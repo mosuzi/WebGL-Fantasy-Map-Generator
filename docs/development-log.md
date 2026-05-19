@@ -1,0 +1,132 @@
+# 开发历史
+
+本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
+
+## 2026-05-18：初始源码阅读与总方案
+
+用户说明：`source/` 目录中是一个地图生成器源码，当前基于 SVG 和 HTML 实现，希望提升性能，用图形技术重新实现。用户不熟悉图形技术，因此先要求阅读源码并写一份详细说明文档。
+
+完成内容：
+
+- 阅读 `source/Fantasy-Map-Generator` 项目结构。
+- 识别核心入口：
+  - `src/index.html`
+  - `public/main.js`
+  - `public/modules/ui/layers.js`
+  - `src/renderers/*`
+  - `src/modules/*`
+  - `src/types/PackedGraph.ts`
+  - `src/utils/pathUtils.ts`
+- 判断主要性能瓶颈来自大量 SVG DOM 节点、SVG path 字符串拼接、`innerHTML` 重建、SVG 滤镜和 mask。
+- 编写 `graphics-reimplementation-plan.md`。
+
+关键决策：
+
+- 不建议推翻生成算法。
+- 建议保留 `grid`、`pack`、`options`、`style` 等现有数据模型。
+- 推荐主路线为 WebGL2 + PixiJS v8 或轻量 WebGL2 封装。
+- 文本、纹章、编辑手柄等复杂能力初期可以保留 overlay。
+
+## 2026-05-18：开始第 0 里程碑
+
+用户要求：按照文档第 0 个里程碑开始实现，项目代码放在当前目录下，不要在 `source` 文件夹下放任何新代码。
+
+完成内容：
+
+- 新增 `tools/fmg-profile.mjs`。
+- 新增 `docs/performance-baseline.md`。
+- profiling 工具设计为外部 harness，不修改 `source/`。
+- 工具会在 Playwright 页面运行时注入 `window.__fmgProfile()`。
+- 工具支持启动 Vite dev server，或连接已有 `--url`。
+- 工具默认测试 `10000`、`50000`、`100000` cells。
+- 工具输出 JSON 和 Markdown 报告。
+
+当前限制：
+
+- `source/Fantasy-Map-Generator/node_modules` 不存在，因此尚未跑出真实数值基线。
+- 已执行 `node --check tools\fmg-profile.mjs`，语法检查通过。
+
+## 2026-05-18：固定协作与文档约定
+
+用户纠正并新增要求：
+
+- 所有文档使用中文描写。
+- 写的代码添加必要注释。
+- 将目前已经沟通过的所有东西写成项目固定文档，后续不再重复强调。
+- 新 Codex 智能体切换后也应能复用上下文。
+- 及时将计划写成文档，方便追溯开发历史。
+
+完成内容：
+
+- 新增 `AGENTS.md` 作为后续智能体固定接手入口。
+- 新增 `docs/current-plan.md` 记录当前计划和下一步。
+- 新增本文件 `docs/development-log.md`。
+- 将 `docs/performance-baseline.md` 改写为中文。
+- 将 profiling 脚本生成的 Markdown 报告改为中文标题和表头。
+- 给 `tools/fmg-profile.mjs` 补充必要注释。
+
+后续要求：
+
+- 所有新增手写文档必须使用中文。
+- 计划、历史、重要决策要持续写入 `docs/`。
+- 若脚本生成 Markdown 报告，也应输出中文。
+
+## 2026-05-19：继续第 0 里程碑执行
+
+用户要求继续执行第 0 里程碑，并说明已将默认 Node 版本重新设置为 26。
+
+执行情况：
+
+- 检查到当前 shell 中 `node` 一度仍显示为 v24.14.0，但后续 profiling 脚本输出中 Node 已显示为 v26.1.0。
+- `npm install` 曾因中断导致 `rolldown` 的 Windows 原生 binding 损坏。
+- 精确删除了损坏的 `source/Fantasy-Map-Generator/node_modules/@rolldown/binding-win32-x64-msvc` 目录。
+- 执行 `npm install @rolldown/binding-win32-x64-msvc@1.0.0 --save-optional`，显式补回缺失的平台依赖。
+- 验证 `rolldown-binding.win32-x64-msvc.node` 可被 Node 正常加载。
+- 发现 Windows TCP 排除端口范围包含 `5109-5208`，因此默认 `5173` 和尝试过的 `5187` 都无法用于 Vite。
+- 改用 `5300` 端口后，Vite 端口问题解除。
+- 新阻塞变为 Playwright 自带 Chromium 未安装，且 `npx playwright install chromium` 下载超时。
+- 为 `tools/fmg-profile.mjs` 增加 `--browser-channel chrome|msedge` 支持，并在 Playwright 自带浏览器缺失时自动尝试系统 Chrome 或 Edge。
+- 使用 `--port 5300 --browser-channel chrome --cells 10000` 跑通烟测，生成 `docs/performance-baseline-smoke.json` 和 `docs/performance-baseline-smoke.md`。
+- 烟测结果已写出，但命令最终超时，原因是 Windows 下 Vite/npm/cmd/node 子进程树没有被完整回收。
+- 为 `tools/fmg-profile.mjs` 增加 Windows `taskkill /T /F` 进程树清理逻辑。
+
+当前下一步：
+
+- 重新跑 10k 烟测确认进程可正常退出。
+- 烟测退出正常后运行完整 `10000,50000,100000` 基线。
+- 完整基线已首次生成，但检查结果发现实际 `pack.cells` 没有随目标 cells 单调增长。
+- 排查源码后确认 `pointsInput.value` 是 1-13 档位，不是实际 cells 数；实际 cells 位于 `pointsInput.dataset.cells`。
+- 修正 `tools/fmg-profile.mjs` 的 cells 设置逻辑：`10000/50000/100000` 分别映射到滑块档位 `4/8/13`，同时设置 `dataset.cells`。
+
+## 2026-05-19：完成第 0 里程碑可信基线
+
+继续排查完整基线时发现：虽然 profiler 已把 `pointsInput` 设置到目标档位，但原项目 `generate()` 会调用 `randomizeOptions()`。当 `lock_points` 没有锁定时，`randomizeOptions()` 会执行 `changeCellsDensity(4)`，把目标点数重置回默认 10k，导致 50k 和 100k 基线不可信。
+
+完成内容：
+
+- 阅读 `public/modules/ui/options.js` 中的 `randomizeOptions()`，确认 points 未锁定时会被重置。
+- 阅读 `public/modules/ui/general.js` 中的 `locked(id)`，确认锁定状态由 `#lock_points.dataset.locked === "1"` 判断。
+- 修正 `tools/fmg-profile.mjs`：
+  - 生成前优先调用原项目 `changeCellsDensity()`，复用原项目自身的点数档位逻辑。
+  - 生成前设置 `lock_points` 为锁定态，避免 `randomizeOptions()` 重置 points。
+  - 对不支持的 cells 档位直接报错，避免产生含糊基线。
+- 执行 `node --check tools\fmg-profile.mjs`，语法检查通过。
+- 使用 Node 26、端口 `5300`、系统 Chrome 跑通完整三档基线。
+- 生成并覆盖可信结果：
+  - `docs/performance-baseline-results.json`
+  - `docs/performance-baseline-results.md`
+
+本次可信基线摘要：
+
+| 目标 cells | 实际 grid cells | 实际 pack cells | 生成耗时 ms | 完整绘制 ms | SVG 节点 |
+|---:|---:|---:|---:|---:|---:|
+| 10000 | 10004 | 5890 | 431.1 | 203.6 | 11462 |
+| 50000 | 50142 | 20870 | 2471 | 229.5 | 41573 |
+| 100000 | 99846 | 44682 | 4420.9 | 314 | 77894 |
+
+关键结论：
+
+- 第 0 里程碑 profiling 工具已经可重复运行。
+- 三档目标 cells 已确认命中实际网格规模，不再错误回退到 10k。
+- 100k 档生成耗时明显高于绘制耗时，但 SVG 节点达到约 7.8 万，仍是后续缩放、交互、局部刷新和导出路径上的重要优化对象。
+- 下一阶段应进入第 1 里程碑：实现最小图形渲染器原型，并选择一个节点量高、可验证收益清晰的图层先迁移。

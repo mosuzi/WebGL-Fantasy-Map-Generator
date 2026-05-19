@@ -1,0 +1,360 @@
+{
+  "metadata": {
+    "generatedAt": "2026-05-19T00:24:09.138Z",
+    "sourceDir": "D:\\work\\fmg\\source\\Fantasy-Map-Generator",
+    "baseUrl": "http://127.0.0.1:5300",
+    "cells": [
+      10000
+    ],
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.0.0 Safari/537.36"
+  },
+  "runs": [
+    {
+      "cellsTarget": 10000,
+      "preset": "political",
+      "timings": {
+        "generate": 664.3,
+        "applyLayersPreset": 18.4,
+        "drawLayers": 211.7,
+        "zoomToScale8": 582,
+        "resetZoom": 112,
+        "serializeSvgForExport": 126.4
+      },
+      "layerTimings": {
+        "drawFeatures": 99.9,
+        "drawHeightmap": 58.8,
+        "drawBiomes": 76.5,
+        "drawCells": 70.8,
+        "drawCultures": 94.2,
+        "drawReligions": 82.3,
+        "drawStates": 88.4,
+        "drawProvinces": 83,
+        "drawBorders": 128.4,
+        "drawRivers": 88.1,
+        "drawRoutes": 94,
+        "drawTemperature": 98,
+        "drawPopulation": 243.3,
+        "drawIce": 202,
+        "drawPrecipitation": 194.5,
+        "drawEmblems": 197.2,
+        "drawLabels": 225.4,
+        "drawBurgIcons": 191.4,
+        "drawMilitary": 250.1,
+        "drawMarkers": 128.8
+      },
+      "nodeCounts": {
+        "ocean": {
+          "descendants": 7,
+          "paths": 3,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "landmass": {
+          "descendants": 1,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "texture": {
+          "descendants": 0,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "terrs": {
+          "descendants": 16,
+          "paths": 13,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "lakes": {
+          "descendants": 9,
+          "paths": 0,
+          "uses": 3,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "biomes": {
+          "descendants": 19,
+          "paths": 19,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "cells": {
+          "descendants": 1,
+          "paths": 1,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "gridOverlay": {
+          "descendants": 0,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "coordinates": {
+          "descendants": 0,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "compass": {
+          "descendants": 1,
+          "paths": 0,
+          "uses": 1,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "rivers": {
+          "descendants": 425,
+          "paths": 425,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "terrain": {
+          "descendants": 0,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "relig": {
+          "descendants": 22,
+          "paths": 22,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "cults": {
+          "descendants": 19,
+          "paths": 19,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "regions": {
+          "descendants": 61,
+          "paths": 59,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "provs": {
+          "descendants": 737,
+          "paths": 469,
+          "uses": 0,
+          "texts": 266,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "zones": {
+          "descendants": 0,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "borders": {
+          "descendants": 4,
+          "paths": 2,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "routes": {
+          "descendants": 774,
+          "paths": 771,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "temperature": {
+          "descendants": 26,
+          "paths": 4,
+          "uses": 0,
+          "texts": 21,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "coastline": {
+          "descendants": 13,
+          "paths": 0,
+          "uses": 11,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "ice": {
+          "descendants": 5,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "prec": {
+          "descendants": 4258,
+          "paths": 0,
+          "uses": 0,
+          "texts": 5,
+          "circles": 4252,
+          "lines": 0,
+          "images": 0
+        },
+        "population": {
+          "descendants": 6008,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 6006,
+          "images": 0
+        },
+        "emblems": {
+          "descendants": 1260,
+          "paths": 0,
+          "uses": 1257,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "icons": {
+          "descendants": 1141,
+          "paths": 0,
+          "uses": 1121,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "labels": {
+          "descendants": 1087,
+          "paths": 0,
+          "uses": 0,
+          "texts": 1075,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "armies": {
+          "descendants": 1194,
+          "paths": 0,
+          "uses": 0,
+          "texts": 388,
+          "circles": 0,
+          "lines": 0,
+          "images": 194
+        },
+        "markers": {
+          "descendants": 474,
+          "paths": 79,
+          "uses": 0,
+          "texts": 79,
+          "circles": 79,
+          "lines": 0,
+          "images": 79
+        },
+        "fogging": {
+          "descendants": 2,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "ruler": {
+          "descendants": 0,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        },
+        "debug": {
+          "descendants": 0,
+          "paths": 0,
+          "uses": 0,
+          "texts": 0,
+          "circles": 0,
+          "lines": 0,
+          "images": 0
+        }
+      },
+      "totals": {
+        "svgDescendants": 17776,
+        "pathNodes": 1930,
+        "useNodes": 2421,
+        "textNodes": 1840,
+        "circleNodes": 4331,
+        "lineNodes": 6009,
+        "imageNodes": 274
+      },
+      "map": {
+        "gridCells": 10004,
+        "packCells": 7424,
+        "vertices": 15052,
+        "features": 17,
+        "rivers": 425,
+        "routes": 771,
+        "burgs": 961,
+        "states": 30,
+        "provinces": 266,
+        "width": 1440,
+        "height": 960
+      },
+      "errors": []
+    }
+  ]
+}
