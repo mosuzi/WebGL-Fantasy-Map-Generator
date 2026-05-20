@@ -130,3 +130,53 @@
 - 三档目标 cells 已确认命中实际网格规模，不再错误回退到 10k。
 - 100k 档生成耗时明显高于绘制耗时，但 SVG 节点达到约 7.8 万，仍是后续缩放、交互、局部刷新和导出路径上的重要优化对象。
 - 下一阶段应进入第 1 里程碑：实现最小图形渲染器原型，并选择一个节点量高、可验证收益清晰的图层先迁移。
+
+## 2026-05-19：开始并跑通第 1 里程碑 WebGL cells 原型
+
+用户要求执行第 1 里程碑。
+
+完成内容：
+
+- 新增 `tools/fmg-export-snapshot.mjs`：
+  - 启动原项目 Vite 服务。
+  - 使用系统 Chrome 打开原项目页面。
+  - 设置目标 cells 并锁定 `lock_points`。
+  - 调用原项目 `generate()`。
+  - 导出 `pack.cells`、`pack.vertices`、`pack.states` 的最小 JSON 快照。
+- 新增 `tools/serve-prototype.mjs`：
+  - 提供无依赖静态服务器。
+  - 默认服务 `prototype/webgl-cells`。
+- 新增 `prototype/webgl-cells/`：
+  - `index.html`：原型页面。
+  - `src/main.js`：加载快照、初始化渲染器、绑定 UI。
+  - `src/renderer.js`：原生 WebGL2 cell 渲染器。
+  - `src/styles.css`：原型样式。
+  - `data/sample-map.json`：10k 目标 cells 的真实 FMG 运行时快照。
+- 新增 `docs/milestone-1-webgl-prototype.md` 记录实现说明、运行方式和当前边界。
+
+当前原型数据：
+
+| 指标 | 数值 |
+|---|---:|
+| 目标 cells | 10000 |
+| 实际 pack cells | 7292 |
+| Voronoi 顶点 | 14788 |
+| 三角形 | 43740 |
+| GPU 顶点 | 131220 |
+| 地图尺寸 | 1440 x 960 |
+
+验证情况：
+
+- `node --check` 通过：
+  - `tools/fmg-export-snapshot.mjs`
+  - `tools/serve-prototype.mjs`
+  - `prototype/webgl-cells/src/main.js`
+  - `prototype/webgl-cells/src/renderer.js`
+- 使用系统 Chrome 打开原型页面，确认 WebGL2 上下文创建成功、地图快照加载成功、高度图可见、国家模式按钮可切换。
+- 内置浏览器插件在本轮因用户目录权限问题无法启动，因此视觉验证使用 Playwright + 系统 Chrome 完成。
+
+关键结论：
+
+- 第 1 里程碑最关键的数据路径已经跑通：真实 `pack.cells` 可以在外部原型中被转换为 GPU 三角形并渲染。
+- 当前还不是完整替代渲染器，只是 cells 面图层原型。
+- 下一步应增加 picking、国家边界线 pass 和原型性能计时。

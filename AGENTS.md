@@ -24,6 +24,7 @@
   - `docs/development-log.md`：开发历史与决策记录。
   - `docs/performance-baseline.md`：第 0 里程碑 profiling 工具说明。
   - `docs/performance-baseline-results.md`：当前可信性能基线报告。
+  - `docs/milestone-1-webgl-prototype.md`：第 1 里程碑 WebGL cells 原型说明。
 
 ## 代码约定
 
@@ -53,6 +54,11 @@
 - 跑出可信 `10000/50000/100000` 三档性能基线：
   - `docs/performance-baseline-results.json`
   - `docs/performance-baseline-results.md`
+- 开始并跑通第 1 里程碑最小 WebGL cells 原型：
+  - `tools/fmg-export-snapshot.mjs`
+  - `tools/serve-prototype.mjs`
+  - `prototype/webgl-cells/`
+  - `docs/milestone-1-webgl-prototype.md`
 - 更新当前计划和开发历史：
   - `docs/current-plan.md`
   - `docs/development-log.md`
@@ -71,6 +77,24 @@
 - Playwright 自带 Chromium 下载曾超时，当前可用 `--browser-channel chrome` 复用系统 Chrome。
 - 原项目 `generate()` 会在 points 未锁定时把点数重置为默认 10k；profiling 工具已经在生成前设置点数并锁定 `lock_points`。
 
+第 1 里程碑当前原型摘要：
+
+| 指标 | 数值 |
+|---|---:|
+| 目标 cells | 10000 |
+| 实际 pack cells | 7292 |
+| Voronoi 顶点 | 14788 |
+| 三角形 | 43740 |
+| GPU 顶点 | 131220 |
+
+运行原型：
+
+```powershell
+node .\tools\serve-prototype.mjs --port 5400
+```
+
+然后访问 `http://127.0.0.1:5400`。
+
 ## 接手建议
 
 新智能体接手时，按顺序阅读：
@@ -81,5 +105,6 @@
 4. `graphics-reimplementation-plan.md`
 5. `docs/performance-baseline.md`
 6. `docs/performance-baseline-results.md`
+7. `docs/milestone-1-webgl-prototype.md`
 
-然后根据用户最新指令继续。当前下一阶段应进入第 1 里程碑：实现最小图形渲染器原型，代码放在当前目录下，不放入 `source/`。
+然后根据用户最新指令继续。当前下一步建议是继续第 1 里程碑：增加 cell picking、国家边界线 pass 和原型性能计时。

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FMG WebGL Cells Prototype</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="side-panel">
+        <header>
+          <h1>FMG WebGL 原型</h1>
+          <p id="summary">正在加载地图快照...</p>
+        </header>
+
+        <section>
+          <h2>渲染模式</h2>
+          <div class="segmented" role="group" aria-label="渲染模式">
+            <button class="active" type="button" data-mode="height">高度</button>
+            <button type="button" data-mode="state">国家</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>视图</h2>
+          <div class="toolbar">
+            <button type="button" id="fit-view">适配</button>
+          </div>
+        </section>
+
+        <dl class="stats" id="stats"></dl>
+      </aside>
+
+      <section class="viewport">
+        <canvas id="map-canvas"></canvas>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
