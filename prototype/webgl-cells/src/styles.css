@@ -79,6 +79,10 @@ button:hover {
   gap: 6px;
 }
 
+.segmented.thematic-modes {
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+}
+
 .segmented button.active {
   border-color: #56a9ff;
   background: #17324d;
@@ -89,12 +93,31 @@ button:hover {
   gap: 8px;
 }
 
+.check-row {
+  align-items: center;
+  color: #edf1f5;
+  display: flex;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.check-row input {
+  accent-color: #56a9ff;
+  height: 16px;
+  width: 16px;
+}
+
 .stats {
   border-top: 1px solid #29313d;
   display: grid;
   gap: 10px;
   margin: 0;
   padding-top: 18px;
+}
+
+.stats.compact {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .stats div {
@@ -110,6 +133,8 @@ button:hover {
 .stats dd {
   font-variant-numeric: tabular-nums;
   margin: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .viewport {
@@ -123,6 +148,103 @@ button:hover {
   display: block;
   height: 100%;
   width: 100%;
+}
+
+.map-overlay {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+}
+
+.overlay-group {
+  inset: 0;
+  position: absolute;
+}
+
+.map-label,
+.emblem-badge {
+  left: 0;
+  position: absolute;
+  top: 0;
+  user-select: none;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.map-label {
+  color: #10151c;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.85),
+    1px 0 0 rgba(255, 255, 255, 0.75),
+    -1px 0 0 rgba(255, 255, 255, 0.75),
+    0 -1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.map-label[data-name-style="zh"] {
+  font-family: "Microsoft YaHei", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+}
+
+.burg-label {
+  font-size: 11px;
+  opacity: 0.82;
+  transform: translate3d(0, 0, 0) translate(-50%, -110%);
+}
+
+.burg-label.capital {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.94;
+}
+
+.burg-label.port::after {
+  color: #315f84;
+  content: " harbour";
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  margin-left: 3px;
+}
+
+.burg-label.port[data-name-style="zh"]::after {
+  content: " 津";
+}
+
+.state-label {
+  color: var(--state-color, #d7dce2);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+  opacity: 0.72;
+  text-transform: uppercase;
+  transform: translate3d(0, 0, 0) translate(-50%, -50%);
+}
+
+.state-label[data-name-style="zh"] {
+  text-transform: none;
+}
+
+.emblem-badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--emblem-color, #d7dce2) 76%, #ffffff);
+  border: 1px solid rgba(13, 18, 24, 0.72);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  color: #121821;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  height: 18px;
+  justify-content: center;
+  transform: translate3d(0, 0, 0) translate(-50%, -50%);
+  width: 18px;
+}
+
+.emblem-badge.state {
+  height: 22px;
+  width: 22px;
 }
 
 @media (max-width: 760px) {

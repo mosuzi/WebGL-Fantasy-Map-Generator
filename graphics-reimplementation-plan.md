@@ -1,5 +1,7 @@
 # Fantasy Map Generator 图形化重实现方案
 
+> 路线修正说明：本文是早期“迁移原项目渲染层”的历史方案。2026-06-17 用户已明确改为“基于原项目复刻独立 WebGL 地图生成器”，不得修改 `source/Fantasy-Map-Generator` 原项目源码。后续执行以 `docs/gl-reimplementation-acceptance-plan.md` 和 `docs/current-plan.md` 为准；本文仅作为原项目结构和旧技术分析参考。
+
 本文档基于当前 `source/Fantasy-Map-Generator` 源码阅读结果，说明如何把现有 SVG/HTML 地图渲染层迁移为更高性能的图形渲染实现。目标不是推翻地图生成器，而是保留现有生成算法、存档格式和编辑逻辑，逐步替换性能压力最大的 SVG 渲染与 DOM 操作。
 
 ## 1. 结论先行
@@ -786,4 +788,3 @@ WebGPU 仍不应作为唯一后端。WebGL2 覆盖更稳，但仍要处理 conte
 - 3D 视图：复用主 renderer 输出 texture，不再依赖 SVG 截图。
 
 这条路线的好处是：不用把整个项目一次重写成一个新应用，而是把最慢、最重的渲染层从 DOM 世界搬到 GPU 世界。地图生成器原有的算法资产可以继续使用，性能收益也会集中落在用户最能感知的缩放、图层切换和大图渲染上。
-

@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FMG WebGL Cells Prototype</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>
@@ -15,10 +16,15 @@
         </header>
 
         <section>
-          <h2>渲染模式</h2>
-          <div class="segmented" role="group" aria-label="渲染模式">
+          <h2>专题面</h2>
+          <div class="segmented thematic-modes" role="group" aria-label="专题面">
             <button class="active" type="button" data-mode="height">高度</button>
-            <button type="button" data-mode="state">国家</button>
+            <button type="button" data-mode="biomes">生物群系</button>
+            <button type="button" data-mode="states">国家</button>
+            <button type="button" data-mode="provinces">省份</button>
+            <button type="button" data-mode="cultures">文化</button>
+            <button type="button" data-mode="religions">宗教</button>
+            <button type="button" data-mode="temperature">温度</button>
           </div>
         </section>
 
@@ -29,11 +35,82 @@
           </div>
         </section>
 
+        <section>
+          <h2>图层</h2>
+          <label class="check-row">
+            <input id="show-landmass" type="checkbox" checked />
+            <span>陆地底色</span>
+          </label>
+          <label class="check-row">
+            <input id="show-lakes" type="checkbox" checked />
+            <span>湖泊</span>
+          </label>
+          <label class="check-row">
+            <input id="show-coastline" type="checkbox" checked />
+            <span>海岸/湖岸线</span>
+          </label>
+          <label class="check-row">
+            <input id="show-state-borders" type="checkbox" checked />
+            <span>国家边界</span>
+          </label>
+          <label class="check-row">
+            <input id="show-province-borders" type="checkbox" checked />
+            <span>省份边界</span>
+          </label>
+          <label class="check-row">
+            <input id="show-routes" type="checkbox" checked />
+            <span>路线</span>
+          </label>
+          <label class="check-row">
+            <input id="show-rivers" type="checkbox" checked />
+            <span>河流</span>
+          </label>
+          <label class="check-row">
+            <input id="show-precipitation" type="checkbox" />
+            <span>降水点</span>
+          </label>
+          <label class="check-row">
+            <input id="show-population" type="checkbox" />
+            <span>人口点</span>
+          </label>
+          <label class="check-row">
+            <input id="show-burg-icons" type="checkbox" checked />
+            <span>城市/港口</span>
+          </label>
+          <label class="check-row">
+            <input id="show-markers" type="checkbox" checked />
+            <span>标记</span>
+          </label>
+          <label class="check-row">
+            <input id="show-burg-labels" type="checkbox" checked />
+            <span>城市标签</span>
+          </label>
+          <label class="check-row">
+            <input id="show-state-labels" type="checkbox" checked />
+            <span>国家标签占位</span>
+          </label>
+          <label class="check-row">
+            <input id="show-emblems" type="checkbox" />
+            <span>纹章占位（暂关）</span>
+          </label>
+        </section>
+
+        <section>
+          <h2>悬停 cell</h2>
+          <dl class="stats compact" id="hover-stats">
+            <div>
+              <dt>状态</dt>
+              <dd>未选中</dd>
+            </div>
+          </dl>
+        </section>
+
         <dl class="stats" id="stats"></dl>
       </aside>
 
       <section class="viewport">
         <canvas id="map-canvas"></canvas>
+        <div id="map-overlay" class="map-overlay" aria-hidden="true"></div>
       </section>
     </main>
 

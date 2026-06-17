@@ -1,0 +1,130 @@
+{
+  "metadata": {
+    "generatedAt": "2026-06-16T02:06:17.568Z",
+    "baseUrl": "http://127.0.0.1:5400",
+    "iterations": 10,
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.0.0 Safari/537.36"
+  },
+  "result": {
+    "summary": "真实 FMG 快照，目标 100000 cells，实际 58251 pack cells，渲染 99846 grid cells。",
+    "stats": {
+      "metadata": {
+        "generatedAt": "2026-06-16T01:56:07.438Z",
+        "source": "Fantasy-Map-Generator runtime snapshot",
+        "cellsTarget": 100000,
+        "seed": "866759983",
+        "graphWidth": 1440,
+        "graphHeight": 960,
+        "gridCells": 99846,
+        "gridVertices": 200338,
+        "packCells": 58251,
+        "vertices": 117148,
+        "rivers": 1021
+      },
+      "geometry": {
+        "renderSource": "grid",
+        "renderCellCount": 99846,
+        "renderVertexCount": 200338,
+        "triangles": 598519,
+        "vertexCount": 1795557,
+        "borderSegments": 1404,
+        "riverCount": 1021,
+        "riverSegments": 5641
+      },
+      "picking": {
+        "buckets": 39204,
+        "nonEmptyBuckets": 38772,
+        "avgCandidates": 5.9,
+        "maxCandidates": 17
+      },
+      "performance": {
+        "buildMs": 336.5,
+        "uploadMs": 36.6,
+        "drawMs": 0.1
+      },
+      "layers": {
+        "cells": true,
+        "borders": true,
+        "rivers": true
+      },
+      "camera": {
+        "scale": 0.6266666666666666,
+        "x": 28.800000000000068,
+        "y": 99.20000000000005
+      }
+    },
+    "lastDraw": {
+      "camera": {
+        "scale": 0.6266666666666666,
+        "x": 28.800000000000068,
+        "y": 99.20000000000005
+      },
+      "canvas": {
+        "width": 960,
+        "height": 800
+      },
+      "mode": "height",
+      "layers": {
+        "cells": true,
+        "borders": true,
+        "rivers": true
+      },
+      "vertexCount": 1795557,
+      "borderVertexCount": 2808,
+      "riverVertexCount": 11282,
+      "errorBefore": 0,
+      "errorAfter": 0,
+      "drawMs": 0.1
+    },
+    "samples": {
+      "drawMs": {
+        "min": 0,
+        "avg": 0.27,
+        "max": 1.3,
+        "samples": [
+          0.2,
+          0.7,
+          1.3,
+          0.1,
+          0.1,
+          0,
+          0.1,
+          0.1,
+          0,
+          0.1
+        ]
+      },
+      "pickMs": {
+        "min": 0,
+        "avg": 0.01,
+        "max": 0.1,
+        "samples": [
+          0.1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "stateDrawMs": 0.1,
+      "heightDrawMs": 0.1,
+      "noRiversDrawMs": 0.1,
+      "withRiversDrawMs": 0.1
+    },
+    "pick": {
+      "id": 26830,
+      "height": 0,
+      "stateId": 0,
+      "stateName": "Neutrals",
+      "x": 720,
+      "y": 480,
+      "pickMs": 0,
+      "pickCandidates": 3
+    }
+  }
+}
