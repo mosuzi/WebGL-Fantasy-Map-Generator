@@ -212,6 +212,36 @@ select {
   font-size: 12px;
 }
 
+.map-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.city-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  max-width: 120px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(13, 18, 18, 0.58);
+  color: #f2ead5;
+  font-size: 11px;
+  line-height: 1.25;
+  text-shadow: 0 1px 2px #050708;
+  white-space: nowrap;
+}
+
+.city-label.capital {
+  color: #ffe29a;
+  font-weight: 700;
+}
+
+.city-label.port {
+  color: #c4ecff;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     grid-template-columns: 1fr;

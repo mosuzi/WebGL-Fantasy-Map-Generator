@@ -2429,3 +2429,167 @@
 - 城市选址仍是轻量适宜度模型，尚未实现 source burg 等级、城镇增长、首都迁移、道路等级和港口/海路规则。
 - 道路目前是 grid 上贪心陆路追踪，可能不是最短或最自然路线；后续应升级为带成本场的路径搜索，并支持宽线、join/cap 和路线 picking。
 - 点层仍是 `gl.POINTS` 占位，后续需要 sprite、LOD、标签避让和对象级 picking。
+
+### 3.4 城市标签 overlay 初版
+
+完成阶段 3.3 后，用户要求提交推送一版并继续开发。已将阶段 3.3 版本提交并推送：
+
+- commit：`fcee714 Build standalone WebGL generator app`
+- 推送：`origin/main`
+- 第一次 `git push origin main` 因仓库本地代理 `127.0.0.1:10809` 不通而失败；随后使用单次 `git -c http.proxy= -c https.proxy= push origin main` 绕过代理推送成功，未修改仓库配置。
+
+继续开发内容：
+
+- `app/webgl-generator/index.html`：
+  - 新增 `map-overlay`，放在 canvas 和地图 badge 之间。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - renderer 初始化时获取 overlay 容器。
+  - 每次加载地图时，按首都、省会和人口排序挑选最多 24 个城市创建标签。
+  - 每次 draw 后根据 WebGL camera 把城市世界坐标投影到屏幕坐标。
+  - 增加简单屏幕距离避让，避免密集标签全部重叠。
+  - `getStats()` 新增 `labelCount` 和 `visibleLabelCount`。
+- `app/webgl-generator/src/styles.css`：
+  - 新增 `.map-overlay` 和 `.city-label` 样式。
+  - 首都和港口标签使用不同颜色。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“城市标签”。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 阶段仍为 `3.3-settlements-routes-population`。
+  - 标签节点 `20` 个，可见标签 `10` 个。
+  - 运行时统计显示城市标签 `10 / 20`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+当前限制：
+
+- 标签仍是 HTML overlay 初版，没有完整 LOD、复杂碰撞盒、国家/道路标签和对象级点击。
+- 小屏/窄视口下标签可见数量会被简单避让压低，后续需要按缩放、城市等级和屏幕空间动态排序。
+
+### 3.4 标签 LOD、道路宽线和未来面板约束
+
+继续推进阶段 3.4：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 城市标签从固定 24 个候选改为最多 48 个候选，按首都、省会、港口和人口估算优先级排序。
+  - 标签显示新增缩放 LOD：远景只显示首都和高优先级城市，中近景逐步放开更多城市。
+  - 标签避让从点距判断改为屏幕碰撞盒判断，并按缩放设置可见数量上限和碰撞 padding。
+  - 道路/小路从普通 `gl.LINES` 中拆出，新增独立 route buffer，以三角形带 mesh 绘制。
+  - 海岸线、湖岸线和河流仍保留在线段 pass 中，避免道路样式和自然线层混在同一个 buffer 里。
+  - `getStats()` 新增 `routeVertexCount` 和 `routeTriangleCount`。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“道路三角形”。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录阶段 3.4 当前能力和仍未完成的 join/cap、dash、屏幕空间恒定宽度、路线 picking、道路/国家标签等事项。
+  - 按用户要求记录未来面板架构约束：生成配置、高度编辑、河流编辑、城市/道路编辑、国家/省份/文化/宗教/标签编辑等面板都应做成 HTML 浮动可拖动面板，不使用 canvas 实现；当前只落文档，暂不改现有侧栏。
+
+当前限制：
+
+- route mesh 仍是逐段矩形带，没有 join/cap、dash 和屏幕空间恒定宽度；缩放时视觉宽度仍随 WebGL 坐标缩放。
+- 标签只处理城市标签，尚未实现国家标签、路线标签、曲线文字、手动锁定位置和标签对象级 picking。
+- 当前固定侧栏仍保留，浮动可拖动面板只是后续架构约束。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md` 通过。
+- 固定 seed `stage-3-4-check`、模板 `continents` 生成器检查：
+  - 阶段 `3.3-settlements-routes-population`。
+  - checksum `b89b1d9e`。
+  - 城市 `20`。
+  - 道路 `23`，道路线段 `1152`。
+  - 人口 cell `5599`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 阶段仍为 `3.3-settlements-routes-population`。
+  - 道路三角形 `3252`。
+  - 线段顶点 `1518`，当前不再包含道路线段。
+  - 标签节点 `20` 个，可见标签 `9` 个。
+  - 运行时统计显示城市标签 `9 / 20`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 道路屏幕空间 mesh
+
+继续推进道路可视细化：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - route buffer 从 `loadMap()` 的静态世界坐标 mesh 改为 `draw()` 时按当前 camera 和 canvas 尺寸动态构建。
+  - route mesh 顶点直接生成在 clip space，绘制道路时使用 identity transform，避免道路宽度随地图缩放一起变粗或变细。
+  - 道路宽度改为 CSS 像素语义：`road` 约 `3.2px`，`trail` 约 `2.1px`，并按设备像素比换算。
+  - polyline mesh 采用第一版 miter join；端点使用 square cap；近似折返时回退到当前 segment 方向，避免 join 退化为零宽。
+  - `getStats()` 新增 `routeBuildMs` 和 `routeWidthMode`，用于观察拖拽缩放时的动态 buffer 成本。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“道路 mesh”，显示宽度模式和 route buffer 构建耗时。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 将道路屏幕空间恒定宽度、基础 miter join 和 square cap 标记为已完成。
+  - 下一步收敛为路线 picking、对象级 picking、城市详情面板、道路 dash/等级样式和更完整的急弯 bevel 策略。
+
+当前限制：
+
+- route buffer 现在每次 draw 都会重建并上传，当前路线规模较小可以接受；后续路线数量上来后应考虑只在 camera/viewport 改变时更新，或改为 shader 侧 screen-space offset。
+- miter join 是基础实现，尖锐急弯只做长度钳制，没有完整 bevel/round join。
+- 还没有路线 picking、道路等级样式、dash、桥梁/渡口/海路和路线标签。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md` 通过。
+- 固定 seed `stage-3-4-route-screen`、模板 `continents` 生成器检查：
+  - 阶段 `3.3-settlements-routes-population`。
+  - checksum `28024022`。
+  - 城市 `20`。
+  - 道路 `25`，道路线段 `1774`。
+  - 人口 cell `5598`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 阶段仍为 `3.3-settlements-routes-population`。
+  - 道路三角形 `3252`。
+  - 道路 mesh `screen-space, 3.5ms`。
+  - 线段顶点 `1518`，仍不包含道路线段。
+  - 城市标签 `9 / 20`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 路线 hover picking 初版
+
+继续推进对象级交互基础：
+
+- `app/webgl-generator/src/renderer/picking.js`：
+  - 新增 `pickRoute()`，按鼠标世界坐标到路线折线段的最短距离寻找最近路线。
+  - 返回路线 `id`、`type`、起点城市、终点城市和命中距离。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - hover 时同时执行 grid cell picking 和 route picking。
+  - 路线命中阈值按当前 camera 和 viewport 换算为世界距离，约等于屏幕 7px。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 悬停面板新增“路线”和“路线类型”，显示起终点、类型和距离。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录路线 hover picking 已完成第一版。
+  - 下一步改为路线点击选择、城市/路线对象级 picking、城市详情面板和道路样式继续细化。
+
+当前限制：
+
+- 当前路线 picking 直接遍历所有路线折线段，没有空间索引；路线规模变大后需要接入统一对象 picking index。
+- 只做 hover 命中显示，还没有点击选择、编辑状态、详情面板或路线高亮。
+- 路线命中距离按屏幕像素近似换算，后续应和屏幕空间 route mesh 的实际宽度、hover 容差和 layer visibility 统一。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md` 通过。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 默认地图 `stage-2-1` 的道路 mesh 显示 `screen-space, 2.6ms`。
+  - 鼠标移动到路线 `雁门城 -> 清源集` 的中段后，悬停面板显示路线 `雁门城 -> 清源集`。
+  - 路线类型显示 `road / 0.0`。
+  - 命中 grid cell `3359`，坐标 `767.4, 323.3`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。

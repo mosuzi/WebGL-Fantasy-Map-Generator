@@ -1,8 +1,9 @@
-import {pickGridCell} from "./picking.js";
+import {pickGridCell, pickRoute} from "./picking.js";
 
 export class PlaceholderMapRenderer {
   constructor(canvas, onViewChange = () => {}, onHover = () => {}) {
     this.canvas = canvas;
+    this.overlay = canvas.parentElement?.querySelector("#map-overlay") || null;
     this.onViewChange = onViewChange;
     this.onHover = onHover;
     this.gl = canvas.getContext("webgl2", {antialias: true});
@@ -16,11 +17,18 @@ export class PlaceholderMapRenderer {
       offset: this.gl.getUniformLocation(this.program, "u_offset")
     };
     this.vertexBuffer = this.gl.createBuffer();
+    this.routeBuffer = this.gl.createBuffer();
     this.lineBuffer = this.gl.createBuffer();
     this.pointBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
+    this.routeVertexCount = 0;
     this.lineVertexCount = 0;
     this.pointVertexCount = 0;
+    this.labelCount = 0;
+    this.visibleLabelCount = 0;
+    this.labelItems = [];
+    this.routeBuildMs = 0;
+    this.routeWidthMode = "screen-space";
     this.colorMode = "height";
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
     this.lastDraw = {drawMs: 0};
@@ -39,14 +47,18 @@ export class PlaceholderMapRenderer {
     const lineVertices = buildLineVertices(map);
     const pointVertices = buildPointVertices(map);
     this.vertexCount = vertices.length / 6;
+    this.routeVertexCount = 0;
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+    this.buildCityLabels(map);
     this.fitToView();
   }
 
@@ -72,6 +84,7 @@ export class PlaceholderMapRenderer {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
     resizeCanvasToDisplaySize(this.canvas);
+    this.updateRouteBuffer();
 
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -83,7 +96,14 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.routeBuffer);
+    gl.uniform1f(this.locations.scale, 1);
+    gl.uniform2f(this.locations.offset, 0, 0);
+    bindVertexBuffer(gl, this.locations);
+    gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuffer);
+    gl.uniform1f(this.locations.scale, this.camera.scale);
+    gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.drawArrays(gl.LINES, 0, this.lineVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.pointBuffer);
@@ -94,6 +114,7 @@ export class PlaceholderMapRenderer {
       drawMs: roundMs(performance.now() - startedAt),
       glError: gl.getError()
     };
+    this.updateCityLabels();
   }
 
   getStats() {
@@ -103,8 +124,14 @@ export class PlaceholderMapRenderer {
       pack: this.map?.pack?.metadata,
       features: this.map?.features?.metadata,
       vertexCount: this.vertexCount,
+      routeVertexCount: this.routeVertexCount,
+      routeTriangleCount: this.routeVertexCount / 3,
+      routeBuildMs: this.routeBuildMs,
+      routeWidthMode: this.routeWidthMode,
       lineVertexCount: this.lineVertexCount,
       pointVertexCount: this.pointVertexCount,
+      labelCount: this.labelCount,
+      visibleLabelCount: this.visibleLabelCount,
       colorMode: this.colorMode,
       camera: {...this.camera},
       draw: this.lastDraw,
@@ -115,7 +142,8 @@ export class PlaceholderMapRenderer {
   pickClientPoint(clientX, clientY) {
     const world = this.screenToWorld(clientX, clientY);
     const result = pickGridCell(this.map, world.x, world.y);
-    return result ? {...result, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
+    const route = pickRoute(this.map, world.x, world.y, this.routePickThresholdWorld());
+    return result ? {...result, route, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
 
   screenToWorld(clientX, clientY) {
@@ -126,6 +154,89 @@ export class PlaceholderMapRenderer {
     const mapY = ((1 - (ndcY - this.camera.offsetY) / this.camera.scale) / 2) * this.map.metadata.graphHeight;
     return {x: mapX, y: mapY};
   }
+
+  updateRouteBuffer() {
+    const startedAt = performance.now();
+    const routeVertices = buildRouteMeshVertices(this.map, this.camera, this.canvas);
+    this.routeVertexCount = routeVertices.length / 6;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
+    this.routeBuildMs = roundMs(performance.now() - startedAt);
+  }
+
+  routePickThresholdWorld() {
+    const rect = this.canvas.getBoundingClientRect();
+    const worldPerPixelX = this.map.metadata.graphWidth / Math.max(1, rect.width * this.camera.scale);
+    const worldPerPixelY = this.map.metadata.graphHeight / Math.max(1, rect.height * this.camera.scale);
+    return Math.max(worldPerPixelX, worldPerPixelY) * 7;
+  }
+
+  buildCityLabels(map) {
+    if (!this.overlay) {
+      this.labelItems = [];
+      this.labelCount = 0;
+      this.visibleLabelCount = 0;
+      return;
+    }
+    this.overlay.replaceChildren();
+    this.labelItems = getLabelCities(map).map(item => {
+      const node = document.createElement("span");
+      const city = item.city;
+      node.className = `city-label${city.capital ? " capital" : ""}${city.port ? " port" : ""}`;
+      node.textContent = city.name;
+      this.overlay.append(node);
+      return {...item, node};
+    });
+    this.labelCount = this.labelItems.length;
+    this.visibleLabelCount = 0;
+  }
+
+  updateCityLabels() {
+    if (!this.overlay || !this.map || !this.labelItems.length) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const occupied = [];
+    let visible = 0;
+    const scale = this.camera.scale;
+    const maxVisible = labelLimitForScale(scale);
+    const padding = labelPaddingForScale(scale);
+
+    for (const item of this.labelItems) {
+      const screen = this.worldToScreen(item.city.x, item.city.y, rect);
+      const box = labelBoxForItem(item, screen);
+      const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
+      const blocked = occupied.some(other => boxesOverlap(box, other, padding));
+      const shouldShow = visible < maxVisible && scale >= item.minScale && onScreen && !blocked;
+      item.node.style.display = shouldShow ? "block" : "none";
+      if (!shouldShow) continue;
+      item.node.style.left = `${screen.x}px`;
+      item.node.style.top = `${screen.y - 6}px`;
+      occupied.push(box);
+      visible++;
+    }
+
+    this.visibleLabelCount = visible;
+  }
+
+  worldToScreen(x, y, rect) {
+    const ndcX = ((x / this.map.metadata.graphWidth) * 2 - 1) * this.camera.scale + this.camera.offsetX;
+    const ndcY = (1 - (y / this.map.metadata.graphHeight) * 2) * this.camera.scale + this.camera.offsetY;
+    return {
+      x: ((ndcX + 1) / 2) * rect.width,
+      y: ((1 - ndcY) / 2) * rect.height
+    };
+  }
+}
+
+function getLabelCities(map) {
+  return [...map.settlements.cities]
+    .map(city => ({city, priority: scoreCityLabel(city)}))
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 48)
+    .map((item, rank) => ({
+      ...item,
+      rank,
+      minScale: minLabelScale(item.city, rank)
+    }));
 }
 
 function installCanvasInteractions(canvas, camera, onChange, onHover) {
@@ -193,16 +304,21 @@ function buildLineVertices(map) {
   const vertices = [];
   for (const segment of map.features.shore.coastline) pushWorldLine(vertices, segment, map, [0.9, 0.86, 0.68, 1]);
   for (const segment of map.features.shore.lakeShore) pushWorldLine(vertices, segment, map, [0.64, 0.82, 0.92, 1]);
-  for (const route of map.settlements.routes) {
-    const color = route.type === "road" ? [0.56, 0.43, 0.24, 1] : [0.44, 0.36, 0.24, 0.95];
-    for (let index = 0; index < route.points.length - 1; index++) {
-      pushWorldLine(vertices, [route.points[index], route.points[index + 1]], map, color);
-    }
-  }
   for (const river of map.rivers.rivers) {
     for (let index = 0; index < river.points.length - 1; index++) {
       pushWorldLine(vertices, [river.points[index], river.points[index + 1]], map, [0.22, 0.48, 0.82, 1]);
     }
+  }
+  return new Float32Array(vertices);
+}
+
+function buildRouteMeshVertices(map, camera, canvas) {
+  const vertices = [];
+  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
+  for (const route of map.settlements.routes) {
+    const color = route.type === "road" ? [0.62, 0.45, 0.24, 1] : [0.45, 0.35, 0.22, 0.94];
+    const widthPx = (route.type === "road" ? 3.2 : 2.1) * pixelRatio;
+    pushScreenPolyline(vertices, route.points, map, camera, canvas, color, widthPx);
   }
   return new Float32Array(vertices);
 }
@@ -250,14 +366,94 @@ function pushWorldLine(vertices, segment, map, color) {
   pushWorldVertex(vertices, segment[1], map, color);
 }
 
+function pushScreenPolyline(vertices, points, map, camera, canvas, color, widthPx) {
+  const screenPoints = points
+    .map(point => worldToScreenPixel(point, map, camera, canvas))
+    .filter((point, index, list) => index === 0 || Math.hypot(point.x - list[index - 1].x, point.y - list[index - 1].y) > 0.5);
+  if (screenPoints.length < 2) return;
+
+  const half = widthPx / 2;
+  const left = [];
+  const right = [];
+
+  for (let index = 0; index < screenPoints.length; index++) {
+    const previous = screenPoints[Math.max(0, index - 1)];
+    const current = screenPoints[index];
+    const next = screenPoints[Math.min(screenPoints.length - 1, index + 1)];
+    const before = normalizeScreenVector(current.x - previous.x, current.y - previous.y);
+    const after = normalizeScreenVector(next.x - current.x, next.y - current.y);
+    const blended = normalizeScreenVector(before.x + after.x, before.y + after.y);
+    const tangent = index === 0 ? after : index === screenPoints.length - 1 ? before : (blended.x || blended.y ? blended : after);
+    const normalBefore = normalForVector(before.x || after.x, before.y || after.y);
+    const normalAfter = normalForVector(after.x || before.x, after.y || before.y);
+    const miter = normalForVector(tangent.x, tangent.y);
+    const dot = Math.max(0.3, Math.abs(miter.x * normalAfter.x + miter.y * normalAfter.y));
+    const length = Math.min(half / dot, half * 2.6);
+    const capShift = index === 0 ? -half : index === screenPoints.length - 1 ? half : 0;
+    const capBase = {
+      x: current.x + tangent.x * capShift,
+      y: current.y + tangent.y * capShift
+    };
+    const normal = index === 0 ? normalAfter : index === screenPoints.length - 1 ? normalBefore : miter;
+    left.push({x: capBase.x + normal.x * length, y: capBase.y + normal.y * length});
+    right.push({x: capBase.x - normal.x * length, y: capBase.y - normal.y * length});
+  }
+
+  for (let index = 0; index < left.length - 1; index++) {
+    pushScreenTriangle(vertices, left[index], left[index + 1], right[index + 1], canvas, color);
+    pushScreenTriangle(vertices, left[index], right[index + 1], right[index], canvas, color);
+  }
+}
+
+function pushScreenTriangle(vertices, a, b, c, canvas, color) {
+  pushScreenVertex(vertices, a, canvas, color);
+  pushScreenVertex(vertices, b, canvas, color);
+  pushScreenVertex(vertices, c, canvas, color);
+}
+
+function pushScreenVertex(vertices, point, canvas, color) {
+  const clip = screenPixelToClip(point, canvas);
+  pushVertex(vertices, clip[0], clip[1], color);
+}
+
+function worldToScreenPixel(point, map, camera, canvas) {
+  const [x, y] = worldToNdcPoint(point, map);
+  const clipX = x * camera.scale + camera.offsetX;
+  const clipY = y * camera.scale + camera.offsetY;
+  return {
+    x: ((clipX + 1) / 2) * canvas.width,
+    y: ((1 - clipY) / 2) * canvas.height
+  };
+}
+
+function screenPixelToClip(point, canvas) {
+  return [(point.x / canvas.width) * 2 - 1, 1 - (point.y / canvas.height) * 2];
+}
+
+function normalizeScreenVector(x, y) {
+  const length = Math.hypot(x, y);
+  if (length <= 0.000001) return {x: 0, y: 0};
+  return {x: x / length, y: y / length};
+}
+
+function normalForVector(x, y) {
+  const vector = normalizeScreenVector(x, y);
+  return {x: -vector.y, y: vector.x};
+}
+
 function pushVertex(vertices, x, y, color) {
   vertices.push(x, y, color[0], color[1], color[2], color[3]);
 }
 
 function pushWorldVertex(vertices, point, map, color) {
+  const [x, y] = worldToNdcPoint(point, map);
+  pushVertex(vertices, x, y, color);
+}
+
+function worldToNdcPoint(point, map) {
   const x = (point[0] / map.metadata.graphWidth) * 2 - 1;
   const y = 1 - (point[1] / map.metadata.graphHeight) * 2;
-  pushVertex(vertices, x, y, color);
+  return [x, y];
 }
 
 function colorForCell(cellIndex, map, colorMode) {
@@ -310,6 +506,45 @@ function indexedColor(index, offset) {
 function indexedColorOrWater(index, offset, waterColor) {
   if (index < 0) return mix(waterColor, [0.05, 0.08, 0.1, 1], 0.3);
   return indexedColor(index, offset);
+}
+
+function scoreCityLabel(city) {
+  return (city.capital ? 320 : 0) + (city.provincial ? 150 : 0) + (city.port ? 28 : 0) + city.population;
+}
+
+function minLabelScale(city, rank) {
+  if (city.capital) return 0.45;
+  if (city.provincial || rank < 12) return 0.75;
+  if (rank < 26 || city.population >= 72) return 1.15;
+  return 1.85;
+}
+
+function labelLimitForScale(scale) {
+  if (scale < 0.75) return 8;
+  if (scale < 1.35) return 16;
+  if (scale < 2.4) return 28;
+  return 42;
+}
+
+function labelPaddingForScale(scale) {
+  if (scale < 0.85) return 14;
+  if (scale < 1.6) return 9;
+  return 5;
+}
+
+function labelBoxForItem(item, screen) {
+  const estimatedWidth = Math.max(34, Math.min(132, 14 + item.city.name.length * 13));
+  const estimatedHeight = item.city.capital ? 21 : 18;
+  return {
+    left: screen.x - estimatedWidth / 2,
+    right: screen.x + estimatedWidth / 2,
+    top: screen.y - estimatedHeight - 8,
+    bottom: screen.y + 2
+  };
+}
+
+function boxesOverlap(a, b, padding) {
+  return a.left - padding < b.right && a.right + padding > b.left && a.top - padding < b.bottom && a.bottom + padding > b.top;
 }
 
 function hslToRgb(h, s, l) {

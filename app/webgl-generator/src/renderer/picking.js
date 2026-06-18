@@ -21,6 +21,29 @@ export function pickGridCell(map, worldX, worldY) {
   };
 }
 
+export function pickRoute(map, worldX, worldY, maxDistance) {
+  if (!map?.settlements?.routes?.length) return null;
+  let best = null;
+
+  for (const route of map.settlements.routes) {
+    for (let index = 0; index < route.points.length - 1; index++) {
+      const distance = distanceToSegment(worldX, worldY, route.points[index], route.points[index + 1]);
+      if (distance > maxDistance || (best && distance >= best.distance)) continue;
+      const from = map.settlements.cities[route.from];
+      const to = map.settlements.cities[route.to];
+      best = {
+        id: route.id,
+        type: route.type,
+        from: from?.name || "unknown",
+        to: to?.name || "unknown",
+        distance
+      };
+    }
+  }
+
+  return best;
+}
+
 function candidateCells(column, row, columns, rows) {
   const cells = [];
   for (let dy = -1; dy <= 1; dy++) {
@@ -71,4 +94,13 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
     worldY,
     candidates
   };
+}
+
+function distanceToSegment(x, y, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 0.000001) return Math.hypot(x - a[0], y - a[1]);
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / lengthSquared));
+  return Math.hypot(x - (a[0] + dx * t), y - (a[1] + dy * t));
 }
