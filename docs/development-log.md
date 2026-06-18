@@ -1554,3 +1554,878 @@
   - `stats.layers.precipitation = false`。
   - `stats.layers.population = false`。
   - `glError = 0`。
+
+## 2026-06-17：开始阶段 2 正式应用骨架
+
+用户要求保留已有 demo，并开始正式开发。本轮启用“太子-尚书-门下-侍中”流程，按 `docs/gl-reimplementation-acceptance-plan.md` 的步骤 2.1 执行。
+
+太子规划：
+
+- 保留 `prototype/webgl-cells/` 作为源项目快照 demo 和视觉对照，不继续把正式应用能力塞进 demo。
+- 新建 `app/webgl-generator/` 作为独立 WebGL 地图生成器正式应用目录。
+- 阶段 2.1 只建立运行时边界和可运行占位地图，后续步骤再逐步补 seed/options、grid、heightmap、features 和 pack 语义图。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/README.md`，记录正式应用目录职责、启动命令，以及与 `prototype/` 和 `source/` 的边界。
+- 新增 `app/webgl-generator/index.html` 和 `src/styles.css`，提供正式应用第一版工作台界面。
+- 新增 `src/main.js`、`src/runtime/app.js` 和 `src/ui/panel.js`，建立应用启动、生成按钮、状态面板和全局调试入口 `window.__webglGeneratorApp`。
+- 新增 `src/generator/options.js` 和 `src/generator/index.js`，由新项目自己的生成器输出阶段 2.1 占位地图数据。
+- 新增 `src/renderer/placeholder-renderer.js`，用 WebGL2 渲染非空占位地图，不读取 `prototype/webgl-cells/data/sample-map.json`，也不依赖 `source/Fantasy-Map-Generator`。
+- 更新 `docs/current-plan.md`，把当前阶段切换为阶段 2，并记录正式应用启动命令。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\main.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\generator\options.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --input-type=module -e "...generatePlaceholderMap..."` 通过，确认占位地图可输出 seed、目标 cells，且 `sourceDependency = false`、`snapshotDependency = false`。
+- `git diff --check` 通过。
+- `git diff --name-only -- source` 无输出。
+- `git diff --name-only -- prototype` 无输出。
+
+侍中验收：
+
+- `node .\tools\serve-prototype.mjs --port 5410 --dir .\app\webgl-generator` 可服务正式应用目录。本轮 Windows 后台进程在 shell 返回后不稳定，因此侍中改用一次性 Node 静态服务脚本完成浏览器验收。
+- 内置 Browser 本轮访问 `127.0.0.1:5410` 返回连接拒绝；已用本机 Playwright + 系统 Chrome 兜底验收。
+- 页面标题为“WebGL 地图生成器”。
+- `window.__webglGeneratorApp` 存在，renderer 统计显示 `webgl2 = true`、`vertexCount = 630`。
+- 状态面板显示阶段 `2.1-placeholder`、seed、目标 cells、地图尺寸、GPU 顶点、绘制耗时、`WebGL error = 0`、`source 依赖 = 否`、`快照依赖 = 否`。
+- 主动重绘后 canvas 像素检查通过：`940 x 800` 画布中 `752000` 个像素非黑，确认画面非空。
+- 生成按钮验收通过：把 seed 改为 `formal-dev-check`、目标 cells 改为 `12000` 后，运行时 metadata 和页面 badge 同步更新。
+- 控制台无 error/warning。
+
+结论：
+
+- 步骤 2.1 已完成。正式应用骨架已经与既有 demo 分离，下一步进入步骤 2.2：随机数、seed 和 options 模型。
+
+## 2026-06-17：完成步骤 2.2 seed 和 options 模型
+
+继续执行阶段 2，本轮目标是让正式应用具备自己的可复现生成基础，而不是只有一次性占位数据。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/random.js`：
+  - 提供 `createRandom(seed)`，同一 seed 输出稳定随机序列。
+  - 提供 `createRandomSeed()`，用于 UI 随机 seed。
+  - 提供 `stableHash()`，用于稳定摘要校验。
+- 更新 `app/webgl-generator/src/generator/options.js`：
+  - 规范化 seed、目标 cells、地图宽高和自动随机 seed 开关。
+  - 保留目标 cells、宽高的上下限保护。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记从 `2.1-placeholder` 升级为 `2.2-seeded-options`。
+  - 使用 seed 驱动占位陆块位置、半径和 palette。
+  - 输出稳定 `summary`、`summary.checksum`、`randomPreview` 和 `generationLog`。
+  - `generatedAt` 只作为运行时记录，不参与稳定摘要。
+- 更新 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 占位地图不再使用硬编码陆块，而是读取 seed/options 生成出的 `shape`。
+- 更新 `app/webgl-generator/index.html`、`src/ui/panel.js`、`src/runtime/app.js` 和 `src/styles.css`：
+  - UI 新增宽度、高度、自动随机 seed 开关和换 seed 按钮。
+  - 运行时面板显示阶段、自动随机、摘要校验、随机预览和生成日志。
+- 更新 `app/webgl-generator/README.md`：
+  - 记录当前 seed/options 能力。
+  - 记录与 source 随机流程的已知差异：当前 PRNG 是新项目内部可复现基础，不保证同 seed 与 source 生成同一地图。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\generator\random.js` 通过。
+- `node --check app\webgl-generator\src\generator\options.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\main.js` 通过。
+- 确定性摘要检查通过：
+  - `seed = repeatable`、`cells = 12000`、`1600 x 900` 连续生成两次，`summary.checksum = 05b328ff`。
+  - `seed = different` 同参数生成 `summary.checksum = ac9dbb6e`，确认不同 seed 会改变摘要。
+- `git diff --check` 通过。
+- `git diff --name-only -- source` 无输出。
+- `git diff --name-only -- prototype` 无输出。
+
+侍中验收：
+
+- 使用当前内置 Browser 刷新 `http://127.0.0.1:5410/`，页面显示阶段 `2.2-seeded-options`。
+- 页面显示 seed、目标 cells、宽度、高度、自动随机 seed 开关、摘要校验、随机预览、生成日志和 `WebGL error = 0`。
+- 固定 UI 参数验收通过：
+  - seed `ui-repeatable`、目标 cells `15000`、尺寸 `1600 x 900` 第一次生成摘要 `228caba4`。
+  - 同 seed/options 再次生成仍为 `228caba4`。
+  - seed 改为 `ui-different` 后摘要变为 `cd8e8963`。
+- 自动随机 seed 开关验收通过：
+  - 勾选后连续生成两次，seed 分别变为 `map-mqi7ognf-07yeyk3` 和 `map-mqi7ogwr-0jumke5`。
+  - 摘要分别为 `37d25068` 和 `24c8a163`。
+- Browser 控制台无 error/warning。
+
+结论：
+
+- 步骤 2.2 已完成。下一步进入步骤 2.3：点集、Voronoi grid 和基础 cell mesh。
+
+## 2026-06-17：完成步骤 2.3 点集、Voronoi grid 和基础 cell mesh
+
+继续执行阶段 2，本轮目标是让正式应用不再渲染椭圆占位，而是由新项目自己的生成内核产出第一版 `grid` 数据，并由 WebGL renderer 三角化绘制。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/grid.js`：
+  - 根据目标 cells 和地图宽高计算点阵列数。
+  - 使用 seed 驱动的抖动点阵生成 `grid.points`。
+  - 使用局部半平面裁剪生成近似 Voronoi cell。
+  - 输出 `grid.cells.v`、`grid.cells.p`、`grid.cells.h` 和 `grid.vertices.p`。
+  - 统计实际 cells、布局、Voronoi 顶点、cell 三角形、构建耗时和生成方法。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记升级为 `2.3-generated-grid`。
+  - 生成摘要纳入 grid cells、布局、顶点、三角形、样本点和样本高度。
+  - `generationLog` 记录 grid 构建结果。
+- 更新 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - renderer 不再绘制硬编码椭圆陆块。
+  - 从 `grid.points`、`grid.cells.v` 和 `grid.vertices.p` 三角化 cell mesh。
+  - 按 `grid.cells.h` 绘制基础高度/海陆占位色。
+  - 新增最小 camera：拖拽平移、滚轮缩放、适配视图。
+- 更新 `app/webgl-generator/index.html`、`src/ui/panel.js` 和 `src/runtime/app.js`：
+  - 按钮文案改为“生成 grid 地图”。
+  - 新增“适配视图”按钮。
+  - 统计面板显示实际 grid cells、grid 布局、Voronoi 顶点、cell 三角形、grid 构建耗时、GPU 顶点和相机状态。
+- 更新 `app/webgl-generator/README.md` 和 `docs/current-plan.md`，记录阶段 2.3 能力和当前算法边界。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\generator\grid.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- 生成器确定性检查通过：
+  - `seed = grid-repeatable`、`cells = 10000`、`1440 x 960` 连续生成两次摘要一致，`summary.checksum = 5ca271f3`。
+  - `seed = grid-different` 同参数生成 `summary.checksum = 696bff5b`。
+  - 10k 目标实际生成 `10004` cells，布局 `122 x 82`，约 `20008` Voronoi 顶点、`39610` cell 三角形，空 cell 为 `0`。
+- `git diff --check` 通过。
+- `git diff --name-only -- source` 无输出。
+- `git diff --name-only -- prototype` 无输出。
+
+侍中验收：
+
+- 使用内置 Browser 刷新当前 `http://127.0.0.1:5410/`，页面显示阶段 `2.3-generated-grid`。
+- 页面统计显示：
+  - 目标 cells `10000`。
+  - 实际 grid cells `10004`。
+  - grid 布局 `122 x 82`。
+  - Voronoi 顶点约 `20009`。
+  - cell 三角形约 `39611`。
+  - GPU 顶点约 `118839`。
+  - `WebGL error = 0`。
+  - `source 依赖 = 否`，`快照依赖 = 否`。
+- 内置 Browser 的点击操作在 10k grid 生成时出现一次动作超时；页面状态读取正常。因此用本机 Playwright + 系统 Chrome 完整兜底验收。
+- 系统 Chrome 验收结果：
+  - 初始地图画面非空，`940 x 800` 画布中 `752000` 个像素非黑。
+  - `seed = grid-ui-repeatable` 连续生成两次摘要均为 `598ed9e8`。
+  - `seed = grid-ui-different` 后摘要变为 `d32628ab`。
+  - 拖拽后相机从 `x 1.00, 0.00, 0.00` 变为 `x 1.00, 0.26, -0.15`。
+  - 滚轮缩放后相机变为 `x 1.52, 0.26, -0.15`。
+  - 点击适配视图后相机恢复 `x 1.00, 0.00, 0.00`。
+  - 控制台无 error/warning。
+
+当前限制：
+
+- 当前 Voronoi 是基于抖动点阵和局部半平面裁剪的轻量近似实现，用于先打通正式应用自己的 `grid` 数据流。
+- 尚未实现 source 那种点集松弛、真实 heightmap、feature 提取或 pack 语义图。
+- 下一步进入步骤 2.4：高度图和海陆 feature。
+
+## 2026-06-17：构建器取舍和步骤 2.4 高度图/feature
+
+用户询问是否需要使用现代构建器，例如 Vite，并说明如果不需要就继续当前开发。
+
+太子决策：
+
+- 当前暂不引入 Vite，继续原生 ESM + `tools/serve-prototype.mjs` 静态开发。
+- 理由：
+  - 正式应用目前无 npm 依赖，且目标可以只支持高版本 Chrome。
+  - 当前阶段重点是生成内核、数据结构和 WebGL 管线，不应先增加构建配置。
+  - `app/webgl-generator/` 目录结构保持 Vite 友好，后续需要打包产物、资源指纹、worker、第三方库或测试集成时再引入。
+
+尚书实施步骤 2.4：
+
+- 新增 `app/webgl-generator/src/generator/heightmap.js`：
+  - 用 seed 驱动的 continent、ridge 和 lake basin 采样高度。
+  - 当前 seaLevel 为 `20`。
+- 新增 `app/webgl-generator/src/generator/features.js`：
+  - 对 `grid.cells.h` 做水陆分类。
+  - 使用 flood fill 提取 ocean、land、lake feature。
+  - 写入 `grid.cells.f`。
+  - 从相邻水陆 cell 的共享 Voronoi 顶点提取海岸线和湖岸线 segment。
+- 更新 `app/webgl-generator/src/generator/grid.js`：
+  - cell 高度改为来自 `sampleHeight(heightmap, point)`。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记升级为 `2.4-heightmap-features`。
+  - 输出 `heightmap`、`features` 和 feature 统计。
+  - 生成日志记录 ocean、land、lake 提取结果。
+- 更新 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 基础 cell 颜色按高度绘制。
+  - 新增 line buffer，用 `gl.LINES` 绘制海岸线和湖岸线。
+- 更新 UI 统计：
+  - feature 数。
+  - 海洋/陆地/湖泊数量。
+  - 海岸线段。
+  - 湖岸线段。
+  - 线段顶点。
+- 更新 `app/webgl-generator/README.md` 和 `docs/current-plan.md`。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- `node --check app\webgl-generator\src\generator\features.js` 通过。
+- `node --check app\webgl-generator\src\generator\grid.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- 生成器确定性检查通过：
+  - `seed = feature-repeatable` 连续生成摘要 `51ea79d4`。
+  - `seed = feature-different` 生成摘要 `25a98f2e`。
+  - `feature-repeatable` 生成 `1` 个 ocean、`1` 个 land、`2` 个 lake，海岸线段 `374`，湖岸线段 `134`。
+- `git diff --check` 通过。
+- `git diff --name-only -- source` 无输出。
+- `git diff --name-only -- prototype` 无输出。
+
+侍中验收：
+
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后显示阶段 `2.4-heightmap-features`。
+- 默认 seed `stage-2-1` 页面统计：
+  - 实际 grid cells `10004`。
+  - feature 数 `3`。
+  - 海洋/陆地/湖泊 `1 / 1 / 1`。
+  - 海岸线段 `349`。
+  - 湖岸线段 `82`。
+  - GPU 顶点 `118830`。
+  - 线段顶点 `862`。
+  - `WebGL error = 0`。
+- 系统 Chrome 兜底验收：
+  - `feature-repeatable` 连续生成摘要均为 `51ea79d4`。
+  - `feature-different` 摘要为 `25a98f2e`。
+  - `940 x 800` 画布中 `752000` 个像素非黑。
+  - 控制台无 error/warning。
+
+当前限制：
+
+- heightmap 只是第一版参数化采样，不等同于 source 的完整高度图模板体系。
+- feature 只区分 ocean、land、lake；尚未实现 lake island、多海域命名、feature 边界平滑或 pack 语义图。
+- 下一步进入步骤 2.5：pack 语义图和基础 picking。
+
+## 2026-06-17：完成步骤 2.5 pack 语义图和基础 picking
+
+继续执行阶段 2，本轮目标是建立正式应用自己的 `pack` 语义层，并让鼠标悬停能从画布位置命中 grid cell、pack cell 和 feature。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/pack.js`：
+  - 生成独立 `pack` 对象。
+  - 当前采用 `one-grid-cell-to-one-pack-cell` 阶段性映射。
+  - 写入 `grid.cells.pack`，用于从底层渲染 mesh cell 找到对应 pack cell。
+  - `pack.cells` 保存 grid cell、feature、height 和 type 等语义字段。
+- 新增 `app/webgl-generator/src/renderer/picking.js`：
+  - 根据世界坐标定位 grid 行列附近候选 cell。
+  - 对候选 cell 做 polygon hit test。
+  - 返回 grid cell、pack cell、feature id/type、height、世界坐标和候选数量。
+- 更新 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 暴露 `screenToWorld()` 和 `pickClientPoint()`。
+  - 在 canvas pointer move 时触发 hover picking。
+  - renderer 统计加入 pack metadata。
+- 更新 `app/webgl-generator/src/runtime/app.js` 和 `src/ui/panel.js`：
+  - 新增 `state.pick`。
+  - 新增“悬停”面板，显示 grid cell、pack cell、feature、height、坐标和候选 cells。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记升级为 `2.5-pack-picking`。
+  - metadata 加入 `packCells`。
+  - 摘要和生成日志加入 pack 映射信息。
+- 更新 `app/webgl-generator/README.md` 和 `docs/current-plan.md`。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\generator\pack.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\main.js` 通过。
+- 生成器和 picking 检查通过：
+  - `seed = pack-repeatable` 连续生成摘要稳定为 `52841298`。
+  - `grid = 10004`，`pack = 10004`。
+  - pack 映射为 `one-grid-cell-to-one-pack-cell`。
+  - 中心点 picking 命中 `gridCell = 5062`、`packCell = 5062`、`featureType = lake`、`height = 13`、候选 cells `9`。
+
+侍中验收：
+
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后显示阶段 `2.5-pack-picking`。
+- 页面统计显示 `pack cells = 10004`，生成日志包含 `build pack: 10004 semantic cells`。
+- 系统 Chrome 验收 hover picking：
+  - 页面阶段为 `2.5-pack-picking`。
+  - `pack cells = 10004`。
+  - 中心悬停面板命中 `grid cell = 4940`、`pack cell = 4940`、`feature = lake #2`、`高度 = 16`、`坐标 = 720, 480`、候选 cells `9`。
+  - 直接调用 renderer `pickClientPoint()` 返回同一组命中信息。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+当前限制：
+
+- 当前 `pack` 是 1:1 语义壳，用于先建立语义边界和 picking 数据流；尚未实现 source 那种抽稀/重建后的 pack 图。
+- picking 目前只支持 cell/pack/feature 命中；城市、河流、路线、marker 等对象级 picking 留到后续阶段。
+- 下一步进入步骤 2.6：气候、生物群系和河流最小链路。
+
+## 2026-06-17：完成步骤 2.6 气候、生物群系和河流最小链路
+
+用户明确授权后续无需每一步停下来等待确认。本轮继续自动执行阶段 2 的最后一步 2.6。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/climate.js`：
+  - 基于纬度、高度、海陆 feature 粗略生成温度和降水。
+  - 规则分类 biome，包括 water、ice、tundra、grassland、forest、desert、savanna、rainforest、mountain。
+  - 写入 `grid.cells.temp`、`grid.cells.prec` 和 `grid.cells.biome`。
+- 新增 `app/webgl-generator/src/generator/rivers.js`：
+  - 从高地和高降水 cell 中挑选河源。
+  - 沿低邻居追踪河流，遇到 ocean、lake 或地图边界停止。
+  - 输出河流 cell 序列、点列和统计。
+- 更新 `app/webgl-generator/src/generator/pack.js`：
+  - pack cell 增加 temp、prec、biome 字段。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记升级为 `2.6-climate-rivers`。
+  - 输出 `climate` 和 `rivers`。
+  - 摘要和生成日志纳入气候范围、biome 分布和河流统计。
+- 更新 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 支持 `height`、`temperature`、`precipitation`、`biomes` 四种专题色。
+  - 河流加入 line pass。
+- 更新 `app/webgl-generator/src/renderer/picking.js`：
+  - 悬停结果增加 temperature、precipitation 和 biome。
+- 更新 `app/webgl-generator/index.html`、`src/runtime/app.js`、`src/ui/panel.js` 和 `src/styles.css`：
+  - 新增专题切换按钮。
+  - 统计面板显示温度范围、降水范围、biome 数量、河流数量/线段数和当前专题。
+  - 悬停面板显示温度/降水和 biome。
+- 更新 `app/webgl-generator/README.md` 和 `docs/current-plan.md`。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\generator\climate.js` 通过。
+- `node --check app\webgl-generator\src\generator\rivers.js` 通过。
+- `node --check app\webgl-generator\src\generator\pack.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- 生成器确定性检查通过：
+  - `seed = climate-repeatable` 连续生成摘要 `94c3bf3c`。
+  - `seed = climate-different` 摘要 `b5c98828`。
+  - 温度范围 `-7 .. 31`。
+  - 降水范围 `40 .. 84`。
+  - biome 统计包含 water、tundra、grassland、forest、savanna、mountain、rainforest。
+  - 河流 `3` 条、`21` 段。
+  - 中心 picking 返回 temperature、precipitation 和 biome 字段。
+
+侍中验收：
+
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后显示阶段 `2.6-climate-rivers`。
+- 默认 seed 页面统计：
+  - 温度范围 `-7 .. 31`。
+  - 降水范围 `36 .. 85`。
+  - biome 数 `7`。
+  - 河流 `3 / 39`。
+  - 专题默认 `height`。
+  - `WebGL error = 0`。
+- 系统 Chrome 交互验收：
+  - 专题按钮可切换高度、温度、降水、生物群系，最终专题为 `biomes`。
+  - 悬停中心点命中 `lake #2`，温度/降水为 `31 / 85`，biome 为 `water`。
+  - `940 x 800` 画布中 `752000` 个像素非黑。
+  - `glError = 0`。
+  - 控制台无 error/warning。
+
+当前限制：
+
+- 气候和 biome 是最小趋势模型，不等同于 source 的完整风向、纬度带、降水传播和 biome 矩阵。
+- 河流只有中心线，未实现流量、宽度、join/cap、河口裁剪和支流汇合。
+- 阶段 2 的最小生成链路已闭合。下一步进入阶段 3：世界语义生成与图层补全，优先步骤 3.1 文化、宗教和名称系统。
+
+## 2026-06-17：完成步骤 3.1 文化、宗教和名称系统
+
+在用户授权自动继续后，本轮没有停在阶段 2.6，而是继续进入阶段 3 的第一步。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/society.js`：
+  - 从陆地 cell 中选择文化和宗教中心。
+  - 使用距离场扩散到所有 grid cell。
+  - 生成中文文化名和宗教名。
+  - 写入 `grid.cells.culture` 和 `grid.cells.religion`。
+- 更新 `app/webgl-generator/src/generator/pack.js`：
+  - pack cell 同步保存 culture 和 religion 字段。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记升级为 `3.1-culture-religion`。
+  - 输出 `society` 对象和统计。
+  - 生成日志记录 culture/religion 数量。
+- 更新 renderer 和 UI：
+  - 新增文化、宗教专题按钮。
+  - renderer 支持 `cultures` 和 `religions` 专题色。
+  - picking 和悬停面板显示文化名、宗教名。
+- 更新 `app/webgl-generator/README.md` 和 `docs/current-plan.md`。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\generator\society.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\generator\pack.js` 通过。
+- 生成器确定性检查通过：
+  - `seed = society-repeatable` 连续生成摘要稳定为 `4da2c96f`。
+  - 生成 `8` 个文化和 `6` 个宗教。
+  - 中心 picking 返回文化 `昭宁文化` 和宗教 `天衡道`。
+
+侍中验收：
+
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后显示阶段 `3.1-culture-religion`。
+- 页面统计显示文化/宗教 `8 / 6`，专题按钮包含文化和宗教。
+- 系统 Chrome 验收：
+  - 专题可切换到文化和宗教，最终专题为 `religions`。
+  - 中心悬停显示文化 `星渚文化`、宗教 `青岚信会`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+当前限制：
+
+- 文化/宗教扩散当前是最小距离场模型，没有考虑地形阻隔、海峡、河流、人口或 source 的完整文化生成逻辑。
+- 名称表是内置中文示例，后续应抽象为可配置命名风格。
+- 下一步进入步骤 3.2：国家、省份和区域。
+
+### 2.4 cell 三角化补丁
+
+用户在内置浏览器中指出当前生成图的三角形看起来是分散的。排查后确认这不是预期表现，而是 renderer 在把 Voronoi cell 做扇形三角化时，只生成了中间边段，漏掉了每个多边形的首边和尾边闭合三角形，导致 cell 填充出现缺片。
+
+修正：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `pushGridCells()` 从 `index = 1` 到 `length - 2` 的不完整循环，改为遍历所有 vertex，并用 `(index + 1) % length` 闭合首尾边。
+  - 每个 cell 现在会完整生成一圈中心扇形三角形。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `git diff --name-only -- source` 无输出。
+- `git diff --name-only -- prototype` 无输出。
+- 内置 Browser 刷新后，默认 10k 地图 GPU 顶点从约 `118839` 增加到 `178854`，符合补齐缺失三角形后的预期。
+- 系统 Chrome 验证：
+  - `940 x 800` 画布中 `752000` 个像素非黑。
+  - `glError = 0`。
+  - 控制台无 error/warning。
+
+## 2026-06-18：完成步骤 3.2 国家、省份和区域
+
+用户询问为何停下后，本轮确认没有实际阻塞，只是会话执行边界导致上一段暂停；随后按用户“不需要每一步停下来”的要求继续推进正式开发。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/politics.js`：
+  - 从陆地 cell 中选择国家中心。
+  - 基于国家分配结果继续生成省份中心和省份归属。
+  - 按位置、高度和湿度生成区域归属。
+  - 写入 `grid.cells.state`、`grid.cells.province` 和 `grid.cells.region`。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记升级为 `3.2-states-provinces-regions`。
+  - 输出 `politics` 对象和统计。
+  - 生成日志记录国家、省份、区域数量。
+- 更新 `app/webgl-generator/src/generator/pack.js`：
+  - pack cell 同步保存 state、province 和 region 字段。
+- 更新 renderer 和 UI：
+  - 新增国家、省份、区域专题按钮。
+  - renderer 支持 `states`、`provinces` 和 `regions` 专题色。
+  - picking 和悬停面板显示国家、省份和区域名称。
+- 更新 `app/webgl-generator/README.md` 和 `docs/current-plan.md`。
+
+门下检查：
+
+- `node --check app\webgl-generator\src\generator\politics.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\generator\pack.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `git diff --name-only -- source` 无输出。
+- `git diff --name-only -- prototype` 无输出。
+- 生成器确定性检查通过：
+  - `seed = politics-repeatable` 连续生成摘要稳定为 `31578b67`。
+  - 生成 `5` 个国家、`11` 个省份、`6` 个区域。
+  - pack 语义字段包含 `state`、`province` 和 `region`。
+
+侍中验收：
+
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后显示阶段 `3.2-states-provinces-regions`。
+- 页面统计显示国家/省份/区域 `5 / 11 / 6`。
+- 专题按钮包含高度、温度、降水、生物群系、文化、宗教、国家、省份和区域。
+- 实际切换国家、省份、区域专题后，最终专题为 `regions`。
+- 悬停陆地 cell 命中 `land #1`，显示国家 `星渚王国`、省份 `雁川领`、区域 `西岭`。
+- `WebGL error = 0`。
+- 控制台无 error/warning。
+
+当前限制：
+
+- 国家、省份扩散当前是最小距离场模型，尚未考虑人口、河流阻隔、海峡、扩张成本、军事/外交或 source 的完整政治生成规则。
+- 区域当前是地理分区，不等同于 source 的完整区域/行政层级。
+- 下一步进入步骤 3.3：城市、道路和基础人口点。
+
+### 2.3 grid 规整感修正
+
+用户在内置浏览器中指出当前正式应用生成结果看起来过于规整。排查后确认原因是 `app/webgl-generator/src/generator/grid.js` 仍采用“每个行列格一个点，再做小幅随机抖动”的阶段性点集策略；这个策略稳定但会在视觉上露出行列结构。
+
+修正：
+
+- `generatePoints()` 从单纯 `0.32` cell 的局部随机抖动，改为三层扰动：
+  - 单 cell 内局部随机。
+  - 每行和每列的轻微错位。
+  - 低频 warp field 的连续形变。
+- 点仍被限制在原始 cell 的安全范围内，避免破坏当前局部 Voronoi 裁剪和基于行列邻域的 picking 假设。
+- `grid.metadata.method` 更新为 `organic-stratified-halfplane-voronoi`。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\grid.js` 通过。
+- 生成器确定性检查通过：
+  - `seed = organic-grid-check` 连续生成摘要稳定为 `350ad237`。
+  - `gridCells = 10004`，`Voronoi 顶点 = 20023`，`cell 三角形 = 39615`。
+  - 阶段仍为 `3.2-states-provinces-regions`，国家/省份/区域统计仍为 `5 / 11 / 6`。
+
+当前限制：
+
+- 这仍是阶段性轻量点集，不是完整 Poisson / Delaunay / Lloyd 生成流程。
+- 后续如果继续追求接近 source 的自然感，需要把点集生成升级为可控密度采样和松弛流程，并对应调整空间索引。
+
+### 2.4 heightmap 地形规整感修正
+
+用户进一步澄清：规整感主要来自生成的地形，而不是 cell 点集。排查后确认 `app/webgl-generator/src/generator/heightmap.js` 使用少量规则椭圆 blob 叠加大陆、高地和湖盆，导致大陆轮廓、湖盆和山脉看起来圆滑且规整。
+
+修正：
+
+- `createHeightmap()` 新增 deterministic noise fields：
+  - domain warp X/Y。
+  - continental noise。
+  - detail noise。
+  - ridge noise。
+- `sampleHeight()` 改为先对采样坐标做低频形变，再叠加不规则 blob、分形噪声和高地细节。
+- continent、ridge 和 lake basin blob 新增旋转角与 irregularity，边界半径按噪声扰动。
+- 仍保持无依赖、seed 可复现的轻量模型。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- `git diff --check` 通过。
+- `git diff --name-only -- source` 无输出。
+- `git diff --name-only -- prototype` 无输出。
+- 生成器确定性检查通过：
+  - `seed = terrain-organic-check` 连续生成摘要稳定为 `2576c8ae`。
+  - `gridCells = 10004`。
+  - feature 统计为 `57`，其中海洋 `3`、陆地 `31`、湖泊 `23`。
+  - 高度范围 `0..84`，陆地/水域 cell 为 `4384 / 5620`。
+  - 河流 `5` 条、线段 `85`。
+- 内置 Browser 刷新默认 `seed = stage-2-1` 后：
+  - 阶段仍为 `3.2-states-provinces-regions`。
+  - feature 统计为 `39`，其中海洋 `3`、陆地 `18`、湖泊 `18`。
+  - 海岸线段 `841`，湖岸线段 `335`。
+  - 河流 `7` 条、线段 `109`。
+  - `WebGL error = 0`，控制台无 error/warning。
+
+当前限制：
+
+- 这仍是阶段性轻量 heightmap，不是 source 的完整模板化地形、海陆再平衡、侵蚀、河谷切割或山脉生成流程。
+- 后续需要把地形生成拆成可配置 pipeline，并加入更明确的大陆板块、山脉走向、海岸后处理和湖泊筛选。
+
+### 2.4/2.6 对照 demo 后的地形和河流修正
+
+用户在内置浏览器中指出当前地图仍存在两个问题：
+
+- 河流过乱，存在转圈、打结的视觉问题。
+- 地形分形仍然偏简单，不如 `prototype/webgl-cells/` 的 demo 地形自然。
+
+排查：
+
+- 正式应用此前的河流是逐条从源头选择最低邻居的贪心追踪，缺少全图流向、汇水量、填洼和合流约束，容易在局部洼地、近水 cell 和已占用河道附近产生短线、折返或绕圈。
+- 正式应用此前的 heightmap 虽加入噪声，但主要仍是大陆 blob 加噪声，缺少 source 中 `HeightmapGenerator` 模板式 `Hill`、`Pit`、`Range`、`Trough` 步骤所形成的方向性地貌。
+- source 的 `river-generator.ts` 不是逐条独立贪心生成，而是先按高度排序汇水，记录 `flux`、`confluence`、parent river，并在生成前执行 depression filling。
+
+修正：
+
+- `app/webgl-generator/src/generator/heightmap.js`：
+  - 增加山脉线、谷地线、小丘和洼地采样。
+  - 调整分形噪声，使正向高地细节更明显，减少内陆被负向噪声打成过多水洞。
+  - 默认高度专题配合 renderer 新色阶，提升内陆高差可读性。
+- `app/webgl-generator/src/generator/rivers.js`：
+  - 从逐条贪心追踪重写为轻量无环流向图。
+  - 生成前对陆地做轻量 depression fill。
+  - 按高度从高到低累计 flux。
+  - 按 flux、高度和间距筛选河源。
+  - 只有通过长度检查的河流才占用河道。
+  - 合流遇到已存在河道时停止当前支流，避免交叉乱穿。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 高度专题改用更分明的低地、丘陵、高地和山地色阶。
+
+验证：
+
+- `seed = stage-2-1` 的生成器检查：
+  - feature 数 `129`，其中海洋 `8`、陆地 `45`、湖泊 `76`。
+  - 高度分桶 `[0-20, 20-38, 38-62, 62-78, 78+] = 3347 / 2945 / 2278 / 1172 / 262`。
+  - 河流 `11` 条、线段 `47`，最长 `8` 个 cell。
+  - 河流重复 cell 数 `0`。
+  - 河流模型标记为 `acyclic-flux-downhill`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 页面显示河流 `11 / 47`。
+  - `WebGL error = 0`。
+  - 截图复查：河流不再出现明显转圈打结，内陆地形层次比上一版更明显。
+
+当前限制：
+
+- 正式应用仍未实现 source 完整的 pack 图、湖泊出口、真实合流流量、河宽 mesh、河床下切和 meandered points。
+- 当前 heightmap 是向 source 模板逻辑靠拢的轻量实现，尚未把模板步骤抽象成可配置 pipeline。
+
+### 2.4 地形圆圈感和平坦感二次修正
+
+用户继续指出正式应用当前地形仍不自然：
+
+- 分形痕迹明显，部分区域能看出圆圈，真实地形不会有这么多圆形结构。
+- 地形整体偏平坦，高山概率不大，大部分区域像平原。
+
+排查：
+
+- `heightmap.js` 中上一版噪声采样使用周期包裹，多频率叠加后容易露出重复纹理和近似环状痕迹。
+- 山脉线段端点位于可视地图内部，容易在端点形成圆形山包。
+- 负向噪声和谷地会产生大量小型闭合内陆水坑，视觉上像圆形打孔。
+- 高程再映射对高山抬升不足，导致大面积陆地停留在低地和平缓丘陵色阶。
+
+修正：
+
+- `app/webgl-generator/src/generator/heightmap.js`：
+  - 将周期包裹噪声改为非周期确定性 lattice noise，减少重复分形纹理。
+  - 将山脉轴线延伸到地图边界外，减少可视区域内的圆形端点山包。
+  - 提高窄山脉脊线和 ridged noise 对高海拔的贡献，使山地从孤立白点变为连续山脉带。
+  - 弱化谷地线对水坑的影响，保留低地起伏但减少圆形洼地。
+- `app/webgl-generator/src/generator/grid.js`：
+  - 新增小型内陆闭合水坑填充，只填平不连海且面积很小的水域 basin。
+  - 保留较大的湖泊和海岸线，避免把所有水体硬抹掉。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- `node --check app\webgl-generator\src\generator\grid.js` 通过。
+- `node --check app\webgl-generator\src\generator\rivers.js` 通过。
+- 三组固定 seed 生成器检查均无河流重复 cell：
+  - `stage-2-1`：feature `82`，海洋/陆地/湖泊 `11 / 39 / 32`，高度分桶 `[<20, 20-38, 38-55, 55-72, 72-86, 86+] = 2667 / 3925 / 1171 / 669 / 553 / 1019`，河流 `9 / 40`，回环 `0`。
+  - `terrain-organic-check`：feature `83`，海洋/陆地/湖泊 `12 / 44 / 27`，高度分桶 `2053 / 4102 / 1412 / 797 / 581 / 1059`，河流 `10 / 46`，回环 `0`。
+  - `river-sanity-1`：feature `89`，海洋/陆地/湖泊 `6 / 63 / 20`，高度分桶 `3498 / 3048 / 1280 / 804 / 428 / 946`，河流 `11 / 52`，回环 `0`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 页面显示阶段 `3.2-states-provinces-regions`。
+  - 默认 seed `stage-2-1` 显示 feature `82`，海洋/陆地/湖泊 `11 / 39 / 32`，河流 `9 / 40`。
+  - `WebGL error = 0`，控制台无 error/warning。
+  - 截图复查：内陆小圆洞明显减少，高山形成更连续的横向山脉带，整体不再主要表现为平坦平原。
+
+当前限制：
+
+- 这仍是轻量 heightmap，不是 source 完整的模板步骤、侵蚀、水文出口和河谷下切。
+- 高山带已经更明显，但后续仍需要把山脉、湖泊和海陆比例拆成可配置参数，避免不同 seed 之间表现波动过大。
+
+### 2.4 山脉突兀感和气团感修正
+
+用户继续指出当前山体仍不自然：
+
+- 高山像突然拔地而起，缺少丘陵、前山和高原过渡。
+- 山势弯弯曲曲，像气团，不像构造运动形成的虽然凌乱但仍有大致走向的山脉。
+
+排查：
+
+- `heightmap.js` 中上一版山脉主要由窄线 `sampleRange()` 高强度抬升，主脊宽度太窄，肩部过渡不足。
+- `remapLandHeight()` 对高值再次抬升，使高山核心更容易直接贴着中低地出现。
+- 多条山脉线在地图中心交汇，叠加后形成白色团块，视觉上更像气团而不是构造带。
+- 高度专题色阶雪线偏低，白色区域过早出现，加剧了突兀感。
+
+修正：
+
+- `app/webgl-generator/src/generator/heightmap.js`：
+  - 将 `mountainRanges` 改为 `mountainBelts`。
+  - 新增 `createMountainBelt()` 和 `sampleMountainBelt()`，把山脉拆成宽缓褶皱、肩部过渡和窄主脊三层。
+  - 降低山脉 bend 幅度，使多条山脉更接近平行或同向构造带。
+  - 弱化中心交汇的第三条斜穿山脉，改为较弱的平行支脉，减少中央高山团块。
+  - 放缓 `remapLandHeight()` 的高值抬升，保留高山但减少悬崖式跃升。
+- `app/webgl-generator/src/generator/grid.js`：
+  - 新增 `softenHighlandTransitions()`，对陆地高差做轻量邻域过渡，让高山外缘向高地和丘陵扩散。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 调整高度专题色阶，推迟雪白高山色出现，并把极高海拔颜色压成更柔和的裸岩/浅雪色。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- `node --check app\webgl-generator\src\generator\grid.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- 三组固定 seed 生成器检查均无河流重复 cell：
+  - `stage-2-1`：feature `69`，海洋/陆地/湖泊 `8 / 54 / 7`，高度分桶 `[<20, 20-38, 38-55, 55-72, 72-86, 86+] = 2390 / 4182 / 1485 / 855 / 444 / 648`，河流 `5 / 28`，回环 `0`。
+  - `terrain-organic-check`：feature `63`，海洋/陆地/湖泊 `9 / 45 / 9`，高度分桶 `2110 / 3356 / 2108 / 1269 / 441 / 720`，河流 `10 / 58`，回环 `0`。
+  - `river-sanity-1`：feature `101`，海洋/陆地/湖泊 `9 / 58 / 34`，高度分桶 `3043 / 3497 / 1749 / 727 / 367 / 621`，河流 `9 / 49`，回环 `0`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 页面显示阶段 `3.2-states-provinces-regions`。
+  - 默认 seed `stage-2-1` 显示 feature `69`，海洋/陆地/湖泊 `8 / 54 / 7`，河流 `5 / 28`。
+  - `WebGL error = 0`，控制台无 error/warning。
+  - 截图复查：主山脉呈横向构造带，中央高山团块减弱，高山外缘比上一版有更明显的高地和丘陵过渡。
+
+当前限制：
+
+- 当前仍是启发式构造带模型，并未实现真实板块边界、俯冲带、褶皱带年龄或侵蚀强度。
+- 后续要继续接近 source 或真实地形，需要把山脉生成拆成可配置的构造 province，并让河谷侵蚀反向影响高度场。
+
+### 2.4 环形/气团山体整改
+
+用户基于内置浏览器截图继续指出地形仍不合格：局部山体仍存在环形结构，走势像气团，不像有大致构造方向的山脉；如果继续推进语义功能，会把错误高度生成当成基础固化。
+
+重新对照 source 和 demo 后确认：
+
+- `prototype/webgl-cells/` 的 demo 地形并不是前端噪声生成，而是 `tools/fmg-export-snapshot.mjs` 从原 FMG 运行时导出的真实 `grid.cells.h`。
+- source 的 `HeightmapGenerator` 对 `continents` 模板按 `Hill`、`Range`、`Strait`、`Smooth`、`Trough`、`Pit`、`Mask` 等步骤在图邻接上扩散高度，不是连续坐标分形噪声。
+- 正式应用上一版虽然加入了构造带，但本质仍是连续采样和宽山带叠加，容易产生环、团块和大面积白色高原。
+
+修正：
+
+- 重写 `app/webgl-generator/src/generator/heightmap.js`：
+  - 删除连续坐标 `sampleHeight()` 方案。
+  - 改为 graph propagation 高度模板，按 source `continents` 的步骤实现 `addHill()`、`addRange()`、`addStrait()`、`addTrough()`、`addPit()`、`smooth()` 和 `mask()`。
+  - `Range` 记录主脊 cell 和邻域影响，重平衡时只允许主脊附近保留高海拔，非 ridge 的宽丘陵会被压回中海拔，避免白色气团。
+  - 补回 `Strait vertical` 步骤，打断过完整大陆面，减少整片高原。
+  - 最终按 demo 快照高度分布做排序校准，使水域、低地、中山、高山和极高峰比例接近 FMG demo。
+- 调整 `app/webgl-generator/src/generator/grid.js`：
+  - grid 构建后再套用 graph propagation heightmap。
+  - 移除上一版 `softenHighlandTransitions()`，避免在高度模板外再次把高山扩成宽团块。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- 三组固定 seed 生成器检查均无河流重复 cell：
+  - `stage-2-1`：checksum `ee78a221`，feature `24`，海洋/陆地/湖泊 `3 / 9 / 12`，高度分桶 `[<20, 20-38, 38-55, 55-72, 72-86, 86+] = 4372 / 2372 / 1737 / 1082 / 349 / 92`，河流 `8 / 60`，回环 `0`。
+  - `terrain-organic-check`：checksum `cc9092f0`，feature `11`，海洋/陆地/湖泊 `1 / 8 / 2`，高度分桶 `4397 / 2347 / 1737 / 1082 / 349 / 92`，河流 `7 / 55`，回环 `0`。
+  - `river-sanity-1`：checksum `476a3fc2`，feature `13`，海洋/陆地/湖泊 `1 / 7 / 5`，高度分桶 `4389 / 2355 / 1737 / 1082 / 349 / 92`，河流 `7 / 61`，回环 `0`。
+- 与 demo 快照分布对照：
+  - demo：`[43.45%, 24.61%, 17.23%, 10.62%, 3.29%, 0.8%]`。
+  - 正式应用 `stage-2-1`：`[43.7%, 23.71%, 17.36%, 10.82%, 3.49%, 0.92%]`。
+  - demo 相邻高度差 p95 为 `8`，正式应用为 `10`；差异主要来自新增海峡切割，后续可继续软化海峡边缘。
+- 浏览器复查 `http://127.0.0.1:5410/`：
+  - 页面显示阶段 `3.2-states-provinces-regions`。
+  - 默认 seed `stage-2-1` 显示 checksum `ee78a221`。
+  - `WebGL error = 0`。
+  - 截图保存为 `docs/terrain-fix-browser-check.png`。
+  - 肉眼复查：环形山和大面积白色气团明显减少，高山集中为更窄的条带，地形可作为后续语义生成继续迭代的基础。
+
+当前限制：
+
+- 这仍是轻量 graph propagation 复刻，不是 source 完整实现；`Strait`、`Range` 和高度分布校准仍为阶段性近似。
+- 当前高度分布已贴近 demo，但山脉方向、侵蚀、水文出口和河谷下切仍需后续接入更完整的模板参数与水文反馈。
+
+### 2.4 地形模板控制
+
+用户指出地形高度已基本可接受，但每次生成仍像一大片接近圆形的陆地；原版 FMG 可以生成地中海、高山岛屿、平原岛屿、一侧大陆等多种 case。
+
+排查：
+
+- 正式应用此前虽然把 heightmap 改成 graph propagation，但 `createHeightmap()` 仍硬编码为 `continents` 近似模板。
+- UI 和 options 没有地形模板字段，换 seed 只是在同一种大陆模板里抽变体，无法切换到原版的其他 heightmap case。
+- 上一轮的 demo 分布校准也只按 continents 分布处理，不能表达岛屿、地中海或盘古大陆的海陆比例。
+
+修正：
+
+- `app/webgl-generator/src/generator/options.js`：
+  - 新增 `heightmapTemplate` 选项，默认 `continents`。
+  - 限制可选模板 id，避免非法输入进入生成链路。
+- `app/webgl-generator/index.html` 和 `app/webgl-generator/src/ui/panel.js`：
+  - 新增“地形”下拉框。
+  - 当前支持大陆、地中海、高山岛屿、平原岛屿、一侧大陆、盘古大陆和群岛。
+  - 运行时统计显示当前地形模板。
+- `app/webgl-generator/src/generator/heightmap.js`：
+  - 将固定 continents 流程改成模板执行器。
+  - 支持 `Hill`、`Pit`、`Range`、`Trough`、`Strait`、`Smooth`、`Mask`、`Add`、`Multiply`、`Invert`。
+  - 每个模板有独立海陆比例和高度分布校准，避免所有模板被压成同一种大陆比例。
+- `app/webgl-generator/src/generator/index.js`：
+  - metadata、summary 和 generationLog 记录 `heightmapTemplate`，方便追踪。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- `node --check app\webgl-generator\src\generator\options.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- 同一 seed `template-check` 下七个模板均生成不同 checksum，且河流无重复 cell：
+  - 大陆：checksum `e62c6eb9`，海洋/陆地/湖泊 `1 / 8 / 0`，水域分桶约 `44.1%`。
+  - 地中海：checksum `71a93f42`，海洋/陆地/湖泊 `4 / 16 / 9`，水域分桶约 `42.1%`。
+  - 高山岛屿：checksum `5b21db7e`，海洋/陆地/湖泊 `1 / 15 / 1`，水域分桶约 `55.8%`。
+  - 平原岛屿：checksum `96e77f12`，海洋/陆地/湖泊 `1 / 11 / 9`，水域分桶约 `52.2%`。
+  - 一侧大陆：checksum `7ffdb759`，海洋/陆地/湖泊 `9 / 58 / 16`，水域分桶约 `46.6%`。
+  - 盘古大陆：checksum `47a1d912`，海洋/陆地/湖泊 `2 / 10 / 6`，水域分桶约 `32.6%`。
+  - 群岛：checksum `6168670d`，海洋/陆地/湖泊 `7 / 18 / 3`，水域分桶约 `64.2%`。
+- 内置 Browser 验证：
+  - 页面统计显示“地形模板”。
+  - 下拉切换到地中海后生成 checksum `ca364d94`，显示模板 `地中海`，`WebGL error = 0`。
+  - 下拉切换到高山岛屿后生成 checksum `0fa2a131`，显示模板 `高山岛屿`，`WebGL error = 0`。
+
+当前限制：
+
+- 这只是第一批模板 case，尚未完整覆盖 source 的 Volcano、Atoll、Isthmus、Old World、Fractious 等所有模板。
+- 当前模板参数仍写在代码中；后续可把模板选择、海陆比例、山脉强度和海峡强度做成更细的用户可调参数。
+
+### 3.3 城市、道路和基础人口点
+
+在地形模板基本可用后，继续推进正式应用的世界语义层。目标是先建立城市、人口和道路数据流，让后续标签、对象 picking、城市详情和更真实的路线系统有基础字段。
+
+实现：
+
+- 新增 `app/webgl-generator/src/generator/settlements.js`：
+  - 按陆地 cell 的高度、降水、海岸邻接、河流邻接、国家中心和省份中心估算人口适宜度。
+  - 生成城市、首都、省会和港口，城市记录所属国家、省份、文化、宗教和人口估值。
+  - 生成 `grid.cells.pop` 和 `grid.cells.burg`。
+  - 连接首都、省会和主要城市，生成 `road` 和 `trail` 路线。
+  - 输出农村人口点，用于 WebGL point pass。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 阶段标记升级为 `3.3-settlements-routes-population`。
+  - 生成链路改为 politics -> rivers -> settlements -> pack。
+  - summary 和 generationLog 记录城市、道路和人口统计。
+- 更新 `app/webgl-generator/src/generator/pack.js`：
+  - pack cell 同步保存 `pop` 和 `burg` 字段。
+- 更新 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 point buffer 和 `gl.POINTS` pass。
+  - 农村人口、普通城市、首都和港口使用不同颜色点。
+  - 道路/小路加入 line pass。
+  - 新增人口专题面。
+- 更新 `app/webgl-generator/index.html`、`app/webgl-generator/src/ui/panel.js` 和 `app/webgl-generator/src/renderer/picking.js`：
+  - UI 新增“人口”专题按钮。
+  - 运行时统计显示城市/首都/港口、道路、人口点和点顶点。
+  - hover 面板显示城市和人口。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- 固定 seed `stage-3-3-check`、模板 `continents` 生成器检查：
+  - 阶段 `3.3-settlements-routes-population`。
+  - checksum `705704e4`。
+  - 城市 `20`，城市名唯一数 `20`。
+  - 道路 `25`，道路线段 `1578`。
+  - 农村人口点 `2201`，人口 cell `5596`。
+  - 河流回环 `0`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 页面显示阶段 `3.3-settlements-routes-population`。
+  - 默认 seed `stage-2-1` 显示城市/首都/港口 `20 / 5 / 5`。
+  - 道路 `25 / 1626`。
+  - 人口点 `2201 / 5593`。
+  - 点顶点 `2221`。
+  - 人口专题可切换。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+当前限制：
+
+- 城市选址仍是轻量适宜度模型，尚未实现 source burg 等级、城镇增长、首都迁移、道路等级和港口/海路规则。
+- 道路目前是 grid 上贪心陆路追踪，可能不是最短或最自然路线；后续应升级为带成本场的路径搜索，并支持宽线、join/cap 和路线 picking。
+- 点层仍是 `gl.POINTS` 占位，后续需要 sprite、LOD、标签避让和对象级 picking。

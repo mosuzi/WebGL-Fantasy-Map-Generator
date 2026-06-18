@@ -6,9 +6,9 @@
 
 基于 `source/Fantasy-Map-Generator` 的功能、数据结构和视觉表现，复刻一个功能相似但使用 WebGL 实现的独立地图生成器。`source/` 只作为参考实现、行为对照和性能基线，不作为被修改或被接入的目标代码库。
 
-## 当前阶段：第 1 里程碑，最小 WebGL cells 原型
+## 当前阶段：阶段 3，世界语义生成与图层补全
 
-第 0 里程碑性能基线已经完成。当前处于第 1 里程碑收尾：使用从原项目运行时导出的真实快照验证 WebGL 主视图能力，并为后续独立生成器内核和正式应用骨架提供数据、图层和交互经验。
+第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。当前进入阶段 3：在 `app/webgl-generator/` 中补齐文化、宗教、国家、省份、区域、城市、道路、标签和对象级交互等世界语义能力；`prototype/webgl-cells/` 继续保留为源项目快照 demo 和视觉对照。
 
 ## 当前已完成
 
@@ -22,6 +22,28 @@
   - 新增 `prototype/webgl-cells/` 原型。
   - 新增 `prototype/webgl-cells/data/sample-map.json`，作为当前原型默认数据。
   - 新增 `docs/milestone-1-webgl-prototype.md`。
+- 阶段 2：
+  - 新增 `app/webgl-generator/` 正式应用目录。
+  - 新增正式应用的运行时、生成器、WebGL 占位 renderer 和 UI 面板骨架。
+  - 新应用当前只生成本项目代码创建的占位地图，不读取 demo 快照，不接入 `source/Fantasy-Map-Generator`。
+  - 新增 `app/webgl-generator/README.md` 记录目录职责、启动命令和与 demo/source 的边界。
+  - 已完成浏览器验收：正式应用页面可加载，WebGL2 画面非空，生成按钮可更新 seed 和目标 cells。
+  - 已完成步骤 2.2：新增可复现 PRNG、seed/options 规范化、随机 seed 开关、稳定生成摘要和生成日志。
+  - 同一 seed/options 的 `summary.checksum` 稳定一致，不同 seed 会产生不同摘要；当前稳定性以 `summary` 为准，`generatedAt` 不参与摘要。
+  - 已完成步骤 2.3：新增自生成点集、近似 Voronoi grid、`grid.points`、`grid.cells.v`、`grid.vertices.p`、基础高度和 WebGL cell mesh 渲染。
+  - 已按浏览器观察修正步骤 2.3 的点集规整感：正式应用 grid 点集从单纯行列抖动改为局部随机、行列错位和低频 warp 叠加的分层扰动。
+  - 正式应用已支持拖拽平移、滚轮缩放和适配视图；统计面板显示实际 grid cells、Voronoi 顶点、cell 三角形、GPU 顶点和相机状态。
+  - 用户询问是否引入 Vite；当前决策是暂不引入，继续原生 ESM + 静态服务器。原因是正式应用当前无 npm 依赖且只面向高版本 Chrome，后续需要打包、worker、第三方库或测试集成时再引入 Vite。
+  - 已完成步骤 2.4：新增 seed 驱动 heightmap、海陆/湖泊 feature 提取、海岸线/湖岸线 line pass 和对应统计。
+  - 已按浏览器观察和 demo 对照继续修正步骤 2.4 的地形自然感：heightmap 从连续噪声/构造带采样改为接近 source `continents` 模板的图邻接传播流程，按 `Hill`、`Range`、`Strait`、`Trough`、`Pit`、`Mask`、`Smooth` 顺序生成高度，并加入 ridge 约束、海陆再平衡和 demo 高度分布校准，减少环形/气团状山体、大面积白色高原和高山突兀感。
+  - 已为正式应用新增地形模板控制：当前可选择大陆、地中海、高山岛屿、平原岛屿、一侧大陆、盘古大陆和群岛，避免所有 seed 都落在同一种偏圆大陆形态。
+  - 已完成步骤 2.5：新增第一版 `pack` 语义图、`grid.cells.pack` 映射、基础 polygon picking 和悬停面板。
+  - 当前 `pack` 采用 `one-grid-cell-to-one-pack-cell` 阶段性映射，后续仍需升级为真正承载国家、河流、城市等业务语义的抽稀/重建图。
+  - 已完成步骤 2.6：新增温度、降水、生物群系、最小河网、专题切换和悬停气候字段。
+  - 已按浏览器观察修正步骤 2.6 的河流混乱问题：河流从逐条贪心下坡改为轻量填洼、无环流向图、flux 汇水和河源间距筛选。
+  - 已进入阶段 3 并完成步骤 3.1：新增文化、宗教、中文名称表、文化/宗教专题面和悬停文化/宗教字段。
+  - 已完成步骤 3.2：新增国家、省份、区域生成、政治专题面、pack 语义字段和悬停政治字段。
+  - 已完成步骤 3.3：新增城市、首都/省会/港口、基础人口估算、道路/小路、人口专题面、城市/人口 hover 字段和 WebGL 点层。
 
 ## 第 1 里程碑当前结果
 
@@ -184,13 +206,28 @@ node .\tools\serve-prototype.mjs --port 5400
 http://127.0.0.1:5400
 ```
 
+启动正式应用：
+
+```powershell
+Set-Location D:\work\fmg
+node .\tools\serve-prototype.mjs --port 5410 --dir .\app\webgl-generator
+```
+
+访问：
+
+```text
+http://127.0.0.1:5410
+```
+
 ## 下一步
 
-1. 第 1 阶段独立 WebGL demo 已按 `docs/gl-reimplementation-acceptance-plan.md` 跑完步骤 1.1 到 1.6。
-2. 下一步进入阶段 2：建立独立 WebGL 地图生成器的工程骨架和生成内核，不接入、不修改 `source/Fantasy-Map-Generator`。
-3. 阶段 2 先复刻最小生成链路：seed/options、随机数、点集/grid、heightmap、features、pack 语义图、基础气候和河流，输出能被现有 WebGL renderer 加载的数据结构。
-4. 点图层后续需要从当前 `gl.POINTS` 占位推进到 sprite atlas、marker pin、LOD 和 burg/marker picking。
-5. 非河流线图层后续需要从当前 `gl.LINES` 推进到可扩展 polyline mesh，以支持宽线、join/cap、dash 和 line picking；河流后续继续补 join/cap 和更精细的曲线平滑。
+1. 步骤 2.1 到 2.6、步骤 3.1、步骤 3.2 和步骤 3.3 已完成：`app/webgl-generator/` 是正式应用入口，`prototype/webgl-cells/` 继续保留为快照 demo。
+2. 当前暂不引入 Vite，继续原生 ESM + 静态服务器；后续需要打包、worker、第三方库或测试集成时再引入。
+3. 下一步继续步骤 3.4：城市标签、道路可视细化、对象级 picking 和城市详情面板。
+4. 地形后续仍需继续接近 source 的完整模板化 heightmap：当前已完成 graph propagation 和第一批多模板切换，但还缺少真实侵蚀、河谷切割、湖泊出口、更多模板和模板参数 UI。
+5. 后续需要把当前 1:1 `pack` 升级成更接近 source 的语义图，并继续补文本、marker 和对象级 picking。
+6. 点图层后续需要从当前 `gl.POINTS` 占位推进到 sprite atlas、marker pin、LOD 和 burg/marker picking。
+7. 非河流线图层后续需要从当前 `gl.LINES` 推进到可扩展 polyline mesh，以支持宽线、join/cap、dash 和 line picking；河流后续继续补 join/cap 和更精细的曲线平滑。
 
 ## 约束
 

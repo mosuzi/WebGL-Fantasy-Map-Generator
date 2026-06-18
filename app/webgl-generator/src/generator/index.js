@@ -1,0 +1,167 @@
+import {buildClimate} from "./climate.js";
+import {extractFeatures} from "./features.js";
+import {buildGrid} from "./grid.js";
+import {createHeightmap} from "./heightmap.js";
+import {normalizeOptions} from "./options.js";
+import {buildPack} from "./pack.js";
+import {buildPolitics} from "./politics.js";
+import {createRandom, stableHash} from "./random.js";
+import {buildRivers} from "./rivers.js";
+import {buildSettlements} from "./settlements.js";
+import {buildSociety} from "./society.js";
+
+export function generatePlaceholderMap(inputOptions = {}) {
+  const options = normalizeOptions(inputOptions);
+  const random = createRandom(options.seed);
+  const heightmap = createHeightmap(options, random);
+  const grid = buildGrid(options, random, heightmap);
+  const features = extractFeatures(grid);
+  const climate = buildClimate(grid, features, options);
+  const society = buildSociety(grid, features, climate, random);
+  const politics = buildPolitics(grid, features, society, random, options);
+  const rivers = buildRivers(grid, features);
+  const settlements = buildSettlements(grid, features, politics, rivers, random);
+  const pack = buildPack(grid, features);
+  const layers = createPalette(random);
+  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, pack, rivers, layers);
+  const generatedAt = new Date().toISOString();
+
+  return {
+    metadata: {
+      app: "webgl-generator",
+      generatorStage: "3.3-settlements-routes-population",
+      seed: options.seed,
+      heightmapTemplate: heightmap.template,
+      cellsTarget: options.cellsTarget,
+      gridCells: grid.metadata.actualCells,
+      packCells: pack.metadata.cells,
+      featureCount: features.metadata.featureCount,
+      graphWidth: options.graphWidth,
+      graphHeight: options.graphHeight,
+      checksum: summary.checksum,
+      generatedAt
+    },
+    options,
+    layers,
+    heightmap,
+    grid,
+    climate,
+    society,
+    politics,
+    settlements,
+    pack,
+    features,
+    rivers,
+    summary,
+    generationLog: [
+      `normalize options: seed=${options.seed}, cells=${options.cellsTarget}, size=${options.graphWidth}x${options.graphHeight}`,
+      `heightmap template: ${heightmap.template}`,
+      `initialize seeded random: ${summary.randomPreview.join(", ")}`,
+      `build grid: ${grid.metadata.actualCells} cells, ${grid.metadata.vertexCount} vertices, ${grid.metadata.triangles} triangles`,
+      `extract features: land=${features.metadata.landFeatures}, ocean=${features.metadata.oceanFeatures}, lakes=${features.metadata.lakeFeatures}`,
+      `build climate: temp=${climate.metadata.temperatureMin}..${climate.metadata.temperatureMax}, prec=${climate.metadata.precipitationMin}..${climate.metadata.precipitationMax}`,
+      `build society: cultures=${society.metadata.cultures}, religions=${society.metadata.religions}`,
+      `build politics: states=${politics.metadata.states}, provinces=${politics.metadata.provinces}, regions=${politics.metadata.regions}`,
+      `build settlements: cities=${settlements.metadata.cities}, routes=${settlements.metadata.routes}, populationCells=${settlements.metadata.populationCells}`,
+      `build pack: ${pack.metadata.cells} semantic cells, mapping=${pack.metadata.mapping}`,
+      `trace rivers: rivers=${rivers.metadata.rivers}, segments=${rivers.metadata.segments}`,
+      `grid checksum: ${summary.checksum}`
+    ],
+    status: {
+      message: "阶段 3.3 城市、道路和人口",
+      sourceDependency: false,
+      snapshotDependency: false
+    }
+  };
+}
+
+export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, pack, rivers, layers) {
+  const randomPreviewGenerator = createRandom(options.seed);
+  const randomPreview = Array.from({length: 4}, () => round(randomPreviewGenerator.next(), 6));
+  const payload = {
+    seed: options.seed,
+    heightmapTemplate: options.heightmapTemplate,
+    cellsTarget: options.cellsTarget,
+    gridCells: grid.metadata.actualCells,
+    graphWidth: options.graphWidth,
+    graphHeight: options.graphHeight,
+    grid: {
+      columns: grid.metadata.columns,
+      rows: grid.metadata.rows,
+      vertexCount: grid.metadata.vertexCount,
+      triangles: grid.metadata.triangles,
+      samplePoints: grid.points.slice(0, 6),
+      sampleHeights: grid.cells.h.slice(0, 12)
+    },
+    features: features.metadata,
+    climate: {
+      temperatureMin: climate.metadata.temperatureMin,
+      temperatureMax: climate.metadata.temperatureMax,
+      precipitationMin: climate.metadata.precipitationMin,
+      precipitationMax: climate.metadata.precipitationMax,
+      biomeCounts: climate.metadata.biomeCounts
+    },
+    pack: {
+      cells: pack.metadata.cells,
+      vertices: pack.metadata.vertices,
+      mapping: pack.metadata.mapping,
+      sampleTypes: pack.cells.type.slice(0, 12)
+    },
+    rivers: rivers.metadata,
+    society: {
+      cultures: grid.cells.culture.slice(0, 12),
+      religions: grid.cells.religion.slice(0, 12),
+      cultureCount: society.metadata.cultures,
+      religionCount: society.metadata.religions
+    },
+    politics: {
+      states: grid.cells.state.slice(0, 12),
+      provinces: grid.cells.province.slice(0, 12),
+      regions: grid.cells.region.slice(0, 12),
+      stateCount: politics.metadata.states,
+      provinceCount: politics.metadata.provinces,
+      regionCount: politics.metadata.regions
+    },
+    settlements: {
+      cityCount: settlements.metadata.cities,
+      routeCount: settlements.metadata.routes,
+      populationCells: settlements.metadata.populationCells,
+      sampleCities: settlements.cities.slice(0, 8).map(city => ({
+        id: city.id,
+        name: city.name,
+        cell: city.cell,
+        population: city.population,
+        state: city.state,
+        capital: city.capital,
+        port: city.port
+      }))
+    },
+    palette: {
+      ocean: layers.ocean.map(value => round(value, 4)),
+      land: layers.land.map(value => round(value, 4)),
+      highland: layers.highland.map(value => round(value, 4))
+    },
+    randomPreview
+  };
+
+  return {
+    ...payload,
+    checksum: stableHash(JSON.stringify(payload))
+  };
+}
+
+function createPalette(random) {
+  const oceanShift = random.range(-0.03, 0.04);
+  const landShift = random.range(-0.04, 0.05);
+  return {
+    background: [0.07, 0.13, 0.18, 1],
+    ocean: [round(0.12 + oceanShift, 4), round(0.33 + oceanShift, 4), round(0.52 + oceanShift, 4), 1],
+    land: [round(0.46 + landShift, 4), round(0.55 + landShift, 4), round(0.35 + landShift, 4), 1],
+    highland: [round(0.7 + landShift, 4), round(0.66 + landShift, 4), round(0.52 + landShift, 4), 1]
+  };
+}
+
+function round(value, digits) {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+}

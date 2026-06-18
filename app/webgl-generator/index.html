@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebGL 地图生成器</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="side-panel">
+        <header class="panel-header">
+          <h1>WebGL 地图生成器</h1>
+          <p id="app-status">初始化中</p>
+        </header>
+
+        <section class="control-section">
+          <h2>生成</h2>
+          <label class="field-row">
+            <span>Seed</span>
+            <input id="seed-input" type="text" value="stage-2-1" autocomplete="off" />
+          </label>
+          <label class="field-row">
+            <span>目标 cells</span>
+            <input id="cells-input" type="number" min="1000" max="100000" step="1000" value="10000" />
+          </label>
+          <label class="field-row">
+            <span>宽度</span>
+            <input id="width-input" type="number" min="640" max="4096" step="80" value="1440" />
+          </label>
+          <label class="field-row">
+            <span>高度</span>
+            <input id="height-input" type="number" min="480" max="4096" step="80" value="960" />
+          </label>
+          <label class="field-row">
+            <span>地形</span>
+            <select id="heightmap-template">
+              <option value="continents" selected>大陆</option>
+              <option value="mediterranean">地中海</option>
+              <option value="highIsland">高山岛屿</option>
+              <option value="lowIsland">平原岛屿</option>
+              <option value="peninsula">一侧大陆</option>
+              <option value="pangea">盘古大陆</option>
+              <option value="archipelago">群岛</option>
+            </select>
+          </label>
+          <label class="check-row">
+            <input id="auto-random-seed" type="checkbox" />
+            <span>生成时自动随机 seed</span>
+          </label>
+          <div class="button-row">
+            <button id="generate-map" class="primary-action" type="button">生成 grid 地图</button>
+            <button id="random-seed" class="secondary-action" type="button">换 seed</button>
+          </div>
+        </section>
+
+        <section class="control-section">
+          <h2>专题</h2>
+          <div class="segmented" role="group" aria-label="专题">
+            <button class="active" type="button" data-mode="height">高度</button>
+            <button type="button" data-mode="temperature">温度</button>
+            <button type="button" data-mode="precipitation">降水</button>
+            <button type="button" data-mode="biomes">生物群系</button>
+            <button type="button" data-mode="cultures">文化</button>
+            <button type="button" data-mode="religions">宗教</button>
+            <button type="button" data-mode="states">国家</button>
+            <button type="button" data-mode="provinces">省份</button>
+            <button type="button" data-mode="regions">区域</button>
+            <button type="button" data-mode="population">人口</button>
+          </div>
+        </section>
+
+        <section class="control-section">
+          <h2>视图</h2>
+          <button id="fit-view" class="secondary-action" type="button">适配视图</button>
+        </section>
+
+        <section class="control-section">
+          <h2>运行时</h2>
+          <dl id="runtime-stats" class="stats-list"></dl>
+        </section>
+
+        <section class="control-section">
+          <h2>悬停</h2>
+          <dl id="pick-stats" class="stats-list"></dl>
+        </section>
+
+        <section class="control-section">
+          <h2>边界</h2>
+          <dl class="stats-list">
+            <div>
+              <dt>正式应用</dt>
+              <dd>app/webgl-generator</dd>
+            </div>
+            <div>
+              <dt>快照 demo</dt>
+              <dd>prototype/webgl-cells</dd>
+            </div>
+            <div>
+              <dt>source</dt>
+              <dd>只读参考</dd>
+            </div>
+          </dl>
+        </section>
+      </aside>
+
+      <section class="map-stage" aria-label="地图画布">
+        <canvas id="map-canvas"></canvas>
+        <div class="map-badge" id="map-badge">等待生成</div>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
