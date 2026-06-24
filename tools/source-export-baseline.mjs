@@ -209,6 +209,13 @@ try {
             ? pack.states.reduce((sum, state) => sum + (Array.isArray(state?.military) ? state.military.length : 0), 0)
             : 0
         },
+        lateStages: {
+          names: describeNames(pack),
+          military: describeMilitary(pack, packCells),
+          markers: describeMarkers(pack.markers || [], packCells),
+          zones: describeZones(pack.zones || [], packCells),
+          statistics: describeStatistics(pack)
+        },
         routes: describeRoutes(routes, packCells),
         validation: validateGraph({grid, pack, routes})
       };
@@ -450,6 +457,96 @@ try {
           searoutes: groups.searoutes || 0,
           landRouteWaterCells,
           seaRouteLandCells
+        };
+      }
+
+      function describeNames(pack) {
+        const burgs = (pack.burgs || []).filter(item => item?.i && !item.removed);
+        const states = (pack.states || []).filter(item => item?.i && !item.removed);
+        const provinces = (pack.provinces || []).filter(item => item?.i && !item.removed);
+        const rivers = pack.rivers || [];
+        const lakes = (pack.features || []).filter(feature => feature?.type === "lake");
+        return {
+          mapName: String(window.mapName?.value || ""),
+          burgNames: countByPredicate(burgs, item => Boolean(item.name)),
+          burgCoas: countByPredicate(burgs, item => Boolean(item.coa)),
+          burgGroups: countByKey(burgs, item => item.group || "none"),
+          stateNames: countByPredicate(states, item => Boolean(item.name)),
+          stateFullNames: countByPredicate(states, item => Boolean(item.fullName)),
+          stateFormNames: countByPredicate(states, item => Boolean(item.formName)),
+          stateCoas: countByPredicate(states, item => Boolean(item.coa)),
+          provinceNames: countByPredicate(provinces, item => Boolean(item.name)),
+          riverNames: countByPredicate(rivers, item => Boolean(item.name)),
+          riverTypes: countByKey(rivers, item => item.type || "none"),
+          lakeNames: countByPredicate(lakes, item => Boolean(item.name)),
+          lakeGroups: countByKey(lakes, item => item.group || "none")
+        };
+      }
+
+      function describeMilitary(pack, cells) {
+        const states = (pack.states || []).filter(item => item?.i && !item.removed);
+        const regiments = states.flatMap(state =>
+          (Array.isArray(state.military) ? state.military : []).map(regiment => ({...regiment, state: state.i}))
+        );
+        const unitEntries = regiments.flatMap(regiment => Object.entries(regiment.u || {}));
+        return {
+          statesWithMilitary: countByPredicate(states, state => Array.isArray(state.military) && state.military.length > 0),
+          regiments: regiments.length,
+          troops: round(regiments.reduce((sum, regiment) => sum + Number(regiment.t || 0), 0)),
+          navalRegiments: countByPredicate(regiments, regiment => regiment.n),
+          types: countByKey(regiments, regiment => regiment.type || "unknown"),
+          units: unitEntries.reduce((counts, [unit, value]) => {
+            counts[unit] = round((counts[unit] || 0) + Number(value || 0));
+            return counts;
+          }, {}),
+          invalidCells: countInvalidRefs(
+            regiments.map(regiment => regiment.cell).filter(Number.isInteger),
+            cells.i.length
+          )
+        };
+      }
+
+      function describeMarkers(markers = [], cells) {
+        return {
+          total: markers.length,
+          types: countByKey(markers, marker => marker.type || "unknown"),
+          withIcon: countByPredicate(markers, marker => Boolean(marker.icon)),
+          pinned: countByPredicate(markers, marker => Boolean(marker.pinned)),
+          locked: countByPredicate(markers, marker => Boolean(marker.lock)),
+          invalidCells: countInvalidRefs(
+            markers.map(marker => marker.cell).filter(Number.isInteger),
+            cells.i.length
+          )
+        };
+      }
+
+      function describeZones(zones = [], cells) {
+        const zoneCells = zones.flatMap(zone => zone.cells || []);
+        return {
+          total: zones.length,
+          types: countByKey(zones, zone => zone.type || "unknown"),
+          cells: describeNumbers(zones.map(zone => (zone.cells || []).length)),
+          hidden: countByPredicate(zones, zone => Boolean(zone.hidden)),
+          invalidCells: countInvalidRefs(zoneCells.filter(Number.isInteger), cells.i.length)
+        };
+      }
+
+      function describeStatistics(pack) {
+        const burgs = (pack.burgs || []).filter(item => item?.i && !item.removed);
+        const states = (pack.states || []).filter(item => item?.i && !item.removed);
+        const provinces = (pack.provinces || []).filter(item => item?.i && !item.removed);
+        const cultures = (pack.cultures || []).filter(item => item?.i && !item.removed);
+        const religions = (pack.religions || []).filter(item => item?.i && !item.removed);
+        return {
+          burgsWithPopulation: countByPredicate(burgs, item => Number.isFinite(item.population)),
+          burgsWithType: countByPredicate(burgs, item => Boolean(item.type)),
+          statesWithArea: countByPredicate(states, item => Number.isFinite(item.area)),
+          statesWithRural: countByPredicate(states, item => Number.isFinite(item.rural)),
+          statesWithUrban: countByPredicate(states, item => Number.isFinite(item.urban)),
+          statesWithNeighbors: countByPredicate(states, item => Array.isArray(item.neighbors)),
+          provincesWithPole: countByPredicate(provinces, item => Array.isArray(item.pole)),
+          culturesWithArea: countByPredicate(cultures, item => Number.isFinite(item.area)),
+          religionsWithArea: countByPredicate(religions, item => Number.isFinite(item.area))
         };
       }
 
@@ -780,7 +877,6 @@ function renderValidationMarkdown(summary, {includeSnapshot, includeScreenshot, 
   lines.push("## 下一步");
   lines.push("");
   lines.push("阶段 0 后续需要把本工具扩展为矩阵批量运行，并生成 `candidate-summary.json` 与 `diff.json`。");
-  lines.push("");
   return `${lines.join("\n")}\n`;
 }
 

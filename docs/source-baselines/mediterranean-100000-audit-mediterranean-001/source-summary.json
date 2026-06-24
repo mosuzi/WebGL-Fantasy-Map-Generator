@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-18T16:12:46.816Z",
+    "generatedAt": "2026-06-24T17:01:15.758Z",
     "source": "Fantasy-Map-Generator runtime baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -10,7 +10,21 @@
     "graphHeight": 960,
     "sourceCommit": null,
     "sourceDir": "D:\\work\\fmg\\source\\Fantasy-Map-Generator",
-    "baseUrl": "http://127.0.0.1:5301"
+    "baseUrl": "http://127.0.0.1:5301",
+    "generatedOptions": {
+      "statesNumber": 21,
+      "provincesRatio": 20,
+      "religionsNumber": 9,
+      "culturesNumber": 10,
+      "culturesSet": "antique",
+      "culturesSetMax": 10,
+      "sizeVariety": 7.4,
+      "growthRate": 1.5,
+      "temperatureEquator": 28,
+      "temperatureNorthPole": -28,
+      "temperatureSouthPole": -11,
+      "precipitation": 74
+    }
   },
   "trace": [
     "setSeed",
@@ -443,6 +457,136 @@
     "markers": 538,
     "zones": 13,
     "regiments": 312
+  },
+  "lateStages": {
+    "names": {
+      "mapName": "Amaqia",
+      "burgNames": 1724,
+      "burgCoas": 1724,
+      "burgGroups": {
+        "capital": 21,
+        "town": 1014,
+        "village": 512,
+        "city": 158,
+        "fort": 19
+      },
+      "stateNames": 21,
+      "stateFullNames": 21,
+      "stateFormNames": 21,
+      "stateCoas": 21,
+      "provinceNames": 477,
+      "riverNames": 956,
+      "riverTypes": {
+        "River": 360,
+        "Brook": 88,
+        "Creek": 250,
+        "Branch": 167,
+        "Fork": 64,
+        "Stream": 27
+      },
+      "lakeNames": 140,
+      "lakeGroups": {
+        "freshwater": 127,
+        "salt": 9,
+        "sinkhole": 4
+      }
+    },
+    "military": {
+      "statesWithMilitary": 21,
+      "regiments": 312,
+      "troops": 0,
+      "navalRegiments": 35,
+      "types": {
+        "unknown": 312
+      },
+      "units": {
+        "infantry": 912527,
+        "cavalry": 671418,
+        "archers": 751670,
+        "artillery": 7524,
+        "fleet": 677
+      },
+      "invalidCells": 0
+    },
+    "markers": {
+      "total": 539,
+      "types": {
+        "volcanoes": 16,
+        "hot-springs": 9,
+        "water-sources": 3,
+        "mines": 17,
+        "inns": 12,
+        "lighthouses": 13,
+        "waterfalls": 1,
+        "battlefields": 36,
+        "dungeons": 112,
+        "lake-monsters": 13,
+        "sea-monsters": 1,
+        "hill-monsters": 19,
+        "sacred-forests": 8,
+        "sacred-pineries": 7,
+        "sacred-palm-groves": 2,
+        "brigands": 14,
+        "pirates": 13,
+        "statues": 27,
+        "ruins": 40,
+        "libraries": 1,
+        "circuses": 9,
+        "jousts": 1,
+        "fairs": 1,
+        "canoes": 3,
+        "migration": 28,
+        "dances": 1,
+        "mirage": 18,
+        "caves": 12,
+        "necropolises": 28,
+        "encounters": 74
+      },
+      "withIcon": 539,
+      "pinned": 0,
+      "locked": 0,
+      "invalidCells": 0
+    },
+    "zones": {
+      "total": 14,
+      "types": {
+        "Invasion": 1,
+        "Proselytism": 2,
+        "Crusade": 1,
+        "Disease": 2,
+        "Disaster": 2,
+        "Eruption": 1,
+        "Avalanche": 1,
+        "Fault": 1,
+        "Flood": 2,
+        "Tsunami": 1
+      },
+      "cells": {
+        "min": 3,
+        "p05": 6.25,
+        "p25": 9.25,
+        "p50": 12,
+        "p75": 22.5,
+        "p90": 172.8,
+        "p95": 1401.6,
+        "p99": 3136.32,
+        "max": 3570,
+        "mean": 282.786
+      },
+      "hidden": 0,
+      "invalidCells": 0
+    },
+    "statistics": {
+      "burgsWithPopulation": 1724,
+      "burgsWithType": 1724,
+      "statesWithArea": 21,
+      "statesWithRural": 21,
+      "statesWithUrban": 21,
+      "statesWithNeighbors": 21,
+      "provincesWithPole": 477,
+      "culturesWithArea": 0,
+      "religionsWithArea": 0
+    }
   },
   "routes": {
     "total": 1331,

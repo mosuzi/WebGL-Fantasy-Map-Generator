@@ -1,10 +1,10 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-24T16:37:49.308Z
+生成时间：2026-06-24T17:02:35.742Z
 模板：`mediterranean`
 Seed：`audit-mediterranean-001`
 目标 cells：100000
-状态：pass（fail 0，warn 0）
+状态：fail（fail 11，warn 0）
 
 ## 关键指标
 
@@ -40,6 +40,20 @@ Seed：`audit-mediterranean-001`
 | routes.searoutes | 214 | 233 | 19 | 0.089 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 1 | 0 | -1 | -1 | pass |
+| lateStages.names.burgNames | 1724 | 1730 | 6 | 0.003 | pass |
+| lateStages.names.burgCoas | 1724 | 0 | -1724 | 1 | fail |
+| lateStages.names.stateFullNames | 21 | 0 | -21 | 1 | fail |
+| lateStages.names.stateFormNames | 21 | 0 | -21 | 1 | fail |
+| lateStages.names.riverNames | 956 | 0 | -956 | 1 | fail |
+| lateStages.names.lakeNames | 140 | 0 | -140 | 1 | fail |
+| lateStages.military.regiments | 312 | 0 | -312 | 1 | fail |
+| lateStages.military.statesWithMilitary | 21 | 0 | -21 | 1 | fail |
+| lateStages.markers.total | 539 | 40 | -499 | 0.926 | fail |
+| lateStages.markers.withIcon | 539 | 0 | -539 | 1 | fail |
+| lateStages.zones.total | 14 | 0 | -14 | 1 | fail |
+| lateStages.statistics.burgsWithPopulation | 1724 | 1730 | 6 | 0.003 | pass |
+| lateStages.statistics.statesWithArea | 21 | 22 | 1 | 0.048 | pass |
+| lateStages.statistics.provincesWithPole | 477 | 0 | -477 | 1 | fail |
 
 ## 不变量
 
@@ -53,6 +67,9 @@ Seed：`audit-mediterranean-001`
 | 城市落水 | undefined | 0 | 0 | pass |
 | 陆路穿水 | 0 | 0 | 0 | pass |
 | 海路中段穿陆 | 1 | 0 | 1 | pass |
+| marker cell 引用 | 0 | 0 | 0 | pass |
+| zone cell 引用 | 0 | 0 | 0 | pass |
+| military cell 引用 | 0 | 0 | 0 | pass |
 
 ## Candidate 特有检查
 
@@ -65,4 +82,4 @@ Seed：`audit-mediterranean-001`
 
 ## 下一步建议
 
-当前 case 达到阶段 0 对照要求，可推进下一阶段。
+进入阶段 18：主生成矩阵已经通过，当前差异来自 source 后段专题。下一步先复刻 Burgs.specify、States.defineStateForms、Rivers.specify、Lakes.defineNames、Military.generate、Markers.generate 和 Zones.generate 的字段产物。

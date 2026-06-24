@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-24T16:37:49.054Z",
+    "generatedAt": "2026-06-24T17:02:30.022Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -433,6 +433,84 @@
     "markers": 40,
     "zones": 0,
     "regiments": 0
+  },
+  "lateStages": {
+    "names": {
+      "mapName": "",
+      "burgNames": 1730,
+      "burgCoas": 0,
+      "burgGroups": {
+        "capital": 21,
+        "town": 980,
+        "city": 729
+      },
+      "stateNames": 22,
+      "stateFullNames": 0,
+      "stateFormNames": 0,
+      "stateCoas": 0,
+      "provinceNames": 463,
+      "riverNames": 0,
+      "riverTypes": {
+        "River": 346,
+        "Branch": 566
+      },
+      "lakeNames": 0,
+      "lakeGroups": {
+        "freshwater": 118,
+        "salt": 9,
+        "sinkhole": 13
+      }
+    },
+    "military": {
+      "statesWithMilitary": 0,
+      "regiments": 0,
+      "troops": 0,
+      "navalRegiments": 0,
+      "types": {},
+      "units": {},
+      "invalidCells": 0
+    },
+    "markers": {
+      "total": 40,
+      "types": {
+        "peak": 10,
+        "river-source": 8,
+        "state-center": 22
+      },
+      "withIcon": 0,
+      "pinned": 0,
+      "locked": 0,
+      "invalidCells": 0
+    },
+    "zones": {
+      "total": 0,
+      "types": {},
+      "cells": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "hidden": 0,
+      "invalidCells": 0
+    },
+    "statistics": {
+      "burgsWithPopulation": 1730,
+      "burgsWithType": 1730,
+      "statesWithArea": 22,
+      "statesWithRural": 22,
+      "statesWithUrban": 22,
+      "statesWithNeighbors": 22,
+      "provincesWithPole": 0,
+      "culturesWithArea": 11,
+      "religionsWithArea": 20
+    }
   },
   "routes": {
     "total": 1481,

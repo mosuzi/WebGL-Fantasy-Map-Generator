@@ -56,7 +56,37 @@ function buildDiff({source, candidate, sourcePath, candidatePath}) {
     metric("routes.trails", "routes.trails", {kind: "relative", warn: 0.45, fail: 0.85}),
     metric("routes.searoutes", "routes.searoutes", {kind: "relative", warn: 0.45, fail: 0.95}),
     metric("routes.landRouteWaterCells", "routes.landRouteWaterCells", {kind: "max-extra", warn: 1, fail: 5}),
-    metric("routes.seaRouteLandCells", "routes.seaRouteLandCells", {kind: "max-extra", warn: 2, fail: 8})
+    metric("routes.seaRouteLandCells", "routes.seaRouteLandCells", {kind: "max-extra", warn: 2, fail: 8}),
+    metric("lateStages.names.burgNames", "lateStages.names.burgNames", {kind: "relative", warn: 0.25, fail: 0.6}),
+    metric("lateStages.names.burgCoas", "lateStages.names.burgCoas", {kind: "relative", warn: 0.25, fail: 0.6}),
+    metric("lateStages.names.stateFullNames", "lateStages.names.stateFullNames", {kind: "relative", warn: 0.25, fail: 0.6}),
+    metric("lateStages.names.stateFormNames", "lateStages.names.stateFormNames", {kind: "relative", warn: 0.25, fail: 0.6}),
+    metric("lateStages.names.riverNames", "lateStages.names.riverNames", {kind: "relative", warn: 0.35, fail: 0.75}),
+    metric("lateStages.names.lakeNames", "lateStages.names.lakeNames", {kind: "relative", warn: 0.35, fail: 0.75}),
+    metric("lateStages.military.regiments", "lateStages.military.regiments", {kind: "relative", warn: 0.45, fail: 0.9}),
+    metric("lateStages.military.statesWithMilitary", "lateStages.military.statesWithMilitary", {
+      kind: "relative",
+      warn: 0.45,
+      fail: 0.9
+    }),
+    metric("lateStages.markers.total", "lateStages.markers.total", {kind: "relative", warn: 0.5, fail: 0.9}),
+    metric("lateStages.markers.withIcon", "lateStages.markers.withIcon", {kind: "relative", warn: 0.5, fail: 0.9}),
+    metric("lateStages.zones.total", "lateStages.zones.total", {kind: "relative", warn: 0.5, fail: 0.9}),
+    metric("lateStages.statistics.burgsWithPopulation", "lateStages.statistics.burgsWithPopulation", {
+      kind: "relative",
+      warn: 0.25,
+      fail: 0.6
+    }),
+    metric("lateStages.statistics.statesWithArea", "lateStages.statistics.statesWithArea", {
+      kind: "relative",
+      warn: 0.25,
+      fail: 0.6
+    }),
+    metric("lateStages.statistics.provincesWithPole", "lateStages.statistics.provincesWithPole", {
+      kind: "relative",
+      warn: 0.45,
+      fail: 0.85
+    })
   ];
 
   const invariantChecks = [
@@ -67,7 +97,10 @@ function buildDiff({source, candidate, sourcePath, candidatePath}) {
     invariant("pack 顶点引用", "validation.packVertexInvalidRefs", 0),
     invariant("城市落水", "validation.cityWaterCells", 0),
     invariant("陆路穿水", "validation.landRouteWaterCells", source.validation?.landRouteWaterCells ?? 0),
-    invariant("海路中段穿陆", "validation.seaRouteLandCells", source.validation?.seaRouteLandCells ?? 0)
+    invariant("海路中段穿陆", "validation.seaRouteLandCells", source.validation?.seaRouteLandCells ?? 0),
+    invariant("marker cell 引用", "lateStages.markers.invalidCells", source.lateStages?.markers?.invalidCells ?? 0),
+    invariant("zone cell 引用", "lateStages.zones.invalidCells", source.lateStages?.zones?.invalidCells ?? 0),
+    invariant("military cell 引用", "lateStages.military.invalidCells", source.lateStages?.military?.invalidCells ?? 0)
   ];
 
   const candidateSpecific = [
@@ -140,8 +173,23 @@ function invariant(label, path, expectedMaximum) {
 }
 
 function compareMetric(source, candidate, item) {
-  const sourceValue = Number(getByPath(source, item.path) ?? 0);
-  const candidateValue = Number(getByPath(candidate, item.path) ?? 0);
+  const sourceRaw = getByPath(source, item.path);
+  const candidateRaw = getByPath(candidate, item.path);
+  if (item.path.startsWith("lateStages.") && sourceRaw === undefined) {
+    return {
+      id: item.path,
+      label: item.label,
+      source: "missing",
+      candidate: round(candidateRaw ?? 0),
+      delta: "n/a",
+      ratio: "n/a",
+      status: "fail",
+      rule: item.rule
+    };
+  }
+
+  const sourceValue = Number(sourceRaw ?? 0);
+  const candidateValue = Number(candidateRaw ?? 0);
   const delta = candidateValue - sourceValue;
   const absDelta = Math.abs(delta);
   let ratio = sourceValue === 0 ? (candidateValue === 0 ? 0 : Infinity) : absDelta / Math.abs(sourceValue);
@@ -227,11 +275,27 @@ function recommendNextStage({failCount, warnCount, candidate}) {
   if (!failCount && warnCount && String(candidate.metadata?.generatorStage || "").includes("stage-13")) {
     return "阶段 13 宗教已通过当前强制 case；下一步单独收紧温度最低值 warn，并继续补齐 source 后段的命名、军事、区域等专题。";
   }
+  if (hasLateStageGaps(candidate)) {
+    return "进入阶段 18：主生成矩阵已经通过，当前差异来自 source 后段专题。下一步先复刻 Burgs.specify、States.defineStateForms、Rivers.specify、Lakes.defineNames、Military.generate、Markers.generate 和 Zones.generate 的字段产物。";
+  }
   if (failCount) return "继续当前阶段整改，先消除 fail 项，再推进下一阶段。";
   if (String(candidate.metadata?.generatorStage || "").includes("stage-14")) {
     return "当前强制 case 已全项通过；下一步可扩大模板/seed 矩阵回归，并补齐 source 后段的命名、军事、区域、marker 细节和统计字段。";
   }
   return "当前 case 达到阶段 0 对照要求，可推进下一阶段。";
+}
+
+function hasLateStageGaps(candidate) {
+  const late = candidate.lateStages || {};
+  return (
+    !late.names ||
+    !late.military ||
+    !late.markers ||
+    !late.zones ||
+    Number(late.names?.stateFullNames || 0) === 0 ||
+    Number(late.military?.regiments || 0) === 0 ||
+    Number(late.zones?.total || 0) === 0
+  );
 }
 
 function renderMarkdown(diff) {
@@ -277,7 +341,6 @@ function renderMarkdown(diff) {
   lines.push("## 下一步建议");
   lines.push("");
   lines.push(diff.nextStageRecommendation);
-  lines.push("");
   return `${lines.join("\n")}\n`;
 }
 

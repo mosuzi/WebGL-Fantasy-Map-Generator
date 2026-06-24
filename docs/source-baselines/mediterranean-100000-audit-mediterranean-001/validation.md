@@ -3,8 +3,8 @@
 Seed：`audit-mediterranean-001`
 模板：`mediterranean`
 目标 cells：100000
-截图：本地预览图片已移至 `docs/local-preview-images/` 对应路径，默认不纳入版本库
-完整 snapshot：未输出，本次仅输出 summary/trace/screenshot
+截图：未输出，可用 `--screenshot true` 生成本地预览
+完整 snapshot：未输出，本次仅输出 summary/trace
 
 ## 结构摘要
 

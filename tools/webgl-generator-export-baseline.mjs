@@ -200,6 +200,7 @@ function createCandidateSummary(candidateMap, {appDir}) {
       zones: 0,
       regiments: 0
     },
+    lateStages: describeCandidateLateStages({grid, pack, society, politics, settlements, markers}),
     routes: routeSummary,
     validation,
     candidateNotes: {
@@ -211,6 +212,80 @@ function createCandidateSummary(candidateMap, {appDir}) {
         "Military.generate",
         "Zones.generate"
       ]
+    }
+  };
+}
+
+function describeCandidateLateStages({grid, pack, society, politics, settlements, markers}) {
+  const states = politics.states || [];
+  const provinces = politics.provinces || [];
+  const cultures = society.cultures || [];
+  const religions = society.religions || [];
+  const cities = settlements.cities || [];
+  const markerList = markers.markers || [];
+  const stateRegiments = states.flatMap(state =>
+    (Array.isArray(state?.military) ? state.military : []).map(regiment => ({...regiment, state: state.i ?? state.id}))
+  );
+
+  return {
+    names: {
+      mapName: "",
+      burgNames: countByPredicate(cities, item => Boolean(item.name)),
+      burgCoas: countByPredicate(cities, item => Boolean(item.coa)),
+      burgGroups: countByKey(cities, item => item.group || item.type || "none"),
+      stateNames: countByPredicate(states, item => Boolean(item?.name) && (item.i || item.id >= 0)),
+      stateFullNames: countByPredicate(states, item => Boolean(item?.fullName)),
+      stateFormNames: countByPredicate(states, item => Boolean(item?.formName)),
+      stateCoas: countByPredicate(states, item => Boolean(item?.coa)),
+      provinceNames: countByPredicate(provinces, item => Boolean(item?.name) && (item.i || item.id >= 0)),
+      riverNames: countByPredicate(pack.rivers || [], item => Boolean(item?.name)),
+      riverTypes: countByKey(pack.rivers || [], item => item.type || "none"),
+      lakeNames: countByPredicate(pack.features || [], item => item?.type === "lake" && Boolean(item.name)),
+      lakeGroups: countByKey((pack.features || []).filter(item => item?.type === "lake"), item => item.group || "none")
+    },
+    military: {
+      statesWithMilitary: countByPredicate(states, state => Array.isArray(state?.military) && state.military.length > 0),
+      regiments: stateRegiments.length,
+      troops: round(stateRegiments.reduce((sum, regiment) => sum + Number(regiment.t || 0), 0)),
+      navalRegiments: countByPredicate(stateRegiments, regiment => regiment.n),
+      types: countByKey(stateRegiments, regiment => regiment.type || "unknown"),
+      units: stateRegiments.flatMap(regiment => Object.entries(regiment.u || {})).reduce((counts, [unit, value]) => {
+        counts[unit] = round((counts[unit] || 0) + Number(value || 0));
+        return counts;
+      }, {}),
+      invalidCells: countInvalidRefs(
+        stateRegiments.map(regiment => regiment.cell).filter(Number.isInteger),
+        pack.cells.g.length
+      )
+    },
+    markers: {
+      total: markerList.length,
+      types: countByKey(markerList, marker => marker.type || "unknown"),
+      withIcon: countByPredicate(markerList, marker => Boolean(marker.icon)),
+      pinned: countByPredicate(markerList, marker => Boolean(marker.pinned)),
+      locked: countByPredicate(markerList, marker => Boolean(marker.lock)),
+      invalidCells: countInvalidRefs(
+        markerList.map(marker => marker.cell).filter(Number.isInteger),
+        grid.points.length
+      )
+    },
+    zones: {
+      total: 0,
+      types: {},
+      cells: describeNumbers([]),
+      hidden: 0,
+      invalidCells: 0
+    },
+    statistics: {
+      burgsWithPopulation: countByPredicate(cities, item => Number.isFinite(item.population)),
+      burgsWithType: countByPredicate(cities, item => Boolean(item.type)),
+      statesWithArea: countByPredicate(states, item => Number.isFinite(item?.area)),
+      statesWithRural: countByPredicate(states, item => Number.isFinite(item?.rural)),
+      statesWithUrban: countByPredicate(states, item => Number.isFinite(item?.urban)),
+      statesWithNeighbors: countByPredicate(states, item => Array.isArray(item?.neighbors)),
+      provincesWithPole: countByPredicate(provinces, item => Array.isArray(item?.pole)),
+      culturesWithArea: countByPredicate(cultures, item => Number.isFinite(item?.area)),
+      religionsWithArea: countByPredicate(religions, item => Number.isFinite(item?.area))
     }
   };
 }
@@ -584,8 +659,11 @@ function renderValidationMarkdown(summary) {
   lines.push("");
   lines.push("## 当前缺口");
   lines.push("");
-  for (const field of summary.candidateNotes.missingRequiredPackFields) lines.push(`- 缺少 \`${field}\``);
-  lines.push("");
+  if (summary.candidateNotes.missingRequiredPackFields.length) {
+    for (const field of summary.candidateNotes.missingRequiredPackFields) lines.push(`- 缺少 \`${field}\``);
+  } else {
+    lines.push("无。");
+  }
   return `${lines.join("\n")}\n`;
 }
 

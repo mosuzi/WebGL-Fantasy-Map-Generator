@@ -4493,3 +4493,44 @@
 
 - 进入 source 后段专题补齐：命名、军事、区域、marker、zones 和统计字段。
 - 扩展 source/candidate 对照 schema，让后段专题也有脚本化验收，而不是只靠肉眼判断。
+
+## 2026-06-25 阶段 18 后段 schema 第一刀
+
+太子计划：
+
+- 阶段 17 已经把主生成矩阵收口到 `63/63 pass`，下一步不直接补新功能，先扩展后段专题验收尺子。
+- 第一刀只覆盖 source/candidate summary、diff 和矩阵报告，不实现命名、军事、marker 或 zones 本体。
+- 验收目标是让 `Burgs.specify()`、`States.defineStateForms()`、`Rivers.specify()`、`Lakes.defineNames()`、`Military.generate()`、`Markers.generate()` 和 `Zones.generate()` 的产物缺口可以被脚本稳定暴露。
+
+尚书实施：
+
+- `tools/source-export-baseline.mjs`：
+  - 新增 `lateStages` 摘要。
+  - 记录 map name、城市名称与纹章、国家 fullName/formName/纹章、河流和湖泊命名、军事 regiment、marker 类型、zone 类型和统计字段覆盖。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - 输出同构 `lateStages` 摘要。
+  - 当前 candidate 未实现的后段能力以 `0` 或空分布显式呈现，避免被混在旧 `society` 总数中。
+- `tools/baseline-diff.mjs`：
+  - 新增后段专题指标和 marker/zone/military cell 引用不变量。
+  - 对缺少 `lateStages` 的旧 source summary 显式标记为 schema 缺失，提示刷新 source baseline。
+- `tools/candidate-baseline-matrix.mjs`：
+  - 新增“后段专题指标”矩阵表，追踪国家全名、城市纹章、河流/湖泊命名、军队、marker 和 zone 的 source/candidate 对照。
+
+门下复核：
+
+- `node --check` 通过：
+  - `tools/source-export-baseline.mjs`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+  - `tools/candidate-baseline-matrix.mjs`
+- `git diff --check` 通过。
+- `git status --short source` 无输出，`source/` 原项目代码未被修改。
+- 已刷新强制 case：
+  - `mediterranean / 100000 / audit-mediterranean-001`
+  - `source-summary.json` 与 `candidate-summary.json` 均包含 `lateStages.names/military/markers/zones/statistics`。
+  - `diff.json` 状态为 `fail（fail 11，warn 0）`，新增 fail 全部来自后段专题缺口：城市纹章、国家 fullName/formName、河流/湖泊命名、军事 regiment、marker 数量/图标、zone 和省份 pole。
+  - 后段 schema 已能把当前 candidate 的真实缺口从主生成矩阵里分离出来；这不是阶段 17 退化。
+
+下一步建议：
+
+- 下一步进入后段本体第一项：复刻 `Burgs.specify()` 的城市人口、类型、分组和纹章字段。

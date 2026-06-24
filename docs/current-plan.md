@@ -150,13 +150,23 @@
 - 完整 candidate 矩阵已跑完 63 个 case：总体 `pass`，`fail 0`，`warn 0`，`pass 63`。
 - 当前矩阵报告：`docs/source-baselines/candidate-matrix.md`，生成时间 `2026-06-24T16:41:47.034Z`。
 
+阶段 18 已开始第一刀：
+
+- 当前目标不是马上实现后段专题，而是先扩展 source/candidate 对照 schema，让命名、军事、marker、zones 和统计字段进入脚本化验收。
+- `tools/source-export-baseline.mjs` 已新增 `lateStages` 摘要，记录 source 的城市/国家/河流/湖泊命名、纹章、国家 form/fullName、军事 regiment、marker 分布、zone 分布和统计字段覆盖。
+- `tools/webgl-generator-export-baseline.mjs` 已输出同构 `lateStages` 摘要，当前 candidate 后段缺口会被明确记录为字段差异。
+- `tools/baseline-diff.mjs` 已加入后段专题指标和引用不变量；旧 source summary 如果缺少 `lateStages` 字段会被显式判定为需要刷新，而不是被当成真实算法差异。
+- `tools/candidate-baseline-matrix.mjs` 已在矩阵报告中新增“后段专题指标”表，用于后续按 case 追踪国家全名、城市纹章、河流/湖泊命名、军队、marker 和 zone 覆盖。
+
 ## 总目标
 
 基于 `source/Fantasy-Map-Generator` 的功能、数据结构和视觉表现，复刻一个功能相似但使用 WebGL 实现的独立地图生成器。`source/` 只作为参考实现、行为对照和性能基线，不作为被修改或被接入的目标代码库。
 
-## 当前阶段：source 优先复位，阶段 17 已完成
+## 当前阶段：source 优先复位，阶段 18 后段 schema 已开始
 
 第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。当前完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`，下一步可以进入 source 后段的命名、军事、区域、marker、zones 和统计字段补齐。
+
+阶段 18 第一刀已经开始建立后段专题验收框架。下一步应刷新至少一个强制 source/candidate case，确认 `lateStages` schema 能稳定暴露 candidate 的真实后段缺口；随后按字段依赖顺序进入 `Burgs.specify()`、`States.defineStateForms()`、`Rivers.specify()`、`Lakes.defineNames()`、`Military.generate()`、`Markers.generate()` 和 `Zones.generate()` 的复刻。
 
 ## 当前已完成
 

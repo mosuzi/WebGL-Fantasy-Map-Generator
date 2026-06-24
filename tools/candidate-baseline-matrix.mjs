@@ -169,6 +169,13 @@ function toMatrixRow({caseName, source, candidate, diff}) {
     religions: pair(source.society?.religions, candidate.society?.religions),
     provinces: pair(source.society?.provinces, candidate.society?.provinces),
     routes: pair(source.routes?.total, candidate.routes?.total),
+    stateFullNames: pair(source.lateStages?.names?.stateFullNames, candidate.lateStages?.names?.stateFullNames),
+    burgCoas: pair(source.lateStages?.names?.burgCoas, candidate.lateStages?.names?.burgCoas),
+    riverNames: pair(source.lateStages?.names?.riverNames, candidate.lateStages?.names?.riverNames),
+    lakeNames: pair(source.lateStages?.names?.lakeNames, candidate.lateStages?.names?.lakeNames),
+    regiments: pair(source.lateStages?.military?.regiments, candidate.lateStages?.military?.regiments),
+    markers: pair(source.lateStages?.markers?.total, candidate.lateStages?.markers?.total),
+    zones: pair(source.lateStages?.zones?.total, candidate.lateStages?.zones?.total),
     landRouteWaterCells: candidate.routes?.landRouteWaterCells,
     seaRouteLandCells: candidate.routes?.seaRouteLandCells,
     recommendation: diff.nextStageRecommendation
@@ -207,6 +214,16 @@ function renderMarkdown(matrix) {
   for (const item of matrix.cases) {
     lines.push(
       `| ${item.caseName} | ${formatPair(item.rivers)} | ${formatPair(item.populationCells)} | ${formatPair(item.burgs)} | ${formatPair(item.ports)} | ${formatPair(item.states)} | ${formatPair(item.religions)} | ${formatPair(item.provinces)} | ${formatPair(item.routes)} | ${item.landRouteWaterCells} | ${item.seaRouteLandCells} |`
+    );
+  }
+  lines.push("");
+  lines.push("## 后段专题指标");
+  lines.push("");
+  lines.push("| case | 国家全名 S/C | 城市纹章 S/C | 河流命名 S/C | 湖泊命名 S/C | 军队 S/C | marker S/C | zone S/C |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|");
+  for (const item of matrix.cases) {
+    lines.push(
+      `| ${item.caseName} | ${formatPair(item.stateFullNames)} | ${formatPair(item.burgCoas)} | ${formatPair(item.riverNames)} | ${formatPair(item.lakeNames)} | ${formatPair(item.regiments)} | ${formatPair(item.markers)} | ${formatPair(item.zones)} |`
     );
   }
   lines.push("");
