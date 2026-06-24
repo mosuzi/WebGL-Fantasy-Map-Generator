@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:14:35.910Z
+生成时间：2026-06-24T16:41:12.918Z
 模板：`pangea`
 Seed：`audit-pangea-001`
 目标 cells：50000
@@ -30,14 +30,14 @@ Seed：`audit-pangea-001`
 | population.positivePopulationCells | 15373 | 15374 | 1 | 0 | pass |
 | society.cultures | 10 | 10 | 0 | 0 | pass |
 | society.burgs | 859 | 859 | 0 | 0 | pass |
-| society.ports | 158 | 124 | -34 | 0.215 | pass |
+| society.ports | 158 | 137 | -21 | 0.133 | pass |
 | society.states | 12 | 12 | 0 | 0 | pass |
 | society.religions | 20 | 20 | 0 | 0 | pass |
-| society.provinces | 303 | 300 | -3 | 0.01 | pass |
-| routes.total | 694 | 736 | 42 | 0.061 | pass |
+| society.provinces | 303 | 294 | -9 | 0.03 | pass |
+| routes.total | 694 | 751 | 57 | 0.082 | pass |
 | routes.roads | 6 | 4 | -2 | 0.333 | pass |
-| routes.trails | 519 | 604 | 85 | 0.164 | pass |
-| routes.searoutes | 169 | 128 | -41 | 0.243 | pass |
+| routes.trails | 519 | 603 | 84 | 0.162 | pass |
+| routes.searoutes | 169 | 144 | -25 | 0.148 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 1 | 0 | -1 | -1 | pass |
 

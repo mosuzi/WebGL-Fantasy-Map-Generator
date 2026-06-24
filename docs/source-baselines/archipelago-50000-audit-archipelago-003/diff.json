@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:11:49.654Z",
+    "generatedAt": "2026-06-24T16:39:05.330Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\archipelago-50000-audit-archipelago-003\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\archipelago-50000-audit-archipelago-003\\candidate-summary.json",
     "seed": "audit-archipelago-003",
@@ -281,9 +281,9 @@
       "id": "society.burgs",
       "label": "society.burgs",
       "source": 436,
-      "candidate": 424,
-      "delta": -12,
-      "ratio": 0.028,
+      "candidate": 436,
+      "delta": 0,
+      "ratio": 0,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 115,
-      "candidate": 91,
-      "delta": -24,
-      "ratio": 0.209,
+      "candidate": 97,
+      "delta": -18,
+      "ratio": 0.157,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 137,
-      "candidate": 138,
-      "delta": 1,
-      "ratio": 0.007,
+      "candidate": 129,
+      "delta": -8,
+      "ratio": 0.058,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 390,
-      "candidate": 398,
-      "delta": 8,
-      "ratio": 0.021,
+      "candidate": 440,
+      "delta": 50,
+      "ratio": 0.128,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -372,16 +372,17 @@
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 256,
-      "candidate": 288,
-      "delta": 32,
-      "ratio": 0.125,
+      "candidate": 317,
+      "delta": 61,
+      "ratio": 0.238,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,9 +394,9 @@
       "id": "routes.searoutes",
       "label": "routes.searoutes",
       "source": 125,
-      "candidate": 99,
-      "delta": -26,
-      "ratio": 0.208,
+      "candidate": 112,
+      "delta": -13,
+      "ratio": 0.104,
       "status": "pass",
       "rule": {
         "kind": "relative",

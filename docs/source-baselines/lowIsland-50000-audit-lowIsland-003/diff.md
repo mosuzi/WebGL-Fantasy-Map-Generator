@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:12:56.285Z
+生成时间：2026-06-24T16:39:56.351Z
 模板：`lowIsland`
 Seed：`audit-lowIsland-003`
 目标 cells：50000
@@ -30,14 +30,14 @@ Seed：`audit-lowIsland-003`
 | population.positivePopulationCells | 13404 | 13404 | 0 | 0 | pass |
 | society.cultures | 10 | 11 | 1 | 0.1 | pass |
 | society.burgs | 759 | 759 | 0 | 0 | pass |
-| society.ports | 178 | 123 | -55 | 0.309 | pass |
+| society.ports | 178 | 146 | -32 | 0.18 | pass |
 | society.states | 21 | 21 | 0 | 0 | pass |
 | society.religions | 16 | 17 | 1 | 0.063 | pass |
-| society.provinces | 278 | 282 | 4 | 0.014 | pass |
-| routes.total | 669 | 700 | 31 | 0.046 | pass |
-| routes.roads | 14 | 17 | 3 | 0.214 | pass |
-| routes.trails | 483 | 556 | 73 | 0.151 | pass |
-| routes.searoutes | 172 | 127 | -45 | 0.262 | pass |
+| society.provinces | 278 | 280 | 2 | 0.007 | pass |
+| routes.total | 669 | 731 | 62 | 0.093 | pass |
+| routes.roads | 14 | 16 | 2 | 0.143 | pass |
+| routes.trails | 483 | 562 | 79 | 0.164 | pass |
+| routes.searoutes | 172 | 153 | -19 | 0.11 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 1 | 0 | -1 | -1 | pass |
 

@@ -1,11 +1,11 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:15:20.910Z",
+    "generatedAt": "2026-06-24T16:41:47.034Z",
     "mode": "full",
     "cases": 63,
     "outRoot": "D:\\work\\fmg\\docs\\source-baselines",
     "screenshots": false,
-    "status": "warn"
+    "status": "pass"
   },
   "cases": [
     {
@@ -65,13 +65,13 @@
       },
       "burgs": {
         "source": 929,
-        "candidate": 831,
-        "delta": -98
+        "candidate": 924,
+        "delta": -5
       },
       "ports": {
         "source": 149,
-        "candidate": 126,
-        "delta": -23
+        "candidate": 155,
+        "delta": 6
       },
       "states": {
         "source": 21,
@@ -85,13 +85,13 @@
       },
       "provinces": {
         "source": 226,
-        "candidate": 183,
-        "delta": -43
+        "candidate": 190,
+        "delta": -36
       },
       "routes": {
         "source": 693,
-        "candidate": 643,
-        "delta": -50
+        "candidate": 711,
+        "delta": 18
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -154,13 +154,13 @@
       },
       "burgs": {
         "source": 1076,
-        "candidate": 1034,
-        "delta": -42
+        "candidate": 1055,
+        "delta": -21
       },
       "ports": {
         "source": 162,
-        "candidate": 135,
-        "delta": -27
+        "candidate": 144,
+        "delta": -18
       },
       "states": {
         "source": 15,
@@ -174,13 +174,13 @@
       },
       "provinces": {
         "source": 349,
-        "candidate": 328,
-        "delta": -21
+        "candidate": 317,
+        "delta": -32
       },
       "routes": {
         "source": 723,
-        "candidate": 769,
-        "delta": 46
+        "candidate": 787,
+        "delta": 64
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -191,13 +191,11 @@
       "template": "mediterranean",
       "seed": "audit-mediterranean-003",
       "cellsTarget": 10000,
-      "status": "warn",
+      "status": "pass",
       "failCount": 0,
-      "warnCount": 1,
+      "warnCount": 0,
       "failedChecks": [],
-      "warnedChecks": [
-        "society.ports"
-      ],
+      "warnedChecks": [],
       "gridCells": {
         "source": 10004,
         "candidate": 10004,
@@ -245,13 +243,13 @@
       },
       "burgs": {
         "source": 1114,
-        "candidate": 853,
-        "delta": -261
+        "candidate": 987,
+        "delta": -127
       },
       "ports": {
         "source": 162,
-        "candidate": 81,
-        "delta": -81
+        "candidate": 113,
+        "delta": -49
       },
       "states": {
         "source": 17,
@@ -265,13 +263,13 @@
       },
       "provinces": {
         "source": 342,
-        "candidate": 219,
-        "delta": -123
+        "candidate": 247,
+        "delta": -95
       },
       "routes": {
         "source": 822,
-        "candidate": 626,
-        "delta": -196
+        "candidate": 725,
+        "delta": -97
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -334,13 +332,13 @@
       },
       "burgs": {
         "source": 1344,
-        "candidate": 1344,
-        "delta": 0
+        "candidate": 1350,
+        "delta": 6
       },
       "ports": {
         "source": 175,
-        "candidate": 193,
-        "delta": 18
+        "candidate": 185,
+        "delta": 10
       },
       "states": {
         "source": 21,
@@ -354,13 +352,13 @@
       },
       "provinces": {
         "source": 356,
-        "candidate": 348,
-        "delta": -8
+        "candidate": 346,
+        "delta": -10
       },
       "routes": {
         "source": 996,
-        "candidate": 1114,
-        "delta": 118
+        "candidate": 1055,
+        "delta": 59
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -428,8 +426,8 @@
       },
       "ports": {
         "source": 253,
-        "candidate": 225,
-        "delta": -28
+        "candidate": 228,
+        "delta": -25
       },
       "states": {
         "source": 15,
@@ -443,13 +441,13 @@
       },
       "provinces": {
         "source": 472,
-        "candidate": 472,
-        "delta": 0
+        "candidate": 465,
+        "delta": -7
       },
       "routes": {
         "source": 1008,
-        "candidate": 1081,
-        "delta": 73
+        "candidate": 1137,
+        "delta": 129
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -512,13 +510,13 @@
       },
       "burgs": {
         "source": 1462,
-        "candidate": 1456,
-        "delta": -6
+        "candidate": 1457,
+        "delta": -5
       },
       "ports": {
         "source": 217,
-        "candidate": 177,
-        "delta": -40
+        "candidate": 193,
+        "delta": -24
       },
       "states": {
         "source": 17,
@@ -532,13 +530,13 @@
       },
       "provinces": {
         "source": 502,
-        "candidate": 496,
-        "delta": -6
+        "candidate": 499,
+        "delta": -3
       },
       "routes": {
         "source": 1141,
-        "candidate": 1207,
-        "delta": 66
+        "candidate": 1233,
+        "delta": 92
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -601,13 +599,13 @@
       },
       "burgs": {
         "source": 1724,
-        "candidate": 1729,
-        "delta": 5
+        "candidate": 1730,
+        "delta": 6
       },
       "ports": {
         "source": 230,
-        "candidate": 261,
-        "delta": 31
+        "candidate": 234,
+        "delta": 4
       },
       "states": {
         "source": 21,
@@ -621,13 +619,13 @@
       },
       "provinces": {
         "source": 477,
-        "candidate": 476,
-        "delta": -1
+        "candidate": 463,
+        "delta": -14
       },
       "routes": {
         "source": 1331,
-        "candidate": 1489,
-        "delta": 158
+        "candidate": 1481,
+        "delta": 150
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -690,13 +688,13 @@
       },
       "burgs": {
         "source": 1609,
-        "candidate": 1608,
-        "delta": -1
+        "candidate": 1613,
+        "delta": 4
       },
       "ports": {
         "source": 293,
-        "candidate": 281,
-        "delta": -12
+        "candidate": 264,
+        "delta": -29
       },
       "states": {
         "source": 15,
@@ -710,13 +708,13 @@
       },
       "provinces": {
         "source": 619,
-        "candidate": 606,
-        "delta": -13
+        "candidate": 611,
+        "delta": -8
       },
       "routes": {
         "source": 1223,
-        "candidate": 1336,
-        "delta": 113
+        "candidate": 1321,
+        "delta": 98
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -784,8 +782,8 @@
       },
       "ports": {
         "source": 317,
-        "candidate": 256,
-        "delta": -61
+        "candidate": 266,
+        "delta": -51
       },
       "states": {
         "source": 17,
@@ -799,13 +797,13 @@
       },
       "provinces": {
         "source": 669,
-        "candidate": 616,
-        "delta": -53
+        "candidate": 605,
+        "delta": -64
       },
       "routes": {
         "source": 1460,
-        "candidate": 1492,
-        "delta": 32
+        "candidate": 1552,
+        "delta": 92
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -888,13 +886,13 @@
       },
       "provinces": {
         "source": 180,
-        "candidate": 178,
-        "delta": -2
+        "candidate": 171,
+        "delta": -9
       },
       "routes": {
         "source": 554,
-        "candidate": 603,
-        "delta": 49
+        "candidate": 611,
+        "delta": 57
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -962,8 +960,8 @@
       },
       "ports": {
         "source": 110,
-        "candidate": 100,
-        "delta": -10
+        "candidate": 113,
+        "delta": 3
       },
       "states": {
         "source": 20,
@@ -977,8 +975,8 @@
       },
       "provinces": {
         "source": 226,
-        "candidate": 210,
-        "delta": -16
+        "candidate": 212,
+        "delta": -14
       },
       "routes": {
         "source": 557,
@@ -1046,13 +1044,13 @@
       },
       "burgs": {
         "source": 790,
-        "candidate": 777,
-        "delta": -13
+        "candidate": 790,
+        "delta": 0
       },
       "ports": {
         "source": 119,
-        "candidate": 113,
-        "delta": -6
+        "candidate": 112,
+        "delta": -7
       },
       "states": {
         "source": 18,
@@ -1066,13 +1064,13 @@
       },
       "provinces": {
         "source": 231,
-        "candidate": 230,
-        "delta": -1
+        "candidate": 236,
+        "delta": 5
       },
       "routes": {
         "source": 639,
-        "candidate": 646,
-        "delta": 7
+        "candidate": 656,
+        "delta": 17
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1140,8 +1138,8 @@
       },
       "ports": {
         "source": 146,
-        "candidate": 127,
-        "delta": -19
+        "candidate": 129,
+        "delta": -17
       },
       "states": {
         "source": 21,
@@ -1155,13 +1153,13 @@
       },
       "provinces": {
         "source": 268,
-        "candidate": 282,
-        "delta": 14
+        "candidate": 269,
+        "delta": 1
       },
       "routes": {
         "source": 842,
-        "candidate": 905,
-        "delta": 63
+        "candidate": 885,
+        "delta": 43
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1229,8 +1227,8 @@
       },
       "ports": {
         "source": 197,
-        "candidate": 168,
-        "delta": -29
+        "candidate": 180,
+        "delta": -17
       },
       "states": {
         "source": 20,
@@ -1244,13 +1242,13 @@
       },
       "provinces": {
         "source": 369,
-        "candidate": 365,
-        "delta": -4
+        "candidate": 367,
+        "delta": -2
       },
       "routes": {
         "source": 994,
-        "candidate": 1022,
-        "delta": 28
+        "candidate": 1056,
+        "delta": 62
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1318,8 +1316,8 @@
       },
       "ports": {
         "source": 268,
-        "candidate": 271,
-        "delta": 3
+        "candidate": 224,
+        "delta": -44
       },
       "states": {
         "source": 18,
@@ -1333,13 +1331,13 @@
       },
       "provinces": {
         "source": 406,
-        "candidate": 410,
-        "delta": 4
+        "candidate": 404,
+        "delta": -2
       },
       "routes": {
         "source": 1111,
-        "candidate": 1201,
-        "delta": 90
+        "candidate": 1130,
+        "delta": 19
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1407,8 +1405,8 @@
       },
       "ports": {
         "source": 187,
-        "candidate": 183,
-        "delta": -4
+        "candidate": 178,
+        "delta": -9
       },
       "states": {
         "source": 21,
@@ -1422,13 +1420,13 @@
       },
       "provinces": {
         "source": 350,
-        "candidate": 350,
-        "delta": 0
+        "candidate": 348,
+        "delta": -2
       },
       "routes": {
         "source": 1041,
-        "candidate": 1083,
-        "delta": 42
+        "candidate": 1094,
+        "delta": 53
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1496,8 +1494,8 @@
       },
       "ports": {
         "source": 260,
-        "candidate": 212,
-        "delta": -48
+        "candidate": 236,
+        "delta": -24
       },
       "states": {
         "source": 20,
@@ -1511,13 +1509,13 @@
       },
       "provinces": {
         "source": 494,
-        "candidate": 502,
-        "delta": 8
+        "candidate": 491,
+        "delta": -3
       },
       "routes": {
         "source": 1252,
-        "candidate": 1257,
-        "delta": 5
+        "candidate": 1304,
+        "delta": 52
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1528,13 +1526,11 @@
       "template": "continents",
       "seed": "audit-continents-003",
       "cellsTarget": 100000,
-      "status": "warn",
+      "status": "pass",
       "failCount": 0,
-      "warnCount": 1,
+      "warnCount": 0,
       "failedChecks": [],
-      "warnedChecks": [
-        "society.cultures"
-      ],
+      "warnedChecks": [],
       "gridCells": {
         "source": 99846,
         "candidate": 99846,
@@ -1586,9 +1582,9 @@
         "delta": 0
       },
       "ports": {
-        "source": 230,
-        "candidate": 224,
-        "delta": -6
+        "source": 229,
+        "candidate": 241,
+        "delta": 12
       },
       "states": {
         "source": 18,
@@ -1596,19 +1592,19 @@
         "delta": 0
       },
       "religions": {
-        "source": 25,
+        "source": 30,
         "candidate": 30,
-        "delta": 5
+        "delta": 0
       },
       "provinces": {
-        "source": 481,
-        "candidate": 488,
-        "delta": 7
+        "source": 487,
+        "candidate": 492,
+        "delta": 5
       },
       "routes": {
-        "source": 1198,
-        "candidate": 1249,
-        "delta": 51
+        "source": 1201,
+        "candidate": 1286,
+        "delta": 85
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1671,13 +1667,13 @@
       },
       "burgs": {
         "source": 355,
-        "candidate": 390,
-        "delta": 35
+        "candidate": 405,
+        "delta": 50
       },
       "ports": {
         "source": 57,
-        "candidate": 60,
-        "delta": 3
+        "candidate": 64,
+        "delta": 7
       },
       "states": {
         "source": 21,
@@ -1691,13 +1687,13 @@
       },
       "provinces": {
         "source": 131,
-        "candidate": 135,
-        "delta": 4
+        "candidate": 120,
+        "delta": -11
       },
       "routes": {
         "source": 272,
-        "candidate": 337,
-        "delta": 65
+        "candidate": 342,
+        "delta": 70
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1765,8 +1761,8 @@
       },
       "ports": {
         "source": 69,
-        "candidate": 69,
-        "delta": 0
+        "candidate": 64,
+        "delta": -5
       },
       "states": {
         "source": 17,
@@ -1780,13 +1776,13 @@
       },
       "provinces": {
         "source": 133,
-        "candidate": 132,
-        "delta": -1
+        "candidate": 133,
+        "delta": 0
       },
       "routes": {
         "source": 361,
-        "candidate": 393,
-        "delta": 32
+        "candidate": 365,
+        "delta": 4
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1849,13 +1845,13 @@
       },
       "burgs": {
         "source": 450,
-        "candidate": 397,
-        "delta": -53
+        "candidate": 439,
+        "delta": -11
       },
       "ports": {
         "source": 95,
-        "candidate": 80,
-        "delta": -15
+        "candidate": 79,
+        "delta": -16
       },
       "states": {
         "source": 22,
@@ -1869,13 +1865,13 @@
       },
       "provinces": {
         "source": 117,
-        "candidate": 96,
-        "delta": -21
+        "candidate": 109,
+        "delta": -8
       },
       "routes": {
         "source": 381,
-        "candidate": 368,
-        "delta": -13
+        "candidate": 376,
+        "delta": -5
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -1938,13 +1934,13 @@
       },
       "burgs": {
         "source": 297,
-        "candidate": 299,
-        "delta": 2
+        "candidate": 300,
+        "delta": 3
       },
       "ports": {
         "source": 89,
-        "candidate": 69,
-        "delta": -20
+        "candidate": 75,
+        "delta": -14
       },
       "states": {
         "source": 21,
@@ -1958,13 +1954,13 @@
       },
       "provinces": {
         "source": 128,
-        "candidate": 124,
-        "delta": -4
+        "candidate": 129,
+        "delta": 1
       },
       "routes": {
         "source": 296,
-        "candidate": 307,
-        "delta": 11
+        "candidate": 321,
+        "delta": 25
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2032,8 +2028,8 @@
       },
       "ports": {
         "source": 85,
-        "candidate": 74,
-        "delta": -11
+        "candidate": 72,
+        "delta": -13
       },
       "states": {
         "source": 17,
@@ -2047,13 +2043,13 @@
       },
       "provinces": {
         "source": 130,
-        "candidate": 123,
-        "delta": -7
+        "candidate": 124,
+        "delta": -6
       },
       "routes": {
         "source": 287,
-        "candidate": 312,
-        "delta": 25
+        "candidate": 317,
+        "delta": 30
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2116,13 +2112,13 @@
       },
       "burgs": {
         "source": 436,
-        "candidate": 424,
-        "delta": -12
+        "candidate": 436,
+        "delta": 0
       },
       "ports": {
         "source": 115,
-        "candidate": 91,
-        "delta": -24
+        "candidate": 97,
+        "delta": -18
       },
       "states": {
         "source": 22,
@@ -2136,13 +2132,13 @@
       },
       "provinces": {
         "source": 137,
-        "candidate": 138,
-        "delta": 1
+        "candidate": 129,
+        "delta": -8
       },
       "routes": {
         "source": 390,
-        "candidate": 398,
-        "delta": 8
+        "candidate": 440,
+        "delta": 50
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2210,8 +2206,8 @@
       },
       "ports": {
         "source": 79,
-        "candidate": 61,
-        "delta": -18
+        "candidate": 68,
+        "delta": -11
       },
       "states": {
         "source": 21,
@@ -2225,8 +2221,8 @@
       },
       "provinces": {
         "source": 128,
-        "candidate": 133,
-        "delta": 5
+        "candidate": 130,
+        "delta": 2
       },
       "routes": {
         "source": 266,
@@ -2299,8 +2295,8 @@
       },
       "ports": {
         "source": 106,
-        "candidate": 95,
-        "delta": -11
+        "candidate": 76,
+        "delta": -30
       },
       "states": {
         "source": 17,
@@ -2319,8 +2315,8 @@
       },
       "routes": {
         "source": 317,
-        "candidate": 354,
-        "delta": 37
+        "candidate": 337,
+        "delta": 20
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2388,8 +2384,8 @@
       },
       "ports": {
         "source": 124,
-        "candidate": 90,
-        "delta": -34
+        "candidate": 102,
+        "delta": -22
       },
       "states": {
         "source": 22,
@@ -2403,13 +2399,13 @@
       },
       "provinces": {
         "source": 144,
-        "candidate": 151,
-        "delta": 7
+        "candidate": 152,
+        "delta": 8
       },
       "routes": {
         "source": 406,
-        "candidate": 412,
-        "delta": 6
+        "candidate": 444,
+        "delta": 38
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2477,8 +2473,8 @@
       },
       "ports": {
         "source": 111,
-        "candidate": 91,
-        "delta": -20
+        "candidate": 81,
+        "delta": -30
       },
       "states": {
         "source": 28,
@@ -2492,13 +2488,13 @@
       },
       "provinces": {
         "source": 217,
-        "candidate": 210,
-        "delta": -7
+        "candidate": 212,
+        "delta": -5
       },
       "routes": {
         "source": 462,
-        "candidate": 510,
-        "delta": 48
+        "candidate": 507,
+        "delta": 45
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2561,13 +2557,13 @@
       },
       "burgs": {
         "source": 690,
-        "candidate": 694,
-        "delta": 4
+        "candidate": 710,
+        "delta": 20
       },
       "ports": {
         "source": 89,
-        "candidate": 72,
-        "delta": -17
+        "candidate": 81,
+        "delta": -8
       },
       "states": {
         "source": 15,
@@ -2581,13 +2577,13 @@
       },
       "provinces": {
         "source": 218,
-        "candidate": 201,
-        "delta": -17
+        "candidate": 209,
+        "delta": -9
       },
       "routes": {
         "source": 533,
-        "candidate": 553,
-        "delta": 20
+        "candidate": 567,
+        "delta": 34
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2650,13 +2646,13 @@
       },
       "burgs": {
         "source": 654,
-        "candidate": 648,
-        "delta": -6
+        "candidate": 667,
+        "delta": 13
       },
       "ports": {
         "source": 111,
-        "candidate": 68,
-        "delta": -43
+        "candidate": 69,
+        "delta": -42
       },
       "states": {
         "source": 15,
@@ -2670,13 +2666,13 @@
       },
       "provinces": {
         "source": 153,
-        "candidate": 154,
-        "delta": 1
+        "candidate": 152,
+        "delta": -1
       },
       "routes": {
         "source": 482,
-        "candidate": 529,
-        "delta": 47
+        "candidate": 527,
+        "delta": 45
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2759,13 +2755,13 @@
       },
       "provinces": {
         "source": 299,
-        "candidate": 284,
-        "delta": -15
+        "candidate": 281,
+        "delta": -18
       },
       "routes": {
         "source": 701,
-        "candidate": 811,
-        "delta": 110
+        "candidate": 791,
+        "delta": 90
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2828,13 +2824,13 @@
       },
       "burgs": {
         "source": 890,
-        "candidate": 883,
-        "delta": -7
+        "candidate": 890,
+        "delta": 0
       },
       "ports": {
         "source": 163,
-        "candidate": 126,
-        "delta": -37
+        "candidate": 141,
+        "delta": -22
       },
       "states": {
         "source": 15,
@@ -2848,13 +2844,13 @@
       },
       "provinces": {
         "source": 329,
-        "candidate": 318,
-        "delta": -11
+        "candidate": 324,
+        "delta": -5
       },
       "routes": {
         "source": 740,
-        "candidate": 804,
-        "delta": 64
+        "candidate": 824,
+        "delta": 84
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -2922,8 +2918,8 @@
       },
       "ports": {
         "source": 144,
-        "candidate": 138,
-        "delta": -6
+        "candidate": 123,
+        "delta": -21
       },
       "states": {
         "source": 15,
@@ -2937,13 +2933,13 @@
       },
       "provinces": {
         "source": 241,
-        "candidate": 237,
-        "delta": -4
+        "candidate": 231,
+        "delta": -10
       },
       "routes": {
         "source": 649,
-        "candidate": 733,
-        "delta": 84
+        "candidate": 735,
+        "delta": 86
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3011,8 +3007,8 @@
       },
       "ports": {
         "source": 195,
-        "candidate": 180,
-        "delta": -15
+        "candidate": 187,
+        "delta": -8
       },
       "states": {
         "source": 28,
@@ -3026,13 +3022,13 @@
       },
       "provinces": {
         "source": 339,
-        "candidate": 347,
-        "delta": 8
+        "candidate": 344,
+        "delta": 5
       },
       "routes": {
         "source": 840,
-        "candidate": 892,
-        "delta": 52
+        "candidate": 883,
+        "delta": 43
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3115,13 +3111,13 @@
       },
       "provinces": {
         "source": 416,
-        "candidate": 425,
-        "delta": 9
+        "candidate": 429,
+        "delta": 13
       },
       "routes": {
         "source": 914,
-        "candidate": 950,
-        "delta": 36
+        "candidate": 962,
+        "delta": 48
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3189,8 +3185,8 @@
       },
       "ports": {
         "source": 169,
-        "candidate": 165,
-        "delta": -4
+        "candidate": 151,
+        "delta": -18
       },
       "states": {
         "source": 15,
@@ -3209,8 +3205,8 @@
       },
       "routes": {
         "source": 810,
-        "candidate": 931,
-        "delta": 121
+        "candidate": 937,
+        "delta": 127
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3273,13 +3269,13 @@
       },
       "burgs": {
         "source": 716,
-        "candidate": 735,
-        "delta": 19
+        "candidate": 737,
+        "delta": 21
       },
       "ports": {
         "source": 103,
-        "candidate": 97,
-        "delta": -6
+        "candidate": 100,
+        "delta": -3
       },
       "states": {
         "source": 28,
@@ -3293,13 +3289,13 @@
       },
       "provinces": {
         "source": 228,
-        "candidate": 228,
-        "delta": 0
+        "candidate": 229,
+        "delta": 1
       },
       "routes": {
         "source": 555,
-        "candidate": 605,
-        "delta": 50
+        "candidate": 625,
+        "delta": 70
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3362,13 +3358,13 @@
       },
       "burgs": {
         "source": 699,
-        "candidate": 693,
-        "delta": -6
+        "candidate": 694,
+        "delta": -5
       },
       "ports": {
         "source": 89,
-        "candidate": 66,
-        "delta": -23
+        "candidate": 75,
+        "delta": -14
       },
       "states": {
         "source": 30,
@@ -3382,13 +3378,13 @@
       },
       "provinces": {
         "source": 157,
-        "candidate": 155,
-        "delta": -2
+        "candidate": 154,
+        "delta": -3
       },
       "routes": {
         "source": 508,
-        "candidate": 502,
-        "delta": -6
+        "candidate": 538,
+        "delta": 30
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3456,8 +3452,8 @@
       },
       "ports": {
         "source": 75,
-        "candidate": 74,
-        "delta": -1
+        "candidate": 59,
+        "delta": -16
       },
       "states": {
         "source": 21,
@@ -3471,13 +3467,13 @@
       },
       "provinces": {
         "source": 232,
-        "candidate": 233,
-        "delta": 1
+        "candidate": 228,
+        "delta": -4
       },
       "routes": {
         "source": 501,
-        "candidate": 548,
-        "delta": 47
+        "candidate": 540,
+        "delta": 39
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3545,8 +3541,8 @@
       },
       "ports": {
         "source": 152,
-        "candidate": 138,
-        "delta": -14
+        "candidate": 125,
+        "delta": -27
       },
       "states": {
         "source": 28,
@@ -3560,13 +3556,13 @@
       },
       "provinces": {
         "source": 305,
-        "candidate": 302,
-        "delta": -3
+        "candidate": 307,
+        "delta": 2
       },
       "routes": {
         "source": 765,
-        "candidate": 829,
-        "delta": 64
+        "candidate": 806,
+        "delta": 41
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3634,8 +3630,8 @@
       },
       "ports": {
         "source": 131,
-        "candidate": 105,
-        "delta": -26
+        "candidate": 99,
+        "delta": -32
       },
       "states": {
         "source": 30,
@@ -3649,13 +3645,13 @@
       },
       "provinces": {
         "source": 226,
-        "candidate": 217,
-        "delta": -9
+        "candidate": 218,
+        "delta": -8
       },
       "routes": {
         "source": 689,
-        "candidate": 817,
-        "delta": 128
+        "candidate": 756,
+        "delta": 67
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3723,8 +3719,8 @@
       },
       "ports": {
         "source": 178,
-        "candidate": 123,
-        "delta": -55
+        "candidate": 146,
+        "delta": -32
       },
       "states": {
         "source": 21,
@@ -3738,13 +3734,13 @@
       },
       "provinces": {
         "source": 278,
-        "candidate": 282,
-        "delta": 4
+        "candidate": 280,
+        "delta": 2
       },
       "routes": {
         "source": 669,
-        "candidate": 700,
-        "delta": 31
+        "candidate": 731,
+        "delta": 62
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3812,8 +3808,8 @@
       },
       "ports": {
         "source": 198,
-        "candidate": 143,
-        "delta": -55
+        "candidate": 194,
+        "delta": -4
       },
       "states": {
         "source": 28,
@@ -3832,8 +3828,8 @@
       },
       "routes": {
         "source": 914,
-        "candidate": 961,
-        "delta": 47
+        "candidate": 1019,
+        "delta": 105
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3901,8 +3897,8 @@
       },
       "ports": {
         "source": 169,
-        "candidate": 165,
-        "delta": -4
+        "candidate": 174,
+        "delta": 5
       },
       "states": {
         "source": 30,
@@ -3916,13 +3912,13 @@
       },
       "provinces": {
         "source": 281,
-        "candidate": 271,
-        "delta": -10
+        "candidate": 277,
+        "delta": -4
       },
       "routes": {
         "source": 895,
-        "candidate": 981,
-        "delta": 86
+        "candidate": 994,
+        "delta": 99
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -3990,8 +3986,8 @@
       },
       "ports": {
         "source": 236,
-        "candidate": 182,
-        "delta": -54
+        "candidate": 177,
+        "delta": -59
       },
       "states": {
         "source": 21,
@@ -4005,13 +4001,13 @@
       },
       "provinces": {
         "source": 379,
-        "candidate": 377,
-        "delta": -2
+        "candidate": 378,
+        "delta": -1
       },
       "routes": {
         "source": 917,
-        "candidate": 950,
-        "delta": 33
+        "candidate": 916,
+        "delta": -1
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4079,8 +4075,8 @@
       },
       "ports": {
         "source": 118,
-        "candidate": 77,
-        "delta": -41
+        "candidate": 101,
+        "delta": -17
       },
       "states": {
         "source": 17,
@@ -4094,13 +4090,13 @@
       },
       "provinces": {
         "source": 159,
-        "candidate": 156,
-        "delta": -3
+        "candidate": 158,
+        "delta": -1
       },
       "routes": {
         "source": 534,
-        "candidate": 567,
-        "delta": 33
+        "candidate": 549,
+        "delta": 15
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4163,13 +4159,13 @@
       },
       "burgs": {
         "source": 769,
-        "candidate": 804,
-        "delta": 35
+        "candidate": 805,
+        "delta": 36
       },
       "ports": {
         "source": 85,
-        "candidate": 73,
-        "delta": -12
+        "candidate": 83,
+        "delta": -2
       },
       "states": {
         "source": 19,
@@ -4183,13 +4179,13 @@
       },
       "provinces": {
         "source": 221,
-        "candidate": 222,
-        "delta": 1
+        "candidate": 221,
+        "delta": 0
       },
       "routes": {
         "source": 545,
-        "candidate": 614,
-        "delta": 69
+        "candidate": 595,
+        "delta": 50
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4252,13 +4248,13 @@
       },
       "burgs": {
         "source": 821,
-        "candidate": 830,
-        "delta": 9
+        "candidate": 831,
+        "delta": 10
       },
       "ports": {
         "source": 174,
-        "candidate": 165,
-        "delta": -9
+        "candidate": 149,
+        "delta": -25
       },
       "states": {
         "source": 21,
@@ -4272,13 +4268,13 @@
       },
       "provinces": {
         "source": 183,
-        "candidate": 185,
-        "delta": 2
+        "candidate": 187,
+        "delta": 4
       },
       "routes": {
         "source": 605,
-        "candidate": 682,
-        "delta": 77
+        "candidate": 665,
+        "delta": 60
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4346,8 +4342,8 @@
       },
       "ports": {
         "source": 192,
-        "candidate": 157,
-        "delta": -35
+        "candidate": 159,
+        "delta": -33
       },
       "states": {
         "source": 17,
@@ -4361,13 +4357,13 @@
       },
       "provinces": {
         "source": 251,
-        "candidate": 254,
-        "delta": 3
+        "candidate": 247,
+        "delta": -4
       },
       "routes": {
         "source": 774,
-        "candidate": 792,
-        "delta": 18
+        "candidate": 809,
+        "delta": 35
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4430,13 +4426,13 @@
       },
       "burgs": {
         "source": 1223,
-        "candidate": 1224,
-        "delta": 1
+        "candidate": 1225,
+        "delta": 2
       },
       "ports": {
         "source": 262,
-        "candidate": 214,
-        "delta": -48
+        "candidate": 185,
+        "delta": -77
       },
       "states": {
         "source": 19,
@@ -4450,13 +4446,13 @@
       },
       "provinces": {
         "source": 394,
-        "candidate": 372,
-        "delta": -22
+        "candidate": 386,
+        "delta": -8
       },
       "routes": {
         "source": 1004,
-        "candidate": 1114,
-        "delta": 110
+        "candidate": 1036,
+        "delta": 32
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4524,8 +4520,8 @@
       },
       "ports": {
         "source": 137,
-        "candidate": 122,
-        "delta": -15
+        "candidate": 117,
+        "delta": -20
       },
       "states": {
         "source": 21,
@@ -4539,13 +4535,13 @@
       },
       "provinces": {
         "source": 202,
-        "candidate": 183,
-        "delta": -19
+        "candidate": 190,
+        "delta": -12
       },
       "routes": {
         "source": 534,
-        "candidate": 614,
-        "delta": 80
+        "candidate": 670,
+        "delta": 136
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4613,8 +4609,8 @@
       },
       "ports": {
         "source": 238,
-        "candidate": 212,
-        "delta": -26
+        "candidate": 199,
+        "delta": -39
       },
       "states": {
         "source": 17,
@@ -4628,13 +4624,13 @@
       },
       "provinces": {
         "source": 425,
-        "candidate": 441,
-        "delta": 16
+        "candidate": 428,
+        "delta": 3
       },
       "routes": {
         "source": 1175,
-        "candidate": 1217,
-        "delta": 42
+        "candidate": 1210,
+        "delta": 35
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4702,8 +4698,8 @@
       },
       "ports": {
         "source": 404,
-        "candidate": 395,
-        "delta": -9
+        "candidate": 365,
+        "delta": -39
       },
       "states": {
         "source": 19,
@@ -4717,13 +4713,13 @@
       },
       "provinces": {
         "source": 616,
-        "candidate": 626,
-        "delta": 10
+        "candidate": 606,
+        "delta": -10
       },
       "routes": {
         "source": 1623,
-        "candidate": 1701,
-        "delta": 78
+        "candidate": 1685,
+        "delta": 62
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4791,8 +4787,8 @@
       },
       "ports": {
         "source": 411,
-        "candidate": 383,
-        "delta": -28
+        "candidate": 348,
+        "delta": -63
       },
       "states": {
         "source": 21,
@@ -4806,13 +4802,13 @@
       },
       "provinces": {
         "source": 475,
-        "candidate": 497,
-        "delta": 22
+        "candidate": 481,
+        "delta": 6
       },
       "routes": {
         "source": 1374,
-        "candidate": 1556,
-        "delta": 182
+        "candidate": 1595,
+        "delta": 221
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4875,13 +4871,13 @@
       },
       "burgs": {
         "source": 775,
-        "candidate": 803,
-        "delta": 28
+        "candidate": 808,
+        "delta": 33
       },
       "ports": {
         "source": 130,
-        "candidate": 95,
-        "delta": -35
+        "candidate": 100,
+        "delta": -30
       },
       "states": {
         "source": 12,
@@ -4895,13 +4891,13 @@
       },
       "provinces": {
         "source": 221,
-        "candidate": 208,
-        "delta": -13
+        "candidate": 210,
+        "delta": -11
       },
       "routes": {
         "source": 596,
-        "candidate": 615,
-        "delta": 19
+        "candidate": 627,
+        "delta": 31
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -4964,13 +4960,13 @@
       },
       "burgs": {
         "source": 978,
-        "candidate": 902,
-        "delta": -76
+        "candidate": 960,
+        "delta": -18
       },
       "ports": {
         "source": 124,
-        "candidate": 121,
-        "delta": -3
+        "candidate": 124,
+        "delta": 0
       },
       "states": {
         "source": 15,
@@ -4984,13 +4980,13 @@
       },
       "provinces": {
         "source": 233,
-        "candidate": 207,
-        "delta": -26
+        "candidate": 215,
+        "delta": -18
       },
       "routes": {
         "source": 724,
-        "candidate": 722,
-        "delta": -2
+        "candidate": 777,
+        "delta": 53
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -5053,13 +5049,13 @@
       },
       "burgs": {
         "source": 966,
-        "candidate": 968,
-        "delta": 2
+        "candidate": 975,
+        "delta": 9
       },
       "ports": {
         "source": 119,
-        "candidate": 96,
-        "delta": -23
+        "candidate": 84,
+        "delta": -35
       },
       "states": {
         "source": 13,
@@ -5073,13 +5069,13 @@
       },
       "provinces": {
         "source": 228,
-        "candidate": 225,
-        "delta": -3
+        "candidate": 223,
+        "delta": -5
       },
       "routes": {
         "source": 709,
-        "candidate": 731,
-        "delta": 22
+        "candidate": 710,
+        "delta": 1
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -5147,8 +5143,8 @@
       },
       "ports": {
         "source": 158,
-        "candidate": 124,
-        "delta": -34
+        "candidate": 137,
+        "delta": -21
       },
       "states": {
         "source": 12,
@@ -5162,13 +5158,13 @@
       },
       "provinces": {
         "source": 303,
-        "candidate": 300,
-        "delta": -3
+        "candidate": 294,
+        "delta": -9
       },
       "routes": {
         "source": 694,
-        "candidate": 736,
-        "delta": 42
+        "candidate": 751,
+        "delta": 57
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -5236,8 +5232,8 @@
       },
       "ports": {
         "source": 191,
-        "candidate": 194,
-        "delta": 3
+        "candidate": 162,
+        "delta": -29
       },
       "states": {
         "source": 15,
@@ -5256,8 +5252,8 @@
       },
       "routes": {
         "source": 864,
-        "candidate": 1000,
-        "delta": 136
+        "candidate": 947,
+        "delta": 83
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -5325,8 +5321,8 @@
       },
       "ports": {
         "source": 114,
-        "candidate": 113,
-        "delta": -1
+        "candidate": 106,
+        "delta": -8
       },
       "states": {
         "source": 13,
@@ -5340,13 +5336,13 @@
       },
       "provinces": {
         "source": 249,
-        "candidate": 206,
-        "delta": -43
+        "candidate": 224,
+        "delta": -25
       },
       "routes": {
         "source": 640,
-        "candidate": 663,
-        "delta": 23
+        "candidate": 671,
+        "delta": 31
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -5414,8 +5410,8 @@
       },
       "ports": {
         "source": 175,
-        "candidate": 155,
-        "delta": -20
+        "candidate": 162,
+        "delta": -13
       },
       "states": {
         "source": 12,
@@ -5429,13 +5425,13 @@
       },
       "provinces": {
         "source": 430,
-        "candidate": 422,
-        "delta": -8
+        "candidate": 430,
+        "delta": 0
       },
       "routes": {
         "source": 873,
-        "candidate": 973,
-        "delta": 100
+        "candidate": 996,
+        "delta": 123
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -5503,8 +5499,8 @@
       },
       "ports": {
         "source": 237,
-        "candidate": 221,
-        "delta": -16
+        "candidate": 194,
+        "delta": -43
       },
       "states": {
         "source": 15,
@@ -5518,13 +5514,13 @@
       },
       "provinces": {
         "source": 385,
-        "candidate": 394,
-        "delta": 9
+        "candidate": 389,
+        "delta": 4
       },
       "routes": {
         "source": 1052,
-        "candidate": 1124,
-        "delta": 72
+        "candidate": 1085,
+        "delta": 33
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,
@@ -5592,8 +5588,8 @@
       },
       "ports": {
         "source": 149,
-        "candidate": 150,
-        "delta": 1
+        "candidate": 146,
+        "delta": -3
       },
       "states": {
         "source": 13,
@@ -5607,13 +5603,13 @@
       },
       "provinces": {
         "source": 413,
-        "candidate": 375,
-        "delta": -38
+        "candidate": 388,
+        "delta": -25
       },
       "routes": {
         "source": 892,
-        "candidate": 1016,
-        "delta": 124
+        "candidate": 1030,
+        "delta": 138
       },
       "landRouteWaterCells": 0,
       "seaRouteLandCells": 0,

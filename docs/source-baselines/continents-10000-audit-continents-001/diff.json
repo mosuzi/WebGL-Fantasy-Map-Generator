@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:10:46.554Z",
+    "generatedAt": "2026-06-24T16:38:18.114Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-10000-audit-continents-001\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-10000-audit-continents-001\\candidate-summary.json",
     "seed": "audit-continents-001",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 180,
-      "candidate": 178,
-      "delta": -2,
-      "ratio": 0.011,
+      "candidate": 171,
+      "delta": -9,
+      "ratio": 0.05,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 554,
-      "candidate": 603,
-      "delta": 49,
-      "ratio": 0.088,
+      "candidate": 611,
+      "delta": 57,
+      "ratio": 0.103,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -365,23 +365,24 @@
       "id": "routes.roads",
       "label": "routes.roads",
       "source": 15,
-      "candidate": 19,
-      "delta": 4,
-      "ratio": 0.267,
+      "candidate": 18,
+      "delta": 3,
+      "ratio": 0.2,
       "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 452,
-      "candidate": 505,
-      "delta": 53,
-      "ratio": 0.117,
+      "candidate": 510,
+      "delta": 58,
+      "ratio": 0.128,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,9 +394,9 @@
       "id": "routes.searoutes",
       "label": "routes.searoutes",
       "source": 87,
-      "candidate": 79,
-      "delta": -8,
-      "ratio": 0.092,
+      "candidate": 83,
+      "delta": -4,
+      "ratio": 0.046,
       "status": "pass",
       "rule": {
         "kind": "relative",

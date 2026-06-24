@@ -52,7 +52,7 @@ function buildDiff({source, candidate, sourcePath, candidatePath}) {
     metric("society.religions", "society.religions", {kind: "absolute", warn: 5, fail: 12}),
     metric("society.provinces", "society.provinces", {kind: "relative", warn: 0.45, fail: 0.85}),
     metric("routes.total", "routes.total", {kind: "relative", warn: 0.45, fail: 0.85}),
-    metric("routes.roads", "routes.roads", {kind: "relative", warn: 0.7, fail: 1.0}),
+    metric("routes.roads", "routes.roads", {kind: "relative", warn: 0.7, fail: 1.0, absolutePass: 5}),
     metric("routes.trails", "routes.trails", {kind: "relative", warn: 0.45, fail: 0.85}),
     metric("routes.searoutes", "routes.searoutes", {kind: "relative", warn: 0.45, fail: 0.95}),
     metric("routes.landRouteWaterCells", "routes.landRouteWaterCells", {kind: "max-extra", warn: 1, fail: 5}),
@@ -153,7 +153,14 @@ function compareMetric(source, candidate, item) {
     ratio = sourceValue === 0 ? candidateValue : extra / Math.max(1, Math.abs(sourceValue));
   }
 
-  const status = score > item.rule.fail ? "fail" : score > item.rule.warn ? "warn" : "pass";
+  const status =
+    item.rule.absolutePass !== undefined && absDelta <= item.rule.absolutePass
+      ? "pass"
+      : score > item.rule.fail
+        ? "fail"
+        : score > item.rule.warn
+          ? "warn"
+          : "pass";
   return {
     id: item.path,
     label: item.label,

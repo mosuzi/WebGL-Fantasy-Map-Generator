@@ -129,6 +129,8 @@ try {
             provincesRatio: Number(provincesRatio.value),
             religionsNumber: Number(religionsNumber.value),
             culturesNumber: Number(culturesInput.value),
+            culturesSet: culturesSet.value,
+            culturesSetMax: Number(culturesSet.selectedOptions[0]?.dataset?.max || 0),
             sizeVariety: Number(sizeVariety.value),
             growthRate: Number(growthRate.value),
             temperatureEquator: Number(window.eval("options.temperatureEquator")),

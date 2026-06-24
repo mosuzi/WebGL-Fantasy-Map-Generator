@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:14:29.657Z",
+    "generatedAt": "2026-06-24T16:41:07.972Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-pangea-001",
     "template": "pangea",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 12,
+      "provincesRatio": 24,
+      "religionsNumber": 10,
+      "culturesNumber": 17,
+      "culturesSet": "english",
+      "culturesSetMax": 10,
+      "sizeVariety": 7.3,
+      "growthRate": 1.4,
+      "temperatureEquator": 20,
+      "temperatureNorthPole": -34,
+      "temperatureSouthPole": -14,
+      "precipitation": 90
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -368,28 +382,28 @@
   },
   "society": {
     "cultures": 10,
-    "culturedPackCells": 3958,
-    "culturedGridCells": 3485,
-    "burgs": 803,
+    "culturedPackCells": 3979,
+    "culturedGridCells": 3506,
+    "burgs": 808,
     "capitals": 12,
-    "ports": 95,
+    "ports": 100,
     "states": 12,
     "religions": 20,
-    "provinces": 208,
+    "provinces": 210,
     "markers": 31,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 615,
+    "total": 627,
     "groups": {
-      "roads": 9,
-      "trails": 504,
-      "searoutes": 102
+      "roads": 8,
+      "trails": 516,
+      "searoutes": 103
     },
-    "roads": 9,
-    "trails": 504,
-    "searoutes": 102,
+    "roads": 8,
+    "trails": 516,
+    "searoutes": 103,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -410,7 +424,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 216,
+    "burgCellsInvalid": 202,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

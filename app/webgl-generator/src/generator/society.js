@@ -110,6 +110,7 @@ function buildPackCultures(grid, pack, random, options) {
   }
 
   expandPackCultures(pack, cultures, centers, cultureIds);
+  fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds);
   cells.culture = cultureIds;
   summarizeCultureCoverage(pack, cultures);
   const gridCells = mirrorPackCultureToGrid(grid, pack);
@@ -772,6 +773,34 @@ function expandPackCultures(pack, cultures, centers, cultureIds) {
 
       costs[neighbor] = total;
       if (isPopulatedPackCell(cells, neighbor)) cultureIds[neighbor] = cultureId;
+      queue.push({cell: neighbor, cultureId, priority: total}, total);
+    }
+  }
+}
+
+function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds) {
+  const {cells} = pack;
+  const costs = new Float64Array(cells.i.length).fill(Infinity);
+  const queue = new MinPriorityQueue();
+  const maxCompletionCost = cells.i.length * 0.9;
+
+  for (const center of centers) {
+    costs[center.cell] = 0;
+    queue.push({cell: center.cell, cultureId: center.cultureId, priority: 0}, 0);
+  }
+
+  while (queue.length) {
+    const {cell, cultureId, priority} = queue.pop();
+    if (priority !== costs[cell]) continue;
+
+    if (!cultureIds[cell] && isPopulatedPackCell(cells, cell)) cultureIds[cell] = cultureId;
+
+    for (const neighbor of cells.c[cell] || []) {
+      const step = packCultureStepCost(pack, cultures[cultureId], cell, neighbor);
+      const total = priority + step;
+      if (!Number.isFinite(total) || total > maxCompletionCost || total >= costs[neighbor]) continue;
+
+      costs[neighbor] = total;
       queue.push({cell: neighbor, cultureId, priority: total}, total);
     }
   }

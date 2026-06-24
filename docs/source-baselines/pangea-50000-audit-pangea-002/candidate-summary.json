@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:14:41.039Z",
+    "generatedAt": "2026-06-24T16:41:17.437Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-pangea-002",
     "template": "pangea",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 15,
+      "provincesRatio": 20,
+      "religionsNumber": 2,
+      "culturesNumber": 16,
+      "culturesSet": "darkFantasy",
+      "culturesSetMax": 18,
+      "sizeVariety": 3.8,
+      "growthRate": 1.9,
+      "temperatureEquator": 21,
+      "temperatureNorthPole": -25,
+      "temperatureSouthPole": -14,
+      "precipitation": 70
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -389,7 +403,7 @@
     "culturedGridCells": 18568,
     "burgs": 1147,
     "capitals": 15,
-    "ports": 194,
+    "ports": 162,
     "states": 15,
     "religions": 18,
     "provinces": 311,
@@ -398,15 +412,15 @@
     "regiments": 0
   },
   "routes": {
-    "total": 1000,
+    "total": 947,
     "groups": {
-      "roads": 10,
-      "trails": 778,
-      "searoutes": 212
+      "roads": 9,
+      "trails": 763,
+      "searoutes": 175
     },
-    "roads": 10,
-    "trails": 778,
-    "searoutes": 212,
+    "roads": 9,
+    "trails": 763,
+    "searoutes": 175,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -427,7 +441,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 491,
+    "burgCellsInvalid": 458,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

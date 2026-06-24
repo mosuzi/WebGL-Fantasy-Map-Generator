@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:15:20.890Z",
+    "generatedAt": "2026-06-24T16:41:47.016Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\pangea-100000-audit-pangea-003\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\pangea-100000-audit-pangea-003\\candidate-summary.json",
     "seed": "audit-pangea-003",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 149,
-      "candidate": 150,
-      "delta": 1,
-      "ratio": 0.007,
+      "candidate": 146,
+      "delta": -3,
+      "ratio": 0.02,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 413,
-      "candidate": 375,
-      "delta": -38,
-      "ratio": 0.092,
+      "candidate": 388,
+      "delta": -25,
+      "ratio": 0.061,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 892,
-      "candidate": 1016,
-      "delta": 124,
-      "ratio": 0.139,
+      "candidate": 1030,
+      "delta": 138,
+      "ratio": 0.155,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -372,16 +372,17 @@
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 750,
-      "candidate": 873,
-      "delta": 123,
-      "ratio": 0.164,
+      "candidate": 887,
+      "delta": 137,
+      "ratio": 0.183,
       "status": "pass",
       "rule": {
         "kind": "relative",

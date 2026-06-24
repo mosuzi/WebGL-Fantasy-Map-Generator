@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:10:06.396Z",
+    "generatedAt": "2026-06-24T16:37:49.054Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 21,
+      "provincesRatio": 20,
+      "religionsNumber": 9,
+      "culturesNumber": 14,
+      "culturesSet": "antique",
+      "culturesSetMax": 10,
+      "sizeVariety": 7.4,
+      "growthRate": 1.5,
+      "temperatureEquator": 28,
+      "temperatureNorthPole": -28,
+      "temperatureSouthPole": -11,
+      "precipitation": 74
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -408,28 +422,28 @@
   },
   "society": {
     "cultures": 10,
-    "culturedPackCells": 53825,
-    "culturedGridCells": 50176,
-    "burgs": 1729,
+    "culturedPackCells": 53834,
+    "culturedGridCells": 50185,
+    "burgs": 1730,
     "capitals": 21,
-    "ports": 261,
+    "ports": 234,
     "states": 21,
     "religions": 19,
-    "provinces": 476,
+    "provinces": 463,
     "markers": 40,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 1489,
+    "total": 1481,
     "groups": {
-      "roads": 17,
-      "trails": 1203,
-      "searoutes": 269
+      "roads": 16,
+      "trails": 1232,
+      "searoutes": 233
     },
-    "roads": 17,
-    "trails": 1203,
-    "searoutes": 269,
+    "roads": 16,
+    "trails": 1232,
+    "searoutes": 233,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -450,7 +464,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 766,
+    "burgCellsInvalid": 735,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

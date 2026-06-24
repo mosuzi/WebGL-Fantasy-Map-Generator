@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:12:32.930Z",
+    "generatedAt": "2026-06-24T16:39:37.452Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\highIsland-100000-audit-highIsland-002\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\highIsland-100000-audit-highIsland-002\\candidate-summary.json",
     "seed": "audit-highIsland-002",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 416,
-      "candidate": 425,
-      "delta": 9,
-      "ratio": 0.022,
+      "candidate": 429,
+      "delta": 13,
+      "ratio": 0.031,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 914,
-      "candidate": 950,
-      "delta": 36,
-      "ratio": 0.039,
+      "candidate": 962,
+      "delta": 48,
+      "ratio": 0.053,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -365,23 +365,24 @@
       "id": "routes.roads",
       "label": "routes.roads",
       "source": 13,
-      "candidate": 8,
-      "delta": -5,
-      "ratio": 0.385,
+      "candidate": 10,
+      "delta": -3,
+      "ratio": 0.231,
       "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 712,
-      "candidate": 800,
-      "delta": 88,
-      "ratio": 0.124,
+      "candidate": 799,
+      "delta": 87,
+      "ratio": 0.122,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,9 +394,9 @@
       "id": "routes.searoutes",
       "label": "routes.searoutes",
       "source": 189,
-      "candidate": 142,
-      "delta": -47,
-      "ratio": 0.249,
+      "candidate": 153,
+      "delta": -36,
+      "ratio": 0.19,
       "status": "pass",
       "rule": {
         "kind": "relative",

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:11:47.804Z",
+    "generatedAt": "2026-06-24T16:39:03.941Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\archipelago-50000-audit-archipelago-002\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\archipelago-50000-audit-archipelago-002\\candidate-summary.json",
     "seed": "audit-archipelago-002",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 85,
-      "candidate": 74,
-      "delta": -11,
-      "ratio": 0.129,
+      "candidate": 72,
+      "delta": -13,
+      "ratio": 0.153,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 130,
-      "candidate": 123,
-      "delta": -7,
-      "ratio": 0.054,
+      "candidate": 124,
+      "delta": -6,
+      "ratio": 0.046,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 287,
-      "candidate": 312,
-      "delta": 25,
-      "ratio": 0.087,
+      "candidate": 317,
+      "delta": 30,
+      "ratio": 0.105,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -372,16 +372,17 @@
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 197,
-      "candidate": 223,
-      "delta": 26,
-      "ratio": 0.132,
+      "candidate": 228,
+      "delta": 31,
+      "ratio": 0.157,
       "status": "pass",
       "rule": {
         "kind": "relative",

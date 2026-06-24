@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:13:38.778Z",
+    "generatedAt": "2026-06-24T16:40:29.557Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-peninsula-003",
     "template": "peninsula",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 21,
+      "provincesRatio": 20,
+      "religionsNumber": 6,
+      "culturesNumber": 7,
+      "culturesSet": "highFantasy",
+      "culturesSetMax": 17,
+      "sizeVariety": 4.5,
+      "growthRate": 1.4,
+      "temperatureEquator": 25,
+      "temperatureNorthPole": -16,
+      "temperatureSouthPole": -16,
+      "precipitation": 20
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -395,28 +409,28 @@
   },
   "society": {
     "cultures": 7,
-    "culturedPackCells": 13241,
-    "culturedGridCells": 12299,
+    "culturedPackCells": 13242,
+    "culturedGridCells": 12300,
     "burgs": 750,
     "capitals": 21,
-    "ports": 122,
+    "ports": 117,
     "states": 21,
     "religions": 13,
-    "provinces": 183,
+    "provinces": 190,
     "markers": 40,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 614,
+    "total": 670,
     "groups": {
-      "roads": 12,
-      "trails": 498,
-      "searoutes": 104
+      "roads": 11,
+      "trails": 550,
+      "searoutes": 109
     },
-    "roads": 12,
-    "trails": 498,
-    "searoutes": 104,
+    "roads": 11,
+    "trails": 550,
+    "searoutes": 109,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -437,7 +451,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 288,
+    "burgCellsInvalid": 317,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

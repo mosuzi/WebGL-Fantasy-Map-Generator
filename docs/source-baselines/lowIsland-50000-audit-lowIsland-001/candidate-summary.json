@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:12:50.282Z",
+    "generatedAt": "2026-06-24T16:39:51.237Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-lowIsland-001",
     "template": "lowIsland",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 28,
+      "provincesRatio": 29,
+      "religionsNumber": 10,
+      "culturesNumber": 21,
+      "culturesSet": "highFantasy",
+      "culturesSetMax": 17,
+      "sizeVariety": 3.6,
+      "growthRate": 1.1,
+      "temperatureEquator": 20,
+      "temperatureNorthPole": -38,
+      "temperatureSouthPole": -22,
+      "precipitation": 95
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -397,24 +411,24 @@
     "culturedGridCells": 14013,
     "burgs": 908,
     "capitals": 28,
-    "ports": 138,
+    "ports": 125,
     "states": 28,
     "religions": 27,
-    "provinces": 302,
+    "provinces": 307,
     "markers": 37,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 829,
+    "total": 806,
     "groups": {
       "roads": 17,
-      "trails": 657,
-      "searoutes": 155
+      "trails": 644,
+      "searoutes": 145
     },
     "roads": 17,
-    "trails": 657,
-    "searoutes": 155,
+    "trails": 644,
+    "searoutes": 145,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -435,7 +449,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 474,
+    "burgCellsInvalid": 460,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

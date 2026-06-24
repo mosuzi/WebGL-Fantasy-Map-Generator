@@ -221,7 +221,7 @@ function renderMarkdown(matrix) {
   lines.push("## 下一步建议");
   lines.push("");
   if (matrix.metadata.status === "pass") {
-    lines.push("quick 矩阵当前全部通过。下一步可刷新 source full 矩阵，或进入 source 后段命名、军事、区域、marker 细节补齐。");
+    lines.push("当前矩阵全部通过。下一步可刷新 source full 矩阵，或进入 source 后段命名、军事、区域、marker 细节补齐。");
   } else {
     lines.push("优先处理 fail case；若多个模板集中失败，应回到对应 source 阶段算法，而不是只调单一 seed 参数。");
   }

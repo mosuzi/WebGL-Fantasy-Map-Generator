@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:12:50.531Z",
+    "generatedAt": "2026-06-24T16:39:51.466Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\lowIsland-50000-audit-lowIsland-001\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\lowIsland-50000-audit-lowIsland-001\\candidate-summary.json",
     "seed": "audit-lowIsland-001",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 152,
-      "candidate": 138,
-      "delta": -14,
-      "ratio": 0.092,
+      "candidate": 125,
+      "delta": -27,
+      "ratio": 0.178,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 305,
-      "candidate": 302,
-      "delta": -3,
-      "ratio": 0.01,
+      "candidate": 307,
+      "delta": 2,
+      "ratio": 0.007,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 765,
-      "candidate": 829,
-      "delta": 64,
-      "ratio": 0.084,
+      "candidate": 806,
+      "delta": 41,
+      "ratio": 0.054,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -372,16 +372,17 @@
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 569,
-      "candidate": 657,
-      "delta": 88,
-      "ratio": 0.155,
+      "candidate": 644,
+      "delta": 75,
+      "ratio": 0.132,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,9 +394,9 @@
       "id": "routes.searoutes",
       "label": "routes.searoutes",
       "source": 171,
-      "candidate": 155,
-      "delta": -16,
-      "ratio": 0.094,
+      "candidate": 145,
+      "delta": -26,
+      "ratio": 0.152,
       "status": "pass",
       "rule": {
         "kind": "relative",

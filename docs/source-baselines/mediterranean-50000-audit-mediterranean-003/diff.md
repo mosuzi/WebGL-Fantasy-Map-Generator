@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:09:48.766Z
+生成时间：2026-06-24T16:37:35.132Z
 模板：`mediterranean`
 Seed：`audit-mediterranean-003`
 目标 cells：50000
@@ -29,15 +29,15 @@ Seed：`audit-mediterranean-003`
 | rivers.cellsWithRiver | 3617 | 3570 | -47 | 0.013 | pass |
 | population.positivePopulationCells | 26250 | 26153 | -97 | 0.004 | pass |
 | society.cultures | 10 | 10 | 0 | 0 | pass |
-| society.burgs | 1462 | 1456 | -6 | 0.004 | pass |
-| society.ports | 217 | 177 | -40 | 0.184 | pass |
+| society.burgs | 1462 | 1457 | -5 | 0.003 | pass |
+| society.ports | 217 | 193 | -24 | 0.111 | pass |
 | society.states | 17 | 17 | 0 | 0 | pass |
 | society.religions | 16 | 16 | 0 | 0 | pass |
-| society.provinces | 502 | 496 | -6 | 0.012 | pass |
-| routes.total | 1141 | 1207 | 66 | 0.058 | pass |
-| routes.roads | 20 | 11 | -9 | 0.45 | pass |
-| routes.trails | 923 | 1023 | 100 | 0.108 | pass |
-| routes.searoutes | 198 | 173 | -25 | 0.126 | pass |
+| society.provinces | 502 | 499 | -3 | 0.006 | pass |
+| routes.total | 1141 | 1233 | 92 | 0.081 | pass |
+| routes.roads | 20 | 10 | -10 | 0.5 | pass |
+| routes.trails | 923 | 1027 | 104 | 0.113 | pass |
+| routes.searoutes | 198 | 196 | -2 | 0.01 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 0 | 0 | 0 | 0 | pass |
 

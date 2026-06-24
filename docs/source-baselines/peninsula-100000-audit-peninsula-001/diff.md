@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:13:51.535Z
+生成时间：2026-06-24T16:40:39.546Z
 模板：`peninsula`
 Seed：`audit-peninsula-001`
 目标 cells：100000
@@ -30,14 +30,14 @@ Seed：`audit-peninsula-001`
 | population.positivePopulationCells | 45172 | 45177 | 5 | 0 | pass |
 | society.cultures | 10 | 11 | 1 | 0.1 | pass |
 | society.burgs | 1451 | 1451 | 0 | 0 | pass |
-| society.ports | 238 | 212 | -26 | 0.109 | pass |
+| society.ports | 238 | 199 | -39 | 0.164 | pass |
 | society.states | 17 | 17 | 0 | 0 | pass |
 | society.religions | 12 | 13 | 1 | 0.083 | pass |
-| society.provinces | 425 | 441 | 16 | 0.038 | pass |
-| routes.total | 1175 | 1217 | 42 | 0.036 | pass |
-| routes.roads | 12 | 12 | 0 | 0 | pass |
-| routes.trails | 979 | 1047 | 68 | 0.069 | pass |
-| routes.searoutes | 184 | 158 | -26 | 0.141 | pass |
+| society.provinces | 425 | 428 | 3 | 0.007 | pass |
+| routes.total | 1175 | 1210 | 35 | 0.03 | pass |
+| routes.roads | 12 | 11 | -1 | 0.083 | pass |
+| routes.trails | 979 | 1044 | 65 | 0.066 | pass |
+| routes.searoutes | 184 | 155 | -29 | 0.158 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 0 | 0 | 0 | 0 | pass |
 

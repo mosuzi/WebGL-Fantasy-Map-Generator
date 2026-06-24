@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:13:28.815Z",
+    "generatedAt": "2026-06-24T16:40:21.738Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-peninsula-001",
     "template": "peninsula",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 17,
+      "provincesRatio": 20,
+      "religionsNumber": 2,
+      "culturesNumber": 11,
+      "culturesSet": "european",
+      "culturesSetMax": 15,
+      "sizeVariety": 3.8,
+      "growthRate": 1.9,
+      "temperatureEquator": 21,
+      "temperatureNorthPole": -17,
+      "temperatureSouthPole": -20,
+      "precipitation": 69
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -391,28 +405,28 @@
   },
   "society": {
     "cultures": 11,
-    "culturedPackCells": 15326,
-    "culturedGridCells": 13382,
+    "culturedPackCells": 15330,
+    "culturedGridCells": 13384,
     "burgs": 861,
     "capitals": 17,
-    "ports": 157,
+    "ports": 159,
     "states": 17,
     "religions": 13,
-    "provinces": 254,
+    "provinces": 247,
     "markers": 36,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 792,
+    "total": 809,
     "groups": {
-      "roads": 10,
-      "trails": 613,
-      "searoutes": 169
+      "roads": 8,
+      "trails": 636,
+      "searoutes": 165
     },
-    "roads": 10,
-    "trails": 613,
-    "searoutes": 169,
+    "roads": 8,
+    "trails": 636,
+    "searoutes": 165,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -433,7 +447,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 440,
+    "burgCellsInvalid": 421,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

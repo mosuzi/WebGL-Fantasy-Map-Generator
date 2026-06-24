@@ -139,13 +139,24 @@
   - `continents-100000-audit-continents-003`：仅 `society.cultures` warn；城市、港口、路线、宗教和省份主指标均 pass。
 - 最新网页快照仅作为本地预览产物保留，不纳入版本库。
 
+阶段 17 已完成矩阵全量收口：
+
+- `settlements.js` 的城镇 spacing 衰减改回 source 行为：每轮扫描后固定 `spacing *= 0.5`。
+- 本地 `gaussian()` 改为贴近 d3 `randomNormal.source(Math.random)` 的 polar Box-Muller 语义，初次调用使用 `y` 分量，不再使用普通 Box-Muller 变体。
+- 首都放置改为 source 的“整轮失败后清空并降低 spacing 重试”语义，避免在低陆地占比群岛样本中逐步补点造成额外偏移。
+- `society.js` 的文化补完从无上限全图填充收窄为有限补完，上限为 `cells.i.length * 0.9`，用于修复少数后段社会层缺口，同时避免低格数群岛过度生成港口和海路。
+- `tools/baseline-diff.mjs` 对 `routes.roads` 增加低基数绝对容忍：相对阈值仍保留，但 source 主路极少时绝对差值 `<= 5` 不再触发 warn。
+- `tools/source-export-baseline.mjs` 已记录 source 随机化后的 `culturesSet` 和 `culturesSetMax`，便于继续追踪文化集随机流。
+- 完整 candidate 矩阵已跑完 63 个 case：总体 `pass`，`fail 0`，`warn 0`，`pass 63`。
+- 当前矩阵报告：`docs/source-baselines/candidate-matrix.md`，生成时间 `2026-06-24T16:41:47.034Z`。
+
 ## 总目标
 
 基于 `source/Fantasy-Map-Generator` 的功能、数据结构和视觉表现，复刻一个功能相似但使用 WebGL 实现的独立地图生成器。`source/` 只作为参考实现、行为对照和性能基线，不作为被修改或被接入的目标代码库。
 
-## 当前阶段：source 优先复位，阶段 16 已完成
+## 当前阶段：source 优先复位，阶段 17 已完成
 
-第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改和阶段 16 社会/路线矩阵整改已完成第一版结构整改。当前完整 63 case 矩阵为 `warn（fail 0，warn 2，pass 61）`，下一步继续补齐 source 后段的命名、军事、区域、marker 细节和统计字段，并视需要继续压低剩余 2 个语义 warn。
+第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。当前完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`，下一步可以进入 source 后段的命名、军事、区域、marker、zones 和统计字段补齐。
 
 ## 当前已完成
 
@@ -400,10 +411,10 @@ http://127.0.0.1:5410
 
 ## 下一步
 
-1. 继续压剩余 2 个矩阵 warn：`mediterranean-10000-audit-mediterranean-003` 的港口数量和 `continents-100000-audit-continents-003` 的文化数量。
-2. 追 source 的随机选项和 d3 randomNormal/Alea 细节，减少 `culturesSet/culturesNumber` 随机流漂移。
-3. 补齐 source 后段的命名、军事、区域、marker、zones 和统计字段；当前这些仍是独立 WebGL 复刻中的简化占位。
-4. 原阶段 3 的 UI、对象编辑、路线样式、点图层、浮动面板等工作继续暂停，等 source 对齐链路进一步稳定后再恢复。
+1. 进入 source 后段专题补齐：命名、军事、区域、marker、zones 和统计字段；当前这些仍是独立 WebGL 复刻中的简化占位。
+2. 继续把 source/candidate 对照报告扩展到后段专题字段，避免后续功能只靠肉眼验收。
+3. 保留当前 63 case 矩阵作为回归门槛；后续改动生成链时先跑 targeted case，再跑 full matrix。
+4. 原阶段 3 的 UI、对象编辑、路线样式、点图层、浮动面板等工作继续暂停，等 source 后段数据链路进一步稳定后再恢复。
 5. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/floating-panel-architecture.md`。
 
 ## 约束

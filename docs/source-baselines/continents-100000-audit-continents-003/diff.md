@@ -1,10 +1,10 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:11:41.905Z
+生成时间：2026-06-24T16:38:59.390Z
 模板：`continents`
 Seed：`audit-continents-003`
 目标 cells：100000
-状态：warn（fail 0，warn 1）
+状态：pass（fail 0，warn 0）
 
 ## 关键指标
 
@@ -28,16 +28,16 @@ Seed：`audit-continents-003`
 | rivers.count | 909 | 867 | -42 | 0.046 | pass |
 | rivers.cellsWithRiver | 5973 | 5790 | -183 | 0.031 | pass |
 | population.positivePopulationCells | 42202 | 42204 | 2 | 0 | pass |
-| society.cultures | 15 | 20 | 5 | 0.333 | warn |
+| society.cultures | 20 | 20 | 0 | 0 | pass |
 | society.burgs | 1357 | 1357 | 0 | 0 | pass |
-| society.ports | 230 | 224 | -6 | 0.026 | pass |
+| society.ports | 229 | 241 | 12 | 0.052 | pass |
 | society.states | 18 | 18 | 0 | 0 | pass |
-| society.religions | 25 | 30 | 5 | 0.2 | pass |
-| society.provinces | 481 | 488 | 7 | 0.015 | pass |
-| routes.total | 1198 | 1249 | 51 | 0.043 | pass |
-| routes.roads | 17 | 13 | -4 | 0.235 | pass |
-| routes.trails | 929 | 987 | 58 | 0.062 | pass |
-| routes.searoutes | 252 | 249 | -3 | 0.012 | pass |
+| society.religions | 30 | 30 | 0 | 0 | pass |
+| society.provinces | 487 | 492 | 5 | 0.01 | pass |
+| routes.total | 1201 | 1286 | 85 | 0.071 | pass |
+| routes.roads | 16 | 13 | -3 | 0.188 | pass |
+| routes.trails | 936 | 1001 | 65 | 0.069 | pass |
+| routes.searoutes | 249 | 272 | 23 | 0.092 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 0 | 0 | 0 | 0 | pass |
 

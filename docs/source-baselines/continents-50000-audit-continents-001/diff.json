@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:10:53.751Z",
+    "generatedAt": "2026-06-24T16:38:22.960Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-50000-audit-continents-001\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-50000-audit-continents-001\\candidate-summary.json",
     "seed": "audit-continents-001",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 146,
-      "candidate": 127,
-      "delta": -19,
-      "ratio": 0.13,
+      "candidate": 129,
+      "delta": -17,
+      "ratio": 0.116,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 268,
-      "candidate": 282,
-      "delta": 14,
-      "ratio": 0.052,
+      "candidate": 269,
+      "delta": 1,
+      "ratio": 0.004,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 842,
-      "candidate": 905,
-      "delta": 63,
-      "ratio": 0.075,
+      "candidate": 885,
+      "delta": 43,
+      "ratio": 0.051,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -372,16 +372,17 @@
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 660,
-      "candidate": 745,
-      "delta": 85,
-      "ratio": 0.129,
+      "candidate": 725,
+      "delta": 65,
+      "ratio": 0.098,
       "status": "pass",
       "rule": {
         "kind": "relative",

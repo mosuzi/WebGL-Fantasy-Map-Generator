@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-19T17:33:01.909Z",
+    "generatedAt": "2026-06-24T16:07:07.160Z",
     "source": "Fantasy-Map-Generator runtime baseline",
     "seed": "audit-continents-003",
     "template": "continents",
@@ -10,7 +10,21 @@
     "graphHeight": 960,
     "sourceCommit": null,
     "sourceDir": "D:\\work\\fmg\\source\\Fantasy-Map-Generator",
-    "baseUrl": "http://127.0.0.1:5617"
+    "baseUrl": "http://127.0.0.1:5302",
+    "generatedOptions": {
+      "statesNumber": 18,
+      "provincesRatio": 27,
+      "religionsNumber": 10,
+      "culturesNumber": 20,
+      "culturesSet": "world",
+      "culturesSetMax": 32,
+      "sizeVariety": 4.1,
+      "growthRate": 1.4,
+      "temperatureEquator": 31,
+      "temperatureNorthPole": -28,
+      "temperatureSouthPole": -15,
+      "precipitation": 147
+    }
   },
   "trace": [
     "setSeed",
@@ -454,27 +468,27 @@
     }
   },
   "society": {
-    "cultures": 15,
+    "cultures": 20,
     "burgs": 1357,
     "capitals": 18,
-    "ports": 230,
+    "ports": 229,
     "states": 18,
-    "religions": 25,
-    "provinces": 481,
-    "markers": 361,
-    "zones": 13,
-    "regiments": 287
+    "religions": 30,
+    "provinces": 487,
+    "markers": 359,
+    "zones": 10,
+    "regiments": 305
   },
   "routes": {
-    "total": 1198,
+    "total": 1201,
     "groups": {
-      "roads": 17,
-      "trails": 929,
-      "searoutes": 252
+      "roads": 16,
+      "trails": 936,
+      "searoutes": 249
     },
-    "roads": 17,
-    "trails": 929,
-    "searoutes": 252,
+    "roads": 16,
+    "trails": 936,
+    "searoutes": 249,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },

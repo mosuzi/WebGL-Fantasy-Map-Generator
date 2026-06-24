@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:10:46.554Z
+生成时间：2026-06-24T16:38:18.114Z
 模板：`continents`
 Seed：`audit-continents-001`
 目标 cells：10000
@@ -33,11 +33,11 @@ Seed：`audit-continents-001`
 | society.ports | 85 | 75 | -10 | 0.118 | pass |
 | society.states | 21 | 21 | 0 | 0 | pass |
 | society.religions | 19 | 19 | 0 | 0 | pass |
-| society.provinces | 180 | 178 | -2 | 0.011 | pass |
-| routes.total | 554 | 603 | 49 | 0.088 | pass |
-| routes.roads | 15 | 19 | 4 | 0.267 | pass |
-| routes.trails | 452 | 505 | 53 | 0.117 | pass |
-| routes.searoutes | 87 | 79 | -8 | 0.092 | pass |
+| society.provinces | 180 | 171 | -9 | 0.05 | pass |
+| routes.total | 554 | 611 | 57 | 0.103 | pass |
+| routes.roads | 15 | 18 | 3 | 0.2 | pass |
+| routes.trails | 452 | 510 | 58 | 0.128 | pass |
+| routes.searoutes | 87 | 83 | -4 | 0.046 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 1 | 0 | -1 | -1 | pass |
 

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:11:54.691Z",
+    "generatedAt": "2026-06-24T16:39:09.210Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\archipelago-100000-audit-archipelago-002\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\archipelago-100000-audit-archipelago-002\\candidate-summary.json",
     "seed": "audit-archipelago-002",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 106,
-      "candidate": 95,
-      "delta": -11,
-      "ratio": 0.104,
+      "candidate": 76,
+      "delta": -30,
+      "ratio": 0.283,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 317,
-      "candidate": 354,
-      "delta": 37,
-      "ratio": 0.117,
+      "candidate": 337,
+      "delta": 20,
+      "ratio": 0.063,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -372,16 +372,17 @@
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 197,
-      "candidate": 241,
-      "delta": 44,
-      "ratio": 0.223,
+      "candidate": 239,
+      "delta": 42,
+      "ratio": 0.213,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,9 +394,9 @@
       "id": "routes.searoutes",
       "label": "routes.searoutes",
       "source": 112,
-      "candidate": 104,
-      "delta": -8,
-      "ratio": 0.071,
+      "candidate": 89,
+      "delta": -23,
+      "ratio": 0.205,
       "status": "pass",
       "rule": {
         "kind": "relative",

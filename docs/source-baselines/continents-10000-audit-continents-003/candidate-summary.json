@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:10:48.954Z",
+    "generatedAt": "2026-06-24T16:38:20.058Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-continents-003",
     "template": "continents",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 18,
+      "provincesRatio": 27,
+      "religionsNumber": 10,
+      "culturesNumber": 20,
+      "culturesSet": "world",
+      "culturesSetMax": 32,
+      "sizeVariety": 4.1,
+      "growthRate": 1.4,
+      "temperatureEquator": 31,
+      "temperatureNorthPole": -28,
+      "temperatureSouthPole": -15,
+      "precipitation": 147
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -399,28 +413,28 @@
   },
   "society": {
     "cultures": 20,
-    "culturedPackCells": 3798,
-    "culturedGridCells": 3231,
-    "burgs": 777,
+    "culturedPackCells": 3863,
+    "culturedGridCells": 3279,
+    "burgs": 790,
     "capitals": 18,
-    "ports": 113,
+    "ports": 112,
     "states": 18,
     "religions": 30,
-    "provinces": 230,
+    "provinces": 236,
     "markers": 37,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 646,
+    "total": 656,
     "groups": {
-      "roads": 12,
-      "trails": 520,
-      "searoutes": 114
+      "roads": 14,
+      "trails": 526,
+      "searoutes": 116
     },
-    "roads": 12,
-    "trails": 520,
-    "searoutes": 114,
+    "roads": 14,
+    "trails": 526,
+    "searoutes": 116,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -441,7 +455,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 242,
+    "burgCellsInvalid": 261,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

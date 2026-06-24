@@ -1,14 +1,14 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:11:41.905Z",
+    "generatedAt": "2026-06-24T16:38:59.390Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-100000-audit-continents-003\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-100000-audit-continents-003\\candidate-summary.json",
     "seed": "audit-continents-003",
     "template": "continents",
     "cellsTarget": 100000,
     "failCount": 0,
-    "warnCount": 1,
-    "status": "warn"
+    "warnCount": 0,
+    "status": "pass"
   },
   "metrics": [
     {
@@ -266,11 +266,11 @@
     {
       "id": "society.cultures",
       "label": "society.cultures",
-      "source": 15,
+      "source": 20,
       "candidate": 20,
-      "delta": 5,
-      "ratio": 0.333,
-      "status": "warn",
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
       "rule": {
         "kind": "absolute",
         "warn": 4,
@@ -294,10 +294,10 @@
     {
       "id": "society.ports",
       "label": "society.ports",
-      "source": 230,
-      "candidate": 224,
-      "delta": -6,
-      "ratio": 0.026,
+      "source": 229,
+      "candidate": 241,
+      "delta": 12,
+      "ratio": 0.052,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -322,10 +322,10 @@
     {
       "id": "society.religions",
       "label": "society.religions",
-      "source": 25,
+      "source": 30,
       "candidate": 30,
-      "delta": 5,
-      "ratio": 0.2,
+      "delta": 0,
+      "ratio": 0,
       "status": "pass",
       "rule": {
         "kind": "absolute",
@@ -336,10 +336,10 @@
     {
       "id": "society.provinces",
       "label": "society.provinces",
-      "source": 481,
-      "candidate": 488,
-      "delta": 7,
-      "ratio": 0.015,
+      "source": 487,
+      "candidate": 492,
+      "delta": 5,
+      "ratio": 0.01,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -350,10 +350,10 @@
     {
       "id": "routes.total",
       "label": "routes.total",
-      "source": 1198,
-      "candidate": 1249,
-      "delta": 51,
-      "ratio": 0.043,
+      "source": 1201,
+      "candidate": 1286,
+      "delta": 85,
+      "ratio": 0.071,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -364,24 +364,25 @@
     {
       "id": "routes.roads",
       "label": "routes.roads",
-      "source": 17,
+      "source": 16,
       "candidate": 13,
-      "delta": -4,
-      "ratio": 0.235,
+      "delta": -3,
+      "ratio": 0.188,
       "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
-      "source": 929,
-      "candidate": 987,
-      "delta": 58,
-      "ratio": 0.062,
+      "source": 936,
+      "candidate": 1001,
+      "delta": 65,
+      "ratio": 0.069,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -392,10 +393,10 @@
     {
       "id": "routes.searoutes",
       "label": "routes.searoutes",
-      "source": 252,
-      "candidate": 249,
-      "delta": -3,
-      "ratio": 0.012,
+      "source": 249,
+      "candidate": 272,
+      "delta": 23,
+      "ratio": 0.092,
       "status": "pass",
       "rule": {
         "kind": "relative",

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:13:23.812Z",
+    "generatedAt": "2026-06-24T16:40:17.804Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-peninsula-002",
     "template": "peninsula",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 19,
+      "provincesRatio": 26,
+      "religionsNumber": 3,
+      "culturesNumber": 14,
+      "culturesSet": "world",
+      "culturesSetMax": 32,
+      "sizeVariety": 6.5,
+      "growthRate": 1.6,
+      "temperatureEquator": 31,
+      "temperatureNorthPole": -24,
+      "temperatureSouthPole": -17,
+      "precipitation": 167
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -371,28 +385,28 @@
   },
   "society": {
     "cultures": 14,
-    "culturedPackCells": 3925,
-    "culturedGridCells": 3520,
-    "burgs": 804,
+    "culturedPackCells": 3929,
+    "culturedGridCells": 3523,
+    "burgs": 805,
     "capitals": 19,
-    "ports": 73,
+    "ports": 83,
     "states": 19,
     "religions": 17,
-    "provinces": 222,
+    "provinces": 221,
     "markers": 38,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 614,
+    "total": 595,
     "groups": {
-      "roads": 13,
-      "trails": 529,
-      "searoutes": 72
+      "roads": 14,
+      "trails": 502,
+      "searoutes": 79
     },
-    "roads": 13,
-    "trails": 529,
-    "searoutes": 72,
+    "roads": 14,
+    "trails": 502,
+    "searoutes": 79,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -413,7 +427,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 171,
+    "burgCellsInvalid": 180,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:10:59.017Z",
+    "generatedAt": "2026-06-24T16:38:27.378Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-50000-audit-continents-002\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-50000-audit-continents-002\\candidate-summary.json",
     "seed": "audit-continents-002",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 197,
-      "candidate": 168,
-      "delta": -29,
-      "ratio": 0.147,
+      "candidate": 180,
+      "delta": -17,
+      "ratio": 0.086,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -337,9 +337,9 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 369,
-      "candidate": 365,
-      "delta": -4,
-      "ratio": 0.011,
+      "candidate": 367,
+      "delta": -2,
+      "ratio": 0.005,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 994,
-      "candidate": 1022,
-      "delta": 28,
-      "ratio": 0.028,
+      "candidate": 1056,
+      "delta": 62,
+      "ratio": 0.062,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -372,16 +372,17 @@
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 783,
-      "candidate": 824,
-      "delta": 41,
-      "ratio": 0.052,
+      "candidate": 860,
+      "delta": 77,
+      "ratio": 0.098,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,9 +394,9 @@
       "id": "routes.searoutes",
       "label": "routes.searoutes",
       "source": 197,
-      "candidate": 184,
-      "delta": -13,
-      "ratio": 0.066,
+      "candidate": 182,
+      "delta": -15,
+      "ratio": 0.076,
       "status": "pass",
       "rule": {
         "kind": "relative",

@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:12:05.306Z
+生成时间：2026-06-24T16:39:17.725Z
 模板：`highIsland`
 Seed：`audit-highIsland-001`
 目标 cells：50000
@@ -33,11 +33,11 @@ Seed：`audit-highIsland-001`
 | society.ports | 162 | 159 | -3 | 0.019 | pass |
 | society.states | 28 | 28 | 0 | 0 | pass |
 | society.religions | 19 | 19 | 0 | 0 | pass |
-| society.provinces | 299 | 284 | -15 | 0.05 | pass |
-| routes.total | 701 | 811 | 110 | 0.157 | pass |
-| routes.roads | 22 | 21 | -1 | 0.045 | pass |
-| routes.trails | 514 | 627 | 113 | 0.22 | pass |
-| routes.searoutes | 165 | 163 | -2 | 0.012 | pass |
+| society.provinces | 299 | 281 | -18 | 0.06 | pass |
+| routes.total | 701 | 791 | 90 | 0.128 | pass |
+| routes.roads | 22 | 19 | -3 | 0.136 | pass |
+| routes.trails | 514 | 595 | 81 | 0.158 | pass |
+| routes.searoutes | 165 | 177 | 12 | 0.073 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 1 | 0 | -1 | -1 | pass |
 

@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:11:46.304Z
+生成时间：2026-06-24T16:39:02.730Z
 模板：`archipelago`
 Seed：`audit-archipelago-001`
 目标 cells：50000
@@ -29,15 +29,15 @@ Seed：`audit-archipelago-001`
 | rivers.cellsWithRiver | 894 | 878 | -16 | 0.018 | pass |
 | population.positivePopulationCells | 5102 | 5098 | -4 | 0.001 | pass |
 | society.cultures | 7 | 7 | 0 | 0 | pass |
-| society.burgs | 297 | 299 | 2 | 0.007 | pass |
-| society.ports | 89 | 69 | -20 | 0.225 | pass |
+| society.burgs | 297 | 300 | 3 | 0.01 | pass |
+| society.ports | 89 | 75 | -14 | 0.157 | pass |
 | society.states | 21 | 21 | 0 | 0 | pass |
 | society.religions | 11 | 11 | 0 | 0 | pass |
-| society.provinces | 128 | 124 | -4 | 0.031 | pass |
-| routes.total | 296 | 307 | 11 | 0.037 | pass |
-| routes.roads | 5 | 7 | 2 | 0.4 | pass |
-| routes.trails | 188 | 216 | 28 | 0.149 | pass |
-| routes.searoutes | 103 | 84 | -19 | 0.184 | pass |
+| society.provinces | 128 | 129 | 1 | 0.008 | pass |
+| routes.total | 296 | 321 | 25 | 0.084 | pass |
+| routes.roads | 5 | 10 | 5 | 1 | pass |
+| routes.trails | 188 | 217 | 29 | 0.154 | pass |
+| routes.searoutes | 103 | 94 | -9 | 0.087 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 1 | 0 | -1 | -1 | pass |
 

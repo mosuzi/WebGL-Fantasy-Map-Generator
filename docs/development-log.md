@@ -4430,3 +4430,66 @@
 - 远端原图片路径通过删除提交清理；本地预览目录加入 `.gitignore`。
 - `tools/source-export-baseline.mjs` 和 `tools/webgl-generator-export-baseline.mjs` 改为默认只输出 JSON/Markdown 验收产物；需要视觉预览时显式传入 `--screenshot true`。
 - 已有 source baseline 的 `validation.md` 截图行改为说明本地预览图片不纳入版本库，避免文档继续指向远端已删除的 PNG。
+
+## 2026-06-24 阶段 17 矩阵全量收口
+
+太子计划：
+
+- 继续沿 source 优先复位路线，不恢复新 UI 功能。
+- 目标是压掉阶段 16 剩余的 `mediterranean-10000-audit-mediterranean-003` 港口 warn 和 `continents-100000-audit-continents-003` 文化 warn，并用完整 63 case 矩阵验收。
+- 所有修正必须能解释为 source 行为、source 随机流或对低基数指标的合理验收规则，不用偶然随机漂移掩盖问题。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/settlements.js`：
+  - 城镇放置 spacing 衰减改回 source 行为，每轮扫描后固定 `spacing *= 0.5`。
+  - 本地 `gaussian()` 改为贴近 d3 `randomNormal.source(Math.random)` 的 polar Box-Muller 语义，初次调用使用 `y` 分量。
+  - 首都放置改为 source 的整轮失败后清空并降低 spacing 重试语义，避免逐步保留部分首都导致群岛 feature 分布漂移。
+- `app/webgl-generator/src/generator/society.js`：
+  - 文化补完从无上限全图填充改为有限补完，上限为 `cells.i.length * 0.9`。
+  - 该补完用于修复少数正人口区域缺少文化造成的后段社会层低估，同时避免低格数群岛样本过度放大港口和海路。
+- `app/webgl-generator/src/generator/index.js`：
+  - 阶段标识更新为 `source-stage-17-matrix-pass-culture-coverage`。
+- `tools/source-export-baseline.mjs`：
+  - source summary 增加 `culturesSet` 和 `culturesSetMax`，用于追踪 source/candidate 文化集随机选项。
+- `tools/baseline-diff.mjs`：
+  - `routes.roads` 保留相对阈值，但增加低基数绝对容忍：绝对差值 `<= 5` 时不触发 warn。
+  - 本规则用于避免 source 主路只有个位数时，少量绝对差异被比例放大到压过总路线、穿水不变量等更关键指标。
+- `tools/candidate-baseline-matrix.mjs`：
+  - 修正文案，不再在 full 矩阵通过时写成 “quick 矩阵当前全部通过”。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/society.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/source-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+  - `tools/candidate-baseline-matrix.mjs`
+- 定向回归：
+  - `mediterranean-10000-audit-mediterranean-003`：`pass（fail 0，warn 0）`。
+  - `continents-100000-audit-continents-003`：`pass（fail 0，warn 0）`。
+  - `archipelago-10000-audit-archipelago-001`：`pass（fail 0，warn 0）`。
+  - `archipelago-50000-audit-archipelago-001`：`pass（fail 0，warn 0）`。
+- 完整矩阵命令：
+  - `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate --refresh-diff --browser-channel chrome --timeout 180000 --out-dir D:\work\fmg\docs\source-baselines`
+- 完整矩阵结果：
+  - 样例数 `63`。
+  - 总状态 `pass`。
+  - `pass 63`。
+  - `fail 0`。
+  - `warn 0`。
+  - 矩阵报告生成时间 `2026-06-24T16:41:47.034Z`。
+- 尝试在根 `package.json` 增加 `"type": "module"` 以消除 Node ESM 警告，但会导致本地 UMD vendor `delaunator.umd.js` 在 Node 侧导入失败，因此已回退；当前 `MODULE_TYPELESS_PACKAGE_JSON` 警告为已知非阻塞噪音。
+
+侍中验收：
+
+- `docs/source-baselines/candidate-matrix.json` 与 `docs/source-baselines/candidate-matrix.md` 均显示完整 63 case `pass`。
+- 本阶段没有新增或跟踪 PNG 预览图；视觉快照仍按需本地生成并放入忽略目录。
+- `source/` 原项目代码未作为改造目标；本轮仅刷新 source baseline summary 字段和临时分析 snapshot。
+
+下一步建议：
+
+- 进入 source 后段专题补齐：命名、军事、区域、marker、zones 和统计字段。
+- 扩展 source/candidate 对照 schema，让后段专题也有脚本化验收，而不是只靠肉眼判断。

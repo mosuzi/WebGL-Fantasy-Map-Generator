@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-19T17:33:08.907Z",
+    "generatedAt": "2026-06-24T16:23:12.092Z",
     "source": "Fantasy-Map-Generator runtime baseline",
     "seed": "audit-archipelago-001",
     "template": "archipelago",
@@ -10,7 +10,21 @@
     "graphHeight": 960,
     "sourceCommit": null,
     "sourceDir": "D:\\work\\fmg\\source\\Fantasy-Map-Generator",
-    "baseUrl": "http://127.0.0.1:5618"
+    "baseUrl": "http://127.0.0.1:5303",
+    "generatedOptions": {
+      "statesNumber": 21,
+      "provincesRatio": 32,
+      "religionsNumber": 4,
+      "culturesNumber": 7,
+      "culturesSet": "world",
+      "culturesSetMax": 32,
+      "sizeVariety": 2.9,
+      "growthRate": 1.4,
+      "temperatureEquator": 26,
+      "temperatureNorthPole": -27,
+      "temperatureSouthPole": -19,
+      "precipitation": 133
+    }
   },
   "trace": [
     "setSeed",

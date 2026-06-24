@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:14:41.283Z",
+    "generatedAt": "2026-06-24T16:41:17.639Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\pangea-50000-audit-pangea-002\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\pangea-50000-audit-pangea-002\\candidate-summary.json",
     "seed": "audit-pangea-002",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 191,
-      "candidate": 194,
-      "delta": 3,
-      "ratio": 0.016,
+      "candidate": 162,
+      "delta": -29,
+      "ratio": 0.152,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 864,
-      "candidate": 1000,
-      "delta": 136,
-      "ratio": 0.157,
+      "candidate": 947,
+      "delta": 83,
+      "ratio": 0.096,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -365,23 +365,24 @@
       "id": "routes.roads",
       "label": "routes.roads",
       "source": 7,
-      "candidate": 10,
-      "delta": 3,
-      "ratio": 0.429,
+      "candidate": 9,
+      "delta": 2,
+      "ratio": 0.286,
       "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 673,
-      "candidate": 778,
-      "delta": 105,
-      "ratio": 0.156,
+      "candidate": 763,
+      "delta": 90,
+      "ratio": 0.134,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,9 +394,9 @@
       "id": "routes.searoutes",
       "label": "routes.searoutes",
       "source": 184,
-      "candidate": 212,
-      "delta": 28,
-      "ratio": 0.152,
+      "candidate": 175,
+      "delta": -9,
+      "ratio": 0.049,
       "status": "pass",
       "rule": {
         "kind": "relative",

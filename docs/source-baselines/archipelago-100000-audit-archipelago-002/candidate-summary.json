@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:11:54.408Z",
+    "generatedAt": "2026-06-24T16:39:09.029Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-archipelago-002",
     "template": "archipelago",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 17,
+      "provincesRatio": 25,
+      "religionsNumber": 9,
+      "culturesNumber": 17,
+      "culturesSet": "european",
+      "culturesSetMax": 15,
+      "sizeVariety": 4.9,
+      "growthRate": 1.2,
+      "temperatureEquator": 35,
+      "temperatureNorthPole": -23,
+      "temperatureSouthPole": -15,
+      "precipitation": 90
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -355,7 +369,7 @@
     "culturedGridCells": 7573,
     "burgs": 320,
     "capitals": 17,
-    "ports": 95,
+    "ports": 76,
     "states": 17,
     "religions": 24,
     "provinces": 146,
@@ -364,15 +378,15 @@
     "regiments": 0
   },
   "routes": {
-    "total": 354,
+    "total": 337,
     "groups": {
       "roads": 9,
-      "trails": 241,
-      "searoutes": 104
+      "trails": 239,
+      "searoutes": 89
     },
     "roads": 9,
-    "trails": 241,
-    "searoutes": 104,
+    "trails": 239,
+    "searoutes": 89,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -393,7 +407,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 238,
+    "burgCellsInvalid": 234,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

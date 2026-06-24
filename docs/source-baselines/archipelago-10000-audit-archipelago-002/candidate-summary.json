@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:11:43.454Z",
+    "generatedAt": "2026-06-24T16:39:00.741Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-archipelago-002",
     "template": "archipelago",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 17,
+      "provincesRatio": 25,
+      "religionsNumber": 9,
+      "culturesNumber": 17,
+      "culturesSet": "european",
+      "culturesSetMax": 15,
+      "sizeVariety": 4.9,
+      "growthRate": 1.2,
+      "temperatureEquator": 35,
+      "temperatureNorthPole": -23,
+      "temperatureSouthPole": -15,
+      "precipitation": 90
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -348,28 +362,28 @@
   },
   "society": {
     "cultures": 15,
-    "culturedPackCells": 2269,
-    "culturedGridCells": 1851,
+    "culturedPackCells": 2272,
+    "culturedGridCells": 1854,
     "burgs": 471,
     "capitals": 17,
-    "ports": 69,
+    "ports": 64,
     "states": 17,
     "religions": 24,
-    "provinces": 132,
+    "provinces": 133,
     "markers": 30,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 393,
+    "total": 365,
     "groups": {
-      "roads": 9,
-      "trails": 304,
-      "searoutes": 80
+      "roads": 8,
+      "trails": 291,
+      "searoutes": 66
     },
-    "roads": 9,
-    "trails": 304,
-    "searoutes": 80,
+    "roads": 8,
+    "trails": 291,
+    "searoutes": 66,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -390,7 +404,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 186,
+    "burgCellsInvalid": 142,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

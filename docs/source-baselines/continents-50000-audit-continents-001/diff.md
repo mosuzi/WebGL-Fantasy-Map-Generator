@@ -1,6 +1,6 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-21T01:10:53.751Z
+生成时间：2026-06-24T16:38:22.960Z
 模板：`continents`
 Seed：`audit-continents-001`
 目标 cells：50000
@@ -30,13 +30,13 @@ Seed：`audit-continents-001`
 | population.positivePopulationCells | 18105 | 18105 | 0 | 0 | pass |
 | society.cultures | 10 | 14 | 4 | 0.4 | pass |
 | society.burgs | 1018 | 1018 | 0 | 0 | pass |
-| society.ports | 146 | 127 | -19 | 0.13 | pass |
+| society.ports | 146 | 129 | -17 | 0.116 | pass |
 | society.states | 21 | 21 | 0 | 0 | pass |
 | society.religions | 15 | 19 | 4 | 0.267 | pass |
-| society.provinces | 268 | 282 | 14 | 0.052 | pass |
-| routes.total | 842 | 905 | 63 | 0.075 | pass |
+| society.provinces | 268 | 269 | 1 | 0.004 | pass |
+| routes.total | 842 | 885 | 43 | 0.051 | pass |
 | routes.roads | 17 | 13 | -4 | 0.235 | pass |
-| routes.trails | 660 | 745 | 85 | 0.129 | pass |
+| routes.trails | 660 | 725 | 65 | 0.098 | pass |
 | routes.searoutes | 165 | 147 | -18 | 0.109 | pass |
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 0 | 0 | 0 | 0 | pass |

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:13:22.661Z",
+    "generatedAt": "2026-06-24T16:40:16.604Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-peninsula-001",
     "template": "peninsula",
@@ -9,7 +9,21 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatedOptions": {
+      "statesNumber": 17,
+      "provincesRatio": 20,
+      "religionsNumber": 2,
+      "culturesNumber": 11,
+      "culturesSet": "european",
+      "culturesSetMax": 15,
+      "sizeVariety": 3.8,
+      "growthRate": 1.9,
+      "temperatureEquator": 21,
+      "temperatureNorthPole": -17,
+      "temperatureSouthPole": -20,
+      "precipitation": 69
+    }
   },
   "trace": [
     "normalizeOptions",
@@ -371,28 +385,28 @@
   },
   "society": {
     "cultures": 11,
-    "culturedPackCells": 3385,
-    "culturedGridCells": 2865,
+    "culturedPackCells": 3387,
+    "culturedGridCells": 2867,
     "burgs": 694,
     "capitals": 17,
-    "ports": 77,
+    "ports": 101,
     "states": 17,
     "religions": 13,
-    "provinces": 156,
+    "provinces": 158,
     "markers": 36,
     "zones": 0,
     "regiments": 0
   },
   "routes": {
-    "total": 567,
+    "total": 549,
     "groups": {
-      "roads": 11,
-      "trails": 477,
-      "searoutes": 79
+      "roads": 12,
+      "trails": 437,
+      "searoutes": 100
     },
-    "roads": 11,
-    "trails": 477,
-    "searoutes": 79,
+    "roads": 12,
+    "trails": 437,
+    "searoutes": 100,
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
@@ -413,7 +427,7 @@
     "packMappingOneToOne": false,
     "routesHaveSeaRoutes": true,
     "routeCellRefsInvalid": 0,
-    "burgCellsInvalid": 192,
+    "burgCellsInvalid": 194,
     "landRouteWaterCellsOk": true,
     "seaRouteLandCellsOk": true,
     "allCitiesOnLand": true,

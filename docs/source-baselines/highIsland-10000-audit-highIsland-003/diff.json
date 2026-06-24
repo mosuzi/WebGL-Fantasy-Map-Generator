@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-21T01:12:01.863Z",
+    "generatedAt": "2026-06-24T16:39:14.819Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\highIsland-10000-audit-highIsland-003\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\highIsland-10000-audit-highIsland-003\\candidate-summary.json",
     "seed": "audit-highIsland-003",
@@ -281,9 +281,9 @@
       "id": "society.burgs",
       "label": "society.burgs",
       "source": 654,
-      "candidate": 648,
-      "delta": -6,
-      "ratio": 0.009,
+      "candidate": 667,
+      "delta": 13,
+      "ratio": 0.02,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -295,9 +295,9 @@
       "id": "society.ports",
       "label": "society.ports",
       "source": 111,
-      "candidate": 68,
-      "delta": -43,
-      "ratio": 0.387,
+      "candidate": 69,
+      "delta": -42,
+      "ratio": 0.378,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -337,8 +337,8 @@
       "id": "society.provinces",
       "label": "society.provinces",
       "source": 153,
-      "candidate": 154,
-      "delta": 1,
+      "candidate": 152,
+      "delta": -1,
       "ratio": 0.007,
       "status": "pass",
       "rule": {
@@ -351,9 +351,9 @@
       "id": "routes.total",
       "label": "routes.total",
       "source": 482,
-      "candidate": 529,
-      "delta": 47,
-      "ratio": 0.098,
+      "candidate": 527,
+      "delta": 45,
+      "ratio": 0.093,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -365,23 +365,24 @@
       "id": "routes.roads",
       "label": "routes.roads",
       "source": 11,
-      "candidate": 9,
-      "delta": -2,
-      "ratio": 0.182,
+      "candidate": 12,
+      "delta": 1,
+      "ratio": 0.091,
       "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.7,
-        "fail": 1
+        "fail": 1,
+        "absolutePass": 5
       }
     },
     {
       "id": "routes.trails",
       "label": "routes.trails",
       "source": 361,
-      "candidate": 444,
-      "delta": 83,
-      "ratio": 0.23,
+      "candidate": 439,
+      "delta": 78,
+      "ratio": 0.216,
       "status": "pass",
       "rule": {
         "kind": "relative",

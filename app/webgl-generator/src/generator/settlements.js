@@ -116,8 +116,7 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
       addedThisPass++;
     }
 
-    if (!addedThisPass) spacing *= 0.5;
-    else if (added < targetTowns) spacing *= 0.75;
+    spacing *= 0.5;
   }
 
   pack.burgs = burgs;
@@ -134,20 +133,24 @@ function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid
   for (const cell of populated) score[cell] = (cells.s[cell] || 0) * random.range(0.5, 1);
   const sorted = [...populated].sort((a, b) => score[b] - score[a]);
   let spacing = (grid.metadata.graphWidth + grid.metadata.graphHeight) / 2 / capitalsNumber;
+  let selected = [];
 
-  while (cities.filter(city => city.capital).length < capitalsNumber && spacing > 1) {
-    let added = 0;
-
-    for (const packCell of sorted) {
-      if (cities.filter(city => city.capital).length >= capitalsNumber) break;
-      if (occupied.has(packCell)) continue;
-      const [x, y] = cells.p[packCell];
-      if (spacingIndex.find(x, y, spacing)) continue;
-      const city = addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, flags: {capital: true}});
-      if (city) added++;
+  for (let index = 0; selected.length < capitalsNumber && spacing > 1; index++) {
+    if (index >= sorted.length) {
+      selected = [];
+      index = -1;
+      spacing /= 1.2;
+      continue;
     }
 
-    if (!added) spacing /= 1.2;
+    const packCell = sorted[index];
+    const [x, y] = cells.p[packCell];
+    const tooClose = selected.some(cell => distance(cells.p[cell], [x, y]) < spacing);
+    if (!tooClose) selected.push(packCell);
+  }
+
+  for (const packCell of selected) {
+    addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, flags: {capital: true}});
   }
 }
 
@@ -866,11 +869,17 @@ function reconstructPath(cameFrom, current) {
 }
 
 function gaussian(random, mean, stdev, min, max, digits = 0) {
-  let u = 0;
-  let v = 0;
-  while (u === 0) u = random.next();
-  while (v === 0) v = random.next();
-  const normal = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  let x;
+  let y;
+  let radius;
+
+  do {
+    x = random.next() * 2 - 1;
+    y = random.next() * 2 - 1;
+    radius = x * x + y * y;
+  } while (!radius || radius > 1);
+
+  const normal = y * Math.sqrt((-2 * Math.log(radius)) / radius);
   return round(clamp(mean + normal * stdev, min, max), digits);
 }
 

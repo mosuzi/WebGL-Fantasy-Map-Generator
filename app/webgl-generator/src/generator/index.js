@@ -39,7 +39,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
   return {
     metadata: {
       app: "webgl-generator",
-      generatorStage: "source-stage-16-culture-settlement-route-parity",
+      generatorStage: "source-stage-17-matrix-pass-culture-coverage",
       seed: options.seed,
       heightmapTemplate: heightmap.template,
       cellsTarget: options.cellsTarget,
@@ -83,7 +83,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `grid checksum: ${summary.checksum}`
     ],
     status: {
-      message: "source 阶段 15 气候水文矩阵整改",
+      message: "source 阶段 17 矩阵全量通过与文化覆盖收口",
       sourceDependency: false,
       snapshotDependency: false
     }
