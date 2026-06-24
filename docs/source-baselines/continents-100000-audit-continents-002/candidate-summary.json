@@ -1,0 +1,494 @@
+{
+  "metadata": {
+    "generatedAt": "2026-06-21T01:11:28.807Z",
+    "source": "webgl-generator candidate baseline",
+    "seed": "audit-continents-002",
+    "template": "continents",
+    "templateName": "大陆",
+    "cellsTarget": 100000,
+    "graphWidth": 1440,
+    "graphHeight": 960,
+    "appDir": "D:\\work\\fmg\\app\\webgl-generator",
+    "generatorStage": "source-stage-15-climate-hydrology-matrix-repair"
+  },
+  "trace": [
+    "normalizeOptions",
+    "createHeightmap",
+    "buildGrid + applyHeightmap",
+    "extractFeatures",
+    "buildClimate",
+    "buildPack",
+    "buildRivers",
+    "defineBiomesAndPopulation",
+    "buildSociety.cultures",
+    "buildPolitics",
+    "buildSettlements",
+    "finalizeSocietyReligions",
+    "buildMarkers"
+  ],
+  "template": {
+    "id": "continents",
+    "name": "大陆",
+    "stepCount": 15,
+    "steps": [
+      {
+        "tool": "Hill",
+        "count": "1",
+        "height": "80-85",
+        "rangeX": "60-80",
+        "rangeY": "40-60",
+        "raw": "Hill 1 80-85 60-80 40-60"
+      },
+      {
+        "tool": "Hill",
+        "count": "1",
+        "height": "80-85",
+        "rangeX": "20-30",
+        "rangeY": "40-60",
+        "raw": "Hill 1 80-85 20-30 40-60"
+      },
+      {
+        "tool": "Hill",
+        "count": "6-7",
+        "height": "15-30",
+        "rangeX": "25-75",
+        "rangeY": "15-85",
+        "raw": "Hill 6-7 15-30 25-75 15-85"
+      },
+      {
+        "tool": "Multiply",
+        "count": "0.6",
+        "height": "land",
+        "rangeX": "0",
+        "rangeY": "0",
+        "raw": "Multiply 0.6 land 0 0"
+      },
+      {
+        "tool": "Hill",
+        "count": "8-10",
+        "height": "5-10",
+        "rangeX": "15-85",
+        "rangeY": "20-80",
+        "raw": "Hill 8-10 5-10 15-85 20-80"
+      },
+      {
+        "tool": "Range",
+        "count": "1-2",
+        "height": "30-60",
+        "rangeX": "5-15",
+        "rangeY": "25-75",
+        "raw": "Range 1-2 30-60 5-15 25-75"
+      },
+      {
+        "tool": "Range",
+        "count": "1-2",
+        "height": "30-60",
+        "rangeX": "80-95",
+        "rangeY": "25-75",
+        "raw": "Range 1-2 30-60 80-95 25-75"
+      },
+      {
+        "tool": "Range",
+        "count": "0-3",
+        "height": "30-60",
+        "rangeX": "80-90",
+        "rangeY": "20-80",
+        "raw": "Range 0-3 30-60 80-90 20-80"
+      },
+      {
+        "tool": "Strait",
+        "count": "2",
+        "height": "vertical",
+        "rangeX": "0",
+        "rangeY": "0",
+        "raw": "Strait 2 vertical 0 0"
+      },
+      {
+        "tool": "Strait",
+        "count": "1",
+        "height": "vertical",
+        "rangeX": "0",
+        "rangeY": "0",
+        "raw": "Strait 1 vertical 0 0"
+      },
+      {
+        "tool": "Smooth",
+        "count": "3",
+        "height": "0",
+        "rangeX": "0",
+        "rangeY": "0",
+        "raw": "Smooth 3 0 0 0"
+      },
+      {
+        "tool": "Trough",
+        "count": "3-4",
+        "height": "15-20",
+        "rangeX": "15-85",
+        "rangeY": "20-80",
+        "raw": "Trough 3-4 15-20 15-85 20-80"
+      },
+      {
+        "tool": "Trough",
+        "count": "3-4",
+        "height": "5-10",
+        "rangeX": "45-55",
+        "rangeY": "45-55",
+        "raw": "Trough 3-4 5-10 45-55 45-55"
+      },
+      {
+        "tool": "Pit",
+        "count": "3-4",
+        "height": "10-20",
+        "rangeX": "15-85",
+        "rangeY": "20-80",
+        "raw": "Pit 3-4 10-20 15-85 20-80"
+      },
+      {
+        "tool": "Mask",
+        "count": "4",
+        "height": "0",
+        "rangeX": "0",
+        "rangeY": "0",
+        "raw": "Mask 4 0 0 0"
+      }
+    ],
+    "blobPower": 0.9973,
+    "linePower": 0.93
+  },
+  "mapCoordinates": {
+    "latT": 109.8,
+    "latN": 43,
+    "latS": -66.8,
+    "lonT": 164.7,
+    "lonW": -82.3,
+    "lonE": 82.4
+  },
+  "grid": {
+    "cells": 99846,
+    "vertices": 200338,
+    "spacing": 3.72,
+    "cellsDesired": 100000,
+    "cellsX": 387,
+    "cellsY": 258,
+    "boundaryPoints": 648,
+    "avgDegree": 5.976,
+    "maxDegree": 11,
+    "borderCells": 1203,
+    "height": {
+      "min": 0,
+      "p05": 2,
+      "p25": 7,
+      "p50": 16,
+      "p75": 30,
+      "p90": 44,
+      "p95": 52,
+      "p99": 68,
+      "max": 93,
+      "mean": 20.243
+    },
+    "landCells": 42826,
+    "waterCells": 57020,
+    "landRatio": 0.429,
+    "tDistribution": {
+      "0": 70056,
+      "1": 4804,
+      "-9": 1627,
+      "-8": 1743,
+      "-7": 1958,
+      "-6": 2147,
+      "-5": 2454,
+      "-4": 2861,
+      "-3": 3331,
+      "-2": 3928,
+      "-1": 4937
+    },
+    "featureCount": 191,
+    "featureTypes": {
+      "ocean": 56,
+      "island": 107,
+      "lake": 82
+    },
+    "temperature": {
+      "min": -16,
+      "p05": 4,
+      "p25": 11,
+      "p50": 19,
+      "p75": 26,
+      "p90": 28,
+      "p95": 29,
+      "p99": 29,
+      "max": 29,
+      "mean": 17.757
+    },
+    "precipitation": {
+      "min": 0,
+      "p05": 1,
+      "p25": 6,
+      "p50": 36,
+      "p75": 36,
+      "p90": 36,
+      "p95": 36,
+      "p99": 36,
+      "max": 72,
+      "mean": 23.054
+    }
+  },
+  "pack": {
+    "cells": 58166,
+    "vertices": 116978,
+    "packGridRatio": 0.583,
+    "avgDegree": 5.994,
+    "maxDegree": 14,
+    "borderCells": 183,
+    "area": {
+      "min": 0,
+      "p05": 5,
+      "p25": 9,
+      "p50": 12,
+      "p75": 15,
+      "p90": 18,
+      "p95": 21,
+      "p99": 128.35,
+      "max": 7769,
+      "mean": 18.816
+    },
+    "tDistribution": {
+      "1": 7201,
+      "2": 4467,
+      "3": 3245,
+      "4": 2759,
+      "5": 2450,
+      "6": 2273,
+      "7": 2096,
+      "8": 1951,
+      "9": 1803,
+      "10": 1695,
+      "11": 1569,
+      "12": 1383,
+      "13": 1269,
+      "14": 1169,
+      "15": 1103,
+      "16": 1005,
+      "17": 934,
+      "18": 855,
+      "19": 782,
+      "20": 716,
+      "21": 663,
+      "22": 617,
+      "23": 577,
+      "24": 554,
+      "25": 520,
+      "26": 483,
+      "27": 432,
+      "28": 386,
+      "29": 345,
+      "30": 300,
+      "31": 246,
+      "32": 200,
+      "33": 167,
+      "34": 127,
+      "35": 101,
+      "36": 77,
+      "37": 46,
+      "38": 3,
+      "-2": 4007,
+      "-1": 7335,
+      "-3": 255
+    },
+    "featureCount": 191,
+    "havenCells": 7201,
+    "harborDistribution": {
+      "0": 50965,
+      "1": 2529,
+      "2": 2824,
+      "3": 1058,
+      "4": 443,
+      "5": 205,
+      "6": 78,
+      "7": 40,
+      "8": 17,
+      "9": 5,
+      "10": 1,
+      "11": 1
+    },
+    "packGridRefsInvalid": 0,
+    "mapping": "source-regraph-pack",
+    "missingRequiredPackFields": []
+  },
+  "features": {
+    "total": 190,
+    "land": 107,
+    "water": 83,
+    "types": {
+      "ocean": 1,
+      "island": 107,
+      "lake": 82
+    },
+    "groups": {
+      "ocean": 1,
+      "isle": 95,
+      "island": 4,
+      "continent": 2,
+      "sinkhole": 5,
+      "freshwater": 77,
+      "lake_island": 6
+    },
+    "lakes": 82,
+    "oceans": 1,
+    "lakeFields": {
+      "withHeight": 82,
+      "withShoreline": 82,
+      "withFlux": 82,
+      "withOutlet": 34,
+      "closed": 0
+    }
+  },
+  "rivers": {
+    "count": 850,
+    "cellsWithRiver": 5830,
+    "flux": {
+      "min": 0,
+      "p05": 0,
+      "p25": 0,
+      "p50": 3,
+      "p75": 12,
+      "p90": 36,
+      "p95": 89,
+      "p99": 468.7,
+      "max": 4281,
+      "mean": 26.295
+    },
+    "confluences": 322,
+    "mouths": 850,
+    "width": {
+      "min": 0,
+      "p05": 0,
+      "p25": 0,
+      "p50": 0,
+      "p75": 0,
+      "p90": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0,
+      "mean": 0
+    },
+    "discharge": {
+      "min": 30,
+      "p05": 30,
+      "p25": 35,
+      "p50": 49.5,
+      "p75": 221,
+      "p90": 527.4,
+      "p95": 845.25,
+      "p99": 1916.63,
+      "max": 4186,
+      "mean": 207.867
+    },
+    "riverLoopCount": 0
+  },
+  "biomes": {
+    "distribution": {
+      "0": 11597,
+      "1": 5920,
+      "2": 401,
+      "3": 11882,
+      "4": 3198,
+      "5": 11775,
+      "6": 4605,
+      "7": 3366,
+      "8": 3542,
+      "9": 284,
+      "10": 96,
+      "11": 193,
+      "12": 1307
+    }
+  },
+  "population": {
+    "positiveSuitabilityCells": 45310,
+    "positivePopulationCells": 45309,
+    "suitability": {
+      "min": 0,
+      "p05": 0,
+      "p25": 1,
+      "p50": 5,
+      "p75": 11,
+      "p90": 20,
+      "p95": 21,
+      "p99": 25,
+      "max": 64,
+      "mean": 7.762
+    },
+    "population": {
+      "min": 0,
+      "p05": 0,
+      "p25": 0.638,
+      "p50": 3.614,
+      "p75": 7.6,
+      "p90": 11.692,
+      "p95": 14.881,
+      "p99": 19.186,
+      "max": 54.21,
+      "mean": 4.85
+    }
+  },
+  "society": {
+    "cultures": 10,
+    "culturedPackCells": 45309,
+    "culturedGridCells": 41566,
+    "burgs": 1458,
+    "capitals": 20,
+    "ports": 212,
+    "states": 20,
+    "religions": 17,
+    "provinces": 502,
+    "markers": 39,
+    "zones": 0,
+    "regiments": 0
+  },
+  "routes": {
+    "total": 1257,
+    "groups": {
+      "roads": 13,
+      "trails": 1033,
+      "searoutes": 211
+    },
+    "roads": 13,
+    "trails": 1033,
+    "searoutes": 211,
+    "landRouteWaterCells": 0,
+    "seaRouteLandCells": 0
+  },
+  "validation": {
+    "gridCellIndexCountOk": true,
+    "gridNeighborInvalidRefs": 0,
+    "gridVertexInvalidRefs": 0,
+    "packCellIndexCountOk": true,
+    "packGridRefsInvalid": 0,
+    "packNeighborInvalidRefs": 0,
+    "packVertexInvalidRefs": 0,
+    "havenInvalidCount": 0,
+    "harborMismatchCount": 0,
+    "routeLinkAsymmetry": null,
+    "landRouteWaterCells": 0,
+    "seaRouteLandCells": 0,
+    "packHasVoronoi": true,
+    "packMappingOneToOne": false,
+    "routesHaveSeaRoutes": true,
+    "routeCellRefsInvalid": 0,
+    "burgCellsInvalid": 607,
+    "landRouteWaterCellsOk": true,
+    "seaRouteLandCellsOk": true,
+    "allCitiesOnLand": true,
+    "cityWaterCells": 0
+  },
+  "candidateNotes": {
+    "packStatus": "source-regraph-pack",
+    "missingRequiredPackFields": [],
+    "unsupportedSourceStages": [
+      "Burgs.specify source names and emblems",
+      "States.defineStateForms",
+      "Military.generate",
+      "Zones.generate"
+    ]
+  }
+}

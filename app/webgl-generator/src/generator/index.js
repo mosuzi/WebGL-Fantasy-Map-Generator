@@ -1,35 +1,45 @@
 import {buildClimate} from "./climate.js";
+import {defineBiomesAndPopulation} from "./biomes.js";
 import {extractFeatures} from "./features.js";
 import {buildGrid} from "./grid.js";
 import {createHeightmap} from "./heightmap.js";
+import {buildMarkers} from "./markers.js";
 import {normalizeOptions} from "./options.js";
 import {buildPack} from "./pack.js";
 import {buildPolitics} from "./politics.js";
 import {createRandom, stableHash} from "./random.js";
 import {buildRivers} from "./rivers.js";
-import {buildSettlements} from "./settlements.js";
-import {buildSociety} from "./society.js";
+import {buildSettlements, finalizeSettlements} from "./settlements.js";
+import {buildSociety, finalizeSocietyReligions} from "./society.js";
 
 export function generatePlaceholderMap(inputOptions = {}) {
   const options = normalizeOptions(inputOptions);
+  const gridRandom = createRandom(options.seed);
   const random = createRandom(options.seed);
   const heightmap = createHeightmap(options, random);
-  const grid = buildGrid(options, random, heightmap);
+  const grid = buildGrid(options, gridRandom, heightmap, random);
   const features = extractFeatures(grid);
-  const climate = buildClimate(grid, features, options);
-  const society = buildSociety(grid, features, climate, random);
-  const politics = buildPolitics(grid, features, society, random, options);
-  const rivers = buildRivers(grid, features);
-  const settlements = buildSettlements(grid, features, politics, rivers, random);
+  const climateRandom = createRandom(options.seed);
+  const climate = buildClimate(grid, features, options, climateRandom);
   const pack = buildPack(grid, features);
+  const rivers = buildRivers(grid, features, pack, options);
+  const biomes = defineBiomesAndPopulation(grid, pack);
+  climate.biomes = biomes.biomes;
+  climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
+  const society = buildSociety(grid, features, climate, rivers, random, pack, options);
+  const settlements = buildSettlements(grid, features, null, rivers, random, pack, options);
+  const politics = buildPolitics(grid, features, society, rivers, random, options, pack);
+  finalizeSettlements(grid, features, politics, settlements, pack);
+  finalizeSocietyReligions(grid, society, pack, random, settlements, options);
+  const markers = buildMarkers(grid, features, politics, rivers);
   const layers = createPalette(random);
-  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, pack, rivers, layers);
+  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers);
   const generatedAt = new Date().toISOString();
 
   return {
     metadata: {
       app: "webgl-generator",
-      generatorStage: "3.3-settlements-routes-population",
+      generatorStage: "source-stage-16-culture-settlement-route-parity",
       seed: options.seed,
       heightmapTemplate: heightmap.template,
       cellsTarget: options.cellsTarget,
@@ -46,9 +56,11 @@ export function generatePlaceholderMap(inputOptions = {}) {
     heightmap,
     grid,
     climate,
+    mapCoordinates: climate.mapCoordinates,
     society,
     politics,
     settlements,
+    markers,
     pack,
     features,
     rivers,
@@ -60,22 +72,25 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `build grid: ${grid.metadata.actualCells} cells, ${grid.metadata.vertexCount} vertices, ${grid.metadata.triangles} triangles`,
       `extract features: land=${features.metadata.landFeatures}, ocean=${features.metadata.oceanFeatures}, lakes=${features.metadata.lakeFeatures}`,
       `build climate: temp=${climate.metadata.temperatureMin}..${climate.metadata.temperatureMax}, prec=${climate.metadata.precipitationMin}..${climate.metadata.precipitationMax}`,
-      `build society: cultures=${society.metadata.cultures}, religions=${society.metadata.religions}`,
-      `build politics: states=${politics.metadata.states}, provinces=${politics.metadata.provinces}, regions=${politics.metadata.regions}`,
-      `build settlements: cities=${settlements.metadata.cities}, routes=${settlements.metadata.routes}, populationCells=${settlements.metadata.populationCells}`,
       `build pack: ${pack.metadata.cells} semantic cells, mapping=${pack.metadata.mapping}`,
       `trace rivers: rivers=${rivers.metadata.rivers}, segments=${rivers.metadata.segments}`,
+      `define biomes and rank cells: biomes=${Object.keys(biomes.metadata.biomeCounts).length}, populationCells=${biomes.metadata.positivePopulationCells}`,
+      `build society: cultures=${society.metadata.cultures}, culturedPackCells=${society.metadata.culturedPackCells}`,
+      `build politics: states=${politics.metadata.states}, provinces=${politics.metadata.provinces}, regions=${politics.metadata.regions}`,
+      `build settlements: cities=${settlements.metadata.cities}, routes=${settlements.metadata.routes}, populationCells=${settlements.metadata.populationCells}`,
+      `build religions: religions=${society.metadata.religions}, religionPackCells=${society.metadata.religionPackCells}`,
+      `build markers: markers=${markers.metadata.markers}, peaks=${markers.metadata.peaks}, riverSources=${markers.metadata.riverSources}`,
       `grid checksum: ${summary.checksum}`
     ],
     status: {
-      message: "阶段 3.3 城市、道路和人口",
+      message: "source 阶段 15 气候水文矩阵整改",
       sourceDependency: false,
       snapshotDependency: false
     }
   };
 }
 
-export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, pack, rivers, layers) {
+export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers) {
   const randomPreviewGenerator = createRandom(options.seed);
   const randomPreview = Array.from({length: 4}, () => round(randomPreviewGenerator.next(), 6));
   const payload = {
@@ -136,6 +151,7 @@ export function createGenerationSummary(options, grid, features, climate, societ
         port: city.port
       }))
     },
+    markers: markers.metadata,
     palette: {
       ocean: layers.ocean.map(value => round(value, 4)),
       land: layers.land.map(value => round(value, 4)),

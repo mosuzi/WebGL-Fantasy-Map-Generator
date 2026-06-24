@@ -202,7 +202,7 @@ select {
 .map-badge {
   position: absolute;
   right: 18px;
-  bottom: 18px;
+  top: 18px;
   max-width: calc(100% - 36px);
   border: 1px solid rgba(208, 221, 225, 0.24);
   border-radius: 6px;
@@ -210,6 +210,52 @@ select {
   background: rgba(12, 18, 22, 0.8);
   color: #d7e1e5;
   font-size: 12px;
+}
+
+.map-legend {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  width: min(240px, calc(100% - 36px));
+  padding: 10px 12px;
+  border: 1px solid rgba(208, 221, 225, 0.24);
+  border-radius: 8px;
+  background: rgba(12, 18, 22, 0.78);
+  box-shadow: 0 12px 34px rgba(2, 6, 23, 0.28);
+  color: #dfe9ed;
+  pointer-events: none;
+}
+
+.map-legend[hidden] {
+  display: none;
+}
+
+.legend-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.legend-bar {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.legend-bar.temperature {
+  background: linear-gradient(90deg, #b9d8f0, #f4f1cf 46%, #d27a56);
+}
+
+.legend-bar.precipitation {
+  background: linear-gradient(90deg, #d8c179, #75a663 52%, #1f7c8f);
+}
+
+.legend-ticks {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  font-size: 11px;
+  color: rgba(223, 233, 237, 0.88);
 }
 
 .map-overlay {
@@ -240,6 +286,118 @@ select {
 
 .city-label.port {
   color: #c4ecff;
+}
+
+.city-label.selected {
+  background: rgba(72, 46, 8, 0.8);
+  color: #ffe7a8;
+}
+
+.selection-marker {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ffe07a;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(18, 13, 4, 0.7), 0 0 16px rgba(255, 203, 83, 0.55);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.floating-panel-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.floating-panel {
+  position: absolute;
+  max-width: min(360px, calc(100% - 16px));
+  border: 1px solid rgba(189, 206, 213, 0.26);
+  border-radius: 8px;
+  background: rgba(15, 21, 25, 0.94);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36);
+  color: #edf4f6;
+  pointer-events: auto;
+}
+
+.floating-panel.hidden {
+  display: none;
+}
+
+.floating-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 38px;
+  border-bottom: 1px solid rgba(189, 206, 213, 0.16);
+  padding: 0 8px 0 12px;
+  cursor: move;
+  user-select: none;
+}
+
+.floating-panel-header h2 {
+  margin: 0;
+  color: #d8e2e7;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.floating-panel-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #9fb0ba;
+  cursor: pointer;
+}
+
+.floating-panel-close:hover {
+  border-color: #3e525f;
+  background: #1b252b;
+  color: #edf4f6;
+}
+
+.floating-panel-body {
+  padding: 12px;
+}
+
+.object-details-title {
+  margin-bottom: 10px;
+  color: #ffe0a1;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.object-details-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.object-details-list div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.object-details-list dt {
+  color: #80919c;
+  font-size: 12px;
+}
+
+.object-details-list dd {
+  margin: 0;
+  color: #edf4f6;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.object-details-actions {
+  margin-top: 12px;
 }
 
 @media (max-width: 720px) {

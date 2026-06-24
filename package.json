@@ -1,0 +1,10 @@
+{
+  "name": "fmg-webgl-reimplementation",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "start": "pnpm run start:app",
+    "start:app": "node ./tools/serve-prototype.mjs --port 5410 --dir ./app/webgl-generator",
+    "start:prototype": "node ./tools/serve-prototype.mjs --port 5400"
+  }
+}

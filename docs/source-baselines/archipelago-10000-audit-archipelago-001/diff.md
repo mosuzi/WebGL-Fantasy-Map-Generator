@@ -1,0 +1,68 @@
+# Source / Candidate 对照差异
+
+生成时间：2026-06-21T01:11:42.751Z
+模板：`archipelago`
+Seed：`audit-archipelago-001`
+目标 cells：10000
+状态：pass（fail 0，warn 0）
+
+## 关键指标
+
+| 指标 | source | candidate | delta | ratio | 状态 |
+|---|---:|---:|---:|---:|---|
+| grid.cells | 10004 | 10004 | 0 | 0 | pass |
+| grid.avgDegree | 5.922 | 5.922 | 0 | 0 | pass |
+| grid.boundaryPoints | 206 | 206 | 0 | 0 | pass |
+| grid.landRatio | 0.157 | 0.157 | 0 | 0 | pass |
+| grid.height.p50 | 12 | 12 | 0 | 0 | pass |
+| grid.height.p95 | 33.85 | 33.85 | 0 | 0 | pass |
+| grid.temperature.min | -24 | -24 | 0 | 0 | pass |
+| grid.temperature.max | 25 | 25 | 0 | 0 | pass |
+| grid.precipitation.mean | 17.652 | 17.652 | 0 | 0 | pass |
+| pack.cells | 3249 | 3249 | 0 | 0 | pass |
+| pack.packGridRatio | 0.325 | 0.325 | 0 | 0 | pass |
+| pack.avgDegree | 5.946 | 5.946 | 0 | 0 | pass |
+| pack.havenCells | 717 | 717 | 0 | 0 | pass |
+| features.total | 21 | 21 | 0 | 0 | pass |
+| features.lakes | 5 | 5 | 0 | 0 | pass |
+| rivers.count | 172 | 171 | -1 | 0.006 | pass |
+| rivers.cellsWithRiver | 569 | 566 | -3 | 0.005 | pass |
+| population.positivePopulationCells | 1925 | 1926 | 1 | 0.001 | pass |
+| society.cultures | 7 | 7 | 0 | 0 | pass |
+| society.burgs | 355 | 390 | 35 | 0.099 | pass |
+| society.ports | 57 | 60 | 3 | 0.053 | pass |
+| society.states | 21 | 21 | 0 | 0 | pass |
+| society.religions | 11 | 11 | 0 | 0 | pass |
+| society.provinces | 131 | 135 | 4 | 0.031 | pass |
+| routes.total | 272 | 337 | 65 | 0.239 | pass |
+| routes.roads | 14 | 14 | 0 | 0 | pass |
+| routes.trails | 203 | 261 | 58 | 0.286 | pass |
+| routes.searoutes | 55 | 62 | 7 | 0.127 | pass |
+| routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
+| routes.seaRouteLandCells | 0 | 0 | 0 | 0 | pass |
+
+## 不变量
+
+| 检查 | source | candidate | 上限 | 状态 |
+|---|---:|---:|---:|---|
+| grid 邻接引用 | 0 | 0 | 0 | pass |
+| grid 顶点引用 | 0 | 0 | 0 | pass |
+| pack grid 引用 | 0 | 0 | 0 | pass |
+| pack 邻接引用 | 0 | 0 | 0 | pass |
+| pack 顶点引用 | 0 | 0 | 0 | pass |
+| 城市落水 | undefined | 0 | 0 | pass |
+| 陆路穿水 | 0 | 0 | 0 | pass |
+| 海路中段穿陆 | 0 | 0 | 0 | pass |
+
+## Candidate 特有检查
+
+| 检查 | candidate | 状态 | 说明 |
+|---|---:|---|---|
+| candidate source boundary points | true | pass | candidate 已输出 boundary points |
+| candidate pack 真实 Voronoi | true | pass | candidate pack 已有独立 Voronoi 字段 |
+| candidate pack 非一比一映射 | false | pass | candidate pack 不再是一比一映射 |
+| candidate 海路 | true | pass | candidate 已生成海路 |
+
+## 下一步建议
+
+当前 case 达到阶段 0 对照要求，可推进下一阶段。

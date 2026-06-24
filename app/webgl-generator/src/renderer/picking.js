@@ -21,27 +21,285 @@ export function pickGridCell(map, worldX, worldY) {
   };
 }
 
-export function pickRoute(map, worldX, worldY, maxDistance) {
-  if (!map?.settlements?.routes?.length) return null;
-  let best = null;
+export function buildObjectPickingIndex(map) {
+  const bucketSize = Math.max(28, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 48);
+  const columns = Math.max(1, Math.ceil(map.metadata.graphWidth / bucketSize));
+  const rows = Math.max(1, Math.ceil(map.metadata.graphHeight / bucketSize));
+  const buckets = new Map();
+  let routeSegmentCount = 0;
+  let riverSegmentCount = 0;
+
+  for (const city of map.settlements.cities) {
+    addToBucket(buckets, columns, rows, bucketSize, city.x, city.y, "cities", city);
+  }
+
+  for (const marker of map.markers.markers) {
+    addToBucket(buckets, columns, rows, bucketSize, marker.x, marker.y, "markers", marker);
+  }
 
   for (const route of map.settlements.routes) {
     for (let index = 0; index < route.points.length - 1; index++) {
-      const distance = distanceToSegment(worldX, worldY, route.points[index], route.points[index + 1]);
-      if (distance > maxDistance || (best && distance >= best.distance)) continue;
-      const from = map.settlements.cities[route.from];
-      const to = map.settlements.cities[route.to];
-      best = {
-        id: route.id,
-        type: route.type,
-        from: from?.name || "unknown",
-        to: to?.name || "unknown",
-        distance
-      };
+      const a = route.points[index];
+      const b = route.points[index + 1];
+      const segment = {kind: "route", route, index, a, b};
+      addSegmentToBuckets(buckets, columns, rows, bucketSize, segment, "routeSegments");
+      routeSegmentCount++;
     }
   }
 
+  for (const river of map.rivers.rivers) {
+    for (let index = 0; index < river.points.length - 1; index++) {
+      const a = river.points[index];
+      const b = river.points[index + 1];
+      const segment = {kind: "river", river, index, a, b};
+      addSegmentToBuckets(buckets, columns, rows, bucketSize, segment, "riverSegments");
+      riverSegmentCount++;
+    }
+  }
+
+  let maxBucketItems = 0;
+  for (const bucket of buckets.values()) {
+    maxBucketItems = Math.max(maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.routeSegments.length + bucket.riverSegments.length);
+  }
+
+  return {
+    bucketSize,
+    columns,
+    rows,
+    buckets,
+    bucketCount: buckets.size,
+    cityCount: map.settlements.cities.length,
+    markerCount: map.markers.markers.length,
+    routeSegmentCount,
+    riverSegmentCount,
+    maxBucketItems
+  };
+}
+
+export function pickRoute(map, index, worldX, worldY, maxDistance) {
+  if (!map?.settlements?.routes?.length) return null;
+  let best = null;
+  let candidateCount = 0;
+  const routeSegments = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "routeSegments", segment => `${segment.route.id}:${segment.index}`) : allRouteSegments(map);
+
+  for (const segment of routeSegments) {
+    candidateCount++;
+    const route = segment.route;
+    const distance = distanceToSegment(worldX, worldY, segment.a, segment.b);
+    if (distance > maxDistance || (best && distance >= best.distance)) continue;
+    const from = map.settlements.cities[route.from];
+    const to = map.settlements.cities[route.to];
+    best = {
+      kind: "route",
+      id: route.id,
+      type: route.type,
+      level: route.level || route.type,
+      from: from?.name || "unknown",
+      to: to?.name || "unknown",
+      distance,
+      candidateCount
+    };
+  }
+
+  if (best) best.candidateCount = candidateCount;
   return best;
+}
+
+export function pickRiver(map, index, worldX, worldY, maxDistance) {
+  if (!map?.rivers?.rivers?.length) return null;
+  let best = null;
+  let candidateCount = 0;
+  const riverSegments = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "riverSegments", segment => `${segment.river.id}:${segment.index}`) : allRiverSegments(map);
+
+  for (const segment of riverSegments) {
+    candidateCount++;
+    const river = segment.river;
+    const distance = distanceToSegment(worldX, worldY, segment.a, segment.b);
+    if (distance > maxDistance || (best && distance >= best.distance)) continue;
+    best = {
+      kind: "river",
+      id: river.id,
+      type: river.parent ? "tributary" : "river",
+      flux: river.flux,
+      length: river.cells.length,
+      distance,
+      candidateCount
+    };
+  }
+
+  if (best) best.candidateCount = candidateCount;
+  return best;
+}
+
+export function pickCity(map, index, worldX, worldY, maxDistance) {
+  if (!map?.settlements?.cities?.length) return null;
+  let best = null;
+  let candidateCount = 0;
+  const cities = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "cities", city => city.id) : map.settlements.cities;
+
+  for (const city of cities) {
+    candidateCount++;
+    const distance = Math.hypot(worldX - city.x, worldY - city.y);
+    if (distance > maxDistance || (best && distance >= best.distance)) continue;
+    best = {
+      kind: "city",
+      id: city.id,
+      name: city.name,
+      type: city.capital ? "capital" : city.provincial ? "provincial" : city.port ? "port" : "city",
+      population: city.population,
+      state: map.politics.states[city.state]?.name || "none",
+      province: map.politics.provinces[city.province]?.name || "none",
+      distance,
+      candidateCount
+    };
+  }
+
+  if (best) best.candidateCount = candidateCount;
+  return best;
+}
+
+export function pickMarker(map, index, worldX, worldY, maxDistance) {
+  if (!map?.markers?.markers?.length) return null;
+  let best = null;
+  let candidateCount = 0;
+  const markers = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "markers", marker => marker.id) : map.markers.markers;
+
+  for (const marker of markers) {
+    candidateCount++;
+    const distance = Math.hypot(worldX - marker.x, worldY - marker.y);
+    if (distance > maxDistance || (best && distance >= best.distance)) continue;
+    best = {
+      kind: "marker",
+      id: marker.id,
+      type: marker.type,
+      name: marker.name,
+      cell: marker.cell,
+      data: marker.data,
+      distance,
+      candidateCount
+    };
+  }
+
+  if (best) best.candidateCount = candidateCount;
+  return best;
+}
+
+export function pickPoliticalObject(map, pickResult, colorMode = "height") {
+  if (!pickResult || pickResult.gridCell === null || !pickResult.featureLand) return null;
+  if (colorMode === "states") return buildStateObject(map, pickResult.gridCell);
+  if (colorMode === "regions") return buildRegionObject(map, pickResult.gridCell);
+  if (colorMode === "provinces") return buildProvinceObject(map, pickResult.gridCell);
+  return buildProvinceObject(map, pickResult.gridCell) || buildStateObject(map, pickResult.gridCell) || buildRegionObject(map, pickResult.gridCell);
+}
+
+function addToBucket(buckets, columns, rows, bucketSize, x, y, key, item) {
+  const column = clampBucket(Math.floor(x / bucketSize), columns);
+  const row = clampBucket(Math.floor(y / bucketSize), rows);
+  bucketFor(buckets, row * columns + column)[key].push(item);
+}
+
+function addSegmentToBuckets(buckets, columns, rows, bucketSize, segment, key) {
+  const minColumn = clampBucket(Math.floor(Math.min(segment.a[0], segment.b[0]) / bucketSize), columns);
+  const maxColumn = clampBucket(Math.floor(Math.max(segment.a[0], segment.b[0]) / bucketSize), columns);
+  const minRow = clampBucket(Math.floor(Math.min(segment.a[1], segment.b[1]) / bucketSize), rows);
+  const maxRow = clampBucket(Math.floor(Math.max(segment.a[1], segment.b[1]) / bucketSize), rows);
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let column = minColumn; column <= maxColumn; column++) {
+      bucketFor(buckets, row * columns + column)[key].push(segment);
+    }
+  }
+}
+
+function queryIndexedItems(index, worldX, worldY, radius, key, getId) {
+  const column = clampBucket(Math.floor(worldX / index.bucketSize), index.columns);
+  const row = clampBucket(Math.floor(worldY / index.bucketSize), index.rows);
+  const bucketRadius = Math.max(1, Math.ceil(radius / index.bucketSize));
+  const items = [];
+  const used = new Set();
+
+  for (let nextRow = row - bucketRadius; nextRow <= row + bucketRadius; nextRow++) {
+    if (nextRow < 0 || nextRow >= index.rows) continue;
+    for (let nextColumn = column - bucketRadius; nextColumn <= column + bucketRadius; nextColumn++) {
+      if (nextColumn < 0 || nextColumn >= index.columns) continue;
+      const bucket = index.buckets.get(nextRow * index.columns + nextColumn);
+      if (!bucket) continue;
+      for (const item of bucket[key]) {
+        const id = getId(item);
+        if (used.has(id)) continue;
+        used.add(id);
+        items.push(item);
+      }
+    }
+  }
+
+  return items;
+}
+
+function bucketFor(buckets, key) {
+  if (!buckets.has(key)) buckets.set(key, {cities: [], markers: [], routeSegments: [], riverSegments: []});
+  return buckets.get(key);
+}
+
+function clampBucket(value, size) {
+  return Math.max(0, Math.min(size - 1, value));
+}
+
+function buildStateObject(map, gridCell) {
+  const id = map.grid.cells.state[gridCell];
+  const state = map.politics.states[id];
+  if (!state) return null;
+  return {
+    kind: "state",
+    id,
+    name: state.name,
+    culture: map.society.cultures[state.culture]?.name || "unknown",
+    religion: map.society.religions[state.religion]?.name || "unknown",
+    centerCell: state.center
+  };
+}
+
+function buildProvinceObject(map, gridCell) {
+  const id = map.grid.cells.province[gridCell];
+  const province = map.politics.provinces[id];
+  if (!province) return null;
+  const state = map.politics.states[province.state];
+  return {
+    kind: "province",
+    id,
+    name: province.name,
+    state: state?.name || "none",
+    stateId: province.state,
+    centerCell: province.center
+  };
+}
+
+function buildRegionObject(map, gridCell) {
+  const id = map.grid.cells.region[gridCell];
+  const region = map.politics.regions[id];
+  if (!region) return null;
+  return {
+    kind: "region",
+    id,
+    name: region.name
+  };
+}
+
+function allRouteSegments(map) {
+  return map.settlements.routes.flatMap(route => route.points.slice(0, -1).map((point, index) => ({
+    route,
+    index,
+    a: point,
+    b: route.points[index + 1]
+  })));
+}
+
+function allRiverSegments(map) {
+  return map.rivers.rivers.flatMap(river => river.points.slice(0, -1).map((point, index) => ({
+    river,
+    index,
+    a: point,
+    b: river.points[index + 1]
+  })));
 }
 
 function candidateCells(column, row, columns, rows) {
@@ -71,14 +329,16 @@ function pointInCell(map, cell, x, y) {
 }
 
 function buildPickResult(map, gridCell, worldX, worldY, candidates) {
-  const packCell = map.grid.cells.pack[gridCell];
-  const featureId = map.pack.cells.f[packCell];
+  const mappedPackCell = map.grid.cells.pack?.[gridCell];
+  const packCell = Number.isInteger(mappedPackCell) && mappedPackCell >= 0 ? mappedPackCell : null;
+  const featureId = packCell === null ? map.grid.cells.f?.[gridCell] : map.pack.cells.f?.[packCell] ?? map.grid.cells.f?.[gridCell];
   const feature = map.features.features[featureId];
   return {
     gridCell,
     packCell,
     featureId,
     featureType: feature?.type || "unknown",
+    featureLand: Boolean(feature?.land),
     height: map.grid.cells.h[gridCell],
     temperature: map.grid.cells.temp[gridCell],
     precipitation: map.grid.cells.prec[gridCell],

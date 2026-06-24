@@ -1,0 +1,536 @@
+{
+  "metadata": {
+    "generatedAt": "2026-06-21T01:11:29.160Z",
+    "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-100000-audit-continents-002\\source-summary.json",
+    "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\continents-100000-audit-continents-002\\candidate-summary.json",
+    "seed": "audit-continents-002",
+    "template": "continents",
+    "cellsTarget": 100000,
+    "failCount": 0,
+    "warnCount": 0,
+    "status": "pass"
+  },
+  "metrics": [
+    {
+      "id": "grid.cells",
+      "label": "grid.cells",
+      "source": 99846,
+      "candidate": 99846,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.02,
+        "fail": 0.05
+      }
+    },
+    {
+      "id": "grid.avgDegree",
+      "label": "grid.avgDegree",
+      "source": 5.976,
+      "candidate": 5.976,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 0.15,
+        "fail": 0.4
+      }
+    },
+    {
+      "id": "grid.boundaryPoints",
+      "label": "grid.boundaryPoints",
+      "source": 648,
+      "candidate": 648,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.25,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "grid.landRatio",
+      "label": "grid.landRatio",
+      "source": 0.429,
+      "candidate": 0.429,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 0.08,
+        "fail": 0.16
+      }
+    },
+    {
+      "id": "grid.height.p50",
+      "label": "grid.height.p50",
+      "source": 16,
+      "candidate": 16,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 8,
+        "fail": 16
+      }
+    },
+    {
+      "id": "grid.height.p95",
+      "label": "grid.height.p95",
+      "source": 52,
+      "candidate": 52,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 10,
+        "fail": 20
+      }
+    },
+    {
+      "id": "grid.temperature.min",
+      "label": "grid.temperature.min",
+      "source": -16,
+      "candidate": -16,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 8,
+        "fail": 18
+      }
+    },
+    {
+      "id": "grid.temperature.max",
+      "label": "grid.temperature.max",
+      "source": 29,
+      "candidate": 29,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 8,
+        "fail": 18
+      }
+    },
+    {
+      "id": "grid.precipitation.mean",
+      "label": "grid.precipitation.mean",
+      "source": 23.054,
+      "candidate": 23.054,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1.4
+      }
+    },
+    {
+      "id": "pack.cells",
+      "label": "pack.cells",
+      "source": 58166,
+      "candidate": 58166,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.2,
+        "fail": 0.45
+      }
+    },
+    {
+      "id": "pack.packGridRatio",
+      "label": "pack.packGridRatio",
+      "source": 0.583,
+      "candidate": 0.583,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 0.12,
+        "fail": 0.25
+      }
+    },
+    {
+      "id": "pack.avgDegree",
+      "label": "pack.avgDegree",
+      "source": 5.994,
+      "candidate": 5.994,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 0.2,
+        "fail": 0.6
+      }
+    },
+    {
+      "id": "pack.havenCells",
+      "label": "pack.havenCells",
+      "source": 7201,
+      "candidate": 7201,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.5,
+        "fail": 0.95
+      }
+    },
+    {
+      "id": "features.total",
+      "label": "features.total",
+      "source": 190,
+      "candidate": 190,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "features.lakes",
+      "label": "features.lakes",
+      "source": 82,
+      "candidate": 82,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "rivers.count",
+      "label": "rivers.count",
+      "source": 879,
+      "candidate": 850,
+      "delta": -29,
+      "ratio": 0.033,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "rivers.cellsWithRiver",
+      "label": "rivers.cellsWithRiver",
+      "source": 5940,
+      "candidate": 5830,
+      "delta": -110,
+      "ratio": 0.019,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "population.positivePopulationCells",
+      "label": "population.positivePopulationCells",
+      "source": 45285,
+      "candidate": 45309,
+      "delta": 24,
+      "ratio": 0.001,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "society.cultures",
+      "label": "society.cultures",
+      "source": 10,
+      "candidate": 10,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 4,
+        "fail": 8
+      }
+    },
+    {
+      "id": "society.burgs",
+      "label": "society.burgs",
+      "source": 1457,
+      "candidate": 1458,
+      "delta": 1,
+      "ratio": 0.001,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.5,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "society.ports",
+      "label": "society.ports",
+      "source": 260,
+      "candidate": 212,
+      "delta": -48,
+      "ratio": 0.185,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "society.states",
+      "label": "society.states",
+      "source": 20,
+      "candidate": 20,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 5,
+        "fail": 12
+      }
+    },
+    {
+      "id": "society.religions",
+      "label": "society.religions",
+      "source": 17,
+      "candidate": 17,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "absolute",
+        "warn": 5,
+        "fail": 12
+      }
+    },
+    {
+      "id": "society.provinces",
+      "label": "society.provinces",
+      "source": 494,
+      "candidate": 502,
+      "delta": 8,
+      "ratio": 0.016,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "routes.total",
+      "label": "routes.total",
+      "source": 1252,
+      "candidate": 1257,
+      "delta": 5,
+      "ratio": 0.004,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "routes.roads",
+      "label": "routes.roads",
+      "source": 15,
+      "candidate": 13,
+      "delta": -2,
+      "ratio": 0.133,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.7,
+        "fail": 1
+      }
+    },
+    {
+      "id": "routes.trails",
+      "label": "routes.trails",
+      "source": 968,
+      "candidate": 1033,
+      "delta": 65,
+      "ratio": 0.067,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "routes.searoutes",
+      "label": "routes.searoutes",
+      "source": 269,
+      "candidate": 211,
+      "delta": -58,
+      "ratio": 0.216,
+      "status": "pass",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.95
+      }
+    },
+    {
+      "id": "routes.landRouteWaterCells",
+      "label": "routes.landRouteWaterCells",
+      "source": 0,
+      "candidate": 0,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "max-extra",
+        "warn": 1,
+        "fail": 5
+      }
+    },
+    {
+      "id": "routes.seaRouteLandCells",
+      "label": "routes.seaRouteLandCells",
+      "source": 0,
+      "candidate": 0,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
+      "rule": {
+        "kind": "max-extra",
+        "warn": 2,
+        "fail": 8
+      }
+    }
+  ],
+  "invariants": [
+    {
+      "id": "validation.gridNeighborInvalidRefs",
+      "label": "grid 邻接引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "validation.gridVertexInvalidRefs",
+      "label": "grid 顶点引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "validation.packGridRefsInvalid",
+      "label": "pack grid 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "validation.packNeighborInvalidRefs",
+      "label": "pack 邻接引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "validation.packVertexInvalidRefs",
+      "label": "pack 顶点引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "validation.cityWaterCells",
+      "label": "城市落水",
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "validation.landRouteWaterCells",
+      "label": "陆路穿水",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "validation.seaRouteLandCells",
+      "label": "海路中段穿陆",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    }
+  ],
+  "candidateSpecific": [
+    {
+      "id": "gridHasBoundary",
+      "label": "candidate source boundary points",
+      "status": "pass",
+      "source": true,
+      "candidate": true,
+      "message": "candidate 已输出 boundary points"
+    },
+    {
+      "id": "packHasVoronoi",
+      "label": "candidate pack 真实 Voronoi",
+      "status": "pass",
+      "source": true,
+      "candidate": true,
+      "message": "candidate pack 已有独立 Voronoi 字段"
+    },
+    {
+      "id": "packMappingOneToOne",
+      "label": "candidate pack 非一比一映射",
+      "status": "pass",
+      "source": false,
+      "candidate": false,
+      "message": "candidate pack 不再是一比一映射"
+    },
+    {
+      "id": "routesHaveSeaRoutes",
+      "label": "candidate 海路",
+      "status": "pass",
+      "source": true,
+      "candidate": true,
+      "message": "candidate 已生成海路"
+    }
+  ],
+  "missingRequiredPackFields": [],
+  "nextStageRecommendation": "当前 case 达到阶段 0 对照要求，可推进下一阶段。"
+}

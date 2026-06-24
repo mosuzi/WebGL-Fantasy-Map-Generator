@@ -28,6 +28,7 @@
   - `docs/milestone-1-webgl-prototype.md`：第 1 里程碑 WebGL cells 原型说明。
   - `docs/webgl-svg-performance-comparison.md`：WebGL 原型与 SVG 基线性能对照。
   - `docs/webgl-prototype-profile-results.md`：WebGL 原型当前性能采集结果。
+  - `docs/source-generation-audit-and-rectification-plan.md`：source 生成算法重新审查和正式应用生成质量整改方案。
 
 ## 代码约定
 
@@ -78,6 +79,12 @@
 - 修正原型级河流折线河口处理：
   - 当前没有复刻原版 `Rivers.getRiverPath()` 的变宽河道。
   - fallback 河流折线遇到第一个水域 cell 会插入近似河口点并停止，避免河流画到海里。
+- 正式应用已完成第一轮 source 生成算法整改：
+  - `grid.cells.c` 改为共享边邻接，并用于高度、feature、河流、路线和语义扩张。
+  - 高度末端不再使用全局百分位重排，改为海平面校准、连续 relief 拉伸和坡脚平滑。
+  - 路线改为 A* 成本寻路，失败时不再画直连。
+  - 河流改为动态河源上限和更低 flux 阈值。
+  - 文化、宗教、国家、省份和区域改为邻接成本扩张。
 - 更新当前计划和开发历史：
   - `docs/current-plan.md`
   - `docs/development-log.md`
@@ -147,5 +154,6 @@ node .\tools\serve-prototype.mjs --port 5400
 7. `docs/milestone-1-webgl-prototype.md`
 8. `docs/webgl-svg-performance-comparison.md`
 9. `docs/webgl-prototype-profile-results.md`
+10. `docs/source-generation-audit-and-rectification-plan.md`
 
 然后根据用户最新指令继续。当前下一步建议是先修正计划文档，明确 `source/` 只读参考边界，然后进入独立 WebGL 地图生成器的生成内核和正式应用骨架设计。

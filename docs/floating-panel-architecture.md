@@ -1,0 +1,75 @@
+# 浮动面板架构约束
+
+本文档记录正式应用后续 UI 面板的长期方向。当前阶段已实现最小只读对象详情面板，但仍不迁移现有固定侧栏。
+
+## 目标
+
+后续所有配置、查看和编辑类面板都应作为普通 HTML/DOM 浮动面板覆盖在地图工作区上方，而不是用 canvas 绘制。适用范围包括：
+
+- 生成配置面板。
+- 高度编辑面板。
+- 河流编辑面板。
+- 城市、道路和路线编辑面板。
+- 国家、省份、文化、宗教编辑面板。
+- 标签、纹章和对象详情面板。
+- 调试、统计和图层控制面板。
+
+## 基本原则
+
+- 面板不占用地图主画布的绘制职责，canvas 只负责地图和 WebGL 图层。
+- 面板使用 HTML 表单、按钮、列表、tabs、slider、checkbox、select 等普通控件。
+- 面板应可拖动，并保留未来折叠、最小化、关闭、停靠和恢复位置的扩展空间。
+- 面板层级应由统一的 panel manager 管理，避免每个功能各自维护 z-index。
+- 面板状态应能按 workspace/session 保存：位置、尺寸、折叠状态、当前 tab 和打开/关闭状态。
+- 面板不应阻塞地图默认操作；只有鼠标事件发生在面板内部时才由面板消费，地图区域仍负责 pan、zoom、hover picking 和 object selection。
+
+## 与地图交互的边界
+
+- WebGL renderer 不直接创建业务编辑面板。
+- renderer 可以暴露选中对象、hover 对象、camera、图层状态和编辑工具状态。
+- 面板通过应用 runtime 或 store 修改生成 options、图层开关、编辑工具参数和选中对象。
+- picking、selection 和高亮是地图交互层职责；详情面板只读取并编辑对应对象，不自行计算命中。
+- 对象详情面板应跟随 selection 状态打开或刷新，但不应该成为 selection 的唯一来源。
+
+## 推荐模块划分
+
+当前已开始在 `app/webgl-generator/src/ui/` 下增加面板模块，后续继续按以下方向扩展：
+
+- `panel-manager.js`：管理面板注册、打开/关闭、激活层级、拖动、尺寸和持久化；当前已覆盖注册、打开/关闭、拖动、层级，以及位置和宽度的 `localStorage` 持久化。
+- `floating-panel.js`：通用面板壳，包含标题栏、拖动句柄、关闭/折叠按钮和内容插槽；当前先由 `panel-manager.js` 内联创建面板壳，后续复杂化时再拆出。
+- `panels/generation-panel.js`：生成配置。
+- `panels/terrain-panel.js`：高度和地形编辑。
+- `panels/river-panel.js`：河流查看和编辑。
+- `panels/settlement-panel.js`：城市、道路和路线编辑。
+- `panels/object-details-panel.js`：选中对象详情。
+- `panels/layers-panel.js`：图层和专题面控制。
+
+当前固定侧栏可以先保留；迁移时应先抽出 panel manager，再逐步把现有控制区搬进浮动面板。
+
+## 第一阶段迁移建议
+
+1. 保留现有侧栏作为 fallback。
+2. 已新增 panel manager 和一个最小浮动“对象详情”面板。
+3. 对象详情面板已只读显示当前 selection，不提供编辑。
+4. 已补最小持久化边界：保存面板位置和宽度，不保存打开状态。
+5. 再迁移图层控制和生成配置。
+6. 最后进入高度、河流、城市等编辑工具面板。
+
+## 验收标准
+
+- 面板可拖动，拖动不触发地图 pan。
+- 面板内部滚动、点击、输入不触发地图 selection。
+- 面板关闭/打开后不会丢失当前地图状态。
+- selection 变化时，对象详情面板能刷新为城市、路线、国家、河流等不同对象摘要。
+- 没有 canvas 绘制的 UI 控件；canvas 只绘制地图。
+
+## 当前状态
+
+截至阶段 3.4：
+
+- 现有配置、统计和悬停信息仍在固定侧栏。
+- 城市标签、城市选中 marker 使用 HTML overlay。
+- 城市、路线和河流 selection 已进入 runtime 状态。
+- 已新增 `panel-manager.js` 和 `panels/object-details-panel.js`。
+- 对象详情面板会随 selection 打开或刷新，显示城市、路线和河流的只读摘要。
+- 对象详情面板位置和宽度会保存到浏览器 `localStorage`，刷新页面后再次打开会恢复位置。

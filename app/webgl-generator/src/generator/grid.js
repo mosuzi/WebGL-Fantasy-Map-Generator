@@ -1,291 +1,190 @@
+import Delaunator from "../vendor/delaunator.js";
 import {applyHeightmap} from "./heightmap.js";
 
-const CLIP_NEIGHBOR_RADIUS = 2;
-const MIN_CELL_VERTICES = 3;
-const POINT_MARGIN = 0.04;
-const LOCAL_JITTER = 0.38;
-const ROW_COLUMN_DRIFT = 0.14;
-const WARP_STRENGTH = 0.2;
-
-export function buildGrid(options, random, heightmap) {
+export function buildGrid(options, random, heightmap, heightRandom = random) {
   const startedAt = performance.now();
   const layout = createPointLayout(options);
-  const points = generatePoints(layout, random, options);
-  const {cells, vertices} = buildVoronoiCells(points, layout, options, heightmap);
-  applyHeightmap(heightmap, {points, cells, vertices}, layout, random);
-  fillSmallInlandBasins(cells, layout);
+  const boundary = getBoundaryPoints(options.graphWidth, options.graphHeight, layout.spacing);
+  const points = getJitteredGrid(options.graphWidth, options.graphHeight, layout.spacing, random);
+  const {cells, vertices} = calculateVoronoi(points, boundary);
+  cells.p = Array.from(cells.i);
+  cells.h = new Array(points.length).fill(0);
+
+  const grid = {points, boundary, cells, vertices};
+  applyHeightmap(heightmap, grid, layout, heightRandom);
+
   const triangles = cells.v.reduce((sum, vertexIds) => sum + Math.max(0, vertexIds.length - 2), 0);
+  const neighborDegrees = cells.c.map(neighbors => neighbors.length);
 
   return {
     points,
+    boundary,
     cells,
     vertices,
     metadata: {
       actualCells: points.length,
+      cellsDesired: options.cellsTarget,
+      spacing: layout.spacing,
       columns: layout.columns,
       rows: layout.rows,
+      graphWidth: options.graphWidth,
+      graphHeight: options.graphHeight,
+      boundaryPoints: boundary.length,
       vertexCount: vertices.p.length,
       triangles,
+      neighborMode: "source-delaunator-halfedge",
+      averageNeighborDegree: round(average(neighborDegrees), 2),
+      maxNeighborDegree: Math.max(...neighborDegrees),
+      borderCells: cells.b.reduce((sum, value) => sum + (value ? 1 : 0), 0),
       buildMs: roundMs(performance.now() - startedAt),
-      method: "organic-stratified-halfplane-voronoi"
+      method: "source-jittered-grid-delaunator-voronoi"
     }
   };
 }
 
 function createPointLayout(options) {
-  const aspect = options.graphWidth / options.graphHeight;
-  const columns = Math.max(1, Math.round(Math.sqrt(options.cellsTarget * aspect)));
-  const rows = Math.max(1, Math.round(options.cellsTarget / columns));
-  return {
-    columns,
-    rows,
-    cellWidth: options.graphWidth / columns,
-    cellHeight: options.graphHeight / rows
-  };
+  const spacing = round(Math.sqrt((options.graphWidth * options.graphHeight) / options.cellsTarget), 2);
+  const columns = Math.floor((options.graphWidth + 0.5 * spacing - 1e-10) / spacing);
+  const rows = Math.floor((options.graphHeight + 0.5 * spacing - 1e-10) / spacing);
+  return {spacing, columns, rows};
 }
 
-function generatePoints(layout, random, options) {
+function getBoundaryPoints(width, height, spacing) {
+  const offset = round(-1 * spacing);
+  const boundarySpacing = spacing * 2;
+  const boundedWidth = width - offset * 2;
+  const boundedHeight = height - offset * 2;
+  const numberX = Math.ceil(boundedWidth / boundarySpacing) - 1;
+  const numberY = Math.ceil(boundedHeight / boundarySpacing) - 1;
   const points = [];
-  const rowDrift = Array.from({length: layout.rows}, () => random.range(-ROW_COLUMN_DRIFT, ROW_COLUMN_DRIFT));
-  const columnDrift = Array.from({length: layout.columns}, () => random.range(-ROW_COLUMN_DRIFT, ROW_COLUMN_DRIFT));
-  const warp = createWarpField(layout, random);
 
-  for (let row = 0; row < layout.rows; row++) {
-    for (let column = 0; column < layout.columns; column++) {
-      const centerX = (column + 0.5) * layout.cellWidth;
-      const centerY = (row + 0.5) * layout.cellHeight;
-      const warpVector = sampleWarp(warp, column, row, layout);
-      const jitterX = (random.range(-LOCAL_JITTER, LOCAL_JITTER) + rowDrift[row] + warpVector.x * WARP_STRENGTH) * layout.cellWidth;
-      const jitterY = (random.range(-LOCAL_JITTER, LOCAL_JITTER) + columnDrift[column] + warpVector.y * WARP_STRENGTH) * layout.cellHeight;
-      const x = clamp(centerX + jitterX, (column + POINT_MARGIN) * layout.cellWidth, (column + 1 - POINT_MARGIN) * layout.cellWidth);
-      const y = clamp(centerY + jitterY, (row + POINT_MARGIN) * layout.cellHeight, (row + 1 - POINT_MARGIN) * layout.cellHeight);
-      points.push([round(x, 3), round(y, 3)]);
-    }
+  for (let i = 0.5; i < numberX; i++) {
+    const x = Math.ceil((boundedWidth * i) / numberX + offset);
+    points.push([x, offset], [x, boundedHeight + offset]);
   }
+
+  for (let i = 0.5; i < numberY; i++) {
+    const y = Math.ceil((boundedHeight * i) / numberY + offset);
+    points.push([offset, y], [boundedWidth + offset, y]);
+  }
+
   return points;
 }
 
-function createWarpField(layout, random) {
-  const columns = Math.max(3, Math.ceil(layout.columns / 12) + 2);
-  const rows = Math.max(3, Math.ceil(layout.rows / 12) + 2);
-  const vectors = [];
+function getJitteredGrid(width, height, spacing, random) {
+  const radius = spacing / 2;
+  const jittering = radius * 0.9;
+  const doubleJittering = jittering * 2;
+  const points = [];
 
-  for (let row = 0; row < rows; row++) {
-    const line = [];
-    for (let column = 0; column < columns; column++) {
-      line.push({
-        x: random.range(-1, 1),
-        y: random.range(-1, 1)
-      });
+  for (let y = radius; y < height; y += spacing) {
+    for (let x = radius; x < width; x += spacing) {
+      const xj = Math.min(round(x + random.next() * doubleJittering - jittering, 2), width);
+      const yj = Math.min(round(y + random.next() * doubleJittering - jittering, 2), height);
+      points.push([xj, yj]);
     }
-    vectors.push(line);
   }
 
-  return {columns, rows, vectors};
+  return points;
 }
 
-function sampleWarp(warp, column, row, layout) {
-  const x = (column / Math.max(1, layout.columns - 1)) * (warp.columns - 1);
-  const y = (row / Math.max(1, layout.rows - 1)) * (warp.rows - 1);
-  const left = Math.floor(x);
-  const top = Math.floor(y);
-  const right = Math.min(warp.columns - 1, left + 1);
-  const bottom = Math.min(warp.rows - 1, top + 1);
-  const tx = smoothstep(x - left);
-  const ty = smoothstep(y - top);
-  const topVector = mixVector(warp.vectors[top][left], warp.vectors[top][right], tx);
-  const bottomVector = mixVector(warp.vectors[bottom][left], warp.vectors[bottom][right], tx);
-  return mixVector(topVector, bottomVector, ty);
+export function calculateVoronoi(points, boundary) {
+  const allPoints = points.concat(boundary);
+  const delaunay = Delaunator.from(allPoints);
+  const voronoi = createVoronoi(delaunay, allPoints, points.length);
+  const cells = voronoi.cells;
+  cells.i = Uint32Array.from({length: points.length}, (_, index) => index);
+  fillMissingCells(cells, points.length);
+  return {cells, vertices: voronoi.vertices};
 }
 
-function buildVoronoiCells(points, layout, options) {
-  const cells = {
-    v: [],
-    p: [],
-    h: []
-  };
-  const vertices = {
-    p: []
-  };
-  const vertexIndex = new Map();
+function createVoronoi(delaunay, points, pointsN) {
+  const cells = {v: [], c: [], b: [], i: new Uint32Array()};
+  const vertices = {p: [], v: [], c: []};
 
-  for (let index = 0; index < points.length; index++) {
-    const point = points[index];
-    const polygon = clipCellPolygon(point, index, points, layout, options);
-    if (polygon.length < MIN_CELL_VERTICES) {
-      cells.v.push([]);
-      cells.p.push(index);
-      cells.h.push(0);
-      continue;
+  for (let edge = 0; edge < delaunay.triangles.length; edge++) {
+    const point = delaunay.triangles[nextHalfedge(edge)];
+    if (point < pointsN && !cells.c[point]) {
+      const edges = edgesAroundPoint(delaunay, edge);
+      cells.v[point] = edges.map(item => triangleOfEdge(item));
+      cells.c[point] = edges.map(item => delaunay.triangles[item]).filter(cell => cell < pointsN);
+      cells.b[point] = edges.length > cells.c[point].length ? 1 : 0;
     }
-    const vertexIds = polygon.map(vertex => internVertex(vertex, vertices, vertexIndex));
-    cells.v.push(vertexIds);
-    cells.p.push(index);
-    cells.h.push(0);
+
+    const triangle = triangleOfEdge(edge);
+    if (!vertices.p[triangle]) {
+      vertices.p[triangle] = triangleCenter(delaunay, points, triangle);
+      vertices.v[triangle] = trianglesAdjacentToTriangle(delaunay, triangle);
+      vertices.c[triangle] = pointsOfTriangle(delaunay, triangle);
+    }
   }
 
   return {cells, vertices};
 }
 
-function fillSmallInlandBasins(cells, layout) {
-  const visited = new Array(cells.h.length).fill(false);
-  const maxBasinCells = Math.max(14, Math.round(cells.h.length * 0.0045));
-
-  for (let cell = 0; cell < cells.h.length; cell++) {
-    if (visited[cell] || cells.h[cell] >= 20) continue;
-    const basin = collectWaterBasin(cell, cells, layout, visited);
-    if (basin.touchesBorder || basin.cells.length > maxBasinCells) continue;
-    const rim = basin.rimHeights.length ? average(basin.rimHeights) : 25;
-    const fillHeight = Math.max(21, Math.min(32, Math.round(rim - 3)));
-    for (const basinCell of basin.cells) cells.h[basinCell] = fillHeight + ((basinCell % 5) - 2);
+function fillMissingCells(cells, pointsN) {
+  for (let cell = 0; cell < pointsN; cell++) {
+    if (!cells.v[cell]) cells.v[cell] = [];
+    if (!cells.c[cell]) cells.c[cell] = [];
+    if (!cells.b[cell]) cells.b[cell] = 0;
   }
 }
 
-function collectWaterBasin(start, cells, layout, visited) {
-  const queue = [start];
-  const basinCells = [];
-  const rimHeights = [];
-  let touchesBorder = false;
-  visited[start] = true;
-
-  for (let cursor = 0; cursor < queue.length; cursor++) {
-    const cell = queue[cursor];
-    basinCells.push(cell);
-    if (isBorderCell(cell, layout)) touchesBorder = true;
-
-    for (const neighbor of getDirectNeighbors(cell, layout)) {
-      if (cells.h[neighbor] < 20) {
-        if (visited[neighbor]) continue;
-        visited[neighbor] = true;
-        queue.push(neighbor);
-      } else {
-        rimHeights.push(cells.h[neighbor]);
-      }
-    }
-  }
-
-  return {cells: basinCells, rimHeights, touchesBorder};
+function edgesAroundPoint(delaunay, start) {
+  const result = [];
+  let incoming = start;
+  do {
+    result.push(incoming);
+    const outgoing = nextHalfedge(incoming);
+    incoming = delaunay.halfedges[outgoing];
+  } while (incoming !== -1 && incoming !== start && result.length < 20);
+  return result;
 }
 
-function getDirectNeighbors(cell, layout) {
-  const neighbors = [];
-  const column = cell % layout.columns;
-  const row = Math.floor(cell / layout.columns);
-  if (column > 0) neighbors.push(cell - 1);
-  if (column < layout.columns - 1) neighbors.push(cell + 1);
-  if (row > 0) neighbors.push(cell - layout.columns);
-  if (row < layout.rows - 1) neighbors.push(cell + layout.columns);
-  return neighbors;
+function triangleCenter(delaunay, points, triangleIndex) {
+  const [a, b, c] = pointsOfTriangle(delaunay, triangleIndex).map(point => points[point]);
+  return circumcenter(a, b, c);
 }
 
-function isBorderCell(cell, layout) {
-  const column = cell % layout.columns;
-  const row = Math.floor(cell / layout.columns);
-  return column === 0 || row === 0 || column === layout.columns - 1 || row === layout.rows - 1;
+function pointsOfTriangle(delaunay, triangleIndex) {
+  return edgesOfTriangle(triangleIndex).map(edge => delaunay.triangles[edge]);
 }
 
-function clipCellPolygon(point, pointIndex, points, layout, options) {
-  let polygon = [
-    [0, 0],
-    [options.graphWidth, 0],
-    [options.graphWidth, options.graphHeight],
-    [0, options.graphHeight]
+function trianglesAdjacentToTriangle(delaunay, triangleIndex) {
+  return edgesOfTriangle(triangleIndex).map(edge => triangleOfEdge(delaunay.halfedges[edge]));
+}
+
+function edgesOfTriangle(triangleIndex) {
+  return [3 * triangleIndex, 3 * triangleIndex + 1, 3 * triangleIndex + 2];
+}
+
+function triangleOfEdge(edge) {
+  return Math.floor(edge / 3);
+}
+
+function nextHalfedge(edge) {
+  return edge % 3 === 2 ? edge - 2 : edge + 1;
+}
+
+function circumcenter(a, b, c) {
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const [cx, cy] = c;
+  const ad = ax * ax + ay * ay;
+  const bd = bx * bx + by * by;
+  const cd = cx * cx + cy * cy;
+  const divisor = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  return [
+    Math.floor((ad * (by - cy) + bd * (cy - ay) + cd * (ay - by)) / divisor),
+    Math.floor((ad * (cx - bx) + bd * (ax - cx) + cd * (bx - ax)) / divisor)
   ];
-
-  for (const neighborIndex of getNeighborIndices(pointIndex, layout)) {
-    if (neighborIndex === pointIndex || neighborIndex < 0 || neighborIndex >= points.length) continue;
-    polygon = clipByBisector(polygon, point, points[neighborIndex]);
-    if (polygon.length < MIN_CELL_VERTICES) break;
-  }
-
-  return polygon.map(([x, y]) => [round(clamp(x, 0, options.graphWidth), 3), round(clamp(y, 0, options.graphHeight), 3)]);
-}
-
-function getNeighborIndices(pointIndex, layout) {
-  const column = pointIndex % layout.columns;
-  const row = Math.floor(pointIndex / layout.columns);
-  const indices = [];
-  for (let dy = -CLIP_NEIGHBOR_RADIUS; dy <= CLIP_NEIGHBOR_RADIUS; dy++) {
-    for (let dx = -CLIP_NEIGHBOR_RADIUS; dx <= CLIP_NEIGHBOR_RADIUS; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const nextColumn = column + dx;
-      const nextRow = row + dy;
-      if (nextColumn < 0 || nextColumn >= layout.columns || nextRow < 0 || nextRow >= layout.rows) continue;
-      indices.push(nextRow * layout.columns + nextColumn);
-    }
-  }
-  return indices;
-}
-
-function clipByBisector(polygon, point, neighbor) {
-  const clipped = [];
-  const [px, py] = point;
-  const [nx, ny] = neighbor;
-  const vx = nx - px;
-  const vy = ny - py;
-  const mx = (px + nx) / 2;
-  const my = (py + ny) / 2;
-
-  for (let index = 0; index < polygon.length; index++) {
-    const current = polygon[index];
-    const previous = polygon[(index + polygon.length - 1) % polygon.length];
-    const currentInside = isInside(current, mx, my, vx, vy);
-    const previousInside = isInside(previous, mx, my, vx, vy);
-
-    if (currentInside !== previousInside) {
-      clipped.push(intersectSegmentBisector(previous, current, mx, my, vx, vy));
-    }
-    if (currentInside) clipped.push(current);
-  }
-
-  return clipped;
-}
-
-function isInside(point, mx, my, vx, vy) {
-  return (point[0] - mx) * vx + (point[1] - my) * vy <= 0.000001;
-}
-
-function intersectSegmentBisector(a, b, mx, my, vx, vy) {
-  const ax = a[0] - mx;
-  const ay = a[1] - my;
-  const sx = b[0] - a[0];
-  const sy = b[1] - a[1];
-  const denominator = sx * vx + sy * vy;
-  if (Math.abs(denominator) < 0.000001) return a;
-  const t = -((ax * vx + ay * vy) / denominator);
-  return [a[0] + sx * t, a[1] + sy * t];
-}
-
-function internVertex(vertex, vertices, vertexIndex) {
-  const key = `${vertex[0]},${vertex[1]}`;
-  const existing = vertexIndex.get(key);
-  if (existing !== undefined) return existing;
-  const id = vertices.p.length;
-  vertices.p.push(vertex);
-  vertexIndex.set(key, id);
-  return id;
-}
-
-function smoothstep(value) {
-  return value * value * (3 - 2 * value);
-}
-
-function mixVector(a, b, t) {
-  return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t
-  };
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function average(values) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function round(value, digits) {
+function round(value, digits = 0) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
 }

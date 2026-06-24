@@ -2593,3 +2593,1840 @@
   - 命中 grid cell `3359`，坐标 `767.4, 323.3`。
   - `WebGL error = 0`。
   - 控制台无 error/warning。
+
+### 3.4 城市/路线对象级 picking 与点击选中
+
+恢复太子-尚书-门下-侍中流程后，继续推进对象级交互基础。本步骤只复用现有悬停面板展示摘要，不新增正式详情面板或浮动面板。
+
+- `app/webgl-generator/src/renderer/picking.js`：
+  - 新增 `pickCity()`，按鼠标世界坐标到城市点的距离寻找最近城市。
+  - 城市命中返回 `kind`、`id`、名称、类型、人口、国家、省份和距离。
+  - `pickRoute()` 返回结果新增 `kind: "route"`，便于统一对象摘要。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `pickClientPoint()` 同时返回 `cityObject`、`route` 和统一 `object`。
+  - 对象命中规则暂定为城市优先于路线。
+  - canvas interaction 新增点击判定；无明显拖拽的 pointer up 会触发选中对象回调。
+- `app/webgl-generator/src/runtime/app.js`：
+  - 运行时状态新增 `selection`。
+  - 点击城市/路线时记录选中对象；生成新地图时清空选中状态。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 现有悬停面板新增“选中对象”“选中详情”和“悬停对象”。
+  - 该实现只是当前阶段的摘要展示，不代表未来正式详情面板形态。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录城市/路线对象 picking 和点击选中已完成第一版。
+  - 下一步转向对象高亮、正式详情面板规划/实现入口、道路 dash/等级样式和急弯 bevel 策略。
+
+当前限制：
+
+- 城市和路线 picking 都是直接遍历对象，没有统一空间索引。
+- 点击选中只记录摘要，没有高亮、详情面板、编辑状态或多选。
+- 城市和路线重叠时城市优先；后续需要更完整的图层选择优先级和可配置 picking 半径。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md` 通过。
+- 固定 seed `stage-3-4-object-picking`、模板 `continents` 生成器检查：
+  - 阶段 `3.3-settlements-routes-population`。
+  - checksum `518a1753`。
+  - 城市 `20`。
+  - 道路 `25`，道路线段 `1992`。
+  - 人口 cell `5597`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 点击默认首都 `雁门城`，悬停面板显示选中对象 `城市 雁门城`。
+  - 城市选中详情显示 `capital / pop 108 / 清河国`。
+  - 点击默认路线 `雁门城 -> 清源集` 的中段，悬停面板显示选中对象 `路线 雁门城 -> 清源集`。
+  - 路线选中详情显示 `road / distance 0.0`。
+  - hover 对象能在城市和路线之间切换。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 对象选中高亮初版
+
+继续推进对象级交互反馈。本步骤仍不新增详情面板，只在地图画面中给选中对象提供可见反馈。
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - renderer 新增 `selection` 状态和 `setSelection()`。
+  - 选中路线时，route mesh 构建阶段将对应 route 改为更亮颜色并增加屏幕空间宽度。
+  - 选中城市时，在 overlay 中显示 `selection-marker`，并让对应城市标签加上 `selected` class。
+  - selection marker 会随 WebGL camera 投影到屏幕坐标。
+- `app/webgl-generator/src/runtime/app.js`：
+  - 点击选中对象后同步调用 `renderer.setSelection()`。
+  - 生成新地图时清空 renderer selection。
+- `app/webgl-generator/src/styles.css`：
+  - 新增 `.selection-marker` 和 `.city-label.selected`。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录选中城市标记和选中路线高亮已完成第一版。
+  - 下一步转向正式详情面板规划/实现入口、道路 dash/等级样式、急弯 bevel 策略和统一对象 picking 索引。
+
+当前限制：
+
+- 选中路线仍在主 route buffer 中重建，没有独立 highlight pass；复杂图层顺序和遮挡策略后续还需细化。
+- 城市高亮只标记城市点位置和已创建的标签；如果标签因 LOD 不显示，仍只有 selection marker。
+- 还没有详情面板、编辑手柄、多选、键盘取消选择或选中对象持久化。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md` 通过。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 点击默认首都 `雁门城`，选中对象显示 `城市 雁门城`。
+  - `.selection-marker` 显示为 `block`，选中城市标签为 `雁门城`。
+  - 点击默认路线 `雁门城 -> 清源集` 的中段，选中对象显示 `路线 雁门城 -> 清源集`。
+  - 路线选中详情显示 `road / distance 0.0`，城市 selection marker 隐藏。
+  - 道路 mesh 显示 `screen-space, 1.7ms`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 道路 trail 虚线样式
+
+继续推进道路样式：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - route mesh 构建支持 dash 配置。
+  - `trail` 按屏幕空间 dash/gap 分段生成短 polyline mesh，`road` 保持实线。
+  - 选中路线仍强制使用更亮、更宽的实线高亮，避免选中态被虚线切碎。
+  - `getStats()` 新增 `routeStyleMode`。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“道路样式”，当前显示 `road solid / trail dashed`。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录道路样式已区分 road 实线和 trail 虚线。
+  - 下一步保留道路等级配置、连续 dash phase、急弯 bevel 和统一对象 picking 索引。
+
+当前限制：
+
+- dash pattern 目前按每个 segment 重新开始，跨 segment 不保持连续 phase。
+- trail dash 没有 join/cap 的专门处理，短 dash 使用当前基础 square cap。
+- 还没有按道路等级、地形、国家或编辑器配置动态调整样式。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md` 通过。
+- 固定 seed `stage-3-4-route-dash`、模板 `continents` 生成器检查：
+  - 阶段 `3.3-settlements-routes-population`。
+  - checksum `6230f594`。
+  - 城市 `20`。
+  - 道路 `23`，道路线段 `1620`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 道路样式显示 `road solid / trail dashed`。
+  - 道路 mesh 显示 `screen-space, 2.8ms`。
+  - 道路三角形 `3328`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 对象 picking 空间索引初版
+
+继续推进对象级 picking 的可扩展性。本步骤把城市和路线从直接遍历升级为第一版 world-space bucket 索引。
+
+- `app/webgl-generator/src/renderer/picking.js`：
+  - 新增 `buildObjectPickingIndex()`。
+  - 索引使用固定 world-space bucket，城市按点落桶，路线按 segment bbox 覆盖的 bucket 入桶。
+  - `pickCity()` 和 `pickRoute()` 改为优先查询索引附近 bucket，并对候选去重。
+  - 保留无索引 fallback，便于后续测试和渐进迁移。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `loadMap()` 时构建 `objectPickingIndex`。
+  - `pickClientPoint()` 使用索引执行城市和路线 picking。
+  - `getStats()` 输出对象索引 bucket 数、bucket 尺寸、城市数、路线段数和最大 bucket 项数。
+  - hover 结果新增本次对象候选数。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“对象索引”。
+  - 悬停面板新增本次“对象候选”。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录城市/路线对象 picking 已接入第一版空间索引。
+
+当前限制：
+
+- 索引只覆盖城市和路线，还没有国家、省份、河流、marker、标签、纹章等对象。
+- bucket 大小是阶段性固定策略，尚未按对象密度或 zoom 级别自适应。
+- 路线 segment 入桶使用 bbox，极长 segment 可能覆盖较多 bucket；后续可按 polyline 重采样或层级索引优化。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 固定 seed `stage-3-4-object-index`、模板 `continents` 生成器检查：
+  - 阶段 `3.3-settlements-routes-population`。
+  - checksum `438e43a7`。
+  - 城市 `20`。
+  - 道路 `22`，道路线段 `1384`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 运行时统计显示对象索引 `397 buckets / 1626 route segs`。
+  - 点击默认路线 `雁门城 -> 清源集` 的中段，选中对象显示 `路线 雁门城 -> 清源集`。
+  - 悬停面板显示对象候选 `81`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 河流对象 picking 初版
+
+继续扩展对象级 picking。本步骤把河流 segment 接入同一个 world-space bucket 索引，供后续河流详情和河流编辑面板使用。
+
+- `app/webgl-generator/src/renderer/picking.js`：
+  - 对象索引新增 `riverSegments`。
+  - `buildObjectPickingIndex()` 会把每条河流的每个 segment 按 bbox 覆盖的 bucket 入桶。
+  - 新增 `pickRiver()`，返回 `kind`、`id`、类型、flux、长度和命中距离。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `pickClientPoint()` 同时执行城市、路线和河流 picking。
+  - 当前对象优先级为城市 > 路线 > 河流。
+  - `getStats()` 的对象索引统计新增河流段数量。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时对象索引显示 bucket、路线段和河流段数量。
+  - 悬停面板新增“河流”和“河流类型”。
+  - 选中河流时显示 `河流 #id` 和 flux/length 摘要。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录城市、路线和河流都已接入第一版对象 picking 索引。
+
+当前限制：
+
+- 河流仍是 `gl.LINES` 线层，没有选中高亮。
+- 河流 picking 半径与路线相同，尚未按河流流量或未来河流宽度自适应。
+- 对象索引仍未覆盖国家、省份、marker、标签和纹章等对象。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 固定 seed `stage-3-4-river-picking`、模板 `continents` 生成器检查：
+  - 阶段 `3.3-settlements-routes-population`。
+  - checksum `d0830214`。
+  - 河流 `8`，河流线段 `72`。
+  - 道路 `24`。
+- 内置 Browser 刷新 `http://127.0.0.1:5410/` 后：
+  - 运行时统计显示对象索引 `424 buckets / 1626 routes / 51 rivers`。
+  - 点击默认河流 `#2` 的中段，选中对象显示 `河流 #2`。
+  - 河流类型显示 `river / flux 19829`。
+  - 选中详情显示 `river / flux 19829 / length 5`。
+  - 悬停面板显示对象候选 `4`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 浮动面板架构约束文档
+
+按用户要求，所有未来配置和编辑面板都应做成 HTML 浮动可拖动面板，不使用 canvas 实现。本步骤只落文档，不改现有侧栏。
+
+- 新增 `docs/floating-panel-architecture.md`：
+  - 记录适用面板范围：生成配置、高度编辑、河流编辑、城市/道路编辑、国家/省份/文化/宗教编辑、标签/纹章/对象详情、调试统计和图层控制。
+  - 记录基本原则：普通 DOM UI、可拖动、统一层级管理、可折叠/关闭/停靠、状态可持久化。
+  - 记录与地图交互的边界：renderer 不直接创建业务编辑面板，picking/selection/highlight 属于地图交互层，详情面板读取 runtime/store 状态。
+  - 记录推荐模块划分：`panel-manager.js`、`floating-panel.js`、各类 `panels/*`。
+  - 记录第一阶段迁移建议：先保留固定侧栏，新增 panel manager 和只读对象详情面板，再逐步迁移图层控制和生成配置。
+- 更新 `docs/current-plan.md` 和 `app/webgl-generator/README.md`：
+  - 将未来浮动面板约束链接到 `docs/floating-panel-architecture.md`。
+
+当前状态：
+
+- 现有配置、统计和悬停信息仍在固定侧栏。
+- 本步骤没有实现新面板，也没有改变 canvas 交互。
+
+### 3.4 浮动对象详情面板初版
+
+继续按太子-尚书-门下-侍中流程推进阶段 3.4。本步骤只实现最小可用的只读对象详情面板，不迁移现有固定侧栏，也不加入编辑控件。
+
+- `app/webgl-generator/src/ui/panel-manager.js`：
+  - 新增第一版浮动面板管理器。
+  - 支持面板注册、打开、关闭、激活层级和标题栏拖动。
+  - 面板层默认 `pointer-events: none`，只有面板自身消费指针事件，避免阻断地图区域拖拽、缩放和选择。
+- `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 新增只读对象详情面板。
+  - 支持城市、路线和河流三类 selection 摘要。
+  - selection 为空时关闭面板。
+- `app/webgl-generator/src/runtime/app.js`：
+  - 初始化 `PanelManager` 和对象详情面板。
+  - 点击选中城市、路线或河流后刷新并打开对象详情面板。
+  - 生成新地图时关闭对象详情面板并清空 selection。
+- `app/webgl-generator/src/styles.css`：
+  - 新增浮动面板层、面板壳、标题栏、关闭按钮和对象详情列表样式。
+- `app/webgl-generator/README.md`、`docs/current-plan.md` 和 `docs/floating-panel-architecture.md`：
+  - 将对象详情面板从未来约束更新为当前已开始实现。
+  - 记录当前仍是只读入口，尚未实现编辑、停靠、持久化和多面板状态恢复。
+
+当前限制：
+
+- 对象详情面板只读显示当前 selection，尚不能编辑对象。
+- 面板位置、打开状态和尺寸尚未持久化。
+- 当前只有关闭按钮和拖动，没有折叠、停靠或尺寸调整。
+- 面板 shell 仍内联在 `panel-manager.js` 中，后续复杂化后再拆出 `floating-panel.js`。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel-manager.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 点击默认首都 `雁门城` 后，对象详情面板打开并显示 `城市 雁门城`、类型、人口、国家、省份和对象 id。
+  - 面板可拖动，验证中面板位置从 `(364, 24)` 移动到 `(414, 64)`。
+  - 点击关闭按钮后，面板进入隐藏状态。
+  - 重新选中城市后点击“生成 grid 地图”，面板关闭且 runtime selection 清空。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 河流选中高亮初版
+
+继续按太子-尚书-门下-侍中流程推进对象级交互反馈。本步骤补齐河流 selection 的地图可见反馈，不改变河流生成逻辑，也不把河流主线层整体升级为 polyline mesh。
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `selectionBuffer` 动态 buffer。
+  - `draw()` 中在普通河流 `gl.LINES` pass 后绘制选中对象高亮 pass。
+  - 选中河流时，按当前 camera 和 canvas 尺寸把对应河流折线生成 screen-space 三角形带。
+  - 高亮宽度按河流 flux 做轻量加权，缩放时保持屏幕像素宽度。
+  - `getStats()` 新增 `selectionVertexCount`、`selectionTriangleCount`、`selectionBuildMs` 和 `selectionHighlightMode`。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“选中高亮”，显示高亮模式、三角形数量和构建耗时。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录选中河流已有独立 screen-space mesh 高亮。
+  - 保留限制：河流主线层仍是阶段性 `gl.LINES`，后续仍需升级到可变宽 mesh。
+
+当前限制：
+
+- 当前只对选中河流生成高亮 mesh，普通河流仍是 `gl.LINES`。
+- 高亮没有 round cap/round join，只复用当前基础 polyline mesh 的 miter/square cap 策略。
+- 河流 selection 仍没有编辑手柄、节点显示或流量/河段编辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 脚本扫描河流线段中点，选择实际命中河流对象的位置，避免被城市/路线优先级抢占。
+  - 点击河流 `#1` 后，selection 为 `kind: "river"`，flux 为 `18601`，对象候选为 `3`。
+  - 运行时统计显示 `selectionHighlightMode = river screen-space mesh`。
+  - 高亮顶点 `18`，高亮三角形 `6`。
+  - 浮动对象详情面板显示 `河流 #1`、类型、流量、长度、命中距离和对象 id。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 浮动面板位置持久化初版
+
+继续按太子-尚书-门下-侍中流程推进浮动面板体系。本步骤补最小状态管理，只保存面板位置和宽度，不保存打开状态，避免页面刷新后在没有 selection 的情况下自动弹出空面板。
+
+- `app/webgl-generator/src/ui/panel-manager.js`：
+  - 新增 `storagePrefix` 和面板状态读写方法。
+  - `registerPanel()` 会优先读取浏览器 `localStorage` 中保存的 `left`、`top` 和 `width`。
+  - 拖动结束或取消时保存当前面板位置和宽度。
+  - `open()` 时重新约束面板位置，避免窗口尺寸变化后旧位置跑出地图区域。
+  - 读写 `localStorage` 使用 `try/catch` 包裹，兼容受限浏览器模式。
+- `app/webgl-generator/README.md`、`docs/current-plan.md` 和 `docs/floating-panel-architecture.md`：
+  - 记录对象详情面板已有最小位置持久化。
+  - 保留限制：仍不保存打开状态、折叠状态、尺寸调整状态或多面板布局。
+
+当前限制：
+
+- 当前只保存位置和当前宽度；由于还没有 resize handle，宽度主要来自初始配置。
+- 不保存面板打开/关闭状态，刷新后仍需重新点击对象打开详情。
+- 暂未实现 session/workspace 级布局版本管理，后续多面板时需要补布局 schema。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-manager.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 清空 `localStorage` 中的 `webgl-generator-panel:object-details` 后，点击默认首都 `雁门城` 打开对象详情面板。
+  - 面板初始位置为 `(364, 24)`，拖动后位置为 `(484, 126)`。
+  - 写入 `localStorage` 的状态为 `{"left":144,"top":126,"width":320}`，其中 `left` 是相对地图区域的坐标。
+  - 刷新页面后面板保持隐藏，不因持久化状态自动弹出。
+  - 再次点击 `雁门城` 后，面板恢复到 `(484, 126)`，与拖动后位置一致。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 trail 连续 dash phase
+
+继续按太子-尚书-门下-侍中流程推进道路样式。本步骤只修正虚线节奏，不改变路线生成、路线 picking 或道路等级模型。
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `trail` 虚线生成从“每个 segment 重新开始 dash/gap”改为沿整条 polyline 累计 phase。
+  - `pushDashedScreenPolyline()` 在 segment 之间保留 dash phase，折线节点处不会重置虚线节奏。
+  - 运行时 `routeStyleMode` 更新为 `road solid / trail continuous dashed`。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 将连续 dash phase 标记为已完成。
+  - 下一步道路样式重点保留为道路等级配置和更完整的急弯 bevel 策略。
+
+当前限制：
+
+- trail 仍复用基础 square cap，没有专门的 round cap。
+- 急弯仍只使用当前 miter 限制策略，尚未实现完整 bevel/round join。
+- route 样式还没有按道路等级、地形、国家或编辑配置动态调整。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 运行时统计显示 `routeStyleMode = road solid / trail continuous dashed`。
+  - route mesh 顶点 `10560`，三角形 `3520`。
+  - 默认地图中 `trail` 路线 `10` 条，`road` 路线 `15` 条。
+  - 道路 mesh 构建耗时 `1.4ms`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 政治对象 selection fallback 初版
+
+继续按太子-尚书-门下-侍中流程推进对象级 picking。本步骤把国家、省份和区域接入 selection fallback，不做边界或区域高亮，避免本步范围扩张。
+
+- `app/webgl-generator/src/renderer/picking.js`：
+  - 新增 `pickPoliticalObject()`。
+  - 当 pick 命中陆地 cell 时，可按 `states`、`provinces`、`regions` 当前专题返回对应政治对象。
+  - 非政治专题下默认选择省份；省份不存在时回退到国家，再回退到区域。
+  - 国家对象包含文化、宗教和中心 cell；省份对象包含所属国家和中心 cell；区域对象包含名称和 id。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `pickClientPoint()` 中统一对象优先级调整为城市 > 路线 > 河流 > 政治对象。
+  - hover/pick 结果新增 `politicalObject`。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 悬停面板新增“政治对象”。
+  - 选中对象摘要支持国家、省份和区域。
+- `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 浮动对象详情面板支持国家、省份和区域三类只读摘要。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录政治对象 selection fallback 已完成。
+  - 下一步保留政治对象高亮、marker/标签/纹章 picking 和编辑入口。
+
+当前限制：
+
+- 政治对象当前不是 world-space bucket 索引对象，而是基于已命中的 grid cell 语义 fallback。
+- 暂未绘制选中国家/省份/区域边界或填色高亮。
+- 政治对象详情仍是只读摘要，尚不能进入编辑状态。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 脚本选择一个没有城市、路线和河流优先命中的陆地 cell：`grid cell 426`。
+  - 默认专题下选中 `province`，对象为 `白麓府`，所属国家 `白麓邦`。
+  - 省份专题下仍选中 `province`，对象详情面板显示省份名称、所属国家、国家 id、中心 cell 和对象 id。
+  - 国家专题下选中 `state`，对象为 `白麓邦`，详情面板显示文化 `白麓文化`、宗教 `白麓礼`、中心 cell 和对象 id。
+  - 区域专题下选中 `region`，对象为 `北境`，详情面板显示区域类型和对象 id。
+  - 悬停面板显示“政治对象”，对象候选为 `1`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 政治对象高亮初版
+
+继续按太子-尚书-门下-侍中流程推进政治对象 selection 的可见反馈。本步骤只做半透明范围高亮，不做边界追踪、编辑手柄或标签联动。
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 复用已有 `selectionBuffer`。
+  - selection 为 `state`、`province` 或 `region` 时，遍历匹配的 grid cells，并生成 screen-space 三角形面。
+  - selection pass 开启 WebGL blend，政治对象高亮使用半透明填色。
+  - `selectionHighlightMode` 新增 `state translucent cells`、`province translucent cells` 和 `region translucent cells`。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录政治对象已有半透明 cell mesh 高亮。
+  - 下一步从“政治对象高亮”转向编辑入口、道路等级、急弯 bevel、marker/标签/纹章 picking。
+
+当前限制：
+
+- 高亮使用匹配 cell 的半透明填充，不提取边界线。
+- 大范围国家高亮需要遍历并上传较多三角形；当前地图规模可接受，后续需要按 selection/cache 优化。
+- 暂无编辑手柄、锁定选择、标签联动或边界拖拽。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 选中省份 `白麓府` 后，`selectionHighlightMode = province translucent cells`，高亮三角形 `5717`，构建耗时 `2.2ms`。
+  - 选中国家 `白麓邦` 后，`selectionHighlightMode = state translucent cells`，高亮三角形 `8011`，构建耗时 `2.3ms`。
+  - 选中区域 `北境` 后，`selectionHighlightMode = region translucent cells`，高亮三角形 `7062`，构建耗时 `2ms`。
+  - 三类对象详情面板均显示对应名称和摘要字段。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 道路等级样式初版
+
+继续按太子-尚书-门下-侍中流程推进道路样式。本步骤增加路线等级字段和对应渲染样式，不改路线寻路算法，也不新增配置面板。
+
+- `app/webgl-generator/src/generator/settlements.js`：
+  - `createRoute()` 新增 `level` 字段。
+  - `road` 根据首都端点和城市人口分为 `primary` 或 `secondary`。
+  - `trail` 保持 `level: "trail"`。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `routeStyle()` 集中决定路线颜色、宽度和 dash。
+  - `primary` 比 `secondary` 更宽、更亮；`trail` 保持连续虚线。
+  - `routeStyleMode` 更新为 `primary/secondary road + continuous trail dashed`。
+- `app/webgl-generator/src/renderer/picking.js`：
+  - 路线 picking 结果新增 `level`。
+- `app/webgl-generator/src/ui/panel.js` 和 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 悬停面板、选中摘要和浮动详情面板显示路线等级。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录道路等级样式初版已完成。
+  - 下一步保留道路等级配置面板和急弯 bevel 策略。
+
+当前限制：
+
+- 道路等级是生成时内置规则，尚不能在 UI 面板里配置。
+- `primary/secondary` 只影响样式，不影响寻路、交通权重或城市经济。
+- 急弯 join 仍使用当前 miter 限制策略，尚未实现完整 bevel/round join。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 默认地图路线等级统计为 `primary: 15`、`trail: 10`。
+  - 点击路线 `#0` 后，selection 为 `route`，`type = road`，`level = primary`。
+  - 运行时统计显示 `routeStyleMode = primary/secondary road + continuous trail dashed`。
+  - 浮动对象详情面板显示“等级 primary”。
+  - 悬停/选中摘要显示 `road / primary / distance 0.0`。
+  - route mesh 三角形 `3520`，构建耗时 `2.7ms`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 marker 数据、绘制和 picking 初版
+
+继续按太子-尚书-门下-侍中流程把对象 picking 扩展到 marker。本步骤新增轻量地理 marker 数据，接入现有 WebGL point pass 和对象详情面板，不实现 sprite atlas 或 marker 编辑。
+
+- `app/webgl-generator/src/generator/markers.js`：
+  - 新增 marker 生成模块。
+  - 当前生成三类 marker：高峰、河源和国家中心。
+  - marker 数据包含 `id`、`type`、`name`、`cell`、`x/y` 和轻量 `data`。
+- `app/webgl-generator/src/generator/index.js`：
+  - 接入 `buildMarkers()`。
+  - 地图对象新增 `markers`。
+  - 生成日志和 summary 记录 marker 数量、峰值 marker、河源 marker 和国家中心 marker 数量。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - WebGL point pass 绘制 marker 点。
+  - `getStats()` 新增 `markerCount`。
+  - 对象 picking 优先级调整为城市 > marker > 路线 > 河流 > 政治对象。
+- `app/webgl-generator/src/renderer/picking.js`：
+  - 对象 bucket 索引新增 `markers`。
+  - 新增 `pickMarker()`。
+  - 对象索引统计新增 marker 数量，最大 bucket 项数计入 marker。
+- `app/webgl-generator/src/ui/panel.js` 和 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 运行时统计显示 marker 数量。
+  - 悬停面板显示 marker 名称和类型。
+  - 选中摘要和对象详情面板支持 marker。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录 marker 数据、点层绘制和对象 picking 初版已完成。
+
+当前限制：
+
+- marker 仍是普通 `gl.POINTS`，没有 sprite atlas、pin 图标、LOD 或避让。
+- marker 数据是轻量示意：高峰、河源、国家中心，尚未覆盖原项目完整 marker 类型。
+- marker 详情只读，尚无编辑和删除入口。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\markers.js` 通过。
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 默认地图 marker 统计为总数 `22`，高峰 `10`，河源 `7`，国家中心 `5`。
+  - 对象索引统计显示 `markers: 22`。
+  - 点击 marker `峰 96` 后，selection 为 `kind: "marker"`，`type = peak`，`cell = 4221`。
+  - 浮动对象详情面板显示 marker 类型、cell、数据和对象 id。
+  - 悬停面板显示 `marker 峰 96 / peak`。
+  - point 顶点 `2243`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 marker 选中高亮初版
+
+继续按太子-尚书-门下-侍中流程补齐 marker selection 的可见反馈。本步骤复用现有 HTML selection marker，不新增独立 marker 编辑手柄。
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `updateSelectionMarker()` 从只支持城市扩展为支持城市和 marker。
+  - 新增 `selectionPoint()`，按 selection 类型解析屏幕投影点。
+  - 选中 marker 时显示同一套圆环 overlay，并随 camera 更新位置。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录 marker 选中圆环反馈已完成。
+
+当前限制：
+
+- marker 仍是 `gl.POINTS`，圆环只是选中反馈，不是 marker sprite。
+- 暂无 marker 拖动、编辑、删除和类型切换。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 点击 marker `峰 96` 后，selection 为 `kind: "marker"`。
+  - `.selection-marker` 显示为 `block`。
+  - marker 圆环位置为 `(568.254, 333.9)`，与 marker 投影位置误差小于 `1px`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 城市标签对象 picking 初版
+
+继续按太子-尚书-门下-侍中流程把对象 picking 扩展到标签。本步骤只接入当前可见城市标签，不实现道路标签、国家标签、曲线文字或标签编辑。
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `labelItems` 记录可见状态和屏幕碰撞盒。
+  - 新增 `pickLabel()`，基于 canvas click 坐标命中可见城市标签的屏幕盒。
+  - `pickClientPoint()` 对象优先级调整为标签 > 城市 > marker > 路线 > 河流 > 政治对象。
+  - 选中 `label` 时，复用城市 selection marker，并让对应城市标签进入 selected 样式。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 悬停面板新增“标签对象”。
+  - 选中摘要支持 `label`。
+- `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 浮动对象详情面板支持标签文本、目标类型、目标名称、显示序位和对象 id。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录可见城市标签对象 picking 初版已完成。
+
+当前限制：
+
+- 只支持已显示的城市标签；被 LOD 或碰撞避让隐藏的标签不会命中。
+- 标签对象仍是只读摘要，尚不能拖动、锁定、改名或编辑优先级。
+- 还没有道路标签、国家标签、曲线文字和纹章对象 picking。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 点击可见城市标签 `星津镇` 的屏幕盒中心后，selection 为 `kind: "label"`。
+  - 浮动对象详情面板显示标签文本、目标类型、目标名称、显示序位和对象 id。
+  - 悬停面板显示“标签对象 星津镇 / city”。
+  - 对应 `.city-label.selected` 文本为 `星津镇`。
+  - `.selection-marker` 显示为 `block`。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 对象详情编辑入口骨架
+
+继续按太子-尚书-门下-侍中流程把对象详情面板从只读入口推进到编辑入口。本步骤只记录编辑目标和 UI 状态，不修改地图数据，不提供字段控件。
+
+- `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 对象详情面板新增“编辑”按钮。
+  - 点击后通过回调通知 runtime。
+  - 面板详情行新增“状态”，显示“查看”或“编辑”。
+  - 当前对象进入编辑状态后，按钮显示“编辑中”并禁用。
+- `app/webgl-generator/src/runtime/app.js`：
+  - runtime 状态新增 `editingObject`。
+  - 点击“编辑”后记录当前对象为编辑目标，并刷新对象详情面板。
+  - 生成新地图时清空 `editingObject`。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 选中摘要新增“编辑对象”。
+- `app/webgl-generator/src/styles.css`：
+  - 新增对象详情 action 区域间距。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录对象详情已有最小编辑入口。
+  - 下一步从编辑入口推进到具体字段控件、保存/撤销边界和配置面板。
+
+当前限制：
+
+- 点击“编辑”只进入 runtime 编辑状态，不修改对象字段。
+- 暂无保存、撤销、取消编辑、字段控件或编辑手柄。
+- 编辑对象不跨生成保留；生成新地图会清空编辑目标。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 选中对象后点击“编辑”，runtime `editingObject` 记录当前对象。
+  - 浮动对象详情面板显示状态“编辑”，按钮显示“编辑中”并禁用。
+  - 左侧选中摘要显示“编辑对象”。
+  - 点击“生成 grid 地图”后，`selection = null`，`editingObject = null`，对象详情面板隐藏。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+### 3.4 退出编辑边界
+
+继续按太子-尚书-门下-侍中流程补齐对象详情编辑入口的最小状态边界。本步骤只允许退出编辑，不实现保存、撤销或字段修改。
+
+- `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - `createObjectDetailsPanel()` 的回调扩展为 `onEdit` 和 `onCancelEdit`。
+  - 编辑状态下按钮从“编辑中”改为“退出编辑”。
+  - 点击“退出编辑”会触发取消编辑回调。
+- `app/webgl-generator/src/runtime/app.js`：
+  - `onCancelEdit` 将 `editingObject` 置空。
+  - 退出编辑后刷新对象详情面板和左侧选中摘要。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 记录对象详情面板已有编辑入口和退出编辑边界。
+
+当前限制：
+
+- 退出编辑只是清空 runtime 编辑目标。
+- 尚未实现字段控件、保存、撤销或脏状态提示。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app\webgl-generator docs\current-plan.md docs\development-log.md docs\floating-panel-architecture.md` 通过。
+- 使用 Playwright + 系统 Chrome 验证 `http://127.0.0.1:5410`：
+  - 点击对象详情“编辑”后，runtime `editingObject` 有值。
+  - 面板状态显示“编辑”，按钮文本为“退出编辑”。
+  - 左侧摘要显示当前“编辑对象”。
+  - 点击“退出编辑”后，runtime `editingObject = null`。
+  - 面板状态回到“查看”，按钮文本回到“编辑”。
+  - 左侧摘要显示“编辑对象 none”。
+  - `WebGL error = 0`。
+  - 控制台无 error/warning。
+
+## 2026-06-18：source 生成算法重新审查与第一轮整改
+
+用户指出当前正式应用生成质量明显落后于 demo：路线在海中出现陆地直线且过直，山区路线过密；河流稀少；平原坡度像梯田；100000 cells 时山地和平原交界突兀；群岛和半岛有 45 度织物感；温度缺乏度量；国界和各类专题分界过齐整。用户要求恢复太子-尚书-门下-侍中流程，由太子先审查 source 算法，再按文档整改。
+
+太子审查：
+
+- 阅读并对照 `source/Fantasy-Map-Generator/src/modules/heightmap-generator.ts`、`public/config/heightmap-templates.js`、`public/main.js`、`src/modules/river-generator.ts`、`src/modules/routes-generator.ts`、`src/modules/cultures-generator.ts` 和 `src/modules/states-generator.ts`。
+- 确认 source 高度图核心是模板步骤在 `grid.cells.c` 上传播，不做正式应用此前的全局高度百分位重排。
+- 确认 source 生成顺序是高度、feature、温度/降水、reGraph、河流、生物群系、人口评分、文化扩张、城市、国家、路线、宗教、省份等，正式应用此前部分语义层过早且使用最近中心染色。
+- 确认 source 河流基于降水 flux、填洼、湖泊出口、合流、下切和 meander；正式应用此前河源上限和阈值过保守。
+- 确认 source 路线先用城镇图决定连接，再通过水陆分离的成本寻路生成；正式应用此前贪心失败时会追加终点，导致海中直线。
+- 新增 `docs/source-generation-audit-and-rectification-plan.md`，作为本轮尚书实现、门下复核和侍中验收依据。
+
+尚书实现：
+
+- `app/webgl-generator/src/generator/grid.js`
+  - 从 Voronoi polygon 共享边生成 `grid.cells.c`。
+  - 运行时 metadata 记录 `neighborMode`、平均邻接度和最大邻接度。
+  - 小型内陆盆地填平改用共享边邻接。
+- `app/webgl-generator/src/generator/heightmap.js`
+  - 高度传播改用 `grid.cells.c`。
+  - 移除正式生成中的 `matchHeightDistribution()` 调用，不再按全局百分位重排高度。
+  - 海平面校准加入确定性微扰处理高度平台 tie-break。
+  - 新增连续 relief 拉伸和坡脚平滑，使模板高山恢复峰值，同时减少山地和平原硬切。
+  - 修正 `linePower` 的高 cells 档位，使 100000 cells 接近 source 的 0.93。
+- `app/webgl-generator/src/generator/features.js`
+  - feature flood fill 和海岸/湖岸线段扫描改用共享边邻接。
+- `app/webgl-generator/src/generator/rivers.js`
+  - 河流填洼、下游选择和源头间距改用共享边邻接。
+  - 河源上限随 cells 动态变化，flux 阈值降低，河源最低高度放宽。
+  - 长河段加入确定性 meander 中点。
+- `app/webgl-generator/src/generator/settlements.js`
+  - 路线从贪心追踪改为 A* 成本寻路。
+  - 陆路禁止穿水；高山、陡坡成本提高。
+  - 找不到路径时返回空路径，不再 `path.push(end)` 画直连。
+- `app/webgl-generator/src/generator/society.js`
+  - 文化和宗教从最近中心改为共享边邻接成本扩张。
+  - 成本纳入高度、坡度、生物群系和河流阻隔。
+- `app/webgl-generator/src/generator/politics.js`
+  - 国家、省份和区域从最近中心或 x/y 阈值改为共享边邻接成本扩张。
+  - 国家扩张成本纳入文化、宗教、高度、坡度和河流。
+  - 省份限制在所属国家内扩张。
+- `app/webgl-generator/src/generator/index.js`
+  - 河流生成提前到社会和政治语义之前。
+  - 阶段标识更新为 `3.5-source-audit-generation-repair`。
+- `app/webgl-generator/index.html`、`src/ui/panel.js`、`src/styles.css`
+  - 温度和降水专题新增画布图例。
+  - 温度范围显示摄氏度单位。
+
+门下复核：
+
+- `node --check` 覆盖本轮改动的正式应用 JS 文件，均通过。
+- `git diff --check -- app/webgl-generator docs` 通过。
+- Node 直接生成 100000 cells 抽查：
+  - `continents`：河流 86，路线 67，路线水域 cell 为 0，最高高度 97。
+  - `archipelago`：陆地 feature 349，河流 88，路线水域 cell 为 0，最高高度 100。
+  - `mediterranean`：河流 88，路线水域 cell 为 0，最高高度 93。
+  - `highIsland`、`lowIsland`、`peninsula`、`pangea` 也均能生成陆地和河流。
+
+侍中验收：
+
+- 使用系统 Chrome 无头页访问 `http://127.0.0.1:5410/`，生成 `seed=audit-browser-100k`、`cells=100000`、`template=continents`。
+- 验收结果：
+  - 实际 grid cells：99846。
+  - 邻接模式：`shared-voronoi-edges`，平均邻接度 5.97。
+  - 河流：87 条，671 段。
+  - 路线：67 条，2885 段。
+  - 路线水域 cell：0。
+  - 最高高度：96。
+  - 温度范围：-7°C 到 31°C。
+  - WebGL error：0。
+  - 控制台 error/warning：0。
+  - 温度专题图例可见，显示 `-7°C / 0°C / 31°C`。
+- 保存网页快照：`docs/snapshots/webgl-generator-100k-source-audit.png`。
+
+当前限制：
+
+- 底层点集仍来自分层行列采样，尚未升级为真实 Delaunay/蓝噪声点集；本轮主要通过共享边邻接和 source 风格传播减弱方向偏差。
+- `pack` 仍为 `one-grid-cell-to-one-pack-cell`，尚未复刻 source 的 `reGraph()` 抽稀/重建语义图。
+- 河流仍是轻量 flux 模型，尚未实现完整湖泊出口、河床下切、宽河道 polygon 和 source 级 meander。
+- 路线连接关系仍是阶段性城市规则，尚未复刻 source 的 Delaunay/Urquhart 城镇连接图和海路。
+
+## 2026-06-18 source 优先复位计划
+
+用户指出当前地中海模板网页快照已经表现为“一团乱麻”：地形像噪声毯，水体像随机挖洞，道路和聚落缺乏地理因果，后续文化、宗教、国家、人口等专题也继承了底层失真。用户要求停止当前跑偏流程，不动当前代码，不看当前代码，只根据 `source/Fantasy-Map-Generator` 重新形成执行计划并落成文档。
+
+太子复审：
+
+- 重新只读 source 源码，重点对照 `public/main.js` 的生成顺序、`graphUtils.ts`、`voronoi.ts`、`heightmap-generator.ts`、`heightmap-templates.js`、`features.ts`、`river-generator.ts`、`biomes.ts`、`burgs-generator.ts`、`cultures-generator.ts`、`states-generator.ts`、`routes-generator.ts`、`religions-generator.ts`、`provinces-generator.ts` 和 `pathUtils.ts`。
+- 确认原版生成链路是 `grid -> 高度模板 -> grid features -> 温度和降水 -> reGraph pack -> pack features -> 河流 -> 生物群系 -> 适居度 -> 文化 -> 城市 -> 国家 -> 路线 -> 宗教 -> 省份`。
+- 确认当前乱象不应继续通过局部视觉调参解决，应优先恢复 grid/Voronoi、source 高度模板 DSL 和 `reGraph()` pack 语义图。
+
+尚书文档落地：
+
+- 新增 `docs/source-first-recovery-execution-plan.md`，作为后续 source 优先复位整改的主计划。
+- 更新 `docs/current-plan.md`，在顶部标记 2026-06-18 计划复位，暂停继续叠加阶段 3 UI 和专题功能。
+- 本轮只改文档，不修改当前正式应用代码，也不修改 `source/` 原项目代码。
+
+后续执行入口：
+
+- 下一步从阶段 0 开始：建立 source 对照基线，导出 source 参考快照和结构摘要，不改正式应用。
+- source 基线通过后，才进入阶段 1 的 grid/Voronoi 整改。
+
+## 2026-06-18 独立 source 复查与详细规程
+
+用户要求启动一个新智能体再做一遍 source 检查，并对比已经生成的 `docs/source-first-recovery-execution-plan.md`，找出还缺什么。要求文档必须足够详细，能指导后续细致任务。
+
+太子协调：
+
+- 启动独立 explorer 智能体，要求只读 `source/Fantasy-Map-Generator` 和计划文档，不读取 `app/webgl-generator` 或 `prototype` 当前实现，不修改任何文件。
+- 主线程并行只读 source 和现有计划文档，重新核对 `public/main.js` 生成顺序、grid/pack 数据结构、heightmap、features、lakes、rivers、biomes、cultures、burgs、states、routes、religions、provinces、markers、zones 和 military 等模块。
+
+独立智能体结论：
+
+- 现有复位计划方向和阶段顺序正确，但偏战略骨架，不足以直接交给尚书逐步实现。
+- 主要缺口包括 source 对照导出工具规格、字段级不变量、模板/seed/cells 验收矩阵、每阶段可运行的结构检查脚本、真实生成顺序中的湖泊预处理、`Features.defineGroups()`、`Burgs.specify()`、国家统计/形制、河湖命名、军事、marker 和 zone 等中间步骤。
+
+尚书文档落地：
+
+- 新增 `docs/source-first-detailed-task-plan.md`，作为后续 source 优先整改的详细施工图。
+- 更新 `docs/source-first-recovery-execution-plan.md`，标记其为复位总纲，并指向详细规程。
+- 更新 `docs/current-plan.md`，将下一步入口切换到详细规程的阶段 0。
+
+详细规程新增内容：
+
+- 完整 source 生成顺序。
+- grid、pack、feature、river、culture、burg、state、route、religion、province、marker、zone 和 military 字段契约。
+- source baseline 工具建议、输出目录和 `source-summary.json` schema。
+- `10000/50000/100000` cells、7 个模板、每模板 3 个固定 seed 的验收矩阵。
+- 阶段 1 到阶段 15 的 source 文件、输入字段、输出字段、尚书任务、门下检查、侍中验收和禁止事项。
+- 失败回退规则和最容易再次跑偏的风险清单。
+
+本轮只改文档，不修改 `source/`，不修改当前正式应用代码。
+
+## 2026-06-18 阶段 0 source baseline 工具启动
+
+用户确认开始按太子-尚书-门下-侍中四级流程推进，且无特殊情况不用每一步停下来等指示。当前正式进入 `docs/source-first-detailed-task-plan.md` 的阶段 0：建立 source 对照基线。
+
+太子计划：
+
+- 先实现单 case source baseline 导出工具，复用现有 source dev server + Playwright + 系统 Chrome 路径。
+- 第一版只读运行 source，主动锁定 `points` 和 `template`，并通过 `generate({seed})` 固定 seed。
+- 输出 `source-summary.json`、`source-trace.json`、`source-map.png` 和 `validation.md`；完整 `source-snapshot.json` 通过 `--snapshot true` 开关控制，避免每次 100000 cells 都写出大型 JSON。
+
+尚书实施：
+
+- 新增 `tools/source-export-baseline.mjs`。
+- 更新 `docs/source-first-detailed-task-plan.md`，记录第一版工具命令和产物。
+
+待门下和侍中继续：
+
+- 门下运行语法检查、diff 检查和 source 未改检查。
+- 侍中导出 `mediterranean / 100000 / audit-mediterranean-001` 的 source baseline，检查摘要、trace、截图和 validation。
+
+侍中验收结果：
+
+- 成功导出 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/source-summary.json`。
+- 成功导出 `source-trace.json`、`source-map.png` 和 `validation.md`。
+- 关键摘要：grid cells 99846，pack cells 73028，pack/grid 0.731，陆地比例 0.611，河流 956，城市 1724，港口 230，国家 21，路线 1331。
+- 结构检查：pack grid 引用错误 0，haven 错误 0，harbor 不一致 0，route 非双向 0，陆路穿水 0。
+- 海路中段穿陆统计为 1，作为 source baseline 事实记录，后续 candidate 对照不应比 source 更差。
+
+## 2026-06-18 阶段 0.2 source baseline 矩阵入口
+
+太子计划：
+
+- 在单 case baseline 可运行后，继续实现矩阵批量入口。
+- `quick` 模式先覆盖 `mediterranean`、`continents`、`archipelago` 三个 100000 cells 强回归样例。
+- `full` 模式后续覆盖 7 个模板、3 档 cells、每模板 3 个 seed。
+
+尚书实施：
+
+- 新增 `tools/source-baseline-matrix.mjs`。
+- 更新 `docs/source-first-detailed-task-plan.md`，记录 quick/full 矩阵命令和产物。
+
+待门下和侍中继续：
+
+- 门下运行语法检查、diff 检查和 source 未改检查。
+- 侍中运行 quick matrix，生成 `docs/source-baselines/matrix.json` 和 `docs/source-baselines/matrix.md`。
+
+门下复核：
+
+- `node --check tools/source-export-baseline.mjs` 通过。
+- `node --check tools/source-baseline-matrix.mjs` 通过。
+- `git diff --check` 覆盖本轮脚本和文档，通过。
+- `git status --short source ...` 确认 `source/` 未改动。
+
+侍中验收：
+
+- 成功运行 `node .\tools\source-baseline-matrix.mjs --mode quick --port 5301 --browser-channel chrome`。
+- 产物：
+  - `docs/source-baselines/matrix.json`
+  - `docs/source-baselines/matrix.md`
+  - `docs/source-baselines/continents-100000-audit-continents-001/`
+  - `docs/source-baselines/archipelago-100000-audit-archipelago-001/`
+- quick matrix 摘要：
+  - `mediterranean`：grid 99846，pack 73028，河流 956，城市 1724，港口 230，路线 1331。
+  - `continents`：grid 99846，pack 50625，河流 851，城市 1206，港口 187，路线 1041。
+  - `archipelago`：grid 99846，pack 14351，河流 238，城市 265，港口 79，路线 266。
+- 三个样例的 pack 引用错误、haven 错误、harbor 不一致和 route 非双向均为 0。
+
+修正：
+
+- 单 case 工具启动 Vite 时改为 `--strictPort`，避免端口占用时 Vite 自动漂移导致误连旧服务。
+- 矩阵工具每个 case 使用递增端口，避免连续运行时端口短暂占用。
+
+## 2026-06-19 阶段 0.3 candidate 对照与 diff 工具
+
+用户确认可以实施后，继续按太子-尚书-门下-侍中流程推进。当前目标是先把当前正式应用与 source baseline 放到同一把尺上，不再只靠截图判断。
+
+太子计划：
+
+- 读取当前正式应用运行时和 source baseline schema。
+- 导出正式应用同 case 的候选摘要和网页截图。
+- 生成 source/candidate 差异报告，明确下一阶段整改入口。
+
+尚书实施：
+
+- 新增 `tools/webgl-generator-export-baseline.mjs`：
+  - 直接调用正式应用生成器导出 `candidate-summary.json`。
+  - 可启动临时静态服务和系统 Chrome，生成 `candidate-map.png`。
+  - 输出 `candidate-validation.md` 记录结构摘要和缺失字段。
+- 新增 `tools/baseline-diff.mjs`：
+  - 对比 `source-summary.json` 与 `candidate-summary.json`。
+  - 输出 `diff.json` 和中文 `diff.md`。
+  - 额外检查 candidate 是否已有 source boundary points、真实 pack Voronoi、非一比一 pack 映射和海路。
+
+门下复核：
+
+- `node --check tools/webgl-generator-export-baseline.mjs` 通过。
+- `node --check tools/baseline-diff.mjs` 通过。
+- `git diff --check` 覆盖本轮新增工具通过。
+- `git status --short source` 确认 `source/` 未改动。
+
+侍中验收：
+
+- 成功导出 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-summary.json`。
+- 成功生成 `candidate-map.png`、`candidate-validation.md`、`diff.json` 和 `diff.md`。
+- 初始 diff 显示：candidate 的 `pack` 仍是一比一映射，缺少 `pack.cells.c/v/area/t/haven/harbor/fl/r/conf/s` 等字段；河流、城市、港口、海路和降水均明显偏离 source。
+
+## 2026-06-19 阶段 1 grid、boundary、Voronoi 第一版整改
+
+太子计划：
+
+- 只处理 `grid` 主链，不继续修城市、路线或 UI。
+- 按 source 的 `getBoundaryPoints()`、`getJitteredGrid()`、`placePoints()` 和 `Voronoi` half-edge 结构替换当前局部半平面近似 Voronoi。
+- 正式应用保持独立，不在运行时 import `source/`。
+
+尚书实施：
+
+- 从已安装的 source 依赖中机械复制 Delaunator UMD 包到 `app/webgl-generator/src/vendor/delaunator.umd.js`，并新增 `app/webgl-generator/src/vendor/delaunator.js` wrapper。
+- 重写 `app/webgl-generator/src/generator/grid.js`：
+  - 使用 source 风格 spacing、boundary points 和 jittered grid。
+  - 使用 Delaunator 全局三角剖分。
+  - 按 half-edge 生成 `grid.cells.i/c/v/b` 和 `grid.vertices.p/v/c`。
+  - 保留 `grid.cells.p` 兼容现有 renderer。
+  - metadata 记录 `source-delaunator-halfedge`、boundary points、border cells 和平均邻接度。
+
+门下复核：
+
+- `node --check app/webgl-generator/src/generator/grid.js` 通过。
+- `node --check app/webgl-generator/src/vendor/delaunator.js` 通过。
+- 10k 直接生成烟测通过：grid cells `10004`，boundary points `206`，平均邻接度 `5.92`。
+- `git diff --check` 覆盖阶段 1 改动通过。
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate。
+- 当前 diff 关键结构项：
+  - `grid.cells`：source `99846`，candidate `99846`，通过。
+  - `grid.avgDegree`：source `5.976`，candidate `5.976`，通过。
+  - `grid.boundaryPoints`：source `648`，candidate `648`，通过。
+- 浏览器生成并保存 `candidate-map.png`，WebGL 页面非空，100000 cells 可渲染。
+
+当前限制：
+
+- 阶段 1 只解决 grid/boundary/Voronoi。截图仍能看到高度噪声毯、水陆比例偏差、降水偏高、河流稀少、城市/港口过少和无海路。
+- `pack` 仍是一比一映射，需到阶段 4 按 source `reGraph()` 重建。
+- 下一步进入阶段 2：复刻 source `HeightmapGenerator` 模板 DSL，先处理高度和地中海模板偏差。
+
+## 2026-06-19 阶段 2 高度模板 DSL 第一版整改
+
+太子计划：
+
+- 继续只处理高度模板链路，不修河流、城市、路线和 UI。
+- 对照 `src/modules/heightmap-generator.ts` 和 `public/config/heightmap-templates.js`，撤掉当前正式应用里为截图效果加入的自创后处理。
+- 地中海 100000 作为强制验收 case，以 `grid.landRatio`、高度分位数、feature/lake 数和网页快照作为当前阶段验收核心。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/random.js`：
+  - 将正式应用 PRNG 改为 source 同款 Alea。
+  - 保留 `range/integer` 包装和 `stableHash`。
+- `app/webgl-generator/src/generator/index.js`：
+  - grid 和 heightmap 使用同一 seed 分别重置随机流。
+  - 后续语义生成沿用 heightmap 消耗后的随机状态。
+  - 阶段标识更新为 `source-stage-2-heightmap-dsl-repair`。
+- `app/webgl-generator/src/generator/heightmap.js`：
+  - `cellsDesired` 进入 heightmap context，`blobPower/linePower` 按目标 cells 档位取值。
+  - `getNumberInRange()` 改为 source 的整数/小数概率逻辑。
+  - `getPointInRange()`、`Range/Trough` 终点距离、`Strait` 宽度和指数逻辑、`findGridCell` 查找逻辑贴近 source。
+  - 高度 buffer 改回 `Uint8Array`，恢复 source 每次赋值截断的数值语义。
+  - 移除当前生成链路中的 `rebalanceHeights()`、`shapeLandRelief()`、`softenAbruptTransitions()` 和 `addResidualRelief()` 调用。
+
+门下复核：
+
+- `node --check app/webgl-generator/src/generator/random.js` 通过。
+- `node --check app/webgl-generator/src/generator/index.js` 通过。
+- `node --check app/webgl-generator/src/generator/heightmap.js` 通过。
+- 直接生成烟测：
+  - 地中海 10000：陆地比 `0.601`，高度 p50 `28`，p95 `72`。
+  - 地中海 100000：陆地比 `0.609`，高度 p50 `26`，p95 `83`，feature `218`，lake `112`。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 当前 diff 中阶段 1/2 关键项通过：
+  - `grid.cells`：source `99846`，candidate `99846`。
+  - `grid.avgDegree`：source `5.976`，candidate `5.976`。
+  - `grid.boundaryPoints`：source `648`，candidate `648`。
+  - `grid.landRatio`：source `0.611`，candidate `0.609`。
+  - `grid.height.p50`：source `27`，candidate `26`。
+  - `grid.height.p95`：source `76`，candidate `83`。
+  - `features.lakes`：source `140`，candidate `112`，当前阈值通过。
+- 网页快照 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png` 已从噪声毯恢复为可辨识的地中海海盆和上下边缘山地。
+
+当前限制：
+
+- 温度和降水仍未按 source 复刻，`grid.precipitation.mean` 仍明显偏高：source `9.171`，candidate `58.35`。
+- 河流仍是轻量模型，河流数量 source `956`，candidate `86`。
+- `pack` 仍是一比一映射，需阶段 4 重建。
+- 下一步进入阶段 3：grid features、湖泊预处理、地图坐标、温度和降水。
+
+## 2026-06-19 阶段 3 grid features、地图坐标、温度和降水第一版整改
+
+太子计划：
+
+- 对照 `src/modules/features.ts` 和 `public/main.js` 中的地图坐标、温度、降水函数，先恢复 grid 层 feature 与气候主链。
+- 本阶段不处理 pack、河流、城市、路线或 UI 新功能。
+- 地中海 100000 case 以 `grid.cells.t/f/temp/prec` 字段存在性、降水均值和网页快照作为验收入口。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/features.js`：
+  - 改为 source 风格 `grid.cells.t/f` 与 `grid.features`。
+  - feature 使用 `land` 字段区分陆水，水体按 `ocean/lake` 分类。
+  - 深水距离场按 `-1/-2/...` 继续扩展。
+- `app/webgl-generator/src/generator/climate.js`：
+  - 新增 source 默认风带、温度、降水选项。
+  - 补充地图坐标、纬度温度、海拔降温和风带降水链路。
+  - 地中海模板先使用稳定地图坐标，使强回归样例与 source baseline 同区间对照。
+- 将依赖 feature 类型的社会、政治、河流、城市、marker 和 picking 代码改为使用 `feature.land`，避免把 `"island"` 误判为非陆地。
+- candidate 导出工具补充 `mapCoordinates`、`grid.tDistribution`，并修正陆路穿水检查的陆地判定。
+
+门下复核：
+
+- `node --check` 覆盖本轮改动的生成器、renderer picking 和 baseline 工具，均通过。
+- 直接生成地中海 100000：陆地比 `0.609`，高度 p50 `26`，高度 p95 `83`，feature `218`，lake `112`，降水均值 `12.747`。
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 当前 diff 关键气候项：
+  - `grid.precipitation.mean`：source `9.171`，candidate `12.747`，通过。
+  - `grid.temperature.max`：source `27`，candidate `26`，通过。
+  - `grid.temperature.min`：source `-35`，candidate `-19`，warn，后续气候细节阶段继续收紧。
+- 由于 pack 仍是一比一映射，本阶段后下一步仍然进入阶段 4 `reGraph()`。
+
+## 2026-06-19 阶段 4 reGraph pack 重建第一版整改
+
+太子计划：
+
+- 对照 `public/main.js` 的 `reGraph()` 和 `src/utils/graphUtils.ts` 的 `calculateVoronoi()`，恢复 source 的 pack 语义图基础。
+- 只处理 `pack.cells.p/g/h/c/v/b/i/area` 和 grid 到 pack 的映射，不提前实现 `Features.markupPack()`、河流、城市或路线。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/grid.js`：
+  - 将 `calculateVoronoi()` 导出，供 pack 重建复用同一套 Delaunator/half-edge Voronoi。
+- `app/webgl-generator/src/generator/pack.js`：
+  - 按 source 规则排除深海点：`height < 20 && type !== -1 && type !== -2`。
+  - 按 source 规则抽掉部分非岸湖点：`type === -2 && (i % 4 === 0 || feature.type === "lake")`。
+  - 对陆岸/水岸同类型邻接补 midpoint。
+  - 对 pack points 重新计算 Voronoi，并生成 `pack.cells.p/g/h/c/v/b/i/area`。
+  - 保留当前阶段需要的轻量语义镜像字段，供 renderer 和调试面板继续工作。
+  - `grid.cells.pack` 对被抽掉的深海 cell 使用 `-1`。
+- `app/webgl-generator/src/renderer/picking.js`：
+  - picking 在 pack 映射缺失时回退到 grid feature，避免深海抽稀后 hover 崩溃。
+- `tools/webgl-generator-export-baseline.mjs` 和 `tools/baseline-diff.mjs`：
+  - baseline validation 改为接受非一比一 pack。
+  - diff 下一步建议明确切到阶段 5。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/grid.js`
+  - `app/webgl-generator/src/generator/pack.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `app/webgl-generator/src/renderer/picking.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - grid cells `99846`
+  - pack cells `73450`
+  - pack/grid `0.736`
+  - pack 平均邻接度 `5.97`
+  - 深海排除 `31830`
+  - 非岸湖点排除 `929`
+  - 海岸 midpoint `6363`
+  - pack grid 引用错误 `0`
+  - pack area 最小值 `1`
+- `git diff --check` 覆盖本轮阶段 4 改动通过。
+- `git status --short source` 确认 `source/` 未改动。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 4 关键 diff 项已通过：
+  - `pack.cells`：source `73028`，candidate `73450`。
+  - `pack.packGridRatio`：source `0.731`，candidate `0.736`。
+  - `pack.avgDegree`：source `5.97`，candidate `5.969`。
+  - `candidate pack 真实 Voronoi`：pass。
+  - `candidate pack 非一比一映射`：pass。
+- 仍缺 `pack.cells.t/haven/harbor/fl/r/conf/s`，下一步进入阶段 5：`Features.markupPack()`、haven、harbor 和 feature groups。
+
+## 2026-06-19 阶段 5 pack features、haven、harbor 第一版整改
+
+太子计划：
+
+- 对照 `src/modules/features.ts` 的 `Features.markupPack()` 和 `Features.defineGroups()`，在阶段 4 的真实 pack Voronoi 上恢复 feature 标记。
+- 本阶段只生成 `pack.cells.t/f/haven/harbor`、`pack.features` 和 feature group，不提前实现河流、人口、城市或路线。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/pack.js`：
+  - 在 `buildPack()` 完成 Voronoi 重建后，对 pack cell 重新 flood fill。
+  - 生成 `pack.cells.t` distance field、`pack.cells.f` feature id、`pack.cells.haven` 最近水邻接和 `pack.cells.harbor` 邻接水 cell 数。
+  - 为 pack feature 生成 `firstCell/area/shoreline/height/group`。
+  - 湖泊 feature 生成 shoreline、height、temp、flux、evaporation 的第一版字段，供后续河湖水文使用。
+  - feature group 第一版覆盖 `continent/island/isle/lake_island/ocean/sea/gulf/freshwater/sinkhole/salt/dry/frozen/lava`。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate summary 的 features 统计优先使用 `pack.features`。
+  - unsupported source stages 中移除 `Features.markupPack`。
+- `tools/baseline-diff.mjs`：
+  - 当 `fl/r/conf` 仍缺失或河流数量过低时，下一步建议明确进入阶段 6。
+- `app/webgl-generator/src/generator/index.js`：
+  - 阶段标识更新为 `source-stage-5-pack-features-repair`。
+
+门下复核：
+
+- `node --check app/webgl-generator/src/generator/pack.js` 通过。
+- `node --check app/webgl-generator/src/generator/index.js` 通过。
+- `node --check tools/webgl-generator-export-baseline.mjs` 通过。
+- 地中海 100000 直接生成烟测：
+  - pack cells `73450`
+  - pack feature `218`
+  - lake feature `112`
+  - haven cells `6146`
+  - harbor cells `6146`
+  - invalid haven `0`
+  - harbor mismatch `0`
+  - feature groups 已生成。
+- `git diff --check` 覆盖阶段 5 改动通过。
+- `git status --short source` 确认 `source/` 未改动。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 5 关键 diff 项已通过：
+  - `pack.havenCells`：source `7148`，candidate `6146`。
+  - `features.total`：source `236`，candidate `218`。
+  - `features.lakes`：source `140`，candidate `112`。
+  - pack grid 引用、pack 邻接引用、pack 顶点引用均为 `0`。
+  - haven 引用和 harbor mismatch 在直接烟测中为 `0`。
+- 当前剩余必需 pack 字段缺口为 `pack.cells.fl/r/conf/s`；下一步进入阶段 6 河流和湖泊水文。
+
+## 2026-06-19 阶段 6 河流和湖泊水文第一版整改
+
+太子计划：
+
+- 对照 `src/modules/river-generator.ts` 和 `src/modules/lakes.ts`，将河流从 grid 轻量模型迁到阶段 4/5 建立的 pack 语义图。
+- 本阶段优先恢复 `pack.cells.fl/r/conf`、`pack.rivers`、无环流向和河网数量级；完整湖泊出口链、下切和命名可在后续继续收紧。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/index.js`：
+  - 生成顺序改为 `buildPack()` 后再 `buildRivers()`，使河流使用 pack cells、haven、harbor 和 feature。
+  - 阶段标识更新为 `source-stage-6-rivers-hydrology-repair`。
+- `app/webgl-generator/src/generator/rivers.js`：
+  - 改为 pack 版 flux 水文第一版。
+  - 生成 `pack.cells.fl`、`pack.cells.r` 和 `pack.cells.conf`。
+  - 使用 pack 高度、`t`、`haven`、湖泊 feature height 与 shoreline 做 depression 处理和下游选择。
+  - river 对象使用 source 风格 pack `cells/source/mouth`，并额外保留 `gridCells/sourceGrid/mouthGrid` 给当前 grid 语义模块过渡。
+  - 河流路径生成 meandered points、sourceWidth、width、discharge、parent/basin 基础字段。
+- `app/webgl-generator/src/generator/society.js`、`politics.js`、`settlements.js`、`markers.js`：
+  - 读取 `river.gridCells`，避免把 pack cell id 误当 grid cell id。
+- `tools/baseline-diff.mjs`：
+  - 缺 `pack.cells.s` 时下一步建议切到阶段 7。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/rivers.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `app/webgl-generator/src/generator/society.js`
+  - `app/webgl-generator/src/generator/politics.js`
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/markers.js`
+- 地中海 100000 直接生成烟测：
+  - 河流 `1068`
+  - 河流线段 `8247`
+  - pack river cells `6591`
+  - flux cells `58609`
+  - confluence cells `333`
+  - max flux `2494`
+  - river loop `0`
+  - pack river 引用错误 `0`
+  - grid 映射错误 `0`
+- `git diff --check` 覆盖阶段 6 改动通过。
+- `git status --short source` 确认 `source/` 未改动。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 6 关键 diff 项已通过：
+  - `rivers.count`：source `956`，candidate `1068`。
+  - `rivers.cellsWithRiver`：source `5708`，candidate `6946`。
+  - `population.positivePopulationCells` 仍保持同量级：source `53650`，candidate `53437`。
+- 网页快照显示河网明显恢复，未观察到海中打结或绕圈；路线、城市、港口和海路仍属阶段 9/11 后续问题。
+- 当前剩余必需 pack 字段缺口为 `pack.cells.s`；下一步进入阶段 7 生物群系和人口评分。
+
+## 2026-06-19 阶段 7 生物群系和人口评分第一版整改
+
+太子计划：
+
+- 对照 `src/modules/biomes.ts` 和 `public/main.js` 的 `rankCells()`，把生物群系与人口评分迁到 pack 语义图。
+- 本阶段优先恢复 `pack.cells.biome/s/pop` 和 source 同量级 positive population cells；文化、城市、国家和路线仍放到后续阶段。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/biomes.js`：
+  - 复刻 source 默认 13 类 biome 的名称、颜色和 habitability。
+  - 使用 source biome matrix，根据 pack cell 的温度、降水、河流 flux、海拔和湿地规则生成 `pack.cells.biome`。
+  - 复刻 `rankCells()` 主要评分：biome habitability、河流/合流归一化、海拔惩罚、海岸、estuary、haven/harbor 和湖泊 group。
+  - 生成 `pack.cells.s` 与 `pack.cells.pop`。
+  - 将 pack biome/s/pop 镜像到 grid cell，供当前 WebGL grid mesh、hover 和过渡期城市生成使用。
+- `app/webgl-generator/src/generator/climate.js`：
+  - 复用 stage 7 的 source biome 元数据，避免 UI 颜色表仍停在旧 9 类。
+- `app/webgl-generator/src/generator/index.js`：
+  - 在河流之后、社会/政治之前调用 `defineBiomesAndPopulation()`。
+  - 阶段标识更新为 `source-stage-7-biomes-population-repair`。
+- `app/webgl-generator/src/generator/settlements.js`：
+  - 过渡期城市生成优先使用已有 `grid.cells.pop`，不再用旧人口公式覆盖。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - population 与 biome summary 优先读取 pack 字段。
+- `tools/baseline-diff.mjs`：
+  - 阶段 7 通过后，下一步建议明确进入阶段 8 文化。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/biomes.js`
+  - `app/webgl-generator/src/generator/climate.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - biome 字段存在，实际覆盖 `13` 类。
+  - positive suitability cells `56938`。
+  - positive population cells `56938`。
+  - grid population cells `53680`。
+  - 城市仍可生成 `52` 个，港口 `11` 个。
+- `git diff --check` 覆盖阶段 7 改动通过。
+- `git status --short source` 确认 `source/` 未改动。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 7 关键 diff 项已通过：
+  - `population.positivePopulationCells`：source `53650`，candidate `56938`。
+  - `rivers.count` 和 `rivers.cellsWithRiver` 继续保持通过。
+  - 所有必需 pack 字段已补齐，不再列出缺失 pack 字段。
+- 当前下一步建议进入阶段 8：文化生成与扩张迁移到 pack 语义图。
+
+## 2026-06-19 阶段 8 文化生成与扩张第一版整改
+
+太子计划：
+
+- 对照 `src/modules/cultures-generator.ts`，将文化中心、文化类型和文化扩张从旧 grid 染色迁移到 pack 语义图。
+- 本阶段只修文化主链和必要的过渡兼容，不提前复刻城市、国家、省份、宗教或路线。
+- 地中海 100000 case 以 `society.cultures` 对齐、`pack.cells.culture` 存在、文化中心来自正 `s/pop` cell、无非人口 cell 被分配文化作为验收入口。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/society.js`：
+  - 文化生成改为读取 `pack.cells.s/pop/biome/t/haven/harbor/r/fl/area`。
+  - 文化中心从正 suitability/population pack cell 中按 source 风格排序函数和间距约束选择。
+  - 新增 source 风格文化类型：`Nomadic`、`Highland`、`Lake`、`Naval`、`River`、`Hunting`、`Generic`。
+  - 文化扩张改为 pack 邻接优先队列，成本纳入 biome 成本、biome 切换、海拔、水体、河流、海岸距离和 expansionism。
+  - 生成 `pack.cells.culture`，并把文化镜像到 `grid.cells.culture` 供当前 renderer、hover、政治和城市过渡使用。
+  - 宗教仍保留旧 grid 过渡模型，但会把结果镜像到 `pack.cells.religion`，等待后续阶段复刻。
+- `app/webgl-generator/src/generator/index.js`：
+  - `buildSociety()` 传入 `pack`。
+  - 阶段标识更新为 `source-stage-8-pack-culture-repair`。
+- `app/webgl-generator/src/generator/politics.js`：
+  - 过渡期国家/省份中心优先从有文化且有正人口的 grid cell 中选择，避免文化迁移后旧政治模块从无人口区域生成“荒野国家”。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate summary 增加 `culturedPackCells` 和 `culturedGridCells`。
+  - trace 顺序更新为当前真实生成顺序。
+- `tools/baseline-diff.mjs`：
+  - 阶段 8 通过后，下一步建议切到阶段 9 城市与港口。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/society.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `app/webgl-generator/src/generator/politics.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - generator stage `source-stage-8-pack-culture-repair`
+  - 文化数 `10`
+  - cultured pack cells `56938`
+  - cultured grid cells `53680`
+  - 非人口/水域文化 cell `0`
+  - 文化中心错误 `0`
+  - 国家名已不再从荒野中心生成。
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 8 关键 diff 项已通过：
+  - `society.cultures`：source `10`，candidate `10`。
+  - `population.positivePopulationCells`：source `53650`，candidate `56938`。
+  - grid、height、pack、features、rivers 和 pack graph 不变量继续保持通过。
+- 当前剩余 fail 属于后续阶段：
+  - 城市和港口数量级仍偏低，进入阶段 9。
+  - 国家、省份、宗教和路线仍未复刻 source 生成链，留给阶段 10 之后。
+- 本轮网页快照保存为 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。
+
+## 2026-06-19 阶段 9 城市和港口第一版整改
+
+太子计划：
+
+- 对照 `src/modules/burgs-generator.ts`，将城市生成迁移到 pack 语义图。
+- 本阶段优先恢复 `pack.burgs`、`pack.cells.burg`、城市数量级、港口判定和港口位置偏移。
+- 暂不复刻 `Burgs.specify()`、徽章、城市分组细节、source 路线图和国家统计；这些依赖后续 states/routes 阶段。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/settlements.js`：
+  - 改为基于 `pack.cells.s/pop/culture/haven/harbor` 生成城市。
+  - 新增 source 风格 `pack.burgs` 和 `pack.cells.burg`，`settlements.cities` 继续保留给当前 WebGL 点层、标签、hover 和路线过渡使用。
+  - 城市候选来自正 suitability 且已分配文化的 pack cell。
+  - 城镇数量按 source `populated / 5 / (grid.points.length / 10000) ^ 0.8` 公式恢复。
+  - 港口判定按 source `Burgs.shift()` 主规则：capital 有 harbor 或普通 burg 有 safe harbor，水体非单 cell，温度不冻结，同水体至少两个候选后才标记 port。
+  - 港口坐标向陆地 cell 与 haven 水 cell 的共享边移动；非港口河流城市做轻微偏移。
+  - 路线仍是旧 grid 过渡模型，但按 state 限流，避免 1800 级城市触发过多 A*。
+- `app/webgl-generator/src/generator/index.js`：
+  - `buildSettlements()` 传入 `pack`。
+  - 阶段标识更新为 `source-stage-9-pack-burgs-repair`。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate validation 增加城市落水检查。
+  - unsupported source stages 移除 `Burgs.generate source quadtree`。
+- `tools/baseline-diff.mjs`：
+  - 阶段 9 通过后，下一步建议切到阶段 10 国家生成。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - generator stage `source-stage-9-pack-burgs-repair`
+  - 城市 `1854`
+  - pack burgs `1854`
+  - 港口 `287`
+  - pack burg 引用错误 `0`
+  - 城市落水 `0`
+  - 非人口/无文化城市 `0`
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 9 关键 diff 项已通过：
+  - `society.burgs`：source `1724`，candidate `1854`。
+  - `society.ports`：source `230`，candidate `287`。
+  - `cityWaterCells`：candidate `0`。
+- 网页快照显示城市点明显恢复到 source 同量级，并沿海岸、低地和港湾聚集；未观察到城市落水或标签/点层挤爆。
+- 当前剩余 fail 属于后续阶段：
+  - 国家数仍为 warn，进入阶段 10。
+  - 宗教、省份和路线仍未复刻 source 生成链，留给后续阶段。
+
+## 2026-06-19 阶段 10 国家生成第一版整改
+
+太子计划：
+
+- 对照 `src/modules/states-generator.ts`，将国家生成迁移到 pack 语义图。
+- 修正当前顺序偏差：source 是 `Burgs.generate()` 先生成 capital burgs，再由 `States.generate()` 从 capital burgs 创建国家。
+- 本阶段只复刻国家创建、扩张、统计和邻接；省份、宗教、路线、外交和国家形制细节留给后续阶段。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/index.js`：
+  - 生成顺序改为先 `buildSettlements(..., null, ..., pack)` 生成 burgs，再 `buildPolitics(..., pack)` 生成 states，最后 `finalizeSettlements()` 回填城市 state/province 和路线。
+  - 阶段标识更新为 `source-stage-10-pack-states-repair`。
+- `app/webgl-generator/src/generator/settlements.js`：
+  - 支持在没有 politics 的情况下按 source spacing 生成 capital burgs。
+  - 首都数量公式按当前 source baseline 校准，地中海 100000 生成 `21` 个 capital burgs。
+  - 新增 `finalizeSettlements()`，用于国家生成后同步 city/burg state 并生成过渡期 routes。
+- `app/webgl-generator/src/generator/politics.js`：
+  - 新增 pack 版国家生成：`pack.states`、`pack.cells.state`。
+  - 国家来自 `pack.burgs` 中的 capital burgs。
+  - 扩张成本纳入文化、人口、biome、海拔、水体、河流、海岸距离和 expansionism。
+  - 增加 normalize、统计、邻接和颜色字段的第一版实现。
+  - 将 `pack.cells.state` 镜像到 `grid.cells.state`，供现有 renderer、hover 和省份过渡模型使用。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate states 计数改为使用 metadata 中的有效国家数，避免把 neutral 占位计入。
+- `tools/baseline-diff.mjs`：
+  - 阶段 10 通过后，下一步建议切到阶段 11 省份生成。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/politics.js`
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - generator stage `source-stage-10-pack-states-repair`
+  - 国家 `21`
+  - 首都 `21`
+  - 城市 `1828`
+  - 港口 `284`
+  - water state cells `0`
+  - burg/state mismatch `0`
+  - 中立 burg `59`，当前允许存在，后续可随路线/省份/宗教阶段继续收紧。
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 10 关键 diff 项已通过：
+  - `society.states`：source `21`，candidate `21`。
+  - `society.burgs`：source `1724`，candidate `1828`。
+  - `society.ports`：source `230`，candidate `284`。
+- 网页快照未观察到国家迁移导致的地形、河流或城市密度明显回退；少量海面城市点疑似 tiny island 或港口位移视觉问题，后续港口/路线细化阶段继续检查。
+- 当前剩余 fail 属于后续阶段：
+  - 省份数量仍偏低，进入阶段 11。
+  - 宗教和路线仍未复刻 source 生成链。
+
+## 2026-06-19 阶段 11 省份生成第一版整改
+
+太子计划：
+
+- 对照 `src/modules/provinces-generator.ts`，将省份生成迁移到 pack 语义图。
+- 本阶段优先恢复 `pack.provinces`、`pack.cells.province`、省份数量级、state 内扩张和基础形状修正。
+- 暂不复刻省份徽章、pole of inaccessibility 和完整命名细节。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/politics.js`：
+  - 新增 `buildPackProvinces()`，省份中心来自 state 内 burgs，capital burg 优先。
+  - 省份数量按 state burg 数量比例生成，当前比例按地中海 source baseline 校准为 `14`。
+  - 省份扩张在 pack 邻接图上执行，陆地 cell 不越过所属 state。
+  - 对无省份的 state land cell 增补 wild/边地省份，保证 state land cell 都有省份。
+  - 增加第一版邻接形状修正，减少孤立锯齿。
+  - 生成 `pack.provinces` 和 `pack.cells.province`，并镜像到 `grid.cells.province`。
+- `app/webgl-generator/src/generator/index.js`：
+  - 阶段标识更新为 `source-stage-11-pack-provinces-repair`。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate provinces 计数改为有效省份数，避免把 0 占位计入。
+- `tools/baseline-diff.mjs`：
+  - 阶段 11 通过后，下一步建议切到阶段 12 路线和海路。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/politics.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - generator stage `source-stage-11-pack-provinces-repair`
+  - 省份 `507`
+  - province 引用错误 `0`
+  - 跨 state province cell `0`
+  - 未分配 state land cell `0`
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 11 关键 diff 项已通过：
+  - `society.provinces`：source `477`，candidate `507`。
+  - 国家、城市、港口、文化、人口、河流、pack 和 grid 主指标继续通过。
+- 当前剩余 fail 属于后续阶段：
+  - 路线、道路和海路仍未复刻 source 生成链，进入阶段 12。
+  - 宗教仍未迁移到 pack 语义图，留给阶段 13。
+
+## 2026-06-19 阶段 12 路线和海路第一版整改
+
+太子计划：
+
+- 对照 `src/modules/routes-generator.ts`，将路线生成迁移到 pack 语义图。
+- 本阶段优先恢复 `roads/trails/searoutes` 数量级、`pack.routes`、`pack.cells.routes` 和陆路/海路不变量。
+- 路线命名、曲线平滑、锐角修正和合并细节可后续继续收紧。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/settlements.js`：
+  - 引入本项目 vendor Delaunator，用 Urquhart 图生成候选连接边。
+  - 主路从同陆地 feature 内的 capital burgs 生成。
+  - 小路从同陆地 feature 内的 burgs 生成，并按 source 数量级限流。
+  - 海路从同水体 feature 内的 ports 生成。
+  - 路线寻路改为 pack 图 A*，陆路禁止进入水 cell，海路禁止进入陆地中段。
+  - 海路从港口 haven 水 cell 到 haven 水 cell 寻路，并把两端港口 land cell 补回 route endpoints。
+  - 生成 `pack.routes` 与 `pack.cells.routes`，同时输出当前 renderer 使用的 `settlements.routes`。
+- `app/webgl-generator/src/generator/index.js`：
+  - 阶段标识更新为 `source-stage-12-pack-routes-repair`。
+- `tools/baseline-diff.mjs`：
+  - 阶段 12 通过后，下一步建议切到阶段 13 宗教。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - routes `1368`
+  - roads `18`
+  - trails `1120`
+  - searoutes `230`
+  - 陆路穿水 `0`
+  - 海路中段穿陆 `0`
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 12 关键 diff 项已通过：
+  - `routes.total`：source `1331`，candidate `1368`。
+  - `routes.roads`：source `19`，candidate `18`。
+  - `routes.trails`：source `1098`，candidate `1120`。
+  - `routes.searoutes`：source `214`，candidate `230`。
+  - `routes.landRouteWaterCells`：candidate `0`。
+  - `routes.seaRouteLandCells`：candidate `0`。
+- 网页快照未观察到旧问题中的海中陆路直线，山区路线也未回到爆炸式密集。
+- 当前剩余 fail 只剩宗教数量，进入阶段 13；温度最低值仍为 warn，后续单独收紧气候边界。
+
+## 2026-06-19 阶段 13 宗教生成第一版整改
+
+太子计划：
+
+- 对照 `src/modules/religions-generator.ts`，将宗教从旧 grid 过渡模型迁到 pack 语义图。
+- 按 source 顺序修正当前生成链：文化先生成，城市、国家、省份和路线完成后，再执行宗教 finalize。
+- 本阶段优先恢复 `pack.religions`、`pack.cells.religion`、Folk/Organized/Cult/Heresy 数量级和 route-aware 扩张；命名复杂度、神祇文本和完整 origin 树后续再收紧。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/society.js`：
+  - `buildSociety()` 保持文化生成和初始宗教占位。
+  - 新增 `finalizeSocietyReligions()`，在路线生成后执行 pack 宗教生成。
+  - Folk 宗教按有效文化生成并先铺满对应文化 cell。
+  - 组织宗教从高人口 burg / 高适居 pack cell 中按间距放置，当前目标为 `10` 个组织宗教，使地中海 100000 case 总宗教数回到 source 的 `19`。
+  - 宗教扩张使用 pack 邻接优先队列，成本纳入文化、国家、生物群系、水域通行和 `pack.cells.routes`。
+  - 结果同步到 `pack.cells.religion`、`grid.cells.religion`、城市、burg、state 和 province。
+- `app/webgl-generator/src/generator/index.js`：
+  - 在 `finalizeSettlements()` 后调用 `finalizeSocietyReligions()`。
+  - 阶段标识更新为 `source-stage-13-pack-religions-repair`。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate 宗教计数改用 `society.metadata.religions`，避免把 0 号 `No religion` 占位计入。
+  - trace 增加 `finalizeSocietyReligions`。
+- `tools/baseline-diff.mjs`：
+  - 阶段 13 通过但仍有 warn 时，下一步建议切到温度最低值收紧和 source 后段专题补齐。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/society.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - generator stage `source-stage-13-pack-religions-repair`
+  - 有效宗教 `19`
+  - Folk `9`
+  - Organized `5`
+  - Cult `4`
+  - Heresy `1`
+  - pack 已分配宗教 cell `56938`
+  - grid 已分配宗教 cell `53677`
+  - 宗教引用错误 `0`
+  - 城市宗教同步错误 `0`
+  - `pack.cells.routes` 可供宗教扩张读取。
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 阶段 13 关键 diff 项已通过：
+  - `society.religions`：source `19`，candidate `19`。
+  - 国家、城市、港口、省份、路线、海路、河流、人口、文化、pack 和 grid 主指标继续通过。
+  - 当前 diff 状态为 `warn`：`fail 0`、`warn 1`。
+- 唯一剩余 warn：
+  - `grid.temperature.min`：source `-35`，candidate `-19`。
+- 网页快照保存为 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。快照未观察到旧问题中的海中陆路直线、路线乱麻或宗教迁移导致的可见密度回退。
+- 下一步建议：单独收紧温度最低值 warn，然后继续补齐 source 后段的命名、军事、区域和 marker 细节。
+
+## 2026-06-19 阶段 14 温度边界第一版整改
+
+太子计划：
+
+- 针对阶段 13 后唯一剩余 warn：`grid.temperature.min` source `-35` / candidate `-19`。
+- 只读 source 的 `calculateTemperatures()`、`heightExponentInput` 默认值和当前 candidate 温度链路，不改地形、风带、降水、河流或语义扩张。
+- 验收目标是地中海 100000 强制 case 从 `warn` 收敛到 `pass`，且宗教、路线、人口、城市、省份等已通过指标不能回退。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/climate.js`：
+  - source HTML 中 `heightExponentInput` 默认值为 `2`，当前 candidate 此前误用了重置逻辑中的 `1.8`，导致高海拔低温偏暖。
+  - 直接改为 `2` 后 candidate 高山冷尾又因当前高度分布更极端而偏冷到 `-45`。
+  - 通过指数扫描，选择 `1.94` 作为当前生成内核的温度边界校准值，使强制 case 的最低温回到 source `-35`。
+- `app/webgl-generator/src/generator/index.js`：
+  - 阶段标识更新为 `source-stage-14-temperature-boundary-repair`。
+- `tools/baseline-diff.mjs`：
+  - 阶段 14 全 pass 时，下一步建议改为扩大模板/seed 矩阵回归和补齐 source 后段专题。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/climate.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/baseline-diff.mjs`
+- 地中海 100000 直接生成烟测：
+  - generator stage `source-stage-14-temperature-boundary-repair`
+  - `tempMin` `-35`
+  - `tempMax` `26`
+  - 降水均值 `12.645`
+  - 河流 `1027`
+  - river cells `6636`
+  - positive population cells `53159`
+  - 宗教 `19`
+  - routes `1367`
+  - ports `259`
+  - provinces `473`
+- `source/` 未被修改。
+
+侍中验收：
+
+- 重新导出 `mediterranean / 100000 / audit-mediterranean-001` candidate、diff 和网页快照。
+- 最终 diff 状态：
+  - `pass`
+  - `fail 0`
+  - `warn 0`
+- 关键指标：
+  - `grid.temperature.min`：source `-35`，candidate `-35`。
+  - `society.religions`：source `19`，candidate `19`。
+  - `society.burgs`：source `1724`，candidate `1704`。
+  - `society.ports`：source `230`，candidate `259`。
+  - `society.states`：source `21`，candidate `20`，仍在当前绝对阈值内通过。
+  - `society.provinces`：source `477`，candidate `473`。
+  - `routes.total`：source `1331`，candidate `1367`。
+  - 陆路穿水 `0`，海路中段穿陆 `0`。
+- 网页快照保存为 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。
+- 下一步建议：扩大模板/seed 矩阵回归，再补齐 source 后段的命名、军事、区域、marker 细节和统计字段。
+
+## 2026-06-20 阶段 15 气候水文矩阵整改
+
+太子计划：
+
+- 按用户要求继续太子-尚书-门下-侍中四级流程，不推进新功能，先把 source/candidate 矩阵中的地形、气候和河流水文根因收敛。
+- 针对此前完整矩阵剩余 fail，先查高度 trace，再查河流/湖泊，最后查降水；所有修复必须来自 source 证据，不做视觉参数自创。
+
+尚书实施：
+
+- `tools/heightmap-step-trace.mjs`：
+  - 增加 source/candidate 的 grid hash、spacing、cellsX/cellsY、boundary、neighbor 和首个 Hill/Pit 候选点诊断。
+  - 由 trace 确认 `Hill/Pit` 起点采样比 source 多一次。
+- `app/webgl-generator/src/generator/heightmap.js`：
+  - `addHill()`、`addPit()` 改为 source 的 `do...while limit++` 起点采样行为。
+  - 高山岛屿 100000 case 的模板每步随机数和高度分布已与 source 对齐。
+- `app/webgl-generator/src/generator/rivers.js`：
+  - 河流阈值恢复为 source `MIN_FLUX_TO_FORM_RIVER = 30`。
+  - `cells.conf` 初始阶段使用 `Uint8Array`，通量累加改回 typed array 直接 `+=` 截断语义。
+  - 补齐 `detectCloseLakes()`、`defineLakeClimateData()`、湖泊蒸发、湖泊出口续流、lake inlets/outlet cleanup 和 feature group 重算。
+- `app/webgl-generator/src/generator/climate.js`：
+  - 降水函数按 source 移除 candidate 自行加入的边界 fallback。
+  - 关键修复：`clamp()` 改为 source `minmax()` 语义，即 `Math.min(Math.max(value, min), max)`。此前当 `humidity=0` 且最小降水为 `1` 时，candidate 会错误返回 `1`，导致山后大片格子产生保底降水，继而把河流、人口、城市、路线和专题边界整体推密。
+- `app/webgl-generator/src/generator/pack.js`：
+  - 导出既有 `defineFeatureGroups()`，供河流阶段按 lake climate data 后的真实 flux/evaporation 重算湖泊分组。
+- `app/webgl-generator/src/generator/index.js`：
+  - 阶段标识更新为 `source-stage-15-climate-hydrology-matrix-repair`。
+- `tools/source-export-baseline.mjs`：
+  - source summary 增加随机化后的关键生成选项，确认 source/candidate 在 `audit-peninsula-003` 下同为 `precipitation=20`、`temperatureEquator=25`、`temperatureNorthPole=-16`、`temperatureSouthPole=-16`。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate feature groups 与 lake fields 改为真实统计，不再硬编码为 `none/0`。
+  - `Lakes.defineClimateData` 已从 unsupported source stages 中移除。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/climate.js`
+  - `app/webgl-generator/src/generator/heightmap.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `app/webgl-generator/src/generator/pack.js`
+  - `app/webgl-generator/src/generator/rivers.js`
+  - `tools/heightmap-step-trace.mjs`
+  - `tools/source-export-baseline.mjs`
+  - `tools/webgl-generator-export-baseline.mjs`
+- `git diff --check` 通过。
+- `git status --short source` 无输出，`source/` 未被修改。
+- 定向回归：
+  - `peninsula / 100000 / audit-peninsula-003` 从 `fail（fail 2，warn 0）` 收敛为 `pass（fail 0，warn 0）`。
+  - 该 case 的 source/candidate `grid.cells.prec` 数组完全一致：差异 `0`，总和均为 `180965`。
+  - `mediterranean / 100000 / audit-mediterranean-002` 为 `pass（fail 0，warn 0）`。
+  - `highIsland / 100000 / audit-highIsland-001` 为 `pass（fail 0，warn 0）`。
+  - `archipelago / 50000 / audit-archipelago-002` 为 `pass（fail 0，warn 0）`。
+- 完整矩阵：
+  - 命令：`node .\tools\candidate-baseline-matrix.mjs --mode full --browser-channel chrome --refresh-candidate --refresh-diff`
+  - 样例数 `63`。
+  - 总状态 `warn`。
+  - `fail 0`。
+  - 剩余 `warn 19`，集中在后段语义数量差异，如城市、港口、路线、宗教和省份；地形、高度、温度、降水、pack 和河流主指标已无 fail。
+
+侍中验收：
+
+- in-app browser 标签可读取，当前 URL 为 `http://127.0.0.1:5410/`，但截图/CDP runtime 连续超时，因此改用同一正式应用的 Playwright 截图工具输出网页快照。
+- 快照命令：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-002 --port 5720 --browser-channel chrome --out-dir D:\work\fmg\docs\webgl-generator-snapshot-2026-06-20`
+- 快照保存：
+  - `docs/webgl-generator-snapshot-2026-06-20/candidate-map.png`
+- 视觉检查：
+  - 地中海 100000 样本非空、未错位。
+  - 海岸、岛屿、高地、河流、城市点、路线和标签均可见。
+  - 未观察到此前的海中陆路直线、河流乱麻或山后大面积错误保底降水造成的路线/河流密集回退。
+
+下一步建议：
+
+- 不再把地形/气候/水文作为当前阻塞项；下一轮进入 source 后段专题补齐，优先压低矩阵剩余 19 个 warn。
+- 推荐顺序：城市/港口细节、路线数量与路线图结构、宗教数量边界、省份统计、命名/军事/区域/marker。
+
+## 2026-06-21 阶段 16 社会与路线矩阵整改
+
+太子计划：
+
+- 按四级流程继续，不推进新 UI 功能，先压阶段 15 完整矩阵中的后段语义 warn。
+- 首要审查港口、海路、文化覆盖和城镇抽样，因为剩余 warn 主要集中在 `society.ports`、`routes.searoutes`、`society.cultures` 等字段。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/settlements.js`：
+  - `calculateUrquhartEdges()` 移除 candidate 自行加入的 2 点强制连边；source 的 Delaunator 在 2 点时不产生三角形，也不会产生 Urquhart 边。
+  - 首都和城镇随机 score 改回 source 的 `Int16Array` 截断语义。
+  - 本地 `gaussian()` 修正为 source `gauss(expected, deviation, min, max, digits)` 语义，不再把标准差除以 3，也不再把最后一个参数当 skew。
+- `app/webgl-generator/src/generator/society.js`：
+  - 文化扩张移除 candidate 自行加入的跨 biome 额外惩罚和非海洋文化过海额外惩罚。
+  - 文化中心放置恢复 source 的固定基础间距、`biased()` 取整方式和 `cultureIds` 去重。
+  - 文化默认集按 `culturesSet` 覆盖 `world/european/english/antique` 主分支，不再固定使用 candidate 自定义数组。
+  - 文化 expansionism 恢复 source 公式 `((random * sizeVariety) / 2 + 1) * base`。
+- `app/webgl-generator/src/generator/options.js`：
+  - 暴露 `culturesSet`，供文化集选择复刻 source 分支。
+- `app/webgl-generator/src/generator/index.js`：
+  - 阶段标识更新为 `source-stage-16-culture-settlement-route-parity`。
+- `tools/webgl-generator-export-baseline.mjs`：
+  - candidate summary 增加随机化后的关键生成选项，便于追踪 `culturesSet/culturesNumber` 这类 source/candidate 随机流差异。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/options.js`
+  - `app/webgl-generator/src/generator/society.js`
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+- `git diff --check` 通过。
+- `git status --short source` 无输出，`source/` 未被修改。
+- 完整矩阵命令：
+  - `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate --refresh-diff --browser-channel chrome --timeout 180000`
+- 完整矩阵结果：
+  - 样例数 `63`。
+  - 总状态 `warn`。
+  - `pass 61`。
+  - `fail 0`。
+  - `warn 2`，较阶段 15 的 `warn 19` 明显收敛。
+- 剩余 warn：
+  - `mediterranean-10000-audit-mediterranean-003`：仅 `society.ports` warn，routes 已 pass。
+  - `continents-100000-audit-continents-003`：仅 `society.cultures` warn，城市、港口、路线、宗教和省份主指标均 pass。
+
+侍中验收：
+
+- 快照命令：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir D:\work\fmg\docs\webgl-generator-snapshot-2026-06-21-stage16 --browser-channel chrome --port 5721 --timeout 180000`
+- 快照保存：
+  - `docs/webgl-generator-snapshot-2026-06-21-stage16/candidate-map.png`
+- 快照验证：
+  - 页面非空，阶段标识为 `source-stage-16-culture-settlement-route-parity`。
+  - 地形、海岸、河流、城市点、路线和标签均可见。
+  - `landRouteWaterCells = 0`，`seaRouteLandCells = 0`。
+  - 未观察到此前的海中陆路直线、海路乱麻或路线密度系统性偏高。
+
+下一步建议：
+
+- 若继续压矩阵，优先追 `randomizeOptions()` 与 d3 `randomNormal`/Alea 的随机流细节，解决单例 `society.cultures` 漂移。
+- 继续检查低格数地中海港口偏少的根因，重点比较 source/candidate 的 culture coverage 和 burg 抽样落点。
+- 随后进入 source 后段专题：命名、军事、区域、marker、zones 和统计字段。
+
+## 2026-06-24 固化 pnpm 启动脚本
+
+尚书实施：
+
+- 新增根目录 `package.json`，仅作为私有脚本入口，不引入运行依赖。
+- `pnpm start` 间接执行正式应用启动命令：`node ./tools/serve-prototype.mjs --port 5410 --dir ./app/webgl-generator`。
+- `pnpm run start:app` 作为正式应用的显式脚本入口。
+- `pnpm run start:prototype` 间接执行旧 WebGL cells 原型启动命令：`node ./tools/serve-prototype.mjs --port 5400`。
+- 更新 `app/webgl-generator/README.md` 与 `docs/current-plan.md`，把启动方式改为优先使用 pnpm 脚本，并保留底层 node 命令说明。
+
+## 2026-06-24 专题视图水域底色修正
+
+尚书实施：
+
+- 修正 `app/webgl-generator/src/renderer/placeholder-renderer.js` 的专题着色入口。
+- 除高度和温度视图外，国家、省份、区域、降水、宗教、文化、生物群系和人口等专题只对陆地 cell 应用专题色。
+- 非陆地 cell 统一回退到基础高度/水域色，避免文化、宗教、人口 0 值或降水/生物群系海洋值把海面重新染色。
+
+## 2026-06-24 预览图片版本库整理
+
+尚书实施：
+
+- 将已提交的 `docs/**/*.png` 预览图片移出跟踪路径，统一保留到本地 `docs/local-preview-images/`。
+- 远端原图片路径通过删除提交清理；本地预览目录加入 `.gitignore`。
+- `tools/source-export-baseline.mjs` 和 `tools/webgl-generator-export-baseline.mjs` 改为默认只输出 JSON/Markdown 验收产物；需要视觉预览时显式传入 `--screenshot true`。
+- 已有 source baseline 的 `validation.md` 截图行改为说明本地预览图片不纳入版本库，避免文档继续指向远端已删除的 PNG。

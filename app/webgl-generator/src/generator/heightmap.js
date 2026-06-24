@@ -123,6 +123,7 @@ export function createHeightmap(options) {
     seaLevel: 20,
     graphWidth: options.graphWidth,
     graphHeight: options.graphHeight,
+    cellsDesired: options.cellsTarget,
     template: id,
     name: template.name,
     waterRatio: template.waterRatio,
@@ -132,9 +133,47 @@ export function createHeightmap(options) {
 }
 
 export function applyHeightmap(heightmap, grid, layout, random) {
-  const heights = new Array(grid.points.length).fill(0);
-  const neighbors = createHeightNeighbors(layout);
-  const context = {
+  const context = createHeightmapContext(heightmap, grid, layout, random);
+
+  for (const step of heightmap.steps) addStep(context, step);
+
+  grid.cells.h = Array.from(context.heights, height => clamp(height, 0, 100));
+}
+
+export function traceHeightmapSteps(heightmap, grid, layout, random) {
+  const context = createHeightmapContext(heightmap, grid, layout, random);
+  const steps = [];
+
+  for (const step of heightmap.steps) {
+    const originalNext = context.random.next.bind(context.random);
+    const randomLog = {count: 0, first: []};
+    context.random.next = () => {
+      const value = originalNext();
+      randomLog.count++;
+      if (randomLog.first.length < 20) randomLog.first.push(round(value, 12));
+      return value;
+    };
+
+    addStep(context, step);
+    context.random.next = originalNext;
+    steps.push({
+      raw: step.join(" "),
+      stats: describeHeights(context.heights),
+      sample: Array.from(context.heights.slice(0, 20)),
+      random: randomLog
+    });
+  }
+
+  return {
+    steps,
+    heights: Array.from(context.heights)
+  };
+}
+
+function createHeightmapContext(heightmap, grid, layout, random) {
+  const heights = new Uint8Array(grid.points.length);
+  const neighbors = createHeightNeighbors(grid, layout);
+  return {
     heightmap,
     grid,
     layout,
@@ -143,17 +182,9 @@ export function applyHeightmap(heightmap, grid, layout, random) {
     neighbors,
     ridgeCells: new Uint8Array(heights.length),
     ridgeInfluence: new Float32Array(heights.length),
-    blobPower: getBlobPower(grid.points.length),
-    linePower: getLinePower(grid.points.length)
+    blobPower: getBlobPower(heightmap.cellsDesired),
+    linePower: getLinePower(heightmap.cellsDesired)
   };
-
-  for (const step of heightmap.steps) addStep(context, step);
-  smooth(context, 2);
-  rebalanceHeights(context, heightmap.waterRatio);
-  accentuateRidges(context);
-  matchHeightDistribution(context, heightmap.distribution);
-
-  grid.cells.h = heights.map(height => clamp(Math.round(height), 0, 100));
 }
 
 function parseTemplateSteps(template) {
@@ -179,15 +210,15 @@ function addStep(context, [tool, a2, a3, a4, a5]) {
 
 function addHill(context, count, height, rangeX, rangeY) {
   repeat(context, count, () => {
-    const change = new Array(context.heights.length).fill(0);
-    const h = getNumberInRange(context.random, height);
-    let start = getCellInRange(context, rangeX, rangeY);
+    const change = new Uint8Array(context.heights.length);
     let limit = 0;
+    let start = 0;
+    const h = clamp(getNumberInRange(context.random, height), 0, 100);
 
-    while (context.heights[start] + h > 90 && limit < 50) {
+    do {
       start = getCellInRange(context, rangeX, rangeY);
       limit++;
-    }
+    } while (context.heights[start] + h > 90 && limit < 50);
 
     change[start] = h;
     const queue = [start];
@@ -210,17 +241,16 @@ function addHill(context, count, height, rangeX, rangeY) {
 function addPit(context, count, height, rangeX, rangeY) {
   repeat(context, count, () => {
     const used = new Uint8Array(context.heights.length);
-    let start = getCellInRange(context, rangeX, rangeY);
-    let h = getNumberInRange(context.random, height);
     let limit = 0;
+    let start = 0;
+    let h = clamp(getNumberInRange(context.random, height), 0, 100);
 
-    while (context.heights[start] < 20 && limit < 50) {
+    do {
       start = getCellInRange(context, rangeX, rangeY);
       limit++;
-    }
+    } while (context.heights[start] < 20 && limit < 50);
 
     const queue = [start];
-    used[start] = 1;
 
     for (let cursor = 0; cursor < queue.length; cursor++) {
       const cell = queue[cursor];
@@ -239,15 +269,28 @@ function addPit(context, count, height, rangeX, rangeY) {
 
 function addRange(context, count, height, rangeX, rangeY) {
   repeat(context, count, () => {
-    const start = getCellInRange(context, rangeX, rangeY);
-    const end = getRangeEndCell(context, start, context.heightmap.graphWidth * 0.58, true);
-    const ridge = getPath(context, start, end, 0.15);
     const used = new Uint8Array(context.heights.length);
-    let frontier = ridge.slice();
     let h = getNumberInRange(context.random, height);
+    const startX = getPointInRange(context.random, rangeX, context.heightmap.graphWidth);
+    const startY = getPointInRange(context.random, rangeY, context.heightmap.graphHeight);
+    let dist = 0;
+    let limit = 0;
+    let endX = 0;
+    let endY = 0;
+
+    do {
+      endX = context.random.next() * context.heightmap.graphWidth * 0.8 + context.heightmap.graphWidth * 0.1;
+      endY = context.random.next() * context.heightmap.graphHeight * 0.7 + context.heightmap.graphHeight * 0.15;
+      dist = Math.abs(endY - startY) + Math.abs(endX - startX);
+      limit++;
+    } while ((dist < context.heightmap.graphWidth / 8 || dist > context.heightmap.graphWidth / 3) && limit < 50);
+
+    const start = getClosestCell(context, startX, startY);
+    const end = getClosestCell(context, endX, endY);
+    const ridge = getPath(context, start, end, used, 0.85);
+    let frontier = ridge.slice();
     let spread = 0;
 
-    for (const cell of ridge) used[cell] = 1;
     markRidgeInfluence(context, ridge);
 
     while (frontier.length) {
@@ -277,18 +320,40 @@ function addRange(context, count, height, rangeX, rangeY) {
 
 function addTrough(context, count, height, rangeX, rangeY) {
   repeat(context, count, () => {
-    const start = getLandCellInRange(context, rangeX, rangeY);
-    const end = getRangeEndCell(context, start, context.heightmap.graphWidth / 2);
-    const trench = getPath(context, start, end, 0.2);
     const used = new Uint8Array(context.heights.length);
-    let frontier = trench.slice();
     let h = getNumberInRange(context.random, height);
+    let limit = 0;
+    let startX = 0;
+    let startY = 0;
+    let start = 0;
+    let dist = 0;
+    let endX = 0;
+    let endY = 0;
 
-    for (const cell of trench) used[cell] = 1;
+    do {
+      startX = getPointInRange(context.random, rangeX, context.heightmap.graphWidth);
+      startY = getPointInRange(context.random, rangeY, context.heightmap.graphHeight);
+      start = getClosestCell(context, startX, startY);
+      limit++;
+    } while (context.heights[start] < 20 && limit < 50);
+
+    limit = 0;
+    do {
+      endX = context.random.next() * context.heightmap.graphWidth * 0.8 + context.heightmap.graphWidth * 0.1;
+      endY = context.random.next() * context.heightmap.graphHeight * 0.7 + context.heightmap.graphHeight * 0.15;
+      dist = Math.abs(endY - startY) + Math.abs(endX - startX);
+      limit++;
+    } while ((dist < context.heightmap.graphWidth / 8 || dist > context.heightmap.graphWidth / 2) && limit < 50);
+
+    const end = getClosestCell(context, endX, endY);
+    const trench = getPath(context, start, end, used, 0.8);
+    let frontier = trench.slice();
+    let spread = 0;
 
     while (frontier.length) {
       const currentFrontier = frontier;
       frontier = [];
+      spread++;
 
       for (const cell of currentFrontier) {
         context.heights[cell] = clamp(context.heights[cell] - h * context.random.range(0.85, 1.15), 0, 100);
@@ -305,37 +370,44 @@ function addTrough(context, count, height, rangeX, rangeY) {
         }
       }
     }
+
+    addProminences(context, trench, spread);
   });
 }
 
 function addStrait(context, width, direction = "vertical") {
-  const desiredWidth = Math.min(Math.max(1, Math.round(getNumberInRange(context.random, width))), context.layout.columns / 3);
+  const desiredWidth = Math.min(getNumberInRange(context.random, width), context.layout.columns / 3);
+  if (desiredWidth < 1 && probability(context.random, desiredWidth)) return;
   const vertical = direction === "vertical";
-  const startX = vertical ? context.random.range(context.heightmap.graphWidth * 0.3, context.heightmap.graphWidth * 0.7) : 5;
-  const startY = vertical ? 5 : context.random.range(context.heightmap.graphHeight * 0.3, context.heightmap.graphHeight * 0.7);
+  const startX = vertical ? Math.floor(context.random.next() * context.heightmap.graphWidth * 0.4 + context.heightmap.graphWidth * 0.3) : 5;
+  const startY = vertical ? 5 : Math.floor(context.random.next() * context.heightmap.graphHeight * 0.4 + context.heightmap.graphHeight * 0.3);
   const endX = vertical
-    ? context.heightmap.graphWidth - startX - context.heightmap.graphWidth * 0.1 + context.random.range(0, context.heightmap.graphWidth * 0.2)
+    ? Math.floor(context.heightmap.graphWidth - startX - context.heightmap.graphWidth * 0.1 + context.random.next() * context.heightmap.graphWidth * 0.2)
     : context.heightmap.graphWidth - 5;
   const endY = vertical
     ? context.heightmap.graphHeight - 5
-    : context.heightmap.graphHeight - startY - context.heightmap.graphHeight * 0.1 + context.random.range(0, context.heightmap.graphHeight * 0.2);
+    : Math.floor(context.heightmap.graphHeight - startY - context.heightmap.graphHeight * 0.1 + context.random.next() * context.heightmap.graphHeight * 0.2);
 
-  let frontier = getPath(context, getClosestCell(context, startX, startY), getClosestCell(context, endX, endY), 0.2);
+  let frontier = getOpenPath(context, getClosestCell(context, startX, startY), getClosestCell(context, endX, endY), 0.8);
   const used = new Uint8Array(context.heights.length);
+  const query = [];
+  const step = 0.1 / desiredWidth;
 
   for (let widthStep = 0; widthStep < desiredWidth; widthStep++) {
     const currentFrontier = frontier;
-    frontier = [];
-    const exponent = 0.86 - widthStep * 0.03;
+    const exponent = 0.9 - step * desiredWidth;
 
     for (const cell of currentFrontier) {
       for (const neighbor of context.neighbors[cell]) {
         if (used[neighbor]) continue;
         used[neighbor] = 1;
-        frontier.push(neighbor);
+        query.push(neighbor);
         context.heights[neighbor] = clamp(context.heights[neighbor] ** exponent, 0, 100);
+        if (context.heights[neighbor] > 100) context.heights[neighbor] = 5;
       }
     }
+
+    frontier = query.slice();
   }
 }
 
@@ -384,7 +456,7 @@ function smooth(context, factor = 2) {
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
     next[cell] = clamp((context.heights[cell] * (factor - 1) + mean) / factor, 0, 100);
   }
-  context.heights.splice(0, context.heights.length, ...next);
+  context.heights = next;
 }
 
 function mask(context, power = 1) {
@@ -404,7 +476,7 @@ function invert(context, probability, axes) {
   if (probability > 0 && probability < 1 && context.random.next() > probability) return;
   const invertX = axes !== "y";
   const invertY = axes !== "x";
-  const next = new Array(context.heights.length);
+  const next = new Uint8Array(context.heights.length);
 
   for (let cell = 0; cell < context.heights.length; cell++) {
     const column = cell % context.layout.columns;
@@ -414,24 +486,51 @@ function invert(context, probability, axes) {
     next[cell] = context.heights[nextRow * context.layout.columns + nextColumn];
   }
 
-  context.heights.splice(0, context.heights.length, ...next);
+  context.heights = next;
 }
 
 function rebalanceHeights(context, targetWaterRatio) {
-  const sorted = context.heights.slice().sort((a, b) => a - b);
+  const adjusted = context.heights.map((height, cell) => {
+    const [x, y] = context.grid.points[cell];
+    return height + (hashNoise(cell + 7919, x, y) - 0.5) * 0.9;
+  });
+  const sorted = adjusted.slice().sort((a, b) => a - b);
   const seaIndex = Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * targetWaterRatio)));
-  const offset = sorted[seaIndex] - 19;
+  let offset = sorted[seaIndex] - 19;
 
   for (let cell = 0; cell < context.heights.length; cell++) {
-    let height = context.heights[cell] - offset;
-    if (height >= 20) {
-      const land = height - 20;
-      const ridgeInfluence = context.ridgeInfluence[cell] || 0;
-      height = 20 + land * 1.18 + Math.pow(clamp(land / 70, 0, 1), 1.7) * 8;
-      if (height > 72) height = 72 + (height - 72) * (0.3 + ridgeInfluence * 0.7);
-      if (height > 90) height = 90 + (height - 90) * 0.35;
+    context.heights[cell] = clamp(adjusted[cell] - offset, 0, 100);
+  }
+
+  const minLandCells = Math.round(context.heights.length * Math.max(0.08, (1 - targetWaterRatio) * 0.35));
+  let landCells = context.heights.reduce((sum, height) => sum + (height >= 20 ? 1 : 0), 0);
+  while (landCells < minLandCells && offset > -20) {
+    offset -= 1;
+    landCells = 0;
+    for (let cell = 0; cell < context.heights.length; cell++) {
+      context.heights[cell] = clamp(adjusted[cell] - offset, 0, 100);
+      if (context.heights[cell] >= 20) landCells++;
     }
-    context.heights[cell] = clamp(height, 0, 100);
+  }
+}
+
+function shapeLandRelief(context) {
+  const landHeights = context.heights.filter(height => height >= 20);
+  if (!landHeights.length) return;
+  const landMax = Math.max(...landHeights) - 20;
+  if (landMax <= 0.05) return;
+  const denominator = Math.max(landMax, 0.75);
+  const targetPeak = context.heightmap.distribution.at(-1)?.[1] ?? 96;
+  const reliefRange = Math.max(48, targetPeak - 20);
+
+  for (let cell = 0; cell < context.heights.length; cell++) {
+    const height = context.heights[cell];
+    if (height < 20) continue;
+    const normalized = clamp((height - 20) / denominator, 0, 1);
+    const ridgeInfluence = context.ridgeInfluence[cell] || 0;
+    const shaped = Math.pow(normalized, 1.48) * reliefRange;
+    const ridgeLift = ridgeInfluence * Math.pow(normalized, 1.1) * 7;
+    context.heights[cell] = clamp(20 + shaped + ridgeLift, 20, 100);
   }
 }
 
@@ -449,58 +548,46 @@ function markRidgeInfluence(context, ridge) {
   }
 }
 
-function accentuateRidges(context) {
-  const boost = new Array(context.heights.length).fill(0);
+function softenAbruptTransitions(context) {
+  for (let iteration = 0; iteration < 2; iteration++) {
+    const next = context.heights.slice();
 
-  for (let cell = 0; cell < context.ridgeCells.length; cell++) {
-    if (!context.ridgeCells[cell] || context.heights[cell] < 52) continue;
-    boost[cell] = Math.max(boost[cell], 5.6);
+    for (let cell = 0; cell < context.heights.length; cell++) {
+      const height = context.heights[cell];
+      if (height < 20 || height > 76) continue;
+      const neighbors = context.neighbors[cell];
+      if (!neighbors.length) continue;
+      const values = neighbors.map(neighbor => context.heights[neighbor]);
+      const mean = (height + values.reduce((sum, value) => sum + value, 0)) / (values.length + 1);
+      const min = Math.min(height, ...values);
+      const max = Math.max(height, ...values);
+      const localSlope = max - min;
+      if (localSlope < 7) continue;
 
-    for (const neighbor of context.neighbors[cell]) {
-      boost[neighbor] = Math.max(boost[neighbor], 2.2);
-      for (const next of context.neighbors[neighbor]) {
-        boost[next] = Math.max(boost[next], 0.8);
-      }
+      const ridgeInfluence = context.ridgeInfluence[cell] || 0;
+      const foothill = height < 58 ? 1 : clamp((76 - height) / 18, 0, 1);
+      const weight = clamp((localSlope - 6) / 42, 0, 0.28) * foothill * (1 - ridgeInfluence * 0.75);
+      next[cell] = clamp(height * (1 - weight) + mean * weight, 0, 100);
     }
-  }
 
+    context.heights.splice(0, context.heights.length, ...next);
+  }
+}
+
+function addResidualRelief(context) {
   for (let cell = 0; cell < context.heights.length; cell++) {
-    if (context.heights[cell] < 20 || !boost[cell]) continue;
-    const terrain = clamp((context.heights[cell] - 20) / 70, 0, 1);
-    context.heights[cell] = clamp(context.heights[cell] + boost[cell] * (0.4 + terrain * 0.65), 0, 100);
-  }
-
-  smooth(context, 8);
-}
-
-function matchHeightDistribution(context, stops) {
-  const order = context.heights
-    .map((height, cell) => ({height, cell}))
-    .sort((a, b) => a.height - b.height);
-  const last = Math.max(1, order.length - 1);
-
-  for (let rank = 0; rank < order.length; rank++) {
-    const percentile = rank / last;
-    const value = sampleDistributionStops(stops, percentile);
-    context.heights[order[rank].cell] = value;
+    const height = context.heights[cell];
+    if (height < 20 || height > 64) continue;
+    const [x, y] = context.grid.points[cell];
+    const lowlandWeight = 1 - clamp((height - 30) / 34, 0, 1);
+    const foothillWeight = clamp((height - 24) / 28, 0, 1) * (1 - clamp((height - 60) / 10, 0, 1));
+    const amplitude = 0.8 + lowlandWeight * 1.1 + foothillWeight * 0.7;
+    context.heights[cell] = clamp(height + (hashNoise(cell, x, y) - 0.5) * amplitude, 0, 100);
   }
 }
 
-function sampleDistributionStops(stops, percentile) {
-  for (let index = 1; index < stops.length; index++) {
-    const [previousPercentile, previousHeight] = stops[index - 1];
-    const [nextPercentile, nextHeight] = stops[index];
-    if (percentile > nextPercentile) continue;
-    const local = (percentile - previousPercentile) / Math.max(0.0001, nextPercentile - previousPercentile);
-    return previousHeight + (nextHeight - previousHeight) * local;
-  }
-
-  return stops[stops.length - 1][1];
-}
-
-function getPath(context, start, end, shortcutChance) {
+function getPath(context, start, end, used, shortcutThreshold) {
   const path = [start];
-  const used = new Uint8Array(context.heights.length);
   const points = context.grid.points;
   let current = start;
   used[current] = 1;
@@ -514,7 +601,7 @@ function getPath(context, start, end, shortcutChance) {
       const dx = points[end][0] - points[neighbor][0];
       const dy = points[end][1] - points[neighbor][1];
       let score = dx * dx + dy * dy;
-      if (context.random.next() < shortcutChance) score *= 0.5;
+      if (context.random.next() > shortcutThreshold) score *= 0.5;
       if (score < bestScore) {
         best = neighbor;
         bestScore = score;
@@ -530,26 +617,32 @@ function getPath(context, start, end, shortcutChance) {
   return path;
 }
 
-function getRangeEndCell(context, start, maxDistance, directional = false) {
-  const [sx, sy] = context.grid.points[start];
-  let end = start;
-  let distance = 0;
-  let limit = 0;
+function getOpenPath(context, start, end, shortcutThreshold) {
+  const path = [];
+  const points = context.grid.points;
+  let current = start;
 
-  while ((distance < context.heightmap.graphWidth / 7 || distance > maxDistance) && limit < 50) {
-    let minX = context.heightmap.graphWidth * 0.1;
-    let maxX = context.heightmap.graphWidth * 0.9;
-    if (directional && sx < context.heightmap.graphWidth * 0.35) minX = context.heightmap.graphWidth * 0.35;
-    if (directional && sx > context.heightmap.graphWidth * 0.65) maxX = context.heightmap.graphWidth * 0.65;
-    const x = context.random.range(minX, maxX);
-    const y = context.random.range(context.heightmap.graphHeight * 0.15, context.heightmap.graphHeight * 0.85);
-    end = getClosestCell(context, x, y);
-    const [ex, ey] = context.grid.points[end];
-    distance = Math.abs(ex - sx) + Math.abs(ey - sy);
-    limit++;
+  while (current !== end && path.length < context.heights.length) {
+    let best = -1;
+    let bestScore = Infinity;
+
+    for (const neighbor of context.neighbors[current]) {
+      const dx = points[end][0] - points[neighbor][0];
+      const dy = points[end][1] - points[neighbor][1];
+      let score = dx * dx + dy * dy;
+      if (context.random.next() > shortcutThreshold) score *= 0.5;
+      if (score < bestScore) {
+        best = neighbor;
+        bestScore = score;
+      }
+    }
+
+    if (best === -1) break;
+    current = best;
+    path.push(current);
   }
 
-  return end;
+  return path;
 }
 
 function getCellInRange(context, rangeX, rangeY) {
@@ -558,23 +651,15 @@ function getCellInRange(context, rangeX, rangeY) {
   return getClosestCell(context, x, y);
 }
 
-function getLandCellInRange(context, rangeX, rangeY) {
-  let cell = getCellInRange(context, rangeX, rangeY);
-  let limit = 0;
-  while (context.heights[cell] < 20 && limit < 50) {
-    cell = getCellInRange(context, rangeX, rangeY);
-    limit++;
-  }
-  return cell;
-}
-
 function getClosestCell(context, x, y) {
-  const column = clamp(Math.round((x / context.heightmap.graphWidth) * (context.layout.columns - 1)), 0, context.layout.columns - 1);
-  const row = clamp(Math.round((y / context.heightmap.graphHeight) * (context.layout.rows - 1)), 0, context.layout.rows - 1);
+  const column = Math.floor(Math.min(x / context.layout.spacing, context.layout.columns - 1));
+  const row = Math.floor(Math.min(y / context.layout.spacing, context.layout.rows - 1));
   return row * context.layout.columns + column;
 }
 
-function createHeightNeighbors(layout) {
+function createHeightNeighbors(grid, layout) {
+  if (grid.cells.c?.length) return grid.cells.c;
+
   const neighbors = [];
   for (let cell = 0; cell < layout.columns * layout.rows; cell++) {
     const list = [];
@@ -602,12 +687,64 @@ function repeat(context, count, callback) {
 function getPointInRange(random, range, length) {
   const value = String(range);
   const [minText, maxText] = value.split("-");
-  const min = (Number.parseFloat(minText) || 0) / 100;
-  const max = (Number.parseFloat(maxText) || Number.parseFloat(minText) || 0) / 100;
-  return random.range(min * length, max * length);
+  const min = (Number.parseInt(minText, 10) || 0) / 100;
+  const max = (Number.parseInt(maxText, 10) || Number.parseInt(minText, 10) || 0) / 100;
+  return rand(random, min * length, max * length);
 }
 
 function getNumberInRange(random, range) {
+  const value = String(range);
+  const numeric = Number(value);
+  if (!Number.isNaN(numeric)) return Math.trunc(numeric) + (probability(random, numeric - Math.trunc(numeric)) ? 1 : 0);
+  const sign = value[0] === "-" ? -1 : 1;
+  const normalized = Number.isNaN(Number(value[0])) ? value.slice(1) : value;
+  const [minText, maxText] = normalized.split("-");
+  if (maxText === undefined) return 0;
+  const count = rand(random, Number.parseFloat(minText) * sign, Number.parseFloat(maxText));
+  if (Number.isNaN(count) || count < 0) return 0;
+  return count;
+}
+
+function rand(random, min = 0, max = undefined) {
+  if (max === undefined) {
+    max = min;
+    min = 0;
+  }
+  return Math.floor(random.next() * (max - min + 1)) + min;
+}
+
+function probability(random, value) {
+  if (value >= 1) return true;
+  if (value <= 0) return false;
+  return random.next() < value;
+}
+
+function describeHeights(values) {
+  const list = Array.from(values).sort((a, b) => a - b);
+  const landCells = list.filter(height => height >= 20).length;
+  return {
+    min: list[0] ?? 0,
+    p05: quantileSorted(list, 0.05),
+    p25: quantileSorted(list, 0.25),
+    p50: quantileSorted(list, 0.5),
+    p75: quantileSorted(list, 0.75),
+    p90: quantileSorted(list, 0.9),
+    p95: quantileSorted(list, 0.95),
+    p99: quantileSorted(list, 0.99),
+    max: list[list.length - 1] ?? 0,
+    mean: round(list.reduce((sum, value) => sum + value, 0) / Math.max(1, list.length), 3),
+    landRatio: round(landCells / Math.max(1, list.length), 3),
+    landCells
+  };
+}
+
+function quantileSorted(list, percentile) {
+  if (!list.length) return 0;
+  const index = Math.min(list.length - 1, Math.max(0, Math.floor((list.length - 1) * percentile)));
+  return list[index];
+}
+
+function getContinuousNumberInRange(random, range) {
   const value = String(range);
   const [minText, maxText] = value.split("-");
   const min = Number.parseFloat(minText) || 0;
@@ -617,16 +754,29 @@ function getNumberInRange(random, range) {
 
 function getBlobPower(cells) {
   if (cells >= 90000) return 0.9973;
+  if (cells >= 80000) return 0.996;
+  if (cells >= 70000) return 0.9955;
+  if (cells >= 60000) return 0.995;
   if (cells >= 50000) return 0.994;
+  if (cells >= 40000) return 0.993;
+  if (cells >= 30000) return 0.991;
   if (cells >= 20000) return 0.99;
   if (cells >= 10000) return 0.98;
   if (cells >= 5000) return 0.97;
+  if (cells >= 2000) return 0.95;
+  if (cells >= 1000) return 0.93;
   return 0.95;
 }
 
 function getLinePower(cells) {
+  if (cells >= 100000) return 0.93;
   if (cells >= 90000) return 0.92;
+  if (cells >= 80000) return 0.91;
+  if (cells >= 70000) return 0.88;
+  if (cells >= 60000) return 0.87;
   if (cells >= 50000) return 0.86;
+  if (cells >= 40000) return 0.84;
+  if (cells >= 30000) return 0.83;
   if (cells >= 20000) return 0.82;
   if (cells >= 10000) return 0.81;
   if (cells >= 5000) return 0.79;
@@ -635,4 +785,14 @@ function getLinePower(cells) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function round(value, digits = 0) {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+}
+
+function hashNoise(cell, x, y) {
+  const value = Math.sin(cell * 12.9898 + x * 78.233 + y * 37.719) * 43758.5453;
+  return value - Math.floor(value);
 }

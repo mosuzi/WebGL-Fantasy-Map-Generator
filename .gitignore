@@ -22,6 +22,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Local visual previews moved out of tracked docs.
+docs/local-preview-images/
+
 # Environment and local config
 .env
 .env.*

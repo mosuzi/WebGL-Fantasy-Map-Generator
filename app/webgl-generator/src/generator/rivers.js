@@ -1,179 +1,475 @@
-const SOURCE_LIMIT = 16;
-const MIN_SOURCE_HEIGHT = 46;
-const MIN_CHANNEL_FLUX = 240;
-const MIN_RIVER_LENGTH = 5;
-const MAX_TRACE_STEPS = 220;
+import {defineFeatureGroups} from "./pack.js";
 
-export function buildRivers(grid, features) {
-  const flow = buildFlowField(grid, features);
-  const sources = selectSources(grid, flow);
-  const rivers = [];
-  const assigned = new Map();
+const WATER_LEVEL = 20;
+const MIN_FLUX_TO_FORM_RIVER = 30;
+const MIN_RIVER_CELLS = 3;
+const MAX_DEPRESSION_ITERATIONS = 250;
+const LAKE_ELEVATION_LIMIT = 20;
+const HEIGHT_EXPONENT = 2;
 
-  for (const source of sources) {
-    const river = traceRiver(source, grid, features, flow, assigned, rivers.length + 1);
-    if (river.cells.length >= MIN_RIVER_LENGTH) {
-      rivers.push(river);
-      for (const cell of river.cells) assigned.set(cell, river.id);
+export function buildRivers(grid, features, pack, options = {}) {
+  if (!pack?.cells?.t) return buildEmptyRivers();
+
+  const startedAt = performance.now();
+  const cells = pack.cells;
+  const riverPaths = new Map();
+  const riverParents = new Map();
+  let effectiveHeights = alterHeights(cells);
+  detectCloseLakes(pack, effectiveHeights);
+  effectiveHeights = resolveDepressions(pack, effectiveHeights);
+
+  cells.fl = new Uint16Array(cells.i.length);
+  cells.r = new Uint16Array(cells.i.length);
+  cells.conf = new Uint8Array(cells.i.length);
+  const lakeOutCells = defineLakeClimateData(grid, pack, effectiveHeights, options);
+
+  const cellsNumberModifier = Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25);
+  const land = Array.from(cells.i)
+    .filter(cell => cells.h[cell] >= WATER_LEVEL)
+    .sort((a, b) => effectiveHeights[b] - effectiveHeights[a]);
+
+  let nextRiverId = 1;
+
+  for (const cell of land) {
+    addFlux(cells.fl, cell, (grid.cells.prec?.[cells.g[cell]] || 0) / cellsNumberModifier);
+
+    const outletLakes = lakeOutCells[cell]
+      ? (pack.features || []).filter(feature => feature && cell === feature.outCell && feature.flux > feature.evaporation)
+      : [];
+
+    for (const lake of outletLakes) {
+      const lakeCell = (cells.c[cell] || []).find(neighbor => effectiveHeights[neighbor] < WATER_LEVEL && cells.f[neighbor] === lake.i);
+      if (lakeCell === undefined) continue;
+
+      addFlux(cells.fl, lakeCell, Math.max(lake.flux - lake.evaporation, 0));
+
+      if (cells.r[lakeCell] !== lake.river) {
+        const sameRiver = (cells.c[lakeCell] || []).some(neighbor => cells.r[neighbor] === lake.river);
+
+        if (sameRiver) {
+          cells.r[lakeCell] = lake.river;
+          addCellToRiver(riverPaths, lake.river, lakeCell);
+        } else {
+          cells.r[lakeCell] = nextRiverId;
+          addCellToRiver(riverPaths, nextRiverId, lakeCell);
+          nextRiverId++;
+        }
+      }
+
+      lake.outlet = cells.r[lakeCell];
+      flowDown(pack, riverPaths, riverParents, cell, cells.fl[lakeCell], lake.outlet);
     }
+
+    const outlet = outletLakes[0]?.outlet;
+    for (const lake of outletLakes) {
+      if (!Array.isArray(lake.inlets)) continue;
+      for (const inlet of lake.inlets) riverParents.set(inlet, outlet);
+    }
+
+    if (cells.b[cell] && cells.r[cell]) {
+      addCellToRiver(riverPaths, cells.r[cell], -1);
+      continue;
+    }
+
+    const downhill = getDownhillCell(pack, effectiveHeights, cell, lakeOutCells, outletLakes);
+    if (downhill === null || effectiveHeights[cell] <= effectiveHeights[downhill]) continue;
+
+    if (cells.fl[cell] < MIN_FLUX_TO_FORM_RIVER) {
+      if (cells.h[downhill] >= WATER_LEVEL) addFlux(cells.fl, downhill, cells.fl[cell]);
+      continue;
+    }
+
+    if (!cells.r[cell]) {
+      cells.r[cell] = nextRiverId;
+      addCellToRiver(riverPaths, nextRiverId, cell);
+      nextRiverId++;
+    }
+
+    flowDown(pack, riverPaths, riverParents, downhill, cells.fl[cell], cells.r[cell]);
   }
+
+  const rivers = defineRivers({grid, pack, riverPaths, riverParents, options});
+  cells.r = new Uint16Array(cells.i.length);
+  cells.conf = new Uint16Array(cells.i.length);
+  markRiverCells(cells, rivers);
+  calculateConfluenceFlux(cells, effectiveHeights);
+  pack.rivers = rivers;
+  cleanupLakeData(pack);
+  defineFeatureGroups(pack, grid);
 
   return {
     rivers,
     metadata: {
       rivers: rivers.length,
       segments: rivers.reduce((sum, river) => sum + Math.max(0, river.points.length - 1), 0),
-      sources: sources.length,
+      sources: rivers.length,
       longest: rivers.reduce((max, river) => Math.max(max, river.cells.length), 0),
-      maxFlux: Math.round(Math.max(...flow.flux)),
-      flowModel: "acyclic-flux-downhill"
+      maxFlux: maxValue(cells.fl),
+      confluences: countPositive(cells.conf),
+      cellsWithRiver: countPositive(cells.r),
+      flowModel: "source-pack-flux-first-pass",
+      buildMs: roundMs(performance.now() - startedAt)
     }
   };
 }
 
-function buildFlowField(grid, features) {
-  const cellCount = grid.points.length;
-  const downstream = new Array(cellCount).fill(null);
-  const flux = new Array(cellCount).fill(0);
-  const effectiveHeight = resolveDepressions(grid, features);
-  const order = Array.from({length: cellCount}, (_, cell) => cell).sort((a, b) => effectiveHeight[b] - effectiveHeight[a]);
-
-  for (const cell of order) {
-    const feature = features.features[grid.cells.f[cell]];
-    if (feature?.type !== "land") continue;
-    flux[cell] += Math.max(1, grid.cells.prec?.[cell] ?? 40) + Math.max(0, grid.cells.h[cell] - 24) * 1.5;
-    const next = chooseDownstream(cell, grid, features, effectiveHeight);
-    downstream[cell] = next;
-    if (next !== null) flux[next] += flux[cell] * 0.985;
-  }
-
-  return {downstream, flux, effectiveHeight};
+function buildEmptyRivers() {
+  return {
+    rivers: [],
+    metadata: {
+      rivers: 0,
+      segments: 0,
+      sources: 0,
+      longest: 0,
+      maxFlux: 0,
+      confluences: 0,
+      cellsWithRiver: 0,
+      flowModel: "empty"
+    }
+  };
 }
 
-function resolveDepressions(grid, features) {
-  const effective = grid.cells.h.map(height => height);
-  const land = Array.from({length: grid.points.length}, (_, cell) => cell)
-    .filter(cell => features.features[grid.cells.f[cell]]?.type === "land")
-    .sort((a, b) => effective[a] - effective[b]);
+function alterHeights(cells) {
+  return Array.from(cells.h).map((height, cell) => {
+    if (height < WATER_LEVEL || cells.t[cell] < 1) return height;
+    const neighbors = cells.c[cell] || [];
+    const meanType = neighbors.length ? neighbors.reduce((sum, neighbor) => sum + (cells.t[neighbor] || 0), 0) / neighbors.length : 0;
+    return height + cells.t[cell] / 100 + meanType / 10000;
+  });
+}
 
-  for (let iteration = 0; iteration < 8; iteration++) {
-    let changed = 0;
-    for (const cell of land) {
-      if (isBorderCell(cell, grid.metadata)) continue;
-      const neighbors = getNeighbors(cell, grid.metadata);
-      if (neighbors.some(neighbor => features.features[grid.cells.f[neighbor]]?.type !== "land")) continue;
-      const minNeighbor = Math.min(...neighbors.map(neighbor => effective[neighbor]));
-      if (effective[cell] <= minNeighbor) {
-        effective[cell] = minNeighbor + 0.12;
-        changed++;
+function detectCloseLakes(pack, heights) {
+  const {cells, features} = pack;
+
+  for (const feature of features || []) {
+    if (!feature || feature.type !== "lake") continue;
+    delete feature.closed;
+    if (!feature.shoreline?.length) {
+      feature.closed = false;
+      continue;
+    }
+
+    const maxElevation = feature.height + LAKE_ELEVATION_LIMIT;
+    if (maxElevation > 99) {
+      feature.closed = false;
+      continue;
+    }
+
+    let isDeep = true;
+    const lowestShorelineCell = [...feature.shoreline].sort((a, b) => heights[a] - heights[b])[0];
+    const queue = [lowestShorelineCell];
+    const checked = [];
+    checked[lowestShorelineCell] = true;
+
+    while (queue.length && isDeep) {
+      const cell = queue.pop();
+
+      for (const neighbor of cells.c[cell] || []) {
+        if (checked[neighbor]) continue;
+        if (heights[neighbor] >= maxElevation) continue;
+
+        if (heights[neighbor] < WATER_LEVEL) {
+          const neighborFeature = features[cells.f[neighbor]];
+          if (neighborFeature?.type === "ocean" || feature.height > (neighborFeature?.height ?? WATER_LEVEL)) isDeep = false;
+        }
+
+        checked[neighbor] = true;
+        queue.push(neighbor);
       }
     }
-    if (!changed) break;
+
+    feature.closed = isDeep;
   }
-
-  return effective;
 }
 
-function chooseDownstream(cell, grid, features, effectiveHeight) {
-  const currentHeight = effectiveHeight[cell];
-  const currentPoint = grid.points[cell];
-  const neighbors = getNeighbors(cell, grid.metadata)
-    .map(neighbor => {
-      const feature = features.features[grid.cells.f[neighbor]];
-      const waterBonus = feature?.type === "ocean" || feature?.type === "lake" ? -18 : 0;
-      const distancePenalty = Math.hypot(currentPoint[0] - grid.points[neighbor][0], currentPoint[1] - grid.points[neighbor][1]) * 0.012;
-      return {
-        cell: neighbor,
-        height: effectiveHeight[neighbor],
-        score: effectiveHeight[neighbor] + waterBonus + distancePenalty
-      };
-    })
-    .sort((a, b) => a.score - b.score);
+function resolveDepressions(pack, heights) {
+  const {cells, features} = pack;
+  const checkLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.85;
+  const elevateLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.75;
+  const land = Array.from(cells.i)
+    .filter(cell => cells.h[cell] >= WATER_LEVEL && !cells.b[cell])
+    .sort((a, b) => heights[a] - heights[b]);
 
-  const water = neighbors.find(neighbor => {
-    const feature = features.features[grid.cells.f[neighbor.cell]];
-    return feature?.type === "ocean" || feature?.type === "lake";
-  });
-  if (water && grid.cells.h[cell] < 38) return water.cell;
+  const progress = [];
+  let depressions = Infinity;
+  let previousDepressions = null;
 
-  const downhill = neighbors.find(neighbor => neighbor.height < currentHeight - 0.001);
-  if (downhill) return downhill.cell;
-
-  return null;
-}
-
-function selectSources(grid, flow) {
-  const channelCells = new Set(flow.flux.map((value, cell) => (value >= MIN_CHANNEL_FLUX ? cell : -1)).filter(cell => cell >= 0));
-
-  return grid.points
-    .map((point, cell) => ({
-      cell,
-      score: flow.flux[cell] * 1.2 + grid.cells.h[cell] * 2 + (grid.cells.prec?.[cell] || 0)
-    }))
-    .filter(source => channelCells.has(source.cell))
-    .filter(source => grid.cells.h[source.cell] >= MIN_SOURCE_HEIGHT)
-    .filter(source => estimateFlowLength(source.cell, flow) >= MIN_RIVER_LENGTH)
-    .sort((a, b) => b.score - a.score)
-    .filter((source, index, list) => {
-      const column = source.cell % grid.metadata.columns;
-      const row = Math.floor(source.cell / grid.metadata.columns);
-      return !list.slice(0, index).some(other => {
-        const otherColumn = other.cell % grid.metadata.columns;
-        const otherRow = Math.floor(other.cell / grid.metadata.columns);
-        return Math.abs(column - otherColumn) + Math.abs(row - otherRow) < 16;
-      });
-    })
-    .slice(0, SOURCE_LIMIT)
-    .map(source => source.cell);
-}
-
-function estimateFlowLength(source, flow) {
-  const visited = new Set([source]);
-  let current = source;
-  for (let length = 1; length < MAX_TRACE_STEPS; length++) {
-    const next = flow.downstream[current];
-    if (next === null || visited.has(next)) return length;
-    visited.add(next);
-    current = next;
-  }
-  return MAX_TRACE_STEPS;
-}
-
-function traceRiver(source, grid, features, flow, assigned, riverId) {
-  const cells = [source];
-  const points = [grid.points[source]];
-  const visited = new Set([source]);
-  let current = source;
-  let parent = 0;
-
-  for (let step = 0; step < MAX_TRACE_STEPS; step++) {
-    const next = flow.downstream[current];
-    if (next === null || visited.has(next)) break;
-
-    const assignedRiver = assigned.get(next);
-    if (assignedRiver && assignedRiver !== riverId) {
-      parent = assignedRiver;
+  for (let iteration = 0; depressions && iteration < MAX_DEPRESSION_ITERATIONS; iteration++) {
+    if (progress.length > 5 && progress.reduce((sum, value) => sum + value, 0) > 0) {
+      heights = alterHeights(cells);
+      depressions = progress[0];
       break;
     }
 
-    cells.push(next);
-    points.push(grid.points[next]);
-    visited.add(next);
+    depressions = 0;
 
-    const feature = features.features[grid.cells.f[next]];
-    if (feature?.type === "ocean" || feature?.type === "lake" || isBorderCell(next, grid.metadata)) break;
-    current = next;
+    if (iteration < checkLakeMaxIteration) {
+      for (const lake of features || []) {
+        if (!lake || lake.type !== "lake" || lake.closed || !lake.shoreline?.length) continue;
+        const minHeight = Math.min(...lake.shoreline.map(cell => heights[cell]));
+        if (minHeight >= 100 || lake.height > minHeight) continue;
+
+        if (iteration > elevateLakeMaxIteration) {
+          for (const cell of lake.shoreline) heights[cell] = cells.h[cell];
+          lake.height = Math.min(...lake.shoreline.map(cell => heights[cell])) - 1;
+          lake.closed = true;
+          continue;
+        }
+
+        lake.height = minHeight + 0.2;
+        depressions++;
+      }
+    }
+
+    for (const cell of land) {
+      const minHeight = Math.min(...(cells.c[cell] || []).map(neighbor => effectiveHeightForCell(pack, heights, neighbor)));
+      if (minHeight >= 100 || heights[cell] > minHeight) continue;
+      heights[cell] = minHeight + 0.1;
+      depressions++;
+    }
+
+    if (!depressions) break;
+    if (previousDepressions !== null) progress.push(depressions - previousDepressions);
+    previousDepressions = depressions;
   }
 
-  return {
-    id: riverId,
-    cells,
-    points: simplifyRiverPoints(points),
-    source,
-    mouth: cells[cells.length - 1],
-    parent,
-    flux: Math.round(flow.flux[cells[cells.length - 1]] || flow.flux[source])
-  };
+  return heights;
+}
+
+function defineLakeClimateData(grid, pack, heights, options = {}) {
+  const {cells, features} = pack;
+  const lakeOutCells = new Uint16Array(cells.i.length);
+  const exponent = options.heightExponent ?? HEIGHT_EXPONENT;
+
+  for (const feature of features || []) {
+    if (!feature || feature.type !== "lake") continue;
+
+    feature.flux = getLakeFlux(grid, cells, feature);
+    feature.temp = getLakeTemperature(grid, cells, feature);
+    feature.evaporation = getLakeEvaporation(feature, exponent);
+    if (feature.closed || !feature.shoreline?.length) continue;
+
+    feature.outCell = [...feature.shoreline].sort((a, b) => heights[a] - heights[b])[0];
+    lakeOutCells[feature.outCell] = feature.i;
+  }
+
+  return lakeOutCells;
+}
+
+function getLakeFlux(grid, cells, lake) {
+  return (lake.shoreline || []).reduce((sum, cell) => sum + (grid.cells.prec?.[cells.g[cell]] || 0), 0);
+}
+
+function getLakeTemperature(grid, cells, lake) {
+  if (lake.cells < 6) return grid.cells.temp?.[cells.g[lake.firstCell]] || 0;
+  const shoreline = lake.shoreline || [];
+  if (!shoreline.length) return 0;
+  return round(shoreline.reduce((sum, cell) => sum + (grid.cells.temp?.[cells.g[cell]] || 0), 0) / shoreline.length, 1);
+}
+
+function getLakeEvaporation(lake, exponent) {
+  const height = (lake.height - 18) ** exponent;
+  const evaporation = ((700 * (lake.temp + 0.006 * height)) / 50 + 75) / (80 - lake.temp);
+  return round(evaporation * lake.cells);
+}
+
+function getDownhillCell(pack, heights, cell, lakeOutCells, outletLakes) {
+  const {cells, features} = pack;
+  if (lakeOutCells[cell]) {
+    const outletLakeIds = new Set(outletLakes.map(lake => lake.i));
+    const filtered = (cells.c[cell] || []).filter(neighbor => !outletLakeIds.has(features[cells.f[neighbor]]?.i));
+    if (!filtered.length) return null;
+    return filtered.sort((a, b) => heights[a] - heights[b])[0];
+  }
+
+  if (cells.haven[cell]) return cells.haven[cell];
+  const neighbors = cells.c[cell] || [];
+  if (!neighbors.length) return null;
+  return neighbors.sort((a, b) => heights[a] - heights[b])[0];
+}
+
+function effectiveHeightForCell(pack, heights, cell) {
+  const feature = pack.features?.[pack.cells.f[cell]];
+  return feature?.height || heights[cell];
+}
+
+function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId) {
+  const {cells, features} = pack;
+  const toFlux = cells.fl[toCell] - cells.conf[toCell];
+  const toRiver = cells.r[toCell];
+
+  if (toRiver) {
+    if (fromFlux > toFlux) {
+      addFlux(cells.conf, toCell, cells.fl[toCell]);
+      if (cells.h[toCell] >= WATER_LEVEL) riverParents.set(toRiver, riverId);
+      cells.r[toCell] = riverId;
+    } else {
+      addFlux(cells.conf, toCell, fromFlux);
+      if (cells.h[toCell] >= WATER_LEVEL) riverParents.set(riverId, toRiver);
+    }
+  } else {
+    cells.r[toCell] = riverId;
+  }
+
+  if (cells.h[toCell] < WATER_LEVEL) {
+    const waterBody = features[cells.f[toCell]];
+    if (waterBody?.type === "lake") {
+      if (!waterBody.river || fromFlux > (waterBody.enteringFlux || 0)) {
+        waterBody.river = riverId;
+        waterBody.enteringFlux = fromFlux;
+      }
+      waterBody.flux = (waterBody.flux || 0) + fromFlux;
+      waterBody.inlets = waterBody.inlets || [];
+      waterBody.inlets.push(riverId);
+    }
+  } else {
+    addFlux(cells.fl, toCell, fromFlux);
+  }
+
+  addCellToRiver(riverPaths, riverId, toCell);
+}
+
+function defineRivers({grid, pack, riverPaths, riverParents, options}) {
+  const rivers = [];
+  const cells = pack.cells;
+  const defaultWidthFactor = round(1 / Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25), 2);
+  const mainStemWidthFactor = defaultWidthFactor * 1.2;
+
+  for (const [riverId, rawCells] of riverPaths) {
+    const riverCells = dedupeConsecutive(rawCells);
+    if (riverCells.length < MIN_RIVER_CELLS) continue;
+    const source = riverCells[0];
+    if (source < 0 || cells.h[source] < WATER_LEVEL) continue;
+    const mouth = getRiverMouth(riverCells);
+    const parent = riverParents.get(riverId) || 0;
+    const widthFactor = !parent || parent === riverId ? mainStemWidthFactor : defaultWidthFactor;
+    const points = addMeandering(pack, riverCells, riverId);
+    const discharge = cells.fl[mouth] || cells.fl[source] || 1;
+    const length = getApproximateLength(points);
+    const sourceWidth = getSourceWidth(cells.fl[source]);
+    const width = getWidth(getRiverOffset(discharge, points.length, widthFactor, sourceWidth));
+
+    rivers.push({
+      id: riverId,
+      i: riverId,
+      source,
+      sourceGrid: cells.g[source],
+      mouth,
+      mouthGrid: mouth >= 0 ? cells.g[mouth] : -1,
+      parent,
+      basin: parent || riverId,
+      discharge,
+      flux: discharge,
+      length,
+      width,
+      widthFactor,
+      sourceWidth,
+      cells: riverCells,
+      gridCells: riverCells.filter(cell => cell >= 0).map(cell => cells.g[cell]),
+      points,
+      type: parent ? "Branch" : "River"
+    });
+  }
+
+  return rivers;
+}
+
+function markRiverCells(cells, rivers) {
+  for (const river of rivers) {
+    for (const cell of river.cells) {
+      if (cell < 0 || cells.h[cell] < WATER_LEVEL) continue;
+      if (cells.r[cell]) cells.conf[cell] = Math.max(cells.conf[cell], 1);
+      else cells.r[cell] = river.i;
+    }
+  }
+}
+
+function calculateConfluenceFlux(cells, heights) {
+  for (const cell of cells.i) {
+    if (!cells.conf[cell]) continue;
+    const sortedInflux = (cells.c[cell] || [])
+      .filter(neighbor => cells.r[neighbor] && heights[neighbor] > heights[cell])
+      .map(neighbor => cells.fl[neighbor])
+      .sort((a, b) => b - a);
+    cells.conf[cell] = sortedInflux.reduce((sum, flux, index) => (index ? sum + flux : sum), 0);
+  }
+}
+
+function cleanupLakeData(pack) {
+  for (const feature of pack.features || []) {
+    if (!feature || feature.type !== "lake") continue;
+    delete feature.river;
+    delete feature.enteringFlux;
+    delete feature.outCell;
+    delete feature.closed;
+    feature.height = round(feature.height, 3);
+    if (feature.inlets) feature.inlets = [...new Set(feature.inlets.filter(id => pack.rivers?.some(river => river.i === id)))];
+    if (!feature.inlets?.length) delete feature.inlets;
+    if (feature.outlet && !pack.rivers?.some(river => river.i === feature.outlet)) delete feature.outlet;
+  }
+}
+
+function addCellToRiver(paths, riverId, cell) {
+  if (!paths.has(riverId)) paths.set(riverId, [cell]);
+  else paths.get(riverId).push(cell);
+}
+
+function addFlux(array, cell, value) {
+  array[cell] += value;
+}
+
+function getRiverMouth(riverCells) {
+  if (riverCells.length < 2) return riverCells[0];
+  const last = riverCells[riverCells.length - 1];
+  if (last < 0) return riverCells[riverCells.length - 2];
+  return last;
+}
+
+function addMeandering(pack, riverCells, riverId) {
+  const points = getRiverPoints(pack, riverCells);
+  if (points.length <= 2) return points;
+  const meandered = [points[0]];
+
+  for (let index = 0; index < points.length - 1; index++) {
+    const start = points[index];
+    const end = points[index + 1];
+    const length = distance(start, end);
+    const dist2 = length ** 2;
+    const step = index + 10;
+    const meander = 0.5 + 1 / step + Math.max(0.5 - step / 100, 0);
+    const angle = Math.atan2(end[1] - start[1], end[0] - start[0]);
+    const sinMeander = Math.sin(angle) * meander;
+    const cosMeander = Math.cos(angle) * meander;
+
+    if (dist2 > 64 || (dist2 > 36 && riverCells.length < 5)) {
+      meandered.push(
+        [(start[0] * 2 + end[0]) / 3 - sinMeander, (start[1] * 2 + end[1]) / 3 + cosMeander],
+        [(start[0] + end[0] * 2) / 3 + sinMeander / 2, (start[1] + end[1] * 2) / 3 - cosMeander / 2]
+      );
+    } else if (dist2 > 25 || riverCells.length < 6) {
+      const wave = Math.sin((riverId * 17.17 + index * 7.31) * Math.PI);
+      meandered.push([(start[0] + end[0]) / 2 - sinMeander * wave, (start[1] + end[1]) / 2 + cosMeander * wave]);
+    }
+
+    meandered.push(end);
+  }
+
+  return simplifyRiverPoints(meandered);
+}
+
+function getRiverPoints(pack, riverCells) {
+  return riverCells.map((cell, index) => (cell === -1 ? getBorderPoint(pack, riverCells[index - 1]) : pack.cells.p[cell]));
+}
+
+function getBorderPoint(pack, cell) {
+  const [x, y] = pack.cells.p[cell];
+  const width = 1440;
+  const height = 960;
+  const min = Math.min(y, height - y, x, width - x);
+  if (min === y) return [x, 0];
+  if (min === height - y) return [x, height];
+  if (min === x) return [0, y];
+  return [width, y];
 }
 
 function simplifyRiverPoints(points) {
@@ -184,8 +480,8 @@ function simplifyRiverPoints(points) {
     const current = points[index];
     const next = points[index + 1];
     const angle = turnAngle(previous, current, next);
-    const distance = Math.hypot(current[0] - previous[0], current[1] - previous[1]);
-    if (angle > 0.18 || distance > 18) simplified.push(current);
+    const segment = distance(previous, current);
+    if (angle > 0.18 || segment > 18) simplified.push(current);
   }
   simplified.push(points[points.length - 1]);
   return simplified;
@@ -196,30 +492,57 @@ function turnAngle(a, b, c) {
   const aby = b[1] - a[1];
   const bcx = c[0] - b[0];
   const bcy = c[1] - b[1];
-  const cross = Math.abs(abx * bcy - aby * bcx);
-  const dot = abx * bcx + aby * bcy;
-  return Math.atan2(cross, dot);
+  return Math.atan2(Math.abs(abx * bcy - aby * bcx), abx * bcx + aby * bcy);
 }
 
-function getNeighbors(cell, metadata) {
-  const {columns, rows} = metadata;
-  const column = cell % columns;
-  const row = Math.floor(cell / columns);
-  const neighbors = [];
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const nextColumn = column + dx;
-      const nextRow = row + dy;
-      if (nextColumn < 0 || nextColumn >= columns || nextRow < 0 || nextRow >= rows) continue;
-      neighbors.push(nextRow * columns + nextColumn);
-    }
+function dedupeConsecutive(values) {
+  const result = [];
+  for (const value of values) {
+    if (result[result.length - 1] !== value) result.push(value);
   }
-  return neighbors;
+  return result;
 }
 
-function isBorderCell(cell, metadata) {
-  const column = cell % metadata.columns;
-  const row = Math.floor(cell / metadata.columns);
-  return column === 0 || row === 0 || column === metadata.columns - 1 || row === metadata.rows - 1;
+function getApproximateLength(points) {
+  return round(points.reduce((sum, point, index) => (index ? sum + distance(point, points[index - 1]) : sum), 0), 2);
+}
+
+function getSourceWidth(flux) {
+  return round(Math.min(flux ** 0.9 / 500, 1), 2);
+}
+
+function getRiverOffset(flux, pointIndex, widthFactor, startingWidth) {
+  const lengthProgression = [1, 1, 2, 3, 5, 8, 13, 21, 34].map(value => value / 200);
+  const fluxWidth = Math.min(flux ** 0.7 / 500, 1);
+  const lengthWidth = pointIndex / 200 + (lengthProgression[pointIndex] || lengthProgression[lengthProgression.length - 1]);
+  return widthFactor * (lengthWidth + fluxWidth) + startingWidth;
+}
+
+function getWidth(offset) {
+  return round((offset / 1.5) ** 1.8, 2);
+}
+
+function distance(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+function maxValue(values) {
+  let max = 0;
+  for (const value of values) if (value > max) max = value;
+  return max;
+}
+
+function countPositive(values) {
+  let count = 0;
+  for (const value of values) if (value > 0) count++;
+  return count;
+}
+
+function round(value, digits = 0) {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+}
+
+function roundMs(value) {
+  return Math.round(value * 100) / 100;
 }

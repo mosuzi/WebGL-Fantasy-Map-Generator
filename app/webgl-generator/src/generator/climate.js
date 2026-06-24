@@ -1,60 +1,214 @@
-const BIOMES = [
-  {id: 0, name: "water", color: [0.12, 0.34, 0.52, 1]},
-  {id: 1, name: "ice", color: [0.84, 0.9, 0.92, 1]},
-  {id: 2, name: "tundra", color: [0.58, 0.64, 0.55, 1]},
-  {id: 3, name: "grassland", color: [0.46, 0.6, 0.34, 1]},
-  {id: 4, name: "forest", color: [0.24, 0.46, 0.28, 1]},
-  {id: 5, name: "desert", color: [0.74, 0.66, 0.42, 1]},
-  {id: 6, name: "savanna", color: [0.62, 0.6, 0.32, 1]},
-  {id: 7, name: "rainforest", color: [0.18, 0.42, 0.22, 1]},
-  {id: 8, name: "mountain", color: [0.68, 0.64, 0.55, 1]}
-];
+import {BIOMES} from "./biomes.js";
 
-export function buildClimate(grid, features, options) {
-  const temp = [];
-  const prec = [];
+const CLIMATE_OPTIONS = {
+  winds: [225, 45, 225, 315, 135, 315],
+  temperatureEquator: 27,
+  temperatureNorthPole: -30,
+  temperatureSouthPole: -15,
+  heightExponent: 2,
+  precipitation: 100
+};
+
+export function buildClimate(grid, features, options, random) {
+  const mapCoordinates = calculateMapCoordinates(defineMapSize(options, grid, features, random), options);
+  const temp = calculateTemperatures(grid, mapCoordinates, options);
+  grid.cells.temp = Array.from(temp);
+  const prec = generatePrecipitation(grid, mapCoordinates, options, random);
   const biome = [];
   const biomeCounts = new Map();
 
   for (let cell = 0; cell < grid.points.length; cell++) {
-    const point = grid.points[cell];
-    const height = grid.cells.h[cell];
     const feature = features.features[grid.cells.f[cell]];
-    const values = sampleClimate(point, height, feature, options);
-    const biomeId = classifyBiome(values.temperature, values.precipitation, height, feature);
-    temp.push(values.temperature);
-    prec.push(values.precipitation);
+    const biomeId = classifyBiome(temp[cell], prec[cell], grid.cells.h[cell], feature);
     biome.push(biomeId);
     biomeCounts.set(biomeId, (biomeCounts.get(biomeId) || 0) + 1);
   }
 
-  grid.cells.temp = temp;
-  grid.cells.prec = prec;
+  grid.cells.prec = Array.from(prec);
   grid.cells.biome = biome;
 
   return {
     biomes: BIOMES,
+    mapCoordinates,
     metadata: {
-      temperatureMin: Math.min(...temp),
-      temperatureMax: Math.max(...temp),
-      precipitationMin: Math.min(...prec),
-      precipitationMax: Math.max(...prec),
+      temperatureMin: Math.min(...grid.cells.temp),
+      temperatureMax: Math.max(...grid.cells.temp),
+      precipitationMin: Math.min(...grid.cells.prec),
+      precipitationMax: Math.max(...grid.cells.prec),
       biomeCounts: Object.fromEntries([...biomeCounts.entries()].map(([id, count]) => [BIOMES[id]?.name || id, count]))
     }
   };
 }
 
-function sampleClimate(point, height, feature, options) {
-  const latitude = Math.abs(point[1] / options.graphHeight - 0.5) * 2;
-  const inland = Math.abs(point[0] / options.graphWidth - 0.5) * 2;
-  const waterBoost = feature?.type === "ocean" || feature?.type === "lake" ? 12 : 0;
-  const temperature = clamp(Math.round(31 - latitude * 38 - Math.max(0, height - 45) * 0.45), -18, 36);
-  const precipitation = clamp(Math.round(45 + waterBoost + (1 - inland) * 28 + Math.max(0, height - 35) * 0.28 - latitude * 16), 0, 100);
-  return {temperature, precipitation};
+function defineMapSize(options, grid, features, random) {
+  const template = options.heightmapTemplate;
+  const landTouchesBorder = features.features.some(feature => feature?.land && feature.border);
+  const maxSize = landTouchesBorder ? 80 : 100;
+  const latitude = () => gauss(random, probability(random, 0.5) ? 40 : 60, 20, 25, 75);
+
+  if (!landTouchesBorder) {
+    if (template === "pangea") return {size: 100, latitude: 50, longitude: 50};
+    if (template === "continents" && probability(random, 0.5)) return {size: 100, latitude: 50, longitude: 50};
+    if (template === "archipelago" && probability(random, 0.35)) return {size: 100, latitude: 50, longitude: 50};
+    if (template === "highIsland" && probability(random, 0.25)) return {size: 100, latitude: 50, longitude: 50};
+    if (template === "lowIsland" && probability(random, 0.1)) return {size: 100, latitude: 50, longitude: 50};
+  }
+
+  if (template === "pangea") return {size: gauss(random, 70, 20, 30, maxSize), latitude: latitude(), longitude: 50};
+  if (template === "mediterranean") return {size: gauss(random, 25, 30, 15, 80), latitude: latitude(), longitude: 50};
+  if (template === "peninsula") return {size: gauss(random, 15, 15, 5, 80), latitude: latitude(), longitude: 50};
+
+  return {size: gauss(random, 30, 20, 15, maxSize), latitude: latitude(), longitude: 50};
+}
+
+function calculateMapCoordinates({size, latitude, longitude}, options) {
+  const sizeFraction = size / 100;
+  const latShift = latitude / 100;
+  const lonShift = longitude / 100;
+  const latT = round(sizeFraction * 180, 1);
+  const latN = round(90 - (180 - latT) * latShift, 1);
+  const latS = round(latN - latT, 1);
+  const lonT = round(Math.min((options.graphWidth / options.graphHeight) * latT, 360), 1);
+  const lonE = round(180 - (360 - lonT) * lonShift, 1);
+  const lonW = round(lonE - lonT, 1);
+  return {latT, latN, latS, lonT, lonW, lonE};
+}
+
+function calculateTemperatures(grid, mapCoordinates, options) {
+  const temp = new Int8Array(grid.points.length);
+  const {columns} = grid.metadata;
+  const temperatureEquator = options.temperatureEquator ?? CLIMATE_OPTIONS.temperatureEquator;
+  const temperatureNorthPole = options.temperatureNorthPole ?? CLIMATE_OPTIONS.temperatureNorthPole;
+  const temperatureSouthPole = options.temperatureSouthPole ?? CLIMATE_OPTIONS.temperatureSouthPole;
+  const tropics = [16, -20];
+  const tropicalGradient = 0.15;
+  const tempNorthTropic = temperatureEquator - tropics[0] * tropicalGradient;
+  const northernGradient = (tempNorthTropic - temperatureNorthPole) / (90 - tropics[0]);
+  const tempSouthTropic = temperatureEquator + tropics[1] * tropicalGradient;
+  const southernGradient = (tempSouthTropic - temperatureSouthPole) / (90 + tropics[1]);
+  const exponent = options.heightExponent ?? CLIMATE_OPTIONS.heightExponent;
+
+  for (let rowCellId = 0; rowCellId < grid.points.length; rowCellId += columns) {
+    const rowPoint = grid.points[rowCellId];
+    const rowLatitude = mapCoordinates.latN - (rowPoint[1] / options.graphHeight) * mapCoordinates.latT;
+    const tempSeaLevel = calculateSeaLevelTemp(rowLatitude);
+
+    for (let cell = rowCellId; cell < Math.min(rowCellId + columns, grid.points.length); cell++) {
+      temp[cell] = clamp(tempSeaLevel - getAltitudeTemperatureDrop(grid.cells.h[cell], exponent), -128, 127);
+    }
+  }
+
+  function calculateSeaLevelTemp(latitude) {
+    if (latitude <= 16 && latitude >= -20) return temperatureEquator - Math.abs(latitude) * tropicalGradient;
+    return latitude > 0
+      ? tempNorthTropic - (latitude - tropics[0]) * northernGradient
+      : tempSouthTropic + (latitude - tropics[1]) * southernGradient;
+  }
+
+  return temp;
+}
+
+function getAltitudeTemperatureDrop(height, exponent) {
+  if (height < 20) return 0;
+  return round((((height - 18) ** exponent) / 1000) * 6.5);
+}
+
+function generatePrecipitation(grid, mapCoordinates, options, random) {
+  const {columns, rows, cellsDesired} = grid.metadata;
+  const prec = new Uint8Array(grid.points.length);
+  const cellsNumberModifier = (cellsDesired / 10000) ** 0.25;
+  const precInputModifier = (options.precipitation ?? CLIMATE_OPTIONS.precipitation) / 100;
+  const modifier = cellsNumberModifier * precInputModifier;
+  const winds = options.winds || CLIMATE_OPTIONS.winds;
+  const latitudeModifier = [4, 2, 2, 2, 1, 1, 2, 2, 2, 2, 3, 3, 2, 2, 1, 1, 1, 0.5];
+  const maxPassableElevation = 85;
+  const westerly = [];
+  const easterly = [];
+  let southerly = 0;
+  let northerly = 0;
+
+  for (let row = 0, cell = 0; row < rows; row++, cell += columns) {
+    const lat = mapCoordinates.latN - (row / rows) * mapCoordinates.latT;
+    const latBand = ((Math.abs(lat) - 1) / 5) | 0;
+    const latMod = latitudeModifier[latBand];
+    const windTier = (Math.abs(lat - 89) / 30) | 0;
+    const {isWest, isEast, isNorth, isSouth} = getWindDirections(winds[windTier]);
+    if (isWest) westerly.push([cell, latMod, windTier]);
+    if (isEast) easterly.push([cell + columns - 1, latMod, windTier]);
+    if (isNorth) northerly++;
+    if (isSouth) southerly++;
+  }
+
+  if (westerly.length) passWind(westerly, 120 * modifier, 1, columns);
+  if (easterly.length) passWind(easterly, 120 * modifier, -1, columns);
+
+  const verticalTotal = southerly + northerly;
+  if (northerly) {
+    const bandN = ((Math.abs(mapCoordinates.latN) - 1) / 5) | 0;
+    const latModN = mapCoordinates.latT > 60 ? mean(latitudeModifier) : latitudeModifier[bandN];
+    passWind(range(0, columns, 1), (northerly / verticalTotal) * 60 * modifier * latModN, columns, rows);
+  }
+
+  if (southerly) {
+    const bandS = ((Math.abs(mapCoordinates.latS) - 1) / 5) | 0;
+    const latModS = mapCoordinates.latT > 60 ? mean(latitudeModifier) : latitudeModifier[bandS];
+    passWind(range(grid.points.length - columns, grid.points.length, 1), (southerly / verticalTotal) * 60 * modifier * latModS, -columns, rows);
+  }
+
+  return prec;
+
+  function getWindDirections(angle) {
+    return {
+      isWest: angle > 40 && angle < 140,
+      isEast: angle > 220 && angle < 320,
+      isNorth: angle > 100 && angle < 260,
+      isSouth: angle > 280 || angle < 80
+    };
+  }
+
+  function passWind(source, maxPrec, next, steps) {
+    const maxPrecInit = maxPrec;
+
+    for (let first of source) {
+      if (first[0]) {
+        maxPrec = Math.min(maxPrecInit * first[1], 255);
+        first = first[0];
+      }
+
+      let humidity = maxPrec - grid.cells.h[first];
+      if (humidity <= 0) continue;
+
+      for (let step = 0, current = first; step < steps; step++, current += next) {
+        if (grid.cells.temp[current] < -5) continue;
+
+        if (grid.cells.h[current] < 20) {
+          if (grid.cells.h[current + next] >= 20) {
+            prec[current + next] += Math.max(humidity / rand(random, 10, 20), 1);
+          } else {
+            humidity = Math.min(humidity + 5 * modifier, maxPrec);
+            prec[current] += 5 * modifier;
+          }
+          continue;
+        }
+
+        const isPassable = grid.cells.h[current + next] <= maxPassableElevation;
+        const precipitation = isPassable ? getPrecipitation(humidity, current, next) : humidity;
+        prec[current] += precipitation;
+        humidity = isPassable ? clamp(humidity - precipitation + (precipitation > 1.5 ? 1 : 0), 0, maxPrec) : 0;
+      }
+    }
+  }
+
+  function getPrecipitation(humidity, cell, next) {
+    const normalLoss = Math.max(humidity / (10 * modifier), 1);
+    const diff = Math.max(grid.cells.h[cell + next] - grid.cells.h[cell], 0);
+    const mod = (grid.cells.h[cell + next] / 70) ** 2;
+    return clamp(normalLoss + diff * mod, 1, humidity);
+  }
 }
 
 function classifyBiome(temperature, precipitation, height, feature) {
-  if (feature?.type === "ocean" || feature?.type === "lake") return 0;
+  if (!feature?.land) return 0;
   if (height > 72) return 8;
   if (temperature < -6) return 1;
   if (temperature < 5) return 2;
@@ -65,6 +219,50 @@ function classifyBiome(temperature, precipitation, height, feature) {
   return 3;
 }
 
+function rand(random, min, max) {
+  return Math.floor(random.next() * (max - min + 1)) + min;
+}
+
+function probability(random, value) {
+  if (value >= 1) return true;
+  if (value <= 0) return false;
+  return random.next() < value;
+}
+
+function gauss(random, expected = 100, deviation = 30, min = 0, max = 300, digits = 0) {
+  const value = randomNormal(random, expected, deviation);
+  return round(Math.min(Math.max(value, min), max), digits);
+}
+
+function randomNormal(random, mean, deviation) {
+  let x;
+  let y;
+  let radius;
+
+  do {
+    x = random.next() * 2 - 1;
+    y = random.next() * 2 - 1;
+    radius = x * x + y * y;
+  } while (!radius || radius > 1);
+
+  return mean + deviation * y * Math.sqrt((-2 * Math.log(radius)) / radius);
+}
+
+function range(start, end, step) {
+  const values = [];
+  for (let value = start; value < end; value += step) values.push(value);
+  return values;
+}
+
+function mean(values) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function round(value, digits = 0) {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+}
+
 function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+  return Math.min(Math.max(value, min), max);
 }

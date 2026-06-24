@@ -1,0 +1,645 @@
+#!/usr/bin/env node
+import {createReadStream, existsSync, mkdirSync, statSync, writeFileSync} from "node:fs";
+import {createServer} from "node:http";
+import {createRequire} from "node:module";
+import {dirname, extname, join, normalize, resolve} from "node:path";
+import {fileURLToPath} from "node:url";
+
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const appDir = join(rootDir, "app", "webgl-generator");
+const defaultSourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
+const args = parseArgs(process.argv.slice(2));
+const template = String(args.template || "mediterranean");
+const cells = Number(args.cells || 100000);
+const seed = String(args.seed || `audit-${template}-${cells}`);
+const graphWidth = Number(args.width || 1440);
+const graphHeight = Number(args.height || 960);
+const host = args.host || "127.0.0.1";
+const port = Number(args.port || 5411);
+const timeoutMs = Number(args.timeout || 120000);
+const browserChannel = args["browser-channel"] || args.channel || null;
+const includeScreenshot = args.screenshot === true || args.screenshot === "true";
+const viewport = parseViewport(args.viewport || "1440x960");
+const caseName = sanitizeFileName(args.name || `${template}-${cells}-${seed}`);
+const outDir = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "source-baselines", caseName));
+
+if (!existsSync(appDir)) fail(`App directory does not exist: ${appDir}`);
+mkdirSync(outDir, {recursive: true});
+
+const map = generatePlaceholderMap({
+  seed,
+  heightmapTemplate: template,
+  cellsTarget: cells,
+  graphWidth,
+  graphHeight,
+  randomSeed: false
+});
+const summary = createCandidateSummary(map, {appDir});
+const summaryPath = join(outDir, "candidate-summary.json");
+writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+writeFileSync(join(outDir, "candidate-validation.md"), renderValidationMarkdown(summary), "utf8");
+console.log(`Wrote candidate baseline summary to ${summaryPath}`);
+
+if (includeScreenshot) {
+  const screenshotPath = join(outDir, "candidate-map.png");
+  await captureScreenshot({screenshotPath});
+  console.log(`Wrote candidate baseline screenshot to ${screenshotPath}`);
+}
+
+function createCandidateSummary(candidateMap, {appDir}) {
+  const {grid, pack, features, rivers, climate, society, politics, settlements, markers, heightmap, metadata, options} = candidateMap;
+  const packFeatures = pack.features || features.features || [];
+  const routeSummary = describeCandidateRoutes(settlements.routes || [], grid, features);
+  const validation = validateCandidateGraph({grid, pack, features, routes: settlements.routes || [], cities: settlements.cities || [], routeSummary});
+  const missingRequiredPackFields = [
+    ["pack.cells.p", pack.cells.p],
+    ["pack.cells.c", pack.cells.c],
+    ["pack.cells.v", pack.cells.v],
+    ["pack.cells.b", pack.cells.b],
+    ["pack.cells.i", pack.cells.i],
+    ["pack.cells.area", pack.cells.area],
+    ["pack.cells.t", pack.cells.t],
+    ["pack.cells.haven", pack.cells.haven],
+    ["pack.cells.harbor", pack.cells.harbor],
+    ["pack.cells.fl", pack.cells.fl],
+    ["pack.cells.r", pack.cells.r],
+    ["pack.cells.conf", pack.cells.conf],
+    ["pack.cells.s", pack.cells.s]
+  ]
+    .filter(([, value]) => value === undefined)
+    .map(([field]) => field);
+
+  return {
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      source: "webgl-generator candidate baseline",
+      seed: metadata.seed,
+      template: heightmap.template,
+      templateName: heightmap.name,
+      cellsTarget: metadata.cellsTarget,
+      graphWidth: metadata.graphWidth,
+      graphHeight: metadata.graphHeight,
+      appDir,
+      generatorStage: metadata.generatorStage,
+      generatedOptions: {
+        statesNumber: Number(options.statesNumber),
+        provincesRatio: Number(options.provincesRatio),
+        religionsNumber: Number(options.religionsNumber),
+        culturesNumber: Number(options.culturesNumber),
+        culturesSet: options.culturesSet,
+        culturesSetMax: Number(options.culturesSetMax),
+        sizeVariety: Number(options.sizeVariety),
+        growthRate: Number(options.growthRate),
+        temperatureEquator: Number(options.temperatureEquator),
+        temperatureNorthPole: Number(options.temperatureNorthPole),
+        temperatureSouthPole: Number(options.temperatureSouthPole),
+        precipitation: Number(options.precipitation)
+      }
+    },
+    trace: [
+      "normalizeOptions",
+      "createHeightmap",
+      "buildGrid + applyHeightmap",
+      "extractFeatures",
+      "buildClimate",
+      "buildPack",
+      "buildRivers",
+      "defineBiomesAndPopulation",
+      "buildSociety.cultures",
+      "buildPolitics",
+      "buildSettlements",
+      "finalizeSocietyReligions",
+      "buildMarkers"
+    ],
+    template: {
+      id: heightmap.template,
+      name: heightmap.name,
+      stepCount: heightmap.steps.length,
+      steps: heightmap.steps.map(step => ({
+        tool: step[0],
+        count: step[1],
+        height: step[2],
+        rangeX: step[3],
+        rangeY: step[4],
+        raw: step.join(" ")
+      })),
+      blobPower: blobPowerForCells(metadata.cellsTarget),
+      linePower: linePowerForCells(metadata.cellsTarget)
+    },
+    mapCoordinates: candidateMap.mapCoordinates || climate.mapCoordinates || null,
+    grid: {
+      cells: grid.points.length,
+      vertices: grid.vertices.p.length,
+      spacing: grid.metadata.spacing ?? round(Math.sqrt((options.graphWidth * options.graphHeight) / options.cellsTarget)),
+      cellsDesired: options.cellsTarget,
+      cellsX: grid.metadata.columns,
+      cellsY: grid.metadata.rows,
+      boundaryPoints: grid.boundary?.length || grid.metadata.boundaryPoints || 0,
+      avgDegree: round(avgDegree(grid.cells.c)),
+      maxDegree: maxDegree(grid.cells.c),
+      borderCells: grid.metadata.borderCells ?? countBorderCells(grid.metadata),
+      height: describeNumbers(grid.cells.h),
+      landCells: countByPredicate(grid.cells.h, height => height >= 20),
+      waterCells: countByPredicate(grid.cells.h, height => height < 20),
+      landRatio: round(countByPredicate(grid.cells.h, height => height >= 20) / grid.points.length),
+      tDistribution: countValues(grid.cells.t || []),
+      featureCount: packFeatures.length,
+      featureTypes: countByKey(features.features, feature => normalizeFeatureType(feature.type)),
+      temperature: describeNumbers(grid.cells.temp || []),
+      precipitation: describeNumbers(grid.cells.prec || [])
+    },
+    pack: {
+      cells: pack.cells.g.length,
+      vertices: pack.vertices.p.length,
+      packGridRatio: round(pack.cells.g.length / grid.points.length),
+      avgDegree: round(avgDegree(pack.cells.c || [])),
+      maxDegree: maxDegree(pack.cells.c || []),
+      borderCells: countByPredicate(pack.cells.b || [], value => Boolean(value)),
+      area: describeNumbers(pack.cells.area || []),
+      tDistribution: countValues(pack.cells.t || []),
+      featureCount: packFeatures.length,
+      havenCells: countDefinedPositive(pack.cells.haven || []),
+      harborDistribution: countValues(pack.cells.harbor || []),
+      packGridRefsInvalid: countInvalidRefs(pack.cells.g, grid.points.length),
+      mapping: pack.metadata.mapping,
+      missingRequiredPackFields
+    },
+    features: describeCandidateFeatures(packFeatures),
+    rivers: {
+      count: rivers.rivers.length,
+      cellsWithRiver: countByPredicate(pack.cells.r || [], value => value > 0),
+      flux: describeNumbers(pack.cells.fl || []),
+      confluences: countByPredicate(pack.cells.conf || [], value => value > 0),
+      mouths: countByPredicate(rivers.rivers, river => Number.isInteger(river.mouth)),
+      width: describeNumbers([]),
+      discharge: describeNumbers(rivers.rivers.map(river => river.flux || 0)),
+      riverLoopCount: countRiverLoops(rivers.rivers)
+    },
+    biomes: {
+      distribution: countValues(pack.cells.biome || grid.cells.biome || [])
+    },
+    population: {
+      positiveSuitabilityCells: countByPredicate(pack.cells.s || [], value => value > 0),
+      positivePopulationCells: countByPredicate(pack.cells.pop || [], value => value > 0),
+      suitability: describeNumbers(pack.cells.s || []),
+      population: describeNumbers(pack.cells.pop || [])
+    },
+    society: {
+      cultures: countByPredicate(society.cultures || [], culture => culture?.i && !culture.removed),
+      culturedPackCells: countByPredicate(pack.cells.culture || [], value => value > 0),
+      culturedGridCells: countByPredicate(grid.cells.culture || [], value => value > 0),
+      burgs: settlements.cities.length,
+      capitals: countByPredicate(settlements.cities, city => city.capital),
+      ports: countByPredicate(settlements.cities, city => city.port),
+      states: politics.metadata?.states ?? politics.states.filter(state => state?.i || state?.id >= 0).length,
+      religions: society.metadata?.religions ?? countByPredicate(society.religions, religion => religion?.i && !religion.removed),
+      provinces: politics.metadata?.provinces ?? politics.provinces.filter(province => province?.i || province?.id >= 0).length,
+      markers: markers.markers.length,
+      zones: 0,
+      regiments: 0
+    },
+    routes: routeSummary,
+    validation,
+    candidateNotes: {
+      packStatus: pack.metadata.mapping,
+      missingRequiredPackFields,
+      unsupportedSourceStages: [
+        "Burgs.specify source names and emblems",
+        "States.defineStateForms",
+        "Military.generate",
+        "Zones.generate"
+      ]
+    }
+  };
+}
+
+async function captureScreenshot({screenshotPath}) {
+  const playwright = await loadPlaywright(defaultSourceDir);
+  const server = await startStaticServer({host, port, publicDir: appDir});
+  let browser = null;
+  try {
+    const baseUrl = `http://${host}:${port}`;
+    browser = await launchBrowser(playwright, {headless: !args.headful, browserChannel});
+    const page = await browser.newPage({viewport});
+    page.setDefaultTimeout(timeoutMs);
+    await page.goto(baseUrl, {waitUntil: "domcontentloaded", timeout: timeoutMs});
+    await page.waitForFunction(() => window.__webglGeneratorApp?.map, null, {timeout: timeoutMs});
+    await page.evaluate(
+      options => {
+        document.getElementById("auto-random-seed").checked = false;
+        document.getElementById("seed-input").value = options.seed;
+        document.getElementById("cells-input").value = String(options.cells);
+        document.getElementById("width-input").value = String(options.graphWidth);
+        document.getElementById("height-input").value = String(options.graphHeight);
+        document.getElementById("heightmap-template").value = options.template;
+        document.getElementById("generate-map").click();
+      },
+      {seed, cells, graphWidth, graphHeight, template}
+    );
+    await page.waitForFunction(
+      expected =>
+        window.__webglGeneratorApp?.map?.metadata?.seed === expected.seed &&
+        window.__webglGeneratorApp?.map?.metadata?.cellsTarget === expected.cells &&
+        window.__webglGeneratorApp?.map?.metadata?.checksum,
+      {seed, cells},
+      {timeout: timeoutMs}
+    );
+    await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.().draw?.glError === 0, null, {timeout: timeoutMs});
+    await page.screenshot({path: screenshotPath, fullPage: false});
+  } finally {
+    if (browser) await Promise.race([browser.close(), new Promise(resolve => setTimeout(resolve, 5000))]);
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
+async function startStaticServer({host, port, publicDir}) {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url || "/", `http://${host}:${port}`);
+    const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+    const target = resolve(publicDir, `.${normalize(pathname)}`);
+
+    if (!target.startsWith(publicDir)) {
+      response.writeHead(403);
+      response.end("Forbidden");
+      return;
+    }
+
+    if (!existsSync(target) || !statSync(target).isFile()) {
+      response.writeHead(404);
+      response.end("Not found");
+      return;
+    }
+
+    response.writeHead(200, {"content-type": getContentType(target)});
+    createReadStream(target).pipe(response);
+  });
+
+  await new Promise((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(port, host, () => {
+      server.off("error", rejectListen);
+      resolveListen();
+    });
+  });
+  return server;
+}
+
+async function loadPlaywright(sourceDir) {
+  try {
+    const require = createRequire(import.meta.url);
+    return require("playwright");
+  } catch {
+    const requireFromSource = createRequire(join(sourceDir, "package.json"));
+    return requireFromSource("playwright");
+  }
+}
+
+async function launchBrowser(playwright, {headless, browserChannel}) {
+  const options = {headless};
+  if (browserChannel) options.channel = browserChannel;
+  try {
+    return await playwright.chromium.launch(options);
+  } catch (error) {
+    if (browserChannel) throw error;
+    for (const channel of ["chrome", "msedge"]) {
+      try {
+        return await playwright.chromium.launch({headless, channel});
+      } catch {
+        // 继续尝试下一个系统浏览器 channel。
+      }
+    }
+    throw error;
+  }
+}
+
+function describeCandidateRoutes(routes, grid, features) {
+  const groups = {
+    roads: routes.filter(route => route.type === "road").length,
+    trails: routes.filter(route => route.type === "trail").length,
+    searoutes: routes.filter(route => route.type === "searoute").length
+  };
+  let landRouteWaterCells = 0;
+  let seaRouteLandCells = 0;
+
+  for (const route of routes) {
+    const routeCells = route.cells || [];
+    if (route.type === "searoute") {
+      seaRouteLandCells += routeCells.slice(1, -1).filter(cell => isLand(features, grid, cell)).length;
+    } else {
+      landRouteWaterCells += routeCells.filter(cell => !isLand(features, grid, cell)).length;
+    }
+  }
+
+  return {
+    total: routes.length,
+    groups,
+    roads: groups.roads,
+    trails: groups.trails,
+    searoutes: groups.searoutes,
+    landRouteWaterCells,
+    seaRouteLandCells
+  };
+}
+
+function validateCandidateGraph({grid, pack, features, routes, cities, routeSummary}) {
+  const landRouteWaterCells = routeSummary.landRouteWaterCells;
+  const seaRouteLandCells = routeSummary.seaRouteLandCells;
+  const cityWaterCells = cities.filter(city => !isLand(features, grid, city.cell)).length;
+  return {
+    gridCellIndexCountOk: grid.cells.v.length === grid.points.length,
+    gridNeighborInvalidRefs: countNeighborInvalidRefs(grid.cells.c, grid.points.length),
+    gridVertexInvalidRefs: countNestedInvalidRefs(grid.cells.v, grid.vertices.p.length),
+    packCellIndexCountOk: pack.cells.i?.length === pack.cells.g.length,
+    packGridRefsInvalid: countInvalidRefs(pack.cells.g, grid.points.length),
+    packNeighborInvalidRefs: countNeighborInvalidRefs(pack.cells.c || [], pack.cells.g.length),
+    packVertexInvalidRefs: countNestedInvalidRefs(pack.cells.v || [], pack.vertices.p.length),
+    havenInvalidCount: pack.cells.haven ? countInvalidHavens(pack.cells) : null,
+    harborMismatchCount: pack.cells.harbor ? countHarborMismatches(pack.cells) : null,
+    routeLinkAsymmetry: null,
+    landRouteWaterCells,
+    seaRouteLandCells,
+    packHasVoronoi: Boolean(pack.cells.c && pack.cells.v && pack.cells.area),
+    packMappingOneToOne: pack.metadata.mapping === "one-grid-cell-to-one-pack-cell",
+    routesHaveSeaRoutes: routes.some(route => route.type === "searoute"),
+    routeCellRefsInvalid: routes.reduce((sum, route) => sum + countInvalidRefs(route.cells || [], grid.points.length), 0),
+    burgCellsInvalid: countInvalidRefs(
+      routes.flatMap(route => [route.from, route.to]).filter(value => value !== undefined),
+      Number.POSITIVE_INFINITY
+    ),
+    landRouteWaterCellsOk: landRouteWaterCells === 0,
+    seaRouteLandCellsOk: seaRouteLandCells <= 1,
+    allCitiesOnLand: cityWaterCells === 0,
+    cityWaterCells
+  };
+
+  function countInvalidHavens(cells) {
+    let invalid = 0;
+    for (let index = 0; index < cells.g.length; index++) {
+      if (cells.h[index] < 20 || cells.t?.[index] !== 1) continue;
+      const haven = cells.haven?.[index];
+      if (!Number.isInteger(haven) || haven < 0 || haven >= cells.g.length || cells.h[haven] >= 20) invalid++;
+    }
+    return invalid;
+  }
+
+  function countHarborMismatches(cells) {
+    let mismatch = 0;
+    for (let index = 0; index < cells.g.length; index++) {
+      const expected = (cells.c?.[index] || []).filter(cell => cells.h[cell] < 20).length;
+      const actual = cells.harbor?.[index] || 0;
+      if (cells.h[index] >= 20 && cells.t?.[index] === 1 && actual !== expected) mismatch++;
+    }
+    return mismatch;
+  }
+
+  function isLandAtCell(cell) {
+    return isLand(features, grid, cell);
+  }
+}
+
+function describeCandidateFeatures(featureList) {
+  const alive = featureList.filter(Boolean);
+  return {
+    total: alive.length,
+    land: alive.filter(feature => normalizeFeatureType(feature.type) === "island").length,
+    water: alive.filter(feature => normalizeFeatureType(feature.type) !== "island").length,
+    types: countByKey(alive, feature => normalizeFeatureType(feature.type)),
+    groups: countByKey(alive, feature => feature.group || "none"),
+    lakes: alive.filter(feature => feature.type === "lake").length,
+    oceans: alive.filter(feature => feature.type === "ocean").length,
+    lakeFields: {
+      withHeight: alive.filter(feature => feature.type === "lake" && Number.isFinite(feature.height)).length,
+      withShoreline: alive.filter(feature => feature.type === "lake" && feature.shoreline?.length).length,
+      withFlux: alive.filter(feature => feature.type === "lake" && Number.isFinite(feature.flux)).length,
+      withOutlet: alive.filter(feature => feature.type === "lake" && feature.outlet).length,
+      closed: alive.filter(feature => feature.type === "lake" && feature.closed).length
+    }
+  };
+}
+
+function normalizeFeatureType(type) {
+  if (type === "land") return "island";
+  return type || "unknown";
+}
+
+function isLand(features, grid, cell) {
+  const feature = features.features?.[grid.cells.f?.[cell]];
+  return Boolean(feature?.land);
+}
+
+function avgDegree(neighbors = []) {
+  if (!neighbors.length) return 0;
+  return neighbors.reduce((sum, item) => sum + (item?.length || 0), 0) / neighbors.length;
+}
+
+function maxDegree(neighbors = []) {
+  return neighbors.reduce((max, item) => Math.max(max, item?.length || 0), 0);
+}
+
+function countBorderCells(metadata) {
+  const {columns, rows} = metadata;
+  if (!columns || !rows) return 0;
+  return columns * 2 + Math.max(0, rows - 2) * 2;
+}
+
+function countRiverLoops(rivers = []) {
+  return rivers.filter(river => {
+    const riverCells = (river.cells || []).filter(cell => cell >= 0);
+    return new Set(riverCells).size !== riverCells.length;
+  }).length;
+}
+
+function countValues(values = []) {
+  const counts = {};
+  for (const value of values || []) {
+    const key = value === undefined || value === null ? "null" : String(value);
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
+function countByKey(items = [], keyFn) {
+  const counts = {};
+  for (const item of items || []) {
+    if (!item) continue;
+    const key = keyFn(item);
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
+function countByPredicate(values = [], predicate) {
+  let count = 0;
+  for (const value of values || []) if (predicate(value)) count++;
+  return count;
+}
+
+function countDefinedPositive(values = []) {
+  let count = 0;
+  for (const value of values || []) if (value !== undefined && value !== null && value > 0) count++;
+  return count;
+}
+
+function countInvalidRefs(values = [], limit) {
+  let count = 0;
+  for (const value of values || []) {
+    if (!Number.isInteger(value) || value < 0 || value >= limit) count++;
+  }
+  return count;
+}
+
+function countNeighborInvalidRefs(neighbors = [], limit) {
+  let invalid = 0;
+  for (const list of neighbors || []) invalid += countInvalidRefs(list || [], limit);
+  return invalid;
+}
+
+function countNestedInvalidRefs(items = [], limit) {
+  let invalid = 0;
+  for (const list of items || []) invalid += countInvalidRefs(list || [], limit);
+  return invalid;
+}
+
+function describeNumbers(values = []) {
+  const list = Array.from(values || []).filter(value => Number.isFinite(Number(value))).map(Number);
+  if (!list.length) return emptyStats();
+  list.sort((a, b) => a - b);
+  const sum = list.reduce((total, value) => total + value, 0);
+  return {
+    min: round(list[0]),
+    p05: round(quantileSorted(list, 0.05)),
+    p25: round(quantileSorted(list, 0.25)),
+    p50: round(quantileSorted(list, 0.5)),
+    p75: round(quantileSorted(list, 0.75)),
+    p90: round(quantileSorted(list, 0.9)),
+    p95: round(quantileSorted(list, 0.95)),
+    p99: round(quantileSorted(list, 0.99)),
+    max: round(list[list.length - 1]),
+    mean: round(sum / list.length)
+  };
+}
+
+function emptyStats() {
+  return {min: 0, p05: 0, p25: 0, p50: 0, p75: 0, p90: 0, p95: 0, p99: 0, max: 0, mean: 0};
+}
+
+function quantileSorted(list, q) {
+  if (list.length === 1) return list[0];
+  const pos = (list.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  const next = list[base + 1];
+  return next === undefined ? list[base] : list[base] + rest * (next - list[base]);
+}
+
+function blobPowerForCells(cells) {
+  if (cells >= 90000) return 0.9973;
+  if (cells >= 50000) return 0.994;
+  if (cells >= 20000) return 0.99;
+  if (cells >= 10000) return 0.98;
+  if (cells >= 5000) return 0.97;
+  return 0.95;
+}
+
+function linePowerForCells(cells) {
+  if (cells >= 100000) return 0.93;
+  if (cells >= 90000) return 0.92;
+  if (cells >= 80000) return 0.91;
+  if (cells >= 70000) return 0.88;
+  if (cells >= 60000) return 0.87;
+  if (cells >= 50000) return 0.86;
+  if (cells >= 40000) return 0.84;
+  if (cells >= 30000) return 0.83;
+  if (cells >= 20000) return 0.82;
+  if (cells >= 10000) return 0.81;
+  if (cells >= 5000) return 0.79;
+  return 0.77;
+}
+
+function renderValidationMarkdown(summary) {
+  const lines = [];
+  lines.push("# Candidate baseline 验收记录");
+  lines.push("");
+  lines.push(`Seed：\`${summary.metadata.seed}\``);
+  lines.push(`模板：\`${summary.metadata.template}\``);
+  lines.push(`目标 cells：${summary.metadata.cellsTarget}`);
+  lines.push("");
+  lines.push("## 结构摘要");
+  lines.push("");
+  lines.push("| 项 | 数值 |");
+  lines.push("|---|---:|");
+  lines.push(`| grid cells | ${summary.grid.cells} |`);
+  lines.push(`| pack cells | ${summary.pack.cells} |`);
+  lines.push(`| pack/grid | ${summary.pack.packGridRatio} |`);
+  lines.push(`| grid 平均邻接度 | ${summary.grid.avgDegree} |`);
+  lines.push(`| pack 平均邻接度 | ${summary.pack.avgDegree} |`);
+  lines.push(`| 陆地比例 | ${summary.grid.landRatio} |`);
+  lines.push(`| 河流 | ${summary.rivers.count} |`);
+  lines.push(`| 城市 | ${summary.society.burgs} |`);
+  lines.push(`| 港口 | ${summary.society.ports} |`);
+  lines.push(`| 国家 | ${summary.society.states} |`);
+  lines.push(`| 路线 | ${summary.routes.total} |`);
+  lines.push("");
+  lines.push("## 当前缺口");
+  lines.push("");
+  for (const field of summary.candidateNotes.missingRequiredPackFields) lines.push(`- 缺少 \`${field}\``);
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
+function parseArgs(argv) {
+  const parsed = {};
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (!arg.startsWith("--")) continue;
+    const [key, inlineValue] = arg.slice(2).split("=");
+    if (inlineValue !== undefined) {
+      parsed[key] = inlineValue;
+      continue;
+    }
+    const next = argv[index + 1];
+    if (!next || next.startsWith("--")) {
+      parsed[key] = true;
+      continue;
+    }
+    parsed[key] = next;
+    index++;
+  }
+  return parsed;
+}
+
+function parseViewport(value) {
+  const [width, height] = String(value)
+    .toLowerCase()
+    .split("x")
+    .map(Number);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return {width: 1440, height: 960};
+  return {width, height};
+}
+
+function getContentType(file) {
+  const types = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png"
+  };
+  return types[extname(file).toLowerCase()] || "application/octet-stream";
+}
+
+function sanitizeFileName(value) {
+  return String(value).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function round(value) {
+  return Math.round((Number(value) || 0) * 1000) / 1000;
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
