@@ -4534,3 +4534,42 @@
 下一步建议：
 
 - 下一步进入后段本体第一项：复刻 `Burgs.specify()` 的城市人口、类型、分组和纹章字段。
+
+## 2026-06-25 阶段 18 中文命名库调研
+
+太子计划：
+
+- 继续阶段 18 后段本体，但在实现 `Burgs.specify()` 前先寻找一个可用的中文命名库。
+- 评估重点是授权、可 seed 化、是否适合静态浏览器应用、能否服务城市/国家/河流/湖泊等幻想地图对象，而不是只生成现代真实姓名。
+
+尚书调研：
+
+- 查询 npm registry 候选：
+  - `cnchar-name@3.2.6`
+  - `mingzi-ts@1.0.1`
+  - `chinese-name@0.3.0`
+  - `random-chinese-name-generator@0.0.3`
+- 拆包检查 `cnchar-name@3.2.6`：
+  - 许可证为 MIT。
+  - 解包大小约 `84KB`，运行文件约 `9.6KB`。
+  - 发布包提供姓氏表、男女名常用字、`isName`、`isSurname`、`addName` 和 `dict`。
+  - 内部使用 `Math.random`，所以不能直接用于本项目，需要项目自己的 seedable wrapper。
+- 评估 `mingzi-ts@1.0.1`：
+  - API 更现代，支持性别、复姓、名长和评分过滤。
+  - README 标注底层数据来自 `ChineseNames` / `CC BY-NC-SA`，存在非商业和相同方式共享的数据授权风险，因此不作为运行链路依赖。
+- 评估 `chinese-name@0.3.0`：
+  - MIT，但发布时间较早、API 和数据较薄、依赖旧 `commander`，不作为首选。
+- 评估 `random-chinese-name-generator@0.0.3`：
+  - MIT，但定位为网名生成，输出风格不适合地图地名和国家命名。
+
+门下结论：
+
+- 推荐 `cnchar-name@3.2.6` 作为阶段 18 中文命名库参考和数据来源。
+- 不直接在正式应用中裸导入 npm 包，因为当前应用仍是原生 ESM + 静态服务器，没有打包器，浏览器端无法稳定解析裸包名。
+- 下一步应新增 `app/webgl-generator/src/generator/names.js`，用本地 seedable wrapper 承接中文根名池、地名后缀和对象类型规则。
+- 详细评估记录见 `docs/chinese-naming-library-evaluation.md`。
+
+下一步建议：
+
+- 先实现 `names.js` 和 `Burgs.specify()` 的城市命名/人口/类型/分组字段。
+- 第一轮不要同时展开河流、湖泊、军事和 zones；先压 `lateStages.names.burgCoas`、`lateStages.statistics.burgsWithPopulation`、`lateStages.names.stateFullNames`、`lateStages.names.stateFormNames`。

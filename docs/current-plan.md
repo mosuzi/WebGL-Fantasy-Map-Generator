@@ -157,6 +157,10 @@
 - `tools/webgl-generator-export-baseline.mjs` 已输出同构 `lateStages` 摘要，当前 candidate 后段缺口会被明确记录为字段差异。
 - `tools/baseline-diff.mjs` 已加入后段专题指标和引用不变量；旧 source summary 如果缺少 `lateStages` 字段会被显式判定为需要刷新，而不是被当成真实算法差异。
 - `tools/candidate-baseline-matrix.mjs` 已在矩阵报告中新增“后段专题指标”表，用于后续按 case 追踪国家全名、城市纹章、河流/湖泊命名、军队、marker 和 zone 覆盖。
+- 已完成中文命名库评估：见 `docs/chinese-naming-library-evaluation.md`。
+  - 推荐 `cnchar-name@3.2.6` 作为阶段 18 命名基础，原因是 MIT 授权、包体小、含姓氏/名用字和姓名判断能力。
+  - 暂不直接裸导入 npm 包；正式应用仍保持原生 ESM 静态运行，下一步用本地 seedable wrapper 接入中文根名池。
+  - `mingzi-ts@1.0.1` 数据质量高，但 README 标注底层数据来自 `ChineseNames` / `CC BY-NC-SA`，不适合直接进入项目运行链路。
 
 ## 总目标
 
@@ -166,7 +170,7 @@
 
 第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。当前完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`，下一步可以进入 source 后段的命名、军事、区域、marker、zones 和统计字段补齐。
 
-阶段 18 第一刀已经开始建立后段专题验收框架。下一步应刷新至少一个强制 source/candidate case，确认 `lateStages` schema 能稳定暴露 candidate 的真实后段缺口；随后按字段依赖顺序进入 `Burgs.specify()`、`States.defineStateForms()`、`Rivers.specify()`、`Lakes.defineNames()`、`Military.generate()`、`Markers.generate()` 和 `Zones.generate()` 的复刻。
+阶段 18 第一刀已经开始建立后段专题验收框架，并已确定中文命名库策略。下一步应先新增本地 `names.js` seedable wrapper，再进入 `Burgs.specify()` 的城市人口、类型、分组、中文命名和纹章字段；随后按字段依赖顺序进入 `States.defineStateForms()`、`Rivers.specify()`、`Lakes.defineNames()`、`Military.generate()`、`Markers.generate()` 和 `Zones.generate()` 的复刻。
 
 ## 当前已完成
 
