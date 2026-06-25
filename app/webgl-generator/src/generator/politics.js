@@ -1,4 +1,5 @@
 import {MinPriorityQueue} from "./priority-queue.js";
+import {createChineseNameGenerator, getStateFullName} from "./names.js";
 import {createRandom} from "./random.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
@@ -48,16 +49,18 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
   const politicalCells = settledCells.length ? settledCells : landCells;
   const riverCells = new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells));
 
-  const states = buildPackStates(pack, society, random);
+  const nameGenerator = createChineseNameGenerator(options.seed);
+  const states = buildPackStates(pack, society, random, nameGenerator);
   expandPackStates(pack, states, society);
   normalizePackStates(pack, states);
   syncBurgStates(pack);
   collectStateStatistics(pack, states);
   findStateNeighbors(pack, states);
+  defineStateForms(states, nameGenerator);
   assignStateColors(states);
   grid.cells.state = mirrorPackStateToGrid(grid, pack);
 
-  const provinces = buildPackProvinces(pack, society, createRandom(options.seed), options);
+  const provinces = buildPackProvinces(pack, society, createRandom(options.seed), options, nameGenerator);
   grid.cells.province = mirrorPackProvinceToGrid(grid, pack);
 
   const regions = buildRegions();
@@ -104,18 +107,24 @@ function buildStates(grid, landCells, society, random) {
   });
 }
 
-function buildPackStates(pack, society, random) {
+function buildPackStates(pack, society, random, nameGenerator) {
   const states = [{id: 0, i: 0, name: "中立", center: 0, culture: 0, type: "Neutral", expansionism: 0}];
   const capitals = pack.burgs.filter(burg => burg?.i && burg.capital && !burg.removed);
 
   for (const burg of capitals) {
     const culture = society.cultures[burg.culture];
-    const root = culture?.name?.replace("文化", "") || STATE_ROOTS[burg.i % STATE_ROOTS.length];
+    const root = nameGenerator.makeStateRoot({
+      id: burg.i,
+      cell: burg.cell,
+      culture: burg.culture,
+      capitalName: burg.name,
+      type: culture?.type || "Generic"
+    }) || culture?.name?.replace("文化", "") || STATE_ROOTS[burg.i % STATE_ROOTS.length];
     const id = burg.i;
     states[id] = {
       id,
       i: id,
-      name: `${root}${id % 3 === 0 ? "国" : id % 3 === 1 ? "邦" : "王国"}`,
+      name: root,
       center: burg.cell,
       gridCenter: pack.cells.g[burg.cell],
       capital: burg.i,
@@ -128,12 +137,42 @@ function buildPackStates(pack, society, random) {
       burgs: 0,
       rural: 0,
       urban: 0,
-      neighbors: []
+      neighbors: [],
+      coa: nameGenerator.makeEmblem({
+        id,
+        kind: "state",
+        cell: burg.cell,
+        culture: burg.culture,
+        type: culture?.type || "Generic",
+        x: burg.x,
+        y: burg.y
+      })
     };
   }
 
   pack.states = states;
   return states;
+}
+
+function defineStateForms(states, nameGenerator) {
+  const validStates = states.filter(state => state?.i && !state.removed);
+  if (!validStates.length) return;
+  const areas = validStates.map(state => state.area || 0).sort((a, b) => a - b);
+  const medianArea = areas[Math.floor(areas.length / 2)] || 1;
+  const empireThreshold = [...areas].sort((a, b) => b - a)[Math.max(Math.ceil(validStates.length ** 0.4) - 2, 0)] || medianArea;
+
+  for (const state of validStates) {
+    let tier = Math.min(Math.floor(((state.area || medianArea) / medianArea) * 2.6), 4);
+    if (tier === 4 && (state.area || 0) < empireThreshold) tier = 3;
+    state.formName = nameGenerator.makeStateFormName({
+      id: state.i,
+      cell: state.center,
+      culture: state.culture,
+      type: state.type,
+      tier
+    });
+    state.fullName = getStateFullName(state.name, state.formName);
+  }
 }
 
 function expandPackStates(pack, states, society) {
@@ -351,7 +390,7 @@ function buildProvinces(grid, landCells, states, society, random) {
   return provinces;
 }
 
-function buildPackProvinces(pack, society, random, options) {
+function buildPackProvinces(pack, society, random, options, nameGenerator) {
   const {cells, states, burgs} = pack;
   const provinces = [null];
   const provinceIds = new Uint16Array(cells.i.length);
@@ -372,8 +411,8 @@ function buildPackProvinces(pack, society, random, options) {
       const burg = stateBurgs[index];
       const provinceId = provinces.length;
       const culture = society.cultures[burg.culture];
-      const root = (index % 2 === 0 ? burg.name : culture?.name?.replace("文化", "")) || STATE_ROOTS[provinceId % STATE_ROOTS.length];
-      const formName = PROVINCE_SUFFIXES[provinceId % PROVINCE_SUFFIXES.length];
+      const sourceRoot = (index % 2 === 0 ? burg.name : culture?.name?.replace("文化", "")) || STATE_ROOTS[provinceId % STATE_ROOTS.length];
+      const provinceName = nameGenerator.makeProvinceName({id: provinceId, cell: burg.cell, culture: burg.culture, state: state.i, baseName: sourceRoot});
       const province = {
         id: provinceId,
         i: provinceId,
@@ -381,9 +420,9 @@ function buildPackProvinces(pack, society, random, options) {
         center: burg.cell,
         gridCenter: cells.g[burg.cell],
         burg: burg.i,
-        name: root,
-        formName,
-        fullName: `${root}${formName}`,
+        name: provinceName.name,
+        formName: provinceName.formName,
+        fullName: provinceName.fullName,
         color: state.color,
         cells: 0,
         area: 0
@@ -396,7 +435,7 @@ function buildPackProvinces(pack, society, random, options) {
 
   expandPackProvinces(pack, provinces, provinceIds, maxGrowth);
   justifyPackProvinces(pack, provinces, provinceIds);
-  fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth);
+  fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator);
   collectProvinceStatistics(pack, provinces, provinceIds);
   cells.province = provinceIds;
   pack.provinces = provinces;
@@ -455,7 +494,7 @@ function justifyPackProvinces(pack, provinces, provinceIds) {
   }
 }
 
-function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth) {
+function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator) {
   const {cells, states, burgs} = pack;
   const queue = new MinPriorityQueue();
 
@@ -468,8 +507,15 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
       const provinceId = provinces.length;
       const burgId = cells.burg[center] || 0;
       const burg = burgs[burgId];
-      const root = burg?.name || `${state.name}${PROVINCE_SUFFIXES[provinceId % PROVINCE_SUFFIXES.length]}`;
-      const formName = burg ? PROVINCE_SUFFIXES[provinceId % PROVINCE_SUFFIXES.length] : "边地";
+      const provinceName = nameGenerator.makeProvinceName({
+        id: provinceId,
+        cell: center,
+        culture: burg?.culture || state.culture,
+        state: state.i,
+        baseName: burg?.name || state.name
+      });
+      if (!burg) provinceName.formName = "边地";
+      provinceName.fullName = `${provinceName.name}${provinceName.formName}`;
       const province = {
         id: provinceId,
         i: provinceId,
@@ -477,9 +523,9 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
         center,
         gridCenter: cells.g[center],
         burg: burgId,
-        name: root,
-        formName,
-        fullName: `${root}${formName}`,
+        name: provinceName.name,
+        formName: provinceName.formName,
+        fullName: provinceName.fullName,
         color: state.color,
         cells: 0,
         area: 0

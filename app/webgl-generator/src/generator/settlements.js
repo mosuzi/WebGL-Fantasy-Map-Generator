@@ -1,10 +1,8 @@
 import {MinPriorityQueue} from "./priority-queue.js";
 import Delaunator from "../vendor/delaunator.js";
 import {BIOMES} from "./biomes.js";
+import {createChineseNameGenerator} from "./names.js";
 
-const CITY_ROOTS = ["雁门", "星津", "青川", "白石", "南浦", "清源", "苍岭", "云渡", "昭阳", "岚港", "栖梧", "河洛"];
-const CITY_SUFFIXES = ["城", "镇", "港", "堡", "邑", "集"];
-const CITY_NUMERALS = ["", "二", "三", "四", "五", "六"];
 const MIN_PASSABLE_SEA_TEMP = -4;
 
 export function buildSettlements(grid, features, politics, rivers, random, pack, options = {}) {
@@ -65,6 +63,7 @@ function createSettlementMetadata({grid, features, population, cities, routes, p
 
 function buildPackSettlements(grid, features, politics, random, pack, options) {
   const {cells} = pack;
+  const nameGenerator = createChineseNameGenerator(options.seed);
   const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
   const cities = [];
   const burgs = [null];
@@ -82,15 +81,15 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
     for (const state of politics.states) {
       if (!state || state.i === 0) continue;
       const packCell = findPackCellForGrid(grid, pack, state.center, populated);
-      addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, flags: {capital: true, state: state.id}});
+      addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags: {capital: true, state: state.id}});
     }
 
     for (const province of politics.provinces || []) {
       const packCell = findPackCellForGrid(grid, pack, province.center, populated);
-      addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, flags: {provincial: true, state: province.state}});
+      addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags: {provincial: true, state: province.state}});
     }
   } else {
-    generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, options});
+    generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator, options});
   }
 
   const targetTowns = getTownsNumber(populated.length, grid.points.length);
@@ -110,7 +109,7 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
       const minSpacing = spacing * gaussian(random, 1, 0.3, 0.2, 2, 2);
       if (spacingIndex.find(x, y, minSpacing)) continue;
 
-      const city = addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random});
+      const city = addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator});
       if (!city) continue;
       added++;
       addedThisPass++;
@@ -120,12 +119,13 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   }
 
   pack.burgs = burgs;
-  shiftPortsAndRiverBurgs(grid, pack, cities, burgs);
+  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator);
   defineCityTypes(pack, cities, burgs);
+  specifyBurgs(pack, cities, burgs, nameGenerator);
   return {cities};
 }
 
-function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, options}) {
+function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator, options}) {
   const {cells} = pack;
   const capitalsNumber = getCapitalsNumber(populated.length, options.statesNumber);
   if (!capitalsNumber) return;
@@ -150,11 +150,11 @@ function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid
   }
 
   for (const packCell of selected) {
-    addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, flags: {capital: true}});
+    addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags: {capital: true}});
   }
 }
 
-function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, flags = {}}) {
+function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags = {}}) {
   if (!Number.isInteger(packCell) || packCell < 0 || packCell >= pack.cells.i.length) return null;
   const {cells} = pack;
   if (!isPopulatedPackCell(cells, packCell) || cells.burg[packCell]) return null;
@@ -167,7 +167,16 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   const cityId = cities.length;
   const state = Number.isInteger(flags.state) ? flags.state : flags.capital ? burgId : grid.cells.state?.[gridCell] ?? 0;
   const province = grid.cells.province?.[gridCell] ?? -1;
-  const name = makeCityName(cityId, false);
+  const type = getBurgType(pack, packCell, 0);
+  const name = nameGenerator.makePlaceName({
+    id: cityId,
+    cell: packCell,
+    culture: cells.culture[packCell],
+    state,
+    type,
+    capital: Boolean(flags.capital),
+    highland: type === "Highland"
+  });
   const sourceBurg = {
     i: burgId,
     id: burgId,
@@ -182,7 +191,8 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     feature: cells.f[packCell],
     capital: flags.capital ? 1 : 0,
     port: 0,
-    population: defineBurgPopulation(pack, packCell, Boolean(flags.capital), random)
+    population: defineBurgPopulation(pack, packCell, Boolean(flags.capital), random),
+    type
   };
   const city = {
     id: cityId,
@@ -200,7 +210,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     capital: Boolean(flags.capital),
     provincial: Boolean(flags.provincial),
     port: 0,
-    type: "Generic"
+    type
   };
 
   burgs.push(sourceBurg);
@@ -212,7 +222,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   return city;
 }
 
-function shiftPortsAndRiverBurgs(grid, pack, cities, burgs) {
+function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
   const {cells, features} = pack;
   const featurePortCandidates = new Map();
 
@@ -245,7 +255,16 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs) {
       city.port = Number(featureId);
       city.x = x;
       city.y = y;
-      if (!city.name.endsWith("港") && !city.capital) city.name = makeCityName(city.id, true);
+      if (!city.name.endsWith("港") && !city.capital) {
+        city.name = nameGenerator.makePlaceName({
+          id: city.id,
+          cell: burg.cell,
+          culture: burg.culture,
+          state: burg.state,
+          type: "Naval",
+          port: true
+        });
+      }
       burg.name = city.name;
     }
   }
@@ -270,6 +289,60 @@ function defineCityTypes(pack, cities, burgs) {
     city.group = city.capital ? "capital" : city.port ? "city" : city.population >= 5 ? "city" : city.population <= 0.1 ? "hamlet" : "town";
     burg.group = city.group;
   }
+}
+
+function specifyBurgs(pack, cities, burgs, nameGenerator) {
+  const populations = burgs.filter(burg => burg?.i && !burg.removed).map(burg => burg.population || 0).sort((a, b) => a - b);
+  for (const city of cities) {
+    const burg = burgs[city.burgId];
+    if (!burg?.i || burg.removed) continue;
+    defineBurgFeatures(pack, burg);
+    burg.group = defineBurgGroup(pack, burg, populations);
+    burg.coa = nameGenerator.makeEmblem({
+      id: burg.i,
+      kind: "burg",
+      cell: burg.cell,
+      culture: burg.culture,
+      state: burg.state,
+      type: burg.type,
+      capital: Boolean(burg.capital),
+      x: burg.x,
+      y: burg.y
+    });
+    city.type = burg.type;
+    city.group = burg.group;
+    city.coa = burg.coa;
+    city.citadel = burg.citadel;
+    city.plaza = burg.plaza;
+    city.walls = burg.walls;
+    city.temple = burg.temple;
+  }
+}
+
+function defineBurgFeatures(pack, burg) {
+  const pop = burg.population || 0;
+  burg.citadel = Number(burg.capital || pop > 50 || (pop > 15 && ((burg.i + burg.cell) % 2 === 0)) || ((burg.i + burg.cell) % 11 === 0));
+  burg.plaza = Number(burg.capital || burg.port || pop > 20 || pop > 10 || ((burg.i + burg.cell) % 7 === 0));
+  burg.walls = Number(burg.capital || pop > 30 || (pop > 20 && ((burg.i + burg.cell) % 3 !== 0)) || (pop > 10 && ((burg.i + burg.cell) % 2 === 0)));
+  burg.shanty = Number(pop > 60 || (pop > 40 && ((burg.i + burg.cell) % 4 !== 0)) || (pop > 20 && burg.walls && ((burg.i + burg.cell) % 5 === 0)));
+  const religion = pack.cells.religion?.[burg.cell] || 0;
+  const state = pack.states?.[burg.state];
+  burg.temple = Number((religion && state?.form === "Theocracy") || pop > 50 || (pop > 35 && ((burg.i + burg.cell) % 4 !== 0)) || (pop > 20 && ((burg.i + burg.cell) % 2 === 0)));
+}
+
+function defineBurgGroup(pack, burg, populations) {
+  const pop = burg.population || 0;
+  const percentile90 = populations[Math.floor(populations.length * 0.9)] || 0;
+  const biome = pack.cells.biome?.[burg.cell];
+  if (burg.capital) return "capital";
+  if (pop >= Math.max(5, percentile90)) return "city";
+  if (burg.citadel && !burg.walls && !burg.plaza && !burg.port && pop <= 1) return "fort";
+  if (burg.temple && !burg.walls && !burg.plaza && !burg.port && pop <= 0.8) return "monastery";
+  if (!burg.port && burg.plaza && pop <= 0.8 && [1, 2, 3].includes(biome)) return "caravanserai";
+  if (!burg.port && burg.plaza && pop <= 0.8 && biome >= 5 && biome <= 12) return "trading_post";
+  if (pop >= 0.1 && pop <= 2) return "village";
+  if (pop <= 0.1 && !burg.plaza) return "hamlet";
+  return "town";
 }
 
 function getBurgType(pack, cell, port) {
@@ -330,6 +403,7 @@ function buildPopulation(grid, features, riverCells) {
 }
 
 function buildGridCities(grid, features, politics, riverCells, landCells, population, random) {
+  const nameGenerator = createChineseNameGenerator(`${grid.metadata.actualCells || grid.points.length}:grid`);
   const requiredCells = new Map();
   for (const state of politics.states) requiredCells.set(state.center, {capital: true});
   for (const province of politics.provinces) {
@@ -364,7 +438,7 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
     return {
       id,
       burgId: id + 1,
-      name: makeCityName(id, port),
+      name: nameGenerator.makePlaceName({id, cell: item.cell, culture: grid.cells.culture[item.cell], state, port: Boolean(port)}),
       cell: item.cell,
       packCell: grid.cells.pack?.[item.cell] ?? -1,
       x: grid.points[item.cell][0],
@@ -376,7 +450,9 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
       religion: grid.cells.religion[item.cell],
       capital: Boolean(item.capital),
       provincial: Boolean(item.provincial),
-      port
+      port,
+      type: port ? "Naval" : "Generic",
+      group: item.capital ? "capital" : port ? "city" : "town"
     };
   });
 }
@@ -830,13 +906,6 @@ function getDirectNeighbors(cell, metadata) {
   if (row > 0) neighbors.push(cell - metadata.columns);
   if (row < metadata.rows - 1) neighbors.push(cell + metadata.columns);
   return neighbors;
-}
-
-function makeCityName(id, port) {
-  const root = CITY_ROOTS[id % CITY_ROOTS.length];
-  const numeral = CITY_NUMERALS[Math.min(CITY_NUMERALS.length - 1, Math.floor(id / CITY_ROOTS.length))];
-  const suffix = port ? (root.endsWith("港") ? "城" : "港") : CITY_SUFFIXES[id % CITY_SUFFIXES.length];
-  return `${root}${numeral}${suffix}`;
 }
 
 function distance(a, b) {

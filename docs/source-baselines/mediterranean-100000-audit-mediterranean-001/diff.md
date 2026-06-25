@@ -1,10 +1,10 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-24T17:02:35.742Z
+生成时间：2026-06-25T14:52:23.107Z
 模板：`mediterranean`
 Seed：`audit-mediterranean-001`
 目标 cells：100000
-状态：fail（fail 11，warn 0）
+状态：fail（fail 6，warn 0）
 
 ## 关键指标
 
@@ -41,11 +41,11 @@ Seed：`audit-mediterranean-001`
 | routes.landRouteWaterCells | 0 | 0 | 0 | 0 | pass |
 | routes.seaRouteLandCells | 1 | 0 | -1 | -1 | pass |
 | lateStages.names.burgNames | 1724 | 1730 | 6 | 0.003 | pass |
-| lateStages.names.burgCoas | 1724 | 0 | -1724 | 1 | fail |
-| lateStages.names.stateFullNames | 21 | 0 | -21 | 1 | fail |
-| lateStages.names.stateFormNames | 21 | 0 | -21 | 1 | fail |
-| lateStages.names.riverNames | 956 | 0 | -956 | 1 | fail |
-| lateStages.names.lakeNames | 140 | 0 | -140 | 1 | fail |
+| lateStages.names.burgCoas | 1724 | 1730 | 6 | 0.003 | pass |
+| lateStages.names.stateFullNames | 21 | 21 | 0 | 0 | pass |
+| lateStages.names.stateFormNames | 21 | 21 | 0 | 0 | pass |
+| lateStages.names.riverNames | 956 | 912 | -44 | 0.046 | pass |
+| lateStages.names.lakeNames | 140 | 140 | 0 | 0 | pass |
 | lateStages.military.regiments | 312 | 0 | -312 | 1 | fail |
 | lateStages.military.statesWithMilitary | 21 | 0 | -21 | 1 | fail |
 | lateStages.markers.total | 539 | 40 | -499 | 0.926 | fail |

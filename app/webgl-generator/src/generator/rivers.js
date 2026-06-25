@@ -1,4 +1,5 @@
 import {defineFeatureGroups} from "./pack.js";
+import {createChineseNameGenerator} from "./names.js";
 
 const WATER_LEVEL = 20;
 const MIN_FLUX_TO_FORM_RIVER = 30;
@@ -11,6 +12,7 @@ export function buildRivers(grid, features, pack, options = {}) {
   if (!pack?.cells?.t) return buildEmptyRivers();
 
   const startedAt = performance.now();
+  const nameGenerator = createChineseNameGenerator(options.seed);
   const cells = pack.cells;
   const riverPaths = new Map();
   const riverParents = new Map();
@@ -88,13 +90,14 @@ export function buildRivers(grid, features, pack, options = {}) {
     flowDown(pack, riverPaths, riverParents, downhill, cells.fl[cell], cells.r[cell]);
   }
 
-  const rivers = defineRivers({grid, pack, riverPaths, riverParents, options});
+  const rivers = defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator});
   cells.r = new Uint16Array(cells.i.length);
   cells.conf = new Uint16Array(cells.i.length);
   markRiverCells(cells, rivers);
   calculateConfluenceFlux(cells, effectiveHeights);
   pack.rivers = rivers;
   cleanupLakeData(pack);
+  defineLakeNames(pack, nameGenerator);
   defineFeatureGroups(pack, grid);
 
   return {
@@ -329,7 +332,7 @@ function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId) {
   addCellToRiver(riverPaths, riverId, toCell);
 }
 
-function defineRivers({grid, pack, riverPaths, riverParents, options}) {
+function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator}) {
   const rivers = [];
   const cells = pack.cells;
   const defaultWidthFactor = round(1 / Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25), 2);
@@ -367,11 +370,24 @@ function defineRivers({grid, pack, riverPaths, riverParents, options}) {
       cells: riverCells,
       gridCells: riverCells.filter(cell => cell >= 0).map(cell => cells.g[cell]),
       points,
-      type: parent ? "Branch" : "River"
+      type: parent ? "Branch" : "River",
+      name: nameGenerator.makeRiverName({id: riverId, cell: source, flux: discharge, type: parent ? "branch" : "river"})
     });
   }
 
   return rivers;
+}
+
+function defineLakeNames(pack, nameGenerator) {
+  for (const feature of pack.features || []) {
+    if (!feature || feature.type !== "lake") continue;
+    feature.name = nameGenerator.makeLakeName({
+      id: feature.i,
+      cell: feature.firstCell,
+      type: feature.group || "lake",
+      major: (feature.cells || 0) >= 10
+    });
+  }
 }
 
 function markRiverCells(cells, rivers) {

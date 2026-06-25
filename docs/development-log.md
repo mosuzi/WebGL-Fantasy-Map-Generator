@@ -4611,3 +4611,58 @@
 
 - `names.js` 先实现可 seed 的 `makePlaceName()`、`makeRiverName()`、`makeLakeName()` 和 `makeStateName()` 基础接口。
 - 城市命名接入 `Burgs.specify()` 时默认使用真实地名感，首都和高人口城市再按低概率加入轻玄幻词素。
+
+## 2026-06-25 阶段 18 中文命名本体第一刀
+
+太子计划：
+
+- 在不扰动主生成随机流的前提下，实现本地中文命名器，并先压低命名相关后段 fail。
+- 本刀覆盖城市、国家、省份、河流和湖泊命名，以及城市/国家轻量 COA 占位。
+- 不实现完整纹章绘制、军事、marker、zones 和省份 pole；这些保持后续独立步骤。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/names.js`：
+  - 参考 `zoningjs@3.2024.0` 县级以上地名语感，整理项目内轻量地点名词素池。
+  - 提供 `makePlaceName()`、`makeRiverName()`、`makeLakeName()`、`makeStateRoot()`、`makeStateFormName()`、`makeProvinceName()` 和 `makeEmblem()`。
+  - 使用 `seed + scope + id/cell/culture/state/type` 派生独立 PRNG，避免命名消耗主生成随机流。
+  - 风格权重保持真实地名感为主，首都、大湖、特殊对象低概率使用轻玄幻词。
+- 更新 `app/webgl-generator/src/generator/settlements.js`：
+  - 替换旧 `CITY_ROOTS + suffix` 城市命名。
+  - 港口改用水系/港口后缀命名，不再强行套旧序号名。
+  - 城市和 burg 补齐 `coa`、`group`、`type`、`citadel`、`plaza`、`walls`、`shanty`、`temple` 等第一版 `Burgs.specify()` 字段。
+- 更新 `app/webgl-generator/src/generator/politics.js`：
+  - 国家从首都/地名词素生成短名。
+  - 国家补齐 `formName`、`fullName` 和轻量 `coa`。
+  - 省份命名改用命名器生成 `name/formName/fullName`。
+- 更新 `app/webgl-generator/src/generator/rivers.js`：
+  - 河流在 `defineRivers()` 阶段生成中文河名。
+  - 湖泊在 lake cleanup 后生成中文湖名。
+  - 水系前缀单独收窄，避免出现 `江河`、`河泊` 这类重复水字组合。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/names.js`
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/politics.js`
+  - `app/webgl-generator/src/generator/rivers.js`
+- Node 直接烟测通过：
+  - `1730` 个城市均有 `coa`。
+  - `21` 个有效国家均有 `formName/fullName`。
+  - `912` 条 candidate 河流均有名称。
+  - `140` 个湖泊均有名称。
+  - 样例包括 `素川`、`长岚`、`丹江`、`镜河`、`寒泊`、`曜泽`，整体符合“真实地名感 + 轻玄幻点缀”。
+- 已刷新强制 case：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir .\docs\source-baselines\mediterranean-100000-audit-mediterranean-001 --browser-channel chrome --timeout 180000 --screenshot false`
+  - `node .\tools\baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001`
+- 验证结果：
+  - 总状态仍为 `fail`，但从 `fail 11 / warn 0` 降为 `fail 6 / warn 0`。
+  - `lateStages.names.burgCoas`、`stateFullNames`、`stateFormNames`、`riverNames`、`lakeNames` 均已通过。
+  - 主生成指标仍保持通过：grid、pack、features、rivers、population、society、routes 等关键指标未出现新增 fail/warn。
+  - `source/` 未修改。
+
+下一步建议：
+
+- 下一刀优先补 `provincesWithPole`，复刻 source 的省份 pole 统计字段；它比军事、marker 和 zones 的依赖面更窄。
+- 再下一步进入 `Military.generate()`，补 `statesWithMilitary` 和 `regiments`。

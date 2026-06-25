@@ -163,6 +163,11 @@
   - 地点名策略改为“真实地名感为主、轻玄幻点缀”：普通城市优先 `青溪`、`洛川`、`云阳` 这类二字地名；首都、圣城、大湖、奇观等少量对象可使用 `玄泽`、`云麓`、`星渊` 这种轻玄幻词。
   - 暂不直接裸导入 npm 包；正式应用仍保持原生 ESM 静态运行，下一步用本地 seedable wrapper 接入中文根名池。
   - `mingzi-ts@1.0.1` 数据质量高，但 README 标注底层数据来自 `ChineseNames` / `CC BY-NC-SA`，不适合直接进入项目运行链路。
+- 已完成阶段 18 命名本体第一刀：
+  - 新增 `app/webgl-generator/src/generator/names.js`，提供 seedable 中文地点名、河流名、湖泊名、国家形制名、省份名和轻量 COA 占位生成。
+  - 城市、港口、国家、省份、河流和湖泊已接入本地命名器；命名随机流由 `seed + object id/cell/type` 派生，不消耗主生成随机流。
+  - 城市已补充 `coa`、`group`、`type` 和基础城市特征字段，国家已补充 `formName`、`fullName` 和轻量 `coa`。
+  - 强制 case `mediterranean / 100000 / audit-mediterranean-001` 已刷新，后段专题从 `fail 11 / warn 0` 降为 `fail 6 / warn 0`；命名相关指标均已通过，剩余 fail 为军事、marker、zones 和省份 pole。
 
 ## 总目标
 
@@ -172,7 +177,7 @@
 
 第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。当前完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`，下一步可以进入 source 后段的命名、军事、区域、marker、zones 和统计字段补齐。
 
-阶段 18 第一刀已经开始建立后段专题验收框架，并已确定中文命名库策略。下一步应先新增本地 `names.js` seedable wrapper，把 `cnchar-name` 的人名感字池参考和 `zoningjs` 的地名词素参考整理为可 seed 的本地命名器，再进入 `Burgs.specify()` 的城市人口、类型、分组、中文命名和纹章字段；随后按字段依赖顺序进入 `States.defineStateForms()`、`Rivers.specify()`、`Lakes.defineNames()`、`Military.generate()`、`Markers.generate()` 和 `Zones.generate()` 的复刻。
+阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA 和国家 full/form name 已接入。下一步应进入省份 `pole` / `getPoles()` 或军事 `Military.generate()`；若继续按后段 fail 数量收口，优先建议补省份 pole，因为它是独立几何统计字段，风险低于军事和 zones。
 
 ## 当前已完成
 
