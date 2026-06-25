@@ -1,10 +1,10 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-25T16:15:44.667Z
+生成时间：2026-06-25T18:13:40.847Z
 模板：`mediterranean`
 Seed：`audit-mediterranean-001`
 目标 cells：100000
-状态：fail（fail 5，warn 0）
+状态：fail（fail 3，warn 0）
 
 ## 关键指标
 
@@ -46,8 +46,8 @@ Seed：`audit-mediterranean-001`
 | lateStages.names.stateFormNames | 21 | 21 | 0 | 0 | pass |
 | lateStages.names.riverNames | 956 | 912 | -44 | 0.046 | pass |
 | lateStages.names.lakeNames | 140 | 140 | 0 | 0 | pass |
-| lateStages.military.regiments | 312 | 0 | -312 | 1 | fail |
-| lateStages.military.statesWithMilitary | 21 | 0 | -21 | 1 | fail |
+| lateStages.military.regiments | 312 | 402 | 90 | 0.288 | pass |
+| lateStages.military.statesWithMilitary | 21 | 21 | 0 | 0 | pass |
 | lateStages.markers.total | 539 | 40 | -499 | 0.926 | fail |
 | lateStages.markers.withIcon | 539 | 0 | -539 | 1 | fail |
 | lateStages.zones.total | 14 | 0 | -14 | 1 | fail |

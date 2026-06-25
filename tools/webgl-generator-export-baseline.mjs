@@ -198,7 +198,7 @@ function createCandidateSummary(candidateMap, {appDir}) {
       provinces: politics.metadata?.provinces ?? politics.provinces.filter(province => province?.i || province?.id >= 0).length,
       markers: markers.markers.length,
       zones: 0,
-      regiments: 0
+      regiments: countStateRegiments(politics.states)
     },
     lateStages: describeCandidateLateStages({grid, pack, society, politics, settlements, markers}),
     routes: routeSummary,
@@ -209,7 +209,6 @@ function createCandidateSummary(candidateMap, {appDir}) {
       unsupportedSourceStages: [
         "Burgs.specify source names and emblems",
         "States.defineStateForms",
-        "Military.generate",
         "Zones.generate"
       ]
     }
@@ -288,6 +287,10 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
       religionsWithArea: countByPredicate(religions, item => Number.isFinite(item?.area))
     }
   };
+}
+
+function countStateRegiments(states = []) {
+  return states.reduce((sum, state) => sum + (Array.isArray(state?.military) ? state.military.length : 0), 0);
 }
 
 async function captureScreenshot({screenshotPath}) {

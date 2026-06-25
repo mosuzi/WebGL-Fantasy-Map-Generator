@@ -4735,3 +4735,64 @@
 下一步建议：
 
 - 回到阶段 18 后段本体，进入 `Military.generate()` 第一刀，补国家军队数组、regiment 数量、基础兵种统计和引用不变量。
+
+## 2026-06-26 阶段 18 军事第一刀
+
+太子计划：
+
+- 本刀只补 `Military.generate()` 的后段数据产物，不做军事图层绘制、军事编辑器、战役 note 或完整外交模型。
+- 验收目标：
+  - 有效国家生成 `military` 数组。
+  - regiment 字段能被现有 `lateStages.military` schema 统计。
+  - `lateStages.military.regiments` 与 `statesWithMilitary` 在强制 case 中通过。
+  - `lateStages.military.invalidCells` 保持 `0`。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/military.js`：
+  - 使用 `seed:military` 派生随机流，不消耗主生成随机流。
+  - 参考 source 的默认兵种结构，生成 infantry、archers、cavalry、artillery 和 fleet。
+  - 按国家扩张性、面积、邻国数量估算 `alert`。
+  - 从城市、乡村人口和港口生成 platoon，再合并成 regiment。
+  - regiment 字段覆盖 `i/a/cell/x/y/bx/by/u/n/s/type/name/state`。
+  - 陆军和海军分开合并，避免 fleet 被混入陆军团。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - 在城市、宗教完成后调用 `buildMilitary(pack, options)`。
+  - 地图对象新增 `military`，summary 和 generation log 记录军事统计。
+  - 阶段标识更新为 `source-stage-18-military-first-pass`。
+- 更新 `tools/webgl-generator-export-baseline.mjs`：
+  - `society.regiments` 不再写死为 `0`，改为从 `politics.states[].military` 统计。
+  - candidate notes 不再把 `Military.generate` 标记为未支持。
+- 更新 `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计面板新增“军事”行，显示有军队国家数和 regiment 数。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/military.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `app/webgl-generator/src/ui/panel.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+- Node 直接烟测通过：
+  - 有效国家 `21`。
+  - 有军队国家 `21`。
+  - regiment `402`。
+  - 海军 regiment `21`。
+  - military cell 引用错误 `0`。
+- 已刷新强制 case：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir .\docs\source-baselines\mediterranean-100000-audit-mediterranean-001 --browser-channel chrome --timeout 180000 --screenshot false`
+  - `node .\tools\baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001`
+- 验证结果：
+  - 总状态仍为 `fail`，但从 `fail 5 / warn 0` 降为 `fail 3 / warn 0`。
+  - `lateStages.military.regiments`：source `312`，candidate `402`，ratio `0.288`，状态 `pass`。
+  - `lateStages.military.statesWithMilitary`：source `21`，candidate `21`，状态 `pass`。
+  - `lateStages.military.invalidCells`：candidate `0`，状态 `pass`。
+  - 主生成指标仍保持通过；剩余 fail 为 `lateStages.markers.total`、`lateStages.markers.withIcon` 和 `lateStages.zones.total`。
+
+侍中验收：
+
+- 运行时军事统计已经进入面板数据源；本刀未新增军事地图图层，因此不做军事视觉层验收。
+
+下一步建议：
+
+- 进入 marker 第一刀，补 source 后段 marker 的数量级、类型分布、icon 字段和引用不变量。

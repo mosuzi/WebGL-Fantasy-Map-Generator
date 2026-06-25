@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-25T16:15:39.666Z",
+    "generatedAt": "2026-06-25T18:13:35.035Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -9,7 +9,7 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-17-matrix-pass-culture-coverage",
+    "generatorStage": "source-stage-18-military-first-pass",
     "generatedOptions": {
       "statesNumber": 21,
       "provincesRatio": 20,
@@ -432,7 +432,7 @@
     "provinces": 463,
     "markers": 40,
     "zones": 0,
-    "regiments": 0
+    "regiments": 402
   },
   "lateStages": {
     "names": {
@@ -466,12 +466,21 @@
       }
     },
     "military": {
-      "statesWithMilitary": 0,
-      "regiments": 0,
+      "statesWithMilitary": 21,
+      "regiments": 402,
       "troops": 0,
-      "navalRegiments": 0,
-      "types": {},
-      "units": {},
+      "navalRegiments": 21,
+      "types": {
+        "regiment": 381,
+        "fleet": 21
+      },
+      "units": {
+        "archers": 1206303,
+        "infantry": 669275,
+        "artillery": 97716,
+        "cavalry": 69295,
+        "fleet": 11429
+      },
       "invalidCells": 0
     },
     "markers": {
@@ -558,7 +567,6 @@
     "unsupportedSourceStages": [
       "Burgs.specify source names and emblems",
       "States.defineStateForms",
-      "Military.generate",
       "Zones.generate"
     ]
   }

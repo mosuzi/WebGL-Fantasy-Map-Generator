@@ -4,6 +4,7 @@ import {extractFeatures} from "./features.js";
 import {buildGrid} from "./grid.js";
 import {createHeightmap} from "./heightmap.js";
 import {buildMarkers} from "./markers.js";
+import {buildMilitary} from "./military.js";
 import {normalizeOptions} from "./options.js";
 import {buildPack} from "./pack.js";
 import {buildPolitics} from "./politics.js";
@@ -31,15 +32,16 @@ export function generatePlaceholderMap(inputOptions = {}) {
   const politics = buildPolitics(grid, features, society, rivers, random, options, pack);
   finalizeSettlements(grid, features, politics, settlements, pack);
   finalizeSocietyReligions(grid, society, pack, random, settlements, options);
+  const military = buildMilitary(pack, options);
   const markers = buildMarkers(grid, features, politics, rivers);
   const layers = createPalette(random);
-  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers);
+  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military);
   const generatedAt = new Date().toISOString();
 
   return {
     metadata: {
       app: "webgl-generator",
-      generatorStage: "source-stage-17-matrix-pass-culture-coverage",
+      generatorStage: "source-stage-18-military-first-pass",
       seed: options.seed,
       heightmapTemplate: heightmap.template,
       cellsTarget: options.cellsTarget,
@@ -60,6 +62,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
     society,
     politics,
     settlements,
+    military,
     markers,
     pack,
     features,
@@ -79,18 +82,19 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `build politics: states=${politics.metadata.states}, provinces=${politics.metadata.provinces}, regions=${politics.metadata.regions}`,
       `build settlements: cities=${settlements.metadata.cities}, routes=${settlements.metadata.routes}, populationCells=${settlements.metadata.populationCells}`,
       `build religions: religions=${society.metadata.religions}, religionPackCells=${society.metadata.religionPackCells}`,
+      `build military: states=${military.metadata.statesWithMilitary}, regiments=${military.metadata.regiments}`,
       `build markers: markers=${markers.metadata.markers}, peaks=${markers.metadata.peaks}, riverSources=${markers.metadata.riverSources}`,
       `grid checksum: ${summary.checksum}`
     ],
     status: {
-      message: "source 阶段 17 矩阵全量通过与文化覆盖收口",
+      message: "source 阶段 18 军事第一刀",
       sourceDependency: false,
       snapshotDependency: false
     }
   };
 }
 
-export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers) {
+export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military = null) {
   const randomPreviewGenerator = createRandom(options.seed);
   const randomPreview = Array.from({length: 4}, () => round(randomPreviewGenerator.next(), 6));
   const payload = {
@@ -152,6 +156,7 @@ export function createGenerationSummary(options, grid, features, climate, societ
       }))
     },
     markers: markers.metadata,
+    military: military?.metadata || null,
     palette: {
       ocean: layers.ocean.map(value => round(value, 4)),
       land: layers.land.map(value => round(value, 4)),
