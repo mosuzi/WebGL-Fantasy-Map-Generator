@@ -172,6 +172,10 @@
   - `buildPackProvinces()` 现在会为每个有效省份生成 `pole` 点位。
   - 当前算法在 pack 语义图上选择离省份边界最远的省内 cell 中心，作为 source `getPolesOfInaccessibility()` 的轻量近似。
   - 强制 case 已刷新，后段专题从 `fail 6 / warn 0` 降为 `fail 5 / warn 0`；`lateStages.statistics.provincesWithPole` 已通过。
+- 已回头修复正式应用河流渲染旧债：
+  - 主河流层已从固定 `gl.LINES` 改为独立 screen-space 三角形带 mesh。
+  - 河流宽度按 pack cell `fl`、河流 `sourceWidth/widthFactor` 和沿程长度趋势计算，不再所有河段同粗。
+  - 运行时统计面板新增河流三角形、河流 mesh 构建耗时和河流宽度范围。
 
 ## 总目标
 
@@ -181,7 +185,7 @@
 
 第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。当前完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`，下一步可以进入 source 后段的命名、军事、区域、marker、zones 和统计字段补齐。
 
-阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀与省份 pole 第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA、国家 full/form name 和省份 `pole` 已接入。下一步应进入 `Military.generate()` 第一刀，补 `statesWithMilitary` 和 `regiments`；marker 和 zones 仍保留为后续独立步骤。
+阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀与省份 pole 第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA、国家 full/form name 和省份 `pole` 已接入。阶段中途已回头修复正式应用主河流固定线宽问题，当前河流层按流量生成 screen-space 三角形带。下一步应进入 `Military.generate()` 第一刀，补 `statesWithMilitary` 和 `regiments`；marker 和 zones 仍保留为后续独立步骤。
 
 ## 当前已完成
 
@@ -436,7 +440,7 @@ http://127.0.0.1:5410
 
 ## 下一步
 
-1. 进入 source 后段专题补齐：命名、军事、区域、marker、zones 和统计字段；当前这些仍是独立 WebGL 复刻中的简化占位。
+1. 进入 `Military.generate()` 第一刀，补国家军队数组、regiment 数量、基础兵种统计和引用不变量。
 2. 继续把 source/candidate 对照报告扩展到后段专题字段，避免后续功能只靠肉眼验收。
 3. 保留当前 63 case 矩阵作为回归门槛；后续改动生成链时先跑 targeted case，再跑 full matrix。
 4. 原阶段 3 的 UI、对象编辑、路线样式、点图层、浮动面板等工作继续暂停，等 source 后段数据链路进一步稳定后再恢复。

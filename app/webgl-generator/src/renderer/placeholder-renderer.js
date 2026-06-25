@@ -19,11 +19,13 @@ export class PlaceholderMapRenderer {
     };
     this.vertexBuffer = this.gl.createBuffer();
     this.routeBuffer = this.gl.createBuffer();
+    this.riverBuffer = this.gl.createBuffer();
     this.selectionBuffer = this.gl.createBuffer();
     this.lineBuffer = this.gl.createBuffer();
     this.pointBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.routeVertexCount = 0;
+    this.riverVertexCount = 0;
     this.selectionVertexCount = 0;
     this.lineVertexCount = 0;
     this.pointVertexCount = 0;
@@ -35,8 +37,11 @@ export class PlaceholderMapRenderer {
     this.objectPickingIndex = null;
     this.lastObjectCandidateCount = 0;
     this.routeBuildMs = 0;
+    this.riverBuildMs = 0;
     this.selectionBuildMs = 0;
     this.routeWidthMode = "screen-space";
+    this.riverWidthMode = "screen-space flux mesh";
+    this.riverWidthStats = emptyRiverWidthStats();
     this.colorMode = "height";
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
     this.lastDraw = {drawMs: 0};
@@ -64,6 +69,8 @@ export class PlaceholderMapRenderer {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
@@ -98,6 +105,7 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     resizeCanvasToDisplaySize(this.canvas);
     this.updateRouteBuffer();
+    this.updateRiverBuffer();
     this.updateSelectionBuffer();
 
     const gl = this.gl;
@@ -120,6 +128,11 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.drawArrays(gl.LINES, 0, this.lineVertexCount);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.riverBuffer);
+    gl.uniform1f(this.locations.scale, 1);
+    gl.uniform2f(this.locations.offset, 0, 0);
+    bindVertexBuffer(gl, this.locations);
+    gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.selectionBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
@@ -153,6 +166,11 @@ export class PlaceholderMapRenderer {
       routeBuildMs: this.routeBuildMs,
       routeWidthMode: this.routeWidthMode,
       routeStyleMode: "primary/secondary road + continuous trail dashed",
+      riverVertexCount: this.riverVertexCount,
+      riverTriangleCount: this.riverVertexCount / 3,
+      riverBuildMs: this.riverBuildMs,
+      riverWidthMode: this.riverWidthMode,
+      riverWidthStats: this.riverWidthStats,
       selectionVertexCount: this.selectionVertexCount,
       selectionTriangleCount: this.selectionVertexCount / 3,
       selectionBuildMs: this.selectionBuildMs,
@@ -209,6 +227,16 @@ export class PlaceholderMapRenderer {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
     this.routeBuildMs = roundMs(performance.now() - startedAt);
+  }
+
+  updateRiverBuffer() {
+    const startedAt = performance.now();
+    const {vertices, stats} = buildRiverMeshVertices(this.map, this.camera, this.canvas);
+    this.riverVertexCount = vertices.length / 6;
+    this.riverWidthStats = stats;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+    this.riverBuildMs = roundMs(performance.now() - startedAt);
   }
 
   updateSelectionBuffer() {
@@ -431,12 +459,106 @@ function buildLineVertices(map) {
   const vertices = [];
   for (const segment of map.features.shore.coastline) pushWorldLine(vertices, segment, map, [0.9, 0.86, 0.68, 1]);
   for (const segment of map.features.shore.lakeShore) pushWorldLine(vertices, segment, map, [0.64, 0.82, 0.92, 1]);
-  for (const river of map.rivers.rivers) {
-    for (let index = 0; index < river.points.length - 1; index++) {
-      pushWorldLine(vertices, [river.points[index], river.points[index + 1]], map, [0.22, 0.48, 0.82, 1]);
-    }
-  }
   return new Float32Array(vertices);
+}
+
+function buildRiverMeshVertices(map, camera, canvas) {
+  const vertices = [];
+  const stats = {
+    rivers: 0,
+    segments: 0,
+    minWidthPx: Infinity,
+    maxWidthPx: 0
+  };
+  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
+
+  for (const river of map.rivers.rivers) {
+    if (!Array.isArray(river.points) || river.points.length < 2) continue;
+    const {points, widths} = getRiverRenderPath(river, map, pixelRatio, stats);
+    if (points.length < 2) continue;
+    const before = vertices.length;
+    pushVariableScreenPolyline(vertices, points, widths, map, camera, canvas, riverRenderColor(river));
+    if (vertices.length === before) continue;
+    stats.rivers++;
+    stats.segments += points.length - 1;
+  }
+
+  return {
+    vertices: new Float32Array(vertices),
+    stats: normalizeRiverWidthStats(stats)
+  };
+}
+
+function getRiverRenderPath(river, map, pixelRatio, stats) {
+  const points = river.points.filter(isWorldPoint);
+  const cells = Array.isArray(river.cells) ? river.cells : [];
+  const widths = [];
+  let runningFlux = 0;
+
+  for (let index = 0; index < points.length; index++) {
+    const cell = sampleRiverCell(cells, index, points.length);
+    runningFlux = Math.max(runningFlux, riverCellFlux(map.pack.cells, cell, river));
+    const widthCss = riverWidthCssPx(river, runningFlux, index);
+    widths.push(widthCss * pixelRatio);
+    stats.minWidthPx = Math.min(stats.minWidthPx, widthCss);
+    stats.maxWidthPx = Math.max(stats.maxWidthPx, widthCss);
+  }
+
+  return {points, widths};
+}
+
+function sampleRiverCell(cells, pointIndex, pointsLength) {
+  if (!cells.length) return -1;
+  const ratio = pointsLength <= 1 ? 0 : pointIndex / (pointsLength - 1);
+  const index = Math.max(0, Math.min(cells.length - 1, Math.round(ratio * (cells.length - 1))));
+  return cells[index];
+}
+
+function riverCellFlux(cells, cell, river) {
+  if (cell === undefined || cell < 0) return river.discharge || river.flux || river.width || 1;
+  return cells.fl?.[cell] || river.discharge || river.flux || river.width || 1;
+}
+
+function riverWidthCssPx(river, flux, pointIndex) {
+  const widthFactor = river.widthFactor || 1;
+  const sourceWidth = river.sourceWidth || 0.05;
+  const offset = getRiverRenderOffset(flux, pointIndex, widthFactor, sourceWidth);
+  const sourceLikeWidth = getRiverRenderWidth(offset);
+  return clamp(sourceLikeWidth * 6 + 1.1, 1.1, 9.5);
+}
+
+function getRiverRenderOffset(flux, pointIndex, widthFactor, startingWidth) {
+  const lengthProgression = [1, 1, 2, 3, 5, 8, 13, 21, 34].map(value => value / 200);
+  const fluxWidth = Math.min((flux || 0) ** 0.7 / 500, 1);
+  const lengthWidth = pointIndex / 200 + (lengthProgression[pointIndex] || lengthProgression[lengthProgression.length - 1]);
+  return widthFactor * (lengthWidth + fluxWidth) + startingWidth;
+}
+
+function getRiverRenderWidth(offset) {
+  return (offset / 1.5) ** 1.8;
+}
+
+function normalizeRiverWidthStats(stats) {
+  return {
+    rivers: stats.rivers,
+    segments: stats.segments,
+    minWidthPx: stats.minWidthPx === Infinity ? 0 : roundValue(stats.minWidthPx),
+    maxWidthPx: roundValue(stats.maxWidthPx)
+  };
+}
+
+function emptyRiverWidthStats() {
+  return {
+    rivers: 0,
+    segments: 0,
+    minWidthPx: 0,
+    maxWidthPx: 0
+  };
+}
+
+function riverRenderColor(river) {
+  const width = Math.min(1, Math.max(0, (river.width || 0) / 8));
+  return mix([0.18, 0.45, 0.78, 0.95], [0.34, 0.68, 0.96, 1], width);
 }
 
 function buildRouteMeshVertices(map, camera, canvas, selection) {
@@ -566,6 +688,20 @@ function pushScreenPolyline(vertices, points, map, camera, canvas, color, widthP
   pushSolidScreenPolyline(vertices, screenPoints, canvas, color, widthPx);
 }
 
+function pushVariableScreenPolyline(vertices, points, widths, map, camera, canvas, color) {
+  const screenPoints = [];
+  const screenWidths = [];
+  for (let index = 0; index < points.length; index++) {
+    const screenPoint = worldToScreenPixel(points[index], map, camera, canvas);
+    const previous = screenPoints[screenPoints.length - 1];
+    if (previous && Math.hypot(screenPoint.x - previous.x, screenPoint.y - previous.y) <= 0.5) continue;
+    screenPoints.push(screenPoint);
+    screenWidths.push(widths[index] || widths[widths.length - 1] || 1);
+  }
+  if (screenPoints.length < 2) return;
+  pushVariableSolidScreenPolyline(vertices, screenPoints, screenWidths, canvas, color);
+}
+
 function pushDashedScreenPolyline(vertices, screenPoints, canvas, color, widthPx, dash) {
   const pattern = dash.dashPx + dash.gapPx;
   let phase = 0;
@@ -600,6 +736,40 @@ function pushSolidScreenPolyline(vertices, screenPoints, canvas, color, widthPx)
   const right = [];
 
   for (let index = 0; index < screenPoints.length; index++) {
+    const previous = screenPoints[Math.max(0, index - 1)];
+    const current = screenPoints[index];
+    const next = screenPoints[Math.min(screenPoints.length - 1, index + 1)];
+    const before = normalizeScreenVector(current.x - previous.x, current.y - previous.y);
+    const after = normalizeScreenVector(next.x - current.x, next.y - current.y);
+    const blended = normalizeScreenVector(before.x + after.x, before.y + after.y);
+    const tangent = index === 0 ? after : index === screenPoints.length - 1 ? before : (blended.x || blended.y ? blended : after);
+    const normalBefore = normalForVector(before.x || after.x, before.y || after.y);
+    const normalAfter = normalForVector(after.x || before.x, after.y || before.y);
+    const miter = normalForVector(tangent.x, tangent.y);
+    const dot = Math.max(0.3, Math.abs(miter.x * normalAfter.x + miter.y * normalAfter.y));
+    const length = Math.min(half / dot, half * 2.6);
+    const capShift = index === 0 ? -half : index === screenPoints.length - 1 ? half : 0;
+    const capBase = {
+      x: current.x + tangent.x * capShift,
+      y: current.y + tangent.y * capShift
+    };
+    const normal = index === 0 ? normalAfter : index === screenPoints.length - 1 ? normalBefore : miter;
+    left.push({x: capBase.x + normal.x * length, y: capBase.y + normal.y * length});
+    right.push({x: capBase.x - normal.x * length, y: capBase.y - normal.y * length});
+  }
+
+  for (let index = 0; index < left.length - 1; index++) {
+    pushScreenTriangle(vertices, left[index], left[index + 1], right[index + 1], canvas, color);
+    pushScreenTriangle(vertices, left[index], right[index + 1], right[index], canvas, color);
+  }
+}
+
+function pushVariableSolidScreenPolyline(vertices, screenPoints, widthPxByPoint, canvas, color) {
+  const left = [];
+  const right = [];
+
+  for (let index = 0; index < screenPoints.length; index++) {
+    const half = Math.max(0.5, widthPxByPoint[index] / 2);
     const previous = screenPoints[Math.max(0, index - 1)];
     const current = screenPoints[index];
     const next = screenPoints[Math.min(screenPoints.length - 1, index + 1)];
@@ -684,6 +854,10 @@ function worldToNdcPoint(point, map) {
   const x = (point[0] / map.metadata.graphWidth) * 2 - 1;
   const y = 1 - (point[1] / map.metadata.graphHeight) * 2;
   return [x, y];
+}
+
+function isWorldPoint(point) {
+  return Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]);
 }
 
 function colorForCell(cellIndex, map, colorMode) {
@@ -814,6 +988,10 @@ function mix(a, b, t) {
     a[2] + (b[2] - a[2]) * t,
     1
   ];
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function createProgram(gl, vertexSource, fragmentSource) {

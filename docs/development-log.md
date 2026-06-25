@@ -4702,3 +4702,36 @@
 下一步建议：
 
 - 进入 `Military.generate()` 第一刀，补国家军队数组、regiment 数量、基础兵种统计和引用不变量。
+
+## 2026-06-26 河流按流量变宽渲染修复
+
+太子回看：
+
+- 用户指出当前正式应用河流没有按流量渲染不同粗细，这是早期 `gl.LINES` 过渡实现留下的旧问题。
+- 数据层已经具备 `pack.cells.fl`、`river.discharge`、`river.sourceWidth`、`river.widthFactor` 和 `river.width`，本轮不改河流生成算法，只修渲染表达。
+
+尚书实施：
+
+- 更新 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 主河流层从 `buildLineVertices()` 中移出，不再与海岸线、湖岸线一起走固定 `gl.LINES`。
+  - 新增独立 `riverBuffer`，每次绘制按当前 camera/canvas 构建 screen-space 三角形带。
+  - 河流宽度沿路径采样 pack cell flux，并结合 `sourceWidth/widthFactor` 和沿程长度趋势计算，源头细、下游粗。
+  - `getStats()` 新增 `riverVertexCount`、`riverTriangleCount`、`riverBuildMs`、`riverWidthMode` 和 `riverWidthStats`。
+- 更新 `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计面板新增河流三角形、河流 mesh 构建耗时和河流宽度范围。
+
+门下复核：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- Playwright + 系统 Chrome 验证正式应用：
+  - 河流数量 `165`，河流线段 `1797`。
+  - `riverVertexCount = 10782`，`riverTriangleCount = 3594`。
+  - 河流宽度范围 `1.1 - 4.2px`。
+  - `riverWidthMode = screen-space flux mesh`。
+  - `WebGL error = 0`。
+
+下一步建议：
+
+- 回到阶段 18 后段本体，进入 `Military.generate()` 第一刀，补国家军队数组、regiment 数量、基础兵种统计和引用不变量。
