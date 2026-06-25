@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-25T14:52:17.437Z",
+    "generatedAt": "2026-06-25T16:15:39.666Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -511,7 +511,7 @@
       "statesWithRural": 22,
       "statesWithUrban": 22,
       "statesWithNeighbors": 22,
-      "provincesWithPole": 0,
+      "provincesWithPole": 463,
       "culturesWithArea": 11,
       "religionsWithArea": 20
     }

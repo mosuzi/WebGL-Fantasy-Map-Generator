@@ -1,10 +1,10 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-25T14:52:23.107Z
+生成时间：2026-06-25T16:15:44.667Z
 模板：`mediterranean`
 Seed：`audit-mediterranean-001`
 目标 cells：100000
-状态：fail（fail 6，warn 0）
+状态：fail（fail 5，warn 0）
 
 ## 关键指标
 
@@ -53,7 +53,7 @@ Seed：`audit-mediterranean-001`
 | lateStages.zones.total | 14 | 0 | -14 | 1 | fail |
 | lateStages.statistics.burgsWithPopulation | 1724 | 1730 | 6 | 0.003 | pass |
 | lateStages.statistics.statesWithArea | 21 | 22 | 1 | 0.048 | pass |
-| lateStages.statistics.provincesWithPole | 477 | 0 | -477 | 1 | fail |
+| lateStages.statistics.provincesWithPole | 477 | 463 | -14 | 0.029 | pass |
 
 ## 不变量
 

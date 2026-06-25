@@ -1,12 +1,12 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-25T14:52:23.107Z",
+    "generatedAt": "2026-06-25T16:15:44.667Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\mediterranean-100000-audit-mediterranean-001\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\mediterranean-100000-audit-mediterranean-001\\candidate-summary.json",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
     "cellsTarget": 100000,
-    "failCount": 6,
+    "failCount": 5,
     "warnCount": 0,
     "status": "fail"
   },
@@ -618,10 +618,10 @@
       "id": "lateStages.statistics.provincesWithPole",
       "label": "lateStages.statistics.provincesWithPole",
       "source": 477,
-      "candidate": 0,
-      "delta": -477,
-      "ratio": 1,
-      "status": "fail",
+      "candidate": 463,
+      "delta": -14,
+      "ratio": 0.029,
+      "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.45,

@@ -4666,3 +4666,39 @@
 
 - 下一刀优先补 `provincesWithPole`，复刻 source 的省份 pole 统计字段；它比军事、marker 和 zones 的依赖面更窄。
 - 再下一步进入 `Military.generate()`，补 `statesWithMilitary` 和 `regiments`。
+
+## 2026-06-26 阶段 18 省份 pole 第一刀
+
+太子计划：
+
+- 继续阶段 18 后段 fail 收口，优先处理 `lateStages.statistics.provincesWithPole`。
+- 本刀只补省份 `pole` 字段，不进入军事、marker 或 zones。
+- 验收目标是强制 case 中 `provincesWithPole` 从 fail 变 pass，后段 fail 从 `6` 降到 `5`，且主生成指标不新增 fail/warn。
+
+尚书实施：
+
+- 更新 `app/webgl-generator/src/generator/politics.js`：
+  - 在 `buildPackProvinces()` 中，省份扩张、形状修正、补洞和统计完成后调用 `assignProvincePoles()`。
+  - `assignProvincePoles()` 按 `provinceIds` 收集省份 cell 和省份边界 cell。
+  - 对每个有效省份，选择离边界 cell 最远的省内 cell 中心作为 `province.pole`。
+  - 极小省份或无 cell 省份回退到 `province.center` 或 `[0, 0]`。
+- 当前算法是 source `getPolesOfInaccessibility(pack, getType)` 的轻量近似，不做 polygon/polylabel 级精确复刻；后续如果要追求标签布局视觉一致，可再升级到 isoline + polylabel。
+
+门下复核：
+
+- `node --check .\app\webgl-generator\src\generator\politics.js` 通过。
+- Node 直接烟测通过：
+  - `463` 个有效省份均有 `pole`。
+  - 抽样 pole 为有效坐标，例如 `素川州 -> [414.3, 311.7]`。
+- 已刷新强制 case：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir .\docs\source-baselines\mediterranean-100000-audit-mediterranean-001 --browser-channel chrome --timeout 180000 --screenshot false`
+  - `node .\tools\baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001`
+- 验证结果：
+  - 总状态仍为 `fail`，但从 `fail 6 / warn 0` 降为 `fail 5 / warn 0`。
+  - `lateStages.statistics.provincesWithPole`：source `477`，candidate `463`，ratio `0.029`，状态 `pass`。
+  - 主生成指标仍保持通过，未新增 fail/warn。
+  - `source/` 未修改。
+
+下一步建议：
+
+- 进入 `Military.generate()` 第一刀，补国家军队数组、regiment 数量、基础兵种统计和引用不变量。

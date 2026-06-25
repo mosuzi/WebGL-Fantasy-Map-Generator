@@ -437,6 +437,7 @@ function buildPackProvinces(pack, society, random, options, nameGenerator) {
   justifyPackProvinces(pack, provinces, provinceIds);
   fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator);
   collectProvinceStatistics(pack, provinces, provinceIds);
+  assignProvincePoles(pack, provinces, provinceIds);
   cells.province = provinceIds;
   pack.provinces = provinces;
   return provinces;
@@ -577,6 +578,64 @@ function collectProvinceStatistics(pack, provinces, provinceIds) {
     if (!province) continue;
     province.area = round(province.area || 0, 2);
   }
+}
+
+function assignProvincePoles(pack, provinces, provinceIds) {
+  const provinceCells = new Map();
+  const provinceBoundaryCells = new Map();
+  const {cells} = pack;
+
+  for (const cell of cells.i) {
+    const provinceId = provinceIds[cell];
+    if (!provinceId || cells.h[cell] < 20) continue;
+    if (!provinceCells.has(provinceId)) provinceCells.set(provinceId, []);
+    provinceCells.get(provinceId).push(cell);
+
+    const isBoundary = (cells.c[cell] || []).some(neighbor => cells.h[neighbor] < 20 || provinceIds[neighbor] !== provinceId);
+    if (isBoundary) {
+      if (!provinceBoundaryCells.has(provinceId)) provinceBoundaryCells.set(provinceId, []);
+      provinceBoundaryCells.get(provinceId).push(cell);
+    }
+  }
+
+  for (const province of provinces) {
+    if (!province?.i || province.removed) continue;
+    const ownCells = provinceCells.get(province.i) || [];
+    if (!ownCells.length) {
+      province.pole = cells.p[province.center] ? cells.p[province.center].map(value => round(value, 2)) : [0, 0];
+      continue;
+    }
+
+    const boundaryCells = provinceBoundaryCells.get(province.i) || ownCells;
+    const poleCell = findPoleCell(cells, ownCells, boundaryCells, province.center);
+    province.pole = cells.p[poleCell].map(value => round(value, 2));
+  }
+}
+
+function findPoleCell(cells, ownCells, boundaryCells, fallbackCell) {
+  if (ownCells.length <= 2) return fallbackCell && ownCells.includes(fallbackCell) ? fallbackCell : ownCells[0];
+
+  let bestCell = ownCells[0];
+  let bestScore = -Infinity;
+  for (const cell of ownCells) {
+    const minBoundaryDistance = getMinDistanceSquared(cells.p[cell], boundaryCells, cells);
+    const populationScore = cells.pop?.[cell] || cells.s?.[cell] || 0;
+    const burgScore = cells.burg?.[cell] ? 5 : 0;
+    const score = minBoundaryDistance + populationScore * 0.02 + burgScore;
+    if (score <= bestScore) continue;
+    bestCell = cell;
+    bestScore = score;
+  }
+  return bestCell;
+}
+
+function getMinDistanceSquared(point, boundaryCells, cells) {
+  let min = Infinity;
+  for (const cell of boundaryCells) {
+    const next = distanceSquared(point, cells.p[cell]);
+    if (next < min) min = next;
+  }
+  return Number.isFinite(min) ? min : 0;
 }
 
 function mirrorPackProvinceToGrid(grid, pack) {
@@ -732,6 +791,10 @@ function getCellNeighbors(grid, cell) {
 
 function distance(a, b) {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+function distanceSquared(a, b) {
+  return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
 }
 
 function round(value, digits = 0) {
