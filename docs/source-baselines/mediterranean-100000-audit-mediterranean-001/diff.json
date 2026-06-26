@@ -1,14 +1,14 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-26T02:05:44.888Z",
+    "generatedAt": "2026-06-26T14:51:05.849Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\mediterranean-100000-audit-mediterranean-001\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\mediterranean-100000-audit-mediterranean-001\\candidate-summary.json",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
     "cellsTarget": 100000,
-    "failCount": 0,
-    "warnCount": 0,
-    "status": "pass"
+    "failCount": 28,
+    "warnCount": 11,
+    "status": "fail"
   },
   "metrics": [
     {
@@ -224,10 +224,10 @@
     {
       "id": "rivers.count",
       "label": "rivers.count",
-      "source": 956,
+      "source": 955,
       "candidate": 912,
-      "delta": -44,
-      "ratio": 0.046,
+      "delta": -43,
+      "ratio": 0.045,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -238,10 +238,10 @@
     {
       "id": "rivers.cellsWithRiver",
       "label": "rivers.cellsWithRiver",
-      "source": 5708,
+      "source": 5711,
       "candidate": 5592,
-      "delta": -116,
-      "ratio": 0.02,
+      "delta": -119,
+      "ratio": 0.021,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -252,10 +252,10 @@
     {
       "id": "population.positivePopulationCells",
       "label": "population.positivePopulationCells",
-      "source": 53650,
+      "source": 56846,
       "candidate": 53834,
-      "delta": 184,
-      "ratio": 0.003,
+      "delta": -3012,
+      "ratio": 0.053,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -280,10 +280,10 @@
     {
       "id": "society.burgs",
       "label": "society.burgs",
-      "source": 1724,
+      "source": 1825,
       "candidate": 1730,
-      "delta": 6,
-      "ratio": 0.003,
+      "delta": -95,
+      "ratio": 0.052,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -294,10 +294,10 @@
     {
       "id": "society.ports",
       "label": "society.ports",
-      "source": 230,
+      "source": 321,
       "candidate": 234,
-      "delta": 4,
-      "ratio": 0.017,
+      "delta": -87,
+      "ratio": 0.271,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -336,10 +336,10 @@
     {
       "id": "society.provinces",
       "label": "society.provinces",
-      "source": 477,
+      "source": 515,
       "candidate": 463,
-      "delta": -14,
-      "ratio": 0.029,
+      "delta": -52,
+      "ratio": 0.101,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -350,10 +350,10 @@
     {
       "id": "routes.total",
       "label": "routes.total",
-      "source": 1331,
+      "source": 1557,
       "candidate": 1481,
-      "delta": 150,
-      "ratio": 0.113,
+      "delta": -76,
+      "ratio": 0.049,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -364,10 +364,10 @@
     {
       "id": "routes.roads",
       "label": "routes.roads",
-      "source": 19,
+      "source": 34,
       "candidate": 16,
-      "delta": -3,
-      "ratio": 0.158,
+      "delta": -18,
+      "ratio": 0.529,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -379,10 +379,10 @@
     {
       "id": "routes.trails",
       "label": "routes.trails",
-      "source": 1098,
+      "source": 1230,
       "candidate": 1232,
-      "delta": 134,
-      "ratio": 0.122,
+      "delta": 2,
+      "ratio": 0.002,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -393,10 +393,10 @@
     {
       "id": "routes.searoutes",
       "label": "routes.searoutes",
-      "source": 214,
+      "source": 293,
       "candidate": 233,
-      "delta": 19,
-      "ratio": 0.089,
+      "delta": -60,
+      "ratio": 0.205,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -421,9 +421,9 @@
     {
       "id": "routes.seaRouteLandCells",
       "label": "routes.seaRouteLandCells",
-      "source": 1,
+      "source": 737,
       "candidate": 0,
-      "delta": -1,
+      "delta": -737,
       "ratio": -1,
       "status": "pass",
       "rule": {
@@ -435,10 +435,10 @@
     {
       "id": "lateStages.names.burgNames",
       "label": "lateStages.names.burgNames",
-      "source": 1724,
+      "source": 1825,
       "candidate": 1730,
-      "delta": 6,
-      "ratio": 0.003,
+      "delta": -95,
+      "ratio": 0.052,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -449,10 +449,10 @@
     {
       "id": "lateStages.names.burgCoas",
       "label": "lateStages.names.burgCoas",
-      "source": 1724,
+      "source": 1825,
       "candidate": 1730,
-      "delta": 6,
-      "ratio": 0.003,
+      "delta": -95,
+      "ratio": 0.052,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -491,10 +491,10 @@
     {
       "id": "lateStages.names.riverNames",
       "label": "lateStages.names.riverNames",
-      "source": 956,
+      "source": 955,
       "candidate": 912,
-      "delta": -44,
-      "ratio": 0.046,
+      "delta": -43,
+      "ratio": 0.045,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -519,10 +519,10 @@
     {
       "id": "lateStages.military.regiments",
       "label": "lateStages.military.regiments",
-      "source": 312,
+      "source": 409,
       "candidate": 402,
-      "delta": 90,
-      "ratio": 0.288,
+      "delta": -7,
+      "ratio": 0.017,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -547,10 +547,10 @@
     {
       "id": "lateStages.markers.total",
       "label": "lateStages.markers.total",
-      "source": 539,
+      "source": 568,
       "candidate": 539,
-      "delta": 0,
-      "ratio": 0,
+      "delta": -29,
+      "ratio": 0.051,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -561,10 +561,10 @@
     {
       "id": "lateStages.markers.withIcon",
       "label": "lateStages.markers.withIcon",
-      "source": 539,
+      "source": 568,
       "candidate": 539,
-      "delta": 0,
-      "ratio": 0,
+      "delta": -29,
+      "ratio": 0.051,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -575,10 +575,10 @@
     {
       "id": "lateStages.zones.total",
       "label": "lateStages.zones.total",
-      "source": 14,
+      "source": 10,
       "candidate": 14,
-      "delta": 0,
-      "ratio": 0,
+      "delta": 4,
+      "ratio": 0.4,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -589,10 +589,10 @@
     {
       "id": "lateStages.statistics.burgsWithPopulation",
       "label": "lateStages.statistics.burgsWithPopulation",
-      "source": 1724,
+      "source": 1825,
       "candidate": 1730,
-      "delta": 6,
-      "ratio": 0.003,
+      "delta": -95,
+      "ratio": 0.052,
       "status": "pass",
       "rule": {
         "kind": "relative",
@@ -617,15 +617,547 @@
     {
       "id": "lateStages.statistics.provincesWithPole",
       "label": "lateStages.statistics.provincesWithPole",
-      "source": 477,
+      "source": 515,
       "candidate": 463,
-      "delta": -14,
-      "ratio": 0.029,
+      "delta": -52,
+      "ratio": 0.101,
       "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.45,
         "fail": 0.85
+      }
+    },
+    {
+      "id": "economy.goods.total",
+      "label": "economy.goods.total",
+      "source": 71,
+      "candidate": 0,
+      "delta": -71,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.1,
+        "fail": 0.5
+      }
+    },
+    {
+      "id": "economy.goods.raw",
+      "label": "economy.goods.raw",
+      "source": 39,
+      "candidate": 0,
+      "delta": -39,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.2,
+        "fail": 0.6
+      }
+    },
+    {
+      "id": "economy.goods.manufactured",
+      "label": "economy.goods.manufactured",
+      "source": 30,
+      "candidate": 0,
+      "delta": -30,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.2,
+        "fail": 0.6
+      }
+    },
+    {
+      "id": "economy.goods.hybrid",
+      "label": "economy.goods.hybrid",
+      "source": 2,
+      "candidate": 0,
+      "delta": -2,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.2,
+        "fail": 0.6
+      }
+    },
+    {
+      "id": "economy.goods.withBiomeOutput",
+      "label": "economy.goods.withBiomeOutput",
+      "source": 16,
+      "candidate": 0,
+      "delta": -16,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.2,
+        "fail": 0.6
+      }
+    },
+    {
+      "id": "economy.goods.withDemandCoverage",
+      "label": "economy.goods.withDemandCoverage",
+      "source": 58,
+      "candidate": 0,
+      "delta": -58,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.2,
+        "fail": 0.6
+      }
+    },
+    {
+      "id": "economy.goods.resourceCells",
+      "label": "economy.goods.resourceCells",
+      "source": 12634,
+      "candidate": 0,
+      "delta": -12634,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "economy.markets.total",
+      "label": "economy.markets.total",
+      "source": 65,
+      "candidate": 0,
+      "delta": -65,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.35,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "economy.markets.cellsAssigned",
+      "label": "economy.markets.cellsAssigned",
+      "source": 65106,
+      "candidate": 0,
+      "delta": -65106,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.35,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "economy.markets.assignedRatio",
+      "label": "economy.markets.assignedRatio",
+      "source": 0.892,
+      "candidate": 0,
+      "delta": -0.892,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "absolute",
+        "warn": 0.15,
+        "fail": 0.35
+      }
+    },
+    {
+      "id": "economy.markets.burgsWithMarket",
+      "label": "economy.markets.burgsWithMarket",
+      "source": 1825,
+      "candidate": 0,
+      "delta": -1825,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.35,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "economy.markets.plazaBurgs",
+      "label": "economy.markets.plazaBurgs",
+      "source": 65,
+      "candidate": 0,
+      "delta": -65,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.35,
+        "fail": 0.8
+      }
+    },
+    {
+      "id": "economy.markets.goodsEntries",
+      "label": "economy.markets.goodsEntries",
+      "source": 4615,
+      "candidate": 0,
+      "delta": -4615,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.35,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "economy.markets.stock.mean",
+      "label": "economy.markets.stock.mean",
+      "source": 33.694,
+      "candidate": 0,
+      "delta": -33.694,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.markets.price.mean",
+      "label": "economy.markets.price.mean",
+      "source": 6.031,
+      "candidate": 0,
+      "delta": -6.031,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.production.burgsWithProduction",
+      "label": "economy.production.burgsWithProduction",
+      "source": 1825,
+      "candidate": 0,
+      "delta": -1825,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.35,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "economy.production.localRecords",
+      "label": "economy.production.localRecords",
+      "source": 1208,
+      "candidate": 0,
+      "delta": -1208,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.5,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "economy.production.mfgRecords",
+      "label": "economy.production.mfgRecords",
+      "source": 13078,
+      "candidate": 0,
+      "delta": -13078,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.5,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "economy.production.dealRecords",
+      "label": "economy.production.dealRecords",
+      "source": 32791,
+      "candidate": 0,
+      "delta": -32791,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.5,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "economy.production.burgsWithProduct",
+      "label": "economy.production.burgsWithProduct",
+      "source": 1825,
+      "candidate": 0,
+      "delta": -1825,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.35,
+        "fail": 0.85
+      }
+    },
+    {
+      "id": "economy.production.product.mean",
+      "label": "economy.production.product.mean",
+      "source": 36.087,
+      "candidate": 0,
+      "delta": -36.087,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.production.burgTreasury.mean",
+      "label": "economy.production.burgTreasury.mean",
+      "source": 30.641,
+      "candidate": 0,
+      "delta": -30.641,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.deals.total",
+      "label": "economy.deals.total",
+      "source": 33683,
+      "candidate": 0,
+      "delta": -33683,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "economy.deals.marketToBurg",
+      "label": "economy.deals.marketToBurg",
+      "source": 27301,
+      "candidate": 0,
+      "delta": -27301,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "economy.deals.burgToMarket",
+      "label": "economy.deals.burgToMarket",
+      "source": 5490,
+      "candidate": 0,
+      "delta": -5490,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.45,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "economy.deals.marketToMarket",
+      "label": "economy.deals.marketToMarket",
+      "source": 892,
+      "candidate": 0,
+      "delta": -892,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.55,
+        "fail": 0.95
+      }
+    },
+    {
+      "id": "economy.deals.tradedGoods",
+      "label": "economy.deals.tradedGoods",
+      "source": 68,
+      "candidate": 0,
+      "delta": -68,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.25,
+        "fail": 0.75
+      }
+    },
+    {
+      "id": "economy.deals.units",
+      "label": "economy.deals.units",
+      "source": 39928,
+      "candidate": 0,
+      "delta": -39928,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.deals.value",
+      "label": "economy.deals.value",
+      "source": 152165.21,
+      "candidate": 0,
+      "delta": -152165.21,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.deals.taxTotal",
+      "label": "economy.deals.taxTotal",
+      "source": 15061.219,
+      "candidate": 0,
+      "delta": -15061.219,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.deals.taxedDeals",
+      "label": "economy.deals.taxedDeals",
+      "source": 6371,
+      "candidate": 0,
+      "delta": -6371,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.5,
+        "fail": 0.9
+      }
+    },
+    {
+      "id": "economy.taxes.statesWithRates",
+      "label": "economy.taxes.statesWithRates",
+      "source": 21,
+      "candidate": 0,
+      "delta": -21,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "absolute",
+        "warn": 2,
+        "fail": 5
+      }
+    },
+    {
+      "id": "economy.taxes.statesWithTreasury",
+      "label": "economy.taxes.statesWithTreasury",
+      "source": 21,
+      "candidate": 0,
+      "delta": -21,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "absolute",
+        "warn": 2,
+        "fail": 5
+      }
+    },
+    {
+      "id": "economy.taxes.salesTax.mean",
+      "label": "economy.taxes.salesTax.mean",
+      "source": 0.155,
+      "candidate": 0,
+      "delta": -0.155,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "absolute",
+        "warn": 0.08,
+        "fail": 0.18
+      }
+    },
+    {
+      "id": "economy.taxes.pollTax.mean",
+      "label": "economy.taxes.pollTax.mean",
+      "source": 0.193,
+      "candidate": 0,
+      "delta": -0.193,
+      "ratio": 1,
+      "status": "fail",
+      "rule": {
+        "kind": "absolute",
+        "warn": 0.08,
+        "fail": 0.18
+      }
+    },
+    {
+      "id": "economy.taxes.treasuryTotal",
+      "label": "economy.taxes.treasuryTotal",
+      "source": 97479.1,
+      "candidate": 0,
+      "delta": -97479.1,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.taxes.dealTaxTotal",
+      "label": "economy.taxes.dealTaxTotal",
+      "source": 15061.219,
+      "candidate": 0,
+      "delta": -15061.219,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
+      }
+    },
+    {
+      "id": "economy.taxes.pollTaxExpected",
+      "label": "economy.taxes.pollTaxExpected",
+      "source": 82417.882,
+      "candidate": 0,
+      "delta": -82417.882,
+      "ratio": 1,
+      "status": "warn",
+      "rule": {
+        "kind": "relative",
+        "warn": 0.6,
+        "fail": 1
       }
     }
   ],
@@ -688,9 +1220,9 @@
     {
       "id": "validation.seaRouteLandCells",
       "label": "海路中段穿陆",
-      "source": 1,
+      "source": 737,
       "candidate": 0,
-      "expectedMaximum": 1,
+      "expectedMaximum": 737,
       "status": "pass"
     },
     {
@@ -712,6 +1244,102 @@
     {
       "id": "lateStages.military.invalidCells",
       "label": "military cell 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.goods.invalidCellGoodRefs",
+      "label": "good cell 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.goods.invalidRecipeGoodRefs",
+      "label": "recipe good 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.markets.invalidCenterBurgs",
+      "label": "market center burg 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.markets.invalidCellMarketRefs",
+      "label": "cell market 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.markets.invalidBurgMarketRefs",
+      "label": "burg market 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.production.invalidProductionGoodRefs",
+      "label": "production good 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.production.invalidProductionDealRefs",
+      "label": "production deal 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.deals.invalidPartyRefs",
+      "label": "deal party 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.deals.invalidGoodRefs",
+      "label": "deal good 引用",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.deals.invalidDealIndexes",
+      "label": "deal index",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.deals.invalidAmounts",
+      "label": "deal amount",
+      "source": 0,
+      "candidate": 0,
+      "expectedMaximum": 0,
+      "status": "pass"
+    },
+    {
+      "id": "economy.taxes.treasuryMismatchCount",
+      "label": "treasury mismatch",
       "source": 0,
       "candidate": 0,
       "expectedMaximum": 0,
@@ -750,8 +1378,22 @@
       "source": true,
       "candidate": true,
       "message": "candidate 已生成海路"
+    },
+    {
+      "id": "economyPresent",
+      "label": "candidate 经济链路",
+      "status": "fail",
+      "source": true,
+      "candidate": false,
+      "message": "candidate 经济链路为 0，尚未输出 goods/markets/production/deals/taxes"
     }
   ],
-  "missingRequiredPackFields": [],
-  "nextStageRecommendation": "阶段 18 后段 schema 当前强制 case 已通过；下一步扩大 candidate matrix 回归，并评估 zone 图层、notes、编辑器和导出等后段专题深挖顺序。"
+  "missingRequiredPackFields": [
+    "pack.goods",
+    "pack.markets",
+    "pack.deals",
+    "pack.cells.good",
+    "pack.cells.market"
+  ],
+  "nextStageRecommendation": "进入阶段 19：当前 source schema 已纳入 goods/markets/production/deals/taxes，candidate 经济链路仍为空。下一刀先实现经济链路数据产物：goods catalogue、market territories、production records、deal log 和 state treasury，不做市场 UI、图表、贸易动画或编辑器。"
 }

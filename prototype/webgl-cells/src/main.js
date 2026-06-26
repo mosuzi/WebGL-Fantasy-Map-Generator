@@ -1,5 +1,6 @@
 import {GraphicsMapRenderer, installCanvasInteractions} from "./renderer.js";
 import {MapOverlayManager} from "./overlays.js";
+import {DemoEditorController} from "./editors.js";
 
 const canvas = document.getElementById("map-canvas");
 const overlayContainer = document.getElementById("map-overlay");
@@ -22,13 +23,36 @@ const showMarkersInput = document.getElementById("show-markers");
 const showBurgLabelsInput = document.getElementById("show-burg-labels");
 const showStateLabelsInput = document.getElementById("show-state-labels");
 const showEmblemsInput = document.getElementById("show-emblems");
+const editorElements = {
+  toolButtons: Array.from(document.querySelectorAll("[data-editor-tool]")),
+  heightButtons: Array.from(document.querySelectorAll("[data-height-action]")),
+  stateButtons: Array.from(document.querySelectorAll("[data-state-action]")),
+  heightPanel: document.getElementById("height-editor-panel"),
+  riverPanel: document.getElementById("river-editor-panel"),
+  statePanel: document.getElementById("state-editor-panel"),
+  heightRadius: document.getElementById("height-radius"),
+  heightStrength: document.getElementById("height-strength"),
+  riverAction: document.getElementById("river-action"),
+  riverWidth: document.getElementById("river-width"),
+  stateColor: document.getElementById("state-color"),
+  undo: document.getElementById("editor-undo"),
+  reset: document.getElementById("editor-reset"),
+  status: document.getElementById("editor-status")
+};
 
 const renderer = new GraphicsMapRenderer(canvas);
 const overlays = new MapOverlayManager(overlayContainer, renderer);
+const editors = new DemoEditorController({renderer, overlays, elements: editorElements, onChange: () => renderStats(renderer.getStats())});
 window.__fmgCellRenderer = renderer;
 window.__graphicsMapRenderer = renderer;
 window.__fmgMapOverlays = overlays;
-installCanvasInteractions(renderer, {onHover: renderHover});
+window.__fmgDemoEditors = editors;
+installCanvasInteractions(renderer, {
+  onHover: renderHover,
+  onPointerDown: event => editors.handlePointerDown(event),
+  onPointerMove: event => editors.handlePointerMove(event),
+  onPointerUp: event => editors.handlePointerUp(event)
+});
 
 const resizeObserver = new ResizeObserver(() => {
   renderer.resize();
@@ -40,6 +64,7 @@ try {
   const snapshot = await loadSnapshot();
   renderer.loadSnapshot(snapshot);
   overlays.loadSnapshot(snapshot);
+  editors.loadSnapshot(snapshot);
   renderer.resize();
   renderSummary(snapshot);
   renderStats(renderer.getStats());

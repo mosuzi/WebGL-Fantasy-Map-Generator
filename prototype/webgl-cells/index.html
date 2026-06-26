@@ -96,6 +96,69 @@
         </section>
 
         <section>
+          <h2>编辑器原型</h2>
+          <div class="segmented editor-tools" role="group" aria-label="编辑器工具">
+            <button class="active" type="button" data-editor-tool="view">浏览</button>
+            <button type="button" data-editor-tool="height">高度</button>
+            <button type="button" data-editor-tool="river">河流</button>
+            <button type="button" data-editor-tool="state">国家</button>
+          </div>
+
+          <div id="height-editor-panel" class="editor-panel" hidden>
+            <div class="segmented editor-actions" role="group" aria-label="高度编辑方式">
+              <button class="active" type="button" data-height-action="raise">抬高</button>
+              <button type="button" data-height-action="lower">降低</button>
+              <button type="button" data-height-action="smooth">平滑</button>
+            </div>
+            <label class="range-row">
+              <span>半径</span>
+              <input id="height-radius" type="range" min="4" max="48" value="18" />
+            </label>
+            <label class="range-row">
+              <span>强度</span>
+              <input id="height-strength" type="range" min="1" max="8" value="3" />
+            </label>
+          </div>
+
+          <div id="river-editor-panel" class="editor-panel" hidden>
+            <label class="field-row">
+              <span>动作</span>
+              <select id="river-action">
+                <option value="width">改宽</option>
+                <option value="move">拖点</option>
+              </select>
+            </label>
+            <label class="range-row">
+              <span>宽度</span>
+              <input id="river-width" type="range" min="-0.25" max="0.25" step="0.05" value="0.1" />
+            </label>
+          </div>
+
+          <div id="state-editor-panel" class="editor-panel" hidden>
+            <div class="segmented editor-actions" role="group" aria-label="国家编辑方式">
+              <button class="active" type="button" data-state-action="sample">取样</button>
+              <button type="button" data-state-action="paint">涂抹</button>
+            </div>
+            <label class="field-row">
+              <span>颜色</span>
+              <input id="state-color" type="color" value="#66c2a5" />
+            </label>
+          </div>
+
+          <div class="toolbar editor-toolbar">
+            <button type="button" id="editor-undo">撤销</button>
+            <button type="button" id="editor-reset">重置</button>
+          </div>
+
+          <dl class="stats compact editor-status" id="editor-status">
+            <div>
+              <dt>状态</dt>
+              <dd>未编辑</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section>
           <h2>悬停 cell</h2>
           <dl class="stats compact" id="hover-stats">
             <div>

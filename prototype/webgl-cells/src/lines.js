@@ -159,6 +159,9 @@ function buildRiverLines(snapshot, layer) {
 }
 
 function getRiverPath(river, snapshot, layer) {
+  if (river.__editorUsePoints && Array.isArray(river.points) && river.points.length >= 2) {
+    return river.points.filter(isPoint).map(point => ({point, flux: point[2] || river.discharge || 0}));
+  }
   if (Array.isArray(river.cells) && river.cells.length >= 2) return getRiverPathFromCells(river, snapshot, layer);
   if (!Array.isArray(river.points) || river.points.length < 2) return [];
   return river.points.filter(isPoint).map(point => ({point, flux: point[2] || 0}));
@@ -192,8 +195,8 @@ function getRiverPathFromCells(river, snapshot, layer) {
     }
 
     const previousCellId = river.cells[index - 1];
-    const previousPoint = path[path.length - 1]?.point;
-    const mouthPoint = getCellSharedEdgeMidpoint(snapshot, previousCellId, cellId) || getHeightInterpolatedPoint(cells, previousCellId, cellId, previousPoint, point);
+    const previousPoint = path[path.length - 1]?.point || cells.p[previousCellId];
+    const mouthPoint = getCellSharedEdgeMouthPoint(snapshot, previousCellId, cellId, previousPoint, point) || getHeightInterpolatedPoint(cells, previousCellId, cellId, previousPoint, point);
     path.push({point: mouthPoint, flux: getCellFlux(cells, previousCellId, river)});
     layer.mouthsClipped++;
     break;
@@ -241,7 +244,15 @@ function hasWaterMouth(river, cells) {
   return river.cells.some(cellId => cellId === -1 || (cellId >= 0 && (cells.h[cellId] ?? 100) < 20));
 }
 
-function getCellSharedEdgeMidpoint(snapshot, landCellId, waterCellId) {
+function getCellSharedEdgeMouthPoint(snapshot, landCellId, waterCellId, landPoint, waterPoint) {
+  const edge = getCellSharedEdgePoints(snapshot, landCellId, waterCellId);
+  if (!edge) return null;
+  const intersection = getSegmentIntersection(landPoint, waterPoint, edge[0], edge[1]);
+  if (intersection) return intersection;
+  return getMidpoint(edge[0], edge[1]);
+}
+
+function getCellSharedEdgePoints(snapshot, landCellId, waterCellId) {
   const landVertices = snapshot.cells.v?.[landCellId];
   const waterVertices = snapshot.cells.v?.[waterCellId];
   if (!Array.isArray(landVertices) || !Array.isArray(waterVertices)) return null;
@@ -249,19 +260,9 @@ function getCellSharedEdgeMidpoint(snapshot, landCellId, waterCellId) {
   const waterSet = new Set(waterVertices);
   const shared = landVertices.filter(vertexId => waterSet.has(vertexId));
   if (shared.length < 2) return null;
-
-  let x = 0;
-  let y = 0;
-  let count = 0;
-  for (const vertexId of shared) {
-    const point = snapshot.vertices?.p?.[vertexId];
-    if (!point) continue;
-    x += point[0];
-    y += point[1];
-    count++;
-  }
-
-  return count ? [x / count, y / count] : null;
+  const first = snapshot.vertices?.p?.[shared[0]];
+  const second = snapshot.vertices?.p?.[shared[1]];
+  return first && second ? [first, second] : null;
 }
 
 function getHeightInterpolatedPoint(cells, landCellId, waterCellId, landPoint, waterPoint) {
@@ -294,6 +295,27 @@ function isPoint(point) {
 
 function lerpPoint(a, b, amount) {
   return [a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount];
+}
+
+function getMidpoint(a, b) {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+}
+
+function getSegmentIntersection(a, b, c, d) {
+  if (!a || !b || !c || !d) return null;
+  const r = [b[0] - a[0], b[1] - a[1]];
+  const s = [d[0] - c[0], d[1] - c[1]];
+  const denominator = cross(r, s);
+  if (Math.abs(denominator) < 1e-8) return null;
+  const ca = [c[0] - a[0], c[1] - a[1]];
+  const t = cross(ca, s) / denominator;
+  const u = cross(ca, r) / denominator;
+  if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) return null;
+  return lerpPoint(a, b, clamp(t, 0, 1));
+}
+
+function cross(a, b) {
+  return a[0] * b[1] - a[1] * b[0];
 }
 
 function pushWideSegment(positions, colors, a, b, widthA, widthB, color) {

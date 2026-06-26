@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-24T17:01:15.758Z",
+    "generatedAt": "2026-06-26T14:50:30.374Z",
     "source": "Fantasy-Map-Generator runtime baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -8,7 +8,7 @@
     "cellsTarget": 100000,
     "graphWidth": 1440,
     "graphHeight": 960,
-    "sourceCommit": null,
+    "sourceCommit": "5de7deb47b4c5337da548f611fa9e669c95bb019",
     "sourceDir": "D:\\work\\fmg\\source\\Fantasy-Map-Generator",
     "baseUrl": "http://127.0.0.1:5301",
     "generatedOptions": {
@@ -48,6 +48,7 @@
     "Biomes.define",
     "Features.defineGroups",
     "Ice.generate",
+    "Goods.generate",
     "rankCells",
     "Cultures.generate",
     "Cultures.expand",
@@ -62,6 +63,9 @@
     "Provinces.getPoles",
     "Rivers.specify",
     "Lakes.defineNames",
+    "Markets.generate",
+    "Production.produce",
+    "States.collectTaxes",
     "Military.generate",
     "Markers.generate",
     "Zones.generate",
@@ -359,8 +363,8 @@
     }
   },
   "rivers": {
-    "count": 956,
-    "cellsWithRiver": 5708,
+    "count": 955,
+    "cellsWithRiver": 5711,
     "flux": {
       "min": 0,
       "p05": 0,
@@ -370,11 +374,11 @@
       "p90": 26,
       "p95": 61,
       "p99": 311.73,
-      "max": 22302,
-      "mean": 19.66
+      "max": 22297,
+      "mean": 19.666
     },
-    "confluences": 264,
-    "mouths": 956,
+    "confluences": 263,
+    "mouths": 955,
     "width": {
       "min": 0.01,
       "p05": 0.01,
@@ -392,97 +396,97 @@
       "p05": 39,
       "p25": 56,
       "p50": 80,
-      "p75": 141,
-      "p90": 269.5,
-      "p95": 445.5,
-      "p99": 1064.7,
-      "max": 22302,
-      "mean": 181.971
+      "p75": 141.5,
+      "p90": 271.8,
+      "p95": 441.4,
+      "p99": 1064.76,
+      "max": 22297,
+      "mean": 182.135
     },
     "riverLoopCount": 2
   },
   "biomes": {
     "distribution": {
       "0": 8356,
-      "1": 6867,
+      "1": 6866,
       "2": 8467,
-      "3": 6874,
-      "4": 10191,
-      "5": 7679,
+      "3": 6875,
+      "4": 10190,
+      "5": 7678,
       "6": 4689,
-      "7": 2186,
-      "8": 2640,
+      "7": 2190,
+      "8": 2642,
       "9": 5478,
       "10": 1970,
       "11": 4969,
-      "12": 2662
+      "12": 2658
     }
   },
   "population": {
-    "positiveSuitabilityCells": 53650,
-    "positivePopulationCells": 53650,
+    "positiveSuitabilityCells": 56846,
+    "positivePopulationCells": 56846,
     "suitability": {
       "min": 0,
       "p05": 0,
-      "p25": 0,
-      "p50": 4,
-      "p75": 10,
-      "p90": 18,
-      "p95": 20,
-      "p99": 26,
+      "p25": 1,
+      "p50": 5,
+      "p75": 14,
+      "p90": 21,
+      "p95": 27,
+      "p99": 35,
       "max": 61,
-      "mean": 5.762
+      "mean": 8.351
     },
     "population": {
       "min": 0,
       "p05": 0,
-      "p25": 0,
-      "p50": 2.149,
-      "p75": 5.157,
-      "p90": 10.206,
-      "p95": 13.697,
-      "p99": 18.37,
-      "max": 41.252,
-      "mean": 3.69
+      "p25": 0.645,
+      "p50": 3.384,
+      "p75": 8.594,
+      "p90": 14.503,
+      "p95": 18.048,
+      "p99": 25.915,
+      "max": 58.656,
+      "mean": 5.494
     }
   },
   "society": {
     "cultures": 10,
-    "burgs": 1724,
+    "burgs": 1825,
     "capitals": 21,
-    "ports": 230,
+    "ports": 321,
     "states": 21,
     "religions": 19,
-    "provinces": 477,
-    "markers": 538,
-    "zones": 13,
-    "regiments": 312
+    "provinces": 515,
+    "markers": 567,
+    "zones": 9,
+    "regiments": 409
   },
   "lateStages": {
     "names": {
-      "mapName": "Amaqia",
-      "burgNames": 1724,
-      "burgCoas": 1724,
+      "mapName": "Calia",
+      "burgNames": 1825,
+      "burgCoas": 1825,
       "burgGroups": {
         "capital": 21,
-        "town": 1014,
-        "village": 512,
-        "city": 158,
-        "fort": 19
+        "town": 1197,
+        "village": 434,
+        "city": 167,
+        "fort": 6
       },
       "stateNames": 21,
       "stateFullNames": 21,
       "stateFormNames": 21,
       "stateCoas": 21,
-      "provinceNames": 477,
-      "riverNames": 956,
+      "provinceNames": 515,
+      "riverNames": 955,
       "riverTypes": {
-        "River": 360,
-        "Brook": 88,
-        "Creek": 250,
-        "Branch": 167,
-        "Fork": 64,
-        "Stream": 27
+        "River": 350,
+        "Brook": 86,
+        "Creek": 261,
+        "Branch": 170,
+        "Fork": 65,
+        "Stream": 23
       },
       "lakeNames": 140,
       "lakeGroups": {
@@ -493,113 +497,255 @@
     },
     "military": {
       "statesWithMilitary": 21,
-      "regiments": 312,
+      "regiments": 409,
       "troops": 0,
-      "navalRegiments": 35,
+      "navalRegiments": 51,
       "types": {
-        "unknown": 312
+        "unknown": 409
       },
       "units": {
-        "infantry": 912527,
-        "cavalry": 671418,
-        "archers": 751670,
-        "artillery": 7524,
-        "fleet": 677
+        "archers": 683939,
+        "cavalry": 737072,
+        "artillery": 5920,
+        "infantry": 880506,
+        "fleet": 641
       },
       "invalidCells": 0
     },
     "markers": {
-      "total": 539,
+      "total": 568,
       "types": {
         "volcanoes": 16,
-        "hot-springs": 9,
+        "hot-springs": 12,
         "water-sources": 3,
-        "mines": 17,
-        "inns": 12,
-        "lighthouses": 13,
+        "mines": 24,
+        "bridges": 1,
+        "inns": 18,
+        "lighthouses": 15,
         "waterfalls": 1,
-        "battlefields": 36,
-        "dungeons": 112,
+        "battlefields": 41,
+        "dungeons": 91,
         "lake-monsters": 13,
-        "sea-monsters": 1,
-        "hill-monsters": 19,
+        "sea-monsters": 2,
+        "hill-monsters": 24,
         "sacred-forests": 8,
         "sacred-pineries": 7,
-        "sacred-palm-groves": 2,
-        "brigands": 14,
-        "pirates": 13,
+        "sacred-palm-groves": 6,
+        "brigands": 21,
+        "pirates": 16,
         "statues": 27,
-        "ruins": 40,
-        "libraries": 1,
-        "circuses": 9,
+        "ruins": 42,
+        "libraries": 2,
+        "circuses": 12,
         "jousts": 1,
         "fairs": 1,
         "canoes": 3,
-        "migration": 28,
+        "migration": 21,
         "dances": 1,
         "mirage": 18,
-        "caves": 12,
-        "necropolises": 28,
-        "encounters": 74
+        "caves": 15,
+        "necropolises": 21,
+        "encounters": 85
       },
-      "withIcon": 539,
+      "withIcon": 568,
       "pinned": 0,
       "locked": 0,
       "invalidCells": 0
     },
     "zones": {
-      "total": 14,
+      "total": 10,
       "types": {
         "Invasion": 1,
-        "Proselytism": 2,
-        "Crusade": 1,
-        "Disease": 2,
-        "Disaster": 2,
+        "Rebels": 2,
+        "Proselytism": 1,
+        "Disease": 1,
         "Eruption": 1,
         "Avalanche": 1,
         "Fault": 1,
-        "Flood": 2,
+        "Flood": 1,
         "Tsunami": 1
       },
       "cells": {
-        "min": 3,
-        "p05": 6.25,
-        "p25": 9.25,
-        "p50": 12,
-        "p75": 22.5,
-        "p90": 172.8,
-        "p95": 1401.6,
-        "p99": 3136.32,
-        "max": 3570,
-        "mean": 282.786
+        "min": 1,
+        "p05": 5.5,
+        "p25": 14.25,
+        "p50": 17,
+        "p75": 20,
+        "p90": 23.4,
+        "p95": 25.2,
+        "p99": 26.64,
+        "max": 27,
+        "mean": 16.5
       },
       "hidden": 0,
       "invalidCells": 0
     },
     "statistics": {
-      "burgsWithPopulation": 1724,
-      "burgsWithType": 1724,
+      "burgsWithPopulation": 1825,
+      "burgsWithType": 1825,
       "statesWithArea": 21,
       "statesWithRural": 21,
       "statesWithUrban": 21,
       "statesWithNeighbors": 21,
-      "provincesWithPole": 477,
+      "provincesWithPole": 515,
       "culturesWithArea": 0,
       "religionsWithArea": 0
     }
   },
   "routes": {
-    "total": 1331,
+    "total": 1557,
     "groups": {
-      "roads": 19,
-      "trails": 1098,
-      "searoutes": 214
+      "roads": 34,
+      "trails": 1230,
+      "searoutes": 293
     },
-    "roads": 19,
-    "trails": 1098,
-    "searoutes": 214,
+    "roads": 34,
+    "trails": 1230,
+    "searoutes": 293,
     "landRouteWaterCells": 0,
-    "seaRouteLandCells": 1
+    "seaRouteLandCells": 737
+  },
+  "economy": {
+    "goods": {
+      "total": 71,
+      "raw": 39,
+      "manufactured": 30,
+      "hybrid": 2,
+      "visible": 1,
+      "withBiomeOutput": 16,
+      "withDemandCoverage": 58,
+      "resourceCells": 12634,
+      "invalidCellGoodRefs": 0,
+      "invalidRecipeGoodRefs": 0
+    },
+    "markets": {
+      "total": 65,
+      "cellsAssigned": 65106,
+      "assignedRatio": 0.892,
+      "burgsWithMarket": 1825,
+      "plazaBurgs": 65,
+      "goodsEntries": 4615,
+      "stock": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 3.32,
+        "p75": 19,
+        "p90": 74.942,
+        "p95": 186.646,
+        "p99": 493.115,
+        "max": 1394.43,
+        "mean": 33.694
+      },
+      "price": {
+        "min": 0.1,
+        "p05": 0.33,
+        "p25": 1.44,
+        "p50": 4.05,
+        "p75": 7.12,
+        "p90": 14.916,
+        "p95": 19.526,
+        "p99": 42.52,
+        "max": 53.88,
+        "mean": 6.031
+      },
+      "invalidCenterBurgs": 0,
+      "invalidCellMarketRefs": 0,
+      "invalidBurgMarketRefs": 0
+    },
+    "production": {
+      "burgsWithProduction": 1825,
+      "localRecords": 1208,
+      "mfgRecords": 13078,
+      "dealRecords": 32791,
+      "burgsWithProduct": 1825,
+      "product": {
+        "min": 3.97,
+        "p05": 12.552,
+        "p25": 22.07,
+        "p50": 32.19,
+        "p75": 44.48,
+        "p90": 61.002,
+        "p95": 73.55,
+        "p99": 104.459,
+        "max": 208.63,
+        "mean": 36.087
+      },
+      "burgTreasury": {
+        "min": -0.11,
+        "p05": 10.084,
+        "p25": 17.63,
+        "p50": 26.15,
+        "p75": 38.73,
+        "p90": 53.35,
+        "p95": 64.952,
+        "p99": 97.825,
+        "max": 143.63,
+        "mean": 30.641
+      },
+      "invalidProductionGoodRefs": 0,
+      "invalidProductionDealRefs": 0
+    },
+    "deals": {
+      "total": 33683,
+      "marketToBurg": 27301,
+      "burgToMarket": 5490,
+      "marketToMarket": 892,
+      "tradedGoods": 68,
+      "units": 39928,
+      "value": 152165.21,
+      "taxTotal": 15061.219,
+      "taxedDeals": 6371,
+      "invalidPartyRefs": 0,
+      "invalidGoodRefs": 0,
+      "invalidDealIndexes": 0,
+      "invalidAmounts": 0
+    },
+    "taxes": {
+      "statesWithRates": 21,
+      "statesWithTreasury": 21,
+      "salesTax": {
+        "min": 0.04,
+        "p05": 0.05,
+        "p25": 0.13,
+        "p50": 0.16,
+        "p75": 0.18,
+        "p90": 0.19,
+        "p95": 0.27,
+        "p99": 0.27,
+        "max": 0.27,
+        "mean": 0.155
+      },
+      "pollTax": {
+        "min": 0.08,
+        "p05": 0.09,
+        "p25": 0.17,
+        "p50": 0.21,
+        "p75": 0.24,
+        "p90": 0.24,
+        "p95": 0.25,
+        "p99": 0.258,
+        "max": 0.26,
+        "mean": 0.193
+      },
+      "stateTreasury": {
+        "min": 350.78,
+        "p05": 389.5,
+        "p25": 1615.33,
+        "p50": 3752.1,
+        "p75": 6812.18,
+        "p90": 8946.25,
+        "p95": 9617.62,
+        "p99": 15142.268,
+        "max": 16523.43,
+        "mean": 4641.862
+      },
+      "treasuryTotal": 97479.1,
+      "dealTaxTotal": 15061.219,
+      "pollTaxExpected": 82417.882,
+      "treasuryMismatchCount": 0,
+      "treasuryMismatchMax": 0.007
+    }
   },
   "validation": {
     "gridCellIndexCountOk": true,
@@ -613,6 +759,6 @@
     "harborMismatchCount": 0,
     "routeLinkAsymmetry": 0,
     "landRouteWaterCells": 0,
-    "seaRouteLandCells": 1
+    "seaRouteLandCells": 737
   }
 }

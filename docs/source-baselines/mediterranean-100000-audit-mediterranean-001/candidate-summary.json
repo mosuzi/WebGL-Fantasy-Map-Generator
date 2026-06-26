@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-26T02:03:03.371Z",
+    "generatedAt": "2026-06-26T14:50:59.593Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -302,7 +302,13 @@
     },
     "packGridRefsInvalid": 0,
     "mapping": "source-regraph-pack",
-    "missingRequiredPackFields": []
+    "missingRequiredPackFields": [
+      "pack.goods",
+      "pack.markets",
+      "pack.deals",
+      "pack.cells.good",
+      "pack.cells.market"
+    ]
   },
   "features": {
     "total": 236,
@@ -578,6 +584,148 @@
     "landRouteWaterCells": 0,
     "seaRouteLandCells": 0
   },
+  "economy": {
+    "goods": {
+      "total": 0,
+      "raw": 0,
+      "manufactured": 0,
+      "hybrid": 0,
+      "visible": 0,
+      "withBiomeOutput": 0,
+      "withDemandCoverage": 0,
+      "resourceCells": 0,
+      "invalidCellGoodRefs": 0,
+      "invalidRecipeGoodRefs": 0
+    },
+    "markets": {
+      "total": 0,
+      "cellsAssigned": 0,
+      "assignedRatio": 0,
+      "burgsWithMarket": 0,
+      "plazaBurgs": 0,
+      "goodsEntries": 0,
+      "stock": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "price": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "invalidCenterBurgs": 0,
+      "invalidCellMarketRefs": 0,
+      "invalidBurgMarketRefs": 0
+    },
+    "production": {
+      "burgsWithProduction": 0,
+      "localRecords": 0,
+      "mfgRecords": 0,
+      "dealRecords": 0,
+      "burgsWithProduct": 0,
+      "product": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "burgTreasury": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "invalidProductionGoodRefs": 0,
+      "invalidProductionDealRefs": 0
+    },
+    "deals": {
+      "total": 0,
+      "marketToBurg": 0,
+      "burgToMarket": 0,
+      "marketToMarket": 0,
+      "tradedGoods": 0,
+      "units": 0,
+      "value": 0,
+      "taxTotal": 0,
+      "taxedDeals": 0,
+      "invalidPartyRefs": 0,
+      "invalidGoodRefs": 0,
+      "invalidDealIndexes": 0,
+      "invalidAmounts": 0
+    },
+    "taxes": {
+      "statesWithRates": 0,
+      "statesWithTreasury": 0,
+      "salesTax": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "pollTax": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "stateTreasury": {
+        "min": 0,
+        "p05": 0,
+        "p25": 0,
+        "p50": 0,
+        "p75": 0,
+        "p90": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0,
+        "mean": 0
+      },
+      "treasuryTotal": 0,
+      "dealTaxTotal": 0,
+      "pollTaxExpected": 0,
+      "treasuryMismatchCount": 0,
+      "treasuryMismatchMax": 0
+    }
+  },
   "validation": {
     "gridCellIndexCountOk": true,
     "gridNeighborInvalidRefs": 0,
@@ -603,10 +751,25 @@
   },
   "candidateNotes": {
     "packStatus": "source-regraph-pack",
-    "missingRequiredPackFields": [],
+    "missingRequiredPackFields": [
+      "pack.goods",
+      "pack.markets",
+      "pack.deals",
+      "pack.cells.good",
+      "pack.cells.market"
+    ],
     "unsupportedSourceStages": [
       "Burgs.specify source names and emblems",
-      "States.defineStateForms"
+      "States.defineStateForms",
+      "Goods.generate",
+      "Markets.generate",
+      "Production.produce",
+      "States.collectTaxes",
+      "pack.goods",
+      "pack.markets",
+      "pack.deals",
+      "pack.cells.good",
+      "pack.cells.market"
     ]
   }
 }

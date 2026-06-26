@@ -86,7 +86,49 @@ function buildDiff({source, candidate, sourcePath, candidatePath}) {
       kind: "relative",
       warn: 0.45,
       fail: 0.85
-    })
+    }),
+    metric("economy.goods.total", "economy.goods.total", {kind: "relative", warn: 0.1, fail: 0.5}),
+    metric("economy.goods.raw", "economy.goods.raw", {kind: "relative", warn: 0.2, fail: 0.6}),
+    metric("economy.goods.manufactured", "economy.goods.manufactured", {kind: "relative", warn: 0.2, fail: 0.6}),
+    metric("economy.goods.hybrid", "economy.goods.hybrid", {kind: "relative", warn: 0.2, fail: 0.6}),
+    metric("economy.goods.withBiomeOutput", "economy.goods.withBiomeOutput", {kind: "relative", warn: 0.2, fail: 0.6}),
+    metric("economy.goods.withDemandCoverage", "economy.goods.withDemandCoverage", {kind: "relative", warn: 0.2, fail: 0.6}),
+    metric("economy.goods.resourceCells", "economy.goods.resourceCells", {kind: "relative", warn: 0.45, fail: 0.85}),
+    metric("economy.markets.total", "economy.markets.total", {kind: "relative", warn: 0.35, fail: 0.8}),
+    metric("economy.markets.cellsAssigned", "economy.markets.cellsAssigned", {kind: "relative", warn: 0.35, fail: 0.8}),
+    metric("economy.markets.assignedRatio", "economy.markets.assignedRatio", {kind: "absolute", warn: 0.15, fail: 0.35}),
+    metric("economy.markets.burgsWithMarket", "economy.markets.burgsWithMarket", {kind: "relative", warn: 0.35, fail: 0.8}),
+    metric("economy.markets.plazaBurgs", "economy.markets.plazaBurgs", {kind: "relative", warn: 0.35, fail: 0.8}),
+    metric("economy.markets.goodsEntries", "economy.markets.goodsEntries", {kind: "relative", warn: 0.35, fail: 0.85}),
+    metric("economy.markets.stock.mean", "economy.markets.stock.mean", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.markets.price.mean", "economy.markets.price.mean", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.production.burgsWithProduction", "economy.production.burgsWithProduction", {
+      kind: "relative",
+      warn: 0.35,
+      fail: 0.85
+    }),
+    metric("economy.production.localRecords", "economy.production.localRecords", {kind: "relative", warn: 0.5, fail: 0.9}),
+    metric("economy.production.mfgRecords", "economy.production.mfgRecords", {kind: "relative", warn: 0.5, fail: 0.9}),
+    metric("economy.production.dealRecords", "economy.production.dealRecords", {kind: "relative", warn: 0.5, fail: 0.9}),
+    metric("economy.production.burgsWithProduct", "economy.production.burgsWithProduct", {kind: "relative", warn: 0.35, fail: 0.85}),
+    metric("economy.production.product.mean", "economy.production.product.mean", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.production.burgTreasury.mean", "economy.production.burgTreasury.mean", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.deals.total", "economy.deals.total", {kind: "relative", warn: 0.45, fail: 0.9}),
+    metric("economy.deals.marketToBurg", "economy.deals.marketToBurg", {kind: "relative", warn: 0.45, fail: 0.9}),
+    metric("economy.deals.burgToMarket", "economy.deals.burgToMarket", {kind: "relative", warn: 0.45, fail: 0.9}),
+    metric("economy.deals.marketToMarket", "economy.deals.marketToMarket", {kind: "relative", warn: 0.55, fail: 0.95}),
+    metric("economy.deals.tradedGoods", "economy.deals.tradedGoods", {kind: "relative", warn: 0.25, fail: 0.75}),
+    metric("economy.deals.units", "economy.deals.units", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.deals.value", "economy.deals.value", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.deals.taxTotal", "economy.deals.taxTotal", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.deals.taxedDeals", "economy.deals.taxedDeals", {kind: "relative", warn: 0.5, fail: 0.9}),
+    metric("economy.taxes.statesWithRates", "economy.taxes.statesWithRates", {kind: "absolute", warn: 2, fail: 5}),
+    metric("economy.taxes.statesWithTreasury", "economy.taxes.statesWithTreasury", {kind: "absolute", warn: 2, fail: 5}),
+    metric("economy.taxes.salesTax.mean", "economy.taxes.salesTax.mean", {kind: "absolute", warn: 0.08, fail: 0.18}),
+    metric("economy.taxes.pollTax.mean", "economy.taxes.pollTax.mean", {kind: "absolute", warn: 0.08, fail: 0.18}),
+    metric("economy.taxes.treasuryTotal", "economy.taxes.treasuryTotal", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.taxes.dealTaxTotal", "economy.taxes.dealTaxTotal", {kind: "relative", warn: 0.6, fail: 1}),
+    metric("economy.taxes.pollTaxExpected", "economy.taxes.pollTaxExpected", {kind: "relative", warn: 0.6, fail: 1})
   ];
 
   const invariantChecks = [
@@ -100,7 +142,19 @@ function buildDiff({source, candidate, sourcePath, candidatePath}) {
     invariant("海路中段穿陆", "validation.seaRouteLandCells", source.validation?.seaRouteLandCells ?? 0),
     invariant("marker cell 引用", "lateStages.markers.invalidCells", source.lateStages?.markers?.invalidCells ?? 0),
     invariant("zone cell 引用", "lateStages.zones.invalidCells", source.lateStages?.zones?.invalidCells ?? 0),
-    invariant("military cell 引用", "lateStages.military.invalidCells", source.lateStages?.military?.invalidCells ?? 0)
+    invariant("military cell 引用", "lateStages.military.invalidCells", source.lateStages?.military?.invalidCells ?? 0),
+    invariant("good cell 引用", "economy.goods.invalidCellGoodRefs", 0),
+    invariant("recipe good 引用", "economy.goods.invalidRecipeGoodRefs", 0),
+    invariant("market center burg 引用", "economy.markets.invalidCenterBurgs", 0),
+    invariant("cell market 引用", "economy.markets.invalidCellMarketRefs", 0),
+    invariant("burg market 引用", "economy.markets.invalidBurgMarketRefs", 0),
+    invariant("production good 引用", "economy.production.invalidProductionGoodRefs", 0),
+    invariant("production deal 引用", "economy.production.invalidProductionDealRefs", 0),
+    invariant("deal party 引用", "economy.deals.invalidPartyRefs", 0),
+    invariant("deal good 引用", "economy.deals.invalidGoodRefs", 0),
+    invariant("deal index", "economy.deals.invalidDealIndexes", 0),
+    invariant("deal amount", "economy.deals.invalidAmounts", 0),
+    invariant("treasury mismatch", "economy.taxes.treasuryMismatchCount", 0)
   ];
 
   const candidateSpecific = [
@@ -135,6 +189,16 @@ function buildDiff({source, candidate, sourcePath, candidatePath}) {
       source: true,
       candidate: Boolean(candidate.validation?.routesHaveSeaRoutes),
       message: candidate.validation?.routesHaveSeaRoutes ? "candidate 已生成海路" : "candidate 没有 searoutes"
+    },
+    {
+      id: "economyPresent",
+      label: "candidate 经济链路",
+      status: isCandidateEconomyEmpty(candidate) ? "fail" : "pass",
+      source: true,
+      candidate: !isCandidateEconomyEmpty(candidate),
+      message: isCandidateEconomyEmpty(candidate)
+        ? "candidate 经济链路为 0，尚未输出 goods/markets/production/deals/taxes"
+        : "candidate 已输出经济链路摘要"
     }
   ];
 
@@ -239,6 +303,9 @@ function compareInvariant(source, candidate, item) {
 
 function recommendNextStage({failCount, warnCount, candidate}) {
   const missingPackFields = candidate.pack?.missingRequiredPackFields || [];
+  if (isCandidateEconomyEmpty(candidate) || hasEconomyRequiredFieldGap(missingPackFields)) {
+    return "进入阶段 19：当前 source schema 已纳入 goods/markets/production/deals/taxes，candidate 经济链路仍为空。下一刀先实现经济链路数据产物：goods catalogue、market territories、production records、deal log 和 state treasury，不做市场 UI、图表、贸易动画或编辑器。";
+  }
   if (Math.abs((candidate.grid?.precipitation?.mean || 0) - 0) > 0 && candidate.grid?.precipitation?.mean > 30) {
     return "进入阶段 3：当前 grid 与高度主体已经对齐，但温度/降水仍明显偏离 source，必须先恢复 grid features、湖泊预处理、地图坐标、温度和降水，再进入 reGraph。";
   }
@@ -289,6 +356,22 @@ function recommendNextStage({failCount, warnCount, candidate}) {
     return "阶段 18 后段 schema 当前强制 case 已通过；下一步扩大 candidate matrix 回归，并评估 zone 图层、notes、编辑器和导出等后段专题深挖顺序。";
   }
   return "当前 case 达到阶段 0 对照要求，可推进下一阶段。";
+}
+
+function isCandidateEconomyEmpty(candidate) {
+  const economy = candidate.economy || {};
+  return (
+    Number(economy.goods?.total || 0) === 0 &&
+    Number(economy.markets?.total || 0) === 0 &&
+    Number(economy.production?.burgsWithProduction || 0) === 0 &&
+    Number(economy.deals?.total || 0) === 0 &&
+    Number(economy.taxes?.statesWithRates || 0) === 0
+  );
+}
+
+function hasEconomyRequiredFieldGap(missingPackFields) {
+  const economyFields = ["pack.goods", "pack.markets", "pack.deals", "pack.cells.good", "pack.cells.market"];
+  return economyFields.some(field => missingPackFields.includes(field));
 }
 
 function onlyZonesRemain(candidate) {

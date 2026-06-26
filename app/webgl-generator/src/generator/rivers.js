@@ -451,6 +451,11 @@ function addMeandering(pack, riverCells, riverId) {
     const end = points[index + 1];
     const length = distance(start, end);
     const dist2 = length ** 2;
+    if (isRiverMouthSegment(pack.cells, riverCells, index)) {
+      meandered.push(end);
+      continue;
+    }
+
     const step = index + 10;
     const meander = 0.5 + 1 / step + Math.max(0.5 - step / 100, 0);
     const angle = Math.atan2(end[1] - start[1], end[0] - start[0]);
@@ -474,10 +479,38 @@ function addMeandering(pack, riverCells, riverId) {
 }
 
 function getRiverPoints(pack, riverCells) {
-  return riverCells.map((cell, index) => (cell === -1 ? getBorderPoint(pack, riverCells[index - 1]) : pack.cells.p[cell]));
+  const points = [];
+  const cells = pack.cells;
+
+  for (let index = 0; index < riverCells.length; index++) {
+    const cell = riverCells[index];
+    const previousCell = riverCells[index - 1];
+
+    if (cell === -1) {
+      const borderPoint = getBorderPoint(pack, previousCell);
+      if (borderPoint) points.push(borderPoint);
+      break;
+    }
+
+    const point = cells.p[cell];
+    if (!point) continue;
+    const height = cells.h[cell] ?? 100;
+    if (height >= WATER_LEVEL || !points.length) {
+      points.push(point);
+      continue;
+    }
+
+    const previousPoint = points[points.length - 1] || cells.p[previousCell];
+    const mouthPoint = getCellSharedEdgeMouthPoint(pack, previousCell, cell, previousPoint, point) || getHeightInterpolatedMouthPoint(cells, previousCell, cell, previousPoint, point);
+    if (mouthPoint) points.push(mouthPoint);
+    break;
+  }
+
+  return points;
 }
 
 function getBorderPoint(pack, cell) {
+  if (cell === undefined || cell < 0 || !pack.cells.p[cell]) return null;
   const [x, y] = pack.cells.p[cell];
   const width = 1440;
   const height = 960;
@@ -486,6 +519,68 @@ function getBorderPoint(pack, cell) {
   if (min === height - y) return [x, height];
   if (min === x) return [0, y];
   return [width, y];
+}
+
+function isRiverMouthSegment(cells, riverCells, segmentIndex) {
+  const from = riverCells[segmentIndex];
+  const to = riverCells[segmentIndex + 1];
+  if (to === -1) return true;
+  if (from === undefined || to === undefined || from < 0 || to < 0) return false;
+  return (cells.h[from] ?? 100) >= WATER_LEVEL && (cells.h[to] ?? 100) < WATER_LEVEL;
+}
+
+function getCellSharedEdgeMouthPoint(pack, landCellId, waterCellId, landPoint, waterPoint) {
+  const edge = getCellSharedEdgePoints(pack, landCellId, waterCellId);
+  if (!edge) return null;
+  const intersection = getSegmentIntersection(landPoint, waterPoint, edge[0], edge[1]);
+  if (intersection) return intersection;
+  return getMidpoint(edge[0], edge[1]);
+}
+
+function getCellSharedEdgePoints(pack, cellA, cellB) {
+  const verticesA = pack.cells.v?.[cellA];
+  const verticesB = pack.cells.v?.[cellB];
+  if (!Array.isArray(verticesA) || !Array.isArray(verticesB)) return null;
+
+  const verticesBSet = new Set(verticesB);
+  const shared = verticesA.filter(vertexId => verticesBSet.has(vertexId));
+  if (shared.length < 2) return null;
+  const first = pack.vertices?.p?.[shared[0]];
+  const second = pack.vertices?.p?.[shared[1]];
+  return first && second ? [first, second] : null;
+}
+
+function getHeightInterpolatedMouthPoint(cells, landCellId, waterCellId, landPoint, waterPoint) {
+  if (!landPoint || !waterPoint) return landPoint || waterPoint;
+  const landHeight = cells.h?.[landCellId] ?? WATER_LEVEL;
+  const waterHeight = cells.h?.[waterCellId] ?? 0;
+  const amount = landHeight === waterHeight ? 0.5 : Math.min(Math.max((landHeight - WATER_LEVEL) / (landHeight - waterHeight), 0), 1);
+  return lerpPoint(landPoint, waterPoint, amount);
+}
+
+function getSegmentIntersection(a, b, c, d) {
+  if (!a || !b || !c || !d) return null;
+  const r = [b[0] - a[0], b[1] - a[1]];
+  const s = [d[0] - c[0], d[1] - c[1]];
+  const denominator = cross(r, s);
+  if (Math.abs(denominator) < 1e-8) return null;
+  const ca = [c[0] - a[0], c[1] - a[1]];
+  const t = cross(ca, s) / denominator;
+  const u = cross(ca, r) / denominator;
+  if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) return null;
+  return lerpPoint(a, b, Math.min(Math.max(t, 0), 1));
+}
+
+function lerpPoint(a, b, amount) {
+  return [a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount];
+}
+
+function getMidpoint(a, b) {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+}
+
+function cross(a, b) {
+  return a[0] * b[1] - a[1] * b[0];
 }
 
 function simplifyRiverPoints(points) {

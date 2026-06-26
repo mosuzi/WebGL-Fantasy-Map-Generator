@@ -42,6 +42,33 @@ export class GraphicsMapRenderer {
     this.fitToView();
   }
 
+  rebuildBuffers({preserveView = true} = {}) {
+    if (!this.snapshot) return;
+    const camera = {...this.camera};
+    const buildStartedAt = performance.now();
+    const buffers = buildCellBuffers(this.snapshot, this.mode);
+    this.performance.buildMs = roundMs(performance.now() - buildStartedAt);
+
+    disposeBuffers(this.gl, this.buffers);
+    this.buffers = buffers;
+
+    const uploadStartedAt = performance.now();
+    uploadBuffers(this.gl, this.buffers);
+    this.performance.uploadMs = roundMs(performance.now() - uploadStartedAt);
+
+    if (preserveView) this.cameraController.setCamera(camera);
+    else this.fitToView();
+    this.draw();
+  }
+
+  refreshTheme() {
+    if (!this.snapshot || !this.buffers) return;
+    const updateStartedAt = performance.now();
+    updateThemeColorBuffer(this.gl, this.buffers, this.snapshot, this.mode);
+    this.performance.themeUpdateMs = roundMs(performance.now() - updateStartedAt);
+    this.draw();
+  }
+
   setColorMode(mode) {
     this.setMode(mode);
   }
@@ -51,9 +78,8 @@ export class GraphicsMapRenderer {
     if (!this.themeIds.includes(mode)) throw new Error(`未知专题: ${mode}`);
     this.mode = mode;
     if (this.buffers && this.snapshot) {
-      const updateStartedAt = performance.now();
-      updateThemeColorBuffer(this.gl, this.buffers, this.snapshot, mode);
-      this.performance.themeUpdateMs = roundMs(performance.now() - updateStartedAt);
+      this.refreshTheme();
+      return;
     }
     this.draw();
   }
@@ -325,13 +351,14 @@ export class GraphicsMapRenderer {
 
 export {GraphicsMapRenderer as CellWebGLRenderer};
 
-export function installCanvasInteractions(renderer, {onHover} = {}) {
+export function installCanvasInteractions(renderer, {onHover, onPointerDown, onPointerMove, onPointerUp} = {}) {
   const canvas = renderer.canvas;
   let dragging = false;
   let lastX = 0;
   let lastY = 0;
 
   canvas.addEventListener("pointerdown", event => {
+    if (onPointerDown?.(event)) return;
     dragging = true;
     lastX = event.clientX;
     lastY = event.clientY;
@@ -339,6 +366,7 @@ export function installCanvasInteractions(renderer, {onHover} = {}) {
   });
 
   canvas.addEventListener("pointermove", event => {
+    if (onPointerMove?.(event)) return;
     if (dragging) {
       renderer.pan(event.clientX - lastX, event.clientY - lastY);
       lastX = event.clientX;
@@ -352,6 +380,7 @@ export function installCanvasInteractions(renderer, {onHover} = {}) {
   canvas.addEventListener("pointerleave", () => onHover?.(null));
 
   canvas.addEventListener("pointerup", event => {
+    if (onPointerUp?.(event)) return;
     dragging = false;
     canvas.releasePointerCapture(event.pointerId);
   });

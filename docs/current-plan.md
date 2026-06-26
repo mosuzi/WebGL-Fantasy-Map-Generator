@@ -176,6 +176,7 @@
   - 主河流层已从固定 `gl.LINES` 改为独立 screen-space 三角形带 mesh。
   - 河流宽度按 pack cell `fl`、河流 `sourceWidth/widthFactor` 和沿程长度趋势计算，不再所有河段同粗。
   - 运行时统计面板新增河流三角形、河流 mesh 构建耗时和河流宽度范围。
+  - 河口点已从水域 cell 中心裁剪到陆海共享边交点，最后一个入海段不再参与蜿蜒扰动，避免宽河流末端伸进海里。
 - 已完成阶段 18 军事第一刀：
   - 新增独立 `app/webgl-generator/src/generator/military.js`，按国家、城市、乡村人口和港口生成 source 风格 `state.military` 数组。
   - regiment 字段覆盖 `i/a/cell/x/y/bx/by/u/n/s/type/name/state`，并按陆军/海军分开合并。
@@ -189,11 +190,72 @@
 
 基于 `source/Fantasy-Map-Generator` 的功能、数据结构和视觉表现，复刻一个功能相似但使用 WebGL 实现的独立地图生成器。`source/` 只作为参考实现、行为对照和性能基线，不作为被修改或被接入的目标代码库。
 
-## 当前阶段：source 优先复位，阶段 18 后段 schema 已开始
+## 当前阶段：source 优先复位，阶段 18 已收口，转入 demo 编辑器原型
 
-第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。当前完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`，下一步可以进入 source 后段的命名、军事、区域、marker、zones 和统计字段补齐。
+第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。旧 source schema 下完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`；source 更新到 `5de7deb4` 后，经济链路 baseline schema 已刷新并确认 candidate 经济为空。经济和军事系统都暂不急，下一步先在 demo 中探索编辑器交互模型。
 
-阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀、省份 pole 第一刀、军事第一刀、marker 第一刀与 zones 第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA、国家 full/form name、省份 `pole`、`state.military`、source 风格 marker 类型池和 `pack.zones` 第一版数据已接入。阶段中途已回头修复正式应用主河流固定线宽问题，当前河流层按流量生成 screen-space 三角形带。强制 case `mediterranean / 100000 / audit-mediterranean-001` 当前 diff 已回到 `pass（fail 0，warn 0）`。
+阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀、省份 pole 第一刀、军事第一刀、marker 第一刀与 zones 第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA、国家 full/form name、省份 `pole`、`state.military`、source 风格 marker 类型池和 `pack.zones` 第一版数据已接入。阶段中途已回头修复正式应用主河流固定线宽问题，当前河流层按流量生成 screen-space 三角形带。强制 case `mediterranean / 100000 / audit-mediterranean-001` 在旧 schema 下曾回到 `pass（fail 0，warn 0）`；纳入 source `1.127.2` 经济链路后，当前 diff 为 `fail 28 / warn 11`，失败集中在 candidate 经济链路为空。
+
+## 2026-06-26 source 最新代码比较后的计划修正
+
+`source/Fantasy-Map-Generator` 已从 `3ee2e956` fast-forward 到 `5de7deb4`，当前 source 版本进入 `1.127.2` 系列。这次拉取不是小修：source 已经完成一次明显的结构迁移，并引入经济链路作为正式生成管线的一部分。由此，当前 `pass（fail 0，warn 0）` 只能说明旧有 source/candidate schema 下阶段 18 后段字段已收口，不能解释为已经覆盖最新 source 的完整生成能力。
+
+本次比较后的新事实：
+
+- source 生成器目录已从 `src/modules/*` 迁移为 `src/generators/*`；UI 动态模块大量迁入 `src/controllers/*`；渲染相关能力迁入 `src/renderers/*`，如 `src/controllers/view-3d.ts`、`src/renderers/erosion-bake.ts`、`src/renderers/draw-satellite-texture.ts`。
+- source 新增官方架构和领域文档：`docs/architecture/*`、`docs/domain/generation_pipeline.md`、`docs/domain/goods_schema.md`、`docs/domain/production_schema.md`、`docs/domain/trade_schema.md`、`docs/domain/taxes.md` 等。后续 source 审查应优先读这些文档，再落到源码。
+- source canonical pipeline 已新增 `Goods.generate`、`Markets.generate`、`Production.produce`、`States.collectTaxes`。经济阶段依赖完整 settlement/state/province/route/population 链路，且位于军事、marker、zones 之前。
+- source 3D 相关能力不再以旧 `public/modules/ui/3d.js` 为主入口，而是进入 controller/renderer 分层；后续 3D 或卫星纹理能力应按新结构重新审查，不沿用早期 WebGL 计划里的旧路径。
+- `source/` 子仓库仍保留本地 `package.json` 与 `package-lock.json` 的 `@rolldown/binding-win32-x64-msvc` optional dependency 改动，用于本机运行依赖，不属于上游 source 更新内容。
+
+计划调整：
+
+1. 先做 source baseline schema 刷新，不直接继续 UI 或视觉专题。重点补 `goods/markets/production/deals/taxes` 的 source/candidate 摘要字段，并把 `docs/domain/generation_pipeline.md` 的 phase 14 纳入验收。
+2. 刷新强制 source baseline：`mediterranean / 100000 / audit-mediterranean-001` 必须基于 `5de7deb4` 重新导出 source summary，再重新导出 candidate summary 和 diff。
+3. 新增经济字段导致 diff fail 后，经济链路第一刀作为已识别缺口保留并顺延为后续阶段，暂不立即执行。
+4. 近期开发优先级改为 demo 编辑器原型：高度编辑器、河流编辑器、国家编辑器，分别覆盖地形栅格编辑、线性对象编辑和政治区域/实体编辑三类典型编辑器。
+5. 之后再评估 source 新增 3D erosion/satellite texture 能力是否进入本项目路线；它属于后续视觉/导出方向，不应打断当前 source baseline 刷新。
+
+## 2026-06-26 economy baseline schema 第一刀
+
+已完成 economy baseline schema 第一刀，只做摘要和 diff，不实现经济生成系统、不做 UI。
+
+- `tools/source-export-baseline.mjs` 已新增顶层 `economy` 摘要，从 source runtime `window.pack` 统计 `goods/markets/production/deals/taxes`。
+- `tools/webgl-generator-export-baseline.mjs` 已输出同形 `economy` 摘要；当前 candidate 仍无经济实现，`pack.goods`、`pack.markets`、`pack.deals`、`pack.cells.good`、`pack.cells.market` 被记录为缺失字段和 unsupported source stage。
+- `tools/baseline-diff.mjs` 已加入 economy 指标、不变量和 candidate 经济空链路检查；当 candidate 经济为 0 时强制 case 会 fail，并能明确暴露后续经济链路第一刀缺口。
+- 已刷新强制 case `mediterranean / 100000 / audit-mediterranean-001`：
+  - source：`goods 71`，`markets 65`，`deals 33683`，`treasuryTotal 97479.1`。
+  - candidate：`goods 0`，`markets 0`，`deals 0`，缺少经济 pack 字段。
+  - diff：`fail 28 / warn 11`，状态为 `fail`，主要暴露 candidate 经济链路为空。
+
+经济链路缺口已经进入 baseline，但近期不立即实现；军事系统也不作为近期优先级。下一步先在 `prototype/webgl-cells/` demo 中尝试三个轻量编辑器原型：高度编辑器、河流编辑器和国家编辑器。它们用于验证编辑交互、命中选择、局部数据修改、撤销/重置和重新渲染策略，不要求直接成为正式应用最终编辑器。
+
+## 2026-06-27 demo 编辑器原型第一刀
+
+已在 `prototype/webgl-cells/` 中完成三个轻量编辑器原型，只用于验证交互模型，不修改 `source/`，也不作为正式应用最终编辑器形态。
+
+- 高度编辑器：
+  - 支持浏览/高度/河流/国家工具切换。
+  - 高度工具支持抬高、降低、平滑三种笔刷，笔刷半径和强度可调。
+  - 当前修改 `grid.cells.h`，并同步映射到对应 `pack.cells.h`；重绘使用 `renderer.refreshTheme()` 更新专题颜色。
+- 河流编辑器：
+  - 支持命中选择河流。
+  - 支持改宽，更新 `river.widthFactor` 后重建河流宽线 buffer。
+  - 支持拖点，使用 demo 运行时 `__editorUsePoints` 让被编辑河流改走 points path，不改原始 source 数据。
+- 国家编辑器：
+  - 支持从 cell 取样国家、涂抹 cell 归属。
+  - 支持调整选中国家的显示色。
+  - 国家归属修改后重建边界和专题 buffer。
+- 三类编辑器共用 demo 级撤销和重置：
+  - 撤销覆盖高度、河流、国家 cell 和国家颜色。
+  - 重置恢复本次加载的原始快照。
+- 验证结果：
+  - Playwright 打开 `http://127.0.0.1:5400`。
+  - 高度编辑：目标高度 `54 -> 57`，撤销后恢复。
+  - 河流编辑：河流 `2` 的 `widthFactor 0.672 -> 0.77`。
+  - 国家编辑：目标 cell 归属 `1 -> 4`。
+
+后续若继续编辑器方向，下一刀应围绕“编辑器状态与正式应用数据层边界”推进：把 demo 中临时的运行时改动整理成正式应用可复用的 edit command / undo command 结构，而不是继续堆 UI。
 
 ## 当前已完成
 
@@ -448,11 +510,13 @@ http://127.0.0.1:5410
 
 ## 下一步
 
-1. 以当前强制 case 通过结果为阶段 18 后段 schema 第一轮收口点，按需跑完整 candidate matrix 回归。
-2. 继续把 source/candidate 对照报告扩展到后段专题字段，避免后续功能只靠肉眼验收。
-3. 评估后段专题下一轮深挖顺序：zone 视觉图层、notes 文案、军事/marker/zones 编辑器或统计字段细化。
-4. 原阶段 3 的 UI、对象编辑、路线样式、点图层、浮动面板等工作继续暂停，等 source 后段数据链路进一步稳定后再恢复。
-5. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/floating-panel-architecture.md`。
+1. 先在 `prototype/webgl-cells/` demo 中实现一组编辑器原型，不改 `source/`。
+2. 高度编辑器：代表地形/栅格类编辑器，支持选择笔刷、抬高/降低或平滑局部高度，并触发高度相关图层重绘。
+3. 河流编辑器：代表线性对象编辑器，支持选择河流、调整局部折线或流量宽度，并刷新河流宽线渲染。
+4. 国家编辑器：代表区域/实体类编辑器，支持选择国家、给 cell 改归属或调整国家显示色，并刷新国家专题/边界。
+5. demo 编辑器第一刀只验证交互模型、数据修改路径、撤销/重置和重绘策略；不追求 source 编辑器完整功能，不做保存格式兼容。
+6. 经济和军事系统都暂缓；经济链路作为已识别缺口保留到后续阶段，军事系统与军事编辑器暂不推进。
+7. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/floating-panel-architecture.md`。
 
 ## 约束
 

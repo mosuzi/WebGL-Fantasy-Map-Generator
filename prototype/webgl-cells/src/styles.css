@@ -93,6 +93,69 @@ button:hover {
   gap: 8px;
 }
 
+.editor-toolbar {
+  margin-top: 10px;
+}
+
+.editor-panel {
+  border-top: 1px solid #29313d;
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.editor-panel[hidden] {
+  display: none;
+}
+
+.editor-actions {
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+}
+
+.field-row,
+.range-row {
+  align-items: center;
+  color: #edf1f5;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  min-height: 30px;
+}
+
+.field-row span,
+.range-row span {
+  color: #aeb9c6;
+  font-size: 13px;
+}
+
+.field-row input,
+.field-row select,
+.range-row input {
+  width: 100%;
+}
+
+.field-row select {
+  background: #1c232d;
+  border: 1px solid #39424f;
+  border-radius: 6px;
+  color: #edf1f5;
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+.field-row input[type="color"] {
+  background: transparent;
+  border: 1px solid #39424f;
+  border-radius: 6px;
+  height: 32px;
+  padding: 2px;
+}
+
+.editor-status {
+  margin-top: 12px;
+}
+
 .check-row {
   align-items: center;
   color: #edf1f5;
@@ -148,6 +211,10 @@ button:hover {
   display: block;
   height: 100%;
   width: 100%;
+}
+
+#map-canvas.editing {
+  cursor: crosshair;
 }
 
 .map-overlay {

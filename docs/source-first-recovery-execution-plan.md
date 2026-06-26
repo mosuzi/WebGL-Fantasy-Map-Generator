@@ -16,19 +16,25 @@
 
 - `public/main.js`：确认原版生成顺序。
 - `src/utils/graphUtils.ts`：确认 `placePoints`、边界点、jittered grid、`calculateVoronoi`、`findGridCell` 等基础图结构。
-- `src/modules/voronoi.ts`：确认邻接关系来自 Delaunator half-edge，而不是行列或固定方向近似。
-- `src/modules/heightmap-generator.ts`：确认高度模板 DSL 和 `Hill`、`Pit`、`Range`、`Trough`、`Strait`、`Mask`、`Invert`、`Add`、`Multiply`、`Smooth` 的执行语义。
+- `src/generators/voronoi.ts`：确认邻接关系来自 Delaunator half-edge，而不是行列或固定方向近似。
+- `src/generators/heightmap-generator.ts`：确认高度模板 DSL 和 `Hill`、`Pit`、`Range`、`Trough`、`Strait`、`Mask`、`Invert`、`Add`、`Multiply`、`Smooth` 的执行语义。
 - `public/config/heightmap-templates.js`：确认大陆、群岛、地中海、高山岛屿、平原岛屿、半岛、盘古大陆等模板步骤。
-- `src/modules/features.ts`：确认 grid/pack feature、海岸距离、`haven`、`harbor`、湖泊和岛屿分组。
-- `src/modules/river-generator.ts`：确认河流基于 pack、降水 flux、填洼、湖泊出口、合流、下切和 meander。
-- `src/modules/biomes.ts`：确认生物群系在河流后生成，并把河流 flux 纳入湿度。
-- `src/modules/burgs-generator.ts`：确认城市从适居度选点，港口依赖 `haven`、`harbor` 和水域 feature。
-- `src/modules/cultures-generator.ts`：确认文化中心来自 populated cells，并通过成本扩张。
-- `src/modules/states-generator.ts`：确认国家从首都扩张，成本包含文化、人口、生物群系、高度、河流和海岸类型。
-- `src/modules/routes-generator.ts`：确认路线先用 burg/port 的 Delaunay/Urquhart 候选连接，再在 pack 上用 `findPath` 成本寻路。
-- `src/modules/religions-generator.ts`：确认宗教在路线后扩张，受文化、国家、路线、生物群系和水域成本影响。
-- `src/modules/provinces-generator.ts`：确认省份在国家和城市之后生成，围绕州内 burg 扩张。
+- `src/generators/features.ts`：确认 grid/pack feature、海岸距离、`haven`、`harbor`、湖泊和岛屿分组。
+- `src/generators/river-generator.ts`：确认河流基于 pack、降水 flux、填洼、湖泊出口、合流、下切和 meander。
+- `src/generators/biomes.ts`：确认生物群系在河流后生成，并把河流 flux 纳入湿度。
+- `src/generators/burgs-generator.ts`：确认城市从适居度选点，港口依赖 `haven`、`harbor` 和水域 feature。
+- `src/generators/cultures-generator.ts`：确认文化中心来自 populated cells，并通过成本扩张。
+- `src/generators/states-generator.ts`：确认国家从首都扩张，成本包含文化、人口、生物群系、高度、河流和海岸类型。
+- `src/generators/routes-generator.ts`：确认路线先用 burg/port 的 Delaunay/Urquhart 候选连接，再在 pack 上用 `findPath` 成本寻路。
+- `src/generators/religions-generator.ts`：确认宗教在路线后扩张，受文化、国家、路线、生物群系和水域成本影响。
+- `src/generators/provinces-generator.ts`：确认省份在国家和城市之后生成，围绕州内 burg 扩张。
 - `src/utils/pathUtils.ts`：确认 `findPath` 是 pack 邻接上的优先队列寻路。
+
+2026-06-26 source 更新后补充：
+
+- source 已更新到 `5de7deb4`，生成器路径以 `src/generators/*` 为准；早期文档和历史记录中的 `src/modules/*` 只代表旧 source 结构。
+- 新增官方架构和领域文档，后续开阶段前应优先读 `source/Fantasy-Map-Generator/docs/domain/generation_pipeline.md`，再按需读取 `goods_schema.md`、`production_schema.md`、`trade_schema.md`、`taxes.md`。
+- UI、动态模块和渲染能力已经分流到 `src/controllers/*`、`src/renderers/*`、`src/services/*`；后续 3D、市场、生产、贸易动画或编辑器类任务不得再沿用旧 `public/modules/dynamic/*` 或 `public/modules/ui/3d.js` 路径假设。
 
 ## 关键结论
 
@@ -43,6 +49,7 @@ reGraph pack
 pack features
 河流
 生物群系
+goods catalog
 适居度
 文化
 城市
@@ -50,13 +57,17 @@ pack features
 路线
 宗教
 省份
+城市/国家/河湖命名与统计
+demo 编辑器原型：高度、河流、国家
+经济：markets、production、deals、taxes
+军事、markers、zones
 ```
 
 当前视觉乱象应优先怀疑前三层：`grid`、高度模板和 `reGraph pack`。如果这三层不按 source 对齐，后面的河流、路线、人口、文化、国家、宗教、省份都会在错误地形上生成，看起来就会一起失真。
 
 ## 总体原则
 
-- 暂停新增 UI、编辑器、面板、专题扩展和视觉调参。
+- source-first 数据对齐已经完成一轮阶段性收口后，允许先在 `prototype/webgl-cells/` demo 中做编辑器原型试验；正式应用 UI、面板、专题扩展和视觉调参仍需单独排期，不夹带进 demo 试验。
 - 暂停把当前正式应用的阶段性实现当作事实来源。
 - 每一阶段先读 source，写小步计划，再实施一个可验收单元。
 - 每一阶段都要有 source 对照快照和结构指标。

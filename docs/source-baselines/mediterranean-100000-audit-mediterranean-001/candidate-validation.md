@@ -19,7 +19,15 @@ Seed：`audit-mediterranean-001`
 | 港口 | 234 |
 | 国家 | 21 |
 | 路线 | 1481 |
+| 货物 | 0 |
+| 市场 | 0 |
+| 交易 | 0 |
+| 国库总额 | 0 |
 
 ## 当前缺口
 
-无。
+- 缺少 `pack.goods`
+- 缺少 `pack.markets`
+- 缺少 `pack.deals`
+- 缺少 `pack.cells.good`
+- 缺少 `pack.cells.market`

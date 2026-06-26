@@ -67,7 +67,12 @@ function createCandidateSummary(candidateMap, {appDir}) {
     ["pack.cells.fl", pack.cells.fl],
     ["pack.cells.r", pack.cells.r],
     ["pack.cells.conf", pack.cells.conf],
-    ["pack.cells.s", pack.cells.s]
+    ["pack.cells.s", pack.cells.s],
+    ["pack.goods", pack.goods],
+    ["pack.markets", pack.markets],
+    ["pack.deals", pack.deals],
+    ["pack.cells.good", pack.cells.good],
+    ["pack.cells.market", pack.cells.market]
   ]
     .filter(([, value]) => value === undefined)
     .map(([field]) => field);
@@ -204,16 +209,226 @@ function createCandidateSummary(candidateMap, {appDir}) {
     },
     lateStages: describeCandidateLateStages({grid, pack, society, politics, settlements, markers, zones: zoneList}),
     routes: routeSummary,
+    economy: describeCandidateEconomy(pack),
     validation,
     candidateNotes: {
       packStatus: pack.metadata.mapping,
       missingRequiredPackFields,
       unsupportedSourceStages: [
         "Burgs.specify source names and emblems",
-        "States.defineStateForms"
+        "States.defineStateForms",
+        "Goods.generate",
+        "Markets.generate",
+        "Production.produce",
+        "States.collectTaxes",
+        "pack.goods",
+        "pack.markets",
+        "pack.deals",
+        "pack.cells.good",
+        "pack.cells.market"
       ]
     }
   };
+}
+
+function describeCandidateEconomy(pack) {
+  const goods = (pack.goods || []).filter(Boolean);
+  const markets = (pack.markets || []).filter(Boolean);
+  const deals = (pack.deals || []).filter(Boolean);
+  const cells = pack.cells || {};
+  const burgs = (pack.burgs || []).filter(item => item?.i && !item.removed);
+  const states = (pack.states || []).filter(item => item?.i && !item.removed);
+  const goodIds = new Set(goods.map(good => good.i).filter(Number.isInteger));
+  const marketIds = new Set(markets.map(market => market.i).filter(Number.isInteger));
+  const marketGoods = markets.flatMap(market => Object.values(market.goods || {}));
+  const productionRecords = burgs.flatMap(burg => (burg.production || []).map(record => ({record, burg})));
+  const dealTaxByState = collectDealTaxesByState({deals, markets, pack});
+  const pollTaxExpectedByState = collectPollTaxExpectedByState(states);
+  const treasuryMismatches = states.map(state => {
+    const expected = (dealTaxByState[state.i] || 0) + (pollTaxExpectedByState[state.i] || 0);
+    return Math.abs(Number(state.treasury || 0) - expected);
+  });
+  const assignedCells = countByPredicate(cells.market || [], market => market > 0);
+
+  return {
+    goods: {
+      total: goods.length,
+      raw: countByPredicate(goods, good => Boolean(good.distribution) && !good.recipes?.length),
+      manufactured: countByPredicate(goods, good => !good.distribution && Boolean(good.recipes?.length)),
+      hybrid: countByPredicate(goods, good => Boolean(good.distribution) && Boolean(good.recipes?.length)),
+      visible: countByPredicate(goods, good => Boolean(good.visible)),
+      withBiomeOutput: countByPredicate(goods, good => Boolean(good.biomeOutput && Object.keys(good.biomeOutput).length)),
+      withDemandCoverage: countByPredicate(goods, good => Boolean(good.demandCoverage && Object.keys(good.demandCoverage).length)),
+      resourceCells: countByPredicate(cells.good || [], good => good > 0),
+      invalidCellGoodRefs: countInvalidOptionalRefs(cells.good || [], goodIds),
+      invalidRecipeGoodRefs: countInvalidRecipeGoodRefs(goods, goodIds)
+    },
+    markets: {
+      total: markets.length,
+      cellsAssigned: assignedCells,
+      assignedRatio: round(assignedCells / Math.max(1, cells.i?.length || cells.g?.length || 0)),
+      burgsWithMarket: countByPredicate(burgs, burg => burg.market > 0),
+      plazaBurgs: countByPredicate(burgs, burg => Boolean(burg.plaza) && marketIds.has(burg.market)),
+      goodsEntries: marketGoods.length,
+      stock: describeNumbers(marketGoods.map(item => item.stock)),
+      price: describeNumbers(marketGoods.map(item => item.price)),
+      invalidCenterBurgs: countByPredicate(markets, market => !isAliveBurg(pack, market.centerBurgId)),
+      invalidCellMarketRefs: countInvalidOptionalRefs(cells.market || [], marketIds),
+      invalidBurgMarketRefs: countByPredicate(burgs, burg => burg.market > 0 && !marketIds.has(burg.market))
+    },
+    production: {
+      burgsWithProduction: countByPredicate(burgs, burg => Array.isArray(burg.production) && burg.production.length > 0),
+      localRecords: countByPredicate(productionRecords, item => isLocalProductionRecord(item.record)),
+      mfgRecords: countByPredicate(productionRecords, item => isMfgProductionRecord(item.record)),
+      dealRecords: countByPredicate(productionRecords, item => isDealProductionRecord(item.record)),
+      burgsWithProduct: countByPredicate(burgs, burg => Number.isFinite(Number(burg.product))),
+      product: describeNumbers(burgs.map(burg => burg.product)),
+      burgTreasury: describeNumbers(burgs.map(burg => burg.treasury)),
+      invalidProductionGoodRefs: countInvalidProductionGoodRefs(productionRecords, goodIds),
+      invalidProductionDealRefs: countByPredicate(
+        productionRecords,
+        item => isDealProductionRecord(item.record) && !isValidDealId(item.record.dealId, deals)
+      )
+    },
+    deals: {
+      total: deals.length,
+      marketToBurg: countByPredicate(deals, deal => deal.sellerType === "market" && deal.buyerType === "burg"),
+      burgToMarket: countByPredicate(deals, deal => deal.sellerType === "burg" && deal.buyerType === "market"),
+      marketToMarket: countByPredicate(deals, deal => deal.sellerType === "market" && deal.buyerType === "market"),
+      tradedGoods: new Set(deals.map(deal => deal.good).filter(good => goodIds.has(good))).size,
+      units: round(deals.reduce((sum, deal) => sum + Number(deal.units || 0), 0)),
+      value: round(deals.reduce((sum, deal) => sum + Number(deal.units || 0) * Number(deal.price || 0), 0)),
+      taxTotal: round(deals.reduce((sum, deal) => sum + Number(deal.tax || 0), 0)),
+      taxedDeals: countByPredicate(deals, deal => Number(deal.tax || 0) > 0),
+      invalidPartyRefs: countInvalidDealPartyRefs(deals, markets, pack),
+      invalidGoodRefs: countInvalidRequiredRefs(deals.map(deal => deal.good), goodIds),
+      invalidDealIndexes: countInvalidDealIndexes(deals),
+      invalidAmounts: countByPredicate(deals, deal => !isValidDealAmount(deal))
+    },
+    taxes: {
+      statesWithRates: countByPredicate(states, state => Number.isFinite(Number(state.salesTax)) && Number.isFinite(Number(state.pollTax))),
+      statesWithTreasury: countByPredicate(states, state => Number.isFinite(Number(state.treasury))),
+      salesTax: describeNumbers(states.map(state => state.salesTax)),
+      pollTax: describeNumbers(states.map(state => state.pollTax)),
+      stateTreasury: describeNumbers(states.map(state => state.treasury)),
+      treasuryTotal: round(states.reduce((sum, state) => sum + Number(state.treasury || 0), 0)),
+      dealTaxTotal: round(deals.reduce((sum, deal) => sum + Number(deal.tax || 0), 0)),
+      pollTaxExpected: round(states.reduce((sum, state) => sum + (pollTaxExpectedByState[state.i] || 0), 0)),
+      treasuryMismatchCount: treasuryMismatches.filter(value => value > 0.05).length,
+      treasuryMismatchMax: round(Math.max(0, ...treasuryMismatches))
+    }
+  };
+}
+
+function countInvalidOptionalRefs(values = [], validIds) {
+  let invalid = 0;
+  for (const value of values || []) {
+    if (value === undefined || value === null || value === 0) continue;
+    if (!Number.isInteger(value) || !validIds.has(value)) invalid++;
+  }
+  return invalid;
+}
+
+function countInvalidRequiredRefs(values = [], validIds) {
+  let invalid = 0;
+  for (const value of values || []) {
+    if (!Number.isInteger(value) || !validIds.has(value)) invalid++;
+  }
+  return invalid;
+}
+
+function countInvalidRecipeGoodRefs(goods, goodIds) {
+  let invalid = 0;
+  for (const good of goods) {
+    for (const recipe of good.recipes || []) {
+      for (const key of Object.keys(recipe || {})) {
+        const goodId = Number(key);
+        if (!Number.isInteger(goodId) || !goodIds.has(goodId)) invalid++;
+      }
+    }
+  }
+  return invalid;
+}
+
+function isLocalProductionRecord(record) {
+  return record && "goodId" in record && "units" in record && !("recipe" in record) && !("dealId" in record);
+}
+
+function isMfgProductionRecord(record) {
+  return record && "goodId" in record && "recipe" in record;
+}
+
+function isDealProductionRecord(record) {
+  return record && "dealId" in record;
+}
+
+function countInvalidProductionGoodRefs(records, goodIds) {
+  let invalid = 0;
+  for (const {record} of records) {
+    if ((isLocalProductionRecord(record) || isMfgProductionRecord(record)) && !goodIds.has(record.goodId)) invalid++;
+    if (!isMfgProductionRecord(record)) continue;
+    for (const entry of record.recipe || []) if (!goodIds.has(entry.goodId)) invalid++;
+  }
+  return invalid;
+}
+
+function isValidDealId(dealId, deals) {
+  return Number.isInteger(dealId) && dealId >= 0 && dealId < deals.length && deals[dealId]?.i === dealId;
+}
+
+function countInvalidDealPartyRefs(deals, markets, pack) {
+  const marketIds = new Set(markets.map(market => market.i).filter(Number.isInteger));
+  let invalid = 0;
+  for (const deal of deals) {
+    if (!isValidDealParty(deal.sellerType, deal.seller, marketIds, pack)) invalid++;
+    if (!isValidDealParty(deal.buyerType, deal.buyer, marketIds, pack)) invalid++;
+  }
+  return invalid;
+}
+
+function isValidDealParty(type, id, marketIds, pack) {
+  if (type === "market") return marketIds.has(id);
+  if (type === "burg") return isAliveBurg(pack, id);
+  return false;
+}
+
+function isAliveBurg(pack, id) {
+  const burg = pack.burgs?.[id];
+  return Boolean(burg?.i && !burg.removed);
+}
+
+function isValidDealAmount(deal) {
+  return Number.isFinite(Number(deal.units)) && Number(deal.units) >= 0 && Number(deal.price) >= 0 && Number(deal.tax) >= 0;
+}
+
+function countInvalidDealIndexes(deals) {
+  let invalid = 0;
+  for (let index = 0; index < deals.length; index++) if (deals[index]?.i !== index) invalid++;
+  return invalid;
+}
+
+function collectDealTaxesByState({deals, markets, pack}) {
+  const taxes = {};
+  const marketsById = Object.fromEntries(markets.map(market => [market.i, market]));
+  for (const deal of deals) {
+    const tax = Number(deal.tax || 0);
+    if (!tax) continue;
+    const stateId =
+      deal.sellerType === "burg"
+        ? pack.burgs?.[deal.seller]?.state
+        : pack.burgs?.[marketsById[deal.seller]?.centerBurgId]?.state;
+    if (!Number.isInteger(stateId) || stateId <= 0) continue;
+    taxes[stateId] = round((taxes[stateId] || 0) + tax);
+  }
+  return taxes;
+}
+
+function collectPollTaxExpectedByState(states) {
+  const taxes = {};
+  for (const state of states) {
+    taxes[state.i] = round(Number(state.pollTax || 0) * (Number(state.rural || 0) + Number(state.urban || 0)));
+  }
+  return taxes;
 }
 
 function describeCandidateLateStages({grid, pack, society, politics, settlements, markers, zones}) {
@@ -672,6 +887,10 @@ function renderValidationMarkdown(summary) {
   lines.push(`| 港口 | ${summary.society.ports} |`);
   lines.push(`| 国家 | ${summary.society.states} |`);
   lines.push(`| 路线 | ${summary.routes.total} |`);
+  lines.push(`| 货物 | ${summary.economy?.goods?.total ?? 0} |`);
+  lines.push(`| 市场 | ${summary.economy?.markets?.total ?? 0} |`);
+  lines.push(`| 交易 | ${summary.economy?.deals?.total ?? 0} |`);
+  lines.push(`| 国库总额 | ${summary.economy?.taxes?.treasuryTotal ?? 0} |`);
   lines.push("");
   lines.push("## 当前缺口");
   lines.push("");

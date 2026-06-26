@@ -103,6 +103,7 @@ export function uploadBuffers(gl, buffers) {
 export function updateThemeColorBuffer(gl, buffers, snapshot, themeId) {
   buffers.themeColors = buildThemeColors(snapshot, buffers.cellRanges, themeId);
   buffers.themeId = themeId;
+  buffers.themeStats = getThemeStats(snapshot, buffers.cellRanges);
   gl.bindBuffer(gl.ARRAY_BUFFER, buffers.themeColorBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, buffers.themeColors, gl.STATIC_DRAW);
 }

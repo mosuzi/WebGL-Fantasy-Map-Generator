@@ -4917,3 +4917,165 @@
 
 - 本刀只补数据和 baseline 摘要，不新增可见 zones 图层；运行时层面以 Node 直接生成、candidate summary 和 baseline diff 验收为准。
 - 当前已知剩余风险：zones 只是 source 风格第一刀，尚未复刻 source 的高斯数量随机、完整 disease 路线传播、手工编辑器、SVG hatch 渲染、legend 和导出行为。
+
+## 2026-06-26 source 最新代码比较与计划修正
+
+太子复查：
+
+- `source/Fantasy-Map-Generator` 已从 `3ee2e956` 拉取到 `5de7deb4`，当前 source 版本进入 `1.127.2` 系列。
+- 这次 source 更新包含 67 个提交，不是单点 bugfix：
+  - 生成器主目录从 `src/modules/*` 迁到 `src/generators/*`。
+  - 动态 UI/编辑器大量迁到 `src/controllers/*`。
+  - 渲染能力迁到 `src/renderers/*`，包括 `view-3d`、erosion bake、satellite texture、markets、goods、trade animation 等。
+  - 新增官方架构和领域文档：`docs/architecture/*`、`docs/domain/generation_pipeline.md`、`goods_schema.md`、`production_schema.md`、`trade_schema.md`、`taxes.md`。
+- source 最新 canonical pipeline 已把经济链路纳入正式生成流程：
+  - `Goods.generate` 在人口评分和文化前后段之间建立 goods catalogue。
+  - `Markets.generate`、`Production.produce`、`States.collectTaxes` 位于省份、河湖命名之后，军事、marker、zones 之前。
+  - 经济阶段依赖 `pack.cells.biome/pop/s/state/province/routes`、burgs、states、provinces、routes 等完整语义链路。
+- 当前阶段 18 强制 case `pass（fail 0，warn 0）` 只代表旧 source/candidate schema 的命名、军事、marker、zones 第一刀收口；尚不能代表最新 source 的 goods/markets/production/deals/taxes 已覆盖。
+
+文档修正：
+
+- 更新 `docs/current-plan.md`：
+  - 记录 source `5de7deb4` 的结构迁移和经济管线新增事实。
+  - 下一步改为先刷新 source/candidate baseline schema，新增 `goods/markets/production/deals/taxes` 摘要字段。
+  - 若新增经济字段出现 fail，下一阶段进入阶段 19 经济链路第一刀。
+- 更新 `docs/source-first-recovery-execution-plan.md`：
+  - 活跃源码路径改为 `src/generators/*`。
+  - 补充 `src/controllers/*`、`src/renderers/*`、`src/services/*` 的新结构边界。
+  - 在生成链结论中加入 goods catalog、经济阶段和 overlays 阶段。
+- 更新 `docs/source-first-detailed-task-plan.md`：
+  - 将旧 `src/modules/*` 活跃路径替换为 `src/generators/*`。
+  - 新增“2026-06-26 source 更新校正”说明。
+  - 新增阶段 19：经济、市场、生产、税收。
+  - 将河湖命名、marker、zones、military 后段深化调整为阶段 20。
+
+下一步建议：
+
+- 先不要继续做 zone 图层或 UI。
+- 先扩展 `tools/source-export-baseline.mjs` 和 `tools/webgl-generator-export-baseline.mjs`，让最新 source 的 goods、markets、production、deals、taxes 进入 summary 和 diff。
+- 基于 source `5de7deb4` 重新导出强制 case source summary，再重跑 candidate summary 和 diff。
+- 根据新 diff 决定是否启动阶段 19 经济链路第一刀。
+
+## 2026-06-26 economy baseline schema 第一刀
+
+尚书实施：
+
+- 更新 `tools/source-export-baseline.mjs`：
+  - 顶层新增 `economy` 摘要，从 source runtime `window.pack` 真实统计。
+  - 覆盖 `goods`、`markets`、`production`、`deals`、`taxes` 五组字段。
+  - 增加经济引用检查，包括 cell good、recipe good、market center burg、cell market、burg market、production good/deal、deal party/good/index/amount 和 treasury mismatch。
+- 更新 `tools/webgl-generator-export-baseline.mjs`：
+  - candidate 输出同形 `economy` schema。
+  - 当前没有经济实现，因此经济主体指标为 0。
+  - `missingRequiredPackFields` 和 `candidateNotes.unsupportedSourceStages` 明确记录 `pack.goods`、`pack.markets`、`pack.deals`、`pack.cells.good`、`pack.cells.market`。
+- 更新 `tools/baseline-diff.mjs`：
+  - 新增 economy metrics 与 invalid invariants。
+  - 新增 `economyPresent` candidate 特有检查。
+  - 当 candidate 经济为空或缺少经济 pack 字段时，下一步建议优先切到阶段 19 经济链路第一刀。
+
+门下复核：
+
+- `node --check .\tools\source-export-baseline.mjs` 通过。
+- `node --check .\tools\webgl-generator-export-baseline.mjs` 通过。
+- `node --check .\tools\baseline-diff.mjs` 通过。
+- 首次 source 强制 case 导出在沙盒内失败：
+  - Vite 重新优化依赖时无法删除 `source/Fantasy-Map-Generator/node_modules/.vite/deps/alea.js.map`。
+  - 精确错误为 `EPERM: operation not permitted, unlink ... alea.js.map`，随后等待 `http://127.0.0.1:5301` 超时。
+- 提升权限重跑 source 导出成功，刷新：
+  - `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/source-summary.json`
+  - `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/source-trace.json`
+  - `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/validation.md`
+- 刷新 candidate 与 diff：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir .\docs\source-baselines\mediterranean-100000-audit-mediterranean-001 --browser-channel chrome --timeout 180000 --screenshot false`
+  - `node .\tools\baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001`
+
+验证结果：
+
+- source economy 摘要：`goods 71`，`markets 65`，`deals 33683`，`treasuryTotal 97479.1`。
+- candidate economy 摘要：`goods 0`，`markets 0`，`deals 0`，缺失 `pack.goods`、`pack.markets`、`pack.deals`、`pack.cells.good`、`pack.cells.market`。
+- diff 结果：`fail 28 / warn 11`，状态为 `fail`。
+- fail 主体来自 economy 空链路；旧有 grid、pack、features、rivers、population、society、routes、lateStages 主指标继续保持通过。
+- 下一步建议已更新为阶段 19：先补 goods catalogue、market territories、production records、deal log 和 state treasury，不做市场 UI、图表、贸易动画或编辑器。
+
+给事中复核后修正：
+
+- `deal.good` 是 source `Deal` 的必填 good id，不是可选引用；baseline validator 已从 optional ref 校验改为 required ref 校验，避免阶段 19 实现后把 `0/null/undefined` 的 deal good 漏判为合法。
+- `burg.market` 是阶段性/可选派生字段；缺少市场时不再被计为 invalid，只有非零且不存在的 market id 才算引用错误。
+- `deal.units` 校验改为非负数，避免 source 中极小/边界交易被 strict `> 0` 口径误判。
+- `source-trace.json` 写出改为使用 `summary.trace`，保证外部 trace 文件与 summary 内部 trace 一致。
+- `docs/current-plan.md` 已从“等待最新 source schema 刷新”改为“准备进入阶段 19 经济链路第一刀”。
+
+优先级更正：
+
+- 用户更正：经济和军事系统都不急。
+- 阶段 19 不再立即做经济链路，而是改为 demo 编辑器原型。
+- 下一步先在 `prototype/webgl-cells/` demo 中尝试高度编辑器、河流编辑器和国家编辑器，分别代表地形栅格编辑、线性对象编辑和政治区域/实体编辑三类典型编辑器。
+- 经济链路缺口继续保留在 baseline 和后续阶段中，军事系统与军事编辑器也继续暂缓。
+
+## 2026-06-27 demo 编辑器原型第一刀
+
+尚书实施：
+
+- 新增 `prototype/webgl-cells/src/editors.js`：
+  - 提供 `DemoEditorController`，管理当前工具、编辑参数、选中国家、选中河流、撤销栈和重置。
+  - 高度编辑器支持抬高、降低和平滑笔刷；直接修改 `grid.cells.h`，并同步对应 `pack.cells.h`。
+  - 河流编辑器支持选中河流、调整 `widthFactor` 和拖动 points 节点。
+  - 国家编辑器支持取样国家、涂抹 cell 归属和修改国家颜色。
+- 更新 `prototype/webgl-cells/src/renderer.js`：
+  - 新增 `refreshTheme()`，用于只更新专题颜色 buffer。
+  - 新增 `rebuildBuffers()`，用于河流宽线、边界等需要重建 buffer 的编辑。
+  - `installCanvasInteractions()` 支持编辑器接管 pointer down/move/up，避免编辑时触发平移。
+- 更新 `prototype/webgl-cells/src/lines.js`：
+  - 被编辑过的河流可通过运行时 `__editorUsePoints` 使用 points path，便于 demo 拖点验证。
+- 更新 `prototype/webgl-cells/index.html` 和 `styles.css`：
+  - 新增编辑器原型控制区。
+  - 提供高度、河流、国家三类工具的参数控件、撤销、重置和状态显示。
+
+门下检查：
+
+- 本轮只改 `prototype/webgl-cells/` 与中文文档，不修改 `source/`。
+- `node --check .\prototype\webgl-cells\src\main.js` 通过。
+- `node --check .\prototype\webgl-cells\src\renderer.js` 通过。
+- `node --check .\prototype\webgl-cells\src\editors.js` 通过。
+- `node --check .\prototype\webgl-cells\src\lines.js` 通过。
+
+侍中验收：
+
+- 复用 `http://127.0.0.1:5400` demo 服务，用系统 Chrome + Playwright 验证。
+- 高度编辑：点击高度工具后，目标高度从 `54` 变为 `57`，撤销后总高度和目标高度恢复。
+- 河流编辑：命中河流 `2`，`widthFactor` 从 `0.672` 改为 `0.77`。
+- 国家编辑：先取样国家 `4`，再把目标 cell 从国家 `1` 涂抹为国家 `4`。
+
+剩余风险：
+
+- 这是 demo 级编辑器，不保存到 `.map` 或正式应用数据模型。
+- 高度平滑按笔刷范围平均值收敛，因为当前 demo 快照没有 grid 邻接表。
+- 河流拖点对被编辑河流改用 points path，只验证线性对象编辑交互，不代表 source 河流拓扑编辑。
+- 国家编辑只处理 cell 归属和显示色，不维护国家统计、中心、城市归属或省份一致性。
+
+## 2026-06-27 河流宽线河口裁剪修复
+
+问题：
+
+- 河流层改为按流量生成宽线 mesh 后，部分河流末端明显伸进海里。
+- 根因不是宽度计算本身，而是正式生成器 `river.points` 遇到第一个水域 cell 时仍会使用水域 cell 中心；河口段参与蜿蜒后，宽线会进一步放大这个偏移。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/rivers.js`：
+  - `getRiverPoints()` 遇到 `-1` 或第一个水域 cell 时立即截断，不再把水域 cell 中心加入 path。
+  - 入海点优先取“上一陆地 cell 中心到水域 cell 中心”与陆海共享边的交点；无法求交时退回共享边中点，再退回高度插值。
+  - 最后一段入海段跳过 meander 扰动，避免控制点摆入海里。
+- `prototype/webgl-cells/src/lines.js`：
+  - demo snapshot 的 cell fallback path 同步使用共享边交点优先的河口裁剪，保留高度插值兜底。
+
+门下检查：
+
+- `node --check .\prototype\webgl-cells\src\lines.js` 通过。
+- `node --check .\app\webgl-generator\src\generator\rivers.js` 通过。
+
+侍中验收：
+
+- 使用正式生成器跑 `mediterranean / 100000 / audit-mediterranean-001` 几何烟测。
+- 本次样例生成河流 `912` 条，其中 `585` 条以水域 cell 入海、`68` 条以地图边界出界；入海河流末点等于水域 cell 中心数量为 `0`，共享岸线附近异常数量为 `0`。

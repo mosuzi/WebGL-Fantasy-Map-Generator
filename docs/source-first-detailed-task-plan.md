@@ -497,6 +497,30 @@ docs/source-baselines/
 - 每个快速回归样例至少输出高度、专题和路线截图。
 - 地中海截图必须能看到中部海盆、上下边缘地形、沿海聚落和海路/陆路差异。
 
+## 2026-06-26 source 更新校正
+
+`source/Fantasy-Map-Generator` 已更新到 `5de7deb4`。本详细计划继续保留阶段 1-18 的已执行结论，但后续新阶段必须按最新 source 结构读取：
+
+- 生成器：`src/generators/*`。
+- 控制器和编辑器：`src/controllers/*`。
+- 渲染器：`src/renderers/*`。
+- 服务和全局支持：`src/services/*`、`src/utils/*`、`src/types/*`。
+- 官方领域文档：`docs/domain/generation_pipeline.md`、`goods_schema.md`、`production_schema.md`、`trade_schema.md`、`taxes.md`。
+
+最新 canonical pipeline 相比本计划初版新增或前移了经济链路：
+
+```text
+Goods.generate
+rankCells / Cultures
+Burgs / States / Routes / Religions
+Burgs.specify / States.collectStatistics / States.defineStateForms
+Provinces / river-lake naming
+Markets.generate / Production.produce / States.collectTaxes
+Military.generate / Markers.generate / Zones.generate
+```
+
+因此，当前阶段 18 的 `pass` 只代表旧 baseline schema 下的命名、军事、marker、zones 第一刀收口。source/candidate 摘要 schema 已把 goods、markets、production、deals 和 taxes 纳入对照，并确认 candidate 经济链路为空。这个缺口顺延为后续经济阶段，但经济和军事系统都不作为近期优先级；下一步先在 demo 中尝试编辑器原型。
+
 ## 五、阶段任务包
 
 每个阶段都遵循同一交付格式：
@@ -514,7 +538,7 @@ docs/source-baselines/
 source：
 
 - `src/utils/graphUtils.ts`
-- `src/modules/voronoi.ts`
+- `src/generators/voronoi.ts`
 
 输入字段：
 
@@ -563,7 +587,7 @@ source：
 
 source：
 
-- `src/modules/heightmap-generator.ts`
+- `src/generators/heightmap-generator.ts`
 - `public/config/heightmap-templates.js`
 
 输入字段：
@@ -607,7 +631,7 @@ source：
 
 source：
 
-- `src/modules/features.ts`
+- `src/generators/features.ts`
 - `public/main.js` 中 `addLakesInDeepDepressions()`、`openNearSeaLakes()`、`defineMapSize()`、`calculateMapCoordinates()`、`calculateTemperatures()`、`generatePrecipitation()`
 
 输入字段：
@@ -700,8 +724,8 @@ source：
 
 source：
 
-- `src/modules/features.ts`
-- `src/modules/lakes.ts`
+- `src/generators/features.ts`
+- `src/generators/lakes.ts`
 
 输入字段：
 
@@ -743,8 +767,8 @@ source：
 
 source：
 
-- `src/modules/river-generator.ts`
-- `src/modules/lakes.ts`
+- `src/generators/river-generator.ts`
+- `src/generators/lakes.ts`
 
 输入字段：
 
@@ -794,7 +818,7 @@ source：
 
 source：
 
-- `src/modules/biomes.ts`
+- `src/generators/biomes.ts`
 - `public/main.js` 中 `rankCells()`
 
 输入字段：
@@ -835,7 +859,7 @@ source：
 
 source：
 
-- `src/modules/cultures-generator.ts`
+- `src/generators/cultures-generator.ts`
 
 输入字段：
 
@@ -873,7 +897,7 @@ source：
 
 source：
 
-- `src/modules/burgs-generator.ts`
+- `src/generators/burgs-generator.ts`
 
 输入字段：
 
@@ -914,7 +938,7 @@ source：
 
 source：
 
-- `src/modules/states-generator.ts`
+- `src/generators/states-generator.ts`
 
 输入字段：
 
@@ -956,7 +980,7 @@ source：
 
 source：
 
-- `src/modules/routes-generator.ts`
+- `src/generators/routes-generator.ts`
 - `src/utils/pathUtils.ts`
 
 输入字段：
@@ -1003,7 +1027,7 @@ source：
 
 source：
 
-- `src/modules/religions-generator.ts`
+- `src/generators/religions-generator.ts`
 
 输入字段：
 
@@ -1042,8 +1066,8 @@ source：
 
 source：
 
-- `src/modules/burgs-generator.ts`
-- `src/modules/states-generator.ts`
+- `src/generators/burgs-generator.ts`
+- `src/generators/states-generator.ts`
 
 输入字段：
 
@@ -1076,7 +1100,7 @@ source：
 
 source：
 
-- `src/modules/provinces-generator.ts`
+- `src/generators/provinces-generator.ts`
 
 输入字段：
 
@@ -1105,15 +1129,108 @@ source：
 
 - 省份围绕城市组织，不是机械网格。
 
-### 阶段 15：河湖命名、markers、zones、military
+### 阶段 19：demo 编辑器原型
+
+目标：
+
+- 先在 `prototype/webgl-cells/` demo 中验证编辑器交互模型，不进入正式应用，不修改 `source/`。
+- 用三个编辑器覆盖三类典型编辑能力：地形栅格、线性对象、政治区域/实体。
+- 第一刀重点是命中选择、局部数据修改、撤销/重置、局部或全量重绘策略，不追求 source 完整编辑器功能。
+
+尚书任务：
+
+1. 高度编辑器：支持基础笔刷，能抬高、降低或平滑局部高度，并刷新高度/地形相关图层。
+2. 河流编辑器：支持选择河流，调整局部折线或流量宽度，并刷新河流宽线渲染。
+3. 国家编辑器：支持选择国家，给 cell 改归属或调整国家显示色，并刷新国家专题和边界。
+4. 为三个编辑器提供统一的 demo 级编辑状态：当前工具、选中对象、笔刷参数、撤销/重置。
+5. 在文档中记录哪些交互可迁移到正式应用，哪些只是 demo 试验。
+
+门下检查：
+
+- 不修改 `source/`。
+- 编辑操作不会破坏 demo 基础渲染和 picking。
+- 三类编辑器的状态切换清晰，不互相污染。
+- 撤销/重置至少覆盖本轮编辑产生的数据改动。
+
+侍中验收：
+
+- 浏览器中能实际执行高度、河流、国家三类编辑。
+- 编辑后画面立即反馈，重新切换专题后仍能看到修改。
+- 记录后续迁移到正式应用时需要重做的数据层和 UI 层边界。
+
+暂缓项：
+
+- source 完整编辑器复刻。
+- 保存格式兼容和导出。
+- 经济系统与军事系统深挖。
+
+### 阶段 20：经济、市场、生产、税收
 
 source：
 
-- `src/modules/river-generator.ts`
-- `src/modules/lakes.ts`
-- `src/modules/markers-generator.ts`
-- `src/modules/zones-generator.ts`
-- `src/modules/military-generator.ts`
+- `docs/domain/generation_pipeline.md`
+- `docs/domain/goods_schema.md`
+- `docs/domain/production_schema.md`
+- `docs/domain/trade_schema.md`
+- `docs/domain/taxes.md`
+- `src/generators/goods-generator.ts`
+- `src/generators/markets-generator.ts`
+- `src/generators/production-generator.ts`
+- `src/generators/states-generator.ts`
+
+输入字段：
+
+- `pack.cells.biome/pop/s/state/province/routes`
+- `pack.burgs`
+- `pack.states`
+- `pack.provinces`
+- `pack.routes`
+
+输出字段：
+
+- `pack.goods`
+- `pack.markets`
+- `pack.deals`
+- `pack.cells.good`
+- `pack.cells.market`
+- burg `market/production/product/treasury`
+- state `treasury` 与 tax 字段
+
+尚书任务：
+
+1. 扩展 source/candidate baseline schema，先统计 goods、markets、production、deals、taxes 的数量、引用和缺字段。
+2. 复刻或近似 `Goods.generate()` 的基础 catalogue 与 resource placement。
+3. 复刻 `Markets.generate()` 的市场中心和市场领地扩张。
+4. 复刻 `Production.produce()` 的第一版产出、库存、价格和 deal 日志。
+5. 复刻 `States.collectTaxes()` 的 state treasury 数据产物。
+
+门下检查：
+
+- market center burg 引用合法。
+- `cells.market` 引用合法，且不指向已删除 market。
+- burg production 与 product 字段存在。
+- state treasury 为数值。
+- submap/resample/heightmap restore 暂不实现时必须明确记录为未覆盖能力。
+
+侍中验收：
+
+- 先以 summary 和 diff 验收，不做市场 UI。
+- 市场数量、生产字段覆盖和税收字段覆盖与 source 同量级。
+
+禁止事项：
+
+- 不先做经济图表、贸易动画、市场编辑器或视觉图层。
+- 不用随机字段填空绕过引用检查。
+
+### 阶段 21：后段专题深化：河湖命名、markers、zones、military
+
+source：
+
+- `src/generators/river-generator.ts`
+- `src/generators/lakes.ts`
+- `src/generators/markers-generator.ts`
+- `src/generators/zones-generator.ts`
+- `src/generators/military-generator.ts`
 
 输入字段：
 

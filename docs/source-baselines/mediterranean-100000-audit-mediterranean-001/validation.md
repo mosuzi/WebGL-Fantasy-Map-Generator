@@ -16,11 +16,15 @@ Seed：`audit-mediterranean-001`
 | grid 平均邻接度 | 5.976 |
 | pack 平均邻接度 | 5.97 |
 | 陆地比例 | 0.611 |
-| 河流 | 956 |
-| 城市 | 1724 |
-| 港口 | 230 |
+| 河流 | 955 |
+| 城市 | 1825 |
+| 港口 | 321 |
 | 国家 | 21 |
-| 路线 | 1331 |
+| 路线 | 1557 |
+| 货物 | 71 |
+| 市场 | 65 |
+| 交易 | 33683 |
+| 国库总额 | 97479.1 |
 
 ## 关键检查
 
@@ -37,7 +41,7 @@ Seed：`audit-mediterranean-001`
 | harborMismatchCount | 0 |
 | routeLinkAsymmetry | 0 |
 | landRouteWaterCells | 0 |
-| seaRouteLandCells | 1 |
+| seaRouteLandCells | 737 |
 
 ## 下一步
 
