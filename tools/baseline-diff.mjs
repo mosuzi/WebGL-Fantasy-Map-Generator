@@ -285,6 +285,9 @@ function recommendNextStage({failCount, warnCount, candidate}) {
   if (String(candidate.metadata?.generatorStage || "").includes("stage-14")) {
     return "当前强制 case 已全项通过；下一步可扩大模板/seed 矩阵回归，并补齐 source 后段的命名、军事、区域、marker 细节和统计字段。";
   }
+  if (String(candidate.metadata?.generatorStage || "").includes("stage-18")) {
+    return "阶段 18 后段 schema 当前强制 case 已通过；下一步扩大 candidate matrix 回归，并评估 zone 图层、notes、编辑器和导出等后段专题深挖顺序。";
+  }
   return "当前 case 达到阶段 0 对照要求，可推进下一阶段。";
 }
 

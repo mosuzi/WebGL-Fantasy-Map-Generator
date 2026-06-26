@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-26T01:36:05.274Z",
+    "generatedAt": "2026-06-26T02:03:03.371Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -9,7 +9,7 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-18-marker-first-pass",
+    "generatorStage": "source-stage-18-zones-first-pass",
     "generatedOptions": {
       "statesNumber": 21,
       "provincesRatio": 20,
@@ -38,7 +38,8 @@
     "buildPolitics",
     "buildSettlements",
     "finalizeSocietyReligions",
-    "buildMarkers"
+    "buildMarkers",
+    "buildZones"
   ],
   "template": {
     "id": "mediterranean",
@@ -431,7 +432,7 @@
     "religions": 19,
     "provinces": 463,
     "markers": 539,
-    "zones": 0,
+    "zones": 14,
     "regiments": 402
   },
   "lateStages": {
@@ -523,19 +524,31 @@
       "invalidCells": 0
     },
     "zones": {
-      "total": 0,
-      "types": {},
+      "total": 14,
+      "types": {
+        "Invasion": 1,
+        "Rebels": 1,
+        "Proselytism": 2,
+        "Crusade": 1,
+        "Disease": 2,
+        "Disaster": 1,
+        "Eruption": 1,
+        "Avalanche": 1,
+        "Fault": 1,
+        "Flood": 2,
+        "Tsunami": 1
+      },
       "cells": {
-        "min": 0,
-        "p05": 0,
-        "p25": 0,
-        "p50": 0,
-        "p75": 0,
-        "p90": 0,
-        "p95": 0,
-        "p99": 0,
-        "max": 0,
-        "mean": 0
+        "min": 9,
+        "p05": 10.3,
+        "p25": 12,
+        "p50": 16,
+        "p75": 22,
+        "p90": 31.1,
+        "p95": 391.1,
+        "p99": 924.62,
+        "max": 1058,
+        "mean": 91.5
       },
       "hidden": 0,
       "invalidCells": 0
@@ -593,8 +606,7 @@
     "missingRequiredPackFields": [],
     "unsupportedSourceStages": [
       "Burgs.specify source names and emblems",
-      "States.defineStateForms",
-      "Zones.generate"
+      "States.defineStateForms"
     ]
   }
 }

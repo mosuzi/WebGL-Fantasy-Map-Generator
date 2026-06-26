@@ -12,6 +12,7 @@ import {createRandom, stableHash} from "./random.js";
 import {buildRivers} from "./rivers.js";
 import {buildSettlements, finalizeSettlements} from "./settlements.js";
 import {buildSociety, finalizeSocietyReligions} from "./society.js";
+import {buildZones} from "./zones.js";
 
 export function generatePlaceholderMap(inputOptions = {}) {
   const options = normalizeOptions(inputOptions);
@@ -34,14 +35,16 @@ export function generatePlaceholderMap(inputOptions = {}) {
   finalizeSocietyReligions(grid, society, pack, random, settlements, options);
   const military = buildMilitary(pack, options);
   const markers = buildMarkers(grid, features, politics, rivers, pack, options);
+  pack.markers = markers.markers;
+  const zones = buildZones(pack, options);
   const layers = createPalette(random);
-  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military);
+  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones);
   const generatedAt = new Date().toISOString();
 
   return {
     metadata: {
       app: "webgl-generator",
-      generatorStage: "source-stage-18-marker-first-pass",
+      generatorStage: "source-stage-18-zones-first-pass",
       seed: options.seed,
       heightmapTemplate: heightmap.template,
       cellsTarget: options.cellsTarget,
@@ -64,6 +67,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
     settlements,
     military,
     markers,
+    zones,
     pack,
     features,
     rivers,
@@ -84,17 +88,18 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `build religions: religions=${society.metadata.religions}, religionPackCells=${society.metadata.religionPackCells}`,
       `build military: states=${military.metadata.statesWithMilitary}, regiments=${military.metadata.regiments}`,
       `build markers: markers=${markers.metadata.markers}, peaks=${markers.metadata.peaks}, riverSources=${markers.metadata.riverSources}`,
+      `build zones: zones=${zones.metadata.zones}, target=${zones.metadata.target}, cells=${zones.metadata.cells}, invalidCells=${zones.metadata.invalidCells}`,
       `grid checksum: ${summary.checksum}`
     ],
     status: {
-      message: "source 阶段 18 marker 第一刀",
+      message: "source 阶段 18 zones 第一刀",
       sourceDependency: false,
       snapshotDependency: false
     }
   };
 }
 
-export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military = null) {
+export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military = null, zones = null) {
   const randomPreviewGenerator = createRandom(options.seed);
   const randomPreview = Array.from({length: 4}, () => round(randomPreviewGenerator.next(), 6));
   const payload = {
@@ -157,6 +162,7 @@ export function createGenerationSummary(options, grid, features, climate, societ
     },
     markers: markers.metadata,
     military: military?.metadata || null,
+    zones: zones?.metadata || null,
     palette: {
       ocean: layers.ocean.map(value => round(value, 4)),
       land: layers.land.map(value => round(value, 4)),

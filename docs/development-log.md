@@ -4855,3 +4855,65 @@
 下一步建议：
 
 - 进入 zones 第一刀，补 source 后段 zone 的数量级、类型分布、cells 字段和引用不变量。
+
+## 2026-06-26 阶段 18 zones 第一刀
+
+太子计划：
+
+- 本刀只补 `Zones.generate()` 的后段数据产物，不做 zones 图层渲染、编辑器、legend、GeoJSON 导出或 notes 文案。
+- 验收目标：
+  - 生成 `pack.zones`，每个 zone 至少包含 `i/name/type/cells/color/hidden`。
+  - 类型覆盖 source 常见类型：`Invasion`、`Rebels`、`Proselytism`、`Crusade`、`Disease`、`Disaster`、`Eruption`、`Avalanche`、`Fault`、`Flood`、`Tsunami`。
+  - 强制 case 的 zone 总数接近 source `14`，且 `lateStages.zones.total` 通过。
+  - `lateStages.zones.invalidCells` 保持 `0`。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/generator/zones.js`：
+  - 使用 `seed:zones` 派生随机流，不消耗主生成随机流。
+  - 按 `Math.round(pack.cells.i.length / 5200)` 估算 zone 数量；强制 case 当前目标为 `14`。
+  - 类型计划会多尝试几轮候选类型，避免单个类型因无候选 cell 导致总数明显低于目标。
+  - 在 pack 邻接图上扩张连续区域，并按类型尽量选择符合语义的 cell：国家边界用于 invasion/rebels，宗教边界和 heresy 用于 proselytism/crusade，城市和人口用于 disease/disaster，高地用于 eruption/avalanche/fault，河流用于 flood，海岸用于 tsunami。
+  - 所有 zone cell 都从合法 pack cell id 中产生，最终写入 `pack.zones`。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - marker 生成后把 `pack.markers` 暴露给 zones。
+  - 接入 `buildZones(pack, options)`，地图对象新增 `zones`，summary 和 generation log 记录 zone 统计。
+  - 阶段标识更新为 `source-stage-18-zones-first-pass`。
+- 更新 `tools/webgl-generator-export-baseline.mjs`：
+  - `society.zones` 和 `lateStages.zones` 改为读取 `candidateMap.zones?.zones` 或 `pack.zones`。
+  - `lateStages.zones` 统计 `total/types/cells/hidden/invalidCells`。
+  - trace 增加 `buildZones`，unsupported source stages 中移除 `Zones.generate`。
+- 更新 `tools/baseline-diff.mjs`：
+  - 当阶段 18 强制 case 全项通过时，下一步建议改为扩大 candidate matrix 回归，并评估 zone 图层、notes、编辑器和导出等后段专题深挖顺序。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/zones.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/webgl-generator-export-baseline.mjs`
+  - `tools/baseline-diff.mjs`
+- Node 直接烟测通过：
+  - 阶段标识 `source-stage-18-zones-first-pass`。
+  - pack cells `73028`。
+  - zones `14`，target `14`。
+  - 类型覆盖全部 11 个目标类型，其中 `Disease`、`Flood`、`Proselytism` 各出现 `2` 次。
+  - hidden `0`，invalidCells `0`。
+- 已执行临时 out-dir 验证，产物未纳入版本库：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --name tmp-zones-check`
+  - `society.zones` 为 `14`，`lateStages.zones.total` 为 `14`，`invalidCells` 为 `0`。
+- 已刷新强制 case：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir .\docs\source-baselines\mediterranean-100000-audit-mediterranean-001 --screenshot false`
+  - `node .\tools\baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001`
+- 验证结果：
+  - 总状态从 marker 第一刀后的 `fail 1 / warn 0` 回到 `pass（fail 0，warn 0）`。
+  - `lateStages.zones.total`：source `14`，candidate `14`，状态 `pass`。
+  - `lateStages.zones.invalidCells`：candidate `0`，状态 `pass`。
+  - 主生成指标继续保持通过。
+- 太子整合后补跑小 case 烟测：
+  - `mediterranean / 10000 / audit-mediterranean-10000` 生成 zones `2`，target `2`，invalidCells `0`。
+
+侍中验收：
+
+- 本刀只补数据和 baseline 摘要，不新增可见 zones 图层；运行时层面以 Node 直接生成、candidate summary 和 baseline diff 验收为准。
+- 当前已知剩余风险：zones 只是 source 风格第一刀，尚未复刻 source 的高斯数量随机、完整 disease 路线传播、手工编辑器、SVG hatch 渲染、legend 和导出行为。

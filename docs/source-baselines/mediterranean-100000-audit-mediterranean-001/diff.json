@@ -1,14 +1,14 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-26T01:36:42.869Z",
+    "generatedAt": "2026-06-26T02:05:44.888Z",
     "sourceSummary": "D:\\work\\fmg\\docs\\source-baselines\\mediterranean-100000-audit-mediterranean-001\\source-summary.json",
     "candidateSummary": "D:\\work\\fmg\\docs\\source-baselines\\mediterranean-100000-audit-mediterranean-001\\candidate-summary.json",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
     "cellsTarget": 100000,
-    "failCount": 1,
+    "failCount": 0,
     "warnCount": 0,
-    "status": "fail"
+    "status": "pass"
   },
   "metrics": [
     {
@@ -576,10 +576,10 @@
       "id": "lateStages.zones.total",
       "label": "lateStages.zones.total",
       "source": 14,
-      "candidate": 0,
-      "delta": -14,
-      "ratio": 1,
-      "status": "fail",
+      "candidate": 14,
+      "delta": 0,
+      "ratio": 0,
+      "status": "pass",
       "rule": {
         "kind": "relative",
         "warn": 0.5,
@@ -753,5 +753,5 @@
     }
   ],
   "missingRequiredPackFields": [],
-  "nextStageRecommendation": "阶段 18 后段字段只剩 zones 缺口；下一步进入 Zones.generate 第一刀，补 zone 数量、类型分布和 cell 引用不变量。"
+  "nextStageRecommendation": "阶段 18 后段 schema 当前强制 case 已通过；下一步扩大 candidate matrix 回归，并评估 zone 图层、notes、编辑器和导出等后段专题深挖顺序。"
 }

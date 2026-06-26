@@ -51,6 +51,7 @@ if (includeScreenshot) {
 function createCandidateSummary(candidateMap, {appDir}) {
   const {grid, pack, features, rivers, climate, society, politics, settlements, markers, heightmap, metadata, options} = candidateMap;
   const packFeatures = pack.features || features.features || [];
+  const zoneList = getCandidateZones(candidateMap, pack);
   const routeSummary = describeCandidateRoutes(settlements.routes || [], grid, features);
   const validation = validateCandidateGraph({grid, pack, features, routes: settlements.routes || [], cities: settlements.cities || [], routeSummary});
   const missingRequiredPackFields = [
@@ -111,7 +112,8 @@ function createCandidateSummary(candidateMap, {appDir}) {
       "buildPolitics",
       "buildSettlements",
       "finalizeSocietyReligions",
-      "buildMarkers"
+      "buildMarkers",
+      "buildZones"
     ],
     template: {
       id: heightmap.template,
@@ -197,10 +199,10 @@ function createCandidateSummary(candidateMap, {appDir}) {
       religions: society.metadata?.religions ?? countByPredicate(society.religions, religion => religion?.i && !religion.removed),
       provinces: politics.metadata?.provinces ?? politics.provinces.filter(province => province?.i || province?.id >= 0).length,
       markers: markers.markers.length,
-      zones: 0,
+      zones: zoneList.length,
       regiments: countStateRegiments(politics.states)
     },
-    lateStages: describeCandidateLateStages({grid, pack, society, politics, settlements, markers}),
+    lateStages: describeCandidateLateStages({grid, pack, society, politics, settlements, markers, zones: zoneList}),
     routes: routeSummary,
     validation,
     candidateNotes: {
@@ -208,20 +210,20 @@ function createCandidateSummary(candidateMap, {appDir}) {
       missingRequiredPackFields,
       unsupportedSourceStages: [
         "Burgs.specify source names and emblems",
-        "States.defineStateForms",
-        "Zones.generate"
+        "States.defineStateForms"
       ]
     }
   };
 }
 
-function describeCandidateLateStages({grid, pack, society, politics, settlements, markers}) {
+function describeCandidateLateStages({grid, pack, society, politics, settlements, markers, zones}) {
   const states = politics.states || [];
   const provinces = politics.provinces || [];
   const cultures = society.cultures || [];
   const religions = society.religions || [];
   const cities = settlements.cities || [];
   const markerList = markers.markers || [];
+  const zoneList = zones || [];
   const stateRegiments = states.flatMap(state =>
     (Array.isArray(state?.military) ? state.military : []).map(regiment => ({...regiment, state: state.i ?? state.id}))
   );
@@ -269,11 +271,11 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
       )
     },
     zones: {
-      total: 0,
-      types: {},
-      cells: describeNumbers([]),
-      hidden: 0,
-      invalidCells: 0
+      total: zoneList.length,
+      types: countByKey(zoneList, zone => zone.type || "unknown"),
+      cells: describeNumbers(zoneList.map(zone => zone.cells?.length || 0)),
+      hidden: countByPredicate(zoneList, zone => Boolean(zone.hidden)),
+      invalidCells: countInvalidZoneCells(zoneList, pack.cells.g.length)
     },
     statistics: {
       burgsWithPopulation: countByPredicate(cities, item => Number.isFinite(item.population)),
@@ -287,6 +289,17 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
       religionsWithArea: countByPredicate(religions, item => Number.isFinite(item?.area))
     }
   };
+}
+
+function getCandidateZones(candidateMap, pack) {
+  if (Array.isArray(candidateMap.zones?.zones)) return candidateMap.zones.zones;
+  if (Array.isArray(candidateMap.zones)) return candidateMap.zones;
+  if (Array.isArray(pack.zones)) return pack.zones;
+  return [];
+}
+
+function countInvalidZoneCells(zones = [], limit) {
+  return zones.reduce((sum, zone) => sum + countInvalidRefs(zone.cells || [], limit), 0);
 }
 
 function countStateRegiments(states = []) {

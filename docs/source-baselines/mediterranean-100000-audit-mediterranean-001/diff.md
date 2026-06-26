@@ -1,10 +1,10 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-26T01:36:42.869Z
+生成时间：2026-06-26T02:05:44.888Z
 模板：`mediterranean`
 Seed：`audit-mediterranean-001`
 目标 cells：100000
-状态：fail（fail 1，warn 0）
+状态：pass（fail 0，warn 0）
 
 ## 关键指标
 
@@ -50,7 +50,7 @@ Seed：`audit-mediterranean-001`
 | lateStages.military.statesWithMilitary | 21 | 21 | 0 | 0 | pass |
 | lateStages.markers.total | 539 | 539 | 0 | 0 | pass |
 | lateStages.markers.withIcon | 539 | 539 | 0 | 0 | pass |
-| lateStages.zones.total | 14 | 0 | -14 | 1 | fail |
+| lateStages.zones.total | 14 | 14 | 0 | 0 | pass |
 | lateStages.statistics.burgsWithPopulation | 1724 | 1730 | 6 | 0.003 | pass |
 | lateStages.statistics.statesWithArea | 21 | 22 | 1 | 0.048 | pass |
 | lateStages.statistics.provincesWithPole | 477 | 463 | -14 | 0.029 | pass |
@@ -82,4 +82,4 @@ Seed：`audit-mediterranean-001`
 
 ## 下一步建议
 
-阶段 18 后段字段只剩 zones 缺口；下一步进入 Zones.generate 第一刀，补 zone 数量、类型分布和 cell 引用不变量。
+阶段 18 后段 schema 当前强制 case 已通过；下一步扩大 candidate matrix 回归，并评估 zone 图层、notes、编辑器和导出等后段专题深挖顺序。
