@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generatedAt": "2026-06-25T18:13:35.035Z",
+    "generatedAt": "2026-06-26T01:36:05.274Z",
     "source": "webgl-generator candidate baseline",
     "seed": "audit-mediterranean-001",
     "template": "mediterranean",
@@ -9,7 +9,7 @@
     "graphWidth": 1440,
     "graphHeight": 960,
     "appDir": "D:\\work\\fmg\\app\\webgl-generator",
-    "generatorStage": "source-stage-18-military-first-pass",
+    "generatorStage": "source-stage-18-marker-first-pass",
     "generatedOptions": {
       "statesNumber": 21,
       "provincesRatio": 20,
@@ -430,7 +430,7 @@
     "states": 21,
     "religions": 19,
     "provinces": 463,
-    "markers": 40,
+    "markers": 539,
     "zones": 0,
     "regiments": 402
   },
@@ -484,13 +484,40 @@
       "invalidCells": 0
     },
     "markers": {
-      "total": 40,
+      "total": 539,
       "types": {
-        "peak": 10,
-        "river-source": 8,
-        "state-center": 22
+        "volcanoes": 16,
+        "hot-springs": 9,
+        "water-sources": 3,
+        "mines": 17,
+        "inns": 12,
+        "lighthouses": 13,
+        "waterfalls": 1,
+        "battlefields": 36,
+        "dungeons": 112,
+        "lake-monsters": 13,
+        "sea-monsters": 1,
+        "hill-monsters": 19,
+        "sacred-forests": 8,
+        "sacred-pineries": 7,
+        "sacred-palm-groves": 2,
+        "brigands": 14,
+        "pirates": 13,
+        "statues": 27,
+        "ruins": 40,
+        "libraries": 1,
+        "circuses": 9,
+        "jousts": 1,
+        "fairs": 1,
+        "canoes": 3,
+        "migration": 28,
+        "dances": 1,
+        "mirage": 18,
+        "caves": 12,
+        "necropolises": 28,
+        "encounters": 74
       },
-      "withIcon": 0,
+      "withIcon": 539,
       "pinned": 0,
       "locked": 0,
       "invalidCells": 0

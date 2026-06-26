@@ -1,10 +1,10 @@
 # Source / Candidate 对照差异
 
-生成时间：2026-06-25T18:13:40.847Z
+生成时间：2026-06-26T01:36:42.869Z
 模板：`mediterranean`
 Seed：`audit-mediterranean-001`
 目标 cells：100000
-状态：fail（fail 3，warn 0）
+状态：fail（fail 1，warn 0）
 
 ## 关键指标
 
@@ -48,8 +48,8 @@ Seed：`audit-mediterranean-001`
 | lateStages.names.lakeNames | 140 | 140 | 0 | 0 | pass |
 | lateStages.military.regiments | 312 | 402 | 90 | 0.288 | pass |
 | lateStages.military.statesWithMilitary | 21 | 21 | 0 | 0 | pass |
-| lateStages.markers.total | 539 | 40 | -499 | 0.926 | fail |
-| lateStages.markers.withIcon | 539 | 0 | -539 | 1 | fail |
+| lateStages.markers.total | 539 | 539 | 0 | 0 | pass |
+| lateStages.markers.withIcon | 539 | 539 | 0 | 0 | pass |
 | lateStages.zones.total | 14 | 0 | -14 | 1 | fail |
 | lateStages.statistics.burgsWithPopulation | 1724 | 1730 | 6 | 0.003 | pass |
 | lateStages.statistics.statesWithArea | 21 | 22 | 1 | 0.048 | pass |
@@ -82,4 +82,4 @@ Seed：`audit-mediterranean-001`
 
 ## 下一步建议
 
-进入阶段 18：主生成矩阵已经通过，当前差异来自 source 后段专题。下一步先复刻 Burgs.specify、States.defineStateForms、Rivers.specify、Lakes.defineNames、Military.generate、Markers.generate 和 Zones.generate 的字段产物。
+阶段 18 后段字段只剩 zones 缺口；下一步进入 Zones.generate 第一刀，补 zone 数量、类型分布和 cell 引用不变量。

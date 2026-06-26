@@ -4796,3 +4796,62 @@
 下一步建议：
 
 - 进入 marker 第一刀，补 source 后段 marker 的数量级、类型分布、icon 字段和引用不变量。
+
+## 2026-06-26 阶段 18 marker 第一刀
+
+太子计划：
+
+- 本刀只补 `Markers.generate()` 的后段数据产物，不做 marker 编辑器、notes 文案、样式面板或 zones 对 marker 的二次消费。
+- 验收目标：
+  - 强制 case 中 `lateStages.markers.total` 与 source 回到同量级并通过。
+  - `lateStages.markers.withIcon` 通过。
+  - `lateStages.markers.invalidCells` 保持 `0`。
+  - 当前 renderer/picking 仍能使用 marker 的 grid cell、坐标和对象信息。
+
+尚书实施：
+
+- 重写 `app/webgl-generator/src/generator/markers.js`：
+  - 从少量 `peak / river-source / state-center` 调试 marker 改为 source 风格 marker 类型池。
+  - 覆盖 source 默认常见类型，包括 `volcanoes`、`hot-springs`、`water-sources`、`mines`、`inns`、`lighthouses`、`battlefields`、`dungeons`、`ruins`、`necropolises` 和 `encounters` 等。
+  - marker 数量按 pack cells 规模缩放；`mediterranean / 100000 / audit-mediterranean-001` 目标回到 source 的 `539` 同量级。
+  - marker 继续保存当前 renderer/picking 使用的 grid cell，同时记录 `packCell`、`icon`、`type`、`name`、坐标和轻量 `data`。
+  - 使用 `seed:markers` 派生随机流，不消耗主生成随机流。
+- 更新 `app/webgl-generator/src/generator/index.js`：
+  - `buildMarkers()` 传入 `pack` 与 `options`。
+  - 阶段标识更新为 `source-stage-18-marker-first-pass`。
+- 更新 `tools/baseline-diff.mjs`：
+  - 当后段只剩 zones 缺口时，报告下一步建议改为进入 zones 第一刀。
+
+门下复核：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/generator/markers.js`
+  - `app/webgl-generator/src/generator/index.js`
+  - `tools/baseline-diff.mjs`
+- Node 直接烟测通过：
+  - marker `539`。
+  - withIcon `539`。
+  - marker cell 引用错误 `0`。
+  - 类型分布覆盖 source 默认主类型，强制 case 中与 source 摘要同量级。
+- 已刷新强制 case：
+  - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir .\docs\source-baselines\mediterranean-100000-audit-mediterranean-001 --browser-channel chrome --timeout 180000 --screenshot false`
+  - `node .\tools\baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001`
+- 验证结果：
+  - 总状态仍为 `fail`，但从 `fail 3 / warn 0` 降为 `fail 1 / warn 0`。
+  - `lateStages.markers.total`：source `539`，candidate `539`，状态 `pass`。
+  - `lateStages.markers.withIcon`：source `539`，candidate `539`，状态 `pass`。
+  - `lateStages.markers.invalidCells`：candidate `0`，状态 `pass`。
+  - 剩余 fail 仅为 `lateStages.zones.total`。
+
+侍中验收：
+
+- Playwright + 系统 Chrome 验证正式应用：
+  - 页面阶段标识为 `source-stage-18-marker-first-pass`。
+  - marker `539`，withIcon `539`，marker 类型 `30`。
+  - 对象索引 marker 数 `539`，运行时面板 marker 行显示 `539`。
+  - 点击/拾取 marker 坐标可返回 marker 对象。
+  - `WebGL error = 0`，控制台无错误。
+
+下一步建议：
+
+- 进入 zones 第一刀，补 source 后段 zone 的数量级、类型分布、cells 字段和引用不变量。

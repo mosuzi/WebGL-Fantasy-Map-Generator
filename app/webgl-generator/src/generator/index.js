@@ -33,7 +33,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
   finalizeSettlements(grid, features, politics, settlements, pack);
   finalizeSocietyReligions(grid, society, pack, random, settlements, options);
   const military = buildMilitary(pack, options);
-  const markers = buildMarkers(grid, features, politics, rivers);
+  const markers = buildMarkers(grid, features, politics, rivers, pack, options);
   const layers = createPalette(random);
   const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military);
   const generatedAt = new Date().toISOString();
@@ -41,7 +41,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
   return {
     metadata: {
       app: "webgl-generator",
-      generatorStage: "source-stage-18-military-first-pass",
+      generatorStage: "source-stage-18-marker-first-pass",
       seed: options.seed,
       heightmapTemplate: heightmap.template,
       cellsTarget: options.cellsTarget,
@@ -87,7 +87,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `grid checksum: ${summary.checksum}`
     ],
     status: {
-      message: "source 阶段 18 军事第一刀",
+      message: "source 阶段 18 marker 第一刀",
       sourceDependency: false,
       snapshotDependency: false
     }

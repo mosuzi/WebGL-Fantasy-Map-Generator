@@ -275,6 +275,9 @@ function recommendNextStage({failCount, warnCount, candidate}) {
   if (!failCount && warnCount && String(candidate.metadata?.generatorStage || "").includes("stage-13")) {
     return "阶段 13 宗教已通过当前强制 case；下一步单独收紧温度最低值 warn，并继续补齐 source 后段的命名、军事、区域等专题。";
   }
+  if (onlyZonesRemain(candidate)) {
+    return "阶段 18 后段字段只剩 zones 缺口；下一步进入 Zones.generate 第一刀，补 zone 数量、类型分布和 cell 引用不变量。";
+  }
   if (hasLateStageGaps(candidate)) {
     return "进入阶段 18：主生成矩阵已经通过，当前差异来自 source 后段专题。下一步先复刻 Burgs.specify、States.defineStateForms、Rivers.specify、Lakes.defineNames、Military.generate、Markers.generate 和 Zones.generate 的字段产物。";
   }
@@ -283,6 +286,20 @@ function recommendNextStage({failCount, warnCount, candidate}) {
     return "当前强制 case 已全项通过；下一步可扩大模板/seed 矩阵回归，并补齐 source 后段的命名、军事、区域、marker 细节和统计字段。";
   }
   return "当前 case 达到阶段 0 对照要求，可推进下一阶段。";
+}
+
+function onlyZonesRemain(candidate) {
+  const late = candidate.lateStages || {};
+  return (
+    Number(late.names?.stateFullNames || 0) > 0 &&
+    Number(late.names?.burgCoas || 0) > 0 &&
+    Number(late.names?.riverNames || 0) > 0 &&
+    Number(late.names?.lakeNames || 0) > 0 &&
+    Number(late.military?.regiments || 0) > 0 &&
+    Number(late.markers?.total || 0) > 0 &&
+    Number(late.markers?.withIcon || 0) > 0 &&
+    Number(late.zones?.total || 0) === 0
+  );
 }
 
 function hasLateStageGaps(candidate) {

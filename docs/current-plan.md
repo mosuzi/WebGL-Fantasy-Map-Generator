@@ -180,6 +180,10 @@
   - 新增独立 `app/webgl-generator/src/generator/military.js`，按国家、城市、乡村人口和港口生成 source 风格 `state.military` 数组。
   - regiment 字段覆盖 `i/a/cell/x/y/bx/by/u/n/s/type/name/state`，并按陆军/海军分开合并。
   - 强制 case 已刷新，后段专题从 `fail 5 / warn 0` 降为 `fail 3 / warn 0`；`lateStages.military.regiments` 与 `statesWithMilitary` 均通过，剩余 fail 为 marker 与 zones。
+- 已完成阶段 18 marker 第一刀：
+  - `buildMarkers()` 已从少量调试点改为 source 风格类型池，覆盖 volcanoes、hot-springs、mines、dungeons、ruins、encounters 等默认 marker 类型。
+  - marker 仍保持当前 renderer/picking 使用的 grid cell 引用，同时记录 `packCell` 和 source 风格 icon/type 数据。
+  - 强制 case 已刷新，后段专题从 `fail 3 / warn 0` 降为 `fail 1 / warn 0`；`lateStages.markers.total`、`withIcon` 和 marker cell 引用均通过，剩余 fail 仅为 zones。
 
 ## 总目标
 
@@ -189,7 +193,7 @@
 
 第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。当前完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`，下一步可以进入 source 后段的命名、军事、区域、marker、zones 和统计字段补齐。
 
-阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀、省份 pole 第一刀与军事第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA、国家 full/form name、省份 `pole` 和 `state.military` 已接入。阶段中途已回头修复正式应用主河流固定线宽问题，当前河流层按流量生成 screen-space 三角形带。下一步应进入 marker 第一刀，补 marker 数量、icon 和引用不变量；zones 仍保留为后续独立步骤。
+阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀、省份 pole 第一刀、军事第一刀与 marker 第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA、国家 full/form name、省份 `pole`、`state.military` 和 source 风格 marker 类型池已接入。阶段中途已回头修复正式应用主河流固定线宽问题，当前河流层按流量生成 screen-space 三角形带。下一步应进入 zones 第一刀，补 zone 数量、类型分布和 cell 引用不变量。
 
 ## 当前已完成
 
@@ -444,7 +448,7 @@ http://127.0.0.1:5410
 
 ## 下一步
 
-1. 进入 marker 第一刀，补 source 后段 marker 的数量级、类型分布、icon 字段和引用不变量。
+1. 进入 zones 第一刀，补 source 后段 zone 的数量级、类型分布、cells 字段和引用不变量。
 2. 继续把 source/candidate 对照报告扩展到后段专题字段，避免后续功能只靠肉眼验收。
 3. 保留当前 63 case 矩阵作为回归门槛；后续改动生成链时先跑 targeted case，再跑 full matrix。
 4. 原阶段 3 的 UI、对象编辑、路线样式、点图层、浮动面板等工作继续暂停，等 source 后段数据链路进一步稳定后再恢复。
