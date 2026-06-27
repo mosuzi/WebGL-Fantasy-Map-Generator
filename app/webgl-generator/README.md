@@ -167,16 +167,52 @@ http://127.0.0.1:5410
 - 道路样式已区分 `road` 实线和 `trail` 虚线，虚线由 WebGL route mesh 生成，并沿整条路线保持连续 dash phase。
 - 路线数据已有 `level`：`primary`、`secondary` 和 `trail`；renderer 按等级设置道路宽度、颜色和虚线样式。
 - 城市、路线和河流对象 picking 已接入第一版 world-space bucket 索引，运行时统计显示索引 bucket、路线段和河流段数量。
-- 已新增第一版浮动对象详情面板：点击选中城市、路线或河流时打开只读详情，面板可拖动和关闭，生成新地图时关闭；面板位置会保存到浏览器 `localStorage` 并在下次打开时恢复。
-- 选中河流会额外绘制屏幕空间三角形带高亮，主河流线层仍保留为阶段性的 `gl.LINES`。
+- 已新增第一版浮动对象详情面板：点击选中城市、路线或河流时打开对象摘要，面板可拖动和关闭，生成新地图时关闭；面板位置会保存到浏览器 `localStorage` 并在下次打开时恢复。
+- 选中河流会额外绘制屏幕空间三角形带高亮；主河流层已升级为按流量变宽的 screen-space mesh。
 - 政治对象已接入 selection fallback：未命中城市、路线和河流时，会按当前专题或默认省份逻辑选中国家、省份或区域，并刷新对象详情面板。
 - 选中国家、省份或区域时会绘制半透明 cell mesh 高亮范围；当前不做边界追踪或编辑手柄。
 - 已新增第一版 marker 数据、点层绘制和对象 picking：当前包含山峰、河源和国家中心 marker，点击后进入对象详情面板。
 - 选中 marker 会复用 HTML selection marker 显示圆环反馈。
 - 可见城市标签已接入对象 picking：点击标签区域会选中 `label` 对象，并在详情面板显示文本和目标城市。
 - 对象详情面板已有最小编辑入口：点击“编辑”会在 runtime 记录当前编辑对象，并将面板状态从查看切换为编辑；点击“退出编辑”会清空编辑目标；暂不修改地图数据。
+- 正式编辑器基础设施已完成第一刀：
+  - `src/runtime/selection-store.js` 统一维护 selection 和 editingObject。
+  - `src/runtime/edit-history.js` 提供编辑命令历史骨架。
+  - renderer 提供 `locateObject()`，对象详情面板提供“定位”按钮。
+  - 运行时统计显示定位状态和编辑历史状态。
+- 正式河流管理面板已完成第一刀：
+  - `src/ui/panels/river-panel.js` 是独立浮动面板，不混入对象详情。
+  - 面板支持河流统计、筛选、排序、列表选择、定位和进入编辑状态。
+  - 河流定位会触发红色闪烁高亮，结束后回到普通河流选中高亮。
+- 河流面板已接入第一条低风险编辑命令：
+  - 选中河流后可以调整 `widthFactor`。
+  - 修改通过 `EditHistory` 执行，支持撤销和重做。
+  - 当前只改河流几何宽度，不重算河道、源头、河口或支流结构。
+- 对象 resolver 已完成第一刀：
+  - `src/runtime/object-resolver.js` 会把 city、label、marker、route、river、state、province 和 region 的 selection 摘要解析为当前地图上的完整对象视图。
+  - `SelectionStore` 在选中、进入编辑和编辑后刷新时都会重新解析对象，避免复杂编辑器误用列表行或 picking 摘要。
+  - 河流解析已补齐 `points/cells/flux/length/widthFactor/source/mouth` 等字段，支撑河流宽度编辑后的面板同步。
+- 派生重建调度已完成第一刀：
+  - `src/runtime/edit-refresh-scheduler.js` 统一处理编辑命令的刷新 effects。
+  - 河流宽度命令已声明 `river-mesh`、`river-width-stats`、`object-panels` 和目标 river。
+  - 运行时统计会显示最近一次“编辑刷新”，用于检查后续编辑器是否触发了正确派生刷新。
+- 正式高度编辑器已完成第一刀：
+  - `src/ui/panels/height-panel.js` 是独立浮动面板，支持抬升、降低、平滑、半径、强度和中心衰减。
+  - `src/runtime/height-edit-commands.js` 将高度笔刷提交为可撤销命令，并同步 `grid.cells.h` 与已有映射的 `pack.cells.h`。
+  - renderer 提供 `refreshCellSurface()`，高度预览和提交只刷新 cell 表面颜色与轻量统计。
+  - 当前是高度表层编辑，不重跑海陆 feature、气候、河流、生物群系或社会政治派生系统。
+- 正式国家编辑器已完成第一刀：
+  - `src/ui/panels/state-panel.js` 是独立浮动面板，支持目标国家选择、颜色变更、取选中、取悬停、半径笔刷、撤销和重做。
+  - `src/runtime/state-edit-commands.js` 将国家归属笔刷提交为可撤销命令，并同步 `grid.cells.state` 与映射到同一 grid cell 的所有陆地 `pack.cells.state`。
+  - 国家颜色变更同样进入 `EditHistory`，修改 `map.politics.states[*].color` 并刷新 states 专题颜色。
+  - 国家编辑启用后自动切到 `states` 专题；拖动中按 `cell-colors` 语义刷新 cell 表面，抬手后刷新 selection/runtime/pick。
+  - 当前是国家表层归属编辑，不重跑省份、区域、城市、路线、军事或 zones 派生系统。
+- 正式编辑器交互锁已完成第一刀：
+  - 高度编辑、国家编辑或对象编辑状态中，左侧生成、专题切换、视图操作和其它编辑入口会禁用。
+  - canvas 上编辑外的 pan、select、hover 和 wheel 会被拦截。
+  - 浮动面板中只保留当前编辑器相关面板可操作，非当前编辑面板的控件会禁用。
 
-当前标签仍是阶段性 overlay：尚未实现道路/国家标签、曲线文字和标签编辑。对象详情面板已有编辑入口和退出编辑边界，但尚未提供字段控件、保存、撤销、停靠、折叠、尺寸调整或多面板状态恢复；当前仅持久化面板位置和宽度。道路等级样式仍是内置规则，尚未接入配置面板；道路 mesh 目前还没有复杂急弯 bevel 策略；河流主线层仍未升级为可变宽 mesh；政治对象当前只有半透明面高亮，尚未做边界追踪、编辑手柄或标签联动；marker 仍是普通 `gl.POINTS`，尚未升级为 sprite/pin 或独立编辑手柄；对象 picking 索引仍未覆盖纹章等对象。
+当前标签仍是阶段性 overlay：尚未实现道路/国家标签、曲线文字和标签编辑。对象详情面板已有编辑入口和退出编辑边界，但尚未提供字段控件、保存、停靠、折叠、尺寸调整或多面板状态恢复；当前仅持久化面板位置和宽度。道路等级样式仍是内置规则，尚未接入配置面板；道路 mesh 目前还没有复杂急弯 bevel 策略；河流主线层已升级为按流量变宽的 screen-space mesh，但河道编辑手柄仍未接入；政治对象当前已有国家表层归属笔刷，但省份、区域、城市、路线、军事、zones 和统计派生还未联动重算；marker 仍是普通 `gl.POINTS`，尚未升级为 sprite/pin 或独立编辑手柄；对象 picking 索引仍未覆盖纹章等对象。下一刀进入国家编辑器政治派生一致性策略。
 
 ## 面板规划
 
@@ -188,6 +224,6 @@ http://127.0.0.1:5410
 - 城市/道路编辑面板。
 - 国家、省份、文化、宗教和标签编辑面板。
 
-这些面板不使用 canvas 实现，应该作为普通 DOM UI 覆盖在地图工作区上方，并保留拖动、折叠、层级和可停靠/恢复位置的扩展空间。当前只接入对象详情面板，暂不迁移现有侧栏。
+这些面板不使用 canvas 实现，应该作为普通 DOM UI 覆盖在地图工作区上方，并保留拖动、折叠、层级和可停靠/恢复位置的扩展空间。当前已接入对象详情面板和独立河流管理面板；现有生成、专题和运行时统计侧栏暂不整体迁移。
 
 详细约束见 `docs/floating-panel-architecture.md`。

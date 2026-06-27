@@ -29,6 +29,7 @@
   - `docs/webgl-svg-performance-comparison.md`：WebGL 原型与 SVG 基线性能对照。
   - `docs/webgl-prototype-profile-results.md`：WebGL 原型当前性能采集结果。
   - `docs/source-generation-audit-and-rectification-plan.md`：source 生成算法重新审查和正式应用生成质量整改方案。
+  - `docs/editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单，记录各领域面板职责、优先级和暂缓范围。
 
 ## 代码约定
 
@@ -155,5 +156,6 @@ node .\tools\serve-prototype.mjs --port 5400
 8. `docs/webgl-svg-performance-comparison.md`
 9. `docs/webgl-prototype-profile-results.md`
 10. `docs/source-generation-audit-and-rectification-plan.md`
+11. `docs/editor-and-stat-panel-inventory.md`
 
-然后根据用户最新指令继续。当前下一步建议是先修正计划文档，明确 `source/` 只读参考边界，然后进入独立 WebGL 地图生成器的生成内核和正式应用骨架设计。
+然后根据用户最新指令继续。当前下一步建议是按 `docs/editor-and-stat-panel-inventory.md` 进入正式版编辑器基础设施：先补 edit command / undo command、selection store、highlight / locate API、对象表格组件和派生重建调度，再做独立浮动 `river-panel`、高度编辑器第一刀和国家编辑器第一刀。

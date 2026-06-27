@@ -177,7 +177,52 @@
   - 河流宽度按 pack cell `fl`、河流 `sourceWidth/widthFactor` 和沿程长度趋势计算，不再所有河段同粗。
   - 运行时统计面板新增河流三角形、河流 mesh 构建耗时和河流宽度范围。
   - 河口点已从水域 cell 中心裁剪到陆海共享边交点，最后一个入海段不再参与蜿蜒扰动，避免宽河流末端伸进海里。
+  - 正式生成器已把沿程 flux 写入 `river.points[*][2]`，renderer 优先用 point flux 计算河宽，避免 meander / 河口裁剪后再按点序号粗略映射 cell 而丢失流量相关宽度。
+- 已完成正式版编辑器基础设施第一刀：
+  - 新增 `SelectionStore`，把 selection 与 editingObject 从 `runtime/app.js` 的零散赋值收拢为统一状态入口。
+  - 新增 `EditHistory`，建立 `execute/undo/redo/clear/getStats` 命令历史骨架，供后续高度、河流和国家编辑器复用。
+  - renderer 新增 `locateObject()`，支持城市/标签/marker 点对象、路线/河流线对象和国家/省份/区域面对象的 bbox 定位。
+  - 对象详情面板新增“定位”按钮；运行时统计显示定位状态和编辑历史状态。
+- 已完成正式版独立河流管理面板第一刀：
+  - 新增独立浮动 `river-panel`，不与对象详情或图层面板混用。
+  - 面板显示河流总数、总长度、最大流量、筛选结果数，以及全量河流列表。
+  - 支持按 id / 类型筛选，按流量、长度和 id 排序。
+  - 支持列表选中、定位、红色闪烁高亮和进入河流编辑状态。
+  - 左侧视图区新增“河流管理”入口；对象详情中的河流也可打开河流面板。
+- 已完成河流面板低风险编辑命令第一刀：
+  - 新增 `river-edit-commands.js`，用命令对象调整指定 `riverId` 的 `widthFactor`。
+  - 河流面板选中详情区新增宽度因子 slider、“应用宽度”、“撤销”和“重做”。
+  - 命令通过 `EditHistory.execute/undo/redo` 修改运行时地图数据，并刷新 renderer、对象详情、河流面板和运行时统计。
+  - 重复应用相同宽度因子不会写入新的历史记录；生成新地图会清空历史栈。
+- 已完成对象 resolver 第一刀：
+  - 新增 `object-resolver.js`，把 city、label、marker、route、river、state、province 和 region 的 selection 摘要解析为当前地图上的完整对象视图。
+  - `SelectionStore` 注入 resolver 后，选中、进入编辑和编辑后刷新都会重新解析对象，避免后续复杂编辑误用列表行或 picking 摘要中的旧字段。
+  - 河流对象解析会补齐 `points/cells/flux/length/widthFactor/source/mouth` 等字段，当前已能支撑河流面板宽度编辑后的状态刷新。
+- 已完成派生重建调度第一刀：
+  - 新增 `edit-refresh-scheduler.js`，让编辑命令通过 `effects` 声明 render、selection、derived 和 affected。
+  - 河流 `widthFactor` 命令已声明影响 `river-mesh`、`river-width-stats` 和 `object-panels`。
+  - 当前第一刀仍把 river mesh 影响映射到现有 `renderer.draw()`，但调度语义已经沉淀，后续可逐步拆 renderer 局部 buffer 刷新。
+  - 运行时统计新增“编辑刷新”，用于确认最近一次编辑触发了哪些派生刷新。
+- 已完成正式高度编辑器第一刀：
+  - 新增独立浮动 `height-panel`，不混入对象详情或固定侧栏。
+  - 面板支持启用/停止高度编辑、抬升/降低/平滑、半径、强度、中心衰减、撤销和重做。
+  - 新增 `height-edit-commands.js`，高度笔刷提交为 `EditHistory` 命令，并同步 `grid.cells.h` 与已映射的 `pack.cells.h`。
+  - renderer 新增 `refreshCellSurface()`，高度预览和提交通过 `HEIGHT_BRUSH_PREVIEW` / `HEIGHT_SURFACE_ONLY` 刷新 cell 表面颜色。
+  - 第一刀定位为“高度表层编辑”：暂不重跑 feature、climate、river、biome、文化、国家、城市、路线等高阶派生系统。
+- 已完成正式国家编辑器第一刀：
+  - 新增独立浮动 `state-panel`，不混入对象详情、河流管理或固定侧栏。
+  - 面板支持启用/停止国家编辑、目标国家下拉选择、颜色变更、取选中、取悬停、笔刷半径、撤销和重做，并显示目标国家、来源国家、影响 cells 和历史计数。
+  - 新增 `state-edit-commands.js`，国家笔刷提交为 `EditHistory` 命令；拖动预览和提交都会同步 `grid.cells.state` 与映射到同一 grid cell 的所有陆地 `pack.cells.state`。
+  - 国家颜色变更也通过 `EditHistory` 命令提交，修改 `map.politics.states[*].color` 并刷新 states 专题颜色。
+  - 国家编辑启用后自动切到 `states` 专题，并与高度编辑互斥；拖动中按 `cell-colors` 语义刷新 cell 表面，抬手后刷新 selection/runtime/pick。
+  - renderer 的国家专题颜色改为优先读取 `map.politics.states[*].color`，缺失时才回退到 indexed 伪色，使面板中的国家颜色与地图专题更一致。
+  - 第一刀定位为“国家表层归属编辑”：暂不重跑省份、区域、城市、路线、军事、zones 或国家统计派生。
+- 已补正式编辑器交互锁：
+  - 高度编辑、国家编辑或对象编辑状态中，左侧生成、专题切换、视图按钮和其它编辑入口会禁用。
+  - canvas 上非当前编辑器需要的 pan、select、hover 和 wheel 会被拦截，避免编辑时误触编辑外交互。
+  - 浮动面板中只保留当前编辑器相关面板可操作，非当前编辑面板的控件会禁用并显示锁定提示。
 - 已完成阶段 18 军事第一刀：
+  - 这是阶段 18 的历史完成项；近期计划仍按用户要求暂缓经济和军事系统，不继续推进军事编辑器。
   - 新增独立 `app/webgl-generator/src/generator/military.js`，按国家、城市、乡村人口和港口生成 source 风格 `state.military` 数组。
   - regiment 字段覆盖 `i/a/cell/x/y/bx/by/u/n/s/type/name/state`，并按陆军/海军分开合并。
   - 强制 case 已刷新，后段专题从 `fail 5 / warn 0` 降为 `fail 3 / warn 0`；`lateStages.military.regiments` 与 `statesWithMilitary` 均通过，剩余 fail 为 marker 与 zones。
@@ -237,15 +282,21 @@
 - 高度编辑器：
   - 支持浏览/高度/河流/国家工具切换。
   - 高度工具支持抬高、降低、平滑三种笔刷，笔刷半径和强度可调。
+  - 抬高/降低支持中心衰减模式，鼠标中心强度最高，靠近半径边缘逐步减弱。
   - 当前修改 `grid.cells.h`，并同步映射到对应 `pack.cells.h`；重绘使用 `renderer.refreshTheme()` 更新专题颜色。
 - 河流编辑器：
   - 支持命中选择河流。
   - 支持改宽，更新 `river.widthFactor` 后重建河流宽线 buffer。
   - 支持拖点，使用 demo 运行时 `__editorUsePoints` 让被编辑河流改走 points path，不改原始 source 数据。
+  - 新增河流管理面板，展示全量河流、总长度、最大流量、单条长度和单条流量。
+  - 支持按 id / 名称筛选河流，点击列表行快速定位到对应河流。
+  - 定位或点击河流后，地图上用红色闪烁 SVG path 描出选中河流，并同步进入河流编辑模式。
+  - 注意：demo 中河流统计/管理暂时混在侧栏里只是为了验证交互；正式应用必须拆成独立 HTML 浮动面板，不与对象详情、图层控制或其它编辑面板混用。
 - 国家编辑器：
-  - 支持从 cell 取样国家、涂抹 cell 归属。
+  - 支持从 cell 取样国家、拖拽连续涂抹 cell 归属，笔刷半径可调。
   - 支持调整选中国家的显示色。
-  - 国家归属修改后重建边界和专题 buffer。
+  - 拖动期间只刷新专题颜色 buffer，抬手后再重建边界 buffer，降低大面积涂抹卡顿。
+  - 状态面板显示目标国家、来源国家、颜色值和本次涂抹 cell 数，避免颜色相近时误判。
 - 三类编辑器共用 demo 级撤销和重置：
   - 撤销覆盖高度、河流、国家 cell 和国家颜色。
   - 重置恢复本次加载的原始快照。
@@ -254,8 +305,9 @@
   - 高度编辑：目标高度 `54 -> 57`，撤销后恢复。
   - 河流编辑：河流 `2` 的 `widthFactor 0.672 -> 0.77`。
   - 国家编辑：目标 cell 归属 `1 -> 4`。
+  - 二次修正验证：高度中心衰减中心增量 `8`、边缘样本增量 `4`；国家一次拖拽涂抹 `643` 个 cell，状态面板包含目标国家和来源国家。
 
-后续若继续编辑器方向，下一刀应围绕“编辑器状态与正式应用数据层边界”推进：把 demo 中临时的运行时改动整理成正式应用可复用的 edit command / undo command 结构，而不是继续堆 UI。
+后续若继续编辑器方向，下一刀应围绕“编辑器状态与正式应用数据层边界”推进：把 demo 中临时的运行时改动整理成正式应用可复用的 edit command / undo command 结构，而不是继续堆 UI。正式应用的河流统计/管理应按 `docs/floating-panel-architecture.md` 建成独立浮动 `river-panel`，不要照搬 demo 的侧栏混合布局。
 
 ## 当前已完成
 
@@ -510,13 +562,17 @@ http://127.0.0.1:5410
 
 ## 下一步
 
-1. 先在 `prototype/webgl-cells/` demo 中实现一组编辑器原型，不改 `source/`。
-2. 高度编辑器：代表地形/栅格类编辑器，支持选择笔刷、抬高/降低或平滑局部高度，并触发高度相关图层重绘。
-3. 河流编辑器：代表线性对象编辑器，支持选择河流、调整局部折线或流量宽度，并刷新河流宽线渲染。
-4. 国家编辑器：代表区域/实体类编辑器，支持选择国家、给 cell 改归属或调整国家显示色，并刷新国家专题/边界。
-5. demo 编辑器第一刀只验证交互模型、数据修改路径、撤销/重置和重绘策略；不追求 source 编辑器完整功能，不做保存格式兼容。
-6. 经济和军事系统都暂缓；经济链路作为已识别缺口保留到后续阶段，军事系统与军事编辑器暂不推进。
-7. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/floating-panel-architecture.md`。
+1. 正式国家编辑器第一刀已完成：新增独立浮动“国家编辑”面板、国家 cell 归属笔刷命令、目标国家选择/取样、笔刷半径、颜色变更器、快速更换首都、连续涂抹预览和 EditHistory 提交。
+2. 对象详情面板已支持国家、河流、城市名称编辑；城市重命名会同步 `settlements.cities` 与 `pack.burgs`，已渲染城市标签会重建刷新。后续城镇编辑器正式面板应复用同一命令模型。
+3. 默认国家和省份配色已改为基于邻接图的贪心分配，避免相邻政治单元按固定色序撞色，并尽量拉开相邻色距。
+4. 视图区已新增“高度专题显示海底”开关；默认关闭，打开后只影响高度专题中的水域高度着色，不改变生成数据。
+5. 国家编辑器当前只修改 `grid.cells.state` 与映射到同一 grid cell 的所有陆地 `pack.cells.state`；拖动中按 states 专题 `cell-colors` 语义刷新，抬手后刷新 selection/runtime/pick。省份、区域、城市、路线、军事和 zones 等后续派生暂不重算。
+6. 下一刀应补政治派生一致性策略：至少明确是否同步省份/区域、城市 state、burg state、state statistics、borders 和 zones，避免长期保留“颜色已改但政治统计未改”的过渡状态。
+7. 高度编辑器后续第二刀再考虑完整派生链路：feature、climate、river、biome 和人口等系统重算，当前第一刀仍只保证表层高度和颜色。
+8. 河流面板下一刀暂不做河道拖点、源头/河口修正或支流结构调整；cells 级河流编辑要等 renderer 局部 buffer 和 objectPickingIndex 重建规则更明确后再做。
+9. 第二批再推进路线、城市/聚落、省份面板，以及图层和生成配置迁移到浮动面板。
+10. 经济和军事系统都暂缓；经济链路作为已识别缺口保留到后续阶段，军事系统与军事编辑器暂不推进。
+11. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/floating-panel-architecture.md`。
 
 ## 约束
 

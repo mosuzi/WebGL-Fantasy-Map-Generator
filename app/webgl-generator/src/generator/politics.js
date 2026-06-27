@@ -6,6 +6,13 @@ const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓",
 const PROVINCE_SUFFIXES = ["郡", "州", "道", "府", "领", "司"];
 const REGION_NAMES = ["北境", "南陆", "西岭", "东湾", "中原", "湖泽"];
 const BIOME_COST = [10, 200, 150, 60, 50, 70, 70, 80, 90, 200, 1000, 5000, 150];
+const STATE_COLOR_PALETTE = [
+  "#5b8ff9", "#f4664a", "#5ad8a6", "#ff99c3", "#f6bd16", "#6dc8ec",
+  "#945fb9", "#ff8f3d", "#269a99", "#d64d8b", "#7ac943", "#6b6ecf",
+  "#c76f32", "#3d9970", "#bc5090", "#9c755f", "#2f6f9f", "#e07b91",
+  "#8e9a21", "#855c75", "#4c78a8", "#f58518", "#54a24b", "#b279a2",
+  "#e45756", "#72b7b2", "#ffb000", "#7f7f7f", "#a0cbe8", "#ff9da6"
+];
 
 export function buildPolitics(grid, features, society, rivers, random, options, pack) {
   if (pack?.burgs?.some?.(burg => burg?.capital)) return buildPackPolitics(grid, features, society, rivers, random, options, pack);
@@ -19,9 +26,13 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
 
   const states = buildStates(grid, politicalCells, society, random);
   grid.cells.state = expandStates(grid, features, states, riverCells);
+  findGridStateNeighbors(grid, states);
+  assignStateColors(states);
 
   const provinces = buildProvinces(grid, politicalCells, states, society, random);
   grid.cells.province = expandProvinces(grid, features, provinces, riverCells);
+  findGridProvinceNeighbors(grid, provinces);
+  assignProvinceColors(provinces);
 
   const regions = buildRegions();
   grid.cells.region = assignRegions(grid, features, regions, riverCells, options);
@@ -305,11 +316,85 @@ function findStateNeighbors(pack, states) {
 }
 
 function assignStateColors(states) {
-  const colors = ["#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854", "#ffd92f"];
-  for (const state of states) {
-    if (!state?.i) continue;
-    state.color = colors[(state.i - 1) % colors.length];
+  const validStates = states.filter(isStateColorTarget);
+  const coloredStates = [];
+  const ordered = [...validStates].sort((a, b) => {
+    const degree = (b.neighbors?.length || 0) - (a.neighbors?.length || 0);
+    return degree || (b.area || 0) - (a.area || 0) || stateColorId(a) - stateColorId(b);
+  });
+
+  for (const state of ordered) {
+    state.color = chooseStateColor(state, states, coloredStates);
+    coloredStates.push(state);
   }
+}
+
+function findGridStateNeighbors(grid, states) {
+  const neighbors = states.map(() => new Set());
+  const cells = grid.cells;
+
+  for (const cell of cells.i) {
+    if (cells.h[cell] < 20) continue;
+    const stateId = cells.state[cell];
+    if (!states[stateId]) continue;
+    for (const neighbor of cells.c[cell] || []) {
+      const neighborState = cells.state[neighbor];
+      if (cells.h[neighbor] < 20 || neighborState === stateId || !states[neighborState]) continue;
+      neighbors[stateId].add(neighborState);
+    }
+  }
+
+  for (const state of states) {
+    if (!state) continue;
+    const id = stateColorId(state);
+    state.neighbors = Array.from(neighbors[id] || []);
+  }
+}
+
+function chooseStateColor(state, states, coloredStates) {
+  const neighborColors = (state.neighbors || []).map(id => states[id]?.color).filter(Boolean);
+  const usedColors = coloredStates.map(item => item.color).filter(Boolean);
+  const fallbackIndex = coloredStates.length % STATE_COLOR_PALETTE.length;
+  let bestColor = STATE_COLOR_PALETTE[fallbackIndex];
+  let bestScore = -Infinity;
+
+  for (let index = 0; index < STATE_COLOR_PALETTE.length; index++) {
+    const color = STATE_COLOR_PALETTE[(fallbackIndex + index) % STATE_COLOR_PALETTE.length];
+    const sameAsNeighbor = neighborColors.includes(color);
+    const unusedBonus = usedColors.includes(color) ? 0 : 0.05;
+    const neighborDistance = minColorDistance(color, neighborColors, 2);
+    const globalDistance = minColorDistance(color, usedColors, 1);
+    const score = neighborDistance * 4 + globalDistance * 0.6 + unusedBonus - (sameAsNeighbor ? 10000 : 0) - index * 0.001;
+    if (score <= bestScore) continue;
+    bestScore = score;
+    bestColor = color;
+  }
+
+  return bestColor;
+}
+
+function minColorDistance(color, colors, emptyValue) {
+  if (!colors.length) return emptyValue;
+  return Math.min(...colors.map(other => colorDistance(color, other)));
+}
+
+function colorDistance(a, b) {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  return Math.hypot(ar - br, ag - bg, ab - bb) / Math.sqrt(3);
+}
+
+function hexToRgb(color) {
+  const value = Number.parseInt(color.slice(1), 16);
+  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255];
+}
+
+function isStateColorTarget(state) {
+  return Boolean(state && !state.removed && (state.i > 0 || (state.i === undefined && Number.isInteger(state.id))));
+}
+
+function stateColorId(state) {
+  return state.i ?? state.id;
 }
 
 function mirrorPackStateToGrid(grid, pack) {
@@ -438,9 +523,99 @@ function buildPackProvinces(pack, society, random, options, nameGenerator) {
   fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator);
   collectProvinceStatistics(pack, provinces, provinceIds);
   assignProvincePoles(pack, provinces, provinceIds);
+  findPackProvinceNeighbors(pack, provinces, provinceIds);
+  assignProvinceColors(provinces);
   cells.province = provinceIds;
   pack.provinces = provinces;
   return provinces;
+}
+
+function findPackProvinceNeighbors(pack, provinces, provinceIds) {
+  const neighbors = provinces.map(() => new Set());
+  const {cells} = pack;
+
+  for (const cell of cells.i) {
+    if (cells.h[cell] < 20) continue;
+    const provinceId = provinceIds[cell];
+    if (!provinces[provinceId]) continue;
+    for (const neighbor of cells.c[cell] || []) {
+      const neighborProvince = provinceIds[neighbor];
+      if (cells.h[neighbor] < 20 || neighborProvince === provinceId || !provinces[neighborProvince]) continue;
+      neighbors[provinceId].add(neighborProvince);
+    }
+  }
+
+  for (const province of provinces) {
+    if (!province) continue;
+    const id = provinceColorId(province);
+    province.neighbors = Array.from(neighbors[id] || []);
+  }
+}
+
+function findGridProvinceNeighbors(grid, provinces) {
+  const neighbors = provinces.map(() => new Set());
+  const cells = grid.cells;
+
+  for (const cell of cells.i) {
+    if (cells.h[cell] < 20) continue;
+    const provinceId = cells.province[cell];
+    if (!provinces[provinceId]) continue;
+    for (const neighbor of cells.c[cell] || []) {
+      const neighborProvince = cells.province[neighbor];
+      if (cells.h[neighbor] < 20 || neighborProvince === provinceId || !provinces[neighborProvince]) continue;
+      neighbors[provinceId].add(neighborProvince);
+    }
+  }
+
+  for (const province of provinces) {
+    if (!province) continue;
+    const id = provinceColorId(province);
+    province.neighbors = Array.from(neighbors[id] || []);
+  }
+}
+
+function assignProvinceColors(provinces) {
+  const validProvinces = provinces.filter(isProvinceColorTarget);
+  const coloredProvinces = [];
+  const ordered = [...validProvinces].sort((a, b) => {
+    const degree = (b.neighbors?.length || 0) - (a.neighbors?.length || 0);
+    return degree || (b.area || 0) - (a.area || 0) || provinceColorId(a) - provinceColorId(b);
+  });
+
+  for (const province of ordered) {
+    province.color = chooseProvinceColor(province, provinces, coloredProvinces);
+    coloredProvinces.push(province);
+  }
+}
+
+function chooseProvinceColor(province, provinces, coloredProvinces) {
+  const neighborColors = (province.neighbors || []).map(id => provinces[id]?.color).filter(Boolean);
+  const usedColors = coloredProvinces.map(item => item.color).filter(Boolean);
+  const fallbackIndex = coloredProvinces.length % STATE_COLOR_PALETTE.length;
+  let bestColor = STATE_COLOR_PALETTE[fallbackIndex];
+  let bestScore = -Infinity;
+
+  for (let index = 0; index < STATE_COLOR_PALETTE.length; index++) {
+    const color = STATE_COLOR_PALETTE[(fallbackIndex + index) % STATE_COLOR_PALETTE.length];
+    const sameAsNeighbor = neighborColors.includes(color);
+    const unusedBonus = usedColors.includes(color) ? 0 : 0.05;
+    const neighborDistance = minColorDistance(color, neighborColors, 2);
+    const globalDistance = minColorDistance(color, usedColors, 1);
+    const score = neighborDistance * 4 + globalDistance * 0.6 + unusedBonus - (sameAsNeighbor ? 10000 : 0) - index * 0.001;
+    if (score <= bestScore) continue;
+    bestScore = score;
+    bestColor = color;
+  }
+
+  return bestColor;
+}
+
+function isProvinceColorTarget(province) {
+  return Boolean(province && !province.removed && Number.isInteger(provinceColorId(province)));
+}
+
+function provinceColorId(province) {
+  return province.i ?? province.id;
 }
 
 function expandPackProvinces(pack, provinces, provinceIds, maxGrowth) {

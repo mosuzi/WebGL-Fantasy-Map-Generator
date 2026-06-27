@@ -42,7 +42,11 @@ export class PlaceholderMapRenderer {
     this.routeWidthMode = "screen-space";
     this.riverWidthMode = "screen-space flux mesh";
     this.riverWidthStats = emptyRiverWidthStats();
+    this.locateStatus = "none";
+    this.locateFlash = null;
+    this.locateFlashFrame = 0;
     this.colorMode = "height";
+    this.viewOptions = {showOceanHeight: false};
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
     this.lastDraw = {drawMs: 0};
     installCanvasInteractions(this.canvas, this.camera, () => {
@@ -59,7 +63,7 @@ export class PlaceholderMapRenderer {
   loadMap(map) {
     this.map = map;
     this.objectPickingIndex = buildObjectPickingIndex(map);
-    const vertices = buildPlaceholderVertices(map, this.colorMode);
+    const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions);
     const lineVertices = buildLineVertices(map);
     const pointVertices = buildPointVertices(map);
     this.vertexCount = vertices.length / 6;
@@ -93,11 +97,28 @@ export class PlaceholderMapRenderer {
   setColorMode(mode) {
     this.colorMode = mode;
     if (!this.map) return;
-    const vertices = buildPlaceholderVertices(this.map, this.colorMode);
+    this.refreshCellSurface();
+  }
+
+  setViewOptions(options = {}) {
+    this.viewOptions = {...this.viewOptions, ...options};
+    if (!this.map) return;
+    this.refreshCellSurface();
+  }
+
+  refreshCellSurface() {
+    if (!this.map) return;
+    const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions);
     this.vertexCount = vertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
     this.draw();
+  }
+
+  refreshLabels() {
+    if (!this.map) return;
+    this.buildCityLabels(this.map);
+    this.updateCityLabels();
   }
 
   draw() {
@@ -174,7 +195,8 @@ export class PlaceholderMapRenderer {
       selectionVertexCount: this.selectionVertexCount,
       selectionTriangleCount: this.selectionVertexCount / 3,
       selectionBuildMs: this.selectionBuildMs,
-      selectionHighlightMode: selectionHighlightMode(this.selection),
+      selectionHighlightMode: selectionHighlightMode(this.selection, this.locateFlash),
+      locateStatus: this.locateStatus,
       objectPickingIndex: this.objectPickingIndex ? {
         buckets: this.objectPickingIndex.bucketCount,
         bucketSize: roundValue(this.objectPickingIndex.bucketSize),
@@ -191,6 +213,7 @@ export class PlaceholderMapRenderer {
       labelCount: this.labelCount,
       visibleLabelCount: this.visibleLabelCount,
       colorMode: this.colorMode,
+      viewOptions: {...this.viewOptions},
       camera: {...this.camera},
       draw: this.lastDraw,
       webgl2: true
@@ -241,7 +264,7 @@ export class PlaceholderMapRenderer {
 
   updateSelectionBuffer() {
     const startedAt = performance.now();
-    const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection);
+    const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash);
     this.selectionVertexCount = selectionVertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, selectionVertices, this.gl.DYNAMIC_DRAW);
@@ -258,6 +281,57 @@ export class PlaceholderMapRenderer {
   setSelection(object) {
     this.selection = object || null;
     this.draw();
+  }
+
+  locateObject(object, options = {}) {
+    const bounds = getObjectBounds(this.map, object);
+    if (!bounds) {
+      this.locateStatus = "not found";
+      return false;
+    }
+
+    const padding = options.padding ?? 0.22;
+    const minScale = options.minScale ?? defaultLocateMinScale(object);
+    const maxScale = options.maxScale ?? 18;
+    const boundsWidth = Math.max(1, bounds.maxX - bounds.minX);
+    const boundsHeight = Math.max(1, bounds.maxY - bounds.minY);
+    const ndcWidth = (boundsWidth / this.map.metadata.graphWidth) * 2;
+    const ndcHeight = (boundsHeight / this.map.metadata.graphHeight) * 2;
+    const available = 2 * (1 - padding);
+    const nextScale = clamp(Math.min(available / ndcWidth, available / ndcHeight), minScale, maxScale);
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const [ndcX, ndcY] = worldToNdcPoint([centerX, centerY], this.map);
+
+    this.camera.scale = nextScale;
+    this.camera.offsetX = -ndcX * nextScale;
+    this.camera.offsetY = -ndcY * nextScale;
+    this.locateStatus = `${object.kind} #${object.id}`;
+    this.startLocateFlash(object);
+    this.setSelection(object);
+    this.onViewChange();
+    return true;
+  }
+
+  startLocateFlash(object) {
+    this.locateFlash = {
+      kind: object.kind,
+      id: object.id,
+      until: performance.now() + 2600
+    };
+    if (!this.locateFlashFrame) this.animateLocateFlash();
+  }
+
+  animateLocateFlash() {
+    if (!this.locateFlash || performance.now() > this.locateFlash.until) {
+      this.locateFlash = null;
+      this.locateFlashFrame = 0;
+      this.draw();
+      this.onViewChange();
+      return;
+    }
+    this.draw();
+    this.locateFlashFrame = requestAnimationFrame(() => this.animateLocateFlash());
   }
 
   buildCityLabels(map) {
@@ -361,6 +435,10 @@ export class PlaceholderMapRenderer {
   }
 }
 
+function defaultLocateMinScale(object) {
+  return object?.kind === "city" || object?.kind === "label" || object?.kind === "marker" ? 1.25 : 0.35;
+}
+
 function selectionPoint(map, selection) {
   if (selection?.kind === "city" || selection?.kind === "label") {
     const city = map.settlements.cities[selection.id];
@@ -371,6 +449,73 @@ function selectionPoint(map, selection) {
     return marker ? {x: marker.x, y: marker.y} : null;
   }
   return null;
+}
+
+function getObjectBounds(map, object) {
+  if (!map || !object) return null;
+  if (object.kind === "city" || object.kind === "label") {
+    const city = map.settlements.cities[object.id];
+    return city ? pointBounds(city.x, city.y, 42) : null;
+  }
+  if (object.kind === "marker") {
+    const marker = map.markers.markers[object.id];
+    return marker ? pointBounds(marker.x, marker.y, 42) : null;
+  }
+  if (object.kind === "route") {
+    const route = map.settlements.routes.find(item => item.id === object.id);
+    return route ? pointsBounds(route.points, 36) : null;
+  }
+  if (object.kind === "river") {
+    const river = map.rivers.rivers.find(item => item.id === object.id);
+    return river ? pointsBounds(river.points, 42) : null;
+  }
+  if (object.kind === "state" || object.kind === "province" || object.kind === "region") {
+    return politicalBounds(map, object, 48);
+  }
+  return null;
+}
+
+function politicalBounds(map, object, padding) {
+  const field = object.kind === "state" ? "state" : object.kind === "province" ? "province" : "region";
+  let bounds = null;
+  for (let cellIndex = 0; cellIndex < map.grid.cells.p.length; cellIndex++) {
+    if (map.grid.cells[field][cellIndex] !== object.id) continue;
+    const point = map.grid.points[map.grid.cells.p[cellIndex]];
+    bounds = includePoint(bounds, point[0], point[1]);
+  }
+  return bounds ? expandBounds(bounds, padding) : null;
+}
+
+function pointsBounds(points, padding) {
+  let bounds = null;
+  for (const point of points) {
+    if (!isWorldPoint(point)) continue;
+    bounds = includePoint(bounds, point[0], point[1]);
+  }
+  return bounds ? expandBounds(bounds, padding) : null;
+}
+
+function pointBounds(x, y, padding) {
+  return expandBounds({minX: x, minY: y, maxX: x, maxY: y}, padding);
+}
+
+function includePoint(bounds, x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return bounds;
+  if (!bounds) return {minX: x, minY: y, maxX: x, maxY: y};
+  bounds.minX = Math.min(bounds.minX, x);
+  bounds.minY = Math.min(bounds.minY, y);
+  bounds.maxX = Math.max(bounds.maxX, x);
+  bounds.maxY = Math.max(bounds.maxY, y);
+  return bounds;
+}
+
+function expandBounds(bounds, padding) {
+  return {
+    minX: bounds.minX - padding,
+    minY: bounds.minY - padding,
+    maxX: bounds.maxX + padding,
+    maxY: bounds.maxY + padding
+  };
 }
 
 function getLabelCities(map) {
@@ -447,10 +592,10 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
   );
 }
 
-function buildPlaceholderVertices(map, colorMode) {
+function buildPlaceholderVertices(map, colorMode, viewOptions) {
   const vertices = [];
 
-  pushGridCells(vertices, map, colorMode);
+  pushGridCells(vertices, map, colorMode, viewOptions);
 
   return new Float32Array(vertices);
 }
@@ -468,7 +613,9 @@ function buildRiverMeshVertices(map, camera, canvas) {
     rivers: 0,
     segments: 0,
     minWidthPx: Infinity,
-    maxWidthPx: 0
+    maxWidthPx: 0,
+    minFlux: Infinity,
+    maxFlux: 0
   };
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
 
@@ -497,11 +644,13 @@ function getRiverRenderPath(river, map, pixelRatio, stats) {
 
   for (let index = 0; index < points.length; index++) {
     const cell = sampleRiverCell(cells, index, points.length);
-    runningFlux = Math.max(runningFlux, riverCellFlux(map.pack.cells, cell, river));
+    runningFlux = Math.max(runningFlux, riverPointFlux(points[index], map.pack.cells, cell, river));
     const widthCss = riverWidthCssPx(river, runningFlux, index);
     widths.push(widthCss * pixelRatio);
     stats.minWidthPx = Math.min(stats.minWidthPx, widthCss);
     stats.maxWidthPx = Math.max(stats.maxWidthPx, widthCss);
+    stats.minFlux = Math.min(stats.minFlux, runningFlux);
+    stats.maxFlux = Math.max(stats.maxFlux, runningFlux);
   }
 
   return {points, widths};
@@ -517,6 +666,11 @@ function sampleRiverCell(cells, pointIndex, pointsLength) {
 function riverCellFlux(cells, cell, river) {
   if (cell === undefined || cell < 0) return river.discharge || river.flux || river.width || 1;
   return cells.fl?.[cell] || river.discharge || river.flux || river.width || 1;
+}
+
+function riverPointFlux(point, cells, cell, river) {
+  if (Number.isFinite(point?.[2]) && point[2] > 0) return point[2];
+  return riverCellFlux(cells, cell, river);
 }
 
 function riverWidthCssPx(river, flux, pointIndex) {
@@ -543,7 +697,9 @@ function normalizeRiverWidthStats(stats) {
     rivers: stats.rivers,
     segments: stats.segments,
     minWidthPx: stats.minWidthPx === Infinity ? 0 : roundValue(stats.minWidthPx),
-    maxWidthPx: roundValue(stats.maxWidthPx)
+    maxWidthPx: roundValue(stats.maxWidthPx),
+    minFlux: stats.minFlux === Infinity ? 0 : roundValue(stats.minFlux),
+    maxFlux: roundValue(stats.maxFlux)
   };
 }
 
@@ -552,7 +708,9 @@ function emptyRiverWidthStats() {
     rivers: 0,
     segments: 0,
     minWidthPx: 0,
-    maxWidthPx: 0
+    maxWidthPx: 0,
+    minFlux: 0,
+    maxFlux: 0
   };
 }
 
@@ -582,7 +740,7 @@ function routeStyle(route) {
   return {color: [0.45, 0.35, 0.22, 0.94], width: 2.1, dash: [9, 6]};
 }
 
-function buildSelectionMeshVertices(map, camera, canvas, selection) {
+function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash) {
   const vertices = [];
   if (selection?.kind === "state" || selection?.kind === "province" || selection?.kind === "region") {
     pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection);
@@ -595,7 +753,8 @@ function buildSelectionMeshVertices(map, camera, canvas, selection) {
   const maxFlux = Math.max(1, map.rivers.metadata.maxFlux || river.flux || 1);
   const fluxFactor = Math.sqrt(Math.max(0, river.flux || 0) / maxFlux);
   const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
-  pushScreenPolyline(vertices, river.points, map, camera, canvas, [0.62, 0.88, 1, 1], widthPx);
+  const color = locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
+  pushScreenPolyline(vertices, river.points, map, camera, canvas, color, widthPx);
   return new Float32Array(vertices);
 }
 
@@ -614,13 +773,25 @@ function pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection) {
   }
 }
 
-function selectionHighlightMode(selection) {
+function selectionHighlightMode(selection, locateFlash = null) {
   if (!selection) return "none";
+  if (isLocateFlashActive(selection, locateFlash)) return `${selection.kind} red flash`;
   if (selection.kind === "river") return "river screen-space mesh";
   if (selection.kind === "state") return "state translucent cells";
   if (selection.kind === "province") return "province translucent cells";
   if (selection.kind === "region") return "region translucent cells";
   return selection.kind;
+}
+
+function locateFlashColor(selection, locateFlash) {
+  if (!isLocateFlashActive(selection, locateFlash)) return null;
+  const phase = (performance.now() / 180) % 2;
+  const alpha = phase < 1 ? 1 : 0.38;
+  return [1, 0.12, 0.08, alpha];
+}
+
+function isLocateFlashActive(selection, locateFlash) {
+  return Boolean(selection && locateFlash && selection.kind === locateFlash.kind && selection.id === locateFlash.id && performance.now() <= locateFlash.until);
 }
 
 function buildPointVertices(map) {
@@ -655,13 +826,13 @@ function pushRect(vertices, left, bottom, right, top, color) {
   pushVertex(vertices, left, top, color);
 }
 
-function pushGridCells(vertices, map, colorMode) {
+function pushGridCells(vertices, map, colorMode, viewOptions) {
   const grid = map.grid;
   for (let cellIndex = 0; cellIndex < grid.cells.v.length; cellIndex++) {
     const vertexIds = grid.cells.v[cellIndex];
     if (vertexIds.length < 3) continue;
     const center = grid.points[grid.cells.p[cellIndex]];
-    const color = colorForCell(cellIndex, map, colorMode);
+    const color = colorForCell(cellIndex, map, colorMode, viewOptions);
     for (let index = 0; index < vertexIds.length; index++) {
       const nextIndex = (index + 1) % vertexIds.length;
       pushWorldVertex(vertices, center, map, color);
@@ -860,7 +1031,7 @@ function isWorldPoint(point) {
   return Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]);
 }
 
-function colorForCell(cellIndex, map, colorMode) {
+function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
     return colorForHeight(map.grid.cells.h[cellIndex], map.layers);
   }
@@ -869,11 +1040,11 @@ function colorForCell(cellIndex, map, colorMode) {
   if (colorMode === "biomes") return colorForBiome(map.grid.cells.biome[cellIndex], map);
   if (colorMode === "cultures") return indexedColor(map.grid.cells.culture[cellIndex], 0.31);
   if (colorMode === "religions") return indexedColor(map.grid.cells.religion[cellIndex], 0.63);
-  if (colorMode === "states") return indexedColorOrWater(map.grid.cells.state[cellIndex], 0.12, map.layers.ocean);
-  if (colorMode === "provinces") return indexedColorOrWater(map.grid.cells.province[cellIndex], 0.46, map.layers.ocean);
+  if (colorMode === "states") return colorForState(map.grid.cells.state[cellIndex], map);
+  if (colorMode === "provinces") return colorForProvince(map.grid.cells.province[cellIndex], map);
   if (colorMode === "regions") return indexedColorOrWater(map.grid.cells.region[cellIndex], 0.77, map.layers.ocean);
   if (colorMode === "population") return colorForPopulation(map.grid.cells.pop[cellIndex], map);
-  return colorForHeight(map.grid.cells.h[cellIndex], map.layers);
+  return colorForHeight(map.grid.cells.h[cellIndex], map.layers, viewOptions);
 }
 
 function isLandCell(cellIndex, map) {
@@ -881,13 +1052,20 @@ function isLandCell(cellIndex, map) {
   return Boolean(map.features.features[featureId]?.land);
 }
 
-function colorForHeight(height, layers) {
-  if (height < 20) return layers.ocean;
+function colorForHeight(height, layers, viewOptions = {}) {
+  if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, layers) : layers.ocean;
   if (height < 36) return mix([0.33, 0.52, 0.32, 1], [0.52, 0.61, 0.38, 1], (height - 20) / 16);
   if (height < 56) return mix([0.52, 0.61, 0.38, 1], [0.64, 0.6, 0.43, 1], (height - 36) / 20);
   if (height < 76) return mix([0.64, 0.6, 0.43, 1], [0.7, 0.66, 0.54, 1], (height - 56) / 20);
   if (height < 92) return mix([0.7, 0.66, 0.54, 1], [0.77, 0.75, 0.68, 1], (height - 76) / 16);
   return mix([0.77, 0.75, 0.68, 1], [0.83, 0.82, 0.78, 1], Math.min(1, (height - 92) / 8));
+}
+
+function colorForOceanHeight(height, layers) {
+  const t = Math.max(0, Math.min(1, height / 20));
+  const deep = mix(layers.ocean, [0.01, 0.04, 0.14, 1], 0.72);
+  const shelf = mix(layers.ocean, [0.38, 0.68, 0.82, 1], 0.42);
+  return mix(deep, shelf, t ** 0.75);
 }
 
 function colorForTemperature(temp) {
@@ -904,6 +1082,16 @@ function colorForBiome(biomeId, map) {
   return map.climate.biomes[biomeId]?.color || [0.5, 0.5, 0.5, 1];
 }
 
+function colorForState(stateId, map) {
+  if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
+}
+
+function colorForProvince(provinceId, map) {
+  if (provinceId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  return hexToRgba(map.politics.provinces[provinceId]?.color) || indexedColor(provinceId, 0.46);
+}
+
 function colorForPopulation(population, map) {
   if (!population) return mix(map.layers.ocean, [0.06, 0.1, 0.08, 1], 0.4);
   const t = Math.min(1, population / Math.max(1, map.settlements.metadata.maxPopulation));
@@ -918,6 +1106,14 @@ function indexedColor(index, offset) {
 function indexedColorOrWater(index, offset, waterColor) {
   if (index < 0) return mix(waterColor, [0.05, 0.08, 0.1, 1], 0.3);
   return indexedColor(index, offset);
+}
+
+function hexToRgba(color) {
+  if (typeof color !== "string") return null;
+  const match = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+  if (!match) return null;
+  const value = Number.parseInt(match[1], 16);
+  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255, 1];
 }
 
 function scoreCityLabel(city) {

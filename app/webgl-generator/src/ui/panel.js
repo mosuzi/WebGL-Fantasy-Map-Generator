@@ -2,12 +2,56 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("generate-map").addEventListener("click", handlers.onGenerate);
   documentRef.getElementById("random-seed").addEventListener("click", handlers.onRandomSeed);
   documentRef.getElementById("fit-view").addEventListener("click", handlers.onFitView);
+  documentRef.getElementById("show-ocean-height")?.addEventListener("change", event => handlers.onShowOceanHeight?.(event.target.checked));
+  documentRef.getElementById("open-height-panel")?.addEventListener("click", handlers.onOpenHeightPanel);
+  documentRef.getElementById("open-state-panel")?.addEventListener("click", handlers.onOpenStatePanel);
+  documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
   for (const button of documentRef.querySelectorAll("[data-mode]")) {
     button.addEventListener("click", () => {
       documentRef.querySelectorAll("[data-mode]").forEach(item => item.classList.toggle("active", item === button));
       handlers.onMode(button.dataset.mode);
     });
   }
+}
+
+export function setActiveModeButton(documentRef, mode) {
+  documentRef.querySelectorAll("[data-mode]").forEach(item => item.classList.toggle("active", item.dataset.mode === mode));
+}
+
+export function setEditingInteractionLock(documentRef, locked, {allowedPanelIds = []} = {}) {
+  documentRef.body.classList.toggle("editing-locked", locked);
+  for (const control of editLockControls(documentRef)) {
+    control.disabled = locked;
+    control.dataset.editLockDisabled = locked ? "true" : "false";
+  }
+  for (const panel of documentRef.querySelectorAll(".floating-panel[data-panel-id]")) {
+    const allowed = !locked || allowedPanelIds.includes(panel.dataset.panelId);
+    panel.classList.toggle("editing-panel-disabled", !allowed);
+    for (const control of panel.querySelectorAll("button, input, select, textarea")) {
+      if (control.classList.contains("floating-panel-close")) continue;
+      control.disabled = !allowed;
+      control.dataset.editLockDisabled = !allowed ? "true" : "false";
+    }
+  }
+}
+
+function editLockControls(documentRef) {
+  return documentRef.querySelectorAll([
+    "#generate-map",
+    "#random-seed",
+    "#fit-view",
+    "#open-height-panel",
+    "#open-state-panel",
+    "#open-river-panel",
+    "#seed-input",
+    "#cells-input",
+    "#width-input",
+    "#height-input",
+    "#heightmap-template",
+    "#auto-random-seed",
+    "#show-ocean-height",
+    "[data-mode]"
+  ].join(", "));
 }
 
 export function readOptionsFromPanel(documentRef, previousOptions) {
@@ -63,6 +107,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "摘要校验", map.summary.checksum),
     statRow(documentRef, "随机预览", map.summary.randomPreview.join(", ")),
     statRow(documentRef, "专题", stats.colorMode),
+    statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏"),
     statRow(documentRef, "GPU 顶点", stats.vertexCount),
     statRow(documentRef, "道路三角形", stats.routeTriangleCount),
     statRow(documentRef, "道路 mesh", `${stats.routeWidthMode}, ${stats.routeBuildMs}ms`),
@@ -70,7 +115,11 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "河流三角形", stats.riverTriangleCount),
     statRow(documentRef, "河流 mesh", `${stats.riverWidthMode}, ${stats.riverBuildMs}ms`),
     statRow(documentRef, "河流宽度", `${stats.riverWidthStats.minWidthPx} - ${stats.riverWidthStats.maxWidthPx}px / ${stats.riverWidthStats.rivers} 条`),
+    statRow(documentRef, "河流流量", `${stats.riverWidthStats.minFlux} - ${stats.riverWidthStats.maxFlux}`),
     statRow(documentRef, "选中高亮", `${stats.selectionHighlightMode}, ${stats.selectionTriangleCount} tris, ${stats.selectionBuildMs}ms`),
+    statRow(documentRef, "定位状态", stats.locateStatus),
+    statRow(documentRef, "编辑历史", formatEditHistory(state.editHistory?.getStats())),
+    statRow(documentRef, "编辑刷新", formatEditRefresh(state.lastEditRefresh)),
     statRow(documentRef, "对象索引", stats.objectPickingIndex ? `${stats.objectPickingIndex.buckets} buckets / ${stats.objectPickingIndex.markers} markers / ${stats.objectPickingIndex.routeSegments} routes / ${stats.objectPickingIndex.riverSegments} rivers` : "none"),
     statRow(documentRef, "线段顶点", stats.lineVertexCount),
     statRow(documentRef, "点顶点", stats.pointVertexCount),
@@ -193,12 +242,26 @@ function formatObjectDetails(object) {
   if (object.kind === "city") return `${object.type} / pop ${object.population} / ${object.state}`;
   if (object.kind === "label") return `${object.targetKind} / ${object.targetName}`;
   if (object.kind === "marker") return `${object.type} / cell ${object.cell}`;
-  if (object.kind === "route") return `${object.type} / ${object.level} / distance ${object.distance.toFixed(1)}`;
+  if (object.kind === "route") return `${object.type} / ${object.level} / distance ${formatDistance(object.distance)}`;
   if (object.kind === "river") return `${object.type} / flux ${object.flux} / length ${object.length}`;
   if (object.kind === "state") return `${object.culture} / ${object.religion}`;
   if (object.kind === "province") return `${object.state}`;
   if (object.kind === "region") return `region #${object.id}`;
   return "unknown";
+}
+
+function formatEditHistory(stats) {
+  if (!stats) return "none";
+  return `undo ${stats.undo} / redo ${stats.redo} / ${stats.lastLabel}`;
+}
+
+function formatEditRefresh(refresh) {
+  if (!refresh) return "none";
+  return `${refresh.render} / ${refresh.selection} / ${refresh.derived} / ${refresh.affected}`;
+}
+
+function formatDistance(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : "n/a";
 }
 
 function statRow(documentRef, label, value) {

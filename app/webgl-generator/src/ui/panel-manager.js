@@ -17,6 +17,7 @@ export class PanelManager {
     panel.style.left = `${savedState?.left ?? options.left ?? 24}px`;
     panel.style.top = `${savedState?.top ?? options.top ?? 24}px`;
     panel.style.width = `${savedState?.width ?? options.width ?? 320}px`;
+    if (options.maxWidth) panel.style.maxWidth = `min(${options.maxWidth}px, calc(100% - 16px))`;
     panel.dataset.panelId = id;
 
     const header = this.documentRef.createElement("header");

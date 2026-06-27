@@ -118,9 +118,18 @@
               <span>强度</span>
               <input id="height-strength" type="range" min="1" max="8" value="3" />
             </label>
+            <label class="check-row compact-check">
+              <input id="height-falloff" type="checkbox" checked />
+              <span>中心衰减</span>
+            </label>
           </div>
 
           <div id="river-editor-panel" class="editor-panel" hidden>
+            <div class="river-summary" id="river-summary"></div>
+            <label class="field-row">
+              <span>筛选</span>
+              <input id="river-filter" type="search" placeholder="河流 id / 名称" />
+            </label>
             <label class="field-row">
               <span>动作</span>
               <select id="river-action">
@@ -132,6 +141,7 @@
               <span>宽度</span>
               <input id="river-width" type="range" min="-0.25" max="0.25" step="0.05" value="0.1" />
             </label>
+            <div class="river-list" id="river-list"></div>
           </div>
 
           <div id="state-editor-panel" class="editor-panel" hidden>
@@ -142,6 +152,10 @@
             <label class="field-row">
               <span>颜色</span>
               <input id="state-color" type="color" value="#66c2a5" />
+            </label>
+            <label class="range-row">
+              <span>半径</span>
+              <input id="state-radius" type="range" min="2" max="36" value="12" />
             </label>
           </div>
 

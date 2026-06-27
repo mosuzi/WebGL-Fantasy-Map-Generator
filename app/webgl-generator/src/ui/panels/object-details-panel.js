@@ -1,21 +1,46 @@
 export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
+  let currentObject = null;
+  let currentEditingObject = null;
+  let suppressNextViewOpenFor = null;
+
   manager.registerPanel("object-details", {
     title: "对象详情",
     left: 24,
     top: 24,
-    width: 320
+    width: 320,
+    onClose: () => {
+      const closedObject = currentObject;
+      const wasEditing = currentEditingObject;
+      currentEditingObject = null;
+      if (!wasEditing) return;
+      suppressNextViewOpenFor = closedObject;
+      callbacks.onCancelEdit?.();
+    }
   });
 
   return {
     show(selection, editingObject = null) {
       if (!selection?.object) {
+        currentObject = null;
+        currentEditingObject = null;
+        suppressNextViewOpenFor = null;
         manager.close("object-details");
         return;
       }
+      currentObject = selection.object;
+      currentEditingObject = editingObject;
       manager.setContent("object-details", renderDetails(documentRef, selection.object, editingObject, {
         onEdit: () => callbacks.onEdit?.(selection.object),
-        onCancelEdit: () => callbacks.onCancelEdit?.()
+        onCancelEdit: () => callbacks.onCancelEdit?.(),
+        onLocate: () => callbacks.onLocate?.(selection.object),
+        onOpenRiverPanel: () => callbacks.onOpenRiverPanel?.(),
+        onRename: name => callbacks.onRename?.(selection.object, name)
       }));
+      if (!editingObject && isSameObject(selection.object, suppressNextViewOpenFor)) {
+        suppressNextViewOpenFor = null;
+        return;
+      }
+      suppressNextViewOpenFor = null;
       manager.open("object-details");
     },
     clear() {
@@ -44,14 +69,30 @@ function renderDetails(documentRef, object, editingObject, callbacks) {
 
   const actions = documentRef.createElement("div");
   actions.className = "object-details-actions";
+  const locate = documentRef.createElement("button");
+  locate.type = "button";
+  locate.className = "secondary-action";
+  locate.textContent = "定位";
+  locate.addEventListener("click", callbacks.onLocate);
   const edit = documentRef.createElement("button");
   edit.type = "button";
   edit.className = "secondary-action";
   edit.textContent = editing ? "退出编辑" : "编辑";
   edit.addEventListener("click", editing ? callbacks.onCancelEdit : callbacks.onEdit);
-  actions.append(edit);
+  actions.append(locate, edit);
+  if (object.kind === "river") {
+    const riverPanel = documentRef.createElement("button");
+    riverPanel.type = "button";
+    riverPanel.className = "secondary-action";
+    riverPanel.textContent = "河流面板";
+    riverPanel.addEventListener("click", callbacks.onOpenRiverPanel);
+    actions.append(riverPanel);
+  }
 
-  return [title, rows, actions];
+  const content = [title, rows];
+  if (editing && canRenameObject(object)) content.push(nameEditor(documentRef, object, callbacks));
+  content.push(actions);
+  return content;
 }
 
 function isSameObject(a, b) {
@@ -63,7 +104,7 @@ function formatObjectTitle(object) {
   if (object.kind === "label") return `标签 ${object.text}`;
   if (object.kind === "marker") return `标记 ${object.name}`;
   if (object.kind === "route") return `路线 ${object.from} -> ${object.to}`;
-  if (object.kind === "river") return `河流 #${object.id}`;
+  if (object.kind === "river") return `河流 ${object.name || `#${object.id}`}`;
   if (object.kind === "state") return `国家 ${object.name}`;
   if (object.kind === "province") return `省份 ${object.name}`;
   if (object.kind === "region") return `区域 ${object.name}`;
@@ -86,7 +127,7 @@ function detailRows(object) {
       ["等级", object.level],
       ["起点", object.from],
       ["终点", object.to],
-      ["命中距离", object.distance.toFixed(1)],
+      ["命中距离", formatDistance(object.distance)],
       ["对象 id", object.id]
     ];
   }
@@ -109,15 +150,18 @@ function detailRows(object) {
   }
   if (object.kind === "river") {
     return [
+      ["名称", object.name || `#${object.id}`],
       ["类型", object.type],
       ["流量", object.flux],
       ["长度", object.length],
-      ["命中距离", object.distance.toFixed(1)],
+      ["命中距离", formatDistance(object.distance)],
       ["对象 id", object.id]
     ];
   }
   if (object.kind === "state") {
     return [
+      ["全称", object.fullName || object.name],
+      ["首都", object.capitalName || "none"],
       ["文化", object.culture],
       ["宗教", object.religion],
       ["中心 cell", object.centerCell],
@@ -141,6 +185,39 @@ function detailRows(object) {
   return [["类型", object.kind || "unknown"]];
 }
 
+function canRenameObject(object) {
+  return object.kind === "state" || object.kind === "river" || object.kind === "city" || (object.kind === "label" && object.targetKind === "city");
+}
+
+function nameEditor(documentRef, object, callbacks) {
+  const editor = documentRef.createElement("form");
+  editor.className = "object-name-editor";
+  const label = documentRef.createElement("label");
+  const text = documentRef.createElement("span");
+  text.textContent = "名称";
+  const input = documentRef.createElement("input");
+  input.type = "text";
+  input.maxLength = 48;
+  input.value = object.name || object.text || object.targetName || "";
+  label.append(text, input);
+
+  const apply = documentRef.createElement("button");
+  apply.type = "submit";
+  apply.className = "secondary-action";
+  apply.textContent = "应用名称";
+  editor.addEventListener("submit", event => {
+    event.preventDefault();
+    callbacks.onRename(input.value);
+  });
+
+  editor.append(label, apply);
+  return editor;
+}
+
 function formatMarkerData(data = {}) {
   return Object.entries(data).map(([key, value]) => `${key}: ${value}`).join(" / ") || "none";
+}
+
+function formatDistance(value) {
+  return Number.isFinite(value) ? value.toFixed(1) : "n/a";
 }

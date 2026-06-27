@@ -5079,3 +5079,853 @@
 
 - 使用正式生成器跑 `mediterranean / 100000 / audit-mediterranean-001` 几何烟测。
 - 本次样例生成河流 `912` 条，其中 `585` 条以水域 cell 入海、`68` 条以地图边界出界；入海河流末点等于水域 cell 中心数量为 `0`，共享岸线附近异常数量为 `0`。
+
+## 2026-06-27 demo 编辑器交互修正
+
+问题：
+
+- 高度编辑只有半径内统一强度，缺少原版式的鼠标中心强、边缘弱的笔刷衰减。
+- 国家编辑只在点击时修改单个 cell，拖动过程中不会连续涂抹；每次修改都重建全量 buffer，造成明显卡顿。
+- 国家取样和涂抹时状态信息不够明确，颜色相似时难以确认当前目标国家和被覆盖国家。
+
+尚书实施：
+
+- `prototype/webgl-cells/index.html` 新增高度“中心衰减”开关和国家“半径”滑条。
+- `prototype/webgl-cells/src/editors.js`：
+  - 抬高/降低笔刷在启用中心衰减时按距离使用 smoothstep 权重，中心强度最高、半径边缘逐步减弱。
+  - 国家涂抹改为拖拽笔刷，按鼠标轨迹补采样，单次操作可连续修改多个 cell。
+  - 拖动期间只刷新专题颜色 buffer，抬手后再重建边界 buffer，避免每个 cell 修改都触发全量重建。
+  - 状态面板持续显示目标国家、来源国家、颜色值和本次涂抹 cell 数。
+
+门下检查：
+
+- `node --check .\prototype\webgl-cells\src\editors.js` 通过。
+- `node --check .\prototype\webgl-cells\src\main.js` 通过。
+- `git diff --check` 通过。
+
+侍中验收：
+
+- 复用 `http://127.0.0.1:5400` demo 服务，用系统 Chrome + Playwright 验证。
+- 高度中心衰减验证：中心 cell 高度增量 `8`，边缘样本 cell 增量 `4`。
+- 国家拖拽涂抹验证：一次拖拽改动 `643` 个 cell，状态面板包含“目标国家”和“来源国家”。
+
+## 2026-06-27 demo 河流管理面板第一刀
+
+问题：
+
+- 河流编辑器只有点选后的改宽/拖点能力，缺少全量河流管理入口。
+- 用户需要先从列表中查看长度和流量，快速定位某条河流，再进入编辑。
+- 定位后需要用醒目的红色闪烁路径描出河流，避免在复杂底图中找不到目标。
+
+尚书实施：
+
+- `prototype/webgl-cells/index.html`：
+  - 河流编辑面板新增摘要区、id / 名称筛选框和全量河流列表。
+- `prototype/webgl-cells/src/editors.js`：
+  - 新增河流 metrics 统计，按 `river.points` 累加长度，流量优先读取 `discharge / flux / width`。
+  - 河流列表展示单条名称、id、长度和流量，点击列表行会选中并定位。
+  - 定位时根据河流 bounds 调整 camera，使河流进入视野中心。
+  - 新增 SVG 高亮层，跟随 WebGL camera 把选中河流绘制为红色闪烁 path。
+  - 浏览模式下直接点击河流，会自动切换到河流编辑工具并选中该河流。
+  - 状态面板补充选中河流长度和流量。
+- `prototype/webgl-cells/src/styles.css`：
+  - 新增河流摘要、河流列表、选中行和闪烁高亮 path 样式。
+
+门下检查：
+
+- `node --check .\prototype\webgl-cells\src\editors.js` 通过。
+- `node --check .\prototype\webgl-cells\src\main.js` 通过。
+- `git diff --check` 通过。
+
+侍中验收：
+
+- 复用 `http://127.0.0.1:5400` demo 服务，用系统 Chrome + Playwright 验证。
+- 河流列表渲染 `1240` 条河流，摘要显示总长度和最大流量。
+- 点击第一条河流后，camera 居中到河流，红色高亮 path 可见并处于闪烁状态。
+- 浏览模式下点击河流中段，会自动切换为河流编辑工具并保持选中该河流。
+- 筛选框输入选中河流 id 后，列表仍能显示匹配河流。
+
+后续约束修正：
+
+- 用户确认 demo 形态可以接受，但正式版河流统计/管理面板必须是独立浮动面板，不应与其它面板混用。
+- 已更新 `docs/floating-panel-architecture.md`：正式版河流统计、全量列表、筛选、长度/流量排序、定位、河道编辑和撤销入口归入独立 `panels/river-panel.js`；对象详情面板只可显示摘要和打开入口，不承载完整河流管理。
+- 已更新 `docs/current-plan.md`：明确 demo 的侧栏混合布局只是交互验证，正式应用不得照搬。
+
+## 2026-06-27 正式版河流宽度 flux 修复
+
+问题：
+
+- 用户指出正式版河流宽度又丢失了与流量相关的变化。
+- 排查确认：正式 renderer 虽然使用 `screen-space flux mesh`，但每个 point 的 flux 通过 `points.length` 与 `river.cells.length` 的比例粗略采样 cell；河口裁剪和 meander 简化后，points 与 cells 不再稳定一一对应，导致宽度关系容易退化。
+
+尚书实施：
+
+- `app/webgl-generator/src/generator/rivers.js`：
+  - `river.points` 的第三位现在保存该点对应的沿程 flux。
+  - 基础 cell 点取当前 cell flux；河口和出界点取上一陆地 cell flux；meander 控制点按起终点 flux 插值。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 河宽计算优先读取 `point[2]`，只有旧数据没有 point flux 时才回退到 cell 比例采样。
+  - `riverWidthStats` 新增 `minFlux/maxFlux`，便于运行时确认宽度来源。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计面板新增“河流流量”行。
+
+门下检查：
+
+- `node --check .\app\webgl-generator\src\generator\rivers.js` 通过。
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+
+侍中验收：
+
+- Node 生成器烟测确认所有 `river.points` 都带第三位 flux，渲染相关 point flux 范围为 `30..1404`。
+- 正式应用 `http://127.0.0.1:5410` 用系统 Chrome + Playwright 验证：
+  - `riverWidthMode` 为 `screen-space flux mesh`。
+  - `riverWidthStats.minWidthPx/maxWidthPx` 为 `1.1..4.1`。
+  - `riverWidthStats.minFlux/maxFlux` 为 `30..1367`。
+  - 运行时统计面板已显示“河流流量”。
+
+## 2026-06-27 编辑器与统计面板清单
+
+问题：
+
+- demo 已验证高度、河流和国家三类编辑器，但正式版不能继续只靠临时侧栏堆功能。
+- 后续需要先明确哪些对象需要编辑器，哪些对象需要统计面板，哪些系统暂缓。
+- 河流管理已经被明确要求为独立浮动面板，这个边界需要扩展到其它领域面板。
+
+实施：
+
+- 新增 `docs/editor-and-stat-panel-inventory.md`：
+  - 按生成、图层、对象详情、地形环境、水文线性对象、政治社会对象、标签视觉对象和暂缓系统分组。
+  - 明确每个领域是否需要编辑器、是否需要统计面板、编辑范围、统计范围和优先级。
+  - 将河流面板列为最高优先级，要求正式版做成独立浮动 `river-panel`。
+  - 将经济和军事系统列为暂缓，不进入近期编辑器主线。
+  - 补充正式编辑器前必须先建立的 edit command / undo command、selection store、highlight / locate API、object table 和派生重建调度。
+- 更新 `docs/current-plan.md`：
+  - 下一步从 demo 编辑器转为正式版编辑器基础设施和第一批正式面板。
+  - 第一批正式版目标为河流独立浮动面板、高度编辑器第一刀和国家编辑器第一刀。
+
+验证：
+
+- 本次为文档规划变更，未改运行时代码。
+
+## 2026-06-27 正式版编辑器基础设施第一刀
+
+问题：
+
+- demo 已验证高度、河流和国家三类编辑交互，但正式应用仍只有 `runtime/app.js` 内的零散 `selection` / `editingObject` 状态。
+- 对象详情面板只有“编辑/退出编辑”状态切换，没有统一命令历史、撤销栈或对象定位入口。
+- 后续独立 `river-panel` 需要复用 selection、定位和命令历史基础设施，不能再把逻辑堆进单个面板。
+
+中书舍人调查：
+
+- 实际启动子智能体 `Archimedes` 做只读调查，确认现有 selection 流转为 renderer click -> `runtime/app.js` -> `renderer.setSelection()` -> 对象详情面板。
+- 调查确认正式应用没有已有 undo/edit command 骨架，也没有通用 locate/highlight API。
+- 调查建议第一刀先补 selection store、命令历史和 locate API，再进入 `river-panel`。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/runtime/selection-store.js`：
+  - 统一维护 `selection` 和 `editingObject`。
+  - selection 变化时会自动清理不匹配的编辑对象，并通知 runtime 刷新 renderer、对象详情和固定 pick 面板。
+- 新增 `app/webgl-generator/src/runtime/edit-history.js`：
+  - 提供 `execute()`、`undo()`、`redo()`、`clear()` 和 `getStats()`。
+  - 命令契约要求提供 `apply(context)` 和 `revert(context)`。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 用 `SelectionStore` 接管原先散落的 selection/editingObject 更新。
+  - 生成新地图时清空 selection store 和 edit history。
+  - 新增对象详情“定位”回调。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `locateObject()`。
+  - 支持点对象、路线、河流、国家、省份和区域的 bbox 定位。
+  - 运行时统计新增 `locateStatus`。
+- 修改 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 对象详情面板新增“定位”按钮。
+  - “编辑”按钮仍只切换编辑状态，不修改地图数据。
+- 修改 `app/webgl-generator/src/ui/panel.js` 和 `app/webgl-generator/src/styles.css`：
+  - 运行时统计显示定位状态和编辑历史。
+  - 对象详情操作区改成两个按钮并排。
+
+门下检查：
+
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\edit-history.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\selection-store.js` 通过。
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+
+侍中验收：
+
+- 启动正式应用 `http://127.0.0.1:5410`。
+- Playwright 验证选中河流对象后：
+  - 对象详情面板打开。
+  - “定位”按钮存在。
+  - `renderer.locateObject()` 返回 `true`。
+  - `locateStatus` 为 `river #1`。
+  - camera 从全图状态移动到河流 bbox。
+  - 运行时统计包含“编辑历史”。
+- Playwright 验证 `EditHistory`：
+  - `execute()` 后 `undo = 1 / redo = 0`。
+  - `undo()` 后上下文值恢复，`undo = 0 / redo = 1`。
+  - `redo()` 后上下文值重新应用，`undo = 1 / redo = 0`。
+
+给事中复核修正：
+
+- 实际启动子智能体 `Avicenna` 做只读复核。
+- 修复 `locateObject()` 对国家、省份、区域等大范围对象强制放大导致 bbox 可能被裁切的问题：
+  - 点对象仍保留最小放大。
+  - 线对象和面对象允许缩小到更低 scale，以完整容纳 bbox。
+- 修复定位失败后运行时统计不刷新的问题：
+  - 对象详情“定位”失败时会更新 `locateStatus = not found`。
+- 修复 route / river 摘要对象缺少 `distance` 时详情面板和固定 pick 面板可能崩溃的问题：
+  - 缺失命中距离时显示 `n/a`。
+- 修正 `app/webgl-generator/README.md` 的旧描述：
+  - 河流主线层已是按流量变宽的 screen-space mesh，剩余缺口是河道编辑手柄尚未接入。
+
+补充验收：
+
+- Playwright 验证最大国家定位后，国家 cell 中心 bbox 完整落在 viewport 内。
+- Playwright 验证不存在河流对象点击“定位”后，运行时统计显示 `not found`。
+- Playwright 验证不带 `distance` 的 route / river 摘要对象不会崩溃，并显示 `n/a`。
+
+后续：
+
+- 下一刀进入独立浮动 `river-panel`，复用本次的 selection store、edit history 和 locate API。
+- 对象表格组件、派生重建调度、区域编辑命令 payload 仍待补。
+
+## 2026-06-27 正式版独立河流管理面板第一刀
+
+问题：
+
+- demo 河流管理面板已经验证列表、定位和红色闪烁高亮，但正式版必须是独立浮动面板。
+- 正式应用此前只有对象详情中的河流摘要，没有全量河流管理入口。
+- 用户明确要求正式版河流统计面板不能与其它面板混用。
+
+中书舍人调查：
+
+- 实际启动子智能体 `Anscombe` 做只读调查。
+- 调查结论：第一刀应做独立 `river-panel` 管理面板，职责限于全量列表、统计、筛选、排序、选择、定位和进入编辑状态。
+- 调查建议河流写入类操作暂缓，后续任何编辑都必须走 `EditHistory` 命令。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/ui/components/object-table.js`：
+  - 提供轻量对象表格，支持行点击、双击定位、选中态和行内定位按钮。
+- 新增 `app/webgl-generator/src/ui/panels/river-panel.js`：
+  - 注册独立浮动 `river-panel`。
+  - 统计河流数量、总长度、最大流量和筛选结果数。
+  - 生成全量河流列表，展示 id、类型、长度和流量。
+  - 支持按 id / 类型筛选，按流量、长度和 id 排序。
+  - 支持列表选中、定位和进入河流编辑状态。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 创建 `state.panels.river`。
+  - selection 变化时同步刷新河流面板。
+  - 左侧“河流管理”按钮可直接打开全量河流面板。
+- 修改 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 河流对象详情新增“河流面板”入口。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `locateObject()` 定位对象后启动短时 `locateFlash`。
+  - 河流定位期间 selection pass 使用红色闪烁高亮；闪烁结束后回到普通河流高亮。
+- 修改 `app/webgl-generator/index.html` 和 `app/webgl-generator/src/styles.css`：
+  - 左侧视图区新增“河流管理”按钮。
+  - 新增河流面板摘要、筛选、排序、表格和详情样式。
+- 修改 `app/webgl-generator/src/ui/panel-manager.js`：
+  - 注册面板时支持 `maxWidth`，方便河流面板保持更宽布局。
+
+门下检查：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\components\object-table.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\river-panel.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+
+侍中验收：
+
+- 正式应用 `http://127.0.0.1:5410` 用系统 Chrome + Playwright 验证。
+- 点击左侧“河流管理”后，独立浮动 `river-panel` 打开。
+- 河流列表数量 `165`，与 `map.rivers.metadata.rivers` 一致。
+- 面板摘要包含“总长度”和“最大流量”。
+- 点击列表首行后，`selection.object.kind = river`，列表有 1 行选中态。
+- 点击行内“定位”后：
+  - `locateStatus = river #45`。
+  - `selectionHighlightMode = river red flash`。
+  - 约 2.85 秒后回到 `river screen-space mesh`。
+- 筛选选中河流 id 后，列表收敛到匹配行。
+- 点击“进入河流编辑”后，`editingObject.kind = river`，对象详情状态显示“编辑”。
+- 点击河流面板输入框不会改变地图 camera，面板内交互没有误触地图 pan/selection。
+
+给事中复核修正：
+
+- 实际启动子智能体 `Volta` 做只读复核。
+- 复核未发现阻断本刀合入的 blocker。
+- 修复红色闪烁结束后左侧运行时统计可能停留在 `river red flash` 的问题：
+  - `locateFlash` 结束时调用 `onViewChange()` 刷新统计面板。
+- 收窄 river-panel 行对象与完整 river 数据的混淆风险：
+  - selection 摘要中的 `length` 改为数字，不再传格式化字符串。
+  - 完整编辑数据解析仍留给后续 object resolver 和具体编辑命令处理。
+- 修正 `app/webgl-generator/README.md` 与 `docs/floating-panel-architecture.md` 中对象详情、河流 mesh 和已接入面板的旧描述。
+
+补充验收：
+
+- Playwright 验证定位后立即为 `selectionHighlightMode = river red flash`，左侧运行时统计包含 `river red flash`。
+- 等待约 2.9 秒后，`selectionHighlightMode` 和左侧统计均回到 `river screen-space mesh`。
+- Playwright 验证河流 selection 摘要中的 `length` 类型为数字。
+
+后续：
+
+- 河流面板第二刀可以补低风险 `widthFactor` 编辑命令，并接入 `EditHistory` 撤销/重做。
+- 河道拖点、源头/河口修正和支流结构调整仍暂缓，需先补派生重建调度和对象 resolver。
+
+## 2026-06-27 河流面板 widthFactor 编辑命令第一刀
+
+问题：
+
+- 河流管理面板已经能统计、筛选、选中和定位，但还没有真正通过正式编辑命令修改河流。
+- 下一步需要选一个低风险编辑项验证 `EditHistory` 路径，避免直接进入河道拖点这种高派生依赖操作。
+
+中书舍人调查：
+
+- 实际启动子智能体 `Faraday` 做只读调查。
+- 调查确认 `widthFactor` 来自 `rivers.js` 的河流生成阶段，渲染时 `placeholder-renderer.js` 会在每次 `draw()` 的 `updateRiverBuffer()` 中读取当前 `river.widthFactor` 重建河流 mesh。
+- 调查建议命令只做数据修改，刷新放在 `runtime/app.js` 外层统一处理；`context` 最小只需 `{map}`。
+- 调查提示 `river.width` 仍是生成期摘要，当前只改 `widthFactor` 会改变几何宽度，不强制改变颜色深浅；该行为作为本刀低风险取舍保留。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/runtime/river-edit-commands.js`：
+  - 新增 `createSetRiverWidthFactorCommand(riverId, nextValue)`。
+  - 命令按 `riverId` 从 `map.rivers.rivers` 解析完整河流对象。
+  - `apply()` 写入 clamp 后的 `widthFactor`。
+  - `revert()` 恢复旧值；如果旧对象没有 `widthFactor` 字段，则撤销时删除字段。
+  - 使用独立 `capturedPrevious` 标记记录旧值，避免旧值为 `null` 时重复捕获。
+  - 提供 `isNoop()`，相同宽度因子不会写入历史栈。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - `riverPanel.onSetWidthFactor` 通过 `EditHistory.execute()` 执行命令。
+  - 新增 `refreshAfterEdit()`，统一刷新 renderer、对象详情、河流面板、运行时统计和悬停/选中面板。
+  - 接入河流面板的撤销和重做按钮。
+- 修改 `app/webgl-generator/src/ui/panels/river-panel.js`：
+  - 选中河流详情显示“宽度因子”。
+  - 新增 range slider、“应用宽度”、“撤销”和“重做”。
+  - slider 拖动只更新面板显示，点击“应用宽度”才写入命令历史。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增河流宽度编辑区和按钮布局样式。
+
+门下检查：
+
+- `node --check .\app\webgl-generator\src\runtime\river-edit-commands.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\river-panel.js` 通过。
+- `git diff --check` 对本刀相关文件通过。
+
+侍中验收：
+
+- 正式应用 `http://127.0.0.1:5410` 用系统 Chrome + Playwright 验证。
+- 选中河流 `#45`，初始 `widthFactor = 1`，`editHistory undo/redo = 0/0`，`WebGL error = 0`。
+- 将宽度因子应用为 `1.45` 后：
+  - 目标河流 `widthFactor = 1.45`。
+  - `editHistory undo = 1 / redo = 0`。
+  - `lastLabel = 调整河流 #45 宽度因子`。
+  - 河流面板显示 `1.45`。
+  - `WebGL error = 0`。
+- 重复点击“应用宽度”不会增加历史栈，`undo` 仍为 `1`。
+- 点击“撤销”后：
+  - 目标河流 `widthFactor = 1`。
+  - `editHistory undo = 0 / redo = 1`。
+  - 河流面板显示 `1.00`。
+- 点击“重做”后：
+  - 目标河流 `widthFactor = 1.45`。
+  - `editHistory undo = 1 / redo = 0`。
+  - 河流面板显示 `1.45`。
+- 点击“生成 grid 地图”后：
+  - `editHistory undo/redo = 0/0`。
+  - `selection = null`。
+  - `editingObject = null`。
+
+给事中复核修正：
+
+- 实际启动子智能体 `Sagan` 做只读复核。
+- 复核未发现 blocker。
+- 复核指出“撤销/重做”是全局 `EditHistory`，放在选中河流详情区可能让用户误以为只针对当前河流。
+- 已修正河流面板文案：
+  - “撤销”改为“撤销上次”。
+  - “重做”改为“重做上次”。
+  - 宽度编辑区显示“最近命令”，用于明确当前全局命令栈状态。
+- 补充浏览器验证：
+  - 应用宽度后，面板显示 `最近命令：调整河流 #45 宽度因子`。
+  - 撤销后，面板显示 `最近命令：撤销 调整河流 #45 宽度因子`。
+  - 重做后，面板显示 `最近命令：重做 调整河流 #45 宽度因子`。
+
+后续：
+
+- 补对象 resolver，避免后续复杂编辑误用 selection 摘要对象。
+- 河道拖点、源头/河口修正、支流结构和 cells 级变更必须等派生重建调度就绪后再做。
+
+## 2026-06-27 对象 resolver 第一刀
+
+问题：
+
+- 河流面板和对象详情面板会从 picking、列表行和编辑状态里传递对象摘要。
+- 摘要对象适合展示和定位，但不适合直接进入复杂编辑；后续河道、国家、高度等编辑需要稳定拿到当前地图上的完整对象字段。
+
+中书舍人调查：
+
+- 实际启动子智能体 `Banach` 做只读调查。
+- 调查确认 selection 来源包含 canvas picking、标签点击、河流表格行和对象详情按钮。
+- 调查建议 resolver 先覆盖 city、label、marker、route、river、state、province 和 region，避免后续编辑器直接依赖摘要字段。
+- 调查建议把 resolver 注入 `SelectionStore`，使选中、进入编辑和刷新都走同一解析路径。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/runtime/object-resolver.js`：
+  - `resolveObject(map, object)` 按 `kind` 分派解析。
+  - city、label、marker、route、river、state、province 和 region 会从当前 `map` 上重新读取字段。
+  - river 解析补齐 `points/cells/flux/discharge/length/segments/widthFactor/source/mouth` 等字段。
+  - state、province 和 region 对 `id/i` 字段做兼容处理。
+- 修改 `app/webgl-generator/src/runtime/selection-store.js`：
+  - 构造函数接收 resolver。
+  - `setSelection()`、`startEditing()` 和 `refresh()` 都会重新解析对象。
+  - resolver 返回空时，当前 selection 会被清空，避免保留无效对象。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 注入 `resolveObject(state.map, object)`。
+  - `refreshAfterEdit()` 在重绘后调用 `selectionStore.refresh()`，让河流宽度等运行时改动反馈到对象详情和河流面板。
+  - 对象详情中的“打开河流管理”也统一传入 `EditHistory` 状态。
+
+门下检查：
+
+- `node --check .\app\webgl-generator\src\runtime\object-resolver.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\selection-store.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\river-edit-commands.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\river-panel.js` 通过。
+- `git diff --check` 通过。
+- `git diff --name-only -- source/Fantasy-Map-Generator` 为空，未修改 source 原项目源码。
+
+侍中验收：
+
+- 使用临时静态 server + Playwright 打开正式应用。
+- city、route、river、state、province、region、marker 和 label 共 8 类对象均能通过 `SelectionStore` 解析，并可 `renderer.locateObject()` 定位。
+- 无效河流 `river #-999` 会清空 selection。
+- 选中河流 `#1` 后，将 `widthFactor 1.2 -> 1.55`，`selectionStore.refresh()` 后 selection 中的 `widthFactor` 同步为 `1.55`。
+- 执行撤销后，selection 中的 `widthFactor` 恢复为 `1.2`。
+- 点击“生成 grid 地图”后，selection、editingObject 和 edit history 均清空。
+
+后续：
+
+- 下一刀先补派生重建调度，明确哪些编辑只需重绘、哪些需要重建边界/索引/统计、哪些必须重新跑语义扩张。
+- 派生调度之后进入正式高度编辑器第一刀。
+
+## 2026-06-27 派生重建调度第一刀
+
+问题：
+
+- `refreshAfterEdit()` 过去只有全量 `renderer.draw()` 和 `selectionStore.refresh()` 一条路径。
+- `renderer.draw()` 每次都会重建 route、river 和 selection 三类动态 mesh；对河流宽度这类小改动来说过粗。
+- `selectionStore.refresh()` 会触发 selection 回调，回调里又会 `renderer.setSelection()` 并重绘，因此调度顺序不收敛时容易重复 draw。
+
+中书舍人调查：
+
+- 实际启动子智能体 `Jason` 做只读调查。
+- 调查确认第一刀应先建立命令级 `effects` 和统一调度入口，不急着拆 renderer 内部 buffer。
+- 调查建议把 `visual: rivers` 等细粒度语义先映射到现有 `draw()`，后续再拆 `renderer.refreshDerived()`。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/runtime/edit-refresh-scheduler.js`：
+  - 提供 `createEditRefreshScheduler()` 和 `normalizeEditEffects()`。
+  - 命令可声明 `render/selection/runtimeStats/pickPanel/derived/affected`。
+  - 第一刀仍使用现有 `renderer.draw()`，但保留 `derived` 语义用于后续拆分。
+  - 当 effects 需要 `selection: "refresh"` 时，调度器先写入 `state.lastEditRefresh`，再走 `selectionStore.refresh()`，由 selection 回调统一刷新面板和触发绘制，避免先 draw 后再 draw。
+- 修改 `app/webgl-generator/src/runtime/river-edit-commands.js`：
+  - `createSetRiverWidthFactorCommand()` 声明影响 `river-mesh`、`river-width-stats` 和 `object-panels`。
+  - `affected` 记录目标 `riverId`。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - `state` 新增 `editRefreshScheduler` 和 `lastEditRefresh`。
+  - execute/undo/redo 后统一调用调度器，而不是直接调用旧 `refreshAfterEdit(state, documentRef)`。
+  - 生成新地图时清空 `lastEditRefresh`。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“编辑刷新”，显示最近一次 render、selection、derived 和 affected。
+
+给事中复核修正：
+
+- 实际启动子智能体 `Lorentz` 做只读复核，未发现 blocker。
+- 复核建议高度刷子会是高频操作，后续不能每个 mousemove 都默认刷新 selection 和面板。
+- 已新增 `EDIT_REFRESH_PRESETS`：
+  - `RIVER_WIDTH_ONLY`：河流宽度类编辑，刷新 river mesh、宽度统计和对象面板。
+  - `HEIGHT_SURFACE_ONLY`：高度提交类编辑，刷新高度字段、cell 颜色和高度统计，不刷新 selection。
+  - `HEIGHT_BRUSH_PREVIEW`：高度拖动预览，刷新高度字段和 cell 颜色，不刷新 runtime/pick 面板。
+- 河流 `widthFactor` 命令已改为复用 `RIVER_WIDTH_ONLY` preset，避免 effects 字符串在命令间漂移。
+
+后续：
+
+- 第二小刀可以给 renderer 增加 `refreshDerived()`，先拆 route、river、selection buffer 的单独刷新。
+- 高度编辑器第一刀前，需要给高度命令声明 cell/color/stat 类 effects，避免把所有刷子操作都写成无语义全量刷新。
+
+## 2026-06-27 正式高度编辑器第一刀
+
+问题：
+
+- demo 已验证高度抬升、降低、平滑和中心衰减笔刷，但正式应用还没有独立高度编辑面板。
+- 正式应用 renderer 目前 cell 位置和颜色仍在同一个 `vertexBuffer`，第一刀不适合直接拆成细粒度 color buffer。
+- 高度编辑会牵动 feature、climate、river、biome、人口和政治社会系统，第一刀必须限制范围，避免假装已经完成完整派生重算。
+
+中书舍人调查：
+
+- 实际启动子智能体 `Sartre` 做只读调查。
+- 调查确认主高度字段为 `map.grid.cells.h`，`pack.cells.h` 是从 grid 派生的语义层高度。
+- 调查确认 renderer 高度专题颜色最终读取 `map.grid.cells.h`，当前可通过重建 cell surface 让颜色变化立即可见。
+- 调查建议第一刀做“高度表层编辑”，只同步 `grid.cells.h` 和已映射的 `pack.cells.h`，不重跑海陆 feature、气候、河流、生物群系或社会政治派生。
+
+尚书实施：
+
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `refreshCellSurface()`，用于重建 cell surface `vertexBuffer` 并绘制。
+  - `setColorMode()` 改为复用该入口。
+- 修改 `app/webgl-generator/src/runtime/edit-refresh-scheduler.js`：
+  - effects 包含 `cell-colors` 时优先调用 `renderer.refreshCellSurface()`。
+- 新增 `app/webgl-generator/src/runtime/height-edit-commands.js`：
+  - `createApplyHeightBrushCommand()` 把高度笔刷提交为可撤销命令。
+  - `applyHeightBrushPreview()` 支持拖动中的预览刷新。
+  - 命令同步 `grid.cells.h` 和所有映射到同一 grid cell 的 `pack.cells.h`。
+- 新增 `app/webgl-generator/src/ui/panels/height-panel.js`：
+  - 注册独立浮动 `height-panel`。
+  - 支持启用/停止高度编辑、抬升、降低、平滑、半径、强度、中心衰减、撤销和重做。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 左侧“视图”区新增“高度编辑”入口。
+  - 高度面板启用后自动切到 height 专题。
+  - canvas capture 阶段接管高度编辑 pointer 事件，避免编辑时触发地图 pan。
+  - 拖动中使用 `HEIGHT_BRUSH_PREVIEW`，抬手后创建命令并使用 `HEIGHT_SURFACE_ONLY` 进入历史栈。
+  - 对 pointer capture 做容错，避免测试或浏览器边缘路径中断笔刷。
+- 修改 `app/webgl-generator/index.html` 和 `app/webgl-generator/src/styles.css`：
+  - 新增高度编辑按钮和高度面板样式。
+
+门下检查：
+
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\height-edit-commands.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\height-panel.js` 通过。
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\edit-refresh-scheduler.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+
+侍中验收：
+
+- 使用临时静态 server + Playwright 打开正式应用。
+- 打开“高度编辑”面板并启用后，目标专题切到 `height`。
+- 在 canvas 上抬升一次：
+  - 目标 grid cell 高度 `34 -> 52`。
+  - `EditHistory` 记录 `undo 1 / redo 0`。
+  - `lastEditRefresh` 为 `height-field, cell-colors, height-stats`，affected 为 `grid-cells#23`。
+  - camera 保持 `scale 1 / offset 0,0`，高度编辑没有触发地图 pan。
+- 点击“撤销上次”后，目标 grid cell 高度恢复 `52 -> 34`，历史变为 `undo 0 / redo 1`。
+- 中心衰减验证：
+  - 抬升前中心 cell `17`、边缘样本 `22`。
+  - 抬升后中心 cell `21`、边缘样本仍为 `22`，中心变化大于边缘。
+- 降低和平滑均能形成命令并进入撤销栈。
+- `git diff --name-only -- source/Fantasy-Map-Generator` 为空，未修改 source 原项目源码。
+
+给事中复核修正：
+
+- 实际启动子智能体 `Pauli` 做只读复核，未发现 blocker。
+- 复核指出高度编辑启用后实际已切到 height 专题，但左侧专题按钮 active 样式可能不同步。
+- 已新增 `setActiveModeButton()`，高度编辑启用时同步把左侧专题按钮切到“高度”。
+- 复核提示的后续非阻断优化：
+  - 高度 preview 仍会重绘高度面板，可在大半径高频拖动场景下再做节流或局部数字更新。
+  - `pointercancel` 当前会提交已有预览，触屏路径后续可改成撤回或明确提交策略。
+  - renderer 内部仍会在 `draw()` 中重建 route/river/selection buffer，真正局部 buffer 刷新留给后续。
+
+后续：
+
+- 下一刀推进正式国家编辑器第一刀，复用 edit command、effects、浮动面板和连续涂抹经验。
+- 高度编辑器第二刀再讨论完整派生重算，包括 feature、climate、river、biome 和人口等系统。
+
+## 2026-06-27 正式国家编辑器第一刀
+
+问题：
+
+- 正式应用已经有高度编辑器和河流管理/widthFactor 编辑路径，但国家编辑仍停留在 demo 经验和计划层。
+- 本刀目标限定为国家 cell 归属表层编辑，先验证浮动面板、目标国家选择、连续涂抹、预览刷新和 EditHistory 提交，不重跑完整政治派生。
+
+尚书实施：
+
+- 新增 `app/webgl-generator/src/runtime/state-edit-commands.js`：
+  - `createApplyStateBrushCommand()` 将国家 cell 归属变化封装为可撤销命令。
+  - `applyStateBrushPreview()` 支持拖动中预览。
+  - 命令同步修改 `grid.cells.state` 与映射到同一 grid cell 的所有陆地 `pack.cells.state`，避免只改 primary pack cell。
+  - 提交 effects 声明为 `state-cells / cell-colors / political-selection` 且 `selection: refresh`，预览 effects 只刷新 `state-cells / cell-colors`。
+- 新增 `app/webgl-generator/src/ui/panels/state-panel.js`：
+  - 注册独立浮动 `state-panel`，标题为“国家编辑”。
+  - 支持启用/停用、目标国家下拉选择、从当前选中对象取样、从悬停 cell 取样、笔刷半径、撤销和重做。
+  - 面板显示目标国家、来源国家、最近影响 cells 和全局历史计数。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 接入国家编辑面板和左侧“国家编辑”入口。
+  - 国家编辑启用后自动切到 `states` 专题，并与高度编辑互斥。
+  - canvas capture 阶段接管国家编辑 pointer 事件，避免涂抹时触发地图 pan 或 selection。
+  - 拖动中使用预览 effects 按 `cell-colors` 语义刷新 cell surface；pointerup/pointercancel 生成 EditHistory 命令并刷新 selection/runtime/pick。
+  - 提交、撤销和重做前会按最近一次笔刷位置重新 pick，避免 hover 面板继续显示编辑前的国家快照。
+  - undo/redo 从国家面板触发时会刷新 cell surface 和 selection。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `states` 专题颜色优先使用 `map.politics.states[*].color`。
+  - 缺失国家色时才回退到 indexed 伪色，使国家面板展示和地图颜色更一致。
+- 修改 `app/webgl-generator/src/ui/panel.js`、`app/webgl-generator/index.html` 和 `app/webgl-generator/src/styles.css`：
+  - 绑定“国家编辑”按钮。
+  - 补齐国家面板摘要、目标选择、取样按钮、半径 slider 和历史按钮样式。
+- 修改 `docs/current-plan.md`：
+  - 将下一步从“推进国家编辑器第一刀”更新为“第一刀补丁已落地，下一刀补政治派生一致性”。
+
+当前边界与风险：
+
+- 国家编辑当前不会同步 `grid.cells.province/region`、`pack.cells.province`、城市/ burg 的 state、路线、军事、zones 或 state statistics，因此它是表层 cell 归属编辑，不是完整政治重算。
+- 预览仍按高度编辑器同级策略遍历全部 grid cells，大半径和高频拖动下后续需要做空间索引或局部候选优化。
+
+检查：
+
+- `node --check .\app\webgl-generator\src\runtime\state-edit-commands.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\state-panel.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+
+侍中验收：
+
+- 使用临时静态 server + Playwright 打开正式应用。
+- 打开“国家编辑”面板后启用国家编辑，专题自动切到 `states`，左侧 active 只保留“国家”。
+- 选取一个映射到 3 个陆地 pack cell 的 grid cell，拖动涂抹到目标国家：
+  - `grid.cells.state` 从 `13 -> 1`。
+  - 对应 3 个 `pack.cells.state` 从 `[13, 13, 13] -> [1, 1, 1]`。
+  - `EditHistory` 记录 `undo 1 / redo 0 / 国家笔刷 10 cells`。
+  - `lastEditRefresh` 为 `state-cells, cell-colors, political-selection`，且 `selection` 为 `refresh`。
+  - camera 保持 `scale 1 / offset 0,0`，国家编辑没有触发地图 pan。
+  - 面板包含“来源国家”信息。
+- 点击“撤销上次”后：
+  - `grid.cells.state` 恢复 `1 -> 13`。
+  - 对应 3 个 `pack.cells.state` 恢复 `[13, 13, 13]`。
+  - 历史变为 `undo 0 / redo 1`。
+
+## 2026-06-27 编辑态交互锁补丁
+
+问题：
+
+- 用户反馈编辑时最好禁用编辑外的交互。
+- 现状中高度/国家笔刷已经拦截大部分 canvas pan/select，但左侧生成、专题切换、其它面板入口和非当前浮动面板控件仍可能被误触。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 新增 `setEditingInteractionLock()`，统一禁用左侧生成、随机 seed、适配视图、专题切换、编辑入口和生成参数控件。
+  - 支持传入允许操作的浮动面板 id；非当前编辑面板中的按钮、输入和下拉会被禁用。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 高度编辑、国家编辑和对象编辑状态变化时统一刷新交互锁。
+  - canvas capture 阶段新增编辑锁拦截，编辑状态中阻止非当前编辑器需要的 pointer 和 wheel 事件继续传给 renderer。
+  - 编辑期间 hover 或 selection 导致面板重绘后，会重新应用锁，避免新 DOM 控件恢复可点。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 禁用控件变淡并显示不可操作 cursor。
+  - 非当前编辑浮动面板内容变淡，并显示“编辑中，暂不可操作”提示。
+
+边界：
+
+- 当前允许的编辑面板：
+  - 高度编辑：只允许 `height-panel`。
+  - 国家编辑：只允许 `state-panel`。
+  - 河流对象编辑：允许 `object-details` 和 `river-panel`。
+  - 其它对象编辑：允许 `object-details`。
+- 面板关闭按钮仍保持可用，避免用户被锁在遮挡视图的浮动面板里。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `git diff --name-only -- source/Fantasy-Map-Generator` 为空。
+- Playwright 临时静态 server 验证：
+  - 打开国家编辑面板和高度编辑面板，启用高度编辑后，`body.editing-locked` 为 true。
+  - 左侧生成、专题按钮和国家编辑入口均 disabled。
+  - 当前高度面板的“停止高度编辑”仍可点击。
+  - 非当前 `state-panel` 的 select 被禁用，面板带 `editing-panel-disabled`。
+  - 编辑状态下拖拽 canvas 后 camera 仍为 `scale 1 / offset 0,0`。
+  - 点击“停止高度编辑”后，左侧控件和 `state-panel` 控件恢复可用。
+
+## 2026-06-27 国家颜色变更器
+
+问题：
+
+- 国家编辑器第一刀已经可以修改国家 cell 归属，但缺少国家颜色变更器。
+- renderer 的 states 专题已优先读取 `map.politics.states[*].color`，因此颜色编辑可以作为低风险表层命令接入。
+
+实施：
+
+- 修改 `app/webgl-generator/src/runtime/state-edit-commands.js`：
+  - 新增 `createSetStateColorCommand()`。
+  - 命令修改目标国家的 `state.color`，effects 声明为 `state-color / cell-colors / object-panels`。
+  - 命令支持撤销和重做。
+- 修改 `app/webgl-generator/src/ui/panels/state-panel.js`：
+  - 在目标国家选择下方新增颜色选择器。
+  - 颜色输入展示当前目标国家颜色；选择颜色后触发颜色命令。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 将颜色变更接入 `EditHistory`。
+  - 提交后复用国家编辑刷新路径，刷新 states 专题、selection/runtime/pick 和国家面板。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 补齐颜色选择器布局和色值展示样式。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\state-edit-commands.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panels\state-panel.js` 通过。
+- `git diff --check` 通过。
+- Playwright 临时静态 server 验证：
+  - 打开国家编辑并启用后，颜色控件在编辑锁中仍可用。
+  - 目标国家 `#1` 颜色从 `#66c2a5 -> #123456`。
+  - `EditHistory` 记录 `undo 1 / redo 0 / 国家颜色 #1`。
+  - `lastEditRefresh` 为 `state-color, cell-colors, object-panels`。
+  - 点击“撤销上次”后颜色恢复为 `#66c2a5`。
+
+## 2026-06-27 对象名称编辑与国家快速换首都
+
+问题：
+
+- 国家、河流以及后续城镇编辑都需要支持编辑名称。
+- 国家编辑器还需要支持快速更换首都，不能只依赖后续完整城镇编辑器。
+
+实施：
+
+- 新增 `app/webgl-generator/src/runtime/object-edit-commands.js`：
+  - `createRenameObjectCommand()` 支持国家、河流、城市重命名，并纳入 `EditHistory`。
+  - 国家重命名同步 `name` 与 `fullName`，保留原有 `formName` 后缀。
+  - 城市重命名同步 `settlements.cities[*].name` 与对应 `pack.burgs[*].name`。
+  - `createSetStateCapitalCommand()` 支持国家首都切换，并同步 `politics.states[*].capital/center/gridCenter/religion`、旧/新城市的 `capital/group` 与对应 burg 的 `capital/group`。
+- 修改对象详情面板：
+  - 编辑态下，国家、河流、城市和城市标签对象显示名称输入框。
+  - 城市标签重命名会落到对应城市实体，避免标签文本和城市实体分裂。
+- 修改国家编辑面板：
+  - 新增“首都”下拉和“设为首都”按钮，只列当前目标国家自己的城市。
+  - 首都切换走可撤销命令。
+- 修改 renderer 与刷新调度：
+  - 新增 `refreshLabels()`，名称或首都变化后重建城市标签。
+  - edit refresh effects 新增 `labels` 派生刷新语义。
+- 修改河流管理面板：
+  - 列表、详情和筛选支持河流名称。
+
+验证：
+
+- `Get-ChildItem -Path .\app\webgl-generator\src -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }` 通过。
+- Playwright 临时静态 server 验证：
+  - 国家 `云梦 / 云梦共和国` 重命名为 `测试国 / 测试国共和国`。
+  - 国家首都从 burg `1` 切到 burg `74` 后，`state.capital`、目标城市 `capital` 和目标 burg `capital` 同步更新。
+  - 城市重命名后，`settlements.cities[*].name` 与 `pack.burgs[*].name` 同步更新。
+  - 实际已渲染城市标签重命名为 `标签测试城` 后，DOM 标签文本同步刷新。
+  - 河流 `清溪` 重命名为 `测试河` 后，河流对象与河流管理面板文本同步更新。
+
+## 2026-06-27 对象详情关闭时退出编辑态
+
+问题：
+
+- 单个河流进入编辑态后，如果直接关闭“对象详情”弹框，弹框只是隐藏，`selectionStore.editingObject` 仍保留河流对象。
+- 页面因此继续处于编辑锁状态，左侧控件和其它非编辑交互无法恢复。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 为 `object-details` 注册 `onClose` 回调。
+  - 关闭面板时如当前对象处于编辑态，调用 `onCancelEdit` 退出编辑。
+  - 关闭触发的 `stopEditing()` 会刷新 selection；面板内部吞掉紧随其后的查看态自动重开，避免用户刚关闭弹框又被重新弹出。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `git diff --check -- app/webgl-generator/src/ui/panels/object-details-panel.js` 通过。
+- Playwright 临时静态 server 验证：
+  - 进入河流编辑后，`editingObject.kind` 为 `river`，`body.editing-locked` 为 true。
+  - 点击对象详情关闭按钮后，`editingObject` 为 null，`body.editing-locked` 为 false。
+  - 对象详情面板保持 hidden，河流 selection 仍保留。
+
+## 2026-06-27 默认国家邻接感知配色
+
+问题：
+
+- 默认生成国家时，原先按 6 色数组和 `state.i` 取模分配颜色。
+- 由于正式应用中的国家 id 来自 burg id，id 分布和地图邻接没有关系，相邻国家容易出现相同或相近颜色。
+
+实施：
+
+- 修改 `app/webgl-generator/src/generator/politics.js`：
+  - 将国家默认色盘扩展为 30 个候选色。
+  - `assignStateColors()` 改为基于国家邻接图的贪心配色。
+  - 优先给邻国数量多、面积大的国家分配颜色。
+  - 每个国家选择颜色时，优先最大化与已上色邻国的 RGB 距离，同时轻微奖励尚未使用的颜色。
+  - pack 政治生成继续使用 `findStateNeighbors()` 的邻接结果；grid fallback 生成新增 `findGridStateNeighbors()` 后再配色。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\generator\politics.js` 通过。
+- `git diff --check -- app/webgl-generator/src/generator/politics.js` 通过。
+- 使用正式生成器跑 5 组种子：`default`、`adjacent-colors-a`、`adjacent-colors-b`、`adjacent-colors-c`、`adjacent-colors-d`。
+- 统计所有国家邻接边：
+  - 5 组样本相邻国家同色数均为 `0`。
+  - 相邻国家最小 RGB 归一化距离约为 `0.338` 到 `0.379`。
+
+## 2026-06-27 高度专题显示海底配置
+
+问题：
+
+- 高度专题中 `height < 20` 的水域原先统一返回海洋底色，无法观察海洋内部的高度差异。
+- 用户需要一个可开启的配置，用于查看海洋高度。
+
+实施：
+
+- 修改 `app/webgl-generator/index.html`：
+  - 在“视图”区域新增“高度专题显示海底”开关。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 将开关接入 runtime panel 事件。
+  - 编辑锁状态下同步禁用该开关。
+  - 运行时面板显示当前“海底高度”状态。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 开关变化时调用 renderer 的 `setViewOptions({showOceanHeight})` 并刷新运行时面板。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `viewOptions.showOceanHeight`。
+  - 高度专题中，水域默认仍使用统一海洋色；开启后按 `height / 20` 在深海色和浅海陆架色之间插值。
+  - 其它专题的水域处理保持原样。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check .\app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check -- app/webgl-generator/index.html app/webgl-generator/src/ui/panel.js app/webgl-generator/src/runtime/app.js app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- Playwright 临时静态 server 验证：
+  - 正式页面加载到 `http://127.0.0.1:5410`。
+  - 高度专题下开关默认关闭时，renderer `showOceanHeight` 为 false，画布样本为统一海洋色。
+  - 勾选“高度专题显示海底”后，renderer `showOceanHeight` 为 true，画布水域样本颜色发生变化。
+  - 运行时面板包含“海底高度 显示”。
+
+## 2026-06-27 默认省份邻接感知配色
+
+问题：
+
+- 省份对象原先默认继承所属国家颜色，省份专题实际渲染也仍使用按 id 生成的索引色。
+- 用户要求省份也默认使用邻接图贪心算法处理颜色，避免相邻省份撞色。
+
+实施：
+
+- 修改 `app/webgl-generator/src/generator/politics.js`：
+  - 新增 `findPackProvinceNeighbors()` 和 `findGridProvinceNeighbors()`。
+  - pack 政治生成在省份扩张、补洞、统计和 pole 分配之后，构建省份邻接图并调用 `assignProvinceColors()`。
+  - grid fallback 生成在 `grid.cells.province` 完成后构建省份邻接图并调用 `assignProvinceColors()`。
+  - 省份配色复用国家配色的 30 色候选色和邻接优先评分：优先拉开已上色邻接省份颜色，轻微奖励未使用颜色。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 省份专题由 `indexedColorOrWater()` 改为 `colorForProvince()`。
+  - `colorForProvince()` 优先读取 `map.politics.provinces[*].color`，没有颜色时才退回索引色。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\generator\politics.js` 通过。
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check -- app/webgl-generator/src/generator/politics.js app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- 使用正式生成器跑 5 组种子：`default`、`province-colors-a`、`province-colors-b`、`province-colors-c`、`province-colors-d`。
+- 5 组样本省份邻接边同色数均为 `0`，省份颜色覆盖率为 `100%`；样本中省份数约 `154` 到 `198`，唯一颜色数约 `28` 到 `30`。
+- Playwright 临时静态 server 验证：
+  - 正式页面切到省份专题后，当前样本 `206` 个省份全部有颜色。
+  - 当前样本 `441` 条省份邻接边，同色数为 `0`。
+  - renderer `colorMode` 为 `provinces`，运行时面板同步显示省份专题。

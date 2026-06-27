@@ -156,12 +156,93 @@ button:hover {
   margin-top: 12px;
 }
 
+.river-summary {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.river-summary span {
+  background: #101820;
+  border: 1px solid #29313d;
+  border-radius: 6px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.river-summary b {
+  color: #aeb9c6;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.river-summary span span {
+  background: transparent;
+  border: 0;
+  color: #edf1f5;
+  font-size: 12px;
+  padding: 0;
+}
+
+.river-list {
+  border: 1px solid #29313d;
+  border-radius: 6px;
+  display: grid;
+  gap: 1px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.river-row {
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 42px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.river-row.active {
+  background: #253544;
+  box-shadow: inset 3px 0 0 #ff5b57;
+}
+
+.river-row-title {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.river-row-stats {
+  color: #aeb9c6;
+  font-size: 11px;
+  grid-column: 1;
+}
+
+.river-row-locate {
+  align-self: center;
+  color: #9ecfff;
+  font-size: 12px;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  justify-self: end;
+}
+
 .check-row {
   align-items: center;
   color: #edf1f5;
   display: flex;
   gap: 10px;
   min-height: 28px;
+}
+
+.compact-check {
+  min-height: 24px;
 }
 
 .check-row input {
@@ -222,6 +303,26 @@ button:hover {
   overflow: hidden;
   pointer-events: none;
   position: absolute;
+}
+
+.river-highlight-overlay {
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+}
+
+.river-highlight-path {
+  fill: none;
+  stroke: #ff302c;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 5px rgba(255, 48, 44, 0.85));
+}
+
+.river-highlight-path.flash {
+  animation: river-flash 0.7s ease-in-out infinite alternate;
 }
 
 .overlay-group {
@@ -312,6 +413,18 @@ button:hover {
 .emblem-badge.state {
   height: 22px;
   width: 22px;
+}
+
+@keyframes river-flash {
+  from {
+    opacity: 0.28;
+    stroke-width: 4;
+  }
+
+  to {
+    opacity: 1;
+    stroke-width: 8;
+  }
 }
 
 @media (max-width: 760px) {

@@ -464,12 +464,12 @@ function addMeandering(pack, riverCells, riverId) {
 
     if (dist2 > 64 || (dist2 > 36 && riverCells.length < 5)) {
       meandered.push(
-        [(start[0] * 2 + end[0]) / 3 - sinMeander, (start[1] * 2 + end[1]) / 3 + cosMeander],
-        [(start[0] + end[0] * 2) / 3 + sinMeander / 2, (start[1] + end[1] * 2) / 3 - cosMeander / 2]
+        withRiverPointFlux([(start[0] * 2 + end[0]) / 3 - sinMeander, (start[1] * 2 + end[1]) / 3 + cosMeander], interpolateFlux(start, end, 1 / 3)),
+        withRiverPointFlux([(start[0] + end[0] * 2) / 3 + sinMeander / 2, (start[1] + end[1] * 2) / 3 - cosMeander / 2], interpolateFlux(start, end, 2 / 3))
       );
     } else if (dist2 > 25 || riverCells.length < 6) {
       const wave = Math.sin((riverId * 17.17 + index * 7.31) * Math.PI);
-      meandered.push([(start[0] + end[0]) / 2 - sinMeander * wave, (start[1] + end[1]) / 2 + cosMeander * wave]);
+      meandered.push(withRiverPointFlux([(start[0] + end[0]) / 2 - sinMeander * wave, (start[1] + end[1]) / 2 + cosMeander * wave], interpolateFlux(start, end, 0.5)));
     }
 
     meandered.push(end);
@@ -488,7 +488,7 @@ function getRiverPoints(pack, riverCells) {
 
     if (cell === -1) {
       const borderPoint = getBorderPoint(pack, previousCell);
-      if (borderPoint) points.push(borderPoint);
+      if (borderPoint) points.push(withRiverPointFlux(borderPoint, getCellFlux(cells, previousCell)));
       break;
     }
 
@@ -496,17 +496,30 @@ function getRiverPoints(pack, riverCells) {
     if (!point) continue;
     const height = cells.h[cell] ?? 100;
     if (height >= WATER_LEVEL || !points.length) {
-      points.push(point);
+      points.push(withRiverPointFlux(point, getCellFlux(cells, cell)));
       continue;
     }
 
     const previousPoint = points[points.length - 1] || cells.p[previousCell];
     const mouthPoint = getCellSharedEdgeMouthPoint(pack, previousCell, cell, previousPoint, point) || getHeightInterpolatedMouthPoint(cells, previousCell, cell, previousPoint, point);
-    if (mouthPoint) points.push(mouthPoint);
+    if (mouthPoint) points.push(withRiverPointFlux(mouthPoint, getCellFlux(cells, previousCell)));
     break;
   }
 
   return points;
+}
+
+function getCellFlux(cells, cell) {
+  if (cell === undefined || cell < 0) return 0;
+  return cells.fl?.[cell] || 0;
+}
+
+function withRiverPointFlux(point, flux) {
+  return [round(point[0], 2), round(point[1], 2), Math.max(0, Math.round(flux || 0))];
+}
+
+function interpolateFlux(start, end, amount) {
+  return (start[2] || 0) + ((end[2] || 0) - (start[2] || 0)) * amount;
 }
 
 function getBorderPoint(pack, cell) {
