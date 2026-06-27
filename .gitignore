@@ -25,6 +25,18 @@ pnpm-debug.log*
 # Local visual previews moved out of tracked docs.
 docs/local-preview-images/
 
+# Generated reports and execution-detail docs.
+docs/source-baselines/
+docs/webgl-generator-snapshot-*/
+docs/*-results.json
+docs/*-results.md
+docs/*-smoke.json
+docs/*-smoke.md
+docs/source-first-*-task-plan.md
+docs/source-first-*-execution-plan.md
+docs/chinese-naming-library-evaluation.md
+docs/editor-and-stat-panel-inventory.md
+
 # Environment and local config
 .env
 .env.*
