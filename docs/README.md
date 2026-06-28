@@ -10,6 +10,8 @@
 ## 长期文档
 
 - `architecture/`：架构约束和长期 UI/系统约定。
+  - `architecture/floating-panel-architecture.md`：浮动面板长期边界。
+  - `architecture/vue-floating-panel-pattern.md`：Vue SFC 面板复用规范。
 - `plans/`：总体验收计划和复刻路线。
 - `milestones/`：里程碑说明。
 - `performance/`：性能基线说明和长期性能对照。

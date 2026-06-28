@@ -7178,3 +7178,167 @@
 - `package.json` JSON 解析通过。
 - Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
 - `git diff --check` 通过。
+
+## 2026-06-28 Vue 面板迁移第二批
+
+目标：
+
+- 按当前计划继续深化 Vue SFC 面板迁移。
+- 优先迁移河流、文化和宗教这三类“列表 + 详情 + 轻编辑”面板，验证基础对象面板组件的复用性。
+- 补充 Vue 浮动面板复用规范，给后续城市、国家和省份复杂面板迁移提供边界。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/vue/components/RiverPanel.vue`：
+  - 复用 `UiMetricGrid`、`UiFilterInput`、`UiSortBar`、`UiObjectTable`、`UiDetailGrid`、`UiTextEditField`、`UiSliderField`、`UiButton` 和 `UiHistoryActions`。
+  - 保留河流统计、筛选、排序、定位、名称编辑、宽度因子滑动条、进入/退出河流编辑和撤销/重做。
+- 重写 `app/webgl-generator/src/ui/panels/river-panel.js`：
+  - 删除旧 DOM 拼装逻辑。
+  - 改为 Vue 挂载 wrapper，继续保留 `open()`、`update()`、`isOpen()` 和关闭时重置编辑态的外部契约。
+- 新增 `CulturePanel.vue` 和 `ReligionPanel.vue`：
+  - 复用同一批对象面板基础组件。
+  - 保留统计摘要、筛选、排序、列表、定位、名称编辑、颜色编辑、详情字段和历史操作。
+- 重写 `culture-panel.js` 和 `religion-panel.js`：
+  - wrapper 仅负责 panel manager 注册、`markRaw(map)`、选中 id fallback 和 runtime 回调桥接。
+- 新增 `docs/architecture/vue-floating-panel-pattern.md`：
+  - 记录 wrapper / SFC / base components / runtime / Pinia 的职责边界。
+  - 明确 `grid`、`pack`、`map`、renderer buffer 和 picking index 不进入 Pinia。
+- 更新 `docs/README.md` 和 `docs/current-plan.md`。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/panels/river-panel.js`
+  - `app/webgl-generator/src/ui/panels/culture-panel.js`
+  - `app/webgl-generator/src/ui/panels/religion-panel.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- `pnpm run build:app` 在 Codex runtime pnpm 下仍会触发非交互式模块目录清理保护，因此本轮继续使用本地 Vite 入口验证。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 应用完成生成，`window.__webglGeneratorApp.map` 存在。
+  - 管理入口可打开 `.vue-river-panel-root`、`.vue-culture-panel-root` 和 `.vue-religion-panel-root`。
+  - 河流面板显示 165 行河流；筛选输入填入 `1` 后仍保持焦点。
+  - 文化面板显示 12 行文化，名称输入、颜色输入和历史操作存在。
+  - 宗教面板显示 18 行宗教，名称输入、颜色输入和历史操作存在。
+  - 选中第一条河流后，河流名称输入、宽度滑动条、历史操作和“进入河流编辑”按钮存在。
+  - 无 console error / pageerror。
+
+## 2026-06-28 Vue 城市管理面板迁移
+
+目标：
+
+- 在河流、文化、宗教等轻编辑面板迁移后，继续迁移更复杂的城市管理面板。
+- 保持旧城市编辑命令链不变，只替换 UI 层：城市重命名、人口编辑、归属同步、定位、selection 和 EditHistory 回调仍由 runtime 处理。
+- 继续遵守 Vue 浮动面板边界：`map` 使用 `markRaw()` 放入 wrapper 状态，不把 settlements、pack、grid 或 renderer 交给 Pinia。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/vue/components/CityPanel.vue`：
+  - 复用 `UiMetricGrid`、`UiFilterInput`、`UiSortBar`、`UiObjectTable`、`UiDetailGrid`、`UiTextEditField`、`UiNumberField`、`UiButton` 和 `UiHistoryActions`。
+  - 保留城市摘要、筛选、排序、城市表格、详情字段、名称编辑、人口编辑、低风险“同步归属到所在 cell”和历史操作。
+  - 城市行统计继续读取 `settlements.cities`、`pack.burgs`、`pack.cells`、`grid.cells`、国家/省份/文化/宗教字段，并保留归属一致性和落水异常提示。
+- 重写 `app/webgl-generator/src/ui/panels/city-panel.js`：
+  - 删除旧 DOM 拼装逻辑。
+  - 改为 Vue wrapper，继续保留 `open()`、`update()`、`setSelectedCityId()`、`isOpen()` 和 `unmount()` 外部 API。
+  - `onSelect`、`onLocate`、`onRename`、`onPopulationChange`、`onSyncOwnerToCell`、`onUndo` 和 `onRedo` 仍桥接到原 runtime 回调。
+- 更新 `docs/current-plan.md` 和 `docs/architecture/vue-floating-panel-pattern.md`，将城市管理面板标记为已迁移，并把下一批收敛为国家/省份面板。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/panels/city-panel.js`
+  - `app/webgl-generator/src/ui/panels/river-panel.js`
+  - `app/webgl-generator/src/ui/panels/culture-panel.js`
+  - `app/webgl-generator/src/ui/panels/religion-panel.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 应用完成生成，城市管理面板可通过 `控制面板 -> 管理 -> 城市管理` 打开。
+  - `.vue-city-panel-root` 存在，城市表格显示 817 行，默认选中城市详情正常。
+  - 城市摘要、详情、名称输入、人口输入、归属同步按钮和历史操作区存在。
+  - 筛选输入填入 `1` 后仍保持焦点。
+  - 点击城市行后 runtime `selection` 和 `selectionStore.selection` 均更新为 `kind: "city"` 对象。
+  - 无 console error / pageerror。
+
+后续：
+
+- 下一批建议迁移国家和省份面板。它们涉及 cell 归属笔刷、政治边界、局部统计和 pole 重算，迁移时应先保持旧编辑命令和 runtime 回调不变，再替换表格、详情和轻编辑字段。
+
+## 2026-06-28 Vue 省份管理面板迁移
+
+目标：
+
+- 在城市面板迁移后，继续推进更复杂的区域编辑面板。
+- 先选择省份面板，而不是国家面板，因为省份面板已有 cell 归属笔刷、目标选择、颜色/名称编辑和局部 pole 统计，但不包含国家面板的首都下拉和国家派生链，适合作为下一步闭环。
+- 保持旧省份编辑命令链不变，只替换 UI 层：省份选择、定位、启停编辑、半径、取选中、取悬停、名称编辑、颜色编辑、撤销/重做仍由 runtime 处理。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/vue/components/ProvincePanel.vue`：
+  - 复用 `UiMetricGrid`、`UiFilterInput`、`UiSortBar`、`UiObjectTable`、`UiDetailGrid`、`UiTextEditField`、`UiColorField`、`UiSliderField`、`UiButton` 和 `UiHistoryActions`。
+  - 保留省份摘要、筛选、排序、表格、详情字段、名称编辑、颜色编辑、启停编辑、目标省份选择、取选中、取悬停、笔刷半径和历史操作。
+  - 省份行统计继续读取 `politics.provinces` / `pack.provinces`、国家、中心 cell、pole、面积、cells、邻接、省内城市、文化和宗教字段。
+- 重写 `app/webgl-generator/src/ui/panels/province-panel.js`：
+  - 删除旧 DOM 拼装逻辑。
+  - 改为 Vue wrapper，继续保留 `open()`、`update()`、`setSelectedProvinceId()`、`getBrush()`、`setActive()`、`isOpen()` 和 `unmount()` 外部 API。
+  - `onSelect`、`onLocate`、`onEdit`、`onActiveChange`、`onTargetProvinceId`、`onRadius`、`onSampleSelection`、`onSampleHover`、`onRename`、`onColorChange`、`onUndo` 和 `onRedo` 仍桥接到原 runtime 回调。
+- 更新 `docs/current-plan.md` 和 `docs/architecture/vue-floating-panel-pattern.md`，将省份管理面板标记为已迁移，并把下一批收敛为国家编辑面板。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/panels/province-panel.js`
+  - `app/webgl-generator/src/ui/panels/state-panel.js`
+  - `app/webgl-generator/src/ui/panels/city-panel.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 应用完成生成，省份管理面板可通过 `控制面板 -> 管理 -> 省份管理` 打开。
+  - `.vue-province-panel-root` 存在，省份表格显示 206 行，默认选中省份详情正常。
+  - 省份摘要、详情、名称输入、颜色输入、目标省份下拉、笔刷半径、取选中/取悬停和历史操作区存在。
+  - 筛选输入填入 `1` 后仍保持焦点。
+  - 点击省份行后 runtime `selection` 和 `selectionStore.selection` 均更新为 `kind: "province"` 对象。
+  - 点击“启用省份编辑”并将半径改为 `42` 后，`getBrush()` 返回 `active: true`、选中省份 id 和半径 `42`。
+  - 无 console error / pageerror。
+
+后续：
+
+- 下一批建议迁移国家编辑面板。国家面板还包含首都选择、国家颜色、国家归属笔刷和更多政治派生刷新，迁移时应保持旧 runtime 命令链不变。
+
+## 2026-06-28 Vue 国家编辑面板迁移
+
+目标：
+
+- 完成当前已有复杂管理/编辑面板的 Vue SFC 迁移收口。
+- 保持旧国家编辑命令链不变，只替换 UI 层：国家选择、定位、启停编辑、半径、取选中、取悬停、名称编辑、颜色编辑、首都修改、撤销/重做仍由 runtime 处理。
+- 继续保持 `state-panel.js` 作为 runtime wrapper，避免把国家、城市、pack/grid 或 renderer 大对象放入 Pinia。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/vue/components/StatePanel.vue`：
+  - 复用 `UiMetricGrid`、`UiFilterInput`、`UiSortBar`、`UiObjectTable`、`UiDetailGrid`、`UiTextEditField`、`UiColorField`、`UiSliderField`、`UiButton` 和 `UiHistoryActions`。
+  - 保留国家摘要、筛选、排序、国家表格、详情字段、名称编辑、颜色编辑、启停编辑、目标国家选择、取选中、取悬停、笔刷半径和历史操作。
+  - 保留国家面板特有的首都下拉与“设为首都”操作，候选城市来自当前目标国家内的城市列表。
+  - 国家行统计继续读取 `politics.states`、首都城市、文化、宗教、中心 cell、面积、城镇数、人口和邻国字段。
+- 重写 `app/webgl-generator/src/ui/panels/state-panel.js`：
+  - 删除旧 DOM 拼装逻辑。
+  - 改为 Vue wrapper，继续保留 `open()`、`update()`、`getBrush()`、`setTargetStateId()`、`setActive()` 和 `unmount()` 外部 API。
+  - `onSelect`、`onLocate`、`onEdit`、`onActiveChange`、`onTargetStateId`、`onRadius`、`onSampleSelection`、`onSampleHover`、`onRename`、`onColorChange`、`onCapitalChange`、`onUndo` 和 `onRedo` 仍桥接到原 runtime 回调。
+- 更新 `docs/current-plan.md` 和 `docs/architecture/vue-floating-panel-pattern.md`，将国家编辑面板标记为已迁移，并记录当前已有主要浮动面板均已迁为 Vue SFC。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/panels/state-panel.js`
+  - `app/webgl-generator/src/ui/panels/province-panel.js`
+  - `app/webgl-generator/src/ui/panels/city-panel.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 应用完成生成，国家编辑面板可通过 `控制面板 -> 管理 -> 国家编辑` 打开。
+  - `.vue-state-panel-root` 存在，国家表格显示 20 行，默认选中国家详情正常。
+  - 国家摘要、详情、名称输入、颜色输入、首都下拉、目标国家下拉、笔刷半径、取选中/取悬停和历史操作区存在。
+  - 筛选输入填入 `1` 后仍保持焦点。
+  - 点击国家行后 runtime `selection` 和 `selectionStore.selection` 均更新为 `kind: "state"` 对象。
+  - 点击“启用国家编辑”并将半径改为 `46` 后，`getBrush()` 返回 `active: true`、选中国家 id 和半径 `46`。
+  - 无 console error / pageerror。
+
+后续：
+
+- 当前已有主要浮动管理/编辑面板已完成 Vue SFC 迁移。下一步可转向面板功能深化，例如国家/省份新增删除、城市移动、标签/命名面板、marker/zone 面板或对象表格虚拟滚动。

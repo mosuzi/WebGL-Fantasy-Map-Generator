@@ -584,9 +584,14 @@ http://127.0.0.1:5410
 20. 文化命名风格第一刀已完成：`european` / `english` 文化集会把文化对象标记为 `nameStyle: "European"`，城市、港口、国家、省份、河流和湖泊命名会读取文化命名风格并输出中文音译风名称，例如 `雷恩郡`、`温德堡自由邦`、`莱茵江`，避免纯外文名。文化管理面板详情会显示“命名风格”。后续可把命名风格做成文化编辑器字段，并继续补东方、古典、黑暗奇幻等风格包。
 21. 宗教管理面板第一刀已完成：新增独立浮动“宗教管理”面板，支持宗教列表、筛选、排序、快速定位、选中高亮、名称编辑、颜色编辑、覆盖 cells、面积、乡村/城市人口、城市数、主要国家和主要文化统计；宗教专题颜色会优先读取宗教对象颜色。宗教 cell 归属笔刷、中心迁移、扩张参数编辑、文化/国家/城市宗教联动重算暂缓。
 22. Vue SFC + Pinia 第一刀已完成：正式应用改为 Vite 入口，使用本地 ESM SFC，不走 CDN；已抽出 `UiButton`、`UiTabs`、`UiSegmented`、`UiField`、`UiSwitchField`、`UiSliderField`、`UiLayerToggleButton` 和 `UiMetricGrid` 等基础组件。控制面板已迁为真实 `ControlPanel.vue`，高度编辑面板已迁为真实 `HeightPanel.vue`；专题、图层、生成配置和管理入口仍保留原 id/data 契约，由现有 runtime 事件驱动。Pinia 只接管轻量编辑状态和全局配置偏好，专题、图层显隐、“高度专题显示海底”和城市标签上限继续同步到 `localStorage`。WebGL 地图数据、pack/grid、renderer buffer、picking index 等渲染优先状态仍留在 runtime/renderer，不进入 Pinia。
-23. Vue 对象面板基础层已完成第一刀：已新增 `UiFilterInput`、`UiSortBar`、`UiObjectTable`、`UiDetailGrid`、`UiHistoryActions`、`UiTextEditField`、`UiColorField` 和 `UiNumberField`。路线面板已迁为真实 `RoutePanel.vue`，对象详情面板已迁为真实 `ObjectDetailsPanel.vue`，并继续保留原外部 API 和编辑关闭保护逻辑。下一批建议迁移河流、文化、宗教这类列表 + 详情 + 轻编辑面板，再迁城市、国家、省份等复杂编辑面板。
-24. 经济和军事系统都暂缓；经济链路作为已识别缺口保留到后续阶段，军事系统与军事编辑器暂不推进。
-25. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/architecture/floating-panel-architecture.md`。
+23. Vue 对象面板基础层已完成第一刀：已新增 `UiFilterInput`、`UiSortBar`、`UiObjectTable`、`UiDetailGrid`、`UiHistoryActions`、`UiTextEditField`、`UiColorField` 和 `UiNumberField`。路线面板、对象详情面板、河流管理面板、文化管理面板、宗教管理面板、城市管理面板、省份管理面板和国家编辑面板均已迁为真实 Vue SFC，并继续保留原外部 API 和 runtime 回调。
+24. 已新增 `docs/architecture/vue-floating-panel-pattern.md`，明确 Vue 浮动面板复用规范：wrapper 只做 panel manager 适配和回调桥接，SFC 负责 UI，Pinia 只接管轻量状态，`map/grid/pack/renderer/picking index` 等渲染优先状态不进入 Pinia。
+25. 城市管理面板 Vue 迁移已完成：`city-panel.js` 已收敛为 Vue wrapper，新增 `CityPanel.vue` 负责摘要、筛选、排序、城市表格、详情、名称编辑、人口编辑、归属同步入口和历史操作；旧重命名、人口编辑、归属同步、定位和 selection 回调保持不变。
+26. 省份管理面板 Vue 迁移已完成：`province-panel.js` 已收敛为 Vue wrapper，新增 `ProvincePanel.vue` 负责摘要、筛选、排序、省份表格、详情、名称编辑、颜色编辑、目标省份选择、笔刷半径、取选中/取悬停、启停编辑和历史操作；旧省份重命名、颜色修改、定位、selection、归属笔刷和撤销/重做回调保持不变。
+27. 国家编辑面板 Vue 迁移已完成：`state-panel.js` 已收敛为 Vue wrapper，新增 `StatePanel.vue` 负责摘要、筛选、排序、国家表格、详情、名称编辑、颜色编辑、首都选择、目标国家选择、笔刷半径、取选中/取悬停、启停编辑和历史操作；旧国家重命名、颜色修改、首都修改、定位、selection、归属笔刷和撤销/重做回调保持不变。
+28. 当前正式应用已有的主要浮动管理/编辑面板均已迁为 Vue SFC；后续可继续做面板内部交互深化，例如国家/省份新增删除、城市移动、标签/命名面板、marker/zone 面板或对象表格虚拟滚动。
+29. 经济和军事系统都暂缓；经济链路作为已识别缺口保留到后续阶段，军事系统与军事编辑器暂不推进。
+30. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/architecture/floating-panel-architecture.md` 和 `docs/architecture/vue-floating-panel-pattern.md`。
 
 ## 约束
 
