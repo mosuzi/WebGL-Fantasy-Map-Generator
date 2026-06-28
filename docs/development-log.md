@@ -8288,3 +8288,83 @@
   - 原始路线段数 `3508`，路线 mesh 正常生成。
   - 画布非空采样 `nonZero = 918000 / 918000`。
   - `WebGL error = 0`，无 console error / pageerror。
+
+## 2026-06-29 边界平滑回滚与面线同源方案
+
+问题：
+
+- 海岸线、湖岸线、国界和省界单独做线层平滑后，会与仍然保持硬 cell 形状的陆海/政治面填色交叉。
+- 这不是平滑强度问题，而是几何来源不一致：线条被平滑了，面仍然是 Voronoi cell 拼出来的直边。
+- 国界和省界在三岔口、狭长 cell 和复杂交界处尤其明显，平滑线会切进相邻国家或省份的色块。
+
+处理：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 海岸线和湖岸线恢复为逐段绘制原始共享边。
+  - 国界和省界恢复为逐段绘制相邻 cell 的共享 Voronoi 边。
+  - 删除边界路径拼接和闭合边界 Chaikin 平滑工具，避免留下当前阶段不适合使用的死代码。
+  - 保留河流、道路、小路和海路线条的开放折线平滑；这些线要素不承担面填色边界，不会与 cell 色块产生同类交叉。
+
+后续方案：
+
+- 边界平滑不能再作为单独线层功能推进，必须改为“面线同源”：
+  - 海岸：从海岸轮廓生成平滑后的视觉陆/水面或遮罩，海岸线使用同一套平滑轮廓。
+  - 国家/省份：为政治视图构建提交后的平滑视觉面 mesh，边界线从同一 mesh/contour 派生。
+  - 编辑拖拽阶段仍使用硬 cell 预览，提交后再重建平滑视觉面和边界线，保持编辑反馈清楚且数据结构不被反写。
+- 这条路线需要后续补 polygonization、三角化或 stencil/mask 管线，再考虑洞、多岛、飞地和三国交界锁点。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - `lineSegments = 4848`，与原始硬边预期 `expectedLineSegments = 4848` 一致。
+  - 原始边界构成：海岸/湖岸 `1806`，国界 `729`，省界 `2313`。
+  - 河流仍保持渲染层平滑：原始河流段 `1557`，渲染段约 `3232`。
+  - `routeVertexCount = 39318`，`riverVertexCount = 19392`。
+  - 画布非空采样 `nonZero = 752000 / 752000`。
+  - `WebGL error = 0`，无 console error / pageerror。
+
+## 2026-06-29 海岸面线同源第一刀
+
+目标：
+
+- 重新推进海岸线平滑，但不再只平滑线层。
+- 让海岸/湖岸的视觉面和线条来自同一套平滑轮廓，避免平滑线穿过硬 cell 色块。
+- 不反写底层 `grid.cells`、`features`、picking 或编辑数据，保持生成语义仍然稳定。
+
+方案：
+
+- 在 surface buffer 中保留原始 cell 面作为基础层。
+- 额外追加一层窄海岸视觉带：
+  - 从 grid 邻接重新收集陆/水 cell 的共享 Voronoi 边。
+  - 记录每条边的陆 cell、水 cell 和陆侧方向。
+  - 把边拼成海岸/湖岸路径后，对陆侧偏移路径和水侧偏移路径同时做 Chaikin 平滑。
+  - 两条平滑偏移路径之间生成三角带，陆侧和水侧颜色分别按当前视图从相邻 cell 取色。
+- 海岸线和湖岸线不再用原始硬边直接绘制，而是从同一条平滑视觉带的中心线派生。
+- 国界和省界暂时保持硬边；政治面要等后续构建国家/省份平滑视觉 mesh 后再推进。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `buildPlaceholderVertices()` 在原始 `pushGridCells()` 后追加 `pushShoreVisualBands()`。
+  - `buildLineVertices()` 的海岸/湖岸改为读取同源 `buildShoreVisualPaths()`，国界/省界仍逐段绘制共享边。
+  - 新增海岸视觉参数 `SHORE_VISUAL_STYLE`，集中管理约 `5.5` world units 的窄带宽度、两轮温和 Chaikin 平滑，以及海岸/湖岸描线颜色。
+  - 新增海岸路径、图结构、陆/水侧偏移、颜色插值和闭合/开放路径平滑工具。
+  - 海岸路径收敛为 renderer 级缓存：`loadMap()` 构建一次，surface buffer 与 line buffer 复用同一份路径；视图切换时只按缓存路径重建颜色和 buffer，不重复收集/拼接海岸拓扑。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 原始硬边预期：海岸/湖岸 `1806`，国界 `729`，省界 `2313`，合计 `4848`。
+  - 平滑海岸同源线层后：`lineSegments = 10088`。
+  - surface 顶点数增加到 `vertexCount = 221799`，说明海岸视觉带进入面层。
+  - 海岸缓存统计：海岸路径 `9` 条、湖岸路径 `5` 条；海岸路径点 `1638`，湖岸路径点 `127`；`bandWidthWorld = 5.5`，平滑参数为 `iterations = 2`、`factor = 0.22`。
+  - 高度、国家、省份视图切换后均能重建 surface，`vertexCount = 221799`，`lineVertexCount = 20176`。
+  - 截图检查高度总览、国家总览和近岸放大：海岸线落在同源海岸视觉带内，不再与硬 cell 面交叉；近岸放大中橙色主线主要来自道路/海路，海岸描线已降为更克制的浅色半透明描边。
+  - 画布非空采样 `nonZero = 752000 / 752000`。
+  - `WebGL error = 0`，无 console error / pageerror。

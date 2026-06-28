@@ -49,6 +49,7 @@ export class PlaceholderMapRenderer {
     this.routeWidthMode = "screen-space";
     this.riverWidthMode = "screen-space flux mesh";
     this.riverWidthStats = emptyRiverWidthStats();
+    this.shoreVisualPaths = emptyShoreVisualPaths();
     this.locateStatus = "none";
     this.locateFlash = null;
     this.locateFlashFrame = 0;
@@ -89,8 +90,9 @@ export class PlaceholderMapRenderer {
   loadMap(map) {
     this.map = map;
     this.objectPickingIndex = buildObjectPickingIndex(map);
-    const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions);
-    const lineVertices = buildLineVertices(map, this.layerVisibility);
+    this.rebuildShoreVisualCache();
+    const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths);
+    const lineVertices = buildLineVertices(map, this.layerVisibility, this.shoreVisualPaths);
     const pointVertices = buildPointVertices(map, this.layerVisibility);
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
@@ -144,7 +146,7 @@ export class PlaceholderMapRenderer {
 
   refreshCellSurface() {
     if (!this.map) return;
-    const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions);
+    const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths);
     this.vertexCount = vertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
@@ -159,7 +161,7 @@ export class PlaceholderMapRenderer {
 
   refreshLineLayers({draw = true} = {}) {
     if (!this.map) return;
-    const lineVertices = buildLineVertices(this.map, this.layerVisibility);
+    const lineVertices = buildLineVertices(this.map, this.layerVisibility, this.shoreVisualPaths);
     this.lineVertexCount = lineVertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
@@ -178,6 +180,10 @@ export class PlaceholderMapRenderer {
   refreshObjectPickingIndex() {
     if (!this.map) return;
     this.objectPickingIndex = buildObjectPickingIndex(this.map);
+  }
+
+  rebuildShoreVisualCache() {
+    this.shoreVisualPaths = this.map ? buildShoreVisualPaths(this.map) : emptyShoreVisualPaths();
   }
 
   setLayerVisible(layer, visible) {
@@ -279,6 +285,7 @@ export class PlaceholderMapRenderer {
       } : null,
       objectCandidateCount: this.lastObjectCandidateCount,
       lineVertexCount: this.lineVertexCount,
+      shoreVisual: summarizeShoreVisualPaths(this.shoreVisualPaths),
       pointVertexCount: this.pointVertexCount,
       markerCount: this.map?.markers?.metadata?.markers || 0,
       labelCount: this.labelCount,
@@ -890,26 +897,31 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
   );
 }
 
-function buildPlaceholderVertices(map, colorMode, viewOptions) {
+function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths = null) {
   const vertices = [];
+  const paths = shoreVisualPaths || buildShoreVisualPaths(map);
 
   pushGridCells(vertices, map, colorMode, viewOptions);
+  pushShoreVisualBands(vertices, map, colorMode, viewOptions, paths);
 
   return new Float32Array(vertices);
 }
 
-function buildLineVertices(map, visibility = {}) {
+function buildLineVertices(map, visibility = {}, shoreVisualPaths = null) {
   const vertices = [];
-  if (visibility.coastline !== false) pushSmoothedBoundarySegments(vertices, map.features.shore.coastline, map, [0.9, 0.86, 0.68, 1], BOUNDARY_SMOOTHING.shore);
-  if (visibility.lakeShore !== false) pushSmoothedBoundarySegments(vertices, map.features.shore.lakeShore, map, [0.64, 0.82, 0.92, 1], BOUNDARY_SMOOTHING.shore);
+  const paths = shoreVisualPaths || buildShoreVisualPaths(map);
+  if (visibility.coastline !== false) pushShoreVisualLines(vertices, paths.coastline, map, SHORE_VISUAL_STYLE.coastlineStroke);
+  if (visibility.lakeShore !== false) pushShoreVisualLines(vertices, paths.lakeShore, map, SHORE_VISUAL_STYLE.lakeShoreStroke);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryLines(vertices, map, "province", [0.18, 0.2, 0.22, 0.34]);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryLines(vertices, map, "state", [0.04, 0.05, 0.06, 0.62]);
   return new Float32Array(vertices);
 }
 
-const BOUNDARY_SMOOTHING = Object.freeze({
-  shore: Object.freeze({iterations: 2, factor: 0.22}),
-  political: Object.freeze({iterations: 1, factor: 0.18})
+const SHORE_VISUAL_STYLE = Object.freeze({
+  bandWidthWorld: 5.5,
+  smoothing: Object.freeze({iterations: 2, factor: 0.22}),
+  coastlineStroke: Object.freeze([0.88, 0.84, 0.63, 0.68]),
+  lakeShoreStroke: Object.freeze([0.58, 0.78, 0.84, 0.64])
 });
 
 const LINE_SMOOTHING = Object.freeze({
@@ -919,14 +931,8 @@ const LINE_SMOOTHING = Object.freeze({
 });
 
 function pushPoliticalBoundaryLines(vertices, map, field, color) {
-  const segments = collectPoliticalBoundarySegments(map, field);
-  pushSmoothedBoundarySegments(vertices, segments, map, color, BOUNDARY_SMOOTHING.political);
-}
-
-function collectPoliticalBoundarySegments(map, field) {
-  const segments = [];
   const cells = map?.grid?.cells;
-  if (!cells?.c || !cells?.v || !cells?.[field]) return segments;
+  if (!cells?.c || !cells?.v || !cells?.[field]) return;
   for (const cell of cells.i || []) {
     if (!isLandCell(cell, map)) continue;
     const ownValue = cells[field][cell] || 0;
@@ -937,10 +943,9 @@ function collectPoliticalBoundarySegments(map, field) {
       if (field !== "state" && (!ownValue || !neighborValue)) continue;
       if (field === "state" && !ownValue && !neighborValue) continue;
       const edge = sharedVoronoiEdge(map, cell, neighbor);
-      if (edge) segments.push(edge);
+      if (edge) pushWorldLine(vertices, edge, map, color);
     }
   }
-  return segments;
 }
 
 function sharedVoronoiEdge(map, cell, neighbor) {
@@ -951,15 +956,133 @@ function sharedVoronoiEdge(map, cell, neighbor) {
   return [map.grid.vertices.p[shared[0]], map.grid.vertices.p[shared[1]]];
 }
 
-function pushSmoothedBoundarySegments(vertices, segments, map, color, options) {
-  for (const path of buildBoundaryPaths(segments)) {
-    const smoothed = smoothBoundaryPath(path, options);
-    pushWorldPolyline(vertices, smoothed, map, color);
+function pushShoreVisualBands(vertices, map, colorMode, viewOptions, paths) {
+  for (const path of paths.coastline) pushShoreVisualBand(vertices, path, map, colorMode, viewOptions);
+  for (const path of paths.lakeShore) pushShoreVisualBand(vertices, path, map, colorMode, viewOptions);
+}
+
+function pushShoreVisualBand(vertices, path, map, colorMode, viewOptions) {
+  const visual = buildSmoothedShoreVisual(path, map, colorMode, viewOptions);
+  if (!visual || visual.land.points.length < 2 || visual.water.points.length !== visual.land.points.length) return;
+
+  for (let index = 0; index < visual.land.points.length - 1; index++) {
+    const landA = visual.land.points[index];
+    const landB = visual.land.points[index + 1];
+    const waterA = visual.water.points[index];
+    const waterB = visual.water.points[index + 1];
+    const landColorA = visual.land.colors[index];
+    const landColorB = visual.land.colors[index + 1];
+    const waterColorA = visual.water.colors[index];
+    const waterColorB = visual.water.colors[index + 1];
+    pushWorldVertex(vertices, landA, map, landColorA);
+    pushWorldVertex(vertices, waterA, map, waterColorA);
+    pushWorldVertex(vertices, waterB, map, waterColorB);
+    pushWorldVertex(vertices, landA, map, landColorA);
+    pushWorldVertex(vertices, waterB, map, waterColorB);
+    pushWorldVertex(vertices, landB, map, landColorB);
   }
 }
 
-function buildBoundaryPaths(segments) {
-  const graph = buildBoundaryGraph(segments);
+function pushShoreVisualLines(vertices, paths, map, color) {
+  for (const path of paths) {
+    const visual = buildSmoothedShoreVisual(path, map, "height", {});
+    if (!visual || visual.land.points.length < 2 || visual.water.points.length !== visual.land.points.length) continue;
+    for (let index = 0; index < visual.land.points.length - 1; index++) {
+      pushWorldLine(vertices, [midpoint(visual.land.points[index], visual.water.points[index]), midpoint(visual.land.points[index + 1], visual.water.points[index + 1])], map, color);
+    }
+  }
+}
+
+function buildSmoothedShoreVisual(path, map, colorMode, viewOptions) {
+  if (!path.points?.length || path.points.length !== path.sideVectors?.length) return null;
+  const halfWidth = SHORE_VISUAL_STYLE.bandWidthWorld / 2;
+  const landPoints = [];
+  const waterPoints = [];
+  const landColors = [];
+  const waterColors = [];
+
+  for (let index = 0; index < path.points.length; index++) {
+    const point = path.points[index];
+    const side = path.sideVectors[index] || {x: 0, y: 0};
+    landPoints.push([point[0] + side.x * halfWidth, point[1] + side.y * halfWidth]);
+    waterPoints.push([point[0] - side.x * halfWidth, point[1] - side.y * halfWidth]);
+    landColors.push(colorForCell(path.landCells[index], map, colorMode, viewOptions));
+    waterColors.push(colorForCell(path.waterCells[index], map, colorMode, viewOptions));
+  }
+
+  return {
+    land: smoothWorldPathAndColors(landPoints, landColors, SHORE_VISUAL_STYLE.smoothing),
+    water: smoothWorldPathAndColors(waterPoints, waterColors, SHORE_VISUAL_STYLE.smoothing)
+  };
+}
+
+function buildShoreVisualPaths(map) {
+  const edges = collectShoreVisualEdges(map);
+  return {
+    coastline: buildShorePathsFromEdges(edges.coastline),
+    lakeShore: buildShorePathsFromEdges(edges.lakeShore)
+  };
+}
+
+function emptyShoreVisualPaths() {
+  return {coastline: [], lakeShore: []};
+}
+
+function summarizeShoreVisualPaths(paths) {
+  const coastlinePoints = countPathPoints(paths?.coastline);
+  const lakeShorePoints = countPathPoints(paths?.lakeShore);
+  return {
+    coastlinePaths: paths?.coastline?.length || 0,
+    lakeShorePaths: paths?.lakeShore?.length || 0,
+    coastlinePoints,
+    lakeShorePoints,
+    bandWidthWorld: SHORE_VISUAL_STYLE.bandWidthWorld,
+    smoothing: {...SHORE_VISUAL_STYLE.smoothing},
+    coastlineStroke: [...SHORE_VISUAL_STYLE.coastlineStroke],
+    lakeShoreStroke: [...SHORE_VISUAL_STYLE.lakeShoreStroke]
+  };
+}
+
+function countPathPoints(paths = []) {
+  return paths.reduce((sum, path) => sum + (path.points?.length || 0), 0);
+}
+
+function collectShoreVisualEdges(map) {
+  const coastline = [];
+  const lakeShore = [];
+  const cells = map?.grid?.cells;
+  if (!cells?.c || !cells?.v || !cells?.h) return {coastline, lakeShore};
+
+  for (const cell of cells.i || []) {
+    for (const neighbor of cells.c[cell] || []) {
+      if (neighbor <= cell) continue;
+      const cellLand = isLandCell(cell, map);
+      const neighborLand = isLandCell(neighbor, map);
+      if (cellLand === neighborLand) continue;
+      const landCell = cellLand ? cell : neighbor;
+      const waterCell = cellLand ? neighbor : cell;
+      const edge = sharedVoronoiEdge(map, cell, neighbor);
+      if (!edge) continue;
+      const waterFeature = map.features.features[cells.f?.[waterCell]];
+      const target = waterFeature?.type === "ocean" ? coastline : lakeShore;
+      const landCenter = cellCenterPoint(map.grid, landCell);
+      const waterCenter = cellCenterPoint(map.grid, waterCell);
+      const side = normalizeWorldVector(landCenter[0] - waterCenter[0], landCenter[1] - waterCenter[1]);
+      target.push({
+        a: edge[0],
+        b: edge[1],
+        landCell,
+        waterCell,
+        side
+      });
+    }
+  }
+
+  return {coastline, lakeShore};
+}
+
+function buildShorePathsFromEdges(edges) {
+  const graph = buildShoreGraph(edges);
   const paths = [];
   const visited = new Uint8Array(graph.edges.length);
 
@@ -967,52 +1090,52 @@ function buildBoundaryPaths(segments) {
     if (node.edges.length === 2) continue;
     for (const edgeIndex of node.edges) {
       if (visited[edgeIndex]) continue;
-      paths.push(walkBoundaryPath(graph, node.key, edgeIndex, visited));
+      paths.push(createShorePath(graph, walkShorePath(graph, node.key, edgeIndex, visited)));
     }
   }
 
   for (let edgeIndex = 0; edgeIndex < graph.edges.length; edgeIndex++) {
     if (visited[edgeIndex]) continue;
-    paths.push(walkBoundaryPath(graph, graph.edges[edgeIndex].a, edgeIndex, visited));
+    paths.push(createShorePath(graph, walkShorePath(graph, graph.edges[edgeIndex].a, edgeIndex, visited)));
   }
 
-  return paths.filter(path => path.length >= 2);
+  return paths.filter(path => path.points.length >= 2);
 }
 
-function buildBoundaryGraph(segments) {
+function buildShoreGraph(edges) {
   const nodes = new Map();
-  const edges = [];
-
-  for (const segment of segments || []) {
-    if (!isWorldPoint(segment?.[0]) || !isWorldPoint(segment?.[1])) continue;
-    const a = boundaryPointKey(segment[0]);
-    const b = boundaryPointKey(segment[1]);
+  const graphEdges = [];
+  for (const edge of edges) {
+    if (!isWorldPoint(edge.a) || !isWorldPoint(edge.b)) continue;
+    const a = shorePointKey(edge.a);
+    const b = shorePointKey(edge.b);
     if (a === b) continue;
-    const edgeIndex = edges.length;
-    ensureBoundaryNode(nodes, a, segment[0]).edges.push(edgeIndex);
-    ensureBoundaryNode(nodes, b, segment[1]).edges.push(edgeIndex);
-    edges.push({a, b});
+    const edgeIndex = graphEdges.length;
+    ensureShoreNode(nodes, a, edge.a).edges.push(edgeIndex);
+    ensureShoreNode(nodes, b, edge.b).edges.push(edgeIndex);
+    graphEdges.push({...edge, a, b});
   }
-
-  return {nodes, edges};
+  return {nodes, edges: graphEdges};
 }
 
-function ensureBoundaryNode(nodes, key, point) {
+function ensureShoreNode(nodes, key, point) {
   if (!nodes.has(key)) nodes.set(key, {key, point: [point[0], point[1]], edges: []});
   return nodes.get(key);
 }
 
-function boundaryPointKey(point) {
+function shorePointKey(point) {
   return `${Math.round(point[0] * 1000)}:${Math.round(point[1] * 1000)}`;
 }
 
-function walkBoundaryPath(graph, startKey, firstEdgeIndex, visited) {
+function walkShorePath(graph, startKey, firstEdgeIndex, visited) {
   const keys = [startKey];
+  const edgeIndexes = [];
   let currentKey = startKey;
   let edgeIndex = firstEdgeIndex;
 
   while (edgeIndex !== -1 && !visited[edgeIndex]) {
     visited[edgeIndex] = 1;
+    edgeIndexes.push(edgeIndex);
     const edge = graph.edges[edgeIndex];
     const nextKey = edge.a === currentKey ? edge.b : edge.a;
     keys.push(nextKey);
@@ -1022,43 +1145,59 @@ function walkBoundaryPath(graph, startKey, firstEdgeIndex, visited) {
     edgeIndex = nextNode.edges.find(index => !visited[index]) ?? -1;
   }
 
-  return keys.map(key => graph.nodes.get(key)?.point).filter(Boolean);
+  return {keys, edgeIndexes};
 }
 
-function smoothBoundaryPath(path, {iterations = 1, factor = 0.2} = {}) {
-  if (path.length < 3 || iterations <= 0) return path;
-  let result = path.map(point => [point[0], point[1]]);
-  const closed = pointsNear(result[0], result[result.length - 1]);
-  if (closed) result = result.slice(0, -1);
-  if (result.length < 3) return path;
+function createShorePath(graph, walk) {
+  const points = [];
+  const sideVectors = [];
+  const landCells = [];
+  const waterCells = [];
 
-  for (let index = 0; index < iterations; index++) {
-    result = chaikinBoundaryPath(result, factor, closed);
-    if (result.length < 3) break;
+  for (let index = 0; index < walk.keys.length; index++) {
+    const node = graph.nodes.get(walk.keys[index]);
+    const adjacentEdges = [
+      walk.edgeIndexes[index - 1],
+      walk.edgeIndexes[index]
+    ].filter(edgeIndex => edgeIndex !== undefined);
+    const edge = graph.edges[adjacentEdges[0]] || graph.edges[walk.edgeIndexes[0]];
+    points.push(node.point);
+    sideVectors.push(averageEdgeSide(graph, adjacentEdges));
+    landCells.push(edge?.landCell ?? 0);
+    waterCells.push(edge?.waterCell ?? 0);
   }
 
-  return closed ? [...result, result[0]] : result;
+  return {points, sideVectors, landCells, waterCells};
 }
 
-function chaikinBoundaryPath(path, factor, closed) {
-  const next = [];
-  const count = path.length;
-  if (!closed) next.push(path[0]);
-
-  const segments = closed ? count : count - 1;
-  for (let index = 0; index < segments; index++) {
-    const a = path[index];
-    const b = path[(index + 1) % count];
-    next.push(interpolatePoint(a, b, factor));
-    next.push(interpolatePoint(a, b, 1 - factor));
+function averageEdgeSide(graph, edgeIndexes) {
+  let x = 0;
+  let y = 0;
+  for (const edgeIndex of edgeIndexes) {
+    const side = graph.edges[edgeIndex]?.side;
+    if (!side) continue;
+    x += side.x;
+    y += side.y;
   }
+  return normalizeWorldVector(x, y);
+}
 
-  if (!closed) next.push(path[count - 1]);
-  return next;
+function cellCenterPoint(grid, cell) {
+  return grid.points[grid.cells.p?.[cell]] || [0, 0];
+}
+
+function normalizeWorldVector(x, y) {
+  const length = Math.hypot(x, y);
+  if (length <= 0.000001) return {x: 0, y: 0};
+  return {x: x / length, y: y / length};
 }
 
 function interpolatePoint(a, b, t) {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+function midpoint(a, b) {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
 function pointsNear(a, b) {
@@ -1067,6 +1206,64 @@ function pointsNear(a, b) {
 
 function smoothWorldPath(points, options) {
   return smoothWorldPathWithValues(points, null, options).points;
+}
+
+function smoothWorldPathAndColors(points, colors, {iterations = 1, factor = 0.2} = {}) {
+  if (points.length < 3 || iterations <= 0) return {
+    points,
+    colors
+  };
+
+  const closed = pointsNear(points[0], points[points.length - 1]);
+  let resultPoints = closed ? points.slice(0, -1) : [...points];
+  let resultColors = closed ? colors.slice(0, -1) : [...colors];
+  if (resultPoints.length < 3) return {points, colors};
+
+  for (let index = 0; index < iterations; index++) {
+    const result = chaikinWorldPathAndColors(resultPoints, resultColors, factor, closed);
+    resultPoints = result.points;
+    resultColors = result.colors;
+    if (resultPoints.length < 3) break;
+  }
+
+  if (closed) {
+    resultPoints = [...resultPoints, resultPoints[0]];
+    resultColors = [...resultColors, resultColors[0]];
+  }
+
+  return {
+    points: resultPoints,
+    colors: resultColors
+  };
+}
+
+function chaikinWorldPathAndColors(points, colors, factor, closed) {
+  const nextPoints = [];
+  const nextColors = [];
+  const count = points.length;
+  if (!closed) {
+    nextPoints.push(points[0]);
+    nextColors.push(colors[0]);
+  }
+
+  const segments = closed ? count : count - 1;
+  for (let index = 0; index < segments; index++) {
+    const a = points[index];
+    const b = points[(index + 1) % count];
+    const colorA = colors[index];
+    const colorB = colors[(index + 1) % count];
+    nextPoints.push(interpolateWorldPoint(a, b, factor));
+    nextPoints.push(interpolateWorldPoint(a, b, 1 - factor));
+    nextColors.push(interpolateColor(colorA, colorB, factor));
+    nextColors.push(interpolateColor(colorA, colorB, 1 - factor));
+  }
+
+  if (!closed) {
+    nextPoints.push(points[count - 1]);
+    nextColors.push(colors[count - 1]);
+  }
+
+  return {points: nextPoints, colors: nextColors};
 }
 
 function smoothWorldPathWithValues(points, values, {iterations = 1, factor = 0.2} = {}) {
@@ -1384,12 +1581,6 @@ function pushGridCells(vertices, map, colorMode, viewOptions) {
 function pushWorldLine(vertices, segment, map, color) {
   pushWorldVertex(vertices, segment[0], map, color);
   pushWorldVertex(vertices, segment[1], map, color);
-}
-
-function pushWorldPolyline(vertices, points, map, color) {
-  for (let index = 0; index < points.length - 1; index++) {
-    pushWorldLine(vertices, [points[index], points[index + 1]], map, color);
-  }
 }
 
 function pushScreenPolyline(vertices, points, map, camera, canvas, color, widthPx, dash = null) {
@@ -1786,6 +1977,10 @@ function mix(a, b, t) {
     a[2] + (b[2] - a[2]) * t,
     1
   ];
+}
+
+function interpolateColor(a, b, t) {
+  return mix(a, b, t);
 }
 
 function clamp(value, min, max) {
