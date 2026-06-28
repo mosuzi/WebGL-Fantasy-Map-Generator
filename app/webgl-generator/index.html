@@ -16,71 +16,8 @@
         </header>
 
         <section class="control-section">
-          <h2>生成</h2>
-          <label class="field-row">
-            <span>Seed</span>
-            <input id="seed-input" type="text" value="stage-2-1" autocomplete="off" />
-          </label>
-          <label class="field-row">
-            <span>目标 cells</span>
-            <input id="cells-input" type="number" min="1000" max="100000" step="1000" value="10000" />
-          </label>
-          <label class="field-row">
-            <span>宽度</span>
-            <input id="width-input" type="number" min="640" max="4096" step="80" value="1440" />
-          </label>
-          <label class="field-row">
-            <span>高度</span>
-            <input id="height-input" type="number" min="480" max="4096" step="80" value="960" />
-          </label>
-          <label class="field-row">
-            <span>地形</span>
-            <select id="heightmap-template">
-              <option value="continents" selected>大陆</option>
-              <option value="mediterranean">地中海</option>
-              <option value="highIsland">高山岛屿</option>
-              <option value="lowIsland">平原岛屿</option>
-              <option value="peninsula">一侧大陆</option>
-              <option value="pangea">盘古大陆</option>
-              <option value="archipelago">群岛</option>
-            </select>
-          </label>
-          <label class="check-row">
-            <input id="auto-random-seed" type="checkbox" />
-            <span>生成时自动随机 seed</span>
-          </label>
-          <div class="button-row">
-            <button id="generate-map" class="primary-action" type="button">生成 grid 地图</button>
-            <button id="random-seed" class="secondary-action" type="button">换 seed</button>
-          </div>
-        </section>
-
-        <section class="control-section">
-          <h2>专题</h2>
-          <div class="segmented" role="group" aria-label="专题">
-            <button class="active" type="button" data-mode="height">高度</button>
-            <button type="button" data-mode="temperature">温度</button>
-            <button type="button" data-mode="precipitation">降水</button>
-            <button type="button" data-mode="biomes">生物群系</button>
-            <button type="button" data-mode="cultures">文化</button>
-            <button type="button" data-mode="religions">宗教</button>
-            <button type="button" data-mode="states">国家</button>
-            <button type="button" data-mode="provinces">省份</button>
-            <button type="button" data-mode="regions">区域</button>
-            <button type="button" data-mode="population">人口</button>
-          </div>
-        </section>
-
-        <section class="control-section">
-          <h2>视图</h2>
-          <label class="check-row">
-            <input id="show-ocean-height" type="checkbox" />
-            <span>高度专题显示海底</span>
-          </label>
-          <button id="fit-view" class="secondary-action" type="button">适配视图</button>
-          <button id="open-height-panel" class="secondary-action stacked-action" type="button">高度编辑</button>
-          <button id="open-state-panel" class="secondary-action stacked-action" type="button">国家编辑</button>
-          <button id="open-river-panel" class="secondary-action stacked-action" type="button">河流管理</button>
+          <h2>控制</h2>
+          <button id="open-generation-panel" class="primary-action" type="button">控制面板</button>
         </section>
 
         <section class="control-section">
@@ -120,6 +57,13 @@
       </section>
     </main>
 
+    <script>
+      window.setTimeout(() => {
+        if (window.__webglGeneratorApp) return;
+        document.getElementById("app-status").textContent = "脚本尚未启动，请检查 DevTools 是否暂停或禁用 JavaScript";
+        document.getElementById("map-badge").textContent = "脚本未启动";
+      }, 3000);
+    </script>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>

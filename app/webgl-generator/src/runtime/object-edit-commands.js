@@ -14,6 +14,14 @@ const STATE_CAPITAL_EFFECTS = Object.freeze({
   derived: Object.freeze(["state-capital", "labels", "object-panels"])
 });
 
+const PROVINCE_COLOR_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["province-color", "cell-colors", "object-panels"])
+});
+
 export function createRenameObjectCommand(object, nextName) {
   const target = normalizeObjectTarget(object);
   const normalizedName = normalizeName(nextName);
@@ -69,6 +77,38 @@ export function createSetStateCapitalCommand(stateId, nextBurgId) {
   };
 }
 
+export function createSetProvinceColorCommand(provinceId, color, {beforeColor = null, label = "省份颜色"} = {}) {
+  const normalizedProvinceId = Number(provinceId);
+  const after = normalizeHexColor(color);
+  let before = beforeColor;
+  let hadBeforeColor = beforeColor !== null && beforeColor !== undefined;
+
+  return {
+    label: `${label} #${normalizedProvinceId}`,
+    effects: {
+      ...PROVINCE_COLOR_EFFECTS,
+      affected: [{kind: "province", id: normalizedProvinceId}]
+    },
+    apply(context) {
+      if (!after) throw new Error("省份颜色必须是 #rrggbb");
+      if (before === null || before === undefined) {
+        const province = context.map?.politics?.provinces?.[normalizedProvinceId] || context.map?.pack?.provinces?.[normalizedProvinceId];
+        hadBeforeColor = Object.prototype.hasOwnProperty.call(province || {}, "color");
+        before = province?.color ?? null;
+      }
+      setProvinceColor(context.map, normalizedProvinceId, after);
+    },
+    revert(context) {
+      if (hadBeforeColor) setProvinceColor(context.map, normalizedProvinceId, before);
+      else clearProvinceColor(context.map, normalizedProvinceId);
+    },
+    isNoop(context) {
+      const province = context.map?.politics?.provinces?.[normalizedProvinceId] || context.map?.pack?.provinces?.[normalizedProvinceId];
+      return !province || !after || province.color === after;
+    }
+  };
+}
+
 function normalizeObjectTarget(object) {
   if (object?.kind === "label" && object.targetKind === "city") {
     return {kind: "city", id: object.targetId ?? object.id};
@@ -80,6 +120,10 @@ function readObjectName(map, target) {
   if (target.kind === "state") {
     const state = map?.politics?.states?.[target.id];
     return state ? {name: state.name || "", fullName: state.fullName || ""} : null;
+  }
+  if (target.kind === "province") {
+    const province = map?.politics?.provinces?.[target.id] || map?.pack?.provinces?.[target.id];
+    return province ? {name: province.name || "", fullName: province.fullName || ""} : null;
   }
   if (target.kind === "river") {
     const river = findRiver(map, target.id);
@@ -95,6 +139,7 @@ function readObjectName(map, target) {
 
 function writeObjectName(map, target, name) {
   if (target.kind === "state") return writeStateName(map, target.id, name);
+  if (target.kind === "province") return writeProvinceName(map, target.id, name);
   if (target.kind === "river") return writeRiverName(map, target.id, name);
   if (target.kind === "city") return writeCityName(map, target.id, name);
   throw new Error(`不支持重命名对象类型：${target.kind}`);
@@ -108,6 +153,13 @@ function restoreObjectName(map, target, previous) {
     state.fullName = previous.fullName;
     return;
   }
+  if (target.kind === "province") {
+    const province = map?.politics?.provinces?.[target.id] || map?.pack?.provinces?.[target.id];
+    if (!province) throw new Error(`找不到省份 #${target.id}`);
+    province.name = previous.name;
+    province.fullName = previous.fullName;
+    return;
+  }
   if (target.kind === "river") return writeRiverName(map, target.id, previous.name);
   if (target.kind === "city") return writeCityName(map, target.id, previous.name, previous.burgName);
   throw new Error(`不支持恢复对象类型：${target.kind}`);
@@ -118,6 +170,25 @@ function writeStateName(map, stateId, name) {
   if (!state) throw new Error(`找不到国家 #${stateId}`);
   state.name = name;
   state.fullName = state.formName ? `${name}${state.formName}` : name;
+}
+
+function writeProvinceName(map, provinceId, name) {
+  const province = map?.politics?.provinces?.[provinceId] || map?.pack?.provinces?.[provinceId];
+  if (!province) throw new Error(`找不到省份 #${provinceId}`);
+  province.name = name;
+  province.fullName = province.formName ? `${name}${province.formName}` : name;
+}
+
+function setProvinceColor(map, provinceId, color) {
+  const province = map?.politics?.provinces?.[provinceId] || map?.pack?.provinces?.[provinceId];
+  if (!province) throw new Error(`找不到省份 #${provinceId}`);
+  province.color = color;
+}
+
+function clearProvinceColor(map, provinceId) {
+  const province = map?.politics?.provinces?.[provinceId] || map?.pack?.provinces?.[provinceId];
+  if (!province) throw new Error(`找不到省份 #${provinceId}`);
+  delete province.color;
 }
 
 function writeRiverName(map, riverId, name) {
@@ -235,8 +306,15 @@ function normalizeName(name) {
   return typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
 }
 
+function normalizeHexColor(color) {
+  if (typeof color !== "string") return null;
+  const match = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+  return match ? `#${match[1].toLowerCase()}` : null;
+}
+
 function formatObjectKind(kind) {
   if (kind === "state") return "国家";
+  if (kind === "province") return "省份";
   if (kind === "river") return "河流";
   if (kind === "city") return "城市";
   return "对象";

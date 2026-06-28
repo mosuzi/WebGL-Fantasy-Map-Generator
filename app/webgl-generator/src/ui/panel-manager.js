@@ -49,7 +49,11 @@ export class PanelManager {
   }
 
   setContent(id, nodes) {
-    this.panels.get(id)?.body.replaceChildren(...nodes);
+    const record = this.panels.get(id);
+    if (!record) return;
+    const focusState = captureFocusState(record.body);
+    record.body.replaceChildren(...nodes);
+    restoreFocusState(record.body, focusState);
   }
 
   open(id) {
@@ -157,4 +161,50 @@ function installDrag(manager, panel, handle) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function captureFocusState(root) {
+  const active = root.ownerDocument.activeElement;
+  if (!active || !root.contains(active)) return null;
+  return {
+    path: childPath(root, active),
+    tagName: active.tagName,
+    type: active.getAttribute("type"),
+    selectionStart: Number.isInteger(active.selectionStart) ? active.selectionStart : null,
+    selectionEnd: Number.isInteger(active.selectionEnd) ? active.selectionEnd : null
+  };
+}
+
+function restoreFocusState(root, state) {
+  if (!state) return;
+  const target = nodeFromPath(root, state.path);
+  if (!target || target.tagName !== state.tagName || target.getAttribute("type") !== state.type) return;
+  target.focus({preventScroll: true});
+  if (state.selectionStart === null || typeof target.setSelectionRange !== "function") return;
+  try {
+    target.setSelectionRange(state.selectionStart, state.selectionEnd ?? state.selectionStart);
+  } catch {
+    // Some focusable controls do not allow text selection ranges.
+  }
+}
+
+function childPath(root, node) {
+  const path = [];
+  let current = node;
+  while (current && current !== root) {
+    const parent = current.parentElement;
+    if (!parent) return [];
+    path.unshift(Array.prototype.indexOf.call(parent.children, current));
+    current = parent;
+  }
+  return path;
+}
+
+function nodeFromPath(root, path) {
+  let current = root;
+  for (const index of path) {
+    current = current?.children?.[index];
+    if (!current) return null;
+  }
+  return current;
 }

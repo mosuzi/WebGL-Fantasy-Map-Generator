@@ -33,7 +33,10 @@ const server = createServer((request, response) => {
     return;
   }
 
-  response.writeHead(200, {"content-type": getContentType(target)});
+  response.writeHead(200, {
+    "content-type": getContentType(target),
+    "cache-control": "no-store, max-age=0"
+  });
   createReadStream(target).pipe(response);
 });
 

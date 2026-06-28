@@ -7,6 +7,7 @@ export class PlaceholderMapRenderer {
     this.onViewChange = onViewChange;
     this.onHover = onHover;
     this.onSelect = onSelect;
+    this.canvasSize = lockCanvasToInitialDisplaySize(canvas, this.overlay);
     this.gl = canvas.getContext("webgl2", {antialias: true});
     if (!this.gl) throw new Error("当前浏览器不支持 WebGL2");
 
@@ -47,9 +48,28 @@ export class PlaceholderMapRenderer {
     this.locateFlashFrame = 0;
     this.colorMode = "height";
     this.viewOptions = {showOceanHeight: false};
+    this.labelOptions = {maxCityLabels: 5000};
+    this.layerVisibility = {
+      routes: true,
+      rivers: true,
+      cities: true,
+      labels: true,
+      population: true,
+      markers: true,
+      coastline: true,
+      lakeShore: true,
+      stateBorders: true,
+      provinceBorders: true
+    };
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
+    this.dynamicBuffersDirty = {
+      routes: true,
+      rivers: true,
+      selection: true
+    };
     this.lastDraw = {drawMs: 0};
     installCanvasInteractions(this.canvas, this.camera, () => {
+      this.markViewportBuffersDirty();
       this.draw();
       this.onViewChange();
     }, event => {
@@ -57,15 +77,14 @@ export class PlaceholderMapRenderer {
     }, event => {
       this.onSelect(this.pickClientPoint(event.clientX, event.clientY));
     });
-    window.addEventListener("resize", () => this.draw());
   }
 
   loadMap(map) {
     this.map = map;
     this.objectPickingIndex = buildObjectPickingIndex(map);
     const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions);
-    const lineVertices = buildLineVertices(map);
-    const pointVertices = buildPointVertices(map);
+    const lineVertices = buildLineVertices(map, this.layerVisibility);
+    const pointVertices = buildPointVertices(map, this.layerVisibility);
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
     this.lineVertexCount = lineVertices.length / 6;
@@ -83,6 +102,7 @@ export class PlaceholderMapRenderer {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
     this.buildCityLabels(map);
+    this.markAllDynamicBuffersDirty();
     this.fitToView();
   }
 
@@ -90,6 +110,7 @@ export class PlaceholderMapRenderer {
     this.camera.scale = 1;
     this.camera.offsetX = 0;
     this.camera.offsetY = 0;
+    this.markViewportBuffersDirty();
     this.draw();
     this.onViewChange();
   }
@@ -104,6 +125,14 @@ export class PlaceholderMapRenderer {
     this.viewOptions = {...this.viewOptions, ...options};
     if (!this.map) return;
     this.refreshCellSurface();
+  }
+
+  setLabelOptions(options = {}) {
+    const maxCityLabels = normalizeMaxCityLabels(options.maxCityLabels, this.labelOptions.maxCityLabels);
+    if (maxCityLabels === this.labelOptions.maxCityLabels) return;
+    this.labelOptions = {...this.labelOptions, maxCityLabels};
+    if (!this.map) return;
+    this.refreshLabels();
   }
 
   refreshCellSurface() {
@@ -121,13 +150,40 @@ export class PlaceholderMapRenderer {
     this.updateCityLabels();
   }
 
+  refreshLineLayers({draw = true} = {}) {
+    if (!this.map) return;
+    const lineVertices = buildLineVertices(this.map, this.layerVisibility);
+    this.lineVertexCount = lineVertices.length / 6;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+    if (draw) this.draw();
+  }
+
+  refreshPointLayers({draw = true} = {}) {
+    if (!this.map) return;
+    const pointVertices = buildPointVertices(this.map, this.layerVisibility);
+    this.pointVertexCount = pointVertices.length / 6;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+    if (draw) this.draw();
+  }
+
+  setLayerVisible(layer, visible) {
+    if (!(layer in this.layerVisibility)) return;
+    const nextVisible = Boolean(visible);
+    if (this.layerVisibility[layer] === nextVisible) return;
+    this.layerVisibility[layer] = nextVisible;
+    if (layer === "cities" || layer === "population" || layer === "markers") this.refreshPointLayers({draw: false});
+    if (layer === "coastline" || layer === "lakeShore" || layer === "stateBorders" || layer === "provinceBorders") this.refreshLineLayers({draw: false});
+    this.draw();
+  }
+
   draw() {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
-    resizeCanvasToDisplaySize(this.canvas);
-    this.updateRouteBuffer();
-    this.updateRiverBuffer();
-    this.updateSelectionBuffer();
+    if (this.dynamicBuffersDirty.routes) this.updateRouteBuffer();
+    if (this.dynamicBuffersDirty.rivers) this.updateRiverBuffer();
+    if (this.dynamicBuffersDirty.selection || this.locateFlash) this.updateSelectionBuffer();
 
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -143,17 +199,20 @@ export class PlaceholderMapRenderer {
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
-    gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
+    if (this.layerVisibility.routes) gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuffer);
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.LINES, 0, this.lineVertexCount);
+    gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.riverBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
-    gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
+    if (this.layerVisibility.rivers) gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.selectionBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
@@ -214,8 +273,16 @@ export class PlaceholderMapRenderer {
       visibleLabelCount: this.visibleLabelCount,
       colorMode: this.colorMode,
       viewOptions: {...this.viewOptions},
+      labelOptions: {...this.labelOptions},
+      layerVisibility: {...this.layerVisibility},
+      canvasSize: {...this.canvasSize},
       camera: {...this.camera},
       draw: this.lastDraw,
+      dynamicMeshCache: {
+        routesDirty: this.dynamicBuffersDirty.routes,
+        riversDirty: this.dynamicBuffersDirty.rivers,
+        selectionDirty: this.dynamicBuffersDirty.selection
+      },
       webgl2: true
     };
   }
@@ -250,6 +317,7 @@ export class PlaceholderMapRenderer {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
     this.routeBuildMs = roundMs(performance.now() - startedAt);
+    this.dynamicBuffersDirty.routes = false;
   }
 
   updateRiverBuffer() {
@@ -260,6 +328,7 @@ export class PlaceholderMapRenderer {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
     this.riverBuildMs = roundMs(performance.now() - startedAt);
+    this.dynamicBuffersDirty.rivers = false;
   }
 
   updateSelectionBuffer() {
@@ -269,6 +338,7 @@ export class PlaceholderMapRenderer {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, selectionVertices, this.gl.DYNAMIC_DRAW);
     this.selectionBuildMs = roundMs(performance.now() - startedAt);
+    this.dynamicBuffersDirty.selection = false;
   }
 
   pickThresholdWorld(pixels) {
@@ -279,8 +349,32 @@ export class PlaceholderMapRenderer {
   }
 
   setSelection(object) {
+    const previous = this.selection;
     this.selection = object || null;
+    this.dynamicBuffersDirty.selection = true;
+    if (previous?.kind === "route" || this.selection?.kind === "route") {
+      this.dynamicBuffersDirty.routes = true;
+    }
     this.draw();
+  }
+
+  invalidateDynamicBuffers(parts = {}) {
+    if (parts.viewport) this.markViewportBuffersDirty();
+    if (parts.routes) this.dynamicBuffersDirty.routes = true;
+    if (parts.rivers) this.dynamicBuffersDirty.rivers = true;
+    if (parts.selection) this.dynamicBuffersDirty.selection = true;
+  }
+
+  markViewportBuffersDirty() {
+    this.dynamicBuffersDirty.routes = true;
+    this.dynamicBuffersDirty.rivers = true;
+    this.dynamicBuffersDirty.selection = true;
+  }
+
+  markAllDynamicBuffersDirty() {
+    this.dynamicBuffersDirty.routes = true;
+    this.dynamicBuffersDirty.rivers = true;
+    this.dynamicBuffersDirty.selection = true;
   }
 
   locateObject(object, options = {}) {
@@ -306,6 +400,7 @@ export class PlaceholderMapRenderer {
     this.camera.scale = nextScale;
     this.camera.offsetX = -ndcX * nextScale;
     this.camera.offsetY = -ndcY * nextScale;
+    this.markViewportBuffersDirty();
     this.locateStatus = `${object.kind} #${object.id}`;
     this.startLocateFlash(object);
     this.setSelection(object);
@@ -342,7 +437,7 @@ export class PlaceholderMapRenderer {
       return;
     }
     this.overlay.replaceChildren();
-    this.labelItems = getLabelCities(map).map(item => {
+    this.labelItems = getLabelCities(map, this.labelOptions).map(item => {
       const node = document.createElement("span");
       const city = item.city;
       node.className = `city-label${city.capital ? " capital" : ""}${city.port ? " port" : ""}`;
@@ -361,10 +456,20 @@ export class PlaceholderMapRenderer {
   updateCityLabels() {
     if (!this.overlay || !this.map || !this.labelItems.length) return;
     const rect = this.canvas.getBoundingClientRect();
+    if (!this.layerVisibility.labels) {
+      for (const item of this.labelItems) {
+        item.node.classList.remove("visible");
+        item.visible = false;
+        item.box = null;
+      }
+      this.visibleLabelCount = 0;
+      this.updateSelectionMarker(rect);
+      return;
+    }
     const occupied = [];
     let visible = 0;
     const scale = this.camera.scale;
-    const maxVisible = labelLimitForScale(scale);
+    const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
 
     for (const item of this.labelItems) {
@@ -374,7 +479,7 @@ export class PlaceholderMapRenderer {
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const blocked = occupied.some(other => boxesOverlap(box, other, padding));
       const shouldShow = visible < maxVisible && scale >= item.minScale && onScreen && !blocked;
-      item.node.style.display = shouldShow ? "block" : "none";
+      item.node.classList.toggle("visible", shouldShow);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
@@ -518,15 +623,16 @@ function expandBounds(bounds, padding) {
   };
 }
 
-function getLabelCities(map) {
+function getLabelCities(map, labelOptions = {}) {
+  const maxCityLabels = normalizeMaxCityLabels(labelOptions.maxCityLabels, 5000);
   return [...map.settlements.cities]
     .map(city => ({city, priority: scoreCityLabel(city)}))
     .sort((a, b) => b.priority - a.priority)
-    .slice(0, 48)
+    .slice(0, maxCityLabels)
     .map((item, rank) => ({
       ...item,
       rank,
-      minScale: minLabelScale(item.city, rank)
+      minScale: minLabelScale(item.city, rank, maxCityLabels)
     }));
 }
 
@@ -600,11 +706,39 @@ function buildPlaceholderVertices(map, colorMode, viewOptions) {
   return new Float32Array(vertices);
 }
 
-function buildLineVertices(map) {
+function buildLineVertices(map, visibility = {}) {
   const vertices = [];
-  for (const segment of map.features.shore.coastline) pushWorldLine(vertices, segment, map, [0.9, 0.86, 0.68, 1]);
-  for (const segment of map.features.shore.lakeShore) pushWorldLine(vertices, segment, map, [0.64, 0.82, 0.92, 1]);
+  if (visibility.coastline !== false) for (const segment of map.features.shore.coastline) pushWorldLine(vertices, segment, map, [0.9, 0.86, 0.68, 1]);
+  if (visibility.lakeShore !== false) for (const segment of map.features.shore.lakeShore) pushWorldLine(vertices, segment, map, [0.64, 0.82, 0.92, 1]);
+  if (visibility.provinceBorders !== false) pushPoliticalBoundaryLines(vertices, map, "province", [0.18, 0.2, 0.22, 0.34]);
+  if (visibility.stateBorders !== false) pushPoliticalBoundaryLines(vertices, map, "state", [0.04, 0.05, 0.06, 0.62]);
   return new Float32Array(vertices);
+}
+
+function pushPoliticalBoundaryLines(vertices, map, field, color) {
+  const cells = map?.grid?.cells;
+  if (!cells?.c || !cells?.v || !cells?.[field]) return;
+  for (const cell of cells.i || []) {
+    if (!isLandCell(cell, map)) continue;
+    const ownValue = cells[field][cell] || 0;
+    for (const neighbor of cells.c[cell] || []) {
+      if (neighbor <= cell || !isLandCell(neighbor, map)) continue;
+      const neighborValue = cells[field][neighbor] || 0;
+      if (neighborValue === ownValue) continue;
+      if (field !== "state" && (!ownValue || !neighborValue)) continue;
+      if (field === "state" && !ownValue && !neighborValue) continue;
+      const edge = sharedVoronoiEdge(map, cell, neighbor);
+      if (edge) pushWorldLine(vertices, edge, map, color);
+    }
+  }
+}
+
+function sharedVoronoiEdge(map, cell, neighbor) {
+  const ownVertices = map.grid.cells.v[cell] || [];
+  const neighborVertices = new Set(map.grid.cells.v[neighbor] || []);
+  const shared = ownVertices.filter(vertex => neighborVertices.has(vertex));
+  if (shared.length < 2) return null;
+  return [map.grid.vertices.p[shared[0]], map.grid.vertices.p[shared[1]]];
 }
 
 function buildRiverMeshVertices(map, camera, canvas) {
@@ -794,18 +928,24 @@ function isLocateFlashActive(selection, locateFlash) {
   return Boolean(selection && locateFlash && selection.kind === locateFlash.kind && selection.id === locateFlash.id && performance.now() <= locateFlash.until);
 }
 
-function buildPointVertices(map) {
+function buildPointVertices(map, visibility = {}) {
   const vertices = [];
-  for (const point of map.settlements.populationPoints) {
-    const alpha = Math.min(0.8, 0.25 + point.population / Math.max(1, map.settlements.metadata.maxPopulation));
-    pushWorldVertex(vertices, point.point, map, [0.25, 0.42, 0.24, alpha]);
+  if (visibility.population !== false) {
+    for (const point of map.settlements.populationPoints) {
+      const alpha = Math.min(0.8, 0.25 + point.population / Math.max(1, map.settlements.metadata.maxPopulation));
+      pushWorldVertex(vertices, point.point, map, [0.25, 0.42, 0.24, alpha]);
+    }
   }
-  for (const city of map.settlements.cities) {
-    const color = city.capital ? [0.98, 0.82, 0.32, 1] : city.port ? [0.35, 0.72, 0.95, 1] : [0.92, 0.72, 0.38, 1];
-    pushWorldVertex(vertices, [city.x, city.y], map, color);
+  if (visibility.cities !== false) {
+    for (const city of map.settlements.cities) {
+      const color = city.capital ? [0.98, 0.82, 0.32, 1] : city.port ? [0.35, 0.72, 0.95, 1] : [0.92, 0.72, 0.38, 1];
+      pushWorldVertex(vertices, [city.x, city.y], map, color);
+    }
   }
-  for (const marker of map.markers.markers) {
-    pushWorldVertex(vertices, [marker.x, marker.y], map, colorForMarker(marker));
+  if (visibility.markers !== false) {
+    for (const marker of map.markers.markers) {
+      pushWorldVertex(vertices, [marker.x, marker.y], map, colorForMarker(marker));
+    }
   }
   return new Float32Array(vertices);
 }
@@ -1120,18 +1260,20 @@ function scoreCityLabel(city) {
   return (city.capital ? 320 : 0) + (city.provincial ? 150 : 0) + (city.port ? 28 : 0) + city.population;
 }
 
-function minLabelScale(city, rank) {
+function minLabelScale(city, rank, totalLabels = 48) {
   if (city.capital) return 0.45;
-  if (city.provincial || rank < 12) return 0.75;
-  if (rank < 26 || city.population >= 72) return 1.15;
-  return 1.85;
+  if (city.provincial) return 0.68;
+  const total = Math.max(1, totalLabels - 1);
+  const rankRatio = Math.max(0, Math.min(1, rank / total));
+  if (rank < 12) return 0.72 + rankRatio * 0.22;
+  if (city.population >= 72) return 1.02 + rankRatio * 0.82;
+  return 0.9 + rankRatio ** 0.72 * 5.2;
 }
 
-function labelLimitForScale(scale) {
-  if (scale < 0.75) return 8;
-  if (scale < 1.35) return 16;
-  if (scale < 2.4) return 28;
-  return 42;
+function labelLimitForScale(scale, maxCityLabels = 5000) {
+  const limit = normalizeMaxCityLabels(maxCityLabels, 5000);
+  const t = smoothStep(0.55, 6.2, scale);
+  return Math.min(limit, Math.max(8, Math.round(8 + (limit - 8) * t)));
 }
 
 function labelPaddingForScale(scale) {
@@ -1141,14 +1283,27 @@ function labelPaddingForScale(scale) {
 }
 
 function labelBoxForItem(item, screen) {
-  const estimatedWidth = Math.max(34, Math.min(132, 14 + item.city.name.length * 13));
-  const estimatedHeight = item.city.capital ? 21 : 18;
+  const estimatedWidth = item.city.capital
+    ? Math.max(48, Math.min(168, 18 + item.city.name.length * 16))
+    : Math.max(34, Math.min(132, 14 + item.city.name.length * 13));
+  const estimatedHeight = item.city.capital ? 27 : 18;
   return {
     left: screen.x - estimatedWidth / 2,
     right: screen.x + estimatedWidth / 2,
     top: screen.y - estimatedHeight - 8,
     bottom: screen.y + 2
   };
+}
+
+function normalizeMaxCityLabels(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(8, Math.min(5000, Math.round(number)));
+}
+
+function smoothStep(edge0, edge1, value) {
+  const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(0.000001, edge1 - edge0)));
+  return t * t * (3 - 2 * t);
 }
 
 function boxesOverlap(a, b, padding) {
@@ -1213,13 +1368,29 @@ function compileShader(gl, type, source) {
   return shader;
 }
 
-function resizeCanvasToDisplaySize(canvas) {
-  const width = Math.max(1, Math.round(canvas.clientWidth * window.devicePixelRatio));
-  const height = Math.max(1, Math.round(canvas.clientHeight * window.devicePixelRatio));
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
+function lockCanvasToInitialDisplaySize(canvas, overlay = null) {
+  const rect = canvas.getBoundingClientRect();
+  const cssWidth = Math.max(1, Math.round(rect.width || canvas.clientWidth || canvas.parentElement?.clientWidth || 1));
+  const cssHeight = Math.max(1, Math.round(rect.height || canvas.clientHeight || canvas.parentElement?.clientHeight || 1));
+  const pixelRatio = window.devicePixelRatio || 1;
+  const width = Math.max(1, Math.round(cssWidth * pixelRatio));
+  const height = Math.max(1, Math.round(cssHeight * pixelRatio));
+
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  canvas.width = width;
+  canvas.height = height;
+
+  if (overlay) {
+    overlay.style.left = "0";
+    overlay.style.top = "0";
+    overlay.style.right = "auto";
+    overlay.style.bottom = "auto";
+    overlay.style.width = `${cssWidth}px`;
+    overlay.style.height = `${cssHeight}px`;
   }
+
+  return {cssWidth, cssHeight, width, height, pixelRatio};
 }
 
 function roundMs(value) {

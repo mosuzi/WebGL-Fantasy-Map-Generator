@@ -1,14 +1,45 @@
+const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
+
 export function bindRuntimePanel(documentRef, handlers) {
+  applyControlPreferences(documentRef);
   documentRef.getElementById("generate-map").addEventListener("click", handlers.onGenerate);
   documentRef.getElementById("random-seed").addEventListener("click", handlers.onRandomSeed);
+  documentRef.getElementById("open-generation-panel")?.addEventListener("click", handlers.onOpenGenerationPanel);
   documentRef.getElementById("fit-view").addEventListener("click", handlers.onFitView);
-  documentRef.getElementById("show-ocean-height")?.addEventListener("change", event => handlers.onShowOceanHeight?.(event.target.checked));
+  documentRef.getElementById("show-ocean-height")?.addEventListener("change", event => {
+    updateControlPreferences(documentRef, {showOceanHeight: event.target.checked});
+    handlers.onShowOceanHeight?.(event.target.checked);
+  });
+  documentRef.getElementById("max-city-labels")?.addEventListener("input", event => {
+    const value = normalizeMaxCityLabels(event.target.value);
+    setLabelLimitControlValue(documentRef, value);
+    updateControlPreferences(documentRef, {maxCityLabels: value});
+    handlers.onMaxCityLabels?.(value);
+  });
   documentRef.getElementById("open-height-panel")?.addEventListener("click", handlers.onOpenHeightPanel);
   documentRef.getElementById("open-state-panel")?.addEventListener("click", handlers.onOpenStatePanel);
+  documentRef.getElementById("open-province-panel")?.addEventListener("click", handlers.onOpenProvincePanel);
+  documentRef.getElementById("open-city-panel")?.addEventListener("click", handlers.onOpenCityPanel);
+  documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
+  for (const control of documentRef.querySelectorAll("[data-layer]")) {
+    if (control.tagName === "BUTTON") {
+      control.addEventListener("click", () => {
+        const visible = control.getAttribute("aria-pressed") !== "true";
+        setLayerControlState(control, visible);
+        updateLayerPreference(documentRef, control.dataset.layer, visible);
+        handlers.onLayerVisible?.(control.dataset.layer, visible);
+      });
+    } else {
+      control.addEventListener("change", () => {
+        updateLayerPreference(documentRef, control.dataset.layer, control.checked);
+        handlers.onLayerVisible?.(control.dataset.layer, control.checked);
+      });
+    }
+  }
   for (const button of documentRef.querySelectorAll("[data-mode]")) {
     button.addEventListener("click", () => {
-      documentRef.querySelectorAll("[data-mode]").forEach(item => item.classList.toggle("active", item === button));
+      setActiveModeButton(documentRef, button.dataset.mode);
       handlers.onMode(button.dataset.mode);
     });
   }
@@ -16,6 +47,18 @@ export function bindRuntimePanel(documentRef, handlers) {
 
 export function setActiveModeButton(documentRef, mode) {
   documentRef.querySelectorAll("[data-mode]").forEach(item => item.classList.toggle("active", item.dataset.mode === mode));
+  updateControlPreferences(documentRef, {colorMode: mode});
+}
+
+export function readControlPreferences(documentRef) {
+  try {
+    const raw = documentRef.defaultView?.localStorage?.getItem(CONTROL_PREFERENCES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export function setEditingInteractionLock(documentRef, locked, {allowedPanelIds = []} = {}) {
@@ -39,9 +82,13 @@ function editLockControls(documentRef) {
   return documentRef.querySelectorAll([
     "#generate-map",
     "#random-seed",
+    "#open-generation-panel",
     "#fit-view",
     "#open-height-panel",
     "#open-state-panel",
+    "#open-province-panel",
+    "#open-city-panel",
+    "#open-route-panel",
     "#open-river-panel",
     "#seed-input",
     "#cells-input",
@@ -50,8 +97,81 @@ function editLockControls(documentRef) {
     "#heightmap-template",
     "#auto-random-seed",
     "#show-ocean-height",
+    "#max-city-labels",
+    "[data-layer]",
     "[data-mode]"
   ].join(", "));
+}
+
+function applyControlPreferences(documentRef) {
+  const preferences = readControlPreferences(documentRef);
+  if (typeof preferences.colorMode === "string") {
+    documentRef.querySelectorAll("[data-mode]").forEach(item => item.classList.toggle("active", item.dataset.mode === preferences.colorMode));
+  }
+  if (typeof preferences.showOceanHeight === "boolean") {
+    const input = documentRef.getElementById("show-ocean-height");
+    if (input) input.checked = preferences.showOceanHeight;
+  }
+  if (typeof preferences.maxCityLabels === "number") {
+    setLabelLimitControlValue(documentRef, preferences.maxCityLabels);
+  }
+  for (const [layer, visible] of Object.entries(preferences.layers || {})) {
+    const control = documentRef.querySelector(`[data-layer="${cssEscape(layer)}"]`);
+    if (!control) continue;
+    if (control.tagName === "BUTTON") setLayerControlState(control, visible);
+    else control.checked = Boolean(visible);
+  }
+}
+
+function setLabelLimitControlValue(documentRef, value) {
+  const normalized = normalizeMaxCityLabels(value);
+  const input = documentRef.getElementById("max-city-labels");
+  const output = documentRef.getElementById("max-city-labels-value");
+  if (input) input.value = String(normalized);
+  if (output) output.textContent = String(normalized);
+}
+
+function normalizeMaxCityLabels(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 5000;
+  return Math.max(8, Math.min(5000, Math.round(number)));
+}
+
+function setLayerControlState(control, visible) {
+  const enabled = Boolean(visible);
+  if (control.tagName === "BUTTON") {
+    control.classList.toggle("active", enabled);
+    control.setAttribute("aria-pressed", enabled ? "true" : "false");
+    return;
+  }
+  control.checked = enabled;
+}
+
+function updateLayerPreference(documentRef, layer, visible) {
+  if (!layer) return;
+  const preferences = readControlPreferences(documentRef);
+  updateControlPreferences(documentRef, {
+    layers: {
+      ...(preferences.layers || {}),
+      [layer]: Boolean(visible)
+    }
+  });
+}
+
+function updateControlPreferences(documentRef, patch) {
+  try {
+    const storage = documentRef.defaultView?.localStorage;
+    if (!storage) return;
+    const preferences = {...readControlPreferences(documentRef), ...patch};
+    storage.setItem(CONTROL_PREFERENCES_KEY, JSON.stringify(preferences));
+  } catch {
+    // localStorage may be unavailable in restricted browser modes.
+  }
+}
+
+function cssEscape(value) {
+  if (globalThis.CSS?.escape) return CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
 }
 
 export function readOptionsFromPanel(documentRef, previousOptions) {
@@ -73,6 +193,7 @@ export function setSeedInput(documentRef, seed) {
 export function updateRuntimePanel(documentRef, state) {
   const {map, renderer} = state;
   const stats = renderer.getStats();
+  syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
   documentRef.getElementById("map-badge").textContent = `${map.metadata.graphWidth} x ${map.metadata.graphHeight} / ${map.metadata.cellsTarget} cells`;
   updateMapLegend(documentRef, map, stats.colorMode);
@@ -108,6 +229,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "随机预览", map.summary.randomPreview.join(", ")),
     statRow(documentRef, "专题", stats.colorMode),
     statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏"),
+    statRow(documentRef, "图层", formatLayerVisibility(stats.layerVisibility)),
     statRow(documentRef, "GPU 顶点", stats.vertexCount),
     statRow(documentRef, "道路三角形", stats.routeTriangleCount),
     statRow(documentRef, "道路 mesh", `${stats.routeWidthMode}, ${stats.routeBuildMs}ms`),
@@ -120,11 +242,12 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "定位状态", stats.locateStatus),
     statRow(documentRef, "编辑历史", formatEditHistory(state.editHistory?.getStats())),
     statRow(documentRef, "编辑刷新", formatEditRefresh(state.lastEditRefresh)),
+    statRow(documentRef, "派生过期", formatDerivedStale(map)),
     statRow(documentRef, "对象索引", stats.objectPickingIndex ? `${stats.objectPickingIndex.buckets} buckets / ${stats.objectPickingIndex.markers} markers / ${stats.objectPickingIndex.routeSegments} routes / ${stats.objectPickingIndex.riverSegments} rivers` : "none"),
     statRow(documentRef, "线段顶点", stats.lineVertexCount),
     statRow(documentRef, "点顶点", stats.pointVertexCount),
     statRow(documentRef, "marker", stats.markerCount),
-    statRow(documentRef, "城市标签", `${stats.visibleLabelCount} / ${stats.labelCount}`),
+    statRow(documentRef, "城市标签", `${stats.visibleLabelCount} / ${stats.labelCount} / 上限 ${formatCityLabelLimit(map, stats)}`),
     statRow(documentRef, "相机", `x ${stats.camera.scale.toFixed(2)}, ${stats.camera.offsetX.toFixed(2)}, ${stats.camera.offsetY.toFixed(2)}`),
     statRow(documentRef, "绘制耗时", `${stats.draw.drawMs}ms`),
     statRow(documentRef, "WebGL error", stats.draw.glError),
@@ -132,6 +255,25 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "快照依赖", map.status.snapshotDependency ? "是" : "否"),
     statRow(documentRef, "生成日志", map.generationLog.join(" / "))
   );
+}
+
+function syncLabelLimitControlBounds(documentRef, map, stats) {
+  const input = documentRef.getElementById("max-city-labels");
+  const output = documentRef.getElementById("max-city-labels-value");
+  if (!input) return;
+  const cityTotal = map.settlements?.cities?.length || map.settlements?.metadata?.cities || 48;
+  const max = Math.max(8, Math.min(5000, cityTotal));
+  input.max = String(max);
+  const current = normalizeMaxCityLabels(stats.labelOptions?.maxCityLabels ?? input.value);
+  const displayValue = Math.min(current, max);
+  input.value = String(displayValue);
+  if (output) output.textContent = String(displayValue);
+}
+
+function formatCityLabelLimit(map, stats) {
+  const cityTotal = map.settlements?.cities?.length || map.settlements?.metadata?.cities || 0;
+  const configured = normalizeMaxCityLabels(stats.labelOptions?.maxCityLabels ?? 5000);
+  return String(cityTotal ? Math.min(configured, cityTotal) : configured);
 }
 
 function updateMapLegend(documentRef, map, colorMode) {
@@ -257,7 +399,29 @@ function formatEditHistory(stats) {
 
 function formatEditRefresh(refresh) {
   if (!refresh) return "none";
-  return `${refresh.render} / ${refresh.selection} / ${refresh.derived} / ${refresh.affected}`;
+  const pending = refresh.pendingDerived && refresh.pendingDerived !== "none" ? ` / 待派生 ${refresh.pendingDerived}` : "";
+  return `${refresh.render} / ${refresh.selection} / ${refresh.derived} / ${refresh.affected}${pending}`;
+}
+
+function formatDerivedStale(map) {
+  const systems = map.metadata?.derivedStale?.systems || [];
+  return systems.length ? systems.join(", ") : "none";
+}
+
+function formatLayerVisibility(visibility = {}) {
+  const labels = {
+    routes: "道路",
+    rivers: "河流",
+    cities: "城市",
+    labels: "标签",
+    stateBorders: "国界",
+    provinceBorders: "省界",
+    coastline: "海岸"
+  };
+  return Object.entries(labels)
+    .filter(([key]) => visibility[key] !== false)
+    .map(([, label]) => label)
+    .join(", ") || "none";
 }
 
 function formatDistance(value) {

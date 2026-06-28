@@ -1,20 +1,31 @@
+import {createDetailGrid} from "../components/detail-grid.js";
+import {createFilterInput} from "../components/filter-input.js";
+import {createHistoryActions} from "../components/history-actions.js";
+import {createObjectTable} from "../components/object-table.js";
+import {createSortBar} from "../components/sort-bar.js";
+import {createSummaryGrid} from "../components/summary-grid.js";
+import {readTableScrollTop, restoreTableScrollTop} from "../components/table-scroll.js";
+
 export function createStatePanel(documentRef, manager, callbacks = {}) {
   const panelState = {
     active: false,
     map: null,
     targetStateId: null,
     sourceStateId: null,
+    filter: "",
+    sortKey: "population",
+    sortDir: "desc",
     radius: 28,
     lastAffected: 0,
     history: null
   };
 
-  manager.registerPanel("state-panel", {
+  const panelRecord = manager.registerPanel("state-panel", {
     title: "国家编辑",
     left: 400,
     top: 128,
-    width: 380,
-    maxWidth: 440,
+    width: 560,
+    maxWidth: 680,
     onClose: () => {
       panelState.active = false;
       callbacks.onActiveChange?.(false);
@@ -22,7 +33,8 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     }
   });
 
-  function render() {
+  function render({preserveTableScroll = true} = {}) {
+    const tableScrollTop = preserveTableScroll ? readTableScrollTop(panelRecord.body) : 0;
     manager.setContent("state-panel", renderStatePanel(documentRef, panelState, {
       onActiveChange: active => {
         panelState.active = active;
@@ -33,9 +45,38 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
         panelState.targetStateId = stateId;
         render();
       },
+      onFilter: value => {
+        panelState.filter = value;
+        render({preserveTableScroll: false});
+      },
+      onSort: key => {
+        if (panelState.sortKey === key) {
+          panelState.sortDir = panelState.sortDir === "asc" ? "desc" : "asc";
+        } else {
+          panelState.sortKey = key;
+          panelState.sortDir = key === "id" || key === "name" ? "asc" : "desc";
+        }
+        render({preserveTableScroll: false});
+      },
+      onSelect: row => {
+        panelState.targetStateId = row.id;
+        callbacks.onSelect?.(stateObject(row));
+        render();
+      },
+      onLocate: row => callbacks.onLocate?.(stateObject(row)),
+      onEdit: row => {
+        panelState.targetStateId = row.id;
+        panelState.active = true;
+        callbacks.onActiveChange?.(true);
+        callbacks.onEdit?.(stateObject(row));
+        render();
+      },
+      onRename: (stateId, name) => {
+        callbacks.onRename?.(stateId, name);
+        render();
+      },
       onRadius: radius => {
         panelState.radius = radius;
-        render();
       },
       onColorChange: color => callbacks.onColorChange?.(panelState.targetStateId, color),
       onCapitalChange: burgId => callbacks.onCapitalChange?.(panelState.targetStateId, burgId),
@@ -44,6 +85,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       onUndo: () => callbacks.onUndo?.(),
       onRedo: () => callbacks.onRedo?.()
     }));
+    restoreTableScrollTop(panelRecord.body, tableScrollTop);
   }
 
   return {
@@ -81,15 +123,80 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
 }
 
 function renderStatePanel(documentRef, state, callbacks) {
-  const summary = documentRef.createElement("div");
-  summary.className = "state-panel-summary";
-  summary.append(
-    metric(documentRef, "状态", state.active ? "编辑中" : "未启用"),
-    metric(documentRef, "目标国家", formatStateName(state.map, state.targetStateId)),
-    metric(documentRef, "来源国家", formatStateName(state.map, state.sourceStateId)),
-    metric(documentRef, "影响", state.lastAffected),
-    metric(documentRef, "历史", state.history ? `undo ${state.history.undo} / redo ${state.history.redo}` : "none")
-  );
+  const metrics = buildStateMetrics(state.map);
+  const visibleRows = sortRows(filterRows(metrics.rows, state.filter), state.sortKey, state.sortDir);
+  const selected = metrics.rows.find(row => row.id === state.targetStateId) || null;
+
+  const summary = createSummaryGrid(documentRef, {
+    className: "state-panel-summary",
+    items: [
+      {label: "状态", value: state.active ? "编辑中" : "未启用"},
+      {label: "国家", value: metrics.total},
+      {label: "筛选", value: visibleRows.length},
+      {label: "目标国家", value: formatStateName(state.map, state.targetStateId)},
+      {label: "影响", value: state.lastAffected}
+    ]
+  });
+
+  const controls = documentRef.createElement("div");
+  controls.className = "state-panel-controls";
+  const filter = createFilterInput(documentRef, {
+    placeholder: "筛选名称 / id / 首都",
+    value: state.filter,
+    onChange: callbacks.onFilter
+  });
+  controls.append(filter);
+
+  const sort = createSortBar(documentRef, {
+    className: "state-panel-sort",
+    options: [["population", "人口"], ["burgs", "城镇"], ["area", "面积"], ["id", "ID"]],
+    activeKey: state.sortKey,
+    direction: state.sortDir,
+    onSort: callbacks.onSort
+  });
+
+  const table = createObjectTable(documentRef, {
+    columns: [
+      {key: "id", label: "ID", align: "right"},
+      {key: "name", label: "名称"},
+      {key: "capitalName", label: "首都"},
+      {key: "burgs", label: "城镇", align: "right"},
+      {key: "population", label: "人口", align: "right", format: value => formatNumber(value)}
+    ],
+    rows: visibleRows,
+    selectedId: state.targetStateId,
+    getRowId: row => row.id,
+    onSelect: callbacks.onSelect,
+    onLocate: callbacks.onLocate,
+    emptyText: "没有匹配的国家"
+  });
+
+  let detailRows = [];
+  if (selected) {
+    detailRows = [
+      stateNameEditor(documentRef, selected, callbacks),
+      {label: "全称", value: selected.fullName},
+      {label: "首都", value: selected.capitalName},
+      {label: "文化", value: selected.culture},
+      {label: "宗教", value: selected.religion},
+      {label: "中心 cell", value: selected.centerCell},
+      {label: "面积", value: formatNumber(selected.area)},
+      {label: "城镇", value: selected.burgs},
+      {label: "人口", value: formatNumber(selected.population)},
+      {label: "邻国", value: selected.neighborCount}
+    ];
+    const edit = documentRef.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary-action";
+    edit.textContent = "编辑此国家";
+    edit.addEventListener("click", () => callbacks.onEdit(selected));
+    detailRows.push(edit);
+  }
+  const details = createDetailGrid(documentRef, {
+    className: "state-panel-details",
+    emptyText: "未选中国家",
+    rows: detailRows
+  });
 
   const active = documentRef.createElement("button");
   active.type = "button";
@@ -116,21 +223,15 @@ function renderStatePanel(documentRef, state, callbacks) {
 
   const radius = rangeField(documentRef, "半径", state.radius, 4, 120, 2, value => callbacks.onRadius(value));
 
-  const historyActions = documentRef.createElement("div");
-  historyActions.className = "state-history-actions";
-  const undo = documentRef.createElement("button");
-  undo.type = "button";
-  undo.className = "secondary-action";
-  undo.textContent = "撤销上次";
-  undo.addEventListener("click", callbacks.onUndo);
-  const redo = documentRef.createElement("button");
-  redo.type = "button";
-  redo.className = "secondary-action";
-  redo.textContent = "重做上次";
-  redo.addEventListener("click", callbacks.onRedo);
-  historyActions.append(undo, redo);
+  const historyActions = createHistoryActions(documentRef, {
+    className: "state-history-actions",
+    history: state.history,
+    onUndo: callbacks.onUndo,
+    onRedo: callbacks.onRedo,
+    noteText: `历史：${state.history ? `undo ${state.history.undo} / redo ${state.history.redo} / ${state.history.lastLabel}` : "none"}；来源：${formatStateName(state.map, state.sourceStateId)}`
+  });
 
-  return [summary, active, target, color, capital, sampleActions, radius, historyActions];
+  return [summary, controls, sort, table, details, active, target, color, capital, sampleActions, radius, historyActions];
 }
 
 function targetSelector(documentRef, state, callbacks) {
@@ -221,14 +322,88 @@ function rangeField(documentRef, label, value, min, max, step, onInput) {
   return field;
 }
 
-function metric(documentRef, label, value) {
-  const item = documentRef.createElement("div");
-  const term = documentRef.createElement("span");
-  const desc = documentRef.createElement("strong");
-  term.textContent = label;
-  desc.textContent = String(value);
-  item.append(term, desc);
-  return item;
+function buildStateMetrics(map) {
+  const rows = stateRows(map).map(row => {
+    const state = map.politics.states[row.id];
+    const capitalCity = findCapitalCity(map, state?.capital);
+    const population = (state?.urban || 0) + (state?.rural || 0);
+    return {
+      id: row.id,
+      name: state?.fullName || state?.name || row.name,
+      rawName: state?.name || row.name,
+      fullName: state?.fullName || state?.name || row.name,
+      capitalName: capitalCity?.name || "none",
+      culture: indexedName(map?.society?.cultures, state?.culture),
+      religion: indexedName(map?.society?.religions, state?.religion),
+      centerCell: state?.center ?? state?.gridCenter ?? "none",
+      area: state?.area || state?.cells || 0,
+      burgs: state?.burgs || stateCities(map, row.id).length,
+      population,
+      neighborCount: state?.neighbors?.length || 0
+    };
+  });
+  return {rows, total: rows.length};
+}
+
+function filterRows(rows, filter) {
+  const query = filter.trim().toLowerCase();
+  if (!query) return rows;
+  return rows.filter(row =>
+    String(row.id).includes(query)
+    || row.name.toLowerCase().includes(query)
+    || row.rawName.toLowerCase().includes(query)
+    || row.capitalName.toLowerCase().includes(query)
+  );
+}
+
+function sortRows(rows, key, direction) {
+  const factor = direction === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    if (a[key] === b[key]) return a.id - b.id;
+    if (typeof a[key] === "string") return a[key].localeCompare(b[key], "zh-CN") * factor;
+    return a[key] > b[key] ? factor : -factor;
+  });
+}
+
+function stateObject(row) {
+  return {
+    kind: "state",
+    id: row.id,
+    name: row.rawName,
+    fullName: row.fullName,
+    capitalName: row.capitalName,
+    culture: row.culture,
+    religion: row.religion,
+    centerCell: row.centerCell,
+    population: roundNumber(row.population),
+    burgs: row.burgs,
+    area: roundNumber(row.area)
+  };
+}
+
+function stateNameEditor(documentRef, selected, callbacks) {
+  const editor = documentRef.createElement("form");
+  editor.className = "state-name-editor";
+  const label = documentRef.createElement("label");
+  const text = documentRef.createElement("span");
+  text.textContent = "名称";
+  const input = documentRef.createElement("input");
+  input.type = "text";
+  input.maxLength = 48;
+  input.value = selected.rawName || "";
+  label.append(text, input);
+
+  const apply = documentRef.createElement("button");
+  apply.type = "submit";
+  apply.className = "secondary-action";
+  apply.textContent = "应用名称";
+  editor.addEventListener("submit", event => {
+    event.preventDefault();
+    callbacks.onRename(selected.id, input.value);
+  });
+
+  editor.append(label, apply);
+  return editor;
 }
 
 function stateRows(map) {
@@ -242,6 +417,15 @@ function stateCities(map, stateId) {
   return (map?.settlements?.cities || [])
     .filter(city => city?.burgId && city.state === stateId)
     .sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population || a.id - b.id);
+}
+
+function findCapitalCity(map, burgId) {
+  return (map?.settlements?.cities || []).find(city => city?.burgId === burgId) || null;
+}
+
+function indexedName(items, id) {
+  const item = items?.[id];
+  return item?.name || item?.fullName || (id === undefined || id === null ? "none" : String(id));
 }
 
 function firstStateId(map) {
@@ -289,4 +473,12 @@ function hueToRgb(p, q, t) {
 
 function toHex(channel) {
   return Math.round(Math.max(0, Math.min(1, channel)) * 255).toString(16).padStart(2, "0");
+}
+
+function formatNumber(value) {
+  return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
+}
+
+function roundNumber(value) {
+  return Math.round((Number(value) || 0) * 10) / 10;
 }

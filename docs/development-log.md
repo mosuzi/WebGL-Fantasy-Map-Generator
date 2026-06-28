@@ -1584,6 +1584,8 @@
 - `node --check app\webgl-generator\src\ui\panel.js` 通过。
 - `node --input-type=module -e "...generatePlaceholderMap..."` 通过，确认占位地图可输出 seed、目标 cells，且 `sourceDependency = false`、`snapshotDependency = false`。
 - `git diff --check` 通过。
+
+
 - `git diff --name-only -- source` 无输出。
 - `git diff --name-only -- prototype` 无输出。
 
@@ -5929,3 +5931,848 @@
   - 正式页面切到省份专题后，当前样本 `206` 个省份全部有颜色。
   - 当前样本 `441` 条省份邻接边，同色数为 `0`。
   - renderer `colorMode` 为 `provinces`，运行时面板同步显示省份专题。
+
+## 2026-06-27 DevTools 打开时加载卡顿诊断与动态 mesh 缓存
+
+问题：
+
+- 打开正式 app 页面时，如果浏览器 DevTools 已开启，页面容易长时间卡在加载或首屏响应很慢。
+- 诊断发现默认 10k cells 可正常加载；100k cells 生成耗时主要集中在生成算法，尤其河流生成。
+- 另一个放大因素是 DevTools 打开/停靠会触发更多 resize、layout 和重绘；此前 renderer 每次 `draw()` 都会重建道路、河流和选中高亮 screen-space mesh，导致 DevTools 场景把普通重绘放大成重复几何构建。
+
+实施：
+
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `dynamicBuffersDirty` 缓存标记。
+  - 道路、河流、选中高亮 buffer 改为脏了才重建。
+  - 相机变化、窗口 resize、地图加载和定位时统一标记 viewport 相关动态 buffer 失效。
+  - 选中路线时标记 route mesh 失效；定位闪烁时仍允许 selection mesh 按帧更新。
+- 修改 `app/webgl-generator/src/runtime/edit-refresh-scheduler.js`：
+  - 根据编辑影响范围显式失效 route、river 或 selection 动态 buffer。
+  - 河流宽度编辑会重新构建 river mesh；普通 cell 颜色刷新不再顺带重建道路/河流。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/runtime/edit-refresh-scheduler.js` 通过。
+- Playwright 临时静态 server 验证：
+  - 默认 10k cells 首次 draw 后动态 mesh cache 均为 clean，连续 8 次 `renderer.draw()` 耗时降为 `0..0.1ms`。
+  - 100k cells 生成后动态 mesh cache 均为 clean，连续 8 次 `renderer.draw()` 耗时同样为 `0..0.1ms`。
+
+补充约束：
+
+- 用户进一步要求：canvas 的初始大小只依赖初始化时的窗口大小，后续窗口变化不要影响画布本体大小，也不要触发画布相关重建。
+- 调整 `PlaceholderMapRenderer`：
+  - 初始化时调用 `lockCanvasToInitialDisplaySize()`，将 canvas 的 CSS 尺寸、drawing buffer 尺寸和 overlay 尺寸固定为初始测量值。
+  - 移除 `window.resize` 对 renderer 的尺寸响应。
+  - `draw()` 不再读取当前 `clientWidth/clientHeight` 来调整 canvas backing store。
+- 追加验证：
+  - Playwright 中先以 `1280x800` 打开页面，canvas 初始尺寸为 `940x800`。
+  - 再将 viewport 改为 `900x620`，canvas rect、overlay rect、drawing buffer 和 renderer `canvasSize` 均保持 `940x800`。
+  - resize 后动态 mesh cache 仍为 clean，没有触发道路、河流或选中高亮 mesh 重建。
+
+补充启动体验修正：
+
+- 用户反馈：如果开着 DevTools 直接打开页面，页面仍可能长时间停在初始的“等待生成”。
+- 原因分析：
+  - “等待生成”是 HTML 初始文案，旧流程在模块加载后立刻同步执行首轮 `generate()`。
+  - 同步生成完成前浏览器没有机会绘制中间状态；DevTools 预打开会让主线程更慢，于是用户看到的仍是初始文案。
+  - 如果页面长期停在原始“等待生成”且状态栏也是“初始化中”，则还需要检查 DevTools 是否启用了 Disable JavaScript 或处于断点暂停状态。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 首轮和按钮触发的生成改为 `requestGenerate()`。
+  - 先写入“等待生成任务”状态，再等一次 paint 后执行同步生成重活。
+  - `window.__webglGeneratorApp` 在首轮生成前就暴露，方便 DevTools 检查当前启动状态。
+  - 生成异常会显示“生成失败”，不再静默停留在初始文案。
+- 修改 `app/webgl-generator/src/main.js`：
+  - 为 app 创建阶段增加启动失败兜底显示。
+- 验证：
+  - 普通 Playwright 加载：`DOMContentLoaded` 后立即显示“等待生成任务”，随后生成完成。
+  - CDP 模拟 DevTools 预打开、开启 Runtime/Debugger 并禁用 cache：同样先显示“等待生成任务”，随后生成完成，无 page error 或 console error。
+
+再次修正：
+
+- 用户反馈 DevTools 开着仍然卡住。
+- 将生成调度从仅依赖 `requestAnimationFrame()` 改为 `setTimeout()` 与 `requestAnimationFrame()` 竞速：
+  - `setTimeout()` 保证即使 rAF 被 DevTools、后台状态或调试状态延后，生成任务也会启动。
+  - rAF 路径仍保留，用于正常情况下尽量让浏览器先绘制启动状态。
+- 修改 `app/webgl-generator/index.html`：
+  - 增加 3 秒启动 watchdog。
+  - 如果模块脚本没有暴露 `window.__webglGeneratorApp`，页面显示“脚本尚未启动，请检查 DevTools 是否暂停或禁用 JavaScript”。
+- 追加验证：
+  - 普通加载、CDP DevTools 模拟、禁用 rAF 三条路径均可从“等待生成任务”进入生成完成。
+  - 故意阻断 `src/main.js` 加载时，watchdog 会显示“脚本尚未启动”，不再停留在 HTML 初始的“等待生成”。
+
+第三次修正：
+
+- 用户反馈仍卡在“等待生成任务”。
+- 将生成调度扩展为多路竞速：
+  - `scheduler.postTask()`。
+  - `MessageChannel`。
+  - `setTimeout()`。
+  - `requestAnimationFrame()` 后再 `setTimeout()`。
+- 修改 `tools/serve-prototype.mjs`：
+  - 本地静态 server 对所有文件返回 `Cache-Control: no-store, max-age=0`。
+  - 避免 DevTools 打开时浏览器继续使用旧版 module 脚本。
+- 已重启 5410 预览服务，并验证 `http://127.0.0.1:5410/src/runtime/app.js` 返回 `no-store`。
+- 追加验证：
+  - CDP DevTools 模拟、禁用 cache、同时禁用 `setTimeout` 和 `requestAnimationFrame` 时，页面仍可从“等待生成任务”进入生成完成。
+
+## 2026-06-27 国家编辑器城镇迁移与滑条拖动修正
+
+问题：
+
+- 国家编辑器笔刷只修改国家 cell 归属，没有同步落在涂色区域内的城镇归属。
+- 如果被涂走的是旧国家首都，旧国家会继续引用已经迁走的首都。
+- 国家编辑器半径滑条在拖动时每次 `input` 都重建整个面板，导致鼠标拖动被中断，只能一点点调整。
+
+实施：
+
+- 修改 `app/webgl-generator/src/runtime/state-edit-commands.js`：
+  - 国家笔刷最终命令在收笔时捕获城镇、burg 和受影响国家快照。
+  - 将涂色 cell 上的城镇迁入新国家，并同步 `settlements.cities[*].state` 与 `pack.burgs[*].state`。
+  - 如果迁走的是旧国家首都，将该城镇降级为普通城市，并在旧国家剩余城镇中按省会优先、人口次之重选首都。
+  - 支持撤销/重做恢复城镇、burg 和国家首都状态。
+  - 收笔后刷新国家统计和邻接摘要。
+- 修改 `app/webgl-generator/src/ui/panels/state-panel.js`：
+  - 半径滑条 `input` 只更新面板状态和当前输出值，不再重建整个浮动面板。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/state-edit-commands.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/state-panel.js` 通过。
+- Playwright 直接执行国家笔刷命令：
+  - 选择一个仍有其它城市的国家首都，将其 cell 涂到另一个国家。
+  - 原首都城镇和 burg 成功迁入目标国家，并被降级为非首都。
+  - 旧国家成功另选首都，新首都仍属于旧国家。
+  - 撤销恢复原首都、城镇归属和 burg 归属；重做再次迁移成功。
+- Playwright 验证国家编辑器半径滑条：
+  - 触发 `input` 后滑条 DOM 节点保持不变，输出值和 `getBrush().radius` 同步更新。
+
+## 2026-06-27 国家编辑器管理列表
+
+问题：
+
+- 国家编辑器只有目标国家下拉选择，不适合像河流管理面板那样批量浏览、快速定位和连续编辑。
+- 用户希望国家编辑器更接近当前河流编辑器的面板体验。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panels/state-panel.js`：
+  - 引入通用 `createObjectTable()`。
+  - 国家面板新增国家统计摘要、筛选框、排序按钮和国家表格。
+  - 支持按人口、城镇数、面积和 ID 排序。
+  - 表格行点击会切换当前目标国家，双击/定位按钮可快速定位。
+  - 详情区展示选中国家的首都、面积、城镇、人口和邻国数。
+  - “编辑此国家”会把目标国家切到当前行，并进入国家编辑状态。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 接入国家面板的选中、定位和编辑回调。
+  - 选中国家时同步地图选中对象。
+  - 编辑国家时切换到国家专题并启用国家编辑锁。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 为国家面板新增筛选、排序、详情和表格布局样式。
+  - 合并重复的 `.state-sample-actions` 样式。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/state-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- Playwright 验证：
+  - 打开国家编辑面板后，国家表格正常渲染。
+  - 点击表格行会更新目标国家，并同步 `window.__webglGeneratorApp.selection.object.kind === "state"`。
+  - 筛选框输入国家 ID 后表格收敛到匹配结果。
+  - 点击“编辑此国家”后，国家编辑激活，renderer 专题切为 `states`。
+
+## 2026-06-27 国家详情归并到国家面板
+
+问题：
+
+- 选中国家对象时会打开通用“对象详情”浮动面板，和已经具备遍历能力的国家编辑面板职责重复。
+- 国家重命名仍挂在通用对象详情面板里，国家列表面板无法独立完成浏览、定位和编辑闭环。
+
+实施：
+
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 选中国家对象时自动关闭通用对象详情面板，并打开国家编辑面板。
+  - 国家面板目标国家同步到当前选中国家。
+  - 为国家面板接入国家重命名命令，继续走编辑历史和刷新调度。
+- 修改 `app/webgl-generator/src/ui/panels/state-panel.js`：
+  - 详情区新增国家名称编辑器。
+  - 将全称、首都、文化、宗教、中心 cell、面积、城镇、人口和邻国数集中展示在国家遍历面板。
+  - 列表继续显示国家全称，输入框编辑国家根名。
+- 修改 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 通用对象详情面板不再展示国家对象，也不再负责国家重命名。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增国家名称编辑器布局样式。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/state-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/object-details-panel.js` 通过。
+- `git diff --check` 通过。
+- Playwright 验证正式版 `app/webgl-generator`：
+  - 打开国家面板后点击国家行，当前选择对象为 `state`。
+  - 通用对象详情面板保持关闭。
+  - 国家面板保持打开并展示名称编辑器。
+  - 在国家面板修改国家根名后，`state.name` 与 `state.fullName` 同步更新。
+  - 详情区包含文化和宗教信息。
+
+## 2026-06-27 国家编辑器政治派生一致性第一刀
+
+问题：
+
+- 国家笔刷提交后已经同步国家归属和城镇迁移，但省份归属仍可能停留在旧国家，形成跨国家省份 cell。
+- 城市迁移国家后，`city.province` 没有跟着当前 cell 的省份修正。
+- 运行时缺少明确的“已刷新哪些派生、哪些派生暂缓”的记录。
+- 政治边界线层没有面向编辑后的局部重建入口。
+
+实施：
+
+- 使用真实四级流程的子智能体：
+  - 中书舍人 / 调查策划员 `Jason` 只读审查现有国家笔刷、刷新调度、renderer 和政治生成链路。
+  - 给事中 / 审查者 `Socrates` 独立审查本次 diff 风险。
+- 修改 `app/webgl-generator/src/runtime/state-edit-commands.js`：
+  - 国家笔刷 effects 明确区分 state cell、pack state cell、settlement state、state statistics、province cells、province statistics、政治边界、selection、labels、object panels 和暂缓派生。
+  - 提交国家笔刷后，对受影响 pack land cells 做局部省份修复：优先使用同国家邻接省份，否则回退到目标国家最大省份。
+  - 同步受影响 grid cell 的 `grid.cells.province`。
+  - 同步迁移城市的 `city.province`。
+  - 重算省份 `cells / area / neighbors` 摘要。
+  - 将军事、zones 和 state-center markers 标记为派生过期。
+  - 为受影响 pack cell state、省份、城市 province、派生过期状态增加 undo/redo 快照恢复。
+  - 审查发现“迁走首都后替补首都未入快照”的漏洞后，补充替补首都 city/burg 快照，避免撤销后留下双首都。
+- 修改 `app/webgl-generator/src/runtime/edit-refresh-scheduler.js`：
+  - 支持在 effects 中记录 `pendingDerived`。
+  - `political-boundaries` 会触发 renderer 线层重建。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `refreshLineLayers()`。
+  - `buildLineVertices()` 增加基于当前 `grid.cells.state/province` 和共享 Voronoi 边的国家/省份边界线。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 运行时面板显示派生过期系统。
+  - 编辑刷新摘要显示待派生项目。
+- 修改 `docs/current-plan.md`：
+  - 将下一步从“补政治派生一致性策略”更新为“第一刀已完成，后续做省份 pole、军事/zones 重建入口或城市/省份面板”。
+
+说明：
+
+- 拖动预览阶段仍只刷新颜色，不实时重建国家/省份边界线；政治边界线在收笔提交命令后刷新。这是当前性能取舍，后续如需要可单独做预览线层节流刷新。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/state-edit-commands.js` 通过。
+- `node --check app/webgl-generator/src/runtime/edit-refresh-scheduler.js` 通过。
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- 纯内存命令级不变量验证通过：
+  - 跨国家边界 cell 涂色后，受影响 `grid/pack` 国家和省份归属一致，全图跨国家省份 cell 未增加。
+  - 同一 grid cell 映射多个初始 pack state 时，撤销可逐 pack cell 恢复原 state/province。
+  - 非首都城市迁移后，`city.state`、`burg.state`、`city.province` 同步迁入目标国家，撤销可恢复。
+  - 迁走一个仍有其它城市的国家首都后，旧国家会另选单一首都；撤销后全图 city/burg 首都数量和国家 `capital` 引用恢复；重做后仍保持单首都。
+- Playwright 临时静态 server 验证正式版 `app/webgl-generator`：
+  - 国家笔刷命令经 `editHistory` 与 `editRefreshScheduler` 执行后，`political-boundaries` 触发线层重建，`lineVertexCount` 从 `8952` 变为 `8954`。
+  - 运行时面板显示“派生过期”，包含 `military / zones / state-markers`。
+  - 编辑刷新摘要显示 `pendingDerived: military, zones, state-markers`；后续省份面板第一刀已将 `province-poles` 改为局部重算项。
+  - 受影响 pack cell 的 province 均属于新的 state。
+- `git diff --check` 通过。
+
+## 2026-06-27 省份管理面板第一刀与省份 pole 局部重算
+
+问题：
+
+- 国家编辑器已经可以修复国家笔刷后的省份归属，但 `province.pole` 仍被标记为待派生，没有在本地命令里恢复一致。
+- 省份对象仍缺少类似国家/河流的独立遍历面板，查看、定位、改名和改色路径分散。
+
+实施：
+
+- 使用真实四级流程的子智能体：
+  - 中书舍人 / 调查策划员 `Boole` 只读调查省份面板、对象表格、对象解析、省份命令和 province pole 生成链路。
+  - 给事中 / 审查者 `Hilbert` 独立审查本次 diff 风险。
+- 新增 `app/webgl-generator/src/ui/panels/province-panel.js`：
+  - 独立浮动“省份管理”面板。
+  - 支持省份统计摘要、筛选、按面积/cells/国家/ID 排序、表格选择、双击/按钮定位。
+  - 详情区展示全称、所属国家、中心 pack/grid cell、pole、面积、cells、邻接省份、城市数、文化和宗教。
+  - 支持省份名称编辑、省份颜色编辑和 EditHistory 撤销/重做。
+- 修改 `app/webgl-generator/src/runtime/object-edit-commands.js`：
+  - `createRenameObjectCommand()` 支持省份名称与 fullName 恢复。
+  - 新增 `createSetProvinceColorCommand()`，省份颜色变更刷新 `cell-colors` 和对象面板。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 注册 `province-panel`，侧栏按钮可打开省份面板。
+  - 选中省份对象时关闭通用对象详情面板，转入省份管理面板。
+  - 省份重命名、改色、撤销和重做均走编辑历史与刷新调度。
+- 修改 `app/webgl-generator/src/runtime/state-edit-commands.js`：
+  - 国家笔刷的 `province-poles` 从待派生项改为已处理派生项。
+  - 对受影响省份按 pack 省内 cell 与边界 cell 距离局部重算 `province.pole`。
+  - `snapshotProvinces()` 追加 `pole` 快照，保证 undo/redo 恢复。
+- 修改 `app/webgl-generator/index.html`、`app/webgl-generator/src/ui/panel.js`、`app/webgl-generator/src/styles.css`：
+  - 新增侧栏“省份管理”入口。
+  - 编辑锁禁用列表纳入省份面板入口。
+  - 补省份面板布局样式。
+- 修改 `docs/current-plan.md`：
+  - 将省份管理面板和 province pole 局部重算标记为已完成。
+
+取舍：
+
+- 本刀不做省份 cell 归属笔刷、不重跑完整省份扩张，也不触碰军事、zones 或经济链路。
+- 省份面板接管省份对象详情；通用对象详情仍保留其它对象类型。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/province-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/runtime/object-edit-commands.js` 通过。
+- `node --check app/webgl-generator/src/runtime/state-edit-commands.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- 纯内存命令级验证通过：
+  - 省份重命名会同步 `name/fullName`，undo/redo 可恢复。
+  - 省份颜色修改会同步 `province.color`，undo/redo 可恢复。
+  - 国家笔刷后受影响省份的 `province.pole` 存在并落在本省 pack cell 上，undo 后 pole 恢复。
+- Playwright 临时静态 server 验证正式版 `app/webgl-generator`：
+  - 点击侧栏“省份管理”可打开独立浮动面板。
+  - 点击省份表格行后 selection 对象为 `province`。
+  - 经 `EditHistory` 修改省份名称和颜色后，面板显示同步更新。
+
+审查修正：
+
+- `Hilbert` 指出普通高度专题点击陆地时也可能选中省份并自动打开省份面板；已收窄为仅当省份面板已打开或当前专题为省份时，才自动分流到省份面板。普通高度专题下仍可显示通用对象详情。
+- 原本无 `color` 字段的省份在颜色命令撤销时会删除新增颜色，避免保留临时颜色。
+- 零 cell 省份的 `pole` 改为 `null`，不再回退到旧中心点伪造有效 pole。
+- 追加验证：
+  - 原色为空的省份执行颜色命令后，undo 会删除新增 `color` 字段。
+  - 涂空小省份后 `province.pole === null`，undo 后恢复原 pole。
+  - 浏览器中默认高度专题选中省份不会自动弹出省份面板；切到省份专题后选中省份会自动打开省份面板。
+
+## 2026-06-27 河流详情归并到河流管理面板
+
+问题：
+
+- 河流和国家、省份的面板逻辑不一致：选中河流时仍会打开通用对象详情面板，河流管理面板只是额外入口。
+- 河流名称编辑挂在通用对象详情的编辑态中，而河流宽度、定位和遍历在河流管理面板中，用户需要在两个面板之间切换。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panels/river-panel.js`：
+  - 河流详情区新增名称编辑器，重命名直接走面板内表单。
+  - 面板记录当前编辑对象，按钮在“进入河流编辑”和“退出河流编辑”之间切换。
+  - 关闭河流面板时通知 runtime 退出河流编辑态，避免页面卡在编辑状态。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 选中河流对象时关闭通用对象详情面板，直接打开“河流管理”面板。
+  - 河流面板接入河流重命名命令，继续走 `EditHistory` 和刷新调度。
+  - 河流编辑按钮支持同一河流的进入/退出切换。
+  - 关闭河流面板时增加一次性抑制，避免退出编辑触发 selection 回调后又重新打开面板。
+  - 编辑锁允许面板从 `object-details + river-panel` 收窄为仅 `river-panel`。
+- 修改 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 通用对象详情面板不再展示河流对象，也不再负责河流重命名或跳转河流面板。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增河流名称编辑器布局样式。
+- 修改 `docs/current-plan.md`：
+  - 记录河流详情已归并到河流管理面板。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/river-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/object-details-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/object-edit-commands.js` 通过。
+- Playwright 临时静态 server 验证正式版 `app/webgl-generator`：
+  - 选中河流后自动打开“河流管理”面板。
+  - 通用对象详情面板保持关闭。
+  - 在河流面板内重命名河流后，`river.name` 与面板文本同步更新，历史命令为 `重命名河流 #1`。
+  - 点击“进入河流编辑”后 `editingObject.kind === "river"`，按钮变为“退出河流编辑”。
+  - 关闭河流面板后面板保持关闭，`editingObject` 重置为 `null`，不会重新弹开。
+
+## 2026-06-27 河流定位保持列表滚动位置
+
+问题：
+
+- 河流管理面板中点击列表行的“定位”后，定位会触发 selection 更新和面板重渲染。
+- 重渲染会重置 `.object-table-wrap` 的 `scrollTop`，导致刚点击定位的河流行被滚出列表视口。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panels/river-panel.js`：
+  - 渲染前读取当前河流表格滚动位置，渲染后恢复。
+  - 筛选和排序仍重置到顶部；定位、选中、编辑历史刷新等普通重渲染保留原滚动位置。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/river-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- Playwright 临时静态 server 验证正式版 `app/webgl-generator`：
+  - 打开河流管理面板，将河流表格滚动到接近底部。
+  - 点击倒数第二条河流的“定位”。
+  - 定位后 `scrollTop` 从 `6828` 保持为 `6828`。
+  - 选中河流仍在表格视口内，selection 对象为 `river #220`。
+
+## 2026-06-27 城市管理面板第一刀
+
+目标：
+
+- 将城市/聚落从通用对象详情中迁入独立浮动管理面板，和国家、省份、河流保持一致。
+- 第一刀只做列表、统计、定位、选择和名称编辑，不做新增/删除、移动城市、人口修改、归属重分配或港口重算。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/panels/city-panel.js`：
+  - 独立浮动“城市管理”面板。
+  - 支持城市总数、首都数、港口数、人口合计和筛选数量摘要。
+  - 支持按人口、类型、国家、省份和 ID 排序。
+  - 列表展示 ID、名称、类型、国家、省份和人口，点击选中，双击或按钮定位。
+  - 详情区展示类型、标记、所属国家、所属省份、人口、grid cell、pack cell、burg id、文化和宗教。
+  - 名称编辑走既有 `createRenameObjectCommand()`，同步 `settlements.cities` 与 `pack.burgs`，并接入 EditHistory 撤销/重做。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 注册 `city-panel`，侧栏按钮可打开城市管理面板。
+  - 选中城市对象时关闭通用对象详情面板，直接打开城市管理面板。
+  - 城市面板的选择、定位、重命名、撤销和重做接入 selection store、renderer locate 和 edit refresh scheduler。
+  - 国家首都变更、国家刷子、省份重命名等可能影响城市面板显示的路径会刷新城市面板。
+- 修改 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 通用对象详情不再展示城市对象，避免城市详情来源重复。
+- 修改 `app/webgl-generator/index.html`、`app/webgl-generator/src/ui/panel.js`、`app/webgl-generator/src/styles.css`：
+  - 新增侧栏“城市管理”入口。
+  - 编辑锁禁用列表纳入城市面板入口。
+  - 补城市面板布局样式。
+- 修改 `docs/current-plan.md`：
+  - 将城市/聚落正式面板第一刀标记为已完成，并记录后续第二刀范围。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/city-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/object-details-panel.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 点击侧栏“城市管理”可打开独立浮动面板。
+  - 通过 selection store 选中城市后，城市面板保持打开，通用对象详情面板保持关闭。
+  - 在城市面板内将城市 `#0` 改名为“浏览器测试城”后，`settlements.cities[0].name` 与对应 `pack.burgs[1].name` 同步更新。
+  - EditHistory 记录为 `重命名城市 #0`，面板文本同步显示新名称。
+- `git diff --check` 通过。
+
+## 2026-06-28 浮动面板筛选输入焦点修复
+
+问题：
+
+- 国家、省份、城市和河流面板的筛选框输入一个字符后会失焦。
+- 根因是筛选 `input` 事件更新面板状态后调用 `PanelManager.setContent()`，整块替换面板 body，正在输入的 DOM 节点被销毁。
+- 第一版只在替换后恢复焦点，对英文输入可用，但对中文输入法不够：拼音组词处于 composition 阶段时，DOM 被替换会打断输入法状态，即使随后重新聚焦也已经破坏了本次输入。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/components/filter-input.js`：
+  - 封装筛选搜索框。
+  - `compositionstart` 到 `compositionend` 期间只保留输入框自身值，不触发面板重渲染。
+  - `compositionend` 后再提交筛选值并重渲染列表，避免中文拼音候选词阶段被 DOM 替换打断。
+- 修改 `app/webgl-generator/src/ui/panels/state-panel.js`、`province-panel.js`、`city-panel.js`、`river-panel.js`：
+  - 四个面板的筛选框统一改用 `createFilterInput()`。
+- 修改 `app/webgl-generator/src/ui/panel-manager.js`：
+  - `setContent()` 替换内容前记录当前焦点元素在面板 body 内的子节点路径、控件类型和文本选择区间。
+  - 替换内容后，如果新节点路径和控件类型一致，则用 `focus({preventScroll: true})` 恢复焦点，并恢复输入光标位置。
+  - 该逻辑仅作为非 composition 场景的焦点兜底；中文输入法的主要保护在 `filter-input`。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/components/filter-input.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel-manager.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/city-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/province-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/state-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/river-panel.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 国家、省份、城市和河流四个面板的筛选框分别连续输入 `abc`。
+  - 每次字符输入后 `document.activeElement` 都仍是对应筛选框。
+  - 每个筛选框最终值为 `abc`，光标停在末尾。
+  - 模拟中文输入法 composition：四个面板在 `compositionstart -> input(isComposing=true)` 期间筛选输入框保持同一个 DOM 节点且保持焦点，直到 `compositionend` 后才提交筛选值并重渲染。
+
+## 2026-06-28 浮动面板公共 DOM 组件与图层开关
+
+目标：
+
+- 抽出大部分浮动面板共用的 DOM 组件，减少国家、省份、城市和河流面板之间的重复结构。
+- 修复无人地带与相邻国家之间国界开放，导致国界断开的视觉问题。
+- 修复国家列表在 hover 更新时滚动位置被重置到顶部的问题。
+- 在专题视图之外提供独立图层显隐开关，先覆盖道路、河流、城市、城市标签、国界、省界和海岸线。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/components/summary-grid.js`、`sort-bar.js`、`detail-grid.js`、`history-actions.js` 和 `table-scroll.js`：
+  - 统一摘要指标、排序按钮、详情网格、撤销/重做操作区和表格滚动位置恢复。
+  - 国家、省份、城市和河流面板改用这些公共组件。
+- 修改 `app/webgl-generator/src/ui/components/table-scroll.js`：
+  - 表格重渲染后立即恢复旧 `scrollTop`，并在下一帧兜底恢复一次。
+  - 避免国家面板在画布 hover 触发面板刷新时把列表滚动位置打回顶部。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `layerVisibility` 状态与 `setLayerVisible()`。
+  - line layer 支持按开关重建海岸线、湖岸线、国界和省界。
+  - point layer 支持按开关重建人口点、城市点和 marker 点。
+  - 道路、河流和城市标签在 draw/update label 阶段按开关跳过。
+  - 国家边界构建允许 `state > 0` 与 `state = 0` 的陆地邻接边生成国界线；省界仍不绘制 `province = 0` 的边界。
+- 修改 `app/webgl-generator/index.html`、`app/webgl-generator/src/ui/panel.js` 和 `app/webgl-generator/src/runtime/app.js`：
+  - 侧栏新增“图层”开关组。
+  - 运行时面板统计区显示当前开启的图层。
+  - 编辑锁期间图层开关会和其他非编辑交互一起禁用。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/components/summary-grid.js` 通过。
+- `node --check app/webgl-generator/src/ui/components/sort-bar.js` 通过。
+- `node --check app/webgl-generator/src/ui/components/detail-grid.js` 通过。
+- `node --check app/webgl-generator/src/ui/components/history-actions.js` 通过。
+- `node --check app/webgl-generator/src/ui/components/table-scroll.js` 通过。
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/state-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/province-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/city-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/river-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 当前生成图存在 `173` 条无人地带与国家陆地邻接边。
+  - 关闭国界后 line vertex 从 `9298` 降到 `7932`，重新打开后恢复为 `9298`。
+  - 关闭城市点后 point vertex 从 `861` 降到 `44`。
+  - 关闭城市标签后可见标签数为 `0`。
+  - 道路与河流开关会正确写入 renderer 图层状态。
+  - 国家面板滚动到 `593` 后触发画布 hover，重渲染后的表格 `scrollTop` 仍为 `593`。
+  - 国家面板摘要与详情区来自公共组件。
+
+## 2026-06-28 省份归属笔刷与路线面板第一刀
+
+目标：
+
+- 在正式版补上省份 cell 归属笔刷，让省份编辑器具备和国家编辑器同型的区域编辑能力。
+- 新增路线管理浮动面板，作为第二批对象管理面板的第一刀。
+- 本轮不做省份新增/删除、跨国家刷省份、路线改道、新增路线或删除路线。
+
+实施：
+
+- 新增 `app/webgl-generator/src/runtime/province-edit-commands.js`：
+  - 提供 `createApplyProvinceBrushCommand()` 和 `applyProvinceBrushPreview()`。
+  - 省份笔刷提交后同步 `grid.cells.province` 与对应陆地 `pack.cells.province`。
+  - 同步被影响城市的 `city.province`。
+  - 重算省份 cells、面积、邻接、center 兜底和 pole。
+  - 支持 EditHistory 撤销/重做；主省份字段由 command changes 回放，快照只保存城市和省份派生字段，避免预览态覆盖撤销。
+- 修改 `app/webgl-generator/src/ui/panels/province-panel.js`：
+  - 新增启用/停止省份编辑、目标省份、取选中、取悬停、半径和影响数量。
+  - “编辑此省份”会进入省份专题并开启省份编辑。
+  - 编辑中不再让外部 selection 刷新覆盖目标省份。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 新增 `provinceEdit` 运行时状态和 `bindProvinceEditing()`。
+  - 省份编辑与高度编辑、国家编辑互斥。
+  - 省份编辑锁定编辑外交互，只允许省份面板继续操作。
+  - 省份笔刷只允许刷目标省份所属国家内的陆地 cell。
+- 新增 `app/webgl-generator/src/ui/panels/route-panel.js`：
+  - 独立浮动“路线管理”面板。
+  - 支持路线总数、筛选数、总长度、海路数量摘要。
+  - 支持按长度、段数、类型和 ID 排序。
+  - 列表展示 ID、类型、起点、终点和长度，点击选中，双击或按钮定位。
+  - 详情区展示类型、等级、起点、终点、长度、段数、grid cells、pack cells 和 feature。
+- 修改 `app/webgl-generator/index.html`、`app/webgl-generator/src/ui/panel.js`、`app/webgl-generator/src/styles.css`：
+  - 侧栏新增“路线管理”入口。
+  - 编辑锁纳入路线管理入口。
+  - 补省份编辑控件和路线面板样式。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/province-edit-commands.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/province-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/route-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- Playwright 临时内嵌静态 server 验证省份笔刷：
+  - 样本 grid cell `934` 从省份 `89` 刷到同国家目标省份 `84`。
+  - 对应 `3` 个陆地 pack cell 省份同步为 `84`。
+  - EditHistory 记录 `省份笔刷 2 cells`。
+  - 撤销后 grid cell `934` 恢复为省份 `89`。
+  - 重做后 grid cell `934` 再次变为省份 `84`。
+  - 开启省份编辑后专题切换为 `provinces`，面板含半径与影响数量控件。
+- Playwright 临时内嵌静态 server 验证路线面板：
+  - 侧栏“路线管理”可打开独立浮动面板。
+  - 当前生成图 `679` 条路线全部进入列表。
+  - 点击默认排序第一行选中 route `#586`。
+  - 路线渲染/高亮 buffer 生成 `25908` 个 route vertices。
+  - 路线面板摘要和详情区来自公共组件。
+
+## 2026-06-28 生成配置浮动面板第一刀
+
+目标：
+
+- 将固定侧栏中的生成配置迁移到独立 DOM 浮动面板，继续收窄固定侧栏职责。
+- 保持既有生成流程、默认 seed、目标 cells、地图尺寸、地形模板和随机 seed 行为不变。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - 注册 `generation-panel` 浮动面板。
+  - 面板内保留原生成控件 ID：`seed-input`、`cells-input`、`width-input`、`height-input`、`heightmap-template`、`auto-random-seed`、`generate-map` 和 `random-seed`。
+  - 这样 `readOptionsFromPanel()`、`setSeedInput()` 和 `requestGenerate()` 可以继续复用原流程。
+- 修改 `app/webgl-generator/index.html`：
+  - 固定侧栏“生成”区只保留“生成配置”入口。
+  - 原 seed、cells、尺寸、模板和生成按钮从固定侧栏移除。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 应用初始化时创建 `generation-panel`，确保首次自动生成前生成控件已经存在于 DOM。
+  - 侧栏入口可打开生成配置面板。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 绑定 `open-generation-panel`。
+  - 编辑锁定时禁用生成配置入口和面板内生成控件。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增生成配置面板表单、字段、checkbox 和按钮行样式。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/generation-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 首次自动生成仍使用 `stage-2-1` 和 `10000` 目标 cells。
+  - 固定侧栏不再包含 `seed-input` 或 `generate-map`。
+  - 点击“生成配置”可打开 `generation-panel`，面板内包含 seed 输入框。
+  - 点击“换 seed”后 seed 从 `stage-2-1` 变为 `map-mqxawad0-1c1tom7`，并完成重新生成。
+  - 在浮动面板内设置 `cells=2000`、`width=800`、`height=600`、`heightmapTemplate=archipelago` 后点击生成，运行时地图更新为 `800 x 600 / 2000 cells`。
+
+## 2026-06-28 控制面板 tab 化
+
+问题：
+
+- 单独把生成配置迁入浮动面板太薄，固定侧栏中仍残留专题选择器、图层选择和管理页面入口。
+- 用户要求这些控制类 UI 与生成配置合并到同一个浮动面板中，并分别占用 tab。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - `generation-panel` 从单一生成表单扩展为“控制面板”。
+  - 新增 `生成 / 专题 / 图层 / 管理` 四个 tab。
+  - 生成 tab 保留 seed、目标 cells、地图尺寸、地形模板、自动随机 seed、生成和换 seed。
+  - 专题 tab 承载高度、温度、降水、生物群系、文化、宗教、国家、省份、区域和人口专题按钮，以及“高度专题显示海底”开关。
+  - 图层 tab 承载道路、河流、城市、城市标签、国界、省界和海岸线显隐开关。
+  - 管理 tab 承载适配视图、高度编辑、国家编辑、省份管理、城市管理、路线管理和河流管理入口。
+- 修改 `app/webgl-generator/index.html`：
+  - 固定侧栏只保留“控制面板”入口。
+  - 从固定侧栏移除专题选择器、图层选择和管理入口。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增控制面板 tab、tab body、图层双列和管理入口双列布局。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/generation-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 控制面板可打开，tab 为 `生成 / 专题 / 图层 / 管理`。
+  - 固定侧栏中专题按钮、图层开关和管理入口数量均为 `0`。
+  - 控制面板内有 `10` 个专题按钮、`7` 个图层开关和 `6` 个对象管理入口。
+  - 生成 tab 可设置 `cells=3000`、`width=900`、`height=620` 并重新生成，运行时 badge 更新为 `900 x 620 / 3000 cells`。
+  - 专题 tab 可切换到 `states`，并能开启“高度专题显示海底”。
+  - 图层 tab 可关闭道路图层，renderer 中 `layerVisibility.routes=false`。
+  - 管理 tab 可打开路线管理面板。
+
+## 2026-06-28 图层按钮与控制偏好持久化
+
+问题：
+
+- 控制面板中的图层开关仍是普通 checkbox，视觉上比各管理面板入口简陋。
+- 用户配置好的图层显隐、专题和高度专题海底显示状态，每次重新打开页面都会丢失。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - 图层 tab 从 checkbox 改为 `button[data-layer]`。
+  - 按钮使用 `aria-pressed` 和 `active` class 表示当前显隐状态。
+  - 按钮内部增加圆点指示器，便于快速扫视开关状态。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 新增 `webgl-generator-control-preferences` localStorage 偏好。
+  - 控制面板绑定前先恢复专题、图层显隐和“高度专题显示海底”控件状态。
+  - 点击专题、图层按钮或切换海底高度显示时，同步写回 localStorage。
+  - localStorage 不可用时静默降级，不影响页面运行。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 初始化生成前读取控制偏好并应用到 renderer，确保首次生成即使用用户上次配置。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增图层按钮、hover、高亮和圆点指示器样式，使图层控制接近管理面板按钮风格。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/generation-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 预置 localStorage 后首次生成恢复 `religions` 专题、`showOceanHeight=true`、道路/标签关闭和城市开启。
+  - 图层 tab 中有 `7` 个 `button[data-layer]`，不再有 `input[data-layer]`。
+  - 关闭的道路和标签按钮 `aria-pressed=false` 且没有高亮；开启的城市按钮 `aria-pressed=true`。
+  - 点击道路按钮会同步 renderer `layerVisibility.routes=true`，并写回 localStorage。
+  - 切换到国家专题会同步 renderer `colorMode=states`，并写回 localStorage。
+  - 关闭“高度专题显示海底”会同步 renderer `showOceanHeight=false`，并写回 localStorage。
+  - 刷新页面后，国家专题、道路开启和海底高度关闭状态仍能恢复。
+
+## 2026-06-28 城市标签上限滑动条
+
+问题：
+
+- 城市标签候选数量此前固定为 `48`，用户无法主动要求展示更多城市标签。
+- 标签 LOD 和避让机制本身有效，应保留缩小时自动隐藏和防重叠行为。
+
+实施：
+
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `labelOptions.maxCityLabels`，默认 `48`。
+  - `getLabelCities()` 从固定 `.slice(0, 48)` 改为读取可配置上限。
+  - `labelLimitForScale()` 按缩放比例和上限动态计算可见数量；缩小时仍保留限流，放大后可显示更多候选。
+  - 新增 `setLabelOptions()`，用于只重建城市标签 overlay，不重建地图 mesh。
+- 修改 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - 在 `图层` tab 新增“城市标签上限”滑动条，范围 `8..240`，默认 `48`。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 滑动条变更时更新数值显示、写入 localStorage，并调用运行时 handler。
+  - 运行时统计中的“城市标签”显示 `可见 / 候选 / 上限`。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 初始化时从控制偏好恢复 `maxCityLabels`。
+  - 滑动条输入时调用 renderer 更新标签候选。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增标签上限滑动条布局和数值样式。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/generation-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - localStorage 预置 `maxCityLabels=96` 后，滑动条、输出值和 renderer 均恢复为 `96`。
+  - 当前样本候选标签数为 `96`，可见标签数为 `17`，说明候选上限与避让/LOD 同时生效。
+  - 将滑动条调到 `160` 后，renderer `labelOptions.maxCityLabels=160`，候选标签数变为 `160`，localStorage 写回 `160`。
+  - 刷新页面后滑动条、输出值、renderer 和 localStorage 仍保持 `160`。
+
+## 2026-06-28 城市标签上限修正
+
+问题：
+
+- 用户发现滑动条拉到最大、地图放大到最大后，仍有一批城镇标签不会显示。
+- 排查确认上一刀的滑动条最大值固定为 `240`，renderer 和 UI clamp 也都限制到 `240`。
+- 当前默认样本实际有 `817` 个城市，因此最大值 `240` 只代表“前 240 个高优先级城市进入标签候选”，不是“所有城市都可参与显示”。
+
+实施：
+
+- 修改 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - 城市标签上限滑动条初始 `max` 从 `240` 放宽为 `2000`。
+  - 步进从 `8` 改为 `1`，便于动态上限精确等于当前城市总数。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js` 和 `app/webgl-generator/src/ui/panel.js`：
+  - `maxCityLabels` 内部 clamp 从 `240` 放宽到 `5000`。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计刷新时，按当前地图 `settlements.cities.length` 动态设置滑动条 `max`。
+  - 当当前地图城市数小于已保存偏好时，UI 显示值会收敛到当前城市总数；renderer 仍可用较大偏好表示“尽可能全量”。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/generation-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 默认样本城市总数为 `817`。
+  - localStorage 预置 `maxCityLabels=240` 时，滑动条 `max` 会动态显示为 `817`，候选标签数仍按偏好为 `240`。
+  - 将滑动条拉到最大后，输入值、输出值、renderer `maxCityLabels` 和候选标签数均为 `817`，非候选城市数为 `0`。
+  - 刷新后仍保持 `817`。
+  - 全图 fit 状态下可见标签仍为 `17`，这是现有 LOD、视口和碰撞避让机制生效，不再是候选上限过低导致。
+
+## 2026-06-28 首都标签字号区分
+
+问题：
+
+- 用户反馈国都文字需要比大城市更大，能够在地图标签中明显分辨。
+
+实施：
+
+- 修改 `app/webgl-generator/src/styles.css`：
+  - `.city-label.capital` 从仅调整颜色和粗体，改为 `15px` 字号、`800` 字重、稍大的 padding 和 `156px` 最大宽度。
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 首都标签碰撞盒估算同步放大，避免字体变大后与其他标签发生未预估重叠。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 首都标签 computed style 为 `font-size: 15px`、`font-weight: 800`。
+  - 普通城市标签 computed style 为 `font-size: 11px`、`font-weight: 400`。
+
+## 2026-06-28 城市标签 LOD 连续化
+
+问题：
+
+- 用户反馈城市标签显隐过渡不自然：全图缩放约 `100%` 时只零星显示少数城市，稍微放大到某个点后又突然显示大量标签。
+- 排查确认原因是标签 LOD 存在硬阈值：
+  - `minLabelScale()` 把大量普通城镇统一卡在 `1.85` 缩放阈值。
+  - `labelLimitForScale()` 在 `0.75 / 1.35 / 2.4` 三个缩放点阶梯式增加可见上限。
+  - 标签显隐直接切换 `display`，没有视觉淡入淡出。
+
+实施：
+
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 普通城市标签的 `minScale` 改为按优先级 rank 连续分布，不再让所有普通城镇共用同一个出现阈值。
+  - `labelLimitForScale()` 改为 `smoothStep()` 曲线，随缩放平滑增加可见数量上限。
+  - 标签显隐从设置 `display` 改为切换 `.visible` class，保留现有 picking 只命中可见标签的逻辑。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - `.city-label` 默认 `opacity: 0`、`visibility: hidden`。
+  - `.city-label.visible` 淡入显示，使用 `140ms` opacity 过渡。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- Playwright 临时内嵌静态 server 验证正式版 `app/webgl-generator`：
+  - 当前样本城市总数 `817`，标签候选数 `817`。
+  - 视图中心固定时，缩放采样可见标签数为：
+    - `1.0 -> 16`
+    - `1.1 -> 17`
+    - `1.2 -> 17`
+    - `1.35 -> 23`
+    - `1.5 -> 25`
+    - `1.7 -> 30`
+    - `1.85 -> 30`
+    - `2.1 -> 43`
+    - `2.4 -> 46`
+  - 没有再出现跨过某个缩放点后标签突然全量显示的跳变。
+
+## 2026-06-28 城市/聚落面板第二刀 A
+
+目标：
+
+- 在城市管理面板补上低风险可撤销编辑，不进入城市新增/删除、移动、自由迁国迁省或港口重算。
+- 人口编辑必须同时写入正式应用城市对象和 source 风格 burg 对象，避免面板、标签和后续统计读取到不同值。
+- 归属修复只允许把城市记录同步到当前所在 cell 的国家/省份，不提供任意下拉迁移。
+
+实施：
+
+- 新增 `app/webgl-generator/src/runtime/city-edit-commands.js`：
+  - `createSetCityPopulationCommand()` 校验非负有限数，写入 `settlements.cities[id].population` 与对应 `pack.burgs[burgId].population`，并支持 EditHistory 撤销/重做。
+  - `createSyncCityOwnerToCellCommand()` 读取城市当前 `packCell` 的 `pack.cells.state/province`，回填 `city.state`、`city.province`、`burg.state` 和既有 `burg.province` 字段。
+  - 两类命令都会刷新城市相关 metadata 和国家 urban/burgs 统计，避免打开管理面板时看到旧值。
+- 修改 `app/webgl-generator/src/runtime/edit-refresh-scheduler.js`：
+  - 新增 `point-layers` effect，允许城市人口相关编辑请求重建点层后再绘制。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 城市面板新增人口编辑和归属同步 runtime callback，统一走 `editHistory.execute()`。
+  - 城市面板撤销/重做后同步刷新国家、省份和城市面板。
+- 修改 `app/webgl-generator/src/ui/panels/city-panel.js`：
+  - 城市详情加入人口输入与“应用人口”按钮。
+  - 城市详情展示当前记录归属、所在 cell 归属、归属一致性和落水检查。
+  - 新增“同步归属到所在 cell”按钮，仅在城市/burg 归属与所在 cell 不一致时启用。
+
+暂缓：
+
+- 不做新增/删除城市。
+- 不做城市位置移动。
+- 不做任意迁国/迁省下拉，也不重跑国家/省份扩张。
+- 不做港口重算、路线重算、军事、zones 或经济派生更新。
+
+## 2026-06-28 城市标签上限默认全量
+
+问题：
+
+- 用户要求“城市标签上限”滑动条默认给全部。
+- 此前虽然滑动条最大值会按当前地图城市总数动态设置，但 renderer 默认 `maxCityLabels` 仍为 `48`，地图加载时会先按 48 个候选构建标签。
+
+实施：
+
+- 修改 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - renderer 默认 `maxCityLabels` 从 `48` 改为 `5000`。
+  - 标签候选和可见上限曲线的默认 fallback 同步改为 `5000`。
+- 修改 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - “城市标签上限”滑动条初始最大值和初始值改为 `5000`。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 没有 localStorage 偏好时，控制层默认上限改为 `5000`。
+  - 运行时面板显示的“上限”按当前城市总数收敛，默认样本会显示为全部城市数量，而不是内部 5000。
+
+行为：
+
+- 新用户或清空 localStorage 后，城市标签候选默认覆盖当前地图全部城市。
+- 用户已经在浏览器 localStorage 中手动设置过较小上限时，仍尊重用户保存的偏好。

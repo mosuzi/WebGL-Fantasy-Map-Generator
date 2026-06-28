@@ -1,28 +1,40 @@
+import {createDetailGrid, detailLine} from "../components/detail-grid.js";
+import {createFilterInput} from "../components/filter-input.js";
 import {createObjectTable} from "../components/object-table.js";
+import {createSortBar} from "../components/sort-bar.js";
+import {createSummaryGrid} from "../components/summary-grid.js";
+import {readTableScrollTop, restoreTableScrollTop} from "../components/table-scroll.js";
 
 export function createRiverPanel(documentRef, manager, callbacks = {}) {
   const panelState = {
+    open: false,
     map: null,
     selection: null,
+    editingObject: null,
     history: null,
     filter: "",
     sortKey: "flux",
     sortDir: "desc"
   };
 
-  manager.registerPanel("river-panel", {
+  const panelRecord = manager.registerPanel("river-panel", {
     title: "河流管理",
     left: 380,
     top: 56,
     width: 520,
-    maxWidth: 620
+    maxWidth: 620,
+    onClose: () => {
+      panelState.open = false;
+      callbacks.onClose?.();
+    }
   });
 
-  function render() {
+  function render({preserveTableScroll = true} = {}) {
+    const tableScrollTop = preserveTableScroll ? readTableScrollTop(panelRecord.body) : 0;
     manager.setContent("river-panel", renderRiverPanel(documentRef, panelState, {
       onFilter: value => {
         panelState.filter = value;
-        render();
+        render({preserveTableScroll: false});
       },
       onSort: key => {
         if (panelState.sortKey === key) {
@@ -31,30 +43,38 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
           panelState.sortKey = key;
           panelState.sortDir = key === "id" ? "asc" : "desc";
         }
-        render();
+        render({preserveTableScroll: false});
       },
       onSelect: row => callbacks.onSelect?.(riverObject(row)),
       onLocate: row => callbacks.onLocate?.(riverObject(row)),
       onEdit: row => callbacks.onEdit?.(riverObject(row)),
+      onRename: (riverId, name) => callbacks.onRename?.(riverId, name),
       onSetWidthFactor: (riverId, widthFactor) => callbacks.onSetWidthFactor?.(riverId, widthFactor),
       onUndo: () => callbacks.onUndo?.(),
       onRedo: () => callbacks.onRedo?.()
     }));
+    restoreTableScrollTop(panelRecord.body, tableScrollTop);
   }
 
   return {
-    open(map, selection, history) {
+    open(map, selection, history, editingObject = panelState.editingObject) {
       panelState.map = map;
       panelState.selection = selection;
+      panelState.editingObject = editingObject;
       panelState.history = history;
       render();
+      panelState.open = true;
       manager.open("river-panel");
     },
-    update(map, selection, history) {
+    update(map, selection, history, editingObject = panelState.editingObject) {
       panelState.map = map;
       panelState.selection = selection;
+      panelState.editingObject = editingObject;
       panelState.history = history;
       render();
+    },
+    isOpen() {
+      return panelState.open;
     }
   };
 }
@@ -62,36 +82,35 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
 function renderRiverPanel(documentRef, state, callbacks) {
   const metrics = buildRiverMetrics(state.map);
   const selectedId = state.selection?.object?.kind === "river" ? state.selection.object.id : null;
+  const editing = state.editingObject?.kind === "river" && state.editingObject.id === selectedId;
   const visibleRows = sortRows(filterRows(metrics.rows, state.filter), state.sortKey, state.sortDir);
 
-  const summary = documentRef.createElement("div");
-  summary.className = "river-panel-summary";
-  summary.append(
-    summaryItem(documentRef, "河流", metrics.total),
-    summaryItem(documentRef, "总长度", formatLength(metrics.totalLength)),
-    summaryItem(documentRef, "最大流量", formatNumber(metrics.maxFlux)),
-    summaryItem(documentRef, "筛选", visibleRows.length)
-  );
+  const summary = createSummaryGrid(documentRef, {
+    className: "river-panel-summary",
+    items: [
+      {label: "河流", value: metrics.total},
+      {label: "总长度", value: formatLength(metrics.totalLength)},
+      {label: "最大流量", value: formatNumber(metrics.maxFlux)},
+      {label: "筛选", value: visibleRows.length}
+    ]
+  });
 
   const controls = documentRef.createElement("div");
   controls.className = "river-panel-controls";
-  const filter = documentRef.createElement("input");
-  filter.type = "search";
-  filter.placeholder = "筛选名称 / id / 类型";
-  filter.value = state.filter;
-  filter.addEventListener("input", event => callbacks.onFilter(event.target.value));
+  const filter = createFilterInput(documentRef, {
+    placeholder: "筛选名称 / id / 类型",
+    value: state.filter,
+    onChange: callbacks.onFilter
+  });
   controls.append(filter);
 
-  const sort = documentRef.createElement("div");
-  sort.className = "river-panel-sort";
-  for (const [key, label] of [["flux", "流量"], ["length", "长度"], ["id", "ID"]]) {
-    const button = documentRef.createElement("button");
-    button.type = "button";
-    button.className = state.sortKey === key ? "active" : "";
-    button.textContent = state.sortKey === key ? `${label} ${state.sortDir === "asc" ? "↑" : "↓"}` : label;
-    button.addEventListener("click", () => callbacks.onSort(key));
-    sort.append(button);
-  }
+  const sort = createSortBar(documentRef, {
+    className: "river-panel-sort",
+    options: [["flux", "流量"], ["length", "长度"], ["id", "ID"]],
+    activeKey: state.sortKey,
+    direction: state.sortDir,
+    onSort: callbacks.onSort
+  });
 
   const table = createObjectTable(documentRef, {
     columns: [
@@ -110,27 +129,29 @@ function renderRiverPanel(documentRef, state, callbacks) {
   });
 
   const selected = selectedId === null ? null : metrics.rows.find(row => row.id === selectedId);
-  const details = documentRef.createElement("div");
-  details.className = "river-panel-details";
+  let detailRows = [];
   if (selected) {
-    details.append(
-      detailLine(documentRef, "选中", `#${selected.id} / ${selected.type}`),
-      detailLine(documentRef, "名称", selected.name),
-      detailLine(documentRef, "长度", formatLength(selected.length)),
-      detailLine(documentRef, "流量", formatNumber(selected.flux)),
-      detailLine(documentRef, "河段", selected.segments),
-      detailLine(documentRef, "宽度因子", selected.widthFactor.toFixed(2))
-    );
-    details.append(widthFactorEditor(documentRef, selected, state.history, callbacks));
+    detailRows = [
+      riverNameEditor(documentRef, selected, callbacks),
+      {label: "选中", value: `#${selected.id} / ${selected.type}`},
+      {label: "长度", value: formatLength(selected.length)},
+      {label: "流量", value: formatNumber(selected.flux)},
+      {label: "河段", value: selected.segments},
+      {label: "宽度因子", value: selected.widthFactor.toFixed(2)},
+      widthFactorEditor(documentRef, selected, state.history, callbacks)
+    ];
     const edit = documentRef.createElement("button");
     edit.type = "button";
     edit.className = "secondary-action";
-    edit.textContent = "进入河流编辑";
+    edit.textContent = editing ? "退出河流编辑" : "进入河流编辑";
     edit.addEventListener("click", () => callbacks.onEdit(selected));
-    details.append(edit);
-  } else {
-    details.textContent = "未选中河流";
+    detailRows.push(edit);
   }
+  const details = createDetailGrid(documentRef, {
+    className: "river-panel-details",
+    emptyText: "未选中河流",
+    rows: detailRows
+  });
 
   return [summary, controls, sort, table, details];
 }
@@ -195,24 +216,29 @@ function riverObject(row) {
   };
 }
 
-function summaryItem(documentRef, label, value) {
-  const item = documentRef.createElement("div");
-  const term = documentRef.createElement("span");
-  const desc = documentRef.createElement("strong");
-  term.textContent = label;
-  desc.textContent = String(value);
-  item.append(term, desc);
-  return item;
-}
+function riverNameEditor(documentRef, selected, callbacks) {
+  const editor = documentRef.createElement("form");
+  editor.className = "river-name-editor";
+  const label = documentRef.createElement("label");
+  const text = documentRef.createElement("span");
+  text.textContent = "名称";
+  const input = documentRef.createElement("input");
+  input.type = "text";
+  input.maxLength = 48;
+  input.value = selected.name || "";
+  label.append(text, input);
 
-function detailLine(documentRef, label, value) {
-  const row = documentRef.createElement("div");
-  const term = documentRef.createElement("span");
-  const desc = documentRef.createElement("strong");
-  term.textContent = label;
-  desc.textContent = String(value);
-  row.append(term, desc);
-  return row;
+  const apply = documentRef.createElement("button");
+  apply.type = "submit";
+  apply.className = "secondary-action";
+  apply.textContent = "应用名称";
+  editor.addEventListener("submit", event => {
+    event.preventDefault();
+    callbacks.onRename(selected.id, input.value);
+  });
+
+  editor.append(label, apply);
+  return editor;
 }
 
 function widthFactorEditor(documentRef, selected, history, callbacks) {

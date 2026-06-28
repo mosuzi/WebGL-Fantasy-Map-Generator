@@ -33,7 +33,7 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
     selection: "refresh",
     runtimeStats: true,
     pickPanel: true,
-    derived: Object.freeze(["state-field", "cell-colors", "political-selection"])
+    derived: Object.freeze(["state-field", "cell-colors", "political-boundaries", "political-selection"])
   }),
   STATE_BRUSH_PREVIEW: Object.freeze({
     render: "draw",
@@ -49,6 +49,15 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
     run(commandOrEffects = null) {
       const effects = normalizeEditEffects(commandOrEffects?.effects || commandOrEffects);
       state.lastEditRefresh = summarizeEditRefresh(effects);
+      invalidateRendererBuffers(state.renderer, effects);
+
+      if (effects.derived.includes("political-boundaries") && typeof state.renderer.refreshLineLayers === "function") {
+        state.renderer.refreshLineLayers({draw: false});
+      }
+
+      if (effects.derived.includes("point-layers") && typeof state.renderer.refreshPointLayers === "function") {
+        state.renderer.refreshPointLayers({draw: false});
+      }
 
       if (effects.derived.includes("cell-colors") && typeof state.renderer.refreshCellSurface === "function") {
         state.renderer.refreshCellSurface();
@@ -77,6 +86,15 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
   };
 }
 
+function invalidateRendererBuffers(renderer, effects) {
+  if (typeof renderer?.invalidateDynamicBuffers !== "function") return;
+  renderer.invalidateDynamicBuffers({
+    routes: effects.derived.includes("route-mesh") || effects.derived.includes("render-mesh"),
+    rivers: effects.derived.includes("river-mesh") || effects.derived.includes("river-width-stats") || effects.derived.includes("render-mesh"),
+    selection: effects.selection === "refresh" || effects.derived.includes("selection") || effects.derived.includes("political-selection")
+  });
+}
+
 export function normalizeEditEffects(effects = {}) {
   return {
     render: effects.render || DEFAULT_EDIT_EFFECTS.render,
@@ -90,10 +108,12 @@ export function normalizeEditEffects(effects = {}) {
 
 function summarizeEditRefresh(effects) {
   const affected = effects.affected.map(item => `${item.kind}#${item.id}`).join(", ") || "none";
+  const pendingDerived = effects.derived.filter(item => item.startsWith("defer:")).map(item => item.slice("defer:".length));
   return {
     render: effects.render,
     selection: effects.selection,
     derived: effects.derived.join(", "),
+    pendingDerived: pendingDerived.join(", ") || "none",
     affected
   };
 }

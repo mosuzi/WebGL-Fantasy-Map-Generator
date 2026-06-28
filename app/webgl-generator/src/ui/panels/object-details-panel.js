@@ -27,13 +27,19 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
         manager.close("object-details");
         return;
       }
+      if (selection.object.kind === "state" || selection.object.kind === "river" || selection.object.kind === "city") {
+        currentObject = null;
+        currentEditingObject = null;
+        suppressNextViewOpenFor = null;
+        manager.close("object-details");
+        return;
+      }
       currentObject = selection.object;
       currentEditingObject = editingObject;
       manager.setContent("object-details", renderDetails(documentRef, selection.object, editingObject, {
         onEdit: () => callbacks.onEdit?.(selection.object),
         onCancelEdit: () => callbacks.onCancelEdit?.(),
         onLocate: () => callbacks.onLocate?.(selection.object),
-        onOpenRiverPanel: () => callbacks.onOpenRiverPanel?.(),
         onRename: name => callbacks.onRename?.(selection.object, name)
       }));
       if (!editingObject && isSameObject(selection.object, suppressNextViewOpenFor)) {
@@ -80,15 +86,6 @@ function renderDetails(documentRef, object, editingObject, callbacks) {
   edit.textContent = editing ? "退出编辑" : "编辑";
   edit.addEventListener("click", editing ? callbacks.onCancelEdit : callbacks.onEdit);
   actions.append(locate, edit);
-  if (object.kind === "river") {
-    const riverPanel = documentRef.createElement("button");
-    riverPanel.type = "button";
-    riverPanel.className = "secondary-action";
-    riverPanel.textContent = "河流面板";
-    riverPanel.addEventListener("click", callbacks.onOpenRiverPanel);
-    actions.append(riverPanel);
-  }
-
   const content = [title, rows];
   if (editing && canRenameObject(object)) content.push(nameEditor(documentRef, object, callbacks));
   content.push(actions);
@@ -105,7 +102,6 @@ function formatObjectTitle(object) {
   if (object.kind === "marker") return `标记 ${object.name}`;
   if (object.kind === "route") return `路线 ${object.from} -> ${object.to}`;
   if (object.kind === "river") return `河流 ${object.name || `#${object.id}`}`;
-  if (object.kind === "state") return `国家 ${object.name}`;
   if (object.kind === "province") return `省份 ${object.name}`;
   if (object.kind === "region") return `区域 ${object.name}`;
   return "未知对象";
@@ -158,16 +154,6 @@ function detailRows(object) {
       ["对象 id", object.id]
     ];
   }
-  if (object.kind === "state") {
-    return [
-      ["全称", object.fullName || object.name],
-      ["首都", object.capitalName || "none"],
-      ["文化", object.culture],
-      ["宗教", object.religion],
-      ["中心 cell", object.centerCell],
-      ["对象 id", object.id]
-    ];
-  }
   if (object.kind === "province") {
     return [
       ["所属国家", object.state],
@@ -186,7 +172,7 @@ function detailRows(object) {
 }
 
 function canRenameObject(object) {
-  return object.kind === "state" || object.kind === "river" || object.kind === "city" || (object.kind === "label" && object.targetKind === "city");
+  return object.kind === "city" || (object.kind === "label" && object.targetKind === "city");
 }
 
 function nameEditor(documentRef, object, callbacks) {
