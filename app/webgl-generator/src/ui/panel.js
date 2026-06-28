@@ -1,6 +1,33 @@
 import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
+import {OBJECT_KIND} from "../runtime/object-kinds.js";
 
 const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
+
+const OBJECT_TITLE_FORMATTERS = Object.freeze({
+  [OBJECT_KIND.CITY]: object => `城市 ${object.name}`,
+  [OBJECT_KIND.LABEL]: object => `标签 ${object.text}`,
+  [OBJECT_KIND.MARKER]: object => `标记 ${object.name}`,
+  [OBJECT_KIND.ROUTE]: object => `路线 ${object.from} -> ${object.to}`,
+  [OBJECT_KIND.RIVER]: object => `河流 #${object.id}`,
+  [OBJECT_KIND.STATE]: object => `国家 ${object.name}`,
+  [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
+  [OBJECT_KIND.CULTURE]: object => `文化 ${object.name}`,
+  [OBJECT_KIND.RELIGION]: object => `宗教 ${object.name}`,
+  [OBJECT_KIND.REGION]: object => `区域 ${object.name}`
+});
+
+const OBJECT_DETAIL_FORMATTERS = Object.freeze({
+  [OBJECT_KIND.CITY]: object => `${object.type} / pop ${object.population} / ${object.state}`,
+  [OBJECT_KIND.LABEL]: object => `${object.targetKind} / ${object.targetName}`,
+  [OBJECT_KIND.MARKER]: object => `${object.type} / cell ${object.cell}`,
+  [OBJECT_KIND.ROUTE]: object => `${object.type} / ${object.level} / distance ${formatDistance(object.distance)}`,
+  [OBJECT_KIND.RIVER]: object => `${object.type} / flux ${object.flux} / length ${object.length}`,
+  [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
+  [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
+  [OBJECT_KIND.CULTURE]: object => `${object.type} / cells ${object.cells} / pop ${object.population}`,
+  [OBJECT_KIND.RELIGION]: object => `${object.type} / ${object.form} / cells ${object.cells}`,
+  [OBJECT_KIND.REGION]: object => `region #${object.id}`
+});
 
 export function bindRuntimePanel(documentRef, handlers) {
   applyControlPreferences(documentRef);
@@ -11,6 +38,10 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("show-ocean-height")?.addEventListener("change", event => {
     updateControlPreferences(documentRef, {showOceanHeight: event.target.checked});
     handlers.onShowOceanHeight?.(event.target.checked);
+  });
+  documentRef.getElementById("show-hover-info")?.addEventListener("change", event => {
+    updateControlPreferences(documentRef, {showHoverInfo: event.target.checked});
+    handlers.onShowHoverInfo?.(event.target.checked);
   });
   documentRef.getElementById("max-city-labels")?.addEventListener("input", event => {
     const value = normalizeMaxCityLabels(event.target.value);
@@ -26,6 +57,10 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-religion-panel")?.addEventListener("click", handlers.onOpenReligionPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
+  documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
+  for (const button of documentRef.querySelectorAll("[data-regenerate-kind]")) {
+    button.addEventListener("click", () => handlers.onRegenerate?.(button.dataset.regenerateKind));
+  }
   for (const control of documentRef.querySelectorAll("[data-layer]")) {
     if (control.tagName === "BUTTON") {
       control.addEventListener("click", () => {
@@ -98,6 +133,8 @@ function editLockControls(documentRef) {
     "#open-religion-panel",
     "#open-route-panel",
     "#open-river-panel",
+    "#open-label-naming-panel",
+    "[data-regenerate-kind]",
     "#seed-input",
     "#cells-input",
     "#width-input",
@@ -105,6 +142,7 @@ function editLockControls(documentRef) {
     "#heightmap-template",
     "#auto-random-seed",
     "#show-ocean-height",
+    "#show-hover-info",
     "#max-city-labels",
     "[data-layer]",
     "[data-mode]"
@@ -119,6 +157,10 @@ function applyControlPreferences(documentRef) {
   if (typeof preferences.showOceanHeight === "boolean") {
     const input = documentRef.getElementById("show-ocean-height");
     if (input) input.checked = preferences.showOceanHeight;
+  }
+  if (typeof preferences.showHoverInfo === "boolean") {
+    const input = documentRef.getElementById("show-hover-info");
+    if (input) input.checked = preferences.showHoverInfo;
   }
   if (typeof preferences.maxCityLabels === "number") {
     setLabelLimitControlValue(documentRef, preferences.maxCityLabels);
@@ -179,6 +221,13 @@ function cssEscape(value) {
   return String(value).replace(/["\\]/g, "\\$&");
 }
 
+export function updateRegenerationSection(documentRef, result = {}) {
+  const status = documentRef.getElementById("regeneration-status");
+  const constraint = documentRef.getElementById("regeneration-constraint");
+  if (status) status.textContent = result.status || "待命";
+  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流会按各自生成约束逐步接入；marker 和 zone 暂缓。";
+}
+
 export function readOptionsFromPanel(documentRef, previousOptions) {
   return {
     ...previousOptions,
@@ -232,7 +281,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "人口点", `${map.settlements.metadata.ruralPopulationPoints} / ${map.settlements.metadata.populationCells}`),
     statRow(documentRef, "摘要校验", map.summary.checksum),
     statRow(documentRef, "随机预览", map.summary.randomPreview.join(", ")),
-    statRow(documentRef, "专题", stats.colorMode),
+    statRow(documentRef, "视图", stats.colorMode),
     statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏"),
     statRow(documentRef, "图层", formatLayerVisibility(stats.layerVisibility)),
     statRow(documentRef, "GPU 顶点", stats.vertexCount),
@@ -252,7 +301,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "线段顶点", stats.lineVertexCount),
     statRow(documentRef, "点顶点", stats.pointVertexCount),
     statRow(documentRef, "marker", stats.markerCount),
-    statRow(documentRef, "城市标签", `${stats.visibleLabelCount} / ${stats.labelCount} / 上限 ${formatCityLabelLimit(map, stats)}`),
+    statRow(documentRef, "标签", `城市 ${stats.visibleCityLabelCount} / ${stats.cityLabelCount} / 上限 ${formatCityLabelLimit(map, stats)}；国家 ${stats.visibleStateLabelCount} / ${stats.stateLabelCount}`),
     statRow(documentRef, "相机", `x ${stats.camera.scale.toFixed(2)}, ${stats.camera.offsetX.toFixed(2)}, ${stats.camera.offsetY.toFixed(2)}`),
     statRow(documentRef, "绘制耗时", `${stats.draw.drawMs}ms`),
     statRow(documentRef, "WebGL error", stats.draw.glError),
@@ -342,63 +391,85 @@ export function updatePickPanel(documentRef, state) {
         statRow(documentRef, "编辑对象", state.editingObject ? formatObjectTitle(state.editingObject) : "none")
       ]
     : [statRow(documentRef, "选中对象", "none"), statRow(documentRef, "编辑对象", state.editingObject ? formatObjectTitle(state.editingObject) : "none")];
-  const hoverRows = pick?.gridCell === null || !pick
-    ? [statRow(documentRef, "状态", "未命中")]
-    : [
-        statRow(documentRef, "悬停对象", pick.object ? formatObjectTitle(pick.object) : "none"),
-        statRow(documentRef, "标签对象", pick.label ? `${pick.label.text} / ${pick.label.targetKind}` : "none"),
-        statRow(documentRef, "政治对象", pick.politicalObject ? formatObjectTitle(pick.politicalObject) : "none"),
-        statRow(documentRef, "grid cell", pick.gridCell),
-        statRow(documentRef, "pack cell", pick.packCell),
-        statRow(documentRef, "feature", `${pick.featureType} #${pick.featureId}`),
-        statRow(documentRef, "高度", pick.height),
-        statRow(documentRef, "温度/降水", `${pick.temperature} / ${pick.precipitation}`),
-        statRow(documentRef, "biome", pick.biome),
-        statRow(documentRef, "文化", pick.culture),
-        statRow(documentRef, "宗教", pick.religion),
-        statRow(documentRef, "国家", pick.state),
-        statRow(documentRef, "省份", pick.province),
-        statRow(documentRef, "区域", pick.region),
-        statRow(documentRef, "城市", pick.city),
-        statRow(documentRef, "marker", pick.marker ? `${pick.marker.name} / ${pick.marker.type}` : "none"),
-        statRow(documentRef, "路线", pick.route ? `${pick.route.from} -> ${pick.route.to}` : "none"),
-        statRow(documentRef, "路线类型", pick.route ? `${pick.route.type} / ${pick.route.level} / ${pick.route.distance.toFixed(1)}` : "none"),
-        statRow(documentRef, "河流", pick.river ? `#${pick.river.id}` : "none"),
-        statRow(documentRef, "河流类型", pick.river ? `${pick.river.type} / flux ${pick.river.flux}` : "none"),
-        statRow(documentRef, "人口", pick.population),
-        statRow(documentRef, "坐标", `${pick.worldX}, ${pick.worldY}`),
-        statRow(documentRef, "候选 cells", pick.candidates),
-        statRow(documentRef, "对象候选", pick.objectCandidates)
-      ];
-  documentRef.getElementById("pick-stats").replaceChildren(...selectionRows, ...hoverRows);
+  documentRef.getElementById("pick-stats").replaceChildren(...selectionRows);
+  updateHoverOverlay(documentRef, pick);
+}
+
+function updateHoverOverlay(documentRef, pick) {
+  const overlay = documentRef.getElementById("hover-overlay");
+  if (!overlay) return;
+  const preferences = readControlPreferences(documentRef);
+  const visible = preferences.showHoverInfo !== false && pick && pick.gridCell !== null;
+  overlay.hidden = !visible;
+  overlay.replaceChildren();
+  if (!visible) return;
+
+  const title = documentRef.createElement("div");
+  title.className = "hover-overlay-title";
+  title.textContent = formatHoverTitle(pick);
+  const rows = documentRef.createElement("dl");
+  rows.className = "hover-overlay-list";
+  rows.replaceChildren(...compactHoverRows(documentRef, pick));
+  overlay.replaceChildren(title, rows);
+}
+
+function formatHoverTitle(pick) {
+  if (pick.label) return `标签 ${pick.label.text}`;
+  if (pick.city && pick.city !== "none") return `城市 ${pick.city}`;
+  if (pick.marker) return `标记 ${pick.marker.name}`;
+  if (pick.river) return `河流 #${pick.river.id}`;
+  if (isNamedRoute(pick.route)) return `路线 ${pick.route.from} -> ${pick.route.to}`;
+  if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
+  if (pick.politicalObject) return formatObjectTitle(pick.politicalObject);
+  return pick.featureLand ? "陆地 cell" : "水域 cell";
+}
+
+function compactHoverRows(documentRef, pick) {
+  const rows = [
+    hoverRow(documentRef, "位置", `grid ${pick.gridCell} / pack ${pick.packCell ?? "none"}`),
+    hoverRow(documentRef, "地形", `${pick.featureType} #${pick.featureId} / 高度 ${pick.height}`),
+    hoverRow(documentRef, "气候", `${pick.temperature}°C / 降水 ${pick.precipitation}`),
+    hoverRow(documentRef, "政区", `${pick.state} / ${pick.province}`),
+    hoverRow(documentRef, "社会", `${pick.culture} / ${pick.religion}`),
+    hoverRow(documentRef, "人口", pick.population)
+  ];
+
+  const objectText = formatHoverObjectLine(pick);
+  if (objectText) rows.unshift(hoverRow(documentRef, "对象", objectText));
+  return rows;
+}
+
+function formatHoverObjectLine(pick) {
+  if (pick.label) return `${pick.label.text} / ${pick.label.targetKind}`;
+  if (pick.city && pick.city !== "none") return pick.city;
+  if (pick.marker) return `${pick.marker.name} / ${pick.marker.type}`;
+  if (isNamedRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
+  if (pick.river) return `河流 #${pick.river.id} / flux ${pick.river.flux}`;
+  if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
+  if (pick.politicalObject) return formatObjectTitle(pick.politicalObject);
+  return "";
+}
+
+function isNamedRoute(route) {
+  return Boolean(route?.from && route?.to && route.from !== "unknown" && route.to !== "unknown");
+}
+
+function hoverRow(documentRef, label, value) {
+  const row = documentRef.createElement("div");
+  const term = documentRef.createElement("dt");
+  const desc = documentRef.createElement("dd");
+  term.textContent = label;
+  desc.textContent = String(value);
+  row.append(term, desc);
+  return row;
 }
 
 function formatObjectTitle(object) {
-  if (object.kind === "city") return `城市 ${object.name}`;
-  if (object.kind === "label") return `标签 ${object.text}`;
-  if (object.kind === "marker") return `标记 ${object.name}`;
-  if (object.kind === "route") return `路线 ${object.from} -> ${object.to}`;
-  if (object.kind === "river") return `河流 #${object.id}`;
-  if (object.kind === "state") return `国家 ${object.name}`;
-  if (object.kind === "province") return `省份 ${object.name}`;
-  if (object.kind === "culture") return `文化 ${object.name}`;
-  if (object.kind === "religion") return `宗教 ${object.name}`;
-  if (object.kind === "region") return `区域 ${object.name}`;
-  return "unknown";
+  return OBJECT_TITLE_FORMATTERS[object?.kind]?.(object) || "unknown";
 }
 
 function formatObjectDetails(object) {
-  if (object.kind === "city") return `${object.type} / pop ${object.population} / ${object.state}`;
-  if (object.kind === "label") return `${object.targetKind} / ${object.targetName}`;
-  if (object.kind === "marker") return `${object.type} / cell ${object.cell}`;
-  if (object.kind === "route") return `${object.type} / ${object.level} / distance ${formatDistance(object.distance)}`;
-  if (object.kind === "river") return `${object.type} / flux ${object.flux} / length ${object.length}`;
-  if (object.kind === "state") return `${object.culture} / ${object.religion}`;
-  if (object.kind === "province") return `${object.state}`;
-  if (object.kind === "culture") return `${object.type} / cells ${object.cells} / pop ${object.population}`;
-  if (object.kind === "religion") return `${object.type} / ${object.form} / cells ${object.cells}`;
-  if (object.kind === "region") return `region #${object.id}`;
-  return "unknown";
+  return OBJECT_DETAIL_FORMATTERS[object?.kind]?.(object) || "unknown";
 }
 
 function formatEditHistory(stats) {
@@ -423,6 +494,7 @@ function formatLayerVisibility(visibility = {}) {
     rivers: "河流",
     cities: "城市",
     labels: "标签",
+    stateLabels: "国家名",
     stateBorders: "国界",
     provinceBorders: "省界",
     coastline: "海岸"

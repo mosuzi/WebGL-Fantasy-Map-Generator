@@ -17,8 +17,8 @@
     </div>
 
     <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
-      <UiSegmented label="专题" :options="themes" :model-value="preferences.colorMode" data-mode />
-      <UiSwitchField label="高度专题显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" />
+      <UiSegmented label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
+      <UiSwitchField label="高度视图显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" />
     </div>
 
     <div class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
@@ -32,6 +32,8 @@
         />
       </div>
 
+      <UiSwitchField label="悬停信息" input-id="show-hover-info" :checked="preferences.showHoverInfo" />
+
       <UiSliderField
         label="城市标签上限"
         input-id="max-city-labels"
@@ -44,10 +46,36 @@
       />
     </div>
 
-    <div class="control-panel-section management-panel-actions" data-control-panel="management" :hidden="activeTab !== 'management'">
-      <UiButton v-for="action in actions" :id="action.id" :key="action.id" variant="secondary">
-        {{ action.label }}
-      </UiButton>
+    <div class="control-panel-section management-panel" data-control-panel="management" :hidden="activeTab !== 'management'">
+      <div class="management-panel-actions">
+        <UiButton v-for="action in actions" :id="action.id" :key="action.id" variant="secondary">
+          {{ action.label }}
+        </UiButton>
+      </div>
+
+      <div class="management-panel-divider" aria-hidden="true"></div>
+
+      <section class="regeneration-section" aria-labelledby="regeneration-section-title">
+        <div class="regeneration-section-header">
+          <h2 id="regeneration-section-title">重新生成</h2>
+          <span id="regeneration-status">待命</span>
+        </div>
+
+        <div class="regeneration-action-grid">
+          <UiButton
+            v-for="action in regenerationActions"
+            :key="action.kind"
+            variant="secondary"
+            :data-regenerate-kind="action.kind"
+          >
+            {{ action.label }}
+          </UiButton>
+        </div>
+
+        <p id="regeneration-constraint" class="regeneration-status-note">
+          国家、省份、城镇、道路、河流会按各自生成约束逐步接入；marker 和 zone 暂缓。
+        </p>
+      </section>
     </div>
   </div>
 </template>
@@ -73,7 +101,7 @@ const preferences = config.preferences;
 
 const tabs = Object.freeze([
   {id: "generation", label: "生成"},
-  {id: "themes", label: "专题"},
+  {id: "themes", label: "视图"},
   {id: "layers", label: "图层"},
   {id: "management", label: "管理"}
 ]);
@@ -106,6 +134,7 @@ const layers = Object.freeze([
   {id: "rivers", label: "河流"},
   {id: "cities", label: "城市"},
   {id: "labels", label: "城市标签"},
+  {id: "stateLabels", label: "国家名称"},
   {id: "stateBorders", label: "国界"},
   {id: "provinceBorders", label: "省界"},
   {id: "coastline", label: "海岸线"}
@@ -120,7 +149,16 @@ const actions = Object.freeze([
   {id: "open-culture-panel", label: "文化管理"},
   {id: "open-religion-panel", label: "宗教管理"},
   {id: "open-route-panel", label: "路线管理"},
-  {id: "open-river-panel", label: "河流管理"}
+  {id: "open-river-panel", label: "河流管理"},
+  {id: "open-label-naming-panel", label: "标签管理"}
+]);
+
+const regenerationActions = Object.freeze([
+  {kind: "states", label: "国家"},
+  {kind: "provinces", label: "省份"},
+  {kind: "cities", label: "城镇"},
+  {kind: "routes", label: "道路"},
+  {kind: "rivers", label: "河流"}
 ]);
 
 function isLayerVisible(layer) {

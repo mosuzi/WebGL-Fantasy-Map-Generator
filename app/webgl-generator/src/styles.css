@@ -241,7 +241,7 @@ select:disabled {
 
 .map-legend {
   position: absolute;
-  right: 18px;
+  left: 18px;
   bottom: 18px;
   width: min(240px, calc(100% - 36px));
   padding: 10px 12px;
@@ -255,6 +255,59 @@ select:disabled {
 
 .map-legend[hidden] {
   display: none;
+}
+
+.hover-overlay {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  width: min(292px, calc(100% - 36px));
+  border: 1px solid rgba(208, 221, 225, 0.18);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(12, 18, 22, 0.58);
+  box-shadow: 0 12px 34px rgba(2, 6, 23, 0.24);
+  color: #dfe9ed;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+
+.hover-overlay[hidden] {
+  display: none;
+}
+
+.hover-overlay-title {
+  margin-bottom: 8px;
+  color: #ffe0a1;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.hover-overlay-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.hover-overlay-list div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.hover-overlay-list dt {
+  color: rgba(177, 193, 201, 0.82);
+  font-size: 11px;
+}
+
+.hover-overlay-list dd {
+  margin: 0;
+  color: rgba(242, 248, 249, 0.94);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .legend-title {
@@ -292,24 +345,22 @@ select:disabled {
   pointer-events: none;
 }
 
-.city-label {
+.city-label,
+.custom-label {
   position: absolute;
   transform: translate(-50%, -100%);
   max-width: 120px;
-  padding: 2px 5px;
-  border-radius: 4px;
-  background: rgba(13, 18, 18, 0.58);
   color: #f2ead5;
   font-size: 11px;
   line-height: 1.25;
   opacity: 0;
-  text-shadow: 0 1px 2px #050708;
   transition: opacity 140ms ease, visibility 0s linear 140ms;
   visibility: hidden;
   white-space: nowrap;
 }
 
-.city-label.visible {
+.city-label.visible,
+.custom-label.visible {
   opacity: 1;
   transition-delay: 0s;
   visibility: visible;
@@ -317,20 +368,53 @@ select:disabled {
 
 .city-label.capital {
   max-width: 156px;
-  padding: 3px 7px;
-  color: #ffe29a;
   font-size: 15px;
   font-weight: 800;
   line-height: 1.2;
 }
 
-.city-label.port {
-  color: #c4ecff;
-}
-
-.city-label.selected {
+.city-label.selected,
+.custom-label.selected {
   background: rgba(72, 46, 8, 0.8);
   color: #ffe7a8;
+}
+
+.custom-label {
+  max-width: 160px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid rgba(238, 213, 145, 0.34);
+  background: rgba(20, 27, 28, 0.74);
+  color: #f8e8ba;
+  font-weight: 700;
+}
+
+.state-label {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(var(--label-rotation, 0deg));
+  max-width: 280px;
+  color: rgba(255, 232, 174, 0.92);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.1;
+  opacity: 0;
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(4, 7, 8, 0.82), 0 0 18px rgba(28, 24, 12, 0.72);
+  transition: opacity 160ms ease, visibility 0s linear 160ms;
+  visibility: hidden;
+  white-space: nowrap;
+}
+
+.state-label.visible {
+  opacity: 1;
+  transition-delay: 0s;
+  visibility: visible;
+}
+
+.state-label.selected {
+  color: #fff1b8;
+  text-shadow: 0 2px 4px rgba(4, 7, 8, 0.9), 0 0 18px rgba(255, 205, 95, 0.38);
 }
 
 .selection-marker {
@@ -1348,8 +1432,15 @@ select:disabled {
   text-align: right;
 }
 
-.management-panel-actions {
+.management-panel {
+  gap: 12px;
+}
+
+.management-panel-actions,
+.regeneration-action-grid {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .management-panel-actions #fit-view {
@@ -1471,6 +1562,52 @@ select:disabled {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.label-management-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.management-panel-divider {
+  height: 1px;
+  background: rgba(189, 206, 213, 0.18);
+}
+
+.regeneration-section {
+  display: grid;
+  gap: 10px;
+}
+
+.regeneration-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.regeneration-section-header h2 {
+  margin: 0;
+  color: #d8e2e7;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.regeneration-section-header span {
+  color: #ffe0a1;
+  font-size: 11px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.regeneration-status-note {
+  margin: 0;
+  color: #9fb0ba;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .city-history-actions span {

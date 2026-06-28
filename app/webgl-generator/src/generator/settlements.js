@@ -170,6 +170,8 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   const type = getBurgType(pack, packCell, 0);
   const cultureId = cells.culture[packCell];
   const culture = pack.cultures?.[cultureId];
+  const population = defineBurgPopulation(pack, packCell, Boolean(flags.capital), random);
+  const groupHint = flags.capital ? "capital" : flags.provincial || population >= 5 ? "city" : population <= 0.1 ? "hamlet" : population <= 1 ? "village" : "town";
   const name = nameGenerator.makePlaceName({
     id: cityId,
     cell: packCell,
@@ -178,6 +180,9 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     state,
     type,
     capital: Boolean(flags.capital),
+    provincial: Boolean(flags.provincial),
+    group: groupHint,
+    population,
     highland: type === "Highland"
   });
   const sourceBurg = {
@@ -194,7 +199,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     feature: cells.f[packCell],
     capital: flags.capital ? 1 : 0,
     port: 0,
-    population: defineBurgPopulation(pack, packCell, Boolean(flags.capital), random),
+    population,
     type
   };
   const city = {
@@ -205,7 +210,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     packCell,
     x,
     y,
-    population: sourceBurg.population,
+    population,
     state,
     province,
     culture: sourceBurg.culture,
@@ -266,7 +271,11 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
           cultureType: pack.cultures?.[burg.culture]?.nameStyle || pack.cultures?.[burg.culture]?.type,
           state: burg.state,
           type: "Naval",
-          port: true
+          port: true,
+          capital: Boolean(city.capital),
+          provincial: Boolean(city.provincial),
+          group: city.group || burg.group,
+          population: city.population
         });
       }
       burg.name = city.name;
@@ -439,6 +448,8 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
     const state = grid.cells.state[item.cell];
     const province = grid.cells.province[item.cell];
     const port = isCoastalCell(grid, features, item.cell) ? 1 : 0;
+    const populationValue = population[item.cell] + (item.capital ? 90 : item.provincial ? 45 : 20);
+    const group = item.capital ? "capital" : port || populationValue >= 5 ? "city" : populationValue <= 0.1 ? "hamlet" : populationValue <= 1 ? "village" : "town";
     return {
       id,
       burgId: id + 1,
@@ -448,13 +459,17 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
         culture: grid.cells.culture[item.cell],
         cultureType: null,
         state,
-        port: Boolean(port)
+        port: Boolean(port),
+        capital: Boolean(item.capital),
+        provincial: Boolean(item.provincial),
+        group,
+        population: populationValue
       }),
       cell: item.cell,
       packCell: grid.cells.pack?.[item.cell] ?? -1,
       x: grid.points[item.cell][0],
       y: grid.points[item.cell][1],
-      population: population[item.cell] + (item.capital ? 90 : item.provincial ? 45 : 20),
+      population: populationValue,
       state,
       province,
       culture: grid.cells.culture[item.cell],
@@ -463,7 +478,7 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
       provincial: Boolean(item.provincial),
       port,
       type: port ? "Naval" : "Generic",
-      group: item.capital ? "capital" : port ? "city" : "town"
+      group
     };
   });
 }

@@ -1,9 +1,8 @@
-import {resolve} from "node:path";
 import vue from "@vitejs/plugin-vue";
 import {defineConfig} from "vite";
 
 export default defineConfig({
-  root: resolve("app/webgl-generator"),
+  root: "app/webgl-generator",
   plugins: [vue()],
   server: {
     host: "127.0.0.1",
@@ -16,7 +15,12 @@ export default defineConfig({
     strictPort: false
   },
   build: {
-    outDir: resolve("dist/webgl-generator"),
-    emptyOutDir: true
+    outDir: "../../dist/webgl-generator",
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: "index.html"
+      }
+    }
   }
 });

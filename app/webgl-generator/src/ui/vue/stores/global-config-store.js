@@ -6,6 +6,7 @@ export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   colorMode: "height",
   showOceanHeight: false,
+  showHoverInfo: true,
   maxCityLabels: 5000,
   layers: Object.freeze({})
 });
@@ -52,6 +53,11 @@ function normalizePreferences(input = {}) {
   return {
     colorMode: typeof input.colorMode === "string" ? input.colorMode : DEFAULT_CONTROL_PREFERENCES.colorMode,
     showOceanHeight: typeof input.showOceanHeight === "boolean" ? input.showOceanHeight : DEFAULT_CONTROL_PREFERENCES.showOceanHeight,
+    showHoverInfo: typeof input.showHoverInfo === "boolean"
+      ? input.showHoverInfo
+      : typeof input.showHoverOverlay === "boolean"
+        ? input.showHoverOverlay
+        : DEFAULT_CONTROL_PREFERENCES.showHoverInfo,
     maxCityLabels: normalizeMaxCityLabels(input.maxCityLabels),
     layers: input.layers && typeof input.layers === "object" ? {...input.layers} : {}
   };

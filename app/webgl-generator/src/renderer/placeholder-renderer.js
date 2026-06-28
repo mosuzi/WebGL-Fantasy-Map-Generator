@@ -1,4 +1,6 @@
 import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickPoliticalObject, pickRiver, pickRoute} from "./picking.js";
+import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
+import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 
 export class PlaceholderMapRenderer {
   constructor(canvas, onViewChange = () => {}, onHover = () => {}, onSelect = () => {}) {
@@ -32,6 +34,10 @@ export class PlaceholderMapRenderer {
     this.pointVertexCount = 0;
     this.labelCount = 0;
     this.visibleLabelCount = 0;
+    this.cityLabelCount = 0;
+    this.visibleCityLabelCount = 0;
+    this.stateLabelCount = 0;
+    this.visibleStateLabelCount = 0;
     this.labelItems = [];
     this.selection = null;
     this.selectionMarker = null;
@@ -54,6 +60,7 @@ export class PlaceholderMapRenderer {
       rivers: true,
       cities: true,
       labels: true,
+      stateLabels: true,
       population: true,
       markers: true,
       coastline: true,
@@ -101,7 +108,7 @@ export class PlaceholderMapRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
-    this.buildCityLabels(map);
+    this.buildLabels(map);
     this.markAllDynamicBuffersDirty();
     this.fitToView();
   }
@@ -146,8 +153,8 @@ export class PlaceholderMapRenderer {
 
   refreshLabels() {
     if (!this.map) return;
-    this.buildCityLabels(this.map);
-    this.updateCityLabels();
+    this.buildLabels(this.map);
+    this.updateLabels();
   }
 
   refreshLineLayers({draw = true} = {}) {
@@ -231,7 +238,7 @@ export class PlaceholderMapRenderer {
       drawMs: roundMs(performance.now() - startedAt),
       glError: gl.getError()
     };
-    this.updateCityLabels();
+    this.updateLabels();
   }
 
   getStats() {
@@ -271,6 +278,10 @@ export class PlaceholderMapRenderer {
       markerCount: this.map?.markers?.metadata?.markers || 0,
       labelCount: this.labelCount,
       visibleLabelCount: this.visibleLabelCount,
+      cityLabelCount: this.cityLabelCount,
+      visibleCityLabelCount: this.visibleCityLabelCount,
+      stateLabelCount: this.stateLabelCount,
+      visibleStateLabelCount: this.visibleStateLabelCount,
       colorMode: this.colorMode,
       viewOptions: {...this.viewOptions},
       labelOptions: {...this.labelOptions},
@@ -352,7 +363,7 @@ export class PlaceholderMapRenderer {
     const previous = this.selection;
     this.selection = object || null;
     this.dynamicBuffersDirty.selection = true;
-    if (previous?.kind === "route" || this.selection?.kind === "route") {
+    if (previous?.kind === OBJECT_KIND.ROUTE || this.selection?.kind === OBJECT_KIND.ROUTE) {
       this.dynamicBuffersDirty.routes = true;
     }
     this.draw();
@@ -429,19 +440,22 @@ export class PlaceholderMapRenderer {
     this.locateFlashFrame = requestAnimationFrame(() => this.animateLocateFlash());
   }
 
-  buildCityLabels(map) {
+  buildLabels(map) {
     if (!this.overlay) {
       this.labelItems = [];
       this.labelCount = 0;
       this.visibleLabelCount = 0;
+      this.cityLabelCount = 0;
+      this.visibleCityLabelCount = 0;
+      this.stateLabelCount = 0;
+      this.visibleStateLabelCount = 0;
       return;
     }
     this.overlay.replaceChildren();
-    this.labelItems = getLabelCities(map, this.labelOptions).map(item => {
+    this.labelItems = [...getLabelStates(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
       const node = document.createElement("span");
-      const city = item.city;
-      node.className = `city-label${city.capital ? " capital" : ""}${city.port ? " port" : ""}`;
-      node.textContent = city.name;
+      node.className = labelClassName(item);
+      node.textContent = item.text;
       this.overlay.append(node);
       return {...item, node, box: null, visible: false};
     });
@@ -450,51 +464,64 @@ export class PlaceholderMapRenderer {
     this.selectionMarker.style.display = "none";
     this.overlay.append(this.selectionMarker);
     this.labelCount = this.labelItems.length;
+    this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
+    this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
     this.visibleLabelCount = 0;
+    this.visibleCityLabelCount = 0;
+    this.visibleStateLabelCount = 0;
   }
 
-  updateCityLabels() {
+  updateLabels() {
     if (!this.overlay || !this.map || !this.labelItems.length) return;
     const rect = this.canvas.getBoundingClientRect();
-    if (!this.layerVisibility.labels) {
-      for (const item of this.labelItems) {
-        item.node.classList.remove("visible");
-        item.visible = false;
-        item.box = null;
-      }
-      this.visibleLabelCount = 0;
-      this.updateSelectionMarker(rect);
-      return;
-    }
     const occupied = [];
+    const occupiedStates = [];
     let visible = 0;
+    let visibleCities = 0;
+    let visibleStates = 0;
     const scale = this.camera.scale;
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
 
     for (const item of this.labelItems) {
-      const screen = this.worldToScreen(item.city.x, item.city.y, rect);
-      item.node.classList.toggle("selected", (this.selection?.kind === "city" || this.selection?.kind === "label") && this.selection.id === item.city.id);
+      const screen = this.worldToScreen(item.x, item.y, rect);
+      item.node.classList.toggle("selected", isSelectedLabelItem(this.selection, item));
       const box = labelBoxForItem(item, screen);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
-      const blocked = occupied.some(other => boxesOverlap(box, other, padding));
-      const shouldShow = visible < maxVisible && scale >= item.minScale && onScreen && !blocked;
+      const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
+      const blocked = stateLabel
+        ? occupiedStates.some(other => boxesOverlap(box, other, padding))
+        : occupiedStates.some(other => boxesOverlap(box, other, padding)) || occupied.some(other => boxesOverlap(box, other, padding));
+      const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
+      const shouldShow = this.isLabelItemLayerVisible(item) && withinLimit && scale >= item.minScale && onScreen && !blocked;
       item.node.classList.toggle("visible", shouldShow);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
       item.node.style.left = `${screen.x}px`;
-      item.node.style.top = `${screen.y - 6}px`;
-      occupied.push(box);
+      item.node.style.top = `${stateLabel ? screen.y : screen.y - 6}px`;
+      item.node.style.setProperty("--label-rotation", `${item.rotation || 0}deg`);
+      if (stateLabel) occupiedStates.push(box);
+      else occupied.push(box);
       visible++;
+      if (item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
+      if (item.targetKind === LABEL_TARGET_KIND.STATE) visibleStates++;
     }
 
     this.visibleLabelCount = visible;
+    this.visibleCityLabelCount = visibleCities;
+    this.visibleStateLabelCount = visibleStates;
     this.updateSelectionMarker(rect);
   }
 
+  isLabelItemLayerVisible(item) {
+    if (item.targetKind === LABEL_TARGET_KIND.STATE) return this.layerVisibility.stateLabels !== false && this.colorMode === "states";
+    if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return this.layerVisibility.labels !== false;
+    return this.layerVisibility.labels !== false;
+  }
+
   updateSelectionMarker(rect) {
-    if (!this.selectionMarker || (this.selection?.kind !== "city" && this.selection?.kind !== "label" && this.selection?.kind !== "marker")) {
+    if (!this.selectionMarker || !isPointObjectKind(this.selection?.kind)) {
       if (this.selectionMarker) this.selectionMarker.style.display = "none";
       return;
     }
@@ -517,13 +544,13 @@ export class PlaceholderMapRenderer {
     for (const item of this.labelItems) {
       if (!item.visible || !item.box) continue;
       if (x < item.box.left || x > item.box.right || y < item.box.top || y > item.box.bottom) continue;
-      const city = item.city;
       return {
-        kind: "label",
-        id: city.id,
-        text: city.name,
-        targetKind: "city",
-        targetName: city.name,
+        kind: OBJECT_KIND.LABEL,
+        id: item.targetId,
+        text: item.text,
+        targetKind: item.targetKind,
+        targetId: item.targetId,
+        targetName: item.text,
         rank: item.rank
       };
     }
@@ -541,15 +568,24 @@ export class PlaceholderMapRenderer {
 }
 
 function defaultLocateMinScale(object) {
-  return object?.kind === "city" || object?.kind === "label" || object?.kind === "marker" ? 1.25 : 0.35;
+  return isPointObjectKind(object?.kind) ? 1.25 : 0.35;
 }
 
 function selectionPoint(map, selection) {
-  if (selection?.kind === "city" || selection?.kind === "label") {
+  if (selection?.kind === OBJECT_KIND.LABEL && selection.targetKind === LABEL_TARGET_KIND.STATE) {
+    const state = map.politics.states[selection.targetId ?? selection.id];
+    const placement = stateLabelPlacement(map, state, state?.fullName || state?.name || "");
+    return placement ? {x: placement.x, y: placement.y} : null;
+  }
+  if (selection?.kind === OBJECT_KIND.LABEL && selection.targetKind === LABEL_TARGET_KIND.CUSTOM) {
+    const label = (map.labels?.custom || []).find(item => item.id === (selection.targetId ?? selection.id));
+    return label ? {x: label.x, y: label.y} : null;
+  }
+  if (selection?.kind === OBJECT_KIND.CITY || selection?.kind === OBJECT_KIND.LABEL) {
     const city = map.settlements.cities[selection.id];
     return city ? {x: city.x, y: city.y} : null;
   }
-  if (selection?.kind === "marker") {
+  if (selection?.kind === OBJECT_KIND.MARKER) {
     const marker = map.markers.markers[selection.id];
     return marker ? {x: marker.x, y: marker.y} : null;
   }
@@ -558,30 +594,37 @@ function selectionPoint(map, selection) {
 
 function getObjectBounds(map, object) {
   if (!map || !object) return null;
-  if (object.kind === "city" || object.kind === "label") {
+  if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.STATE) {
+    return politicalBounds(map, {kind: OBJECT_KIND.STATE, id: object.targetId ?? object.id}, 48);
+  }
+  if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.CUSTOM) {
+    const label = (map.labels?.custom || []).find(item => item.id === (object.targetId ?? object.id));
+    return label ? pointBounds(label.x, label.y, 42) : null;
+  }
+  if (object.kind === OBJECT_KIND.CITY || object.kind === OBJECT_KIND.LABEL) {
     const city = map.settlements.cities[object.id];
     return city ? pointBounds(city.x, city.y, 42) : null;
   }
-  if (object.kind === "marker") {
+  if (object.kind === OBJECT_KIND.MARKER) {
     const marker = map.markers.markers[object.id];
     return marker ? pointBounds(marker.x, marker.y, 42) : null;
   }
-  if (object.kind === "route") {
+  if (object.kind === OBJECT_KIND.ROUTE) {
     const route = map.settlements.routes.find(item => item.id === object.id);
     return route ? pointsBounds(route.points, 36) : null;
   }
-  if (object.kind === "river") {
+  if (object.kind === OBJECT_KIND.RIVER) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
     return river ? pointsBounds(river.points, 42) : null;
   }
-  if (object.kind === "state" || object.kind === "province" || object.kind === "region" || object.kind === "culture" || object.kind === "religion") {
+  if (isPoliticalObjectKind(object.kind)) {
     return politicalBounds(map, object, 48);
   }
   return null;
 }
 
 function politicalBounds(map, object, padding) {
-  const field = object.kind === "state" ? "state" : object.kind === "province" ? "province" : object.kind === "culture" ? "culture" : object.kind === "religion" ? "religion" : "region";
+  const field = POLITICAL_OBJECT_FIELD[object.kind] || POLITICAL_OBJECT_FIELD[OBJECT_KIND.REGION];
   let bounds = null;
   for (let cellIndex = 0; cellIndex < map.grid.cells.p.length; cellIndex++) {
     if (map.grid.cells[field][cellIndex] !== object.id) continue;
@@ -626,14 +669,150 @@ function expandBounds(bounds, padding) {
 function getLabelCities(map, labelOptions = {}) {
   const maxCityLabels = normalizeMaxCityLabels(labelOptions.maxCityLabels, 5000);
   return [...map.settlements.cities]
+    .filter(city => city && Number.isInteger(city.id))
+    .filter(city => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.CITY, city.id))
     .map(city => ({city, priority: scoreCityLabel(city)}))
     .sort((a, b) => b.priority - a.priority)
     .slice(0, maxCityLabels)
     .map((item, rank) => ({
-      ...item,
+      targetKind: LABEL_TARGET_KIND.CITY,
+      targetId: item.city.id,
+      text: item.city.name,
+      x: item.city.x,
+      y: item.city.y,
+      priority: item.priority,
+      city: item.city,
       rank,
       minScale: minLabelScale(item.city, rank, maxCityLabels)
     }));
+}
+
+function getLabelStates(map) {
+  return (map?.politics?.states || [])
+    .filter(state => state && (state.i || state.id) && !state.removed)
+    .filter(state => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.STATE, state.i ?? state.id))
+    .map((state, rank) => {
+      const text = state.fullName || state.name || `国家 #${state.i ?? state.id}`;
+      const placement = stateLabelPlacement(map, state, text);
+      return placement ? {
+        targetKind: LABEL_TARGET_KIND.STATE,
+        targetId: state.i ?? state.id,
+        text,
+        x: placement.x,
+        y: placement.y,
+        rotation: placement.rotation,
+        priority: Number(state.area || 0) + Number(state.burgs || 0) * 100,
+        state,
+        rank,
+        minScale: 0.5
+      } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.priority - a.priority);
+}
+
+function getCustomLabels(map) {
+  return (map?.labels?.custom || [])
+    .filter(label => label && Number.isFinite(label.x) && Number.isFinite(label.y) && label.text)
+    .map((label, rank) => ({
+      targetKind: LABEL_TARGET_KIND.CUSTOM,
+      targetId: label.id,
+      text: label.text,
+      x: label.x,
+      y: label.y,
+      priority: 90000 - rank,
+      custom: label,
+      rank,
+      minScale: 0.25
+    }));
+}
+
+function stateLabelPlacement(map, state, text = "") {
+  if (!state) return null;
+  const stateId = state.i ?? state.id;
+  const cells = map?.pack?.cells;
+  if (Number.isInteger(stateId) && cells?.p && cells?.state) {
+    const centroid = stateCentroid(cells, stateId);
+    if (centroid) return {...centroid, rotation: stateLabelRotation(cells, stateId, centroid, text)};
+  }
+
+  const center = Number.isInteger(state.center) ? state.center : null;
+  if (center !== null && map?.pack?.cells?.p?.[center]) {
+    const [x, y] = map.pack.cells.p[center];
+    return {x, y, rotation: 0};
+  }
+  const gridCenter = Number.isInteger(state.gridCenter) ? state.gridCenter : null;
+  if (gridCenter !== null) {
+    const point = map?.grid?.points?.[map.grid.cells.p?.[gridCenter]];
+    return point ? {x: point[0], y: point[1], rotation: 0} : null;
+  }
+  return null;
+}
+
+function stateCentroid(cells, stateId) {
+  let weightSum = 0;
+  let xSum = 0;
+  let ySum = 0;
+
+  for (const cell of cells.i || []) {
+    if (cells.state[cell] !== stateId || cells.h[cell] < 20 || !isWorldPoint(cells.p[cell])) continue;
+    const weight = Math.max(0.0001, cells.area?.[cell] || 1);
+    weightSum += weight;
+    xSum += cells.p[cell][0] * weight;
+    ySum += cells.p[cell][1] * weight;
+  }
+
+  if (!weightSum) return null;
+  return {x: xSum / weightSum, y: ySum / weightSum};
+}
+
+function stateLabelRotation(cells, stateId, centroid, text) {
+  if (Array.from(text || "").length < 5) return 0;
+
+  let weightSum = 0;
+  let xx = 0;
+  let yy = 0;
+  let xy = 0;
+  for (const cell of cells.i || []) {
+    if (cells.state[cell] !== stateId || cells.h[cell] < 20 || !isWorldPoint(cells.p[cell])) continue;
+    const weight = Math.max(0.0001, cells.area?.[cell] || 1);
+    const dx = cells.p[cell][0] - centroid.x;
+    const dy = cells.p[cell][1] - centroid.y;
+    weightSum += weight;
+    xx += dx * dx * weight;
+    yy += dy * dy * weight;
+    xy += dx * dy * weight;
+  }
+
+  if (!weightSum) return 0;
+  const radians = 0.5 * Math.atan2(2 * xy, xx - yy);
+  const angle = clampLabelAngle((radians * 180) / Math.PI);
+  return Math.abs(angle) >= 8 ? angle : (stateId % 2 ? -12 : 12);
+}
+
+function clampLabelAngle(angle) {
+  let value = angle;
+  while (value > 90) value -= 180;
+  while (value < -90) value += 180;
+  if (value > 45) value -= 90;
+  if (value < -45) value += 90;
+  return Math.round(Math.max(-28, Math.min(28, value)) * 10) / 10;
+}
+
+function labelClassName(item) {
+  if (item.targetKind === LABEL_TARGET_KIND.STATE) return "state-label";
+  if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return "custom-label";
+  const city = item.city || {};
+  return `city-label${city.capital ? " capital" : ""}`;
+}
+
+function isSelectedLabelItem(selection, item) {
+  if (!selection) return false;
+  if (selection.kind === item.targetKind && selection.id === item.targetId) return true;
+  if (selection.kind !== OBJECT_KIND.LABEL) return false;
+  const targetKind = selection.targetKind || LABEL_TARGET_KIND.CITY;
+  const targetId = selection.targetId ?? selection.id;
+  return targetKind === item.targetKind && targetId === item.targetId;
 }
 
 function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) {
@@ -857,7 +1036,7 @@ function buildRouteMeshVertices(map, camera, canvas, selection) {
   const vertices = [];
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
   for (const route of map.settlements.routes) {
-    const selected = selection?.kind === "route" && selection.id === route.id;
+    const selected = selection?.kind === OBJECT_KIND.ROUTE && selection.id === route.id;
     const style = routeStyle(route);
     const color = selected ? [1, 0.82, 0.34, 1] : style.color;
     const baseWidth = style.width;
@@ -874,13 +1053,30 @@ function routeStyle(route) {
   return {color: [0.45, 0.35, 0.22, 0.94], width: 2.1, dash: [9, 6]};
 }
 
+const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
+  [OBJECT_KIND.STATE]: [1, 0.86, 0.28, 0.3],
+  [OBJECT_KIND.PROVINCE]: [0.9, 0.7, 0.28, 0.34],
+  [OBJECT_KIND.CULTURE]: [0.72, 0.95, 0.62, 0.3],
+  [OBJECT_KIND.RELIGION]: [0.96, 0.68, 0.95, 0.3],
+  [OBJECT_KIND.REGION]: [0.65, 0.9, 1, 0.28]
+});
+
+const SELECTION_HIGHLIGHT_MODES = Object.freeze({
+  [OBJECT_KIND.RIVER]: "river screen-space mesh",
+  [OBJECT_KIND.STATE]: "state translucent cells",
+  [OBJECT_KIND.PROVINCE]: "province translucent cells",
+  [OBJECT_KIND.CULTURE]: "culture translucent cells",
+  [OBJECT_KIND.RELIGION]: "religion translucent cells",
+  [OBJECT_KIND.REGION]: "region translucent cells"
+});
+
 function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash) {
   const vertices = [];
-  if (selection?.kind === "state" || selection?.kind === "province" || selection?.kind === "region" || selection?.kind === "culture" || selection?.kind === "religion") {
+  if (isPoliticalObjectKind(selection?.kind)) {
     pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection, locateFlash);
     return new Float32Array(vertices);
   }
-  if (selection?.kind !== "river") return new Float32Array(vertices);
+  if (selection?.kind !== OBJECT_KIND.RIVER) return new Float32Array(vertices);
   const river = map.rivers.rivers.find(item => item.id === selection.id);
   if (!river || river.points.length < 2) return new Float32Array(vertices);
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
@@ -893,8 +1089,8 @@ function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash)
 }
 
 function pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection, locateFlash) {
-  const field = selection.kind === "state" ? "state" : selection.kind === "province" ? "province" : selection.kind === "culture" ? "culture" : selection.kind === "religion" ? "religion" : "region";
-  const color = locateFlashColor(selection, locateFlash) || (selection.kind === "state" ? [1, 0.86, 0.28, 0.3] : selection.kind === "province" ? [0.9, 0.7, 0.28, 0.34] : selection.kind === "culture" ? [0.72, 0.95, 0.62, 0.3] : selection.kind === "religion" ? [0.96, 0.68, 0.95, 0.3] : [0.65, 0.9, 1, 0.28]);
+  const field = POLITICAL_OBJECT_FIELD[selection.kind] || POLITICAL_OBJECT_FIELD[OBJECT_KIND.REGION];
+  const color = locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[selection.kind] || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.REGION];
   for (let cellIndex = 0; cellIndex < map.grid.cells.v.length; cellIndex++) {
     if (map.grid.cells[field][cellIndex] !== selection.id) continue;
     const vertexIds = map.grid.cells.v[cellIndex];
@@ -910,13 +1106,7 @@ function pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection, lo
 function selectionHighlightMode(selection, locateFlash = null) {
   if (!selection) return "none";
   if (isLocateFlashActive(selection, locateFlash)) return `${selection.kind} red flash`;
-  if (selection.kind === "river") return "river screen-space mesh";
-  if (selection.kind === "state") return "state translucent cells";
-  if (selection.kind === "province") return "province translucent cells";
-  if (selection.kind === "culture") return "culture translucent cells";
-  if (selection.kind === "religion") return "religion translucent cells";
-  if (selection.kind === "region") return "region translucent cells";
-  return selection.kind;
+  return SELECTION_HIGHLIGHT_MODES[selection.kind] || selection.kind;
 }
 
 function locateFlashColor(selection, locateFlash) {
@@ -1295,10 +1485,25 @@ function labelPaddingForScale(scale) {
 }
 
 function labelBoxForItem(item, screen) {
-  const estimatedWidth = item.city.capital
-    ? Math.max(48, Math.min(168, 18 + item.city.name.length * 16))
-    : Math.max(34, Math.min(132, 14 + item.city.name.length * 13));
-  const estimatedHeight = item.city.capital ? 27 : 18;
+  if (item.targetKind === LABEL_TARGET_KIND.STATE) {
+    const estimatedWidth = Math.max(72, Math.min(280, 22 + Array.from(item.text || "").length * 22));
+    const estimatedHeight = 36;
+    const radians = Math.abs((item.rotation || 0) * Math.PI / 180);
+    const boxWidth = estimatedWidth * Math.cos(radians) + estimatedHeight * Math.sin(radians);
+    const boxHeight = estimatedWidth * Math.sin(radians) + estimatedHeight * Math.cos(radians);
+    return {
+      left: screen.x - boxWidth / 2,
+      right: screen.x + boxWidth / 2,
+      top: screen.y - boxHeight / 2,
+      bottom: screen.y + boxHeight / 2
+    };
+  }
+  const city = item.city || {};
+  const text = item.text || city.name || "";
+  const estimatedWidth = city.capital
+    ? Math.max(48, Math.min(168, 18 + text.length * 16))
+    : Math.max(34, Math.min(132, 14 + text.length * 13));
+  const estimatedHeight = city.capital ? 27 : 18;
   return {
     left: screen.x - estimatedWidth / 2,
     right: screen.x + estimatedWidth / 2,

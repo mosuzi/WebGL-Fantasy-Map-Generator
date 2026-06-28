@@ -7342,3 +7342,457 @@
 后续：
 
 - 当前已有主要浮动管理/编辑面板已完成 Vue SFC 迁移。下一步可转向面板功能深化，例如国家/省份新增删除、城市移动、标签/命名面板、marker/zone 面板或对象表格虚拟滚动。
+
+## 2026-06-28 悬停信息右下角展示
+
+目标：
+
+- 在继续面板功能深化前，先降低悬停信息对固定侧栏的占用。
+- 将悬停后的信息改成更精简的地图内提示，并固定在右下角展示。
+- 保留用户控制权：可在控制面板中开启或关闭该信息卡，并在刷新后恢复偏好。
+
+实施：
+
+- `app/webgl-generator/index.html` 新增 `hover-overlay` 容器，并把原侧栏“悬停”小节改为“选择”，避免侧栏继续承载大段 hover 明细。
+- `app/webgl-generator/src/ui/panel.js` 新增 `updateHoverOverlay()` 和压缩行生成逻辑：
+  - 信息标题优先显示命中对象类型，例如城市、河流、路线或专题对象；无对象时显示陆地/水域 cell。
+  - 内容只保留对象摘要、cell、海拔/水域、国家/省份、文化/宗教、城市/路线和拾取候选等短字段。
+  - 过滤未命名路线，避免出现 `unknown -> unknown` 这类调试态信息。
+  - `pick-stats` 改为只显示选中对象和编辑对象摘要。
+- `app/webgl-generator/src/ui/vue/components/ControlPanel.vue` 在 `图层` tab 新增“悬停信息”开关。
+- `app/webgl-generator/src/ui/vue/stores/global-config-store.js` 新增 `showHoverInfo` 偏好，并继续通过现有全局偏好链路写入 `localStorage`；旧版偏好兼容读取。
+- `app/webgl-generator/src/styles.css` 新增右下角透明固定信息卡样式；信息卡 `pointer-events: none`，不会拦截地图拖拽、缩放和 hover picking。
+- `app/webgl-generator/src/runtime/app.js` 在开关变化后刷新当前 pick 面板状态，使关闭/开启立即生效。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/panel.js`
+  - `app/webgl-generator/src/runtime/app.js`
+  - `app/webgl-generator/src/ui/vue/stores/global-config-store.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 鼠标移动到 canvas 后，右下角信息卡出现并显示精简 hover 内容。
+  - 信息卡为不可交互层，`pointer-events` 为 `none`。
+  - 控制面板 `图层` tab 中“悬停信息”开关默认开启。
+  - 关闭开关后信息卡立即隐藏，并写入 `showHoverInfo: false`；再次开启后恢复显示，并写入 `true`。
+  - 侧栏 `pick-stats` 只保留选中对象和编辑对象摘要。
+  - 无 console error / pageerror。
+
+后续：
+
+- 如果后续接入对象级 picking 或标签编辑器，可继续扩展悬停信息摘要字段，但仍应保持右下角信息卡短句化，避免退回侧栏长调试信息。
+
+## 2026-06-28 标签命名面板与国家名称显示
+
+目标：
+
+- 继续面板迁移后的下一步：新增标签命名面板第一刀。
+- 修复国家专题下不显示国家名字的问题。
+- 保持产品文案克制：图层中显示“国家名称”，管理入口显示“标签命名”，不使用实现逻辑词。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/vue/components/LabelNamingPanel.vue`：
+  - 统一列出城市标签和国家名称。
+  - 支持筛选、排序、表格选中、定位、详情和名称编辑。
+  - 名称编辑复用现有 `createRenameObjectCommand()` 与 EditHistory。
+- 新增 `app/webgl-generator/src/ui/panels/label-naming-panel.js`：
+  - 作为 Vue wrapper 桥接 runtime 回调。
+  - 保持 `map` 使用 `markRaw()`，不把地图大对象放入 Pinia。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js` 的标签层从仅城市标签扩展为城市标签 + 国家名称：
+  - `labels` 继续控制城市标签。
+  - 新增 `stateLabels` 图层控制国家名称。
+  - 国家名称只在国家专题下显示，避免其它专题被大字遮挡。
+  - label picking 支持 `targetKind: "state"`。
+- `app/webgl-generator/src/runtime/object-resolver.js` 和 `app/webgl-generator/src/runtime/object-edit-commands.js` 支持国家名称标签解析与重命名。
+- `app/webgl-generator/src/ui/vue/components/ObjectDetailsPanel.vue` 允许国家名称标签进入名称编辑。
+- `app/webgl-generator/src/ui/vue/components/ControlPanel.vue`：
+  - `图层` tab 新增“国家名称”开关。
+  - `管理` tab 新增“标签命名”入口。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/runtime/app.js`
+  - `app/webgl-generator/src/renderer/placeholder-renderer.js`
+  - `app/webgl-generator/src/ui/panels/label-naming-panel.js`
+  - `app/webgl-generator/src/runtime/object-resolver.js`
+  - `app/webgl-generator/src/runtime/object-edit-commands.js`
+  - `app/webgl-generator/src/ui/panel.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 控制面板 `图层` tab 存在“悬停信息”开关，旧 `show-hover-overlay` 控件不再出现在 DOM 中。
+  - 切到国家专题后，`stateLabelCount = 20`，当前视口可见国家名称 `12` 个。
+  - 运行时统计显示 `标签：城市 2 / 817 / 上限 817；国家 12 / 20`。
+  - `管理 -> 标签命名` 可打开 `.vue-label-naming-panel-root`，面板同时包含城市标签和国家名称。
+  - 在标签命名面板中筛选“国家名称”，把一个国家名称改为“测试国”后，地图上的 `.state-label` 文本同步刷新，EditHistory 记录为 `重命名国家 #15`。
+  - 无 console error / pageerror。
+
+后续：
+
+- 标签命名面板当前只做城市/国家名称第一刀；路线标签、区域标签、手动标签位置锁定、曲线文字和批量命名风格配置仍留到后续阶段。
+
+## 2026-06-28 比例尺位置与对象类型分发整理
+
+目标：
+
+- 修复温度、降水专题比例尺与右下角悬停信息卡位置冲突。
+- 对 `object.kind === "xxx"` 这类重复比较做第一轮结构化整理。
+- 不引入 TypeScript enum，仅用普通对象常量集中管理对象类型，方便后续面板、选择、定位、编辑命令自然串联。
+
+实施：
+
+- `app/webgl-generator/src/styles.css` 将 `.map-legend` 从右下区域移到左下角：
+  - 温度、降水专题仍按原逻辑显示比例尺。
+  - 右下角继续留给悬停信息卡。
+- 新增 `app/webgl-generator/src/runtime/object-kinds.js`：
+  - 集中定义 `OBJECT_KIND`、`LABEL_TARGET_KIND`、`OBJECT_KIND_LABEL`。
+  - 集中定义 `POLITICAL_OBJECT_KINDS`、`POLITICAL_OBJECT_FIELD` 和 `POINT_OBJECT_KINDS`。
+  - 提供 `isPoliticalObjectKind()`、`isPointObjectKind()` 等轻量判断函数。
+- `app/webgl-generator/src/runtime/object-resolver.js`：
+  - 从连续 `if object.kind` 改为 `OBJECT_RESOLVERS` 分发表。
+  - label 的 city/state target 使用 `LABEL_TARGET_KIND`。
+- `app/webgl-generator/src/runtime/object-edit-commands.js`：
+  - 对象命名读取、写入、恢复分别改为 reader/writer/restorer 表。
+  - 对象中文类型名读取 `OBJECT_KIND_LABEL`。
+  - label 重命名目标归一化使用 `LABEL_TARGET_KIND`。
+- `app/webgl-generator/src/runtime/app.js`：
+  - selection 自动打开面板逻辑抽为 `SELECTION_PANEL_HANDLERS`。
+  - 国家、城市、省份、文化、宗教、河流、路线的后续动作都从分发表进入，后续新增对象面板时可直接新增 handler。
+- `app/webgl-generator/src/ui/panel.js` 和 `app/webgl-generator/src/ui/vue/components/ObjectDetailsPanel.vue`：
+  - 对象标题、对象详情行改为 formatter map。
+  - 悬停信息和对象详情继续使用现有显示文案。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - renderer 使用同一套对象类型常量。
+  - 政治对象字段、政治高亮颜色和高亮模式改为字段表/映射表。
+- `app/webgl-generator/src/ui/panels/label-naming-panel.js` 与 `LabelNamingPanel.vue`：
+  - 标签目标类型改用 `LABEL_TARGET_KIND`，避免城市/国家标签继续散落字符串。
+- `vite.config.mjs`：
+  - 将 `root` 和 `outDir` 改为相对路径，避免 Windows + Rolldown 构建时 HTML 插件尝试用绝对路径作为输出文件名。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/runtime/object-kinds.js`
+  - `app/webgl-generator/src/runtime/object-edit-commands.js`
+  - `app/webgl-generator/src/runtime/object-resolver.js`
+  - `app/webgl-generator/src/runtime/app.js`
+  - `app/webgl-generator/src/renderer/placeholder-renderer.js`
+  - `app/webgl-generator/src/ui/panel.js`
+  - `app/webgl-generator/src/ui/panels/label-naming-panel.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 温度专题下比例尺位于地图左下角，悬停信息卡位于右下角，两者不重叠。
+  - 降水专题下比例尺同样位于地图左下角。
+  - 比例尺和悬停信息卡均为 `pointer-events: none`。
+  - 国家专题仍显示国家名称：`stateLabelCount = 20`，当前视口可见 `12` 个。
+  - `管理 -> 标签命名` 面板仍可打开，并包含国家名称。
+  - 无 console error / pageerror。
+
+后续：
+
+- 本轮优先整理对象解析、命名、UI 展示、selection 自动开面板和 renderer 选择高亮；仍有少量面板局部状态判断保留 `kind` 比较，可在对应面板继续深化时逐步迁到 `OBJECT_KIND`。
+
+## 2026-06-28 标签命名面板样式统一
+
+目标：
+
+- 修复标签命名面板与其它 Vue 浮动面板视觉不统一的问题。
+- 保持标签命名面板业务逻辑不变，只收敛 UI class 与 CSS 复用。
+
+原因：
+
+- `LabelNamingPanel.vue` 使用了 `label-naming-sort`、`label-naming-details`、`label-name-editor` 等专用 class。
+- `styles.css` 只给 `label-naming-summary`、`label-naming-controls` 和 `label-name-editor` 补了半套样式，没有覆盖排序按钮、详情网格和历史操作区。
+- 这导致标签命名面板的排序、详情和编辑区域没有复用路线/城市/国家等面板的完整视觉规则，看起来不像同一套面板系统。
+
+实施：
+
+- `app/webgl-generator/src/ui/vue/components/LabelNamingPanel.vue` 改为复用现有对象面板样式：
+  - 摘要、筛选、排序和详情复用 `route-panel-*` class。
+  - 名称编辑复用 `city-name-editor` class。
+  - 历史操作复用 `city-history-actions` class。
+- `app/webgl-generator/src/styles.css` 删除孤立的 `label-naming-*` 和 `label-name-editor` 专用样式，避免形成第二套半成品面板样式。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/label-naming-panel.js` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 标签命名面板与路线面板的摘要、筛选输入、排序按钮、详情网格 computed style 一致。
+  - DOM 中不再出现 `.label-naming-sort`、`.label-naming-details` 和 `.label-name-editor`。
+  - 无 console error / pageerror。
+
+## 2026-06-28 “专题”命名改为“视图”
+
+目标：
+
+- 将控制面板中用户可见的“专题”改为“视图”，后续产品文案统一使用“视图”。
+- 保留内部 `themes`、`colorMode` 等既有契约，避免为了改名牵动运行时事件和持久化字段。
+
+实施：
+
+- `app/webgl-generator/src/ui/vue/components/ControlPanel.vue`：
+  - tab 文案改为 `生成 / 视图 / 图层 / 管理`。
+  - 分段控件 label 改为“视图”。
+  - 开关文案改为“高度视图显示海底”。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计行从“专题”改为“视图”。
+- `app/webgl-generator/src/ui/vue/components/LabelNamingPanel.vue`：
+  - 国家名称显示策略改为“国家视图下显示”。
+- `app/webgl-generator/README.md` 和 `docs/current-plan.md`：
+  - 当前说明中的用户可见称呼同步改为“视图”。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/label-naming-panel.js` 通过。
+- Vite 生产构建通过；本机因 `pnpm run` 会触发依赖校验并访问 registry，实际使用本地 Vite 入口 `node node_modules/vite/bin/vite.js build --config vite.config.mjs` 验证。仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时静态服务验证 `dist/webgl-generator`：
+  - 控制面板 tab 显示 `生成 / 视图 / 图层 / 管理`，页面正文不再出现“专题”。
+  - `视图`页可打开，包含高度、温度、降水、生物群系、文化、宗教、国家、省份、区域、人口按钮和“高度视图显示海底”开关。
+  - 运行时统计行显示“视图”，不再显示“专题”。
+  - 标签命名面板中国家名称详情显示“国家视图下显示”。
+  - 无 console error / pageerror。
+
+## 2026-06-28 标签管理深化与重新生成入口计划
+
+目标：
+
+- 深化“标签命名”为真正的标签管理，支持增删改。
+- marker 和 zone 暂缓。
+- 标签管理完善后，将其动作区、表格操作和历史操作模式推广到其它管理面板。
+- 管理面板新增专门的“重新生成”入口，后续用于国家、省份、城镇、道路、河流等属性重算。
+
+设计约束：
+
+- 城市标签和国家名称是由城市/国家对象派生的标签，不能用“删除标签”误删城市或国家本体；第一刀删除派生标签实现为隐藏，并提供恢复。
+- 新增标签先实现为独立手工标签，写入当前地图自己的 `labels.custom` 数据，不回写 source，也不改变城市/国家生成链路。
+- 手工标签应支持名称、位置、定位、选择、删除和撤销/重做。
+- 重新生成入口先提供动作和状态框架；具体重算要逐类遵守生成约束：河流按高度/水文下行，路线按陆路/海路寻路，国家/省份/城镇要处理下游派生过期或联动刷新。
+
+## 2026-06-28 标签管理增删改与重新生成入口第一刀
+
+实施：
+
+- 新增 `app/webgl-generator/src/runtime/label-edit-commands.js`：
+  - `createAddCustomLabelCommand()` 新增独立手工标签，默认放在当前 hover 世界坐标；没有 hover 时放在地图中心。
+  - `createRenameCustomLabelCommand()` 支持手工标签重命名。
+  - `createDeleteLabelCommand()` 对手工标签执行删除，对城市/国家派生标签执行隐藏。
+  - `createRestoreGeneratedLabelCommand()` 支持恢复被隐藏的城市/国家派生标签。
+  - 标签编辑统一走 `EditHistory`，并刷新 labels、selection、runtime 和对象面板。
+- `LabelNamingPanel.vue` 深化为标签管理：
+  - 表格新增“状态”列。
+  - 摘要新增“手工”数量。
+  - 详情显示标签状态。
+  - 动作区新增“新增标签”、“删除标签”和“恢复标签”。
+  - 通过 `version` 触发 markRaw 地图深层变更后的表格重算。
+- renderer 标签层支持手工标签：
+  - `map.labels.custom` 会渲染为 `.custom-label`。
+  - 城市和国家派生标签会读取 `map.labels.hidden`，隐藏后不进入 overlay。
+  - picking、selection marker、定位 bounds 支持手工标签。
+- 管理入口文案从“标签命名”改为“标签管理”。
+- 新增 `RegenerationPanel.vue` 和 `regeneration-panel.js`：
+  - 管理 tab 新增“重新生成”入口。
+  - 面板提供国家、省份、城镇、道路、河流按钮和约束说明。
+  - 道路按钮已接入实际重算：复用 `finalizeSettlements()`，按当前国家、城镇、港口、陆路和海路约束重建路线，并刷新 route mesh。
+  - 国家、省份、城镇、河流先显示受约束重算说明，暂不执行无约束替换；marker 和 zone 暂缓。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/runtime/label-edit-commands.js`
+  - `app/webgl-generator/src/runtime/app.js`
+  - `app/webgl-generator/src/ui/panels/label-naming-panel.js`
+  - `app/webgl-generator/src/ui/panels/regeneration-panel.js`
+  - `app/webgl-generator/src/ui/panel.js`
+  - `app/webgl-generator/src/renderer/placeholder-renderer.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时静态服务验证 `dist/webgl-generator`：
+  - “标签管理”可打开。
+  - 新增手工标签后，`map.labels.custom.length = 1`，表格出现“手工标签”，overlay 出现 `.custom-label`。
+  - 手工标签重命名为“手工测试标签”后，地图 overlay 同步显示新文本。
+  - 删除手工标签后，`map.labels.custom.length = 0`。
+  - 选择城市派生标签后点击“删除标签”，`map.labels.hidden.city.length = 1`，详情显示“已隐藏，不在地图显示”。
+  - 点击“恢复标签”后，`map.labels.hidden.city.length = 0`。
+  - “重新生成”面板可打开，道路重算后 `lastEditRefresh` 显示 `route-mesh, object-panels`，面板显示“道路已按当前国家、城镇、港口和陆海约束重算”。
+  - 无 console error / pageerror。
+
+## 2026-06-28 中文文化城镇命名修正计划
+
+目标：
+
+- 修正中文文化下城镇名过度三字化、四字化的问题。
+- 大城市、首都和省会优先使用二字地名；小城镇保留少量三字或四字自然地名。
+- 扩充中式候选用字和二字词根，降低重复拼接感。
+- 不改变欧洲/英文等音译风命名的总体方向。
+
+现状：
+
+- `app/webgl-generator/src/generator/names.js` 的 `makePlaceName()` 会对显式文化风格高概率使用“词干 + 后缀”。
+- 普通中式词干本身多为二字，因此追加 `山/岭/川/港/城/州` 等后缀后，城市很容易稳定变成三字。
+- 10k 地中海样本中，中式城市名长度分布为：二字 `28`、三字 `491`、四字 `344`、五字 `22`；首都和大城市同样以三字为主。
+
+计划：
+
+- 将默认/中式地点名生成从音译风文化分支中拆开，避免“显式文化风格”误触发高频后缀拼接。
+- 为城镇命名增加规模参数，使 `capital/provincial/city` 倾向二字，`town/village/hamlet` 才有小概率派生三字或四字。
+- 扩充中式二字词根、单字词根、自然后缀和小聚落修饰词，并控制唯一化前缀的使用频率。
+
+## 2026-06-28 中文文化城镇命名修正第一刀
+
+实施：
+
+- `app/webgl-generator/src/generator/names.js`：
+  - 扩充中式二字地名词根，并新增可组合的首字、尾字词库，避免大地图中二字名过早撞名。
+  - 新增港口二字词根、小聚落前缀和小聚落后缀。
+  - 默认/中式地点名不再因为 `Highland/Naval/River/Hunting` 等文化类型自动使用音译词根；只有明确 `European/Western/English` 等音译命名风格才走音译词干。
+  - 中式地点名按规模控制长度：首都、省会、高人口城市几乎只生成二字名；普通小聚落才有较高概率生成三字或少量四字名。
+  - 地点名撞名时优先重抽候选，最后才回退到方向前缀唯一化，避免大城市因唯一化变成三字。
+- `app/webgl-generator/src/generator/settlements.js`：
+  - 城市命名时向命名器传入 `capital/provincial/group/population`。
+  - pack 城市在命名前先计算人口和组别提示；港口改名也带上城市规模信息。
+  - grid fallback 城市同样传入人口、首都/省会和组别。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/names.js` 通过。
+- `node --check app/webgl-generator/src/generator/settlements.js` 通过。
+- 10k 地中海样本 `audit-mediterranean-001` / `world`：
+  - 中式城市总数 `885`。
+  - 长度分布从修正前的二字 `28`、三字 `491`、四字 `344`、五字 `22`，变为二字 `714`、三字 `163`、四字 `8`。
+  - 首都 `21/21` 均为二字。
+  - 按首都、省会和人口 `>= 5` 统计的大城市二字率为 `98.8%`。
+  - 小聚落仍保留三字和少量四字样本。
+- 10k `english` 文化集样本仍保持音译风城市名，例如 `贝尔堡`、`奥斯维尔`、`卡斯特港`。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+
+## 2026-06-28 标签视觉与国家名称放置修正计划
+
+目标：
+
+- 城市标签去掉黑色半透明底框，避免像临时调试标注。
+- 普通城市、首都和港口统一文字颜色，不再靠颜色区分类型。
+- 国家名称从首都/国家中心 burg 附近迁到国家地理中心。
+- 国名较长时允许轻微斜放，减少横向压迫感。
+- 国家名称不再导致首都或核心城市标签被隐藏。
+
+现状：
+
+- `.city-label` 当前有半透明黑底、padding 和 text-shadow；`.city-label.capital`、`.city-label.port` 会改颜色。
+- `getLabelStates()` 通过 `stateLabelPoint()` 使用 `state.center`，而 pack 国家 `center` 会在政治生成中回写为首都 burg 所在 cell。
+- 标签更新按顺序把国家标签先放入 `occupied`，后续城市标签与之冲突会被隐藏。
+
+计划：
+
+- 调整城市标签 CSS，保留简洁文字与首都字号/权重差异，但去掉普通态底框和港口/首都颜色差异。
+- 以 `pack.cells.state` 内的陆地 cell 面积加权中心作为国家名称点位，保留 `state.center/gridCenter` 兜底。
+- 对较长国家名计算国家形状主轴角度并写入 CSS 旋转变量。
+- 将标签避让拆成国家标签占位和城市/手工标签占位，避免国家标签遮挡城市标签。
+
+## 2026-06-28 标签视觉与国家名称放置修正第一刀
+
+实施：
+
+- `app/webgl-generator/src/styles.css`：
+  - 城市标签普通态去掉黑色半透明背景、padding 和 text-shadow。
+  - 首都标签仍可保留字号和字重差异，但文字颜色与普通城市一致。
+  - 港口不再生成独立颜色规则。
+  - 手工标签保留自己的底色、边框和 padding，不受城镇标签简化影响。
+  - 国家标签通过 `--label-rotation` 支持轻微旋转。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 国家标签文本改为优先使用 `state.fullName`，没有全称时回退 `state.name`。
+  - 国家标签点位改为按 `pack.cells.state` 内陆地 cell 的面积加权中心计算，不再直接使用首都 burg cell。
+  - 较长国名会按国家 cell 分布主轴计算旋转角；主轴近水平时给出轻微兜底斜角。
+  - 国家标签和城市/手工标签使用独立避让集合，国家标签不再导致城市标签隐藏。
+  - 选中国家标签时的 selection marker 同步使用新的国家标签点位。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 城市标签普通态 `background-color: rgba(0, 0, 0, 0)`、`padding: 0px`、`text-shadow: none`。
+  - 普通城市与首都标签颜色一致，均为 `rgb(242, 234, 213)`。
+  - 国家标签样本已离开首都点，样本距离首都约 `59.9` 到 `175.5`。
+  - 长国名样本出现 `28`、`-12`、`23.1` 等旋转角。
+  - 无 console error / pageerror。
+
+## 2026-06-28 国家名称与首都标签优先级修正
+
+目标：
+
+- 国家视图中，国家名称是主标签。
+- 如果首都标签与国家名称重叠，优先显示国家名称，首都标签应避让或隐藏。
+
+实施计划：
+
+- 保留国家标签先布局、国家标签彼此避让的规则。
+- 城市、首都和手工标签在布局时额外避让已经显示的国家标签。
+- 不改变国家名称的地理中心、旋转和城市标签视觉样式。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js` 的 `updateLabels()` 调整遮挡判定：
+  - 国家标签仍只检查已显示国家标签。
+  - 非国家标签会同时检查已显示国家标签和同类标签。
+  - 因为 `labelItems` 顺序仍是国家、城市、手工，所以国家名称自然拥有最高布局优先级。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 临时 HTTP server 强制重叠验证：
+  - 将一个国家名称临时移动到其首都坐标。
+  - 验证结果为 `stateVisible: true`、`capitalVisible: false`。
+  - 无 console error / pageerror。
+
+## 2026-06-28 管理 tab 重新生成专栏直出
+
+目标：
+
+- “重新生成”不再作为管理 tab 下的二级入口按钮。
+- 管理 tab 内直接展示各类重新生成按钮。
+- 重新生成操作区应作为独立专栏，并用分割线与编辑/管理面板入口分开。
+
+计划：
+
+- `ControlPanel.vue` 将管理 tab 拆成“编辑与管理”和“重新生成”两个区块。
+- `fit-view` 与各浮动编辑/管理面板入口保留在上方。
+- 下方“重新生成”专栏直接展示国家、省份、城镇、道路、河流按钮。
+- 运行时直接监听 `data-regenerate-kind` 按钮，复用现有 `regenerateMapAttribute()`。
+- 重新生成执行结果显示在管理 tab 内，替代原浮动二级面板状态。
+
+实施：
+
+- `app/webgl-generator/src/ui/vue/components/ControlPanel.vue`：
+  - 管理 tab 拆为上方“编辑与管理”按钮区和下方“重新生成”专栏。
+  - 两个区块之间新增分割线。
+  - “重新生成”专栏直接展示 `国家 / 省份 / 城镇 / 道路 / 河流` 五个按钮。
+  - 移除原 `open-regeneration-panel` 二级入口按钮。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 新增对 `[data-regenerate-kind]` 的按钮监听。
+  - 新增 `updateRegenerationSection()`，用于更新管理 tab 内的状态和约束说明。
+  - 编辑锁定名单改为包含 `[data-regenerate-kind]`。
+- `app/webgl-generator/src/runtime/app.js`：
+  - 移除浮动 `RegenerationPanel` 创建与打开逻辑。
+  - 管理 tab 直出按钮直接调用 `regenerateMapAttribute()`。
+- 删除不再使用的二级浮动面板文件：
+  - `app/webgl-generator/src/ui/panels/regeneration-panel.js`
+  - `app/webgl-generator/src/ui/vue/components/RegenerationPanel.vue`
+- `app/webgl-generator/src/styles.css`：
+  - 新增管理 tab 专栏、分割线、重新生成按钮网格和状态说明样式。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel.js` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 临时 HTTP server 验证 `dist/webgl-generator`：
+  - 管理 tab 中不再存在 `open-regeneration-panel`。
+  - 分割线 `.management-panel-divider` 存在。
+  - “重新生成”专栏直接显示 `国家 / 省份 / 城镇 / 道路 / 河流` 五个按钮。
+  - 上方编辑/管理按钮仍保留 `适配视图、高度编辑、国家编辑、省份管理、城市管理、文化管理、宗教管理、路线管理、河流管理、标签管理`。
+  - 点击“道路”后侧栏状态更新为 `道路已按当前国家、城镇、港口和陆海约束重算...`，没有打开 `regeneration-panel` 浮动面板。
+  - 无 console error / pageerror。

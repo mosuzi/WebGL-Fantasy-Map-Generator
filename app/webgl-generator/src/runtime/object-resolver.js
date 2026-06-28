@@ -1,16 +1,21 @@
+import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
+
+const OBJECT_RESOLVERS = Object.freeze({
+  [OBJECT_KIND.CITY]: resolveCity,
+  [OBJECT_KIND.LABEL]: resolveLabel,
+  [OBJECT_KIND.MARKER]: resolveMarker,
+  [OBJECT_KIND.ROUTE]: resolveRoute,
+  [OBJECT_KIND.RIVER]: resolveRiver,
+  [OBJECT_KIND.STATE]: resolveState,
+  [OBJECT_KIND.PROVINCE]: resolveProvince,
+  [OBJECT_KIND.CULTURE]: resolveCulture,
+  [OBJECT_KIND.RELIGION]: resolveReligion,
+  [OBJECT_KIND.REGION]: resolveRegion
+});
+
 export function resolveObject(map, object) {
   if (!map || !object?.kind) return null;
-  if (object.kind === "city") return resolveCity(map, object);
-  if (object.kind === "label") return resolveLabel(map, object);
-  if (object.kind === "marker") return resolveMarker(map, object);
-  if (object.kind === "route") return resolveRoute(map, object);
-  if (object.kind === "river") return resolveRiver(map, object);
-  if (object.kind === "state") return resolveState(map, object);
-  if (object.kind === "province") return resolveProvince(map, object);
-  if (object.kind === "culture") return resolveCulture(map, object);
-  if (object.kind === "religion") return resolveReligion(map, object);
-  if (object.kind === "region") return resolveRegion(map, object);
-  return object;
+  return OBJECT_RESOLVERS[object.kind]?.(map, object) || object;
 }
 
 function resolveCity(map, object) {
@@ -31,15 +36,45 @@ function resolveCity(map, object) {
 }
 
 function resolveLabel(map, object) {
-  if (object.targetKind === "city" || object.id !== undefined) {
+  if (object.targetKind === LABEL_TARGET_KIND.CUSTOM) {
+    const label = (map.labels?.custom || []).find(item => item.id === (object.targetId ?? object.id));
+    if (!label) return null;
+    return {
+      ...object,
+      kind: OBJECT_KIND.LABEL,
+      id: label.id,
+      text: label.text,
+      targetKind: LABEL_TARGET_KIND.CUSTOM,
+      targetId: label.id,
+      targetName: label.text,
+      x: label.x,
+      y: label.y,
+      rank: object.rank ?? "custom"
+    };
+  }
+  if (object.targetKind === LABEL_TARGET_KIND.STATE) {
+    const state = map.politics.states[object.targetId ?? object.id];
+    if (!state) return null;
+    return {
+      ...object,
+      kind: OBJECT_KIND.LABEL,
+      id: state.id ?? state.i ?? object.id,
+      text: state.name,
+      targetKind: LABEL_TARGET_KIND.STATE,
+      targetId: state.id ?? state.i ?? object.id,
+      targetName: state.name,
+      rank: object.rank ?? "n/a"
+    };
+  }
+  if (object.targetKind === LABEL_TARGET_KIND.CITY || object.id !== undefined) {
     const city = map.settlements.cities[object.id];
     if (!city) return null;
     return {
       ...object,
-      kind: "label",
+      kind: OBJECT_KIND.LABEL,
       id: city.id,
       text: city.name,
-      targetKind: "city",
+      targetKind: LABEL_TARGET_KIND.CITY,
       targetId: city.id,
       targetName: city.name,
       rank: object.rank ?? "n/a"

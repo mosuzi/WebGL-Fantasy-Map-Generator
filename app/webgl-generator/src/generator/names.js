@@ -79,7 +79,167 @@ const PLACE_STEMS = [
   "岚山",
   "长川",
   "南溪",
-  "北岭"
+  "北岭",
+  "临安",
+  "永宁",
+  "广陵",
+  "武陵",
+  "建宁",
+  "宣城",
+  "宜春",
+  "长乐",
+  "临海",
+  "会稽",
+  "余杭",
+  "上虞",
+  "句容",
+  "曲沃",
+  "平阳",
+  "安平",
+  "新丰",
+  "武昌",
+  "汉阳",
+  "江夏",
+  "巴陵",
+  "零陵",
+  "武安",
+  "安邑",
+  "晋阳",
+  "平遥",
+  "太原",
+  "阳曲",
+  "汾阳",
+  "蒲津",
+  "蓝田",
+  "咸宁",
+  "扶风",
+  "武功",
+  "金城",
+  "临洮",
+  "张掖",
+  "酒泉",
+  "敦煌",
+  "姑臧",
+  "番禺",
+  "南海",
+  "合浦",
+  "苍梧",
+  "桂阳",
+  "始安",
+  "建安",
+  "邵陵",
+  "庐陵",
+  "豫章",
+  "浔阳",
+  "彭泽",
+  "会昌",
+  "临江",
+  "广信",
+  "建昌",
+  "信安",
+  "永嘉",
+  "处州",
+  "括苍",
+  "缙云",
+  "青田",
+  "瑞安",
+  "乐清",
+  "东阳",
+  "兰溪",
+  "义乌",
+  "浦阳",
+  "海盐",
+  "嘉禾",
+  "吴兴",
+  "毗陵",
+  "京口",
+  "丹徒",
+  "江都",
+  "海陵",
+  "盱眙",
+  "广德",
+  "宣州",
+  "歙州",
+  "休宁",
+  "黟县",
+  "桐庐",
+  "富春",
+  "新昌",
+  "剡溪",
+  "余姚",
+  "慈溪",
+  "奉化",
+  "定海",
+  "象山",
+  "临汾",
+  "河东",
+  "闻喜",
+  "绛州",
+  "曲阳",
+  "常山",
+  "真定",
+  "邺城",
+  "邯郸",
+  "巨鹿",
+  "清苑",
+  "涿鹿",
+  "范阳",
+  "渔阳",
+  "密云",
+  "蓟州",
+  "辽阳",
+  "扶余",
+  "玄菟",
+  "乐浪",
+  "龙城",
+  "朔方",
+  "云中",
+  "五原",
+  "雁门",
+  "代郡",
+  "马邑",
+  "定襄",
+  "上郡",
+  "延安",
+  "绥德",
+  "榆林",
+  "麟州",
+  "银州",
+  "怀远",
+  "灵武",
+  "西平",
+  "湟中",
+  "西宁",
+  "河湟",
+  "洮阳",
+  "成纪",
+  "天祝",
+  "会宁"
+];
+const CHINESE_FIRST_CHARS = [
+  "安", "永", "长", "临", "广", "清", "青", "云", "明", "昭", "建", "宣", "宁", "平", "武", "定",
+  "宜", "嘉", "瑞", "景", "德", "兴", "昌", "丰", "新", "庆", "怀", "归", "望", "会", "开", "承",
+  "金", "玉", "石", "铜", "银", "丹", "赤", "白", "苍", "玄", "素", "朱", "蓝", "翠", "松", "柏",
+  "桂", "兰", "梅", "桑", "梧", "柳", "桃", "榆", "槐", "竹", "莲", "荆", "衡", "岳", "岱", "嵩",
+  "岚", "岭", "峄", "崇", "峻", "灵", "龙", "凤", "麟", "雁", "鹤", "鹿", "星", "月", "晴", "雨",
+  "霁", "霜", "寒", "春", "秋", "夏", "海", "江", "河", "湖", "泽", "溪", "浦", "津", "渡", "渚",
+  "洛", "汾", "沅", "湘", "汉", "淮", "越", "吴", "楚", "秦", "晋", "燕", "赵", "梁", "蜀", "巴",
+  "南", "北", "东", "西", "中", "上"
+];
+const CHINESE_SECOND_CHARS = [
+  "安", "宁", "平", "阳", "阴", "陵", "丘", "原", "川", "州", "城", "都", "京", "郡", "府", "邑",
+  "丰", "昌", "兴", "盛", "和", "嘉", "祥", "瑞", "德", "义", "信", "仁", "礼", "乐", "康", "泰",
+  "源", "泉", "溪", "水", "江", "河", "湖", "泽", "浦", "津", "港", "湾", "渡", "渚", "沂", "汀",
+  "山", "岭", "岳", "峰", "岑", "谷", "关", "隘", "台", "庭", "台", "楼", "亭", "门", "桥", "驿",
+  "林", "森", "野", "田", "畴", "苑", "园", "坞", "寨", "集", "镇", "里", "坊", "墟", "圩", "埠",
+  "云", "岚", "霞", "霄", "星", "月", "晖", "光", "明", "景", "春", "秋", "寒", "霜", "雨", "风",
+  "玉", "金", "石", "铜", "丹", "朱", "玄", "青", "白", "苍", "松", "柏", "桂", "梧", "兰", "竹",
+  "龙", "凤", "麟", "雁", "鹤", "鹿", "鱼", "梁", "津", "海"
+];
+const CHINESE_PORT_STEMS = [
+  "南浦", "海津", "青港", "云渡", "月湾", "江浦", "临津", "松港", "白湾", "澄浦", "玉津", "东港",
+  "西浦", "北津", "长湾", "清港", "安浦", "明津", "瑞港", "嘉湾", "临浦", "广津", "海门", "江都",
+  "定海", "合浦", "海陵", "象山", "乐清", "瑞安", "番禺", "南海"
 ];
 const REAL_PREFIXES = ["青", "清", "云", "白", "苍", "南", "北", "东", "西", "长", "安", "昭", "临", "平", "江", "河", "石", "松", "金", "玉"];
 const HYDRO_PREFIXES = ["青", "清", "云", "白", "苍", "洛", "澄", "月", "星", "玉", "金", "龙", "灵", "玄", "镜", "寒", "秋", "明", "丹", "素"];
@@ -138,6 +298,8 @@ const STATE_FORMS = {
 };
 const PROVINCE_FORMS = ["郡", "州", "道", "府", "领", "司"];
 const DIRECTION_PREFIXES = ["东", "西", "南", "北", "上", "下", "新", "古"];
+const SMALL_SETTLEMENT_PREFIXES = ["新", "旧", "上", "下", "东", "西", "南", "北", "小", "前", "后"];
+const SMALL_SETTLEMENT_SUFFIXES = ["镇", "集", "寨", "村", "渡", "铺", "驿", "坞", "埠", "圩"];
 const SHIELDS = ["heater", "kite", "round", "horsehead", "banner"];
 const CHARGES = ["mount", "river", "star", "gate", "wave", "tree", "tower", "sun", "moon", "bridge"];
 const FIELD_TINCTURES = ["#b94b4b", "#3d6f9e", "#4f7f52", "#a47a35", "#6e579b", "#9a9a70", "#3e7b7d", "#704f38"];
@@ -149,18 +311,24 @@ export function createChineseNameGenerator(seed = "map") {
   return {
     makePlaceName(options = {}) {
       const rng = rngFor(seed, "place", options);
-      const style = choosePlaceStyle(rng, options);
-      const cultureStyle = getCultureStyle(options);
-      const suffixes = getPlaceSuffixes(options, cultureStyle);
-      let name;
+      const makeCandidate = () => {
+        const style = choosePlaceStyle(rng, options);
+        const transliterationStyle = getTransliterationStyle(options);
+        const cultureStyle = getCultureStyle(options);
+        const suffixes = getPlaceSuffixes(options, cultureStyle);
+        let name;
 
-      if (cultureStyle?.place && (hasExplicitCultureStyle(options) || rng.next() < 0.82)) name = combineStemAndSuffix(pick(rng, cultureStyle.place), pick(rng, suffixes));
-      else if (style === "real") name = rng.next() < 0.72 ? pick(rng, PLACE_STEMS) : `${pick(rng, REAL_PREFIXES)}${pick(rng, suffixes)}`;
-      else if (style === "light") name = `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, suffixes)}`;
-      else name = pick(rng, HIGH_FANTASY_STEMS);
+        if (transliterationStyle?.place) name = combineStemAndSuffix(pick(rng, transliterationStyle.place), pick(rng, suffixes));
+        else if (style === "real") name = makeChinesePlaceName(rng, options, suffixes);
+        else if (style === "light") name = makeChineseLightPlaceName(rng, options, suffixes);
+        else name = pick(rng, HIGH_FANTASY_STEMS);
 
-      if (options.port && !PORT_SUFFIXES.some(suffix => name.endsWith(suffix))) name = trimGeographicSuffix(name) + pick(rng, PORT_SUFFIXES);
-      return makeUnique(used, "place", name, rng);
+        if (options.port && transliterationStyle?.place && !PORT_SUFFIXES.some(suffix => name.endsWith(suffix))) name = trimGeographicSuffix(name) + pick(rng, PORT_SUFFIXES);
+        return name;
+      };
+
+      const attempts = getSettlementScale(options) === "large" ? 48 : 20;
+      return makeUniqueGenerated(used, "place", makeCandidate(), rng, makeCandidate, attempts);
     },
 
     makeRiverName(options = {}) {
@@ -238,6 +406,52 @@ function choosePlaceStyle(rng, options) {
   return "real";
 }
 
+function makeChinesePlaceName(rng, options, suffixes) {
+  const scale = getSettlementScale(options);
+  if (options.port) return makeChinesePortName(rng, scale, suffixes);
+
+  const twoCharRate = scale === "large" ? 0.985 : scale === "medium" ? 0.88 : 0.72;
+  const roll = rng.next();
+  if (roll < twoCharRate) return makeChineseTwoCharName(rng);
+
+  const base = makeChineseTwoCharName(rng);
+  if (scale === "large" || roll < twoCharRate + 0.23) return `${base}${pickSmallSettlementSuffix(rng, suffixes)}`;
+
+  const prefix = pick(rng, SMALL_SETTLEMENT_PREFIXES);
+  return rng.next() < 0.55 ? `${prefix}${base}` : `${prefix}${base}${pick(rng, SMALL_SETTLEMENT_SUFFIXES)}`;
+}
+
+function makeChineseLightPlaceName(rng, options, suffixes) {
+  const scale = getSettlementScale(options);
+  if (scale === "large" || rng.next() < 0.78) return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, CHINESE_SECOND_CHARS)}`;
+  return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pickSmallSettlementSuffix(rng, suffixes)}`;
+}
+
+function makeChinesePortName(rng, scale, suffixes) {
+  if (scale === "large" || rng.next() < 0.82) return pick(rng, CHINESE_PORT_STEMS);
+  return `${makeChineseTwoCharName(rng)}${pick(rng, suffixes)}`;
+}
+
+function makeChineseTwoCharName(rng) {
+  if (rng.next() < 0.46) return pick(rng, PLACE_STEMS);
+
+  const first = pick(rng, CHINESE_FIRST_CHARS);
+  let second = pick(rng, CHINESE_SECOND_CHARS);
+  if (first === second) second = pick(rng, CHINESE_SECOND_CHARS);
+  return `${first}${second}`;
+}
+
+function getSettlementScale(options = {}) {
+  if (options.capital || options.provincial || options.major || options.group === "capital" || options.group === "city" || (options.population || 0) >= 5) return "large";
+  if (options.group === "town" || (options.population || 0) >= 1) return "medium";
+  return "small";
+}
+
+function pickSmallSettlementSuffix(rng, suffixes) {
+  const localSuffixes = suffixes?.length ? suffixes : LAND_SUFFIXES;
+  return rng.next() < 0.62 ? pick(rng, SMALL_SETTLEMENT_SUFFIXES) : pick(rng, localSuffixes);
+}
+
 function getPlaceSuffixes(options, cultureStyle = null) {
   if (options.port) return PORT_SUFFIXES;
   if (cultureStyle?.suffixes) return cultureStyle.suffixes;
@@ -258,8 +472,21 @@ function getCultureStyle(options = {}) {
   return cultureStyleFor(options.type);
 }
 
+function getTransliterationStyle(options = {}) {
+  const explicit = options.nameStyle || options.cultureNameStyle;
+  const style = transliterationStyleFor(explicit);
+  if (style) return style;
+  return transliterationStyleFor(options.cultureType);
+}
+
 function hasExplicitCultureStyle(options = {}) {
   return Boolean(options.cultureType || options.nameStyle);
+}
+
+function transliterationStyleFor(type) {
+  if (!type) return null;
+  if (/europe|western|english|西方|音译/i.test(type)) return CULTURE_STYLE_CONFIG.European;
+  return null;
 }
 
 function cultureStyleFor(type) {
@@ -278,6 +505,19 @@ function makeUnique(used, scope, name, rng) {
   if (!count) return name;
   if (count <= DIRECTION_PREFIXES.length) return `${DIRECTION_PREFIXES[count - 1]}${name}`;
   return `${name}${toChineseOrdinal(count + 1)}`;
+}
+
+function makeUniqueGenerated(used, scope, initialName, rng, generate, attempts) {
+  let name = initialName;
+  for (let attempt = 0; attempt <= attempts; attempt++) {
+    const key = `${scope}:${name}`;
+    if (!used.has(key)) {
+      used.set(key, 1);
+      return name;
+    }
+    name = generate();
+  }
+  return makeUnique(used, scope, initialName, rng);
 }
 
 function trimGeographicSuffix(name) {

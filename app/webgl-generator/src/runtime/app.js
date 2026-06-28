@@ -1,13 +1,15 @@
 import {generatePlaceholderMap} from "../generator/index.js";
+import {finalizeSettlements} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS} from "../generator/options.js";
 import {createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {PanelManager} from "../ui/panel-manager.js";
-import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setSeedInput, updatePickPanel, updateRuntimePanel} from "../ui/panel.js";
+import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
+import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
 import {createObjectDetailsPanel} from "../ui/panels/object-details-panel.js";
 import {createProvincePanel} from "../ui/panels/province-panel.js";
 import {createReligionPanel} from "../ui/panels/religion-panel.js";
@@ -20,6 +22,7 @@ import {EditHistory} from "./edit-history.js";
 import {createSetCityPopulationCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand} from "./culture-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
+import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand} from "./label-edit-commands.js";
 import {createRenameObjectCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand} from "./religion-edit-commands.js";
@@ -28,6 +31,7 @@ import {createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
+import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 
 export function createGeneratorApp(documentRef) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -74,6 +78,7 @@ export function createGeneratorApp(documentRef) {
   let religionPanel = null;
   let riverPanel = null;
   let routePanel = null;
+  let labelNamingPanel = null;
   let suppressNextRiverPanelOpen = false;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
@@ -433,6 +438,78 @@ export function createGeneratorApp(documentRef) {
     }
   });
   state.panels.route = routePanel;
+  labelNamingPanel = createLabelNamingPanel(documentRef, panelManager, {
+    onSelect: object => {
+      selectionStore.setSelection({object});
+      labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
+    },
+    onLocate: object => {
+      locateObject(state, object, documentRef);
+      labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
+    },
+    onRename: (object, name) => {
+      const context = {map: state.map};
+      const command = object.targetKind === LABEL_TARGET_KIND.CUSTOM ? createRenameCustomLabelCommand(object.targetId ?? object.id, name) : createRenameObjectCommand(object, name);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateLabelNamingPanel(state);
+      updateStatePanel(state);
+      updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onAdd: () => {
+      const point = getNewLabelPoint(state);
+      const context = {map: state.map};
+      const command = createAddCustomLabelCommand({text: "新标签", x: point.x, y: point.y});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      const created = command.getCreatedLabel?.();
+      if (created) {
+        const object = {kind: OBJECT_KIND.LABEL, id: created.id, targetKind: LABEL_TARGET_KIND.CUSTOM, targetId: created.id, text: created.text, targetName: created.text};
+        selectionStore.setSelection({object});
+        labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
+      }
+      updateLabelNamingPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onDelete: object => {
+      const context = {map: state.map};
+      const command = createDeleteLabelCommand(object);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateLabelNamingPanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onRestore: object => {
+      const context = {map: state.map};
+      const command = createRestoreGeneratedLabelCommand(object);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateLabelNamingPanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateLabelNamingPanel(state);
+      updateStatePanel(state);
+      updateCityPanel(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateLabelNamingPanel(state);
+      updateStatePanel(state);
+      updateCityPanel(state);
+    }
+  });
+  state.panels.labelNaming = labelNamingPanel;
   riverPanel = createRiverPanel(documentRef, panelManager, {
     onSelect: object => {
       selectionStore.setSelection({object});
@@ -442,7 +519,7 @@ export function createGeneratorApp(documentRef) {
     },
     onEdit: object => {
       selectionStore.setSelection({object});
-      if (state.editingObject?.kind === "river" && state.editingObject.id === object.id) {
+      if (state.editingObject?.kind === OBJECT_KIND.RIVER && state.editingObject.id === object.id) {
         selectionStore.stopEditing();
       } else {
         selectionStore.startEditing(object);
@@ -459,7 +536,7 @@ export function createGeneratorApp(documentRef) {
       updateEditingInteractionLock(state, documentRef);
     },
     onClose: () => {
-      if (state.editingObject?.kind === "river") {
+      if (state.editingObject?.kind === OBJECT_KIND.RIVER) {
         suppressNextRiverPanelOpen = true;
         selectionStore.stopEditing();
       }
@@ -499,42 +576,18 @@ export function createGeneratorApp(documentRef) {
     state.selection = selection;
     state.editingObject = editingObject;
     renderer.setSelection(selection?.object || null);
-    if (selection?.object?.kind === "state") {
-      state.panels.objectDetails.clear();
-      state.panels.state.setTargetStateId(selection.object.id);
-      state.panels.state.open(state.map, state.editHistory.getStats());
-    } else if (selection?.object?.kind === "city") {
-      state.panels.objectDetails.clear();
-      state.panels.city.setSelectedCityId(selection.object.id);
-      state.panels.city.open(state.map, selection, state.editHistory.getStats());
-    } else if (selection?.object?.kind === "province" && shouldOpenProvincePanelForSelection(state)) {
-      state.panels.objectDetails.clear();
-      state.panels.province.setSelectedProvinceId(selection.object.id);
-      state.panels.province.open(state.map, selection, state.editHistory.getStats());
-    } else if (selection?.object?.kind === "culture" && shouldOpenCulturePanelForSelection(state)) {
-      state.panels.objectDetails.clear();
-      state.panels.culture.setSelectedCultureId(selection.object.id);
-      state.panels.culture.open(state.map, selection, state.editHistory.getStats());
-    } else if (selection?.object?.kind === "religion" && shouldOpenReligionPanelForSelection(state)) {
-      state.panels.objectDetails.clear();
-      state.panels.religion.setSelectedReligionId(selection.object.id);
-      state.panels.religion.open(state.map, selection, state.editHistory.getStats());
-    } else if (selection?.object?.kind === "river") {
-      state.panels.objectDetails.clear();
-      if (suppressNextRiverPanelOpen) {
+    const handled = handleSelectionPanel(state, selection, editingObject, {
+      suppressNextRiverPanelOpen,
+      clearRiverSuppressor: () => {
         suppressNextRiverPanelOpen = false;
-      } else {
-        state.panels.river.open(state.map, selection, state.editHistory.getStats(), editingObject);
       }
-    } else if (selection?.object?.kind === "route") {
-      state.panels.objectDetails.clear();
-      state.panels.route.setSelectedRouteId(selection.object.id);
-      state.panels.route.open(state.map, selection);
-    } else {
+    });
+    if (!handled) {
       state.panels.objectDetails.show(selection, editingObject);
     }
     state.panels.river.update(state.map, selection, state.editHistory.getStats(), editingObject);
     state.panels.route.update(state.map, selection);
+    state.panels.labelNaming.update(state.map, selection, state.editHistory.getStats());
     updateStatePanel(state);
     updateProvincePanel(state);
     updateCityPanel(state);
@@ -566,6 +619,9 @@ export function createGeneratorApp(documentRef) {
       renderer.setViewOptions({showOceanHeight});
       updateRuntimePanel(documentRef, state);
     },
+    onShowHoverInfo: () => {
+      updatePickPanel(documentRef, state);
+    },
     onMaxCityLabels: maxCityLabels => {
       renderer.setLabelOptions({maxCityLabels});
       updateRuntimePanel(documentRef, state);
@@ -581,31 +637,31 @@ export function createGeneratorApp(documentRef) {
       state.panels.height.open(state.editHistory.getStats());
     },
     onOpenStatePanel: () => {
-      if (state.selection?.object?.kind === "state") {
+      if (state.selection?.object?.kind === OBJECT_KIND.STATE) {
         state.panels.state.setTargetStateId(state.selection.object.id);
       }
       state.panels.state.open(state.map, state.editHistory.getStats());
     },
     onOpenProvincePanel: () => {
-      if (state.selection?.object?.kind === "province") {
+      if (state.selection?.object?.kind === OBJECT_KIND.PROVINCE) {
         state.panels.province.setSelectedProvinceId(state.selection.object.id);
       }
       state.panels.province.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenCityPanel: () => {
-      if (state.selection?.object?.kind === "city") {
+      if (state.selection?.object?.kind === OBJECT_KIND.CITY) {
         state.panels.city.setSelectedCityId(state.selection.object.id);
       }
       state.panels.city.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenCulturePanel: () => {
-      if (state.selection?.object?.kind === "culture") {
+      if (state.selection?.object?.kind === OBJECT_KIND.CULTURE) {
         state.panels.culture.setSelectedCultureId(state.selection.object.id);
       }
       state.panels.culture.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenReligionPanel: () => {
-      if (state.selection?.object?.kind === "religion") {
+      if (state.selection?.object?.kind === OBJECT_KIND.RELIGION) {
         state.panels.religion.setSelectedReligionId(state.selection.object.id);
       }
       state.panels.religion.open(state.map, state.selection, state.editHistory.getStats());
@@ -614,10 +670,19 @@ export function createGeneratorApp(documentRef) {
       state.panels.river.open(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
     },
     onOpenRoutePanel: () => {
-      if (state.selection?.object?.kind === "route") {
+      if (state.selection?.object?.kind === OBJECT_KIND.ROUTE) {
         state.panels.route.setSelectedRouteId(state.selection.object.id);
       }
       state.panels.route.open(state.map, state.selection);
+    },
+    onOpenLabelNamingPanel: () => {
+      if (state.selection?.object?.kind === OBJECT_KIND.LABEL) {
+        state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(state.selection.object));
+      }
+      state.panels.labelNaming.open(state.map, state.selection, state.editHistory.getStats());
+    },
+    onRegenerate: kind => {
+      updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
     },
     onMode: mode => {
       renderer.setColorMode(mode);
@@ -686,6 +751,7 @@ function runGenerateNow(state, documentRef, generateId) {
     updateCityPanel(state);
     updateCulturePanel(state);
     updateReligionPanel(state);
+    updateLabelNamingPanel(state);
     state.panels.route.update(state.map, state.selection);
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
@@ -737,6 +803,63 @@ function locateObject(state, object, documentRef) {
   updatePickPanel(documentRef, state);
 }
 
+const SELECTION_PANEL_HANDLERS = Object.freeze({
+  [OBJECT_KIND.STATE]: (state, selection) => {
+    state.panels.objectDetails.clear();
+    state.panels.state.setTargetStateId(selection.object.id);
+    state.panels.state.open(state.map, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.CITY]: (state, selection) => {
+    state.panels.objectDetails.clear();
+    state.panels.city.setSelectedCityId(selection.object.id);
+    state.panels.city.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.PROVINCE]: (state, selection) => {
+    if (!shouldOpenProvincePanelForSelection(state)) return false;
+    state.panels.objectDetails.clear();
+    state.panels.province.setSelectedProvinceId(selection.object.id);
+    state.panels.province.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.CULTURE]: (state, selection) => {
+    if (!shouldOpenCulturePanelForSelection(state)) return false;
+    state.panels.objectDetails.clear();
+    state.panels.culture.setSelectedCultureId(selection.object.id);
+    state.panels.culture.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.RELIGION]: (state, selection) => {
+    if (!shouldOpenReligionPanelForSelection(state)) return false;
+    state.panels.objectDetails.clear();
+    state.panels.religion.setSelectedReligionId(selection.object.id);
+    state.panels.religion.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.RIVER]: (state, selection, editingObject, context) => {
+    state.panels.objectDetails.clear();
+    if (context.suppressNextRiverPanelOpen) {
+      context.clearRiverSuppressor();
+      return true;
+    }
+    state.panels.river.open(state.map, selection, state.editHistory.getStats(), editingObject);
+    return true;
+  },
+  [OBJECT_KIND.ROUTE]: (state, selection) => {
+    state.panels.objectDetails.clear();
+    state.panels.route.setSelectedRouteId(selection.object.id);
+    state.panels.route.open(state.map, selection);
+    return true;
+  }
+});
+
+function handleSelectionPanel(state, selection, editingObject, context) {
+  const object = selection?.object;
+  if (!object?.kind) return false;
+  return SELECTION_PANEL_HANDLERS[object.kind]?.(state, selection, editingObject, context) || false;
+}
+
 function refreshAfterEdit(state, commandOrEffects) {
   state.editRefreshScheduler.run(commandOrEffects);
 }
@@ -753,6 +876,50 @@ function refreshAfterProvinceEdit(state, commandOrEffects) {
   refreshAfterEdit(state, commandOrEffects);
   updateProvincePanel(state);
   updateCityPanel(state);
+}
+
+function regenerateMapAttribute(state, kind, documentRef) {
+  if (!state.map) return regenerationResult(kind, "未执行", "当前没有可重算的地图。");
+  if (kind === "routes") {
+    const before = state.map.settlements?.routes?.length || 0;
+    finalizeSettlements(state.map.grid, state.map.features, state.map.politics, state.map.settlements, state.map.pack);
+    const after = state.map.settlements?.routes?.length || 0;
+    refreshAfterEdit(state, {
+      render: "draw",
+      selection: "refresh",
+      runtimeStats: true,
+      pickPanel: true,
+      derived: ["route-mesh", "object-panels"],
+      affected: [{kind: OBJECT_KIND.ROUTE, id: "all"}]
+    });
+    state.panels.route.update(state.map, state.selection);
+    updateCityPanel(state);
+    updateRuntimePanel(documentRef, state);
+    return regenerationResult(kind, `道路已按当前国家、城镇、港口和陆海约束重算：${before} -> ${after}`, "陆路仍通过 pack 邻接寻路并避开水域，海路只连接同水体港口。");
+  }
+
+  const constraints = {
+    states: "国家重算需要重新选择首都、扩张国家、同步省份/城镇/道路/军事等下游派生；当前先保留为受约束入口。",
+    provinces: "省份重算需要限制在所属国家内扩张，并同步城市省份、边界、pole 和统计；当前先保留为受约束入口。",
+    cities: "城镇重算需要按适居度、文化、国家、省份、港口和间距约束重新选点，并处理道路联动；当前先保留为受约束入口。",
+    rivers: "河流重算必须沿高度和水文通量下行，不能让河流倒流或爬山，并会影响生物群系、城镇、路线等派生；当前先保留为受约束入口。"
+  };
+  return regenerationResult(kind, "暂未执行", constraints[kind] || "该属性尚未接入受约束重算。");
+}
+
+function regenerationResult(kind, status, constraint) {
+  const labels = {
+    states: "国家",
+    provinces: "省份",
+    cities: "城镇",
+    routes: "道路",
+    rivers: "河流"
+  };
+  return {
+    action: labels[kind] || kind,
+    status,
+    constraint
+  };
 }
 
 function shouldOpenProvincePanelForSelection(state) {
@@ -1134,6 +1301,36 @@ function updateReligionPanel(state) {
   state.panels.religion?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
+function updateLabelNamingPanel(state) {
+  state.panels.labelNaming?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function labelKeyForObject(object) {
+  if (!object?.kind) return null;
+  if (object.kind === OBJECT_KIND.LABEL) return `${object.targetKind || OBJECT_KIND.CITY}:${object.targetId ?? object.id}`;
+  if (object.kind === OBJECT_KIND.CITY || object.kind === OBJECT_KIND.STATE) return `${object.kind}:${object.id}`;
+  return null;
+}
+
+function getNewLabelPoint(state) {
+  if (Number.isFinite(state.pick?.worldX) && Number.isFinite(state.pick?.worldY)) {
+    return {x: state.pick.worldX, y: state.pick.worldY};
+  }
+  const object = state.selection?.object;
+  if (object?.kind === OBJECT_KIND.CITY) {
+    const city = state.map?.settlements?.cities?.[object.id];
+    if (city) return {x: city.x, y: city.y};
+  }
+  if (object?.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.CUSTOM) {
+    const label = (state.map?.labels?.custom || []).find(item => item.id === (object.targetId ?? object.id));
+    if (label) return {x: label.x, y: label.y};
+  }
+  return {
+    x: (state.map?.metadata?.graphWidth || 1440) / 2,
+    y: (state.map?.metadata?.graphHeight || 960) / 2
+  };
+}
+
 function setStatePanelTarget(state, stateId) {
   if (!Number.isInteger(stateId) || stateId <= 0) return;
   state.panels.state?.setTargetStateId(stateId);
@@ -1142,14 +1339,14 @@ function setStatePanelTarget(state, stateId) {
 
 function getStateIdFromSelection(state) {
   const object = state.selection?.object;
-  if (object?.kind === "state") return object.id;
+  if (object?.kind === OBJECT_KIND.STATE) return object.id;
   if (Number.isInteger(object?.stateId)) return object.stateId;
   return null;
 }
 
 function getStateIdFromPick(state) {
   if (Number.isInteger(state.pick?.gridCell)) return state.map.grid.cells.state[state.pick.gridCell] || null;
-  if (state.pick?.politicalObject?.kind === "state") return state.pick.politicalObject.id;
+  if (state.pick?.politicalObject?.kind === OBJECT_KIND.STATE) return state.pick.politicalObject.id;
   return null;
 }
 
@@ -1169,15 +1366,15 @@ function setProvincePanelTarget(state, provinceId) {
 
 function getProvinceIdFromSelection(state) {
   const object = state.selection?.object;
-  if (object?.kind === "province") return object.id;
+  if (object?.kind === OBJECT_KIND.PROVINCE) return object.id;
   if (Number.isInteger(object?.provinceId)) return object.provinceId;
-  if (object?.kind === "city") return state.map?.settlements?.cities?.[object.id]?.province || null;
+  if (object?.kind === OBJECT_KIND.CITY) return state.map?.settlements?.cities?.[object.id]?.province || null;
   return null;
 }
 
 function getProvinceIdFromPick(state) {
   if (Number.isInteger(state.pick?.gridCell)) return state.map.grid.cells.province[state.pick.gridCell] || null;
-  if (state.pick?.politicalObject?.kind === "province") return state.pick.politicalObject.id;
+  if (state.pick?.politicalObject?.kind === OBJECT_KIND.PROVINCE) return state.pick.politicalObject.id;
   return null;
 }
 
@@ -1216,7 +1413,7 @@ function getAllowedEditingPanelIds(state) {
   if (state.panels.height?.getBrush().active) return ["height-panel"];
   if (state.panels.state?.getBrush().active) return ["state-panel"];
   if (state.panels.province?.getBrush().active) return ["province-panel"];
-  if (state.editingObject?.kind === "river") return ["river-panel"];
+  if (state.editingObject?.kind === OBJECT_KIND.RIVER) return ["river-panel"];
   if (state.editingObject) return ["object-details"];
   return [];
 }

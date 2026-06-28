@@ -1,3 +1,5 @@
+import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
+
 const OBJECT_NAME_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
@@ -20,6 +22,33 @@ const PROVINCE_COLOR_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["province-color", "cell-colors", "object-panels"])
+});
+
+const OBJECT_NAME_READERS = Object.freeze({
+  [OBJECT_KIND.STATE]: readStateName,
+  [OBJECT_KIND.PROVINCE]: readProvinceName,
+  [OBJECT_KIND.CULTURE]: readCultureName,
+  [OBJECT_KIND.RELIGION]: readReligionName,
+  [OBJECT_KIND.RIVER]: readRiverName,
+  [OBJECT_KIND.CITY]: readCityName
+});
+
+const OBJECT_NAME_WRITERS = Object.freeze({
+  [OBJECT_KIND.STATE]: writeStateName,
+  [OBJECT_KIND.PROVINCE]: writeProvinceName,
+  [OBJECT_KIND.CULTURE]: writeCultureName,
+  [OBJECT_KIND.RELIGION]: writeReligionName,
+  [OBJECT_KIND.RIVER]: writeRiverName,
+  [OBJECT_KIND.CITY]: writeCityName
+});
+
+const OBJECT_NAME_RESTORERS = Object.freeze({
+  [OBJECT_KIND.STATE]: restoreStateName,
+  [OBJECT_KIND.PROVINCE]: restoreProvinceName,
+  [OBJECT_KIND.CULTURE]: restoreCultureName,
+  [OBJECT_KIND.RELIGION]: (map, target, previous) => writeReligionName(map, target.id, previous.name),
+  [OBJECT_KIND.RIVER]: (map, target, previous) => writeRiverName(map, target.id, previous.name),
+  [OBJECT_KIND.CITY]: (map, target, previous) => writeCityName(map, target.id, previous.name, previous.burgName)
 });
 
 export function createRenameObjectCommand(object, nextName) {
@@ -110,77 +139,60 @@ export function createSetProvinceColorCommand(provinceId, color, {beforeColor = 
 }
 
 function normalizeObjectTarget(object) {
-  if (object?.kind === "label" && object.targetKind === "city") {
-    return {kind: "city", id: object.targetId ?? object.id};
+  if (object?.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.CITY) {
+    return {kind: OBJECT_KIND.CITY, id: object.targetId ?? object.id};
+  }
+  if (object?.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.STATE) {
+    return {kind: OBJECT_KIND.STATE, id: object.targetId ?? object.id};
   }
   return {kind: object?.kind, id: object?.id};
 }
 
 function readObjectName(map, target) {
-  if (target.kind === "state") {
-    const state = map?.politics?.states?.[target.id];
-    return state ? {name: state.name || "", fullName: state.fullName || ""} : null;
-  }
-  if (target.kind === "province") {
-    const province = map?.politics?.provinces?.[target.id] || map?.pack?.provinces?.[target.id];
-    return province ? {name: province.name || "", fullName: province.fullName || ""} : null;
-  }
-  if (target.kind === "culture") {
-    const culture = map?.society?.cultures?.[target.id] || map?.pack?.cultures?.[target.id];
-    return culture ? {name: culture.name || "", root: culture.root || ""} : null;
-  }
-  if (target.kind === "religion") {
-    const religion = map?.society?.religions?.[target.id] || map?.pack?.religions?.[target.id];
-    return religion ? {name: religion.name || ""} : null;
-  }
-  if (target.kind === "river") {
-    const river = findRiver(map, target.id);
-    return river ? {name: river.name || ""} : null;
-  }
-  if (target.kind === "city") {
-    const city = map?.settlements?.cities?.[target.id];
-    const burg = city ? findBurgForCity(map, city) : null;
-    return city ? {name: city.name || "", burgName: burg?.name || ""} : null;
-  }
-  return null;
+  return OBJECT_NAME_READERS[target.kind]?.(map, target.id) || null;
 }
 
 function writeObjectName(map, target, name) {
-  if (target.kind === "state") return writeStateName(map, target.id, name);
-  if (target.kind === "province") return writeProvinceName(map, target.id, name);
-  if (target.kind === "culture") return writeCultureName(map, target.id, name);
-  if (target.kind === "religion") return writeReligionName(map, target.id, name);
-  if (target.kind === "river") return writeRiverName(map, target.id, name);
-  if (target.kind === "city") return writeCityName(map, target.id, name);
+  const writer = OBJECT_NAME_WRITERS[target.kind];
+  if (writer) return writer(map, target.id, name);
   throw new Error(`不支持重命名对象类型：${target.kind}`);
 }
 
 function restoreObjectName(map, target, previous) {
-  if (target.kind === "state") {
-    const state = map?.politics?.states?.[target.id];
-    if (!state) throw new Error(`找不到国家 #${target.id}`);
-    state.name = previous.name;
-    state.fullName = previous.fullName;
-    return;
-  }
-  if (target.kind === "province") {
-    const province = map?.politics?.provinces?.[target.id] || map?.pack?.provinces?.[target.id];
-    if (!province) throw new Error(`找不到省份 #${target.id}`);
-    province.name = previous.name;
-    province.fullName = previous.fullName;
-    return;
-  }
-  if (target.kind === "culture") {
-    const culture = map?.society?.cultures?.[target.id] || map?.pack?.cultures?.[target.id];
-    if (!culture) throw new Error(`找不到文化 #${target.id}`);
-    culture.name = previous.name;
-    culture.root = previous.root;
-    return;
-  }
-  if (target.kind === "religion") return writeReligionName(map, target.id, previous.name);
-  if (target.kind === "river") return writeRiverName(map, target.id, previous.name);
-  if (target.kind === "city") return writeCityName(map, target.id, previous.name, previous.burgName);
+  const restorer = OBJECT_NAME_RESTORERS[target.kind];
+  if (restorer) return restorer(map, target, previous);
   throw new Error(`不支持恢复对象类型：${target.kind}`);
+}
+
+function readStateName(map, stateId) {
+  const state = map?.politics?.states?.[stateId];
+  return state ? {name: state.name || "", fullName: state.fullName || ""} : null;
+}
+
+function readProvinceName(map, provinceId) {
+  const province = map?.politics?.provinces?.[provinceId] || map?.pack?.provinces?.[provinceId];
+  return province ? {name: province.name || "", fullName: province.fullName || ""} : null;
+}
+
+function readCultureName(map, cultureId) {
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
+  return culture ? {name: culture.name || "", root: culture.root || ""} : null;
+}
+
+function readReligionName(map, religionId) {
+  const religion = map?.society?.religions?.[religionId] || map?.pack?.religions?.[religionId];
+  return religion ? {name: religion.name || ""} : null;
+}
+
+function readRiverName(map, riverId) {
+  const river = findRiver(map, riverId);
+  return river ? {name: river.name || ""} : null;
+}
+
+function readCityName(map, cityId) {
+  const city = map?.settlements?.cities?.[cityId];
+  const burg = city ? findBurgForCity(map, city) : null;
+  return city ? {name: city.name || "", burgName: burg?.name || ""} : null;
 }
 
 function writeStateName(map, stateId, name) {
@@ -190,6 +202,13 @@ function writeStateName(map, stateId, name) {
   state.fullName = state.formName ? `${name}${state.formName}` : name;
 }
 
+function restoreStateName(map, target, previous) {
+  const state = map?.politics?.states?.[target.id];
+  if (!state) throw new Error(`找不到国家 #${target.id}`);
+  state.name = previous.name;
+  state.fullName = previous.fullName;
+}
+
 function writeProvinceName(map, provinceId, name) {
   const province = map?.politics?.provinces?.[provinceId] || map?.pack?.provinces?.[provinceId];
   if (!province) throw new Error(`找不到省份 #${provinceId}`);
@@ -197,11 +216,25 @@ function writeProvinceName(map, provinceId, name) {
   province.fullName = province.formName ? `${name}${province.formName}` : name;
 }
 
+function restoreProvinceName(map, target, previous) {
+  const province = map?.politics?.provinces?.[target.id] || map?.pack?.provinces?.[target.id];
+  if (!province) throw new Error(`找不到省份 #${target.id}`);
+  province.name = previous.name;
+  province.fullName = previous.fullName;
+}
+
 function writeCultureName(map, cultureId, name) {
   const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
   if (!culture) throw new Error(`找不到文化 #${cultureId}`);
   culture.name = name;
   culture.root = name.endsWith("文化") ? name.slice(0, name.length - "文化".length) : name;
+}
+
+function restoreCultureName(map, target, previous) {
+  const culture = map?.society?.cultures?.[target.id] || map?.pack?.cultures?.[target.id];
+  if (!culture) throw new Error(`找不到文化 #${target.id}`);
+  culture.name = previous.name;
+  culture.root = previous.root;
 }
 
 function writeReligionName(map, religionId, name) {
@@ -344,11 +377,5 @@ function normalizeHexColor(color) {
 }
 
 function formatObjectKind(kind) {
-  if (kind === "state") return "国家";
-  if (kind === "province") return "省份";
-  if (kind === "culture") return "文化";
-  if (kind === "religion") return "宗教";
-  if (kind === "river") return "河流";
-  if (kind === "city") return "城市";
-  return "对象";
+  return OBJECT_KIND_LABEL[kind] || "对象";
 }
