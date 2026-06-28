@@ -1,5 +1,7 @@
-import {generatePlaceholderMap} from "../generator/index.js";
-import {finalizeSettlements} from "../generator/settlements.js";
+import {defineBiomesAndPopulation} from "../generator/biomes.js";
+import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
+import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
+import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS} from "../generator/options.js";
 import {createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
@@ -22,7 +24,7 @@ import {EditHistory} from "./edit-history.js";
 import {createSetCityPopulationCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand} from "./culture-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand} from "./label-edit-commands.js";
+import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createRenameObjectCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand} from "./religion-edit-commands.js";
@@ -880,31 +882,168 @@ function refreshAfterProvinceEdit(state, commandOrEffects) {
 
 function regenerateMapAttribute(state, kind, documentRef) {
   if (!state.map) return regenerationResult(kind, "未执行", "当前没有可重算的地图。");
-  if (kind === "routes") {
-    const before = state.map.settlements?.routes?.length || 0;
-    finalizeSettlements(state.map.grid, state.map.features, state.map.politics, state.map.settlements, state.map.pack);
-    const after = state.map.settlements?.routes?.length || 0;
-    refreshAfterEdit(state, {
-      render: "draw",
-      selection: "refresh",
-      runtimeStats: true,
-      pickPanel: true,
-      derived: ["route-mesh", "object-panels"],
-      affected: [{kind: OBJECT_KIND.ROUTE, id: "all"}]
-    });
-    state.panels.route.update(state.map, state.selection);
-    updateCityPanel(state);
-    updateRuntimePanel(documentRef, state);
-    return regenerationResult(kind, `道路已按当前国家、城镇、港口和陆海约束重算：${before} -> ${after}`, "陆路仍通过 pack 邻接寻路并避开水域，海路只连接同水体港口。");
+  switch (kind) {
+    case "routes":
+      return regenerateRoutes(state, documentRef);
+    case "rivers":
+      return regenerateRivers(state, documentRef);
+    case "cities":
+      return regenerateCities(state, documentRef);
+    default:
+      break;
   }
 
   const constraints = {
     states: "国家重算需要重新选择首都、扩张国家、同步省份/城镇/道路/军事等下游派生；当前先保留为受约束入口。",
-    provinces: "省份重算需要限制在所属国家内扩张，并同步城市省份、边界、pole 和统计；当前先保留为受约束入口。",
-    cities: "城镇重算需要按适居度、文化、国家、省份、港口和间距约束重新选点，并处理道路联动；当前先保留为受约束入口。",
-    rivers: "河流重算必须沿高度和水文通量下行，不能让河流倒流或爬山，并会影响生物群系、城镇、路线等派生；当前先保留为受约束入口。"
+    provinces: "省份重算需要限制在所属国家内扩张，并同步城市省份、边界、pole 和统计；当前先保留为受约束入口。"
   };
   return regenerationResult(kind, "暂未执行", constraints[kind] || "该属性尚未接入受约束重算。");
+}
+
+function regenerateRoutes(state, documentRef) {
+  const map = state.map;
+  const before = map.settlements?.routes?.length || 0;
+  const routeSalt = nextRegenerationSalt(map, "routes");
+  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, routeRegenerationSalt: routeSalt});
+  const after = map.settlements?.routes?.length || 0;
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate routes: salt=${routeSalt}, routes=${map.settlements.metadata.routes}, segments=${map.settlements.metadata.routeSegments}`);
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["route-mesh", "object-panels", "object-index"],
+    affected: [{kind: OBJECT_KIND.ROUTE, id: "all"}]
+  });
+  return regenerationResult("routes", `道路已按当前国家、城镇、港口和陆海约束重算（扰动 #${routeSalt}）：${before} -> ${after}`, "陆路仍通过 pack 邻接寻路并避开水域，海路只连接同水体港口。");
+}
+
+function regenerateRivers(state, documentRef) {
+  const map = state.map;
+  const beforeRivers = map.rivers?.rivers?.length || 0;
+  const beforeRoutes = map.settlements?.routes?.length || 0;
+  const riverOptions = {...map.options, riverRegenerationSalt: nextRegenerationSalt(map, "rivers")};
+  const nextRivers = buildRivers(map.grid, map.features, map.pack, riverOptions);
+  renameHydronymsByCulture(nextRivers, map.pack, riverOptions);
+  map.rivers = nextRivers;
+
+  const biomes = defineBiomesAndPopulation(map.grid, map.pack);
+  map.climate.biomes = biomes.biomes;
+  map.climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
+
+  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack);
+  markDerivedStale(map, ["cities", "provinces", "states", "religions", "markers", "zones", "military"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate rivers: salt=${riverOptions.riverRegenerationSalt}, rivers=${map.rivers.metadata.rivers}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale.systems.join(",")}`);
+
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["river-mesh", "river-width-stats", "route-mesh", "cell-colors", "point-layers", "object-panels", "object-index"],
+    affected: [{kind: OBJECT_KIND.RIVER, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+  });
+
+  return regenerationResult(
+    "rivers",
+    `河流已按当前高度、降水和湖泊约束重算（扰动 #${riverOptions.riverRegenerationSalt}）：${beforeRivers} -> ${map.rivers.metadata.rivers}；道路同步重算：${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    "已刷新水文通量、生物群系/人口评分、河流 mesh、道路 mesh 和对象索引；城镇、省份、国家、宗教、标记、区域、军事仍标记为待派生。"
+  );
+}
+
+function regenerateCities(state, documentRef) {
+  const map = state.map;
+  const beforeCities = map.settlements?.cities?.length || 0;
+  const beforePorts = map.settlements?.cities?.filter(city => city?.port).length || 0;
+  const beforeRoutes = map.settlements?.routes?.length || 0;
+  const citySalt = nextRegenerationSalt(map, "cities");
+
+  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, settlementRegenerationSalt: citySalt, routeRegenerationSalt: citySalt});
+  clearGeneratedCityLabelHides(map);
+  markDerivedFresh(map, ["cities"]);
+  markDerivedStale(map, ["provinces", "states", "religions", "markers", "zones", "military"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate settlements: salt=${citySalt}, cities=${map.settlements.metadata.cities}, ports=${map.settlements.metadata.ports}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["point-layers", "labels", "route-mesh", "object-panels", "object-index"],
+    affected: [{kind: OBJECT_KIND.CITY, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+  });
+
+  return regenerationResult(
+    "cities",
+    `城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    "已保留国家首都 burg 引用，刷新省会、普通城镇、城市标签、人口点、道路和对象索引；省份、国家、宗教、标记、区域、军事仍标记为待派生。"
+  );
+}
+
+function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
+  state.renderer.refreshObjectPickingIndex?.();
+  refreshAfterEdit(state, {
+    render: "draw",
+    selection: "refresh",
+    runtimeStats: true,
+    pickPanel: true,
+    derived,
+    affected
+  });
+  updateStatePanel(state);
+  updateProvincePanel(state);
+  updateCityPanel(state);
+  updateCulturePanel(state);
+  updateReligionPanel(state);
+  updateLabelNamingPanel(state);
+  state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  state.panels.route.update(state.map, state.selection);
+  updateRuntimePanel(documentRef, state);
+}
+
+function refreshGenerationSummary(map) {
+  map.summary = createGenerationSummary(map.options, map.grid, map.features, map.climate, map.society, map.politics, map.settlements, map.markers, map.pack, map.rivers, map.layers, map.military, map.zones);
+}
+
+function appendGenerationLog(map, message) {
+  if (!Array.isArray(map.generationLog)) map.generationLog = [];
+  map.generationLog.push(message);
+}
+
+function nextRegenerationSalt(map, kind) {
+  if (!map.metadata.regeneration || typeof map.metadata.regeneration !== "object") map.metadata.regeneration = {};
+  const current = Number(map.metadata.regeneration[kind]) || 0;
+  const next = current + 1;
+  map.metadata.regeneration[kind] = next;
+  return next;
+}
+
+function markDerivedStale(map, systems) {
+  const stale = {
+    systems: [...new Set([...(map?.metadata?.derivedStale?.systems || []), ...systems])],
+    updatedAt: new Date().toISOString()
+  };
+  if (map?.metadata) map.metadata.derivedStale = stale;
+  if (map?.military?.metadata) map.military.metadata.stale = stale.systems.includes("military");
+  if (map?.zones?.metadata) map.zones.metadata.stale = stale.systems.includes("zones");
+  if (map?.markers?.metadata) map.markers.metadata.stale = stale.systems.includes("markers");
+}
+
+function markDerivedFresh(map, systems) {
+  if (!map?.metadata) return;
+  const fresh = new Set(systems);
+  const nextSystems = (map.metadata.derivedStale?.systems || []).filter(system => !fresh.has(system));
+  if (nextSystems.length) {
+    map.metadata.derivedStale = {
+      systems: nextSystems,
+      updatedAt: new Date().toISOString()
+    };
+  } else {
+    delete map.metadata.derivedStale;
+  }
+  if (map?.military?.metadata) map.military.metadata.stale = nextSystems.includes("military");
+  if (map?.zones?.metadata) map.zones.metadata.stale = nextSystems.includes("zones");
+  if (map?.markers?.metadata) map.markers.metadata.stale = nextSystems.includes("markers");
+}
+
+function clearGeneratedCityLabelHides(map) {
+  const store = ensureLabelStore(map);
+  store.hidden[LABEL_TARGET_KIND.CITY] = [];
+  store.metadata = {
+    custom: store.custom.length,
+    hidden: store.hidden[LABEL_TARGET_KIND.CITY].length + store.hidden[LABEL_TARGET_KIND.STATE].length
+  };
 }
 
 function regenerationResult(kind, status, constraint) {
@@ -1088,7 +1227,7 @@ function applyHeightBrushAtEvent(state, event) {
 function applyStateBrushAtEvent(state, event) {
   const brush = state.panels.state.getBrush();
   const stroke = state.stateEdit.activeStroke;
-  if (!brush.active || !stroke || brush.targetStateId <= 0) return;
+  if (!brush.active || !stroke || brush.targetStateId === null || brush.targetStateId === undefined || brush.targetStateId < 0) return;
 
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   state.stateEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
@@ -1105,7 +1244,7 @@ function applyStateBrushAtEvent(state, event) {
 function applyProvinceBrushAtEvent(state, event) {
   const brush = state.panels.province.getBrush();
   const stroke = state.provinceEdit.activeStroke;
-  if (!brush.active || !stroke || brush.targetProvinceId <= 0) return;
+  if (!brush.active || !stroke || brush.targetProvinceId === null || brush.targetProvinceId === undefined || brush.targetProvinceId < 0) return;
 
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   state.provinceEdit.lastPointer = {clientX: event.clientX, clientY: event.clientY};
@@ -1221,11 +1360,12 @@ function getProvinceBrushChanges(map, point, brush, originals) {
   const affected = [];
   const cells = map.grid.cells;
   const targetStateId = getProvinceStateId(map, brush.targetProvinceId);
-  if (!targetStateId) return affected;
+  const eraseProvince = brush.targetProvinceId === 0;
+  if (!eraseProvince && !targetStateId) return affected;
 
   for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
     if (!isGridLandCell(map, gridCell)) continue;
-    if (cells.state[gridCell] !== targetStateId) continue;
+    if (!eraseProvince && cells.state[gridCell] !== targetStateId) continue;
     const cellPoint = map.grid.points[cells.p[gridCell]];
     if (!cellPoint) continue;
     const dx = cellPoint[0] - point.x;
@@ -1332,7 +1472,7 @@ function getNewLabelPoint(state) {
 }
 
 function setStatePanelTarget(state, stateId) {
-  if (!Number.isInteger(stateId) || stateId <= 0) return;
+  if (!Number.isInteger(stateId) || stateId < 0) return;
   state.panels.state?.setTargetStateId(stateId);
   updateStatePanel(state);
 }
@@ -1345,7 +1485,7 @@ function getStateIdFromSelection(state) {
 }
 
 function getStateIdFromPick(state) {
-  if (Number.isInteger(state.pick?.gridCell)) return state.map.grid.cells.state[state.pick.gridCell] || null;
+  if (Number.isInteger(state.pick?.gridCell)) return state.map.grid.cells.state[state.pick.gridCell] ?? null;
   if (state.pick?.politicalObject?.kind === OBJECT_KIND.STATE) return state.pick.politicalObject.id;
   return null;
 }
@@ -1353,13 +1493,13 @@ function getStateIdFromPick(state) {
 function getStateIdAtEvent(state, event) {
   const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
   if (Number.isInteger(pick?.gridCell) && pick.gridCell >= 0) {
-    return state.map.grid.cells.state[pick.gridCell] || null;
+    return state.map.grid.cells.state[pick.gridCell] ?? null;
   }
   return null;
 }
 
 function setProvincePanelTarget(state, provinceId) {
-  if (!Number.isInteger(provinceId) || provinceId <= 0) return;
+  if (!Number.isInteger(provinceId) || provinceId < 0) return;
   state.panels.province?.setSelectedProvinceId(provinceId);
   updateProvincePanel(state);
 }
@@ -1373,7 +1513,7 @@ function getProvinceIdFromSelection(state) {
 }
 
 function getProvinceIdFromPick(state) {
-  if (Number.isInteger(state.pick?.gridCell)) return state.map.grid.cells.province[state.pick.gridCell] || null;
+  if (Number.isInteger(state.pick?.gridCell)) return state.map.grid.cells.province[state.pick.gridCell] ?? null;
   if (state.pick?.politicalObject?.kind === OBJECT_KIND.PROVINCE) return state.pick.politicalObject.id;
   return null;
 }
@@ -1381,7 +1521,7 @@ function getProvinceIdFromPick(state) {
 function getProvinceIdAtEvent(state, event) {
   const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
   if (Number.isInteger(pick?.gridCell) && pick.gridCell >= 0) {
-    return state.map.grid.cells.province[pick.gridCell] || null;
+    return state.map.grid.cells.province[pick.gridCell] ?? null;
   }
   return null;
 }

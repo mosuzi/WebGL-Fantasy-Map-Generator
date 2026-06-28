@@ -135,8 +135,9 @@ function captureSettlementSnapshot(map, changes) {
 
   for (const city of map?.settlements?.cities || []) {
     if (!city) continue;
+    if (!nextStateByGrid.has(city.cell)) continue;
     const nextState = nextStateByGrid.get(city.cell);
-    if (!nextState || city.state === nextState) continue;
+    if (city.state === nextState) continue;
     const burg = findBurgForCity(map, city);
     const previousState = normalizeStateId(city.state);
     movedCities.push({
@@ -237,9 +238,12 @@ function repairProvinceCells(map, changes) {
   for (const packCell of packCells) {
     if (map?.pack?.cells?.h?.[packCell] < 20) continue;
     const stateId = normalizeStateId(map.pack.cells.state?.[packCell]);
-    if (!stateId) continue;
     const provinceId = normalizeProvinceId(map.pack.cells.province?.[packCell]);
     if (provinceId) affectedProvinces.add(provinceId);
+    if (!stateId) {
+      map.pack.cells.province[packCell] = 0;
+      continue;
+    }
     if (provinceBelongsToState(map, provinceId, stateId)) continue;
     const nextProvince = chooseProvinceForState(map, stateId, packCell);
     map.pack.cells.province[packCell] = nextProvince;
@@ -259,7 +263,8 @@ function syncMovedCityProvinces(map, settlementSnapshot) {
     const city = map?.settlements?.cities?.[item.cityId];
     if (!city) continue;
     const packProvince = Number.isInteger(city.packCell) ? map?.pack?.cells?.province?.[city.packCell] : null;
-    city.province = normalizeProvinceId(packProvince) || normalizeProvinceId(map?.grid?.cells?.province?.[city.cell]) || city.province;
+    if (packProvince !== null && packProvince !== undefined) city.province = normalizeProvinceId(packProvince);
+    else if (Number.isInteger(city.cell)) city.province = normalizeProvinceId(map?.grid?.cells?.province?.[city.cell]);
   }
 }
 
@@ -547,6 +552,7 @@ function getPackCellsForGrid(map, gridCell) {
 
 function chooseGridProvince(map, gridCell) {
   const stateId = normalizeStateId(map?.grid?.cells?.state?.[gridCell]);
+  if (!stateId) return 0;
   let bestProvince = 0;
   let bestScore = -Infinity;
   for (const packCell of getPackCellsForGrid(map, gridCell)) {

@@ -144,6 +144,22 @@ function resolveRiver(map, object) {
 function resolveState(map, object) {
   const state = map.politics.states[object.id];
   if (!state) return null;
+  if ((state.id ?? state.i ?? object.id) === 0) {
+    return {
+      ...object,
+      kind: "state",
+      id: 0,
+      name: "中立",
+      fullName: "中立",
+      capitalId: 0,
+      capitalName: "无",
+      cultureId: 0,
+      culture: "混合",
+      religionId: 0,
+      religion: "混合",
+      centerCell: 0
+    };
+  }
   const capital = map.pack?.burgs?.[state.capital];
   return {
     ...object,
@@ -162,6 +178,18 @@ function resolveState(map, object) {
 }
 
 function resolveProvince(map, object) {
+  if (object.id === 0) {
+    return {
+      ...object,
+      kind: "province",
+      id: 0,
+      name: "中立",
+      state: "无所属国家",
+      stateId: 0,
+      centerCell: 0,
+      pole: null
+    };
+  }
   const province = map.politics.provinces[object.id];
   if (!province) return null;
   const state = map.politics.states[province.state];

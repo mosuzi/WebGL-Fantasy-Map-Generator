@@ -175,6 +175,11 @@ export class PlaceholderMapRenderer {
     if (draw) this.draw();
   }
 
+  refreshObjectPickingIndex() {
+    if (!this.map) return;
+    this.objectPickingIndex = buildObjectPickingIndex(this.map);
+  }
+
   setLayerVisible(layer, visible) {
     if (!(layer in this.layerVisibility)) return;
     const nextVisible = Boolean(visible);
@@ -482,8 +487,15 @@ export class PlaceholderMapRenderer {
     const scale = this.camera.scale;
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
+    const stateLabelScale = stateLabelScaleBehavior(scale);
+    const labelItems = stateLabelScale.blocksCities
+      ? this.labelItems
+      : [
+        ...this.labelItems.filter(item => item.targetKind !== LABEL_TARGET_KIND.STATE),
+        ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE)
+      ];
 
-    for (const item of this.labelItems) {
+    for (const item of labelItems) {
       const screen = this.worldToScreen(item.x, item.y, rect);
       item.node.classList.toggle("selected", isSelectedLabelItem(this.selection, item));
       const box = labelBoxForItem(item, screen);
@@ -491,9 +503,9 @@ export class PlaceholderMapRenderer {
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
       const blocked = stateLabel
         ? occupiedStates.some(other => boxesOverlap(box, other, padding))
-        : occupiedStates.some(other => boxesOverlap(box, other, padding)) || occupied.some(other => boxesOverlap(box, other, padding));
+        : (stateLabelScale.blocksCities && occupiedStates.some(other => boxesOverlap(box, other, padding))) || occupied.some(other => boxesOverlap(box, other, padding));
       const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
-      const shouldShow = this.isLabelItemLayerVisible(item) && withinLimit && scale >= item.minScale && onScreen && !blocked;
+      const shouldShow = this.isLabelItemLayerVisible(item) && withinLimit && scale >= item.minScale && (!stateLabel || stateLabelScale.visible) && onScreen && !blocked;
       item.node.classList.toggle("visible", shouldShow);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
@@ -501,6 +513,7 @@ export class PlaceholderMapRenderer {
       item.node.style.left = `${screen.x}px`;
       item.node.style.top = `${stateLabel ? screen.y : screen.y - 6}px`;
       item.node.style.setProperty("--label-rotation", `${item.rotation || 0}deg`);
+      if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
       if (stateLabel) occupiedStates.push(box);
       else occupied.push(box);
       visible++;
@@ -1416,6 +1429,7 @@ function colorForBiome(biomeId, map) {
 
 function colorForState(stateId, map) {
   if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  if (!stateId) return [0.58, 0.6, 0.58, 1];
   return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
 }
 
@@ -1431,6 +1445,7 @@ function colorForReligion(religionId, map) {
 
 function colorForProvince(provinceId, map) {
   if (provinceId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  if (!provinceId) return [0.58, 0.6, 0.58, 1];
   return hexToRgba(map.politics.provinces[provinceId]?.color) || indexedColor(provinceId, 0.46);
 }
 
@@ -1484,6 +1499,16 @@ function labelPaddingForScale(scale) {
   return 5;
 }
 
+function stateLabelScaleBehavior(scale) {
+  const rawOpacity = 1 - smootherStep(1.55, 3.95, scale);
+  const opacity = rawOpacity < 0.004 ? 0 : clamp(rawOpacity, 0, 1);
+  return {
+    blocksCities: scale < 1.55,
+    visible: opacity > 0,
+    opacity
+  };
+}
+
 function labelBoxForItem(item, screen) {
   if (item.targetKind === LABEL_TARGET_KIND.STATE) {
     const estimatedWidth = Math.max(72, Math.min(280, 22 + Array.from(item.text || "").length * 22));
@@ -1521,6 +1546,11 @@ function normalizeMaxCityLabels(value, fallback) {
 function smoothStep(edge0, edge1, value) {
   const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(0.000001, edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+function smootherStep(edge0, edge1, value) {
+  const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(0.000001, edge1 - edge0)));
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 function boxesOverlap(a, b, padding) {

@@ -29,6 +29,17 @@ const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.REGION]: object => `region #${object.id}`
 });
 
+const DERIVED_STALE_LABELS = Object.freeze({
+  cities: "城镇",
+  provinces: "省份",
+  states: "国家",
+  religions: "宗教",
+  markers: "标记",
+  zones: "区域",
+  military: "军事",
+  "state-markers": "国家中心标记"
+});
+
 export function bindRuntimePanel(documentRef, handlers) {
   applyControlPreferences(documentRef);
   documentRef.getElementById("generate-map").addEventListener("click", handlers.onGenerate);
@@ -485,7 +496,7 @@ function formatEditRefresh(refresh) {
 
 function formatDerivedStale(map) {
   const systems = map.metadata?.derivedStale?.systems || [];
-  return systems.length ? systems.join(", ") : "none";
+  return systems.length ? systems.map(system => DERIVED_STALE_LABELS[system] || system).join("、") : "none";
 }
 
 function formatLayerVisibility(visibility = {}) {

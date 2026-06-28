@@ -125,18 +125,20 @@ function stateObject(row) {
 }
 
 function stateRows(map) {
-  return (map?.politics?.states || []).filter(state => state?.i || state?.id).map(state => ({
+  const rows = (map?.politics?.states || []).filter(state => state?.i || state?.id).map(state => ({
     id: state.id ?? state.i,
     name: state.fullName || state.name || `国家 #${state.id ?? state.i}`
   }));
+  return map?.politics?.states?.[0] ? [{id: 0, name: "中立"}, ...rows] : rows;
 }
 
 function firstStateId(map) {
-  return stateRows(map)[0]?.id ?? null;
+  return stateRows(map).find(row => row.id > 0)?.id ?? stateRows(map)[0]?.id ?? null;
 }
 
 function stateExists(map, stateId) {
   if (stateId === null || stateId === undefined) return false;
+  if (stateId === 0) return Boolean(map?.politics?.states?.[0]);
   return Boolean(map?.politics?.states?.[stateId]);
 }
 

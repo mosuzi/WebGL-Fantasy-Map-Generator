@@ -1,5 +1,6 @@
 import {defineFeatureGroups} from "./pack.js";
 import {createChineseNameGenerator} from "./names.js";
+import {createRandom} from "./random.js";
 
 const WATER_LEVEL = 20;
 const MIN_FLUX_TO_FORM_RIVER = 30;
@@ -12,18 +13,19 @@ export function buildRivers(grid, features, pack, options = {}) {
   if (!pack?.cells?.t) return buildEmptyRivers();
 
   const startedAt = performance.now();
-  const nameGenerator = createChineseNameGenerator(options.seed);
+  const nameGenerator = createChineseNameGenerator(getHydronymSeed(options));
   const cells = pack.cells;
   const riverPaths = new Map();
   const riverParents = new Map();
-  let effectiveHeights = alterHeights(cells);
+  const variation = createRiverVariation(cells, options);
+  let effectiveHeights = alterHeights(cells, variation);
   detectCloseLakes(pack, effectiveHeights);
-  effectiveHeights = resolveDepressions(pack, effectiveHeights);
+  effectiveHeights = resolveDepressions(pack, effectiveHeights, variation);
 
   cells.fl = new Uint16Array(cells.i.length);
   cells.r = new Uint16Array(cells.i.length);
   cells.conf = new Uint8Array(cells.i.length);
-  const lakeOutCells = defineLakeClimateData(grid, pack, effectiveHeights, options);
+  const lakeOutCells = defineLakeClimateData(grid, pack, effectiveHeights, options, variation);
 
   const cellsNumberModifier = Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25);
   const land = Array.from(cells.i)
@@ -33,7 +35,7 @@ export function buildRivers(grid, features, pack, options = {}) {
   let nextRiverId = 1;
 
   for (const cell of land) {
-    addFlux(cells.fl, cell, (grid.cells.prec?.[cells.g[cell]] || 0) / cellsNumberModifier);
+    addFlux(cells.fl, cell, getCellPrecipitation(grid, cells, cell, variation) / cellsNumberModifier);
 
     const outletLakes = lakeOutCells[cell]
       ? (pack.features || []).filter(feature => feature && cell === feature.outCell && feature.flux > feature.evaporation)
@@ -110,14 +112,15 @@ export function buildRivers(grid, features, pack, options = {}) {
       maxFlux: maxValue(cells.fl),
       confluences: countPositive(cells.conf),
       cellsWithRiver: countPositive(cells.r),
-      flowModel: "source-pack-flux-first-pass",
+      flowModel: variation ? "source-pack-flux-regenerated-variation" : "source-pack-flux-first-pass",
+      variationSalt: variation?.salt || null,
       buildMs: roundMs(performance.now() - startedAt)
     }
   };
 }
 
 export function renameHydronymsByCulture(rivers, pack, options = {}) {
-  const nameGenerator = createChineseNameGenerator(options.seed);
+  const nameGenerator = createChineseNameGenerator(getHydronymSeed(options));
   for (const river of rivers.rivers || []) {
     if (!river?.i) continue;
     const cultureId = pack.cells.culture?.[river.source] || 0;
@@ -151,12 +154,38 @@ function buildEmptyRivers() {
   };
 }
 
-function alterHeights(cells) {
+function createRiverVariation(cells, options = {}) {
+  const salt = options.riverRegenerationSalt;
+  if (salt === undefined || salt === null || salt === "") return null;
+  const random = createRandom(`${options.seed}:river-regeneration:${salt}`);
+  const height = new Float32Array(cells.i.length);
+  const precipitation = new Float32Array(cells.i.length);
+
+  for (const cell of cells.i) {
+    height[cell] = random.range(-0.08, 0.08);
+    precipitation[cell] = random.range(0.72, 1.28);
+  }
+
+  return {salt: String(salt), height, precipitation};
+}
+
+function getHydronymSeed(options = {}) {
+  return options.riverRegenerationSalt === undefined || options.riverRegenerationSalt === null || options.riverRegenerationSalt === ""
+    ? options.seed
+    : `${options.seed}:rivers:${options.riverRegenerationSalt}`;
+}
+
+function getCellPrecipitation(grid, cells, cell, variation = null) {
+  const precipitation = grid.cells.prec?.[cells.g[cell]] || 0;
+  return variation ? precipitation * (variation.precipitation?.[cell] || 1) : precipitation;
+}
+
+function alterHeights(cells, variation = null) {
   return Array.from(cells.h).map((height, cell) => {
     if (height < WATER_LEVEL || cells.t[cell] < 1) return height;
     const neighbors = cells.c[cell] || [];
     const meanType = neighbors.length ? neighbors.reduce((sum, neighbor) => sum + (cells.t[neighbor] || 0), 0) / neighbors.length : 0;
-    return height + cells.t[cell] / 100 + meanType / 10000;
+    return height + cells.t[cell] / 100 + meanType / 10000 + (variation?.height?.[cell] || 0);
   });
 }
 
@@ -204,7 +233,7 @@ function detectCloseLakes(pack, heights) {
   }
 }
 
-function resolveDepressions(pack, heights) {
+function resolveDepressions(pack, heights, variation = null) {
   const {cells, features} = pack;
   const checkLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.85;
   const elevateLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.75;
@@ -218,7 +247,7 @@ function resolveDepressions(pack, heights) {
 
   for (let iteration = 0; depressions && iteration < MAX_DEPRESSION_ITERATIONS; iteration++) {
     if (progress.length > 5 && progress.reduce((sum, value) => sum + value, 0) > 0) {
-      heights = alterHeights(cells);
+      heights = alterHeights(cells, variation);
       depressions = progress[0];
       break;
     }
@@ -258,7 +287,7 @@ function resolveDepressions(pack, heights) {
   return heights;
 }
 
-function defineLakeClimateData(grid, pack, heights, options = {}) {
+function defineLakeClimateData(grid, pack, heights, options = {}, variation = null) {
   const {cells, features} = pack;
   const lakeOutCells = new Uint16Array(cells.i.length);
   const exponent = options.heightExponent ?? HEIGHT_EXPONENT;
@@ -266,7 +295,7 @@ function defineLakeClimateData(grid, pack, heights, options = {}) {
   for (const feature of features || []) {
     if (!feature || feature.type !== "lake") continue;
 
-    feature.flux = getLakeFlux(grid, cells, feature);
+    feature.flux = getLakeFlux(grid, cells, feature, variation);
     feature.temp = getLakeTemperature(grid, cells, feature);
     feature.evaporation = getLakeEvaporation(feature, exponent);
     if (feature.closed || !feature.shoreline?.length) continue;
@@ -278,8 +307,8 @@ function defineLakeClimateData(grid, pack, heights, options = {}) {
   return lakeOutCells;
 }
 
-function getLakeFlux(grid, cells, lake) {
-  return (lake.shoreline || []).reduce((sum, cell) => sum + (grid.cells.prec?.[cells.g[cell]] || 0), 0);
+function getLakeFlux(grid, cells, lake, variation = null) {
+  return (lake.shoreline || []).reduce((sum, cell) => sum + getCellPrecipitation(grid, cells, cell, variation), 0);
 }
 
 function getLakeTemperature(grid, cells, lake) {

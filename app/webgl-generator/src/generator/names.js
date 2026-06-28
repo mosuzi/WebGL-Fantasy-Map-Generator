@@ -349,9 +349,11 @@ export function createChineseNameGenerator(seed = "map") {
 
     makeStateRoot(options = {}) {
       const rng = rngFor(seed, "state-root", options);
-      const base = options.capitalName ? trimGeographicSuffix(options.capitalName) : "";
-      const name = base && rng.next() < 0.58 ? base : this.makePlaceName({...options, type: "state", capital: true});
-      return makeUnique(used, "state", trimStateForm(name), rng);
+      const capitalRoot = normalizeNameRoot(options.capitalName);
+      const allowCapitalName = Boolean(options.allowCapitalName);
+      const generate = () => makeStateRootCandidateAvoiding(rng, options, allowCapitalName ? "" : capitalRoot);
+      const initialName = allowCapitalName && capitalRoot && rng.next() < 0.28 ? capitalRoot : generate();
+      return makeUniqueGenerated(used, "state", initialName, rng, generate, 32);
     },
 
     makeStateFormName(options = {}) {
@@ -441,6 +443,29 @@ function makeChineseTwoCharName(rng) {
   return `${first}${second}`;
 }
 
+function makeStateRootCandidate(rng, options = {}) {
+  const transliterationStyle = getTransliterationStyle(options);
+  if (transliterationStyle?.place) return pick(rng, transliterationStyle.place);
+
+  const cultureStyle = getCultureStyle(options);
+  if (cultureStyle?.place && hasExplicitCultureStyle(options) && rng.next() < 0.82) return pick(rng, cultureStyle.place);
+
+  const roll = rng.next();
+  if (roll < 0.62) return makeChineseTwoCharName(rng);
+  if (roll < 0.84) return pick(rng, PLACE_STEMS);
+  if (roll < 0.96) return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, CHINESE_SECOND_CHARS)}`;
+  return pick(rng, HIGH_FANTASY_STEMS);
+}
+
+function makeStateRootCandidateAvoiding(rng, options = {}, avoidedRoot = "") {
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const candidate = cleanStateRootCandidate(makeStateRootCandidate(rng, options));
+    if (candidate && !hasSameNameRoot(candidate, avoidedRoot)) return candidate;
+  }
+
+  return makeChineseTwoCharName(rng);
+}
+
 function getSettlementScale(options = {}) {
   if (options.capital || options.provincial || options.major || options.group === "capital" || options.group === "city" || (options.population || 0) >= 5) return "large";
   if (options.group === "town" || (options.population || 0) >= 1) return "medium";
@@ -521,7 +546,15 @@ function makeUniqueGenerated(used, scope, initialName, rng, generate, attempts) 
 }
 
 function trimGeographicSuffix(name) {
-  return name.replace(/(城|镇|港|津|浦|湾|县|市|区|州|郡|府|道|领|司)$/u, "");
+  return String(name || "").replace(/(城|镇|港|津|浦|湾|县|市|区|州|郡|府|道|领|司)$/u, "");
+}
+
+function hasGeographicSuffix(name) {
+  return /(城|镇|港|津|浦|湾|县|市|区|州|郡|府|道|领|司)$/u.test(String(name || ""));
+}
+
+function trimPoliticalForm(name) {
+  return String(name || "").replace(/(王国|公国|海国|山国|泽国|汗国|邦联|共和国|诸州|诸港|诸帐|部盟|邦|国)$/u, "");
 }
 
 function combineStemAndSuffix(stem, suffix) {
@@ -530,7 +563,25 @@ function combineStemAndSuffix(stem, suffix) {
 }
 
 function trimStateForm(name) {
-  return trimGeographicSuffix(name).replace(/(王国|公国|海国|山国|泽国|汗国|邦联|共和国|诸州|诸港|诸帐|部盟|邦|国)$/u, "");
+  return trimGeographicSuffix(trimPoliticalForm(name));
+}
+
+function cleanStateRootCandidate(name) {
+  const rawRoot = trimPoliticalForm(name).replace(/\s+/g, "");
+  const trimmedRoot = trimStateForm(name).replace(/\s+/g, "");
+  if (Array.from(trimmedRoot).length >= 2) return trimmedRoot;
+  if (Array.from(rawRoot).length >= 2 && !hasGeographicSuffix(rawRoot)) return rawRoot;
+  return "";
+}
+
+function normalizeNameRoot(name) {
+  return trimStateForm(name).replace(/\s+/g, "");
+}
+
+function hasSameNameRoot(left, right) {
+  const leftRoot = normalizeNameRoot(left);
+  const rightRoot = normalizeNameRoot(right);
+  return Boolean(leftRoot && rightRoot && leftRoot === rightRoot);
 }
 
 function toChineseOrdinal(value) {

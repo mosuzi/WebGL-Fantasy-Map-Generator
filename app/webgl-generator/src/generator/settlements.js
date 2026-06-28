@@ -2,6 +2,7 @@ import {MinPriorityQueue} from "./priority-queue.js";
 import Delaunator from "../vendor/delaunator.js";
 import {BIOMES} from "./biomes.js";
 import {createChineseNameGenerator} from "./names.js";
+import {createRandom} from "./random.js";
 
 const MIN_PASSABLE_SEA_TEMP = -4;
 
@@ -11,7 +12,7 @@ export function buildSettlements(grid, features, politics, rivers, random, pack,
   const result = pack?.cells?.s
     ? buildPackSettlements(grid, features, politics, random, pack, options)
     : buildGridSettlements(grid, features, politics, riverCells, population, random);
-  const routes = politics ? buildRoutes(grid, features, politics, result.cities, pack) : [];
+  const routes = politics ? buildRoutes(grid, features, politics, result.cities, pack, options) : [];
 
   grid.cells.pop = population;
   mirrorCitiesToGrid(grid, result.cities);
@@ -20,7 +21,7 @@ export function buildSettlements(grid, features, politics, rivers, random, pack,
   return createSettlementResult({grid, features, population, cities: result.cities, routes, pack});
 }
 
-export function finalizeSettlements(grid, features, politics, settlements, pack) {
+export function finalizeSettlements(grid, features, politics, settlements, pack, options = {}) {
   for (const city of settlements.cities) {
     if (pack?.cells && Number.isInteger(city.packCell) && city.packCell >= 0) {
       city.state = pack.cells.state?.[city.packCell] ?? city.state;
@@ -32,10 +33,24 @@ export function finalizeSettlements(grid, features, politics, settlements, pack)
     city.province = grid.cells.province?.[city.cell] ?? city.province;
   }
 
-  const routes = buildRoutes(grid, features, politics, settlements.cities, pack);
+  if (options.pruneNeutralSettlements) pruneNeutralSettlements(grid, settlements, pack);
+  mirrorCitiesToGrid(grid, settlements.cities);
+  const routes = buildRoutes(grid, features, politics, settlements.cities, pack, options);
   settlements.routes = routes;
+  settlements.populationPoints = buildPopulationPoints(grid, features, grid.cells.pop);
   settlements.metadata = createSettlementMetadata({grid, features, population: grid.cells.pop, cities: settlements.cities, routes, pack});
   return settlements;
+}
+
+export function regenerateSettlementsWithinPolitics(grid, features, politics, settlements, pack, options = {}) {
+  if (!pack?.cells?.s || !settlements) return finalizeSettlements(grid, features, politics, settlements, pack, options);
+
+  const random = createRandom(regenerationSeed(options, "regenerate-settlements", options.settlementRegenerationSalt));
+  const result = rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options, settlements);
+  settlements.cities = result.cities;
+  mirrorCitiesToGrid(grid, settlements.cities);
+  syncPoliticalSettlementStats(pack, politics, settlements.cities);
+  return finalizeSettlements(grid, features, politics, settlements, pack, options);
 }
 
 function createSettlementResult({grid, features, population, cities, routes, pack}) {
@@ -125,6 +140,110 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   return {cities};
 }
 
+function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options, settlements) {
+  const {cells} = pack;
+  const nameGenerator = createChineseNameGenerator(options.seed);
+  const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
+  const cities = [];
+  const burgs = [null];
+  const occupied = new Set();
+  const occupiedGrid = new Set();
+  const spacingIndex = new SpacingIndex(16);
+  const previousBurgs = pack.burgs || [];
+  const previousCitiesByBurg = new Map((settlements?.cities || []).map(city => [city.burgId, city]));
+
+  cells.burg = new Uint16Array(cells.i.length);
+  if (!cells.i.length) {
+    pack.burgs = burgs;
+    return {cities};
+  }
+
+  for (const state of politics?.states || []) {
+    if (!state?.i || !Number.isInteger(state.capital)) continue;
+    const previousBurg = previousBurgs[state.capital];
+    const previousCity = previousCitiesByBurg.get(state.capital);
+    const packCell = anchorPackCell(pack, previousBurg?.cell ?? state.center, populated);
+    const city = addPackCity({
+      grid,
+      pack,
+      cities,
+      burgs,
+      occupied,
+      occupiedGrid,
+      spacingIndex,
+      packCell,
+      random,
+      nameGenerator,
+      flags: {capital: true, required: true, state: state.i, burgId: state.capital, name: previousCity?.name || previousBurg?.name}
+    });
+    if (city) {
+      state.capital = city.burgId;
+      state.center = city.packCell;
+      state.gridCenter = city.cell;
+      state.capitalName = city.name;
+    }
+  }
+
+  for (const province of politics?.provinces || []) {
+    if (!province?.i) continue;
+    const packCell = anchorPackCell(pack, province.center, populated);
+    const previousBurg = previousBurgs[province.burg];
+    const previousCity = previousCitiesByBurg.get(province.burg);
+    const city = addPackCity({
+      grid,
+      pack,
+      cities,
+      burgs,
+      occupied,
+      occupiedGrid,
+      spacingIndex,
+      packCell,
+      random,
+      nameGenerator,
+      flags: {provincial: true, required: true, state: province.state, name: previousCity?.name || previousBurg?.name}
+    });
+    if (city) {
+      province.burg = city.burgId;
+      province.center = city.packCell;
+      province.gridCenter = city.cell;
+    } else if (cells.burg?.[packCell]) {
+      province.burg = cells.burg[packCell];
+    }
+  }
+
+  addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator});
+  pack.burgs = burgs;
+  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator);
+  defineCityTypes(pack, cities, burgs);
+  specifyBurgs(pack, cities, burgs, nameGenerator);
+  return {cities};
+}
+
+function addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator}) {
+  const {cells} = pack;
+  const targetTowns = getTownsNumber(populated.length, grid.points.length);
+  const score = new Int16Array(cells.i.length);
+  for (const cell of populated) score[cell] = (cells.s[cell] || 0) * gaussian(random, 1, 3, 0, 20, 3);
+  const sorted = [...populated].sort((a, b) => score[b] - score[a]);
+  let spacing = ((grid.metadata.graphWidth + grid.metadata.graphHeight) / 150) / (targetTowns ** 0.7 / 66);
+
+  for (let added = 0; added < targetTowns && spacing > 1; ) {
+    for (const packCell of sorted) {
+      if (added >= targetTowns) break;
+      if (occupied.has(packCell) || cells.burg[packCell]) continue;
+
+      const [x, y] = cells.p[packCell];
+      const minSpacing = spacing * gaussian(random, 1, 0.3, 0.2, 2, 2);
+      if (spacingIndex.find(x, y, minSpacing)) continue;
+
+      const city = addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator});
+      if (city) added++;
+    }
+
+    spacing *= 0.5;
+  }
+}
+
 function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator, options}) {
   const {cells} = pack;
   const capitalsNumber = getCapitalsNumber(populated.length, options.statesNumber);
@@ -157,22 +276,24 @@ function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid
 function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags = {}}) {
   if (!Number.isInteger(packCell) || packCell < 0 || packCell >= pack.cells.i.length) return null;
   const {cells} = pack;
-  if (!isPopulatedPackCell(cells, packCell) || cells.burg[packCell]) return null;
+  if (flags.required) {
+    if (cells.h[packCell] < 20 || cells.burg[packCell]) return null;
+  } else if (!isPopulatedPackCell(cells, packCell) || cells.burg[packCell]) return null;
 
   const gridCell = cells.g[packCell];
   if (occupied.has(packCell) || occupiedGrid.has(gridCell)) return null;
 
   const [x, y] = cells.p[packCell];
-  const burgId = burgs.length;
+  const burgId = Number.isInteger(flags.burgId) && flags.burgId > 0 ? flags.burgId : burgs.length;
   const cityId = cities.length;
   const state = Number.isInteger(flags.state) ? flags.state : flags.capital ? burgId : grid.cells.state?.[gridCell] ?? 0;
   const province = grid.cells.province?.[gridCell] ?? -1;
   const type = getBurgType(pack, packCell, 0);
-  const cultureId = cells.culture[packCell];
+  const cultureId = cells.culture[packCell] || 0;
   const culture = pack.cultures?.[cultureId];
   const population = defineBurgPopulation(pack, packCell, Boolean(flags.capital), random);
   const groupHint = flags.capital ? "capital" : flags.provincial || population >= 5 ? "city" : population <= 0.1 ? "hamlet" : population <= 1 ? "village" : "town";
-  const name = nameGenerator.makePlaceName({
+  const name = flags.name || nameGenerator.makePlaceName({
     id: cityId,
     cell: packCell,
     culture: cultureId,
@@ -221,13 +342,18 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     type
   };
 
-  burgs.push(sourceBurg);
+  burgs[burgId] = sourceBurg;
   cities.push(city);
   cells.burg[packCell] = burgId;
   occupied.add(packCell);
   occupiedGrid.add(gridCell);
   spacingIndex.add(x, y, cityId);
   return city;
+}
+
+function anchorPackCell(pack, preferredCell, populated) {
+  if (Number.isInteger(preferredCell) && preferredCell >= 0 && preferredCell < pack.cells.i.length && pack.cells.h[preferredCell] >= 20) return preferredCell;
+  return populated[0] ?? -1;
 }
 
 function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
@@ -483,8 +609,8 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
   });
 }
 
-function buildRoutes(grid, features, politics, cities, pack) {
-  if (pack?.burgs?.length) return buildPackRoutes(grid, pack, cities);
+function buildRoutes(grid, features, politics, cities, pack, options = {}) {
+  if (pack?.burgs?.length) return buildPackRoutes(grid, pack, cities, options);
 
   const routes = [];
   const citiesByState = new Map();
@@ -519,7 +645,7 @@ function buildRoutes(grid, features, politics, cities, pack) {
   return routes.filter(route => route.points.length > 1);
 }
 
-function buildPackRoutes(grid, pack, cities) {
+function buildPackRoutes(grid, pack, cities, options = {}) {
   const connections = new Set();
   const routes = [];
   const {burgs} = pack;
@@ -529,16 +655,17 @@ function buildPackRoutes(grid, pack, cities) {
   const burgsByFeature = groupBurgs(aliveBurgs, burg => pack.cells.f[burg.cell]);
   const portsByFeature = groupBurgs(aliveBurgs.filter(burg => burg.port), burg => burg.port);
   const pointsArray = preparePackRoutePoints(pack);
+  const variation = createRouteVariation(pack, options);
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalsByFeature, water: false}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalsByFeature, water: false, variation}))) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByFeature, water: false}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByFeature, water: false, variation}))) {
     addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation}))) {
     addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg});
   }
 
@@ -552,21 +679,21 @@ function buildPackRoutes(grid, pack, cities) {
   return routes;
 }
 
-function generateRouteSegments({pack, connections, groups, water}) {
+function generateRouteSegments({pack, connections, groups, water, variation = null}) {
   const routeSegments = [];
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
 
   for (const [feature, burgs] of entries) {
-    const edges = calculateUrquhartEdges(burgs.map(burg => [burg.x, burg.y]));
+    const edges = calculateUrquhartEdges(burgs.map(burg => routeCandidatePoint(burg, variation, water)));
 
     for (const [fromId, toId] of edges) {
       const start = burgs[fromId].cell;
       const end = burgs[toId].cell;
-      const pathCells = tracePackPath(pack, start, end, water, connections);
+      const pathCells = tracePackPath(pack, start, end, water, connections, variation);
 
       for (const cells of getRouteSegments(pathCells, connections)) {
         addConnections(cells, connections);
-        routeSegments.push({feature: Number(feature), cells});
+        routeSegments.push({feature: Number(feature), cells, fromBurg: burgs[fromId].i, toBurg: burgs[toId].i});
       }
     }
   }
@@ -574,7 +701,7 @@ function generateRouteSegments({pack, connections, groups, water}) {
   return routeSegments;
 }
 
-function tracePackPath(pack, start, end, water, connections) {
+function tracePackPath(pack, start, end, water, connections, variation = null) {
   if (start === end) return [];
 
   const open = new MinPriorityQueue();
@@ -596,7 +723,7 @@ function tracePackPath(pack, start, end, water, connections) {
         return reconstructPath(cameFrom, neighbor);
       }
 
-      const step = packRouteStepCost(pack, current, neighbor, water, connections);
+      const step = packRouteStepCost(pack, current, neighbor, water, connections, variation);
       if (!Number.isFinite(step)) continue;
       const tentative = bestCost[current] + step;
       if (tentative >= bestCost[neighbor]) continue;
@@ -609,16 +736,17 @@ function tracePackPath(pack, start, end, water, connections) {
   return [];
 }
 
-function packRouteStepCost(pack, current, next, water, connections) {
+function packRouteStepCost(pack, current, next, water, connections, variation = null) {
   const height = pack.cells.h[next];
   const distanceCost = distanceSquared(pack.cells.p[current], pack.cells.p[next]);
   const connected = connections.has(`${current}-${next}`) ? 0.5 : 1;
+  const variationFactor = variation?.cellCost?.[next] || 1;
 
   if (water) {
     if (height >= 20) return Infinity;
     if ((pack.cells.temp?.[next] || 0) < MIN_PASSABLE_SEA_TEMP) return Infinity;
     const typeModifier = pack.cells.t[next] === -1 ? 1 : pack.cells.t[next] === -2 ? 1.8 : pack.cells.t[next] === -3 ? 4 : pack.cells.t[next] === -4 ? 6 : 8;
-    return distanceCost * typeModifier * connected;
+    return distanceCost * typeModifier * connected * variationFactor;
   }
 
   if (height < 20) return Infinity;
@@ -627,7 +755,7 @@ function packRouteStepCost(pack, current, next, water, connections) {
   const habitabilityModifier = 1 + Math.max(100 - habitability, 0) / 1000;
   const heightModifier = 1 + Math.max(height - 25, 25) / 25;
   const burgModifier = pack.cells.burg?.[next] ? 1 : 3;
-  return distanceCost * habitabilityModifier * heightModifier * connected * burgModifier;
+  return distanceCost * habitabilityModifier * heightModifier * connected * burgModifier * variationFactor;
 }
 
 function getRouteSegments(pathCells, connections) {
@@ -669,6 +797,32 @@ function preparePackRoutePoints(pack) {
   });
 }
 
+function createRouteVariation(pack, options = {}) {
+  const salt = options.routeRegenerationSalt;
+  if (salt === undefined || salt === null || salt === "") return null;
+
+  const random = createRandom(regenerationSeed(options, "regenerate-routes", salt));
+  const cellCost = new Float32Array(pack.cells.i.length);
+  const jitterX = new Float32Array(pack.cells.i.length);
+  const jitterY = new Float32Array(pack.cells.i.length);
+
+  for (const cell of pack.cells.i) {
+    cellCost[cell] = random.range(0.72, 1.28);
+    jitterX[cell] = random.range(-10, 10);
+    jitterY[cell] = random.range(-10, 10);
+  }
+
+  return {cellCost, jitterX, jitterY};
+}
+
+function routeCandidatePoint(burg, variation) {
+  if (!variation || !Number.isInteger(burg?.cell)) return [burg.x, burg.y];
+  return [
+    burg.x + (variation.jitterX[burg.cell] || 0),
+    burg.y + (variation.jitterY[burg.cell] || 0)
+  ];
+}
+
 function mergeRouteSegments(segments) {
   let mergedCount = 0;
 
@@ -693,7 +847,7 @@ function addPackRoute({routes, pack, segment, type, pointsArray, cityByBurg}) {
   if (segment.merged || segment.cells.length < 2) return;
   const parts = type === "searoute" ? splitSeaRouteCells(pack, segment.cells) : [segment.cells];
 
-  for (const cells of parts) addPackRoutePart({routes, pack, cells, type, feature: segment.feature, pointsArray, cityByBurg});
+  for (const cells of parts) addPackRoutePart({routes, pack, cells, type, feature: segment.feature, pointsArray, cityByBurg, fromBurgId: segment.fromBurg, toBurgId: segment.toBurg});
 }
 
 function splitSeaRouteCells(pack, cells) {
@@ -714,10 +868,10 @@ function splitSeaRouteCells(pack, cells) {
   return parts;
 }
 
-function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, cityByBurg}) {
+function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, cityByBurg, fromBurgId = null, toBurgId = null}) {
   const id = routes.length;
-  const fromBurg = pack.burgs?.[pack.cells.burg?.[cells[0]]];
-  const toBurg = pack.burgs?.[pack.cells.burg?.[cells.at(-1)]];
+  const fromBurg = pack.burgs?.[pack.cells.burg?.[cells[0]]] || pack.burgs?.[fromBurgId];
+  const toBurg = pack.burgs?.[pack.cells.burg?.[cells.at(-1)]] || pack.burgs?.[toBurgId];
   const fromCity = cityByBurg.get(fromBurg?.i);
   const toCity = cityByBurg.get(toBurg?.i);
 
@@ -859,6 +1013,37 @@ function buildPopulationPoints(grid, features, population) {
     .slice(0, Math.min(2400, Math.round(grid.points.length * 0.22)));
 }
 
+function pruneNeutralSettlements(grid, settlements, pack) {
+  const kept = [];
+  for (const city of settlements.cities || []) {
+    if ((city.state || 0) > 0) {
+      city.id = kept.length;
+      kept.push(city);
+      const burg = pack?.burgs?.[city.burgId];
+      if (burg) burg.cityId = city.id;
+      continue;
+    }
+
+    const burg = pack?.burgs?.[city.burgId];
+    if (burg) {
+      burg.removed = true;
+      burg.state = 0;
+      burg.capital = 0;
+    }
+    if (Number.isInteger(city.packCell) && pack?.cells?.burg?.[city.packCell] === city.burgId) pack.cells.burg[city.packCell] = 0;
+  }
+  settlements.cities = kept;
+  if (pack?.cells?.burg) {
+    for (const city of kept) {
+      if (Number.isInteger(city.packCell) && city.packCell >= 0) pack.cells.burg[city.packCell] = city.burgId;
+    }
+  }
+  if (grid?.cells?.burg) {
+    grid.cells.burg = new Array(grid.points.length).fill(-1);
+    for (const city of kept) grid.cells.burg[city.cell] = city.id;
+  }
+}
+
 function mirrorCitiesToGrid(grid, cities) {
   grid.cells.burg = new Array(grid.points.length).fill(-1);
   for (const city of cities) grid.cells.burg[city.cell] = city.id;
@@ -868,6 +1053,71 @@ function mirrorGridBurgsToPack(pack, cities) {
   if (!pack.cells.burg) pack.cells.burg = new Uint16Array(pack.cells.i.length);
   for (const city of cities) {
     if (Number.isInteger(city.packCell) && city.packCell >= 0) pack.cells.burg[city.packCell] = city.burgId;
+  }
+}
+
+function syncPoliticalSettlementStats(pack, politics, cities) {
+  syncStateSettlementStats(pack, politics?.states || []);
+  syncProvinceSettlementStats(pack, politics?.provinces || []);
+  for (const city of cities) {
+    const burg = pack.burgs?.[city.burgId];
+    if (!burg) continue;
+    city.state = burg.state;
+    city.province = pack.cells.province?.[city.packCell] ?? city.province;
+  }
+}
+
+function syncStateSettlementStats(pack, states) {
+  for (const state of states) {
+    if (!state) continue;
+    state.burgs = 0;
+    state.rural = 0;
+    state.urban = 0;
+  }
+
+  for (const cell of pack.cells.i) {
+    if (pack.cells.h[cell] < 20) continue;
+    const state = states[pack.cells.state?.[cell]];
+    if (!state) continue;
+    state.rural += pack.cells.pop?.[cell] || 0;
+    const burg = pack.burgs?.[pack.cells.burg?.[cell]];
+    if (burg?.i && !burg.removed) {
+      state.burgs++;
+      state.urban += burg.population || 0;
+    }
+  }
+
+  for (const state of states) {
+    if (!state) continue;
+    state.rural = round(state.rural || 0, 2);
+    state.urban = round(state.urban || 0, 2);
+  }
+}
+
+function syncProvinceSettlementStats(pack, provinces) {
+  for (const province of provinces) {
+    if (!province) continue;
+    province.burgs = 0;
+    province.rural = 0;
+    province.urban = 0;
+  }
+
+  for (const cell of pack.cells.i) {
+    if (pack.cells.h[cell] < 20) continue;
+    const province = provinces[pack.cells.province?.[cell]];
+    if (!province) continue;
+    province.rural += pack.cells.pop?.[cell] || 0;
+    const burg = pack.burgs?.[pack.cells.burg?.[cell]];
+    if (burg?.i && !burg.removed) {
+      province.burgs++;
+      province.urban += burg.population || 0;
+    }
+  }
+
+  for (const province of provinces) {
+    if (!province) continue;
+    province.rural = round(province.rural || 0, 2);
+    province.urban = round(province.urban || 0, 2);
   }
 }
 
@@ -932,6 +1182,11 @@ function getDirectNeighbors(cell, metadata) {
   if (row > 0) neighbors.push(cell - metadata.columns);
   if (row < metadata.rows - 1) neighbors.push(cell + metadata.columns);
   return neighbors;
+}
+
+function regenerationSeed(options = {}, scope, salt) {
+  const seed = options.seed || "map";
+  return salt === undefined || salt === null || salt === "" ? `${seed}:${scope}` : `${seed}:${scope}:${salt}`;
 }
 
 function distance(a, b) {

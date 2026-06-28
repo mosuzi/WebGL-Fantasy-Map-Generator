@@ -125,8 +125,11 @@ function syncCityProvinces(map, changes) {
   for (const city of map?.settlements?.cities || []) {
     if (!city) continue;
     if (!changedGridCells.has(city.cell) && !changedPackCells.has(city.packCell)) continue;
-    const nextProvince = normalizeProvinceId(map?.pack?.cells?.province?.[city.packCell]) || normalizeProvinceId(map?.grid?.cells?.province?.[city.cell]);
-    city.province = nextProvince || city.province;
+    if (Number.isInteger(city.packCell) && city.packCell >= 0 && map?.pack?.cells?.province) {
+      city.province = normalizeProvinceId(map.pack.cells.province[city.packCell]);
+    } else if (Number.isInteger(city.cell) && map?.grid?.cells?.province) {
+      city.province = normalizeProvinceId(map.grid.cells.province[city.cell]);
+    }
   }
 }
 

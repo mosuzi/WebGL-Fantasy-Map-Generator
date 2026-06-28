@@ -18,7 +18,7 @@
 
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
 
-  <template v-if="selected">
+  <template v-if="selected && !selected.neutral">
     <UiTextEditField
       class-name="province-name-editor"
       :model-value="selected.rawName"
@@ -148,24 +148,27 @@ function buildProvinceMetrics(map) {
     const cultureId = map?.pack?.cells?.culture?.[centerCell];
     const religionId = province?.religion ?? map?.pack?.cells?.religion?.[centerCell];
     const cityCount = (map?.settlements?.cities || []).filter(city => city?.province === row.id).length;
+    const neutral = row.id === 0;
+    const neutralStats = neutral ? neutralProvinceStats(map) : null;
 
     return {
       id: row.id,
-      name: province?.fullName || province?.name || row.name,
-      rawName: province?.name || row.name,
-      fullName: province?.fullName || province?.name || row.name,
-      stateId: province?.state || 0,
-      stateName: state?.fullName || state?.name || (province?.state ? `#${province.state}` : "none"),
-      centerCell,
-      gridCenterCell: province?.gridCenter ?? map?.pack?.cells?.g?.[centerCell] ?? "none",
-      pole: formatPole(province?.pole),
-      area: province?.area || 0,
-      cells: province?.cells || 0,
+      neutral,
+      name: neutral ? "中立" : province?.fullName || province?.name || row.name,
+      rawName: neutral ? "中立" : province?.name || row.name,
+      fullName: neutral ? "中立" : province?.fullName || province?.name || row.name,
+      stateId: neutral ? 0 : province?.state || 0,
+      stateName: neutral ? "无所属国家" : state?.fullName || state?.name || (province?.state ? `#${province.state}` : "none"),
+      centerCell: neutral ? "none" : centerCell,
+      gridCenterCell: neutral ? "none" : province?.gridCenter ?? map?.pack?.cells?.g?.[centerCell] ?? "none",
+      pole: neutral ? "none" : formatPole(province?.pole),
+      area: neutral ? neutralStats.area : province?.area || 0,
+      cells: neutral ? neutralStats.cells : province?.cells || 0,
       neighborCount: province?.neighbors?.length || 0,
-      cityCount,
-      culture: indexedName(map?.society?.cultures, cultureId),
-      religion: indexedName(map?.society?.religions, religionId),
-      color: normalizeHexColor(province?.color) || normalizeHexColor(state?.color) || fallbackProvinceColor(row.id)
+      cityCount: neutral ? neutralStats.cityCount : cityCount,
+      culture: neutral ? "混合" : indexedName(map?.society?.cultures, cultureId),
+      religion: neutral ? "混合" : indexedName(map?.society?.religions, religionId),
+      color: neutral ? "#a6adb3" : normalizeHexColor(province?.color) || normalizeHexColor(state?.color) || fallbackProvinceColor(row.id)
     };
   });
   const totalArea = rows.reduce((sum, row) => sum + row.area, 0);
@@ -194,12 +197,13 @@ function sortRows(rows, key, direction) {
 }
 
 function provinceRows(map) {
-  return (map?.politics?.provinces || map?.pack?.provinces || [])
+  const rows = (map?.politics?.provinces || map?.pack?.provinces || [])
     .filter(province => province && !province.removed && Number.isInteger(province.i ?? province.id))
     .map(province => ({
       id: province.i ?? province.id,
       name: province.fullName || province.name || `省份 #${province.i ?? province.id}`
     }));
+  return [{id: 0, name: "中立"}, ...rows];
 }
 
 function getProvince(map, provinceId) {
@@ -207,8 +211,30 @@ function getProvince(map, provinceId) {
 }
 
 function formatProvinceName(map, provinceId) {
+  if (provinceId === 0) return "中立";
   const province = getProvince(map, provinceId);
   return province?.fullName || province?.name || (provinceId ? `#${provinceId}` : "none");
+}
+
+function neutralProvinceStats(map) {
+  const cells = map?.pack?.cells;
+  let area = 0;
+  let cellCount = 0;
+  if (cells?.province) {
+    for (const cell of cells.i || []) {
+      if (cells.h?.[cell] < 20 || (cells.province[cell] || 0) !== 0) continue;
+      area += cells.area?.[cell] || 0;
+      cellCount++;
+    }
+  } else {
+    for (const cell of map?.grid?.cells?.i || []) {
+      if (map.grid.cells.h?.[cell] < 20 || (map.grid.cells.province?.[cell] || 0) !== 0) continue;
+      area += 1;
+      cellCount++;
+    }
+  }
+  const cityCount = (map?.settlements?.cities || []).filter(city => city && (city.province || 0) === 0).length;
+  return {area, cells: cellCount, cityCount};
 }
 
 function indexedName(items, id) {

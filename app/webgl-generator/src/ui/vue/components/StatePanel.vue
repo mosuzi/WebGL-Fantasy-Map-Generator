@@ -18,7 +18,7 @@
 
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
-  <template v-if="selected">
+  <template v-if="selected && !selected.neutral">
     <UiTextEditField
       class-name="state-name-editor"
       :model-value="selected.rawName"
@@ -159,21 +159,24 @@ function buildStateMetrics(map) {
     const stateItem = map?.politics?.states?.[row.id];
     const capitalCity = findCapitalCity(map, stateItem?.capital);
     const population = (stateItem?.urban || 0) + (stateItem?.rural || 0);
+    const neutral = row.id === 0;
+    const neutralStats = neutral ? neutralStateStats(map) : null;
     return {
       id: row.id,
-      name: stateItem?.fullName || stateItem?.name || row.name,
-      rawName: stateItem?.name || row.name,
-      fullName: stateItem?.fullName || stateItem?.name || row.name,
-      capitalName: capitalCity?.name || "none",
+      neutral,
+      name: neutral ? "中立" : stateItem?.fullName || stateItem?.name || row.name,
+      rawName: neutral ? "中立" : stateItem?.name || row.name,
+      fullName: neutral ? "中立" : stateItem?.fullName || stateItem?.name || row.name,
+      capitalName: neutral ? "无" : capitalCity?.name || "none",
       capitalBurgId: stateItem?.capital || capitalCity?.burgId || null,
-      culture: indexedName(map?.society?.cultures, stateItem?.culture),
-      religion: indexedName(map?.society?.religions, stateItem?.religion),
-      centerCell: stateItem?.center ?? stateItem?.gridCenter ?? "none",
-      area: stateItem?.area || stateItem?.cells || 0,
-      burgs: stateItem?.burgs || stateCities(map, row.id).length,
-      population,
+      culture: neutral ? "混合" : indexedName(map?.society?.cultures, stateItem?.culture),
+      religion: neutral ? "混合" : indexedName(map?.society?.religions, stateItem?.religion),
+      centerCell: neutral ? "none" : stateItem?.center ?? stateItem?.gridCenter ?? "none",
+      area: neutral ? neutralStats.area : stateItem?.area || stateItem?.cells || 0,
+      burgs: neutral ? neutralStats.burgs : stateItem?.burgs || stateCities(map, row.id).length,
+      population: neutral ? neutralStats.population : population,
       neighborCount: stateItem?.neighbors?.length || 0,
-      color: normalizeHexColor(stateItem?.color) || fallbackStateColor(row.id)
+      color: neutral ? "#a6adb3" : normalizeHexColor(stateItem?.color) || fallbackStateColor(row.id)
     };
   });
   return {rows, total: rows.length};
@@ -200,10 +203,11 @@ function sortRows(rows, key, direction) {
 }
 
 function stateRows(map) {
-  return (map?.politics?.states || []).filter(stateItem => stateItem?.i || stateItem?.id).map(stateItem => ({
+  const rows = (map?.politics?.states || []).filter(stateItem => stateItem?.i || stateItem?.id).map(stateItem => ({
     id: stateItem.id ?? stateItem.i,
     name: stateItem.fullName || stateItem.name || `国家 #${stateItem.id ?? stateItem.i}`
   }));
+  return map?.politics?.states?.[0] ? [{id: 0, name: "中立"}, ...rows] : rows;
 }
 
 function stateCities(map, stateId) {
@@ -222,9 +226,31 @@ function indexedName(items, id) {
 }
 
 function formatStateName(map, stateId) {
+  if (stateId === 0) return "中立";
   const stateItem = map?.politics?.states?.[stateId];
   if (!stateItem) return "none";
   return stateItem.fullName || stateItem.name || `#${stateId}`;
+}
+
+function neutralStateStats(map) {
+  const cells = map?.pack?.cells;
+  let area = 0;
+  let population = 0;
+  if (cells?.state) {
+    for (const cell of cells.i || []) {
+      if (cells.h?.[cell] < 20 || (cells.state[cell] || 0) !== 0) continue;
+      area += cells.area?.[cell] || 0;
+      population += cells.pop?.[cell] || 0;
+    }
+  } else {
+    for (const cell of map?.grid?.cells?.i || []) {
+      if (map.grid.cells.h?.[cell] < 20 || (map.grid.cells.state?.[cell] || 0) !== 0) continue;
+      area += 1;
+      population += map.grid.cells.pop?.[cell] || 0;
+    }
+  }
+  const burgs = (map?.settlements?.cities || []).filter(city => city && (city.state || 0) === 0).length;
+  return {area, population, burgs};
 }
 
 function normalizeHexColor(color) {

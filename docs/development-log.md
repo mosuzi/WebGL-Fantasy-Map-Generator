@@ -7796,3 +7796,409 @@
   - 上方编辑/管理按钮仍保留 `适配视图、高度编辑、国家编辑、省份管理、城市管理、文化管理、宗教管理、路线管理、河流管理、标签管理`。
   - 点击“道路”后侧栏状态更新为 `道路已按当前国家、城镇、港口和陆海约束重算...`，没有打开 `regeneration-panel` 浮动面板。
   - 无 console error / pageerror。
+
+## 2026-06-28 河流重新生成深化计划
+
+目标：
+
+- 按用户确认的依赖链，先深化“河流”重新生成，而不是先做城镇。
+- 河流重建应遵守当前高度、降水、湖泊、pack 邻接与下行水文约束，不让河流倒流或爬山。
+- 河流重建后先刷新受河流直接影响的 biome/人口评分和道路 mesh；城镇、省份、国家等更深层派生先标记为待派生，后续再逐项接入。
+
+计划：
+
+- 运行时复用 `buildRivers()` 与 `renameHydronymsByCulture()`，避免另写一套水文算法。
+- 重算后调用 `defineBiomesAndPopulation()` 刷新 `pack.cells.biome/s/pop` 与 grid 镜像字段。
+- 随后调用 `finalizeSettlements()`，让现有城镇上的道路按最新 biome、海陆和城镇点位重算。
+- 刷新河流 mesh、道路 mesh、cell 颜色、人口/城市点层、对象索引、河流/路线/城市等面板和运行时统计。
+- 将 `cities / provinces / states / religions / markers / zones / military` 写入 `map.metadata.derivedStale.systems`，提示后续仍需正式重建。
+
+实施：
+
+- `app/webgl-generator/src/runtime/app.js`：
+  - “道路”重算抽成 `regenerateRoutes()`，保留原有行为。
+  - 新增 `regenerateRivers()`，复用当前水文生成链路重建 `map.rivers`，并在文化字段存在时重新套用河湖命名。
+  - 河流重建后调用 `defineBiomesAndPopulation()` 刷新 `pack.cells.biome/s/pop` 与 grid 镜像字段。
+  - 随后调用 `finalizeSettlements()` 重算当前城镇体系上的道路。
+  - 更新 summary、generationLog、运行时面板、对象面板和待派生状态。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `refreshObjectPickingIndex()`，供河流/道路重建后刷新对象级 picking 索引。
+- `app/webgl-generator/src/ui/panel.js`：
+  - `派生过期` 展示改为中文对象名，避免把 `cities/zones` 这类内部系统名直接暴露到 UI。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 打开控制面板，进入管理 tab，点击“河流”。
+  - 状态更新为 `河流已按当前高度、降水和湖泊约束重算...`。
+  - 河流段数从 `1557` 更新到 `1558`，对象索引 riverSegments 同步更新到 `1558`。
+  - 道路同步重算后仍为 `679 / 3508`，对象索引 routeSegments 为 `3508`。
+  - `派生过期` 显示为 `城镇、省份、国家、宗教、标记、区域、军事`。
+  - 河流/道路动态 mesh dirty 均为 `false`，`WebGL error` 为 `0`，无 console error / pageerror。
+
+## 2026-06-28 城镇重新生成深化计划
+
+目标：
+
+- 让管理 tab 的“城镇”按钮从占位说明推进为真实重建。
+- 重建普通城镇时保留国家首都锚点，避免国家 `state.capital` 断链。
+- 省会按当前省份中心重建，并同步 `province.burg`。
+- 重建后自动刷新道路、城市点、城市标签、人口点、对象索引和相关面板。
+
+边界：
+
+- 本刀不重建国家边界、省份扩张、宗教、marker、zone 和军事。
+- 国家首都 burg id 必须保留；city id 可以重新生成。
+- 城市生成标签跟随新 city id 重建，因此旧城市标签隐藏列表会清空；手工标签和国家名称隐藏状态保留。
+- 省份/国家统计中的城市数、城镇人口、乡村人口做轻量同步，完整政治重算留给后续“省份/国家”按钮。
+
+实施：
+
+- `app/webgl-generator/src/generator/settlements.js`：
+  - 新增 `regenerateSettlementsWithinPolitics()`，供运行时在既有政治层上重建城镇。
+  - 重建时保留各国 `state.capital` 指向的 burg id，避免国家首都断链。
+  - 省会按当前 `province.center` 重建，并回写 `province.burg / center / gridCenter`。
+  - 普通城镇继续复用现有适居度、文化、间距、港口和河畔类型规则。
+  - `finalizeSettlements()` 现在会同步刷新 `populationPoints`，避免人口点层引用旧数据。
+  - 重建后轻量同步国家/省份的 burg 数、乡村人口和城镇人口统计。
+- `app/webgl-generator/src/runtime/app.js`：
+  - “城镇”重新生成按钮接入真实执行链路。
+  - 城镇重建后清空旧城市生成标签隐藏列表，保留手工标签和国家名称隐藏状态。
+  - 刷新点层、标签、道路 mesh、对象索引、城市/路线/标签等面板和运行时统计。
+  - 将 `cities` 从待派生移除，并保留 `provinces / states / religions / markers / zones / military` 待派生提示。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- Node 直接生成并调用城镇重建：
+  - 城市 `810 -> 1041`，港口 `111 -> 150`，道路 `664 -> 848`。
+  - 无失效首都、无落水城市、无省份 burg 引用错误、无 burg 到 city 反查错误。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 点击“城镇”后状态更新为 `城镇已按当前适居度、文化、政区、港口和间距约束重算...`。
+  - 城市 `817 -> 1003`，港口 `135 -> 143`，道路 `679 -> 811`。
+  - 城市标签总数和 city picking 索引同步为 `1003`，route picking 索引同步为 `3776`。
+  - 失效首都 `0`、落水城市 `0`、省份 burg 引用错误 `0`、burg 到 city 反查错误 `0`。
+  - `派生过期` 显示为 `省份、国家、宗教、标记、区域、军事`，不再包含城镇。
+  - 河流/道路动态 mesh dirty 均为 `false`，`WebGL error` 为 `0`，无 console error / pageerror。
+
+## 2026-06-28 河流重新生成扰动修正
+
+问题：
+
+- 用户发现点击“河流”重新生成后，河网几乎没有变化。
+- 原因是当前 `buildRivers()` 对同一高度、降水、湖泊和 pack 邻接图是确定性的；运行时只是重跑同一输入，没有引入任何新的水文扰动。
+
+方案：
+
+- 普通整图生成不传扰动参数，继续保持 seed 可复现。
+- 运行时点击“河流”时递增 `riverRegenerationSalt`，并传给 `buildRivers()` 和 `renameHydronymsByCulture()`。
+- `buildRivers()` 仅在存在 `riverRegenerationSalt` 时生成每个 pack cell 的轻微高度扰动和降水倍率扰动：
+  - 高度扰动幅度很小，只影响近似等高/洼地解析的选择。
+  - 降水倍率扰动影响局部汇流和成河阈值，使河流数量、支流和局部路径可变化。
+- 河流 metadata 记录 `variationSalt`，运行时状态文案显示“扰动 #n”。
+
+验证计划：
+
+- 用同一地图对比初始河网、扰动 #1 和扰动 #2 的 fingerprint，确认连续重建不同。
+- 浏览器中连续点击两次“河流”，确认河流数量/段数或 fingerprint 变化，状态显示不同扰动编号。
+
+实施：
+
+- `app/webgl-generator/src/generator/rivers.js`：
+  - 新增 `riverRegenerationSalt` 可选路径。
+  - 有 salt 时按 `seed + riverRegenerationSalt` 生成每个 pack cell 的轻微高度扰动和降水倍率扰动。
+  - `alterHeights()`、湖泊 flux 和 cell 汇流量会读取扰动；无 salt 时保持原始确定性路径。
+  - 河流和湖泊命名 seed 也纳入 salt，避免重建后新河流沿用旧命名流。
+  - `rivers.metadata` 新增 `variationSalt`，`flowModel` 区分普通生成与扰动重建。
+- `app/webgl-generator/src/runtime/app.js`：
+  - 点击“河流”时递增 `map.metadata.regeneration.rivers`，并作为 `riverRegenerationSalt` 传给河流重建。
+  - 重新生成状态显示 `扰动 #n`，generationLog 记录 salt。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\rivers.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\generator\settlements.js` 通过。
+- Node 直接对比同一地图：
+  - 初始河流 `178 / 1701`，扰动 #1 为 `165 / 1598`，扰动 #2 为 `159 / 1581`。
+  - 初始、扰动 #1、扰动 #2 的河流 fingerprint 均不同。
+  - 旧链路在显示高度上已有少量看似逆坡段：样本初始 `37`，扰动 #1 `35`，扰动 #2 `32`；本次扰动没有扩大该旧问题。后续如需“显示高度绝不逆坡”，需要单独校正 depression/lake 有效高度与显示高度的关系。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 连续点击两次“河流”：
+  - 第一次状态显示 `扰动 #1`，河流 `165 -> 152`，对象索引 riverSegments 为 `1464`。
+  - 第二次状态显示 `扰动 #2`，河流 `152 -> 149`，对象索引 riverSegments 为 `1467`。
+  - 两次点击后的 fingerprint 均变化。
+  - 河流/道路动态 mesh dirty 均为 `false`，`WebGL error` 为 `0`，无 console error / pageerror。
+
+## 2026-06-28 国家与首都重名修正
+
+问题：
+
+- 用户指出大部分国家名称与首都名称重合，不符合一般国家与首都分离的命名习惯；除非是单个城邦的小国，否则不应把首都名直接当作国名。
+- 检查发现 `makeStateRoot()` 有 `58%` 概率直接从 `capitalName` 派生国家根名，导致默认地图中大量国家与首都同根。
+
+方案：
+
+- 国家根名改为独立的文化/地理候选生成，不再默认取首都名。
+- `capitalName` 改为避让项：普通国家候选若与首都同根，会继续换名。
+- 保留 `allowCapitalName` 开关作为未来单城邦小国的显式例外入口；当前政治生成默认传入 `false`。
+- 国家根名候选会过滤掉被剥成单字的州、郡、府等地理后缀根，避免生成“上王国”“蓟王国”这类退化名称。
+
+实施：
+
+- `app/webgl-generator/src/generator/names.js`：
+  - `makeStateRoot()` 改为调用独立国家根名候选生成器。
+  - 新增同根比较、首都避让和国家根名清理逻辑。
+  - 地理后缀剥离函数改为可安全处理空值。
+- `app/webgl-generator/src/generator/politics.js`：
+  - `buildPackStates()` 调用国家命名时显式传入 `allowCapitalName: false`。
+
+验证：
+
+- 修正前，`seed=default` 的默认 10k 地图中，国家与首都同根为 `9 / 13`。
+- 修正后，同一 seed 变为 `0 / 13`。
+- 额外 10 组 seed 小样本验证：
+  - 国家总数覆盖 `12-28`。
+  - 国家与首都同根均为 `0`。
+  - 单字国家根名均为 `0`。
+- `node --check app\webgl-generator\src\generator\names.js` 通过。
+- `node --check app\webgl-generator\src\generator\politics.js` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证正式应用当前地图：
+  - 国家 `20` 个，国家与首都同根 `0`。
+  - 单字国家根名 `0`。
+  - `WebGL error` 为 `0`，无 console error / pageerror。
+
+## 2026-06-28 国家名称缩放优先级修正
+
+问题：
+
+- 用户发现部分国家名称与城镇标签完全重叠，导致近景下城镇名称不可见。
+- 旧规则中，国家名称在国家视图下始终先进入标签占位，并且会阻挡城市标签；这适合总览，但不适合放大后的城镇阅读。
+
+方案：
+
+- 国家名称按相机缩放分三段处理：
+  - 远景/总览：国家名称仍优先于城镇标签，用于阅读国家视图。
+  - 中近景：城镇标签优先进入占位，国家名称只在不压住城镇标签时显示。
+  - 深度放大：国家名称逐渐淡出并最终隐藏。
+- 保留“国家名称”图层开关和标签管理隐藏/恢复语义，不把缩放退场写入数据。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `stateLabelScaleBehavior()`，集中管理国家名称在不同缩放下的占位、可见性和透明度。
+  - `updateLabels()` 在中近景把城市/手工标签排到国家名称前面，并让国家名称被已有城市标签阻挡。
+- `app/webgl-generator/src/styles.css`：
+  - `.state-label.visible` 改为读取 `--state-label-opacity`，支持放大后的渐隐。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410`，切到国家视图验证：
+  - `scale=1`：国家名称 `12` 个、城市标签 `10` 个，国家/城市标签重叠 `0`。
+  - `scale=2`：国家名称 `2` 个、城市标签 `107` 个，国家/城市标签重叠 `0`，说明中近景已由城镇标签优先占位。
+  - `scale=4`：国家名称 `0` 个、城市标签 `60` 个，当前地图中已被城市优先规则提前退场。
+  - `scale=6`：国家名称 `0` 个、城市标签 `26` 个。
+  - `WebGL error` 为 `0`，无 console error / pageerror。
+
+## 2026-06-28 城镇与道路二次重生成扰动修正
+
+问题：
+
+- 用户发现二次点击“城镇”重新生成后，地图结果不再明显变化。
+- 用户同时指出“道路”似乎永远不会变化。
+- 检查发现：
+  - 城镇重建使用固定随机流 `${seed}:regenerate-settlements`，运行时没有传入递增扰动。
+  - 道路按钮只调用 `finalizeSettlements()`，而 pack 道路的连接候选和 A* 成本都由当前 burg 点、陆海约束和固定成本决定，没有任何重建扰动。
+
+方案：
+
+- 普通整图生成不传扰动参数，继续保持同 seed 可复现。
+- 点击“城镇”时递增 `settlementRegenerationSalt`：
+  - 保留国家首都 `burg id`、省会锚点、政治归属和陆地适居约束。
+  - 只扰动普通城镇候选评分和间距筛选。
+  - 同时用同一个 salt 触发道路重建扰动，避免城镇变化后道路仍沿用同一套确定性路径。
+- 点击“道路”时递增 `routeRegenerationSalt`：
+  - 路线候选连接的 Delaunay 输入点使用很小的虚拟偏移，不移动真实城市。
+  - pack A* 寻路成本在每个 cell 上加入轻微倍率扰动。
+  - 陆路仍禁止穿水，海路仍受同水体港口、海域和冻结温度约束。
+
+实施：
+
+- `app/webgl-generator/src/runtime/app.js`：
+  - “道路”重算改为传入 `routeRegenerationSalt`，状态文案显示扰动编号，并写入 generation log。
+  - “城镇”重算改为传入 `settlementRegenerationSalt` 和 `routeRegenerationSalt`，状态文案显示扰动编号，并写入 generation log。
+- `app/webgl-generator/src/generator/settlements.js`：
+  - `finalizeSettlements()` 新增可选 `options`，并把 options 传给 `buildRoutes()`。
+  - `regenerateSettlementsWithinPolitics()` 的随机流纳入 `settlementRegenerationSalt`。
+  - pack 道路新增 `routeRegenerationSalt` 分支，生成 cell 成本扰动和候选点虚拟偏移。
+  - 拆分后的道路段若端点 cell 没有 burg，会回退到原始连接的起终点 burg，避免路线对象 `from/to` 退化为 unknown。
+
+脚本验证：
+
+- 修正前，`seed=regen-debug`：
+  - 二次城镇重建后道路 fingerprint 不变。
+  - 二次道路重建后道路 fingerprint 不变。
+- 修正后，`seed=regen-debug`：
+  - 初始城市/道路为 `812 / 645`。
+  - 城镇扰动 #1 后为 `990 / 804`，城市 cell fingerprint 与道路 fingerprint 均变化。
+  - 城镇扰动 #2 后为 `990 / 782`，相对 #1 城市 cell fingerprint 与道路 fingerprint 均变化。
+  - 道路扰动 #3 / #4 为 `771 / 769`，道路 fingerprint 变化。
+  - 失效首都 `0`，落水城市 `0`。
+- `seed=route-constraints` 约束验证：
+  - 初始、城镇扰动 #1/#2、道路扰动 #3/#4 均为陆路穿水 `0`、海路中段上岸 `0`、路线端点 unknown `0`。
+  - 连续扰动后失效首都 `0`、落水城市 `0`。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410`，通过真实 `[data-regenerate-kind]` 按钮事件连续点击：
+  - 初始城市/道路为 `817 / 679`。
+  - 城镇扰动 #1 后为 `1003 / 872`，城市与道路 fingerprint 均变化；港口 `135 -> 156`，对象索引 routeSegments 为 `3791`。
+  - 城镇扰动 #2 后为 `1003 / 831`，相对 #1 城市与道路 fingerprint 均变化；港口 `156 -> 146`，对象索引 routeSegments 为 `3680`。
+  - 道路扰动 #1 后为 `831 -> 829`，道路 fingerprint 变化，对象索引 routeSegments 为 `3748`。
+  - 道路扰动 #2 后为 `829 -> 831`，道路 fingerprint 变化，对象索引 routeSegments 为 `3680`。
+  - 上述每次重建均为陆路穿水 `0`、海路中段上岸 `0`、路线端点 unknown `0`。
+  - `WebGL error` 均为 `0`，无 console error / pageerror。
+
+## 2026-06-28 城镇标签黑色字体调整
+
+问题：
+
+- 用户要求城镇标签改为黑色字体。
+
+实施：
+
+- `app/webgl-generator/src/styles.css`：
+  - 将 `.city-label` 从与 `.custom-label` 共享浅色文字中拆出。
+  - 城镇标签改为黑色字体，并加轻量浅色文字阴影，保证深色地块上仍可读。
+  - 手工标签继续保留原浅色样式。
+
+验证：
+
+- `git diff --check` 通过。
+
+## 2026-06-28 国家名称渐隐丝滑度修正
+
+问题：
+
+- 用户发现国家名称在缩放退场时不够丝滑，表现为接近突然消失。
+- 用户同时发现某个特定缩放比例下，已经隐藏的国家名称会轻微重新显现。
+- 检查发现：
+  - 国家名称透明度被四舍五入到两位小数，低透明区存在肉眼可见的阶梯感。
+  - 中近景时国家名称会被城市标签碰撞规则直接移除；随着缩放后标签间距变化，碰撞结果可能改变，导致国家名称重新获得 `.visible` 类。
+
+方案：
+
+- 国家名称退场改为连续 `smootherStep` 曲线，不再对透明度四舍五入。
+- 中近景后国家名称不再和城市标签互相碰撞抢显示权，只与其它国家名称互相避让。
+- 城市标签在视觉层级上高于国家名称；国家名称淡出时不会遮盖城市阅读。
+- 低透明尾端直接归零，避免高倍缩放下残影。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `stateLabelScaleBehavior()` 改用 `smootherStep(1.55, 3.95, scale)` 生成连续透明度。
+  - 国家名称在中近景不再检查城市标签占位；城市标签也只在总览段被国家名称占位阻挡。
+  - 新增 `smootherStep()` 供标签渐隐曲线使用。
+- `app/webgl-generator/src/styles.css`：
+  - 国家名称 opacity transition 调整为 `240ms cubic-bezier(0.22, 0.61, 0.36, 1)`。
+  - 城市标签、手工标签和国家名称分别设置层级，保证城市标签稳定位于淡出的国家名称之上。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410`，切到国家视图并扫 `scale=1..4.6`：
+  - 国家名称最大透明度按缩放单调下降：`1 -> 0.990 -> 0.917 -> 0.758 -> 0.539 -> 0.310 -> 0.127 -> 0.025 -> 0`。
+  - `scale >= 3.9` 后国家名称数量为 `0`，未再出现高倍缩放残影。
+  - 城市标签在中近景保持显示，国家名称不再挤占城市标签空间。
+
+## 2026-06-28 初始化中立区与涂色编辑中立目标修正
+
+问题：
+
+- 用户发现有一处中立地区存在大量道路和城镇，不符合原版初始中立地区通常偏无人区的预期。
+- 检查发现正式应用生成顺序是先生成城镇作为首都候选，再生成国家；国家扩张后，部分非首都城镇可能仍落在 `state=0` 的中立 cell 上，后续道路又会基于这些 burg 生成连接。
+- 国家/省份编辑器此前把目标 id `<= 0` 当作无效，无法把“中立”作为类似橡皮擦的特殊涂色对象。
+
+方案：
+
+- 初始化阶段不把所有中立地硬塞进国家，而是按“无人区”语义收紧：
+  - 国家扩张后，已有 burg 或具备 `s/pop + culture` 的中立陆地会先通过相邻国家扩张接管。
+  - 连通扩张够不到的零星适居中立 cell 会兜底归给最近国家。
+  - 仍为中立的非首都城镇在初始 finalize 时剔除，并清理对应 burg 引用；道路随后只基于剩余城镇生成。
+- 手工编辑语义保持开放：
+  - 用户后续用国家编辑器涂出中立，不走初始清理逻辑。
+  - 国家中立会清 `state=0`，并同步把省份归属清为 `0`。
+  - 省份中立只清 `province=0`，不改变国家。
+
+实施：
+
+- `app/webgl-generator/src/generator/politics.js`：
+  - 新增 `claimInhabitedNeutralCells()`，在 pack 国家扩张与形状修正后补领适居中立 cell。
+  - 新增孤立适居中立 cell 的最近国家兜底归属。
+- `app/webgl-generator/src/generator/settlements.js`：
+  - `finalizeSettlements()` 支持 `pruneNeutralSettlements` 选项。
+  - 初始生成开启该选项，剔除仍为中立的非首都城市，清理 `pack.cells.burg`、burg removed 状态和 grid burg 索引。
+  - 运行时城镇/道路重新生成默认不启用该清理，避免用户手工中立区被自动删除。
+- `app/webgl-generator/src/generator/index.js`：
+  - 初始 `finalizeSettlements()` 调用传入 `pruneNeutralSettlements: true`。
+- `app/webgl-generator/src/runtime/app.js`：
+  - 国家和省份笔刷允许目标 id `0`。
+  - 省份目标为 `0` 时不再要求目标省份所属国家，允许在任意陆地清省份。
+- `app/webgl-generator/src/runtime/state-edit-commands.js`：
+  - 国家笔刷移入 `state=0` 时会同步清除 pack/grid 省份。
+  - 城市落在被擦除国家的 cell 上时，城市和 burg 的 state/province 会同步变成 `0`。
+- `app/webgl-generator/src/runtime/province-edit-commands.js`：
+  - 省份笔刷清零后，城市 province 也允许同步为 `0`。
+- `app/webgl-generator/src/ui/panels/state-panel.js`、`StatePanel.vue`：
+  - 国家面板加入“中立”特殊行和目标选项。
+  - 中立行显示面积、人口和中立城镇统计，但隐藏改名、改色、首都等实体操作。
+- `app/webgl-generator/src/ui/panels/province-panel.js`、`ProvincePanel.vue`：
+  - 省份面板加入“中立”特殊行和目标选项。
+  - 中立行显示无省份面积、cells 和城市统计，但隐藏实体操作。
+- `app/webgl-generator/src/runtime/object-resolver.js`：
+  - 补齐 state/province id `0` 的特殊对象解析。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 国家/省份专题中的中立色改为克制灰色，避免看起来像普通强势政区。
+
+验证：
+
+- `node --check` 通过：
+  - `app\webgl-generator\src\generator\politics.js`
+  - `app\webgl-generator\src\generator\settlements.js`
+  - `app\webgl-generator\src\runtime\app.js`
+  - `app\webgl-generator\src\runtime\state-edit-commands.js`
+  - `app\webgl-generator\src\runtime\province-edit-commands.js`
+  - `app\webgl-generator\src\runtime\object-resolver.js`
+- 同一组 `default / neutral-debug-1 / neutral-debug-2 / neutral-debug-3` 生成验证：
+  - `neutralCities = 0`
+  - `neutralRouteEndpoints = 0`
+  - `neutralInhabited = 0`
+  - 保留的中立陆地均无适居/文化评分或 burg。
+- 命令级编辑验证：
+  - 国家笔刷把一个有国家/省份的城市 cell 涂成中立后，`state/province/cityState/cityProvince` 均为 `0`。
+  - 省份笔刷把同一 cell 涂成中立后，`state` 保持原国家，`province/cityProvince` 为 `0`。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 页面运行态 `neutralCities = 0`、`neutralRouteEndpoints = 0`、`neutralInhabited = 0`。
+  - 国家面板目标下拉包含 `中立`。
+  - 省份面板目标下拉包含 `中立`。
+  - 无 console error / pageerror。

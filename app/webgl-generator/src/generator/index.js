@@ -32,7 +32,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
   renameHydronymsByCulture(rivers, pack, options);
   const settlements = buildSettlements(grid, features, null, rivers, random, pack, options);
   const politics = buildPolitics(grid, features, society, rivers, random, options, pack);
-  finalizeSettlements(grid, features, politics, settlements, pack);
+  finalizeSettlements(grid, features, politics, settlements, pack, {...options, pruneNeutralSettlements: true});
   finalizeSocietyReligions(grid, society, pack, random, settlements, options);
   const military = buildMilitary(pack, options);
   const markers = buildMarkers(grid, features, politics, rivers, pack, options);

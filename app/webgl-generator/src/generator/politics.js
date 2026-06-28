@@ -64,6 +64,7 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
   const states = buildPackStates(pack, society, random, nameGenerator);
   expandPackStates(pack, states, society);
   normalizePackStates(pack, states);
+  claimInhabitedNeutralCells(pack, states);
   syncBurgStates(pack);
   collectStateStatistics(pack, states);
   findStateNeighbors(pack, states);
@@ -130,6 +131,7 @@ function buildPackStates(pack, society, random, nameGenerator) {
       culture: burg.culture,
       cultureType: culture?.nameStyle || culture?.type,
       capitalName: burg.name,
+      allowCapitalName: false,
       type: culture?.type || "Generic"
     }) || culture?.name?.replace("文化", "") || STATE_ROOTS[burg.i % STATE_ROOTS.length];
     const id = burg.i;
@@ -255,6 +257,65 @@ function normalizePackStates(pack, states) {
 
   for (const state of states) {
     if (state?.i) state.center = pack.burgs[state.capital].cell;
+  }
+}
+
+function claimInhabitedNeutralCells(pack, states) {
+  const {cells} = pack;
+  if (!cells?.state) return;
+  const costs = new Float64Array(cells.i.length).fill(Infinity);
+  const queue = new MinPriorityQueue();
+
+  for (const cell of cells.i) {
+    const stateId = cells.state[cell] || 0;
+    if (!stateId || !states[stateId]) continue;
+    costs[cell] = 0;
+    queue.push({cell, stateId, cost: 0}, 0);
+  }
+
+  while (queue.length) {
+    const {cell, stateId, cost} = queue.pop();
+    if (cost > costs[cell]) continue;
+
+    for (const neighbor of cells.c[cell] || []) {
+      if (cells.state[neighbor]) continue;
+      if (!isInhabitedNeutralCell(cells, neighbor)) continue;
+      const step = distance(cells.p[cell], cells.p[neighbor]) * (1 + Math.max((cells.h?.[neighbor] || 20) - 55, 0) / 45);
+      const nextCost = cost + step;
+      if (nextCost >= costs[neighbor]) continue;
+      cells.state[neighbor] = stateId;
+      costs[neighbor] = nextCost;
+      queue.push({cell: neighbor, stateId, cost: nextCost}, nextCost);
+    }
+  }
+
+  claimIsolatedInhabitedNeutralCells(pack, states);
+}
+
+function isInhabitedNeutralCell(cells, cell) {
+  if (cells.h?.[cell] < 20) return false;
+  if (cells.burg?.[cell]) return true;
+  return (cells.s?.[cell] || 0) > 0 && (cells.culture?.[cell] || 0) > 0;
+}
+
+function claimIsolatedInhabitedNeutralCells(pack, states) {
+  const {cells} = pack;
+  const centers = states
+    .filter(state => state?.i && cells.p?.[state.center])
+    .map(state => ({stateId: state.i, point: cells.p[state.center]}));
+  if (!centers.length) return;
+
+  for (const cell of cells.i) {
+    if (cells.state[cell] || !isInhabitedNeutralCell(cells, cell)) continue;
+    let bestState = 0;
+    let bestDistance = Infinity;
+    for (const center of centers) {
+      const nextDistance = distance(cells.p[cell], center.point);
+      if (nextDistance >= bestDistance) continue;
+      bestState = center.stateId;
+      bestDistance = nextDistance;
+    }
+    if (bestState) cells.state[cell] = bestState;
   }
 }
 

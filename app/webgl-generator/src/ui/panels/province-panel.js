@@ -138,13 +138,14 @@ function getProvince(map, provinceId) {
 }
 
 function provinceExists(map, provinceId) {
+  if (provinceId === 0) return true;
   return Boolean(Number.isInteger(provinceId) && getProvince(map, provinceId));
 }
 
 function firstProvinceId(map) {
   const province = (map?.politics?.provinces || map?.pack?.provinces || [])
     .find(item => item && !item.removed && Number.isInteger(item.i ?? item.id));
-  return province ? province.i ?? province.id : null;
+  return province ? province.i ?? province.id : 0;
 }
 
 function roundNumber(value) {
