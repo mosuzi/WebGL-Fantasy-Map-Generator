@@ -1,6 +1,6 @@
 # Fantasy Map Generator 图形化重实现方案
 
-> 路线修正说明：本文是早期“迁移原项目渲染层”的历史方案。2026-06-17 用户已明确改为“基于原项目复刻独立 WebGL 地图生成器”，不得修改 `source/Fantasy-Map-Generator` 原项目源码。后续执行以 `docs/gl-reimplementation-acceptance-plan.md` 和 `docs/current-plan.md` 为准；本文仅作为原项目结构和旧技术分析参考。
+> 路线修正说明：本文是早期“迁移原项目渲染层”的历史方案。2026-06-17 用户已明确改为“基于原项目复刻独立 WebGL 地图生成器”，不得修改 `source/Fantasy-Map-Generator` 原项目源码。后续执行以 `docs/plans/gl-reimplementation-acceptance-plan.md` 和 `docs/current-plan.md` 为准；本文仅作为原项目结构和旧技术分析参考。
 
 本文档基于当前 `source/Fantasy-Map-Generator` 源码阅读结果，说明如何把现有 SVG/HTML 地图渲染层迁移为更高性能的图形渲染实现。目标不是推翻地图生成器，而是保留现有生成算法、存档格式和编辑逻辑，逐步替换性能压力最大的 SVG 渲染与 DOM 操作。
 
@@ -549,7 +549,7 @@ const textureCanvas = graphicsRenderer.renderToTextureCanvas();
 
 产出：
 
-- `docs/performance-baseline.md`
+- `docs/performance/performance-baseline.md`
 - 一个 `window.__fmgProfile()` 调试函数。
 
 ### Milestone 1：渲染器骨架

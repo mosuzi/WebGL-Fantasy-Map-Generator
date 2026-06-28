@@ -26,8 +26,8 @@ node .\tools\fmg-profile.mjs --port 5300 --browser-channel chrome --cells 10000,
 
 默认输出：
 
-- `docs/performance-baseline-results.json`
-- `docs/performance-baseline-results.md`
+- `docs/generated/reports/performance-baseline-results.json`
+- `docs/generated/reports/performance-baseline-results.md`
 
 如果地图生成器已经在本地运行，可以传入 `--url`，脚本就不会再启动 Vite：
 
@@ -94,8 +94,8 @@ await window.__fmgProfile({
 
 当前完整结果位于：
 
-- `docs/performance-baseline-results.json`
-- `docs/performance-baseline-results.md`
+- `docs/generated/reports/performance-baseline-results.json`
+- `docs/generated/reports/performance-baseline-results.md`
 
 摘要：
 

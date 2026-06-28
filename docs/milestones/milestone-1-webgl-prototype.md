@@ -82,7 +82,7 @@
 - `prototype/webgl-cells/data/sample-map.json`
   - 当前 demo 使用的一份 100k 目标 cells 真实 FMG 快照。
 
-- `docs/webgl-prototype-profile-results.md`
+- `docs/generated/reports/webgl-prototype-profile-results.md`
   - 当前 WebGL 原型性能采集结果。
 
 ## 运行方式
@@ -193,7 +193,7 @@ http://127.0.0.1:5400
   - 100k 目标快照下，当前机器记录的步骤 1.6 轻量验证为构建约 `244.7ms`，上传约 `25.6ms`，绘制约 `0.3ms`；overlay 可见城市标签 `143/440`、国家标签占位 `17/17`、纹章占位 `457/457`。
   - 100k 目标快照下，当前机器记录的步骤 1.4 轻量验证为构建约 `249ms`，上传约 `31.5ms`，绘制约 `0.2ms`。
   - 中心点 picking 仍可命中。
-  - 正式采集脚本已生成 `docs/webgl-prototype-profile-results.md`：
+  - 正式采集脚本已生成 `docs/generated/reports/webgl-prototype-profile-results.md`：
     - 10 次 draw 平均约 `0.27ms`，最大约 `1.3ms`。
     - 10 次 picking 平均约 `0.01ms`，最大约 `0.1ms`。
 

@@ -1,3 +1,5 @@
+import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
+
 const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 
 export function bindRuntimePanel(documentRef, handlers) {
@@ -20,6 +22,8 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-state-panel")?.addEventListener("click", handlers.onOpenStatePanel);
   documentRef.getElementById("open-province-panel")?.addEventListener("click", handlers.onOpenProvincePanel);
   documentRef.getElementById("open-city-panel")?.addEventListener("click", handlers.onOpenCityPanel);
+  documentRef.getElementById("open-culture-panel")?.addEventListener("click", handlers.onOpenCulturePanel);
+  documentRef.getElementById("open-religion-panel")?.addEventListener("click", handlers.onOpenReligionPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
   for (const control of documentRef.querySelectorAll("[data-layer]")) {
@@ -51,6 +55,8 @@ export function setActiveModeButton(documentRef, mode) {
 }
 
 export function readControlPreferences(documentRef) {
+  const storePreferences = readGlobalConfigPreferences();
+  if (storePreferences) return storePreferences;
   try {
     const raw = documentRef.defaultView?.localStorage?.getItem(CONTROL_PREFERENCES_KEY);
     if (!raw) return {};
@@ -88,6 +94,8 @@ function editLockControls(documentRef) {
     "#open-state-panel",
     "#open-province-panel",
     "#open-city-panel",
+    "#open-culture-panel",
+    "#open-religion-panel",
     "#open-route-panel",
     "#open-river-panel",
     "#seed-input",
@@ -149,16 +157,13 @@ function setLayerControlState(control, visible) {
 
 function updateLayerPreference(documentRef, layer, visible) {
   if (!layer) return;
+  if (setGlobalConfigLayerVisible(layer, visible)) return;
   const preferences = readControlPreferences(documentRef);
-  updateControlPreferences(documentRef, {
-    layers: {
-      ...(preferences.layers || {}),
-      [layer]: Boolean(visible)
-    }
-  });
+  updateControlPreferences(documentRef, {layers: {...(preferences.layers || {}), [layer]: Boolean(visible)}});
 }
 
 function updateControlPreferences(documentRef, patch) {
+  if (patchGlobalConfigPreferences(patch)) return;
   try {
     const storage = documentRef.defaultView?.localStorage;
     if (!storage) return;
@@ -376,6 +381,8 @@ function formatObjectTitle(object) {
   if (object.kind === "river") return `河流 #${object.id}`;
   if (object.kind === "state") return `国家 ${object.name}`;
   if (object.kind === "province") return `省份 ${object.name}`;
+  if (object.kind === "culture") return `文化 ${object.name}`;
+  if (object.kind === "religion") return `宗教 ${object.name}`;
   if (object.kind === "region") return `区域 ${object.name}`;
   return "unknown";
 }
@@ -388,6 +395,8 @@ function formatObjectDetails(object) {
   if (object.kind === "river") return `${object.type} / flux ${object.flux} / length ${object.length}`;
   if (object.kind === "state") return `${object.culture} / ${object.religion}`;
   if (object.kind === "province") return `${object.state}`;
+  if (object.kind === "culture") return `${object.type} / cells ${object.cells} / pop ${object.population}`;
+  if (object.kind === "religion") return `${object.type} / ${object.form} / cells ${object.cells}`;
   if (object.kind === "region") return `region #${object.id}`;
   return "unknown";
 }

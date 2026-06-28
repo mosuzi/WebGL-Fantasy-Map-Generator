@@ -85,11 +85,48 @@ const REAL_PREFIXES = ["青", "清", "云", "白", "苍", "南", "北", "东", "
 const HYDRO_PREFIXES = ["青", "清", "云", "白", "苍", "洛", "澄", "月", "星", "玉", "金", "龙", "灵", "玄", "镜", "寒", "秋", "明", "丹", "素"];
 const LIGHT_FANTASY_PREFIXES = ["云", "青", "苍", "玄", "灵", "玉", "星", "月", "霜", "岚", "曜", "澜"];
 const HIGH_FANTASY_STEMS = ["太微", "扶摇", "归墟", "烛龙", "昆吾", "瑶光"];
+const WESTERN_PLACE_STEMS = [
+  "阿尔文",
+  "布伦",
+  "卡斯特",
+  "维斯特",
+  "洛林",
+  "赛伦",
+  "格兰",
+  "赫尔",
+  "艾登",
+  "诺维",
+  "泰伦",
+  "沃伦",
+  "雷恩",
+  "奥斯",
+  "米兰",
+  "兰德",
+  "贝尔",
+  "弗洛",
+  "克莱",
+  "温德"
+];
+const WESTERN_HYDRO_STEMS = ["艾文", "洛恩", "赛尔", "布兰", "维尔", "莱茵", "欧伦", "诺恩", "密尔", "赫伦", "卡恩", "阿斯"];
+const NORTHERN_PLACE_STEMS = ["诺德", "斯卡尔", "弗罗斯", "乌尔夫", "霍尔姆", "冰湾", "霜谷", "洛克", "奥恩", "布约恩"];
+const STEPPE_PLACE_STEMS = ["阿兰", "钦察", "乌勒", "巴彦", "呼伦", "塔尔", "阿尔泰", "斡尔", "苍帐", "金帐"];
+const SOUTHERN_PLACE_STEMS = ["萨赫", "阿曼", "苏莱", "巴拉", "纳赛", "泽菲", "玛拉", "沙姆", "迦南", "金棕"];
 const LAND_SUFFIXES = ["山", "岭", "川", "原", "谷", "陵", "泉", "城", "州", "阳", "阴", "泽"];
 const WATER_SUFFIXES = ["溪", "水", "河", "江", "湖", "泽", "湾", "港", "浦", "津", "泊"];
 const HIGHLAND_SUFFIXES = ["山", "岭", "岳", "峰", "陵", "关"];
 const PORT_SUFFIXES = ["港", "津", "浦", "湾"];
 const LAKE_SUFFIXES = ["湖", "泽", "泊", "潭", "海"];
+const CULTURE_STYLE_CONFIG = {
+  European: {place: WESTERN_PLACE_STEMS, hydro: WESTERN_HYDRO_STEMS, forms: ["王国", "公国", "侯国", "自由邦", "共和国"], suffixes: ["堡", "顿", "维尔", "港", "城", "郡"]},
+  Generic: null,
+  Highland: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "霜", "冰", "洛恩"], forms: ["山国", "公国", "王国"], suffixes: HIGHLAND_SUFFIXES},
+  Naval: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["海国", "诸港", "海邦", "自由港"], suffixes: PORT_SUFFIXES},
+  Lake: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["泽国", "湖邦", "王国"], suffixes: WATER_SUFFIXES},
+  Nomadic: {place: STEPPE_PLACE_STEMS, hydro: ["乌勒", "呼伦", "阿兰", "苍", "金", "青"], forms: ["汗国", "部盟", "诸帐"], suffixes: ["原", "帐", "河", "岭", "城"]},
+  Hunting: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "森", "鹿", "霜"], forms: ["林邦", "诸部", "王国"], suffixes: ["林", "谷", "岭", "泉", "城"]},
+  River: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["河邦", "诸州", "王国"], suffixes: WATER_SUFFIXES},
+  Desert: {place: SOUTHERN_PLACE_STEMS, hydro: ["萨赫", "阿曼", "纳赛", "金", "赤", "白"], forms: ["苏丹国", "诸城", "王国"], suffixes: ["城", "绿洲", "港", "河", "原"]}
+};
 const STATE_FORMS = {
   Naval: ["海国", "诸港", "海邦", "王国"],
   Lake: ["泽国", "湖邦", "王国"],
@@ -113,10 +150,12 @@ export function createChineseNameGenerator(seed = "map") {
     makePlaceName(options = {}) {
       const rng = rngFor(seed, "place", options);
       const style = choosePlaceStyle(rng, options);
-      const suffixes = getPlaceSuffixes(options);
+      const cultureStyle = getCultureStyle(options);
+      const suffixes = getPlaceSuffixes(options, cultureStyle);
       let name;
 
-      if (style === "real") name = rng.next() < 0.72 ? pick(rng, PLACE_STEMS) : `${pick(rng, REAL_PREFIXES)}${pick(rng, suffixes)}`;
+      if (cultureStyle?.place && (hasExplicitCultureStyle(options) || rng.next() < 0.82)) name = combineStemAndSuffix(pick(rng, cultureStyle.place), pick(rng, suffixes));
+      else if (style === "real") name = rng.next() < 0.72 ? pick(rng, PLACE_STEMS) : `${pick(rng, REAL_PREFIXES)}${pick(rng, suffixes)}`;
       else if (style === "light") name = `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, suffixes)}`;
       else name = pick(rng, HIGH_FANTASY_STEMS);
 
@@ -126,13 +165,17 @@ export function createChineseNameGenerator(seed = "map") {
 
     makeRiverName(options = {}) {
       const rng = rngFor(seed, "river", options);
-      const prefix = rng.next() < 0.82 ? pick(rng, HYDRO_PREFIXES) : pick(rng, LIGHT_FANTASY_PREFIXES);
+      const cultureStyle = getCultureStyle(options);
+      const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
+      const prefix = cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.82 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
       return makeUnique(used, "river", `${prefix}${pick(rng, ["溪", "水", "河", "江", "川"])}`, rng);
     },
 
     makeLakeName(options = {}) {
       const rng = rngFor(seed, "lake", options);
-      const prefix = rng.next() < 0.78 ? pick(rng, HYDRO_PREFIXES) : pick(rng, LIGHT_FANTASY_PREFIXES);
+      const cultureStyle = getCultureStyle(options);
+      const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
+      const prefix = cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.78 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
       return makeUnique(used, "lake", `${prefix}${pick(rng, LAKE_SUFFIXES)}`, rng);
     },
 
@@ -145,7 +188,7 @@ export function createChineseNameGenerator(seed = "map") {
 
     makeStateFormName(options = {}) {
       const rng = rngFor(seed, "state-form", options);
-      const forms = STATE_FORMS[options.type] || STATE_FORMS.Generic;
+      const forms = getCultureStyle(options)?.forms || STATE_FORMS[options.type] || STATE_FORMS.Generic;
       const tier = Math.max(0, Math.min(forms.length - 1, Math.floor(options.tier || 0)));
       return rng.next() < 0.72 ? forms[tier] || forms[0] : pick(rng, forms);
     },
@@ -195,8 +238,9 @@ function choosePlaceStyle(rng, options) {
   return "real";
 }
 
-function getPlaceSuffixes(options) {
+function getPlaceSuffixes(options, cultureStyle = null) {
   if (options.port) return PORT_SUFFIXES;
+  if (cultureStyle?.suffixes) return cultureStyle.suffixes;
   if (options.type === "river") return WATER_SUFFIXES;
   if (options.type === "lake") return LAKE_SUFFIXES;
   if (options.type === "Highland" || options.highland) return HIGHLAND_SUFFIXES;
@@ -205,7 +249,26 @@ function getPlaceSuffixes(options) {
 }
 
 function rngFor(seed, scope, options) {
-  return createRandom([seed, scope, options.id ?? "", options.cell ?? "", options.culture ?? "", options.state ?? "", options.type ?? ""].join(":"));
+  return createRandom([seed, scope, options.id ?? "", options.cell ?? "", options.culture ?? "", options.cultureType ?? "", options.state ?? "", options.type ?? ""].join(":"));
+}
+
+function getCultureStyle(options = {}) {
+  const style = cultureStyleFor(options.cultureType) || cultureStyleFor(options.nameStyle);
+  if (style) return style;
+  return cultureStyleFor(options.type);
+}
+
+function hasExplicitCultureStyle(options = {}) {
+  return Boolean(options.cultureType || options.nameStyle);
+}
+
+function cultureStyleFor(type) {
+  if (!type) return null;
+  if (CULTURE_STYLE_CONFIG[type]) return CULTURE_STYLE_CONFIG[type];
+  if (/europe|western|english|西方/i.test(type)) return CULTURE_STYLE_CONFIG.European;
+  if (/nomad|游牧/i.test(type)) return CULTURE_STYLE_CONFIG.Nomadic;
+  if (/desert|沙漠/i.test(type)) return CULTURE_STYLE_CONFIG.Desert;
+  return null;
 }
 
 function makeUnique(used, scope, name, rng) {
@@ -219,6 +282,11 @@ function makeUnique(used, scope, name, rng) {
 
 function trimGeographicSuffix(name) {
   return name.replace(/(城|镇|港|津|浦|湾|县|市|区|州|郡|府|道|领|司)$/u, "");
+}
+
+function combineStemAndSuffix(stem, suffix) {
+  if (!suffix || stem.endsWith(suffix)) return stem;
+  return `${stem}${suffix}`;
 }
 
 function trimStateForm(name) {

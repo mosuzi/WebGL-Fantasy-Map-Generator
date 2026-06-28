@@ -4,7 +4,7 @@
 
 ## 对照口径
 
-- SVG 基线来自 `docs/performance-baseline-results.md`，测试对象是原 Fantasy Map Generator 的完整 SVG/HTML 渲染管线。
+- SVG 基线来自 `docs/generated/reports/performance-baseline-results.md`，测试对象是原 Fantasy Map Generator 的完整 SVG/HTML 渲染管线。
 - WebGL 原型来自 `prototype/webgl-cells/`，测试对象是独立 WebGL2 demo。
 - 两者使用的 100k 目标地图不是同一张随机地图，因此不能作为严格 A/B benchmark。
 - WebGL 原型目前覆盖 cell 面、七类专题面、基础 feature 图层、国家边界、省份边界、路线、河流折线、人口点、降水点、城市/港口点、marker 点、城市标签 overlay、国家标签占位、纹章占位和 hover cell picking，不覆盖 GPU 文本、真实 COA 渲染和完整 sprite/icon atlas。
@@ -58,7 +58,7 @@
 | overlay 同步 | SVG zoom handler | 已验证 | 城市标签、国家占位和纹章 badge 随 renderer camera 同步，容器不接收 pointer events。 |
 | 中心点 picking | 无同口径 | 命中 | 空间索引仍使用 pack cell 语义。 |
 
-补充：当前已新增 `tools/webgl-prototype-profile.mjs` 作为正式采集脚本。`docs/webgl-prototype-profile-results.md` 仍是步骤 1.1 后的正式采集结果；步骤 1.6 只做了轻量页面验证，尚未重跑正式多次采样报告。
+补充：当前已新增 `tools/webgl-prototype-profile.mjs` 作为正式采集脚本。`docs/generated/reports/webgl-prototype-profile-results.md` 仍是步骤 1.1 后的正式采集结果；步骤 1.6 只做了轻量页面验证，尚未重跑正式多次采样报告。
 
 ## 图层节点压力
 

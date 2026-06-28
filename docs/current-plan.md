@@ -6,14 +6,14 @@
 
 当前正式应用生成质量在用户验收中被判定为已经跑偏：地形、河流、路线、聚落和后续专题均出现明显失真。开发暂停继续叠加阶段 3 功能，先进入 source 优先复位整改。
 
-新的总纲入口是 `docs/source-first-recovery-execution-plan.md`，详细施工入口是 `docs/source-first-detailed-task-plan.md`。详细规程已经补充独立新智能体 source 复查后的缺口清单、完整生成顺序、字段契约、source baseline 导出 schema、模板/seed/cells 矩阵、各阶段任务包和可脚本判定的验收要求。后续按太子-尚书-门下-侍中四级流程，从 source 对照基线、grid/Voronoi、高度模板、grid/pack features、河流、生物群系、适居度、文化、城市、国家、路线、宗教和省份逐层恢复。
+新的总纲入口是 `docs/task-notes/source-first-recovery-execution-plan.md`，详细施工入口是 `docs/task-notes/source-first-detailed-task-plan.md`。详细规程已经补充独立新智能体 source 复查后的缺口清单、完整生成顺序、字段契约、source baseline 导出 schema、模板/seed/cells 矩阵、各阶段任务包和可脚本判定的验收要求。后续按太子-尚书-门下-侍中四级流程，从 source 对照基线、grid/Voronoi、高度模板、grid/pack features、河流、生物群系、适居度、文化、城市、国家、路线、宗教和省份逐层恢复。
 
 在 source 对照基线完成前，不继续推进 UI 面板、对象编辑、路线样式、政治专题或其他后续功能。
 
 阶段 0 已开始落地：
 
 - 新增 `tools/source-export-baseline.mjs`，可导出单个 source baseline 的 `source-summary.json`、`source-trace.json` 和 `validation.md`；截图需用 `--screenshot true` 本地生成，默认不纳入版本库。
-- 新增 `tools/source-baseline-matrix.mjs`，可运行 `quick/full` source baseline 矩阵并生成 `docs/source-baselines/matrix.json` 与 `matrix.md`。
+- 新增 `tools/source-baseline-matrix.mjs`，可运行 `quick/full` source baseline 矩阵并生成 `docs/generated/source-baselines/matrix.json` 与 `matrix.md`。
 - 已完成 quick matrix：`mediterranean`、`continents`、`archipelago` 三个 100000 cells source 样例均已导出。
 - 新增 `tools/webgl-generator-export-baseline.mjs`，可导出正式应用同 case 的 `candidate-summary.json` 和 `candidate-validation.md`；截图需用 `--screenshot true` 本地生成，默认不纳入版本库。
 - 新增 `tools/baseline-diff.mjs`，可生成 source/candidate 的 `diff.json` 和 `diff.md`。
@@ -148,7 +148,7 @@
 - `tools/baseline-diff.mjs` 对 `routes.roads` 增加低基数绝对容忍：相对阈值仍保留，但 source 主路极少时绝对差值 `<= 5` 不再触发 warn。
 - `tools/source-export-baseline.mjs` 已记录 source 随机化后的 `culturesSet` 和 `culturesSetMax`，便于继续追踪文化集随机流。
 - 完整 candidate 矩阵已跑完 63 个 case：总体 `pass`，`fail 0`，`warn 0`，`pass 63`。
-- 当前矩阵报告：`docs/source-baselines/candidate-matrix.md`，生成时间 `2026-06-24T16:41:47.034Z`。
+- 当前矩阵报告：`docs/generated/source-baselines/candidate-matrix.md`，生成时间 `2026-06-24T16:41:47.034Z`。
 
 阶段 18 已开始第一刀：
 
@@ -157,7 +157,7 @@
 - `tools/webgl-generator-export-baseline.mjs` 已输出同构 `lateStages` 摘要，当前 candidate 后段缺口会被明确记录为字段差异。
 - `tools/baseline-diff.mjs` 已加入后段专题指标和引用不变量；旧 source summary 如果缺少 `lateStages` 字段会被显式判定为需要刷新，而不是被当成真实算法差异。
 - `tools/candidate-baseline-matrix.mjs` 已在矩阵报告中新增“后段专题指标”表，用于后续按 case 追踪国家全名、城市纹章、河流/湖泊命名、军队、marker 和 zone 覆盖。
-- 已完成中文命名库评估：见 `docs/chinese-naming-library-evaluation.md`。
+- 已完成中文命名库评估：见 `docs/task-notes/chinese-naming-library-evaluation.md`。
   - 推荐 `cnchar-name@3.2.6` 作为阶段 18 命名基础，原因是 MIT 授权、包体小、含姓氏/名用字和姓名判断能力。
   - 中文地点名新增推荐 `zoningjs@3.2024.0` 作为真实地名语感基础，原因是 MIT 授权、县级以上地名数据、压缩包约 `36KB`、解包约 `133KB`，适合离线整理为轻量词素池。
   - 地点名策略改为“真实地名感为主、轻玄幻点缀”：普通城市优先 `青溪`、`洛川`、`云阳` 这类二字地名；首都、圣城、大湖、奇观等少量对象可使用 `玄泽`、`云麓`、`星渊` 这种轻玄幻词。
@@ -237,7 +237,7 @@
 
 ## 当前阶段：source 优先复位，阶段 18 已收口，转入 demo 编辑器原型
 
-第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。旧 source schema 下完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`；source 更新到 `5de7deb4` 后，经济链路 baseline schema 已刷新并确认 candidate 经济为空。经济和军事系统都暂不急，下一步先在 demo 中探索编辑器交互模型。
+第 0 里程碑性能基线、第 1 阶段 WebGL 快照 demo、阶段 2 独立生成器工程骨架和最小生成内核已完成。由于正式应用生成质量被判定偏离 source，当前暂停原阶段 3 的新增 UI/语义功能，改按 `docs/task-notes/source-first-detailed-task-plan.md` 逐层恢复。阶段 0 source/candidate 对照工具已可用，阶段 1 grid/boundary/Voronoi、阶段 2 高度模板 DSL、阶段 3 grid features/地图坐标/温度/降水、阶段 4 `reGraph()` pack 重建、阶段 5 pack features/haven/harbor、阶段 6 河流/湖泊水文、阶段 7 生物群系/人口评分、阶段 8 文化生成/扩张、阶段 9 城市/港口、阶段 10 国家、阶段 11 省份、阶段 12 路线/海路、阶段 13 宗教、阶段 14 温度边界、阶段 15 气候/水文矩阵整改、阶段 16 社会/路线矩阵整改和阶段 17 矩阵全量收口已完成第一版结构整改。旧 source schema 下完整 63 case candidate 矩阵为 `pass（fail 0，warn 0，pass 63）`；source 更新到 `5de7deb4` 后，经济链路 baseline schema 已刷新并确认 candidate 经济为空。经济和军事系统都暂不急，下一步先在 demo 中探索编辑器交互模型。
 
 阶段 18 第一刀已经开始建立后段专题验收框架，并已完成中文命名本体第一刀、省份 pole 第一刀、军事第一刀、marker 第一刀与 zones 第一刀：`names.js` seedable wrapper、城市/国家/省份/河湖命名、城市轻量 COA、国家 full/form name、省份 `pole`、`state.military`、source 风格 marker 类型池和 `pack.zones` 第一版数据已接入。阶段中途已回头修复正式应用主河流固定线宽问题，当前河流层按流量生成 screen-space 三角形带。强制 case `mediterranean / 100000 / audit-mediterranean-001` 在旧 schema 下曾回到 `pass（fail 0，warn 0）`；纳入 source `1.127.2` 经济链路后，当前 diff 为 `fail 28 / warn 11`，失败集中在 candidate 经济链路为空。
 
@@ -307,20 +307,20 @@
   - 国家编辑：目标 cell 归属 `1 -> 4`。
   - 二次修正验证：高度中心衰减中心增量 `8`、边缘样本增量 `4`；国家一次拖拽涂抹 `643` 个 cell，状态面板包含目标国家和来源国家。
 
-后续若继续编辑器方向，下一刀应围绕“编辑器状态与正式应用数据层边界”推进：把 demo 中临时的运行时改动整理成正式应用可复用的 edit command / undo command 结构，而不是继续堆 UI。正式应用的河流统计/管理应按 `docs/floating-panel-architecture.md` 建成独立浮动 `river-panel`，不要照搬 demo 的侧栏混合布局。
+后续若继续编辑器方向，下一刀应围绕“编辑器状态与正式应用数据层边界”推进：把 demo 中临时的运行时改动整理成正式应用可复用的 edit command / undo command 结构，而不是继续堆 UI。正式应用的河流统计/管理应按 `docs/architecture/floating-panel-architecture.md` 建成独立浮动 `river-panel`，不要照搬 demo 的侧栏混合布局。
 
 ## 当前已完成
 
 - 第 0 里程碑：
   - 新增 `tools/fmg-profile.mjs`。
-  - 生成 `docs/performance-baseline-results.json` 和 `docs/performance-baseline-results.md`。
+  - 生成 `docs/generated/reports/performance-baseline-results.json` 和 `docs/generated/reports/performance-baseline-results.md`。
   - 建立中文协作文档和开发历史。
 - 第 1 里程碑：
   - 新增 `tools/fmg-export-snapshot.mjs`，从原项目运行时导出真实地图快照。
   - 新增 `tools/serve-prototype.mjs`，提供无依赖静态服务器。
   - 新增 `prototype/webgl-cells/` 原型。
   - 新增 `prototype/webgl-cells/data/sample-map.json`，作为当前原型默认数据。
-  - 新增 `docs/milestone-1-webgl-prototype.md`。
+  - 新增 `docs/milestones/milestone-1-webgl-prototype.md`。
 - 阶段 2：
   - 新增 `app/webgl-generator/` 正式应用目录。
   - 新增正式应用的运行时、生成器、WebGL 占位 renderer 和 UI 面板骨架。
@@ -359,7 +359,7 @@
   - 选中 marker 会复用 HTML selection marker 显示圆环反馈。
   - 可见城市标签已接入对象 picking：点击标签区域会选中 `label` 对象，并在详情面板显示文本和目标城市。
   - 对象详情面板已有最小编辑入口：点击“编辑”会在 runtime 记录当前编辑对象，并将面板状态从查看切换为编辑；点击“退出编辑”会清空编辑目标；暂不修改地图数据。
-  - 已按用户反馈完成 source 生成算法重新审查，新增 `docs/source-generation-audit-and-rectification-plan.md`，明确高度、河流、路线、文化/国家边界和温度度量的偏差来源与整改顺序。
+  - 已按用户反馈完成 source 生成算法重新审查，新增 `docs/audits/source-generation-audit-and-rectification-plan.md`，明确高度、河流、路线、文化/国家边界和温度度量的偏差来源与整改顺序。
   - 已完成第一轮生成根因整改：正式 grid 生成 `grid.cells.c` 共享边邻接，高度末端不再使用全局百分位强制重排，feature、水文、路线和语义扩张优先走共享边邻接。
   - 河流已改为动态河源上限和更低 flux 阈值；100000 cells 抽查中大陆、群岛、地中海、高山岛屿等模板均能生成河流。
   - 路线已从贪心追踪改为 A* 成本寻路，陆路禁止穿水，山地和大坡度成本提高，找不到路径时不再追加终点直连。
@@ -380,14 +380,14 @@
 - 支持原型级河流 line pass。
 - 支持基于均匀网格空间索引的鼠标悬停 cell picking，显示 cell id、高度、国家、候选数量、耗时和世界坐标。
 - 显示构建、上传、绘制耗时。
-- 已整理 WebGL 原型与 SVG 基线的阶段性性能对照，见 `docs/webgl-svg-performance-comparison.md`。
+- 已整理 WebGL 原型与 SVG 基线的阶段性性能对照，见 `docs/performance/webgl-svg-performance-comparison.md`。
 - 渲染器接口已收敛到接近 `GraphicsMapRenderer` 的形态：
   - 导出 `GraphicsMapRenderer`，并保留 `CellWebGLRenderer` 兼容别名。
   - 提供 `loadSnapshot()`、`setColorMode()`、`setLayerVisible()`、`setCamera()`、`screenToWorld()`、`pick()` 和 `getStats()`。
 - 已新增正式 WebGL 原型性能采集脚本：
   - `tools/webgl-prototype-profile.mjs`
-  - `docs/webgl-prototype-profile-results.json`
-  - `docs/webgl-prototype-profile-results.md`
+  - `docs/generated/reports/webgl-prototype-profile-results.json`
+  - `docs/generated/reports/webgl-prototype-profile-results.md`
 - 已修正底层 mesh 数据源：
   - 之前误用 `pack.cells` 作为基础 cell mesh，水域/边界 pack cell 会出现大多边形，导致视觉上出现巨型三角 cell。
   - 现在快照导出 `grid` 数据，基础 mesh 使用 `grid`，pack 只保留业务语义。
@@ -406,33 +406,33 @@
   - 省界颜色改为连续灰线，不再跳绘；路线改为更暖的棕/金色，并从 `gl.LINES` 改成略粗的三角形带，避免省界和道路混在一起。
   - 绘制顺序调整为省界先绘制、国界后绘制，避免省界压过国界。
   - 新增本地中文地名库，部分国家和其城市标签会确定性显示为中式名称；当前只是 demo 表现层策略，后续可扩展为时代/文化风格配置。
-- 已按 `docs/gl-reimplementation-acceptance-plan.md` 完成步骤 1.1：
+- 已按 `docs/plans/gl-reimplementation-acceptance-plan.md` 完成步骤 1.1：
   - `renderer.js` 收敛为 `GraphicsMapRenderer` 主类和 WebGL draw/API 门面。
   - 新增 `camera.js`、`buffers.js`、`picking.js`、`colors.js`、`layers.js`、`utils.js`，拆出相机、buffer、picking、颜色和图层状态职责。
   - 保留 `loadSnapshot()`、`setColorMode()`、`setLayerVisible()`、`setCamera()`、`screenToWorld()`、`pick()`、`getStats()` 对外 API，以及 `CellWebGLRenderer` 兼容别名。
-- 已按 `docs/gl-reimplementation-acceptance-plan.md` 完成步骤 1.2：
+- 已按 `docs/plans/gl-reimplementation-acceptance-plan.md` 完成步骤 1.2：
   - 快照导出新增 `pack.features`、`cells.f`、feature/lake 统计和湖泊 group/type 分类数据。
   - demo 新增陆地底色、湖泊填色、海岸线和湖岸线 WebGL 图层。
   - 基础 cell mesh 仍使用 `grid`；feature 图层只使用 `pack.features` 和 `pack.vertices` 做业务语义表达。
   - UI 新增陆地底色、湖泊、海岸/湖岸线开关。
-- 已按 `docs/gl-reimplementation-acceptance-plan.md` 完成步骤 1.3：
+- 已按 `docs/plans/gl-reimplementation-acceptance-plan.md` 完成步骤 1.3：
   - 快照导出新增 `pack.cells.province/culture/religion/biome`、`grid.cells.temp`、`pack.provinces/cultures/religions` 和 `biomesData` 颜色/名称元数据。
   - 新增 `themes.js`，集中管理 `height`、`biomes`、`states`、`provinces`、`cultures`、`religions`、`temperature` 专题面定义和 palette。
   - cell 几何仍只构建一套 grid mesh；专题切换仅重算并上传当前专题颜色 buffer，不重建 position buffer。
   - UI 的渲染模式扩展为七个专题按钮，统计面板显示当前专题、字段来源、专题值数、颜色 buffer 顶点数和专题更新耗时。
   - hover picking 保留原空间索引，并补充生物群系、省份、文化、宗教和温度字段。
-- 已按 `docs/gl-reimplementation-acceptance-plan.md` 完成步骤 1.4：
+- 已按 `docs/plans/gl-reimplementation-acceptance-plan.md` 完成步骤 1.4：
   - 快照导出新增 `pack.routes`，保留 `roads`、`trails`、`searoutes` 分组和路线点列。
   - 新增 `lines.js`，统一构建河流、路线、国家边界和省份边界四类 WebGL line layer。
   - 国家边界和省份边界已拆成独立图层，`setLayerVisible("borders")` 仍保留为兼容别名。
   - UI 新增省份边界和路线开关，统计面板显示四类线图层线段数、路线数量和路线分组。
   - 当前仍使用 `gl.LINES`，宽线、join/cap、dash 和 line picking 放入后续步骤。
-- 已按 `docs/gl-reimplementation-acceptance-plan.md` 完成步骤 1.5：
+- 已按 `docs/plans/gl-reimplementation-acceptance-plan.md` 完成步骤 1.5：
   - 快照导出新增 `grid.cells.prec`、`pack.cells.pop`、`pack.cells.burg`、`pack.burgs` 和 `pack.markers`。
   - 新增 `points.js`，统一构建降水、人口、城市/港口和 marker 四类 WebGL point layer。
   - UI 新增四类点层开关，统计面板显示点层数量、港口数量和 marker 分组。
   - 当前仍使用 `gl.POINTS` 占位，sprite atlas、LOD 和对象级 picking 放入后续步骤。
-- 已按 `docs/gl-reimplementation-acceptance-plan.md` 完成步骤 1.6：
+- 已按 `docs/plans/gl-reimplementation-acceptance-plan.md` 完成步骤 1.6：
   - 快照导出新增普通城市标签、国家标签占位和纹章占位所需的轻量语义数据。
   - 新增 `overlays.js`，用 HTML/SVG overlay 表达城市标签、国家中心标签占位和纹章 badge 占位。
   - overlay 通过 renderer 的 view listener 跟随 WebGL camera，容器 `pointer-events: none`，不阻塞 canvas 拖拽、缩放和 hover picking。
@@ -580,8 +580,13 @@ http://127.0.0.1:5410
 16. 河流面板下一刀暂不做河道拖点、源头/河口修正或支流结构调整；cells 级河流编辑要等 renderer 局部 buffer 和 objectPickingIndex 重建规则更明确后再做。
 17. 城市/聚落面板第二刀 A 已完成：新增城市人口编辑命令，支持 EditHistory 撤销/重做，并同步 `settlements.cities[id].population` 与对应 `pack.burgs[burgId].population`；城市详情已加入人口输入、归属一致性/落水异常提示，以及低风险“同步归属到所在 cell”操作。该同步只按城市当前 `packCell` 回填 city/burg 的国家与省份字段，不提供任意迁国/迁省下拉。
 18. 城市/聚落面板后续仍暂缓新增/删除城市、移动位置、自由迁国/迁省、港口重算、路线重算和标签手动布局；下一刀可在本轮一致性提示基础上做城市移动/港口派生设计，或转向文化/宗教/生物群系统计面板。
-19. 经济和军事系统都暂缓；经济链路作为已识别缺口保留到后续阶段，军事系统与军事编辑器暂不推进。
-20. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/floating-panel-architecture.md`。
+19. 文化管理面板第一刀已完成：新增独立浮动“文化管理”面板，支持文化列表、筛选、排序、快速定位、选中高亮、名称编辑、颜色编辑、覆盖 cells、面积、乡村/城市人口、城市数和主要国家分布统计；文化专题颜色会优先读取文化对象颜色。文化 cell 归属笔刷、中心迁移、扩张参数编辑和宗教联动重算暂缓。
+20. 文化命名风格第一刀已完成：`european` / `english` 文化集会把文化对象标记为 `nameStyle: "European"`，城市、港口、国家、省份、河流和湖泊命名会读取文化命名风格并输出中文音译风名称，例如 `雷恩郡`、`温德堡自由邦`、`莱茵江`，避免纯外文名。文化管理面板详情会显示“命名风格”。后续可把命名风格做成文化编辑器字段，并继续补东方、古典、黑暗奇幻等风格包。
+21. 宗教管理面板第一刀已完成：新增独立浮动“宗教管理”面板，支持宗教列表、筛选、排序、快速定位、选中高亮、名称编辑、颜色编辑、覆盖 cells、面积、乡村/城市人口、城市数、主要国家和主要文化统计；宗教专题颜色会优先读取宗教对象颜色。宗教 cell 归属笔刷、中心迁移、扩张参数编辑、文化/国家/城市宗教联动重算暂缓。
+22. Vue SFC + Pinia 第一刀已完成：正式应用改为 Vite 入口，使用本地 ESM SFC，不走 CDN；已抽出 `UiButton`、`UiTabs`、`UiSegmented`、`UiField`、`UiSwitchField`、`UiSliderField`、`UiLayerToggleButton` 和 `UiMetricGrid` 等基础组件。控制面板已迁为真实 `ControlPanel.vue`，高度编辑面板已迁为真实 `HeightPanel.vue`；专题、图层、生成配置和管理入口仍保留原 id/data 契约，由现有 runtime 事件驱动。Pinia 只接管轻量编辑状态和全局配置偏好，专题、图层显隐、“高度专题显示海底”和城市标签上限继续同步到 `localStorage`。WebGL 地图数据、pack/grid、renderer buffer、picking index 等渲染优先状态仍留在 runtime/renderer，不进入 Pinia。
+23. Vue 对象面板基础层已完成第一刀：已新增 `UiFilterInput`、`UiSortBar`、`UiObjectTable`、`UiDetailGrid`、`UiHistoryActions`、`UiTextEditField`、`UiColorField` 和 `UiNumberField`。路线面板已迁为真实 `RoutePanel.vue`，对象详情面板已迁为真实 `ObjectDetailsPanel.vue`，并继续保留原外部 API 和编辑关闭保护逻辑。下一批建议迁移河流、文化、宗教这类列表 + 详情 + 轻编辑面板，再迁城市、国家、省份等复杂编辑面板。
+24. 经济和军事系统都暂缓；经济链路作为已识别缺口保留到后续阶段，军事系统与军事编辑器暂不推进。
+25. 后续 UI 面板仍需遵循 HTML 浮动可拖动方向，不使用 canvas 实现；该架构约束继续保留在 `docs/architecture/floating-panel-architecture.md`。
 
 ## 约束
 
@@ -589,4 +594,4 @@ http://127.0.0.1:5410
 - `source/` 只读参考；允许为运行参考项目安装依赖并产生锁文件，例如 `pnpm-lock.yaml`，但不得修改原项目源码。
 - 所有文档继续使用中文。
 - 代码注释保持必要且克制。
-- UI 面板长期目标是普通 DOM/HTML 浮动可拖动面板，不使用 canvas 绘制面板；当前对象详情已开始迁入浮动面板，现有固定配置面板仍是阶段性实现。架构约束见 `docs/floating-panel-architecture.md`。
+- UI 面板长期目标是普通 DOM/HTML 浮动可拖动面板，不使用 canvas 绘制面板；当前对象详情已开始迁入浮动面板，现有固定配置面板仍是阶段性实现。架构约束见 `docs/architecture/floating-panel-architecture.md`。

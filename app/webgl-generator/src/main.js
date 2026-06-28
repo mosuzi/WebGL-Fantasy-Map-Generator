@@ -1,6 +1,8 @@
 import {createGeneratorApp} from "./runtime/app.js";
+import {initializeVueStateBridge} from "./ui/vue/state-bridge.js";
 
 try {
+  initializeVueStateBridge(document);
   createGeneratorApp(document);
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

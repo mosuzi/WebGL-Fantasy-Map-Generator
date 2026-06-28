@@ -23,7 +23,7 @@ const browserChannel = args["browser-channel"] || args.channel || null;
 const includeScreenshot = args.screenshot === true || args.screenshot === "true";
 const viewport = parseViewport(args.viewport || "1440x960");
 const caseName = sanitizeFileName(args.name || `${template}-${cells}-${seed}`);
-const outDir = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "source-baselines", caseName));
+const outDir = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "generated", "source-baselines", caseName));
 
 if (!existsSync(appDir)) fail(`App directory does not exist: ${appDir}`);
 mkdirSync(outDir, {recursive: true});

@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url";
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = parseArgs(process.argv.slice(2));
 const caseName = args.case || "mediterranean-100000-audit-mediterranean-001";
-const caseDir = resolve(args.caseDir || args["case-dir"] || join(rootDir, "docs", "source-baselines", caseName));
+const caseDir = resolve(args.caseDir || args["case-dir"] || join(rootDir, "docs", "generated", "source-baselines", caseName));
 const sourcePath = resolve(args.source || join(caseDir, "source-summary.json"));
 const candidatePath = resolve(args.candidate || join(caseDir, "candidate-summary.json"));
 const outPath = resolve(args.out || join(caseDir, "diff.json"));

@@ -34,7 +34,7 @@
 完成内容：
 
 - 新增 `tools/fmg-profile.mjs`。
-- 新增 `docs/performance-baseline.md`。
+- 新增 `docs/performance/performance-baseline.md`。
 - profiling 工具设计为外部 harness，不修改 `source/`。
 - 工具会在 Playwright 页面运行时注入 `window.__fmgProfile()`。
 - 工具支持启动 Vite dev server，或连接已有 `--url`。
@@ -61,7 +61,7 @@
 - 新增 `AGENTS.md` 作为后续智能体固定接手入口。
 - 新增 `docs/current-plan.md` 记录当前计划和下一步。
 - 新增本文件 `docs/development-log.md`。
-- 将 `docs/performance-baseline.md` 改写为中文。
+- 将 `docs/performance/performance-baseline.md` 改写为中文。
 - 将 profiling 脚本生成的 Markdown 报告改为中文标题和表头。
 - 给 `tools/fmg-profile.mjs` 补充必要注释。
 
@@ -86,7 +86,7 @@
 - 改用 `5300` 端口后，Vite 端口问题解除。
 - 新阻塞变为 Playwright 自带 Chromium 未安装，且 `npx playwright install chromium` 下载超时。
 - 为 `tools/fmg-profile.mjs` 增加 `--browser-channel chrome|msedge` 支持，并在 Playwright 自带浏览器缺失时自动尝试系统 Chrome 或 Edge。
-- 使用 `--port 5300 --browser-channel chrome --cells 10000` 跑通烟测，生成 `docs/performance-baseline-smoke.json` 和 `docs/performance-baseline-smoke.md`。
+- 使用 `--port 5300 --browser-channel chrome --cells 10000` 跑通烟测，生成 `docs/generated/reports/performance-baseline-smoke.json` 和 `docs/generated/reports/performance-baseline-smoke.md`。
 - 烟测结果已写出，但命令最终超时，原因是 Windows 下 Vite/npm/cmd/node 子进程树没有被完整回收。
 - 为 `tools/fmg-profile.mjs` 增加 Windows `taskkill /T /F` 进程树清理逻辑。
 
@@ -113,8 +113,8 @@
 - 执行 `node --check tools\fmg-profile.mjs`，语法检查通过。
 - 使用 Node 26、端口 `5300`、系统 Chrome 跑通完整三档基线。
 - 生成并覆盖可信结果：
-  - `docs/performance-baseline-results.json`
-  - `docs/performance-baseline-results.md`
+  - `docs/generated/reports/performance-baseline-results.json`
+  - `docs/generated/reports/performance-baseline-results.md`
 
 本次可信基线摘要：
 
@@ -152,7 +152,7 @@
   - `src/renderer.js`：原生 WebGL2 cell 渲染器。
   - `src/styles.css`：原型样式。
   - `data/sample-map.json`：10k 目标 cells 的真实 FMG 运行时快照。
-- 新增 `docs/milestone-1-webgl-prototype.md` 记录实现说明、运行方式和当前边界。
+- 新增 `docs/milestones/milestone-1-webgl-prototype.md` 记录实现说明、运行方式和当前边界。
 
 当前原型数据：
 
@@ -249,8 +249,8 @@
 - 在悬停面板中新增单次 picking 指标：
   - 当前命中的候选 cell 数量。
   - picking 耗时。
-- 更新 `docs/current-plan.md`、`docs/milestone-1-webgl-prototype.md` 和 `AGENTS.md`。
-- 新增 `docs/webgl-svg-performance-comparison.md`，记录 WebGL 原型与 SVG 基线的阶段性对照。
+- 更新 `docs/current-plan.md`、`docs/milestones/milestone-1-webgl-prototype.md` 和 `AGENTS.md`。
+- 新增 `docs/performance/webgl-svg-performance-comparison.md`，记录 WebGL 原型与 SVG 基线的阶段性对照。
 
 当前验证结果：
 
@@ -306,7 +306,7 @@
 - 扩展 demo UI：
   - 新增河流图层开关。
   - 统计面板显示河流数量和河流线段数。
-- 更新 `docs/current-plan.md`、`docs/milestone-1-webgl-prototype.md` 和 `AGENTS.md`。
+- 更新 `docs/current-plan.md`、`docs/milestones/milestone-1-webgl-prototype.md` 和 `AGENTS.md`。
 
 当前验证结果：
 
@@ -372,7 +372,7 @@
   - `pick(screenX, screenY)`：统一 picking 入口。
   - `getStats()`：返回 metadata、geometry、picking、performance、layers 和 camera。
 - 更新 `prototype/webgl-cells/src/main.js`，让 demo UI 使用新接口。
-- 更新 `docs/current-plan.md`、`docs/milestone-1-webgl-prototype.md`、`docs/webgl-svg-performance-comparison.md` 和 `AGENTS.md`。
+- 更新 `docs/current-plan.md`、`docs/milestones/milestone-1-webgl-prototype.md`、`docs/performance/webgl-svg-performance-comparison.md` 和 `AGENTS.md`。
 
 验证情况：
 
@@ -414,9 +414,9 @@
   - 验证切换国家/高度模式、关闭/打开河流图层后的绘制耗时。
   - 输出 JSON 和中文 Markdown。
 - 生成当前采集结果：
-  - `docs/webgl-prototype-profile-results.json`
-  - `docs/webgl-prototype-profile-results.md`
-- 更新 `AGENTS.md`、`docs/current-plan.md`、`docs/milestone-1-webgl-prototype.md` 和 `docs/webgl-svg-performance-comparison.md`。
+  - `docs/generated/reports/webgl-prototype-profile-results.json`
+  - `docs/generated/reports/webgl-prototype-profile-results.md`
+- 更新 `AGENTS.md`、`docs/current-plan.md`、`docs/milestones/milestone-1-webgl-prototype.md` 和 `docs/performance/webgl-svg-performance-comparison.md`。
 
 当前采集结果：
 
@@ -487,9 +487,9 @@
   - 统计面板显示 `pack cells`、`grid cells`、渲染来源、渲染 cells、渲染顶点。
 - 重新导出 `prototype/webgl-cells/data/sample-map.json`。
 - 重新生成 WebGL 性能采集报告：
-  - `docs/webgl-prototype-profile-results.json`
-  - `docs/webgl-prototype-profile-results.md`
-- 更新 `AGENTS.md`、`docs/current-plan.md`、`docs/milestone-1-webgl-prototype.md` 和 `docs/webgl-svg-performance-comparison.md`。
+  - `docs/generated/reports/webgl-prototype-profile-results.json`
+  - `docs/generated/reports/webgl-prototype-profile-results.md`
+- 更新 `AGENTS.md`、`docs/current-plan.md`、`docs/milestones/milestone-1-webgl-prototype.md` 和 `docs/performance/webgl-svg-performance-comparison.md`。
 
 当前快照摘要：
 
@@ -563,9 +563,9 @@
   - 新增 `lerpPoint()`。
   - 当河流折线遇到第一个水域 cell 时，在上一陆地中心点和当前水域中心点之间插入一个近似河口点，然后停止绘制。
 - 重新运行 WebGL 原型性能采集：
-  - `docs/webgl-prototype-profile-results.json`
-  - `docs/webgl-prototype-profile-results.md`
-- 更新 `AGENTS.md`、`docs/current-plan.md`、`docs/milestone-1-webgl-prototype.md` 和 `docs/webgl-svg-performance-comparison.md`。
+  - `docs/generated/reports/webgl-prototype-profile-results.json`
+  - `docs/generated/reports/webgl-prototype-profile-results.md`
+- 更新 `AGENTS.md`、`docs/current-plan.md`、`docs/milestones/milestone-1-webgl-prototype.md` 和 `docs/performance/webgl-svg-performance-comparison.md`。
 
 当前结果：
 
@@ -601,7 +601,7 @@
 
 ## 2026-06-16：完成步骤 1.1 demo 渲染器模块化
 
-按 `docs/gl-reimplementation-acceptance-plan.md` 的“步骤 1.1：demo 渲染器模块化”执行。本步只改 `prototype/webgl-cells/src/` 和项目中文文档，不修改 `source/`。
+按 `docs/plans/gl-reimplementation-acceptance-plan.md` 的“步骤 1.1：demo 渲染器模块化”执行。本步只改 `prototype/webgl-cells/src/` 和项目中文文档，不修改 `source/`。
 
 完成内容：
 
@@ -679,11 +679,11 @@
 
 下一步：
 
-- 按 `docs/gl-reimplementation-acceptance-plan.md` 进入步骤 1.2：基础底图和 feature 图层。
+- 按 `docs/plans/gl-reimplementation-acceptance-plan.md` 进入步骤 1.2：基础底图和 feature 图层。
 
 ## 2026-06-16：完成步骤 1.2 基础底图和 feature 图层
 
-按 `docs/gl-reimplementation-acceptance-plan.md` 的“步骤 1.2：基础底图和 feature 图层”执行。本步只改 `tools/`、`prototype/webgl-cells/` 和中文文档，不修改 `source/`。
+按 `docs/plans/gl-reimplementation-acceptance-plan.md` 的“步骤 1.2：基础底图和 feature 图层”执行。本步只改 `tools/`、`prototype/webgl-cells/` 和中文文档，不修改 `source/`。
 
 完成内容：
 
@@ -781,11 +781,11 @@
 
 下一步：
 
-- 按 `docs/gl-reimplementation-acceptance-plan.md` 进入步骤 1.3：专题面图层。
+- 按 `docs/plans/gl-reimplementation-acceptance-plan.md` 进入步骤 1.3：专题面图层。
 
 ## 2026-06-16：完成步骤 1.3 专题面图层
 
-按 `docs/gl-reimplementation-acceptance-plan.md` 的“步骤 1.3：专题面图层”执行。本步只改 `tools/`、`prototype/webgl-cells/` 和中文文档，不修改 `source/`。
+按 `docs/plans/gl-reimplementation-acceptance-plan.md` 的“步骤 1.3：专题面图层”执行。本步只改 `tools/`、`prototype/webgl-cells/` 和中文文档，不修改 `source/`。
 
 完成内容：
 
@@ -893,7 +893,7 @@
 
 下一步：
 
-- 按 `docs/gl-reimplementation-acceptance-plan.md` 进入步骤 1.4：线图层。
+- 按 `docs/plans/gl-reimplementation-acceptance-plan.md` 进入步骤 1.4：线图层。
 
 ## 2026-06-16：步骤 1.4 线图层实施
 
@@ -1006,12 +1006,12 @@
 
 下一步：
 
-- 按 `docs/gl-reimplementation-acceptance-plan.md` 进入步骤 1.5：点图层和高节点图层。
+- 按 `docs/plans/gl-reimplementation-acceptance-plan.md` 进入步骤 1.5：点图层和高节点图层。
 - 优先覆盖 `population`、`prec`、`burgIcons`、`markers` 等 SVG 节点压力较大的图层。
 
 ## 2026-06-16：步骤 1.5 点图层和高节点图层
 
-本轮由“尚书”实施 `docs/gl-reimplementation-acceptance-plan.md` 的步骤 1.5。开工前执行 `git status --short`，确认工作区存在多人流水线既有未提交改动；本步没有回退或覆盖其他人的改动，也没有修改 `source/`。
+本轮由“尚书”实施 `docs/plans/gl-reimplementation-acceptance-plan.md` 的步骤 1.5。开工前执行 `git status --short`，确认工作区存在多人流水线既有未提交改动；本步没有回退或覆盖其他人的改动，也没有修改 `source/`。
 
 主要改动：
 
@@ -1118,11 +1118,11 @@
 
 下一步：
 
-- 按 `docs/gl-reimplementation-acceptance-plan.md` 进入步骤 1.6：文本和纹章 demo 策略。
+- 按 `docs/plans/gl-reimplementation-acceptance-plan.md` 进入步骤 1.6：文本和纹章 demo 策略。
 
 ## 2026-06-17：步骤 1.6 文本和纹章 demo 策略
 
-本轮由“尚书”实施 `docs/gl-reimplementation-acceptance-plan.md` 的步骤 1.6。开工前执行 `git status --short`，确认工作区存在多人流水线既有未提交改动，且 `prototype/webgl-cells/data/sample-map.json` 仍有暂存区/工作区不一致状态；本步没有回退或覆盖其他人的改动，也没有修改 `source/`。
+本轮由“尚书”实施 `docs/plans/gl-reimplementation-acceptance-plan.md` 的步骤 1.6。开工前执行 `git status --short`，确认工作区存在多人流水线既有未提交改动，且 `prototype/webgl-cells/data/sample-map.json` 仍有暂存区/工作区不一致状态；本步没有回退或覆盖其他人的改动，也没有修改 `source/`。
 
 主要改动：
 
@@ -1149,7 +1149,7 @@
   - 新增城市标签、国家标签占位、纹章占位三个开关。
   - 统计面板新增 overlay 可见/渲染数量和短期策略说明。
   - `window.__fmgMapOverlays` 暴露 overlay 管理器，方便门下和侍中检查。
-- `docs/current-plan.md`、`docs/milestone-1-webgl-prototype.md`、`docs/webgl-svg-performance-comparison.md`：
+- `docs/current-plan.md`、`docs/milestones/milestone-1-webgl-prototype.md`、`docs/performance/webgl-svg-performance-comparison.md`：
   - 记录步骤 1.6 的实现内容、当前样本统计、验证结果和限制。
 
 重新导出的默认 100k 快照：
@@ -1249,11 +1249,11 @@
 
 - `AGENTS.md`：项目目标改为独立 WebGL 地图生成器复刻，明确 `source/` 只读参考边界。
 - `docs/current-plan.md`：下一步改为阶段 2 独立生成器工程骨架和生成内核。
-- `docs/gl-reimplementation-acceptance-plan.md`：重写为“WebGL 地图生成器复刻可验收计划”，删除接入源项目主视图、GL 模式替换原图层等旧路线。
+- `docs/plans/gl-reimplementation-acceptance-plan.md`：重写为“WebGL 地图生成器复刻可验收计划”，删除接入源项目主视图、GL 模式替换原图层等旧路线。
 
 下一步：
 
-- 尚书从 `docs/gl-reimplementation-acceptance-plan.md` 的 **步骤 2.1：正式应用目录和运行时边界** 开始。
+- 尚书从 `docs/plans/gl-reimplementation-acceptance-plan.md` 的 **步骤 2.1：正式应用目录和运行时边界** 开始。
 - 门下重点检查 `source/` 是否保持未修改。
 - 侍中打开新应用页面，验证独立应用可运行、画面非空、控制台无关键错误。
 
@@ -1557,7 +1557,7 @@
 
 ## 2026-06-17：开始阶段 2 正式应用骨架
 
-用户要求保留已有 demo，并开始正式开发。本轮启用“太子-尚书-门下-侍中”流程，按 `docs/gl-reimplementation-acceptance-plan.md` 的步骤 2.1 执行。
+用户要求保留已有 demo，并开始正式开发。本轮启用“太子-尚书-门下-侍中”流程，按 `docs/plans/gl-reimplementation-acceptance-plan.md` 的步骤 2.1 执行。
 
 太子规划：
 
@@ -2816,14 +2816,14 @@
 
 按用户要求，所有未来配置和编辑面板都应做成 HTML 浮动可拖动面板，不使用 canvas 实现。本步骤只落文档，不改现有侧栏。
 
-- 新增 `docs/floating-panel-architecture.md`：
+- 新增 `docs/architecture/floating-panel-architecture.md`：
   - 记录适用面板范围：生成配置、高度编辑、河流编辑、城市/道路编辑、国家/省份/文化/宗教编辑、标签/纹章/对象详情、调试统计和图层控制。
   - 记录基本原则：普通 DOM UI、可拖动、统一层级管理、可折叠/关闭/停靠、状态可持久化。
   - 记录与地图交互的边界：renderer 不直接创建业务编辑面板，picking/selection/highlight 属于地图交互层，详情面板读取 runtime/store 状态。
   - 记录推荐模块划分：`panel-manager.js`、`floating-panel.js`、各类 `panels/*`。
   - 记录第一阶段迁移建议：先保留固定侧栏，新增 panel manager 和只读对象详情面板，再逐步迁移图层控制和生成配置。
 - 更新 `docs/current-plan.md` 和 `app/webgl-generator/README.md`：
-  - 将未来浮动面板约束链接到 `docs/floating-panel-architecture.md`。
+  - 将未来浮动面板约束链接到 `docs/architecture/floating-panel-architecture.md`。
 
 当前状态：
 
@@ -2848,7 +2848,7 @@
   - 生成新地图时关闭对象详情面板并清空 selection。
 - `app/webgl-generator/src/styles.css`：
   - 新增浮动面板层、面板壳、标题栏、关闭按钮和对象详情列表样式。
-- `app/webgl-generator/README.md`、`docs/current-plan.md` 和 `docs/floating-panel-architecture.md`：
+- `app/webgl-generator/README.md`、`docs/current-plan.md` 和 `docs/architecture/floating-panel-architecture.md`：
   - 将对象详情面板从未来约束更新为当前已开始实现。
   - 记录当前仍是只读入口，尚未实现编辑、停靠、持久化和多面板状态恢复。
 
@@ -2922,7 +2922,7 @@
   - 拖动结束或取消时保存当前面板位置和宽度。
   - `open()` 时重新约束面板位置，避免窗口尺寸变化后旧位置跑出地图区域。
   - 读写 `localStorage` 使用 `try/catch` 包裹，兼容受限浏览器模式。
-- `app/webgl-generator/README.md`、`docs/current-plan.md` 和 `docs/floating-panel-architecture.md`：
+- `app/webgl-generator/README.md`、`docs/current-plan.md` 和 `docs/architecture/floating-panel-architecture.md`：
   - 记录对象详情面板已有最小位置持久化。
   - 保留限制：仍不保存打开状态、折叠状态、尺寸调整状态或多面板布局。
 
@@ -3300,7 +3300,7 @@
 - 确认 source 生成顺序是高度、feature、温度/降水、reGraph、河流、生物群系、人口评分、文化扩张、城市、国家、路线、宗教、省份等，正式应用此前部分语义层过早且使用最近中心染色。
 - 确认 source 河流基于降水 flux、填洼、湖泊出口、合流、下切和 meander；正式应用此前河源上限和阈值过保守。
 - 确认 source 路线先用城镇图决定连接，再通过水陆分离的成本寻路生成；正式应用此前贪心失败时会追加终点，导致海中直线。
-- 新增 `docs/source-generation-audit-and-rectification-plan.md`，作为本轮尚书实现、门下复核和侍中验收依据。
+- 新增 `docs/audits/source-generation-audit-and-rectification-plan.md`，作为本轮尚书实现、门下复核和侍中验收依据。
 
 尚书实现：
 
@@ -3383,7 +3383,7 @@
 
 尚书文档落地：
 
-- 新增 `docs/source-first-recovery-execution-plan.md`，作为后续 source 优先复位整改的主计划。
+- 新增 `docs/task-notes/source-first-recovery-execution-plan.md`，作为后续 source 优先复位整改的主计划。
 - 更新 `docs/current-plan.md`，在顶部标记 2026-06-18 计划复位，暂停继续叠加阶段 3 UI 和专题功能。
 - 本轮只改文档，不修改当前正式应用代码，也不修改 `source/` 原项目代码。
 
@@ -3394,7 +3394,7 @@
 
 ## 2026-06-18 独立 source 复查与详细规程
 
-用户要求启动一个新智能体再做一遍 source 检查，并对比已经生成的 `docs/source-first-recovery-execution-plan.md`，找出还缺什么。要求文档必须足够详细，能指导后续细致任务。
+用户要求启动一个新智能体再做一遍 source 检查，并对比已经生成的 `docs/task-notes/source-first-recovery-execution-plan.md`，找出还缺什么。要求文档必须足够详细，能指导后续细致任务。
 
 太子协调：
 
@@ -3408,8 +3408,8 @@
 
 尚书文档落地：
 
-- 新增 `docs/source-first-detailed-task-plan.md`，作为后续 source 优先整改的详细施工图。
-- 更新 `docs/source-first-recovery-execution-plan.md`，标记其为复位总纲，并指向详细规程。
+- 新增 `docs/task-notes/source-first-detailed-task-plan.md`，作为后续 source 优先整改的详细施工图。
+- 更新 `docs/task-notes/source-first-recovery-execution-plan.md`，标记其为复位总纲，并指向详细规程。
 - 更新 `docs/current-plan.md`，将下一步入口切换到详细规程的阶段 0。
 
 详细规程新增内容：
@@ -3425,7 +3425,7 @@
 
 ## 2026-06-18 阶段 0 source baseline 工具启动
 
-用户确认开始按太子-尚书-门下-侍中四级流程推进，且无特殊情况不用每一步停下来等指示。当前正式进入 `docs/source-first-detailed-task-plan.md` 的阶段 0：建立 source 对照基线。
+用户确认开始按太子-尚书-门下-侍中四级流程推进，且无特殊情况不用每一步停下来等指示。当前正式进入 `docs/task-notes/source-first-detailed-task-plan.md` 的阶段 0：建立 source 对照基线。
 
 太子计划：
 
@@ -3436,7 +3436,7 @@
 尚书实施：
 
 - 新增 `tools/source-export-baseline.mjs`。
-- 更新 `docs/source-first-detailed-task-plan.md`，记录第一版工具命令和产物。
+- 更新 `docs/task-notes/source-first-detailed-task-plan.md`，记录第一版工具命令和产物。
 
 待门下和侍中继续：
 
@@ -3445,7 +3445,7 @@
 
 侍中验收结果：
 
-- 成功导出 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/source-summary.json`。
+- 成功导出 `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/source-summary.json`。
 - 成功导出 `source-trace.json`、`source-map.png` 和 `validation.md`。
 - 关键摘要：grid cells 99846，pack cells 73028，pack/grid 0.731，陆地比例 0.611，河流 956，城市 1724，港口 230，国家 21，路线 1331。
 - 结构检查：pack grid 引用错误 0，haven 错误 0，harbor 不一致 0，route 非双向 0，陆路穿水 0。
@@ -3462,12 +3462,12 @@
 尚书实施：
 
 - 新增 `tools/source-baseline-matrix.mjs`。
-- 更新 `docs/source-first-detailed-task-plan.md`，记录 quick/full 矩阵命令和产物。
+- 更新 `docs/task-notes/source-first-detailed-task-plan.md`，记录 quick/full 矩阵命令和产物。
 
 待门下和侍中继续：
 
 - 门下运行语法检查、diff 检查和 source 未改检查。
-- 侍中运行 quick matrix，生成 `docs/source-baselines/matrix.json` 和 `docs/source-baselines/matrix.md`。
+- 侍中运行 quick matrix，生成 `docs/generated/source-baselines/matrix.json` 和 `docs/generated/source-baselines/matrix.md`。
 
 门下复核：
 
@@ -3480,10 +3480,10 @@
 
 - 成功运行 `node .\tools\source-baseline-matrix.mjs --mode quick --port 5301 --browser-channel chrome`。
 - 产物：
-  - `docs/source-baselines/matrix.json`
-  - `docs/source-baselines/matrix.md`
-  - `docs/source-baselines/continents-100000-audit-continents-001/`
-  - `docs/source-baselines/archipelago-100000-audit-archipelago-001/`
+  - `docs/generated/source-baselines/matrix.json`
+  - `docs/generated/source-baselines/matrix.md`
+  - `docs/generated/source-baselines/continents-100000-audit-continents-001/`
+  - `docs/generated/source-baselines/archipelago-100000-audit-archipelago-001/`
 - quick matrix 摘要：
   - `mediterranean`：grid 99846，pack 73028，河流 956，城市 1724，港口 230，路线 1331。
   - `continents`：grid 99846，pack 50625，河流 851，城市 1206，港口 187，路线 1041。
@@ -3525,7 +3525,7 @@
 
 侍中验收：
 
-- 成功导出 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-summary.json`。
+- 成功导出 `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-summary.json`。
 - 成功生成 `candidate-map.png`、`candidate-validation.md`、`diff.json` 和 `diff.md`。
 - 初始 diff 显示：candidate 的 `pack` 仍是一比一映射，缺少 `pack.cells.c/v/area/t/haven/harbor/fl/r/conf/s` 等字段；河流、城市、港口、海路和降水均明显偏离 source。
 
@@ -3614,7 +3614,7 @@
   - `grid.height.p50`：source `27`，candidate `26`。
   - `grid.height.p95`：source `76`，candidate `83`。
   - `features.lakes`：source `140`，candidate `112`，当前阈值通过。
-- 网页快照 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png` 已从噪声毯恢复为可辨识的地中海海盆和上下边缘山地。
+- 网页快照 `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png` 已从噪声毯恢复为可辨识的地中海海盆和上下边缘山地。
 
 当前限制：
 
@@ -3932,7 +3932,7 @@
 - 当前剩余 fail 属于后续阶段：
   - 城市和港口数量级仍偏低，进入阶段 9。
   - 国家、省份、宗教和路线仍未复刻 source 生成链，留给阶段 10 之后。
-- 本轮网页快照保存为 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。
+- 本轮网页快照保存为 `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。
 
 ## 2026-06-19 阶段 9 城市和港口第一版整改
 
@@ -4205,7 +4205,7 @@
   - 当前 diff 状态为 `warn`：`fail 0`、`warn 1`。
 - 唯一剩余 warn：
   - `grid.temperature.min`：source `-35`，candidate `-19`。
-- 网页快照保存为 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。快照未观察到旧问题中的海中陆路直线、路线乱麻或宗教迁移导致的可见密度回退。
+- 网页快照保存为 `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。快照未观察到旧问题中的海中陆路直线、路线乱麻或宗教迁移导致的可见密度回退。
 - 下一步建议：单独收紧温度最低值 warn，然后继续补齐 source 后段的命名、军事、区域和 marker 细节。
 
 ## 2026-06-19 阶段 14 温度边界第一版整改
@@ -4263,7 +4263,7 @@
   - `society.provinces`：source `477`，candidate `473`。
   - `routes.total`：source `1331`，candidate `1367`。
   - 陆路穿水 `0`，海路中段穿陆 `0`。
-- 网页快照保存为 `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。
+- 网页快照保存为 `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/candidate-map.png`。
 - 下一步建议：扩大模板/seed 矩阵回归，再补齐 source 后段的命名、军事、区域、marker 细节和统计字段。
 
 ## 2026-06-20 阶段 15 气候水文矩阵整改
@@ -4330,7 +4330,7 @@
 - 快照命令：
   - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-002 --port 5720 --browser-channel chrome --out-dir D:\work\fmg\docs\webgl-generator-snapshot-2026-06-20`
 - 快照保存：
-  - `docs/webgl-generator-snapshot-2026-06-20/candidate-map.png`
+  - `docs/generated/snapshots/webgl-generator-snapshot-2026-06-20/candidate-map.png`
 - 视觉检查：
   - 地中海 100000 样本非空、未错位。
   - 海岸、岛屿、高地、河流、城市点、路线和标签均可见。
@@ -4393,7 +4393,7 @@
 - 快照命令：
   - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir D:\work\fmg\docs\webgl-generator-snapshot-2026-06-21-stage16 --browser-channel chrome --port 5721 --timeout 180000`
 - 快照保存：
-  - `docs/webgl-generator-snapshot-2026-06-21-stage16/candidate-map.png`
+  - `docs/generated/snapshots/webgl-generator-snapshot-2026-06-21-stage16/candidate-map.png`
 - 快照验证：
   - 页面非空，阶段标识为 `source-stage-16-culture-settlement-route-parity`。
   - 地形、海岸、河流、城市点、路线和标签均可见。
@@ -4411,10 +4411,10 @@
 尚书实施：
 
 - 新增根目录 `package.json`，仅作为私有脚本入口，不引入运行依赖。
-- `pnpm start` 间接执行正式应用启动命令：`node ./tools/serve-prototype.mjs --port 5410 --dir ./app/webgl-generator`。
+- 当时的 `pnpm start` 间接执行正式应用静态托管命令：`node ./tools/serve-prototype.mjs --port 5410 --dir ./app/webgl-generator`。2026-06-28 已改为 Vite 入口，当前端口配置以 `vite.config.mjs` 为准。
 - `pnpm run start:app` 作为正式应用的显式脚本入口。
 - `pnpm run start:prototype` 间接执行旧 WebGL cells 原型启动命令：`node ./tools/serve-prototype.mjs --port 5400`。
-- 更新 `app/webgl-generator/README.md` 与 `docs/current-plan.md`，把启动方式改为优先使用 pnpm 脚本，并保留底层 node 命令说明。
+- 更新 `app/webgl-generator/README.md` 与 `docs/current-plan.md`，把启动方式改为优先使用 pnpm 脚本。
 
 ## 2026-06-24 专题视图水域底色修正
 
@@ -4428,7 +4428,7 @@
 
 尚书实施：
 
-- 将已提交的 `docs/**/*.png` 预览图片移出跟踪路径，统一保留到本地 `docs/local-preview-images/`。
+- 将已提交的 `docs/**/*.png` 预览图片移出跟踪路径，统一保留到本地 `docs/generated/local-preview-images/`。
 - 远端原图片路径通过删除提交清理；本地预览目录加入 `.gitignore`。
 - `tools/source-export-baseline.mjs` 和 `tools/webgl-generator-export-baseline.mjs` 改为默认只输出 JSON/Markdown 验收产物；需要视觉预览时显式传入 `--screenshot true`。
 - 已有 source baseline 的 `validation.md` 截图行改为说明本地预览图片不纳入版本库，避免文档继续指向远端已删除的 PNG。
@@ -4487,7 +4487,7 @@
 
 侍中验收：
 
-- `docs/source-baselines/candidate-matrix.json` 与 `docs/source-baselines/candidate-matrix.md` 均显示完整 63 case `pass`。
+- `docs/generated/source-baselines/candidate-matrix.json` 与 `docs/generated/source-baselines/candidate-matrix.md` 均显示完整 63 case `pass`。
 - 本阶段没有新增或跟踪 PNG 预览图；视觉快照仍按需本地生成并放入忽略目录。
 - `source/` 原项目代码未作为改造目标；本轮仅刷新 source baseline summary 字段和临时分析 snapshot。
 
@@ -4569,7 +4569,7 @@
 - 推荐 `cnchar-name@3.2.6` 作为阶段 18 中文命名库参考和数据来源。
 - 不直接在正式应用中裸导入 npm 包，因为当前应用仍是原生 ESM + 静态服务器，没有打包器，浏览器端无法稳定解析裸包名。
 - 下一步应新增 `app/webgl-generator/src/generator/names.js`，用本地 seedable wrapper 承接中文根名池、地名后缀和对象类型规则。
-- 详细评估记录见 `docs/chinese-naming-library-evaluation.md`。
+- 详细评估记录见 `docs/task-notes/chinese-naming-library-evaluation.md`。
 
 下一步建议：
 
@@ -4942,11 +4942,11 @@
   - 记录 source `5de7deb4` 的结构迁移和经济管线新增事实。
   - 下一步改为先刷新 source/candidate baseline schema，新增 `goods/markets/production/deals/taxes` 摘要字段。
   - 若新增经济字段出现 fail，下一阶段进入阶段 19 经济链路第一刀。
-- 更新 `docs/source-first-recovery-execution-plan.md`：
+- 更新 `docs/task-notes/source-first-recovery-execution-plan.md`：
   - 活跃源码路径改为 `src/generators/*`。
   - 补充 `src/controllers/*`、`src/renderers/*`、`src/services/*` 的新结构边界。
   - 在生成链结论中加入 goods catalog、经济阶段和 overlays 阶段。
-- 更新 `docs/source-first-detailed-task-plan.md`：
+- 更新 `docs/task-notes/source-first-detailed-task-plan.md`：
   - 将旧 `src/modules/*` 活跃路径替换为 `src/generators/*`。
   - 新增“2026-06-26 source 更新校正”说明。
   - 新增阶段 19：经济、市场、生产、税收。
@@ -4985,9 +4985,9 @@
   - Vite 重新优化依赖时无法删除 `source/Fantasy-Map-Generator/node_modules/.vite/deps/alea.js.map`。
   - 精确错误为 `EPERM: operation not permitted, unlink ... alea.js.map`，随后等待 `http://127.0.0.1:5301` 超时。
 - 提升权限重跑 source 导出成功，刷新：
-  - `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/source-summary.json`
-  - `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/source-trace.json`
-  - `docs/source-baselines/mediterranean-100000-audit-mediterranean-001/validation.md`
+  - `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/source-summary.json`
+  - `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/source-trace.json`
+  - `docs/generated/source-baselines/mediterranean-100000-audit-mediterranean-001/validation.md`
 - 刷新 candidate 与 diff：
   - `node .\tools\webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --out-dir .\docs\source-baselines\mediterranean-100000-audit-mediterranean-001 --browser-channel chrome --timeout 180000 --screenshot false`
   - `node .\tools\baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001`
@@ -5150,7 +5150,7 @@
 后续约束修正：
 
 - 用户确认 demo 形态可以接受，但正式版河流统计/管理面板必须是独立浮动面板，不应与其它面板混用。
-- 已更新 `docs/floating-panel-architecture.md`：正式版河流统计、全量列表、筛选、长度/流量排序、定位、河道编辑和撤销入口归入独立 `panels/river-panel.js`；对象详情面板只可显示摘要和打开入口，不承载完整河流管理。
+- 已更新 `docs/architecture/floating-panel-architecture.md`：正式版河流统计、全量列表、筛选、长度/流量排序、定位、河道编辑和撤销入口归入独立 `panels/river-panel.js`；对象详情面板只可显示摘要和打开入口，不承载完整河流管理。
 - 已更新 `docs/current-plan.md`：明确 demo 的侧栏混合布局只是交互验证，正式应用不得照搬。
 
 ## 2026-06-27 正式版河流宽度 flux 修复
@@ -5196,7 +5196,7 @@
 
 实施：
 
-- 新增 `docs/editor-and-stat-panel-inventory.md`：
+- 新增 `docs/task-notes/editor-and-stat-panel-inventory.md`：
   - 按生成、图层、对象详情、地形环境、水文线性对象、政治社会对象、标签视觉对象和暂缓系统分组。
   - 明确每个领域是否需要编辑器、是否需要统计面板、编辑范围、统计范围和优先级。
   - 将河流面板列为最高优先级，要求正式版做成独立浮动 `river-panel`。
@@ -5367,7 +5367,7 @@
 - 收窄 river-panel 行对象与完整 river 数据的混淆风险：
   - selection 摘要中的 `length` 改为数字，不再传格式化字符串。
   - 完整编辑数据解析仍留给后续 object resolver 和具体编辑命令处理。
-- 修正 `app/webgl-generator/README.md` 与 `docs/floating-panel-architecture.md` 中对象详情、河流 mesh 和已接入面板的旧描述。
+- 修正 `app/webgl-generator/README.md` 与 `docs/architecture/floating-panel-architecture.md` 中对象详情、河流 mesh 和已接入面板的旧描述。
 
 补充验收：
 
@@ -6776,3 +6776,405 @@
 
 - 新用户或清空 localStorage 后，城市标签候选默认覆盖当前地图全部城市。
 - 用户已经在浏览器 localStorage 中手动设置过较小上限时，仍尊重用户保存的偏好。
+
+## 2026-06-28 文化管理面板第一刀
+
+目标：
+
+- 进入第三批区域实体面板，先完成文化管理面板第一刀。
+- 本刀只做管理、统计、定位、名称和颜色编辑，不做文化 cell 归属笔刷、中心迁移、扩张参数编辑或宗教联动重算。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/panels/culture-panel.js`：
+  - 支持文化列表、筛选、排序、选中、定位、名称编辑、颜色编辑和 EditHistory 撤销/重做。
+  - 详情展示文化词根、类型、扩张值、中心 pack/grid cell、覆盖 cells、面积、乡村人口、城市人口、城市数和主要国家分布。
+- 新增 `app/webgl-generator/src/runtime/culture-edit-commands.js`：
+  - `createSetCultureColorCommand()` 校验 `#rrggbb` 颜色，写入文化对象颜色，并支持撤销/重做。
+- 修改 `app/webgl-generator/src/runtime/object-edit-commands.js`：
+  - 通用对象重命名支持 `culture`，并同步更新文化 `root`。
+- 修改 `app/webgl-generator/src/runtime/app.js` 和 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - 控制面板“管理”tab 新增“文化管理”入口。
+  - runtime 接入文化选择、定位、名称编辑、颜色编辑、撤销和重做。
+- 修改 `app/webgl-generator/src/renderer/picking.js`、`app/webgl-generator/src/runtime/object-resolver.js` 和 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 文化专题点击地图时可产生 `culture` 对象。
+  - `locateObject()` 和选中高亮支持文化区域。
+  - 文化专题颜色优先读取 `map.society.cultures[id].color`，缺失时回退 indexed color。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 新增文化面板摘要、筛选、排序、详情、名称编辑、颜色编辑和历史操作的样式。
+
+暂缓：
+
+- 不做文化 cell 归属笔刷。
+- 不做文化中心移动。
+- 不做扩张参数编辑。
+- 不重算宗教、国家、城市或路线派生链。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/runtime/app.js`
+  - `app/webgl-generator/src/ui/panels/culture-panel.js`
+  - `app/webgl-generator/src/runtime/culture-edit-commands.js`
+  - `app/webgl-generator/src/runtime/object-edit-commands.js`
+  - `app/webgl-generator/src/ui/panel.js`
+  - `app/webgl-generator/src/ui/panels/generation-panel.js`
+  - `app/webgl-generator/src/renderer/placeholder-renderer.js`
+  - `app/webgl-generator/src/renderer/picking.js`
+  - `app/webgl-generator/src/runtime/object-resolver.js`
+- `git diff --check` 通过。
+- Playwright 临时静态 server 验证正式应用：
+  - 打开 `文化管理` 面板，默认样本显示 `12` 个文化。
+  - 文化名称 `栖梧文化 -> 栖梧新文化`，撤销/重做均生效，`root` 同步为 `栖梧新`。
+  - 文化颜色改为 `#33aa77` 后触发 `culture-color, cell-colors, object-panels` 刷新，撤销后恢复无自定义颜色状态。
+  - `renderer.locateObject({kind: "culture", id: 1})` 成功，定位状态为 `culture #1`，选中高亮为 `culture red flash`。
+  - 文化专题下点击远离城市标签的文化 cell，可选中 `culture #1` 并自动打开文化面板。
+
+## 2026-06-28 宗教管理面板第一刀
+
+目标：
+
+- 延续文化管理面板的形态，补齐宗教管理面板第一刀。
+- 本刀只做管理、统计、定位、名称和颜色编辑，不做宗教 cell 归属笔刷、中心迁移、扩张参数编辑或文化/国家/城市宗教联动重算。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/panels/religion-panel.js`：
+  - 支持宗教列表、筛选、排序、选中、定位、名称编辑、颜色编辑和 EditHistory 撤销/重做。
+  - 详情展示宗教类型、形态、扩张范围、扩张强度、主神、所属文化、中心 pack/grid cell、覆盖 cells、面积、乡村人口、城市人口、城市数、主要国家和主要文化。
+- 新增 `app/webgl-generator/src/runtime/religion-edit-commands.js`：
+  - `createSetReligionColorCommand()` 校验 `#rrggbb` 颜色，写入宗教对象颜色，并支持撤销/重做。
+- 修改 `app/webgl-generator/src/runtime/object-edit-commands.js`：
+  - 通用对象重命名支持 `religion`。
+- 修改 `app/webgl-generator/src/runtime/app.js`、`app/webgl-generator/src/ui/panel.js` 和 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - 控制面板“管理”tab 新增“宗教管理”入口。
+  - runtime 接入宗教选择、定位、名称编辑、颜色编辑、撤销和重做。
+  - 通用对象标题和详情格式补充 `religion`。
+- 修改 `app/webgl-generator/src/renderer/picking.js`、`app/webgl-generator/src/runtime/object-resolver.js` 和 `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 宗教专题点击地图时可产生 `religion` 对象。
+  - `locateObject()` 和选中高亮支持宗教区域。
+  - 宗教专题颜色优先读取 `map.society.religions[id].color`，缺失时回退 indexed color。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - 宗教面板复用文化面板的摘要、筛选、排序、详情、名称编辑、颜色编辑和历史操作布局。
+
+暂缓：
+
+- 不做宗教 cell 归属笔刷。
+- 不做宗教中心移动。
+- 不做扩张范围和扩张强度编辑。
+- 不重算文化、国家、城市、路线、zones 或其他派生链。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/runtime/app.js`
+  - `app/webgl-generator/src/ui/panels/religion-panel.js`
+  - `app/webgl-generator/src/runtime/religion-edit-commands.js`
+  - `app/webgl-generator/src/runtime/object-edit-commands.js`
+  - `app/webgl-generator/src/runtime/object-resolver.js`
+  - `app/webgl-generator/src/renderer/picking.js`
+  - `app/webgl-generator/src/renderer/placeholder-renderer.js`
+  - `app/webgl-generator/src/ui/panel.js`
+  - `app/webgl-generator/src/ui/panels/generation-panel.js`
+- `git diff --check` 通过。
+- Playwright 临时静态 server 验证正式应用：
+  - 打开 `宗教管理` 面板，默认样本显示 `18` 个宗教。
+  - 宗教名称 `栖梧民俗 -> 栖梧民俗新` 生效。
+  - 宗教颜色改为 `#8844cc` 后触发 `religion-color, cell-colors, object-panels` 刷新，撤销后恢复原颜色。
+  - `renderer.locateObject({kind: "religion", id: 1})` 成功，宗教对象可进入选中状态并构建宗教区域高亮。
+  - 宗教专题下用 renderer 实际 pick 结果筛选地图点并真实鼠标点击，可选中 `religion` 对象，选中高亮为 `religion translucent cells`。
+
+## 2026-06-28 文化命名风格第一刀
+
+问题：
+
+- 用户指出文化必须“有点用”：如果某个文化是西方文化，那么城镇、国家、河流等命名也应该体现西方风格。
+- 此前 `culture` 只作为命名 seed 的一部分，并不会改变词池；即使随机到 `european` 文化集，最终地名仍主要是中式地名。
+
+实施：
+
+- 修改 `app/webgl-generator/src/generator/society.js`：
+  - `european` 和 `english` 文化集生成的文化对象会带 `nameStyle: "European"`。
+  - grid fallback 文化也保留定义上的 `root` 和 `nameStyle` 字段。
+- 修改 `app/webgl-generator/src/generator/names.js`：
+  - 新增西方音译地名和水名词池，例如 `雷恩`、`兰德`、`温德`、`卡斯特`、`莱茵`、`欧伦`、`艾文`。
+  - `makePlaceName()`、`makeRiverName()`、`makeLakeName()` 和 `makeStateFormName()` 会读取 `cultureType/nameStyle`。
+  - 显式 `European` 文化不再混入普通中式词根，但仍输出中文音译和中文地理后缀，避免纯外文名。
+- 修改 `app/webgl-generator/src/generator/settlements.js`、`politics.js` 和 `rivers.js`：
+  - 城市、港口、国家、省份、河流和湖泊命名都会传入所属文化的 `nameStyle` 或文化类型。
+  - 河流几何仍在文化前生成，但会在 `buildSociety()` 后执行一次 `renameHydronymsByCulture()`，使水系名称能读取最终文化归属。
+- 修改 `app/webgl-generator/src/ui/panels/culture-panel.js`、`runtime/object-resolver.js` 和 `renderer/picking.js`：
+  - 文化对象和文化管理面板展示“命名风格”，后续可扩展为可编辑字段。
+
+验证：
+
+- `node --check` 已覆盖：
+  - `app/webgl-generator/src/generator/names.js`
+  - `app/webgl-generator/src/generator/society.js`
+  - `app/webgl-generator/src/generator/settlements.js`
+  - `app/webgl-generator/src/generator/politics.js`
+  - `app/webgl-generator/src/generator/rivers.js`
+  - `app/webgl-generator/src/generator/index.js`
+- 使用 `culturesSet: "european"` 生成抽样：
+  - 城市样例包含 `雷恩郡`、`兰德城`、`温德堡`、`沃伦顿`、`阿尔文城`。
+  - 国家样例包含 `贝尔顿公国`、`温德堡自由邦`、`奥斯维尔王国`。
+  - 河流样例包含 `莱茵江`、`欧伦江`、`艾文溪`、`阿斯河`。
+  - 抽样名称没有纯 Latin 外文名。
+
+## 2026-06-28 Vue SFC 与 Pinia 状态岛第一刀
+
+目标：
+
+- 按用户要求引入最简 ESM Vue SFC 模式，不走 CDN，并让用户能看到真实 Vue 面板落地。
+- 使用 Pinia 接管编辑状态和全局配置状态，但不把 WebGL 地图数据、pack/grid、renderer buffer 或 picking index 放入 Pinia。
+- 配置状态继续快速同步到浏览器 `localStorage`，保证专题、图层和标签上限等偏好下次打开仍可恢复。
+
+实施：
+
+- 使用 `pnpm` 安装运行依赖 `vue`、`pinia`、`@vueuse/core`，安装开发依赖 `vite` 和 `@vitejs/plugin-vue`，新增 `pnpm-lock.yaml`。
+- 新增 `vite.config.mjs`，正式应用根目录指向 `app/webgl-generator`，构建输出到 `dist/webgl-generator`。
+- 修改根 `package.json`：
+  - `start:app` 改为 Vite dev server。
+  - 新增 `build:app` 和 `preview:app`。
+  - 保留旧 `start:prototype`，继续使用项目静态服务启动旧 WebGL cells 原型。
+- 修改 `app/webgl-generator/index.html`：
+  - 保留原 canvas 和 DOM 面板结构。
+  - 新增隐藏的 `#vue-state-root`，作为 Vue SFC 状态岛挂载点。
+- 新增 `app/webgl-generator/src/ui/vue/`：
+  - `pinia.js` 创建全局 Pinia 实例。
+  - `VueStateBridge.vue` 作为当前最小 SFC 根组件。
+  - `state-bridge.js` 暴露 runtime 可调用的状态同步门面，并把 `config/editor` store 暂挂到 `window.__webglGeneratorStores` 便于调试。
+  - `stores/global-config-store.js` 使用 Pinia setup store 和 `@vueuse/core` 的 `useLocalStorage()` 管理 `webgl-generator-control-preferences`。
+  - `stores/editor-store.js` 只保存当前编辑器、交互锁、编辑对象摘要、笔刷摘要和 history 计数等轻量状态。
+- 修改 `app/webgl-generator/src/main.js`：
+  - 在正式应用 runtime 初始化前先初始化 Vue/Pinia 状态岛。
+- 重写 `app/webgl-generator/src/ui/panels/generation-panel.js`：
+  - 删除旧的 `document.createElement()` 控制面板拼装逻辑。
+  - 改为在原浮动面板 body 内挂载 `ControlPanel.vue`。
+  - 保留 `generate-map`、`data-mode`、`data-layer`、管理入口按钮等原 id/data 契约，使现有 runtime 事件绑定继续可用。
+- 新增 `app/webgl-generator/src/ui/vue/components/ControlPanel.vue`：
+  - 用 Vue SFC 渲染生成配置、专题选择、图层开关和管理入口四个 tab。
+  - 专题 active、图层 active、海底高度开关和城市标签上限从 Pinia `global-config` store 读取。
+  - WebGL 地图数据和大型渲染状态仍不进入组件 props 或 Pinia。
+- 修改 `app/webgl-generator/src/ui/panel.js`：
+  - 控制偏好读写优先走 Pinia/global-config store。
+  - 保留原生 `localStorage` fallback，避免状态岛不可用时控制面板失效。
+- 修改 `app/webgl-generator/src/runtime/app.js`：
+  - 编辑交互锁刷新时同步轻量 editor snapshot 到 Pinia。
+  - snapshot 不包含地图数据、renderer、selection store、grid/pack 或大型数组。
+- 修改 `.gitignore`：
+  - 忽略 `.pnpm-store/`，避免本地 pnpm store 出现在 git 状态中。
+
+工具链注意：
+
+- 本次在 Codex 沙箱内直接运行 `pnpm run build:app` 会触发 Codex runtime 包装的 pnpm 运行前依赖校验；它与本机 fnm/pnpm 创建的 `node_modules` 不同源时，会尝试非交互式重建目录并可能留下半安装状态。
+- 处理方式是安全删除工作区内损坏的 `node_modules` 后，使用同一 pnpm 环境重新执行 `pnpm install --frozen-lockfile`；验证阶段直接调用本地 Vite 入口：
+  - `node .\node_modules\.pnpm\vite@8.1.0\node_modules\vite\bin\vite.js build --config vite.config.mjs`
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/vue/state-bridge.js`
+  - `app/webgl-generator/src/ui/vue/stores/global-config-store.js`
+  - `app/webgl-generator/src/ui/panels/generation-panel.js`
+  - `app/webgl-generator/src/runtime/app.js`
+- Vite 生产构建通过：
+  - 生成 `dist/webgl-generator/index.html` 和对应 CSS/JS assets。
+  - 构建输出中只有 `@vueuse/core` 依赖的 Rolldown pure annotation 位置警告，不影响构建结果。
+- Playwright 临时静态 server 验证 `dist/webgl-generator`：
+  - 页面标题为 `WebGL 地图生成器`。
+  - `#map-canvas` 存在。
+  - `window.__webglGeneratorStores` 中存在 `config` 和 `editor`。
+  - 打开控制面板后存在 `.vue-control-panel-root`，确认控制面板由 Vue 挂载。
+  - Vue 控制面板 tab 可切到 `图层` 和 `专题`。
+  - 点击 `rivers` 图层开关后，按钮 `aria-pressed` 变为 `false`，Pinia 和 `localStorage` 同步记录 `layers.rivers = false`。
+  - 点击 `states` 专题后，专题按钮 active，Pinia 和 `localStorage` 同步记录 `colorMode = "states"`。
+  - 默认 `colorMode` 为 `height`，`maxCityLabels` 为 `5000`。
+  - 通过 `config.patchPreferences({colorMode: "states", layers: {rivers: false}})` 修改 store 后，`localStorage.webgl-generator-control-preferences` 同步更新。
+  - 无 console/pageerror。
+
+## 2026-06-28 Vue 基础组件与高度面板迁移第一刀
+
+目标：
+
+- 先抽出各面板会反复使用的基础 Vue 组件，再继续深化面板改造。
+- 第一批不迁移大型对象表格，先覆盖按钮、tab、分段按钮、开关、滑动条、输入字段、图层开关和指标摘要这些基础控件。
+- 用高度编辑面板作为第二个真实 Vue 面板样板，验证基础件可以承载编辑面板，而不只是控制配置面板。
+
+实施：
+
+- 新增 `app/webgl-generator/src/ui/vue/components/base/`：
+  - `UiButton.vue`：统一普通、primary、secondary 和 active 按钮形态。
+  - `UiTabs.vue`：用于控制面板这类 tab 切换。
+  - `UiSegmented.vue`：用于专题选择、高度编辑动作等分段按钮。
+  - `UiField.vue`：统一输入框和下拉字段结构。
+  - `UiSwitchField.vue`：统一 checkbox 开关行。
+  - `UiSliderField.vue`：统一 range 滑动条和值显示。
+  - `UiLayerToggleButton.vue`：统一图层开关按钮形态，保留 `data-layer` 和 `aria-pressed` 契约。
+  - `UiMetricGrid.vue`：统一摘要指标栅格。
+- 修改 `app/webgl-generator/src/ui/vue/components/ControlPanel.vue`：
+  - 改用基础组件渲染生成配置、专题、图层和管理入口。
+  - 保留 `generate-map`、`data-mode`、`data-layer`、`max-city-labels` 等旧 runtime 依赖的 DOM 契约。
+- 新增 `app/webgl-generator/src/ui/vue/components/HeightPanel.vue`：
+  - 用基础组件渲染高度摘要、启停按钮、抬升/降低/平滑动作、半径/强度滑动条、中心衰减开关和撤销/重做。
+  - 面板内部笔刷状态仍是轻量 reactive 对象，不进入 Pinia。
+- 重写 `app/webgl-generator/src/ui/panels/height-panel.js`：
+  - 删除旧 `document.createElement()` 拼装逻辑。
+  - 改为在原浮动面板 body 内挂载 `HeightPanel.vue`。
+  - 保持外部 API：`open()`、`update()`、`getBrush()`、`setActive()`。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/panels/generation-panel.js`
+  - `app/webgl-generator/src/ui/panels/height-panel.js`
+  - `app/webgl-generator/src/ui/vue/stores/global-config-store.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 临时静态 server 验证 `dist/webgl-generator`：
+  - 打开控制面板后存在 `.vue-control-panel-root`。
+  - 打开高度编辑后存在 `.vue-height-panel-root`。
+  - 通过 Vue 控制面板关闭 `rivers` 图层后，按钮 `aria-pressed` 为 `false`，Pinia 和 `localStorage` 同步为 `layers.rivers = false`。
+  - 在 Vue 高度面板中启用高度编辑后，按钮文案变为 `停止高度编辑`，Pinia editor store 的 `activeEditor` 为 `height`。
+  - 切换高度动作到 `降低`、拖动半径到 `42` 后，面板状态与 DOM 值同步。
+  - 无 console/pageerror。
+
+后续：
+
+- 下一批优先迁移只读或轻编辑面板：路线面板、对象详情面板。
+- 再迁移列表 + 详情 + 编辑组合面板：河流、文化、宗教、城市、国家、省份。
+- 在迁移这些面板前，需要继续把对象表格、排序条、详情字段、历史操作和名称/颜色编辑字段抽成 Vue 组件。
+
+## 2026-06-28 Vue 对象面板基础层与路线/对象详情迁移
+
+目标：
+
+- 在基础控件之后继续抽对象面板需要的通用 Vue 组件。
+- 先迁移路线面板和对象详情面板，验证列表、筛选、排序、详情、定位和编辑入口的 Vue 版本可以复用旧 runtime 流程。
+- 继续保持 WebGL 地图数据、renderer、picking index 等大状态不进入 Pinia。
+
+实施：
+
+- 新增对象面板基础组件：
+  - `UiFilterInput.vue`：保留中文输入法 composition 处理，避免筛选时拼音输入被中断。
+  - `UiSortBar.vue`：统一排序按钮和升降序箭头。
+  - `UiObjectTable.vue`：统一对象表格、选中行、双击定位和定位按钮。
+  - `UiDetailGrid.vue`：统一详情字段网格。
+  - `UiHistoryActions.vue`：统一撤销/重做按钮和历史摘要。
+  - `UiTextEditField.vue`：统一名称编辑表单。
+  - `UiColorField.vue`：统一颜色编辑表单。
+  - `UiNumberField.vue`：统一数字编辑表单。
+- 修改 `UiButton.vue`：
+  - 增加 `buttonType`，支持表单 submit 按钮，默认仍为 `button`。
+- 新增 `app/webgl-generator/src/ui/vue/components/RoutePanel.vue`：
+  - 使用 `UiMetricGrid`、`UiFilterInput`、`UiSortBar`、`UiObjectTable` 和 `UiDetailGrid` 渲染路线管理面板。
+  - 路线长度、类型、起终点、段数、grid/pack cells 等指标维持原逻辑。
+- 重写 `app/webgl-generator/src/ui/panels/route-panel.js`：
+  - 删除旧 DOM 拼装逻辑。
+  - 改为 Vue 挂载包装，保持 `open()`、`update()`、`setSelectedRouteId()` 和 `isOpen()` 外部 API。
+  - `map` 通过 `markRaw()` 放入 `shallowReactive` 面板状态，避免 Vue 深代理 pack/grid 大对象。
+- 新增 `app/webgl-generator/src/ui/vue/components/ObjectDetailsPanel.vue`：
+  - 使用 `UiDetailGrid`、`UiButton` 和 `UiTextEditField` 渲染通用对象详情。
+  - 保留城市/路线/marker/label/river/province/region 的详情字段格式。
+- 重写 `app/webgl-generator/src/ui/panels/object-details-panel.js`：
+  - 删除旧 DOM 拼装逻辑。
+  - 改为 Vue 挂载包装，保持 `show()` 和 `clear()` 外部 API。
+  - 保留关闭编辑面板时调用 `onCancelEdit()` 并抑制下一次查看态自动打开的保护逻辑。
+- 修改 `app/webgl-generator/src/styles.css`：
+  - `object-details-list` 兼容 Vue 详情组件的 `span/strong` 结构。
+
+验证：
+
+- `node --check` 通过：
+  - `app/webgl-generator/src/ui/panels/route-panel.js`
+  - `app/webgl-generator/src/ui/panels/object-details-panel.js`
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 临时静态 server 验证 `dist/webgl-generator`：
+  - 打开路线管理后存在 `.vue-route-panel-root`。
+  - 路线面板排序切到 `段数 ↓`，表格选中行数量为 `1`，详情区显示路线类型、等级、起终点、长度、段数、grid cells、pack cells 和 feature。
+  - 路线定位按钮可触发 runtime selection 更新。
+  - 人工选中一个 marker 后，对象详情面板存在 `.vue-object-details-root`，标题和详情字段正确显示。
+  - 对象详情定位按钮可调用旧定位回调。
+  - 点击对象详情“编辑”后，按钮变为“退出编辑”，runtime `editingObject` 变为该 marker。
+  - 无 console/pageerror。
+
+后续：
+
+- 下一批建议迁移河流、文化、宗教面板：它们都有列表、详情、名称/颜色或数字轻编辑，正好继续验证 `UiHistoryActions`、`UiTextEditField`、`UiColorField`、`UiNumberField`。
+- 城市、国家、省份面板依赖更多派生编辑链路，建议在轻编辑列表面板稳定后再迁。
+
+## 2026-06-28 docs 目录整理
+
+目标：
+
+- `docs/` 根目录只保留接手入口和总日志，减少本地日志、生成报告和阶段细则混在一起的噪声。
+- 已追踪的总结性文档继续保留在版本库，但按用途分组。
+- 执行细则、评估记录、生成报告、snapshot、baseline 和本地 server 日志统一收进被 ignore 的目录。
+
+实施：
+
+- 新增 `docs/README.md`，说明根目录、长期文档目录和本地/生成目录的用途。
+- 将长期文档移动到分组目录：
+  - `docs/architecture/floating-panel-architecture.md`
+  - `docs/plans/gl-reimplementation-acceptance-plan.md`
+  - `docs/milestones/milestone-1-webgl-prototype.md`
+  - `docs/performance/performance-baseline.md`
+  - `docs/performance/webgl-svg-performance-comparison.md`
+  - `docs/audits/source-generation-audit-and-rectification-plan.md`
+- 将执行细则和评估记录移动到 `docs/task-notes/`：
+  - `chinese-naming-library-evaluation.md`
+  - `editor-and-stat-panel-inventory.md`
+  - `source-first-detailed-task-plan.md`
+  - `source-first-recovery-execution-plan.md`
+- 将生成报告移动到 `docs/generated/reports/`。
+- 将 source baseline、snapshot 和本地预览图片移动到 `docs/generated/` 下对应目录。
+- 将本地 server 日志移动到 `docs/local-logs/`。
+- 停止两个已确认属于本项目旧预览服务的 `serve-prototype.mjs` node 进程，释放根目录日志文件后完成归档。
+- 更新 `.gitignore`：
+  - 新增 `docs/generated/`
+  - 新增 `docs/local-logs/`
+  - 新增 `docs/task-notes/`
+  - 保留旧路径 ignore 规则，避免旧脚本仍按旧路径吐产物时进入 git 状态。
+- 更新工具默认输出路径，避免后续运行重新污染 `docs/` 根目录：
+  - `tools/fmg-profile.mjs` 默认写入 `docs/generated/reports/`。
+  - `tools/webgl-prototype-profile.mjs` 默认写入 `docs/generated/reports/`。
+  - source/candidate baseline 和 diff 相关工具默认写入 `docs/generated/source-baselines/`。
+- 批量更新 AGENTS、当前计划、开发日志、app README 和长期文档中的新路径引用。
+
+验证：
+
+- `docs/` 根目录当前只保留：
+  - `README.md`
+  - `current-plan.md`
+  - `development-log.md`
+  - 分组子目录
+- `rg` 检查旧文档路径未再出现在非 generated 文档中。
+- `git status --ignored docs` 显示 generated、local-logs、task-notes 均被 ignore。
+
+后续：
+
+- 后续新增总结性文档优先放入 `architecture/`、`plans/`、`milestones/`、`performance/` 或 `audits/`。
+- 后续临时执行细则和脚本产物应写入 `task-notes/` 或 `generated/`，不要再堆到 `docs/` 根目录。
+
+## 2026-06-28 Vite 端口配置收敛
+
+目标：
+
+- 使用 Vite 推荐的配置文件方式管理正式应用开发服务端口，而不是把 `host` 和 `port` 写在 pnpm 启动参数里。
+
+实施：
+
+- `package.json` 的 `start:app` 和 `preview:app` 保留为单纯的 Vite config 入口：
+  - `vite --config vite.config.mjs`
+  - `vite preview --config vite.config.mjs`
+- `vite.config.mjs` 集中声明正式应用的 `server` 和 `preview` 配置：
+  - `host: "127.0.0.1"`
+  - `port: 5410`
+  - `strictPort: false`
+- 更新 `app/webgl-generator/README.md`，移除旧的 `serve-prototype` 正式应用托管说明，并记录当前 Vite + Vue SFC + Pinia 构建器决策。
+
+验证：
+
+- `node --check vite.config.mjs` 通过。
+- `package.json` JSON 解析通过。
+- Vite 生产构建通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告，不影响构建结果。
+- `git diff --check` 通过。

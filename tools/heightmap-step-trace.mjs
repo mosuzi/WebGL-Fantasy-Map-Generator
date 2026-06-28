@@ -20,7 +20,7 @@ const host = args.host || "127.0.0.1";
 const port = Number(args.port || 5303);
 const timeoutMs = Number(args.timeout || 180000);
 const browserChannel = args["browser-channel"] || args.channel || "chrome";
-const outDir = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "source-baselines", `heightmap-step-${template}-${cells}-${seed}`));
+const outDir = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "generated", "source-baselines", `heightmap-step-${template}-${cells}-${seed}`));
 
 if (!existsSync(sourceDir)) fail(`Source directory does not exist: ${sourceDir}`);
 mkdirSync(outDir, {recursive: true});

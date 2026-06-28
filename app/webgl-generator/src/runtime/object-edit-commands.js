@@ -125,6 +125,14 @@ function readObjectName(map, target) {
     const province = map?.politics?.provinces?.[target.id] || map?.pack?.provinces?.[target.id];
     return province ? {name: province.name || "", fullName: province.fullName || ""} : null;
   }
+  if (target.kind === "culture") {
+    const culture = map?.society?.cultures?.[target.id] || map?.pack?.cultures?.[target.id];
+    return culture ? {name: culture.name || "", root: culture.root || ""} : null;
+  }
+  if (target.kind === "religion") {
+    const religion = map?.society?.religions?.[target.id] || map?.pack?.religions?.[target.id];
+    return religion ? {name: religion.name || ""} : null;
+  }
   if (target.kind === "river") {
     const river = findRiver(map, target.id);
     return river ? {name: river.name || ""} : null;
@@ -140,6 +148,8 @@ function readObjectName(map, target) {
 function writeObjectName(map, target, name) {
   if (target.kind === "state") return writeStateName(map, target.id, name);
   if (target.kind === "province") return writeProvinceName(map, target.id, name);
+  if (target.kind === "culture") return writeCultureName(map, target.id, name);
+  if (target.kind === "religion") return writeReligionName(map, target.id, name);
   if (target.kind === "river") return writeRiverName(map, target.id, name);
   if (target.kind === "city") return writeCityName(map, target.id, name);
   throw new Error(`不支持重命名对象类型：${target.kind}`);
@@ -160,6 +170,14 @@ function restoreObjectName(map, target, previous) {
     province.fullName = previous.fullName;
     return;
   }
+  if (target.kind === "culture") {
+    const culture = map?.society?.cultures?.[target.id] || map?.pack?.cultures?.[target.id];
+    if (!culture) throw new Error(`找不到文化 #${target.id}`);
+    culture.name = previous.name;
+    culture.root = previous.root;
+    return;
+  }
+  if (target.kind === "religion") return writeReligionName(map, target.id, previous.name);
   if (target.kind === "river") return writeRiverName(map, target.id, previous.name);
   if (target.kind === "city") return writeCityName(map, target.id, previous.name, previous.burgName);
   throw new Error(`不支持恢复对象类型：${target.kind}`);
@@ -177,6 +195,19 @@ function writeProvinceName(map, provinceId, name) {
   if (!province) throw new Error(`找不到省份 #${provinceId}`);
   province.name = name;
   province.fullName = province.formName ? `${name}${province.formName}` : name;
+}
+
+function writeCultureName(map, cultureId, name) {
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
+  if (!culture) throw new Error(`找不到文化 #${cultureId}`);
+  culture.name = name;
+  culture.root = name.endsWith("文化") ? name.slice(0, name.length - "文化".length) : name;
+}
+
+function writeReligionName(map, religionId, name) {
+  const religion = map?.society?.religions?.[religionId] || map?.pack?.religions?.[religionId];
+  if (!religion) throw new Error(`找不到宗教 #${religionId}`);
+  religion.name = name;
 }
 
 function setProvinceColor(map, provinceId, color) {
@@ -315,6 +346,8 @@ function normalizeHexColor(color) {
 function formatObjectKind(kind) {
   if (kind === "state") return "国家";
   if (kind === "province") return "省份";
+  if (kind === "culture") return "文化";
+  if (kind === "religion") return "宗教";
   if (kind === "river") return "河流";
   if (kind === "city") return "城市";
   return "对象";

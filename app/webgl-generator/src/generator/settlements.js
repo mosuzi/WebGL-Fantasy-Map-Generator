@@ -168,10 +168,13 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   const state = Number.isInteger(flags.state) ? flags.state : flags.capital ? burgId : grid.cells.state?.[gridCell] ?? 0;
   const province = grid.cells.province?.[gridCell] ?? -1;
   const type = getBurgType(pack, packCell, 0);
+  const cultureId = cells.culture[packCell];
+  const culture = pack.cultures?.[cultureId];
   const name = nameGenerator.makePlaceName({
     id: cityId,
     cell: packCell,
-    culture: cells.culture[packCell],
+    culture: cultureId,
+    cultureType: culture?.nameStyle || culture?.type,
     state,
     type,
     capital: Boolean(flags.capital),
@@ -185,7 +188,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     x,
     y,
     state,
-    culture: cells.culture[packCell],
+    culture: cultureId,
     religion: cells.religion?.[packCell] ?? grid.cells.religion?.[gridCell] ?? 0,
     name,
     feature: cells.f[packCell],
@@ -260,6 +263,7 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
           id: city.id,
           cell: burg.cell,
           culture: burg.culture,
+          cultureType: pack.cultures?.[burg.culture]?.nameStyle || pack.cultures?.[burg.culture]?.type,
           state: burg.state,
           type: "Naval",
           port: true
@@ -438,7 +442,14 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
     return {
       id,
       burgId: id + 1,
-      name: nameGenerator.makePlaceName({id, cell: item.cell, culture: grid.cells.culture[item.cell], state, port: Boolean(port)}),
+      name: nameGenerator.makePlaceName({
+        id,
+        cell: item.cell,
+        culture: grid.cells.culture[item.cell],
+        cultureType: null,
+        state,
+        port: Boolean(port)
+      }),
       cell: item.cell,
       packCell: grid.cells.pack?.[item.cell] ?? -1,
       x: grid.points[item.cell][0],

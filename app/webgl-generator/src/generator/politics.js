@@ -128,6 +128,7 @@ function buildPackStates(pack, society, random, nameGenerator) {
       id: burg.i,
       cell: burg.cell,
       culture: burg.culture,
+      cultureType: culture?.nameStyle || culture?.type,
       capitalName: burg.name,
       type: culture?.type || "Generic"
     }) || culture?.name?.replace("文化", "") || STATE_ROOTS[burg.i % STATE_ROOTS.length];
@@ -142,6 +143,7 @@ function buildPackStates(pack, society, random, nameGenerator) {
       culture: burg.culture,
       religion: pack.cells.religion?.[burg.cell] ?? 0,
       type: culture?.type || "Generic",
+      nameStyle: culture?.nameStyle || null,
       expansionism: round(random.range(1, 2), 1),
       cells: 0,
       area: 0,
@@ -179,6 +181,7 @@ function defineStateForms(states, nameGenerator) {
       id: state.i,
       cell: state.center,
       culture: state.culture,
+      cultureType: state.nameStyle || state.type,
       type: state.type,
       tier
     });
@@ -496,8 +499,15 @@ function buildPackProvinces(pack, society, random, options, nameGenerator) {
       const burg = stateBurgs[index];
       const provinceId = provinces.length;
       const culture = society.cultures[burg.culture];
-      const sourceRoot = (index % 2 === 0 ? burg.name : culture?.name?.replace("文化", "")) || STATE_ROOTS[provinceId % STATE_ROOTS.length];
-      const provinceName = nameGenerator.makeProvinceName({id: provinceId, cell: burg.cell, culture: burg.culture, state: state.i, baseName: sourceRoot});
+      const sourceRoot = (index % 2 === 0 || culture?.nameStyle ? burg.name : culture?.name?.replace("文化", "")) || STATE_ROOTS[provinceId % STATE_ROOTS.length];
+      const provinceName = nameGenerator.makeProvinceName({
+        id: provinceId,
+        cell: burg.cell,
+        culture: burg.culture,
+        cultureType: culture?.nameStyle || culture?.type,
+        state: state.i,
+        baseName: sourceRoot
+      });
       const province = {
         id: provinceId,
         i: provinceId,
@@ -687,6 +697,7 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
         id: provinceId,
         cell: center,
         culture: burg?.culture || state.culture,
+        cultureType: pack.cultures?.[burg?.culture || state.culture]?.nameStyle || pack.cultures?.[burg?.culture || state.culture]?.type,
         state: state.i,
         baseName: burg?.name || state.name
       });

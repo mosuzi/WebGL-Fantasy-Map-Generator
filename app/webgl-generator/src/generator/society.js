@@ -93,6 +93,7 @@ function buildPackCultures(grid, pack, random, options) {
       i: cultureId,
       name: `${definition.root}文化`,
       root: definition.root,
+      nameStyle: definition.nameStyle || null,
       center,
       gridCenter: cells.g[center],
       type,
@@ -137,6 +138,8 @@ function buildGridFallbackCultures(grid, features, rivers, random) {
       id: index + 1,
       i: index + 1,
       name: `${CULTURE_DEFINITIONS[index].root}文化`,
+      root: CULTURE_DEFINITIONS[index].root,
+      nameStyle: CULTURE_DEFINITIONS[index].nameStyle || null,
       center: center.cell,
       gridCenter: center.cell,
       type: CULTURE_TYPES.generic,
@@ -536,7 +539,7 @@ function uniqueName(name, usedNames) {
 }
 
 function getDefaultCultureDefinitions(options) {
-  if (options.culturesSet === "english") return createGenericCultureDefinitions(10);
+  if (options.culturesSet === "english") return createGenericCultureDefinitions(10, "European");
   if (options.culturesSet === "antique") return createAntiqueCultureDefinitions();
   if (options.culturesSet === "european") return createEuropeanCultureDefinitions();
   if (options.culturesSet === "world") return createWorldCultureDefinitions();
@@ -562,32 +565,32 @@ function selectCultureDefinitions(definitions, count, random) {
   return selected;
 }
 
-function cultureDefinition(index, sort, odd = 1) {
+function cultureDefinition(index, sort, odd = 1, nameStyle = null) {
   const root = CULTURE_ROOTS[index % CULTURE_ROOTS.length];
-  return {root, sort, odd};
+  return {root, sort, odd, nameStyle};
 }
 
-function createGenericCultureDefinitions(count) {
-  return Array.from({length: count}, (_, index) => cultureDefinition(index, null, 1));
+function createGenericCultureDefinitions(count, nameStyle = null) {
+  return Array.from({length: count}, (_, index) => cultureDefinition(index, null, 1, nameStyle));
 }
 
 function createEuropeanCultureDefinitions() {
   return [
-    cultureDefinition(0, createCultureSort({temperature: 10, biomes: [6, 8]}), 1),
-    cultureDefinition(1, createCultureSort({temperature: 10, seaCoast: true}), 1),
-    cultureDefinition(2, createCultureSort({temperature: 12, biomes: [6, 8]}), 1),
-    cultureDefinition(3, createCultureSort({temperature: 15}), 1),
-    cultureDefinition(4, createCultureSort({temperature: 16}), 1),
-    cultureDefinition(5, createCultureSort({temperature: 6, multiplyType: true}), 1),
-    cultureDefinition(6, createCultureSort({temperature: 5}), 1),
-    cultureDefinition(7, createCultureSort({temperature: 18, multiplyHeight: true}), 1),
-    cultureDefinition(8, createCultureSort({temperature: 15, divideType: true}), 0.2),
-    cultureDefinition(9, createCultureSort({temperature: 5, biomes: [9], multiplyType: true}), 1),
-    cultureDefinition(10, createCultureSort({temperature: 17, seaCoast: true}), 1),
-    cultureDefinition(11, createCultureSort({temperature: 11, biomes: [4], multiplyType: true}), 1),
-    cultureDefinition(12, createCultureSort({temperature: 14}), 0.05),
-    cultureDefinition(13, createCultureSort({temperature: 15, multiplyHeight: true}), 0.05),
-    cultureDefinition(14, createCultureSort({temperature: 11, biomes: [6, 8], multiplyType: true}), 0.05)
+    cultureDefinition(0, createCultureSort({temperature: 10, biomes: [6, 8]}), 1, "European"),
+    cultureDefinition(1, createCultureSort({temperature: 10, seaCoast: true}), 1, "European"),
+    cultureDefinition(2, createCultureSort({temperature: 12, biomes: [6, 8]}), 1, "European"),
+    cultureDefinition(3, createCultureSort({temperature: 15}), 1, "European"),
+    cultureDefinition(4, createCultureSort({temperature: 16}), 1, "European"),
+    cultureDefinition(5, createCultureSort({temperature: 6, multiplyType: true}), 1, "European"),
+    cultureDefinition(6, createCultureSort({temperature: 5}), 1, "European"),
+    cultureDefinition(7, createCultureSort({temperature: 18, multiplyHeight: true}), 1, "European"),
+    cultureDefinition(8, createCultureSort({temperature: 15, divideType: true}), 0.2, "European"),
+    cultureDefinition(9, createCultureSort({temperature: 5, biomes: [9], multiplyType: true}), 1, "European"),
+    cultureDefinition(10, createCultureSort({temperature: 17, seaCoast: true}), 1, "European"),
+    cultureDefinition(11, createCultureSort({temperature: 11, biomes: [4], multiplyType: true}), 1, "European"),
+    cultureDefinition(12, createCultureSort({temperature: 14}), 0.05, "European"),
+    cultureDefinition(13, createCultureSort({temperature: 15, multiplyHeight: true}), 0.05, "European"),
+    cultureDefinition(14, createCultureSort({temperature: 11, biomes: [6, 8], multiplyType: true}), 0.05, "European")
   ];
 }
 

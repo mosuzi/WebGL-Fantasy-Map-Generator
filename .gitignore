@@ -3,6 +3,7 @@
 
 # Dependencies
 node_modules/
+.pnpm-store/
 
 # Build output
 dist/
@@ -24,6 +25,9 @@ pnpm-debug.log*
 
 # Local visual previews moved out of tracked docs.
 docs/local-preview-images/
+docs/generated/
+docs/local-logs/
+docs/task-notes/
 
 # Generated reports and execution-detail docs.
 docs/source-baselines/

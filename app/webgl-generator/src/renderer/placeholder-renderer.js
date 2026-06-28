@@ -574,14 +574,14 @@ function getObjectBounds(map, object) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
     return river ? pointsBounds(river.points, 42) : null;
   }
-  if (object.kind === "state" || object.kind === "province" || object.kind === "region") {
+  if (object.kind === "state" || object.kind === "province" || object.kind === "region" || object.kind === "culture" || object.kind === "religion") {
     return politicalBounds(map, object, 48);
   }
   return null;
 }
 
 function politicalBounds(map, object, padding) {
-  const field = object.kind === "state" ? "state" : object.kind === "province" ? "province" : "region";
+  const field = object.kind === "state" ? "state" : object.kind === "province" ? "province" : object.kind === "culture" ? "culture" : object.kind === "religion" ? "religion" : "region";
   let bounds = null;
   for (let cellIndex = 0; cellIndex < map.grid.cells.p.length; cellIndex++) {
     if (map.grid.cells[field][cellIndex] !== object.id) continue;
@@ -876,8 +876,8 @@ function routeStyle(route) {
 
 function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash) {
   const vertices = [];
-  if (selection?.kind === "state" || selection?.kind === "province" || selection?.kind === "region") {
-    pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection);
+  if (selection?.kind === "state" || selection?.kind === "province" || selection?.kind === "region" || selection?.kind === "culture" || selection?.kind === "religion") {
+    pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection, locateFlash);
     return new Float32Array(vertices);
   }
   if (selection?.kind !== "river") return new Float32Array(vertices);
@@ -892,9 +892,9 @@ function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash)
   return new Float32Array(vertices);
 }
 
-function pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection) {
-  const field = selection.kind === "state" ? "state" : selection.kind === "province" ? "province" : "region";
-  const color = selection.kind === "state" ? [1, 0.86, 0.28, 0.3] : selection.kind === "province" ? [0.9, 0.7, 0.28, 0.34] : [0.65, 0.9, 1, 0.28];
+function pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection, locateFlash) {
+  const field = selection.kind === "state" ? "state" : selection.kind === "province" ? "province" : selection.kind === "culture" ? "culture" : selection.kind === "religion" ? "religion" : "region";
+  const color = locateFlashColor(selection, locateFlash) || (selection.kind === "state" ? [1, 0.86, 0.28, 0.3] : selection.kind === "province" ? [0.9, 0.7, 0.28, 0.34] : selection.kind === "culture" ? [0.72, 0.95, 0.62, 0.3] : selection.kind === "religion" ? [0.96, 0.68, 0.95, 0.3] : [0.65, 0.9, 1, 0.28]);
   for (let cellIndex = 0; cellIndex < map.grid.cells.v.length; cellIndex++) {
     if (map.grid.cells[field][cellIndex] !== selection.id) continue;
     const vertexIds = map.grid.cells.v[cellIndex];
@@ -913,6 +913,8 @@ function selectionHighlightMode(selection, locateFlash = null) {
   if (selection.kind === "river") return "river screen-space mesh";
   if (selection.kind === "state") return "state translucent cells";
   if (selection.kind === "province") return "province translucent cells";
+  if (selection.kind === "culture") return "culture translucent cells";
+  if (selection.kind === "religion") return "religion translucent cells";
   if (selection.kind === "region") return "region translucent cells";
   return selection.kind;
 }
@@ -1178,8 +1180,8 @@ function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode === "temperature") return colorForTemperature(map.grid.cells.temp[cellIndex]);
   if (colorMode === "precipitation") return colorForPrecipitation(map.grid.cells.prec[cellIndex]);
   if (colorMode === "biomes") return colorForBiome(map.grid.cells.biome[cellIndex], map);
-  if (colorMode === "cultures") return indexedColor(map.grid.cells.culture[cellIndex], 0.31);
-  if (colorMode === "religions") return indexedColor(map.grid.cells.religion[cellIndex], 0.63);
+  if (colorMode === "cultures") return colorForCulture(map.grid.cells.culture[cellIndex], map);
+  if (colorMode === "religions") return colorForReligion(map.grid.cells.religion[cellIndex], map);
   if (colorMode === "states") return colorForState(map.grid.cells.state[cellIndex], map);
   if (colorMode === "provinces") return colorForProvince(map.grid.cells.province[cellIndex], map);
   if (colorMode === "regions") return indexedColorOrWater(map.grid.cells.region[cellIndex], 0.77, map.layers.ocean);
@@ -1225,6 +1227,16 @@ function colorForBiome(biomeId, map) {
 function colorForState(stateId, map) {
   if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
   return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
+}
+
+function colorForCulture(cultureId, map) {
+  if (cultureId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  return hexToRgba(map.society.cultures[cultureId]?.color) || indexedColor(cultureId, 0.31);
+}
+
+function colorForReligion(religionId, map) {
+  if (religionId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  return hexToRgba(map.society.religions[religionId]?.color) || indexedColor(religionId, 0.63);
 }
 
 function colorForProvince(provinceId, map) {

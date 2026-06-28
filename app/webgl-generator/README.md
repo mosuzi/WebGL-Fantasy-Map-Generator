@@ -26,11 +26,11 @@ pnpm start
 pnpm run start:app
 ```
 
-脚本内部实际托管命令为：
+正式应用端口在根目录 `vite.config.mjs` 中配置，启动脚本只负责调用 Vite：
 
 ```powershell
 Set-Location D:\work\fmg
-node .\tools\serve-prototype.mjs --port 5410 --dir .\app\webgl-generator
+pnpm run start:app
 ```
 
 访问：
@@ -41,11 +41,11 @@ http://127.0.0.1:5410
 
 ## 构建器决策
 
-当前暂不引入 Vite。原因：
+当前正式应用已使用 Vite + Vue SFC + Pinia。原因：
 
-- 正式应用目前是原生 ESM、无 npm 依赖、只面向高版本 Chrome。
-- 当前阶段更需要稳定生成内核和 WebGL 数据结构，而不是先增加构建配置。
-- 目录结构保持 Vite 友好，后续需要打包产物、资源指纹、worker、第三方库或测试集成时，再引入 Vite 更划算。
+- 面板逐步迁移到 Vue SFC，继续人肉维护大段 DOM 渲染代码成本过高。
+- Vite 提供本地 ESM 开发服务、生产构建和资源处理，适合当前轻量迁移节奏。
+- 端口、host、preview 等开发服务配置集中放在根目录 `vite.config.mjs`，避免散落到 pnpm 脚本参数里。
 
 ## 与 demo 的边界
 
@@ -226,4 +226,4 @@ http://127.0.0.1:5410
 
 这些面板不使用 canvas 实现，应该作为普通 DOM UI 覆盖在地图工作区上方，并保留拖动、折叠、层级和可停靠/恢复位置的扩展空间。当前已接入对象详情面板和独立河流管理面板；现有生成、专题和运行时统计侧栏暂不整体迁移。
 
-详细约束见 `docs/floating-panel-architecture.md`。
+详细约束见 `docs/architecture/floating-panel-architecture.md`。

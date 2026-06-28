@@ -116,6 +116,25 @@ export function buildRivers(grid, features, pack, options = {}) {
   };
 }
 
+export function renameHydronymsByCulture(rivers, pack, options = {}) {
+  const nameGenerator = createChineseNameGenerator(options.seed);
+  for (const river of rivers.rivers || []) {
+    if (!river?.i) continue;
+    const cultureId = pack.cells.culture?.[river.source] || 0;
+    const culture = pack.cultures?.[cultureId];
+    river.name = nameGenerator.makeRiverName({
+      id: river.i,
+      cell: river.source,
+      culture: cultureId,
+      cultureType: culture?.nameStyle || culture?.type,
+      flux: river.discharge || river.flux,
+      type: river.parent ? "branch" : "river"
+    });
+  }
+  defineLakeNames(pack, nameGenerator);
+}
+
+
 function buildEmptyRivers() {
   return {
     rivers: [],
@@ -351,6 +370,8 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
     const length = getApproximateLength(points);
     const sourceWidth = getSourceWidth(cells.fl[source]);
     const width = getWidth(getRiverOffset(discharge, points.length, widthFactor, sourceWidth));
+    const cultureId = cells.culture?.[source] || 0;
+    const culture = pack.cultures?.[cultureId];
 
     rivers.push({
       id: riverId,
@@ -371,7 +392,14 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
       gridCells: riverCells.filter(cell => cell >= 0).map(cell => cells.g[cell]),
       points,
       type: parent ? "Branch" : "River",
-      name: nameGenerator.makeRiverName({id: riverId, cell: source, flux: discharge, type: parent ? "branch" : "river"})
+      name: nameGenerator.makeRiverName({
+        id: riverId,
+        cell: source,
+        culture: cultureId,
+        cultureType: culture?.nameStyle || culture?.type,
+        flux: discharge,
+        type: parent ? "branch" : "river"
+      })
     });
   }
 
@@ -381,9 +409,13 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
 function defineLakeNames(pack, nameGenerator) {
   for (const feature of pack.features || []) {
     if (!feature || feature.type !== "lake") continue;
+    const cultureId = pack.cells.culture?.[feature.firstCell] || 0;
+    const culture = pack.cultures?.[cultureId];
     feature.name = nameGenerator.makeLakeName({
       id: feature.i,
       cell: feature.firstCell,
+      culture: cultureId,
+      cultureType: culture?.nameStyle || culture?.type,
       type: feature.group || "lake",
       major: (feature.cells || 0) >= 10
     });

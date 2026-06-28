@@ -82,8 +82,8 @@ npm run lint
 范围：
 
 - `tools/fmg-profile.mjs`
-- `docs/performance-baseline-results.json`
-- `docs/performance-baseline-results.md`
+- `docs/generated/reports/performance-baseline-results.json`
+- `docs/generated/reports/performance-baseline-results.md`
 
 验收标准：
 

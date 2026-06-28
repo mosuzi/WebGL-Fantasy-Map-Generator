@@ -6,8 +6,8 @@ import {spawn, spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const defaultOut = join(rootDir, "docs", "webgl-prototype-profile-results.json");
-const defaultMarkdown = join(rootDir, "docs", "webgl-prototype-profile-results.md");
+const defaultOut = join(rootDir, "docs", "generated", "reports", "webgl-prototype-profile-results.json");
+const defaultMarkdown = join(rootDir, "docs", "generated", "reports", "webgl-prototype-profile-results.md");
 
 const args = parseArgs(process.argv.slice(2));
 const port = Number(args.port || 5400);

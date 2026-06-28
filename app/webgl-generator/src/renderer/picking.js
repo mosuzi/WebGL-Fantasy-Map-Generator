@@ -189,6 +189,8 @@ export function pickPoliticalObject(map, pickResult, colorMode = "height") {
   if (colorMode === "states") return buildStateObject(map, pickResult.gridCell);
   if (colorMode === "regions") return buildRegionObject(map, pickResult.gridCell);
   if (colorMode === "provinces") return buildProvinceObject(map, pickResult.gridCell);
+  if (colorMode === "cultures") return buildCultureObject(map, pickResult.gridCell);
+  if (colorMode === "religions") return buildReligionObject(map, pickResult.gridCell);
   return buildProvinceObject(map, pickResult.gridCell) || buildStateObject(map, pickResult.gridCell) || buildRegionObject(map, pickResult.gridCell);
 }
 
@@ -273,6 +275,38 @@ function buildProvinceObject(map, gridCell) {
   };
 }
 
+function buildCultureObject(map, gridCell) {
+  const id = map.grid.cells.culture[gridCell];
+  const culture = map.society.cultures[id];
+  if (!culture || !culture.i) return null;
+  return {
+    kind: "culture",
+    id,
+    name: culture.name,
+    type: culture.type || "Generic",
+    nameStyle: culture.nameStyle || "default",
+    centerCell: culture.center,
+    cells: culture.cells || 0,
+    population: (culture.rural || 0) + cultureUrbanPopulation(map, id)
+  };
+}
+
+function buildReligionObject(map, gridCell) {
+  const id = map.grid.cells.religion[gridCell];
+  const religion = map.society.religions[id];
+  if (!religion || !religion.i) return null;
+  return {
+    kind: "religion",
+    id,
+    name: religion.name,
+    type: religion.type || "Generic",
+    form: religion.form || "none",
+    centerCell: religion.center,
+    cells: religion.cells || 0,
+    population: (religion.rural || 0) + religionUrbanPopulation(map, id)
+  };
+}
+
 function buildRegionObject(map, gridCell) {
   const id = map.grid.cells.region[gridCell];
   const region = map.politics.regions[id];
@@ -282,6 +316,14 @@ function buildRegionObject(map, gridCell) {
     id,
     name: region.name
   };
+}
+
+function cultureUrbanPopulation(map, cultureId) {
+  return (map.settlements?.cities || []).reduce((sum, city) => sum + (Number(city?.culture) === cultureId ? Number(city.population) || 0 : 0), 0);
+}
+
+function religionUrbanPopulation(map, religionId) {
+  return (map.settlements?.cities || []).reduce((sum, city) => sum + (Number(city?.religion) === religionId ? Number(city.population) || 0 : 0), 0);
 }
 
 function allRouteSegments(map) {

@@ -1,0 +1,129 @@
+<template>
+  <UiTabs v-model="activeTab" :tabs="tabs" />
+
+  <div class="control-panel-tab-panels">
+    <div class="generation-panel-form" data-control-panel="generation" :hidden="activeTab !== 'generation'">
+      <UiField label="Seed" input-id="seed-input" model-value="stage-2-1" :input-attrs="{autocomplete: 'off'}" />
+      <UiField label="目标 cells" input-id="cells-input" type="number" :model-value="10000" :input-attrs="{min: 1000, max: 100000, step: 1000}" />
+      <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
+      <UiField label="高度" input-id="height-input" type="number" :model-value="960" :input-attrs="{min: 480, max: 4096, step: 80}" />
+      <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />
+      <UiSwitchField label="生成时自动随机 seed" input-id="auto-random-seed" />
+
+      <div class="generation-button-row">
+        <UiButton id="generate-map" variant="primary">生成 grid 地图</UiButton>
+        <UiButton id="random-seed" variant="secondary">换 seed</UiButton>
+      </div>
+    </div>
+
+    <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
+      <UiSegmented label="专题" :options="themes" :model-value="preferences.colorMode" data-mode />
+      <UiSwitchField label="高度专题显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" />
+    </div>
+
+    <div class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
+      <div class="layer-toggle-grid">
+        <UiLayerToggleButton
+          v-for="layer in layers"
+          :key="layer.id"
+          :layer="layer.id"
+          :label="layer.label"
+          :pressed="isLayerVisible(layer.id)"
+        />
+      </div>
+
+      <UiSliderField
+        label="城市标签上限"
+        input-id="max-city-labels"
+        output-id="max-city-labels-value"
+        field-class="label-limit-field"
+        value-tag="output"
+        :model-value="preferences.maxCityLabels"
+        :min="8"
+        :max="5000"
+      />
+    </div>
+
+    <div class="control-panel-section management-panel-actions" data-control-panel="management" :hidden="activeTab !== 'management'">
+      <UiButton v-for="action in actions" :id="action.id" :key="action.id" variant="secondary">
+        {{ action.label }}
+      </UiButton>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import {ref} from "vue";
+import UiButton from "./base/UiButton.vue";
+import UiField from "./base/UiField.vue";
+import UiLayerToggleButton from "./base/UiLayerToggleButton.vue";
+import UiSegmented from "./base/UiSegmented.vue";
+import UiSliderField from "./base/UiSliderField.vue";
+import UiSwitchField from "./base/UiSwitchField.vue";
+import UiTabs from "./base/UiTabs.vue";
+import {useGlobalConfigStore} from "../stores/global-config-store.js";
+
+defineOptions({
+  name: "ControlPanel"
+});
+
+const config = useGlobalConfigStore();
+const activeTab = ref("generation");
+const preferences = config.preferences;
+
+const tabs = Object.freeze([
+  {id: "generation", label: "生成"},
+  {id: "themes", label: "专题"},
+  {id: "layers", label: "图层"},
+  {id: "management", label: "管理"}
+]);
+
+const terrainTemplates = Object.freeze([
+  {value: "continents", label: "大陆"},
+  {value: "mediterranean", label: "地中海"},
+  {value: "highIsland", label: "高山岛屿"},
+  {value: "lowIsland", label: "平原岛屿"},
+  {value: "peninsula", label: "一侧大陆"},
+  {value: "pangea", label: "盘古大陆"},
+  {value: "archipelago", label: "群岛"}
+]);
+
+const themes = Object.freeze([
+  {value: "height", label: "高度"},
+  {value: "temperature", label: "温度"},
+  {value: "precipitation", label: "降水"},
+  {value: "biomes", label: "生物群系"},
+  {value: "cultures", label: "文化"},
+  {value: "religions", label: "宗教"},
+  {value: "states", label: "国家"},
+  {value: "provinces", label: "省份"},
+  {value: "regions", label: "区域"},
+  {value: "population", label: "人口"}
+]);
+
+const layers = Object.freeze([
+  {id: "routes", label: "道路"},
+  {id: "rivers", label: "河流"},
+  {id: "cities", label: "城市"},
+  {id: "labels", label: "城市标签"},
+  {id: "stateBorders", label: "国界"},
+  {id: "provinceBorders", label: "省界"},
+  {id: "coastline", label: "海岸线"}
+]);
+
+const actions = Object.freeze([
+  {id: "fit-view", label: "适配视图"},
+  {id: "open-height-panel", label: "高度编辑"},
+  {id: "open-state-panel", label: "国家编辑"},
+  {id: "open-province-panel", label: "省份管理"},
+  {id: "open-city-panel", label: "城市管理"},
+  {id: "open-culture-panel", label: "文化管理"},
+  {id: "open-religion-panel", label: "宗教管理"},
+  {id: "open-route-panel", label: "路线管理"},
+  {id: "open-river-panel", label: "河流管理"}
+]);
+
+function isLayerVisible(layer) {
+  return preferences.layers?.[layer] !== false;
+}
+</script>

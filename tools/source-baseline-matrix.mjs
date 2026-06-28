@@ -11,7 +11,7 @@ const mode = args.mode || "quick";
 const port = Number(args.port || 5301);
 const browserChannel = args["browser-channel"] || args.channel || null;
 const timeoutMs = Number(args.timeout || 180000);
-const outRoot = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "source-baselines"));
+const outRoot = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "generated", "source-baselines"));
 const refresh = Boolean(args.refresh);
 const reuseServer = Boolean(args["reuse-server"]);
 

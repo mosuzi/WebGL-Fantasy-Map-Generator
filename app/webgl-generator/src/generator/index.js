@@ -9,7 +9,7 @@ import {normalizeOptions} from "./options.js";
 import {buildPack} from "./pack.js";
 import {buildPolitics} from "./politics.js";
 import {createRandom, stableHash} from "./random.js";
-import {buildRivers} from "./rivers.js";
+import {buildRivers, renameHydronymsByCulture} from "./rivers.js";
 import {buildSettlements, finalizeSettlements} from "./settlements.js";
 import {buildSociety, finalizeSocietyReligions} from "./society.js";
 import {buildZones} from "./zones.js";
@@ -29,6 +29,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
   climate.biomes = biomes.biomes;
   climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
   const society = buildSociety(grid, features, climate, rivers, random, pack, options);
+  renameHydronymsByCulture(rivers, pack, options);
   const settlements = buildSettlements(grid, features, null, rivers, random, pack, options);
   const politics = buildPolitics(grid, features, society, rivers, random, options, pack);
   finalizeSettlements(grid, features, politics, settlements, pack);

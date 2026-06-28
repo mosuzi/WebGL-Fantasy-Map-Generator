@@ -18,18 +18,18 @@
 - 所有手写文档必须使用中文。
 - 计划、阶段进度、重要决策、风险和执行结果都要及时写入 `docs/`。
 - 如果新增脚本会生成 Markdown 报告，生成内容也应为中文。
-- 根目录关键文档：
+- 关键文档：
   - `graphics-reimplementation-plan.md`：早期图形化重实现分析，已被新复刻计划取代，仅作参考。
-  - `docs/gl-reimplementation-acceptance-plan.md`：独立 WebGL 地图生成器复刻可验收计划。
+  - `docs/plans/gl-reimplementation-acceptance-plan.md`：独立 WebGL 地图生成器复刻可验收计划。
   - `docs/current-plan.md`：当前开发计划和下一步。
   - `docs/development-log.md`：开发历史与决策记录。
-  - `docs/performance-baseline.md`：第 0 里程碑 profiling 工具说明。
-  - `docs/performance-baseline-results.md`：当前可信性能基线报告。
-  - `docs/milestone-1-webgl-prototype.md`：第 1 里程碑 WebGL cells 原型说明。
-  - `docs/webgl-svg-performance-comparison.md`：WebGL 原型与 SVG 基线性能对照。
-  - `docs/webgl-prototype-profile-results.md`：WebGL 原型当前性能采集结果。
-  - `docs/source-generation-audit-and-rectification-plan.md`：source 生成算法重新审查和正式应用生成质量整改方案。
-  - `docs/editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单，记录各领域面板职责、优先级和暂缓范围。
+  - `docs/performance/performance-baseline.md`：第 0 里程碑 profiling 工具说明。
+  - `docs/generated/reports/performance-baseline-results.md`：当前可信性能基线报告。
+  - `docs/milestones/milestone-1-webgl-prototype.md`：第 1 里程碑 WebGL cells 原型说明。
+  - `docs/performance/webgl-svg-performance-comparison.md`：WebGL 原型与 SVG 基线性能对照。
+  - `docs/generated/reports/webgl-prototype-profile-results.md`：WebGL 原型当前性能采集结果。
+  - `docs/audits/source-generation-audit-and-rectification-plan.md`：source 生成算法重新审查和正式应用生成质量整改方案。
+  - `docs/task-notes/editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单，记录各领域面板职责、优先级和暂缓范围。
 
 ## 代码约定
 
@@ -55,24 +55,24 @@
 - 阅读 `source/Fantasy-Map-Generator` 核心结构。
 - 编写图形化重实现总方案：`graphics-reimplementation-plan.md`。
 - 完成第 0 里程碑外部性能基线工具：`tools/fmg-profile.mjs`。
-- 编写第 0 里程碑说明：`docs/performance-baseline.md`。
+- 编写第 0 里程碑说明：`docs/performance/performance-baseline.md`。
 - 跑出可信 `10000/50000/100000` 三档性能基线：
-  - `docs/performance-baseline-results.json`
-  - `docs/performance-baseline-results.md`
+  - `docs/generated/reports/performance-baseline-results.json`
+  - `docs/generated/reports/performance-baseline-results.md`
 - 开始并跑通第 1 里程碑最小 WebGL cells 原型：
   - `tools/fmg-export-snapshot.mjs`
   - `tools/serve-prototype.mjs`
   - `prototype/webgl-cells/`
-  - `docs/milestone-1-webgl-prototype.md`
+  - `docs/milestones/milestone-1-webgl-prototype.md`
 - 整理第 1 里程碑 WebGL 原型与第 0 里程碑 SVG 基线对照：
-  - `docs/webgl-svg-performance-comparison.md`
+  - `docs/performance/webgl-svg-performance-comparison.md`
 - 将 WebGL 原型主接口收敛为 `GraphicsMapRenderer`：
   - `prototype/webgl-cells/src/renderer.js`
   - 保留 `CellWebGLRenderer` 兼容别名。
 - 新增正式 WebGL 原型性能采集脚本：
   - `tools/webgl-prototype-profile.mjs`
-  - `docs/webgl-prototype-profile-results.json`
-  - `docs/webgl-prototype-profile-results.md`
+  - `docs/generated/reports/webgl-prototype-profile-results.json`
+  - `docs/generated/reports/webgl-prototype-profile-results.md`
 - 修正底层 mesh 数据源：
   - 基础 cell mesh 使用 `grid.points`、`grid.cells.v`、`grid.vertices.p`。
   - `pack.cells` 只用于国家、边界、河流、picking 等业务语义。
@@ -150,12 +150,12 @@ node .\tools\serve-prototype.mjs --port 5400
 2. `docs/current-plan.md`
 3. `docs/development-log.md`
 4. `graphics-reimplementation-plan.md`
-5. `docs/performance-baseline.md`
-6. `docs/performance-baseline-results.md`
-7. `docs/milestone-1-webgl-prototype.md`
-8. `docs/webgl-svg-performance-comparison.md`
-9. `docs/webgl-prototype-profile-results.md`
-10. `docs/source-generation-audit-and-rectification-plan.md`
-11. `docs/editor-and-stat-panel-inventory.md`
+5. `docs/performance/performance-baseline.md`
+6. `docs/generated/reports/performance-baseline-results.md`
+7. `docs/milestones/milestone-1-webgl-prototype.md`
+8. `docs/performance/webgl-svg-performance-comparison.md`
+9. `docs/generated/reports/webgl-prototype-profile-results.md`
+10. `docs/audits/source-generation-audit-and-rectification-plan.md`
+11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
-然后根据用户最新指令继续。当前下一步建议是按 `docs/editor-and-stat-panel-inventory.md` 进入正式版编辑器基础设施：先补 edit command / undo command、selection store、highlight / locate API、对象表格组件和派生重建调度，再做独立浮动 `river-panel`、高度编辑器第一刀和国家编辑器第一刀。
+然后根据用户最新指令继续。当前下一步建议是按 `docs/task-notes/editor-and-stat-panel-inventory.md` 进入正式版编辑器基础设施：先补 edit command / undo command、selection store、highlight / locate API、对象表格组件和派生重建调度，再做独立浮动 `river-panel`、高度编辑器第一刀和国家编辑器第一刀。

@@ -7,6 +7,8 @@ export function resolveObject(map, object) {
   if (object.kind === "river") return resolveRiver(map, object);
   if (object.kind === "state") return resolveState(map, object);
   if (object.kind === "province") return resolveProvince(map, object);
+  if (object.kind === "culture") return resolveCulture(map, object);
+  if (object.kind === "religion") return resolveReligion(map, object);
   if (object.kind === "region") return resolveRegion(map, object);
   return object;
 }
@@ -137,6 +139,44 @@ function resolveProvince(map, object) {
     stateId: province.state,
     centerCell: province.center,
     pole: province.pole
+  };
+}
+
+function resolveCulture(map, object) {
+  const culture = map.society.cultures[object.id];
+  if (!culture || !culture.i) return null;
+  const urban = (map.settlements?.cities || []).reduce((sum, city) => sum + (Number(city?.culture) === object.id ? Number(city.population) || 0 : 0), 0);
+  return {
+    ...object,
+    kind: "culture",
+    id: culture.id ?? culture.i ?? object.id,
+    name: culture.name,
+    type: culture.type || "Generic",
+    nameStyle: culture.nameStyle || "default",
+    centerCell: culture.center,
+    gridCenterCell: culture.gridCenter,
+    cells: culture.cells || 0,
+    population: (culture.rural || 0) + urban
+  };
+}
+
+function resolveReligion(map, object) {
+  const religion = map.society.religions[object.id];
+  if (!religion || !religion.i) return null;
+  const urban = (map.settlements?.cities || []).reduce((sum, city) => sum + (Number(city?.religion) === object.id ? Number(city.population) || 0 : 0), 0);
+  return {
+    ...object,
+    kind: "religion",
+    id: religion.id ?? religion.i ?? object.id,
+    name: religion.name,
+    type: religion.type || "Generic",
+    form: religion.form || "none",
+    cultureId: religion.culture,
+    culture: map.society.cultures[religion.culture]?.name || "unknown",
+    centerCell: religion.center,
+    gridCenterCell: religion.gridCenter,
+    cells: religion.cells || 0,
+    population: (religion.rural || 0) + urban
   };
 }
 
