@@ -8202,3 +8202,89 @@
   - 国家面板目标下拉包含 `中立`。
   - 省份面板目标下拉包含 `中立`。
   - 无 console error / pageerror。
+
+## 2026-06-29 国界、省界与海岸线渲染平滑
+
+目标：
+
+- 按用户此前确认的方向，让 WebGL 生成的国界、省界、海岸线和湖岸线在视觉上更柔和。
+- 保持关联 cells、国家/省份归属、picking 和编辑判定仍为原始棱角边界。
+- 国家/省份编辑拖动时仍按 cell 即时预览；提交后沿用现有 `refreshLineLayers()` 自动重新生成平滑线层。
+
+方案：
+
+- 在线层构建时，把零散共享边线段先拼成有序路径。
+- 对海岸线和湖岸线使用两轮较温和的 Chaikin 平滑。
+- 对国界和省界使用一轮更保守的 Chaikin 平滑：
+  - 节点度数不等于 `2` 的三岔口、端点和交汇点会作为路径切分点。
+  - 开放路径保留首尾端点，避免国家/省份交界点漂移。
+  - 闭合路径按循环路径处理，再补回首点闭合。
+- 平滑结果只写入现有 `gl.LINES` 线层 buffer，不反写 `grid.cells`、`pack.cells` 或任何语义字段。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `buildLineVertices()` 改为通过 `pushSmoothedBoundarySegments()` 输出海岸、湖岸、国界和省界。
+  - 新增 `collectPoliticalBoundarySegments()`，把原本边扫描逻辑拆成线段收集。
+  - 新增边界 graph/path 构建函数：
+    - `buildBoundaryGraph()`
+    - `buildBoundaryPaths()`
+    - `walkBoundaryPath()`
+  - 新增平滑函数：
+    - `smoothBoundaryPath()`
+    - `chaikinBoundaryPath()`
+  - 新增 `pushWorldPolyline()`，把平滑路径拆回短线段进入现有线层。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 海岸/湖岸原始线段合计 `1806`。
+  - 平滑后线层 `lineVertexCount = 26588`。
+  - 切换国家视图和省份视图后 `lineVertexCount` 保持有效。
+  - 画布非空采样 `nonZero = 918000 / 918000`。
+  - `WebGL error = 0`，无 console error / pageerror。
+
+## 2026-06-29 河流与路线渲染平滑
+
+目标：
+
+- 延续边界平滑方案，把河流、道路、小路和海路也改为渲染层平滑。
+- 保持原始 `river.points`、`route.points`、河流 cells、道路寻路结果、picking 和对象定位不变。
+- 河流宽度不丢失：平滑后的中间点需要同步插值宽度，避免变宽河流出现断档。
+
+方案：
+
+- 新增开放折线 Chaikin 平滑工具，保留首尾端点，只平滑中间折点。
+- 河流：
+  - `getRiverRenderPath()` 仍先按原始点计算 flux 与宽度。
+  - 返回前对点和宽度数组一起平滑。
+  - 如果河流点带有第三维 flux，也同步插值。
+- 路线：
+  - `buildRouteMeshVertices()` 在绘制前临时平滑 `route.points`。
+  - 道路、小路、海路和虚线小路共享该渲染路径，原始路线 cells 与点不写回。
+- 选中河流高亮：
+  - `buildSelectionMeshVertices()` 的河流高亮也使用同一套开放折线平滑，避免高亮和河流主体错位。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `LINE_SMOOTHING` 配置，分别控制河流、路线和河流高亮的平滑强度。
+  - 新增 `smoothWorldPath()`、`smoothWorldPathWithValues()`、`chaikinOpenWorldPath()`。
+  - 新增 `interpolateWorldPoint()` 和 `interpolateValue()`，支持河流第三维 flux 与宽度插值。
+  - `getRiverRenderPath()`、`buildRouteMeshVertices()` 和河流 selection mesh 改为使用平滑后的临时路径。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - `routeVertexCount = 48930`。
+  - `riverVertexCount = 19674`。
+  - 原始河流段数 `1557`，平滑后河流渲染段数 `3279`。
+  - 原始路线段数 `3508`，路线 mesh 正常生成。
+  - 画布非空采样 `nonZero = 918000 / 918000`。
+  - `WebGL error = 0`，无 console error / pageerror。

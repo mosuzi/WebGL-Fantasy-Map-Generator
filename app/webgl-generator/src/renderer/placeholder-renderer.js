@@ -900,16 +900,33 @@ function buildPlaceholderVertices(map, colorMode, viewOptions) {
 
 function buildLineVertices(map, visibility = {}) {
   const vertices = [];
-  if (visibility.coastline !== false) for (const segment of map.features.shore.coastline) pushWorldLine(vertices, segment, map, [0.9, 0.86, 0.68, 1]);
-  if (visibility.lakeShore !== false) for (const segment of map.features.shore.lakeShore) pushWorldLine(vertices, segment, map, [0.64, 0.82, 0.92, 1]);
+  if (visibility.coastline !== false) pushSmoothedBoundarySegments(vertices, map.features.shore.coastline, map, [0.9, 0.86, 0.68, 1], BOUNDARY_SMOOTHING.shore);
+  if (visibility.lakeShore !== false) pushSmoothedBoundarySegments(vertices, map.features.shore.lakeShore, map, [0.64, 0.82, 0.92, 1], BOUNDARY_SMOOTHING.shore);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryLines(vertices, map, "province", [0.18, 0.2, 0.22, 0.34]);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryLines(vertices, map, "state", [0.04, 0.05, 0.06, 0.62]);
   return new Float32Array(vertices);
 }
 
+const BOUNDARY_SMOOTHING = Object.freeze({
+  shore: Object.freeze({iterations: 2, factor: 0.22}),
+  political: Object.freeze({iterations: 1, factor: 0.18})
+});
+
+const LINE_SMOOTHING = Object.freeze({
+  river: Object.freeze({iterations: 1, factor: 0.2}),
+  route: Object.freeze({iterations: 1, factor: 0.16}),
+  riverSelection: Object.freeze({iterations: 1, factor: 0.18})
+});
+
 function pushPoliticalBoundaryLines(vertices, map, field, color) {
+  const segments = collectPoliticalBoundarySegments(map, field);
+  pushSmoothedBoundarySegments(vertices, segments, map, color, BOUNDARY_SMOOTHING.political);
+}
+
+function collectPoliticalBoundarySegments(map, field) {
+  const segments = [];
   const cells = map?.grid?.cells;
-  if (!cells?.c || !cells?.v || !cells?.[field]) return;
+  if (!cells?.c || !cells?.v || !cells?.[field]) return segments;
   for (const cell of cells.i || []) {
     if (!isLandCell(cell, map)) continue;
     const ownValue = cells[field][cell] || 0;
@@ -920,9 +937,10 @@ function pushPoliticalBoundaryLines(vertices, map, field, color) {
       if (field !== "state" && (!ownValue || !neighborValue)) continue;
       if (field === "state" && !ownValue && !neighborValue) continue;
       const edge = sharedVoronoiEdge(map, cell, neighbor);
-      if (edge) pushWorldLine(vertices, edge, map, color);
+      if (edge) segments.push(edge);
     }
   }
+  return segments;
 }
 
 function sharedVoronoiEdge(map, cell, neighbor) {
@@ -931,6 +949,182 @@ function sharedVoronoiEdge(map, cell, neighbor) {
   const shared = ownVertices.filter(vertex => neighborVertices.has(vertex));
   if (shared.length < 2) return null;
   return [map.grid.vertices.p[shared[0]], map.grid.vertices.p[shared[1]]];
+}
+
+function pushSmoothedBoundarySegments(vertices, segments, map, color, options) {
+  for (const path of buildBoundaryPaths(segments)) {
+    const smoothed = smoothBoundaryPath(path, options);
+    pushWorldPolyline(vertices, smoothed, map, color);
+  }
+}
+
+function buildBoundaryPaths(segments) {
+  const graph = buildBoundaryGraph(segments);
+  const paths = [];
+  const visited = new Uint8Array(graph.edges.length);
+
+  for (const node of graph.nodes.values()) {
+    if (node.edges.length === 2) continue;
+    for (const edgeIndex of node.edges) {
+      if (visited[edgeIndex]) continue;
+      paths.push(walkBoundaryPath(graph, node.key, edgeIndex, visited));
+    }
+  }
+
+  for (let edgeIndex = 0; edgeIndex < graph.edges.length; edgeIndex++) {
+    if (visited[edgeIndex]) continue;
+    paths.push(walkBoundaryPath(graph, graph.edges[edgeIndex].a, edgeIndex, visited));
+  }
+
+  return paths.filter(path => path.length >= 2);
+}
+
+function buildBoundaryGraph(segments) {
+  const nodes = new Map();
+  const edges = [];
+
+  for (const segment of segments || []) {
+    if (!isWorldPoint(segment?.[0]) || !isWorldPoint(segment?.[1])) continue;
+    const a = boundaryPointKey(segment[0]);
+    const b = boundaryPointKey(segment[1]);
+    if (a === b) continue;
+    const edgeIndex = edges.length;
+    ensureBoundaryNode(nodes, a, segment[0]).edges.push(edgeIndex);
+    ensureBoundaryNode(nodes, b, segment[1]).edges.push(edgeIndex);
+    edges.push({a, b});
+  }
+
+  return {nodes, edges};
+}
+
+function ensureBoundaryNode(nodes, key, point) {
+  if (!nodes.has(key)) nodes.set(key, {key, point: [point[0], point[1]], edges: []});
+  return nodes.get(key);
+}
+
+function boundaryPointKey(point) {
+  return `${Math.round(point[0] * 1000)}:${Math.round(point[1] * 1000)}`;
+}
+
+function walkBoundaryPath(graph, startKey, firstEdgeIndex, visited) {
+  const keys = [startKey];
+  let currentKey = startKey;
+  let edgeIndex = firstEdgeIndex;
+
+  while (edgeIndex !== -1 && !visited[edgeIndex]) {
+    visited[edgeIndex] = 1;
+    const edge = graph.edges[edgeIndex];
+    const nextKey = edge.a === currentKey ? edge.b : edge.a;
+    keys.push(nextKey);
+    const nextNode = graph.nodes.get(nextKey);
+    if (!nextNode || (nextNode.edges.length !== 2 && nextKey !== startKey)) break;
+    currentKey = nextKey;
+    edgeIndex = nextNode.edges.find(index => !visited[index]) ?? -1;
+  }
+
+  return keys.map(key => graph.nodes.get(key)?.point).filter(Boolean);
+}
+
+function smoothBoundaryPath(path, {iterations = 1, factor = 0.2} = {}) {
+  if (path.length < 3 || iterations <= 0) return path;
+  let result = path.map(point => [point[0], point[1]]);
+  const closed = pointsNear(result[0], result[result.length - 1]);
+  if (closed) result = result.slice(0, -1);
+  if (result.length < 3) return path;
+
+  for (let index = 0; index < iterations; index++) {
+    result = chaikinBoundaryPath(result, factor, closed);
+    if (result.length < 3) break;
+  }
+
+  return closed ? [...result, result[0]] : result;
+}
+
+function chaikinBoundaryPath(path, factor, closed) {
+  const next = [];
+  const count = path.length;
+  if (!closed) next.push(path[0]);
+
+  const segments = closed ? count : count - 1;
+  for (let index = 0; index < segments; index++) {
+    const a = path[index];
+    const b = path[(index + 1) % count];
+    next.push(interpolatePoint(a, b, factor));
+    next.push(interpolatePoint(a, b, 1 - factor));
+  }
+
+  if (!closed) next.push(path[count - 1]);
+  return next;
+}
+
+function interpolatePoint(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+function pointsNear(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]) <= 0.001;
+}
+
+function smoothWorldPath(points, options) {
+  return smoothWorldPathWithValues(points, null, options).points;
+}
+
+function smoothWorldPathWithValues(points, values, {iterations = 1, factor = 0.2} = {}) {
+  const sourcePoints = (points || []).filter(isWorldPoint);
+  if (sourcePoints.length < 3 || iterations <= 0) return {
+    points: sourcePoints,
+    widths: values || []
+  };
+
+  let resultPoints = sourcePoints.map(point => Array.isArray(point) ? [...point] : point);
+  let resultValues = Array.isArray(values) ? [...values] : null;
+
+  for (let index = 0; index < iterations; index++) {
+    const result = chaikinOpenWorldPath(resultPoints, resultValues, factor);
+    resultPoints = result.points;
+    resultValues = result.values;
+    if (resultPoints.length < 3) break;
+  }
+
+  return {
+    points: resultPoints,
+    widths: resultValues || values || []
+  };
+}
+
+function chaikinOpenWorldPath(points, values, factor) {
+  const nextPoints = [points[0]];
+  const nextValues = values ? [values[0]] : null;
+
+  for (let index = 0; index < points.length - 1; index++) {
+    const a = points[index];
+    const b = points[index + 1];
+    nextPoints.push(interpolateWorldPoint(a, b, factor));
+    nextPoints.push(interpolateWorldPoint(a, b, 1 - factor));
+    if (nextValues) {
+      nextValues.push(interpolateValue(values[index], values[index + 1], factor));
+      nextValues.push(interpolateValue(values[index], values[index + 1], 1 - factor));
+    }
+  }
+
+  nextPoints.push(points[points.length - 1]);
+  if (nextValues) nextValues.push(values[values.length - 1]);
+  return {points: nextPoints, values: nextValues};
+}
+
+function interpolateWorldPoint(a, b, t) {
+  const point = interpolatePoint(a, b, t);
+  if (Number.isFinite(a?.[2]) || Number.isFinite(b?.[2])) point[2] = interpolateValue(a?.[2], b?.[2], t);
+  return point;
+}
+
+function interpolateValue(a, b, t) {
+  const av = Number.isFinite(a) ? a : b;
+  const bv = Number.isFinite(b) ? b : a;
+  if (!Number.isFinite(av) && !Number.isFinite(bv)) return 0;
+  if (!Number.isFinite(av)) return bv;
+  if (!Number.isFinite(bv)) return av;
+  return av + (bv - av) * t;
 }
 
 function buildRiverMeshVertices(map, camera, canvas) {
@@ -979,7 +1173,7 @@ function getRiverRenderPath(river, map, pixelRatio, stats) {
     stats.maxFlux = Math.max(stats.maxFlux, runningFlux);
   }
 
-  return {points, widths};
+  return smoothWorldPathWithValues(points, widths, LINE_SMOOTHING.river);
 }
 
 function sampleRiverCell(cells, pointIndex, pointsLength) {
@@ -1055,7 +1249,7 @@ function buildRouteMeshVertices(map, camera, canvas, selection) {
     const baseWidth = style.width;
     const widthPx = (selected ? baseWidth + 2.4 : baseWidth) * pixelRatio;
     const dash = !selected && style.dash ? {dashPx: style.dash[0] * pixelRatio, gapPx: style.dash[1] * pixelRatio} : null;
-    pushScreenPolyline(vertices, route.points, map, camera, canvas, color, widthPx, dash);
+    pushScreenPolyline(vertices, smoothWorldPath(route.points, LINE_SMOOTHING.route), map, camera, canvas, color, widthPx, dash);
   }
   return new Float32Array(vertices);
 }
@@ -1097,7 +1291,7 @@ function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash)
   const fluxFactor = Math.sqrt(Math.max(0, river.flux || 0) / maxFlux);
   const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
   const color = locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
-  pushScreenPolyline(vertices, river.points, map, camera, canvas, color, widthPx);
+  pushScreenPolyline(vertices, smoothWorldPath(river.points, LINE_SMOOTHING.riverSelection), map, camera, canvas, color, widthPx);
   return new Float32Array(vertices);
 }
 
@@ -1190,6 +1384,12 @@ function pushGridCells(vertices, map, colorMode, viewOptions) {
 function pushWorldLine(vertices, segment, map, color) {
   pushWorldVertex(vertices, segment[0], map, color);
   pushWorldVertex(vertices, segment[1], map, color);
+}
+
+function pushWorldPolyline(vertices, points, map, color) {
+  for (let index = 0; index < points.length - 1; index++) {
+    pushWorldLine(vertices, [points[index], points[index + 1]], map, color);
+  }
 }
 
 function pushScreenPolyline(vertices, points, map, camera, canvas, color, widthPx, dash = null) {
