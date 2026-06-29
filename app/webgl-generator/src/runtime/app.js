@@ -621,6 +621,10 @@ export function createGeneratorApp(documentRef) {
       renderer.setViewOptions({showOceanHeight});
       updateRuntimePanel(documentRef, state);
     },
+    onSmoothCellBorders: smoothCellBorders => {
+      renderer.setViewOptions({smoothCellBorders});
+      updateRuntimePanel(documentRef, state);
+    },
     onShowHoverInfo: () => {
       updatePickPanel(documentRef, state);
     },
@@ -701,10 +705,18 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
   const preferences = readControlPreferences(documentRef);
   if (typeof preferences.colorMode === "string") renderer.setColorMode(preferences.colorMode);
   if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
+  if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
   if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
-  for (const [layer, visible] of Object.entries(preferences.layers || {})) {
+  const layers = normalizeLayerVisibilityPreferences(preferences.layers || {});
+  for (const [layer, visible] of Object.entries(layers)) {
     renderer.setLayerVisible(layer, visible);
   }
+}
+
+function normalizeLayerVisibilityPreferences(layers = {}) {
+  const normalized = {...layers};
+  if (Object.prototype.hasOwnProperty.call(normalized, "coastline")) normalized.lakeShore = normalized.coastline;
+  return normalized;
 }
 
 function requestGenerate(state, documentRef) {

@@ -8560,3 +8560,506 @@
 风险与下一步：
 
 - 当前 debug mesh 仍是重心过滤，不是严格 polygon clipping；如果截图出现跨越狭窄边界的三角形，下一刀应在真正替换主 surface 前补 clipping 或局部补点策略。
+
+## 2026-06-29 政治视图主 surface 接入视觉 mesh
+
+目标：
+
+- 解决国家/省份视图里“边界线和平滑带已经同源，但底层政治色块仍是硬 cell 面”的割裂感。
+- 先只替换政治视图下的非零国家/省份陆地 surface，保留水域、中立国家和无省份陆地的硬 grid cell 兜底。
+- 继续保持底层 cell、picking、编辑判定和生成数据不变；本刀只改变国家/省份视图的绘制 surface。
+
+方案：
+
+- `buildPlaceholderVertices()` 在国家/省份视图下会优先读取 `politicalVisualMeshes`：
+  - 水域继续绘制硬 grid cell。
+  - 国家视图中 `state = 0` 的中立陆地继续绘制硬 grid cell。
+  - 省份视图中 `province = 0` 的无省份陆地继续绘制硬 grid cell。
+  - 其它非零政治陆地使用政治视觉 mesh surface。
+- `buildPoliticalVisualMeshCache()` 同时生成两套顶点：
+  - `surfaceVertices`：不透明，用于正式政治视图 surface。
+  - `vertices`：半透明，用于 `setPoliticalMeshDebugMode()` 的覆盖调试层。
+- mesh 点集新增同源海岸/湖岸陆侧平滑点：
+  - 先按 `SHORE_VISUAL_STYLE.bandWidthWorld` 取陆侧边界点。
+  - 再按海岸平滑参数得到视觉海岸点。
+  - 对平滑点重新 `pickGridCell()`，按实际落点的国家/省份归属加入对应 mesh group。
+- 仍使用 Delaunay 候选三角形 + 重心所在 cell 归属过滤；本刀没有引入 polygon clipping。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `loadMap()` 和 `refreshCellSurface()` 把 `politicalVisualMeshes` 传给 surface 构建。
+  - 新增 `politicalSurfaceMeshForMode()`、`shouldDrawGridCellUnderPoliticalMesh()` 和 `pushMeshSurfaceVertices()`。
+  - `collectPoliticalVisualMeshGroups()` 新增海岸/湖岸点补充。
+  - `buildPoliticalVisualMeshCache()` 同步输出正式 surface 顶点和 debug 顶点。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 高度视图保持 `vertexCount = 221799`，`lineVertexCount = 20176`，debug 默认关闭。
+  - 国家 mesh 点数从上一刀约 `6006` 提升到 `13060`，候选三角 `25659`，保留三角 `21468`，过滤三角 `4191`，surface/debug 顶点 `64404`。
+  - 省份 mesh 点数从上一刀约 `13951` 提升到 `21005`，候选三角 `38290`，保留三角 `32828`，过滤三角 `5462`，surface/debug 顶点 `98484`。
+  - 国家视图默认 surface：`vertexCount = 294963`，`lineVertexCount = 21638`，`politicalMeshDebug.mode = none`。
+  - 省份视图默认 surface：`vertexCount = 349215`，`lineVertexCount = 25194`，`politicalMeshDebug.mode = none`。
+  - debug 层仍可独立开启：国家 debug `triangleCount = 21468`，省份 debug `triangleCount = 32828`，关闭后回到 `vertexCount = 0`。
+  - `WebGL error = 0`，无 console error / pageerror。
+  - 已生成截图：
+    - `docs/generated/reports/political-mesh-surface-states.png`
+    - `docs/generated/reports/political-mesh-surface-provinces.png`
+  - 两张截图均为 `1280 x 800`，文件级像素采样 `nonZero = 1024000 / 1024000`。
+
+风险与下一步：
+
+- 当前 mesh 仍不是严格 polygon clipping，极端狭窄飞地或细碎湖岸仍可能有少量跨界三角。
+- 下一刀建议做近景抽样截图和局部指标：检查三角形边长异常、跨越多条政治边界的长三角，并按需要加入最大边长过滤或边界局部补点。
+
+## 2026-06-29 政治视觉 mesh 质量统计与近景抽样
+
+目标：
+
+- 给政治视觉 mesh 增加可量化的质量指标，减少只靠肉眼判断的随机性。
+- 用指标定位最可疑三角并输出近景截图，判断下一刀是做过滤、补点还是更正式的 clipping。
+- 本刀只统计和截图，不改变 mesh 过滤规则，避免过早删掉合法的沿海/边界三角。
+
+方案：
+
+- `politicalVisualMeshes.*.quality` 新增：
+  - `averageGridSpacingWorld`：按 grid 邻接估算的平均 cell 间距。
+  - `longEdgeThresholdWorld`：长边三角阈值，当前取平均间距约 `4.5` 倍，并受海岸视觉带宽兜底约束。
+  - `maxEdgeWorld`、`longTriangleCount`、`longTriangleRatio`。
+  - `boundaryMismatchTriangleCount`、`boundaryMismatchRatio`：保留三角的三条边中点采样后，若落到其它政治归属，计为疑似跨界。
+  - `waterSampleTriangleCount`、`waterSampleRatio`：边中点采样落到水域或无 cell，用于捕捉海岸/湖岸附近风险。
+  - `notableTriangles`：按长边、边界不一致和落水采样综合排序，保留最多 `8` 个可疑三角的中心坐标和摘要。
+- Playwright 根据 `notableTriangles` 自动把相机移动到最可疑区域，生成国家/省份近景截图。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `createPoliticalMeshQualityStats()`、`addPoliticalMeshTriangleQuality()`、`summarizePoliticalMeshQualityStats()`。
+  - 新增 `estimateGridSpacingWorld()`、`worldDistance()` 和 `roundRatio()`。
+  - `buildPoliticalVisualMeshCache()` 在保留三角时同步更新全局 quality 和 group quality。
+  - `largestGroups` 增加每个大组的最大边长、长边三角、边界不一致和落水采样计数。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 高度视图仍保持 `vertexCount = 221799`。
+  - 国家 mesh：
+    - 平均 grid 间距 `13.4`，长边阈值 `60.1`，最大边长 `170.1`。
+    - 长边三角 `8` 个。
+    - 边中点归属不一致三角 `349` 个，比例 `0.016`。
+    - 落水采样三角 `576` 个，比例 `0.027`。
+  - 省份 mesh：
+    - 平均 grid 间距 `13.4`，长边阈值 `60.1`，最大边长 `76.9`。
+    - 长边三角 `6` 个。
+    - 边中点归属不一致三角 `688` 个，比例 `0.021`。
+    - 落水采样三角 `559` 个，比例 `0.017`。
+  - `WebGL error = 0`，无 console error / pageerror。
+  - 已生成截图：
+    - `docs/generated/reports/political-mesh-quality-states-overview.png`
+    - `docs/generated/reports/political-mesh-quality-states-near-1.png`
+    - `docs/generated/reports/political-mesh-quality-states-near-2.png`
+    - `docs/generated/reports/political-mesh-quality-provinces-overview.png`
+    - `docs/generated/reports/political-mesh-quality-provinces-near-1.png`
+    - `docs/generated/reports/political-mesh-quality-provinces-near-2.png`
+  - 6 张截图均为 `1280 x 800`，文件级像素采样 `nonZero = 1024000 / 1024000`。
+
+观察：
+
+- 国家近景中，可疑区域集中在狭长湖岸、海岸和政治边界邻近处，没有大面积破洞。
+- 省份近景中可见少量尖细三角插入湖岸/海岸附近，说明长边三角不是纯统计噪声。
+
+风险与下一步：
+
+- 边中点归属不一致会把一部分合法边界贴边三角也计入风险，暂不适合作为硬删除规则。
+- 下一刀优先做长边过滤：先剔除 `maxEdgeWorld > longEdgeThresholdWorld` 的保留三角，再观察是否出现缺口；如缺口明显，再补局部边界点，而不是直接全量 clipping。
+
+## 2026-06-29 政治 mesh 异常直线排查与过滤
+
+问题：
+
+- 用户指出 `political-mesh-quality-states-near-1.png` 中存在异常的断续直线。
+- 该线看起来像路线或描边，但在政治 mesh 迁移后也可能来自 surface 三角。
+
+排查：
+
+- 用同一相机位置分别输出：
+  - 默认图层。
+  - 关闭道路。
+  - 关闭河流。
+  - 关闭道路和河流。
+  - 保留 surface + 海岸/国界线。
+  - 只保留 surface。
+- 结果：
+  - 关闭道路、河流、边界、海岸和标签后，异常直线仍存在。
+  - 因此来源不是路线、河流或描边，而是政治视觉 mesh surface 的瘦长三角。
+
+方案：
+
+- 在 Delaunay 候选三角进入 surface/debug 顶点前增加三层过滤：
+  - 长边过滤：`maxEdgeWorld > longEdgeThresholdWorld` 的候选三角不绘制。
+  - 采样异常过滤：边中点采样跨到其它政治归属或水域时，只有边长超过较保守阈值才过滤，避免误删正常贴边三角。
+  - 针状过滤：最大边超过约 `1.5` 倍平均 grid 间距，同时最小高小于约 `0.25` 倍平均 grid 间距时过滤。
+- stats 新增：
+  - `longEdgeFilteredTriangles`
+  - `skinnyFilteredTriangles`
+  - `sampleFilteredTriangles`
+  - `quality.filteredLongTriangleCount`
+  - `quality.filteredSkinnyTriangleCount`
+  - `quality.filteredSampleTriangleCount`
+  - `notableTriangles[].filterReason`
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `triangleMaxEdgeWorld()`、`triangleMinAltitudeWorld()` 和 `triangleDoubleAreaWorld()`。
+  - 新增 `inspectPoliticalMeshTriangleSamples()`、`shouldFilterPoliticalMeshSampleTriangle()` 和 `shouldFilterPoliticalMeshSkinnyTriangle()`。
+  - `buildPoliticalVisualMeshCache()` 在三角进入顶点前先执行长边、针状和采样异常过滤。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 同一位置 `surface-only` 截图中，原异常断续直线已消失。
+  - 国家 mesh：
+    - `keptTriangles = 21315`
+    - `longEdgeFilteredTriangles = 377`
+    - `skinnyFilteredTriangles = 1323`
+    - `sampleFilteredTriangles = 7`
+    - 保留三角 `maxEdgeWorld = 33`
+  - 省份 mesh：
+    - `keptTriangles = 32566`
+    - `longEdgeFilteredTriangles = 161`
+    - `skinnyFilteredTriangles = 1713`
+    - `sampleFilteredTriangles = 4`
+    - 保留三角 `maxEdgeWorld = 33`
+  - 高度视图保持 `vertexCount = 221799`。
+  - `WebGL error = 0`，无 console error / pageerror。
+  - 已生成截图：
+    - `docs/generated/reports/line-source-default.png`
+    - `docs/generated/reports/line-source-routes-off.png`
+    - `docs/generated/reports/line-source-surface-only.png`
+    - `docs/generated/reports/line-source-after-filter-surface-only.png`
+    - `docs/generated/reports/line-source-after-sample-filter-surface-only.png`
+    - `docs/generated/reports/line-source-after-skinny-filter-surface-only.png`
+    - `docs/generated/reports/political-mesh-filtered-states-overview.png`
+    - `docs/generated/reports/political-mesh-filtered-provinces-overview.png`
+  - 关键截图均为 `1280 x 800`，文件级像素采样 `nonZero = 1024000 / 1024000`。
+
+风险与下一步：
+
+- 针状过滤是视觉策略，不改变底层 cell；极端碎片区域仍可能需要局部补点。
+- 下一步建议做省份近景回归抽样，确认过滤没有在小省份或飞地边缘制造可见缺口；若缺口出现，再补边界点，而不是继续降低过滤阈值。
+
+## 2026-06-29 全局视觉 cell mesh 试验
+
+背景：
+
+- 用户提出：如果一开始的 cells 边界就是平滑的，后续与 cells 相关的平滑就会顺理成章。
+- 这个方向比继续在国家/省份层面补 Delaunay 政治 mesh 更根本：所有视图都可以共享同一套视觉 cell 边界，picking 和编辑仍保持原始硬 cell。
+
+目标：
+
+- 新增一套 renderer 级 `cellVisualMesh`，不修改真实 `grid.cells`。
+- 每条共享 Voronoi 边只生成一次视觉曲线，相邻 cell 反向复用，避免裂缝。
+- 先让所有 surface 视图都使用视觉 cell mesh 着色，观察高度、国家、省份和既有异常直线区域是否稳定。
+- 保留政治 Delaunay mesh 的 debug 和质量统计，作为对比与回退依据。
+
+方案：
+
+- `cellVisualMesh` 只缓存几何：
+  - `cell`：原 grid cell id。
+  - `center`：原 cell 中心点。
+  - `points`：按 cell 顶点顺序串起的视觉边界采样点。
+- 共享边曲线：
+  - 以两个 Voronoi 顶点 id 排序作为 edge key。
+  - 基于 edge key 哈希得到稳定偏移。
+  - 用二次曲线从原边起点到终点采样，第一刀参数为 `segmentsPerEdge = 3`、`curveFactor = 0.14`、`maxOffsetWorld = 1.8`。
+  - 相邻 cell 读取同一条曲线，方向相反。
+- surface 构建：
+  - `buildPlaceholderVertices()` 优先使用 `cellVisualMesh`。
+  - 每个视觉 cell 仍以原 cell center 做扇形三角化。
+  - `colorForCell()` 仍按原 cell id 取色，因此高度、国家、省份、文化等视图的语义不变。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `cellVisualMesh` renderer 缓存和 `rebuildCellVisualMesh()`。
+  - 新增 `buildCellVisualMesh()`、`buildCellVisualBoundary()`、`cellVisualEdgeCurve()`、`sampleQuadraticWorldPath()`、`cellVisualEdgeNoise()`。
+  - 新增 `pushCellVisualGridCells()`，surface 构建优先使用视觉 cell 边界。
+  - `getStats()` 新增 `cellVisualMesh` 摘要。
+  - `pushGridCells()` 补上可选 cell 过滤 predicate，保留无视觉 mesh 时的政治 mesh fallback 正确性。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - `cellVisualMesh.cellCount = 10004`
+  - `cellVisualMesh.skippedCells = 0`
+  - `cellVisualMesh.edgeCurveCount = 30215`
+  - `cellVisualMesh.boundaryPoints = 175281`
+  - `averageBoundaryPoints = 17.521`
+  - `buildMs = 46`
+  - 高度视图 `vertexCount = 568119`，`lineVertexCount = 20176`，`WebGL error = 0`。
+  - 国家视图 `vertexCount = 576879`，`lineVertexCount = 21638`，`WebGL error = 0`。
+  - 省份视图 `vertexCount = 597051`，`lineVertexCount = 25194`，`WebGL error = 0`。
+  - 之前异常直线位置的国家近景截图未再出现直线异常。
+  - 已生成截图：
+    - `docs/generated/reports/cell-visual-height-overview.png`
+    - `docs/generated/reports/cell-visual-states-overview.png`
+    - `docs/generated/reports/cell-visual-provinces-overview.png`
+    - `docs/generated/reports/cell-visual-states-near-line-check.png`
+  - 4 张截图均为 `1280 x 800`，文件级像素采样 `nonZero = 1024000 / 1024000`。
+
+观察：
+
+- 这条路线整体更统一：高度、国家、省份等 surface 都来自同一套视觉 cell 边界。
+- 第一刀曲率较克制，暂未看到裂缝或明显自交。
+- 顶点数从硬 cell 的约 `22` 万提升到约 `57-60` 万，draw 仍在十几毫秒，当前 10k cells 可接受；后续大图需要再 profile。
+
+风险与下一步：
+
+- 当前视觉 cell 仍用 cell center 扇形三角化；若某些 cell 在更强曲率下出现凹形或自交，可能需要正式 polygon triangulation。
+- 海岸线、国界线、省界线当前仍来自各自 path/band 体系，虽然 surface 已统一为视觉 cell，但线层还没有完全改成从 `cellVisualMesh` 提取共享边。
+- 下一步建议先做一个开关或参数化策略：保留视觉 cell mesh 作为默认候选，但允许回退硬 cell surface；随后把海岸/国界/省界线层逐步改为读取视觉 cell 共享边，真正完成“面线同源”。
+
+## 2026-06-29 平滑单元格边界开关与线层推广
+
+背景：
+
+- 全局视觉 cell mesh 试验通过后，需要先提供可见开关，避免该策略在大图或异常地形上没有用户级回退。
+- 用户此前指出单独平滑海岸线、国界、省界会与硬 cell 面交叉，因此线层必须与当前 surface 使用同一套视觉边界。
+
+目标：
+
+- 在控制面板中新增“平滑单元格边界”开关，默认开启并持久化。
+- 关闭开关时，地图表面和边界线层一起回到硬 cell 路径。
+- 开启开关时，海岸线、湖岸线、国界和省界直接从 `cellVisualMesh.edgeCurves` 读取共享边曲线，保证面线同源。
+
+实施：
+
+- `app/webgl-generator/src/ui/vue/components/ControlPanel.vue`：
+  - 在 `视图` tab 增加“平滑单元格边界”开关。
+- `app/webgl-generator/src/ui/vue/stores/global-config-store.js`、`app/webgl-generator/src/ui/panel.js`、`app/webgl-generator/src/runtime/app.js`：
+  - 新增 `smoothCellBorders` 偏好读写、控制锁定、运行时刷新和统计展示。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - `viewOptions` 新增 `smoothCellBorders`，默认开启。
+  - `buildLineVertices()` 在平滑模式下使用 `pushCellVisualShoreLines()` 与 `pushCellVisualPoliticalLines()`。
+  - 新增 `visualSharedCellEdge()`，通过共享 Voronoi 顶点 id 查找 `cellVisualMesh.edgeCurves`。
+  - 关闭平滑时不再使用政治视觉 surface，保证真实回退到硬 cell surface 加旧线层。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 一次性静态服务验证 `dist/webgl-generator`：
+  - 控制面板 `视图` tab 中“平滑单元格边界”开关可见，默认选中。
+  - 国家视图平滑模式：
+    - `cellSurfaceMode = visual-cells`
+    - `vertexCount = 525843`
+    - `lineVertexCount = 28260`
+    - `cellVisualMesh.cellCount = 10004`
+    - `cellVisualMesh.edgeCurveCount = 30215`
+    - `WebGL error = 0`
+  - 省份视图平滑模式：
+    - `cellSurfaceMode = visual-cells`
+    - `vertexCount = 525843`
+    - `lineVertexCount = 28260`
+    - `WebGL error = 0`
+  - 关闭开关后的省份硬边界回退：
+    - `cellSurfaceMode = hard-cells`
+    - `vertexCount = 250731`
+    - `lineVertexCount = 25194`
+    - `WebGL error = 0`
+  - 再次打开后恢复：
+    - `cellSurfaceMode = visual-cells`
+    - `vertexCount = 525843`
+    - `lineVertexCount = 28260`
+    - `WebGL error = 0`
+  - `localStorage.webgl-generator-control-preferences.smoothCellBorders = true`。
+  - 无 console error / pageerror。
+  - 已生成截图：
+    - `docs/generated/reports/smooth-cell-borders-states-on.png`
+    - `docs/generated/reports/smooth-cell-borders-provinces-on.png`
+    - `docs/generated/reports/smooth-cell-borders-provinces-off.png`
+
+观察与下一步：
+
+- 当前平滑曲率仍保持克制，面线同源后未再看到边界线与 cell 面明显交叉。
+- 大图性能还没有重新 profile；后续若推进默认发布，需要补 `50k/100k` cells 下 `cellVisualMesh` 构建、顶点数和 draw 耗时数据。
+- 河流、道路等开放折线仍保留独立 Chaikin 平滑，不依赖 cellVisualMesh；后续如要让河流贴合河谷 cell 边界，可另做水文路径约束，不应直接混到边界视觉开关里。
+
+## 2026-06-29 平滑单元格边界大图回归与自然度修正
+
+背景：
+
+- 用户要求按“50k/100k 性能回归、近景视觉抽样、保护阈值判断、路径整理”的顺序完整走一遍。
+- 用户随后指出：省份视图开启/关闭平滑在总览上不明显；进一步观察后又指出虽然有曲线，但曲线仍显得不够自然。
+
+实施：
+
+- 新增 `tools/webgl-generator-smooth-cell-profile.mjs`：
+  - 启动一次性静态服务加载 `dist/webgl-generator`。
+  - 生成指定 cells 地图，采集高度、国家、省份平滑模式和省份硬边界模式的 renderer 统计。
+  - 输出 `docs/generated/reports/smooth-cell-profile-results.json` 和 `docs/generated/reports/smooth-cell-profile-results.md`。
+  - 自动截取总览图，以及海岸、湖岸、国界、省界、三国交界等近景的平滑/硬边界对照图。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 修正关闭“平滑单元格边界”时仍混入旧海岸/政治视觉带的问题。
+  - 关闭平滑后，surface 使用硬 grid cell，海岸/湖岸/国界/省界线层使用硬共享 Voronoi 边。
+  - 开启平滑后，surface 与线层继续使用 `cellVisualMesh` 的共享曲线。
+  - `getStats()` 新增 `boundaryLineMode`，区分 `visual-cell-curves`、`hard-cell-edges` 和兼容 fallback。
+  - 将视觉边曲线从逐边独立哈希偏移改为连续空间噪声，并把 `curveFactor` 从 `0.14` 降到 `0.08`、`maxOffsetWorld` 从 `1.8` 降到 `0.9`，降低“每条边单独被捏弯”的人工感。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计新增“边界线来源”，显示为“平滑共享边 / 硬共享边 / 兼容路径”。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check tools\webgl-generator-smooth-cell-profile.mjs` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- 10k smoke：
+  - 平滑省份近景与硬边界近景已经可见差异：平滑图为克制曲线，硬边界图为直共享边。
+  - `cellVisualMesh.buildMs = 41.6ms`，`vertexCount = 525852`，`lineVertexCount = 25206`，硬边界省份 `vertexCount = 179550`，`lineVertexCount = 8640`。
+- 50k/100k 完整回归：
+  - 50k：
+    - 实际 grid cells `50142`，pack cells `29988`。
+    - 平滑模式 `vertexCount = 2558304`，`lineVertexCount = 85188`，`cellVisualMesh.edgeCurveCount = 150881`，`boundaryPoints = 852768`，`cellVisualMesh.buildMs = 184.4ms`。
+    - 省份硬边界 `vertexCount = 901233`，`lineVertexCount = 30162`。
+  - 100k：
+    - 实际 grid cells `99846`，pack cells `52578`。
+    - 平滑模式 `vertexCount = 4963554`，`lineVertexCount = 128838`，`cellVisualMesh.edgeCurveCount = 300183`，`boundaryPoints = 1654518`，`cellVisualMesh.buildMs = 466.2ms`。
+    - 省份硬边界 `vertexCount = 1795557`，`lineVertexCount = 47004`。
+  - 两档 `WebGL error = 0`，无 console error / pageerror。
+  - 风险扫描中，50k/100k 的短边、超长边、低面积 cell、无效点均为 `0`。
+  - 近景海岸、湖岸、省界、国界和交界截图未见裂缝、线面交叉或异常直线。
+
+判断：
+
+- 本轮不额外增加保护阈值。原因是风险扫描和抽样截图没有暴露出自交、裂缝或异常长线；继续加阈值反而可能制造局部硬/软混杂。
+- 用户关于“曲线不够自然”的判断成立。新版连续噪声只是把逐边随机感压低，定位应是“克制的 cell 级微曲过渡”，不是最终制图级自然轮廓。
+- 后续若继续追求自然效果，应该走轮廓级方案：对海岸、湖岸、国界、省界分别生成可重采样的连续轮廓，并把填色面和线层一起从同一轮廓构建；同时引入地貌、水文、山脉、道路等约束，而不是继续加大每条 cell 边的曲率。
+
+## 2026-06-29 原版风格海岸与圆角政区边界
+
+背景：
+
+- 用户确认新的方向：海岸线移植原版逻辑；国界、省界等内部边界不继续曲线化，而是模拟原版 SVG 的 `stroke-linejoin: round`，获得更克制的视觉平滑。
+- 原版源码调查结论：海岸/湖岸有专门的 `coastline-fractal` 分形与曲线构建；行政边界主要是连续顶点链加 SVG 圆角连接，并不是自然曲线。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 线层从 `gl.LINES` 改为 `gl.TRIANGLES`。
+  - 新增原版风格海岸采样：
+    - 读取现有海岸/湖岸路径。
+    - 按 seed 生成闭合粗糙度包络。
+    - 递归细分边并按法线扰动中点。
+    - 平滑段用二次曲线采样，扰动段用三次曲线采样。
+  - 新增 `pushWorldPolylineMesh()`：
+    - 每个边界线段生成矩形条带。
+    - 每个折点补圆盘，模拟 SVG `stroke-linejoin: round`。
+  - 海岸/湖岸线层调用原版风格采样点。
+  - 国界/省界线层调用连续政治边界路径和圆角 join，不再读取 `cellVisualMesh.edgeCurves`。
+  - `getStats()` 新增 `lineTriangleCount`，`boundaryLineMode` 固定为 `original-coastline + round-join-political`。
+- `app/webgl-generator/src/ui/panel.js`：
+  - 运行时统计将“线段顶点”改为“轮廓三角形”。
+  - “边界线来源”显示为“原版海岸 / 圆角政区”。
+- `tools/webgl-generator-smooth-cell-profile.mjs`：
+  - 回归报告同步采集并展示 `lineTriangleCount`。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check tools\webgl-generator-smooth-cell-profile.mjs` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有既有 `@vueuse/core` pure annotation 位置警告。
+- 10k 快速回归：
+  - `boundaryLineMode = original-coastline + round-join-political`。
+  - `lineTriangleCount = 509548`。
+  - 高度视图 draw 平均 `0.9ms`，国家视图 `0.9ms`，省份视图 `0.8ms`。
+  - 三个视图 `WebGL error = 0`。
+  - 报告文件：
+    - `docs/generated/reports/smooth-cell-profile-results.json`
+    - `docs/generated/reports/smooth-cell-profile-results.md`
+  - 近景截图已覆盖：
+    - `docs/generated/reports/smooth-cell-profile/10000-coast-near-smooth.png`
+    - `docs/generated/reports/smooth-cell-profile/10000-lake-near-smooth.png`
+    - `docs/generated/reports/smooth-cell-profile/10000-state-border-near-smooth.png`
+    - `docs/generated/reports/smooth-cell-profile/10000-province-border-near-smooth.png`
+    - `docs/generated/reports/smooth-cell-profile/10000-state-junction-near-smooth.png`
+
+观察与风险：
+
+- 海岸线已经比 cell 级微曲更接近原版分形海岸；国界/省界保持直线语义，只通过圆角 join 消除尖锐折点。
+- 线层三角形数量显著高于旧 `gl.LINES`，但 10k 快速档 draw 仍在 1ms 左右。
+- 下一步如果要默认推广到 50k/100k，需要重新跑大图回归，观察轮廓三角形数量和近景线宽；必要时再改为屏幕空间宽度或做视距自适应线宽。
+
+### 后续修正：海岸线与填色分离
+
+问题：
+
+- 用户查看快照后指出海岸线仍与填色分离。
+- 原因是线层已经换成原版分形轮廓，但海岸附近的 surface 仍主要来自视觉 cell mesh；第一轮同源带又使用陆/水渐变，并按序号比例映射原始海岸方向，局部仍会在线与陆地填色之间露出水色。
+
+修正：
+
+- `pushShoreVisualBands()` 改为无论是否启用 `cellVisualMesh` 都叠加海岸视觉带。
+- `buildSmoothedShoreVisual()` 改为使用 `path.originalCoastlinePoints`，并拆成陆侧实色带和水侧实色带，两侧在海岸线中心相接，不再做陆水渐变。
+- 原版分形点的陆/水方向采样从“按序号比例”改为“按最近原始海岸点”，减少局部方向错配。
+- 海岸视觉带宽从 `5.5` 调整为 `13` world units，用来覆盖原版分形扰动相对旧 cell 海岸的偏移。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有既有 `@vueuse/core` pure annotation 位置警告。
+- 重新运行 10k 快速回归并更新：
+  - `docs/generated/reports/smooth-cell-profile-results.json`
+  - `docs/generated/reports/smooth-cell-profile-results.md`
+  - `docs/generated/reports/smooth-cell-profile/10000-coast-near-smooth.png`
+  - `docs/generated/reports/smooth-cell-profile/10000-lake-near-smooth.png`
+- 人工查看最新 coast/lake 近景，海岸线附近不再出现线与陆地填色之间夹水色的明显分离。
+
+### 后续修正：水陆线统一控制湖岸
+
+问题：
+
+- 用户指出控制面板中“海岸线”开关只影响海岸线，没有一起控制湖岸线。
+- 现有 renderer 内部本来有 `coastline` 和 `lakeShore` 两个线层状态，但用户可见语义应是统一的水陆分界，不应把湖岸漏在外面。
+
+修正：
+
+- `ControlPanel.vue`：图层按钮文案从“海岸线”改为“水陆线”，仍复用 `data-layer="coastline"` 作为外部契约。
+- `placeholder-renderer.js`：`setLayerVisible("coastline", visible)` 会同步更新 `coastline` 与 `lakeShore`，并只刷新一次线层。
+- `panel.js`、`runtime/app.js`、`global-config-store.js`：偏好读写和应用时都会把 `coastline` 同步给 `lakeShore`；非 Pinia fallback 写入 localStorage 时改为安全合并 `layers`，避免覆盖其它图层状态。
+- 运行时统计中的图层显示名称也改为“水陆线”。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\vue\stores\global-config-store.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有既有 `@vueuse/core` pure annotation 位置警告。
+- Playwright 打开构建产物后验证：
+  - 图层按钮列表显示“水陆线”，没有显示“海岸线”。
+  - 点击关闭后 renderer 中 `coastline=false` 且 `lakeShore=false`。
+  - 再次点击打开后 renderer 中 `coastline=true` 且 `lakeShore=true`。
+  - localStorage 中对应的 `layers.coastline` 与 `layers.lakeShore` 同步写入。

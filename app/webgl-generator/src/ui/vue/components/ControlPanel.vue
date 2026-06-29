@@ -19,6 +19,7 @@
     <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
       <UiSegmented label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
       <UiSwitchField label="高度视图显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" />
+      <UiSwitchField label="平滑单元格边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" />
     </div>
 
     <div class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
@@ -137,7 +138,7 @@ const layers = Object.freeze([
   {id: "stateLabels", label: "国家名称"},
   {id: "stateBorders", label: "国界"},
   {id: "provinceBorders", label: "省界"},
-  {id: "coastline", label: "海岸线"}
+  {id: "coastline", label: "水陆线"}
 ]);
 
 const actions = Object.freeze([

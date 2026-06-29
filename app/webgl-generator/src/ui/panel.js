@@ -50,6 +50,10 @@ export function bindRuntimePanel(documentRef, handlers) {
     updateControlPreferences(documentRef, {showOceanHeight: event.target.checked});
     handlers.onShowOceanHeight?.(event.target.checked);
   });
+  documentRef.getElementById("smooth-cell-borders")?.addEventListener("change", event => {
+    updateControlPreferences(documentRef, {smoothCellBorders: event.target.checked});
+    handlers.onSmoothCellBorders?.(event.target.checked);
+  });
   documentRef.getElementById("show-hover-info")?.addEventListener("change", event => {
     updateControlPreferences(documentRef, {showHoverInfo: event.target.checked});
     handlers.onShowHoverInfo?.(event.target.checked);
@@ -107,7 +111,7 @@ export function readControlPreferences(documentRef) {
     const raw = documentRef.defaultView?.localStorage?.getItem(CONTROL_PREFERENCES_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return normalizeControlPreferences(parsed);
   } catch {
     return {};
   }
@@ -153,6 +157,7 @@ function editLockControls(documentRef) {
     "#heightmap-template",
     "#auto-random-seed",
     "#show-ocean-height",
+    "#smooth-cell-borders",
     "#show-hover-info",
     "#max-city-labels",
     "[data-layer]",
@@ -168,6 +173,10 @@ function applyControlPreferences(documentRef) {
   if (typeof preferences.showOceanHeight === "boolean") {
     const input = documentRef.getElementById("show-ocean-height");
     if (input) input.checked = preferences.showOceanHeight;
+  }
+  if (typeof preferences.smoothCellBorders === "boolean") {
+    const input = documentRef.getElementById("smooth-cell-borders");
+    if (input) input.checked = preferences.smoothCellBorders;
   }
   if (typeof preferences.showHoverInfo === "boolean") {
     const input = documentRef.getElementById("show-hover-info");
@@ -210,9 +219,15 @@ function setLayerControlState(control, visible) {
 
 function updateLayerPreference(documentRef, layer, visible) {
   if (!layer) return;
+  const patch = layerVisibilityPreferencePatch(layer, visible);
   if (setGlobalConfigLayerVisible(layer, visible)) return;
   const preferences = readControlPreferences(documentRef);
-  updateControlPreferences(documentRef, {layers: {...(preferences.layers || {}), [layer]: Boolean(visible)}});
+  updateControlPreferences(documentRef, {layers: {...(preferences.layers || {}), ...patch}});
+}
+
+function layerVisibilityPreferencePatch(layer, visible) {
+  const value = Boolean(visible);
+  return layer === "coastline" ? {coastline: value, lakeShore: value} : {[layer]: value};
 }
 
 function updateControlPreferences(documentRef, patch) {
@@ -220,11 +235,28 @@ function updateControlPreferences(documentRef, patch) {
   try {
     const storage = documentRef.defaultView?.localStorage;
     if (!storage) return;
-    const preferences = {...readControlPreferences(documentRef), ...patch};
+    const current = readControlPreferences(documentRef);
+    const preferences = normalizeControlPreferences({
+      ...current,
+      ...patch,
+      layers: patch.layers ? {...(current.layers || {}), ...patch.layers} : current.layers || {}
+    });
     storage.setItem(CONTROL_PREFERENCES_KEY, JSON.stringify(preferences));
   } catch {
     // localStorage may be unavailable in restricted browser modes.
   }
+}
+
+function normalizeControlPreferences(preferences) {
+  if (!preferences || typeof preferences !== "object") return {};
+  const normalized = {...preferences};
+  if (normalized.layers && typeof normalized.layers === "object") {
+    normalized.layers = {...normalized.layers};
+    if (Object.prototype.hasOwnProperty.call(normalized.layers, "coastline")) {
+      normalized.layers.lakeShore = normalized.layers.coastline;
+    }
+  }
+  return normalized;
 }
 
 function cssEscape(value) {
@@ -294,6 +326,8 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "随机预览", map.summary.randomPreview.join(", ")),
     statRow(documentRef, "视图", stats.colorMode),
     statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏"),
+    statRow(documentRef, "单元格边界", stats.cellSurfaceMode === "visual-cells" ? "平滑" : "硬边界"),
+    statRow(documentRef, "边界线来源", formatBoundaryLineMode(stats.boundaryLineMode)),
     statRow(documentRef, "图层", formatLayerVisibility(stats.layerVisibility)),
     statRow(documentRef, "GPU 顶点", stats.vertexCount),
     statRow(documentRef, "道路三角形", stats.routeTriangleCount),
@@ -309,7 +343,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "编辑刷新", formatEditRefresh(state.lastEditRefresh)),
     statRow(documentRef, "派生过期", formatDerivedStale(map)),
     statRow(documentRef, "对象索引", stats.objectPickingIndex ? `${stats.objectPickingIndex.buckets} buckets / ${stats.objectPickingIndex.markers} markers / ${stats.objectPickingIndex.routeSegments} routes / ${stats.objectPickingIndex.riverSegments} rivers` : "none"),
-    statRow(documentRef, "线段顶点", stats.lineVertexCount),
+    statRow(documentRef, "轮廓三角形", stats.lineTriangleCount ?? Math.round((stats.lineVertexCount || 0) / 3)),
     statRow(documentRef, "点顶点", stats.pointVertexCount),
     statRow(documentRef, "marker", stats.markerCount),
     statRow(documentRef, "标签", `城市 ${stats.visibleCityLabelCount} / ${stats.cityLabelCount} / 上限 ${formatCityLabelLimit(map, stats)}；国家 ${stats.visibleStateLabelCount} / ${stats.stateLabelCount}`),
@@ -508,12 +542,20 @@ function formatLayerVisibility(visibility = {}) {
     stateLabels: "国家名",
     stateBorders: "国界",
     provinceBorders: "省界",
-    coastline: "海岸"
+    coastline: "水陆线"
   };
   return Object.entries(labels)
     .filter(([key]) => visibility[key] !== false)
     .map(([, label]) => label)
     .join(", ") || "none";
+}
+
+function formatBoundaryLineMode(mode) {
+  if (mode === "original-coastline + round-join-political") return "原版海岸 / 圆角政区";
+  if (mode === "visual-cell-curves") return "平滑共享边";
+  if (mode === "hard-cell-edges") return "硬共享边";
+  if (mode === "legacy-visual-paths") return "兼容路径";
+  return mode || "未知";
 }
 
 function formatDistance(value) {
