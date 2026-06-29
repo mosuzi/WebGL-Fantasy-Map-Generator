@@ -8413,3 +8413,47 @@
   - 国家视图截图检查：国界线落在国家边界视觉带内，没有明显切进相邻国家色块；省界仍保持硬边。
   - 画布非空采样 `nonZero = 752000 / 752000`。
   - `WebGL error = 0`，无 console error / pageerror。
+
+## 2026-06-29 省份视图政治面线同源第一刀
+
+目标：
+
+- 把国家视图的同源边界带推广到省份视图，但保持更克制的宽度和透明度。
+- 让省界线和两侧省份色块来自同一套平滑路径，避免单独平滑省界线切入省份色块。
+- 高度视图和国家视图不受省份视觉带影响。
+
+方案：
+
+- 将国家边界路径结构泛化为政治边界路径：
+  - 统一使用 `valueA/valueB` 表示边界两侧对象 id。
+  - 颜色由各自 style 决定，国家使用 `colorForState()`，省份使用 `colorForProvince()`。
+  - 路径按对象组合分组，复杂节点和三方交界处切分。
+- 新增 `PROVINCE_VISUAL_STYLE`：
+  - 省份边界带宽 `bandWidthWorld = 4`。
+  - 平滑参数为 `iterations = 1`、`factor = 0.14`。
+  - 省界描线透明度比国界更低，避免省份密集区域变脏。
+- 无省份 `0` 不参与省界视觉带，避免中立/无省份区域被当作实体省份染色。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `provinceVisualPaths` renderer 缓存和 `rebuildProvinceVisualCache()`。
+  - `loadMap()`、`refreshCellSurface()`、`refreshLineLayers()` 同步维护省份视觉路径缓存。
+  - `buildPlaceholderVertices()` 在 `colorMode === "provinces"` 时追加省份视觉边界带。
+  - `buildLineVertices()` 只在省份视图下使用平滑省界中心线；其它视图继续使用对应硬边。
+  - `getStats()` 暴露 `provinceVisual` 统计，方便后续性能和视觉调参。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 原始硬国界段 `729`，硬省界段 `2313`。
+  - 省份视觉路径 `486` 条、路径点 `2737`，`bandWidthWorld = 4`，平滑参数为 `iterations = 1`、`factor = 0.14`。
+  - 高度视图：`vertexCount = 221799`，`lineVertexCount = 20176`。
+  - 国家视图：`vertexCount = 230559`，`lineVertexCount = 21638`。
+  - 省份视图：`vertexCount = 250731`，`lineVertexCount = 25194`，说明省份边界带和同源省界线只在省份视图生效。
+  - 省份总览和近景截图检查：省界视觉带与省份色块同源，宽度和透明度比国界更克制；没有明显省界线切进色块的问题。
+  - 画布非空采样 `nonZero = 752000 / 752000`。
+  - `WebGL error = 0`，无 console error / pageerror。
