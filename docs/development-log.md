@@ -8368,3 +8368,48 @@
   - 截图检查高度总览、国家总览和近岸放大：海岸线落在同源海岸视觉带内，不再与硬 cell 面交叉；近岸放大中橙色主线主要来自道路/海路，海岸描线已降为更克制的浅色半透明描边。
   - 画布非空采样 `nonZero = 752000 / 752000`。
   - `WebGL error = 0`，无 console error / pageerror。
+
+## 2026-06-29 国家视图政治面线同源第一刀
+
+目标：
+
+- 继续推进边界平滑，但先只处理国家视图，不直接扩展到省份视图。
+- 解决国界线平滑后切进国家色块的问题：国界线和两侧国家色块必须来自同一条平滑路径。
+- 保持国家归属、picking、编辑判定和底层 cell 数据仍为原始硬边。
+
+方案：
+
+- 新增国家视觉边界带，而不是重三角化整个国家多边形：
+  - 从 land cell 邻接中收集国家不同的共享 Voronoi 边。
+  - 记录每条边两侧国家 id，并按国家组合规范化，保证同一条边界两侧颜色沿路径保持一致。
+  - 路径只在相同国家组合内连续；三国交界、端点和复杂节点会切分路径，避免跨国家组合平滑。
+  - 在国家视图 surface 上追加一层窄边界带，两侧分别取对应国家颜色。
+  - 国家视图的国界描线从同一条边界带中心线派生。
+- 高度视图和省份视图仍使用硬国界：
+  - 高度视图没有国家色块，不需要同源国家面。
+  - 省份视图尚未构建省份政治视觉面，提前平滑国界会重现“线平滑、面未同步”的问题。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `stateVisualPaths` renderer 缓存和 `rebuildStateVisualCache()`。
+  - `loadMap()`、`refreshCellSurface()`、`refreshLineLayers()` 会维护国家视觉路径缓存。
+  - `buildPlaceholderVertices()` 在 `colorMode === "states"` 时追加 `pushPoliticalVisualBands()`。
+  - `buildLineVertices()` 只在 `colorMode === "states"` 时使用平滑国界中心线；其它视图仍调用硬边 `pushPoliticalBoundaryLines()`。
+  - 新增 `STATE_VISUAL_STYLE`，集中管理国家边界带宽、平滑参数和描线颜色。
+  - `getStats()` 暴露 `stateVisual` 统计，方便后续调试和性能对比。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 原始硬国界段 `729`，硬省界段 `2313`。
+  - 国家视觉路径 `46` 条、路径点 `754`，`bandWidthWorld = 7`，平滑参数为 `iterations = 1`、`factor = 0.18`。
+  - 高度视图：`vertexCount = 221799`，`lineVertexCount = 20176`。
+  - 国家视图：`vertexCount = 230559`，`lineVertexCount = 21638`，说明国家边界带和同源国界线只在国家视图生效。
+  - 省份视图：`vertexCount = 221799`，`lineVertexCount = 20176`，仍保持硬国界路径。
+  - 国家视图截图检查：国界线落在国家边界视觉带内，没有明显切进相邻国家色块；省界仍保持硬边。
+  - 画布非空采样 `nonZero = 752000 / 752000`。
+  - `WebGL error = 0`，无 console error / pageerror。

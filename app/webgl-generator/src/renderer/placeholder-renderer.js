@@ -50,6 +50,7 @@ export class PlaceholderMapRenderer {
     this.riverWidthMode = "screen-space flux mesh";
     this.riverWidthStats = emptyRiverWidthStats();
     this.shoreVisualPaths = emptyShoreVisualPaths();
+    this.stateVisualPaths = emptyPoliticalVisualPaths();
     this.locateStatus = "none";
     this.locateFlash = null;
     this.locateFlashFrame = 0;
@@ -91,8 +92,9 @@ export class PlaceholderMapRenderer {
     this.map = map;
     this.objectPickingIndex = buildObjectPickingIndex(map);
     this.rebuildShoreVisualCache();
-    const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths);
-    const lineVertices = buildLineVertices(map, this.layerVisibility, this.shoreVisualPaths);
+    this.rebuildStateVisualCache();
+    const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths);
+    const lineVertices = buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths);
     const pointVertices = buildPointVertices(map, this.layerVisibility);
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
@@ -128,6 +130,7 @@ export class PlaceholderMapRenderer {
     this.colorMode = mode;
     if (!this.map) return;
     this.refreshCellSurface();
+    this.refreshLineLayers();
   }
 
   setViewOptions(options = {}) {
@@ -146,7 +149,8 @@ export class PlaceholderMapRenderer {
 
   refreshCellSurface() {
     if (!this.map) return;
-    const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths);
+    this.rebuildStateVisualCache();
+    const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths);
     this.vertexCount = vertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
@@ -161,7 +165,8 @@ export class PlaceholderMapRenderer {
 
   refreshLineLayers({draw = true} = {}) {
     if (!this.map) return;
-    const lineVertices = buildLineVertices(this.map, this.layerVisibility, this.shoreVisualPaths);
+    this.rebuildStateVisualCache();
+    const lineVertices = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths);
     this.lineVertexCount = lineVertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
@@ -184,6 +189,10 @@ export class PlaceholderMapRenderer {
 
   rebuildShoreVisualCache() {
     this.shoreVisualPaths = this.map ? buildShoreVisualPaths(this.map) : emptyShoreVisualPaths();
+  }
+
+  rebuildStateVisualCache() {
+    this.stateVisualPaths = this.map ? buildStateVisualPaths(this.map) : emptyPoliticalVisualPaths();
   }
 
   setLayerVisible(layer, visible) {
@@ -286,6 +295,7 @@ export class PlaceholderMapRenderer {
       objectCandidateCount: this.lastObjectCandidateCount,
       lineVertexCount: this.lineVertexCount,
       shoreVisual: summarizeShoreVisualPaths(this.shoreVisualPaths),
+      stateVisual: summarizePoliticalVisualPaths(this.stateVisualPaths, STATE_VISUAL_STYLE),
       pointVertexCount: this.pointVertexCount,
       markerCount: this.map?.markers?.metadata?.markers || 0,
       labelCount: this.labelCount,
@@ -897,23 +907,27 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
   );
 }
 
-function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths = null) {
+function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null) {
   const vertices = [];
-  const paths = shoreVisualPaths || buildShoreVisualPaths(map);
+  const shorePaths = shoreVisualPaths || buildShoreVisualPaths(map);
+  const statePaths = stateVisualPaths || buildStateVisualPaths(map);
 
   pushGridCells(vertices, map, colorMode, viewOptions);
-  pushShoreVisualBands(vertices, map, colorMode, viewOptions, paths);
+  pushShoreVisualBands(vertices, map, colorMode, viewOptions, shorePaths);
+  if (colorMode === "states") pushPoliticalVisualBands(vertices, map, statePaths, STATE_VISUAL_STYLE);
 
   return new Float32Array(vertices);
 }
 
-function buildLineVertices(map, visibility = {}, shoreVisualPaths = null) {
+function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null) {
   const vertices = [];
-  const paths = shoreVisualPaths || buildShoreVisualPaths(map);
-  if (visibility.coastline !== false) pushShoreVisualLines(vertices, paths.coastline, map, SHORE_VISUAL_STYLE.coastlineStroke);
-  if (visibility.lakeShore !== false) pushShoreVisualLines(vertices, paths.lakeShore, map, SHORE_VISUAL_STYLE.lakeShoreStroke);
+  const shorePaths = shoreVisualPaths || buildShoreVisualPaths(map);
+  const statePaths = stateVisualPaths || buildStateVisualPaths(map);
+  if (visibility.coastline !== false) pushShoreVisualLines(vertices, shorePaths.coastline, map, SHORE_VISUAL_STYLE.coastlineStroke);
+  if (visibility.lakeShore !== false) pushShoreVisualLines(vertices, shorePaths.lakeShore, map, SHORE_VISUAL_STYLE.lakeShoreStroke);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryLines(vertices, map, "province", [0.18, 0.2, 0.22, 0.34]);
-  if (visibility.stateBorders !== false) pushPoliticalBoundaryLines(vertices, map, "state", [0.04, 0.05, 0.06, 0.62]);
+  if (visibility.stateBorders !== false && colorMode === "states") pushPoliticalVisualLines(vertices, statePaths, map, STATE_VISUAL_STYLE.borderStroke);
+  else if (visibility.stateBorders !== false) pushPoliticalBoundaryLines(vertices, map, "state", [0.04, 0.05, 0.06, 0.62]);
   return new Float32Array(vertices);
 }
 
@@ -922,6 +936,12 @@ const SHORE_VISUAL_STYLE = Object.freeze({
   smoothing: Object.freeze({iterations: 2, factor: 0.22}),
   coastlineStroke: Object.freeze([0.88, 0.84, 0.63, 0.68]),
   lakeShoreStroke: Object.freeze([0.58, 0.78, 0.84, 0.64])
+});
+
+const STATE_VISUAL_STYLE = Object.freeze({
+  bandWidthWorld: 7,
+  smoothing: Object.freeze({iterations: 1, factor: 0.18}),
+  borderStroke: Object.freeze([0.03, 0.035, 0.04, 0.5])
 });
 
 const LINE_SMOOTHING = Object.freeze({
@@ -1045,6 +1065,201 @@ function summarizeShoreVisualPaths(paths) {
 
 function countPathPoints(paths = []) {
   return paths.reduce((sum, path) => sum + (path.points?.length || 0), 0);
+}
+
+function pushPoliticalVisualBands(vertices, map, paths, style) {
+  for (const path of paths.boundaries) pushPoliticalVisualBand(vertices, path, map, style);
+}
+
+function pushPoliticalVisualBand(vertices, path, map, style) {
+  const visual = buildSmoothedPoliticalVisual(path, map, style);
+  if (!visual || visual.a.points.length < 2 || visual.b.points.length !== visual.a.points.length) return;
+
+  for (let index = 0; index < visual.a.points.length - 1; index++) {
+    const a0 = visual.a.points[index];
+    const a1 = visual.a.points[index + 1];
+    const b0 = visual.b.points[index];
+    const b1 = visual.b.points[index + 1];
+    const colorA0 = visual.a.colors[index];
+    const colorA1 = visual.a.colors[index + 1];
+    const colorB0 = visual.b.colors[index];
+    const colorB1 = visual.b.colors[index + 1];
+    pushWorldVertex(vertices, a0, map, colorA0);
+    pushWorldVertex(vertices, b0, map, colorB0);
+    pushWorldVertex(vertices, b1, map, colorB1);
+    pushWorldVertex(vertices, a0, map, colorA0);
+    pushWorldVertex(vertices, b1, map, colorB1);
+    pushWorldVertex(vertices, a1, map, colorA1);
+  }
+}
+
+function pushPoliticalVisualLines(vertices, paths, map, color) {
+  for (const path of paths.boundaries) {
+    const visual = buildSmoothedPoliticalVisual(path, map, STATE_VISUAL_STYLE);
+    if (!visual || visual.a.points.length < 2 || visual.b.points.length !== visual.a.points.length) continue;
+    for (let index = 0; index < visual.a.points.length - 1; index++) {
+      pushWorldLine(vertices, [midpoint(visual.a.points[index], visual.b.points[index]), midpoint(visual.a.points[index + 1], visual.b.points[index + 1])], map, color);
+    }
+  }
+}
+
+function buildSmoothedPoliticalVisual(path, map, style) {
+  if (!path.points?.length || path.points.length !== path.sideVectors?.length) return null;
+  const halfWidth = style.bandWidthWorld / 2;
+  const pointsA = [];
+  const pointsB = [];
+  const colorsA = [];
+  const colorsB = [];
+
+  for (let index = 0; index < path.points.length; index++) {
+    const point = path.points[index];
+    const side = path.sideVectors[index] || {x: 0, y: 0};
+    pointsA.push([point[0] + side.x * halfWidth, point[1] + side.y * halfWidth]);
+    pointsB.push([point[0] - side.x * halfWidth, point[1] - side.y * halfWidth]);
+    colorsA.push(colorForState(path.statesA[index], map));
+    colorsB.push(colorForState(path.statesB[index], map));
+  }
+
+  return {
+    a: smoothWorldPathAndColors(pointsA, colorsA, style.smoothing),
+    b: smoothWorldPathAndColors(pointsB, colorsB, style.smoothing)
+  };
+}
+
+function buildStateVisualPaths(map) {
+  return {
+    boundaries: buildPoliticalPathsFromEdges(collectStateVisualEdges(map))
+  };
+}
+
+function emptyPoliticalVisualPaths() {
+  return {boundaries: []};
+}
+
+function summarizePoliticalVisualPaths(paths, style) {
+  return {
+    paths: paths?.boundaries?.length || 0,
+    points: countPathPoints(paths?.boundaries),
+    bandWidthWorld: style.bandWidthWorld,
+    smoothing: {...style.smoothing},
+    borderStroke: [...style.borderStroke]
+  };
+}
+
+function collectStateVisualEdges(map) {
+  const edges = [];
+  const cells = map?.grid?.cells;
+  if (!cells?.c || !cells?.v || !cells?.state) return edges;
+
+  for (const cell of cells.i || []) {
+    if (!isLandCell(cell, map)) continue;
+    const stateA = cells.state[cell] || 0;
+    for (const neighbor of cells.c[cell] || []) {
+      if (neighbor <= cell || !isLandCell(neighbor, map)) continue;
+      const stateB = cells.state[neighbor] || 0;
+      if (stateA === stateB || (!stateA && !stateB)) continue;
+      const edge = sharedVoronoiEdge(map, cell, neighbor);
+      if (!edge) continue;
+      const centerA = cellCenterPoint(map.grid, cell);
+      const centerB = cellCenterPoint(map.grid, neighbor);
+      const firstState = Math.min(stateA, stateB);
+      const secondState = Math.max(stateA, stateB);
+      const side = stateA === firstState
+        ? normalizeWorldVector(centerA[0] - centerB[0], centerA[1] - centerB[1])
+        : normalizeWorldVector(centerB[0] - centerA[0], centerB[1] - centerA[1]);
+      edges.push({
+        a: edge[0],
+        b: edge[1],
+        pair: `${firstState}:${secondState}`,
+        stateA: firstState,
+        stateB: secondState,
+        side
+      });
+    }
+  }
+
+  return edges;
+}
+
+function buildPoliticalPathsFromEdges(edges) {
+  const graph = buildPoliticalGraph(edges);
+  const paths = [];
+  const visited = new Uint8Array(graph.edges.length);
+
+  for (const node of graph.nodes.values()) {
+    if (node.edges.length === 2) continue;
+    for (const edgeIndex of node.edges) {
+      if (visited[edgeIndex]) continue;
+      paths.push(createPoliticalPath(graph, walkPoliticalPath(graph, node.key, edgeIndex, visited)));
+    }
+  }
+
+  for (let edgeIndex = 0; edgeIndex < graph.edges.length; edgeIndex++) {
+    if (visited[edgeIndex]) continue;
+    paths.push(createPoliticalPath(graph, walkPoliticalPath(graph, graph.edges[edgeIndex].a, edgeIndex, visited)));
+  }
+
+  return paths.filter(path => path.points.length >= 2);
+}
+
+function buildPoliticalGraph(edges) {
+  const nodes = new Map();
+  const graphEdges = [];
+  for (const edge of edges) {
+    if (!isWorldPoint(edge.a) || !isWorldPoint(edge.b)) continue;
+    const a = shorePointKey(edge.a);
+    const b = shorePointKey(edge.b);
+    if (a === b) continue;
+    const edgeIndex = graphEdges.length;
+    ensureShoreNode(nodes, a, edge.a).edges.push(edgeIndex);
+    ensureShoreNode(nodes, b, edge.b).edges.push(edgeIndex);
+    graphEdges.push({...edge, a, b});
+  }
+  return {nodes, edges: graphEdges};
+}
+
+function walkPoliticalPath(graph, startKey, firstEdgeIndex, visited) {
+  const pair = graph.edges[firstEdgeIndex]?.pair;
+  const keys = [startKey];
+  const edgeIndexes = [];
+  let currentKey = startKey;
+  let edgeIndex = firstEdgeIndex;
+
+  while (edgeIndex !== -1 && !visited[edgeIndex]) {
+    visited[edgeIndex] = 1;
+    edgeIndexes.push(edgeIndex);
+    const edge = graph.edges[edgeIndex];
+    const nextKey = edge.a === currentKey ? edge.b : edge.a;
+    keys.push(nextKey);
+    const nextNode = graph.nodes.get(nextKey);
+    if (!nextNode || (nextNode.edges.length !== 2 && nextKey !== startKey)) break;
+    currentKey = nextKey;
+    edgeIndex = nextNode.edges.find(index => !visited[index] && graph.edges[index]?.pair === pair) ?? -1;
+  }
+
+  return {keys, edgeIndexes};
+}
+
+function createPoliticalPath(graph, walk) {
+  const points = [];
+  const sideVectors = [];
+  const statesA = [];
+  const statesB = [];
+
+  for (let index = 0; index < walk.keys.length; index++) {
+    const node = graph.nodes.get(walk.keys[index]);
+    const adjacentEdges = [
+      walk.edgeIndexes[index - 1],
+      walk.edgeIndexes[index]
+    ].filter(edgeIndex => edgeIndex !== undefined);
+    const edge = graph.edges[adjacentEdges[0]] || graph.edges[walk.edgeIndexes[0]];
+    points.push(node.point);
+    sideVectors.push(averageEdgeSide(graph, adjacentEdges));
+    statesA.push(edge?.stateA ?? 0);
+    statesB.push(edge?.stateB ?? 0);
+  }
+
+  return {points, sideVectors, statesA, statesB};
 }
 
 function collectShoreVisualEdges(map) {
