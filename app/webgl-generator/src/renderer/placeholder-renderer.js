@@ -1,6 +1,7 @@
 import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickPoliticalObject, pickRiver, pickRoute} from "./picking.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
+import Delaunator from "../vendor/delaunator.js";
 
 export class PlaceholderMapRenderer {
   constructor(canvas, onViewChange = () => {}, onHover = () => {}, onSelect = () => {}) {
@@ -26,12 +27,15 @@ export class PlaceholderMapRenderer {
     this.selectionBuffer = this.gl.createBuffer();
     this.lineBuffer = this.gl.createBuffer();
     this.pointBuffer = this.gl.createBuffer();
+    this.politicalMeshDebugBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.routeVertexCount = 0;
     this.riverVertexCount = 0;
     this.selectionVertexCount = 0;
     this.lineVertexCount = 0;
     this.pointVertexCount = 0;
+    this.politicalMeshDebugMode = "none";
+    this.politicalMeshDebugVertexCount = 0;
     this.labelCount = 0;
     this.visibleLabelCount = 0;
     this.cityLabelCount = 0;
@@ -52,6 +56,7 @@ export class PlaceholderMapRenderer {
     this.shoreVisualPaths = emptyShoreVisualPaths();
     this.stateVisualPaths = emptyPoliticalVisualPaths();
     this.provinceVisualPaths = emptyPoliticalVisualPaths();
+    this.politicalVisualMeshes = emptyPoliticalVisualMeshes();
     this.locateStatus = "none";
     this.locateFlash = null;
     this.locateFlashFrame = 0;
@@ -95,6 +100,7 @@ export class PlaceholderMapRenderer {
     this.rebuildShoreVisualCache();
     this.rebuildStateVisualCache();
     this.rebuildProvinceVisualCache();
+    this.rebuildPoliticalVisualMeshes();
     const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths);
     const lineVertices = buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths);
     const pointVertices = buildPointVertices(map, this.layerVisibility);
@@ -114,6 +120,7 @@ export class PlaceholderMapRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+    this.updatePoliticalMeshDebugBuffer();
     this.buildLabels(map);
     this.markAllDynamicBuffersDirty();
     this.fitToView();
@@ -153,6 +160,7 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     this.rebuildStateVisualCache();
     this.rebuildProvinceVisualCache();
+    this.rebuildPoliticalVisualMeshes();
     const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths);
     this.vertexCount = vertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
@@ -203,6 +211,36 @@ export class PlaceholderMapRenderer {
     this.provinceVisualPaths = this.map ? buildProvinceVisualPaths(this.map) : emptyPoliticalVisualPaths();
   }
 
+  rebuildPoliticalVisualMeshes() {
+    if (!this.map) {
+      this.politicalVisualMeshes = emptyPoliticalVisualMeshes();
+      this.updatePoliticalMeshDebugBuffer();
+      return;
+    }
+    this.politicalVisualMeshes = {
+      states: buildPoliticalVisualMeshCache(this.map, "state", this.stateVisualPaths, STATE_VISUAL_STYLE),
+      provinces: buildPoliticalVisualMeshCache(this.map, "province", this.provinceVisualPaths, PROVINCE_VISUAL_STYLE)
+    };
+    this.updatePoliticalMeshDebugBuffer();
+  }
+
+  setPoliticalMeshDebugMode(mode = "none") {
+    const nextMode = normalizePoliticalMeshDebugMode(mode);
+    if (this.politicalMeshDebugMode === nextMode) return;
+    this.politicalMeshDebugMode = nextMode;
+    this.updatePoliticalMeshDebugBuffer();
+    if (this.map) this.draw();
+  }
+
+  updatePoliticalMeshDebugBuffer() {
+    if (!this.gl || !this.politicalMeshDebugBuffer) return;
+    const cache = politicalMeshDebugCache(this.politicalVisualMeshes, this.politicalMeshDebugMode);
+    const vertices = cache?.vertices || new Float32Array();
+    this.politicalMeshDebugVertexCount = vertices.length / 6;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.politicalMeshDebugBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+  }
+
   setLayerVisible(layer, visible) {
     if (!(layer in this.layerVisibility)) return;
     const nextVisible = Boolean(visible);
@@ -230,6 +268,16 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    if (this.politicalMeshDebugVertexCount > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.politicalMeshDebugBuffer);
+      gl.uniform1f(this.locations.scale, this.camera.scale);
+      gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
+      bindVertexBuffer(gl, this.locations);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArrays(gl.TRIANGLES, 0, this.politicalMeshDebugVertexCount);
+      gl.disable(gl.BLEND);
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, this.routeBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
@@ -305,6 +353,12 @@ export class PlaceholderMapRenderer {
       shoreVisual: summarizeShoreVisualPaths(this.shoreVisualPaths),
       stateVisual: summarizePoliticalVisualPaths(this.stateVisualPaths, STATE_VISUAL_STYLE),
       provinceVisual: summarizePoliticalVisualPaths(this.provinceVisualPaths, PROVINCE_VISUAL_STYLE),
+      politicalVisualMeshes: summarizePoliticalVisualMeshes(this.politicalVisualMeshes),
+      politicalMeshDebug: {
+        mode: this.politicalMeshDebugMode,
+        vertexCount: this.politicalMeshDebugVertexCount,
+        triangleCount: this.politicalMeshDebugVertexCount / 3
+      },
       pointVertexCount: this.pointVertexCount,
       markerCount: this.map?.markers?.metadata?.markers || 0,
       labelCount: this.labelCount,
@@ -955,6 +1009,7 @@ const STATE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 7,
   smoothing: Object.freeze({iterations: 1, factor: 0.18}),
   borderStroke: Object.freeze([0.03, 0.035, 0.04, 0.5]),
+  meshAlpha: 0.72,
   colorForValue: colorForState
 });
 
@@ -962,6 +1017,7 @@ const PROVINCE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 4,
   smoothing: Object.freeze({iterations: 1, factor: 0.14}),
   borderStroke: Object.freeze([0.08, 0.09, 0.1, 0.32]),
+  meshAlpha: 0.68,
   colorForValue: colorForProvince
 });
 
@@ -1171,6 +1227,151 @@ function summarizePoliticalVisualPaths(paths, style) {
     smoothing: {...style.smoothing},
     borderStroke: [...style.borderStroke]
   };
+}
+
+function buildPoliticalVisualMeshCache(map, field, paths, style) {
+  const startedAt = performance.now();
+  const groups = collectPoliticalVisualMeshGroups(map, field, paths, style);
+  const vertices = [];
+  let pointCount = 0;
+  let candidateTriangles = 0;
+  let keptTriangles = 0;
+  let rejectedTriangles = 0;
+  let skippedGroups = 0;
+  const groupStats = [];
+
+  for (const group of groups.values()) {
+    pointCount += group.points.length;
+    if (group.points.length < 3) {
+      skippedGroups++;
+      groupStats.push({value: group.value, points: group.points.length, candidateTriangles: 0, keptTriangles: 0, rejectedTriangles: 0, skipped: true});
+      continue;
+    }
+
+    const delaunay = Delaunator.from(group.points);
+    const candidate = Math.floor(delaunay.triangles.length / 3);
+    let kept = 0;
+    let rejected = 0;
+    for (let index = 0; index < delaunay.triangles.length; index += 3) {
+      const a = group.points[delaunay.triangles[index]];
+      const b = group.points[delaunay.triangles[index + 1]];
+      const c = group.points[delaunay.triangles[index + 2]];
+      const centroid = [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3];
+      const picked = pickGridCell(map, centroid[0], centroid[1]);
+      if (picked?.gridCell !== null && picked?.gridCell !== undefined && isLandCell(picked.gridCell, map) && (map.grid.cells[field]?.[picked.gridCell] || 0) === group.value) {
+        kept++;
+        const color = withAlpha(style.colorForValue(group.value, map), style.meshAlpha ?? 0.7);
+        pushWorldVertex(vertices, a, map, color);
+        pushWorldVertex(vertices, b, map, color);
+        pushWorldVertex(vertices, c, map, color);
+      } else {
+        rejected++;
+      }
+    }
+
+    candidateTriangles += candidate;
+    keptTriangles += kept;
+    rejectedTriangles += rejected;
+    groupStats.push({value: group.value, points: group.points.length, candidateTriangles: candidate, keptTriangles: kept, rejectedTriangles: rejected, skipped: false});
+  }
+
+  groupStats.sort((a, b) => b.keptTriangles - a.keptTriangles);
+  return {
+    field,
+    groups: groups.size,
+    pointCount,
+    candidateTriangles,
+    keptTriangles,
+    rejectedTriangles,
+    skippedGroups,
+    vertices: new Float32Array(vertices),
+    vertexCount: vertices.length / 6,
+    buildMs: roundMs(performance.now() - startedAt),
+    largestGroups: groupStats.slice(0, 8)
+  };
+}
+
+function collectPoliticalVisualMeshGroups(map, field, paths, style) {
+  const groups = new Map();
+  const cells = map?.grid?.cells;
+  if (!cells?.i || !cells?.[field]) return groups;
+
+  for (const cell of cells.i) {
+    if (!isLandCell(cell, map)) continue;
+    const value = cells[field][cell] || 0;
+    if (!value) continue;
+    addPoliticalVisualMeshPoint(ensurePoliticalVisualMeshGroup(groups, value), cellCenterPoint(map.grid, cell));
+  }
+
+  for (const path of paths?.boundaries || []) {
+    const visual = buildSmoothedPoliticalVisual(path, map, style);
+    if (!visual) continue;
+    const valueA = path.valuesA?.[0] || 0;
+    const valueB = path.valuesB?.[0] || 0;
+    if (valueA) for (const point of visual.a.points) addPoliticalVisualMeshPoint(ensurePoliticalVisualMeshGroup(groups, valueA), point);
+    if (valueB) for (const point of visual.b.points) addPoliticalVisualMeshPoint(ensurePoliticalVisualMeshGroup(groups, valueB), point);
+  }
+
+  return groups;
+}
+
+function ensurePoliticalVisualMeshGroup(groups, value) {
+  if (!groups.has(value)) groups.set(value, {value, points: [], pointKeys: new Set()});
+  return groups.get(value);
+}
+
+function addPoliticalVisualMeshPoint(group, point) {
+  if (!isWorldPoint(point)) return;
+  const key = `${Math.round(point[0] * 100)}:${Math.round(point[1] * 100)}`;
+  if (group.pointKeys.has(key)) return;
+  group.pointKeys.add(key);
+  group.points.push([point[0], point[1]]);
+}
+
+function emptyPoliticalVisualMeshes() {
+  return {
+    states: emptyPoliticalVisualMeshCache("state"),
+    provinces: emptyPoliticalVisualMeshCache("province")
+  };
+}
+
+function emptyPoliticalVisualMeshCache(field) {
+  return {field, groups: 0, pointCount: 0, candidateTriangles: 0, keptTriangles: 0, rejectedTriangles: 0, skippedGroups: 0, vertices: new Float32Array(), vertexCount: 0, buildMs: 0, largestGroups: []};
+}
+
+function summarizePoliticalVisualMeshes(meshes) {
+  return {
+    states: summarizePoliticalVisualMeshCache(meshes?.states),
+    provinces: summarizePoliticalVisualMeshCache(meshes?.provinces)
+  };
+}
+
+function summarizePoliticalVisualMeshCache(cache) {
+  const safeCache = cache || emptyPoliticalVisualMeshCache("unknown");
+  return {
+    field: safeCache.field,
+    groups: safeCache.groups,
+    pointCount: safeCache.pointCount,
+    candidateTriangles: safeCache.candidateTriangles,
+    keptTriangles: safeCache.keptTriangles,
+    rejectedTriangles: safeCache.rejectedTriangles,
+    skippedGroups: safeCache.skippedGroups,
+    vertexCount: safeCache.vertexCount,
+    buildMs: safeCache.buildMs,
+    largestGroups: safeCache.largestGroups
+  };
+}
+
+function normalizePoliticalMeshDebugMode(mode) {
+  if (mode === "states" || mode === "state") return "states";
+  if (mode === "provinces" || mode === "province") return "provinces";
+  return "none";
+}
+
+function politicalMeshDebugCache(meshes, mode) {
+  if (mode === "states") return meshes?.states;
+  if (mode === "provinces") return meshes?.provinces;
+  return null;
 }
 
 function collectPoliticalVisualEdges(map, field) {
@@ -2220,6 +2421,10 @@ function mix(a, b, t) {
     a[2] + (b[2] - a[2]) * t,
     1
   ];
+}
+
+function withAlpha(color, alpha) {
+  return [color?.[0] ?? 0, color?.[1] ?? 0, color?.[2] ?? 0, alpha];
 }
 
 function interpolateColor(a, b, t) {

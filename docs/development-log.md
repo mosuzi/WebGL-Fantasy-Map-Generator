@@ -8457,3 +8457,106 @@
   - 省份总览和近景截图检查：省界视觉带与省份色块同源，宽度和透明度比国界更克制；没有明显省界线切进色块的问题。
   - 画布非空采样 `nonZero = 752000 / 752000`。
   - `WebGL error = 0`，无 console error / pageerror。
+
+## 2026-06-29 实验性政治视觉面 mesh 缓存
+
+目标：
+
+- 开始推进真正的政治视觉面 mesh，但暂不替换主渲染 surface。
+- 先验证完整政治面三角化的可行性、过滤比例和构建成本，避免直接把不成熟 mesh 画到主视图。
+- 继续保持国家/省份归属、picking、编辑判定和底层 cell 数据不变。
+
+方案：
+
+- 使用项目已有的 `Delaunator`，不新增三角化依赖。
+- 对国家和省份分别构建实验 mesh cache：
+  - 按政治对象 id 分组。
+  - 收集该对象内部 land cell 的中心点。
+  - 从同源政治边界带中收集对应一侧的平滑边界点。
+  - 对每个对象的点集做 Delaunay 三角化。
+  - 用三角形重心 `pickGridCell()`，只保留重心仍落在对应政治对象 cell 内的三角形。
+- 缓存只进入 renderer stats 的 `politicalVisualMeshes`，不进入 draw path。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 引入 `../vendor/delaunator.js`。
+  - 新增 `politicalVisualMeshes` renderer 缓存和 `rebuildPoliticalVisualMeshes()`。
+  - 新增 `buildPoliticalVisualMeshCache()`、`collectPoliticalVisualMeshGroups()`、`summarizePoliticalVisualMeshes()` 等实验 mesh 构建与统计函数。
+  - `getStats()` 暴露国家/省份实验 mesh 的对象数、点数、候选三角数、保留三角数、过滤三角数、跳过对象数、构建耗时和最大对象摘要。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 现有视图绘制不变：
+    - 高度视图 `vertexCount = 221799`，`lineVertexCount = 20176`。
+    - 国家视图 `vertexCount = 230559`，`lineVertexCount = 21638`。
+    - 省份视图 `vertexCount = 250731`，`lineVertexCount = 25194`。
+  - 国家实验 mesh：
+    - `groups = 20`
+    - `pointCount = 6006`
+    - `candidateTriangles = 11675`
+    - `keptTriangles = 10269`
+    - `rejectedTriangles = 1406`
+    - `buildMs = 20.3`
+  - 省份实验 mesh：
+    - `groups = 217`
+    - `pointCount = 13951`
+    - `candidateTriangles = 24786`
+    - `keptTriangles = 21112`
+    - `rejectedTriangles = 3674`
+    - `skippedGroups = 2`
+    - `buildMs = 32.5`
+  - 画布非空采样 `nonZero = 752000 / 752000`。
+  - `WebGL error = 0`，无 console error / pageerror。
+
+风险与下一步：
+
+- 当前实验 mesh 只按三角形重心过滤，尚未执行真正 polygon clipping；狭窄边界和细长飞地仍可能存在跨界三角。
+- 下一刀应先把 cache 扩展为可选 debug draw buffer，生成对比截图，再决定是否替换国家/省份主 surface。
+
+## 2026-06-29 实验性政治视觉面 debug 绘制
+
+目标：
+
+- 把上一刀的政治视觉面 mesh 缓存扩展为可选绘制层，方便用截图直接观察三角化后的国家/省份视觉面是否跨界或漏洞。
+- 默认仍不影响正式视图，避免把尚未 clipping 的实验 mesh 误接入主渲染结果。
+- 继续保持国家/省份归属、picking、编辑判定和底层 cell 数据不变。
+
+方案：
+
+- `politicalVisualMeshes` 不再只保存统计，同时保存可上传到 WebGL 的 `Float32Array` 顶点。
+- 新增独立 `politicalMeshDebugBuffer`，由 `setPoliticalMeshDebugMode("states" | "provinces" | "none")` 控制。
+- debug 层使用政治对象原色加透明度，绘制在硬 cell surface 之上、道路/河流/线层之下，便于对比 mesh 与现有面层的偏差。
+- `getStats()` 新增 `politicalMeshDebug`，暴露当前模式、顶点数和三角数；`politicalVisualMeshes` 摘要继续隐藏原始顶点数组，只报告统计信息。
+
+实施：
+
+- `app/webgl-generator/src/renderer/placeholder-renderer.js`：
+  - 新增 `politicalMeshDebugBuffer`、`politicalMeshDebugMode`、`politicalMeshDebugVertexCount`。
+  - 新增 `setPoliticalMeshDebugMode()`、`updatePoliticalMeshDebugBuffer()`、`normalizePoliticalMeshDebugMode()` 和 `politicalMeshDebugCache()`。
+  - `buildPoliticalVisualMeshCache()` 在保留三角形时同步写入可绘制顶点，并继续按重心所在 cell 的政治归属过滤。
+  - 国家/省份视觉 style 新增 `meshAlpha`，集中控制 debug mesh 透明度。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有 `@vueuse/core` 的 Rolldown pure annotation 位置警告。
+- Playwright 访问 `http://127.0.0.1:5410` 验证：
+  - 默认 debug 模式为 `none`，`politicalMeshDebug.vertexCount = 0`。
+  - 国家 debug 模式：`politicalMeshDebug.mode = states`，`vertexCount = 30807`，`triangleCount = 10269`，与 `politicalVisualMeshes.states.keptTriangles` 对齐。
+  - 省份 debug 模式：`politicalMeshDebug.mode = provinces`，`vertexCount = 63336`，`triangleCount = 21112`，与 `politicalVisualMeshes.provinces.keptTriangles` 对齐。
+  - 关闭 debug 后回到 `mode = none`、`vertexCount = 0`。
+  - `WebGL error = 0`，无 console error / pageerror。
+  - 已生成截图：
+    - `docs/generated/reports/political-mesh-debug-states.png`
+    - `docs/generated/reports/political-mesh-debug-provinces.png`
+  - 两张截图均为 `1280 x 800`，文件级像素采样 `nonZero = 1024000 / 1024000`。
+
+风险与下一步：
+
+- 当前 debug mesh 仍是重心过滤，不是严格 polygon clipping；如果截图出现跨越狭窄边界的三角形，下一刀应在真正替换主 surface 前补 clipping 或局部补点策略。
