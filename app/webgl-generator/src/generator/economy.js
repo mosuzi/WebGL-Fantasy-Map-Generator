@@ -87,7 +87,7 @@ export function buildEconomy(pack, options = {}) {
 
   pack.goods = [null, ...goods];
   pack.cells.good = assignResourceGoods(pack, rawGoods, random);
-  pack.markets = createMarkets(pack, aliveBurgs, goods, random);
+  pack.markets = createMarkets(pack, aliveBurgs, goods, random, options);
   pack.cells.market = assignMarketsToCells(pack, pack.markets);
   assignMarketsToBurgs(pack, aliveBurgs, pack.markets);
   initializeTaxRates(states, random);
@@ -215,12 +215,13 @@ function selectRawGoodId(pack, cell, rawGoods) {
   return rawGoods[index].i;
 }
 
-function createMarkets(pack, aliveBurgs, goods, random) {
+function createMarkets(pack, aliveBurgs, goods, random, options = {}) {
   const markets = [null];
   if (!aliveBurgs.length) return markets;
 
   const target = clamp(Math.round(aliveBurgs.length / 28), Math.min(1, aliveBurgs.length), Math.min(70, aliveBurgs.length));
   const lowLandRatio = landRatio(pack) < 0.65;
+  const stockScale = getMarketStockScale(options);
   const selected = new Set();
   const candidates = aliveBurgs
     .map(burg => ({burg, score: marketScore(pack, burg, random)}))
@@ -231,7 +232,7 @@ function createMarkets(pack, aliveBurgs, goods, random) {
     if (markets.length > target) break;
     if (selected.has(burg.i)) continue;
     selected.add(burg.i);
-    markets.push(createMarket(markets.length, burg, goods, {lowLandRatio}));
+    markets.push(createMarket(markets.length, burg, goods, {lowLandRatio, stockScale}));
   }
 
   return markets;
@@ -248,12 +249,13 @@ function marketScore(pack, burg, random) {
   );
 }
 
-function createMarket(id, burg, goods, {lowLandRatio = false} = {}) {
+function createMarket(id, burg, goods, {lowLandRatio = false, stockScale = 1} = {}) {
   const marketGoods = {};
   for (const good of goods) {
+    const baseStock = lowLandRatio ? 5 + ((id * 17 + good.i * 13) % 28) : 10 + ((id * 17 + good.i * 13) % 50);
     marketGoods[good.i] = {
       good: good.i,
-      stock: round(lowLandRatio ? 5 + ((id * 17 + good.i * 13) % 28) : 10 + ((id * 17 + good.i * 13) % 50)),
+      stock: round(baseStock * stockScale),
       price: round(1.2 + ((id * 11 + good.i * 7) % 70) / 10)
     };
   }
@@ -505,6 +507,11 @@ function countPositive(values) {
 function marketCoverageTarget(pack) {
   const ratio = clamp(landRatio(pack) + 0.02, 0.55, 0.9);
   return Math.min(pack.cells.i.length, Math.max(0, Math.round(pack.cells.i.length * ratio)));
+}
+
+function getMarketStockScale(options) {
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  return clamp((cellsTarget / 100000) ** 0.85, 0.12, 1);
 }
 
 function landRatio(pack) {

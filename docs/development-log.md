@@ -10190,3 +10190,36 @@ pnpm run regress:rendering
 
 - quick matrix 已全绿；下一步可刷新 full source/candidate 矩阵，确认 63 case 在 source `1.127.2` economy schema 下是否仍全绿。
 - zone 类型和 cell 规模仍只是第一刀，后续可继续参考 source 的 per-type 高斯抽样和路径/河流/海啸候选规则深化。
+
+### 经济市场库存规模校准第一刀
+
+背景：
+
+- quick candidate 矩阵已经全绿，但 full source/candidate 矩阵刷新后暴露出 10k/50k case 的系统性经济库存偏差。
+- `node .\tools\source-baseline-matrix.mjs --mode full --refresh true --reuse-server true --browser-channel chrome --port 5301 --timeout 240000` 外层因为共享 Vite server 生命周期拖到 1 小时超时；检查后确认 63 个 `source-summary.json` 都已刷新，并且全部包含新版 `lateStages` 和 `economy` schema，`matrix.json/md` 也已写为 full。
+- full candidate 初始状态为 `31 fail / 21 warn / 11 pass`。失败项高度集中：
+  - `economy.markets.stock.mean`：`29` 个 fail。
+  - `lateStages.military.regiments`：`15` 个 fail、`23` 个 warn。
+- candidate 旧 market stock 均值基本固定：普通 market 约 `34.5`，低陆地比 market 约 `18.5`；source 则按目标 cells 明显增长，当前 full 矩阵平均约为 10k `5.67`、50k `18.6`、100k `36`。
+
+修正：
+
+- `createMarkets()` 接收 `options`，并传入 `createMarket()`。
+- `createMarket()` 的每种商品库存先保留原有确定性基数，再乘以 `getMarketStockScale(options)`。
+- `getMarketStockScale()` 使用 `(cellsTarget / 100000) ^ 0.85`，并夹在 `0.12..1`；因此 100k 保持旧库存尺度，10k/50k 向 source 的小图库存尺度收敛。
+- 本刀只调库存尺度，不同时调整价格、生产记录、交易数量和税收，避免把多个经济指标耦在一起。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- `git diff --check`
+- 定点最差样例 `peninsula / 10000 / audit-peninsula-003` 从 `fail` 降为 `warn`，库存均值 source/candidate 从 `2.968 / 34.552` 变为 `2.968 / 4.881`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh-candidate true --refresh-diff true --browser-channel chrome --timeout 240000` 通过：quick 仍为 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate true --refresh-diff true --browser-channel chrome --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态从 `31 fail / 21 warn / 11 pass` 改为 `20 fail / 29 warn / 14 pass`。
+  - `economy.markets.stock.mean` 从 `29` 个 fail 降到 `1` 个 fail、`2` 个 warn。
+
+后续：
+
+- 下一刀优先军事第二刀。full 矩阵仍有 `lateStages.military.regiments` 的 `15` 个 fail 和 `23` 个 warn，主要集中在 10k、50k 和 highIsland / lowIsland 这类地图；第一刀的陆地密度因子只保证了 quick 100k 样例。
+- 经济后续可继续处理 `production.localRecords / product.mean / marketToMarket / taxTotal`，但应等军事数量先收敛，否则 full 矩阵的最大噪声仍在军事。
