@@ -1,0 +1,112 @@
+import {mix} from "./geometry.js";
+
+export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
+  if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
+    return colorForHeight(map.grid.cells.h[cellIndex], map.layers);
+  }
+  if (colorMode === "temperature") return colorForTemperature(map.grid.cells.temp[cellIndex]);
+  if (colorMode === "precipitation") return colorForPrecipitation(map.grid.cells.prec[cellIndex]);
+  if (colorMode === "biomes") return colorForBiome(map.grid.cells.biome[cellIndex], map);
+  if (colorMode === "cultures") return colorForCulture(map.grid.cells.culture[cellIndex], map);
+  if (colorMode === "religions") return colorForReligion(map.grid.cells.religion[cellIndex], map);
+  if (colorMode === "states") return colorForState(map.grid.cells.state[cellIndex], map);
+  if (colorMode === "provinces") return colorForProvince(map.grid.cells.province[cellIndex], map);
+  if (colorMode === "regions") return indexedColorOrWater(map.grid.cells.region[cellIndex], 0.77, map.layers.ocean);
+  if (colorMode === "population") return colorForPopulation(map.grid.cells.pop[cellIndex], map);
+  return colorForHeight(map.grid.cells.h[cellIndex], map.layers, viewOptions);
+}
+
+export function isLandCell(cellIndex, map) {
+  const featureId = map.grid.cells.f?.[cellIndex];
+  return Boolean(map.features.features[featureId]?.land);
+}
+
+export function colorForHeight(height, layers, viewOptions = {}) {
+  if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, layers) : layers.ocean;
+  if (height < 36) return mix([0.33, 0.52, 0.32, 1], [0.52, 0.61, 0.38, 1], (height - 20) / 16);
+  if (height < 56) return mix([0.52, 0.61, 0.38, 1], [0.64, 0.6, 0.43, 1], (height - 36) / 20);
+  if (height < 76) return mix([0.64, 0.6, 0.43, 1], [0.7, 0.66, 0.54, 1], (height - 56) / 20);
+  if (height < 92) return mix([0.7, 0.66, 0.54, 1], [0.77, 0.75, 0.68, 1], (height - 76) / 16);
+  return mix([0.77, 0.75, 0.68, 1], [0.83, 0.82, 0.78, 1], Math.min(1, (height - 92) / 8));
+}
+
+function colorForOceanHeight(height, layers) {
+  const t = Math.max(0, Math.min(1, height / 20));
+  const deep = mix(layers.ocean, [0.01, 0.04, 0.14, 1], 0.72);
+  const shelf = mix(layers.ocean, [0.38, 0.68, 0.82, 1], 0.42);
+  return mix(deep, shelf, t ** 0.75);
+}
+
+function colorForTemperature(temp) {
+  const t = Math.max(0, Math.min(1, (temp + 18) / 54));
+  return mix([0.2, 0.38, 0.72, 1], [0.82, 0.32, 0.2, 1], t);
+}
+
+function colorForPrecipitation(prec) {
+  const t = Math.max(0, Math.min(1, prec / 100));
+  return mix([0.72, 0.62, 0.36, 1], [0.16, 0.48, 0.68, 1], t);
+}
+
+function colorForBiome(biomeId, map) {
+  return map.climate.biomes[biomeId]?.color || [0.5, 0.5, 0.5, 1];
+}
+
+export function colorForState(stateId, map) {
+  if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  if (!stateId) return [0.58, 0.6, 0.58, 1];
+  return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
+}
+
+function colorForCulture(cultureId, map) {
+  if (cultureId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  return hexToRgba(map.society.cultures[cultureId]?.color) || indexedColor(cultureId, 0.31);
+}
+
+function colorForReligion(religionId, map) {
+  if (religionId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  return hexToRgba(map.society.religions[religionId]?.color) || indexedColor(religionId, 0.63);
+}
+
+export function colorForProvince(provinceId, map) {
+  if (provinceId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  if (!provinceId) return [0.58, 0.6, 0.58, 1];
+  return hexToRgba(map.politics.provinces[provinceId]?.color) || indexedColor(provinceId, 0.46);
+}
+
+function colorForPopulation(population, map) {
+  if (!population) return mix(map.layers.ocean, [0.06, 0.1, 0.08, 1], 0.4);
+  const t = Math.min(1, population / Math.max(1, map.settlements.metadata.maxPopulation));
+  return mix([0.2, 0.36, 0.24, 1], [0.92, 0.72, 0.34, 1], Math.sqrt(t));
+}
+
+function indexedColor(index, offset) {
+  const hue = (index * 0.61803398875 + offset) % 1;
+  return hslToRgb(hue, 0.42, 0.56);
+}
+
+function indexedColorOrWater(index, offset, waterColor) {
+  if (index < 0) return mix(waterColor, [0.05, 0.08, 0.1, 1], 0.3);
+  return indexedColor(index, offset);
+}
+
+function hexToRgba(color) {
+  if (typeof color !== "string") return null;
+  const match = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+  if (!match) return null;
+  const value = Number.parseInt(match[1], 16);
+  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255, 1];
+}
+
+function hslToRgb(h, s, l) {
+  const hueToRgb = (p, q, t) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hueToRgb(p, q, h + 1 / 3), hueToRgb(p, q, h), hueToRgb(p, q, h - 1 / 3), 1];
+}

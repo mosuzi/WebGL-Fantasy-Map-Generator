@@ -1,4 +1,38 @@
 import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickPoliticalObject, pickRiver, pickRoute} from "./picking.js";
+import {bindVertexBuffer, createProgram} from "./gl-utils.js";
+import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
+import {colorForCell, colorForState, colorForProvince, isLandCell} from "./color-modes.js";
+import {
+  buildCellVisualGridVertices,
+  politicalSurfaceMeshForMode,
+  pushGridCells,
+  pushMeshSurfaceVertices,
+  shouldDrawGridCellUnderPoliticalMesh
+} from "./cell-surface-layer.js";
+import {
+  pushScreenPolyline,
+  pushScreenTriangle,
+  pushVariableScreenPolyline,
+  pushWorldLine,
+  pushWorldPolylineMesh,
+  pushWorldVertex
+} from "./mesh-writer.js";
+import {
+  clamp,
+  interpolatePoint,
+  interpolateWorldPoint,
+  isWorldPoint,
+  midpoint,
+  mix,
+  normalizeWorldVector,
+  pointsNear,
+  polygonArea,
+  segmentsIntersect,
+  smoothWorldPath,
+  smoothWorldPathAndColors,
+  smoothWorldPathWithValues,
+  worldDistance
+} from "./geometry.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {createRandom} from "../generator/random.js";
@@ -514,7 +548,7 @@ export class PlaceholderMapRenderer {
     const nextScale = clamp(Math.min(available / ndcWidth, available / ndcHeight), minScale, maxScale);
     const centerX = (bounds.minX + bounds.maxX) / 2;
     const centerY = (bounds.minY + bounds.maxY) / 2;
-    const [ndcX, ndcY] = worldToNdcPoint([centerX, centerY], this.map);
+    const [ndcX, ndcY] = worldToNdcPoint(createRenderContext(this.map), [centerX, centerY]);
 
     this.camera.scale = nextScale;
     this.camera.offsetX = -ndcX * nextScale;
@@ -994,59 +1028,33 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
 }
 
 function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {
-  const shorePaths = shoreVisualPaths || buildShoreVisualPaths(map);
+  const context = createRenderContext(map);
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const politicalSurface = politicalSurfaceMeshForMode(colorMode, politicalVisualMeshes);
   const smoothCellBorders = viewOptions.smoothCellBorders !== false;
   const useCellVisualMesh = smoothCellBorders && cellVisualMesh?.cells?.length;
   const usePoliticalSurface = smoothCellBorders && politicalSurface;
-  const vertices = useCellVisualMesh ? buildCellVisualGridVertices(map, colorMode, viewOptions, cellVisualMesh) : [];
+  const vertices = useCellVisualMesh ? buildCellVisualGridVertices(context, colorMode, viewOptions, cellVisualMesh) : [];
 
   if (!useCellVisualMesh && usePoliticalSurface) {
-    pushGridCells(vertices, map, colorMode, viewOptions, cellIndex => shouldDrawGridCellUnderPoliticalMesh(map, colorMode, cellIndex));
+    pushGridCells(vertices, context, colorMode, viewOptions, cellIndex => shouldDrawGridCellUnderPoliticalMesh(map, colorMode, cellIndex));
     pushMeshSurfaceVertices(vertices, politicalSurface);
   } else if (!useCellVisualMesh) {
-    pushGridCells(vertices, map, colorMode, viewOptions);
+    pushGridCells(vertices, context, colorMode, viewOptions);
   }
   const shoreVertices = [];
-  if (shouldDrawShoreVisualBands(colorMode)) pushShoreVisualBands(shoreVertices, map, colorMode, viewOptions, shorePaths);
+  if (shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths) pushShoreVisualBands(shoreVertices, context, colorMode, viewOptions, shoreVisualPaths);
   if (smoothCellBorders && !useCellVisualMesh) {
-    if (colorMode === "states") pushPoliticalVisualBands(vertices, map, statePaths, STATE_VISUAL_STYLE);
-    if (colorMode === "provinces") pushPoliticalVisualBands(vertices, map, provincePaths, PROVINCE_VISUAL_STYLE);
+    if (colorMode === "states") pushPoliticalVisualBands(vertices, context, statePaths, STATE_VISUAL_STYLE);
+    if (colorMode === "provinces") pushPoliticalVisualBands(vertices, context, provincePaths, PROVINCE_VISUAL_STYLE);
   }
 
   return combineVertexBuffers(vertices, shoreVertices);
 }
 
 function shouldDrawShoreVisualBands(colorMode) {
-  return colorMode !== "states" && colorMode !== "provinces";
-}
-
-function buildCellVisualGridVertices(map, colorMode, viewOptions, cellVisualMesh) {
-  const cells = cellVisualMesh?.cells || [];
-  let triangles = 0;
-  for (const cellMesh of cells) {
-    if (cellMesh?.points?.length) triangles += cellMesh.points.length;
-  }
-
-  const vertices = new Float32Array(triangles * 3 * 6);
-  let offset = 0;
-  for (const cellMesh of cellVisualMesh.cells || []) {
-    if (!cellMesh?.points?.length) continue;
-    const color = colorForCell(cellMesh.cell, map, colorMode, viewOptions);
-    const center = worldToNdcPoint(cellMesh.center, map);
-    for (let index = 0; index < cellMesh.points.length; index++) {
-      const nextIndex = (index + 1) % cellMesh.points.length;
-      const current = worldToNdcPoint(cellMesh.points[index], map);
-      const next = worldToNdcPoint(cellMesh.points[nextIndex], map);
-      offset = writeVertex(vertices, offset, center[0], center[1], color);
-      offset = writeVertex(vertices, offset, current[0], current[1], color);
-      offset = writeVertex(vertices, offset, next[0], next[1], color);
-    }
-  }
-
-  return offset === vertices.length ? vertices : vertices.slice(0, offset);
+  return false;
 }
 
 function combineVertexBuffers(primary, extra) {
@@ -1058,31 +1066,22 @@ function combineVertexBuffers(primary, extra) {
   return result;
 }
 
-function politicalSurfaceMeshForMode(colorMode, meshes) {
-  if (colorMode === "states" && meshes?.states?.surfaceVertices?.length) return meshes.states;
-  if (colorMode === "provinces" && meshes?.provinces?.surfaceVertices?.length) return meshes.provinces;
-  return null;
-}
-
-function shouldDrawGridCellUnderPoliticalMesh(map, colorMode, cellIndex) {
-  if (!isLandCell(cellIndex, map)) return true;
-  const field = colorMode === "states" ? "state" : colorMode === "provinces" ? "province" : null;
-  return !field || !(map.grid.cells[field]?.[cellIndex] || 0);
-}
-
-function pushMeshSurfaceVertices(vertices, mesh) {
-  for (const value of mesh.surfaceVertices || []) vertices.push(value);
-}
-
 function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}) {
+  const context = createRenderContext(map);
   const vertices = [];
-  const shorePaths = shoreVisualPaths || buildShoreVisualPaths(map);
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
-  if (visibility.coastline !== false) pushOriginalShoreContourLines(vertices, shorePaths.coastline, map, SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld);
-  if (visibility.lakeShore !== false) pushOriginalShoreContourLines(vertices, shorePaths.lakeShore, map, SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld);
-  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, map, PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
-  if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, map, STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
+  const smoothCellBorders = viewOptions.smoothCellBorders !== false && cellVisualMesh?.edgeCurves;
+  if (visibility.coastline !== false) {
+    if (smoothCellBorders) pushCellVisualShoreLines(vertices, context, cellVisualMesh, "ocean", SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld);
+    else pushHardShoreLines(vertices, context, "ocean", SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld);
+  }
+  if (visibility.lakeShore !== false) {
+    if (smoothCellBorders) pushCellVisualShoreLines(vertices, context, cellVisualMesh, "lake", SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld);
+    else pushHardShoreLines(vertices, context, "lake", SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld);
+  }
+  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
+  if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   return new Float32Array(vertices);
 }
 
@@ -1303,10 +1302,13 @@ function summarizeCellVisualMesh(mesh) {
 }
 
 function boundaryLineModeForOptions(viewOptions, cellVisualMesh) {
-  return "original-coastline + butt-join-political";
+  return viewOptions?.smoothCellBorders !== false && cellVisualMesh?.edgeCurves
+    ? "visual-cell-shore + butt-join-political"
+    : "hard-cell-shore + butt-join-political";
 }
 
-function pushCellVisualShoreLines(vertices, map, cellVisualMesh, targetType, color) {
+function pushCellVisualShoreLines(vertices, context, cellVisualMesh, targetType, color, widthWorld) {
+  const {map} = context;
   const cells = map?.grid?.cells;
   if (!cells?.i || !cells?.c) return;
   for (const cell of cells.i || []) {
@@ -1319,12 +1321,13 @@ function pushCellVisualShoreLines(vertices, map, cellVisualMesh, targetType, col
       const waterFeature = map.features.features[cells.f?.[waterCell]];
       const isOcean = waterFeature?.type === "ocean";
       if ((targetType === "ocean" && !isOcean) || (targetType === "lake" && isOcean)) continue;
-      pushWorldPolylineLines(vertices, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), map, color);
+      pushWorldPolylineMesh(vertices, context, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), color, widthWorld, {joinMode: "round"});
     }
   }
 }
 
-function pushCellVisualPoliticalLines(vertices, map, field, cellVisualMesh, color) {
+function pushCellVisualPoliticalLines(vertices, context, field, cellVisualMesh, color) {
+  const {map} = context;
   const cells = map?.grid?.cells;
   if (!cells?.i || !cells?.c || !cells?.[field]) return;
   for (const cell of cells.i || []) {
@@ -1336,12 +1339,13 @@ function pushCellVisualPoliticalLines(vertices, map, field, cellVisualMesh, colo
       if (neighborValue === ownValue) continue;
       if (field !== "state" && (!ownValue || !neighborValue)) continue;
       if (field === "state" && !ownValue && !neighborValue) continue;
-      pushWorldPolylineLines(vertices, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), map, color);
+      pushWorldPolylineLines(vertices, context, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), color);
     }
   }
 }
 
-function pushHardShoreLines(vertices, map, targetType, color) {
+function pushHardShoreLines(vertices, context, targetType, color, widthWorld) {
+  const {map} = context;
   const cells = map?.grid?.cells;
   if (!cells?.i || !cells?.c) return;
   for (const cell of cells.i || []) {
@@ -1355,7 +1359,7 @@ function pushHardShoreLines(vertices, map, targetType, color) {
       const isOcean = waterFeature?.type === "ocean";
       if ((targetType === "ocean" && !isOcean) || (targetType === "lake" && isOcean)) continue;
       const edge = sharedVoronoiEdge(map, cell, neighbor);
-      if (edge) pushWorldLine(vertices, edge, map, color);
+      if (edge) pushWorldPolylineMesh(vertices, context, edge, color, widthWorld, {joinMode: "caps"});
     }
   }
 }
@@ -1370,14 +1374,15 @@ function visualSharedCellEdge(map, cell, neighbor, cellVisualMesh) {
   return shared.map(vertex => map.grid.vertices.p[vertex]).filter(isWorldPoint);
 }
 
-function pushWorldPolylineLines(vertices, points, map, color) {
+function pushWorldPolylineLines(vertices, context, points, color) {
   if (!Array.isArray(points) || points.length < 2) return;
   for (let index = 0; index < points.length - 1; index++) {
-    pushWorldLine(vertices, [points[index], points[index + 1]], map, color);
+    pushWorldLine(vertices, context, [points[index], points[index + 1]], color);
   }
 }
 
-function pushPoliticalBoundaryLines(vertices, map, field, color) {
+function pushPoliticalBoundaryLines(vertices, context, field, color) {
+  const {map} = context;
   const cells = map?.grid?.cells;
   if (!cells?.c || !cells?.v || !cells?.[field]) return;
   for (const cell of cells.i || []) {
@@ -1390,7 +1395,7 @@ function pushPoliticalBoundaryLines(vertices, map, field, color) {
       if (field !== "state" && (!ownValue || !neighborValue)) continue;
       if (field === "state" && !ownValue && !neighborValue) continue;
       const edge = sharedVoronoiEdge(map, cell, neighbor);
-      if (edge) pushWorldLine(vertices, edge, map, color);
+      if (edge) pushWorldLine(vertices, context, edge, color);
     }
   }
 }
@@ -1409,12 +1414,13 @@ function sharedVoronoiEdgeVertexIds(map, cell, neighbor) {
   return [shared[0], shared[1]];
 }
 
-function pushShoreVisualBands(vertices, map, colorMode, viewOptions, paths) {
-  for (const path of paths.coastline) pushShoreVisualBand(vertices, path, map, colorMode, viewOptions);
-  for (const path of paths.lakeShore) pushShoreVisualBand(vertices, path, map, colorMode, viewOptions);
+function pushShoreVisualBands(vertices, context, colorMode, viewOptions, paths) {
+  for (const path of paths.coastline) pushShoreVisualBand(vertices, path, context, colorMode, viewOptions);
+  for (const path of paths.lakeShore) pushShoreVisualBand(vertices, path, context, colorMode, viewOptions);
 }
 
-function pushShoreVisualBand(vertices, path, map, colorMode, viewOptions) {
+function pushShoreVisualBand(vertices, path, context, colorMode, viewOptions) {
+  const {map} = context;
   const visual = buildSmoothedShoreVisual(path, map, colorMode, viewOptions);
   if (!visual || visual.land.points.length < 2 || visual.water.points.length !== visual.land.points.length) return;
 
@@ -1431,18 +1437,18 @@ function pushShoreVisualBand(vertices, path, map, colorMode, viewOptions) {
     const landColorB = visual.land.colors[index + 1];
     const waterColorA = visual.water.colors[index];
     const waterColorB = visual.water.colors[index + 1];
-    pushWorldVertex(vertices, centerA, map, waterColorA);
-    pushWorldVertex(vertices, waterA, map, waterColorA);
-    pushWorldVertex(vertices, waterB, map, waterColorB);
-    pushWorldVertex(vertices, centerA, map, waterColorA);
-    pushWorldVertex(vertices, waterB, map, waterColorB);
-    pushWorldVertex(vertices, centerB, map, waterColorB);
-    pushWorldVertex(vertices, centerA, map, landColorA);
-    pushWorldVertex(vertices, centerB, map, landColorB);
-    pushWorldVertex(vertices, landB, map, landColorB);
-    pushWorldVertex(vertices, centerA, map, landColorA);
-    pushWorldVertex(vertices, landB, map, landColorB);
-    pushWorldVertex(vertices, landA, map, landColorA);
+    pushWorldVertex(vertices, context, centerA, waterColorA);
+    pushWorldVertex(vertices, context, waterA, waterColorA);
+    pushWorldVertex(vertices, context, waterB, waterColorB);
+    pushWorldVertex(vertices, context, centerA, waterColorA);
+    pushWorldVertex(vertices, context, waterB, waterColorB);
+    pushWorldVertex(vertices, context, centerB, waterColorB);
+    pushWorldVertex(vertices, context, centerA, landColorA);
+    pushWorldVertex(vertices, context, centerB, landColorB);
+    pushWorldVertex(vertices, context, landB, landColorB);
+    pushWorldVertex(vertices, context, centerA, landColorA);
+    pushWorldVertex(vertices, context, landB, landColorB);
+    pushWorldVertex(vertices, context, landA, landColorA);
   }
 }
 
@@ -1479,27 +1485,28 @@ function isWaterSample(map, point) {
   return cell !== null && cell !== undefined && !isLandCell(cell, map);
 }
 
-function pushShoreVisualLines(vertices, paths, map, color) {
+function pushShoreVisualLines(vertices, paths, context, color) {
+  const {map} = context;
   for (const path of paths) {
     const visual = buildSmoothedShoreVisual(path, map, "height", {});
     if (!visual || visual.land.points.length < 2 || visual.water.points.length !== visual.land.points.length) continue;
     for (let index = 0; index < visual.land.points.length - 1; index++) {
       if (visual.breakBefore?.[index + 1]) continue;
-      pushWorldLine(vertices, [midpoint(visual.land.points[index], visual.water.points[index]), midpoint(visual.land.points[index + 1], visual.water.points[index + 1])], map, color);
+      pushWorldLine(vertices, context, [midpoint(visual.land.points[index], visual.water.points[index]), midpoint(visual.land.points[index + 1], visual.water.points[index + 1])], color);
     }
   }
 }
 
-function pushOriginalShoreContourLines(vertices, paths, map, color, widthWorld) {
+function pushOriginalShoreContourLines(vertices, paths, context, color, widthWorld) {
   for (const path of paths || []) {
     const points = clampedShoreRenderPoints(path).map(entry => entry.point);
-    pushWorldPolylineMesh(vertices, points, map, color, widthWorld, {closed: pointsNear(points?.[0], points?.[points.length - 1]), maxSegmentWorld: SHORE_VISUAL_STYLE.maxRenderSegmentWorld});
+    pushWorldPolylineMesh(vertices, context, points, color, widthWorld, {closed: pointsNear(points?.[0], points?.[points.length - 1]), maxSegmentWorld: SHORE_VISUAL_STYLE.maxRenderSegmentWorld});
   }
 }
 
-function pushPoliticalBoundaryStrokes(vertices, paths, map, color, widthWorld) {
+function pushPoliticalBoundaryStrokes(vertices, paths, context, color, widthWorld) {
   for (const path of paths?.boundaries || []) {
-    pushWorldPolylineMesh(vertices, path.points, map, color, widthWorld, {
+    pushWorldPolylineMesh(vertices, context, path.points, color, widthWorld, {
       closed: pointsNear(path.points?.[0], path.points?.[path.points.length - 1]),
       joinMode: "none"
     });
@@ -1964,11 +1971,12 @@ function countPathPoints(paths = []) {
   return paths.reduce((sum, path) => sum + (path.points?.length || 0), 0);
 }
 
-function pushPoliticalVisualBands(vertices, map, paths, style) {
-  for (const path of paths.boundaries) pushPoliticalVisualBand(vertices, path, map, style);
+function pushPoliticalVisualBands(vertices, context, paths, style) {
+  for (const path of paths.boundaries) pushPoliticalVisualBand(vertices, path, context, style);
 }
 
-function pushPoliticalVisualBand(vertices, path, map, style) {
+function pushPoliticalVisualBand(vertices, path, context, style) {
+  const {map} = context;
   const visual = buildSmoothedPoliticalVisual(path, map, style);
   if (!visual || visual.a.points.length < 2 || visual.b.points.length !== visual.a.points.length) return;
 
@@ -1981,21 +1989,22 @@ function pushPoliticalVisualBand(vertices, path, map, style) {
     const colorA1 = visual.a.colors[index + 1];
     const colorB0 = visual.b.colors[index];
     const colorB1 = visual.b.colors[index + 1];
-    pushWorldVertex(vertices, a0, map, colorA0);
-    pushWorldVertex(vertices, b0, map, colorB0);
-    pushWorldVertex(vertices, b1, map, colorB1);
-    pushWorldVertex(vertices, a0, map, colorA0);
-    pushWorldVertex(vertices, b1, map, colorB1);
-    pushWorldVertex(vertices, a1, map, colorA1);
+    pushWorldVertex(vertices, context, a0, colorA0);
+    pushWorldVertex(vertices, context, b0, colorB0);
+    pushWorldVertex(vertices, context, b1, colorB1);
+    pushWorldVertex(vertices, context, a0, colorA0);
+    pushWorldVertex(vertices, context, b1, colorB1);
+    pushWorldVertex(vertices, context, a1, colorA1);
   }
 }
 
-function pushPoliticalVisualLines(vertices, paths, map, style) {
+function pushPoliticalVisualLines(vertices, paths, context, style) {
+  const {map} = context;
   for (const path of paths.boundaries) {
     const visual = buildSmoothedPoliticalVisual(path, map, style);
     if (!visual || visual.a.points.length < 2 || visual.b.points.length !== visual.a.points.length) continue;
     for (let index = 0; index < visual.a.points.length - 1; index++) {
-      pushWorldLine(vertices, [midpoint(visual.a.points[index], visual.b.points[index]), midpoint(visual.a.points[index + 1], visual.b.points[index + 1])], map, style.borderStroke);
+      pushWorldLine(vertices, context, [midpoint(visual.a.points[index], visual.b.points[index]), midpoint(visual.a.points[index + 1], visual.b.points[index + 1])], style.borderStroke);
     }
   }
 }
@@ -2050,6 +2059,7 @@ function summarizePoliticalVisualPaths(paths, style) {
 }
 
 function buildPoliticalVisualMeshCache(map, field, paths, shorePaths, style) {
+  const context = createRenderContext(map);
   const startedAt = performance.now();
   const groups = collectPoliticalVisualMeshGroups(map, field, paths, shorePaths, style);
   const vertices = [];
@@ -2109,12 +2119,12 @@ function buildPoliticalVisualMeshCache(map, field, paths, shorePaths, style) {
         addPoliticalMeshTriangleQuality(quality, groupQuality, map, field, group.value, a, b, c, maxEdgeWorld, sampleStatus);
         const surfaceColor = style.colorForValue(group.value, map);
         const debugColor = withAlpha(surfaceColor, style.meshAlpha ?? 0.7);
-        pushWorldVertex(surfaceVertices, a, map, surfaceColor);
-        pushWorldVertex(surfaceVertices, b, map, surfaceColor);
-        pushWorldVertex(surfaceVertices, c, map, surfaceColor);
-        pushWorldVertex(vertices, a, map, debugColor);
-        pushWorldVertex(vertices, b, map, debugColor);
-        pushWorldVertex(vertices, c, map, debugColor);
+        pushWorldVertex(surfaceVertices, context, a, surfaceColor);
+        pushWorldVertex(surfaceVertices, context, b, surfaceColor);
+        pushWorldVertex(surfaceVertices, context, c, surfaceColor);
+        pushWorldVertex(vertices, context, a, debugColor);
+        pushWorldVertex(vertices, context, b, debugColor);
+        pushWorldVertex(vertices, context, c, debugColor);
       } else {
         rejected++;
       }
@@ -2313,10 +2323,6 @@ function estimateGridSpacingWorld(map) {
     }
   }
   return count ? total / count : Math.sqrt((map?.metadata?.graphWidth || 1) * (map?.metadata?.graphHeight || 1) / Math.max(1, cells.i.length || 1));
-}
-
-function worldDistance(a, b) {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }
 
 function collectPoliticalVisualMeshGroups(map, field, paths, shorePaths, style) {
@@ -2712,179 +2718,8 @@ function cellCenterPoint(grid, cell) {
   return grid.points[grid.cells.p?.[cell]] || [0, 0];
 }
 
-function normalizeWorldVector(x, y) {
-  const length = Math.hypot(x, y);
-  if (length <= 0.000001) return {x: 0, y: 0};
-  return {x: x / length, y: y / length};
-}
-
-function interpolatePoint(a, b, t) {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-}
-
-function midpoint(a, b) {
-  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-}
-
-function pointsNear(a, b) {
-  if (!isWorldPoint(a) || !isWorldPoint(b)) return false;
-  return Math.hypot(a[0] - b[0], a[1] - b[1]) <= 0.001;
-}
-
-function polygonArea(points) {
-  let area = 0;
-  for (let index = 0; index < points.length; index++) {
-    const a = points[index];
-    const b = points[(index + 1) % points.length];
-    area += a[0] * b[1] - b[0] * a[1];
-  }
-  return area / 2;
-}
-
-function segmentsIntersect(a, b, c, d) {
-  const abC = orient(a, b, c);
-  const abD = orient(a, b, d);
-  const cdA = orient(c, d, a);
-  const cdB = orient(c, d, b);
-  if (Math.abs(abC) <= 0.000001 && pointOnSegment(c, a, b)) return true;
-  if (Math.abs(abD) <= 0.000001 && pointOnSegment(d, a, b)) return true;
-  if (Math.abs(cdA) <= 0.000001 && pointOnSegment(a, c, d)) return true;
-  if (Math.abs(cdB) <= 0.000001 && pointOnSegment(b, c, d)) return true;
-  return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
-}
-
-function orient(a, b, c) {
-  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-}
-
-function pointOnSegment(point, a, b) {
-  return point[0] >= Math.min(a[0], b[0]) - 0.000001 &&
-    point[0] <= Math.max(a[0], b[0]) + 0.000001 &&
-    point[1] >= Math.min(a[1], b[1]) - 0.000001 &&
-    point[1] <= Math.max(a[1], b[1]) + 0.000001;
-}
-
-function smoothWorldPath(points, options) {
-  return smoothWorldPathWithValues(points, null, options).points;
-}
-
-function smoothWorldPathAndColors(points, colors, {iterations = 1, factor = 0.2} = {}) {
-  if (points.length < 3 || iterations <= 0) return {
-    points,
-    colors
-  };
-
-  const closed = pointsNear(points[0], points[points.length - 1]);
-  let resultPoints = closed ? points.slice(0, -1) : [...points];
-  let resultColors = closed ? colors.slice(0, -1) : [...colors];
-  if (resultPoints.length < 3) return {points, colors};
-
-  for (let index = 0; index < iterations; index++) {
-    const result = chaikinWorldPathAndColors(resultPoints, resultColors, factor, closed);
-    resultPoints = result.points;
-    resultColors = result.colors;
-    if (resultPoints.length < 3) break;
-  }
-
-  if (closed) {
-    resultPoints = [...resultPoints, resultPoints[0]];
-    resultColors = [...resultColors, resultColors[0]];
-  }
-
-  return {
-    points: resultPoints,
-    colors: resultColors
-  };
-}
-
-function chaikinWorldPathAndColors(points, colors, factor, closed) {
-  const nextPoints = [];
-  const nextColors = [];
-  const count = points.length;
-  if (!closed) {
-    nextPoints.push(points[0]);
-    nextColors.push(colors[0]);
-  }
-
-  const segments = closed ? count : count - 1;
-  for (let index = 0; index < segments; index++) {
-    const a = points[index];
-    const b = points[(index + 1) % count];
-    const colorA = colors[index];
-    const colorB = colors[(index + 1) % count];
-    nextPoints.push(interpolateWorldPoint(a, b, factor));
-    nextPoints.push(interpolateWorldPoint(a, b, 1 - factor));
-    nextColors.push(interpolateColor(colorA, colorB, factor));
-    nextColors.push(interpolateColor(colorA, colorB, 1 - factor));
-  }
-
-  if (!closed) {
-    nextPoints.push(points[count - 1]);
-    nextColors.push(colors[count - 1]);
-  }
-
-  return {points: nextPoints, colors: nextColors};
-}
-
-function smoothWorldPathWithValues(points, values, {iterations = 1, factor = 0.2} = {}) {
-  const sourcePoints = (points || []).filter(isWorldPoint);
-  if (sourcePoints.length < 3 || iterations <= 0) return {
-    points: sourcePoints,
-    widths: values || []
-  };
-
-  let resultPoints = sourcePoints.map(point => Array.isArray(point) ? [...point] : point);
-  let resultValues = Array.isArray(values) ? [...values] : null;
-
-  for (let index = 0; index < iterations; index++) {
-    const result = chaikinOpenWorldPath(resultPoints, resultValues, factor);
-    resultPoints = result.points;
-    resultValues = result.values;
-    if (resultPoints.length < 3) break;
-  }
-
-  return {
-    points: resultPoints,
-    widths: resultValues || values || []
-  };
-}
-
-function chaikinOpenWorldPath(points, values, factor) {
-  const nextPoints = [points[0]];
-  const nextValues = values ? [values[0]] : null;
-
-  for (let index = 0; index < points.length - 1; index++) {
-    const a = points[index];
-    const b = points[index + 1];
-    nextPoints.push(interpolateWorldPoint(a, b, factor));
-    nextPoints.push(interpolateWorldPoint(a, b, 1 - factor));
-    if (nextValues) {
-      nextValues.push(interpolateValue(values[index], values[index + 1], factor));
-      nextValues.push(interpolateValue(values[index], values[index + 1], 1 - factor));
-    }
-  }
-
-  nextPoints.push(points[points.length - 1]);
-  if (nextValues) nextValues.push(values[values.length - 1]);
-  return {points: nextPoints, values: nextValues};
-}
-
-function interpolateWorldPoint(a, b, t) {
-  const point = interpolatePoint(a, b, t);
-  if (Number.isFinite(a?.[2]) || Number.isFinite(b?.[2])) point[2] = interpolateValue(a?.[2], b?.[2], t);
-  return point;
-}
-
-function interpolateValue(a, b, t) {
-  const av = Number.isFinite(a) ? a : b;
-  const bv = Number.isFinite(b) ? b : a;
-  if (!Number.isFinite(av) && !Number.isFinite(bv)) return 0;
-  if (!Number.isFinite(av)) return bv;
-  if (!Number.isFinite(bv)) return av;
-  return av + (bv - av) * t;
-}
-
 function buildRiverMeshVertices(map, camera, canvas) {
+  const context = createRenderContext(map, {camera, canvas});
   const vertices = [];
   const stats = {
     rivers: 0,
@@ -2901,7 +2736,7 @@ function buildRiverMeshVertices(map, camera, canvas) {
     const {points, widths} = getRiverRenderPath(river, map, pixelRatio, stats);
     if (points.length < 2) continue;
     const before = vertices.length;
-    pushVariableScreenPolyline(vertices, points, widths, map, camera, canvas, riverRenderColor(river));
+    pushVariableScreenPolyline(vertices, context, points, widths, riverRenderColor(river));
     if (vertices.length === before) continue;
     stats.rivers++;
     stats.segments += points.length - 1;
@@ -2997,6 +2832,7 @@ function riverRenderColor(river) {
 }
 
 function buildRouteMeshVertices(map, camera, canvas, selection) {
+  const context = createRenderContext(map, {camera, canvas});
   const vertices = [];
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
   for (const route of map.settlements.routes) {
@@ -3006,7 +2842,7 @@ function buildRouteMeshVertices(map, camera, canvas, selection) {
     const baseWidth = style.width;
     const widthPx = (selected ? baseWidth + 2.4 : baseWidth) * pixelRatio;
     const dash = !selected && style.dash ? {dashPx: style.dash[0] * pixelRatio, gapPx: style.dash[1] * pixelRatio} : null;
-    pushScreenPolyline(vertices, smoothWorldPath(route.points, LINE_SMOOTHING.route), map, camera, canvas, color, widthPx, dash);
+    pushScreenPolyline(vertices, context, smoothWorldPath(route.points, LINE_SMOOTHING.route), color, widthPx, dash);
   }
   return new Float32Array(vertices);
 }
@@ -3035,9 +2871,10 @@ const SELECTION_HIGHLIGHT_MODES = Object.freeze({
 });
 
 function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash) {
+  const context = createRenderContext(map, {camera, canvas});
   const vertices = [];
   if (isPoliticalObjectKind(selection?.kind)) {
-    pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection, locateFlash);
+    pushPoliticalSelectionMesh(vertices, context, selection, locateFlash);
     return new Float32Array(vertices);
   }
   if (selection?.kind !== OBJECT_KIND.RIVER) return new Float32Array(vertices);
@@ -3048,21 +2885,22 @@ function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash)
   const fluxFactor = Math.sqrt(Math.max(0, river.flux || 0) / maxFlux);
   const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
   const color = locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
-  pushScreenPolyline(vertices, smoothWorldPath(river.points, LINE_SMOOTHING.riverSelection), map, camera, canvas, color, widthPx);
+  pushScreenPolyline(vertices, context, smoothWorldPath(river.points, LINE_SMOOTHING.riverSelection), color, widthPx);
   return new Float32Array(vertices);
 }
 
-function pushPoliticalSelectionMesh(vertices, map, camera, canvas, selection, locateFlash) {
+function pushPoliticalSelectionMesh(vertices, context, selection, locateFlash) {
+  const {map} = context;
   const field = POLITICAL_OBJECT_FIELD[selection.kind] || POLITICAL_OBJECT_FIELD[OBJECT_KIND.REGION];
   const color = locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[selection.kind] || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.REGION];
   for (let cellIndex = 0; cellIndex < map.grid.cells.v.length; cellIndex++) {
     if (map.grid.cells[field][cellIndex] !== selection.id) continue;
     const vertexIds = map.grid.cells.v[cellIndex];
     if (vertexIds.length < 3) continue;
-    const center = worldToScreenPixel(map.grid.points[map.grid.cells.p[cellIndex]], map, camera, canvas);
+    const center = worldToScreenPixel(context, map.grid.points[map.grid.cells.p[cellIndex]]);
     for (let index = 0; index < vertexIds.length; index++) {
       const nextIndex = (index + 1) % vertexIds.length;
-      pushScreenTriangle(vertices, center, worldToScreenPixel(map.grid.vertices.p[vertexIds[index]], map, camera, canvas), worldToScreenPixel(map.grid.vertices.p[vertexIds[nextIndex]], map, camera, canvas), canvas, color);
+      pushScreenTriangle(vertices, context, center, worldToScreenPixel(context, map.grid.vertices.p[vertexIds[index]]), worldToScreenPixel(context, map.grid.vertices.p[vertexIds[nextIndex]]), color);
     }
   }
 }
@@ -3085,22 +2923,23 @@ function isLocateFlashActive(selection, locateFlash) {
 }
 
 function buildPointVertices(map, visibility = {}) {
+  const context = createRenderContext(map);
   const vertices = [];
   if (visibility.population !== false) {
     for (const point of map.settlements.populationPoints) {
       const alpha = Math.min(0.8, 0.25 + point.population / Math.max(1, map.settlements.metadata.maxPopulation));
-      pushWorldVertex(vertices, point.point, map, [0.25, 0.42, 0.24, alpha]);
+      pushWorldVertex(vertices, context, point.point, [0.25, 0.42, 0.24, alpha]);
     }
   }
   if (visibility.cities !== false) {
     for (const city of map.settlements.cities) {
       const color = city.capital ? [0.98, 0.82, 0.32, 1] : city.port ? [0.35, 0.72, 0.95, 1] : [0.92, 0.72, 0.38, 1];
-      pushWorldVertex(vertices, [city.x, city.y], map, color);
+      pushWorldVertex(vertices, context, [city.x, city.y], color);
     }
   }
   if (visibility.markers !== false) {
     for (const marker of map.markers.markers) {
-      pushWorldVertex(vertices, [marker.x, marker.y], map, colorForMarker(marker));
+      pushWorldVertex(vertices, context, [marker.x, marker.y], colorForMarker(marker));
     }
   }
   return new Float32Array(vertices);
@@ -3111,384 +2950,6 @@ function colorForMarker(marker) {
   if (marker.type === "river-source") return [0.5, 0.82, 1, 1];
   if (marker.type === "state-center") return [1, 0.68, 0.28, 1];
   return [0.9, 0.9, 0.9, 1];
-}
-
-function pushRect(vertices, left, bottom, right, top, color) {
-  pushVertex(vertices, left, bottom, color);
-  pushVertex(vertices, right, bottom, color);
-  pushVertex(vertices, right, top, color);
-  pushVertex(vertices, left, bottom, color);
-  pushVertex(vertices, right, top, color);
-  pushVertex(vertices, left, top, color);
-}
-
-function pushGridCells(vertices, map, colorMode, viewOptions, shouldDrawCell = () => true) {
-  const grid = map.grid;
-  for (let cellIndex = 0; cellIndex < grid.cells.v.length; cellIndex++) {
-    if (!shouldDrawCell(cellIndex)) continue;
-    const vertexIds = grid.cells.v[cellIndex];
-    if (vertexIds.length < 3) continue;
-    const center = grid.points[grid.cells.p[cellIndex]];
-    const color = colorForCell(cellIndex, map, colorMode, viewOptions);
-    for (let index = 0; index < vertexIds.length; index++) {
-      const nextIndex = (index + 1) % vertexIds.length;
-      pushWorldVertex(vertices, center, map, color);
-      pushWorldVertex(vertices, grid.vertices.p[vertexIds[index]], map, color);
-      pushWorldVertex(vertices, grid.vertices.p[vertexIds[nextIndex]], map, color);
-    }
-  }
-}
-
-function pushWorldLine(vertices, segment, map, color) {
-  pushWorldVertex(vertices, segment[0], map, color);
-  pushWorldVertex(vertices, segment[1], map, color);
-}
-
-function pushWorldPolylineMesh(vertices, points, map, color, widthWorld, {closed = false, joinSegments = 10, maxSegmentWorld = Infinity, joinMode = "round"} = {}) {
-  const source = normalizeWorldPathPoints(points);
-  if (source.length < 2) return;
-  const ringClosed = closed && source.length > 2;
-  const path = ringClosed && pointsNear(source[0], source[source.length - 1]) ? source.slice(0, -1) : source;
-  const radius = Math.max(0.05, widthWorld / 2);
-  const segmentCount = ringClosed ? path.length : path.length - 1;
-
-  for (let index = 0; index < segmentCount; index++) {
-    const start = path[index];
-    const end = path[(index + 1) % path.length];
-    if (worldDistance(start, end) > maxSegmentWorld) continue;
-    pushWorldLineQuad(vertices, start, end, map, color, radius);
-  }
-
-  if (joinMode === "none") return;
-
-  for (let index = 0; index < path.length; index++) {
-    const isCap = !ringClosed && (index === 0 || index === path.length - 1);
-    if (joinMode === "caps" && !isCap) continue;
-    pushWorldCircle(vertices, path[index], radius, map, color, isCap ? Math.max(8, joinSegments) : joinSegments);
-  }
-}
-
-function pushWorldLineQuad(vertices, start, end, map, color, halfWidth) {
-  if (!isWorldPoint(start) || !isWorldPoint(end)) return;
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  const length = Math.hypot(dx, dy);
-  if (length <= 0.000001) return;
-  const nx = -dy / length;
-  const ny = dx / length;
-  const a = [start[0] + nx * halfWidth, start[1] + ny * halfWidth];
-  const b = [end[0] + nx * halfWidth, end[1] + ny * halfWidth];
-  const c = [end[0] - nx * halfWidth, end[1] - ny * halfWidth];
-  const d = [start[0] - nx * halfWidth, start[1] - ny * halfWidth];
-  pushWorldVertex(vertices, a, map, color);
-  pushWorldVertex(vertices, b, map, color);
-  pushWorldVertex(vertices, c, map, color);
-  pushWorldVertex(vertices, a, map, color);
-  pushWorldVertex(vertices, c, map, color);
-  pushWorldVertex(vertices, d, map, color);
-}
-
-function pushWorldCircle(vertices, center, radius, map, color, segments = 10) {
-  if (!isWorldPoint(center)) return;
-  const count = Math.max(6, Math.round(segments));
-  for (let index = 0; index < count; index++) {
-    const a = (index / count) * Math.PI * 2;
-    const b = ((index + 1) / count) * Math.PI * 2;
-    pushWorldVertex(vertices, center, map, color);
-    pushWorldVertex(vertices, [center[0] + Math.cos(a) * radius, center[1] + Math.sin(a) * radius], map, color);
-    pushWorldVertex(vertices, [center[0] + Math.cos(b) * radius, center[1] + Math.sin(b) * radius], map, color);
-  }
-}
-
-function pushScreenPolyline(vertices, points, map, camera, canvas, color, widthPx, dash = null) {
-  const screenPoints = points
-    .map(point => worldToScreenPixel(point, map, camera, canvas))
-    .filter((point, index, list) => index === 0 || Math.hypot(point.x - list[index - 1].x, point.y - list[index - 1].y) > 0.5);
-  if (screenPoints.length < 2) return;
-  if (dash) {
-    pushDashedScreenPolyline(vertices, screenPoints, canvas, color, widthPx, dash);
-    return;
-  }
-  pushSolidScreenPolyline(vertices, screenPoints, canvas, color, widthPx);
-}
-
-function pushVariableScreenPolyline(vertices, points, widths, map, camera, canvas, color) {
-  const screenPoints = [];
-  const screenWidths = [];
-  for (let index = 0; index < points.length; index++) {
-    const screenPoint = worldToScreenPixel(points[index], map, camera, canvas);
-    const previous = screenPoints[screenPoints.length - 1];
-    if (previous && Math.hypot(screenPoint.x - previous.x, screenPoint.y - previous.y) <= 0.5) continue;
-    screenPoints.push(screenPoint);
-    screenWidths.push(widths[index] || widths[widths.length - 1] || 1);
-  }
-  if (screenPoints.length < 2) return;
-  pushVariableSolidScreenPolyline(vertices, screenPoints, screenWidths, canvas, color);
-}
-
-function pushDashedScreenPolyline(vertices, screenPoints, canvas, color, widthPx, dash) {
-  const pattern = dash.dashPx + dash.gapPx;
-  let phase = 0;
-  for (let index = 0; index < screenPoints.length - 1; index++) {
-    const start = screenPoints[index];
-    const end = screenPoints[index + 1];
-    const dx = end.x - start.x;
-    const dy = end.y - start.y;
-    const length = Math.hypot(dx, dy);
-    if (length <= 0.5) continue;
-    let position = 0;
-    while (position < length) {
-      const phaseInPattern = phase % pattern;
-      const drawing = phaseInPattern < dash.dashPx;
-      const remainingPattern = (drawing ? dash.dashPx : pattern) - phaseInPattern;
-      const step = Math.min(remainingPattern, length - position);
-      if (drawing && step > 0.5) {
-        pushSolidScreenPolyline(vertices, [
-          interpolateScreenPoint(start, dx, dy, position / length),
-          interpolateScreenPoint(start, dx, dy, (position + step) / length)
-        ], canvas, color, widthPx);
-      }
-      position += step;
-      phase += step;
-    }
-  }
-}
-
-function pushSolidScreenPolyline(vertices, screenPoints, canvas, color, widthPx) {
-  const half = widthPx / 2;
-  const left = [];
-  const right = [];
-
-  for (let index = 0; index < screenPoints.length; index++) {
-    const previous = screenPoints[Math.max(0, index - 1)];
-    const current = screenPoints[index];
-    const next = screenPoints[Math.min(screenPoints.length - 1, index + 1)];
-    const before = normalizeScreenVector(current.x - previous.x, current.y - previous.y);
-    const after = normalizeScreenVector(next.x - current.x, next.y - current.y);
-    const blended = normalizeScreenVector(before.x + after.x, before.y + after.y);
-    const tangent = index === 0 ? after : index === screenPoints.length - 1 ? before : (blended.x || blended.y ? blended : after);
-    const normalBefore = normalForVector(before.x || after.x, before.y || after.y);
-    const normalAfter = normalForVector(after.x || before.x, after.y || before.y);
-    const miter = normalForVector(tangent.x, tangent.y);
-    const dot = Math.max(0.3, Math.abs(miter.x * normalAfter.x + miter.y * normalAfter.y));
-    const length = Math.min(half / dot, half * 2.6);
-    const capShift = index === 0 ? -half : index === screenPoints.length - 1 ? half : 0;
-    const capBase = {
-      x: current.x + tangent.x * capShift,
-      y: current.y + tangent.y * capShift
-    };
-    const normal = index === 0 ? normalAfter : index === screenPoints.length - 1 ? normalBefore : miter;
-    left.push({x: capBase.x + normal.x * length, y: capBase.y + normal.y * length});
-    right.push({x: capBase.x - normal.x * length, y: capBase.y - normal.y * length});
-  }
-
-  for (let index = 0; index < left.length - 1; index++) {
-    pushScreenTriangle(vertices, left[index], left[index + 1], right[index + 1], canvas, color);
-    pushScreenTriangle(vertices, left[index], right[index + 1], right[index], canvas, color);
-  }
-}
-
-function pushVariableSolidScreenPolyline(vertices, screenPoints, widthPxByPoint, canvas, color) {
-  const left = [];
-  const right = [];
-
-  for (let index = 0; index < screenPoints.length; index++) {
-    const half = Math.max(0.5, widthPxByPoint[index] / 2);
-    const previous = screenPoints[Math.max(0, index - 1)];
-    const current = screenPoints[index];
-    const next = screenPoints[Math.min(screenPoints.length - 1, index + 1)];
-    const before = normalizeScreenVector(current.x - previous.x, current.y - previous.y);
-    const after = normalizeScreenVector(next.x - current.x, next.y - current.y);
-    const blended = normalizeScreenVector(before.x + after.x, before.y + after.y);
-    const tangent = index === 0 ? after : index === screenPoints.length - 1 ? before : (blended.x || blended.y ? blended : after);
-    const normalBefore = normalForVector(before.x || after.x, before.y || after.y);
-    const normalAfter = normalForVector(after.x || before.x, after.y || before.y);
-    const miter = normalForVector(tangent.x, tangent.y);
-    const dot = Math.max(0.3, Math.abs(miter.x * normalAfter.x + miter.y * normalAfter.y));
-    const length = Math.min(half / dot, half * 2.6);
-    const capShift = index === 0 ? -half : index === screenPoints.length - 1 ? half : 0;
-    const capBase = {
-      x: current.x + tangent.x * capShift,
-      y: current.y + tangent.y * capShift
-    };
-    const normal = index === 0 ? normalAfter : index === screenPoints.length - 1 ? normalBefore : miter;
-    left.push({x: capBase.x + normal.x * length, y: capBase.y + normal.y * length});
-    right.push({x: capBase.x - normal.x * length, y: capBase.y - normal.y * length});
-  }
-
-  for (let index = 0; index < left.length - 1; index++) {
-    pushScreenTriangle(vertices, left[index], left[index + 1], right[index + 1], canvas, color);
-    pushScreenTriangle(vertices, left[index], right[index + 1], right[index], canvas, color);
-  }
-}
-
-function interpolateScreenPoint(start, dx, dy, t) {
-  return {
-    x: start.x + dx * t,
-    y: start.y + dy * t
-  };
-}
-
-function pushScreenTriangle(vertices, a, b, c, canvas, color) {
-  pushScreenVertex(vertices, a, canvas, color);
-  pushScreenVertex(vertices, b, canvas, color);
-  pushScreenVertex(vertices, c, canvas, color);
-}
-
-function pushScreenVertex(vertices, point, canvas, color) {
-  const clip = screenPixelToClip(point, canvas);
-  pushVertex(vertices, clip[0], clip[1], color);
-}
-
-function worldToScreenPixel(point, map, camera, canvas) {
-  const [x, y] = worldToNdcPoint(point, map);
-  const clipX = x * camera.scale + camera.offsetX;
-  const clipY = y * camera.scale + camera.offsetY;
-  return {
-    x: ((clipX + 1) / 2) * canvas.width,
-    y: ((1 - clipY) / 2) * canvas.height
-  };
-}
-
-function screenPixelToClip(point, canvas) {
-  return [(point.x / canvas.width) * 2 - 1, 1 - (point.y / canvas.height) * 2];
-}
-
-function normalizeScreenVector(x, y) {
-  const length = Math.hypot(x, y);
-  if (length <= 0.000001) return {x: 0, y: 0};
-  return {x: x / length, y: y / length};
-}
-
-function normalForVector(x, y) {
-  const vector = normalizeScreenVector(x, y);
-  return {x: -vector.y, y: vector.x};
-}
-
-function pushVertex(vertices, x, y, color) {
-  vertices.push(x, y, color[0], color[1], color[2], color[3]);
-}
-
-function writeVertex(vertices, offset, x, y, color) {
-  vertices[offset++] = x;
-  vertices[offset++] = y;
-  vertices[offset++] = color[0];
-  vertices[offset++] = color[1];
-  vertices[offset++] = color[2];
-  vertices[offset++] = color[3];
-  return offset;
-}
-
-function pushWorldVertex(vertices, point, map, color) {
-  const [x, y] = worldToNdcPoint(point, map);
-  pushVertex(vertices, x, y, color);
-}
-
-function worldToNdcPoint(point, map) {
-  const x = (point[0] / map.metadata.graphWidth) * 2 - 1;
-  const y = 1 - (point[1] / map.metadata.graphHeight) * 2;
-  return [x, y];
-}
-
-function isWorldPoint(point) {
-  return Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]);
-}
-
-function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
-  if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
-    return colorForHeight(map.grid.cells.h[cellIndex], map.layers);
-  }
-  if (colorMode === "temperature") return colorForTemperature(map.grid.cells.temp[cellIndex]);
-  if (colorMode === "precipitation") return colorForPrecipitation(map.grid.cells.prec[cellIndex]);
-  if (colorMode === "biomes") return colorForBiome(map.grid.cells.biome[cellIndex], map);
-  if (colorMode === "cultures") return colorForCulture(map.grid.cells.culture[cellIndex], map);
-  if (colorMode === "religions") return colorForReligion(map.grid.cells.religion[cellIndex], map);
-  if (colorMode === "states") return colorForState(map.grid.cells.state[cellIndex], map);
-  if (colorMode === "provinces") return colorForProvince(map.grid.cells.province[cellIndex], map);
-  if (colorMode === "regions") return indexedColorOrWater(map.grid.cells.region[cellIndex], 0.77, map.layers.ocean);
-  if (colorMode === "population") return colorForPopulation(map.grid.cells.pop[cellIndex], map);
-  return colorForHeight(map.grid.cells.h[cellIndex], map.layers, viewOptions);
-}
-
-function isLandCell(cellIndex, map) {
-  const featureId = map.grid.cells.f?.[cellIndex];
-  return Boolean(map.features.features[featureId]?.land);
-}
-
-function colorForHeight(height, layers, viewOptions = {}) {
-  if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, layers) : layers.ocean;
-  if (height < 36) return mix([0.33, 0.52, 0.32, 1], [0.52, 0.61, 0.38, 1], (height - 20) / 16);
-  if (height < 56) return mix([0.52, 0.61, 0.38, 1], [0.64, 0.6, 0.43, 1], (height - 36) / 20);
-  if (height < 76) return mix([0.64, 0.6, 0.43, 1], [0.7, 0.66, 0.54, 1], (height - 56) / 20);
-  if (height < 92) return mix([0.7, 0.66, 0.54, 1], [0.77, 0.75, 0.68, 1], (height - 76) / 16);
-  return mix([0.77, 0.75, 0.68, 1], [0.83, 0.82, 0.78, 1], Math.min(1, (height - 92) / 8));
-}
-
-function colorForOceanHeight(height, layers) {
-  const t = Math.max(0, Math.min(1, height / 20));
-  const deep = mix(layers.ocean, [0.01, 0.04, 0.14, 1], 0.72);
-  const shelf = mix(layers.ocean, [0.38, 0.68, 0.82, 1], 0.42);
-  return mix(deep, shelf, t ** 0.75);
-}
-
-function colorForTemperature(temp) {
-  const t = Math.max(0, Math.min(1, (temp + 18) / 54));
-  return mix([0.2, 0.38, 0.72, 1], [0.82, 0.32, 0.2, 1], t);
-}
-
-function colorForPrecipitation(prec) {
-  const t = Math.max(0, Math.min(1, prec / 100));
-  return mix([0.72, 0.62, 0.36, 1], [0.16, 0.48, 0.68, 1], t);
-}
-
-function colorForBiome(biomeId, map) {
-  return map.climate.biomes[biomeId]?.color || [0.5, 0.5, 0.5, 1];
-}
-
-function colorForState(stateId, map) {
-  if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!stateId) return [0.58, 0.6, 0.58, 1];
-  return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
-}
-
-function colorForCulture(cultureId, map) {
-  if (cultureId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  return hexToRgba(map.society.cultures[cultureId]?.color) || indexedColor(cultureId, 0.31);
-}
-
-function colorForReligion(religionId, map) {
-  if (religionId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  return hexToRgba(map.society.religions[religionId]?.color) || indexedColor(religionId, 0.63);
-}
-
-function colorForProvince(provinceId, map) {
-  if (provinceId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!provinceId) return [0.58, 0.6, 0.58, 1];
-  return hexToRgba(map.politics.provinces[provinceId]?.color) || indexedColor(provinceId, 0.46);
-}
-
-function colorForPopulation(population, map) {
-  if (!population) return mix(map.layers.ocean, [0.06, 0.1, 0.08, 1], 0.4);
-  const t = Math.min(1, population / Math.max(1, map.settlements.metadata.maxPopulation));
-  return mix([0.2, 0.36, 0.24, 1], [0.92, 0.72, 0.34, 1], Math.sqrt(t));
-}
-
-function indexedColor(index, offset) {
-  const hue = (index * 0.61803398875 + offset) % 1;
-  return hslToRgb(hue, 0.42, 0.56);
-}
-
-function indexedColorOrWater(index, offset, waterColor) {
-  if (index < 0) return mix(waterColor, [0.05, 0.08, 0.1, 1], 0.3);
-  return indexedColor(index, offset);
-}
-
-function hexToRgba(color) {
-  if (typeof color !== "string") return null;
-  const match = /^#?([0-9a-f]{6})$/i.exec(color.trim());
-  if (!match) return null;
-  const value = Number.parseInt(match[1], 16);
-  return [((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255, 1];
 }
 
 function scoreCityLabel(city) {
@@ -3575,70 +3036,8 @@ function boxesOverlap(a, b, padding) {
   return a.left - padding < b.right && a.right + padding > b.left && a.top - padding < b.bottom && a.bottom + padding > b.top;
 }
 
-function hslToRgb(h, s, l) {
-  const hueToRgb = (p, q, t) => {
-    if (t < 0) t += 1;
-    if (t > 1) t -= 1;
-    if (t < 1 / 6) return p + (q - p) * 6 * t;
-    if (t < 1 / 2) return q;
-    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-    return p;
-  };
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-  const p = 2 * l - q;
-  return [hueToRgb(p, q, h + 1 / 3), hueToRgb(p, q, h), hueToRgb(p, q, h - 1 / 3), 1];
-}
-
-function bindVertexBuffer(gl, locations) {
-  const stride = 6 * Float32Array.BYTES_PER_ELEMENT;
-  gl.enableVertexAttribArray(locations.position);
-  gl.vertexAttribPointer(locations.position, 2, gl.FLOAT, false, stride, 0);
-  gl.enableVertexAttribArray(locations.color);
-  gl.vertexAttribPointer(locations.color, 4, gl.FLOAT, false, stride, 2 * Float32Array.BYTES_PER_ELEMENT);
-}
-
-function mix(a, b, t) {
-  return [
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
-    1
-  ];
-}
-
 function withAlpha(color, alpha) {
   return [color?.[0] ?? 0, color?.[1] ?? 0, color?.[2] ?? 0, alpha];
-}
-
-function interpolateColor(a, b, t) {
-  return mix(a, b, t);
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function createProgram(gl, vertexSource, fragmentSource) {
-  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  const program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    throw new Error(gl.getProgramInfoLog(program) || "WebGL program link failed");
-  }
-  return program;
-}
-
-function compileShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    throw new Error(gl.getShaderInfoLog(shader) || "WebGL shader compile failed");
-  }
-  return shader;
 }
 
 function lockCanvasToInitialDisplaySize(canvas, overlay = null) {

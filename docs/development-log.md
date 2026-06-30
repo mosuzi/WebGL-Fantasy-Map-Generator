@@ -9343,3 +9343,152 @@
   - 省份视图 `glError = 0`。
   - 国家/省份视图 surface 顶点数回到 `525843`，说明 shore visual band 不再进入政治 surface。
   - 截图 `repro-state-no-shore-band-political.png` 未再出现蓝黄渐变楔子。
+
+### renderer 公共工具抽取第一刀
+
+背景：
+
+- 用户提出 WebGL 中的公共操作是否应该抽取，方便后续复用和维护。
+- 当前 `placeholder-renderer.js` 已经同时承载 WebGL program/buffer 操作、几何计算、surface 构建、海岸/政治边界、河流/道路线带、标签和调试统计，后续继续修海岸、国界和性能时会越来越难定位影响范围。
+- 本轮目标是先抽低风险纯函数和 WebGL 基础操作，保持 `PlaceholderMapRenderer` 外部接口不变。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/geometry.js`：
+  - 世界坐标距离、归一化向量、点插值、中点、近似相等判断。
+  - 多边形面积、线段相交判断。
+  - Chaikin 路径平滑、带颜色路径平滑、带数值路径平滑。
+  - `isWorldPoint()`、`mix()` 和 `clamp()` 等通用工具。
+- 新增 `app/webgl-generator/src/renderer/gl-utils.js`：
+  - `createProgram()` 负责 shader 编译和 program 链接。
+  - `bindVertexBuffer()` 统一绑定当前 renderer 顶点格式。
+- `placeholder-renderer.js` 改为从这两个模块导入公共函数，并删除本地重复实现。
+- 暂不抽 `mesh-writer`：
+  - `pushWorldVertex`、`pushWorldPolylineMesh`、`pushScreenPolyline` 等仍与地图投影、颜色计算、屏幕像素尺寸、图层构建强耦合。
+  - 下一刀应先明确颜色/投影上下文，再把 mesh 写入器独立出去。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\geometry.js` 通过。
+- `node --check app\webgl-generator\src\renderer\gl-utils.js` 通过。
+- `git diff --check` 通过。
+
+### renderer mesh-writer 第二刀
+
+背景：
+
+- 第一刀已经抽出几何和 WebGL 基础工具，`placeholder-renderer.js` 中仍保留大量底层顶点写入、世界坐标线带、屏幕空间线带和投影转换函数。
+- 这些函数会被 surface、海岸线、政治边界、道路、河流、选中高亮和点图层反复使用，是后续拆 `shore-layer`、`political-layer`、`route-layer` 的前置基础。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/render-context.js`：
+  - `createRenderContext(map, {camera, canvas})` 统一传递地图、相机和 canvas。
+  - `worldToNdcPoint()`、`worldToScreenPixel()`、`screenPixelToClip()` 统一坐标转换。
+- 新增 `app/webgl-generator/src/renderer/mesh-writer.js`：
+  - 世界坐标写入：`pushWorldVertex()`、`pushWorldLine()`、`pushWorldPolylineMesh()`。
+  - 屏幕空间写入：`pushScreenPolyline()`、`pushVariableScreenPolyline()`、`pushScreenTriangle()`。
+  - 底层写入：`pushVertex()`、`writeVertex()`、`pushRect()`。
+- `placeholder-renderer.js` 保留图层构建和颜色计算职责，但底层写入统一改为通过 `RenderContext` 调用 `mesh-writer`。
+- `pushGridCells()` 暂留在 renderer 内，因为它依赖 `colorForCell()` 和当前视图配置；后续拆 `cell-surface-layer` 时再整体迁出。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\mesh-writer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\render-context.js` 通过。
+- `git diff --check` 通过。
+- `pnpm.cmd run build:app` 通过，仍只有 `@vueuse/core` 的既有 pure annotation 警告。
+- Playwright 复查默认 `stage-2-1 / 10000 / 大陆` 国家视图：
+  - `glError = 0`。
+  - `vertexCount = 525843`。
+  - `routeVertexCount = 39318`。
+  - `riverVertexCount = 19392`。
+  - `lineVertexCount = 1964076`。
+  - `pointVertexCount = 861`。
+  - 截图输出到 `renderer-mesh-writer-state-10k.png`。
+
+### renderer 颜色模式和 cell surface 抽取
+
+背景：
+
+- `mesh-writer` 第二刀后，`placeholder-renderer.js` 仍然保留颜色模式、陆地判定、grid cell surface 和政治 surface 兜底逻辑。
+- 这些逻辑会被海岸视觉带、政治边界、cell surface、政治 visual mesh 等多处共用，是拆 `shore-layer` 和 `political-layer` 前需要先稳定的共享基础。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/color-modes.js`：
+  - `colorForCell()` 统一管理高度、温度、降水、生物群、文化、宗教、国家、省份、区域和人口视图颜色。
+  - `isLandCell()` 集中陆地判定。
+  - `colorForState()`、`colorForProvince()` 供政治边界和政治 visual mesh 复用。
+  - 高度、海底高度、温度、降水、索引色和十六进制颜色转换移入该模块。
+- 新增 `app/webgl-generator/src/renderer/cell-surface-layer.js`：
+  - `buildCellVisualGridVertices()` 构建平滑 cell surface。
+  - `pushGridCells()` 构建硬 grid cell surface。
+  - `politicalSurfaceMeshForMode()`、`shouldDrawGridCellUnderPoliticalMesh()`、`pushMeshSurfaceVertices()` 负责政治 surface 兜底和拷贝。
+- `placeholder-renderer.js` 改为导入颜色和 surface 构建函数，继续保留图层编排和更高层的海岸/政治路径逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\renderer\color-modes.js` 通过。
+- `node --check app\webgl-generator\src\renderer\cell-surface-layer.js` 通过。
+- `git diff --check` 通过。
+
+### 原版风格水陆线平滑暂时回退
+
+背景：
+
+- 用户再次指出水陆线与填色分离。
+- 当前原版风格海岸轮廓虽然让线条更自然，但它与 `cellVisualMesh` / 政治 surface 不是同一套最终填色边界；只要分形轮廓偏离当前 surface，就会重新出现线面分离。
+- 这类问题继续局部过滤尖角或调宽海岸带收益很低，主视图应先保证可靠贴合。
+
+修正：
+
+- `shouldDrawShoreVisualBands()` 暂时固定返回 `false`，所有视图都不再额外叠加海岸填色视觉带。
+- `buildLineVertices()` 中水陆线描边不再调用 `pushOriginalShoreContourLines()`。
+- 平滑单元格开启且存在 `cellVisualMesh.edgeCurves` 时，海岸线 / 湖岸线改为读取 `pushCellVisualShoreLines()` 的共享视觉边。
+- 平滑单元格关闭时，海岸线 / 湖岸线回退 `pushHardShoreLines()` 的硬共享 Voronoi 边。
+- 运行时统计中的边界线来源改为：
+  - `visual-cell-shore + butt-join-political`
+  - `hard-cell-shore + butt-join-political`
+- 补修：第一次回退时水陆线复用了旧 `pushWorldLine()` 线段写入，但当前 `lineBuffer` 统一按 `gl.TRIANGLES` 绘制，导致水陆线统计存在但屏幕上不可见。现在 `pushCellVisualShoreLines()` 和 `pushHardShoreLines()` 都改为 `pushWorldPolylineMesh()` 三角形描边，水陆线重新显示，同时仍保持与当前 surface 同源。
+
+待办：
+
+- 原版风格海岸采样、分形点保护和局部宽度拟合代码暂不删除，后续可以作为 `shore-layer` 的候选实现继续整理。
+- 重新启用前必须先完成海岸轮廓级裁剪或同源填色 mesh，让水陆线、陆侧填色、水侧填色来自同一条最终轮廓。
+- 默认验证仍必须先覆盖 `seed = stage-2-1`、目标 `10000`、地形模板“大陆”，确认 10k 下不再出现水陆线漂移、尖楔或分离，再扩展到 50k / 100k。
+
+### 水陆线回归脚本
+
+背景：
+
+- 用户要求先做回归，避免后续继续拆 renderer 时反复出现“水陆线消失 / 水陆线与填色分离 / 修尖角又破线层”的问题。
+- 仅检查 `glError = 0` 不够：此前水陆线曾因为写入 `pushWorldLine()` 而没有进入当前 `gl.TRIANGLES` 轮廓层，画面上不可见但 WebGL 仍无错误。
+
+新增：
+
+- 新增 `tools/webgl-generator-shoreline-regression.mjs`：
+  - 默认读取 `dist/webgl-generator` 并启动一次性静态服务。
+  - 默认 case 固定为 `seed = stage-2-1`、目标 `10000`、地形模板 `continents`、尺寸 `1440 x 960`。
+  - 自动生成地图后，分别验证高度、国家、省份视图。
+  - 每个视图都跑两种路径：`smoothCellBorders = true` 和 `smoothCellBorders = false`。
+  - 平滑路径要求 `boundaryLineMode = visual-cell-shore + butt-join-political`，轮廓三角形数默认不少于 `50000`。
+  - 硬边路径要求 `boundaryLineMode = hard-cell-shore + butt-join-political`，轮廓三角形数默认不少于 `25000`。
+  - 所有 case 都要求 `glError = 0`，水陆线 / 湖岸线图层保持可见，主 surface 顶点数为正。
+  - 输出 JSON、Markdown 和截图到 `docs/generated/reports/shoreline-regression-*`。
+- `package.json` 新增脚本：
+  - `pnpm run regress:shoreline`
+
+使用：
+
+```powershell
+pnpm run build:app
+pnpm run regress:shoreline -- --browser-channel chrome
+```
+
+定位：
+
+- 该脚本是 10k 默认种子的快速水陆线守门，不替代 `tools/webgl-generator-smooth-cell-profile.mjs` 的 50k / 100k 大图性能和近景截图 profile。

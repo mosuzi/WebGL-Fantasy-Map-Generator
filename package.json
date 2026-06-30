@@ -7,6 +7,7 @@
     "start:app": "vite --config vite.config.mjs",
     "build:app": "vite build --config vite.config.mjs",
     "preview:app": "vite preview --config vite.config.mjs",
+    "regress:shoreline": "node ./tools/webgl-generator-shoreline-regression.mjs",
     "start:prototype": "node ./tools/serve-prototype.mjs --port 5400"
   },
   "dependencies": {
