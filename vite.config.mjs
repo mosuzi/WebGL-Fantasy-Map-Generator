@@ -16,11 +16,6 @@ export default defineConfig({
   },
   build: {
     outDir: "../../dist/webgl-generator",
-    emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        index: "index.html"
-      }
-    }
+    emptyOutDir: true
   }
 });

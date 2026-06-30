@@ -9063,3 +9063,283 @@
   - 点击关闭后 renderer 中 `coastline=false` 且 `lakeShore=false`。
   - 再次点击打开后 renderer 中 `coastline=true` 且 `lakeShore=true`。
   - localStorage 中对应的 `layers.coastline` 与 `layers.lakeShore` 同步写入。
+
+### 50k/100k 大图回归与海岸异常保护
+
+目标：
+
+- 按计划验证原版风格海岸线、圆角政区边界和“水陆线”统一开关在 50k/100k 大图下的性能与视觉风险。
+
+执行：
+
+- 首次普通 shell 运行 50k/100k 时 5 分钟超时，且输出落在受管沙箱路径；随后改用真实工作区权限重新跑。
+- 最终命令：
+  - `node .\tools\webgl-generator-smooth-cell-profile.mjs --cells 50000,100000 --port 5428 --browser-channel chrome`
+- 产物：
+  - `docs/generated/reports/smooth-cell-profile-results.json`
+  - `docs/generated/reports/smooth-cell-profile-results.md`
+  - `docs/generated/reports/smooth-cell-profile/*.png`
+
+结果：
+
+- 50k：
+  - 实际 grid `50142`，pack `29988`。
+  - 平滑视图 surface 顶点 `6981864`。
+  - 轮廓三角形 `1212982`。
+  - draw 平均：height `1ms`，states `1.2ms`，provinces `0.8ms`。
+  - WebGL error `0`。
+- 100k：
+  - 实际 grid `99846`，pack `52578`。
+  - 平滑视图 surface 顶点 `10102410`。
+  - 轮廓三角形 `1441378`。
+  - draw 平均：height `0.6ms`，states `0.7ms`，provinces `0.5ms`。
+  - WebGL error `0`。
+- 风险扫描：
+  - 50k/100k 的短边、超长边、低面积 cell、无效点均为 `0`。
+
+中途发现与修正：
+
+- 100k 省份近景出现细长尖带。图层隔离后确认不是道路、河流或单独描线，而是海岸视觉带 / 政治视觉面补点在复杂海岸处的几何放大。
+- `createPoliticalMeshQualityStats()` 的长边阈值不再被 `SHORE_VISUAL_STYLE.bandWidthWorld * 3` 顶到过宽，改为 `averageGridSpacingWorld * 4.5` 与较小海岸保护下限取大。
+- 政治视觉 mesh 的海岸补点现在只接收陆地 cell 采样点，避免把带有政治字段的水域点加入国家/省份点集。
+- 海岸原版分形点新增最大渲染偏移夹取，避免曲线采样点远离原始海岸路径。
+- 海岸描线和海岸视觉带新增异常长段保护，遇到过长段直接断开不绘制。
+- 海岸视觉带不再对陆侧/水侧 offset 曲线分别平滑；现在直接使用和海岸描线相同的分形中心线向两侧扩展，避免填色带中心与描线中心发生局部漂移。
+
+观察：
+
+- 旧问题“海岸线与填色分离”在本轮抽查中未复现。
+- 线层三角形数量已经到百万级，但 50k/100k 的实际 draw 仍很低，暂不需要为了性能立刻降采样。
+- 复杂海岸仍能看到很细的岬角/尖带；在海岸带改为中心线同源后，这更像同源几何本身的尖角，而不是描线和填色不重合。下一刀如继续打磨视觉，应转向“海岸视觉带轮廓裁剪 / 更保守分形采样 / 细长三角屏蔽”，不要再只调 `stroke-linejoin` 或单条线。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node .\node_modules\vite\bin\vite.js build --config .\vite.config.mjs` 通过；仍只有既有 `@vueuse/core` pure annotation 位置警告。
+
+### 开发服务器依赖入口修复
+
+问题：
+
+- 用户执行 `pnpm start` 时出现 `vite 不是内部或外部命令`。
+- 排查发现根目录 `node_modules` 缺少 `.bin` 和 `.modules.yaml`，属于 pnpm 安装元数据损坏；顶层包链接虽然存在，但命令 shim 未生成。
+- 重新安装后 `pnpm start` 可启动，但 Vite 8 依赖扫描报 `failed to resolve rolldownOptions.input value: "index.html"`，导致跳过 dependency pre-bundling，可能放大开发态页面加载和渲染卡顿感。
+
+修正：
+
+- 删除损坏的根目录 `node_modules` 后重新执行 `pnpm install`，恢复 `node_modules/.bin/vite`。
+- `vite.config.mjs` 删除冗余的 `build.rollupOptions.input`。正式应用只有 `app/webgl-generator/index.html` 单入口，交给 Vite 按 `root` 默认解析即可，避免 dev 依赖扫描从项目根错误解析 `index.html`。
+
+验证：
+
+- `pnpm exec vite --version` 通过，输出 `vite/8.1.0 win32-x64 node-v22.22.0`。
+- `pnpm start` 已能启动到 `http://127.0.0.1:5410/`，stderr 中不再出现 Vite dependency scan / `rolldownOptions.input` 报错。
+- `pnpm run build:app` 通过；仍只有既有 `@vueuse/core` pure annotation 位置警告。
+- Playwright 打开 dev server 后验证默认 10k：`vertexCount = 1175259`，`lineTriangleCount = 690254`，30 次 draw 最大约 `0.2ms`，`glError = 0`。
+- Playwright 通过页面生成 100k：总耗时约 `23.7s`，`vertexCount = 6354975`，`lineTriangleCount = 1568408`，`cellVisualMesh.buildMs = 386.3ms`，30 次 draw 最大约 `0.2ms`，`glError = 0`。当前更像生成/重建阶段和视觉 mesh 规模问题，不是单帧 WebGL draw 慢。
+
+### 视图切换卡顿修复
+
+问题：
+
+- 用户指出每次切换视图都会明显卡顿。
+- 初始 Playwright 打点显示 50k 下切换 `states / provinces / height` 每次约 `7.6-7.8s`。
+- 根因不是 `draw()`，而是 `setColorMode()` 同步触发了多项重建：
+  - `refreshCellSurface()` 每次都重建 state/province visual paths 和两套 political visual meshes。
+  - `refreshLineLayers()` 又重复重建 state/province visual paths。
+  - `rebuildPoliticalVisualMeshes()` 单次约 `5.7s`，且高度视图也会重建国家和省份两套 Delaunay mesh。
+  - 线层 buffer 只为视图切换时改变边界线透明度而重建，50k 下约 `0.86s`。
+
+修正：
+
+- `PlaceholderMapRenderer.setColorMode()` 只刷新 surface 颜色 buffer 并绘制，不再刷新线层 buffer。
+- 国界/省界线层改为稳定线色，不再随当前视图切换临时改变透明度。
+- `refreshCellSurface()` 和 `refreshLineLayers()` 不再隐式重建 state/province visual paths 或 political visual meshes。
+- 新增 `refreshPoliticalVisualCaches()`，仅在地图载入或调度器收到 `political-boundaries` 派生变更时重建政治视觉缓存。
+- 平滑 cell surface 构建改为预估三角数后直接写入 `Float32Array`，避免大图切换时先 `Array.push()` 百万级顶点再整体转换。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\runtime\edit-refresh-scheduler.js` 通过。
+- 50k 复测：
+  - 修复前：`states 7811.8ms`、`provinces 7612.8ms`、`height 7594.7ms`。
+  - 去掉政治 mesh 重建后：约 `1740-1817ms`。
+  - 去掉线层重建并改用 typed-array surface 后：`states 559.1ms`、`provinces 642.7ms`、`height 592.7ms`。
+- 100k 复测：
+  - `states 622.6ms`、`provinces 547.6ms`、`height 631.8ms`。
+  - 三个视图 `glError = 0`。
+
+### 海岸视觉带尖楔修复
+
+问题：
+
+- 用户截图显示复杂海岸处出现深色水域尖楔插入陆地填色，海岸描线与填色带发生冲突。
+- 该问题集中在原版风格海岸分形轮廓与海岸视觉带拼接处：分形中心线局部抖动或相邻岸线侧向量快速翻转时，`center -> land/water` 四边形带会生成过长、交叉或采样到错误陆水侧的小三角，视觉上形成“尖尖”和深色楔形。
+
+修正：
+
+- `pushShoreVisualBand()` 在推入每个海岸视觉带小段前增加合法性检查。
+- 跳过以下异常小段：
+  - 中心线、陆侧线或水侧线单段过长。
+  - 陆水对角距离异常放大。
+  - 陆侧线与水侧线发生自交。
+  - 四边形面积明显超过按中心线长度与带宽估算的正常面积。
+  - 陆侧采样落到水域，或水侧采样落到陆地。
+- 该修正只过滤异常小段，不关闭整条海岸线，也不改变底层 cell、picking、编辑和陆水判定。
+- 二次收紧：
+  - 海岸分形点不再按“最近原始顶点”夹取，而是投影到最近原始海岸边段，再按投影位置插值侧向量和陆水 cell，避免凹口处 sourceIndex 跳变。
+  - 分形点最大偏移从 `18` 收紧到 `5`，最大渲染段从 `26` 收紧到 `14`。
+  - 海岸渲染点新增两轮尖角过滤：折返角过尖，或折返角较尖且明显偏离原始岸线的点会被移除。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- Playwright 生成 100k 国家视图，`glError = 0`。
+- 近景截图抽查 `west / central / east / south` 四个复杂海岸区域，未再看到截图中那种长水色尖楔压进陆地填色的形态。
+- 二次收紧后，中心复杂海岸近景 `coastline-fix-central3.png` 复查 `glError = 0`，未见明显尖楔。
+
+### 海岸视觉带近岸岛屿适配
+
+问题判断：
+
+- 用户怀疑残留尖角来自离岸很近的小岛，导致海岸线计算出错。
+- 复查后判断该怀疑成立：底层陆地生成和 grid cell 本身不一定错误，问题主要在渲染层用固定宽度海岸视觉带。近岸小岛、窄海峡和小湖湾处，可用水面宽度可能小于固定 `13` 世界单位的视觉带宽；水侧 offset 会采样到另一块陆地，陆侧 offset 也可能掉进水域，从而形成残留尖角或填色冲突。
+
+修正：
+
+- `buildSmoothedShoreVisual()` 不再直接使用固定半宽。
+- 新增局部海岸带宽拟合：
+  - 从默认半宽开始试探陆侧/水侧 offset。
+  - 如果陆侧不是陆地或水侧不是水域，就逐步减半。
+  - 最小宽度仍无法满足陆水采样时，跳过该渲染点。
+- 政治视觉 mesh 的海岸补点 `buildSmoothedShoreBoundaryPoints()` 也改用同一套局部拟合，避免近岸岛屿继续把政治面 triangulation 拉出尖角。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- Playwright 生成 100k 国家视图，中心复杂海岸近景 `coastline-adaptive-band-central.png` 复查 `glError = 0`。
+- 近岸小岛/窄水道处海岸带会自动变窄，不再依靠整段删除来掩盖冲突。
+
+### 国界笔刷状侵入修复
+
+问题：
+
+- 用户指出国界之间总会出现一块类似笔刷侵入的形态。
+- 排查后分成两类来源：
+  - 线层来源：国界/省界用世界坐标三角形线带绘制时，每个折点额外补圆盘模拟 `stroke-linejoin: round`，三国交界和锯齿边界会叠出半透明涂抹块。
+  - 数据来源：国家/省份扩张后仍有少量弱连接边界 cell，会像一格或几格的小刷痕插入相邻政治单元。
+
+修正：
+
+- 国界/省界描边改为不在折点补圆盘的 butt-join 线带；海岸线仍保留原版风格圆滑描线。
+- `boundaryLineMode` 更新为 `original-coastline + butt-join-political`，方便运行时统计确认当前路径。
+- `politics.js` 新增保守的边界毛刺吸收：
+  - 国家归属在 `claimInhabitedNeutralCells()` 后执行。
+  - 省份归属在填补未分配省份 cell 后执行。
+  - 只吸收“自身同类邻居很少、另一侧邻居明显占多数”的 cell。
+  - 城镇、首都、省会中心等锚点受保护，不参与吸收，避免破坏政治中心和编辑锚点。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\politics.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `pnpm run build:app` 在真实 Windows pnpm 环境通过；仍只有既有 `@vueuse/core` pure annotation 位置警告。
+- Playwright 生成 10k 国家视图截图 `political-boundary-spike-cleanup-states.png`，`boundaryLineMode = original-coastline + butt-join-political`，`glError = 0`，弱连接国家边界 cell 统计为 `9`。
+
+### 10k 开放海岸端点尖刺修复
+
+问题：
+
+- 用户指出在默认 `seed = stage-2-1`、目标 `10000`、地形模板“大陆”的地图中部，海岸线仍有明显尖尖；并强调 10k 都未修好时不应以更高 cells 数作为主要验证。
+- 按该配置复现后，定位到中部开放海岸分叉端点 `[634, 527]`：
+  - `coastline path 0` 末尾本应从 `[636, 525]` 收回 `[634, 527]`，但旧采样插入了 `[638.8, 527.8] -> [645.9, 529.9] -> [647.2, 530.4] -> [634, 527]`。
+  - `coastline path 2` 起点本应从 `[634, 527]` 走向真实下一段，却先冲到 `[646.5, 522.5]`。
+- 根因是 `sampleCatmullRomWorldPath(points, false, ...)` 虽然传入开放路径参数，但取 `previous / next` 时仍用取模环绕；开放 path 起点把终点当 previous，终点把起点当 next，导致 Catmull-Rom 控制点绕回另一端，生成端点尖刺。
+
+修正：
+
+- `sampleCatmullRomWorldPath()` 现在区分闭合/开放路径：
+  - 闭合路径继续用取模环绕。
+  - 开放路径在起点使用自身作为 previous，在终点使用自身作为 next，不再跨端点取样。
+- 该修正只影响开放折线路径的曲线控制点，不改变底层 grid、陆水判定、海岸共享边或国家/省份归属。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- Playwright 使用默认 `stage-2-1 / 10000 / continents` 复查 `[634, 527]` 附近：
+  - `path 0` 末尾不再跳到 `[647, 530]`，最大近端偏移降为 `3.8`。
+  - `path 2` 起点不再跳到 `[646, 522]`，只沿真实下一段方向采样。
+  - 近景截图 `repro-10k-shore-endpoint-634-527-fixed.png` 中，原先两根向右伸出的浅色尖刺已消失。
+
+### 国界填色笔刷侵入第二轮修复
+
+问题：
+
+- 用户反馈国界笔刷状侵入仍在。
+- 复查时先关闭 `stateBorders` 和 `provinceBorders` 线层，发现部分侵入仍能在国家填色中出现，因此剩余问题不是政治描边端帽，而是政治归属从 pack 镜像到 grid 后保留了细长舌头。
+- 第一轮 pack 级毛刺吸收保护了全部城镇，能保护政治语义，但在 grid 渲染层会让普通城镇所在的一格宽毛刺被固定下来。
+
+修正：
+
+- `mirrorPackStateToGrid()` 在写出渲染用 `grid.cells.state` 前，新增 grid 层国家归属毛刺吸收。
+- `mirrorPackProvinceToGrid()` 同样新增 grid 层省份归属毛刺吸收，并限制在同一国家内部调整省份归属。
+- pack 层平滑仍保护所有城镇；grid 渲染层只保护首都和省会中心，普通城镇不再阻止视觉填色被吸收到多数邻居中。
+- 毛刺吸收仍只处理“自身同类邻居很少、另一侧邻居明显占多数”的 cell，不做整块区域重分配。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\politics.js` 通过。
+- `git diff --check` 通过。
+- Playwright 复查默认 `stage-2-1 / 10000 / 大陆`：
+  - 关闭国界/省界线层后，弱连接国家边界 cell 从约 `30` 降到 `5`。
+  - 纯国家填色截图 `state-fill-only-capitals-only.png` 未再出现大块笔刷状侵入。
+  - 打开国界/省界后的最终截图 `state-borders-final-10k.png` 未再把剩余一两格互咬放大成笔刷块。
+
+### 海岸视觉带跨段三角修复
+
+问题：
+
+- 用户再次截图指出问题仍在，画面中可见一块蓝黄渐变的直边楔子。
+- 该形态带有顶点色插值，不像道路、国界 stroke 或底层政治归属；结合图层隔离判断，来源是 shore visual band。
+- 海岸视觉带此前只检查候选小段两端的陆侧/水侧采样。窄水道、近岸岛屿或复杂凹口处，`fitShoreHalfWidth()` 可能跳过某些无法安全放置宽度的海岸点，旧逻辑会把跳过点前后的两个有效点直接相连，形成跨过凹口的直边渐变三角。
+
+修正：
+
+- `buildSmoothedShoreVisual()` 记录每个有效海岸带点是否跨过了被跳过的渲染点。
+- `pushShoreVisualBand()` 和 shore visual line 绘制遇到跳点会断段，不再连接跳点两侧。
+- `isShoreBandSegmentSafe()` 从只检查端点扩展为检查 `0 / 0.25 / 0.5 / 0.75 / 1` 五个采样位置：
+  - 陆侧插值点必须仍落在陆地。
+  - 水侧插值点必须仍落在水域。
+- 该修正只影响渲染层海岸视觉带，不改变 grid、pack、picking、编辑判定和政治归属。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- Playwright 复查默认 `stage-2-1 / 10000 / 大陆` 国家视图，`glError = 0`。
+- 最新总览截图 `repro-state-full-with-lines-shore-gaps-safe.png` 中海岸线没有大面积缺失；surface 顶点数下降，说明原先跨段的海岸带三角已被过滤。
+
+### 政治视图禁用海岸填色过渡带
+
+问题：
+
+- 用户反馈蓝黄楔子仍能看到。
+- 继续局部过滤 shore visual band 可以减少一部分跨段三角，但政治视图里 shore visual band 本质上会把国家/省份陆地色和水色做顶点插值；一旦近岸小岛、窄海峡、复杂凹口或侧向量有误，就会重新出现非常显眼的蓝黄/省份色渐变楔子。
+- 国家/省份视图更需要政治 surface 清晰可靠，海岸填色过渡带在该视图中的收益低于风险。
+
+修正：
+
+- 新增 `shouldDrawShoreVisualBands()`，国家视图和省份视图不再绘制 shore visual band。
+- 水陆线描边仍按图层开关正常绘制；高度、温度、降水等非政治视图仍保留海岸视觉带。
+- 该策略直接移除政治视图中蓝黄渐变楔子的绘制来源。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- Playwright 复查默认 `stage-2-1 / 10000 / 大陆`：
+  - 国家视图 `glError = 0`。
+  - 省份视图 `glError = 0`。
+  - 国家/省份视图 surface 顶点数回到 `525843`，说明 shore visual band 不再进入政治 surface。
+  - 截图 `repro-state-no-shore-band-political.png` 未再出现蓝黄渐变楔子。

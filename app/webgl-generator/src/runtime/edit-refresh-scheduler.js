@@ -51,6 +51,10 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       state.lastEditRefresh = summarizeEditRefresh(effects);
       invalidateRendererBuffers(state.renderer, effects);
 
+      if (effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
+        state.renderer.refreshPoliticalVisualCaches();
+      }
+
       if (effects.derived.includes("political-boundaries") && typeof state.renderer.refreshLineLayers === "function") {
         state.renderer.refreshLineLayers({draw: false});
       }

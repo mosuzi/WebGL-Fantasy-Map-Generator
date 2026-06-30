@@ -65,6 +65,7 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
   expandPackStates(pack, states, society);
   normalizePackStates(pack, states);
   claimInhabitedNeutralCells(pack, states);
+  smoothPackStateBoundarySpikes(pack, states);
   syncBurgStates(pack);
   collectStateStatistics(pack, states);
   findStateNeighbors(pack, states);
@@ -258,6 +259,23 @@ function normalizePackStates(pack, states) {
   for (const state of states) {
     if (state?.i) state.center = pack.burgs[state.capital].cell;
   }
+}
+
+function smoothPackStateBoundarySpikes(pack, states) {
+  const {cells, burgs} = pack;
+  const protectedCells = new Set(
+    burgs
+      .filter(burg => burg?.i && !burg.removed && cells.h[burg.cell] >= 20)
+      .map(burg => burg.cell)
+  );
+
+  absorbBoundarySpikes(cells, cells.state, {
+    passes: 3,
+    protectedCells,
+    canInspect: cell => cells.h[cell] >= 20 && Boolean(states[cells.state[cell]]),
+    canUseNeighbor: neighbor => cells.h[neighbor] >= 20,
+    canAbsorbTo: value => value > 0 && Boolean(states[value])
+  });
 }
 
 function claimInhabitedNeutralCells(pack, states) {
@@ -473,7 +491,19 @@ function mirrorPackStateToGrid(grid, pack) {
     bestScore[gridCell] = score;
   }
 
+  smoothMirroredGridStates(grid, pack, values);
   return values;
+}
+
+function smoothMirroredGridStates(grid, pack, values) {
+  const protectedCells = protectedGridCellsForPackBurgs(pack, {capitalsOnly: true});
+  absorbBoundarySpikes(grid.cells, values, {
+    passes: 3,
+    protectedCells,
+    canInspect: cell => grid.cells.h[cell] >= 20 && values[cell] > 0,
+    canUseNeighbor: neighbor => grid.cells.h[neighbor] >= 20,
+    canAbsorbTo: value => value > 0
+  });
 }
 
 function getStateBiomeCost(nativeBiome, biome, type) {
@@ -592,6 +622,7 @@ function buildPackProvinces(pack, society, random, options, nameGenerator) {
   expandPackProvinces(pack, provinces, provinceIds, maxGrowth);
   justifyPackProvinces(pack, provinces, provinceIds);
   fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator);
+  smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds);
   collectProvinceStatistics(pack, provinces, provinceIds);
   assignProvincePoles(pack, provinces, provinceIds);
   findPackProvinceNeighbors(pack, provinces, provinceIds);
@@ -739,6 +770,81 @@ function justifyPackProvinces(pack, provinces, provinceIds) {
     }
     if (bestProvince) provinceIds[cell] = bestProvince;
   }
+}
+
+function smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds) {
+  const {cells} = pack;
+  const protectedCells = new Set();
+  for (const province of provinces) {
+    if (province?.i && cells.h[province.center] >= 20) protectedCells.add(province.center);
+  }
+  for (const cell of cells.i) {
+    if (cells.burg[cell] && cells.h[cell] >= 20) protectedCells.add(cell);
+  }
+
+  absorbBoundarySpikes(cells, provinceIds, {
+    passes: 3,
+    protectedCells,
+    canInspect: cell => cells.h[cell] >= 20 && Boolean(provinces[provinceIds[cell]]),
+    canUseNeighbor: (neighbor, cell) => cells.h[neighbor] >= 20 && cells.state[neighbor] === cells.state[cell],
+    canAbsorbTo: value => value > 0 && Boolean(provinces[value])
+  });
+}
+
+function absorbBoundarySpikes(cells, values, {passes = 1, protectedCells = new Set(), canInspect, canUseNeighbor, canAbsorbTo}) {
+  if (!cells?.i || !cells?.c || !values) return 0;
+  let totalChanged = 0;
+
+  for (let pass = 0; pass < passes; pass++) {
+    const changes = [];
+
+    for (const cell of cells.i) {
+      if (protectedCells.has(cell) || !canInspect(cell)) continue;
+      const nextValue = boundarySpikeAbsorptionValue(cells, values, cell, canUseNeighbor, canAbsorbTo);
+      if (nextValue !== null && nextValue !== values[cell]) changes.push([cell, nextValue]);
+    }
+
+    if (!changes.length) break;
+    for (const [cell, value] of changes) values[cell] = value;
+    totalChanged += changes.length;
+  }
+
+  return totalChanged;
+}
+
+function boundarySpikeAbsorptionValue(cells, values, cell, canUseNeighbor, canAbsorbTo) {
+  const ownValue = values[cell] || 0;
+  if (!ownValue) return null;
+  const counts = new Map();
+  let ownNeighbors = 0;
+  let inspectedNeighbors = 0;
+
+  for (const neighbor of cells.c[cell] || []) {
+    if (!canUseNeighbor(neighbor, cell)) continue;
+    inspectedNeighbors++;
+    const neighborValue = values[neighbor] || 0;
+    if (neighborValue === ownValue) {
+      ownNeighbors++;
+      continue;
+    }
+    if (!canAbsorbTo(neighborValue)) continue;
+    counts.set(neighborValue, (counts.get(neighborValue) || 0) + 1);
+  }
+
+  if (inspectedNeighbors < 3 || !counts.size) return null;
+  let bestValue = 0;
+  let bestCount = 0;
+  for (const [value, count] of counts) {
+    if (count <= bestCount) continue;
+    bestValue = value;
+    bestCount = count;
+  }
+
+  if (bestCount < 2) return null;
+  if (ownNeighbors === 0) return bestValue;
+  if (ownNeighbors === 1 && bestCount >= 2) return bestValue;
+  if (ownNeighbors <= 2 && bestCount >= ownNeighbors + 1) return bestValue;
+  return null;
 }
 
 function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator) {
@@ -897,7 +1003,35 @@ function mirrorPackProvinceToGrid(grid, pack) {
     bestScore[gridCell] = score;
   }
 
+  smoothMirroredGridProvinces(grid, pack, values);
   return values;
+}
+
+function smoothMirroredGridProvinces(grid, pack, values) {
+  const protectedCells = protectedGridCellsForPackBurgs(pack, {capitalsOnly: true});
+  for (const province of pack.provinces || []) {
+    const gridCenter = Number.isInteger(province?.gridCenter) ? province.gridCenter : Number.isInteger(province?.center) ? pack.cells.g?.[province.center] : null;
+    if (Number.isInteger(gridCenter) && grid.cells.h[gridCenter] >= 20) protectedCells.add(gridCenter);
+  }
+
+  absorbBoundarySpikes(grid.cells, values, {
+    passes: 3,
+    protectedCells,
+    canInspect: cell => grid.cells.h[cell] >= 20 && values[cell] > 0,
+    canUseNeighbor: (neighbor, cell) => grid.cells.h[neighbor] >= 20 && grid.cells.state?.[neighbor] === grid.cells.state?.[cell],
+    canAbsorbTo: value => value > 0
+  });
+}
+
+function protectedGridCellsForPackBurgs(pack, {capitalsOnly = false} = {}) {
+  const protectedCells = new Set();
+  for (const burg of pack.burgs || []) {
+    if (!burg?.i || burg.removed) continue;
+    if (capitalsOnly && !burg.capital) continue;
+    const gridCell = pack.cells.g?.[burg.cell];
+    if (Number.isInteger(gridCell)) protectedCells.add(gridCell);
+  }
+  return protectedCells;
 }
 
 function buildRegions() {
