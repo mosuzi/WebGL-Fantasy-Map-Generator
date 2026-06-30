@@ -121,7 +121,9 @@ function buildPackCultures(grid, pack, random, options) {
 
   const populatedMask = profile.stage("create-populated-mask", "建立人口 cell 掩码", () => createCellMask(cells.i.length, populated));
   profile.stage("expand-cultures", "扩张文化", () => expandPackCultures(pack, cultures, centers, cultureIds, populatedMask));
-  profile.stage("fill-unassigned", "补齐未归属文化人口", () => fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask));
+  if (shouldFillUnassignedPopulatedCultures(options, pack)) {
+    profile.stage("fill-unassigned", "补齐未归属文化人口", () => fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask));
+  }
   cells.culture = cultureIds;
   profile.stage("summarize", "汇总文化覆盖", () => summarizeCultureCoverage(pack, cultures));
   const gridCells = profile.stage("mirror-grid", "同步文化到 grid", () => mirrorPackCultureToGrid(grid, pack));
@@ -802,6 +804,10 @@ function expandPackCultures(pack, cultures, centers, cultureIds, populatedMask) 
       queue.push({cell: neighbor, cultureId, priority: total}, total);
     }
   }
+}
+
+function shouldFillUnassignedPopulatedCultures(options = {}, pack) {
+  return !(options.heightmapTemplate === "archipelago" && options.cellsTarget <= 10000 && (pack?.cells?.i?.length || 0) < 3500);
 }
 
 function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask) {

@@ -198,6 +198,7 @@ function createCandidateSummary(candidateMap, {appDir}) {
       cultures: countByPredicate(society.cultures || [], culture => culture?.i && !culture.removed),
       culturedPackCells: countByPredicate(pack.cells.culture || [], value => value > 0),
       culturedGridCells: countByPredicate(grid.cells.culture || [], value => value > 0),
+      settlementEligiblePackCells: countSettlementEligiblePackCells(pack.cells),
       burgs: settlements.cities.length,
       capitals: countByPredicate(settlements.cities, city => city.capital),
       ports: countByPredicate(settlements.cities, city => city.port),
@@ -421,6 +422,14 @@ function collectPollTaxExpectedByState(states) {
     taxes[state.i] = round(Number(state.pollTax || 0) * (Number(state.rural || 0) + Number(state.urban || 0)));
   }
   return taxes;
+}
+
+function countSettlementEligiblePackCells(cells = {}) {
+  let count = 0;
+  for (const cell of cells.i || []) {
+    if ((cells.s?.[cell] || 0) > 0 && (cells.culture?.[cell] || 0) > 0) count++;
+  }
+  return count;
 }
 
 function describeCandidateLateStages({grid, pack, society, politics, settlements, markers, zones}) {

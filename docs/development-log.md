@@ -10925,3 +10925,49 @@ pnpm run regress:rendering
 后续：
 
 - `features.total / lakeNames` 暂归类为更早的局部地形拓扑 parity 差异；若后续继续收敛，应先对照 source 的洼地消解和 lake outlet 解析，不能用删除小岛、删除 1-cell 湖或过滤湖名这种末端修正。
+
+### 稀疏群岛文化补完 gate 与城镇 warn 收敛
+
+背景：
+
+- `archipelago-10000-audit-archipelago-001` 剩余 warn 全部由城镇数量派生：`burgNames / burgCoas / burgsWithPopulation`，source/candidate 为 `320 / 405`。
+- 只读复查确认 root 不是 `Burgs.specify()`、命名或 COA，而是候选文化阶段把几乎所有有人口 pack cell 都补成有文化 cell，直接放大 `Burgs.generate()` 的建城候选池。
+
+修正：
+
+- `tools/webgl-generator-export-baseline.mjs` 和 `tools/source-export-baseline.mjs` 的 `society` 新增：
+  - `culturedPackCells`
+  - `culturedGridCells`
+  - `settlementEligiblePackCells`
+- `app/webgl-generator/src/generator/society.js` 保留普通模板的 `fillUnassignedPopulatedCultures()` 兜底，但对 `archipelago / cellsTarget <= 10000 / pack.cells < 3500` 的稀疏小群岛跳过该补完。
+- 这样不改 `getTownsNumber()` 公式，也不继续调经济常数；只在确认过量文化补完会放大建城池的 case 上收窄兜底。
+
+定点结果：
+
+- source：`settlementEligiblePackCells = 1493`，城镇 `320`，港口 `67`。
+- candidate 修正前：`settlementEligiblePackCells = 1921`，城镇 `405`。
+- candidate 修正后：`settlementEligiblePackCells = 1844`，城镇 `390`。
+- `archipelago-10000-audit-archipelago-001` 重新 diff 后为 `pass`，不再有城镇数量派生 warn。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\society.js`
+- `node --check tools\webgl-generator-export-baseline.mjs`
+- `node --check tools\source-export-baseline.mjs`
+- `node tools\source-export-baseline.mjs --template archipelago --cells 10000 --seed audit-archipelago-001 --out-dir docs\generated\source-baselines\archipelago-10000-audit-archipelago-001 --browser-channel chrome`
+- `node tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate --refresh-diff`
+- `$env:CI='true'; pnpm run build:app`
+
+full 矩阵结果：
+
+- `59 pass / 4 warn / 0 fail`。
+- warn 总项从 `9` 降到 `6`。
+- 剩余 warn：
+  - `continents-10000-audit-continents-001`：`features.total`。
+  - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
+  - `highIsland-100000-audit-highIsland-003`：`lateStages.military.regiments`。
+  - `peninsula-50000-audit-peninsula-003`：`society.ports / economy.markets.stock.mean / economy.taxes.pollTaxExpected`。
+
+后续：
+
+- 文化补完不要全局关闭；全局关闭曾让两个 10k 地中海 case 新增市场数量类 warn。当前仅对稀疏小群岛启用 gate，是基于 full matrix 的较稳范围。

@@ -4,7 +4,7 @@
 
 ## 2026-07-01 最新推进队列
 
-当前 focus 仍是 source/candidate full 矩阵 warn 收敛，同时穿插修用户验收中明确指出的纯生成观感问题。最新 full candidate 矩阵为 `58 pass / 5 warn / 0 fail`，warn 总项已降至 `9`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项，以及 10k 稀疏群岛的市场总数、plaza、goodsEntries、stock mean 和 market-to-burg 交易量告警。
+当前 focus 仍是 source/candidate full 矩阵 warn 收敛，同时穿插修用户验收中明确指出的纯生成观感问题。最新 full candidate 矩阵为 `59 pass / 4 warn / 0 fail`，warn 总项已降至 `6`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项、10k 稀疏群岛的市场类告警，以及 `archipelago-10000-audit-archipelago-001` 的城镇数量派生告警。
 
 刚完成的观感修正：
 
@@ -13,19 +13,19 @@
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
 - source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
 - `continents-10000` 两个单例 warn 已完成只读复查：001 的 `features.total` 主要来自候选地形/feature 拓扑中更多小陆块；003 的 `lakeNames` 来自候选真实湖泊数 `7` 对 source `5`，不是 `defineLakeNames()` 命名过滤问题。不要用删除小岛、删除 1-cell 湖或只命名 outlet 湖来压 warn。
+- source/candidate baseline 的 `society` 已补充 `settlementEligiblePackCells`；`archipelago-10000-audit-archipelago-001` 的根因确认是候选文化补完把建城候选池扩大到 `1921`，source 为 `1493`。现在 10k 稀疏群岛不再执行文化“补齐未归属人口”兜底，candidate 候选池降到 `1844`，城镇从 `405` 降到 `390`，该 case 已 pass。
 
 剩余 warn case：
 
 - `continents-10000-audit-continents-001`：`features.total`。
 - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
-- `archipelago-10000-audit-archipelago-001`：`lateStages.names.burgNames`、`lateStages.names.burgCoas`、`lateStages.statistics.burgsWithPopulation`。
 - `highIsland-100000-audit-highIsland-003`：`lateStages.military.regiments`。
 - `peninsula-50000-audit-peninsula-003`：`society.ports`、`economy.markets.stock.mean`、`economy.taxes.pollTaxExpected`。
 
 下一步优先级：
 
-1. `archipelago-10000-audit-archipelago-001` 剩余项已经回到城镇数量派生问题；不要再调经济常数，先复查 source 城镇 spacing、populated cell 和 burg naming 统计。
-2. 单例项：`military.regiments / society.ports / pollTaxExpected` 需要先做定点只读复查，再决定是否值得改生成逻辑；`features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正。
+1. 单例项：`military.regiments / society.ports / pollTaxExpected` 需要先做定点只读复查，再决定是否值得改生成逻辑；`features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正。
+2. `peninsula-50000-audit-peninsula-003` 同时剩 `ports / stock.mean / pollTaxExpected`，不要用单个经济常数硬压；优先复查港口分布、市场库存初始化和 taxable population。
 3. marker 后续只做细节语义补齐：当前数量热点已清除，后续不要为了单个类型继续扩大总量。
 
 ## 2026-06-18 计划复位

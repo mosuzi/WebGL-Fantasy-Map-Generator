@@ -201,6 +201,9 @@ try {
         },
         society: {
           cultures: countAlive(pack.cultures),
+          culturedPackCells: countByPredicate(packCells.culture || [], value => value > 0),
+          culturedGridCells: countByPredicate(gridCells.culture || [], value => value > 0),
+          settlementEligiblePackCells: countSettlementEligiblePackCells(packCells),
           burgs: countAlive(pack.burgs),
           capitals: countByPredicate(pack.burgs || [], burg => burg?.i && !burg.removed && burg.capital),
           ports: countByPredicate(pack.burgs || [], burg => burg?.i && !burg.removed && burg.port),
@@ -339,6 +342,14 @@ try {
       function countByPredicate(values = [], predicate) {
         let count = 0;
         for (const value of values) if (predicate(value)) count++;
+        return count;
+      }
+
+      function countSettlementEligiblePackCells(cells = {}) {
+        let count = 0;
+        for (const cell of cells.i || []) {
+          if ((cells.s?.[cell] || 0) > 0 && (cells.culture?.[cell] || 0) > 0) count++;
+        }
         return count;
       }
 
