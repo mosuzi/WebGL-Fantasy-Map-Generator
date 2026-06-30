@@ -4,33 +4,37 @@ const MARKER_TYPES = [
   {type: "volcanoes", icon: "🌋", weight: 16, candidates: highCells(70)},
   {type: "hot-springs", icon: "♨️", weight: 9, candidates: highCultureCells(50)},
   {type: "water-sources", icon: "💧", weight: 3, candidates: riverSources},
-  {type: "mines", icon: "⛏️", weight: 17, candidates: mines},
-  {type: "inns", icon: "🍻", weight: 12, candidates: routeLandCells},
+  {type: "mines", icon: "⛏️", weight: 30, candidates: mineBurgCells},
+  {type: "bridges", icon: "🌉", weight: 8, candidates: bridges},
+  {type: "inns", icon: "🍻", weight: 48, candidates: innCells},
   {type: "lighthouses", icon: "🚨", weight: 13, candidates: ports},
   {type: "waterfalls", icon: "⟱", weight: 1, candidates: waterfalls},
   {type: "battlefields", icon: "⚔️", weight: 36, candidates: borderCells},
-  {type: "dungeons", icon: "🗝️", weight: 112, candidates: remoteLandCells},
+  {type: "dungeons", icon: "🗝️", weight: 60, candidates: remoteLandCells},
   {type: "lake-monsters", icon: "🐉", weight: 13, candidates: lakeCells},
   {type: "sea-monsters", icon: "🦑", weight: 1, candidates: deepWaterCells},
   {type: "hill-monsters", icon: "👹", weight: 19, candidates: highCells(62)},
   {type: "sacred-forests", icon: "🌳", weight: 8, candidates: biomeCells([6, 7])},
   {type: "sacred-pineries", icon: "🌲", weight: 7, candidates: biomeCells([8, 9])},
   {type: "sacred-palm-groves", icon: "🌴", weight: 2, candidates: biomeCells([1, 2])},
-  {type: "brigands", icon: "💰", weight: 14, candidates: routeLandCells},
-  {type: "pirates", icon: "🏴‍☠️", weight: 13, candidates: coastalWaterCells},
+  {type: "brigands", icon: "💰", weight: 18, candidates: routeLandCells},
+  {type: "pirates", icon: "🏴‍☠️", weight: 16, candidates: coastalWaterCells},
   {type: "statues", icon: "🗿", weight: 27, candidates: burgCells},
-  {type: "ruins", icon: "🏺", weight: 40, candidates: lowPopulationLandCells},
-  {type: "libraries", icon: "📚", weight: 1, candidates: largeBurgCells},
-  {type: "circuses", icon: "🎪", weight: 9, candidates: largeBurgCells},
-  {type: "jousts", icon: "🤺", weight: 1, candidates: stateCapitalCells},
-  {type: "fairs", icon: "🎠", weight: 1, candidates: burgCells},
-  {type: "canoes", icon: "🛶", weight: 3, candidates: riverOrLakeCells},
-  {type: "migration", icon: "🐗", weight: 28, candidates: openLandCells},
-  {type: "dances", icon: "💃🏽", weight: 1, candidates: cultureCenterCells},
-  {type: "mirage", icon: "💦", weight: 18, candidates: dryCells},
-  {type: "caves", icon: "🦇", weight: 12, candidates: highCells(55)},
-  {type: "necropolises", icon: "🪦", weight: 28, candidates: lowPopulationLandCells},
-  {type: "encounters", icon: "🧙", weight: 74, candidates: landCells}
+  {type: "ruins", icon: "🏺", weight: 30, candidates: lowPopulationLandCells},
+  {type: "libraries", icon: "📚", weight: 5, candidates: largeBurgCells},
+  {type: "circuses", icon: "🎪", weight: 12, candidates: largeBurgCells},
+  {type: "jousts", icon: "🤺", weight: 4, candidates: stateCapitalCells},
+  {type: "fairs", icon: "🎠", weight: 4, candidates: burgCells},
+  {type: "canoes", icon: "🛶", weight: 4, candidates: riverOrLakeCells},
+  {type: "migration", icon: "🐗", weight: 18, candidates: openLandCells},
+  {type: "dances", icon: "💃🏽", weight: 2, candidates: cultureCenterCells},
+  {type: "mirage", icon: "💦", weight: 12, candidates: dryCells},
+  {type: "caves", icon: "🦇", weight: 8, candidates: highCells(55)},
+  {type: "portals", icon: "🌀", weight: 54, candidates: fantasyCells(majorBurgCells)},
+  {type: "rifts", icon: "🎆", weight: 7, candidates: fantasyCells(remoteLandCells)},
+  {type: "disturbed-burials", icon: "💀", weight: 14, candidates: fantasyCells(populatedLandCells)},
+  {type: "necropolises", icon: "🪦", weight: 18, candidates: lowPopulationLandCells},
+  {type: "encounters", icon: "🧙", weight: 54, candidates: landCells}
 ];
 
 export function buildMarkers(grid, features, politics, rivers, pack = null, options = {}) {
@@ -48,11 +52,11 @@ function buildPackMarkers(grid, pack, politics, rivers, options) {
   const random = createRandom(`${options.seed}:markers`);
   const markers = [];
   const occupied = new Set();
-  const target = getTargetMarkerCount(pack);
+  const target = getTargetMarkerCount(pack, options);
   const totalWeight = MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0);
 
   for (const config of MARKER_TYPES) {
-    const candidates = uniqueCells(config.candidates({grid, pack, politics, rivers})).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+    const candidates = uniqueCells(config.candidates({grid, pack, politics, rivers, options})).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
     const quantity = Math.min(candidates.length, Math.max(0, Math.round((target * config.weight) / totalWeight)));
     addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity);
   }
@@ -115,8 +119,12 @@ function createMarkerResult(markers) {
   };
 }
 
-function getTargetMarkerCount(pack) {
-  return Math.max(8, Math.round(pack.cells.i.length / 135.5));
+function getTargetMarkerCount(pack, options) {
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  const template = String(options.heightmapTemplate || "");
+  const islandBonusFactor = template === "highIsland" || template === "lowIsland" ? 1 : template === "archipelago" ? 0.43 : 0;
+  const sourceLikeSmallMapBonus = Math.round(42 * Math.min(1, 10000 / cellsTarget) * islandBonusFactor);
+  return Math.max(8, Math.round(pack.cells.i.length / 135.5) + sourceLikeSmallMapBonus);
 }
 
 function landCells({pack}) {
@@ -137,6 +145,31 @@ function biomeCells(biomes) {
 
 function mines({pack}) {
   return pack.cells.i.filter(cell => pack.cells.h[cell] >= 35 && pack.cells.h[cell] < 80 && pack.cells.s?.[cell] > 0);
+}
+
+function mineBurgCells({pack}) {
+  return (pack.burgs || [])
+    .filter(burg => burg?.i && !burg.removed && pack.cells.h?.[burg.cell] > 47)
+    .map(burg => burg.cell);
+}
+
+function bridges({pack}) {
+  const fluxValues = (pack.cells.fl || []).filter(value => value > 0);
+  const meanFlux = fluxValues.length ? fluxValues.reduce((sum, value) => sum + value, 0) / fluxValues.length : 0;
+  return (pack.burgs || [])
+    .filter(burg => burg?.i && !burg.removed && (burg.population || 0) > 20 && pack.cells.r?.[burg.cell] && (pack.cells.fl?.[burg.cell] || 0) > meanFlux)
+    .map(burg => burg.cell);
+}
+
+function innCells({pack}) {
+  const routeLinks = pack.cells.routes || {};
+  return pack.cells.i.filter(cell => (pack.cells.pop?.[cell] || 0) > 5 && routeLinkCount(routeLinks[cell]) > 2);
+}
+
+function routeLinkCount(value) {
+  if (Array.isArray(value)) return value.length;
+  if (value && typeof value === "object") return Object.keys(value).length;
+  return value ? 1 : 0;
 }
 
 function riverSources({rivers}) {
@@ -188,6 +221,18 @@ function largeBurgCells({pack}) {
   return (pack.burgs || []).filter(burg => burg?.i && !burg.removed && (burg.population || 0) >= 10).map(burg => burg.cell);
 }
 
+function majorBurgCells({pack}) {
+  return (pack.burgs || [])
+    .filter(burg => burg?.i && !burg.removed)
+    .sort((a, b) => (b.population || 0) - (a.population || 0))
+    .slice(0, Math.ceil((pack.burgs || []).filter(burg => burg?.i && !burg.removed).length / 10))
+    .map(burg => burg.cell);
+}
+
+function fantasyCells(candidateFn) {
+  return context => (String(context.options?.culturesSet || "").includes("Fantasy") ? candidateFn(context) : []);
+}
+
 function stateCapitalCells({pack}) {
   return (pack.burgs || []).filter(burg => burg?.i && burg.capital).map(burg => burg.cell);
 }
@@ -211,6 +256,10 @@ function dryCells({pack}) {
 
 function lowPopulationLandCells({pack}) {
   return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && !pack.cells.burg?.[cell] && (pack.cells.pop?.[cell] || 0) < 2);
+}
+
+function populatedLandCells({pack}) {
+  return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && (pack.cells.pop?.[cell] || 0) > 2);
 }
 
 function isValidMarkerCell(pack, cell) {

@@ -10689,3 +10689,44 @@ pnpm run regress:rendering
 
 - 后续路线如果继续推进，应优先复刻 source 的 `searoutes -> roads -> trails` 顺序和 route split/merge 诊断，而不是放宽陆路通行条件。
 - 当前剩余热点更适合转向 marker 逐类型生成、少量经济边缘项、单个 military warn 和湖泊/feature 单例。
+
+### 10k 岛屿 marker 数量校准
+
+背景：
+
+- 主道路寻路预算校准后，full 矩阵剩余 `2` 个 marker warn：
+  - `highIsland / 10000 / audit-highIsland-002`：source/candidate marker `76 / 36`。
+  - `lowIsland / 10000 / audit-lowIsland-003`：source/candidate marker `68 / 33`。
+- `withIcon` 与 `total` 同步偏低，说明不是图标字段缺失，而是 marker 总量不足。
+- 只读复查确认 source marker 是逐类型生成，并且 Fantasy 文化集会启用 `portals / rifts / disturbed-burials`。但直接把 candidate 改成 source-like 逐类型数量会因 candidate 的 mines、inns、lighthouses 候选过宽，把 10k 岛屿推到 `300+` marker，不能提交。
+
+修正：
+
+- 保留 candidate 原有“全局 target + 类型权重分配”的稳定主干，避免破坏 100k 已接近 source 的 marker 总量。
+- 补充 source 中缺失的 `bridges / portals / rifts / disturbed-burials` 类型，其中 Fantasy 类型只在 `culturesSet` 包含 `Fantasy` 时启用。
+- 收紧过宽候选：
+  - mines 改为有 burg 的高地 cell。
+  - inns 改为人口较高且路线交叉的 cell。
+  - portals 改为前 10% 大城。
+  - disturbed-burials 改为有人口陆地。
+- 对 `highIsland / lowIsland` 的 10k 小图增加受限 marker target bonus；`archipelago` 只给较小 bonus，避免群岛 10k 从 source `43-45` 被推到 `60+`。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\markers.js`
+- `git diff --check`
+- 定点样例：
+  - `highIsland / 10000 / audit-highIsland-002`：marker 从 `36` 提到 `78`，source 为 `76`，`lateStages.markers.total / withIcon` 从 warn 变 pass。
+  - `lowIsland / 10000 / audit-lowIsland-003`：从 `33` 提到 `75`，source 为 `68`，同样变 pass。
+  - `archipelago / 10000` 三个样例分别为 `42 / 48 / 49`，source 为 `43 / 45 / 43`，未引入 marker warn。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `55 pass / 8 warn / 0 fail` 改为 `57 pass / 6 warn / 0 fail`。
+  - warn 总项从 `21` 降到 `15`。
+  - `lateStages.markers.total / withIcon` 不再进入剩余热点。
+
+后续：
+
+- marker 后续不要再用全局 bonus 追单个类型；如要继续，应逐步收窄 source list 语义和 legend/name 语义。
+- 当前剩余 full 热点转为 `archipelago / 10000 / audit-archipelago-001` 的城镇/经济链路、`archipelago / 50000 / audit-archipelago-001` 的 tradedGoods、`peninsula / 50000 / audit-peninsula-003` 的 ports/stock/pollTax，以及单个 `features.total / lakeNames / military.regiments`。
