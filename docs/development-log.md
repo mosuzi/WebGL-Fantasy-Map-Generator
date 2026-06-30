@@ -9540,3 +9540,28 @@ pnpm run regress:shoreline -- --browser-channel chrome
 - 本刀仍不重新启用原版分形水陆线表现。
 - 主渲染路径仍是 `pushShoreLineLayers()`：平滑单元格开启时读取 `cellVisualMesh.edgeCurves`，关闭时读取硬共享 Voronoi 边。
 - 旧海岸候选代码迁入 `shore-layer` 只是为了隔离职责和保留待办基础；后续重新启用前，仍必须先完成海岸轮廓级裁剪或同源填色 mesh，并优先用 `stage-2-1 / 10000 / 大陆` 回归验证。
+
+### political-layer 第一刀
+
+背景：
+
+- `shore-layer` 已经接走水陆线相关职责后，`placeholder-renderer.js` 中最大的剩余静态渲染块是政治边界、政治视觉带和政治视觉 mesh。
+- 这些逻辑与国家/省份颜色、Delaunay mesh、边界质量统计和 debug cache 强耦合，适合先整体迁移，暂不改变渲染行为。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/political-layer.js`：
+  - 集中 `STATE_VISUAL_STYLE` / `PROVINCE_VISUAL_STYLE`。
+  - 承载国家/省份边界 path 构建、butt-join 政治描边和政治视觉带。
+  - 承载政治视觉 mesh 构建、候选三角过滤、质量统计、notable triangle 记录和 debug cache 摘要。
+  - 继续复用 `shore-layer` 导出的共享边与海岸陆侧补点 helper。
+- `placeholder-renderer.js` 删除本地政治 path / mesh 构建实现，只保留：
+  - 地图载入和派生变更时的政治缓存重建调度。
+  - debug buffer 上传与绘制。
+  - 选中政治对象的高亮 mesh。
+  - 总体 surface / line / dynamic layer 编排。
+
+边界：
+
+- 本刀只做结构迁移，不改变政治 mesh 过滤阈值、国界/省界描边方式或政治视图 surface 策略。
+- `pushPoliticalSelectionMesh()` 暂留在主 renderer，因为它依赖当前 selection / locate flash / 动态 buffer 机制；后续若拆 `selection-layer` 再迁走。
