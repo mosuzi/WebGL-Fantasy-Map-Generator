@@ -9772,3 +9772,41 @@ pnpm run regress:rendering
 - 首屏端到端性能下一刀优先看 `line-vertices` 和 `cell-visual-mesh`，尤其是水陆线/国界/省界三角描边是否可以缓存或延迟。
 - 生成函数内部仍按上一节推进：10k 看省份颜色分配，50k/100k 看 `resolveDepressions()`。
 - 如果之后重新启用政治视觉 mesh 正式绘制，必须先做懒加载、分帧构建或 worker 化，不能再回到首屏同步 Delaunay。
+
+### 端到端性能守门与线层一次扫描优化
+
+背景：
+
+- 首屏 Loading 已经从政治视觉 mesh 同步构建中解放出来，但上一刀使用的是临时浏览器探针，不利于后续持续回归。
+- `renderer.loadMap()` 剩余主要瓶颈之一是 `line-vertices`；临时探针里线层顶点构建约 `131.6ms`。
+- 现有 `tools/webgl-generator-shoreline-regression.mjs` 会测点击到 ready，但它的报告目标是水陆线视觉回归，缺少生成、WebGL 加载和 UI/调度余量拆分。
+
+修正：
+
+- 新增 `tools/webgl-generator-e2e-profile.mjs` 和 `pnpm run profile:e2e`：
+  - 默认读取 `dist/webgl-generator`，用本地静态 server + Chrome 运行正式构建产物。
+  - 默认测试 `stage-2-1 / 10000 / 大陆 / 1440x960`。
+  - 等待条件改为新地图对象生成、`WebGL error = 0` 且 Loading 气泡隐藏，避免把旧地图或仅 WebGL ready 误判为完成。
+  - 报告拆分为点击到出图、纯生成、`renderer.loadMap()` 和 UI/调度余量。
+  - 报告展开 `loadMap` 阶段明细，并默认设置端到端 `2500ms`、WebGL 加载 `1200ms` 两个守门阈值。
+  - 输出 `docs/generated/reports/e2e-profile-results.json/md`，仍不入库。
+- `shore-layer` 的水陆线线层构建做低风险优化：
+  - 旧逻辑在海岸线和湖岸线都可见时，会为海岸扫描一遍所有 grid 邻接，再为湖岸扫描一遍所有 grid 邻接。
+  - 新逻辑改为一次遍历陆水相邻边，根据水域 feature 类型分发到海洋海岸或湖岸，并保持原来的颜色、线宽、平滑/硬边路径和图层显隐语义。
+
+本轮数据：
+
+- 命令：`$env:CI='true'; pnpm.cmd run profile:e2e -- --browser-channel chrome`
+- 结论：通过。
+- 10k：点击到出图 `980ms`。
+- 纯生成：`717ms`，最慢为“按政区整理城镇和路线” `254.2ms`。
+- WebGL 加载：`178.2ms`，最慢为“构建线层顶点” `50.8ms`。
+- UI/调度余量：`84.8ms`。
+- `lineVertexCount = 258192`，`lineTriangleCount = 86064`，`boundaryLineMode = visual-cell-shore + butt-join-political`，`glError = 0`。
+- 相对上一轮临时探针中 `line-vertices = 131.6ms`，本轮线层构建明显下降；不同采样存在浏览器抖动，但优化方向成立。
+
+后续：
+
+- 端到端性能应优先使用 `pnpm run profile:e2e -- --browser-channel chrome` 判断体感，而不是只看 Node 纯生成 profile。
+- 下一个端到端 renderer 目标可以继续看 `cell-visual-mesh`、`shore-cache` 和 `fit-draw`；不过 10k 当前主要剩余已转回纯生成链路。
+- 纯生成下一刀建议优先处理“按政区整理城镇和路线”，然后再处理 pack 省份颜色分配。

@@ -38,20 +38,21 @@ export function boundaryLineModeForOptions(viewOptions, cellVisualMesh) {
 
 export function pushShoreLineLayers(vertices, context, visibility = {}, cellVisualMesh = null, viewOptions = {}) {
   const smoothCellBorders = viewOptions.smoothCellBorders !== false && cellVisualMesh?.edgeCurves;
-  if (visibility.coastline !== false) {
-    if (smoothCellBorders) pushCellVisualShoreLines(vertices, context, cellVisualMesh, "ocean", SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld);
-    else pushHardShoreLines(vertices, context, "ocean", SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld);
-  }
-  if (visibility.lakeShore !== false) {
-    if (smoothCellBorders) pushCellVisualShoreLines(vertices, context, cellVisualMesh, "lake", SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld);
-    else pushHardShoreLines(vertices, context, "lake", SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld);
-  }
+  pushShoreLines(vertices, context, {
+    cellVisualMesh,
+    smoothCellBorders,
+    drawCoastline: visibility.coastline !== false,
+    drawLakeShore: visibility.lakeShore !== false
+  });
 }
 
-function pushCellVisualShoreLines(vertices, context, cellVisualMesh, targetType, color, widthWorld) {
+function pushShoreLines(vertices, context, options) {
   const {map} = context;
   const cells = map?.grid?.cells;
+  const {cellVisualMesh, smoothCellBorders, drawCoastline, drawLakeShore} = options;
+  if (!drawCoastline && !drawLakeShore) return;
   if (!cells?.i || !cells?.c) return;
+
   for (const cell of cells.i || []) {
     for (const neighbor of cells.c[cell] || []) {
       if (neighbor <= cell) continue;
@@ -61,28 +62,16 @@ function pushCellVisualShoreLines(vertices, context, cellVisualMesh, targetType,
       const waterCell = cellLand ? neighbor : cell;
       const waterFeature = map.features.features[cells.f?.[waterCell]];
       const isOcean = waterFeature?.type === "ocean";
-      if ((targetType === "ocean" && !isOcean) || (targetType === "lake" && isOcean)) continue;
-      pushWorldPolylineMesh(vertices, context, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), color, widthWorld, {joinMode: "round"});
-    }
-  }
-}
-
-function pushHardShoreLines(vertices, context, targetType, color, widthWorld) {
-  const {map} = context;
-  const cells = map?.grid?.cells;
-  if (!cells?.i || !cells?.c) return;
-  for (const cell of cells.i || []) {
-    for (const neighbor of cells.c[cell] || []) {
-      if (neighbor <= cell) continue;
-      const cellLand = isLandCell(cell, map);
-      const neighborLand = isLandCell(neighbor, map);
-      if (cellLand === neighborLand) continue;
-      const waterCell = cellLand ? neighbor : cell;
-      const waterFeature = map.features.features[cells.f?.[waterCell]];
-      const isOcean = waterFeature?.type === "ocean";
-      if ((targetType === "ocean" && !isOcean) || (targetType === "lake" && isOcean)) continue;
-      const edge = sharedVoronoiEdge(map, cell, neighbor);
-      if (edge) pushWorldPolylineMesh(vertices, context, edge, color, widthWorld, {joinMode: "caps"});
+      if (isOcean && !drawCoastline) continue;
+      if (!isOcean && !drawLakeShore) continue;
+      const color = isOcean ? SHORE_VISUAL_STYLE.coastlineStroke : SHORE_VISUAL_STYLE.lakeShoreStroke;
+      const widthWorld = isOcean ? SHORE_VISUAL_STYLE.coastlineWidthWorld : SHORE_VISUAL_STYLE.lakeShoreWidthWorld;
+      if (smoothCellBorders) {
+        pushWorldPolylineMesh(vertices, context, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), color, widthWorld, {joinMode: "round"});
+      } else {
+        const edge = sharedVoronoiEdge(map, cell, neighbor);
+        if (edge) pushWorldPolylineMesh(vertices, context, edge, color, widthWorld, {joinMode: "caps"});
+      }
     }
   }
 }
