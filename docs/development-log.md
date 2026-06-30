@@ -10493,3 +10493,45 @@ pnpm run regress:rendering
 
 - 经济剩余 warn 主要是 `marketToMarket` 偏低、`marketToBurg` 个别偏高、`tradedGoods` 个别偏高和 `pollTaxExpected` 个别 case。
 - 如果继续经济，应优先做 source-style `buy / sell / runGlobalTrade` 小步替换：market→burg 不征税，burg→market 和 profitable market→market 按卖方税率征税，market→market 按 reserve、距离、运输成本和利润成交。
+
+### 军事数量校准第三刀：收紧小图 burg-backed 上限
+
+背景：
+
+- 经济交易金额校准后，full candidate 矩阵保持 `0 fail / 32 warn`，其中 `lateStages.military.regiments` 还剩 `4` 个 warn，全部为 candidate 数量偏高：
+  - `mediterranean / 10000 / audit-mediterranean-002`：source/candidate `106 / 159`。
+  - `highIsland / 10000 / audit-highIsland-002`：`69 / 111`。
+  - `highIsland / 100000 / audit-highIsland-003`：`137 / 223`。
+  - `pangea / 10000 / audit-pangea-003`：`86 / 140`。
+- 对照其它 100k 通过样例后，不能继续全局降低 target：例如 `mediterranean / 100000 / audit-mediterranean-001` 已经是 source/candidate `409 / 264`，继续压 100k 会把通过样例推向低估。
+- Bernoulli 只读复查确认，source 军事生成不是先定每州 regiment target，而是先按 rural / urban / naval 规则生成 platoon，再按兵力和空间邻近合并。candidate 当前仍是 per-state target + 网格分桶合并模型，本刀只做小图上限校准，不伪装成完整 source 复刻。
+
+修正：
+
+- `getBurgBackedRegimentTarget()` 保留原先随目标 cells 增长的 burg-backed 比例。
+- 对小图额外乘 `(0.75 + 0.25 * sqrt(cellsTarget / 100000))`：
+  - 100k 保持 `1`，不影响已偏低但通过的 100k 样例。
+  - 50k 轻微收紧。
+  - 10k 约为原上限的 `83%`，针对小图普遍 overcount。
+- 本刀不修改军队节点生成、单位人数、海军规则或 `groupNodes()` 合并逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\military.js`
+- 定点样例：
+  - `mediterranean / 10000 / audit-mediterranean-002`：candidate regiment 从 `159` 降到 `134`，source 为 `106`。
+  - `highIsland / 10000 / audit-highIsland-002`：从 `111` 降到 `92`，source 为 `69`。
+  - `pangea / 10000 / audit-pangea-003`：从 `140` 降到 `123`，source 为 `86`。
+  - `highIsland / 100000 / audit-highIsland-003`：保持 `223`，source 为 `137`，仍为唯一军事 warn。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过，quick 仍为 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `46 pass / 17 warn / 0 fail` 改为 `48 pass / 15 warn / 0 fail`。
+  - warn 总项从 `32` 降到 `29`。
+  - `lateStages.military.regiments` 从 `4` 个 warn 降到 `1` 个 warn。
+
+后续：
+
+- 军事剩余 warn 不应再靠继续压全局常数处理。下一步如果继续军事，应先补 per-state 诊断字段，例如 `rawTarget / burgBackedTarget / final target / landNodes / navalNodes / regiments`。
+- 更根本的方向是把 `groupNodes()` 逐步替换为 source-like platoon 空间合并：按兵力从小到大找近邻，用人口规模相关半径和 unit/separate 条件合并。
+- 矩阵剩余热点转为 `routes.searoutes`、`lateStages.zones.total`、`economy.deals.marketToMarket`、`routes.roads`、`economy.markets.stock.mean`、marker 数量和少量 tax / port 边缘项。

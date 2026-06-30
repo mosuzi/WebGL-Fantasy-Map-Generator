@@ -203,7 +203,8 @@ function getRegimentDensityFactor(cells) {
 function getBurgBackedRegimentTarget(burgs, options) {
   if (!burgs) return 0;
   const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
-  const burgRate = 0.1 + 0.14 * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1));
+  const scale = Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1));
+  const burgRate = (0.1 + 0.14 * scale) * (0.75 + 0.25 * scale);
   return Math.max(1, Math.ceil(burgs * burgRate));
 }
 
