@@ -837,7 +837,8 @@ function generateRouteSegments({pack, connections, groups, water, variation = nu
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
 
   for (const [feature, burgs] of entries) {
-    const edges = calculateUrquhartEdges(burgs.map(burg => routeCandidatePoint(burg, variation, water)));
+    const points = burgs.map(burg => routeCandidatePoint(burg, variation, water));
+    const edges = selectRouteEdges(calculateUrquhartEdges(points), points, water);
 
     for (const [fromId, toId] of edges) {
       const start = burgs[fromId].cell;
@@ -852,6 +853,15 @@ function generateRouteSegments({pack, connections, groups, water, variation = nu
   }
 
   return routeSegments;
+}
+
+function selectRouteEdges(edges, points, water) {
+  if (!water || edges.length < 12) return edges;
+  const keep = Math.max(1, Math.round(edges.length * 0.65));
+  if (keep >= edges.length) return edges;
+  return [...edges]
+    .sort((left, right) => distanceSquared(points[right[0]], points[right[1]]) - distanceSquared(points[left[0]], points[left[1]]))
+    .slice(0, keep);
 }
 
 function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null) {

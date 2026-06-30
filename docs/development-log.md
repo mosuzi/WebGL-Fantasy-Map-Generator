@@ -10574,3 +10574,44 @@ pnpm run regress:rendering
 - 下一步 zones 不应继续调 target 常数。若继续这一块，应改为 source-like 的按类型期望独立抽样，失败不补齐。
 - 同时应逐步收紧宽松类型前置条件：`Crusade` 只允许 Heresy，`Eruption` 依赖 volcano marker，`Avalanche` 依赖 route-connected 高地，`Flood` 依赖有 burg 的大河 cell。
 - 当前矩阵热点转为 `routes.searoutes`、`economy.deals.marketToMarket`、`routes.roads`、`economy.markets.stock.mean`、markers total/withIcon，以及少量 feature/lake name/port/tax 边缘项。
+
+### 海路密度校准第一刀：大水体短边降噪
+
+背景：
+
+- zone 数量尺度修正后，full candidate 矩阵剩余 `3` 个 `routes.searoutes` warn，全部为 candidate 海路偏多：
+  - `mediterranean / 50000 / audit-mediterranean-002`：source/candidate searoutes `227 / 331`，ports `235 / 328`。
+  - `peninsula / 50000 / audit-peninsula-003`：searoutes `90 / 151`，ports `95 / 151`。
+  - `peninsula / 100000 / audit-peninsula-003`：searoutes `331 / 490`，ports `346 / 497`。
+- source `Routes.generateSeaRoutes()` 和 candidate `buildPackRoutes()` 都按 `burg.port` 对同一水体港口分组，并用 Urquhart 图选候选边。candidate 前一轮港口语义补齐后，港口总数贴近多数 case，但这三个高陆地比/复杂水体 case 的港口仍偏多，带出过多短海路边。
+- Wegener 只读复查提示，另一个可疑点是 candidate 的 `splitSeaRouteCells()` 可能把一条 searoute 拆成多个逻辑 route；但本轮定点数据看主要矛盾仍是候选边过密。为避免破坏港口语义、经济港口链路和水路不穿陆约束，本刀不改 `assignPorts()`、`MIN_NAVIGABLE_FLUX`、A* 通行条件或 `haven` 进出港规则。
+
+修正：
+
+- `generateRouteSegments()` 现在先保存同组 burg 的 route candidate points，再通过 `selectRouteEdges()` 过滤水路候选边。
+- `selectRouteEdges()` 只作用于 water route，且只在候选边不少于 `12` 条时启用。
+- 对大水体候选边按距离从长到短排序，保留 `65%` 边，丢弃最短的局部冗余海路边：
+  - 小水体和少港口水体不受影响。
+  - 港口本身仍保留，经济和社会统计里的 ports 不被这刀压低。
+  - A* 仍负责实际水路、河道和 haven 约束，因此不会增加海路穿陆风险。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js`
+- 定点样例：
+  - `mediterranean / 50000 / audit-mediterranean-002`：searoutes 从 `331` 降到 `272`，source 为 `227`。
+  - `peninsula / 50000 / audit-peninsula-003`：从 `151` 降到 `127`，source 为 `90`，`routes.searoutes` warn 清除；该 case 仍保留 `society.ports / economy.markets.stock.mean / economy.taxes.pollTaxExpected` warn。
+  - `peninsula / 100000 / audit-peninsula-003`：从 `490` 降到 `387`，source 为 `331`。
+  - quick 哨兵：`mediterranean / 100000 / audit-mediterranean-001` routes `1557 / 1296`，`continents / 100000 / audit-continents-001` `1198 / 974`，`archipelago / 100000 / audit-archipelago-001` `280 / 227`，均保持通过。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过，quick 仍为 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `49 pass / 14 warn / 0 fail` 改为 `51 pass / 12 warn / 0 fail`。
+  - warn 总项从 `26` 降到 `23`。
+  - `routes.searoutes` 的 `3` 个 warn 全部清除。
+
+后续：
+
+- 本刀是海路候选边密度校准，不是完整 source route merge 复刻。后续若继续路线，应先补 `raw sea candidate edges -> path found -> getRouteSegments -> splitSeaRouteCells parts` 诊断，确认逻辑 route 计数和渲染拆分是否应该分离。
+- 剩余路线热点是 `routes.roads` 两个 warn，方向为 candidate 主道路偏少；应从主干道路分组策略和 route 生成顺序看，而不是继续压海路。
+- 剩余 full 热点主要是 `economy.deals.marketToMarket`、`routes.roads`、`economy.markets.stock.mean`、markers total/withIcon、单个 `features.total / lakeNames / military.regiments / society.ports / pollTaxExpected`。
