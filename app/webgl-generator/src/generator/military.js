@@ -35,6 +35,7 @@ export function buildMilitary(pack, options = {}) {
   const averageExpansion = average(validStates.map(state => state.expansionism || 1)) || 1;
   const stateCells = collectStateCells(cells, validStates);
   const stateBurgs = collectStateBurgs(pack.burgs || [], validStates);
+  const densityFactor = getRegimentDensityFactor(cells);
 
   for (const state of states) if (state) state.military = [];
 
@@ -43,7 +44,7 @@ export function buildMilitary(pack, options = {}) {
     state.alert = alert;
     const cellsForState = stateCells.get(state.i) || [];
     const burgsForState = stateBurgs.get(state.i) || [];
-    const target = getStateRegimentTarget(state, cellsForState, burgsForState, alert);
+    const target = getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor);
     const nodes = createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, random});
     state.military = createRegiments({pack, state, nodes, target});
   }
@@ -182,11 +183,19 @@ function getRuralTroops(pack, state, cell, unit, alert, random) {
   return round(population * unit.rural * 18 * alert * stateModifier * terrainModifier * cultureModifier * variance);
 }
 
-function getStateRegimentTarget(state, cellsForState, burgsForState, alert) {
+function getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor = 1) {
   const burgFactor = Math.sqrt(Math.max(1, burgsForState.length)) * 2.5;
   const cellFactor = Math.sqrt(Math.max(1, cellsForState.length)) * 0.18;
   const areaFactor = Math.sqrt(Math.max(1, state.area || 1)) * 0.02;
-  return clamp(Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert)), burgsForState.length ? 2 : 0, 26);
+  const minimum = burgsForState.length ? 1 : 0;
+  return clamp(Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor), minimum, 26);
+}
+
+function getRegimentDensityFactor(cells) {
+  let land = 0;
+  for (const cell of cells.i) if ((cells.h[cell] || 0) >= 20) land++;
+  const landRatio = land / Math.max(1, cells.i.length);
+  return clamp((landRatio - 0.5) / 0.45, 0.25, 1);
 }
 
 function getStateAlert(state, averageArea, averageExpansion) {

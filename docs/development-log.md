@@ -10131,3 +10131,32 @@ pnpm run regress:rendering
 
 - 下一刀优先校准军事生成。当前低陆地比群岛 source regiment `63`，candidate `267`，明显过量；大陆 case 也有 regiment warn。
 - zone 数量在群岛 case 仍为 warn，可在军事校准后继续处理。
+
+### 军事数量校准第一刀：低陆地比地图 regiment 过量
+
+背景：
+
+- quick matrix 刷新后，economy 全部通过，但 `archipelago / 100000 / audit-archipelago-001` 的 `lateStages.military.regiments` 为 source `63` / candidate `267`，触发 fail；`continents` 为 `272 / 475`，触发 warn。
+- source `military-generator.ts` 不是预设每州 regiment 目标数，而是先按 rural / burg population 生成 platoon，再以 `expected = 3 * populationRate` 为目标通过 quadtree 空间合并小 platoon。
+- candidate 当前实现先按 `sqrt(burgs) + sqrt(cells) + sqrt(area)` 计算每州 target，再 round-robin 把节点硬分成 target 组。这个策略在群岛和碎片国家里会接近“一城一团”。
+
+修正：
+
+- `getStateRegimentTarget()` 增加全图 pack 陆地密度因子：pack 陆地比例越低，target 越接近 source 的小规模合并结果；地中海这类高陆地比例地图基本不受影响。
+- 有城镇国家的最低 regiment 从 `2` 降为 `1`，避免微岛国家被下限强行膨胀。
+- 本刀不调整单位人数、artillery/fleet 组成，也不改为 source 的 quadtree 合并算法；这些属于后续更贴 source 的中风险重写。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/military.js`
+- 本地三例 100k 抽样：`mediterranean` regiments `468`，`continents` `356`，`archipelago` `79`。
+- `node tools/candidate-baseline-matrix.mjs --mode quick --refresh-candidate true --refresh-diff true` 通过刷新 3 个 100k candidate case：
+  - `mediterranean` source/candidate regiments `409 / 468`，pass。
+  - `continents` source/candidate regiments `272 / 356`，pass。
+  - `archipelago` source/candidate regiments `63 / 79`，pass。
+  - quick matrix 总体从 `fail` 降到 `warn`，唯一剩余 warn 为 `archipelago` 的 `lateStages.zones.total`，source `11` / candidate `3`。
+
+后续：
+
+- 下一刀处理 zone 数量。群岛 case 当前 zone 明显偏少，应该优先检查 `zones.js` 的目标数量和候选类型是否对低陆地比/多岛屿场景过度保守。
+- 若后续继续军事，应考虑 source 式 platoon 空间合并，代替当前 target round-robin 分组。
