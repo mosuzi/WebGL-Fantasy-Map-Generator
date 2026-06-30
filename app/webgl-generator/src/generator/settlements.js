@@ -5,6 +5,9 @@ import {createChineseNameGenerator} from "./names.js";
 import {createRandom} from "./random.js";
 
 const MIN_PASSABLE_SEA_TEMP = -4;
+const MIN_NAVIGABLE_FLUX = 100;
+const RIVER_ROUTE_TYPE_MODIFIER = 1.5;
+const NON_NAVIGABLE_LAKE_GROUPS = new Set(["dry", "frozen", "lava"]);
 
 export function buildSettlements(grid, features, politics, rivers, random, pack, options = {}) {
   const riverCells = new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells));
@@ -369,34 +372,51 @@ function anchorPackCell(pack, preferredCell, populated) {
 function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
   const {cells, features} = pack;
   const featurePortCandidates = new Map();
+  const riversById = new Map((pack.rivers || []).map(river => [river.i, river]));
+  const addCandidate = candidate => {
+    if (!candidate.portFeatureId) return;
+    if (!featurePortCandidates.has(candidate.portFeatureId)) featurePortCandidates.set(candidate.portFeatureId, []);
+    featurePortCandidates.get(candidate.portFeatureId).push(candidate);
+  };
 
   for (const burg of burgs) {
     if (!burg?.i) continue;
     burg.port = 0;
     const haven = cells.haven?.[burg.cell];
+    const landFeature = cells.f?.[burg.cell];
     const harbor = cells.harbor?.[burg.cell] || 0;
-    const featureId = cells.f?.[haven];
-    if (!featureId) continue;
 
-    const isMulticell = (features?.[featureId]?.cells || 0) > 1;
-    const isHarbor = (harbor && burg.capital) || harbor === 1;
-    const isFrozen = (grid.cells.temp?.[cells.g[burg.cell]] || 0) <= 0;
-    if (!isMulticell || !isHarbor || isFrozen) continue;
+    if (haven) {
+      const featureId = cells.f?.[haven];
+      const feature = features?.[featureId];
+      if (!featureId || !feature) continue;
 
-    if (!featurePortCandidates.has(featureId)) featurePortCandidates.set(featureId, []);
-    featurePortCandidates.get(featureId).push(burg);
+      const isMulticell = (feature.cells || 0) > 1;
+      const isHarbor = (harbor && burg.capital) || harbor === 1;
+      const isFrozen = (grid.cells.temp?.[cells.g[burg.cell]] || 0) <= 0;
+      const isNavigableLake = feature.type !== "lake" || !NON_NAVIGABLE_LAKE_GROUPS.has(feature.group);
+      if (!isMulticell || !harbor || isFrozen || !isNavigableLake) continue;
+
+      const portFeatureId = feature.type === "lake" && feature.outlet ? resolveLakeDrainFeature(pack, featureId, riversById) || featureId : featureId;
+      addCandidate({burg, haven, portFeatureId: Number(portFeatureId), landFeature, preferred: Boolean(isHarbor)});
+      continue;
+    }
+
+    if (!isNavigableRiverCell(cells, burg.cell)) continue;
+    const portFeatureId = resolveDrainFeature(pack, burg.cell, riversById);
+    if (!portFeatureId) continue;
+    addCandidate({burg, haven: null, portFeatureId: Number(portFeatureId), landFeature, preferred: true});
   }
 
-  for (const [featureId, candidates] of featurePortCandidates.entries()) {
-    if (candidates.length < 2) continue;
-    for (const burg of candidates) {
+  for (const candidates of featurePortCandidates.values()) {
+    for (const candidate of selectPortCandidates(pack, candidates)) {
+      const {burg, haven, portFeatureId} = candidate;
       const city = cities[burg.cityId];
-      const haven = cells.haven[burg.cell];
-      const [x, y] = getCloseToEdgePoint(pack, burg.cell, haven);
-      burg.port = Number(featureId);
+      const [x, y] = haven === null ? shiftTowardsRiverBank(pack, burg.cell, riversById) : getCloseToEdgePoint(pack, burg.cell, haven);
+      burg.port = portFeatureId;
       burg.x = x;
       burg.y = y;
-      city.port = Number(featureId);
+      city.port = portFeatureId;
       city.x = x;
       city.y = y;
       if (!city.name.endsWith("港") && !city.capital) {
@@ -421,12 +441,130 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
   for (const burg of burgs) {
     if (!burg?.i || burg.port || !cells.r?.[burg.cell]) continue;
     const city = cities[burg.cityId];
-    const shift = Math.min((cells.fl?.[burg.cell] || 0) / 150, 1);
-    burg.x = burg.cell % 2 ? round(burg.x + shift, 2) : round(burg.x - shift, 2);
-    burg.y = cells.r[burg.cell] % 2 ? round(burg.y + shift, 2) : round(burg.y - shift, 2);
+    const [x, y] = shiftTowardsRiverBank(pack, burg.cell, riversById);
+    burg.x = x;
+    burg.y = y;
     city.x = burg.x;
     city.y = burg.y;
   }
+}
+
+function selectPortCandidates(pack, candidates) {
+  const promoted = new Set();
+  const rank = candidate => (candidate.burg.capital ? -1000 : 0) + (candidate.haven !== null ? pack.cells.harbor?.[candidate.burg.cell] || 0 : 0);
+
+  for (const candidate of candidates) {
+    if (candidate.preferred) promoted.add(candidate);
+  }
+
+  const byLand = new Map();
+  for (const candidate of candidates) {
+    if (!byLand.has(candidate.landFeature)) byLand.set(candidate.landFeature, []);
+    byLand.get(candidate.landFeature).push(candidate);
+  }
+
+  for (const group of byLand.values()) {
+    if (group.some(candidate => promoted.has(candidate))) continue;
+    promoted.add(group.reduce((best, candidate) => (rank(candidate) < rank(best) ? candidate : best)));
+  }
+
+  if (promoted.size < 2) {
+    const rest = candidates.filter(candidate => !promoted.has(candidate)).sort((a, b) => rank(a) - rank(b));
+    for (const candidate of rest) {
+      promoted.add(candidate);
+      if (promoted.size >= 2) break;
+    }
+  }
+
+  return promoted.size >= 2 ? [...promoted] : [];
+}
+
+function isNavigableRiverCell(cells, cell) {
+  return Boolean(cells.r?.[cell]) && (cells.fl?.[cell] || 0) >= MIN_NAVIGABLE_FLUX;
+}
+
+function resolveLakeDrainFeature(pack, lakeFeatureId, riversById) {
+  const lake = pack.features?.[lakeFeatureId];
+  if (!lake || lake.type !== "lake") return null;
+  if (!lake.outlet) return lakeFeatureId;
+
+  const visited = new Set();
+  let river = riversById.get(lake.outlet);
+  while (river && !visited.has(river.i)) {
+    visited.add(river.i);
+    const featureId = riverDrainFeatureId(pack, river);
+    const feature = pack.features?.[featureId];
+    if (!feature) return null;
+    if (feature.type === "ocean") return feature.i;
+    if (feature.type !== "lake") return null;
+    if (!feature.outlet) return feature.i;
+    river = riversById.get(feature.outlet);
+  }
+
+  return null;
+}
+
+function resolveDrainFeature(pack, cell, riversById) {
+  const startRiver = pack.cells.r?.[cell];
+  if (!startRiver) return null;
+
+  const visited = new Set();
+  let river = riversById.get(startRiver);
+  while (river && !visited.has(river.i)) {
+    visited.add(river.i);
+    const featureId = riverDrainFeatureId(pack, river);
+    const feature = pack.features?.[featureId];
+    if (!feature) return null;
+    if (feature.type === "ocean") return feature.i;
+    if (feature.type !== "lake") return null;
+    if (!feature.outlet) return feature.i;
+    river = riversById.get(feature.outlet);
+  }
+
+  return null;
+}
+
+function riverDrainFeatureId(pack, river) {
+  const lastCell = river?.cells?.[river.cells.length - 1];
+  if (lastCell === undefined || lastCell < 0) return null;
+  return pack.cells.f?.[lastCell] ?? null;
+}
+
+function shiftTowardsRiverBank(pack, cell, riversById) {
+  const {cells} = pack;
+  const [x, y] = cells.p[cell];
+  const shift = Math.min((cells.fl?.[cell] || 0) / 200, 0.6);
+  const tangent = getRiverTangent(pack, cell, riversById);
+
+  if (!tangent) {
+    return [
+      round(cell % 2 ? x + shift : x - shift, 2),
+      round((cells.r?.[cell] || 0) % 2 ? y + shift : y - shift, 2)
+    ];
+  }
+
+  const [tx, ty] = tangent;
+  const length = Math.hypot(tx, ty);
+  const side = cell % 2 ? 1 : -1;
+  return [
+    round(x + (-ty / length) * shift * side, 2),
+    round(y + (tx / length) * shift * side, 2)
+  ];
+}
+
+function getRiverTangent(pack, cell, riversById) {
+  const river = riversById.get(pack.cells.r?.[cell]);
+  if (!river?.cells?.length) return null;
+  const index = river.cells.indexOf(cell);
+  if (index === -1) return null;
+
+  const previous = river.cells[index - 1];
+  const next = river.cells[index + 1];
+  const from = previous !== undefined && previous >= 0 ? pack.cells.p[previous] : pack.cells.p[cell];
+  const to = next !== undefined && next >= 0 ? pack.cells.p[next] : pack.cells.p[cell];
+  const tx = to[0] - from[0];
+  const ty = to[1] - from[1];
+  return tx || ty ? [tx, ty] : null;
 }
 
 function defineCityTypes(pack, cities, burgs) {
@@ -668,16 +806,17 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const variation = createRouteVariation(pack, options);
   const search = createRouteSearchScratch(pack.cells.i.length);
   const edgeKeyMultiplier = pack.cells.i.length + 1;
+  const riverEdges = buildRiverEdges(pack);
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges}))) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation, search, edgeKeyMultiplier}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation, search, edgeKeyMultiplier, riverEdges}))) {
     addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation, search, edgeKeyMultiplier}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation, search, edgeKeyMultiplier, riverEdges}))) {
     addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg});
   }
 
@@ -693,7 +832,7 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   return routes;
 }
 
-function generateRouteSegments({pack, connections, groups, water, variation = null, search, edgeKeyMultiplier}) {
+function generateRouteSegments({pack, connections, groups, water, variation = null, search, edgeKeyMultiplier, riverEdges = null}) {
   const routeSegments = [];
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
 
@@ -703,7 +842,7 @@ function generateRouteSegments({pack, connections, groups, water, variation = nu
     for (const [fromId, toId] of edges) {
       const start = burgs[fromId].cell;
       const end = burgs[toId].cell;
-      const pathCells = tracePackPath(pack, start, end, water, connections, variation, search, edgeKeyMultiplier);
+      const pathCells = tracePackPath(pack, start, end, water, connections, variation, search, edgeKeyMultiplier, riverEdges);
 
       for (const cells of getRouteSegments(pathCells, connections, edgeKeyMultiplier)) {
         addConnections(cells, connections, edgeKeyMultiplier);
@@ -715,7 +854,7 @@ function generateRouteSegments({pack, connections, groups, water, variation = nu
   return routeSegments;
 }
 
-function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1) {
+function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null) {
   if (start === end) return [];
 
   const open = new MinPriorityQueue();
@@ -734,13 +873,21 @@ function tracePackPath(pack, start, end, water, connections, variation = null, s
 
     for (const neighbor of pack.cells.c[current] || []) {
       if (search.closed[neighbor] === runId) continue;
-      if (neighbor === end) {
+      if (neighbor === end && !water) {
+        search.cameFrom[neighbor] = current;
+        return reconstructPath(search.cameFrom, neighbor);
+      }
+      if (neighbor === end && water && canReachWaterRouteExit(pack, current, end, riverEdges)) {
         search.cameFrom[neighbor] = current;
         return reconstructPath(search.cameFrom, neighbor);
       }
 
-      const step = packRouteStepCost(pack, current, neighbor, water, connections, variation, edgeKeyMultiplier);
+      const step = packRouteStepCost(pack, current, neighbor, water, connections, variation, edgeKeyMultiplier, riverEdges);
       if (!Number.isFinite(step)) continue;
+      if (neighbor === end) {
+        search.cameFrom[neighbor] = current;
+        return reconstructPath(search.cameFrom, neighbor);
+      }
       const tentative = getRouteBest(search, runId, current) + step;
       if (tentative >= getRouteBest(search, runId, neighbor)) continue;
       setRouteBest(search, runId, neighbor, tentative, current);
@@ -751,14 +898,33 @@ function tracePackPath(pack, start, end, water, connections, variation = null, s
   return [];
 }
 
-function packRouteStepCost(pack, current, next, water, connections, variation = null, edgeKeyMultiplier = pack.cells.i.length + 1) {
+function canReachWaterRouteExit(pack, current, exit, riverEdges) {
+  if (riverEdges?.get(current)?.has(exit)) return true;
+  if (pack.cells.h[current] >= 20) return false;
+  const haven = pack.cells.haven?.[exit];
+  return !haven || current === haven;
+}
+
+function packRouteStepCost(pack, current, next, water, connections, variation = null, edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null) {
   const height = pack.cells.h[next];
   const distanceCost = distanceSquared(pack.cells.p[current], pack.cells.p[next]);
   const connected = connections.has(routeEdgeKey(current, next, edgeKeyMultiplier)) ? 0.5 : 1;
   const variationFactor = variation?.cellCost?.[next] || 1;
 
   if (water) {
-    if (height >= 20) return Infinity;
+    if (height >= 20) {
+      if (!isNavigableRiverCell(pack.cells, next)) return Infinity;
+      if (!riverEdges?.get(current)?.has(next)) return Infinity;
+      return distanceCost * RIVER_ROUTE_TYPE_MODIFIER * connected * variationFactor;
+    }
+    if (pack.cells.h[current] >= 20) {
+      if (pack.cells.r?.[current]) {
+        if (!riverEdges?.get(current)?.has(next)) return Infinity;
+      } else {
+        const haven = pack.cells.haven?.[current];
+        if (haven && haven !== next) return Infinity;
+      }
+    }
     if ((pack.cells.temp?.[next] || 0) < MIN_PASSABLE_SEA_TEMP) return Infinity;
     const typeModifier = pack.cells.t[next] === -1 ? 1 : pack.cells.t[next] === -2 ? 1.8 : pack.cells.t[next] === -3 ? 4 : pack.cells.t[next] === -4 ? 6 : 8;
     return distanceCost * typeModifier * connected * variationFactor;
@@ -771,6 +937,23 @@ function packRouteStepCost(pack, current, next, water, connections, variation = 
   const heightModifier = 1 + Math.max(height - 25, 25) / 25;
   const burgModifier = pack.cells.burg?.[next] ? 1 : 3;
   return distanceCost * habitabilityModifier * heightModifier * connected * burgModifier * variationFactor;
+}
+
+function buildRiverEdges(pack) {
+  const edges = new Map();
+  for (const river of pack.rivers || []) {
+    const cells = river?.cells || [];
+    for (let index = 0; index < cells.length - 1; index++) {
+      const left = cells[index];
+      const right = cells[index + 1];
+      if (left < 0 || right < 0) continue;
+      if (!edges.has(left)) edges.set(left, new Set());
+      if (!edges.has(right)) edges.set(right, new Set());
+      edges.get(left).add(right);
+      edges.get(right).add(left);
+    }
+  }
+  return edges;
 }
 
 function getRouteSegments(pathCells, connections, edgeKeyMultiplier) {
@@ -905,7 +1088,7 @@ function splitSeaRouteCells(pack, cells) {
     const cell = cells[index];
     part.push(cell);
 
-    if (index < cells.length - 1 && pack.cells.h[cell] >= 20) {
+    if (index < cells.length - 1 && pack.cells.h[cell] >= 20 && !isNavigableRiverCell(pack.cells, cell)) {
       if (part.length > 1) parts.push(part);
       part = [cell];
     }
@@ -956,6 +1139,7 @@ function routeMajorityCellValue(pack, cells, field) {
 }
 
 function calculateUrquhartEdges(points) {
+  if (points.length === 2) return [[0, 1]];
   if (points.length < 3) return [];
 
   const delaunay = Delaunator.from(points);

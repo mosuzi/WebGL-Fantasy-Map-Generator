@@ -10400,3 +10400,53 @@ pnpm run regress:rendering
 
 - 当前最大 warn 热点转为 `society.ports`（10 个 warn），其次是 `economy.deals.value`（5 个 warn）和 `lateStages.military.regiments`（4 个 warn）。
 - 下一刀如果继续矩阵收敛，优先评估港口数量偏低：这可能牵连 searoutes、markets、naval culture 和 burg type，改动前应先只读对比 source 港口选址规则。
+
+### 港口、河港与海路 source 语义补齐第一刀
+
+背景：
+
+- 经济 product 校准后，full 矩阵仍保持 `0 fail`，但 `society.ports` 是最大 warn 热点，共 `10` 个 warn。
+- 典型偏差集中在港口偏低：
+  - `mediterranean / 10000 / audit-mediterranean-003`：港口 source/candidate `216 / 117`。
+  - `continents / 10000 / audit-continents-001`：`152 / 78`。
+  - `lowIsland / 50000 / audit-lowIsland-001`：`258 / 126`。
+- source 复查确认 `assignPorts()` 不只提升安全海港，还会把可通航河流上的内陆 burg 按最终出海或入湖水体提升为 river port。candidate 旧逻辑只处理 safe harbor / 首都 harbor，并把非港河边 burg 轻微挪到河岸，没有设置 `burg.port`。
+
+修正：
+
+- `shiftPortsAndRiverBurgs()` 改为 source-like 候选收集：
+  - `haven` 按 truthy 语义判断，避免 `Uint32Array` 默认 `0` 吞掉 river port 分支。
+  - 普通 coastal harbor 也可入池；safe harbor / 首都港只作为 `preferred`。
+  - 排除 `dry / frozen / lava` 湖泊。
+  - 湖港若有 outlet，会沿下游 river / lake outlet 解析最终承载水体。
+  - 河港要求 `pack.cells.r[cell]` 且 `pack.cells.fl[cell] >= 100`，并沿河流和湖泊 outlet 解析最终承载水体。
+- 港口选择器补齐 source 规则：先晋升 preferred，再保证同一水体每个 land feature 至少有一个候选，不足两个端点时补齐，最终少于两个端点则不设港。
+- 河港和非港河边 burg 的位置偏移改为按河道局部切线挪到河岸。
+- 海路 A* 成本补齐 riverEdges：
+  - 水路可沿可通航河道进出河港。
+  - 普通海港作为终点时允许从对应 haven 入港。
+  - 普通海港离港时必须从 haven 出海。
+  - 非可通航河道的陆地仍不可作为海路中段。
+- `calculateUrquhartEdges()` 补齐 `2` 个点时直接返回 `[[0, 1]]`，避免刚好两个港口的水体没有海路。
+
+验证：
+
+- 两个只读子智能体参与：
+  - Cicero 复查 source `assignPorts()` / `Rivers.resolveDrainFeature()`，指出 `haven` truthy、普通 harbor 候选和 river port 规则。
+  - Hilbert 复查当前 diff，指出普通 coastal 港口终点需要 source-like exit 谓词，以及两港口 Urquhart 特判。
+- `node --check app\webgl-generator\src\generator\settlements.js`
+- `git diff --check`
+- 定点样例：
+  - `mediterranean / 10000 / audit-mediterranean-003` 港口从 `117` 提升到 `202`，source 为 `216`；海路从 `115` 提升到 `168`，source 为 `181`。
+  - `continents / 10000 / audit-continents-001` 港口从 `78` 提升到 `150`，source 为 `152`。
+  - `lowIsland / 50000 / audit-lowIsland-001` 港口从 `126` 提升到 `242`，source 为 `258`；海路为 `239`，source 为 `235`。
+  - quick 100k 三样例保持 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `39 pass / 24 warn / 0 fail` 改为 `44 pass / 19 warn / 0 fail`。
+  - `society.ports` 从 `10` 个 warn 降为 `1` 个 warn。
+
+后续：
+
+- 剩余热点转为 `economy.deals.value`、`lateStages.military.regiments`、`routes.searoutes`、`lateStages.zones.total` 和少量 market / tax 指标。
+- 港口和海路已无硬 fail；后续若继续海路，应优先复刻 source 的 route river run / meander 几何，而不是再通过拆分 route 调数量。
