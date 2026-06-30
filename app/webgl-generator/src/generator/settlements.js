@@ -808,7 +808,7 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const edgeKeyMultiplier = pack.cells.i.length + 1;
   const riverEdges = buildRiverEdges(pack);
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length}))) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg});
   }
 
@@ -832,7 +832,7 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   return routes;
 }
 
-function generateRouteSegments({pack, connections, groups, water, variation = null, search, edgeKeyMultiplier, riverEdges = null}) {
+function generateRouteSegments({pack, connections, groups, water, variation = null, search, edgeKeyMultiplier, riverEdges = null, maxVisited = null}) {
   const routeSegments = [];
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
 
@@ -843,7 +843,7 @@ function generateRouteSegments({pack, connections, groups, water, variation = nu
     for (const [fromId, toId] of edges) {
       const start = burgs[fromId].cell;
       const end = burgs[toId].cell;
-      const pathCells = tracePackPath(pack, start, end, water, connections, variation, search, edgeKeyMultiplier, riverEdges);
+      const pathCells = tracePackPath(pack, start, end, water, connections, variation, search, edgeKeyMultiplier, riverEdges, maxVisited);
 
       for (const cells of getRouteSegments(pathCells, connections, edgeKeyMultiplier)) {
         addConnections(cells, connections, edgeKeyMultiplier);
@@ -864,12 +864,12 @@ function selectRouteEdges(edges, points, water) {
     .slice(0, keep);
 }
 
-function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null) {
+function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null, maxVisitedOverride = null) {
   if (start === end) return [];
 
   const open = new MinPriorityQueue();
   const runId = beginRouteSearch(search);
-  const maxVisited = Math.min(pack.cells.i.length, water ? 22000 : 14000);
+  const maxVisited = Math.min(pack.cells.i.length, maxVisitedOverride ?? (water ? 22000 : 14000));
   let visited = 0;
 
   setRouteBest(search, runId, start, 0, -1);

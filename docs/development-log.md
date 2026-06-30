@@ -10654,3 +10654,38 @@ pnpm run regress:rendering
 - 不要继续通过提高固定链接数来追 market-to-market；50k 岛屿类已经接近上限，粗调会重新引入 fail。
 - 后续经济应进入 source-style global trade：按商品拆 exporter/importer，考虑库存 reserve、价格、距离运输成本、卖方税率和最小利润，再生成 market-to-market deal。
 - 其它经济剩余项集中在 `archipelago / 10000 / audit-archipelago-001` 的 market 数、plaza、goodsEntries、stock mean 和 `peninsula / 50000 / audit-peninsula-003` 的 stock mean / pollTaxExpected。
+
+### 主道路寻路预算校准
+
+背景：
+
+- full 矩阵剩余 `2` 个 `routes.roads` warn，都是 100k 大陆型地图 candidate 主路偏少：
+  - `continents / 100000 / audit-continents-003`：source/candidate roads `38 / 11`。
+  - `pangea / 100000 / audit-pangea-003`：source/candidate roads `31 / 8`。
+- source `findPath()` 没有访问上限；candidate 的 pack 陆路 A* 为所有陆路统一限制 `14000` 个访问 cell，长距离首都主路容易提前耗尽。
+- 本刀不放宽陆路通行条件，不允许陆路穿水，也不改 trails / searoutes 的访问预算。
+
+修正：
+
+- `generateRouteSegments()` 增加可选 `maxVisited` 参数，并透传给 `tracePackPath()`。
+- 仅国家主路 `capitalBurgs` 这一轮传入 `maxVisited: pack.cells.i.length`。
+- 省内 trail 仍保持默认 `14000`，searoute 仍保持默认 `22000`。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js`
+- `git diff --check`
+- 定点样例：
+  - `continents / 100000 / audit-continents-003`：roads 从 `11` 提到 `13`，source 为 `38`，`routes.roads` 从 warn 变 pass。
+  - `pangea / 100000 / audit-pangea-003`：roads 从 `8` 提到 `13`，source 为 `31`，`routes.roads` 从 warn 变 pass。
+  - 陆路穿水仍为 `0`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过，quick 仍为 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `53 pass / 10 warn / 0 fail` 改为 `55 pass / 8 warn / 0 fail`。
+  - `routes.roads` 的 `2` 个 warn 全部清除。
+
+后续：
+
+- 后续路线如果继续推进，应优先复刻 source 的 `searoutes -> roads -> trails` 顺序和 route split/merge 诊断，而不是放宽陆路通行条件。
+- 当前剩余热点更适合转向 marker 逐类型生成、少量经济边缘项、单个 military warn 和湖泊/feature 单例。
