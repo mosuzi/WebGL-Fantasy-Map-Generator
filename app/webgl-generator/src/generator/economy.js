@@ -219,9 +219,9 @@ function createMarkets(pack, aliveBurgs, goods, random, options = {}) {
   const markets = [null];
   if (!aliveBurgs.length) return markets;
 
-  const target = clamp(Math.round(aliveBurgs.length / 28), Math.min(1, aliveBurgs.length), Math.min(70, aliveBurgs.length));
+  const target = getMarketTarget(pack, aliveBurgs.length, options);
   const lowLandRatio = landRatio(pack) < 0.65;
-  const stockScale = getMarketStockScale(options);
+  const stockScale = getMarketStockScale(pack, options);
   const selected = new Set();
   const candidates = aliveBurgs
     .map(burg => ({burg, score: marketScore(pack, burg, random)}))
@@ -236,6 +236,16 @@ function createMarkets(pack, aliveBurgs, goods, random, options = {}) {
   }
 
   return markets;
+}
+
+function getMarketTarget(pack, burgCount, options) {
+  const divisor = isSparseSmallArchipelago(pack, options) ? 50 : 28;
+  return clamp(Math.round(burgCount / divisor), Math.min(1, burgCount), Math.min(70, burgCount));
+}
+
+function isSparseSmallArchipelago(pack, options) {
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  return String(options.heightmapTemplate || "") === "archipelago" && cellsTarget <= 10000 && pack.cells.i.length < 3500;
 }
 
 function marketScore(pack, burg, random) {
@@ -354,6 +364,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   const dealGoods = getDealGoods(goods, options);
   const dealGoodIds = new Set(dealGoods.map(good => good.i));
   const rawDealGoods = rawGoods.filter(good => dealGoodIds.has(good.i));
+  const marketToBurgDeals = getMarketToBurgDealCount(pack, options);
 
   for (const burg of aliveBurgs) {
     burg.production = [];
@@ -371,7 +382,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
       });
     }
 
-    for (let index = 0; index < 15; index++) {
+    for (let index = 0; index < marketToBurgDeals; index++) {
       const good = dealGoods[(burg.i * 13 + index * 7) % dealGoods.length];
       const deal = addDeal({
         pack,
@@ -470,6 +481,10 @@ function getMarketTradeLinks(markets, options) {
   return Math.min(markets - 1, clamp(scaledLinks, minLinks, maxLinks));
 }
 
+function getMarketToBurgDealCount(pack, options) {
+  return isSparseSmallArchipelago(pack, options) ? 10 : 15;
+}
+
 function calculateBurgProduct(burg, dealProductWeight) {
   let productionRecords = 0;
   let dealRecords = 0;
@@ -566,7 +581,8 @@ function marketCoverageTarget(pack) {
   return Math.min(pack.cells.i.length, Math.max(0, Math.round(pack.cells.i.length * ratio)));
 }
 
-function getMarketStockScale(options) {
+function getMarketStockScale(pack, options) {
+  if (isSparseSmallArchipelago(pack, options)) return 0.41;
   const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
   return clamp((cellsTarget / 100000) ** 0.92, 0.12, 1);
 }

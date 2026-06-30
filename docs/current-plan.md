@@ -4,19 +4,19 @@
 
 ## 2026-07-01 最新推进队列
 
-当前 focus 仍是 source/candidate full 矩阵 warn 收敛。最新 full candidate 矩阵为 `58 pass / 5 warn / 0 fail`，已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点和 50k 群岛 `tradedGoods` 单项。
+当前 focus 仍是 source/candidate full 矩阵 warn 收敛。最新 full candidate 矩阵为 `58 pass / 5 warn / 0 fail`，warn 总项已降至 `9`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项，以及 10k 稀疏群岛的市场总数、plaza、goodsEntries、stock mean 和 market-to-burg 交易量告警。
 
 剩余 warn case：
 
 - `continents-10000-audit-continents-001`：`features.total`。
 - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
-- `archipelago-10000-audit-archipelago-001`：`lateStages.names.burgNames`、`lateStages.names.burgCoas`、`lateStages.statistics.burgsWithPopulation`、`economy.markets.total`、`economy.markets.plazaBurgs`、`economy.markets.goodsEntries`、`economy.markets.stock.mean`、`economy.deals.marketToBurg`。
+- `archipelago-10000-audit-archipelago-001`：`lateStages.names.burgNames`、`lateStages.names.burgCoas`、`lateStages.statistics.burgsWithPopulation`。
 - `highIsland-100000-audit-highIsland-003`：`lateStages.military.regiments`。
 - `peninsula-50000-audit-peninsula-003`：`society.ports`、`economy.markets.stock.mean`、`economy.taxes.pollTaxExpected`。
 
 下一步优先级：
 
-1. 经济小图和群岛边缘项：不要继续调固定全局常数，优先补 source-style 市场、plaza、stock、market-to-burg 和 global trade 诊断。
+1. `archipelago-10000-audit-archipelago-001` 剩余项已经回到城镇数量派生问题；不要再调经济常数，先复查 source 城镇 spacing、populated cell 和 burg naming 统计。
 2. 单例项：`features.total / lakeNames / military.regiments / society.ports / pollTaxExpected` 需要先做定点只读复查，再决定是否值得改生成逻辑。
 3. marker 后续只做细节语义补齐：当前数量热点已清除，后续不要为了单个类型继续扩大总量。
 

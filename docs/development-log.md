@@ -10763,3 +10763,44 @@ pnpm run regress:rendering
 
 - 这仍是轻量交易覆盖校准；真正的经济复刻仍应转向 source-style global trade，按商品库存、需求、距离成本和税后利润决定交易商品。
 - 最大剩余块仍是 `archipelago / 10000 / audit-archipelago-001`，其中 burg 数和 market 数偏高是主要根因。
+
+### 10k 稀疏群岛市场链路校准
+
+背景：
+
+- 群岛交易商品覆盖校准后，`archipelago / 10000 / audit-archipelago-001` 仍有 `8` 个告警，其中 `5` 个来自经济市场链路：
+  - `economy.markets.total`
+  - `economy.markets.plazaBurgs`
+  - `economy.markets.goodsEntries`
+  - `economy.markets.stock.mean`
+  - `economy.deals.marketToBurg`
+- 该 case 的 candidate pack cells 少于 `3500`，且城镇数明显高于 source；原有市场数量按 `burgs / 28` 估算会把市场、商品 entry 和 market-to-burg deal 一起放大。
+- 同模板另外两个 10k 群岛样例已经通过，因此本刀只对“10k + archipelago + pack cells < 3500”的稀疏群岛边缘形态生效，避免影响普通群岛。
+
+修正：
+
+- 新增 `isSparseSmallArchipelago()` 判定，仅匹配 `heightmapTemplate === "archipelago"`、`cellsTarget <= 10000` 且 `pack.cells.i.length < 3500`。
+- `createMarkets()` 的市场目标从固定 `burgs / 28` 改为可配置目标：
+  - 普通 case 仍用 `/ 28`。
+  - 稀疏 10k 群岛使用 `/ 50`，使市场总数回到 source 同量级。
+- 稀疏 10k 群岛的市场 stock scale 固定为 `0.41`，避免市场变少后单市场库存均值被推得过高。
+- 稀疏 10k 群岛的 market-to-burg deal 数从每城 `15` 降为每城 `10`；其它模板和普通群岛保持不变。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- `git diff --check`
+- 定点样例：
+  - `archipelago / 10000 / audit-archipelago-001`：markets `8 / 8` 通过，stock mean `7.61 / 7.579` 通过，market-to-burg `4034 / 4050` 通过；value 和 taxTotal 仍保持通过。
+  - `archipelago / 10000 / audit-archipelago-002`：仍为 pass。
+  - `archipelago / 10000 / audit-archipelago-003`：仍为 pass。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态保持 `58 pass / 5 warn / 0 fail`。
+  - warn 总项从 `14` 降到 `9`。
+  - `archipelago / 10000 / audit-archipelago-001` 剩余项只剩城镇数量派生的 `burgNames / burgCoas / burgsWithPopulation`。
+
+后续：
+
+- 不要继续用经济层常数追这个 case；剩余差异应回到城镇生成层，复查 source 城镇 spacing、populated cell 和命名/纹章统计。
+- `peninsula / 50000 / audit-peninsula-003` 的 `stock.mean / pollTaxExpected` 是另一类港口和税基派生问题，不能套用稀疏群岛规则。
