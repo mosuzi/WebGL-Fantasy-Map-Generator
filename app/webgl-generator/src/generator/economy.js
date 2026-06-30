@@ -456,8 +456,9 @@ function getMarketTradeLinks(markets, options) {
   if (markets < 2) return 0;
   const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
   const maxLinks = markets < 16 ? 6 : 14;
+  const minLinks = markets < 16 ? 5 : 10;
   const scaledLinks = Math.round(5 + (maxLinks - 5) * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1)));
-  return Math.min(markets - 1, clamp(scaledLinks, 5, maxLinks));
+  return Math.min(markets - 1, clamp(scaledLinks, minLinks, maxLinks));
 }
 
 function calculateBurgProduct(burg, dealProductWeight) {

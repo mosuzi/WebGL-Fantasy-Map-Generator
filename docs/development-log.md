@@ -10615,3 +10615,42 @@ pnpm run regress:rendering
 - 本刀是海路候选边密度校准，不是完整 source route merge 复刻。后续若继续路线，应先补 `raw sea candidate edges -> path found -> getRouteSegments -> splitSeaRouteCells parts` 诊断，确认逻辑 route 计数和渲染拆分是否应该分离。
 - 剩余路线热点是 `routes.roads` 两个 warn，方向为 candidate 主道路偏少；应从主干道路分组策略和 route 生成顺序看，而不是继续压海路。
 - 剩余 full 热点主要是 `economy.deals.marketToMarket`、`routes.roads`、`economy.markets.stock.mean`、markers total/withIcon、单个 `features.total / lakeNames / military.regiments / society.ports / pollTaxExpected`。
+
+### 经济 market-to-market 小图下限校准
+
+背景：
+
+- 海路密度校准后，full candidate 矩阵剩余 `2` 个 `economy.deals.marketToMarket` warn，全部是 `mediterranean / 10000` 下 candidate 偏少：
+  - `mediterranean / 10000 / audit-mediterranean-001`：source/candidate `636 / 264`。
+  - `mediterranean / 10000 / audit-mediterranean-003`：`792 / 312`。
+- Planck 只读复查确认 source 的 market-to-market 交易来自 `Markets.runGlobalTrade()`：按每个商品的库存盈余、缺口、价格差、距离成本和出口方销售税寻找 profitable opportunity，成交后移动库存并更新价格；不是固定每个 market 连几条边。
+- candidate 当前仍是轻量合成模型：每个 market 固定生成 `getMarketTradeLinks()` 条 market-to-market deal。10k 下该函数按 cells 规模只给约 `8` 条链接，因此两个地中海 10k case 偏低；而 50k/100k 已在原增长曲线下较稳。
+
+修正：
+
+- 先试过把 `16` 个以上市场的链接数直接固定到 `14`，两个地中海 10k case 会过线，但 full 矩阵在 `archipelago / 50000 / audit-archipelago-003`、`lowIsland / 50000 / audit-lowIsland-001` 等 case 引入 `marketToMarket` fail；该方案已回退。
+- 当前保守方案：
+  - `markets < 16` 仍保持 `minLinks = 5`、`maxLinks = 6`。
+  - `markets >= 16` 的 `minLinks` 从 `5` 提到 `10`。
+  - 原有 `cellsTarget` 平方根增长和 `maxLinks = 14` 保持不变。
+- 本刀不改 deal value scale、税额公式、市场数量、库存、价格和 `marketToBurg / burgToMarket` 交易条数。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- 定点样例：
+  - `mediterranean / 10000 / audit-mediterranean-001`：market-to-market 从 `264` 提到 `330`，source 为 `636`；value `49917.084`，source `54339.731`；tax `4542.875`，source `5271.039`。
+  - `mediterranean / 10000 / audit-mediterranean-003`：从 `312` 提到 `390`，source 为 `792`；value `59047.861`，source `65479.28`；tax `5664.027`，source `6278.44`。
+  - 回归观察：`archipelago / 50000 / audit-archipelago-003` market-to-market `176`，source `123`；`lowIsland / 50000 / audit-lowIsland-001` `352`，source `249`；`pangea / 50000 / audit-pangea-001` `341`，source `260`，均未引入 fail。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过，quick 仍为 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `51 pass / 12 warn / 0 fail` 改为 `53 pass / 10 warn / 0 fail`。
+  - warn 总项从 `23` 降到 `21`。
+  - `economy.deals.marketToMarket` 从 `2` 个 warn 降到 `0`。
+
+后续：
+
+- 不要继续通过提高固定链接数来追 market-to-market；50k 岛屿类已经接近上限，粗调会重新引入 fail。
+- 后续经济应进入 source-style global trade：按商品拆 exporter/importer，考虑库存 reserve、价格、距离运输成本、卖方税率和最小利润，再生成 market-to-market deal。
+- 其它经济剩余项集中在 `archipelago / 10000 / audit-archipelago-001` 的 market 数、plaza、goodsEntries、stock mean 和 `peninsula / 50000 / audit-peninsula-003` 的 stock mean / pollTaxExpected。
