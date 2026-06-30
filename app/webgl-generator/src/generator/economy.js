@@ -350,6 +350,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   const statesById = new Map(states.map(state => [state.i, state]));
   const localProductionRate = getLocalProductionRate(options);
   const dealProductWeight = getDealProductWeight(options);
+  const dealValueScale = getDealValueScale(options);
 
   for (const burg of aliveBurgs) {
     burg.production = [];
@@ -380,7 +381,8 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         buyerType: "burg",
         buyer: burg.i,
         units: 1,
-        price: marketPrice(pack.markets[burg.market], good.i)
+        price: marketPrice(pack.markets[burg.market], good.i),
+        valueScale: dealValueScale
       });
       burg.production.push({dealId: deal.i});
     }
@@ -398,7 +400,8 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         buyerType: "market",
         buyer: burg.market,
         units: 0.8 + (index % 2) * 0.2,
-        price: marketPrice(pack.markets[burg.market], goodId) * 0.75
+        price: marketPrice(pack.markets[burg.market], goodId) * 0.75,
+        valueScale: dealValueScale
       });
       burg.production.push({dealId: deal.i});
     }
@@ -425,7 +428,8 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         buyerType: "market",
         buyer: buyer.i,
         units: 1.5 + (index % 3) * 0.25,
-        price: marketPrice(market, good.i)
+        price: marketPrice(market, good.i),
+        valueScale: dealValueScale
       });
     }
   }
@@ -473,11 +477,16 @@ function getDealProductWeight(options) {
   return 0.8 * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1));
 }
 
-function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price}) {
+function getDealValueScale(options) {
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  return clamp((cellsTarget / 100000) ** 0.18, 0.66, 1);
+}
+
+function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1}) {
   const sellerState = partyState(pack, sellerType, seller);
   const salesTax = statesById.get(sellerState)?.salesTax || 0.15;
   const roundedUnits = round(units);
-  const roundedPrice = round(price);
+  const roundedPrice = round(price * valueScale);
   const taxable = deals.length % 5 === 0;
   const tax = taxable ? round(roundedUnits * roundedPrice * salesTax * 3) : 0;
   const deal = {

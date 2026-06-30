@@ -10450,3 +10450,46 @@ pnpm run regress:rendering
 
 - 剩余热点转为 `economy.deals.value`、`lateStages.military.regiments`、`routes.searoutes`、`lateStages.zones.total` 和少量 market / tax 指标。
 - 港口和海路已无硬 fail；后续若继续海路，应优先复刻 source 的 route river run / meander 几何，而不是再通过拆分 route 调数量。
+
+### 经济交易金额尺度校准第一刀
+
+背景：
+
+- 港口、河港与海路补齐后，full 矩阵仍保持 `0 fail`，但经济交易金额和税额成为新热点：
+  - `economy.deals.value`：`5` 个 warn。
+  - `economy.deals.taxTotal`：`2` 个 warn。
+  - `economy.taxes.dealTaxTotal`：`2` 个 warn。
+- 典型 10k 偏差：
+  - `mediterranean / 10000 / audit-mediterranean-002`：value source/candidate `45388.892 / 86003.52`，tax `4832.035 / 7871.379`。
+  - `peninsula / 10000 / audit-peninsula-002`：value `39381.302 / 66275.46`，tax `3076.424 / 6103.537`。
+  - `pangea / 10000 / audit-pangea-003`：value `48230.932 / 77428.955`。
+- source 复查确认 `deals.value` 是 baseline 摘要里的 `sum(deal.units * deal.price)`；source 的真实交易链路会按库存、供需、margin、market pressure、运输成本、利润和卖方税率决定成交金额。candidate 当前仍是轻量合成模型，尚未复刻完整 `buy / sell / runGlobalTrade`。
+
+修正：
+
+- `addDeal()` 新增 `valueScale` 参数，用于温和缩放成交价格和对应税额。
+- `createProductionAndDeals()` 统一传入 `dealValueScale`：
+  - 100k 保持 `1`，避免影响 quick 100k 守门样例。
+  - 50k 约 `0.88`。
+  - 10k 约 `0.66`。
+- 本刀不改交易条数、市场选择、库存、商品覆盖或税率公式；`marketToMarket` 偏低和 `marketToBurg` 个别偏高留给后续 source-style 交易重写。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- 定点样例：
+  - `mediterranean / 10000 / audit-mediterranean-002`：value 改为 `56822.396`，tax 改为 `5200.471`。
+  - `continents / 10000 / audit-continents-003`：value 改为 `41987.8`，source 为 `38728.043`。
+  - `peninsula / 10000 / audit-peninsula-002`：value 改为 `43788.269`，tax 改为 `4032.585`。
+  - `mediterranean / 100000 / audit-mediterranean-001`：100k value / tax 仍保持同量级，没有引入 quick 回退。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过，quick 仍为 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `44 pass / 19 warn / 0 fail` 改为 `46 pass / 17 warn / 0 fail`。
+  - warn 总项从 `41` 降到 `32`。
+  - `economy.deals.value / taxTotal / economy.taxes.dealTaxTotal` 不再进入热点。
+
+后续：
+
+- 经济剩余 warn 主要是 `marketToMarket` 偏低、`marketToBurg` 个别偏高、`tradedGoods` 个别偏高和 `pollTaxExpected` 个别 case。
+- 如果继续经济，应优先做 source-style `buy / sell / runGlobalTrade` 小步替换：market→burg 不征税，burg→market 和 profitable market→market 按卖方税率征税，market→market 按 reserve、距离、运输成本和利润成交。
