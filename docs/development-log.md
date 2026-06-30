@@ -10223,3 +10223,40 @@ pnpm run regress:rendering
 
 - 下一刀优先军事第二刀。full 矩阵仍有 `lateStages.military.regiments` 的 `15` 个 fail 和 `23` 个 warn，主要集中在 10k、50k 和 highIsland / lowIsland 这类地图；第一刀的陆地密度因子只保证了 quick 100k 样例。
 - 经济后续可继续处理 `production.localRecords / product.mean / marketToMarket / taxTotal`，但应等军事数量先收敛，否则 full 矩阵的最大噪声仍在军事。
+
+### 军事数量校准第二刀：按 burg 背书收紧 per-state target
+
+背景：
+
+- 经济库存校准后，full 矩阵仍有 `lateStages.military.regiments` 的 `15` 个 fail 和 `23` 个 warn。
+- 失败集中在 10k/50k 以及 highIsland、lowIsland、pangea 的中低陆地比场景。典型 overcount：
+  - `lowIsland / 10000 / 002`：source/candidate `100 / 298`。
+  - `highIsland / 10000 / 001`：`86 / 250`。
+  - `highIsland / 50000 / 001`：`144 / 362`。
+  - `highIsland / 100000 / 003`：`137 / 304`。
+- source 的 `regiments / burgs` 比例随目标 cells 增长，但通常明显低于 candidate：10k 多在 `0.10..0.15`，100k 多在 `0.20..0.25`。candidate 第一刀后仍可达到 `0.35..0.45`。
+
+修正：
+
+- `getStateRegimentTarget()` 继续保留原有 `burg/cell/area/alert/densityFactor` raw target。
+- 新增 `getBurgBackedRegimentTarget()`，按每州 burg 数给 target 加上上限。
+- 上限比例随目标 cells 增长：`0.1 + 0.14 * sqrt(cellsTarget / 100000)`，并夹在有效范围内；约等于 10k `0.144`、50k `0.199`、100k `0.24`。
+- 本刀不改军队节点、兵种人数、fleet/artillery 组成，也不重写为 source 的 quadtree platoon 合并算法；目标只是把 regiment 数量压回 source 阈值。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\military.js`
+- `git diff --check`
+- 定点样例：
+  - `highIsland / 10000 / audit-highIsland-001` 从 `86 / 250` 改为 `86 / 112`，军事 fail 清除。
+  - quick 守门 `mediterranean / 100000 / audit-mediterranean-001` 为 `409 / 321`，仍 pass。
+  - quick 守门 `archipelago / 100000 / audit-archipelago-001` 为 `63 / 75`，仍 pass。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh-candidate true --refresh-diff true --browser-channel chrome --timeout 240000` 通过：quick 仍为 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate true --refresh-diff true --browser-channel chrome --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态从 `20 fail / 29 warn / 14 pass` 改为 `7 fail / 30 warn / 26 pass`。
+  - `lateStages.military.regiments` 的 `15` 个 fail 全部清除，仅剩 `4` 个 warn：`mediterranean-10000-002`、`highIsland-10000-002`、`highIsland-100000-003`、`pangea-10000-003`。
+
+后续：
+
+- 军事数量已经不再是 fail 来源；后续若继续军事，应改向 source 式 platoon 空间合并和 troop/unit 数量校准，而不是继续调 target 阈值。
+- 当前 full 的剩余 fail 主要是湖泊/湖名、经济交易和少量库存/税收；也可以按 Gibbs 只读调查结果补 marker 的 `bridges / sacred-mountains` 等低风险缺口。

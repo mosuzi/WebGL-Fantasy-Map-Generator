@@ -44,7 +44,7 @@ export function buildMilitary(pack, options = {}) {
     state.alert = alert;
     const cellsForState = stateCells.get(state.i) || [];
     const burgsForState = stateBurgs.get(state.i) || [];
-    const target = getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor);
+    const target = getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor, options);
     const nodes = createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, random});
     state.military = createRegiments({pack, state, nodes, target});
   }
@@ -183,12 +183,14 @@ function getRuralTroops(pack, state, cell, unit, alert, random) {
   return round(population * unit.rural * 18 * alert * stateModifier * terrainModifier * cultureModifier * variance);
 }
 
-function getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor = 1) {
+function getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor = 1, options = {}) {
   const burgFactor = Math.sqrt(Math.max(1, burgsForState.length)) * 2.5;
   const cellFactor = Math.sqrt(Math.max(1, cellsForState.length)) * 0.18;
   const areaFactor = Math.sqrt(Math.max(1, state.area || 1)) * 0.02;
   const minimum = burgsForState.length ? 1 : 0;
-  return clamp(Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor), minimum, 26);
+  const rawTarget = Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor);
+  const burgBackedTarget = getBurgBackedRegimentTarget(burgsForState.length, options);
+  return clamp(Math.min(rawTarget, burgBackedTarget), minimum, 26);
 }
 
 function getRegimentDensityFactor(cells) {
@@ -196,6 +198,13 @@ function getRegimentDensityFactor(cells) {
   for (const cell of cells.i) if ((cells.h[cell] || 0) >= 20) land++;
   const landRatio = land / Math.max(1, cells.i.length);
   return clamp((landRatio - 0.5) / 0.45, 0.25, 1);
+}
+
+function getBurgBackedRegimentTarget(burgs, options) {
+  if (!burgs) return 0;
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  const burgRate = 0.1 + 0.14 * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1));
+  return Math.max(1, Math.ceil(burgs * burgRate));
 }
 
 function getStateAlert(state, averageArea, averageExpansion) {
