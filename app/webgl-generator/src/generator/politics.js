@@ -1,5 +1,6 @@
 import {MinPriorityQueue} from "./priority-queue.js";
 import {createChineseNameGenerator, getStateFullName} from "./names.js";
+import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
@@ -17,30 +18,33 @@ const STATE_COLOR_PALETTE = [
 export function buildPolitics(grid, features, society, rivers, random, options, pack) {
   if (pack?.burgs?.some?.(burg => burg?.capital)) return buildPackPolitics(grid, features, society, rivers, random, options, pack);
 
-  const landCells = grid.points
+  const profile = createStageProfile();
+  const landCells = profile.stage("land-cells", "收集陆地 cell", () => grid.points
     .map((point, cell) => ({cell, point, height: grid.cells.h[cell], prec: grid.cells.prec[cell]}))
-    .filter(item => isLandFeature(features, grid, item.cell));
-  const settledCells = landCells.filter(item => (grid.cells.culture?.[item.cell] || 0) > 0 && (grid.cells.pop?.[item.cell] || 0) > 0);
+    .filter(item => isLandFeature(features, grid, item.cell)));
+  const settledCells = profile.stage("settled-cells", "收集已定居 cell", () => landCells.filter(item => (grid.cells.culture?.[item.cell] || 0) > 0 && (grid.cells.pop?.[item.cell] || 0) > 0));
   const politicalCells = settledCells.length ? settledCells : landCells;
-  const riverCells = new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells));
+  const riverCells = profile.stage("river-cell-index", "建立河流 cell 索引", () => new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells)));
 
-  const states = buildStates(grid, politicalCells, society, random);
-  grid.cells.state = expandStates(grid, features, states, riverCells);
-  findGridStateNeighbors(grid, states);
-  assignStateColors(states);
+  const states = profile.stage("states-build", "生成国家中心", () => buildStates(grid, politicalCells, society, random));
+  grid.cells.state = profile.stage("states-expand", "扩张国家", () => expandStates(grid, features, states, riverCells));
+  profile.stage("states-neighbors", "计算国家相邻关系", () => findGridStateNeighbors(grid, states));
+  profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
 
-  const provinces = buildProvinces(grid, politicalCells, states, society, random);
-  grid.cells.province = expandProvinces(grid, features, provinces, riverCells);
-  findGridProvinceNeighbors(grid, provinces);
-  assignProvinceColors(provinces);
+  const provinces = profile.stage("provinces-build", "生成省份中心", () => buildProvinces(grid, politicalCells, states, society, random));
+  grid.cells.province = profile.stage("provinces-expand", "扩张省份", () => expandProvinces(grid, features, provinces, riverCells));
+  profile.stage("provinces-neighbors", "计算省份相邻关系", () => findGridProvinceNeighbors(grid, provinces));
+  profile.stage("provinces-colors", "分配省份颜色", () => assignProvinceColors(provinces));
 
-  const regions = buildRegions();
-  grid.cells.region = assignRegions(grid, features, regions, riverCells, options);
+  const regions = profile.stage("regions-build", "生成区域定义", () => buildRegions());
+  grid.cells.region = profile.stage("regions-expand", "扩张区域", () => assignRegions(grid, features, regions, riverCells, options));
+  const timing = profile.finish();
 
   return {
     states,
     provinces,
     regions,
+    timing,
     metadata: {
       states: states.length,
       provinces: provinces.length,
@@ -53,37 +57,36 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
 }
 
 function buildPackPolitics(grid, features, society, rivers, random, options, pack) {
-  const landCells = grid.points
-    .map((point, cell) => ({cell, point, height: grid.cells.h[cell], prec: grid.cells.prec[cell]}))
-    .filter(item => isLandFeature(features, grid, item.cell));
-  const settledCells = landCells.filter(item => (grid.cells.culture?.[item.cell] || 0) > 0 && (grid.cells.pop?.[item.cell] || 0) > 0);
-  const politicalCells = settledCells.length ? settledCells : landCells;
-  const riverCells = new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells));
+  const profile = createStageProfile();
+  const riverCells = profile.stage("river-cell-index", "建立河流 cell 索引", () => new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells)));
 
-  const nameGenerator = createChineseNameGenerator(options.seed);
-  const states = buildPackStates(pack, society, random, nameGenerator);
-  expandPackStates(pack, states, society);
-  normalizePackStates(pack, states);
-  claimInhabitedNeutralCells(pack, states);
-  smoothPackStateBoundarySpikes(pack, states);
-  syncBurgStates(pack);
-  collectStateStatistics(pack, states);
-  findStateNeighbors(pack, states);
-  defineStateForms(states, nameGenerator);
-  assignStateColors(states);
-  grid.cells.state = mirrorPackStateToGrid(grid, pack);
+  const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(options.seed));
+  const states = profile.stage("states-build", "生成国家对象", () => buildPackStates(pack, society, random, nameGenerator));
+  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society));
+  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states));
+  profile.stage("states-claim-neutral", "吸收已定居中立 cell", () => claimInhabitedNeutralCells(pack, states));
+  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states));
+  profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
+  profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
+  profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states));
+  profile.stage("states-forms", "定义国家形态", () => defineStateForms(states, nameGenerator));
+  profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
+  grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack));
 
-  const provinces = buildPackProvinces(pack, society, createRandom(options.seed), options, nameGenerator);
-  grid.cells.province = mirrorPackProvinceToGrid(grid, pack);
+  const provinces = profile.stage("provinces-build", "生成 pack 省份", () => buildPackProvinces(pack, society, createRandom(options.seed), options, nameGenerator));
+  grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack));
 
-  const regions = buildRegions();
-  grid.cells.region = assignRegions(grid, features, regions, riverCells, options);
+  const regions = profile.stage("regions-build", "生成区域定义", () => buildRegions());
+  grid.cells.region = profile.stage("regions-expand", "扩张区域", () => assignRegions(grid, features, regions, riverCells, options));
 
   const validStates = states.filter(state => state?.i);
+  const timing = profile.finish();
   return {
     states,
     provinces,
     regions,
+    timing,
+    provinceTiming: provinces.timing || null,
     metadata: {
       states: validStates.length,
       provinces: provinces.filter(province => province?.i).length,
@@ -570,65 +573,69 @@ function buildProvinces(grid, landCells, states, society, random) {
 }
 
 function buildPackProvinces(pack, society, random, options, nameGenerator) {
+  const profile = createStageProfile();
   const {cells, states, burgs} = pack;
   const provinces = [null];
   const provinceIds = new Uint16Array(cells.i.length);
   const provincesRatio = Math.max(0, Math.min(100, Number(options.provincesRatio ?? 20)));
   const maxGrowth = provincesRatio === 100 ? 1000 : gauss(random, 20, 5, 5, 100) * Math.sqrt(provincesRatio);
 
-  for (const state of states) {
-    if (!state?.i) continue;
-    state.provinces = [];
-    const stateBurgs = burgs
-      .filter(burg => burg?.i && !burg.removed && burg.state === state.i)
-      .sort((a, b) => b.population * gauss(random, 1, 0.2, 0.5, 1.5, 3) - a.population)
-      .sort((a, b) => Number(b.capital) - Number(a.capital));
-    if (stateBurgs.length < 2) continue;
+  profile.stage("seed-provinces", "选择省份中心", () => {
+    for (const state of states) {
+      if (!state?.i) continue;
+      state.provinces = [];
+      const stateBurgs = burgs
+        .filter(burg => burg?.i && !burg.removed && burg.state === state.i)
+        .sort((a, b) => b.population * gauss(random, 1, 0.2, 0.5, 1.5, 3) - a.population)
+        .sort((a, b) => Number(b.capital) - Number(a.capital));
+      if (stateBurgs.length < 2) continue;
 
-    const provincesNumber = Math.max(Math.ceil((stateBurgs.length * provincesRatio) / 100), 2);
-    for (let index = 0; index < provincesNumber; index++) {
-      const burg = stateBurgs[index];
-      const provinceId = provinces.length;
-      const culture = society.cultures[burg.culture];
-      const sourceRoot = (index % 2 === 0 || culture?.nameStyle ? burg.name : culture?.name?.replace("文化", "")) || STATE_ROOTS[provinceId % STATE_ROOTS.length];
-      const provinceName = nameGenerator.makeProvinceName({
-        id: provinceId,
-        cell: burg.cell,
-        culture: burg.culture,
-        cultureType: culture?.nameStyle || culture?.type,
-        state: state.i,
-        baseName: sourceRoot
-      });
-      const province = {
-        id: provinceId,
-        i: provinceId,
-        state: state.i,
-        center: burg.cell,
-        gridCenter: cells.g[burg.cell],
-        burg: burg.i,
-        name: provinceName.name,
-        formName: provinceName.formName,
-        fullName: provinceName.fullName,
-        color: state.color,
-        cells: 0,
-        area: 0
-      };
-      provinces.push(province);
-      state.provinces.push(provinceId);
-      provinceIds[burg.cell] = provinceId;
+      const provincesNumber = Math.max(Math.ceil((stateBurgs.length * provincesRatio) / 100), 2);
+      for (let index = 0; index < provincesNumber; index++) {
+        const burg = stateBurgs[index];
+        const provinceId = provinces.length;
+        const culture = society.cultures[burg.culture];
+        const sourceRoot = (index % 2 === 0 || culture?.nameStyle ? burg.name : culture?.name?.replace("文化", "")) || STATE_ROOTS[provinceId % STATE_ROOTS.length];
+        const provinceName = nameGenerator.makeProvinceName({
+          id: provinceId,
+          cell: burg.cell,
+          culture: burg.culture,
+          cultureType: culture?.nameStyle || culture?.type,
+          state: state.i,
+          baseName: sourceRoot
+        });
+        const province = {
+          id: provinceId,
+          i: provinceId,
+          state: state.i,
+          center: burg.cell,
+          gridCenter: cells.g[burg.cell],
+          burg: burg.i,
+          name: provinceName.name,
+          formName: provinceName.formName,
+          fullName: provinceName.fullName,
+          color: state.color,
+          cells: 0,
+          area: 0
+        };
+        provinces.push(province);
+        state.provinces.push(provinceId);
+        provinceIds[burg.cell] = provinceId;
+      }
     }
-  }
+  });
 
-  expandPackProvinces(pack, provinces, provinceIds, maxGrowth);
-  justifyPackProvinces(pack, provinces, provinceIds);
-  fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator);
-  smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds);
-  collectProvinceStatistics(pack, provinces, provinceIds);
-  assignProvincePoles(pack, provinces, provinceIds);
-  findPackProvinceNeighbors(pack, provinces, provinceIds);
-  assignProvinceColors(provinces);
+  profile.stage("expand-provinces", "扩张省份", () => expandPackProvinces(pack, provinces, provinceIds, maxGrowth));
+  profile.stage("justify-provinces", "整理省份边界", () => justifyPackProvinces(pack, provinces, provinceIds));
+  profile.stage("fill-unassigned", "填充未归属省份 cell", () => fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator));
+  profile.stage("smooth-spikes", "吸收省份边界毛刺", () => smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds));
+  profile.stage("statistics", "统计省份数据", () => collectProvinceStatistics(pack, provinces, provinceIds));
+  profile.stage("assign-poles", "计算省份 pole", () => assignProvincePoles(pack, provinces, provinceIds));
+  profile.stage("neighbors", "计算省份相邻关系", () => findPackProvinceNeighbors(pack, provinces, provinceIds));
+  profile.stage("colors", "分配省份颜色", () => assignProvinceColors(provinces));
   cells.province = provinceIds;
   pack.provinces = provinces;
+  provinces.timing = profile.finish();
   return provinces;
 }
 

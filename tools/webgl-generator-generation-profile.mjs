@@ -59,7 +59,12 @@ function profileCase({cells, seed, template, graphWidth, graphHeight, iterations
       packCells: map.metadata.packCells,
       checksum: map.summary.checksum,
       slowest: timing.slowest,
-      stages: timing.stages
+      stages: timing.stages,
+      subsystemTimings: {
+        rivers: map.rivers?.timing || null,
+        politics: map.politics?.timing || null,
+        provinces: map.politics?.provinceTiming || null
+      }
     });
   }
 
@@ -93,6 +98,39 @@ function summarizeRuns(runs) {
     packCells: runs[0]?.packCells ?? 0,
     checksum: runs[0]?.checksum ?? "none",
     slowestStages: stages.slice(0, 8),
+    stages,
+    subsystems: summarizeSubsystems(runs)
+  };
+}
+
+function summarizeSubsystems(runs) {
+  return {
+    rivers: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.rivers).filter(Boolean)),
+    politics: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.politics).filter(Boolean)),
+    provinces: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.provinces).filter(Boolean))
+  };
+}
+
+function summarizeTimingSamples(timings) {
+  if (!timings.length) return null;
+  const stageIds = [...new Set(timings.flatMap(timing => timing.stages.map(stage => stage.id)))];
+  const stages = stageIds.map(id => {
+    const samples = timings
+      .map(timing => timing.stages.find(stage => stage.id === id))
+      .filter(Boolean);
+    return {
+      id,
+      label: samples[0]?.label || id,
+      avgMs: roundMs(average(samples.map(stage => stage.ms))),
+      maxMs: roundMs(Math.max(...samples.map(stage => stage.ms))),
+      share: round(average(samples.map(stage => stage.ms)) / Math.max(1, average(timings.map(timing => timing.totalMs))) * 100, 1)
+    };
+  }).sort((a, b) => b.avgMs - a.avgMs);
+
+  return {
+    avgTotalMs: roundMs(average(timings.map(timing => timing.totalMs))),
+    maxTotalMs: roundMs(Math.max(...timings.map(timing => timing.totalMs))),
+    slowestStages: stages.slice(0, 8),
     stages
   };
 }
@@ -121,10 +159,26 @@ function renderMarkdown(report) {
     for (const stage of item.summary.stages) {
       lines.push(`| ${stage.label} | ${stage.avgMs}ms | ${stage.maxMs}ms | ${stage.share}% |`);
     }
+    appendSubsystemMarkdown(lines, item, "politics", "国家 / 省份 / 区域子阶段");
+    appendSubsystemMarkdown(lines, item, "provinces", "pack 省份子阶段");
+    appendSubsystemMarkdown(lines, item, "rivers", "河流子阶段");
   }
 
   lines.push("");
   return `${lines.join("\n")}\n`;
+}
+
+function appendSubsystemMarkdown(lines, item, key, title) {
+  const subsystem = item.summary.subsystems?.[key];
+  if (!subsystem) return;
+  lines.push("", `### ${item.cells} cells ${title}`, "");
+  lines.push(`总耗时：\`${subsystem.avgTotalMs}ms\``);
+  lines.push("");
+  lines.push("| 子阶段 | 平均耗时 | 最大耗时 | 占比 |");
+  lines.push("|---|---:|---:|---:|");
+  for (const stage of subsystem.stages) {
+    lines.push(`| ${stage.label} | ${stage.avgMs}ms | ${stage.maxMs}ms | ${stage.share}% |`);
+  }
 }
 
 function parseArgs(argv) {

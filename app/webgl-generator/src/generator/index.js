@@ -8,6 +8,7 @@ import {buildMilitary} from "./military.js";
 import {normalizeOptions} from "./options.js";
 import {buildPack} from "./pack.js";
 import {buildPolitics} from "./politics.js";
+import {createStageProfile} from "./profile.js";
 import {createRandom, stableHash} from "./random.js";
 import {buildRivers, renameHydronymsByCulture} from "./rivers.js";
 import {buildSettlements, finalizeSettlements} from "./settlements.js";
@@ -15,7 +16,7 @@ import {buildSociety, finalizeSocietyReligions} from "./society.js";
 import {buildZones} from "./zones.js";
 
 export function generatePlaceholderMap(inputOptions = {}) {
-  const profile = createGenerationProfile();
+  const profile = createStageProfile();
   const options = profile.stage("normalize-options", "标准化参数", () => normalizeOptions(inputOptions));
   const gridRandom = profile.stage("random-grid", "初始化 grid 随机源", () => createRandom(options.seed));
   const random = profile.stage("random-main", "初始化主随机源", () => createRandom(options.seed));
@@ -100,28 +101,6 @@ export function generatePlaceholderMap(inputOptions = {}) {
       message: "source 阶段 18 zones 第一刀",
       sourceDependency: false,
       snapshotDependency: false
-    }
-  };
-}
-
-function createGenerationProfile() {
-  const startedAt = performance.now();
-  const stages = [];
-  return {
-    stage(id, label, task) {
-      const started = performance.now();
-      const result = task();
-      stages.push({id, label, ms: roundMs(performance.now() - started)});
-      return result;
-    },
-    finish() {
-      const totalMs = roundMs(performance.now() - startedAt);
-      const slowest = stages.reduce((best, stage) => stage.ms > (best?.ms ?? -1) ? stage : best, null);
-      return {
-        totalMs,
-        stages,
-        slowest: slowest ? {...slowest} : null
-      };
     }
   };
 }
@@ -218,8 +197,4 @@ function createPalette(random) {
 function round(value, digits) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
-}
-
-function roundMs(value) {
-  return round(value, 1);
 }

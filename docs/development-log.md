@@ -9659,3 +9659,59 @@ pnpm run regress:rendering
 - 10k 体感优化优先拆 `buildPackPolitics()` 子阶段，重点看省份填充、边界毛刺吸收、grid 镜像和区域扩张。
 - 50k / 100k 优先拆 `buildRivers()` 子阶段；当前河流在大图下占比约 `43% - 45%`，已经是最明确瓶颈。
 - 生成报告通过 ESM 方式加载 app 源码时，Node 会提示 package 未声明 `type: module`；本刀不改 package module 类型，避免影响现有工具链。
+
+### 生成性能子阶段拆分与河流取最小值优化
+
+背景：
+
+- 上一刀已经确认 10k 的主瓶颈在“生成国家 / 省份 / 区域”，50k / 100k 的主瓶颈在“生成河流”。
+- 但阶段粒度仍然太粗，无法判断政治慢在国家扩张、省份扩张、grid 镜像还是颜色分配，也无法判断河流慢在洼地消解、流量累计还是对象构建。
+- 用户要求继续拆，并同时留意性能问题；因此本刀以低风险埋点和确定性微优化为主，不改生成语义。
+
+修正：
+
+- 新增 `app/webgl-generator/src/generator/profile.js`：
+  - 提供 `createStageProfile()` 作为生成链路通用阶段计时器。
+  - `generatePlaceholderMap()`、河流生成、政治生成和省份生成共用同一套 timing 结构。
+- `buildRivers()` 新增子阶段计时：
+  - 覆盖命名器、扰动、高度调整、闭合湖识别、洼地消解、buffer 初始化、湖泊水文、陆地排序、流量累计、河流对象、汇流标记、湖泊清理、湖泊命名和 feature 分组。
+  - 返回结果新增顶层 `timing`，不塞进 metadata，避免改变现有河流元数据语义。
+- `buildPackPolitics()` 新增子阶段计时：
+  - 覆盖河流索引、国家构建、国家扩张、国家整理、中立吸收、边界毛刺吸收、城市归属同步、统计、相邻关系、形态、颜色、grid 镜像、省份生成、省份镜像和区域扩张。
+  - 去掉 pack 政治生成里未使用的 `landCells / settledCells / politicalCells` 扫描。
+- `buildPackProvinces()` 新增独立子阶段计时：
+  - 覆盖省份中心、扩张、整理、未归属填充、边界毛刺吸收、统计、pole、相邻关系和颜色分配。
+  - `buildPackPolitics()` 通过 `provinceTiming` 暴露该结果。
+- 河流洼地消解做了低风险微优化：
+  - 原本多处只是为了取最低 cell / 最低高度而 `map().sort()` 或展开数组再排序。
+  - 现在改为线性扫描 helper：`minHeightCell()`、`minHeightValue()`、`minEffectiveNeighborHeight()` 和 `minNeighborHeightCell()`。
+  - `getDownhillCell()` 不再复制并排序相邻 cell，只扫描一次候选邻居。
+- `tools/webgl-generator-generation-profile.mjs` 扩展报告：
+  - JSON 记录 `subsystemTimings.rivers / politics / provinces`。
+  - Markdown 为每个 cells 档位输出“国家 / 省份 / 区域子阶段”“pack 省份子阶段”“河流子阶段”。
+
+本轮数据：
+
+- 命令：`node .\tools\webgl-generator-generation-profile.mjs --iterations 1`
+- 10k：总耗时约 `560.2ms`，最慢阶段为“生成国家 / 省份 / 区域” `184ms`。
+  - 政治子阶段中，“生成 pack 省份” `146.4ms`，占政治耗时约 `79.7%`。
+  - pack 省份子阶段中，“分配省份颜色” `125ms`，占省份耗时约 `85.5%`。
+  - 河流总耗时 `31.4ms`，其中“消解洼地” `19.7ms`。
+- 50k：总耗时约 `2212.3ms`，最慢阶段为“生成河流” `520.3ms`。
+  - 河流子阶段中，“消解洼地” `494.2ms`，占河流耗时约 `95.2%`。
+  - 政治总耗时 `482ms`，其中 pack 省份 `381.7ms`、省份颜色分配 `302.3ms`。
+- 100k：总耗时约 `5333.7ms`，最慢阶段为“生成河流” `1571.8ms`。
+  - 河流子阶段中，“消解洼地” `1519.1ms`，占河流耗时约 `96.8%`。
+  - 政治总耗时 `1028.7ms`，其中 pack 省份 `849ms`、省份颜色分配 `586.9ms`。
+
+结论：
+
+- 10k 体感卡顿的首要目标已经从“政治整体”收敛到 `buildPackProvinces()` 内的省份颜色分配。
+- 50k / 100k 的首要目标已经从“河流整体”收敛到 `resolveDepressions()`。
+- 河流取最小值微优化后，单次采样较上一轮明显下降，但 Node 单次 profile 有抖动；后续如果要记录正式性能基线，应至少用 `--iterations 3` 重新采样。
+
+后续：
+
+- 省份颜色分配下一刀应检查是否存在对所有省份或所有邻居的重复避让计算，优先引入局部邻接颜色候选缓存，而不是改变省份扩张结果。
+- `resolveDepressions()` 下一刀应改为更接近优先队列 / 局部传播的算法，避免大图上反复做全邻域松弛；改动前需要保留河流数量、湖泊出口和 checksum 对照。
+- 当前 timing 结构可继续扩展到城镇路线整理阶段，因为 100k 下该阶段已到 `1133.4ms`，是河流之后的第二梯队瓶颈。
