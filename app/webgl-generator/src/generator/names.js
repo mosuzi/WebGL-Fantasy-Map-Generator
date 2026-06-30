@@ -298,6 +298,8 @@ const STATE_FORMS = {
 };
 const PROVINCE_FORMS = ["郡", "州", "道", "府", "领", "司"];
 const DIRECTION_PREFIXES = ["东", "西", "南", "北", "上", "下", "新", "古"];
+const CARDINAL_PREFIXES = new Set(["东", "西", "南", "北"]);
+const NON_CARDINAL_VARIANT_PREFIXES = ["新", "古", "上", "下"];
 const SMALL_SETTLEMENT_PREFIXES = ["新", "旧", "上", "下", "东", "西", "南", "北", "小", "前", "后"];
 const SMALL_SETTLEMENT_SUFFIXES = ["镇", "集", "寨", "村", "渡", "铺", "驿", "坞", "埠", "圩"];
 const SHIELDS = ["heater", "kite", "round", "horsehead", "banner"];
@@ -350,8 +352,10 @@ export function createChineseNameGenerator(seed = "map") {
     makeStateRoot(options = {}) {
       const rng = rngFor(seed, "state-root", options);
       const capitalRoot = normalizeNameRoot(options.capitalName);
+      const cultureRoot = cleanStateRootCandidate(options.cultureRoot);
       const allowCapitalName = Boolean(options.allowCapitalName);
       const generate = () => makeStateRootCandidateAvoiding(rng, options, allowCapitalName ? "" : capitalRoot);
+      if (cultureRoot && rng.next() < 0.82) return makeUnique(used, "state", cultureRoot, rng);
       const initialName = allowCapitalName && capitalRoot && rng.next() < 0.28 ? capitalRoot : generate();
       return makeUniqueGenerated(used, "state", initialName, rng, generate, 32);
     },
@@ -526,7 +530,7 @@ function makeUnique(used, scope, name, rng) {
   const count = used.get(key) || 0;
   used.set(key, count + 1);
   if (!count) return name;
-  if (count <= DIRECTION_PREFIXES.length) return `${DIRECTION_PREFIXES[count - 1]}${name}`;
+  if (count <= DIRECTION_PREFIXES.length) return `${pickDirectionPrefix(name, count - 1)}${name}`;
   return `${name}${toChineseOrdinal(count + 1)}`;
 }
 
@@ -586,6 +590,19 @@ function toChineseOrdinal(value) {
   const numerals = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
   if (value <= 10) return numerals[value];
   return String(value);
+}
+
+function pickDirectionPrefix(name, startIndex) {
+  const rawName = String(name || "");
+  if (CARDINAL_PREFIXES.has(Array.from(rawName)[0])) {
+    for (const prefix of NON_CARDINAL_VARIANT_PREFIXES) if (!rawName.startsWith(prefix)) return prefix;
+  }
+
+  for (let offset = 0; offset < DIRECTION_PREFIXES.length; offset++) {
+    const prefix = DIRECTION_PREFIXES[(startIndex + offset) % DIRECTION_PREFIXES.length];
+    if (!rawName.startsWith(prefix)) return prefix;
+  }
+  return DIRECTION_PREFIXES[startIndex % DIRECTION_PREFIXES.length];
 }
 
 function pick(rng, values) {

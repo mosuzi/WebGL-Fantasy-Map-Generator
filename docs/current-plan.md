@@ -4,7 +4,12 @@
 
 ## 2026-07-01 最新推进队列
 
-当前 focus 仍是 source/candidate full 矩阵 warn 收敛。最新 full candidate 矩阵为 `58 pass / 5 warn / 0 fail`，warn 总项已降至 `9`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项，以及 10k 稀疏群岛的市场总数、plaza、goodsEntries、stock mean 和 market-to-burg 交易量告警。
+当前 focus 仍是 source/candidate full 矩阵 warn 收敛，同时穿插修用户验收中明确指出的纯生成观感问题。最新 full candidate 矩阵为 `58 pass / 5 warn / 0 fail`，warn 总项已降至 `9`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项，以及 10k 稀疏群岛的市场总数、plaza、goodsEntries、stock mean 和 market-to-burg 交易量告警。
+
+刚完成的观感修正：
+
+- 生成 loading 文案不再显示目标 `cells`，运行中 badge 只显示状态和地图尺寸；loading bubble 显示“等待浏览器绘制 / 正在生成地图数据 / 正在整理 WebGL 图层 / 正在刷新面板”。
+- 国家根名现在优先从所属文化 `root` 派生，同文化多国用“东/西/新/古”等变体保持关联；国家形制继续按文化类型生成，例如游牧文化倾向 `汗国 / 诸帐`，海洋文化倾向 `海国 / 诸港 / 海盟`。
 
 剩余 warn case：
 

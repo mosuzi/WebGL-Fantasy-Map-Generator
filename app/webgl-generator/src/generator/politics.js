@@ -133,6 +133,7 @@ function buildPackStates(pack, society, random, nameGenerator) {
       id: burg.i,
       cell: burg.cell,
       culture: burg.culture,
+      cultureRoot: culture?.root || culture?.name,
       cultureType: culture?.nameStyle || culture?.type,
       capitalName: burg.name,
       allowCapitalName: false,

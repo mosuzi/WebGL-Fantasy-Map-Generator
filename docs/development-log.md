@@ -10821,3 +10821,36 @@ pnpm run regress:rendering
 后续：
 
 - 若要做到真正“每一步正在做什么”的实时 loading，需要把生成流程拆成异步 stage runner，或者让 `createStageProfile().stage()` 接收进度回调并在阶段之间让出主线程。
+
+### 国家命名与文化 root 关联修正
+
+背景：
+
+- 用户指出 `stage-2-1231411414 / 10000 cells` 下文化、宗教名称已是中文风格，但国家名和形制看起来像异域中世纪，且与文化不相关。
+- 当前代码已经不再生成 `公国 / 自由邦` 这类旧形制；残留命中主要在历史文档和 `trimPoliticalForm()` 的兼容剥离正则中。
+- 但国家根名仍主要从通用地名池生成，文化只影响 `state.type` 和形制，因此同一文化下可能出现 `苍原文化 -> 雨林诸州` 这类观感上不相关的国家。
+
+修正：
+
+- `buildPackStates()` 调用 `makeStateRoot()` 时传入所属文化的 `cultureRoot`。
+- `makeStateRoot()` 优先使用 `cultureRoot` 作为国家根名；同一文化下多个国家通过既有唯一化逻辑生成变体，例如 `雁川 / 东雁川 / 西雁川`。
+- 对已经以 `东 / 西 / 南 / 北` 开头的文化根，重复变体优先使用 `新 / 古 / 上 / 下`，避免 `东东衡`、`西东衡` 这类方向叠加名称。
+- 国家形制仍按文化类型生成：`Nomadic` 倾向 `汗国 / 部盟 / 诸帐`，`Naval` 倾向 `海国 / 诸港 / 海盟`，`River` 倾向 `河国 / 河府 / 诸州`。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\names.js`
+- `node --check app\webgl-generator\src\generator\politics.js`
+- 定点内存生成：
+  - `seed = stage-2-1231411414`
+  - `heightmapTemplate = continents`
+  - `cellsTarget = 10000`
+- 结果：
+  - 有效国家 `18` 个，其中 `15` 个国家根名直接包含所属文化 root。
+  - 旧形制正则 `公国|侯国|自由邦|共和国|帝国|联邦|邦联` 命中 `0`。
+  - 方向叠加正则 `东东|西西|东西|西东|南北|北南...` 命中 `0`。
+  - 样例包括 `东衡诸州`、`新东衡王朝`、`北辰诸帐`、`清河诸港`、`苍原邦`、`东苍原诸州`。
+
+后续：
+
+- 如果继续命名体系，应把 `state.formName/type/nameStyle` 和 culture `type/nameStyle` 加入轻量命名回归报告，而不是只看数量矩阵。
