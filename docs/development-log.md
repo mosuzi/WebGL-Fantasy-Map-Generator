@@ -9565,3 +9565,34 @@ pnpm run regress:shoreline -- --browser-channel chrome
 
 - 本刀只做结构迁移，不改变政治 mesh 过滤阈值、国界/省界描边方式或政治视图 surface 策略。
 - `pushPoliticalSelectionMesh()` 暂留在主 renderer，因为它依赖当前 selection / locate flash / 动态 buffer 机制；后续若拆 `selection-layer` 再迁走。
+
+### cell-visual-layer 第一刀与视图切换性能守门
+
+背景：
+
+- `placeholder-renderer.js` 中剩余的主要静态几何块是视觉 cell mesh：它负责平滑单元格边界的曲线采样、共享边复用和 surface 顶点写入。
+- 当前视图切换不再重建视觉 cell 几何，但仍会为每个视图重新把视觉 cell 的世界坐标投影到 NDC，再写入颜色顶点；这部分是可安全消除的重复计算。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/cell-visual-layer.js`：
+  - 承载 `buildCellVisualMesh()`、`emptyCellVisualMesh()`、`summarizeCellVisualMesh()` 和 `buildCellVisualGridVertices()`。
+  - 视觉 cell mesh 构建时预先生成每个 cell 的 `ndcTriangles`，缓存中心点和边界点投影后的三角坐标。
+  - 视图切换刷新 surface 时只按当前视图颜色填充顶点颜色，不再重复执行同一批 `worldToNdcPoint()`。
+- `cell-surface-layer.js` 回到硬 cell surface、政治 mesh surface 兜底和 surface 顶点拼接职责。
+- `placeholder-renderer.js` 删除本地视觉 cell 构建、噪声和摘要 helper，只保留缓存重建调用。
+
+性能守门：
+
+- `tools/webgl-generator-shoreline-regression.mjs` 新增每个 case 的 `switchMs` 记录。
+- 回归新增 `--max-switch-ms` 参数，默认 `1500ms`；超过阈值会失败。
+- `package.json` 新增：
+
+```powershell
+pnpm run regress:rendering
+```
+
+边界：
+
+- 本刀不改变视觉 cell 曲率、采样段数、海岸线或政治边界行为。
+- `switchMs` 是 10k 默认种子的快速守门，用来捕获明显退化；50k / 100k 大图仍应继续用 `tools/webgl-generator-smooth-cell-profile.mjs` 做专项 profile。

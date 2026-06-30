@@ -1,33 +1,5 @@
 import {colorForCell, isLandCell} from "./color-modes.js";
-import {worldToNdcPoint} from "./render-context.js";
-import {pushWorldVertex, writeVertex} from "./mesh-writer.js";
-
-export function buildCellVisualGridVertices(context, colorMode, viewOptions, cellVisualMesh) {
-  const {map} = context;
-  const cells = cellVisualMesh?.cells || [];
-  let triangles = 0;
-  for (const cellMesh of cells) {
-    if (cellMesh?.points?.length) triangles += cellMesh.points.length;
-  }
-
-  const vertices = new Float32Array(triangles * 3 * 6);
-  let offset = 0;
-  for (const cellMesh of cellVisualMesh.cells || []) {
-    if (!cellMesh?.points?.length) continue;
-    const color = colorForCell(cellMesh.cell, map, colorMode, viewOptions);
-    const center = worldToNdcPoint(context, cellMesh.center);
-    for (let index = 0; index < cellMesh.points.length; index++) {
-      const nextIndex = (index + 1) % cellMesh.points.length;
-      const current = worldToNdcPoint(context, cellMesh.points[index]);
-      const next = worldToNdcPoint(context, cellMesh.points[nextIndex]);
-      offset = writeVertex(vertices, offset, center[0], center[1], color);
-      offset = writeVertex(vertices, offset, current[0], current[1], color);
-      offset = writeVertex(vertices, offset, next[0], next[1], color);
-    }
-  }
-
-  return offset === vertices.length ? vertices : vertices.slice(0, offset);
-}
+import {pushWorldVertex} from "./mesh-writer.js";
 
 export function pushGridCells(vertices, context, colorMode, viewOptions, shouldDrawCell = () => true) {
   const {map} = context;

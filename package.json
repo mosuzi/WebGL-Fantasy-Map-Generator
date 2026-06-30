@@ -8,6 +8,7 @@
     "build:app": "vite build --config vite.config.mjs",
     "preview:app": "vite preview --config vite.config.mjs",
     "regress:shoreline": "node ./tools/webgl-generator-shoreline-regression.mjs",
+    "regress:rendering": "pnpm run regress:shoreline -- --max-switch-ms 1500",
     "start:prototype": "node ./tools/serve-prototype.mjs --port 5400"
   },
   "dependencies": {

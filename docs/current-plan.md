@@ -644,6 +644,7 @@ http://127.0.0.1:5410
 80. `shore-layer` 第一刀结构迁移已完成：新增 `app/webgl-generator/src/renderer/shore-layer.js`，承载当前活跃水陆线样式、平滑/硬边水陆线三角描边写入、`boundaryLineMode` 统计和共享 Voronoi 边 helper；`placeholder-renderer.js` 只保留图层编排入口并调用 `pushShoreLineLayers()`。本刀不重新启用原版分形海岸，也暂不搬迁仍用于政治 mesh 补点的旧 shore path / 分形候选实现，避免结构迁移夹带视觉行为变化。
 81. `shore-layer` 第二刀结构迁移已完成：`buildShoreVisualPaths()`、`emptyShoreVisualPaths()`、`summarizeShoreVisualPaths()`、旧 shore visual band、原版海岸候选采样和 `buildSmoothedShoreBoundaryPoints()` 已迁入 `shore-layer`；`placeholder-renderer.js` 继续保留政治边界 graph、政治视觉 mesh、动态图层和外部 renderer API。原版分形水陆线仍不进入主渲染路径，当前活跃水陆线仍以 `pushShoreLineLayers()` 的平滑/硬共享边为准，保证与 surface 填色同源贴合。
 82. `political-layer` 第一刀结构迁移已完成：新增 `app/webgl-generator/src/renderer/political-layer.js`，承载国家/省份视觉样式、政治边界 path、政治视觉带、政治视觉 mesh、mesh 质量统计和 debug cache；`placeholder-renderer.js` 只保留政治缓存重建调用、debug buffer 上传、选中高亮和总体图层编排。水陆线回归仍是拆 renderer 后的固定守门。
+83. `cell-visual-layer` 第一刀结构迁移与视图切换性能加固已完成：新增 `app/webgl-generator/src/renderer/cell-visual-layer.js`，承载视觉 cell mesh 几何构建、统计摘要和按视图写 surface 顶点；视觉 cell 构建时会预缓存 NDC 三角坐标，视图切换只重写颜色顶点，避免重复世界坐标投影。`tools/webgl-generator-shoreline-regression.mjs` 新增 `switchMs` 与 `--max-switch-ms` 判定，`package.json` 新增 `pnpm run regress:rendering` 作为渲染回归入口。
 
 ## 约束
 

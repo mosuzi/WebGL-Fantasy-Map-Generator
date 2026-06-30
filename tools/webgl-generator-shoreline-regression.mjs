@@ -24,6 +24,7 @@ const screenshotDir = resolve(args["screenshot-dir"] || join(rootDir, "docs", "g
 const viewport = parseViewport(args.viewport || "1280x820");
 const minSmoothLineTriangles = Number(args["min-smooth-line-triangles"] || 50000);
 const minHardLineTriangles = Number(args["min-hard-line-triangles"] || 25000);
+const maxSwitchMs = Number(args["max-switch-ms"] || 1500);
 
 if (!existsSync(distDir)) fail(`构建产物不存在：${distDir}`);
 mkdirSync(dirname(outPath), {recursive: true});
@@ -99,6 +100,7 @@ try {
       browserChannel,
       minSmoothLineTriangles,
       minHardLineTriangles,
+      maxSwitchMs,
       consoleErrors
     },
     generation,
@@ -159,15 +161,18 @@ async function collectCase(page, {mode, smoothCellBorders, expectedBoundaryLineM
   const stats = await page.evaluate(async ({mode, smoothCellBorders}) => {
     const app = window.__webglGeneratorApp;
     const renderer = app.renderer;
+    const started = performance.now();
     renderer.setViewOptions({smoothCellBorders});
     renderer.setColorMode(mode);
     renderer.draw();
     renderer.gl.finish();
     await new Promise(resolve => requestAnimationFrame(resolve));
+    const switchMs = Math.round((performance.now() - started) * 10) / 10;
     const stats = renderer.getStats();
     return {
       mode,
       smoothCellBorders,
+      switchMs,
       cellSurfaceMode: stats.cellSurfaceMode,
       boundaryLineMode: stats.boundaryLineMode,
       vertexCount: stats.vertexCount,
@@ -202,6 +207,7 @@ function validateCase(stats, {expectedBoundaryLineMode, minLineTriangles}) {
   if (stats.lineVertexCount % 3 !== 0) failures.push(`lineVertexCount should be divisible by 3, got ${stats.lineVertexCount}`);
   if (!stats.coastlineVisible || !stats.lakeShoreVisible) failures.push("coastline/lakeShore layer should stay visible");
   if (stats.vertexCount <= 0) failures.push(`vertexCount should be positive, got ${stats.vertexCount}`);
+  if (stats.switchMs > maxSwitchMs) failures.push(`switchMs expected <= ${maxSwitchMs}ms, got ${stats.switchMs}ms`);
   return failures;
 }
 
@@ -212,6 +218,7 @@ function renderMarkdown(report) {
   lines.push(`- seed：\`${report.metadata.seed}\``);
   lines.push(`- 目标 cells：\`${report.metadata.cells}\``);
   lines.push(`- 地形模板：\`${report.metadata.template}\``);
+  lines.push(`- 单次视图切换上限：\`${report.metadata.maxSwitchMs}ms\``);
   lines.push(`- 结论：${report.passed ? "通过" : "失败"}`);
   lines.push("");
   lines.push("## 生成摘要", "");
@@ -221,14 +228,15 @@ function renderMarkdown(report) {
   lines.push(`- 生成耗时：\`${report.generation.elapsedMs}ms\``);
   lines.push("");
   lines.push("## 判定结果", "");
-  lines.push("| 模式 | 平滑 | 边界线来源 | surface | GPU 顶点 | 轮廓三角形 | WebGL error | 截图 | 结果 |");
-  lines.push("|---|---:|---|---|---:|---:|---:|---|---|");
+  lines.push("| 模式 | 平滑 | 边界线来源 | surface | 切换耗时 | GPU 顶点 | 轮廓三角形 | WebGL error | 截图 | 结果 |");
+  lines.push("|---|---:|---|---|---:|---:|---:|---:|---|---|");
   for (const item of report.cases) {
     lines.push([
       item.mode,
       item.smoothCellBorders ? "是" : "否",
       `\`${item.boundaryLineMode}\``,
       item.cellSurfaceMode,
+      `${item.switchMs}ms`,
       item.vertexCount,
       item.lineTriangleCount,
       item.glError,
