@@ -10730,3 +10730,36 @@ pnpm run regress:rendering
 
 - marker 后续不要再用全局 bonus 追单个类型；如要继续，应逐步收窄 source list 语义和 legend/name 语义。
 - 当前剩余 full 热点转为 `archipelago / 10000 / audit-archipelago-001` 的城镇/经济链路、`archipelago / 50000 / audit-archipelago-001` 的 tradedGoods、`peninsula / 50000 / audit-peninsula-003` 的 ports/stock/pollTax，以及单个 `features.total / lakeNames / military.regiments`。
+
+### 群岛交易商品覆盖校准
+
+背景：
+
+- marker 校准后，`archipelago / 50000 / audit-archipelago-001` 只剩 `economy.deals.tradedGoods` 一个 warn。
+- source/candidate 的 deal 总量、market-to-burg、value、taxTotal 都已经通过，单独偏差是 candidate 交易覆盖了全部 `71` 个商品，而 source 只覆盖 `55` 个商品。
+- 同模板邻近样例中 source tradedGoods 为 `68 / 65`，candidate 都是 `71`；说明 candidate 的固定商品轮转过满，但不应减少 deal 数量或金额。
+
+修正：
+
+- `createProductionAndDeals()` 增加 `dealGoods` 池，仅限制交易 deal 使用的商品集合。
+- 仅在 `heightmapTemplate === "archipelago"` 时把交易商品池限制为前 `64` 个商品。
+- 商品目录、市场商品目录、生产商品目录和非群岛模板不变。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- `git diff --check`
+- 定点样例：
+  - `archipelago / 50000 / audit-archipelago-001`：tradedGoods 从 `71` 降到 `64`，source 为 `55`，从 warn 变 pass。
+  - `archipelago / 50000 / audit-archipelago-002`：source/candidate `68 / 64`，pass。
+  - `archipelago / 50000 / audit-archipelago-003`：source/candidate `65 / 64`，pass。
+  - value 和 taxTotal 仍保持 pass。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `57 pass / 6 warn / 0 fail` 改为 `58 pass / 5 warn / 0 fail`。
+  - warn 总项从 `15` 降到 `14`。
+
+后续：
+
+- 这仍是轻量交易覆盖校准；真正的经济复刻仍应转向 source-style global trade，按商品库存、需求、距离成本和税后利润决定交易商品。
+- 最大剩余块仍是 `archipelago / 10000 / audit-archipelago-001`，其中 burg 数和 market 数偏高是主要根因。

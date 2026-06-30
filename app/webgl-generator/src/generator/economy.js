@@ -351,6 +351,9 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   const localProductionRate = getLocalProductionRate(options);
   const dealProductWeight = getDealProductWeight(options);
   const dealValueScale = getDealValueScale(options);
+  const dealGoods = getDealGoods(goods, options);
+  const dealGoodIds = new Set(dealGoods.map(good => good.i));
+  const rawDealGoods = rawGoods.filter(good => dealGoodIds.has(good.i));
 
   for (const burg of aliveBurgs) {
     burg.production = [];
@@ -369,7 +372,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     }
 
     for (let index = 0; index < 15; index++) {
-      const good = goods[(burg.i * 13 + index * 7) % goods.length];
+      const good = dealGoods[(burg.i * 13 + index * 7) % dealGoods.length];
       const deal = addDeal({
         pack,
         deals,
@@ -388,7 +391,8 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     }
 
     for (let index = 0; index < 3; index++) {
-      const goodId = index === 0 ? localGoodId : rawGoods[(burg.i * 3 + index * 5) % rawGoods.length].i;
+      const fallbackGoodId = rawDealGoods[(burg.i * 3 + index * 5) % rawDealGoods.length]?.i ?? dealGoods[(burg.i + index) % dealGoods.length].i;
+      const goodId = index === 0 && dealGoodIds.has(localGoodId) ? localGoodId : fallbackGoodId;
       const deal = addDeal({
         pack,
         deals,
@@ -416,7 +420,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     for (let index = 0; index < marketTradeLinks; index++) {
       const buyer = markets[(market.i + index) % markets.length];
       if (!buyer || buyer.i === market.i) continue;
-      const good = goods[(market.i * 17 + index * 9) % goods.length];
+      const good = dealGoods[(market.i * 17 + index * 9) % dealGoods.length];
       addDeal({
         pack,
         deals,
@@ -436,6 +440,11 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
 
   for (const state of states) state._economyDealTax = stateDealTax.get(state.i) || 0;
   return deals;
+}
+
+function getDealGoods(goods, options) {
+  if (String(options.heightmapTemplate || "") !== "archipelago") return goods;
+  return goods.slice(0, Math.min(goods.length, 64));
 }
 
 function productionRecipe(good) {
