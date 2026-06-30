@@ -10804,3 +10804,20 @@ pnpm run regress:rendering
 
 - 不要继续用经济层常数追这个 case；剩余差异应回到城镇生成层，复查 source 城镇 spacing、populated cell 和命名/纹章统计。
 - `peninsula / 50000 / audit-peninsula-003` 的 `stock.mean / pollTaxExpected` 是另一类港口和税基派生问题，不能套用稀疏群岛规则。
+
+### 生成 loading 文案清理
+
+背景：
+
+- 用户指出 loading 不应显示“准备生成 xxx cells”这类文案；如果不能实时呈现每个内部生成步骤，至少要让状态文案不误导。
+- 当前正式应用生成器仍是同步执行，`generatePlaceholderMap()` 内部各 stage 无法在同一主线程阻塞期间逐步刷新 DOM，因此本刀不做假进度条。
+
+修正：
+
+- `requestGenerate()` 点击后 loading bubble 从泛泛的“生成中”改为“等待浏览器绘制”，让浏览器先有机会把 loading 状态画出来。
+- `runGenerateNow()` 保留真实的阶段提示：`正在生成地图数据`、`正在整理 WebGL 图层`、`正在刷新面板`。
+- 运行中的 `map-badge` 不再显示 `cellsTarget cells`，只显示当前状态和地图尺寸，避免把目标 cells 当成 loading 主文案。
+
+后续：
+
+- 若要做到真正“每一步正在做什么”的实时 loading，需要把生成流程拆成异步 stage runner，或者让 `createStageProfile().stage()` 接收进度回调并在阶段之间让出主线程。

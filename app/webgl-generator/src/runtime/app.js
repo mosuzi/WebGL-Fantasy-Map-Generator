@@ -728,7 +728,7 @@ function requestGenerate(state, documentRef) {
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     const generateId = state.pendingGenerateId;
     setGenerationStatus(documentRef, state.options, "等待生成任务");
-    setGenerationLoading(documentRef, true, "生成中");
+    setGenerationLoading(documentRef, true, "等待浏览器绘制");
     scheduleAfterPaint(documentRef, () => {
       if (generateId !== state.pendingGenerateId) return;
       runGenerateNow(state, documentRef, generateId);
@@ -805,7 +805,7 @@ function scheduleAfterPaint(documentRef, callback) {
 
 function setGenerationStatus(documentRef, options, status) {
   documentRef.getElementById("app-status").textContent = `${status}，seed ${options.seed}`;
-  documentRef.getElementById("map-badge").textContent = `${status} / ${options.graphWidth} x ${options.graphHeight} / ${options.cellsTarget} cells`;
+  documentRef.getElementById("map-badge").textContent = `${status} / ${options.graphWidth} x ${options.graphHeight}`;
 }
 
 function reportGenerateError(documentRef, error) {
