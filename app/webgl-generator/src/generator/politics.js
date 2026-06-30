@@ -403,14 +403,16 @@ function findStateNeighbors(pack, states) {
 function assignStateColors(states) {
   const validStates = states.filter(isStateColorTarget);
   const coloredStates = [];
+  const usedColors = new Set();
   const ordered = [...validStates].sort((a, b) => {
     const degree = (b.neighbors?.length || 0) - (a.neighbors?.length || 0);
     return degree || (b.area || 0) - (a.area || 0) || stateColorId(a) - stateColorId(b);
   });
 
   for (const state of ordered) {
-    state.color = chooseStateColor(state, states, coloredStates);
+    state.color = chooseStateColor(state, states, coloredStates.length, usedColors);
     coloredStates.push(state);
+    usedColors.add(state.color);
   }
 }
 
@@ -436,19 +438,19 @@ function findGridStateNeighbors(grid, states) {
   }
 }
 
-function chooseStateColor(state, states, coloredStates) {
+function chooseStateColor(state, states, coloredCount, usedColors) {
   const neighborColors = (state.neighbors || []).map(id => states[id]?.color).filter(Boolean);
-  const usedColors = coloredStates.map(item => item.color).filter(Boolean);
-  const fallbackIndex = coloredStates.length % STATE_COLOR_PALETTE.length;
+  const globalColors = Array.from(usedColors);
+  const fallbackIndex = coloredCount % STATE_COLOR_PALETTE.length;
   let bestColor = STATE_COLOR_PALETTE[fallbackIndex];
   let bestScore = -Infinity;
 
   for (let index = 0; index < STATE_COLOR_PALETTE.length; index++) {
     const color = STATE_COLOR_PALETTE[(fallbackIndex + index) % STATE_COLOR_PALETTE.length];
     const sameAsNeighbor = neighborColors.includes(color);
-    const unusedBonus = usedColors.includes(color) ? 0 : 0.05;
+    const unusedBonus = usedColors.has(color) ? 0 : 0.05;
     const neighborDistance = minColorDistance(color, neighborColors, 2);
-    const globalDistance = minColorDistance(color, usedColors, 1);
+    const globalDistance = minColorDistance(color, globalColors, 1);
     const score = neighborDistance * 4 + globalDistance * 0.6 + unusedBonus - (sameAsNeighbor ? 10000 : 0) - index * 0.001;
     if (score <= bestScore) continue;
     bestScore = score;
@@ -686,30 +688,32 @@ function findGridProvinceNeighbors(grid, provinces) {
 function assignProvinceColors(provinces) {
   const validProvinces = provinces.filter(isProvinceColorTarget);
   const coloredProvinces = [];
+  const usedColors = new Set();
   const ordered = [...validProvinces].sort((a, b) => {
     const degree = (b.neighbors?.length || 0) - (a.neighbors?.length || 0);
     return degree || (b.area || 0) - (a.area || 0) || provinceColorId(a) - provinceColorId(b);
   });
 
   for (const province of ordered) {
-    province.color = chooseProvinceColor(province, provinces, coloredProvinces);
+    province.color = chooseProvinceColor(province, provinces, coloredProvinces.length, usedColors);
     coloredProvinces.push(province);
+    usedColors.add(province.color);
   }
 }
 
-function chooseProvinceColor(province, provinces, coloredProvinces) {
+function chooseProvinceColor(province, provinces, coloredCount, usedColors) {
   const neighborColors = (province.neighbors || []).map(id => provinces[id]?.color).filter(Boolean);
-  const usedColors = coloredProvinces.map(item => item.color).filter(Boolean);
-  const fallbackIndex = coloredProvinces.length % STATE_COLOR_PALETTE.length;
+  const globalColors = Array.from(usedColors);
+  const fallbackIndex = coloredCount % STATE_COLOR_PALETTE.length;
   let bestColor = STATE_COLOR_PALETTE[fallbackIndex];
   let bestScore = -Infinity;
 
   for (let index = 0; index < STATE_COLOR_PALETTE.length; index++) {
     const color = STATE_COLOR_PALETTE[(fallbackIndex + index) % STATE_COLOR_PALETTE.length];
     const sameAsNeighbor = neighborColors.includes(color);
-    const unusedBonus = usedColors.includes(color) ? 0 : 0.05;
+    const unusedBonus = usedColors.has(color) ? 0 : 0.05;
     const neighborDistance = minColorDistance(color, neighborColors, 2);
-    const globalDistance = minColorDistance(color, usedColors, 1);
+    const globalDistance = minColorDistance(color, globalColors, 1);
     const score = neighborDistance * 4 + globalDistance * 0.6 + unusedBonus - (sameAsNeighbor ? 10000 : 0) - index * 0.001;
     if (score <= bestScore) continue;
     bestScore = score;

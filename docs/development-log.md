@@ -9810,3 +9810,38 @@ pnpm run regress:rendering
 - 端到端性能应优先使用 `pnpm run profile:e2e -- --browser-channel chrome` 判断体感，而不是只看 Node 纯生成 profile。
 - 下一个端到端 renderer 目标可以继续看 `cell-visual-mesh`、`shore-cache` 和 `fit-draw`；不过 10k 当前主要剩余已转回纯生成链路。
 - 纯生成下一刀建议优先处理“按政区整理城镇和路线”，然后再处理 pack 省份颜色分配。
+
+### 纯生成链路政区与命名修正第一刀
+
+背景：
+
+- 用户在 `seed = stage-2-1231411414`、`cells = 10000` 下观察到文化、宗教都是中文风格，但国家像中世纪欧洲，例如“公国”“自由邦”，和当前中文命名本体方向不一致。
+- 只读调查确认该 seed 随机到 `culturesSet = european`，文化对象使用中文根名但同时带 `nameStyle: "European"`；国家命名把这个字段当作政治命名风格，导致国家根名和形制切到欧式音译/欧式形制。
+- 用户同时指出省份/国家链路还需回到纯生成链路继续整理，尤其是按政区整理城镇、路线和 pack 省份颜色。
+- Loading 气泡的“准备生成 xxx cells”文案不够自然，且暴露了过多内部参数。
+
+修正：
+
+- `society.js` 中 `european / english` 文化集继续保留 source 风格的分布筛选，但不再把 `European` 写入 `nameStyle`；该字段后续只用于显式命名风格，而不是文化分布预设。
+- `names.js` 中国家形制表收回为中文本土风格，默认不再生成 `公国 / 侯国 / 自由邦 / 共和国`；`cultureType` 也不再自动触发音译根名，避免文化类型被误当语种。
+- `settlements.js` 的 `finalizeSettlements()` 优先从 `pack.cells.state/province` 同步城市和 burg 的政区归属；删去中立城镇、重建路线前后会刷新 `states/provinces` 的城市和人口统计。
+- pack 陆路主干改为按国家内首都、省会和大城分组，小路改为按省份分组；海路继续按水体港口分组。路线对象和 `pack.routes` 都写入 `state/province`，为后续路线面板和政区编辑提供归属字段。
+- `politics.js` 的国家/省份颜色分配改用已用颜色集合，避免每个省份反复映射已着色省份列表；颜色评分语义保持不变。
+- `runtime/app.js` 的 Loading 文案改为“生成中 / 正在生成地图数据 / 正在整理 WebGL 图层 / 正在刷新面板”，不再显示“准备生成 xxx cells”。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\names.js`
+- `node --check app\webgl-generator\src\generator\society.js`
+- `node --check app\webgl-generator\src\generator\politics.js`
+- `node --check app\webgl-generator\src\generator\settlements.js`
+- `node --check app\webgl-generator\src\runtime\app.js`
+- `node -e "import('./app/webgl-generator/src/generator/index.js').then(...)"` 对 `stage-2-1231411414 / continents / 10000` 做命名与政区烟测：文化 `nameStyle` 为 `null`，国家名未命中欧式词根或旧形制，城市省份与 `pack.cells.province` mismatch 为 `0`，路线 `696` 条，其中 `676` 条有国家归属、`585` 条有省份归属。
+- `$env:CI='true'; pnpm.cmd run build:app` 通过；Rolldown 仍报告第三方 `@vueuse/core` pure 注释位置警告，和本轮代码无关。
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 10000 --seed stage-2-1231411414 --template continents --iterations 1` 通过；10k 总耗时 `718.3ms`，最慢阶段为“生成国家 / 省份 / 区域” `132.8ms`，pack 省份颜色分配约 `32.4ms`。
+- `$env:CI='true'; pnpm.cmd run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1009.5ms`，纯生成 `698.3ms`，WebGL 加载 `184.8ms`。
+
+后续：
+
+- 如果要长期防止“分布预设误当命名风格”回归，应给 baseline diff 或单独 smoke 增加命名风格断言。
+- 100k 下仍应继续处理河流 `resolveDepressions()`；10k 下可继续看“按政区整理城镇和路线”里的路线候选和 A* 成本。

@@ -25,16 +25,24 @@ export function finalizeSettlements(grid, features, politics, settlements, pack,
   for (const city of settlements.cities) {
     if (pack?.cells && Number.isInteger(city.packCell) && city.packCell >= 0) {
       city.state = pack.cells.state?.[city.packCell] ?? city.state;
+      city.province = pack.cells.province?.[city.packCell] ?? city.province;
       const burg = pack.burgs?.[city.burgId];
-      if (burg) burg.state = city.state;
+      if (burg) {
+        burg.state = city.state;
+        burg.province = city.province;
+      }
     } else {
       city.state = grid.cells.state?.[city.cell] ?? city.state;
+      city.province = grid.cells.province?.[city.cell] ?? city.province;
     }
-    city.province = grid.cells.province?.[city.cell] ?? city.province;
   }
 
   if (options.pruneNeutralSettlements) pruneNeutralSettlements(grid, settlements, pack);
   mirrorCitiesToGrid(grid, settlements.cities);
+  if (pack?.cells) {
+    mirrorGridBurgsToPack(pack, settlements.cities);
+    syncPoliticalSettlementStats(pack, politics, settlements.cities);
+  }
   const routes = buildRoutes(grid, features, politics, settlements.cities, pack, options);
   const populationPoints = buildPopulationPoints(grid, features, grid.cells.pop);
   settlements.routes = routes;
@@ -653,17 +661,17 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const {burgs} = pack;
   const aliveBurgs = burgs.filter(burg => burg?.i && !burg.removed);
   const cityByBurg = new Map(cities.map(city => [city.burgId, city]));
-  const capitalsByFeature = groupBurgs(aliveBurgs.filter(burg => burg.capital), burg => pack.cells.f[burg.cell]);
-  const burgsByFeature = groupBurgs(aliveBurgs, burg => pack.cells.f[burg.cell]);
+  const majorBurgsByState = groupBurgs(aliveBurgs.filter(isMajorRouteBurg), burg => burgStateKey(burg));
+  const burgsByProvince = groupBurgs(aliveBurgs, burg => burgProvinceKey(burg));
   const portsByFeature = groupBurgs(aliveBurgs.filter(burg => burg.port), burg => burg.port);
   const pointsArray = preparePackRoutePoints(pack);
   const variation = createRouteVariation(pack, options);
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalsByFeature, water: false, variation}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: majorBurgsByState, water: false, variation}))) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByFeature, water: false, variation}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation}))) {
     addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg});
   }
 
@@ -675,6 +683,8 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
     i: route.id,
     group: route.type === "road" ? "roads" : route.type === "trail" ? "trails" : "searoutes",
     feature: route.feature,
+    state: route.state,
+    province: route.province,
     points: route.points.map((point, index) => [point[0], point[1], route.packCells[index]])
   }));
   pack.cells.routes = buildPackRouteLinks(routes);
@@ -882,12 +892,32 @@ function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, city
     type,
     level: type === "trail" ? "trail" : type === "searoute" ? "secondary" : fromBurg?.capital || toBurg?.capital ? "primary" : "secondary",
     feature,
+    state: routeMajorityCellValue(pack, cells, "state"),
+    province: type === "searoute" ? 0 : routeMajorityCellValue(pack, cells, "province"),
     from: fromCity?.id ?? -1,
     to: toCity?.id ?? -1,
     cells: cells.map(cell => pack.cells.g[cell]),
     packCells: cells,
     points: cells.map(cell => pointsArray[cell])
   });
+}
+
+function routeMajorityCellValue(pack, cells, field) {
+  const values = pack.cells?.[field];
+  if (!values) return 0;
+  const counts = new Map();
+  let bestValue = 0;
+  let bestCount = 0;
+  for (const cell of cells) {
+    const value = Number(values[cell]) || 0;
+    if (!value) continue;
+    const count = (counts.get(value) || 0) + 1;
+    counts.set(value, count);
+    if (count <= bestCount) continue;
+    bestValue = value;
+    bestCount = count;
+  }
+  return bestValue;
 }
 
 function calculateUrquhartEdges(points) {
@@ -933,6 +963,21 @@ function groupBurgs(burgs, keyFn) {
     groups.get(key).push(burg);
   }
   return groups;
+}
+
+function isMajorRouteBurg(burg) {
+  return Boolean(burg?.capital || burg?.province || (burg?.population || 0) >= 5);
+}
+
+function burgStateKey(burg) {
+  const state = Number(burg?.state) || 0;
+  return state > 0 ? state : null;
+}
+
+function burgProvinceKey(burg) {
+  const province = Number(burg?.province) || 0;
+  if (province > 0) return province;
+  return burgStateKey(burg);
 }
 
 function buildPackRouteLinks(routes) {
@@ -1066,6 +1111,7 @@ function syncPoliticalSettlementStats(pack, politics, cities) {
     if (!burg) continue;
     city.state = burg.state;
     city.province = pack.cells.province?.[city.packCell] ?? city.province;
+    burg.province = city.province;
   }
 }
 
