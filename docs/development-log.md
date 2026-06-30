@@ -9518,3 +9518,25 @@ pnpm run regress:shoreline -- --browser-channel chrome
 
 - 旧的原版分形海岸候选、shore visual band、shore path 构建和政治 mesh 海岸补点暂留在 `placeholder-renderer.js`。
 - 后续第二刀可以继续搬迁 shore path / old coastline candidate，但必须在每刀后跑 `regress:shoreline`。
+
+### shore-layer 第二刀
+
+背景：
+
+- 第一刀已经把当前活跃的水陆线描边入口迁到 `shore-layer`。
+- `placeholder-renderer.js` 中仍残留旧 shore path、原版分形海岸候选和政治 mesh 海岸补点 helper，主 renderer 继续膨胀，不利于后续拆 `political-layer`。
+
+修正：
+
+- `shore-layer.js` 继续承接水陆线相关缓存和候选实现：
+  - `buildShoreVisualPaths()` / `emptyShoreVisualPaths()` / `summarizeShoreVisualPaths()`。
+  - shore visual band 写入、局部宽度拟合、陆水采样安全检查和断段逻辑。
+  - 原版风格海岸候选采样、分形中点扰动、曲线采样、尖角过滤和贴回原始路径的保护逻辑。
+  - `buildSmoothedShoreBoundaryPoints()`，供政治视觉 mesh 补入海岸陆侧点。
+- `placeholder-renderer.js` 删除对应本地重复实现，只保留图层编排、政治边界 graph、政治视觉 mesh、河流/道路/选择/点位等动态图层和 renderer 外部 API。
+
+边界：
+
+- 本刀仍不重新启用原版分形水陆线表现。
+- 主渲染路径仍是 `pushShoreLineLayers()`：平滑单元格开启时读取 `cellVisualMesh.edgeCurves`，关闭时读取硬共享 Voronoi 边。
+- 旧海岸候选代码迁入 `shore-layer` 只是为了隔离职责和保留待办基础；后续重新启用前，仍必须先完成海岸轮廓级裁剪或同源填色 mesh，并优先用 `stage-2-1 / 10000 / 大陆` 回归验证。
