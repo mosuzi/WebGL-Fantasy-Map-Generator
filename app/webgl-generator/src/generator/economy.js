@@ -531,7 +531,7 @@ function marketCoverageTarget(pack) {
 
 function getMarketStockScale(options) {
   const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
-  return clamp((cellsTarget / 100000) ** 0.85, 0.12, 1);
+  return clamp((cellsTarget / 100000) ** 0.92, 0.12, 1);
 }
 
 function landRatio(pack) {

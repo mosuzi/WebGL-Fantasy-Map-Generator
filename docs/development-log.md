@@ -10333,3 +10333,34 @@ pnpm run regress:rendering
 
 - 当前 full 矩阵唯一 fail 是 `peninsula-50000-audit-peninsula-003` 的 `economy.markets.stock.mean`。
 - 该问题只剩单 case，下一刀应先读取该 case 的 source/candidate market stock 分布，再决定是做轻量 stock 下限/上限修正，还是把它降级为可接受的 warn；避免为了一个边缘 case 大幅重调所有地图的库存指数。
+
+### 经济库存尺度边缘校准
+
+背景：
+
+- 湖泊兜底后，full 矩阵剩余唯一 fail 是 `peninsula / 50000 / audit-peninsula-003` 的 `economy.markets.stock.mean`。
+- 该 case 的 source/candidate 库存均值为 `9.169 / 19.165`，相对差 `1.09`，略高于 fail 阈值 `1.0`。
+- full 矩阵中同一指标此前只有 `2` 个 warn 和 `1` 个 fail；说明这是边缘尺度问题，不适合大幅重写市场、商品或交易逻辑。
+
+修正：
+
+- `getMarketStockScale()` 的指数从 `0.85` 微调为 `0.92`。
+- 100k 因 `(100000 / 100000) ^ n = 1` 不变。
+- 50k 库存均值约下降 `4.7%`，刚好把 `peninsula / 50000 / 003` 从 fail 拉回 warn。
+- 10k 库存也会下降，但定点检查确认原有库存 warn 没跨入 fail。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- 定点样例：
+  - `peninsula / 50000 / audit-peninsula-003`：`stock.mean` source/candidate 从 `9.169 / 19.165` 改为 `9.169 / 18.257`，状态从 fail 降为 warn。
+  - `archipelago / 10000 / audit-archipelago-001`：`stock.mean` 保持 warn，没有跨入 fail。
+  - `lowIsland / 50000 / audit-lowIsland-001`：`stock.mean` 仍为 pass。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态从 `1 fail / 30 warn / 32 pass` 改为 `0 fail / 31 warn / 32 pass`。
+
+后续：
+
+- 阶段 19 当前没有硬 fail。下一步可以从 warn 数量最多或 source 语义缺口最明确的专题继续：marker 类型/规则、经济 stock 分布形态、税收 pollTaxExpected、或 marker/zone 的 source 细节。
+- 若继续经济，建议不要再只调单一均值；应改为 source 风格的“稀疏库存 + 长尾库存”分布，否则均值接近但 p25/p50/p99 仍不像 source。
