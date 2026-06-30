@@ -1,4 +1,5 @@
 import {MinPriorityQueue} from "./priority-queue.js";
+import {createStageProfile} from "./profile.js";
 
 const CULTURE_ROOTS = ["昭宁", "雁川", "栖梧", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "北辰", "东衡", "西陵", "海澜", "赤原", "沙洲", "霜庭", "松岳", "月湾", "石原", "晴川", "夜渡", "金台", "雨林", "岭南", "北海", "东渚", "朱明", "玄岭", "素川"];
 const RELIGION_ROOTS = ["天衡", "星渚", "青岚", "白麓", "南明", "清河", "玄曜", "苍极", "云章", "赤霄", "静澜", "昭灵"];
@@ -38,6 +39,7 @@ export function buildSociety(grid, features, climate, rivers, random, pack, opti
       culturedGridCells: cultureResult.gridCells,
       religionPackCells: religionResult.packCells,
       religionGridCells: religionResult.gridCells,
+      cultureTiming: cultureResult.timing || null,
       buildMs: roundMs(performance.now() - startedAt)
     }
   };
@@ -60,8 +62,9 @@ export function finalizeSocietyReligions(grid, society, pack, random, settlement
 }
 
 function buildPackCultures(grid, pack, random, options) {
+  const profile = createStageProfile();
   const {cells} = pack;
-  const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
+  const populated = profile.stage("collect-populated", "收集文化候选地", () => cells.i.filter(cell => isPopulatedPackCell(cells, cell)));
   const defaultDefinitions = getDefaultCultureDefinitions(options);
   let count = Math.min(defaultDefinitions.length, Math.max(0, Math.floor(options.culturesNumber ?? 12)), Math.max(1, Math.floor(options.culturesSetMax ?? 32)));
   if (populated.length < count * 25) count = Math.floor(populated.length / 50);
@@ -71,50 +74,57 @@ function buildPackCultures(grid, pack, random, options) {
     cells.culture = cultureIds;
     grid.cells.culture = new Array(grid.points.length).fill(0);
     pack.cultures = [createWildlandsCulture()];
-    return {cultures: pack.cultures, centers: [], packCells: 0, gridCells: 0};
+    return {cultures: pack.cultures, centers: [], packCells: 0, gridCells: 0, timing: profile.finish()};
   }
 
-  const context = createCultureContext(grid, pack, populated);
-  const selected = options.culturesSet === "antique" ? defaultDefinitions.slice(0, count) : selectCultureDefinitions(defaultDefinitions, count, random);
+  const context = profile.stage("create-context", "准备文化选址上下文", () => createCultureContext(grid, pack, populated));
+  const selected = profile.stage("select-definitions", "选择文化定义", () =>
+    options.culturesSet === "antique" ? defaultDefinitions.slice(0, count) : selectCultureDefinitions(defaultDefinitions, count, random)
+  );
   const cultures = [createWildlandsCulture()];
   const centers = [];
   let spacing = (grid.metadata.graphWidth + grid.metadata.graphHeight) / 2 / count;
+  const rankScores = new Float64Array(cells.i.length);
 
-  for (let index = 0; index < selected.length; index++) {
-    const definition = selected[index];
-    const sort = definition.sort || ((cell, context) => context.pack.cells.s[cell] || 0);
-    const center = placeCultureCenter({cells, context, populated, centers, spacing, random, sort, cultureIds});
-    if (center === -1) continue;
+  profile.stage("place-centers", "放置文化中心", () => {
+    for (let index = 0; index < selected.length; index++) {
+      const definition = selected[index];
+      const sort = definition.sort || ((cell, context) => context.pack.cells.s[cell] || 0);
+      const ranked = rankCultureCandidates(populated, context, sort, rankScores);
+      const center = placeCultureCenter({cells, ranked, centers, spacing, random, cultureIds});
+      if (center === -1) continue;
 
-    const cultureId = cultures.length;
-    const type = defineCultureType(pack, center, random);
-    const culture = {
-      id: cultureId,
-      i: cultureId,
-      name: `${definition.root}文化`,
-      root: definition.root,
-      nameStyle: definition.nameStyle || null,
-      center,
-      gridCenter: cells.g[center],
-      type,
-      expansionism: defineExpansionism(type, random, options.sizeVariety),
-      colorIndex: index,
-      cells: 0,
-      area: 0,
-      rural: 0,
-      origins: [0]
-    };
+      const cultureId = cultures.length;
+      const type = defineCultureType(pack, center, random);
+      const culture = {
+        id: cultureId,
+        i: cultureId,
+        name: `${definition.root}文化`,
+        root: definition.root,
+        nameStyle: definition.nameStyle || null,
+        center,
+        gridCenter: cells.g[center],
+        type,
+        expansionism: defineExpansionism(type, random, options.sizeVariety),
+        colorIndex: index,
+        cells: 0,
+        area: 0,
+        rural: 0,
+        origins: [0]
+      };
 
-    cultures.push(culture);
-    centers.push({cell: center, cultureId, point: cells.p[center]});
-    cultureIds[center] = cultureId;
-  }
+      cultures.push(culture);
+      centers.push({cell: center, cultureId, point: cells.p[center]});
+      cultureIds[center] = cultureId;
+    }
+  });
 
-  expandPackCultures(pack, cultures, centers, cultureIds);
-  fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds);
+  const populatedMask = profile.stage("create-populated-mask", "建立人口 cell 掩码", () => createCellMask(cells.i.length, populated));
+  profile.stage("expand-cultures", "扩张文化", () => expandPackCultures(pack, cultures, centers, cultureIds, populatedMask));
+  profile.stage("fill-unassigned", "补齐未归属文化人口", () => fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask));
   cells.culture = cultureIds;
-  summarizeCultureCoverage(pack, cultures);
-  const gridCells = mirrorPackCultureToGrid(grid, pack);
+  profile.stage("summarize", "汇总文化覆盖", () => summarizeCultureCoverage(pack, cultures));
+  const gridCells = profile.stage("mirror-grid", "同步文化到 grid", () => mirrorPackCultureToGrid(grid, pack));
   pack.cultures = cultures;
 
   return {
@@ -122,7 +132,8 @@ function buildPackCultures(grid, pack, random, options) {
     count: cultures.filter(culture => culture?.i && !culture.removed).length,
     centers: centers.map(center => center.cell),
     packCells: countPositive(cultureIds),
-    gridCells
+    gridCells,
+    timing: profile.finish()
   };
 }
 
@@ -702,20 +713,32 @@ function createCultureSort({
   };
 }
 
-function placeCultureCenter({cells, context, populated, centers, spacing, random, sort, cultureIds}) {
-  const sorted = [...populated].sort((a, b) => sort(b, context) - sort(a, context));
-  const maxIndex = Math.max(0, Math.floor(sorted.length / 2));
+function rankCultureCandidates(populated, context, sort, scores) {
+  const ranked = populated.slice();
+  for (const cell of populated) scores[cell] = sort(cell, context);
+  ranked.sort((a, b) => scores[b] - scores[a] || a - b);
+  return ranked;
+}
+
+function createCellMask(length, cells) {
+  const mask = new Uint8Array(length);
+  for (const cell of cells) mask[cell] = 1;
+  return mask;
+}
+
+function placeCultureCenter({cells, ranked, centers, spacing, random, cultureIds}) {
+  const maxIndex = Math.max(0, Math.floor(ranked.length / 2));
   let currentSpacing = spacing;
 
   for (let attempt = 0; attempt < 100; attempt++) {
-    const candidate = sorted[biasedIndex(random, maxIndex, 5)];
+    const candidate = ranked[biasedIndex(random, maxIndex, 5)];
     currentSpacing *= 0.9;
     if (candidate === undefined || cultureIds[candidate]) continue;
     const tooClose = centers.some(center => distance(cells.p[candidate], center.point) < currentSpacing);
     if (!tooClose) return candidate;
   }
 
-  return sorted.find(cell => !cultureIds[cell] && !centers.some(center => center.cell === cell)) ?? -1;
+  return ranked.find(cell => !cultureIds[cell] && !centers.some(center => center.cell === cell)) ?? -1;
 }
 
 function defineCultureType(pack, cell, random) {
@@ -753,7 +776,7 @@ function defineExpansionism(type, random, sizeVariety = 4) {
   return round(((random.next() * sizeVariety) / 2 + 1) * base, 1);
 }
 
-function expandPackCultures(pack, cultures, centers, cultureIds) {
+function expandPackCultures(pack, cultures, centers, cultureIds, populatedMask) {
   const {cells} = pack;
   const costs = new Float64Array(cells.i.length).fill(Infinity);
   const queue = new MinPriorityQueue();
@@ -775,14 +798,16 @@ function expandPackCultures(pack, cultures, centers, cultureIds) {
       if (!Number.isFinite(total) || total > maxExpansionCost || total >= costs[neighbor]) continue;
 
       costs[neighbor] = total;
-      if (isPopulatedPackCell(cells, neighbor)) cultureIds[neighbor] = cultureId;
+      if (populatedMask[neighbor]) cultureIds[neighbor] = cultureId;
       queue.push({cell: neighbor, cultureId, priority: total}, total);
     }
   }
 }
 
-function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds) {
+function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask) {
   const {cells} = pack;
+  if (!hasUnassignedPopulatedCulture(cultureIds, populatedMask)) return;
+
   const costs = new Float64Array(cells.i.length).fill(Infinity);
   const queue = new MinPriorityQueue();
   const maxCompletionCost = cells.i.length * 0.9;
@@ -796,7 +821,7 @@ function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds) {
     const {cell, cultureId, priority} = queue.pop();
     if (priority !== costs[cell]) continue;
 
-    if (!cultureIds[cell] && isPopulatedPackCell(cells, cell)) cultureIds[cell] = cultureId;
+    if (!cultureIds[cell] && populatedMask[cell]) cultureIds[cell] = cultureId;
 
     for (const neighbor of cells.c[cell] || []) {
       const step = packCultureStepCost(pack, cultures[cultureId], cell, neighbor);
@@ -807,6 +832,13 @@ function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds) {
       queue.push({cell: neighbor, cultureId, priority: total}, total);
     }
   }
+}
+
+function hasUnassignedPopulatedCulture(cultureIds, populatedMask) {
+  for (let cell = 0; cell < populatedMask.length; cell++) {
+    if (populatedMask[cell] && !cultureIds[cell]) return true;
+  }
+  return false;
 }
 
 function packCultureStepCost(pack, culture, from, to) {

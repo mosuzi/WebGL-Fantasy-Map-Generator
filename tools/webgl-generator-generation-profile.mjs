@@ -61,6 +61,7 @@ function profileCase({cells, seed, template, graphWidth, graphHeight, iterations
       slowest: timing.slowest,
       stages: timing.stages,
       subsystemTimings: {
+        cultures: map.society?.metadata?.cultureTiming || null,
         rivers: map.rivers?.timing || null,
         politics: map.politics?.timing || null,
         provinces: map.politics?.provinceTiming || null
@@ -105,6 +106,7 @@ function summarizeRuns(runs) {
 
 function summarizeSubsystems(runs) {
   return {
+    cultures: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.cultures).filter(Boolean)),
     rivers: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.rivers).filter(Boolean)),
     politics: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.politics).filter(Boolean)),
     provinces: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.provinces).filter(Boolean))
@@ -159,6 +161,7 @@ function renderMarkdown(report) {
     for (const stage of item.summary.stages) {
       lines.push(`| ${stage.label} | ${stage.avgMs}ms | ${stage.maxMs}ms | ${stage.share}% |`);
     }
+    appendSubsystemMarkdown(lines, item, "cultures", "文化子阶段");
     appendSubsystemMarkdown(lines, item, "politics", "国家 / 省份 / 区域子阶段");
     appendSubsystemMarkdown(lines, item, "provinces", "pack 省份子阶段");
     appendSubsystemMarkdown(lines, item, "rivers", "河流子阶段");

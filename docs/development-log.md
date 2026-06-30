@@ -9887,3 +9887,47 @@ pnpm run regress:rendering
 - 如果继续处理纯生成性能，优先拆 `society-cultures` 的文化中心选择、扩张队列和补完逻辑；其次看 pack 构建和省份填充是否存在可缓存的邻接/候选扫描。
 - 河流洼地算法已经改变传播顺序，checksum 与旧实现不同；当前按水陆不变量和端到端性能验收，后续若要收紧视觉一致性，可跑 source/candidate baseline 矩阵确认河流数量、湖泊出口和流域分布。
 - 阶段 19 前需要刷新 source baseline 或继续实现经济链路，否则 full candidate 矩阵会继续被 lateStages / economy 缺口判为 fail；这不是本轮 route/rivers 回归。
+
+### 纯生成链路性能第三刀：文化中心选址与子阶段 profile
+
+背景：
+
+- 上一轮 route / river 优化后，`stage-2-1231411414 / continents / 100000` 的最慢纯生成阶段转为 `society-cultures`，约 `603.9ms`。
+- 只读调查确认主要嫌疑是 `placeCultureCenter()`：每个文化定义都会复制全部 populated cells 后排序，并在 comparator 中反复调用 `sort(cell, context)`。
+- 用户要求继续自动推进，因此本轮沿纯生成链路继续处理确定性热点，并把文化内部耗时拆出来，方便后续不用再猜。
+
+修正：
+
+- `society.js` 引入 `createStageProfile()`，`buildPackCultures()` 现在记录文化子阶段：
+  - 收集文化候选地。
+  - 准备文化选址上下文。
+  - 选择文化定义。
+  - 放置文化中心。
+  - 建立人口 cell 掩码。
+  - 扩张文化。
+  - 补齐未归属文化人口。
+  - 汇总文化覆盖。
+  - 同步文化到 grid。
+- `buildSociety().metadata.cultureTiming` 暴露文化 timing；`tools/webgl-generator-generation-profile.mjs` 报告新增“文化子阶段”。
+- 文化中心候选排序改为先预计算每个 populated cell 的文化适配分，再按分数排序；同时复用 typed score buffer，避免 comparator 重复计算和大量 `{cell, score}` 对象分配。
+- 文化扩张与补齐阶段改用 populated mask 判断人口 cell；如果文化扩张已经覆盖所有 populated cell，补齐阶段会快速跳过。
+- 本轮没有修改 `source/`，也没有新增依赖。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/society.js`
+- `node --check tools/webgl-generator-generation-profile.mjs`
+- `git diff --check`
+- 第一次 `$env:CI` 未设置时运行 `pnpm.cmd run build:app` 被 pnpm 非 TTY modules 清理确认拦住；随后使用 `$env:CI='true'; pnpm.cmd run build:app` 通过。第三方 `@vueuse/core` pure annotation 警告仍为既有工具链噪音。
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 10000,50000,100000 --seed stage-2-1231411414 --template continents --iterations 1` 通过：
+  - 10k：总耗时约 `471.5ms`，`生成文化初稿` 约 `33ms`，文化中心放置约 `18.5ms`。
+  - 50k：总耗时约 `1240.8ms`，`生成文化初稿` 约 `86.5ms`，文化中心放置约 `61.7ms`。
+  - 100k：总耗时约 `2695.8ms`，`生成文化初稿` 约 `186.3ms`，文化中心放置约 `133.2ms`，扩张文化约 `37.2ms`。
+- 相比上一轮记录的 100k `生成文化初稿` 约 `603.9ms`，本轮降到约 `186.3ms`；不同单次采样会有抖动，但热点已明显下移。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh-candidate --refresh-diff --browser-channel chrome --timeout 240000` 通过刷新 3 个 100k candidate case；路线陆路穿水和海路中段穿陆均为 `0`，未出现文化引用或宗教连锁类新回退。矩阵总体仍为 fail，原因仍是已知 economy 空链路，以及部分 quick case 的旧 source `lateStages` 缺口。
+
+后续：
+
+- 文化阶段剩余最大子项仍是“放置文化中心”，但 100k 总体最慢已经转到 `politics`。
+- 下一刀纯生成性能建议优先看 `buildPackProvinces()` 里的“填充未归属省份 cell”和省份颜色、再看 `pack/features` 构建。
+- 若继续优化文化中心，可考虑更保守的 top-K 候选缓存或按文化定义复用排序结果，但这会更接近行为优化，需要比本轮更严格的文化中心/文化覆盖 diff。
