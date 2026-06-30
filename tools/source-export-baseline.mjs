@@ -420,7 +420,52 @@ try {
             withFlux: alive.filter(feature => feature.type === "lake" && Number.isFinite(feature.flux)).length,
             withOutlet: alive.filter(feature => feature.type === "lake" && feature.outlet).length,
             closed: alive.filter(feature => feature.type === "lake" && feature.closed).length
-          }
+          },
+          diagnostics: describeFeatureDiagnostics(alive)
+        };
+      }
+
+      function describeFeatureDiagnostics(features = []) {
+        const typed = type => features.filter(feature => feature.type === type);
+        const islands = typed("island");
+        const lakes = typed("lake");
+        return {
+          byType: Object.fromEntries(["island", "lake", "ocean"].map(type => [type, describeFeatureGroup(typed(type))])),
+          tinyLand: {
+            cellsLt3: islands.filter(feature => Number(feature.cells || 0) < 3).length,
+            cellsLt10: islands.filter(feature => Number(feature.cells || 0) < 10).length,
+            cellsLt20: islands.filter(feature => Number(feature.cells || 0) < 20).length
+          },
+          lakes: {
+            named: lakes.filter(feature => Boolean(feature.name)).length,
+            withOutlet: lakes.filter(feature => Boolean(feature.outlet)).length,
+            cellsLt3: lakes.filter(feature => Number(feature.cells || 0) < 3).length,
+            cellsLt10: lakes.filter(feature => Number(feature.cells || 0) < 10).length
+          },
+          details: features.map(describeFeatureDetail)
+        };
+      }
+
+      function describeFeatureGroup(features = []) {
+        return {
+          count: features.length,
+          cells: describeNumbers(features.map(feature => feature.cells)),
+          area: describeNumbers(features.map(feature => feature.area)),
+          groups: countByKey(features, feature => feature.group || "none")
+        };
+      }
+
+      function describeFeatureDetail(feature) {
+        return {
+          i: feature.i ?? feature.id ?? null,
+          type: feature.type || "unknown",
+          group: feature.group || "none",
+          cells: Number(feature.cells || 0),
+          area: round(Number(feature.area || 0)),
+          firstCell: Number.isInteger(feature.firstCell) ? feature.firstCell : null,
+          height: Number.isFinite(feature.height) ? round(feature.height) : null,
+          outlet: Number.isInteger(feature.outlet) ? feature.outlet : null,
+          named: Boolean(feature.name)
         };
       }
 

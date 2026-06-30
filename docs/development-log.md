@@ -10887,3 +10887,41 @@ pnpm run regress:rendering
   - `cells = 10000`
   - `seed = stage-2-1231411414`
   - 输出 `oldPoliticalFormHits = 0`，`cultureLinkedStateNames = 15`，并包含国家形制分布和前 12 个国家样本。
+
+### feature 单例 warn 诊断字段补齐
+
+背景：
+
+- full candidate 矩阵剩余两个 continents 10k 单例 warn：`continents-10000-audit-continents-001` 的 `features.total`，以及 `continents-10000-audit-continents-003` 的 `lateStages.names.lakeNames`。
+- 只看总数无法判断该改 feature 提取、pack 重建、湖泊命名，还是后续河流出口解析。
+
+修正：
+
+- `tools/webgl-generator-export-baseline.mjs` 和 `tools/source-export-baseline.mjs` 的 `features.diagnostics` 新增：
+  - `byType`：按 `island / lake / ocean` 统计 count、cells、area 和 group。
+  - `tinyLand`：统计 `<3 / <10 / <20` cells 的小陆地 feature。
+  - `lakes`：统计湖泊命名、outlet、小湖泊数量；candidate 额外记录 `supplemental` 湖泊数。
+  - `details`：输出每个 feature 的 `i / type / group / cells / area / firstCell / height / outlet / named`，candidate 额外记录 `supplemental`。
+
+定点复查：
+
+- `continents-10000-audit-continents-001`：
+  - source：总 feature `13`，陆地 `10`，湖泊 `2`；`tinyLand.cellsLt3 = 4`。
+  - candidate：总 feature `19`，陆地 `16`，湖泊 `2`；`tinyLand.cellsLt3 = 9`。
+  - 结论：水体数量对齐，warn 来自候选地形/feature 拓扑中更多小陆块，不应在命名或河流阶段修。
+- `continents-10000-audit-continents-003`：
+  - source：湖泊/湖名 `5 / 5`，`withOutlet = 5`。
+  - candidate：湖泊/湖名 `7 / 7`，`withOutlet = 4`。
+  - 横扫已有 summary 后确认 source 大多数 case 也是给所有湖命名，不是只命名有 outlet 的湖；因此不能把 `defineLakeNames()` 改成 outlet 过滤来压 warn。
+
+验证：
+
+- `node --check tools\webgl-generator-export-baseline.mjs`
+- `node --check tools\source-export-baseline.mjs`
+- 刷新并重算：
+  - `continents / 10000 / audit-continents-001`
+  - `continents / 10000 / audit-continents-003`
+
+后续：
+
+- `features.total / lakeNames` 暂归类为更早的局部地形拓扑 parity 差异；若后续继续收敛，应先对照 source 的洼地消解和 lake outlet 解析，不能用删除小岛、删除 1-cell 湖或过滤湖名这种末端修正。

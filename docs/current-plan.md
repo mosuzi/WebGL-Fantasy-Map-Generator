@@ -11,6 +11,8 @@
 - 生成 loading 文案不再显示目标 `cells`，运行中 badge 只显示状态和地图尺寸；loading bubble 显示“等待浏览器绘制 / 正在生成地图数据 / 正在整理 WebGL 图层 / 正在刷新面板”。
 - 国家根名现在优先从所属文化 `root` 派生，同文化多国用“东/西/新/古”等变体保持关联；国家形制继续按文化类型生成，例如游牧文化倾向 `汗国 / 诸帐`，海洋文化倾向 `海国 / 诸港 / 海盟`。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
+- source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
+- `continents-10000` 两个单例 warn 已完成只读复查：001 的 `features.total` 主要来自候选地形/feature 拓扑中更多小陆块；003 的 `lakeNames` 来自候选真实湖泊数 `7` 对 source `5`，不是 `defineLakeNames()` 命名过滤问题。不要用删除小岛、删除 1-cell 湖或只命名 outlet 湖来压 warn。
 
 剩余 warn case：
 
@@ -23,7 +25,7 @@
 下一步优先级：
 
 1. `archipelago-10000-audit-archipelago-001` 剩余项已经回到城镇数量派生问题；不要再调经济常数，先复查 source 城镇 spacing、populated cell 和 burg naming 统计。
-2. 单例项：`features.total / lakeNames / military.regiments / society.ports / pollTaxExpected` 需要先做定点只读复查，再决定是否值得改生成逻辑。
+2. 单例项：`military.regiments / society.ports / pollTaxExpected` 需要先做定点只读复查，再决定是否值得改生成逻辑；`features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正。
 3. marker 后续只做细节语义补齐：当前数量热点已清除，后续不要为了单个类型继续扩大总量。
 
 ## 2026-06-18 计划复位
