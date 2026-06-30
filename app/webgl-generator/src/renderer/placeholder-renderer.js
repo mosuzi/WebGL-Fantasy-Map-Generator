@@ -125,6 +125,7 @@ export class PlaceholderMapRenderer {
       selection: true
     };
     this.lastDraw = {drawMs: 0};
+    this.lastLoad = emptyRendererLoadStats();
     installCanvasInteractions(this.canvas, this.camera, () => {
       this.markViewportBuffersDirty();
       this.draw();
@@ -137,36 +138,40 @@ export class PlaceholderMapRenderer {
   }
 
   loadMap(map) {
+    const profile = createRendererLoadProfile();
     this.map = map;
-    this.objectPickingIndex = buildObjectPickingIndex(map);
-    this.rebuildCellVisualMesh();
-    this.rebuildShoreVisualCache();
-    this.rebuildStateVisualCache();
-    this.rebuildProvinceVisualCache();
-    this.rebuildPoliticalVisualMeshes();
-    const vertices = buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
-    const lineVertices = buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions);
-    const pointVertices = buildPointVertices(map, this.layerVisibility);
+    this.objectPickingIndex = profile.stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
+    profile.stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
+    profile.stage("shore-cache", "构建水陆线缓存", () => this.rebuildShoreVisualCache());
+    profile.stage("state-boundaries", "构建国家边界缓存", () => this.rebuildStateVisualCache());
+    profile.stage("province-boundaries", "构建省份边界缓存", () => this.rebuildProvinceVisualCache());
+    profile.stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
+    const vertices = profile.stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
+    const lineVertices = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
+    const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
-    this.updatePoliticalMeshDebugBuffer();
-    this.buildLabels(map);
+    profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+      this.updatePoliticalMeshDebugBuffer();
+    });
+    profile.stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
-    this.fitToView();
+    profile.stage("fit-draw", "适配视图并绘制", () => this.fitToView());
+    this.lastLoad = profile.finish();
   }
 
   fitToView() {
@@ -231,7 +236,7 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     this.rebuildStateVisualCache();
     this.rebuildProvinceVisualCache();
-    this.rebuildPoliticalVisualMeshes();
+    this.rebuildPoliticalVisualMeshesIfNeeded();
   }
 
   refreshPointLayers({draw = true} = {}) {
@@ -277,11 +282,25 @@ export class PlaceholderMapRenderer {
     this.updatePoliticalMeshDebugBuffer();
   }
 
+  rebuildPoliticalVisualMeshesIfNeeded() {
+    if (!this.map || !this.shouldBuildPoliticalVisualMeshes()) {
+      this.politicalVisualMeshes = emptyPoliticalVisualMeshes();
+      this.updatePoliticalMeshDebugBuffer();
+      return;
+    }
+    this.rebuildPoliticalVisualMeshes();
+  }
+
+  shouldBuildPoliticalVisualMeshes() {
+    if (this.politicalMeshDebugMode !== "none") return true;
+    return this.viewOptions.smoothCellBorders !== false && !this.cellVisualMesh?.cells?.length;
+  }
+
   setPoliticalMeshDebugMode(mode = "none") {
     const nextMode = normalizePoliticalMeshDebugMode(mode);
     if (this.politicalMeshDebugMode === nextMode) return;
     this.politicalMeshDebugMode = nextMode;
-    this.updatePoliticalMeshDebugBuffer();
+    this.rebuildPoliticalVisualMeshesIfNeeded();
     if (this.map) this.draw();
   }
 
@@ -436,6 +455,7 @@ export class PlaceholderMapRenderer {
       layerVisibility: {...this.layerVisibility},
       canvasSize: {...this.canvasSize},
       camera: {...this.camera},
+      loadMap: this.lastLoad,
       draw: this.lastDraw,
       dynamicMeshCache: {
         routesDirty: this.dynamicBuffersDirty.routes,
@@ -1369,6 +1389,28 @@ function lockCanvasToInitialDisplaySize(canvas, overlay = null) {
 
 function roundMs(value) {
   return Math.round(value * 100) / 100;
+}
+
+function createRendererLoadProfile() {
+  const startedAt = performance.now();
+  const stages = [];
+  return {
+    stage(id, label, task) {
+      const started = performance.now();
+      const result = task();
+      stages.push({id, label, ms: roundMs(performance.now() - started)});
+      return result;
+    },
+    finish() {
+      const totalMs = roundMs(performance.now() - startedAt);
+      const slowest = stages.reduce((best, stage) => stage.ms > (best?.ms ?? -1) ? stage : best, null);
+      return {totalMs, stages, slowest: slowest ? {...slowest} : null};
+    }
+  };
+}
+
+function emptyRendererLoadStats() {
+  return {totalMs: 0, stages: [], slowest: null};
 }
 
 function roundValue(value) {

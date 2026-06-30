@@ -9715,3 +9715,60 @@ pnpm run regress:rendering
 - 省份颜色分配下一刀应检查是否存在对所有省份或所有邻居的重复避让计算，优先引入局部邻接颜色候选缓存，而不是改变省份扩张结果。
 - `resolveDepressions()` 下一刀应改为更接近优先队列 / 局部传播的算法，避免大图上反复做全邻域松弛；改动前需要保留河流数量、湖泊出口和 checksum 对照。
 - 当前 timing 结构可继续扩展到城镇路线整理阶段，因为 100k 下该阶段已到 `1133.4ms`，是河流之后的第二梯队瓶颈。
+
+### 首屏 Loading 体感耗时纠偏与政治 mesh 按需构建
+
+背景：
+
+- 用户指出 10k 下刷新页面从 Loading 到出图约 `4s`，而上一轮报告里引用了 `560ms`。
+- 经复核，`560ms` 来自 `tools/webgl-generator-generation-profile.mjs` 的 Node CLI 纯生成函数 profile，只覆盖 `generatePlaceholderMap()`，不包含浏览器端 `renderer.loadMap()`、WebGL buffer、标签和面板刷新。
+- `tools/webgl-generator-shoreline-regression.mjs` 的浏览器报告曾显示点击到 WebGL ready 约 `4641.7ms`，与用户体感一致；因此需要拆浏览器端加载路径，而不是继续只看生成函数。
+
+排查：
+
+- 临时浏览器探针确认：
+  - 浏览器内 `map.metadata.generationTiming.totalMs` 约 `518-708ms`，与 Node CLI 纯生成量级一致。
+  - 点击生成到新图 ready 曾约 `3386.9-3858.7ms`。
+  - 新增 `renderer.loadMap()` 子阶段 timing 后，确认 `loadMap` 约 `3247.7ms`。
+  - 其中“构建政治视觉 mesh”单项约 `3048.3ms`，是首屏 Loading 体感的主要来源。
+- 当前默认平滑 cell surface 已由 `cellVisualMesh` 接管，政治视觉 mesh 主要作为 debug / 实验缓存；默认高度视图首屏并不需要同步构建该 Delaunay mesh。
+
+修正：
+
+- `PlaceholderMapRenderer.loadMap()` 新增加载阶段 profile：
+  - 对象索引、视觉 cell mesh、水陆线缓存、国家边界缓存、省份边界缓存、政治视觉 mesh、surface 顶点、线层顶点、点图层顶点、GPU upload、标签和 fit/draw 都会记录耗时。
+  - `renderer.getStats().loadMap` 暴露总耗时、阶段耗时和最慢阶段。
+- 运行时统计面板新增“WebGL 加载”行，与“生成耗时”并列显示，避免再把纯生成耗时误认为端到端体感耗时。
+- 政治视觉 mesh 改为按需构建：
+  - 默认不再在首屏同步构建 `states / provinces` 政治 Delaunay mesh。
+  - 只有开启 `politicalMeshDebugMode`，或未来出现没有 `cellVisualMesh` 且需要政治 surface fallback 的情况，才构建政治视觉 mesh。
+  - 关闭 debug 时会回到空 mesh cache，避免继续占用首屏时间。
+
+本轮数据：
+
+- 修正前浏览器探针：
+  - 点击到 ready：约 `3858.7ms`。
+  - 纯生成：约 `518.2ms`。
+  - `loadMap`：约 `3247.7ms`。
+  - `loadMap` 最慢阶段：“构建政治视觉 mesh” `3048.3ms`。
+- 修正后浏览器探针：
+  - 点击到 ready：约 `1591.4ms`。
+  - 纯生成：约 `969.7ms`，本次最慢为“按政区整理城镇和路线” `281.9ms`，存在正常采样抖动。
+  - `loadMap`：约 `425.1ms`。
+  - 政治视觉 mesh：`0.1ms`。
+  - 当前 `loadMap` 剩余较大项：线层顶点 `131.6ms`、视觉 cell mesh `99.5ms`、fit/draw `71.7ms`。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js`
+- `node --check app\webgl-generator\src\ui\panel.js`
+- `git diff --check`
+- `$env:CI='true'; pnpm.cmd run build:app`
+- `$env:CI='true'; pnpm.cmd run regress:rendering -- --browser-channel chrome`
+- 最新水陆线回归通过；10k 默认种子下视图切换约 `53-78ms`，`WebGL error = 0`。
+
+后续：
+
+- 首屏端到端性能下一刀优先看 `line-vertices` 和 `cell-visual-mesh`，尤其是水陆线/国界/省界三角描边是否可以缓存或延迟。
+- 生成函数内部仍按上一节推进：10k 看省份颜色分配，50k/100k 看 `resolveDepressions()`。
+- 如果之后重新启用政治视觉 mesh 正式绘制，必须先做懒加载、分帧构建或 worker 化，不能再回到首屏同步 Delaunay。

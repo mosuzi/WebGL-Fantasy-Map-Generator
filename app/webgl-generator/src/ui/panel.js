@@ -324,6 +324,7 @@ export function updateRuntimePanel(documentRef, state) {
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
     statRow(documentRef, "生成耗时", formatGenerationTiming(map.metadata.generationTiming)),
+    statRow(documentRef, "WebGL 加载", formatGenerationTiming(stats.loadMap)),
     statRow(documentRef, "Seed", map.metadata.seed),
     statRow(documentRef, "自动随机", map.options.randomSeed ? "是" : "否"),
     statRow(documentRef, "地形模板", map.heightmap.name),
