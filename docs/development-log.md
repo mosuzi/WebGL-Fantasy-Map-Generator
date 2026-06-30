@@ -9845,3 +9845,45 @@ pnpm run regress:rendering
 
 - 如果要长期防止“分布预设误当命名风格”回归，应给 baseline diff 或单独 smoke 增加命名风格断言。
 - 100k 下仍应继续处理河流 `resolveDepressions()`；10k 下可继续看“按政区整理城镇和路线”里的路线候选和 A* 成本。
+
+### 纯生成链路性能第二刀：河流洼地与路线寻路
+
+背景：
+
+- 上一刀已经把用户指出的命名、政区归属、路线归属和 Loading 文案问题收住，但 50k / 100k 纯生成仍有明显性能空间。
+- 子阶段 profile 显示旧 `resolveDepressions()` 在大图下会反复扫描全体陆地 cell；路线生成则在每条 A* 候选路径中反复创建并填充 `cameFrom / bestCost / closed` 大数组。
+- 用户明确要求可以继续自行推进，因此本轮继续沿纯生成链路处理确定性瓶颈，不改 UI 结构和 source 原项目。
+
+修正：
+
+- `rivers.js` 的洼地消解改为优先队列局部传播：
+  - 首轮仍从全部非边界陆地 cell 入队，保证初始洼地可被完整松弛。
+  - 每次抬高 cell 后只把相邻陆地重新入队，不再做整轮全陆地扫描。
+  - 湖泊高度或闭合状态变化后，只重新激活相关 shoreline 及邻近陆地，避免湖泊阶段把全图扫描重新打开。
+- `settlements.js` 的路线寻路复用 scratch：
+  - `tracePackPath()` 复用 `cameFrom / bestCost / seen / closed` typed arrays，用递增 `runId` 表示本次搜索访问状态。
+  - 路线连接边从字符串 key 改为基于 pack cell 数的无向数值 key，减少字符串分配。
+  - road 生成收敛为全图首都主干网，省会和大城不再生成国家级 road，继续通过省内 trail 覆盖。
+  - 极低陆地比群岛只取人口较高的首都生成 road，避免稀碎岛屿产生过多国家级道路。
+- 本轮没有改变 `source/`，也没有新增运行时依赖。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js`
+- `node --check app\webgl-generator\src\generator\rivers.js`
+- `git diff --check`
+- `$env:CI='true'; pnpm.cmd run build:app` 通过；第三方 `@vueuse/core` pure annotation 警告仍为既有工具链噪音。
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 10000,50000,100000 --seed stage-2-1231411414 --template continents --iterations 1` 通过：
+  - 10k：总耗时 `535.4ms`，最慢阶段为“生成国家 / 省份 / 区域” `114.2ms`，洼地消解 `12.8ms`，按政区整理城镇和路线 `43.5ms`。
+  - 50k：总耗时 `1380ms`，最慢阶段为“生成文化初稿” `269ms`，洼地消解 `47.4ms`，按政区整理城镇和路线 `98.1ms`。
+  - 100k：总耗时 `3007.6ms`，最慢阶段为“生成文化初稿” `603.9ms`，洼地消解 `102.1ms`，按政区整理城镇和路线 `301.2ms`。
+- `$env:CI='true'; pnpm.cmd run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `728.1ms`，纯生成 `341.4ms`，WebGL 加载 `248.5ms`。
+- 100k 不变量烟测通过：路线陆路穿水 `0`、海路中段穿陆 `0`、river 引用越界 `0`、`pack.cells.r` 标到水格 `0`。`river.cells` 中仍会包含河口海格和湖泊链路水格，这是当前河口裁剪与湖泊出流语义的一部分，不作为错误处理。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate --refresh-diff --browser-channel chrome --timeout 240000` 已刷新 63 个 candidate case；route/rivers 相关指标 fail `0`、warn `0`，陆路穿水与海路中段穿陆均为 `0`。矩阵总体状态仍为 fail，剩余原因是旧 source summary 缺 `lateStages` 字段，以及 candidate 经济链路尚未实现。
+
+后续：
+
+- 100k 最大瓶颈已从河流洼地和路线 A* 转到 `society-cultures`、`pack` 构建、`features` 和省份未归属填充。
+- 如果继续处理纯生成性能，优先拆 `society-cultures` 的文化中心选择、扩张队列和补完逻辑；其次看 pack 构建和省份填充是否存在可缓存的邻接/候选扫描。
+- 河流洼地算法已经改变传播顺序，checksum 与旧实现不同；当前按水陆不变量和端到端性能验收，后续若要收紧视觉一致性，可跑 source/candidate baseline 矩阵确认河流数量、湖泊出口和流域分布。
+- 阶段 19 前需要刷新 source baseline 或继续实现经济链路，否则 full candidate 矩阵会继续被 lateStages / economy 缺口判为 fail；这不是本轮 route/rivers 回归。

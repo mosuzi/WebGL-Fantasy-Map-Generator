@@ -1,6 +1,7 @@
 import {defineFeatureGroups} from "./pack.js";
 import {createChineseNameGenerator} from "./names.js";
 import {createStageProfile} from "./profile.js";
+import {MinPriorityQueue} from "./priority-queue.js";
 import {createRandom} from "./random.js";
 
 const WATER_LEVEL = 20;
@@ -248,10 +249,12 @@ function resolveDepressions(pack, heights, variation = null) {
   const land = Array.from(cells.i)
     .filter(cell => cells.h[cell] >= WATER_LEVEL && !cells.b[cell])
     .sort((a, b) => heights[a] - heights[b]);
+  const landMask = buildCellMask(cells.i.length, land);
 
   const progress = [];
   let depressions = Infinity;
   let previousDepressions = null;
+  let activeLand = land;
 
   for (let iteration = 0; depressions && iteration < MAX_DEPRESSION_ITERATIONS; iteration++) {
     if (progress.length > 5 && progress.reduce((sum, value) => sum + value, 0) > 0) {
@@ -261,6 +264,7 @@ function resolveDepressions(pack, heights, variation = null) {
     }
 
     depressions = 0;
+    const lakeChangedCells = [];
 
     if (iteration < checkLakeMaxIteration) {
       for (const lake of features || []) {
@@ -272,20 +276,18 @@ function resolveDepressions(pack, heights, variation = null) {
           for (const cell of lake.shoreline) heights[cell] = cells.h[cell];
           lake.height = minHeightValue(lake.shoreline, heights) - 1;
           lake.closed = true;
+          lakeChangedCells.push(...lake.shoreline);
           continue;
         }
 
         lake.height = minHeight + 0.2;
+        lakeChangedCells.push(...lake.shoreline);
         depressions++;
       }
     }
 
-    for (const cell of land) {
-      const minHeight = minEffectiveNeighborHeight(pack, heights, cell);
-      if (minHeight >= 100 || heights[cell] > minHeight) continue;
-      heights[cell] = minHeight + 0.1;
-      depressions++;
-    }
+    if (activeLand.length) depressions += resolveLandDepressions(pack, heights, activeLand, landMask);
+    activeLand = collectActiveLandAroundCells(pack, lakeChangedCells, landMask);
 
     if (!depressions) break;
     if (previousDepressions !== null) progress.push(depressions - previousDepressions);
@@ -293,6 +295,56 @@ function resolveDepressions(pack, heights, variation = null) {
   }
 
   return heights;
+}
+
+function resolveLandDepressions(pack, heights, land, landMask) {
+  const queue = new MinPriorityQueue();
+  const queued = new Uint8Array(pack.cells.i.length);
+  let depressions = 0;
+
+  for (const cell of land) enqueueDepressionCell(queue, queued, heights, cell);
+
+  while (queue.length) {
+    const cell = queue.pop();
+    queued[cell] = 0;
+    if (!landMask[cell]) continue;
+
+    const minHeight = minEffectiveNeighborHeight(pack, heights, cell);
+    if (minHeight >= 100 || heights[cell] > minHeight) continue;
+
+    heights[cell] = minHeight + 0.1;
+    depressions++;
+
+    for (const neighbor of pack.cells.c[cell] || []) {
+      if (landMask[neighbor]) enqueueDepressionCell(queue, queued, heights, neighbor);
+    }
+  }
+
+  return depressions;
+}
+
+function enqueueDepressionCell(queue, queued, heights, cell) {
+  if (queued[cell]) return;
+  queued[cell] = 1;
+  queue.push(cell, heights[cell]);
+}
+
+function buildCellMask(length, cells) {
+  const mask = new Uint8Array(length);
+  for (const cell of cells) mask[cell] = 1;
+  return mask;
+}
+
+function collectActiveLandAroundCells(pack, cells, landMask) {
+  if (!cells.length) return [];
+  const active = new Set();
+  for (const cell of cells) {
+    if (landMask[cell]) active.add(cell);
+    for (const neighbor of pack.cells.c[cell] || []) {
+      if (landMask[neighbor]) active.add(neighbor);
+    }
+  }
+  return Array.from(active).sort((a, b) => pack.cells.h[a] - pack.cells.h[b]);
 }
 
 function defineLakeClimateData(grid, pack, heights, options = {}, variation = null) {

@@ -661,21 +661,23 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const {burgs} = pack;
   const aliveBurgs = burgs.filter(burg => burg?.i && !burg.removed);
   const cityByBurg = new Map(cities.map(city => [city.burgId, city]));
-  const majorBurgsByState = groupBurgs(aliveBurgs.filter(isMajorRouteBurg), burg => burgStateKey(burg));
+  const capitalBurgs = groupCapitalBurgs(aliveBurgs, grid);
   const burgsByProvince = groupBurgs(aliveBurgs, burg => burgProvinceKey(burg));
   const portsByFeature = groupBurgs(aliveBurgs.filter(burg => burg.port), burg => burg.port);
   const pointsArray = preparePackRoutePoints(pack);
   const variation = createRouteVariation(pack, options);
+  const search = createRouteSearchScratch(pack.cells.i.length);
+  const edgeKeyMultiplier = pack.cells.i.length + 1;
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: majorBurgsByState, water: false, variation}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier}))) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation, search, edgeKeyMultiplier}))) {
     addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation, search, edgeKeyMultiplier}))) {
     addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg});
   }
 
@@ -691,7 +693,7 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   return routes;
 }
 
-function generateRouteSegments({pack, connections, groups, water, variation = null}) {
+function generateRouteSegments({pack, connections, groups, water, variation = null, search, edgeKeyMultiplier}) {
   const routeSegments = [];
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
 
@@ -701,10 +703,10 @@ function generateRouteSegments({pack, connections, groups, water, variation = nu
     for (const [fromId, toId] of edges) {
       const start = burgs[fromId].cell;
       const end = burgs[toId].cell;
-      const pathCells = tracePackPath(pack, start, end, water, connections, variation);
+      const pathCells = tracePackPath(pack, start, end, water, connections, variation, search, edgeKeyMultiplier);
 
-      for (const cells of getRouteSegments(pathCells, connections)) {
-        addConnections(cells, connections);
+      for (const cells of getRouteSegments(pathCells, connections, edgeKeyMultiplier)) {
+        addConnections(cells, connections, edgeKeyMultiplier);
         routeSegments.push({feature: Number(feature), cells, fromBurg: burgs[fromId].i, toBurg: burgs[toId].i});
       }
     }
@@ -713,34 +715,35 @@ function generateRouteSegments({pack, connections, groups, water, variation = nu
   return routeSegments;
 }
 
-function tracePackPath(pack, start, end, water, connections, variation = null) {
+function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1) {
   if (start === end) return [];
 
   const open = new MinPriorityQueue();
-  const cameFrom = new Int32Array(pack.cells.i.length).fill(-1);
-  const bestCost = new Float64Array(pack.cells.i.length).fill(Infinity);
+  const runId = beginRouteSearch(search);
   const maxVisited = Math.min(pack.cells.i.length, water ? 22000 : 14000);
   let visited = 0;
 
-  bestCost[start] = 0;
+  setRouteBest(search, runId, start, 0, -1);
   open.push(start, 0);
 
   while (open.length && visited < maxVisited) {
     const current = open.pop();
+    if (search.closed[current] === runId) continue;
+    search.closed[current] = runId;
     visited++;
 
     for (const neighbor of pack.cells.c[current] || []) {
+      if (search.closed[neighbor] === runId) continue;
       if (neighbor === end) {
-        cameFrom[neighbor] = current;
-        return reconstructPath(cameFrom, neighbor);
+        search.cameFrom[neighbor] = current;
+        return reconstructPath(search.cameFrom, neighbor);
       }
 
-      const step = packRouteStepCost(pack, current, neighbor, water, connections, variation);
+      const step = packRouteStepCost(pack, current, neighbor, water, connections, variation, edgeKeyMultiplier);
       if (!Number.isFinite(step)) continue;
-      const tentative = bestCost[current] + step;
-      if (tentative >= bestCost[neighbor]) continue;
-      cameFrom[neighbor] = current;
-      bestCost[neighbor] = tentative;
+      const tentative = getRouteBest(search, runId, current) + step;
+      if (tentative >= getRouteBest(search, runId, neighbor)) continue;
+      setRouteBest(search, runId, neighbor, tentative, current);
       open.push(neighbor, tentative);
     }
   }
@@ -748,10 +751,10 @@ function tracePackPath(pack, start, end, water, connections, variation = null) {
   return [];
 }
 
-function packRouteStepCost(pack, current, next, water, connections, variation = null) {
+function packRouteStepCost(pack, current, next, water, connections, variation = null, edgeKeyMultiplier = pack.cells.i.length + 1) {
   const height = pack.cells.h[next];
   const distanceCost = distanceSquared(pack.cells.p[current], pack.cells.p[next]);
-  const connected = connections.has(`${current}-${next}`) ? 0.5 : 1;
+  const connected = connections.has(routeEdgeKey(current, next, edgeKeyMultiplier)) ? 0.5 : 1;
   const variationFactor = variation?.cellCost?.[next] || 1;
 
   if (water) {
@@ -770,14 +773,14 @@ function packRouteStepCost(pack, current, next, water, connections, variation = 
   return distanceCost * habitabilityModifier * heightModifier * connected * burgModifier * variationFactor;
 }
 
-function getRouteSegments(pathCells, connections) {
+function getRouteSegments(pathCells, connections, edgeKeyMultiplier) {
   const segments = [];
   let segment = [];
 
   for (let index = 0; index < pathCells.length; index++) {
     const cell = pathCells[index];
     const next = pathCells[index + 1];
-    const isConnected = connections.has(`${cell}-${next}`) || connections.has(`${next}-${cell}`);
+    const isConnected = next !== undefined && connections.has(routeEdgeKey(cell, next, edgeKeyMultiplier));
 
     if (isConnected) {
       if (segment.length) {
@@ -795,11 +798,43 @@ function getRouteSegments(pathCells, connections) {
   return segments;
 }
 
-function addConnections(cells, connections) {
+function addConnections(cells, connections, edgeKeyMultiplier) {
   for (let index = 0; index < cells.length - 1; index++) {
-    connections.add(`${cells[index]}-${cells[index + 1]}`);
-    connections.add(`${cells[index + 1]}-${cells[index]}`);
+    connections.add(routeEdgeKey(cells[index], cells[index + 1], edgeKeyMultiplier));
   }
+}
+
+function routeEdgeKey(left, right, multiplier) {
+  return left < right ? left * multiplier + right : right * multiplier + left;
+}
+
+function createRouteSearchScratch(size) {
+  return {
+    cameFrom: new Int32Array(size),
+    bestCost: new Float64Array(size),
+    seen: new Uint32Array(size),
+    closed: new Uint32Array(size),
+    runId: 0
+  };
+}
+
+function beginRouteSearch(search) {
+  search.runId++;
+  if (search.runId < 0xffffffff) return search.runId;
+  search.seen.fill(0);
+  search.closed.fill(0);
+  search.runId = 1;
+  return search.runId;
+}
+
+function getRouteBest(search, runId, cell) {
+  return search.seen[cell] === runId ? search.bestCost[cell] : Infinity;
+}
+
+function setRouteBest(search, runId, cell, cost, from) {
+  search.seen[cell] = runId;
+  search.bestCost[cell] = cost;
+  search.cameFrom[cell] = from;
 }
 
 function preparePackRoutePoints(pack) {
@@ -965,8 +1000,18 @@ function groupBurgs(burgs, keyFn) {
   return groups;
 }
 
-function isMajorRouteBurg(burg) {
-  return Boolean(burg?.capital || burg?.province || (burg?.population || 0) >= 5);
+function groupCapitalBurgs(burgs, grid) {
+  const capitals = burgs.filter(burg => burg?.capital);
+  if (getGridLandRatio(grid) < 0.09) capitals.sort((a, b) => (b.population || 0) - (a.population || 0)).splice(18);
+  return capitals.length >= 3 ? new Map([[1, capitals]]) : new Map();
+}
+
+function getGridLandRatio(grid) {
+  const heights = grid.cells?.h || [];
+  if (!heights.length) return 1;
+  let land = 0;
+  for (const height of heights) if (height >= 20) land++;
+  return land / heights.length;
 }
 
 function burgStateKey(burg) {
