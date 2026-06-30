@@ -9492,3 +9492,29 @@ pnpm run regress:shoreline -- --browser-channel chrome
 定位：
 
 - 该脚本是 10k 默认种子的快速水陆线守门，不替代 `tools/webgl-generator-smooth-cell-profile.mjs` 的 50k / 100k 大图性能和近景截图 profile。
+
+### shore-layer 第一刀
+
+背景：
+
+- 新增水陆线回归后，可以开始拆 `shore-layer`，但这一刀只做结构迁移，不重新启用原版分形海岸，避免再次引入水陆线与填色分离。
+- 当前主渲染路径中真正活跃的是：
+  - 平滑开启：水陆线读取 `cellVisualMesh.edgeCurves`。
+  - 平滑关闭：水陆线读取硬共享 Voronoi 边。
+  - 两者都通过三角形描边进入当前 `lineBuffer`。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/shore-layer.js`：
+  - `SHORE_VISUAL_STYLE` 集中水陆线和旧海岸视觉参数。
+  - `pushShoreLineLayers()` 负责按 `smoothCellBorders` 写入海岸线和湖岸线。
+  - `boundaryLineModeForOptions()` 负责运行时统计中的边界线来源。
+  - `sharedVoronoiEdge()` / `sharedVoronoiEdgeVertexIds()` 作为共享边 helper 暂由 shore layer 导出，政治边界和 shore path 构建继续复用。
+- `placeholder-renderer.js`：
+  - `buildLineVertices()` 改为调用 `pushShoreLineLayers()`。
+  - 删除本地重复的水陆线写入、硬边水陆线写入、旧线段写入和本地 `boundaryLineModeForOptions()`。
+
+边界：
+
+- 旧的原版分形海岸候选、shore visual band、shore path 构建和政治 mesh 海岸补点暂留在 `placeholder-renderer.js`。
+- 后续第二刀可以继续搬迁 shore path / old coastline candidate，但必须在每刀后跑 `regress:shoreline`。

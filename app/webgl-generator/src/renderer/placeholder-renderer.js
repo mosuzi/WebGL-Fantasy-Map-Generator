@@ -33,6 +33,7 @@ import {
   smoothWorldPathWithValues,
   worldDistance
 } from "./geometry.js";
+import {SHORE_VISUAL_STYLE, boundaryLineModeForOptions, pushShoreLineLayers, sharedVoronoiEdge} from "./shore-layer.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {createRandom} from "../generator/random.js";
@@ -1071,35 +1072,11 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   const vertices = [];
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
-  const smoothCellBorders = viewOptions.smoothCellBorders !== false && cellVisualMesh?.edgeCurves;
-  if (visibility.coastline !== false) {
-    if (smoothCellBorders) pushCellVisualShoreLines(vertices, context, cellVisualMesh, "ocean", SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld);
-    else pushHardShoreLines(vertices, context, "ocean", SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld);
-  }
-  if (visibility.lakeShore !== false) {
-    if (smoothCellBorders) pushCellVisualShoreLines(vertices, context, cellVisualMesh, "lake", SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld);
-    else pushHardShoreLines(vertices, context, "lake", SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld);
-  }
+  pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   return new Float32Array(vertices);
 }
-
-const SHORE_VISUAL_STYLE = Object.freeze({
-  bandWidthWorld: 13,
-  minBandWidthWorld: 1.2,
-  bandWidthFitSteps: 6,
-  maxRenderDisplacementWorld: 5,
-  maxRenderSegmentWorld: 14,
-  spikeAngleCos: 0.86,
-  hardSpikeAngleCos: 0.94,
-  spikeDisplacementWorld: 2.5,
-  smoothing: Object.freeze({iterations: 2, factor: 0.22}),
-  coastlineWidthWorld: 0.42,
-  lakeShoreWidthWorld: 0.34,
-  coastlineStroke: Object.freeze([0.88, 0.84, 0.63, 0.68]),
-  lakeShoreStroke: Object.freeze([0.58, 0.78, 0.84, 0.64])
-});
 
 const STATE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 7,
@@ -1299,119 +1276,6 @@ function summarizeCellVisualMesh(mesh) {
     style: {...CELL_VISUAL_STYLE},
     buildMs: mesh?.buildMs || 0
   };
-}
-
-function boundaryLineModeForOptions(viewOptions, cellVisualMesh) {
-  return viewOptions?.smoothCellBorders !== false && cellVisualMesh?.edgeCurves
-    ? "visual-cell-shore + butt-join-political"
-    : "hard-cell-shore + butt-join-political";
-}
-
-function pushCellVisualShoreLines(vertices, context, cellVisualMesh, targetType, color, widthWorld) {
-  const {map} = context;
-  const cells = map?.grid?.cells;
-  if (!cells?.i || !cells?.c) return;
-  for (const cell of cells.i || []) {
-    for (const neighbor of cells.c[cell] || []) {
-      if (neighbor <= cell) continue;
-      const cellLand = isLandCell(cell, map);
-      const neighborLand = isLandCell(neighbor, map);
-      if (cellLand === neighborLand) continue;
-      const waterCell = cellLand ? neighbor : cell;
-      const waterFeature = map.features.features[cells.f?.[waterCell]];
-      const isOcean = waterFeature?.type === "ocean";
-      if ((targetType === "ocean" && !isOcean) || (targetType === "lake" && isOcean)) continue;
-      pushWorldPolylineMesh(vertices, context, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), color, widthWorld, {joinMode: "round"});
-    }
-  }
-}
-
-function pushCellVisualPoliticalLines(vertices, context, field, cellVisualMesh, color) {
-  const {map} = context;
-  const cells = map?.grid?.cells;
-  if (!cells?.i || !cells?.c || !cells?.[field]) return;
-  for (const cell of cells.i || []) {
-    if (!isLandCell(cell, map)) continue;
-    const ownValue = cells[field][cell] || 0;
-    for (const neighbor of cells.c[cell] || []) {
-      if (neighbor <= cell || !isLandCell(neighbor, map)) continue;
-      const neighborValue = cells[field][neighbor] || 0;
-      if (neighborValue === ownValue) continue;
-      if (field !== "state" && (!ownValue || !neighborValue)) continue;
-      if (field === "state" && !ownValue && !neighborValue) continue;
-      pushWorldPolylineLines(vertices, context, visualSharedCellEdge(map, cell, neighbor, cellVisualMesh), color);
-    }
-  }
-}
-
-function pushHardShoreLines(vertices, context, targetType, color, widthWorld) {
-  const {map} = context;
-  const cells = map?.grid?.cells;
-  if (!cells?.i || !cells?.c) return;
-  for (const cell of cells.i || []) {
-    for (const neighbor of cells.c[cell] || []) {
-      if (neighbor <= cell) continue;
-      const cellLand = isLandCell(cell, map);
-      const neighborLand = isLandCell(neighbor, map);
-      if (cellLand === neighborLand) continue;
-      const waterCell = cellLand ? neighbor : cell;
-      const waterFeature = map.features.features[cells.f?.[waterCell]];
-      const isOcean = waterFeature?.type === "ocean";
-      if ((targetType === "ocean" && !isOcean) || (targetType === "lake" && isOcean)) continue;
-      const edge = sharedVoronoiEdge(map, cell, neighbor);
-      if (edge) pushWorldPolylineMesh(vertices, context, edge, color, widthWorld, {joinMode: "caps"});
-    }
-  }
-}
-
-function visualSharedCellEdge(map, cell, neighbor, cellVisualMesh) {
-  const shared = sharedVoronoiEdgeVertexIds(map, cell, neighbor);
-  if (!shared) return [];
-  const first = Math.min(shared[0], shared[1]);
-  const second = Math.max(shared[0], shared[1]);
-  const curve = cellVisualMesh?.edgeCurves?.get(`${first}:${second}`);
-  if (curve?.length) return shared[0] <= shared[1] ? curve : [...curve].reverse();
-  return shared.map(vertex => map.grid.vertices.p[vertex]).filter(isWorldPoint);
-}
-
-function pushWorldPolylineLines(vertices, context, points, color) {
-  if (!Array.isArray(points) || points.length < 2) return;
-  for (let index = 0; index < points.length - 1; index++) {
-    pushWorldLine(vertices, context, [points[index], points[index + 1]], color);
-  }
-}
-
-function pushPoliticalBoundaryLines(vertices, context, field, color) {
-  const {map} = context;
-  const cells = map?.grid?.cells;
-  if (!cells?.c || !cells?.v || !cells?.[field]) return;
-  for (const cell of cells.i || []) {
-    if (!isLandCell(cell, map)) continue;
-    const ownValue = cells[field][cell] || 0;
-    for (const neighbor of cells.c[cell] || []) {
-      if (neighbor <= cell || !isLandCell(neighbor, map)) continue;
-      const neighborValue = cells[field][neighbor] || 0;
-      if (neighborValue === ownValue) continue;
-      if (field !== "state" && (!ownValue || !neighborValue)) continue;
-      if (field === "state" && !ownValue && !neighborValue) continue;
-      const edge = sharedVoronoiEdge(map, cell, neighbor);
-      if (edge) pushWorldLine(vertices, context, edge, color);
-    }
-  }
-}
-
-function sharedVoronoiEdge(map, cell, neighbor) {
-  const shared = sharedVoronoiEdgeVertexIds(map, cell, neighbor);
-  if (!shared) return null;
-  return [map.grid.vertices.p[shared[0]], map.grid.vertices.p[shared[1]]];
-}
-
-function sharedVoronoiEdgeVertexIds(map, cell, neighbor) {
-  const ownVertices = map.grid.cells.v[cell] || [];
-  const neighborVertices = new Set(map.grid.cells.v[neighbor] || []);
-  const shared = ownVertices.filter(vertex => neighborVertices.has(vertex));
-  if (shared.length < 2) return null;
-  return [shared[0], shared[1]];
 }
 
 function pushShoreVisualBands(vertices, context, colorMode, viewOptions, paths) {

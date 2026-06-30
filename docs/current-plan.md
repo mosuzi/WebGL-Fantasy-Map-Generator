@@ -641,6 +641,7 @@ http://127.0.0.1:5410
 77. renderer 颜色模式和 cell surface 抽取已完成：新增 `app/webgl-generator/src/renderer/color-modes.js`，集中管理 `colorForCell()`、陆地判定、各视图颜色、国家/省份颜色和高度/温度/降水色带；新增 `app/webgl-generator/src/renderer/cell-surface-layer.js`，承载普通 grid cell surface、视觉 cell mesh surface、政治视觉 mesh 兜底过滤和 surface 顶点拷贝。`placeholder-renderer.js` 继续保留图层编排、海岸/政治路径和动态对象层，后续可优先拆 `shore-layer` 与 `political-layer`。
 78. 原版风格水陆线平滑表现已暂时回退：用户再次观察到水陆线与填色分离后，当前渲染不再绘制海岸填色视觉带，水陆线描边也不再使用原版分形海岸轮廓；平滑单元格开启时读取 `cellVisualMesh.edgeCurves` 的共享边，关闭时回退硬共享 Voronoi 边，优先保证线与当前 surface 填色同源贴合。原版海岸采样代码暂不删除，作为待办保留；后续如果重新启用，应先完成海岸轮廓级裁剪或同源填色 mesh，再让分形水陆线重新进入主渲染路径。
 79. 水陆线回归脚本已新增：`tools/webgl-generator-shoreline-regression.mjs` 默认使用 `stage-2-1 / 10000 / 大陆` 跑高度、国家、省份三种视图，并分别验证平滑单元格开启和关闭两种路径。脚本会检查 `glError = 0`、`boundaryLineMode` 是否为 `visual-cell-shore + butt-join-political` / `hard-cell-shore + butt-join-political`、水陆线图层是否可见、轮廓三角形数量是否高于下限，并输出 `docs/generated/reports/shoreline-regression-results.json/md` 与截图。后续修改 `shore-layer`、`political-layer`、`mesh-writer` 或边界线绘制模式前后，应先跑 `pnpm run build:app` 再跑 `pnpm run regress:shoreline -- --browser-channel chrome`。
+80. `shore-layer` 第一刀结构迁移已完成：新增 `app/webgl-generator/src/renderer/shore-layer.js`，承载当前活跃水陆线样式、平滑/硬边水陆线三角描边写入、`boundaryLineMode` 统计和共享 Voronoi 边 helper；`placeholder-renderer.js` 只保留图层编排入口并调用 `pushShoreLineLayers()`。本刀不重新启用原版分形海岸，也暂不搬迁仍用于政治 mesh 补点的旧 shore path / 分形候选实现，避免结构迁移夹带视觉行为变化。
 
 ## 约束
 
