@@ -61,6 +61,10 @@ function profileCase({cells, seed, template, graphWidth, graphHeight, iterations
       slowest: timing.slowest,
       stages: timing.stages,
       subsystemTimings: {
+        grid: map.grid?.metadata?.timing || null,
+        features: map.features?.metadata?.timing || null,
+        pack: map.pack?.metadata?.timing || null,
+        packFeatures: map.pack?.metadata?.featureTiming || null,
         cultures: map.society?.metadata?.cultureTiming || null,
         rivers: map.rivers?.timing || null,
         politics: map.politics?.timing || null,
@@ -106,6 +110,10 @@ function summarizeRuns(runs) {
 
 function summarizeSubsystems(runs) {
   return {
+    grid: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.grid).filter(Boolean)),
+    features: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.features).filter(Boolean)),
+    pack: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.pack).filter(Boolean)),
+    packFeatures: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.packFeatures).filter(Boolean)),
     cultures: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.cultures).filter(Boolean)),
     rivers: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.rivers).filter(Boolean)),
     politics: summarizeTimingSamples(runs.map(run => run.subsystemTimings?.politics).filter(Boolean)),
@@ -161,6 +169,10 @@ function renderMarkdown(report) {
     for (const stage of item.summary.stages) {
       lines.push(`| ${stage.label} | ${stage.avgMs}ms | ${stage.maxMs}ms | ${stage.share}% |`);
     }
+    appendSubsystemMarkdown(lines, item, "grid", "grid / Voronoi / 高度子阶段");
+    appendSubsystemMarkdown(lines, item, "features", "水陆 feature 子阶段");
+    appendSubsystemMarkdown(lines, item, "pack", "pack 语义图子阶段");
+    appendSubsystemMarkdown(lines, item, "packFeatures", "pack feature 标注子阶段");
     appendSubsystemMarkdown(lines, item, "cultures", "文化子阶段");
     appendSubsystemMarkdown(lines, item, "politics", "国家 / 省份 / 区域子阶段");
     appendSubsystemMarkdown(lines, item, "provinces", "pack 省份子阶段");

@@ -1,3 +1,5 @@
+import {createStageProfile} from "./profile.js";
+
 const WATER_LEVEL = 20;
 const UNMARKED = 0;
 const LAND_COAST = 1;
@@ -5,10 +7,45 @@ const WATER_COAST = -1;
 const DEEP_WATER = -2;
 
 export function extractFeatures(grid) {
+  const profile = createStageProfile();
   const cellCount = grid.points.length;
   const distanceField = new Int8Array(cellCount);
   const featureIds = new Uint16Array(cellCount);
   const features = [null];
+
+  profile.stage("flood-features", "泛洪识别水陆 feature", () => floodGridFeatures({grid, distanceField, featureIds, features}));
+  profile.stage("deep-water", "标记深水距离", () => markupDeepWater(distanceField, grid.cells.c));
+  profile.stage("depression-lakes", "识别深洼湖泊", () => addLakesInDeepDepressions({grid, distanceField, featureIds, features}));
+  profile.stage("open-near-sea-lakes", "打开近海湖泊", () => openNearSeaLakes({grid, distanceField, featureIds, features}));
+  profile.stage("rebuild-feature-cells", "重建 feature cell 列表", () => rebuildFeatureCells(features, featureIds, cellCount));
+  profile.stage("sync-grid-fields", "同步 feature 字段到 grid", () => {
+    grid.cells.t = Array.from(distanceField);
+    grid.cells.f = Array.from(featureIds);
+    grid.features = features;
+  });
+
+  const shore = profile.stage("shore-segments", "生成水陆线段", () => buildShoreSegments(grid, features, featureIds));
+  const counts = profile.stage("metadata-counts", "统计 feature 指标", () => ({
+    featureCount: features.filter(Boolean).length,
+    oceanFeatures: features.filter(feature => feature?.type === "ocean").length,
+    landFeatures: features.filter(feature => feature?.land).length,
+    lakeFeatures: features.filter(feature => feature?.type === "lake").length
+  }));
+  const timing = profile.finish();
+
+  return {
+    features,
+    shore,
+    metadata: {
+      ...counts,
+      coastlineSegments: shore.coastline.length,
+      lakeShoreSegments: shore.lakeShore.length,
+      timing
+    }
+  };
+}
+
+function floodGridFeatures({grid, distanceField, featureIds, features}) {
   const queue = [0];
 
   for (let featureId = 1; queue[0] !== -1; featureId++) {
@@ -38,28 +75,6 @@ export function extractFeatures(grid) {
     features.push({id: featureId, i: featureId, land, border, type, cells: []});
     queue[0] = featureIds.indexOf(UNMARKED);
   }
-
-  markupDeepWater(distanceField, grid.cells.c);
-  addLakesInDeepDepressions({grid, distanceField, featureIds, features});
-  openNearSeaLakes({grid, distanceField, featureIds, features});
-  rebuildFeatureCells(features, featureIds, cellCount);
-  grid.cells.t = Array.from(distanceField);
-  grid.cells.f = Array.from(featureIds);
-  grid.features = features;
-
-  const shore = buildShoreSegments(grid, features, featureIds);
-  return {
-    features,
-    shore,
-    metadata: {
-      featureCount: features.filter(Boolean).length,
-      oceanFeatures: features.filter(feature => feature?.type === "ocean").length,
-      landFeatures: features.filter(feature => feature?.land).length,
-      lakeFeatures: features.filter(feature => feature?.type === "lake").length,
-      coastlineSegments: shore.coastline.length,
-      lakeShoreSegments: shore.lakeShore.length
-    }
-  };
 }
 
 function markupDeepWater(distanceField, neighbors) {
@@ -85,30 +100,34 @@ function addLakesInDeepDepressions({grid, distanceField, featureIds, features}) 
   const elevationLimit = 20;
   if (elevationLimit === 80) return;
   const {c: neighbors, h: heights, b: borders, i: indexes} = grid.cells;
+  const checked = new Uint32Array(indexes.length);
+  const queue = [];
+  let stamp = 0;
 
   for (const cell of indexes) {
     if (borders[cell] || heights[cell] < WATER_LEVEL) continue;
-    const minNeighborHeight = Math.min(...(neighbors[cell] || []).map(neighbor => heights[neighbor]));
+    const minNeighborHeight = minNeighborValue(neighbors[cell] || [], heights);
     if (heights[cell] > minNeighborHeight) continue;
 
     let deep = true;
     const threshold = heights[cell] + elevationLimit;
-    const queue = [cell];
-    const checked = [];
-    checked[cell] = true;
+    stamp++;
+    queue.length = 0;
+    queue.push(cell);
+    checked[cell] = stamp;
 
     while (deep && queue.length) {
       const current = queue.pop();
 
       for (const neighbor of neighbors[current] || []) {
-        if (checked[neighbor]) continue;
+        if (checked[neighbor] === stamp) continue;
         if (heights[neighbor] >= threshold) continue;
         if (heights[neighbor] < WATER_LEVEL) {
           deep = false;
           break;
         }
 
-        checked[neighbor] = true;
+        checked[neighbor] = stamp;
         queue.push(neighbor);
       }
     }
@@ -117,6 +136,12 @@ function addLakesInDeepDepressions({grid, distanceField, featureIds, features}) 
     const lakeCells = [cell].concat((neighbors[cell] || []).filter(neighbor => heights[neighbor] === heights[cell]));
     addLake({lakeCells, grid, distanceField, featureIds, features});
   }
+}
+
+function minNeighborValue(neighbors, values) {
+  let min = Infinity;
+  for (const neighbor of neighbors) if (values[neighbor] < min) min = values[neighbor];
+  return min;
 }
 
 function addLake({lakeCells, grid, distanceField, featureIds, features}) {

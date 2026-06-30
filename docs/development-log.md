@@ -9970,3 +9970,64 @@ pnpm run regress:rendering
 - 省份未归属填充已不再是主要热点；pack 省份阶段剩余最大项为“分配省份颜色”，其次是边界毛刺吸收和 pole 计算。
 - 如果继续做颜色优化，不要使用字符串 Map 缓存；应把 `STATE_COLOR_PALETTE` 预编成 index、RGB 和距离矩阵，并严格保持当前候选顺序和 score tie-break。
 - 纯生成总体下一批热点仍包括 `pack` 构建、`features` 提取、grid/Voronoi 和阶段 19 经济链路。
+
+### 纯生成链路性能第五刀：底层结构 profile 与深洼湖泊优化
+
+背景：
+
+- 省份未归属填充优化后，100k 纯生成的一线热点转为 `grid`、`pack` 和 `features`，但此前只有总阶段耗时，不知道瓶颈在 Delaunay、heightmap、feature flood、shore segment 还是 pack feature 标注。
+- 只读调查建议先拆底层子阶段 profile，再动算法；其中 `features.addLakesInDeepDepressions()` 存在每个候选 cell 新建 `checked` 数组和 `neighbors.map() + Math.min(...spread)` 的明显短命分配。
+
+修正：
+
+- `grid.js` 新增子阶段 timing：
+  - 点阵布局。
+  - 边界点。
+  - 扰动点阵。
+  - Delaunay / Voronoi。
+  - cell 字段初始化。
+  - 高度模板。
+  - grid 指标。
+- `features.js` 新增子阶段 timing：
+  - 水陆 feature 泛洪。
+  - 深水距离。
+  - 深洼湖泊。
+  - 近海湖泊打开。
+  - feature cell 重建。
+  - grid 字段同步。
+  - 水陆线段。
+  - feature 指标。
+- `pack.js` 新增子阶段 timing：
+  - pack 点选择。
+  - pack Voronoi 重建。
+  - pack 点字段写入。
+  - pack cell 面积。
+  - grid 语义字段复制。
+  - pack feature 标注。
+  - pack 指标。
+- `pack.markupPackFeatures()` 又暴露内部 timing，用于区分 pack feature 泛洪、内陆距离、深水距离、字段同步和 feature 分组。
+- `tools/webgl-generator-generation-profile.mjs` 新增 grid / features / pack / pack feature 标注四类子系统报告。
+- `addLakesInDeepDepressions()` 复用 `Uint32Array checked` 和 queue，用递增 stamp 标记本轮访问；邻居最低高度改为单次循环读取，避免每个候选 cell 创建临时数组和 spread。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/grid.js`
+- `node --check app/webgl-generator/src/generator/features.js`
+- `node --check app/webgl-generator/src/generator/pack.js`
+- `node --check tools/webgl-generator-generation-profile.mjs`
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 100000 --seed stage-2-1231411414 --template continents --iterations 3` 通过：
+  - `features` 总耗时约 `178.4ms`。
+  - `识别深洼湖泊` 平均约 `62.9ms`，此前拆 profile 时为约 `265.5ms`。
+  - `pack` 总耗时约 `524.1ms`。
+  - `标注 pack feature` 平均约 `294.7ms`。
+  - `pack feature 标注`内部 `泛洪识别 pack feature` 平均约 `279.2ms`，占 `94.8%`。
+  - `grid` 中 `构建 Delaunay / Voronoi` 和 `应用高度模板` 是主要子项。
+- `$env:CI='true'; pnpm.cmd run build:app` 通过；第三方 `@vueuse/core` pure annotation 警告仍为既有工具链噪音。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh-candidate --refresh-diff --browser-channel chrome --timeout 240000` 通过刷新 3 个 100k candidate case；地形、高度、降水、pack、feature、湖泊、河流、人口、国家、省份和路线主指标未新增回退，矩阵总体仍仅因 economy 空链路和旧 source `lateStages` 缺口 fail。
+- `$env:CI='true'; pnpm.cmd run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `560.6ms`，纯生成 `321.6ms`，WebGL 加载 `147.7ms`。
+
+后续：
+
+- 下一刀优先继续拆 / 优化 `pack.markupPackFeatures()` 的泛洪段。当前它把 `createPackFeature()` 计入泛洪阶段，后者内部可能有边界 cell、边界顶点、湖岸和面积的多轮全 pack 扫描。
+- 低风险候选仍包括 `features.buildShoreSegments()` 的 per-edge `Set/filter`、`pack` 面积计算的临时 polygon 数组，以及 feature 未标记 cell 查找的 `indexOf(UNMARKED)` 单调指针化。
+- `grid` 的 Delaunay / Voronoi 是底层大项，任何改点序、边界点、Voronoi 数据结构的优化都需要更强回归，不应和小刀混在一起。

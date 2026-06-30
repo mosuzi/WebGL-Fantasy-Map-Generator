@@ -1,20 +1,27 @@
 import Delaunator from "../vendor/delaunator.js";
 import {applyHeightmap} from "./heightmap.js";
+import {createStageProfile} from "./profile.js";
 
 export function buildGrid(options, random, heightmap, heightRandom = random) {
   const startedAt = performance.now();
-  const layout = createPointLayout(options);
-  const boundary = getBoundaryPoints(options.graphWidth, options.graphHeight, layout.spacing);
-  const points = getJitteredGrid(options.graphWidth, options.graphHeight, layout.spacing, random);
-  const {cells, vertices} = calculateVoronoi(points, boundary);
-  cells.p = Array.from(cells.i);
-  cells.h = new Array(points.length).fill(0);
+  const profile = createStageProfile();
+  const layout = profile.stage("layout", "计算点阵布局", () => createPointLayout(options));
+  const boundary = profile.stage("boundary-points", "生成边界点", () => getBoundaryPoints(options.graphWidth, options.graphHeight, layout.spacing));
+  const points = profile.stage("jittered-grid", "生成扰动点阵", () => getJitteredGrid(options.graphWidth, options.graphHeight, layout.spacing, random));
+  const {cells, vertices} = profile.stage("voronoi", "构建 Delaunay / Voronoi", () => calculateVoronoi(points, boundary));
+  profile.stage("cell-fields", "初始化 cell 字段", () => {
+    cells.p = Array.from(cells.i);
+    cells.h = new Array(points.length).fill(0);
+  });
 
   const grid = {points, boundary, cells, vertices};
-  applyHeightmap(heightmap, grid, layout, heightRandom);
+  profile.stage("heightmap", "应用高度模板", () => applyHeightmap(heightmap, grid, layout, heightRandom));
 
-  const triangles = cells.v.reduce((sum, vertexIds) => sum + Math.max(0, vertexIds.length - 2), 0);
-  const neighborDegrees = cells.c.map(neighbors => neighbors.length);
+  const {triangles, neighborDegrees} = profile.stage("metrics", "统计 grid 指标", () => ({
+    triangles: cells.v.reduce((sum, vertexIds) => sum + Math.max(0, vertexIds.length - 2), 0),
+    neighborDegrees: cells.c.map(neighbors => neighbors.length)
+  }));
+  const timing = profile.finish();
 
   return {
     points,
@@ -37,6 +44,7 @@ export function buildGrid(options, random, heightmap, heightRandom = random) {
       maxNeighborDegree: Math.max(...neighborDegrees),
       borderCells: cells.b.reduce((sum, value) => sum + (value ? 1 : 0), 0),
       buildMs: roundMs(performance.now() - startedAt),
+      timing,
       method: "source-jittered-grid-delaunator-voronoi"
     }
   };

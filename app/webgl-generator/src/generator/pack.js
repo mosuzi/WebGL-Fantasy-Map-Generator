@@ -1,4 +1,5 @@
 import {calculateVoronoi} from "./grid.js";
+import {createStageProfile} from "./profile.js";
 
 const WATER_LEVEL = 20;
 const UINT16_MAX = 65535;
@@ -11,6 +12,56 @@ const DEEP_WATER = -2;
 
 export function buildPack(grid, features) {
   const startedAt = performance.now();
+  const profile = createStageProfile();
+  const {newCells, gridToPack, counters} = profile.stage("select-pack-points", "选择 pack 点", () => collectPackPoints(grid, features));
+
+  const {cells, vertices} = profile.stage("regraph-voronoi", "重建 pack Voronoi", () => calculateVoronoi(newCells.p, grid.boundary || []));
+  profile.stage("copy-point-fields", "写入 pack 点字段", () => {
+    cells.p = newCells.p;
+    cells.g = Uint32Array.from(newCells.g);
+    cells.h = Uint8Array.from(newCells.h);
+  });
+  cells.area = profile.stage("cell-areas", "计算 pack cell 面积", () =>
+    Uint16Array.from(cells.i, cellId => Math.min(Math.abs(polygonArea(getPackPolygon(cells, vertices, cellId))), UINT16_MAX))
+  );
+
+  grid.cells.pack = gridToPack;
+
+  const neighborDegrees = profile.stage("degree-metrics", "统计 pack 邻接指标", () => cells.c.map(neighbors => neighbors.length));
+  const pack = {
+    cells,
+    vertices,
+    metadata: {
+      cells: cells.g.length,
+      vertices: vertices.p.length,
+      mapping: "source-regraph-pack",
+      semanticFields: ["gridCell", "feature", "height", "type", "culture", "religion", "state", "province", "region", "population", "burg"],
+      excludedDeepWater: counters.excludedDeepWater,
+      excludedLakePoints: counters.excludedLakePoints,
+      keptGridPoints: counters.keptGridPoints,
+      coastMidpoints: counters.coastMidpoints,
+      averageNeighborDegree: round(average(neighborDegrees), 2),
+      maxNeighborDegree: Math.max(...neighborDegrees),
+      borderCells: cells.b.reduce((sum, value) => sum + (value ? 1 : 0), 0),
+      buildMs: roundMs(performance.now() - startedAt)
+    }
+  };
+
+  profile.stage("copy-grid-semantics", "复制 grid 语义字段", () => copyGridSemantics(cells, grid, features));
+  const featureTiming = profile.stage("markup-pack-features", "标注 pack feature", () => markupPackFeatures(pack, grid));
+  profile.stage("metadata-counts", "统计 pack 指标", () => {
+    pack.metadata.packFeatureCount = pack.features.filter(Boolean).length;
+    pack.metadata.havenCells = countPositive(cells.haven);
+    pack.metadata.harborCells = countPositive(cells.harbor);
+    pack.metadata.featureGroups = countByKey(pack.features.filter(Boolean), feature => feature.group || "none");
+  });
+  pack.metadata.featureTiming = featureTiming;
+  pack.metadata.timing = profile.finish();
+
+  return pack;
+}
+
+function collectPackPoints(grid, features) {
   const newCells = {p: [], g: [], h: []};
   const gridToPack = new Array(grid.points.length).fill(-1);
   const spacing2 = grid.metadata.spacing ** 2;
@@ -54,42 +105,7 @@ export function buildPack(grid, features) {
     }
   }
 
-  const {cells, vertices} = calculateVoronoi(newCells.p, grid.boundary || []);
-  cells.p = newCells.p;
-  cells.g = Uint32Array.from(newCells.g);
-  cells.h = Uint8Array.from(newCells.h);
-  cells.area = Uint16Array.from(cells.i, cellId => Math.min(Math.abs(polygonArea(getPackPolygon(cells, vertices, cellId))), UINT16_MAX));
-
-  grid.cells.pack = gridToPack;
-
-  const neighborDegrees = cells.c.map(neighbors => neighbors.length);
-  const pack = {
-    cells,
-    vertices,
-    metadata: {
-      cells: cells.g.length,
-      vertices: vertices.p.length,
-      mapping: "source-regraph-pack",
-      semanticFields: ["gridCell", "feature", "height", "type", "culture", "religion", "state", "province", "region", "population", "burg"],
-      excludedDeepWater: counters.excludedDeepWater,
-      excludedLakePoints: counters.excludedLakePoints,
-      keptGridPoints: counters.keptGridPoints,
-      coastMidpoints: counters.coastMidpoints,
-      averageNeighborDegree: round(average(neighborDegrees), 2),
-      maxNeighborDegree: Math.max(...neighborDegrees),
-      borderCells: cells.b.reduce((sum, value) => sum + (value ? 1 : 0), 0),
-      buildMs: roundMs(performance.now() - startedAt)
-    }
-  };
-
-  copyGridSemantics(cells, grid, features);
-  markupPackFeatures(pack, grid);
-  pack.metadata.packFeatureCount = pack.features.filter(Boolean).length;
-  pack.metadata.havenCells = countPositive(cells.haven);
-  pack.metadata.harborCells = countPositive(cells.harbor);
-  pack.metadata.featureGroups = countByKey(pack.features.filter(Boolean), feature => feature.group || "none");
-
-  return pack;
+  return {newCells, gridToPack, counters};
 }
 
 function addNewPoint(newCells, gridToPack, gridCell, x, y, height, primary = true) {
@@ -135,6 +151,7 @@ function copyGridSemantics(cells, grid, features) {
 }
 
 function markupPackFeatures(pack, grid) {
+  const profile = createStageProfile();
   const {cells, vertices} = pack;
   const length = cells.i.length;
   const distanceField = new Int8Array(length);
@@ -144,7 +161,8 @@ function markupPackFeatures(pack, grid) {
   const features = [null];
   const queue = [0];
 
-  for (let featureId = 1; queue[0] !== -1; featureId++) {
+  profile.stage("flood-features", "泛洪识别 pack feature", () => {
+    for (let featureId = 1; queue[0] !== -1; featureId++) {
     const firstCell = queue[0];
     featureIds[firstCell] = featureId;
     const land = isLand(cells, firstCell);
@@ -178,17 +196,21 @@ function markupPackFeatures(pack, grid) {
     features.push(createPackFeature({pack, grid, featureIds, firstCell, featureId, land, border, totalCells}));
     queue[0] = featureIds.indexOf(UNMARKED);
   }
+  });
 
-  markupDistanceField(distanceField, cells.c, DEEPER_LAND, 1);
-  markupDistanceField(distanceField, cells.c, DEEP_WATER, -1, -10);
+  profile.stage("distance-land", "标记内陆距离", () => markupDistanceField(distanceField, cells.c, DEEPER_LAND, 1));
+  profile.stage("distance-water", "标记深水距离", () => markupDistanceField(distanceField, cells.c, DEEP_WATER, -1, -10));
 
-  cells.t = distanceField;
-  cells.f = featureIds;
-  cells.haven = haven;
-  cells.harbor = harbor;
-  for (let cell = 0; cell < length; cell++) cells.type[cell] = features[featureIds[cell]]?.type || "unknown";
-  pack.features = features;
-  defineFeatureGroups(pack, grid);
+  profile.stage("sync-fields", "同步 pack feature 字段", () => {
+    cells.t = distanceField;
+    cells.f = featureIds;
+    cells.haven = haven;
+    cells.harbor = harbor;
+    for (let cell = 0; cell < length; cell++) cells.type[cell] = features[featureIds[cell]]?.type || "unknown";
+    pack.features = features;
+  });
+  profile.stage("feature-groups", "定义 feature 分组", () => defineFeatureGroups(pack, grid));
+  return profile.finish();
 }
 
 function defineHaven(cells, cell, haven, harbor) {
