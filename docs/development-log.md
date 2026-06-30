@@ -10260,3 +10260,38 @@ pnpm run regress:rendering
 
 - 军事数量已经不再是 fail 来源；后续若继续军事，应改向 source 式 platoon 空间合并和 troop/unit 数量校准，而不是继续调 target 阈值。
 - 当前 full 的剩余 fail 主要是湖泊/湖名、经济交易和少量库存/税收；也可以按 Gibbs 只读调查结果补 marker 的 `bridges / sacred-mountains` 等低风险缺口。
+
+### 经济生产与市场间交易密度校准第一刀
+
+背景：
+
+- 军事第二刀后，full 矩阵还剩 `7 fail / 30 warn / 26 pass`。
+- 经济剩余 fail 主要集中在 10k 小图：
+  - `economy.production.localRecords`：`archipelago / 10000 / 001` source/candidate `117 / 270`。
+  - `economy.deals.marketToMarket`：`lowIsland / 10000 / 001` 为 `170 / 364`，`lowIsland / 10000 / 002` 为 `167 / 350`。
+  - `economy.deals.taxTotal` 与 `economy.taxes.dealTaxTotal`：`peninsula / 10000 / 002` 为 `3076.424 / 6275.335`。
+- 初步判断：candidate 的本地生产记录比例固定偏高，市场间交易链接数在 10k/50k 下过密，进一步推高交易值和税收。
+
+修正：
+
+- `createProductionAndDeals()` 接收 `options`。
+- 新增 `getLocalProductionRate()`：本地生产记录概率随目标 cells 增长，约为 10k `0.41`、50k `0.55`、100k `0.65`，替代旧的固定 `burg.i % 3 !== 0`。
+- 新增 `getMarketTradeLinks()`：市场间链接数随目标 cells 增长；同时保留小市场数量场景最多 `6` 条链接的旧上限，避免 archipelago 100k 这类 market 很少的 quick 样例回退。
+- 本刀不改 goods、market 选址、stock、price、税率公式和商品生产配方。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- `git diff --check`
+- 定点样例：
+  - `lowIsland / 10000 / audit-lowIsland-001` 从 fail 降为 warn，`marketToMarket` 从 `170 / 364` 改为 `170 / 208`，`localRecords` 从 `281 / 492` 改为 `281 / 305`。
+  - `peninsula / 10000 / audit-peninsula-002` 从 fail 降为 warn，`localRecords` 从 `332 / 537` 改为 `332 / 330`，`taxTotal` 从 `3076.424 / 6275.335` 改为 `3076.424 / 6129.101`，低于 fail 阈值但仍为 warn。
+- 第一次 quick 检查发现 archipelago 100k 因小市场数量场景链接数从旧 `6` 扩到 `9` 而出现 `marketToMarket` warn；随后把 `markets < 16` 的最大链接数恢复到 `6`，quick 回到 `pass（fail 0，warn 0）`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate true --refresh-diff true --browser-channel chrome --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态从 `7 fail / 30 warn / 26 pass` 改为 `3 fail / 31 warn / 29 pass`。
+  - 经济交易类 fail 全部清除；剩余 fail 为 `features.lakes`、`lateStages.names.lakeNames` 和一个 `economy.markets.stock.mean` 边缘 case。
+
+后续：
+
+- 下一刀可处理湖泊数量/湖名：当前 `continents / 10000 / 001` 和 `archipelago / 10000 / 002` 同时因 `features.lakes` 与 `lakeNames` fail，属于同一根因。
+- 也可继续处理 `peninsula / 50000 / 003` 的 `economy.markets.stock.mean`，但只影响 1 个 fail，应避免为了单 case 过度调 stock 全局指数。

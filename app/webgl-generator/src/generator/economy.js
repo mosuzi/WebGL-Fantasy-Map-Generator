@@ -91,7 +91,7 @@ export function buildEconomy(pack, options = {}) {
   pack.cells.market = assignMarketsToCells(pack, pack.markets);
   assignMarketsToBurgs(pack, aliveBurgs, pack.markets);
   initializeTaxRates(states, random);
-  const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random);
+  const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
   pack.deals = deals;
   collectStateTreasuries(states, deals, pack.markets, pack);
 
@@ -344,15 +344,18 @@ function initializeTaxRates(states, random) {
   }
 }
 
-function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random) {
+function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options = {}) {
   const deals = [];
   const stateDealTax = new Map();
   const statesById = new Map(states.map(state => [state.i, state]));
+  const localProductionRate = getLocalProductionRate(options);
 
   for (const burg of aliveBurgs) {
     burg.production = [];
     const localGoodId = pack.cells.good?.[burg.cell] || rawGoods[(burg.i * 7) % rawGoods.length].i;
-    if (burg.i % 3 !== 0) burg.production.push({goodId: localGoodId, units: round(1 + (burg.population || 0) * 0.25)});
+    if (shouldCreateLocalProduction(burg.i, localProductionRate)) {
+      burg.production.push({goodId: localGoodId, units: round(1 + (burg.population || 0) * 0.25)});
+    }
 
     for (let index = 0; index < 7; index++) {
       const good = manufacturedGoods[(burg.i * 5 + index * 11) % manufacturedGoods.length];
@@ -404,7 +407,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   }
 
   const markets = (pack.markets || []).filter(Boolean);
-  const marketTradeLinks = markets.length < 16 ? 6 : 14;
+  const marketTradeLinks = getMarketTradeLinks(markets.length, options);
   for (const market of markets) {
     for (let index = 0; index < marketTradeLinks; index++) {
       const buyer = markets[(market.i + index) % markets.length];
@@ -433,6 +436,23 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
 function productionRecipe(good) {
   const recipe = good.recipes?.[0] || {};
   return Object.entries(recipe).map(([goodId, units]) => ({goodId: Number(goodId), units}));
+}
+
+function shouldCreateLocalProduction(burgId, rate) {
+  return ((burgId * 37) % 1000) / 1000 < rate;
+}
+
+function getLocalProductionRate(options) {
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  return clamp(0.3 + 0.35 * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1)), 0.32, 0.65);
+}
+
+function getMarketTradeLinks(markets, options) {
+  if (markets < 2) return 0;
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  const maxLinks = markets < 16 ? 6 : 14;
+  const scaledLinks = Math.round(5 + (maxLinks - 5) * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1)));
+  return Math.min(markets - 1, clamp(scaledLinks, 5, maxLinks));
 }
 
 function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price}) {
