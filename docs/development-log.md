@@ -9931,3 +9931,42 @@ pnpm run regress:rendering
 - 文化阶段剩余最大子项仍是“放置文化中心”，但 100k 总体最慢已经转到 `politics`。
 - 下一刀纯生成性能建议优先看 `buildPackProvinces()` 里的“填充未归属省份 cell”和省份颜色、再看 `pack/features` 构建。
 - 若继续优化文化中心，可考虑更保守的 top-K 候选缓存或按文化定义复用排序结果，但这会更接近行为优化，需要比本轮更严格的文化中心/文化覆盖 diff。
+
+### 纯生成链路性能第四刀：省份未归属填充
+
+背景：
+
+- 文化中心选址优化后，100k 纯生成热点转向 `politics`，其中 `buildPackProvinces()` 里的“填充未归属省份 cell”在单次报告中可到约 `106ms`。
+- 只读调查确认 `fillUnassignedProvinceCells()` 每创建一个补充省份后都会重新 `cells.i.filter(...)` 全 pack 扫描，并且每个补充省份都会新建并填充整张 `Float64Array costs`。
+- 这类重复扫描不改变算法意图，适合先做低风险性能刀。
+
+修正：
+
+- `fillUnassignedProvinceCells()` 开始时单次扫描 pack cells，按 state 收集仍未归属省份的陆地 cell。
+- 新增 `remaining` 掩码和 `remainingCount`，省份扩张写入 `provinceIds` 时同步从剩余集合中删除，不再在 while 末尾全图重扫。
+- `costs` 改为函数内复用，新增 `seen/runId` 标记当前补充省份的访问状态，避免每个补充省份 `new Float64Array(...).fill(Infinity)`。
+- 中心选择仍保持原语义：优先选当前 state 剩余未归属 cell 中有 burg 的 cell，否则取原 cell 顺序里的第一个剩余 cell。
+- 曾试验给颜色距离加入 Map 字符串缓存，但 100k 下省份颜色分配反而从约 `54ms` 抖到 `131ms`，已回滚；后续颜色优化应改为 palette index 和预计算距离矩阵。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/politics.js`
+- `git diff --check -- app/webgl-generator/src/generator/politics.js`
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 100000 --seed stage-2-1231411414 --template continents --iterations 3` 通过：
+  - 100k 平均总耗时 `2565.8ms`。
+  - `生成国家 / 省份 / 区域` 平均 `405.7ms`。
+  - `生成 pack 省份` 平均 `179.6ms`。
+  - `填充未归属省份 cell` 平均 `21.2ms`，最大 `23.9ms`。
+  - `分配省份颜色` 平均 `59.6ms`，仍是 pack 省份当前最大子项。
+- `$env:CI='true'; pnpm.cmd run build:app` 通过；第三方 `@vueuse/core` pure annotation 警告仍为既有工具链噪音。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh-candidate --refresh-diff --browser-channel chrome --timeout 240000` 通过刷新 3 个 100k candidate case：
+  - 地中海强制 case 的 `society.provinces` 为 source `515` / candidate `501`，继续通过。
+  - 路线陆路穿水和海路中段穿陆仍为 `0`。
+  - 引用类不变量继续通过。
+  - 矩阵总体仍为 fail，原因仍是 candidate economy 空链路，以及两个 quick case 的旧 source `lateStages` 缺口。
+
+后续：
+
+- 省份未归属填充已不再是主要热点；pack 省份阶段剩余最大项为“分配省份颜色”，其次是边界毛刺吸收和 pole 计算。
+- 如果继续做颜色优化，不要使用字符串 Map 缓存；应把 `STATE_COLOR_PALETTE` 预编成 index、RGB 和距离矩阵，并严格保持当前候选顺序和 score tie-break。
+- 纯生成总体下一批热点仍包括 `pack` 构建、`features` 提取、grid/Voronoi 和阶段 19 经济链路。

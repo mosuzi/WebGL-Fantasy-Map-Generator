@@ -860,14 +860,25 @@ function boundarySpikeAbsorptionValue(cells, values, cell, canUseNeighbor, canAb
 
 function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator) {
   const {cells, states, burgs} = pack;
+  const unassignedByState = collectUnassignedProvinceCellsByState(cells, states, provinceIds);
+  const remaining = new Uint8Array(cells.i.length);
+  for (const stateCells of unassignedByState) {
+    if (!stateCells) continue;
+    for (const cell of stateCells) remaining[cell] = 1;
+  }
+  const costs = new Float64Array(cells.i.length);
+  const seen = new Uint32Array(cells.i.length);
   const queue = new MinPriorityQueue();
+  let runId = 0;
 
   for (const state of states) {
     if (!state?.i || !state.provinces?.length) continue;
-    let unassigned = cells.i.filter(cell => cells.state[cell] === state.i && cells.h[cell] >= 20 && !provinceIds[cell]);
+    const stateUnassigned = unassignedByState[state.i] || [];
+    let remainingCount = stateUnassigned.length;
 
-    while (unassigned.length) {
-      const center = unassigned.find(cell => cells.burg[cell]) || unassigned[0];
+    while (remainingCount) {
+      const center = pickUnassignedProvinceCenter(stateUnassigned, remaining, cells.burg);
+      if (center === -1) break;
       const provinceId = provinces.length;
       const burgId = cells.burg[center] || 0;
       const burg = burgs[burgId];
@@ -898,30 +909,59 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
       provinces.push(province);
       state.provinces.push(provinceId);
 
-      const costs = new Float64Array(cells.i.length).fill(Infinity);
+      runId++;
       costs[center] = 0;
+      seen[center] = runId;
       provinceIds[center] = provinceId;
+      remaining[center] = 0;
+      remainingCount--;
       queue.push({cell: center, cost: 0}, 0);
 
       while (queue.length) {
         const {cell, cost} = queue.pop();
-        if (cost !== costs[cell]) continue;
+        if (seen[cell] !== runId || cost !== costs[cell]) continue;
         for (const neighbor of cells.c[cell] || []) {
           if (provinceIds[neighbor]) continue;
           if (cells.state[neighbor] && cells.state[neighbor] !== state.i) continue;
           const land = cells.h[neighbor] >= 20;
           const step = land ? (cells.state[neighbor] === state.i ? 3 : 20) : cells.t[neighbor] ? 10 : 30;
           const nextCost = cost + step;
-          if (nextCost > maxGrowth || nextCost >= costs[neighbor]) continue;
-          if (land && cells.state[neighbor] === state.i) provinceIds[neighbor] = provinceId;
+          const currentCost = seen[neighbor] === runId ? costs[neighbor] : Infinity;
+          if (nextCost > maxGrowth || nextCost >= currentCost) continue;
+          if (land && cells.state[neighbor] === state.i) {
+            provinceIds[neighbor] = provinceId;
+            if (remaining[neighbor]) {
+              remaining[neighbor] = 0;
+              remainingCount--;
+            }
+          }
           costs[neighbor] = nextCost;
+          seen[neighbor] = runId;
           queue.push({cell: neighbor, cost: nextCost}, nextCost);
         }
       }
-
-      unassigned = cells.i.filter(cell => cells.state[cell] === state.i && cells.h[cell] >= 20 && !provinceIds[cell]);
     }
   }
+}
+
+function collectUnassignedProvinceCellsByState(cells, states, provinceIds) {
+  const byState = states.map(() => []);
+  for (const cell of cells.i) {
+    const stateId = cells.state[cell];
+    if (!states[stateId]?.i || cells.h[cell] < 20 || provinceIds[cell]) continue;
+    byState[stateId].push(cell);
+  }
+  return byState;
+}
+
+function pickUnassignedProvinceCenter(stateUnassigned, remaining, burgsByCell) {
+  for (const cell of stateUnassigned) {
+    if (remaining[cell] && burgsByCell[cell]) return cell;
+  }
+  for (const cell of stateUnassigned) {
+    if (remaining[cell]) return cell;
+  }
+  return -1;
 }
 
 function collectProvinceStatistics(pack, provinces, provinceIds) {
