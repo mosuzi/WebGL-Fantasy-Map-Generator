@@ -37,7 +37,8 @@ const SCORE_MAP = {
 export function defineBiomesAndPopulation(grid, pack) {
   const startedAt = performance.now();
   defineBiomes(grid, pack);
-  rankCells(pack);
+  const rankCellsInputs = rankCells(pack);
+  pack.metadata.rankCellsInputs = rankCellsInputs;
   mirrorPackFieldsToGrid(grid, pack);
 
   return {
@@ -48,6 +49,7 @@ export function defineBiomesAndPopulation(grid, pack) {
       positivePopulationCells: countPositive(pack.cells.pop),
       maxSuitability: maxValue(pack.cells.s),
       maxPopulation: round(maxValue(pack.cells.pop), 3),
+      rankCellsInputs,
       buildMs: roundMs(performance.now() - startedAt)
     }
   };
@@ -95,6 +97,7 @@ function isWetland(moisture, temperature, height) {
 
 function rankCells(pack) {
   const {cells, features} = pack;
+  const hasGoodsAtRankTime = Boolean(cells.good);
   cells.s = new Int16Array(cells.i.length);
   cells.pop = new Float32Array(cells.i.length);
 
@@ -125,6 +128,8 @@ function rankCells(pack) {
     cells.s[cell] = score / 5;
     cells.pop[cell] = cells.s[cell] > 0 ? (cells.s[cell] * cells.area[cell]) / meanArea : 0;
   }
+
+  return {hasGoodsAtRankTime};
 }
 
 function mirrorPackFieldsToGrid(grid, pack) {

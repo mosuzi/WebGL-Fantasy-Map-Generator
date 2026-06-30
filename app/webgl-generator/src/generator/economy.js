@@ -76,6 +76,10 @@ const MANUFACTURED_GOODS = [
 ];
 
 const HYBRID_GOODS = ["香木", "药酒"];
+const RAW_GOOD_VALUES = [
+  1, 2, 6, 3, 4, 4, 8, 15, 1, 2, 1, 2, 2, 2, 2, 2, 2, 5, 7, 5, 1, 13, 15, 5, 10, 9, 15, 7, 4, 2, 8, 3, 2,
+  3, 3, 7, 1, 4, 5
+];
 
 export function buildEconomy(pack, options = {}) {
   const random = createRandom(`${options.seed}:economy`);
@@ -87,6 +91,8 @@ export function buildEconomy(pack, options = {}) {
 
   pack.goods = [null, ...goods];
   pack.cells.good = assignResourceGoods(pack, rawGoods, random);
+  const resourcePopulation = applyResourcePopulationBonus(pack);
+  syncPoliticalPopulationStats(pack);
   pack.markets = createMarkets(pack, aliveBurgs, goods, random, options);
   pack.cells.market = assignMarketsToCells(pack, pack.markets);
   assignMarketsToBurgs(pack, aliveBurgs, pack.markets);
@@ -101,6 +107,7 @@ export function buildEconomy(pack, options = {}) {
     manufacturedGoods: goods.filter(good => !good.distribution && good.recipes?.length).length,
     hybridGoods: goods.filter(good => good.distribution && good.recipes?.length).length,
     resourceCells: countPositive(pack.cells.good),
+    resourcePopulation,
     markets: Math.max(0, pack.markets.length - 1),
     assignedMarketCells: countPositive(pack.cells.market),
     burgsWithMarket: aliveBurgs.filter(burg => burg.market > 0).length,
@@ -120,6 +127,7 @@ function createGoods() {
       i: id,
       name,
       visible: true,
+      value: RAW_GOOD_VALUES[id - 1] || 2,
       distribution: createDistribution(id),
       biomeOutput: id <= 16 ? createBiomeOutput(id) : undefined,
       demandCoverage: id <= 58 ? createDemandCoverage(id) : undefined
@@ -143,6 +151,7 @@ function createGoods() {
       i: id,
       name,
       visible: true,
+      value: 4 + (id % 5),
       distribution: createDistribution(id),
       recipes: [createRecipe(id)],
       demandCoverage: id <= 58 ? createDemandCoverage(id) : undefined
@@ -150,6 +159,66 @@ function createGoods() {
   }
 
   return goods;
+}
+
+function applyResourcePopulationBonus(pack) {
+  const {cells} = pack;
+  if (!cells.good || !cells.s || !cells.pop) return {cells: 0, total: 0};
+  const meanArea = average(Array.from(cells.area || [])) || 1;
+  let affected = 0;
+  let total = 0;
+
+  for (const cell of cells.i) {
+    if ((cells.h[cell] || 0) < 20) continue;
+    if (!(cells.good[cell] || (cells.c?.[cell] || []).some(neighbor => cells.good[neighbor]))) continue;
+    const cellRes = getResourceValue(pack, cell);
+    const neighborRes = average((cells.c?.[cell] || []).map(neighbor => getResourceValue(pack, neighbor)));
+    const bonus = (cellRes ? cellRes + 10 : 0) + neighborRes;
+    if (bonus <= 0) continue;
+    cells.s[cell] += bonus;
+    cells.pop[cell] = cells.s[cell] > 0 ? (cells.s[cell] * cells.area[cell]) / meanArea : 0;
+    affected++;
+    total += bonus;
+  }
+
+  return {cells: affected, total: round(total)};
+}
+
+function getResourceValue(pack, cell) {
+  const good = pack.cells.good?.[cell];
+  return good ? Number(pack.goods?.[good]?.value || 0) : 0;
+}
+
+function syncPoliticalPopulationStats(pack) {
+  syncGroupPopulationStats(pack, pack.states || [], "state");
+  syncGroupPopulationStats(pack, pack.provinces || [], "province");
+}
+
+function syncGroupPopulationStats(pack, groups, field) {
+  for (const group of groups || []) {
+    if (!group) continue;
+    group.rural = 0;
+    group.urban = 0;
+    group.burgs = 0;
+  }
+
+  for (const cell of pack.cells.i) {
+    if ((pack.cells.h[cell] || 0) < 20) continue;
+    const group = groups?.[pack.cells[field]?.[cell]];
+    if (!group) continue;
+    group.rural += pack.cells.pop?.[cell] || 0;
+    const burg = pack.burgs?.[pack.cells.burg?.[cell]];
+    if (burg?.i && !burg.removed) {
+      group.burgs++;
+      group.urban += burg.population || 0;
+    }
+  }
+
+  for (const group of groups || []) {
+    if (!group) continue;
+    group.rural = round(group.rural || 0, 2);
+    group.urban = round(group.urban || 0, 2);
+  }
 }
 
 function createDistribution(id) {
@@ -574,6 +643,10 @@ function countPositive(values) {
   let count = 0;
   for (const value of values || []) if (value > 0) count++;
   return count;
+}
+
+function average(values = []) {
+  return values.length ? values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length : 0;
 }
 
 function marketCoverageTarget(pack) {

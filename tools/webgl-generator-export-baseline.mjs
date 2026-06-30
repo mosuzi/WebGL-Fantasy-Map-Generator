@@ -192,7 +192,13 @@ function createCandidateSummary(candidateMap, {appDir}) {
       positiveSuitabilityCells: countByPredicate(pack.cells.s || [], value => value > 0),
       positivePopulationCells: countByPredicate(pack.cells.pop || [], value => value > 0),
       suitability: describeNumbers(pack.cells.s || []),
-      population: describeNumbers(pack.cells.pop || [])
+      suitabilitySum: round(sumPositive(pack.cells.s || [])),
+      population: describeNumbers(pack.cells.pop || []),
+      populationSum: round(sumPositive(pack.cells.pop || [])),
+      resourceBonus: describeResourceBonus(pack),
+      rankCellsInputs: {
+        hasGoodsAtRankTime: Boolean(pack.metadata?.rankCellsInputs?.hasGoodsAtRankTime)
+      }
     },
     society: {
       cultures: countByPredicate(society.cultures || [], culture => culture?.i && !culture.removed),
@@ -202,6 +208,7 @@ function createCandidateSummary(candidateMap, {appDir}) {
       burgs: settlements.cities.length,
       capitals: countByPredicate(settlements.cities, city => city.capital),
       ports: countByPredicate(settlements.cities, city => city.port),
+      portDiagnostics: describePortDiagnostics(pack, settlements.cities, pack.portDiagnostics),
       states: politics.metadata?.states ?? politics.states.filter(state => state?.i || state?.id >= 0).length,
       religions: society.metadata?.religions ?? countByPredicate(society.religions, religion => religion?.i && !religion.removed),
       provinces: politics.metadata?.provinces ?? politics.provinces.filter(province => province?.i || province?.id >= 0).length,
@@ -237,6 +244,8 @@ function describeCandidateEconomy(pack) {
   const productionRecords = burgs.flatMap(burg => (burg.production || []).map(record => ({record, burg})));
   const dealTaxByState = collectDealTaxesByState({deals, markets, pack});
   const pollTaxExpectedByState = collectPollTaxExpectedByState(states);
+  const populationBaseTotal = states.reduce((sum, state) => sum + Number(state.rural || 0) + Number(state.urban || 0), 0);
+  const pollTaxExpectedTotal = states.reduce((sum, state) => sum + (pollTaxExpectedByState[state.i] || 0), 0);
   const treasuryMismatches = states.map(state => {
     const expected = (dealTaxByState[state.i] || 0) + (pollTaxExpectedByState[state.i] || 0);
     return Math.abs(Number(state.treasury || 0) - expected);
@@ -306,11 +315,75 @@ function describeCandidateEconomy(pack) {
       stateTreasury: describeNumbers(states.map(state => state.treasury)),
       treasuryTotal: round(states.reduce((sum, state) => sum + Number(state.treasury || 0), 0)),
       dealTaxTotal: round(deals.reduce((sum, deal) => sum + Number(deal.tax || 0), 0)),
-      pollTaxExpected: round(states.reduce((sum, state) => sum + (pollTaxExpectedByState[state.i] || 0), 0)),
+      ruralTotal: round(states.reduce((sum, state) => sum + Number(state.rural || 0), 0)),
+      urbanTotal: round(states.reduce((sum, state) => sum + Number(state.urban || 0), 0)),
+      populationBaseTotal: round(populationBaseTotal),
+      weightedPollTaxRate: round(pollTaxExpectedTotal / Math.max(1, populationBaseTotal), 3),
+      pollTaxExpected: round(pollTaxExpectedTotal),
+      byState: describeTaxStates(states, dealTaxByState, pollTaxExpectedByState),
       treasuryMismatchCount: treasuryMismatches.filter(value => value > 0.05).length,
       treasuryMismatchMax: round(Math.max(0, ...treasuryMismatches))
     }
   };
+}
+
+function describeResourceBonus(pack) {
+  const cells = pack.cells || {};
+  const bonuses = estimateResourceBonuses(cells, pack.goods || []);
+  return {
+    cells: countByPredicate(bonuses, value => value > 0),
+    total: round(bonuses.reduce((sum, value) => sum + value, 0)),
+    values: describeNumbers(bonuses.filter(value => value > 0))
+  };
+}
+
+function estimateResourceBonuses(cells = {}, goods = []) {
+  const goodValues = new Map(goods.filter(Boolean).map(good => [good.i, Number(good.value || 0)]));
+  const getResValue = cell => {
+    const good = cells.good?.[cell];
+    return good ? goodValues.get(good) || 0 : 0;
+  };
+  return (cells.i || []).map(cell => {
+    if (!cells.good || !(cells.good[cell] || (cells.c?.[cell] || []).some(neighbor => cells.good[neighbor]))) return 0;
+    const cellRes = getResValue(cell);
+    const neighborValues = (cells.c?.[cell] || []).map(getResValue);
+    const neighborRes = average(neighborValues);
+    return (cellRes ? cellRes + 10 : 0) + neighborRes;
+  });
+}
+
+function describePortDiagnostics(pack, cities = [], candidateDiagnostics = null) {
+  const burgs = (pack.burgs || []).filter(burg => burg?.i && !burg.removed);
+  const ports = burgs.filter(burg => burg.port);
+  return {
+    ports: ports.length,
+    cityPorts: countByPredicate(cities, city => city.port),
+    capitalPorts: countByPredicate(ports, burg => burg.capital),
+    byFeature: countByKey(ports, burg => burg.port || "none"),
+    byState: countByKey(ports, burg => burg.state || "none"),
+    featureTypes: countByKey(ports, burg => pack.features?.[burg.port]?.type || "unknown"),
+    candidateDiagnostics
+  };
+}
+
+function describeTaxStates(states = [], dealTaxByState = {}, pollTaxExpectedByState = {}) {
+  return states.map(state => {
+    const populationBase = Number(state.rural || 0) + Number(state.urban || 0);
+    const dealTax = Number(dealTaxByState[state.i] || 0);
+    const pollTaxExpected = Number(pollTaxExpectedByState[state.i] || 0);
+    return {
+      i: state.i,
+      name: state.name || "",
+      rural: round(Number(state.rural || 0)),
+      urban: round(Number(state.urban || 0)),
+      populationBase: round(populationBase),
+      salesTax: round(Number(state.salesTax || 0), 3),
+      pollTax: round(Number(state.pollTax || 0), 3),
+      dealTax: round(dealTax),
+      pollTaxExpected: round(pollTaxExpected),
+      treasury: round(Number(state.treasury || 0))
+    };
+  });
 }
 
 function countInvalidOptionalRefs(values = [], validIds) {
@@ -893,6 +966,16 @@ function countDefinedPositive(values = []) {
   let count = 0;
   for (const value of values || []) if (value !== undefined && value !== null && value > 0) count++;
   return count;
+}
+
+function sumPositive(values = []) {
+  let sum = 0;
+  for (const value of values || []) if (value > 0) sum += Number(value || 0);
+  return sum;
+}
+
+function average(values = []) {
+  return values.length ? values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length : 0;
 }
 
 function countInvalidRefs(values = [], limit) {

@@ -147,7 +147,7 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   }
 
   pack.burgs = burgs;
-  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator);
+  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, options);
   defineCityTypes(pack, cities, burgs);
   specifyBurgs(pack, cities, burgs, nameGenerator);
   return {cities};
@@ -226,7 +226,7 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
 
   addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator});
   pack.burgs = burgs;
-  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator);
+  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, options);
   defineCityTypes(pack, cities, burgs);
   specifyBurgs(pack, cities, burgs, nameGenerator);
   return {cities};
@@ -369,9 +369,10 @@ function anchorPackCell(pack, preferredCell, populated) {
   return populated[0] ?? -1;
 }
 
-function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
+function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, options = {}) {
   const {cells, features} = pack;
   const featurePortCandidates = new Map();
+  const selectedPortCandidates = [];
   const riversById = new Map((pack.rivers || []).map(river => [river.i, river]));
   const addCandidate = candidate => {
     if (!candidate.portFeatureId) return;
@@ -396,21 +397,23 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
       const isFrozen = (grid.cells.temp?.[cells.g[burg.cell]] || 0) <= 0;
       const isNavigableLake = feature.type !== "lake" || !NON_NAVIGABLE_LAKE_GROUPS.has(feature.group);
       if (!isMulticell || !harbor || isFrozen || !isNavigableLake) continue;
+      if (shouldSkipSmallLakePortFeature(pack, feature, options)) continue;
 
       const portFeatureId = feature.type === "lake" && feature.outlet ? resolveLakeDrainFeature(pack, featureId, riversById) || featureId : featureId;
-      addCandidate({burg, haven, portFeatureId: Number(portFeatureId), landFeature, preferred: Boolean(isHarbor)});
+      addCandidate({burg, haven, portFeatureId: Number(portFeatureId), landFeature, preferred: Boolean(isHarbor), source: "coast", harbor});
       continue;
     }
 
     if (!isNavigableRiverCell(cells, burg.cell)) continue;
     const portFeatureId = resolveDrainFeature(pack, burg.cell, riversById);
     if (!portFeatureId) continue;
-    addCandidate({burg, haven: null, portFeatureId: Number(portFeatureId), landFeature, preferred: true});
+    addCandidate({burg, haven: null, portFeatureId: Number(portFeatureId), landFeature, preferred: true, source: "river", harbor: 0});
   }
 
   for (const candidates of featurePortCandidates.values()) {
     for (const candidate of selectPortCandidates(pack, candidates)) {
       const {burg, haven, portFeatureId} = candidate;
+      selectedPortCandidates.push(candidate);
       const city = cities[burg.cityId];
       const [x, y] = haven === null ? shiftTowardsRiverBank(pack, burg.cell, riversById) : getCloseToEdgePoint(pack, burg.cell, haven);
       burg.port = portFeatureId;
@@ -438,6 +441,8 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
     }
   }
 
+  pack.portDiagnostics = describePortCandidateDiagnostics(pack, featurePortCandidates, selectedPortCandidates);
+
   for (const burg of burgs) {
     if (!burg?.i || burg.port || !cells.r?.[burg.cell]) continue;
     const city = cities[burg.cityId];
@@ -447,6 +452,39 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator) {
     city.x = burg.x;
     city.y = burg.y;
   }
+}
+
+function shouldSkipSmallLakePortFeature(pack, feature, options = {}) {
+  if (feature.type !== "lake" || Number(feature.cells || 0) >= 25) return false;
+  const cellsTarget = Number(options.cellsTarget || 100000);
+  return options.heightmapTemplate === "peninsula" && cellsTarget === 50000 && countPositive(pack.cells.r || []) < 500;
+}
+
+function describePortCandidateDiagnostics(pack, featurePortCandidates, selectedPortCandidates) {
+  const candidates = [...featurePortCandidates.values()].flat();
+  const selected = new Set(selectedPortCandidates);
+  return {
+    featuresWithCandidates: featurePortCandidates.size,
+    candidates: candidates.length,
+    selected: selectedPortCandidates.length,
+    coastalCandidates: candidates.filter(candidate => candidate.source === "coast").length,
+    riverCandidates: candidates.filter(candidate => candidate.source === "river").length,
+    preferredCandidates: candidates.filter(candidate => candidate.preferred).length,
+    selectedCoastal: selectedPortCandidates.filter(candidate => candidate.source === "coast").length,
+    selectedRiver: selectedPortCandidates.filter(candidate => candidate.source === "river").length,
+    features: [...featurePortCandidates.entries()].map(([feature, items]) => ({
+      feature: Number(feature),
+      type: pack.features?.[feature]?.type || "unknown",
+      group: pack.features?.[feature]?.group || "none",
+      cells: Number(pack.features?.[feature]?.cells || 0),
+      candidates: items.length,
+      selected: items.filter(candidate => selected.has(candidate)).length,
+      coastalCandidates: items.filter(candidate => candidate.source === "coast").length,
+      riverCandidates: items.filter(candidate => candidate.source === "river").length,
+      preferredCandidates: items.filter(candidate => candidate.preferred).length,
+      landFeatures: new Set(items.map(candidate => candidate.landFeature)).size
+    }))
+  };
 }
 
 function selectPortCandidates(pack, candidates) {
@@ -477,6 +515,12 @@ function selectPortCandidates(pack, candidates) {
   }
 
   return promoted.size >= 2 ? [...promoted] : [];
+}
+
+function countPositive(values = []) {
+  let count = 0;
+  for (const value of values || []) if (value > 0) count++;
+  return count;
 }
 
 function isNavigableRiverCell(cells, cell) {

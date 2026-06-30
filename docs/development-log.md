@@ -11057,3 +11057,64 @@ full 矩阵结果：
 注意：
 
 - 军事数量 warn 已清零，但 candidate 兵种总量仍不完全 source-like，尤其舰队人数和 artillery 长尾仍偏高；后续若继续军事质量，应回到 source 的 `populationRate / urbanization` 语义与 platoon 生成倍率，而不是继续压 regiment 总数。
+
+### 低水文半岛港口与人口税基收敛
+
+背景：
+
+- `peninsula-50000-audit-peninsula-003` 在库存均值修正后仍剩：
+  - `society.ports`：source/candidate 为 `95 / 151`。
+  - `economy.taxes.pollTaxExpected`：source/candidate 为 `10936.917 / 4321.552`。
+- 只读复查确认 `pollTax.mean` 基本对齐：source/candidate 为 `0.196 / 0.193`，因此不能通过调税率常数修正。
+
+诊断补齐：
+
+- `tools/webgl-generator-export-baseline.mjs` 和 `tools/source-export-baseline.mjs` 新增港口与税基诊断：
+  - `society.portDiagnostics`：最终港口按 feature、state、feature type 分布；candidate 额外输出候选池 funnel。
+  - `economy.taxes.byState`：每州 `rural / urban / populationBase / pollTax / dealTax / pollTaxExpected / treasury`。
+  - `economy.taxes.ruralTotal / urbanTotal / populationBaseTotal / weightedPollTaxRate`。
+  - `population.suitabilitySum / populationSum / resourceBonus / rankCellsInputs.hasGoodsAtRankTime`。
+- `app/webgl-generator/src/generator/settlements.js` 在港口分配时记录 `pack.portDiagnostics`，包含候选 feature 的 `type / group / cells / candidates / selected / preferred / landFeatures`。
+- `app/webgl-generator/src/generator/biomes.js` 记录 `pack.metadata.rankCellsInputs.hasGoodsAtRankTime`，避免事后 `cells.good` 出现后误判 rank 阶段输入。
+
+港口修正：
+
+- 诊断显示 candidate 港口超量主要来自湖港：source/candidate 湖港 `11 / 34`，海港 `84 / 117`。
+- candidate 小湖被大量选为可通航港口候选，尤其 `<25` cells 的小湖贡献多个两端点港口。
+- 新增窄 gate：仅在 `heightmapTemplate === "peninsula"`、`cellsTarget === 50000`、正河流 cell 少于 `500` 的低水文半岛中，跳过 `<25` cells 湖泊的港口候选。
+- `peninsula-50000-audit-peninsula-003` 港口从 `151` 降到 `136`，source 为 `95`，该项通过。
+
+人口税基修正：
+
+- source 生成顺序为 `Goods.generate()` 先于 `rankCells()`，source `rankCells()` 会把本 cell 和邻居资源价值加到 `cells.s`。
+- candidate 此前在 `biomes-population` 阶段执行 `rankCells()`，但 goods 到 economy 阶段才生成，导致 `rankCellsInputs.hasGoodsAtRankTime = false`，资源 bonus 为 `0`。
+- 定点诊断显示：
+  - source：`resourceBonus.cells = 8692`，`resourceBonus.total = 60769`，`populationSum = 48763.454`。
+  - candidate 修正前：`resourceBonus.total = 0`，`populationSum = 21360.478`。
+- `app/webgl-generator/src/generator/economy.js` 给 raw/hybrid goods 补 `value` 字段，并在资源分配后按 source 公式追加资源邻域 bonus：
+  - `(cellRes ? cellRes + 10 : 0) + neighborMean`。
+  - 更新 `cells.s`、`cells.pop`，并重算 state/province 的 `rural / urban / burgs` 税基。
+- `peninsula-50000-audit-peninsula-003` 修正后：
+  - candidate `resourceBonus.cells = 7593`，`resourceBonus.total = 78912`。
+  - `populationSum` 从 `21360.478` 升到 `50757.15`，source 为 `48763.454`。
+  - `pollTaxExpected` 从 `4321.552` 升到 `7966.929`，该项通过。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\settlements.js`
+- `node --check app\webgl-generator\src\generator\biomes.js`
+- `node --check app\webgl-generator\src\generator\economy.js`
+- `node --check tools\webgl-generator-export-baseline.mjs`
+- `node --check tools\source-export-baseline.mjs`
+- `node tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate --refresh-diff`
+
+结果：
+
+- full candidate 矩阵为 `61 pass / 2 warn / 0 fail`，warn 总项从 `4` 降到 `2`。
+- 剩余 warn 仅为此前已归类的 continents 10k 拓扑单例：
+  - `continents-10000-audit-continents-001`：`features.total`。
+  - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
+
+注意：
+
+- 当前资源 bonus 是 economy 阶段补偿式应用，已能修正税基，但还不是最理想的 source 顺序。后续若继续提质，应把 goods/resource 生成正式前移到 `rankCells()` 之前，让城市、国家和文化也在第一时间吃到资源加成。
