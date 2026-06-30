@@ -275,7 +275,7 @@ function getZoneTypePlan(target) {
 }
 
 function getTargetZoneCount(pack) {
-  return clamp(Math.round(pack.cells.i.length / 5200), 1, 30);
+  return clamp(Math.round(8 + pack.cells.i.length / 10000), 7, 20);
 }
 
 function createZonesResult(pack, zones, startedAt, target) {

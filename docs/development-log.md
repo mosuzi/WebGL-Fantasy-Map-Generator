@@ -10160,3 +10160,33 @@ pnpm run regress:rendering
 
 - 下一刀处理 zone 数量。群岛 case 当前 zone 明显偏少，应该优先检查 `zones.js` 的目标数量和候选类型是否对低陆地比/多岛屿场景过度保守。
 - 若后续继续军事，应考虑 source 式 platoon 空间合并，代替当前 target round-robin 分组。
+
+### 区域 zone 数量校准第一刀
+
+背景：
+
+- 军事数量修正后，quick matrix 唯一剩余 warn 是 `archipelago / 100000 / audit-archipelago-001` 的 `lateStages.zones.total`：source `11`，candidate `3`。
+- source `Zones.generate()` 对每种 zone 类型使用固定 `quantity` 期望值并按高斯抽样尝试，不会按 pack cells 线性缩小。
+- candidate 旧 target 为 `pack.cells.i.length / 5200`，群岛 pack 只有约 `14351` cells，因此 target 被压到 `3`，类型计划只够生成 Invasion / Rebels / Proselytism，后段灾害类几乎没有机会。
+
+修正：
+
+- `getTargetZoneCount()` 改为固定基础量加弱规模增量：`round(8 + pack.cells.i.length / 10000)`，并夹在 `7..20`。
+- 该公式让低陆地比 / 小 pack 地图仍能尝试足够多的 zone 类型，同时保持大图数量在 source 阈值内。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/zones.js`
+- 本地三例 100k 抽样：
+  - `mediterranean` zones `15`，target `15`。
+  - `continents` zones `13`，target `13`。
+  - `archipelago` zones `9`，target `9`。
+- `node tools/candidate-baseline-matrix.mjs --mode quick --refresh-candidate true --refresh-diff true` 通过刷新 3 个 100k candidate case，矩阵状态为 `pass（fail 0，warn 0）`：
+  - `mediterranean` source/candidate zones `10 / 15`。
+  - `continents` source/candidate zones `17 / 13`。
+  - `archipelago` source/candidate zones `11 / 9`。
+
+后续：
+
+- quick matrix 已全绿；下一步可刷新 full source/candidate 矩阵，确认 63 case 在 source `1.127.2` economy schema 下是否仍全绿。
+- zone 类型和 cell 规模仍只是第一刀，后续可继续参考 source 的 per-type 高斯抽样和路径/河流/海啸候选规则深化。
