@@ -10535,3 +10535,42 @@ pnpm run regress:rendering
 - 军事剩余 warn 不应再靠继续压全局常数处理。下一步如果继续军事，应先补 per-state 诊断字段，例如 `rawTarget / burgBackedTarget / final target / landNodes / navalNodes / regiments`。
 - 更根本的方向是把 `groupNodes()` 逐步替换为 source-like platoon 空间合并：按兵力从小到大找近邻，用人口规模相关半径和 unit/separate 条件合并。
 - 矩阵剩余热点转为 `routes.searoutes`、`lateStages.zones.total`、`economy.deals.marketToMarket`、`routes.roads`、`economy.markets.stock.mean`、marker 数量和少量 tax / port 边缘项。
+
+### 区域 zone 数量尺度第二刀
+
+背景：
+
+- 军事小图上限校准后，full candidate 矩阵剩余 `3` 个 `lateStages.zones.total` warn，全部为 100k 大陆/半岛高陆地比地图 candidate 偏多：
+  - `continents / 100000 / audit-continents-003`：source/candidate `9 / 14`。
+  - `peninsula / 100000 / audit-peninsula-002`：`10 / 16`。
+  - `peninsula / 100000 / audit-peninsula-003`：`9 / 16`。
+- source `Zones.generate()` 是按类型配置独立抽样：`invasion 2`、`rebels 1.5`、`proselytism 1.6`、`crusade 1.6`、`disease 1.4`、`disaster 1`、`eruption 1`、`avalanche 0.8`、`fault 1`、`flood 1`、`tsunami 1`，每类用 `gauss(expected, expected / 2, 0, 100)` 取次数；类型前置条件失败后不会补齐总数。
+- candidate 当前是先算全局 target，再按固定类型计划生成，达到 target 才停。上一刀为了低陆地比群岛补齐后段类型，把 target 改为 `round(8 + pack.cells.i.length / 10000)`，在 100k 高 pack cell 场景会自然拉到 `14-16`，比 source 实际值偏高。
+- Pasteur 只读复查指出，更完整方向应该是按 source 的类型期望独立抽样，并收紧 `Crusade / Eruption / Avalanche / Flood` 等宽松 fallback。本刀先做数量尺度小修，避免一次性重写 zone 语义。
+
+修正：
+
+- `getTargetZoneCount()` 从线性 pack cell 公式改为平方根弱增长：
+  - 旧公式：`round(8 + pack.cells.i.length / 10000)`。
+  - 新公式：`round(8 + sqrt(pack.cells.i.length) / 55)`。
+- 10k/50k 的 target 基本维持原有通过区间；100k 高 pack cell 场景从 `14-16` 收到约 `12-13`。
+- 本刀不修改 zone 类型顺序、类型 factory、zone cells 扩张逻辑或颜色。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\zones.js`
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过，quick 仍为 `pass（fail 0，warn 0）`：
+  - `mediterranean / 100000 / audit-mediterranean-001`：zones source/candidate `10 / 13`。
+  - `continents / 100000 / audit-continents-001`：`17 / 12`。
+  - `archipelago / 100000 / audit-archipelago-001`：`11 / 10`。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `48 pass / 15 warn / 0 fail` 改为 `49 pass / 14 warn / 0 fail`。
+  - warn 总项从 `29` 降到 `26`。
+  - `lateStages.zones.total` 的 `3` 个 warn 全部清除，没有新增 zone 低估 warn。
+
+后续：
+
+- 下一步 zones 不应继续调 target 常数。若继续这一块，应改为 source-like 的按类型期望独立抽样，失败不补齐。
+- 同时应逐步收紧宽松类型前置条件：`Crusade` 只允许 Heresy，`Eruption` 依赖 volcano marker，`Avalanche` 依赖 route-connected 高地，`Flood` 依赖有 burg 的大河 cell。
+- 当前矩阵热点转为 `routes.searoutes`、`economy.deals.marketToMarket`、`routes.roads`、`economy.markets.stock.mean`、markers total/withIcon，以及少量 feature/lake name/port/tax 边缘项。
