@@ -1376,6 +1376,16 @@ select:disabled {
   gap: 10px;
 }
 
+.preference-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preference-toggle-grid.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .layer-toggle-button {
   display: flex;
   min-height: 34px;
@@ -1411,6 +1421,47 @@ select:disabled {
 }
 
 .layer-toggle-button.active .layer-toggle-indicator {
+  border-color: #f0c56e;
+  background: #d7a84f;
+  box-shadow: 0 0 0 3px rgb(215 168 79 / 14%);
+}
+
+.toggle-button-switch {
+  position: relative;
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  background: #10171b;
+  color: #cbd7dc;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toggle-button-switch:hover {
+  background: #24313a;
+}
+
+.toggle-button-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-button-switch:has(input:checked) {
+  border-color: #d7a84f;
+  background: #2b2415;
+  color: #ffe0a1;
+}
+
+.toggle-button-switch:has(input:checked) .layer-toggle-indicator {
   border-color: #f0c56e;
   background: #d7a84f;
   box-shadow: 0 0 0 3px rgb(215 168 79 / 14%);

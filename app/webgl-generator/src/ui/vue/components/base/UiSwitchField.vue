@@ -1,6 +1,7 @@
 <template>
-  <label :class="fieldClass">
+  <label :class="[fieldClass, {'toggle-button-switch': buttonStyle}]">
     <input :id="inputId || null" type="checkbox" :checked="checked" @change="$emit('change', $event.target.checked)" />
+    <span v-if="buttonStyle" class="layer-toggle-indicator"></span>
     <span>{{ label }}</span>
   </label>
 </template>
@@ -26,6 +27,10 @@ defineProps({
   fieldClass: {
     type: String,
     default: "generation-check-row"
+  },
+  buttonStyle: {
+    type: Boolean,
+    default: false
   }
 });
 

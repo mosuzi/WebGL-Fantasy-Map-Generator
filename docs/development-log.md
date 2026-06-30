@@ -9596,3 +9596,26 @@ pnpm run regress:rendering
 
 - 本刀不改变视觉 cell 曲率、采样段数、海岸线或政治边界行为。
 - `switchMs` 是 10k 默认种子的快速守门，用来捕获明显退化；50k / 100k 大图仍应继续用 `tools/webgl-generator-smooth-cell-profile.mjs` 做专项 profile。
+
+### selection-layer 第一刀与图层/偏好 UI 修正
+
+背景：
+
+- `placeholder-renderer.js` 中仍保留选中高亮 mesh、定位闪烁颜色和高亮模式统计，适合继续拆出独立 layer。
+- 用户指出国家名称图层应与其它图层显隐一致：开启后不应只在国家视图显示。
+- 用户要求“悬停信息”、“高度视图显示海底”和“平滑单元格边界”开关改成按钮样式。
+- 用户指出 10k cells 生成速度仍有几秒，后续需要专门 profile 生成链路。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/selection-layer.js`：
+  - 承载 `buildSelectionMeshVertices()` 和 `selectionHighlightMode()`。
+  - 选中河流的屏幕空间高亮、政治对象半透明 cell 高亮、定位闪烁颜色都移入该模块。
+  - `placeholder-renderer.js` 只保留 selection 状态、定位动画、overlay marker、动态 buffer 脏标记和上传。
+- 国家名称图层显示逻辑从 `stateLabels && colorMode === "states"` 改为只看 `stateLabels` 图层开关；缩放淡入淡出与碰撞避让策略保持不变。
+- `UiSwitchField` 新增按钮样式模式，仍保留内部 checkbox 和原 id。
+- `ControlPanel.vue` 将“显示海底”、“平滑边界”、“悬停信息”切到按钮样式；`auto-random-seed` 仍保留普通 checkbox。
+
+待办：
+
+- 10k 生成耗时需要作为下一轮生成性能专项处理，优先增加阶段计时报告，再按数据决定优化地形、pack、社会、水文、路线或渲染准备阶段。

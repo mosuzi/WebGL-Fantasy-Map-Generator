@@ -18,8 +18,10 @@
 
     <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
       <UiSegmented label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
-      <UiSwitchField label="高度视图显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" />
-      <UiSwitchField label="平滑单元格边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" />
+      <div class="preference-toggle-grid">
+        <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
+        <UiSwitchField label="平滑边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
+      </div>
     </div>
 
     <div class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
@@ -33,7 +35,9 @@
         />
       </div>
 
-      <UiSwitchField label="悬停信息" input-id="show-hover-info" :checked="preferences.showHoverInfo" />
+      <div class="preference-toggle-grid single">
+        <UiSwitchField label="悬停信息" input-id="show-hover-info" :checked="preferences.showHoverInfo" button-style />
+      </div>
 
       <UiSliderField
         label="城市标签上限"
