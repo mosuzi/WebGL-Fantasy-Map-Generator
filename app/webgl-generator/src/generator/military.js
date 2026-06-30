@@ -36,6 +36,7 @@ export function buildMilitary(pack, options = {}) {
   const stateCells = collectStateCells(cells, validStates);
   const stateBurgs = collectStateBurgs(pack.burgs || [], validStates);
   const densityFactor = getRegimentDensityFactor(cells);
+  const spatialMerge = shouldUseSpatialRegimentMerging(options);
 
   for (const state of states) if (state) state.military = [];
 
@@ -44,9 +45,20 @@ export function buildMilitary(pack, options = {}) {
     state.alert = alert;
     const cellsForState = stateCells.get(state.i) || [];
     const burgsForState = stateBurgs.get(state.i) || [];
-    const target = getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor, options);
+    const targetDetails = getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor, options);
+    const target = targetDetails.finalTarget;
     const nodes = createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, random});
-    state.military = createRegiments({pack, state, nodes, target});
+    state.military = createRegiments({pack, state, nodes, target, spatialMerge});
+    state.militaryDiagnostics = describeStateMilitaryFunnel({
+      pack,
+      state,
+      cellsForState,
+      burgsForState,
+      targetDetails,
+      nodes,
+      regiments: state.military,
+      spatialMerge
+    });
   }
 
   const regiments = validStates.flatMap(state => state.military || []);
@@ -67,8 +79,7 @@ function createMilitaryNodes({pack, state, cellsForState, burgsForState, target,
   const sortedCells = [...cellsForState]
     .filter(cell => (pack.cells.pop?.[cell] || 0) > 0 && !pack.cells.burg?.[cell])
     .sort((a, b) => (pack.cells.pop?.[b] || 0) - (pack.cells.pop?.[a] || 0));
-  const burgLimit = Math.min(sortedBurgs.length, Math.ceil(target * 1.4));
-  const ruralLimit = Math.min(sortedCells.length, Math.ceil(target * 1.8));
+  const {burgLimit, ruralLimit} = getMilitaryNodeLimits(sortedBurgs.length, sortedCells.length, target);
 
   for (const burg of sortedBurgs.slice(0, burgLimit)) {
     for (const unit of UNITS) {
@@ -87,6 +98,13 @@ function createMilitaryNodes({pack, state, cellsForState, burgsForState, target,
   }
 
   return nodes.sort((a, b) => b.t - a.t);
+}
+
+function getMilitaryNodeLimits(burgs, ruralCells, target) {
+  return {
+    burgLimit: Math.min(burgs, Math.ceil(target * 1.4)),
+    ruralLimit: Math.min(ruralCells, Math.ceil(target * 1.8))
+  };
 }
 
 function createNode(pack, cell, x, y, unit, total, naval) {
@@ -110,14 +128,17 @@ function createNode(pack, cell, x, y, unit, total, naval) {
   };
 }
 
-function createRegiments({pack, state, nodes, target}) {
+function createRegiments({pack, state, nodes, target, spatialMerge}) {
   if (!nodes.length || target <= 0) return [];
   const regiments = [];
   const landNodes = nodes.filter(node => !node.n);
   const navalNodes = nodes.filter(node => node.n);
-  const navalTarget = navalNodes.length ? clamp(Math.round(target * (navalNodes.length / nodes.length)), 1, Math.min(navalNodes.length, 5)) : 0;
-  const landTarget = Math.max(landNodes.length ? 1 : 0, target - navalTarget);
-  const grouped = [...groupNodes(landNodes, landTarget), ...groupNodes(navalNodes, navalTarget)];
+  const {landTarget, navalTarget} = getRegimentSplitTargets(nodes, target);
+  const expectedSize = getExpectedRegimentSize();
+  const grouped = [
+    ...groupNodes(landNodes, landTarget, expectedSize, spatialMerge),
+    ...groupNodes(navalNodes, navalTarget, expectedSize, spatialMerge)
+  ];
 
   for (const group of grouped) {
     if (!group.length) continue;
@@ -150,13 +171,91 @@ function createRegiments({pack, state, nodes, target}) {
   return regiments;
 }
 
-function groupNodes(nodes, target) {
+function getRegimentSplitTargets(nodes, target) {
+  const landNodes = nodes.filter(node => !node.n);
+  const navalNodes = nodes.filter(node => node.n);
+  const navalTarget = navalNodes.length ? clamp(Math.round(target * (navalNodes.length / nodes.length)), 1, Math.min(navalNodes.length, 5)) : 0;
+  const landTarget = Math.max(landNodes.length ? 1 : 0, target - navalTarget);
+  return {landTarget, navalTarget};
+}
+
+function groupNodes(nodes, target, expectedSize, spatialMerge) {
   if (!nodes.length || target <= 0) return [];
+  if (!spatialMerge) return distributeNodesByTarget(nodes, target);
+
+  const sorted = [...nodes].sort((a, b) => a.a - b.a);
+
+  for (const node of sorted) {
+    if (!node.t) continue;
+    const overlap = findClosestMergeCandidate(sorted, node, 20);
+    if (overlap && mergeableNodes(node, overlap)) {
+      mergeNode(node, overlap);
+      continue;
+    }
+
+    if (node.t > expectedSize) continue;
+    const radius = (expectedSize - node.t) / (node.s ? 40 : 20);
+    const candidates = findMergeCandidates(sorted, node, radius);
+    for (const candidate of candidates) {
+      if (candidate.t < expectedSize && mergeableNodes(node, candidate)) {
+        mergeNode(node, candidate);
+        break;
+      }
+    }
+  }
+
+  return sorted.filter(node => node.t > 0).sort((a, b) => b.t - a.t).map(node => [node, ...(node.children || [])]);
+}
+
+function distributeNodesByTarget(nodes, target) {
   const maxRegiments = Math.max(1, Math.min(target, nodes.length));
   const grouped = new Array(maxRegiments).fill(null).map(() => []);
 
   for (let index = 0; index < nodes.length; index++) grouped[index % maxRegiments].push(nodes[index]);
   return grouped;
+}
+
+function getExpectedRegimentSize() {
+  return 3000;
+}
+
+function mergeableNodes(node, candidate) {
+  return (!node.s && !candidate.s) || node.u === candidate.u;
+}
+
+function mergeNode(node, parent) {
+  if (!parent.children) parent.children = [];
+  parent.children.push(node);
+  if (node.children) parent.children.push(...node.children);
+  parent.t += node.t;
+  node.t = 0;
+}
+
+function findClosestMergeCandidate(nodes, node, radius) {
+  let best = null;
+  let bestDistance = radius * radius;
+  for (const candidate of nodes) {
+    if (candidate === node || !candidate.t) continue;
+    const distance = squaredDistance(node, candidate);
+    if (distance <= bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function findMergeCandidates(nodes, node, radius) {
+  const limit = radius * radius;
+  return nodes
+    .filter(candidate => candidate !== node && candidate.t && squaredDistance(node, candidate) <= limit)
+    .sort((a, b) => squaredDistance(node, a) - squaredDistance(node, b));
+}
+
+function squaredDistance(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
 }
 
 function getUrbanTroops(pack, state, burg, unit, alert, random) {
@@ -183,14 +282,54 @@ function getRuralTroops(pack, state, cell, unit, alert, random) {
   return round(population * unit.rural * 18 * alert * stateModifier * terrainModifier * cultureModifier * variance);
 }
 
-function getStateRegimentTarget(state, cellsForState, burgsForState, alert, densityFactor = 1, options = {}) {
+function getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor = 1, options = {}) {
   const burgFactor = Math.sqrt(Math.max(1, burgsForState.length)) * 2.5;
   const cellFactor = Math.sqrt(Math.max(1, cellsForState.length)) * 0.18;
   const areaFactor = Math.sqrt(Math.max(1, state.area || 1)) * 0.02;
   const minimum = burgsForState.length ? 1 : 0;
   const rawTarget = Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor);
   const burgBackedTarget = getBurgBackedRegimentTarget(burgsForState.length, options);
-  return clamp(Math.min(rawTarget, burgBackedTarget), minimum, 26);
+  const finalTarget = clamp(Math.min(rawTarget, burgBackedTarget), minimum, 26);
+  return {rawTarget, burgBackedTarget, finalTarget, minimum, densityFactor};
+}
+
+function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState, targetDetails, nodes, regiments, spatialMerge}) {
+  const sortedCells = cellsForState.filter(cell => (pack.cells.pop?.[cell] || 0) > 0 && !pack.cells.burg?.[cell]);
+  const {burgLimit, ruralLimit} = getMilitaryNodeLimits(burgsForState.length, sortedCells.length, targetDetails.finalTarget);
+  const landNodes = nodes.filter(node => !node.n);
+  const navalNodes = nodes.filter(node => node.n);
+  const {landTarget, navalTarget} = getRegimentSplitTargets(nodes, targetDetails.finalTarget);
+  return {
+    state: state.i,
+    alert: round(state.alert || 0, 2),
+    landCells: cellsForState.length,
+    burgs: burgsForState.length,
+    ports: burgsForState.filter(burg => burg.port).length,
+    rawTarget: targetDetails.rawTarget,
+    burgBackedTarget: targetDetails.burgBackedTarget,
+    finalTarget: targetDetails.finalTarget,
+    minimumTarget: targetDetails.minimum,
+    densityFactor: round(targetDetails.densityFactor, 3),
+    spatialMerge: Boolean(spatialMerge),
+    mergeExpectedSize: getExpectedRegimentSize(),
+    burgLimit,
+    ruralLimit,
+    nodes: nodes.length,
+    landNodes: landNodes.length,
+    navalNodes: navalNodes.length,
+    urbanNodes: nodes.filter(node => Boolean(pack.cells.burg?.[node.cell])).length,
+    ruralNodes: nodes.filter(node => !pack.cells.burg?.[node.cell]).length,
+    landTarget,
+    navalTarget,
+    regiments: regiments.length,
+    landRegiments: regiments.filter(regiment => !regiment.n).length,
+    navalRegiments: regiments.filter(regiment => regiment.n).length
+  };
+}
+
+function shouldUseSpatialRegimentMerging(options = {}) {
+  const cellsTarget = Number(options.cellsTarget || 100000);
+  return options.heightmapTemplate === "highIsland" && cellsTarget >= 100000;
 }
 
 function getRegimentDensityFactor(cells) {

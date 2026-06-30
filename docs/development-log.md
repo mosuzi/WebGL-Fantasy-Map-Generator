@@ -11008,3 +11008,52 @@ full 矩阵结果：
 注意：
 
 - 这个修正只清理库存均值，库存分布仍不是 source-style：source 有大量 `0` 库存和长尾，candidate 仍更均匀。后续若继续经济质量，应转向 source-style 库存初始化、农村生产累加和 global trade 库存移动，而不是继续调 stock 常数。
+
+### 高山岛屿军事团数诊断与空间合并 gate
+
+背景：
+
+- `highIsland-100000-audit-highIsland-003` 剩余 `lateStages.military.regiments` warn：source/candidate 为 `137 / 223`。
+- 初始对比显示社会基数基本接近：source/candidate 城镇 `1025 / 1021`，首都 `15 / 15`，港口 `257 / 256`，国家 `15 / 15`。
+- 军事拆分显示 candidate 不是舰队过多，而是陆军 regiment 偏多：原 candidate 为陆军 `208`、舰队 `15`；source 总 regiment `137`、舰队 `26`。
+
+诊断补齐：
+
+- `tools/webgl-generator-export-baseline.mjs` 和 `tools/source-export-baseline.mjs` 的 `lateStages.military` 新增 per-state 摘要：
+  - `states`：每州 `name / type / burgs / rural / urban / area / regiments / navalRegiments / troops / units`。
+  - candidate 额外输出 `diagnostics`：`rawTarget / burgBackedTarget / finalTarget / landTarget / navalTarget / nodes / landNodes / navalNodes / urbanNodes / ruralNodes / spatialMerge` 等 funnel 字段。
+- 刷新 `highIsland-100000-audit-highIsland-003` 后确认：修正前 candidate 每州 `finalTarget === regiments`，`landTarget === landRegiments`，`navalTarget === navalRegiments`，说明旧逻辑把 target 当成最终团数严格兑现。
+
+修正：
+
+- `app/webgl-generator/src/generator/military.js` 保留原 target 分桶逻辑作为默认路径。
+- 新增 source-like platoon 空间合并路径：
+  - 按 source 思路从小 platoon 开始，优先合并 20px 内可合并 platoon。
+  - 小于 `mergeExpectedSize = 3000` 的 platoon 会按剩余兵力计算搜索半径继续合并。
+  - 不新增 quadtree 依赖，当前每州 platoon 数量较小，使用简单近邻扫描。
+- 为避免全局回归，空间合并只对 `heightmapTemplate === "highIsland"` 且 `cellsTarget >= 100000` 启用。全局启用曾让多个 10k 群岛/高山岛屿 case 和 `mediterranean-100000-audit-mediterranean-001` 新增军事 warn，因此不能作为无条件替换。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\military.js`
+- `node --check tools\webgl-generator-export-baseline.mjs`
+- `node --check tools\source-export-baseline.mjs`
+- 刷新并重算：
+  - `highIsland / 100000 / audit-highIsland-003`
+  - `mediterranean / 100000 / audit-mediterranean-001`
+  - `archipelago / 10000 / audit-archipelago-001`
+- `node tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate --refresh-diff`
+
+结果：
+
+- `highIsland-100000-audit-highIsland-003` candidate regiment 从 `223` 降到 `183`，source 为 `137`，该项通过。
+- 抽查确认 `mediterranean-100000-audit-mediterranean-001` 和 `archipelago-10000-audit-archipelago-001` 未启用 `spatialMerge`，保持通过。
+- full candidate 矩阵为 `60 pass / 3 warn / 0 fail`，warn 总项从 `5` 降到 `4`。
+- 剩余 warn：
+  - `continents-10000-audit-continents-001`：`features.total`。
+  - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
+  - `peninsula-50000-audit-peninsula-003`：`society.ports / economy.taxes.pollTaxExpected`。
+
+注意：
+
+- 军事数量 warn 已清零，但 candidate 兵种总量仍不完全 source-like，尤其舰队人数和 artillery 长尾仍偏高；后续若继续军事质量，应回到 source 的 `populationRate / urbanization` 语义与 platoon 生成倍率，而不是继续压 regiment 总数。

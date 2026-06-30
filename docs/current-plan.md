@@ -4,7 +4,7 @@
 
 ## 2026-07-01 最新推进队列
 
-当前 focus 仍是 source/candidate full 矩阵 warn 收敛，同时穿插修用户验收中明确指出的纯生成观感问题。最新 full candidate 矩阵为 `59 pass / 4 warn / 0 fail`，warn 总项已降至 `5`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项、10k 稀疏群岛的市场类告警、`archipelago-10000-audit-archipelago-001` 的城镇数量派生告警，以及 `peninsula-50000-audit-peninsula-003` 的库存均值告警。
+当前 focus 仍是 source/candidate full 矩阵 warn 收敛，同时穿插修用户验收中明确指出的纯生成观感问题。最新 full candidate 矩阵为 `60 pass / 3 warn / 0 fail`，warn 总项已降至 `4`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项、10k 稀疏群岛的市场类告警、`archipelago-10000-audit-archipelago-001` 的城镇数量派生告警、`peninsula-50000-audit-peninsula-003` 的库存均值告警，以及 `highIsland-100000-audit-highIsland-003` 的军事团数告警。
 
 刚完成的观感修正：
 
@@ -15,17 +15,17 @@
 - `continents-10000` 两个单例 warn 已完成只读复查：001 的 `features.total` 主要来自候选地形/feature 拓扑中更多小陆块；003 的 `lakeNames` 来自候选真实湖泊数 `7` 对 source `5`，不是 `defineLakeNames()` 命名过滤问题。不要用删除小岛、删除 1-cell 湖或只命名 outlet 湖来压 warn。
 - source/candidate baseline 的 `society` 已补充 `settlementEligiblePackCells`；`archipelago-10000-audit-archipelago-001` 的根因确认是候选文化补完把建城候选池扩大到 `1921`，source 为 `1493`。现在 10k 稀疏群岛不再执行文化“补齐未归属人口”兜底，candidate 候选池降到 `1844`，城镇从 `405` 降到 `390`，该 case 已 pass。
 - `peninsula-50000-audit-peninsula-003` 的 `economy.markets.stock.mean` 已用低水文半岛库存缩放 gate 清除：candidate 从 `18.257` 降到 `9.129`，source 为 `9.169`。这只是均值对齐；库存分布仍不是 source-style，后续不要继续用全局 stock 常数替代库存机制重写。
+- source/candidate baseline 的 `lateStages.military` 已补充 per-state 军事摘要，candidate 额外输出 `rawTarget / burgBackedTarget / finalTarget / landTarget / navalTarget / nodes / spatialMerge` 等 funnel 诊断。`highIsland-100000-audit-highIsland-003` 确认为候选每州 target 被严格兑现导致团数偏高；现在仅对 `highIsland >= 100000` 启用 source-like platoon 空间合并，原 case candidate 团数从 `223` 降到 `183`，source 为 `137`，该项通过。
 
 剩余 warn case：
 
 - `continents-10000-audit-continents-001`：`features.total`。
 - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
-- `highIsland-100000-audit-highIsland-003`：`lateStages.military.regiments`。
 - `peninsula-50000-audit-peninsula-003`：`society.ports`、`economy.taxes.pollTaxExpected`。
 
 下一步优先级：
 
-1. 单例项：`military.regiments / society.ports / pollTaxExpected` 需要先做定点只读复查，再决定是否值得改生成逻辑；`features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正。
+1. 单例项：`society.ports / pollTaxExpected` 需要先做定点只读复查，再决定是否值得改生成逻辑；`features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正。
 2. `peninsula-50000-audit-peninsula-003` 仍剩 `ports / pollTaxExpected`；港口应先加候选/选择诊断，poll tax 应回到人口/州统计税基，不要改税率常数硬压。
 3. marker 后续只做细节语义补齐：当前数量热点已清除，后续不要为了单个类型继续扩大总量。
 

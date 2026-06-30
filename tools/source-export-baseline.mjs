@@ -581,22 +581,47 @@ try {
         const regiments = states.flatMap(state =>
           (Array.isArray(state.military) ? state.military : []).map(regiment => ({...regiment, state: state.i}))
         );
-        const unitEntries = regiments.flatMap(regiment => Object.entries(regiment.u || {}));
         return {
           statesWithMilitary: countByPredicate(states, state => Array.isArray(state.military) && state.military.length > 0),
           regiments: regiments.length,
-          troops: round(regiments.reduce((sum, regiment) => sum + Number(regiment.t || 0), 0)),
+          troops: round(regiments.reduce((sum, regiment) => sum + Number(regiment.t ?? regiment.a ?? 0), 0)),
           navalRegiments: countByPredicate(regiments, regiment => regiment.n),
           types: countByKey(regiments, regiment => regiment.type || "unknown"),
-          units: unitEntries.reduce((counts, [unit, value]) => {
-            counts[unit] = round((counts[unit] || 0) + Number(value || 0));
-            return counts;
-          }, {}),
+          units: sumRegimentUnits(regiments),
+          states: describeMilitaryStates(states, regiments),
           invalidCells: countInvalidRefs(
             regiments.map(regiment => regiment.cell).filter(Number.isInteger),
             cells.i.length
           )
         };
+      }
+
+      function describeMilitaryStates(states = [], regiments = []) {
+        return states
+          .filter(state => state?.i && !state.removed)
+          .map(state => {
+            const stateRegiments = regiments.filter(regiment => Number(regiment.state) === Number(state.i));
+            return {
+              i: state.i,
+              name: state.name || "",
+              type: state.type || state.form || "unknown",
+              burgs: Number(state.burgs || 0),
+              rural: round(Number(state.rural || 0)),
+              urban: round(Number(state.urban || 0)),
+              area: round(Number(state.area || 0)),
+              regiments: stateRegiments.length,
+              navalRegiments: countByPredicate(stateRegiments, regiment => regiment.n),
+              troops: round(stateRegiments.reduce((sum, regiment) => sum + Number(regiment.t ?? regiment.a ?? 0), 0)),
+              units: sumRegimentUnits(stateRegiments)
+            };
+          });
+      }
+
+      function sumRegimentUnits(regiments = []) {
+        return regiments.flatMap(regiment => Object.entries(regiment.u || {})).reduce((counts, [unit, value]) => {
+          counts[unit] = round((counts[unit] || 0) + Number(value || 0));
+          return counts;
+        }, {});
       }
 
       function describeMarkers(markers = [], cells) {
