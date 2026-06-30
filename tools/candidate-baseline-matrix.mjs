@@ -170,6 +170,8 @@ function toMatrixRow({caseName, source, candidate, diff}) {
     provinces: pair(source.society?.provinces, candidate.society?.provinces),
     routes: pair(source.routes?.total, candidate.routes?.total),
     stateFullNames: pair(source.lateStages?.names?.stateFullNames, candidate.lateStages?.names?.stateFullNames),
+    oldPoliticalFormHits: candidate.lateStages?.names?.oldPoliticalFormHits ?? 0,
+    cultureLinkedStateNames: pair(source.lateStages?.names?.cultureLinkedStateNames, candidate.lateStages?.names?.cultureLinkedStateNames),
     burgCoas: pair(source.lateStages?.names?.burgCoas, candidate.lateStages?.names?.burgCoas),
     riverNames: pair(source.lateStages?.names?.riverNames, candidate.lateStages?.names?.riverNames),
     lakeNames: pair(source.lateStages?.names?.lakeNames, candidate.lateStages?.names?.lakeNames),
@@ -219,11 +221,11 @@ function renderMarkdown(matrix) {
   lines.push("");
   lines.push("## 后段专题指标");
   lines.push("");
-  lines.push("| case | 国家全名 S/C | 城市纹章 S/C | 河流命名 S/C | 湖泊命名 S/C | 军队 S/C | marker S/C | zone S/C |");
-  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|");
+  lines.push("| case | 国家全名 S/C | 文化关联国家 S/C | 旧形制命中 C | 城市纹章 S/C | 河流命名 S/C | 湖泊命名 S/C | 军队 S/C | marker S/C | zone S/C |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
   for (const item of matrix.cases) {
     lines.push(
-      `| ${item.caseName} | ${formatPair(item.stateFullNames)} | ${formatPair(item.burgCoas)} | ${formatPair(item.riverNames)} | ${formatPair(item.lakeNames)} | ${formatPair(item.regiments)} | ${formatPair(item.markers)} | ${formatPair(item.zones)} |`
+      `| ${item.caseName} | ${formatPair(item.stateFullNames)} | ${formatPair(item.cultureLinkedStateNames)} | ${item.oldPoliticalFormHits} | ${formatPair(item.burgCoas)} | ${formatPair(item.riverNames)} | ${formatPair(item.lakeNames)} | ${formatPair(item.regiments)} | ${formatPair(item.markers)} | ${formatPair(item.zones)} |`
     );
   }
   lines.push("");

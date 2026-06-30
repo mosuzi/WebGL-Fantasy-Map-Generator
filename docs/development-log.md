@@ -10854,3 +10854,36 @@ pnpm run regress:rendering
 后续：
 
 - 如果继续命名体系，应把 `state.formName/type/nameStyle` 和 culture `type/nameStyle` 加入轻量命名回归报告，而不是只看数量矩阵。
+
+### 命名风格回归观测字段补齐
+
+背景：
+
+- 国家命名与文化 root 关联修正后，需要把这类观感问题纳入可观测报告，否则后续只能靠临时 `generatePlaceholderMap()` 脚本排查。
+- 现有 source/candidate baseline 只统计国家全名数量，无法显示国家形制、文化类型、旧欧式形制命中或文化 root 关联程度。
+
+修正：
+
+- `tools/webgl-generator-export-baseline.mjs` 的 `lateStages.names` 新增：
+  - `stateForms`
+  - `stateTypes`
+  - `cultureTypes`
+  - `cultureNameStyles`
+  - `oldPoliticalFormHits`
+  - `cultureLinkedStateNames`
+  - `stateNameSamples`
+- `tools/source-export-baseline.mjs` 增加同形字段，便于 source/candidate 并排观察。
+- `tools/candidate-baseline-matrix.mjs` 的后段专题表新增：
+  - `文化关联国家 S/C`
+  - `旧形制命中 C`
+
+验证：
+
+- `node --check tools\webgl-generator-export-baseline.mjs`
+- `node --check tools\source-export-baseline.mjs`
+- `node --check tools\candidate-baseline-matrix.mjs`
+- 临时 candidate export：
+  - `template = continents`
+  - `cells = 10000`
+  - `seed = stage-2-1231411414`
+  - 输出 `oldPoliticalFormHits = 0`，`cultureLinkedStateNames = 15`，并包含国家形制分布和前 12 个国家样本。

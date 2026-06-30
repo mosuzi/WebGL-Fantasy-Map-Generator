@@ -444,6 +444,20 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
       stateNames: countByPredicate(states, item => Boolean(item?.name) && (item.i || item.id >= 0)),
       stateFullNames: countByPredicate(states, item => Boolean(item?.fullName)),
       stateFormNames: countByPredicate(states, item => Boolean(item?.formName)),
+      stateForms: countByKey(states, item => item?.formName || "none"),
+      stateTypes: countByKey(states, item => item?.type || "none"),
+      cultureTypes: countByKey(cultures, item => item?.type || "none"),
+      cultureNameStyles: countByKey(cultures, item => item?.nameStyle || "default"),
+      oldPoliticalFormHits: countOldPoliticalFormHits(states),
+      cultureLinkedStateNames: countCultureLinkedStateNames(states, cultures),
+      stateNameSamples: states.filter(item => item?.i && !item.removed).slice(0, 12).map(item => ({
+        i: item.i,
+        name: item.name || "",
+        fullName: item.fullName || "",
+        formName: item.formName || "",
+        type: item.type || "",
+        culture: item.culture || 0
+      })),
       stateCoas: countByPredicate(states, item => Boolean(item?.coa)),
       provinceNames: countByPredicate(provinces, item => Boolean(item?.name) && (item.i || item.id >= 0)),
       riverNames: countByPredicate(pack.rivers || [], item => Boolean(item?.name)),
@@ -496,6 +510,24 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
       religionsWithArea: countByPredicate(religions, item => Number.isFinite(item?.area))
     }
   };
+}
+
+function countOldPoliticalFormHits(states = []) {
+  const oldForm = /公国|侯国|自由邦|共和国|帝国|联邦|邦联/u;
+  return countByPredicate(states, state => oldForm.test(`${state?.name || ""}${state?.formName || ""}${state?.fullName || ""}`));
+}
+
+function countCultureLinkedStateNames(states = [], cultures = []) {
+  const roots = new Map(cultures.filter(culture => culture?.i && !culture.removed).map(culture => [culture.i, cleanCultureRoot(culture)]));
+  return countByPredicate(states, state => {
+    if (!state?.i || state.removed) return false;
+    const root = roots.get(state.culture);
+    return Boolean(root && String(state.name || "").includes(root));
+  });
+}
+
+function cleanCultureRoot(culture) {
+  return String(culture?.root || culture?.name || "").replace(/文化$/u, "");
 }
 
 function getCandidateZones(candidateMap, pack) {
