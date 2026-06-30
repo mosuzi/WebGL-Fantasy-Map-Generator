@@ -22,7 +22,7 @@ export function buildPack(grid, features) {
     cells.h = Uint8Array.from(newCells.h);
   });
   cells.area = profile.stage("cell-areas", "计算 pack cell 面积", () =>
-    Uint16Array.from(cells.i, cellId => Math.min(Math.abs(polygonArea(getPackPolygon(cells, vertices, cellId))), UINT16_MAX))
+    Uint16Array.from(cells.i, cellId => Math.min(Math.abs(packCellArea(cells, vertices, cellId)), UINT16_MAX))
   );
 
   grid.cells.pack = gridToPack;
@@ -381,18 +381,24 @@ function distanceSquared(a, b) {
   return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
 }
 
-function getPackPolygon(cells, vertices, cellId) {
-  return (cells.v[cellId] || []).map(vertexId => vertices.p[vertexId]).filter(Boolean);
-}
-
-function polygonArea(points) {
-  if (points.length < 3) return 0;
+function packCellArea(cells, vertices, cellId) {
+  const vertexIds = cells.v[cellId] || [];
   let area = 0;
-  for (let index = 0, previous = points.length - 1; index < points.length; previous = index++) {
-    const [x1, y1] = points[previous];
-    const [x2, y2] = points[index];
-    area += x1 * y2 - x2 * y1;
+  let first = null;
+  let previous = null;
+  let points = 0;
+
+  for (const vertexId of vertexIds) {
+    const point = vertices.p[vertexId];
+    if (!point) continue;
+    if (!first) first = point;
+    if (previous) area += previous[0] * point[1] - point[0] * previous[1];
+    previous = point;
+    points++;
   }
+
+  if (points < 3) return 0;
+  area += previous[0] * first[1] - first[0] * previous[1];
   return area / 2;
 }
 

@@ -200,7 +200,8 @@ function buildShoreSegments(grid, features, featureIds) {
   const lakeShore = [];
 
   for (let cell = 0; cell < grid.points.length; cell++) {
-    for (const neighbor of getForwardNeighbors(grid, cell)) {
+    for (const neighbor of getCellNeighbors(grid, cell)) {
+      if (neighbor <= cell) continue;
       const cellWater = grid.cells.h[cell] < WATER_LEVEL;
       const neighborWater = grid.cells.h[neighbor] < WATER_LEVEL;
       if (cellWater === neighborWater) continue;
@@ -221,13 +222,17 @@ function getCellNeighbors(grid, cell) {
   return grid.cells.c?.[cell] || [];
 }
 
-function getForwardNeighbors(grid, cell) {
-  return getCellNeighbors(grid, cell).filter(neighbor => neighbor > cell);
-}
-
 function getSharedSegment(grid, a, b) {
-  const bVertices = new Set(grid.cells.v[b]);
-  const shared = grid.cells.v[a].filter(vertexId => bVertices.has(vertexId));
+  const aVertices = grid.cells.v[a] || [];
+  const bVertices = grid.cells.v[b] || [];
+  const shared = [];
+
+  for (const vertexId of aVertices) {
+    if (!bVertices.includes(vertexId)) continue;
+    shared.push(vertexId);
+    if (shared.length >= 2) break;
+  }
+
   if (shared.length < 2) return null;
   return [grid.vertices.p[shared[0]], grid.vertices.p[shared[1]]];
 }

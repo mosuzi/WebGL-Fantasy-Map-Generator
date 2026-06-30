@@ -10064,3 +10064,36 @@ pnpm run regress:rendering
 
 - `pack` 当前剩余主要热点是 `重建 pack Voronoi` 和 `标注 pack feature` 本身；Voronoi 改动风险较高，下一步更适合继续做小的临时对象优化，例如 pack cell 面积直接遍历顶点、shore segment 避免 per-edge `Set/filter`。
 - `grid` 中 `Delaunay / Voronoi` 和 `heightmap` 仍是大项，但会触碰更底层的数据顺序和视觉结果，后续必须单独开刀并加强 baseline。
+
+### 纯生成链路性能第七刀：面积与水陆线临时对象优化
+
+背景：
+
+- 第六刀后，`pack` 的主要剩余热点转到 pack Voronoi、pack feature 标注和 pack cell 面积；`features` 中水陆线段构建也仍有可见成本。
+- 只读调查指出两个低风险临时对象点：pack cell 面积每个 cell 都构造 polygon 数组，水陆线段每条边都构造 `Set` 并 filter 共享顶点。
+
+修正：
+
+- `pack` cell 面积计算改为 `packCellArea()`：直接按 `cells.v[cellId]` 的顶点顺序做鞋带公式，跳过无效点，不再生成 polygon 临时数组。
+- `features.buildShoreSegments()` 不再调用 `getForwardNeighbors()` 生成过滤数组，而是在邻接循环中直接跳过 `neighbor <= cell`。
+- `getSharedSegment()` 改为在两个短顶点数组里查找前两个共享顶点，避免每条水陆边创建 `Set` 和 filter 数组。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/pack.js`
+- `node --check app/webgl-generator/src/generator/features.js`
+- `git diff --check -- app/webgl-generator/src/generator/pack.js app/webgl-generator/src/generator/features.js`
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 100000 --seed stage-2-1231411414 --template continents --iterations 3` 通过：
+  - `features` 总耗时约 `138.1ms`。
+  - `生成水陆线段` 约 `18.3ms`。
+  - `pack` 总耗时约 `291.5ms`。
+  - `计算 pack cell 面积` 约 `26.6ms`。
+  - `标注 pack feature` 约 `95.9ms`。
+- `$env:CI='true'; pnpm.cmd run build:app` 通过；第三方 `@vueuse/core` pure annotation 警告仍为既有工具链噪音。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh-candidate --refresh-diff --browser-channel chrome --timeout 240000` 通过刷新 3 个 100k candidate case；地形、pack、feature、湖泊、河流、人口、国家、省份和路线主指标未新增回退。
+- `$env:CI='true'; pnpm.cmd run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `560.7ms`，纯生成 `315.8ms`，WebGL 加载 `146.1ms`。
+
+后续：
+
+- 继续做纯生成性能时，低风险小项已逐渐收敛；下一步要么进入更底层的 `grid / pack Voronoi` 和 heightmap，要么切到阶段 19 economy 数据链路。
+- 若继续优化 pack feature 泛洪本体，可考虑单调 next-unmarked 指针和 haven 查找的短数组优化，但收益可能小于前几刀，需要先看三次 profile。
