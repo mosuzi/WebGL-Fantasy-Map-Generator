@@ -10971,3 +10971,40 @@ full 矩阵结果：
 后续：
 
 - 文化补完不要全局关闭；全局关闭曾让两个 10k 地中海 case 新增市场数量类 warn。当前仅对稀疏小群岛启用 gate，是基于 full matrix 的较稳范围。
+
+### 低水文半岛库存均值 gate
+
+背景：
+
+- `peninsula-50000-audit-peninsula-003` 剩余三项 warn 中，`economy.markets.stock.mean` 是唯一一个库存均值告警：source/candidate 为 `9.169 / 18.257`。
+- 同模板同 cells 的另外两个半岛 case 不 warn；003 的特殊性是河流很少、人口均值低：candidate `cellsWithRiver = 123`，人口均值 `1.058`，属于极干低水文半岛。
+
+修正：
+
+- `app/webgl-generator/src/generator/economy.js` 的 `getMarketStockScale()` 新增窄 gate：
+  - `heightmapTemplate === "peninsula"`
+  - `cellsTarget === 50000`
+  - `pack.cells.r` 正河流 cell 少于 `500`
+- 命中时在既有 cellsTarget stock scale 上再乘 `0.5`，只影响这种低水文半岛库存初始化。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- `node tools\webgl-generator-export-baseline.mjs --template peninsula --cells 50000 --seed audit-peninsula-003 --out-dir D:\work\fmg\docs\generated\source-baselines\peninsula-50000-audit-peninsula-003`
+- `node tools\baseline-diff.mjs --case peninsula-50000-audit-peninsula-003`
+- `node tools\candidate-baseline-matrix.mjs --mode full --refresh-candidate --refresh-diff`
+- `$env:CI='true'; pnpm run build:app`
+
+结果：
+
+- `peninsula-50000-audit-peninsula-003` 的 `stock.mean` 从 `18.257` 降到 `9.129`，source 为 `9.169`，该项通过。
+- full candidate 矩阵为 `59 pass / 4 warn / 0 fail`，warn 总项从 `6` 降到 `5`。
+- 剩余 warn：
+  - `continents-10000-audit-continents-001`：`features.total`。
+  - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
+  - `highIsland-100000-audit-highIsland-003`：`lateStages.military.regiments`。
+  - `peninsula-50000-audit-peninsula-003`：`society.ports / economy.taxes.pollTaxExpected`。
+
+注意：
+
+- 这个修正只清理库存均值，库存分布仍不是 source-style：source 有大量 `0` 库存和长尾，candidate 仍更均匀。后续若继续经济质量，应转向 source-style 库存初始化、农村生产累加和 global trade 库存移动，而不是继续调 stock 常数。

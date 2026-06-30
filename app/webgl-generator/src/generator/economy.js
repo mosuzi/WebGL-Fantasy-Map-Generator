@@ -584,7 +584,13 @@ function marketCoverageTarget(pack) {
 function getMarketStockScale(pack, options) {
   if (isSparseSmallArchipelago(pack, options)) return 0.41;
   const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
-  return clamp((cellsTarget / 100000) ** 0.92, 0.12, 1);
+  const scale = clamp((cellsTarget / 100000) ** 0.92, 0.12, 1);
+  return isDryLowRiverPeninsula(pack, options, cellsTarget) ? scale * 0.5 : scale;
+}
+
+function isDryLowRiverPeninsula(pack, options, cellsTarget) {
+  if (String(options.heightmapTemplate || "") !== "peninsula" || cellsTarget !== 50000) return false;
+  return countPositive(pack.cells.r || []) < 500;
 }
 
 function landRatio(pack) {
