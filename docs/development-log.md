@@ -10295,3 +10295,41 @@ pnpm run regress:rendering
 
 - 下一刀可处理湖泊数量/湖名：当前 `continents / 10000 / 001` 和 `archipelago / 10000 / 002` 同时因 `features.lakes` 与 `lakeNames` fail，属于同一根因。
 - 也可继续处理 `peninsula / 50000 / 003` 的 `economy.markets.stock.mean`，但只影响 1 个 fail，应避免为了单 case 过度调 stock 全局指数。
+
+### 10k 湖泊兜底校准第一刀
+
+背景：
+
+- 经济生产与交易密度校准后，full 矩阵还剩 `3 fail / 31 warn / 29 pass`。
+- 其中两个 fail 属于同一根因：
+  - `continents / 10000 / audit-continents-001`：source 有 `2` 个 lake / lakeName，candidate 为 `0`。
+  - `archipelago / 10000 / audit-archipelago-002`：source 有 `1` 个 lake / lakeName，candidate 为 `0`。
+- 只读诊断确认 candidate 初始水体全部连到海洋；已有湖泊的 case 多数来自初始封闭水体，而当前 `addLakesInDeepDepressions()` 生成的近海低洼湖会被 `openNearSeaLakes()` 打开，导致这两个 10k case 最终无湖。
+
+修正：
+
+- 在 `openNearSeaLakes()` 之后新增 `supplemental-basin-lakes` 阶段，只在整张地图最终仍没有湖泊时触发。
+- 兜底候选必须满足：
+  - 非边界陆地 cell。
+  - 海拔 `20..45`。
+  - 距当前水岸至少 `3` 层邻接。
+  - 不高于所有邻居，即局部低点。
+- 候选按内陆距离、低海拔和邻域 relief 评分，目标数量按候选规模夹在 `1..3`，并要求补湖点之间至少相隔若干邻接步，避免扎堆。
+- `addLake()` 同步把湖 cell 高度改为 `19`，把周边陆地标为 `LAND_COAST`，保证后续 grid/pack feature、湖岸、湖泊水文和湖名链路能接上。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\features.js`
+- 定点生成：
+  - `continents / 10000 / audit-continents-001`：grid lakes / pack lakes / named lakes 均为 `2`。
+  - `archipelago / 10000 / audit-archipelago-002`：grid lakes / pack lakes / named lakes 均为 `1`。
+  - `continents / 10000 / audit-continents-002` 保持 `6` 湖，`continents / 100000 / audit-continents-001` 保持 `69` 湖，说明已有湖泊 case 没被兜底阶段改动。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态从 `3 fail / 31 warn / 29 pass` 改为 `1 fail / 30 warn / 32 pass`。
+  - 两个湖泊 / 湖名 fail 清除。
+
+后续：
+
+- 当前 full 矩阵唯一 fail 是 `peninsula-50000-audit-peninsula-003` 的 `economy.markets.stock.mean`。
+- 该问题只剩单 case，下一刀应先读取该 case 的 source/candidate market stock 分布，再决定是做轻量 stock 下限/上限修正，还是把它降级为可接受的 warn；避免为了一个边缘 case 大幅重调所有地图的库存指数。
