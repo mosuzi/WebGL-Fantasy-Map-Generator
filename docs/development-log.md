@@ -10031,3 +10031,36 @@ pnpm run regress:rendering
 - 下一刀优先继续拆 / 优化 `pack.markupPackFeatures()` 的泛洪段。当前它把 `createPackFeature()` 计入泛洪阶段，后者内部可能有边界 cell、边界顶点、湖岸和面积的多轮全 pack 扫描。
 - 低风险候选仍包括 `features.buildShoreSegments()` 的 per-edge `Set/filter`、`pack` 面积计算的临时 polygon 数组，以及 feature 未标记 cell 查找的 `indexOf(UNMARKED)` 单调指针化。
 - `grid` 的 Delaunay / Voronoi 是底层大项，任何改点序、边界点、Voronoi 数据结构的优化都需要更强回归，不应和小刀混在一起。
+
+### 纯生成链路性能第六刀：pack feature 后处理局部化
+
+背景：
+
+- 第五刀 profile 显示 `pack.markupPackFeatures()` 的内部耗时几乎全部落在“泛洪识别 pack feature”，但该阶段同时包含 `createPackFeature()`。
+- `createPackFeature()` 旧逻辑会为每个 feature 再次扫描全 pack cells，用于找边界 cell、收集边界顶点、收集湖岸和计算面积；feature 数量较多时这是明显的重复全表扫描。
+- 为避免改变 feature 判定和输出顺序，本轮只把每个 feature 自己的 cell 列表从泛洪阶段传给后处理函数，并按 cell id 排序后使用，模拟旧的 `cells.i` 顺序。
+
+修正：
+
+- `markupPackFeatures()` 在泛洪时收集 `featureCells`。
+- `featureCells` 在创建 feature 前按 cell id 升序排序，保持边界、湖岸和面积后处理的 cell 顺序接近旧的全表扫描顺序。
+- `findFeatureBorderCell()`、`collectBoundaryVertices()`、`collectLakeShoreline()` 和 `sumFeatureArea()` 改为只遍历当前 feature 的 cells。
+- 保留 feature id 分配、邻接遍历、haven/harbor、distance field、lake metadata 和 feature group 逻辑。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/pack.js`
+- `git diff --check -- app/webgl-generator/src/generator/pack.js`
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 100000 --seed stage-2-1231411414 --template continents --iterations 3` 通过：
+  - `pack` 总耗时约 `300.3ms`。
+  - `重建 pack Voronoi` 约 `130.4ms`。
+  - `标注 pack feature` 约 `123.2ms`，此前为约 `294.7ms`。
+  - `pack feature 标注` 内部 `泛洪识别 pack feature` 约 `108.7ms`，此前为约 `279.2ms`。
+- `$env:CI='true'; pnpm.cmd run build:app` 通过；第三方 `@vueuse/core` pure annotation 警告仍为既有工具链噪音。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh-candidate --refresh-diff --browser-channel chrome --timeout 240000` 通过刷新 3 个 100k candidate case；强制地中海 case 的 grid、pack、feature、湖泊、河流、人口、国家、省份和路线主指标继续 pass，矩阵总体 fail 仍是 economy 空链路和旧 source `lateStages` 缺口。
+- `$env:CI='true'; pnpm.cmd run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `698.5ms`，纯生成 `334.1ms`，WebGL 加载 `271.8ms`。
+
+后续：
+
+- `pack` 当前剩余主要热点是 `重建 pack Voronoi` 和 `标注 pack feature` 本身；Voronoi 改动风险较高，下一步更适合继续做小的临时对象优化，例如 pack cell 面积直接遍历顶点、shore segment 避免 per-edge `Set/filter`。
+- `grid` 中 `Delaunay / Voronoi` 和 `heightmap` 仍是大项，但会触碰更底层的数据顺序和视觉结果，后续必须单独开刀并加强 baseline。

@@ -163,39 +163,42 @@ function markupPackFeatures(pack, grid) {
 
   profile.stage("flood-features", "泛洪识别 pack feature", () => {
     for (let featureId = 1; queue[0] !== -1; featureId++) {
-    const firstCell = queue[0];
-    featureIds[firstCell] = featureId;
-    const land = isLand(cells, firstCell);
-    let border = Boolean(cells.b[firstCell]);
-    let totalCells = 1;
+      const firstCell = queue[0];
+      const featureCells = [];
+      featureIds[firstCell] = featureId;
+      const land = isLand(cells, firstCell);
+      let border = Boolean(cells.b[firstCell]);
+      let totalCells = 1;
 
-    while (queue.length) {
-      const cell = queue.pop();
-      if (cells.b[cell]) border = true;
+      while (queue.length) {
+        const cell = queue.pop();
+        featureCells.push(cell);
+        if (cells.b[cell]) border = true;
 
-      for (const neighbor of cells.c[cell] || []) {
-        const neighborLand = isLand(cells, neighbor);
+        for (const neighbor of cells.c[cell] || []) {
+          const neighborLand = isLand(cells, neighbor);
 
-        if (land && !neighborLand) {
-          distanceField[cell] = LAND_COAST;
-          distanceField[neighbor] = WATER_COAST;
-          if (!haven[cell]) defineHaven(cells, cell, haven, harbor);
-        } else if (land && neighborLand) {
-          if (distanceField[neighbor] === UNMARKED && distanceField[cell] === LAND_COAST) distanceField[neighbor] = LANDLOCKED;
-          else if (distanceField[cell] === UNMARKED && distanceField[neighbor] === LAND_COAST) distanceField[cell] = LANDLOCKED;
-        }
+          if (land && !neighborLand) {
+            distanceField[cell] = LAND_COAST;
+            distanceField[neighbor] = WATER_COAST;
+            if (!haven[cell]) defineHaven(cells, cell, haven, harbor);
+          } else if (land && neighborLand) {
+            if (distanceField[neighbor] === UNMARKED && distanceField[cell] === LAND_COAST) distanceField[neighbor] = LANDLOCKED;
+            else if (distanceField[cell] === UNMARKED && distanceField[neighbor] === LAND_COAST) distanceField[cell] = LANDLOCKED;
+          }
 
-        if (!featureIds[neighbor] && land === neighborLand) {
-          queue.push(neighbor);
-          featureIds[neighbor] = featureId;
-          totalCells++;
+          if (!featureIds[neighbor] && land === neighborLand) {
+            queue.push(neighbor);
+            featureIds[neighbor] = featureId;
+            totalCells++;
+          }
         }
       }
-    }
 
-    features.push(createPackFeature({pack, grid, featureIds, firstCell, featureId, land, border, totalCells}));
-    queue[0] = featureIds.indexOf(UNMARKED);
-  }
+      featureCells.sort((a, b) => a - b);
+      features.push(createPackFeature({pack, grid, featureIds, featureCells, firstCell, featureId, land, border, totalCells}));
+      queue[0] = featureIds.indexOf(UNMARKED);
+    }
   });
 
   profile.stage("distance-land", "标记内陆距离", () => markupDistanceField(distanceField, cells.c, DEEPER_LAND, 1));
@@ -227,11 +230,11 @@ function defineHaven(cells, cell, haven, harbor) {
   harbor[cell] = waterCells.length;
 }
 
-function createPackFeature({pack, grid, featureIds, firstCell, featureId, land, border, totalCells}) {
+function createPackFeature({pack, grid, featureIds, featureCells, firstCell, featureId, land, border, totalCells}) {
   const {cells, vertices} = pack;
   const type = land ? "island" : border ? "ocean" : "lake";
-  const startCell = type === "ocean" ? firstCell : findFeatureBorderCell(cells, featureIds, firstCell, featureId);
-  const featureVertices = type === "ocean" ? [] : collectBoundaryVertices(cells, vertices, featureIds, featureId);
+  const startCell = type === "ocean" ? firstCell : findFeatureBorderCell(cells, featureIds, featureCells, firstCell, featureId);
+  const featureVertices = type === "ocean" ? [] : collectBoundaryVertices(cells, vertices, featureIds, featureCells, featureId);
   const feature = {
     id: featureId,
     i: featureId,
@@ -241,14 +244,14 @@ function createPackFeature({pack, grid, featureIds, firstCell, featureId, land, 
     cells: totalCells,
     firstCell: startCell,
     vertices: featureVertices,
-    area: round(sumFeatureArea(cells, featureIds, featureId)),
+    area: round(sumFeatureArea(cells, featureCells)),
     shoreline: [],
     height: 0,
     group: "none"
   };
 
   if (type === "lake") {
-    feature.shoreline = collectLakeShoreline(cells, featureIds, featureId);
+    feature.shoreline = collectLakeShoreline(cells, featureCells);
     feature.height = getLakeHeight(cells, feature.shoreline);
     feature.temp = getMeanGridValue(grid, cells, feature.shoreline, "temp");
     feature.flux = getSumGridValue(grid, cells, feature.shoreline, "prec");
@@ -258,10 +261,10 @@ function createPackFeature({pack, grid, featureIds, firstCell, featureId, land, 
   return feature;
 }
 
-function findFeatureBorderCell(cells, featureIds, firstCell, featureId) {
+function findFeatureBorderCell(cells, featureIds, featureCells, firstCell, featureId) {
   if (isFeatureBorderCell(cells, featureIds, firstCell, featureId)) return firstCell;
-  for (const cell of cells.i) {
-    if (featureIds[cell] === featureId && isFeatureBorderCell(cells, featureIds, cell, featureId)) return cell;
+  for (const cell of featureCells) {
+    if (isFeatureBorderCell(cells, featureIds, cell, featureId)) return cell;
   }
   return firstCell;
 }
@@ -270,11 +273,10 @@ function isFeatureBorderCell(cells, featureIds, cell, featureId) {
   return Boolean(cells.b[cell]) || (cells.c[cell] || []).some(neighbor => featureIds[neighbor] !== featureId);
 }
 
-function collectBoundaryVertices(cells, vertices, featureIds, featureId) {
+function collectBoundaryVertices(cells, vertices, featureIds, featureCells, featureId) {
   const result = [];
   const seen = new Set();
-  for (const cell of cells.i) {
-    if (featureIds[cell] !== featureId) continue;
+  for (const cell of featureCells) {
     for (const vertexId of cells.v[cell] || []) {
       const vertexCells = vertices.c[vertexId] || [];
       if (!vertexCells.some(neighbor => neighbor < featureIds.length && featureIds[neighbor] !== featureId)) continue;
@@ -286,11 +288,10 @@ function collectBoundaryVertices(cells, vertices, featureIds, featureId) {
   return result;
 }
 
-function collectLakeShoreline(cells, featureIds, featureId) {
+function collectLakeShoreline(cells, featureCells) {
   const shoreline = [];
   const seen = new Set();
-  for (const cell of cells.i) {
-    if (featureIds[cell] !== featureId) continue;
+  for (const cell of featureCells) {
     for (const neighbor of cells.c[cell] || []) {
       if (!isLand(cells, neighbor) || seen.has(neighbor)) continue;
       seen.add(neighbor);
@@ -350,9 +351,9 @@ function markupDistanceField(distanceField, neighbors, start, increment, limit =
   }
 }
 
-function sumFeatureArea(cells, featureIds, featureId) {
+function sumFeatureArea(cells, featureCells) {
   let area = 0;
-  for (const cell of cells.i) if (featureIds[cell] === featureId) area += cells.area[cell] || 0;
+  for (const cell of featureCells) area += cells.area[cell] || 0;
   return area;
 }
 
