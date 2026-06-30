@@ -36,9 +36,10 @@ export function finalizeSettlements(grid, features, politics, settlements, pack,
   if (options.pruneNeutralSettlements) pruneNeutralSettlements(grid, settlements, pack);
   mirrorCitiesToGrid(grid, settlements.cities);
   const routes = buildRoutes(grid, features, politics, settlements.cities, pack, options);
+  const populationPoints = buildPopulationPoints(grid, features, grid.cells.pop);
   settlements.routes = routes;
-  settlements.populationPoints = buildPopulationPoints(grid, features, grid.cells.pop);
-  settlements.metadata = createSettlementMetadata({grid, features, population: grid.cells.pop, cities: settlements.cities, routes, pack});
+  settlements.populationPoints = populationPoints;
+  settlements.metadata = createSettlementMetadata({grid, features, population: grid.cells.pop, cities: settlements.cities, routes, pack, populationPoints});
   return settlements;
 }
 
@@ -54,15 +55,16 @@ export function regenerateSettlementsWithinPolitics(grid, features, politics, se
 }
 
 function createSettlementResult({grid, features, population, cities, routes, pack}) {
+  const populationPoints = buildPopulationPoints(grid, features, population);
   return {
     cities,
     routes,
-    populationPoints: buildPopulationPoints(grid, features, population),
-    metadata: createSettlementMetadata({grid, features, population, cities, routes, pack})
+    populationPoints,
+    metadata: createSettlementMetadata({grid, features, population, cities, routes, pack, populationPoints})
   };
 }
 
-function createSettlementMetadata({grid, features, population, cities, routes, pack}) {
+function createSettlementMetadata({grid, features, population, cities, routes, pack, populationPoints = null}) {
   return {
     cities: cities.length,
     capitals: cities.filter(city => city.capital).length,
@@ -70,7 +72,7 @@ function createSettlementMetadata({grid, features, population, cities, routes, p
     routes: routes.length,
     routeSegments: routes.reduce((sum, route) => sum + Math.max(0, route.points.length - 1), 0),
     populationCells: population.filter(value => value > 0).length,
-    ruralPopulationPoints: buildPopulationPoints(grid, features, population).length,
+    ruralPopulationPoints: (populationPoints || buildPopulationPoints(grid, features, population)).length,
     maxPopulation: maxValue(cities.map(city => city.population)),
     packBurgs: pack?.burgs ? Math.max(0, pack.burgs.length - 1) : 0
   };

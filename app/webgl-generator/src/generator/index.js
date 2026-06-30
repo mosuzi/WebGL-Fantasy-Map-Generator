@@ -15,32 +15,34 @@ import {buildSociety, finalizeSocietyReligions} from "./society.js";
 import {buildZones} from "./zones.js";
 
 export function generatePlaceholderMap(inputOptions = {}) {
-  const options = normalizeOptions(inputOptions);
-  const gridRandom = createRandom(options.seed);
-  const random = createRandom(options.seed);
-  const heightmap = createHeightmap(options, random);
-  const grid = buildGrid(options, gridRandom, heightmap, random);
-  const features = extractFeatures(grid);
-  const climateRandom = createRandom(options.seed);
-  const climate = buildClimate(grid, features, options, climateRandom);
-  const pack = buildPack(grid, features);
-  const rivers = buildRivers(grid, features, pack, options);
-  const biomes = defineBiomesAndPopulation(grid, pack);
+  const profile = createGenerationProfile();
+  const options = profile.stage("normalize-options", "标准化参数", () => normalizeOptions(inputOptions));
+  const gridRandom = profile.stage("random-grid", "初始化 grid 随机源", () => createRandom(options.seed));
+  const random = profile.stage("random-main", "初始化主随机源", () => createRandom(options.seed));
+  const heightmap = profile.stage("heightmap", "生成高度模板", () => createHeightmap(options, random));
+  const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(options, gridRandom, heightmap, random));
+  const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
+  const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(options.seed));
+  const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, options, climateRandom));
+  const pack = profile.stage("pack", "构建 pack 语义图", () => buildPack(grid, features));
+  const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, options));
+  const biomes = profile.stage("biomes-population", "生成生物群系与人口评分", () => defineBiomesAndPopulation(grid, pack));
   climate.biomes = biomes.biomes;
   climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
-  const society = buildSociety(grid, features, climate, rivers, random, pack, options);
-  renameHydronymsByCulture(rivers, pack, options);
-  const settlements = buildSettlements(grid, features, null, rivers, random, pack, options);
-  const politics = buildPolitics(grid, features, society, rivers, random, options, pack);
-  finalizeSettlements(grid, features, politics, settlements, pack, {...options, pruneNeutralSettlements: true});
-  finalizeSocietyReligions(grid, society, pack, random, settlements, options);
-  const military = buildMilitary(pack, options);
-  const markers = buildMarkers(grid, features, politics, rivers, pack, options);
+  const society = profile.stage("society-cultures", "生成文化初稿", () => buildSociety(grid, features, climate, rivers, random, pack, options));
+  profile.stage("river-names", "按文化命名河流", () => renameHydronymsByCulture(rivers, pack, options));
+  const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, options));
+  const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, options, pack));
+  profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...options, pruneNeutralSettlements: true}));
+  profile.stage("religions-finalize", "按城镇和文化扩张宗教", () => finalizeSocietyReligions(grid, society, pack, random, settlements, options));
+  const military = profile.stage("military", "生成军事", () => buildMilitary(pack, options));
+  const markers = profile.stage("markers", "生成标记", () => buildMarkers(grid, features, politics, rivers, pack, options));
   pack.markers = markers.markers;
-  const zones = buildZones(pack, options);
-  const layers = createPalette(random);
-  const summary = createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones);
-  const generatedAt = new Date().toISOString();
+  const zones = profile.stage("zones", "生成区域", () => buildZones(pack, options));
+  const layers = profile.stage("palette", "生成色板", () => createPalette(random));
+  const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones));
+  const generatedAt = profile.stage("metadata", "生成元数据", () => new Date().toISOString());
+  const generationTiming = profile.finish();
 
   return {
     metadata: {
@@ -55,7 +57,8 @@ export function generatePlaceholderMap(inputOptions = {}) {
       graphWidth: options.graphWidth,
       graphHeight: options.graphHeight,
       checksum: summary.checksum,
-      generatedAt
+      generatedAt,
+      generationTiming
     },
     options,
     layers,
@@ -90,12 +93,35 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `build military: states=${military.metadata.statesWithMilitary}, regiments=${military.metadata.regiments}`,
       `build markers: markers=${markers.metadata.markers}, peaks=${markers.metadata.peaks}, riverSources=${markers.metadata.riverSources}`,
       `build zones: zones=${zones.metadata.zones}, target=${zones.metadata.target}, cells=${zones.metadata.cells}, invalidCells=${zones.metadata.invalidCells}`,
+      `generation timing: total=${generationTiming.totalMs}ms, slowest=${generationTiming.slowest?.label || "none"} ${generationTiming.slowest?.ms ?? 0}ms`,
       `grid checksum: ${summary.checksum}`
     ],
     status: {
       message: "source 阶段 18 zones 第一刀",
       sourceDependency: false,
       snapshotDependency: false
+    }
+  };
+}
+
+function createGenerationProfile() {
+  const startedAt = performance.now();
+  const stages = [];
+  return {
+    stage(id, label, task) {
+      const started = performance.now();
+      const result = task();
+      stages.push({id, label, ms: roundMs(performance.now() - started)});
+      return result;
+    },
+    finish() {
+      const totalMs = roundMs(performance.now() - startedAt);
+      const slowest = stages.reduce((best, stage) => stage.ms > (best?.ms ?? -1) ? stage : best, null);
+      return {
+        totalMs,
+        stages,
+        slowest: slowest ? {...slowest} : null
+      };
     }
   };
 }
@@ -192,4 +218,8 @@ function createPalette(random) {
 function round(value, digits) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
+}
+
+function roundMs(value) {
+  return round(value, 1);
 }

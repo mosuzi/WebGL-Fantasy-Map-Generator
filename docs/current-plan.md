@@ -646,6 +646,7 @@ http://127.0.0.1:5410
 82. `political-layer` 第一刀结构迁移已完成：新增 `app/webgl-generator/src/renderer/political-layer.js`，承载国家/省份视觉样式、政治边界 path、政治视觉带、政治视觉 mesh、mesh 质量统计和 debug cache；`placeholder-renderer.js` 只保留政治缓存重建调用、debug buffer 上传、选中高亮和总体图层编排。水陆线回归仍是拆 renderer 后的固定守门。
 83. `cell-visual-layer` 第一刀结构迁移与视图切换性能加固已完成：新增 `app/webgl-generator/src/renderer/cell-visual-layer.js`，承载视觉 cell mesh 几何构建、统计摘要和按视图写 surface 顶点；视觉 cell 构建时会预缓存 NDC 三角坐标，视图切换只重写颜色顶点，避免重复世界坐标投影。`tools/webgl-generator-shoreline-regression.mjs` 新增 `switchMs` 与 `--max-switch-ms` 判定，`package.json` 新增 `pnpm run regress:rendering` 作为渲染回归入口。
 84. `selection-layer` 第一刀结构迁移已完成：新增 `app/webgl-generator/src/renderer/selection-layer.js`，承载选中高亮 mesh、定位闪烁颜色和选中高亮统计模式；`placeholder-renderer.js` 继续保留 selection 状态、定位动画调度、overlay marker 和 buffer 上传。国家名称图层已改为不受当前视图限制，开启后在所有视图按缩放策略显示；“悬停信息 / 显示海底 / 平滑边界”偏好开关已改为按钮样式但保留旧 checkbox id 事件契约。下一步性能专项建议优先 profile 10k 生成耗时，把生成阶段拆分为地形、pack、社会、水文、路线、渲染准备等分段指标。
+85. 生成性能专项第一刀已完成：`generatePlaceholderMap()` 新增 `metadata.generationTiming`，记录总耗时、阶段耗时和最慢阶段；新增 `tools/webgl-generator-generation-profile.mjs` 与 `pnpm run profile:generation`，默认输出 10k/50k/100k 三档中文报告到 `docs/generated/reports/generation-profile-results.*`（该目录按 `.gitignore` 不入库）。当前单次采样：10k 约 `800.4ms`，最慢为国家/省份/区域 `246.4ms`；50k 约 `3740.6ms`，最慢为河流 `1620.6ms`；100k 约 `8553.6ms`，最慢为河流 `3891.2ms`。本刀还去掉城镇 metadata 中重复构建人口点的一次扫描，并给页面生成/加载阶段增加画布顶部 Loading 气泡；“悬停信息”开关已改为与普通图层一致的两列按钮。下一步建议分两线：10k 优先拆解 `buildPackPolitics()` 内部子阶段，50k/100k 优先拆解 `buildRivers()`。
 
 ## 约束
 

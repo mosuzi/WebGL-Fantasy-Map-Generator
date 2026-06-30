@@ -54,10 +54,7 @@ export function bindRuntimePanel(documentRef, handlers) {
     updateControlPreferences(documentRef, {smoothCellBorders: event.target.checked});
     handlers.onSmoothCellBorders?.(event.target.checked);
   });
-  documentRef.getElementById("show-hover-info")?.addEventListener("change", event => {
-    updateControlPreferences(documentRef, {showHoverInfo: event.target.checked});
-    handlers.onShowHoverInfo?.(event.target.checked);
-  });
+  bindBooleanPreferenceButton(documentRef, "show-hover-info", "showHoverInfo", handlers.onShowHoverInfo);
   documentRef.getElementById("max-city-labels")?.addEventListener("input", event => {
     const value = normalizeMaxCityLabels(event.target.value);
     setLabelLimitControlValue(documentRef, value);
@@ -179,8 +176,8 @@ function applyControlPreferences(documentRef) {
     if (input) input.checked = preferences.smoothCellBorders;
   }
   if (typeof preferences.showHoverInfo === "boolean") {
-    const input = documentRef.getElementById("show-hover-info");
-    if (input) input.checked = preferences.showHoverInfo;
+    const control = documentRef.getElementById("show-hover-info");
+    if (control) setBooleanControlState(control, preferences.showHoverInfo);
   }
   if (typeof preferences.maxCityLabels === "number") {
     setLabelLimitControlValue(documentRef, preferences.maxCityLabels);
@@ -208,6 +205,10 @@ function normalizeMaxCityLabels(value) {
 }
 
 function setLayerControlState(control, visible) {
+  setBooleanControlState(control, visible);
+}
+
+function setBooleanControlState(control, visible) {
   const enabled = Boolean(visible);
   if (control.tagName === "BUTTON") {
     control.classList.toggle("active", enabled);
@@ -215,6 +216,24 @@ function setLayerControlState(control, visible) {
     return;
   }
   control.checked = enabled;
+}
+
+function bindBooleanPreferenceButton(documentRef, id, preferenceKey, handler) {
+  const control = documentRef.getElementById(id);
+  if (!control) return;
+  if (control.tagName === "BUTTON") {
+    control.addEventListener("click", () => {
+      const enabled = control.getAttribute("aria-pressed") !== "true";
+      setBooleanControlState(control, enabled);
+      updateControlPreferences(documentRef, {[preferenceKey]: enabled});
+      handler?.(enabled);
+    });
+    return;
+  }
+  control.addEventListener("change", event => {
+    updateControlPreferences(documentRef, {[preferenceKey]: event.target.checked});
+    handler?.(event.target.checked);
+  });
 }
 
 function updateLayerPreference(documentRef, layer, visible) {
@@ -271,6 +290,14 @@ export function updateRegenerationSection(documentRef, result = {}) {
   if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流会按各自生成约束逐步接入；marker 和 zone 暂缓。";
 }
 
+export function setGenerationLoading(documentRef, visible, message = "正在生成地图") {
+  const bubble = documentRef.getElementById("generation-loading");
+  if (!bubble) return;
+  const text = documentRef.getElementById("generation-loading-text");
+  if (text) text.textContent = message;
+  bubble.hidden = !visible;
+}
+
 export function readOptionsFromPanel(documentRef, previousOptions) {
   return {
     ...previousOptions,
@@ -296,6 +323,7 @@ export function updateRuntimePanel(documentRef, state) {
   updateMapLegend(documentRef, map, stats.colorMode);
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
+    statRow(documentRef, "生成耗时", formatGenerationTiming(map.metadata.generationTiming)),
     statRow(documentRef, "Seed", map.metadata.seed),
     statRow(documentRef, "自动随机", map.options.randomSeed ? "是" : "否"),
     statRow(documentRef, "地形模板", map.heightmap.name),
@@ -531,6 +559,12 @@ function formatEditRefresh(refresh) {
 function formatDerivedStale(map) {
   const systems = map.metadata?.derivedStale?.systems || [];
   return systems.length ? systems.map(system => DERIVED_STALE_LABELS[system] || system).join("、") : "none";
+}
+
+function formatGenerationTiming(timing) {
+  if (!timing) return "none";
+  const slowest = timing.slowest ? ` / 最慢 ${timing.slowest.label} ${timing.slowest.ms}ms` : "";
+  return `${timing.totalMs}ms${slowest}`;
 }
 
 function formatLayerVisibility(visibility = {}) {

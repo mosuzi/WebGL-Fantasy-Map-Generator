@@ -9619,3 +9619,43 @@ pnpm run regress:rendering
 待办：
 
 - 10k 生成耗时需要作为下一轮生成性能专项处理，优先增加阶段计时报告，再按数据决定优化地形、pack、社会、水文、路线或渲染准备阶段。
+
+### 生成性能阶段计时与加载提示第一刀
+
+背景：
+
+- 用户指出 10000 cells 生成仍有几秒体感卡顿，需要先量化生成链路，而不是继续只拆 renderer。
+- 页面同步生成和 WebGL 加载期间缺少明确反馈，用户会看到界面短时间卡住。
+- “悬停信息”上一刀虽然按钮化，但仍占满一整行；用户要求它和普通图层按钮一致。
+
+修正：
+
+- `generatePlaceholderMap()` 新增轻量阶段计时：
+  - `metadata.generationTiming.totalMs` 记录整次生成耗时。
+  - `metadata.generationTiming.stages` 记录标准化参数、heightmap、grid、features、climate、pack、rivers、biomes、society、politics、settlements、religions、military、markers、zones、summary 等阶段。
+  - `metadata.generationTiming.slowest` 记录当前最慢阶段。
+  - 运行时统计新增“生成耗时”行。
+- 新增 `tools/webgl-generator-generation-profile.mjs` 和 `pnpm run profile:generation`：
+  - 默认跑 `stage-2-1 / 大陆 / 1440x960` 的 `10000,50000,100000` 三档。
+  - 输出 JSON 和中文 Markdown 到 `docs/generated/reports/generation-profile-results.*`。
+  - `docs/generated/` 仍按 `.gitignore` 不入库，报告作为本地可复现产物。
+- 城镇 metadata 去掉一次重复人口点构建：
+  - `createSettlementResult()` 和 `finalizeSettlements()` 先构建 `populationPoints`，再把同一个数组传给 metadata，避免重复全图扫描、过滤、排序。
+- 页面生成体验：
+  - `index.html` 新增 `generation-loading` 气泡，定位在画布顶部居中。
+  - `requestGenerate()` 显示“准备生成 ... cells”；`runGenerateNow()` 在创建地图数据和加载 WebGL 图层期间保持气泡可见，完成或失败后关闭。
+- `ControlPanel.vue` 中“悬停信息”改为普通 `layer-toggle-button`，放回图层两列网格；`panel.js` 支持按钮型 boolean preference，不再要求该控件必须是 checkbox。
+
+本轮数据：
+
+- `node .\tools\webgl-generator-generation-profile.mjs --iterations 1`
+- 10k：`800.4ms`，最慢为“生成国家 / 省份 / 区域” `246.4ms`。
+- 50k：`3740.6ms`，最慢为“生成河流” `1620.6ms`。
+- 100k：`8553.6ms`，最慢为“生成河流” `3891.2ms`。
+- 10k 的 2 次采样曾显示城镇 finalize 从约 `133.9ms` 到约 `121ms`，但 Node 单次抖动明显，不能把总耗时差异全部归因于这次人口点复用。
+
+后续：
+
+- 10k 体感优化优先拆 `buildPackPolitics()` 子阶段，重点看省份填充、边界毛刺吸收、grid 镜像和区域扩张。
+- 50k / 100k 优先拆 `buildRivers()` 子阶段；当前河流在大图下占比约 `43% - 45%`，已经是最明确瓶颈。
+- 生成报告通过 ESM 方式加载 app 源码时，Node 会提示 package 未声明 `type: module`；本刀不改 package module 类型，避免影响现有工具链。
