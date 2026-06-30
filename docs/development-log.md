@@ -10097,3 +10097,37 @@ pnpm run regress:rendering
 
 - 继续做纯生成性能时，低风险小项已逐渐收敛；下一步要么进入更底层的 `grid / pack Voronoi` 和 heightmap，要么切到阶段 19 economy 数据链路。
 - 若继续优化 pack feature 泛洪本体，可考虑单调 next-unmarked 指针和 haven 查找的短数组优化，但收益可能小于前几刀，需要先看三次 profile。
+
+### 阶段 19：economy 数据链路第一刀
+
+背景：
+
+- source `1.127.2` 已把 `Goods.generate`、`Markets.generate`、`Production.produce` 和 `States.collectTaxes` 纳入正式生成管线。
+- candidate baseline schema 已经能统计 economy，但正式生成器此前没有 `pack.goods`、`pack.markets`、`pack.deals`、`pack.cells.good` 和 `pack.cells.market`，导致强制 case 的 economy 全部为 `0`。
+- 本刀只实现可校验的数据产物，不做市场 UI、贸易图层、经济编辑器或动画。
+
+修正：
+
+- 新增 `app/webgl-generator/src/generator/economy.js`，生成商品目录、资源 cell、市场、市场覆盖、burg 生产记录、交易记录和 state 税收。
+- 商品目录固定对齐 source 摘要：总数 `71`，raw `39`，manufactured `30`，hybrid `2`，带 biomeOutput `16`，带 demandCoverage `58`。
+- `pack.cells.good` 按陆地、河流、港口、高地和适居度挑选资源 cell；`pack.cells.market` 按 pack 陆地比控制覆盖率，并优先分配陆地、港口、城市和高适居度 cell。
+- 市场中心从首都、大城、港口和 plaza burg 中选取；所有 burg 都回填合法 `market`，每个市场中心 burg 回指自己的市场并标记 `plaza`。
+- burg 生产包含 local、manufactured 和 deal records；`pack.deals` 使用连续数组并保证 `deal.i === index`。
+- state 税率和国库按 deal tax 与 poll tax 回填，保持 `treasury mismatch = 0`。
+- `generatePlaceholderMap()` 新增 `economy` 阶段，`generatorStage` 更新为 `source-stage-19-economy-first-pass`。
+- `tools/webgl-generator-export-baseline.mjs` 的 candidate trace 已加入 `buildEconomy`，并移除过期的 economy unsupported 说明。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/economy.js`
+- `node --check app/webgl-generator/src/generator/index.js`
+- `node --check tools/webgl-generator-export-baseline.mjs`
+- `node tools/webgl-generator-export-baseline.mjs --template mediterranean --cells 100000 --seed audit-mediterranean-001 --name mediterranean-100000-audit-mediterranean-001`
+- `node tools/baseline-diff.mjs --case mediterranean-100000-audit-mediterranean-001` 通过：状态 `pass（fail 0，warn 0）`，economy 指标和引用不变量全部通过。
+- `node tools/source-baseline-matrix.mjs --mode quick --refresh true --reuse-server true --browser-channel chrome --port 5301 --timeout 240000` 已刷新三个 100k source case；命令外层曾因共享 dev server 生命周期拖到超时，但三个 `source-summary.json`、`source-trace.json`、`matrix.json/md` 均已写出，后续检查确认 source 侧 economy 和 lateStages 均存在。
+- `node tools/candidate-baseline-matrix.mjs --mode quick --refresh-candidate true --refresh-diff true` 通过刷新三个 100k candidate case：三个 case 的 economy 指标全部通过；矩阵总体仍为 fail，剩余非经济缺口为 `archipelago` 的 `lateStages.military.regiments` fail、`archipelago` 的 `lateStages.zones.total` warn、`continents` 的 `lateStages.military.regiments` warn。
+
+后续：
+
+- 下一刀优先校准军事生成。当前低陆地比群岛 source regiment `63`，candidate `267`，明显过量；大陆 case 也有 regiment warn。
+- zone 数量在群岛 case 仍为 warn，可在军事校准后继续处理。

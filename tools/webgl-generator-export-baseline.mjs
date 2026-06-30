@@ -116,6 +116,7 @@ function createCandidateSummary(candidateMap, {appDir}) {
       "buildSociety.cultures",
       "buildPolitics",
       "buildSettlements",
+      "buildEconomy",
       "finalizeSocietyReligions",
       "buildMarkers",
       "buildZones"
@@ -217,15 +218,6 @@ function createCandidateSummary(candidateMap, {appDir}) {
       unsupportedSourceStages: [
         "Burgs.specify source names and emblems",
         "States.defineStateForms",
-        "Goods.generate",
-        "Markets.generate",
-        "Production.produce",
-        "States.collectTaxes",
-        "pack.goods",
-        "pack.markets",
-        "pack.deals",
-        "pack.cells.good",
-        "pack.cells.market"
       ]
     }
   };

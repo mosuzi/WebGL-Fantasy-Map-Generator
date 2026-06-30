@@ -1,5 +1,6 @@
 import {buildClimate} from "./climate.js";
 import {defineBiomesAndPopulation} from "./biomes.js";
+import {buildEconomy} from "./economy.js";
 import {extractFeatures} from "./features.js";
 import {buildGrid} from "./grid.js";
 import {createHeightmap} from "./heightmap.js";
@@ -35,20 +36,21 @@ export function generatePlaceholderMap(inputOptions = {}) {
   const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, options));
   const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, options, pack));
   profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...options, pruneNeutralSettlements: true}));
+  const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, options));
   profile.stage("religions-finalize", "按城镇和文化扩张宗教", () => finalizeSocietyReligions(grid, society, pack, random, settlements, options));
   const military = profile.stage("military", "生成军事", () => buildMilitary(pack, options));
   const markers = profile.stage("markers", "生成标记", () => buildMarkers(grid, features, politics, rivers, pack, options));
   pack.markers = markers.markers;
   const zones = profile.stage("zones", "生成区域", () => buildZones(pack, options));
   const layers = profile.stage("palette", "生成色板", () => createPalette(random));
-  const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones));
+  const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones, economy));
   const generatedAt = profile.stage("metadata", "生成元数据", () => new Date().toISOString());
   const generationTiming = profile.finish();
 
   return {
     metadata: {
       app: "webgl-generator",
-      generatorStage: "source-stage-18-zones-first-pass",
+      generatorStage: "source-stage-19-economy-first-pass",
       seed: options.seed,
       heightmapTemplate: heightmap.template,
       cellsTarget: options.cellsTarget,
@@ -70,6 +72,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
     society,
     politics,
     settlements,
+    economy,
     military,
     markers,
     zones,
@@ -90,6 +93,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `build society: cultures=${society.metadata.cultures}, culturedPackCells=${society.metadata.culturedPackCells}`,
       `build politics: states=${politics.metadata.states}, provinces=${politics.metadata.provinces}, regions=${politics.metadata.regions}`,
       `build settlements: cities=${settlements.metadata.cities}, routes=${settlements.metadata.routes}, populationCells=${settlements.metadata.populationCells}`,
+      `build economy: goods=${economy.metadata.goods}, markets=${economy.metadata.markets}, deals=${economy.metadata.deals}, resourceCells=${economy.metadata.resourceCells}`,
       `build religions: religions=${society.metadata.religions}, religionPackCells=${society.metadata.religionPackCells}`,
       `build military: states=${military.metadata.statesWithMilitary}, regiments=${military.metadata.regiments}`,
       `build markers: markers=${markers.metadata.markers}, peaks=${markers.metadata.peaks}, riverSources=${markers.metadata.riverSources}`,
@@ -98,14 +102,14 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `grid checksum: ${summary.checksum}`
     ],
     status: {
-      message: "source 阶段 18 zones 第一刀",
+      message: "source 阶段 19 economy 第一刀",
       sourceDependency: false,
       snapshotDependency: false
     }
   };
 }
 
-export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military = null, zones = null) {
+export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military = null, zones = null, economy = null) {
   const randomPreviewGenerator = createRandom(options.seed);
   const randomPreview = Array.from({length: 4}, () => round(randomPreviewGenerator.next(), 6));
   const payload = {
@@ -169,6 +173,11 @@ export function createGenerationSummary(options, grid, features, climate, societ
     markers: markers.metadata,
     military: military?.metadata || null,
     zones: zones?.metadata || null,
+    economy: economy?.metadata || {
+      goods: (pack.goods || []).filter(Boolean).length,
+      markets: Math.max(0, (pack.markets || []).filter(Boolean).length),
+      deals: (pack.deals || []).filter(Boolean).length
+    },
     palette: {
       ocean: layers.ocean.map(value => round(value, 4)),
       land: layers.land.map(value => round(value, 4)),
