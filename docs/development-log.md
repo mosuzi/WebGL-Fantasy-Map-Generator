@@ -10364,3 +10364,39 @@ pnpm run regress:rendering
 
 - 阶段 19 当前没有硬 fail。下一步可以从 warn 数量最多或 source 语义缺口最明确的专题继续：marker 类型/规则、经济 stock 分布形态、税收 pollTaxExpected、或 marker/zone 的 source 细节。
 - 若继续经济，建议不要再只调单一均值；应改为 source 风格的“稀疏库存 + 长尾库存”分布，否则均值接近但 p25/p50/p99 仍不像 source。
+
+### 经济 product 均值校准第一刀
+
+背景：
+
+- 库存边缘校准后，full 矩阵没有硬 fail，但 `economy.production.product.mean` 是最大 warn 热点，共 `15` 个 warn。
+- 典型偏差集中在 10k：
+  - `mediterranean / 10000 / audit-mediterranean-002`：source/candidate `16.305 / 29.869`。
+  - `continents / 10000 / audit-continents-001`：`23.003 / 39.842`。
+- 只读对比发现 candidate 的 product 最小值和 p25 明显过高，原因是 `burg.production.length` 同时包含真实生产记录和 market/burg deal 记录。每个 burg 默认会带十几条 deal 记录，旧公式把这些 deal 也按固定 `0.8` 计入 product，给 10k 小图制造了约 `14` 点固定底座。
+
+修正：
+
+- 新增 `calculateBurgProduct()`，把 `burg.production` 拆成真实生产记录和 deal 记录。
+- 真实生产记录继续按 `0.8` 计入 product。
+- deal 记录改用 `getDealProductWeight()`：`0.8 * sqrt(cellsTarget / 100000)`。
+- 因此 100k 保持旧 deal product 尺度，10k 只保留约 `31.6%` 的 deal product 底座，50k 居中。
+- treasury 公式暂不改，避免同时重调税收和国库链路。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\economy.js`
+- 定点样例：
+  - `mediterranean / 10000 / audit-mediterranean-002`：`product.mean` 从 `29.869` 降为 `20.023`，状态从 warn 降为 pass；`burgTreasury.mean` 仍为 pass。
+  - `continents / 10000 / audit-continents-001`：`product.mean` 从 `39.842` 降为 `29.996`，状态从 warn 降为 pass；`burgTreasury.mean` 仍为 pass。
+  - `mediterranean / 100000 / audit-mediterranean-001`：product / treasury 状态保持 pass，说明 100k 尺度未回退。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --port 5411 --timeout 180000` 通过。
+- `node .\tools\candidate-baseline-matrix.mjs --mode full --refresh true --browser-channel chrome --port 5411 --timeout 240000` 通过刷新 63 个 candidate case：
+  - full 状态保持 `0 fail`。
+  - case 状态从 `32 pass / 31 warn / 0 fail` 改为 `39 pass / 24 warn / 0 fail`。
+  - `economy.production.product.mean` 不再进入 warn 热点。
+
+后续：
+
+- 当前最大 warn 热点转为 `society.ports`（10 个 warn），其次是 `economy.deals.value`（5 个 warn）和 `lateStages.military.regiments`（4 个 warn）。
+- 下一刀如果继续矩阵收敛，优先评估港口数量偏低：这可能牵连 searoutes、markets、naval culture 和 burg type，改动前应先只读对比 source 港口选址规则。

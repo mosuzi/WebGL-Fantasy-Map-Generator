@@ -349,6 +349,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   const stateDealTax = new Map();
   const statesById = new Map(states.map(state => [state.i, state]));
   const localProductionRate = getLocalProductionRate(options);
+  const dealProductWeight = getDealProductWeight(options);
 
   for (const burg of aliveBurgs) {
     burg.production = [];
@@ -402,7 +403,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
       burg.production.push({dealId: deal.i});
     }
 
-    burg.product = round((burg.population || 0) * 4 + burg.production.length * 0.8);
+    burg.product = calculateBurgProduct(burg, dealProductWeight);
     burg.treasury = round(burg.product * 0.35 + (burg.population || 0) * 0.5);
   }
 
@@ -453,6 +454,23 @@ function getMarketTradeLinks(markets, options) {
   const maxLinks = markets < 16 ? 6 : 14;
   const scaledLinks = Math.round(5 + (maxLinks - 5) * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1)));
   return Math.min(markets - 1, clamp(scaledLinks, 5, maxLinks));
+}
+
+function calculateBurgProduct(burg, dealProductWeight) {
+  let productionRecords = 0;
+  let dealRecords = 0;
+
+  for (const record of burg.production || []) {
+    if (record.goodId) productionRecords++;
+    else if (record.dealId !== undefined) dealRecords++;
+  }
+
+  return round((burg.population || 0) * 4 + productionRecords * 0.8 + dealRecords * dealProductWeight);
+}
+
+function getDealProductWeight(options) {
+  const cellsTarget = Math.max(1000, Number(options.cellsTarget || 100000));
+  return 0.8 * Math.sqrt(clamp(cellsTarget / 100000, 0.01, 1));
 }
 
 function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price}) {
