@@ -1830,27 +1830,56 @@ select:disabled {
 }
 
 .control-panel-tabs {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
   margin-bottom: 12px;
+  --el-color-primary: #d7a84f;
+  --el-text-color-primary: #cbd7dc;
+  --el-text-color-secondary: #9fb0ba;
 }
 
-.control-panel-tabs button {
+.control-panel-tabs .el-tabs__header {
+  margin: 0;
+}
+
+.control-panel-tabs .el-tabs__nav-wrap::after,
+.control-panel-tabs .el-tabs__active-bar {
+  display: none;
+}
+
+.control-panel-tabs .el-tabs__nav {
+  width: 100%;
+  gap: 6px;
+}
+
+.control-panel-tabs .el-tabs__item {
   height: 30px;
+  min-width: 0;
   border: 1px solid #33444f;
   border-radius: 6px;
+  padding: 0 8px;
   background: #10171b;
   color: #cbd7dc;
   font-size: 12px;
   font-weight: 700;
+  line-height: 28px;
 }
 
-.control-panel-tabs button.active,
-.control-panel-tabs button:hover {
+.control-panel-tabs .el-tabs__item span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-panel-tabs .el-tabs__item.is-active,
+.control-panel-tabs .el-tabs__item:hover {
   border-color: #d7a84f;
   background: #2b2415;
   color: #ffe0a1;
+}
+
+.control-panel-tabs .el-tabs__content {
+  display: none;
 }
 
 .control-panel-tab-panels [hidden] {

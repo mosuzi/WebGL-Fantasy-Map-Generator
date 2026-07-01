@@ -12311,3 +12311,27 @@ full 矩阵结果：
 
 - `ElSelect` 的 gzip 增量约 `+33.86KB JS / +2.78KB CSS`，后续迁移 `ElTree / ElTable / ElDialog` 前必须考虑懒加载、拆包或仅在特定浮层中按需加载。
 - `UiSliderField / UiSwitchField` 仍未迁移；迁移前同样要保留隐藏 input 或事件桥，避免 `panel.js` 读取 `.value/.checked` 的链路断开。
+
+### Element Plus 迁移第四刀：控制面板 Tabs
+
+背景：
+
+- 用户要求控制面板宽度足以容纳 tab，不希望出现折行；当前 `UiTabs` 是自写 button 组，虽然可用，但仍是后续组件库替换的一部分。
+- 只读搜索确认项目脚本没有依赖旧的 `.control-panel-tabs button` 或 `data-control-tab` button 结构。
+
+修正：
+
+- `UiTabs` 改为 `ElTabs / ElTabPane`，仍通过 `v-model activeTab` 驱动原有 `data-control-panel` 面板显示。
+- tab label slot 保留 `data-control-tab` 标记，方便后续自动化或样式定位。
+- 增加 Element Tabs 暗色紧凑样式，隐藏默认 active bar 和空 pane content，维持六个 tab 一行排列。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `877.61KB JS / 275.08KB gzip`、`128.40KB CSS / 19.07KB gzip`。
+- Playwright + 构建产物静态服务验证通过：`.control-panel-tabs .el-tabs__item` 数量为 `6`，旧 `.control-panel-tabs button` 数量为 `0`；六个 tab 的 top 坐标均为 `67`，没有换行；点击“单位 / 图层 / 生成”后对应 `data-control-panel` 正常显示，console/page error 为 `0`。
+
+后续：
+
+- 后续自动化验证控制面板 tab 时应优先使用 `role=tab` 或 `[data-control-tab]`，不要再假设 tab 是 button。
+- Tabs 增量约 `+6.45KB JS gzip / +1.89KB CSS gzip`，继续记录组件迁移体积。

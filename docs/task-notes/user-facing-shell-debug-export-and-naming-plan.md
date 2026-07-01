@@ -28,7 +28,8 @@
 - 已迁移 `UiButton` 作为样板，保持旧业务 API 不变。
 - 已迁移第二批基础组件：`UiFilterInput -> ElInput`、`UiTextEditField -> ElInput`、`UiNumberField -> ElInputNumber`、`UiSortBar -> UiButton/ElButton`。
 - 已迁移第三批基础组件：`UiSelectField -> ElSelect/ElOption`，保留隐藏原生 select 桥以兼容旧 runtime 读写 DOM id。
-- 当前第三批迁移后构建产物约 `858.60KB JS / 268.63KB gzip`、`112.16KB CSS / 17.18KB gzip`；相比灰度反转补充后的基线约增加 `+33.86KB JS gzip`、`+2.78KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
+- 已迁移第四批基础组件：`UiTabs -> ElTabs/ElTabPane`，控制面板仍复用原 `activeTab` 切换逻辑。
+- 当前第四批迁移后构建产物约 `877.61KB JS / 275.08KB gzip`、`128.40KB CSS / 19.07KB gzip`；相比下拉迁移后的基线约增加 `+6.45KB JS gzip`、`+1.89KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
 
 参考：
 
@@ -202,5 +203,6 @@
 - Element Plus 已作为第四批代码接入按需导入与 `UiButton` 样板迁移。
 - 阶段 E 已作为第五批代码实现：灰度高度图导入、采样型高度模板、完整重生成链路和黑白反转映射。
 - Element Plus 第三批已迁移 `UiSelectField`，解决下拉视觉层和空白点击收起问题，同时保留原生 select 桥。
+- Element Plus 第四批已迁移 `UiTabs`，控制面板 tab 不再折行，后续注意自动化脚本应使用 `role=tab` 或 `data-control-tab`。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。
