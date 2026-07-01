@@ -766,6 +766,7 @@ http://127.0.0.1:5410
 141. 备注总览第一刀已完成：管理 tab 新增“备注总览”入口，独立浮层列出所有 `map.notes`，显示总数、可定位数、孤儿备注数和筛选数；支持按更新时间、类型、名称和字数排序，支持筛选正文/名称/id，支持定位到目标对象、删除备注并进入 `EditHistory` 撤销/重做。备注总览会解析 `label:${targetKind}:${targetId}` 复合键，避免把标签备注误定位到城市本体。后续可继续补备注独立导入导出、孤儿备注批量清理和备注摘要导出。
 142. 城市要素 GeoJSON 第一刀已完成：`createMapFeatureGeoJson()` 新增 `city` Point 图层，properties 输出 id、burg、name、type、group、population、capital、provincial、port、state/province/culture/religion、cell、packCell、hasNote 和 note；`layerSet` 更新为 `cities-routes-rivers-markers-zones`。后续可继续补国家/省份 dissolve、分层选择和范围导出。
 143. 要素 GeoJSON 分层选择第一刀已完成：简介 tab 新增“要素 GeoJSON 图层”开关，可独立控制 city、route、river、marker、zone 是否进入 `.features.geojson`；导出时 `createMapFeatureGeoJson(map, {layers})` 只生成选中图层，metadata 的 `layerSet` 和各图层计数同步反映选择。后续可继续补国家/省份 dissolve、范围导出和 CRS 元数据配置。
+144. 政治面 GeoJSON / dissolve 已先落实计划文档：`docs/task-notes/political-geojson-dissolve-plan.md` 区分了第一阶段 `state/province` 非 dissolve MultiPolygon 集合与第二阶段真正拓扑 dissolve 外轮廓，记录了字段、算法、风险和验收。后续不要把 pack cell 集合误称为真正 dissolve；若引入几何库，需要先评估懒加载或拆包。
 
 ## 约束
 

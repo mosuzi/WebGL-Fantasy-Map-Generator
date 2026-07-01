@@ -12820,3 +12820,20 @@ full 矩阵结果：
 后续：
 
 - 继续补国家/省份 dissolve、范围导出、CRS 元数据配置和更完整属性映射。
+
+### 政治面 GeoJSON / dissolve 计划
+
+背景：
+
+- 导出能力矩阵的下一项是国家/省份政治面，但真正 dissolve 需要拓扑边界合并、ring 拼接和 hole 处理，不能直接把 cell 集合称为外轮廓。
+- 为避免过早引入沉重 GIS 库或产出误导性文件，本轮先落实可执行计划文档。
+
+记录：
+
+- 新增 `docs/task-notes/political-geojson-dissolve-plan.md`。
+- 文档拆分第一阶段 `state/province` 非 dissolve MultiPolygon 集合和第二阶段真正 dissolve 外轮廓。
+- 文档记录了建议 properties、图层开关默认策略、拓扑边 key 算法、ring/hole 风险、性能风险和验收标准。
+
+后续：
+
+- 可先实现默认关闭的 `state/province` 非 dissolve 图层，并在 properties 中标注 `dissolved=false`；真正 dissolve 应先做脚本原型验证。

@@ -115,6 +115,6 @@
 
 ## 后续顺序建议
 
-1. 国家和省份 dissolve：补真正适合 GIS 的政治面。
+1. 国家和省份 dissolve：补真正适合 GIS 的政治面，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 分清非 dissolve 集合与真实外轮廓。
 2. PNG 导出倍率和是否包含 overlay 的选项。
 3. 完整 JSON 压缩和版本迁移器。
