@@ -64,15 +64,15 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "人口", value: formatPopulationValue(object.population)},
     {label: "国家", value: object.state},
     {label: "省份", value: object.province},
-    {label: "对象 id", value: object.id}
+    {label: "对象 id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.ROUTE]: object => [
     {label: "类型", value: object.type},
     {label: "等级", value: object.level},
     {label: "起点", value: object.from},
     {label: "终点", value: object.to},
-    {label: "命中距离", value: formatDistanceValue(object.distance)},
-    {label: "对象 id", value: object.id}
+    {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
+    {label: "对象 id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.MARKER]: object => [
     {label: "类型", value: `${object.label || object.type} / ${object.type}`},
@@ -81,34 +81,34 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "经济潜力", value: formatNumberValue(object.economicValue)},
     {label: "国家", value: object.state || object.data?.state || "none"},
     {label: "省份", value: object.province || object.data?.province || "none"},
-    {label: "cell", value: `${object.cell} / pack ${object.packCell ?? object.data?.packCell ?? "none"}`},
-    {label: "数据", value: formatMarkerData(object.data)},
-    {label: "对象 id", value: object.id}
+    {label: "cell", value: `${object.cell} / pack ${object.packCell ?? object.data?.packCell ?? "none"}`, debug: true},
+    {label: "数据", value: formatMarkerData(object.data), debug: true},
+    {label: "对象 id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.LABEL]: object => [
     {label: "文本", value: object.text},
     {label: "目标类型", value: object.targetKind},
     {label: "目标名称", value: object.targetName},
     {label: "显示序位", value: object.rank},
-    {label: "对象 id", value: object.id}
+    {label: "对象 id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.RIVER]: object => [
     {label: "名称", value: object.name || `#${object.id}`},
     {label: "类型", value: object.type},
     {label: "流量", value: formatNumberValue(object.flux)},
     {label: "长度", value: formatDistanceValue(object.length)},
-    {label: "命中距离", value: formatDistanceValue(object.distance)},
-    {label: "对象 id", value: object.id}
+    {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
+    {label: "对象 id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.PROVINCE]: object => [
     {label: "所属国家", value: object.state},
     {label: "国家 id", value: object.stateId},
-    {label: "中心 cell", value: object.centerCell},
-    {label: "对象 id", value: object.id}
+    {label: "中心 cell", value: object.centerCell, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.REGION]: object => [
     {label: "类型", value: "region"},
-    {label: "对象 id", value: object.id}
+    {label: "对象 id", value: object.id, debug: true}
   ]
 });
 

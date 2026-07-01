@@ -1,7 +1,7 @@
 <template>
   <div :class="className">
-    <template v-if="rows.length">
-      <div v-for="row in rows" :key="row.label">
+    <template v-if="visibleRows.length">
+      <div v-for="row in visibleRows" :key="row.label">
         <span>{{ row.label }}</span>
         <strong>{{ row.value }}</strong>
       </div>
@@ -11,11 +11,14 @@
 </template>
 
 <script setup>
+import {computed} from "vue";
+import {useDebugMode} from "../../composables/use-debug-mode.js";
+
 defineOptions({
   name: "UiDetailGrid"
 });
 
-defineProps({
+const props = defineProps({
   className: {
     type: String,
     required: true
@@ -29,4 +32,7 @@ defineProps({
     default: "未选中对象"
   }
 });
+
+const debugEnabled = useDebugMode();
+const visibleRows = computed(() => props.rows.filter(row => !row?.debug || debugEnabled.value));
 </script>

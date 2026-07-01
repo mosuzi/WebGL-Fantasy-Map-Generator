@@ -104,9 +104,9 @@ const detailRows = computed(() => selected.value ? [
   {label: "终点", value: selected.value.toName},
   {label: "长度", value: formatRouteLength(selected.value.length)},
   {label: "段数", value: formatNumberValue(selected.value.segments)},
-  {label: "grid cells", value: formatNumberValue(selected.value.cellCount)},
-  {label: "pack cells", value: formatNumberValue(selected.value.packCellCount)},
-  {label: "feature", value: selected.value.feature},
+  {label: "grid cells", value: formatNumberValue(selected.value.cellCount), debug: true},
+  {label: "pack cells", value: formatNumberValue(selected.value.packCellCount), debug: true},
+  {label: "feature", value: selected.value.feature, debug: true},
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumberValue(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
 

@@ -13311,3 +13311,26 @@ full 矩阵结果：
 后续：
 
 - `ElTable / ElTree / ElDialog` 仍不能直接常驻主包；迁移前应先做懒加载或拆包方案，并为对象列表保留选中、定位和自动滚入视口契约。
+
+### 对象详情开发信息收敛第一刀
+
+背景：
+
+- 开发模式已经承接运行时统计、选择统计、checksum 和重新生成内部状态，但各类对象详情面板仍直接显示 `grid cell / pack cell / burg id / 对象 id` 等内部定位信息。
+- 这些字段对调试很有用，但普通用户更关心名称、类型、人口、面积、宗教、文化、备注等地图语义。
+
+修正：
+
+- 新增 `useDebugMode()` 组合函数，通过 `window.__webglGeneratorDebug.enabled` 读取开发模式状态，并监听 `webgl-generator-debug-change`。
+- `UiDetailGrid` 支持行级 `debug: true`，普通模式隐藏，开发模式开启后显示。
+- 城市、marker、国家、省份、文化、宗教、路线、备注总览和通用对象详情中的内部 cell/id、pole、feature、命中距离、内部归属诊断等字段标记为 debug 行。
+- 开发模式面板启停时派发 `webgl-generator-debug-change`，已打开的 Vue 浮层可响应状态变化。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；产物为 `dist/webgl-generator/assets/index-B_zXECIF.js`，约 `987.15KB JS / 304.43KB gzip`，CSS 约 `155.39KB / 23.02KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：普通模式打开城市详情，文本不含 `grid cell / pack cell / burg id / 归属一致性 / 落水检查`；运行 `window.__webglGeneratorDebug.enabled = true` 后，同一城市详情立即显示这些 debug 行，开发模式面板打开，console/page error 为 `0`。
+
+后续：
+
+- 继续清点摘要指标、hover 面板和导出元数据，避免普通 UI 泄露开发专用信息；导出文件内部保留 id/checksum 时，应在 README 或格式说明中说明它们属于元数据。

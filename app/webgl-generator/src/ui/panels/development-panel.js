@@ -64,6 +64,7 @@ export function createDevelopmentPanel(documentRef, manager) {
     enabled = Boolean(value);
     collapsed = !enabled || collapsed;
     showControl(enabled);
+    dispatchDebugChange();
     if (!enabled) {
       manager.close("development-panel");
       return;
@@ -94,6 +95,12 @@ export function createDevelopmentPanel(documentRef, manager) {
     control.hidden = !visible;
     control.textContent = collapsed ? "开发模式" : "调试信息";
     control.setAttribute("aria-pressed", !record.panel.classList.contains("hidden") ? "true" : "false");
+  }
+
+  function dispatchDebugChange() {
+    documentRef.defaultView.dispatchEvent(new CustomEvent("webgl-generator-debug-change", {
+      detail: {enabled, collapsed}
+    }));
   }
 }
 

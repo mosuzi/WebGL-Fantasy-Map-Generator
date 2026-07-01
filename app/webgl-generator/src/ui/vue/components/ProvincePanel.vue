@@ -172,9 +172,9 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "全称", value: selected.value.fullName},
   {label: "所属国家", value: selected.value.stateName},
-  {label: "中心 pack cell", value: selected.value.centerCell},
-  {label: "中心 grid cell", value: selected.value.gridCenterCell},
-  {label: "pole", value: selected.value.pole},
+  {label: "中心 pack cell", value: selected.value.centerCell, debug: true},
+  {label: "中心 grid cell", value: selected.value.gridCenterCell, debug: true},
+  {label: "pole", value: selected.value.pole, debug: true},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "cells", value: formatNumber(selected.value.cells)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},

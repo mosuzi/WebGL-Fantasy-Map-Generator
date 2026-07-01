@@ -31,8 +31,8 @@
 - 已迁移第四批基础组件：`UiTabs -> ElTabs/ElTabPane`，控制面板仍复用原 `activeTab` 切换逻辑。
 - 已迁移第五批基础组件：`UiSliderField -> ElSlider`，保留隐藏原生 range 桥以兼容旧 runtime 读写 DOM id。
 - 已迁移第六批基础组件：`UiSwitchField -> ElSwitch`，保留隐藏原生 checkbox 桥，按钮式图层开关继续支持整行点击。
-- 当前第六批迁移后构建产物约 `899.56KB JS / 281.46KB gzip`、`137.51KB CSS / 20.44KB gzip`；相比 Slider 迁移后的基线约增加 `+1.17KB JS gzip`、`+0.64KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
-- 最新组合烟测已覆盖按钮、下拉、tabs、slider 和 switch 的同页连续操作；`ElColorPicker` 已作为共享二级改色面板的小范围例外完成迁移并记录体积增量。下一阶段应先处理懒加载/拆包方案，再考虑 `ElTable / ElTree / ElDialog`。
+- 当前第八批迁移后构建产物约 `986.31KB JS / 304.22KB gzip`、`155.39KB CSS / 23.02KB gzip`；相比第七批约增加 `+14.57KB JS gzip`、`+1.20KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
+- 最新组合烟测已覆盖按钮、下拉、tabs、slider、switch、颜色盘和 segmented 的同页连续操作；`UiSegmented -> ElSegmented` 已保留 `[data-mode]` 桥。下一阶段应先处理懒加载/拆包方案，再考虑 `ElTable / ElTree / ElDialog`。
 
 后续拆包守则：
 
@@ -40,6 +40,8 @@
 - 继续避免 `app.use(ElementPlus)` 和整包 CSS；每批迁移后记录 `JS / CSS` 原始体积和 gzip 体积。
 - 旧 runtime 仍通过 DOM id 读取的控件必须保留隐藏原生 input/select/checkbox 桥，直到相关读取链正式迁入 Vue state。
 - 如果单批迁移让 JS gzip 增量超过 `20KB`，先停下来评估是否需要拆包或替代实现，再继续迁移。
+- `UiObjectTable` 是下一个用户感知最强的候选，但不能直接静态替换为 `ElTable`；先用 `NotesPanel` 或 `NamebasePanel` 这类低风险浮层验证动态 import，再批量迁移对象面板，最后替换表格内核。
+- `UiTreeDisplayPanel` 当前是可拖动浮层 + SVG 连线的图形总览，直接换成 `ElTree` 可能降低树状总览的视觉表达；应排在表格拆包之后再评估。
 
 参考：
 

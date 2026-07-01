@@ -191,7 +191,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "首都", value: selected.value.capitalName},
   {label: "文化", value: selected.value.culture},
   {label: "宗教", value: selected.value.religion},
-  {label: "中心 cell", value: selected.value.centerCell},
+  {label: "中心 cell", value: selected.value.centerCell, debug: true},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "城镇", value: formatNumber(selected.value.burgs)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},

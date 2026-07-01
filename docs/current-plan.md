@@ -788,6 +788,7 @@ http://127.0.0.1:5410
 163. 名称库绑定生成专项计划已落文档：`docs/task-notes/namebase-generation-binding-plan.md` 记录了原版 `Names.getBase / culture.base` 的参考语义、当前 WebGL 版命名链路、`map.namebases.bindings` 建议契约、全局绑定、文化级绑定、样例生成、显式重命名命令和验证矩阵。后续不要直接把用户词池硬替换进国家命名器，应先建立绑定状态、失效引用处理和生成回退规则。
 164. 名称库质量提示第一刀已完成：名称库总览详情新增“质量”行，按原版 Namesbase Editor 的样本量思路提示“样本偏少 / 样本可用 / 样本充足 / 样本过多 / 有重复样本”，并可被筛选命中。构建产物验证中，把复制用户库样本编辑为 5 个后，详情显示“质量 / 样本偏少”；筛选“偏少”后可见行数 `49`，其中复制用户库命中 `1`，console/page error 为 `0`。后续若实现 Markov chain，可再补链路多样性和生成样例质量。
 165. Element Plus 迁移第八刀已完成：`UiSegmented` 改为 `ElSegmented` 视觉层，同时保留不可见 `data-mode` 桥按钮，旧 runtime 仍可通过 `[data-mode]` 绑定和同步视图模式。样式把 Element segmented 的选项组改为可换行网格，避免 11 个视图模式挤成一行；高度编辑动作和 marker 范围也复用同一适配层。构建产物约 `986.31KB JS / 304.22KB gzip`、`155.39KB CSS / 23.02KB gzip`；构建产物烟测中 `.ui-segmented-el = 3`、旧 `.segmented:not(.ui-segmented) button = 0`，视图切到“外交”后 `data-mode` 和 Pinia 偏好均为 `diplomacy`，高度动作可切到“平滑”，marker 范围可切到“资源点”，console/page error 为 `0`。后续迁移对象表格和树状总览前仍需先评估 `ElTable / ElTree` 的懒加载或拆包。
+166. 对象详情开发信息收敛第一刀已完成：`UiDetailGrid` 支持 `debug: true` 行，并通过 `window.__webglGeneratorDebug.enabled` 与 `webgl-generator-debug-change` 事件响应开发模式开关。普通模式下，城市、marker、国家、省份、文化、宗教、路线、备注总览和通用对象详情里的 grid/pack cell、burg id、pole、feature、命中距离、对象 id、内部归属诊断等行会隐藏；开启 `?debug=1` 或运行时打开开发模式后重新显示。构建产物约 `987.15KB JS / 304.43KB gzip`、`155.39KB CSS / 23.02KB gzip`；构建产物烟测中普通模式城市详情不含 `grid cell / pack cell / burg id / 归属一致性 / 落水检查`，运行 `window.__webglGeneratorDebug.enabled = true` 后同一面板立即显示这些 debug 行，console/page error 为 `0`。后续可继续清点摘要指标和导出文件中的 checksum/id 字段，决定哪些属于用户可见数据、哪些只应出现在开发模式或导出元数据中。
 
 ## 约束
 

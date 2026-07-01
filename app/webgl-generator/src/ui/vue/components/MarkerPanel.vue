@@ -193,8 +193,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "经济潜力", value: formatNumber(selected.value.economicValue)},
   {label: "所属国家", value: selected.value.stateName},
   {label: "所属省份", value: selected.value.provinceName},
-  {label: "grid cell", value: selected.value.cell},
-  {label: "pack cell", value: selected.value.packCell},
+  {label: "grid cell", value: selected.value.cell, debug: true},
+  {label: "pack cell", value: selected.value.packCell, debug: true},
   {label: "图形", value: selected.value.visualLabel},
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
   {label: "手动图标", value: selected.value.manual ? "是" : "否"}

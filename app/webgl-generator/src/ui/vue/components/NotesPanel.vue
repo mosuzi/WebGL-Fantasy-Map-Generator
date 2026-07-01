@@ -92,8 +92,8 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.kindLabel},
   {label: "名称", value: selected.value.name},
-  {label: "备注 id", value: selected.value.id},
-  {label: "对象 id", value: selected.value.objectId},
+  {label: "备注 id", value: selected.value.id, debug: true},
+  {label: "对象 id", value: selected.value.objectId, debug: true},
   {label: "状态", value: selected.value.orphan ? "对象缺失" : "可定位"},
   {label: "字数", value: `${formatNumber(selected.value.bodyLength)}字`},
   {label: "更新时间", value: formatDateTime(selected.value.updatedAt)}
