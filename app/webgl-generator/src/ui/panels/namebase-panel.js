@@ -7,7 +7,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
     open: false,
     map: null,
-    summaries: getNamebaseSummariesForMap(null),
+    summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     filter: "",
     sortKey: "category",
     sortDir: "asc",
@@ -33,6 +33,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onImport: file => callbacks.onImport?.(file),
     onCopyBuiltin: row => callbacks.onCopyBuiltin?.(row),
     onRenameUser: (row, name) => callbacks.onRenameUser?.(row, name),
+    onUpdateSource: (row, sourceText) => callbacks.onUpdateSource?.(row, sourceText),
     onDeleteUser: row => callbacks.onDeleteUser?.(row),
     onClearUser: () => callbacks.onClearUser?.()
   };
@@ -77,7 +78,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
 }
 
 function refreshSummaries(panelState) {
-  panelState.summaries = getNamebaseSummariesForMap(panelState.map);
+  panelState.summaries = getNamebaseSummariesForMap(panelState.map, {includeSource: true});
   if (!panelState.selectedNamebaseId || !panelState.summaries.some(row => row.id === panelState.selectedNamebaseId)) {
     panelState.selectedNamebaseId = panelState.summaries[0]?.id || null;
   }

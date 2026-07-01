@@ -3285,6 +3285,19 @@ input.ui-switch-native {
   margin-top: 10px;
 }
 
+.namebase-source-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.namebase-source-editor label {
+  display: grid;
+  gap: 6px;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
 .city-panel-details {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

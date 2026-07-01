@@ -38,6 +38,14 @@
     @apply="value => callbacks.onRenameUser(selectedUserRow, value)"
   />
 
+  <div v-if="selectedUserRow" class="namebase-source-editor">
+    <label>
+      <span>样本</span>
+      <ElInput v-model="sourceDraft" type="textarea" :rows="5" resize="vertical" />
+    </label>
+    <UiButton variant="secondary" @click="callbacks.onUpdateSource(selectedUserRow, sourceDraft)">应用样本</UiButton>
+  </div>
+
   <div class="namebase-panel-actions">
     <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
     <label class="secondary-action file-import-action namebase-import-action" for="namebase-import-file">导入名称库</label>
@@ -49,7 +57,7 @@
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import UiButton from "./base/UiButton.vue";
@@ -77,6 +85,7 @@ const props = defineProps({
 });
 
 const unitPreferences = useUnitPreferences();
+const sourceDraft = ref("");
 
 const sortOptions = Object.freeze([
   {key: "category", label: "分类"},
@@ -172,4 +181,8 @@ function handleImportFile(event) {
   if (file) props.callbacks.onImport?.(file);
   event.target.value = "";
 }
+
+watch(() => selected.value?.id, () => {
+  sourceDraft.value = selectedUserRow.value?.source?.join("\n") || "";
+}, {immediate: true});
 </script>

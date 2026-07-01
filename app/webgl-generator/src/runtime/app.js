@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument, renameUserNamebase} from "../generator/namebase-store.js";
+import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument, renameUserNamebase, updateUserNamebaseSource} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -810,6 +810,7 @@ export function createGeneratorApp(documentRef) {
     onImport: file => importNamebases(state, documentRef, file),
     onCopyBuiltin: row => copyBuiltinNamebase(state, documentRef, row),
     onRenameUser: (row, name) => renameImportedNamebase(state, documentRef, row, name),
+    onUpdateSource: (row, sourceText) => updateImportedNamebaseSource(state, documentRef, row, sourceText),
     onDeleteUser: row => deleteImportedNamebase(state, documentRef, row),
     onClearUser: () => clearImportedNamebases(state, documentRef)
   });
@@ -1393,6 +1394,25 @@ function renameImportedNamebase(state, documentRef, row, name) {
     setFileOperationStatus(documentRef, `已重命名用户名称库“${result.previousName}”为“${result.name}”。`);
   } catch (error) {
     reportFileOperationError(documentRef, "重命名名称库失败", error);
+  }
+}
+
+function updateImportedNamebaseSource(state, documentRef, row, sourceText) {
+  try {
+    assertMapAvailable(state);
+    if (!row?.id || row.builtin === true) {
+      setFileOperationStatus(documentRef, "请选择一个用户名称库编辑样本。");
+      return;
+    }
+    const result = updateUserNamebaseSource(state.map, row.id, sourceText);
+    if (!result.updated) {
+      setFileOperationStatus(documentRef, "未找到可编辑的用户名称库。");
+      return;
+    }
+    state.panels.namebase.update(state.map);
+    setFileOperationStatus(documentRef, `已更新用户名称库“${result.name}”，样本 ${result.samples} 个。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "编辑名称库样本失败", error);
   }
 }
 

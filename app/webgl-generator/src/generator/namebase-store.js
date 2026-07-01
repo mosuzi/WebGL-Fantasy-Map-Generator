@@ -145,6 +145,23 @@ export function renameUserNamebase(map, id, name) {
   };
 }
 
+export function updateUserNamebaseSource(map, id, sourceText) {
+  if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {updated: false, total: 0, samples: 0};
+  const base = map.namebases.bases.find(item => item?.id === id && item?.builtin !== true);
+  if (!base) return {updated: false, total: map.namebases.bases.length, samples: 0};
+  const values = normalizeSourceValues(sourceText);
+  if (!values.length) throw new Error("名称库至少需要一个样本");
+  base.source = values;
+  base.updatedAt = new Date().toISOString();
+  updateNamebaseMetadata(map.namebases);
+  return {
+    updated: true,
+    total: map.namebases.bases.length,
+    samples: values.length,
+    name: base.name || base.id || ""
+  };
+}
+
 export function getNamebaseSummariesForMap(map, options = {}) {
   const builtinRows = getBuiltinNamebaseSummaries(options).map(row => ({
     ...row,
@@ -184,10 +201,7 @@ function updateNamebaseMetadata(store) {
 }
 
 function normalizeImportedBase(base, {existingIds, importedAt, filename, index}) {
-  const source = Array.isArray(base?.source)
-    ? base.source
-    : String(base?.source || "").split(/[,，\n\r]+/u);
-  const values = source.map(value => String(value || "").trim()).filter(Boolean);
+  const values = normalizeSourceValues(base?.source);
   if (!values.length) return null;
   const id = uniqueId(`imported-${sanitizeId(base?.id || base?.name || `namebase-${index + 1}`)}`, existingIds);
   existingIds.add(id);
@@ -204,6 +218,11 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
     importedAt,
     importedFrom: filename || ""
   };
+}
+
+function normalizeSourceValues(source) {
+  const values = Array.isArray(source) ? source : String(source || "").split(/[,，\n\r]+/u);
+  return values.map(value => String(value || "").trim()).filter(Boolean);
 }
 
 function namebaseExportRecord(base) {
