@@ -19,15 +19,26 @@
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />
 
-  <template v-if="selected">
-    <UiTextEditField
-      class-name="city-name-editor"
-      :label="selected.targetKind === LABEL_TARGET_KIND.STATE ? '国家名称' : selected.targetKind === LABEL_TARGET_KIND.CUSTOM ? '标签文字' : '城市名称'"
-      :model-value="selected.name"
-      :max-length="48"
-      @apply="name => callbacks.onRename(selected, name)"
-    />
-  </template>
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="labelActions">
+    <template #rename>
+      <UiTextEditField
+        class-name="label-name-editor"
+        :label="selected.targetKind === LABEL_TARGET_KIND.STATE ? '国家名称' : selected.targetKind === LABEL_TARGET_KIND.CUSTOM ? '标签文字' : '城市名称'"
+        :model-value="selected.name"
+        :max-length="48"
+        @apply="name => callbacks.onRename(selected, name)"
+      />
+    </template>
+
+    <template #note>
+      <UiNoteField
+        class-name="label-note-editor"
+        :model-value="selected.noteBody"
+        @apply="body => callbacks.onNoteChange(selected, body)"
+        @clear="callbacks.onNoteChange(selected, '')"
+      />
+    </template>
+  </UiActionDock>
 
   <div class="label-management-actions">
     <UiButton variant="secondary" @click="callbacks.onAdd">新增标签</UiButton>
@@ -39,16 +50,19 @@
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import UiButton from "./base/UiButton.vue";
 import {LABEL_TARGET_KIND} from "../../../runtime/object-kinds.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -88,6 +102,11 @@ const rows = computed(() => {
   return labelRows(props.state.map);
 });
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
+const labelActions = Object.freeze([
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "note", label: "编辑备注", icon: "☰"}
+]);
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
 
@@ -106,8 +125,13 @@ const detailRows = computed(() => selected.value ? [
   {label: "显示策略", value: selected.value.visibility},
   {label: "状态", value: selected.value.status},
   {label: "中心", value: selected.value.center},
-  {label: "目标 id", value: selected.value.targetId}
+  {label: "目标 id", value: selected.value.targetId},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
+
+watch(() => selected.value?.key, () => {
+  activeAction.value = null;
+});
 
 function labelRows(map) {
   return [...customLabelRows(map), ...cityLabelRows(map), ...stateLabelRows(map)];
@@ -116,21 +140,27 @@ function labelRows(map) {
 function customLabelRows(map) {
   return (map?.labels?.custom || [])
     .filter(label => label && Number.isInteger(label.id))
-    .map(label => ({
-      key: `${LABEL_TARGET_KIND.CUSTOM}:${label.id}`,
-      id: label.id,
-      targetId: label.id,
-      targetKind: LABEL_TARGET_KIND.CUSTOM,
-      type: "手工标签",
-      name: label.text || `标签 #${label.id}`,
-      owner: "手工",
-      visibility: "随城市标签图层显示",
-      status: "显示",
-      hidden: false,
-      center: formatPoint(label.x, label.y),
-      priority: 90000 - label.id,
-      rank: "custom"
-    }));
+    .map(label => {
+      const key = `${LABEL_TARGET_KIND.CUSTOM}:${label.id}`;
+      const note = readObjectNote(map, {kind: "label", id: key});
+      return {
+        key,
+        id: label.id,
+        targetId: label.id,
+        targetKind: LABEL_TARGET_KIND.CUSTOM,
+        type: "手工标签",
+        name: label.text || `标签 #${label.id}`,
+        owner: "手工",
+        visibility: "随城市标签图层显示",
+        status: "显示",
+        hidden: false,
+        center: formatPoint(label.x, label.y),
+        priority: 90000 - label.id,
+        rank: "custom",
+        noteBody: note?.body || "",
+        noteUpdatedAt: note?.updatedAt || ""
+      };
+    });
 }
 
 function cityLabelRows(map) {
@@ -140,8 +170,10 @@ function cityLabelRows(map) {
       const state = map?.politics?.states?.[city.state];
       const population = Number(city.population) || 0;
       const priority = (city.capital ? 100000 : 0) + (city.port ? 10000 : 0) + population;
+      const key = `${LABEL_TARGET_KIND.CITY}:${city.id}`;
+      const note = readObjectNote(map, {kind: "label", id: key});
       return {
-        key: `${LABEL_TARGET_KIND.CITY}:${city.id}`,
+        key,
         id: city.id,
         targetId: city.id,
         targetKind: LABEL_TARGET_KIND.CITY,
@@ -153,7 +185,9 @@ function cityLabelRows(map) {
         hidden: isHiddenLabel(map, LABEL_TARGET_KIND.CITY, city.id),
         center: formatPoint(city.x, city.y),
         priority,
-        rank: city.capital ? "capital" : city.port ? "port" : "city"
+        rank: city.capital ? "capital" : city.port ? "port" : "city",
+        noteBody: note?.body || "",
+        noteUpdatedAt: note?.updatedAt || ""
       };
     });
 }
@@ -165,8 +199,10 @@ function stateLabelRows(map) {
       const stateId = state.i ?? state.id;
       const capital = map?.pack?.burgs?.[state.capital];
       const point = stateLabelPoint(map, state);
+      const key = `${LABEL_TARGET_KIND.STATE}:${stateId}`;
+      const note = readObjectNote(map, {kind: "label", id: key});
       return {
-        key: `${LABEL_TARGET_KIND.STATE}:${stateId}`,
+        key,
         id: stateId,
         targetId: stateId,
         targetKind: LABEL_TARGET_KIND.STATE,
@@ -178,7 +214,9 @@ function stateLabelRows(map) {
         hidden: isHiddenLabel(map, LABEL_TARGET_KIND.STATE, stateId),
         center: point ? formatPoint(point[0], point[1]) : "none",
         priority: Number(state.area || 0) + Number(state.burgs || 0) * 100,
-        rank: "state"
+        rank: "state",
+        noteBody: note?.body || "",
+        noteUpdatedAt: note?.updatedAt || ""
       };
     });
 }

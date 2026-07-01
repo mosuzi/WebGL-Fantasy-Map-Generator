@@ -12726,3 +12726,26 @@ full 矩阵结果：
 后续：
 
 - 对象注记第一批专用面板只剩 label 未接入；之后再考虑独立备注总览、孤儿备注标记和富文本/Markdown。
+
+### 标签备注第一刀
+
+背景：
+
+- marker、city、river、route、state、province、culture、religion 的备注入口都已完成，第一批对象注记只剩标签管理面板。
+- 标签对象有城市标签、国家标签和手工标签三种来源，id 空间可能重叠，因此不能直接使用 `label:${id}`。
+
+修正：
+
+- `label-edit-commands.js` 新增 `createSetLabelNoteCommand()`，标签备注 id 使用 `label:${targetKind}:${targetId}`，例如 `label:city:0`。
+- 标签管理面板将原本常露出的重命名输入收进 `UiActionDock` 二级操作栏，并新增“编辑备注”入口。
+- 标签详情新增备注状态：“无”或“有备注（N字）”。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `943.85KB JS / 292.58KB gzip`、`147.42KB CSS / 21.94KB gzip`。
+- Playwright + 构建产物内置静态服务验证通过：给城市标签 `city:0` 写入“标签备注检查：这个城市名需要靠近河口。”后，`map.notes` 中生成 `label:city:0`，不会生成 `city:0` 城市本体备注；详情显示“有备注（19字）”。
+- 撤销后 notes 为 `0` 且详情显示“无”；重做并导出完整 JSON `fmg-stage-2-1-17047708.webgl-map.json` 后保留 `label:city:0`，console/page error 为 `0`。
+
+后续：
+
+- 对象注记第一批入口已闭环。下一步应转入独立备注总览、孤儿备注标记、批量定位和导入导出备注摘要。

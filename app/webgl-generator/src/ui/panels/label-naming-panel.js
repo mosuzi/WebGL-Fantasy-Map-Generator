@@ -33,6 +33,7 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
     },
     onLocate: row => callbacks.onLocate?.(labelObject(row)),
     onRename: (row, name) => callbacks.onRename?.(labelObject(row), name),
+    onNoteChange: (row, body) => callbacks.onNoteChange?.(labelObject(row), body),
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(labelObject(row)),
     onRestore: row => callbacks.onRestore?.(labelObject(row)),

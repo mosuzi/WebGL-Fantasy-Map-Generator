@@ -85,6 +85,7 @@
 - route 备注第一刀已完成：路线管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
 - state / province 备注第一刀已完成：国家编辑和省份管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
 - culture / religion 备注第一刀已完成：文化管理和宗教管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
-- 完整地图 JSON 导出已验证包含 marker、city、river、route、state、province、culture 与 religion 的 `map.notes`。
+- label 备注第一刀已完成：标签管理面板新增二级“编辑备注”，标签 note id 使用 `label:${targetKind}:${targetId}` 复合键避免碰撞。
+- 完整地图 JSON 导出已验证包含 marker、city、river、route、state、province、culture、religion 与 label 的 `map.notes`。
 - marker、river 与 route 要素 GeoJSON 已写入 `hasNote` 和 `note` 属性；其中 marker 和 route 已完成端到端导出验证。
-- 尚未接入 label，也尚未做独立备注总览。
+- 尚未做独立备注总览、孤儿备注标记、富文本或 Markdown。

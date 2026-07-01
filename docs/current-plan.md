@@ -762,6 +762,7 @@ http://127.0.0.1:5410
 137. 路线备注第一刀已完成：新增 `createSetRouteNoteCommand()`，路线管理面板接入二级“编辑备注”和历史按钮，并用 `version` 刷新解决 markRaw 地图内部备注变更后详情不重算的问题。要素 GeoJSON 的 route / river properties 同步输出 `hasNote` 与 `note` 字段。构建产物验证中给路线 `#0` 写入“路线备注检查：这条道路适合设商站。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（17字）”；撤销后 notes 为 `0`，重做后恢复为 `1`；完整地图 JSON `fmg-stage-2-1-bb2f7448.webgl-map.json` 和要素 GeoJSON `fmg-stage-2-1-bb2f7448.features.geojson` 均保留该 route 备注，console/page error 为 `0`。
 138. 国家/省份备注第一刀已完成：`object-edit-commands.js` 新增通用 `createSetObjectNoteCommand()`，国家编辑和省份管理面板复用 `UiNoteField`，二级操作新增“编辑备注”，并通过 `version` 刷新 markRaw 内部备注状态。构建产物验证中给国家 `#1` 写入“国家备注检查：此国适合设为北境霸主。”、给省份 `#1` 写入“省份备注检查：这里适合规划粮仓。”；国家备注撤销/重做正常，省份备注撤销时国家备注仍保留，最终完整地图 JSON `fmg-stage-2-1-460ac096.webgl-map.json` 同时包含 `state:1` 与 `province:1`，console/page error 为 `0`。
 139. 文化/宗教备注第一刀已完成：文化管理和宗教管理面板复用 `createSetObjectNoteCommand()` 与 `UiNoteField`，二级操作新增“编辑备注”，并通过 `version` 刷新详情备注状态。构建产物验证中给文化 `#1` 写入“文化备注检查：这个文化适合扩展商贸传统。”、给宗教 `#1` 写入“宗教备注检查：这里适合设置朝圣路线。”；文化备注撤销/重做正常，宗教备注撤销时文化备注仍保留，最终完整地图 JSON `fmg-stage-2-1-fcc49865.webgl-map.json` 同时包含 `culture:1` 与 `religion:1`，console/page error 为 `0`。
+140. 标签备注第一刀已完成：`label-edit-commands.js` 新增 `createSetLabelNoteCommand()`，标签备注 id 使用 `label:${targetKind}:${targetId}` 复合键，避免城市标签、国家标签和手工标签同 id 碰撞；标签管理面板将重命名与备注收进二级操作栏。构建产物验证中给城市标签 `city:0` 写入“标签备注检查：这个城市名需要靠近河口。”后生成 `label:city:0`，不会写成 `city:0`；撤销后 notes 为 `0`，重做并导出完整地图 JSON `fmg-stage-2-1-17047708.webgl-map.json` 后保留该标签备注，console/page error 为 `0`。
 
 ## 约束
 

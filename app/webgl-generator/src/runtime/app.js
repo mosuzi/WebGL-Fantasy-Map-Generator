@@ -33,7 +33,7 @@ import {createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPop
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
+import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -736,6 +736,15 @@ export function createGeneratorApp(documentRef) {
       updateLabelNamingPanel(state);
       updateStatePanel(state);
       updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onNoteChange: (object, body) => {
+      const context = {map: state.map};
+      const command = createSetLabelNoteCommand(object, body, {name: object.targetName || object.text || `标签 #${object.targetId ?? object.id}`});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateLabelNamingPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onAdd: () => {

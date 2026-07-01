@@ -3072,14 +3072,16 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
-.city-name-editor {
+.city-name-editor,
+.label-name-editor {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 96px;
   gap: 8px;
 }
 
-.city-name-editor label {
+.city-name-editor label,
+.label-name-editor label {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
@@ -3089,6 +3091,7 @@ input.ui-switch-native {
 }
 
 .city-name-editor input,
+.label-name-editor input,
 .city-visual-editor select {
   min-width: 0;
   height: 32px;
@@ -3108,6 +3111,14 @@ input.ui-switch-native {
 }
 
 .city-note-editor {
+  margin-top: 8px;
+}
+
+.label-name-editor {
+  margin-top: 8px;
+}
+
+.label-note-editor {
   margin-top: 8px;
 }
 

@@ -1,4 +1,5 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
+import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 
 const LABEL_EFFECTS = Object.freeze({
   render: "draw",
@@ -6,6 +7,14 @@ const LABEL_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["labels", "object-panels"])
+});
+
+const LABEL_NOTE_EFFECTS = Object.freeze({
+  render: "none",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-panels"])
 });
 
 export function createAddCustomLabelCommand({text, x, y}) {
@@ -73,6 +82,45 @@ export function createRenameCustomLabelCommand(labelId, nextText) {
     isNoop(context) {
       const label = findCustomLabel(context.map, id);
       return !label || !text || label.text === text;
+    }
+  };
+}
+
+export function createSetLabelNoteCommand(label, body, {name = ""} = {}) {
+  const target = normalizeLabelTarget(label);
+  const noteTarget = labelNoteTarget(target);
+  const normalizedBody = normalizeNoteBody(body);
+  let previous = null;
+  let next = null;
+
+  return {
+    label: normalizedBody ? `编辑标签备注 #${target.targetKind}:${target.id}` : `清空标签备注 #${target.targetKind}:${target.id}`,
+    effects: {
+      ...LABEL_NOTE_EFFECTS,
+      affected: [{kind: OBJECT_KIND.LABEL, id: target.id}]
+    },
+    apply(context) {
+      const currentName = readLabelName(context.map, target);
+      if (!currentName) throw new Error(`找不到标签 #${target.targetKind}:${target.id}`);
+      previous ??= cloneObjectNote(readObjectNote(context.map, noteTarget));
+      if (!normalizedBody) {
+        deleteObjectNote(context.map, noteTarget);
+        return;
+      }
+      next ??= createLabelNoteSnapshot(noteTarget, normalizedBody, {
+        name: name || currentName,
+        previous
+      });
+      restoreObjectNote(context.map, next);
+    },
+    revert(context) {
+      if (previous) restoreObjectNote(context.map, previous);
+      else deleteObjectNote(context.map, noteTarget);
+    },
+    isNoop(context) {
+      if (!readLabelName(context.map, target)) return true;
+      const current = readObjectNote(context.map, noteTarget)?.body || "";
+      return current === normalizedBody;
     }
   };
 }
@@ -189,8 +237,46 @@ function normalizeLabelTarget(label) {
   };
 }
 
+function labelNoteTarget(target) {
+  return {
+    kind: OBJECT_KIND.LABEL,
+    id: `${target.targetKind}:${target.id}`
+  };
+}
+
+function readLabelName(map, target) {
+  if (target.targetKind === LABEL_TARGET_KIND.CUSTOM) {
+    return findCustomLabel(map, target.id)?.text || "";
+  }
+  if (target.targetKind === LABEL_TARGET_KIND.STATE) {
+    const state = map?.politics?.states?.[target.id];
+    return state?.fullName || state?.name || "";
+  }
+  const city = map?.settlements?.cities?.[target.id];
+  return city?.name || "";
+}
+
 function normalizeLabelText(text) {
   return typeof text === "string" ? text.trim().replace(/\s+/g, " ") : "";
+}
+
+function createLabelNoteSnapshot(target, body, {name, previous = null} = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: objectNoteId(target),
+    kind: target.kind,
+    objectId: target.id,
+    name,
+    body,
+    format: "plain",
+    pinned: previous?.pinned || false,
+    createdAt: previous?.createdAt || now,
+    updatedAt: now
+  };
+}
+
+function normalizeNoteBody(body) {
+  return typeof body === "string" ? body.trim() : "";
 }
 
 function normalizePoint(x, y) {
