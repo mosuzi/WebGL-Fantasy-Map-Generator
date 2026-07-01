@@ -1174,8 +1174,7 @@ select:disabled {
   margin-bottom: 8px;
 }
 
-.river-panel-sort button,
-.table-icon-action {
+.river-panel-sort button {
   height: 28px;
   border: 1px solid #33444f;
   border-radius: 6px;
@@ -1184,15 +1183,7 @@ select:disabled {
   cursor: pointer;
 }
 
-.table-icon-action {
-  width: 30px;
-  padding: 0;
-  font-size: 15px;
-  line-height: 1;
-}
-
-.river-panel-sort button.active,
-.table-icon-action:hover {
+.river-panel-sort button.active {
   border-color: #d7a84f;
   background: #3a2f18;
   color: #ffe0a1;
@@ -1344,42 +1335,82 @@ select:disabled {
 
 .object-table-wrap {
   max-height: 300px;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid rgba(189, 206, 213, 0.16);
   border-radius: 6px;
+  background: #0f1519;
 }
 
-.object-table {
+.object-table-el {
+  --el-color-primary: #d7a84f;
+  --el-table-bg-color: #0f1519;
+  --el-table-tr-bg-color: #0f1519;
+  --el-table-header-bg-color: #111a20;
+  --el-table-border-color: rgba(189, 206, 213, 0.1);
+  --el-table-border: 1px solid rgba(189, 206, 213, 0.1);
+  --el-table-text-color: #dfe8eb;
+  --el-table-header-text-color: #ffe0a1;
+  --el-table-row-hover-bg-color: rgba(215, 168, 79, 0.12);
+  --el-table-current-row-bg-color: rgba(215, 168, 79, 0.16);
+  --el-fill-color-lighter: #10171b;
   width: 100%;
-  border-collapse: collapse;
+  background: #0f1519;
   font-size: 12px;
 }
 
-.object-table th,
-.object-table td {
-  padding: 7px 8px;
-  border-bottom: 1px solid rgba(189, 206, 213, 0.1);
-  text-align: left;
+.object-table-el::before,
+.object-table-el .el-table__inner-wrapper::before {
+  background-color: rgba(189, 206, 213, 0.12);
+}
+
+.object-table-el .el-table__cell {
+  padding: 6px 0;
+  border-color: rgba(189, 206, 213, 0.1);
+}
+
+.object-table-el .cell {
+  padding: 0 8px;
+  line-height: 1.35;
   white-space: nowrap;
 }
 
-.object-table th[data-align="right"],
-.object-table td[data-align="right"] {
-  text-align: right;
+.object-table-el th.el-table__cell {
+  background: #111a20;
+  font-weight: 700;
 }
 
-.object-table tr {
+.object-table-el .el-table__row {
   cursor: pointer;
 }
 
-.object-table tbody tr:hover,
-.object-table tbody tr.selected {
+.object-table-el .el-table__row:hover > .el-table__cell,
+.object-table-el .el-table__row.selected-row > .el-table__cell,
+.object-table-el .el-table__row.current-row > .el-table__cell {
   background: rgba(215, 168, 79, 0.16);
 }
 
-.object-table-empty {
+.object-table-el .el-table__empty-text {
   color: #9fb0ba;
-  text-align: center;
+}
+
+.object-table-el .el-table-fixed-column--right {
+  background: #0f1519;
+}
+
+.table-icon-action.el-button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-color: #33444f;
+  background: #10171b;
+  color: #cbd7dc;
+}
+
+.table-icon-action.el-button:hover,
+.table-icon-action.el-button:focus {
+  border-color: #d7a84f;
+  background: #3a2f18;
+  color: #ffe0a1;
 }
 
 .river-panel-details {

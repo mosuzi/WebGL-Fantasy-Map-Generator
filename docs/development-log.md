@@ -13448,3 +13448,26 @@ full 矩阵结果：
 后续：
 
 - 依赖 `UiObjectTable` 的主要管理浮层已经基本拆出首屏，下一步可迁移 `UiObjectTable -> ElTable`，并专门验证定位按钮、双击定位、选中行滚入视口和空态。
+
+### Element Plus 表格迁移第一刀：UiObjectTable
+
+背景：
+
+- 主要对象管理面板已经按需加载，`UiObjectTable` 可以迁移到 Element Plus 表格而不直接压回首屏。
+- 旧表格虽然轻，但已经需要继续自写空态、选中行、滚动定位和按钮交互；后续表格需求会越来越接近成熟组件。
+
+修正：
+
+- `UiObjectTable` 改为 `ElTable / ElTableColumn` 适配层，保留原 `columns / rows / selectedId / rowIdKey / emptyText / showLocateAction` props。
+- 行点击继续派发 `select`，双击继续派发 `locate`；定位列改为 Element 圆形图标按钮。
+- 选中行通过 `row-class-name` 标记为 `selected-row`，并继续在 `selectedId / rows` 更新后滚入视口。
+- CSS 改为覆写 `.object-table-el` 的暗色表格变量、表头、行 hover、选中态、空态和定位按钮样式；旧原生 table 结构移除。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口变为 `index-BYj11Dn8.js`，约 `541.94KB / 163.18KB gzip`。`ElTable` 相关代码进入按需共享 chunk `UiDetailGrid-CJZ0rMrf.js`，约 `82.67KB gzip`；仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：打开城市管理后 `.object-table-el.el-table = 1`、旧 `table.object-table = 0`、行数 `817`、定位按钮 `817`；点击第二行后选中行和详情更新，定位按钮点击与双击定位无错误；筛选无结果时空态为“没有匹配的城市”，console/page error 为 `0`。
+
+后续：
+
+- 继续迁移树状总览、弹窗/确认和少数残留自写控件时，要观察共享 chunk 是否继续膨胀；如过大，考虑按面板域拆分表格/树组件依赖。

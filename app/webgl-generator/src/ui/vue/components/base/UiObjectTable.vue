@@ -1,39 +1,42 @@
 <template>
   <div ref="tableWrap" class="object-table-wrap">
-    <table class="object-table">
-      <thead>
-        <tr>
-          <th v-for="column in columns" :key="column.key" :data-align="column.align || null">{{ column.label }}</th>
-          <th v-if="showLocateAction"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="!rows.length">
-          <td class="object-table-empty" :colspan="columns.length + (showLocateAction ? 1 : 0)">{{ emptyText }}</td>
-        </tr>
-        <tr
-          v-for="row in rows"
-          v-else
-          :key="getRowId(row)"
-          :data-row-id="stringRowId(getRowId(row))"
-          :class="{selected: isSelected(row)}"
-          @click="$emit('select', row)"
-          @dblclick="showLocateAction && $emit('locate', row)"
-        >
-          <td v-for="column in columns" :key="column.key" :data-align="column.align || null">
-            {{ formatCell(column, row) }}
-          </td>
-          <td v-if="showLocateAction" data-align="right">
-            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="$emit('locate', row)">⌖</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <ElTable
+      class="object-table object-table-el"
+      :data="rows"
+      :row-key="rowKey"
+      :current-row-key="currentRowKey"
+      :max-height="300"
+      :row-class-name="rowClassName"
+      :empty-text="emptyText"
+      highlight-current-row
+      table-layout="auto"
+      @row-click="handleRowClick"
+      @row-dblclick="handleRowDoubleClick"
+    >
+      <ElTableColumn
+        v-for="column in columns"
+        :key="column.key"
+        :prop="column.key"
+        :label="column.label"
+        :align="column.align || 'left'"
+        :min-width="columnWidth(column)"
+      >
+        <template #default="{ row }">
+          {{ formatCell(column, row) }}
+        </template>
+      </ElTableColumn>
+      <ElTableColumn v-if="showLocateAction" width="48" fixed="right" align="right">
+        <template #default="{ row }">
+          <ElButton class="table-icon-action" circle size="small" :icon="Aim" title="定位" aria-label="定位" @click.stop="emit('locate', row)" />
+        </template>
+      </ElTableColumn>
+    </ElTable>
   </div>
 </template>
 
 <script setup>
-import {nextTick, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
+import {Aim} from "@element-plus/icons-vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 
 defineOptions({
@@ -67,9 +70,13 @@ const props = defineProps({
   }
 });
 
-defineEmits(["select", "locate"]);
+const emit = defineEmits(["select", "locate"]);
 
 const tableWrap = ref(null);
+const currentRowKey = computed(() => {
+  if (props.selectedId === null || props.selectedId === undefined) return null;
+  return stringRowId(props.selectedId);
+});
 
 watch(
   () => [props.selectedId, props.rows],
@@ -85,14 +92,28 @@ function isSelected(row) {
   return sameObjectId(getRowId(row), props.selectedId);
 }
 
+function rowKey(row) {
+  return stringRowId(getRowId(row));
+}
+
+function rowClassName({row}) {
+  return isSelected(row) ? "selected-row" : "";
+}
+
+function handleRowClick(row) {
+  emit("select", row);
+}
+
+function handleRowDoubleClick(row) {
+  if (props.showLocateAction) emit("locate", row);
+}
+
 function scrollSelectedRowIntoView() {
   if (props.selectedId === null || props.selectedId === undefined) return;
   nextTick(() => {
     const wrap = tableWrap.value;
     if (!wrap) return;
-    const targetId = stringRowId(props.selectedId);
-    const row = [...wrap.querySelectorAll("tbody tr[data-row-id]")]
-      .find(item => item.dataset.rowId === targetId);
+    const row = wrap.querySelector(".el-table__body-wrapper .selected-row");
     if (!row) return;
     row.scrollIntoView({block: "nearest"});
   });
@@ -105,5 +126,12 @@ function stringRowId(value) {
 function formatCell(column, row) {
   if (typeof column.format === "function") return column.format(row[column.key], row);
   return row[column.key];
+}
+
+function columnWidth(column) {
+  if (Number.isFinite(column.width)) return column.width;
+  if (column.key === "id") return 64;
+  if (column.align === "right") return 88;
+  return Math.max(96, String(column.label || column.key || "").length * 16 + 48);
 }
 </script>
