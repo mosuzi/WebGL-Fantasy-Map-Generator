@@ -2094,10 +2094,13 @@ function bindMeasurementTool(canvas, state, documentRef) {
     releasePointer(canvas, event.pointerId);
     if (pointer.moved || !state.map || !state.renderer) return;
     const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-    state.measurement.points.push({
+    const measurementPoint = {
       x: clampMeasurementValue(point.x, 0, state.map.metadata.graphWidth),
       y: clampMeasurementValue(point.y, 0, state.map.metadata.graphHeight)
-    });
+    };
+    const insertIndex = shouldInsertMeasurementPoint(event) ? findMeasurementInsertIndex(state, canvas, event) : -1;
+    if (insertIndex >= 0) state.measurement.points.splice(insertIndex + 1, 0, measurementPoint);
+    else state.measurement.points.push(measurementPoint);
     updateMeasurementOverlay(state, documentRef);
   }, true);
 
@@ -2193,6 +2196,41 @@ function handleMeasurementPointPointerDown(event, state, documentRef, index) {
 
 function shouldDeleteMeasurementPoint(event) {
   return event.button === 2 || event.altKey || event.shiftKey;
+}
+
+function shouldInsertMeasurementPoint(event) {
+  return event.button === 0 && (event.altKey || event.shiftKey);
+}
+
+function findMeasurementInsertIndex(state, canvas, event) {
+  const points = state.measurement.points || [];
+  if (!state.renderer || points.length < 2) return -1;
+  const rect = canvas.getBoundingClientRect();
+  const target = {x: event.clientX - rect.left, y: event.clientY - rect.top};
+  const screenPoints = points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+  const segmentCount = points.length >= 3 ? points.length : points.length - 1;
+  let bestIndex = -1;
+  let bestDistance = Infinity;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const nextIndex = (index + 1) % points.length;
+    const distance = distanceToMeasurementSegment(target, screenPoints[index], screenPoints[nextIndex]);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  }
+  return bestDistance <= 18 ? bestIndex : -1;
+}
+
+function distanceToMeasurementSegment(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (!lengthSquared) return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = clampMeasurementValue(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
+  const x = start.x + dx * t;
+  const y = start.y + dy * t;
+  return Math.hypot(point.x - x, point.y - y);
 }
 
 function deleteMeasurementPoint(state, documentRef, index) {
