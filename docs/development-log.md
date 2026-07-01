@@ -13631,3 +13631,27 @@ full 矩阵结果：
 后续：
 
 - 测量工具下一步可继续做节点删除、插入、保存测量对象和路线贴合；路线贴合需要先设计与道路/河流/海路图的关系，复杂度高于单纯拖拽。
+
+### Element Plus 顶部地图工具栏迁移
+
+背景：
+
+- 顶部地图工具栏仍写在静态 HTML 中，控制面板、测量和开发模式三个入口都是原生按钮。
+- 这些按钮被旧 runtime 按 `id` 绑定和修改，因此迁移时必须先确保 Vue toolbar 在 `createGeneratorApp()` 绑定事件前完成挂载。
+
+修正：
+
+- 新增 `MapToolbar.vue`，复用 `UiButton / ElButton` 渲染控制面板、测量和开发模式入口。
+- `initializeVueStateBridge()` 在 state bridge app 挂载后、`createGeneratorApp()` 执行前挂载 toolbar app。
+- `index.html` 中原来的三个静态按钮移除，只保留 `#map-toolbar` 挂载容器。
+- 保留 `open-generation-panel / toggle-measurement / open-development-panel` 三个 id，以及 `aria-pressed`、`hidden` 和 `debug-action` 契约，旧 runtime 继续负责打开面板、切换测量文案和显示 debug 入口。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `533.45KB / 160.03KB gzip`，HTML 约 `4.34KB / 1.34KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：普通模式 toolbar 中 `.el-button = 3`，旧 `button:not(.el-button) = 0`，开发模式按钮保持 hidden；点击“控制面板”能打开生成面板，点击“测量”后按钮文案为“退出测量”、`aria-pressed = true`、测量 overlay 显示。
+- `?debug=1` 烟测通过：开发按钮显示为“调试信息”，`aria-pressed = true`，按钮处于 active，开发面板自动打开，console/page error 为 `0`。
+
+后续：
+
+- 静态 HTML 里仍有测量 readout 的“导出 / 清除”两个原生按钮；它们目前不在 Vue root 内，若要迁移应先决定是否把测量 readout 也组件化。
