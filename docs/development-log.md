@@ -11894,3 +11894,30 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
 - 构建产物中可检索到新的四段 loading 文案。
 - 临时静态 server + Playwright 验证构建产物：将一个资源 marker 临时挪到城市坐标并放大到 `x5` 后，城市 icon 可见、资源 marker 可见且带 `city-overlap`；城镇 `z-index = 1`，资源 marker `z-index = 0`；资源 marker opacity 稳定为 `0.42`，console error 为 `0`。
+
+### 人口显示、下拉菜单和浮动面板尺寸
+
+背景：
+
+- 用户在 `stage-2-1 / 10k` 看到国家面积动辄几十万平方公里，但人口只显示几千人，比例明显不可信。
+- 用户指出当前所有下拉组件的下拉框样式不对。
+- 用户要求所有悬浮面板高度不超过视口 `97%`，最小高度 `200px`，内容超出时滚动。
+
+修正：
+
+- 实测 `stage-2-1 / continents / 10000` 中国家人口原值如 `22125.82`，结合城镇 `population = 3.046` 等字段判断为 FMG 内部千人单位；`formatPopulation()` 现在统一乘以 `1000` 后再应用人口倍率。国家、省份、文化、宗教、城市、外交和对象详情等使用统一 formatter 的位置会同步修正；生成数据和经济/军事公式不改。
+- 城镇近景剪影 tooltip 的人口也改成按千人单位显示为真实人数。
+- `UiSelectField` 改为隐藏原生 select + 自绘触发按钮 + 自绘菜单；保留原生 select 的 id 和 value，确保 `readOptionsFromPanel()`、单位偏好读取和旧事件监听仍可工作。
+- `.floating-panel` 改为纵向 flex 容器，设置 `min-height: 200px`、`max-height: min(97%, calc(100% - 16px))`；`.floating-panel-body` 设置 `overflow: auto` 和 `min-height: 0`。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/display-units.js` 通过。
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/ui/panel-manager.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 临时静态 server + Playwright 验证构建产物：
+  - 国家面板人口按千人单位换算后显示为真实人数，例如 `3,449,980 人`。
+  - 地形模板下拉框打开自绘菜单后可选择“群岛”，隐藏原生 select 同步为 `archipelago`，触发按钮文本同步为“群岛”。
+  - 外交面板在 `1280 x 620` 视口下高度为 `601.39px`，未超过 `620 * 97% = 601.4px`；面板 body 为 `overflow: auto`，内容高度超过可视高度时可滚动。
+  - 浏览器 console error 为 `0`。

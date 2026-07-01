@@ -9,6 +9,9 @@
 刚完成的观感修正：
 
 - 生成 loading 文案不再显示目标 `cells`，运行中 badge 只显示状态和地图尺寸；loading bubble 显示“静候星图显影 / 正在推演山海脉络 / 正在铺展灵纹图层 / 正在誊清诸域卷册”。
+- 人口显示口径已从内部 FMG 千人单位修正为“人”：国家、省份、文化、宗教、城市、外交矩阵和悬停详情等统一乘以 `1000` 后再套用人口倍率；生成数据、经济和军事公式仍保留内部单位。
+- 所有 `UiSelectField` 下拉已从原生浏览器菜单改为统一自绘菜单，同时保留隐藏 select 作为旧运行时代码读取 `.value` 的数据源。
+- 浮动面板统一限制在视口内：最大高度不超过宿主视口 `97%`，最小高度 `200px`，面板内容超出后在 body 内滚动。
 - 国家根名现在优先从所属文化 `root` 派生，同文化多国用“东/西/新/古”等变体保持关联；国家形制继续按文化类型生成，例如游牧文化倾向 `汗国 / 诸帐`，海洋文化倾向 `海国 / 诸港 / 海盟`。
 - marker 细化第一刀已完成：旧的统一浅白点改为按类别着色，marker 数据补充中文 `label`、`category/categoryLabel`、`resourceKey/resourceLabel`、`economicValue` 和 RGBA `color`；新增盐湖、稀有生物、宝石矿脉等资源 marker，矿山候选也扩展到高地适居资源 cell。
 - marker 资源经济已接入国家/省份对象：生成 marker 时按 `state/province` 汇总 `resourcePotential / markerEconomicPotential / resourceTypes / markerCategories`，水域资源会归属到邻接陆地政区；经济阶段新增 `economicPower` 和 `economy.metadata.markerEconomy`，但暂不改 source 已收敛的税收/国库公式。

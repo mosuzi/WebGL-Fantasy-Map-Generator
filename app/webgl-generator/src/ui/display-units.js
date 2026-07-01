@@ -1,4 +1,5 @@
 const CSS_PX_PER_CM = 96 / 2.54;
+const INTERNAL_POPULATION_UNIT_PEOPLE = 1000;
 
 export const DEFAULT_UNIT_PREFERENCES = Object.freeze({
   distanceUnit: "km-cn",
@@ -74,7 +75,12 @@ export function formatArea(value, preferences = {}) {
 
 export function formatPopulation(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
-  return `${formatWholeNumber(numberOrZero(value) * units.populationScale)} 人`;
+  return `${formatWholeNumber(populationUnitsToPeople(value, units))} 人`;
+}
+
+export function populationUnitsToPeople(value, preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  return numberOrZero(value) * INTERNAL_POPULATION_UNIT_PEOPLE * units.populationScale;
 }
 
 export function formatPrecipitation(value, preferences = {}) {

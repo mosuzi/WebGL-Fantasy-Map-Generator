@@ -695,7 +695,11 @@ select:disabled {
 
 .floating-panel {
   position: absolute;
+  display: flex;
+  flex-direction: column;
   max-width: min(360px, calc(100% - 16px));
+  min-height: 200px;
+  max-height: min(97%, calc(100% - 16px));
   border: 1px solid rgba(189, 206, 213, 0.26);
   border-radius: 8px;
   background: rgba(15, 21, 25, 0.94);
@@ -744,6 +748,8 @@ select:disabled {
 }
 
 .floating-panel-body {
+  min-height: 0;
+  overflow: auto;
   padding: 12px;
 }
 
@@ -2524,29 +2530,95 @@ select:disabled {
   min-width: 0;
 }
 
-.ui-select-field select {
+.ui-select-native {
+  position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ui-select-trigger {
   width: 100%;
   min-width: 0;
   height: 32px;
   border: 1px solid #33444f;
   border-radius: 6px;
   padding: 0 32px 0 10px;
-  appearance: none;
   background: linear-gradient(180deg, #162129 0%, #10171b 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: #edf4f6;
   cursor: pointer;
+  font: inherit;
+  line-height: 30px;
+  text-align: left;
 }
 
-.ui-select-field select:hover:not(:disabled) {
+.ui-select-trigger span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-trigger:hover:not(:disabled),
+.ui-select-field.is-open .ui-select-trigger {
   border-color: #4d6574;
   background: linear-gradient(180deg, #1a2831 0%, #111b20 100%);
 }
 
-.ui-select-field select:focus-visible {
+.ui-select-trigger:focus-visible {
   outline: 2px solid rgba(98, 171, 216, 0.42);
   outline-offset: 2px;
   border-color: #62abd8;
+}
+
+.ui-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.ui-select-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 80;
+  max-height: min(260px, 48vh);
+  border: 1px solid rgba(98, 171, 216, 0.34);
+  border-radius: 7px;
+  background: rgba(12, 18, 22, 0.98);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: auto;
+  padding: 4px;
+}
+
+.ui-select-option {
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 8px;
+  background: transparent;
+  color: #dce8ed;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.ui-select-option:hover,
+.ui-select-option:focus-visible {
+  outline: none;
+  background: #1b2b33;
+  color: #f3fbff;
+}
+
+.ui-select-option.active {
+  background: linear-gradient(180deg, rgba(98, 171, 216, 0.32), rgba(77, 119, 145, 0.22));
+  color: #ffffff;
 }
 
 .ui-select-arrow {

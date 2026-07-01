@@ -53,6 +53,7 @@ const CITY_ICON_MIN_SCALE = 1.05;
 const CITY_ICON_RELAXED_SCALE = 3.8;
 const CITY_ICON_BASE_WIDTH = 34;
 const CITY_ICON_BASE_HEIGHT = 26;
+const POPULATION_UNIT_PEOPLE = 1000;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -1148,7 +1149,7 @@ function cityIconTooltip(city, kind) {
     hamlet: "村落"
   }[kind] || "城镇";
   const population = Number(city.population || 0);
-  const populationText = population > 0 ? `，人口 ${roundValue(population)}` : "";
+  const populationText = population > 0 ? `，人口 ${formatPopulationPeople(population)}` : "";
   return `${city.name || "城镇"} / ${kindLabel}${populationText}`;
 }
 
@@ -1911,6 +1912,10 @@ function emptyRendererLoadStats() {
 
 function roundValue(value) {
   return Math.round(value * 10) / 10;
+}
+
+function formatPopulationPeople(value) {
+  return `${Math.round(Number(value || 0) * POPULATION_UNIT_PEOPLE).toLocaleString("zh-CN")} 人`;
 }
 
 const vertexShaderSource = `#version 300 es
