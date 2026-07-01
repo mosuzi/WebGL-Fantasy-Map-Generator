@@ -3664,6 +3664,11 @@ input.ui-switch-native {
   width: 42px;
 }
 
+.culture-note-editor,
+.religion-note-editor {
+  margin-top: 8px;
+}
+
 .culture-history-actions,
 .religion-history-actions,
 .diplomacy-history-actions {

@@ -12704,3 +12704,25 @@ full 矩阵结果：
 后续：
 
 - 对象注记下一步可接 culture / religion / label；三者都应继续复用 `createSetObjectNoteCommand()` 和二级操作栏。
+
+### 文化/宗教备注第一刀
+
+背景：
+
+- state / province 已证明通用 `createSetObjectNoteCommand()` 可以覆盖非线状、非点状对象。文化和宗教面板同样具备二级操作栏、历史按钮和树状总览，适合继续补备注入口。
+
+修正：
+
+- 文化管理面板和宗教管理面板新增“编辑备注”二级操作，复用 `UiNoteField` 和 `createSetObjectNoteCommand()`。
+- `culture-panel` 与 `religion-panel` 增加 `version` 刷新信号，避免 markRaw 地图内部备注变更后详情 computed 不重算。
+- 文化和宗教详情新增备注状态：“无”或“有备注（N字）”。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `941.61KB JS / 292.20KB gzip`、`147.31KB CSS / 21.92KB gzip`。
+- Playwright + 构建产物内置静态服务验证通过：给文化 `#1` 写入“文化备注检查：这个文化适合扩展商贸传统。”后详情显示“有备注（20字）”，撤销后 notes 为 `0` 且详情显示“无”，重做后恢复。
+- 同一轮继续给宗教 `#1` 写入“宗教备注检查：这里适合设置朝圣路线。”后 notes 为 `2`，撤销宗教备注后 notes 为 `1` 且 culture 备注仍存在，重做后完整 JSON `fmg-stage-2-1-fcc49865.webgl-map.json` 同时包含 `culture:1` 和 `religion:1`；console/page error 为 `0`。
+
+后续：
+
+- 对象注记第一批专用面板只剩 label 未接入；之后再考虑独立备注总览、孤儿备注标记和富文本/Markdown。

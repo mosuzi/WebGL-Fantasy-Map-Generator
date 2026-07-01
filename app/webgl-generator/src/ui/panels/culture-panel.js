@@ -12,7 +12,8 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     filter: "",
     sortKey: "cells",
     sortDir: "desc",
-    selectedCultureId: null
+    selectedCultureId: null,
+    version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
@@ -34,6 +35,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onRename: (cultureId, name) => callbacks.onRename?.(cultureId, name),
     onColorChange: (cultureId, color) => callbacks.onColorChange?.(cultureId, color),
     onParentChange: (cultureId, parentId) => callbacks.onParentChange?.(cultureId, parentId),
+    onNoteChange: (cultureId, body) => callbacks.onNoteChange?.(cultureId, body),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -63,6 +65,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
       panelState.open = true;
+      panelState.version++;
       manager.open("culture-panel");
     },
     update(map, selection, history) {
@@ -71,6 +74,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
+      panelState.version++;
     },
     setSelectedCultureId(cultureId) {
       const normalized = normalizeCultureId(cultureId);

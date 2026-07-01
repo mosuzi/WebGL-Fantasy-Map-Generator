@@ -468,6 +468,17 @@ export function createGeneratorApp(documentRef) {
       updateCulturePanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onNoteChange: (cultureId, body) => {
+      const culture = state.map?.society?.cultures?.[cultureId] || state.map?.pack?.cultures?.[cultureId];
+      const object = {kind: OBJECT_KIND.CULTURE, id: cultureId};
+      const context = {map: state.map};
+      const command = createSetObjectNoteCommand(object, body, {name: culture?.name || `文化 #${cultureId}`});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateCulturePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterEdit(state, command);
@@ -513,6 +524,17 @@ export function createGeneratorApp(documentRef) {
       const command = createSetReligionParentCommand(religionId, parentId, {beforeParent: religion?.parent ?? 0});
       if (!command.isNoop({map: state.map})) {
         refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      }
+      updateReligionPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onNoteChange: (religionId, body) => {
+      const religion = state.map?.society?.religions?.[religionId] || state.map?.pack?.religions?.[religionId];
+      const object = {kind: OBJECT_KIND.RELIGION, id: religionId};
+      const context = {map: state.map};
+      const command = createSetObjectNoteCommand(object, body, {name: religion?.name || `宗教 #${religionId}`});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
       }
       updateReligionPanel(state);
       updateEditingInteractionLock(state, documentRef);

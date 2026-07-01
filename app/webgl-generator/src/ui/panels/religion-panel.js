@@ -12,7 +12,8 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     filter: "",
     sortKey: "cells",
     sortDir: "desc",
-    selectedReligionId: null
+    selectedReligionId: null,
+    version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
@@ -34,6 +35,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     onRename: (religionId, name) => callbacks.onRename?.(religionId, name),
     onColorChange: (religionId, color) => callbacks.onColorChange?.(religionId, color),
     onParentChange: (religionId, parentId) => callbacks.onParentChange?.(religionId, parentId),
+    onNoteChange: (religionId, body) => callbacks.onNoteChange?.(religionId, body),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -63,6 +65,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
       panelState.open = true;
+      panelState.version++;
       manager.open("religion-panel");
     },
     update(map, selection, history) {
@@ -71,6 +74,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
+      panelState.version++;
     },
     setSelectedReligionId(religionId) {
       const normalized = normalizeReligionId(religionId);

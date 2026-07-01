@@ -68,6 +68,15 @@
         @update:model-value="parentId => callbacks.onParentChange(selected.id, parentId)"
       />
     </template>
+
+    <template #note>
+      <UiNoteField
+        class-name="culture-note-editor"
+        :model-value="selected.noteBody"
+        @apply="body => callbacks.onNoteChange(selected.id, body)"
+        @clear="callbacks.onNoteChange(selected.id, '')"
+      />
+    </template>
   </UiActionDock>
 
   <UiHistoryActions class-name="culture-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -81,6 +90,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
@@ -88,6 +98,7 @@ import UiTextEditField from "./base/UiTextEditField.vue";
 import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -128,7 +139,10 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const treePanelOpen = ref(false);
-const metrics = computed(() => buildCultureMetrics(props.state.map));
+const metrics = computed(() => {
+  props.state.version;
+  return buildCultureMetrics(props.state.map);
+});
 const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根文化"));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCultureId));
@@ -136,7 +150,8 @@ const parentOptions = computed(() => buildParentOptions(metrics.value.rows, sele
 const cultureActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "parent", label: "调整继承", icon: "↳"}
+  {key: "parent", label: "调整继承", icon: "↳"},
+  {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -163,6 +178,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "乡村人口", value: formatPopulationValue(selected.value.rural)},
   {label: "城市人口", value: formatPopulationValue(selected.value.urban)},
   {label: "城市", value: formatNumber(selected.value.cities)},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
   {label: "主要国家", value: selected.value.stateSummary}
 ] : []);
 
@@ -183,6 +199,7 @@ function buildCultureMetrics(map) {
     const urban = cities.reduce((sum, city) => sum + (Number(city.population) || 0), 0);
     const rural = Number(culture.rural) || 0;
     const treeFields = tree.get(culture.id) || {};
+    const note = readObjectNote(map, {kind: "culture", id: culture.id});
     return {
       ...culture,
       ...treeFields,
@@ -192,6 +209,8 @@ function buildCultureMetrics(map) {
       cities: cities.length,
       states: stateStats.length,
       stateSummary: stateStats.slice(0, 4).map(item => `${item.name} ${formatNumber(item.count)}`).join(" / ") || "none",
+      noteBody: note?.body || "",
+      noteUpdatedAt: note?.updatedAt || "",
       color: normalizeHexColor(culture.color) || fallbackCultureColor(culture.id)
     };
   });
