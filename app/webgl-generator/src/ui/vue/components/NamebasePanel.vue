@@ -141,6 +141,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "样本数", value: formatNumber(selected.value.samples)},
   {label: "唯一样本", value: formatNumber(selected.value.uniqueSamples)},
   {label: "重复样本", value: formatNumber(selected.value.duplicateSamples)},
+  {label: "质量", value: selected.value.qualityLabel},
   {label: "最短", value: `${formatNumber(selected.value.minLength)}字`},
   {label: "最长", value: `${formatNumber(selected.value.maxLength)}字`},
   {label: "说明", value: selected.value.note || "内置词池"}
@@ -153,8 +154,18 @@ function toRow(summary) {
     ...summary,
     lengthRange: `${summary.minLength}-${summary.maxLength}`,
     examplesLabel: examples.length ? examples.join("、") : "无样例",
-    duplicateLabel: duplicateNames.length ? duplicateNames.join("、") : ""
+    duplicateLabel: duplicateNames.length ? duplicateNames.join("、") : "",
+    qualityLabel: qualityLabel(summary)
   };
+}
+
+function qualityLabel(summary) {
+  const samples = summary.samples || 0;
+  if (samples < 30) return "样本偏少";
+  if (samples < 100) return "样本可用";
+  if (samples > 400) return "样本过多";
+  if ((summary.duplicateSamples || 0) > 0) return "有重复样本";
+  return "样本充足";
 }
 
 function isUserNamebaseRow(row) {
@@ -171,6 +182,7 @@ function filterRows(sourceRows, filter) {
     row.origin,
     row.category,
     row.note,
+    row.qualityLabel,
     row.examplesLabel,
     row.duplicateLabel
   ].some(value => String(value || "").toLowerCase().includes(query)));
