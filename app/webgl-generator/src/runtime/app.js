@@ -6,6 +6,7 @@ import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} f
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
+import {getBuiltinNamebaseSummaries} from "../generator/names.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
@@ -804,7 +805,9 @@ export function createGeneratorApp(documentRef) {
     }
   });
   state.panels.labelNaming = labelNamingPanel;
-  namebasePanel = createNamebasePanel(documentRef, panelManager);
+  namebasePanel = createNamebasePanel(documentRef, panelManager, {
+    onExport: () => exportNamebases(state, documentRef)
+  });
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
     onSelect: row => {
@@ -1317,6 +1320,43 @@ function exportNotesSummary(state, documentRef, rows = []) {
     setFileOperationStatus(documentRef, `备注摘要已导出，共 ${notes.length} 条。`);
   } catch (error) {
     reportFileOperationError(documentRef, "备注摘要导出失败", error);
+  }
+}
+
+function exportNamebases(state, documentRef) {
+  try {
+    const bases = getBuiltinNamebaseSummaries({includeSource: true}).map(row => ({
+      id: row.id,
+      name: row.name,
+      kind: row.kind,
+      category: row.category,
+      builtin: true,
+      samples: row.samples,
+      uniqueSamples: row.uniqueSamples,
+      duplicateSamples: row.duplicateSamples,
+      minLength: row.minLength,
+      maxLength: row.maxLength,
+      note: row.note,
+      source: row.source || []
+    }));
+    const payload = {
+      type: "webgl-generator-namebases",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      metadata: {
+        seed: state.map?.metadata?.seed || "",
+        checksum: state.map?.metadata?.checksum || "",
+        bases: bases.length,
+        samples: bases.reduce((sum, base) => sum + base.samples, 0),
+        builtin: true
+      },
+      bases
+    };
+    const filename = state.map ? `${mapFileBaseName(state.map)}.namebases.json` : "webgl-generator-namebases.json";
+    downloadText(documentRef, JSON.stringify(payload, null, 2), filename, "application/json;charset=utf-8");
+    setFileOperationStatus(documentRef, `名称库已导出，共 ${bases.length} 个词池。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "名称库导出失败", error);
   }
 }
 

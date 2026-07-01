@@ -3278,6 +3278,13 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.namebase-panel-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .city-panel-details {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

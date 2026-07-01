@@ -3,7 +3,7 @@ import {getBuiltinNamebaseSummaries} from "../../generator/names.js";
 import {pinia} from "../vue/pinia.js";
 import NamebasePanel from "../vue/components/NamebasePanel.vue";
 
-export function createNamebasePanel(documentRef, manager) {
+export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
     open: false,
     summaries: getBuiltinNamebaseSummaries(),
@@ -27,7 +27,8 @@ export function createNamebasePanel(documentRef, manager) {
     },
     onSelect: row => {
       panelState.selectedNamebaseId = row.id;
-    }
+    },
+    onExport: () => callbacks.onExport?.()
   };
 
   const record = manager.registerPanel("namebase-panel", {

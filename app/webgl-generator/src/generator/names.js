@@ -422,46 +422,46 @@ export function getStateFullName(name, formName) {
   return `${name}${formName}`;
 }
 
-export function getBuiltinNamebaseSummaries() {
+export function getBuiltinNamebaseSummaries({includeSource = false} = {}) {
   const baseRows = [
-    analyzeNamebase("ancient-state-roots", "春秋古国根名", "state-root", "国家根名", ANCIENT_STATE_ROOTS, "国家短根名，参与 state-family 去重"),
-    analyzeNamebase("ancient-state-compounds", "古国复合根名", "state-root", "国家根名", ANCIENT_STATE_COMPOUND_ROOTS, "低概率补充，用于东晋、南越一类国名"),
-    analyzeNamebase("state-forms-generic", "通用国家形制", "state-form", "国家形制", STATE_FORMS.Generic, "古国根名优先使用这组形制"),
-    analyzeNamebase("state-forms-naval", "海洋国家形制", "state-form", "国家形制", STATE_FORMS.Naval, "非古国根名的海洋文化国家形制"),
-    analyzeNamebase("state-forms-lake", "湖泽国家形制", "state-form", "国家形制", STATE_FORMS.Lake, "非古国根名的湖泽文化国家形制"),
-    analyzeNamebase("state-forms-highland", "山地国家形制", "state-form", "国家形制", STATE_FORMS.Highland, "非古国根名的山地文化国家形制"),
-    analyzeNamebase("state-forms-river", "河流国家形制", "state-form", "国家形制", STATE_FORMS.River, "非古国根名的河流文化国家形制"),
-    analyzeNamebase("state-forms-nomadic", "游牧国家形制", "state-form", "国家形制", STATE_FORMS.Nomadic, "游牧文化国家形制"),
-    analyzeNamebase("state-forms-hunting", "林猎国家形制", "state-form", "国家形制", STATE_FORMS.Hunting, "林猎文化国家形制"),
-    analyzeNamebase("province-forms", "省份形制", "province-form", "政区形制", PROVINCE_FORMS, "省份、州郡和地方行政名称后缀"),
-    analyzeNamebase("place-stems", "中文地名词干", "place", "城镇地名", PLACE_STEMS, "主要城镇、地域和标签命名来源"),
-    analyzeNamebase("chinese-first-chars", "中文首字词素", "place-part", "城镇地名", CHINESE_FIRST_CHARS, "二字地名组合首字池"),
-    analyzeNamebase("chinese-second-chars", "中文尾字词素", "place-part", "城镇地名", CHINESE_SECOND_CHARS, "二字地名组合尾字池"),
-    analyzeNamebase("port-stems", "港口地名", "place", "城镇地名", CHINESE_PORT_STEMS, "港镇和近海城市优先词池"),
-    analyzeNamebase("hydro-prefixes", "中文水文词根", "hydro", "水文名称", HYDRO_PREFIXES, "河流、湖泊名称前缀"),
-    analyzeNamebase("light-fantasy-prefixes", "轻幻想词根", "place-part", "幻想名称", LIGHT_FANTASY_PREFIXES, "少量混入城镇、水文和国家兜底命名"),
-    analyzeNamebase("high-fantasy-stems", "高幻想词干", "place", "幻想名称", HIGH_FANTASY_STEMS, "极低概率特殊名称"),
-    analyzeNamebase("land-suffixes", "陆地后缀", "suffix", "地貌后缀", LAND_SUFFIXES, "普通地名后缀"),
-    analyzeNamebase("water-suffixes", "水文后缀", "suffix", "地貌后缀", WATER_SUFFIXES, "水域、河湖和临水地名后缀"),
-    analyzeNamebase("highland-suffixes", "山地后缀", "suffix", "地貌后缀", HIGHLAND_SUFFIXES, "山地文化和高地地名后缀"),
-    analyzeNamebase("port-suffixes", "港口后缀", "suffix", "地貌后缀", PORT_SUFFIXES, "港镇地名后缀"),
-    analyzeNamebase("lake-suffixes", "湖泊后缀", "suffix", "地貌后缀", LAKE_SUFFIXES, "湖泊名称后缀"),
-    analyzeNamebase("small-settlement-prefixes", "小聚落前缀", "place-part", "聚落细分", SMALL_SETTLEMENT_PREFIXES, "小镇、村寨和渡口名称前缀"),
-    analyzeNamebase("small-settlement-suffixes", "小聚落后缀", "suffix", "聚落细分", SMALL_SETTLEMENT_SUFFIXES, "小镇、村寨和渡口名称后缀"),
-    analyzeNamebase("western-place-stems", "西式地名词干", "place", "文化风格", WESTERN_PLACE_STEMS, "音译或欧洲风文化地名"),
-    analyzeNamebase("western-hydro-stems", "西式水文词干", "hydro", "文化风格", WESTERN_HYDRO_STEMS, "音译或欧洲风水文名称"),
-    analyzeNamebase("northern-place-stems", "北境地名词干", "place", "文化风格", NORTHERN_PLACE_STEMS, "北境、山地、寒冷文化地名"),
-    analyzeNamebase("steppe-place-stems", "草原地名词干", "place", "文化风格", STEPPE_PLACE_STEMS, "游牧文化地名"),
-    analyzeNamebase("southern-place-stems", "南方沙漠词干", "place", "文化风格", SOUTHERN_PLACE_STEMS, "沙漠、热带和南方文化地名")
+    analyzeNamebase("ancient-state-roots", "春秋古国根名", "state-root", "国家根名", ANCIENT_STATE_ROOTS, "国家短根名，参与 state-family 去重", {includeSource}),
+    analyzeNamebase("ancient-state-compounds", "古国复合根名", "state-root", "国家根名", ANCIENT_STATE_COMPOUND_ROOTS, "低概率补充，用于东晋、南越一类国名", {includeSource}),
+    analyzeNamebase("state-forms-generic", "通用国家形制", "state-form", "国家形制", STATE_FORMS.Generic, "古国根名优先使用这组形制", {includeSource}),
+    analyzeNamebase("state-forms-naval", "海洋国家形制", "state-form", "国家形制", STATE_FORMS.Naval, "非古国根名的海洋文化国家形制", {includeSource}),
+    analyzeNamebase("state-forms-lake", "湖泽国家形制", "state-form", "国家形制", STATE_FORMS.Lake, "非古国根名的湖泽文化国家形制", {includeSource}),
+    analyzeNamebase("state-forms-highland", "山地国家形制", "state-form", "国家形制", STATE_FORMS.Highland, "非古国根名的山地文化国家形制", {includeSource}),
+    analyzeNamebase("state-forms-river", "河流国家形制", "state-form", "国家形制", STATE_FORMS.River, "非古国根名的河流文化国家形制", {includeSource}),
+    analyzeNamebase("state-forms-nomadic", "游牧国家形制", "state-form", "国家形制", STATE_FORMS.Nomadic, "游牧文化国家形制", {includeSource}),
+    analyzeNamebase("state-forms-hunting", "林猎国家形制", "state-form", "国家形制", STATE_FORMS.Hunting, "林猎文化国家形制", {includeSource}),
+    analyzeNamebase("province-forms", "省份形制", "province-form", "政区形制", PROVINCE_FORMS, "省份、州郡和地方行政名称后缀", {includeSource}),
+    analyzeNamebase("place-stems", "中文地名词干", "place", "城镇地名", PLACE_STEMS, "主要城镇、地域和标签命名来源", {includeSource}),
+    analyzeNamebase("chinese-first-chars", "中文首字词素", "place-part", "城镇地名", CHINESE_FIRST_CHARS, "二字地名组合首字池", {includeSource}),
+    analyzeNamebase("chinese-second-chars", "中文尾字词素", "place-part", "城镇地名", CHINESE_SECOND_CHARS, "二字地名组合尾字池", {includeSource}),
+    analyzeNamebase("port-stems", "港口地名", "place", "城镇地名", CHINESE_PORT_STEMS, "港镇和近海城市优先词池", {includeSource}),
+    analyzeNamebase("hydro-prefixes", "中文水文词根", "hydro", "水文名称", HYDRO_PREFIXES, "河流、湖泊名称前缀", {includeSource}),
+    analyzeNamebase("light-fantasy-prefixes", "轻幻想词根", "place-part", "幻想名称", LIGHT_FANTASY_PREFIXES, "少量混入城镇、水文和国家兜底命名", {includeSource}),
+    analyzeNamebase("high-fantasy-stems", "高幻想词干", "place", "幻想名称", HIGH_FANTASY_STEMS, "极低概率特殊名称", {includeSource}),
+    analyzeNamebase("land-suffixes", "陆地后缀", "suffix", "地貌后缀", LAND_SUFFIXES, "普通地名后缀", {includeSource}),
+    analyzeNamebase("water-suffixes", "水文后缀", "suffix", "地貌后缀", WATER_SUFFIXES, "水域、河湖和临水地名后缀", {includeSource}),
+    analyzeNamebase("highland-suffixes", "山地后缀", "suffix", "地貌后缀", HIGHLAND_SUFFIXES, "山地文化和高地地名后缀", {includeSource}),
+    analyzeNamebase("port-suffixes", "港口后缀", "suffix", "地貌后缀", PORT_SUFFIXES, "港镇地名后缀", {includeSource}),
+    analyzeNamebase("lake-suffixes", "湖泊后缀", "suffix", "地貌后缀", LAKE_SUFFIXES, "湖泊名称后缀", {includeSource}),
+    analyzeNamebase("small-settlement-prefixes", "小聚落前缀", "place-part", "聚落细分", SMALL_SETTLEMENT_PREFIXES, "小镇、村寨和渡口名称前缀", {includeSource}),
+    analyzeNamebase("small-settlement-suffixes", "小聚落后缀", "suffix", "聚落细分", SMALL_SETTLEMENT_SUFFIXES, "小镇、村寨和渡口名称后缀", {includeSource}),
+    analyzeNamebase("western-place-stems", "西式地名词干", "place", "文化风格", WESTERN_PLACE_STEMS, "音译或欧洲风文化地名", {includeSource}),
+    analyzeNamebase("western-hydro-stems", "西式水文词干", "hydro", "文化风格", WESTERN_HYDRO_STEMS, "音译或欧洲风水文名称", {includeSource}),
+    analyzeNamebase("northern-place-stems", "北境地名词干", "place", "文化风格", NORTHERN_PLACE_STEMS, "北境、山地、寒冷文化地名", {includeSource}),
+    analyzeNamebase("steppe-place-stems", "草原地名词干", "place", "文化风格", STEPPE_PLACE_STEMS, "游牧文化地名", {includeSource}),
+    analyzeNamebase("southern-place-stems", "南方沙漠词干", "place", "文化风格", SOUTHERN_PLACE_STEMS, "沙漠、热带和南方文化地名", {includeSource})
   ];
 
   const cultureRows = Object.entries(CULTURE_STYLE_CONFIG)
     .filter(([, config]) => config)
     .flatMap(([style, config]) => [
-      analyzeNamebase(`culture-${style.toLowerCase()}-place`, `${cultureStyleLabel(style)}地名`, "place", "文化风格", config.place || [], `${cultureStyleLabel(style)}文化 place 词池`),
-      analyzeNamebase(`culture-${style.toLowerCase()}-hydro`, `${cultureStyleLabel(style)}水文`, "hydro", "文化风格", config.hydro || [], `${cultureStyleLabel(style)}文化 hydro 词池`),
-      analyzeNamebase(`culture-${style.toLowerCase()}-forms`, `${cultureStyleLabel(style)}形制`, "state-form", "文化风格", config.forms || [], `${cultureStyleLabel(style)}文化国家形制`),
-      analyzeNamebase(`culture-${style.toLowerCase()}-suffixes`, `${cultureStyleLabel(style)}后缀`, "suffix", "文化风格", config.suffixes || [], `${cultureStyleLabel(style)}文化地名后缀`)
+      analyzeNamebase(`culture-${style.toLowerCase()}-place`, `${cultureStyleLabel(style)}地名`, "place", "文化风格", config.place || [], `${cultureStyleLabel(style)}文化 place 词池`, {includeSource}),
+      analyzeNamebase(`culture-${style.toLowerCase()}-hydro`, `${cultureStyleLabel(style)}水文`, "hydro", "文化风格", config.hydro || [], `${cultureStyleLabel(style)}文化 hydro 词池`, {includeSource}),
+      analyzeNamebase(`culture-${style.toLowerCase()}-forms`, `${cultureStyleLabel(style)}形制`, "state-form", "文化风格", config.forms || [], `${cultureStyleLabel(style)}文化国家形制`, {includeSource}),
+      analyzeNamebase(`culture-${style.toLowerCase()}-suffixes`, `${cultureStyleLabel(style)}后缀`, "suffix", "文化风格", config.suffixes || [], `${cultureStyleLabel(style)}文化地名后缀`, {includeSource})
     ]);
 
   return [...baseRows, ...cultureRows].map((row, index) => ({...row, index}));
@@ -700,14 +700,14 @@ export function isAncientStateNameRoot(name) {
   return isAncientStateRoot(cleanStateRootCandidate(name));
 }
 
-function analyzeNamebase(id, name, kind, category, values, note = "") {
+function analyzeNamebase(id, name, kind, category, values, note = "", {includeSource = false} = {}) {
   const normalizedValues = values.map(value => String(value || "").trim()).filter(Boolean);
   const counts = new Map();
   for (const value of normalizedValues) counts.set(value, (counts.get(value) || 0) + 1);
   const uniqueValues = [...counts.keys()];
   const duplicateValues = [...counts.entries()].filter(([, count]) => count > 1).map(([value]) => value);
   const lengths = uniqueValues.map(value => Array.from(value).length);
-  return {
+  const summary = {
     id,
     name,
     kind,
@@ -721,6 +721,8 @@ function analyzeNamebase(id, name, kind, category, values, note = "") {
     examples: uniqueValues.slice(0, 16),
     note
   };
+  if (includeSource) summary.source = [...normalizedValues];
+  return summary;
 }
 
 function cultureStyleLabel(style) {

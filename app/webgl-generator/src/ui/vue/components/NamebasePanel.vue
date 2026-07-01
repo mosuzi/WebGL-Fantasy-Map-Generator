@@ -28,12 +28,17 @@
     <strong>重复样本</strong>
     <span>{{ selected.duplicateLabel }}</span>
   </div>
+
+  <div class="namebase-panel-actions">
+    <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
+  </div>
 </template>
 
 <script setup>
 import {computed} from "vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";

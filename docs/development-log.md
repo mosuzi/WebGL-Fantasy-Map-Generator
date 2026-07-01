@@ -13026,3 +13026,26 @@ full 矩阵结果：
 后续：
 
 - 下一步可做 `webgl-generator-namebases v1` 导出；用户自定义名称库、Markov chain 复刻和文化级绑定仍按计划后置。
+
+### 名称库导出第一刀
+
+背景：
+
+- 名称库总览已经能显示内置词池摘要，但用户还不能把当前内置命名资源带出页面。
+- 导出名称库可以服务外部审阅和后续自定义名称库格式设计，同时仍不需要改变生成逻辑。
+
+修正：
+
+- `getBuiltinNamebaseSummaries()` 增加可选 `includeSource`，默认仍只返回统计；导出时才返回复制后的完整 `source` 数组。
+- 名称库总览面板新增“导出名称库”按钮。
+- 运行时新增 `exportNamebases()`，导出 `webgl-generator-namebases v1` JSON，包含词池 id、名称、类型、分类、样本统计、长度范围、说明和完整样本数组，并写入当前地图 seed/checksum 作为上下文。
+
+验证：
+
+- Node 直接验证：默认 `getBuiltinNamebaseSummaries()` 不带 `source`，`includeSource: true` 时输出 `61` 个词池、`2241` 个样本，“春秋古国根名”保留 `96` 个 source 样本，前八项为 `齐、晋、秦、楚、鲁、宋、卫、郑`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `971.04KB JS / 299.24KB gzip`、`150.80KB CSS / 22.41KB gzip`。
+- Playwright + 构建产物静态服务下载验证通过：点击“导出名称库”后下载 `fmg-stage-2-1-c59fdd6b.namebases.json`，`type = webgl-generator-namebases`、`version = 1`、`bases = 61`、`samples = 2241`，`ancient-state-roots.source.length = 96`，打开前后 checksum 稳定，console/page error 为 `0`。
+
+后续：
+
+- 下一步若继续做名称库系统，应先做导入格式的覆盖/追加策略和用户自定义名称库历史，再考虑 Markov chain 和生成绑定。
