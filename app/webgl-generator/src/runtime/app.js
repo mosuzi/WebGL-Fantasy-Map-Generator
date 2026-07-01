@@ -1,6 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
+import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS} from "../generator/options.js";
 import {createRandomSeed} from "../generator/random.js";
@@ -908,15 +909,70 @@ function regenerateMapAttribute(state, kind, documentRef) {
       return regenerateRivers(state, documentRef);
     case "cities":
       return regenerateCities(state, documentRef);
+    case "states":
+      return regenerateStates(state, documentRef);
+    case "provinces":
+      return regenerateProvinces(state, documentRef);
     default:
       break;
   }
 
-  const constraints = {
-    states: "国家重算需要重新选择首都、扩张国家、同步省份/城镇/道路/军事等下游派生；当前先保留为受约束入口。",
-    provinces: "省份重算需要限制在所属国家内扩张，并同步城市省份、边界、pole 和统计；当前先保留为受约束入口。"
-  };
-  return regenerationResult(kind, "暂未执行", constraints[kind] || "该属性尚未接入受约束重算。");
+  return regenerationResult(kind, "暂未执行", "该属性尚未接入受约束重算。");
+}
+
+function regenerateStates(state, documentRef) {
+  const map = state.map;
+  const beforeStates = map.politics?.metadata?.states || 0;
+  const beforeProvinces = map.politics?.metadata?.provinces || 0;
+  const beforeRoutes = map.settlements?.routes?.length || 0;
+  const stateSalt = nextRegenerationSalt(map, "states");
+  const result = regeneratePackStatesAndProvinces(map.grid, map.society, map.options, map.pack, map.settlements, {salt: stateSalt});
+  if (!result) return regenerationResult("states", "未执行", "当前地图缺少可用城镇或 pack 语义图，无法重选首都并扩张国家。");
+
+  applyPoliticsRegenerationResult(map, result);
+  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, pruneNeutralSettlements: true, routeRegenerationSalt: stateSalt});
+  markDerivedFresh(map, ["states", "provinces", "cities"]);
+  markDerivedStale(map, ["religions", "markers", "zones", "military", "economy"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate states: salt=${stateSalt}, states=${map.politics.metadata.states}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
+    affected: [{kind: OBJECT_KIND.STATE, id: "all"}, {kind: OBJECT_KIND.PROVINCE, id: "all"}, {kind: OBJECT_KIND.CITY, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+  });
+
+  return regenerationResult(
+    "states",
+    `国家已重选首都并按当前文化、人口和地形约束重算（扰动 #${stateSalt}）：${beforeStates} -> ${map.politics.metadata.states}；省份 ${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    "已刷新国家/省份归属、城市政区、路线、标签、边界和对象索引；宗教、标记、区域、军事、经济已标记为待派生。"
+  );
+}
+
+function regenerateProvinces(state, documentRef) {
+  const map = state.map;
+  const beforeProvinces = map.politics?.metadata?.provinces || 0;
+  const beforeRoutes = map.settlements?.routes?.length || 0;
+  const provinceSalt = nextRegenerationSalt(map, "provinces");
+  const result = regeneratePackProvincesWithinStates(map.grid, map.society, map.options, map.pack, {salt: provinceSalt});
+  if (!result) return regenerationResult("provinces", "未执行", "当前地图缺少可用国家或 pack 语义图，无法在国家内重建省份。");
+
+  applyPoliticsRegenerationResult(map, result);
+  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, routeRegenerationSalt: provinceSalt});
+  markDerivedFresh(map, ["provinces", "cities"]);
+  markDerivedStale(map, ["markers", "zones", "military", "economy"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate provinces: salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
+    affected: [{kind: OBJECT_KIND.PROVINCE, id: "all"}, {kind: OBJECT_KIND.CITY, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+  });
+
+  return regenerationResult(
+    "provinces",
+    `省份已在当前国家内重算（扰动 #${provinceSalt}）：${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    "已刷新省份归属、省会/城市省份、路线、标签、边界和对象索引；标记、区域、军事、经济已标记为待派生。"
+  );
 }
 
 function regenerateRoutes(state, documentRef) {
@@ -1012,7 +1068,39 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
 }
 
 function refreshGenerationSummary(map) {
-  map.summary = createGenerationSummary(map.options, map.grid, map.features, map.climate, map.society, map.politics, map.settlements, map.markers, map.pack, map.rivers, map.layers, map.military, map.zones);
+  map.summary = createGenerationSummary(map.options, map.grid, map.features, map.climate, map.society, map.politics, map.settlements, map.markers, map.pack, map.rivers, map.layers, map.military, map.zones, map.economy);
+}
+
+function applyPoliticsRegenerationResult(map, result) {
+  if (!result) return;
+  if (result.states) {
+    map.politics.states = result.states;
+    map.pack.states = result.states;
+  }
+  if (result.provinces) {
+    map.politics.provinces = result.provinces;
+    map.pack.provinces = result.provinces;
+  }
+  if (result.timing) map.politics.timing = result.timing;
+  if (result.provinceTiming) map.politics.provinceTiming = result.provinceTiming;
+  map.politics.metadata = {
+    ...(map.politics.metadata || {}),
+    ...result.metadata,
+    states: result.metadata?.states ?? map.politics.metadata?.states ?? countPoliticalItems(map.politics.states),
+    provinces: result.metadata?.provinces ?? map.politics.metadata?.provinces ?? countPoliticalItems(map.politics.provinces),
+    regions: map.politics.metadata?.regions ?? countPoliticalItems(map.politics.regions),
+    stateNames: result.metadata?.stateNames ?? politicalNames(map.politics.states),
+    provinceNames: result.metadata?.provinceNames ?? politicalNames(map.politics.provinces),
+    regionNames: map.politics.metadata?.regionNames ?? politicalNames(map.politics.regions)
+  };
+}
+
+function countPoliticalItems(items = []) {
+  return items.filter(item => item && !item.removed && (item.i > 0 || (item.i === undefined && Number.isInteger(item.id)))).length;
+}
+
+function politicalNames(items = []) {
+  return items.filter(item => item && !item.removed && (item.i > 0 || (item.i === undefined && Number.isInteger(item.id)))).map(item => item.fullName || item.name);
 }
 
 function appendGenerationLog(map, message) {
@@ -1037,6 +1125,7 @@ function markDerivedStale(map, systems) {
   if (map?.military?.metadata) map.military.metadata.stale = stale.systems.includes("military");
   if (map?.zones?.metadata) map.zones.metadata.stale = stale.systems.includes("zones");
   if (map?.markers?.metadata) map.markers.metadata.stale = stale.systems.includes("markers");
+  if (map?.economy?.metadata) map.economy.metadata.stale = stale.systems.includes("economy");
 }
 
 function markDerivedFresh(map, systems) {
@@ -1054,6 +1143,7 @@ function markDerivedFresh(map, systems) {
   if (map?.military?.metadata) map.military.metadata.stale = nextSystems.includes("military");
   if (map?.zones?.metadata) map.zones.metadata.stale = nextSystems.includes("zones");
   if (map?.markers?.metadata) map.markers.metadata.stale = nextSystems.includes("markers");
+  if (map?.economy?.metadata) map.economy.metadata.stale = nextSystems.includes("economy");
 }
 
 function clearGeneratedCityLabelHides(map) {

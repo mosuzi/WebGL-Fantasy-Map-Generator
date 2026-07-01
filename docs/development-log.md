@@ -11141,3 +11141,45 @@ full 矩阵结果：
 注意：
 
 - 控制面板后续只放可操作配置和常用开关；生成诊断、checksum、source/candidate 对照继续归入侧栏运行统计和 baseline 文档。
+
+### 国家和省份重新生成第一刀
+
+背景：
+
+- 管理 tab 已有国家、省份、城镇、道路、河流的“重新生成”入口，但国家和省份仍只是受约束占位。
+- 用户建议下一步推进国家和省份重新生成，然后再细化地图上不明白的白色 marker、资源点和控制面板下拉 UI。
+
+修正：
+
+- `politics.js` 新增 `regeneratePackStatesAndProvinces()`：
+  - 在当前城镇中按人口、适居度、港口和间距重新挑选首都。
+  - 复用 pack 国家扩张、边界整理、中立定居 cell 吸收、边界毛刺吸收、国家统计、邻接、形制和颜色分配。
+  - 随后重建 pack 省份并镜像国家/省份到 grid。
+- `politics.js` 新增 `regeneratePackProvincesWithinStates()`：
+  - 保持当前国家边界，只重新选择省份中心、扩张省份、补齐未归属省份 cell、重算 pole、邻接和颜色。
+- `runtime/app.js` 接入管理 tab 的“国家”和“省份”按钮：
+  - 国家重算后同步 `pack.states / map.politics.states`、重建省份、按政区 `finalizeSettlements()`、重算道路、刷新政治边界、颜色、标签、点图层、路线 mesh、对象索引和面板。
+  - 省份重算后同步 `pack.provinces / map.politics.provinces`、按当前国家整理城市省份和道路。
+  - 宗教、marker、zone、军事、经济标记为待派生。
+- `refreshGenerationSummary()` 补上传入 `map.economy`，避免局部重算后 summary 丢失已有经济元数据。
+- 侧栏“派生过期”文案新增“经济”。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\politics.js`
+- `node --check app\webgl-generator\src\runtime\app.js`
+- `node --check app\webgl-generator\src\ui\panel.js`
+- `git diff --check`
+- `$env:CI='true'; pnpm run build:app`
+- 内存重算验证：
+  - seed：`stage-2-1231411414`
+  - template：`continents`
+  - cells：`10000`
+  - 初始：国家 `18`、省份 `180`、城市 `776`、道路 `536`、首都 `18`
+  - 国家重算后：国家 `18`、省份 `173`、城市 `776`、道路 `541`、首都 `18`、城市 state/province mismatch 均为 `0`
+  - 省份重算后：国家 `18`、省份 `169`、城市 `776`、道路 `573`、首都 `18`、城市 state/province mismatch 均为 `0`
+
+后续：
+
+- 下一步优先细化 marker / 资源点：解释当前白色点含义，并把矿山、盐湖、稀有生物等资源位做成有类型、有图标、有经济贡献的对象，再接入国家/省份经济与国力计算。
+- 再下一步统一控制面板中的下拉选项 UI。

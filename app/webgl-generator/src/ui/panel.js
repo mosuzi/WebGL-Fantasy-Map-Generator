@@ -37,6 +37,7 @@ const DERIVED_STALE_LABELS = Object.freeze({
   markers: "标记",
   zones: "区域",
   military: "军事",
+  economy: "经济",
   "state-markers": "国家中心标记"
 });
 

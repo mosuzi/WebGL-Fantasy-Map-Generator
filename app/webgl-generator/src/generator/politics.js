@@ -56,6 +56,59 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
   };
 }
 
+export function regeneratePackStatesAndProvinces(grid, society, options, pack, settlements, {salt = 0} = {}) {
+  if (!pack?.cells?.i?.length || !pack?.burgs?.length) return null;
+  const profile = createStageProfile();
+  const random = profile.stage("random-states", "初始化国家重算随机源", () => createRandom(regenerationSeed(options, "regenerate-states", salt)));
+  const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-politics-names", salt)));
+
+  const selectedCapitals = profile.stage("capitals-select", "重新选择国家首都", () => selectRegeneratedCapitalBurgs(pack, settlements, options, random));
+  if (!selectedCapitals.length) return null;
+
+  const states = profile.stage("states-build", "生成国家对象", () => buildPackStates(pack, society, random, nameGenerator));
+  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society));
+  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states));
+  profile.stage("states-claim-neutral", "吸收已定居中立 cell", () => claimInhabitedNeutralCells(pack, states));
+  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states));
+  profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
+  profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
+  profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states));
+  profile.stage("states-forms", "定义国家形态", () => defineStateForms(states, nameGenerator));
+  profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
+  grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack));
+
+  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, createRandom(regenerationSeed(options, "regenerate-provinces", salt)), options, nameGenerator));
+  grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack));
+
+  const timing = profile.finish();
+  return {
+    states,
+    provinces,
+    timing,
+    provinceTiming: provinces.timing || null,
+    metadata: createPackPoliticsMetadata(states, provinces)
+  };
+}
+
+export function regeneratePackProvincesWithinStates(grid, society, options, pack, {salt = 0} = {}) {
+  if (!pack?.cells?.i?.length || !pack?.states?.some?.(state => state?.i)) return null;
+  const profile = createStageProfile();
+  const random = profile.stage("random-provinces", "初始化省份重算随机源", () => createRandom(regenerationSeed(options, "regenerate-provinces", salt)));
+  const nameGenerator = profile.stage("name-generator", "初始化省份命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-province-names", salt)));
+  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, random, options, nameGenerator));
+  grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack));
+  const timing = profile.finish();
+  return {
+    provinces,
+    timing,
+    provinceTiming: provinces.timing || null,
+    metadata: {
+      provinces: provinces.filter(province => province?.i).length,
+      provinceNames: provinces.filter(province => province?.i).map(province => province.fullName || province.name)
+    }
+  };
+}
+
 function buildPackPolitics(grid, features, society, rivers, random, options, pack) {
   const profile = createStageProfile();
   const riverCells = profile.stage("river-cell-index", "建立河流 cell 索引", () => new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells)));
@@ -172,6 +225,107 @@ function buildPackStates(pack, society, random, nameGenerator) {
 
   pack.states = states;
   return states;
+}
+
+function selectRegeneratedCapitalBurgs(pack, settlements, options, random) {
+  const aliveBurgs = (pack.burgs || []).filter(burg => burg?.i && !burg.removed && pack.cells.h?.[burg.cell] >= 20);
+  const currentCapitals = aliveBurgs.filter(burg => burg.capital);
+  const target = clamp(currentCapitals.length || Number(options.statesNumber) || 12, 1, Math.min(aliveBurgs.length, 40));
+  if (!target) return [];
+
+  const candidates = aliveBurgs
+    .map(burg => ({
+      burg,
+      score: getCapitalCandidateScore(pack, burg, random)
+    }))
+    .sort((a, b) => b.score - a.score || a.burg.i - b.burg.i)
+    .map(item => item.burg);
+  const selected = pickSpacedCapitalBurgs(pack, candidates, target);
+  applyCapitalSelection(pack, settlements, new Set(selected.map(burg => burg.i)));
+  return selected;
+}
+
+function getCapitalCandidateScore(pack, burg, random) {
+  const cell = burg.cell;
+  const suitability = pack.cells.s?.[cell] || 0;
+  const population = burg.population || 0;
+  const portBonus = burg.port ? 8 : 0;
+  const cultureSpread = pack.cells.culture?.[cell] ? 4 : 0;
+  return population * random.range(70, 130) + suitability * random.range(2, 5) + portBonus + cultureSpread + random.range(0, 30);
+}
+
+function pickSpacedCapitalBurgs(pack, candidates, target) {
+  const selected = [];
+  let spacing = estimateCapitalSpacing(pack, target);
+
+  while (selected.length < target && spacing > 1) {
+    let added = false;
+    const cultureCounts = countSelectedCapitalCultures(pack, selected);
+    for (const burg of candidates) {
+      if (selected.includes(burg)) continue;
+      if (selected.length >= target) break;
+      const culture = pack.cells.culture?.[burg.cell] || 0;
+      const cultureSoftCap = Math.max(1, Math.ceil(target / 4));
+      if ((cultureCounts.get(culture) || 0) >= cultureSoftCap && selected.length < Math.ceil(target * 0.75)) continue;
+      if (selected.some(item => distance(pack.cells.p[item.cell], pack.cells.p[burg.cell]) < spacing)) continue;
+      selected.push(burg);
+      cultureCounts.set(culture, (cultureCounts.get(culture) || 0) + 1);
+      added = true;
+    }
+    spacing *= added ? 0.86 : 0.72;
+  }
+
+  for (const burg of candidates) {
+    if (selected.length >= target) break;
+    if (!selected.includes(burg)) selected.push(burg);
+  }
+  return selected;
+}
+
+function countSelectedCapitalCultures(pack, selected) {
+  const counts = new Map();
+  for (const burg of selected) {
+    const culture = pack.cells.culture?.[burg.cell] || 0;
+    counts.set(culture, (counts.get(culture) || 0) + 1);
+  }
+  return counts;
+}
+
+function estimateCapitalSpacing(pack, target) {
+  const points = (pack.burgs || []).filter(burg => burg?.i && !burg.removed && pack.cells.p?.[burg.cell]).map(burg => pack.cells.p[burg.cell]);
+  if (!points.length) return 1;
+  const xs = points.map(point => point[0]);
+  const ys = points.map(point => point[1]);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  return Math.max(1, (width + height) / 2 / Math.max(1, target));
+}
+
+function applyCapitalSelection(pack, settlements, selectedBurgIds) {
+  const citiesByBurg = new Map((settlements?.cities || []).map(city => [city.burgId, city]));
+  for (const burg of pack.burgs || []) {
+    if (!burg?.i || burg.removed) continue;
+    const selected = selectedBurgIds.has(burg.i);
+    burg.capital = selected ? 1 : 0;
+    burg.group = selected ? "capital" : burg.port ? "city" : burg.population >= 5 ? "city" : burg.population <= 0.1 ? "hamlet" : "town";
+    const city = citiesByBurg.get(burg.i);
+    if (!city) continue;
+    city.capital = selected;
+    city.group = selected ? "capital" : city.port ? "city" : city.population >= 5 ? "city" : city.population <= 0.1 ? "hamlet" : "town";
+  }
+}
+
+function createPackPoliticsMetadata(states, provinces, regions = []) {
+  const validStates = states.filter(state => state?.i && !state.removed);
+  const validProvinces = provinces.filter(province => province?.i && !province.removed);
+  return {
+    states: validStates.length,
+    provinces: validProvinces.length,
+    regions: regions.length,
+    stateNames: validStates.map(state => state.fullName || state.name),
+    provinceNames: validProvinces.map(province => province.fullName || province.name),
+    regionNames: regions.map(region => region.name)
+  };
 }
 
 function defineStateForms(states, nameGenerator) {
@@ -1233,6 +1387,11 @@ function distanceSquared(a, b) {
 function round(value, digits = 0) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
+}
+
+function regenerationSeed(options = {}, scope, salt) {
+  const seed = options.seed || "map";
+  return salt === undefined || salt === null || salt === "" ? `${seed}:${scope}` : `${seed}:${scope}:${salt}`;
 }
 
 function gaussian(random, mean, stdev, min, max, skew = 1) {
