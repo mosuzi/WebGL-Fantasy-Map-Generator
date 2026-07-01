@@ -769,6 +769,7 @@ http://127.0.0.1:5410
 144. 政治面 GeoJSON / dissolve 已先落实计划文档：`docs/task-notes/political-geojson-dissolve-plan.md` 区分了第一阶段 `state/province` 非 dissolve MultiPolygon 集合与第二阶段真正拓扑 dissolve 外轮廓，记录了字段、算法、风险和验收。后续不要把 pack cell 集合误称为真正 dissolve；若引入几何库，需要先评估懒加载或拆包。
 145. 春秋古国风命名第二刀已完成：国家根名词库补入更多周代/春秋小国启发的单字和短根名，例如单、芮、舒、郯、鄣、鄀、轸、邿、鄅、根牟、须句、逼阳、钟吾和群舒分支；国家根名抽取更偏向古国短名，文化地貌词根概率降低。古国根名定义国家形制时优先使用“国、侯国、伯国、邦、朝”，避免再出现“芮海邦 / 郯河国”这类单字古国根名加地貌形制的怪名；`state-family` 也补了 `舒*`、`曾/鄫/缯`、`谭/郯` 的近源归并。五组 seed 抽样中，20 个国家的短根名为 `19-20` 个、单字根名为 `8-13` 个、同根重复为 `0`。
 146. 政治面 GeoJSON 第一阶段已完成：简介 tab 的“要素 GeoJSON 图层”新增默认关闭的“国家面 / 省份面”开关，导出时会按 `pack.cells.state / province` 分组陆地 cell，输出 `state` 与 `province` MultiPolygon Feature，并在 properties 中明确 `dissolved=false`。构建产物验证中开启国家面和省份面后导出 `states-provinces-cities-routes-rivers-markers-zones`，包含 state `20`、province `213`、city `817`、route `602`、river `164`、marker `44`、zone `9`，政治面 `233` 个且 bad `0`，console/page error 为 `0`。后续真正 dissolve 仍按计划文档进入拓扑边界合并原型。
+147. GeoJSON bbox 第一刀已完成：pack cell GeoJSON 与要素 GeoJSON 导出都会为每个 Feature 和整个 FeatureCollection 写入标准 `bbox = [minLon, minLat, maxLon, maxLat]`。Node 验证中 pack cell 与 `states-provinces-cities` 要素导出的 collection bbox 和前 20 个 feature bbox 均有效；`pnpm run build:app` 通过，构建产物约 `957.83KB JS / 295.96KB gzip`、`149.39KB CSS / 22.20KB gzip`。这为后续范围导出、视口裁剪和外部 GIS 快速索引铺基础。
 
 ## 约束
 

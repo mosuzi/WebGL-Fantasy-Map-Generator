@@ -12887,3 +12887,26 @@ full 矩阵结果：
 后续：
 
 - 真正 dissolve 外轮廓仍需按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑边界原型，再决定是否接 UI。
+
+### GeoJSON bbox 第一刀
+
+背景：
+
+- 当前 GeoJSON 已有近似经纬度坐标，但缺少标准 `bbox`，外部工具或后续范围导出无法快速判断空间范围。
+- bbox 不改变现有几何和属性语义，适合作为范围导出、视口裁剪和 GIS 索引前置能力。
+
+修正：
+
+- `createMapGeoJson()` 和 `createMapFeatureGeoJson()` 返回前会调用 `attachGeoJsonBboxes()`。
+- 每个 Feature 依据自身 geometry 坐标写入 `bbox = [minLon, minLat, maxLon, maxLat]`。
+- FeatureCollection 会合并所有 feature bbox 写入整体 `bbox`。
+
+验证：
+
+- Node 直接验证：pack cell GeoJSON 的 collection bbox、首个 feature bbox、前 20 个 feature bbox 均有效。
+- Node 直接验证：开启 `states-provinces-cities` 的要素 GeoJSON collection bbox、首个 feature bbox、前 20 个 feature bbox 均有效，`featureCount = 1100`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `957.83KB JS / 295.96KB gzip`、`149.39KB CSS / 22.20KB gzip`。
+
+后续：
+
+- 可基于 bbox 做范围导出、视口导出、导出前体积预估，以及对象定位/空间索引优化。

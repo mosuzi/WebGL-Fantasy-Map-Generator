@@ -90,7 +90,7 @@ export function createMapGeoJson(map) {
     });
   }
 
-  return {
+  return attachGeoJsonBboxes({
     type: "FeatureCollection",
     name: map.metadata?.seed ? `fmg-${map.metadata.seed}` : "fmg-webgl-map",
     properties: {
@@ -103,7 +103,7 @@ export function createMapGeoJson(map) {
       coordinateReference: "approximate-equirectangular"
     },
     features
-  };
+  });
 }
 
 export function createMapFeatureGeoJson(map, options = {}) {
@@ -120,7 +120,7 @@ export function createMapFeatureGeoJson(map, options = {}) {
   ];
   const layerSet = selectedFeatureLayerNames(layers);
 
-  return {
+  return attachGeoJsonBboxes({
     type: "FeatureCollection",
     name: map.metadata?.seed ? `fmg-${map.metadata.seed}-features` : "fmg-webgl-map-features",
     properties: {
@@ -138,7 +138,7 @@ export function createMapFeatureGeoJson(map, options = {}) {
       zones: layers.zone ? map.zones?.zones?.length || 0 : 0
     },
     features
-  };
+  });
 }
 
 export function downloadJson(documentRef, data, filename, replacer = null) {
@@ -548,6 +548,59 @@ function worldLineLength(points) {
 
 function roundCoordinate(value) {
   return Math.round(value * 1e6) / 1e6;
+}
+
+function attachGeoJsonBboxes(collection) {
+  const collectionBbox = createEmptyBbox();
+  for (const feature of collection.features || []) {
+    const featureBbox = geometryBbox(feature.geometry);
+    if (!featureBbox) continue;
+    feature.bbox = featureBbox;
+    expandBboxWithBbox(collectionBbox, featureBbox);
+  }
+  const bbox = finalizeBbox(collectionBbox);
+  if (bbox) collection.bbox = bbox;
+  return collection;
+}
+
+function geometryBbox(geometry) {
+  if (!geometry?.coordinates) return null;
+  const bbox = createEmptyBbox();
+  expandBboxWithCoordinates(bbox, geometry.coordinates);
+  return finalizeBbox(bbox);
+}
+
+function createEmptyBbox() {
+  return [Infinity, Infinity, -Infinity, -Infinity];
+}
+
+function expandBboxWithCoordinates(bbox, coordinates) {
+  if (!Array.isArray(coordinates) || !coordinates.length) return;
+  if (typeof coordinates[0] === "number" && typeof coordinates[1] === "number") {
+    expandBboxWithPoint(bbox, coordinates);
+    return;
+  }
+  for (const child of coordinates) expandBboxWithCoordinates(bbox, child);
+}
+
+function expandBboxWithPoint(bbox, point) {
+  const lon = Number(point[0]);
+  const lat = Number(point[1]);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  bbox[0] = Math.min(bbox[0], lon);
+  bbox[1] = Math.min(bbox[1], lat);
+  bbox[2] = Math.max(bbox[2], lon);
+  bbox[3] = Math.max(bbox[3], lat);
+}
+
+function expandBboxWithBbox(target, source) {
+  if (!Array.isArray(source) || source.length < 4) return;
+  expandBboxWithPoint(target, [source[0], source[1]]);
+  expandBboxWithPoint(target, [source[2], source[3]]);
+}
+
+function finalizeBbox(bbox) {
+  return bbox.every(Number.isFinite) ? bbox.map(roundCoordinate) : null;
 }
 
 function downloadBlob(documentRef, blob, filename) {

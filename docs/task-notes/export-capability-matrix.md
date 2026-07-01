@@ -48,6 +48,7 @@
 
 - 每个 pack cell 输出一个 `Polygon`。
 - 坐标采用当前 `mapCoordinates` 的近似 equirectangular 投影。
+- FeatureCollection 与每个 Feature 都输出标准 `bbox = [minLon, minLat, maxLon, maxLat]`。
 
 当前属性：
 
@@ -85,6 +86,8 @@
 | `zone` | `MultiPolygon` | id、name、type、hidden、cells、color | 当前按 zone 的 cell polygon 集合输出，未 dissolve |
 | `state` | `MultiPolygon` | id、name、fullName、capital、capitalName、culture、religion、cells、area、population、color、neighbors、dissolved、hasNote、note | 默认关闭；按国家陆地 cell 集合输出，`dissolved=false` |
 | `province` | `MultiPolygon` | id、name、fullName、state、stateName、burg、burgName、cells、area、population、color、neighbors、dissolved、hasNote、note | 默认关闭；按省份陆地 cell 集合输出，`dissolved=false` |
+
+所有要素 GeoJSON 的 FeatureCollection 与每个 Feature 都输出标准 `bbox`，方便外部 GIS 工具和后续范围导出快速判断空间范围。
 
 已验证：
 
