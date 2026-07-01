@@ -79,13 +79,21 @@ export function clearUserNamebases(map) {
   if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {removed: 0, total: 0};
   const removed = map.namebases.bases.length;
   map.namebases.bases = [];
-  map.namebases.metadata = {
-    ...(map.namebases.metadata || {}),
-    bases: 0,
-    imported: 0,
-    updatedAt: new Date().toISOString()
-  };
+  updateNamebaseMetadata(map.namebases);
   return {removed, total: 0};
+}
+
+export function deleteUserNamebase(map, id) {
+  if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {removed: false, total: 0, name: ""};
+  const index = map.namebases.bases.findIndex(base => base?.id === id && base?.builtin !== true);
+  if (index < 0) return {removed: false, total: map.namebases.bases.length, name: ""};
+  const [removed] = map.namebases.bases.splice(index, 1);
+  updateNamebaseMetadata(map.namebases);
+  return {
+    removed: true,
+    total: map.namebases.bases.length,
+    name: removed?.name || removed?.id || ""
+  };
 }
 
 export function getNamebaseSummariesForMap(map, options = {}) {
@@ -115,6 +123,15 @@ function ensureNamebaseStore(map) {
   if (!map.namebases.bindings || typeof map.namebases.bindings !== "object") map.namebases.bindings = {};
   if (!map.namebases.metadata || typeof map.namebases.metadata !== "object") map.namebases.metadata = {};
   return map.namebases;
+}
+
+function updateNamebaseMetadata(store) {
+  store.metadata = {
+    ...(store.metadata || {}),
+    bases: store.bases.length,
+    imported: store.bases.filter(base => base?.origin === "导入").length,
+    updatedAt: new Date().toISOString()
+  };
 }
 
 function normalizeImportedBase(base, {existingIds, importedAt, filename, index}) {

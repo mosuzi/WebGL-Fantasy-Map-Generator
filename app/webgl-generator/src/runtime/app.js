@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {clearUserNamebases, createNamebaseDocument, importNamebaseDocument, parseNamebaseDocument} from "../generator/namebase-store.js";
+import {clearUserNamebases, createNamebaseDocument, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -808,6 +808,7 @@ export function createGeneratorApp(documentRef) {
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
     onExport: () => exportNamebases(state, documentRef),
     onImport: file => importNamebases(state, documentRef, file),
+    onDeleteUser: row => deleteImportedNamebase(state, documentRef, row),
     onClearUser: () => clearImportedNamebases(state, documentRef)
   });
   state.panels.namebase = namebasePanel;
@@ -1366,6 +1367,30 @@ function clearImportedNamebases(state, documentRef) {
     setFileOperationStatus(documentRef, `已清空 ${result.removed} 个用户名称库。`);
   } catch (error) {
     reportFileOperationError(documentRef, "清空名称库失败", error);
+  }
+}
+
+function deleteImportedNamebase(state, documentRef, row) {
+  try {
+    assertMapAvailable(state);
+    const id = row?.id;
+    if (!id) return;
+    if (row.origin === "内置" || row.builtin === true) {
+      setFileOperationStatus(documentRef, "内置名称库不能删除。");
+      return;
+    }
+    const view = documentRef.defaultView || window;
+    const name = row.name || id;
+    if (typeof view.confirm === "function" && !view.confirm(`确定删除用户名称库“${name}”？`)) return;
+    const result = deleteUserNamebase(state.map, id);
+    if (!result.removed) {
+      setFileOperationStatus(documentRef, "未找到可删除的用户名称库。");
+      return;
+    }
+    state.panels.namebase.update(state.map);
+    setFileOperationStatus(documentRef, `已删除用户名称库“${result.name || name}”，当前用户库 ${result.total} 个。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "删除名称库失败", error);
   }
 }
 

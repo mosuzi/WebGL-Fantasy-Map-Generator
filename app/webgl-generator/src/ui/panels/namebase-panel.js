@@ -31,6 +31,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     },
     onExport: () => callbacks.onExport?.(),
     onImport: file => callbacks.onImport?.(file),
+    onDeleteUser: row => callbacks.onDeleteUser?.(row),
     onClearUser: () => callbacks.onClearUser?.()
   };
 

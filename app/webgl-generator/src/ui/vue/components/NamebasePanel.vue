@@ -33,6 +33,7 @@
     <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
     <label class="secondary-action file-import-action namebase-import-action" for="namebase-import-file">导入名称库</label>
     <input id="namebase-import-file" type="file" accept=".json,application/json" hidden @change="handleImportFile" />
+    <UiButton variant="secondary" :disabled="!selectedUserRow" @click="callbacks.onDeleteUser(selectedUserRow)">删除选中</UiButton>
     <UiButton variant="secondary" :disabled="!userRows.length" @click="callbacks.onClearUser()">清空用户库</UiButton>
   </div>
 </template>
@@ -90,6 +91,7 @@ const rows = computed(() => {
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const userRows = computed(() => rows.value.filter(row => row.origin !== "内置"));
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedNamebaseId));
+const selectedUserRow = computed(() => isUserNamebaseRow(selected.value) ? selected.value : null);
 const summaryMetrics = computed(() => [
   {label: "词池", value: formatNumber(rows.value.length)},
   {label: "样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.samples, 0))},
@@ -118,6 +120,10 @@ function toRow(summary) {
     examplesLabel: examples.length ? examples.join("、") : "无样例",
     duplicateLabel: duplicateNames.length ? duplicateNames.join("、") : ""
   };
+}
+
+function isUserNamebaseRow(row) {
+  return Boolean(row && row.origin !== "内置" && row.builtin !== true);
 }
 
 function filterRows(sourceRows, filter) {
