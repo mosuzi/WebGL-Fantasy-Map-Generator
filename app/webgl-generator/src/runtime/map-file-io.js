@@ -104,6 +104,31 @@ export function createMapGeoJson(map) {
   };
 }
 
+export function createMapFeatureGeoJson(map) {
+  if (!map) throw new Error("当前没有可导出的地图");
+  const features = [
+    ...routeFeatures(map),
+    ...riverFeatures(map),
+    ...markerFeatures(map)
+  ];
+
+  return {
+    type: "FeatureCollection",
+    name: map.metadata?.seed ? `fmg-${map.metadata.seed}-features` : "fmg-webgl-map-features",
+    properties: {
+      source: "fmg-webgl-reimplementation",
+      layerSet: "routes-rivers-markers",
+      seed: map.metadata?.seed || "",
+      checksum: map.metadata?.checksum || "",
+      generatedAt: map.metadata?.generatedAt || "",
+      routes: map.settlements?.routes?.length || 0,
+      rivers: map.rivers?.rivers?.length || 0,
+      markers: map.markers?.markers?.length || 0
+    },
+    features
+  };
+}
+
 export function downloadJson(documentRef, data, filename, replacer = null) {
   const text = JSON.stringify(data, replacer);
   downloadBlob(documentRef, new Blob([text], {type: "application/json;charset=utf-8"}), filename);
@@ -165,6 +190,108 @@ function projectWorldPoint(point, map) {
   const lon = lonW + (Number(point[0]) / width) * (lonE - lonW);
   const lat = latN + (Number(point[1]) / height) * (latS - latN);
   return [roundCoordinate(lon), roundCoordinate(lat)];
+}
+
+function routeFeatures(map) {
+  return (map.settlements?.routes || []).map(route => {
+    const coordinates = lineCoordinates(route.points, map);
+    if (coordinates.length < 2) return null;
+    return {
+      type: "Feature",
+      id: `route-${route.id}`,
+      properties: {
+        layer: "route",
+        id: route.id,
+        type: route.type,
+        level: route.level,
+        state: route.state || 0,
+        province: route.province || 0,
+        from: route.from ?? -1,
+        to: route.to ?? -1,
+        cells: route.cells?.length || 0,
+        distance: roundCoordinate(worldLineLength(route.points))
+      },
+      geometry: {
+        type: "LineString",
+        coordinates
+      }
+    };
+  }).filter(Boolean);
+}
+
+function riverFeatures(map) {
+  return (map.rivers?.rivers || []).map(river => {
+    const coordinates = lineCoordinates(river.points, map);
+    if (coordinates.length < 2) return null;
+    return {
+      type: "Feature",
+      id: `river-${river.id}`,
+      properties: {
+        layer: "river",
+        id: river.id,
+        name: river.name || "",
+        type: river.type || "",
+        source: river.source ?? -1,
+        mouth: river.mouth ?? -1,
+        parent: river.parent || 0,
+        basin: river.basin || river.id,
+        flux: river.flux || river.discharge || 0,
+        length: river.length || roundCoordinate(worldLineLength(river.points)),
+        width: river.width || 0,
+        widthFactor: river.widthFactor || 1
+      },
+      geometry: {
+        type: "LineString",
+        coordinates
+      }
+    };
+  }).filter(Boolean);
+}
+
+function markerFeatures(map) {
+  return (map.markers?.markers || []).map(marker => {
+    const coordinate = projectWorldPoint([marker.x, marker.y], map);
+    if (!coordinate) return null;
+    return {
+      type: "Feature",
+      id: `marker-${marker.id}`,
+      properties: {
+        layer: "marker",
+        id: marker.id,
+        name: marker.name || marker.label || "",
+        type: marker.type || "",
+        label: marker.label || "",
+        category: marker.category || "",
+        categoryLabel: marker.categoryLabel || "",
+        resourceKey: marker.resourceKey || "",
+        resourceLabel: marker.resourceLabel || "",
+        economicValue: marker.economicValue || 0,
+        state: marker.data?.state || 0,
+        province: marker.data?.province || 0,
+        cell: marker.cell ?? -1,
+        packCell: marker.packCell ?? -1
+      },
+      geometry: {
+        type: "Point",
+        coordinates: coordinate
+      }
+    };
+  }).filter(Boolean);
+}
+
+function lineCoordinates(points, map) {
+  return (points || []).map(point => projectWorldPoint(point, map)).filter(Boolean);
+}
+
+function worldLineLength(points) {
+  let length = 0;
+  for (let index = 1; index < (points || []).length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    if (!Array.isArray(a) || !Array.isArray(b)) continue;
+    length += Math.hypot(Number(b[0]) - Number(a[0]), Number(b[1]) - Number(a[1]));
+  }
+  return length;
 }
 
 function roundCoordinate(value) {

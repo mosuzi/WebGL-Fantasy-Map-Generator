@@ -12473,3 +12473,26 @@ full 矩阵结果：
 后续：
 
 - 补面积测量、节点拖拽、删除最后一点、路线贴合测量、保存测量对象和导出测量结果。
+
+### 要素 GeoJSON 导出第一刀
+
+背景：
+
+- 原版 FMG 支持按路线、河流、marker、zone 等对象导出 GeoJSON；当前 WebGL 版此前只有 pack cell Polygon 导出，地理数据能力不够分层。
+- 第一刀优先做路线、河流和 marker 三类对象，保持与 pack cell Polygon 导出分开，避免一个按钮输出过大的混合文件。
+
+修正：
+
+- 简介 tab 新增“导出要素 GeoJSON”按钮。
+- `createMapFeatureGeoJson()` 输出混合 `FeatureCollection`：路线和河流为 `LineString`，marker 为 `Point`。
+- 每个要素带 `layer`、id、类型、政区、资源和经济等属性，文件名使用 `.features.geojson` 后缀。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `908.73KB JS / 284.60KB gzip`、`138.80KB CSS / 20.63KB gzip`。
+- Playwright + 构建产物静态服务验证通过：下载文件名为 `fmg-stage-2-1-497329e2.features.geojson`，大小约 `310KB`，`FeatureCollection` 共 `810` 个要素，其中 route `602`、river `164`、marker `44`，geometry 为 `766` 个 `LineString` 和 `44` 个 `Point`，状态提示为“要素 GeoJSON 已导出，共 810 个路线、河流和标记要素。”，console/page error 为 `0`。
+
+后续：
+
+- 补 zone 导出、国家/省份 dissolve、范围选择、分层选择和更完整属性映射。

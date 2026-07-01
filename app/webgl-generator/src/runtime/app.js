@@ -28,7 +28,7 @@ import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, readHeightmapImportSettings} from "./heightmap-import.js";
-import {createMapDocument, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
+import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
 import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
@@ -912,6 +912,7 @@ export function createGeneratorApp(documentRef) {
     onExportImage: () => exportMapImage(state, documentRef),
     onExportMapData: () => exportMapData(state, documentRef),
     onExportGeoJson: () => exportGeoJson(state, documentRef),
+    onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef),
     onImportMapData: file => importMapData(state, documentRef, file),
     onImportHeightmapImage: file => importHeightmapImage(state, documentRef, file),
     onRegenerate: kind => {
@@ -1118,6 +1119,18 @@ function exportGeoJson(state, documentRef) {
     setFileOperationStatus(documentRef, `GeoJSON 已导出，共 ${geoJson.features.length} 个 cell 面。`);
   } catch (error) {
     reportFileOperationError(documentRef, "GeoJSON 导出失败", error);
+  }
+}
+
+function exportFeatureGeoJson(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导出要素 GeoJSON...");
+    const geoJson = createMapFeatureGeoJson(state.map);
+    downloadText(documentRef, JSON.stringify(geoJson), `${mapFileBaseName(state.map)}.features.geojson`, "application/geo+json;charset=utf-8");
+    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个路线、河流和标记要素。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "要素 GeoJSON 导出失败", error);
   }
 }
 

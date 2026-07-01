@@ -91,6 +91,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("export-map-image")?.addEventListener("click", () => handlers.onExportImage?.());
   documentRef.getElementById("export-map-data")?.addEventListener("click", () => handlers.onExportMapData?.());
   documentRef.getElementById("export-map-geojson")?.addEventListener("click", () => handlers.onExportGeoJson?.());
+  documentRef.getElementById("export-map-features-geojson")?.addEventListener("click", () => handlers.onExportFeatureGeoJson?.());
   documentRef.getElementById("import-map-file")?.addEventListener("change", event => {
     const file = event.target.files?.[0];
     if (file) handlers.onImportMapData?.(file);
@@ -184,6 +185,7 @@ function editLockControls(documentRef) {
     "#export-map-image",
     "#export-map-data",
     "#export-map-geojson",
+    "#export-map-features-geojson",
     "#import-map-file",
     "#heightmap-image-file",
     "#heightmap-import-min",
