@@ -13334,3 +13334,27 @@ full 矩阵结果：
 后续：
 
 - 继续清点摘要指标、hover 面板和导出元数据，避免普通 UI 泄露开发专用信息；导出文件内部保留 id/checksum 时，应在 README 或格式说明中说明它们属于元数据。
+
+### 面板级懒加载试点：备注总览
+
+背景：
+
+- Element Plus 后续若迁移 `ElTable / ElTree / ElDialog`，不能把重组件静态塞进首屏。
+- `NotesPanel` 是低频管理浮层，行为边界清楚，适合作为动态 import 试点。
+
+修正：
+
+- `notes-panel.js` 移除对 `NotesPanel.vue` 的静态 import。
+- 面板仍在启动时注册浮层和维护 `panelState`，但组件实例在首次 `open()` 时通过 `import("../vue/components/NotesPanel.vue")` 加载并挂载。
+- 保留原有 `open / update / setSelectedNoteId / isOpen / unmount` API，runtime 调用方不需要调整。
+- 加载中显示“正在加载备注总览...”，加载失败时把错误写入 console，并在面板中显示失败提示。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；产物拆出 `NotesPanel-BcY2lGmD.js`，约 `4.83KB / 2.10KB gzip`。主入口变为 `index-DD9a5JYP.js`，约 `809.59KB / 241.05KB gzip`；共享 `object-resolver-DNc0fsN5.js` 约 `176.52KB / 65.03KB gzip` 并仍被首屏 preload，CSS 拆为 `index-oSmXNNEF.css` 与 `object-resolver-m12-100N.css`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：首屏资源中没有 `NotesPanel` chunk，打开“备注总览”后才加载 `NotesPanel-BcY2lGmD.js`；备注总览摘要正常显示 `备注 / 可定位 / 孤儿备注 / 筛选`，console/page error 为 `0`。
+
+后续：
+
+- 继续把低频管理浮层按同一模式动态 import，观察共享 chunk 是否还能继续拆小。
+- 进入 `UiObjectTable -> ElTable` 前，必须保留筛选、排序、选中、定位按钮、双击定位和选中自动滚入视口契约。

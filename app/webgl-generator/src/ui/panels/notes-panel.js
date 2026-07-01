@@ -1,6 +1,5 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
-import NotesPanel from "../vue/components/NotesPanel.vue";
 
 export function createNotesPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -52,10 +51,11 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
   });
   const root = documentRef.createElement("div");
   root.className = "vue-notes-panel-root";
+  root.textContent = "备注总览将在首次打开时加载。";
   record.body.replaceChildren(root);
-  const app = createApp(NotesPanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  let app = null;
+  let appPromise = null;
+  let disposed = false;
 
   return {
     open(map, selection, history) {
@@ -66,6 +66,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       panelState.open = true;
       panelState.version++;
       manager.open("notes-panel");
+      loadPanelApp();
     },
     update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
@@ -81,9 +82,34 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       return panelState.open;
     },
     unmount() {
-      app.unmount();
+      disposed = true;
+      app?.unmount();
+      app = null;
     }
   };
+
+  function loadPanelApp() {
+    ensurePanelApp().catch(error => {
+      root.textContent = "备注总览加载失败，请检查开发模式日志。";
+      documentRef.defaultView?.console.error?.(error);
+    });
+  }
+
+  function ensurePanelApp() {
+    if (app) return Promise.resolve(app);
+    if (appPromise) return appPromise;
+    root.textContent = "正在加载备注总览...";
+    appPromise = import("../vue/components/NotesPanel.vue").then(module => {
+      if (disposed) return null;
+      if (app) return app;
+      root.textContent = "";
+      app = createApp(module.default, {state: panelState, callbacks: panelCallbacks});
+      app.use(pinia);
+      app.mount(root);
+      return app;
+    });
+    return appPromise;
+  }
 }
 
 function noteExists(map, noteId) {
