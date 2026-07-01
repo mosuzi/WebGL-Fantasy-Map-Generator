@@ -68,6 +68,14 @@
             :checked="heightmapImportInvert"
             @change="heightmapImportInvert = $event"
           />
+          <UiSelectField
+            label="适应方式"
+            input-id="heightmap-import-fit"
+            class-name="heightmap-import-select"
+            :model-value="heightmapImportFit"
+            :options="heightmapFitOptions"
+            @update:model-value="heightmapImportFit = $event"
+          />
           <label class="secondary-action file-import-action heightmap-import-action" for="heightmap-image-file">导入灰度图</label>
           <input id="heightmap-image-file" type="file" accept="image/*" hidden />
         </div>
@@ -406,6 +414,7 @@ const temperatureSouthPole = ref(-15);
 const heightmapImportMin = ref(0);
 const heightmapImportMax = ref(100);
 const heightmapImportInvert = ref(false);
+const heightmapImportFit = ref("stretch");
 const cultureInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const religionInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
@@ -463,6 +472,11 @@ const terrainTemplates = Object.freeze([
   {value: "peninsula", label: "一侧大陆"},
   {value: "pangea", label: "盘古大陆"},
   {value: "archipelago", label: "群岛"}
+]);
+
+const heightmapFitOptions = Object.freeze([
+  {value: "stretch", label: "拉伸铺满"},
+  {value: "crop", label: "保持比例裁剪"}
 ]);
 
 const themes = Object.freeze([

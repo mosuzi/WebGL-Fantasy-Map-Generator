@@ -1155,11 +1155,15 @@ async function importHeightmapImage(state, documentRef, file) {
       loadingMessages: ["正在重建水陆与气候", "正在刷新地图面板"]
     });
     setGenerationLoading(documentRef, false);
-    setFileOperationStatus(documentRef, `已导入灰度高度图：${heightmap.source.filename || "本地图片"}，高度 ${heightmap.source.heightMin}-${heightmap.source.heightMax}`, ["heightmap-import-status"]);
+    setFileOperationStatus(documentRef, `已导入灰度高度图：${heightmap.source.filename || "本地图片"}，高度 ${heightmap.source.heightMin}-${heightmap.source.heightMax}，${heightmapFitLabel(heightmap.source.fitMode)}`, ["heightmap-import-status"]);
   } catch (error) {
     setGenerationLoading(documentRef, false);
     reportFileOperationError(documentRef, "灰度高度图导入失败", error, ["heightmap-import-status"]);
   }
+}
+
+function heightmapFitLabel(fitMode) {
+  return fitMode === "crop" ? "保持比例裁剪" : "拉伸铺满";
 }
 
 function clearStaleHeightmapImportStatus(state, documentRef, importGenerateId) {

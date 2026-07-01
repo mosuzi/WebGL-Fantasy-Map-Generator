@@ -2057,6 +2057,10 @@ select:disabled {
   text-align: right;
 }
 
+.heightmap-import-select {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
 .heightmap-import-check {
   display: flex;
   align-items: center;

@@ -747,6 +747,7 @@ http://127.0.0.1:5410
 122. Element Plus 迁移第五刀已完成：`UiSliderField` 改为 `ElSlider` 视觉层，同时保留隐藏原生 `input[type=range]` 桥，继续兼容旧 runtime 按 DOM id 读取 `.value` 和派发 `input/change`。构建产物验证中 `.ui-slider-el` 和隐藏 range 均为 `14` 个，可见原生 range 为 `0`；点击灰度最低高度滑轨后 `#heightmap-import-min.value` 和 output 同步为 `61`，点击单位页人口倍率滑轨后隐藏值为 `3.6`、显示为 `3.6x`，console/page error 为 `0`。体积增至约 `894.48KB JS / 280.29KB gzip`、`133.04KB CSS / 19.80KB gzip`。
 123. Element Plus 迁移第六刀已完成：`UiSwitchField` 改为 `ElSwitch` 视觉层，同时保留隐藏原生 checkbox 桥，普通开关和按钮式图层开关都继续支持整行点击。构建产物验证中 `.ui-switch-el` 和隐藏 checkbox 均为 `5` 个，可见原生 checkbox 为 `0`；点击灰度“反转黑白”后隐藏 checkbox、行选中态和 Element 选中态均为 `true`；点击“显示海底”图层按钮后隐藏 checkbox、按钮选中态和 Element 选中态均为 `true`，console/page error 为 `0`。体积增至约 `899.56KB JS / 281.46KB gzip`、`137.51KB CSS / 20.44KB gzip`。
 124. PNG 导出 overlay 合成第一刀已完成：`downloadCanvasPng()` 支持 `includeMapOverlays`，正式“导出图片”会先复制 WebGL canvas 到离屏 canvas，再按 DOM 坐标绘制右上角地图尺寸摘要和左下角比例尺。构建产物验证中下载 PNG 为 `1440x920`、约 `34KB`，比例尺标签为 `264.6 千米`，比例尺白线区域 `800` 个像素中有 `220` 个亮色像素，状态提示为“图片已导出。”，console/page error 为 `0`。
+125. 灰度高度图适应方式补充已完成：灰度导入区域新增“适应方式”下拉，支持“拉伸铺满”和“保持比例裁剪”。`createGrayscaleHeightmapFromImage()` 会在读取像素前按所选模式绘制到采样 canvas，`heightmap.source.fitMode` 记录模式，导入成功状态也显示当前适应方式。构建产物验证中，`96x24` 宽幅灰度 PNG 选择“保持比例裁剪”后导入，隐藏值为 `crop`，`map.heightmap.source.fitMode = crop`，状态为“已导入灰度高度图：wide-height-gradient.png，高度 0-100，保持比例裁剪”，console/page error 为 `0`。
 
 ## 约束
 

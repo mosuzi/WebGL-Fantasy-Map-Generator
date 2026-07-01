@@ -153,6 +153,7 @@ export function createSampledHeightmap(options, source) {
       heightMin: source.heightMin ?? 0,
       heightMax: source.heightMax ?? 100,
       invert: Boolean(source.invert),
+      fitMode: source.fitMode || "stretch",
       normalization: source.normalization || "image-min-max"
     }
   };

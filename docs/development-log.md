@@ -12407,3 +12407,27 @@ full 矩阵结果：
 后续：
 
 - 继续合成温度/降水/外交图例、城市/国家标签、资源图标和可选透明背景；浮动控制面板默认不应进入导出图，除非后续增加“导出当前屏幕”模式。
+
+### 灰度高度图适应方式补充
+
+背景：
+
+- 灰度高度图导入第一刀会把图片直接拉伸到当前地图尺寸；当用户导入宽幅或窄幅图时，地形容易被横向或纵向压扁。
+- 完整手动裁剪预览较重，但可以先提供常见的“保持比例居中裁剪”模式，避免默认强制变形。
+
+修正：
+
+- 灰度高度图区域新增“适应方式”下拉，选项为“拉伸铺满”和“保持比例裁剪”。
+- `createGrayscaleHeightmapFromImage()` 在读取像素前按 `fitMode` 绘制图片：`stretch` 保持旧行为，`crop` 按目标地图比例从图片中心裁剪后铺满采样 canvas。
+- `heightmap.source.fitMode` 保存适应方式，导入成功状态文案显示当前模式。
+- 编辑锁定列表加入 `#heightmap-import-fit`，导入或生成过程中不可改。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `902.89KB JS / 282.92KB gzip`、`137.57KB CSS / 20.45KB gzip`。
+- Playwright + 构建产物静态服务验证通过：合成 `96x24` 宽幅灰度 PNG，选择“保持比例裁剪”后导入；隐藏 `#heightmap-import-fit.value = crop`，`map.heightmap.template = grayscale-import`，`map.heightmap.source.fitMode = crop`，状态文案为“已导入灰度高度图：wide-height-gradient.png，高度 0-100，保持比例裁剪”，console/page error 为 `0`。
+
+后续：
+
+- 可继续补留白适应、手动裁剪框、导入预览缩略图和导入前陆地比例预估。

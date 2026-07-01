@@ -188,6 +188,7 @@ function editLockControls(documentRef) {
     "#heightmap-import-min",
     "#heightmap-import-max",
     "#heightmap-import-invert",
+    "#heightmap-import-fit",
     "[data-regenerate-kind]",
     "#seed-input",
     "#cells-input",

@@ -12,7 +12,8 @@ export async function createGrayscaleHeightmapFromImage(documentRef, file, optio
   canvas.height = height;
   const context = canvas.getContext("2d", {willReadFrequently: true});
   if (!context) throw new Error("当前浏览器无法读取图片像素");
-  context.drawImage(image, 0, 0, width, height);
+  const fitMode = normalizeFitMode(settings.fitMode);
+  drawImageToHeightmapCanvas(context, image, width, height, fitMode);
   const imageData = context.getImageData(0, 0, width, height);
   const brightness = new Float32Array(width * height);
   const stats = readBrightness(imageData.data, brightness);
@@ -33,6 +34,7 @@ export async function createGrayscaleHeightmapFromImage(documentRef, file, optio
     heightMin: minHeight,
     heightMax: maxHeight,
     invert,
+    fitMode,
     normalization: "image-min-max",
     sampleHeight: point => {
       const x = clampInteger(Math.round(point[0]), 0, width - 1);
@@ -48,7 +50,35 @@ export function readHeightmapImportSettings(documentRef) {
   const minHeight = readNumberInput(documentRef, "heightmap-import-min", 0);
   const maxHeight = readNumberInput(documentRef, "heightmap-import-max", 100);
   const invert = Boolean(documentRef.getElementById("heightmap-import-invert")?.checked);
-  return {minHeight, maxHeight, invert};
+  const fitMode = documentRef.getElementById("heightmap-import-fit")?.value || "stretch";
+  return {minHeight, maxHeight, invert, fitMode};
+}
+
+function drawImageToHeightmapCanvas(context, image, width, height, fitMode) {
+  if (fitMode !== "crop") {
+    context.drawImage(image, 0, 0, width, height);
+    return;
+  }
+  const imageWidth = Math.max(1, image.width || image.naturalWidth || width);
+  const imageHeight = Math.max(1, image.height || image.naturalHeight || height);
+  const targetRatio = width / height;
+  const imageRatio = imageWidth / imageHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+  let sourceWidth = imageWidth;
+  let sourceHeight = imageHeight;
+  if (imageRatio > targetRatio) {
+    sourceWidth = imageHeight * targetRatio;
+    sourceX = (imageWidth - sourceWidth) / 2;
+  } else if (imageRatio < targetRatio) {
+    sourceHeight = imageWidth / targetRatio;
+    sourceY = (imageHeight - sourceHeight) / 2;
+  }
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+}
+
+function normalizeFitMode(value) {
+  return value === "crop" ? "crop" : "stretch";
 }
 
 async function loadImage(file, documentRef) {
