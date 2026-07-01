@@ -814,6 +814,7 @@ http://127.0.0.1:5410
 189. 测量对象与路线贴合计划已落文档：`docs/task-notes/measurement-rulers-plan.md` 对照原版 `Rulers / Ruler / Opisometer / RouteOpisometer / Planimeter`，记录了原版可保存测量集合、字符串序列化、曲线采样优化、路线 cell 贴合和面积尺语义，并为 WebGL 版拆出 `map.measurements` 数据契约、保存临时测量为对象、测量图层化、路线贴合、曲线尺和面积尺细化四阶段。后续不应直接把当前临时 `state.measurement.points` 扩成长期数据，而应先建立保存对象与完整地图 JSON 往返。
 190. 视觉主题与样式预设计划已落文档：`docs/task-notes/visual-theme-preset-plan.md` 对照原版 `style-presets.js`、`style.js` 和 `public/styles/*.json`，记录了原版 12 个系统预设、selector/attribute JSON、自定义 localStorage 预设和高度色带语义，并为 WebGL 版明确不直接兼容 SVG selector，而是走 `map.visualTheme` 与 renderer/overlay theme token。后续可先做只读轻量主题预设，再做主题导入导出和少量颜色级编辑；纹理、滤镜、字体和高级后处理暂缓。
 191. 市场、商品与贸易流计划已落文档：`docs/task-notes/economy-market-trade-plan.md` 对照原版 goods editor、markets overview、trade animation editor 和 draw-trade-animation，记录了商品产量/库存/价格、市场覆盖和交易动画语义；WebGL 版已有 `pack.goods / pack.markets / pack.deals` 生成数据，但用户侧应先做只读经济总览和导出诊断，再进入轻量编辑、静态贸易流和按需动画，市场归属刷子和生产链编辑后置。
+192. 军事对象与战斗事件计划已落文档：`docs/task-notes/military-battle-plan.md` 对照原版 regiments overview、regiment editor 和 battle screen，记录了军团筛选/导出、军团编辑、战斗类型推断、士气阶段、伤亡应用和备注事件链路；WebGL 版已有军事生成和国家详情军力摘要，但后续应先做只读军团总览与军事图层，再做军团轻量编辑、战斗事件记录和可撤销战斗模拟。
 
 ## 约束
 

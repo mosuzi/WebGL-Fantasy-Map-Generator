@@ -18,7 +18,7 @@
 | 高度图工作台增强 | `source/Fantasy-Map-Generator/public/modules/ui/heightmap-editor.js`，`source/Fantasy-Map-Generator/src/controllers/view-3d.ts` | 当前已有高度编辑、灰度图导入、黑白反转和适应方式；导入预览、色板量化、亮度/色相/FMG 色带自动映射计划已落到 `docs/task-notes/heightmap-image-converter-plan.md`；尚未实现彩色高度图识别、3D 地形预览或 OBJ。 | 复杂 | 先按计划做懒加载导入预览和轻量色板量化；3D/OBJ 单独规划。 |
 | 样式预设与视觉风格编辑 | `source/Fantasy-Map-Generator/public/modules/ui/style.js`、`style-presets.js`、`public/styles/*.json` | 当前是固定 WebGL 风格加少量图层/视图开关；轻量主题 token、预设、导入导出和颜色级编辑计划已落到 `docs/task-notes/visual-theme-preset-plan.md`；尚未实现纹理、滤镜、字体、晕影和色带编辑。 | 复杂 | 先做只读轻量主题预设；完整样式系统和原版 SVG selector 兼容暂缓。 |
 | 市场、商品与贸易动画 | `source/Fantasy-Map-Generator/src/controllers/goods-editor.ts`、`markets-overview.ts`、`trade-animation-editor.ts`、`draw-trade-animation.ts` | 当前已生成经济、资源和贸易数据；只读经济总览、导出诊断、轻量编辑、贸易流可视化和市场归属编辑计划已落到 `docs/task-notes/economy-market-trade-plan.md`；用户侧还没有完整 goods/market 面板和贸易流动画。 | 复杂 | 先做只读经济总览和导出诊断；动画和市场归属编辑后置。 |
-| 战斗模拟与军事事件 | `source/Fantasy-Map-Generator/public/modules/ui/battle-screen.js`、`regiments-overview.js`、`regiment-editor.js` | 当前有军事生成，但没有军团地图交互、战斗推演、战场 marker 和战斗注记链路。 | 复杂 | 先做军事对象/事件数据契约，再考虑 UI。 |
+| 战斗模拟与军事事件 | `source/Fantasy-Map-Generator/public/modules/ui/battle-screen.js`、`regiments-overview.js`、`regiment-editor.js` | 当前有军事生成和国家详情军力摘要；只读军团总览、军事图层、军团编辑、战斗事件和战斗模拟计划已落到 `docs/task-notes/military-battle-plan.md`；尚未有军团地图交互、战斗推演、战场 marker 和战斗注记链路。 | 复杂 | 先做只读军团总览和军事图层；战斗事件和模拟后置。 |
 
 ## 长期复杂系统
 
