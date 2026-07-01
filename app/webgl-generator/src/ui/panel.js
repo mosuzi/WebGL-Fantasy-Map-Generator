@@ -168,6 +168,7 @@ function editLockControls(documentRef) {
     "#random-seed",
     "#open-generation-panel",
     "#open-development-panel",
+    "#toggle-measurement",
     "#fit-view",
     "#open-height-panel",
     "#open-state-panel",

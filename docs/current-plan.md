@@ -749,6 +749,7 @@ http://127.0.0.1:5410
 124. PNG 导出 overlay 合成第一刀已完成：`downloadCanvasPng()` 支持 `includeMapOverlays`，正式“导出图片”会先复制 WebGL canvas 到离屏 canvas，再按 DOM 坐标绘制右上角地图尺寸摘要和左下角比例尺。构建产物验证中下载 PNG 为 `1440x920`、约 `34KB`，比例尺标签为 `264.6 千米`，比例尺白线区域 `800` 个像素中有 `220` 个亮色像素，状态提示为“图片已导出。”，console/page error 为 `0`。
 125. 灰度高度图适应方式补充已完成：灰度导入区域新增“适应方式”下拉，支持“拉伸铺满”和“保持比例裁剪”。`createGrayscaleHeightmapFromImage()` 会在读取像素前按所选模式绘制到采样 canvas，`heightmap.source.fitMode` 记录模式，导入成功状态也显示当前适应方式。构建产物验证中，`96x24` 宽幅灰度 PNG 选择“保持比例裁剪”后导入，隐藏值为 `crop`，`map.heightmap.source.fitMode = crop`，状态为“已导入灰度高度图：wide-height-gradient.png，高度 0-100，保持比例裁剪”，console/page error 为 `0`。
 126. 原版功能巡视积压已落文档：`docs/task-notes/source-feature-backlog.md` 记录了对照 source 后的后续候选，包括测量工具、对象注记、名称库编辑器、分层 GeoJSON、高度图工作台增强、样式预设、市场贸易动画、军事事件、纹章和子地图/地图变换。建议优先级为测量工具、对象注记、名称库编辑器、分层 GeoJSON；特别复杂系统先保留规划，不直接塞入当前批次。
+127. 测量工具第一刀已完成：地图工具栏新增“测量”按钮，进入测量模式后左键点击地图添加测量点，overlay 用 SVG 绘制折线和节点，并按当前单位偏好显示折线总长；“清除”会移除当前测量点，“退出测量”隐藏 overlay。测量模式通过 canvas capture 阶段拦截点击，避免触发对象选择或拖拽。构建产物验证中，连续点击两点后生成 `2` 个点、`1` 条线，总长显示 `1,085.4 千米`，`selection.object = null`；清除后点线为 `0`，退出后 overlay 隐藏，console/page error 为 `0`。
 
 ## 约束
 

@@ -6,7 +6,7 @@
 
 | 候选功能 | 原版入口 | 当前缺口 | 复杂度 | 建议 |
 |---|---|---|---|---|
-| 测量工具：直尺、曲线尺、路线尺、面积尺 | `source/Fantasy-Map-Generator/public/modules/ui/measurers.js`，`Ruler / Opisometer / RouteOpisometer / Planimeter` | 当前只有比例尺，没有用户可放置、编辑或保存的测距/测面积对象。 | 中等 | 下一批可立即实现轻量版：临时测距、折线距离、面积多边形和清除按钮。 |
+| 测量工具：直尺、曲线尺、路线尺、面积尺 | `source/Fantasy-Map-Generator/public/modules/ui/measurers.js`，`Ruler / Opisometer / RouteOpisometer / Planimeter` | 已完成临时折线测距第一刀；尚未支持面积尺、路线贴合、保存测量对象和编辑节点。 | 中等 | 下一步补面积多边形、节点拖拽和保存/导出。 |
 | 对象注记 | `source/Fantasy-Map-Generator/public/modules/ui/notes-editor.js`，`editNotes` | 当前可编辑标签、marker 和对象名称，但不能给国家、城市、河流、marker、军团等绑定长文本说明。 | 中等 | 可先做纯文本/Markdown 轻量版，富文本编辑器和 AI 辅助暂缓。 |
 | 名称库编辑器 | `source/Fantasy-Map-Generator/src/controllers/namesbase-editor.ts` | 当前有中文命名策略和标签管理，但用户不能维护名称库、权重或文化绑定。 | 中等 | 与当前中文命名优化方向贴合，建议作为命名系统下一阶段。 |
 | 分层 GeoJSON 导出 | `source/Fantasy-Map-Generator/public/modules/io/export.js`，`saveGeoJsonRoutes / Rivers / Markers / Zones` | 当前只导出 pack cell Polygon FeatureCollection；道路、河流、marker、zone 尚不能单独导出为地理数据。 | 中等 | 可先做路线、河流、marker 三类分层导出；SVG、瓦片 zip 暂缓。 |

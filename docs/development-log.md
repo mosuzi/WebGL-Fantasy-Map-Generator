@@ -12449,3 +12449,27 @@ full 矩阵结果：
 后续：
 
 - 下一批若继续做用户工具，建议先从测量工具开始；它能直接复用当前比例尺、相机和世界坐标换算，并且不要求先补全复杂 source 视觉 parity。
+
+### 测量工具第一刀
+
+背景：
+
+- 原版 FMG 有 `Ruler / Opisometer / RouteOpisometer / Planimeter` 等测量工具；当前 WebGL 版只有比例尺，用户无法在地图上临时测距。
+- 第一刀只做临时折线距离，不写入地图数据、不进入撤销栈，避免和对象编辑器耦合。
+
+修正：
+
+- 地图工具栏新增“测量”按钮，进入测量模式后按钮变为“退出测量”，body 增加 `measurement-active`。
+- 新增 `#measurement-overlay`，使用 SVG 绘制测量折线和节点，并显示“测量 / 总长 / 清除”读数卡。
+- 测量模式下 canvas capture 阶段拦截左键点击，使用 `renderer.screenToWorld()` 添加测量点，避免触发对象选择或拖拽。
+- 距离按当前单位偏好用 `formatDisplayDistance()` 显示；相机变化、适配视图和单位变化都会刷新测量 overlay。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `905.98KB JS / 284.00KB gzip`、`138.80KB CSS / 20.63KB gzip`。
+- Playwright + 构建产物静态服务验证通过：点击“测量”后 `aria-pressed=true`，点击地图两点后 `.measurement-point = 2`、`.measurement-path = 1`，summary 为 `2 点 / 总长 1,085.4 千米`，`selection.object = null`；点击“清除”后点线为 `0`、按钮 disabled；点击“退出测量”后 overlay hidden，console/page error 为 `0`。
+
+后续：
+
+- 补面积测量、节点拖拽、删除最后一点、路线贴合测量、保存测量对象和导出测量结果。

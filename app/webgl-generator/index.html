@@ -15,6 +15,7 @@
         <div id="vue-state-root"></div>
         <div class="map-toolbar" aria-label="地图工具">
           <button id="open-generation-panel" class="primary-action" type="button">控制面板</button>
+          <button id="toggle-measurement" class="secondary-action" type="button" aria-pressed="false">测量</button>
           <button id="open-development-panel" class="secondary-action debug-action" type="button" hidden>开发模式</button>
         </div>
         <div class="map-badge" id="map-badge">等待生成</div>
@@ -27,6 +28,14 @@
         <div class="map-scale-bar" id="map-scale-bar" aria-label="地图比例尺" hidden>
           <div class="map-scale-line"></div>
           <div class="map-scale-label">比例尺</div>
+        </div>
+        <div class="measurement-overlay" id="measurement-overlay" hidden>
+          <svg id="measurement-svg" class="measurement-svg" aria-hidden="true"></svg>
+          <div class="measurement-readout">
+            <strong>测量</strong>
+            <span id="measurement-summary">点击地图添加起点</span>
+            <button id="measurement-clear" type="button">清除</button>
+          </div>
         </div>
       </section>
     </main>

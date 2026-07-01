@@ -9,6 +9,7 @@ import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
+import {formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
@@ -77,6 +78,11 @@ export function createGeneratorApp(documentRef) {
       type: "mines",
       markerId: null,
       lastPackCell: null
+    },
+    measurement: {
+      active: false,
+      points: [],
+      pointer: null
     },
     lastEditRefresh: null,
     selectionStore: null,
@@ -751,7 +757,10 @@ export function createGeneratorApp(documentRef) {
   });
   state.panels.river = riverPanel;
   const renderer = new PlaceholderMapRenderer(canvas, () => {
-    if (state.map) updateRuntimePanel(documentRef, state);
+    if (state.map) {
+      updateRuntimePanel(documentRef, state);
+      updateMeasurementOverlay(state, documentRef);
+    }
   }, pick => {
     state.pick = pick;
     updatePickPanel(documentRef, state);
@@ -792,6 +801,7 @@ export function createGeneratorApp(documentRef) {
   state.selectionStore = selectionStore;
   state.editRefreshScheduler = createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel});
   applyControlPreferencesToRenderer(documentRef, renderer);
+  bindMeasurementTool(canvas, state, documentRef);
   bindHeightEditing(canvas, state, documentRef);
   bindStateEditing(canvas, state, documentRef);
   bindProvinceEditing(canvas, state, documentRef);
@@ -807,6 +817,7 @@ export function createGeneratorApp(documentRef) {
     onFitView: () => {
       renderer.fitToView();
       updateRuntimePanel(documentRef, state);
+      updateMeasurementOverlay(state, documentRef);
     },
     onShowOceanHeight: showOceanHeight => {
       renderer.setViewOptions({showOceanHeight});
@@ -826,6 +837,7 @@ export function createGeneratorApp(documentRef) {
     onUnitPreferences: () => {
       updateRuntimePanel(documentRef, state);
       updatePickPanel(documentRef, state);
+      updateMeasurementOverlay(state, documentRef);
     },
     onClimateControls: () => {
       applyClimateControls(state, documentRef);
@@ -1015,6 +1027,8 @@ function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}
   state.markerEdit.type = "mines";
   state.markerEdit.markerId = null;
   state.markerEdit.lastPackCell = null;
+  state.measurement.points = [];
+  state.measurement.pointer = null;
   state.lastEditRefresh = null;
   if (loadingMessages[0]) setGenerationLoading(documentRef, true, loadingMessages[0]);
   state.renderer.loadMap(state.map);
@@ -1034,6 +1048,7 @@ function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}
   updateEditingInteractionLock(state, documentRef);
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
+  updateMeasurementOverlay(state, documentRef);
 }
 
 function scheduleAfterPaint(documentRef, callback) {
@@ -1661,6 +1676,133 @@ function shouldOpenReligionPanelForSelection(state) {
 
 function shouldSwitchDiplomacySubjectForSelection(state) {
   return state.renderer?.getStats?.().colorMode === "diplomacy";
+}
+
+function bindMeasurementTool(canvas, state, documentRef) {
+  const toggle = documentRef.getElementById("toggle-measurement");
+  const clear = documentRef.getElementById("measurement-clear");
+  toggle?.addEventListener("click", () => {
+    state.measurement.active = !state.measurement.active;
+    if (!state.measurement.active) state.measurement.pointer = null;
+    updateMeasurementOverlay(state, documentRef);
+  });
+  clear?.addEventListener("click", () => {
+    state.measurement.points = [];
+    updateMeasurementOverlay(state, documentRef);
+  });
+
+  canvas.addEventListener("pointerdown", event => {
+    if (!state.measurement.active || event.button !== 0) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    state.measurement.pointer = {
+      id: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false
+    };
+    capturePointer(canvas, event.pointerId);
+  }, true);
+
+  canvas.addEventListener("pointermove", event => {
+    const pointer = state.measurement.pointer;
+    if (!state.measurement.active || !pointer || pointer.id !== event.pointerId) return;
+    if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 4) pointer.moved = true;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+
+  canvas.addEventListener("pointerup", event => {
+    const pointer = state.measurement.pointer;
+    if (!state.measurement.active || !pointer || pointer.id !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    state.measurement.pointer = null;
+    releasePointer(canvas, event.pointerId);
+    if (pointer.moved || !state.map || !state.renderer) return;
+    const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+    state.measurement.points.push({
+      x: clampMeasurementValue(point.x, 0, state.map.metadata.graphWidth),
+      y: clampMeasurementValue(point.y, 0, state.map.metadata.graphHeight)
+    });
+    updateMeasurementOverlay(state, documentRef);
+  }, true);
+
+  canvas.addEventListener("pointercancel", event => {
+    const pointer = state.measurement.pointer;
+    if (!pointer || pointer.id !== event.pointerId) return;
+    state.measurement.pointer = null;
+    releasePointer(canvas, event.pointerId);
+  }, true);
+}
+
+function updateMeasurementOverlay(state, documentRef) {
+  const overlay = documentRef.getElementById("measurement-overlay");
+  const svg = documentRef.getElementById("measurement-svg");
+  const summary = documentRef.getElementById("measurement-summary");
+  const clear = documentRef.getElementById("measurement-clear");
+  const toggle = documentRef.getElementById("toggle-measurement");
+  const canvas = documentRef.getElementById("map-canvas");
+  if (!overlay || !svg || !summary || !clear || !toggle || !canvas) return;
+
+  const active = Boolean(state.measurement.active);
+  const points = state.measurement.points || [];
+  documentRef.body.classList.toggle("measurement-active", active);
+  toggle.classList.toggle("active", active);
+  toggle.setAttribute("aria-pressed", active ? "true" : "false");
+  toggle.textContent = active ? "退出测量" : "测量";
+  overlay.hidden = !active;
+  clear.disabled = points.length === 0;
+  svg.replaceChildren();
+  if (!active) return;
+
+  const rect = canvas.getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
+  const screenPoints = points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+  if (screenPoints.length > 1) {
+    const polyline = documentRef.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    polyline.setAttribute("class", "measurement-path");
+    polyline.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
+    svg.append(polyline);
+  }
+  for (const point of screenPoints) {
+    const circle = documentRef.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("class", "measurement-point");
+    circle.setAttribute("cx", roundMeasurementDisplay(point.x));
+    circle.setAttribute("cy", roundMeasurementDisplay(point.y));
+    circle.setAttribute("r", "4.5");
+    svg.append(circle);
+  }
+
+  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const distance = measurementDistance(points);
+  summary.textContent = measurementSummary(points.length, distance, units);
+}
+
+function measurementDistance(points) {
+  let total = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    total += Math.hypot(current.x - previous.x, current.y - previous.y);
+  }
+  return total;
+}
+
+function measurementSummary(pointCount, distance, units) {
+  if (pointCount === 0) return "点击地图添加起点";
+  if (pointCount === 1) return "继续点击添加测量点";
+  return `${pointCount} 点 / 总长 ${formatDisplayDistance(distance, units)}`;
+}
+
+function clampMeasurementValue(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, number));
+}
+
+function roundMeasurementDisplay(value) {
+  return Math.round(value * 10) / 10;
 }
 
 function bindHeightEditing(canvas, state, documentRef) {
