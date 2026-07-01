@@ -120,10 +120,9 @@
                 <polygon class="earth-canvas-footprint" :points="canvasFootprintPoints" />
               </svg>
               <div class="wind-band-column" role="group" aria-label="大气风带">
-                <button
+                <ElButton
                   v-for="(band, index) in windBandOptions"
                   :key="band.value"
-                  type="button"
                   class="wind-band-button"
                   :data-wind-band="index"
                   :data-wind-angle="windBands[index]"
@@ -132,19 +131,18 @@
                   @click="cycleWindBand(index)"
                 >
                   <span class="wind-band-arrow" aria-hidden="true">{{ windDirectionArrow(windBands[index]) }}</span>
-                </button>
+                </ElButton>
               </div>
             </div>
             <div class="earth-projection-controls">
-              <button
+              <ElButton
                 id="climate-latitude-toggle"
-                type="button"
                 class="climate-mode-toggle"
                 :aria-pressed="climateLatitudeMode === 'custom' ? 'true' : 'false'"
                 @click="toggleLatitudeMode"
               >
                 {{ climateLatitudeMode === "custom" ? "手动纬度" : "自动纬度" }}
-              </button>
+              </ElButton>
               <div class="earth-latitude-readout">{{ latitudeBandLabel }}</div>
             </div>
           </div>

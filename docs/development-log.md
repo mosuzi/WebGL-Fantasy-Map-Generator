@@ -13563,3 +13563,26 @@ full 矩阵结果：
 后续：
 
 - 继续迁移气候风向按钮、确认弹窗或文件操作按钮时，应先检查组件库默认字段名和现有业务字段是否碰撞；尤其是 `children / value / label / disabled` 这类通用字段。
+
+### Element Plus 气候按钮迁移
+
+背景：
+
+- 控制面板气候投影旁仍保留原生风带箭头按钮和纬度模式切换按钮。
+- 这两类按钮属于特殊几何控件：风带按钮需要对齐地球投影纬度带，纬度按钮需要保留旧 runtime 读取的 `id` 和 `aria-pressed`。
+
+修正：
+
+- `ControlPanel.vue` 中风带按钮改为 `ElButton`，继续保留 `data-wind-band`、`data-wind-angle`、标题和点击轮询风向逻辑。
+- `climate-latitude-toggle` 改为 `ElButton`，继续保留 `id`、`aria-pressed` 和自动/手动纬度切换逻辑。
+- CSS 更新为 `.wind-band-button.el-button` 和 `.climate-mode-toggle.el-button` 覆写，保留小尺寸风带按钮、投影旁布局和手动状态高亮。
+- 隐藏 input 桥继续保留，`atmosphere-winds`、`climate-latitude-mode` 等仍由旧 runtime 读取。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `531.46KB / 160.19KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：气候风带按钮 `6` 个，旧原生风带按钮 `0`，纬度切换按钮 `1` 个且为 Element Button；点击首个风带后 `atmosphere-winds` 从 `225,45,225,315,135,315` 变为 `315,45,225,315,135,315`，首个箭头变为 `↖`；点击纬度切换后 `climate-latitude-mode = custom`、`aria-pressed = true`、投影进入 manual 状态，console/page error 为 `0`。
+
+后续：
+
+- 控制面板可见原生按钮已进一步减少；剩余隐藏 input / select / checkbox 多数是兼容旧 runtime 的桥，不应为了“全量替换”盲目删除。

@@ -227,6 +227,7 @@
 - Element Plus 第九批已迁移 `UiActionDock`，对象二级操作按钮和二级浮层关闭按钮使用 Element Button，保留外部点击收起和 Element popper 豁免。
 - Element Plus 第十批已迁移 `UiLayerToggleButton` 和图层页内联悬停信息按钮，保留 `data-layer / id / aria-pressed` 旧 runtime 契约。
 - Element Plus 第十一批已迁移文化/宗教树状总览入口、关闭按钮和节点按钮，保留树状浮层拖动、节点连线与节点选择；同时修正 `UiObjectTable` 对业务 `children` 字段和 Element Table 树表默认字段的碰撞。
+- Element Plus 第十二批已迁移气候投影风带箭头和自动/手动纬度切换按钮，保留风带位置对齐、点击轮询风向和隐藏 input 桥。
 - Element Plus 组件迁移前置拆包已继续推进：备注、名称库、路线、河流、标签、外交、城市、文化、宗教、资源标记、国家、省份、高度编辑和对象详情浮层均已改为首次打开时动态加载；表格迁移后继续观察共享 chunk 体积，后续树状总览或弹窗迁移也应优先保持按需加载。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。
