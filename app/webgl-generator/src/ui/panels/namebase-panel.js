@@ -30,7 +30,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
       panelState.selectedNamebaseId = row.id;
     },
     onExport: () => callbacks.onExport?.(),
-    onImport: file => callbacks.onImport?.(file)
+    onImport: file => callbacks.onImport?.(file),
+    onClearUser: () => callbacks.onClearUser?.()
   };
 
   const record = manager.registerPanel("namebase-panel", {

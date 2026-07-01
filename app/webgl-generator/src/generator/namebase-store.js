@@ -75,6 +75,19 @@ export function importNamebaseDocument(map, document, {filename = ""} = {}) {
   };
 }
 
+export function clearUserNamebases(map) {
+  if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {removed: 0, total: 0};
+  const removed = map.namebases.bases.length;
+  map.namebases.bases = [];
+  map.namebases.metadata = {
+    ...(map.namebases.metadata || {}),
+    bases: 0,
+    imported: 0,
+    updatedAt: new Date().toISOString()
+  };
+  return {removed, total: 0};
+}
+
 export function getNamebaseSummariesForMap(map, options = {}) {
   const builtinRows = getBuiltinNamebaseSummaries(options).map(row => ({
     ...row,
