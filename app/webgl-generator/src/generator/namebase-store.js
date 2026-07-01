@@ -174,6 +174,34 @@ export function getNamebaseSummariesForMap(map, options = {}) {
   return [...builtinRows, ...customRows].map((row, index) => ({...row, index}));
 }
 
+export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", salt = 0} = {}) {
+  const values = [...new Set(normalizeSourceValues(source))];
+  if (!values.length) return [];
+  const chain = createPreviewChain(values);
+  const rng = createPreviewRng(`${seed}|${salt}|${values.join("|")}`);
+  const result = [];
+  const seen = new Set();
+  const maxAttempts = Math.max(80, count * 24);
+  for (let attempt = 0; result.length < count && attempt < maxAttempts; attempt += 1) {
+    const candidate = attempt % 4 === 3
+      ? recombinePreviewName(values, rng)
+      : generatePreviewName(chain, rng);
+    const normalized = normalizePreviewName(candidate);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
+  for (const value of values) {
+    if (result.length >= count) break;
+    const normalized = normalizePreviewName(value);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
 function ensureNamebaseStore(map) {
   if (!map.namebases || typeof map.namebases !== "object") {
     map.namebases = {
@@ -221,6 +249,80 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
 function normalizeSourceValues(source) {
   const values = Array.isArray(source) ? source : String(source || "").split(/[,，\n\r]+/u);
   return values.map(value => String(value || "").trim()).filter(Boolean);
+}
+
+function createPreviewChain(values) {
+  const starts = [];
+  const startsByLength = new Map();
+  const lengths = [];
+  const transitions = new Map();
+  for (const value of values) {
+    const chars = Array.from(value).filter(char => !/\s/u.test(char));
+    if (!chars.length) continue;
+    const length = Math.max(1, Math.min(chars.length, 8));
+    starts.push(chars[0]);
+    lengths.push(length);
+    if (!startsByLength.has(length)) startsByLength.set(length, []);
+    startsByLength.get(length).push(chars[0]);
+    for (let index = 0; index < chars.length - 1; index += 1) {
+      const current = chars[index];
+      const next = chars[index + 1];
+      if (!transitions.has(current)) transitions.set(current, []);
+      transitions.get(current).push(next);
+    }
+  }
+  return {starts, startsByLength, lengths, transitions};
+}
+
+function generatePreviewName(chain, rng) {
+  if (!chain.starts.length) return "";
+  const targetLength = pickPreviewValue(chain.lengths, rng) || 1;
+  const starts = chain.startsByLength.get(targetLength) || chain.starts;
+  const chars = [pickPreviewValue(starts, rng)];
+  while (chars.length < targetLength) {
+    const options = chain.transitions.get(chars[chars.length - 1]) || chain.starts;
+    chars.push(pickPreviewValue(options, rng));
+  }
+  return chars.join("");
+}
+
+function recombinePreviewName(values, rng) {
+  if (values.length < 2) return values[0] || "";
+  const left = Array.from(pickPreviewValue(values, rng));
+  const right = Array.from(pickPreviewValue(values, rng));
+  if (!left.length || !right.length) return "";
+  const leftCut = Math.max(1, Math.ceil(left.length * (0.35 + rng() * 0.45)));
+  const rightStart = Math.max(0, Math.floor(right.length * rng() * 0.65));
+  return [...left.slice(0, leftCut), ...right.slice(rightStart)].join("");
+}
+
+function normalizePreviewName(value) {
+  return Array.from(String(value || "").replace(/\s+/gu, "")).slice(0, 12).join("");
+}
+
+function pickPreviewValue(values, rng) {
+  if (!values.length) return "";
+  return values[Math.floor(rng() * values.length)] || values[0] || "";
+}
+
+function createPreviewRng(seed) {
+  let state = hashPreviewSeed(seed) || 0x6d2b79f5;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashPreviewSeed(value) {
+  let hash = 2166136261;
+  for (const char of String(value || "")) {
+    hash ^= char.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function namebaseExportRecord(base) {

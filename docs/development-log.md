@@ -13694,3 +13694,29 @@ full 矩阵结果：
 验证：
 
 - 文档校准，无代码变更；已对照 `app/webgl-generator/src/runtime/map-file-io.js` 的 `stateFeatures()`、`provinceFeatures()` 和控制面板 `feature-export-layer-state / province` 开关。
+
+### 名称库样例生成预览第一刀
+
+背景：
+
+- 名称库总览已经能导入、导出、复制、重命名、编辑和清理用户词池，但“样例生成预览”仍停留在规划文档中。
+- 用户此前关注中文命名质量，预览能力可以先帮助检查词池气质，但不能直接改变当前地图对象名称，也不能绕过后续绑定设计。
+
+修正：
+
+- `namebase-store.js` 新增 `createNamebaseGeneratedExamples()`，使用本项目自己的轻量字符链和词根重组生成候选名称。
+- 预览函数只读取 source 数组，使用 seed/salt 生成稳定但可换组的候选，不写入 `map`，不接入 `createChineseNameGenerator()`。
+- 字符链按样本长度分桶选择起始字符，避免二字古国名首字被一字长度抽中后形成怪异单字候选。
+- `NamebasePanel.vue` 的样例区域新增“生成预览 / 换一组”按钮；初始仍显示原 source 样例，点击后展示临时生成候选。
+- 预览正文改用 `.namebase-panel-preview-text`，避免 Element Button 内部 span 被样式和自动化选择器误伤。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `510.57KB / 150.49KB gzip`，`NamebasePanel` chunk 约 `7.13KB / 2.82KB gzip`，`namebase-store` chunk 约 `25.20KB / 10.31KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：打开控制面板管理 tab 的名称库浮层，行数为 `61`；初始标题为“样例”、按钮为“生成预览”，初始文本为 `齐、晋、秦、楚...`；点击后标题为“生成预览”、按钮变为“换一组”，生成文本如 `单、轸、滕、宿徐...`；再次点击会换一组候选；checksum 从 `72294771` 到 `72294771` 保持稳定，console/page error 为 `0`。
+
+后续：
+
+- 下一步若继续推进名称库，应先实现绑定状态和失效引用显示，再让全局 `stateRoot / place / hydro` 绑定影响后续重新生成。
+- 若要更接近原版 Namesbase Editor，可在不依赖 `source/` 全局状态的前提下追加纯函数 Markov chain，但仍应把自动重命名留到显式命令和历史栈之后。

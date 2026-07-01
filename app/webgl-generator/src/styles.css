@@ -3394,7 +3394,21 @@ input.ui-switch-native {
   font-size: 12px;
 }
 
-.namebase-panel-preview span {
+.namebase-panel-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.namebase-panel-preview-header .secondary-action {
+  width: auto;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.namebase-panel-preview-text {
   overflow-wrap: anywhere;
 }
 

@@ -805,6 +805,7 @@ http://127.0.0.1:5410
 180. Element Plus 顶部地图工具栏迁移已完成：`MapToolbar.vue` 在 `createGeneratorApp()` 之前挂载到原 `#map-toolbar` 容器，控制面板、测量和开发模式入口均改为 `UiButton / ElButton`，但保留原 `id / aria-pressed / hidden / debug-action` 契约，旧 runtime 仍按 DOM id 绑定事件和切换文案。构建产物主入口约 `533.45KB / 160.03KB gzip`，HTML gzip 从约 `1.45KB` 降到 `1.34KB`。构建产物烟测中 toolbar 的 Element Button 为 `3` 个、旧原生 toolbar button 为 `0`；普通模式开发按钮保持 hidden，测量可切到“退出测量”并显示 overlay；`?debug=1` 下按钮显示为“调试信息”、`aria-pressed=true` 且开发面板打开，console/page error 为 `0`。
 181. Element Plus 测量读数按钮迁移已完成：新增 `MeasurementReadout.vue`，在 runtime 绑定前挂载到 `#measurement-readout`，测量“导出 / 清除”改为 `UiButton / ElButton`，继续保留 `measurement-summary / measurement-export / measurement-clear` id 契约。构建产物主入口约 `533.97KB / 160.17KB gzip`，HTML gzip 降到约 `1.24KB`。构建产物烟测中 readout 的 Element Button 为 `2` 个、旧原生 readout button 为 `0`；添加两点后导出 `webgl-generator-measurement` JSON，`pointCount = 2`，清除后点数和 SVG 点为 `0` 且导出/清除重新禁用，console/page error 为 `0`。
 182. 原版功能积压 GeoJSON 状态已校准：`docs/task-notes/source-feature-backlog.md` 现在明确国家和省份要素 GeoJSON 第一刀已实现，当前形态是 pack cell polygon 集合型 `MultiPolygon`；后续缺口收窄为国家/省份拓扑 dissolve、范围选择和更完整属性映射。
+183. 名称库样例生成预览第一刀已完成：`namebase-store.js` 新增本项目自己的轻量字符链和重组式预览函数，名称库总览面板可对当前选中词池点击“生成预览 / 换一组”查看临时候选；该能力只读 source，不写 `map.namebases`，也不接入真实 `createChineseNameGenerator()`。为避免二字古国名被截成怪异单字，预览链按样本长度分桶选择起始字符。构建产物主入口约 `510.57KB / 150.49KB gzip`，名称库面板懒加载 chunk 约 `2.82KB gzip`，`namebase-store` chunk 约 `10.31KB gzip`；构建产物烟测中打开名称库显示 `61` 行，初始样例为春秋古国根名，点击生成后按钮变为“换一组”，第二次点击会换一批候选，checksum 保持稳定，console/page error 为 `0`。
 
 ## 约束
 

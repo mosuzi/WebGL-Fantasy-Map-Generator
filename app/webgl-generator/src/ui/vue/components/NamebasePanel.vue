@@ -29,8 +29,11 @@
   <UiDetailGrid class-name="namebase-panel-details" empty-text="未选中名称库" :rows="detailRows" />
 
   <div v-if="selected" class="namebase-panel-preview">
-    <strong>样例</strong>
-    <span>{{ selected.examplesLabel }}</span>
+    <div class="namebase-panel-preview-header">
+      <strong>{{ generatedExamples.length ? "生成预览" : "样例" }}</strong>
+      <UiButton variant="secondary" @click="generateExamples">{{ generatedExamples.length ? "换一组" : "生成预览" }}</UiButton>
+    </div>
+    <span class="namebase-panel-preview-text">{{ previewExamplesLabel }}</span>
   </div>
 
   <div v-if="selected?.duplicateLabel" class="namebase-panel-preview">
@@ -67,6 +70,7 @@
 
 <script setup>
 import {computed, ref, watch} from "vue";
+import {createNamebaseGeneratedExamples} from "../../../generator/namebase-store.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import UiButton from "./base/UiButton.vue";
@@ -97,6 +101,8 @@ const props = defineProps({
 const unitPreferences = useUnitPreferences();
 const sourceDraft = ref("");
 const importFileInput = ref(null);
+const generatedExamples = ref([]);
+const previewNonce = ref(0);
 
 const sortOptions = Object.freeze([
   {key: "category", label: "分类"},
@@ -128,6 +134,8 @@ const userRows = computed(() => rows.value.filter(row => row.origin !== "内置"
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedNamebaseId));
 const selectedBuiltinRow = computed(() => selected.value?.builtin === true ? selected.value : null);
 const selectedUserRow = computed(() => isUserNamebaseRow(selected.value) ? selected.value : null);
+const selectedSourceFingerprint = computed(() => (selected.value?.source || []).join("\u0000"));
+const previewExamplesLabel = computed(() => generatedExamples.value.length ? generatedExamples.value.join("、") : selected.value?.examplesLabel || "无样例");
 const summaryMetrics = computed(() => [
   {label: "词池", value: formatNumber(rows.value.length)},
   {label: "样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.samples, 0))},
@@ -213,7 +221,18 @@ function triggerImportFile() {
   importFileInput.value?.click();
 }
 
-watch(() => selected.value?.id, () => {
+function generateExamples() {
+  if (!selected.value) return;
+  previewNonce.value += 1;
+  generatedExamples.value = createNamebaseGeneratedExamples(selected.value.source || [], {
+    count: 16,
+    seed: selected.value.id,
+    salt: previewNonce.value
+  });
+}
+
+watch(() => [selected.value?.id, selectedSourceFingerprint.value], () => {
   sourceDraft.value = selectedUserRow.value?.source?.join("\n") || "";
+  generatedExamples.value = [];
 }, {immediate: true});
 </script>
