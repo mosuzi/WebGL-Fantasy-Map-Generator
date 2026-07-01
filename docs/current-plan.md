@@ -787,6 +787,7 @@ http://127.0.0.1:5410
 162. 名称库导入追加/替换模式已完成：名称库总览新增导入方式选择，默认“追加到用户库”，也可选择“替换用户库”；替换只清空 `map.namebases.bases` 中的用户库，不影响内置词池。构建产物验证中，初始导入方式为 `append`，切到 `replace` 后导入一份 61 个内置词池文件，会先替换原 1 个复制用户库，再导入 61 个用户库；最终 `map.namebases.bases.length = 61`、导入来源 `61`、复制来源 `0`、总览行数 `122`、导出名称库 `bases = 122 / builtin = 61 / user = 61`，console/page error 为 `0`。
 163. 名称库绑定生成专项计划已落文档：`docs/task-notes/namebase-generation-binding-plan.md` 记录了原版 `Names.getBase / culture.base` 的参考语义、当前 WebGL 版命名链路、`map.namebases.bindings` 建议契约、全局绑定、文化级绑定、样例生成、显式重命名命令和验证矩阵。后续不要直接把用户词池硬替换进国家命名器，应先建立绑定状态、失效引用处理和生成回退规则。
 164. 名称库质量提示第一刀已完成：名称库总览详情新增“质量”行，按原版 Namesbase Editor 的样本量思路提示“样本偏少 / 样本可用 / 样本充足 / 样本过多 / 有重复样本”，并可被筛选命中。构建产物验证中，把复制用户库样本编辑为 5 个后，详情显示“质量 / 样本偏少”；筛选“偏少”后可见行数 `49`，其中复制用户库命中 `1`，console/page error 为 `0`。后续若实现 Markov chain，可再补链路多样性和生成样例质量。
+165. Element Plus 迁移第八刀已完成：`UiSegmented` 改为 `ElSegmented` 视觉层，同时保留不可见 `data-mode` 桥按钮，旧 runtime 仍可通过 `[data-mode]` 绑定和同步视图模式。样式把 Element segmented 的选项组改为可换行网格，避免 11 个视图模式挤成一行；高度编辑动作和 marker 范围也复用同一适配层。构建产物约 `986.31KB JS / 304.22KB gzip`、`155.39KB CSS / 23.02KB gzip`；构建产物烟测中 `.ui-segmented-el = 3`、旧 `.segmented:not(.ui-segmented) button = 0`，视图切到“外交”后 `data-mode` 和 Pinia 偏好均为 `diplomacy`，高度动作可切到“平滑”，marker 范围可切到“资源点”，console/page error 为 `0`。后续迁移对象表格和树状总览前仍需先评估 `ElTable / ElTree` 的懒加载或拆包。
 
 ## 约束
 

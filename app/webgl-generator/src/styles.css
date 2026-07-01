@@ -111,13 +111,13 @@ select {
   margin-top: 8px;
 }
 
-.segmented {
+.segmented:not(.ui-segmented) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
-.segmented button {
+.segmented:not(.ui-segmented) button {
   height: 32px;
   border: 1px solid #33444f;
   border-radius: 6px;
@@ -126,10 +126,61 @@ select {
   cursor: pointer;
 }
 
-.segmented button.active {
+.segmented:not(.ui-segmented) button.active {
   border-color: #d7a84f;
   background: #3a2f18;
   color: #ffe0a1;
+}
+
+.ui-segmented {
+  display: block;
+  min-width: 0;
+}
+
+.ui-segmented-el {
+  width: 100%;
+  --el-segmented-bg-color: #10171b;
+  --el-segmented-color: #cbd7dc;
+  --el-segmented-item-selected-bg-color: #3a2f18;
+  --el-segmented-item-selected-color: #ffe0a1;
+  --el-segmented-item-hover-color: #ffe0a1;
+}
+
+.ui-segmented-el .el-segmented__group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
+  gap: 5px;
+  padding: 3px;
+  border: 1px solid #33444f;
+  border-radius: 7px;
+  background: #10171b;
+}
+
+.ui-segmented-el .el-segmented__item {
+  min-width: 0;
+}
+
+.ui-segmented-el .el-segmented__item-label {
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  color: #cbd7dc;
+  font-size: 12px;
+  line-height: 28px;
+  text-align: center;
+}
+
+.ui-segmented-el .el-segmented__item:hover .el-segmented__item-label,
+.ui-segmented-el .el-segmented__item.is-selected .el-segmented__item-label {
+  color: #ffe0a1;
+}
+
+.ui-segmented-mode-bridge {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .primary-action,
@@ -2943,13 +2994,13 @@ input.ui-switch-native {
   margin-bottom: 8px;
 }
 
-.marker-panel-controls .segmented {
+.marker-panel-controls .segmented:not(.ui-segmented) {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
-.marker-panel-controls .segmented button,
+.marker-panel-controls .segmented:not(.ui-segmented) button,
 .marker-panel-sort button {
   height: 28px;
   border: 1px solid #33444f;
@@ -2960,8 +3011,8 @@ input.ui-switch-native {
   cursor: pointer;
 }
 
-.marker-panel-controls .segmented button.active,
-.marker-panel-controls .segmented button:hover,
+.marker-panel-controls .segmented:not(.ui-segmented) button.active,
+.marker-panel-controls .segmented:not(.ui-segmented) button:hover,
 .marker-panel-sort button.active,
 .marker-panel-sort button:hover {
   border-color: #d7a84f;

@@ -13289,3 +13289,25 @@ full 矩阵结果：
 后续：
 
 - 后续如果实现 Markov chain，再补链路多样性和生成样例质量提示。
+
+### Element Plus 迁移第八刀：分段控件
+
+背景：
+
+- `UiSegmented` 仍是自写按钮组，主要用于视图模式、高度编辑动作和 marker 范围。
+- 视图模式按钮有旧 runtime 依赖的 `[data-mode]` 契约，不能简单替换成 Element Plus 后丢失 DOM 桥。
+
+修正：
+
+- `UiSegmented` 改为 `ElSegmented` 视觉层，保留不可见桥按钮给旧 runtime 绑定和同步 active 状态。
+- 点击 Element 选项时会同步内部值、触发 Vue 回调，并在视图模式场景中派发桥按钮 click，从而继续调用旧的 `handlers.onMode()`。
+- 样式把 Element segmented 的选项组改成可换行网格，避免 11 个视图模式在控制面板内被压成一行。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；产物为 `dist/webgl-generator/assets/index-BngNbC1T.js`，约 `986.31KB JS / 304.22KB gzip`，CSS 约 `155.39KB / 23.02KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：`.ui-segmented-el = 3`、旧 `.segmented:not(.ui-segmented) button = 0`、`[data-mode] = 11`；切换“外交”后桥按钮 active 和 Pinia 偏好均为 `diplomacy`；高度编辑动作可切为“平滑”，marker 范围可切为“资源点”，console/page error 为 `0`。
+
+后续：
+
+- `ElTable / ElTree / ElDialog` 仍不能直接常驻主包；迁移前应先做懒加载或拆包方案，并为对象列表保留选中、定位和自动滚入视口契约。
