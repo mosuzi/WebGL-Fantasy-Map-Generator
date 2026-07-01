@@ -30,7 +30,8 @@
 - 已迁移第三批基础组件：`UiSelectField -> ElSelect/ElOption`，保留隐藏原生 select 桥以兼容旧 runtime 读写 DOM id。
 - 已迁移第四批基础组件：`UiTabs -> ElTabs/ElTabPane`，控制面板仍复用原 `activeTab` 切换逻辑。
 - 已迁移第五批基础组件：`UiSliderField -> ElSlider`，保留隐藏原生 range 桥以兼容旧 runtime 读写 DOM id。
-- 当前第五批迁移后构建产物约 `894.48KB JS / 280.29KB gzip`、`133.04KB CSS / 19.80KB gzip`；相比 Tabs 迁移后的基线约增加 `+5.21KB JS gzip`、`+0.73KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
+- 已迁移第六批基础组件：`UiSwitchField -> ElSwitch`，保留隐藏原生 checkbox 桥，按钮式图层开关继续支持整行点击。
+- 当前第六批迁移后构建产物约 `899.56KB JS / 281.46KB gzip`、`137.51KB CSS / 20.44KB gzip`；相比 Slider 迁移后的基线约增加 `+1.17KB JS gzip`、`+0.64KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
 
 参考：
 
@@ -206,5 +207,6 @@
 - Element Plus 第三批已迁移 `UiSelectField`，解决下拉视觉层和空白点击收起问题，同时保留原生 select 桥。
 - Element Plus 第四批已迁移 `UiTabs`，控制面板 tab 不再折行，后续注意自动化脚本应使用 `role=tab` 或 `data-control-tab`。
 - Element Plus 第五批已迁移 `UiSliderField`，所有滑动条使用 Element Slider 视觉层，同时保留隐藏 range 桥。
+- Element Plus 第六批已迁移 `UiSwitchField`，普通开关和图层按钮式开关使用 Element Switch 视觉层，同时保留隐藏 checkbox 桥。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。

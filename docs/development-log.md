@@ -12359,3 +12359,27 @@ full 矩阵结果：
 
 - `UiSwitchField` 仍未迁移；它包含普通 checkbox 和 layer button 两种语义，迁移前需要决定是否把 layer button 保持为按钮式开关，还是改成 Element Switch。
 - Slider 增量约 `+5.21KB JS gzip / +0.73KB CSS gzip`，继续记录组件迁移体积。
+
+### Element Plus 迁移第六刀：开关组件
+
+背景：
+
+- `UiSwitchField` 同时承担普通 checkbox 行和图层按钮式开关，旧 runtime 会按 DOM id 读取或监听部分 checkbox。
+- 图层开关需要保持整行可点击和明显选中态，不能只换成孤立的小控件。
+
+修正：
+
+- `UiSwitchField` 改为 `ElSwitch` 视觉层，普通开关和按钮式图层开关复用同一个适配层。
+- 保留隐藏原生 checkbox 桥：Element Switch 变化后同步 hidden checkbox 并派发 `change`；外部脚本写 hidden checkbox 后可反向更新组件状态。
+- 按钮式图层开关选中态改为 `.is-checked`，继续保留整行点击和深色面板样式。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `899.56KB JS / 281.46KB gzip`、`137.51KB CSS / 20.44KB gzip`。
+- Playwright + 构建产物静态服务验证通过：`.ui-switch-el` 数量为 `5`，隐藏 `input.ui-switch-native[type=checkbox]` 数量为 `5`，可见原生 checkbox 数量为 `0`；点击灰度“反转黑白”整行后 hidden checkbox、行选中态和 Element 选中态均为 `true`；点击“显示海底”图层按钮后 hidden checkbox、按钮选中态和 Element 选中态均为 `true`，console/page error 为 `0`。
+
+后续：
+
+- 基础表单组件的按钮、输入、数字输入、筛选、排序、下拉、tab、slider、switch 已完成 Element Plus 适配层迁移；后续若进入 `ElTable / ElTree / ElDialog / ElColorPicker`，应先做懒加载或拆包方案。
+- Switch 增量约 `+1.17KB JS gzip / +0.64KB CSS gzip`，继续记录组件迁移体积。

@@ -1338,6 +1338,8 @@ select:disabled {
   margin: 8px 0 10px;
   color: #c5d1d8;
   font-size: 12px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .height-check-row input {
@@ -1996,6 +1998,8 @@ select:disabled {
   gap: 8px;
   color: #cbd7dc;
   font-size: 12px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .generation-check-row input {
@@ -2059,6 +2063,8 @@ select:disabled {
   gap: 8px;
   color: #cbd7dc;
   font-size: 12px;
+  cursor: pointer;
+  user-select: none;
 }
 
 .heightmap-import-check input {
@@ -2507,7 +2513,33 @@ select:disabled {
   pointer-events: none;
 }
 
+.ui-switch-el {
+  flex: 0 0 auto;
+  --el-switch-on-color: #d7a84f;
+  --el-switch-off-color: #26343d;
+  --el-border-color: #4a5963;
+}
+
+input.ui-switch-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-button-switch .ui-switch-el {
+  --el-switch-on-color: #d7a84f;
+  --el-switch-off-color: #1a252c;
+}
+
 .toggle-button-switch:has(input:checked) {
+  border-color: #d7a84f;
+  background: #2b2415;
+  color: #ffe0a1;
+}
+
+.toggle-button-switch.is-checked {
   border-color: #d7a84f;
   background: #2b2415;
   color: #ffe0a1;
