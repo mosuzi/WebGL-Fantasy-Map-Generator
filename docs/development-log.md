@@ -13655,3 +13655,26 @@ full 矩阵结果：
 后续：
 
 - 静态 HTML 里仍有测量 readout 的“导出 / 清除”两个原生按钮；它们目前不在 Vue root 内，若要迁移应先决定是否把测量 readout 也组件化。
+
+### Element Plus 测量读数按钮迁移
+
+背景：
+
+- 顶部地图工具栏迁移后，静态 HTML 中剩余最明显的用户可见原生按钮是测量 readout 的“导出 / 清除”。
+- 这两个按钮同样被旧 runtime 按 `id` 查询、绑定和设置 `disabled`，因此可以用轻量 Vue 组件替换 DOM，同时保留 id 契约。
+
+修正：
+
+- 新增 `MeasurementReadout.vue`，复用 `UiButton / ElButton` 渲染“导出”和“清除”。
+- `initializeVueStateBridge()` 在 runtime 绑定前挂载测量 readout app。
+- `index.html` 中测量 readout 只保留 `#measurement-readout` 挂载容器。
+- CSS 为 `.measurement-readout .el-button` 补充 margin 和 padding 覆写，避免 Element 默认按钮间距撑开 readout。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `533.97KB / 160.17KB gzip`，HTML 约 `4.10KB / 1.24KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：开启测量并添加两点后，readout 中 `.el-button = 2`、旧 `button:not(.el-button) = 0`，导出按钮下载 `webgl-generator-measurement` JSON，`metadata.pointCount = 2`，距离摘要为 `635.1 千米`；点击清除后点数和 SVG 点为 `0`，导出/清除按钮禁用，console/page error 为 `0`。
+
+后续：
+
+- 目前静态 HTML 已基本只保留 canvas、overlay 容器和状态挂载点；继续迁移应优先从 runtime 动态创建的浮层关闭按钮或确认弹窗开始。

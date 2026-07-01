@@ -564,6 +564,11 @@ select:disabled {
   font: inherit;
 }
 
+.measurement-readout .el-button {
+  margin-left: 0;
+  padding: 0 10px;
+}
+
 .measurement-readout button:hover:not(:disabled) {
   border-color: #d7a84f;
   color: #ffe0a1;

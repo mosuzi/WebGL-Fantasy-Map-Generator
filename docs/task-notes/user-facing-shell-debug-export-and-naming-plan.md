@@ -230,6 +230,7 @@
 - Element Plus 第十二批已迁移气候投影风带箭头和自动/手动纬度切换按钮，保留风带位置对齐、点击轮询风向和隐藏 input 桥。
 - Element Plus 第十三批已迁移地图数据、灰度高度图和名称库三个本地文件导入入口，改用轻量 `UiButton` 触发隐藏 file input，不引入较重的 `ElUpload`。
 - Element Plus 第十四批已迁移顶部地图工具栏，`MapToolbar.vue` 在运行时绑定前挂载，控制面板、测量和开发模式入口均使用 `UiButton / ElButton`，同时保留旧 DOM id 契约。
+- Element Plus 第十五批已迁移测量 readout 的导出/清除按钮，`MeasurementReadout.vue` 在运行时绑定前挂载，继续保留 `measurement-summary / measurement-export / measurement-clear` DOM id 契约。
 - Element Plus 组件迁移前置拆包已继续推进：备注、名称库、路线、河流、标签、外交、城市、文化、宗教、资源标记、国家、省份、高度编辑和对象详情浮层均已改为首次打开时动态加载；表格迁移后继续观察共享 chunk 体积，后续树状总览或弹窗迁移也应优先保持按需加载。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。

@@ -1,0 +1,14 @@
+<template>
+  <strong>测量</strong>
+  <span id="measurement-summary">点击地图添加起点</span>
+  <UiButton id="measurement-export">导出</UiButton>
+  <UiButton id="measurement-clear">清除</UiButton>
+</template>
+
+<script setup>
+import UiButton from "./base/UiButton.vue";
+
+defineOptions({
+  name: "MeasurementReadout"
+});
+</script>
