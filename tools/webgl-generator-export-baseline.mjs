@@ -116,9 +116,9 @@ function createCandidateSummary(candidateMap, {appDir}) {
       "buildSociety.cultures",
       "buildPolitics",
       "buildSettlements",
+      "buildMarkers",
       "buildEconomy",
       "finalizeSocietyReligions",
-      "buildMarkers",
       "buildZones"
     ],
     template: {

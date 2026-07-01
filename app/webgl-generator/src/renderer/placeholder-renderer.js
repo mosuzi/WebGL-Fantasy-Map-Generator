@@ -1268,10 +1268,19 @@ function buildPointVertices(map, visibility = {}) {
 }
 
 function colorForMarker(marker) {
-  if (marker.type === "peak") return [0.94, 0.94, 0.88, 1];
-  if (marker.type === "river-source") return [0.5, 0.82, 1, 1];
-  if (marker.type === "state-center") return [1, 0.68, 0.28, 1];
-  return [0.9, 0.9, 0.9, 1];
+  if (Array.isArray(marker.color) && marker.color.length >= 4) return marker.color;
+  if (marker.category === "resource") return [0.22, 0.74, 0.46, 1];
+  if (marker.category === "water") return [0.32, 0.66, 0.95, 1];
+  if (marker.category === "natural") return [0.68, 0.78, 0.45, 1];
+  if (marker.category === "infrastructure") return [0.9, 0.6, 0.24, 1];
+  if (marker.category === "trade") return [0.96, 0.76, 0.26, 1];
+  if (marker.category === "hazard") return [0.9, 0.28, 0.22, 1];
+  if (marker.category === "culture") return [0.64, 0.48, 0.86, 1];
+  if (marker.category === "settlement") return [0.94, 0.56, 0.38, 1];
+  if (marker.type === "peak" || marker.type === "volcanoes") return [0.94, 0.94, 0.88, 1];
+  if (marker.type === "river-source" || marker.type === "water-sources") return [0.5, 0.82, 1, 1];
+  if (marker.type === "state-center" || marker.type === "statues") return [1, 0.68, 0.28, 1];
+  return [0.55, 0.44, 0.86, 1];
 }
 
 function scoreCityLabel(city) {

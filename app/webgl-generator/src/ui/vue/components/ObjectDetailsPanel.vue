@@ -48,7 +48,7 @@ const detailRowsWithState = computed(() => [...detailRows(props.state.object), {
 const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.CITY]: object => `城市 ${object.name}`,
   [OBJECT_KIND.LABEL]: object => `标签 ${object.text}`,
-  [OBJECT_KIND.MARKER]: object => `标记 ${object.name}`,
+  [OBJECT_KIND.MARKER]: object => `标记 ${formatMarkerTitle(object)}`,
   [OBJECT_KIND.ROUTE]: object => `路线 ${object.from} -> ${object.to}`,
   [OBJECT_KIND.RIVER]: object => `河流 ${object.name || `#${object.id}`}`,
   [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
@@ -72,8 +72,13 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "对象 id", value: object.id}
   ],
   [OBJECT_KIND.MARKER]: object => [
-    {label: "类型", value: object.type},
-    {label: "cell", value: object.cell},
+    {label: "类型", value: `${object.label || object.type} / ${object.type}`},
+    {label: "类别", value: object.categoryLabel || object.category || "未知"},
+    {label: "资源", value: object.resourceLabel || "无"},
+    {label: "经济潜力", value: object.economicValue || 0},
+    {label: "国家", value: object.state || object.data?.state || "none"},
+    {label: "省份", value: object.province || object.data?.province || "none"},
+    {label: "cell", value: `${object.cell} / pack ${object.packCell ?? object.data?.packCell ?? "none"}`},
     {label: "数据", value: formatMarkerData(object.data)},
     {label: "对象 id", value: object.id}
   ],
@@ -120,6 +125,11 @@ function detailRows(object) {
 
 function canRenameObject(object) {
   return object?.kind === OBJECT_KIND.CITY || (object?.kind === OBJECT_KIND.LABEL && (object.targetKind === LABEL_TARGET_KIND.CITY || object.targetKind === LABEL_TARGET_KIND.STATE));
+}
+
+function formatMarkerTitle(object) {
+  const icon = object.icon ? `${object.icon} ` : "";
+  return `${icon}${object.name || object.label || object.type || "unknown"}`;
 }
 
 function formatMarkerData(data = {}) {

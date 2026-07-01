@@ -36,11 +36,11 @@ export function generatePlaceholderMap(inputOptions = {}) {
   const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, options));
   const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, options, pack));
   profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...options, pruneNeutralSettlements: true}));
+  const markers = profile.stage("markers", "生成标记 / 资源点", () => buildMarkers(grid, features, politics, rivers, pack, options));
+  pack.markers = markers.markers;
   const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, options));
   profile.stage("religions-finalize", "按城镇和文化扩张宗教", () => finalizeSocietyReligions(grid, society, pack, random, settlements, options));
   const military = profile.stage("military", "生成军事", () => buildMilitary(pack, options));
-  const markers = profile.stage("markers", "生成标记", () => buildMarkers(grid, features, politics, rivers, pack, options));
-  pack.markers = markers.markers;
   const zones = profile.stage("zones", "生成区域", () => buildZones(pack, options));
   const layers = profile.stage("palette", "生成色板", () => createPalette(random));
   const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones, economy));
@@ -93,10 +93,10 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `build society: cultures=${society.metadata.cultures}, culturedPackCells=${society.metadata.culturedPackCells}`,
       `build politics: states=${politics.metadata.states}, provinces=${politics.metadata.provinces}, regions=${politics.metadata.regions}`,
       `build settlements: cities=${settlements.metadata.cities}, routes=${settlements.metadata.routes}, populationCells=${settlements.metadata.populationCells}`,
+      `build markers: markers=${markers.metadata.markers}, resources=${markers.metadata.resourceMarkers}, resourcePotential=${markers.metadata.resourcePotential}`,
       `build economy: goods=${economy.metadata.goods}, markets=${economy.metadata.markets}, deals=${economy.metadata.deals}, resourceCells=${economy.metadata.resourceCells}`,
       `build religions: religions=${society.metadata.religions}, religionPackCells=${society.metadata.religionPackCells}`,
       `build military: states=${military.metadata.statesWithMilitary}, regiments=${military.metadata.regiments}`,
-      `build markers: markers=${markers.metadata.markers}, peaks=${markers.metadata.peaks}, riverSources=${markers.metadata.riverSources}`,
       `build zones: zones=${zones.metadata.zones}, target=${zones.metadata.target}, cells=${zones.metadata.cells}, invalidCells=${zones.metadata.invalidCells}`,
       `generation timing: total=${generationTiming.totalMs}ms, slowest=${generationTiming.slowest?.label || "none"} ${generationTiming.slowest?.ms ?? 0}ms`,
       `grid checksum: ${summary.checksum}`

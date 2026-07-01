@@ -19,7 +19,7 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
 const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.CITY]: object => `${object.type} / pop ${object.population} / ${object.state}`,
   [OBJECT_KIND.LABEL]: object => `${object.targetKind} / ${object.targetName}`,
-  [OBJECT_KIND.MARKER]: object => `${object.type} / cell ${object.cell}`,
+  [OBJECT_KIND.MARKER]: object => formatMarkerObjectSummary(object),
   [OBJECT_KIND.ROUTE]: object => `${object.type} / ${object.level} / distance ${formatDistance(object.distance)}`,
   [OBJECT_KIND.RIVER]: object => `${object.type} / flux ${object.flux} / length ${object.length}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
@@ -288,7 +288,7 @@ export function updateRegenerationSection(documentRef, result = {}) {
   const status = documentRef.getElementById("regeneration-status");
   const constraint = documentRef.getElementById("regeneration-constraint");
   if (status) status.textContent = result.status || "待命";
-  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流会按各自生成约束逐步接入；marker 和 zone 暂缓。";
+  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流会按各自生成约束逐步接入；资源 marker 已随生成接入，marker / zone 的局部重算另行推进。";
 }
 
 export function setGenerationLoading(documentRef, visible, message = "正在生成地图") {
@@ -376,6 +376,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "轮廓三角形", stats.lineTriangleCount ?? Math.round((stats.lineVertexCount || 0) / 3)),
     statRow(documentRef, "点顶点", stats.pointVertexCount),
     statRow(documentRef, "marker", stats.markerCount),
+    statRow(documentRef, "marker 资源", formatMarkerResources(map)),
     statRow(documentRef, "标签", `城市 ${stats.visibleCityLabelCount} / ${stats.cityLabelCount} / 上限 ${formatCityLabelLimit(map, stats)}；国家 ${stats.visibleStateLabelCount} / ${stats.stateLabelCount}`),
     statRow(documentRef, "相机", `x ${stats.camera.scale.toFixed(2)}, ${stats.camera.offsetX.toFixed(2)}, ${stats.camera.offsetY.toFixed(2)}`),
     statRow(documentRef, "绘制耗时", `${stats.draw.drawMs}ms`),
@@ -491,7 +492,7 @@ function updateHoverOverlay(documentRef, pick) {
 function formatHoverTitle(pick) {
   if (pick.label) return `标签 ${pick.label.text}`;
   if (pick.city && pick.city !== "none") return `城市 ${pick.city}`;
-  if (pick.marker) return `标记 ${pick.marker.name}`;
+  if (pick.marker) return `标记 ${formatMarkerTitle(pick.marker)}`;
   if (pick.river) return `河流 #${pick.river.id}`;
   if (isNamedRoute(pick.route)) return `路线 ${pick.route.from} -> ${pick.route.to}`;
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
@@ -517,7 +518,7 @@ function compactHoverRows(documentRef, pick) {
 function formatHoverObjectLine(pick) {
   if (pick.label) return `${pick.label.text} / ${pick.label.targetKind}`;
   if (pick.city && pick.city !== "none") return pick.city;
-  if (pick.marker) return `${pick.marker.name} / ${pick.marker.type}`;
+  if (pick.marker) return formatMarkerObjectSummary(pick.marker);
   if (isNamedRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
   if (pick.river) return `河流 #${pick.river.id} / flux ${pick.river.flux}`;
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
@@ -545,6 +546,27 @@ function formatObjectTitle(object) {
 
 function formatObjectDetails(object) {
   return OBJECT_DETAIL_FORMATTERS[object?.kind]?.(object) || "unknown";
+}
+
+function formatMarkerTitle(marker = {}) {
+  const icon = marker.icon ? `${marker.icon} ` : "";
+  return `${icon}${marker.name || marker.label || marker.type || "unknown"}`;
+}
+
+function formatMarkerObjectSummary(marker = {}) {
+  const label = marker.label || marker.type || "标记";
+  const category = marker.categoryLabel || marker.category || "未知";
+  const resource = marker.resourceLabel ? ` / ${marker.resourceLabel}` : "";
+  const economic = Number(marker.economicValue || 0) > 0 ? ` / 潜力 ${marker.economicValue}` : "";
+  return `${label} / ${category}${resource}${economic} / cell ${marker.cell}`;
+}
+
+function formatMarkerResources(map) {
+  const metadata = map.markers?.metadata || {};
+  const resourceMarkers = Number(metadata.resourceMarkers || 0);
+  const resourcePotential = Number(metadata.resourcePotential || 0);
+  const economicPotential = Number(metadata.economicPotential || 0);
+  return `${resourceMarkers} 处 / 资源潜力 ${resourcePotential} / 经济潜力 ${economicPotential}`;
 }
 
 function formatEditHistory(stats) {

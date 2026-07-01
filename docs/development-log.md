@@ -11183,3 +11183,55 @@ full 矩阵结果：
 
 - 下一步优先细化 marker / 资源点：解释当前白色点含义，并把矿山、盐湖、稀有生物等资源位做成有类型、有图标、有经济贡献的对象，再接入国家/省份经济与国力计算。
 - 再下一步统一控制面板中的下拉选项 UI。
+
+### marker 资源点语义与经济潜力第一刀
+
+背景：
+
+- 用户指出地图上有一些不明所以的白色点，希望后续增加矿山、盐湖、稀有生物等资源位，并让这些资源参与国家和省份的经济/国力计算。
+- 复查确认 marker 数据层已有 source 风格 `type/icon`，但 renderer 的 `colorForMarker()` 只识别旧的 `peak / river-source / state-center`，其余类型全部回退为浅白点，导致视觉上缺少含义。
+
+修正：
+
+- `markers.js` 新增 marker 类别元数据：
+  - `natural / water / resource / infrastructure / trade / hazard / culture / settlement / mystery`。
+  - 每个 marker 补充中文 `label`、`category/categoryLabel`、RGBA `color`、资源字段和 `economicValue`。
+- 新增或细化资源 marker：
+  - 矿山：保留城镇高地矿山，并扩展到高地适居资源 cell。
+  - 盐湖：从干旱或高温湖泊 cell 中生成，水域资源会归属到邻接陆地国家/省份。
+  - 稀有生物：从低人口、森林/湿润/高地/临水等偏远生态 cell 中生成。
+  - 宝石矿脉：从高地适居或邻近适居 cell 中生成。
+- marker 生成后会按国家和省份汇总：
+  - `resourcePotential / resourceMarkers / resourceTypes`
+  - `markerEconomicPotential / markerEconomicMarkers / markerCategories`
+- 经济阶段读取 marker 汇总并写入：
+  - `state.economicPower = state.treasury + markerEconomicPotential`
+  - `province.economicPower = populationBase * 0.2 + markerEconomicPotential`
+  - `economy.metadata.markerEconomy`
+- 本轮不把 marker 资源直接加进 `treasury / pollTax / salesTax`，避免破坏已经收敛的 source/candidate 经济 baseline；后续国力计算应优先读取 `economicPower` 和 `resourcePotential`。
+- renderer marker 点层改为优先使用 marker 自带颜色，旧数据按类别或旧类型回退着色，不再统一浅白。
+- picking、对象解析、hover、对象详情面板和侧栏统计补充 marker 图标、中文类型、类别、资源标签、经济潜力、国家和省份信息。
+- “重新生成”说明文案改为“资源 marker 已随生成接入，marker / zone 的局部重算另行推进”。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\markers.js`
+- `node --check app\webgl-generator\src\generator\economy.js`
+- `node --check app\webgl-generator\src\generator\index.js`
+- `node --check app\webgl-generator\src\renderer\picking.js`
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js`
+- `node --check app\webgl-generator\src\runtime\object-resolver.js`
+- `node --check app\webgl-generator\src\ui\panel.js`
+- `node --check tools\webgl-generator-export-baseline.mjs`
+- `$env:CI='true'; pnpm run build:app`
+- 内存烟测：
+  - `mediterranean / 100000 / audit-mediterranean-001`：marker `539`，资源 marker `58`，资源潜力 `930`，无无色 marker，无非法 cell 引用。
+  - `stage-2-1231411414 / continents / 10000`：marker `41`，资源 marker `5`，资源潜力 `74`，覆盖 `4` 个国家和 `5` 个省份，无无色 marker，无非法 cell 引用。
+  - `archipelago / 10000 / audit-archipelago-001`：marker `42`，资源 marker `5`，资源潜力 `74`，无无色 marker，无非法 cell 引用。
+  - `highIsland / 10000 / audit-highIsland-002`：marker `79`，资源 marker `8`，资源潜力 `132`，无无色 marker，无非法 cell 引用。
+
+注意：
+
+- 当前 marker 点仍是 `gl.POINTS`，只是完成类别配色和数据语义；真实 sprite/icon atlas 或 HTML overlay 图标仍是后续任务。
+- marker 局部重算按钮尚未接入；国家/省份/城镇/河流重算后仍会把 marker 标记为待派生。
+- 如果后续要把资源影响税收，应先设计与 source economy baseline 兼容的资源/国力公式，再决定是否改 `treasury`。

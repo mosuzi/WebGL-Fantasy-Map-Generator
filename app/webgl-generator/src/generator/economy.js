@@ -100,6 +100,7 @@ export function buildEconomy(pack, options = {}) {
   const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
   pack.deals = deals;
   collectStateTreasuries(states, deals, pack.markets, pack);
+  const markerEconomy = applyMarkerEconomicPower(pack);
 
   const metadata = {
     goods: goods.length,
@@ -113,7 +114,8 @@ export function buildEconomy(pack, options = {}) {
     burgsWithMarket: aliveBurgs.filter(burg => burg.market > 0).length,
     burgsWithProduction: aliveBurgs.filter(burg => burg.production?.length).length,
     deals: deals.length,
-    statesWithTaxes: states.filter(state => Number.isFinite(state.salesTax) && Number.isFinite(state.pollTax)).length
+    statesWithTaxes: states.filter(state => Number.isFinite(state.salesTax) && Number.isFinite(state.pollTax)).length,
+    markerEconomy
   };
 
   return {goods: pack.goods, markets: pack.markets, deals: pack.deals, metadata};
@@ -627,6 +629,37 @@ function collectStateTreasuries(states, deals, markets, pack) {
     state.treasury = round((dealTaxByState.get(state.i) || 0) + pollTax);
     delete state._economyDealTax;
   }
+}
+
+function applyMarkerEconomicPower(pack) {
+  const markerEconomy = pack.metadata?.markerResourceEconomy || {};
+  const states = (pack.states || []).filter(state => state?.i && !state.removed);
+  const provinces = (pack.provinces || []).filter(province => province?.i && !province.removed);
+  let statesWithResources = 0;
+  let provincesWithResources = 0;
+
+  for (const state of states) {
+    const markerPotential = Number(state.markerEconomicPotential || 0);
+    const resourcePotential = Number(state.resourcePotential || 0);
+    state.economicPower = round(Number(state.treasury || 0) + markerPotential);
+    if (resourcePotential > 0) statesWithResources++;
+  }
+
+  for (const province of provinces) {
+    const markerPotential = Number(province.markerEconomicPotential || 0);
+    const populationBase = Number(province.rural || 0) + Number(province.urban || 0);
+    province.economicPower = round(populationBase * 0.2 + markerPotential);
+    if (Number(province.resourcePotential || 0) > 0) provincesWithResources++;
+  }
+
+  return {
+    economicMarkers: Number(markerEconomy.economicMarkers || 0),
+    resourceMarkers: Number(markerEconomy.resourceMarkers || 0),
+    economicPotential: round(markerEconomy.economicPotential || 0),
+    resourcePotential: round(markerEconomy.resourcePotential || 0),
+    statesWithResources,
+    provincesWithResources
+  };
 }
 
 function marketPrice(market, goodId) {
