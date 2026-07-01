@@ -26,6 +26,7 @@
 - 生成级气候系统第一刀已完成：控制面板“生成”tab 新增“纬度”和“大气”下拉，纬度支持自动、赤道带、南北亚热/温/寒带，大气方向支持自动风带和八个主风向；选择后重新生成会改变 `mapCoordinates`、温度、降水、河流 flux / 数量，并通过 biome / suitability / population 间接影响城镇、文化、国家、省份、资源点和经济派生。运行统计已显示气候纬度范围和大气方向。
 - 文化/宗教继承结构第一刀已完成：控制面板“生成”tab 新增“文化继承 / 宗教继承”树状参数，支持“平铺 / 区域浅树 / 分支树”；生成数据写入 `parent / children / depth / lineage / origins`，文化管理和宗教管理面板可查看父级、层级、继承路径并手动调整父级，调整会进入撤销栈并防止自环。
 - 外交系统第一刀已完成：参考原版 `States.generateDiplomacy()` 和 `diplomacy-editor`，新增 `Ally / Friendly / Neutral / Suspicion / Rival / Enemy / Vassal / Suzerain / Unknown` 关系矩阵；关系生成会读取国家邻接、文化/宗教继承、国力、资源竞争和海洋国家差异。国家对象写入 `diplomacy / diplomacySummary / campaigns`，`map.diplomacy.metadata` 统计关系、战争、附庸和历史；管理 tab 新增“外交管理”，支持主体国家选择、关系列表、手动改关系、重生成外交和撤销/重做。
+- Vercel 部署配置已补齐：根目录新增 `vercel.json`，显式使用 `pnpm install --frozen-lockfile`、`pnpm run build:app` 和 `dist/webgl-generator`；`package.json` 补充 `dev / build / preview` 常规脚本和 Vite 8 所需 Node engine；部署说明见 `docs/deployment/vercel.md`。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
 - source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
 - `continents-10000` 两个单例 warn 已完成只读复查：001 的 `features.total` 主要来自候选地形/feature 拓扑中更多小陆块；003 的 `lakeNames` 来自候选真实湖泊数 `7` 对 source `5`，不是 `defineLakeNames()` 命名过滤问题。不要用删除小岛、删除 1-cell 湖或只命名 outlet 湖来压 warn。

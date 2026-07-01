@@ -11699,7 +11699,7 @@ full 矩阵结果：
 
 验证：
 
-- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- `$env:CI='true'; pnpm run build` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
 - 静态 server + Playwright 构建产物验证通过：
   - 默认生成数据包含文化树 `{roots: 4, derived: 8, maxDepth: 5}` 和宗教树 `{roots: 4, derived: 14, maxDepth: 6}`。
   - 文化管理面板出现 `#culture-parent-select`，宗教管理面板出现 `#religion-parent-select`。
@@ -11768,3 +11768,37 @@ full 矩阵结果：
 
 - 当前外交只生成关系、附庸、战争历史和管理面板；战争尚未驱动军事行动或地图事件。
 - 后续可以继续做外交专题着色、关系矩阵导出、战争事件、军事行动、经济制裁和贸易偏好联动。
+
+### Vercel 部署配置
+
+背景：
+
+- 用户希望开始部署当前正式 WebGL 地图生成器，需要让 Vercel 从仓库根目录直接构建正式应用。
+- 项目中 `source/` 是只读参考实现，不应作为 Vercel 项目根目录或部署目标。
+
+修正：
+
+- 新增根目录 `vercel.json`：
+  - `framework` 固定为 `vite`。
+  - `installCommand` 固定为 `pnpm install --frozen-lockfile`。
+  - `buildCommand` 固定为 `pnpm run build:app`。
+  - `outputDirectory` 固定为 `dist/webgl-generator`。
+  - 增加 SPA fallback rewrite 到 `/index.html`。
+  - 给 `/assets/*` 添加长期 immutable 缓存头。
+  - 全站添加 `X-Content-Type-Options: nosniff`。
+- `package.json` 新增常规脚本：
+  - `dev` -> `start:app`
+  - `build` -> `build:app`
+  - `preview` -> `preview:app`
+- `package.json` 新增 `engines.node = ^20.19.0 || >=22.12.0`，避免 Vercel 使用低于 Vite 8 要求的 Node 版本。
+- 新增 `docs/deployment/vercel.md`，记录 Vercel 控制台导入方式、构建命令、输出目录、本地验证命令和注意事项。
+
+验证：
+
+- `node -e "JSON.parse(require('fs').readFileSync('vercel.json','utf8')); JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('json ok')"` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+
+后续：
+
+- 首次在 Vercel 控制台导入时，Root Directory 应保持仓库根目录。
+- 当前未执行 `vercel deploy`，需要用户登录 Vercel 或通过 GitHub 集成触发部署。
