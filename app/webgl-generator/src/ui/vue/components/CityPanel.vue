@@ -55,6 +55,15 @@
         <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
       </div>
     </template>
+
+    <template #note>
+      <UiNoteField
+        class-name="city-note-editor"
+        :model-value="selected.noteBody"
+        @apply="body => callbacks.onNoteChange(selected.id, body)"
+        @clear="callbacks.onNoteChange(selected.id, '')"
+      />
+    </template>
   </UiActionDock>
 
   <UiHistoryActions class-name="city-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -68,6 +77,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
@@ -83,6 +93,7 @@ import {
 } from "../../../runtime/city-visuals.js";
 import {formatHeight, formatNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -122,7 +133,10 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
-const metrics = computed(() => buildCityMetrics(props.state.map));
+const metrics = computed(() => {
+  props.state.version;
+  return buildCityMetrics(props.state.map);
+});
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
 const visualDraft = reactive({
@@ -133,7 +147,8 @@ const cityActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "population", label: "调整人口", icon: "#"},
   {key: "owner", label: "同步归属", icon: "⇄", disabled: !selected.value?.canSyncOwner},
-  {key: "visual", label: "调整剪影", icon: "▣"}
+  {key: "visual", label: "调整剪影", icon: "▣"},
+  {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -161,6 +176,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "宗教", value: selected.value.religion},
   {label: "剪影", value: selected.value.visualLabel},
   {label: "文化样式", value: selected.value.cultureStyleLabel},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumberValue(selected.value.noteBody.length)}字）` : "无"},
   {label: "手动剪影", value: selected.value.manualVisual ? "是" : "否"}
 ] : []);
 
@@ -185,6 +201,7 @@ function buildCityMetrics(map) {
     const owner = cityOwnerInfo(map, city, burg, {stateId, provinceId, packCell, gridCell});
     const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
     const visual = resolveCityVisual(city, culture, burg?.visual);
+    const note = readObjectNote(map, {kind: "city", id: city.id});
 
     return {
       id: city.id,
@@ -212,6 +229,8 @@ function buildCityMetrics(map) {
       cultureStyle: visual.cultureStyle,
       cultureStyleLabel: cityCultureStyleLabel(visual.cultureStyle),
       visualLabel: `${citySilhouetteLabel(visual.silhouette)} / ${cityPaletteLabel(visual.palette)}`,
+      noteBody: note?.body || "",
+      noteUpdatedAt: note?.updatedAt || "",
       manualVisual: Boolean(visual.manual),
       capital: Boolean(city.capital || burg?.capital),
       provincial: Boolean(city.provincial),

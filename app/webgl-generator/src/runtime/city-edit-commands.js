@@ -1,4 +1,5 @@
 import {defaultCityVisual, normalizeCityVisualPatch, resolveCityVisual} from "./city-visuals.js";
+import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 
 const CITY_POPULATION_EFFECTS = Object.freeze({
@@ -23,6 +24,14 @@ const CITY_VISUAL_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["labels", "object-panels"])
+});
+
+const CITY_NOTE_EFFECTS = Object.freeze({
+  render: "none",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-panels"])
 });
 
 export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口"} = {}) {
@@ -159,6 +168,46 @@ export function createResetCityVisualCommand(cityId, {label = "恢复城市自�
         && current.silhouette === automatic.silhouette
         && current.palette === automatic.palette
         && current.cultureStyle === automatic.cultureStyle;
+    }
+  };
+}
+
+export function createSetCityNoteCommand(cityId, body, {name = ""} = {}) {
+  const normalizedCityId = normalizeCityId(cityId);
+  const target = {kind: OBJECT_KIND.CITY, id: normalizedCityId};
+  const normalizedBody = normalizeNoteBody(body);
+  let previous = null;
+  let next = null;
+
+  return {
+    label: normalizedBody ? `编辑城市备注 #${normalizedCityId}` : `清空城市备注 #${normalizedCityId}`,
+    effects: {
+      ...CITY_NOTE_EFFECTS,
+      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+    },
+    apply(context) {
+      const city = context.map?.settlements?.cities?.[normalizedCityId];
+      if (!city) throw new Error(`找不到城市 #${normalizedCityId}`);
+      previous ??= cloneObjectNote(readObjectNote(context.map, target));
+      if (!normalizedBody) {
+        deleteObjectNote(context.map, target);
+        return;
+      }
+      next ??= createCityNoteSnapshot(target, normalizedBody, {
+        name: name || city.name || `城市 #${normalizedCityId}`,
+        previous
+      });
+      restoreObjectNote(context.map, next);
+    },
+    revert(context) {
+      if (previous) restoreObjectNote(context.map, previous);
+      else deleteObjectNote(context.map, target);
+    },
+    isNoop(context) {
+      const city = context.map?.settlements?.cities?.[normalizedCityId];
+      if (!city) return true;
+      const current = readObjectNote(context.map, target)?.body || "";
+      return current === normalizedBody;
     }
   };
 }
@@ -364,6 +413,25 @@ function roundValue(value, digits = 1) {
 
 function cloneVisual(visual) {
   return visual ? {...visual} : {};
+}
+
+function createCityNoteSnapshot(target, body, {name, previous = null} = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: objectNoteId(target),
+    kind: target.kind,
+    objectId: target.id,
+    name,
+    body,
+    format: "plain",
+    pinned: previous?.pinned || false,
+    createdAt: previous?.createdAt || now,
+    updatedAt: now
+  };
+}
+
+function normalizeNoteBody(body) {
+  return typeof body === "string" ? body.trim() : "";
 }
 
 function hasOwn(object, key) {

@@ -29,7 +29,7 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, readHeightmapImportSettings} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
-import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
+import {createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
@@ -376,6 +376,16 @@ export function createGeneratorApp(documentRef) {
     onVisualReset: cityId => {
       const context = {map: state.map};
       const command = createResetCityVisualCommand(cityId);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onNoteChange: (cityId, body) => {
+      const city = state.map?.settlements?.cities?.[cityId];
+      const context = {map: state.map};
+      const command = createSetCityNoteCommand(cityId, body, {name: city?.name || `城市 #${cityId}`});
       if (!command.isNoop(context)) {
         refreshAfterEdit(state, state.editHistory.execute(command, context));
       }

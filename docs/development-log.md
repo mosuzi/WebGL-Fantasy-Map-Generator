@@ -12597,3 +12597,26 @@ full 矩阵结果：
 
 - `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `931.18KB JS / 291.03KB gzip`、`147.10KB CSS / 21.88KB gzip`。
 - Playwright + 构建产物静态服务验证通过：给 marker `#2` 写入“GeoJSON 备注检查：这里有珍贵矿脉。”后导出 `fmg-stage-2-1-f6cfb182.features.geojson`，对应 `marker-2` 的 properties 中 `hasNote = true`，`note` 正文一致，带备注 marker 数为 `1`，console/page error 为 `0`。
+
+### 城市备注第一刀
+
+背景：
+
+- marker 备注闭环跑通后，下一步按对象注记计划接入 city；城市管理面板同样有二级操作栏和历史按钮。
+
+修正：
+
+- `city-edit-commands.js` 新增 `createSetCityNoteCommand()`，复用 `object-notes.js` 的 note id、读取、恢复和删除能力。
+- 城市管理面板新增“编辑备注”二级操作，复用 `UiNoteField`。
+- `city-panel` 增加 `version` 刷新计数，避免 markRaw 地图内部备注变更后详情 computed 不重算。
+- 城市详情新增备注状态：“无”或“有备注（N字）”。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `932.80KB JS / 291.15KB gzip`、`147.13KB CSS / 21.88KB gzip`。
+- Playwright + 构建产物静态服务验证通过：给城市 `#1` 写入“城市备注检查：此城是北境贸易节点。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（17字）”；撤销后 notes 为 `0` 且详情显示“无”，重做后恢复为 `1`。
+- 最终导出完整地图 JSON 验证通过：`fmg-stage-2-1-260af816.webgl-map.json` 中 `map.notes.notes[0]` 为 `city:1`，正文为“城市备注导出检查：港口仓储完善。”，console/page error 为 `0`。
+
+后续：
+
+- 继续补 river / route 备注入口；如果进入国家、省份、文化、宗教，则优先复用二级操作栏，不要塞进列表主体。

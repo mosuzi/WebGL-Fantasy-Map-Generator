@@ -3091,6 +3091,10 @@ input.ui-switch-native {
   margin-top: 8px;
 }
 
+.city-note-editor {
+  margin-top: 8px;
+}
+
 .city-visual-editor label {
   display: grid;
   gap: 5px;
