@@ -13872,3 +13872,30 @@ full 矩阵结果：
 
 - 若继续实现，应先做“保存临时测量为对象”和完整地图 JSON 往返，再考虑路线贴合。
 - 路线贴合第一刀可先使用 pack cell 与路线索引；更精确的道路 polyline 投影应后置。
+
+### 视觉主题与样式预设计划
+
+背景：
+
+- WebGL 版当前只有固定渲染风格、视图色彩模式和图层开关。
+- 原版样式系统覆盖面很广，但核心数据是 SVG selector/attribute JSON，不能直接作为 WebGL 运行时格式。
+
+对照结果：
+
+- `style-presets.js` 提供 12 个系统预设：`default / ancient / gloom / pale / light / watercolor / clean / atlas / darkSeas / cyberpunk / night / monochrome`。
+- 原版系统预设在 `public/styles/*.json` 中，单个文件约 `14-15KB`，以 `#map`、`#stateBorders`、`#landmass`、`#texture`、`#terrs` 等 selector 为 key。
+- 预设值主要是 SVG attribute 和 DOM attribute，包括 `stroke`、`stroke-width`、`opacity`、`filter`、`mask`、`fill`、`scheme`、`terracing`、`data-href`。
+- `style.js` 会根据选择的元素显示不同编辑区，并支持高度色带、纹理、滤镜、网格、指南针、marker、标签等细项。
+- 自定义预设保存到 `localStorage`，key 前缀为 `fmgStyle_`，也支持下载和上传。
+
+文档：
+
+- 新增 `docs/task-notes/visual-theme-preset-plan.md`。
+- 文档明确 WebGL 版不直接兼容原版 SVG selector，而是新增 `map.visualTheme` 与 renderer/overlay theme token。
+- 阶段拆分为只读主题预设、主题导入导出、颜色级编辑、纹理/滤镜和高级效果。
+- `source-feature-backlog.md` 的样式预设行已改为指向专项计划。
+
+后续：
+
+- 如果继续实现，应从 4-6 个只读轻量主题开始，先覆盖背景、地形、水域、边界、道路、标签和比例尺。
+- 主题切换不应改变生成数据或 checksum，PNG 导出应合成当前主题下的画布与 overlay。
