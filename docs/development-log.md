@@ -12540,3 +12540,21 @@ full 矩阵结果：
 后续：
 
 - 后续可把 zone cell polygon dissolve 成更少的外轮廓，并增加分层选择、范围导出和国家/省份 dissolve。
+
+### 对象注记实现计划
+
+背景：
+
+- 夜间继续对照原版功能时，发现 Notes Editor 覆盖对象范围较广，不适合只在当前 ObjectDetailsPanel 里临时添加 textarea。
+- 原版 `editNotes(id, name)` 使用全局 `notes[]`，每条 `{id, name, legend}`，可绑定 label、burg、river、route、marker、regiment 等对象，并支持富文本、定位、pin、下载和上传。
+
+记录：
+
+- 新增 `docs/task-notes/object-notes-implementation-plan.md`。
+- 文档定义 WebGL 版建议数据契约 `map.notes.notes[]`，id 使用 `${kind}:${objectId}`，并保留 `kind / objectId / name / body / format / pinned / createdAt / updatedAt`。
+- 第一阶段建议新增运行时 helper、`createSetObjectNoteCommand()`、共享 `UiNoteField`，先接入 marker、city、river、route，再接入 state、province、culture、religion、label。
+- 计划明确第一阶段只做纯文本，富文本、AI 生成、独立备注总览和孤儿备注清理策略后置。
+
+后续：
+
+- 进入代码实现前，先补 `object-notes.js` helper 和命令层，再从 marker 面板做最小可验收闭环：编辑、撤销/重做、导出完整 JSON、导入复原。
