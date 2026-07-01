@@ -12980,3 +12980,26 @@ full 矩阵结果：
 后续：
 
 - 可继续做节点拖拽、路线贴合和保存测量对象；测量 JSON 导入暂不进入当前批次。
+
+### 名称库编辑器计划
+
+背景：
+
+- 用户已经多次关注中文命名质量，尤其是国家名同质化和春秋古国风短名。
+- 原版 FMG 提供 `Namesbase Editor`，支持编辑名称库、生成示例、质量分析、下载和上传，但 WebGL 版当前只有代码内置词池。
+
+对照 source：
+
+- 阅读 `source/Fantasy-Map-Generator/src/controllers/namesbase-editor.ts`：确认原版编辑器有选择 base、编辑名称样本、`min/max/d`、生成示例、分析、恢复默认、下载、上传覆盖和上传追加。
+- 阅读 `source/Fantasy-Map-Generator/src/generators/names-generator.ts`：确认原版通过 `calculateChain()` 构建 Markov chain，通过 `getBase()`、`getCulture()`、`getState()` 使用名称库。
+- 阅读 `source/Fantasy-Map-Generator/src/index.html` 的 `#namesbaseEditor`：确认原版 UI 布局和按钮集合。
+
+记录：
+
+- 新增 `docs/task-notes/namebase-editor-plan.md`。
+- 文档定义了建议的 `map.namebases` 数据契约、`webgl-generator-namebases v1` 导出方向和四阶段推进顺序。
+- 计划强调：用户名称库接入国家根名时仍必须走当前 `state-family` 去重和古国形制规则，不能绕过现有中文命名修正。
+
+后续：
+
+- 优先做只读名称库总览与名称库导出，再做可编辑用户名称库；文化级绑定和 Markov chain 复刻后置。
