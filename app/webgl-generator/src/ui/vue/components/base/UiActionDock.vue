@@ -1,19 +1,19 @@
 <template>
   <div ref="root" class="ui-action-dock">
     <div class="ui-action-icon-row" role="toolbar" aria-label="对象操作">
-      <button
+      <ElButton
         v-for="action in actions"
         :key="action.key"
-        type="button"
         class="ui-icon-action"
         :class="{active: action.key === active}"
         :disabled="action.disabled"
         :title="action.label"
         :aria-label="action.label"
+        circle
         @click="toggleAction(action)"
       >
         <span aria-hidden="true">{{ action.icon }}</span>
-      </button>
+      </ElButton>
     </div>
 
     <Teleport to="body">
@@ -27,7 +27,7 @@
       >
         <header class="ui-secondary-action-header">
           <strong>{{ activeActionLabel }}</strong>
-          <button type="button" class="ui-secondary-action-close" aria-label="关闭二级编辑面板" @click="closePanel">×</button>
+          <ElButton class="ui-secondary-action-close" text circle :icon="Close" aria-label="关闭二级编辑面板" @click="closePanel" />
         </header>
         <div class="ui-secondary-action-body">
           <slot :name="active" />
@@ -39,6 +39,7 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
+import {Close} from "@element-plus/icons-vue";
 
 defineOptions({
   name: "UiActionDock"

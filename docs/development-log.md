@@ -13493,3 +13493,25 @@ full 矩阵结果：
 后续：
 
 - 当前仅控制面板作为常驻 Vue 入口；后续组件迁移应优先在按需面板内部推进，避免重新扩大首屏资源。
+
+### Element Plus 二级操作按钮迁移
+
+背景：
+
+- `UiActionDock` 是各对象管理面板复用的二级操作入口，之前仍使用原生按钮。
+- 二级浮层定位、外部点击收起和 Element popper 点击豁免已经稳定，可以先把按钮视觉层迁到 Element Plus。
+
+修正：
+
+- `UiActionDock` 的操作按钮改为 `ElButton`，继续保留 `.ui-icon-action.active` 作为二级浮层定位锚点。
+- 二级浮层关闭按钮改为 `ElButton` + `Close` 图标。
+- CSS 更新为 `.ui-icon-action.el-button` 和 `.ui-secondary-action-close.el-button` 覆写，保留原尺寸、选中态、禁用态和 hover 风格。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口保持约 `531.42KB / 160.18KB gzip`，`UiActionDock` 按需 chunk 约 `1.40KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：城市管理面板内 `.ui-icon-action.el-button = 5`、旧原生 `.ui-icon-action:not(.el-button) = 0`；点击“重命名”打开二级浮层，关闭按钮为 Element Button，点击关闭和点击空白都能收起，console/page error 为 `0`。
+
+后续：
+
+- 图层按钮、树状面板节点按钮和气候风向按钮仍是特定交互样式，迁移时要保留它们的 DOM 桥和空间布局。

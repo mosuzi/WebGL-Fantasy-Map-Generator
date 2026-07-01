@@ -1199,9 +1199,10 @@ select:disabled {
   gap: 6px;
 }
 
-.ui-icon-action {
+.ui-icon-action.el-button {
   width: 32px;
   height: 32px;
+  min-width: 32px;
   border: 1px solid rgba(99, 126, 140, 0.72);
   border-radius: 7px;
   background: linear-gradient(180deg, #17232a 0%, #10171b 100%);
@@ -1209,26 +1210,30 @@ select:disabled {
   cursor: pointer;
   font: inherit;
   line-height: 1;
+  margin: 0;
+  padding: 0;
 }
 
-.ui-icon-action:hover:not(:disabled),
-.ui-icon-action.active {
+.ui-icon-action.el-button:hover:not(.is-disabled),
+.ui-icon-action.el-button.active {
   border-color: #d7a84f;
   background: linear-gradient(180deg, #3a2f18 0%, #241d10 100%);
   color: #ffe0a1;
 }
 
-.ui-icon-action:focus-visible {
+.ui-icon-action.el-button:focus-visible {
   outline: 2px solid rgba(98, 171, 216, 0.42);
   outline-offset: 2px;
 }
 
-.ui-icon-action:disabled {
+.ui-icon-action.el-button.is-disabled,
+.ui-icon-action.el-button:disabled {
   cursor: not-allowed;
   opacity: 0.42;
 }
 
-.ui-icon-action span {
+.ui-icon-action.el-button > span,
+.ui-icon-action.el-button .el-button__text {
   display: inline-block;
   transform: translateY(-0.5px);
 }
@@ -1264,9 +1269,10 @@ select:disabled {
   white-space: nowrap;
 }
 
-.ui-secondary-action-close {
+.ui-secondary-action-close.el-button {
   width: 26px;
   height: 26px;
+  min-width: 26px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -1274,9 +1280,11 @@ select:disabled {
   cursor: pointer;
   font-size: 17px;
   line-height: 1;
+  margin: 0;
+  padding: 0;
 }
 
-.ui-secondary-action-close:hover {
+.ui-secondary-action-close.el-button:hover {
   border-color: #3e525f;
   background: #1b252b;
   color: #edf4f6;
