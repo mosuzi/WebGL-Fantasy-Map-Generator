@@ -34,7 +34,7 @@ import {createSetCultureColorCommand, createSetCultureParentCommand} from "./cul
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
-import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
+import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createRenameObjectCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
@@ -589,6 +589,16 @@ export function createGeneratorApp(documentRef) {
     onVisualChange: (markerId, patch) => {
       const context = {map: state.map};
       const command = createSetMarkerVisualCommand(markerId, patch);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateMarkerPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onNoteChange: (markerId, body) => {
+      const marker = state.map?.markers?.markers?.[markerId];
+      const context = {map: state.map};
+      const command = createSetMarkerNoteCommand(markerId, body, {name: marker?.name || marker?.label || `标记 #${markerId}`});
       if (!command.isNoop(context)) {
         refreshAfterEdit(state, state.editHistory.execute(command, context));
       }

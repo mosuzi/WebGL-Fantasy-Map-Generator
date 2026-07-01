@@ -48,10 +48,10 @@
 
 优先实现顺序：
 
-1. 新增 `object-notes.js` 运行时 helper：生成 note id、读取、写入、删除、统计。
-2. 新增 `createSetObjectNoteCommand()`，进入 `EditHistory`，effects 使用 `selection: refresh`、`derived: ["object-panels"]`。
-3. 做共享 `UiNoteField`，使用 `ElInput type="textarea"`，支持应用和清空。
-4. 先接入对象详情面板与最常用专用面板：marker、city、river、route。
+1. 新增 `object-notes.js` 运行时 helper：生成 note id、读取、写入、删除、统计。（已完成）
+2. 新增 `createSetObjectNoteCommand()`，进入 `EditHistory`，effects 使用 `selection: refresh`、`derived: ["object-panels"]`。（marker 第一刀已用 `createSetMarkerNoteCommand()` 完成）
+3. 做共享 `UiNoteField`，使用 `ElInput type="textarea"`，支持应用和清空。（已完成）
+4. 先接入对象详情面板与最常用专用面板：marker、city、river、route。（marker 已完成）
 5. 第二批再接入 state、province、culture、religion、label；这些面板已有二级操作栏，适合新增“备注”动作。
 
 ## UI 方案
@@ -76,3 +76,9 @@
 - 导出完整地图 JSON 再导入，备注仍在。
 - 对象重命名后备注显示名同步或至少定位仍可用。
 - 删除或重生成对象后备注不会导致面板崩溃。
+
+## 当前进度
+
+- marker 备注第一刀已完成：资源与标记管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
+- 完整地图 JSON 导出已验证包含 `map.notes`。
+- 尚未接入 city、river、route、state、province、culture、religion、label，也尚未做独立备注总览。

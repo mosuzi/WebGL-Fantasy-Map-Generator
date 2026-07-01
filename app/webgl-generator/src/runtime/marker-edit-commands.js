@@ -1,5 +1,6 @@
 import {createMarkerAtPackCell, createMarkerResult, regenerateResourceMarkers, refreshMarkerResourceEconomy} from "../generator/markers.js";
 import {refreshPoliticalEconomicPower} from "../generator/economy.js";
+import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 
 const MARKER_VISUAL_EFFECTS = Object.freeze({
@@ -16,6 +17,14 @@ const MARKER_COLLECTION_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["point-layers", "labels", "object-panels", "object-index"])
+});
+
+const MARKER_NOTE_EFFECTS = Object.freeze({
+  render: "none",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-panels"])
 });
 
 export function createSetMarkerVisualCommand(markerId, patch = {}) {
@@ -49,6 +58,45 @@ export function createSetMarkerVisualCommand(markerId, patch = {}) {
       if (!marker || !Object.keys(nextPatch).length) return true;
       const current = marker.visual || marker.data?.visual || {};
       return Object.entries(nextPatch).every(([key, value]) => current[key] === value);
+    }
+  };
+}
+
+export function createSetMarkerNoteCommand(markerId, body, {name = ""} = {}) {
+  const normalizedMarkerId = Number(markerId);
+  const target = {kind: OBJECT_KIND.MARKER, id: normalizedMarkerId};
+  const normalizedBody = normalizeNoteBody(body);
+  let previous = null;
+  let next = null;
+
+  return {
+    label: normalizedBody ? `编辑标记备注 #${normalizedMarkerId}` : `清空标记备注 #${normalizedMarkerId}`,
+    effects: {
+      ...MARKER_NOTE_EFFECTS,
+      affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
+    },
+    apply(context) {
+      const marker = readMarker(context.map, normalizedMarkerId);
+      previous ??= cloneObjectNote(readObjectNote(context.map, target));
+      if (!normalizedBody) {
+        deleteObjectNote(context.map, target);
+        return;
+      }
+      next ??= createMarkerNoteSnapshot(target, normalizedBody, {
+        name: name || marker.name || marker.label || `标记 #${normalizedMarkerId}`,
+        previous
+      });
+      restoreObjectNote(context.map, next);
+    },
+    revert(context) {
+      if (previous) restoreObjectNote(context.map, previous);
+      else deleteObjectNote(context.map, target);
+    },
+    isNoop(context) {
+      const marker = context.map?.markers?.markers?.[normalizedMarkerId];
+      if (!marker) return true;
+      const current = readObjectNote(context.map, target)?.body || "";
+      return current === normalizedBody;
     }
   };
 }
@@ -211,6 +259,21 @@ function cloneVisual(visual) {
   return visual ? {...visual} : {};
 }
 
+function createMarkerNoteSnapshot(target, body, {name, previous = null} = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: objectNoteId(target),
+    kind: target.kind,
+    objectId: target.id,
+    name,
+    body,
+    format: "plain",
+    pinned: previous?.pinned || false,
+    createdAt: previous?.createdAt || now,
+    updatedAt: now
+  };
+}
+
 function captureMarkerSnapshot(map) {
   return markerRows(map).map(cloneMarker);
 }
@@ -262,6 +325,10 @@ function normalizeMarkerType(type) {
 
 function normalizeMarkerName(name) {
   return typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
+}
+
+function normalizeNoteBody(body) {
+  return typeof body === "string" ? body.trim() : "";
 }
 
 function normalizeCellId(value) {

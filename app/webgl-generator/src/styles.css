@@ -1254,6 +1254,36 @@ select:disabled {
   background: #10171b;
 }
 
+.ui-note-field {
+  display: grid;
+  gap: 8px;
+}
+
+.ui-note-field label {
+  display: grid;
+  gap: 6px;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
+.ui-note-field .el-textarea__inner {
+  border-color: #33444f;
+  background: #10171b;
+  color: #edf4f6;
+  box-shadow: none;
+}
+
+.ui-note-field .el-input__count {
+  background: transparent;
+  color: #80919c;
+}
+
+.ui-note-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .object-table-wrap {
   max-height: 300px;
   overflow: auto;
@@ -2980,6 +3010,10 @@ input.ui-switch-native {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px;
   gap: 8px;
   align-items: end;
+  margin-top: 8px;
+}
+
+.marker-note-editor {
   margin-top: 8px;
 }
 

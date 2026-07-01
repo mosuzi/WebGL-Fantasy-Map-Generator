@@ -12558,3 +12558,26 @@ full 矩阵结果：
 后续：
 
 - 进入代码实现前，先补 `object-notes.js` helper 和命令层，再从 marker 面板做最小可验收闭环：编辑、撤销/重做、导出完整 JSON、导入复原。
+
+### marker 备注第一刀
+
+背景：
+
+- 对象注记计划已经确定先从 marker 做最小闭环，避免一次性改所有专用面板。
+- marker 面板已有二级操作栏和历史按钮，适合作为 `map.notes` 数据契约的第一处代码落点。
+
+修正：
+
+- 新增 `app/webgl-generator/src/runtime/object-notes.js`，提供 `objectNoteId()`、读取、恢复、删除和 metadata 维护。
+- 新增 `UiNoteField`，使用 `ElInput type="textarea"`，支持应用和清空。
+- `createSetMarkerNoteCommand()` 写入 `${kind}:${objectId}` note id，进入 `EditHistory`，撤销时恢复旧备注或删除新备注。
+- 资源与标记管理面板二级操作新增“编辑备注”，详情中显示“无”或“有备注（N字）”。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `931.10KB JS / 290.99KB gzip`、`147.10KB CSS / 21.88KB gzip`。
+- Playwright + 构建产物静态服务验证通过：给首个 marker 写入“第一条 marker 备注：矿脉附近有旧道路。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（23字）”；撤销后 notes 为 `0`，重做后恢复为 `1`；导出完整地图 JSON 后，`map.notes.notes[0].body` 保留同一备注，console/page error 为 `0`。
+
+后续：
+
+- 补 city、river、route 的同类入口，再考虑 state、province、culture、religion、label 和独立备注总览。

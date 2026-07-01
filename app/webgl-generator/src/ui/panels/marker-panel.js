@@ -44,6 +44,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     },
     onRename: (markerId, name) => callbacks.onRename?.(markerId, name),
     onVisualChange: (markerId, patch) => callbacks.onVisualChange?.(markerId, patch),
+    onNoteChange: (markerId, body) => callbacks.onNoteChange?.(markerId, body),
     onAddResourceMode: type => callbacks.onAddResourceMode?.(type),
     onMoveMode: markerId => callbacks.onMoveMode?.(markerId),
     onDelete: markerId => callbacks.onDelete?.(markerId),

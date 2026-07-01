@@ -47,6 +47,15 @@
         <UiButton variant="secondary" @click="applyVisual">应用图标</UiButton>
       </div>
     </template>
+
+    <template #note>
+      <UiNoteField
+        class-name="marker-note-editor"
+        :model-value="selected.noteBody"
+        @apply="body => callbacks.onNoteChange(selected.id, body)"
+        @clear="callbacks.onNoteChange(selected.id, '')"
+      />
+    </template>
   </UiActionDock>
 
   <UiHistoryActions class-name="marker-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -61,6 +70,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
@@ -68,6 +78,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -164,7 +175,8 @@ const activeSelectedMarkerId = computed(() => {
 const selected = computed(() => findByObjectId(metrics.value.rows, activeSelectedMarkerId.value));
 const markerActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
-  {key: "visual", label: "调整图标", icon: "▣"}
+  {key: "visual", label: "调整图标", icon: "▣"},
+  {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -184,6 +196,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "grid cell", value: selected.value.cell},
   {label: "pack cell", value: selected.value.packCell},
   {label: "图形", value: selected.value.visualLabel},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
   {label: "手动图标", value: selected.value.manual ? "是" : "否"}
 ] : []);
 
@@ -205,6 +218,7 @@ function buildMarkerMetrics(map) {
     const stateId = marker.data?.state ?? 0;
     const provinceId = marker.data?.province ?? 0;
     const visual = marker.visual || marker.data?.visual || {};
+    const note = readObjectNote(map, {kind: "marker", id: marker.id});
     return {
       id: marker.id,
       name: marker.name || marker.label || `标记 #${marker.id}`,
@@ -225,7 +239,9 @@ function buildMarkerMetrics(map) {
       symbol: visual.symbol || "marker",
       palette: visual.palette || marker.category || "mystery",
       manual: Boolean(visual.manual),
-      visualLabel: `${symbolLabel(visual.symbol || "marker")} / ${paletteLabel(visual.palette || marker.category || "mystery")}`
+      visualLabel: `${symbolLabel(visual.symbol || "marker")} / ${paletteLabel(visual.palette || marker.category || "mystery")}`,
+      noteBody: note?.body || "",
+      noteUpdatedAt: note?.updatedAt || ""
     };
   });
 
