@@ -14,15 +14,6 @@
         <UiButton id="generate-map" variant="primary">生成 grid 地图</UiButton>
         <UiButton id="random-seed" variant="secondary">换 seed</UiButton>
       </div>
-
-      <div class="generation-panel-summary" aria-live="polite">
-        <div><span>阶段</span><strong id="control-summary-stage">-</strong></div>
-        <div><span>耗时</span><strong id="control-summary-timing">-</strong></div>
-        <div><span>Seed</span><strong id="control-summary-seed">-</strong></div>
-        <div><span>地形</span><strong id="control-summary-template">-</strong></div>
-        <div><span>规模</span><strong id="control-summary-cells">-</strong></div>
-        <div><span>校验</span><strong id="control-summary-checksum">-</strong></div>
-      </div>
     </div>
 
     <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">

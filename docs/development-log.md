@@ -11119,18 +11119,18 @@ full 矩阵结果：
 
 - 当前资源 bonus 是 economy 阶段补偿式应用，已能修正税基，但还不是最理想的 source 顺序。后续若继续提质，应把 goods/resource 生成正式前移到 `rankCells()` 之前，让城市、国家和文化也在第一时间吃到资源加成。
 
-### 生成控制面板摘要迁移
+### 生成控制面板保持操作面定位
 
 背景：
 
 - 正式应用的运行时统计区已经包含大量生成、渲染、编辑和 baseline 诊断信息，生成配置面板仍只显示输入控件。
-- 按编辑器与统计面板清单，`generation-panel` 应承载少量生成摘要，方便用户在浮动控制面板中快速确认当前地图身份。
+- 用户指出控制面板不应出现阶段、耗时、checksum、grid/pack 规模这类 debug/诊断型数据；这些信息更适合留在侧栏运行统计中。
 
 修正：
 
-- `ControlPanel.vue` 的 `生成` tab 新增轻量摘要区，显示阶段、耗时、seed、地形、grid/pack 规模和 checksum。
-- `updateRuntimePanel()` 在刷新旧侧栏统计时同步更新控制面板摘要；摘要 DOM 缺失时静默跳过，避免影响其它挂载路径。
-- 新增紧凑样式，确保 checksum、耗时和规模字段在窄浮动面板中可换行、不撑破布局。
+- 撤回 `ControlPanel.vue` 中的生成摘要区，让 `生成` tab 重新只承载 seed、模板、目标 cells、地图尺寸、自动随机 seed、生成和换 seed。
+- 移除控制面板摘要同步函数和配套样式。
+- 侧栏 `runtime-stats` 已保留阶段、生成耗时、seed、地形模板、目标/实际 cells、pack cells、地图尺寸和摘要校验等诊断数据，本轮不重复新增。
 
 验证：
 
@@ -11140,4 +11140,4 @@ full 矩阵结果：
 
 注意：
 
-- 该改动只迁移轻量生成摘要，不迁移 source/candidate 对照表；对照仍以 baseline 报告和运行时统计为主。
+- 控制面板后续只放可操作配置和常用开关；生成诊断、checksum、source/candidate 对照继续归入侧栏运行统计和 baseline 文档。
