@@ -18,6 +18,7 @@ export async function createGrayscaleHeightmapFromImage(documentRef, file, optio
   const stats = readBrightness(imageData.data, brightness);
   const minHeight = clampNumber(settings.minHeight, 0, 99, 0);
   const maxHeight = clampNumber(settings.maxHeight, minHeight + 1, 100, 100);
+  const invert = Boolean(settings.invert);
   const brightnessRange = Math.max(1e-6, stats.max - stats.min);
 
   return createSampledHeightmap(options, {
@@ -31,11 +32,13 @@ export async function createGrayscaleHeightmapFromImage(documentRef, file, optio
     brightnessMax: stats.max,
     heightMin: minHeight,
     heightMax: maxHeight,
+    invert,
     normalization: "image-min-max",
     sampleHeight: point => {
       const x = clampInteger(Math.round(point[0]), 0, width - 1);
       const y = clampInteger(Math.round(point[1]), 0, height - 1);
-      const normalized = (brightness[y * width + x] - stats.min) / brightnessRange;
+      const base = (brightness[y * width + x] - stats.min) / brightnessRange;
+      const normalized = invert ? 1 - base : base;
       return minHeight + clampNumber(normalized, 0, 1, 0) * (maxHeight - minHeight);
     }
   });
@@ -44,7 +47,8 @@ export async function createGrayscaleHeightmapFromImage(documentRef, file, optio
 export function readHeightmapImportSettings(documentRef) {
   const minHeight = readNumberInput(documentRef, "heightmap-import-min", 0);
   const maxHeight = readNumberInput(documentRef, "heightmap-import-max", 100);
-  return {minHeight, maxHeight};
+  const invert = Boolean(documentRef.getElementById("heightmap-import-invert")?.checked);
+  return {minHeight, maxHeight, invert};
 }
 
 async function loadImage(file, documentRef) {

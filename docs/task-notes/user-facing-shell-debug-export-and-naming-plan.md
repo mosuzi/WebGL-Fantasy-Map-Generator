@@ -27,7 +27,7 @@
 - Vite 当前只启用 `unplugin-vue-components` + `ElementPlusResolver({importStyle: "css"})`，避免全局注册和整包样式。
 - 已迁移 `UiButton` 作为样板，保持旧业务 API 不变。
 - 已迁移第二批基础组件：`UiFilterInput -> ElInput`、`UiTextEditField -> ElInput`、`UiNumberField -> ElInputNumber`、`UiSortBar -> UiButton/ElButton`。
-- 当前第二批迁移后构建产物约 `756.84KB JS / 234.58KB gzip`、`93.80KB CSS / 14.38KB gzip`；相比灰度导入后的基线约增加 `+14.10KB JS gzip`、`+2.24KB CSS gzip`，后续继续迁移必须继续记录体积。
+- 当前灰度反转补充后的构建产物约 `757.14KB JS / 234.77KB gzip`、`93.95KB CSS / 14.40KB gzip`；相比灰度导入后的基线约增加 `+14.29KB JS gzip`、`+2.26KB CSS gzip`，后续继续迁移必须继续记录体积。
 
 参考：
 
@@ -148,6 +148,7 @@
 - 支持用户选择本地灰度图。
 - 读取像素亮度并映射到 grid cell 高度。第一刀使用灰度归一化：自动读取图片亮度最小/最大值，把黑白或低对比图片都压到用户指定高度区间。
 - 提供高度映射区间，例如最低亮度对应最低高度、最高亮度对应峰值高度；第一刀不做原版 Image Converter 的彩色高度方案识别。
+- 提供黑白反转开关，方便用户把低亮度区域映射为高地或把高亮度区域映射为低地。
 - 应用后把图片采样作为“自定义高度模板”进入正式生成链路，完整重算 feature、climate、biome、pack、river、politics/settlements 等派生数据，避免只改高度造成水陆、城市、河流和国家不一致。
 
 风险：
@@ -161,13 +162,14 @@
 - 生成 tab 的地形配置附近可以选择本地图片，并调整最低/最高高度。
 - 导入后生成一张新的完整地图，`map.heightmap.template` 标记为灰度导入，地形、feature、河流、国家和城市等派生信息随新高度重算。
 - 低对比灰度图也能自动拉伸到指定高度区间；导入失败时在文件操作状态中给出可读错误。
+- 开启反转黑白后，亮度到高度的映射方向反向，元数据记录 `invert: true`。
 
 状态：
 
 - 已实现灰度高度图导入第一刀，入口位于生成 tab 的地形配置后方。
 - 生成器新增采样型 heightmap 覆盖入口，灰度图会作为 `grayscale-import` 高度模板进入完整生成链路，下游阶段也使用该模板标记，避免沿用导入前下拉模板的专属分支。
 - 图片读取使用浏览器 canvas 解码，按 `grid.points` 坐标采样亮度，并把图片亮度 min/max 自动拉伸到用户设置的最低/最高高度。
-- 已验证合成 `32x24` 灰度 PNG 导入后高度范围为 `10..90`，`features / pack / states / cities / rivers` 均重新生成。
+- 已补充黑白反转开关，导入元数据会保存 `invert`；已验证合成 `32x24` 灰度 PNG 导入后高度范围为 `10..90`，`features / pack / states / cities / rivers` 均重新生成，开启反转后低亮度角高度为 `90`、高亮度角高度为 `10`。
 
 ### 阶段 F：国家命名优化
 
@@ -197,6 +199,6 @@
 - 阶段 D 已作为第二批代码实现：PNG、完整地图 JSON、GeoJSON 和完整 JSON 导入。
 - 阶段 F 已作为第三批代码实现：春秋古国风国家根名、根族去重和形制收敛。
 - Element Plus 已作为第四批代码接入按需导入与 `UiButton` 样板迁移。
-- 阶段 E 已作为第五批代码实现：灰度高度图导入、采样型高度模板和完整重生成链路。
+- 阶段 E 已作为第五批代码实现：灰度高度图导入、采样型高度模板、完整重生成链路和黑白反转映射。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。

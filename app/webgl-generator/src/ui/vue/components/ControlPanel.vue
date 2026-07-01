@@ -61,6 +61,13 @@
             :step="1"
             @input="setHeightmapImportMax"
           />
+          <UiSwitchField
+            label="反转黑白"
+            input-id="heightmap-import-invert"
+            field-class="heightmap-import-check"
+            :checked="heightmapImportInvert"
+            @change="heightmapImportInvert = $event"
+          />
           <label class="secondary-action file-import-action heightmap-import-action" for="heightmap-image-file">导入灰度图</label>
           <input id="heightmap-image-file" type="file" accept="image/*" hidden />
         </div>
@@ -398,6 +405,7 @@ const temperatureNorthPole = ref(-25);
 const temperatureSouthPole = ref(-15);
 const heightmapImportMin = ref(0);
 const heightmapImportMax = ref(100);
+const heightmapImportInvert = ref(false);
 const cultureInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const religionInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));

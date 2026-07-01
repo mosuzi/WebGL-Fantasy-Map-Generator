@@ -12226,7 +12226,7 @@ full 矩阵结果：
 
 后续：
 
-- 增加黑白反转、保持比例/裁剪、模糊降噪和陆地比例预检。
+- 增加保持比例/裁剪、模糊降噪和陆地比例预检。
 - 如果要对齐原版 Image Converter，再补彩色高度图色板识别、手动颜色映射和导入预览；这不应塞进当前第一刀。
 
 ### Element Plus 迁移第二刀
@@ -12258,3 +12258,26 @@ full 矩阵结果：
 
 - `UiSelectField / UiSliderField / UiSwitchField` 暂不迁移，必须先设计隐藏原生控件或事件桥，保证 `panel.js` 中按 DOM id 读取 `.value/.checked/change` 的逻辑不被破坏。
 - `ElInput / ElInputNumber` 引入后 gzip 增量明显高于按钮样板，后续如果继续迁移表格、树、弹窗，应同步考虑面板级懒加载或 chunk 拆分。
+
+### 灰度高度图反转映射补充
+
+背景：
+
+- 灰度高度图第一刀已经支持高度区间映射，但常见高度图可能用黑色表示山体或白色表示山体，用户需要能快速反转黑白含义。
+- 该补充只调整采样映射方向，不改变完整重生成链路，也不引入图片持久化。
+
+修正：
+
+- 灰度高度图区域新增“反转黑白”开关，并加入编辑锁定控制。
+- `createGrayscaleHeightmapFromImage()` 读取 `invert` 设置；采样时先按图片亮度 min/max 归一化，再在开启反转时使用 `1 - normalized` 写入高度。
+- `createSampledHeightmap()` 的 source 元数据保存 `invert`，完整地图 JSON 导出会随 heightmap source 一起保留该信息。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `757.14KB JS / 234.77KB gzip`、`93.95KB CSS / 14.40KB gzip`。
+- Playwright + 构建产物静态服务验证通过：合成 `32x24` 斜向渐变 PNG，设置高度区间 `10..90` 并开启反转后导入；`map.heightmap.template = grayscale-import`，source 记录 `invert: true`，实际 `grid.cells.h` 最小/最大为 `10 / 90`，左上低亮度角高度为 `90`、右下高亮度角高度为 `10`，console/page error 为 `0`。
+
+后续：
+
+- 继续补保持比例/裁剪、模糊降噪、导入预览和原版 Image Converter 的彩色高度方案识别。

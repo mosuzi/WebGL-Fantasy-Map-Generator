@@ -2024,6 +2024,19 @@ select:disabled {
   text-align: right;
 }
 
+.heightmap-import-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.heightmap-import-check input {
+  width: 16px;
+  height: 16px;
+}
+
 .heightmap-import-action {
   display: inline-flex;
   align-items: center;
