@@ -1342,6 +1342,10 @@ select:disabled {
   margin-top: 8px;
 }
 
+.route-note-editor {
+  margin-top: 8px;
+}
+
 .river-width-editor label {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr) 48px;

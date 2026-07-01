@@ -17,17 +17,34 @@
   />
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中路线" :rows="detailRows" />
+
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="routeActions">
+    <template #note>
+      <UiNoteField
+        class-name="route-note-editor"
+        :model-value="selected.noteBody"
+        @apply="body => callbacks.onNoteChange(selected.id, body)"
+        @clear="callbacks.onNoteChange(selected.id, '')"
+      />
+    </template>
+  </UiActionDock>
+
+  <UiHistoryActions class-name="route-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
+import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance, formatNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -61,7 +78,14 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
-const rows = computed(() => routeRows(props.state.map));
+const activeAction = ref(null);
+const routeActions = Object.freeze([
+  {key: "note", label: "编辑备注", icon: "☰"}
+]);
+const rows = computed(() => {
+  props.state.version;
+  return routeRows(props.state.map);
+});
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
@@ -82,13 +106,19 @@ const detailRows = computed(() => selected.value ? [
   {label: "段数", value: formatNumberValue(selected.value.segments)},
   {label: "grid cells", value: formatNumberValue(selected.value.cellCount)},
   {label: "pack cells", value: formatNumberValue(selected.value.packCellCount)},
-  {label: "feature", value: selected.value.feature}
+  {label: "feature", value: selected.value.feature},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumberValue(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
+
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
+});
 
 function routeRows(map) {
   return (map?.settlements?.routes || []).map(route => {
     const from = map?.settlements?.cities?.[route.from];
     const to = map?.settlements?.cities?.[route.to];
+    const note = readObjectNote(map, {kind: "route", id: route.id});
     return {
       id: route.id,
       type: route.type || "route",
@@ -102,7 +132,9 @@ function routeRows(map) {
       segments: Math.max(0, (route.points || []).length - 1),
       cellCount: route.cells?.length || 0,
       packCellCount: route.packCells?.length || 0,
-      feature: route.feature ?? "none"
+      feature: route.feature ?? "none",
+      noteBody: note?.body || "",
+      noteUpdatedAt: note?.updatedAt || ""
     };
   });
 }

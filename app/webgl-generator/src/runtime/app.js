@@ -40,6 +40,7 @@ import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRU
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
+import {createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
@@ -574,6 +575,26 @@ export function createGeneratorApp(documentRef) {
     onLocate: object => {
       locateObject(state, object, documentRef);
       routePanel.setSelectedRouteId(object.id);
+    },
+    onNoteChange: (routeId, body) => {
+      const route = state.map?.settlements?.routes?.find(item => item.id === routeId);
+      const context = {map: state.map};
+      const command = createSetRouteNoteCommand(routeId, body, {name: routeDisplayName(state.map, route, routeId)});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
     }
   });
   state.panels.route = routePanel;
@@ -815,7 +836,7 @@ export function createGeneratorApp(documentRef) {
       state.panels.objectDetails.show(selection, editingObject);
     }
     state.panels.river.update(state.map, selection, state.editHistory.getStats(), editingObject);
-    state.panels.route.update(state.map, selection);
+    state.panels.route.update(state.map, selection, state.editHistory.getStats());
     state.panels.marker.update(state.map, selection, state.editHistory.getStats());
     state.panels.labelNaming.update(state.map, selection, state.editHistory.getStats());
     updateStatePanel(state);
@@ -925,7 +946,7 @@ export function createGeneratorApp(documentRef) {
       if (state.selection?.object?.kind === OBJECT_KIND.ROUTE) {
         state.panels.route.setSelectedRouteId(state.selection.object.id);
       }
-      state.panels.route.open(state.map, state.selection);
+      state.panels.route.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenMarkerPanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.MARKER) {
@@ -1074,7 +1095,7 @@ function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}
   updateDiplomacyPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
-  state.panels.route.update(state.map, state.selection);
+  state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateEditingInteractionLock(state, documentRef);
   updateRuntimePanel(documentRef, state);
@@ -1347,7 +1368,7 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
   [OBJECT_KIND.ROUTE]: (state, selection) => {
     state.panels.objectDetails.clear();
     state.panels.route.setSelectedRouteId(selection.object.id);
-    state.panels.route.open(state.map, selection);
+    state.panels.route.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
   [OBJECT_KIND.MARKER]: (state, selection) => {
@@ -1598,7 +1619,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
-  state.panels.route.update(state.map, state.selection);
+  state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   updateRuntimePanel(documentRef, state);
 }
 
@@ -2345,6 +2366,14 @@ function labelKeyForObject(object) {
   if (object.kind === OBJECT_KIND.LABEL) return `${object.targetKind || OBJECT_KIND.CITY}:${object.targetId ?? object.id}`;
   if (object.kind === OBJECT_KIND.CITY || object.kind === OBJECT_KIND.STATE) return `${object.kind}:${object.id}`;
   return null;
+}
+
+function routeDisplayName(map, route, routeId) {
+  if (!route) return `路线 #${routeId}`;
+  const from = map?.settlements?.cities?.[route.from]?.name || (route.from >= 0 ? `#${route.from}` : "");
+  const to = map?.settlements?.cities?.[route.to]?.name || (route.to >= 0 ? `#${route.to}` : "");
+  if (from && to) return `${from} -> ${to}`;
+  return `路线 #${routeId}`;
 }
 
 function getNewLabelPoint(state) {

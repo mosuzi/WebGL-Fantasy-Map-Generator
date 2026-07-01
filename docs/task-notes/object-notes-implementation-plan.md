@@ -49,9 +49,9 @@
 优先实现顺序：
 
 1. 新增 `object-notes.js` 运行时 helper：生成 note id、读取、写入、删除、统计。（已完成）
-2. 新增 `createSetObjectNoteCommand()`，进入 `EditHistory`，effects 使用 `selection: refresh`、`derived: ["object-panels"]`。（marker 第一刀已用 `createSetMarkerNoteCommand()` 完成）
+2. 新增 `createSetObjectNoteCommand()`，进入 `EditHistory`，effects 使用 `selection: refresh`、`derived: ["object-panels"]`。（marker / city / river / route 已先用各自命令完成）
 3. 做共享 `UiNoteField`，使用 `ElInput type="textarea"`，支持应用和清空。（已完成）
-4. 先接入对象详情面板与最常用专用面板：marker、city、river、route。（marker 已完成）
+4. 先接入对象详情面板与最常用专用面板：marker、city、river、route。（已完成）
 5. 第二批再接入 state、province、culture、religion、label；这些面板已有二级操作栏，适合新增“备注”动作。
 
 ## UI 方案
@@ -82,6 +82,7 @@
 - marker 备注第一刀已完成：资源与标记管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
 - city 备注第一刀已完成：城市管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
 - river 备注第一刀已完成：河流管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
-- 完整地图 JSON 导出已验证包含 marker、city 与 river 的 `map.notes`。
-- marker 要素 GeoJSON 已写入 `hasNote` 和 `note` 属性。
-- 尚未接入 route、state、province、culture、religion、label，也尚未做独立备注总览。
+- route 备注第一刀已完成：路线管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
+- 完整地图 JSON 导出已验证包含 marker、city、river 与 route 的 `map.notes`。
+- marker、river 与 route 要素 GeoJSON 已写入 `hasNote` 和 `note` 属性；其中 marker 和 route 已完成端到端导出验证。
+- 尚未接入 state、province、culture、religion、label，也尚未做独立备注总览。

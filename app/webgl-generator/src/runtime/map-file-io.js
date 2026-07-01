@@ -203,6 +203,7 @@ function routeFeatures(map) {
   return (map.settlements?.routes || []).map(route => {
     const coordinates = lineCoordinates(route.points, map);
     if (coordinates.length < 2) return null;
+    const note = readObjectNote(map, {kind: "route", id: route.id});
     return {
       type: "Feature",
       id: `route-${route.id}`,
@@ -216,7 +217,9 @@ function routeFeatures(map) {
         from: route.from ?? -1,
         to: route.to ?? -1,
         cells: route.cells?.length || 0,
-        distance: roundCoordinate(worldLineLength(route.points))
+        distance: roundCoordinate(worldLineLength(route.points)),
+        hasNote: Boolean(note?.body),
+        note: note?.body || ""
       },
       geometry: {
         type: "LineString",
@@ -230,6 +233,7 @@ function riverFeatures(map) {
   return (map.rivers?.rivers || []).map(river => {
     const coordinates = lineCoordinates(river.points, map);
     if (coordinates.length < 2) return null;
+    const note = readObjectNote(map, {kind: "river", id: river.id});
     return {
       type: "Feature",
       id: `river-${river.id}`,
@@ -245,7 +249,9 @@ function riverFeatures(map) {
         flux: river.flux || river.discharge || 0,
         length: river.length || roundCoordinate(worldLineLength(river.points)),
         width: river.width || 0,
-        widthFactor: river.widthFactor || 1
+        widthFactor: river.widthFactor || 1,
+        hasNote: Boolean(note?.body),
+        note: note?.body || ""
       },
       geometry: {
         type: "LineString",

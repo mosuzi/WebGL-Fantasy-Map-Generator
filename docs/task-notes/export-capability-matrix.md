@@ -30,7 +30,7 @@
 已验证：
 
 - typed arrays 显式序列化并恢复构造器。
-- marker、city 与 river 的 `map.notes` 会随完整 JSON 导出。
+- marker、city、river 与 route 的 `map.notes` 会随完整 JSON 导出。
 
 缺口：
 
@@ -78,15 +78,15 @@
 
 | layer | 几何 | 主要属性 | 备注 |
 |---|---|---|---|
-| `route` | `LineString` | id、type、level、state、province、from、to、cells、distance | 道路和路径第一刀 |
-| `river` | `LineString` | id、name、type、source、mouth、parent、basin、flux、length、width、widthFactor | 暂未输出变宽河道面 |
+| `route` | `LineString` | id、type、level、state、province、from、to、cells、distance、hasNote、note | 路线备注正文已输出 |
+| `river` | `LineString` | id、name、type、source、mouth、parent、basin、flux、length、width、widthFactor、hasNote、note | 暂未输出变宽河道面；备注正文已输出 |
 | `marker` | `Point` | id、name、type、label、category、resource、economicValue、state、province、cell、packCell、hasNote、note | marker 备注正文已输出 |
 | `zone` | `MultiPolygon` | id、name、type、hidden、cells、color | 当前按 zone 的 cell polygon 集合输出，未 dissolve |
 
 已验证：
 
 - 默认图可输出 route、river、marker、zone 四类要素。
-- 写入 marker 备注后，对应 marker feature 会带 `hasNote = true` 和 `note` 正文。
+- 写入 marker 或 route 备注后，对应 feature 会带 `hasNote = true` 和 `note` 正文；river 走同一备注字段导出路径。
 
 缺口：
 

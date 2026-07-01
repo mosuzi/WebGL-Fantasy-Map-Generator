@@ -12656,3 +12656,27 @@ full 矩阵结果：
 后续：
 
 - 补 route 备注入口；之后再考虑国家、省份、文化、宗教和标签。
+
+### 路线备注第一刀
+
+背景：
+
+- marker、city 和 river 备注闭环都已跑通，route 是第一批最常用专用对象面板中的最后一个缺口。
+- route 面板此前只有只读列表和定位，没有二级操作栏、历史按钮或 edit command 文件，因此本刀同时补最小编辑基础设施。
+
+修正：
+
+- 新增 `runtime/route-edit-commands.js`，提供 `createSetRouteNoteCommand()`，备注 id 仍使用 `route:${id}`。
+- 路线管理面板新增“编辑备注”二级操作，复用 `UiNoteField`，并增加 `history` 与 `version` 刷新信号。
+- `runtime/app.js` 将 route 备注接入 `EditHistory`，支持撤销和重做，并在备注变更后刷新 route 面板。
+- 要素 GeoJSON 的 route 和 river properties 新增 `hasNote` 与 `note` 字段；marker 已有字段保持不变。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `937.62KB JS / 291.80KB gzip`、`147.18KB CSS / 21.90KB gzip`。
+- Playwright + 构建产物内置静态服务验证通过：给路线 `#0` 写入“路线备注检查：这条道路适合设商站。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（17字）”；撤销后 notes 为 `0` 且详情显示“无”，重做后恢复为 `1`。
+- 完整地图 JSON `fmg-stage-2-1-bb2f7448.webgl-map.json` 中 `map.notes.notes[0]` 为 `route:0`，正文一致；要素 GeoJSON `fmg-stage-2-1-bb2f7448.features.geojson` 中 `route-0` 的 `hasNote = true` 且 `note` 正文一致；console/page error 为 `0`。
+
+后续：
+
+- 对象注记第一批已覆盖 marker、city、river、route。下一步如果继续做备注，建议进入 state / province / culture / religion / label，并优先复用已有二级操作栏。

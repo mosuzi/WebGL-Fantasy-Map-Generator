@@ -8,10 +8,12 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     open: false,
     map: null,
     selection: null,
+    history: null,
     filter: "",
     sortKey: "length",
     sortDir: "desc",
-    selectedRouteId: null
+    selectedRouteId: null,
+    version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
@@ -29,7 +31,10 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       panelState.selectedRouteId = row.id;
       callbacks.onSelect?.(routeObject(row));
     },
-    onLocate: row => callbacks.onLocate?.(routeObject(row))
+    onLocate: row => callbacks.onLocate?.(routeObject(row)),
+    onNoteChange: (routeId, body) => callbacks.onNoteChange?.(routeId, body),
+    onUndo: () => callbacks.onUndo?.(),
+    onRedo: () => callbacks.onRedo?.()
   };
 
   const record = manager.registerPanel("route-panel", {
@@ -50,19 +55,23 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
   app.mount(root);
 
   return {
-    open(map, selection) {
+    open(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
+      panelState.history = history;
       if (selection?.object?.kind === "route") panelState.selectedRouteId = normalizeRouteId(selection.object.id);
       if (!routeExists(map, panelState.selectedRouteId)) panelState.selectedRouteId = firstRouteId(map);
       panelState.open = true;
+      panelState.version++;
       manager.open("route-panel");
     },
-    update(map, selection) {
+    update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
+      panelState.history = history;
       if (selection?.object?.kind === "route") panelState.selectedRouteId = normalizeRouteId(selection.object.id);
       if (!routeExists(map, panelState.selectedRouteId)) panelState.selectedRouteId = firstRouteId(map);
+      panelState.version++;
     },
     setSelectedRouteId(routeId) {
       const normalized = normalizeRouteId(routeId);
