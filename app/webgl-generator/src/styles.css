@@ -2260,6 +2260,89 @@ select:disabled {
   overflow-wrap: anywhere;
 }
 
+.ui-select-field {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
+.ui-select-label {
+  min-width: 0;
+  color: #9fb0ba;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-shell {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.ui-select-field select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  padding: 0 32px 0 10px;
+  appearance: none;
+  background: linear-gradient(180deg, #162129 0%, #10171b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: #edf4f6;
+  cursor: pointer;
+}
+
+.ui-select-field select:hover:not(:disabled) {
+  border-color: #4d6574;
+  background: linear-gradient(180deg, #1a2831 0%, #111b20 100%);
+}
+
+.ui-select-field select:focus-visible {
+  outline: 2px solid rgba(98, 171, 216, 0.42);
+  outline-offset: 2px;
+  border-color: #62abd8;
+}
+
+.ui-select-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid #9fb0ba;
+  border-bottom: 1.5px solid #9fb0ba;
+  pointer-events: none;
+  transform: translateY(-62%) rotate(45deg);
+}
+
+.ui-select-field.is-disabled .ui-select-arrow {
+  opacity: 0.45;
+}
+
+.marker-resource-select,
+.marker-visual-select,
+.city-visual-select {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 5px;
+}
+
+.marker-resource-select .ui-select-label,
+.marker-visual-select .ui-select-label,
+.city-visual-select .ui-select-label {
+  color: #c5d1d8;
+}
+
+.state-capital-select {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
 @media (max-width: 720px) {
   .app-shell {
     grid-template-columns: 1fr;

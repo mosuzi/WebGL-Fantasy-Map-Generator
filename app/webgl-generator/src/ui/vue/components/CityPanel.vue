@@ -42,18 +42,8 @@
     </div>
 
     <div class="city-visual-editor">
-      <label>
-        <span>剪影</span>
-        <select v-model="visualDraft.silhouette">
-          <option v-for="option in silhouetteOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-      </label>
-      <label>
-        <span>配色</span>
-        <select v-model="visualDraft.palette">
-          <option v-for="option in paletteOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-      </label>
+      <UiSelectField class-name="city-visual-select" label="剪影" :model-value="visualDraft.silhouette" :options="silhouetteOptions" @update:model-value="visualDraft.silhouette = $event" />
+      <UiSelectField class-name="city-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
       <UiButton variant="secondary" @click="applyVisual">应用剪影</UiButton>
       <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
     </div>
@@ -71,6 +61,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {

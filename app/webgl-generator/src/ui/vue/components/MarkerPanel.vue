@@ -7,12 +7,7 @@
   </div>
 
   <div class="marker-edit-toolbar">
-    <label>
-      <span>新增资源</span>
-      <select v-model="resourceDraft.type">
-        <option v-for="option in resourceTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-      </select>
-    </label>
+    <UiSelectField class-name="marker-resource-select" label="新增资源" :model-value="resourceDraft.type" :options="resourceTypeOptions" @update:model-value="resourceDraft.type = $event" />
     <UiButton variant="secondary" :active="state.editMode === 'add'" @click="startAddResource">放置</UiButton>
     <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
     <UiButton variant="secondary" :disabled="!selected" @click="deleteSelected">删除</UiButton>
@@ -44,18 +39,8 @@
     />
 
     <div class="marker-visual-editor">
-      <label>
-        <span>图形</span>
-        <select v-model="visualDraft.symbol">
-          <option v-for="option in symbolOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-      </label>
-      <label>
-        <span>配色</span>
-        <select v-model="visualDraft.palette">
-          <option v-for="option in paletteOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-        </select>
-      </label>
+      <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="symbolOptions" @update:model-value="visualDraft.symbol = $event" />
+      <UiSelectField class-name="marker-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
       <UiButton variant="secondary" @click="applyVisual">应用图标</UiButton>
     </div>
   </template>
@@ -72,6 +57,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";

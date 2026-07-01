@@ -39,12 +39,13 @@
     {{ state.active ? "停止省份编辑" : "启用省份编辑" }}
   </UiButton>
 
-  <label class="province-select-field">
-    <span>目标</span>
-    <select :value="state.selectedProvinceId ?? ''" @change="callbacks.onTargetProvinceId(Number($event.target.value))">
-      <option v-for="province in provinceOptions" :key="province.id" :value="province.id">{{ province.name }}</option>
-    </select>
-  </label>
+  <UiSelectField
+    label="目标"
+    class-name="province-select-field"
+    :model-value="state.selectedProvinceId ?? ''"
+    :options="provinceOptions"
+    @update:model-value="callbacks.onTargetProvinceId(Number($event))"
+  />
 
   <div class="province-sample-actions">
     <UiButton variant="secondary" @click="callbacks.onSampleSelection">取选中</UiButton>
@@ -73,6 +74,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";

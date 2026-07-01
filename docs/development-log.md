@@ -11499,3 +11499,37 @@ full 矩阵结果：
 
 - 当前 `powerScore` 是 UI/派生层的第一版综合评分，适合排序和观感验证；后续如果进入正式国力系统，应进一步拆成财政、资源、兵源、交通、科技或稳定度等权重。
 - 资源点仍未转成正式 goods 供需，也没有接入贸易路径价格；后续经济提质应把资源 marker 与 goods/market/deals 打通。
+
+### 控制面板和管理浮窗下拉 UI 统一
+
+背景：
+
+- 用户指出控制面板中的下拉选项还没有统一 UI，并以为此前已经做完。
+- 复查后确认：控制面板地形下拉走 `UiField type="select"` 的原生分支，国家/省份/城市/marker 浮动面板里也各自直接写了原生 `select`。
+
+修正：
+
+- 新增 `UiSelectField.vue`：
+  - 支持 `modelValue / update:modelValue`、`change`、禁用态和统一箭头。
+  - 选项可读取 `value / id / burgId / key`，避免国家、首都和普通枚举各自转换。
+  - DOM 上保留原生 `select`，不破坏键盘和浏览器选择行为。
+- `UiField type="select"` 改为复用 `UiSelectField`，以后继续使用旧入口也会获得统一样式。
+- 已替换：
+  - 控制面板：地形模板。
+  - 国家面板：首都、目标国家。
+  - 省份面板：目标省份。
+  - 城市面板：剪影、配色。
+  - marker 面板：新增资源类型、图形、配色。
+- CSS 新增 `.ui-select-field / .ui-select-shell / .ui-select-arrow` 统一边框、背景、hover、focus、禁用态和右侧箭头；资源/图标编辑器保留原来的上标签紧凑布局。
+
+验证：
+
+- `rg "<select|</select>|<option" app/webgl-generator/src/ui/vue/components -n`：除 `base/UiSelectField.vue` 外无裸下拉。
+- `git diff --check` 通过。
+- `npm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 静态 server + Playwright 构建产物验证通过：
+  - 页面中 `selects=9`、`uiSelects=9`、裸下拉 `0`。
+  - `#heightmap-template` 可切换到 `archipelago`。
+  - 国家目标、省份目标、城市剪影/配色、资源类型、marker 图形/配色下拉均存在。
+  - 样式读取显示 `border-radius: 6px`、`padding-right: 32px`、`appearance: none`。
+  - console error 为 `0`。

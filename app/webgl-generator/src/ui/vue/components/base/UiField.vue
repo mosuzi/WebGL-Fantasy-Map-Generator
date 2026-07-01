@@ -1,13 +1,16 @@
 <template>
-  <label :class="fieldClass">
+  <UiSelectField
+    v-if="type === 'select'"
+    :label="label"
+    :input-id="inputId"
+    :model-value="modelValue"
+    :options="options"
+    :class-name="fieldClass"
+    @update:model-value="$emit('update:modelValue', $event)"
+  />
+  <label v-else :class="fieldClass">
     <span>{{ label }}</span>
-    <select v-if="type === 'select'" :id="inputId" :value="modelValue">
-      <option v-for="option in options" :key="option.value" :value="option.value">
-        {{ option.label }}
-      </option>
-    </select>
     <input
-      v-else
       :id="inputId"
       :type="type"
       :value="modelValue"
@@ -17,9 +20,13 @@
 </template>
 
 <script setup>
+import UiSelectField from "./UiSelectField.vue";
+
 defineOptions({
   name: "UiField"
 });
+
+defineEmits(["update:modelValue"]);
 
 defineProps({
   label: {

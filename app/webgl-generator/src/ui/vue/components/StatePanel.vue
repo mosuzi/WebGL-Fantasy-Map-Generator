@@ -35,12 +35,14 @@
     />
 
     <div class="state-capital-field">
-      <label>
-        <span>首都</span>
-        <select :value="capitalDraft" :disabled="!capitalOptions.length" @change="capitalDraft = Number($event.target.value)">
-          <option v-for="city in capitalOptions" :key="city.burgId" :value="city.burgId">{{ city.name }}</option>
-        </select>
-      </label>
+      <UiSelectField
+        label="首都"
+        class-name="state-capital-select"
+        :model-value="capitalDraft"
+        :options="capitalOptions"
+        :disabled="!capitalOptions.length"
+        @update:model-value="capitalDraft = Number($event)"
+      />
       <UiButton variant="secondary" :disabled="!capitalOptions.length" @click="callbacks.onCapitalChange(selected.id, capitalDraft)">设为首都</UiButton>
     </div>
   </template>
@@ -49,12 +51,13 @@
     {{ state.active ? "停止国家编辑" : "启用国家编辑" }}
   </UiButton>
 
-  <label class="state-select-field">
-    <span>目标</span>
-    <select :value="state.targetStateId ?? ''" @change="callbacks.onTargetStateId(Number($event.target.value))">
-      <option v-for="item in stateOptions" :key="item.id" :value="item.id">{{ item.name }}</option>
-    </select>
-  </label>
+  <UiSelectField
+    label="目标"
+    class-name="state-select-field"
+    :model-value="state.targetStateId ?? ''"
+    :options="stateOptions"
+    @update:model-value="callbacks.onTargetStateId(Number($event))"
+  />
 
   <div class="state-sample-actions">
     <UiButton variant="secondary" @click="callbacks.onSampleSelection">取选中</UiButton>
@@ -83,6 +86,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
