@@ -96,7 +96,8 @@ export class PlaceholderMapRenderer {
       position: this.gl.getAttribLocation(this.program, "a_position"),
       color: this.gl.getAttribLocation(this.program, "a_color"),
       scale: this.gl.getUniformLocation(this.program, "u_scale"),
-      offset: this.gl.getUniformLocation(this.program, "u_offset")
+      offset: this.gl.getUniformLocation(this.program, "u_offset"),
+      pointMode: this.gl.getUniformLocation(this.program, "u_pointMode")
     };
     this.vertexBuffer = this.gl.createBuffer();
     this.routeBuffer = this.gl.createBuffer();
@@ -382,6 +383,7 @@ export class PlaceholderMapRenderer {
     gl.clearColor(...this.map.layers.background);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
+    gl.uniform1i(this.locations.pointMode, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
@@ -424,10 +426,15 @@ export class PlaceholderMapRenderer {
     gl.drawArrays(gl.TRIANGLES, 0, this.selectionVertexCount);
     gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.pointBuffer);
+    gl.uniform1i(this.locations.pointMode, 1);
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.POINTS, 0, this.pointVertexCount);
+    gl.disable(gl.BLEND);
+    gl.uniform1i(this.locations.pointMode, 0);
 
     this.lastDraw = {
       drawMs: roundMs(performance.now() - startedAt),
@@ -1622,6 +1629,7 @@ in vec2 a_position;
 in vec4 a_color;
 uniform float u_scale;
 uniform vec2 u_offset;
+uniform bool u_pointMode;
 out vec4 v_color;
 
 void main() {
@@ -1634,8 +1642,18 @@ const fragmentShaderSource = `#version 300 es
 precision highp float;
 
 in vec4 v_color;
+uniform bool u_pointMode;
 out vec4 outColor;
 
 void main() {
+  if (u_pointMode) {
+    vec2 coord = gl_PointCoord * 2.0 - 1.0;
+    float distanceFromCenter = length(coord);
+    if (distanceFromCenter > 1.0) discard;
+    float alpha = 1.0 - smoothstep(0.72, 1.0, distanceFromCenter);
+    outColor = vec4(v_color.rgb, v_color.a * alpha);
+    return;
+  }
+
   outColor = v_color;
 }`;

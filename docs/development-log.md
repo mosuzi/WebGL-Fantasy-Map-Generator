@@ -11308,3 +11308,27 @@ full 矩阵结果：
 
 - 图标 symbol / palette 目前是第一版内置集合；后续可把文化样式拆成预设表，让城市、国家、资源 marker 按文化自动选用。
 - marker 面板应补充图标手动调整入口，并把 `visual.manual = true` 的对象排除出自动覆盖。
+
+### 远景 marker 圆点修正
+
+背景：
+
+- 近景图标完成后，用户继续指出远景像素点看起来像方点，期望远景仍是圆点。
+
+修正：
+
+- renderer shader 新增 `u_pointMode` 分支，仅在 `gl.POINTS` 绘制 pass 启用。
+- point fragment 使用 `gl_PointCoord` 裁切圆形，并在 point pass 启用 alpha blending，让边缘更柔和。
+- 面、道路、河流、边界、选择高亮等三角形 pass 保持 `u_pointMode = false`，不受圆点裁切影响。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js`
+- `git diff --check`
+- `$env:CI='true'; pnpm run build:app`
+- 临时静态 server + Playwright 像素验证：
+  - 初始 seed：`stage-2-1`
+  - marker：`鹿泽火山`
+  - 隐藏 marker / resources 读取背景，再显示 marker / resources 读取同一 `7x7` patch。
+  - 中心 delta 为 `53`，四角 delta 均为 `0`，说明 point 已被圆形裁切，不再是方块填充。
+  - 浏览器 console error 为 `0`。
