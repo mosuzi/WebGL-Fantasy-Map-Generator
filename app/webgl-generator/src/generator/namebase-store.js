@@ -126,6 +126,25 @@ export function deleteUserNamebase(map, id) {
   };
 }
 
+export function renameUserNamebase(map, id, name) {
+  if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {renamed: false, total: 0, name: ""};
+  const nextName = String(name || "").trim();
+  if (!nextName) throw new Error("名称库名称不能为空");
+  const base = map.namebases.bases.find(item => item?.id === id && item?.builtin !== true);
+  if (!base) return {renamed: false, total: map.namebases.bases.length, name: ""};
+  const previousName = base.name || base.id || "";
+  if (previousName === nextName) return {renamed: false, unchanged: true, total: map.namebases.bases.length, name: previousName};
+  base.name = nextName;
+  base.updatedAt = new Date().toISOString();
+  updateNamebaseMetadata(map.namebases);
+  return {
+    renamed: true,
+    total: map.namebases.bases.length,
+    name: base.name,
+    previousName
+  };
+}
+
 export function getNamebaseSummariesForMap(map, options = {}) {
   const builtinRows = getBuiltinNamebaseSummaries(options).map(row => ({
     ...row,

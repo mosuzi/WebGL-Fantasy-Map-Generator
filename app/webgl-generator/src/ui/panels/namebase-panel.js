@@ -32,6 +32,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onExport: () => callbacks.onExport?.(),
     onImport: file => callbacks.onImport?.(file),
     onCopyBuiltin: row => callbacks.onCopyBuiltin?.(row),
+    onRenameUser: (row, name) => callbacks.onRenameUser?.(row, name),
     onDeleteUser: row => callbacks.onDeleteUser?.(row),
     onClearUser: () => callbacks.onClearUser?.()
   };

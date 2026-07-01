@@ -13182,3 +13182,25 @@ full 矩阵结果：
 后续：
 
 - 下一步可在复制出的用户库上做重命名、样本编辑和导入覆盖/追加策略；生成绑定仍后置。
+
+### 用户名称库重命名第一刀
+
+背景：
+
+- 复制内置库后，用户会得到默认“某某 副本”的名称。
+- 在样本编辑实现前，先允许用户给用户库改名，方便后续导出和管理。
+
+修正：
+
+- `namebase-store.js` 新增 `renameUserNamebase(map, id, name)`，只允许重命名 `map.namebases.bases` 中的非内置记录，空名称会报错。
+- 名称库总览在选中用户库时显示名称编辑器；内置库不显示该编辑器。
+- 运行时重命名后刷新总览并显示状态，仍不接入 `EditHistory`。
+
+验证：
+
+- `$env:CI='true'; npm run build` 通过；产物为 `dist/webgl-generator/assets/index-BngTNCW4.js`，gzip 约 `301.99KB`。仍有既有的 Rolldown `#__PURE__` 注释警告和大 chunk 警告。
+- Playwright 构建产物烟测通过：初始选中内置库时不显示名称编辑器；复制“春秋古国根名”后选中副本并重命名为“古国根名自定义”，`map.namebases.bases.length = 1`，`map.namebases.bases[0].name = 古国根名自定义` 且写入 `updatedAt`，总览中重命名行数为 `1`，状态为“已重命名用户名称库“春秋古国根名 副本”为“古国根名自定义”。”；导出名称库 metadata `user = 1` 且复制记录名称为新名称，导出完整地图 JSON 中用户库名称也为新名称，console/page error 为 `0`。
+
+后续：
+
+- 下一步可进入样本编辑、导入覆盖/追加和文化绑定设计。

@@ -29,6 +29,15 @@
     <span>{{ selected.duplicateLabel }}</span>
   </div>
 
+  <UiTextEditField
+    v-if="selectedUserRow"
+    :model-value="selectedUserRow.name"
+    label="名称"
+    action-label="重命名"
+    :max-length="48"
+    @apply="value => callbacks.onRenameUser(selectedUserRow, value)"
+  />
+
   <div class="namebase-panel-actions">
     <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
     <label class="secondary-action file-import-action namebase-import-action" for="namebase-import-file">导入名称库</label>
@@ -49,6 +58,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
+import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
