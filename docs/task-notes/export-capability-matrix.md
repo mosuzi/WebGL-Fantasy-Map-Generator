@@ -10,6 +10,7 @@
 | 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v1` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成第一刀 |
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
 | 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon、state/province 非 dissolve MultiPolygon；简介 tab 可选择导出图层 | 否 | 已完成第二刀 |
+| 导出备注摘要 | `.notes.json` | JSON | `webgl-generator-notes-summary v1`：当前筛选备注、正文、对象 id、孤儿状态和时间戳 | 否 | 已完成第一刀 |
 
 ## 完整地图 JSON
 
@@ -118,6 +119,21 @@
 
 - 尚未合成图例、标签、手工叠层和浮动面板。
 - 尚未支持指定输出倍率、透明背景或裁剪范围。
+
+## 备注摘要 JSON
+
+用途：
+
+- 从备注总览导出当前筛选结果，便于人类阅读、外部脚本汇总或单独整理备注。
+- 不替代完整地图 JSON；重新导入复原地图仍应使用 `.webgl-map.json`。
+
+当前字段：
+
+- `type = webgl-generator-notes-summary`
+- `version = 1`
+- `exportedAt`
+- `metadata.seed / checksum / notes / totalNotes`
+- `notes[]`：id、kind、kindLabel、objectId、name、body、bodyLength、orphan、createdAt、updatedAt
 
 ## 后续顺序建议
 

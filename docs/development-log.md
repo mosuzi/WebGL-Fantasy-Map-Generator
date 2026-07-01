@@ -12910,3 +12910,27 @@ full 矩阵结果：
 后续：
 
 - 可基于 bbox 做范围导出、视口导出、导出前体积预估，以及对象定位/空间索引优化。
+
+### 备注摘要导出第一刀
+
+背景：
+
+- 完整地图 JSON 已包含 `map.notes`，但它面向复原地图，不适合给外部脚本或人类快速阅读。
+- 备注总览已能筛选、排序、定位和删除备注，顺手导出当前筛选结果可以补齐备注摘要导出缺口。
+
+修正：
+
+- `NotesPanel.vue` 的操作区新增“导出备注摘要”按钮；按钮在当前筛选结果为空时禁用。
+- `createNotesPanel()` 透传 `onExport(rows)` 回调。
+- 运行时新增 `exportNotesSummary()`，导出 `webgl-generator-notes-summary v1` JSON。
+- 摘要包含 seed、checksum、当前导出备注数、总备注数、备注 id、kind、对象 id、显示名、正文、字数、孤儿状态、创建时间和更新时间。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `958.77KB JS / 296.22KB gzip`、`149.39KB CSS / 22.20KB gzip`。
+- Playwright route 构建产物验证通过：注入 `marker:0` 与 `label:city:0` 两条备注后，打开备注总览，摘要显示 `备注2 / 可定位2 / 孤儿备注0 / 筛选2`。
+- 点击“导出备注摘要”后下载 `fmg-stage-2-1-0857e6f9.notes.json`，`type = webgl-generator-notes-summary`，metadata `notes = 2 / totalNotes = 2`，两条备注均保留正文和 orphan 状态，console/page error 为 `0`。
+
+后续：
+
+- 可继续做备注独立导入、孤儿备注批量清理和 Markdown / 富文本格式，但不应替代完整地图 JSON 的保存职责。

@@ -35,6 +35,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       callbacks.onLocate?.(row);
     },
     onDelete: row => callbacks.onDelete?.(row),
+    onExport: rows => callbacks.onExport?.(rows),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };

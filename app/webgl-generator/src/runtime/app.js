@@ -822,6 +822,7 @@ export function createGeneratorApp(documentRef) {
       updateAllObjectPanels(state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onExport: rows => exportNotesSummary(state, documentRef, rows),
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterEdit(state, command);
@@ -1275,6 +1276,40 @@ function exportFeatureGeoJson(state, documentRef) {
     setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个要素，图层：${geoJson.properties.layerSet}。`);
   } catch (error) {
     reportFileOperationError(documentRef, "要素 GeoJSON 导出失败", error);
+  }
+}
+
+function exportNotesSummary(state, documentRef, rows = []) {
+  try {
+    assertMapAvailable(state);
+    const notes = (rows || []).map(row => ({
+      id: row.id,
+      kind: row.kind,
+      kindLabel: row.kindLabel,
+      objectId: row.objectId,
+      name: row.name,
+      body: row.body,
+      bodyLength: row.bodyLength,
+      orphan: Boolean(row.orphan),
+      createdAt: row.createdAt || "",
+      updatedAt: row.updatedAt || ""
+    }));
+    const payload = {
+      type: "webgl-generator-notes-summary",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      metadata: {
+        seed: state.map.metadata?.seed || "",
+        checksum: state.map.metadata?.checksum || "",
+        notes: notes.length,
+        totalNotes: state.map.notes?.metadata?.notes || state.map.notes?.notes?.length || 0
+      },
+      notes
+    };
+    downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.notes.json`, "application/json;charset=utf-8");
+    setFileOperationStatus(documentRef, `备注摘要已导出，共 ${notes.length} 条。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "备注摘要导出失败", error);
   }
 }
 

@@ -23,9 +23,10 @@
     {{ selected.body || "空备注" }}
   </div>
 
-  <div v-if="selected" class="notes-panel-actions">
-    <UiButton variant="secondary" :disabled="selected.orphan" @click="callbacks.onLocate(selected)">定位对象</UiButton>
-    <UiButton variant="secondary" @click="callbacks.onDelete(selected)">删除备注</UiButton>
+  <div class="notes-panel-actions">
+    <UiButton v-if="selected" variant="secondary" :disabled="selected.orphan" @click="callbacks.onLocate(selected)">定位对象</UiButton>
+    <UiButton v-if="selected" variant="secondary" @click="callbacks.onDelete(selected)">删除备注</UiButton>
+    <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onExport(visibleRows)">导出备注摘要</UiButton>
   </div>
 
   <UiHistoryActions class-name="notes-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
