@@ -34,6 +34,13 @@
 - 当前第六批迁移后构建产物约 `899.56KB JS / 281.46KB gzip`、`137.51KB CSS / 20.44KB gzip`；相比 Slider 迁移后的基线约增加 `+1.17KB JS gzip`、`+0.64KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
 - 最新组合烟测已覆盖按钮、下拉、tabs、slider 和 switch 的同页连续操作；基础表单适配层暂可视为一轮闭环，下一阶段应先处理懒加载/拆包方案，再考虑 `ElTable / ElTree / ElDialog / ElColorPicker`。
 
+后续拆包守则：
+
+- 表格、树、弹窗、颜色选择器和大型编辑器不要直接静态引入到首屏控制面板；优先在对应浮层面板第一次打开时动态加载。
+- 继续避免 `app.use(ElementPlus)` 和整包 CSS；每批迁移后记录 `JS / CSS` 原始体积和 gzip 体积。
+- 旧 runtime 仍通过 DOM id 读取的控件必须保留隐藏原生 input/select/checkbox 桥，直到相关读取链正式迁入 Vue state。
+- 如果单批迁移让 JS gzip 增量超过 `20KB`，先停下来评估是否需要拆包或替代实现，再继续迁移。
+
 参考：
 
 - https://cn.element-plus.org/zh-CN/guide/installation
