@@ -1,7 +1,7 @@
 <template>
-  <button :type="buttonType" :class="[variantClass, {active}]">
+  <ElButton :native-type="buttonType" :class="[variantClass, {active}]">
     <slot />
-  </button>
+  </ElButton>
 </template>
 
 <script setup>

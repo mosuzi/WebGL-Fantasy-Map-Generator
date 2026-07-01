@@ -142,6 +142,11 @@ select {
   cursor: pointer;
 }
 
+.primary-action.el-button,
+.secondary-action.el-button {
+  margin-left: 0;
+}
+
 .primary-action {
   background: #d7a84f;
   color: #15120a;

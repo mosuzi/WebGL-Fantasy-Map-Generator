@@ -21,6 +21,13 @@
 - 官方快速开始页提供完整引入、自动按需导入和手动导入三种方式；自动按需导入推荐 `unplugin-vue-components` 和 `unplugin-auto-import`，手动导入可利用 ESM tree shaking，但样式需要 `unplugin-element-plus`。
 - 本项目短期不应做一次性全量替换。建议先引入构建侧按需能力，然后从表单、按钮、tabs、select、slider、table、tree、dialog/popover 等最容易复用的基础组件开始迁移，并在每一批迁移后记录 bundle 体积变化。
 
+当前状态：
+
+- 已安装 Element Plus 与按需导入相关依赖。
+- Vite 当前只启用 `unplugin-vue-components` + `ElementPlusResolver({importStyle: "css"})`，避免全局注册和整包样式。
+- 已迁移 `UiButton` 作为样板，保持旧业务 API 不变。
+- 当前样板迁移后的 gzip 增量约 `+10.17KB JS`、`+3.70KB CSS`，后续每批迁移都需要继续记录。
+
 参考：
 
 - https://cn.element-plus.org/zh-CN/guide/installation
@@ -174,6 +181,7 @@
 - 阶段 A/B/C 已作为第一批代码实现：外壳、开发模式、比例尺、README、简介 tab。
 - 阶段 D 已作为第二批代码实现：PNG、完整地图 JSON、GeoJSON 和完整 JSON 导入。
 - 阶段 F 已作为第三批代码实现：春秋古国风国家根名、根族去重和形制收敛。
+- Element Plus 已作为第四批代码接入按需导入与 `UiButton` 样板迁移。
 - 阶段 E 灰度高度图导入后续单独提交，避免和命名策略互相干扰。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。

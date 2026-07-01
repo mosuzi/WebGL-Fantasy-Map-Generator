@@ -738,6 +738,7 @@ http://127.0.0.1:5410
 113. 用户外壳第一批已完成：常驻侧栏移除，地图默认全屏显示；生成控制迁入可拖动“控制面板”浮层，调试、性能、WebGL 统计和内部状态迁入“开发模式”浮层。开发模式仅在 `?debug=1` 或 `window.__webglGeneratorDebug.enabled = true` 时可见，收起后保留小按钮；普通模式只保留地图、图例、悬停信息、比例尺和控制入口。图层新增“比例尺”开关，比例尺按当前相机缩放和单位配置显示实际距离。README 与控制面板“简介”tab 已补齐项目定位、仓库链接和后续计划。后续优先进入 Element Plus 按需迁移、完整导入导出、灰度高度图导入和春秋古国风命名阶段。
 114. 本地导入导出第一刀已完成：简介 tab 新增导出图片、导出地图数据、导出 GeoJSON 和导入地图数据入口。完整地图数据格式为 `webgl-generator-map v1`，保存 `options / metadata / map`，并显式序列化 typed arrays，导入后会重建 renderer、清空选择和编辑历史、刷新对象面板与运行统计。GeoJSON 先按 pack cell 输出 Polygon FeatureCollection，属性包含 height、feature、biome、state/province/culture/religion 名称和人口。PNG 目前直接读取 WebGL canvas，不包含 DOM 标签、比例尺或浮动面板。后续可做压缩、范围选择、所见即所得图片合成和格式兼容诊断。
 115. 国家命名策略第一刀已完成：国家根名不再高概率复用文化根名，改为优先抽取春秋/周代诸侯国启发的单字与短根名，并用 `state-family` 去重避免同一根名反复派生“东/西/南/北”相邻变体；文化根名只作为低概率首选。国家形制收敛为“国、侯国、伯国、邦、朝”和少量地貌特化形式，不再生成“王朝、诸帐、林盟、水府、诸州”等旧形制。三组 seed 抽样中，20 个国家的短根名为 `19-20` 个、单字根名为 `8-11` 个、同根重复为 `0`。
+116. Element Plus 迁移第一刀已完成：新增 `element-plus`、`@element-plus/icons-vue` 和按需导入相关插件，Vite 仅启用 `unplugin-vue-components` 的 `ElementPlusResolver({importStyle: "css"})`，不全局 `app.use(ElementPlus)`，不引入整包 CSS。`UiButton` 已改为 `ElButton` 适配层，同时保留原 `variant / active / buttonType` API 和 `.primary-action / .secondary-action` 样式类。生产构建 gzip 体积从命名阶段约 `208.39KB JS / 8.40KB CSS` 增至 `218.56KB JS / 12.10KB CSS`，作为后续迁移体积基线。
 
 ## 约束
 

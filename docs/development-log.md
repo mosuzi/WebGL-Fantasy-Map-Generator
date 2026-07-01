@@ -12175,3 +12175,30 @@ full 矩阵结果：
 
 - 目前古国风根名池仍会直接使用部分历史国名；后续可继续做“历史气质但非完全照搬”的生成变体。
 - 省份、城市、文化和宗教命名还可以进一步联动，避免国家变短后局部地名风格显得太现代。
+
+### Element Plus 迁移第一刀
+
+背景：
+
+- 用户要求后续组件尽量使用 Element Plus 替换，同时注意 tree shaking，避免最终产物过大。
+- 只读调查确认当前应用由多个浮动面板分别 `createApp()`，不适合全局 `app.use(ElementPlus)`；旧 runtime 仍大量通过 DOM id 读取原生 input/select，不能一次性替换所有表单控件。
+
+修正：
+
+- 新增依赖：`element-plus`、`@element-plus/icons-vue`；新增构建侧插件依赖：`unplugin-vue-components`、`unplugin-auto-import`、`unplugin-element-plus`。
+- `vite.config.mjs` 当前只启用 `unplugin-vue-components` 的 `ElementPlusResolver({importStyle: "css"})`，让模板里的 Element Plus 组件按需导入组件和对应 CSS；没有使用 `ElementPlus` 全局注册，也没有引入 `element-plus/dist/index.css`。
+- `UiButton` 作为第一批样板迁移到 `ElButton`，保留原来的 `variant / active / buttonType` API 和 `.primary-action / .secondary-action` 样式类，业务面板无需改调用方式。
+- CSS 增加 `.primary-action.el-button / .secondary-action.el-button` 的 margin 归零，避免 Element Plus 默认相邻按钮间距破坏现有网格布局。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。
+- 体积基线：命名阶段构建约 `684.75KB JS / 208.39KB gzip`、`49.21KB CSS / 8.40KB gzip`；引入 `UiButton -> ElButton` 后约 `711.48KB JS / 218.56KB gzip`、`77.03KB CSS / 12.10KB gzip`。
+- Playwright + 构建产物静态服务验证通过：页面中 `.el-button` 数量为 `61`，`#generate-map` 和 `#export-map-data` 都是 Element Plus 按钮；导出地图数据正常下载，点击“换 seed”后 checksum 正常变化，console/page error 为 `0`。
+
+后续：
+
+- 下一批建议迁移 `UiFilterInput`、`UiTextEditField`、`UiNumberField`、`UiSortBar`，继续只改 base 适配层。
+- `UiSelectField / UiSliderField / UiSwitchField` 需要保留隐藏原生控件或 DOM id 桥，再迁移 Element Plus；否则旧 runtime 的 `.value/.checked/change` 读取链会断。
+- 暂缓 `ElTable / ElTree / ElDialog / ElColorPicker / ElSelect` 等较重组件，迁移前先记录体积增量。
