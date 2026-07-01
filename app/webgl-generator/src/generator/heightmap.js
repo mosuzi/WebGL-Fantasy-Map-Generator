@@ -132,12 +132,51 @@ export function createHeightmap(options) {
   };
 }
 
+export function createSampledHeightmap(options, source) {
+  const descriptor = {
+    seaLevel: 20,
+    graphWidth: options.graphWidth,
+    graphHeight: options.graphHeight,
+    cellsDesired: options.cellsTarget,
+    template: source.template || "grayscale-import",
+    name: source.name || "灰度高度图",
+    waterRatio: null,
+    distribution: [],
+    steps: [],
+    source: {
+      kind: source.kind || "image-grayscale",
+      filename: source.filename || "",
+      width: source.width || 0,
+      height: source.height || 0,
+      brightnessMin: round(source.brightnessMin || 0, 3),
+      brightnessMax: round(source.brightnessMax || 0, 3),
+      heightMin: source.heightMin ?? 0,
+      heightMax: source.heightMax ?? 100,
+      normalization: source.normalization || "image-min-max"
+    }
+  };
+  Object.defineProperty(descriptor, "sampleHeight", {
+    value: source.sampleHeight,
+    enumerable: false
+  });
+  return descriptor;
+}
+
 export function applyHeightmap(heightmap, grid, layout, random) {
+  if (typeof heightmap?.sampleHeight === "function") {
+    applySampledHeightmap(heightmap, grid);
+    return;
+  }
+
   const context = createHeightmapContext(heightmap, grid, layout, random);
 
   for (const step of heightmap.steps) addStep(context, step);
 
   grid.cells.h = Array.from(context.heights, height => clamp(height, 0, 100));
+}
+
+function applySampledHeightmap(heightmap, grid) {
+  grid.cells.h = grid.points.map((point, cell) => clamp(Math.round(heightmap.sampleHeight(point, cell, grid)), 0, 100));
 }
 
 export function traceHeightmapSteps(heightmap, grid, layout, random) {

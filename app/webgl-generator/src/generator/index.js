@@ -17,35 +17,36 @@ import {buildSettlements, finalizeSettlements} from "./settlements.js";
 import {buildSociety, finalizeSocietyReligions} from "./society.js";
 import {buildZones} from "./zones.js";
 
-export function generatePlaceholderMap(inputOptions = {}) {
+export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   const profile = createStageProfile();
   const options = profile.stage("normalize-options", "标准化参数", () => normalizeOptions(inputOptions));
   const gridRandom = profile.stage("random-grid", "初始化 grid 随机源", () => createRandom(options.seed));
   const random = profile.stage("random-main", "初始化主随机源", () => createRandom(options.seed));
-  const heightmap = profile.stage("heightmap", "生成高度模板", () => createHeightmap(options, random));
-  const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(options, gridRandom, heightmap, random));
+  const heightmap = profile.stage("heightmap", "生成高度模板", () => overrides.heightmap || createHeightmap(options, random));
+  const generationOptions = heightmap.template === options.heightmapTemplate ? options : {...options, heightmapTemplate: heightmap.template};
+  const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(generationOptions, gridRandom, heightmap, random));
   const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
-  const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(options.seed));
-  const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, options, climateRandom));
+  const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(generationOptions.seed));
+  const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, generationOptions, climateRandom));
   const pack = profile.stage("pack", "构建 pack 语义图", () => buildPack(grid, features));
-  const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, options));
+  const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, generationOptions));
   const biomes = profile.stage("biomes-population", "生成生物群系与人口评分", () => defineBiomesAndPopulation(grid, pack));
   climate.biomes = biomes.biomes;
   climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
-  const society = profile.stage("society-cultures", "生成文化初稿", () => buildSociety(grid, features, climate, rivers, random, pack, options));
-  profile.stage("river-names", "按文化命名河流", () => renameHydronymsByCulture(rivers, pack, options));
-  const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, options));
-  const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, options, pack));
-  profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...options, pruneNeutralSettlements: true}));
-  const markers = profile.stage("markers", "生成标记 / 资源点", () => buildMarkers(grid, features, politics, rivers, pack, options));
+  const society = profile.stage("society-cultures", "生成文化初稿", () => buildSociety(grid, features, climate, rivers, random, pack, generationOptions));
+  profile.stage("river-names", "按文化命名河流", () => renameHydronymsByCulture(rivers, pack, generationOptions));
+  const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, generationOptions));
+  const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, generationOptions, pack));
+  profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...generationOptions, pruneNeutralSettlements: true}));
+  const markers = profile.stage("markers", "生成标记 / 资源点", () => buildMarkers(grid, features, politics, rivers, pack, generationOptions));
   pack.markers = markers.markers;
-  const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, options));
-  profile.stage("religions-finalize", "按城镇和文化扩张宗教", () => finalizeSocietyReligions(grid, society, pack, random, settlements, options));
-  const diplomacy = profile.stage("diplomacy", "生成外交关系", () => buildDiplomacy(pack, society, options));
-  const military = profile.stage("military", "生成军事", () => buildMilitary(pack, options));
-  const zones = profile.stage("zones", "生成区域", () => buildZones(pack, options));
+  const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, generationOptions));
+  profile.stage("religions-finalize", "按城镇和文化扩张宗教", () => finalizeSocietyReligions(grid, society, pack, random, settlements, generationOptions));
+  const diplomacy = profile.stage("diplomacy", "生成外交关系", () => buildDiplomacy(pack, society, generationOptions));
+  const military = profile.stage("military", "生成军事", () => buildMilitary(pack, generationOptions));
+  const zones = profile.stage("zones", "生成区域", () => buildZones(pack, generationOptions));
   const layers = profile.stage("palette", "生成色板", () => createPalette(random));
-  const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones, economy, diplomacy));
+  const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(generationOptions, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones, economy, diplomacy));
   const generatedAt = profile.stage("metadata", "生成元数据", () => new Date().toISOString());
   const generationTiming = profile.finish();
 
@@ -53,19 +54,19 @@ export function generatePlaceholderMap(inputOptions = {}) {
     metadata: {
       app: "webgl-generator",
       generatorStage: "source-stage-20-diplomacy-first-pass",
-      seed: options.seed,
+      seed: generationOptions.seed,
       heightmapTemplate: heightmap.template,
-      cellsTarget: options.cellsTarget,
+      cellsTarget: generationOptions.cellsTarget,
       gridCells: grid.metadata.actualCells,
       packCells: pack.metadata.cells,
       featureCount: features.metadata.featureCount,
-      graphWidth: options.graphWidth,
-      graphHeight: options.graphHeight,
+      graphWidth: generationOptions.graphWidth,
+      graphHeight: generationOptions.graphHeight,
       checksum: summary.checksum,
       generatedAt,
       generationTiming
     },
-    options,
+    options: generationOptions,
     layers,
     heightmap,
     grid,
@@ -84,7 +85,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
     rivers,
     summary,
     generationLog: [
-      `normalize options: seed=${options.seed}, cells=${options.cellsTarget}, size=${options.graphWidth}x${options.graphHeight}`,
+      `normalize options: seed=${generationOptions.seed}, cells=${generationOptions.cellsTarget}, size=${generationOptions.graphWidth}x${generationOptions.graphHeight}`,
       `heightmap template: ${heightmap.template}`,
       `initialize seeded random: ${summary.randomPreview.join(", ")}`,
       `build grid: ${grid.metadata.actualCells} cells, ${grid.metadata.vertexCount} vertices, ${grid.metadata.triangles} triangles`,

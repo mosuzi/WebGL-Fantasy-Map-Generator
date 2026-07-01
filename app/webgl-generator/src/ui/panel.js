@@ -96,6 +96,11 @@ export function bindRuntimePanel(documentRef, handlers) {
     if (file) handlers.onImportMapData?.(file);
     event.target.value = "";
   });
+  documentRef.getElementById("heightmap-image-file")?.addEventListener("change", event => {
+    const file = event.target.files?.[0];
+    if (file) handlers.onImportHeightmapImage?.(file);
+    event.target.value = "";
+  });
   for (const button of documentRef.querySelectorAll("[data-regenerate-kind]")) {
     button.addEventListener("click", () => handlers.onRegenerate?.(button.dataset.regenerateKind));
   }
@@ -179,6 +184,9 @@ function editLockControls(documentRef) {
     "#export-map-data",
     "#export-map-geojson",
     "#import-map-file",
+    "#heightmap-image-file",
+    "#heightmap-import-min",
+    "#heightmap-import-max",
     "[data-regenerate-kind]",
     "#seed-input",
     "#cells-input",

@@ -1928,6 +1928,7 @@ select:disabled {
   margin-top: 4px;
 }
 
+.heightmap-import-section,
 .generation-climate-section,
 .generation-inheritance-section {
   display: grid;
@@ -1938,12 +1939,45 @@ select:disabled {
   background: #10171b;
 }
 
+.heightmap-import-section h2,
 .generation-climate-section h2,
 .generation-inheritance-section h2 {
   margin: 0;
   color: #edf4f6;
   font-size: 12px;
   line-height: 1.2;
+}
+
+.heightmap-import-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.heightmap-import-field {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.heightmap-import-field input {
+  width: 100%;
+}
+
+.heightmap-import-field output {
+  color: #edf4f6;
+  text-align: right;
+}
+
+.heightmap-import-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  width: 100%;
+  text-align: center;
 }
 
 .generation-climate-grid,

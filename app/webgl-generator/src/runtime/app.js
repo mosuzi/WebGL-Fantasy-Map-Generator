@@ -26,6 +26,7 @@ import {createStatePanel} from "../ui/panels/state-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
+import {createGrayscaleHeightmapFromImage, readHeightmapImportSettings} from "./heightmap-import.js";
 import {createMapDocument, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
 import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
@@ -81,6 +82,7 @@ export function createGeneratorApp(documentRef) {
     selectionStore: null,
     renderer: null,
     pendingGenerateId: 0,
+    heightmapImportId: 0,
     panels: {}
   };
   let selectionStore = null;
@@ -899,6 +901,7 @@ export function createGeneratorApp(documentRef) {
     onExportMapData: () => exportMapData(state, documentRef),
     onExportGeoJson: () => exportGeoJson(state, documentRef),
     onImportMapData: file => importMapData(state, documentRef, file),
+    onImportHeightmapImage: file => importHeightmapImage(state, documentRef, file),
     onRegenerate: kind => {
       updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
     },
@@ -1125,18 +1128,59 @@ async function importMapData(state, documentRef, file) {
   }
 }
 
+async function importHeightmapImage(state, documentRef, file) {
+  if (!file) return;
+  try {
+    setFileOperationStatus(documentRef, "正在读取灰度高度图...", ["heightmap-import-status"]);
+    setGenerationLoading(documentRef, true, "正在读取灰度高度图");
+    const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+    const settings = readHeightmapImportSettings(documentRef);
+    const importGenerateId = (state.pendingGenerateId || 0) + 1;
+    state.pendingGenerateId = importGenerateId;
+    state.heightmapImportId = importGenerateId;
+    const heightmap = await createGrayscaleHeightmapFromImage(documentRef, file, options, settings);
+    if (importGenerateId !== state.pendingGenerateId) {
+      clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
+      return;
+    }
+    state.options = options;
+    setGenerationLoading(documentRef, true, "正在按灰度图生成地图");
+    const map = generatePlaceholderMap(options, {heightmap});
+    if (importGenerateId !== state.pendingGenerateId) {
+      clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
+      return;
+    }
+    state.options = map.options;
+    loadMapIntoRuntime(state, documentRef, map, {
+      loadingMessages: ["正在重建水陆与气候", "正在刷新地图面板"]
+    });
+    setGenerationLoading(documentRef, false);
+    setFileOperationStatus(documentRef, `已导入灰度高度图：${heightmap.source.filename || "本地图片"}，高度 ${heightmap.source.heightMin}-${heightmap.source.heightMax}`, ["heightmap-import-status"]);
+  } catch (error) {
+    setGenerationLoading(documentRef, false);
+    reportFileOperationError(documentRef, "灰度高度图导入失败", error, ["heightmap-import-status"]);
+  }
+}
+
+function clearStaleHeightmapImportStatus(state, documentRef, importGenerateId) {
+  if (state.heightmapImportId !== importGenerateId) return;
+  setFileOperationStatus(documentRef, "", ["heightmap-import-status"]);
+}
+
 function assertMapAvailable(state) {
   if (!state.map) throw new Error("当前没有可用地图");
 }
 
-function setFileOperationStatus(documentRef, message) {
-  const status = documentRef.getElementById("file-operation-status");
-  if (status) status.textContent = message;
+function setFileOperationStatus(documentRef, message, targetIds = ["file-operation-status"]) {
+  for (const id of targetIds) {
+    const status = documentRef.getElementById(id);
+    if (status) status.textContent = message;
+  }
 }
 
-function reportFileOperationError(documentRef, prefix, error) {
+function reportFileOperationError(documentRef, prefix, error, targetIds) {
   const message = error instanceof Error ? error.message : String(error);
-  setFileOperationStatus(documentRef, `${prefix}：${message}`);
+  setFileOperationStatus(documentRef, `${prefix}：${message}`, targetIds);
   console.error(error);
 }
 
@@ -1151,6 +1195,7 @@ function syncGenerationInputs(documentRef, options) {
 function setInputValue(documentRef, id, value) {
   const input = documentRef.getElementById(id);
   if (!input || value === undefined || value === null) return;
+  if (input.tagName === "SELECT" && !Array.from(input.options).some(option => option.value === String(value))) return;
   input.value = String(value);
   input.dispatchEvent(new Event("change", {bubbles: true}));
 }

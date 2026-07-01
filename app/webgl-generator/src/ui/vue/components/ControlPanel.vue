@@ -32,6 +32,40 @@
       <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
       <UiField label="高度" input-id="height-input" type="number" :model-value="960" :input-attrs="{min: 480, max: 4096, step: 80}" />
       <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />
+      <section class="heightmap-import-section" aria-labelledby="heightmap-import-title">
+        <h2 id="heightmap-import-title">灰度高度图</h2>
+        <div class="heightmap-import-fields">
+          <UiSliderField
+            label="最低高度"
+            input-id="heightmap-import-min"
+            output-id="heightmap-import-min-value"
+            field-class="heightmap-import-field"
+            value-tag="output"
+            :model-value="heightmapImportMin"
+            :display-value="heightmapImportMin"
+            :min="0"
+            :max="99"
+            :step="1"
+            @input="setHeightmapImportMin"
+          />
+          <UiSliderField
+            label="最高高度"
+            input-id="heightmap-import-max"
+            output-id="heightmap-import-max-value"
+            field-class="heightmap-import-field"
+            value-tag="output"
+            :model-value="heightmapImportMax"
+            :display-value="heightmapImportMax"
+            :min="1"
+            :max="100"
+            :step="1"
+            @input="setHeightmapImportMax"
+          />
+          <label class="secondary-action file-import-action heightmap-import-action" for="heightmap-image-file">导入灰度图</label>
+          <input id="heightmap-image-file" type="file" accept="image/*" hidden />
+        </div>
+        <p id="heightmap-import-status" class="file-operation-status" aria-live="polite"></p>
+      </section>
       <section class="generation-climate-section" aria-labelledby="generation-climate-title">
         <h2 id="generation-climate-title">气候</h2>
         <input id="climate-latitude-mode" type="hidden" :value="climateLatitudeMode" />
@@ -362,6 +396,8 @@ const windBands = ref(defaultWindProfile());
 const temperatureEquator = ref(25);
 const temperatureNorthPole = ref(-25);
 const temperatureSouthPole = ref(-15);
+const heightmapImportMin = ref(0);
+const heightmapImportMax = ref(100);
 const cultureInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const religionInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
@@ -482,6 +518,14 @@ function patchUnitPreference(patch) {
   const next = normalizeUnitPreferences({...unitPreferences.value, ...patch});
   if (patch.distanceUnit) next.areaUnit = areaUnitForDistanceUnit(patch.distanceUnit);
   config.patchPreferences({units: next});
+}
+
+function setHeightmapImportMin(value) {
+  heightmapImportMin.value = Math.min(Number(value) || 0, heightmapImportMax.value - 1);
+}
+
+function setHeightmapImportMax(value) {
+  heightmapImportMax.value = Math.max(Number(value) || 100, heightmapImportMin.value + 1);
 }
 
 function toggleLatitudeMode() {

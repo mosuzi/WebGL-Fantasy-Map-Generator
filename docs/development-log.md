@@ -12202,3 +12202,29 @@ full 矩阵结果：
 - 下一批建议迁移 `UiFilterInput`、`UiTextEditField`、`UiNumberField`、`UiSortBar`，继续只改 base 适配层。
 - `UiSelectField / UiSliderField / UiSwitchField` 需要保留隐藏原生控件或 DOM id 桥，再迁移 Element Plus；否则旧 runtime 的 `.value/.checked/change` 读取链会断。
 - 暂缓 `ElTable / ElTree / ElDialog / ElColorPicker / ElSelect` 等较重组件，迁移前先记录体积增量。
+
+### 灰度高度图导入第一刀
+
+背景：
+
+- 用户希望能导入灰度图生成地形，并可调整高度映射区间，用来扩展项目玩法。
+- 只读调查确认当前高度笔刷只同步 `grid / pack.cells.h`，不会重建 `features / pack / rivers / politics / settlements`，因此灰度导入不能走局部高度编辑路径。
+
+修正：
+
+- `heightmap.js` 新增采样型高度模板 `createSampledHeightmap()`；`applyHeightmap()` 遇到 `sampleHeight` 时按 `grid.points` 坐标写入高度，普通内置模板逻辑保持不变。
+- `generatePlaceholderMap(inputOptions, overrides)` 支持传入 `overrides.heightmap`，让灰度图导入复用完整生成链路；传入采样型 heightmap 时，下游阶段使用 `grayscale-import` 作为有效 `heightmapTemplate`，避免继续触发导入前下拉模板的专属启发式。
+- 新增 `runtime/heightmap-import.js`：浏览器读取本地图片到 canvas，计算图片亮度 min/max，把亮度自动归一化到用户设定的最低/最高高度，并返回 `grayscale-import` 高度模板。原始图片像素不进入地图导出数据。
+- 生成 tab 在地形配置后新增“灰度高度图”区域，包含最低高度、最高高度和本地图片导入入口；导入状态显示在同一区域。
+- 导入时读取当前控制面板 options，递增 `pendingGenerateId` 并记录 `heightmapImportId`，防止读图过程中被普通生成或另一轮导入覆盖；被替换的旧导入只清理自己的状态文案，随后重建整张地图并刷新 renderer、选择、编辑历史和对象面板。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `716.90KB JS / 220.48KB gzip`、`77.51KB CSS / 12.14KB gzip`。
+- Playwright + 构建产物静态服务验证通过：合成 `32x24` 灰度 PNG，设置高度区间 `10..90` 后导入；`map.heightmap.template = grayscale-import`，source 记录文件名和亮度范围，实际 `grid.cells.h` 最小/最大为 `10 / 90`，checksum 从 `0de77532` 变为 `f26a4db9`，并重新生成 `features=5 / packCells=9709 / states=20 / cities=1349 / rivers=121`，console/page error 为 `0`。复测时把上传文件 MIME 置空，扩展名兜底可正常导入；另一次复测先把地形下拉设为“群岛”，导入后 `map/options/summary.heightmapTemplate` 仍均为 `grayscale-import`。
+
+后续：
+
+- 增加黑白反转、保持比例/裁剪、模糊降噪和陆地比例预检。
+- 如果要对齐原版 Image Converter，再补彩色高度图色板识别、手动颜色映射和导入预览；这不应塞进当前第一刀。
