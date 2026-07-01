@@ -13160,3 +13160,25 @@ full 矩阵结果：
 后续：
 
 - 单个编辑、复制内置库、重命名和覆盖/追加模式仍未实现；若这些操作开始影响生成，应再决定是否引入 `EditHistory` 或名称库专用历史栈。
+
+### 复制内置名称库为用户库
+
+背景：
+
+- 单个删除和清空用户库已经能管理导入库，但用户还不能从内置词池创建可编辑副本。
+- 后续做词池编辑前，需要先避免“直接修改内置库”的路径。
+
+修正：
+
+- `namebase-store.js` 新增 `copyBuiltinNamebaseToUser(map, id)`，从内置只读摘要中取完整 `source`，复制为 `map.namebases.bases` 中的用户库，id 使用 `user-` 前缀并避让冲突。
+- 名称库总览新增“复制内置”按钮，仅选中内置库时可用；复制结果来源显示为“复制”，可继续导出、删除、清空并随完整地图保存。
+- 底部操作区改用 `auto-fit` 网格，避免新增按钮后固定列数挤压。
+
+验证：
+
+- `$env:CI='true'; npm run build` 通过；产物为 `dist/webgl-generator/assets/index-6OjCQcxq.js`，gzip 约 `301.67KB`。仍有既有的 Rolldown `#__PURE__` 注释警告和大 chunk 警告。
+- Playwright 构建产物烟测通过：打开名称库总览后，“复制内置”在选中内置库时可用，“删除选中”仍禁用；复制“春秋古国根名”后 `map.namebases.bases.length = 1`，新增用户库 id 为 `user-ancient-state-roots`，名称为“春秋古国根名 副本”，来源为“复制”，样本数 `96`。总览行数 `62`，其中内置 `61`、复制 `1`；导出名称库 metadata 为 `bases = 62 / builtin = 61 / user = 1`，复制记录 source 长度 `96`；导出完整地图 JSON 后 `map.namebases.bases.length = 1`，console/page error 为 `0`。
+
+后续：
+
+- 下一步可在复制出的用户库上做重命名、样本编辑和导入覆盖/追加策略；生成绑定仍后置。

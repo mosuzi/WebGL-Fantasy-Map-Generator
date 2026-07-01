@@ -75,6 +75,36 @@ export function importNamebaseDocument(map, document, {filename = ""} = {}) {
   };
 }
 
+export function copyBuiltinNamebaseToUser(map, id) {
+  if (!map) throw new Error("当前没有可复制名称库的地图");
+  const sourceBase = getBuiltinNamebaseSummaries({includeSource: true}).find(base => base.id === id);
+  if (!sourceBase?.source?.length) return {copied: false, total: map.namebases?.bases?.length || 0, name: ""};
+  const store = ensureNamebaseStore(map);
+  const existingIds = new Set(store.bases.map(base => base.id));
+  const copiedAt = new Date().toISOString();
+  const copy = {
+    id: uniqueId(`user-${sanitizeId(sourceBase.id)}`, existingIds),
+    sourceId: sourceBase.id,
+    name: `${sourceBase.name} 副本`,
+    kind: sourceBase.kind,
+    category: sourceBase.category,
+    note: sourceBase.note || "",
+    source: [...sourceBase.source],
+    builtin: false,
+    origin: "复制",
+    importedAt: copiedAt,
+    importedFrom: "内置名称库"
+  };
+  store.bases.push(copy);
+  updateNamebaseMetadata(store);
+  return {
+    copied: true,
+    total: store.bases.length,
+    name: copy.name,
+    id: copy.id
+  };
+}
+
 export function clearUserNamebases(map) {
   if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {removed: 0, total: 0};
   const removed = map.namebases.bases.length;

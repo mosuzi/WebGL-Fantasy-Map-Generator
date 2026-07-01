@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {clearUserNamebases, createNamebaseDocument, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument} from "../generator/namebase-store.js";
+import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -808,6 +808,7 @@ export function createGeneratorApp(documentRef) {
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
     onExport: () => exportNamebases(state, documentRef),
     onImport: file => importNamebases(state, documentRef, file),
+    onCopyBuiltin: row => copyBuiltinNamebase(state, documentRef, row),
     onDeleteUser: row => deleteImportedNamebase(state, documentRef, row),
     onClearUser: () => clearImportedNamebases(state, documentRef)
   });
@@ -1349,6 +1350,25 @@ async function importNamebases(state, documentRef, file) {
     setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池，当前用户库 ${result.total} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导入失败", error);
+  }
+}
+
+function copyBuiltinNamebase(state, documentRef, row) {
+  try {
+    assertMapAvailable(state);
+    if (!row?.id || row.builtin !== true) {
+      setFileOperationStatus(documentRef, "请选择一个内置名称库进行复制。");
+      return;
+    }
+    const result = copyBuiltinNamebaseToUser(state.map, row.id);
+    if (!result.copied) {
+      setFileOperationStatus(documentRef, "未找到可复制的内置名称库。");
+      return;
+    }
+    state.panels.namebase.update(state.map);
+    setFileOperationStatus(documentRef, `已复制“${row.name}”为用户名称库“${result.name}”，当前用户库 ${result.total} 个。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "复制名称库失败", error);
   }
 }
 
