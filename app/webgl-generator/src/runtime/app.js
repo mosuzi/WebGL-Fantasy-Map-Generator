@@ -1620,7 +1620,7 @@ function bindEditingInteractionLock(canvas, state) {
   for (const eventName of ["pointerdown", "pointermove", "pointerup", "pointercancel", "wheel"]) {
     canvas.addEventListener(eventName, event => {
       if (!isEditingInteractionLocked(state)) return;
-      if (isRightButtonNavigationEvent(event)) return;
+      if (isMouseButtonNavigationEvent(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     }, true);
@@ -1631,11 +1631,11 @@ function isPrimaryPointerDown(event) {
   return event.button === 0;
 }
 
-function isRightButtonNavigationEvent(event) {
+function isMouseButtonNavigationEvent(event) {
   if (!event.type?.startsWith("pointer") || event.pointerType !== "mouse") return false;
-  if (event.type === "pointermove") return (event.buttons & 2) === 2;
+  if (event.type === "pointermove") return (event.buttons & 6) !== 0;
   if (event.type === "pointercancel") return true;
-  return event.button === 2;
+  return event.button === 1 || event.button === 2;
 }
 
 function startMarkerEditMode(state, documentRef, {mode, type = "mines", markerId = null} = {}) {

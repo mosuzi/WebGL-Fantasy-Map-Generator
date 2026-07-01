@@ -11854,3 +11854,22 @@ full 矩阵结果：
 
 - 外交矩阵当前用于查看、选中、编辑和导出；尚未做矩阵内直接批量编辑。
 - 战争关系仍只记录在外交关系和历史中，尚未驱动军事行动、战争事件、经济制裁或贸易偏好。
+
+### 保留中键平移
+
+背景：
+
+- 用户确认左键仍然不可拖动画布，但需要保留鼠标中键拖动画布的能力。
+
+修正：
+
+- `pointerInteractionMode()` 中鼠标中键与右键一样进入 `pan` 模式，左键继续只进入 `select` 模式。
+- canvas 增加 `auxclick` 阻止中键/右键默认动作，避免中键点击在浏览器里触发额外行为。
+- 编辑交互锁的导航穿透从“右键”扩展为“鼠标导航键”，右键和中键 pointerdown / pointermove / pointerup 均可穿透给地图平移；高度、国家、省份和 marker 编辑仍只响应左键。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 临时静态 server + Playwright 验证构建产物：左键拖动后 camera offset 保持 `{0, 0}`；右键拖动后 camera offset 变为 `{offsetX: 0.2979, offsetY: -0.1951}`；中键拖动后 camera offset 同样变为 `{offsetX: 0.2979, offsetY: -0.1951}`；console error 为 `0`。

@@ -1492,6 +1492,10 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
     event.preventDefault();
   });
 
+  canvas.addEventListener("auxclick", event => {
+    if (event.button === 1 || event.button === 2) event.preventDefault();
+  });
+
   canvas.addEventListener(
     "wheel",
     event => {
@@ -1515,6 +1519,7 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
 function pointerInteractionMode(event) {
   if (event.pointerType === "mouse") {
     if (event.button === 0) return "select";
+    if (event.button === 1) return "pan";
     if (event.button === 2) return "pan";
     return null;
   }
