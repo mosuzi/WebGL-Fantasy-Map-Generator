@@ -13845,3 +13845,30 @@ full 矩阵结果：
 后续：
 
 - 测量工具的轻量编辑能力已经覆盖添加、拖动、撤销、删除、插入和 JSON 导出；后续应转向保存测量对象或路线贴合，这两项都需要更明确的数据契约。
+
+### 测量对象与路线贴合计划
+
+背景：
+
+- 临时测量工具已经覆盖主要轻量编辑动作，但保存测量对象和路线贴合会影响地图数据结构、图层和导入导出。
+- 原版 FMG 的测量系统是 `Rulers.data` 集合，不是单一临时点列，直接继续扩展 `state.measurement.points` 会让后续保存和多对象编辑变得混乱。
+
+对照结果：
+
+- `source/Fantasy-Map-Generator/public/modules/ui/measurers.js` 中 `Rulers.toString()` / `fromString()` 会把多个测量对象序列化为字符串，再按 `Ruler / Opisometer / RouteOpisometer / Planimeter` 类型重建。
+- `Ruler` 支持折线点拖拽、点击线段插入控制点、点击控制点删除，并按折线长度显示标签。
+- `Opisometer` 和 `Planimeter` 通过拖拽连续采样，结束时默认优化过密点；`Shift` 会跳过优化。
+- `RouteOpisometer` 通过 `Routes.isConnected(cell)` 限制路线尺沿道路/路线 cell 延伸；`Shift` 允许离开道路。
+- `Planimeter` 使用闭合曲线和多边形面积，并用 `polylabel` 找标签位置。
+
+文档：
+
+- 新增 `docs/task-notes/measurement-rulers-plan.md`。
+- 文档建议新增 `map.measurements` 结构化 JSON 契约，而不是沿用原版字符串作为主格式。
+- 阶段拆分为保存临时测量为对象、图层化与对象编辑、路线贴合、曲线尺和面积尺细化。
+- `source-feature-backlog.md` 已改为指向专项计划。
+
+后续：
+
+- 若继续实现，应先做“保存临时测量为对象”和完整地图 JSON 往返，再考虑路线贴合。
+- 路线贴合第一刀可先使用 pack cell 与路线索引；更精确的道路 polyline 投影应后置。
