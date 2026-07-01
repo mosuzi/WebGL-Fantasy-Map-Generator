@@ -33,6 +33,8 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     onRename: (cityId, name) => callbacks.onRename?.(cityId, name),
     onPopulationChange: (cityId, population) => callbacks.onPopulationChange?.(cityId, population),
     onSyncOwnerToCell: cityId => callbacks.onSyncOwnerToCell?.(cityId),
+    onVisualChange: (cityId, patch) => callbacks.onVisualChange?.(cityId, patch),
+    onVisualReset: cityId => callbacks.onVisualReset?.(cityId),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };

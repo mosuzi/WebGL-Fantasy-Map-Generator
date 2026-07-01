@@ -1,3 +1,6 @@
+import {defaultCityVisual, normalizeCityVisualPatch, resolveCityVisual} from "./city-visuals.js";
+import {OBJECT_KIND} from "./object-kinds.js";
+
 const CITY_POPULATION_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
@@ -12,6 +15,14 @@ const CITY_OWNER_SYNC_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["settlement-states", "city-provinces", "object-panels"])
+});
+
+const CITY_VISUAL_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["labels", "object-panels"])
 });
 
 export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口"} = {}) {
@@ -84,6 +95,74 @@ export function createSyncCityOwnerToCellCommand(cityId, {label = "同步城市�
   };
 }
 
+export function createSetCityVisualCommand(cityId, patch = {}, {label = "调整城市剪影"} = {}) {
+  const normalizedCityId = normalizeCityId(cityId);
+  const nextPatch = normalizeCityVisualPatch(patch);
+  let snapshot = null;
+
+  return {
+    label: `${label} #${normalizedCityId}`,
+    effects: {
+      ...CITY_VISUAL_EFFECTS,
+      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+    },
+    apply(context) {
+      snapshot ??= captureCityVisualSnapshot(context.map, normalizedCityId);
+      if (!snapshot) throw new Error(`找不到城市 #${normalizedCityId}`);
+      const {city, burg, culture} = readCityVisualTarget(context.map, normalizedCityId);
+      const current = resolveCityVisual(city, culture, burg?.visual);
+      writeCityVisual(city, burg, {...current, ...nextPatch, manual: true});
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的城市剪影快照");
+      restoreCityVisualSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const city = context.map?.settlements?.cities?.[normalizedCityId];
+      if (!city || !Object.keys(nextPatch).length) return true;
+      const burg = findBurgForCity(context.map, city);
+      const culture = readCityCulture(context.map, city, burg);
+      const current = resolveCityVisual(city, culture, burg?.visual);
+      return current.manual && Object.entries(nextPatch).every(([key, value]) => current[key] === value);
+    }
+  };
+}
+
+export function createResetCityVisualCommand(cityId, {label = "恢复城市自动剪影"} = {}) {
+  const normalizedCityId = normalizeCityId(cityId);
+  let snapshot = null;
+
+  return {
+    label: `${label} #${normalizedCityId}`,
+    effects: {
+      ...CITY_VISUAL_EFFECTS,
+      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+    },
+    apply(context) {
+      snapshot ??= captureCityVisualSnapshot(context.map, normalizedCityId);
+      if (!snapshot) throw new Error(`找不到城市 #${normalizedCityId}`);
+      const {city, burg, culture} = readCityVisualTarget(context.map, normalizedCityId);
+      writeCityVisual(city, burg, defaultCityVisual(city, culture));
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的城市剪影快照");
+      restoreCityVisualSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const city = context.map?.settlements?.cities?.[normalizedCityId];
+      if (!city) return true;
+      const burg = findBurgForCity(context.map, city);
+      const culture = readCityCulture(context.map, city, burg);
+      const current = resolveCityVisual(city, culture, burg?.visual);
+      const automatic = defaultCityVisual(city, culture);
+      return !current.manual
+        && current.silhouette === automatic.silhouette
+        && current.palette === automatic.palette
+        && current.cultureStyle === automatic.cultureStyle;
+    }
+  };
+}
+
 function captureCitySnapshot(map, cityId) {
   const city = map?.settlements?.cities?.[cityId];
   if (!city) return null;
@@ -103,6 +182,54 @@ function captureCitySnapshot(map, cityId) {
       hasProvince: hasOwn(burg, "province")
     } : null
   };
+}
+
+function captureCityVisualSnapshot(map, cityId) {
+  const city = map?.settlements?.cities?.[cityId];
+  if (!city) return null;
+  const burg = findBurgForCity(map, city);
+  return {
+    cityId,
+    burgId: city.burgId,
+    city: {
+      hasVisual: hasOwn(city, "visual"),
+      visual: cloneVisual(city.visual)
+    },
+    burg: burg ? {
+      hasVisual: hasOwn(burg, "visual"),
+      visual: cloneVisual(burg.visual)
+    } : null
+  };
+}
+
+function restoreCityVisualSnapshot(map, snapshot) {
+  const city = map?.settlements?.cities?.[snapshot.cityId];
+  if (city) restoreObjectVisual(city, snapshot.city);
+  const burg = map?.pack?.burgs?.[snapshot.burgId] || findBurgForCity(map, city);
+  if (burg && snapshot.burg) restoreObjectVisual(burg, snapshot.burg);
+}
+
+function restoreObjectVisual(object, snapshot) {
+  if (snapshot.hasVisual) object.visual = cloneVisual(snapshot.visual);
+  else delete object.visual;
+}
+
+function readCityVisualTarget(map, cityId) {
+  const city = map?.settlements?.cities?.[cityId];
+  if (!city) throw new Error(`找不到城市 #${cityId}`);
+  const burg = findBurgForCity(map, city);
+  return {city, burg, culture: readCityCulture(map, city, burg)};
+}
+
+function readCityCulture(map, city, burg) {
+  const cultureId = city?.culture ?? burg?.culture ?? 0;
+  return map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
+}
+
+function writeCityVisual(city, burg, visual) {
+  const next = cloneVisual(visual);
+  city.visual = next;
+  if (burg) burg.visual = cloneVisual(next);
 }
 
 function writeCityPopulation(map, cityId, population) {
@@ -233,6 +360,10 @@ function maxValue(values) {
 function roundValue(value, digits = 1) {
   const factor = 10 ** digits;
   return Math.round((Number(value) || 0) * factor) / factor;
+}
+
+function cloneVisual(visual) {
+  return visual ? {...visual} : {};
 }
 
 function hasOwn(object, key) {

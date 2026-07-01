@@ -42,6 +42,7 @@ import {
   summarizePoliticalVisualPaths
 } from "./political-layer.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
+import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 
 const MARKER_ICON_MIN_SCALE = 2.15;
@@ -63,15 +64,6 @@ const MARKER_ICON_PALETTES = Object.freeze({
   culture: {fill: "#8264c5", stroke: "#2d204d", symbol: "#fbf2ff"},
   settlement: {fill: "#cf6f4b", stroke: "#4b271b", symbol: "#fff1e8"},
   mystery: {fill: "#715cc7", stroke: "#271f51", symbol: "#f7f1ff"}
-});
-
-const CITY_ICON_PALETTES = Object.freeze({
-  capital: {wall: "#dcc17e", roof: "#8f4b37", stroke: "#4b311d", accent: "#f7e4aa", water: "#7fa8ba"},
-  provincial: {wall: "#d3b979", roof: "#9a5438", stroke: "#49301c", accent: "#f4dea2", water: "#83a7b8"},
-  port: {wall: "#c8b785", roof: "#816c47", stroke: "#33404a", accent: "#eef0c4", water: "#4d92bc"},
-  city: {wall: "#d8c08b", roof: "#a35d3f", stroke: "#4d3321", accent: "#ffe0a0", water: "#7fa8ba"},
-  town: {wall: "#cfb884", roof: "#965a3d", stroke: "#493323", accent: "#efd69a", water: "#7fa8ba"},
-  hamlet: {wall: "#c6ad79", roof: "#8d6540", stroke: "#493523", accent: "#e6cf91", water: "#7fa8ba"}
 });
 
 const MARKER_ICON_SYMBOLS = Object.freeze({
@@ -1091,17 +1083,21 @@ function getCityIconItems(map) {
     .sort((a, b) => b.priority - a.priority)
     .map(({city, priority}, rank) => {
       const kind = cityIconKind(city);
+      const culture = map?.society?.cultures?.[city.culture] || map?.pack?.cultures?.[city.culture] || null;
+      const burg = map?.pack?.burgs?.[city.burgId] || null;
+      const visual = resolveCityVisual(city, culture, burg?.visual);
       return {
         id: city.id,
         city,
         name: city.name || `城镇 #${city.id + 1}`,
         kind,
+        silhouette: visual.silhouette,
         tooltip: cityIconTooltip(city, kind),
         priority,
         rank,
         population: Number(city.population || 0),
         cultureId: Number.isInteger(city.culture) ? city.culture : null,
-        visual: city.visual || city.iconVisual || {},
+        visual,
         x: city.x,
         y: city.y,
         minScale: cityIconMinScale(city, kind, rank)
@@ -1146,7 +1142,7 @@ function cityIconTooltip(city, kind) {
 }
 
 function cityIconClassName(item) {
-  return `city-map-icon city-map-icon--${item.kind}`;
+  return `city-map-icon city-map-icon--${item.silhouette} city-map-icon--style-${item.visual.cultureStyle}`;
 }
 
 function applyCityIconPalette(node, item) {
@@ -1160,11 +1156,11 @@ function applyCityIconPalette(node, item) {
 
 function cityIconPalette(item) {
   const visual = item.visual || {};
-  return CITY_ICON_PALETTES[visual.cityPalette] || CITY_ICON_PALETTES[visual.palette] || CITY_ICON_PALETTES[item.kind] || CITY_ICON_PALETTES.town;
+  return CITY_ICON_PALETTES[visual.palette] || CITY_ICON_PALETTES[item.silhouette] || CITY_ICON_PALETTES[item.kind] || CITY_ICON_PALETTES.town;
 }
 
 function cityIconSvg(item) {
-  if (item.kind === "capital") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+  if (item.silhouette === "capital") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
     <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="13.6" ry="2.3"/>
     <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="13.1" ry="2.1"/>
     <path class="city-icon-fill" d="M5 20.1v-7.8l2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3v7.8z"/>
@@ -1173,7 +1169,7 @@ function cityIconSvg(item) {
     <path class="city-icon-window" d="M12.3 15.2h2.2v4.9h-2.2zm7.3-.1h2.2v5h-2.2z"/>
     <path class="city-icon-stroke" d="M4.2 20.1h25.6"/>
   </svg>`;
-  if (item.kind === "provincial") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+  if (item.silhouette === "provincial") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
     <ellipse class="city-icon-shadow" cx="17" cy="22.3" rx="12.4" ry="2.1"/>
     <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="12" ry="1.9"/>
     <path class="city-icon-fill" d="M9.2 20.2v-8.8l1.8-.9 1.8.9 1.8-.9 1.8.9 1.8-.9 1.8.9 1.8-.9 1.8.9v8.8z"/>
@@ -1182,7 +1178,7 @@ function cityIconSvg(item) {
     <path class="city-icon-window" d="M16 12.2h2v2.2h-2zm.1 4.1h1.8v3.9h-1.8z"/>
     <path class="city-icon-stroke" d="M6.7 20.2h20.6"/>
   </svg>`;
-  if (item.kind === "port") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+  if (item.silhouette === "port") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
     <ellipse class="city-icon-shadow" cx="16.5" cy="22.1" rx="12.5" ry="2.1"/>
     <path class="city-icon-water" d="M4.8 21.1c2.5-1.1 4.9-1.1 7.4 0s4.9 1.1 7.4 0 5-1.1 7.5 0"/>
     <path class="city-icon-fill" d="M7.6 20v-6h8.6v6z"/>
@@ -1191,7 +1187,25 @@ function cityIconSvg(item) {
     <path class="city-icon-sail" d="M22.3 8.2c3 2 4.6 4.7 4.9 8.1h-4.9z"/>
     <path class="city-icon-window" d="M10.7 16h2.4v4h-2.4z"/>
   </svg>`;
-  if (item.kind === "hamlet") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+  if (item.silhouette === "fort") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="12.6" ry="2.1"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21" rx="12" ry="1.8"/>
+    <path class="city-icon-fill" d="M6.4 20.2v-7.5l1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8v7.5z"/>
+    <path class="city-icon-accent" d="M12.1 20.2v-10h4.2v10zm5.7 0v-11.8h4.6v11.8z"/>
+    <path class="city-icon-roof" d="m11.1 10.4 3.1-3.2 3.1 3.2zm5.7-1.9 3.3-3.5 3.3 3.5z"/>
+    <path class="city-icon-window" d="M13.5 14.2H15v6h-1.5zm5.8-2h1.6v2.1h-1.6zm.1 4.1h1.4v3.9h-1.4z"/>
+    <path class="city-icon-stroke" d="M5.6 20.2h22.8"/>
+  </svg>`;
+  if (item.silhouette === "camp") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="11.8" ry="2"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="11.2" ry="1.7"/>
+    <path class="city-icon-tent" d="M7.8 20.2 13 9.2l5.2 11z"/>
+    <path class="city-icon-tent city-icon-tent--main" d="M13.2 20.2 20 7.3l6.8 12.9z"/>
+    <path class="city-icon-roof" d="M20 7.3v12.9"/>
+    <path class="city-icon-window" d="M18.3 16.4 20 13.2l1.7 3.2v3.8h-3.4z"/>
+    <path class="city-icon-stroke" d="M6.9 20.2h21.2"/>
+  </svg>`;
+  if (item.silhouette === "hamlet") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
     <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="9.4" ry="1.8"/>
     <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="9" ry="1.6"/>
     <path class="city-icon-fill" d="M10.4 20.3v-7.2h13.2v7.2z"/>
@@ -1199,7 +1213,7 @@ function cityIconSvg(item) {
     <path class="city-icon-window" d="M15.3 16.1h3.4v4.2h-3.4z"/>
     <path class="city-icon-stroke" d="M9.2 20.3h15.6"/>
   </svg>`;
-  if (item.kind === "city") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+  if (item.silhouette === "city") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
     <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="12.9" ry="2.2"/>
     <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="12.2" ry="1.9"/>
     <path class="city-icon-fill" d="M5.8 20.2v-6.9h8.2v6.9zm9.2 0v-8.2h8.4v8.2zm9.2 0v-6.1h4.2v6.1z"/>

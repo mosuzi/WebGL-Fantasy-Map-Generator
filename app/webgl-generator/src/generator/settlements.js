@@ -3,6 +3,7 @@ import Delaunator from "../vendor/delaunator.js";
 import {BIOMES} from "./biomes.js";
 import {createChineseNameGenerator} from "./names.js";
 import {createRandom} from "./random.js";
+import {defaultCityVisual} from "../runtime/city-visuals.js";
 
 const MIN_PASSABLE_SEA_TEMP = -4;
 const MIN_NAVIGABLE_FLUX = 100;
@@ -334,7 +335,9 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     capital: flags.capital ? 1 : 0,
     port: 0,
     population,
-    type
+    type,
+    group: groupHint,
+    visual: defaultCityVisual({capital: Boolean(flags.capital), provincial: Boolean(flags.provincial), port: 0, population, type, group: groupHint}, culture)
   };
   const city = {
     id: cityId,
@@ -352,7 +355,9 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     capital: Boolean(flags.capital),
     provincial: Boolean(flags.provincial),
     port: 0,
-    type
+    type,
+    group: groupHint,
+    visual: cloneVisual(sourceBurg.visual)
   };
 
   burgs[burgId] = sourceBurg;
@@ -647,7 +652,24 @@ function specifyBurgs(pack, cities, burgs, nameGenerator) {
     city.plaza = burg.plaza;
     city.walls = burg.walls;
     city.temple = burg.temple;
+    syncCityVisual(pack, city, burg);
   }
+}
+
+function syncCityVisual(pack, city, burg) {
+  const cultureId = city.culture ?? burg?.culture ?? 0;
+  const culture = pack?.cultures?.[cultureId] || null;
+  const current = city.visual || burg?.visual || {};
+  if (current.manual) {
+    const manual = cloneVisual(current);
+    city.visual = manual;
+    if (burg) burg.visual = cloneVisual(manual);
+    return;
+  }
+
+  const visual = defaultCityVisual(city, culture);
+  city.visual = visual;
+  if (burg) burg.visual = cloneVisual(visual);
 }
 
 function defineBurgFeatures(pack, burg) {
@@ -768,7 +790,7 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
     const port = isCoastalCell(grid, features, item.cell) ? 1 : 0;
     const populationValue = population[item.cell] + (item.capital ? 90 : item.provincial ? 45 : 20);
     const group = item.capital ? "capital" : port || populationValue >= 5 ? "city" : populationValue <= 0.1 ? "hamlet" : populationValue <= 1 ? "village" : "town";
-    return {
+    const city = {
       id,
       burgId: id + 1,
       name: nameGenerator.makePlaceName({
@@ -798,6 +820,8 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
       type: port ? "Naval" : "Generic",
       group
     };
+    city.visual = defaultCityVisual(city, null);
+    return city;
   });
 }
 
@@ -1613,6 +1637,10 @@ function clamp(value, min, max) {
 function round(value, digits = 0) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
+}
+
+function cloneVisual(visual) {
+  return visual ? {...visual} : {};
 }
 
 function isLandFeature(features, grid, cell) {

@@ -40,13 +40,30 @@
       <span>归属操作</span>
       <UiButton variant="secondary" :disabled="!selected.canSyncOwner" @click="callbacks.onSyncOwnerToCell(selected.id)">同步归属到所在 cell</UiButton>
     </div>
+
+    <div class="city-visual-editor">
+      <label>
+        <span>剪影</span>
+        <select v-model="visualDraft.silhouette">
+          <option v-for="option in silhouetteOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+      <label>
+        <span>配色</span>
+        <select v-model="visualDraft.palette">
+          <option v-for="option in paletteOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+      <UiButton variant="secondary" @click="applyVisual">应用剪影</UiButton>
+      <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
+    </div>
   </template>
 
   <UiHistoryActions class-name="city-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, reactive, watch} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -56,6 +73,14 @@ import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {
+  CITY_PALETTE_OPTIONS,
+  CITY_SILHOUETTE_OPTIONS,
+  cityCultureStyleLabel,
+  cityPaletteLabel,
+  citySilhouetteLabel,
+  resolveCityVisual
+} from "../../../runtime/city-visuals.js";
 
 defineOptions({
   name: "CityPanel"
@@ -80,6 +105,9 @@ const sortOptions = Object.freeze([
   {key: "id", label: "ID"}
 ]);
 
+const silhouetteOptions = CITY_SILHOUETTE_OPTIONS;
+const paletteOptions = CITY_PALETTE_OPTIONS;
+
 const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
@@ -92,6 +120,10 @@ const columns = Object.freeze([
 const metrics = computed(() => buildCityMetrics(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedCityId) || null);
+const visualDraft = reactive({
+  silhouette: "town",
+  palette: "town"
+});
 
 const summaryMetrics = computed(() => [
   {label: "城市", value: metrics.value.total},
@@ -114,8 +146,15 @@ const detailRows = computed(() => selected.value ? [
   {label: "pack cell", value: selected.value.packCell},
   {label: "burg id", value: selected.value.burgId},
   {label: "文化", value: selected.value.culture},
-  {label: "宗教", value: selected.value.religion}
+  {label: "宗教", value: selected.value.religion},
+  {label: "剪影", value: selected.value.visualLabel},
+  {label: "文化样式", value: selected.value.cultureStyleLabel},
+  {label: "手动剪影", value: selected.value.manualVisual ? "是" : "否"}
 ] : []);
+
+watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
+watch(() => selected.value?.silhouette, syncVisualDraft);
+watch(() => selected.value?.palette, syncVisualDraft);
 
 function buildCityMetrics(map) {
   const rows = cityRows(map).map(city => {
@@ -129,6 +168,8 @@ function buildCityMetrics(map) {
     const population = Number(city.population ?? burg?.population ?? 0) || 0;
     const flags = cityFlags(city, burg);
     const owner = cityOwnerInfo(map, city, burg, {stateId, provinceId, packCell, gridCell});
+    const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
+    const visual = resolveCityVisual(city, culture, burg?.visual);
 
     return {
       id: city.id,
@@ -151,6 +192,12 @@ function buildCityMetrics(map) {
       packCell: packCell ?? "none",
       culture: indexedName(map?.society?.cultures, cultureId),
       religion: indexedName(map?.society?.religions, religionId),
+      silhouette: visual.silhouette,
+      palette: visual.palette,
+      cultureStyle: visual.cultureStyle,
+      cultureStyleLabel: cityCultureStyleLabel(visual.cultureStyle),
+      visualLabel: `${citySilhouetteLabel(visual.silhouette)} / ${cityPaletteLabel(visual.palette)}`,
+      manualVisual: Boolean(visual.manual),
       capital: Boolean(city.capital || burg?.capital),
       provincial: Boolean(city.provincial),
       port: Boolean(city.port || burg?.port)
@@ -199,6 +246,19 @@ function formatCityType(city, burg, population) {
   if (city.group === "hamlet" || burg?.group === "hamlet") return "村镇";
   if (population >= 5 || city.group === "city" || burg?.group === "city") return "城市";
   return "城镇";
+}
+
+function applyVisual() {
+  if (!selected.value) return;
+  props.callbacks.onVisualChange?.(selected.value.id, {
+    silhouette: visualDraft.silhouette,
+    palette: visualDraft.palette
+  });
+}
+
+function syncVisualDraft() {
+  visualDraft.silhouette = selected.value?.silhouette || "town";
+  visualDraft.palette = selected.value?.palette || "town";
 }
 
 function cityFlags(city, burg) {

@@ -11401,3 +11401,28 @@ full 矩阵结果：
 后续：
 
 - 城镇剪影仍是 renderer 自动派生，暂未写入 `city.visual` 或编辑命令；后续可增加文化风格预设、用户手动样式覆盖和城市面板中的图标设置。
+
+### 城镇剪影文化预设与手动调整
+
+背景：
+
+- 用户确认第一版小屋/城墙剪影方向正确，下一步推进文化预设和手动调整入口。
+- 本轮目标是让城镇剪影成为正式对象字段，而不是只在 renderer 中临时推断；同时保持不进入城镇新增、移动和文化图标包精绘。
+
+修正：
+
+- 新增 `runtime/city-visuals.js` 共享契约：
+  - `city.visual.silhouette`：`capital / provincial / port / city / town / hamlet / fort / camp`。
+  - `city.visual.palette`：都城、省会、港口、城市、城镇、村落、游牧、高地、林地、水乡等配色。
+  - `city.visual.cultureStyle`：`default / maritime / waterway / nomadic / highland / woodland`。
+  - `city.visual.manual`：手动覆盖标记。
+- 生成链路在 `settlements.js` 中为 city 和 burg 写入默认 visual，并在 `specifyBurgs()` 后按最终 `group/port/walls/citadel/culture` 刷新；手动 visual 会保留，不被自动覆盖。
+- renderer 改为读取 `resolveCityVisual()`，并新增 `fort` 高地寨堡与 `camp` 游牧营帐剪影。
+- 城市管理面板新增剪影和配色下拉：
+  - 可应用手动剪影，写入 `manual: true`。
+  - 可恢复自动预设，重新按当前文化类型和城市属性计算。
+  - 调整和恢复均接入 `EditHistory`，支持撤销/重做。
+
+后续：
+
+- 当前是规则化预设，不是按文化根名逐个绘制图标包；后续可继续扩展文化图标包、城市面板预览缩略图和批量应用到同文化城镇。

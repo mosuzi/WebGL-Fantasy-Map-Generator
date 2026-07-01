@@ -23,7 +23,7 @@ import {createStatePanel} from "../ui/panels/state-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
-import {createSetCityPopulationCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
+import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand} from "./culture-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
@@ -334,6 +334,24 @@ export function createGeneratorApp(documentRef) {
       }
       updateStatePanel(state);
       updateProvincePanel(state);
+      updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onVisualChange: (cityId, patch) => {
+      const context = {map: state.map};
+      const command = createSetCityVisualCommand(cityId, patch);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onVisualReset: cityId => {
+      const context = {map: state.map};
+      const command = createResetCityVisualCommand(cityId);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
       updateCityPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
