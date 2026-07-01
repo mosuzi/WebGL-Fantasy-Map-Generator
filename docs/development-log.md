@@ -11711,3 +11711,60 @@ full 矩阵结果：
 
 - 当前继承关系先进入数据、统计和编辑管理，不改变扩张结果。
 - 后续可让文化派生影响名称变体、文化图标预制、同化速度、国家合法性、宗教改革事件和国力计算。
+
+### 外交系统第一刀
+
+背景：
+
+- 用户提出文化和宗教支持树状后，可以考虑引入外交系统，并参考原版实现。
+- 原版参考点：
+  - `States.generateDiplomacy()` 会基于国家邻接、邻国的邻国、远方国家和海洋国家权重生成 `Ally / Friendly / Neutral / Suspicion / Rival / Enemy / Vassal / Suzerain / Unknown` 关系。
+  - `diplomacy-editor` 提供关系矩阵、历史、重生成、手动改关系和导出能力。
+
+修正：
+
+- 新增 `app/webgl-generator/src/generator/diplomacy.js`：
+  - 生成国家两两外交关系矩阵。
+  - 关系权重读取国家邻接、海洋国家、文化/宗教继承、政体类型、国力差异和资源竞争。
+  - 强邻国对弱邻国有概率形成 `Vassal / Suzerain`。
+  - 少量宿敌关系会升级为 `Enemy`，并写入外交历史和国家 `campaigns`。
+- 主生成链在经济与宗教终态后执行 `diplomacy` 阶段；地图 metadata 更新为 `source-stage-20-diplomacy-first-pass`。
+- 国家对象写入：
+  - `diplomacy`：以国家 id 为 key 的关系表。
+  - `diplomacySummary`：盟友、友好、中立、猜忌、宿敌、战争、附庸、宗主等计数。
+  - `campaigns`：当前首版只记录外交战争条目，不驱动军队行动。
+- `pack.diplomacy` 写入 `relations / chronicle / metadata`，metadata 统计关系对数、盟友、宿敌、战争、附庸和历史数量。
+- 新增 `diplomacy-edit-commands.js`：
+  - `createSetDiplomacyRelationCommand()` 支持手动修改关系，并自动维护反向关系；`Vassal / Suzerain` 会互为反向。
+  - `createRegenerateDiplomacyCommand()` 支持只重生成外交关系。
+  - 两者都接入撤销/重做。
+- 管理 tab 新增“外交管理”：
+  - 支持选择主体国家、筛选关系、按关系/国力/邻接/文化排序。
+  - 表格可定位目标国家。
+  - 详情区显示双方文化、宗教、邻接、国力、经济、面积、人口和城市数。
+  - 关系下拉可直接编辑当前关系。
+  - 支持“重生成外交”。
+- 国家面板和运行统计新增外交摘要。
+- 国家、省份、城市、河流、marker/资源点和文化/宗教继承等会影响政治、经济或合法性的编辑，现在会把 `diplomacy` 标为 stale。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/diplomacy.js`
+- `node --check app/webgl-generator/src/generator/index.js`
+- `node --check app/webgl-generator/src/runtime/diplomacy-edit-commands.js`
+- `node --check app/webgl-generator/src/runtime/app.js`
+- 纯生成验证通过：`seed=stage-2-1231411414 / cells=10000` 生成 `18` 个国家、`153` 个关系对、`22` 个盟友、`4` 个宿敌、`1` 个战争关系、`1` 个附庸关系，外交阶段耗时约 `2.9ms`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 静态 server + Playwright 构建产物验证通过：
+  - `#open-diplomacy-panel` 可打开外交管理面板。
+  - `#diplomacy-relation-select` 存在。
+  - 构建产物默认生成 `20` 个国家、`190` 个关系对、`42` 个盟友、`4` 个宿敌、`2` 个附庸。
+  - 在外交面板点选目标国家行后，主体国家保持不变，关系下拉仍编辑原主体到目标的关系。
+  - 将 `#1-#6` 关系从 `Ally` 改为 `Enemy` 后，正反向关系均变为 `Enemy`。
+  - 运行统计战争数更新为 `1`，撤销栈出现“外交关系 #1-#6”。
+  - 浏览器 console error 为 `0`。
+
+后续：
+
+- 当前外交只生成关系、附庸、战争历史和管理面板；战争尚未驱动军事行动或地图事件。
+- 后续可以继续做外交专题着色、关系矩阵导出、战争事件、军事行动、经济制裁和贸易偏好联动。

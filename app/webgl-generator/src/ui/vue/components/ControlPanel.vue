@@ -289,6 +289,7 @@ const actions = Object.freeze([
   {id: "open-city-panel", label: "城市管理"},
   {id: "open-culture-panel", label: "文化管理"},
   {id: "open-religion-panel", label: "宗教管理"},
+  {id: "open-diplomacy-panel", label: "外交管理"},
   {id: "open-route-panel", label: "路线管理"},
   {id: "open-river-panel", label: "河流管理"},
   {id: "open-marker-panel", label: "资源标记"},
@@ -301,7 +302,8 @@ const regenerationActions = Object.freeze([
   {kind: "cities", label: "城镇"},
   {kind: "routes", label: "道路"},
   {kind: "rivers", label: "河流"},
-  {kind: "markers", label: "资源点"}
+  {kind: "markers", label: "资源点"},
+  {kind: "diplomacy", label: "外交"}
 ]);
 
 function isLayerVisible(layer) {

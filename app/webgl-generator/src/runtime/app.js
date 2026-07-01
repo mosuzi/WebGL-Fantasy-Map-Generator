@@ -10,6 +10,7 @@ import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
+import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
 import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
@@ -25,6 +26,7 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
 import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
+import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -87,6 +89,7 @@ export function createGeneratorApp(documentRef) {
   let cityPanel = null;
   let culturePanel = null;
   let religionPanel = null;
+  let diplomacyPanel = null;
   let riverPanel = null;
   let routePanel = null;
   let markerPanel = null;
@@ -481,6 +484,58 @@ export function createGeneratorApp(documentRef) {
     }
   });
   state.panels.religion = religionPanel;
+  diplomacyPanel = createDiplomacyPanel(documentRef, panelManager, {
+    onSelect: object => {
+      selectionStore.setSelection({object});
+    },
+    onLocate: object => {
+      locateObject(state, object, documentRef);
+    },
+    onRelationChange: (subjectId, objectId, relation) => {
+      const command = createSetDiplomacyRelationCommand(subjectId, objectId, relation);
+      if (!command.isNoop({map: state.map})) {
+        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+        refreshGenerationSummary(state.map);
+      }
+      updateDiplomacyPanel(state);
+      updateStatePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onRegenerate: () => {
+      if (!state.map) return;
+      const salt = nextRegenerationSalt(state.map, "diplomacy");
+      const command = createRegenerateDiplomacyCommand({salt});
+      if (!command.isNoop({map: state.map})) {
+        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+        markDerivedFresh(state.map, ["diplomacy"]);
+        refreshGenerationSummary(state.map);
+        appendGenerationLog(state.map, `regenerate diplomacy: salt=${salt}, pairs=${state.map.diplomacy?.metadata?.pairs || 0}, enemies=${state.map.diplomacy?.metadata?.enemies || 0}`);
+      }
+      updateDiplomacyPanel(state);
+      updateStatePanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) {
+        refreshAfterEdit(state, command);
+        refreshGenerationSummary(state.map);
+      }
+      updateDiplomacyPanel(state);
+      updateStatePanel(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) {
+        refreshAfterEdit(state, command);
+        refreshGenerationSummary(state.map);
+      }
+      updateDiplomacyPanel(state);
+      updateStatePanel(state);
+    }
+  });
+  state.panels.diplomacy = diplomacyPanel;
   routePanel = createRoutePanel(documentRef, panelManager, {
     onSelect: object => {
       selectionStore.setSelection({object});
@@ -714,6 +769,7 @@ export function createGeneratorApp(documentRef) {
     updateCityPanel(state);
     updateCulturePanel(state);
     updateReligionPanel(state);
+    updateDiplomacyPanel(state);
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
     updatePickPanel(documentRef, state);
@@ -795,6 +851,12 @@ export function createGeneratorApp(documentRef) {
         state.panels.religion.setSelectedReligionId(state.selection.object.id);
       }
       state.panels.religion.open(state.map, state.selection, state.editHistory.getStats());
+    },
+    onOpenDiplomacyPanel: () => {
+      if (state.selection?.object?.kind === OBJECT_KIND.STATE) {
+        state.panels.diplomacy.setSelectedStateId(state.selection.object.id);
+      }
+      state.panels.diplomacy.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenRiverPanel: () => {
       state.panels.river.open(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
@@ -904,6 +966,7 @@ function runGenerateNow(state, documentRef, generateId) {
     updateCityPanel(state);
     updateCulturePanel(state);
     updateReligionPanel(state);
+    updateDiplomacyPanel(state);
     updateMarkerPanel(state);
     updateLabelNamingPanel(state);
     state.panels.route.update(state.map, state.selection);
@@ -1056,6 +1119,8 @@ function regenerateMapAttribute(state, kind, documentRef) {
       return regenerateProvinces(state, documentRef);
     case "markers":
       return regenerateMarkerResources(state, documentRef);
+    case "diplomacy":
+      return regenerateDiplomacy(state, documentRef);
     default:
       break;
   }
@@ -1075,7 +1140,7 @@ function regenerateStates(state, documentRef) {
   applyPoliticsRegenerationResult(map, result);
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, pruneNeutralSettlements: true, routeRegenerationSalt: stateSalt});
   markDerivedFresh(map, ["states", "provinces", "cities"]);
-  markDerivedStale(map, ["religions", "markers", "zones", "military", "economy"]);
+  markDerivedStale(map, ["religions", "markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate states: salt=${stateSalt}, states=${map.politics.metadata.states}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
@@ -1102,7 +1167,7 @@ function regenerateProvinces(state, documentRef) {
   applyPoliticsRegenerationResult(map, result);
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, routeRegenerationSalt: provinceSalt});
   markDerivedFresh(map, ["provinces", "cities"]);
-  markDerivedStale(map, ["markers", "zones", "military", "economy"]);
+  markDerivedStale(map, ["markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate provinces: salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
@@ -1147,7 +1212,7 @@ function regenerateRivers(state, documentRef) {
   map.climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
 
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack);
-  markDerivedStale(map, ["cities", "provinces", "states", "religions", "markers", "zones", "military"]);
+  markDerivedStale(map, ["cities", "provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate rivers: salt=${riverOptions.riverRegenerationSalt}, rivers=${map.rivers.metadata.rivers}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale.systems.join(",")}`);
 
@@ -1173,7 +1238,7 @@ function regenerateCities(state, documentRef) {
   regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, settlementRegenerationSalt: citySalt, routeRegenerationSalt: citySalt});
   clearGeneratedCityLabelHides(map);
   markDerivedFresh(map, ["cities"]);
-  markDerivedStale(map, ["provinces", "states", "religions", "markers", "zones", "military"]);
+  markDerivedStale(map, ["provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate settlements: salt=${citySalt}, cities=${map.settlements.metadata.cities}, ports=${map.settlements.metadata.ports}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
@@ -1206,6 +1271,30 @@ function regenerateMarkerResources(state, documentRef) {
   );
 }
 
+function regenerateDiplomacy(state, documentRef) {
+  const map = state.map;
+  const beforePairs = map.diplomacy?.metadata?.pairs || 0;
+  const beforeEnemies = map.diplomacy?.metadata?.enemies || 0;
+  const salt = nextRegenerationSalt(map, "diplomacy");
+  const command = createRegenerateDiplomacyCommand({salt});
+  if (command.isNoop({map})) return regenerationResult("diplomacy", "未执行", "当前地图至少需要两个有效国家才能重生成外交。");
+
+  const executed = state.editHistory.execute(command, {map});
+  refreshAfterEdit(state, executed);
+  markDerivedFresh(map, ["diplomacy"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate diplomacy: salt=${salt}, pairs=${map.diplomacy.metadata.pairs}, enemies=${map.diplomacy.metadata.enemies}`);
+  updateDiplomacyPanel(state);
+  updateStatePanel(state);
+  updateRuntimePanel(documentRef, state);
+
+  return regenerationResult(
+    "diplomacy",
+    `外交已按当前国家邻接、文化、宗教、国力、资源竞争和海洋势力重算（扰动 #${salt}）：关系 ${beforePairs} -> ${map.diplomacy.metadata.pairs}；战争 ${beforeEnemies} -> ${map.diplomacy.metadata.enemies}`,
+    "外交重算不会改写国家边界、城镇、经济或军队；后续可把战争状态进一步接入军事行动和事件。"
+  );
+}
+
 function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
   state.renderer.refreshObjectPickingIndex?.();
   refreshAfterEdit(state, {
@@ -1221,6 +1310,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
   updateCityPanel(state);
   updateCulturePanel(state);
   updateReligionPanel(state);
+  updateDiplomacyPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
@@ -1229,7 +1319,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
 }
 
 function refreshGenerationSummary(map) {
-  map.summary = createGenerationSummary(map.options, map.grid, map.features, map.climate, map.society, map.politics, map.settlements, map.markers, map.pack, map.rivers, map.layers, map.military, map.zones, map.economy);
+  map.summary = createGenerationSummary(map.options, map.grid, map.features, map.climate, map.society, map.politics, map.settlements, map.markers, map.pack, map.rivers, map.layers, map.military, map.zones, map.economy, map.diplomacy);
 }
 
 function applyPoliticsRegenerationResult(map, result) {
@@ -1545,7 +1635,7 @@ function applyMarkerCollectionCommand(state, documentRef, command, {selectCreate
   if (!state.map || !command || command.isNoop?.({map: state.map})) return null;
   const executed = state.editHistory.execute(command, {map: state.map});
   markDerivedFresh(state.map, ["markers"]);
-  markDerivedStale(state.map, ["economy", "military"]);
+  markDerivedStale(state.map, ["economy", "military", "diplomacy"]);
   refreshGenerationSummary(state.map);
   refreshAfterEdit(state, executed);
 
@@ -1820,6 +1910,10 @@ function updateCulturePanel(state) {
 
 function updateReligionPanel(state) {
   state.panels.religion?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function updateDiplomacyPanel(state) {
+  state.panels.diplomacy?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateMarkerPanel(state) {

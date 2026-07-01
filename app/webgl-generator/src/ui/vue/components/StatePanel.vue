@@ -168,6 +168,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "资源潜力", value: formatNumber(selected.value.resourcePotential)},
   {label: "资源类型", value: selected.value.resourceSummary},
   {label: "军力", value: formatNumber(selected.value.militaryPower)},
+  {label: "外交", value: selected.value.diplomacySummary},
   {label: "邻国", value: selected.value.neighborCount}
 ] : []);
 
@@ -207,6 +208,7 @@ function buildStateMetrics(map) {
       powerScore: neutral ? 0 : Number(stateItem?.powerScore || 0),
       militaryPower: neutral ? 0 : sumMilitaryPower(stateItem?.military),
       resourceSummary: neutral ? "无" : formatResourceTypes(stateItem?.resourceTypes),
+      diplomacySummary: neutral ? "无" : formatDiplomacyCounts(stateItem?.diplomacySummary),
       neighborCount: stateItem?.neighbors?.length || 0,
       color: neutral ? "#a6adb3" : normalizeHexColor(stateItem?.color) || fallbackStateColor(row.id)
     };
@@ -302,6 +304,19 @@ function formatResourceTypes(types) {
     .slice(0, 4);
   if (!entries.length) return "无";
   return entries.map(([key, value]) => `${RESOURCE_LABELS[key] || key} ${formatNumber(Number(value))}`).join(" / ");
+}
+
+function formatDiplomacyCounts(counts = {}) {
+  const parts = [
+    ["Ally", "盟友"],
+    ["Enemy", "战争"],
+    ["Rival", "宿敌"],
+    ["Vassal", "附庸"],
+    ["Suzerain", "宗主"]
+  ]
+    .map(([key, label]) => Number(counts[key] || 0) ? `${label} ${counts[key]}` : "")
+    .filter(Boolean);
+  return parts.join(" / ") || "中立";
 }
 
 function normalizeHexColor(color) {

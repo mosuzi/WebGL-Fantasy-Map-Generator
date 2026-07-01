@@ -1,6 +1,7 @@
 import {buildClimate} from "./climate.js";
 import {defineBiomesAndPopulation} from "./biomes.js";
 import {buildEconomy} from "./economy.js";
+import {buildDiplomacy} from "./diplomacy.js";
 import {extractFeatures} from "./features.js";
 import {buildGrid} from "./grid.js";
 import {createHeightmap} from "./heightmap.js";
@@ -40,17 +41,18 @@ export function generatePlaceholderMap(inputOptions = {}) {
   pack.markers = markers.markers;
   const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, options));
   profile.stage("religions-finalize", "按城镇和文化扩张宗教", () => finalizeSocietyReligions(grid, society, pack, random, settlements, options));
+  const diplomacy = profile.stage("diplomacy", "生成外交关系", () => buildDiplomacy(pack, society, options));
   const military = profile.stage("military", "生成军事", () => buildMilitary(pack, options));
   const zones = profile.stage("zones", "生成区域", () => buildZones(pack, options));
   const layers = profile.stage("palette", "生成色板", () => createPalette(random));
-  const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones, economy));
+  const summary = profile.stage("summary", "生成摘要和校验", () => createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military, zones, economy, diplomacy));
   const generatedAt = profile.stage("metadata", "生成元数据", () => new Date().toISOString());
   const generationTiming = profile.finish();
 
   return {
     metadata: {
       app: "webgl-generator",
-      generatorStage: "source-stage-19-economy-first-pass",
+      generatorStage: "source-stage-20-diplomacy-first-pass",
       seed: options.seed,
       heightmapTemplate: heightmap.template,
       cellsTarget: options.cellsTarget,
@@ -73,6 +75,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
     politics,
     settlements,
     economy,
+    diplomacy,
     military,
     markers,
     zones,
@@ -96,6 +99,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `build markers: markers=${markers.metadata.markers}, resources=${markers.metadata.resourceMarkers}, resourcePotential=${markers.metadata.resourcePotential}`,
       `build economy: goods=${economy.metadata.goods}, markets=${economy.metadata.markets}, deals=${economy.metadata.deals}, resourceCells=${economy.metadata.resourceCells}`,
       `build religions: religions=${society.metadata.religions}, religionPackCells=${society.metadata.religionPackCells}`,
+      `build diplomacy: pairs=${diplomacy.metadata.pairs}, allies=${diplomacy.metadata.allies}, rivals=${diplomacy.metadata.rivals}, enemies=${diplomacy.metadata.enemies}`,
       `build military: states=${military.metadata.statesWithMilitary}, regiments=${military.metadata.regiments}`,
       `build zones: zones=${zones.metadata.zones}, target=${zones.metadata.target}, cells=${zones.metadata.cells}, invalidCells=${zones.metadata.invalidCells}`,
       `generation timing: total=${generationTiming.totalMs}ms, slowest=${generationTiming.slowest?.label || "none"} ${generationTiming.slowest?.ms ?? 0}ms`,
@@ -109,7 +113,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
   };
 }
 
-export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military = null, zones = null, economy = null) {
+export function createGenerationSummary(options, grid, features, climate, society, politics, settlements, markers, pack, rivers, layers, military = null, zones = null, economy = null, diplomacy = null) {
   const randomPreviewGenerator = createRandom(options.seed);
   const randomPreview = Array.from({length: 4}, () => round(randomPreviewGenerator.next(), 6));
   const payload = {
@@ -164,6 +168,7 @@ export function createGenerationSummary(options, grid, features, climate, societ
       provinceCount: politics.metadata.provinces,
       regionCount: politics.metadata.regions
     },
+    diplomacy: diplomacy?.metadata || null,
     settlements: {
       cityCount: settlements.metadata.cities,
       routeCount: settlements.metadata.routes,

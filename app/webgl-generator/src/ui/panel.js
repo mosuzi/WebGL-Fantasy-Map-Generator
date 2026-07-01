@@ -46,6 +46,7 @@ const DERIVED_STALE_LABELS = Object.freeze({
   zones: "区域",
   military: "军事",
   economy: "经济",
+  diplomacy: "外交",
   "state-markers": "国家中心标记"
 });
 
@@ -77,6 +78,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-city-panel")?.addEventListener("click", handlers.onOpenCityPanel);
   documentRef.getElementById("open-culture-panel")?.addEventListener("click", handlers.onOpenCulturePanel);
   documentRef.getElementById("open-religion-panel")?.addEventListener("click", handlers.onOpenReligionPanel);
+  documentRef.getElementById("open-diplomacy-panel")?.addEventListener("click", handlers.onOpenDiplomacyPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
@@ -154,6 +156,7 @@ function editLockControls(documentRef) {
     "#open-city-panel",
     "#open-culture-panel",
     "#open-religion-panel",
+    "#open-diplomacy-panel",
     "#open-route-panel",
     "#open-river-panel",
     "#open-marker-panel",
@@ -361,7 +364,7 @@ export function updateRegenerationSection(documentRef, result = {}) {
   const status = documentRef.getElementById("regeneration-status");
   const constraint = documentRef.getElementById("regeneration-constraint");
   if (status) status.textContent = result.status || "待命";
-  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流和资源点会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。";
+  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流、资源点和外交会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。";
 }
 
 export function setGenerationLoading(documentRef, visible, message = "正在生成地图") {
@@ -431,6 +434,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "文化继承", formatInheritanceStats(map.options.cultureInheritanceMode, map.society.metadata.cultureTree)),
     statRow(documentRef, "宗教继承", formatInheritanceStats(map.options.religionInheritanceMode, map.society.metadata.religionTree)),
     statRow(documentRef, "国家/省份/区域", `${map.politics.metadata.states} / ${map.politics.metadata.provinces} / ${map.politics.metadata.regions}`),
+    statRow(documentRef, "外交", formatDiplomacyStats(map.diplomacy?.metadata)),
     statRow(documentRef, "城市/首都/港口", `${map.settlements.metadata.cities} / ${map.settlements.metadata.capitals} / ${map.settlements.metadata.ports}`),
     statRow(documentRef, "道路", `${map.settlements.metadata.routes} / ${map.settlements.metadata.routeSegments}`),
     statRow(documentRef, "军事", `${map.military?.metadata?.statesWithMilitary || 0} / ${map.military?.metadata?.regiments || 0}`),
@@ -705,6 +709,10 @@ function formatInheritanceStats(mode, tree = {}) {
     branching: "分支树"
   };
   return `${labels[mode] || mode || "分支树"} / 根 ${tree.roots || 0} / 派生 ${tree.derived || 0} / 深 ${tree.maxDepth || 0}`;
+}
+
+function formatDiplomacyStats(metadata = {}) {
+  return `关系 ${metadata.pairs || 0} / 盟友 ${metadata.allies || 0} / 宿敌 ${metadata.rivals || 0} / 战争 ${metadata.enemies || 0} / 附庸 ${metadata.vassals || 0}`;
 }
 
 function formatLatitude(value) {
