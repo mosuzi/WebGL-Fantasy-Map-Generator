@@ -11,6 +11,7 @@
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
 | 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon、state/province 非 dissolve MultiPolygon；简介 tab 可选择导出图层 | 否 | 已完成第二刀 |
 | 导出备注摘要 | `.notes.json` | JSON | `webgl-generator-notes-summary v1`：当前筛选备注、正文、对象 id、孤儿状态和时间戳 | 否 | 已完成第一刀 |
+| 导出测量结果 | `.measurement.json` | JSON | `webgl-generator-measurement v1`：当前测量点列、比例尺单位、距离和面积摘要 | 否 | 已完成第一刀 |
 
 ## 完整地图 JSON
 
@@ -134,6 +135,23 @@
 - `exportedAt`
 - `metadata.seed / checksum / notes / totalNotes`
 - `notes[]`：id、kind、kindLabel、objectId、name、body、bodyLength、orphan、createdAt、updatedAt
+
+## 测量结果 JSON
+
+用途：
+
+- 从地图测量工具导出当前临时测量点、距离和面积，便于外部记录或复核比例尺结果。
+- 不保存为地图对象；重新打开地图不会自动恢复这次测量。
+
+当前字段：
+
+- `type = webgl-generator-measurement`
+- `version = 1`
+- `exportedAt`
+- `metadata.seed / checksum / graphWidth / graphHeight / pointCount`
+- `units.distanceUnit / areaUnit / mapScaleKmPerCm`
+- `summary.distanceMapUnits / distanceLabel / areaMapUnits / areaLabel`
+- `points[]`：index、x、y
 
 ## 后续顺序建议
 
