@@ -11873,3 +11873,24 @@ full 矩阵结果：
 - `node --check app/webgl-generator/src/runtime/app.js` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
 - 临时静态 server + Playwright 验证构建产物：左键拖动后 camera offset 保持 `{0, 0}`；右键拖动后 camera offset 变为 `{offsetX: 0.2979, offsetY: -0.1951}`；中键拖动后 camera offset 同样变为 `{offsetX: 0.2979, offsetY: -0.1951}`；console error 为 `0`。
+
+### Loading 玄幻文案与资源标记让位
+
+背景：
+
+- 用户指出“等待浏览器绘制”太直白，希望 loading 文案更有玄幻感。
+- 用户指出资源标记层级应低于城镇 icon；近景下资源标记与城镇重合时应弱化资源标记。
+
+修正：
+
+- 生成 loading 气泡四段文案改为“静候星图显影 / 正在推演山海脉络 / 正在铺展灵纹图层 / 正在誊清诸域卷册”。
+- 资源 marker overlay 增加专属层级，低于城镇剪影；非资源 marker 仍保留原有层级。
+- `updateMarkerIcons()` 会在近景放开避让后检测资源 marker 与已显示城镇剪影 bbox 是否重叠，并给资源 marker 添加 `city-overlap` class；样式将其透明度降到 `0.42` 并略微缩小，选中时保留较高透明度。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 构建产物中可检索到新的四段 loading 文案。
+- 临时静态 server + Playwright 验证构建产物：将一个资源 marker 临时挪到城市坐标并放大到 `x5` 后，城市 icon 可见、资源 marker 可见且带 `city-overlap`；城镇 `z-index = 1`，资源 marker `z-index = 0`；资源 marker opacity 稳定为 `0.42`，console error 为 `0`。

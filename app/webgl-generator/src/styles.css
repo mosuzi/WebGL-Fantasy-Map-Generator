@@ -610,10 +610,23 @@ select:disabled {
   z-index: 5;
 }
 
+.marker-map-icon--resource {
+  z-index: 0;
+}
+
 .marker-map-icon.visible {
   opacity: 1;
   transition-delay: 0s;
   visibility: visible;
+}
+
+.marker-map-icon--resource.visible.city-overlap {
+  opacity: 0.42;
+  transform: translate(-50%, -98%) scale(calc(var(--marker-icon-scale, 1) * 0.9));
+}
+
+.marker-map-icon--resource.selected.city-overlap {
+  opacity: 0.72;
 }
 
 .marker-map-icon svg {

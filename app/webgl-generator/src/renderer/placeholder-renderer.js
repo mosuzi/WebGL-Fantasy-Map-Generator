@@ -794,7 +794,7 @@ export class PlaceholderMapRenderer {
     this.visibleCityLabelCount = visibleCities;
     this.visibleStateLabelCount = visibleStates;
     const cityIconBoxes = this.updateCityIcons(rect, occupiedStates);
-    this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes]);
+    this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes], cityIconBoxes);
     this.updateSelectionMarker(rect);
   }
 
@@ -857,7 +857,7 @@ export class PlaceholderMapRenderer {
     return occupiedIcons;
   }
 
-  updateMarkerIcons(rect, occupiedLabels = []) {
+  updateMarkerIcons(rect, occupiedLabels = [], cityIconBoxes = []) {
     if (!this.markerIconItems.length) {
       this.visibleMarkerIconCount = 0;
       return;
@@ -879,7 +879,9 @@ export class PlaceholderMapRenderer {
         occupiedIcons.some(other => boxesOverlap(box, other, iconPadding))
       );
       const shouldShow = iconsEnabled && layerVisible && onScreen && !blocked;
+      const cityOverlap = shouldShow && item.category === "resource" && cityIconBoxes.some(other => boxesOverlap(box, other, 0));
       item.node.classList.toggle("visible", shouldShow);
+      item.node.classList.toggle("city-overlap", cityOverlap);
       item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.MARKER && this.selection.id === item.id);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;

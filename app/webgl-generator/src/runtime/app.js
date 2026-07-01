@@ -954,7 +954,7 @@ function requestGenerate(state, documentRef) {
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     const generateId = state.pendingGenerateId;
     setGenerationStatus(documentRef, state.options, "等待生成任务");
-    setGenerationLoading(documentRef, true, "等待浏览器绘制");
+    setGenerationLoading(documentRef, true, "静候星图显影");
     scheduleAfterPaint(documentRef, () => {
       if (generateId !== state.pendingGenerateId) return;
       runGenerateNow(state, documentRef, generateId);
@@ -968,7 +968,7 @@ function requestGenerate(state, documentRef) {
 function runGenerateNow(state, documentRef, generateId) {
   try {
     setGenerationStatus(documentRef, state.options, "生成中");
-    setGenerationLoading(documentRef, true, "正在生成地图数据");
+    setGenerationLoading(documentRef, true, "正在推演山海脉络");
     const map = generatePlaceholderMap(state.options);
     if (generateId !== state.pendingGenerateId) return;
     state.map = map;
@@ -990,9 +990,9 @@ function runGenerateNow(state, documentRef, generateId) {
     state.markerEdit.markerId = null;
     state.markerEdit.lastPackCell = null;
     state.lastEditRefresh = null;
-    setGenerationLoading(documentRef, true, "正在整理 WebGL 图层");
+    setGenerationLoading(documentRef, true, "正在铺展灵纹图层");
     state.renderer.loadMap(state.map);
-    setGenerationLoading(documentRef, true, "正在刷新面板");
+    setGenerationLoading(documentRef, true, "正在誊清诸域卷册");
     state.selectionStore.clear();
     updateHeightPanel(state);
     updateStatePanel(state);
