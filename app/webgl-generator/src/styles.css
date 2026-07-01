@@ -1586,6 +1586,33 @@ select:disabled {
   margin-top: 4px;
 }
 
+.generation-climate-section {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #273640;
+  border-radius: 6px;
+  background: #10171b;
+}
+
+.generation-climate-section h2 {
+  margin: 0;
+  color: #edf4f6;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.generation-climate-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.generation-climate-select {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+
 .layer-toggle-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

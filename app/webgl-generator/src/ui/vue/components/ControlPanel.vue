@@ -8,6 +8,27 @@
       <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
       <UiField label="高度" input-id="height-input" type="number" :model-value="960" :input-attrs="{min: 480, max: 4096, step: 80}" />
       <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />
+      <section class="generation-climate-section" aria-labelledby="generation-climate-title">
+        <h2 id="generation-climate-title">气候</h2>
+        <div class="generation-climate-grid">
+          <UiSelectField
+            label="纬度"
+            input-id="climate-latitude-mode"
+            class-name="generation-climate-select"
+            :model-value="climateLatitudeMode"
+            :options="climateLatitudeOptions"
+            @update:model-value="climateLatitudeMode = $event"
+          />
+          <UiSelectField
+            label="大气"
+            input-id="atmosphere-direction"
+            class-name="generation-climate-select"
+            :model-value="atmosphereDirection"
+            :options="atmosphereDirectionOptions"
+            @update:model-value="atmosphereDirection = $event"
+          />
+        </div>
+      </section>
       <UiSwitchField label="生成时自动随机 seed" input-id="auto-random-seed" />
 
       <div class="generation-button-row">
@@ -172,6 +193,7 @@ import {
   formatScaleMultiplier,
   normalizeUnitPreferences
 } from "../../display-units.js";
+import {ATMOSPHERE_DIRECTION_OPTIONS, CLIMATE_LATITUDE_OPTIONS} from "../../../generator/climate-options.js";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
 defineOptions({
@@ -181,11 +203,15 @@ defineOptions({
 const config = useGlobalConfigStore();
 const {preferences} = storeToRefs(config);
 const activeTab = ref("generation");
+const climateLatitudeMode = ref("auto");
+const atmosphereDirection = ref("auto");
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
 const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
 const distanceUnitOptions = DISTANCE_UNIT_OPTIONS;
 const areaUnitOptions = AREA_UNIT_OPTIONS;
 const unitScaleLimits = UNIT_SCALE_LIMITS;
+const climateLatitudeOptions = CLIMATE_LATITUDE_OPTIONS;
+const atmosphereDirectionOptions = ATMOSPHERE_DIRECTION_OPTIONS;
 
 const tabs = Object.freeze([
   {id: "generation", label: "生成"},

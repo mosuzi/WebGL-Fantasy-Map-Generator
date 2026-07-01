@@ -1,4 +1,10 @@
 import {BIOMES} from "./biomes.js";
+import {
+  atmosphereDirectionLabel,
+  climateLatitudeLabel,
+  resolveAtmosphereWindProfile,
+  resolveClimateLatitudePreset
+} from "./climate-options.js";
 
 const CLIMATE_OPTIONS = {
   winds: [225, 45, 225, 315, 135, 315],
@@ -11,9 +17,11 @@ const CLIMATE_OPTIONS = {
 
 export function buildClimate(grid, features, options, random) {
   const mapCoordinates = calculateMapCoordinates(defineMapSize(options, grid, features, random), options);
+  const windProfile = resolveAtmosphereWindProfile(options.atmosphereDirection, options.winds || CLIMATE_OPTIONS.winds);
+  const climateOptions = {...options, winds: windProfile.winds};
   const temp = calculateTemperatures(grid, mapCoordinates, options);
   grid.cells.temp = Array.from(temp);
-  const prec = generatePrecipitation(grid, mapCoordinates, options, random);
+  const prec = generatePrecipitation(grid, mapCoordinates, climateOptions, random);
   const biome = [];
   const biomeCounts = new Map();
 
@@ -35,43 +43,97 @@ export function buildClimate(grid, features, options, random) {
       temperatureMax: Math.max(...grid.cells.temp),
       precipitationMin: Math.min(...grid.cells.prec),
       precipitationMax: Math.max(...grid.cells.prec),
+      latitudeMode: mapCoordinates.latitudeMode,
+      latitudeLabel: mapCoordinates.latitudeLabel,
+      latitudeCenter: mapCoordinates.latCenter,
+      atmosphereDirection: windProfile.direction,
+      atmosphereLabel: windProfile.label,
+      windAngle: windProfile.angle,
+      windProfile: windProfile.winds,
       biomeCounts: Object.fromEntries([...biomeCounts.entries()].map(([id, count]) => [BIOMES[id]?.name || id, count]))
     }
   };
 }
 
 function defineMapSize(options, grid, features, random) {
+  const latitudePreset = resolveClimateLatitudePreset(options.climateLatitudeMode);
   const template = options.heightmapTemplate;
   const landTouchesBorder = features.features.some(feature => feature?.land && feature.border);
   const maxSize = landTouchesBorder ? 80 : 100;
   const latitude = () => gauss(random, probability(random, 0.5) ? 40 : 60, 20, 25, 75);
+  const withLatitudePreset = base => latitudePreset
+    ? {
+        ...base,
+        size: latitudePreset.span,
+        latitudeCenter: latitudePreset.center,
+        latitudeMode: latitudePreset.value,
+        latitudeLabel: latitudePreset.label
+      }
+    : {
+        ...base,
+        latitudeMode: "auto",
+        latitudeLabel: climateLatitudeLabel("auto")
+      };
 
   if (!landTouchesBorder) {
-    if (template === "pangea") return {size: 100, latitude: 50, longitude: 50};
-    if (template === "continents" && probability(random, 0.5)) return {size: 100, latitude: 50, longitude: 50};
-    if (template === "archipelago" && probability(random, 0.35)) return {size: 100, latitude: 50, longitude: 50};
-    if (template === "highIsland" && probability(random, 0.25)) return {size: 100, latitude: 50, longitude: 50};
-    if (template === "lowIsland" && probability(random, 0.1)) return {size: 100, latitude: 50, longitude: 50};
+    if (template === "pangea") return withLatitudePreset({size: 100, latitude: 50, longitude: 50});
+    if (template === "continents" && probability(random, 0.5)) return withLatitudePreset({size: 100, latitude: 50, longitude: 50});
+    if (template === "archipelago" && probability(random, 0.35)) return withLatitudePreset({size: 100, latitude: 50, longitude: 50});
+    if (template === "highIsland" && probability(random, 0.25)) return withLatitudePreset({size: 100, latitude: 50, longitude: 50});
+    if (template === "lowIsland" && probability(random, 0.1)) return withLatitudePreset({size: 100, latitude: 50, longitude: 50});
   }
 
-  if (template === "pangea") return {size: gauss(random, 70, 20, 30, maxSize), latitude: latitude(), longitude: 50};
-  if (template === "mediterranean") return {size: gauss(random, 25, 30, 15, 80), latitude: latitude(), longitude: 50};
-  if (template === "peninsula") return {size: gauss(random, 15, 15, 5, 80), latitude: latitude(), longitude: 50};
+  if (template === "pangea") return withLatitudePreset({size: gauss(random, 70, 20, 30, maxSize), latitude: latitude(), longitude: 50});
+  if (template === "mediterranean") return withLatitudePreset({size: gauss(random, 25, 30, 15, 80), latitude: latitude(), longitude: 50});
+  if (template === "peninsula") return withLatitudePreset({size: gauss(random, 15, 15, 5, 80), latitude: latitude(), longitude: 50});
 
-  return {size: gauss(random, 30, 20, 15, maxSize), latitude: latitude(), longitude: 50};
+  return withLatitudePreset({size: gauss(random, 30, 20, 15, maxSize), latitude: latitude(), longitude: 50});
 }
 
-function calculateMapCoordinates({size, latitude, longitude}, options) {
+function calculateMapCoordinates({size, latitude, latitudeCenter, longitude, latitudeMode, latitudeLabel}, options) {
   const sizeFraction = size / 100;
-  const latShift = latitude / 100;
   const lonShift = longitude / 100;
   const latT = round(sizeFraction * 180, 1);
-  const latN = round(90 - (180 - latT) * latShift, 1);
-  const latS = round(latN - latT, 1);
+  const {latN, latS} = Number.isFinite(latitudeCenter)
+    ? centerLatitudeBand(latitudeCenter, latT)
+    : shiftedLatitudeBand(latitude, latT);
   const lonT = round(Math.min((options.graphWidth / options.graphHeight) * latT, 360), 1);
   const lonE = round(180 - (360 - lonT) * lonShift, 1);
   const lonW = round(lonE - lonT, 1);
-  return {latT, latN, latS, lonT, lonW, lonE};
+  return {
+    latT,
+    latN,
+    latS,
+    latCenter: round((latN + latS) / 2, 1),
+    latitudeMode: latitudeMode || "auto",
+    latitudeLabel: latitudeLabel || climateLatitudeLabel(latitudeMode),
+    lonT,
+    lonW,
+    lonE,
+    atmosphereLabel: atmosphereDirectionLabel(options.atmosphereDirection)
+  };
+}
+
+function shiftedLatitudeBand(latitude, latT) {
+  const latShift = latitude / 100;
+  const latN = round(90 - (180 - latT) * latShift, 1);
+  const latS = round(latN - latT, 1);
+  return {latN, latS};
+}
+
+function centerLatitudeBand(center, latT) {
+  const halfSpan = latT / 2;
+  let latN = center + halfSpan;
+  let latS = center - halfSpan;
+  if (latN > 90) {
+    latS -= latN - 90;
+    latN = 90;
+  }
+  if (latS < -90) {
+    latN += -90 - latS;
+    latS = -90;
+  }
+  return {latN: round(latN, 1), latS: round(latS, 1)};
 }
 
 function calculateTemperatures(grid, mapCoordinates, options) {

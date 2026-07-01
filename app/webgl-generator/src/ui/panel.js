@@ -164,6 +164,8 @@ function editLockControls(documentRef) {
     "#width-input",
     "#height-input",
     "#heightmap-template",
+    "#climate-latitude-mode",
+    "#atmosphere-direction",
     "#auto-random-seed",
     "#show-ocean-height",
     "#smooth-cell-borders",
@@ -374,6 +376,8 @@ export function readOptionsFromPanel(documentRef, previousOptions) {
     seed: documentRef.getElementById("seed-input").value,
     randomSeed: documentRef.getElementById("auto-random-seed").checked,
     heightmapTemplate: documentRef.getElementById("heightmap-template").value,
+    climateLatitudeMode: documentRef.getElementById("climate-latitude-mode")?.value || previousOptions?.climateLatitudeMode,
+    atmosphereDirection: documentRef.getElementById("atmosphere-direction")?.value || previousOptions?.atmosphereDirection,
     cellsTarget: documentRef.getElementById("cells-input").value,
     graphWidth: documentRef.getElementById("width-input").value,
     graphHeight: documentRef.getElementById("height-input").value
@@ -415,6 +419,8 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "湖岸线段", map.features.metadata.lakeShoreSegments),
     statRow(documentRef, "温度范围", `${map.climate.metadata.temperatureMin}°C .. ${map.climate.metadata.temperatureMax}°C`),
     statRow(documentRef, "降水范围", `${formatDisplayPrecipitation(map.climate.metadata.precipitationMin, unitPreferences)} .. ${formatDisplayPrecipitation(map.climate.metadata.precipitationMax, unitPreferences)}`),
+    statRow(documentRef, "气候纬度", formatClimateLatitude(map.climate)),
+    statRow(documentRef, "大气方向", formatAtmosphereDirection(map.climate)),
     statRow(documentRef, "biome 数", Object.keys(map.climate.metadata.biomeCounts).length),
     statRow(documentRef, "河流", `${map.rivers.metadata.rivers} / ${map.rivers.metadata.segments}`),
     statRow(documentRef, "文化/宗教", `${map.society.metadata.cultures} / ${map.society.metadata.religions}`),
@@ -669,6 +675,27 @@ function formatGenerationTiming(timing) {
   if (!timing) return "none";
   const slowest = timing.slowest ? ` / 最慢 ${timing.slowest.label} ${timing.slowest.ms}ms` : "";
   return `${timing.totalMs}ms${slowest}`;
+}
+
+function formatClimateLatitude(climate = {}) {
+  const coordinates = climate.mapCoordinates || {};
+  const metadata = climate.metadata || {};
+  const label = metadata.latitudeLabel || coordinates.latitudeLabel || "自动纬度";
+  if (!Number.isFinite(coordinates.latS) || !Number.isFinite(coordinates.latN)) return label;
+  return `${label} / ${formatLatitude(coordinates.latS)} .. ${formatLatitude(coordinates.latN)}`;
+}
+
+function formatAtmosphereDirection(climate = {}) {
+  const metadata = climate.metadata || {};
+  const label = metadata.atmosphereLabel || climate.mapCoordinates?.atmosphereLabel || "自动风带";
+  const angle = Number.isFinite(metadata.windAngle) ? ` / ${metadata.windAngle}°` : "";
+  return `${label}${angle}`;
+}
+
+function formatLatitude(value) {
+  if (value > 0) return `北纬 ${Math.abs(value)}°`;
+  if (value < 0) return `南纬 ${Math.abs(value)}°`;
+  return "赤道 0°";
 }
 
 function formatLayerVisibility(visibility = {}) {

@@ -1,4 +1,10 @@
 import {createRandom} from "./random.js";
+import {
+  DEFAULT_ATMOSPHERE_DIRECTION,
+  DEFAULT_CLIMATE_LATITUDE_MODE,
+  normalizeAtmosphereDirection,
+  normalizeClimateLatitudeMode
+} from "./climate-options.js";
 
 export const DEFAULT_OPTIONS = {
   seed: "stage-2-1",
@@ -14,6 +20,8 @@ export const DEFAULT_OPTIONS = {
   culturesSetMax: 32,
   sizeVariety: 4,
   growthRate: 1,
+  climateLatitudeMode: DEFAULT_CLIMATE_LATITUDE_MODE,
+  atmosphereDirection: DEFAULT_ATMOSPHERE_DIRECTION,
   temperatureEquator: 25,
   temperatureNorthPole: -25,
   temperatureSouthPole: -15,
@@ -41,6 +49,8 @@ export function normalizeOptions(input = {}) {
     culturesSetMax: clampInteger(input.culturesSetMax, 1, 100, randomized.culturesSetMax),
     sizeVariety: clampNumber(input.sizeVariety, 0, 10, randomized.sizeVariety),
     growthRate: clampNumber(input.growthRate, 0.1, 10, randomized.growthRate),
+    climateLatitudeMode: normalizeClimateLatitudeMode(input.climateLatitudeMode),
+    atmosphereDirection: normalizeAtmosphereDirection(input.atmosphereDirection),
     temperatureEquator: clampInteger(input.temperatureEquator, 20, 35, randomized.temperatureEquator),
     temperatureNorthPole: clampInteger(input.temperatureNorthPole, -40, 10, randomized.temperatureNorthPole),
     temperatureSouthPole: clampInteger(input.temperatureSouthPole, -40, 10, randomized.temperatureSouthPole),

@@ -11615,3 +11615,53 @@ full 矩阵结果：
 
 - 当前是显示层换算，内部生成值、编辑器原始输入、导出格式和正式比例尺绘制尚未改写。
 - 后续若要让导出或数据模型跟随比例尺，应单独做数据契约，避免显示倍率污染原始生成结果。
+
+### 生成级气候系统第一刀
+
+背景：
+
+- 用户要求引入可控气候系统，支持选择整个画布所在的地球纬度和大气方向，并让这些参数直接影响温度、降水、河流，间接影响人口和国家等下游生成。
+
+修正：
+
+- 新增 `generator/climate-options.js`：
+  - 纬度选项：自动纬度、赤道带、北/南亚热带、北/南温带、北/南寒带。
+  - 大气方向选项：自动风带、西风、东风、北风、南风、西北风、东北风、西南风、东南风。
+  - 自动模式保留原 source-style 随机纬度和六纬度风带；固定纬度模式用预设中心纬度和跨度生成 `latN / latS / latCenter`；固定风向会把六个风带统一为对应角度。
+- `normalizeOptions()` 新增 `climateLatitudeMode / atmosphereDirection`，作为正式生成参数进入 `map.options`。
+- `buildClimate()` 接入新参数：
+  - 固定纬度会改变整图的实际纬度范围，从而改变温度梯度。
+  - 固定大气方向会改变降水推进方向、迎风坡和雨影，进而改变 `grid.cells.prec`。
+  - 气候 metadata 记录纬度模式、纬度标签、中心纬度、大气方向、风向角度和实际风带数组。
+- 下游链路无需额外硬接：
+  - `buildRivers()` 已从 `grid.cells.prec/temp` 读取降水、温度和湖泊蒸发，河流 flux / 数量自然随气候改变。
+  - `defineBiomesAndPopulation()` 已从温度、降水、河流 flux 计算 biome、适居度和人口。
+  - 文化、城镇、国家、省份、资源点和经济派生继续吃人口、biome、河流、降水等字段，因此会间接变化。
+- 控制面板“生成”tab 新增“气候”区块，包含“纬度”和“大气”两个统一下拉。
+- `readOptionsFromPanel()` 读取两个新控件；编辑锁也纳入这两个控件。
+- 运行统计新增：
+  - “气候纬度”：显示纬度标签和实际 `latS .. latN`。
+  - “大气方向”：显示风向标签和固定角度。
+- 生成日志和 summary 的 climate 段记录纬度、大气方向、风带和 mapCoordinates，便于后续 baseline / diff 复查。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/climate-options.js`
+- `node --check app/webgl-generator/src/generator/climate.js`
+- `node --check app/webgl-generator/src/generator/options.js`
+- `node --check app/webgl-generator/src/ui/panel.js`
+- 纯生成对比通过：同 seed `stage-2-1231411414 / continents / 10000` 下，自动气候和 `赤道带 + 西风` 生成不同 checksum；`赤道带 + 西风` 的 `latS=-40.5 / latN=40.5`、降水峰值、河流数量、最大 flux、人口 cell 和城市数均发生变化。
+- `git diff --check` 通过。
+- `npm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 静态 server + Playwright 构建产物验证通过：
+  - UI 下拉包含 8 个纬度选项和 9 个大气方向选项。
+  - 选择 `赤道带 + 西风` 后重新生成，`map.options.climateLatitudeMode=equatorial`、`map.options.atmosphereDirection=west`。
+  - climate metadata 显示 `latitudeLabel=赤道带`、`atmosphereLabel=西风`、`windProfile=[90,90,90,90,90,90]`、`latS=-40.5 / latN=40.5`。
+  - 运行统计包含“赤道带”和“西风”。
+  - 降水专题切换为 active，截图像素非空：`1020x860`，`varied=877200`。
+  - console error 为 `0`。
+
+后续：
+
+- 当前气候控制是整图生成参数，改动后需要重新生成；还没有“仅重算气候及下游派生”的管理按钮。
+- 后续可以继续补局部季风、海流、雨影强度、温度/降水编辑器，或让资源/贸易系统对气候带有更强的 goods 倾向。

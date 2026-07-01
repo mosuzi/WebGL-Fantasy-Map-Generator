@@ -86,7 +86,7 @@ export function generatePlaceholderMap(inputOptions = {}) {
       `initialize seeded random: ${summary.randomPreview.join(", ")}`,
       `build grid: ${grid.metadata.actualCells} cells, ${grid.metadata.vertexCount} vertices, ${grid.metadata.triangles} triangles`,
       `extract features: land=${features.metadata.landFeatures}, ocean=${features.metadata.oceanFeatures}, lakes=${features.metadata.lakeFeatures}`,
-      `build climate: temp=${climate.metadata.temperatureMin}..${climate.metadata.temperatureMax}, prec=${climate.metadata.precipitationMin}..${climate.metadata.precipitationMax}`,
+      `build climate: ${climate.metadata.latitudeLabel}, ${climate.metadata.atmosphereLabel}, temp=${climate.metadata.temperatureMin}..${climate.metadata.temperatureMax}, prec=${climate.metadata.precipitationMin}..${climate.metadata.precipitationMax}`,
       `build pack: ${pack.metadata.cells} semantic cells, mapping=${pack.metadata.mapping}`,
       `trace rivers: rivers=${rivers.metadata.rivers}, segments=${rivers.metadata.segments}`,
       `define biomes and rank cells: biomes=${Object.keys(biomes.metadata.biomeCounts).length}, populationCells=${biomes.metadata.positivePopulationCells}`,
@@ -133,6 +133,14 @@ export function createGenerationSummary(options, grid, features, climate, societ
       temperatureMax: climate.metadata.temperatureMax,
       precipitationMin: climate.metadata.precipitationMin,
       precipitationMax: climate.metadata.precipitationMax,
+      latitudeMode: climate.metadata.latitudeMode,
+      latitudeLabel: climate.metadata.latitudeLabel,
+      latitudeCenter: climate.metadata.latitudeCenter,
+      atmosphereDirection: climate.metadata.atmosphereDirection,
+      atmosphereLabel: climate.metadata.atmosphereLabel,
+      windAngle: climate.metadata.windAngle,
+      windProfile: climate.metadata.windProfile,
+      mapCoordinates: climate.mapCoordinates,
       biomeCounts: climate.metadata.biomeCounts
     },
     pack: {
