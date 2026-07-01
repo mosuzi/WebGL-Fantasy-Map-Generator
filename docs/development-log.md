@@ -11533,3 +11533,36 @@ full 矩阵结果：
   - 国家目标、省份目标、城市剪影/配色、资源类型、marker 图形/配色下拉均存在。
   - 样式读取显示 `border-radius: 6px`、`padding-right: 32px`、`appearance: none`。
   - console error 为 `0`。
+
+### 地图点击列表滚动与右键平移
+
+背景：
+
+- 用户要求点击地图元素后，如果命中对象有对应编辑列表面板，应把编辑列表滚动到该对象行进入视口。
+- 同时调整地图导航习惯：鼠标左键不再拖动画布，改为鼠标右键拖动画布；左键保留点击选择。
+
+修正：
+
+- `UiObjectTable` 新增选中行自动滚动：
+  - 表格外层持有 `ref`。
+  - 每行写入 `data-row-id`。
+  - `selectedId / rows` 变化后在 `nextTick` 中查找选中行并执行 `scrollIntoView({block: "nearest"})`。
+  - 国家、省份、城市、资源点、路线、河流、文化、宗教和标签等复用该表格的面板自动获得滚动能力。
+- `installCanvasInteractions()` 改为区分 pointer 模式：
+  - 鼠标左键进入 `select` 模式，只记录是否移动，不改变 camera offset；未移动时触发选择。
+  - 鼠标右键进入 `pan` 模式，拖动时更新 camera offset，并阻止浏览器右键菜单。
+  - 非鼠标主指针仍保留平移，避免触控/笔设备完全失去导航能力。
+- 高度、国家、省份和 marker 编辑绑定只响应主按钮 pointerdown，避免右键平移时误触编辑笔刷或资源放置。
+- 编辑交互锁放行鼠标右键 pointer 导航事件，让编辑状态下仍可右键平移画布。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js`
+- `node --check app/webgl-generator/src/runtime/app.js`
+- `git diff --check`
+- `npm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 静态 server + Playwright 构建产物验证通过：
+  - 选中最后一个国家后，国家列表 `scrollTop=206`，目标行位于列表视口内。
+  - 遮挡外画布点左键拖拽后 camera offset 保持 `{0, 0}`。
+  - 同点右键拖拽后 camera offset 变为 `{offsetX: 0.2727, offsetY: -0.1522}`。
+  - console error 为 `0`。

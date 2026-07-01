@@ -1422,28 +1422,43 @@ function isSelectedLabelItem(selection, item) {
 }
 
 function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) {
-  let dragging = false;
-  let moved = false;
+  let activePointer = null;
   let lastX = 0;
   let lastY = 0;
+  let startX = 0;
+  let startY = 0;
 
   canvas.addEventListener("pointerdown", event => {
-    dragging = true;
-    moved = false;
+    const mode = pointerInteractionMode(event);
+    if (!mode) return;
+    if (mode === "pan") event.preventDefault();
+    activePointer = {
+      id: event.pointerId,
+      mode,
+      moved: false
+    };
     lastX = event.clientX;
     lastY = event.clientY;
+    startX = event.clientX;
+    startY = event.clientY;
     canvas.setPointerCapture(event.pointerId);
   });
 
   canvas.addEventListener("pointermove", event => {
-    if (!dragging) {
+    if (!activePointer || activePointer.id !== event.pointerId) {
       onHover(event);
       return;
     }
+    if (activePointer.mode === "select") {
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 3) activePointer.moved = true;
+      onHover(event);
+      return;
+    }
+    event.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const dx = event.clientX - lastX;
     const dy = event.clientY - lastY;
-    if (Math.hypot(dx, dy) > 3) moved = true;
+    if (Math.hypot(event.clientX - startX, event.clientY - startY) > 3) activePointer.moved = true;
     lastX = event.clientX;
     lastY = event.clientY;
     camera.offsetX += (dx / rect.width) * 2;
@@ -1453,15 +1468,19 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
   });
 
   canvas.addEventListener("pointerup", event => {
-    if (!dragging) return;
-    dragging = false;
-    if (!moved) onSelect(event);
+    if (!activePointer || activePointer.id !== event.pointerId) return;
+    const pointer = activePointer;
+    activePointer = null;
+    if (pointer.mode === "select" && !pointer.moved) onSelect(event);
     canvas.releasePointerCapture(event.pointerId);
   });
 
   canvas.addEventListener("pointercancel", () => {
-    dragging = false;
-    moved = false;
+    activePointer = null;
+  });
+
+  canvas.addEventListener("contextmenu", event => {
+    event.preventDefault();
   });
 
   canvas.addEventListener(
@@ -1482,6 +1501,15 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
     },
     {passive: false}
   );
+}
+
+function pointerInteractionMode(event) {
+  if (event.pointerType === "mouse") {
+    if (event.button === 0) return "select";
+    if (event.button === 2) return "pan";
+    return null;
+  }
+  return event.button === 0 ? "pan" : null;
 }
 
 function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {

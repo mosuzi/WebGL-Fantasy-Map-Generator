@@ -1324,6 +1324,7 @@ function shouldOpenReligionPanelForSelection(state) {
 function bindHeightEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (!state.panels.height?.getBrush().active || !state.map) return;
+    if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     state.heightEdit.activeStroke = {
@@ -1363,6 +1364,7 @@ function bindHeightEditing(canvas, state, documentRef) {
 function bindStateEditing(canvas, state) {
   canvas.addEventListener("pointerdown", event => {
     if (!state.panels.state?.getBrush().active || !state.map) return;
+    if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const sourceStateId = getStateIdAtEvent(state, event);
@@ -1406,6 +1408,7 @@ function bindStateEditing(canvas, state) {
 function bindProvinceEditing(canvas, state) {
   canvas.addEventListener("pointerdown", event => {
     if (!state.panels.province?.getBrush().active || !state.map) return;
+    if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const sourceProvinceId = getProvinceIdAtEvent(state, event);
@@ -1449,6 +1452,7 @@ function bindProvinceEditing(canvas, state) {
 function bindMarkerEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (!state.markerEdit.mode || !state.map) return;
+    if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
 
@@ -1470,10 +1474,22 @@ function bindEditingInteractionLock(canvas, state) {
   for (const eventName of ["pointerdown", "pointermove", "pointerup", "pointercancel", "wheel"]) {
     canvas.addEventListener(eventName, event => {
       if (!isEditingInteractionLocked(state)) return;
+      if (isRightButtonNavigationEvent(event)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     }, true);
   }
+}
+
+function isPrimaryPointerDown(event) {
+  return event.button === 0;
+}
+
+function isRightButtonNavigationEvent(event) {
+  if (!event.type?.startsWith("pointer") || event.pointerType !== "mouse") return false;
+  if (event.type === "pointermove") return (event.buttons & 2) === 2;
+  if (event.type === "pointercancel") return true;
+  return event.button === 2;
 }
 
 function startMarkerEditMode(state, documentRef, {mode, type = "mines", markerId = null} = {}) {
