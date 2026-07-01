@@ -9,7 +9,7 @@ import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
-import {formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
+import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
@@ -1963,6 +1963,12 @@ function updateMeasurementOverlay(state, documentRef) {
   const rect = canvas.getBoundingClientRect();
   svg.setAttribute("viewBox", `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
   const screenPoints = points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+  if (screenPoints.length >= 3) {
+    const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    polygon.setAttribute("class", "measurement-area");
+    polygon.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
+    svg.append(polygon);
+  }
   if (screenPoints.length > 1) {
     const polyline = documentRef.createElementNS("http://www.w3.org/2000/svg", "polyline");
     polyline.setAttribute("class", "measurement-path");
@@ -1980,7 +1986,8 @@ function updateMeasurementOverlay(state, documentRef) {
 
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
   const distance = measurementDistance(points);
-  summary.textContent = measurementSummary(points.length, distance, units);
+  const area = points.length >= 3 ? measurementArea(points) : 0;
+  summary.textContent = measurementSummary(points.length, distance, area, units);
 }
 
 function measurementDistance(points) {
@@ -1993,10 +2000,22 @@ function measurementDistance(points) {
   return total;
 }
 
-function measurementSummary(pointCount, distance, units) {
+function measurementArea(points) {
+  let sum = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    sum += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+function measurementSummary(pointCount, distance, area, units) {
   if (pointCount === 0) return "点击地图添加起点";
   if (pointCount === 1) return "继续点击添加测量点";
-  return `${pointCount} 点 / 总长 ${formatDisplayDistance(distance, units)}`;
+  const distanceText = `${pointCount} 点 / 总长 ${formatDisplayDistance(distance, units)}`;
+  if (pointCount < 3) return distanceText;
+  return `${distanceText} / 面积 ${formatDisplayArea(area, units)}`;
 }
 
 function clampMeasurementValue(value, min, max) {

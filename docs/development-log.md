@@ -12934,3 +12934,26 @@ full 矩阵结果：
 后续：
 
 - 可继续做备注独立导入、孤儿备注批量清理和 Markdown / 富文本格式，但不应替代完整地图 JSON 的保存职责。
+
+### 面积测量第一刀
+
+背景：
+
+- 原版测量工具包含距离和面积类工具，当前 WebGL 版只完成了临时折线测距。
+- 面积测量可以直接复用现有测量点、比例尺和单位换算，不需要引入新的面板或保存格式。
+
+修正：
+
+- 测量点达到 `3` 个及以上时，`updateMeasurementOverlay()` 会用首尾闭合的多边形绘制 `.measurement-area` 半透明面片。
+- 新增 `measurementArea(points)`，按 shoelace 公式计算内部地图单位面积。
+- 测量摘要在三点及以上显示“总长 + 面积”，面积使用现有 `formatArea()` 和单位偏好换算。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `959.18KB JS / 296.36KB gzip`、`149.49KB CSS / 22.22KB gzip`。
+- Playwright route 构建产物验证通过：开启测量后点击三点，页面生成 `1` 个 `.measurement-area`、`1` 条 `.measurement-path` 和 `3` 个 `.measurement-point`。
+- 测量摘要为 `3 点 / 总长 994.3 千米 / 面积 11万 平方公里`，measurement active 为 true，console/page error 为 `0`。
+
+后续：
+
+- 可继续补节点拖拽、路线贴合测量、保存测量对象和导出测量结果。

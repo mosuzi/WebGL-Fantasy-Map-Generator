@@ -6,8 +6,8 @@
 
 | 候选功能 | 原版入口 | 当前缺口 | 复杂度 | 建议 |
 |---|---|---|---|---|
-| 测量工具：直尺、曲线尺、路线尺、面积尺 | `source/Fantasy-Map-Generator/public/modules/ui/measurers.js`，`Ruler / Opisometer / RouteOpisometer / Planimeter` | 已完成临时折线测距第一刀；尚未支持面积尺、路线贴合、保存测量对象和编辑节点。 | 中等 | 下一步补面积多边形、节点拖拽和保存/导出。 |
-| 对象注记 | `source/Fantasy-Map-Generator/public/modules/ui/notes-editor.js`，`editNotes` | 数据契约和分阶段入口已落到 `docs/task-notes/object-notes-implementation-plan.md`；marker、city、river、route、state、province、culture、religion 与 label 纯文本备注第一刀已完成，独立备注总览第一刀已完成，尚未做富文本、独立导入导出和孤儿备注批量清理。 | 中等 | 下一步可补备注独立导入导出、孤儿备注批量操作；富文本编辑器和 AI 辅助暂缓。 |
+| 测量工具：直尺、曲线尺、路线尺、面积尺 | `source/Fantasy-Map-Generator/public/modules/ui/measurers.js`，`Ruler / Opisometer / RouteOpisometer / Planimeter` | 已完成临时折线测距和闭合多边形面积第一刀；尚未支持路线贴合、保存测量对象和编辑节点。 | 中等 | 下一步补节点拖拽、路线贴合和保存/导出测量结果。 |
+| 对象注记 | `source/Fantasy-Map-Generator/public/modules/ui/notes-editor.js`，`editNotes` | 数据契约和分阶段入口已落到 `docs/task-notes/object-notes-implementation-plan.md`；marker、city、river、route、state、province、culture、religion 与 label 纯文本备注第一刀已完成，独立备注总览和备注摘要导出已完成，尚未做富文本、备注独立导入和孤儿备注批量清理。 | 中等 | 下一步可补备注独立导入、孤儿备注批量操作；富文本编辑器和 AI 辅助暂缓。 |
 | 名称库编辑器 | `source/Fantasy-Map-Generator/src/controllers/namesbase-editor.ts` | 当前有中文命名策略和标签管理，但用户不能维护名称库、权重或文化绑定。 | 中等 | 与当前中文命名优化方向贴合，建议作为命名系统下一阶段。 |
 | 分层 GeoJSON 导出 | `source/Fantasy-Map-Generator/public/modules/io/export.js`，`saveGeoJsonRoutes / Rivers / Markers / Zones` | 已完成城市、路线、河流、marker 和 zone 要素 GeoJSON 第一刀，并支持 city / route / river / marker / zone 分层选择；尚缺国家/省份/区域 dissolve、范围选择和更完整属性映射。 | 中等 | 下一步补国家/省份 dissolve 或范围选择；SVG、瓦片 zip 暂缓。 |
 
@@ -29,7 +29,7 @@
 
 ## 建议顺序
 
-1. 测量工具：最能增强制图工具感，也能直接复用当前比例尺和相机坐标。
-2. 对象注记：第一批专用入口和独立总览已完成；后续为孤儿备注批量操作、独立导入导出和战斗事件备注铺路。
+1. 测量工具：折线测距和面积第一刀已完成；后续可做节点拖拽、路线贴合、保存与导出。
+2. 对象注记：第一批专用入口、独立总览和摘要导出已完成；后续为孤儿备注批量操作、独立导入和战斗事件备注铺路。
 3. 名称库编辑器：与当前中文命名策略高度相关，能给用户可控性。
 4. 分层 GeoJSON：路线、河流、marker、zone 第一刀已完成；后续可继续做国家/省份 dissolve、分层选择和范围导出。
