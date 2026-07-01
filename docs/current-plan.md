@@ -13,6 +13,7 @@
 - marker 细化第一刀已完成：旧的统一浅白点改为按类别着色，marker 数据补充中文 `label`、`category/categoryLabel`、`resourceKey/resourceLabel`、`economicValue` 和 RGBA `color`；新增盐湖、稀有生物、宝石矿脉等资源 marker，矿山候选也扩展到高地适居资源 cell。
 - marker 资源经济已接入国家/省份对象：生成 marker 时按 `state/province` 汇总 `resourcePotential / markerEconomicPotential / resourceTypes / markerCategories`，水域资源会归属到邻接陆地政区；经济阶段新增 `economicPower` 和 `economy.metadata.markerEconomy`，但暂不改 source 已收敛的税收/国库公式。
 - marker hover、选中详情和侧栏统计已显示图标、中文类型、类别、资源标签和经济潜力；`stage-2-1231411414 / continents / 10000` 内存验证中生成 `41` 个 marker、`5` 个资源 marker、资源潜力 `74`，覆盖 `4` 个国家和 `5` 个省份，且 marker 无无色点、无非法 cell 引用。
+- 资源点已拆成独立图层：控制面板“图层”tab 新增“资源点”和“标记”，前者只控制 `category === "resource"` 的资源 marker，后者控制遗迹、危险、设施、文化等非资源 marker；隐藏的 marker 不再参与 hover/点击命中。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
 - source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
 - `continents-10000` 两个单例 warn 已完成只读复查：001 的 `features.total` 主要来自候选地形/feature 拓扑中更多小陆块；003 的 `lakeNames` 来自候选真实湖泊数 `7` 对 source `5`，不是 `defineLakeNames()` 命名过滤问题。不要用删除小岛、删除 1-cell 湖或只命名 outlet 湖来压 warn。
@@ -29,7 +30,7 @@
 下一步优先级：
 
 1. `features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正；若继续收敛，应回到高度洼地、lake outlet、feature 拓扑，而不是删除小岛或过滤湖名。
-2. marker 后续不要为了单个类型继续扩大总量；如果继续深化，应进入 marker 面板、图标 sprite/HTML overlay、资源点编辑和 marker 局部重算，而不是再调全局 target。
+2. marker 后续不要为了单个类型继续扩大总量；如果继续深化，应进入 marker 面板、图标 sprite/HTML overlay、资源点编辑和 marker 局部重算，而不是再调全局 target。可追加的资源点类型包括：采石场、黏土坑、煤田、硫磺泉、硝石洞、琥珀海岸、珍珠滩、珊瑚礁、渔场、良港、森林木场、树脂林、药草谷、染料草场、香料林、茶山、丝茧桑园、马场、牧盐草甸、绿洲、圣泉、地热田。
 3. 经济/人口后续若继续提质，应把 Goods 生成正式前移到 rankCells 之前，并把 `state.economicPower / province.economicPower` 接入后续国力计算，而不是长期依赖 economy 阶段的资源 bonus 补偿。
 4. 再下一步可以统一控制面板下拉选项 UI。
 

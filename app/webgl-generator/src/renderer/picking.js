@@ -158,13 +158,14 @@ export function pickCity(map, index, worldX, worldY, maxDistance) {
   return best;
 }
 
-export function pickMarker(map, index, worldX, worldY, maxDistance) {
+export function pickMarker(map, index, worldX, worldY, maxDistance, predicate = () => true) {
   if (!map?.markers?.markers?.length) return null;
   let best = null;
   let candidateCount = 0;
   const markers = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "markers", marker => marker.id) : map.markers.markers;
 
   for (const marker of markers) {
+    if (!predicate(marker)) continue;
     candidateCount++;
     const distance = Math.hypot(worldX - marker.x, worldY - marker.y);
     if (distance > maxDistance || (best && distance >= best.distance)) continue;

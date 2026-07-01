@@ -596,6 +596,8 @@ function formatLayerVisibility(visibility = {}) {
     routes: "道路",
     rivers: "河流",
     cities: "城市",
+    resources: "资源点",
+    markers: "标记",
     labels: "标签",
     stateLabels: "国家名",
     stateBorders: "国界",

@@ -113,6 +113,7 @@ export class PlaceholderMapRenderer {
       stateLabels: true,
       population: true,
       markers: true,
+      resources: true,
       coastline: true,
       lakeShore: true,
       stateBorders: true,
@@ -324,7 +325,7 @@ export class PlaceholderMapRenderer {
       changed = true;
     }
     if (!changed) return;
-    if (layer === "cities" || layer === "population" || layer === "markers") this.refreshPointLayers({draw: false});
+    if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources") this.refreshPointLayers({draw: false});
     if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders")) this.refreshLineLayers({draw: false});
     this.draw();
   }
@@ -471,7 +472,7 @@ export class PlaceholderMapRenderer {
     const world = this.screenToWorld(clientX, clientY);
     const result = pickGridCell(this.map, world.x, world.y);
     const cityObject = pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9));
-    const marker = pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8));
+    const marker = pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
     const route = pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7));
     const river = pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7));
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
@@ -1259,12 +1260,18 @@ function buildPointVertices(map, visibility = {}) {
       pushWorldVertex(vertices, context, [city.x, city.y], color);
     }
   }
-  if (visibility.markers !== false) {
+  if (visibility.markers !== false || visibility.resources !== false) {
     for (const marker of map.markers.markers) {
+      if (!isMarkerLayerVisible(marker, visibility)) continue;
       pushWorldVertex(vertices, context, [marker.x, marker.y], colorForMarker(marker));
     }
   }
   return new Float32Array(vertices);
+}
+
+function isMarkerLayerVisible(marker, visibility = {}) {
+  if (marker.category === "resource") return visibility.resources !== false;
+  return visibility.markers !== false;
 }
 
 function colorForMarker(marker) {

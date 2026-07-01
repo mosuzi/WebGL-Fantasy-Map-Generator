@@ -11235,3 +11235,33 @@ full 矩阵结果：
 - 当前 marker 点仍是 `gl.POINTS`，只是完成类别配色和数据语义；真实 sprite/icon atlas 或 HTML overlay 图标仍是后续任务。
 - marker 局部重算按钮尚未接入；国家/省份/城镇/河流重算后仍会把 marker 标记为待派生。
 - 如果后续要把资源影响税收，应先设计与 source economy baseline 兼容的资源/国力公式，再决定是否改 `treasury`。
+
+### 资源点独立图层
+
+背景：
+
+- 用户继续询问还可以有哪些资源点，并要求把资源点作为单独图层控制。
+- 当前 marker 点层已经有资源语义，但 UI 仍只有统一 marker 渲染路径；资源点和遗迹、危险、设施类标记无法分开隐藏。
+
+修正：
+
+- 控制面板“图层”tab 新增：
+  - `资源点`：只控制 `category === "resource"` 的资源 marker。
+  - `标记`：控制遗迹、危险、设施、文化、自然、水文、商旅、活动、异象等非资源 marker。
+- renderer 新增 `resources` layer visibility，点层构建时按 marker category 分流。
+- picking 也尊重资源点/标记图层可见性：隐藏后的资源点或普通 marker 不再参与 hover/点击命中。
+- 侧栏图层摘要会显示“资源点”和“标记”两个独立开关状态。
+- 当前建议追加资源池记录到 `docs/current-plan.md`：采石场、黏土坑、煤田、硫磺泉、硝石洞、琥珀海岸、珍珠滩、珊瑚礁、渔场、良港、森林木场、树脂林、药草谷、染料草场、香料林、茶山、丝茧桑园、马场、牧盐草甸、绿洲、圣泉、地热田。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js`
+- `node --check app\webgl-generator\src\renderer\picking.js`
+- `node --check app\webgl-generator\src\ui\panel.js`
+- `git diff --check`
+- `$env:CI='true'; pnpm run build:app`
+- 临时静态 server + Playwright 验证：
+  - 控制面板存在 `[data-layer=resources]` 和 `[data-layer=markers]` 两个按钮。
+  - 默认样例 marker `44`，其中资源点 `5`，非资源 marker `39`。
+  - 全开 point 顶点 `861`；关闭资源点后 `856`；再关闭标记后 `817`；只开资源点时 `822`；恢复后 `861`。
+  - 关闭资源点后资源点 picking 返回 `null`，非资源 marker 仍可命中；关闭标记后非资源 marker 返回 `null`；只开资源点时资源点仍可命中。

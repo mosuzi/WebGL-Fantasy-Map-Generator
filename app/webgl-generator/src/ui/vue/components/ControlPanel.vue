@@ -144,6 +144,8 @@ const layers = Object.freeze([
   {id: "routes", label: "道路"},
   {id: "rivers", label: "河流"},
   {id: "cities", label: "城市"},
+  {id: "resources", label: "资源点"},
+  {id: "markers", label: "标记"},
   {id: "labels", label: "城市标签"},
   {id: "stateLabels", label: "国家名称"},
   {id: "stateBorders", label: "国界"},
