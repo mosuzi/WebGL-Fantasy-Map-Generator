@@ -807,6 +807,7 @@ http://127.0.0.1:5410
 182. 原版功能积压 GeoJSON 状态已校准：`docs/task-notes/source-feature-backlog.md` 现在明确国家和省份要素 GeoJSON 第一刀已实现，当前形态是 pack cell polygon 集合型 `MultiPolygon`；后续缺口收窄为国家/省份拓扑 dissolve、范围选择和更完整属性映射。
 183. 名称库样例生成预览第一刀已完成：`namebase-store.js` 新增本项目自己的轻量字符链和重组式预览函数，名称库总览面板可对当前选中词池点击“生成预览 / 换一组”查看临时候选；该能力只读 source，不写 `map.namebases`，也不接入真实 `createChineseNameGenerator()`。为避免二字古国名被截成怪异单字，预览链按样本长度分桶选择起始字符。构建产物主入口约 `510.57KB / 150.49KB gzip`，名称库面板懒加载 chunk 约 `2.82KB gzip`，`namebase-store` chunk 约 `10.31KB gzip`；构建产物烟测中打开名称库显示 `61` 行，初始样例为春秋古国根名，点击生成后按钮变为“换一组”，第二次点击会换一批候选，checksum 保持稳定，console/page error 为 `0`。
 184. 用户名称库新建入口已完成：名称库总览新增“新建用户库”，会在 `map.namebases.bases` 中创建 `origin = 手动` 的用户词池，默认样本为 `青川 / 云泽 / 鹿原 / 玄岭 / 白沙`，创建后自动选中并显示名称和样本编辑器。预览生成器同步收紧为不超过源词池最大长度并过滤相邻重复字，避免小词池生成 `玄岭玄岭` 这类候选。构建产物主入口约 `510.93KB / 150.57KB gzip`，`NamebasePanel` chunk 约 `2.84KB gzip`，`namebase-store` chunk 约 `10.55KB gzip`；构建产物烟测中新建后名称库行数 `61 -> 62`、用户库数量 `1`，详情显示“用户名称库 1 / 来源手动 / 样本偏少”，样本编辑器预填 5 个样本，生成候选最大长度 `2` 且无相邻重复，checksum 保持稳定，console/page error 为 `0`。
+185. 测量撤销点第一刀已完成：测量 readout 新增“撤销点”按钮，复用 Element Button 并保留运行时 DOM id 契约；点击后只从临时 `state.measurement.points` 中移除最后一点，取消正在进行的拖拽并刷新 overlay，不写地图数据。readout 最大宽度放宽到 `640px`，避免导出、撤销点、清除三枚按钮挤压读数。构建产物主入口约 `511.25KB / 150.66KB gzip`。构建产物烟测中三点测量显示面积且 SVG 面片 `1` 个；点击撤销后点数 `3 -> 2`、面积面片消失、读数回到总长；继续撤销到 `0` 后摘要为“点击地图添加起点”，导出/撤销/清除均禁用，console/page error 为 `0`。
 
 ## 约束
 

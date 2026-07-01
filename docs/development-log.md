@@ -13745,3 +13745,27 @@ full 矩阵结果：
 
 - 新建库目前仍不接历史栈；后续如果把名称库管理定位成可撤销编辑，需要统一处理新建、删除、重命名和样本编辑。
 - 继续推进生成绑定前，应先显示 `map.namebases.bindings` 的绑定状态和失效引用。
+
+### 测量撤销点第一刀
+
+背景：
+
+- 测量工具已经支持临时折线测距、闭合面积、导出和节点拖拽，但用户添加错点后只能清空全部测量。
+- 原版测量器有更完整的节点编辑能力；当前先补最小、风险最低的“撤销最后一点”。
+
+修正：
+
+- `MeasurementReadout.vue` 新增“撤销点”按钮，继续通过 Element Button 渲染，并提供 `measurement-undo` DOM id 供 runtime 绑定。
+- `bindMeasurementTool()` 绑定撤销按钮，点击后取消当前拖拽、从 `state.measurement.points` 中移除最后一点，并复用 `updateMeasurementOverlay()` 刷新折线、面积和读数。
+- `updateMeasurementOverlay()` 同步维护撤销按钮禁用状态；无点时导出、撤销点和清除都禁用。
+- 测量 readout 最大宽度从 `420px` 放宽到 `640px`，避免三枚按钮挤压较长面积读数。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `511.25KB / 150.66KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：开启测量后点击三点，点数 `3`、SVG 点 `3`、面积面片 `1`，读数为 `3 点 / 总长 1,620.9 千米 / 面积 30万 平方公里`；点击“撤销点”后点数变为 `2`、面积面片为 `0`、读数为 `2 点 / 总长 955.5 千米`；继续撤销到 `0` 后摘要回到“点击地图添加起点”，导出/撤销/清除按钮均禁用，console/page error 为 `0`。
+
+后续：
+
+- 下一步测量工具可继续做点击节点删除、在折线中插入节点和保存测量对象；路线贴合仍应单独设计。

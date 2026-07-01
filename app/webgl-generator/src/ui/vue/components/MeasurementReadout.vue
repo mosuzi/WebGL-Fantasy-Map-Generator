@@ -2,6 +2,7 @@
   <strong>测量</strong>
   <span id="measurement-summary">点击地图添加起点</span>
   <UiButton id="measurement-export">导出</UiButton>
+  <UiButton id="measurement-undo">撤销点</UiButton>
   <UiButton id="measurement-clear">清除</UiButton>
 </template>
 

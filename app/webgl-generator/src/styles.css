@@ -535,7 +535,7 @@ select:disabled {
   left: 18px;
   top: 64px;
   display: flex;
-  max-width: min(420px, calc(100% - 36px));
+  max-width: min(640px, calc(100% - 36px));
   min-height: 34px;
   align-items: center;
   gap: 10px;

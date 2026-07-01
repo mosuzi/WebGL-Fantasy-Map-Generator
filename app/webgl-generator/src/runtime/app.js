@@ -2046,6 +2046,7 @@ function shouldSwitchDiplomacySubjectForSelection(state) {
 function bindMeasurementTool(canvas, state, documentRef) {
   const toggle = documentRef.getElementById("toggle-measurement");
   const clear = documentRef.getElementById("measurement-clear");
+  const undo = documentRef.getElementById("measurement-undo");
   const exportButton = documentRef.getElementById("measurement-export");
   toggle?.addEventListener("click", () => {
     state.measurement.active = !state.measurement.active;
@@ -2060,6 +2061,7 @@ function bindMeasurementTool(canvas, state, documentRef) {
     state.measurement.points = [];
     updateMeasurementOverlay(state, documentRef);
   });
+  undo?.addEventListener("click", () => undoMeasurementPoint(state, documentRef));
   exportButton?.addEventListener("click", () => exportMeasurement(state, documentRef));
 
   canvas.addEventListener("pointerdown", event => {
@@ -2112,10 +2114,11 @@ function updateMeasurementOverlay(state, documentRef) {
   const svg = documentRef.getElementById("measurement-svg");
   const summary = documentRef.getElementById("measurement-summary");
   const clear = documentRef.getElementById("measurement-clear");
+  const undo = documentRef.getElementById("measurement-undo");
   const exportButton = documentRef.getElementById("measurement-export");
   const toggle = documentRef.getElementById("toggle-measurement");
   const canvas = documentRef.getElementById("map-canvas");
-  if (!overlay || !svg || !summary || !clear || !exportButton || !toggle || !canvas) return;
+  if (!overlay || !svg || !summary || !clear || !undo || !exportButton || !toggle || !canvas) return;
 
   const active = Boolean(state.measurement.active);
   const points = state.measurement.points || [];
@@ -2125,6 +2128,7 @@ function updateMeasurementOverlay(state, documentRef) {
   toggle.textContent = active ? "退出测量" : "测量";
   overlay.hidden = !active;
   clear.disabled = points.length === 0;
+  undo.disabled = points.length === 0;
   exportButton.disabled = points.length === 0;
   svg.replaceChildren();
   if (!active) return;
@@ -2159,6 +2163,12 @@ function updateMeasurementOverlay(state, documentRef) {
   const distance = measurementDistance(points);
   const area = points.length >= 3 ? measurementArea(points) : 0;
   summary.textContent = measurementSummary(points.length, distance, area, units);
+}
+
+function undoMeasurementPoint(state, documentRef) {
+  cancelMeasurementDrag(state, documentRef);
+  if (state.measurement.points?.length) state.measurement.points.pop();
+  updateMeasurementOverlay(state, documentRef);
 }
 
 function exportMeasurement(state, documentRef) {
