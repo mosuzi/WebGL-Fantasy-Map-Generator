@@ -11309,6 +11309,50 @@ full 矩阵结果：
 - 图标 symbol / palette 目前是第一版内置集合；后续可把文化样式拆成预设表，让城市、国家、资源 marker 按文化自动选用。
 - marker 面板应补充图标手动调整入口，并把 `visual.manual = true` 的对象排除出自动覆盖。
 
+### marker / 资源点管理面板第一刀
+
+背景：
+
+- marker 已经具备资源语义、独立图层、经济潜力和近景小图标，但用户还没有独立管理入口。
+- 用户确认下一步先推进管理面板；本轮目标是管理和微调，不进入新增/删除/移动/局部重算。
+
+修正：
+
+- 管理 tab 新增“资源标记”入口，打开独立浮动 `marker-panel`。
+- 新增 `MarkerPanel.vue`：
+  - 支持全部 / 资源点 / 普通标记范围切换。
+  - 支持按名称、id、类型、国家、省份筛选。
+  - 支持按潜力、类别、国家、ID 排序。
+  - 表格显示名称、类别、资源、国家和经济潜力。
+  - 详情显示所属国家/省份、grid cell、pack cell、当前图形、是否手动图标等。
+- 面板支持选中和定位 marker；当 marker 面板已打开时，地图点击 marker 会同步面板选中项。
+- marker 重命名接入通用对象重命名命令。
+- 新增 `marker-edit-commands.js`，支持调整近景图标 `symbol / palette`，并写入 `visual.manual = true`；撤销/重做会恢复 `marker.visual` 和 `marker.data.visual`。
+- renderer 刷新使用已有 `point-layers / labels / object-panels` effects，保证点层、overlay 图标和对象详情同步更新。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`
+- `node --check app\webgl-generator\src\runtime\object-edit-commands.js`
+- `node --check app\webgl-generator\src\runtime\marker-edit-commands.js`
+- `node --check app\webgl-generator\src\ui\panels\marker-panel.js`
+- `node --check app\webgl-generator\src\ui\panel.js`
+- `$env:CI='true'; pnpm run build:app`
+- 临时静态 server + Playwright 验证：
+  - 初始 seed：`stage-2-1`
+  - marker 总数 `44`，资源 marker `5`。
+  - 面板“全部”表格行数 `44`，切到“资源点”后表格行数 `5`。
+  - 定位第一条资源 marker 后，selection 为 `marker #2 / 丰苍矿山`。
+  - 重命名命令生效，图标 `symbol/palette` 手动调整生效。
+  - 手动调整 `palette` 后会清除 `categoryColor` 覆盖，让图牌主色真正使用手动配色；撤销会恢复原始类别色。
+  - 图标调整可撤销、可重做；再次撤销后重命名也恢复。
+  - 浏览器 console error 为 `0`。
+
+后续：
+
+- marker 新增、删除、移动、局部重算仍未接入；这些操作需要同步对象索引、经济汇总和国家/省份资源潜力。
+- 文化预制图标还未接入，当前只是手动 `symbol/palette` 选择。
+
 ### 远景 marker 圆点修正
 
 背景：

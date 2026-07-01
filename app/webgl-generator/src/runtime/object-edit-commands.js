@@ -30,7 +30,8 @@ const OBJECT_NAME_READERS = Object.freeze({
   [OBJECT_KIND.CULTURE]: readCultureName,
   [OBJECT_KIND.RELIGION]: readReligionName,
   [OBJECT_KIND.RIVER]: readRiverName,
-  [OBJECT_KIND.CITY]: readCityName
+  [OBJECT_KIND.CITY]: readCityName,
+  [OBJECT_KIND.MARKER]: readMarkerName
 });
 
 const OBJECT_NAME_WRITERS = Object.freeze({
@@ -39,7 +40,8 @@ const OBJECT_NAME_WRITERS = Object.freeze({
   [OBJECT_KIND.CULTURE]: writeCultureName,
   [OBJECT_KIND.RELIGION]: writeReligionName,
   [OBJECT_KIND.RIVER]: writeRiverName,
-  [OBJECT_KIND.CITY]: writeCityName
+  [OBJECT_KIND.CITY]: writeCityName,
+  [OBJECT_KIND.MARKER]: writeMarkerName
 });
 
 const OBJECT_NAME_RESTORERS = Object.freeze({
@@ -48,7 +50,8 @@ const OBJECT_NAME_RESTORERS = Object.freeze({
   [OBJECT_KIND.CULTURE]: restoreCultureName,
   [OBJECT_KIND.RELIGION]: (map, target, previous) => writeReligionName(map, target.id, previous.name),
   [OBJECT_KIND.RIVER]: (map, target, previous) => writeRiverName(map, target.id, previous.name),
-  [OBJECT_KIND.CITY]: (map, target, previous) => writeCityName(map, target.id, previous.name, previous.burgName)
+  [OBJECT_KIND.CITY]: (map, target, previous) => writeCityName(map, target.id, previous.name, previous.burgName),
+  [OBJECT_KIND.MARKER]: (map, target, previous) => writeMarkerName(map, target.id, previous.name)
 });
 
 export function createRenameObjectCommand(object, nextName) {
@@ -189,6 +192,11 @@ function readRiverName(map, riverId) {
   return river ? {name: river.name || ""} : null;
 }
 
+function readMarkerName(map, markerId) {
+  const marker = map?.markers?.markers?.[markerId];
+  return marker ? {name: marker.name || ""} : null;
+}
+
 function readCityName(map, cityId) {
   const city = map?.settlements?.cities?.[cityId];
   const burg = city ? findBurgForCity(map, city) : null;
@@ -259,6 +267,12 @@ function writeRiverName(map, riverId, name) {
   const river = findRiver(map, riverId);
   if (!river) throw new Error(`找不到河流 #${riverId}`);
   river.name = name;
+}
+
+function writeMarkerName(map, markerId, name) {
+  const marker = map?.markers?.markers?.[markerId];
+  if (!marker) throw new Error(`找不到标记 #${markerId}`);
+  marker.name = name;
 }
 
 function writeCityName(map, cityId, name, burgName = name) {

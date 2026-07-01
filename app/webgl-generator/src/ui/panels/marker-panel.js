@@ -1,0 +1,119 @@
+import {createApp, markRaw, shallowReactive} from "vue";
+import {pinia} from "../vue/pinia.js";
+import MarkerPanel from "../vue/components/MarkerPanel.vue";
+
+export function createMarkerPanel(documentRef, manager, callbacks = {}) {
+  const panelState = shallowReactive({
+    open: false,
+    map: null,
+    selection: null,
+    history: null,
+    filter: "",
+    scope: "all",
+    sortKey: "economicValue",
+    sortDir: "desc",
+    selectedMarkerId: null
+  });
+  const panelCallbacks = {
+    onFilter: value => {
+      panelState.filter = value;
+    },
+    onScope: value => {
+      panelState.scope = value;
+    },
+    onSort: key => {
+      if (panelState.sortKey === key) {
+        panelState.sortDir = panelState.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        panelState.sortKey = key;
+        panelState.sortDir = key === "id" || key === "name" || key === "categoryLabel" ? "asc" : "desc";
+      }
+    },
+    onSelect: row => {
+      panelState.selectedMarkerId = row.id;
+      callbacks.onSelect?.(markerObject(row));
+    },
+    onLocate: row => {
+      panelState.selectedMarkerId = row.id;
+      callbacks.onLocate?.(markerObject(row));
+    },
+    onRename: (markerId, name) => callbacks.onRename?.(markerId, name),
+    onVisualChange: (markerId, patch) => callbacks.onVisualChange?.(markerId, patch),
+    onUndo: () => callbacks.onUndo?.(),
+    onRedo: () => callbacks.onRedo?.()
+  };
+
+  const record = manager.registerPanel("marker-panel", {
+    title: "资源与标记管理",
+    left: 504,
+    top: 96,
+    width: 620,
+    maxWidth: 760,
+    onClose: () => {
+      panelState.open = false;
+    }
+  });
+  const root = documentRef.createElement("div");
+  root.className = "vue-marker-panel-root";
+  record.body.replaceChildren(root);
+  const app = createApp(MarkerPanel, {state: panelState, callbacks: panelCallbacks});
+  app.use(pinia);
+  app.mount(root);
+
+  return {
+    open(map, selection, history) {
+      panelState.map = map ? markRaw(map) : null;
+      panelState.selection = selection;
+      panelState.history = history;
+      if (selection?.object?.kind === "marker") panelState.selectedMarkerId = selection.object.id;
+      if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
+      panelState.open = true;
+      manager.open("marker-panel");
+    },
+    update(map, selection, history) {
+      panelState.map = map ? markRaw(map) : null;
+      panelState.selection = selection;
+      panelState.history = history;
+      if (selection?.object?.kind === "marker") panelState.selectedMarkerId = selection.object.id;
+      if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
+    },
+    setSelectedMarkerId(markerId) {
+      if (markerExists(panelState.map, markerId)) panelState.selectedMarkerId = markerId;
+    },
+    isOpen() {
+      return panelState.open;
+    },
+    unmount() {
+      app.unmount();
+    }
+  };
+}
+
+function markerObject(row) {
+  return {
+    kind: "marker",
+    id: row.id,
+    name: row.rawName,
+    type: row.type,
+    label: row.typeLabel,
+    category: row.category,
+    categoryLabel: row.categoryLabel,
+    resourceKey: row.resourceKey,
+    resourceLabel: row.resourceLabel,
+    economicValue: row.economicValue,
+    cell: row.cell,
+    packCell: row.packCell,
+    stateId: row.stateId,
+    state: row.stateName,
+    provinceId: row.provinceId,
+    province: row.provinceName
+  };
+}
+
+function markerExists(map, markerId) {
+  return Boolean(Number.isInteger(markerId) && map?.markers?.markers?.[markerId]);
+}
+
+function firstMarkerId(map) {
+  return (map?.markers?.markers || []).find(marker => marker && Number.isInteger(marker.id))?.id ?? null;
+}

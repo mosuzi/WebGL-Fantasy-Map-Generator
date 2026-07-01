@@ -163,6 +163,7 @@ const actions = Object.freeze([
   {id: "open-religion-panel", label: "宗教管理"},
   {id: "open-route-panel", label: "路线管理"},
   {id: "open-river-panel", label: "河流管理"},
+  {id: "open-marker-panel", label: "资源标记"},
   {id: "open-label-naming-panel", label: "标签管理"}
 ]);
 

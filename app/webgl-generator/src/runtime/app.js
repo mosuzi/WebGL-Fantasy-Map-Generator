@@ -13,6 +13,7 @@ import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
+import {createMarkerPanel} from "../ui/panels/marker-panel.js";
 import {createObjectDetailsPanel} from "../ui/panels/object-details-panel.js";
 import {createProvincePanel} from "../ui/panels/province-panel.js";
 import {createReligionPanel} from "../ui/panels/religion-panel.js";
@@ -26,6 +27,7 @@ import {createSetCityPopulationCommand, createSyncCityOwnerToCellCommand} from "
 import {createSetCultureColorCommand} from "./culture-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
+import {createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createRenameObjectCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand} from "./religion-edit-commands.js";
@@ -81,6 +83,7 @@ export function createGeneratorApp(documentRef) {
   let religionPanel = null;
   let riverPanel = null;
   let routePanel = null;
+  let markerPanel = null;
   let labelNamingPanel = null;
   let suppressNextRiverPanelOpen = false;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
@@ -441,6 +444,46 @@ export function createGeneratorApp(documentRef) {
     }
   });
   state.panels.route = routePanel;
+  markerPanel = createMarkerPanel(documentRef, panelManager, {
+    onSelect: object => {
+      selectionStore.setSelection({object});
+      markerPanel.setSelectedMarkerId(object.id);
+    },
+    onLocate: object => {
+      locateObject(state, object, documentRef);
+      markerPanel.setSelectedMarkerId(object.id);
+    },
+    onRename: (markerId, name) => {
+      const object = {kind: OBJECT_KIND.MARKER, id: markerId};
+      const context = {map: state.map};
+      const command = createRenameObjectCommand(object, name);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateMarkerPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onVisualChange: (markerId, patch) => {
+      const context = {map: state.map};
+      const command = createSetMarkerVisualCommand(markerId, patch);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateMarkerPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateMarkerPanel(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateMarkerPanel(state);
+    }
+  });
+  state.panels.marker = markerPanel;
   labelNamingPanel = createLabelNamingPanel(documentRef, panelManager, {
     onSelect: object => {
       selectionStore.setSelection({object});
@@ -590,6 +633,7 @@ export function createGeneratorApp(documentRef) {
     }
     state.panels.river.update(state.map, selection, state.editHistory.getStats(), editingObject);
     state.panels.route.update(state.map, selection);
+    state.panels.marker.update(state.map, selection, state.editHistory.getStats());
     state.panels.labelNaming.update(state.map, selection, state.editHistory.getStats());
     updateStatePanel(state);
     updateProvincePanel(state);
@@ -682,6 +726,12 @@ export function createGeneratorApp(documentRef) {
       }
       state.panels.route.open(state.map, state.selection);
     },
+    onOpenMarkerPanel: () => {
+      if (state.selection?.object?.kind === OBJECT_KIND.MARKER) {
+        state.panels.marker.setSelectedMarkerId(state.selection.object.id);
+      }
+      state.panels.marker.open(state.map, state.selection, state.editHistory.getStats());
+    },
     onOpenLabelNamingPanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.LABEL) {
         state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(state.selection.object));
@@ -771,6 +821,7 @@ function runGenerateNow(state, documentRef, generateId) {
     updateCityPanel(state);
     updateCulturePanel(state);
     updateReligionPanel(state);
+    updateMarkerPanel(state);
     updateLabelNamingPanel(state);
     state.panels.route.update(state.map, state.selection);
     updateEditingInteractionLock(state, documentRef);
@@ -872,6 +923,13 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     state.panels.objectDetails.clear();
     state.panels.route.setSelectedRouteId(selection.object.id);
     state.panels.route.open(state.map, selection);
+    return true;
+  },
+  [OBJECT_KIND.MARKER]: (state, selection) => {
+    if (!state.panels.marker?.isOpen?.()) return false;
+    state.panels.objectDetails.clear();
+    state.panels.marker.setSelectedMarkerId(selection.object.id);
+    state.panels.marker.open(state.map, selection, state.editHistory.getStats());
     return true;
   }
 });
@@ -1061,6 +1119,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
   updateCityPanel(state);
   updateCulturePanel(state);
   updateReligionPanel(state);
+  updateMarkerPanel(state);
   updateLabelNamingPanel(state);
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   state.panels.route.update(state.map, state.selection);
@@ -1548,6 +1607,10 @@ function updateCulturePanel(state) {
 
 function updateReligionPanel(state) {
   state.panels.religion?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function updateMarkerPanel(state) {
+  state.panels.marker?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateLabelNamingPanel(state) {

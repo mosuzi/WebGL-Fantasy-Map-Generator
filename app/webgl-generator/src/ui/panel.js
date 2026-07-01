@@ -70,6 +70,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-religion-panel")?.addEventListener("click", handlers.onOpenReligionPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
+  documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
   documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
   for (const button of documentRef.querySelectorAll("[data-regenerate-kind]")) {
     button.addEventListener("click", () => handlers.onRegenerate?.(button.dataset.regenerateKind));
@@ -146,6 +147,7 @@ function editLockControls(documentRef) {
     "#open-religion-panel",
     "#open-route-panel",
     "#open-river-panel",
+    "#open-marker-panel",
     "#open-label-naming-panel",
     "[data-regenerate-kind]",
     "#seed-input",
