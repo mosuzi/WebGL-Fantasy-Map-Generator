@@ -9,6 +9,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     map: null,
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     filter: "",
+    importMode: "append",
     sortKey: "category",
     sortDir: "asc",
     selectedNamebaseId: null,
@@ -30,7 +31,10 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
       panelState.selectedNamebaseId = row.id;
     },
     onExport: () => callbacks.onExport?.(),
-    onImport: file => callbacks.onImport?.(file),
+    onImportMode: mode => {
+      panelState.importMode = mode;
+    },
+    onImport: file => callbacks.onImport?.(file, panelState.importMode),
     onCopyBuiltin: row => callbacks.onCopyBuiltin?.(row),
     onRenameUser: (row, name) => callbacks.onRenameUser?.(row, name),
     onUpdateSource: (row, sourceText) => callbacks.onUpdateSource?.(row, sourceText),

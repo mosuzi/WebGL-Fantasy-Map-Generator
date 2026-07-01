@@ -807,7 +807,7 @@ export function createGeneratorApp(documentRef) {
   state.panels.labelNaming = labelNamingPanel;
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
     onExport: () => exportNamebases(state, documentRef),
-    onImport: file => importNamebases(state, documentRef, file),
+    onImport: (file, mode) => importNamebases(state, documentRef, file, mode),
     onCopyBuiltin: row => copyBuiltinNamebase(state, documentRef, row),
     onRenameUser: (row, name) => renameImportedNamebase(state, documentRef, row, name),
     onUpdateSource: (row, sourceText) => updateImportedNamebaseSource(state, documentRef, row, sourceText),
@@ -1341,15 +1341,16 @@ function exportNamebases(state, documentRef) {
   }
 }
 
-async function importNamebases(state, documentRef, file) {
+async function importNamebases(state, documentRef, file, mode = "append") {
   if (!file) return;
   try {
     assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导入名称库...");
     const document = parseNamebaseDocument(await file.text());
-    const result = importNamebaseDocument(state.map, document, {filename: file.name});
+    const result = importNamebaseDocument(state.map, document, {filename: file.name, mode});
     state.panels.namebase.update(state.map);
-    setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池，当前用户库 ${result.total} 个。`);
+    const replacedText = result.replaced ? `，已替换原用户库 ${result.replaced} 个` : "";
+    setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池${replacedText}，当前用户库 ${result.total} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导入失败", error);
   }

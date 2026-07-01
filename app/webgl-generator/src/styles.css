@@ -3285,6 +3285,10 @@ input.ui-switch-native {
   margin-top: 10px;
 }
 
+.namebase-import-mode {
+  margin: 8px 0 10px;
+}
+
 .namebase-source-editor {
   display: grid;
   gap: 8px;

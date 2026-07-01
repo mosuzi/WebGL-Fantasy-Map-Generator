@@ -48,9 +48,11 @@ export function parseNamebaseDocument(text) {
   return document;
 }
 
-export function importNamebaseDocument(map, document, {filename = ""} = {}) {
+export function importNamebaseDocument(map, document, {filename = "", mode = "append"} = {}) {
   if (!map) throw new Error("当前没有可导入名称库的地图");
   const store = ensureNamebaseStore(map);
+  const replaced = mode === "replace" ? store.bases.length : 0;
+  if (mode === "replace") store.bases = [];
   const existingIds = new Set(store.bases.map(base => base.id));
   const importedAt = new Date().toISOString();
   const bases = document.bases
@@ -63,15 +65,11 @@ export function importNamebaseDocument(map, document, {filename = ""} = {}) {
     .filter(Boolean);
 
   store.bases.push(...bases);
-  store.metadata = {
-    ...(store.metadata || {}),
-    bases: store.bases.length,
-    imported: store.bases.filter(base => base.origin === "导入").length,
-    updatedAt: importedAt
-  };
+  updateNamebaseMetadata(store);
   return {
     imported: bases.length,
-    total: store.bases.length
+    total: store.bases.length,
+    replaced
   };
 }
 

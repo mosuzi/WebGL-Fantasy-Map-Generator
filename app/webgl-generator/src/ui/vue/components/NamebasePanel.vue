@@ -7,6 +7,15 @@
 
   <UiSortBar class-name="namebase-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
 
+  <UiSelectField
+    class-name="namebase-import-mode"
+    input-id="namebase-import-mode"
+    label="导入方式"
+    :model-value="state.importMode"
+    :options="importModeOptions"
+    @update:model-value="callbacks.onImportMode"
+  />
+
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
@@ -65,6 +74,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -92,6 +102,10 @@ const sortOptions = Object.freeze([
   {key: "name", label: "名称"},
   {key: "samples", label: "样本"},
   {key: "duplicateSamples", label: "重复"}
+]);
+const importModeOptions = Object.freeze([
+  {value: "append", label: "追加到用户库"},
+  {value: "replace", label: "替换用户库"}
 ]);
 
 const columns = Object.freeze([
