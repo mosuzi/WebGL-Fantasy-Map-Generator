@@ -13049,3 +13049,27 @@ full 矩阵结果：
 后续：
 
 - 下一步若继续做名称库系统，应先做导入格式的覆盖/追加策略和用户自定义名称库历史，再考虑 Markov chain 和生成绑定。
+
+### 名称库导入第一刀
+
+背景：
+
+- 内置名称库已经可以导出为 `webgl-generator-namebases v1` JSON，但导出的文件还不能重新导入项目。
+- 在真正影响生成前，需要先验证用户库数据契约可以进入 `map.namebases` 并随完整地图 JSON 保存。
+
+修正：
+
+- 新增 `generator/namebase-store.js`，集中处理名称库文档创建、解析、导入归一化和总览摘要合并。
+- 名称库总览面板新增“导入名称库”文件入口；导入 `webgl-generator-namebases v1` 后，会把非空词池追加为 `map.namebases.bases` 中的用户库，id 统一加 `imported-` 前缀并避让冲突。
+- 总览面板新增“来源”列和详情项，内置库显示“内置”，导入库显示“导入”。
+- 完整地图 JSON 不需要额外格式改动，因为 `createMapDocument()` 已经保存整个 `map`；导入名称库会随 `map.namebases` 一起保存。
+
+验证：
+
+- Node 直接验证：`createBuiltinNamebaseDocument()` 生成 `61` 个词池；`importNamebaseDocument()` 导入后 `map.namebases.bases = 61`，总览摘要合并后行数为 `122`，首个导入 id 为 `imported-ancient-state-roots`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `974.41KB JS / 300.52KB gzip`、`150.81KB CSS / 22.40KB gzip`。
+- Playwright + 构建产物静态服务闭环验证通过：先下载 `fmg-stage-2-1-d3c70dc7.namebases.json`，再通过“导入名称库”读回；导入后 `map.namebases.bases = 61`，总览行数 `122`、导入行数 `61`，状态为“名称库已导入 61 个词池，当前用户库 61 个。”；随后导出完整地图 `fmg-stage-2-1-d3c70dc7.webgl-map.json`，其中 `map.namebases.bases.length = 61`，首个 id 为 `imported-ancient-state-roots`；打开前后 checksum 稳定，console/page error 为 `0`。
+
+后续：
+
+- 继续做用户库编辑/删除前，应先补清理导入库和覆盖/追加模式；生成绑定仍需等 `state-family` 去重和古国形制规则接入设计完成。

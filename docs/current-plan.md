@@ -776,6 +776,7 @@ http://127.0.0.1:5410
 151. 名称库编辑器计划已落文档：`docs/task-notes/namebase-editor-plan.md` 对照原版 `Namesbase Editor` 记录了 `nameBases` 数据结构、Markov chain 生成、示例生成、质量分析、下载/上传覆盖与追加等行为，并为 WebGL 版拆分为只读名称库总览、名称库导出、用户自定义名称库和生成系统绑定四阶段。后续不应直接把用户词表塞进当前中文命名器，而要先建立 `map.namebases` 数据契约和稳定绑定，避免破坏春秋古国短名与 `state-family` 去重。
 152. 名称库总览第一刀已完成：管理 tab 新增“名称库”入口，打开可拖动浮层展示当前内置词池摘要；`names.js` 暴露只读 `getBuiltinNamebaseSummaries()`，统计分类、样本数、唯一样本、重复样本、长度范围和样例，不调用随机生成器、不写入 `map.namebases`，因此不改变当前地图 checksum 或命名流程。构建产物验证中打开浮层显示 `61` 个词池、`2241` 个样本，“春秋古国根名”为 `96` 个样本且重复为 `0`，打开前后 checksum 保持 `7fda045e`，console/page error 为 `0`。后续再接名称库导出、用户自定义名称库和生成绑定。
 153. 名称库导出第一刀已完成：名称库总览面板新增“导出名称库”，会导出 `webgl-generator-namebases v1` JSON，包含当前内置词池的 id、名称、类型、分类、样本统计、长度范围、说明和完整 `source` 数组，并记录当前地图 seed/checksum 作为导出上下文。构建产物验证中下载 `fmg-stage-2-1-c59fdd6b.namebases.json`，`bases = 61`、`samples = 2241`，`ancient-state-roots.source.length = 96`，打开前后 checksum 稳定，console/page error 为 `0`。该导出仍是只读能力，不写入 `map.namebases`，不改变生成器签名，也不影响当前命名结果。后续进入用户自定义名称库前，需要先设计导入合并/覆盖和 EditHistory 或独立历史栈。
+154. 名称库导入第一刀已完成：名称库总览面板新增“导入名称库”，支持读取 `webgl-generator-namebases v1` JSON，并把其中非空词池规范化为 `map.namebases.bases` 中的导入用户库；总览会同时显示内置词池和导入词池，导入库会随完整地图 JSON 保存。构建产物闭环验证中，导出并重新导入内置名称库后 `map.namebases.bases = 61`，总览行数 `122`、导入行数 `61`，完整地图 JSON 也保留 `61` 个导入库，checksum 稳定且 console/page error 为 `0`。当前导入仍不接入生成、不自动重命名现有对象，也不提供编辑历史；下一步若继续推进，应补用户库编辑、删除/清理、覆盖/追加策略和生成绑定。
 
 ## 约束
 

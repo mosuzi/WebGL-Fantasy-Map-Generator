@@ -1,0 +1,140 @@
+import {getBuiltinNamebaseSummaries, summarizeNamebaseSource} from "./names.js";
+
+export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
+export const NAMEBASE_DOCUMENT_VERSION = 1;
+
+export function createBuiltinNamebaseDocument(map = null) {
+  const bases = getBuiltinNamebaseSummaries({includeSource: true}).map(row => ({
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    category: row.category,
+    builtin: true,
+    samples: row.samples,
+    uniqueSamples: row.uniqueSamples,
+    duplicateSamples: row.duplicateSamples,
+    minLength: row.minLength,
+    maxLength: row.maxLength,
+    note: row.note,
+    source: row.source || []
+  }));
+  return {
+    type: NAMEBASE_DOCUMENT_TYPE,
+    version: NAMEBASE_DOCUMENT_VERSION,
+    exportedAt: new Date().toISOString(),
+    metadata: {
+      seed: map?.metadata?.seed || "",
+      checksum: map?.metadata?.checksum || "",
+      bases: bases.length,
+      samples: bases.reduce((sum, base) => sum + base.samples, 0),
+      builtin: true
+    },
+    bases
+  };
+}
+
+export function parseNamebaseDocument(text) {
+  const document = JSON.parse(text);
+  if (document?.type !== NAMEBASE_DOCUMENT_TYPE) throw new Error("文件不是当前名称库格式");
+  if (document.version !== NAMEBASE_DOCUMENT_VERSION) throw new Error(`暂不支持的名称库格式版本：${document.version}`);
+  if (!Array.isArray(document.bases)) throw new Error("名称库文件缺少 bases 数据");
+  return document;
+}
+
+export function importNamebaseDocument(map, document, {filename = ""} = {}) {
+  if (!map) throw new Error("当前没有可导入名称库的地图");
+  const store = ensureNamebaseStore(map);
+  const existingIds = new Set(store.bases.map(base => base.id));
+  const importedAt = new Date().toISOString();
+  const bases = document.bases
+    .map((base, index) => normalizeImportedBase(base, {
+      existingIds,
+      importedAt,
+      filename,
+      index
+    }))
+    .filter(Boolean);
+
+  store.bases.push(...bases);
+  store.metadata = {
+    ...(store.metadata || {}),
+    bases: store.bases.length,
+    imported: store.bases.filter(base => base.origin === "导入").length,
+    updatedAt: importedAt
+  };
+  return {
+    imported: bases.length,
+    total: store.bases.length
+  };
+}
+
+export function getNamebaseSummariesForMap(map, options = {}) {
+  const builtinRows = getBuiltinNamebaseSummaries(options).map(row => ({
+    ...row,
+    builtin: true,
+    origin: "内置"
+  }));
+  const customRows = (map?.namebases?.bases || []).map(base => ({
+    ...summarizeNamebaseSource(base, options),
+    builtin: false,
+    origin: base.origin || "导入"
+  }));
+  return [...builtinRows, ...customRows].map((row, index) => ({...row, index}));
+}
+
+function ensureNamebaseStore(map) {
+  if (!map.namebases || typeof map.namebases !== "object") {
+    map.namebases = {
+      version: 1,
+      bases: [],
+      bindings: {},
+      metadata: {bases: 0}
+    };
+  }
+  if (!Array.isArray(map.namebases.bases)) map.namebases.bases = [];
+  if (!map.namebases.bindings || typeof map.namebases.bindings !== "object") map.namebases.bindings = {};
+  if (!map.namebases.metadata || typeof map.namebases.metadata !== "object") map.namebases.metadata = {};
+  return map.namebases;
+}
+
+function normalizeImportedBase(base, {existingIds, importedAt, filename, index}) {
+  const source = Array.isArray(base?.source)
+    ? base.source
+    : String(base?.source || "").split(/[,，\n\r]+/u);
+  const values = source.map(value => String(value || "").trim()).filter(Boolean);
+  if (!values.length) return null;
+  const id = uniqueId(`imported-${sanitizeId(base?.id || base?.name || `namebase-${index + 1}`)}`, existingIds);
+  existingIds.add(id);
+  return {
+    id,
+    sourceId: String(base?.id || ""),
+    name: base?.name ? `${base.name}` : `导入名称库 ${index + 1}`,
+    kind: base?.kind || "generic",
+    category: base?.category || "用户名称库",
+    note: base?.note || "",
+    source: values,
+    builtin: false,
+    origin: "导入",
+    importedAt,
+    importedFrom: filename || ""
+  };
+}
+
+function uniqueId(id, existingIds) {
+  let candidate = id || "imported-namebase";
+  let index = 2;
+  while (existingIds.has(candidate)) {
+    candidate = `${id}-${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function sanitizeId(value) {
+  return String(value || "namebase")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72) || "namebase";
+}

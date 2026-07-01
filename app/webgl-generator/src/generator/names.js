@@ -700,6 +700,25 @@ export function isAncientStateNameRoot(name) {
   return isAncientStateRoot(cleanStateRootCandidate(name));
 }
 
+export function summarizeNamebaseSource(source, {includeSource = false} = {}) {
+  const sourceValues = Array.isArray(source?.source)
+    ? source.source
+    : String(source?.source || "").split(/[,，\n\r]+/u);
+  const summary = analyzeNamebase(
+    source?.id || "namebase",
+    source?.name || "名称库",
+    source?.kind || "generic",
+    source?.category || "用户名称库",
+    sourceValues,
+    source?.note || "",
+    {includeSource}
+  );
+  if (source?.builtin !== undefined) summary.builtin = Boolean(source.builtin);
+  if (source?.origin) summary.origin = source.origin;
+  if (source?.importedAt) summary.importedAt = source.importedAt;
+  return summary;
+}
+
 function analyzeNamebase(id, name, kind, category, values, note = "", {includeSource = false} = {}) {
   const normalizedValues = values.map(value => String(value || "").trim()).filter(Boolean);
   const counts = new Map();

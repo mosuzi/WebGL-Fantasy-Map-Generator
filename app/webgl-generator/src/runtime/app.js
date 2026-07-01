@@ -1,12 +1,12 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
+import {createBuiltinNamebaseDocument, importNamebaseDocument, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
-import {getBuiltinNamebaseSummaries} from "../generator/names.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
@@ -806,7 +806,8 @@ export function createGeneratorApp(documentRef) {
   });
   state.panels.labelNaming = labelNamingPanel;
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
-    onExport: () => exportNamebases(state, documentRef)
+    onExport: () => exportNamebases(state, documentRef),
+    onImport: file => importNamebases(state, documentRef, file)
   });
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
@@ -1061,7 +1062,7 @@ export function createGeneratorApp(documentRef) {
       state.panels.notes.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenNamebasePanel: () => {
-      state.panels.namebase.open();
+      state.panels.namebase.open(state.map);
     },
     onExportImage: () => exportMapImage(state, documentRef),
     onExportMapData: () => exportMapData(state, documentRef),
@@ -1198,6 +1199,7 @@ function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}
   updateDiplomacyPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
+  state.panels.namebase.update(state.map);
   state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateEditingInteractionLock(state, documentRef);
@@ -1325,38 +1327,26 @@ function exportNotesSummary(state, documentRef, rows = []) {
 
 function exportNamebases(state, documentRef) {
   try {
-    const bases = getBuiltinNamebaseSummaries({includeSource: true}).map(row => ({
-      id: row.id,
-      name: row.name,
-      kind: row.kind,
-      category: row.category,
-      builtin: true,
-      samples: row.samples,
-      uniqueSamples: row.uniqueSamples,
-      duplicateSamples: row.duplicateSamples,
-      minLength: row.minLength,
-      maxLength: row.maxLength,
-      note: row.note,
-      source: row.source || []
-    }));
-    const payload = {
-      type: "webgl-generator-namebases",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      metadata: {
-        seed: state.map?.metadata?.seed || "",
-        checksum: state.map?.metadata?.checksum || "",
-        bases: bases.length,
-        samples: bases.reduce((sum, base) => sum + base.samples, 0),
-        builtin: true
-      },
-      bases
-    };
+    const payload = createBuiltinNamebaseDocument(state.map);
     const filename = state.map ? `${mapFileBaseName(state.map)}.namebases.json` : "webgl-generator-namebases.json";
     downloadText(documentRef, JSON.stringify(payload, null, 2), filename, "application/json;charset=utf-8");
-    setFileOperationStatus(documentRef, `名称库已导出，共 ${bases.length} 个词池。`);
+    setFileOperationStatus(documentRef, `名称库已导出，共 ${payload.metadata.bases} 个词池。`);
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导出失败", error);
+  }
+}
+
+async function importNamebases(state, documentRef, file) {
+  if (!file) return;
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导入名称库...");
+    const document = parseNamebaseDocument(await file.text());
+    const result = importNamebaseDocument(state.map, document, {filename: file.name});
+    state.panels.namebase.update(state.map);
+    setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池，当前用户库 ${result.total} 个。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "名称库导入失败", error);
   }
 }
 

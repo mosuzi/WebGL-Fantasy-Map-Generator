@@ -1,12 +1,13 @@
 import {createApp, shallowReactive} from "vue";
-import {getBuiltinNamebaseSummaries} from "../../generator/names.js";
+import {getNamebaseSummariesForMap} from "../../generator/namebase-store.js";
 import {pinia} from "../vue/pinia.js";
 import NamebasePanel from "../vue/components/NamebasePanel.vue";
 
 export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
     open: false,
-    summaries: getBuiltinNamebaseSummaries(),
+    map: null,
+    summaries: getNamebaseSummariesForMap(null),
     filter: "",
     sortKey: "category",
     sortDir: "asc",
@@ -28,7 +29,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onSelect: row => {
       panelState.selectedNamebaseId = row.id;
     },
-    onExport: () => callbacks.onExport?.()
+    onExport: () => callbacks.onExport?.(),
+    onImport: file => callbacks.onImport?.(file)
   };
 
   const record = manager.registerPanel("namebase-panel", {
@@ -49,13 +51,15 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   app.mount(root);
 
   return {
-    open() {
+    open(map = null) {
+      panelState.map = map;
       refreshSummaries(panelState);
       panelState.open = true;
       panelState.version++;
       manager.open("namebase-panel");
     },
-    update() {
+    update(map = null) {
+      panelState.map = map;
       refreshSummaries(panelState);
       panelState.version++;
     },
@@ -69,7 +73,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
 }
 
 function refreshSummaries(panelState) {
-  panelState.summaries = getBuiltinNamebaseSummaries();
+  panelState.summaries = getNamebaseSummariesForMap(panelState.map);
   if (!panelState.selectedNamebaseId || !panelState.summaries.some(row => row.id === panelState.selectedNamebaseId)) {
     panelState.selectedNamebaseId = panelState.summaries[0]?.id || null;
   }

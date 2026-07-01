@@ -31,6 +31,8 @@
 
   <div class="namebase-panel-actions">
     <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
+    <label class="secondary-action file-import-action namebase-import-action" for="namebase-import-file">导入名称库</label>
+    <input id="namebase-import-file" type="file" accept=".json,application/json" hidden @change="handleImportFile" />
   </div>
 </template>
 
@@ -72,6 +74,7 @@ const sortOptions = Object.freeze([
 
 const columns = Object.freeze([
   {key: "category", label: "分类"},
+  {key: "origin", label: "来源"},
   {key: "name", label: "名称"},
   {key: "kind", label: "类型"},
   {key: "samples", label: "样本", align: "right", format: value => formatNumber(value)},
@@ -93,6 +96,7 @@ const summaryMetrics = computed(() => [
 ]);
 const detailRows = computed(() => selected.value ? [
   {label: "分类", value: selected.value.category},
+  {label: "来源", value: selected.value.origin},
   {label: "名称", value: selected.value.name},
   {label: "类型", value: selected.value.kind},
   {label: "样本数", value: formatNumber(selected.value.samples)},
@@ -121,6 +125,7 @@ function filterRows(sourceRows, filter) {
     row.id,
     row.name,
     row.kind,
+    row.origin,
     row.category,
     row.note,
     row.examplesLabel,
@@ -140,5 +145,11 @@ function compareValue(a, b) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function handleImportFile(event) {
+  const file = event.target.files?.[0];
+  if (file) props.callbacks.onImport?.(file);
+  event.target.value = "";
 }
 </script>
