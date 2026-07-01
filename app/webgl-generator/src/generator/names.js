@@ -245,6 +245,17 @@ const REAL_PREFIXES = ["青", "清", "云", "白", "苍", "南", "北", "东", "
 const HYDRO_PREFIXES = ["青", "清", "云", "白", "苍", "洛", "澄", "月", "星", "玉", "金", "龙", "灵", "玄", "镜", "寒", "秋", "明", "丹", "素"];
 const LIGHT_FANTASY_PREFIXES = ["云", "青", "苍", "玄", "灵", "玉", "星", "月", "霜", "岚", "曜", "澜"];
 const HIGH_FANTASY_STEMS = ["太微", "扶摇", "归墟", "烛龙", "昆吾", "瑶光"];
+const ANCIENT_STATE_ROOTS = [
+  "齐", "晋", "秦", "楚", "鲁", "宋", "卫", "郑", "陈", "蔡", "曹", "燕", "吴", "越", "许", "虢",
+  "虞", "邾", "莒", "郯", "薛", "滕", "邢", "滑", "息", "赖", "邓", "随", "唐", "贾", "芮", "梁",
+  "黄", "江", "沈", "胡", "顿", "徐", "巴", "蜀", "韩", "赵", "魏", "代", "岐", "雍", "荆", "庸",
+  "苴", "濮", "奄", "邶", "鄘", "息", "申", "吕", "焦", "夔", "葛", "任", "宿", "谭", "莱", "牟",
+  "费", "缯", "郧", "罗", "绞", "绚", "邾", "麇"
+];
+const ANCIENT_STATE_COMPOUND_ROOTS = [
+  "东晋", "西凉", "南越", "北燕", "后赵", "前秦", "西蜀", "东吴", "南楚", "北齐", "西秦", "后梁",
+  "前燕", "南唐", "北汉", "东越", "西戎", "南陈", "北魏", "后蜀"
+];
 const WESTERN_PLACE_STEMS = [
   "阿尔文",
   "布伦",
@@ -277,27 +288,28 @@ const HIGHLAND_SUFFIXES = ["山", "岭", "岳", "峰", "陵", "关"];
 const PORT_SUFFIXES = ["港", "津", "浦", "湾"];
 const LAKE_SUFFIXES = ["湖", "泽", "泊", "潭", "海"];
 const CULTURE_STYLE_CONFIG = {
-  European: {place: WESTERN_PLACE_STEMS, hydro: WESTERN_HYDRO_STEMS, forms: ["国", "王朝", "诸州", "盟邦"], suffixes: ["堡", "顿", "维尔", "港", "城", "郡"]},
+  European: {place: WESTERN_PLACE_STEMS, hydro: WESTERN_HYDRO_STEMS, forms: ["国", "侯国", "伯国", "邦", "朝"], suffixes: ["堡", "顿", "维尔", "港", "城", "郡"]},
   Generic: null,
-  Highland: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "霜", "冰", "洛恩"], forms: ["山国", "山府", "岭盟"], suffixes: HIGHLAND_SUFFIXES},
-  Naval: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["海国", "诸港", "海盟", "水府"], suffixes: PORT_SUFFIXES},
-  Lake: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["泽国", "湖州", "水府"], suffixes: WATER_SUFFIXES},
-  Nomadic: {place: STEPPE_PLACE_STEMS, hydro: ["乌勒", "呼伦", "阿兰", "苍", "金", "青"], forms: ["汗国", "部盟", "诸帐"], suffixes: ["原", "帐", "河", "岭", "城"]},
-  Hunting: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "森", "鹿", "霜"], forms: ["林国", "诸部", "林盟"], suffixes: ["林", "谷", "岭", "泉", "城"]},
-  River: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["河国", "河府", "诸州"], suffixes: WATER_SUFFIXES},
-  Desert: {place: SOUTHERN_PLACE_STEMS, hydro: ["萨赫", "阿曼", "纳赛", "金", "赤", "白"], forms: ["沙国", "诸城", "绿洲盟"], suffixes: ["城", "绿洲", "港", "河", "原"]}
+  Highland: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "霜", "冰", "洛恩"], forms: ["山国", "侯国", "伯国", "邦", "朝"], suffixes: HIGHLAND_SUFFIXES},
+  Naval: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["海国", "侯国", "伯国", "海邦", "朝"], suffixes: PORT_SUFFIXES},
+  Lake: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["泽国", "侯国", "伯国", "邦", "朝"], suffixes: WATER_SUFFIXES},
+  Nomadic: {place: STEPPE_PLACE_STEMS, hydro: ["乌勒", "呼伦", "阿兰", "苍", "金", "青"], forms: ["汗国", "侯国", "伯国", "邦", "朝"], suffixes: ["原", "帐", "河", "岭", "城"]},
+  Hunting: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "森", "鹿", "霜"], forms: ["林国", "侯国", "伯国", "邦", "朝"], suffixes: ["林", "谷", "岭", "泉", "城"]},
+  River: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["河国", "侯国", "伯国", "邦", "朝"], suffixes: WATER_SUFFIXES},
+  Desert: {place: SOUTHERN_PLACE_STEMS, hydro: ["萨赫", "阿曼", "纳赛", "金", "赤", "白"], forms: ["沙国", "侯国", "伯国", "邦", "朝"], suffixes: ["城", "绿洲", "港", "河", "原"]}
 };
 const STATE_FORMS = {
-  Naval: ["海国", "诸港", "海盟", "水府"],
-  Lake: ["泽国", "湖州", "水府"],
-  Highland: ["山国", "山府", "岭盟"],
-  River: ["河国", "河府", "诸州"],
+  Naval: ["海国", "侯国", "伯国", "海邦", "朝"],
+  Lake: ["泽国", "侯国", "伯国", "湖邦", "朝"],
+  Highland: ["山国", "侯国", "伯国", "山邦", "朝"],
+  River: ["河国", "侯国", "伯国", "河邦", "朝"],
   Nomadic: ["汗国", "部盟", "诸帐"],
   Hunting: ["林国", "诸部", "林盟"],
-  Generic: ["国", "邦", "王朝", "盟", "诸州"]
+  Generic: ["国", "侯国", "伯国", "邦", "朝"]
 };
 const PROVINCE_FORMS = ["郡", "州", "道", "府", "领", "司"];
 const DIRECTION_PREFIXES = ["东", "西", "南", "北", "上", "下", "新", "古"];
+const STATE_VARIANT_PREFIXES = ["新", "古", "后", "前", "东", "西", "南", "北"];
 const CARDINAL_PREFIXES = new Set(["东", "西", "南", "北"]);
 const NON_CARDINAL_VARIANT_PREFIXES = ["新", "古", "上", "下"];
 const SMALL_SETTLEMENT_PREFIXES = ["新", "旧", "上", "下", "东", "西", "南", "北", "小", "前", "后"];
@@ -355,9 +367,9 @@ export function createChineseNameGenerator(seed = "map") {
       const cultureRoot = cleanStateRootCandidate(options.cultureRoot);
       const allowCapitalName = Boolean(options.allowCapitalName);
       const generate = () => makeStateRootCandidateAvoiding(rng, options, allowCapitalName ? "" : capitalRoot);
-      if (cultureRoot && rng.next() < 0.82) return makeUnique(used, "state", cultureRoot, rng);
+      if (cultureRoot && rng.next() < 0.24 && claimStateRoot(used, cultureRoot)) return cultureRoot;
       const initialName = allowCapitalName && capitalRoot && rng.next() < 0.28 ? capitalRoot : generate();
-      return makeUniqueGenerated(used, "state", initialName, rng, generate, 32);
+      return makeUniqueStateGenerated(used, initialName, rng, generate, 96);
     },
 
     makeStateFormName(options = {}) {
@@ -452,12 +464,14 @@ function makeStateRootCandidate(rng, options = {}) {
   if (transliterationStyle?.place) return pick(rng, transliterationStyle.place);
 
   const cultureStyle = getCultureStyle(options);
-  if (cultureStyle?.place && hasExplicitCultureStyle(options) && rng.next() < 0.82) return pick(rng, cultureStyle.place);
+  if (cultureStyle?.place && hasExplicitCultureStyle(options) && rng.next() < 0.24) return pick(rng, cultureStyle.place);
 
   const roll = rng.next();
-  if (roll < 0.62) return makeChineseTwoCharName(rng);
-  if (roll < 0.84) return pick(rng, PLACE_STEMS);
-  if (roll < 0.96) return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, CHINESE_SECOND_CHARS)}`;
+  if (roll < 0.58) return pick(rng, ANCIENT_STATE_ROOTS);
+  if (roll < 0.7) return pick(rng, ANCIENT_STATE_COMPOUND_ROOTS);
+  if (roll < 0.84) return makeChineseTwoCharName(rng);
+  if (roll < 0.94) return pick(rng, PLACE_STEMS);
+  if (roll < 0.985) return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, CHINESE_SECOND_CHARS)}`;
   return pick(rng, HIGH_FANTASY_STEMS);
 }
 
@@ -547,6 +561,43 @@ function makeUniqueGenerated(used, scope, initialName, rng, generate, attempts) 
   return makeUnique(used, scope, initialName, rng);
 }
 
+function makeUniqueStateGenerated(used, initialName, rng, generate, attempts) {
+  let name = initialName;
+  for (let attempt = 0; attempt <= attempts; attempt++) {
+    const candidate = cleanStateRootCandidate(name);
+    if (candidate && claimStateRoot(used, candidate)) return candidate;
+    name = generate();
+  }
+  return makeStateVariant(used, initialName, rng);
+}
+
+function claimStateRoot(used, name, {allowFamilyVariant = false} = {}) {
+  const root = cleanStateRootCandidate(name);
+  if (!root) return false;
+  const exactKey = `state:${root}`;
+  const familyKey = `state-family:${stateRootFamily(root)}`;
+  if (used.has(exactKey)) return false;
+  if (!allowFamilyVariant && used.has(familyKey)) return false;
+  used.set(exactKey, 1);
+  used.set(familyKey, (used.get(familyKey) || 0) + 1);
+  return true;
+}
+
+function makeStateVariant(used, initialName, rng) {
+  const root = cleanStateRootCandidate(initialName) || pick(rng, ANCIENT_STATE_ROOTS);
+  for (const prefix of STATE_VARIANT_PREFIXES) {
+    const candidate = root.startsWith(prefix) ? root : `${prefix}${root}`;
+    if (claimStateRoot(used, candidate, {allowFamilyVariant: true})) return candidate;
+  }
+
+  for (let ordinal = 2; ordinal < 20; ordinal += 1) {
+    const candidate = `${root}${toChineseOrdinal(ordinal)}`;
+    if (claimStateRoot(used, candidate, {allowFamilyVariant: true})) return candidate;
+  }
+
+  return `${root}${Math.floor(rng.next() * 1000)}`;
+}
+
 function trimGeographicSuffix(name) {
   return String(name || "").replace(/(城|镇|港|津|浦|湾|县|市|区|州|郡|府|道|领|司)$/u, "");
 }
@@ -556,7 +607,7 @@ function hasGeographicSuffix(name) {
 }
 
 function trimPoliticalForm(name) {
-  return String(name || "").replace(/(王国|公国|海国|山国|泽国|汗国|邦联|共和国|诸州|诸港|诸帐|部盟|邦|国)$/u, "");
+  return String(name || "").replace(/(共和国|王国|公国|侯国|伯国|海国|山国|泽国|河国|汗国|邦联|诸州|诸港|诸帐|部盟|海邦|湖邦|山邦|河邦|邦|朝|国)$/u, "");
 }
 
 function combineStemAndSuffix(stem, suffix) {
@@ -572,6 +623,8 @@ function cleanStateRootCandidate(name) {
   const rawRoot = trimPoliticalForm(name).replace(/\s+/g, "");
   const trimmedRoot = trimStateForm(name).replace(/\s+/g, "");
   if (Array.from(trimmedRoot).length >= 2) return trimmedRoot;
+  if (isAncientStateRoot(trimmedRoot)) return trimmedRoot;
+  if (isAncientStateRoot(rawRoot)) return rawRoot;
   if (Array.from(rawRoot).length >= 2 && !hasGeographicSuffix(rawRoot)) return rawRoot;
   return "";
 }
@@ -584,6 +637,18 @@ function hasSameNameRoot(left, right) {
   const leftRoot = normalizeNameRoot(left);
   const rightRoot = normalizeNameRoot(right);
   return Boolean(leftRoot && rightRoot && leftRoot === rightRoot);
+}
+
+function isAncientStateRoot(name) {
+  return ANCIENT_STATE_ROOTS.includes(name) || ANCIENT_STATE_COMPOUND_ROOTS.includes(name);
+}
+
+function stateRootFamily(name) {
+  const chars = Array.from(normalizeNameRoot(name));
+  if (chars.length <= 1) return chars.join("");
+  const first = chars[0];
+  if (STATE_VARIANT_PREFIXES.includes(first)) return chars.slice(1).join("");
+  return chars.join("");
 }
 
 function toChineseOrdinal(value) {
