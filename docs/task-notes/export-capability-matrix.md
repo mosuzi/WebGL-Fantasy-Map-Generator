@@ -30,7 +30,7 @@
 已验证：
 
 - typed arrays 显式序列化并恢复构造器。
-- marker、city、river 与 route 的 `map.notes` 会随完整 JSON 导出。
+- marker、city、river、route、state 与 province 的 `map.notes` 会随完整 JSON 导出。
 
 缺口：
 

@@ -760,6 +760,7 @@ http://127.0.0.1:5410
 135. 导出能力矩阵已落文档：`docs/task-notes/export-capability-matrix.md` 区分了 PNG、完整地图 JSON、pack cell GeoJSON 和要素 GeoJSON 的入口、后缀、内容、是否可重新导入、备注字段覆盖和缺口；后续导出增强建议顺序为 GeoJSON 分层选择、国家/省份 dissolve、city GeoJSON layer、PNG 倍率/overlay 选项、完整 JSON 压缩与版本迁移。
 136. 河流备注第一刀已完成：复用 `map.notes` 与 `UiNoteField`，新增 `createSetRiverNoteCommand()`，河流管理面板二级操作加入“编辑备注”，并补 `river-panel` 的 `version` 刷新触发。构建产物验证中给河流 `#45` 写入“河流备注检查：这条河适合设渡口。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（16字）”；撤销后 notes 为 `0` 且详情显示“无”，重做后恢复为 `1`；导出完整地图 JSON `fmg-stage-2-1-ebb0e1b8.webgl-map.json` 中 `map.notes.notes[0]` 为 `river:45`，console/page error 为 `0`。
 137. 路线备注第一刀已完成：新增 `createSetRouteNoteCommand()`，路线管理面板接入二级“编辑备注”和历史按钮，并用 `version` 刷新解决 markRaw 地图内部备注变更后详情不重算的问题。要素 GeoJSON 的 route / river properties 同步输出 `hasNote` 与 `note` 字段。构建产物验证中给路线 `#0` 写入“路线备注检查：这条道路适合设商站。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（17字）”；撤销后 notes 为 `0`，重做后恢复为 `1`；完整地图 JSON `fmg-stage-2-1-bb2f7448.webgl-map.json` 和要素 GeoJSON `fmg-stage-2-1-bb2f7448.features.geojson` 均保留该 route 备注，console/page error 为 `0`。
+138. 国家/省份备注第一刀已完成：`object-edit-commands.js` 新增通用 `createSetObjectNoteCommand()`，国家编辑和省份管理面板复用 `UiNoteField`，二级操作新增“编辑备注”，并通过 `version` 刷新 markRaw 内部备注状态。构建产物验证中给国家 `#1` 写入“国家备注检查：此国适合设为北境霸主。”、给省份 `#1` 写入“省份备注检查：这里适合规划粮仓。”；国家备注撤销/重做正常，省份备注撤销时国家备注仍保留，最终完整地图 JSON `fmg-stage-2-1-460ac096.webgl-map.json` 同时包含 `state:1` 与 `province:1`，console/page error 为 `0`。
 
 ## 约束
 

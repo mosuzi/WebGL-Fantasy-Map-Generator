@@ -35,7 +35,7 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
-import {createRenameObjectCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
+import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
@@ -235,6 +235,17 @@ export function createGeneratorApp(documentRef) {
       updateCityPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onNoteChange: (stateId, body) => {
+      const stateItem = state.map?.politics?.states?.[stateId];
+      const object = {kind: OBJECT_KIND.STATE, id: stateId};
+      const context = {map: state.map};
+      const command = createSetObjectNoteCommand(object, body, {name: stateItem?.fullName || stateItem?.name || `国家 #${stateId}`});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateStatePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterStateEdit(state, command);
@@ -308,6 +319,17 @@ export function createGeneratorApp(documentRef) {
       }
       updateProvincePanel(state);
       updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onNoteChange: (provinceId, body) => {
+      const province = state.map?.politics?.provinces?.[provinceId] || state.map?.pack?.provinces?.[provinceId];
+      const object = {kind: OBJECT_KIND.PROVINCE, id: provinceId};
+      const context = {map: state.map};
+      const command = createSetObjectNoteCommand(object, body, {name: province?.fullName || province?.name || `省份 #${provinceId}`});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateProvincePanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {

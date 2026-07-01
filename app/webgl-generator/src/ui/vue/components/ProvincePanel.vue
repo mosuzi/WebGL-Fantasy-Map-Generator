@@ -39,6 +39,15 @@
     <template #edit>
       <UiButton variant="secondary" @click="callbacks.onEdit(selected)">编辑此省份</UiButton>
     </template>
+
+    <template #note>
+      <UiNoteField
+        class-name="province-note-editor"
+        :model-value="selected.noteBody"
+        @apply="body => callbacks.onNoteChange(selected.id, body)"
+        @clear="callbacks.onNoteChange(selected.id, '')"
+      />
+    </template>
   </UiActionDock>
 
   <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="callbacks.onActiveChange(!state.active)">
@@ -80,6 +89,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
@@ -87,6 +97,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -134,14 +145,18 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
-const metrics = computed(() => buildProvinceMetrics(props.state.map));
+const metrics = computed(() => {
+  props.state.version;
+  return buildProvinceMetrics(props.state.map);
+});
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedProvinceId));
 const provinceActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "edit", label: "进入编辑", icon: "◎"}
+  {key: "edit", label: "进入编辑", icon: "◎"},
+  {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -170,7 +185,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "邻接省份", value: formatNumber(selected.value.neighborCount)},
   {label: "城市", value: formatNumber(selected.value.cityCount)},
   {label: "文化", value: selected.value.culture},
-  {label: "宗教", value: selected.value.religion}
+  {label: "宗教", value: selected.value.religion},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
 
 const historyNote = computed(() => {
@@ -194,6 +210,7 @@ function buildProvinceMetrics(map) {
     const neutral = row.id === 0;
     const neutralStats = neutral ? neutralProvinceStats(map) : null;
     const population = Number(province?.rural || 0) + Number(province?.urban || 0);
+    const note = readObjectNote(map, {kind: "province", id: row.id});
 
     return {
       id: row.id,
@@ -217,6 +234,8 @@ function buildProvinceMetrics(map) {
       cityCount: neutral ? neutralStats.cityCount : cityCount,
       culture: neutral ? "混合" : indexedName(map?.society?.cultures, cultureId),
       religion: neutral ? "混合" : indexedName(map?.society?.religions, religionId),
+      noteBody: note?.body || "",
+      noteUpdatedAt: note?.updatedAt || "",
       color: neutral ? "#a6adb3" : normalizeHexColor(province?.color) || normalizeHexColor(state?.color) || fallbackProvinceColor(row.id)
     };
   });

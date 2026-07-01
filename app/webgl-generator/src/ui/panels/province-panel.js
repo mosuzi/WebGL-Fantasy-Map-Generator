@@ -16,7 +16,8 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     selectedProvinceId: null,
     radius: 28,
     lastAffected: 0,
-    sourceProvinceId: null
+    sourceProvinceId: null,
+    version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
@@ -55,6 +56,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     onSampleHover: () => callbacks.onSampleHover?.(),
     onRename: (provinceId, name) => callbacks.onRename?.(provinceId, name),
     onColorChange: (provinceId, color) => callbacks.onColorChange?.(provinceId, color),
+    onNoteChange: (provinceId, body) => callbacks.onNoteChange?.(provinceId, body),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -86,6 +88,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = normalizeProvinceId(selection.object.id);
       if (!provinceExists(map, panelState.selectedProvinceId)) panelState.selectedProvinceId = firstProvinceId(map);
       panelState.open = true;
+      panelState.version++;
       manager.open("province-panel");
     },
     update(map, selection, history, editState = {}) {
@@ -96,6 +99,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.sourceProvinceId = editState.sourceProvinceId ?? panelState.sourceProvinceId;
       if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = normalizeProvinceId(selection.object.id);
       if (!provinceExists(map, panelState.selectedProvinceId)) panelState.selectedProvinceId = firstProvinceId(map);
+      panelState.version++;
     },
     setSelectedProvinceId(provinceId) {
       const normalized = normalizeProvinceId(provinceId);

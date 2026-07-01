@@ -12680,3 +12680,27 @@ full 矩阵结果：
 后续：
 
 - 对象注记第一批已覆盖 marker、city、river、route。下一步如果继续做备注，建议进入 state / province / culture / religion / label，并优先复用已有二级操作栏。
+
+### 国家/省份备注第一刀
+
+背景：
+
+- route 备注完成后，对象注记的下一个自然入口是政治对象。国家和省份面板已经有二级操作栏、历史按钮和对象选择状态，适合继续复用同一套备注 UX。
+- state / province / culture / religion / label 后续都会是“对象存在 -> 写入 map.notes -> 刷新对象面板”的模式，因此本刀先补通用备注命令，避免继续复制专用 note command。
+
+修正：
+
+- `object-edit-commands.js` 新增 `createSetObjectNoteCommand()`，复用 `object-notes.js` 的 note id、读取、恢复和删除能力，并通过 `readObjectName()` 做对象存在校验。
+- 国家编辑面板和省份管理面板新增“编辑备注”二级操作，复用 `UiNoteField`。
+- `state-panel` 与 `province-panel` 增加 `version` 刷新信号，避免 markRaw 地图内部备注变更后详情 computed 不重算。
+- 国家和省份详情新增备注状态：“无”或“有备注（N字）”。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `940.07KB JS / 292.02KB gzip`、`147.26KB CSS / 21.91KB gzip`。
+- Playwright + 构建产物内置静态服务验证通过：给国家 `#1` 写入“国家备注检查：此国适合设为北境霸主。”后详情显示“有备注（18字）”，撤销后 notes 为 `0` 且详情显示“无”，重做后恢复。
+- 同一轮继续给省份 `#1` 写入“省份备注检查：这里适合规划粮仓。”后 notes 为 `2`，撤销省份备注后 notes 为 `1` 且 state 备注仍存在，重做后完整 JSON `fmg-stage-2-1-460ac096.webgl-map.json` 同时包含 `state:1` 和 `province:1`；console/page error 为 `0`。
+
+后续：
+
+- 对象注记下一步可接 culture / religion / label；三者都应继续复用 `createSetObjectNoteCommand()` 和二级操作栏。

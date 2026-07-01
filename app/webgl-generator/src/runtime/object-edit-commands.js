@@ -1,4 +1,5 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
+import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 
 const OBJECT_NAME_EFFECTS = Object.freeze({
   render: "draw",
@@ -22,6 +23,14 @@ const PROVINCE_COLOR_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["province-color", "cell-colors", "object-panels"])
+});
+
+const OBJECT_NOTE_EFFECTS = Object.freeze({
+  render: "none",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-panels"])
 });
 
 const OBJECT_NAME_READERS = Object.freeze({
@@ -78,6 +87,44 @@ export function createRenameObjectCommand(object, nextName) {
       if (!normalizedName) return true;
       const current = readObjectName(context.map, target);
       return !current || current.name === normalizedName;
+    }
+  };
+}
+
+export function createSetObjectNoteCommand(object, body, {name = ""} = {}) {
+  const target = normalizeObjectTarget(object);
+  const normalizedBody = normalizeNoteBody(body);
+  let previous = null;
+  let next = null;
+
+  return {
+    label: normalizedBody ? `编辑${formatObjectKind(target.kind)}备注 #${target.id}` : `清空${formatObjectKind(target.kind)}备注 #${target.id}`,
+    effects: {
+      ...OBJECT_NOTE_EFFECTS,
+      affected: [{kind: target.kind, id: target.id}]
+    },
+    apply(context) {
+      const current = readObjectName(context.map, target);
+      if (!current) throw new Error(`找不到${formatObjectKind(target.kind)} #${target.id}`);
+      previous ??= cloneObjectNote(readObjectNote(context.map, target));
+      if (!normalizedBody) {
+        deleteObjectNote(context.map, target);
+        return;
+      }
+      next ??= createObjectNoteSnapshot(target, normalizedBody, {
+        name: name || current.fullName || current.name || `${formatObjectKind(target.kind)} #${target.id}`,
+        previous
+      });
+      restoreObjectNote(context.map, next);
+    },
+    revert(context) {
+      if (previous) restoreObjectNote(context.map, previous);
+      else deleteObjectNote(context.map, target);
+    },
+    isNoop(context) {
+      if (!readObjectName(context.map, target)) return true;
+      const current = readObjectNote(context.map, target)?.body || "";
+      return current === normalizedBody;
     }
   };
 }
@@ -382,6 +429,25 @@ function findBurgForCity(map, city) {
 
 function normalizeName(name) {
   return typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
+}
+
+function createObjectNoteSnapshot(target, body, {name, previous = null} = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: objectNoteId(target),
+    kind: target.kind,
+    objectId: target.id,
+    name,
+    body,
+    format: "plain",
+    pinned: previous?.pinned || false,
+    createdAt: previous?.createdAt || now,
+    updatedAt: now
+  };
+}
+
+function normalizeNoteBody(body) {
+  return typeof body === "string" ? body.trim() : "";
 }
 
 function normalizeHexColor(color) {

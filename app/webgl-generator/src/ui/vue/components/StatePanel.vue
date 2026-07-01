@@ -53,6 +53,15 @@
         <UiButton variant="secondary" :disabled="!capitalOptions.length" @click="callbacks.onCapitalChange(selected.id, capitalDraft)">设为首都</UiButton>
       </div>
     </template>
+
+    <template #note>
+      <UiNoteField
+        class-name="state-note-editor"
+        :model-value="selected.noteBody"
+        @apply="body => callbacks.onNoteChange(selected.id, body)"
+        @clear="callbacks.onNoteChange(selected.id, '')"
+      />
+    </template>
   </UiActionDock>
 
   <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="callbacks.onActiveChange(!state.active)">
@@ -94,6 +103,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
@@ -101,6 +111,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -149,7 +160,10 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const capitalDraft = ref(0);
-const metrics = computed(() => buildStateMetrics(props.state.map));
+const metrics = computed(() => {
+  props.state.version;
+  return buildStateMetrics(props.state.map);
+});
 const stateOptions = computed(() => stateRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
@@ -158,7 +172,8 @@ const stateActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "edit", label: "进入编辑", icon: "◎"},
   {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "capital", label: "设置首都", icon: "♛", disabled: !capitalOptions.value.length}
+  {key: "capital", label: "设置首都", icon: "♛", disabled: !capitalOptions.value.length},
+  {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -186,6 +201,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "资源类型", value: selected.value.resourceSummary},
   {label: "军力", value: formatNumber(selected.value.militaryPower)},
   {label: "外交", value: selected.value.diplomacySummary},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
   {label: "邻国", value: formatNumber(selected.value.neighborCount)}
 ] : []);
 
@@ -210,6 +226,7 @@ function buildStateMetrics(map) {
     const population = (stateItem?.urban || 0) + (stateItem?.rural || 0);
     const neutral = row.id === 0;
     const neutralStats = neutral ? neutralStateStats(map) : null;
+    const note = readObjectNote(map, {kind: "state", id: row.id});
     return {
       id: row.id,
       neutral,
@@ -230,6 +247,8 @@ function buildStateMetrics(map) {
       militaryPower: neutral ? 0 : sumMilitaryPower(stateItem?.military),
       resourceSummary: neutral ? "无" : formatResourceTypes(stateItem?.resourceTypes),
       diplomacySummary: neutral ? "无" : formatDiplomacyCounts(stateItem?.diplomacySummary),
+      noteBody: note?.body || "",
+      noteUpdatedAt: note?.updatedAt || "",
       neighborCount: stateItem?.neighbors?.length || 0,
       color: neutral ? "#a6adb3" : normalizeHexColor(stateItem?.color) || fallbackStateColor(row.id)
     };

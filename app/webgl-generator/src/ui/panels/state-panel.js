@@ -14,7 +14,8 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     sortDir: "desc",
     radius: 28,
     lastAffected: 0,
-    history: null
+    history: null,
+    version: 0
   });
   const panelCallbacks = {
     onActiveChange: active => {
@@ -52,6 +53,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     onColorChange: (stateId, color) => callbacks.onColorChange?.(stateId, color),
     onCapitalChange: (stateId, burgId) => callbacks.onCapitalChange?.(stateId, burgId),
+    onNoteChange: (stateId, body) => callbacks.onNoteChange?.(stateId, body),
     onSampleSelection: () => callbacks.onSampleSelection?.(),
     onSampleHover: () => callbacks.onSampleHover?.(),
     onUndo: () => callbacks.onUndo?.(),
@@ -81,6 +83,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       if (panelState.targetStateId === null) panelState.targetStateId = firstStateId(map);
+      panelState.version++;
       manager.open("state-panel");
     },
     update({map = panelState.map, sourceStateId = panelState.sourceStateId, lastAffected = panelState.lastAffected, history = panelState.history} = {}) {
@@ -89,6 +92,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.lastAffected = lastAffected;
       panelState.history = history;
       if (!stateExists(map, panelState.targetStateId)) panelState.targetStateId = firstStateId(map);
+      panelState.version++;
     },
     getBrush() {
       return {

@@ -1641,6 +1641,10 @@ select:disabled {
   grid-template-columns: minmax(0, 1fr) 88px;
 }
 
+.state-note-editor {
+  margin-top: 8px;
+}
+
 .state-capital-field label {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
@@ -1842,6 +1846,10 @@ select:disabled {
   color: #edf4f6;
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.province-note-editor {
+  margin-top: 8px;
 }
 
 .province-history-actions {

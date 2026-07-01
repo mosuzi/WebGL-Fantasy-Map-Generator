@@ -83,6 +83,7 @@
 - city 备注第一刀已完成：城市管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
 - river 备注第一刀已完成：河流管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
 - route 备注第一刀已完成：路线管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
-- 完整地图 JSON 导出已验证包含 marker、city、river 与 route 的 `map.notes`。
+- state / province 备注第一刀已完成：国家编辑和省份管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
+- 完整地图 JSON 导出已验证包含 marker、city、river、route、state 与 province 的 `map.notes`。
 - marker、river 与 route 要素 GeoJSON 已写入 `hasNote` 和 `note` 属性；其中 marker 和 route 已完成端到端导出验证。
-- 尚未接入 state、province、culture、religion、label，也尚未做独立备注总览。
+- 尚未接入 culture、religion、label，也尚未做独立备注总览。
