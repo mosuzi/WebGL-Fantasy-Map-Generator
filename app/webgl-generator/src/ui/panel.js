@@ -154,6 +154,7 @@ function editLockControls(documentRef) {
     "#generate-map",
     "#random-seed",
     "#open-generation-panel",
+    "#open-development-panel",
     "#fit-view",
     "#open-height-panel",
     "#open-state-panel",
@@ -438,12 +439,14 @@ export function setSeedInput(documentRef, seed) {
 
 export function updateRuntimePanel(documentRef, state) {
   const {map, renderer} = state;
+  if (!map || !renderer) return;
   const stats = renderer.getStats();
   const unitPreferences = readControlPreferences(documentRef).units;
   syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
-  documentRef.getElementById("map-badge").textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)} / ${formatDisplayNumber(map.metadata.cellsTarget, unitPreferences)} cells`;
+  documentRef.getElementById("map-badge").textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)}`;
   updateMapLegend(documentRef, map, stats);
+  updateMapScaleBar(documentRef, map, stats, unitPreferences);
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
     statRow(documentRef, "生成耗时", formatGenerationTiming(map.metadata.generationTiming)),
@@ -580,6 +583,37 @@ function updateMapLegend(documentRef, map, stats) {
 
   legend.hidden = true;
   legend.replaceChildren();
+}
+
+function updateMapScaleBar(documentRef, map, stats, unitPreferences) {
+  const scaleBar = documentRef.getElementById("map-scale-bar");
+  const line = scaleBar?.querySelector(".map-scale-line");
+  const label = scaleBar?.querySelector(".map-scale-label");
+  const canvas = documentRef.getElementById("map-canvas");
+  if (!scaleBar || !line || !label || !canvas || !map || stats.layerVisibility?.scaleBar === false) {
+    if (scaleBar) scaleBar.hidden = true;
+    return;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const cameraScale = Math.max(0.001, Number(stats.camera?.scale) || 1);
+  const worldPerPixel = map.metadata.graphWidth / Math.max(1, rect.width * cameraScale);
+  const targetPixels = Math.max(86, Math.min(180, rect.width * 0.12));
+  const distance = niceScaleDistance(worldPerPixel * targetPixels);
+  const widthPx = Math.max(72, Math.min(220, distance / worldPerPixel));
+
+  line.style.width = `${Math.round(widthPx)}px`;
+  label.textContent = formatDisplayDistance(distance, unitPreferences);
+  scaleBar.hidden = false;
+}
+
+function niceScaleDistance(distance) {
+  if (!Number.isFinite(distance) || distance <= 0) return 1;
+  const exponent = Math.floor(Math.log10(distance));
+  const base = 10 ** exponent;
+  const normalized = distance / base;
+  const step = normalized >= 5 ? 5 : normalized >= 2 ? 2 : 1;
+  return step * base;
 }
 
 function legendTitle(documentRef, text) {

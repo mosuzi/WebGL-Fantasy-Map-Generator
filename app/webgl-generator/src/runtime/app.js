@@ -11,6 +11,7 @@ import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
+import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
 import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
 import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
@@ -84,6 +85,7 @@ export function createGeneratorApp(documentRef) {
   let selectionStore = null;
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
+  state.panels.development = createDevelopmentPanel(documentRef, panelManager);
   let heightPanel = null;
   let statePanel = null;
   let provincePanel = null;
@@ -1041,14 +1043,16 @@ function scheduleAfterPaint(documentRef, callback) {
 }
 
 function setGenerationStatus(documentRef, options, status) {
-  documentRef.getElementById("app-status").textContent = `${status}，seed ${options.seed}`;
-  documentRef.getElementById("map-badge").textContent = `${status} / ${options.graphWidth} x ${options.graphHeight}`;
+  const appStatus = documentRef.getElementById("app-status");
+  if (appStatus) appStatus.textContent = `${status}，seed ${options.seed}`;
+  documentRef.getElementById("map-badge").textContent = status;
 }
 
 function reportGenerateError(documentRef, error) {
   const message = error instanceof Error ? error.message : String(error);
-  documentRef.getElementById("app-status").textContent = `生成失败：${message}`;
-  documentRef.getElementById("map-badge").textContent = "生成失败，查看 Console";
+  const appStatus = documentRef.getElementById("app-status");
+  if (appStatus) appStatus.textContent = `生成失败：${message}`;
+  documentRef.getElementById("map-badge").textContent = "生成失败";
   console.error(error);
 }
 

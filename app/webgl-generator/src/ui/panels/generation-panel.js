@@ -7,8 +7,8 @@ export function createGenerationPanel(documentRef, manager) {
     title: "控制面板",
     left: 352,
     top: 24,
-    width: 520,
-    maxWidth: 600
+    width: 600,
+    maxWidth: 720
   });
   const root = documentRef.createElement("div");
   root.className = "vue-control-panel-root";

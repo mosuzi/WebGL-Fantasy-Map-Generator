@@ -12081,3 +12081,37 @@ full 矩阵结果：
 - 第一批落地优先做全屏地图外壳、开发模式浮动面板、比例尺图层、README 和简介 tab。
 - Element Plus 采用按需/分批迁移路线，参考官方中文文档的自动按需导入和 ESM tree shaking 方案；不做一次性全量替换。
 - 完整地图数据导入导出、GeoJSON 导出、灰度高度图导入和春秋古国风命名拆成后续独立提交，避免互相污染风险。
+
+### 用户外壳第一批：全屏地图、开发模式、比例尺与简介
+
+背景：
+
+- 用户要求普通页面不再常驻显示生成耗时、WebGL 加载、mesh 顶点等开发数据。
+- 用户要求比例尺作为地图图层提供给普通用户，而开发信息收敛到可按需开启的开发模式。
+- 用户要求新增人类可读 README，并在控制面板中增加项目简介 tab，后续承接导入导出入口。
+
+修正：
+
+- 页面外壳改为单列全屏地图，移除常驻 `.side-panel`；地图左上角只保留“控制面板”入口和 debug 开启后的“调试信息 / 开发模式”入口。
+- 新增 `createDevelopmentPanel()`：开发模式复用浮动面板体系，支持拖动、关闭、收起为小按钮，并暴露 `window.__webglGeneratorDebug` 响应式控制对象；`?debug=1` 会自动开启。
+- `runtime-stats`、`pick-stats` 和 `app-status` 迁入开发模式面板；普通模式仍保留地图 badge、图例、悬停/选择面板等用户可见地图信息。
+- 图层新增“比例尺”，默认开启；地图左下角根据当前 canvas 宽度、相机缩放和单位配置计算 1/2/5 序列的实际距离，并随图层开关隐藏或显示。
+- “控制面板”宽度扩大到 `600px`，tab 改为六列，新增“简介”tab；简介 tab 写明本项目参考 `Azgaar/Fantasy-Map-Generator`，并链接当前仓库和原项目。
+- 新增根目录 `README.md`，说明项目定位、已完成能力、运行方式、debug 开启方式、当前限制和后续计划。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。
+- Vite dev server + Playwright 验证通过：
+  - 普通模式 `.side-panel` 数量为 `0`，地图舞台宽度为 `1400`，开发按钮隐藏，开发面板隐藏。
+  - 普通模式比例尺显示，示例标签为 `264.6 千米`。
+  - `?debug=1` 下 `window.__webglGeneratorDebug.enabled = true`，开发面板可见，运行时统计行数为 `69`。
+  - 点击“收起”后开发面板隐藏，入口按钮仍显示为“开发模式”。
+  - 控制面板“简介”tab 可见，仓库链接为 `https://github.com/mosuzi/fmg-gl`。
+  - 图层“比例尺”开关关闭后，`#map-scale-bar.hidden = true`。
+
+后续：
+
+- Element Plus 迁移按需引入，不在本批代码中直接全量替换。
+- 完整地图 JSON 导入导出、PNG 导出、GeoJSON 导出、灰度高度图导入和国家命名策略进入后续独立阶段。

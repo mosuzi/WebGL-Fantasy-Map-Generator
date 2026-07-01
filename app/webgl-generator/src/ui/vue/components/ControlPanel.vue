@@ -2,6 +2,22 @@
   <UiTabs v-model="activeTab" :tabs="tabs" />
 
   <div class="control-panel-tab-panels">
+    <div class="control-panel-section project-about-panel" data-control-panel="about" :hidden="activeTab !== 'about'">
+      <section class="project-about-card" aria-labelledby="project-about-title">
+        <h2 id="project-about-title">WebGL 地图生成器</h2>
+        <p>
+          这是一个参考 Azgaar/Fantasy-Map-Generator 的生成流程、数据结构和视觉经验，
+          以 WebGL2 canvas 重新实现的独立地图生成器。
+        </p>
+        <p>
+          当前已接入地形、气候、河流、文化、宗教、国家、省份、城镇、道路、资源点、外交、经济、军事和区域等系统，
+          并提供 Vue 浮动面板用于查看、编辑和局部重新生成地图对象。
+        </p>
+        <a href="https://github.com/mosuzi/fmg-gl" target="_blank" rel="noreferrer">打开当前仓库</a>
+        <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">查看原项目</a>
+      </section>
+    </div>
+
     <div class="generation-panel-form" data-control-panel="generation" :hidden="activeTab !== 'generation'">
       <UiField label="Seed" input-id="seed-input" model-value="stage-2-1" :input-attrs="{autocomplete: 'off'}" />
       <UiField label="目标 cells" input-id="cells-input" type="number" :model-value="10000" :input-attrs="{min: 1000, max: 100000, step: 1000}" />
@@ -379,6 +395,7 @@ const latitudeBandLabel = computed(() => {
 });
 
 const tabs = Object.freeze([
+  {id: "about", label: "简介"},
   {id: "generation", label: "生成"},
   {id: "themes", label: "视图"},
   {id: "units", label: "单位"},
@@ -416,6 +433,7 @@ const layers = Object.freeze([
   {id: "cities", label: "城市"},
   {id: "resources", label: "资源点"},
   {id: "markers", label: "标记"},
+  {id: "scaleBar", label: "比例尺"},
   {id: "labels", label: "城市标签"},
   {id: "stateLabels", label: "国家名称"},
   {id: "stateBorders", label: "国界"},

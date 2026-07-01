@@ -9,50 +9,14 @@
   </head>
   <body>
     <main class="app-shell">
-      <aside class="side-panel">
-        <header class="panel-header">
-          <h1>WebGL 地图生成器</h1>
-          <p id="app-status">初始化中</p>
-        </header>
-
-        <section class="control-section">
-          <h2>控制</h2>
-          <button id="open-generation-panel" class="primary-action" type="button">控制面板</button>
-        </section>
-
-        <section class="control-section">
-          <h2>运行时</h2>
-          <dl id="runtime-stats" class="stats-list"></dl>
-        </section>
-
-        <section class="control-section">
-          <h2>选择</h2>
-          <dl id="pick-stats" class="stats-list"></dl>
-        </section>
-
-        <section class="control-section">
-          <h2>边界</h2>
-          <dl class="stats-list">
-            <div>
-              <dt>正式应用</dt>
-              <dd>app/webgl-generator</dd>
-            </div>
-            <div>
-              <dt>快照 demo</dt>
-              <dd>prototype/webgl-cells</dd>
-            </div>
-            <div>
-              <dt>source</dt>
-              <dd>只读参考</dd>
-            </div>
-          </dl>
-        </section>
-      </aside>
-
       <section class="map-stage" aria-label="地图画布">
         <canvas id="map-canvas"></canvas>
         <div class="map-overlay" id="map-overlay"></div>
         <div id="vue-state-root"></div>
+        <div class="map-toolbar" aria-label="地图工具">
+          <button id="open-generation-panel" class="primary-action" type="button">控制面板</button>
+          <button id="open-development-panel" class="secondary-action debug-action" type="button" hidden>开发模式</button>
+        </div>
         <div class="map-badge" id="map-badge">等待生成</div>
         <div class="generation-loading-bubble" id="generation-loading" role="status" aria-live="polite" hidden>
           <span class="generation-loading-dot"></span>
@@ -60,14 +24,19 @@
         </div>
         <div class="hover-overlay" id="hover-overlay" hidden></div>
         <div class="map-legend" id="map-legend" hidden></div>
+        <div class="map-scale-bar" id="map-scale-bar" aria-label="地图比例尺" hidden>
+          <div class="map-scale-line"></div>
+          <div class="map-scale-label">比例尺</div>
+        </div>
       </section>
     </main>
 
     <script>
       window.setTimeout(() => {
         if (window.__webglGeneratorApp) return;
-        document.getElementById("app-status").textContent = "脚本尚未启动，请检查 DevTools 是否暂停或禁用 JavaScript";
         document.getElementById("map-badge").textContent = "脚本未启动";
+        const status = document.getElementById("app-status");
+        if (status) status.textContent = "脚本尚未启动，请检查 DevTools 是否暂停或禁用 JavaScript";
       }, 3000);
     </script>
     <script type="module" src="./src/main.js"></script>

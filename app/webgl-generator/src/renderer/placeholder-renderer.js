@@ -165,6 +165,7 @@ export class PlaceholderMapRenderer {
       population: true,
       markers: true,
       resources: true,
+      scaleBar: true,
       coastline: true,
       lakeShore: true,
       stateBorders: true,
