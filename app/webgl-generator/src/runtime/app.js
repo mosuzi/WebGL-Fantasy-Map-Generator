@@ -18,6 +18,7 @@ import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
 import {createMarkerPanel} from "../ui/panels/marker-panel.js";
+import {createNotesPanel} from "../ui/panels/notes-panel.js";
 import {createObjectDetailsPanel} from "../ui/panels/object-details-panel.js";
 import {createProvincePanel} from "../ui/panels/province-panel.js";
 import {createReligionPanel} from "../ui/panels/religion-panel.js";
@@ -35,6 +36,7 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
+import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
@@ -107,6 +109,7 @@ export function createGeneratorApp(documentRef) {
   let routePanel = null;
   let markerPanel = null;
   let labelNamingPanel = null;
+  let notesPanel = null;
   let suppressNextRiverPanelOpen = false;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
@@ -799,6 +802,38 @@ export function createGeneratorApp(documentRef) {
     }
   });
   state.panels.labelNaming = labelNamingPanel;
+  notesPanel = createNotesPanel(documentRef, panelManager, {
+    onSelect: row => {
+      if (!row?.object || row.orphan) return;
+      selectionStore.setSelection({object: row.object});
+      notesPanel.setSelectedNoteId(row.id);
+    },
+    onLocate: row => {
+      if (!row?.object || row.orphan) return;
+      locateObject(state, row.object, documentRef);
+      notesPanel.setSelectedNoteId(row.id);
+    },
+    onDelete: row => {
+      if (!row?.id) return;
+      const command = createDeleteNoteCommand(row.id, {name: row.name});
+      if (!command.isNoop({map: state.map})) {
+        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      }
+      updateAllObjectPanels(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateAllObjectPanels(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateAllObjectPanels(state);
+    }
+  });
+  state.panels.notes = notesPanel;
   riverPanel = createRiverPanel(documentRef, panelManager, {
     onSelect: object => {
       selectionStore.setSelection({object});
@@ -892,6 +927,7 @@ export function createGeneratorApp(documentRef) {
     state.panels.route.update(state.map, selection, state.editHistory.getStats());
     state.panels.marker.update(state.map, selection, state.editHistory.getStats());
     state.panels.labelNaming.update(state.map, selection, state.editHistory.getStats());
+    state.panels.notes.update(state.map, selection, state.editHistory.getStats());
     updateStatePanel(state);
     updateProvincePanel(state);
     updateCityPanel(state);
@@ -1012,6 +1048,9 @@ export function createGeneratorApp(documentRef) {
         state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(state.selection.object));
       }
       state.panels.labelNaming.open(state.map, state.selection, state.editHistory.getStats());
+    },
+    onOpenNotesPanel: () => {
+      state.panels.notes.open(state.map, state.selection, state.editHistory.getStats());
     },
     onExportImage: () => exportMapImage(state, documentRef),
     onExportMapData: () => exportMapData(state, documentRef),
@@ -2412,6 +2451,24 @@ function updateMarkerPanel(state) {
 
 function updateLabelNamingPanel(state) {
   state.panels.labelNaming?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function updateNotesPanel(state) {
+  state.panels.notes?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function updateAllObjectPanels(state) {
+  updateStatePanel(state);
+  updateProvincePanel(state);
+  updateCityPanel(state);
+  updateCulturePanel(state);
+  updateReligionPanel(state);
+  updateDiplomacyPanel(state);
+  updateMarkerPanel(state);
+  updateLabelNamingPanel(state);
+  state.panels.route?.update(state.map, state.selection, state.editHistory.getStats());
+  state.panels.river?.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  updateNotesPanel(state);
 }
 
 function labelKeyForObject(object) {

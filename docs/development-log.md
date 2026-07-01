@@ -12749,3 +12749,28 @@ full 矩阵结果：
 后续：
 
 - 对象注记第一批入口已闭环。下一步应转入独立备注总览、孤儿备注标记、批量定位和导入导出备注摘要。
+
+### 备注总览第一刀
+
+背景：
+
+- marker、city、river、route、state、province、culture、religion 和 label 的备注入口已经闭环，用户需要一个集中查看和处理所有 `map.notes` 的入口。
+- 原版 FMG 的 Notes Editor 支持对象下拉、定位、下载、上传和删除；WebGL 版第一刀先做轻量总览，不引入富文本或 AI。
+
+修正：
+
+- 新增 `runtime/note-edit-commands.js`，提供 `createDeleteNoteCommand()`，删除备注进入 `EditHistory`，可撤销和重做。
+- 新增 `NotesPanel.vue` 与 `ui/panels/notes-panel.js`，管理 tab 新增“备注总览”入口。
+- 备注总览显示备注总数、可定位数、孤儿备注数和筛选数，支持按更新时间、类型、名称和字数排序，支持筛选正文、名称、类型和 id。
+- 备注总览可定位有效对象；对象缺失或 id 无法解析时标记为“对象缺失”，避免强行定位崩溃。
+- 标签备注会按 `label:${targetKind}:${targetId}` 解析，例如 `label:city:0` 会定位城市标签对象而不是城市本体备注。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `950.98KB JS / 294.12KB gzip`、`148.71KB CSS / 22.09KB gzip`。
+- Playwright + 构建产物内置静态服务验证通过：给 marker `#0` 写入“备注总览验证：这里有一处矿脉。”，给城市标签 `city:0` 写入“标签备注总览验证：城市名不要遮挡河口。”后，管理 tab 的“备注总览”入口可见，面板显示 `备注 2 / 可定位 2 / 孤儿备注 0 / 筛选 2`。
+- 验证中定位 marker 备注后 `selection.object.kind = marker`、`renderer.locateStatus = marker #0`；删除该备注后 notes 只剩 `label:city:0` 且历史为 `删除备注 江陵火山`；撤销后恢复 `marker:0`；筛选“标签备注总览”只保留 `label:city:0`，console/page error 为 `0`。
+
+后续：
+
+- 可继续补备注独立导入导出、孤儿备注批量清理、备注摘要导出；富文本、Markdown 和 AI 辅助仍暂缓。
