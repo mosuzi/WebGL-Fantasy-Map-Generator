@@ -1280,6 +1280,8 @@ function exportFeatureGeoJson(state, documentRef) {
 
 function readFeatureGeoJsonLayerOptions(documentRef) {
   return {
+    state: documentRef.getElementById("feature-export-layer-state")?.checked === true,
+    province: documentRef.getElementById("feature-export-layer-province")?.checked === true,
     city: documentRef.getElementById("feature-export-layer-city")?.checked !== false,
     route: documentRef.getElementById("feature-export-layer-route")?.checked !== false,
     river: documentRef.getElementById("feature-export-layer-river")?.checked !== false,

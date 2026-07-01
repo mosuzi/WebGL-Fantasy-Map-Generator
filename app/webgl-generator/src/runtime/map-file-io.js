@@ -110,6 +110,8 @@ export function createMapFeatureGeoJson(map, options = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
   const layers = normalizeFeatureLayerOptions(options.layers);
   const features = [
+    ...(layers.state ? stateFeatures(map) : []),
+    ...(layers.province ? provinceFeatures(map) : []),
     ...(layers.city ? cityFeatures(map) : []),
     ...(layers.route ? routeFeatures(map) : []),
     ...(layers.river ? riverFeatures(map) : []),
@@ -127,6 +129,8 @@ export function createMapFeatureGeoJson(map, options = {}) {
       seed: map.metadata?.seed || "",
       checksum: map.metadata?.checksum || "",
       generatedAt: map.metadata?.generatedAt || "",
+      states: layers.state ? countValidPoliticalObjects(map.politics?.states) : 0,
+      provinces: layers.province ? countValidPoliticalObjects(map.politics?.provinces) : 0,
       cities: layers.city ? map.settlements?.cities?.length || 0 : 0,
       routes: layers.route ? map.settlements?.routes?.length || 0 : 0,
       rivers: layers.river ? map.rivers?.rivers?.length || 0 : 0,
@@ -206,6 +210,8 @@ function projectWorldPoint(point, map) {
 function normalizeFeatureLayerOptions(layers = {}) {
   const source = layers && typeof layers === "object" ? layers : {};
   return {
+    state: source.state === true,
+    province: source.province === true,
     city: source.city !== false,
     route: source.route !== false,
     river: source.river !== false,
@@ -216,12 +222,99 @@ function normalizeFeatureLayerOptions(layers = {}) {
 
 function selectedFeatureLayerNames(layers) {
   return [
+    layers.state ? "states" : "",
+    layers.province ? "provinces" : "",
     layers.city ? "cities" : "",
     layers.route ? "routes" : "",
     layers.river ? "rivers" : "",
     layers.marker ? "markers" : "",
     layers.zone ? "zones" : ""
   ].filter(Boolean);
+}
+
+function stateFeatures(map) {
+  const groups = collectPoliticalCellGroups(map, "state");
+  return (map.politics?.states || []).map(state => {
+    const id = Number(state?.i ?? state?.id) || 0;
+    if (!id || state?.removed) return null;
+    const group = groups.get(id);
+    if (!group?.polygons?.length) return null;
+    const capital = map.pack?.burgs?.[state.capital];
+    const note = readObjectNote(map, {kind: "state", id});
+    const cultureId = Number(state.culture) || 0;
+    const religionId = Number(state.religion) || 0;
+    return {
+      type: "Feature",
+      id: `state-${id}`,
+      properties: {
+        layer: "state",
+        id,
+        name: state.name || "",
+        fullName: state.fullName || state.name || "",
+        capital: state.capital || 0,
+        capitalName: capital?.name || "",
+        culture: cultureId,
+        cultureName: map.society?.cultures?.[cultureId]?.name || "",
+        religion: religionId,
+        religionName: map.society?.religions?.[religionId]?.name || "",
+        cells: group.cells,
+        area: roundCoordinate(group.area || state.area || 0),
+        population: roundCoordinate((state.rural || 0) + (state.urban || 0) || group.population),
+        rural: state.rural || 0,
+        urban: state.urban || 0,
+        burgs: state.burgs || 0,
+        color: state.color || "",
+        neighbors: Array.isArray(state.neighbors) ? state.neighbors.filter(Boolean) : [],
+        dissolved: false,
+        hasNote: Boolean(note?.body),
+        note: note?.body || ""
+      },
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: group.polygons
+      }
+    };
+  }).filter(Boolean);
+}
+
+function provinceFeatures(map) {
+  const groups = collectPoliticalCellGroups(map, "province");
+  return (map.politics?.provinces || []).map(province => {
+    const id = Number(province?.i ?? province?.id) || 0;
+    if (!id || province?.removed) return null;
+    const group = groups.get(id);
+    if (!group?.polygons?.length) return null;
+    const stateId = Number(province.state) || 0;
+    const state = map.politics?.states?.[stateId];
+    const burg = map.pack?.burgs?.[province.burg];
+    const note = readObjectNote(map, {kind: "province", id});
+    return {
+      type: "Feature",
+      id: `province-${id}`,
+      properties: {
+        layer: "province",
+        id,
+        name: province.name || "",
+        fullName: province.fullName || province.name || "",
+        state: stateId,
+        stateName: state?.fullName || state?.name || "",
+        burg: province.burg || 0,
+        burgName: burg?.name || "",
+        cells: group.cells,
+        area: roundCoordinate(group.area || province.area || 0),
+        population: roundCoordinate(group.population),
+        color: province.color || "",
+        neighbors: Array.isArray(province.neighbors) ? province.neighbors.filter(Boolean) : [],
+        dissolved: false,
+        hasNote: Boolean(note?.body),
+        note: note?.body || ""
+      },
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: group.polygons
+      }
+    };
+  }).filter(Boolean);
 }
 
 function cityFeatures(map) {
@@ -267,6 +360,39 @@ function cityFeatures(map) {
       }
     };
   }).filter(Boolean);
+}
+
+function collectPoliticalCellGroups(map, field) {
+  const cells = map.pack?.cells;
+  const groups = new Map();
+  if (!cells?.i || !cells?.[field]) return groups;
+
+  for (const cell of cells.i) {
+    const cellId = Number(cell);
+    if (!Number.isInteger(cellId) || (Number(cells.h?.[cellId]) || 0) < 20) continue;
+    const ownerId = Number(cells[field]?.[cellId]) || 0;
+    if (!ownerId) continue;
+    const polygon = packCellPolygon(map, cellId);
+    if (!polygon) continue;
+    let group = groups.get(ownerId);
+    if (!group) {
+      group = {cells: 0, area: 0, population: 0, polygons: []};
+      groups.set(ownerId, group);
+    }
+    group.cells += 1;
+    group.area += Number(cells.area?.[cellId]) || 0;
+    group.population += Number(cells.pop?.[cellId]) || 0;
+    group.polygons.push(polygon);
+  }
+
+  return groups;
+}
+
+function countValidPoliticalObjects(objects = []) {
+  return objects.filter(object => {
+    const id = Number(object?.i ?? object?.id) || 0;
+    return id && !object?.removed;
+  }).length;
 }
 
 function routeFeatures(map) {

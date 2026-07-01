@@ -9,7 +9,7 @@
 | 导出图片 | `.png` | PNG | WebGL 画布、地图尺寸摘要、比例尺 overlay | 否 | 已完成第一刀 |
 | 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v1` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成第一刀 |
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
-| 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon；简介 tab 可选择导出图层 | 否 | 已完成第一刀 |
+| 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon、state/province 非 dissolve MultiPolygon；简介 tab 可选择导出图层 | 否 | 已完成第二刀 |
 
 ## 完整地图 JSON
 
@@ -83,16 +83,19 @@
 | `river` | `LineString` | id、name、type、source、mouth、parent、basin、flux、length、width、widthFactor、hasNote、note | 暂未输出变宽河道面；备注正文已输出 |
 | `marker` | `Point` | id、name、type、label、category、resource、economicValue、state、province、cell、packCell、hasNote、note | marker 备注正文已输出 |
 | `zone` | `MultiPolygon` | id、name、type、hidden、cells、color | 当前按 zone 的 cell polygon 集合输出，未 dissolve |
+| `state` | `MultiPolygon` | id、name、fullName、capital、capitalName、culture、religion、cells、area、population、color、neighbors、dissolved、hasNote、note | 默认关闭；按国家陆地 cell 集合输出，`dissolved=false` |
+| `province` | `MultiPolygon` | id、name、fullName、state、stateName、burg、burgName、cells、area、population、color、neighbors、dissolved、hasNote、note | 默认关闭；按省份陆地 cell 集合输出，`dissolved=false` |
 
 已验证：
 
 - 默认图可输出 city、route、river、marker、zone 五类要素。
 - 写入 city、marker 或 route 备注后，对应 feature 会带 `hasNote = true` 和 `note` 正文；river 走同一备注字段导出路径。
 - 简介 tab 的“要素 GeoJSON 图层”开关可限制导出图层，导出元数据 `layerSet` 会同步反映选择。
+- 国家面和省份面默认关闭，手动开启后输出非 dissolve MultiPolygon，并明确 `dissolved=false`。
 
 缺口：
 
-- zone 需要 dissolve 外轮廓。
+- zone、state 和 province 仍需要真正 dissolve 外轮廓。
 - route / river 可继续补名称、等级中文标签和更完整统计。
 - 尚未支持范围导出或 CRS 元数据配置。
 
@@ -115,6 +118,6 @@
 
 ## 后续顺序建议
 
-1. 国家和省份 dissolve：补真正适合 GIS 的政治面，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 分清非 dissolve 集合与真实外轮廓。
+1. 国家、省份和 zone dissolve：补真正适合 GIS 的外轮廓，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑原型验证。
 2. PNG 导出倍率和是否包含 overlay 的选项。
 3. 完整 JSON 压缩和版本迁移器。

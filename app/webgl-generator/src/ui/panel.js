@@ -188,6 +188,8 @@ function editLockControls(documentRef) {
     "#export-map-data",
     "#export-map-geojson",
     "#export-map-features-geojson",
+    "#feature-export-layer-state",
+    "#feature-export-layer-province",
     "#feature-export-layer-city",
     "#feature-export-layer-route",
     "#feature-export-layer-river",

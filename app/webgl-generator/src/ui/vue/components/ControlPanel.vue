@@ -18,6 +18,8 @@
         <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
           <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>
           <div class="feature-export-layer-grid">
+            <UiSwitchField label="国家面" input-id="feature-export-layer-state" field-class="feature-export-layer-switch" />
+            <UiSwitchField label="省份面" input-id="feature-export-layer-province" field-class="feature-export-layer-switch" />
             <UiSwitchField label="城市" input-id="feature-export-layer-city" field-class="feature-export-layer-switch" :checked="true" />
             <UiSwitchField label="路线" input-id="feature-export-layer-route" field-class="feature-export-layer-switch" :checked="true" />
             <UiSwitchField label="河流" input-id="feature-export-layer-river" field-class="feature-export-layer-switch" :checked="true" />

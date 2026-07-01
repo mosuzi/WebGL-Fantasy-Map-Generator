@@ -1,12 +1,13 @@
 # 政治面 GeoJSON 与 dissolve 计划
 
-本文档记录国家、省份等政治面导出的实现边界。当前 `.features.geojson` 已包含 city、route、river、marker、zone，并支持分层选择；下一步若继续扩展 GIS 能力，应谨慎区分“按 cell 收集成 MultiPolygon”和“真正 dissolve 外轮廓”。
+本文档记录国家、省份等政治面导出的实现边界。当前 `.features.geojson` 已包含 city、route、river、marker、zone、state、province，并支持分层选择；继续扩展 GIS 能力时，应谨慎区分“按 cell 收集成 MultiPolygon”和“真正 dissolve 外轮廓”。
 
 ## 当前基础
 
 - `createMapGeoJson(map)` 已逐个导出 pack cell Polygon，并在 properties 中写入 state、province、culture、religion、生物群系、人口等字段。
-- `createMapFeatureGeoJson(map, {layers})` 已支持 city Point、route LineString、river LineString、marker Point、zone MultiPolygon。
+- `createMapFeatureGeoJson(map, {layers})` 已支持 city Point、route LineString、river LineString、marker Point、zone MultiPolygon、state MultiPolygon 和 province MultiPolygon。
 - `zoneFeatures()` 当前做法是把 zone 的 pack cells 转为多个 cell polygon，放进一个 MultiPolygon；这不是拓扑 dissolve，只是按对象聚合 cell polygon。
+- `stateFeatures()` 和 `provinceFeatures()` 当前做法同样是把所属陆地 pack cells 转为多个 cell polygon，放进一个 MultiPolygon，并在 properties 中标注 `dissolved=false`。
 - 政治归属主要来自 `map.pack.cells.state / province` 和 `map.politics.states / provinces`；国家、省份对象已有 cells、area、neighbors、center、gridCenter、color、capital、culture、religion 等字段。
 
 ## 不应直接做的事
@@ -16,7 +17,7 @@
 - 不要在没有拓扑校验的情况下合并坐标字符串；浮点误差和 ring 方向会导致外部 GIS 工具读出自交面。
 - 不要把水域、中立 cell、removed state/province 混入政治面。
 
-## 第一阶段：政治面 MultiPolygon 集合
+## 第一阶段：政治面 MultiPolygon 集合（已完成）
 
 目标：
 
@@ -43,6 +44,14 @@
 - 默认图导出 state 图层时，Feature 数等于有效国家数，所有 feature geometry 为 MultiPolygon。
 - province 图层同理，且每个 province 的 `state` 能指向有效国家。
 - 关闭 state/province 后现有 city/route/river/marker/zone 导出不变。
+
+当前实现：
+
+- 简介 tab 的“要素 GeoJSON 图层”已新增“国家面 / 省份面”开关，默认关闭。
+- `createMapFeatureGeoJson(map, {layers})` 支持 `layers.state` 和 `layers.province`。
+- 导出按 `pack.cells.state / province` 分组陆地 cell，复用 `packCellPolygon(map, cell)` 生成 MultiPolygon。
+- properties 输出 `dissolved=false`、基础对象字段、邻接、面积、人口、颜色和备注字段。
+- 构建产物验证中开启国家面和省份面后，`layerSet = states-provinces-cities-routes-rivers-markers-zones`，state `20`、province `213`、政治面 bad `0`，console/page error 为 `0`。
 
 ## 第二阶段：真正 dissolve 外轮廓
 
@@ -76,8 +85,7 @@
 
 ## 建议顺序
 
-1. 先做第一阶段 `state/province` 非 dissolve MultiPolygon，并默认关闭开关。
+1. 先做 dissolve 算法原型，先在工具脚本中用固定 seed 验证 ring 拼接。
 2. 补导出验证和文件体积记录。
-3. 再做 dissolve 算法原型，先在工具脚本中用固定 seed 验证 ring 拼接。
-4. 稳定后接入 UI，提供“合并政治面边界”开关。
-5. 若导出耗时影响主线程，再评估 Worker 或懒加载几何库。
+3. 稳定后接入 UI，提供“合并政治面边界”开关。
+4. 若导出耗时影响主线程，再评估 Worker 或懒加载几何库。

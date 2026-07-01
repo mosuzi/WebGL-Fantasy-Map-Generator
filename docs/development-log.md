@@ -12861,3 +12861,29 @@ full 矩阵结果：
 后续：
 
 - 后续可做名称库编辑器、区域禁用字、避讳规则、国家-省份-城市命名联动，以及更明确的文化命名风格包。
+
+### 政治面 GeoJSON 第一阶段
+
+背景：
+
+- 要素 GeoJSON 已支持城市、路线、河流、标记和区域，但国家、省份仍只能通过 pack cell GeoJSON 间接分析。
+- 真正 dissolve 外轮廓需要拓扑边合并和 ring 校验；本阶段只做明确标注的非 dissolve MultiPolygon 集合。
+
+修正：
+
+- `createMapFeatureGeoJson(map, {layers})` 新增 `state` 和 `province` 图层，默认关闭。
+- 简介 tab 的“要素 GeoJSON 图层”新增“国家面 / 省份面”开关，运行时读取 `feature-export-layer-state / province`。
+- 导出按 `pack.cells.state / province` 分组陆地 cell，复用 `packCellPolygon()` 生成 MultiPolygon；properties 明确输出 `dissolved=false`。
+- 国家面输出名称、首都、文化、宗教、面积、人口、邻接、颜色和备注；省份面输出所属国家、省会、面积、人口、邻接、颜色和备注。
+
+验证：
+
+- Node 直接验证：仅开启 state/province 时，`layerSet = states-provinces`，state `20`、province `259`，政治面总数 `279`，bad `0`。
+- 默认导出仍为 `cities-routes-rivers-markers-zones`，state/province metadata 为 `0`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `957.08KB JS / 295.69KB gzip`、`149.39KB CSS / 22.20KB gzip`。
+- Playwright route 构建产物验证通过：打开控制面板简介 tab，默认 `state=false / province=false / city=true`；点击“国家面 / 省份面”后导出 `fmg-stage-2-1-5c3a6601.features.geojson`。
+- 导出文件 `layerSet = states-provinces-cities-routes-rivers-markers-zones`，Feature 计数 state `20`、province `213`、city `817`、route `602`、river `164`、marker `44`、zone `9`；政治面 `233` 个，bad `0`，状态提示正确，console/page error 为 `0`。
+
+后续：
+
+- 真正 dissolve 外轮廓仍需按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑边界原型，再决定是否接 UI。
