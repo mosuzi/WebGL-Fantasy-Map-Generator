@@ -12518,3 +12518,25 @@ full 矩阵结果：
 后续：
 
 - `ElTable / ElTree / ElDialog` 仍需先设计懒加载或拆包方案；不要把大组件一次性塞进首屏主 chunk。
+
+### zone 要素 GeoJSON 导出
+
+背景：
+
+- 上一刀要素 GeoJSON 已覆盖路线、河流和 marker，但原版分层导出里还有 zone。
+- 当前 zone 数据是 pack cell 集合，第一刀先用 `MultiPolygon` 表达每个 zone 覆盖的 cell polygon 集合，不做 dissolve。
+
+修正：
+
+- `createMapFeatureGeoJson()` 新增 `zoneFeatures()`，输出 `layer=zone` 的 `MultiPolygon` Feature。
+- zone 属性包含 id、name、type、hidden、cells 和 color；FeatureCollection metadata 增加 zones 计数，`layerSet` 改为 `routes-rivers-markers-zones`。
+- `projectWorldPoint()` 增加非有限坐标过滤，避免坏点写成 `NaN` 坐标。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `927.31KB JS / 289.86KB gzip`、`146.71KB CSS / 21.82KB gzip`。
+- Playwright + 构建产物静态服务验证通过：下载文件名为 `fmg-stage-2-1-68c7df07.features.geojson`，大小约 `353KB`，`FeatureCollection` 共 `819` 个要素，其中 route `602`、river `164`、marker `44`、zone `9`，geometry 为 `766` 个 `LineString`、`44` 个 `Point` 和 `9` 个 `MultiPolygon`；首个 zone 为 `zone-0 / Invasion / 26 cells / 26 polygons`，状态提示正确，console/page error 为 `0`。
+
+后续：
+
+- 后续可把 zone cell polygon dissolve 成更少的外轮廓，并增加分层选择、范围导出和国家/省份 dissolve。

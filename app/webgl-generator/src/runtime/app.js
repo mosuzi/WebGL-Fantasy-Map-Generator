@@ -1128,7 +1128,7 @@ function exportFeatureGeoJson(state, documentRef) {
     setFileOperationStatus(documentRef, "正在导出要素 GeoJSON...");
     const geoJson = createMapFeatureGeoJson(state.map);
     downloadText(documentRef, JSON.stringify(geoJson), `${mapFileBaseName(state.map)}.features.geojson`, "application/geo+json;charset=utf-8");
-    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个路线、河流和标记要素。`);
+    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个路线、河流、标记和区域要素。`);
   } catch (error) {
     reportFileOperationError(documentRef, "要素 GeoJSON 导出失败", error);
   }

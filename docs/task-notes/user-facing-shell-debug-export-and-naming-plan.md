@@ -151,7 +151,7 @@
 - 已实现 `webgl-generator-map v1` 完整 JSON 导出/导入，typed arrays 会显式保存并恢复。
 - 已实现 PNG 导出第一刀，并补充地图尺寸摘要和比例尺 overlay 合成；完整图例、标签和浮动面板暂不合成。
 - 已实现 pack cell GeoJSON 第一刀，默认图可输出 `5950` 个 Polygon。
-- 已实现要素 GeoJSON 第一刀，单独输出路线 `LineString`、河流 `LineString` 和 marker `Point`，与 pack cell Polygon 导出分离。
+- 已实现要素 GeoJSON 第一刀，单独输出路线 `LineString`、河流 `LineString`、marker `Point` 和区域 `MultiPolygon`，与 pack cell Polygon 导出分离。
 - 已验证导出旧图、生成新图、再导入旧图后 checksum 和 typed array 构造器恢复。
 
 ### 阶段 E：灰度高度图导入
@@ -211,7 +211,7 @@
 
 - 文档计划先单独提交。
 - 阶段 A/B/C 已作为第一批代码实现：外壳、开发模式、比例尺、README、简介 tab。
-- 阶段 D 已作为第二批代码实现：PNG、完整地图 JSON、pack cell GeoJSON、要素 GeoJSON 和完整 JSON 导入；PNG 后续已补地图摘要与比例尺合成。
+- 阶段 D 已作为第二批代码实现：PNG、完整地图 JSON、pack cell GeoJSON、路线/河流/marker/zone 要素 GeoJSON 和完整 JSON 导入；PNG 后续已补地图摘要与比例尺合成。
 - 阶段 F 已作为第三批代码实现：春秋古国风国家根名、根族去重和形制收敛。
 - Element Plus 已作为第四批代码接入按需导入与 `UiButton` 样板迁移。
 - 阶段 E 已作为第五批代码实现：灰度高度图导入、采样型高度模板、完整重生成链路和黑白反转映射。

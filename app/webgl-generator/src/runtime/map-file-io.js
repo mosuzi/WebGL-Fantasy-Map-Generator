@@ -109,7 +109,8 @@ export function createMapFeatureGeoJson(map) {
   const features = [
     ...routeFeatures(map),
     ...riverFeatures(map),
-    ...markerFeatures(map)
+    ...markerFeatures(map),
+    ...zoneFeatures(map)
   ];
 
   return {
@@ -117,13 +118,14 @@ export function createMapFeatureGeoJson(map) {
     name: map.metadata?.seed ? `fmg-${map.metadata.seed}-features` : "fmg-webgl-map-features",
     properties: {
       source: "fmg-webgl-reimplementation",
-      layerSet: "routes-rivers-markers",
+      layerSet: "routes-rivers-markers-zones",
       seed: map.metadata?.seed || "",
       checksum: map.metadata?.checksum || "",
       generatedAt: map.metadata?.generatedAt || "",
       routes: map.settlements?.routes?.length || 0,
       rivers: map.rivers?.rivers?.length || 0,
-      markers: map.markers?.markers?.length || 0
+      markers: map.markers?.markers?.length || 0,
+      zones: map.zones?.zones?.length || 0
     },
     features
   };
@@ -180,6 +182,9 @@ function typedArrayReviver(_key, value) {
 
 function projectWorldPoint(point, map) {
   if (!Array.isArray(point) || point.length < 2) return null;
+  const x = Number(point[0]);
+  const y = Number(point[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   const width = Math.max(1, Number(map.metadata?.graphWidth) || Number(map.options?.graphWidth) || 1);
   const height = Math.max(1, Number(map.metadata?.graphHeight) || Number(map.options?.graphHeight) || 1);
   const coordinates = map.mapCoordinates || {};
@@ -187,8 +192,8 @@ function projectWorldPoint(point, map) {
   const lonE = Number.isFinite(Number(coordinates.lonE)) ? Number(coordinates.lonE) : width;
   const latN = Number.isFinite(Number(coordinates.latN)) ? Number(coordinates.latN) : 0;
   const latS = Number.isFinite(Number(coordinates.latS)) ? Number(coordinates.latS) : height;
-  const lon = lonW + (Number(point[0]) / width) * (lonE - lonW);
-  const lat = latN + (Number(point[1]) / height) * (latS - latN);
+  const lon = lonW + (x / width) * (lonE - lonW);
+  const lat = latN + (y / height) * (latS - latN);
   return [roundCoordinate(lon), roundCoordinate(lat)];
 }
 
@@ -277,6 +282,42 @@ function markerFeatures(map) {
       }
     };
   }).filter(Boolean);
+}
+
+function zoneFeatures(map) {
+  return (map.zones?.zones || []).map(zone => {
+    const polygons = (zone.cells || []).map(cell => packCellPolygon(map, cell)).filter(Boolean);
+    if (!polygons.length) return null;
+    return {
+      type: "Feature",
+      id: `zone-${zone.i ?? zone.id}`,
+      properties: {
+        layer: "zone",
+        id: zone.i ?? zone.id,
+        name: zone.name || "",
+        type: zone.type || "",
+        hidden: Boolean(zone.hidden),
+        cells: zone.cells?.length || 0,
+        color: zone.color || ""
+      },
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: polygons
+      }
+    };
+  }).filter(Boolean);
+}
+
+function packCellPolygon(map, cell) {
+  const vertexIds = map.pack?.cells?.v?.[cell];
+  const vertices = map.pack?.vertices?.p;
+  if (!Array.isArray(vertexIds) || vertexIds.length < 3 || !vertices) return null;
+  const ring = vertexIds.map(vertexId => projectWorldPoint(vertices[vertexId], map)).filter(Boolean);
+  if (ring.length < 3) return null;
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) ring.push([...first]);
+  return [ring];
 }
 
 function lineCoordinates(points, map) {
