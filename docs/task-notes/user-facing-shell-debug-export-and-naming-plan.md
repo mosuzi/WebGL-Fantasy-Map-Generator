@@ -126,7 +126,7 @@
 
 - 先定义 `webgl-generator-map` 完整数据文件格式，包含版本、导出时间、options、map 全量数据和必要 metadata。
 - 第一刀本地导出支持：
-  - PNG 图片导出：从 canvas 读取。
+  - PNG 图片导出：从 canvas 读取，并逐步合成用户可见的地图 overlay。
   - 完整地图 JSON 导出：可重新导入复原当前地图对象。
   - GeoJSON 导出：先输出陆地 grid cell polygon 或 pack cell polygon 的 FeatureCollection，属性包含 height、state、province、culture、religion、biome。
 - 第一刀导入支持：
@@ -142,7 +142,7 @@
 状态：
 
 - 已实现 `webgl-generator-map v1` 完整 JSON 导出/导入，typed arrays 会显式保存并恢复。
-- 已实现 PNG 导出第一刀，当前只导出 WebGL canvas。
+- 已实现 PNG 导出第一刀，并补充地图尺寸摘要和比例尺 overlay 合成；完整图例、标签和浮动面板暂不合成。
 - 已实现 pack cell GeoJSON 第一刀，默认图可输出 `5950` 个 Polygon。
 - 已验证导出旧图、生成新图、再导入旧图后 checksum 和 typed array 构造器恢复。
 
@@ -201,7 +201,7 @@
 
 - 文档计划先单独提交。
 - 阶段 A/B/C 已作为第一批代码实现：外壳、开发模式、比例尺、README、简介 tab。
-- 阶段 D 已作为第二批代码实现：PNG、完整地图 JSON、GeoJSON 和完整 JSON 导入。
+- 阶段 D 已作为第二批代码实现：PNG、完整地图 JSON、GeoJSON 和完整 JSON 导入；PNG 后续已补地图摘要与比例尺合成。
 - 阶段 F 已作为第三批代码实现：春秋古国风国家根名、根族去重和形制收敛。
 - Element Plus 已作为第四批代码接入按需导入与 `UiButton` 样板迁移。
 - 阶段 E 已作为第五批代码实现：灰度高度图导入、采样型高度模板、完整重生成链路和黑白反转映射。

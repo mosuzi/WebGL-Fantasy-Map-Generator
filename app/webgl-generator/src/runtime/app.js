@@ -1075,7 +1075,7 @@ async function exportMapImage(state, documentRef) {
   try {
     assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导出图片...");
-    await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`);
+    await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`, {includeMapOverlays: true});
     setFileOperationStatus(documentRef, "图片已导出。");
   } catch (error) {
     reportFileOperationError(documentRef, "图片导出失败", error);

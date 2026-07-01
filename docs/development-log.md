@@ -12384,3 +12384,26 @@ full 矩阵结果：
 
 - 基础表单组件的按钮、输入、数字输入、筛选、排序、下拉、tab、slider、switch 已完成 Element Plus 适配层迁移；后续若进入 `ElTable / ElTree / ElDialog / ElColorPicker`，应先做懒加载或拆包方案。
 - Switch 增量约 `+1.17KB JS gzip / +0.64KB CSS gzip`，继续记录组件迁移体积。
+
+### PNG 导出 overlay 合成第一刀
+
+背景：
+
+- 本地导入导出第一刀的 PNG 只导出 WebGL canvas，不包含普通用户可见的比例尺和地图尺寸摘要。
+- 当前比例尺和地图 badge 都是稳定 DOM overlay，适合先合成进图片；完整图例、城市/国家标签和浮动面板仍需要更完整的所见即所得策略。
+
+修正：
+
+- `downloadCanvasPng()` 新增 `includeMapOverlays` 选项；正式“导出图片”入口启用该选项。
+- 导出时创建离屏 canvas，先复制 WebGL canvas，再按当前 DOM / canvas 坐标比例绘制右上角 `#map-badge` 和左下角 `#map-scale-bar`。
+- 比例尺合成会重画面板背景、`_|_` 形比例尺线和当前距离文本；地图 badge 合成会重画背景和摘要文本。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `902.02KB JS / 282.53KB gzip`、`137.51KB CSS / 20.44KB gzip`。
+- Playwright + 构建产物静态服务验证通过：点击“导出图片”下载 `fmg-stage-2-1-2a83d85f.png`，文件约 `34068` bytes，PNG 尺寸为 `1440x920`、RGBA；导出前比例尺未隐藏，标签为 `264.6 千米`；下载 PNG 中比例尺白线区域 `800` 个像素里有 `220` 个亮色像素，状态提示为“图片已导出。”，console/page error 为 `0`。
+
+后续：
+
+- 继续合成温度/降水/外交图例、城市/国家标签、资源图标和可选透明背景；浮动控制面板默认不应进入导出图，除非后续增加“导出当前屏幕”模式。

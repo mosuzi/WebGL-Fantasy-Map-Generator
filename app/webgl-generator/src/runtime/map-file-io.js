@@ -113,13 +113,14 @@ export function downloadText(documentRef, text, filename, type = "text/plain;cha
   downloadBlob(documentRef, new Blob([text], {type}), filename);
 }
 
-export function downloadCanvasPng(documentRef, canvas, filename) {
+export function downloadCanvasPng(documentRef, canvas, filename, options = {}) {
   return new Promise((resolve, reject) => {
     if (!canvas?.toBlob) {
       reject(new Error("当前浏览器不支持 canvas 图片导出"));
       return;
     }
-    canvas.toBlob(blob => {
+    const exportCanvas = options.includeMapOverlays ? composeMapExportCanvas(documentRef, canvas) : canvas;
+    exportCanvas.toBlob(blob => {
       if (!blob) {
         reject(new Error("图片导出失败"));
         return;
@@ -181,6 +182,132 @@ function downloadBlob(documentRef, blob, filename) {
   link.click();
   link.remove();
   view.setTimeout(() => view.URL.revokeObjectURL(url), 0);
+}
+
+function composeMapExportCanvas(documentRef, canvas) {
+  const output = documentRef.createElement("canvas");
+  output.width = canvas.width;
+  output.height = canvas.height;
+  const context = output.getContext("2d");
+  if (!context) return canvas;
+  context.drawImage(canvas, 0, 0, output.width, output.height);
+
+  const canvasRect = canvas.getBoundingClientRect();
+  if (!canvasRect.width || !canvasRect.height) return output;
+  const scale = {
+    x: output.width / canvasRect.width,
+    y: output.height / canvasRect.height
+  };
+
+  drawMapBadge(documentRef, context, canvasRect, scale);
+  drawMapScaleBar(documentRef, context, canvasRect, scale);
+  return output;
+}
+
+function drawMapBadge(documentRef, context, canvasRect, scale) {
+  const badge = documentRef.getElementById("map-badge");
+  if (!isVisibleElement(badge)) return;
+  const box = elementBox(badge, canvasRect, scale);
+  if (!box) return;
+  drawPanel(context, box, 6 * scale.x, "rgba(12, 18, 22, 0.8)", "rgba(208, 221, 225, 0.24)");
+  drawText(context, badge.textContent.trim(), box.x + 10 * scale.x, box.y + box.height / 2, {
+    color: "#d7e1e5",
+    fontSize: 12 * scale.y,
+    baseline: "middle",
+    maxWidth: box.width - 20 * scale.x
+  });
+}
+
+function drawMapScaleBar(documentRef, context, canvasRect, scale) {
+  const scaleBar = documentRef.getElementById("map-scale-bar");
+  const line = scaleBar?.querySelector(".map-scale-line");
+  const label = scaleBar?.querySelector(".map-scale-label");
+  if (!isVisibleElement(scaleBar) || !isVisibleElement(line) || !label?.textContent.trim()) return;
+
+  const box = elementBox(scaleBar, canvasRect, scale);
+  const lineBox = elementBox(line, canvasRect, scale);
+  const labelBox = elementBox(label, canvasRect, scale);
+  if (!box || !lineBox || !labelBox) return;
+
+  drawPanel(context, box, 8 * scale.x, "rgba(12, 18, 22, 0.74)", "rgba(208, 221, 225, 0.24)");
+  const lineWidth = Math.max(1, 2 * Math.min(scale.x, scale.y));
+  const bottom = lineBox.y + lineBox.height - lineWidth / 2;
+  const top = lineBox.y + lineWidth / 2;
+  const left = lineBox.x + lineWidth / 2;
+  const right = lineBox.x + lineBox.width - lineWidth / 2;
+  context.save();
+  context.strokeStyle = "#edf4f6";
+  context.lineWidth = lineWidth;
+  context.beginPath();
+  context.moveTo(left, top);
+  context.lineTo(left, bottom);
+  context.lineTo(right, bottom);
+  context.lineTo(right, top);
+  context.stroke();
+  context.restore();
+
+  drawText(context, label.textContent.trim(), labelBox.x, labelBox.y + labelBox.height / 2, {
+    color: "rgba(242, 248, 249, 0.94)",
+    fontSize: 11 * scale.y,
+    fontWeight: 700,
+    baseline: "middle",
+    maxWidth: box.width - 20 * scale.x
+  });
+}
+
+function isVisibleElement(element) {
+  if (!element || element.hidden) return false;
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function elementBox(element, canvasRect, scale) {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  return {
+    x: (rect.left - canvasRect.left) * scale.x,
+    y: (rect.top - canvasRect.top) * scale.y,
+    width: rect.width * scale.x,
+    height: rect.height * scale.y
+  };
+}
+
+function drawPanel(context, box, radius, fillStyle, strokeStyle) {
+  context.save();
+  context.fillStyle = fillStyle;
+  context.strokeStyle = strokeStyle;
+  context.lineWidth = 1;
+  roundedRectPath(context, box.x, box.y, box.width, box.height, radius);
+  context.fill();
+  context.stroke();
+  context.restore();
+}
+
+function drawText(context, text, x, y, options) {
+  if (!text) return;
+  context.save();
+  context.fillStyle = options.color;
+  context.font = `${options.fontWeight || 400} ${Math.max(8, options.fontSize)}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  context.textBaseline = options.baseline || "alphabetic";
+  context.fillText(text, x, y, options.maxWidth);
+  context.restore();
+}
+
+function roundedRectPath(context, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + r, y);
+  context.lineTo(x + width - r, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + r);
+  context.lineTo(x + width, y + height - r);
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  context.lineTo(x + r, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - r);
+  context.lineTo(x, y + r);
+  context.quadraticCurveTo(x, y, x + r, y);
+  context.closePath();
 }
 
 function sanitizeFilename(value) {
