@@ -166,6 +166,8 @@ function editLockControls(documentRef) {
     "#heightmap-template",
     "#climate-latitude-mode",
     "#atmosphere-direction",
+    "#culture-inheritance-mode",
+    "#religion-inheritance-mode",
     "#auto-random-seed",
     "#show-ocean-height",
     "#smooth-cell-borders",
@@ -378,6 +380,8 @@ export function readOptionsFromPanel(documentRef, previousOptions) {
     heightmapTemplate: documentRef.getElementById("heightmap-template").value,
     climateLatitudeMode: documentRef.getElementById("climate-latitude-mode")?.value || previousOptions?.climateLatitudeMode,
     atmosphereDirection: documentRef.getElementById("atmosphere-direction")?.value || previousOptions?.atmosphereDirection,
+    cultureInheritanceMode: documentRef.getElementById("culture-inheritance-mode")?.value || previousOptions?.cultureInheritanceMode,
+    religionInheritanceMode: documentRef.getElementById("religion-inheritance-mode")?.value || previousOptions?.religionInheritanceMode,
     cellsTarget: documentRef.getElementById("cells-input").value,
     graphWidth: documentRef.getElementById("width-input").value,
     graphHeight: documentRef.getElementById("height-input").value
@@ -424,6 +428,8 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "biome 数", Object.keys(map.climate.metadata.biomeCounts).length),
     statRow(documentRef, "河流", `${map.rivers.metadata.rivers} / ${map.rivers.metadata.segments}`),
     statRow(documentRef, "文化/宗教", `${map.society.metadata.cultures} / ${map.society.metadata.religions}`),
+    statRow(documentRef, "文化继承", formatInheritanceStats(map.options.cultureInheritanceMode, map.society.metadata.cultureTree)),
+    statRow(documentRef, "宗教继承", formatInheritanceStats(map.options.religionInheritanceMode, map.society.metadata.religionTree)),
     statRow(documentRef, "国家/省份/区域", `${map.politics.metadata.states} / ${map.politics.metadata.provinces} / ${map.politics.metadata.regions}`),
     statRow(documentRef, "城市/首都/港口", `${map.settlements.metadata.cities} / ${map.settlements.metadata.capitals} / ${map.settlements.metadata.ports}`),
     statRow(documentRef, "道路", `${map.settlements.metadata.routes} / ${map.settlements.metadata.routeSegments}`),
@@ -690,6 +696,15 @@ function formatAtmosphereDirection(climate = {}) {
   const label = metadata.atmosphereLabel || climate.mapCoordinates?.atmosphereLabel || "自动风带";
   const angle = Number.isFinite(metadata.windAngle) ? ` / ${metadata.windAngle}°` : "";
   return `${label}${angle}`;
+}
+
+function formatInheritanceStats(mode, tree = {}) {
+  const labels = {
+    flat: "平铺",
+    regional: "区域浅树",
+    branching: "分支树"
+  };
+  return `${labels[mode] || mode || "分支树"} / 根 ${tree.roots || 0} / 派生 ${tree.derived || 0} / 深 ${tree.maxDepth || 0}`;
 }
 
 function formatLatitude(value) {

@@ -11665,3 +11665,49 @@ full 矩阵结果：
 
 - 当前气候控制是整图生成参数，改动后需要重新生成；还没有“仅重算气候及下游派生”的管理按钮。
 - 后续可以继续补局部季风、海流、雨影强度、温度/降水编辑器，或让资源/贸易系统对气候带有更强的 goods 倾向。
+
+### 文化与宗教继承结构第一刀
+
+背景：
+
+- 用户要求文化和宗教支持选择继承结构，例如文化 A 可以从文化 B 派生，需要有树状参数和可编辑父级。
+
+修正：
+
+- 新增 `generator/inheritance.js` 共享树工具：
+  - 继承模式支持“平铺 / 区域浅树 / 分支树”。
+  - 统一重建 `parent / children / depth / lineage / origins`。
+  - 手动改父级时防止自指和循环。
+- `normalizeOptions()` 新增 `cultureInheritanceMode / religionInheritanceMode`，默认使用“分支树”。
+- 文化生成新增树状父级分配：
+  - “平铺”保持扁平父级。
+  - “区域浅树”和“分支树”会根据文化类型、命名风格、扩张强度和中心距离选择父级。
+  - `society.metadata.cultureTree` 记录根系、派生节点和最大深度。
+- 宗教生成新增树状父级分配：
+  - Folk 宗教优先跟随所属文化的继承关系。
+  - Organized / Cult / Heresy 会优先从本土 Folk 或同文化宗教派生。
+  - `society.metadata.religionTree` 记录根系、派生节点和最大深度。
+- 控制面板“生成”tab 新增“继承结构”区块，包含“文化”和“宗教”两个统一下拉。
+- 运行统计新增“文化继承 / 宗教继承”，显示当前模式、根系数、派生数和最大深度。
+- 文化管理面板新增：
+  - 表格列：父级、层级。
+  - 摘要：根系、派生、层级。
+  - 详情：父级、子级、继承路径。
+  - “继承自”下拉，可手动调整父级。
+- 宗教管理面板同样新增父级、层级、继承路径和“继承自”下拉。
+- 新增 `createSetCultureParentCommand()` 与 `createSetReligionParentCommand()`，父级调整接入 `EditHistory`、运行统计、选中详情和对象面板刷新。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 静态 server + Playwright 构建产物验证通过：
+  - 默认生成数据包含文化树 `{roots: 4, derived: 8, maxDepth: 5}` 和宗教树 `{roots: 4, derived: 14, maxDepth: 6}`。
+  - 文化管理面板出现 `#culture-parent-select`，宗教管理面板出现 `#religion-parent-select`。
+  - 手动把文化 `#3` 父级改为 `#1` 后，数据变为 `parent=1 / depth=2 / lineage=[0,1]`，且 `#1.children` 包含 `#3`。
+  - 手动把宗教 `#3` 父级改为 `#1` 后，数据变为 `parent=1 / depth=2 / lineage=[0,1]`，且 `#1.children` 包含 `#3`。
+  - 运行统计显示“文化继承分支树”和“宗教继承分支树”。
+
+后续：
+
+- 当前继承关系先进入数据、统计和编辑管理，不改变扩张结果。
+- 后续可让文化派生影响名称变体、文化图标预制、同化速度、国家合法性、宗教改革事件和国力计算。

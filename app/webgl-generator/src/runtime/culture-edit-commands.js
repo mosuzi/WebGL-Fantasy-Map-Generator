@@ -1,9 +1,19 @@
+import {canAssignInheritanceParent, setInheritanceParent, summarizeInheritanceTree} from "../generator/inheritance.js";
+
 const CULTURE_COLOR_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["culture-color", "cell-colors", "object-panels"])
+});
+
+const CULTURE_PARENT_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["culture-inheritance", "object-panels"])
 });
 
 export function createSetCultureColorCommand(cultureId, color, {beforeColor = null, label = "文化颜色"} = {}) {
@@ -41,8 +51,49 @@ export function createSetCultureColorCommand(cultureId, color, {beforeColor = nu
   };
 }
 
+export function createSetCultureParentCommand(cultureId, parentId, {beforeParent = null, label = "文化继承"} = {}) {
+  const normalizedCultureId = Number(cultureId);
+  const after = Number(parentId) || 0;
+  let before = beforeParent;
+
+  return {
+    label: `${label} #${normalizedCultureId}`,
+    effects: {
+      ...CULTURE_PARENT_EFFECTS,
+      affected: [{kind: "culture", id: normalizedCultureId}]
+    },
+    apply(context) {
+      const cultures = getCultures(context.map);
+      const culture = cultures?.[normalizedCultureId];
+      if (!culture) throw new Error(`找不到文化 #${normalizedCultureId}`);
+      before ??= Number(culture.parent) || 0;
+      if (!setInheritanceParent(cultures, normalizedCultureId, after)) throw new Error("无法设置文化继承父级");
+      updateCultureTreeMetadata(context.map, cultures);
+    },
+    revert(context) {
+      const cultures = getCultures(context.map);
+      if (!cultures?.[normalizedCultureId]) throw new Error(`找不到文化 #${normalizedCultureId}`);
+      if (!setInheritanceParent(cultures, normalizedCultureId, before || 0)) throw new Error("无法恢复文化继承父级");
+      updateCultureTreeMetadata(context.map, cultures);
+    },
+    isNoop(context) {
+      const cultures = getCultures(context.map);
+      const culture = cultures?.[normalizedCultureId];
+      return !culture || (Number(culture.parent) || 0) === after || !canAssignInheritanceParent(cultures, normalizedCultureId, after);
+    }
+  };
+}
+
 function findCulture(map, cultureId) {
   return map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
+}
+
+function getCultures(map) {
+  return map?.society?.cultures || map?.pack?.cultures || [];
+}
+
+function updateCultureTreeMetadata(map, cultures) {
+  if (map?.society?.metadata) map.society.metadata.cultureTree = summarizeInheritanceTree(cultures);
 }
 
 function normalizeHexColor(color) {

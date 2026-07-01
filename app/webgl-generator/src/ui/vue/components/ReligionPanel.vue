@@ -30,6 +30,14 @@
       :model-value="selected.color"
       @apply="color => callbacks.onColorChange(selected.id, color)"
     />
+    <UiSelectField
+      input-id="religion-parent-select"
+      class-name="religion-parent-select"
+      label="继承自"
+      :model-value="selected.parentId"
+      :options="parentOptions"
+      @update:model-value="parentId => callbacks.onParentChange(selected.id, parentId)"
+    />
   </template>
 
   <UiHistoryActions class-name="religion-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -43,6 +51,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatPopulation} from "../../display-units.js";
@@ -69,6 +78,7 @@ const sortOptions = Object.freeze([
   {key: "cities", label: "城市"},
   {key: "cultures", label: "文化"},
   {key: "states", label: "国家"},
+  {key: "depth", label: "层级"},
   {key: "id", label: "ID"}
 ]);
 
@@ -77,6 +87,8 @@ const columns = Object.freeze([
   {key: "name", label: "名称"},
   {key: "type", label: "类型"},
   {key: "form", label: "形态"},
+  {key: "parentName", label: "父级"},
+  {key: "depth", label: "层", align: "right"},
   {key: "cells", label: "cells", align: "right"},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
 ]);
@@ -85,11 +97,13 @@ const unitPreferences = useUnitPreferences();
 const metrics = computed(() => buildReligionMetrics(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedReligionId) || null);
+const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
 
 const summaryMetrics = computed(() => [
   {label: "宗教", value: metrics.value.total},
-  {label: "筛选", value: visibleRows.value.length},
-  {label: "覆盖 cells", value: metrics.value.cells},
+  {label: "根系", value: metrics.value.roots},
+  {label: "派生", value: metrics.value.derived},
+  {label: "层级", value: metrics.value.maxDepth},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: metrics.value.cities}
 ]);
@@ -97,6 +111,9 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
   {label: "形态", value: selected.value.form},
+  {label: "父级", value: selected.value.parentName},
+  {label: "子级", value: selected.value.childCount},
+  {label: "继承路径", value: selected.value.treePath},
   {label: "扩张范围", value: selected.value.expansion},
   {label: "扩张强度", value: selected.value.expansionism},
   {label: "主神", value: selected.value.deity},
@@ -113,14 +130,18 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 function buildReligionMetrics(map) {
-  const rows = religionRows(map).map(religion => {
+  const baseRows = religionRows(map);
+  const tree = buildTreeFields(baseRows, "根宗教");
+  const rows = baseRows.map(religion => {
     const cities = religionCities(map, religion.id);
     const stateStats = religionStateStats(map, cities);
     const cultureStats = religionCultureStats(map, cities);
     const urban = cities.reduce((sum, city) => sum + (Number(city.population) || 0), 0);
     const rural = Number(religion.rural) || 0;
+    const treeFields = tree.get(religion.id) || {};
     return {
       ...religion,
+      ...treeFields,
       cultureName: indexedName(map?.society?.cultures || map?.pack?.cultures, religion.cultureId),
       rural,
       urban,
@@ -137,6 +158,9 @@ function buildReligionMetrics(map) {
   return {
     rows,
     total: rows.length,
+    roots: rows.filter(row => row.parentId === 0).length,
+    derived: rows.filter(row => row.parentId > 0).length,
+    maxDepth: rows.reduce((max, row) => Math.max(max, row.depth), 0),
     cells: rows.reduce((sum, row) => sum + row.cells, 0),
     population: rows.reduce((sum, row) => sum + row.population, 0),
     cities: rows.reduce((sum, row) => sum + row.cities, 0)
@@ -156,6 +180,9 @@ function religionRows(map) {
       expansionism: Number.isFinite(religion.expansionism) ? religion.expansionism : "none",
       deity: religion.deity || "none",
       cultureId: Number(religion.culture) || 0,
+      parentId: Number(religion.parent) || 0,
+      depth: Number(religion.depth) || 0,
+      children: Array.isArray(religion.children) ? religion.children.filter(Number.isInteger) : [],
       centerCell: religion.center ?? "none",
       gridCenterCell: religion.gridCenter ?? "none",
       cells: Number(religion.cells) || 0,
@@ -174,6 +201,8 @@ function filterRows(rows, filter) {
     || row.rawName.toLowerCase().includes(query)
     || row.type.toLowerCase().includes(query)
     || row.form.toLowerCase().includes(query)
+    || row.parentName.toLowerCase().includes(query)
+    || row.treePath.toLowerCase().includes(query)
     || row.cultureName.toLowerCase().includes(query)
     || row.stateSummary.toLowerCase().includes(query)
     || row.cultureSummary.toLowerCase().includes(query)
@@ -187,6 +216,86 @@ function sortRows(rows, key, direction) {
     if (typeof a[key] === "string") return a[key].localeCompare(b[key], "zh-CN") * factor;
     return a[key] > b[key] ? factor : -factor;
   });
+}
+
+function buildTreeFields(rows, rootLabel) {
+  const names = new Map(rows.map(row => [row.id, row.name]));
+  const parentById = new Map(rows.map(row => [row.id, normalizeParentId(row.parentId, row.id, names)]));
+  const childCounts = new Map(rows.map(row => [row.id, 0]));
+  for (const parentId of parentById.values()) {
+    if (parentId > 0) childCounts.set(parentId, (childCounts.get(parentId) || 0) + 1);
+  }
+
+  return new Map(rows.map(row => {
+    const parentId = parentById.get(row.id) || 0;
+    const treePath = formatTreePath(row.id, parentById, names);
+    return [row.id, {
+      parentId,
+      parentName: parentId ? names.get(parentId) || `#${parentId}` : rootLabel,
+      childCount: childCounts.get(row.id) || 0,
+      depth: Math.max(Number(row.depth) || 0, countAncestors(row.id, parentById)),
+      treePath
+    }];
+  }));
+}
+
+function buildParentOptions(rows, selectedRow, rootLabel) {
+  if (!selectedRow) return [];
+  const descendants = descendantIds(selectedRow.id, rows);
+  return [
+    {value: 0, label: rootLabel},
+    ...rows
+      .filter(row => row.id !== selectedRow.id && !descendants.has(row.id))
+      .sort((a, b) => a.depth - b.depth || a.name.localeCompare(b.name, "zh-CN") || a.id - b.id)
+      .map(row => ({value: row.id, label: `${"  ".repeat(Math.min(row.depth, 4))}${row.name}`}))
+  ];
+}
+
+function descendantIds(id, rows) {
+  const parentById = new Map(rows.map(row => [row.id, row.parentId]));
+  const descendants = new Set();
+  for (const row of rows) {
+    let current = parentById.get(row.id) || 0;
+    const visited = new Set();
+    while (current && !visited.has(current)) {
+      if (current === id) {
+        descendants.add(row.id);
+        break;
+      }
+      visited.add(current);
+      current = parentById.get(current) || 0;
+    }
+  }
+  return descendants;
+}
+
+function normalizeParentId(parentId, itemId, names) {
+  const parsed = Number(parentId) || 0;
+  return parsed && parsed !== itemId && names.has(parsed) ? parsed : 0;
+}
+
+function countAncestors(id, parentById) {
+  let depth = 0;
+  let current = parentById.get(id) || 0;
+  const visited = new Set([id]);
+  while (current && !visited.has(current)) {
+    depth++;
+    visited.add(current);
+    current = parentById.get(current) || 0;
+  }
+  return depth;
+}
+
+function formatTreePath(id, parentById, names) {
+  const path = [names.get(id) || `#${id}`];
+  let current = parentById.get(id) || 0;
+  const visited = new Set([id]);
+  while (current && !visited.has(current)) {
+    path.push(names.get(current) || `#${current}`);
+    visited.add(current);
+    current = parentById.get(current) || 0;
+  }
+  return path.reverse().join(" / ");
 }
 
 function religionCities(map, religionId) {

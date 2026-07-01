@@ -29,6 +29,27 @@
           />
         </div>
       </section>
+      <section class="generation-inheritance-section" aria-labelledby="generation-inheritance-title">
+        <h2 id="generation-inheritance-title">继承结构</h2>
+        <div class="generation-inheritance-grid">
+          <UiSelectField
+            label="文化"
+            input-id="culture-inheritance-mode"
+            class-name="generation-inheritance-select"
+            :model-value="cultureInheritanceMode"
+            :options="inheritanceModeOptions"
+            @update:model-value="cultureInheritanceMode = $event"
+          />
+          <UiSelectField
+            label="宗教"
+            input-id="religion-inheritance-mode"
+            class-name="generation-inheritance-select"
+            :model-value="religionInheritanceMode"
+            :options="inheritanceModeOptions"
+            @update:model-value="religionInheritanceMode = $event"
+          />
+        </div>
+      </section>
       <UiSwitchField label="生成时自动随机 seed" input-id="auto-random-seed" />
 
       <div class="generation-button-row">
@@ -194,6 +215,7 @@ import {
   normalizeUnitPreferences
 } from "../../display-units.js";
 import {ATMOSPHERE_DIRECTION_OPTIONS, CLIMATE_LATITUDE_OPTIONS} from "../../../generator/climate-options.js";
+import {DEFAULT_INHERITANCE_MODE, INHERITANCE_MODE_OPTIONS} from "../../../generator/inheritance.js";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
 defineOptions({
@@ -205,6 +227,8 @@ const {preferences} = storeToRefs(config);
 const activeTab = ref("generation");
 const climateLatitudeMode = ref("auto");
 const atmosphereDirection = ref("auto");
+const cultureInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
+const religionInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
 const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
 const distanceUnitOptions = DISTANCE_UNIT_OPTIONS;
@@ -212,6 +236,7 @@ const areaUnitOptions = AREA_UNIT_OPTIONS;
 const unitScaleLimits = UNIT_SCALE_LIMITS;
 const climateLatitudeOptions = CLIMATE_LATITUDE_OPTIONS;
 const atmosphereDirectionOptions = ATMOSPHERE_DIRECTION_OPTIONS;
+const inheritanceModeOptions = INHERITANCE_MODE_OPTIONS;
 
 const tabs = Object.freeze([
   {id: "generation", label: "生成"},

@@ -1586,7 +1586,8 @@ select:disabled {
   margin-top: 4px;
 }
 
-.generation-climate-section {
+.generation-climate-section,
+.generation-inheritance-section {
   display: grid;
   gap: 8px;
   padding: 10px;
@@ -1595,20 +1596,23 @@ select:disabled {
   background: #10171b;
 }
 
-.generation-climate-section h2 {
+.generation-climate-section h2,
+.generation-inheritance-section h2 {
   margin: 0;
   color: #edf4f6;
   font-size: 12px;
   line-height: 1.2;
 }
 
-.generation-climate-grid {
+.generation-climate-grid,
+.generation-inheritance-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.generation-climate-select {
+.generation-climate-select,
+.generation-inheritance-select {
   grid-template-columns: minmax(0, 1fr);
   gap: 5px;
 }
@@ -2186,7 +2190,7 @@ select:disabled {
 .culture-panel-summary,
 .religion-panel-summary {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
 }
@@ -2229,7 +2233,7 @@ select:disabled {
 .culture-panel-sort,
 .religion-panel-sort {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
   gap: 6px;
   margin-bottom: 8px;
 }
@@ -2296,6 +2300,13 @@ select:disabled {
   display: grid;
   grid-template-columns: 44px 42px minmax(0, 1fr);
   gap: 8px;
+}
+
+.culture-parent-select,
+.religion-parent-select {
+  grid-column: 1 / -1;
+  grid-template-columns: 52px minmax(0, 1fr);
+  margin: 8px 0 10px;
 }
 
 .culture-name-editor label,

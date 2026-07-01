@@ -30,6 +30,14 @@
       :model-value="selected.color"
       @apply="color => callbacks.onColorChange(selected.id, color)"
     />
+    <UiSelectField
+      input-id="culture-parent-select"
+      class-name="culture-parent-select"
+      label="继承自"
+      :model-value="selected.parentId"
+      :options="parentOptions"
+      @update:model-value="parentId => callbacks.onParentChange(selected.id, parentId)"
+    />
   </template>
 
   <UiHistoryActions class-name="culture-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -43,6 +51,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatPopulation} from "../../display-units.js";
@@ -68,6 +77,7 @@ const sortOptions = Object.freeze([
   {key: "population", label: "人口"},
   {key: "cities", label: "城市"},
   {key: "states", label: "国家"},
+  {key: "depth", label: "层级"},
   {key: "id", label: "ID"}
 ]);
 
@@ -75,6 +85,8 @@ const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
   {key: "type", label: "类型"},
+  {key: "parentName", label: "父级"},
+  {key: "depth", label: "层", align: "right"},
   {key: "cells", label: "cells", align: "right"},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)},
   {key: "cities", label: "城市", align: "right"}
@@ -84,11 +96,13 @@ const unitPreferences = useUnitPreferences();
 const metrics = computed(() => buildCultureMetrics(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedCultureId) || null);
+const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根文化"));
 
 const summaryMetrics = computed(() => [
   {label: "文化", value: metrics.value.total},
-  {label: "筛选", value: visibleRows.value.length},
-  {label: "覆盖 cells", value: metrics.value.cells},
+  {label: "根系", value: metrics.value.roots},
+  {label: "派生", value: metrics.value.derived},
+  {label: "层级", value: metrics.value.maxDepth},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: metrics.value.cities}
 ]);
@@ -96,6 +110,9 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "词根", value: selected.value.root},
   {label: "类型", value: selected.value.type},
+  {label: "父级", value: selected.value.parentName},
+  {label: "子级", value: selected.value.childCount},
+  {label: "继承路径", value: selected.value.treePath},
   {label: "命名风格", value: selected.value.nameStyle},
   {label: "扩张", value: selected.value.expansionism},
   {label: "中心 pack cell", value: selected.value.centerCell},
@@ -109,13 +126,17 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 function buildCultureMetrics(map) {
-  const rows = cultureRows(map).map(culture => {
+  const baseRows = cultureRows(map);
+  const tree = buildTreeFields(baseRows, "根文化");
+  const rows = baseRows.map(culture => {
     const cities = cultureCities(map, culture.id);
     const stateStats = cultureStateStats(map, culture.id);
     const urban = cities.reduce((sum, city) => sum + (Number(city.population) || 0), 0);
     const rural = Number(culture.rural) || 0;
+    const treeFields = tree.get(culture.id) || {};
     return {
       ...culture,
+      ...treeFields,
       urban,
       rural,
       population: rural + urban,
@@ -129,6 +150,9 @@ function buildCultureMetrics(map) {
   return {
     rows,
     total: rows.length,
+    roots: rows.filter(row => row.parentId === 0).length,
+    derived: rows.filter(row => row.parentId > 0).length,
+    maxDepth: rows.reduce((max, row) => Math.max(max, row.depth), 0),
     cells: rows.reduce((sum, row) => sum + row.cells, 0),
     population: rows.reduce((sum, row) => sum + row.population, 0),
     cities: rows.reduce((sum, row) => sum + row.cities, 0)
@@ -146,6 +170,9 @@ function cultureRows(map) {
       type: culture.type || "Generic",
       nameStyle: culture.nameStyle || "default",
       expansionism: Number.isFinite(culture.expansionism) ? culture.expansionism : "none",
+      parentId: Number(culture.parent) || 0,
+      depth: Number(culture.depth) || 0,
+      children: Array.isArray(culture.children) ? culture.children.filter(Number.isInteger) : [],
       centerCell: culture.center ?? "none",
       gridCenterCell: culture.gridCenter ?? "none",
       cells: Number(culture.cells) || 0,
@@ -164,8 +191,90 @@ function filterRows(rows, filter) {
     || row.rawName.toLowerCase().includes(query)
     || row.type.toLowerCase().includes(query)
     || row.nameStyle.toLowerCase().includes(query)
+    || row.parentName.toLowerCase().includes(query)
+    || row.treePath.toLowerCase().includes(query)
     || row.stateSummary.toLowerCase().includes(query)
   );
+}
+
+function buildTreeFields(rows, rootLabel) {
+  const names = new Map(rows.map(row => [row.id, row.name]));
+  const parentById = new Map(rows.map(row => [row.id, normalizeParentId(row.parentId, row.id, names)]));
+  const childCounts = new Map(rows.map(row => [row.id, 0]));
+  for (const parentId of parentById.values()) {
+    if (parentId > 0) childCounts.set(parentId, (childCounts.get(parentId) || 0) + 1);
+  }
+
+  return new Map(rows.map(row => {
+    const parentId = parentById.get(row.id) || 0;
+    const treePath = formatTreePath(row.id, parentById, names);
+    return [row.id, {
+      parentId,
+      parentName: parentId ? names.get(parentId) || `#${parentId}` : rootLabel,
+      childCount: childCounts.get(row.id) || 0,
+      depth: Math.max(Number(row.depth) || 0, countAncestors(row.id, parentById)),
+      treePath
+    }];
+  }));
+}
+
+function buildParentOptions(rows, selectedRow, rootLabel) {
+  if (!selectedRow) return [];
+  const descendants = descendantIds(selectedRow.id, rows);
+  return [
+    {value: 0, label: rootLabel},
+    ...rows
+      .filter(row => row.id !== selectedRow.id && !descendants.has(row.id))
+      .sort((a, b) => a.depth - b.depth || a.name.localeCompare(b.name, "zh-CN") || a.id - b.id)
+      .map(row => ({value: row.id, label: `${"  ".repeat(Math.min(row.depth, 4))}${row.name}`}))
+  ];
+}
+
+function descendantIds(id, rows) {
+  const parentById = new Map(rows.map(row => [row.id, row.parentId]));
+  const descendants = new Set();
+  for (const row of rows) {
+    let current = parentById.get(row.id) || 0;
+    const visited = new Set();
+    while (current && !visited.has(current)) {
+      if (current === id) {
+        descendants.add(row.id);
+        break;
+      }
+      visited.add(current);
+      current = parentById.get(current) || 0;
+    }
+  }
+  return descendants;
+}
+
+function normalizeParentId(parentId, itemId, names) {
+  const parsed = Number(parentId) || 0;
+  return parsed && parsed !== itemId && names.has(parsed) ? parsed : 0;
+}
+
+function countAncestors(id, parentById) {
+  let depth = 0;
+  let current = parentById.get(id) || 0;
+  const visited = new Set([id]);
+  while (current && !visited.has(current)) {
+    depth++;
+    visited.add(current);
+    current = parentById.get(current) || 0;
+  }
+  return depth;
+}
+
+function formatTreePath(id, parentById, names) {
+  const path = [names.get(id) || `#${id}`];
+  let current = parentById.get(id) || 0;
+  const visited = new Set([id]);
+  while (current && !visited.has(current)) {
+    path.push(names.get(current) || `#${current}`);
+    visited.add(current);
+    current = parentById.get(current) || 0;
+  }
+  return path.reverse().join(" / ");
 }
 
 function sortRows(rows, key, direction) {

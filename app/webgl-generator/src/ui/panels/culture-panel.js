@@ -32,6 +32,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onLocate: row => callbacks.onLocate?.(cultureObject(row)),
     onRename: (cultureId, name) => callbacks.onRename?.(cultureId, name),
     onColorChange: (cultureId, color) => callbacks.onColorChange?.(cultureId, color),
+    onParentChange: (cultureId, parentId) => callbacks.onParentChange?.(cultureId, parentId),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -94,7 +95,9 @@ function cultureObject(row) {
     cells: row.cells,
     population: roundNumber(row.population),
     cities: row.cities,
-    states: row.states
+    states: row.states,
+    parent: row.parentName,
+    depth: row.depth
   };
 }
 

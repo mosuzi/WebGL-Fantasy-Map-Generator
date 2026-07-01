@@ -24,13 +24,13 @@ import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
 import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
-import {createSetCultureColorCommand} from "./culture-edit-commands.js";
+import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createRenameObjectCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
-import {createSetReligionColorCommand} from "./religion-edit-commands.js";
+import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
@@ -411,6 +411,15 @@ export function createGeneratorApp(documentRef) {
       updateCulturePanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onParentChange: (cultureId, parentId) => {
+      const culture = state.map?.society?.cultures?.[cultureId] || state.map?.pack?.cultures?.[cultureId];
+      const command = createSetCultureParentCommand(cultureId, parentId, {beforeParent: culture?.parent ?? 0});
+      if (!command.isNoop({map: state.map})) {
+        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      }
+      updateCulturePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterEdit(state, command);
@@ -445,6 +454,15 @@ export function createGeneratorApp(documentRef) {
     onColorChange: (religionId, color) => {
       const religion = state.map?.society?.religions?.[religionId] || state.map?.pack?.religions?.[religionId];
       const command = createSetReligionColorCommand(religionId, color, {beforeColor: religion?.color || null});
+      if (!command.isNoop({map: state.map})) {
+        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      }
+      updateReligionPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onParentChange: (religionId, parentId) => {
+      const religion = state.map?.society?.religions?.[religionId] || state.map?.pack?.religions?.[religionId];
+      const command = createSetReligionParentCommand(religionId, parentId, {beforeParent: religion?.parent ?? 0});
       if (!command.isNoop({map: state.map})) {
         refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
       }

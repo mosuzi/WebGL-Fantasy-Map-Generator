@@ -32,6 +32,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     onLocate: row => callbacks.onLocate?.(religionObject(row)),
     onRename: (religionId, name) => callbacks.onRename?.(religionId, name),
     onColorChange: (religionId, color) => callbacks.onColorChange?.(religionId, color),
+    onParentChange: (religionId, parentId) => callbacks.onParentChange?.(religionId, parentId),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -95,7 +96,9 @@ function religionObject(row) {
     cells: row.cells,
     population: roundNumber(row.population),
     cities: row.cities,
-    states: row.states
+    states: row.states,
+    parent: row.parentName,
+    depth: row.depth
   };
 }
 

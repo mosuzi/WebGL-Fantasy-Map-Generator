@@ -5,6 +5,7 @@ import {
   normalizeAtmosphereDirection,
   normalizeClimateLatitudeMode
 } from "./climate-options.js";
+import {DEFAULT_INHERITANCE_MODE, normalizeInheritanceMode} from "./inheritance.js";
 
 export const DEFAULT_OPTIONS = {
   seed: "stage-2-1",
@@ -20,6 +21,8 @@ export const DEFAULT_OPTIONS = {
   culturesSetMax: 32,
   sizeVariety: 4,
   growthRate: 1,
+  cultureInheritanceMode: DEFAULT_INHERITANCE_MODE,
+  religionInheritanceMode: DEFAULT_INHERITANCE_MODE,
   climateLatitudeMode: DEFAULT_CLIMATE_LATITUDE_MODE,
   atmosphereDirection: DEFAULT_ATMOSPHERE_DIRECTION,
   temperatureEquator: 25,
@@ -49,6 +52,8 @@ export function normalizeOptions(input = {}) {
     culturesSetMax: clampInteger(input.culturesSetMax, 1, 100, randomized.culturesSetMax),
     sizeVariety: clampNumber(input.sizeVariety, 0, 10, randomized.sizeVariety),
     growthRate: clampNumber(input.growthRate, 0.1, 10, randomized.growthRate),
+    cultureInheritanceMode: normalizeInheritanceMode(input.cultureInheritanceMode),
+    religionInheritanceMode: normalizeInheritanceMode(input.religionInheritanceMode),
     climateLatitudeMode: normalizeClimateLatitudeMode(input.climateLatitudeMode),
     atmosphereDirection: normalizeAtmosphereDirection(input.atmosphereDirection),
     temperatureEquator: clampInteger(input.temperatureEquator, 20, 35, randomized.temperatureEquator),

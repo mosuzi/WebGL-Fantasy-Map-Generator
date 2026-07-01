@@ -1,5 +1,6 @@
 import {MinPriorityQueue} from "./priority-queue.js";
 import {createStageProfile} from "./profile.js";
+import {normalizeInheritanceMode, rebuildInheritanceTree, summarizeInheritanceTree} from "./inheritance.js";
 
 const CULTURE_ROOTS = ["昭宁", "雁川", "栖梧", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "北辰", "东衡", "西陵", "海澜", "赤原", "沙洲", "霜庭", "松岳", "月湾", "石原", "晴川", "夜渡", "金台", "雨林", "岭南", "北海", "东渚", "朱明", "玄岭", "素川"];
 const RELIGION_ROOTS = ["天衡", "星渚", "青岚", "白麓", "南明", "清河", "玄曜", "苍极", "云章", "赤霄", "静澜", "昭灵"];
@@ -22,8 +23,8 @@ const CULTURE_TYPES = {
 
 export function buildSociety(grid, features, climate, rivers, random, pack, options = {}) {
   const startedAt = performance.now();
-  const cultureResult = pack?.cells?.s ? buildPackCultures(grid, pack, random, options) : buildGridFallbackCultures(grid, features, rivers, random);
-  const religionResult = pack?.cells?.s ? initializePackReligions(grid, pack) : buildGridReligions(grid, features, rivers, random);
+  const cultureResult = pack?.cells?.s ? buildPackCultures(grid, pack, random, options) : buildGridFallbackCultures(grid, features, rivers, random, options);
+  const religionResult = pack?.cells?.s ? initializePackReligions(grid, pack) : buildGridReligions(grid, features, rivers, random, options);
 
   return {
     cultures: cultureResult.cultures,
@@ -33,6 +34,8 @@ export function buildSociety(grid, features, climate, rivers, random, pack, opti
       cultures: cultureResult.count,
       cultureNames: cultureResult.cultures.filter(culture => culture?.i).map(culture => culture.name),
       religionNames: religionResult.religions.filter(religion => religion?.i).map(religion => religion.name),
+      cultureTree: summarizeInheritanceTree(cultureResult.cultures),
+      religionTree: summarizeInheritanceTree(religionResult.religions),
       cultureCenters: cultureResult.centers,
       religionCenters: religionResult.centers,
       culturedPackCells: cultureResult.packCells,
@@ -53,6 +56,7 @@ export function finalizeSocietyReligions(grid, society, pack, random, settlement
   society.religions = result.religions;
   society.metadata.religions = result.count;
   society.metadata.religionNames = result.religions.filter(religion => religion?.i).map(religion => religion.name);
+  society.metadata.religionTree = summarizeInheritanceTree(result.religions);
   society.metadata.religionCenters = result.centers;
   society.metadata.religionPackCells = result.packCells;
   society.metadata.religionGridCells = result.gridCells;
@@ -74,6 +78,7 @@ function buildPackCultures(grid, pack, random, options) {
     cells.culture = cultureIds;
     grid.cells.culture = new Array(grid.points.length).fill(0);
     pack.cultures = [createWildlandsCulture()];
+    rebuildInheritanceTree(pack.cultures);
     return {cultures: pack.cultures, centers: [], packCells: 0, gridCells: 0, timing: profile.finish()};
   }
 
@@ -126,6 +131,7 @@ function buildPackCultures(grid, pack, random, options) {
   }
   cells.culture = cultureIds;
   profile.stage("summarize", "汇总文化覆盖", () => summarizeCultureCoverage(pack, cultures));
+  profile.stage("inheritance", "构建文化继承树", () => applyCultureInheritance(cultures, pack, random, options));
   const gridCells = profile.stage("mirror-grid", "同步文化到 grid", () => mirrorPackCultureToGrid(grid, pack));
   pack.cultures = cultures;
 
@@ -139,7 +145,7 @@ function buildPackCultures(grid, pack, random, options) {
   };
 }
 
-function buildGridFallbackCultures(grid, features, rivers, random) {
+function buildGridFallbackCultures(grid, features, rivers, random, options) {
   const landCells = grid.points
     .map((point, cell) => ({cell, height: grid.cells.h[cell], biome: grid.cells.biome[cell]}))
     .filter(item => isLandFeature(features, grid, item.cell));
@@ -164,6 +170,7 @@ function buildGridFallbackCultures(grid, features, rivers, random) {
     cultureGridCost(grid, riverCells, from, to, cultureCenters[owner].cell)
   );
   grid.cells.culture = expanded.map(value => value + 1);
+  applyCultureInheritance(cultures, null, random, options);
 
   return {
     cultures,
@@ -177,11 +184,12 @@ function buildGridFallbackCultures(grid, features, rivers, random) {
 function initializePackReligions(grid, pack) {
   pack.cells.religion = new Uint16Array(pack.cells.i.length);
   pack.religions = [createNoReligion()];
+  rebuildInheritanceTree(pack.religions);
   grid.cells.religion = new Array(grid.points.length).fill(0);
   return {religions: pack.religions, count: 0, centers: [], packCells: 0, gridCells: 0};
 }
 
-function buildGridReligions(grid, features, rivers, random) {
+function buildGridReligions(grid, features, rivers, random, options) {
   const riverCells = new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells));
   const religionCells = getGridReligionCells(grid, features);
   const religionCenters = pickGridCenters(religionCells, random, Math.min(RELIGION_ROOTS.length, 6), grid);
@@ -205,6 +213,7 @@ function buildGridReligions(grid, features, rivers, random) {
     religionCost(grid, riverCells, from, to, religionCenters[owner].cell)
   );
   grid.cells.religion = expanded.map((value, cell) => (isLandFeature(features, grid, cell) && religionCenters[value] ? value + 1 : 0));
+  applyReligionInheritance(religions, {cultures: []}, null, random, options);
 
   return {
     religions,
@@ -220,6 +229,7 @@ function buildPackReligions(grid, pack, society, random, settlements, options) {
   const folkReligions = createFolkReligions(pack, society, random);
   const organizedReligions = createOrganizedReligions(pack, society, random, Math.max(0, Math.floor(options.religionsNumber ?? 6)));
   const religions = combinePackReligions([...folkReligions, ...organizedReligions]);
+  applyReligionInheritance(religions, society, pack, random, options);
   const religionIds = expandPackReligions(pack, religions);
 
   cells.religion = religionIds;
@@ -236,6 +246,116 @@ function buildPackReligions(grid, pack, society, random, settlements, options) {
     packCells: countPositive(religionIds),
     gridCells
   };
+}
+
+function applyCultureInheritance(cultures, pack, random, options = {}) {
+  const mode = normalizeInheritanceMode(options?.cultureInheritanceMode);
+  for (const culture of cultures || []) {
+    if (!culture) continue;
+    culture.parent = Number.isInteger(culture.parent) ? culture.parent : 0;
+  }
+
+  if (mode !== "flat") {
+    const rootsChance = mode === "regional" ? 0.52 : 0.28;
+    const previous = [];
+    for (const culture of (cultures || []).filter(item => item?.i && !item.removed).sort((a, b) => a.i - b.i)) {
+      if (!previous.length || random.next() < rootsChance) culture.parent = 0;
+      else culture.parent = pickCultureParent(culture, previous, pack, random, mode);
+      previous.push(culture);
+    }
+  } else {
+    for (const culture of cultures || []) if (culture?.i) culture.parent = 0;
+  }
+
+  rebuildInheritanceTree(cultures);
+}
+
+function pickCultureParent(culture, previous, pack, random, mode) {
+  const scored = previous
+    .map(parent => ({
+      parent,
+      score: cultureParentScore(culture, parent, pack)
+    }))
+    .sort((a, b) => a.score - b.score);
+  const limit = Math.min(scored.length, mode === "regional" ? 2 : 4);
+  return scored[Math.floor(random.next() * limit)]?.parent?.i || 0;
+}
+
+function cultureParentScore(culture, parent, pack) {
+  let score = 0;
+  if (culture.type !== parent.type) score += 70;
+  if (culture.nameStyle !== parent.nameStyle) score += 24;
+  score += Math.abs((Number(culture.expansionism) || 0) - (Number(parent.expansionism) || 0)) * 12;
+
+  const culturePoint = packCellPoint(pack, culture.center);
+  const parentPoint = packCellPoint(pack, parent.center);
+  if (culturePoint && parentPoint) score += distance(culturePoint, parentPoint) / 12;
+  return score;
+}
+
+function applyReligionInheritance(religions, society, pack, random, options = {}) {
+  const mode = normalizeInheritanceMode(options?.religionInheritanceMode);
+  for (const religion of religions || []) {
+    if (!religion) continue;
+    religion.parent = Number.isInteger(religion.parent) ? religion.parent : 0;
+  }
+
+  if (mode === "flat") {
+    for (const religion of religions || []) if (religion?.i) religion.parent = 0;
+    rebuildInheritanceTree(religions);
+    return;
+  }
+
+  const folkByCulture = new Map(
+    (religions || []).filter(religion => religion?.i && religion.type === "Folk" && !religion.removed).map(religion => [Number(religion.culture) || 0, religion.i])
+  );
+  const previous = [];
+
+  for (const religion of (religions || []).filter(item => item?.i && !item.removed).sort((a, b) => a.i - b.i)) {
+    const cultureId = Number(religion.culture) || 0;
+    if (religion.type === "Folk") {
+      const culture = society?.cultures?.[cultureId];
+      const parentCultureId = Number(culture?.parent) || 0;
+      religion.parent = parentCultureId && folkByCulture.has(parentCultureId) ? folkByCulture.get(parentCultureId) : 0;
+    } else {
+      religion.parent = pickReligionParent(religion, previous, folkByCulture, pack, random, mode);
+    }
+    previous.push(religion);
+  }
+
+  rebuildInheritanceTree(religions);
+}
+
+function pickReligionParent(religion, previous, folkByCulture, pack, random, mode) {
+  const localFolk = folkByCulture.get(Number(religion.culture) || 0) || 0;
+  if (localFolk && (religion.type === "Cult" || religion.type === "Heresy" || random.next() < 0.55)) return localFolk;
+
+  const scored = previous
+    .filter(parent => parent.type !== "Folk" || mode === "branching")
+    .map(parent => ({
+      parent,
+      score: religionParentScore(religion, parent, pack)
+    }))
+    .sort((a, b) => a.score - b.score);
+  const limit = Math.min(scored.length, mode === "regional" ? 2 : 4);
+  return scored[Math.floor(random.next() * limit)]?.parent?.i || localFolk || 0;
+}
+
+function religionParentScore(religion, parent, pack) {
+  let score = 0;
+  if (religion.culture !== parent.culture) score += 60;
+  if (religion.type !== parent.type) score += parent.type === "Folk" ? 18 : 32;
+  if (religion.form !== parent.form) score += 12;
+  score += Math.abs((Number(religion.expansionism) || 0) - (Number(parent.expansionism) || 0)) * 8;
+
+  const religionPoint = packCellPoint(pack, religion.center);
+  const parentPoint = packCellPoint(pack, parent.center);
+  if (religionPoint && parentPoint) score += distance(religionPoint, parentPoint) / 14;
+  return score;
+}
+
+function packCellPoint(pack, cell) {
+  return Number.isInteger(cell) ? pack?.cells?.p?.[cell] || null : null;
 }
 
 function createFolkReligions(pack, society, random) {
@@ -531,7 +651,23 @@ function pick(values, random) {
 }
 
 function createNoReligion() {
-  return {id: 0, i: 0, name: "No religion", type: "None", culture: 0, center: 0, cells: 0, area: 0, rural: 0, urban: 0};
+  return {
+    id: 0,
+    i: 0,
+    name: "No religion",
+    type: "None",
+    culture: 0,
+    center: 0,
+    parent: null,
+    children: [],
+    depth: 0,
+    lineage: [],
+    origins: [null],
+    cells: 0,
+    area: 0,
+    rural: 0,
+    urban: 0
+  };
 }
 
 function createReligionCode(name, index) {
@@ -1019,6 +1155,10 @@ function createWildlandsCulture() {
     root: "荒野",
     type: "Wildlands",
     expansionism: 0,
+    parent: null,
+    children: [],
+    depth: 0,
+    lineage: [],
     origins: [null],
     cells: 0,
     area: 0,
