@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {createBuiltinNamebaseDocument, importNamebaseDocument, parseNamebaseDocument} from "../generator/namebase-store.js";
+import {createNamebaseDocument, importNamebaseDocument, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -1327,10 +1327,10 @@ function exportNotesSummary(state, documentRef, rows = []) {
 
 function exportNamebases(state, documentRef) {
   try {
-    const payload = createBuiltinNamebaseDocument(state.map);
+    const payload = createNamebaseDocument(state.map);
     const filename = state.map ? `${mapFileBaseName(state.map)}.namebases.json` : "webgl-generator-namebases.json";
     downloadText(documentRef, JSON.stringify(payload, null, 2), filename, "application/json;charset=utf-8");
-    setFileOperationStatus(documentRef, `名称库已导出，共 ${payload.metadata.bases} 个词池。`);
+    setFileOperationStatus(documentRef, `名称库已导出，共 ${payload.metadata.bases} 个词池，用户库 ${payload.metadata.user} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导出失败", error);
   }

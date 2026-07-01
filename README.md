@@ -15,7 +15,7 @@
 - Vue 浮动面板：控制面板、高度编辑、国家编辑、省份管理、城市管理、文化管理、宗教管理、外交管理、路线管理、河流管理、资源标记、标签管理、备注总览和名称库总览。
 - 局部编辑与撤销/重做：高度、国家归属、省份归属、对象命名、颜色、首都、城市人口、城市/marker 视觉、国家/省份/文化/宗教/城市/河流/路线/marker/标签备注、备注总览删除、标签和外交关系等。
 - 管理 tab 中的受约束重新生成：国家、省份、城镇、道路、河流、资源点和外交。
-- 本地文件能力第一刀：导出 PNG 图片、导出完整地图 JSON、导出 pack cell GeoJSON、导出城市/路线/河流/标记/区域/国家/省份要素 GeoJSON，并可选择要素 GeoJSON 图层；GeoJSON 导出会写入 collection 与 feature 级 `bbox`；国家/省份政治面当前为非 dissolve 的 MultiPolygon cell 集合；可从完整地图 JSON 重新导入复原当前地图；国家、省份、文化、宗教、城市、河流、路线、marker、标签备注和导入名称库会随完整地图 JSON 导出，备注总览可导出轻量备注摘要 JSON，名称库总览可导出内置名称库 JSON 并导入为用户库，城市、路线、河流、marker、国家和省份备注也会写入要素 GeoJSON 属性；PNG 会合成 WebGL 画布、地图尺寸摘要和比例尺。
+- 本地文件能力第一刀：导出 PNG 图片、导出完整地图 JSON、导出 pack cell GeoJSON、导出城市/路线/河流/标记/区域/国家/省份要素 GeoJSON，并可选择要素 GeoJSON 图层；GeoJSON 导出会写入 collection 与 feature 级 `bbox`；国家/省份政治面当前为非 dissolve 的 MultiPolygon cell 集合；可从完整地图 JSON 重新导入复原当前地图；国家、省份、文化、宗教、城市、河流、路线、marker、标签备注和导入名称库会随完整地图 JSON 导出，备注总览可导出轻量备注摘要 JSON，名称库总览可导出当前内置库与用户库并导入为用户库，城市、路线、河流、marker、国家和省份备注也会写入要素 GeoJSON 属性；PNG 会合成 WebGL 画布、地图尺寸摘要和比例尺。
 - 灰度高度图导入：读取本地灰度图，按亮度映射到用户指定高度区间，支持黑白反转，并走完整地图派生重算链路。
 - 开发模式：通过 `?debug=1` 或 `window.__webglGeneratorDebug.enabled = true` 打开，用于查看生成耗时、WebGL 统计、picking 统计和内部状态。
 

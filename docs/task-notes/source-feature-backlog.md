@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 测量工具：直尺、曲线尺、路线尺、面积尺 | `source/Fantasy-Map-Generator/public/modules/ui/measurers.js`，`Ruler / Opisometer / RouteOpisometer / Planimeter` | 已完成临时折线测距、闭合多边形面积和测量 JSON 导出第一刀；尚未支持路线贴合、保存测量对象和编辑节点。 | 中等 | 下一步补节点拖拽、路线贴合和保存测量对象。 |
 | 对象注记 | `source/Fantasy-Map-Generator/public/modules/ui/notes-editor.js`，`editNotes` | 数据契约和分阶段入口已落到 `docs/task-notes/object-notes-implementation-plan.md`；marker、city、river、route、state、province、culture、religion 与 label 纯文本备注第一刀已完成，独立备注总览和备注摘要导出已完成，尚未做富文本、备注独立导入和孤儿备注批量清理。 | 中等 | 下一步可补备注独立导入、孤儿备注批量操作；富文本编辑器和 AI 辅助暂缓。 |
-| 名称库编辑器 | `source/Fantasy-Map-Generator/src/controllers/namesbase-editor.ts` | 当前有中文命名策略、标签管理、只读名称库总览、内置名称库 JSON 导出和名称库 JSON 导入保存；用户仍不能编辑、删除、调整权重或做文化绑定；实现计划已落到 `docs/task-notes/namebase-editor-plan.md`。 | 中等 | 下一步先做用户库编辑/删除和导入覆盖/追加策略，再做生成绑定。 |
+| 名称库编辑器 | `source/Fantasy-Map-Generator/src/controllers/namesbase-editor.ts` | 当前有中文命名策略、标签管理、只读名称库总览、当前名称库 JSON 导出和名称库 JSON 导入保存；用户仍不能编辑、删除、调整权重或做文化绑定；实现计划已落到 `docs/task-notes/namebase-editor-plan.md`。 | 中等 | 下一步先做用户库编辑/删除和导入覆盖/追加策略，再做生成绑定。 |
 | 分层 GeoJSON 导出 | `source/Fantasy-Map-Generator/public/modules/io/export.js`，`saveGeoJsonRoutes / Rivers / Markers / Zones` | 已完成城市、路线、河流、marker 和 zone 要素 GeoJSON 第一刀，并支持 city / route / river / marker / zone 分层选择；尚缺国家/省份/区域 dissolve、范围选择和更完整属性映射。 | 中等 | 下一步补国家/省份 dissolve 或范围选择；SVG、瓦片 zip 暂缓。 |
 
 ## 先落文档

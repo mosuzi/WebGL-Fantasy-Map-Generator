@@ -3,8 +3,8 @@ import {getBuiltinNamebaseSummaries, summarizeNamebaseSource} from "./names.js";
 export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
 export const NAMEBASE_DOCUMENT_VERSION = 1;
 
-export function createBuiltinNamebaseDocument(map = null) {
-  const bases = getBuiltinNamebaseSummaries({includeSource: true}).map(row => ({
+export function createNamebaseDocument(map = null, {includeUser = true} = {}) {
+  const builtinBases = getBuiltinNamebaseSummaries({includeSource: true}).map(row => ({
     id: row.id,
     name: row.name,
     kind: row.kind,
@@ -18,6 +18,8 @@ export function createBuiltinNamebaseDocument(map = null) {
     note: row.note,
     source: row.source || []
   }));
+  const userBases = includeUser ? (map?.namebases?.bases || []).map(base => namebaseExportRecord(base)).filter(Boolean) : [];
+  const bases = [...builtinBases, ...userBases];
   return {
     type: NAMEBASE_DOCUMENT_TYPE,
     version: NAMEBASE_DOCUMENT_VERSION,
@@ -27,10 +29,15 @@ export function createBuiltinNamebaseDocument(map = null) {
       checksum: map?.metadata?.checksum || "",
       bases: bases.length,
       samples: bases.reduce((sum, base) => sum + base.samples, 0),
-      builtin: true
+      builtin: builtinBases.length,
+      user: userBases.length
     },
     bases
   };
+}
+
+export function createBuiltinNamebaseDocument(map = null) {
+  return createNamebaseDocument(map, {includeUser: false});
 }
 
 export function parseNamebaseDocument(text) {
@@ -117,6 +124,29 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
     origin: "导入",
     importedAt,
     importedFrom: filename || ""
+  };
+}
+
+function namebaseExportRecord(base) {
+  const summary = summarizeNamebaseSource(base, {includeSource: true});
+  if (!summary.source?.length) return null;
+  return {
+    id: summary.id,
+    sourceId: base.sourceId || "",
+    name: summary.name,
+    kind: summary.kind,
+    category: summary.category,
+    builtin: false,
+    origin: base.origin || "导入",
+    samples: summary.samples,
+    uniqueSamples: summary.uniqueSamples,
+    duplicateSamples: summary.duplicateSamples,
+    minLength: summary.minLength,
+    maxLength: summary.maxLength,
+    note: summary.note,
+    importedAt: base.importedAt || "",
+    importedFrom: base.importedFrom || "",
+    source: summary.source
   };
 }
 

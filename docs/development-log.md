@@ -13073,3 +13073,25 @@ full 矩阵结果：
 后续：
 
 - 继续做用户库编辑/删除前，应先补清理导入库和覆盖/追加模式；生成绑定仍需等 `state-family` 去重和古国形制规则接入设计完成。
+
+### 名称库当前库导出
+
+背景：
+
+- 名称库导入后，用户库已经能进入 `map.namebases.bases` 并随完整地图 JSON 保存。
+- 但“导出名称库”仍只导出内置库，会导致用户库无法通过名称库文件单独迁移。
+
+修正：
+
+- `generator/namebase-store.js` 新增 `createNamebaseDocument(map)`，导出内置库和当前 `map.namebases.bases` 中的用户库；保留 `createBuiltinNamebaseDocument(map)` 作为只导内置库的 helper。
+- 名称库导出 metadata 现在写入 `builtin / user` 数量，运行时状态文案显示用户库数量。
+
+验证：
+
+- Node 直接验证：内置名称库导出仍为 `61` 个词池、用户库 `0`；导入 61 个用户库后，当前库导出为 `122` 个词池，其中内置 `61`、用户 `61`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `974.97KB JS / 300.68KB gzip`、`150.81KB CSS / 22.40KB gzip`。
+- Playwright + 构建产物静态服务验证通过：初始点击“导出名称库”得到 `bases = 61 / builtin = 61 / user = 0`；把该文件导入后再次导出得到 `bases = 122 / builtin = 61 / user = 61`，导出文件中 `!builtin` 记录为 `61` 个，首个用户库 id 为 `imported-ancient-state-roots`，状态为“名称库已导出，共 122 个词池，用户库 61 个。”，console/page error 为 `0`。
+
+后续：
+
+- 下一步可做用户库删除/清理和导入覆盖/追加模式；用户库真正影响生成仍需单独设计。
