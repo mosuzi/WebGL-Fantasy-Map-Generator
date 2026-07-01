@@ -12335,3 +12335,27 @@ full 矩阵结果：
 
 - 后续自动化验证控制面板 tab 时应优先使用 `role=tab` 或 `[data-control-tab]`，不要再假设 tab 是 button。
 - Tabs 增量约 `+6.45KB JS gzip / +1.89KB CSS gzip`，继续记录组件迁移体积。
+
+### Element Plus 迁移第五刀：滑动条组件
+
+背景：
+
+- 灰度高度图、气候、单位倍率、标签数量和对象编辑半径/宽度都依赖 `UiSliderField`。
+- 旧 runtime 仍会按 DOM id 读取部分 range 的 `.value`，因此不能直接删除原生 input。
+
+修正：
+
+- `UiSliderField` 改为 `ElSlider` 视觉层，所有现有调用 API 保持不变。
+- 保留隐藏原生 `input[type=range]` 桥：Element Slider 输入后同步隐藏 range，并派发 `input/change`；外部脚本写隐藏 range 后也能反向更新组件状态。
+- 增加 `.ui-slider-*` 暗色样式，统一滑轨、进度条和滑块视觉，并覆盖旧字段里的 `input { width: 100%; }` 规则，避免隐藏 range 露出。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `894.48KB JS / 280.29KB gzip`、`133.04KB CSS / 19.80KB gzip`。
+- Playwright + 构建产物静态服务验证通过：控制面板中 `.ui-slider-el` 数量为 `14`，隐藏 `input.ui-slider-native[type=range]` 数量为 `14`，可见原生 range 数量为 `0`；点击灰度最低高度滑轨后 `#heightmap-import-min.value` 与 output 同步为 `61`；点击单位页人口倍率滑轨后隐藏值为 `3.6`，显示为 `3.6x`，console/page error 为 `0`。
+
+后续：
+
+- `UiSwitchField` 仍未迁移；它包含普通 checkbox 和 layer button 两种语义，迁移前需要决定是否把 layer button 保持为按钮式开关，还是改成 Element Switch。
+- Slider 增量约 `+5.21KB JS gzip / +0.73KB CSS gzip`，继续记录组件迁移体积。
