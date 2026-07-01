@@ -12581,3 +12581,19 @@ full 矩阵结果：
 后续：
 
 - 补 city、river、route 的同类入口，再考虑 state、province、culture、religion、label 和独立备注总览。
+
+### marker 备注接入要素 GeoJSON
+
+背景：
+
+- marker 备注已经保存在完整地图 JSON 中；如果用户导出标准地理数据，也应能把资源点或标记说明带出去。
+
+修正：
+
+- `createMapFeatureGeoJson()` 的 marker properties 新增 `hasNote` 和 `note`。
+- `map-file-io.js` 复用 `readObjectNote()`，只对存在正文的 marker 标记 `hasNote: true`。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `931.18KB JS / 291.03KB gzip`、`147.10KB CSS / 21.88KB gzip`。
+- Playwright + 构建产物静态服务验证通过：给 marker `#2` 写入“GeoJSON 备注检查：这里有珍贵矿脉。”后导出 `fmg-stage-2-1-f6cfb182.features.geojson`，对应 `marker-2` 的 properties 中 `hasNote = true`，`note` 正文一致，带备注 marker 数为 `1`，console/page error 为 `0`。

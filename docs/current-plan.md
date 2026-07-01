@@ -755,6 +755,7 @@ http://127.0.0.1:5410
 130. zone 要素 GeoJSON 已接入：`createMapFeatureGeoJson()` 在路线、河流、marker 之外追加区域 `MultiPolygon`，每个 zone 以自身 pack cells 的 cell polygon 集合表达，并带 `layer=zone`、id、name、type、hidden、cells 和 color 属性；坐标投影也补充了无效点过滤。构建产物验证中下载 `fmg-stage-2-1-68c7df07.features.geojson`，大小约 `353KB`，FeatureCollection 共 `819` 个要素，其中 route `602`、river `164`、marker `44`、zone `9`，geometry 为 `766` 个 LineString、`44` 个 Point 和 `9` 个 MultiPolygon，状态提示正确，console/page error 为 `0`。
 131. 对象注记已完成 source 对照和实现计划：`docs/task-notes/object-notes-implementation-plan.md` 记录了原版 `notes[] / editNotes()` 行为、WebGL 版 `map.notes` 数据契约、`${kind}:${objectId}` id 规则、EditHistory 命令入口、共享 `UiNoteField` 方案、专用面板分批接入顺序和验收建议。由于国家、城市、河流等已有专用面板，不能只在 ObjectDetailsPanel 里塞 textarea，后续实现应先做运行时 helper 和 marker/city/river/route 第一批入口。
 132. marker 备注第一刀已完成：新增 `map.notes` 数据 helper、`UiNoteField`、`createSetMarkerNoteCommand()`，并在资源与标记管理面板的二级操作中加入“编辑备注”。备注使用 `${kind}:${objectId}` id 保存到完整地图数据中，支持 EditHistory 撤销/重做；第一阶段只做纯文本，不引入富文本或 AI。构建产物验证中给首个 marker 写入“第一条 marker 备注：矿脉附近有旧道路。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（23字）”；撤销后 notes 为 `0`，重做后恢复为 `1`；导出的完整地图 JSON `fmg-stage-2-1-e575f0b1.webgl-map.json` 中保留该备注，console/page error 为 `0`。
+133. marker 备注已接入要素 GeoJSON：`markerFeatures()` 会读取 `map.notes`，在 marker properties 中输出 `hasNote` 和 `note` 字段。构建产物验证中给 marker `#2` 写入“GeoJSON 备注检查：这里有珍贵矿脉。”后导出 `fmg-stage-2-1-f6cfb182.features.geojson`，该 marker feature 为 `marker-2`，`hasNote = true`，`note` 正文一致，带备注 marker 数为 `1`，console/page error 为 `0`。
 
 ## 约束
 

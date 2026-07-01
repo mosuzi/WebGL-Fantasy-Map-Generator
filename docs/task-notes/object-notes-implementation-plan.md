@@ -81,4 +81,5 @@
 
 - marker 备注第一刀已完成：资源与标记管理面板新增二级“编辑备注”，支持纯文本写入、清空、撤销和重做。
 - 完整地图 JSON 导出已验证包含 `map.notes`。
+- marker 要素 GeoJSON 已写入 `hasNote` 和 `note` 属性。
 - 尚未接入 city、river、route、state、province、culture、religion、label，也尚未做独立备注总览。

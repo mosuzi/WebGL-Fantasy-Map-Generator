@@ -1,3 +1,5 @@
+import {readObjectNote} from "./object-notes.js";
+
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 1;
 
@@ -257,6 +259,7 @@ function markerFeatures(map) {
   return (map.markers?.markers || []).map(marker => {
     const coordinate = projectWorldPoint([marker.x, marker.y], map);
     if (!coordinate) return null;
+    const note = readObjectNote(map, {kind: "marker", id: marker.id});
     return {
       type: "Feature",
       id: `marker-${marker.id}`,
@@ -274,7 +277,9 @@ function markerFeatures(map) {
         state: marker.data?.state || 0,
         province: marker.data?.province || 0,
         cell: marker.cell ?? -1,
-        packCell: marker.packCell ?? -1
+        packCell: marker.packCell ?? -1,
+        hasNote: Boolean(note?.body),
+        note: note?.body || ""
       },
       geometry: {
         type: "Point",
