@@ -87,7 +87,8 @@ export function createGeneratorApp(documentRef) {
     measurement: {
       active: false,
       points: [],
-      pointer: null
+      pointer: null,
+      drag: null
     },
     lastEditRefresh: null,
     selectionStore: null,
@@ -2034,10 +2035,14 @@ function bindMeasurementTool(canvas, state, documentRef) {
   const exportButton = documentRef.getElementById("measurement-export");
   toggle?.addEventListener("click", () => {
     state.measurement.active = !state.measurement.active;
-    if (!state.measurement.active) state.measurement.pointer = null;
+    if (!state.measurement.active) {
+      state.measurement.pointer = null;
+      cancelMeasurementDrag(state, documentRef);
+    }
     updateMeasurementOverlay(state, documentRef);
   });
   clear?.addEventListener("click", () => {
+    cancelMeasurementDrag(state, documentRef);
     state.measurement.points = [];
     updateMeasurementOverlay(state, documentRef);
   });
@@ -2125,12 +2130,14 @@ function updateMeasurementOverlay(state, documentRef) {
     polyline.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
     svg.append(polyline);
   }
-  for (const point of screenPoints) {
+  for (const [index, point] of screenPoints.entries()) {
     const circle = documentRef.createElementNS("http://www.w3.org/2000/svg", "circle");
-    circle.setAttribute("class", "measurement-point");
+    circle.setAttribute("class", measurementPointClass(state, index));
+    circle.dataset.measurementPoint = String(index);
     circle.setAttribute("cx", roundMeasurementDisplay(point.x));
     circle.setAttribute("cy", roundMeasurementDisplay(point.y));
     circle.setAttribute("r", "4.5");
+    circle.addEventListener("pointerdown", event => startMeasurementPointDrag(event, state, documentRef, index));
     svg.append(circle);
   }
 
@@ -2175,6 +2182,60 @@ function exportMeasurement(state, documentRef) {
     points
   };
   downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.measurement.json`, "application/json;charset=utf-8");
+}
+
+function startMeasurementPointDrag(event, state, documentRef, index) {
+  if (!state.measurement.active || !state.map || !state.renderer) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const view = documentRef.defaultView || window;
+  const drag = {
+    pointerId: event.pointerId,
+    index,
+    move: moveEvent => {
+      if (moveEvent.pointerId !== drag.pointerId) return;
+      moveEvent.preventDefault();
+      moveEvent.stopPropagation();
+      moveMeasurementPoint(state, moveEvent);
+      updateMeasurementOverlay(state, documentRef);
+    },
+    end: endEvent => {
+      if (endEvent.pointerId !== drag.pointerId) return;
+      endEvent.preventDefault();
+      endEvent.stopPropagation();
+      cancelMeasurementDrag(state, documentRef);
+      updateMeasurementOverlay(state, documentRef);
+    }
+  };
+  state.measurement.drag = drag;
+  moveMeasurementPoint(state, event);
+  view.addEventListener("pointermove", drag.move, true);
+  view.addEventListener("pointerup", drag.end, true);
+  view.addEventListener("pointercancel", drag.end, true);
+  updateMeasurementOverlay(state, documentRef);
+}
+
+function moveMeasurementPoint(state, event) {
+  const drag = state.measurement.drag;
+  const point = state.measurement.points?.[drag?.index];
+  if (!point || !state.map || !state.renderer) return;
+  const world = state.renderer.screenToWorld(event.clientX, event.clientY);
+  point.x = clampMeasurementValue(world.x, 0, state.map.metadata.graphWidth);
+  point.y = clampMeasurementValue(world.y, 0, state.map.metadata.graphHeight);
+}
+
+function cancelMeasurementDrag(state, documentRef) {
+  const drag = state.measurement.drag;
+  if (!drag) return;
+  const view = documentRef.defaultView || window;
+  view.removeEventListener("pointermove", drag.move, true);
+  view.removeEventListener("pointerup", drag.end, true);
+  view.removeEventListener("pointercancel", drag.end, true);
+  state.measurement.drag = null;
+}
+
+function measurementPointClass(state, index) {
+  return state.measurement.drag?.index === index ? "measurement-point dragging" : "measurement-point";
 }
 
 function measurementDistance(points) {

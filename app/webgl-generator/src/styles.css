@@ -518,8 +518,16 @@ select:disabled {
 
 .measurement-point {
   fill: #111a20;
+  cursor: grab;
+  pointer-events: all;
   stroke: #ffe0a1;
   stroke-width: 2;
+}
+
+.measurement-point.dragging {
+  cursor: grabbing;
+  fill: #2b2415;
+  stroke: #ffd37c;
 }
 
 .measurement-readout {

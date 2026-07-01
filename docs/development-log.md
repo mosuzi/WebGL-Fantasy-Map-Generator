@@ -13608,3 +13608,26 @@ full 矩阵结果：
 后续：
 
 - 如果后续要展示文件拖拽、进度、文件列表或校验详情，再评估 `ElUpload`；在当前单文件本地导入阶段继续保持轻量按钮触发模式。
+
+### 测量工具节点拖拽第一刀
+
+背景：
+
+- 原版测量工具支持更完整的测量对象编辑；当前 WebGL 版已经有折线距离、面积和测量 JSON 导出，但测量点不能调整。
+- 节点拖拽是低风险增强，不需要改 WebGL 地图数据或生成流程，只需要在测量 overlay 中移动临时点。
+
+修正：
+
+- `state.measurement` 新增 `drag` 状态，记录当前拖动的点索引和事件处理器。
+- SVG 测量点添加 `pointerdown` 处理，拖动时通过 `renderer.screenToWorld()` 把屏幕坐标反算到地图坐标，并 clamp 到图幅范围内。
+- 拖动期间实时刷新测量 polygon、polyline、点位和读数；松开、取消、清空或退出测量都会移除窗口级 pointer 监听并清空 drag 状态。
+- CSS 为 `.measurement-point` 增加 pointer-events、grab/grabbing 光标和拖动高亮。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `532.87KB / 160.51KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：开启测量后添加两点，拖动第一个点后坐标移动约 `141.3` 地图单位，读数从 `657.2 千米` 更新为 `318.8 千米`；拖动中 `.measurement-point.dragging = 1`、`dragIndex = 0`，松开后 drag 为 `null`；点击清除后点数和 SVG 点为 `0`，清除/导出按钮禁用，console/page error 为 `0`。
+
+后续：
+
+- 测量工具下一步可继续做节点删除、插入、保存测量对象和路线贴合；路线贴合需要先设计与道路/河流/海路图的关系，复杂度高于单纯拖拽。
