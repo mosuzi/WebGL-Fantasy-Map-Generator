@@ -153,7 +153,7 @@ export class PlaceholderMapRenderer {
     this.locateFlash = null;
     this.locateFlashFrame = 0;
     this.colorMode = "height";
-    this.viewOptions = {showOceanHeight: false, smoothCellBorders: true};
+    this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, diplomacySubjectId: null};
     this.labelOptions = {maxCityLabels: 5000};
     this.layerVisibility = {
       routes: true,
@@ -238,6 +238,15 @@ export class PlaceholderMapRenderer {
     if (this.colorMode === mode) return;
     this.colorMode = mode;
     if (!this.map) return;
+    this.refreshCellSurface({draw: false});
+    this.draw();
+  }
+
+  setDiplomacySubjectId(stateId) {
+    const nextId = normalizePositiveId(stateId);
+    if (this.viewOptions.diplomacySubjectId === nextId) return;
+    this.viewOptions = {...this.viewOptions, diplomacySubjectId: nextId};
+    if (!this.map || this.colorMode !== "diplomacy") return;
     this.refreshCellSurface({draw: false});
     this.draw();
   }
@@ -1816,6 +1825,12 @@ function normalizeMaxCityLabels(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(8, Math.min(5000, Math.round(number)));
+}
+
+function normalizePositiveId(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) return null;
+  return number;
 }
 
 function smoothStep(edge0, edge1, value) {

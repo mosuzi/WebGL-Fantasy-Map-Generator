@@ -5,7 +5,7 @@ const DIPLOMACY_EFFECTS = Object.freeze({
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
-  derived: Object.freeze(["diplomacy", "object-panels"])
+  derived: Object.freeze(["diplomacy", "cell-colors", "object-panels"])
 });
 
 export function createSetDiplomacyRelationCommand(subjectId, objectId, relation, {label = "外交关系"} = {}) {

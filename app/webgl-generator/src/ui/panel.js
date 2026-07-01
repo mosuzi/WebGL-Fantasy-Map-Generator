@@ -1,5 +1,6 @@
 import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
+import {DIPLOMACY_RELATIONS} from "../generator/diplomacy.js";
 import {
   formatDistance as formatDisplayDistance,
   formatPopulation as formatDisplayPopulation,
@@ -402,7 +403,7 @@ export function updateRuntimePanel(documentRef, state) {
   syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
   documentRef.getElementById("map-badge").textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)} / ${map.metadata.cellsTarget} cells`;
-  updateMapLegend(documentRef, map, stats.colorMode);
+  updateMapLegend(documentRef, map, stats);
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
     statRow(documentRef, "生成耗时", formatGenerationTiming(map.metadata.generationTiming)),
@@ -495,10 +496,11 @@ function formatCityLabelLimit(map, stats) {
   return String(cityTotal ? Math.min(configured, cityTotal) : configured);
 }
 
-function updateMapLegend(documentRef, map, colorMode) {
+function updateMapLegend(documentRef, map, stats) {
   const legend = documentRef.getElementById("map-legend");
   if (!legend) return;
   const unitPreferences = readControlPreferences(documentRef).units;
+  const colorMode = stats.colorMode;
 
   if (colorMode === "temperature") {
     legend.hidden = false;
@@ -521,6 +523,17 @@ function updateMapLegend(documentRef, map, colorMode) {
         formatDisplayPrecipitation(50, unitPreferences),
         formatDisplayPrecipitation(map.climate.metadata.precipitationMax, unitPreferences)
       )
+    );
+    return;
+  }
+
+  if (colorMode === "diplomacy") {
+    const subjectId = Number(stats.viewOptions?.diplomacySubjectId) || firstDiplomacyStateId(map);
+    const subject = map.politics.states?.[subjectId];
+    legend.hidden = false;
+    legend.replaceChildren(
+      legendTitle(documentRef, `外交：${subject?.fullName || subject?.name || "未选主体"}`),
+      diplomacyLegendList(documentRef)
     );
     return;
   }
@@ -551,6 +564,30 @@ function legendTicks(documentRef, min, mid, max) {
     ticks.append(item);
   }
   return ticks;
+}
+
+function diplomacyLegendList(documentRef) {
+  const list = documentRef.createElement("div");
+  list.className = "legend-list diplomacy";
+  list.append(legendSwatch(documentRef, "#ffbf42", "主体"));
+  for (const key of ["Ally", "Friendly", "Neutral", "Suspicion", "Rival", "Enemy", "Vassal", "Suzerain", "Unknown"]) {
+    const relation = DIPLOMACY_RELATIONS[key];
+    list.append(legendSwatch(documentRef, relation.color, relation.label));
+  }
+  return list;
+}
+
+function legendSwatch(documentRef, color, label) {
+  const item = documentRef.createElement("span");
+  item.className = "legend-swatch-item";
+  const swatch = documentRef.createElement("i");
+  swatch.style.background = color;
+  item.append(swatch, documentRef.createTextNode(label));
+  return item;
+}
+
+function firstDiplomacyStateId(map) {
+  return (map?.politics?.states || []).find(state => state?.i && !state.removed)?.i || 0;
 }
 
 export function updatePickPanel(documentRef, state) {

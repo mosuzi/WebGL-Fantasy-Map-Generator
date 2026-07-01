@@ -1,4 +1,5 @@
 import {mix} from "./geometry.js";
+import {diplomacyRelationColor} from "../generator/diplomacy.js";
 
 export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
@@ -9,6 +10,7 @@ export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode === "biomes") return colorForBiome(map.grid.cells.biome[cellIndex], map);
   if (colorMode === "cultures") return colorForCulture(map.grid.cells.culture[cellIndex], map);
   if (colorMode === "religions") return colorForReligion(map.grid.cells.religion[cellIndex], map);
+  if (colorMode === "diplomacy") return colorForDiplomacy(map.grid.cells.state[cellIndex], map, viewOptions);
   if (colorMode === "states") return colorForState(map.grid.cells.state[cellIndex], map);
   if (colorMode === "provinces") return colorForProvince(map.grid.cells.province[cellIndex], map);
   if (colorMode === "regions") return indexedColorOrWater(map.grid.cells.region[cellIndex], 0.77, map.layers.ocean);
@@ -55,6 +57,22 @@ export function colorForState(stateId, map) {
   if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
   if (!stateId) return [0.58, 0.6, 0.58, 1];
   return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
+}
+
+function colorForDiplomacy(stateId, map, viewOptions = {}) {
+  if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  if (!stateId) return [0.46, 0.48, 0.46, 1];
+  const subjectId = diplomacySubjectId(map, viewOptions.diplomacySubjectId);
+  if (!subjectId || stateId === subjectId) return [1, 0.78, 0.28, 1];
+  const subject = map.politics.states[subjectId] || map.pack?.states?.[subjectId];
+  const relation = subject?.diplomacy?.[stateId] || "Unknown";
+  return hexToRgba(diplomacyRelationColor(relation)) || [0.62, 0.65, 0.66, 1];
+}
+
+function diplomacySubjectId(map, preferredId) {
+  const preferred = Number(preferredId);
+  if (Number.isInteger(preferred) && preferred > 0 && map.politics.states[preferred] && !map.politics.states[preferred].removed) return preferred;
+  return (map.politics.states || []).find(state => state?.i && !state.removed)?.i || 0;
 }
 
 function colorForCulture(cultureId, map) {

@@ -14,7 +14,36 @@
   </div>
 
   <div class="diplomacy-edit-toolbar">
+    <UiButton id="diplomacy-show-theme" variant="secondary" @click="callbacks.onShowTheme?.(selectedSubjectId)">外交着色</UiButton>
+    <UiButton id="diplomacy-export-csv" variant="secondary" @click="exportCsv">导出 CSV</UiButton>
+    <UiButton id="diplomacy-export-json" variant="secondary" @click="exportJson">导出 JSON</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRegenerate?.()">重生成外交</UiButton>
+  </div>
+
+  <div class="diplomacy-matrix-wrap">
+    <table id="diplomacy-matrix-table" class="diplomacy-matrix-table">
+      <thead>
+        <tr>
+          <th>国家</th>
+          <th v-for="stateRow in matrix.states" :key="stateRow.id" :title="stateRow.name">#{{ stateRow.id }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="row in matrix.rows" :key="row.id">
+          <th :title="row.name">{{ row.shortName }}</th>
+          <td
+            v-for="cell in row.cells"
+            :key="`${row.id}:${cell.id}`"
+            :class="{selected: row.id === selectedSubjectId && cell.id === state.selectedObjectId, self: cell.self}"
+            :style="{backgroundColor: cell.color, color: cell.textColor}"
+            :title="cell.title"
+            @click="!cell.self && callbacks.onMatrixCell?.(row.id, cell.id)"
+          >
+            {{ cell.shortLabel }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 
   <UiSortBar class-name="diplomacy-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -91,11 +120,18 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
-const metrics = computed(() => buildDiplomacyMetrics(props.state.map, props.state.selectedStateId));
+const metrics = computed(() => {
+  props.state.version;
+  return buildDiplomacyMetrics(props.state.map, props.state.selectedStateId);
+});
 const stateOptions = computed(() => metrics.value.states.map(state => ({value: state.id, label: state.name})));
 const selectedSubjectId = computed(() => props.state.selectedStateId ?? stateOptions.value[0]?.value ?? null);
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedObjectId) || visibleRows.value[0] || null);
+const matrix = computed(() => {
+  props.state.version;
+  return buildDiplomacyMatrix(props.state.map);
+});
 
 const summaryMetrics = computed(() => [
   {label: "主体", value: metrics.value.subjectName},
@@ -167,6 +203,33 @@ function buildDiplomacyMetrics(map, selectedStateId) {
   };
 }
 
+function buildDiplomacyMatrix(map) {
+  const states = stateRows(map);
+  return {
+    states,
+    rows: states.map(subject => ({
+      id: subject.id,
+      name: subject.name,
+      shortName: shortName(subject.name),
+      cells: states.map(object => {
+        const self = subject.id === object.id;
+        const relation = self ? "Self" : normalizeRelation(subject.state.diplomacy?.[object.id]);
+        const label = self ? "本国" : relationLabel(relation);
+        return {
+          id: object.id,
+          relation,
+          label,
+          shortLabel: self ? "本" : label.slice(0, 2),
+          self,
+          color: self ? "#ffbf42" : DIPLOMACY_RELATIONS[relation]?.color || "#9ca3a8",
+          textColor: relationTextColor(relation),
+          title: `${subject.name} -> ${object.name}: ${label}`
+        };
+      })
+    }))
+  };
+}
+
 function stateRows(map) {
   return (map?.politics?.states || map?.pack?.states || [])
     .filter(state => state?.i && !state.removed)
@@ -208,6 +271,11 @@ function relationLabel(relation) {
   return DIPLOMACY_RELATIONS[relation]?.label || relation;
 }
 
+function relationTextColor(relation) {
+  if (relation === "Enemy" || relation === "Rival" || relation === "Suzerain" || relation === "Unknown") return "#f7fbff";
+  return "#102026";
+}
+
 function relationWeight(relation) {
   const order = {Ally: 1, Friendly: 2, Suzerain: 3, Vassal: 4, Neutral: 5, Suspicion: 6, Rival: 7, Enemy: 8, Unknown: 9};
   return order[relation] || 10;
@@ -228,5 +296,63 @@ function formatAreaValue(value) {
 
 function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
+}
+
+function exportCsv() {
+  const seed = props.state.map?.metadata?.seed || "map";
+  downloadText(`fmg-diplomacy-${safeFilePart(seed)}.csv`, matrixToCsv(matrix.value), "text/csv;charset=utf-8");
+}
+
+function exportJson() {
+  const map = props.state.map;
+  const seed = map?.metadata?.seed || "map";
+  const payload = {
+    seed,
+    metadata: map?.diplomacy?.metadata || {},
+    states: matrix.value.states.map(state => ({id: state.id, name: state.name})),
+    relations: matrix.value.rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      relations: row.cells.filter(cell => !cell.self).map(cell => ({
+        state: cell.id,
+        relation: cell.relation,
+        label: cell.label
+      }))
+    }))
+  };
+  downloadText(`fmg-diplomacy-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function matrixToCsv(matrixValue) {
+  const header = ["国家", ...matrixValue.states.map(state => `#${state.id} ${state.name}`)];
+  const rows = matrixValue.rows.map(row => [row.name, ...row.cells.map(cell => cell.label)]);
+  return [header, ...rows].map(values => values.map(csvEscape).join(",")).join("\r\n");
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll("\"", "\"\"")}"` : text;
+}
+
+function downloadText(filename, text, type) {
+  const blob = new Blob([text], {type});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.style.display = "none";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function safeFilePart(value) {
+  return String(value).replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "map";
+}
+
+function shortName(name) {
+  const chars = Array.from(name || "");
+  return chars.length > 5 ? `${chars.slice(0, 5).join("")}...` : chars.join("");
 }
 </script>

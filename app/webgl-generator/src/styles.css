@@ -384,6 +384,29 @@ select:disabled {
   color: rgba(223, 233, 237, 0.88);
 }
 
+.legend-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 10px;
+}
+
+.legend-swatch-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #cbd7dc;
+  font-size: 11px;
+}
+
+.legend-swatch-item i {
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
 .map-overlay {
   position: absolute;
   inset: 0;
@@ -2254,9 +2277,72 @@ select:disabled {
 
 .diplomacy-edit-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 8px;
+}
+
+.diplomacy-matrix-wrap {
+  max-height: 230px;
+  overflow: auto;
+  margin-bottom: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 6px;
+}
+
+.diplomacy-matrix-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.diplomacy-matrix-table th,
+.diplomacy-matrix-table td {
+  min-width: 46px;
+  height: 28px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  padding: 0 6px;
+  color: #102026;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.diplomacy-matrix-table thead th,
+.diplomacy-matrix-table tbody th {
+  position: sticky;
+  z-index: 1;
+  background: #121b20;
+  color: #d8e3e8;
+}
+
+.diplomacy-matrix-table thead th {
+  top: 0;
+}
+
+.diplomacy-matrix-table tbody th {
+  left: 0;
+  max-width: 96px;
+  text-align: left;
+}
+
+.diplomacy-matrix-table thead th:first-child {
+  left: 0;
+  z-index: 2;
+}
+
+.diplomacy-matrix-table td {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.diplomacy-matrix-table td.self {
+  cursor: default;
+}
+
+.diplomacy-matrix-table td.selected {
+  outline: 2px solid #ffe282;
+  outline-offset: -2px;
 }
 
 .culture-panel-sort,

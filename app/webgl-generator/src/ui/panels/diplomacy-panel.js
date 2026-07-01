@@ -12,12 +12,14 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     sortKey: "relation",
     sortDir: "asc",
     selectedStateId: null,
-    selectedObjectId: null
+    selectedObjectId: null,
+    version: 0
   });
   const panelCallbacks = {
     onSubjectChange: stateId => {
       panelState.selectedStateId = stateId;
       if (!stateExists(panelState.map, panelState.selectedObjectId, stateId)) panelState.selectedObjectId = firstOtherStateId(panelState.map, stateId);
+      callbacks.onSubjectChange?.(stateId);
     },
     onFilter: value => {
       panelState.filter = value;
@@ -34,12 +36,18 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedObjectId = row.id;
       callbacks.onSelect?.(stateObject(row));
     },
+    onMatrixCell: (subjectId, objectId) => {
+      panelState.selectedStateId = subjectId;
+      panelState.selectedObjectId = objectId;
+      callbacks.onSubjectChange?.(subjectId);
+    },
     onLocate: row => {
       panelState.selectedObjectId = row.id;
       callbacks.onLocate?.(stateObject(row));
     },
     onRelationChange: (subjectId, objectId, relation) => callbacks.onRelationChange?.(subjectId, objectId, relation),
     onRegenerate: () => callbacks.onRegenerate?.(),
+    onShowTheme: stateId => callbacks.onShowTheme?.(stateId),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -48,8 +56,8 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     title: "外交管理",
     left: 548,
     top: 116,
-    width: 660,
-    maxWidth: 820,
+    width: 780,
+    maxWidth: 980,
     onClose: () => {
       panelState.open = false;
     }
@@ -69,6 +77,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       if (selection?.object?.kind === "state" && stateExists(map, selection.object.id)) panelState.selectedStateId = selection.object.id;
       if (!stateExists(map, panelState.selectedStateId)) panelState.selectedStateId = firstStateId(map);
       if (!stateExists(map, panelState.selectedObjectId, panelState.selectedStateId)) panelState.selectedObjectId = firstOtherStateId(map, panelState.selectedStateId);
+      panelState.version++;
       panelState.open = true;
       manager.open("diplomacy-panel");
     },
@@ -78,6 +87,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       if (!stateExists(map, panelState.selectedStateId)) panelState.selectedStateId = firstStateId(map);
       if (!stateExists(map, panelState.selectedObjectId, panelState.selectedStateId)) panelState.selectedObjectId = firstOtherStateId(map, panelState.selectedStateId);
+      panelState.version++;
     },
     setSelectedStateId(stateId) {
       if (!stateExists(panelState.map, stateId)) return;

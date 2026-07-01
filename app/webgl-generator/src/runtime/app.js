@@ -485,6 +485,11 @@ export function createGeneratorApp(documentRef) {
   });
   state.panels.religion = religionPanel;
   diplomacyPanel = createDiplomacyPanel(documentRef, panelManager, {
+    onSubjectChange: stateId => {
+      if (state.renderer.getStats().colorMode === "diplomacy") {
+        setDiplomacyThemeSubject(state, documentRef, stateId);
+      }
+    },
     onSelect: object => {
       selectionStore.setSelection({object});
     },
@@ -515,6 +520,9 @@ export function createGeneratorApp(documentRef) {
       updateStatePanel(state);
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
+    },
+    onShowTheme: stateId => {
+      setDiplomacyThemeSubject(state, documentRef, stateId);
     },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
@@ -883,6 +891,11 @@ export function createGeneratorApp(documentRef) {
       updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
     },
     onMode: mode => {
+      if (mode === "diplomacy") {
+        const subjectId = state.selection?.object?.kind === OBJECT_KIND.STATE ? state.selection.object.id : firstDiplomacyStateId(state.map);
+        state.panels.diplomacy?.setSelectedStateId?.(subjectId);
+        renderer.setDiplomacySubjectId?.(subjectId);
+      }
       renderer.setColorMode(mode);
       updateRuntimePanel(documentRef, state);
     }
@@ -903,6 +916,27 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
   for (const [layer, visible] of Object.entries(layers)) {
     renderer.setLayerVisible(layer, visible);
   }
+}
+
+function setDiplomacyThemeSubject(state, documentRef, stateId) {
+  const subjectId = normalizedDiplomacyStateId(state.map, stateId) || firstDiplomacyStateId(state.map);
+  if (!subjectId) return;
+  state.panels.diplomacy?.setSelectedStateId?.(subjectId);
+  state.renderer.setDiplomacySubjectId?.(subjectId);
+  state.renderer.setColorMode("diplomacy");
+  setActiveModeButton(documentRef, "diplomacy");
+  updateRuntimePanel(documentRef, state);
+}
+
+function normalizedDiplomacyStateId(map, stateId) {
+  const id = Number(stateId);
+  if (!Number.isInteger(id) || id <= 0) return 0;
+  const state = map?.politics?.states?.[id] || map?.pack?.states?.[id];
+  return state?.i && !state.removed ? id : 0;
+}
+
+function firstDiplomacyStateId(map) {
+  return (map?.politics?.states || map?.pack?.states || []).find(stateItem => stateItem?.i && !stateItem.removed)?.i || 0;
 }
 
 function normalizeLayerVisibilityPreferences(layers = {}) {

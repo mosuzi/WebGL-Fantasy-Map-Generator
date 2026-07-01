@@ -25,7 +25,7 @@
 - 单位与比例尺显示第一刀已完成：控制面板“视图”tab 新增距离单位、面积单位、`1 cm` 地图比例尺、人口倍率和降水倍率；距离支持“米/千米/m/km”，面积支持“平方米/平方公里/m²/km²”，比例尺限制在 `1-1000 km/cm`，人口倍率限制在 `0.1-10x`，降水倍率限制在 `0.1-5x`。主要运行统计、降水图例、悬停人口/降水、路线/河流长度、国家/省份/文化/宗教面积与人口、城市人口和对象详情已按同一显示偏好换算；内部生成数据暂不改写。
 - 生成级气候系统第一刀已完成：控制面板“生成”tab 新增“纬度”和“大气”下拉，纬度支持自动、赤道带、南北亚热/温/寒带，大气方向支持自动风带和八个主风向；选择后重新生成会改变 `mapCoordinates`、温度、降水、河流 flux / 数量，并通过 biome / suitability / population 间接影响城镇、文化、国家、省份、资源点和经济派生。运行统计已显示气候纬度范围和大气方向。
 - 文化/宗教继承结构第一刀已完成：控制面板“生成”tab 新增“文化继承 / 宗教继承”树状参数，支持“平铺 / 区域浅树 / 分支树”；生成数据写入 `parent / children / depth / lineage / origins`，文化管理和宗教管理面板可查看父级、层级、继承路径并手动调整父级，调整会进入撤销栈并防止自环。
-- 外交系统第一刀已完成：参考原版 `States.generateDiplomacy()` 和 `diplomacy-editor`，新增 `Ally / Friendly / Neutral / Suspicion / Rival / Enemy / Vassal / Suzerain / Unknown` 关系矩阵；关系生成会读取国家邻接、文化/宗教继承、国力、资源竞争和海洋国家差异。国家对象写入 `diplomacy / diplomacySummary / campaigns`，`map.diplomacy.metadata` 统计关系、战争、附庸和历史；管理 tab 新增“外交管理”，支持主体国家选择、关系列表、手动改关系、重生成外交和撤销/重做。
+- 外交系统第一刀已完成：参考原版 `States.generateDiplomacy()` 和 `diplomacy-editor`，新增 `Ally / Friendly / Neutral / Suspicion / Rival / Enemy / Vassal / Suzerain / Unknown` 关系矩阵；关系生成会读取国家邻接、文化/宗教继承、国力、资源竞争和海洋国家差异。国家对象写入 `diplomacy / diplomacySummary / campaigns`，`map.diplomacy.metadata` 统计关系、战争、附庸和历史；管理 tab 新增“外交管理”，支持主体国家选择、关系列表、手动改关系、重生成外交和撤销/重做；第二刀已补外交专题着色、关系矩阵表、矩阵点击选中关系以及 CSV/JSON 导出。
 - Vercel 部署配置已补齐：根目录新增 `vercel.json`，显式使用 `pnpm install --frozen-lockfile`、`pnpm run build:app` 和 `dist/webgl-generator`；`package.json` 补充 `dev / build / preview` 常规脚本和 Vite 8 所需 Node engine；部署说明见 `docs/deployment/vercel.md`。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
 - source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
@@ -48,7 +48,7 @@
 4. 单位系统当前是显示层换算；后续导出、比例尺标尺绘制、编辑器输入字段和正式人口/降水口径如果要跟随倍率，需要单独接入，避免误把显示倍率写回生成数据。
 5. 气候系统当前是整图生成参数；后续可继续做更细粒度的海流/季风、局部雨影强度、温度/降水编辑器和“仅重算气候及下游派生”的管理入口。
 6. 文化/宗教继承结构目前只影响数据、统计和手动管理；后续可以让派生关系参与名称变体、图标预制、宗教改革事件、文化同化速度、国家合法性和国力计算。
-7. 外交系统当前已生成关系、附庸、战争历史和管理面板，但战争尚未驱动军事行动、外交没有专题着色视图，也没有导出矩阵；后续可继续做外交专题色、关系矩阵导出、战争事件和军事/经济制裁联动。
+7. 外交系统当前已生成关系、附庸、战争历史、管理面板、专题着色、关系矩阵和 CSV/JSON 导出；战争尚未驱动军事行动或地图事件，后续可继续做战争事件、军事行动、经济制裁和贸易偏好联动。
 8. 再下一步可以继续补文化预制图标包和批量应用入口，或进入资源点到 goods/market/deals 的正式贸易链路。
 
 ## 2026-06-18 计划复位

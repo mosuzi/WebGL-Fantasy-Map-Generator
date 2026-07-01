@@ -11802,3 +11802,55 @@ full 矩阵结果：
 
 - 首次在 Vercel 控制台导入时，Root Directory 应保持仓库根目录。
 - 当前未执行 `vercel deploy`，需要用户登录 Vercel 或通过 GitHub 集成触发部署。
+
+### 外交专题色与关系矩阵
+
+背景：
+
+- 用户确认线上部署只是预先体验地址，不需要先做线上烟测。
+- 本轮继续推进外交系统补色和矩阵，目标是让外交数据能在地图上检查，也能按原版外交编辑器思路导出关系表。
+
+修正：
+
+- 控制面板“视图”tab 新增“外交”专题。
+- 渲染器新增 `diplomacy` color mode：
+  - 外交专题按“主体国家 -> 目标国家”的关系给国家面域着色。
+  - 主体国家使用金色；盟友、友好、中立、猜疑、宿敌、战争、附庸、宗主和未知使用外交关系定义中的颜色。
+  - 外交专题 picking 仍命中国家对象。
+- 渲染器新增 `setDiplomacySubjectId()`：
+  - 外交管理面板切换主体时，如果当前正在查看外交专题，会即时重绘关系色。
+  - 从控制面板直接切到“外交”专题时，优先使用当前选中国家，否则使用第一个有效国家。
+- 地图图例新增外交模式：
+  - 显示当前主体国家。
+  - 显示主体、盟友、友好、中立、猜疑、宿敌、战争、附庸、宗主、未知的色块。
+- 外交管理面板新增：
+  - “外交着色”按钮：以当前主体国家切换地图到外交专题。
+  - 关系矩阵表：行列均为国家，单元格显示关系简称。
+  - 点击矩阵格会切换主体和对象，并同步下面的关系下拉。
+  - 导出 CSV。
+  - 导出 JSON。
+- 外交关系编辑命令的派生影响新增 `cell-colors`，所以在外交专题中手动改关系、撤销、重做和重生成外交都会刷新地图颜色。
+- 外交面板新增 `version` 计数，解决 `markRaw(map)` 下深层外交数组变化不会触发矩阵 computed 重新计算的问题。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/color-modes.js`
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js`
+- `node --check app/webgl-generator/src/runtime/app.js`
+- `node --check app/webgl-generator/src/ui/panels/diplomacy-panel.js`
+- `node --check app/webgl-generator/src/ui/panel.js`
+- `node --check app/webgl-generator/src/runtime/diplomacy-edit-commands.js`
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 静态 server + Playwright 构建产物验证通过：
+  - 外交矩阵为 `20 x 20`，关系对数 `190`。
+  - 点击“外交着色”后 renderer `colorMode = diplomacy`，主体为 `#1`，图例显示“外交：清河王朝”。
+  - 点击矩阵中的 `#1 -> #2` 后，主体为 `#1`、对象为 `#2`，关系下拉显示 `Friendly`。
+  - 将关系改为 `Enemy` 后，正反向关系均为 `Enemy`，矩阵选中格文本同步刷新为“战争”。
+  - CSV 下载文件名为 `fmg-diplomacy-stage-2-1.csv`。
+  - JSON 下载文件名为 `fmg-diplomacy-stage-2-1.json`。
+  - 浏览器 console error 为 `0`。
+
+后续：
+
+- 外交矩阵当前用于查看、选中、编辑和导出；尚未做矩阵内直接批量编辑。
+- 战争关系仍只记录在外交关系和历史中，尚未驱动军事行动、战争事件、经济制裁或贸易偏好。
