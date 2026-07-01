@@ -109,6 +109,7 @@ export function createMapGeoJson(map) {
 export function createMapFeatureGeoJson(map) {
   if (!map) throw new Error("当前没有可导出的地图");
   const features = [
+    ...cityFeatures(map),
     ...routeFeatures(map),
     ...riverFeatures(map),
     ...markerFeatures(map),
@@ -120,10 +121,11 @@ export function createMapFeatureGeoJson(map) {
     name: map.metadata?.seed ? `fmg-${map.metadata.seed}-features` : "fmg-webgl-map-features",
     properties: {
       source: "fmg-webgl-reimplementation",
-      layerSet: "routes-rivers-markers-zones",
+      layerSet: "cities-routes-rivers-markers-zones",
       seed: map.metadata?.seed || "",
       checksum: map.metadata?.checksum || "",
       generatedAt: map.metadata?.generatedAt || "",
+      cities: map.settlements?.cities?.length || 0,
       routes: map.settlements?.routes?.length || 0,
       rivers: map.rivers?.rivers?.length || 0,
       markers: map.markers?.markers?.length || 0,
@@ -197,6 +199,51 @@ function projectWorldPoint(point, map) {
   const lon = lonW + (x / width) * (lonE - lonW);
   const lat = latN + (y / height) * (latS - latN);
   return [roundCoordinate(lon), roundCoordinate(lat)];
+}
+
+function cityFeatures(map) {
+  return (map.settlements?.cities || []).map(city => {
+    const burg = findCityBurg(map, city);
+    const coordinate = projectWorldPoint([city.x ?? burg?.x, city.y ?? burg?.y], map);
+    if (!coordinate) return null;
+    const note = readObjectNote(map, {kind: "city", id: city.id});
+    const stateId = Number(city.state ?? burg?.state) || 0;
+    const provinceId = Number(city.province ?? burg?.province) || 0;
+    const cultureId = Number(city.culture ?? burg?.culture) || 0;
+    const religionId = Number(city.religion ?? burg?.religion) || 0;
+    return {
+      type: "Feature",
+      id: `city-${city.id}`,
+      properties: {
+        layer: "city",
+        id: city.id,
+        burg: city.burgId ?? burg?.i ?? -1,
+        name: city.name || burg?.name || "",
+        type: city.type || burg?.type || "",
+        group: city.group || burg?.group || "",
+        population: city.population ?? burg?.population ?? 0,
+        capital: Boolean(city.capital || burg?.capital),
+        provincial: Boolean(city.provincial),
+        port: Boolean(city.port || burg?.port),
+        state: stateId,
+        stateName: map.politics?.states?.[stateId]?.name || "",
+        province: provinceId,
+        provinceName: map.politics?.provinces?.[provinceId]?.name || "",
+        culture: cultureId,
+        cultureName: map.society?.cultures?.[cultureId]?.name || "",
+        religion: religionId,
+        religionName: map.society?.religions?.[religionId]?.name || "",
+        cell: city.cell ?? -1,
+        packCell: city.packCell ?? burg?.cell ?? -1,
+        hasNote: Boolean(note?.body),
+        note: note?.body || ""
+      },
+      geometry: {
+        type: "Point",
+        coordinates: coordinate
+      }
+    };
+  }).filter(Boolean);
 }
 
 function routeFeatures(map) {
@@ -317,6 +364,10 @@ function zoneFeatures(map) {
       }
     };
   }).filter(Boolean);
+}
+
+function findCityBurg(map, city) {
+  return map?.pack?.burgs?.[city?.burgId] || (map?.pack?.burgs || []).find(burg => burg?.cityId === city?.id) || null;
 }
 
 function packCellPolygon(map, cell) {

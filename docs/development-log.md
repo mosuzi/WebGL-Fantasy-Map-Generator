@@ -12774,3 +12774,26 @@ full 矩阵结果：
 后续：
 
 - 可继续补备注独立导入导出、孤儿备注批量清理、备注摘要导出；富文本、Markdown 和 AI 辅助仍暂缓。
+
+### 城市要素 GeoJSON 第一刀
+
+背景：
+
+- 要素 GeoJSON 已覆盖 route、river、marker 和 zone，但城市只随 pack cell GeoJSON 或完整地图 JSON 间接出现。
+- 城市是最常用的标准地理 Point 图层，且 city 备注已经进入 `map.notes`，应能随要素导出带出。
+
+修正：
+
+- `createMapFeatureGeoJson()` 新增 `cityFeatures(map)`，输出 `layer = city` 的 Point Feature。
+- city properties 包含 id、burg、name、type、group、population、capital、provincial、port、state/province/culture/religion 名称与 id、grid cell、pack cell、hasNote 和 note。
+- 要素 GeoJSON 元数据 `layerSet` 更新为 `cities-routes-rivers-markers-zones`，并新增 `cities` 计数字段。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `952.11KB JS / 294.36KB gzip`、`148.71KB CSS / 22.09KB gzip`。
+- Playwright + 构建产物内置静态服务验证通过：给城市 `#0 / 青台` 写入“城市 GeoJSON 备注检查：港口仓储完善。”后导出 `fmg-stage-2-1-c0f5082f.features.geojson`。
+- 导出文件 `layerSet = cities-routes-rivers-markers-zones`，metadata `cities = 817`，Feature 计数为 city `817`、route `602`、river `164`、marker `44`、zone `9`；`city-0` 为 Point，properties 中 `hasNote = true` 且 `note` 正文一致，console/page error 为 `0`。
+
+后续：
+
+- 继续补国家/省份 dissolve、分层选择、范围导出和 CRS 元数据配置。

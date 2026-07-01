@@ -9,7 +9,7 @@
 | 导出图片 | `.png` | PNG | WebGL 画布、地图尺寸摘要、比例尺 overlay | 否 | 已完成第一刀 |
 | 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v1` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成第一刀 |
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
-| 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | route LineString、river LineString、marker Point、zone MultiPolygon | 否 | 已完成第一刀 |
+| 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon | 否 | 已完成第一刀 |
 
 ## 完整地图 JSON
 
@@ -78,6 +78,7 @@
 
 | layer | 几何 | 主要属性 | 备注 |
 |---|---|---|---|
+| `city` | `Point` | id、burg、name、type、group、population、capital、provincial、port、state/province/culture/religion、cell、packCell、hasNote、note | 城市备注正文已输出 |
 | `route` | `LineString` | id、type、level、state、province、from、to、cells、distance、hasNote、note | 路线备注正文已输出 |
 | `river` | `LineString` | id、name、type、source、mouth、parent、basin、flux、length、width、widthFactor、hasNote、note | 暂未输出变宽河道面；备注正文已输出 |
 | `marker` | `Point` | id、name、type、label、category、resource、economicValue、state、province、cell、packCell、hasNote、note | marker 备注正文已输出 |
@@ -85,14 +86,13 @@
 
 已验证：
 
-- 默认图可输出 route、river、marker、zone 四类要素。
-- 写入 marker 或 route 备注后，对应 feature 会带 `hasNote = true` 和 `note` 正文；river 走同一备注字段导出路径。
+- 默认图可输出 city、route、river、marker、zone 五类要素。
+- 写入 city、marker 或 route 备注后，对应 feature 会带 `hasNote = true` 和 `note` 正文；river 走同一备注字段导出路径。
 
 缺口：
 
 - zone 需要 dissolve 外轮廓。
 - route / river 可继续补名称、等级中文标签和更完整统计。
-- city 备注当前只随完整 JSON 保存，尚无 city GeoJSON layer。
 - 尚未支持选择图层、范围导出或 CRS 元数据配置。
 
 ## PNG
@@ -116,6 +116,5 @@
 
 1. GeoJSON 分层选择：允许用户只导出 routes / rivers / markers / zones。
 2. 国家和省份 dissolve：补真正适合 GIS 的政治面。
-3. city GeoJSON layer：给城市输出 Point，并带 city note 摘要。
-4. PNG 导出倍率和是否包含 overlay 的选项。
-5. 完整 JSON 压缩和版本迁移器。
+3. PNG 导出倍率和是否包含 overlay 的选项。
+4. 完整 JSON 压缩和版本迁移器。

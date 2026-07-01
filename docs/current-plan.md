@@ -764,6 +764,7 @@ http://127.0.0.1:5410
 139. 文化/宗教备注第一刀已完成：文化管理和宗教管理面板复用 `createSetObjectNoteCommand()` 与 `UiNoteField`，二级操作新增“编辑备注”，并通过 `version` 刷新详情备注状态。构建产物验证中给文化 `#1` 写入“文化备注检查：这个文化适合扩展商贸传统。”、给宗教 `#1` 写入“宗教备注检查：这里适合设置朝圣路线。”；文化备注撤销/重做正常，宗教备注撤销时文化备注仍保留，最终完整地图 JSON `fmg-stage-2-1-fcc49865.webgl-map.json` 同时包含 `culture:1` 与 `religion:1`，console/page error 为 `0`。
 140. 标签备注第一刀已完成：`label-edit-commands.js` 新增 `createSetLabelNoteCommand()`，标签备注 id 使用 `label:${targetKind}:${targetId}` 复合键，避免城市标签、国家标签和手工标签同 id 碰撞；标签管理面板将重命名与备注收进二级操作栏。构建产物验证中给城市标签 `city:0` 写入“标签备注检查：这个城市名需要靠近河口。”后生成 `label:city:0`，不会写成 `city:0`；撤销后 notes 为 `0`，重做并导出完整地图 JSON `fmg-stage-2-1-17047708.webgl-map.json` 后保留该标签备注，console/page error 为 `0`。
 141. 备注总览第一刀已完成：管理 tab 新增“备注总览”入口，独立浮层列出所有 `map.notes`，显示总数、可定位数、孤儿备注数和筛选数；支持按更新时间、类型、名称和字数排序，支持筛选正文/名称/id，支持定位到目标对象、删除备注并进入 `EditHistory` 撤销/重做。备注总览会解析 `label:${targetKind}:${targetId}` 复合键，避免把标签备注误定位到城市本体。后续可继续补备注独立导入导出、孤儿备注批量清理和备注摘要导出。
+142. 城市要素 GeoJSON 第一刀已完成：`createMapFeatureGeoJson()` 新增 `city` Point 图层，properties 输出 id、burg、name、type、group、population、capital、provincial、port、state/province/culture/religion、cell、packCell、hasNote 和 note；`layerSet` 更新为 `cities-routes-rivers-markers-zones`。后续可继续补国家/省份 dissolve、分层选择和范围导出。
 
 ## 约束
 
