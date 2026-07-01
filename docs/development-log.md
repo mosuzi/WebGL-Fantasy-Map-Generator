@@ -13471,3 +13471,25 @@ full 矩阵结果：
 后续：
 
 - 继续迁移树状总览、弹窗/确认和少数残留自写控件时，要观察共享 chunk 是否继续膨胀；如过大，考虑按面板域拆分表格/树组件依赖。
+
+### 高度编辑和对象详情懒加载
+
+背景：
+
+- `UiObjectTable` 迁移后，首屏仍静态挂载高度编辑和通用对象详情两个 Vue 面板入口。
+- 高度编辑的 brush state 位于 wrapper，通用对象详情的 selection state 也位于 wrapper，因此 SFC 可以按首次打开延迟加载，不影响画布侧状态读写。
+
+修正：
+
+- `height-panel.js` 移除对 `HeightPanel.vue` 的静态 import，首次打开高度编辑浮层时通过 `createLazyVuePanel()` 加载。
+- `object-details-panel.js` 移除对 `ObjectDetailsPanel.vue` 的静态 import，selection 分发决定显示通用对象详情时才加载。
+- 保留高度 brush 的 `getBrush / setActive / update` API，以及对象详情的查看、定位、编辑、取消编辑和重命名回调。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口变为 `index-B1CPbYkD.js`，约 `531.42KB / 160.18KB gzip`。新增按需 chunk 包括 `HeightPanel-BFwMD0oC.js`（约 `1.21KB gzip`）和 `ObjectDetailsPanel-DGai1L3E.js`（约 `1.68KB gzip`）。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：首屏资源中没有 `HeightPanel / ObjectDetailsPanel` chunk；打开高度编辑后才加载高度面板，并显示状态、半径、强度、中心衰减；通过 `selectionStore` 选中真实 marker 后才加载对象详情，显示标记类型、经济潜力、国家/省份，console/page error 为 `0`。
+
+后续：
+
+- 当前仅控制面板作为常驻 Vue 入口；后续组件迁移应优先在按需面板内部推进，避免重新扩大首屏资源。

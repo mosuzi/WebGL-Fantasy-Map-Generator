@@ -1,6 +1,5 @@
-import {createApp, reactive} from "vue";
-import {pinia} from "../vue/pinia.js";
-import HeightPanel from "../vue/components/HeightPanel.vue";
+import {reactive} from "vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 
 export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const panelState = reactive({
@@ -33,14 +32,23 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-height-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(HeightPanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/HeightPanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "高度编辑将在首次打开时加载。",
+      loading: "正在加载高度编辑...",
+      failure: "高度编辑加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(history) {
       panelState.history = history;
       manager.open("height-panel");
+      lazyPanel.load();
     },
     update({lastAffected = panelState.lastAffected, lastHeight = panelState.lastHeight, history = panelState.history} = {}) {
       panelState.lastAffected = lastAffected;
@@ -60,7 +68,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.active = active;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }
