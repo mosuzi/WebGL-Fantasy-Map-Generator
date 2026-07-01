@@ -14,6 +14,70 @@ const MARKER_CATEGORY_DETAILS = Object.freeze({
 
 const DEFAULT_MARKER_CATEGORY = "mystery";
 
+const MARKER_SYMBOL_BY_TYPE = Object.freeze({
+  volcanoes: "volcano",
+  "hot-springs": "spring",
+  "water-sources": "drop",
+  mines: "mine",
+  "salt-lakes": "salt",
+  "rare-biota": "life",
+  "gem-fields": "gem",
+  bridges: "bridge",
+  inns: "inn",
+  lighthouses: "tower",
+  waterfalls: "drop",
+  battlefields: "danger",
+  dungeons: "ruin",
+  "lake-monsters": "danger",
+  "sea-monsters": "danger",
+  "hill-monsters": "danger",
+  "sacred-forests": "life",
+  "sacred-pineries": "life",
+  "sacred-palm-groves": "life",
+  brigands: "danger",
+  pirates: "danger",
+  statues: "star",
+  ruins: "ruin",
+  libraries: "book",
+  circuses: "market",
+  jousts: "star",
+  fairs: "market",
+  canoes: "bridge",
+  migration: "life",
+  dances: "star",
+  mirage: "star",
+  caves: "ruin",
+  portals: "star",
+  rifts: "danger",
+  "disturbed-burials": "danger",
+  necropolises: "ruin",
+  encounters: "marker"
+});
+
+const MARKER_SYMBOL_BY_CATEGORY = Object.freeze({
+  natural: "volcano",
+  water: "drop",
+  resource: "mine",
+  infrastructure: "bridge",
+  trade: "market",
+  hazard: "danger",
+  culture: "star",
+  settlement: "market",
+  mystery: "marker"
+});
+
+const MARKER_PALETTE_BY_CATEGORY = Object.freeze({
+  natural: "natural",
+  water: "water",
+  resource: "resource",
+  infrastructure: "infrastructure",
+  trade: "trade",
+  hazard: "hazard",
+  culture: "culture",
+  settlement: "settlement",
+  mystery: "mystery"
+});
+
 const MARKER_TYPES = [
   {type: "volcanoes", label: "火山", category: "natural", icon: "🌋", weight: 16, economicValue: 6, candidates: highCells(70)},
   {type: "hot-springs", label: "温泉", category: "resource", icon: "♨️", weight: 9, resourceKey: "geothermal", resourceLabel: "地热", economicValue: 8, candidates: highCultureCells(50)},
@@ -115,6 +179,7 @@ function createMarker(id, config, pack, grid, packCell) {
     resourceKey: details.resourceKey,
     resourceLabel: details.resourceLabel,
     economicValue: details.economicValue,
+    visual: details.visual,
     name,
     cell: gridCell,
     packCell,
@@ -137,7 +202,8 @@ function createMarker(id, config, pack, grid, packCell) {
       icon: details.icon,
       resourceKey: details.resourceKey,
       resourceLabel: details.resourceLabel,
-      economicValue: details.economicValue
+      economicValue: details.economicValue,
+      visual: details.visual
     }
   };
 }
@@ -407,6 +473,7 @@ function createFallbackMarker(id, type, icon, name, cell, point, data) {
     resourceKey: details.resourceKey,
     resourceLabel: details.resourceLabel,
     economicValue: details.economicValue,
+    visual: details.visual,
     name,
     cell,
     x: point[0],
@@ -419,7 +486,8 @@ function createFallbackMarker(id, type, icon, name, cell, point, data) {
       icon: details.icon,
       resourceKey: details.resourceKey,
       resourceLabel: details.resourceLabel,
-      economicValue: details.economicValue
+      economicValue: details.economicValue,
+      visual: details.visual
     }
   };
 }
@@ -435,7 +503,21 @@ function markerDetails(config = {}) {
     color: config.color || categoryDetails.color,
     resourceKey: config.resourceKey || null,
     resourceLabel: config.resourceLabel || null,
-    economicValue: Number(config.economicValue || 0)
+    economicValue: Number(config.economicValue || 0),
+    visual: normalizeMarkerVisual(config, categoryDetails)
+  };
+}
+
+function normalizeMarkerVisual(config, categoryDetails) {
+  const category = config.category || DEFAULT_MARKER_CATEGORY;
+  const visual = config.visual || {};
+  return {
+    shape: visual.shape || "pin",
+    symbol: visual.symbol || MARKER_SYMBOL_BY_TYPE[config.type] || MARKER_SYMBOL_BY_CATEGORY[category] || "marker",
+    palette: visual.palette || MARKER_PALETTE_BY_CATEGORY[category] || DEFAULT_MARKER_CATEGORY,
+    cultureStyle: visual.cultureStyle || "default",
+    manual: Boolean(visual.manual),
+    categoryColor: visual.categoryColor || categoryDetails.color
   };
 }
 

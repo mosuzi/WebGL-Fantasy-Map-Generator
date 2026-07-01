@@ -44,6 +44,42 @@ import {
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 
+const MARKER_ICON_MIN_SCALE = 2.15;
+const MARKER_ICON_RELAXED_SCALE = 4.4;
+const MARKER_ICON_BASE_WIDTH = 28;
+const MARKER_ICON_BASE_HEIGHT = 32;
+
+const MARKER_ICON_PALETTES = Object.freeze({
+  natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
+  water: {fill: "#3a91d8", stroke: "#12365c", symbol: "#eff9ff"},
+  resource: {fill: "#33a96b", stroke: "#123b25", symbol: "#f4ffe9"},
+  infrastructure: {fill: "#d18b35", stroke: "#4c2f12", symbol: "#fff5dc"},
+  trade: {fill: "#d7a52d", stroke: "#4a3410", symbol: "#fff8d8"},
+  hazard: {fill: "#c84b3e", stroke: "#4b1817", symbol: "#fff0e8"},
+  culture: {fill: "#8264c5", stroke: "#2d204d", symbol: "#fbf2ff"},
+  settlement: {fill: "#cf6f4b", stroke: "#4b271b", symbol: "#fff1e8"},
+  mystery: {fill: "#715cc7", stroke: "#271f51", symbol: "#f7f1ff"}
+});
+
+const MARKER_ICON_SYMBOLS = Object.freeze({
+  mine: '<path d="M9.2 17.7 18 8.9"/><path d="M16.2 7.8c1.6.1 2.7.5 3.6 1.4-.8.2-1.6.6-2.5 1.4"/><path d="m9 9 10 9"/>',
+  salt: '<path class="fill" d="M11 10.1h2.7v2.7H11zM15.1 12.4h2.3v2.3h-2.3zM10.2 15.1h2.2v2.2h-2.2z"/><path d="M9.2 18.4h9.6"/>',
+  life: '<path d="M10.1 17.8c5.7-.6 8.1-4.4 8.5-8.2-4.5.1-8.2 2.2-8.6 7.6"/><path d="M10.3 17.6c1.4-2.3 3.2-4.1 5.5-5.4"/><path d="M8.7 10.4l.9 1.4 1.5.6-1.5.6-.9 1.4-.7-1.4-1.5-.6 1.5-.6z"/>',
+  gem: '<path class="fill" d="m14 7.4 6.5 4.7-2.7 7.5h-7.6l-2.7-7.5z"/><path d="M7.7 12.1h12.6M11.2 8.3l2.8 11.3 2.8-11.3"/>',
+  spring: '<path d="M9.1 11.2c1.7-1.4 3.4-1.4 5 0 1.6 1.3 3.2 1.3 4.8 0"/><path d="M9.1 14.6c1.7-1.4 3.4-1.4 5 0 1.6 1.3 3.2 1.3 4.8 0"/><path d="M11.1 18.1h5.8"/>',
+  drop: '<path class="fill" d="M14 7.7c3.2 3.8 4.8 6.4 4.8 8.1a4.8 4.8 0 0 1-9.6 0c0-1.7 1.6-4.3 4.8-8.1z"/>',
+  volcano: '<path class="fill" d="M7.8 19.2 12.4 8.6h3.2l4.6 10.6z"/><path d="m12 10.4 2 2.2 2-2.2M10.2 19.2h7.6"/>',
+  bridge: '<path d="M7.7 18.7h12.6M9 18.6c.7-4.2 2.3-6.3 5-6.3s4.3 2.1 5 6.3M10.2 14.2h7.6"/>',
+  inn: '<path class="fill" d="M9.4 10.4h9.2v8H9.4z"/><path d="M8.2 11.1 14 7.5l5.8 3.6M12 18.3v-4h4v4"/>',
+  tower: '<path class="fill" d="M10.4 9.2h7.2v10h-7.2z"/><path d="M10 9.1V7.7h1.8v1.4h4.4V7.7H18v1.4M12.4 19.1v-4h3.2v4"/>',
+  ruin: '<path d="M8.7 18.8h10.6M10 10.1h8M11.1 10.2v8.2M14 10.2v8.2M16.9 10.2v8.2"/><path class="fill" d="m9.5 8.1 4.5-1.5 4.5 1.5z"/>',
+  book: '<path d="M8.5 9.1h4.7c.7 0 1.1.4 1.1 1.1v8.1c0-.7-.5-1.1-1.2-1.1H8.5z"/><path d="M19.5 9.1h-4.7c-.7 0-1.1.4-1.1 1.1v8.1c0-.7.5-1.1 1.2-1.1h4.6z"/>',
+  market: '<path d="M8.5 11.2h11M9.6 11.4l1-3h6.8l1 3"/><path class="fill" d="M10 13.2h8v5.7h-8z"/><path d="M12.8 18.8v-3.1h2.4v3.1"/>',
+  danger: '<path class="fill" d="m14 7.6 6 11H8z"/><path d="M14 11.3v3.6M14 17.4h.1"/>',
+  star: '<path class="fill" d="m14 7.6 1.7 4 4.2.4-3.2 2.8.9 4.2-3.6-2.2-3.6 2.2.9-4.2L8.1 12l4.2-.4z"/>',
+  marker: '<circle class="fill" cx="14" cy="13.8" r="4.5"/><path d="M14 9.3v9"/>'
+});
+
 export class PlaceholderMapRenderer {
   constructor(canvas, onViewChange = () => {}, onHover = () => {}, onSelect = () => {}) {
     this.canvas = canvas;
@@ -84,6 +120,10 @@ export class PlaceholderMapRenderer {
     this.stateLabelCount = 0;
     this.visibleStateLabelCount = 0;
     this.labelItems = [];
+    this.markerIconItems = [];
+    this.markerIconCount = 0;
+    this.visibleMarkerIconCount = 0;
+    this.markerIconScaleThreshold = MARKER_ICON_MIN_SCALE;
     this.selection = null;
     this.selectionMarker = null;
     this.objectPickingIndex = null;
@@ -444,6 +484,9 @@ export class PlaceholderMapRenderer {
       },
       pointVertexCount: this.pointVertexCount,
       markerCount: this.map?.markers?.metadata?.markers || 0,
+      markerIconCount: this.markerIconCount,
+      visibleMarkerIconCount: this.visibleMarkerIconCount,
+      markerIconScaleThreshold: this.markerIconScaleThreshold,
       labelCount: this.labelCount,
       visibleLabelCount: this.visibleLabelCount,
       cityLabelCount: this.cityLabelCount,
@@ -612,12 +655,15 @@ export class PlaceholderMapRenderer {
   buildLabels(map) {
     if (!this.overlay) {
       this.labelItems = [];
+      this.markerIconItems = [];
       this.labelCount = 0;
       this.visibleLabelCount = 0;
       this.cityLabelCount = 0;
       this.visibleCityLabelCount = 0;
       this.stateLabelCount = 0;
       this.visibleStateLabelCount = 0;
+      this.markerIconCount = 0;
+      this.visibleMarkerIconCount = 0;
       return;
     }
     this.overlay.replaceChildren();
@@ -628,6 +674,18 @@ export class PlaceholderMapRenderer {
       this.overlay.append(node);
       return {...item, node, box: null, visible: false};
     });
+    this.markerIconItems = getMarkerIconItems(map).map(item => {
+      const node = document.createElement("span");
+      node.className = markerIconClassName(item);
+      node.title = item.tooltip;
+      node.setAttribute("aria-label", item.tooltip);
+      node.dataset.markerId = String(item.id);
+      node.dataset.markerCategory = item.category || "marker";
+      applyMarkerIconPalette(node, item);
+      node.innerHTML = markerIconSvg(item);
+      this.overlay.append(node);
+      return {...item, node, box: null, visible: false};
+    });
     this.selectionMarker = document.createElement("span");
     this.selectionMarker.className = "selection-marker";
     this.selectionMarker.style.display = "none";
@@ -635,13 +693,15 @@ export class PlaceholderMapRenderer {
     this.labelCount = this.labelItems.length;
     this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
     this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
+    this.markerIconCount = this.markerIconItems.length;
     this.visibleLabelCount = 0;
     this.visibleCityLabelCount = 0;
     this.visibleStateLabelCount = 0;
+    this.visibleMarkerIconCount = 0;
   }
 
   updateLabels() {
-    if (!this.overlay || !this.map || !this.labelItems.length) return;
+    if (!this.overlay || !this.map) return;
     const rect = this.canvas.getBoundingClientRect();
     const occupied = [];
     const occupiedStates = [];
@@ -688,6 +748,7 @@ export class PlaceholderMapRenderer {
     this.visibleLabelCount = visible;
     this.visibleCityLabelCount = visibleCities;
     this.visibleStateLabelCount = visibleStates;
+    this.updateMarkerIcons(rect, [...occupied, ...occupiedStates]);
     this.updateSelectionMarker(rect);
   }
 
@@ -711,6 +772,43 @@ export class PlaceholderMapRenderer {
     this.selectionMarker.style.display = "block";
     this.selectionMarker.style.left = `${screen.x}px`;
     this.selectionMarker.style.top = `${screen.y}px`;
+  }
+
+  updateMarkerIcons(rect, occupiedLabels = []) {
+    if (!this.markerIconItems.length) {
+      this.visibleMarkerIconCount = 0;
+      return;
+    }
+
+    const scale = this.camera.scale;
+    const iconsEnabled = scale >= this.markerIconScaleThreshold;
+    const iconPadding = scale >= MARKER_ICON_RELAXED_SCALE ? 2 : 6;
+    const occupiedIcons = [];
+    let visible = 0;
+
+    for (const item of this.markerIconItems) {
+      const screen = this.worldToScreen(item.x, item.y, rect);
+      const box = markerIconBoxForItem(item, screen, scale);
+      const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
+      const layerVisible = isMarkerLayerVisible(item, this.layerVisibility);
+      const blocked = scale < MARKER_ICON_RELAXED_SCALE && (
+        occupiedLabels.some(other => boxesOverlap(box, other, iconPadding)) ||
+        occupiedIcons.some(other => boxesOverlap(box, other, iconPadding))
+      );
+      const shouldShow = iconsEnabled && layerVisible && onScreen && !blocked;
+      item.node.classList.toggle("visible", shouldShow);
+      item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.MARKER && this.selection.id === item.id);
+      item.visible = shouldShow;
+      item.box = shouldShow ? box : null;
+      if (!shouldShow) continue;
+      item.node.style.left = `${screen.x}px`;
+      item.node.style.top = `${screen.y}px`;
+      item.node.style.setProperty("--marker-icon-scale", String(markerIconScale(scale)));
+      occupiedIcons.push(box);
+      visible++;
+    }
+
+    this.visibleMarkerIconCount = visible;
   }
 
   pickLabel(clientX, clientY) {
@@ -902,6 +1000,92 @@ function getCustomLabels(map) {
       rank,
       minScale: 0.25
     }));
+}
+
+function getMarkerIconItems(map) {
+  return [...(map?.markers?.markers || [])]
+    .filter(marker => marker && Number.isFinite(marker.x) && Number.isFinite(marker.y))
+    .sort((a, b) => markerIconPriority(b) - markerIconPriority(a))
+    .map(marker => ({
+      id: marker.id,
+      marker,
+      type: marker.type,
+      label: marker.label,
+      name: marker.name || marker.label || `标记 #${marker.id + 1}`,
+      tooltip: markerIconTooltip(marker),
+      category: marker.category || "marker",
+      resourceKey: marker.resourceKey || null,
+      economicValue: Number(marker.economicValue || 0),
+      visual: marker.visual || marker.data?.visual || {},
+      x: marker.x,
+      y: marker.y
+    }));
+}
+
+function markerIconPriority(marker) {
+  const categoryScore = marker.category === "resource" ? 1000 : marker.category === "infrastructure" || marker.category === "trade" ? 400 : 0;
+  return categoryScore + Number(marker.economicValue || 0) * 12 + (marker.type === "water-sources" ? 80 : 0);
+}
+
+function markerIconTooltip(marker) {
+  const value = Number(marker.economicValue || 0);
+  const valueText = value > 0 ? `，潜力 ${roundValue(value)}` : "";
+  return `${marker.name || marker.label || "标记"} / ${marker.categoryLabel || marker.category || "标记"}${valueText}`;
+}
+
+function markerIconClassName(item) {
+  const classes = ["marker-map-icon"];
+  if (item.category) classes.push(`marker-map-icon--${item.category}`);
+  if (item.resourceKey) classes.push("marker-map-icon--resource");
+  return classes.join(" ");
+}
+
+function applyMarkerIconPalette(node, item) {
+  const palette = markerIconPalette(item);
+  node.style.setProperty("--marker-fill", palette.fill);
+  node.style.setProperty("--marker-stroke", palette.stroke);
+  node.style.setProperty("--marker-symbol", palette.symbol);
+}
+
+function markerIconPalette(item) {
+  const visual = item.visual || {};
+  const categoryColor = normalizedCssColor(visual.categoryColor);
+  const palette = MARKER_ICON_PALETTES[visual.palette] || MARKER_ICON_PALETTES[item.category] || MARKER_ICON_PALETTES.mystery;
+  return categoryColor ? {...palette, fill: categoryColor} : palette;
+}
+
+function normalizedCssColor(color) {
+  if (!Array.isArray(color) || color.length < 3) return null;
+  const [r, g, b] = color.map(value => Math.round(clamp(value, 0, 1) * 255));
+  return `rgb(${r} ${g} ${b})`;
+}
+
+function markerIconSvg(item) {
+  const visual = item.visual || {};
+  const symbol = MARKER_ICON_SYMBOLS[visual.symbol] || MARKER_ICON_SYMBOLS.marker;
+  return `<svg viewBox="0 0 28 32" aria-hidden="true" focusable="false">
+    <path class="marker-icon-shadow" d="M14 30.8c2.3-1.9 11.6-10.3 11.6-18.1C25.6 6 20.8 1.7 14 1.7S2.4 6 2.4 12.7c0 7.8 9.3 16.2 11.6 18.1z"/>
+    <path class="marker-icon-body" d="M14 30.8c2.3-1.9 11.6-10.3 11.6-18.1C25.6 6 20.8 1.7 14 1.7S2.4 6 2.4 12.7c0 7.8 9.3 16.2 11.6 18.1z"/>
+    <circle class="marker-icon-plate" cx="14" cy="13.6" r="8.7"/>
+    <g class="marker-icon-symbol" transform="translate(0 .2)">${symbol}</g>
+  </svg>`;
+}
+
+function markerIconBoxForItem(item, screen, scale) {
+  const sizeScale = markerIconScale(scale);
+  const width = MARKER_ICON_BASE_WIDTH * sizeScale;
+  const height = MARKER_ICON_BASE_HEIGHT * sizeScale;
+  return {
+    left: screen.x - width / 2,
+    right: screen.x + width / 2,
+    top: screen.y - height,
+    bottom: screen.y + 3 * sizeScale,
+    item
+  };
+}
+
+function markerIconScale(scale) {
+  return clamp(0.86 + (scale - MARKER_ICON_MIN_SCALE) * 0.06, 0.86, 1.12);
 }
 
 function stateLabelPlacement(map, state, text = "") {

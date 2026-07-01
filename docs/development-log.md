@@ -11265,3 +11265,46 @@ full 矩阵结果：
   - 默认样例 marker `44`，其中资源点 `5`，非资源 marker `39`。
   - 全开 point 顶点 `861`；关闭资源点后 `856`；再关闭标记后 `817`；只开资源点时 `822`；恢复后 `861`。
   - 关闭资源点后资源点 picking 返回 `null`，非资源 marker 仍可命中；关闭标记后非资源 marker 返回 `null`；只开资源点时资源点仍可命中。
+
+### marker 近景小图标第一刀
+
+背景：
+
+- 用户观察到资源点和 marker 仍然像一个像素点，要求缩放足够近时显示“小图”，远景保持像素点。
+- 这套能力如果效果好，后续希望推广到城镇标识，并支持按文化预制几种 icon 类型、自动选用和用户手动调整。
+
+修正：
+
+- `markers.js` 给每个 marker 增加 `visual` 描述：
+  - `shape`：当前默认为 `pin`。
+  - `symbol`：按 marker type 自动选择，例如矿山、温泉、水源、盐湖、稀有生物、宝石、桥梁、驿馆、灯塔、遗迹、藏书楼等。
+  - `palette`：按类别选择自然、水文、资源、设施、商旅、危险、文化、活动和异象配色。
+  - `cultureStyle` 和 `manual`：当前先写入默认值，供后续文化预设和手动调整复用。
+- renderer 新增 marker overlay 图标缓存：
+  - 远景仍由 WebGL `POINTS` 显示像素点。
+  - 相机缩放达到 `x2.15` 后才显示 overlay 小图标。
+  - 资源点优先级高于普通 marker；近景会参考已有标签和图标占位做轻量避让，`x4.4` 之后放宽避让以便显示更多细节。
+  - 资源图层 / 标记图层关闭时，overlay 图标和 WebGL 点、picking 一起遵守同一可见性规则。
+- CSS 新增 `.marker-map-icon` 小图牌样式，使用受控 SVG symbol 列表，不再把 emoji 当地图图标；选中 marker 会显示高亮描边。
+- 侧栏运行统计新增 `marker 图标`，显示当前可见图标数、总图标数和缩放阈值。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\markers.js`
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js`
+- `node --check app\webgl-generator\src\ui\panel.js`
+- `$env:CI='true'; pnpm run build:app`
+- 临时静态 server + Playwright 验证：
+  - seed：`stage-2-1231411414`
+  - template：`continents`
+  - cells：`10000`
+  - 远景 `x1`：marker 图标总数 `41`，可见图标 `0`。
+  - 近景 `x4.8`：定位到资源点 `楚桥圩温泉`，可见图标 `7`，其中资源图标 `1`。
+  - 关闭资源图层后：资源图标可见数降为 `0`，非资源 marker 图标仍保留 `6`。
+  - 浏览器 console error 为 `0`。
+- 快照：`docs/generated/snapshots/webgl-generator-marker-icons-snapshot.png`。
+
+后续：
+
+- 图标 symbol / palette 目前是第一版内置集合；后续可把文化样式拆成预设表，让城市、国家、资源 marker 按文化自动选用。
+- marker 面板应补充图标手动调整入口，并把 `visual.manual = true` 的对象排除出自动覆盖。

@@ -376,6 +376,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "轮廓三角形", stats.lineTriangleCount ?? Math.round((stats.lineVertexCount || 0) / 3)),
     statRow(documentRef, "点顶点", stats.pointVertexCount),
     statRow(documentRef, "marker", stats.markerCount),
+    statRow(documentRef, "marker 图标", `${stats.visibleMarkerIconCount} / ${stats.markerIconCount}，阈值 x${stats.markerIconScaleThreshold}`),
     statRow(documentRef, "marker 资源", formatMarkerResources(map)),
     statRow(documentRef, "标签", `城市 ${stats.visibleCityLabelCount} / ${stats.cityLabelCount} / 上限 ${formatCityLabelLimit(map, stats)}；国家 ${stats.visibleStateLabelCount} / ${stats.stateLabelCount}`),
     statRow(documentRef, "相机", `x ${stats.camera.scale.toFixed(2)}, ${stats.camera.offsetX.toFixed(2)}, ${stats.camera.offsetY.toFixed(2)}`),
