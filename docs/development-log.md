@@ -13795,3 +13795,28 @@ full 矩阵结果：
 
 - 若继续实现，应先做不写 map 的懒加载预览面板；预览取消必须保持 checksum 不变。
 - 颜色量化优先尝试本项目轻量实现，效果不足时再评估动态导入第三方 quantizer。
+
+### 测量节点删除第一刀
+
+背景：
+
+- 测量工具已经支持临时折线、闭合面积、导出、节点拖拽和撤销最后一点。
+- 原版测量器的节点编辑更完整；当前继续补一个不牵动地图数据的临时节点删除能力。
+
+修正：
+
+- SVG 测量点的 `pointerdown` 统一进入 `handleMeasurementPointPointerDown()`。
+- 普通左键仍进入拖拽；右键、`Alt` 点击或 `Shift` 点击会删除对应节点。
+- 测量点增加 `tabindex` 与键盘处理，聚焦后可用 `Delete / Backspace` 删除。
+- 删除节点时会取消正在进行的拖拽，直接从 `state.measurement.points` 删除对应项并刷新 overlay、面积和读数。
+- `source-feature-backlog.md` 和 README 同步把节点删除从待办移入已实现能力。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `511.79KB / 150.85KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：开启测量后添加两点，左键拖动首点位移约 `82.3` 地图单位，拖动中 `.measurement-point.dragging = 1`；新增第三点后右键第二点，点数回到 `2`；再新增一点并聚焦首点按 `Delete` 后点数为 `2`，面积面片为 `0`，读数为 `2 点 / 总长 420.8 千米`，导出/撤销/清除按钮仍可用，console/page error 为 `0`。
+
+后续：
+
+- 测量工具后续可继续做折线中插入节点、路线贴合和保存测量对象；路线贴合需要先明确与道路、河流和海路图层的关系。

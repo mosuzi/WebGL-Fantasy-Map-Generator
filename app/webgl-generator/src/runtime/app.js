@@ -2155,7 +2155,16 @@ function updateMeasurementOverlay(state, documentRef) {
     circle.setAttribute("cx", roundMeasurementDisplay(point.x));
     circle.setAttribute("cy", roundMeasurementDisplay(point.y));
     circle.setAttribute("r", "4.5");
-    circle.addEventListener("pointerdown", event => startMeasurementPointDrag(event, state, documentRef, index));
+    circle.setAttribute("tabindex", "0");
+    circle.setAttribute("aria-label", `测量点 ${index + 1}`);
+    circle.addEventListener("pointerdown", event => handleMeasurementPointPointerDown(event, state, documentRef, index));
+    circle.addEventListener("contextmenu", event => event.preventDefault());
+    circle.addEventListener("keydown", event => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      event.preventDefault();
+      event.stopPropagation();
+      deleteMeasurementPoint(state, documentRef, index);
+    });
     svg.append(circle);
   }
 
@@ -2168,6 +2177,29 @@ function updateMeasurementOverlay(state, documentRef) {
 function undoMeasurementPoint(state, documentRef) {
   cancelMeasurementDrag(state, documentRef);
   if (state.measurement.points?.length) state.measurement.points.pop();
+  updateMeasurementOverlay(state, documentRef);
+}
+
+function handleMeasurementPointPointerDown(event, state, documentRef, index) {
+  if (shouldDeleteMeasurementPoint(event)) {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteMeasurementPoint(state, documentRef, index);
+    return;
+  }
+  if (event.button !== 0) return;
+  startMeasurementPointDrag(event, state, documentRef, index);
+}
+
+function shouldDeleteMeasurementPoint(event) {
+  return event.button === 2 || event.altKey || event.shiftKey;
+}
+
+function deleteMeasurementPoint(state, documentRef, index) {
+  const points = state.measurement.points;
+  if (!Array.isArray(points) || index < 0 || index >= points.length) return;
+  cancelMeasurementDrag(state, documentRef);
+  points.splice(index, 1);
   updateMeasurementOverlay(state, documentRef);
 }
 
