@@ -765,6 +765,7 @@ http://127.0.0.1:5410
 140. 标签备注第一刀已完成：`label-edit-commands.js` 新增 `createSetLabelNoteCommand()`，标签备注 id 使用 `label:${targetKind}:${targetId}` 复合键，避免城市标签、国家标签和手工标签同 id 碰撞；标签管理面板将重命名与备注收进二级操作栏。构建产物验证中给城市标签 `city:0` 写入“标签备注检查：这个城市名需要靠近河口。”后生成 `label:city:0`，不会写成 `city:0`；撤销后 notes 为 `0`，重做并导出完整地图 JSON `fmg-stage-2-1-17047708.webgl-map.json` 后保留该标签备注，console/page error 为 `0`。
 141. 备注总览第一刀已完成：管理 tab 新增“备注总览”入口，独立浮层列出所有 `map.notes`，显示总数、可定位数、孤儿备注数和筛选数；支持按更新时间、类型、名称和字数排序，支持筛选正文/名称/id，支持定位到目标对象、删除备注并进入 `EditHistory` 撤销/重做。备注总览会解析 `label:${targetKind}:${targetId}` 复合键，避免把标签备注误定位到城市本体。后续可继续补备注独立导入导出、孤儿备注批量清理和备注摘要导出。
 142. 城市要素 GeoJSON 第一刀已完成：`createMapFeatureGeoJson()` 新增 `city` Point 图层，properties 输出 id、burg、name、type、group、population、capital、provincial、port、state/province/culture/religion、cell、packCell、hasNote 和 note；`layerSet` 更新为 `cities-routes-rivers-markers-zones`。后续可继续补国家/省份 dissolve、分层选择和范围导出。
+143. 要素 GeoJSON 分层选择第一刀已完成：简介 tab 新增“要素 GeoJSON 图层”开关，可独立控制 city、route、river、marker、zone 是否进入 `.features.geojson`；导出时 `createMapFeatureGeoJson(map, {layers})` 只生成选中图层，metadata 的 `layerSet` 和各图层计数同步反映选择。后续可继续补国家/省份 dissolve、范围导出和 CRS 元数据配置。
 
 ## 约束
 

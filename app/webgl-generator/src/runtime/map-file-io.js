@@ -106,30 +106,32 @@ export function createMapGeoJson(map) {
   };
 }
 
-export function createMapFeatureGeoJson(map) {
+export function createMapFeatureGeoJson(map, options = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
+  const layers = normalizeFeatureLayerOptions(options.layers);
   const features = [
-    ...cityFeatures(map),
-    ...routeFeatures(map),
-    ...riverFeatures(map),
-    ...markerFeatures(map),
-    ...zoneFeatures(map)
+    ...(layers.city ? cityFeatures(map) : []),
+    ...(layers.route ? routeFeatures(map) : []),
+    ...(layers.river ? riverFeatures(map) : []),
+    ...(layers.marker ? markerFeatures(map) : []),
+    ...(layers.zone ? zoneFeatures(map) : [])
   ];
+  const layerSet = selectedFeatureLayerNames(layers);
 
   return {
     type: "FeatureCollection",
     name: map.metadata?.seed ? `fmg-${map.metadata.seed}-features` : "fmg-webgl-map-features",
     properties: {
       source: "fmg-webgl-reimplementation",
-      layerSet: "cities-routes-rivers-markers-zones",
+      layerSet: layerSet.length ? layerSet.join("-") : "none",
       seed: map.metadata?.seed || "",
       checksum: map.metadata?.checksum || "",
       generatedAt: map.metadata?.generatedAt || "",
-      cities: map.settlements?.cities?.length || 0,
-      routes: map.settlements?.routes?.length || 0,
-      rivers: map.rivers?.rivers?.length || 0,
-      markers: map.markers?.markers?.length || 0,
-      zones: map.zones?.zones?.length || 0
+      cities: layers.city ? map.settlements?.cities?.length || 0 : 0,
+      routes: layers.route ? map.settlements?.routes?.length || 0 : 0,
+      rivers: layers.river ? map.rivers?.rivers?.length || 0 : 0,
+      markers: layers.marker ? map.markers?.markers?.length || 0 : 0,
+      zones: layers.zone ? map.zones?.zones?.length || 0 : 0
     },
     features
   };
@@ -199,6 +201,27 @@ function projectWorldPoint(point, map) {
   const lon = lonW + (x / width) * (lonE - lonW);
   const lat = latN + (y / height) * (latS - latN);
   return [roundCoordinate(lon), roundCoordinate(lat)];
+}
+
+function normalizeFeatureLayerOptions(layers = {}) {
+  const source = layers && typeof layers === "object" ? layers : {};
+  return {
+    city: source.city !== false,
+    route: source.route !== false,
+    river: source.river !== false,
+    marker: source.marker !== false,
+    zone: source.zone !== false
+  };
+}
+
+function selectedFeatureLayerNames(layers) {
+  return [
+    layers.city ? "cities" : "",
+    layers.route ? "routes" : "",
+    layers.river ? "rivers" : "",
+    layers.marker ? "markers" : "",
+    layers.zone ? "zones" : ""
+  ].filter(Boolean);
 }
 
 function cityFeatures(map) {

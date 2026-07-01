@@ -15,6 +15,16 @@
         </p>
         <a href="https://github.com/mosuzi/fmg-gl" target="_blank" rel="noreferrer">打开当前仓库</a>
         <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">查看原项目</a>
+        <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
+          <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>
+          <div class="feature-export-layer-grid">
+            <UiSwitchField label="城市" input-id="feature-export-layer-city" field-class="feature-export-layer-switch" :checked="true" />
+            <UiSwitchField label="路线" input-id="feature-export-layer-route" field-class="feature-export-layer-switch" :checked="true" />
+            <UiSwitchField label="河流" input-id="feature-export-layer-river" field-class="feature-export-layer-switch" :checked="true" />
+            <UiSwitchField label="标记" input-id="feature-export-layer-marker" field-class="feature-export-layer-switch" :checked="true" />
+            <UiSwitchField label="区域" input-id="feature-export-layer-zone" field-class="feature-export-layer-switch" :checked="true" />
+          </div>
+        </section>
         <div class="project-file-actions" aria-label="本地文件操作">
           <UiButton id="export-map-image" variant="secondary">导出图片</UiButton>
           <UiButton id="export-map-data" variant="secondary">导出地图数据</UiButton>

@@ -12797,3 +12797,26 @@ full 矩阵结果：
 后续：
 
 - 继续补国家/省份 dissolve、分层选择、范围导出和 CRS 元数据配置。
+
+### 要素 GeoJSON 分层选择第一刀
+
+背景：
+
+- 要素 GeoJSON 已覆盖 city、route、river、marker 和 zone，但此前只能一次性全部导出。
+- 用户在 GIS 或外部工具中常只需要某几类要素，分层选择可以先降低文件体积和后续清洗成本。
+
+修正：
+
+- `createMapFeatureGeoJson(map, {layers})` 支持按 city、route、river、marker、zone 开关生成 Feature。
+- 简介 tab 新增“要素 GeoJSON 图层”开关，默认五层全开，导出时读取隐藏 checkbox 状态。
+- 导出元数据 `layerSet` 和各图层计数会随选择同步变化；状态提示显示导出的要素总数和图层集合。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `953.86KB JS / 294.85KB gzip`、`149.39KB CSS / 22.20KB gzip`。
+- Playwright + 构建产物内置静态服务验证通过：在简介 tab 关闭 route、river、zone，仅保留 city 和 marker 后导出 `fmg-stage-2-1-3983ab14.features.geojson`。
+- 导出文件 `layerSet = cities-markers`，metadata 为 cities `817`、routes `0`、rivers `0`、markers `44`、zones `0`；Feature 计数为 city `817`、marker `44`，总数 `861`；状态提示为“要素 GeoJSON 已导出，共 861 个要素，图层：cities-markers。”，console/page error 为 `0`。
+
+后续：
+
+- 继续补国家/省份 dissolve、范围导出、CRS 元数据配置和更完整属性映射。

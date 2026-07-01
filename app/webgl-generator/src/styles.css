@@ -2097,6 +2097,52 @@ select:disabled {
   gap: 8px;
 }
 
+.feature-export-layers {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(189, 206, 213, 0.12);
+}
+
+.feature-export-layers h3 {
+  margin: 0;
+  color: #edf4f6;
+  font-size: 13px;
+}
+
+.feature-export-layer-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.feature-export-layer-switch {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  background: #10171b;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.feature-export-layer-switch.is-checked {
+  border-color: rgba(215, 168, 79, 0.75);
+  background: #2b2415;
+  color: #ffe0a1;
+}
+
+.feature-export-layer-switch span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .project-file-actions .secondary-action,
 .project-file-actions button {
   display: inline-flex;

@@ -9,7 +9,7 @@
 | 导出图片 | `.png` | PNG | WebGL 画布、地图尺寸摘要、比例尺 overlay | 否 | 已完成第一刀 |
 | 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v1` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成第一刀 |
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
-| 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon | 否 | 已完成第一刀 |
+| 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon；简介 tab 可选择导出图层 | 否 | 已完成第一刀 |
 
 ## 完整地图 JSON
 
@@ -88,12 +88,13 @@
 
 - 默认图可输出 city、route、river、marker、zone 五类要素。
 - 写入 city、marker 或 route 备注后，对应 feature 会带 `hasNote = true` 和 `note` 正文；river 走同一备注字段导出路径。
+- 简介 tab 的“要素 GeoJSON 图层”开关可限制导出图层，导出元数据 `layerSet` 会同步反映选择。
 
 缺口：
 
 - zone 需要 dissolve 外轮廓。
 - route / river 可继续补名称、等级中文标签和更完整统计。
-- 尚未支持选择图层、范围导出或 CRS 元数据配置。
+- 尚未支持范围导出或 CRS 元数据配置。
 
 ## PNG
 
@@ -114,7 +115,6 @@
 
 ## 后续顺序建议
 
-1. GeoJSON 分层选择：允许用户只导出 routes / rivers / markers / zones。
-2. 国家和省份 dissolve：补真正适合 GIS 的政治面。
-3. PNG 导出倍率和是否包含 overlay 的选项。
-4. 完整 JSON 压缩和版本迁移器。
+1. 国家和省份 dissolve：补真正适合 GIS 的政治面。
+2. PNG 导出倍率和是否包含 overlay 的选项。
+3. 完整 JSON 压缩和版本迁移器。

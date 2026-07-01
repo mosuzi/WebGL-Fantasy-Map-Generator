@@ -1268,13 +1268,24 @@ function exportGeoJson(state, documentRef) {
 function exportFeatureGeoJson(state, documentRef) {
   try {
     assertMapAvailable(state);
+    const layers = readFeatureGeoJsonLayerOptions(documentRef);
     setFileOperationStatus(documentRef, "正在导出要素 GeoJSON...");
-    const geoJson = createMapFeatureGeoJson(state.map);
+    const geoJson = createMapFeatureGeoJson(state.map, {layers});
     downloadText(documentRef, JSON.stringify(geoJson), `${mapFileBaseName(state.map)}.features.geojson`, "application/geo+json;charset=utf-8");
-    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个路线、河流、标记和区域要素。`);
+    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个要素，图层：${geoJson.properties.layerSet}。`);
   } catch (error) {
     reportFileOperationError(documentRef, "要素 GeoJSON 导出失败", error);
   }
+}
+
+function readFeatureGeoJsonLayerOptions(documentRef) {
+  return {
+    city: documentRef.getElementById("feature-export-layer-city")?.checked !== false,
+    route: documentRef.getElementById("feature-export-layer-route")?.checked !== false,
+    river: documentRef.getElementById("feature-export-layer-river")?.checked !== false,
+    marker: documentRef.getElementById("feature-export-layer-marker")?.checked !== false,
+    zone: documentRef.getElementById("feature-export-layer-zone")?.checked !== false
+  };
 }
 
 async function importMapData(state, documentRef, file) {
