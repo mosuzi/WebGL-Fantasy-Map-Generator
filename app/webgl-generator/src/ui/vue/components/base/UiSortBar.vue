@@ -1,18 +1,20 @@
 <template>
   <div :class="className">
-    <button
+    <UiButton
       v-for="option in options"
       :key="option.key"
-      type="button"
-      :class="{active: activeKey === option.key}"
+      variant="secondary"
+      :active="activeKey === option.key"
       @click="$emit('sort', option.key)"
     >
       {{ labelFor(option) }}
-    </button>
+    </UiButton>
   </div>
 </template>
 
 <script setup>
+import UiButton from "./UiButton.vue";
+
 defineOptions({
   name: "UiSortBar"
 });

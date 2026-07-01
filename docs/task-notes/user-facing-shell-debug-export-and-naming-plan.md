@@ -26,7 +26,8 @@
 - 已安装 Element Plus 与按需导入相关依赖。
 - Vite 当前只启用 `unplugin-vue-components` + `ElementPlusResolver({importStyle: "css"})`，避免全局注册和整包样式。
 - 已迁移 `UiButton` 作为样板，保持旧业务 API 不变。
-- 当前样板迁移后的 gzip 增量约 `+10.17KB JS`、`+3.70KB CSS`，后续每批迁移都需要继续记录。
+- 已迁移第二批基础组件：`UiFilterInput -> ElInput`、`UiTextEditField -> ElInput`、`UiNumberField -> ElInputNumber`、`UiSortBar -> UiButton/ElButton`。
+- 当前第二批迁移后构建产物约 `756.84KB JS / 234.58KB gzip`、`93.80KB CSS / 14.38KB gzip`；相比灰度导入后的基线约增加 `+14.10KB JS gzip`、`+2.24KB CSS gzip`，后续继续迁移必须继续记录体积。
 
 参考：
 

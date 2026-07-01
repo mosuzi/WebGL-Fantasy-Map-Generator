@@ -740,6 +740,7 @@ http://127.0.0.1:5410
 115. 国家命名策略第一刀已完成：国家根名不再高概率复用文化根名，改为优先抽取春秋/周代诸侯国启发的单字与短根名，并用 `state-family` 去重避免同一根名反复派生“东/西/南/北”相邻变体；文化根名只作为低概率首选。国家形制收敛为“国、侯国、伯国、邦、朝”和少量地貌特化形式，不再生成“王朝、诸帐、林盟、水府、诸州”等旧形制。三组 seed 抽样中，20 个国家的短根名为 `19-20` 个、单字根名为 `8-11` 个、同根重复为 `0`。
 116. Element Plus 迁移第一刀已完成：新增 `element-plus`、`@element-plus/icons-vue` 和按需导入相关插件，Vite 仅启用 `unplugin-vue-components` 的 `ElementPlusResolver({importStyle: "css"})`，不全局 `app.use(ElementPlus)`，不引入整包 CSS。`UiButton` 已改为 `ElButton` 适配层，同时保留原 `variant / active / buttonType` API 和 `.primary-action / .secondary-action` 样式类。生产构建 gzip 体积从命名阶段约 `208.39KB JS / 8.40KB CSS` 增至 `218.56KB JS / 12.10KB CSS`，作为后续迁移体积基线。
 117. 灰度高度图导入第一刀已完成：生成 tab 的地形配置后新增本地图片导入和最低/最高高度滑块；导入时浏览器读取图片像素，按亮度 min/max 自动归一化，并按 `grid.points` 坐标采样为 `grayscale-import` 高度模板，再走完整 `generatePlaceholderMap()` 派生链路。采样型 heightmap 会把下游有效 `heightmapTemplate` 也改为 `grayscale-import`，避免继续触发导入前下拉模板的专属启发式。合成 `32x24` 灰度 PNG 端到端验证中，设置 `10..90` 后实际高度范围为 `10..90`，checksum 变化为 `0de77532 -> f26a4db9`，并重新生成 `features=5 / packCells=9709 / states=20 / cities=1349 / rivers=121`。后续可补黑白反转、裁剪/保持比例、平滑/降噪和原版彩色高度图方案识别。
+118. Element Plus 迁移第二刀已完成：`UiFilterInput` 改为 `ElInput`，`UiTextEditField` 改为 `ElInput`，`UiNumberField` 改为 `ElInputNumber`，`UiSortBar` 复用 `UiButton/ElButton`；业务面板调用 API 不变。新增 Element 输入暗色适配 CSS，避免旧 `*-panel-controls input` 样式打坏 Element 输入内部结构。生产构建约 `756.84KB JS / 234.58KB gzip`、`93.80KB CSS / 14.38KB gzip`；城市面板验证中筛选框、排序按钮、重命名浮层和人口数字浮层均正常。后续迁移 `UiSelectField / UiSliderField / UiSwitchField` 前必须先设计原生 DOM id 桥，否则会断 runtime 读取。
 
 ## 约束
 

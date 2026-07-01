@@ -2,7 +2,7 @@
   <form :class="className" @submit.prevent="$emit('apply', normalizedValue)">
     <label>
       <span>{{ label }}</span>
-      <input v-model.number="value" type="number" :min="min" :max="max" :step="step" />
+      <ElInputNumber v-model="value" v-bind="numberAttrs" controls-position="right" />
     </label>
     <UiButton variant="secondary" button-type="submit">{{ actionLabel }}</UiButton>
   </form>
@@ -51,6 +51,11 @@ defineEmits(["apply"]);
 
 const value = ref(props.modelValue);
 const normalizedValue = computed(() => Number(value.value));
+const numberAttrs = computed(() => ({
+  ...(props.min !== null ? {min: props.min} : {}),
+  ...(props.max !== null ? {max: props.max} : {}),
+  step: props.step
+}));
 
 watch(() => props.modelValue, next => {
   value.value = Number(next) || 0;

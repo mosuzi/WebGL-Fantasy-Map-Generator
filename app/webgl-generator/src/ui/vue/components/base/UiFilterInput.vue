@@ -1,17 +1,15 @@
 <template>
-  <input
+  <ElInput
+    class="ui-filter-input"
     type="search"
     :placeholder="placeholder"
-    :value="modelValue"
-    @compositionstart="composing = true"
-    @compositionend="onCompositionEnd"
-    @input="onInput"
+    :model-value="modelValue"
+    clearable
+    @update:model-value="$emit('update:modelValue', $event)"
   />
 </template>
 
 <script setup>
-import {ref} from "vue";
-
 defineOptions({
   name: "UiFilterInput"
 });
@@ -27,16 +25,5 @@ defineProps({
   }
 });
 
-const emit = defineEmits(["update:modelValue"]);
-const composing = ref(false);
-
-function onCompositionEnd(event) {
-  composing.value = false;
-  emit("update:modelValue", event.target.value);
-}
-
-function onInput(event) {
-  if (composing.value || event.isComposing) return;
-  emit("update:modelValue", event.target.value);
-}
+defineEmits(["update:modelValue"]);
 </script>

@@ -2,7 +2,7 @@
   <form :class="className" @submit.prevent="$emit('apply', value)">
     <label>
       <span>{{ label }}</span>
-      <input v-model="value" type="text" :maxlength="maxLength" />
+      <ElInput v-model="value" type="text" :maxlength="maxLength" />
     </label>
     <UiButton variant="secondary" button-type="submit">{{ actionLabel }}</UiButton>
   </form>

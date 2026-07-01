@@ -166,6 +166,59 @@ select {
   background: #24313a;
 }
 
+.el-input,
+.el-input-number {
+  width: 100%;
+  --el-input-bg-color: #10171b;
+  --el-input-border-color: #33444f;
+  --el-input-hover-border-color: #5f7480;
+  --el-input-focus-border-color: #d7a84f;
+  --el-input-text-color: #edf4f6;
+  --el-input-placeholder-color: #758892;
+  --el-input-icon-color: #9fb0ba;
+  --el-disabled-bg-color: #12191e;
+  --el-disabled-text-color: #72838c;
+  --el-fill-color-light: #172127;
+}
+
+.el-input__wrapper {
+  min-height: 32px;
+  border-radius: 6px;
+  background: #10171b;
+  box-shadow: 0 0 0 1px #33444f inset;
+}
+
+.el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px #5f7480 inset;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px #d7a84f inset;
+}
+
+.floating-panel .el-input__inner {
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #edf4f6;
+  font: inherit;
+}
+
+.el-input-number__decrease,
+.el-input-number__increase {
+  border-color: #33444f;
+  background: #172127;
+  color: #cbd7dc;
+}
+
+.el-input-number__decrease:hover,
+.el-input-number__increase:hover {
+  color: #ffe0a1;
+}
+
 button:disabled,
 input:disabled,
 select:disabled {

@@ -12228,3 +12228,33 @@ full 矩阵结果：
 
 - 增加黑白反转、保持比例/裁剪、模糊降噪和陆地比例预检。
 - 如果要对齐原版 Image Converter，再补彩色高度图色板识别、手动颜色映射和导入预览；这不应塞进当前第一刀。
+
+### Element Plus 迁移第二刀
+
+背景：
+
+- 第一刀只迁移了 `UiButton`，用户仍希望逐步全量替换自写组件，但不能因为一次性替换打断旧 runtime 的 DOM id / `.value` 读取链。
+- 本刀选择不依赖旧 runtime 直接读取的 Vue 内部基础组件：筛选输入、文本编辑、数字编辑和排序条。
+
+修正：
+
+- `UiFilterInput` 改为 `ElInput`，保留 `modelValue / update:modelValue / placeholder` API，并启用 clearable。
+- `UiTextEditField` 改为 `ElInput`，保留表单提交和 `apply` 事件。
+- `UiNumberField` 改为 `ElInputNumber`，保留 `min / max / step / apply` 事件，避免把数值控件继续留在原生 input。
+- `UiSortBar` 改为复用 `UiButton`，因此排序按钮也走 `ElButton` 适配层。
+- 新增 Element 输入暗色适配 CSS，统一 `.el-input / .el-input-number / .el-input__wrapper / .el-input__inner`，并覆盖旧面板中 `input` 选择器对 Element 内部 input 的干扰。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `756.84KB JS / 234.58KB gzip`、`93.80KB CSS / 14.38KB gzip`。
+- Playwright + 构建产物静态服务验证城市面板：
+  - `.city-panel-controls .ui-filter-input.el-input` 存在，筛选“京”后城市行数从 `817` 降到 `24`。
+  - `.city-panel-sort .el-button` 数量为 `5`，点击排序后 active 文案为“人口 ↑”。
+  - 选中城市后，二级编辑浮层“重命名”出现 `ElInput`，二级编辑浮层“调整人口”出现 `ElInputNumber`。
+  - console/page error 为 `0`。
+
+后续：
+
+- `UiSelectField / UiSliderField / UiSwitchField` 暂不迁移，必须先设计隐藏原生控件或事件桥，保证 `panel.js` 中按 DOM id 读取 `.value/.checked/change` 的逻辑不被破坏。
+- `ElInput / ElInputNumber` 引入后 gzip 增量明显高于按钮样板，后续如果继续迁移表格、树、弹窗，应同步考虑面板级懒加载或 chunk 拆分。
