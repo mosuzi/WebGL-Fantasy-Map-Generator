@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import CityPanel from "../vue/components/CityPanel.vue";
+import {toIntegerId} from "../object-id.js";
 
 export function createCityPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -61,7 +62,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "city") panelState.selectedCityId = selection.object.id;
+      if (selection?.object?.kind === "city") panelState.selectedCityId = normalizeCityId(selection.object.id);
       if (!cityExists(map, panelState.selectedCityId)) panelState.selectedCityId = firstCityId(map);
       panelState.open = true;
       manager.open("city-panel");
@@ -70,11 +71,12 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "city") panelState.selectedCityId = selection.object.id;
+      if (selection?.object?.kind === "city") panelState.selectedCityId = normalizeCityId(selection.object.id);
       if (!cityExists(map, panelState.selectedCityId)) panelState.selectedCityId = firstCityId(map);
     },
     setSelectedCityId(cityId) {
-      if (cityExists(panelState.map, cityId)) panelState.selectedCityId = cityId;
+      const normalized = normalizeCityId(cityId);
+      if (cityExists(panelState.map, normalized)) panelState.selectedCityId = normalized;
     },
     isOpen() {
       return panelState.open;
@@ -103,7 +105,12 @@ function cityObject(row) {
 }
 
 function cityExists(map, cityId) {
+  cityId = normalizeCityId(cityId);
   return Boolean(Number.isInteger(cityId) && map?.settlements?.cities?.[cityId]);
+}
+
+function normalizeCityId(cityId) {
+  return toIntegerId(cityId);
 }
 
 function firstCityId(map) {

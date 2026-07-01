@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import MarkerPanel from "../vue/components/MarkerPanel.vue";
+import {toIntegerId} from "../object-id.js";
 
 export function createMarkerPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -74,7 +75,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "marker") panelState.selectedMarkerId = selection.object.id;
+      if (selection?.object?.kind === "marker") panelState.selectedMarkerId = normalizeMarkerId(selection.object.id);
       if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
       panelState.open = true;
       panelState.version++;
@@ -84,12 +85,13 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "marker") panelState.selectedMarkerId = selection.object.id;
+      if (selection?.object?.kind === "marker") panelState.selectedMarkerId = normalizeMarkerId(selection.object.id);
       if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
       panelState.version++;
     },
     setSelectedMarkerId(markerId) {
-      if (markerExists(panelState.map, markerId)) panelState.selectedMarkerId = markerId;
+      const normalized = normalizeMarkerId(markerId);
+      if (markerExists(panelState.map, normalized)) panelState.selectedMarkerId = normalized;
     },
     updateEditMode(editMode) {
       panelState.editMode = editMode?.mode || null;
@@ -127,7 +129,12 @@ function markerObject(row) {
 }
 
 function markerExists(map, markerId) {
+  markerId = normalizeMarkerId(markerId);
   return Boolean(Number.isInteger(markerId) && map?.markers?.markers?.[markerId]);
+}
+
+function normalizeMarkerId(markerId) {
+  return toIntegerId(markerId);
 }
 
 function firstMarkerId(map) {

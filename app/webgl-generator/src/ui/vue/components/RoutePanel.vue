@@ -27,6 +27,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance} from "../../display-units.js";
+import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -62,7 +63,7 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const rows = computed(() => routeRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selected = computed(() => rows.value.find(row => row.id === props.state.selectedRouteId) || null);
+const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 
 const summaryMetrics = computed(() => [

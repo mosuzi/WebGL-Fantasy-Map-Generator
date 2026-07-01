@@ -34,7 +34,7 @@
           <td
             v-for="cell in row.cells"
             :key="`${row.id}:${cell.id}`"
-            :class="{selected: row.id === selectedSubjectId && cell.id === state.selectedObjectId, self: cell.self}"
+            :class="{selected: sameObjectId(row.id, selectedSubjectId) && sameObjectId(cell.id, state.selectedObjectId), self: cell.self}"
             :style="{backgroundColor: cell.color, color: cell.textColor}"
             :title="cell.title"
             @click="!cell.self && callbacks.onMatrixCell?.(row.id, cell.id)"
@@ -59,22 +59,26 @@
 
   <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
 
-  <UiSelectField
-    v-if="selected"
-    input-id="diplomacy-relation-select"
-    class-name="diplomacy-relation-select"
-    label="关系"
-    :model-value="selected.relation"
-    :options="relationOptions"
-    @update:model-value="relation => callbacks.onRelationChange(selected.subjectId, selected.id, relation)"
-  />
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="diplomacyActions">
+    <template #relation>
+      <UiSelectField
+        input-id="diplomacy-relation-select"
+        class-name="diplomacy-relation-select"
+        label="关系"
+        :model-value="selected.relation"
+        :options="relationOptions"
+        @update:model-value="relation => callbacks.onRelationChange(selected.subjectId, selected.id, relation)"
+      />
+    </template>
+  </UiActionDock>
 
   <UiHistoryActions class-name="diplomacy-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
 import {DIPLOMACY_RELATION_OPTIONS, DIPLOMACY_RELATIONS} from "../../../generator/diplomacy.js";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -84,6 +88,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatPopulation} from "../../display-units.js";
+import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -119,19 +124,23 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
 const metrics = computed(() => {
   props.state.version;
   return buildDiplomacyMetrics(props.state.map, props.state.selectedStateId);
 });
 const stateOptions = computed(() => metrics.value.states.map(state => ({value: state.id, label: state.name})));
-const selectedSubjectId = computed(() => props.state.selectedStateId ?? stateOptions.value[0]?.value ?? null);
+const selectedSubjectId = computed(() => toIntegerId(props.state.selectedStateId) ?? stateOptions.value[0]?.value ?? null);
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedObjectId) || visibleRows.value[0] || null);
+const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedObjectId) || visibleRows.value[0] || null);
 const matrix = computed(() => {
   props.state.version;
   return buildDiplomacyMatrix(props.state.map);
 });
+const diplomacyActions = Object.freeze([
+  {key: "relation", label: "调整关系", icon: "⇄"}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "主体", value: metrics.value.subjectName},
@@ -157,9 +166,13 @@ const detailRows = computed(() => selected.value ? [
   {label: "城镇", value: selected.value.burgs}
 ] : []);
 
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
+});
+
 function buildDiplomacyMetrics(map, selectedStateId) {
   const states = stateRows(map);
-  const subject = states.find(state => state.id === selectedStateId) || states[0] || null;
+  const subject = states.find(state => sameObjectId(state.id, selectedStateId)) || states[0] || null;
   if (!subject) return {states, subjectName: "none", rows: [], counts: {}, history: 0};
 
   const rows = states

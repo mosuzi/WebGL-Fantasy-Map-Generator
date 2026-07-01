@@ -18,22 +18,28 @@
 
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
 
-  <template v-if="selected && !selected.neutral">
-    <UiTextEditField
-      class-name="province-name-editor"
-      :model-value="selected.rawName"
-      :max-length="48"
-      @apply="name => callbacks.onRename(selected.id, name)"
-    />
+  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="provinceActions">
+    <template #rename>
+      <UiTextEditField
+        class-name="province-name-editor"
+        :model-value="selected.rawName"
+        :max-length="48"
+        @apply="name => callbacks.onRename(selected.id, name)"
+      />
+    </template>
 
-    <UiColorField
-      class-name="province-color-field"
-      :model-value="selected.color"
-      @apply="color => callbacks.onColorChange(selected.id, color)"
-    />
+    <template #color>
+      <UiColorField
+        class-name="province-color-field"
+        :model-value="selected.color"
+        @apply="color => callbacks.onColorChange(selected.id, color)"
+      />
+    </template>
 
-    <UiButton variant="secondary" @click="callbacks.onEdit(selected)">编辑此省份</UiButton>
-  </template>
+    <template #edit>
+      <UiButton variant="secondary" @click="callbacks.onEdit(selected)">编辑此省份</UiButton>
+    </template>
+  </UiActionDock>
 
   <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="callbacks.onActiveChange(!state.active)">
     {{ state.active ? "停止省份编辑" : "启用省份编辑" }}
@@ -66,7 +72,8 @@
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiColorField from "./base/UiColorField.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -79,6 +86,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatPopulation} from "../../display-units.js";
+import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -125,10 +133,16 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
 const metrics = computed(() => buildProvinceMetrics(props.state.map));
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedProvinceId) || null);
+const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedProvinceId));
+const provinceActions = Object.freeze([
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "color", label: "调整颜色", icon: "◐"},
+  {key: "edit", label: "进入编辑", icon: "◎"}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
@@ -163,6 +177,10 @@ const historyNote = computed(() => {
   const history = props.state.history;
   const historyText = history ? `undo ${history.undo} / redo ${history.redo} / ${history.lastLabel}` : "none";
   return `历史：${historyText}；来源：${formatProvinceName(props.state.map, props.state.sourceProvinceId)}`;
+});
+
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
 });
 
 function buildProvinceMetrics(map) {

@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import CulturePanel from "../vue/components/CulturePanel.vue";
+import {toIntegerId} from "../object-id.js";
 
 export function createCulturePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -59,7 +60,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "culture") panelState.selectedCultureId = selection.object.id;
+      if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
       panelState.open = true;
       manager.open("culture-panel");
@@ -68,11 +69,12 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "culture") panelState.selectedCultureId = selection.object.id;
+      if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
     },
     setSelectedCultureId(cultureId) {
-      if (cultureExists(panelState.map, cultureId)) panelState.selectedCultureId = cultureId;
+      const normalized = normalizeCultureId(cultureId);
+      if (cultureExists(panelState.map, normalized)) panelState.selectedCultureId = normalized;
     },
     isOpen() {
       return panelState.open;
@@ -102,7 +104,12 @@ function cultureObject(row) {
 }
 
 function cultureExists(map, cultureId) {
+  cultureId = normalizeCultureId(cultureId);
   return Boolean(Number.isInteger(cultureId) && (map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId]));
+}
+
+function normalizeCultureId(cultureId) {
+  return toIntegerId(cultureId);
 }
 
 function firstCultureId(map) {

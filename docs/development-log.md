@@ -11921,3 +11921,31 @@ full 矩阵结果：
   - 地形模板下拉框打开自绘菜单后可选择“群岛”，隐藏原生 select 同步为 `archipelago`，触发按钮文本同步为“群岛”。
   - 外交面板在 `1280 x 620` 视口下高度为 `601.39px`，未超过 `620 * 97% = 601.4px`；面板 body 为 `overflow: auto`，内容高度超过可视高度时可滚动。
   - 浏览器 console error 为 `0`。
+
+### 列表选中态与图标二级操作
+
+背景：
+
+- 用户观察到有概率出现“已选中国家，国家编辑摘要能显示目标国家，但下方详情仍显示未选中国家”的半选中状态。
+- 用户希望所有列表编辑面板把详细编辑功能收归为图标，点击图标后再进行二级操作。
+
+修正：
+
+- 新增 `ui/object-id.js`，统一把数字 id 和数字字符串 id 规范化为同一个比较键，并提供 `findByObjectId()` / `sameObjectId()` / `toIntegerId()`。
+- `UiObjectTable` 的选中高亮和滚动定位改用规范化 id，表格“定位”动作改为图标按钮。
+- 国家、省份、城市、文化、宗教、路线、河流、marker 和外交面板的选中详情查找改用规范化 id，避免摘要、表格高亮和详情区读取不同类型 id。
+- 国家/省份/城市/文化/宗教/marker/路线/外交等旧桥接层的 `setSelected*` / `setTarget*` / open/update selection 入口同步把 id 规范化为数字，防止编辑笔刷或后续命令拿到字符串 id。
+- 新增 `UiActionDock`，以小图标按钮承载列表对象的二级操作；国家、省份、城市、文化、宗教、河流、资源/marker 和外交面板已把重命名、调色、继承、人口、归属同步、首都、剪影、河流宽度、外交关系等详细编辑控件收进图标展开区。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/object-id.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/state-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/province-panel.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/diplomacy-panel.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 临时静态 server + Playwright 验证构建产物：
+  - 国家面板手动传入字符串 `stateId = "1"` 后，`getBrush().targetStateId` 为 `number`，表格行高亮、详情 `15` 项、摘要目标均为“清河王朝”，页面不再包含“未选中国家”。
+  - 国家面板图标为“重命名 / 进入编辑 / 调整颜色 / 设置首都”，点击“重命名”后出现二级重命名控件。
+  - 省份、城市、文化、宗教、marker、河流和外交面板均能打开图标操作入口，表格存在选中行，未出现“未选中”详情占位。
+  - 浏览器 console error 为 `0`。

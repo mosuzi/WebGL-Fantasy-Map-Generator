@@ -19,28 +19,37 @@
   <UiDetailGrid class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
 
   <template v-if="selected">
-    <UiTextEditField
-      class-name="river-name-editor"
-      :model-value="selected.name"
-      :max-length="48"
-      @apply="name => callbacks.onRename(selected.id, name)"
-    />
+    <UiActionDock v-model:active="activeAction" :actions="riverActions">
+      <template #rename>
+        <UiTextEditField
+          class-name="river-name-editor"
+          :model-value="selected.name"
+          :max-length="48"
+          @apply="name => callbacks.onRename(selected.id, name)"
+        />
+      </template>
 
-    <div class="river-width-editor">
-      <UiSliderField
-        label="宽度因子"
-        field-class="river-width-field"
-        :model-value="widthDraft"
-        :min="0.2"
-        :max="3"
-        :step="0.05"
-        @input="value => widthDraft = normalizeWidth(value)"
-      />
-      <div class="river-width-actions">
-        <UiButton variant="secondary" @click="callbacks.onSetWidthFactor(selected.id, widthDraft)">应用宽度</UiButton>
+      <template #width>
+        <div class="river-width-editor">
+          <UiSliderField
+            label="宽度因子"
+            field-class="river-width-field"
+            :model-value="widthDraft"
+            :min="0.2"
+            :max="3"
+            :step="0.05"
+            @input="value => widthDraft = normalizeWidth(value)"
+          />
+          <div class="river-width-actions">
+            <UiButton variant="secondary" @click="callbacks.onSetWidthFactor(selected.id, widthDraft)">应用宽度</UiButton>
+          </div>
+        </div>
+      </template>
+
+      <template #edit>
         <UiButton variant="secondary" @click="callbacks.onEdit(selected)">{{ editing ? "退出河流编辑" : "进入河流编辑" }}</UiButton>
-      </div>
-    </div>
+      </template>
+    </UiActionDock>
 
     <UiHistoryActions class-name="river-history-note" :history="state.history" label="最近命令" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
   </template>
@@ -48,6 +57,7 @@
 
 <script setup>
 import {computed, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -58,6 +68,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatDistance} from "../../display-units.js";
+import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -90,14 +101,20 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
 const widthDraft = ref(1);
 const rows = computed(() => riverRows(props.state.map));
 const selectedId = computed(() => props.state.selection?.object?.kind === "river" ? props.state.selection.object.id : null);
-const selected = computed(() => rows.value.find(row => row.id === selectedId.value) || null);
-const editing = computed(() => props.state.editingObject?.kind === "river" && props.state.editingObject.id === selectedId.value);
+const selected = computed(() => findByObjectId(rows.value, selectedId.value));
+const editing = computed(() => props.state.editingObject?.kind === "river" && sameObjectId(props.state.editingObject.id, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
+const riverActions = computed(() => [
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "width", label: "调整宽度", icon: "↔"},
+  {key: "edit", label: editing.value ? "退出编辑" : "进入编辑", icon: "◎"}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "河流", value: rows.value.length},
@@ -116,6 +133,7 @@ const detailRows = computed(() => selected.value ? [
 
 watch(() => selected.value?.id, () => {
   widthDraft.value = normalizeWidth(selected.value?.widthFactor ?? 1);
+  activeAction.value = null;
 }, {immediate: true});
 
 watch(() => selected.value?.widthFactor, next => {

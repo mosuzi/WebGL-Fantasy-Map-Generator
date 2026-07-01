@@ -30,27 +30,32 @@
 
   <UiDetailGrid class-name="marker-panel-details" empty-text="未选中资源点或标记" :rows="detailRows" />
 
-  <template v-if="selected">
-    <UiTextEditField
-      class-name="marker-name-editor"
-      :model-value="selected.rawName"
-      :max-length="48"
-      @apply="name => callbacks.onRename(selected.id, name)"
-    />
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="markerActions">
+    <template #rename>
+      <UiTextEditField
+        class-name="marker-name-editor"
+        :model-value="selected.rawName"
+        :max-length="48"
+        @apply="name => callbacks.onRename(selected.id, name)"
+      />
+    </template>
 
-    <div class="marker-visual-editor">
-      <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="symbolOptions" @update:model-value="visualDraft.symbol = $event" />
-      <UiSelectField class-name="marker-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
-      <UiButton variant="secondary" @click="applyVisual">应用图标</UiButton>
-    </div>
-  </template>
+    <template #visual>
+      <div class="marker-visual-editor">
+        <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="symbolOptions" @update:model-value="visualDraft.symbol = $event" />
+        <UiSelectField class-name="marker-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
+        <UiButton variant="secondary" @click="applyVisual">应用图标</UiButton>
+      </div>
+    </template>
+  </UiActionDock>
 
   <UiHistoryActions class-name="marker-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
-import {computed, reactive, watch} from "vue";
+import {computed, reactive, ref, watch} from "vue";
 import {MARKER_RESOURCE_TYPE_OPTIONS} from "../../../generator/markers.js";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -61,6 +66,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {findByObjectId} from "../../object-id.js";
 
 defineOptions({
   name: "MarkerPanel"
@@ -141,6 +147,7 @@ const resourceDraft = reactive({
   type: resourceTypeOptions[0]?.value || "mines"
 });
 
+const activeAction = ref(null);
 const metrics = computed(() => {
   props.state.version;
   return buildMarkerMetrics(props.state.map);
@@ -149,9 +156,13 @@ const scopedRows = computed(() => applyScope(metrics.value.rows, props.state.sco
 const visibleRows = computed(() => sortRows(filterRows(scopedRows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const activeSelectedMarkerId = computed(() => {
   const selectionId = props.state.selection?.object?.kind === "marker" ? props.state.selection.object.id : null;
-  return Number.isInteger(selectionId) ? selectionId : props.state.selectedMarkerId;
+  return selectionId !== null && selectionId !== undefined ? selectionId : props.state.selectedMarkerId;
 });
-const selected = computed(() => metrics.value.rows.find(row => row.id === activeSelectedMarkerId.value) || null);
+const selected = computed(() => findByObjectId(metrics.value.rows, activeSelectedMarkerId.value));
+const markerActions = Object.freeze([
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "visual", label: "调整图标", icon: "▣"}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "标记", value: metrics.value.total},
@@ -180,6 +191,9 @@ const editStatus = computed(() => {
 });
 
 watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
+});
 watch(() => selected.value?.symbol, syncVisualDraft);
 watch(() => selected.value?.palette, syncVisualDraft);
 

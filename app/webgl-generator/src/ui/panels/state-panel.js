@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import StatePanel from "../vue/components/StatePanel.vue";
+import {toIntegerId} from "../object-id.js";
 
 export function createStatePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -21,7 +22,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       callbacks.onActiveChange?.(active);
     },
     onTargetStateId: stateId => {
-      panelState.targetStateId = stateId;
+      panelState.targetStateId = normalizeStateId(stateId);
     },
     onFilter: value => {
       panelState.filter = value;
@@ -97,7 +98,8 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       };
     },
     setTargetStateId(stateId) {
-      panelState.targetStateId = stateExists(panelState.map, stateId) ? stateId : panelState.targetStateId;
+      const normalized = normalizeStateId(stateId);
+      panelState.targetStateId = stateExists(panelState.map, normalized) ? normalized : panelState.targetStateId;
     },
     setActive(active) {
       panelState.active = active;
@@ -137,9 +139,14 @@ function firstStateId(map) {
 }
 
 function stateExists(map, stateId) {
+  stateId = normalizeStateId(stateId);
   if (stateId === null || stateId === undefined) return false;
   if (stateId === 0) return Boolean(map?.politics?.states?.[0]);
   return Boolean(map?.politics?.states?.[stateId]);
+}
+
+function normalizeStateId(stateId) {
+  return toIntegerId(stateId);
 }
 
 function roundNumber(value) {

@@ -18,34 +18,42 @@
 
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
-  <template v-if="selected && !selected.neutral">
-    <UiTextEditField
-      class-name="state-name-editor"
-      :model-value="selected.rawName"
-      :max-length="48"
-      @apply="name => callbacks.onRename(selected.id, name)"
-    />
-
-    <UiButton variant="secondary" @click="callbacks.onEdit(selected)">编辑此国家</UiButton>
-
-    <UiColorField
-      class-name="state-color-field"
-      :model-value="selected.color"
-      @apply="color => callbacks.onColorChange(selected.id, color)"
-    />
-
-    <div class="state-capital-field">
-      <UiSelectField
-        label="首都"
-        class-name="state-capital-select"
-        :model-value="capitalDraft"
-        :options="capitalOptions"
-        :disabled="!capitalOptions.length"
-        @update:model-value="capitalDraft = Number($event)"
+  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="stateActions">
+    <template #rename>
+      <UiTextEditField
+        class-name="state-name-editor"
+        :model-value="selected.rawName"
+        :max-length="48"
+        @apply="name => callbacks.onRename(selected.id, name)"
       />
-      <UiButton variant="secondary" :disabled="!capitalOptions.length" @click="callbacks.onCapitalChange(selected.id, capitalDraft)">设为首都</UiButton>
-    </div>
-  </template>
+    </template>
+
+    <template #edit>
+      <UiButton variant="secondary" @click="callbacks.onEdit(selected)">编辑此国家</UiButton>
+    </template>
+
+    <template #color>
+      <UiColorField
+        class-name="state-color-field"
+        :model-value="selected.color"
+        @apply="color => callbacks.onColorChange(selected.id, color)"
+      />
+    </template>
+
+    <template #capital>
+      <div class="state-capital-field">
+        <UiSelectField
+          label="首都"
+          class-name="state-capital-select"
+          :model-value="capitalDraft"
+          :options="capitalOptions"
+          :disabled="!capitalOptions.length"
+          @update:model-value="capitalDraft = Number($event)"
+        />
+        <UiButton variant="secondary" :disabled="!capitalOptions.length" @click="callbacks.onCapitalChange(selected.id, capitalDraft)">设为首都</UiButton>
+      </div>
+    </template>
+  </UiActionDock>
 
   <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="callbacks.onActiveChange(!state.active)">
     {{ state.active ? "停止国家编辑" : "启用国家编辑" }}
@@ -79,6 +87,7 @@
 
 <script setup>
 import {computed, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiColorField from "./base/UiColorField.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -91,6 +100,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatPopulation} from "../../display-units.js";
+import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -137,12 +147,19 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
 const capitalDraft = ref(0);
 const metrics = computed(() => buildStateMetrics(props.state.map));
 const stateOptions = computed(() => stateRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.targetStateId) || null);
+const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
 const capitalOptions = computed(() => stateCities(props.state.map, selected.value?.id));
+const stateActions = computed(() => [
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "edit", label: "进入编辑", icon: "◎"},
+  {key: "color", label: "调整颜色", icon: "◐"},
+  {key: "capital", label: "设置首都", icon: "♛", disabled: !capitalOptions.value.length}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
@@ -181,6 +198,10 @@ const historyNote = computed(() => {
 watch(() => selected.value?.capitalBurgId, next => {
   capitalDraft.value = Number(next) || capitalOptions.value[0]?.burgId || 0;
 }, {immediate: true});
+
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
+});
 
 function buildStateMetrics(map) {
   const rows = stateRows(map).map(row => {

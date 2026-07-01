@@ -18,33 +18,42 @@
 
   <UiDetailGrid class-name="religion-panel-details" empty-text="未选中宗教" :rows="detailRows" />
 
-  <template v-if="selected">
-    <UiTextEditField
-      class-name="religion-name-editor"
-      :model-value="selected.rawName"
-      :max-length="64"
-      @apply="name => callbacks.onRename(selected.id, name)"
-    />
-    <UiColorField
-      class-name="religion-color-field"
-      :model-value="selected.color"
-      @apply="color => callbacks.onColorChange(selected.id, color)"
-    />
-    <UiSelectField
-      input-id="religion-parent-select"
-      class-name="religion-parent-select"
-      label="继承自"
-      :model-value="selected.parentId"
-      :options="parentOptions"
-      @update:model-value="parentId => callbacks.onParentChange(selected.id, parentId)"
-    />
-  </template>
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="religionActions">
+    <template #rename>
+      <UiTextEditField
+        class-name="religion-name-editor"
+        :model-value="selected.rawName"
+        :max-length="64"
+        @apply="name => callbacks.onRename(selected.id, name)"
+      />
+    </template>
+
+    <template #color>
+      <UiColorField
+        class-name="religion-color-field"
+        :model-value="selected.color"
+        @apply="color => callbacks.onColorChange(selected.id, color)"
+      />
+    </template>
+
+    <template #parent>
+      <UiSelectField
+        input-id="religion-parent-select"
+        class-name="religion-parent-select"
+        label="继承自"
+        :model-value="selected.parentId"
+        :options="parentOptions"
+        @update:model-value="parentId => callbacks.onParentChange(selected.id, parentId)"
+      />
+    </template>
+  </UiActionDock>
 
   <UiHistoryActions class-name="religion-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiColorField from "./base/UiColorField.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -55,6 +64,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatPopulation} from "../../display-units.js";
+import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -94,10 +104,16 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
 const metrics = computed(() => buildReligionMetrics(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedReligionId) || null);
+const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
+const religionActions = Object.freeze([
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "color", label: "调整颜色", icon: "◐"},
+  {key: "parent", label: "调整继承", icon: "↳"}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "宗教", value: metrics.value.total},
@@ -128,6 +144,10 @@ const detailRows = computed(() => selected.value ? [
   {label: "主要国家", value: selected.value.stateSummary},
   {label: "主要文化", value: selected.value.cultureSummary}
 ] : []);
+
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
+});
 
 function buildReligionMetrics(map) {
   const baseRows = religionRows(map);

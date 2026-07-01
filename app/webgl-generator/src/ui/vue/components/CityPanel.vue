@@ -18,42 +18,51 @@
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
-  <template v-if="selected">
-    <UiTextEditField
-      class-name="city-name-editor"
-      :model-value="selected.rawName"
-      :max-length="48"
-      @apply="name => callbacks.onRename(selected.id, name)"
-    />
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cityActions">
+    <template #rename>
+      <UiTextEditField
+        class-name="city-name-editor"
+        :model-value="selected.rawName"
+        :max-length="48"
+        @apply="name => callbacks.onRename(selected.id, name)"
+      />
+    </template>
 
-    <UiNumberField
-      class-name="city-name-editor city-population-editor"
-      label="人口"
-      action-label="应用人口"
-      :model-value="selected.population"
-      :min="0"
-      :step="0.001"
-      @apply="population => callbacks.onPopulationChange(selected.id, population)"
-    />
+    <template #population>
+      <UiNumberField
+        class-name="city-name-editor city-population-editor"
+        label="人口"
+        action-label="应用人口"
+        :model-value="selected.population"
+        :min="0"
+        :step="0.001"
+        @apply="population => callbacks.onPopulationChange(selected.id, population)"
+      />
+    </template>
 
-    <div class="city-owner-sync">
-      <span>归属操作</span>
-      <UiButton variant="secondary" :disabled="!selected.canSyncOwner" @click="callbacks.onSyncOwnerToCell(selected.id)">同步归属到所在 cell</UiButton>
-    </div>
+    <template #owner>
+      <div class="city-owner-sync">
+        <span>归属操作</span>
+        <UiButton variant="secondary" :disabled="!selected.canSyncOwner" @click="callbacks.onSyncOwnerToCell(selected.id)">同步归属到所在 cell</UiButton>
+      </div>
+    </template>
 
-    <div class="city-visual-editor">
-      <UiSelectField class-name="city-visual-select" label="剪影" :model-value="visualDraft.silhouette" :options="silhouetteOptions" @update:model-value="visualDraft.silhouette = $event" />
-      <UiSelectField class-name="city-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
-      <UiButton variant="secondary" @click="applyVisual">应用剪影</UiButton>
-      <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
-    </div>
-  </template>
+    <template #visual>
+      <div class="city-visual-editor">
+        <UiSelectField class-name="city-visual-select" label="剪影" :model-value="visualDraft.silhouette" :options="silhouetteOptions" @update:model-value="visualDraft.silhouette = $event" />
+        <UiSelectField class-name="city-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
+        <UiButton variant="secondary" @click="applyVisual">应用剪影</UiButton>
+        <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
+      </div>
+    </template>
+  </UiActionDock>
 
   <UiHistoryActions class-name="city-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
-import {computed, reactive, watch} from "vue";
+import {computed, reactive, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -73,6 +82,7 @@ import {
   resolveCityVisual
 } from "../../../runtime/city-visuals.js";
 import {formatPopulation} from "../../display-units.js";
+import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -111,13 +121,20 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
 const metrics = computed(() => buildCityMetrics(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedCityId) || null);
+const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
 const visualDraft = reactive({
   silhouette: "town",
   palette: "town"
 });
+const cityActions = computed(() => [
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "population", label: "调整人口", icon: "#"},
+  {key: "owner", label: "同步归属", icon: "⇄", disabled: !selected.value?.canSyncOwner},
+  {key: "visual", label: "调整剪影", icon: "▣"}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "城市", value: metrics.value.total},
@@ -148,6 +165,9 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
+});
 watch(() => selected.value?.silhouette, syncVisualDraft);
 watch(() => selected.value?.palette, syncVisualDraft);
 

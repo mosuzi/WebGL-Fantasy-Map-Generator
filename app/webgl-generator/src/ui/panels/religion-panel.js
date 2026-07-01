@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import ReligionPanel from "../vue/components/ReligionPanel.vue";
+import {toIntegerId} from "../object-id.js";
 
 export function createReligionPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -59,7 +60,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "religion") panelState.selectedReligionId = selection.object.id;
+      if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
       panelState.open = true;
       manager.open("religion-panel");
@@ -68,11 +69,12 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "religion") panelState.selectedReligionId = selection.object.id;
+      if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
     },
     setSelectedReligionId(religionId) {
-      if (religionExists(panelState.map, religionId)) panelState.selectedReligionId = religionId;
+      const normalized = normalizeReligionId(religionId);
+      if (religionExists(panelState.map, normalized)) panelState.selectedReligionId = normalized;
     },
     isOpen() {
       return panelState.open;
@@ -103,7 +105,12 @@ function religionObject(row) {
 }
 
 function religionExists(map, religionId) {
+  religionId = normalizeReligionId(religionId);
   return Boolean(Number.isInteger(religionId) && (map?.society?.religions?.[religionId] || map?.pack?.religions?.[religionId]));
+}
+
+function normalizeReligionId(religionId) {
+  return toIntegerId(religionId);
 }
 
 function firstReligionId(map) {

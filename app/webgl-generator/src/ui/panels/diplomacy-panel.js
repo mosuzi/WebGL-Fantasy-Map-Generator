@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import DiplomacyPanel from "../vue/components/DiplomacyPanel.vue";
+import {sameObjectId, toIntegerId} from "../object-id.js";
 
 export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -17,9 +18,10 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
   });
   const panelCallbacks = {
     onSubjectChange: stateId => {
-      panelState.selectedStateId = stateId;
-      if (!stateExists(panelState.map, panelState.selectedObjectId, stateId)) panelState.selectedObjectId = firstOtherStateId(panelState.map, stateId);
-      callbacks.onSubjectChange?.(stateId);
+      const normalized = normalizeStateId(stateId);
+      panelState.selectedStateId = normalized;
+      if (!stateExists(panelState.map, panelState.selectedObjectId, normalized)) panelState.selectedObjectId = firstOtherStateId(panelState.map, normalized);
+      callbacks.onSubjectChange?.(normalized);
     },
     onFilter: value => {
       panelState.filter = value;
@@ -37,9 +39,9 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(stateObject(row));
     },
     onMatrixCell: (subjectId, objectId) => {
-      panelState.selectedStateId = subjectId;
-      panelState.selectedObjectId = objectId;
-      callbacks.onSubjectChange?.(subjectId);
+      panelState.selectedStateId = normalizeStateId(subjectId);
+      panelState.selectedObjectId = normalizeStateId(objectId);
+      callbacks.onSubjectChange?.(panelState.selectedStateId);
     },
     onLocate: row => {
       panelState.selectedObjectId = row.id;
@@ -74,7 +76,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (selection?.object?.kind === "state" && stateExists(map, selection.object.id)) panelState.selectedStateId = selection.object.id;
+      if (selection?.object?.kind === "state" && stateExists(map, selection.object.id)) panelState.selectedStateId = normalizeStateId(selection.object.id);
       if (!stateExists(map, panelState.selectedStateId)) panelState.selectedStateId = firstStateId(map);
       if (!stateExists(map, panelState.selectedObjectId, panelState.selectedStateId)) panelState.selectedObjectId = firstOtherStateId(map, panelState.selectedStateId);
       panelState.version++;
@@ -90,9 +92,10 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.version++;
     },
     setSelectedStateId(stateId) {
-      if (!stateExists(panelState.map, stateId)) return;
-      panelState.selectedStateId = stateId;
-      if (!stateExists(panelState.map, panelState.selectedObjectId, stateId)) panelState.selectedObjectId = firstOtherStateId(panelState.map, stateId);
+      const normalized = normalizeStateId(stateId);
+      if (!stateExists(panelState.map, normalized)) return;
+      panelState.selectedStateId = normalized;
+      if (!stateExists(panelState.map, panelState.selectedObjectId, normalized)) panelState.selectedObjectId = firstOtherStateId(panelState.map, normalized);
     },
     isOpen() {
       return panelState.open;
@@ -125,11 +128,17 @@ function firstStateId(map) {
 }
 
 function firstOtherStateId(map, stateId) {
-  return stateRows(map).find(row => row.id !== stateId)?.id ?? null;
+  return stateRows(map).find(row => !sameObjectId(row.id, stateId))?.id ?? null;
 }
 
 function stateExists(map, stateId, excludedId = null) {
+  stateId = normalizeStateId(stateId);
+  excludedId = normalizeStateId(excludedId);
   return Number.isInteger(stateId) && stateId !== excludedId && Boolean(map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId]);
+}
+
+function normalizeStateId(stateId) {
+  return toIntegerId(stateId);
 }
 
 function stateRows(map) {

@@ -24,7 +24,7 @@
             {{ formatCell(column, row) }}
           </td>
           <td data-align="right">
-            <button class="table-icon-action" type="button" @click.stop="$emit('locate', row)">定位</button>
+            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="$emit('locate', row)">⌖</button>
           </td>
         </tr>
       </tbody>
@@ -34,6 +34,7 @@
 
 <script setup>
 import {nextTick, ref, watch} from "vue";
+import {objectIdKey, sameObjectId} from "../../../object-id.js";
 
 defineOptions({
   name: "UiObjectTable"
@@ -77,7 +78,7 @@ function getRowId(row) {
 }
 
 function isSelected(row) {
-  return getRowId(row) === props.selectedId;
+  return sameObjectId(getRowId(row), props.selectedId);
 }
 
 function scrollSelectedRowIntoView() {
@@ -94,7 +95,7 @@ function scrollSelectedRowIntoView() {
 }
 
 function stringRowId(value) {
-  return value === null || value === undefined ? "" : String(value);
+  return objectIdKey(value);
 }
 
 function formatCell(column, row) {

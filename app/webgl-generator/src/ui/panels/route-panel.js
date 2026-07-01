@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import RoutePanel from "../vue/components/RoutePanel.vue";
+import {toIntegerId} from "../object-id.js";
 
 export function createRoutePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -52,7 +53,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     open(map, selection) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
-      if (selection?.object?.kind === "route") panelState.selectedRouteId = selection.object.id;
+      if (selection?.object?.kind === "route") panelState.selectedRouteId = normalizeRouteId(selection.object.id);
       if (!routeExists(map, panelState.selectedRouteId)) panelState.selectedRouteId = firstRouteId(map);
       panelState.open = true;
       manager.open("route-panel");
@@ -60,11 +61,12 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     update(map, selection) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
-      if (selection?.object?.kind === "route") panelState.selectedRouteId = selection.object.id;
+      if (selection?.object?.kind === "route") panelState.selectedRouteId = normalizeRouteId(selection.object.id);
       if (!routeExists(map, panelState.selectedRouteId)) panelState.selectedRouteId = firstRouteId(map);
     },
     setSelectedRouteId(routeId) {
-      if (routeExists(panelState.map, routeId)) panelState.selectedRouteId = routeId;
+      const normalized = normalizeRouteId(routeId);
+      if (routeExists(panelState.map, normalized)) panelState.selectedRouteId = normalized;
     },
     isOpen() {
       return panelState.open;
@@ -91,7 +93,12 @@ function routeObject(row) {
 }
 
 function routeExists(map, routeId) {
+  routeId = normalizeRouteId(routeId);
   return Boolean(Number.isInteger(routeId) && (map?.settlements?.routes || []).some(route => route.id === routeId));
+}
+
+function normalizeRouteId(routeId) {
+  return toIntegerId(routeId);
 }
 
 function firstRouteId(map) {

@@ -1,6 +1,7 @@
 import {createApp, markRaw, shallowReactive} from "vue";
 import {pinia} from "../vue/pinia.js";
 import ProvincePanel from "../vue/components/ProvincePanel.vue";
+import {toIntegerId} from "../object-id.js";
 
 export function createProvincePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -45,7 +46,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       callbacks.onActiveChange?.(active);
     },
     onTargetProvinceId: provinceId => {
-      panelState.selectedProvinceId = provinceId;
+      panelState.selectedProvinceId = normalizeProvinceId(provinceId);
     },
     onRadius: radius => {
       panelState.radius = radius;
@@ -82,7 +83,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = selection.object.id;
+      if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = normalizeProvinceId(selection.object.id);
       if (!provinceExists(map, panelState.selectedProvinceId)) panelState.selectedProvinceId = firstProvinceId(map);
       panelState.open = true;
       manager.open("province-panel");
@@ -93,11 +94,12 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       panelState.lastAffected = editState.lastAffected ?? panelState.lastAffected;
       panelState.sourceProvinceId = editState.sourceProvinceId ?? panelState.sourceProvinceId;
-      if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = selection.object.id;
+      if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = normalizeProvinceId(selection.object.id);
       if (!provinceExists(map, panelState.selectedProvinceId)) panelState.selectedProvinceId = firstProvinceId(map);
     },
     setSelectedProvinceId(provinceId) {
-      if (provinceExists(panelState.map, provinceId)) panelState.selectedProvinceId = provinceId;
+      const normalized = normalizeProvinceId(provinceId);
+      if (provinceExists(panelState.map, normalized)) panelState.selectedProvinceId = normalized;
     },
     getBrush() {
       return {
@@ -138,8 +140,13 @@ function getProvince(map, provinceId) {
 }
 
 function provinceExists(map, provinceId) {
+  provinceId = normalizeProvinceId(provinceId);
   if (provinceId === 0) return true;
   return Boolean(Number.isInteger(provinceId) && getProvince(map, provinceId));
+}
+
+function normalizeProvinceId(provinceId) {
+  return toIntegerId(provinceId);
 }
 
 function firstProvinceId(map) {
