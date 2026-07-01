@@ -48,6 +48,10 @@ const MARKER_ICON_MIN_SCALE = 2.15;
 const MARKER_ICON_RELAXED_SCALE = 4.4;
 const MARKER_ICON_BASE_WIDTH = 28;
 const MARKER_ICON_BASE_HEIGHT = 32;
+const CITY_ICON_MIN_SCALE = 1.05;
+const CITY_ICON_RELAXED_SCALE = 3.8;
+const CITY_ICON_BASE_WIDTH = 34;
+const CITY_ICON_BASE_HEIGHT = 26;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -59,6 +63,15 @@ const MARKER_ICON_PALETTES = Object.freeze({
   culture: {fill: "#8264c5", stroke: "#2d204d", symbol: "#fbf2ff"},
   settlement: {fill: "#cf6f4b", stroke: "#4b271b", symbol: "#fff1e8"},
   mystery: {fill: "#715cc7", stroke: "#271f51", symbol: "#f7f1ff"}
+});
+
+const CITY_ICON_PALETTES = Object.freeze({
+  capital: {wall: "#dcc17e", roof: "#8f4b37", stroke: "#4b311d", accent: "#f7e4aa", water: "#7fa8ba"},
+  provincial: {wall: "#d3b979", roof: "#9a5438", stroke: "#49301c", accent: "#f4dea2", water: "#83a7b8"},
+  port: {wall: "#c8b785", roof: "#816c47", stroke: "#33404a", accent: "#eef0c4", water: "#4d92bc"},
+  city: {wall: "#d8c08b", roof: "#a35d3f", stroke: "#4d3321", accent: "#ffe0a0", water: "#7fa8ba"},
+  town: {wall: "#cfb884", roof: "#965a3d", stroke: "#493323", accent: "#efd69a", water: "#7fa8ba"},
+  hamlet: {wall: "#c6ad79", roof: "#8d6540", stroke: "#493523", accent: "#e6cf91", water: "#7fa8ba"}
 });
 
 const MARKER_ICON_SYMBOLS = Object.freeze({
@@ -121,6 +134,10 @@ export class PlaceholderMapRenderer {
     this.stateLabelCount = 0;
     this.visibleStateLabelCount = 0;
     this.labelItems = [];
+    this.cityIconItems = [];
+    this.cityIconCount = 0;
+    this.visibleCityIconCount = 0;
+    this.cityIconScaleThreshold = CITY_ICON_MIN_SCALE;
     this.markerIconItems = [];
     this.markerIconCount = 0;
     this.visibleMarkerIconCount = 0;
@@ -490,6 +507,9 @@ export class PlaceholderMapRenderer {
         triangleCount: this.politicalMeshDebugVertexCount / 3
       },
       pointVertexCount: this.pointVertexCount,
+      cityIconCount: this.cityIconCount,
+      visibleCityIconCount: this.visibleCityIconCount,
+      cityIconScaleThreshold: this.cityIconScaleThreshold,
       markerCount: this.map?.markers?.metadata?.markers || 0,
       markerIconCount: this.markerIconCount,
       visibleMarkerIconCount: this.visibleMarkerIconCount,
@@ -662,6 +682,7 @@ export class PlaceholderMapRenderer {
   buildLabels(map) {
     if (!this.overlay) {
       this.labelItems = [];
+      this.cityIconItems = [];
       this.markerIconItems = [];
       this.labelCount = 0;
       this.visibleLabelCount = 0;
@@ -669,6 +690,8 @@ export class PlaceholderMapRenderer {
       this.visibleCityLabelCount = 0;
       this.stateLabelCount = 0;
       this.visibleStateLabelCount = 0;
+      this.cityIconCount = 0;
+      this.visibleCityIconCount = 0;
       this.markerIconCount = 0;
       this.visibleMarkerIconCount = 0;
       return;
@@ -678,6 +701,18 @@ export class PlaceholderMapRenderer {
       const node = document.createElement("span");
       node.className = labelClassName(item);
       node.textContent = item.text;
+      this.overlay.append(node);
+      return {...item, node, box: null, visible: false};
+    });
+    this.cityIconItems = getCityIconItems(map).map(item => {
+      const node = document.createElement("span");
+      node.className = cityIconClassName(item);
+      node.title = item.tooltip;
+      node.setAttribute("aria-label", item.tooltip);
+      node.dataset.cityId = String(item.id);
+      node.dataset.cityKind = item.kind;
+      applyCityIconPalette(node, item);
+      node.innerHTML = cityIconSvg(item);
       this.overlay.append(node);
       return {...item, node, box: null, visible: false};
     });
@@ -700,10 +735,12 @@ export class PlaceholderMapRenderer {
     this.labelCount = this.labelItems.length;
     this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
     this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
+    this.cityIconCount = this.cityIconItems.length;
     this.markerIconCount = this.markerIconItems.length;
     this.visibleLabelCount = 0;
     this.visibleCityLabelCount = 0;
     this.visibleStateLabelCount = 0;
+    this.visibleCityIconCount = 0;
     this.visibleMarkerIconCount = 0;
   }
 
@@ -755,7 +792,8 @@ export class PlaceholderMapRenderer {
     this.visibleLabelCount = visible;
     this.visibleCityLabelCount = visibleCities;
     this.visibleStateLabelCount = visibleStates;
-    this.updateMarkerIcons(rect, [...occupied, ...occupiedStates]);
+    const cityIconBoxes = this.updateCityIcons(rect, occupiedStates);
+    this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes]);
     this.updateSelectionMarker(rect);
   }
 
@@ -779,6 +817,43 @@ export class PlaceholderMapRenderer {
     this.selectionMarker.style.display = "block";
     this.selectionMarker.style.left = `${screen.x}px`;
     this.selectionMarker.style.top = `${screen.y}px`;
+  }
+
+  updateCityIcons(rect, occupiedLabels = []) {
+    if (!this.cityIconItems.length) {
+      this.visibleCityIconCount = 0;
+      return [];
+    }
+
+    const scale = this.camera.scale;
+    const iconPadding = scale >= CITY_ICON_RELAXED_SCALE ? 2 : 5;
+    const occupiedIcons = [];
+    let visible = 0;
+
+    for (const item of this.cityIconItems) {
+      const screen = this.worldToScreen(item.x, item.y, rect);
+      const sizeScale = cityIconScale(scale, item);
+      const box = cityIconBoxForItem(item, screen, sizeScale);
+      const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
+      const blocked = scale < CITY_ICON_RELAXED_SCALE && (
+        occupiedLabels.some(other => boxesOverlap(box, other, iconPadding)) ||
+        occupiedIcons.some(other => boxesOverlap(box, other, iconPadding))
+      );
+      const shouldShow = this.layerVisibility.cities !== false && scale >= item.minScale && onScreen && !blocked;
+      item.node.classList.toggle("visible", shouldShow);
+      item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.CITY && this.selection.id === item.id);
+      item.visible = shouldShow;
+      item.box = shouldShow ? box : null;
+      if (!shouldShow) continue;
+      item.node.style.left = `${screen.x}px`;
+      item.node.style.top = `${screen.y}px`;
+      item.node.style.setProperty("--city-icon-scale", String(sizeScale));
+      occupiedIcons.push(box);
+      visible++;
+    }
+
+    this.visibleCityIconCount = visible;
+    return occupiedIcons;
   }
 
   updateMarkerIcons(rect, occupiedLabels = []) {
@@ -1007,6 +1082,155 @@ function getCustomLabels(map) {
       rank,
       minScale: 0.25
     }));
+}
+
+function getCityIconItems(map) {
+  return [...(map?.settlements?.cities || [])]
+    .filter(city => city && Number.isInteger(city.id) && Number.isFinite(city.x) && Number.isFinite(city.y))
+    .map(city => ({city, priority: scoreCityIcon(city)}))
+    .sort((a, b) => b.priority - a.priority)
+    .map(({city, priority}, rank) => {
+      const kind = cityIconKind(city);
+      return {
+        id: city.id,
+        city,
+        name: city.name || `城镇 #${city.id + 1}`,
+        kind,
+        tooltip: cityIconTooltip(city, kind),
+        priority,
+        rank,
+        population: Number(city.population || 0),
+        cultureId: Number.isInteger(city.culture) ? city.culture : null,
+        visual: city.visual || city.iconVisual || {},
+        x: city.x,
+        y: city.y,
+        minScale: cityIconMinScale(city, kind, rank)
+      };
+    });
+}
+
+function scoreCityIcon(city) {
+  return (city.capital ? 800 : 0) + (city.provincial ? 320 : 0) + (city.port ? 120 : 0) + Number(city.population || 0) * 2;
+}
+
+function cityIconKind(city) {
+  const population = Number(city.population || 0);
+  if (city.capital) return "capital";
+  if (city.provincial) return "provincial";
+  if (city.port) return "port";
+  if (population >= 64) return "city";
+  if (population < 8) return "hamlet";
+  return "town";
+}
+
+function cityIconMinScale(city, kind, rank) {
+  if (kind === "capital") return 0.95;
+  if (kind === "provincial") return 1.2;
+  if (kind === "city" || kind === "port") return rank < 18 ? 1.45 : 1.65;
+  if (kind === "town") return rank < 36 ? 1.9 : 2.25;
+  return rank < 72 ? 2.35 : 2.85;
+}
+
+function cityIconTooltip(city, kind) {
+  const kindLabel = {
+    capital: "都城",
+    provincial: "省会",
+    port: "港镇",
+    city: "城市",
+    town: "城镇",
+    hamlet: "村落"
+  }[kind] || "城镇";
+  const population = Number(city.population || 0);
+  const populationText = population > 0 ? `，人口 ${roundValue(population)}` : "";
+  return `${city.name || "城镇"} / ${kindLabel}${populationText}`;
+}
+
+function cityIconClassName(item) {
+  return `city-map-icon city-map-icon--${item.kind}`;
+}
+
+function applyCityIconPalette(node, item) {
+  const palette = cityIconPalette(item);
+  node.style.setProperty("--city-wall", palette.wall);
+  node.style.setProperty("--city-roof", palette.roof);
+  node.style.setProperty("--city-stroke", palette.stroke);
+  node.style.setProperty("--city-accent", palette.accent);
+  node.style.setProperty("--city-water", palette.water);
+}
+
+function cityIconPalette(item) {
+  const visual = item.visual || {};
+  return CITY_ICON_PALETTES[visual.cityPalette] || CITY_ICON_PALETTES[visual.palette] || CITY_ICON_PALETTES[item.kind] || CITY_ICON_PALETTES.town;
+}
+
+function cityIconSvg(item) {
+  if (item.kind === "capital") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="13.6" ry="2.3"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="13.1" ry="2.1"/>
+    <path class="city-icon-fill" d="M5 20.1v-7.8l2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3v7.8z"/>
+    <path class="city-icon-roof" d="m9.2 11.8 4.2-4 4.2 4zm8.8.1 4.2-4.9 4.2 4.9z"/>
+    <path class="city-icon-accent" d="M6.9 20.1v-8.8h3.7v8.8zm16.5 0v-8.8h3.7v8.8z"/>
+    <path class="city-icon-window" d="M12.3 15.2h2.2v4.9h-2.2zm7.3-.1h2.2v5h-2.2z"/>
+    <path class="city-icon-stroke" d="M4.2 20.1h25.6"/>
+  </svg>`;
+  if (item.kind === "provincial") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.3" rx="12.4" ry="2.1"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="12" ry="1.9"/>
+    <path class="city-icon-fill" d="M9.2 20.2v-8.8l1.8-.9 1.8.9 1.8-.9 1.8.9 1.8-.9 1.8.9 1.8-.9 1.8.9v8.8z"/>
+    <path class="city-icon-roof" d="m7.4 14.1 5.3-4.5 5.3 4.5zm10.2-.4 4.4-3.7 4.4 3.7z"/>
+    <path class="city-icon-accent" d="M14 20.2v-11h6v11z"/>
+    <path class="city-icon-window" d="M16 12.2h2v2.2h-2zm.1 4.1h1.8v3.9h-1.8z"/>
+    <path class="city-icon-stroke" d="M6.7 20.2h20.6"/>
+  </svg>`;
+  if (item.kind === "port") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="16.5" cy="22.1" rx="12.5" ry="2.1"/>
+    <path class="city-icon-water" d="M4.8 21.1c2.5-1.1 4.9-1.1 7.4 0s4.9 1.1 7.4 0 5-1.1 7.5 0"/>
+    <path class="city-icon-fill" d="M7.6 20v-6h8.6v6z"/>
+    <path class="city-icon-roof" d="m6.3 14.2 5.6-4 5.6 4z"/>
+    <path class="city-icon-accent" d="M21.5 7.3v12.8"/>
+    <path class="city-icon-sail" d="M22.3 8.2c3 2 4.6 4.7 4.9 8.1h-4.9z"/>
+    <path class="city-icon-window" d="M10.7 16h2.4v4h-2.4z"/>
+  </svg>`;
+  if (item.kind === "hamlet") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="9.4" ry="1.8"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="9" ry="1.6"/>
+    <path class="city-icon-fill" d="M10.4 20.3v-7.2h13.2v7.2z"/>
+    <path class="city-icon-roof" d="M8.7 13.6 17 7.7l8.3 5.9z"/>
+    <path class="city-icon-window" d="M15.3 16.1h3.4v4.2h-3.4z"/>
+    <path class="city-icon-stroke" d="M9.2 20.3h15.6"/>
+  </svg>`;
+  if (item.kind === "city") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="12.9" ry="2.2"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="12.2" ry="1.9"/>
+    <path class="city-icon-fill" d="M5.8 20.2v-6.9h8.2v6.9zm9.2 0v-8.2h8.4v8.2zm9.2 0v-6.1h4.2v6.1z"/>
+    <path class="city-icon-roof" d="m4.7 13.5 5.2-4.1 5.2 4.1zm8.7-1.1 5.8-4.6 5.8 4.6zm9.4 1.9 3.5-2.8 3.5 2.8z"/>
+    <path class="city-icon-window" d="M8.7 16h2.1v4.2H8.7zm18 1h1.2v3.2h-1.2zm-9.4-1.6h3v4.8h-3z"/>
+  </svg>`;
+  return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="11.4" ry="2"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="10.8" ry="1.7"/>
+    <path class="city-icon-fill" d="M7.9 20.2v-6.8h8.7v6.8zm9.8 0v-7.6h8.4v7.6z"/>
+    <path class="city-icon-roof" d="m6.7 13.8 5.5-4.2 5.5 4.2zm9.6-.8 5.5-4.3 5.5 4.3z"/>
+    <path class="city-icon-window" d="M11.1 16.2h2.2v4h-2.2zm9.7-.3h2.3v4.3h-2.3z"/>
+    <path class="city-icon-stroke" d="M7.1 20.2h20"/>
+  </svg>`;
+}
+
+function cityIconBoxForItem(item, screen, sizeScale) {
+  const width = CITY_ICON_BASE_WIDTH * sizeScale;
+  const height = CITY_ICON_BASE_HEIGHT * sizeScale;
+  return {
+    left: screen.x - width / 2,
+    right: screen.x + width / 2,
+    top: screen.y - height * 0.82,
+    bottom: screen.y + height * 0.18,
+    item
+  };
+}
+
+function cityIconScale(scale, item) {
+  const kindBonus = item.kind === "capital" ? 0.16 : item.kind === "provincial" ? 0.1 : item.kind === "city" || item.kind === "port" ? 0.06 : 0;
+  return clamp(0.72 + kindBonus + (scale - item.minScale) * 0.055, 0.72, 1.18);
 }
 
 function getMarkerIconItems(map) {

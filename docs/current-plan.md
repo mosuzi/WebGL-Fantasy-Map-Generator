@@ -15,6 +15,7 @@
 - marker hover、选中详情和侧栏统计已显示图标、中文类型、类别、资源标签和经济潜力；`stage-2-1231411414 / continents / 10000` 内存验证中生成 `41` 个 marker、`5` 个资源 marker、资源潜力 `74`，覆盖 `4` 个国家和 `5` 个省份，且 marker 无无色点、无非法 cell 引用。
 - 资源点已拆成独立图层：控制面板“图层”tab 新增“资源点”和“标记”，前者只控制 `category === "resource"` 的资源 marker，后者控制遗迹、危险、设施、文化等非资源 marker；隐藏的 marker 不再参与 hover/点击命中。
 - marker 近景小图标第一刀已完成：远景仍显示 WebGL 点；相机缩放达到 `x2.15` 后，地图 overlay 会显示带底牌的小 SVG 图标，图标按 `visual.shape/symbol/palette/cultureStyle/manual` 数据选择，资源图层关闭时资源图标也同步隐藏；这套字段后续可推广到城镇标识、文化预制样式和用户手动调整。
+- 城镇近景剪影第一刀已完成：城镇不复用 marker 水滴图标，而是新增独立 `.city-map-icon` overlay；远景仍用 WebGL 圆点保持轻量，近景按都城、省会、大城、港镇、普通城镇和村落显示简化剪影，城市图层关闭时剪影、点位和 picking 一起隐藏。
 - marker / 资源点管理面板第一刀已完成：管理 tab 新增“资源标记”入口，浮动面板支持全部/资源点/普通标记切换、筛选、排序、选中、定位、详情、重命名、近景图标 `symbol/palette` 手动调整和撤销/重做；暂不做新增、删除、移动和局部重算。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
 - source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
@@ -32,7 +33,7 @@
 下一步优先级：
 
 1. `features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正；若继续收敛，应回到高度洼地、lake outlet、feature 拓扑，而不是删除小岛或过滤湖名。
-2. marker 后续不要为了单个类型继续扩大总量；下一步可进入 marker 新增/删除/移动、局部重算、文化化图标预设和城镇标识复用，而不是再调全局 target。可追加的资源点类型包括：采石场、黏土坑、煤田、硫磺泉、硝石洞、琥珀海岸、珍珠滩、珊瑚礁、渔场、良港、森林木场、树脂林、药草谷、染料草场、香料林、茶山、丝茧桑园、马场、牧盐草甸、绿洲、圣泉、地热田。
+2. marker 后续不要为了单个类型继续扩大总量；下一步可进入 marker 新增/删除/移动、局部重算、文化化图标预设和城镇剪影文化变体，而不是再调全局 target。可追加的资源点类型包括：采石场、黏土坑、煤田、硫磺泉、硝石洞、琥珀海岸、珍珠滩、珊瑚礁、渔场、良港、森林木场、树脂林、药草谷、染料草场、香料林、茶山、丝茧桑园、马场、牧盐草甸、绿洲、圣泉、地热田。
 3. 经济/人口后续若继续提质，应把 Goods 生成正式前移到 rankCells 之前，并把 `state.economicPower / province.economicPower` 接入后续国力计算，而不是长期依赖 economy 阶段的资源 bonus 补偿。
 4. 再下一步可以统一控制面板下拉选项 UI。
 

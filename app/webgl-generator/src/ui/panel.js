@@ -377,6 +377,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "对象索引", stats.objectPickingIndex ? `${stats.objectPickingIndex.buckets} buckets / ${stats.objectPickingIndex.markers} markers / ${stats.objectPickingIndex.routeSegments} routes / ${stats.objectPickingIndex.riverSegments} rivers` : "none"),
     statRow(documentRef, "轮廓三角形", stats.lineTriangleCount ?? Math.round((stats.lineVertexCount || 0) / 3)),
     statRow(documentRef, "点顶点", stats.pointVertexCount),
+    statRow(documentRef, "城市图标", `${stats.visibleCityIconCount} / ${stats.cityIconCount}，阈值 x${stats.cityIconScaleThreshold}`),
     statRow(documentRef, "marker", stats.markerCount),
     statRow(documentRef, "marker 图标", `${stats.visibleMarkerIconCount} / ${stats.markerIconCount}，阈值 x${stats.markerIconScaleThreshold}`),
     statRow(documentRef, "marker 资源", formatMarkerResources(map)),
