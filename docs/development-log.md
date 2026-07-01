@@ -11118,3 +11118,26 @@ full 矩阵结果：
 注意：
 
 - 当前资源 bonus 是 economy 阶段补偿式应用，已能修正税基，但还不是最理想的 source 顺序。后续若继续提质，应把 goods/resource 生成正式前移到 `rankCells()` 之前，让城市、国家和文化也在第一时间吃到资源加成。
+
+### 生成控制面板摘要迁移
+
+背景：
+
+- 正式应用的运行时统计区已经包含大量生成、渲染、编辑和 baseline 诊断信息，生成配置面板仍只显示输入控件。
+- 按编辑器与统计面板清单，`generation-panel` 应承载少量生成摘要，方便用户在浮动控制面板中快速确认当前地图身份。
+
+修正：
+
+- `ControlPanel.vue` 的 `生成` tab 新增轻量摘要区，显示阶段、耗时、seed、地形、grid/pack 规模和 checksum。
+- `updateRuntimePanel()` 在刷新旧侧栏统计时同步更新控制面板摘要；摘要 DOM 缺失时静默跳过，避免影响其它挂载路径。
+- 新增紧凑样式，确保 checksum、耗时和规模字段在窄浮动面板中可换行、不撑破布局。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel.js`
+- `git diff --check`
+- `$env:CI='true'; pnpm run build:app`
+
+注意：
+
+- 该改动只迁移轻量生成摘要，不迁移 source/candidate 对照表；对照仍以 baseline 报告和运行时统计为主。

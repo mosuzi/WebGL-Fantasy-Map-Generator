@@ -320,6 +320,7 @@ export function updateRuntimePanel(documentRef, state) {
   syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
   documentRef.getElementById("map-badge").textContent = `${map.metadata.graphWidth} x ${map.metadata.graphHeight} / ${map.metadata.cellsTarget} cells`;
+  updateControlPanelSummary(documentRef, map);
   updateMapLegend(documentRef, map, stats.colorMode);
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
@@ -383,6 +384,20 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "快照依赖", map.status.snapshotDependency ? "是" : "否"),
     statRow(documentRef, "生成日志", map.generationLog.join(" / "))
   );
+}
+
+function updateControlPanelSummary(documentRef, map) {
+  setTextById(documentRef, "control-summary-stage", map.metadata.generatorStage);
+  setTextById(documentRef, "control-summary-timing", formatGenerationTiming(map.metadata.generationTiming));
+  setTextById(documentRef, "control-summary-seed", map.metadata.seed);
+  setTextById(documentRef, "control-summary-template", map.heightmap.name);
+  setTextById(documentRef, "control-summary-cells", `${map.metadata.gridCells} / ${map.metadata.packCells}`);
+  setTextById(documentRef, "control-summary-checksum", map.summary.checksum);
+}
+
+function setTextById(documentRef, id, value) {
+  const target = documentRef.getElementById(id);
+  if (target) target.textContent = String(value);
 }
 
 function syncLabelLimitControlBounds(documentRef, map, stats) {

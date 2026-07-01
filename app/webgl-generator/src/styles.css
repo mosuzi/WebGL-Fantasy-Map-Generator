@@ -1416,6 +1416,34 @@ select:disabled {
   margin-top: 4px;
 }
 
+.generation-panel-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.generation-panel-summary div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: #10171b;
+}
+
+.generation-panel-summary span {
+  color: #80919c;
+  font-size: 11px;
+}
+
+.generation-panel-summary strong {
+  color: #edf4f6;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .layer-toggle-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
