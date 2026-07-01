@@ -1,7 +1,6 @@
-import {createApp, shallowReactive} from "vue";
+import {shallowReactive} from "vue";
 import {getNamebaseSummariesForMap} from "../../generator/namebase-store.js";
-import {pinia} from "../vue/pinia.js";
-import NamebasePanel from "../vue/components/NamebasePanel.vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 
 export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -55,9 +54,17 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-namebase-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(NamebasePanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/NamebasePanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "名称库总览将在首次打开时加载。",
+      loading: "正在加载名称库总览...",
+      failure: "名称库总览加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(map = null) {
@@ -66,6 +73,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
       panelState.open = true;
       panelState.version++;
       manager.open("namebase-panel");
+      lazyPanel.load();
     },
     update(map = null) {
       panelState.map = map;
@@ -76,7 +84,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
       return panelState.open;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }

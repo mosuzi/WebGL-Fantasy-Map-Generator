@@ -13358,3 +13358,26 @@ full 矩阵结果：
 
 - 继续把低频管理浮层按同一模式动态 import，观察共享 chunk 是否还能继续拆小。
 - 进入 `UiObjectTable -> ElTable` 前，必须保留筛选、排序、选中、定位按钮、双击定位和选中自动滚入视口契约。
+
+### 低频管理浮层懒加载第二刀：名称库总览
+
+背景：
+
+- 备注总览懒加载已经证明 SFC 可按浮层首次打开拆包。
+- 名称库总览也是低频管理浮层，且包含列表、详情、导入导出和编辑表单，适合验证同一模式的复用性。
+
+修正：
+
+- 新增 `createLazyVuePanel()`，统一封装动态 import、`createApp()`、Pinia 注入、加载提示、失败提示和卸载。
+- `notes-panel.js` 改为复用该 helper，移除本地重复 promise 状态管理。
+- `namebase-panel.js` 移除对 `NamebasePanel.vue` 的静态 import，首次打开名称库浮层时再动态加载组件。
+- 两个面板继续保留原 `open / update / isOpen / unmount` 等外部 API。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；产物拆出 `NotesPanel-DtYFJkzo.js`（约 `4.87KB / 2.13KB gzip`）和 `NamebasePanel-BFurKgSt.js`（约 `6.29KB / 2.50KB gzip`）。主入口变为 `index-FDfayAtz.js`，约 `715.83KB / 211.47KB gzip`；共享 chunk 包括 `use-unit-preferences-D9KEQpc_.js`（约 `63.02KB gzip`）、`UiTextEditField-oLniX9Hu.js`（约 `30.24KB gzip`）和 `object-resolver-BymDTy8G.js`（约 `2.26KB gzip`）。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：首屏资源中没有 `NotesPanel` 或 `NamebasePanel` chunk；打开“备注总览”后加载 `NotesPanel-DtYFJkzo.js`，打开“名称库”后加载 `NamebasePanel-BFurKgSt.js`；两个面板摘要均正常显示，console/page error 为 `0`。
+
+后续：
+
+- 继续迁移低频管理浮层时优先观察共享 chunk 变化，必要时再把对象解析、单位偏好和表单基础组件做更细的拆分。
