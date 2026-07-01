@@ -4,12 +4,12 @@
       <thead>
         <tr>
           <th v-for="column in columns" :key="column.key" :data-align="column.align || null">{{ column.label }}</th>
-          <th></th>
+          <th v-if="showLocateAction"></th>
         </tr>
       </thead>
       <tbody>
         <tr v-if="!rows.length">
-          <td class="object-table-empty" :colspan="columns.length + 1">{{ emptyText }}</td>
+          <td class="object-table-empty" :colspan="columns.length + (showLocateAction ? 1 : 0)">{{ emptyText }}</td>
         </tr>
         <tr
           v-for="row in rows"
@@ -18,12 +18,12 @@
           :data-row-id="stringRowId(getRowId(row))"
           :class="{selected: isSelected(row)}"
           @click="$emit('select', row)"
-          @dblclick="$emit('locate', row)"
+          @dblclick="showLocateAction && $emit('locate', row)"
         >
           <td v-for="column in columns" :key="column.key" :data-align="column.align || null">
             {{ formatCell(column, row) }}
           </td>
-          <td data-align="right">
+          <td v-if="showLocateAction" data-align="right">
             <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="$emit('locate', row)">⌖</button>
           </td>
         </tr>
@@ -60,6 +60,10 @@ const props = defineProps({
   rowIdKey: {
     type: String,
     default: "id"
+  },
+  showLocateAction: {
+    type: Boolean,
+    default: true
   }
 });
 

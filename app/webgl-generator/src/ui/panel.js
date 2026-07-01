@@ -89,6 +89,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
   documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
   documentRef.getElementById("open-notes-panel")?.addEventListener("click", handlers.onOpenNotesPanel);
+  documentRef.getElementById("open-namebase-panel")?.addEventListener("click", handlers.onOpenNamebasePanel);
   documentRef.getElementById("export-map-image")?.addEventListener("click", () => handlers.onExportImage?.());
   documentRef.getElementById("export-map-data")?.addEventListener("click", () => handlers.onExportMapData?.());
   documentRef.getElementById("export-map-geojson")?.addEventListener("click", () => handlers.onExportGeoJson?.());
@@ -184,6 +185,7 @@ function editLockControls(documentRef) {
     "#open-marker-panel",
     "#open-label-naming-panel",
     "#open-notes-panel",
+    "#open-namebase-panel",
     "#export-map-image",
     "#export-map-data",
     "#export-map-geojson",

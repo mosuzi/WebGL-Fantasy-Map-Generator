@@ -13003,3 +13003,26 @@ full 矩阵结果：
 后续：
 
 - 优先做只读名称库总览与名称库导出，再做可编辑用户名称库；文化级绑定和 Markov chain 复刻后置。
+
+### 名称库总览第一刀
+
+背景：
+
+- 名称库编辑器计划已经明确第一阶段只做只读总览，避免在没有数据契约和导入导出格式前直接改变生成逻辑。
+- 当前内置词池散落在 `names.js` 常量中，用户无法直观看到春秋古国根名、文化风格词池和重复项情况。
+
+修正：
+
+- `names.js` 新增 `getBuiltinNamebaseSummaries()`，只返回内置词池统计值和样例，不暴露可变数组引用，也不调用随机生成流程。
+- 管理 tab 新增“名称库”入口，打开 `NamebasePanel.vue` 浮层，可查看词池总数、样本总数、唯一样本、重复样本、筛选、排序、表格和选中详情。
+- `UiObjectTable` 增加 `showLocateAction` 可选项，默认保持原行为；名称库不是地图对象，因此隐藏定位列。
+
+验证：
+
+- Node 直接验证 `getBuiltinNamebaseSummaries()` 输出 `61` 个内置词池、总样本 `2241`；“春秋古国根名”为 `96` 个样本、`96` 个唯一样本、`0` 个重复，长度范围 `1-2`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `969.34KB JS / 298.99KB gzip`、`150.71KB CSS / 22.40KB gzip`。
+- Playwright + 构建产物静态服务验证通过：管理 tab 点击“名称库”后打开 `名称库总览` 浮层，表格行数 `61`，指标为 `词池 61 / 样本 2241 / 唯一样本 2233 / 重复 8`；“春秋古国根名”详情显示 `96` 个样本、`0` 重复，样例含 `齐、晋、秦、楚、鲁、宋、卫、郑`；打开前后 checksum 均为 `7fda045e`，console/page error 为 `0`。
+
+后续：
+
+- 下一步可做 `webgl-generator-namebases v1` 导出；用户自定义名称库、Markov chain 复刻和文化级绑定仍按计划后置。

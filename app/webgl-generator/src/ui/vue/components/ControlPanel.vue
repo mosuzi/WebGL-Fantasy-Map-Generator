@@ -533,7 +533,8 @@ const actions = Object.freeze([
   {id: "open-river-panel", label: "河流管理"},
   {id: "open-marker-panel", label: "资源标记"},
   {id: "open-label-naming-panel", label: "标签管理"},
-  {id: "open-notes-panel", label: "备注总览"}
+  {id: "open-notes-panel", label: "备注总览"},
+  {id: "open-namebase-panel", label: "名称库"}
 ]);
 
 const regenerationActions = Object.freeze([

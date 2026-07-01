@@ -18,6 +18,7 @@ import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
 import {createMarkerPanel} from "../ui/panels/marker-panel.js";
+import {createNamebasePanel} from "../ui/panels/namebase-panel.js";
 import {createNotesPanel} from "../ui/panels/notes-panel.js";
 import {createObjectDetailsPanel} from "../ui/panels/object-details-panel.js";
 import {createProvincePanel} from "../ui/panels/province-panel.js";
@@ -109,6 +110,7 @@ export function createGeneratorApp(documentRef) {
   let routePanel = null;
   let markerPanel = null;
   let labelNamingPanel = null;
+  let namebasePanel = null;
   let notesPanel = null;
   let suppressNextRiverPanelOpen = false;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
@@ -802,6 +804,8 @@ export function createGeneratorApp(documentRef) {
     }
   });
   state.panels.labelNaming = labelNamingPanel;
+  namebasePanel = createNamebasePanel(documentRef, panelManager);
+  state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
     onSelect: row => {
       if (!row?.object || row.orphan) return;
@@ -1052,6 +1056,9 @@ export function createGeneratorApp(documentRef) {
     },
     onOpenNotesPanel: () => {
       state.panels.notes.open(state.map, state.selection, state.editHistory.getStats());
+    },
+    onOpenNamebasePanel: () => {
+      state.panels.namebase.open();
     },
     onExportImage: () => exportMapImage(state, documentRef),
     onExportMapData: () => exportMapData(state, documentRef),

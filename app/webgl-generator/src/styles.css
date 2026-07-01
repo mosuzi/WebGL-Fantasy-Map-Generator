@@ -3192,6 +3192,92 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.namebase-panel-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.namebase-panel-summary div {
+  display: grid;
+  gap: 3px;
+}
+
+.namebase-panel-summary span {
+  color: #80919c;
+  font-size: 11px;
+}
+
+.namebase-panel-summary strong {
+  color: #edf4f6;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.namebase-panel-controls {
+  margin-bottom: 8px;
+}
+
+.namebase-panel-controls input {
+  width: 100%;
+}
+
+.namebase-panel-sort {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.namebase-panel-sort button {
+  height: 28px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  background: #10171b;
+  color: #cbd7dc;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.namebase-panel-sort button.active,
+.namebase-panel-sort button:hover {
+  border-color: #d7a84f;
+  background: #2b2415;
+  color: #ffe0a1;
+}
+
+.namebase-panel-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(189, 206, 213, 0.12);
+}
+
+.namebase-panel-preview {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 6px;
+  background: rgba(16, 23, 27, 0.72);
+  color: #dce7eb;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.namebase-panel-preview strong {
+  color: #ffe0a1;
+  font-size: 12px;
+}
+
+.namebase-panel-preview span {
+  overflow-wrap: anywhere;
+}
+
 .city-panel-details {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
