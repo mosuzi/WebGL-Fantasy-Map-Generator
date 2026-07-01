@@ -12378,6 +12378,7 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `899.56KB JS / 281.46KB gzip`、`137.51KB CSS / 20.44KB gzip`。
 - Playwright + 构建产物静态服务验证通过：`.ui-switch-el` 数量为 `5`，隐藏 `input.ui-switch-native[type=checkbox]` 数量为 `5`，可见原生 checkbox 数量为 `0`；点击灰度“反转黑白”整行后 hidden checkbox、行选中态和 Element 选中态均为 `true`；点击“显示海底”图层按钮后 hidden checkbox、按钮选中态和 Element 选中态均为 `true`，console/page error 为 `0`。
+- 组件迁移组合烟测通过：最新构建中 `.el-button = 113`、`.ui-select-field .el-select = 9`、`.ui-slider-el = 14`、`.ui-switch-el = 5`、tab 数 `6`；连续操作地形下拉、灰度高度 slider、反转开关、人口倍率 slider、显示海底开关并生成地图后，隐藏地形值和 `map.heightmap.template` 均为 `archipelago`，console/page error 为 `0`。
 
 后续：
 
