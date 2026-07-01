@@ -102,7 +102,18 @@ const props = defineProps({
   }
 });
 
+const RESOURCE_LABELS = Object.freeze({
+  geothermal: "地热",
+  ore: "矿产",
+  salt: "盐",
+  "rare-biota": "稀有生物",
+  gems: "宝石"
+});
+
 const sortOptions = Object.freeze([
+  {key: "powerScore", label: "国力"},
+  {key: "economicPower", label: "经济"},
+  {key: "resourcePotential", label: "资源"},
   {key: "population", label: "人口"},
   {key: "burgs", label: "城镇"},
   {key: "area", label: "面积"},
@@ -114,7 +125,9 @@ const columns = Object.freeze([
   {key: "name", label: "名称"},
   {key: "capitalName", label: "首都"},
   {key: "burgs", label: "城镇", align: "right"},
-  {key: "population", label: "人口", align: "right", format: value => formatNumber(value)}
+  {key: "population", label: "人口", align: "right", format: value => formatNumber(value)},
+  {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
+  {key: "resourcePotential", label: "资源", align: "right", format: value => formatNumber(value)}
 ]);
 
 const capitalDraft = ref(0);
@@ -127,6 +140,8 @@ const capitalOptions = computed(() => stateCities(props.state.map, selected.valu
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
   {label: "国家", value: metrics.value.total},
+  {label: "国力", value: formatNumber(metrics.value.powerScore)},
+  {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
   {label: "筛选", value: visibleRows.value.length},
   {label: "目标国家", value: formatStateName(props.state.map, props.state.targetStateId)},
   {label: "影响", value: props.state.lastAffected}
@@ -141,6 +156,11 @@ const detailRows = computed(() => selected.value ? [
   {label: "面积", value: formatNumber(selected.value.area)},
   {label: "城镇", value: selected.value.burgs},
   {label: "人口", value: formatNumber(selected.value.population)},
+  {label: "国力评分", value: formatNumber(selected.value.powerScore)},
+  {label: "经济力", value: formatNumber(selected.value.economicPower)},
+  {label: "资源潜力", value: formatNumber(selected.value.resourcePotential)},
+  {label: "资源类型", value: selected.value.resourceSummary},
+  {label: "军力", value: formatNumber(selected.value.militaryPower)},
   {label: "邻国", value: selected.value.neighborCount}
 ] : []);
 
@@ -175,11 +195,22 @@ function buildStateMetrics(map) {
       area: neutral ? neutralStats.area : stateItem?.area || stateItem?.cells || 0,
       burgs: neutral ? neutralStats.burgs : stateItem?.burgs || stateCities(map, row.id).length,
       population: neutral ? neutralStats.population : population,
+      economicPower: neutral ? 0 : Number(stateItem?.economicPower || 0),
+      resourcePotential: neutral ? 0 : Number(stateItem?.resourcePotential || 0),
+      powerScore: neutral ? 0 : Number(stateItem?.powerScore || 0),
+      militaryPower: neutral ? 0 : sumMilitaryPower(stateItem?.military),
+      resourceSummary: neutral ? "无" : formatResourceTypes(stateItem?.resourceTypes),
       neighborCount: stateItem?.neighbors?.length || 0,
       color: neutral ? "#a6adb3" : normalizeHexColor(stateItem?.color) || fallbackStateColor(row.id)
     };
   });
-  return {rows, total: rows.length};
+  return {
+    rows,
+    total: rows.length,
+    powerScore: rows.reduce((sum, row) => sum + row.powerScore, 0),
+    economicPower: rows.reduce((sum, row) => sum + row.economicPower, 0),
+    resourcePotential: rows.reduce((sum, row) => sum + row.resourcePotential, 0)
+  };
 }
 
 function filterRows(rows, filter) {
@@ -251,6 +282,19 @@ function neutralStateStats(map) {
   }
   const burgs = (map?.settlements?.cities || []).filter(city => city && (city.state || 0) === 0).length;
   return {area, population, burgs};
+}
+
+function sumMilitaryPower(regiments) {
+  return (regiments || []).reduce((sum, regiment) => sum + Number(regiment?.a || regiment?.t || 0), 0);
+}
+
+function formatResourceTypes(types) {
+  const entries = Object.entries(types || {})
+    .filter(([, value]) => Number(value) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, 4);
+  if (!entries.length) return "无";
+  return entries.map(([key, value]) => `${RESOURCE_LABELS[key] || key} ${formatNumber(Number(value))}`).join(" / ");
 }
 
 function normalizeHexColor(color) {

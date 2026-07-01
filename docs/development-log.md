@@ -11475,3 +11475,27 @@ full 矩阵结果：
 - 可以继续扩展资源类型：采石场、煤田、硫磺泉、珍珠滩、珊瑚礁、森林木场、药草谷、香料林、马场、绿洲、圣泉、地热田等。
 - 后续经济/国力阶段应读取 `markerResourceEconomy` 或正式资源 goods 生成结果，把资源点纳入国力和贸易计算。
 - 控制面板下拉 UI 仍待统一。
+
+### 资源经济接入国力第一刀
+
+背景：
+
+- 用户希望资源点不只是地图 marker，而是能参与国家、省份经济计算，并为后续国力计算提供基础。
+- 上一轮已经生成并编辑资源点，也按国家/省份汇总 `resourcePotential / markerEconomicPotential`；本轮目标是把这些字段真正接到政治对象、军事派生和管理面板。
+
+修正：
+
+- `economy.js` 新增可复用 `refreshPoliticalEconomicPower(pack)`：
+  - 国家和省份会根据税收或人口税基、marker 经济潜力、资源潜力、人口、面积和城镇数派生 `economicPower / resourcePower / populationPower / territoryPower / settlementPower / powerScore / militarySupply`。
+  - `buildEconomy()` 使用同一函数，避免经济阶段和编辑阶段计算口径分裂。
+- marker 新增、移动、删除和资源点重生成后，会先刷新 `markerResourceEconomy`，再刷新国家/省份经济力和实力评分；完整 economy / military 仍标记为 stale，等待后续更重的派生重算。
+- `military.js` 读取国家 `economicPower / resourcePotential / militarySupply`：
+  - 资源和经济只作为小幅补给修正，不直接替代人口、城镇和警戒因子。
+  - 军事诊断新增 `economicPower / resourcePotential / economicTargetModifier / militarySupply`，方便后续 baseline 或面板复查。
+- 国家面板新增国力、经济、资源排序和列表列；详情显示国力评分、经济力、资源潜力、资源类型和军力。
+- 省份面板新增实力、经济、资源排序和列表列；详情显示人口、实力评分、经济力、资源潜力和资源类型。
+
+后续：
+
+- 当前 `powerScore` 是 UI/派生层的第一版综合评分，适合排序和观感验证；后续如果进入正式国力系统，应进一步拆成财政、资源、兵源、交通、科技或稳定度等权重。
+- 资源点仍未转成正式 goods 供需，也没有接入贸易路径价格；后续经济提质应把资源 marker 与 goods/market/deals 打通。

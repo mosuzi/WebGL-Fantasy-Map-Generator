@@ -92,7 +92,18 @@ const props = defineProps({
   }
 });
 
+const RESOURCE_LABELS = Object.freeze({
+  geothermal: "地热",
+  ore: "矿产",
+  salt: "盐",
+  "rare-biota": "稀有生物",
+  gems: "宝石"
+});
+
 const sortOptions = Object.freeze([
+  {key: "powerScore", label: "实力"},
+  {key: "economicPower", label: "经济"},
+  {key: "resourcePotential", label: "资源"},
   {key: "area", label: "面积"},
   {key: "cells", label: "cells"},
   {key: "stateName", label: "国家"},
@@ -104,7 +115,9 @@ const columns = Object.freeze([
   {key: "name", label: "名称"},
   {key: "stateName", label: "国家"},
   {key: "cells", label: "cells", align: "right"},
-  {key: "area", label: "面积", align: "right", format: value => formatNumber(value)}
+  {key: "area", label: "面积", align: "right", format: value => formatNumber(value)},
+  {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
+  {key: "resourcePotential", label: "资源", align: "right", format: value => formatNumber(value)}
 ]);
 
 const metrics = computed(() => buildProvinceMetrics(props.state.map));
@@ -115,6 +128,8 @@ const selected = computed(() => metrics.value.rows.find(row => row.id === props.
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
   {label: "省份", value: metrics.value.total},
+  {label: "实力", value: formatNumber(metrics.value.powerScore)},
+  {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
   {label: "筛选", value: visibleRows.value.length},
   {label: "目标省份", value: formatProvinceName(props.state.map, props.state.selectedProvinceId)},
   {label: "影响", value: props.state.lastAffected}
@@ -128,6 +143,11 @@ const detailRows = computed(() => selected.value ? [
   {label: "pole", value: selected.value.pole},
   {label: "面积", value: formatNumber(selected.value.area)},
   {label: "cells", value: selected.value.cells},
+  {label: "人口", value: formatNumber(selected.value.population)},
+  {label: "实力评分", value: formatNumber(selected.value.powerScore)},
+  {label: "经济力", value: formatNumber(selected.value.economicPower)},
+  {label: "资源潜力", value: formatNumber(selected.value.resourcePotential)},
+  {label: "资源类型", value: selected.value.resourceSummary},
   {label: "邻接省份", value: selected.value.neighborCount},
   {label: "城市", value: selected.value.cityCount},
   {label: "文化", value: selected.value.culture},
@@ -150,6 +170,7 @@ function buildProvinceMetrics(map) {
     const cityCount = (map?.settlements?.cities || []).filter(city => city?.province === row.id).length;
     const neutral = row.id === 0;
     const neutralStats = neutral ? neutralProvinceStats(map) : null;
+    const population = Number(province?.rural || 0) + Number(province?.urban || 0);
 
     return {
       id: row.id,
@@ -164,6 +185,11 @@ function buildProvinceMetrics(map) {
       pole: neutral ? "none" : formatPole(province?.pole),
       area: neutral ? neutralStats.area : province?.area || 0,
       cells: neutral ? neutralStats.cells : province?.cells || 0,
+      population: neutral ? neutralStats.population : population,
+      economicPower: neutral ? 0 : Number(province?.economicPower || 0),
+      resourcePotential: neutral ? 0 : Number(province?.resourcePotential || 0),
+      powerScore: neutral ? 0 : Number(province?.powerScore || 0),
+      resourceSummary: neutral ? "无" : formatResourceTypes(province?.resourceTypes),
       neighborCount: province?.neighbors?.length || 0,
       cityCount: neutral ? neutralStats.cityCount : cityCount,
       culture: neutral ? "混合" : indexedName(map?.society?.cultures, cultureId),
@@ -173,7 +199,15 @@ function buildProvinceMetrics(map) {
   });
   const totalArea = rows.reduce((sum, row) => sum + row.area, 0);
   const maxArea = rows.reduce((max, row) => Math.max(max, row.area), 0);
-  return {rows, total: rows.length, totalArea, maxArea};
+  return {
+    rows,
+    total: rows.length,
+    totalArea,
+    maxArea,
+    powerScore: rows.reduce((sum, row) => sum + row.powerScore, 0),
+    economicPower: rows.reduce((sum, row) => sum + row.economicPower, 0),
+    resourcePotential: rows.reduce((sum, row) => sum + row.resourcePotential, 0)
+  };
 }
 
 function filterRows(rows, filter) {
@@ -220,21 +254,24 @@ function neutralProvinceStats(map) {
   const cells = map?.pack?.cells;
   let area = 0;
   let cellCount = 0;
+  let population = 0;
   if (cells?.province) {
     for (const cell of cells.i || []) {
       if (cells.h?.[cell] < 20 || (cells.province[cell] || 0) !== 0) continue;
       area += cells.area?.[cell] || 0;
+      population += cells.pop?.[cell] || 0;
       cellCount++;
     }
   } else {
     for (const cell of map?.grid?.cells?.i || []) {
       if (map.grid.cells.h?.[cell] < 20 || (map.grid.cells.province?.[cell] || 0) !== 0) continue;
       area += 1;
+      population += map.grid.cells.pop?.[cell] || 0;
       cellCount++;
     }
   }
   const cityCount = (map?.settlements?.cities || []).filter(city => city && (city.province || 0) === 0).length;
-  return {area, cells: cellCount, cityCount};
+  return {area, cells: cellCount, cityCount, population};
 }
 
 function indexedName(items, id) {
@@ -244,6 +281,15 @@ function indexedName(items, id) {
 
 function formatPole(pole) {
   return Array.isArray(pole) ? pole.map(value => roundNumber(value)).join(", ") : "none";
+}
+
+function formatResourceTypes(types) {
+  const entries = Object.entries(types || {})
+    .filter(([, value]) => Number(value) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, 4);
+  if (!entries.length) return "无";
+  return entries.map(([key, value]) => `${RESOURCE_LABELS[key] || key} ${formatNumber(Number(value))}`).join(" / ");
 }
 
 function normalizeHexColor(color) {

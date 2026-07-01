@@ -100,7 +100,7 @@ export function buildEconomy(pack, options = {}) {
   const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
   pack.deals = deals;
   collectStateTreasuries(states, deals, pack.markets, pack);
-  const markerEconomy = applyMarkerEconomicPower(pack);
+  const markerEconomy = refreshPoliticalEconomicPower(pack);
 
   const metadata = {
     goods: goods.length,
@@ -631,24 +631,35 @@ function collectStateTreasuries(states, deals, markets, pack) {
   }
 }
 
-function applyMarkerEconomicPower(pack) {
+export function refreshPoliticalEconomicPower(pack) {
   const markerEconomy = pack.metadata?.markerResourceEconomy || {};
   const states = (pack.states || []).filter(state => state?.i && !state.removed);
   const provinces = (pack.provinces || []).filter(province => province?.i && !province.removed);
+  const stateAverages = politicalAverages(states);
+  const provinceAverages = politicalAverages(provinces);
   let statesWithResources = 0;
   let provincesWithResources = 0;
 
   for (const state of states) {
-    const markerPotential = Number(state.markerEconomicPotential || 0);
-    const resourcePotential = Number(state.resourcePotential || 0);
-    state.economicPower = round(Number(state.treasury || 0) + markerPotential);
-    if (resourcePotential > 0) statesWithResources++;
+    applyPoliticalPowerFields(state, stateAverages, {
+      kind: "state",
+      treasury: Number(state.treasury || 0),
+      population: Number(state.rural || 0) + Number(state.urban || 0),
+      burgs: Number(state.burgs || 0),
+      area: Number(state.area || state.cells || 0)
+    });
+    if (Number(state.resourcePotential || 0) > 0) statesWithResources++;
   }
 
   for (const province of provinces) {
-    const markerPotential = Number(province.markerEconomicPotential || 0);
     const populationBase = Number(province.rural || 0) + Number(province.urban || 0);
-    province.economicPower = round(populationBase * 0.2 + markerPotential);
+    applyPoliticalPowerFields(province, provinceAverages, {
+      kind: "province",
+      treasury: populationBase * 0.2,
+      population: populationBase,
+      burgs: Number(province.burgs || province.cityCount || 0),
+      area: Number(province.area || province.cells || 0)
+    });
     if (Number(province.resourcePotential || 0) > 0) provincesWithResources++;
   }
 
@@ -660,6 +671,45 @@ function applyMarkerEconomicPower(pack) {
     statesWithResources,
     provincesWithResources
   };
+}
+
+function politicalAverages(groups) {
+  return {
+    population: average(groups.map(group => Number(group?.rural || 0) + Number(group?.urban || 0))),
+    area: average(groups.map(group => Number(group?.area || group?.cells || 0))),
+    burgs: average(groups.map(group => Number(group?.burgs || group?.cityCount || 0))),
+    economy: average(groups.map(group => {
+      const population = Number(group?.rural || 0) + Number(group?.urban || 0);
+      const base = Number(group?.treasury || 0) || population * 0.2;
+      return base + Number(group?.markerEconomicPotential || 0);
+    }))
+  };
+}
+
+function applyPoliticalPowerFields(group, averages, context) {
+  const markerPotential = Number(group.markerEconomicPotential || 0);
+  const resourcePotential = Number(group.resourcePotential || 0);
+  const economicPower = Number(context.treasury || 0) + markerPotential;
+  const populationScore = relativeScore(context.population, averages.population, 42);
+  const territoryScore = relativeScore(context.area, averages.area, context.kind === "state" ? 18 : 14);
+  const settlementScore = relativeScore(context.burgs, averages.burgs, context.kind === "state" ? 20 : 16);
+  const economyScore = relativeScore(economicPower, averages.economy, context.kind === "state" ? 28 : 22);
+  const resourceScore = Math.sqrt(Math.max(0, resourcePotential)) * (context.kind === "state" ? 5.5 : 4.5);
+  const markerScore = Math.sqrt(Math.max(0, markerPotential)) * 2;
+
+  group.resourcePower = round(resourceScore, 2);
+  group.economicPower = round(economicPower, 2);
+  group.populationPower = round(populationScore, 2);
+  group.territoryPower = round(territoryScore, 2);
+  group.settlementPower = round(settlementScore, 2);
+  group.powerScore = round(populationScore + territoryScore + settlementScore + economyScore + resourceScore + markerScore, 2);
+  group.militarySupply = round(1 + clamp(resourcePotential / 320, 0, 0.18) + clamp(Math.sqrt(Math.max(0, economicPower)) / 240, 0, 0.12), 3);
+}
+
+function relativeScore(value, averageValue, weight) {
+  const numeric = Math.max(0, Number(value || 0));
+  const baseline = Math.max(1, Number(averageValue || 0));
+  return Math.sqrt(numeric / baseline) * weight;
 }
 
 function marketPrice(market, goodId) {

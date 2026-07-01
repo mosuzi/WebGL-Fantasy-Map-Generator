@@ -266,9 +266,10 @@ function getUrbanTroops(pack, state, burg, unit, alert, random) {
   const stateModifier = STATE_MODIFIERS[unit.type]?.[state.type || "Generic"] || 1;
   const capitalModifier = burg.capital ? 1.25 : 1;
   const cultureModifier = burg.culture === state.culture ? 1 : 0.55;
+  const supplyModifier = getStateSupplyModifier(state, unit.type);
   const population = burg.population || 0;
   const variance = random.range(0.78, 1.28);
-  return round(population * unit.urban * 420 * alert * stateModifier * terrainModifier * capitalModifier * cultureModifier * variance);
+  return round(population * unit.urban * 420 * alert * stateModifier * terrainModifier * capitalModifier * cultureModifier * supplyModifier * variance);
 }
 
 function getRuralTroops(pack, state, cell, unit, alert, random) {
@@ -277,20 +278,22 @@ function getRuralTroops(pack, state, cell, unit, alert, random) {
   const terrainModifier = TERRAIN_MODIFIERS[terrain]?.[unit.type] || 1;
   const stateModifier = STATE_MODIFIERS[unit.type]?.[state.type || "Generic"] || 1;
   const cultureModifier = pack.cells.culture?.[cell] === state.culture ? 1 : 0.5;
+  const supplyModifier = getStateSupplyModifier(state, unit.type);
   const population = pack.cells.pop?.[cell] || 0;
   const variance = random.range(0.72, 1.2);
-  return round(population * unit.rural * 18 * alert * stateModifier * terrainModifier * cultureModifier * variance);
+  return round(population * unit.rural * 18 * alert * stateModifier * terrainModifier * cultureModifier * supplyModifier * variance);
 }
 
 function getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor = 1, options = {}) {
   const burgFactor = Math.sqrt(Math.max(1, burgsForState.length)) * 2.5;
   const cellFactor = Math.sqrt(Math.max(1, cellsForState.length)) * 0.18;
   const areaFactor = Math.sqrt(Math.max(1, state.area || 1)) * 0.02;
+  const economicTargetModifier = getStateEconomicTargetModifier(state);
   const minimum = burgsForState.length ? 1 : 0;
-  const rawTarget = Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor);
+  const rawTarget = Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor * economicTargetModifier);
   const burgBackedTarget = getBurgBackedRegimentTarget(burgsForState.length, options);
   const finalTarget = clamp(Math.min(rawTarget, burgBackedTarget), minimum, 26);
-  return {rawTarget, burgBackedTarget, finalTarget, minimum, densityFactor};
+  return {rawTarget, burgBackedTarget, finalTarget, minimum, densityFactor, economicTargetModifier};
 }
 
 function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState, targetDetails, nodes, regiments, spatialMerge}) {
@@ -310,6 +313,10 @@ function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState,
     finalTarget: targetDetails.finalTarget,
     minimumTarget: targetDetails.minimum,
     densityFactor: round(targetDetails.densityFactor, 3),
+    economicPower: round(state.economicPower || 0, 2),
+    resourcePotential: round(state.resourcePotential || 0, 2),
+    economicTargetModifier: round(targetDetails.economicTargetModifier || 1, 3),
+    militarySupply: round(state.militarySupply || 1, 3),
     spatialMerge: Boolean(spatialMerge),
     mergeExpectedSize: getExpectedRegimentSize(),
     burgLimit,
@@ -325,6 +332,21 @@ function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState,
     landRegiments: regiments.filter(regiment => !regiment.n).length,
     navalRegiments: regiments.filter(regiment => regiment.n).length
   };
+}
+
+function getStateEconomicTargetModifier(state) {
+  const economicPower = Number(state.economicPower || state.treasury || 0);
+  const resourcePotential = Number(state.resourcePotential || 0);
+  return 1 + clamp(Math.sqrt(Math.max(0, economicPower)) / 260, 0, 0.12) + clamp(resourcePotential / 460, 0, 0.1);
+}
+
+function getStateSupplyModifier(state, unitType) {
+  const base = Number(state.militarySupply || 1);
+  const resourcePotential = Number(state.resourcePotential || 0);
+  const resourceBonus = unitType === "machinery" || unitType === "naval"
+    ? clamp(resourcePotential / 420, 0, 0.08)
+    : 0;
+  return clamp(base + resourceBonus, 0.9, 1.32);
 }
 
 function shouldUseSpatialRegimentMerging(options = {}) {

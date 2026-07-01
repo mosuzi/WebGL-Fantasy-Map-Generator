@@ -19,6 +19,7 @@
 - 城镇剪影第二刀已完成：新增 `city.visual` 契约和共享 `city-visuals` 预设，生成时按文化类型自动给海洋/河湖/游牧/高地/林地文化选择港镇帆影、水乡青瓦、营帐、寨堡或林地木屋；城市管理面板支持手动调整剪影与配色，并可撤销/重做或恢复自动预设。
 - marker / 资源点管理面板第一刀已完成：管理 tab 新增“资源标记”入口，浮动面板支持全部/资源点/普通标记切换、筛选、排序、选中、定位、详情、重命名、近景图标 `symbol/palette` 手动调整和撤销/重做。
 - marker / 资源点编辑第二刀已完成：资源面板支持选择资源类型后点击地图放置、移动选中 marker、删除选中 marker 和重生成全部资源点；所有操作接入 `EditHistory`、点图层、标签、对象索引和国家/省份资源潜力刷新。资源重生成只替换 `category === "resource"` 的资源点，保留遗迹、设施、危险、文化等普通标记，并按地形、河流、生物群系、温度、降水、人口和适居度对候选 cell 加权。
+- 资源经济接入国力第一刀已完成：`economy` 阶段会把 marker 经济潜力、资源潜力、人口、面积、城镇和税收合成为国家/省份 `economicPower / resourcePower / powerScore / militarySupply`；资源点编辑和重生成后会立即刷新这些派生字段；军事阶段会用 `economicPower / resourcePotential / militarySupply` 小幅修正军团目标和兵力规模；国家/省份面板已显示并支持排序经济力、资源潜力和实力评分。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
 - source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
 - `continents-10000` 两个单例 warn 已完成只读复查：001 的 `features.total` 主要来自候选地形/feature 拓扑中更多小陆块；003 的 `lakeNames` 来自候选真实湖泊数 `7` 对 source `5`，不是 `defineLakeNames()` 命名过滤问题。不要用删除小岛、删除 1-cell 湖或只命名 outlet 湖来压 warn。
@@ -35,8 +36,8 @@
 下一步优先级：
 
 1. `features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正；若继续收敛，应回到高度洼地、lake outlet、feature 拓扑，而不是删除小岛或过滤湖名。
-2. marker 后续不要为了单个类型继续扩大总量；下一步可把资源点类型继续细分并接入国力/经济重算，或把 marker/city 图标扩展成文化预制图标包和批量应用入口。可追加的资源点类型包括：采石场、黏土坑、煤田、硫磺泉、硝石洞、琥珀海岸、珍珠滩、珊瑚礁、渔场、良港、森林木场、树脂林、药草谷、染料草场、香料林、茶山、丝茧桑园、马场、牧盐草甸、绿洲、圣泉、地热田。
-3. 经济/人口后续若继续提质，应把 Goods 生成正式前移到 rankCells 之前，并把 `state.economicPower / province.economicPower` 接入后续国力计算，而不是长期依赖 economy 阶段的资源 bonus 补偿。
+2. marker 后续不要为了单个类型继续扩大总量；下一步可把资源点类型继续细分，或把 marker/city 图标扩展成文化预制图标包和批量应用入口。可追加的资源点类型包括：采石场、黏土坑、煤田、硫磺泉、硝石洞、琥珀海岸、珍珠滩、珊瑚礁、渔场、良港、森林木场、树脂林、药草谷、染料草场、香料林、茶山、丝茧桑园、马场、牧盐草甸、绿洲、圣泉、地热田。
+3. 经济/人口后续若继续提质，应把 Goods 生成正式前移到 rankCells 之前，并把资源点转成正式 goods/贸易供需，而不是长期依赖 economy 阶段的资源 bonus 补偿。
 4. 再下一步可以统一控制面板下拉选项 UI。
 
 ## 2026-06-18 计划复位

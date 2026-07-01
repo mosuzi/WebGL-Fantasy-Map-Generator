@@ -1,4 +1,5 @@
 import {createMarkerAtPackCell, createMarkerResult, regenerateResourceMarkers, refreshMarkerResourceEconomy} from "../generator/markers.js";
+import {refreshPoliticalEconomicPower} from "../generator/economy.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 
 const MARKER_VISUAL_EFFECTS = Object.freeze({
@@ -227,7 +228,10 @@ function writeMarkerCollection(map, markers) {
     ...map.markers.metadata,
     stale: false
   };
-  if (map.pack) refreshMarkerResourceEconomy(map.pack, normalized);
+  if (map.pack) {
+    refreshMarkerResourceEconomy(map.pack, normalized);
+    refreshPoliticalEconomicPower(map.pack);
+  }
 }
 
 function normalizeMarkerIds(markers) {
