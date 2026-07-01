@@ -1243,6 +1243,17 @@ select:disabled {
   min-width: 0;
 }
 
+.ui-color-picker {
+  --el-color-primary: #d7a84f;
+}
+
+.ui-color-picker .el-color-picker__trigger {
+  width: 44px;
+  height: 30px;
+  border-color: #33444f;
+  background: #10171b;
+}
+
 .object-table-wrap {
   max-height: 300px;
   overflow: auto;
@@ -1612,6 +1623,14 @@ select:disabled {
   border: 1px solid #3e525f;
   border-radius: 6px;
   background: #10171b;
+}
+
+.state-color-field .ui-color-picker {
+  width: 48px;
+}
+
+.state-color-field .ui-color-picker .el-color-picker__trigger {
+  width: 48px;
 }
 
 .state-color-field strong {
@@ -3579,6 +3598,16 @@ input.ui-switch-native {
   border: 1px solid #33444f;
   border-radius: 6px;
   background: #10171b;
+}
+
+.culture-color-field .ui-color-picker,
+.religion-color-field .ui-color-picker {
+  width: 42px;
+}
+
+.culture-color-field .ui-color-picker .el-color-picker__trigger,
+.religion-color-field .ui-color-picker .el-color-picker__trigger {
+  width: 42px;
 }
 
 .culture-history-actions,

@@ -12496,3 +12496,25 @@ full 矩阵结果：
 后续：
 
 - 补 zone 导出、国家/省份 dissolve、范围选择、分层选择和更完整属性映射。
+
+### Element Plus 迁移第七刀：共享颜色选择器
+
+背景：
+
+- 国家、省份、文化、宗教的“调整颜色”都复用 `UiColorField / UiColorActionPanel`，是继续推进组件库迁移时收益较高的共享点。
+- 颜色选择器的弹层会 Teleport 到 `body`，必须和二级编辑面板的“点击空白关闭”规则兼容。
+
+修正：
+
+- `UiColorField` 改为使用 `ElColorPicker`，提供一组地图编辑常用预设色，并保留原 `modelValue / apply / className` API。
+- `UiActionDock` 的外部点击判定补充识别 `.el-popper / .el-picker__popper / .el-color-dropdown / .el-select-dropdown`，避免点击 Element Plus 弹层时误关闭二级编辑面板。
+- 补充 `.ui-color-picker` 暗色样式，并适配国家、省份、文化、宗教不同二级改色面板的既有列宽。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `926.56KB JS / 289.65KB gzip`、`146.71KB CSS / 21.82KB gzip`。
+- Playwright + 构建产物静态服务验证通过：打开控制面板管理 tab、国家编辑、二级“调整颜色”，颜色盘弹出后 `.ui-color-picker = 1`、原生 `input[type=color] = 0`，二级编辑面板保持开启；点预设色后二级面板仍开启；点空白后二级面板和颜色盘均关闭，console/page error 为 `0`。
+
+后续：
+
+- `ElTable / ElTree / ElDialog` 仍需先设计懒加载或拆包方案；不要把大组件一次性塞进首屏主 chunk。

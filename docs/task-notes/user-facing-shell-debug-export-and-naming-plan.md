@@ -32,11 +32,11 @@
 - 已迁移第五批基础组件：`UiSliderField -> ElSlider`，保留隐藏原生 range 桥以兼容旧 runtime 读写 DOM id。
 - 已迁移第六批基础组件：`UiSwitchField -> ElSwitch`，保留隐藏原生 checkbox 桥，按钮式图层开关继续支持整行点击。
 - 当前第六批迁移后构建产物约 `899.56KB JS / 281.46KB gzip`、`137.51KB CSS / 20.44KB gzip`；相比 Slider 迁移后的基线约增加 `+1.17KB JS gzip`、`+0.64KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
-- 最新组合烟测已覆盖按钮、下拉、tabs、slider 和 switch 的同页连续操作；基础表单适配层暂可视为一轮闭环，下一阶段应先处理懒加载/拆包方案，再考虑 `ElTable / ElTree / ElDialog / ElColorPicker`。
+- 最新组合烟测已覆盖按钮、下拉、tabs、slider 和 switch 的同页连续操作；`ElColorPicker` 已作为共享二级改色面板的小范围例外完成迁移并记录体积增量。下一阶段应先处理懒加载/拆包方案，再考虑 `ElTable / ElTree / ElDialog`。
 
 后续拆包守则：
 
-- 表格、树、弹窗、颜色选择器和大型编辑器不要直接静态引入到首屏控制面板；优先在对应浮层面板第一次打开时动态加载。
+- 表格、树、弹窗和大型编辑器不要直接静态引入到首屏控制面板；优先在对应浮层面板第一次打开时动态加载。颜色选择器已静态进入共享二级改色面板，当前 gzip 增量可接受，后续若颜色编辑扩展为复杂调色板再拆包。
 - 继续避免 `app.use(ElementPlus)` 和整包 CSS；每批迁移后记录 `JS / CSS` 原始体积和 gzip 体积。
 - 旧 runtime 仍通过 DOM id 读取的控件必须保留隐藏原生 input/select/checkbox 桥，直到相关读取链正式迁入 Vue state。
 - 如果单批迁移让 JS gzip 增量超过 `20KB`，先停下来评估是否需要拆包或替代实现，再继续迁移。
@@ -219,5 +219,6 @@
 - Element Plus 第四批已迁移 `UiTabs`，控制面板 tab 不再折行，后续注意自动化脚本应使用 `role=tab` 或 `data-control-tab`。
 - Element Plus 第五批已迁移 `UiSliderField`，所有滑动条使用 Element Slider 视觉层，同时保留隐藏 range 桥。
 - Element Plus 第六批已迁移 `UiSwitchField`，普通开关和图层按钮式开关使用 Element Switch 视觉层，同时保留隐藏 checkbox 桥。
+- Element Plus 第七批已迁移 `UiColorField`，共享二级改色面板使用 Element ColorPicker，并补充二级面板对 Element teleported popper 的点击豁免。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。

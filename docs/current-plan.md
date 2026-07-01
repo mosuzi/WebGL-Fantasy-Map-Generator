@@ -751,6 +751,7 @@ http://127.0.0.1:5410
 126. 原版功能巡视积压已落文档：`docs/task-notes/source-feature-backlog.md` 记录了对照 source 后的后续候选，包括测量工具、对象注记、名称库编辑器、分层 GeoJSON、高度图工作台增强、样式预设、市场贸易动画、军事事件、纹章和子地图/地图变换。建议优先级为测量工具、对象注记、名称库编辑器、分层 GeoJSON；特别复杂系统先保留规划，不直接塞入当前批次。
 127. 测量工具第一刀已完成：地图工具栏新增“测量”按钮，进入测量模式后左键点击地图添加测量点，overlay 用 SVG 绘制折线和节点，并按当前单位偏好显示折线总长；“清除”会移除当前测量点，“退出测量”隐藏 overlay。测量模式通过 canvas capture 阶段拦截点击，避免触发对象选择或拖拽。构建产物验证中，连续点击两点后生成 `2` 个点、`1` 条线，总长显示 `1,085.4 千米`，`selection.object = null`；清除后点线为 `0`，退出后 overlay 隐藏，console/page error 为 `0`。
 128. 要素 GeoJSON 导出第一刀已完成：简介 tab 新增“导出要素 GeoJSON”，与原有 pack cell Polygon GeoJSON 分开；新导出混合输出路线 LineString、河流 LineString 和 marker Point，并带 `layer`、id、类型、政区、资源和经济等属性。构建产物验证中下载 `fmg-stage-2-1-497329e2.features.geojson`，大小约 `310KB`，FeatureCollection 共 `810` 个要素，其中 route `602`、river `164`、marker `44`，geometry 为 `766` 个 LineString 和 `44` 个 Point，状态提示正确，console/page error 为 `0`。
+129. Element Plus 迁移第七刀已完成：`UiColorField` 改为 `ElColorPicker`，国家、省份、文化、宗教共享的二级改色面板同步获得 Element 颜色盘和预设色；`UiActionDock` 的空白点击关闭逻辑补充识别 Element Plus teleported popper，避免点击颜色盘或下拉弹层时误关二级面板。构建产物验证中 `.ui-color-picker = 1`、原生 `input[type=color] = 0`，颜色盘打开后二级编辑面板保持开启，点空白后二级面板与颜色盘均关闭，console/page error 为 `0`。体积增至约 `926.56KB JS / 289.65KB gzip`、`146.71KB CSS / 21.82KB gzip`；后续 `ElTable / ElTree / ElDialog` 仍需先做懒加载或拆包方案。
 
 ## 约束
 

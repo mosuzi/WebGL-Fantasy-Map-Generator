@@ -2,7 +2,14 @@
   <form :class="className" @submit.prevent="$emit('apply', value)">
     <label>
       <span>{{ label }}</span>
-      <input v-model="value" type="color" />
+      <ElColorPicker
+        v-model="value"
+        class="ui-color-picker"
+        :predefine="predefinedColors"
+        :teleported="true"
+        :show-alpha="false"
+        color-format="hex"
+      />
       <strong>{{ value }}</strong>
     </label>
     <UiButton variant="secondary" button-type="submit">{{ actionLabel }}</UiButton>
@@ -39,6 +46,17 @@ const props = defineProps({
 defineEmits(["apply"]);
 
 const value = ref(props.modelValue || "#ffffff");
+const predefinedColors = [
+  "#c94c4c",
+  "#d7a84f",
+  "#6aa56a",
+  "#4f9cc9",
+  "#7f6cc7",
+  "#c86e9f",
+  "#8aa6b0",
+  "#d8d0bd"
+];
+
 watch(() => props.modelValue, next => {
   value.value = next || "#ffffff";
 });

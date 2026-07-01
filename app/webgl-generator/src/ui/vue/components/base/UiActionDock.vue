@@ -98,7 +98,13 @@ function closePanel() {
 function onDocumentPointerDown(event) {
   if (!props.active) return;
   if (root.value?.contains(event.target) || panel.value?.contains(event.target)) return;
+  if (isElementPlusOverlayTarget(event.target)) return;
   closePanel();
+}
+
+function isElementPlusOverlayTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest(".el-popper, .el-picker__popper, .el-color-dropdown, .el-select-dropdown"));
 }
 
 function addPositionListeners() {
