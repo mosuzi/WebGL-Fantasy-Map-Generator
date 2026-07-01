@@ -13678,3 +13678,19 @@ full 矩阵结果：
 后续：
 
 - 目前静态 HTML 已基本只保留 canvas、overlay 容器和状态挂载点；继续迁移应优先从 runtime 动态创建的浮层关闭按钮或确认弹窗开始。
+
+### 原版功能积压 GeoJSON 状态校准
+
+背景：
+
+- 夜间继续巡视 source 功能积压时，发现 `source-feature-backlog.md` 对分层 GeoJSON 的描述略滞后。
+- 当前 `createMapFeatureGeoJson()` 已经支持国家和省份开关，并输出 pack cell polygon 集合型 `MultiPolygon`；真正缺的是拓扑层面的边界 dissolve。
+
+修正：
+
+- 更新 `docs/task-notes/source-feature-backlog.md`，把 state / province 分层选择和第一刀导出列为已完成。
+- 后续缺口改为国家/省份拓扑 dissolve、范围选择和更完整属性映射，避免后续重复实现已有的 cell 集合导出。
+
+验证：
+
+- 文档校准，无代码变更；已对照 `app/webgl-generator/src/runtime/map-file-io.js` 的 `stateFeatures()`、`provinceFeatures()` 和控制面板 `feature-export-layer-state / province` 开关。

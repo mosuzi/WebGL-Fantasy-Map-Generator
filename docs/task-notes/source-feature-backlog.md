@@ -9,7 +9,7 @@
 | 测量工具：直尺、曲线尺、路线尺、面积尺 | `source/Fantasy-Map-Generator/public/modules/ui/measurers.js`，`Ruler / Opisometer / RouteOpisometer / Planimeter` | 已完成临时折线测距、闭合多边形面积、测量 JSON 导出和节点拖拽第一刀；尚未支持节点插入/删除、路线贴合和保存测量对象。 | 中等 | 下一步补节点删除/插入、路线贴合和保存测量对象。 |
 | 对象注记 | `source/Fantasy-Map-Generator/public/modules/ui/notes-editor.js`，`editNotes` | 数据契约和分阶段入口已落到 `docs/task-notes/object-notes-implementation-plan.md`；marker、city、river、route、state、province、culture、religion 与 label 纯文本备注第一刀已完成，独立备注总览和备注摘要导出已完成，尚未做富文本、备注独立导入和孤儿备注批量清理。 | 中等 | 下一步可补备注独立导入、孤儿备注批量操作；富文本编辑器和 AI 辅助暂缓。 |
 | 名称库编辑器 | `source/Fantasy-Map-Generator/src/controllers/namesbase-editor.ts` | 当前有中文命名策略、标签管理、只读名称库总览、当前名称库 JSON 导出、名称库 JSON 追加/替换导入保存、复制内置库、重命名用户库、编辑用户库样本、样本规模质量提示、单个删除用户库和清空用户库；用户仍不能调整权重、生成预览或做文化绑定；实现计划已落到 `docs/task-notes/namebase-editor-plan.md`，绑定专项见 `docs/task-notes/namebase-generation-binding-plan.md`。 | 中等 | 下一步先做用户库样例生成预览、权重和导入冲突预览；生成绑定按专项计划分阶段推进。 |
-| 分层 GeoJSON 导出 | `source/Fantasy-Map-Generator/public/modules/io/export.js`，`saveGeoJsonRoutes / Rivers / Markers / Zones` | 已完成城市、路线、河流、marker 和 zone 要素 GeoJSON 第一刀，并支持 city / route / river / marker / zone 分层选择；尚缺国家/省份/区域 dissolve、范围选择和更完整属性映射。 | 中等 | 下一步补国家/省份 dissolve 或范围选择；SVG、瓦片 zip 暂缓。 |
+| 分层 GeoJSON 导出 | `source/Fantasy-Map-Generator/public/modules/io/export.js`，`saveGeoJsonRoutes / Rivers / Markers / Zones` | 已完成城市、路线、河流、marker、zone、国家和省份要素 GeoJSON 第一刀，并支持 city / route / river / marker / zone / state / province 分层选择；国家和省份当前是 pack cell polygon 集合型 `MultiPolygon`，尚未做拓扑 dissolve、范围选择和更完整属性映射。 | 中等 | 下一步补国家/省份边界 dissolve 或范围选择；SVG、瓦片 zip 暂缓。 |
 
 ## 先落文档
 
@@ -32,4 +32,4 @@
 1. 测量工具：折线测距、面积、测量 JSON 导出和节点拖拽第一刀已完成；后续可做节点删除/插入、路线贴合和保存测量对象。
 2. 对象注记：第一批专用入口、独立总览和摘要导出已完成；后续为孤儿备注批量操作、独立导入和战斗事件备注铺路。
 3. 名称库编辑器：计划、只读总览、内置名称库导出和导入保存已完成；下一步先做用户库编辑/删除和导入覆盖/追加策略，避免直接改生成器导致命名回退。
-4. 分层 GeoJSON：路线、河流、marker、zone 第一刀已完成；后续可继续做国家/省份 dissolve、分层选择和范围导出。
+4. 分层 GeoJSON：路线、河流、marker、zone、国家和省份第一刀已完成；后续可继续做国家/省份拓扑 dissolve、范围选择和更完整属性映射。
