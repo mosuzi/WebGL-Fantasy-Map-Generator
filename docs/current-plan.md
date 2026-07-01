@@ -757,6 +757,7 @@ http://127.0.0.1:5410
 132. marker 备注第一刀已完成：新增 `map.notes` 数据 helper、`UiNoteField`、`createSetMarkerNoteCommand()`，并在资源与标记管理面板的二级操作中加入“编辑备注”。备注使用 `${kind}:${objectId}` id 保存到完整地图数据中，支持 EditHistory 撤销/重做；第一阶段只做纯文本，不引入富文本或 AI。构建产物验证中给首个 marker 写入“第一条 marker 备注：矿脉附近有旧道路。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（23字）”；撤销后 notes 为 `0`，重做后恢复为 `1`；导出的完整地图 JSON `fmg-stage-2-1-e575f0b1.webgl-map.json` 中保留该备注，console/page error 为 `0`。
 133. marker 备注已接入要素 GeoJSON：`markerFeatures()` 会读取 `map.notes`，在 marker properties 中输出 `hasNote` 和 `note` 字段。构建产物验证中给 marker `#2` 写入“GeoJSON 备注检查：这里有珍贵矿脉。”后导出 `fmg-stage-2-1-f6cfb182.features.geojson`，该 marker feature 为 `marker-2`，`hasNote = true`，`note` 正文一致，带备注 marker 数为 `1`，console/page error 为 `0`。
 134. 城市备注第一刀已完成：复用 `map.notes` 与 `UiNoteField`，新增 `createSetCityNoteCommand()`，城市管理面板二级操作加入“编辑备注”，并补 `city-panel` 的 `version` 刷新触发，保证 markRaw 地图内部备注变化后详情行同步更新。构建产物验证中给城市 `#1` 写入“城市备注检查：此城是北境贸易节点。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（17字）”；撤销后 notes 为 `0` 且详情显示“无”，重做后恢复为 `1`；最终导出完整地图 JSON `fmg-stage-2-1-260af816.webgl-map.json`，`map.notes.notes[0]` 为 `city:1`，正文“城市备注导出检查：港口仓储完善。”，console/page error 为 `0`。
+135. 导出能力矩阵已落文档：`docs/task-notes/export-capability-matrix.md` 区分了 PNG、完整地图 JSON、pack cell GeoJSON 和要素 GeoJSON 的入口、后缀、内容、是否可重新导入、备注字段覆盖和缺口；后续导出增强建议顺序为 GeoJSON 分层选择、国家/省份 dissolve、city GeoJSON layer、PNG 倍率/overlay 选项、完整 JSON 压缩与版本迁移。
 
 ## 约束
 

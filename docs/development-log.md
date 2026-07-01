@@ -12620,3 +12620,16 @@ full 矩阵结果：
 后续：
 
 - 继续补 river / route 备注入口；如果进入国家、省份、文化、宗教，则优先复用二级操作栏，不要塞进列表主体。
+
+### 导出能力矩阵
+
+背景：
+
+- 当前已同时存在 PNG、完整地图 JSON、pack cell GeoJSON、要素 GeoJSON 和备注字段导出，后续继续扩展前需要把各格式职责分清楚。
+
+记录：
+
+- 新增 `docs/task-notes/export-capability-matrix.md`。
+- 文档按入口列出文件后缀、格式、主要内容、是否可重新导入复原和当前状态。
+- 文档拆分说明完整地图 JSON、pack cell GeoJSON、要素 GeoJSON 和 PNG 的用途、字段、已验证点与缺口。
+- 后续建议顺序为 GeoJSON 分层选择、国家/省份 dissolve、city GeoJSON layer、PNG 倍率/overlay 选项、完整 JSON 压缩和版本迁移器。
