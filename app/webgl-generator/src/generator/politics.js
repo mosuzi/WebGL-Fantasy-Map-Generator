@@ -1,5 +1,5 @@
 import {MinPriorityQueue} from "./priority-queue.js";
-import {createChineseNameGenerator, getStateFullName} from "./names.js";
+import {createChineseNameGenerator, getStateFullName, isAncientStateNameRoot} from "./names.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
 
@@ -344,6 +344,8 @@ function defineStateForms(states, nameGenerator) {
       culture: state.culture,
       cultureType: state.nameStyle || state.type,
       type: state.type,
+      root: state.name,
+      ancientRoot: isAncientStateNameRoot(state.name),
       tier
     });
     state.fullName = getStateFullName(state.name, state.formName);

@@ -249,8 +249,10 @@ const ANCIENT_STATE_ROOTS = [
   "齐", "晋", "秦", "楚", "鲁", "宋", "卫", "郑", "陈", "蔡", "曹", "燕", "吴", "越", "许", "虢",
   "虞", "邾", "莒", "郯", "薛", "滕", "邢", "滑", "息", "赖", "邓", "随", "唐", "贾", "芮", "梁",
   "黄", "江", "沈", "胡", "顿", "徐", "巴", "蜀", "韩", "赵", "魏", "代", "岐", "雍", "荆", "庸",
-  "苴", "濮", "奄", "邶", "鄘", "息", "申", "吕", "焦", "夔", "葛", "任", "宿", "谭", "莱", "牟",
-  "费", "缯", "郧", "罗", "绞", "绚", "邾", "麇"
+  "苴", "濮", "奄", "邶", "鄘", "申", "吕", "焦", "夔", "葛", "任", "宿", "谭", "莱", "牟",
+  "费", "缯", "郧", "罗", "绞", "麇", "单", "舒", "曾", "鄫", "鄣", "鄀", "鄂", "轸", "邿",
+  "郕", "弦", "遂", "鄅", "鄟", "邳", "祝", "铸", "根牟", "须句", "逼阳", "钟吾",
+  "舒庸", "舒蓼", "舒鸠", "舒龙", "舒鲍", "舒龚"
 ];
 const ANCIENT_STATE_COMPOUND_ROOTS = [
   "东晋", "西凉", "南越", "北燕", "后赵", "前秦", "西蜀", "东吴", "南楚", "北齐", "西秦", "后梁",
@@ -309,9 +311,15 @@ const STATE_FORMS = {
 };
 const PROVINCE_FORMS = ["郡", "州", "道", "府", "领", "司"];
 const DIRECTION_PREFIXES = ["东", "西", "南", "北", "上", "下", "新", "古"];
-const STATE_VARIANT_PREFIXES = ["新", "古", "后", "前", "东", "西", "南", "北"];
+const STATE_VARIANT_PREFIXES = ["东", "西", "南", "北", "前", "后", "新", "古"];
 const CARDINAL_PREFIXES = new Set(["东", "西", "南", "北"]);
 const NON_CARDINAL_VARIANT_PREFIXES = ["新", "古", "上", "下"];
+const ANCIENT_STATE_CLUSTER_PREFIXES = ["舒"];
+const STATE_ROOT_FAMILY_ALIASES = new Map([
+  ["曾", "鄫"],
+  ["缯", "鄫"],
+  ["谭", "郯"]
+]);
 const SMALL_SETTLEMENT_PREFIXES = ["新", "旧", "上", "下", "东", "西", "南", "北", "小", "前", "后"];
 const SMALL_SETTLEMENT_SUFFIXES = ["镇", "集", "寨", "村", "渡", "铺", "驿", "坞", "埠", "圩"];
 const SHIELDS = ["heater", "kite", "round", "horsehead", "banner"];
@@ -374,7 +382,7 @@ export function createChineseNameGenerator(seed = "map") {
 
     makeStateFormName(options = {}) {
       const rng = rngFor(seed, "state-form", options);
-      const forms = getCultureStyle(options)?.forms || STATE_FORMS[options.type] || STATE_FORMS.Generic;
+      const forms = options.ancientRoot ? STATE_FORMS.Generic : getCultureStyle(options)?.forms || STATE_FORMS[options.type] || STATE_FORMS.Generic;
       const tier = Math.max(0, Math.min(forms.length - 1, Math.floor(options.tier || 0)));
       return rng.next() < 0.72 ? forms[tier] || forms[0] : pick(rng, forms);
     },
@@ -464,14 +472,14 @@ function makeStateRootCandidate(rng, options = {}) {
   if (transliterationStyle?.place) return pick(rng, transliterationStyle.place);
 
   const cultureStyle = getCultureStyle(options);
-  if (cultureStyle?.place && hasExplicitCultureStyle(options) && rng.next() < 0.24) return pick(rng, cultureStyle.place);
+  if (cultureStyle?.place && hasExplicitCultureStyle(options) && rng.next() < 0.12) return pick(rng, cultureStyle.place);
 
   const roll = rng.next();
-  if (roll < 0.58) return pick(rng, ANCIENT_STATE_ROOTS);
-  if (roll < 0.7) return pick(rng, ANCIENT_STATE_COMPOUND_ROOTS);
-  if (roll < 0.84) return makeChineseTwoCharName(rng);
-  if (roll < 0.94) return pick(rng, PLACE_STEMS);
-  if (roll < 0.985) return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, CHINESE_SECOND_CHARS)}`;
+  if (roll < 0.74) return pick(rng, ANCIENT_STATE_ROOTS);
+  if (roll < 0.88) return pick(rng, ANCIENT_STATE_COMPOUND_ROOTS);
+  if (roll < 0.95) return makeChineseTwoCharName(rng);
+  if (roll < 0.985) return pick(rng, PLACE_STEMS);
+  if (roll < 0.997) return `${pick(rng, LIGHT_FANTASY_PREFIXES)}${pick(rng, CHINESE_SECOND_CHARS)}`;
   return pick(rng, HIGH_FANTASY_STEMS);
 }
 
@@ -643,12 +651,22 @@ function isAncientStateRoot(name) {
   return ANCIENT_STATE_ROOTS.includes(name) || ANCIENT_STATE_COMPOUND_ROOTS.includes(name);
 }
 
+export function isAncientStateNameRoot(name) {
+  return isAncientStateRoot(cleanStateRootCandidate(name));
+}
+
 function stateRootFamily(name) {
   const chars = Array.from(normalizeNameRoot(name));
-  if (chars.length <= 1) return chars.join("");
+  if (chars.length <= 1) {
+    const root = chars.join("");
+    return STATE_ROOT_FAMILY_ALIASES.get(root) || root;
+  }
   const first = chars[0];
-  if (STATE_VARIANT_PREFIXES.includes(first)) return chars.slice(1).join("");
-  return chars.join("");
+  const root = STATE_VARIANT_PREFIXES.includes(first) ? chars.slice(1).join("") : chars.join("");
+  const canonicalRoot = STATE_ROOT_FAMILY_ALIASES.get(root) || root;
+  const rootChars = Array.from(canonicalRoot);
+  if (rootChars.length > 1 && ANCIENT_STATE_CLUSTER_PREFIXES.includes(rootChars[0])) return rootChars[0];
+  return canonicalRoot;
 }
 
 function toChineseOrdinal(value) {
