@@ -49,6 +49,15 @@
       <template #edit>
         <UiButton variant="secondary" @click="callbacks.onEdit(selected)">{{ editing ? "退出河流编辑" : "进入河流编辑" }}</UiButton>
       </template>
+
+      <template #note>
+        <UiNoteField
+          class-name="river-note-editor"
+          :model-value="selected.noteBody"
+          @apply="body => callbacks.onNoteChange(selected.id, body)"
+          @clear="callbacks.onNoteChange(selected.id, '')"
+        />
+      </template>
     </UiActionDock>
 
     <UiHistoryActions class-name="river-history-note" :history="state.history" label="最近命令" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -63,12 +72,14 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
+import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -103,7 +114,10 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const widthDraft = ref(1);
-const rows = computed(() => riverRows(props.state.map));
+const rows = computed(() => {
+  props.state.version;
+  return riverRows(props.state.map);
+});
 const selectedId = computed(() => props.state.selection?.object?.kind === "river" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const editing = computed(() => props.state.editingObject?.kind === "river" && sameObjectId(props.state.editingObject.id, selectedId.value));
@@ -113,7 +127,8 @@ const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row
 const riverActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "width", label: "调整宽度", icon: "↔"},
-  {key: "edit", label: editing.value ? "退出编辑" : "进入编辑", icon: "◎"}
+  {key: "edit", label: editing.value ? "退出编辑" : "进入编辑", icon: "◎"},
+  {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -128,7 +143,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "长度", value: formatLength(selected.value.length)},
   {label: "流量", value: formatNumber(selected.value.flux)},
   {label: "河段", value: formatNumber(selected.value.segments)},
-  {label: "宽度因子", value: selected.value.widthFactor.toFixed(2)}
+  {label: "宽度因子", value: selected.value.widthFactor.toFixed(2)},
+  {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
 
 watch(() => selected.value?.id, () => {
@@ -144,6 +160,7 @@ function riverRows(map) {
   return (map?.rivers?.rivers || []).map(river => {
     const length = riverLength(river);
     const flux = river.flux || river.discharge || river.width || 0;
+    const note = readObjectNote(map, {kind: "river", id: river.id});
     return {
       id: river.id,
       name: river.name || `#${river.id}`,
@@ -151,7 +168,9 @@ function riverRows(map) {
       length,
       flux,
       widthFactor: Number.isFinite(river.widthFactor) ? river.widthFactor : 1,
-      segments: Math.max(0, (river.points?.length || 0) - 1)
+      segments: Math.max(0, (river.points?.length || 0) - 1),
+      noteBody: note?.body || "",
+      noteUpdatedAt: note?.updatedAt || ""
     };
   });
 }

@@ -12633,3 +12633,26 @@ full 矩阵结果：
 - 文档按入口列出文件后缀、格式、主要内容、是否可重新导入复原和当前状态。
 - 文档拆分说明完整地图 JSON、pack cell GeoJSON、要素 GeoJSON 和 PNG 的用途、字段、已验证点与缺口。
 - 后续建议顺序为 GeoJSON 分层选择、国家/省份 dissolve、city GeoJSON layer、PNG 倍率/overlay 选项、完整 JSON 压缩和版本迁移器。
+
+### 河流备注第一刀
+
+背景：
+
+- marker 和 city 备注已跑通，river 面板也具备二级操作栏、历史按钮和专用命令文件，适合继续补对象注记。
+
+修正：
+
+- `river-edit-commands.js` 新增 `createSetRiverNoteCommand()`，复用 `object-notes.js` 的 note id、读取、恢复和删除能力。
+- 河流管理面板新增“编辑备注”二级操作，复用 `UiNoteField`。
+- `river-panel` 增加 `version` 刷新计数，避免 markRaw 地图内部备注变更后详情 computed 不重算。
+- 河流详情新增备注状态：“无”或“有备注（N字）”。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `934.48KB JS / 291.47KB gzip`、`147.17KB CSS / 21.89KB gzip`。
+- Playwright + 构建产物静态服务验证通过：给河流 `#45` 写入“河流备注检查：这条河适合设渡口。”后，`map.notes.metadata.notes = 1`，详情显示“有备注（16字）”；撤销后 notes 为 `0` 且详情显示“无”，重做后恢复为 `1`。
+- 导出完整地图 JSON 验证通过：`fmg-stage-2-1-ebb0e1b8.webgl-map.json` 中 `map.notes.notes[0]` 为 `river:45`，正文一致，console/page error 为 `0`。
+
+后续：
+
+- 补 route 备注入口；之后再考虑国家、省份、文化、宗教和标签。

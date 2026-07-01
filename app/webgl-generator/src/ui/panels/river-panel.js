@@ -11,7 +11,8 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     history: null,
     filter: "",
     sortKey: "flux",
-    sortDir: "desc"
+    sortDir: "desc",
+    version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
@@ -30,6 +31,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     onEdit: row => callbacks.onEdit?.(riverObject(row)),
     onRename: (riverId, name) => callbacks.onRename?.(riverId, name),
     onSetWidthFactor: (riverId, widthFactor) => callbacks.onSetWidthFactor?.(riverId, widthFactor),
+    onNoteChange: (riverId, body) => callbacks.onNoteChange?.(riverId, body),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -59,6 +61,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.editingObject = editingObject;
       panelState.history = history;
       panelState.open = true;
+      panelState.version++;
       manager.open("river-panel");
     },
     update(map, selection, history, editingObject = panelState.editingObject) {
@@ -66,6 +69,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
       panelState.history = history;
+      panelState.version++;
     },
     isOpen() {
       return panelState.open;

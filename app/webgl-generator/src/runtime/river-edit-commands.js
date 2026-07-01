@@ -1,4 +1,14 @@
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
+import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
+import {OBJECT_KIND} from "./object-kinds.js";
+
+const RIVER_NOTE_EFFECTS = Object.freeze({
+  render: "none",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-panels"])
+});
 
 export function createSetRiverWidthFactorCommand(riverId, nextValue) {
   const nextWidthFactor = normalizeWidthFactor(nextValue);
@@ -38,6 +48,46 @@ export function createSetRiverWidthFactorCommand(riverId, nextValue) {
   };
 }
 
+export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {
+  const normalizedRiverId = Number(riverId);
+  const target = {kind: OBJECT_KIND.RIVER, id: normalizedRiverId};
+  const normalizedBody = normalizeNoteBody(body);
+  let previous = null;
+  let next = null;
+
+  return {
+    label: normalizedBody ? `编辑河流备注 #${normalizedRiverId}` : `清空河流备注 #${normalizedRiverId}`,
+    effects: {
+      ...RIVER_NOTE_EFFECTS,
+      affected: [{kind: OBJECT_KIND.RIVER, id: normalizedRiverId}]
+    },
+    apply(context) {
+      const river = findRiver(context.map, normalizedRiverId);
+      if (!river) throw new Error(`找不到河流 #${normalizedRiverId}`);
+      previous ??= cloneObjectNote(readObjectNote(context.map, target));
+      if (!normalizedBody) {
+        deleteObjectNote(context.map, target);
+        return;
+      }
+      next ??= createRiverNoteSnapshot(target, normalizedBody, {
+        name: name || river.name || `河流 #${normalizedRiverId}`,
+        previous
+      });
+      restoreObjectNote(context.map, next);
+    },
+    revert(context) {
+      if (previous) restoreObjectNote(context.map, previous);
+      else deleteObjectNote(context.map, target);
+    },
+    isNoop(context) {
+      const river = findRiver(context.map, normalizedRiverId);
+      if (!river) return true;
+      const current = readObjectNote(context.map, target)?.body || "";
+      return current === normalizedBody;
+    }
+  };
+}
+
 function findRiver(map, riverId) {
   return map?.rivers?.rivers?.find(river => river.id === riverId) || null;
 }
@@ -46,4 +96,23 @@ function normalizeWidthFactor(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 1;
   return Math.max(0.2, Math.min(3, numeric));
+}
+
+function createRiverNoteSnapshot(target, body, {name, previous = null} = {}) {
+  const now = new Date().toISOString();
+  return {
+    id: objectNoteId(target),
+    kind: target.kind,
+    objectId: target.id,
+    name,
+    body,
+    format: "plain",
+    pinned: previous?.pinned || false,
+    createdAt: previous?.createdAt || now,
+    updatedAt: now
+  };
+}
+
+function normalizeNoteBody(body) {
+  return typeof body === "string" ? body.trim() : "";
 }

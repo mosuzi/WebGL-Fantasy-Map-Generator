@@ -39,7 +39,7 @@ import {createRenameObjectCommand, createSetProvinceColorCommand, createSetState
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
-import {createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
+import {createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
@@ -763,6 +763,16 @@ export function createGeneratorApp(documentRef) {
         refreshAfterEdit(state, state.editHistory.execute(command, context));
       }
       state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+    },
+    onNoteChange: (riverId, body) => {
+      const river = state.map?.rivers?.rivers?.find(item => item.id === riverId);
+      const context = {map: state.map};
+      const command = createSetRiverNoteCommand(riverId, body, {name: river?.name || `河流 #${riverId}`});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
