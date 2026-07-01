@@ -15,6 +15,14 @@
         </p>
         <a href="https://github.com/mosuzi/fmg-gl" target="_blank" rel="noreferrer">打开当前仓库</a>
         <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">查看原项目</a>
+        <div class="project-file-actions" aria-label="本地文件操作">
+          <UiButton id="export-map-image" variant="secondary">导出图片</UiButton>
+          <UiButton id="export-map-data" variant="secondary">导出地图数据</UiButton>
+          <UiButton id="export-map-geojson" variant="secondary">导出 GeoJSON</UiButton>
+          <label class="secondary-action file-import-action" for="import-map-file">导入地图数据</label>
+          <input id="import-map-file" type="file" accept=".json,application/json" hidden />
+        </div>
+        <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
       </section>
     </div>
 

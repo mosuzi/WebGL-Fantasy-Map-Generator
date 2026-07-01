@@ -26,6 +26,7 @@ import {createStatePanel} from "../ui/panels/state-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
+import {createMapDocument, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
 import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
@@ -894,6 +895,10 @@ export function createGeneratorApp(documentRef) {
       }
       state.panels.labelNaming.open(state.map, state.selection, state.editHistory.getStats());
     },
+    onExportImage: () => exportMapImage(state, documentRef),
+    onExportMapData: () => exportMapData(state, documentRef),
+    onExportGeoJson: () => exportGeoJson(state, documentRef),
+    onImportMapData: file => importMapData(state, documentRef, file),
     onRegenerate: kind => {
       updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
     },
@@ -978,47 +983,54 @@ function runGenerateNow(state, documentRef, generateId) {
     setGenerationLoading(documentRef, true, "正在推演山海脉络");
     const map = generatePlaceholderMap(state.options);
     if (generateId !== state.pendingGenerateId) return;
-    state.map = map;
-    state.pick = null;
-    state.editHistory.clear();
-    state.heightEdit.activeStroke = null;
-    state.heightEdit.lastAffected = 0;
-    state.heightEdit.lastHeight = "none";
-    state.stateEdit.activeStroke = null;
-    state.stateEdit.lastAffected = 0;
-    state.stateEdit.sourceStateId = null;
-    state.stateEdit.lastPointer = null;
-    state.provinceEdit.activeStroke = null;
-    state.provinceEdit.lastAffected = 0;
-    state.provinceEdit.sourceProvinceId = null;
-    state.provinceEdit.lastPointer = null;
-    state.markerEdit.mode = null;
-    state.markerEdit.type = "mines";
-    state.markerEdit.markerId = null;
-    state.markerEdit.lastPackCell = null;
-    state.lastEditRefresh = null;
-    setGenerationLoading(documentRef, true, "正在铺展灵纹图层");
-    state.renderer.loadMap(state.map);
-    setGenerationLoading(documentRef, true, "正在誊清诸域卷册");
-    state.selectionStore.clear();
-    updateHeightPanel(state);
-    updateStatePanel(state);
-    updateProvincePanel(state);
-    updateCityPanel(state);
-    updateCulturePanel(state);
-    updateReligionPanel(state);
-    updateDiplomacyPanel(state);
-    updateMarkerPanel(state);
-    updateLabelNamingPanel(state);
-    state.panels.route.update(state.map, state.selection);
-    updateEditingInteractionLock(state, documentRef);
-    updateRuntimePanel(documentRef, state);
-    updatePickPanel(documentRef, state);
+    loadMapIntoRuntime(state, documentRef, map, {
+      loadingMessages: ["正在铺展灵纹图层", "正在誊清诸域卷册"]
+    });
     setGenerationLoading(documentRef, false);
   } catch (error) {
     setGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
   }
+}
+
+function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}) {
+  state.map = map;
+  state.pick = null;
+  state.editHistory.clear();
+  state.heightEdit.activeStroke = null;
+  state.heightEdit.lastAffected = 0;
+  state.heightEdit.lastHeight = "none";
+  state.stateEdit.activeStroke = null;
+  state.stateEdit.lastAffected = 0;
+  state.stateEdit.sourceStateId = null;
+  state.stateEdit.lastPointer = null;
+  state.provinceEdit.activeStroke = null;
+  state.provinceEdit.lastAffected = 0;
+  state.provinceEdit.sourceProvinceId = null;
+  state.provinceEdit.lastPointer = null;
+  state.markerEdit.mode = null;
+  state.markerEdit.type = "mines";
+  state.markerEdit.markerId = null;
+  state.markerEdit.lastPackCell = null;
+  state.lastEditRefresh = null;
+  if (loadingMessages[0]) setGenerationLoading(documentRef, true, loadingMessages[0]);
+  state.renderer.loadMap(state.map);
+  if (loadingMessages[1]) setGenerationLoading(documentRef, true, loadingMessages[1]);
+  state.selectionStore.clear();
+  updateHeightPanel(state);
+  updateStatePanel(state);
+  updateProvincePanel(state);
+  updateCityPanel(state);
+  updateCulturePanel(state);
+  updateReligionPanel(state);
+  updateDiplomacyPanel(state);
+  updateMarkerPanel(state);
+  updateLabelNamingPanel(state);
+  state.panels.route.update(state.map, state.selection);
+  state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  updateEditingInteractionLock(state, documentRef);
+  updateRuntimePanel(documentRef, state);
+  updatePickPanel(documentRef, state);
 }
 
 function scheduleAfterPaint(documentRef, callback) {
@@ -1054,6 +1066,93 @@ function reportGenerateError(documentRef, error) {
   if (appStatus) appStatus.textContent = `生成失败：${message}`;
   documentRef.getElementById("map-badge").textContent = "生成失败";
   console.error(error);
+}
+
+async function exportMapImage(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导出图片...");
+    await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`);
+    setFileOperationStatus(documentRef, "图片已导出。");
+  } catch (error) {
+    reportFileOperationError(documentRef, "图片导出失败", error);
+  }
+}
+
+function exportMapData(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导出地图数据...");
+    const document = createMapDocument(state.map, state.options);
+    downloadText(documentRef, stringifyMapDocument(document), `${mapFileBaseName(state.map)}.webgl-map.json`, "application/json;charset=utf-8");
+    setFileOperationStatus(documentRef, "地图数据已导出。");
+  } catch (error) {
+    reportFileOperationError(documentRef, "地图数据导出失败", error);
+  }
+}
+
+function exportGeoJson(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导出 GeoJSON...");
+    const geoJson = createMapGeoJson(state.map);
+    downloadText(documentRef, JSON.stringify(geoJson), `${mapFileBaseName(state.map)}.geojson`, "application/geo+json;charset=utf-8");
+    setFileOperationStatus(documentRef, `GeoJSON 已导出，共 ${geoJson.features.length} 个 cell 面。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "GeoJSON 导出失败", error);
+  }
+}
+
+async function importMapData(state, documentRef, file) {
+  if (!file) return;
+  try {
+    setFileOperationStatus(documentRef, "正在读取地图数据...");
+    setGenerationLoading(documentRef, true, "正在读取本地地图文件");
+    const document = parseMapDocument(await file.text());
+    const options = normalizeOptions(document.map.options || document.options || state.options);
+    document.map.options = options;
+    state.options = options;
+    syncGenerationInputs(documentRef, options);
+    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
+    loadMapIntoRuntime(state, documentRef, document.map, {
+      loadingMessages: ["正在复原 WebGL 图层", "正在刷新地图面板"]
+    });
+    setGenerationLoading(documentRef, false);
+    setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
+  } catch (error) {
+    setGenerationLoading(documentRef, false);
+    reportFileOperationError(documentRef, "地图数据导入失败", error);
+  }
+}
+
+function assertMapAvailable(state) {
+  if (!state.map) throw new Error("当前没有可用地图");
+}
+
+function setFileOperationStatus(documentRef, message) {
+  const status = documentRef.getElementById("file-operation-status");
+  if (status) status.textContent = message;
+}
+
+function reportFileOperationError(documentRef, prefix, error) {
+  const message = error instanceof Error ? error.message : String(error);
+  setFileOperationStatus(documentRef, `${prefix}：${message}`);
+  console.error(error);
+}
+
+function syncGenerationInputs(documentRef, options) {
+  setInputValue(documentRef, "seed-input", options.seed);
+  setInputValue(documentRef, "cells-input", options.cells);
+  setInputValue(documentRef, "width-input", options.graphWidth);
+  setInputValue(documentRef, "height-input", options.graphHeight);
+  setInputValue(documentRef, "heightmap-template", options.heightmapTemplate);
+}
+
+function setInputValue(documentRef, id, value) {
+  const input = documentRef.getElementById(id);
+  if (!input || value === undefined || value === null) return;
+  input.value = String(value);
+  input.dispatchEvent(new Event("change", {bubbles: true}));
 }
 
 function applyClimateControls(state, documentRef) {

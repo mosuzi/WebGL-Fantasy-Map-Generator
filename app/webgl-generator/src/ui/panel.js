@@ -88,6 +88,14 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
   documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
+  documentRef.getElementById("export-map-image")?.addEventListener("click", () => handlers.onExportImage?.());
+  documentRef.getElementById("export-map-data")?.addEventListener("click", () => handlers.onExportMapData?.());
+  documentRef.getElementById("export-map-geojson")?.addEventListener("click", () => handlers.onExportGeoJson?.());
+  documentRef.getElementById("import-map-file")?.addEventListener("change", event => {
+    const file = event.target.files?.[0];
+    if (file) handlers.onImportMapData?.(file);
+    event.target.value = "";
+  });
   for (const button of documentRef.querySelectorAll("[data-regenerate-kind]")) {
     button.addEventListener("click", () => handlers.onRegenerate?.(button.dataset.regenerateKind));
   }
@@ -167,6 +175,10 @@ function editLockControls(documentRef) {
     "#open-river-panel",
     "#open-marker-panel",
     "#open-label-naming-panel",
+    "#export-map-image",
+    "#export-map-data",
+    "#export-map-geojson",
+    "#import-map-file",
     "[data-regenerate-kind]",
     "#seed-input",
     "#cells-input",

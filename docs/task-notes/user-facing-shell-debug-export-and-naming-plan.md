@@ -126,6 +126,13 @@
 - 完整复原必须覆盖 renderer、selection、edit history、Vue store 偏好、对象索引和派生缓存。
 - GeoJSON 会很大，100k grid cell 直接导出可能产生超大文件；第一刀可限制为当前数据规模或提示。
 
+状态：
+
+- 已实现 `webgl-generator-map v1` 完整 JSON 导出/导入，typed arrays 会显式保存并恢复。
+- 已实现 PNG 导出第一刀，当前只导出 WebGL canvas。
+- 已实现 pack cell GeoJSON 第一刀，默认图可输出 `5950` 个 Polygon。
+- 已验证导出旧图、生成新图、再导入旧图后 checksum 和 typed array 构造器恢复。
+
 ### 阶段 E：灰度高度图导入
 
 目标：
@@ -158,6 +165,7 @@
 
 - 文档计划先单独提交。
 - 阶段 A/B/C 已作为第一批代码实现：外壳、开发模式、比例尺、README、简介 tab。
-- 阶段 D/E/F 分别提交，避免导入导出和命名策略互相干扰。
+- 阶段 D 已作为第二批代码实现：PNG、完整地图 JSON、GeoJSON 和完整 JSON 导入。
+- 阶段 E/F 分别提交，避免灰度高度图导入和命名策略互相干扰。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。

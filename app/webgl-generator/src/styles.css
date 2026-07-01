@@ -1849,6 +1849,37 @@ select:disabled {
   color: #ffe0a1;
 }
 
+.project-file-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.project-file-actions .secondary-action,
+.project-file-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 32px;
+  text-align: center;
+}
+
+.file-import-action {
+  cursor: pointer;
+}
+
+.file-operation-status:empty {
+  display: none;
+}
+
+.file-operation-status {
+  margin: 0;
+  color: #9fb0ba;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .generation-field-row {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);

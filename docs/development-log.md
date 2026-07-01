@@ -12115,3 +12115,35 @@ full 矩阵结果：
 
 - Element Plus 迁移按需引入，不在本批代码中直接全量替换。
 - 完整地图 JSON 导入导出、PNG 导出、GeoJSON 导出、灰度高度图导入和国家命名策略进入后续独立阶段。
+
+### 本地导入导出第一刀
+
+背景：
+
+- 用户要求支持本地文件导出导入：图片、完整地图数据和标准地理数据，并能从完整数据重新导入复原地图。
+- 简介 tab 后续会承接导入导出按钮，因此第一刀直接把入口放在简介 tab，避免挤占生成/视图/图层 tab。
+
+修正：
+
+- 新增 `runtime/map-file-io.js`，定义 `webgl-generator-map v1` 完整地图保存格式，包含 `type / version / exportedAt / options / metadata / map`。
+- 完整地图 JSON 导出使用 typed array replacer，把 `Uint32Array / Uint16Array / Float32Array` 等显式保存为 `{__webglGeneratorTypedArray, data}`；导入时 reviver 恢复 typed array 构造器。
+- 简介 tab 新增四个本地入口：导出图片、导出地图数据、导出 GeoJSON、导入地图数据，并显示 `file-operation-status` 状态。
+- 导入完整地图数据后会同步 `state.options` 和基础生成控件，递增 `pendingGenerateId` 中断旧生成任务，随后复用 runtime 装载路径：清空选择、编辑历史和笔刷状态，重建 renderer，刷新对象面板、运行统计和选择面板。
+- GeoJSON 第一刀按 pack cell 输出 `FeatureCollection`，每个 cell 是 Polygon，属性包含高度、水域、feature、biome、国家/省份/文化/宗教 id 与名称、人口；坐标按当前 `mapCoordinates` 做近似等距经纬投影。
+- PNG 第一刀直接从 WebGL canvas `toBlob()` 导出，不合成 DOM 图例、比例尺、标签或浮动面板。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。
+- Playwright + Chrome 验证通过：
+  - 完整 JSON 下载格式为 `webgl-generator-map`，版本 `1`，`pack.cells.i` 保存为 `Uint32Array`，10k 默认图导出约 `10.3MB`。
+  - GeoJSON 下载为 `FeatureCollection`，默认图输出 `5950` 个 Polygon。
+  - roundtrip：导出 `stage-2-1` 后改 seed 重新生成，checksum 从 `7642d7ca` 变为 `cedd01d1`；导入导出的 JSON 后 checksum 恢复为 `7642d7ca`，`pack.cells.i.constructor.name = Uint32Array`。
+  - PNG 下载文件头为标准 PNG，状态提示为“图片已导出。”。
+
+后续：
+
+- 图片导出需要进一步合成 DOM 标签、比例尺、图例和可选透明背景，才能成为真正所见即所得。
+- 完整 JSON 目前未压缩，100k 地图会很大；后续可考虑 typed array base64、gzip 或分块保存。
+- GeoJSON 后续应支持只导出陆地、按国家/省份 dissolve、坐标投影说明和大文件提示。
