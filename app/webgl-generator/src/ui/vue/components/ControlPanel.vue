@@ -84,7 +84,7 @@
         </div>
 
         <p id="regeneration-constraint" class="regeneration-status-note">
-          国家、省份、城镇、道路、河流会按各自生成约束逐步接入；资源 marker 已随生成接入，marker / zone 的局部重算另行推进。
+          国家、省份、城镇、道路、河流和资源点会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。
         </p>
       </section>
     </div>
@@ -172,7 +172,8 @@ const regenerationActions = Object.freeze([
   {kind: "provinces", label: "省份"},
   {kind: "cities", label: "城镇"},
   {kind: "routes", label: "道路"},
-  {kind: "rivers", label: "河流"}
+  {kind: "rivers", label: "河流"},
+  {kind: "markers", label: "资源点"}
 ]);
 
 function isLayerVisible(layer) {

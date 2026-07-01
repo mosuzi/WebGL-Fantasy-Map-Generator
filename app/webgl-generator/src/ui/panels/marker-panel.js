@@ -12,7 +12,11 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     scope: "all",
     sortKey: "economicValue",
     sortDir: "desc",
-    selectedMarkerId: null
+    selectedMarkerId: null,
+    editMode: null,
+    editType: null,
+    editMarkerId: null,
+    version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
@@ -39,6 +43,11 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     },
     onRename: (markerId, name) => callbacks.onRename?.(markerId, name),
     onVisualChange: (markerId, patch) => callbacks.onVisualChange?.(markerId, patch),
+    onAddResourceMode: type => callbacks.onAddResourceMode?.(type),
+    onMoveMode: markerId => callbacks.onMoveMode?.(markerId),
+    onDelete: markerId => callbacks.onDelete?.(markerId),
+    onRegenerateResources: () => callbacks.onRegenerateResources?.(),
+    onCancelEdit: () => callbacks.onCancelEdit?.(),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -68,6 +77,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       if (selection?.object?.kind === "marker") panelState.selectedMarkerId = selection.object.id;
       if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
       panelState.open = true;
+      panelState.version++;
       manager.open("marker-panel");
     },
     update(map, selection, history) {
@@ -76,9 +86,15 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       if (selection?.object?.kind === "marker") panelState.selectedMarkerId = selection.object.id;
       if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
+      panelState.version++;
     },
     setSelectedMarkerId(markerId) {
       if (markerExists(panelState.map, markerId)) panelState.selectedMarkerId = markerId;
+    },
+    updateEditMode(editMode) {
+      panelState.editMode = editMode?.mode || null;
+      panelState.editType = editMode?.type || null;
+      panelState.editMarkerId = Number.isInteger(editMode?.markerId) ? editMode.markerId : null;
     },
     isOpen() {
       return panelState.open;

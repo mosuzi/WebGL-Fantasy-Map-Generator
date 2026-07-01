@@ -290,7 +290,7 @@ export function updateRegenerationSection(documentRef, result = {}) {
   const status = documentRef.getElementById("regeneration-status");
   const constraint = documentRef.getElementById("regeneration-constraint");
   if (status) status.textContent = result.status || "待命";
-  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流会按各自生成约束逐步接入；资源 marker 已随生成接入，marker / zone 的局部重算另行推进。";
+  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流和资源点会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。";
 }
 
 export function setGenerationLoading(documentRef, visible, message = "正在生成地图") {

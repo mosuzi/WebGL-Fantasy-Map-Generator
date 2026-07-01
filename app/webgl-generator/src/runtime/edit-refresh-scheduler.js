@@ -63,6 +63,10 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         state.renderer.refreshPointLayers({draw: false});
       }
 
+      if (effects.derived.includes("object-index") && typeof state.renderer.refreshObjectPickingIndex === "function") {
+        state.renderer.refreshObjectPickingIndex();
+      }
+
       if (effects.derived.includes("cell-colors") && typeof state.renderer.refreshCellSurface === "function") {
         state.renderer.refreshCellSurface();
       } else if (effects.render === "draw") {

@@ -27,7 +27,7 @@ import {createResetCityVisualCommand, createSetCityPopulationCommand, createSetC
 import {createSetCultureColorCommand} from "./culture-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, ensureLabelStore} from "./label-edit-commands.js";
-import {createSetMarkerVisualCommand} from "./marker-edit-commands.js";
+import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createRenameObjectCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand} from "./religion-edit-commands.js";
@@ -65,6 +65,12 @@ export function createGeneratorApp(documentRef) {
       lastAffected: 0,
       sourceProvinceId: null,
       lastPointer: null
+    },
+    markerEdit: {
+      mode: null,
+      type: "mines",
+      markerId: null,
+      lastPackCell: null
     },
     lastEditRefresh: null,
     selectionStore: null,
@@ -119,6 +125,8 @@ export function createGeneratorApp(documentRef) {
         provincePanel?.setActive(false);
         state.stateEdit.activeStroke = null;
         state.provinceEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
         renderer.setColorMode("height");
         setActiveModeButton(documentRef, "height");
         updateEditingInteractionLock(state, documentRef);
@@ -147,6 +155,8 @@ export function createGeneratorApp(documentRef) {
         provincePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
         state.provinceEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
         renderer.setColorMode("states");
         setActiveModeButton(documentRef, "states");
         updateEditingInteractionLock(state, documentRef);
@@ -230,6 +240,8 @@ export function createGeneratorApp(documentRef) {
         statePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
         state.stateEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
         renderer.setColorMode("provinces");
         setActiveModeButton(documentRef, "provinces");
         updateEditingInteractionLock(state, documentRef);
@@ -490,6 +502,32 @@ export function createGeneratorApp(documentRef) {
       updateMarkerPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onAddResourceMode: type => {
+      startMarkerEditMode(state, documentRef, {mode: "add", type: type || "mines", markerId: null});
+    },
+    onMoveMode: markerId => {
+      const marker = state.map?.markers?.markers?.[markerId];
+      if (!marker) return;
+      selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
+      startMarkerEditMode(state, documentRef, {mode: "move", type: marker.type, markerId});
+    },
+    onDelete: markerId => {
+      const command = createDeleteMarkerCommand(markerId);
+      applyMarkerCollectionCommand(state, documentRef, command);
+      if (state.markerEdit.markerId === markerId) stopMarkerEditMode(state, documentRef);
+    },
+    onRegenerateResources: () => {
+      if (!state.map) return;
+      const salt = nextRegenerationSalt(state.map, "markers");
+      const command = createRegenerateResourceMarkersCommand({salt});
+      const executed = applyMarkerCollectionCommand(state, documentRef, command);
+      if (!executed) return;
+      stopMarkerEditMode(state, documentRef);
+      appendGenerationLog(state.map, `regenerate resources: salt=${salt}, resources=${state.map.markers.metadata.resourceMarkers}, resourcePotential=${state.map.markers.metadata.resourcePotential}`);
+    },
+    onCancelEdit: () => {
+      stopMarkerEditMode(state, documentRef);
+    },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterEdit(state, command);
@@ -668,6 +706,7 @@ export function createGeneratorApp(documentRef) {
   bindHeightEditing(canvas, state, documentRef);
   bindStateEditing(canvas, state, documentRef);
   bindProvinceEditing(canvas, state, documentRef);
+  bindMarkerEditing(canvas, state, documentRef);
   bindEditingInteractionLock(canvas, state);
 
   bindRuntimePanel(documentRef, {
@@ -828,6 +867,10 @@ function runGenerateNow(state, documentRef, generateId) {
     state.provinceEdit.lastAffected = 0;
     state.provinceEdit.sourceProvinceId = null;
     state.provinceEdit.lastPointer = null;
+    state.markerEdit.mode = null;
+    state.markerEdit.type = "mines";
+    state.markerEdit.markerId = null;
+    state.markerEdit.lastPackCell = null;
     state.lastEditRefresh = null;
     setGenerationLoading(documentRef, true, "正在整理 WebGL 图层");
     state.renderer.loadMap(state.map);
@@ -989,6 +1032,8 @@ function regenerateMapAttribute(state, kind, documentRef) {
       return regenerateStates(state, documentRef);
     case "provinces":
       return regenerateProvinces(state, documentRef);
+    case "markers":
+      return regenerateMarkerResources(state, documentRef);
     default:
       break;
   }
@@ -1119,6 +1164,23 @@ function regenerateCities(state, documentRef) {
     "cities",
     `城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
     "已保留国家首都 burg 引用，刷新省会、普通城镇、城市标签、人口点、道路和对象索引；省份、国家、宗教、标记、区域、军事仍标记为待派生。"
+  );
+}
+
+function regenerateMarkerResources(state, documentRef) {
+  const map = state.map;
+  const beforeResources = map.markers?.metadata?.resourceMarkers || 0;
+  const beforePotential = map.markers?.metadata?.resourcePotential || 0;
+  const salt = nextRegenerationSalt(map, "markers");
+  const command = createRegenerateResourceMarkersCommand({salt});
+  const executed = applyMarkerCollectionCommand(state, documentRef, command);
+  if (!executed) return regenerationResult("markers", "未执行", "当前地图缺少可用 pack 语义图或标记集合，无法重生成资源点。");
+
+  appendGenerationLog(map, `regenerate resources: salt=${salt}, resources=${map.markers.metadata.resourceMarkers}, resourcePotential=${map.markers.metadata.resourcePotential}`);
+  return regenerationResult(
+    "markers",
+    `资源点已按当前地形、河流、生物群系、温度和降水约束重算（扰动 #${salt}）：${beforeResources} -> ${map.markers.metadata.resourceMarkers}；资源潜力 ${beforePotential} -> ${map.markers.metadata.resourcePotential}`,
+    "已刷新资源 marker、国家/省份资源潜力、点图层、对象索引和统计；经济与军事已标记为待派生。"
   );
 }
 
@@ -1384,6 +1446,26 @@ function bindProvinceEditing(canvas, state) {
   }, true);
 }
 
+function bindMarkerEditing(canvas, state, documentRef) {
+  canvas.addEventListener("pointerdown", event => {
+    if (!state.markerEdit.mode || !state.map) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    const packCell = getMarkerPackCellAtEvent(state, event);
+    if (!Number.isInteger(packCell)) return;
+
+    const command = state.markerEdit.mode === "move"
+      ? createMoveMarkerCommand(state.markerEdit.markerId, packCell)
+      : createAddMarkerCommand({type: state.markerEdit.type, packCell});
+    const selectedMarkerId = state.markerEdit.mode === "move" ? state.markerEdit.markerId : null;
+    const executed = applyMarkerCollectionCommand(state, documentRef, command, {selectCreated: state.markerEdit.mode !== "move", selectMarkerId: selectedMarkerId});
+    if (!executed) return;
+    state.markerEdit.lastPackCell = packCell;
+    stopMarkerEditMode(state, documentRef);
+  }, true);
+}
+
 function bindEditingInteractionLock(canvas, state) {
   for (const eventName of ["pointerdown", "pointermove", "pointerup", "pointercancel", "wheel"]) {
     canvas.addEventListener(eventName, event => {
@@ -1392,6 +1474,81 @@ function bindEditingInteractionLock(canvas, state) {
       event.stopImmediatePropagation();
     }, true);
   }
+}
+
+function startMarkerEditMode(state, documentRef, {mode, type = "mines", markerId = null} = {}) {
+  state.panels.height?.setActive(false);
+  state.panels.state?.setActive(false);
+  state.panels.province?.setActive(false);
+  state.heightEdit.activeStroke = null;
+  state.stateEdit.activeStroke = null;
+  state.provinceEdit.activeStroke = null;
+  state.markerEdit.mode = mode || null;
+  state.markerEdit.type = type || state.markerEdit.type || "mines";
+  state.markerEdit.markerId = Number.isInteger(markerId) ? markerId : null;
+  state.markerEdit.lastPackCell = null;
+  updateMarkerPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
+function stopMarkerEditMode(state, documentRef) {
+  clearMarkerEditMode(state);
+  updateMarkerPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
+function clearMarkerEditMode(state) {
+  state.markerEdit.mode = null;
+  state.markerEdit.markerId = null;
+  state.markerEdit.lastPackCell = null;
+}
+
+function applyMarkerCollectionCommand(state, documentRef, command, {selectCreated = false, selectMarkerId = null} = {}) {
+  if (!state.map || !command || command.isNoop?.({map: state.map})) return null;
+  const executed = state.editHistory.execute(command, {map: state.map});
+  markDerivedFresh(state.map, ["markers"]);
+  markDerivedStale(state.map, ["economy", "military"]);
+  refreshGenerationSummary(state.map);
+  refreshAfterEdit(state, executed);
+
+  const created = selectCreated ? command.getCreatedMarker?.() : null;
+  const markerId = Number.isInteger(selectMarkerId) ? selectMarkerId : created?.id;
+  if (Number.isInteger(markerId) && state.map.markers?.markers?.[markerId]) {
+    state.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
+    state.panels.marker?.setSelectedMarkerId(markerId);
+  }
+
+  updateMarkerPanel(state);
+  updateStatePanel(state);
+  updateProvincePanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return executed;
+}
+
+function getMarkerPackCellAtEvent(state, event) {
+  const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  if (Number.isInteger(pick?.packCell) && pick.packCell >= 0) return pick.packCell;
+  const world = pick ? {x: pick.worldX, y: pick.worldY} : state.renderer.screenToWorld(event.clientX, event.clientY);
+  const maxDistance = typeof state.renderer.pickThresholdWorld === "function" ? state.renderer.pickThresholdWorld(18) : 28;
+  return nearestPackCell(state.map, world, maxDistance);
+}
+
+function nearestPackCell(map, point, maxDistance) {
+  if (!map?.pack?.cells?.p || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return null;
+  let bestCell = null;
+  let bestDistanceSq = maxDistance * maxDistance;
+  for (const packCell of map.pack.cells.i || []) {
+    const cellPoint = map.pack.cells.p[packCell];
+    if (!cellPoint) continue;
+    const dx = cellPoint[0] - point.x;
+    const dy = cellPoint[1] - point.y;
+    const distanceSq = dx * dx + dy * dy;
+    if (distanceSq > bestDistanceSq) continue;
+    bestDistanceSq = distanceSq;
+    bestCell = packCell;
+  }
+  return bestCell;
 }
 
 function applyHeightBrushAtEvent(state, event) {
@@ -1629,6 +1786,7 @@ function updateReligionPanel(state) {
 
 function updateMarkerPanel(state) {
   state.panels.marker?.update(state.map, state.selection, state.editHistory.getStats());
+  state.panels.marker?.updateEditMode?.(state.markerEdit);
 }
 
 function updateLabelNamingPanel(state) {
@@ -1736,13 +1894,14 @@ function updateEditingInteractionLock(state, documentRef) {
 }
 
 function isEditingInteractionLocked(state) {
-  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.panels.province?.getBrush().active || state.editingObject);
+  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.panels.province?.getBrush().active || state.markerEdit.mode || state.editingObject);
 }
 
 function getAllowedEditingPanelIds(state) {
   if (state.panels.height?.getBrush().active) return ["height-panel"];
   if (state.panels.state?.getBrush().active) return ["state-panel"];
   if (state.panels.province?.getBrush().active) return ["province-panel"];
+  if (state.markerEdit.mode) return ["marker-panel"];
   if (state.editingObject?.kind === OBJECT_KIND.RIVER) return ["river-panel"];
   if (state.editingObject) return ["object-details"];
   return [];
@@ -1774,6 +1933,12 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       lastAffected: state.provinceEdit.lastAffected,
       sourceProvinceId: state.provinceEdit.sourceProvinceId
     },
+    marker: {
+      mode: state.markerEdit.mode,
+      type: state.markerEdit.type,
+      markerId: state.markerEdit.markerId,
+      lastPackCell: state.markerEdit.lastPackCell
+    },
     history: state.editHistory.getStats(),
     lastEditRefresh: state.lastEditRefresh
   };
@@ -1783,6 +1948,7 @@ function getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush) {
   if (heightBrush.active) return "height";
   if (stateBrush.active) return "state";
   if (provinceBrush.active) return "province";
+  if (state.markerEdit.mode) return `marker:${state.markerEdit.mode}`;
   if (state.editingObject?.kind) return state.editingObject.kind;
   return null;
 }

@@ -1849,6 +1849,59 @@ select:disabled {
   color: #edf4f6;
 }
 
+.marker-edit-toolbar {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) repeat(5, minmax(76px, auto));
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.marker-edit-toolbar label {
+  display: grid;
+  gap: 5px;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
+.marker-edit-toolbar select {
+  min-width: 0;
+  height: 32px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #10171b;
+  color: #edf4f6;
+}
+
+.marker-edit-toolbar button {
+  min-height: 32px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  background: #10171b;
+  color: #cbd7dc;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.marker-edit-toolbar button.active,
+.marker-edit-toolbar button:hover:not(:disabled) {
+  border-color: #d7a84f;
+  background: #2b2415;
+  color: #ffe0a1;
+}
+
+.marker-edit-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.marker-edit-status {
+  margin: -2px 0 8px;
+  color: #d7a84f;
+  font-size: 12px;
+}
+
 .marker-panel-sort {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

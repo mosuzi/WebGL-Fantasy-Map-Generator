@@ -11426,3 +11426,52 @@ full 矩阵结果：
 后续：
 
 - 当前是规则化预设，不是按文化根名逐个绘制图标包；后续可继续扩展文化图标包、城市面板预览缩略图和批量应用到同文化城镇。
+
+### marker / 资源点编辑与重生成
+
+背景：
+
+- 用户要求继续推进 marker 管理，并新增重新生成资源点功能。
+- 资源点不能随机撒点，需要与地形、河流、生物群落、温度、降水等信息有一定关系，并继续参与国家/省份资源经济汇总。
+
+修正：
+
+- `generator/markers.js` 导出 marker 类型选项、资源类型选项、按 pack cell 创建 marker、资源点重生成和资源经济刷新工具。
+- 资源点生成从单纯候选随机抽样改为候选加权排序：
+  - 矿山偏好高地、起伏地形、适居边缘和低人口区域。
+  - 盐湖偏好干热湖泊、低降水和干岸邻接。
+  - 稀有生物偏好林地/高地/水文邻近、低人口和较适合的温度/降水。
+  - 宝石矿脉偏好高地、起伏地形和低人口区域。
+  - 温泉偏好高地、起伏地形、河流邻近和适中温度。
+- 新增 marker 编辑命令：
+  - 新增资源点。
+  - 移动 marker。
+  - 删除 marker。
+  - 重生成资源点。
+  - 以上操作均接入 `EditHistory`，并在应用后重建 marker metadata、国家/省份资源潜力、点图层、标签和对象索引。
+- marker 面板新增资源类型下拉、放置、移动、删除、重生成资源点和取消按钮；地图点击模式会锁定交互，并在点击有效 pack cell 后执行命令。
+- 管理 tab 的重新生成区新增“资源点”按钮，调用同一套资源重生成命令。
+- marker 面板因为 `map` 使用 `markRaw` 且对象原地修改，新增 `version` 刷新信号，避免新增/删除后表格和按钮仍读取旧 rows。
+- renderer 的 canvas `pointerup` 在没有对应 `pointerdown` 时不再触发拾取，避免资源放置完成后被底层城市/省份选择覆盖。
+
+验证：
+
+- `node --check`：
+  - `app/webgl-generator/src/generator/markers.js`
+  - `app/webgl-generator/src/runtime/marker-edit-commands.js`
+  - `app/webgl-generator/src/runtime/app.js`
+  - `app/webgl-generator/src/runtime/edit-refresh-scheduler.js`
+  - `app/webgl-generator/src/renderer/placeholder-renderer.js`
+- `npm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- Programmatic Vite server + Playwright 验证通过：
+  - 初始 `44` 个 marker、`5` 个资源点、资源潜力 `74`。
+  - 放置矿山后 marker `44 -> 45`、资源点 `5 -> 6`，新增 marker 被选中，派生 stale 为 `economy / military`。
+  - 移动后 marker 数不变，对象索引 marker 数为 `45`，选中对象仍为 marker。
+  - 删除后 marker 回到 `44`、资源点回到 `5`，对象索引 marker 数为 `44`。
+  - 重生成资源点后资源点仍为 `5`，资源潜力和 pack 资源经济汇总一致，样本覆盖温泉、矿山、盐湖和稀有生物，且候选落点携带高度、温度、降水和生物群落信息。
+
+后续：
+
+- 可以继续扩展资源类型：采石场、煤田、硫磺泉、珍珠滩、珊瑚礁、森林木场、药草谷、香料林、马场、绿洲、圣泉、地热田等。
+- 后续经济/国力阶段应读取 `markerResourceEconomy` 或正式资源 goods 生成结果，把资源点纳入国力和贸易计算。
+- 控制面板下拉 UI 仍待统一。

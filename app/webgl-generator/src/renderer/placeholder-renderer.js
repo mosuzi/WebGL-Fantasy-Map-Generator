@@ -1453,6 +1453,7 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
   });
 
   canvas.addEventListener("pointerup", event => {
+    if (!dragging) return;
     dragging = false;
     if (!moved) onSelect(event);
     canvas.releasePointerCapture(event.pointerId);

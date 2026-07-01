@@ -119,6 +119,15 @@ const MARKER_TYPES = [
 ];
 
 const MARKER_TYPE_BY_TYPE = new Map(MARKER_TYPES.map(config => [config.type, config]));
+const RESOURCE_MARKER_TYPES = Object.freeze(MARKER_TYPES.filter(config => config.category === "resource"));
+const RESOURCE_MARKER_WEIGHT = RESOURCE_MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0);
+
+export const MARKER_TYPE_OPTIONS = Object.freeze(MARKER_TYPES.map(markerTypeOption));
+export const MARKER_RESOURCE_TYPE_OPTIONS = Object.freeze(RESOURCE_MARKER_TYPES.map(markerTypeOption));
+
+export function getMarkerTypeConfig(type) {
+  return MARKER_TYPE_BY_TYPE.get(type) || MARKER_TYPE_BY_TYPE.get("encounters");
+}
 
 export function buildMarkers(grid, features, politics, rivers, pack = null, options = {}) {
   if (pack?.cells?.i?.length) return buildPackMarkers(grid, pack, politics, rivers, options);
@@ -137,11 +146,15 @@ function buildPackMarkers(grid, pack, politics, rivers, options) {
   const occupied = new Set();
   const target = getTargetMarkerCount(pack, options);
   const totalWeight = MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0);
+  const context = {grid, pack, politics, rivers, options};
 
   for (const config of MARKER_TYPES) {
-    const candidates = uniqueCells(config.candidates({grid, pack, politics, rivers, options})).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+    const candidates = uniqueCells(config.candidates(context)).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
     const quantity = Math.min(candidates.length, Math.max(0, Math.round((target * config.weight) / totalWeight)));
-    addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity);
+    addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity, {
+      ordered: config.category === "resource",
+      context
+    });
   }
 
   if (markers.length < target) {
@@ -153,11 +166,59 @@ function buildPackMarkers(grid, pack, politics, rivers, options) {
   return createMarkerResult(markers);
 }
 
-function addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity) {
-  const pool = shuffle(candidates, random);
+export function regenerateResourceMarkers(grid, pack, politics, rivers, options = {}, existingMarkers = []) {
+  if (!pack?.cells?.i?.length) return [];
+
+  const salt = options.resourceRegenerationSalt ?? options.markerRegenerationSalt ?? 0;
+  const random = createRandom(`${options.seed}:resource-markers:${salt}`);
+  const context = {grid, pack, politics, rivers, options};
+  const occupied = new Set(existingMarkers.map(marker => marker?.packCell).filter(Number.isInteger));
+  const markers = [];
+  const previousResourceCount = existingMarkers.filter(marker => marker?.category === "resource").length;
+  const target = Math.max(3, previousResourceCount || Math.round((getTargetMarkerCount(pack, options) * RESOURCE_MARKER_WEIGHT) / MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0)));
+  const quotas = markerTypeQuotas(RESOURCE_MARKER_TYPES, target);
+
+  for (const config of RESOURCE_MARKER_TYPES) {
+    const candidates = uniqueCells(config.candidates(context)).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+    const quantity = Math.min(candidates.length, quotas.get(config.type) || 0);
+    addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity, {ordered: true, context, idOffset: existingMarkers.length});
+  }
+
+  if (markers.length < target) {
+    for (const config of [...RESOURCE_MARKER_TYPES].sort((a, b) => b.weight - a.weight)) {
+      if (markers.length >= target) break;
+      const candidates = uniqueCells(config.candidates(context)).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+      addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, target - markers.length, {ordered: true, context, idOffset: existingMarkers.length});
+    }
+  }
+
+  return markers;
+}
+
+export function createMarkerAtPackCell(markers, pack, grid, type, packCell, overrides = {}) {
+  if (!isValidMarkerCell(pack, packCell)) throw new Error(`无效的标记 pack cell: ${packCell}`);
+  const config = getMarkerTypeConfig(type);
+  const id = Number.isInteger(overrides.id) ? overrides.id : nextMarkerId(markers);
+  const marker = createMarker(id, config, pack, grid, packCell);
+  if (typeof overrides.name === "string") marker.name = overrides.name;
+  if (overrides.visual) {
+    marker.visual = {...overrides.visual};
+    marker.data.visual = {...overrides.visual};
+  }
+  if (typeof overrides.pinned === "boolean") marker.pinned = overrides.pinned;
+  if (typeof overrides.lock === "boolean") marker.lock = overrides.lock;
+  return marker;
+}
+
+export function refreshMarkerResourceEconomy(pack, markers) {
+  applyMarkerResourceEconomy(pack, markers);
+}
+
+function addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity, options = {}) {
+  const pool = options.ordered ? rankMarkerCandidates(options.context, config, candidates, random) : shuffle(candidates, random);
   for (const packCell of pool.slice(0, quantity)) {
     occupied.add(packCell);
-    markers.push(createMarker(markers.length, config, pack, grid, packCell));
+    markers.push(createMarker((options.idOffset || 0) + markers.length, config, pack, grid, packCell));
   }
 }
 
@@ -208,7 +269,7 @@ function createMarker(id, config, pack, grid, packCell) {
   };
 }
 
-function createMarkerResult(markers) {
+export function createMarkerResult(markers) {
   return {
     markers,
     metadata: {
@@ -226,6 +287,115 @@ function createMarkerResult(markers) {
       types: countByType(markers)
     }
   };
+}
+
+function markerTypeOption(config) {
+  const details = markerDetails(config);
+  return {
+    type: config.type,
+    value: config.type,
+    label: details.label,
+    category: details.category,
+    categoryLabel: details.categoryLabel,
+    resourceKey: details.resourceKey,
+    resourceLabel: details.resourceLabel,
+    economicValue: details.economicValue,
+    visual: details.visual
+  };
+}
+
+function markerTypeQuotas(configs, target) {
+  const totalWeight = configs.reduce((sum, config) => sum + config.weight, 0);
+  const quotas = new Map();
+  const fractions = [];
+  let assigned = 0;
+
+  for (const config of configs) {
+    const exact = (target * config.weight) / totalWeight;
+    const base = Math.floor(exact);
+    quotas.set(config.type, base);
+    assigned += base;
+    fractions.push({type: config.type, fraction: exact - base, weight: config.weight});
+  }
+
+  fractions.sort((a, b) => (b.fraction - a.fraction) || (b.weight - a.weight));
+  for (let index = 0; assigned < target && fractions.length; index++, assigned++) {
+    const item = fractions[index % fractions.length];
+    quotas.set(item.type, (quotas.get(item.type) || 0) + 1);
+  }
+
+  return quotas;
+}
+
+function rankMarkerCandidates(context, config, candidates, random) {
+  if (config.category !== "resource") return shuffle(candidates, random);
+  return candidates
+    .map(cell => ({
+      cell,
+      score: resourceCandidateScore(context, config, cell) * (0.86 + random.next() * 0.28)
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map(item => item.cell);
+}
+
+function resourceCandidateScore({grid, pack}, config, packCell) {
+  const gridCell = pack.cells.g?.[packCell];
+  const height = Number(pack.cells.h?.[packCell] ?? grid?.cells?.h?.[gridCell] ?? 0);
+  const temperature = Number(grid?.cells?.temp?.[gridCell] ?? 10);
+  const precipitation = Number(grid?.cells?.prec?.[gridCell] ?? 50);
+  const suitability = Number(pack.cells.s?.[packCell] || 0);
+  const population = Number(pack.cells.pop?.[packCell] || 0);
+  const biome = pack.cells.biome?.[packCell] ?? grid?.cells?.biome?.[gridCell] ?? 0;
+  const neighbors = pack.cells.c?.[packCell] || [];
+  const hasRiver = Boolean(pack.cells.r?.[packCell] || (pack.cells.fl?.[packCell] || 0) > 0);
+  const nearRiver = hasRiver || neighbors.some(neighbor => pack.cells.r?.[neighbor] || (pack.cells.fl?.[neighbor] || 0) > 0);
+  const nearLand = neighbors.some(neighbor => pack.cells.h?.[neighbor] >= 20);
+  const feature = pack.features?.[pack.cells.f?.[packCell]];
+  const isLake = feature?.type === "lake";
+  const roughness = terrainRoughness(pack, packCell, neighbors);
+  const dry = clamp01((80 - precipitation) / 80);
+  const wet = clamp01(precipitation / 120);
+  const warmth = clamp01((temperature + 8) / 36);
+  const moderateTemperature = 1 - Math.min(1, Math.abs(temperature - 12) / 28);
+  const remote = 1 - Math.min(1, population / 8);
+
+  switch (config.type) {
+    case "hot-springs":
+      return 1 + bell(height, 62, 34) * 1.8 + roughness * 0.9 + (nearRiver ? 0.45 : 0) + moderateTemperature * 0.45;
+    case "mines":
+      return 1 + bell(height, 58, 30) * 2.2 + roughness * 1.4 + clamp01(suitability / 70) * 0.35 + remote * 0.25;
+    case "salt-lakes":
+      return 1 + (isLake ? 1.4 : 0) + dry * 1.7 + warmth * 0.75 + (nearLand ? 0.45 : 0) + (precipitation <= 25 ? 0.5 : 0);
+    case "rare-biota":
+      return 1 + rareBiomeScore(biome) * 1.35 + wet * 0.8 + moderateTemperature * 0.75 + (nearRiver ? 0.65 : 0) + remote * 0.55 + (height >= 55 ? 0.35 : 0);
+    case "gem-fields":
+      return 1 + bell(height, 72, 24) * 2.1 + roughness * 1.2 + remote * 0.35 + clamp01((100 - precipitation) / 100) * 0.3;
+    default:
+      return 1;
+  }
+}
+
+function rareBiomeScore(biome) {
+  if ([6, 7, 8, 9, 10, 11].includes(biome)) return 1;
+  if ([4, 5].includes(biome)) return 0.65;
+  return 0.25;
+}
+
+function terrainRoughness(pack, packCell, neighbors = []) {
+  const height = pack.cells.h?.[packCell] ?? 0;
+  const landNeighbors = neighbors.filter(neighbor => pack.cells.h?.[neighbor] >= 20);
+  if (!landNeighbors.length) return 0;
+  const averageDelta = landNeighbors.reduce((sum, neighbor) => sum + Math.abs(height - (pack.cells.h?.[neighbor] ?? height)), 0) / landNeighbors.length;
+  return clamp01(averageDelta / 38);
+}
+
+function bell(value, center, width) {
+  const distance = Math.abs(value - center) / Math.max(1, width);
+  return Math.max(0, 1 - distance * distance);
+}
+
+function nextMarkerId(markers) {
+  return (markers || []).reduce((max, marker) => Math.max(max, Number(marker?.id) || 0), -1) + 1;
 }
 
 function getTargetMarkerCount(pack, options) {
@@ -638,4 +808,8 @@ function roundObject(values) {
 function round(value, digits = 0) {
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
 }

@@ -6,12 +6,28 @@
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 国家 / 省份" @update:model-value="callbacks.onFilter" />
   </div>
 
+  <div class="marker-edit-toolbar">
+    <label>
+      <span>新增资源</span>
+      <select v-model="resourceDraft.type">
+        <option v-for="option in resourceTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+      </select>
+    </label>
+    <UiButton variant="secondary" :active="state.editMode === 'add'" @click="startAddResource">放置</UiButton>
+    <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
+    <UiButton variant="secondary" :disabled="!selected" @click="deleteSelected">删除</UiButton>
+    <UiButton variant="secondary" @click="callbacks.onRegenerateResources?.()">重生成资源点</UiButton>
+    <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
+  </div>
+
+  <div v-if="editStatus" class="marker-edit-status">{{ editStatus }}</div>
+
   <UiSortBar class-name="marker-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
 
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
-    :selected-id="state.selectedMarkerId"
+    :selected-id="activeSelectedMarkerId"
     empty-text="没有匹配的资源点或标记"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
@@ -49,6 +65,7 @@
 
 <script setup>
 import {computed, reactive, watch} from "vue";
+import {MARKER_RESOURCE_TYPE_OPTIONS} from "../../../generator/markers.js";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -127,15 +144,28 @@ const paletteOptions = Object.freeze([
   {value: "mystery", label: "异象"}
 ]);
 
+const resourceTypeOptions = MARKER_RESOURCE_TYPE_OPTIONS;
+
 const visualDraft = reactive({
   symbol: "marker",
   palette: "mystery"
 });
 
-const metrics = computed(() => buildMarkerMetrics(props.state.map));
+const resourceDraft = reactive({
+  type: resourceTypeOptions[0]?.value || "mines"
+});
+
+const metrics = computed(() => {
+  props.state.version;
+  return buildMarkerMetrics(props.state.map);
+});
 const scopedRows = computed(() => applyScope(metrics.value.rows, props.state.scope));
 const visibleRows = computed(() => sortRows(filterRows(scopedRows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedMarkerId) || null);
+const activeSelectedMarkerId = computed(() => {
+  const selectionId = props.state.selection?.object?.kind === "marker" ? props.state.selection.object.id : null;
+  return Number.isInteger(selectionId) ? selectionId : props.state.selectedMarkerId;
+});
+const selected = computed(() => metrics.value.rows.find(row => row.id === activeSelectedMarkerId.value) || null);
 
 const summaryMetrics = computed(() => [
   {label: "标记", value: metrics.value.total},
@@ -156,6 +186,12 @@ const detailRows = computed(() => selected.value ? [
   {label: "图形", value: selected.value.visualLabel},
   {label: "手动图标", value: selected.value.manual ? "是" : "否"}
 ] : []);
+
+const editStatus = computed(() => {
+  if (props.state.editMode === "add") return `放置：${resourceTypeLabel(props.state.editType || resourceDraft.type)}`;
+  if (props.state.editMode === "move") return `移动：#${props.state.editMarkerId ?? selected.value?.id ?? "none"}`;
+  return "";
+});
 
 watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
 watch(() => selected.value?.symbol, syncVisualDraft);
@@ -239,6 +275,20 @@ function applyVisual() {
   });
 }
 
+function startAddResource() {
+  props.callbacks.onAddResourceMode?.(resourceDraft.type);
+}
+
+function startMoveSelected() {
+  if (!selected.value) return;
+  props.callbacks.onMoveMode?.(selected.value.id);
+}
+
+function deleteSelected() {
+  if (!selected.value) return;
+  props.callbacks.onDelete?.(selected.value.id);
+}
+
 function syncVisualDraft() {
   visualDraft.symbol = selected.value?.symbol || "marker";
   visualDraft.palette = selected.value?.palette || selected.value?.category || "mystery";
@@ -255,6 +305,10 @@ function symbolLabel(value) {
 
 function paletteLabel(value) {
   return paletteOptions.find(option => option.value === value)?.label || value || "异象";
+}
+
+function resourceTypeLabel(value) {
+  return resourceTypeOptions.find(option => option.value === value)?.label || value || "资源";
 }
 
 function formatNumber(value) {
