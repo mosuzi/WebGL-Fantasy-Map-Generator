@@ -813,6 +813,7 @@ http://127.0.0.1:5410
 188. 测量线段插入节点第一刀已完成：测量模式下按住 `Alt` 或 `Shift` 点击现有线段附近，会把新点插入最近线段后方；普通点击仍追加到末尾，点击测量点本身仍按删除/拖拽规则处理。三点及以上会把闭合面片最后一段也纳入插入候选。构建产物主入口约 `512.45KB / 151.12KB gzip`。构建产物烟测中两点测量后 `Shift` 点击线段中点，点列从 `[292.5,312] -> [697.5,312]` 变为中间插入 `[495,312]` 的三点序列；右键删除插入点、再次插入后按 `Backspace` 删除首点均正常；随后拖动首点位移约 `66.8` 地图单位，console/page error 为 `0`。
 189. 测量对象与路线贴合计划已落文档：`docs/task-notes/measurement-rulers-plan.md` 对照原版 `Rulers / Ruler / Opisometer / RouteOpisometer / Planimeter`，记录了原版可保存测量集合、字符串序列化、曲线采样优化、路线 cell 贴合和面积尺语义，并为 WebGL 版拆出 `map.measurements` 数据契约、保存临时测量为对象、测量图层化、路线贴合、曲线尺和面积尺细化四阶段。后续不应直接把当前临时 `state.measurement.points` 扩成长期数据，而应先建立保存对象与完整地图 JSON 往返。
 190. 视觉主题与样式预设计划已落文档：`docs/task-notes/visual-theme-preset-plan.md` 对照原版 `style-presets.js`、`style.js` 和 `public/styles/*.json`，记录了原版 12 个系统预设、selector/attribute JSON、自定义 localStorage 预设和高度色带语义，并为 WebGL 版明确不直接兼容 SVG selector，而是走 `map.visualTheme` 与 renderer/overlay theme token。后续可先做只读轻量主题预设，再做主题导入导出和少量颜色级编辑；纹理、滤镜、字体和高级后处理暂缓。
+191. 市场、商品与贸易流计划已落文档：`docs/task-notes/economy-market-trade-plan.md` 对照原版 goods editor、markets overview、trade animation editor 和 draw-trade-animation，记录了商品产量/库存/价格、市场覆盖和交易动画语义；WebGL 版已有 `pack.goods / pack.markets / pack.deals` 生成数据，但用户侧应先做只读经济总览和导出诊断，再进入轻量编辑、静态贸易流和按需动画，市场归属刷子和生产链编辑后置。
 
 ## 约束
 

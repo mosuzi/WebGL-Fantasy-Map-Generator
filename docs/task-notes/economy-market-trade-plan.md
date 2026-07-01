@@ -1,0 +1,94 @@
+# 市场、商品与贸易流计划
+
+## 背景
+
+当前 WebGL 版已经在 `app/webgl-generator/src/generator/economy.js` 中生成 `pack.goods`、`pack.markets`、`pack.deals`，并把经济摘要写入生成 metadata。用户侧目前只有资源点、城市经济潜力和部分财政信息，没有商品总览、市场总览、价格比较、生产链或贸易流动画。
+
+原版入口：
+
+- `source/Fantasy-Map-Generator/src/controllers/goods-editor.ts`
+- `source/Fantasy-Map-Generator/src/controllers/markets-overview.ts`
+- `source/Fantasy-Map-Generator/src/controllers/trade-animation-editor.ts`
+- `source/Fantasy-Map-Generator/src/renderers/draw-trade-animation.ts`
+
+## 原版行为摘录
+
+- 商品编辑器展示每个 good 的图标、类型、单位、产量、库存、基础价格、标签、可见状态，并可打开生产者、库存来源和价格比较。
+- 市场总览展示市场名、所属国家、覆盖 cell、burg 数量、库存、销售额、采购额和市场价值，并支持手工刷市场归属、添加市场、删除市场和重新生成。
+- 贸易动画编辑器配置贸易类型、并发动画数、旅行时长、陆路减速、分段暂停和 marker 尺寸。
+- 贸易动画使用船和马车 SVG symbol，按 land / water 分段沿路径移动，点击移动 marker 可打开交易详情。
+
+## WebGL 版建议边界
+
+第一阶段不要直接做“会动的贸易动画”。原因：
+
+- WebGL 版当前没有 SVG route 动画层，贸易流动画需要 HTML/SVG overlay 或 WebGL instancing 方案。
+- 市场和商品数据虽然已生成，但用户还不能读懂数据来源；先做只读总览更能帮助校准经济生成质量。
+- 手动编辑市场归属会牵动 `pack.cells.market`、burg market、生产、交易、财政和导出导入，需要在只读面板稳定后再做。
+
+## 阶段计划
+
+### 阶段 1：只读经济总览
+
+- 新增“经济总览”浮层，懒加载 Vue 面板。
+- 顶部显示商品数、市场数、交易数、资源点数、总库存、总销售/采购估算。
+- 商品 tab：展示名称、类型、单位、基础价格、产量、库存、标签和可见状态。
+- 市场 tab：展示市场名、所属国家、中心城市、覆盖 cell、burg 数量、库存和交易价值。
+- 交易 tab：展示 seller、buyer、good、amount、price、route 类型和估算距离。
+
+验收：
+
+- 打开面板不改变 checksum。
+- 表格使用已迁移的 Element Plus `UiObjectTable` 适配层或按需懒加载表格。
+- 对商品、市场、交易支持定位到中心城市或交易端点。
+
+### 阶段 2：导出与诊断
+
+- 支持导出商品、市场和交易 CSV / JSON。
+- 开发模式下显示内部 id、cell、deal id、生产来源和异常诊断。
+- 普通模式只显示用户可理解的经济指标。
+
+验收：
+
+- 导出文件能被电子表格直接读取。
+- 缺失市场、孤儿交易、无库存商品等异常只在开发模式或诊断区显示。
+
+### 阶段 3：轻量编辑
+
+- 商品可见状态、颜色、图标和标签先做本地编辑。
+- 市场颜色和名称可编辑；市场归属刷子暂缓到专门阶段。
+- 编辑走 EditHistory，并随完整地图 JSON 保存。
+
+验收：
+
+- 修改商品/市场展示属性不触发经济重新生成。
+- 完整地图导出再导入后，展示属性保持。
+
+### 阶段 4：贸易流可视化
+
+- 第一刀先做静态贸易流图层：按交易量绘制 seller -> buyer 的线，颜色区分陆路/水路或本地/全球贸易。
+- 第二刀再做动画：优先使用轻量 SVG/HTML overlay，按需开启，不进入默认首屏。
+- 动画配置放入开发模式或经济面板高级区，默认并发数要保守。
+
+验收：
+
+- 关闭贸易流图层时无额外动画开销。
+- 开启动画后不会阻塞地图拖拽和缩放。
+- 点击贸易流或 marker 能打开交易详情。
+
+### 阶段 5：市场归属编辑与重新生成
+
+- 在经济面板中提供市场重新生成、生产重新生成和交易重新生成入口。
+- 手工刷市场归属前，先复制 `pack.cells.market` 到工作副本，支持撤销、应用和取消。
+- 应用后重新计算 burg market、生产、交易和国家财政。
+
+验收：
+
+- 取消手工刷市场不改变地图数据。
+- 应用后经济摘要、市场面板和导出数据一致。
+
+## 暂缓项
+
+- 生产链图形化编辑。原版有 `ProductionChains`，但 WebGL 版应先稳定只读经济面板。
+- 复杂贸易动画 shader。先用 overlay 或静态流线，证明交互价值后再考虑 WebGL instancing。
+- 让经济编辑影响所有下游政治/军事系统。当前先保持经济链内闭环。
