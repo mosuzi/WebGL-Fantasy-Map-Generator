@@ -103,6 +103,35 @@ export function copyBuiltinNamebaseToUser(map, id) {
   };
 }
 
+export function createUserNamebase(map) {
+  if (!map) throw new Error("当前没有可新建名称库的地图");
+  const store = ensureNamebaseStore(map);
+  const existingIds = new Set(store.bases.map(base => base.id));
+  const createdAt = new Date().toISOString();
+  const index = store.bases.length + 1;
+  const base = {
+    id: uniqueId(`user-namebase-${index}`, existingIds),
+    name: `用户名称库 ${index}`,
+    kind: "generic",
+    category: "用户名称库",
+    note: "手动创建的用户名称库",
+    source: ["青川", "云泽", "鹿原", "玄岭", "白沙"],
+    builtin: false,
+    origin: "手动",
+    importedAt: createdAt,
+    importedFrom: ""
+  };
+  store.bases.push(base);
+  updateNamebaseMetadata(store);
+  return {
+    created: true,
+    id: base.id,
+    name: base.name,
+    total: store.bases.length,
+    samples: base.source.length
+  };
+}
+
 export function clearUserNamebases(map) {
   if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {removed: 0, total: 0};
   const removed = map.namebases.bases.length;
@@ -179,6 +208,7 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
   if (!values.length) return [];
   const chain = createPreviewChain(values);
   const rng = createPreviewRng(`${seed}|${salt}|${values.join("|")}`);
+  const maxLength = values.reduce((max, value) => Math.max(max, Math.min(12, Array.from(value).length)), 1);
   const result = [];
   const seen = new Set();
   const maxAttempts = Math.max(80, count * 24);
@@ -186,7 +216,7 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
     const candidate = attempt % 4 === 3
       ? recombinePreviewName(values, rng)
       : generatePreviewName(chain, rng);
-    const normalized = normalizePreviewName(candidate);
+    const normalized = normalizePreviewName(candidate, maxLength);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     result.push(normalized);
@@ -194,7 +224,7 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
 
   for (const value of values) {
     if (result.length >= count) break;
-    const normalized = normalizePreviewName(value);
+    const normalized = normalizePreviewName(value, maxLength);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     result.push(normalized);
@@ -296,8 +326,17 @@ function recombinePreviewName(values, rng) {
   return [...left.slice(0, leftCut), ...right.slice(rightStart)].join("");
 }
 
-function normalizePreviewName(value) {
-  return Array.from(String(value || "").replace(/\s+/gu, "")).slice(0, 12).join("");
+function normalizePreviewName(value, maxLength = 12) {
+  const chars = Array.from(String(value || "").replace(/\s+/gu, "")).slice(0, maxLength);
+  if (hasAdjacentRepeatedChar(chars)) return "";
+  return chars.join("");
+}
+
+function hasAdjacentRepeatedChar(chars) {
+  for (let index = 1; index < chars.length; index += 1) {
+    if (chars[index] === chars[index - 1]) return true;
+  }
+  return false;
 }
 
 function pickPreviewValue(values, rng) {

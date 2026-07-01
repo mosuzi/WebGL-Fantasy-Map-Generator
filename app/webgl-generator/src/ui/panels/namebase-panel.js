@@ -34,6 +34,10 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
       panelState.importMode = mode;
     },
     onImport: file => callbacks.onImport?.(file, panelState.importMode),
+    onCreateUser: () => {
+      const result = callbacks.onCreateUser?.();
+      if (result?.id) panelState.selectedNamebaseId = result.id;
+    },
     onCopyBuiltin: row => callbacks.onCopyBuiltin?.(row),
     onRenameUser: (row, name) => callbacks.onRenameUser?.(row, name),
     onUpdateSource: (row, sourceText) => callbacks.onUpdateSource?.(row, sourceText),

@@ -62,6 +62,7 @@
     <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
     <UiButton class="file-import-action namebase-import-action" variant="secondary" @click="triggerImportFile">导入名称库</UiButton>
     <input ref="importFileInput" id="namebase-import-file" type="file" accept=".json,application/json" hidden @change="handleImportFile" />
+    <UiButton variant="secondary" @click="callbacks.onCreateUser()">新建用户库</UiButton>
     <UiButton variant="secondary" :disabled="!selectedBuiltinRow" @click="callbacks.onCopyBuiltin(selectedBuiltinRow)">复制内置</UiButton>
     <UiButton variant="secondary" :disabled="!selectedUserRow" @click="callbacks.onDeleteUser(selectedUserRow)">删除选中</UiButton>
     <UiButton variant="secondary" :disabled="!userRows.length" @click="callbacks.onClearUser()">清空用户库</UiButton>

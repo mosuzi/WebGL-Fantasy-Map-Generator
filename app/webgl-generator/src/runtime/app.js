@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument, renameUserNamebase, updateUserNamebaseSource} from "../generator/namebase-store.js";
+import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, createUserNamebase, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument, renameUserNamebase, updateUserNamebaseSource} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -809,6 +809,7 @@ export function createGeneratorApp(documentRef) {
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
     onExport: () => exportNamebases(state, documentRef),
     onImport: (file, mode) => importNamebases(state, documentRef, file, mode),
+    onCreateUser: () => createManualNamebase(state, documentRef),
     onCopyBuiltin: row => copyBuiltinNamebase(state, documentRef, row),
     onRenameUser: (row, name) => renameImportedNamebase(state, documentRef, row, name),
     onUpdateSource: (row, sourceText) => updateImportedNamebaseSource(state, documentRef, row, sourceText),
@@ -1373,6 +1374,19 @@ function copyBuiltinNamebase(state, documentRef, row) {
     setFileOperationStatus(documentRef, `已复制“${row.name}”为用户名称库“${result.name}”，当前用户库 ${result.total} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "复制名称库失败", error);
+  }
+}
+
+function createManualNamebase(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    const result = createUserNamebase(state.map);
+    state.panels.namebase.update(state.map);
+    setFileOperationStatus(documentRef, `已新建用户名称库“${result.name}”，样本 ${result.samples} 个，当前用户库 ${result.total} 个。`);
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "新建名称库失败", error);
+    return null;
   }
 }
 
