@@ -427,8 +427,19 @@ function cssEscape(value) {
 export function updateRegenerationSection(documentRef, result = {}) {
   const status = documentRef.getElementById("regeneration-status");
   const constraint = documentRef.getElementById("regeneration-constraint");
-  if (status) status.textContent = result.status || "";
-  if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流、资源点和外交会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。";
+  const defaultConstraint = "国家、省份、城镇、道路、河流、资源点和外交会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。";
+  const debugEnabled = Boolean(documentRef.defaultView?.__webglGeneratorDebug?.enabled);
+  if (status) status.textContent = debugEnabled ? result.status || "" : "";
+  if (constraint) constraint.textContent = debugEnabled && result.constraint ? result.constraint : defaultConstraint;
+  updateRegenerationDebugStatus(documentRef, result);
+}
+
+function updateRegenerationDebugStatus(documentRef, result = {}) {
+  if (!result.status) return;
+  const appStatus = documentRef.getElementById("app-status");
+  if (!appStatus) return;
+  const action = result.action ? `${result.action}：` : "";
+  appStatus.textContent = `${action}${result.status}${result.constraint ? ` / ${result.constraint}` : ""}`;
 }
 
 export function setGenerationLoading(documentRef, visible, message = "正在生成地图") {

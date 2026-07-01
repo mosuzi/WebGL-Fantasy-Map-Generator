@@ -13095,3 +13095,25 @@ full 矩阵结果：
 后续：
 
 - 下一步可做用户库删除/清理和导入覆盖/追加模式；用户库真正影响生成仍需单独设计。
+
+### 重新生成提示收敛到开发模式
+
+背景：
+
+- 用户此前指出重新生成区域不应显示面向开发的“待命”和后续内部状态提示。
+- “待命”已经移除，但点击重新生成后的详细结果仍会写回管理面板，包含派生系统刷新、约束说明等调试信息。
+
+修正：
+
+- `updateRegenerationSection()` 现在会检查 `window.__webglGeneratorDebug.enabled`。
+- 普通模式下，重新生成按钮执行后 `#regeneration-status` 保持空白，说明文字回到稳定默认说明。
+- 详细重算结果仍写入开发模式“状态”区；当 `?debug=1` 或 `window.__webglGeneratorDebug.enabled = true` 开启时，管理面板也会显示详细状态和约束说明，方便开发调试。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `975.23KB JS / 300.76KB gzip`、`150.81KB CSS / 22.40KB gzip`。
+- Playwright + 构建产物静态服务验证通过：普通模式点击“道路”重生成后，`#regeneration-status` 为空，`#regeneration-constraint` 为稳定默认说明；详细结果只写入隐藏开发模式状态区。执行 `window.__webglGeneratorDebug.enabled = true` 后再次点击“道路”，管理面板显示详细状态和约束，开发模式按钮可见，console/page error 为 `0`。
+
+后续：
+
+- 如果后续需要普通用户可见反馈，应增加短 toast 或状态灯，不再复用当前内部调试文案。

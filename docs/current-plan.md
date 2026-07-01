@@ -36,7 +36,7 @@
 - 文化/宗教树总览已升级为可拖动的独立连线面板：文化管理和宗教管理面板在摘要下方只保留“打开树状面板”入口；完整总览以独立浮层展示，节点按父子层级横向展开，并用 SVG 曲线连接父子节点，拖动标题栏可移动面板，点击节点复用现有选择回调。
 - 外交系统第一刀已完成：参考原版 `States.generateDiplomacy()` 和 `diplomacy-editor`，新增 `Ally / Friendly / Neutral / Suspicion / Rival / Enemy / Vassal / Suzerain / Unknown` 关系矩阵；关系生成会读取国家邻接、文化/宗教继承、国力、资源竞争和海洋国家差异。国家对象写入 `diplomacy / diplomacySummary / campaigns`，`map.diplomacy.metadata` 统计关系、战争、附庸和历史；管理 tab 新增“外交管理”，支持主体国家选择、关系列表、手动改关系、重生成外交和撤销/重做；第二刀已补外交专题着色、关系矩阵表、矩阵点击选中关系以及 CSV/JSON 导出。
 - 外交专题点击语义已修正：在外交视图下点击国家只切换外交主体并刷新外交着色，不再自动打开国家编辑面板；非外交视图下仍保留原国家选择/编辑入口行为。
-- 重新生成区的“待命”提示已移除：默认状态为空。后续点击重新生成后的提示仍计划收敛为 debug 模式功能，本轮先不做 debug 开关。
+- 重新生成区的“待命”提示已移除，后续点击重新生成后的内部状态提示也已收敛到开发模式；普通模式仅保留稳定的用户可读默认说明。
 - Vercel 部署配置已补齐：根目录新增 `vercel.json`，显式使用 `pnpm install --frozen-lockfile`、`pnpm run build:app` 和 `dist/webgl-generator`；`package.json` 补充 `dev / build / preview` 常规脚本和 Vite 8 所需 Node engine；部署说明见 `docs/deployment/vercel.md`。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
 - source/candidate baseline 的 `features.diagnostics` 已补充 feature 类型分布、小碎陆地/小湖泊数量、湖泊命名/outlet 统计和每个 feature 的 `type / group / cells / firstCell / outlet` 明细；`continents-10000-audit-continents-001/003` 已刷新 summary 和 diff。
@@ -60,7 +60,7 @@
 5. 气候系统当前已支持运行时即时重算温度、降水、生物群系和人口适宜度；后续可继续做更细粒度的海流/季风、局部雨影强度、温度/降水刷子，以及下游派生系统的受约束重算。
 6. 文化/宗教继承结构目前只影响数据、统计和手动管理；后续可以让派生关系参与名称变体、图标预制、宗教改革事件、文化同化速度、国家合法性和国力计算。
 7. 外交系统当前已生成关系、附庸、战争历史、管理面板、专题着色、关系矩阵和 CSV/JSON 导出；战争尚未驱动军事行动或地图事件，后续可继续做战争事件、军事行动、经济制裁和贸易偏好联动。
-8. 重新生成后的状态提示后续应收敛到 debug 模式开启时才显示；本轮只移除了默认“待命”。
+8. 重新生成后的内部状态提示已收敛到 debug 模式；若后续要给普通用户反馈，应改为简短 toast 或状态灯，而不是展示派生系统和调试细节。
 9. 再下一步可以继续补文化预制图标包和批量应用入口，或进入资源点到 goods/market/deals 的正式贸易链路。
 
 ## 2026-06-18 计划复位
@@ -778,6 +778,7 @@ http://127.0.0.1:5410
 153. 名称库导出第一刀已完成：名称库总览面板新增“导出名称库”，会导出 `webgl-generator-namebases v1` JSON，包含当前内置词池的 id、名称、类型、分类、样本统计、长度范围、说明和完整 `source` 数组，并记录当前地图 seed/checksum 作为导出上下文。构建产物验证中下载 `fmg-stage-2-1-c59fdd6b.namebases.json`，`bases = 61`、`samples = 2241`，`ancient-state-roots.source.length = 96`，打开前后 checksum 稳定，console/page error 为 `0`。该导出仍是只读能力，不写入 `map.namebases`，不改变生成器签名，也不影响当前命名结果。后续进入用户自定义名称库前，需要先设计导入合并/覆盖和 EditHistory 或独立历史栈。
 154. 名称库导入第一刀已完成：名称库总览面板新增“导入名称库”，支持读取 `webgl-generator-namebases v1` JSON，并把其中非空词池规范化为 `map.namebases.bases` 中的导入用户库；总览会同时显示内置词池和导入词池，导入库会随完整地图 JSON 保存。构建产物闭环验证中，导出并重新导入内置名称库后 `map.namebases.bases = 61`，总览行数 `122`、导入行数 `61`，完整地图 JSON 也保留 `61` 个导入库，checksum 稳定且 console/page error 为 `0`。当前导入仍不接入生成、不自动重命名现有对象，也不提供编辑历史；下一步若继续推进，应补用户库编辑、删除/清理、覆盖/追加策略和生成绑定。
 155. 名称库当前库导出已完成：名称库导出从“仅内置库”改为导出当前库集合，包含内置库与 `map.namebases.bases` 中的用户库；metadata 现在区分 `builtin / user` 数量，导出状态也会显示用户库数量。构建产物验证中，无用户库时导出 `bases = 61 / user = 0`；导入 61 个用户库后再导出会输出 `bases = 122 / user = 61`，首个用户库 id 为 `imported-ancient-state-roots`，console/page error 为 `0`。后续可继续做用户库删除、重命名和导入覆盖/追加选择。
+156. 重新生成提示已收敛到开发模式：普通模式下点击管理 tab 的重新生成按钮，`regeneration-status` 保持空白，说明文字回到稳定的用户可读默认说明；具体重算结果、派生刷新和约束说明写入开发模式“状态”区，并且仅在 `?debug=1` 或 `window.__webglGeneratorDebug.enabled = true` 开启后显示在管理面板状态里。构建产物验证中普通模式点击“道路”重生成后状态为空，开启 debug 后再次点击才显示详细状态，console/page error 为 `0`。后续若要展示用户向成功 toast，应另做简短、非内部状态的用户提示。
 
 ## 约束
 
