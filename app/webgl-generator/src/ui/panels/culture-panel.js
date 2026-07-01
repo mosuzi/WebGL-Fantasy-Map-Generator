@@ -1,6 +1,5 @@
-import {createApp, markRaw, shallowReactive} from "vue";
-import {pinia} from "../vue/pinia.js";
-import CulturePanel from "../vue/components/CulturePanel.vue";
+import {markRaw, shallowReactive} from "vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 
 export function createCulturePanel(documentRef, manager, callbacks = {}) {
@@ -53,9 +52,17 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-culture-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(CulturePanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/CulturePanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "文化管理将在首次打开时加载。",
+      loading: "正在加载文化管理...",
+      failure: "文化管理加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(map, selection, history) {
@@ -67,6 +74,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.open = true;
       panelState.version++;
       manager.open("culture-panel");
+      lazyPanel.load();
     },
     update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
@@ -84,7 +92,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       return panelState.open;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }

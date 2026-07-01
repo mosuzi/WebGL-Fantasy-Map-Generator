@@ -13403,3 +13403,26 @@ full 矩阵结果：
 后续：
 
 - 可继续迁移城市、文化、宗教、marker 等对象管理浮层，但国家/省份/高度编辑这种直接驱动笔刷的面板应放慢，先确认编辑锁和画布交互不受懒加载影响。
+
+### 对象管理浮层懒加载第四刀：城市、文化、宗教、资源标记
+
+背景：
+
+- `UiObjectTable` 后续若迁移到 `ElTable`，依赖对象列表的面板不能继续常驻首屏，否则会把 Element Table 的运行时代价直接带进初始资源。
+- 城市、文化、宗教和资源标记管理面板都属于对象管理浮层，打开频率低于主控制面板，但内部保留表格、详情、定位和编辑入口，适合作为进入 `ElTable` 前的拆包边界。
+
+修正：
+
+- `city-panel.js`、`culture-panel.js`、`religion-panel.js`、`marker-panel.js` 移除对应 SFC 静态 import。
+- 四个 panel wrapper 继续在启动时注册浮层并维护 state/callbacks，首次 `open()` 时通过 `createLazyVuePanel()` 动态加载组件。
+- 原有选中、定位、重命名、备注、改色、资源点放置/移动、撤销/重做和 `setSelected... / updateEditMode` API 保持不变。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口变为 `index-XzNEAHlr.js`，约 `566.30KB / 169.44KB gzip`。新增按需面板 chunk 包括 `CityPanel-Cd2sjBE-.js`（约 `4.33KB gzip`）、`CulturePanel-DP9Hg7AZ.js`（约 `3.97KB gzip`）、`ReligionPanel-CNpfkOr4.js`（约 `4.12KB gzip`）和 `MarkerPanel-BIgOPVy2.js`（约 `3.44KB gzip`）。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：首屏资源中没有 `CityPanel / CulturePanel / ReligionPanel / MarkerPanel` chunk；逐个打开城市、文化、宗教和资源标记管理后才加载对应 chunk，四个面板摘要均正常，console/page error 为 `0`。
+
+后续：
+
+- `UiObjectTable -> ElTable` 可在这些已懒加载的对象管理浮层内试点；迁移前需要保留筛选、排序、选中、定位按钮和选中自动滚入视口契约。
+- 国家、省份和高度编辑器直接关联画布编辑、二级面板和笔刷模式，继续放慢迁移节奏，先补交互验证再拆包。
