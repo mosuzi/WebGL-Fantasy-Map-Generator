@@ -13426,3 +13426,25 @@ full 矩阵结果：
 
 - `UiObjectTable -> ElTable` 可在这些已懒加载的对象管理浮层内试点；迁移前需要保留筛选、排序、选中、定位按钮和选中自动滚入视口契约。
 - 国家、省份和高度编辑器直接关联画布编辑、二级面板和笔刷模式，继续放慢迁移节奏，先补交互验证再拆包。
+
+### 国家/省份编辑浮层懒加载
+
+背景：
+
+- 国家和省份面板同样依赖 `UiObjectTable`，若在它们仍静态 import 的状态下迁移 `ElTable`，表格组件会重新进入主包。
+- 两个面板虽带画布 brush 编辑，但 brush 状态本身在 wrapper 的 reactive state 中，SFC 只负责可视化控制和用户操作，因此可以先拆加载边界，同时保留外部 API。
+
+修正：
+
+- `state-panel.js` 和 `province-panel.js` 移除对应 SFC 静态 import，改为通过 `createLazyVuePanel()` 在首次 `open()` 时加载。
+- 保留国家/省份目标选择、编辑启停、半径、取选中/取悬停、改名、改色、首都/备注、历史和 `getBrush / setActive` 等画布交互 API。
+- 浮层注册、关闭时停用编辑和状态更新逻辑保持不变。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口变为 `index-BJGM0ANB.js`，约 `547.52KB / 165.45KB gzip`。新增按需面板 chunk 包括 `StatePanel-CkKvFGCH.js`（约 `4.17KB gzip`）和 `ProvincePanel-7a1i5Izi.js`（约 `3.97KB gzip`）。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：首屏资源中没有 `StatePanel / ProvincePanel` chunk；打开国家编辑和省份管理后才加载对应 chunk，两个面板摘要均正常，console/page error 为 `0`。
+
+后续：
+
+- 依赖 `UiObjectTable` 的主要管理浮层已经基本拆出首屏，下一步可迁移 `UiObjectTable -> ElTable`，并专门验证定位按钮、双击定位、选中行滚入视口和空态。

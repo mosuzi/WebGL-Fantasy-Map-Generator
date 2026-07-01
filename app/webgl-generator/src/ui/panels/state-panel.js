@@ -1,6 +1,5 @@
-import {createApp, markRaw, shallowReactive} from "vue";
-import {pinia} from "../vue/pinia.js";
-import StatePanel from "../vue/components/StatePanel.vue";
+import {markRaw, shallowReactive} from "vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 
 export function createStatePanel(documentRef, manager, callbacks = {}) {
@@ -74,9 +73,17 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-state-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(StatePanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/StatePanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "国家编辑将在首次打开时加载。",
+      loading: "正在加载国家编辑...",
+      failure: "国家编辑加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(map, history) {
@@ -85,6 +92,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       if (panelState.targetStateId === null) panelState.targetStateId = firstStateId(map);
       panelState.version++;
       manager.open("state-panel");
+      lazyPanel.load();
     },
     update({map = panelState.map, sourceStateId = panelState.sourceStateId, lastAffected = panelState.lastAffected, history = panelState.history} = {}) {
       panelState.map = map ? markRaw(map) : null;
@@ -109,7 +117,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.active = active;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }

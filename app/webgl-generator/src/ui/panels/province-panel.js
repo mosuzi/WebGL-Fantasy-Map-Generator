@@ -1,6 +1,5 @@
-import {createApp, markRaw, shallowReactive} from "vue";
-import {pinia} from "../vue/pinia.js";
-import ProvincePanel from "../vue/components/ProvincePanel.vue";
+import {markRaw, shallowReactive} from "vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 
 export function createProvincePanel(documentRef, manager, callbacks = {}) {
@@ -76,9 +75,17 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-province-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(ProvincePanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/ProvincePanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "省份管理将在首次打开时加载。",
+      loading: "正在加载省份管理...",
+      failure: "省份管理加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(map, selection, history) {
@@ -90,6 +97,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.open = true;
       panelState.version++;
       manager.open("province-panel");
+      lazyPanel.load();
     },
     update(map, selection, history, editState = {}) {
       panelState.map = map ? markRaw(map) : null;
@@ -119,7 +127,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       return panelState.open;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }

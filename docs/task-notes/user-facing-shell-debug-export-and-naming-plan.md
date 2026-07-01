@@ -223,6 +223,6 @@
 - Element Plus 第五批已迁移 `UiSliderField`，所有滑动条使用 Element Slider 视觉层，同时保留隐藏 range 桥。
 - Element Plus 第六批已迁移 `UiSwitchField`，普通开关和图层按钮式开关使用 Element Switch 视觉层，同时保留隐藏 checkbox 桥。
 - Element Plus 第七批已迁移 `UiColorField`，共享二级改色面板使用 Element ColorPicker，并补充二级面板对 Element teleported popper 的点击豁免。
-- Element Plus 组件迁移前置拆包已继续推进：备注、名称库、路线、河流、标签、外交、城市、文化、宗教和资源标记管理浮层均已改为首次打开时动态加载；后续 `UiObjectTable -> ElTable` 应先在这些按需面板内试点，避免首屏再次变重。
+- Element Plus 组件迁移前置拆包已继续推进：备注、名称库、路线、河流、标签、外交、城市、文化、宗教、资源标记、国家和省份管理浮层均已改为首次打开时动态加载；后续 `UiObjectTable -> ElTable` 可在这些按需面板内试点，避免首屏再次变重。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。
