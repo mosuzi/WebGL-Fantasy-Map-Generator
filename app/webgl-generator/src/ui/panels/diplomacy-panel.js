@@ -1,6 +1,5 @@
-import {createApp, markRaw, shallowReactive} from "vue";
-import {pinia} from "../vue/pinia.js";
-import DiplomacyPanel from "../vue/components/DiplomacyPanel.vue";
+import {markRaw, shallowReactive} from "vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {sameObjectId, toIntegerId} from "../object-id.js";
 
 export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
@@ -67,9 +66,17 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-diplomacy-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(DiplomacyPanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/DiplomacyPanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "外交管理将在首次打开时加载。",
+      loading: "正在加载外交管理...",
+      failure: "外交管理加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(map, selection, history) {
@@ -82,6 +89,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.version++;
       panelState.open = true;
       manager.open("diplomacy-panel");
+      lazyPanel.load();
     },
     update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
@@ -101,7 +109,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       return panelState.open;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }

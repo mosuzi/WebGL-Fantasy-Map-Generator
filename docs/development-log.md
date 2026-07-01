@@ -13381,3 +13381,25 @@ full 矩阵结果：
 后续：
 
 - 继续迁移低频管理浮层时优先观察共享 chunk 变化，必要时再把对象解析、单位偏好和表单基础组件做更细的拆分。
+
+### 低频管理浮层懒加载第三刀：路线、河流、标签、外交
+
+背景：
+
+- 备注总览和名称库总览已经验证动态 import 模式可复用。
+- 路线、河流、标签和外交管理属于低频管理浮层，不参与高度/国家/省份这类持续笔刷交互，适合继续拆出首屏。
+
+修正：
+
+- `route-panel.js`、`river-panel.js`、`label-naming-panel.js`、`diplomacy-panel.js` 移除对应 SFC 静态 import。
+- 四个 panel wrapper 继续在启动时注册浮层并维护 state/callbacks，首次 `open()` 时通过 `createLazyVuePanel()` 动态加载组件。
+- 原有 `open / update / setSelected... / isOpen / unmount` API 保持不变。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口变为 `index-5wLOxeIk.js`，约 `655.04KB / 193.94KB gzip`。新增或保留的按需面板 chunk 包括 `RoutePanel-CPPOoeuM.js`（约 `2.05KB gzip`）、`RiverPanel-BGlS-d5T.js`（约 `2.38KB gzip`）、`LabelNamingPanel-B8Y7tZ4M.js`（约 `2.84KB gzip`）和 `DiplomacyPanel-DozHhf5q.js`（约 `3.70KB gzip`）。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：首屏资源中没有 `RoutePanel / RiverPanel / LabelNamingPanel / DiplomacyPanel` chunk；逐个打开路线、河流、标签、外交管理后才加载对应 chunk，四个面板摘要均正常，console/page error 为 `0`。
+
+后续：
+
+- 可继续迁移城市、文化、宗教、marker 等对象管理浮层，但国家/省份/高度编辑这种直接驱动笔刷的面板应放慢，先确认编辑锁和画布交互不受懒加载影响。

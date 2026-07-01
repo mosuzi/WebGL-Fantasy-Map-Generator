@@ -1,6 +1,5 @@
-import {createApp, markRaw, shallowReactive} from "vue";
-import {pinia} from "../vue/pinia.js";
-import RoutePanel from "../vue/components/RoutePanel.vue";
+import {markRaw, shallowReactive} from "vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 
 export function createRoutePanel(documentRef, manager, callbacks = {}) {
@@ -50,9 +49,17 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-route-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(RoutePanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/RoutePanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "路线管理将在首次打开时加载。",
+      loading: "正在加载路线管理...",
+      failure: "路线管理加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(map, selection, history) {
@@ -64,6 +71,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       panelState.open = true;
       panelState.version++;
       manager.open("route-panel");
+      lazyPanel.load();
     },
     update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
@@ -81,7 +89,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       return panelState.open;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }

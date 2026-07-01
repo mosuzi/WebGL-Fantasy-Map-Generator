@@ -42,7 +42,7 @@
 - 如果单批迁移让 JS gzip 增量超过 `20KB`，先停下来评估是否需要拆包或替代实现，再继续迁移。
 - `UiObjectTable` 是下一个用户感知最强的候选，但不能直接静态替换为 `ElTable`；先用 `NotesPanel` 或 `NamebasePanel` 这类低风险浮层验证动态 import，再批量迁移对象面板，最后替换表格内核。
 - `UiTreeDisplayPanel` 当前是可拖动浮层 + SVG 连线的图形总览，直接换成 `ElTree` 可能降低树状总览的视觉表达；应排在表格拆包之后再评估。
-- 备注总览和名称库总览已经完成面板级动态 import：`NotesPanel.vue` 与 `NamebasePanel.vue` 均在首次打开时才加载，主入口 gzip 明显下降；但 `use-unit-preferences`、`UiTextEditField` 等共享 chunk 仍被首屏 preload，后续拆更多面板时要继续观察共享依赖是否能进一步切分。
+- 备注总览、名称库总览、路线、河流、标签和外交管理已经完成面板级动态 import：对应 SFC 均在首次打开时才加载，主入口 gzip 明显下降；但 `use-unit-preferences`、`UiSelectField`、`UiSliderField` 等共享 chunk 仍被首屏 preload，后续拆更多面板时要继续观察共享依赖是否能进一步切分。
 
 参考：
 

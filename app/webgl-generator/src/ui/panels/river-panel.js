@@ -1,6 +1,5 @@
-import {createApp, markRaw, shallowReactive} from "vue";
-import {pinia} from "../vue/pinia.js";
-import RiverPanel from "../vue/components/RiverPanel.vue";
+import {markRaw, shallowReactive} from "vue";
+import {createLazyVuePanel} from "./lazy-vue-panel.js";
 
 export function createRiverPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -50,9 +49,17 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-river-panel-root";
   record.body.replaceChildren(root);
-  const app = createApp(RiverPanel, {state: panelState, callbacks: panelCallbacks});
-  app.use(pinia);
-  app.mount(root);
+  const lazyPanel = createLazyVuePanel(
+    documentRef,
+    root,
+    () => import("../vue/components/RiverPanel.vue"),
+    {state: panelState, callbacks: panelCallbacks},
+    {
+      initial: "河流管理将在首次打开时加载。",
+      loading: "正在加载河流管理...",
+      failure: "河流管理加载失败，请检查开发模式日志。"
+    }
+  );
 
   return {
     open(map, selection, history, editingObject = panelState.editingObject) {
@@ -63,6 +70,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.open = true;
       panelState.version++;
       manager.open("river-panel");
+      lazyPanel.load();
     },
     update(map, selection, history, editingObject = panelState.editingObject) {
       panelState.map = map ? markRaw(map) : null;
@@ -75,7 +83,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       return panelState.open;
     },
     unmount() {
-      app.unmount();
+      lazyPanel.unmount();
     }
   };
 }
