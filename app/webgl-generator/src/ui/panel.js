@@ -842,6 +842,7 @@ function formatLayerVisibility(visibility = {}) {
     cities: "城市",
     resources: "资源点",
     markers: "标记",
+    scaleBar: "比例尺",
     labels: "标签",
     stateLabels: "国家名",
     stateBorders: "国界",

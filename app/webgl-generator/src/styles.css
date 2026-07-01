@@ -771,6 +771,10 @@ select:disabled {
   display: none;
 }
 
+.floating-panel[data-panel-id="development-panel"] {
+  max-height: min(76%, calc(100% - 96px));
+}
+
 .floating-panel-header {
   display: flex;
   align-items: center;
