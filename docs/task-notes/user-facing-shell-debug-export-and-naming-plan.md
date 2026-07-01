@@ -27,7 +27,8 @@
 - Vite 当前只启用 `unplugin-vue-components` + `ElementPlusResolver({importStyle: "css"})`，避免全局注册和整包样式。
 - 已迁移 `UiButton` 作为样板，保持旧业务 API 不变。
 - 已迁移第二批基础组件：`UiFilterInput -> ElInput`、`UiTextEditField -> ElInput`、`UiNumberField -> ElInputNumber`、`UiSortBar -> UiButton/ElButton`。
-- 当前灰度反转补充后的构建产物约 `757.14KB JS / 234.77KB gzip`、`93.95KB CSS / 14.40KB gzip`；相比灰度导入后的基线约增加 `+14.29KB JS gzip`、`+2.26KB CSS gzip`，后续继续迁移必须继续记录体积。
+- 已迁移第三批基础组件：`UiSelectField -> ElSelect/ElOption`，保留隐藏原生 select 桥以兼容旧 runtime 读写 DOM id。
+- 当前第三批迁移后构建产物约 `858.60KB JS / 268.63KB gzip`、`112.16KB CSS / 17.18KB gzip`；相比灰度反转补充后的基线约增加 `+33.86KB JS gzip`、`+2.78KB CSS gzip`，后续继续迁移必须继续记录体积，并优先考虑面板级懒加载或拆包。
 
 参考：
 
@@ -200,5 +201,6 @@
 - 阶段 F 已作为第三批代码实现：春秋古国风国家根名、根族去重和形制收敛。
 - Element Plus 已作为第四批代码接入按需导入与 `UiButton` 样板迁移。
 - 阶段 E 已作为第五批代码实现：灰度高度图导入、采样型高度模板、完整重生成链路和黑白反转映射。
+- Element Plus 第三批已迁移 `UiSelectField`，解决下拉视觉层和空白点击收起问题，同时保留原生 select 桥。
 - 每次提交前至少运行 `git diff --check` 和 `pnpm run build`；涉及浏览器交互时使用 Playwright 验证。
 - 本轮只提交，不推送。

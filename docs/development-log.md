@@ -12281,3 +12281,33 @@ full 矩阵结果：
 后续：
 
 - 继续补保持比例/裁剪、模糊降噪、导入预览和原版 Image Converter 的彩色高度方案识别。
+
+### Element Plus 迁移第三刀：下拉组件
+
+背景：
+
+- 用户明确指出自写下拉组件已经暴露出空白点击收起、弹层宽度和撑开浮层滚动高度等问题。
+- `UiSelectField` 同时用于生成参数、单位配置、外交主体、文化/宗教父级、国家/省份编辑和资源/城市视觉配置；其中 `heightmap-template` 仍被 `panel.js` 直接按 DOM id 读取和写入。
+
+修正：
+
+- `UiSelectField` 改为使用 `ElSelect / ElOption` 作为视觉层，弹层交由 Element Plus popper 管理。
+- 保留隐藏原生 `<select id=...>` 桥：Element 选择变化后同步原生 select 并派发 `change`；外部导入地图或旧 runtime 写原生 select 后，也会反向同步 Vue 当前值。
+- 下拉 popper 添加暗色样式、最小宽度和长文本换行，避免中文长选项过窄或截断。
+- 删除旧自绘 trigger/menu/option/arrow 的有效样式，保留 `.ui-select-field` 布局类供现有面板继续复用。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `858.60KB JS / 268.63KB gzip`、`112.16KB CSS / 17.18KB gzip`。
+- Playwright + 构建产物静态服务验证通过：
+  - 控制面板中 `.ui-select-field .el-select` 数量为 `9`，旧 `.ui-select-trigger` 数量为 `0`。
+  - 打开地形下拉后 popper 位于 document body 内，不在 `.floating-panel` 内；宽度约 `476px`。
+  - 打开下拉前后控制面板 body 的 `scrollHeight/clientHeight` 均为 `971 / 857`，没有因下拉弹层额外撑高。
+  - 点击空白后 popper 保留 DOM 但 `display: none`、`aria-hidden=true`，视觉上已收起。
+  - 选择“群岛”后隐藏原生 `#heightmap-template.value = archipelago`；点击生成后 `map.heightmap.template = archipelago`，console/page error 为 `0`。
+
+后续：
+
+- `ElSelect` 的 gzip 增量约 `+33.86KB JS / +2.78KB CSS`，后续迁移 `ElTree / ElTable / ElDialog` 前必须考虑懒加载、拆包或仅在特定浮层中按需加载。
+- `UiSliderField / UiSwitchField` 仍未迁移；迁移前同样要保留隐藏 input 或事件桥，避免 `panel.js` 读取 `.value/.checked` 的链路断开。
