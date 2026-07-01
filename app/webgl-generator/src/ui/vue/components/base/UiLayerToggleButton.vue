@@ -1,6 +1,5 @@
 <template>
-  <button
-    type="button"
+  <ElButton
     class="layer-toggle-button"
     :class="{active: pressed}"
     :data-layer="layer"
@@ -8,7 +7,7 @@
   >
     <span class="layer-toggle-indicator"></span>
     <span>{{ label }}</span>
-  </button>
+  </ElButton>
 </template>
 
 <script setup>

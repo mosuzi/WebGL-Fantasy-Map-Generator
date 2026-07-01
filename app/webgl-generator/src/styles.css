@@ -2742,9 +2742,11 @@ select:disabled {
   overflow-wrap: anywhere;
 }
 
-.layer-toggle-button {
+.layer-toggle-button.el-button {
   display: flex;
+  width: 100%;
   min-height: 34px;
+  height: auto;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
@@ -2757,13 +2759,23 @@ select:disabled {
   font-size: 12px;
   font-weight: 700;
   text-align: left;
+  white-space: normal;
+  margin: 0;
 }
 
-.layer-toggle-button:hover {
+.layer-toggle-button.el-button > span {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.layer-toggle-button.el-button:hover {
   background: #24313a;
 }
 
-.layer-toggle-button.active {
+.layer-toggle-button.el-button.active {
   border-color: #d7a84f;
   background: #2b2415;
   color: #ffe0a1;
@@ -2778,7 +2790,7 @@ select:disabled {
   background: #1b252b;
 }
 
-.layer-toggle-button.active .layer-toggle-indicator {
+.layer-toggle-button.el-button.active .layer-toggle-indicator {
   border-color: #f0c56e;
   background: #d7a84f;
   box-shadow: 0 0 0 3px rgb(215 168 79 / 14%);

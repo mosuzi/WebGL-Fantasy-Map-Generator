@@ -320,16 +320,15 @@
           :label="layer.label"
           :pressed="isLayerVisible(layer.id)"
         />
-        <button
+        <ElButton
           id="show-hover-info"
-          type="button"
           class="layer-toggle-button"
           :class="{active: preferences.showHoverInfo !== false}"
           :aria-pressed="preferences.showHoverInfo !== false ? 'true' : 'false'"
         >
           <span class="layer-toggle-indicator"></span>
           <span>悬停信息</span>
-        </button>
+        </ElButton>
       </div>
 
       <UiSliderField

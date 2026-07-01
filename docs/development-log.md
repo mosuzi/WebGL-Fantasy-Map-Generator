@@ -13515,3 +13515,25 @@ full 矩阵结果：
 后续：
 
 - 图层按钮、树状面板节点按钮和气候风向按钮仍是特定交互样式，迁移时要保留它们的 DOM 桥和空间布局。
+
+### Element Plus 图层开关迁移
+
+背景：
+
+- 图层 tab 仍有一组原生按钮，既包括 `UiLayerToggleButton`，也包括控制面板内联的“悬停信息”按钮。
+- 这些按钮被旧 runtime 通过 `data-layer`、`id` 和 `aria-pressed` 读取与更新，迁移时不能改变根节点契约。
+
+修正：
+
+- `UiLayerToggleButton` 改为 `ElButton` 根节点，保留 `data-layer` 和 `aria-pressed`。
+- 控制面板内联的“悬停信息”按钮也改为 `ElButton` 根节点，保留 `id="show-hover-info"` 和 `aria-pressed`。
+- CSS 更新为 `.layer-toggle-button.el-button` 覆写，保持旧圆点、选中态、hover 和多列网格布局。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `531.46KB / 160.18KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：图层页 `.layer-toggle-button = 12`，且全部带 `.el-button`，旧原生 `button.layer-toggle-button:not(.el-button) = 0`；点击比例尺后 `aria-pressed=false` 且 `#map-scale-bar.hidden = true`，点击悬停信息后 `aria-pressed=false`，console/page error 为 `0`。
+
+后续：
+
+- 控制面板气候风向箭头和树状节点按钮属于特殊可视交互，后续迁移需要单独保留其几何排布和点击轮询行为。
