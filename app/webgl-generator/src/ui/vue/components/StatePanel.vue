@@ -90,6 +90,8 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {formatArea, formatPopulation} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "StatePanel"
@@ -129,11 +131,12 @@ const columns = Object.freeze([
   {key: "name", label: "名称"},
   {key: "capitalName", label: "首都"},
   {key: "burgs", label: "城镇", align: "right"},
-  {key: "population", label: "人口", align: "right", format: value => formatNumber(value)},
+  {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)},
   {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
   {key: "resourcePotential", label: "资源", align: "right", format: value => formatNumber(value)}
 ]);
 
+const unitPreferences = useUnitPreferences();
 const capitalDraft = ref(0);
 const metrics = computed(() => buildStateMetrics(props.state.map));
 const stateOptions = computed(() => stateRows(props.state.map));
@@ -157,9 +160,9 @@ const detailRows = computed(() => selected.value ? [
   {label: "文化", value: selected.value.culture},
   {label: "宗教", value: selected.value.religion},
   {label: "中心 cell", value: selected.value.centerCell},
-  {label: "面积", value: formatNumber(selected.value.area)},
+  {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "城镇", value: selected.value.burgs},
-  {label: "人口", value: formatNumber(selected.value.population)},
+  {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "国力评分", value: formatNumber(selected.value.powerScore)},
   {label: "经济力", value: formatNumber(selected.value.economicPower)},
   {label: "资源潜力", value: formatNumber(selected.value.resourcePotential)},
@@ -335,6 +338,14 @@ function toHex(channel) {
 
 function formatNumber(value) {
   return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
+}
+
+function formatAreaValue(value) {
+  return formatArea(value, unitPreferences.value);
+}
+
+function formatPopulationValue(value) {
+  return formatPopulation(value, unitPreferences.value);
 }
 
 function roundNumber(value) {

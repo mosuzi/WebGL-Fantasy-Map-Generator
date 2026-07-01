@@ -22,6 +22,8 @@ import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {formatDistance, formatPopulation} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../../runtime/object-kinds.js";
 
 defineOptions({
@@ -44,6 +46,7 @@ const title = computed(() => formatObjectTitle(props.state.object));
 const canRename = computed(() => canRenameObject(props.state.object));
 const editableName = computed(() => props.state.object?.name || props.state.object?.text || props.state.object?.targetName || "");
 const detailRowsWithState = computed(() => [...detailRows(props.state.object), {label: "状态", value: editing.value ? "编辑" : "查看"}]);
+const unitPreferences = useUnitPreferences();
 
 const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.CITY]: object => `城市 ${object.name}`,
@@ -58,7 +61,7 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
 const OBJECT_DETAIL_ROWS = Object.freeze({
   [OBJECT_KIND.CITY]: object => [
     {label: "类型", value: object.type},
-    {label: "人口", value: object.population},
+    {label: "人口", value: formatPopulationValue(object.population)},
     {label: "国家", value: object.state},
     {label: "省份", value: object.province},
     {label: "对象 id", value: object.id}
@@ -68,7 +71,7 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "等级", value: object.level},
     {label: "起点", value: object.from},
     {label: "终点", value: object.to},
-    {label: "命中距离", value: formatDistance(object.distance)},
+    {label: "命中距离", value: formatDistanceValue(object.distance)},
     {label: "对象 id", value: object.id}
   ],
   [OBJECT_KIND.MARKER]: object => [
@@ -93,8 +96,8 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "名称", value: object.name || `#${object.id}`},
     {label: "类型", value: object.type},
     {label: "流量", value: object.flux},
-    {label: "长度", value: object.length},
-    {label: "命中距离", value: formatDistance(object.distance)},
+    {label: "长度", value: formatDistanceValue(object.length)},
+    {label: "命中距离", value: formatDistanceValue(object.distance)},
     {label: "对象 id", value: object.id}
   ],
   [OBJECT_KIND.PROVINCE]: object => [
@@ -136,7 +139,11 @@ function formatMarkerData(data = {}) {
   return Object.entries(data).map(([key, value]) => `${key}: ${value}`).join(" / ") || "none";
 }
 
-function formatDistance(value) {
-  return Number.isFinite(value) ? value.toFixed(1) : "n/a";
+function formatDistanceValue(value) {
+  return formatDistance(value, unitPreferences.value);
+}
+
+function formatPopulationValue(value) {
+  return formatPopulation(value, unitPreferences.value);
 }
 </script>

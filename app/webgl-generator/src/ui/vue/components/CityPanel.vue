@@ -72,6 +72,8 @@ import {
   citySilhouetteLabel,
   resolveCityVisual
 } from "../../../runtime/city-visuals.js";
+import {formatPopulation} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "CityPanel"
@@ -105,9 +107,10 @@ const columns = Object.freeze([
   {key: "type", label: "类型"},
   {key: "stateName", label: "国家"},
   {key: "provinceName", label: "省份"},
-  {key: "population", label: "人口", align: "right", format: value => formatNumber(value)}
+  {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
 ]);
 
+const unitPreferences = useUnitPreferences();
 const metrics = computed(() => buildCityMetrics(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedCityId) || null);
@@ -120,12 +123,13 @@ const summaryMetrics = computed(() => [
   {label: "城市", value: metrics.value.total},
   {label: "首都", value: metrics.value.capitals},
   {label: "港口", value: metrics.value.ports},
-  {label: "人口", value: formatNumber(metrics.value.totalPopulation)},
+  {label: "人口", value: formatPopulationValue(metrics.value.totalPopulation)},
   {label: "筛选", value: visibleRows.value.length}
 ]);
 
 const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
+  {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "标记", value: selected.value.flags},
   {label: "所属国家", value: selected.value.stateName},
   {label: "所属省份", value: selected.value.provinceName},
@@ -332,11 +336,7 @@ function hasOwn(object, key) {
   return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
 }
 
-function formatNumber(value) {
-  return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
-}
-
-function roundNumber(value) {
-  return Math.round((Number(value) || 0) * 10) / 10;
+function formatPopulationValue(value) {
+  return formatPopulation(value, unitPreferences.value);
 }
 </script>

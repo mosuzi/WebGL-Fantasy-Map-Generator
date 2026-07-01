@@ -57,6 +57,8 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {formatDistance} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "RiverPanel"
@@ -87,6 +89,7 @@ const columns = Object.freeze([
   {key: "flux", label: "流量", align: "right", format: value => formatNumber(value)}
 ]);
 
+const unitPreferences = useUnitPreferences();
 const widthDraft = ref(1);
 const rows = computed(() => riverRows(props.state.map));
 const selectedId = computed(() => props.state.selection?.object?.kind === "river" ? props.state.selection.object.id : null);
@@ -162,8 +165,7 @@ function riverLength(river) {
 }
 
 function formatLength(value) {
-  if (!Number.isFinite(value)) return "0";
-  return value >= 1000 ? `${(value / 1000).toFixed(2)}k` : value.toFixed(0);
+  return formatDistance(value, unitPreferences.value);
 }
 
 function formatNumber(value) {

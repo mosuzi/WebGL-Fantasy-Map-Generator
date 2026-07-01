@@ -1,5 +1,6 @@
 import {useLocalStorage} from "@vueuse/core";
 import {defineStore} from "pinia";
+import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../../display-units.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 
@@ -9,6 +10,7 @@ const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   smoothCellBorders: true,
   showHoverInfo: true,
   maxCityLabels: 5000,
+  units: Object.freeze({...DEFAULT_UNIT_PREFERENCES}),
   layers: Object.freeze({})
 });
 
@@ -47,6 +49,7 @@ function mergePreferences(current = {}, patch = {}) {
   return {
     ...current,
     ...patch,
+    units: patch.units ? normalizeUnitPreferences({...current.units, ...patch.units}) : normalizeUnitPreferences(current.units),
     layers: patch.layers ? {...(current.layers || {}), ...patch.layers} : current.layers || {}
   };
 }
@@ -62,6 +65,7 @@ function normalizePreferences(input = {}) {
         ? input.showHoverOverlay
         : DEFAULT_CONTROL_PREFERENCES.showHoverInfo,
     maxCityLabels: normalizeMaxCityLabels(input.maxCityLabels),
+    units: normalizeUnitPreferences(input.units),
     layers: normalizeLayerPreferences(input.layers)
   };
 }

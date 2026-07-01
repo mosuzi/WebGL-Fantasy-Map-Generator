@@ -734,6 +734,10 @@ export function createGeneratorApp(documentRef) {
       renderer.setLabelOptions({maxCityLabels});
       updateRuntimePanel(documentRef, state);
     },
+    onUnitPreferences: () => {
+      updateRuntimePanel(documentRef, state);
+      updatePickPanel(documentRef, state);
+    },
     onLayerVisible: (layer, visible) => {
       renderer.setLayerVisible(layer, visible);
       updateRuntimePanel(documentRef, state);

@@ -78,6 +78,8 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {formatArea, formatPopulation} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "ProvincePanel"
@@ -117,11 +119,12 @@ const columns = Object.freeze([
   {key: "name", label: "名称"},
   {key: "stateName", label: "国家"},
   {key: "cells", label: "cells", align: "right"},
-  {key: "area", label: "面积", align: "right", format: value => formatNumber(value)},
+  {key: "area", label: "面积", align: "right", format: value => formatAreaValue(value)},
   {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
   {key: "resourcePotential", label: "资源", align: "right", format: value => formatNumber(value)}
 ]);
 
+const unitPreferences = useUnitPreferences();
 const metrics = computed(() => buildProvinceMetrics(props.state.map));
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
@@ -143,9 +146,9 @@ const detailRows = computed(() => selected.value ? [
   {label: "中心 pack cell", value: selected.value.centerCell},
   {label: "中心 grid cell", value: selected.value.gridCenterCell},
   {label: "pole", value: selected.value.pole},
-  {label: "面积", value: formatNumber(selected.value.area)},
+  {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "cells", value: selected.value.cells},
-  {label: "人口", value: formatNumber(selected.value.population)},
+  {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "实力评分", value: formatNumber(selected.value.powerScore)},
   {label: "经济力", value: formatNumber(selected.value.economicPower)},
   {label: "资源潜力", value: formatNumber(selected.value.resourcePotential)},
@@ -328,6 +331,14 @@ function toHex(channel) {
 
 function formatNumber(value) {
   return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
+}
+
+function formatAreaValue(value) {
+  return formatArea(value, unitPreferences.value);
+}
+
+function formatPopulationValue(value) {
+  return formatPopulation(value, unitPreferences.value);
 }
 
 function roundNumber(value) {

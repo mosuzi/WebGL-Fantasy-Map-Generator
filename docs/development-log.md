@@ -11566,3 +11566,52 @@ full 矩阵结果：
   - 遮挡外画布点左键拖拽后 camera offset 保持 `{0, 0}`。
   - 同点右键拖拽后 camera offset 变为 `{offsetX: 0.2727, offsetY: -0.1522}`。
   - console error 为 `0`。
+
+### 单位、比例尺和显示倍率第一刀
+
+背景：
+
+- 用户要求所有数据增加单位，距离和面积支持中英文/符号单位切换，页面 `1 cm` 对应实际距离可放缩，并让人口、降水也能在合理范围内按比例放缩。
+
+修正：
+
+- 新增 `ui/display-units.js` 统一显示层单位工具：
+  - 距离单位：`米 / 千米 / m / km`。
+  - 面积单位：`平方米 / 平方公里 / m² / km²`。
+  - 比例尺：`1-1000 km/cm`，按浏览器 `96dpi` 的 CSS cm 把地图坐标换算为距离与面积。
+  - 人口倍率：`0.1-10x`；降水倍率：`0.1-5x`。
+- 全局控制偏好新增 `units`，所有字段经 `normalizeUnitPreferences()` 裁剪，兼容旧 localStorage。
+- 控制面板“视图”tab 新增显示单位区块，包含距离、面积、`1 cm` 比例尺、人口倍率和降水倍率；`UiSliderField` 支持自定义输出文本，例如 `10 km`、`2x`。
+- 传统运行面板接入单位偏好：
+  - 地图 badge 和“地图尺寸”显示距离单位。
+  - 运行统计新增“地图比例”。
+  - 降水范围和降水图例显示 `mm`，并应用降水倍率。
+  - hover 层的人口和降水显示单位并应用倍率。
+  - 地图对象选择详情中的城市人口、路线命中距离、河流长度、文化人口等显示单位。
+- Vue 浮动面板接入同一套显示偏好：
+  - 路线、河流面板显示长度单位。
+  - 国家、省份、文化、宗教面板显示面积和人口单位。
+  - 城市面板显示列表、汇总和详情人口单位；人口编辑器仍编辑原始值，不把显示倍率写回数据。
+  - 对象详情面板同步显示人口、距离和河流长度单位。
+- 控制面板改用 `storeToRefs()` 读取 Pinia 偏好，修复单位变化时 `1 cm = ...` 读数不随 store 更新的问题。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/display-units.js`
+- `node --check app/webgl-generator/src/ui/panel.js`
+- `node --check app/webgl-generator/src/runtime/app.js`
+- `git diff --check`
+- `npm run build:app` 通过；仍有既有 VueUse pure annotation 和 chunk size warning。
+- 静态 server + Playwright 构建产物验证通过：
+  - 单位偏好成功写入 store：`distanceUnit=m`、`areaUnit=m2-cn`、`mapScaleKmPerCm=10`、`populationScale=2`、`precipitationScale=2`。
+  - 距离选项为“米、千米、m、km”，面积选项为“平方米、平方公里、m²、km²”。
+  - 控制面板读数显示 `1 cm = 10 km`，比例尺输出显示 `10 km`，人口/降水输出显示 `2x`。
+  - 地图 badge 显示 `381,000 m x 254,000 m / 10000 cells`。
+  - 运行统计包含 `1 cm = 10 km` 和 `mm`。
+  - 省份面板出现“平方米”面积单位。
+  - console error 为 `0`。
+
+后续：
+
+- 当前是显示层换算，内部生成值、编辑器原始输入、导出格式和正式比例尺绘制尚未改写。
+- 后续若要让导出或数据模型跟随比例尺，应单独做数据契约，避免显示倍率污染原始生成结果。

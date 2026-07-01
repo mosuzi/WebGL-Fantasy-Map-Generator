@@ -45,6 +45,8 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {formatArea, formatPopulation} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "ReligionPanel"
@@ -76,9 +78,10 @@ const columns = Object.freeze([
   {key: "type", label: "类型"},
   {key: "form", label: "形态"},
   {key: "cells", label: "cells", align: "right"},
-  {key: "population", label: "人口", align: "right", format: value => formatNumber(value)}
+  {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
 ]);
 
+const unitPreferences = useUnitPreferences();
 const metrics = computed(() => buildReligionMetrics(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => metrics.value.rows.find(row => row.id === props.state.selectedReligionId) || null);
@@ -87,7 +90,7 @@ const summaryMetrics = computed(() => [
   {label: "宗教", value: metrics.value.total},
   {label: "筛选", value: visibleRows.value.length},
   {label: "覆盖 cells", value: metrics.value.cells},
-  {label: "人口", value: formatNumber(metrics.value.population)},
+  {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: metrics.value.cities}
 ]);
 
@@ -101,9 +104,9 @@ const detailRows = computed(() => selected.value ? [
   {label: "中心 pack cell", value: selected.value.centerCell},
   {label: "中心 grid cell", value: selected.value.gridCenterCell},
   {label: "覆盖 cells", value: selected.value.cells},
-  {label: "面积", value: formatNumber(selected.value.area)},
-  {label: "乡村人口", value: formatNumber(selected.value.rural)},
-  {label: "城市人口", value: formatNumber(selected.value.urban)},
+  {label: "面积", value: formatAreaValue(selected.value.area)},
+  {label: "乡村人口", value: formatPopulationValue(selected.value.rural)},
+  {label: "城市人口", value: formatPopulationValue(selected.value.urban)},
   {label: "城市", value: selected.value.cities},
   {label: "主要国家", value: selected.value.stateSummary},
   {label: "主要文化", value: selected.value.cultureSummary}
@@ -255,11 +258,12 @@ function toHex(channel) {
   return Math.round(Math.max(0, Math.min(1, channel)) * 255).toString(16).padStart(2, "0");
 }
 
-function formatNumber(value) {
-  return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
+function formatAreaValue(value) {
+  return formatArea(value, unitPreferences.value);
 }
 
-function roundNumber(value) {
-  return Math.round((Number(value) || 0) * 10) / 10;
+function formatPopulationValue(value) {
+  return formatPopulation(value, unitPreferences.value);
 }
+
 </script>

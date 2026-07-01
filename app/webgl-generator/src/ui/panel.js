@@ -1,5 +1,13 @@
 import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
+import {
+  formatDistance as formatDisplayDistance,
+  formatPopulation as formatDisplayPopulation,
+  formatPrecipitation as formatDisplayPrecipitation,
+  formatScaleLabel,
+  formatScaleMultiplier,
+  normalizeUnitPreferences
+} from "./display-units.js";
 
 const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 
@@ -17,14 +25,14 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
 });
 
 const OBJECT_DETAIL_FORMATTERS = Object.freeze({
-  [OBJECT_KIND.CITY]: object => `${object.type} / pop ${object.population} / ${object.state}`,
+  [OBJECT_KIND.CITY]: (object, units) => `${object.type} / pop ${formatDisplayPopulation(object.population, units)} / ${object.state}`,
   [OBJECT_KIND.LABEL]: object => `${object.targetKind} / ${object.targetName}`,
   [OBJECT_KIND.MARKER]: object => formatMarkerObjectSummary(object),
-  [OBJECT_KIND.ROUTE]: object => `${object.type} / ${object.level} / distance ${formatDistance(object.distance)}`,
-  [OBJECT_KIND.RIVER]: object => `${object.type} / flux ${object.flux} / length ${object.length}`,
+  [OBJECT_KIND.ROUTE]: (object, units) => `${object.type} / ${object.level} / distance ${formatDisplayDistance(object.distance, units)}`,
+  [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${object.flux} / length ${formatDisplayDistance(object.length, units)}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
   [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
-  [OBJECT_KIND.CULTURE]: object => `${object.type} / cells ${object.cells} / pop ${object.population}`,
+  [OBJECT_KIND.CULTURE]: (object, units) => `${object.type} / cells ${object.cells} / pop ${formatDisplayPopulation(object.population, units)}`,
   [OBJECT_KIND.RELIGION]: object => `${object.type} / ${object.form} / cells ${object.cells}`,
   [OBJECT_KIND.REGION]: object => `region #${object.id}`
 });
@@ -62,6 +70,7 @@ export function bindRuntimePanel(documentRef, handlers) {
     updateControlPreferences(documentRef, {maxCityLabels: value});
     handlers.onMaxCityLabels?.(value);
   });
+  bindUnitPreferenceControls(documentRef, handlers.onUnitPreferences);
   documentRef.getElementById("open-height-panel")?.addEventListener("click", handlers.onOpenHeightPanel);
   documentRef.getElementById("open-state-panel")?.addEventListener("click", handlers.onOpenStatePanel);
   documentRef.getElementById("open-province-panel")?.addEventListener("click", handlers.onOpenProvincePanel);
@@ -160,6 +169,11 @@ function editLockControls(documentRef) {
     "#smooth-cell-borders",
     "#show-hover-info",
     "#max-city-labels",
+    "#distance-unit",
+    "#area-unit",
+    "#map-scale-km-per-cm",
+    "#population-scale",
+    "#precipitation-scale",
     "[data-layer]",
     "[data-mode]"
   ].join(", "));
@@ -185,6 +199,7 @@ function applyControlPreferences(documentRef) {
   if (typeof preferences.maxCityLabels === "number") {
     setLabelLimitControlValue(documentRef, preferences.maxCityLabels);
   }
+  applyUnitPreferences(documentRef, preferences.units);
   for (const [layer, visible] of Object.entries(preferences.layers || {})) {
     const control = documentRef.querySelector(`[data-layer="${cssEscape(layer)}"]`);
     if (!control) continue;
@@ -199,6 +214,56 @@ function setLabelLimitControlValue(documentRef, value) {
   const output = documentRef.getElementById("max-city-labels-value");
   if (input) input.value = String(normalized);
   if (output) output.textContent = String(normalized);
+}
+
+function bindUnitPreferenceControls(documentRef, handler) {
+  const controls = ["distance-unit", "area-unit", "map-scale-km-per-cm", "population-scale", "precipitation-scale"]
+    .map(id => documentRef.getElementById(id))
+    .filter(Boolean);
+  for (const control of controls) {
+    const eventName = control.type === "range" ? "input" : "change";
+    control.addEventListener(eventName, () => {
+      const units = readUnitPreferencesFromControls(documentRef);
+      applyUnitPreferences(documentRef, units);
+      updateControlPreferences(documentRef, {units});
+      handler?.(units);
+    });
+  }
+}
+
+function readUnitPreferencesFromControls(documentRef) {
+  const current = readControlPreferences(documentRef).units || {};
+  return normalizeUnitPreferences({
+    ...current,
+    distanceUnit: documentRef.getElementById("distance-unit")?.value ?? current.distanceUnit,
+    areaUnit: documentRef.getElementById("area-unit")?.value ?? current.areaUnit,
+    mapScaleKmPerCm: documentRef.getElementById("map-scale-km-per-cm")?.value ?? current.mapScaleKmPerCm,
+    populationScale: documentRef.getElementById("population-scale")?.value ?? current.populationScale,
+    precipitationScale: documentRef.getElementById("precipitation-scale")?.value ?? current.precipitationScale
+  });
+}
+
+function applyUnitPreferences(documentRef, preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  setControlValue(documentRef, "distance-unit", units.distanceUnit);
+  setControlValue(documentRef, "area-unit", units.areaUnit);
+  setControlValue(documentRef, "map-scale-km-per-cm", units.mapScaleKmPerCm);
+  setControlValue(documentRef, "population-scale", units.populationScale);
+  setControlValue(documentRef, "precipitation-scale", units.precipitationScale);
+  setOutputText(documentRef, "map-scale-km-per-cm-value", `${units.mapScaleKmPerCm} km`);
+  setOutputText(documentRef, "population-scale-value", formatScaleMultiplier(units.populationScale));
+  setOutputText(documentRef, "precipitation-scale-value", formatScaleMultiplier(units.precipitationScale));
+}
+
+function setControlValue(documentRef, id, value) {
+  const control = documentRef.getElementById(id);
+  if (!control) return;
+  control.value = String(value);
+}
+
+function setOutputText(documentRef, id, value) {
+  const output = documentRef.getElementById(id);
+  if (output) output.textContent = String(value);
 }
 
 function normalizeMaxCityLabels(value) {
@@ -261,6 +326,7 @@ function updateControlPreferences(documentRef, patch) {
     const preferences = normalizeControlPreferences({
       ...current,
       ...patch,
+      units: patch.units ? {...(current.units || {}), ...patch.units} : current.units || {},
       layers: patch.layers ? {...(current.layers || {}), ...patch.layers} : current.layers || {}
     });
     storage.setItem(CONTROL_PREFERENCES_KEY, JSON.stringify(preferences));
@@ -272,6 +338,7 @@ function updateControlPreferences(documentRef, patch) {
 function normalizeControlPreferences(preferences) {
   if (!preferences || typeof preferences !== "object") return {};
   const normalized = {...preferences};
+  normalized.units = normalizeUnitPreferences(normalized.units);
   if (normalized.layers && typeof normalized.layers === "object") {
     normalized.layers = {...normalized.layers};
     if (Object.prototype.hasOwnProperty.call(normalized.layers, "coastline")) {
@@ -320,9 +387,10 @@ export function setSeedInput(documentRef, seed) {
 export function updateRuntimePanel(documentRef, state) {
   const {map, renderer} = state;
   const stats = renderer.getStats();
+  const unitPreferences = readControlPreferences(documentRef).units;
   syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
-  documentRef.getElementById("map-badge").textContent = `${map.metadata.graphWidth} x ${map.metadata.graphHeight} / ${map.metadata.cellsTarget} cells`;
+  documentRef.getElementById("map-badge").textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)} / ${map.metadata.cellsTarget} cells`;
   updateMapLegend(documentRef, map, stats.colorMode);
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
@@ -334,7 +402,8 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "目标 cells", map.metadata.cellsTarget),
     statRow(documentRef, "实际 grid cells", map.metadata.gridCells),
     statRow(documentRef, "pack cells", map.metadata.packCells),
-    statRow(documentRef, "地图尺寸", `${map.metadata.graphWidth} x ${map.metadata.graphHeight}`),
+    statRow(documentRef, "地图比例", formatScaleLabel(unitPreferences)),
+    statRow(documentRef, "地图尺寸", `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)}`),
     statRow(documentRef, "grid 布局", `${map.grid.metadata.columns} x ${map.grid.metadata.rows}`),
     statRow(documentRef, "grid 邻接", `${map.grid.metadata.neighborMode} / avg ${map.grid.metadata.averageNeighborDegree}`),
     statRow(documentRef, "Voronoi 顶点", map.grid.metadata.vertexCount),
@@ -345,7 +414,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "海岸线段", map.features.metadata.coastlineSegments),
     statRow(documentRef, "湖岸线段", map.features.metadata.lakeShoreSegments),
     statRow(documentRef, "温度范围", `${map.climate.metadata.temperatureMin}°C .. ${map.climate.metadata.temperatureMax}°C`),
-    statRow(documentRef, "降水范围", `${map.climate.metadata.precipitationMin} .. ${map.climate.metadata.precipitationMax}`),
+    statRow(documentRef, "降水范围", `${formatDisplayPrecipitation(map.climate.metadata.precipitationMin, unitPreferences)} .. ${formatDisplayPrecipitation(map.climate.metadata.precipitationMax, unitPreferences)}`),
     statRow(documentRef, "biome 数", Object.keys(map.climate.metadata.biomeCounts).length),
     statRow(documentRef, "河流", `${map.rivers.metadata.rivers} / ${map.rivers.metadata.segments}`),
     statRow(documentRef, "文化/宗教", `${map.society.metadata.cultures} / ${map.society.metadata.religions}`),
@@ -413,6 +482,7 @@ function formatCityLabelLimit(map, stats) {
 function updateMapLegend(documentRef, map, colorMode) {
   const legend = documentRef.getElementById("map-legend");
   if (!legend) return;
+  const unitPreferences = readControlPreferences(documentRef).units;
 
   if (colorMode === "temperature") {
     legend.hidden = false;
@@ -429,7 +499,12 @@ function updateMapLegend(documentRef, map, colorMode) {
     legend.replaceChildren(
       legendTitle(documentRef, "降水"),
       legendBar(documentRef, "precipitation"),
-      legendTicks(documentRef, `${map.climate.metadata.precipitationMin}`, "50", `${map.climate.metadata.precipitationMax}`)
+      legendTicks(
+        documentRef,
+        formatDisplayPrecipitation(map.climate.metadata.precipitationMin, unitPreferences),
+        formatDisplayPrecipitation(50, unitPreferences),
+        formatDisplayPrecipitation(map.climate.metadata.precipitationMax, unitPreferences)
+      )
     );
     return;
   }
@@ -464,10 +539,11 @@ function legendTicks(documentRef, min, mid, max) {
 
 export function updatePickPanel(documentRef, state) {
   const pick = state.pick;
+  const unitPreferences = readControlPreferences(documentRef).units;
   const selectionRows = state.selection?.object
     ? [
         statRow(documentRef, "选中对象", formatObjectTitle(state.selection.object)),
-        statRow(documentRef, "选中详情", formatObjectDetails(state.selection.object)),
+        statRow(documentRef, "选中详情", formatObjectDetails(state.selection.object, unitPreferences)),
         statRow(documentRef, "编辑对象", state.editingObject ? formatObjectTitle(state.editingObject) : "none")
       ]
     : [statRow(documentRef, "选中对象", "none"), statRow(documentRef, "编辑对象", state.editingObject ? formatObjectTitle(state.editingObject) : "none")];
@@ -489,7 +565,7 @@ function updateHoverOverlay(documentRef, pick) {
   title.textContent = formatHoverTitle(pick);
   const rows = documentRef.createElement("dl");
   rows.className = "hover-overlay-list";
-  rows.replaceChildren(...compactHoverRows(documentRef, pick));
+  rows.replaceChildren(...compactHoverRows(documentRef, pick, preferences.units));
   overlay.replaceChildren(title, rows);
 }
 
@@ -504,14 +580,14 @@ function formatHoverTitle(pick) {
   return pick.featureLand ? "陆地 cell" : "水域 cell";
 }
 
-function compactHoverRows(documentRef, pick) {
+function compactHoverRows(documentRef, pick, unitPreferences) {
   const rows = [
     hoverRow(documentRef, "位置", `grid ${pick.gridCell} / pack ${pick.packCell ?? "none"}`),
     hoverRow(documentRef, "地形", `${pick.featureType} #${pick.featureId} / 高度 ${pick.height}`),
-    hoverRow(documentRef, "气候", `${pick.temperature}°C / 降水 ${pick.precipitation}`),
+    hoverRow(documentRef, "气候", `${pick.temperature}°C / 降水 ${formatDisplayPrecipitation(pick.precipitation, unitPreferences)}`),
     hoverRow(documentRef, "政区", `${pick.state} / ${pick.province}`),
     hoverRow(documentRef, "社会", `${pick.culture} / ${pick.religion}`),
-    hoverRow(documentRef, "人口", pick.population)
+    hoverRow(documentRef, "人口", formatDisplayPopulation(pick.population, unitPreferences))
   ];
 
   const objectText = formatHoverObjectLine(pick);
@@ -548,8 +624,8 @@ function formatObjectTitle(object) {
   return OBJECT_TITLE_FORMATTERS[object?.kind]?.(object) || "unknown";
 }
 
-function formatObjectDetails(object) {
-  return OBJECT_DETAIL_FORMATTERS[object?.kind]?.(object) || "unknown";
+function formatObjectDetails(object, unitPreferences) {
+  return OBJECT_DETAIL_FORMATTERS[object?.kind]?.(object, unitPreferences) || "unknown";
 }
 
 function formatMarkerTitle(marker = {}) {
@@ -620,10 +696,6 @@ function formatBoundaryLineMode(mode) {
   if (mode === "hard-cell-edges") return "硬共享边";
   if (mode === "legacy-visual-paths") return "兼容路径";
   return mode || "未知";
-}
-
-function formatDistance(value) {
-  return Number.isFinite(value) ? value.toFixed(1) : "n/a";
 }
 
 function statRow(documentRef, label, value) {

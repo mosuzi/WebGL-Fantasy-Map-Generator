@@ -10,7 +10,7 @@
       :value="modelValue"
       @input="$emit('input', Number($event.target.value))"
     />
-    <component :is="valueTag" :id="outputId || null" :for="inputId || null">{{ modelValue }}</component>
+    <component :is="valueTag" :id="outputId || null" :for="inputId || null">{{ displayValue ?? modelValue }}</component>
   </label>
 </template>
 
@@ -35,6 +35,10 @@ defineProps({
   modelValue: {
     type: Number,
     required: true
+  },
+  displayValue: {
+    type: [String, Number],
+    default: null
   },
   min: {
     type: Number,

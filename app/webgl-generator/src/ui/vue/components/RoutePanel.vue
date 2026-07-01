@@ -26,6 +26,8 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
+import {formatDistance} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "RoutePanel"
@@ -54,9 +56,10 @@ const columns = Object.freeze([
   {key: "typeLabel", label: "类型"},
   {key: "fromName", label: "起点"},
   {key: "toName", label: "终点"},
-  {key: "length", label: "长度", align: "right", format: value => formatNumber(value)}
+  {key: "length", label: "长度", align: "right", format: value => formatRouteLength(value)}
 ]);
 
+const unitPreferences = useUnitPreferences();
 const rows = computed(() => routeRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedRouteId) || null);
@@ -65,7 +68,7 @@ const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.len
 const summaryMetrics = computed(() => [
   {label: "路线", value: rows.value.length},
   {label: "筛选", value: visibleRows.value.length},
-  {label: "总长度", value: formatNumber(totalLength.value)},
+  {label: "总长度", value: formatRouteLength(totalLength.value)},
   {label: "海路", value: rows.value.filter(row => row.type === "searoute").length}
 ]);
 
@@ -74,7 +77,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "等级", value: selected.value.level},
   {label: "起点", value: selected.value.fromName},
   {label: "终点", value: selected.value.toName},
-  {label: "长度", value: formatNumber(selected.value.length)},
+  {label: "长度", value: formatRouteLength(selected.value.length)},
   {label: "段数", value: selected.value.segments},
   {label: "grid cells", value: selected.value.cellCount},
   {label: "pack cells", value: selected.value.packCellCount},
@@ -147,11 +150,7 @@ function routeTypeLabel(type) {
   return type || "路线";
 }
 
-function formatNumber(value) {
-  return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
-}
-
-function roundNumber(value) {
-  return Math.round((Number(value) || 0) * 10) / 10;
+function formatRouteLength(value) {
+  return formatDistance(value, unitPreferences.value);
 }
 </script>

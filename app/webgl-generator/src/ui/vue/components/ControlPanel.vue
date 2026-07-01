@@ -22,6 +22,68 @@
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
         <UiSwitchField label="平滑边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
       </div>
+
+      <section class="unit-settings" aria-labelledby="unit-settings-title">
+        <h2 id="unit-settings-title">显示单位</h2>
+        <div class="unit-select-grid">
+          <UiSelectField
+            label="距离"
+            input-id="distance-unit"
+            class-name="unit-select-field"
+            :model-value="unitPreferences.distanceUnit"
+            :options="distanceUnitOptions"
+            @update:model-value="value => patchUnitPreference({distanceUnit: value})"
+          />
+          <UiSelectField
+            label="面积"
+            input-id="area-unit"
+            class-name="unit-select-field"
+            :model-value="unitPreferences.areaUnit"
+            :options="areaUnitOptions"
+            @update:model-value="value => patchUnitPreference({areaUnit: value})"
+          />
+        </div>
+        <div class="unit-scale-readout">{{ scaleLabel }}</div>
+        <UiSliderField
+          label="1 cm"
+          input-id="map-scale-km-per-cm"
+          output-id="map-scale-km-per-cm-value"
+          field-class="unit-scale-field"
+          value-tag="output"
+          :model-value="unitPreferences.mapScaleKmPerCm"
+          :display-value="`${unitPreferences.mapScaleKmPerCm} km`"
+          :min="unitScaleLimits.mapScaleKmPerCm.min"
+          :max="unitScaleLimits.mapScaleKmPerCm.max"
+          :step="unitScaleLimits.mapScaleKmPerCm.step"
+          @input="value => patchUnitPreference({mapScaleKmPerCm: value})"
+        />
+        <UiSliderField
+          label="人口倍率"
+          input-id="population-scale"
+          output-id="population-scale-value"
+          field-class="unit-scale-field"
+          value-tag="output"
+          :model-value="unitPreferences.populationScale"
+          :display-value="formatScaleMultiplier(unitPreferences.populationScale)"
+          :min="unitScaleLimits.populationScale.min"
+          :max="unitScaleLimits.populationScale.max"
+          :step="unitScaleLimits.populationScale.step"
+          @input="value => patchUnitPreference({populationScale: value})"
+        />
+        <UiSliderField
+          label="降水倍率"
+          input-id="precipitation-scale"
+          output-id="precipitation-scale-value"
+          field-class="unit-scale-field"
+          value-tag="output"
+          :model-value="unitPreferences.precipitationScale"
+          :display-value="formatScaleMultiplier(unitPreferences.precipitationScale)"
+          :min="unitScaleLimits.precipitationScale.min"
+          :max="unitScaleLimits.precipitationScale.max"
+          :step="unitScaleLimits.precipitationScale.step"
+          @input="value => patchUnitPreference({precipitationScale: value})"
+        />
+      </section>
     </div>
 
     <div class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
@@ -92,14 +154,24 @@
 </template>
 
 <script setup>
-import {ref} from "vue";
+import {computed, ref} from "vue";
+import {storeToRefs} from "pinia";
 import UiButton from "./base/UiButton.vue";
 import UiField from "./base/UiField.vue";
 import UiLayerToggleButton from "./base/UiLayerToggleButton.vue";
 import UiSegmented from "./base/UiSegmented.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTabs from "./base/UiTabs.vue";
+import {
+  AREA_UNIT_OPTIONS,
+  DISTANCE_UNIT_OPTIONS,
+  UNIT_SCALE_LIMITS,
+  formatScaleLabel,
+  formatScaleMultiplier,
+  normalizeUnitPreferences
+} from "../../display-units.js";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
 defineOptions({
@@ -107,8 +179,13 @@ defineOptions({
 });
 
 const config = useGlobalConfigStore();
+const {preferences} = storeToRefs(config);
 const activeTab = ref("generation");
-const preferences = config.preferences;
+const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
+const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
+const distanceUnitOptions = DISTANCE_UNIT_OPTIONS;
+const areaUnitOptions = AREA_UNIT_OPTIONS;
+const unitScaleLimits = UNIT_SCALE_LIMITS;
 
 const tabs = Object.freeze([
   {id: "generation", label: "生成"},
@@ -177,6 +254,10 @@ const regenerationActions = Object.freeze([
 ]);
 
 function isLayerVisible(layer) {
-  return preferences.layers?.[layer] !== false;
+  return preferences.value.layers?.[layer] !== false;
+}
+
+function patchUnitPreference(patch) {
+  config.patchPreferences({units: {...unitPreferences.value, ...patch}});
 }
 </script>
