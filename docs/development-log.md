@@ -13586,3 +13586,25 @@ full 矩阵结果：
 后续：
 
 - 控制面板可见原生按钮已进一步减少；剩余隐藏 input / select / checkbox 多数是兼容旧 runtime 的桥，不应为了“全量替换”盲目删除。
+
+### Element Plus 文件导入入口迁移
+
+背景：
+
+- 简介 tab、灰度高度图区域和名称库面板的本地导入入口仍是可点击 `label`，视觉上像按钮但不是按钮组件。
+- 当前导入能力只需要触发浏览器本地文件选择器，并由既有隐藏 input 和 File API 处理文件；如果直接引入 `ElUpload`，会增加不必要的组件和交互状态。
+
+修正：
+
+- 简介 tab 的“导入地图数据”和生成 tab 的“导入灰度图”改为 `UiButton / ElButton`，点击后触发对应隐藏 input。
+- 名称库面板的“导入名称库”也改为 `UiButton / ElButton`，通过 `ref` 触发隐藏 input。
+- 隐藏 file input 的 `id`、`accept`、`change` 处理和旧 runtime 读取契约保持不变；重复选择同名文件前会清空旧值。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `531.64KB / 160.23KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：简介 tab 的“导入地图数据”、生成 tab 的“导入灰度图”和名称库面板的“导入名称库”均触发 file chooser；三个隐藏 input 仍为 hidden，accept 分别为 `.json,application/json`、`image/*`、`.json,application/json`；旧 `label.file-import-action = 0`，console/page error 为 `0`。
+
+后续：
+
+- 如果后续要展示文件拖拽、进度、文件列表或校验详情，再评估 `ElUpload`；在当前单文件本地导入阶段继续保持轻量按钮触发模式。

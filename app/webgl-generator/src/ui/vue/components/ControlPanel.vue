@@ -32,7 +32,7 @@
           <UiButton id="export-map-data" variant="secondary">导出地图数据</UiButton>
           <UiButton id="export-map-geojson" variant="secondary">导出 GeoJSON</UiButton>
           <UiButton id="export-map-features-geojson" variant="secondary">导出要素 GeoJSON</UiButton>
-          <label class="secondary-action file-import-action" for="import-map-file">导入地图数据</label>
+          <UiButton class="file-import-action" variant="secondary" @click="triggerFileInput('import-map-file')">导入地图数据</UiButton>
           <input id="import-map-file" type="file" accept=".json,application/json" hidden />
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
@@ -89,7 +89,7 @@
             :options="heightmapFitOptions"
             @update:model-value="heightmapImportFit = $event"
           />
-          <label class="secondary-action file-import-action heightmap-import-action" for="heightmap-image-file">导入灰度图</label>
+          <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerFileInput('heightmap-image-file')">导入灰度图</UiButton>
           <input id="heightmap-image-file" type="file" accept="image/*" hidden />
         </div>
         <p id="heightmap-import-status" class="file-operation-status" aria-live="polite"></p>
@@ -580,6 +580,13 @@ function cycleWindBand(index) {
   windBands.value = windBands.value.map((angle, bandIndex) => bandIndex === index ? next.angle : angle);
   atmosphereDirection.value = "customBands";
   emitClimateControlsChange();
+}
+
+function triggerFileInput(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.value = "";
+  input.click();
 }
 
 function windDirectionLabel(angle) {

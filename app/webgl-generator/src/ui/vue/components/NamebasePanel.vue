@@ -57,8 +57,8 @@
 
   <div class="namebase-panel-actions">
     <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
-    <label class="secondary-action file-import-action namebase-import-action" for="namebase-import-file">导入名称库</label>
-    <input id="namebase-import-file" type="file" accept=".json,application/json" hidden @change="handleImportFile" />
+    <UiButton class="file-import-action namebase-import-action" variant="secondary" @click="triggerImportFile">导入名称库</UiButton>
+    <input ref="importFileInput" id="namebase-import-file" type="file" accept=".json,application/json" hidden @change="handleImportFile" />
     <UiButton variant="secondary" :disabled="!selectedBuiltinRow" @click="callbacks.onCopyBuiltin(selectedBuiltinRow)">复制内置</UiButton>
     <UiButton variant="secondary" :disabled="!selectedUserRow" @click="callbacks.onDeleteUser(selectedUserRow)">删除选中</UiButton>
     <UiButton variant="secondary" :disabled="!userRows.length" @click="callbacks.onClearUser()">清空用户库</UiButton>
@@ -96,6 +96,7 @@ const props = defineProps({
 
 const unitPreferences = useUnitPreferences();
 const sourceDraft = ref("");
+const importFileInput = ref(null);
 
 const sortOptions = Object.freeze([
   {key: "category", label: "分类"},
@@ -206,6 +207,10 @@ function handleImportFile(event) {
   const file = event.target.files?.[0];
   if (file) props.callbacks.onImport?.(file);
   event.target.value = "";
+}
+
+function triggerImportFile() {
+  importFileInput.value?.click();
 }
 
 watch(() => selected.value?.id, () => {
