@@ -1885,6 +1885,7 @@ function shouldSwitchDiplomacySubjectForSelection(state) {
 function bindMeasurementTool(canvas, state, documentRef) {
   const toggle = documentRef.getElementById("toggle-measurement");
   const clear = documentRef.getElementById("measurement-clear");
+  const exportButton = documentRef.getElementById("measurement-export");
   toggle?.addEventListener("click", () => {
     state.measurement.active = !state.measurement.active;
     if (!state.measurement.active) state.measurement.pointer = null;
@@ -1894,6 +1895,7 @@ function bindMeasurementTool(canvas, state, documentRef) {
     state.measurement.points = [];
     updateMeasurementOverlay(state, documentRef);
   });
+  exportButton?.addEventListener("click", () => exportMeasurement(state, documentRef));
 
   canvas.addEventListener("pointerdown", event => {
     if (!state.measurement.active || event.button !== 0) return;
@@ -1945,9 +1947,10 @@ function updateMeasurementOverlay(state, documentRef) {
   const svg = documentRef.getElementById("measurement-svg");
   const summary = documentRef.getElementById("measurement-summary");
   const clear = documentRef.getElementById("measurement-clear");
+  const exportButton = documentRef.getElementById("measurement-export");
   const toggle = documentRef.getElementById("toggle-measurement");
   const canvas = documentRef.getElementById("map-canvas");
-  if (!overlay || !svg || !summary || !clear || !toggle || !canvas) return;
+  if (!overlay || !svg || !summary || !clear || !exportButton || !toggle || !canvas) return;
 
   const active = Boolean(state.measurement.active);
   const points = state.measurement.points || [];
@@ -1957,6 +1960,7 @@ function updateMeasurementOverlay(state, documentRef) {
   toggle.textContent = active ? "退出测量" : "测量";
   overlay.hidden = !active;
   clear.disabled = points.length === 0;
+  exportButton.disabled = points.length === 0;
   svg.replaceChildren();
   if (!active) return;
 
@@ -1988,6 +1992,43 @@ function updateMeasurementOverlay(state, documentRef) {
   const distance = measurementDistance(points);
   const area = points.length >= 3 ? measurementArea(points) : 0;
   summary.textContent = measurementSummary(points.length, distance, area, units);
+}
+
+function exportMeasurement(state, documentRef) {
+  if (!state.map || !state.measurement.points?.length) return;
+  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const points = state.measurement.points.map((point, index) => ({
+    index,
+    x: roundMeasurementExport(point.x),
+    y: roundMeasurementExport(point.y)
+  }));
+  const distance = measurementDistance(state.measurement.points);
+  const area = state.measurement.points.length >= 3 ? measurementArea(state.measurement.points) : 0;
+  const payload = {
+    type: "webgl-generator-measurement",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    metadata: {
+      seed: state.map.metadata?.seed || "",
+      checksum: state.map.metadata?.checksum || "",
+      graphWidth: state.map.metadata?.graphWidth || 0,
+      graphHeight: state.map.metadata?.graphHeight || 0,
+      pointCount: points.length
+    },
+    units: {
+      distanceUnit: units.distanceUnit,
+      areaUnit: units.areaUnit,
+      mapScaleKmPerCm: units.mapScaleKmPerCm
+    },
+    summary: {
+      distanceMapUnits: roundMeasurementExport(distance),
+      distanceLabel: formatDisplayDistance(distance, units),
+      areaMapUnits: roundMeasurementExport(area),
+      areaLabel: points.length >= 3 ? formatDisplayArea(area, units) : ""
+    },
+    points
+  };
+  downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.measurement.json`, "application/json;charset=utf-8");
 }
 
 function measurementDistance(points) {
@@ -2026,6 +2067,10 @@ function clampMeasurementValue(value, min, max) {
 
 function roundMeasurementDisplay(value) {
   return Math.round(value * 10) / 10;
+}
+
+function roundMeasurementExport(value) {
+  return Math.round(Number(value || 0) * 1000) / 1000;
 }
 
 function bindHeightEditing(canvas, state, documentRef) {

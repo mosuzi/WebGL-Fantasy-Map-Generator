@@ -12957,3 +12957,26 @@ full 矩阵结果：
 后续：
 
 - 可继续补节点拖拽、路线贴合测量、保存测量对象和导出测量结果。
+
+### 测量结果导出第一刀
+
+背景：
+
+- 折线测距和面积测量已经能在画布上显示，但结果无法带出页面。
+- 先导出轻量 JSON 可以服务外部记录和脚本处理，暂不引入持久化测量对象。
+
+修正：
+
+- `measurement-readout` 新增“导出”按钮，测量点为空时禁用。
+- 新增 `exportMeasurement()`，导出 `webgl-generator-measurement v1` JSON。
+- 导出内容包含 seed、checksum、图幅尺寸、点数、单位偏好、地图单位距离/面积、显示标签和测量点列。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 与 chunk size warning。构建产物约 `960.20KB JS / 296.59KB gzip`、`149.49KB CSS / 22.22KB gzip`。
+- Playwright route 构建产物验证通过：开启测量后，无点时“导出”按钮禁用；点击三点后按钮可用。
+- 下载 `fmg-stage-2-1-a6390a8f.measurement.json`，`type = webgl-generator-measurement`、`pointCount = 3`、`distanceLabel = 994.3 千米`、`areaLabel = 11万 平方公里`、点列长度 `3`，console/page error 为 `0`。
+
+后续：
+
+- 可继续做节点拖拽、路线贴合和保存测量对象；测量 JSON 导入暂不进入当前批次。

@@ -772,6 +772,7 @@ http://127.0.0.1:5410
 147. GeoJSON bbox 第一刀已完成：pack cell GeoJSON 与要素 GeoJSON 导出都会为每个 Feature 和整个 FeatureCollection 写入标准 `bbox = [minLon, minLat, maxLon, maxLat]`。Node 验证中 pack cell 与 `states-provinces-cities` 要素导出的 collection bbox 和前 20 个 feature bbox 均有效；`pnpm run build:app` 通过，构建产物约 `957.83KB JS / 295.96KB gzip`、`149.39KB CSS / 22.20KB gzip`。这为后续范围导出、视口裁剪和外部 GIS 快速索引铺基础。
 148. 备注摘要导出第一刀已完成：备注总览面板新增“导出备注摘要”，会导出当前筛选结果为 `webgl-generator-notes-summary v1` JSON，包含 seed、checksum、筛选备注数、总备注数、note id、kind、对象 id、名称、正文、字数、孤儿状态和时间戳。构建产物验证中注入 marker 与 label 两条备注后，备注总览显示 `备注2 / 可定位2 / 孤儿备注0 / 筛选2`，导出 `fmg-stage-2-1-0857e6f9.notes.json`，两条备注均保留正文和定位状态，console/page error 为 `0`。
 149. 面积测量第一刀已完成：测量工具仍用同一个入口添加测量点，三点及以上会额外按首尾闭合多边形计算面积，并在 SVG overlay 中绘制半透明面片。构建产物验证中开启测量后点击三点，生成 `1` 个 `.measurement-area`、`1` 条路径、`3` 个点，读数为 `3 点 / 总长 994.3 千米 / 面积 11万 平方公里`，console/page error 为 `0`。后续仍可继续做路线贴合、节点拖拽、保存测量对象和导出测量结果。
+150. 测量结果导出第一刀已完成：测量 readout 新增“导出”按钮，无测量点时禁用，存在点位后导出 `webgl-generator-measurement v1` JSON，包含 seed、checksum、图幅尺寸、比例尺单位、点列、地图单位距离/面积和显示标签。构建产物验证中三点测量导出 `fmg-stage-2-1-a6390a8f.measurement.json`，`pointCount = 3`，距离标签 `994.3 千米`、面积标签 `11万 平方公里`，console/page error 为 `0`。后续可做保存测量对象、节点拖拽和路线贴合。
 
 ## 约束
 
