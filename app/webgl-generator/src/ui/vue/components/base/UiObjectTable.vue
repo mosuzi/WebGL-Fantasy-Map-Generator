@@ -4,11 +4,10 @@
       class="object-table object-table-el"
       :data="rows"
       :row-key="rowKey"
-      :current-row-key="currentRowKey"
+      :tree-props="flatTreeProps"
       :max-height="300"
       :row-class-name="rowClassName"
       :empty-text="emptyText"
-      highlight-current-row
       table-layout="auto"
       @row-click="handleRowClick"
       @row-dblclick="handleRowDoubleClick"
@@ -35,7 +34,7 @@
 </template>
 
 <script setup>
-import {computed, nextTick, ref, watch} from "vue";
+import {nextTick, ref, watch} from "vue";
 import {Aim} from "@element-plus/icons-vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 
@@ -73,9 +72,9 @@ const props = defineProps({
 const emit = defineEmits(["select", "locate"]);
 
 const tableWrap = ref(null);
-const currentRowKey = computed(() => {
-  if (props.selectedId === null || props.selectedId === undefined) return null;
-  return stringRowId(props.selectedId);
+const flatTreeProps = Object.freeze({
+  children: "__tableChildren",
+  hasChildren: "__tableHasChildren"
 });
 
 watch(

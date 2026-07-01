@@ -3624,7 +3624,7 @@ input.ui-switch-native {
   font-size: 12px;
 }
 
-.inheritance-tree-open {
+.inheritance-tree-open.el-button {
   min-height: 32px;
   border: 1px solid #33444f;
   border-radius: 6px;
@@ -3632,10 +3632,11 @@ input.ui-switch-native {
   color: #dce8ed;
   cursor: pointer;
   font: inherit;
+  margin: 0;
 }
 
-.inheritance-tree-open:hover,
-.inheritance-tree-open:focus-visible {
+.inheritance-tree-open.el-button:hover,
+.inheritance-tree-open.el-button:focus-visible {
   border-color: #9dcf78;
   background: #1d2818;
   color: #efffe8;
@@ -3720,9 +3721,10 @@ input.ui-switch-native {
   font-size: 12px;
 }
 
-.ui-tree-display-close {
+.ui-tree-display-close.el-button {
   width: 28px;
   height: 28px;
+  min-width: 28px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -3730,9 +3732,11 @@ input.ui-switch-native {
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
+  margin: 0;
+  padding: 0;
 }
 
-.ui-tree-display-close:hover {
+.ui-tree-display-close.el-button:hover {
   border-color: #3e525f;
   background: #1b252b;
   color: #edf4f6;
@@ -3763,12 +3767,9 @@ input.ui-switch-native {
   stroke-width: 1.4;
 }
 
-.ui-tree-display-node {
+.ui-tree-display-node.el-button {
   position: absolute;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
+  display: block;
   width: 148px;
   height: 32px;
   border: 1px solid rgba(99, 126, 140, 0.7);
@@ -3779,10 +3780,19 @@ input.ui-switch-native {
   cursor: pointer;
   font: inherit;
   text-align: left;
+  margin: 0;
 }
 
-.ui-tree-display-node:hover,
-.ui-tree-display-node.active {
+.ui-tree-display-node.el-button > span {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-tree-display-node.el-button:hover,
+.ui-tree-display-node.el-button.active {
   border-color: #9dcf78;
   background: linear-gradient(180deg, #26391f 0%, #182515 100%);
   color: #efffe8;

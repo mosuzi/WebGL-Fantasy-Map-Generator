@@ -13537,3 +13537,29 @@ full 矩阵结果：
 后续：
 
 - 控制面板气候风向箭头和树状节点按钮属于特殊可视交互，后续迁移需要单独保留其几何排布和点击轮询行为。
+
+### Element Plus 树状总览按钮迁移
+
+背景：
+
+- 文化和宗教的树状总览浮层已经独立为 `UiTreeDisplayPanel`，但入口、关闭和节点仍是原生按钮。
+- 该浮层必须继续支持拖动、节点连线、节点选择和紧凑布局，不能因为迁移组件库变成普通列表。
+
+修正：
+
+- 文化/宗教面板中的“打开树状面板”改为 `ElButton`。
+- `UiTreeDisplayPanel` 的关闭按钮和节点按钮改为 `ElButton`，关闭按钮使用 Element Plus `Close` 图标。
+- CSS 更新为 `.inheritance-tree-open.el-button`、`.ui-tree-display-close.el-button` 和 `.ui-tree-display-node.el-button` 覆写，保留原来的绝对定位、节点宽高、连线布局和选中态。
+- 修正文化/宗教树节点选择函数对 `callbacks` 的裸引用，改为 `props.callbacks.onSelect?.(node)`。
+- `UiObjectTable` 显式设置 `tree-props` 到内部字段，避免文化/宗教行对象的业务字段 `children: [id]` 被 Element Table 当作树表子节点递归，导致数字 id 触发 `Invalid value used as weak map key`。
+- 选中行高亮继续由 `.selected-row` 和滚动定位承担，不依赖 Element Table 的 current-row 内部状态。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `531.46KB / 160.19KB gzip`，`UiTreeDisplayPanel-TuqfQewL.js` 约 `3.48KB / 1.69KB gzip`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright 构建产物烟测通过：打开控制面板 -> 管理 -> 文化管理 -> 打开树状面板后，面板可拖动，树节点 `12` 个，旧原生树节点 `0`，点击节点后活动节点和表格选中行均为 `1`，关闭按钮可关闭，console/page error 为 `0`。
+- 城市对象表格回归通过：城市管理表格 `817` 行，`.object-table-el.el-table = 1`，旧 `table.object-table = 0`；点击第二行后详情更新，定位按钮 `817` 个，筛选无结果时空态为“没有匹配的城市”，console/page error 为 `0`。
+
+后续：
+
+- 继续迁移气候风向按钮、确认弹窗或文件操作按钮时，应先检查组件库默认字段名和现有业务字段是否碰撞；尤其是 `children / value / label / disabled` 这类通用字段。

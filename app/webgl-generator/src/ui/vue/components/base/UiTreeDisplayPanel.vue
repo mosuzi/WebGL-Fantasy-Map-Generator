@@ -4,7 +4,7 @@
       <header class="ui-tree-display-header" @pointerdown="startDrag">
         <strong>{{ title }}</strong>
         <span>{{ nodes.length }} 节点</span>
-        <button type="button" class="ui-tree-display-close" aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)">×</button>
+        <ElButton class="ui-tree-display-close" text circle :icon="Close" aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)" />
       </header>
 
       <div class="ui-tree-display-viewport">
@@ -18,10 +18,9 @@
             />
           </svg>
 
-          <button
+          <ElButton
             v-for="node in layout.nodes"
             :key="node.id"
-            type="button"
             class="ui-tree-display-node"
             :class="{active: node.id === selectedId}"
             :style="{left: `${node.x}px`, top: `${node.y}px`}"
@@ -29,7 +28,7 @@
           >
             <span class="ui-tree-node-name">{{ node.name }}</span>
             <span class="ui-tree-node-meta">{{ node.childCount ? `${node.childCount} 子` : "叶" }}</span>
-          </button>
+          </ElButton>
         </div>
       </div>
     </section>
@@ -38,6 +37,7 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
+import {Close} from "@element-plus/icons-vue";
 
 defineOptions({
   name: "UiTreeDisplayPanel"

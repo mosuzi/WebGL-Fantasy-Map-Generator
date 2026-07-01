@@ -6,13 +6,12 @@
       <span>文化树总览</span>
       <strong>{{ formatNumber(treeOverview.length) }}</strong>
     </div>
-    <button
-      type="button"
+    <ElButton
       class="inheritance-tree-open"
       @click="treePanelOpen = true"
     >
       打开树状面板
-    </button>
+    </ElButton>
   </div>
 
   <UiTreeDisplayPanel
@@ -187,7 +186,7 @@ watch(() => selected.value?.id, () => {
 });
 
 function selectTreeNode(node) {
-  callbacks.onSelect?.(node);
+  props.callbacks.onSelect?.(node);
 }
 
 function buildCultureMetrics(map) {
