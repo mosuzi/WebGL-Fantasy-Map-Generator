@@ -929,12 +929,63 @@ select:disabled {
   transform: translateY(-0.5px);
 }
 
-.ui-action-content {
-  margin-top: 8px;
-  padding: 9px;
-  border: 1px solid rgba(189, 206, 213, 0.14);
-  border-radius: 7px;
-  background: rgba(9, 14, 17, 0.44);
+.ui-secondary-action-panel {
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(189, 206, 213, 0.24);
+  border-radius: 8px;
+  background: rgba(13, 19, 23, 0.98);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  color: #edf4f6;
+  overflow: hidden;
+}
+
+.ui-secondary-action-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  border-bottom: 1px solid rgba(189, 206, 213, 0.14);
+  padding: 0 8px 0 11px;
+}
+
+.ui-secondary-action-header strong {
+  min-width: 0;
+  color: #ffe0a1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-secondary-action-close {
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #9fb0ba;
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.ui-secondary-action-close:hover {
+  border-color: #3e525f;
+  background: #1b252b;
+  color: #edf4f6;
+}
+
+.ui-secondary-action-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.ui-color-action-panel {
+  min-width: 0;
 }
 
 .object-table-wrap {
@@ -1613,7 +1664,7 @@ select:disabled {
 
 .control-panel-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 12px;
 }
@@ -1712,6 +1763,237 @@ select:disabled {
   gap: 8px;
 }
 
+.earth-climate-grid {
+  grid-template-columns: minmax(116px, 0.8fr) minmax(0, 1.2fr);
+  align-items: stretch;
+}
+
+.earth-projection {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.earth-projection-map {
+  display: grid;
+  grid-template-columns: minmax(112px, 128px) 30px;
+  gap: 6px;
+  align-items: stretch;
+  justify-content: center;
+  min-width: 0;
+}
+
+.earth-globe-svg {
+  width: min(128px, 100%);
+  aspect-ratio: 1;
+  justify-self: center;
+  overflow: visible;
+}
+
+.earth-globe-fill {
+  fill: #10191f;
+  stroke: rgba(126, 171, 184, 0.52);
+  stroke-width: 1.2;
+  filter: drop-shadow(0 0 10px rgba(98, 171, 216, 0.16));
+}
+
+.earth-latitude-guide {
+  stroke: rgba(210, 229, 236, 0.24);
+  stroke-linecap: round;
+  stroke-width: 1;
+}
+
+.earth-latitude-guide.equator {
+  stroke: rgba(255, 224, 161, 0.8);
+  stroke-width: 1.15;
+}
+
+.earth-canvas-footprint {
+  fill: rgba(157, 207, 120, 0.22);
+  stroke: rgba(157, 207, 120, 0.9);
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.earth-projection.manual .earth-canvas-footprint {
+  fill: rgba(255, 191, 66, 0.2);
+  stroke: rgba(255, 191, 66, 0.92);
+}
+
+.earth-globe {
+  position: relative;
+  width: min(120px, 100%);
+  aspect-ratio: 1;
+  justify-self: center;
+  border: 1px solid rgba(126, 171, 184, 0.4);
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, rgba(117, 160, 176, 0.24), rgba(70, 100, 116, 0.16)),
+    radial-gradient(circle at 50% 50%, #17252b 0%, #10171b 72%);
+  box-shadow: inset 0 0 18px rgba(98, 171, 216, 0.18);
+  overflow: hidden;
+}
+
+.earth-equator,
+.earth-pole,
+.earth-canvas-band {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  pointer-events: none;
+}
+
+.earth-equator {
+  top: 50%;
+  height: 1px;
+  background: rgba(255, 224, 161, 0.72);
+}
+
+.earth-pole {
+  height: 1px;
+  background: rgba(210, 229, 236, 0.36);
+}
+
+.earth-pole.north {
+  top: 14%;
+}
+
+.earth-pole.south {
+  bottom: 14%;
+}
+
+.earth-canvas-band {
+  border-top: 1px solid rgba(157, 207, 120, 0.82);
+  border-bottom: 1px solid rgba(157, 207, 120, 0.82);
+  background: rgba(157, 207, 120, 0.16);
+}
+
+.earth-projection.manual .earth-canvas-band {
+  background: rgba(255, 191, 66, 0.18);
+  border-color: rgba(255, 191, 66, 0.82);
+}
+
+.earth-projection-controls {
+  display: grid;
+  gap: 5px;
+}
+
+.climate-mode-toggle {
+  min-height: 30px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  background: #142129;
+  color: #dce8ed;
+  cursor: pointer;
+  font: inherit;
+}
+
+.climate-mode-toggle:hover,
+.earth-projection.manual .climate-mode-toggle {
+  border-color: #d7a84f;
+  background: #2b2415;
+  color: #ffe0a1;
+}
+
+.earth-latitude-readout {
+  min-height: 28px;
+  color: #9fb0ba;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.climate-temperature-fields {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.climate-slider-field {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 7px;
+  color: #cbd7dc;
+  font-size: 11px;
+}
+
+.climate-slider-field input {
+  width: 100%;
+}
+
+.climate-slider-field output {
+  color: #ffe0a1;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.wind-band-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.wind-band-column {
+  display: grid;
+  grid-template-rows: repeat(6, 1fr);
+  gap: 3px;
+  width: 28px;
+  padding: 5px 0;
+  align-self: stretch;
+  justify-self: start;
+  min-width: 0;
+}
+
+.wind-band-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #33444f;
+  border-radius: 5px;
+  padding: 0;
+  background: #121c22;
+  color: #dce8ed;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.wind-band-button:hover,
+.wind-band-button:focus-visible {
+  border-color: #62abd8;
+  outline: none;
+}
+
+.wind-band-name,
+.wind-band-direction {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wind-band-name {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.wind-band-arrow {
+  color: #ffe0a1;
+  font-size: 14px;
+  line-height: 1;
+  text-align: center;
+}
+
+.wind-band-direction {
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
 .generation-climate-select,
 .generation-inheritance-select {
   grid-template-columns: minmax(0, 1fr);
@@ -1737,8 +2019,6 @@ select:disabled {
 .unit-settings {
   display: grid;
   gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(189, 206, 213, 0.12);
 }
 
 .unit-settings h2 {
@@ -1748,15 +2028,55 @@ select:disabled {
   line-height: 1.2;
 }
 
+.unit-settings-standalone {
+  padding: 10px;
+  border: 1px solid #273640;
+  border-radius: 6px;
+  background: #10171b;
+}
+
+.unit-config-list {
+  display: grid;
+  gap: 9px;
+}
+
 .unit-select-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .unit-select-field {
   grid-template-columns: minmax(0, 1fr);
   gap: 5px;
+}
+
+.unit-config-row {
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.unit-derived-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  border: 1px solid #273640;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #0f1519;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.unit-derived-row span {
+  color: #9fb0ba;
+}
+
+.unit-derived-row strong {
+  color: #edf4f6;
+  font-size: 12px;
 }
 
 .unit-scale-readout {
@@ -1774,7 +2094,7 @@ select:disabled {
 
 .unit-scale-field {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) 58px;
+  grid-template-columns: 82px minmax(0, 1fr) 74px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -2325,6 +2645,223 @@ select:disabled {
   overflow-wrap: anywhere;
 }
 
+.inheritance-tree-launcher,
+.inheritance-tree-overview {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 10px;
+  padding: 8px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 7px;
+  background: rgba(9, 14, 17, 0.36);
+}
+
+.inheritance-tree-header {
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  padding-bottom: 4px;
+  background: #0f1519;
+  color: #d8e3e8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.inheritance-tree-overview {
+  max-height: 148px;
+  overflow: auto;
+}
+
+.inheritance-tree-overview .inheritance-tree-header {
+  position: sticky;
+  top: -8px;
+  padding-bottom: 4px;
+}
+
+.inheritance-tree-header strong {
+  color: #ffe0a1;
+  font-size: 12px;
+}
+
+.inheritance-tree-open {
+  min-height: 32px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  background: #10171b;
+  color: #dce8ed;
+  cursor: pointer;
+  font: inherit;
+}
+
+.inheritance-tree-open:hover,
+.inheritance-tree-open:focus-visible {
+  border-color: #9dcf78;
+  background: #1d2818;
+  color: #efffe8;
+  outline: none;
+}
+
+.inheritance-tree-node {
+  display: grid;
+  grid-template-columns: minmax(34px, max-content) minmax(0, 1fr) minmax(42px, max-content);
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 4px 6px 4px calc(6px + var(--tree-depth, 0) * 12px);
+  background: transparent;
+  color: #dce8ed;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.inheritance-tree-node:hover,
+.inheritance-tree-node.active {
+  border-color: rgba(157, 207, 120, 0.5);
+  background: rgba(36, 59, 32, 0.5);
+}
+
+.inheritance-tree-branch,
+.inheritance-tree-meta {
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
+.inheritance-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-tree-display-panel {
+  position: fixed;
+  z-index: 850;
+  top: 64px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 48px));
+  height: min(650px, calc(100vh - 88px));
+  border: 1px solid rgba(189, 206, 213, 0.24);
+  border-radius: 8px;
+  background: rgba(13, 19, 23, 0.98);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  color: #edf4f6;
+  overflow: hidden;
+}
+
+.ui-tree-display-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 28px;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-bottom: 1px solid rgba(189, 206, 213, 0.14);
+  padding: 0 8px 0 12px;
+  cursor: move;
+  user-select: none;
+}
+
+.ui-tree-display-header strong {
+  min-width: 0;
+  color: #ffe0a1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-tree-display-header span {
+  color: #9fb0ba;
+  font-size: 12px;
+}
+
+.ui-tree-display-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #9fb0ba;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.ui-tree-display-close:hover {
+  border-color: #3e525f;
+  background: #1b252b;
+  color: #edf4f6;
+}
+
+.ui-tree-display-viewport {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.ui-tree-display-canvas {
+  position: relative;
+  min-width: 100%;
+}
+
+.ui-tree-display-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.ui-tree-display-line {
+  fill: none;
+  stroke: rgba(157, 207, 120, 0.48);
+  stroke-width: 1.4;
+}
+
+.ui-tree-display-node {
+  position: absolute;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 148px;
+  height: 32px;
+  border: 1px solid rgba(99, 126, 140, 0.7);
+  border-radius: 6px;
+  padding: 0 9px;
+  background: linear-gradient(180deg, #17232a 0%, #10171b 100%);
+  color: #dce8ed;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.ui-tree-display-node:hover,
+.ui-tree-display-node.active {
+  border-color: #9dcf78;
+  background: linear-gradient(180deg, #26391f 0%, #182515 100%);
+  color: #efffe8;
+}
+
+.ui-tree-node-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-tree-node-meta {
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
 .culture-panel-controls,
 .religion-panel-controls,
 .diplomacy-panel-controls {
@@ -2640,12 +3177,8 @@ select:disabled {
 }
 
 .ui-select-menu {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% + 5px);
-  z-index: 80;
-  max-height: min(260px, 48vh);
+  z-index: 1000;
+  max-width: calc(100vw - 16px);
   border: 1px solid rgba(98, 171, 216, 0.34);
   border-radius: 7px;
   background: rgba(12, 18, 22, 0.98);

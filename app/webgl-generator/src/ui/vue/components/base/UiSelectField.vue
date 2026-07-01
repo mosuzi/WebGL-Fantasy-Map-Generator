@@ -35,22 +35,32 @@
       </button>
       <i class="ui-select-arrow" aria-hidden="true"></i>
 
-      <div v-if="open" :id="menuId" class="ui-select-menu" role="listbox" :aria-labelledby="labelId">
-        <button
-          v-for="option in options"
-          :key="stringValue(optionValue(option))"
-          ref="optionButtons"
-          type="button"
-          class="ui-select-option"
-          :class="{active: stringValue(optionValue(option)) === stringValue(currentValue)}"
-          role="option"
-          :aria-selected="stringValue(optionValue(option)) === stringValue(currentValue) ? 'true' : 'false'"
-          @click="selectOption(option)"
-          @keydown="onOptionKeydown"
+      <Teleport to="body">
+        <div
+          v-if="open"
+          :id="menuId"
+          ref="menu"
+          class="ui-select-menu"
+          role="listbox"
+          :aria-labelledby="labelId"
+          :style="menuStyle"
         >
-          {{ optionLabel(option) }}
-        </button>
-      </div>
+          <button
+            v-for="option in options"
+            :key="stringValue(optionValue(option))"
+            ref="optionButtons"
+            type="button"
+            class="ui-select-option"
+            :class="{active: stringValue(optionValue(option)) === stringValue(currentValue)}"
+            role="option"
+            :aria-selected="stringValue(optionValue(option)) === stringValue(currentValue) ? 'true' : 'false'"
+            @click="selectOption(option)"
+            @keydown="onOptionKeydown"
+          >
+            {{ optionLabel(option) }}
+          </button>
+        </div>
+      </Teleport>
     </span>
   </div>
 </template>
@@ -92,9 +102,11 @@ const props = defineProps({
 const emit = defineEmits(["update:modelValue", "change"]);
 
 const root = ref(null);
+const menu = ref(null);
 const optionButtons = ref([]);
 const open = ref(false);
 const currentValue = ref(props.modelValue);
+const menuStyle = ref({});
 const instanceId = `ui-select-${Math.random().toString(36).slice(2, 10)}`;
 const labelId = `${instanceId}-label`;
 const menuId = `${instanceId}-menu`;
@@ -105,12 +117,25 @@ watch(() => props.modelValue, next => {
   currentValue.value = next;
 });
 
+watch(open, isOpen => {
+  if (isOpen) {
+    nextTick(() => {
+      updateMenuPosition();
+      focusSelectedOption();
+      addMenuPositionListeners();
+    });
+    return;
+  }
+  removeMenuPositionListeners();
+});
+
 onMounted(() => {
   document.addEventListener("pointerdown", onDocumentPointerDown);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", onDocumentPointerDown);
+  removeMenuPositionListeners();
 });
 
 function onNativeChange(event) {
@@ -123,7 +148,6 @@ function onNativeChange(event) {
 function toggleOpen() {
   if (props.disabled) return;
   open.value = !open.value;
-  if (open.value) focusSelectedOption();
 }
 
 function selectOption(option) {
@@ -176,8 +200,47 @@ function focusSelectedOption() {
 }
 
 function onDocumentPointerDown(event) {
-  if (!open.value || root.value?.contains(event.target)) return;
+  if (!open.value || root.value?.contains(event.target) || menu.value?.contains(event.target)) return;
   open.value = false;
+}
+
+function addMenuPositionListeners() {
+  const view = root.value?.ownerDocument?.defaultView || window;
+  view.addEventListener("resize", updateMenuPosition);
+  view.addEventListener("scroll", updateMenuPosition, true);
+}
+
+function removeMenuPositionListeners() {
+  const view = root.value?.ownerDocument?.defaultView || window;
+  view.removeEventListener("resize", updateMenuPosition);
+  view.removeEventListener("scroll", updateMenuPosition, true);
+}
+
+function updateMenuPosition() {
+  const trigger = root.value?.querySelector(".ui-select-trigger");
+  const view = root.value?.ownerDocument?.defaultView || window;
+  if (!trigger || !view) return;
+  const rect = trigger.getBoundingClientRect();
+  const viewportWidth = view.innerWidth || 1024;
+  const viewportHeight = view.innerHeight || 768;
+  const margin = 8;
+  const maxHeight = Math.min(260, Math.max(140, viewportHeight * 0.48));
+  const longestLabel = props.options.reduce((max, option) => Math.max(max, optionLabel(option).length), 0);
+  const preferredWidth = Math.max(rect.width, Math.min(360, 190 + longestLabel * 8), 260);
+  const width = Math.min(preferredWidth, viewportWidth - margin * 2);
+  const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - width - margin));
+  const below = viewportHeight - rect.bottom - margin;
+  const above = rect.top - margin;
+  const openBelow = below >= Math.min(maxHeight, 180) || below >= above;
+  const top = openBelow ? rect.bottom + 5 : Math.max(margin, rect.top - maxHeight - 5);
+
+  menuStyle.value = {
+    position: "fixed",
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    maxHeight: `${maxHeight}px`
+  };
 }
 
 function optionValue(option) {

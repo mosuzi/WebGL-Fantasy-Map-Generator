@@ -26,7 +26,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
-import {formatDistance} from "../../display-units.js";
+import {formatDistance, formatNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -67,10 +67,10 @@ const selected = computed(() => findByObjectId(rows.value, props.state.selectedR
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 
 const summaryMetrics = computed(() => [
-  {label: "路线", value: rows.value.length},
-  {label: "筛选", value: visibleRows.value.length},
+  {label: "路线", value: formatNumberValue(rows.value.length)},
+  {label: "筛选", value: formatNumberValue(visibleRows.value.length)},
   {label: "总长度", value: formatRouteLength(totalLength.value)},
-  {label: "海路", value: rows.value.filter(row => row.type === "searoute").length}
+  {label: "海路", value: formatNumberValue(rows.value.filter(row => row.type === "searoute").length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -79,9 +79,9 @@ const detailRows = computed(() => selected.value ? [
   {label: "起点", value: selected.value.fromName},
   {label: "终点", value: selected.value.toName},
   {label: "长度", value: formatRouteLength(selected.value.length)},
-  {label: "段数", value: selected.value.segments},
-  {label: "grid cells", value: selected.value.cellCount},
-  {label: "pack cells", value: selected.value.packCellCount},
+  {label: "段数", value: formatNumberValue(selected.value.segments)},
+  {label: "grid cells", value: formatNumberValue(selected.value.cellCount)},
+  {label: "pack cells", value: formatNumberValue(selected.value.packCellCount)},
   {label: "feature", value: selected.value.feature}
 ] : []);
 
@@ -153,5 +153,9 @@ function routeTypeLabel(type) {
 
 function formatRouteLength(value) {
   return formatDistance(value, unitPreferences.value);
+}
+
+function formatNumberValue(value) {
+  return formatNumber(value, unitPreferences.value);
 }
 </script>

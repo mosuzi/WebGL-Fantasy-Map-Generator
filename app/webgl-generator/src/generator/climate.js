@@ -57,17 +57,25 @@ export function buildClimate(grid, features, options, random) {
 
 function defineMapSize(options, grid, features, random) {
   const latitudePreset = resolveClimateLatitudePreset(options.climateLatitudeMode);
+  const customLatitudePreset = options.climateLatitudeMode === "custom"
+    ? {
+        value: "custom",
+        label: climateLatitudeLabel("custom"),
+        center: options.climateLatitudeCenter ?? 0,
+        span: options.climateLatitudeSpan ?? 45
+      }
+    : latitudePreset;
   const template = options.heightmapTemplate;
   const landTouchesBorder = features.features.some(feature => feature?.land && feature.border);
   const maxSize = landTouchesBorder ? 80 : 100;
   const latitude = () => gauss(random, probability(random, 0.5) ? 40 : 60, 20, 25, 75);
-  const withLatitudePreset = base => latitudePreset
+  const withLatitudePreset = base => customLatitudePreset
     ? {
         ...base,
-        size: latitudePreset.span,
-        latitudeCenter: latitudePreset.center,
-        latitudeMode: latitudePreset.value,
-        latitudeLabel: latitudePreset.label
+        size: customLatitudePreset.span,
+        latitudeCenter: customLatitudePreset.center,
+        latitudeMode: customLatitudePreset.value,
+        latitudeLabel: customLatitudePreset.label
       }
     : {
         ...base,

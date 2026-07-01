@@ -22,7 +22,7 @@ import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatDistance, formatPopulation} from "../../display-units.js";
+import {formatDistance, formatNumber, formatPopulation} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../../runtime/object-kinds.js";
 
@@ -78,7 +78,7 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "类型", value: `${object.label || object.type} / ${object.type}`},
     {label: "类别", value: object.categoryLabel || object.category || "未知"},
     {label: "资源", value: object.resourceLabel || "无"},
-    {label: "经济潜力", value: object.economicValue || 0},
+    {label: "经济潜力", value: formatNumberValue(object.economicValue)},
     {label: "国家", value: object.state || object.data?.state || "none"},
     {label: "省份", value: object.province || object.data?.province || "none"},
     {label: "cell", value: `${object.cell} / pack ${object.packCell ?? object.data?.packCell ?? "none"}`},
@@ -95,7 +95,7 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
   [OBJECT_KIND.RIVER]: object => [
     {label: "名称", value: object.name || `#${object.id}`},
     {label: "类型", value: object.type},
-    {label: "流量", value: object.flux},
+    {label: "流量", value: formatNumberValue(object.flux)},
     {label: "长度", value: formatDistanceValue(object.length)},
     {label: "命中距离", value: formatDistanceValue(object.distance)},
     {label: "对象 id", value: object.id}
@@ -145,5 +145,9 @@ function formatDistanceValue(value) {
 
 function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
+}
+
+function formatNumberValue(value) {
+  return formatNumber(value, unitPreferences.value);
 }
 </script>

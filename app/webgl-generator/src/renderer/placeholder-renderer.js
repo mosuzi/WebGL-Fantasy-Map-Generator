@@ -541,14 +541,15 @@ export class PlaceholderMapRenderer {
 
   pickClientPoint(clientX, clientY) {
     const label = this.pickLabel(clientX, clientY);
+    const markerIcon = this.pickMarkerIcon(clientX, clientY);
     const world = this.screenToWorld(clientX, clientY);
     const result = pickGridCell(this.map, world.x, world.y);
     const cityObject = pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9));
-    const marker = pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
+    const marker = markerIcon || pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
     const route = pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7));
     const river = pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7));
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
-    const object = label || cityObject || marker || route || river || politicalObject;
+    const object = markerIcon || label || cityObject || marker || route || river || politicalObject;
     this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (politicalObject ? 1 : 0);
     return result ? {...result, label, cityObject, marker, route, river, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
@@ -914,6 +915,18 @@ export class PlaceholderMapRenderer {
         targetName: item.text,
         rank: item.rank
       };
+    }
+    return null;
+  }
+
+  pickMarkerIcon(clientX, clientY) {
+    if (!this.overlay || !this.markerIconItems.length) return null;
+    for (let index = this.markerIconItems.length - 1; index >= 0; index--) {
+      const item = this.markerIconItems[index];
+      if (!item.visible || !isMarkerLayerVisible(item, this.layerVisibility)) continue;
+      const rect = item.node.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue;
+      return markerObjectFromIconItem(item);
     }
     return null;
   }
@@ -1288,6 +1301,28 @@ function markerIconTooltip(marker) {
   const value = Number(marker.economicValue || 0);
   const valueText = value > 0 ? `，潜力 ${roundValue(value)}` : "";
   return `${marker.name || marker.label || "标记"} / ${marker.categoryLabel || marker.category || "标记"}${valueText}`;
+}
+
+function markerObjectFromIconItem(item) {
+  const marker = item.marker || {};
+  return {
+    kind: OBJECT_KIND.MARKER,
+    id: marker.id ?? item.id,
+    type: marker.type || item.type,
+    label: marker.label || item.label,
+    icon: marker.icon,
+    category: marker.category || item.category,
+    categoryLabel: marker.categoryLabel,
+    resourceKey: marker.resourceKey || item.resourceKey,
+    resourceLabel: marker.resourceLabel,
+    economicValue: marker.economicValue ?? item.economicValue,
+    name: marker.name || item.name,
+    cell: marker.cell,
+    packCell: marker.packCell,
+    data: marker.data,
+    distance: 0,
+    candidateCount: 1
+  };
 }
 
 function markerIconClassName(item) {

@@ -2,8 +2,10 @@ import {createRandom} from "./random.js";
 import {
   DEFAULT_ATMOSPHERE_DIRECTION,
   DEFAULT_CLIMATE_LATITUDE_MODE,
+  defaultWindProfile,
   normalizeAtmosphereDirection,
-  normalizeClimateLatitudeMode
+  normalizeClimateLatitudeMode,
+  normalizeWindProfile
 } from "./climate-options.js";
 import {DEFAULT_INHERITANCE_MODE, normalizeInheritanceMode} from "./inheritance.js";
 
@@ -24,10 +26,14 @@ export const DEFAULT_OPTIONS = {
   cultureInheritanceMode: DEFAULT_INHERITANCE_MODE,
   religionInheritanceMode: DEFAULT_INHERITANCE_MODE,
   climateLatitudeMode: DEFAULT_CLIMATE_LATITUDE_MODE,
+  climateLatitudeCenter: 0,
+  climateLatitudeSpan: 45,
   atmosphereDirection: DEFAULT_ATMOSPHERE_DIRECTION,
+  winds: Object.freeze(defaultWindProfile()),
   temperatureEquator: 25,
   temperatureNorthPole: -25,
   temperatureSouthPole: -15,
+  heightExponent: 2,
   precipitation: 100
 };
 
@@ -55,10 +61,14 @@ export function normalizeOptions(input = {}) {
     cultureInheritanceMode: normalizeInheritanceMode(input.cultureInheritanceMode),
     religionInheritanceMode: normalizeInheritanceMode(input.religionInheritanceMode),
     climateLatitudeMode: normalizeClimateLatitudeMode(input.climateLatitudeMode),
+    climateLatitudeCenter: clampNumber(input.climateLatitudeCenter, -75, 75, DEFAULT_OPTIONS.climateLatitudeCenter),
+    climateLatitudeSpan: clampNumber(input.climateLatitudeSpan, 20, 80, DEFAULT_OPTIONS.climateLatitudeSpan),
     atmosphereDirection: normalizeAtmosphereDirection(input.atmosphereDirection),
+    winds: normalizeWindProfile(input.winds || DEFAULT_OPTIONS.winds),
     temperatureEquator: clampInteger(input.temperatureEquator, 20, 35, randomized.temperatureEquator),
     temperatureNorthPole: clampInteger(input.temperatureNorthPole, -40, 10, randomized.temperatureNorthPole),
     temperatureSouthPole: clampInteger(input.temperatureSouthPole, -40, 10, randomized.temperatureSouthPole),
+    heightExponent: clampNumber(input.heightExponent, 1.5, 2.2, DEFAULT_OPTIONS.heightExponent),
     precipitation: clampInteger(input.precipitation, 5, 500, randomized.precipitation)
   };
 }

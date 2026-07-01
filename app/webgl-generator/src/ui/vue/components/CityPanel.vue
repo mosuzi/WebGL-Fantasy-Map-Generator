@@ -81,7 +81,7 @@ import {
   citySilhouetteLabel,
   resolveCityVisual
 } from "../../../runtime/city-visuals.js";
-import {formatPopulation} from "../../display-units.js";
+import {formatHeight, formatNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -137,11 +137,11 @@ const cityActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "城市", value: metrics.value.total},
-  {label: "首都", value: metrics.value.capitals},
-  {label: "港口", value: metrics.value.ports},
+  {label: "城市", value: formatNumberValue(metrics.value.total)},
+  {label: "首都", value: formatNumberValue(metrics.value.capitals)},
+  {label: "港口", value: formatNumberValue(metrics.value.ports)},
   {label: "人口", value: formatPopulationValue(metrics.value.totalPopulation)},
-  {label: "筛选", value: visibleRows.value.length}
+  {label: "筛选", value: formatNumberValue(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -317,7 +317,7 @@ function cityOwnerInfo(map, city, burg, {stateId, provinceId, packCell, gridCell
 function cityWaterStatus(map, packCell, gridCell) {
   if (Number.isInteger(packCell)) {
     const height = map?.pack?.cells?.h?.[packCell];
-    if (Number.isFinite(height) && height < 20) return `落水：pack cell #${packCell} 高度 ${height}`;
+    if (Number.isFinite(height) && height < 20) return `落水：pack cell #${packCell} 高度 ${formatHeightValue(height)}`;
     const featureId = map?.pack?.cells?.f?.[packCell];
     const feature = map?.pack?.features?.[featureId] || map?.features?.features?.[featureId];
     if (feature && feature.land === false) return `落水：pack cell #${packCell} 位于水体 feature #${featureId}`;
@@ -325,7 +325,7 @@ function cityWaterStatus(map, packCell, gridCell) {
   }
   if (Number.isInteger(gridCell)) {
     const height = map?.grid?.cells?.h?.[gridCell];
-    if (Number.isFinite(height) && height < 20) return `落水：grid cell #${gridCell} 高度 ${height}`;
+    if (Number.isFinite(height) && height < 20) return `落水：grid cell #${gridCell} 高度 ${formatHeightValue(height)}`;
     return "正常";
   }
   return "未知";
@@ -358,5 +358,13 @@ function hasOwn(object, key) {
 
 function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
+}
+
+function formatHeightValue(value) {
+  return formatHeight(value, unitPreferences.value);
+}
+
+function formatNumberValue(value) {
+  return formatNumber(value, unitPreferences.value);
 }
 </script>

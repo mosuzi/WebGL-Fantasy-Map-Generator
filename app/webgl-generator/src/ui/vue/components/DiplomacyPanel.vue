@@ -87,7 +87,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
-import {formatArea, formatPopulation} from "../../display-units.js";
+import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -144,12 +144,12 @@ const diplomacyActions = Object.freeze([
 
 const summaryMetrics = computed(() => [
   {label: "主体", value: metrics.value.subjectName},
-  {label: "关系", value: metrics.value.rows.length},
-  {label: "盟友", value: metrics.value.counts.Ally || 0},
-  {label: "宿敌", value: metrics.value.counts.Rival || 0},
-  {label: "战争", value: metrics.value.counts.Enemy || 0},
-  {label: "附庸", value: metrics.value.counts.Vassal || 0},
-  {label: "历史", value: metrics.value.history}
+  {label: "关系", value: formatNumber(metrics.value.rows.length)},
+  {label: "盟友", value: formatNumber(metrics.value.counts.Ally || 0)},
+  {label: "宿敌", value: formatNumber(metrics.value.counts.Rival || 0)},
+  {label: "战争", value: formatNumber(metrics.value.counts.Enemy || 0)},
+  {label: "附庸", value: formatNumber(metrics.value.counts.Vassal || 0)},
+  {label: "历史", value: formatNumber(metrics.value.history)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -163,7 +163,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "经济力", value: formatNumber(selected.value.economicPower)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
-  {label: "城镇", value: selected.value.burgs}
+  {label: "城镇", value: formatNumber(selected.value.burgs)}
 ] : []);
 
 watch(() => selected.value?.id, () => {
@@ -300,7 +300,7 @@ function indexedName(items, id) {
 }
 
 function formatNumber(value) {
-  return Math.round((Number(value) || 0) * 10) / 10;
+  return formatDisplayNumber(value, unitPreferences.value);
 }
 
 function formatAreaValue(value) {

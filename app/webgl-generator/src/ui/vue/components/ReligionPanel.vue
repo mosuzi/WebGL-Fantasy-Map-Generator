@@ -1,6 +1,28 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="religion-panel-summary" />
 
+  <div class="inheritance-tree-launcher religion-tree-overview" aria-label="宗教树总览">
+    <div class="inheritance-tree-header">
+      <span>宗教树总览</span>
+      <strong>{{ formatNumber(treeOverview.length) }}</strong>
+    </div>
+    <button
+      type="button"
+      class="inheritance-tree-open"
+      @click="treePanelOpen = true"
+    >
+      打开树状面板
+    </button>
+  </div>
+
+  <UiTreeDisplayPanel
+    v-model:open="treePanelOpen"
+    title="宗教树总览"
+    :nodes="treeOverview"
+    :selected-id="state.selectedReligionId"
+    @select="selectTreeNode"
+  />
+
   <div class="religion-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 文化 / 国家" @update:model-value="callbacks.onFilter" />
   </div>
@@ -29,7 +51,7 @@
     </template>
 
     <template #color>
-      <UiColorField
+      <UiColorActionPanel
         class-name="religion-color-field"
         :model-value="selected.color"
         @apply="color => callbacks.onColorChange(selected.id, color)"
@@ -54,7 +76,7 @@
 <script setup>
 import {computed, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
-import UiColorField from "./base/UiColorField.vue";
+import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
@@ -63,7 +85,8 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatArea, formatPopulation} from "../../display-units.js";
+import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
+import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -99,13 +122,15 @@ const columns = Object.freeze([
   {key: "form", label: "形态"},
   {key: "parentName", label: "父级"},
   {key: "depth", label: "层", align: "right"},
-  {key: "cells", label: "cells", align: "right"},
+  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
 ]);
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const treePanelOpen = ref(false);
 const metrics = computed(() => buildReligionMetrics(props.state.map));
+const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根宗教"));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
@@ -116,31 +141,31 @@ const religionActions = Object.freeze([
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "宗教", value: metrics.value.total},
-  {label: "根系", value: metrics.value.roots},
-  {label: "派生", value: metrics.value.derived},
-  {label: "层级", value: metrics.value.maxDepth},
+  {label: "宗教", value: formatNumber(metrics.value.total)},
+  {label: "根系", value: formatNumber(metrics.value.roots)},
+  {label: "派生", value: formatNumber(metrics.value.derived)},
+  {label: "层级", value: formatNumber(metrics.value.maxDepth)},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
-  {label: "城市", value: metrics.value.cities}
+  {label: "城市", value: formatNumber(metrics.value.cities)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
   {label: "形态", value: selected.value.form},
   {label: "父级", value: selected.value.parentName},
-  {label: "子级", value: selected.value.childCount},
+  {label: "子级", value: formatNumber(selected.value.childCount)},
   {label: "继承路径", value: selected.value.treePath},
   {label: "扩张范围", value: selected.value.expansion},
-  {label: "扩张强度", value: selected.value.expansionism},
+  {label: "扩张强度", value: formatNumber(selected.value.expansionism)},
   {label: "主神", value: selected.value.deity},
   {label: "所属文化", value: selected.value.cultureName},
   {label: "中心 pack cell", value: selected.value.centerCell},
   {label: "中心 grid cell", value: selected.value.gridCenterCell},
-  {label: "覆盖 cells", value: selected.value.cells},
+  {label: "覆盖 cells", value: formatNumber(selected.value.cells)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "乡村人口", value: formatPopulationValue(selected.value.rural)},
   {label: "城市人口", value: formatPopulationValue(selected.value.urban)},
-  {label: "城市", value: selected.value.cities},
+  {label: "城市", value: formatNumber(selected.value.cities)},
   {label: "主要国家", value: selected.value.stateSummary},
   {label: "主要文化", value: selected.value.cultureSummary}
 ] : []);
@@ -148,6 +173,10 @@ const detailRows = computed(() => selected.value ? [
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
 });
+
+function selectTreeNode(node) {
+  callbacks.onSelect?.(node);
+}
 
 function buildReligionMetrics(map) {
   const baseRows = religionRows(map);
@@ -169,8 +198,8 @@ function buildReligionMetrics(map) {
       cities: cities.length,
       states: stateStats.length,
       cultures: cultureStats.length,
-      stateSummary: stateStats.slice(0, 4).map(item => `${item.name} ${item.count}`).join(" / ") || "none",
-      cultureSummary: cultureStats.slice(0, 4).map(item => `${item.name} ${item.count}`).join(" / ") || "none",
+      stateSummary: stateStats.slice(0, 4).map(item => `${item.name} ${formatNumber(item.count)}`).join(" / ") || "none",
+      cultureSummary: cultureStats.slice(0, 4).map(item => `${item.name} ${formatNumber(item.count)}`).join(" / ") || "none",
       color: normalizeHexColor(religion.color) || fallbackReligionColor(religion.id)
     };
   });
@@ -269,6 +298,33 @@ function buildParentOptions(rows, selectedRow, rootLabel) {
       .sort((a, b) => a.depth - b.depth || a.name.localeCompare(b.name, "zh-CN") || a.id - b.id)
       .map(row => ({value: row.id, label: `${"  ".repeat(Math.min(row.depth, 4))}${row.name}`}))
   ];
+}
+
+function buildTreeOverview(rows, rootLabel) {
+  const childrenByParent = new Map();
+  const rowById = new Map(rows.map(row => [row.id, row]));
+  for (const row of rows) {
+    const parentId = rowById.has(row.parentId) ? row.parentId : 0;
+    const children = childrenByParent.get(parentId) || [];
+    children.push(row);
+    childrenByParent.set(parentId, children);
+  }
+  for (const children of childrenByParent.values()) {
+    children.sort((a, b) => a.depth - b.depth || a.name.localeCompare(b.name, "zh-CN") || a.id - b.id);
+  }
+
+  const ordered = [];
+  const visited = new Set();
+  const visit = (row, depth) => {
+    if (!row || visited.has(row.id)) return;
+    visited.add(row.id);
+    ordered.push({...row, depth, branch: depth ? "↳".repeat(Math.min(depth, 4)) : rootLabel});
+    for (const child of childrenByParent.get(row.id) || []) visit(child, depth + 1);
+  };
+
+  for (const root of childrenByParent.get(0) || []) visit(root, 0);
+  for (const row of rows) visit(row, 0);
+  return ordered;
 }
 
 function descendantIds(id, rows) {
@@ -393,6 +449,10 @@ function formatAreaValue(value) {
 
 function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
+}
+
+function formatNumber(value) {
+  return formatDisplayNumber(value, unitPreferences.value);
 }
 
 </script>

@@ -10,23 +10,113 @@
       <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />
       <section class="generation-climate-section" aria-labelledby="generation-climate-title">
         <h2 id="generation-climate-title">气候</h2>
-        <div class="generation-climate-grid">
-          <UiSelectField
-            label="纬度"
-            input-id="climate-latitude-mode"
-            class-name="generation-climate-select"
-            :model-value="climateLatitudeMode"
-            :options="climateLatitudeOptions"
-            @update:model-value="climateLatitudeMode = $event"
-          />
-          <UiSelectField
-            label="大气"
-            input-id="atmosphere-direction"
-            class-name="generation-climate-select"
-            :model-value="atmosphereDirection"
-            :options="atmosphereDirectionOptions"
-            @update:model-value="atmosphereDirection = $event"
-          />
+        <input id="climate-latitude-mode" type="hidden" :value="climateLatitudeMode" />
+        <input id="climate-latitude-center" type="hidden" :value="climateLatitudeCenter" />
+        <input id="climate-latitude-span" type="hidden" :value="climateLatitudeSpan" />
+        <input id="atmosphere-direction" type="hidden" :value="atmosphereDirection" />
+        <input id="atmosphere-winds" type="hidden" :value="windProfileValue" />
+
+        <div class="earth-climate-grid">
+          <div class="earth-projection" :class="{manual: climateLatitudeMode === 'custom'}">
+            <div class="earth-projection-map">
+              <svg class="earth-globe-svg" viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="earth-globe-fill" cx="60" cy="60" r="51" />
+                <line
+                  v-for="line in latitudeGuideLines"
+                  :key="line.key"
+                  class="earth-latitude-guide"
+                  :class="{equator: line.lat === 0}"
+                  :x1="line.x1"
+                  :x2="line.x2"
+                  :y1="line.y"
+                  :y2="line.y"
+                />
+                <polygon class="earth-canvas-footprint" :points="canvasFootprintPoints" />
+              </svg>
+              <div class="wind-band-column" role="group" aria-label="大气风带">
+                <button
+                  v-for="(band, index) in windBandOptions"
+                  :key="band.value"
+                  type="button"
+                  class="wind-band-button"
+                  :data-wind-band="index"
+                  :data-wind-angle="windBands[index]"
+                  :aria-label="`${band.label} ${band.range}：${windDirectionLabel(windBands[index])}`"
+                  :title="`${band.label} ${band.range}：${windDirectionLabel(windBands[index])}`"
+                  @click="cycleWindBand(index)"
+                >
+                  <span class="wind-band-arrow" aria-hidden="true">{{ windDirectionArrow(windBands[index]) }}</span>
+                </button>
+              </div>
+            </div>
+            <div class="earth-projection-controls">
+              <button
+                id="climate-latitude-toggle"
+                type="button"
+                class="climate-mode-toggle"
+                :aria-pressed="climateLatitudeMode === 'custom' ? 'true' : 'false'"
+                @click="toggleLatitudeMode"
+              >
+                {{ climateLatitudeMode === "custom" ? "手动纬度" : "自动纬度" }}
+              </button>
+              <div class="earth-latitude-readout">{{ latitudeBandLabel }}</div>
+            </div>
+          </div>
+
+          <div class="climate-temperature-fields">
+            <UiSliderField
+              label="赤道"
+              input-id="temperature-equator"
+              output-id="temperature-equator-value"
+              field-class="climate-slider-field"
+              value-tag="output"
+              :model-value="temperatureEquator"
+              :display-value="`${temperatureEquator}°C`"
+              :min="20"
+              :max="35"
+              :step="1"
+              @input="value => temperatureEquator = value"
+            />
+            <UiSliderField
+              label="北极"
+              input-id="temperature-north-pole"
+              output-id="temperature-north-pole-value"
+              field-class="climate-slider-field"
+              value-tag="output"
+              :model-value="temperatureNorthPole"
+              :display-value="`${temperatureNorthPole}°C`"
+              :min="-40"
+              :max="10"
+              :step="1"
+              @input="value => temperatureNorthPole = value"
+            />
+            <UiSliderField
+              label="南极"
+              input-id="temperature-south-pole"
+              output-id="temperature-south-pole-value"
+              field-class="climate-slider-field"
+              value-tag="output"
+              :model-value="temperatureSouthPole"
+              :display-value="`${temperatureSouthPole}°C`"
+              :min="-40"
+              :max="10"
+              :step="1"
+              @input="value => temperatureSouthPole = value"
+            />
+            <UiSliderField
+              label="画布纬度"
+              input-id="climate-latitude-center-slider"
+              output-id="climate-latitude-center-value"
+              field-class="climate-slider-field"
+              value-tag="output"
+              :model-value="climateLatitudeCenter"
+              :display-value="formatLatitudeCenter(climateLatitudeCenter)"
+              :min="-75"
+              :max="75"
+              :step="1"
+              @input="setLatitudeCenter"
+            />
+          </div>
         </div>
       </section>
       <section class="generation-inheritance-section" aria-labelledby="generation-inheritance-title">
@@ -64,67 +154,74 @@
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
         <UiSwitchField label="平滑边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
       </div>
+    </div>
 
-      <section class="unit-settings" aria-labelledby="unit-settings-title">
+    <div class="control-panel-section unit-control-panel" data-control-panel="units" :hidden="activeTab !== 'units'">
+      <section class="unit-settings unit-settings-standalone" aria-labelledby="unit-settings-title">
         <h2 id="unit-settings-title">显示单位</h2>
-        <div class="unit-select-grid">
+        <input id="area-unit" type="hidden" :value="unitPreferences.areaUnit" />
+        <div class="unit-config-list">
           <UiSelectField
-            label="距离"
+            class-name="unit-select-field unit-config-row"
+            label="数字缩写"
+            input-id="number-abbreviation"
+            :model-value="unitPreferences.numberAbbreviation"
+            :options="numberAbbreviationOptions"
+            @update:model-value="value => patchUnitPreference({numberAbbreviation: value})"
+          />
+          <UiSelectField
+            label="距离单位"
             input-id="distance-unit"
-            class-name="unit-select-field"
+            class-name="unit-select-field unit-config-row"
             :model-value="unitPreferences.distanceUnit"
             :options="distanceUnitOptions"
             @update:model-value="value => patchUnitPreference({distanceUnit: value})"
           />
-          <UiSelectField
-            label="面积"
-            input-id="area-unit"
-            class-name="unit-select-field"
-            :model-value="unitPreferences.areaUnit"
-            :options="areaUnitOptions"
-            @update:model-value="value => patchUnitPreference({areaUnit: value})"
+          <div class="unit-derived-row">
+            <span>面积单位</span>
+            <strong>{{ areaUnitLabel }}</strong>
+          </div>
+          <div class="unit-scale-readout">{{ scaleLabel }}</div>
+          <UiSliderField
+            label="比例尺"
+            input-id="map-scale-km-per-cm"
+            output-id="map-scale-km-per-cm-value"
+            field-class="unit-scale-field"
+            value-tag="output"
+            :model-value="unitPreferences.mapScaleKmPerCm"
+            :display-value="`${unitPreferences.mapScaleKmPerCm} km/cm`"
+            :min="unitScaleLimits.mapScaleKmPerCm.min"
+            :max="unitScaleLimits.mapScaleKmPerCm.max"
+            :step="unitScaleLimits.mapScaleKmPerCm.step"
+            @input="value => patchUnitPreference({mapScaleKmPerCm: value})"
+          />
+          <UiSliderField
+            label="人口倍率"
+            input-id="population-scale"
+            output-id="population-scale-value"
+            field-class="unit-scale-field"
+            value-tag="output"
+            :model-value="unitPreferences.populationScale"
+            :display-value="formatScaleMultiplier(unitPreferences.populationScale)"
+            :min="unitScaleLimits.populationScale.min"
+            :max="unitScaleLimits.populationScale.max"
+            :step="unitScaleLimits.populationScale.step"
+            @input="value => patchUnitPreference({populationScale: value})"
+          />
+          <UiSliderField
+            label="降水倍率"
+            input-id="precipitation-scale"
+            output-id="precipitation-scale-value"
+            field-class="unit-scale-field"
+            value-tag="output"
+            :model-value="unitPreferences.precipitationScale"
+            :display-value="formatScaleMultiplier(unitPreferences.precipitationScale)"
+            :min="unitScaleLimits.precipitationScale.min"
+            :max="unitScaleLimits.precipitationScale.max"
+            :step="unitScaleLimits.precipitationScale.step"
+            @input="value => patchUnitPreference({precipitationScale: value})"
           />
         </div>
-        <div class="unit-scale-readout">{{ scaleLabel }}</div>
-        <UiSliderField
-          label="1 cm"
-          input-id="map-scale-km-per-cm"
-          output-id="map-scale-km-per-cm-value"
-          field-class="unit-scale-field"
-          value-tag="output"
-          :model-value="unitPreferences.mapScaleKmPerCm"
-          :display-value="`${unitPreferences.mapScaleKmPerCm} km`"
-          :min="unitScaleLimits.mapScaleKmPerCm.min"
-          :max="unitScaleLimits.mapScaleKmPerCm.max"
-          :step="unitScaleLimits.mapScaleKmPerCm.step"
-          @input="value => patchUnitPreference({mapScaleKmPerCm: value})"
-        />
-        <UiSliderField
-          label="人口倍率"
-          input-id="population-scale"
-          output-id="population-scale-value"
-          field-class="unit-scale-field"
-          value-tag="output"
-          :model-value="unitPreferences.populationScale"
-          :display-value="formatScaleMultiplier(unitPreferences.populationScale)"
-          :min="unitScaleLimits.populationScale.min"
-          :max="unitScaleLimits.populationScale.max"
-          :step="unitScaleLimits.populationScale.step"
-          @input="value => patchUnitPreference({populationScale: value})"
-        />
-        <UiSliderField
-          label="降水倍率"
-          input-id="precipitation-scale"
-          output-id="precipitation-scale-value"
-          field-class="unit-scale-field"
-          value-tag="output"
-          :model-value="unitPreferences.precipitationScale"
-          :display-value="formatScaleMultiplier(unitPreferences.precipitationScale)"
-          :min="unitScaleLimits.precipitationScale.min"
-          :max="unitScaleLimits.precipitationScale.max"
-          :step="unitScaleLimits.precipitationScale.step"
-          @input="value => patchUnitPreference({precipitationScale: value})"
-        />
       </section>
     </div>
 
@@ -173,7 +270,7 @@
       <section class="regeneration-section" aria-labelledby="regeneration-section-title">
         <div class="regeneration-section-header">
           <h2 id="regeneration-section-title">重新生成</h2>
-          <span id="regeneration-status">待命</span>
+          <span id="regeneration-status"></span>
         </div>
 
         <div class="regeneration-action-grid">
@@ -196,7 +293,7 @@
 </template>
 
 <script setup>
-import {computed, ref} from "vue";
+import {computed, nextTick, ref} from "vue";
 import {storeToRefs} from "pinia";
 import UiButton from "./base/UiButton.vue";
 import UiField from "./base/UiField.vue";
@@ -207,14 +304,22 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTabs from "./base/UiTabs.vue";
 import {
-  AREA_UNIT_OPTIONS,
   DISTANCE_UNIT_OPTIONS,
+  NUMBER_ABBREVIATION_OPTIONS,
   UNIT_SCALE_LIMITS,
+  areaUnitForDistanceUnit,
+  areaUnitLabelForDistanceUnit,
   formatScaleLabel,
   formatScaleMultiplier,
   normalizeUnitPreferences
 } from "../../display-units.js";
-import {ATMOSPHERE_DIRECTION_OPTIONS, CLIMATE_LATITUDE_OPTIONS} from "../../../generator/climate-options.js";
+import {
+  WIND_BAND_OPTIONS,
+  WIND_DIRECTION_OPTIONS,
+  defaultWindProfile,
+  windDirectionLabelFromAngle,
+  windDirectionValueFromAngle
+} from "../../../generator/climate-options.js";
 import {DEFAULT_INHERITANCE_MODE, INHERITANCE_MODE_OPTIONS} from "../../../generator/inheritance.js";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
@@ -226,21 +331,57 @@ const config = useGlobalConfigStore();
 const {preferences} = storeToRefs(config);
 const activeTab = ref("generation");
 const climateLatitudeMode = ref("auto");
-const atmosphereDirection = ref("auto");
+const climateLatitudeCenter = ref(0);
+const climateLatitudeSpan = ref(45);
+const atmosphereDirection = ref("customBands");
+const windBands = ref(defaultWindProfile());
+const temperatureEquator = ref(25);
+const temperatureNorthPole = ref(-25);
+const temperatureSouthPole = ref(-15);
 const cultureInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const religionInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
 const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
+const areaUnitLabel = computed(() => areaUnitLabelForDistanceUnit(unitPreferences.value.distanceUnit));
 const distanceUnitOptions = DISTANCE_UNIT_OPTIONS;
-const areaUnitOptions = AREA_UNIT_OPTIONS;
+const numberAbbreviationOptions = NUMBER_ABBREVIATION_OPTIONS;
 const unitScaleLimits = UNIT_SCALE_LIMITS;
-const climateLatitudeOptions = CLIMATE_LATITUDE_OPTIONS;
-const atmosphereDirectionOptions = ATMOSPHERE_DIRECTION_OPTIONS;
 const inheritanceModeOptions = INHERITANCE_MODE_OPTIONS;
+const windBandOptions = WIND_BAND_OPTIONS;
+const windProfileValue = computed(() => windBands.value.join(","));
+const canvasFootprintPoints = computed(() => {
+  const span = Number(climateLatitudeSpan.value) || 45;
+  const center = Number(climateLatitudeCenter.value) || 0;
+  const north = Math.min(90, center + span / 2);
+  const south = Math.max(-90, center - span / 2);
+  const northPair = latitudeCanvasPair(north);
+  const southPair = latitudeCanvasPair(south);
+  return [
+    northPair.left,
+    northPair.right,
+    southPair.right,
+    southPair.left
+  ].map(point => point.map(roundSvg).join(",")).join(" ");
+});
+const latitudeGuideLines = computed(() => [-60, -30, 0, 30, 60].map(lat => ({
+  key: `lat-${lat}`,
+  lat,
+  ...latitudeLine(lat)
+})));
+const latitudeBandLabel = computed(() => {
+  const span = Number(climateLatitudeSpan.value) || 45;
+  const center = Number(climateLatitudeCenter.value) || 0;
+  const north = Math.min(90, center + span / 2);
+  const south = Math.max(-90, center - span / 2);
+  return climateLatitudeMode.value === "custom"
+    ? `${formatLatitudeCenter(center)} / ${formatLatitudeCenter(south)} 至 ${formatLatitudeCenter(north)}`
+    : "自动按地形选择纬度";
+});
 
 const tabs = Object.freeze([
   {id: "generation", label: "生成"},
   {id: "themes", label: "视图"},
+  {id: "units", label: "单位"},
   {id: "layers", label: "图层"},
   {id: "management", label: "管理"}
 ]);
@@ -312,6 +453,78 @@ function isLayerVisible(layer) {
 }
 
 function patchUnitPreference(patch) {
-  config.patchPreferences({units: {...unitPreferences.value, ...patch}});
+  const next = normalizeUnitPreferences({...unitPreferences.value, ...patch});
+  if (patch.distanceUnit) next.areaUnit = areaUnitForDistanceUnit(patch.distanceUnit);
+  config.patchPreferences({units: next});
+}
+
+function toggleLatitudeMode() {
+  climateLatitudeMode.value = climateLatitudeMode.value === "custom" ? "auto" : "custom";
+  emitClimateControlsChange();
+}
+
+function setLatitudeCenter(value) {
+  climateLatitudeMode.value = "custom";
+  climateLatitudeCenter.value = value;
+  emitClimateControlsChange();
+}
+
+function cycleWindBand(index) {
+  const currentValue = windDirectionValueFromAngle(windBands.value[index]);
+  const currentIndex = Math.max(0, WIND_DIRECTION_OPTIONS.findIndex(option => option.value === currentValue));
+  const next = WIND_DIRECTION_OPTIONS[(currentIndex + 1) % WIND_DIRECTION_OPTIONS.length];
+  windBands.value = windBands.value.map((angle, bandIndex) => bandIndex === index ? next.angle : angle);
+  atmosphereDirection.value = "customBands";
+  emitClimateControlsChange();
+}
+
+function windDirectionLabel(angle) {
+  return windDirectionLabelFromAngle(angle);
+}
+
+function windDirectionArrow(angle) {
+  const value = windDirectionValueFromAngle(angle);
+  return WIND_DIRECTION_OPTIONS.find(option => option.value === value)?.arrow || "→";
+}
+
+function formatLatitudeCenter(value) {
+  const numeric = Number(value) || 0;
+  if (numeric > 0) return `北纬 ${numeric}°`;
+  if (numeric < 0) return `南纬 ${Math.abs(numeric)}°`;
+  return "赤道 0°";
+}
+
+function latitudeCanvasPair(latitude) {
+  const line = latitudeLine(latitude);
+  const halfWidth = Math.max(3, line.halfWidth * 0.82);
+  return {
+    left: [60 - halfWidth, line.y],
+    right: [60 + halfWidth, line.y]
+  };
+}
+
+function latitudeLine(latitude) {
+  const lat = Math.max(-89.5, Math.min(89.5, Number(latitude) || 0));
+  const radians = Math.abs(lat) * Math.PI / 180;
+  const halfWidth = Math.max(2.4, 47 * Math.cos(radians));
+  const y = 60 - (lat / 90) * 47;
+  return {
+    y: roundSvg(y),
+    x1: roundSvg(60 - halfWidth),
+    x2: roundSvg(60 + halfWidth),
+    halfWidth: roundSvg(halfWidth)
+  };
+}
+
+function roundSvg(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function emitClimateControlsChange() {
+  nextTick(() => {
+    const target = document.getElementById("climate-latitude-mode") || document.getElementById("atmosphere-winds");
+    target?.dispatchEvent(new CustomEvent("climate-controls-change", {bubbles: true}));
+    target?.dispatchEvent(new Event("change", {bubbles: true}));
+  });
 }
 </script>

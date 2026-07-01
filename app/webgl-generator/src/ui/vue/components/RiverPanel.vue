@@ -67,7 +67,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatDistance} from "../../display-units.js";
+import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -117,17 +117,17 @@ const riverActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "河流", value: rows.value.length},
+  {label: "河流", value: formatNumber(rows.value.length)},
   {label: "总长度", value: formatLength(totalLength.value)},
   {label: "最大流量", value: formatNumber(maxFlux.value)},
-  {label: "筛选", value: visibleRows.value.length}
+  {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
   {label: "长度", value: formatLength(selected.value.length)},
   {label: "流量", value: formatNumber(selected.value.flux)},
-  {label: "河段", value: selected.value.segments},
+  {label: "河段", value: formatNumber(selected.value.segments)},
   {label: "宽度因子", value: selected.value.widthFactor.toFixed(2)}
 ] : []);
 
@@ -187,7 +187,7 @@ function formatLength(value) {
 }
 
 function formatNumber(value) {
-  return Number.isFinite(value) ? Math.round(value).toLocaleString("zh-CN") : "0";
+  return formatDisplayNumber(value, unitPreferences.value);
 }
 
 function normalizeWidth(value) {

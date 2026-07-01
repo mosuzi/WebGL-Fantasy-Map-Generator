@@ -1,8 +1,11 @@
 import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
 import {DIPLOMACY_RELATIONS} from "../generator/diplomacy.js";
+import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {
   formatDistance as formatDisplayDistance,
+  formatHeight as formatDisplayHeight,
+  formatNumber as formatDisplayNumber,
   formatPopulation as formatDisplayPopulation,
   formatPrecipitation as formatDisplayPrecipitation,
   formatScaleLabel,
@@ -28,13 +31,13 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
 const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.CITY]: (object, units) => `${object.type} / pop ${formatDisplayPopulation(object.population, units)} / ${object.state}`,
   [OBJECT_KIND.LABEL]: object => `${object.targetKind} / ${object.targetName}`,
-  [OBJECT_KIND.MARKER]: object => formatMarkerObjectSummary(object),
+  [OBJECT_KIND.MARKER]: (object, units) => formatMarkerObjectSummary(object, units),
   [OBJECT_KIND.ROUTE]: (object, units) => `${object.type} / ${object.level} / distance ${formatDisplayDistance(object.distance, units)}`,
-  [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${object.flux} / length ${formatDisplayDistance(object.length, units)}`,
+  [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${formatDisplayNumber(object.flux, units)} / length ${formatDisplayDistance(object.length, units)}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
   [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
-  [OBJECT_KIND.CULTURE]: (object, units) => `${object.type} / cells ${object.cells} / pop ${formatDisplayPopulation(object.population, units)}`,
-  [OBJECT_KIND.RELIGION]: object => `${object.type} / ${object.form} / cells ${object.cells}`,
+  [OBJECT_KIND.CULTURE]: (object, units) => `${object.type} / cells ${formatDisplayNumber(object.cells, units)} / pop ${formatDisplayPopulation(object.population, units)}`,
+  [OBJECT_KIND.RELIGION]: (object, units) => `${object.type} / ${object.form} / cells ${formatDisplayNumber(object.cells, units)}`,
   [OBJECT_KIND.REGION]: object => `region #${object.id}`
 });
 
@@ -73,6 +76,7 @@ export function bindRuntimePanel(documentRef, handlers) {
     handlers.onMaxCityLabels?.(value);
   });
   bindUnitPreferenceControls(documentRef, handlers.onUnitPreferences);
+  bindClimateControls(documentRef, handlers.onClimateControls);
   documentRef.getElementById("open-height-panel")?.addEventListener("click", handlers.onOpenHeightPanel);
   documentRef.getElementById("open-state-panel")?.addEventListener("click", handlers.onOpenStatePanel);
   documentRef.getElementById("open-province-panel")?.addEventListener("click", handlers.onOpenProvincePanel);
@@ -168,8 +172,6 @@ function editLockControls(documentRef) {
     "#width-input",
     "#height-input",
     "#heightmap-template",
-    "#climate-latitude-mode",
-    "#atmosphere-direction",
     "#culture-inheritance-mode",
     "#religion-inheritance-mode",
     "#auto-random-seed",
@@ -179,12 +181,34 @@ function editLockControls(documentRef) {
     "#max-city-labels",
     "#distance-unit",
     "#area-unit",
+    "#number-abbreviation",
     "#map-scale-km-per-cm",
     "#population-scale",
     "#precipitation-scale",
     "[data-layer]",
     "[data-mode]"
   ].join(", "));
+}
+
+function bindClimateControls(documentRef, handler) {
+  if (!handler) return;
+  const view = documentRef.defaultView || window;
+  let pending = 0;
+  const schedule = () => {
+    if (pending) view.cancelAnimationFrame?.(pending);
+    pending = view.requestAnimationFrame?.(() => {
+      pending = 0;
+      handler(readOptionsFromPanel(documentRef, {}));
+    }) || view.setTimeout(() => {
+      pending = 0;
+      handler(readOptionsFromPanel(documentRef, {}));
+    }, 16);
+  };
+
+  for (const id of ["temperature-equator", "temperature-north-pole", "temperature-south-pole", "climate-latitude-center-slider"]) {
+    documentRef.getElementById(id)?.addEventListener("input", schedule);
+  }
+  documentRef.addEventListener("climate-controls-change", schedule);
 }
 
 function applyControlPreferences(documentRef) {
@@ -225,7 +249,7 @@ function setLabelLimitControlValue(documentRef, value) {
 }
 
 function bindUnitPreferenceControls(documentRef, handler) {
-  const controls = ["distance-unit", "area-unit", "map-scale-km-per-cm", "population-scale", "precipitation-scale"]
+  const controls = ["number-abbreviation", "distance-unit", "area-unit", "map-scale-km-per-cm", "population-scale", "precipitation-scale"]
     .map(id => documentRef.getElementById(id))
     .filter(Boolean);
   for (const control of controls) {
@@ -243,6 +267,7 @@ function readUnitPreferencesFromControls(documentRef) {
   const current = readControlPreferences(documentRef).units || {};
   return normalizeUnitPreferences({
     ...current,
+    numberAbbreviation: documentRef.getElementById("number-abbreviation")?.value ?? current.numberAbbreviation,
     distanceUnit: documentRef.getElementById("distance-unit")?.value ?? current.distanceUnit,
     areaUnit: documentRef.getElementById("area-unit")?.value ?? current.areaUnit,
     mapScaleKmPerCm: documentRef.getElementById("map-scale-km-per-cm")?.value ?? current.mapScaleKmPerCm,
@@ -255,6 +280,7 @@ function applyUnitPreferences(documentRef, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   setControlValue(documentRef, "distance-unit", units.distanceUnit);
   setControlValue(documentRef, "area-unit", units.areaUnit);
+  setControlValue(documentRef, "number-abbreviation", units.numberAbbreviation);
   setControlValue(documentRef, "map-scale-km-per-cm", units.mapScaleKmPerCm);
   setControlValue(documentRef, "population-scale", units.populationScale);
   setControlValue(documentRef, "precipitation-scale", units.precipitationScale);
@@ -364,7 +390,7 @@ function cssEscape(value) {
 export function updateRegenerationSection(documentRef, result = {}) {
   const status = documentRef.getElementById("regeneration-status");
   const constraint = documentRef.getElementById("regeneration-constraint");
-  if (status) status.textContent = result.status || "待命";
+  if (status) status.textContent = result.status || "";
   if (constraint) constraint.textContent = result.constraint || "国家、省份、城镇、道路、河流、资源点和外交会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。";
 }
 
@@ -383,13 +409,27 @@ export function readOptionsFromPanel(documentRef, previousOptions) {
     randomSeed: documentRef.getElementById("auto-random-seed").checked,
     heightmapTemplate: documentRef.getElementById("heightmap-template").value,
     climateLatitudeMode: documentRef.getElementById("climate-latitude-mode")?.value || previousOptions?.climateLatitudeMode,
+    climateLatitudeCenter: documentRef.getElementById("climate-latitude-center-slider")?.value || documentRef.getElementById("climate-latitude-center")?.value || previousOptions?.climateLatitudeCenter,
+    climateLatitudeSpan: documentRef.getElementById("climate-latitude-span")?.value || previousOptions?.climateLatitudeSpan,
     atmosphereDirection: documentRef.getElementById("atmosphere-direction")?.value || previousOptions?.atmosphereDirection,
+    winds: parseWindProfileInput(documentRef.getElementById("atmosphere-winds")?.value, previousOptions?.winds),
+    temperatureEquator: documentRef.getElementById("temperature-equator")?.value || previousOptions?.temperatureEquator,
+    temperatureNorthPole: documentRef.getElementById("temperature-north-pole")?.value || previousOptions?.temperatureNorthPole,
+    temperatureSouthPole: documentRef.getElementById("temperature-south-pole")?.value || previousOptions?.temperatureSouthPole,
     cultureInheritanceMode: documentRef.getElementById("culture-inheritance-mode")?.value || previousOptions?.cultureInheritanceMode,
     religionInheritanceMode: documentRef.getElementById("religion-inheritance-mode")?.value || previousOptions?.religionInheritanceMode,
     cellsTarget: documentRef.getElementById("cells-input").value,
     graphWidth: documentRef.getElementById("width-input").value,
     graphHeight: documentRef.getElementById("height-input").value
   };
+}
+
+function parseWindProfileInput(value, fallback) {
+  const values = String(value || "")
+    .split(",")
+    .map(item => Number(item.trim()))
+    .filter(Number.isFinite);
+  return values.length ? values : fallback;
 }
 
 export function setSeedInput(documentRef, seed) {
@@ -402,7 +442,7 @@ export function updateRuntimePanel(documentRef, state) {
   const unitPreferences = readControlPreferences(documentRef).units;
   syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
-  documentRef.getElementById("map-badge").textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)} / ${map.metadata.cellsTarget} cells`;
+  documentRef.getElementById("map-badge").textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)} / ${formatDisplayNumber(map.metadata.cellsTarget, unitPreferences)} cells`;
   updateMapLegend(documentRef, map, stats);
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
@@ -416,7 +456,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "pack cells", map.metadata.packCells),
     statRow(documentRef, "地图比例", formatScaleLabel(unitPreferences)),
     statRow(documentRef, "地图尺寸", `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)}`),
-    statRow(documentRef, "grid 布局", `${map.grid.metadata.columns} x ${map.grid.metadata.rows}`),
+    statRow(documentRef, "grid 布局", `${formatDisplayNumber(map.grid.metadata.columns, unitPreferences)} x ${formatDisplayNumber(map.grid.metadata.rows, unitPreferences)}`),
     statRow(documentRef, "grid 邻接", `${map.grid.metadata.neighborMode} / avg ${map.grid.metadata.averageNeighborDegree}`),
     statRow(documentRef, "Voronoi 顶点", map.grid.metadata.vertexCount),
     statRow(documentRef, "cell 三角形", map.grid.metadata.triangles),
@@ -432,10 +472,10 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "biome 数", Object.keys(map.climate.metadata.biomeCounts).length),
     statRow(documentRef, "河流", `${map.rivers.metadata.rivers} / ${map.rivers.metadata.segments}`),
     statRow(documentRef, "文化/宗教", `${map.society.metadata.cultures} / ${map.society.metadata.religions}`),
-    statRow(documentRef, "文化继承", formatInheritanceStats(map.options.cultureInheritanceMode, map.society.metadata.cultureTree)),
-    statRow(documentRef, "宗教继承", formatInheritanceStats(map.options.religionInheritanceMode, map.society.metadata.religionTree)),
+    statRow(documentRef, "文化继承", formatInheritanceStats(map.options.cultureInheritanceMode, map.society.metadata.cultureTree, unitPreferences)),
+    statRow(documentRef, "宗教继承", formatInheritanceStats(map.options.religionInheritanceMode, map.society.metadata.religionTree, unitPreferences)),
     statRow(documentRef, "国家/省份/区域", `${map.politics.metadata.states} / ${map.politics.metadata.provinces} / ${map.politics.metadata.regions}`),
-    statRow(documentRef, "外交", formatDiplomacyStats(map.diplomacy?.metadata)),
+    statRow(documentRef, "外交", formatDiplomacyStats(map.diplomacy?.metadata, unitPreferences)),
     statRow(documentRef, "城市/首都/港口", `${map.settlements.metadata.cities} / ${map.settlements.metadata.capitals} / ${map.settlements.metadata.ports}`),
     statRow(documentRef, "道路", `${map.settlements.metadata.routes} / ${map.settlements.metadata.routeSegments}`),
     statRow(documentRef, "军事", `${map.military?.metadata?.statesWithMilitary || 0} / ${map.military?.metadata?.regiments || 0}`),
@@ -466,7 +506,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "城市图标", `${stats.visibleCityIconCount} / ${stats.cityIconCount}，阈值 x${stats.cityIconScaleThreshold}`),
     statRow(documentRef, "marker", stats.markerCount),
     statRow(documentRef, "marker 图标", `${stats.visibleMarkerIconCount} / ${stats.markerIconCount}，阈值 x${stats.markerIconScaleThreshold}`),
-    statRow(documentRef, "marker 资源", formatMarkerResources(map)),
+    statRow(documentRef, "marker 资源", formatMarkerResources(map, unitPreferences)),
     statRow(documentRef, "标签", `城市 ${stats.visibleCityLabelCount} / ${stats.cityLabelCount} / 上限 ${formatCityLabelLimit(map, stats)}；国家 ${stats.visibleStateLabelCount} / ${stats.stateLabelCount}`),
     statRow(documentRef, "相机", `x ${stats.camera.scale.toFixed(2)}, ${stats.camera.offsetX.toFixed(2)}, ${stats.camera.offsetY.toFixed(2)}`),
     statRow(documentRef, "绘制耗时", `${stats.draw.drawMs}ms`),
@@ -615,17 +655,17 @@ function updateHoverOverlay(documentRef, pick) {
 
   const title = documentRef.createElement("div");
   title.className = "hover-overlay-title";
-  title.textContent = formatHoverTitle(pick);
+  title.textContent = formatHoverTitle(pick, preferences.units);
   const rows = documentRef.createElement("dl");
   rows.className = "hover-overlay-list";
   rows.replaceChildren(...compactHoverRows(documentRef, pick, preferences.units));
   overlay.replaceChildren(title, rows);
 }
 
-function formatHoverTitle(pick) {
+function formatHoverTitle(pick, unitPreferences = {}) {
   if (pick.label) return `标签 ${pick.label.text}`;
   if (pick.city && pick.city !== "none") return `城市 ${pick.city}`;
-  if (pick.marker) return `标记 ${formatMarkerTitle(pick.marker)}`;
+  if (pick.marker) return `标记 ${formatMarkerObjectSummary(pick.marker, unitPreferences)}`;
   if (pick.river) return `河流 #${pick.river.id}`;
   if (isNamedRoute(pick.route)) return `路线 ${pick.route.from} -> ${pick.route.to}`;
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
@@ -636,24 +676,24 @@ function formatHoverTitle(pick) {
 function compactHoverRows(documentRef, pick, unitPreferences) {
   const rows = [
     hoverRow(documentRef, "位置", `grid ${pick.gridCell} / pack ${pick.packCell ?? "none"}`),
-    hoverRow(documentRef, "地形", `${pick.featureType} #${pick.featureId} / 高度 ${pick.height}`),
+    hoverRow(documentRef, "地形", `${pick.featureType} #${pick.featureId} / 高度 ${formatDisplayHeight(pick.height, unitPreferences)}`),
     hoverRow(documentRef, "气候", `${pick.temperature}°C / 降水 ${formatDisplayPrecipitation(pick.precipitation, unitPreferences)}`),
     hoverRow(documentRef, "政区", `${pick.state} / ${pick.province}`),
     hoverRow(documentRef, "社会", `${pick.culture} / ${pick.religion}`),
     hoverRow(documentRef, "人口", formatDisplayPopulation(pick.population, unitPreferences))
   ];
 
-  const objectText = formatHoverObjectLine(pick);
+  const objectText = formatHoverObjectLine(pick, unitPreferences);
   if (objectText) rows.unshift(hoverRow(documentRef, "对象", objectText));
   return rows;
 }
 
-function formatHoverObjectLine(pick) {
+function formatHoverObjectLine(pick, unitPreferences = {}) {
   if (pick.label) return `${pick.label.text} / ${pick.label.targetKind}`;
   if (pick.city && pick.city !== "none") return pick.city;
-  if (pick.marker) return formatMarkerObjectSummary(pick.marker);
+  if (pick.marker) return formatMarkerObjectSummary(pick.marker, unitPreferences);
   if (isNamedRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
-  if (pick.river) return `河流 #${pick.river.id} / flux ${pick.river.flux}`;
+  if (pick.river) return `河流 #${pick.river.id} / flux ${formatDisplayNumber(pick.river.flux, unitPreferences)}`;
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
   if (pick.politicalObject) return formatObjectTitle(pick.politicalObject);
   return "";
@@ -686,20 +726,20 @@ function formatMarkerTitle(marker = {}) {
   return `${icon}${marker.name || marker.label || marker.type || "unknown"}`;
 }
 
-function formatMarkerObjectSummary(marker = {}) {
+function formatMarkerObjectSummary(marker = {}, unitPreferences = {}) {
   const label = marker.label || marker.type || "标记";
   const category = marker.categoryLabel || marker.category || "未知";
   const resource = marker.resourceLabel ? ` / ${marker.resourceLabel}` : "";
-  const economic = Number(marker.economicValue || 0) > 0 ? ` / 潜力 ${marker.economicValue}` : "";
+  const economic = Number(marker.economicValue || 0) > 0 ? ` / 潜力 ${formatDisplayNumber(marker.economicValue, unitPreferences)}` : "";
   return `${label} / ${category}${resource}${economic} / cell ${marker.cell}`;
 }
 
-function formatMarkerResources(map) {
+function formatMarkerResources(map, unitPreferences = {}) {
   const metadata = map.markers?.metadata || {};
   const resourceMarkers = Number(metadata.resourceMarkers || 0);
   const resourcePotential = Number(metadata.resourcePotential || 0);
   const economicPotential = Number(metadata.economicPotential || 0);
-  return `${resourceMarkers} 处 / 资源潜力 ${resourcePotential} / 经济潜力 ${economicPotential}`;
+  return `${formatDisplayNumber(resourceMarkers, unitPreferences)} 处 / 资源潜力 ${formatDisplayNumber(resourcePotential, unitPreferences)} / 经济潜力 ${formatDisplayNumber(economicPotential, unitPreferences)}`;
 }
 
 function formatEditHistory(stats) {
@@ -736,20 +776,23 @@ function formatAtmosphereDirection(climate = {}) {
   const metadata = climate.metadata || {};
   const label = metadata.atmosphereLabel || climate.mapCoordinates?.atmosphereLabel || "自动风带";
   const angle = Number.isFinite(metadata.windAngle) ? ` / ${metadata.windAngle}°` : "";
-  return `${label}${angle}`;
+  const profile = Array.isArray(metadata.windProfile) && metadata.windProfile.length
+    ? ` / ${metadata.windProfile.map(windDirectionLabelFromAngle).join("、")}`
+    : "";
+  return `${label}${angle}${profile}`;
 }
 
-function formatInheritanceStats(mode, tree = {}) {
+function formatInheritanceStats(mode, tree = {}, unitPreferences = {}) {
   const labels = {
     flat: "平铺",
     regional: "区域浅树",
     branching: "分支树"
   };
-  return `${labels[mode] || mode || "分支树"} / 根 ${tree.roots || 0} / 派生 ${tree.derived || 0} / 深 ${tree.maxDepth || 0}`;
+  return `${labels[mode] || mode || "分支树"} / 根 ${formatDisplayNumber(tree.roots || 0, unitPreferences)} / 派生 ${formatDisplayNumber(tree.derived || 0, unitPreferences)} / 深 ${formatDisplayNumber(tree.maxDepth || 0, unitPreferences)}`;
 }
 
-function formatDiplomacyStats(metadata = {}) {
-  return `关系 ${metadata.pairs || 0} / 盟友 ${metadata.allies || 0} / 宿敌 ${metadata.rivals || 0} / 战争 ${metadata.enemies || 0} / 附庸 ${metadata.vassals || 0}`;
+function formatDiplomacyStats(metadata = {}, unitPreferences = {}) {
+  return `关系 ${formatDisplayNumber(metadata.pairs || 0, unitPreferences)} / 盟友 ${formatDisplayNumber(metadata.allies || 0, unitPreferences)} / 宿敌 ${formatDisplayNumber(metadata.rivals || 0, unitPreferences)} / 战争 ${formatDisplayNumber(metadata.enemies || 0, unitPreferences)} / 附庸 ${formatDisplayNumber(metadata.vassals || 0, unitPreferences)}`;
 }
 
 function formatLatitude(value) {
@@ -790,7 +833,12 @@ function statRow(documentRef, label, value) {
   const term = documentRef.createElement("dt");
   const desc = documentRef.createElement("dd");
   term.textContent = label;
-  desc.textContent = String(value);
+  desc.textContent = formatStatValue(documentRef, value);
   row.append(term, desc);
   return row;
+}
+
+function formatStatValue(documentRef, value) {
+  if (typeof value !== "number") return String(value);
+  return formatDisplayNumber(value, readControlPreferences(documentRef).units);
 }

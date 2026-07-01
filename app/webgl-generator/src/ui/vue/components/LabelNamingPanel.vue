@@ -49,6 +49,8 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import UiButton from "./base/UiButton.vue";
 import {LABEL_TARGET_KIND} from "../../../runtime/object-kinds.js";
+import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "LabelNamingPanel"
@@ -85,15 +87,16 @@ const rows = computed(() => {
   props.state.version;
   return labelRows(props.state.map);
 });
+const unitPreferences = useUnitPreferences();
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
 
 const summaryMetrics = computed(() => [
-  {label: "标签", value: rows.value.length},
-  {label: "城市", value: rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CITY).length},
-  {label: "国家", value: rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.STATE).length},
-  {label: "手工", value: rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CUSTOM).length},
-  {label: "筛选", value: visibleRows.value.length}
+  {label: "标签", value: formatNumber(rows.value.length)},
+  {label: "城市", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CITY).length)},
+  {label: "国家", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.STATE).length)},
+  {label: "手工", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CUSTOM).length)},
+  {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -217,6 +220,6 @@ function formatPoint(x, y) {
 }
 
 function formatNumber(value) {
-  return Number.isFinite(Number(value)) ? Math.round(Number(value) * 10) / 10 : "0";
+  return formatDisplayNumber(value, unitPreferences.value);
 }
 </script>

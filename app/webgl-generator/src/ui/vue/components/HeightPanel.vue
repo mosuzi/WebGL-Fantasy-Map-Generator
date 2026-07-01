@@ -25,6 +25,8 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
+import {formatHeight, formatNumber} from "../../display-units.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "HeightPanel"
@@ -46,11 +48,12 @@ const actions = Object.freeze([
   {value: "lower", label: "降低"},
   {value: "smooth", label: "平滑"}
 ]);
+const unitPreferences = useUnitPreferences();
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
-  {label: "影响", value: props.state.lastAffected},
-  {label: "高度", value: props.state.lastHeight},
+  {label: "影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
+  {label: "高度", value: formatHeightRange(props.state.lastHeight)},
   {label: "历史", value: props.state.history ? `undo ${props.state.history.undo} / redo ${props.state.history.redo}` : "none"}
 ]);
 
@@ -73,5 +76,12 @@ function setStrength(strength) {
 
 function setFalloff(falloff) {
   props.state.falloff = falloff;
+}
+
+function formatHeightRange(value) {
+  if (typeof value !== "string" || value === "none") return value || "none";
+  const parts = value.split("..").map(part => Number(part));
+  if (parts.length !== 2 || parts.some(part => !Number.isFinite(part))) return value;
+  return `${formatHeight(parts[0], unitPreferences.value)} .. ${formatHeight(parts[1], unitPreferences.value)}`;
 }
 </script>

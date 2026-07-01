@@ -29,7 +29,7 @@
     </template>
 
     <template #color>
-      <UiColorField
+      <UiColorActionPanel
         class-name="province-color-field"
         :model-value="selected.color"
         @apply="color => callbacks.onColorChange(selected.id, color)"
@@ -75,7 +75,7 @@
 import {computed, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
-import UiColorField from "./base/UiColorField.vue";
+import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
@@ -85,7 +85,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatArea, formatPopulation} from "../../display-units.js";
+import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -126,7 +126,7 @@ const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
   {key: "stateName", label: "国家"},
-  {key: "cells", label: "cells", align: "right"},
+  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
   {key: "area", label: "面积", align: "right", format: value => formatAreaValue(value)},
   {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
   {key: "resourcePotential", label: "资源", align: "right", format: value => formatNumber(value)}
@@ -146,12 +146,12 @@ const provinceActions = Object.freeze([
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
-  {label: "省份", value: metrics.value.total},
+  {label: "省份", value: formatNumber(metrics.value.total)},
   {label: "实力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
-  {label: "筛选", value: visibleRows.value.length},
+  {label: "筛选", value: formatNumber(visibleRows.value.length)},
   {label: "目标省份", value: formatProvinceName(props.state.map, props.state.selectedProvinceId)},
-  {label: "影响", value: props.state.lastAffected}
+  {label: "影响", value: formatNumber(props.state.lastAffected)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -161,14 +161,14 @@ const detailRows = computed(() => selected.value ? [
   {label: "中心 grid cell", value: selected.value.gridCenterCell},
   {label: "pole", value: selected.value.pole},
   {label: "面积", value: formatAreaValue(selected.value.area)},
-  {label: "cells", value: selected.value.cells},
+  {label: "cells", value: formatNumber(selected.value.cells)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "实力评分", value: formatNumber(selected.value.powerScore)},
   {label: "经济力", value: formatNumber(selected.value.economicPower)},
   {label: "资源潜力", value: formatNumber(selected.value.resourcePotential)},
   {label: "资源类型", value: selected.value.resourceSummary},
-  {label: "邻接省份", value: selected.value.neighborCount},
-  {label: "城市", value: selected.value.cityCount},
+  {label: "邻接省份", value: formatNumber(selected.value.neighborCount)},
+  {label: "城市", value: formatNumber(selected.value.cityCount)},
   {label: "文化", value: selected.value.culture},
   {label: "宗教", value: selected.value.religion}
 ] : []);
@@ -348,7 +348,7 @@ function toHex(channel) {
 }
 
 function formatNumber(value) {
-  return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
+  return formatDisplayNumber(value, unitPreferences.value);
 }
 
 function formatAreaValue(value) {

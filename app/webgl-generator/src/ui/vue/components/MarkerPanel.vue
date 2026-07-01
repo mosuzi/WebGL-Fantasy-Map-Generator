@@ -66,7 +66,9 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
   name: "MarkerPanel"
@@ -137,6 +139,7 @@ const paletteOptions = Object.freeze([
 ]);
 
 const resourceTypeOptions = MARKER_RESOURCE_TYPE_OPTIONS;
+const unitPreferences = useUnitPreferences();
 
 const visualDraft = reactive({
   symbol: "marker",
@@ -165,10 +168,10 @@ const markerActions = Object.freeze([
 ]);
 
 const summaryMetrics = computed(() => [
-  {label: "标记", value: metrics.value.total},
-  {label: "资源点", value: metrics.value.resources},
+  {label: "标记", value: formatNumber(metrics.value.total)},
+  {label: "资源点", value: formatNumber(metrics.value.resources)},
   {label: "资源潜力", value: formatNumber(metrics.value.resourcePotential)},
-  {label: "筛选", value: visibleRows.value.length}
+  {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -312,6 +315,6 @@ function resourceTypeLabel(value) {
 }
 
 function formatNumber(value) {
-  return Number.isFinite(value) ? Math.round(value * 10) / 10 : "0";
+  return formatDisplayNumber(value, unitPreferences.value);
 }
 </script>

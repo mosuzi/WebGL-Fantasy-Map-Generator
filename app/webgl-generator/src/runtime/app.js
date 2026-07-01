@@ -1,10 +1,11 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
+import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
-import {DEFAULT_OPTIONS} from "../generator/options.js";
-import {createRandomSeed} from "../generator/random.js";
+import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
+import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
@@ -760,6 +761,7 @@ export function createGeneratorApp(documentRef) {
     state.editingObject = editingObject;
     renderer.setSelection(selection?.object || null);
     const handled = handleSelectionPanel(state, selection, editingObject, {
+      documentRef,
       suppressNextRiverPanelOpen,
       clearRiverSuppressor: () => {
         suppressNextRiverPanelOpen = false;
@@ -819,6 +821,9 @@ export function createGeneratorApp(documentRef) {
     onUnitPreferences: () => {
       updateRuntimePanel(documentRef, state);
       updatePickPanel(documentRef, state);
+    },
+    onClimateControls: () => {
+      applyClimateControls(state, documentRef);
     },
     onLayerVisible: (layer, visible) => {
       renderer.setLayerVisible(layer, visible);
@@ -1047,6 +1052,36 @@ function reportGenerateError(documentRef, error) {
   console.error(error);
 }
 
+function applyClimateControls(state, documentRef) {
+  if (!state.map) return;
+  const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+  state.options = options;
+  state.map.options = options;
+  const climate = buildClimate(state.map.grid, state.map.features, options, createRandom(options.seed));
+  const biomes = defineBiomesAndPopulation(state.map.grid, state.map.pack);
+  climate.biomes = biomes.biomes;
+  climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
+  state.map.climate = climate;
+  state.map.mapCoordinates = climate.mapCoordinates;
+  state.map.summary = createGenerationSummary(options, state.map.grid, state.map.features, climate, state.map.society, state.map.politics, state.map.settlements, state.map.markers, state.map.pack, state.map.rivers, state.map.layers, state.map.military, state.map.zones, state.map.economy, state.map.diplomacy);
+  if (state.map.metadata) state.map.metadata.checksum = state.map.summary.checksum;
+  markDerivedStale(state.map, ["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
+
+  refreshAfterEdit(state, {
+    render: "draw",
+    selection: "none",
+    runtimeStats: true,
+    pickPanel: true,
+    derived: ["cell-colors", "point-layers", "object-panels"],
+    affected: [{kind: "climate", id: "live"}]
+  });
+  updateCulturePanel(state);
+  updateReligionPanel(state);
+  updateCityPanel(state);
+  updateStatePanel(state);
+  updateProvincePanel(state);
+}
+
 function locateObject(state, object, documentRef) {
   const located = object ? state.renderer.locateObject(object) : false;
   if (located) {
@@ -1117,6 +1152,11 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
 function handleSelectionPanel(state, selection, editingObject, context) {
   const object = selection?.object;
   if (!object?.kind) return false;
+  if (object.kind === OBJECT_KIND.STATE && shouldSwitchDiplomacySubjectForSelection(state)) {
+    state.panels.objectDetails.clear();
+    setDiplomacyThemeSubject(state, context.documentRef, object.id);
+    return true;
+  }
   return SELECTION_PANEL_HANDLERS[object.kind]?.(state, selection, editingObject, context) || false;
 }
 
@@ -1465,6 +1505,10 @@ function shouldOpenCulturePanelForSelection(state) {
 
 function shouldOpenReligionPanelForSelection(state) {
   return Boolean(state.panels.religion?.isOpen?.() || state.renderer?.getStats?.().colorMode === "religions");
+}
+
+function shouldSwitchDiplomacySubjectForSelection(state) {
+  return state.renderer?.getStats?.().colorMode === "diplomacy";
 }
 
 function bindHeightEditing(canvas, state, documentRef) {

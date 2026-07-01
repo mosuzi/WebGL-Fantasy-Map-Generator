@@ -33,7 +33,7 @@
     </template>
 
     <template #color>
-      <UiColorField
+      <UiColorActionPanel
         class-name="state-color-field"
         :model-value="selected.color"
         @apply="color => callbacks.onColorChange(selected.id, color)"
@@ -89,7 +89,7 @@
 import {computed, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
-import UiColorField from "./base/UiColorField.vue";
+import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
@@ -99,7 +99,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatArea, formatPopulation} from "../../display-units.js";
+import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -140,7 +140,7 @@ const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
   {key: "capitalName", label: "首都"},
-  {key: "burgs", label: "城镇", align: "right"},
+  {key: "burgs", label: "城镇", align: "right", format: value => formatNumber(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)},
   {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
   {key: "resourcePotential", label: "资源", align: "right", format: value => formatNumber(value)}
@@ -163,12 +163,12 @@ const stateActions = computed(() => [
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
-  {label: "国家", value: metrics.value.total},
+  {label: "国家", value: formatNumber(metrics.value.total)},
   {label: "国力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
-  {label: "筛选", value: visibleRows.value.length},
+  {label: "筛选", value: formatNumber(visibleRows.value.length)},
   {label: "目标国家", value: formatStateName(props.state.map, props.state.targetStateId)},
-  {label: "影响", value: props.state.lastAffected}
+  {label: "影响", value: formatNumber(props.state.lastAffected)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -178,7 +178,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "宗教", value: selected.value.religion},
   {label: "中心 cell", value: selected.value.centerCell},
   {label: "面积", value: formatAreaValue(selected.value.area)},
-  {label: "城镇", value: selected.value.burgs},
+  {label: "城镇", value: formatNumber(selected.value.burgs)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "国力评分", value: formatNumber(selected.value.powerScore)},
   {label: "经济力", value: formatNumber(selected.value.economicPower)},
@@ -186,7 +186,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "资源类型", value: selected.value.resourceSummary},
   {label: "军力", value: formatNumber(selected.value.militaryPower)},
   {label: "外交", value: selected.value.diplomacySummary},
-  {label: "邻国", value: selected.value.neighborCount}
+  {label: "邻国", value: formatNumber(selected.value.neighborCount)}
 ] : []);
 
 const historyNote = computed(() => {
@@ -335,7 +335,7 @@ function formatDiplomacyCounts(counts = {}) {
     ["Vassal", "附庸"],
     ["Suzerain", "宗主"]
   ]
-    .map(([key, label]) => Number(counts[key] || 0) ? `${label} ${counts[key]}` : "")
+    .map(([key, label]) => Number(counts[key] || 0) ? `${label} ${formatNumber(counts[key])}` : "")
     .filter(Boolean);
   return parts.join(" / ") || "中立";
 }
@@ -373,7 +373,7 @@ function toHex(channel) {
 }
 
 function formatNumber(value) {
-  return Number.isFinite(value) ? roundNumber(value).toLocaleString("zh-CN") : "0";
+  return formatDisplayNumber(value, unitPreferences.value);
 }
 
 function formatAreaValue(value) {
@@ -384,7 +384,4 @@ function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
 }
 
-function roundNumber(value) {
-  return Math.round((Number(value) || 0) * 10) / 10;
-}
 </script>
