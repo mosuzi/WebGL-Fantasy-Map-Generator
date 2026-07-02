@@ -31,6 +31,10 @@
   - `docs/audits/source-generation-audit-and-rectification-plan.md`：source 生成算法重新审查和正式应用生成质量整改方案。
   - `docs/task-notes/editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单，记录各领域面板职责、优先级和暂缓范围。
 
+## 提交约定
+
+- 后续所有 Git 提交记录必须使用中文，包括 commit 标题和正文；除非用户明确要求，否则不要再使用英文提交信息。
+
 ## 代码约定
 
 - 写代码时只添加必要注释，注释应解释意图、约束或非显然逻辑。
