@@ -5,6 +5,7 @@ import {defineConfig} from "vite";
 
 export default defineConfig({
   root: "app/webgl-generator",
+  base: "./",
   plugins: [
     vue(),
     Components({

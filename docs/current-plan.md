@@ -816,6 +816,7 @@ http://127.0.0.1:5410
 191. 市场、商品与贸易流计划已落文档：`docs/task-notes/economy-market-trade-plan.md` 对照原版 goods editor、markets overview、trade animation editor 和 draw-trade-animation，记录了商品产量/库存/价格、市场覆盖和交易动画语义；WebGL 版已有 `pack.goods / pack.markets / pack.deals` 生成数据，但用户侧应先做只读经济总览和导出诊断，再进入轻量编辑、静态贸易流和按需动画，市场归属刷子和生产链编辑后置。
 192. 军事对象与战斗事件计划已落文档：`docs/task-notes/military-battle-plan.md` 对照原版 regiments overview、regiment editor 和 battle screen，记录了军团筛选/导出、军团编辑、战斗类型推断、士气阶段、伤亡应用和备注事件链路；WebGL 版已有军事生成和国家详情军力摘要，但后续应先做只读军团总览与军事图层，再做军团轻量编辑、战斗事件记录和可撤销战斗模拟。
 193. 纹章与 Coat of Arms 计划已落文档：`docs/task-notes/emblems-coa-plan.md` 对照原版 `generators/emblems`、`draw-emblems.ts` 和 `emblems-editor.js`，记录了国家/省份/城市三层纹章、父级派生、盾形、division、ordinary、charge、SVG defs/use 渲染、上传下载和 Armoria 集成语义；WebGL 版后续应先保留 `coa` 数据占位和只读显示，再做默认关闭的轻量纹章图层，完整生成器和外部集成按需懒加载后置。
+194. 构建产物子路径加载问题已修复：`vite.config.mjs` 新增 `base: "./"`，避免生产 `index.html` 继续输出 `/assets/...` 根路径资源。复现时，页面挂在 `/webgl-generator/` 下会请求根 `/assets/index-*.js` 并 404，最终停在“脚本未启动”；修复后入口脚本、modulepreload 和 stylesheet 都改为 `./assets/...`。重新构建后，Playwright 分别访问根路径 `/` 与子路径 `/webgl-generator/`，两者均 `appReady = true`、canvas 为 `1280x800`、toolbar Element 按钮为 `3`、无 request failed、无 404、无 console/page error。
 
 ## 约束
 

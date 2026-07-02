@@ -13971,3 +13971,31 @@ full 矩阵结果：
 后续：
 
 - 若继续纹章系统，应先保证完整地图 JSON 能保留 `coa` 字段并在详情中只读显示；完整生成器和外部 Armoria 集成后置。
+
+### 构建产物子路径加载修复
+
+背景：
+
+- 用户反馈当前页面又出现加载问题，需要重新验证实际页面启动。
+- 此前烟测主要在站点根路径服务构建产物，未覆盖 `/webgl-generator/` 这类子路径部署。
+
+问题：
+
+- 生产构建的 `dist/webgl-generator/index.html` 使用 `/assets/...` 绝对路径加载入口脚本、preload chunk 和 CSS。
+- 当页面挂在 `/webgl-generator/` 子路径时，浏览器会请求根路径 `/assets/index-*.js`，真实服务只暴露 `/webgl-generator/assets/...` 时会全部 404。
+- 复现结果为 `appReady = false`，页面 badge 变成“脚本未启动”，request failed 中包含入口脚本和多个 CSS/chunk 的 404。
+
+修正：
+
+- `vite.config.mjs` 增加 `base: "./"`，让构建产物使用相对资源路径。
+- 修复后 `index.html` 中入口脚本、modulepreload 和 stylesheet 均输出为 `./assets/...`。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 构建产物静态服务验证根路径 `/`：`appReady = true`，badge 为 `3,810 千米 x 2,540 千米`，canvas 为 `1280x800`，toolbar Element 按钮 `3`，无 console/page error、无 request failed、无 404。
+- Playwright + 构建产物静态服务验证子路径 `/webgl-generator/`：入口脚本实际加载自 `/webgl-generator/assets/index-*.js`，`appReady = true`，canvas 为 `1280x800`，toolbar Element 按钮 `3`，无 console/page error、无 request failed、无 404。
+
+后续：
+
+- 之后凡是验证生产构建加载，都应同时覆盖根路径和子路径，避免只在开发服务器或根路径下通过。
