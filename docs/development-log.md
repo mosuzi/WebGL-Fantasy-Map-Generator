@@ -14276,6 +14276,73 @@ full 矩阵结果：
 - 这次是贸易链路第一刀，尚未做用户可视化的市场供需面板，也没有让资源货物进一步影响城镇选址、道路选线和外交贸易偏好。
 - 后续若继续深化，应增加市场距离成本、供需缺口、贸易路线可视化，以及按资源类型生成专门的城镇产业标签。
 
+### 拾取、列表滚动与 PNG 导出修正
+
+背景：
+
+- 用户反馈河流与路线重叠时不容易点中河流。
+- 河流、路线、省份从地图选中后，列表没有稳定滚动到选中行。
+- 控制面板“视图”tab 的 Element 分段按钮 hover 时会露出白色背景。
+- 导出 PNG 只有左下角比例尺，底图为空。
+
+修正：
+
+- `PlaceholderMapRenderer.pickClientPoint()` 将河流命中优先级调整到路线之前，并给河流拾取略放宽阈值；路线和河流拾取会尊重对应图层开关。
+- 城市拾取现在尊重城市/人口图层开关，避免隐藏城市图层后仍抢占河流/路线命中。
+- `UiObjectTable` 的选中行滚动改为跨多帧复核：找到行后如果仍在表格视口外，会先调整 Element Plus 内部滚动容器，再下一帧确认，直到进入视口或达到重试上限。
+- 旧 `table-scroll` helper 的滚动容器选择同步改为 Element Plus 的 `.el-scrollbar__wrap`，保留外层容器兜底。
+- 视图分段按钮补齐 Element Plus hover/fill 变量，并压制 item 本体伪元素背景，避免 hover 时露出白底。
+- PNG 导出改为在导出前调用 renderer 重绘，并通过 `gl.readPixels()` 从 WebGL framebuffer 读回像素、翻转到 2D canvas，再叠加徽标和比例尺等 DOM 覆盖层。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 系统 Chrome 通过 Vite 程序化服务访问 `http://127.0.0.1:5410/`：地图 ready 后 `generation-loading.hidden = true`，WebGL canvas 抽样 `uniqueColors = 324`。
+- 河流/路线重叠抽样：候选点同时有 route 和 river candidate，最终 `pickedKind = river`。
+- 河流、路线、省份三类面板选中末尾对象后，`.selected-row` 均在 Element 表格滚动视口内。
+- “视图”tab 中“文化”按钮 hover 时 item 背景为透明，label 背景为暗色 `rgb(23, 33, 39)`，不再出现白底。
+- 导出 PNG 文件 `1366 x 900`，抽样区域 `uniqueColors = 70`，确认不再只有比例尺。
+
+### 滑条数字显示收敛
+
+背景：
+
+- 用户指出滑条已经配套 Element Plus 数字输入，右侧再显示一个数字属于重复信息。
+- 对温度、纬度、比例尺和倍率这类带单位场景，右侧只需要保留单位提示。
+
+修正：
+
+- `UiSliderField` 移除 `displayValue` 数值展示语义，新增 `unitLabel`，只在传入单位时显示单位文本。
+- 气候温度显示 `°C`，画布纬度显示 `°`，比例尺显示 `km/cm`，人口/降水倍率和河流宽度因子显示 `x`。
+- 高度刷子、国家/省份刷子、标签上限、高度图导入最低/最高高度等无单位滑条不再显示右侧数字，也收掉对应占位列。
+- 旧的隐藏 range input 和 output id 保留，兼容现有运行时代码读取和更新控制值；运行时不再把 output 写回数字。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 系统 Chrome 抽样：气候 output 分别为 `°C / °`，单位 tab output 为 `km/cm / x / x`，标签上限 output 为空且 `display:none`；高度面板半径/强度无右侧单位节点，高度图导入区间 output 隐藏；河流宽度二级面板只显示 `x`。
+
+### 关键滑条 change 防抖
+
+背景：
+
+- 用户指出比例尺等会立刻引起全局数据重算的关键数据，不应在滑条拖动的 `input` 阶段响应，必须等 `change` 事件后再响应，并增加防抖。
+
+修正：
+
+- `UiSliderField` 拆分实时值更新和最终提交：Element 滑条/数字输入的 `input` 阶段只更新组件当前值和隐藏原生 range 的 `.value`，不再派发原生 `input/change`。
+- `UiSliderField` 在 `change` 阶段才派发组件 `change` 和隐藏原生 range 的 `change`，旧 runtime 的 DOM id 桥仍可读取最终值。
+- 比例尺、人口倍率、降水倍率改为 `@change` 后写入全局偏好；画布纬度滑条拖动时只切换为手动模式和更新读数，不再每次 `input` 主动触发气候重算。
+- `panel.js` 中气候参数和单位倍率的 runtime 绑定统一改为监听 `change`，并通过 `180ms` 短防抖合并最终提交；城市标签上限同步切到 `change`，适配新的滑条桥接语义。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 系统 Chrome 通过 Vite 程序化服务访问 `http://127.0.0.1:5410/?slider_change_verify=3`：控制面板中拖动比例尺滑条时，鼠标按下移动阶段隐藏 range 事件为 `input=0 / change=0`，松手后为 `input=0 / change=1`，比例读数更新为 `1 cm = 777 km`；拖动赤道温度滑条同样在移动阶段 `input=0 / change=0`，松手后 `change=1`，且页面无 console/page error。
+
 ### README 人类化重写与许可证补充
 
 背景：

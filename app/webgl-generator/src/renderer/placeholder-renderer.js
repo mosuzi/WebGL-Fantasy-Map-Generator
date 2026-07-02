@@ -596,12 +596,14 @@ export class PlaceholderMapRenderer {
     const markerIcon = this.pickMarkerIcon(clientX, clientY);
     const world = this.screenToWorld(clientX, clientY);
     const result = pickGridCell(this.map, world.x, world.y);
-    const cityObject = pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9));
+    const cityObject = this.layerVisibility.cities || this.layerVisibility.population
+      ? pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9))
+      : null;
     const marker = markerIcon || pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
-    const route = pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7));
-    const river = pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7));
+    const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
+    const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
-    const object = markerIcon || label || cityObject || marker || route || river || politicalObject;
+    const object = markerIcon || label || cityObject || marker || river || route || politicalObject;
     this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (politicalObject ? 1 : 0);
     return result ? {...result, label, cityObject, marker, route, river, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }

@@ -1,5 +1,5 @@
 <template>
-  <label :class="fieldClass">
+  <label :class="[fieldClass, 'ui-slider-field', unitText ? 'ui-slider-field-has-unit' : 'ui-slider-field-no-unit']">
     <span>{{ label }}</span>
     <span class="ui-slider-shell">
       <input
@@ -14,7 +14,7 @@
         tabindex="-1"
         aria-hidden="true"
         @input="onNativeInput"
-        @change="onNativeInput"
+        @change="onNativeChange"
       />
       <ElSlider
         class="ui-slider-el"
@@ -23,7 +23,7 @@
         :max="max"
         :step="step"
         :show-tooltip="false"
-        @input="commitValue"
+        @input="updateValue"
         @change="commitValue"
       />
     </span>
@@ -37,10 +37,19 @@
       :precision="inputPrecision"
       controls-position="right"
       size="small"
-      @update:model-value="commitValue"
+      @update:model-value="updateValue"
       @change="commitValue"
     />
-    <component :is="valueTag" :id="outputId || null" :for="inputId || null">{{ displayValue ?? currentValue }}</component>
+    <component
+      :is="valueTag"
+      v-if="outputId || unitText"
+      :id="outputId || null"
+      class="ui-slider-unit"
+      :for="inputId || null"
+      :aria-hidden="unitText ? null : 'true'"
+    >
+      {{ unitText }}
+    </component>
   </label>
 </template>
 
@@ -68,9 +77,9 @@ const props = defineProps({
     type: Number,
     required: true
   },
-  displayValue: {
-    type: [String, Number],
-    default: null
+  unitLabel: {
+    type: String,
+    default: ""
   },
   min: {
     type: Number,
@@ -94,31 +103,56 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(["input"]);
+const emit = defineEmits(["input", "change"]);
 
 const nativeInput = ref(null);
 const currentValue = ref(clampValue(props.modelValue));
 const inputPrecision = computed(() => decimalPlaces(props.step));
+const unitText = computed(() => props.unitLabel.trim());
 
 watch(() => props.modelValue, next => {
   currentValue.value = clampValue(next);
 });
 
 function onNativeInput(event) {
-  commitValue(Number(event.target.value), {dispatchNative: false});
+  updateValue(Number(event.target.value), {syncNative: false});
 }
 
-function commitValue(value, {dispatchNative = true} = {}) {
+function onNativeChange(event) {
+  commitValue(Number(event.target.value), {syncNative: false});
+}
+
+function updateValue(value, {syncNative = true, emitInput = true} = {}) {
   const nextValue = clampValue(value);
-  if (Object.is(nextValue, currentValue.value)) return;
-  currentValue.value = nextValue;
-  emit("input", nextValue);
-  if (!dispatchNative || !props.inputId) return;
+  const changed = !Object.is(nextValue, currentValue.value);
+  if (changed) {
+    currentValue.value = nextValue;
+    if (emitInput) emit("input", nextValue);
+  }
+  if (syncNative && props.inputId) syncNativeValue(nextValue);
+  return nextValue;
+}
+
+function commitValue(value, options = {}) {
+  const nextValue = updateValue(value, options);
+  emit("change", nextValue);
+  if (options.syncNative === false || !props.inputId) return;
+  dispatchNativeChange(nextValue);
+}
+
+function syncNativeValue(nextValue) {
   nextTick(() => {
     const input = nativeInput.value;
     if (!input) return;
     input.value = String(nextValue);
-    input.dispatchEvent(new Event("input", {bubbles: true}));
+  });
+}
+
+function dispatchNativeChange(nextValue) {
+  nextTick(() => {
+    const input = nativeInput.value;
+    if (!input) return;
+    input.value = String(nextValue);
     input.dispatchEvent(new Event("change", {bubbles: true}));
   });
 }

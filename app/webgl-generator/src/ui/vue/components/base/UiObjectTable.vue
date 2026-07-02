@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import {nextTick, ref, watch} from "vue";
+import {nextTick, onBeforeUnmount, ref, watch} from "vue";
 import {Aim} from "@element-plus/icons-vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 
@@ -72,16 +72,22 @@ const props = defineProps({
 const emit = defineEmits(["select", "locate"]);
 
 const tableWrap = ref(null);
+let scrollFrame = 0;
+let scrollAttempt = 0;
 const flatTreeProps = Object.freeze({
   children: "__tableChildren",
   hasChildren: "__tableHasChildren"
 });
 
 watch(
-  () => [props.selectedId, props.rows],
+  () => [props.selectedId, props.rows, props.rows.length],
   () => scrollSelectedRowIntoView(),
   {flush: "post", immediate: true}
 );
+
+onBeforeUnmount(() => {
+  cancelScrollFrame();
+});
 
 function getRowId(row) {
   return row?.[props.rowIdKey];
@@ -109,13 +115,55 @@ function handleRowDoubleClick(row) {
 
 function scrollSelectedRowIntoView() {
   if (props.selectedId === null || props.selectedId === undefined) return;
-  nextTick(() => {
-    const wrap = tableWrap.value;
-    if (!wrap) return;
-    const row = wrap.querySelector(".el-table__body-wrapper .selected-row");
-    if (!row) return;
-    row.scrollIntoView({block: "nearest"});
+  scrollAttempt = 0;
+  nextTick(() => requestSelectedRowScroll());
+}
+
+function requestSelectedRowScroll() {
+  const view = tableWrap.value?.ownerDocument?.defaultView;
+  if (!view?.requestAnimationFrame) {
+    scrollSelectedRowNow();
+    return;
+  }
+  cancelScrollFrame();
+  scrollFrame = view.requestAnimationFrame(() => {
+    scrollFrame = 0;
+    const done = scrollSelectedRowNow();
+    scrollAttempt += 1;
+    if (!done && scrollAttempt < 10) requestSelectedRowScroll();
   });
+}
+
+function cancelScrollFrame() {
+  if (!scrollFrame) return;
+  const view = tableWrap.value?.ownerDocument?.defaultView;
+  view?.cancelAnimationFrame?.(scrollFrame);
+  scrollFrame = 0;
+}
+
+function scrollSelectedRowNow() {
+  const wrap = tableWrap.value;
+  const row = wrap?.querySelector(".el-table__body-wrapper .selected-row");
+  const scroller = tableScroller(wrap);
+  if (!row || !scroller) return false;
+  const rowRect = row.getBoundingClientRect();
+  const scrollerRect = scroller.getBoundingClientRect();
+  const padding = 8;
+  if (rowRect.top < scrollerRect.top + padding) {
+    scroller.scrollTop -= scrollerRect.top + padding - rowRect.top;
+    return false;
+  } else if (rowRect.bottom > scrollerRect.bottom - padding) {
+    scroller.scrollTop += rowRect.bottom - scrollerRect.bottom + padding;
+    return false;
+  }
+  return true;
+}
+
+function tableScroller(wrap) {
+  return wrap?.querySelector(".el-table__body-wrapper .el-scrollbar__wrap")
+    || wrap?.querySelector(".el-scrollbar__wrap")
+    || wrap?.querySelector(".el-table__body-wrapper")
+    || wrap;
 }
 
 function stringRowId(value) {

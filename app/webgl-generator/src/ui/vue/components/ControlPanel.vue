@@ -106,7 +106,7 @@
               field-class="climate-slider-field"
               value-tag="output"
               :model-value="temperatureEquator"
-              :display-value="`${temperatureEquator}°C`"
+              unit-label="°C"
               :min="20"
               :max="35"
               :step="1"
@@ -119,7 +119,7 @@
               field-class="climate-slider-field"
               value-tag="output"
               :model-value="temperatureNorthPole"
-              :display-value="`${temperatureNorthPole}°C`"
+              unit-label="°C"
               :min="-40"
               :max="10"
               :step="1"
@@ -132,7 +132,7 @@
               field-class="climate-slider-field"
               value-tag="output"
               :model-value="temperatureSouthPole"
-              :display-value="`${temperatureSouthPole}°C`"
+              unit-label="°C"
               :min="-40"
               :max="10"
               :step="1"
@@ -145,7 +145,7 @@
               field-class="climate-slider-field"
               value-tag="output"
               :model-value="climateLatitudeCenter"
-              :display-value="formatLatitudeCenter(climateLatitudeCenter)"
+              unit-label="°"
               :min="-75"
               :max="75"
               :step="1"
@@ -203,11 +203,11 @@
             field-class="unit-scale-field"
             value-tag="output"
             :model-value="unitPreferences.mapScaleKmPerCm"
-            :display-value="`${unitPreferences.mapScaleKmPerCm} km/cm`"
+            unit-label="km/cm"
             :min="unitScaleLimits.mapScaleKmPerCm.min"
             :max="unitScaleLimits.mapScaleKmPerCm.max"
             :step="unitScaleLimits.mapScaleKmPerCm.step"
-            @input="value => patchUnitPreference({mapScaleKmPerCm: value})"
+            @change="value => patchUnitPreference({mapScaleKmPerCm: value})"
           />
           <UiSliderField
             label="人口倍率"
@@ -216,11 +216,11 @@
             field-class="unit-scale-field"
             value-tag="output"
             :model-value="unitPreferences.populationScale"
-            :display-value="formatScaleMultiplier(unitPreferences.populationScale)"
+            unit-label="x"
             :min="unitScaleLimits.populationScale.min"
             :max="unitScaleLimits.populationScale.max"
             :step="unitScaleLimits.populationScale.step"
-            @input="value => patchUnitPreference({populationScale: value})"
+            @change="value => patchUnitPreference({populationScale: value})"
           />
           <UiSliderField
             label="降水倍率"
@@ -229,11 +229,11 @@
             field-class="unit-scale-field"
             value-tag="output"
             :model-value="unitPreferences.precipitationScale"
-            :display-value="formatScaleMultiplier(unitPreferences.precipitationScale)"
+            unit-label="x"
             :min="unitScaleLimits.precipitationScale.min"
             :max="unitScaleLimits.precipitationScale.max"
             :step="unitScaleLimits.precipitationScale.step"
-            @input="value => patchUnitPreference({precipitationScale: value})"
+            @change="value => patchUnitPreference({precipitationScale: value})"
           />
         </div>
       </section>
@@ -323,7 +323,6 @@ import {
   areaUnitForDistanceUnit,
   areaUnitLabelForDistanceUnit,
   formatScaleLabel,
-  formatScaleMultiplier,
   normalizeUnitPreferences
 } from "../../display-units.js";
 import {
@@ -479,7 +478,6 @@ function toggleLatitudeMode() {
 function setLatitudeCenter(value) {
   climateLatitudeMode.value = "custom";
   climateLatitudeCenter.value = value;
-  emitClimateControlsChange();
 }
 
 function cycleWindBand(index) {

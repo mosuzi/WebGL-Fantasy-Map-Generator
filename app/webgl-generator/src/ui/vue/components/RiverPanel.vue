@@ -35,6 +35,7 @@
             label="宽度因子"
             field-class="river-width-field"
             :model-value="widthDraft"
+            unit-label="x"
             :min="0.2"
             :max="3"
             :step="0.05"

@@ -171,7 +171,10 @@ select {
   --el-segmented-color: #cbd7dc;
   --el-segmented-item-selected-bg-color: #3a2f18;
   --el-segmented-item-selected-color: #ffe0a1;
+  --el-segmented-item-hover-bg-color: #172127;
   --el-segmented-item-hover-color: #ffe0a1;
+  --el-fill-color-light: #172127;
+  --el-fill-color-blank: #10171b;
 }
 
 .ui-segmented-el .el-segmented__group {
@@ -205,6 +208,18 @@ select {
 .ui-segmented-el .el-segmented__item {
   flex: 1 0 var(--ui-segmented-min-width);
   min-width: var(--ui-segmented-min-width);
+  background: transparent !important;
+}
+
+.ui-segmented-el .el-segmented__item:hover,
+.ui-segmented-el .el-segmented__item:focus,
+.ui-segmented-el .el-segmented__item.is-selected {
+  background: transparent !important;
+}
+
+.ui-segmented-el .el-segmented__item::before,
+.ui-segmented-el .el-segmented__item::after {
+  background: transparent !important;
 }
 
 .view-mode-segmented {
@@ -230,6 +245,8 @@ select {
   display: none !important;
   visibility: hidden;
   opacity: 0;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .view-mode-segmented .el-segmented__item-label {
@@ -1625,7 +1642,7 @@ select:disabled {
 
 .river-width-editor label {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 84px 48px;
+  grid-template-columns: 72px minmax(0, 1fr) 84px 30px;
   align-items: center;
   gap: 8px;
 }
@@ -1750,7 +1767,7 @@ select:disabled {
 
 .height-range-field {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 84px 38px;
+  grid-template-columns: 44px minmax(0, 1fr) 84px;
   align-items: center;
   gap: 8px;
   margin: 9px 0;
@@ -1920,7 +1937,7 @@ select:disabled {
 .state-capital-field,
 .state-range-field {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 84px 38px;
+  grid-template-columns: 64px minmax(0, 1fr) 84px;
   align-items: center;
   gap: 8px;
   margin: 9px 0;
@@ -2168,7 +2185,7 @@ select:disabled {
 .province-select-field,
 .province-range-field {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 84px 38px;
+  grid-template-columns: 64px minmax(0, 1fr) 84px;
   align-items: center;
   gap: 8px;
   margin: 9px 0;
@@ -2635,7 +2652,7 @@ select:disabled {
 
 .heightmap-import-field {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 84px 36px;
+  grid-template-columns: 72px minmax(0, 1fr) 84px;
   align-items: center;
   gap: 8px;
   color: #cbd7dc;
@@ -2855,7 +2872,7 @@ select:disabled {
 
 .climate-slider-field {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 78px 56px;
+  grid-template-columns: 42px minmax(0, 1fr) 78px 32px;
   align-items: center;
   gap: 7px;
   color: #cbd7dc;
@@ -3034,7 +3051,7 @@ select:disabled {
 
 .unit-scale-field {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) 88px 74px;
+  grid-template-columns: 82px minmax(0, 1fr) 88px 54px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -3180,7 +3197,7 @@ input.ui-switch-native {
 
 .label-limit-field {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 90px 38px;
+  grid-template-columns: 92px minmax(0, 1fr) 90px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -3199,6 +3216,18 @@ input.ui-switch-native {
   color: #ffe0a1;
   font-weight: 700;
   text-align: right;
+}
+
+.ui-slider-field-no-unit .ui-slider-unit {
+  display: none;
+}
+
+.ui-slider-unit {
+  min-width: 0;
+  color: #ffe0a1;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .ui-slider-shell {

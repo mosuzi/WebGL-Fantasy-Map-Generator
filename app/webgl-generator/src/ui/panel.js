@@ -10,11 +10,11 @@ import {
   formatPopulation as formatDisplayPopulation,
   formatPrecipitation as formatDisplayPrecipitation,
   formatScaleLabel,
-  formatScaleMultiplier,
   normalizeUnitPreferences
 } from "./display-units.js";
 
 const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
+const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
 
 const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.CITY]: object => `城市 ${object.name}`,
@@ -70,7 +70,7 @@ export function bindRuntimePanel(documentRef, handlers) {
     handlers.onSmoothCellBorders?.(event.target.checked);
   });
   bindBooleanPreferenceButton(documentRef, "show-hover-info", "showHoverInfo", handlers.onShowHoverInfo);
-  documentRef.getElementById("max-city-labels")?.addEventListener("input", event => {
+  documentRef.getElementById("max-city-labels")?.addEventListener("change", event => {
     const value = normalizeMaxCityLabels(event.target.value);
     setLabelLimitControlValue(documentRef, value);
     updateControlPreferences(documentRef, {maxCityLabels: value});
@@ -227,23 +227,26 @@ function editLockControls(documentRef) {
 
 function bindClimateControls(documentRef, handler) {
   if (!handler) return;
-  const view = documentRef.defaultView || window;
-  let pending = 0;
-  const schedule = () => {
-    if (pending) view.cancelAnimationFrame?.(pending);
-    pending = view.requestAnimationFrame?.(() => {
-      pending = 0;
-      handler(readOptionsFromPanel(documentRef, {}));
-    }) || view.setTimeout(() => {
-      pending = 0;
-      handler(readOptionsFromPanel(documentRef, {}));
-    }, 16);
-  };
+  const schedule = createDebouncedControlHandler(documentRef, () => {
+    handler(readOptionsFromPanel(documentRef, {}));
+  });
 
   for (const id of ["temperature-equator", "temperature-north-pole", "temperature-south-pole", "climate-latitude-center-slider"]) {
-    documentRef.getElementById(id)?.addEventListener("input", schedule);
+    documentRef.getElementById(id)?.addEventListener("change", schedule);
   }
   documentRef.addEventListener("climate-controls-change", schedule);
+}
+
+function createDebouncedControlHandler(documentRef, handler, delay = CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS) {
+  const view = documentRef.defaultView || window;
+  let pending = 0;
+  return () => {
+    if (pending) view.clearTimeout(pending);
+    pending = view.setTimeout(() => {
+      pending = 0;
+      handler();
+    }, delay);
+  };
 }
 
 function applyControlPreferences(documentRef) {
@@ -280,21 +283,22 @@ function setLabelLimitControlValue(documentRef, value) {
   const input = documentRef.getElementById("max-city-labels");
   const output = documentRef.getElementById("max-city-labels-value");
   if (input) input.value = String(normalized);
-  if (output) output.textContent = String(normalized);
+  if (output) output.textContent = "";
 }
 
 function bindUnitPreferenceControls(documentRef, handler) {
   const controls = ["number-abbreviation", "distance-unit", "area-unit", "map-scale-km-per-cm", "population-scale", "precipitation-scale"]
     .map(id => documentRef.getElementById(id))
     .filter(Boolean);
+  const commit = () => {
+    const units = readUnitPreferencesFromControls(documentRef);
+    applyUnitPreferences(documentRef, units);
+    updateControlPreferences(documentRef, {units});
+    handler?.(units);
+  };
+  const commitDebounced = createDebouncedControlHandler(documentRef, commit);
   for (const control of controls) {
-    const eventName = control.type === "range" ? "input" : "change";
-    control.addEventListener(eventName, () => {
-      const units = readUnitPreferencesFromControls(documentRef);
-      applyUnitPreferences(documentRef, units);
-      updateControlPreferences(documentRef, {units});
-      handler?.(units);
-    });
+    control.addEventListener("change", control.type === "range" ? commitDebounced : commit);
   }
 }
 
@@ -319,9 +323,9 @@ function applyUnitPreferences(documentRef, preferences = {}) {
   setControlValue(documentRef, "map-scale-km-per-cm", units.mapScaleKmPerCm);
   setControlValue(documentRef, "population-scale", units.populationScale);
   setControlValue(documentRef, "precipitation-scale", units.precipitationScale);
-  setOutputText(documentRef, "map-scale-km-per-cm-value", `${units.mapScaleKmPerCm} km/cm`);
-  setOutputText(documentRef, "population-scale-value", formatScaleMultiplier(units.populationScale));
-  setOutputText(documentRef, "precipitation-scale-value", formatScaleMultiplier(units.precipitationScale));
+  setOutputText(documentRef, "map-scale-km-per-cm-value", "km/cm");
+  setOutputText(documentRef, "population-scale-value", "x");
+  setOutputText(documentRef, "precipitation-scale-value", "x");
 }
 
 function setControlValue(documentRef, id, value) {
@@ -575,7 +579,7 @@ function syncLabelLimitControlBounds(documentRef, map, stats) {
   const current = normalizeMaxCityLabels(stats.labelOptions?.maxCityLabels ?? input.value);
   const displayValue = Math.min(current, max);
   input.value = String(displayValue);
-  if (output) output.textContent = String(displayValue);
+  if (output) output.textContent = "";
 }
 
 function formatCityLabelLimit(map, stats) {

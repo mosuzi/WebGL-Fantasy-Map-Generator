@@ -156,7 +156,7 @@ export function downloadCanvasPng(documentRef, canvas, filename, options = {}) {
       reject(new Error("当前浏览器不支持 canvas 图片导出"));
       return;
     }
-    const exportCanvas = options.includeMapOverlays ? composeMapExportCanvas(documentRef, canvas) : canvas;
+    const exportCanvas = options.includeMapOverlays || options.renderer ? composeMapExportCanvas(documentRef, canvas, options) : canvas;
     exportCanvas.toBlob(blob => {
       if (!blob) {
         reject(new Error("图片导出失败"));
@@ -616,13 +616,15 @@ function downloadBlob(documentRef, blob, filename) {
   view.setTimeout(() => view.URL.revokeObjectURL(url), 0);
 }
 
-function composeMapExportCanvas(documentRef, canvas) {
+function composeMapExportCanvas(documentRef, canvas, options = {}) {
   const output = documentRef.createElement("canvas");
   output.width = canvas.width;
   output.height = canvas.height;
   const context = output.getContext("2d");
   if (!context) return canvas;
-  context.drawImage(canvas, 0, 0, output.width, output.height);
+  if (!copyWebglCanvasTo2d(context, canvas, options.renderer)) {
+    context.drawImage(canvas, 0, 0, output.width, output.height);
+  }
 
   const canvasRect = canvas.getBoundingClientRect();
   if (!canvasRect.width || !canvasRect.height) return output;
@@ -634,6 +636,41 @@ function composeMapExportCanvas(documentRef, canvas) {
   drawMapBadge(documentRef, context, canvasRect, scale);
   drawMapScaleBar(documentRef, context, canvasRect, scale);
   return output;
+}
+
+function copyWebglCanvasTo2d(context, canvas, renderer) {
+  if (!renderer?.draw) return false;
+  const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+  if (!gl?.readPixels) return false;
+  renderer.draw();
+  const width = gl.drawingBufferWidth || canvas.width;
+  const height = gl.drawingBufferHeight || canvas.height;
+  if (!width || !height) return false;
+  try {
+    const pixels = new Uint8Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const imageData = context.createImageData(width, height);
+    const rowBytes = width * 4;
+    for (let y = 0; y < height; y += 1) {
+      const sourceOffset = (height - y - 1) * rowBytes;
+      const targetOffset = y * rowBytes;
+      imageData.data.set(pixels.subarray(sourceOffset, sourceOffset + rowBytes), targetOffset);
+    }
+    if (context.canvas.width === width && context.canvas.height === height) {
+      context.putImageData(imageData, 0, 0);
+      return true;
+    }
+    const scratch = canvas.ownerDocument.createElement("canvas");
+    scratch.width = width;
+    scratch.height = height;
+    const scratchContext = scratch.getContext("2d");
+    if (!scratchContext) return false;
+    scratchContext.putImageData(imageData, 0, 0);
+    context.drawImage(scratch, 0, 0, context.canvas.width, context.canvas.height);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function drawMapBadge(documentRef, context, canvasRect, scale) {
