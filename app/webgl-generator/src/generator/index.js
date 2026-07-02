@@ -33,7 +33,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, generationOptions, climateRandom));
   const pack = profile.stage("pack", "构建 pack 语义图", () => buildPack(grid, features));
   const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, generationOptions));
-  const biomes = profile.stage("biomes-population", "生成生物群系与人口评分", () => defineBiomesAndPopulation(grid, pack));
+  const biomes = profile.stage("biomes-population", "生成生物群系与人口评分", () => defineBiomesAndPopulation(grid, pack, generationOptions));
   climate.biomes = biomes.biomes;
   climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
   const society = profile.stage("society-cultures", "生成文化初稿", () => buildSociety(grid, features, climate, rivers, random, pack, generationOptions));
@@ -101,7 +101,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
       `build politics: states=${politics.metadata.states}, provinces=${politics.metadata.provinces}, regions=${politics.metadata.regions}`,
       `build settlements: cities=${settlements.metadata.cities}, routes=${settlements.metadata.routes}, populationCells=${settlements.metadata.populationCells}`,
       `build markers: markers=${markers.metadata.markers}, resources=${markers.metadata.resourceMarkers}, resourcePotential=${markers.metadata.resourcePotential}`,
-      `build economy: goods=${economy.metadata.goods}, markets=${economy.metadata.markets}, deals=${economy.metadata.deals}, resourceCells=${economy.metadata.resourceCells}`,
+      `build economy: goods=${economy.metadata.goods}, markets=${economy.metadata.markets}, deals=${economy.metadata.deals}, resourceCells=${economy.metadata.resourceCells}, markerResourceDeals=${economy.metadata.resourceTrade?.markerResourceDeals || 0}`,
       `build religions: religions=${society.metadata.religions}, religionPackCells=${society.metadata.religionPackCells}`,
       `build diplomacy: pairs=${diplomacy.metadata.pairs}, allies=${diplomacy.metadata.allies}, rivals=${diplomacy.metadata.rivals}, enemies=${diplomacy.metadata.enemies}`,
       `build military: states=${military.metadata.statesWithMilitary}, regiments=${military.metadata.regiments}`,

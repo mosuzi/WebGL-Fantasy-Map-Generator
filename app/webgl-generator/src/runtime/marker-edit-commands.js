@@ -1,5 +1,5 @@
 import {createMarkerAtPackCell, createMarkerResult, regenerateResourceMarkers, refreshMarkerResourceEconomy} from "../generator/markers.js";
-import {refreshPoliticalEconomicPower} from "../generator/economy.js";
+import {buildEconomy, refreshPoliticalEconomicPower} from "../generator/economy.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 
@@ -292,8 +292,10 @@ function writeMarkerCollection(map, markers) {
     stale: false
   };
   if (map.pack) {
+    map.pack.markers = normalized;
     refreshMarkerResourceEconomy(map.pack, normalized);
-    refreshPoliticalEconomicPower(map.pack);
+    if (map.options) map.economy = buildEconomy(map.pack, map.options);
+    else refreshPoliticalEconomicPower(map.pack);
   }
 }
 

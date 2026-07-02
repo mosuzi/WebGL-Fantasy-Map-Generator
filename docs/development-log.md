@@ -8091,6 +8091,7 @@
 验证：
 
 - `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
 
 ## 2026-06-28 国家名称渐隐丝滑度修正
 
@@ -14221,3 +14222,51 @@ full 矩阵结果：
 后续：
 
 - 地热田尚未从温泉中独立拆出，后续如果要继续资源链路，应优先进入 goods/market/deals 正式贸易系统，而不是继续追加小类型。
+
+### 资源点接入正式贸易链路第一刀
+
+背景：
+
+- 当前计划第三优先要求把 goods 生成前移到 `rankCells()` 之前，并把资源点转成正式 goods / market / deals 贸易供需，而不是长期只依赖 economy 阶段的资源 bonus。
+- 旧逻辑里 `economy` 阶段才创建 `pack.goods` 和 `pack.cells.good`，资源 marker 主要汇总为国家/省份 `resourcePotential`，没有成为市场库存和交易的正式来源。
+
+修正：
+
+- `economy.js` 新增 `prepareInitialGoods()`，在 biome 定义后、`rankCells()` 前写入 `pack.goods / pack.cells.good / pack.cells.goodSupply / pack.cells.goodSource`。
+- `biomes.js` 的 `rankCells()` 会读取正式 goods，并把资源价值与供应量加入适居度评分；`pack.metadata.rankCellsInputs` 记录 `hasGoodsAtRankTime / resourceRankBonusCells / resourceRankBonusTotal`。
+- `economy` 阶段会保留前置自然资源，并把 marker 资源按 `resourceKey` 映射为正式货物，例如矿产映射铁矿/铜矿/锡矿/银矿/金砂，茶山映射茶叶，渔场映射鱼，马场映射马匹，绿洲映射水果/粮食。
+- marker 资源会覆盖当前 cell，水域资源会额外落到邻接陆地 access cell；这些来源会注入所属市场库存，降低本地价格，并在 market-to-burg、burg-to-market 和 market-to-market 交易中优先出现。
+- `deal.source` 新增 `scheduled / market-resource / marker-resource`，`economy.metadata.resourceTrade` 记录资源 cell、marker resource cell、库存增量、资源货物分布、资源交易数和 marker 资源交易数。
+- 资源点增删移和重生成后，`marker-edit-commands.js` 会同步 `pack.markers` 并立即重建 `map.economy`；运行时只把军事和外交标为待派生，不再把 economy 留在 stale 状态。
+
+验证：
+
+- `node --check` 覆盖 `economy.js / biomes.js / index.js / app.js / marker-edit-commands.js`，均通过。
+- `stage-2-1231411414 / continents / 10000` 生成样本：`hasGoodsAtRankTime = true`，`resourceRankBonusCells = 995`，资源交易 `8136 / 14248`，marker 资源交易 `297`，交易来源同时保留 `scheduled = 6112`。
+- `stage-2-1231411414 / continents / 100000` 生成样本：`resourceRankBonusCells = 9324`，资源交易 `13260 / 23684`，marker 资源交易 `2292`，`markerGoods` 覆盖陶土、药草、煤、鱼、木材、硝石、宝石、盐等多类货物。
+- 资源编辑命令抽样：新增一个“测试茶山”后，资源 marker 从 `5` 到 `6`，marker 资源 cell 从 `6` 到 `7`，marker 资源交易从 `297` 到 `389`，`markerGoods` 出现“茶叶”，`map.economy.metadata.stale` 仍为 `false`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。主入口从上一轮约 `671.15KB / 203.12KB gzip` 增至约 `676.66KB / 205.09KB gzip`。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?resource_trade_ready=...`：最终 `#generation-loading.hidden = true`、`display = none`，WebGL `glError = 0`，`markerResourceDeals = 390`，`hasGoodsAtRankTime = true`，console/page error 为 `0`。
+- 在浏览器中打开资源与标记管理并点击“重生成资源点”：资源点变为 `10`，资源潜力 `134`，marker resource cells `19`，marker resource deals `764`；`derivedStale.systems` 仅剩 `military / diplomacy`，generationLog 记录 `markerResourceDeals=764`。
+
+后续：
+
+- 这次是贸易链路第一刀，尚未做用户可视化的市场供需面板，也没有让资源货物进一步影响城镇选址、道路选线和外交贸易偏好。
+- 后续若继续深化，应增加市场距离成本、供需缺口、贸易路线可视化，以及按资源类型生成专门的城镇产业标签。
+
+### README 人类化重写与许可证补充
+
+背景：
+
+- 原 README 偏向实现清单和交接说明，读起来更像给后续智能体看的任务记录，而不是给真实读者看的项目首页。
+- 项目已经进入可体验阶段，需要更清楚地说明它想服务的创作者、与原 Fantasy Map Generator 的关系，以及继续探索的方向。
+
+修正：
+
+- 重写根目录 `README.md`，把重心从细项功能罗列转向项目介绍、创作愿景、本地运行、仓库结构、原作者致敬和许可证。
+- 新增根目录 `LICENSE`，采用 MIT License，并明确保留对 Max Haniyeu (Azgaar) 和原 Fantasy Map Generator 许可证声明的引用。
+- `package.json` 补充 `license: MIT`，与根目录许可证文件保持一致。
+
+验证：
+
+- `git diff --check` 通过。

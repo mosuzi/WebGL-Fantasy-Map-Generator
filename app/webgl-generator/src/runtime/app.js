@@ -757,7 +757,7 @@ export function createGeneratorApp(documentRef) {
       const executed = applyMarkerCollectionCommand(state, documentRef, command);
       if (!executed) return;
       stopMarkerEditMode(state, documentRef);
-      appendGenerationLog(state.map, `regenerate resources: salt=${salt}, resources=${state.map.markers.metadata.resourceMarkers}, resourcePotential=${state.map.markers.metadata.resourcePotential}`);
+      appendGenerationLog(state.map, `regenerate resources: salt=${salt}, resources=${state.map.markers.metadata.resourceMarkers}, resourcePotential=${state.map.markers.metadata.resourcePotential}, markerResourceDeals=${state.map.economy?.metadata?.resourceTrade?.markerResourceDeals || 0}`);
     },
     onCancelEdit: () => {
       stopMarkerEditMode(state, documentRef);
@@ -1733,7 +1733,7 @@ function applyClimateControls(state, documentRef) {
   state.options = options;
   state.map.options = options;
   const climate = buildClimate(state.map.grid, state.map.features, options, createRandom(options.seed));
-  const biomes = defineBiomesAndPopulation(state.map.grid, state.map.pack);
+  const biomes = defineBiomesAndPopulation(state.map.grid, state.map.pack, state.map.options);
   climate.biomes = biomes.biomes;
   climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
   state.map.climate = climate;
@@ -1956,7 +1956,7 @@ function regenerateRivers(state, documentRef) {
   renameHydronymsByCulture(nextRivers, map.pack, riverOptions);
   map.rivers = nextRivers;
 
-  const biomes = defineBiomesAndPopulation(map.grid, map.pack);
+  const biomes = defineBiomesAndPopulation(map.grid, map.pack, map.options);
   map.climate.biomes = biomes.biomes;
   map.climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
 
@@ -2012,11 +2012,11 @@ function regenerateMarkerResources(state, documentRef) {
   const executed = applyMarkerCollectionCommand(state, documentRef, command);
   if (!executed) return regenerationResult("markers", "未执行", "当前地图缺少可用 pack 语义图或标记集合，无法重生成资源点。");
 
-  appendGenerationLog(map, `regenerate resources: salt=${salt}, resources=${map.markers.metadata.resourceMarkers}, resourcePotential=${map.markers.metadata.resourcePotential}`);
+  appendGenerationLog(map, `regenerate resources: salt=${salt}, resources=${map.markers.metadata.resourceMarkers}, resourcePotential=${map.markers.metadata.resourcePotential}, markerResourceDeals=${map.economy?.metadata?.resourceTrade?.markerResourceDeals || 0}`);
   return regenerationResult(
     "markers",
     `资源点已按当前地形、河流、生物群系、温度和降水约束重算（扰动 #${salt}）：${beforeResources} -> ${map.markers.metadata.resourceMarkers}；资源潜力 ${beforePotential} -> ${map.markers.metadata.resourcePotential}`,
-    "已刷新资源 marker、国家/省份资源潜力、点图层、对象索引和统计；经济与军事已标记为待派生。"
+    "已刷新资源 marker、正式货物来源、市场库存、交易、国家/省份资源潜力、点图层、对象索引和统计；军事与外交已标记为待派生。"
   );
 }
 
@@ -2718,8 +2718,8 @@ function clearMarkerEditMode(state) {
 function applyMarkerCollectionCommand(state, documentRef, command, {selectCreated = false, selectMarkerId = null} = {}) {
   if (!state.map || !command || command.isNoop?.({map: state.map})) return null;
   const executed = state.editHistory.execute(command, {map: state.map});
-  markDerivedFresh(state.map, ["markers"]);
-  markDerivedStale(state.map, ["economy", "military", "diplomacy"]);
+  markDerivedFresh(state.map, ["markers", "economy"]);
+  markDerivedStale(state.map, ["military", "diplomacy"]);
   refreshGenerationSummary(state.map);
   refreshAfterEdit(state, executed);
 

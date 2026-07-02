@@ -81,20 +81,63 @@ const RAW_GOOD_VALUES = [
   3, 3, 7, 1, 4, 5
 ];
 
+const GOOD_SOURCE_NATURAL = 1;
+const GOOD_SOURCE_MARKER = 2;
+
+const RESOURCE_KEY_GOOD_IDS = Object.freeze({
+  geothermal: [35],
+  ore: [29, 30, 31, 32, 33],
+  salt: [18],
+  "rare-biota": [8, 17, 24],
+  gems: [34],
+  stone: [26],
+  clay: [25],
+  coal: [28],
+  sulfur: [35],
+  nitrate: [36],
+  amber: [37],
+  pearls: [20, 34],
+  coral: [20, 34],
+  fish: [19],
+  harbor: [19, 20, 38],
+  timber: [13],
+  resin: [14],
+  herbs: [8],
+  dyes: [39],
+  spices: [17],
+  tea: [7],
+  silk: [12],
+  horses: [22],
+  "salt-meadow": [18, 21],
+  oasis: [15, 1, 5],
+  "sacred-water": [8, 24],
+  freshwater: [1, 5]
+});
+
+export function prepareInitialGoods(pack, options = {}) {
+  const random = createRandom(`${options.seed}:economy-goods`);
+  const goods = ensurePackGoods(pack);
+  const rawGoods = goods.filter(good => good?.distribution);
+  const assignment = assignResourceGoods(pack, rawGoods, random, {includeMarkers: false, preserveExisting: false});
+  writeResourceGoods(pack, assignment);
+  return assignment.metadata;
+}
+
 export function buildEconomy(pack, options = {}) {
   const random = createRandom(`${options.seed}:economy`);
-  const goods = createGoods();
+  const goods = ensurePackGoods(pack);
   const rawGoods = goods.filter(good => good?.distribution);
   const manufacturedGoods = goods.filter(good => good?.recipes?.length);
   const aliveBurgs = (pack.burgs || []).filter(burg => burg?.i && !burg.removed);
   const states = (pack.states || []).filter(state => state?.i && !state.removed);
 
-  pack.goods = [null, ...goods];
-  pack.cells.good = assignResourceGoods(pack, rawGoods, random);
-  const resourcePopulation = applyResourcePopulationBonus(pack);
+  const resourceAssignment = assignResourceGoods(pack, rawGoods, random, {includeMarkers: true, preserveExisting: true});
+  writeResourceGoods(pack, resourceAssignment);
+  const resourcePopulation = applyResourcePopulationBonus(pack, {markerOnly: true});
   syncPoliticalPopulationStats(pack);
   pack.markets = createMarkets(pack, aliveBurgs, goods, random, options);
   pack.cells.market = assignMarketsToCells(pack, pack.markets);
+  const resourceTrade = applyResourceSupplyToMarkets(pack, pack.markets);
   assignMarketsToBurgs(pack, aliveBurgs, pack.markets);
   initializeTaxRates(states, random);
   const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
@@ -114,11 +157,24 @@ export function buildEconomy(pack, options = {}) {
     burgsWithMarket: aliveBurgs.filter(burg => burg.market > 0).length,
     burgsWithProduction: aliveBurgs.filter(burg => burg.production?.length).length,
     deals: deals.length,
+    resourceTrade: {
+      ...resourceTrade,
+      resourceDeals: deals.filter(deal => deal.source === "market-resource" || deal.source === "marker-resource").length,
+      markerResourceDeals: deals.filter(deal => deal.source === "marker-resource").length
+    },
     statesWithTaxes: states.filter(state => Number.isFinite(state.salesTax) && Number.isFinite(state.pollTax)).length,
     markerEconomy
   };
 
   return {goods: pack.goods, markets: pack.markets, deals: pack.deals, metadata};
+}
+
+function ensurePackGoods(pack) {
+  const existing = (pack.goods || []).filter(Boolean);
+  if (existing.length) return existing;
+  const goods = createGoods();
+  pack.goods = [null, ...goods];
+  return goods;
 }
 
 function createGoods() {
@@ -163,7 +219,7 @@ function createGoods() {
   return goods;
 }
 
-function applyResourcePopulationBonus(pack) {
+function applyResourcePopulationBonus(pack, {markerOnly = false} = {}) {
   const {cells} = pack;
   if (!cells.good || !cells.s || !cells.pop) return {cells: 0, total: 0};
   const meanArea = average(Array.from(cells.area || [])) || 1;
@@ -172,10 +228,14 @@ function applyResourcePopulationBonus(pack) {
 
   for (const cell of cells.i) {
     if ((cells.h[cell] || 0) < 20) continue;
-    if (!(cells.good[cell] || (cells.c?.[cell] || []).some(neighbor => cells.good[neighbor]))) continue;
+    const neighborCells = cells.c?.[cell] || [];
+    const hasResource = cells.good[cell] || neighborCells.some(neighbor => cells.good[neighbor]);
+    if (!hasResource) continue;
+    if (markerOnly && !isMarkerResourceNeighborhood(cells, cell, neighborCells)) continue;
     const cellRes = getResourceValue(pack, cell);
     const neighborRes = average((cells.c?.[cell] || []).map(neighbor => getResourceValue(pack, neighbor)));
-    const bonus = (cellRes ? cellRes + 10 : 0) + neighborRes;
+    const supply = Number(cells.goodSupply?.[cell] || 1);
+    const bonus = ((cellRes ? cellRes + 10 : 0) + neighborRes) * (markerOnly ? 0.32 : 1) + supply;
     if (bonus <= 0) continue;
     cells.s[cell] += bonus;
     cells.pop[cell] = cells.s[cell] > 0 ? (cells.s[cell] * cells.area[cell]) / meanArea : 0;
@@ -184,6 +244,11 @@ function applyResourcePopulationBonus(pack) {
   }
 
   return {cells: affected, total: round(total)};
+}
+
+function isMarkerResourceNeighborhood(cells, cell, neighbors) {
+  if ((cells.goodSource?.[cell] || 0) >= GOOD_SOURCE_MARKER) return true;
+  return neighbors.some(neighbor => (cells.goodSource?.[neighbor] || 0) >= GOOD_SOURCE_MARKER);
 }
 
 function getResourceValue(pack, cell) {
@@ -252,9 +317,57 @@ function createRecipe(id) {
   return {[first]: 1, [second]: 0.5};
 }
 
-function assignResourceGoods(pack, rawGoods, random) {
+function writeResourceGoods(pack, assignment) {
+  pack.cells.good = assignment.goods;
+  pack.cells.goodSupply = assignment.supply;
+  pack.cells.goodSource = assignment.source;
+  if (!pack.metadata) pack.metadata = {};
+  pack.metadata.resourceGoods = assignment.metadata;
+}
+
+function assignResourceGoods(pack, rawGoods, random, {includeMarkers = true, preserveExisting = true} = {}) {
   const {cells} = pack;
-  const resource = new Uint16Array(cells.i.length);
+  const resource = preserveExisting && cells.good ? new Uint16Array(cells.good) : new Uint16Array(cells.i.length);
+  const supply = preserveExisting && cells.goodSupply ? new Float32Array(cells.goodSupply) : new Float32Array(cells.i.length);
+  const source = preserveExisting && cells.goodSource ? new Uint8Array(cells.goodSource) : new Uint8Array(cells.i.length);
+  const metadata = {
+    naturalCells: countPositive(resource),
+    markerCells: 0,
+    markerTradeCells: 0,
+    markerResources: 0,
+    markerGoods: {}
+  };
+
+  if (!metadata.naturalCells) {
+    metadata.naturalCells = assignNaturalResourceGoods(pack, rawGoods, random, resource, supply, source);
+  }
+
+  if (includeMarkers) {
+    const markerStats = assignMarkerResourceGoods(pack, rawGoods, resource, supply, source);
+    metadata.markerCells = markerStats.cells;
+    metadata.markerTradeCells = markerStats.tradeCells;
+    metadata.markerResources = markerStats.markers;
+    metadata.markerGoods = markerStats.goods;
+  }
+
+  metadata.totalCells = countPositive(resource);
+  metadata.supply = round(sumValues(supply), 2);
+  metadata.hasMarkerSources = metadata.markerCells > 0;
+  return {goods: resource, supply, source, metadata};
+}
+
+function selectRawGoodId(pack, cell, rawGoods) {
+  const {cells} = pack;
+  if (cells.harbor?.[cell]) return 19;
+  if (cells.r?.[cell]) return 1 + (cell % 8);
+  if ((cells.h[cell] || 0) > 70) return 26 + (cell % 11);
+  const biome = cells.biome?.[cell] || 0;
+  const index = Math.abs((biome * 7 + cell * 3) % rawGoods.length);
+  return rawGoods[index].i;
+}
+
+function assignNaturalResourceGoods(pack, rawGoods, random, resource, supply, source) {
+  const {cells} = pack;
   const candidates = [];
   for (const cell of cells.i) {
     if ((cells.h[cell] || 0) < 20) continue;
@@ -272,18 +385,75 @@ function assignResourceGoods(pack, rawGoods, random) {
   for (let index = 0; index < target; index++) {
     const cell = candidates[index].cell;
     resource[cell] = selectRawGoodId(pack, cell, rawGoods);
+    supply[cell] = Math.max(supply[cell] || 0, naturalSupplyScore(candidates[index].score));
+    source[cell] = GOOD_SOURCE_NATURAL;
   }
-  return resource;
+  return target;
 }
 
-function selectRawGoodId(pack, cell, rawGoods) {
-  const {cells} = pack;
-  if (cells.harbor?.[cell]) return 19;
-  if (cells.r?.[cell]) return 1 + (cell % 8);
-  if ((cells.h[cell] || 0) > 70) return 26 + (cell % 11);
-  const biome = cells.biome?.[cell] || 0;
-  const index = Math.abs((biome * 7 + cell * 3) % rawGoods.length);
-  return rawGoods[index].i;
+function assignMarkerResourceGoods(pack, rawGoods, resource, supply, source) {
+  const touchedCells = new Set();
+  const tradeCells = new Set();
+  const goods = {};
+  let markers = 0;
+
+  for (const marker of pack.markers || []) {
+    if (marker?.category !== "resource") continue;
+    const packCell = Number(marker.packCell);
+    if (!Number.isInteger(packCell) || packCell < 0 || packCell >= pack.cells.i.length) continue;
+    const goodId = markerResourceGoodId(marker, packCell, rawGoods);
+    if (!goodId) continue;
+    markers++;
+
+    const markerSupply = markerSupplyScore(marker);
+    writeResourceCell(resource, supply, source, packCell, goodId, markerSupply, GOOD_SOURCE_MARKER);
+    touchedCells.add(packCell);
+
+    const accessCell = markerAccessCell(pack, packCell);
+    if (Number.isInteger(accessCell) && accessCell !== packCell) {
+      writeResourceCell(resource, supply, source, accessCell, goodId, markerSupply * 0.75, GOOD_SOURCE_MARKER);
+      touchedCells.add(accessCell);
+      tradeCells.add(accessCell);
+    }
+
+    const name = pack.goods?.[goodId]?.name || `good-${goodId}`;
+    goods[name] = (goods[name] || 0) + 1;
+  }
+
+  return {cells: touchedCells.size, tradeCells: tradeCells.size, markers, goods};
+}
+
+function writeResourceCell(resource, supply, source, cell, goodId, nextSupply, nextSource) {
+  const currentSource = source[cell] || 0;
+  const currentSupply = supply[cell] || 0;
+  if (currentSource > nextSource && currentSupply >= nextSupply) return;
+  if (currentSource === nextSource && currentSupply > nextSupply) return;
+  resource[cell] = goodId;
+  supply[cell] = Math.max(currentSupply, nextSupply);
+  source[cell] = nextSource;
+}
+
+function markerResourceGoodId(marker, cell, rawGoods) {
+  const ids = RESOURCE_KEY_GOOD_IDS[marker.resourceKey] || RESOURCE_KEY_GOOD_IDS[marker.type];
+  if (ids?.length) return ids[Math.abs((cell + marker.id * 7) % ids.length)];
+  return rawGoods[Math.abs((cell + marker.id * 11) % rawGoods.length)]?.i || 0;
+}
+
+function markerAccessCell(pack, packCell) {
+  if ((pack.cells.h?.[packCell] || 0) >= 20) return packCell;
+  const candidates = (pack.cells.c?.[packCell] || [])
+    .filter(cell => (pack.cells.h?.[cell] || 0) >= 20)
+    .map(cell => ({cell, score: (pack.cells.s?.[cell] || 0) + (pack.cells.pop?.[cell] || 0) * 0.25 + (pack.cells.harbor?.[cell] ? 20 : 0)}))
+    .sort((a, b) => b.score - a.score || a.cell - b.cell);
+  return candidates[0]?.cell ?? packCell;
+}
+
+function naturalSupplyScore(score) {
+  return round(clamp(0.7 + Math.sqrt(Math.max(0, score)) / 12, 0.8, 3.2), 2);
+}
+
+function markerSupplyScore(marker) {
+  return round(clamp(1.4 + Number(marker.economicValue || 0) / 7, 1.5, 5.5), 2);
 }
 
 function createMarkets(pack, aliveBurgs, goods, random, options = {}) {
@@ -404,6 +574,55 @@ function assignMarketsToBurgs(pack, aliveBurgs, markets) {
   }
 }
 
+function applyResourceSupplyToMarkets(pack, markets) {
+  const validMarkets = markets.filter(Boolean);
+  const metadata = {
+    resourceCells: 0,
+    markerResourceCells: 0,
+    suppliedMarkets: 0,
+    stockBoost: 0,
+    goods: {},
+    markerGoods: {}
+  };
+  if (!validMarkets.length) return metadata;
+
+  const suppliedMarkets = new Set();
+  for (const cell of pack.cells.i) {
+    const goodId = pack.cells.good?.[cell] || 0;
+    if (!goodId) continue;
+    const marketId = pack.cells.market?.[cell] || nearestMarketId(pack.cells.p[cell], validMarkets);
+    const market = markets[marketId];
+    const record = market?.goods?.[goodId];
+    if (!market || !record) continue;
+
+    const markerSource = (pack.cells.goodSource?.[cell] || 0) >= GOOD_SOURCE_MARKER;
+    const supply = Number(pack.cells.goodSupply?.[cell] || 1);
+    const goodValue = Number(pack.goods?.[goodId]?.value || 2);
+    const boost = round((markerSource ? 2.1 : 1) * supply + Math.sqrt(goodValue), 2);
+    record.stock = round(Number(record.stock || 0) + boost, 2);
+    record.price = round(Math.max(0.5, Number(record.price || 2) - Math.min(0.35, boost * 0.025)), 2);
+
+    market.resourceSupply ??= {};
+    market.resourceSupplySources ??= {};
+    market.resourceSupply[goodId] = round((market.resourceSupply[goodId] || 0) + boost, 2);
+    if (markerSource) market.resourceSupplySources[goodId] = GOOD_SOURCE_MARKER;
+    else if (!market.resourceSupplySources[goodId]) market.resourceSupplySources[goodId] = GOOD_SOURCE_NATURAL;
+
+    const goodName = pack.goods?.[goodId]?.name || `good-${goodId}`;
+    metadata.resourceCells++;
+    metadata.stockBoost = round(metadata.stockBoost + boost, 2);
+    metadata.goods[goodName] = round((metadata.goods[goodName] || 0) + boost, 2);
+    if (markerSource) {
+      metadata.markerResourceCells++;
+      metadata.markerGoods[goodName] = round((metadata.markerGoods[goodName] || 0) + boost, 2);
+    }
+    suppliedMarkets.add(market.i);
+  }
+
+  metadata.suppliedMarkets = suppliedMarkets.size;
+  return metadata;
+}
+
 function nearestMarketId(point, markets) {
   let best = markets[0];
   let bestDistance = Infinity;
@@ -439,7 +658,9 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
 
   for (const burg of aliveBurgs) {
     burg.production = [];
-    const localGoodId = pack.cells.good?.[burg.cell] || rawGoods[(burg.i * 7) % rawGoods.length].i;
+    const localMarket = pack.markets?.[burg.market];
+    const localGood = selectMarketDealGood(localMarket, rawGoods, burg.i, 0, rawGoods[(burg.i * 7) % rawGoods.length]);
+    const localGoodId = pack.cells.good?.[burg.cell] || localGood.good.i;
     if (shouldCreateLocalProduction(burg.i, localProductionRate)) {
       burg.production.push({goodId: localGoodId, units: round(1 + (burg.population || 0) * 0.25)});
     }
@@ -454,27 +675,29 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     }
 
     for (let index = 0; index < marketToBurgDeals; index++) {
-      const good = dealGoods[(burg.i * 13 + index * 7) % dealGoods.length];
+      const selectedGood = selectMarketDealGood(localMarket, dealGoods, burg.i, index, dealGoods[(burg.i * 13 + index * 7) % dealGoods.length]);
       const deal = addDeal({
         pack,
         deals,
         statesById,
         stateDealTax,
-        goodId: good.i,
+        goodId: selectedGood.good.i,
         sellerType: "market",
         seller: burg.market,
         buyerType: "burg",
         buyer: burg.i,
         units: 1,
-        price: marketPrice(pack.markets[burg.market], good.i),
-        valueScale: dealValueScale
+        price: marketPrice(localMarket, selectedGood.good.i),
+        valueScale: dealValueScale,
+        source: selectedGood.source
       });
       burg.production.push({dealId: deal.i});
     }
 
     for (let index = 0; index < 3; index++) {
       const fallbackGoodId = rawDealGoods[(burg.i * 3 + index * 5) % rawDealGoods.length]?.i ?? dealGoods[(burg.i + index) % dealGoods.length].i;
-      const goodId = index === 0 && dealGoodIds.has(localGoodId) ? localGoodId : fallbackGoodId;
+      const selectedGood = selectMarketDealGood(localMarket, rawDealGoods.length ? rawDealGoods : dealGoods, burg.i, index + 17, {i: fallbackGoodId});
+      const goodId = index === 0 && dealGoodIds.has(localGoodId) ? localGoodId : selectedGood.good.i;
       const deal = addDeal({
         pack,
         deals,
@@ -486,8 +709,9 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         buyerType: "market",
         buyer: burg.market,
         units: 0.8 + (index % 2) * 0.2,
-        price: marketPrice(pack.markets[burg.market], goodId) * 0.75,
-        valueScale: dealValueScale
+        price: marketPrice(localMarket, goodId) * 0.75,
+        valueScale: dealValueScale,
+        source: selectedGood.source
       });
       burg.production.push({dealId: deal.i});
     }
@@ -502,20 +726,21 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
     for (let index = 0; index < marketTradeLinks; index++) {
       const buyer = markets[(market.i + index) % markets.length];
       if (!buyer || buyer.i === market.i) continue;
-      const good = dealGoods[(market.i * 17 + index * 9) % dealGoods.length];
+      const selectedGood = selectMarketDealGood(market, dealGoods, market.i, index, dealGoods[(market.i * 17 + index * 9) % dealGoods.length]);
       addDeal({
         pack,
         deals,
         statesById,
         stateDealTax,
-        goodId: good.i,
+        goodId: selectedGood.good.i,
         sellerType: "market",
         seller: market.i,
         buyerType: "market",
         buyer: buyer.i,
         units: 1.5 + (index % 3) * 0.25,
-        price: marketPrice(market, good.i),
-        valueScale: dealValueScale
+        price: marketPrice(market, selectedGood.good.i),
+        valueScale: dealValueScale,
+        source: selectedGood.source
       });
     }
   }
@@ -527,6 +752,28 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
 function getDealGoods(goods, options) {
   if (String(options.heightmapTemplate || "") !== "archipelago") return goods;
   return goods.slice(0, Math.min(goods.length, 64));
+}
+
+function selectMarketDealGood(market, goods, saltA, saltB, fallback) {
+  const fallbackGood = fallback || goods[Math.abs((saltA + saltB) % goods.length)];
+  const allowed = new Set(goods.map(good => good.i));
+  const supplied = Object.entries(market?.resourceSupply || {})
+    .map(([goodId, supply]) => ({
+      goodId: Number(goodId),
+      supply: Number(supply || 0),
+      source: market.resourceSupplySources?.[goodId] >= GOOD_SOURCE_MARKER ? "marker-resource" : "market-resource"
+    }))
+    .filter(item => allowed.has(item.goodId) && item.supply > 0)
+    .sort((a, b) => b.supply - a.supply || a.goodId - b.goodId);
+
+  if (!supplied.length) return {good: fallbackGood, source: "scheduled"};
+  const supplyPreference = ((saltA * 31 + saltB * 17) % 100) < 58;
+  if (!supplyPreference) return {good: fallbackGood, source: "scheduled"};
+  const selected = supplied[Math.abs((saltA * 13 + saltB * 7) % supplied.length)];
+  return {
+    good: goods.find(good => good.i === selected.goodId) || fallbackGood,
+    source: selected.source
+  };
 }
 
 function productionRecipe(good) {
@@ -578,7 +825,7 @@ function getDealValueScale(options) {
   return clamp((cellsTarget / 100000) ** 0.18, 0.66, 1);
 }
 
-function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1}) {
+function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1, source = "scheduled"}) {
   const sellerState = partyState(pack, sellerType, seller);
   const salesTax = statesById.get(sellerState)?.salesTax || 0.15;
   const roundedUnits = round(units);
@@ -594,7 +841,8 @@ function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, sel
     buyer,
     units: roundedUnits,
     price: roundedPrice,
-    tax
+    tax,
+    source
   };
   deals.push(deal);
   if (sellerState > 0) stateDealTax.set(sellerState, round((stateDealTax.get(sellerState) || 0) + tax));
@@ -730,6 +978,12 @@ function countPositive(values) {
 
 function average(values = []) {
   return values.length ? values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length : 0;
+}
+
+function sumValues(values = []) {
+  let total = 0;
+  for (const value of values || []) total += Number(value || 0);
+  return total;
 }
 
 function marketCoverageTarget(pack) {

@@ -1,3 +1,5 @@
+import {prepareInitialGoods} from "./economy.js";
+
 export const BIOMES = [
   {id: 0, name: "Marine", color: [0.27, 0.43, 0.67, 1], habitability: 0},
   {id: 1, name: "Hot desert", color: [0.98, 0.91, 0.62, 1], habitability: 4},
@@ -34,9 +36,10 @@ const SCORE_MAP = {
   lava: -30
 };
 
-export function defineBiomesAndPopulation(grid, pack) {
+export function defineBiomesAndPopulation(grid, pack, options = {}) {
   const startedAt = performance.now();
   defineBiomes(grid, pack);
+  const goodsAtRankTime = prepareInitialGoods(pack, options);
   const rankCellsInputs = rankCells(pack);
   pack.metadata.rankCellsInputs = rankCellsInputs;
   mirrorPackFieldsToGrid(grid, pack);
@@ -49,6 +52,7 @@ export function defineBiomesAndPopulation(grid, pack) {
       positivePopulationCells: countPositive(pack.cells.pop),
       maxSuitability: maxValue(pack.cells.s),
       maxPopulation: round(maxValue(pack.cells.pop), 3),
+      goodsAtRankTime,
       rankCellsInputs,
       buildMs: roundMs(performance.now() - startedAt)
     }
@@ -98,6 +102,8 @@ function isWetland(moisture, temperature, height) {
 function rankCells(pack) {
   const {cells, features} = pack;
   const hasGoodsAtRankTime = Boolean(cells.good);
+  let resourceRankBonusCells = 0;
+  let resourceRankBonusTotal = 0;
   cells.s = new Int16Array(cells.i.length);
   cells.pop = new Float32Array(cells.i.length);
 
@@ -113,6 +119,12 @@ function rankCells(pack) {
 
     if (meanFlux) score += normalize((cells.fl[cell] || 0) + (cells.conf[cell] || 0), meanFlux, maxFlux) * 250;
     score -= (cells.h[cell] - 50) / 5;
+    const resourceScore = resourceRankScore(pack, cell);
+    if (resourceScore > 0) {
+      score += resourceScore;
+      resourceRankBonusCells++;
+      resourceRankBonusTotal += resourceScore;
+    }
 
     if (cells.t[cell] === 1) {
       if (cells.r[cell]) score += SCORE_MAP.estuary;
@@ -129,7 +141,15 @@ function rankCells(pack) {
     cells.pop[cell] = cells.s[cell] > 0 ? (cells.s[cell] * cells.area[cell]) / meanArea : 0;
   }
 
-  return {hasGoodsAtRankTime};
+  return {hasGoodsAtRankTime, resourceRankBonusCells, resourceRankBonusTotal: round(resourceRankBonusTotal, 2)};
+}
+
+function resourceRankScore(pack, cell) {
+  const goodId = pack.cells.good?.[cell] || 0;
+  if (!goodId) return 0;
+  const value = Number(pack.goods?.[goodId]?.value || 2);
+  const supply = Number(pack.cells.goodSupply?.[cell] || 1);
+  return Math.min(48, value * 1.15 + supply * 5);
 }
 
 function mirrorPackFieldsToGrid(grid, pack) {
