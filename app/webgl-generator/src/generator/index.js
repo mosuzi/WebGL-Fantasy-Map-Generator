@@ -18,7 +18,10 @@ import {buildSociety, finalizeSocietyReligions} from "./society.js";
 import {buildZones} from "./zones.js";
 
 export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
-  const profile = createStageProfile();
+  const profile = createStageProfile({
+    onStageStart: overrides.onStageStart,
+    onStageEnd: overrides.onStageEnd
+  });
   const options = profile.stage("normalize-options", "标准化参数", () => normalizeOptions(inputOptions));
   const gridRandom = profile.stage("random-grid", "初始化 grid 随机源", () => createRandom(options.seed));
   const random = profile.stage("random-main", "初始化主随机源", () => createRandom(options.seed));

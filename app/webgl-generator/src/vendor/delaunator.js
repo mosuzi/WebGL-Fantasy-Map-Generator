@@ -1,5 +1,6 @@
-const module = await import("./delaunator.umd.js");
-const Delaunator = module.default || globalThis.Delaunator;
+import * as DelaunatorModule from "./delaunator.umd.js";
+
+const Delaunator = DelaunatorModule.default || globalThis.Delaunator;
 
 if (!Delaunator) {
   throw new Error("Delaunator vendor bundle did not initialize");

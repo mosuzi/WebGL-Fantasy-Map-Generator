@@ -94,7 +94,13 @@ export class PlaceholderMapRenderer {
     this.onHover = onHover;
     this.onSelect = onSelect;
     this.canvasSize = lockCanvasToInitialDisplaySize(canvas, this.overlay);
-    this.gl = canvas.getContext("webgl2", {antialias: true});
+    this.gl = canvas.getContext("webgl2", {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      powerPreference: "high-performance",
+      stencil: false
+    });
     if (!this.gl) throw new Error("当前浏览器不支持 WebGL2");
 
     this.program = createProgram(this.gl, vertexShaderSource, fragmentShaderSource);
@@ -224,6 +230,51 @@ export class PlaceholderMapRenderer {
     profile.stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
     profile.stage("fit-draw", "适配视图并绘制", () => this.fitToView());
+    this.lastLoad = profile.finish();
+  }
+
+  async loadMapAsync(map, {onStage = () => {}, yieldToBrowser = () => Promise.resolve()} = {}) {
+    const profile = createRendererLoadProfile();
+    const stage = async (id, label, task) => {
+      onStage(label);
+      await yieldToBrowser();
+      const result = profile.stage(id, label, task);
+      await yieldToBrowser();
+      return result;
+    };
+
+    this.map = map;
+    this.objectPickingIndex = await stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
+    await stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
+    await stage("shore-cache", "构建水陆线缓存", () => this.rebuildShoreVisualCache());
+    await stage("state-boundaries", "构建国家边界缓存", () => this.rebuildStateVisualCache());
+    await stage("province-boundaries", "构建省份边界缓存", () => this.rebuildProvinceVisualCache());
+    await stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
+    const vertices = await stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
+    const lineVertices = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
+    const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
+    this.vertexCount = vertices.length / 6;
+    this.routeVertexCount = 0;
+    this.lineVertexCount = lineVertices.length / 6;
+    this.pointVertexCount = pointVertices.length / 6;
+    await stage("gpu-upload", "上传静态 GPU buffer", () => {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+      this.updatePoliticalMeshDebugBuffer();
+    });
+    await stage("labels", "构建标签", () => this.buildLabels(map));
+    this.markAllDynamicBuffersDirty();
+    await stage("fit-draw", "适配视图并绘制", () => this.fitToView());
     this.lastLoad = profile.finish();
   }
 
@@ -1899,7 +1950,7 @@ function lockCanvasToInitialDisplaySize(canvas, overlay = null) {
   const rect = canvas.getBoundingClientRect();
   const cssWidth = Math.max(1, Math.round(rect.width || canvas.clientWidth || canvas.parentElement?.clientWidth || 1));
   const cssHeight = Math.max(1, Math.round(rect.height || canvas.clientHeight || canvas.parentElement?.clientHeight || 1));
-  const pixelRatio = window.devicePixelRatio || 1;
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
   const width = Math.max(1, Math.round(cssWidth * pixelRatio));
   const height = Math.max(1, Math.round(cssHeight * pixelRatio));
 

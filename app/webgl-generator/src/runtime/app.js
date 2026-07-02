@@ -49,6 +49,7 @@ import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
+import GenerationWorker from "./generation-worker.js?worker";
 
 export function createGeneratorApp(documentRef) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -1147,7 +1148,7 @@ function requestGenerate(state, documentRef) {
     setGenerationLoading(documentRef, true, "静候星图显影");
     scheduleAfterPaint(documentRef, () => {
       if (generateId !== state.pendingGenerateId) return;
-      runGenerateNow(state, documentRef, generateId);
+      void runGenerateNow(state, documentRef, generateId);
     });
   } catch (error) {
     setGenerationLoading(documentRef, false);
@@ -1155,13 +1156,14 @@ function requestGenerate(state, documentRef) {
   }
 }
 
-function runGenerateNow(state, documentRef, generateId) {
+async function runGenerateNow(state, documentRef, generateId) {
   try {
     setGenerationStatus(documentRef, state.options, "生成中");
     setGenerationLoading(documentRef, true, "正在推演山海脉络");
-    const map = generatePlaceholderMap(state.options);
+    await yieldToBrowser(documentRef);
+    const map = await generateMapOffMainThread(documentRef, state.options, generateId);
     if (generateId !== state.pendingGenerateId) return;
-    loadMapIntoRuntime(state, documentRef, map, {
+    await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: ["正在铺展灵纹图层", "正在誊清诸域卷册"]
     });
     setGenerationLoading(documentRef, false);
@@ -1171,7 +1173,7 @@ function runGenerateNow(state, documentRef, generateId) {
   }
 }
 
-function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}) {
+async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}) {
   state.map = map;
   state.pick = null;
   state.editHistory.clear();
@@ -1193,9 +1195,22 @@ function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}
   state.measurement.points = [];
   state.measurement.pointer = null;
   state.lastEditRefresh = null;
-  if (loadingMessages[0]) setGenerationLoading(documentRef, true, loadingMessages[0]);
-  state.renderer.loadMap(state.map);
-  if (loadingMessages[1]) setGenerationLoading(documentRef, true, loadingMessages[1]);
+  if (loadingMessages[0]) {
+    setGenerationLoading(documentRef, true, loadingMessages[0]);
+    await yieldToBrowser(documentRef);
+  }
+  if (typeof state.renderer.loadMapAsync === "function") {
+    await state.renderer.loadMapAsync(state.map, {
+      onStage: label => setGenerationLoading(documentRef, true, label),
+      yieldToBrowser: () => yieldToBrowser(documentRef)
+    });
+  } else {
+    state.renderer.loadMap(state.map);
+  }
+  if (loadingMessages[1]) {
+    setGenerationLoading(documentRef, true, loadingMessages[1]);
+    await yieldToBrowser(documentRef);
+  }
   state.selectionStore.clear();
   updateHeightPanel(state);
   updateStatePanel(state);
@@ -1224,16 +1239,82 @@ function scheduleAfterPaint(documentRef, callback) {
     callback();
   };
 
-  if (typeof view.scheduler?.postTask === "function") {
-    view.scheduler.postTask(run, {priority: "user-visible"}).catch(() => {});
-  }
-  if (typeof view.MessageChannel === "function") {
-    const channel = new view.MessageChannel();
-    channel.port1.onmessage = run;
-    channel.port2.postMessage(null);
+  if (typeof view.requestAnimationFrame === "function") {
+    view.requestAnimationFrame(() => view.setTimeout(run, 0));
+    return;
   }
   view.setTimeout(run, 0);
-  view.requestAnimationFrame(() => view.setTimeout(run, 0));
+}
+
+function yieldToBrowser(documentRef) {
+  const view = documentRef.defaultView || window;
+  return new Promise(resolve => {
+    if (typeof view.requestAnimationFrame === "function") {
+      view.requestAnimationFrame(() => view.setTimeout(resolve, 0));
+      return;
+    }
+    view.setTimeout(resolve, 0);
+  });
+}
+
+function generateMapOffMainThread(documentRef, options, generateId) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.Worker !== "function") return Promise.resolve(generatePlaceholderMap(options));
+
+  let worker;
+  try {
+    worker = new GenerationWorker();
+  } catch {
+    return Promise.resolve(generatePlaceholderMap(options));
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = view.setTimeout(() => {
+      finish(() => reject(new Error("地图生成超时，请降低 cells 数量后重试")));
+    }, 60000);
+
+    const finish = callback => {
+      if (settled) return;
+      settled = true;
+      view.clearTimeout(timeout);
+      worker.terminate();
+      callback();
+    };
+
+    const fallbackToMainThread = () => {
+      try {
+        const map = generatePlaceholderMap(options);
+        finish(() => resolve(map));
+      } catch (error) {
+        finish(() => reject(error));
+      }
+    };
+
+    worker.addEventListener("message", event => {
+      const data = event.data || {};
+      if (data.requestId !== generateId) return;
+      if (data.type === "generation-stage") {
+        setGenerationLoading(documentRef, true, data.stage?.label || "生成中");
+        return;
+      }
+      if (data.type === "generation-stage-complete") {
+        return;
+      }
+      if (data.type === "generated-map") {
+        finish(() => resolve(data.map));
+        return;
+      }
+      const error = new Error(data.message || "地图生成失败");
+      if (data.stack) error.stack = data.stack;
+      finish(() => reject(error));
+    });
+
+    worker.addEventListener("error", fallbackToMainThread);
+    worker.addEventListener("messageerror", fallbackToMainThread);
+
+    worker.postMessage({type: "generate-map", requestId: generateId, options});
+  });
 }
 
 function setGenerationStatus(documentRef, options, status) {
@@ -1497,7 +1578,7 @@ async function importMapData(state, documentRef, file) {
     state.options = options;
     syncGenerationInputs(documentRef, options);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
-    loadMapIntoRuntime(state, documentRef, document.map, {
+    await loadMapIntoRuntime(state, documentRef, document.map, {
       loadingMessages: ["正在复原 WebGL 图层", "正在刷新地图面板"]
     });
     setGenerationLoading(documentRef, false);
@@ -1531,7 +1612,7 @@ async function importHeightmapImage(state, documentRef, file) {
       return;
     }
     state.options = map.options;
-    loadMapIntoRuntime(state, documentRef, map, {
+    await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: ["正在重建水陆与气候", "正在刷新地图面板"]
     });
     setGenerationLoading(documentRef, false);

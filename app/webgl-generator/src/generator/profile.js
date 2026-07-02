@@ -1,11 +1,14 @@
-export function createStageProfile() {
+export function createStageProfile({onStageStart = null, onStageEnd = null} = {}) {
   const startedAt = performance.now();
   const stages = [];
   return {
     stage(id, label, task) {
       const started = performance.now();
+      onStageStart?.({id, label});
       const result = task();
-      stages.push({id, label, ms: roundMs(performance.now() - started)});
+      const stage = {id, label, ms: roundMs(performance.now() - started)};
+      stages.push(stage);
+      onStageEnd?.(stage);
       return result;
     },
     finish() {

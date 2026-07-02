@@ -13999,3 +13999,39 @@ full 矩阵结果：
 后续：
 
 - 之后凡是验证生产构建加载，都应同时覆盖根路径和子路径，避免只在开发服务器或根路径下通过。
+
+### 5410 首屏生成卡死修复
+
+背景：
+
+- 用户反馈 `http://127.0.0.1:5410/` 在 in-app browser 中卡在右上角“等待生成任务”和顶部“静候星图显影”，控制面板展开、测量按钮和 DevTools console 的 `window` 回车都无法响应。
+- 早先只在独立 Chrome 干净会话里判断“可加载”是不充分的；这次按真实端口和卡死表现重新排查。
+
+诊断：
+
+- Node 直接运行 `tools/webgl-generator-generation-profile.mjs --cells 10000` 可在约 `655ms` 内完成，说明纯生成算法本身没有无限循环。
+- 生产页旧路径在首轮 `requestGenerate()` 设置 loading 后进入同步生成/装载，主线程没有机会处理输入，表现为 DOM 和 console 一起失去响应。
+- 第一版 Worker 改造后，构建产物中 `new Worker(new URL(...))` 没有稳定产出 worker 资源；改成 Vite `?worker` 后又发现 worker 默认 IIFE 不支持现有 `vendor/delaunator.js` 的顶层 await。
+- 将 worker 输出改为 ES module 后，worker 能创建但 60 秒超时且没有任何阶段消息；构建后的 worker 包中仍存在 `await import("./delaunator.umd-*.js")`，卡在 worker 模块初始化，连 `message` 监听都未注册。
+
+修正：
+
+- 新增 `app/webgl-generator/src/runtime/generation-worker.js`，首轮地图生成走 ES module Worker，并把生成阶段通过 `generation-stage` 消息回传给 loading bubble。
+- `app/webgl-generator/src/generator/profile.js` 支持 `onStageStart / onStageEnd` 回调，`generatePlaceholderMap()` 透传该回调供 worker 和后续诊断复用。
+- `app/webgl-generator/src/runtime/app.js` 把 `requestGenerate()` 改为先等一次 paint，再异步生成；`loadMapIntoRuntime()` 改为可等待的装载流程；Worker 错误或不可用时保留主线程兜底生成。
+- `app/webgl-generator/src/renderer/placeholder-renderer.js` 新增 `loadMapAsync()`，按对象索引、cell mesh、水陆线、政治边界、顶点构建、GPU 上传、标签和 fit/draw 分阶段装载，每段之间让出浏览器事件循环；WebGL context 关闭不必要的 antialias/depth/stencil，并把初始 pixel ratio 限制到 `1.5`。
+- `app/webgl-generator/src/vendor/delaunator.js` 改为静态命名空间导入 UMD，并从 `module.default || globalThis.Delaunator` 取构造器，消除顶层动态导入造成的 worker 初始化阻塞，同时保持 Node profile 兼容。
+- `vite.config.mjs` 增加 `worker.format = "es"`，让 worker 产物支持 ES module。
+
+验证：
+
+- `node .\tools\webgl-generator-generation-profile.mjs --cells 10000 --iterations 1 --out .\docs\generated\reports\tmp-generation-profile.json --markdown .\docs\generated\reports\tmp-generation-profile.md` 通过，生成 profile 仍可跑通。
+- `$env:CI='true'; pnpm run build:app` 通过；产物生成 `generation-worker-*.js`。仍有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?verify=...`：`window.__webglGeneratorApp.map` 可在 30 秒内出现；默认 10k 地图生成 `555.2ms`，renderer `loadMap.totalMs = 419.2ms`，`vertexCount = 525843`，`lineVertexCount = 257952`，`draw.glError = 0`，loading 最终收起。
+- 截图 `docs/generated/reports/tmp-webgl-load.png` 确认地图实际可见；控制面板按钮可打开生成面板，测量按钮点击后 `measurement-active = true`。
+- in-app browser 的自动化桥接仍会被旧卡死标签拖住，连列标签/新建标签都超时；这与旧 bundle 主线程冻结现象一致。代码侧验证通过后，需要刷新当前 in-app browser 标签以加载新的 hash bundle。
+
+后续：
+
+- 继续关注首屏 bundle：静态导入 Delaunator 后主入口体积上升，后续应结合现有懒加载策略拆分生成器或 vendor，而不是回到顶层动态导入。
+- 浏览器验证加载问题时，必须使用用户实际端口和当前页面状态；独立干净会话只能作为辅助证明。

@@ -6,6 +6,10 @@
 
 当前 focus 仍是 source/candidate full 矩阵 warn 收敛，同时穿插修用户验收中明确指出的纯生成观感问题。最新 full candidate 矩阵为 `61 pass / 2 warn / 0 fail`，warn 总项已降至 `2`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项、10k 稀疏群岛的市场类告警、`archipelago-10000-audit-archipelago-001` 的城镇数量派生告警、`peninsula-50000-audit-peninsula-003` 的库存均值/港口/税基告警，以及 `highIsland-100000-audit-highIsland-003` 的军事团数告警。
 
+启动稳定性补充：
+
+- 2026-07-02 修复 `127.0.0.1:5410` 首屏卡在“等待生成任务 / 静候星图显影”的问题：首轮生成改由 ES module Worker 执行，WebGL 装载拆成可让出主线程的阶段，`delaunator` vendor 包装去掉顶层动态导入，避免 worker 模块初始化阻塞。Chrome 构建产物验证中，默认 10k 地图生成约 `555ms`，WebGL 装载约 `419ms`，页面加载完成后控制面板和测量按钮可点击，截图确认地图可见。
+
 刚完成的观感修正：
 
 - 生成 loading 文案不再显示目标 `cells`，运行中 badge 只显示状态和地图尺寸；loading bubble 显示“静候星图显影 / 正在推演山海脉络 / 正在铺展灵纹图层 / 正在誊清诸域卷册”。

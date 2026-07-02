@@ -23,6 +23,9 @@ export default defineConfig({
     port: 5410,
     strictPort: false
   },
+  worker: {
+    format: "es"
+  },
   build: {
     outDir: "../../dist/webgl-generator",
     emptyOutDir: true
