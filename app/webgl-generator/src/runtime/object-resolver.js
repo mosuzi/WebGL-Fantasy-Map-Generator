@@ -6,6 +6,7 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.MARKER]: resolveMarker,
   [OBJECT_KIND.ROUTE]: resolveRoute,
   [OBJECT_KIND.RIVER]: resolveRiver,
+  [OBJECT_KIND.MILITARY]: resolveMilitary,
   [OBJECT_KIND.STATE]: resolveState,
   [OBJECT_KIND.PROVINCE]: resolveProvince,
   [OBJECT_KIND.CULTURE]: resolveCulture,
@@ -153,6 +154,33 @@ function resolveRiver(map, object) {
   };
 }
 
+function resolveMilitary(map, object) {
+  const {regiment, state} = findRegiment(map, object);
+  if (!regiment) return null;
+  return {
+    ...object,
+    kind: OBJECT_KIND.MILITARY,
+    id: regiment.id ?? `${regiment.state}:${regiment.i}`,
+    regimentId: regiment.i,
+    stateId: regiment.state,
+    name: regiment.name || `军团 #${regiment.i}`,
+    state: state?.name || "none",
+    type: regiment.type,
+    status: regiment.status,
+    statusLabel: regiment.statusLabel,
+    dominantUnit: regiment.dominantUnit,
+    dominantUnitLabel: regiment.dominantUnitLabel,
+    troops: regiment.a,
+    units: regiment.u,
+    icon: regiment.icon,
+    x: regiment.x,
+    y: regiment.y,
+    cell: regiment.cell,
+    suitability: regiment.suitability,
+    movementSpeed: regiment.movementSpeed
+  };
+}
+
 function resolveState(map, object) {
   const state = map.politics.states[object.id];
   if (!state) return null;
@@ -187,6 +215,14 @@ function resolveState(map, object) {
     religion: map.society.religions[state.religion]?.name || "unknown",
     centerCell: state.center
   };
+}
+
+function findRegiment(map, object) {
+  const stateId = Number(object.stateId ?? object.state ?? String(object.id || "").split(":")[0]);
+  const regimentId = Number(object.regimentId ?? object.i ?? String(object.id || "").split(":")[1]);
+  const state = map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId];
+  const regiment = (state?.military || []).find(item => item.i === regimentId || item.id === object.id) || null;
+  return {state, regiment};
 }
 
 function resolveProvince(map, object) {

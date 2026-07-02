@@ -19,6 +19,7 @@ import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
 import {createMarkerPanel} from "../ui/panels/marker-panel.js";
+import {createMilitaryPanel} from "../ui/panels/military-panel.js";
 import {createNamebasePanel} from "../ui/panels/namebase-panel.js";
 import {createNotesPanel} from "../ui/panels/notes-panel.js";
 import {createObjectDetailsPanel} from "../ui/panels/object-details-panel.js";
@@ -38,6 +39,7 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
+import {createSetMilitaryRatiosCommand} from "./military-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -157,6 +159,7 @@ export function createGeneratorApp(documentRef) {
   let culturePanel = null;
   let religionPanel = null;
   let diplomacyPanel = null;
+  let militaryPanel = null;
   let riverPanel = null;
   let routePanel = null;
   let markerPanel = null;
@@ -667,6 +670,48 @@ export function createGeneratorApp(documentRef) {
     }
   });
   state.panels.diplomacy = diplomacyPanel;
+  militaryPanel = createMilitaryPanel(documentRef, panelManager, {
+    onSelect: object => {
+      selectionStore.setSelection({object});
+      militaryPanel.setSelectedRegimentId(object.id);
+    },
+    onLocate: object => {
+      locateObject(state, object, documentRef);
+      militaryPanel.setSelectedRegimentId(object.id);
+    },
+    onRatiosApply: (stateId, ratios) => {
+      const command = createSetMilitaryRatiosCommand(stateId, ratios);
+      if (!command.isNoop({map: state.map})) {
+        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+        markDerivedFresh(state.map, ["military"]);
+        refreshGenerationSummary(state.map);
+        appendGenerationLog(state.map, `update military ratios: state=${stateId}, regiments=${state.map.military?.metadata?.regiments || 0}`);
+      }
+      updateMilitaryPanel(state);
+      updateStatePanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) {
+        refreshAfterEdit(state, command);
+        refreshGenerationSummary(state.map);
+      }
+      updateMilitaryPanel(state);
+      updateStatePanel(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) {
+        refreshAfterEdit(state, command);
+        refreshGenerationSummary(state.map);
+      }
+      updateMilitaryPanel(state);
+      updateStatePanel(state);
+    }
+  });
+  state.panels.military = militaryPanel;
   routePanel = createRoutePanel(documentRef, panelManager, {
     onSelect: object => {
       selectionStore.setSelection({object});
@@ -1092,6 +1137,12 @@ export function createGeneratorApp(documentRef) {
         state.panels.diplomacy.setSelectedStateId(state.selection.object.id);
       }
       state.panels.diplomacy.open(state.map, state.selection, state.editHistory.getStats());
+    },
+    onOpenMilitaryPanel: () => {
+      if (state.selection?.object?.kind === OBJECT_KIND.MILITARY) {
+        state.panels.military.setSelectedRegimentId(state.selection.object.id);
+      }
+      state.panels.military.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenRiverPanel: () => {
       state.panels.river.open(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
@@ -1820,6 +1871,12 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     state.panels.objectDetails.clear();
     state.panels.marker.setSelectedMarkerId(selection.object.id);
     state.panels.marker.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.MILITARY]: (state, selection) => {
+    state.panels.objectDetails.clear();
+    state.panels.military.setSelectedRegimentId(selection.object.id);
+    state.panels.military.open(state.map, selection, state.editHistory.getStats());
     return true;
   }
 });
@@ -3002,6 +3059,10 @@ function updateDiplomacyPanel(state) {
   state.panels.diplomacy?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
+function updateMilitaryPanel(state) {
+  state.panels.military?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
 function updateMarkerPanel(state) {
   state.panels.marker?.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.marker?.updateEditMode?.(state.markerEdit);
@@ -3022,6 +3083,7 @@ function updateAllObjectPanels(state) {
   updateCulturePanel(state);
   updateReligionPanel(state);
   updateDiplomacyPanel(state);
+  updateMilitaryPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
   state.panels.route?.update(state.map, state.selection, state.editHistory.getStats());

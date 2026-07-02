@@ -1,4 +1,4 @@
-import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickPoliticalObject, pickRiver, pickRoute} from "./picking.js";
+import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRoute} from "./picking.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {isLandCell} from "./color-modes.js";
@@ -53,6 +53,10 @@ const CITY_ICON_MIN_SCALE = 1.05;
 const CITY_ICON_RELAXED_SCALE = 3.8;
 const CITY_ICON_BASE_WIDTH = 34;
 const CITY_ICON_BASE_HEIGHT = 26;
+const MILITARY_ICON_MIN_SCALE = 0.76;
+const MILITARY_ICON_RELAXED_SCALE = 2.6;
+const MILITARY_ICON_BASE_WIDTH = 58;
+const MILITARY_ICON_BASE_HEIGHT = 24;
 const POPULATION_UNIT_PEOPLE = 1000;
 
 const MARKER_ICON_PALETTES = Object.freeze({
@@ -141,6 +145,9 @@ export class PlaceholderMapRenderer {
     this.markerIconCount = 0;
     this.visibleMarkerIconCount = 0;
     this.markerIconScaleThreshold = MARKER_ICON_MIN_SCALE;
+    this.militaryIconItems = [];
+    this.militaryIconCount = 0;
+    this.visibleMilitaryIconCount = 0;
     this.selection = null;
     this.selectionMarker = null;
     this.objectPickingIndex = null;
@@ -171,6 +178,8 @@ export class PlaceholderMapRenderer {
       population: true,
       markers: true,
       resources: true,
+      military: true,
+      warFronts: true,
       scaleBar: true,
       coastline: true,
       lakeShore: true,
@@ -437,8 +446,8 @@ export class PlaceholderMapRenderer {
       changed = true;
     }
     if (!changed) return;
-    if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources") this.refreshPointLayers({draw: false});
-    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders")) this.refreshLineLayers({draw: false});
+    if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") this.refreshPointLayers({draw: false});
+    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts")) this.refreshLineLayers({draw: false});
     this.draw();
   }
 
@@ -594,18 +603,20 @@ export class PlaceholderMapRenderer {
   pickClientPoint(clientX, clientY) {
     const label = this.pickLabel(clientX, clientY);
     const markerIcon = this.pickMarkerIcon(clientX, clientY);
+    const militaryIcon = this.pickMilitaryIcon(clientX, clientY);
     const world = this.screenToWorld(clientX, clientY);
     const result = pickGridCell(this.map, world.x, world.y);
     const cityObject = this.layerVisibility.cities || this.layerVisibility.population
       ? pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9))
       : null;
     const marker = markerIcon || pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
+    const military = militaryIcon || (this.layerVisibility.military !== false ? pickMilitary(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(13)) : null);
     const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
     const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
-    const object = markerIcon || label || cityObject || marker || river || route || politicalObject;
-    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (politicalObject ? 1 : 0);
-    return result ? {...result, label, cityObject, marker, route, river, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
+    const object = militaryIcon || markerIcon || label || cityObject || marker || military || river || route || politicalObject;
+    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (politicalObject ? 1 : 0);
+    return result ? {...result, label, cityObject, marker, military, route, river, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
 
   screenToWorld(clientX, clientY) {
@@ -741,6 +752,7 @@ export class PlaceholderMapRenderer {
       this.labelItems = [];
       this.cityIconItems = [];
       this.markerIconItems = [];
+      this.militaryIconItems = [];
       this.labelCount = 0;
       this.visibleLabelCount = 0;
       this.cityLabelCount = 0;
@@ -751,6 +763,8 @@ export class PlaceholderMapRenderer {
       this.visibleCityIconCount = 0;
       this.markerIconCount = 0;
       this.visibleMarkerIconCount = 0;
+      this.militaryIconCount = 0;
+      this.visibleMilitaryIconCount = 0;
       return;
     }
     this.overlay.replaceChildren();
@@ -785,6 +799,23 @@ export class PlaceholderMapRenderer {
       this.overlay.append(node);
       return {...item, node, box: null, visible: false};
     });
+    this.militaryIconItems = getMilitaryIconItems(map).map(item => {
+      const node = document.createElement("span");
+      node.className = militaryIconClassName(item);
+      node.title = item.tooltip;
+      node.setAttribute("aria-label", item.tooltip);
+      node.dataset.militaryId = String(item.id);
+      node.dataset.stateId = String(item.stateId);
+      const symbol = document.createElement("span");
+      symbol.className = "military-map-icon-symbol";
+      symbol.textContent = item.icon;
+      const count = document.createElement("span");
+      count.className = "military-map-icon-count";
+      count.textContent = formatMilitaryTroops(item.troops);
+      node.append(symbol, count);
+      this.overlay.append(node);
+      return {...item, node, box: null, visible: false};
+    });
     this.selectionMarker = document.createElement("span");
     this.selectionMarker.className = "selection-marker";
     this.selectionMarker.style.display = "none";
@@ -794,11 +825,13 @@ export class PlaceholderMapRenderer {
     this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
     this.cityIconCount = this.cityIconItems.length;
     this.markerIconCount = this.markerIconItems.length;
+    this.militaryIconCount = this.militaryIconItems.length;
     this.visibleLabelCount = 0;
     this.visibleCityLabelCount = 0;
     this.visibleStateLabelCount = 0;
     this.visibleCityIconCount = 0;
     this.visibleMarkerIconCount = 0;
+    this.visibleMilitaryIconCount = 0;
   }
 
   updateLabels() {
@@ -851,6 +884,7 @@ export class PlaceholderMapRenderer {
     this.visibleStateLabelCount = visibleStates;
     const cityIconBoxes = this.updateCityIcons(rect, occupiedStates);
     this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes], cityIconBoxes);
+    this.updateMilitaryIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes]);
     this.updateSelectionMarker(rect);
   }
 
@@ -952,6 +986,44 @@ export class PlaceholderMapRenderer {
     this.visibleMarkerIconCount = visible;
   }
 
+  updateMilitaryIcons(rect, occupiedLabels = []) {
+    if (!this.militaryIconItems.length) {
+      this.visibleMilitaryIconCount = 0;
+      return;
+    }
+
+    const scale = this.camera.scale;
+    const iconPadding = scale >= MILITARY_ICON_RELAXED_SCALE ? 2 : 6;
+    const occupiedIcons = [];
+    let visible = 0;
+
+    for (const item of this.militaryIconItems) {
+      const screen = this.worldToScreen(item.x, item.y, rect);
+      const sizeScale = militaryIconScale(scale, item);
+      const box = militaryIconBoxForItem(item, screen, sizeScale);
+      const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
+      const selected = this.selection?.kind === OBJECT_KIND.MILITARY && this.selection.id === item.id;
+      const blocked = !selected && scale < MILITARY_ICON_RELAXED_SCALE && (
+        occupiedLabels.some(other => boxesOverlap(box, other, iconPadding)) ||
+        occupiedIcons.some(other => boxesOverlap(box, other, iconPadding))
+      );
+      const shouldShow = this.layerVisibility.military !== false && scale >= item.minScale && onScreen && !blocked;
+      item.node.classList.toggle("visible", shouldShow);
+      item.node.classList.toggle("selected", selected);
+      item.node.classList.toggle("military-map-icon--fleet", item.type === "fleet");
+      item.visible = shouldShow;
+      item.box = shouldShow ? box : null;
+      if (!shouldShow) continue;
+      item.node.style.left = `${screen.x}px`;
+      item.node.style.top = `${screen.y}px`;
+      item.node.style.setProperty("--military-icon-scale", String(sizeScale));
+      occupiedIcons.push(box);
+      visible++;
+    }
+
+    this.visibleMilitaryIconCount = visible;
+  }
+
   pickLabel(clientX, clientY) {
     if (!this.overlay || !this.labelItems.length) return null;
     const rect = this.canvas.getBoundingClientRect();
@@ -982,6 +1054,18 @@ export class PlaceholderMapRenderer {
       const rect = item.node.getBoundingClientRect();
       if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue;
       return markerObjectFromIconItem(item);
+    }
+    return null;
+  }
+
+  pickMilitaryIcon(clientX, clientY) {
+    if (!this.overlay || !this.militaryIconItems.length || this.layerVisibility.military === false) return null;
+    for (let index = this.militaryIconItems.length - 1; index >= 0; index--) {
+      const item = this.militaryIconItems[index];
+      if (!item.visible) continue;
+      const rect = item.node.getBoundingClientRect();
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) continue;
+      return militaryObjectFromIconItem(item);
     }
     return null;
   }
@@ -1018,6 +1102,10 @@ function selectionPoint(map, selection) {
     const marker = map.markers.markers[selection.id];
     return marker ? {x: marker.x, y: marker.y} : null;
   }
+  if (selection?.kind === OBJECT_KIND.MILITARY) {
+    const regiment = findRegiment(map, selection);
+    return regiment ? {x: regiment.x, y: regiment.y} : null;
+  }
   return null;
 }
 
@@ -1037,6 +1125,10 @@ function getObjectBounds(map, object) {
   if (object.kind === OBJECT_KIND.MARKER) {
     const marker = map.markers.markers[object.id];
     return marker ? pointBounds(marker.x, marker.y, 42) : null;
+  }
+  if (object.kind === OBJECT_KIND.MILITARY) {
+    const regiment = findRegiment(map, object);
+    return regiment ? pointBounds(regiment.x, regiment.y, 58) : null;
   }
   if (object.kind === OBJECT_KIND.ROUTE) {
     const route = map.settlements.routes.find(item => item.id === object.id);
@@ -1387,6 +1479,134 @@ function markerIconClassName(item) {
   return classes.join(" ");
 }
 
+function getMilitaryIconItems(map) {
+  return militaryRegiments(map)
+    .sort((a, b) => Number(b.a || 0) - Number(a.a || 0))
+    .map(regiment => ({
+      id: regiment.id ?? `${regiment.state}:${regiment.i}`,
+      regiment,
+      stateId: regiment.state,
+      regimentId: regiment.i,
+      type: regiment.type,
+      name: regiment.name || `军团 #${regiment.i}`,
+      stateName: regiment.stateName || map?.politics?.states?.[regiment.state]?.name || "none",
+      icon: regiment.icon || militaryIconForUnit(regiment.dominantUnit),
+      troops: Number(regiment.a || 0),
+      status: regiment.status,
+      statusLabel: regiment.statusLabel,
+      dominantUnit: regiment.dominantUnit,
+      dominantUnitLabel: regiment.dominantUnitLabel,
+      tooltip: militaryIconTooltip(regiment, map),
+      minScale: regiment.a >= 8000 ? MILITARY_ICON_MIN_SCALE * 0.82 : MILITARY_ICON_MIN_SCALE,
+      x: regiment.x,
+      y: regiment.y
+    }));
+}
+
+function militaryRegiments(map) {
+  return (map?.politics?.states || map?.pack?.states || [])
+    .filter(state => state?.i && !state.removed)
+    .flatMap(state => (state.military || []).map(regiment => ({
+      ...regiment,
+      stateName: state.name || state.fullName || `国家 #${state.i}`,
+      state: regiment.state ?? state.i
+    })))
+    .filter(regiment => Number.isFinite(regiment.x) && Number.isFinite(regiment.y));
+}
+
+function militaryIconTooltip(regiment, map) {
+  const state = map?.politics?.states?.[regiment.state] || map?.pack?.states?.[regiment.state];
+  return `${state?.name || "国家"} / ${regiment.name || "军团"} / ${regiment.statusLabel || "待命"} / ${formatMilitaryTroops(regiment.a)}`;
+}
+
+function militaryIconClassName(item) {
+  const classes = ["military-map-icon"];
+  if (item.type === "fleet") classes.push("military-map-icon--fleet");
+  return classes.join(" ");
+}
+
+function militaryObjectFromIconItem(item) {
+  const regiment = item.regiment || {};
+  return {
+    kind: OBJECT_KIND.MILITARY,
+    id: item.id,
+    regimentId: regiment.i ?? item.regimentId,
+    stateId: regiment.state ?? item.stateId,
+    name: regiment.name || item.name,
+    state: item.stateName,
+    type: regiment.type || item.type,
+    status: regiment.status || item.status,
+    statusLabel: regiment.statusLabel || item.statusLabel,
+    dominantUnit: regiment.dominantUnit || item.dominantUnit,
+    dominantUnitLabel: regiment.dominantUnitLabel || item.dominantUnitLabel,
+    troops: regiment.a ?? item.troops,
+    units: regiment.u,
+    icon: regiment.icon || item.icon,
+    cell: regiment.cell,
+    x: regiment.x,
+    y: regiment.y,
+    distance: 0,
+    candidateCount: 1
+  };
+}
+
+function militaryIconBoxForItem(item, screen, sizeScale) {
+  const width = (MILITARY_ICON_BASE_WIDTH + Math.min(18, String(formatMilitaryTroops(item.troops)).length * 3)) * sizeScale;
+  const height = MILITARY_ICON_BASE_HEIGHT * sizeScale;
+  return {
+    left: screen.x - width / 2,
+    right: screen.x + width / 2,
+    top: screen.y - height * 0.55,
+    bottom: screen.y + height * 0.45,
+    item
+  };
+}
+
+function militaryIconScale(scale, item) {
+  const troopBonus = item.troops >= 10000 ? 0.08 : item.troops >= 4000 ? 0.04 : 0;
+  return clamp(0.82 + troopBonus + (scale - item.minScale) * 0.04, 0.78, 1.16);
+}
+
+function militaryIconForUnit(unit) {
+  if (unit === "archers") return "弓";
+  if (unit === "cavalry") return "骑";
+  if (unit === "artillery") return "械";
+  if (unit === "fleet") return "舟";
+  return "步";
+}
+
+function formatMilitaryTroops(value) {
+  const troops = Math.max(0, Number(value || 0));
+  if (troops >= 10000) return `${roundValue(troops / 10000)}万`;
+  if (troops >= 1000) return `${roundValue(troops / 1000)}千`;
+  return String(Math.round(troops));
+}
+
+function colorForRegiment(regiment) {
+  if (regiment.type === "fleet" || regiment.dominantUnit === "fleet") return [0.32, 0.68, 0.92, 0.92];
+  if (regiment.dominantUnit === "cavalry") return [0.86, 0.66, 0.34, 0.94];
+  if (regiment.dominantUnit === "archers") return [0.48, 0.74, 0.46, 0.94];
+  if (regiment.dominantUnit === "artillery") return [0.82, 0.46, 0.34, 0.94];
+  return [0.86, 0.82, 0.62, 0.94];
+}
+
+function pushMilitaryFrontLines(vertices, context, map, visibility) {
+  const width = Math.max(1.2, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 1900);
+  for (const front of map?.military?.fronts || []) {
+    const points = front.points || [[front.from?.x, front.from?.y], [front.to?.x, front.to?.y]];
+    const color = front.stance === "defense" ? [0.34, 0.64, 0.92, 0.72] : [0.92, 0.38, 0.25, 0.78];
+    pushWorldPolylineMesh(vertices, context, points, color, width, {joinSegments: 8, joinMode: "caps"});
+  }
+}
+
+function findRegiment(map, object) {
+  const idParts = String(object.id ?? "").split(":");
+  const stateId = Number(object.stateId ?? object.state ?? idParts[0]);
+  const regimentId = Number(object.regimentId ?? object.i ?? idParts[1]);
+  const state = map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId];
+  return (state?.military || []).find(regiment => regiment.i === regimentId || regiment.id === object.id) || null;
+}
+
 function applyMarkerIconPalette(node, item) {
   const palette = markerIconPalette(item);
   node.style.setProperty("--marker-fill", palette.fill);
@@ -1666,6 +1886,7 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
+  if (visibility.warFronts !== false) pushMilitaryFrontLines(vertices, context, map, visibility);
   return new Float32Array(vertices);
 }
 
@@ -1830,6 +2051,9 @@ function buildPointVertices(map, visibility = {}) {
       if (!isMarkerLayerVisible(marker, visibility)) continue;
       pushWorldVertex(vertices, context, [marker.x, marker.y], colorForMarker(marker));
     }
+  }
+  if (visibility.military !== false) {
+    for (const regiment of militaryRegiments(map)) pushWorldVertex(vertices, context, [regiment.x, regiment.y], colorForRegiment(regiment));
   }
   return new Float32Array(vertices);
 }

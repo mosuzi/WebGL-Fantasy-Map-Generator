@@ -681,6 +681,7 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   const elements = Array.from(overlay.querySelectorAll([
     ".city-map-icon.visible",
     ".marker-map-icon.visible",
+    ".military-map-icon.visible",
     ".state-label.visible",
     ".city-label.visible",
     ".custom-label.visible"

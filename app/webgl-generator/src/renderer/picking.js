@@ -37,6 +37,10 @@ export function buildObjectPickingIndex(map) {
     addToBucket(buckets, columns, rows, bucketSize, marker.x, marker.y, "markers", marker);
   }
 
+  for (const regiment of militaryRegiments(map)) {
+    addToBucket(buckets, columns, rows, bucketSize, regiment.x, regiment.y, "military", regiment);
+  }
+
   for (const route of map.settlements.routes) {
     for (let index = 0; index < route.points.length - 1; index++) {
       const a = route.points[index];
@@ -59,7 +63,7 @@ export function buildObjectPickingIndex(map) {
 
   let maxBucketItems = 0;
   for (const bucket of buckets.values()) {
-    maxBucketItems = Math.max(maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.routeSegments.length + bucket.riverSegments.length);
+    maxBucketItems = Math.max(maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.military.length + bucket.routeSegments.length + bucket.riverSegments.length);
   }
 
   return {
@@ -70,10 +74,29 @@ export function buildObjectPickingIndex(map) {
     bucketCount: buckets.size,
     cityCount: map.settlements.cities.length,
     markerCount: map.markers.markers.length,
+    militaryCount: militaryRegiments(map).length,
     routeSegmentCount,
     riverSegmentCount,
     maxBucketItems
   };
+}
+
+export function pickMilitary(map, index, worldX, worldY, maxDistance) {
+  const regiments = militaryRegiments(map);
+  if (!regiments.length) return null;
+  let best = null;
+  let candidateCount = 0;
+  const candidates = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "military", regiment => regiment.id) : regiments;
+
+  for (const regiment of candidates) {
+    candidateCount++;
+    const distance = Math.hypot(worldX - regiment.x, worldY - regiment.y);
+    if (distance > maxDistance || (best && distance >= best.distance)) continue;
+    best = regimentPickObject(map, regiment, distance, candidateCount);
+  }
+
+  if (best) best.candidateCount = candidateCount;
+  return best;
 }
 
 export function pickRoute(map, index, worldX, worldY, maxDistance) {
@@ -248,7 +271,7 @@ function queryIndexedItems(index, worldX, worldY, radius, key, getId) {
 }
 
 function bucketFor(buckets, key) {
-  if (!buckets.has(key)) buckets.set(key, {cities: [], markers: [], routeSegments: [], riverSegments: []});
+  if (!buckets.has(key)) buckets.set(key, {cities: [], markers: [], military: [], routeSegments: [], riverSegments: []});
   return buckets.get(key);
 }
 
@@ -352,6 +375,38 @@ function allRiverSegments(map) {
     a: point,
     b: river.points[index + 1]
   })));
+}
+
+function militaryRegiments(map) {
+  return (map?.politics?.states || map?.pack?.states || [])
+    .filter(state => state?.i && !state.removed)
+    .flatMap(state => (state.military || []).map(regiment => ({...regiment, stateId: state.i, stateName: state.name || state.fullName})))
+    .filter(regiment => Number.isFinite(regiment.x) && Number.isFinite(regiment.y));
+}
+
+function regimentPickObject(map, regiment, distance, candidateCount) {
+  const state = map?.politics?.states?.[regiment.state] || map?.pack?.states?.[regiment.state] || map?.politics?.states?.[regiment.stateId];
+  return {
+    kind: "military",
+    id: regiment.id ?? `${regiment.state ?? regiment.stateId}:${regiment.i}`,
+    regimentId: regiment.i,
+    stateId: regiment.state ?? regiment.stateId,
+    name: regiment.name,
+    state: state?.name || regiment.stateName || "none",
+    type: regiment.type,
+    status: regiment.status,
+    statusLabel: regiment.statusLabel,
+    dominantUnit: regiment.dominantUnit,
+    dominantUnitLabel: regiment.dominantUnitLabel,
+    troops: regiment.a,
+    units: regiment.u,
+    icon: regiment.icon,
+    cell: regiment.cell,
+    x: regiment.x,
+    y: regiment.y,
+    distance,
+    candidateCount
+  };
 }
 
 function candidateCells(column, row, columns, rows) {

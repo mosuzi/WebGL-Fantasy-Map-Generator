@@ -25,6 +25,15 @@ const NEIGHBOR_WEIGHTS = Object.freeze({Ally: 1, Friendly: 2, Neutral: 1, Suspic
 const NEIGHBOR_OF_NEIGHBOR_WEIGHTS = Object.freeze({Ally: 10, Friendly: 8, Neutral: 5, Suspicion: 1});
 const FAR_WEIGHTS = Object.freeze({Friendly: 1, Neutral: 12, Suspicion: 2, Unknown: 6});
 const NAVAL_WEIGHTS = Object.freeze({Neutral: 1, Suspicion: 2, Rival: 1, Unknown: 1});
+const WAR_CAUSE_LABELS = Object.freeze({
+  resource: "资源争夺",
+  border: "边境冲突",
+  rivalry: "宿敌旧怨",
+  power: "强权扩张",
+  culture: "文化宗教矛盾",
+  trade: "贸易路线争端",
+  manual: "外交宣战"
+});
 
 export function buildDiplomacy(pack, society, options = {}) {
   const startedAt = performance.now();
@@ -71,6 +80,7 @@ export function setDiplomacyRelation(pack, subjectId, objectId, relation, {recor
     if (!Array.isArray(states[0].diplomacy)) states[0].diplomacy = [];
     states[0].diplomacy.push(createRelationHistoryEntry(subject, object, oldRelation, normalized, reason));
   }
+  if (normalized === "Enemy") ensureWarCampaign(subject, object, createManualWarCause(subject, object, reason));
 
   refreshDiplomacySummaries(states);
   if (pack?.diplomacy) {
@@ -154,12 +164,85 @@ function declareRivalWars({states, validStates, random, context, chronicle, opti
 
     setPairRelation(attacker, defender, "Enemy");
     const name = `${attacker.name}-${defender.name}之战`;
-    const campaign = {name, start: Math.max(1, Math.round(year - random.range(1, 10))), attacker: attacker.i, defender: defender.i};
+    const cause = chooseWarCause(attacker, defender, context, random);
+    const campaign = {
+      name,
+      start: Math.max(1, Math.round(year - random.range(1, 10))),
+      attacker: attacker.i,
+      defender: defender.i,
+      ...cause,
+      front: {kind: "attack", fromState: attacker.i, toState: defender.i}
+    };
     attacker.campaigns.push(campaign);
     defender.campaigns.push(campaign);
-    chronicle.push(["战争爆发", `${attacker.name}向宿敌${defender.name}宣战`]);
+    chronicle.push(["战争爆发", `${attacker.name}向宿敌${defender.name}宣战：${cause.causeLabel}`]);
     wars++;
   }
+}
+
+function chooseWarCause(attacker, defender, context, random) {
+  const sharedResources = sharedResourceKeys(attacker, defender);
+  const neighbors = (attacker.neighbors || []).includes(defender.i);
+  const sharedCulture = sharesHeritage(context.cultureItems, attacker.culture, defender.culture);
+  const sharedReligion = sharesHeritage(context.religionItems, attacker.religion, defender.religion);
+  const attackerPower = statePower(context, attacker.i);
+  const defenderPower = statePower(context, defender.i);
+
+  if (sharedResources.length && random.next() < 0.5) {
+    return createWarCause("resource", `${attacker.name}与${defender.name}争夺${formatResourceCause(sharedResources)}，边境关系持续恶化。`, sharedResources);
+  }
+  if (neighbors && random.next() < 0.36) return createWarCause("border", `${attacker.name}与${defender.name}在边境据点和通行权上爆发冲突。`);
+  if (!sharedCulture || !sharedReligion) {
+    if (random.next() < 0.28) return createWarCause("culture", `${attacker.name}与${defender.name}的文化或宗教裂痕被贵族派系点燃。`);
+  }
+  if (attackerPower > defenderPower * 1.7 && random.next() < 0.34) return createWarCause("power", `${attacker.name}试图扩大势力范围，迫使${defender.name}退让。`);
+  if (random.next() < 0.26) return createWarCause("trade", `${attacker.name}与${defender.name}围绕商路、港口或关税爆发争端。`);
+  return createWarCause("rivalry", `${attacker.name}与${defender.name}的宿敌关系升级为正式战争。`);
+}
+
+function createWarCause(cause, causeDetail, resourceKeys = []) {
+  return {
+    cause,
+    causeLabel: WAR_CAUSE_LABELS[cause] || cause,
+    causeDetail,
+    resourceKeys
+  };
+}
+
+function createManualWarCause(subject, object, reason) {
+  return createWarCause("manual", `${subject.name || `#${subject.i}`}向${object.name || `#${object.i}`}宣战。原因：${reason || "手动调整外交关系"}。`);
+}
+
+function ensureWarCampaign(subject, object, cause) {
+  if (!Array.isArray(subject.campaigns)) subject.campaigns = [];
+  if (!Array.isArray(object.campaigns)) object.campaigns = [];
+  const exists = subject.campaigns.some(campaign => sameCampaignPair(campaign, subject.i, object.i));
+  if (exists) return;
+  const campaign = {
+    name: `${subject.name || `#${subject.i}`}-${object.name || `#${object.i}`}之战`,
+    start: 1000,
+    attacker: subject.i,
+    defender: object.i,
+    ...cause,
+    front: {kind: "attack", fromState: subject.i, toState: object.i}
+  };
+  subject.campaigns.push(campaign);
+  object.campaigns.push(campaign);
+}
+
+function sameCampaignPair(campaign, a, b) {
+  return (campaign.attacker === a && campaign.defender === b) || (campaign.attacker === b && campaign.defender === a);
+}
+
+function sharedResourceKeys(a, b) {
+  const aTypes = Object.entries(a.resourceTypes || {}).filter(([, value]) => Number(value) > 0).map(([key]) => key);
+  const bTypes = new Set(Object.entries(b.resourceTypes || {}).filter(([, value]) => Number(value) > 0).map(([key]) => key));
+  return aTypes.filter(key => bTypes.has(key)).slice(0, 3);
+}
+
+function formatResourceCause(keys) {
+  const labels = {ore: "矿产", salt: "盐路", geothermal: "地热", gems: "宝石", "rare-biota": "稀有生物"};
+  return keys.map(key => labels[key] || key).join("、") || "关键资源";
 }
 
 function createDiplomacyContext(pack, society, validStates) {

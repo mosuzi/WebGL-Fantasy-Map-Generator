@@ -4,6 +4,7 @@ export const OBJECT_KIND = Object.freeze({
   MARKER: "marker",
   ROUTE: "route",
   RIVER: "river",
+  MILITARY: "military",
   STATE: "state",
   PROVINCE: "province",
   CULTURE: "culture",
@@ -23,6 +24,7 @@ export const OBJECT_KIND_LABEL = Object.freeze({
   [OBJECT_KIND.MARKER]: "标记",
   [OBJECT_KIND.ROUTE]: "路线",
   [OBJECT_KIND.RIVER]: "河流",
+  [OBJECT_KIND.MILITARY]: "军团",
   [OBJECT_KIND.STATE]: "国家",
   [OBJECT_KIND.PROVINCE]: "省份",
   [OBJECT_KIND.CULTURE]: "文化",
@@ -49,7 +51,8 @@ export const POLITICAL_OBJECT_FIELD = Object.freeze({
 export const POINT_OBJECT_KINDS = Object.freeze([
   OBJECT_KIND.CITY,
   OBJECT_KIND.LABEL,
-  OBJECT_KIND.MARKER
+  OBJECT_KIND.MARKER,
+  OBJECT_KIND.MILITARY
 ]);
 
 export function isKind(object, kind) {

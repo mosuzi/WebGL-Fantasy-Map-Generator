@@ -9,6 +9,15 @@ const MIN_PASSABLE_SEA_TEMP = -4;
 const MIN_NAVIGABLE_FLUX = 100;
 const RIVER_ROUTE_TYPE_MODIFIER = 1.5;
 const NON_NAVIGABLE_LAKE_GROUPS = new Set(["dry", "frozen", "lava"]);
+const CITY_CIVILIZATION_LABELS = Object.freeze({
+  nomadic: "游牧",
+  agrarian: "农耕",
+  hunting: "渔猎",
+  marine: "海洋",
+  merchant: "商人",
+  highland: "山地",
+  frontier: "边地"
+});
 
 export function buildSettlements(grid, features, politics, rivers, random, pack, options = {}) {
   const riverCells = new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells));
@@ -336,6 +345,8 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     port: 0,
     population,
     type,
+    civilizationType: "agrarian",
+    civilizationLabel: CITY_CIVILIZATION_LABELS.agrarian,
     group: groupHint,
     visual: defaultCityVisual({capital: Boolean(flags.capital), provincial: Boolean(flags.provincial), port: 0, population, type, group: groupHint}, culture)
   };
@@ -356,9 +367,12 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     provincial: Boolean(flags.provincial),
     port: 0,
     type,
+    civilizationType: sourceBurg.civilizationType,
+    civilizationLabel: sourceBurg.civilizationLabel,
     group: groupHint,
     visual: cloneVisual(sourceBurg.visual)
   };
+  assignCityCivilization(pack, city, sourceBurg);
 
   burgs[burgId] = sourceBurg;
   cities.push(city);
@@ -624,6 +638,7 @@ function defineCityTypes(pack, cities, burgs) {
     city.type = type;
     city.group = city.capital ? "capital" : city.port ? "city" : city.population >= 5 ? "city" : city.population <= 0.1 ? "hamlet" : "town";
     burg.group = city.group;
+    assignCityCivilization(pack, city, burg);
   }
 }
 
@@ -652,8 +667,40 @@ function specifyBurgs(pack, cities, burgs, nameGenerator) {
     city.plaza = burg.plaza;
     city.walls = burg.walls;
     city.temple = burg.temple;
+    assignCityCivilization(pack, city, burg);
     syncCityVisual(pack, city, burg);
   }
+}
+
+function assignCityCivilization(pack, city, burg) {
+  const type = resolveCityCivilization(pack, city, burg);
+  const label = CITY_CIVILIZATION_LABELS[type] || CITY_CIVILIZATION_LABELS.agrarian;
+  city.civilizationType = type;
+  city.civilizationLabel = label;
+  if (burg) {
+    burg.civilizationType = type;
+    burg.civilizationLabel = label;
+  }
+}
+
+function resolveCityCivilization(pack, city, burg) {
+  const cell = Number.isInteger(city?.packCell) ? city.packCell : burg?.cell;
+  const cells = pack?.cells || {};
+  const biome = Number.isInteger(cell) ? cells.biome?.[cell] : null;
+  const height = Number.isInteger(cell) ? cells.h?.[cell] || 0 : 0;
+  const population = Number(city?.population || burg?.population || 0);
+  const group = city?.group || burg?.group || "";
+  const type = city?.type || burg?.type || "Generic";
+  const culture = pack?.cultures?.[city?.culture ?? burg?.culture];
+  const state = pack?.states?.[city?.state ?? burg?.state];
+
+  if (city?.port || burg?.port || type === "Naval" || culture?.type === "Naval" || state?.type === "Naval") return "marine";
+  if (group === "caravanserai" || group === "trading_post" || (burg?.plaza && population >= 8)) return "merchant";
+  if (type === "Highland" || height > 60 || culture?.type === "Highland") return "highland";
+  if (type === "Nomadic" || culture?.type === "Nomadic" || ([1, 2, 3, 4].includes(biome) && population < 5)) return "nomadic";
+  if (type === "Hunting" || culture?.type === "Hunting" || ([7, 8, 9, 10, 11, 12].includes(biome) && population < 4)) return "hunting";
+  if ((group === "fort" || burg?.citadel) && population <= 2 && !city?.capital) return "frontier";
+  return "agrarian";
 }
 
 function syncCityVisual(pack, city, burg) {
@@ -1428,6 +1475,9 @@ function syncStateSettlementStats(pack, states) {
     state.burgs = 0;
     state.rural = 0;
     state.urban = 0;
+    state.civilizationProfile = {};
+    state.civilizationType = null;
+    state.civilizationLabel = null;
   }
 
   for (const cell of pack.cells.i) {
@@ -1439,6 +1489,7 @@ function syncStateSettlementStats(pack, states) {
     if (burg?.i && !burg.removed) {
       state.burgs++;
       state.urban += burg.population || 0;
+      addCivilizationWeight(state, burg);
     }
   }
 
@@ -1446,7 +1497,39 @@ function syncStateSettlementStats(pack, states) {
     if (!state) continue;
     state.rural = round(state.rural || 0, 2);
     state.urban = round(state.urban || 0, 2);
+    finalizeCivilizationProfile(state);
   }
+}
+
+function addCivilizationWeight(state, burg) {
+  const type = burg.civilizationType || "agrarian";
+  const weight = Math.max(0.1, Number(burg.population || 0)) * (burg.capital ? 3 : burg.group === "city" ? 1.6 : burg.group === "town" ? 1.2 : 1);
+  state.civilizationProfile[type] = (state.civilizationProfile[type] || 0) + weight;
+}
+
+function finalizeCivilizationProfile(state) {
+  const entries = Object.entries(state.civilizationProfile || {});
+  const total = entries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+  if (!entries.length || total <= 0) {
+    state.civilizationProfile = {agrarian: 1};
+    state.civilizationType = "agrarian";
+    state.civilizationLabel = CITY_CIVILIZATION_LABELS.agrarian;
+    return;
+  }
+
+  let dominant = entries[0][0];
+  let dominantValue = entries[0][1];
+  const profile = {};
+  for (const [type, value] of entries) {
+    if (value > dominantValue) {
+      dominant = type;
+      dominantValue = value;
+    }
+    profile[type] = round(value / total, 3);
+  }
+  state.civilizationProfile = profile;
+  state.civilizationType = dominant;
+  state.civilizationLabel = CITY_CIVILIZATION_LABELS[dominant] || dominant;
 }
 
 function syncProvinceSettlementStats(pack, provinces) {

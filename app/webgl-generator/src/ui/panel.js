@@ -85,6 +85,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-culture-panel")?.addEventListener("click", handlers.onOpenCulturePanel);
   documentRef.getElementById("open-religion-panel")?.addEventListener("click", handlers.onOpenReligionPanel);
   documentRef.getElementById("open-diplomacy-panel")?.addEventListener("click", handlers.onOpenDiplomacyPanel);
+  documentRef.getElementById("open-military-panel")?.addEventListener("click", handlers.onOpenMilitaryPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
@@ -180,6 +181,7 @@ function editLockControls(documentRef) {
     "#open-culture-panel",
     "#open-religion-panel",
     "#open-diplomacy-panel",
+    "#open-military-panel",
     "#open-route-panel",
     "#open-river-panel",
     "#open-marker-panel",

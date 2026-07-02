@@ -31,7 +31,7 @@
 ## 世界系统与后续大功能
 
 - `economy-market-trade-plan.md`：市场、商品与贸易流计划。
-- `military-battle-plan.md`：军事对象与战斗事件计划。
+- `military-battle-plan.md`：军事系统、图层与管理面板设计。
 - `emblems-coa-plan.md`：纹章与 Coat of Arms 计划。
 
 ## 维护规则

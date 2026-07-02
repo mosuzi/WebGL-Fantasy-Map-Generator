@@ -1,12 +1,21 @@
 import {createRandom} from "./random.js";
 
-const UNITS = [
-  {name: "infantry", rural: 0.25, urban: 0.2, type: "melee", separate: 0},
-  {name: "archers", rural: 0.12, urban: 0.2, type: "ranged", separate: 0},
-  {name: "cavalry", rural: 0.12, urban: 0.03, type: "mounted", separate: 0},
-  {name: "artillery", rural: 0, urban: 0.03, type: "machinery", separate: 0},
-  {name: "fleet", rural: 0, urban: 0.015, type: "naval", separate: 1}
-];
+export const MILITARY_UNITS = Object.freeze([
+  {name: "infantry", label: "步兵", icon: "步", rural: 0.25, urban: 0.2, baseRatio: 0.46, type: "melee", separate: 0, speed: 0.78},
+  {name: "archers", label: "弓兵", icon: "弓", rural: 0.12, urban: 0.2, baseRatio: 0.22, type: "ranged", separate: 0, speed: 0.82},
+  {name: "cavalry", label: "骑兵", icon: "骑", rural: 0.12, urban: 0.03, baseRatio: 0.16, type: "mounted", separate: 0, speed: 1.22},
+  {name: "artillery", label: "器械", icon: "械", rural: 0, urban: 0.03, baseRatio: 0.06, type: "machinery", separate: 0, speed: 0.48},
+  {name: "fleet", label: "舰队", icon: "舟", rural: 0, urban: 0.015, baseRatio: 0.1, type: "naval", separate: 1, speed: 0.9}
+]);
+
+export const MILITARY_STATUSES = Object.freeze({
+  patrolling: {value: "patrolling", label: "巡逻中"},
+  marching: {value: "marching", label: "行军中"},
+  resting: {value: "resting", label: "修整中"},
+  mustering: {value: "mustering", label: "集结中"},
+  routed: {value: "routed", label: "败逃中"},
+  garrisoned: {value: "garrisoned", label: "驻防中"}
+});
 
 const STATE_MODIFIERS = {
   melee: {Nomadic: 0.5, Highland: 1.2, Lake: 1, Naval: 0.7, Hunting: 1.2, River: 1.1, Generic: 1},
@@ -23,6 +32,38 @@ const TERRAIN_MODIFIERS = {
   highland: {melee: 1.2, ranged: 1.6, mounted: 0.3, machinery: 3, naval: 1}
 };
 
+const CIVILIZATION_CAP_RATIOS = Object.freeze({
+  nomadic: 0.075,
+  frontier: 0.06,
+  hunting: 0.05,
+  highland: 0.045,
+  marine: 0.04,
+  agrarian: 0.035,
+  merchant: 0.032
+});
+
+const CIVILIZATION_RECRUITMENT = Object.freeze({
+  nomadic: 1.42,
+  frontier: 1.28,
+  hunting: 1.12,
+  highland: 1.04,
+  marine: 1,
+  agrarian: 0.92,
+  merchant: 0.82
+});
+
+const CIVILIZATION_RATIO_MODIFIERS = Object.freeze({
+  nomadic: {infantry: 0.65, archers: 0.92, cavalry: 2.2, artillery: 0.42, fleet: 0.36},
+  agrarian: {infantry: 1.18, archers: 1.08, cavalry: 0.92, artillery: 0.82, fleet: 0.62},
+  hunting: {infantry: 0.92, archers: 1.75, cavalry: 0.58, artillery: 0.38, fleet: 0.55},
+  marine: {infantry: 0.9, archers: 0.86, cavalry: 0.48, artillery: 1.08, fleet: 2.35},
+  merchant: {infantry: 0.95, archers: 0.95, cavalry: 0.82, artillery: 1.55, fleet: 1.25},
+  highland: {infantry: 1.25, archers: 1.45, cavalry: 0.42, artillery: 1.1, fleet: 0.36},
+  frontier: {infantry: 1.18, archers: 1.22, cavalry: 1.12, artillery: 0.62, fleet: 0.48}
+});
+
+const WAR_RELATIONS = new Set(["Enemy", "Rival", "Suspicion"]);
+
 export function buildMilitary(pack, options = {}) {
   const startedAt = performance.now();
   const states = pack?.states || [];
@@ -38,17 +79,25 @@ export function buildMilitary(pack, options = {}) {
   const densityFactor = getRegimentDensityFactor(cells);
   const spatialMerge = shouldUseSpatialRegimentMerging(options);
 
-  for (const state of states) if (state) state.military = [];
+  for (const state of states) {
+    if (!state) continue;
+    state.military = [];
+  }
 
   for (const state of validStates) {
-    const alert = getStateAlert(state, averageArea, averageExpansion);
+    const diplomacyPressure = getStateDiplomacyPressure(state, states);
+    const resourcePressure = getStateResourcePressure(state, states);
+    const alert = getStateAlert(state, averageArea, averageExpansion, diplomacyPressure);
     state.alert = alert;
     const cellsForState = stateCells.get(state.i) || [];
     const burgsForState = stateBurgs.get(state.i) || [];
-    const targetDetails = getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor, options);
+    const policy = buildMilitaryPolicy({state, burgsForState, diplomacyPressure, resourcePressure, alert});
+    state.militaryPolicy = policy;
+    const targetDetails = getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor, options, policy);
     const target = targetDetails.finalTarget;
-    const nodes = createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, random});
-    state.military = createRegiments({pack, state, nodes, target, spatialMerge});
+    const nodes = createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, policy, random});
+    state.military = createRegiments({pack, state, nodes, target, spatialMerge, policy, random});
+    state.militaryPolicy.generatedTroops = round(sumRegimentTroops(state.military));
     state.militaryDiagnostics = describeStateMilitaryFunnel({
       pack,
       state,
@@ -61,19 +110,25 @@ export function buildMilitary(pack, options = {}) {
     });
   }
 
+  const fronts = buildMilitaryFronts(pack, validStates);
   const regiments = validStates.flatMap(state => state.military || []);
-  return {
+  const result = {
+    fronts,
     metadata: {
       statesWithMilitary: validStates.filter(state => state.military?.length).length,
       regiments: regiments.length,
       troops: round(regiments.reduce((sum, regiment) => sum + (regiment.a || 0), 0)),
       navalRegiments: regiments.filter(regiment => regiment.n).length,
+      fronts: fronts.length,
+      statuses: countRegimentStatuses(regiments),
       buildMs: roundMs(performance.now() - startedAt)
     }
   };
+  if (pack) pack.military = result;
+  return result;
 }
 
-function createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, random}) {
+function createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, policy, random}) {
   const nodes = [];
   const sortedBurgs = [...burgsForState].sort((a, b) => (b.population || 0) - (a.population || 0));
   const sortedCells = [...cellsForState]
@@ -82,16 +137,16 @@ function createMilitaryNodes({pack, state, cellsForState, burgsForState, target,
   const {burgLimit, ruralLimit} = getMilitaryNodeLimits(sortedBurgs.length, sortedCells.length, target);
 
   for (const burg of sortedBurgs.slice(0, burgLimit)) {
-    for (const unit of UNITS) {
-      const total = getUrbanTroops(pack, state, burg, unit, alert, random);
+    for (const unit of MILITARY_UNITS) {
+      const total = getUrbanTroops(pack, state, burg, unit, alert, random, policy);
       if (total <= 0) continue;
       nodes.push(createNode(pack, burg.cell, burg.x, burg.y, unit, total, Boolean(unit.type === "naval" && burg.port)));
     }
   }
 
   for (const cell of sortedCells.slice(0, ruralLimit)) {
-    for (const unit of UNITS) {
-      const total = getRuralTroops(pack, state, cell, unit, alert, random);
+    for (const unit of MILITARY_UNITS) {
+      const total = getRuralTroops(pack, state, cell, unit, alert, random, policy);
       if (total <= 0) continue;
       nodes.push(createNode(pack, cell, pack.cells.p[cell][0], pack.cells.p[cell][1], unit, total, false));
     }
@@ -128,7 +183,7 @@ function createNode(pack, cell, x, y, unit, total, naval) {
   };
 }
 
-function createRegiments({pack, state, nodes, target, spatialMerge}) {
+function createRegiments({pack, state, nodes, target, spatialMerge, policy, random}) {
   if (!nodes.length || target <= 0) return [];
   const regiments = [];
   const landNodes = nodes.filter(node => !node.n);
@@ -150,25 +205,43 @@ function createRegiments({pack, state, nodes, target, spatialMerge}) {
       total += node.a;
     }
     const id = regiments.length;
+    const unitMap = roundUnitMap(units);
+    const dominantUnit = dominantUnitName(unitMap);
+    const status = getRegimentStatus(pack, state, lead, dominantUnit, policy, random);
+    const suitability = getCellSuitability(pack, lead.cell, dominantUnit, total);
+    const unitDefinition = unitByName(dominantUnit);
     const regiment = {
       i: id,
+      id: `${state.i}:${id}`,
       a: round(total),
       cell: lead.cell,
       x: round(lead.x, 2),
       y: round(lead.y, 2),
       bx: round(lead.x, 2),
       by: round(lead.y, 2),
-      u: roundUnitMap(units),
+      u: unitMap,
       n: lead.n,
       s: lead.s,
       type: lead.n ? "fleet" : "regiment",
+      dominantUnit,
+      dominantUnitLabel: unitDefinition.label,
+      icon: unitDefinition.icon,
+      status,
+      statusLabel: MILITARY_STATUSES[status]?.label || status,
+      order: getRegimentOrder(pack, state, lead, status),
+      suitability,
+      movementSpeed: round((unitDefinition.speed || 0.8) * suitability.total, 2),
+      pressure: {
+        front: round(policy.diplomacyPressure || 1, 2),
+        supply: round(getStateSupplyModifier(state, unitDefinition.type), 2)
+      },
       name: getRegimentName(pack, state, lead, id, regiments),
       state: state.i
     };
     regiments.push(regiment);
   }
 
-  return regiments;
+  return scaleRegimentsToPolicy(regiments, policy);
 }
 
 function getRegimentSplitTargets(nodes, target) {
@@ -258,42 +331,47 @@ function squaredDistance(a, b) {
   return dx * dx + dy * dy;
 }
 
-function getUrbanTroops(pack, state, burg, unit, alert, random) {
+function getUrbanTroops(pack, state, burg, unit, alert, random, policy) {
   if (unit.urban <= 0) return 0;
   if (unit.type === "naval" && (!burg.port || pack.cells.haven?.[burg.cell] === undefined)) return 0;
   const terrain = getCellType(pack.cells, burg.cell);
   const terrainModifier = TERRAIN_MODIFIERS[terrain]?.[unit.type] || 1;
   const stateModifier = STATE_MODIFIERS[unit.type]?.[state.type || "Generic"] || 1;
   const capitalModifier = burg.capital ? 1.25 : 1;
+  const civilizationModifier = getCivilizationRecruitmentModifier(burg.civilizationType);
+  const ratioModifier = getPolicyUnitMultiplier(policy, unit);
   const cultureModifier = burg.culture === state.culture ? 1 : 0.55;
   const supplyModifier = getStateSupplyModifier(state, unit.type);
   const population = burg.population || 0;
   const variance = random.range(0.78, 1.28);
-  return round(population * unit.urban * 420 * alert * stateModifier * terrainModifier * capitalModifier * cultureModifier * supplyModifier * variance);
+  return round(population * unit.urban * 420 * alert * stateModifier * terrainModifier * capitalModifier * civilizationModifier * ratioModifier * cultureModifier * supplyModifier * variance);
 }
 
-function getRuralTroops(pack, state, cell, unit, alert, random) {
+function getRuralTroops(pack, state, cell, unit, alert, random, policy) {
   if (unit.rural <= 0 || unit.type === "naval") return 0;
   const terrain = getCellType(pack.cells, cell);
   const terrainModifier = TERRAIN_MODIFIERS[terrain]?.[unit.type] || 1;
   const stateModifier = STATE_MODIFIERS[unit.type]?.[state.type || "Generic"] || 1;
+  const ratioModifier = getPolicyUnitMultiplier(policy, unit);
   const cultureModifier = pack.cells.culture?.[cell] === state.culture ? 1 : 0.5;
   const supplyModifier = getStateSupplyModifier(state, unit.type);
   const population = pack.cells.pop?.[cell] || 0;
   const variance = random.range(0.72, 1.2);
-  return round(population * unit.rural * 18 * alert * stateModifier * terrainModifier * cultureModifier * supplyModifier * variance);
+  return round(population * unit.rural * 18 * alert * stateModifier * terrainModifier * ratioModifier * cultureModifier * supplyModifier * variance);
 }
 
-function getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor = 1, options = {}) {
+function getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor = 1, options = {}, policy = null) {
   const burgFactor = Math.sqrt(Math.max(1, burgsForState.length)) * 2.5;
   const cellFactor = Math.sqrt(Math.max(1, cellsForState.length)) * 0.18;
   const areaFactor = Math.sqrt(Math.max(1, state.area || 1)) * 0.02;
   const economicTargetModifier = getStateEconomicTargetModifier(state);
   const minimum = burgsForState.length ? 1 : 0;
   const rawTarget = Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor * economicTargetModifier);
+  const troopTarget = policy?.finalTroops ? Math.ceil(policy.finalTroops / getExpectedRegimentSize()) : 0;
   const burgBackedTarget = getBurgBackedRegimentTarget(burgsForState.length, options);
-  const finalTarget = clamp(Math.min(rawTarget, burgBackedTarget), minimum, 26);
-  return {rawTarget, burgBackedTarget, finalTarget, minimum, densityFactor, economicTargetModifier};
+  const desiredTarget = Math.max(rawTarget, troopTarget);
+  const finalTarget = clamp(Math.min(desiredTarget, burgBackedTarget), minimum, 26);
+  return {rawTarget, troopTarget, burgBackedTarget, finalTarget, minimum, densityFactor, economicTargetModifier};
 }
 
 function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState, targetDetails, nodes, regiments, spatialMerge}) {
@@ -309,6 +387,7 @@ function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState,
     burgs: burgsForState.length,
     ports: burgsForState.filter(burg => burg.port).length,
     rawTarget: targetDetails.rawTarget,
+    troopTarget: targetDetails.troopTarget,
     burgBackedTarget: targetDetails.burgBackedTarget,
     finalTarget: targetDetails.finalTarget,
     minimumTarget: targetDetails.minimum,
@@ -317,6 +396,13 @@ function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState,
     resourcePotential: round(state.resourcePotential || 0, 2),
     economicTargetModifier: round(targetDetails.economicTargetModifier || 1, 3),
     militarySupply: round(state.militarySupply || 1, 3),
+    civilizationType: state.civilizationType || "agrarian",
+    diplomacyPressure: round(state.militaryPolicy?.diplomacyPressure || 1, 3),
+    resourcePressure: round(state.militaryPolicy?.resourcePressure || 1, 3),
+    troopCapRatio: round(state.militaryPolicy?.troopCapRatio || 0, 4),
+    desiredTroops: round(state.militaryPolicy?.desiredTroops || 0),
+    finalTroops: round(state.militaryPolicy?.finalTroops || 0),
+    generatedTroops: round(state.militaryPolicy?.generatedTroops || 0),
     spatialMerge: Boolean(spatialMerge),
     mergeExpectedSize: getExpectedRegimentSize(),
     burgLimit,
@@ -332,6 +418,117 @@ function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState,
     landRegiments: regiments.filter(regiment => !regiment.n).length,
     navalRegiments: regiments.filter(regiment => regiment.n).length
   };
+}
+
+function buildMilitaryPolicy({state, burgsForState, diplomacyPressure, resourcePressure, alert}) {
+  const populationPeople = Math.max(0, (Number(state.rural || 0) + Number(state.urban || 0)) * 1000);
+  const dominantCivilization = state.civilizationType || dominantCivilizationFromBurgs(burgsForState);
+  const troopCapRatio = getTroopCapRatio(state, dominantCivilization);
+  const recruitment = 0.012 * (CIVILIZATION_RECRUITMENT[dominantCivilization] || 1);
+  const economicModifier = getStateEconomicRecruitmentModifier(state);
+  const desiredTroops = round(populationPeople * recruitment * economicModifier * diplomacyPressure * resourcePressure);
+  const capTroops = round(populationPeople * troopCapRatio);
+  const finalTroops = round(Math.min(desiredTroops, capTroops));
+  const existingRatios = validUnitRatios(state.militaryPolicy?.unitRatios);
+  const unitRatios = existingRatios || buildDefaultUnitRatios(state, burgsForState, dominantCivilization);
+  return {
+    state: state.i,
+    populationPeople: round(populationPeople),
+    troopCapRatio: round(troopCapRatio, 4),
+    desiredTroops,
+    capTroops,
+    finalTroops,
+    generatedTroops: 0,
+    alert: round(alert, 2),
+    unitRatios,
+    dominantCivilization,
+    civilizationLabel: state.civilizationLabel || dominantCivilization,
+    civilizationProfile: {...(state.civilizationProfile || {})},
+    posture: militaryPosture(diplomacyPressure),
+    diplomacyPressure: round(diplomacyPressure, 3),
+    resourcePressure: round(resourcePressure, 3)
+  };
+}
+
+function buildDefaultUnitRatios(state, burgsForState, dominantCivilization) {
+  const ratios = Object.fromEntries(MILITARY_UNITS.map(unit => [unit.name, unit.baseRatio]));
+  applyRatioModifier(ratios, CIVILIZATION_RATIO_MODIFIERS[dominantCivilization]);
+  applyRatioModifier(ratios, CIVILIZATION_RATIO_MODIFIERS[state.type?.toLowerCase?.()]);
+  const ports = burgsForState.filter(burg => burg.port).length;
+  if (!ports && state.type !== "Naval") ratios.fleet *= 0.15;
+  if (ports >= Math.max(1, burgsForState.length * 0.25)) ratios.fleet *= 1.45;
+  if (Number(state.resourcePotential || 0) > 120) ratios.artillery *= 1.18;
+  if (Number(state.economicPower || 0) > 220) ratios.artillery *= 1.16;
+  return normalizeUnitRatios(ratios);
+}
+
+export function normalizeUnitRatios(ratios = {}) {
+  const result = {};
+  let total = 0;
+  for (const unit of MILITARY_UNITS) {
+    const value = Math.max(0, Number(ratios[unit.name] ?? unit.baseRatio));
+    result[unit.name] = value;
+    total += value;
+  }
+  if (total <= 0) return Object.fromEntries(MILITARY_UNITS.map(unit => [unit.name, unit.baseRatio]));
+  for (const unit of MILITARY_UNITS) result[unit.name] = round(result[unit.name] / total, 4);
+  return result;
+}
+
+function validUnitRatios(ratios) {
+  if (!ratios || typeof ratios !== "object") return null;
+  const normalized = normalizeUnitRatios(ratios);
+  const total = Object.values(normalized).reduce((sum, value) => sum + value, 0);
+  return total > 0 ? normalized : null;
+}
+
+function applyRatioModifier(ratios, modifiers) {
+  if (!modifiers) return;
+  for (const [unit, modifier] of Object.entries(modifiers)) {
+    if (ratios[unit] !== undefined) ratios[unit] *= modifier;
+  }
+}
+
+function getTroopCapRatio(state, civilization) {
+  let cap = CIVILIZATION_CAP_RATIOS[civilization] || CIVILIZATION_CAP_RATIOS.agrarian;
+  if (state.type === "Nomadic") cap += 0.015;
+  if (state.type === "Hunting") cap += 0.008;
+  if (state.type === "Naval") cap += 0.004;
+  if ((state.diplomacySummary?.Enemy || 0) > 0) cap += 0.006;
+  if ((state.diplomacySummary?.Rival || 0) > 1) cap += 0.004;
+  return clamp(cap, 0.018, 0.095);
+}
+
+function getStateEconomicRecruitmentModifier(state) {
+  const economicPower = Number(state.economicPower || state.treasury || 0);
+  const resourcePotential = Number(state.resourcePotential || 0);
+  const supply = Number(state.militarySupply || 1);
+  return clamp(0.86 + Math.sqrt(Math.max(0, economicPower)) / 170 + resourcePotential / 1100 + (supply - 1) * 0.35, 0.7, 1.48);
+}
+
+function militaryPosture(diplomacyPressure) {
+  if (diplomacyPressure >= 1.45) return "mobilized";
+  if (diplomacyPressure >= 1.18) return "guarded";
+  if (diplomacyPressure <= 0.92) return "relaxed";
+  return "watchful";
+}
+
+function dominantCivilizationFromBurgs(burgs) {
+  const weights = {};
+  for (const burg of burgs) {
+    const type = burg.civilizationType || "agrarian";
+    weights[type] = (weights[type] || 0) + Math.max(0.1, Number(burg.population || 0));
+  }
+  return Object.entries(weights).sort((a, b) => b[1] - a[1])[0]?.[0] || "agrarian";
+}
+
+function getPolicyUnitMultiplier(policy, unit) {
+  const ratio = Number(policy?.unitRatios?.[unit.name] || unit.baseRatio);
+  return clamp(ratio / Math.max(0.001, unit.baseRatio), 0.05, 4);
+}
+
+function getCivilizationRecruitmentModifier(civilization) {
+  return clamp(CIVILIZATION_RECRUITMENT[civilization] || 1, 0.72, 1.5);
 }
 
 function getStateEconomicTargetModifier(state) {
@@ -369,11 +566,57 @@ function getBurgBackedRegimentTarget(burgs, options) {
   return Math.max(1, Math.ceil(burgs * burgRate));
 }
 
-function getStateAlert(state, averageArea, averageExpansion) {
+function getStateAlert(state, averageArea, averageExpansion, diplomacyPressure = 1) {
   const expansionRate = (state.expansionism || 1) / averageExpansion;
   const areaRate = Math.sqrt((state.area || averageArea) / averageArea);
   const neighborRate = 0.7 + Math.min(1.8, (state.neighbors?.length || 0) * 0.18);
-  return clamp(round(expansionRate * areaRate * neighborRate, 2), 0.25, 3.5);
+  return clamp(round(expansionRate * areaRate * neighborRate * diplomacyPressure, 2), 0.25, 4.2);
+}
+
+function getStateDiplomacyPressure(state, states) {
+  const summary = state.diplomacySummary || countRelations(state.diplomacy);
+  const ownPower = Number(state.powerScore || state.economicPower || 1);
+  let strongHostiles = 0;
+  for (const id of state.neighbors || []) {
+    const neighbor = states[id];
+    const relation = state.diplomacy?.[id] || "Unknown";
+    if (!neighbor?.i || !WAR_RELATIONS.has(relation)) continue;
+    if (Number(neighbor.powerScore || neighbor.economicPower || 0) > ownPower * 1.2) strongHostiles++;
+  }
+  return clamp(
+    1
+    + Number(summary.Enemy || 0) * 0.28
+    + Number(summary.Rival || 0) * 0.16
+    + Number(summary.Suspicion || 0) * 0.05
+    + strongHostiles * 0.12,
+    0.82,
+    2.2
+  );
+}
+
+function getStateResourcePressure(state, states) {
+  let pressure = 1;
+  for (const id of state.neighbors || []) {
+    const neighbor = states[id];
+    if (!neighbor?.i) continue;
+    const relation = state.diplomacy?.[id] || "Unknown";
+    const shared = sharedResourceKeys(state, neighbor).length;
+    if (!shared) continue;
+    pressure += shared * (relation === "Enemy" ? 0.08 : relation === "Rival" ? 0.055 : relation === "Suspicion" ? 0.028 : 0.012);
+  }
+  return clamp(pressure, 0.95, 1.35);
+}
+
+function countRelations(relations = []) {
+  const counts = {};
+  for (const relation of relations) counts[relation] = (counts[relation] || 0) + 1;
+  return counts;
+}
+
+function sharedResourceKeys(a, b) {
+  const aTypes = Object.entries(a.resourceTypes || {}).filter(([, value]) => Number(value) > 0).map(([key]) => key);
+  const bTypes = new Set(Object.entries(b.resourceTypes || {}).filter(([, value]) => Number(value) > 0).map(([key]) => key));
+  return aTypes.filter(key => bTypes.has(key));
 }
 
 function collectStateCells(cells, states) {
@@ -403,6 +646,173 @@ function getCellType(cells, cell) {
   return "generic";
 }
 
+function getCellSuitability(pack, cell, unitName, troops = 0) {
+  const unit = unitByName(unitName);
+  const cells = pack.cells;
+  const terrain = getCellType(cells, cell);
+  const terrainScore = clamp(((TERRAIN_MODIFIERS[terrain]?.[unit.type] || 1) + 0.35) / 1.8, 0.22, 1.18);
+  const temp = Number(cells.temp?.[cell] ?? cells.temperature?.[cell] ?? 12);
+  const climateScore = climateSuitability(temp, unit.type);
+  const biomeScore = biomeSuitability(cells.biome?.[cell], unit.type);
+  const localPopulation = Number(cells.pop?.[cell] || 0) + Number(pack.burgs?.[cells.burg?.[cell]]?.population || 0) * 12;
+  const capacityScore = clamp((Math.sqrt(localPopulation + 1) + 1.5) / Math.sqrt(Math.max(1, troops / 900)), 0.28, 1.12);
+  return {
+    total: round(clamp(terrainScore * climateScore * biomeScore * capacityScore, 0.15, 1.2), 2),
+    terrain: round(terrainScore, 2),
+    climate: round(climateScore, 2),
+    biome: round(biomeScore, 2),
+    capacity: round(capacityScore, 2)
+  };
+}
+
+function climateSuitability(temp, unitType) {
+  if (!Number.isFinite(temp)) return 1;
+  if (unitType === "mounted" && temp < -5) return 0.58;
+  if (unitType === "machinery" && temp < -8) return 0.68;
+  if (temp < -15) return 0.48;
+  if (temp < -5) return 0.72;
+  if (temp > 35) return 0.64;
+  if (temp > 30) return 0.78;
+  return 1;
+}
+
+function biomeSuitability(biome, unitType) {
+  if ([7, 8, 9, 12].includes(biome) && unitType === "mounted") return 0.48;
+  if ([10, 11, 12].includes(biome) && unitType === "machinery") return 0.62;
+  if ([1, 2, 3, 4].includes(biome) && unitType === "mounted") return 1.22;
+  if ([7, 8, 9, 10, 11, 12].includes(biome) && unitType === "ranged") return 1.12;
+  return 1;
+}
+
+function getRegimentStatus(pack, state, lead, dominantUnit, policy, random) {
+  const hasWar = (state.diplomacySummary?.Enemy || 0) > 0;
+  const suitability = getCellSuitability(pack, lead.cell, dominantUnit, lead.t);
+  const border = isBorderCell(pack, state, lead.cell);
+  const burg = pack.burgs?.[pack.cells.burg?.[lead.cell]];
+  if (hasWar && random.next() < 0.035) return "routed";
+  if (hasWar && border && random.next() < 0.5) return "marching";
+  if (hasWar && (burg?.capital || policy.posture === "mobilized") && random.next() < 0.55) return "mustering";
+  if (suitability.total < 0.42) return "resting";
+  if (burg?.capital || burg?.group === "fort") return "garrisoned";
+  if (border || policy.diplomacyPressure > 1.2 || policy.resourcePressure > 1.08) return "patrolling";
+  return random.next() < 0.28 ? "resting" : "garrisoned";
+}
+
+function getRegimentOrder(pack, state, lead, status) {
+  if (status === "marching" || status === "mustering") {
+    const target = firstEnemyTarget(pack, state);
+    if (target) return {kind: status === "marching" ? "advance" : "muster", targetCell: target.center, targetName: target.name};
+  }
+  if (status === "patrolling") return {kind: "patrol", targetCell: lead.cell, targetName: pack.provinces?.[pack.cells.province?.[lead.cell]]?.name || state.name};
+  if (status === "resting") return {kind: "rest", targetCell: lead.cell, targetName: pack.burgs?.[pack.cells.burg?.[lead.cell]]?.name || state.name};
+  if (status === "routed") return {kind: "retreat", targetCell: state.center, targetName: state.name};
+  return {kind: "garrison", targetCell: lead.cell, targetName: pack.burgs?.[pack.cells.burg?.[lead.cell]]?.name || state.name};
+}
+
+function firstEnemyTarget(pack, state) {
+  const enemyId = (state.diplomacy || []).findIndex(relation => relation === "Enemy");
+  return enemyId > 0 ? pack.states?.[enemyId] || null : null;
+}
+
+function isBorderCell(pack, state, cell) {
+  const stateId = state.i;
+  for (const neighbor of pack.cells.c?.[cell] || []) {
+    if ((pack.cells.state?.[neighbor] || 0) !== stateId && (pack.cells.h?.[neighbor] || 0) >= 20) return true;
+  }
+  return false;
+}
+
+function scaleRegimentsToPolicy(regiments, policy) {
+  const target = Number(policy?.finalTroops || 0);
+  const total = sumRegimentTroops(regiments);
+  if (!target || !total) return regiments;
+  const scale = target / total;
+  for (const regiment of regiments) {
+    const units = {};
+    for (const [unit, value] of Object.entries(regiment.u || {})) units[unit] = Math.max(0, round(Number(value || 0) * scale));
+    regiment.u = units;
+    regiment.a = round(Object.values(units).reduce((sum, value) => sum + value, 0));
+  }
+  return regiments.filter(regiment => regiment.a > 0);
+}
+
+function sumRegimentTroops(regiments = []) {
+  return regiments.reduce((sum, regiment) => sum + Number(regiment.a || 0), 0);
+}
+
+function dominantUnitName(units) {
+  let best = "infantry";
+  let bestValue = -1;
+  for (const [unit, value] of Object.entries(units || {})) {
+    if (value > bestValue) {
+      best = unit;
+      bestValue = value;
+    }
+  }
+  return best;
+}
+
+function unitByName(name) {
+  return MILITARY_UNITS.find(unit => unit.name === name) || MILITARY_UNITS[0];
+}
+
+function buildMilitaryFronts(pack, states) {
+  const fronts = [];
+  const seen = new Set();
+  for (const attacker of states) {
+    for (const campaign of attacker.campaigns || []) {
+      if (campaign.attacker !== attacker.i) continue;
+      const defender = pack.states?.[campaign.defender];
+      if (!defender?.i || defender.removed) continue;
+      const key = `${campaign.attacker}:${campaign.defender}:${campaign.start}:${campaign.name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const attackLine = createFrontLine(pack, campaign, attacker, defender, "attack");
+      const defenseLine = createFrontLine(pack, campaign, defender, attacker, "defense");
+      if (attackLine) fronts.push(attackLine);
+      if (defenseLine) fronts.push(defenseLine);
+    }
+  }
+  return fronts;
+}
+
+function createFrontLine(pack, campaign, fromState, toState, stance) {
+  const fromPoint = regimentOrStatePoint(pack, fromState);
+  const toPoint = statePoint(pack, toState);
+  if (!fromPoint || !toPoint) return null;
+  return {
+    id: `${campaign.attacker}:${campaign.defender}:${stance}:${campaign.start}`,
+    campaign: campaign.name,
+    attacker: campaign.attacker,
+    defender: campaign.defender,
+    fromState: fromState.i,
+    toState: toState.i,
+    stance,
+    cause: campaign.cause || "rivalry",
+    causeLabel: campaign.causeLabel || "战争原因",
+    causeDetail: campaign.causeDetail || "",
+    label: `${stance === "attack" ? "进攻" : "防守"}：${fromState.name} -> ${toState.name}`,
+    from: fromPoint,
+    to: toPoint,
+    points: [[fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]]
+  };
+}
+
+function regimentOrStatePoint(pack, state) {
+  const regiment = [...(state.military || [])].sort((a, b) => Number(b.a || 0) - Number(a.a || 0))[0];
+  if (regiment) return {x: regiment.x, y: regiment.y, cell: regiment.cell, name: regiment.name};
+  return statePoint(pack, state);
+}
+
+function statePoint(pack, state) {
+  const cell = Number.isInteger(state.center) ? state.center : Number.isInteger(state.gridCenter) ? pack.cells.pack?.[state.gridCenter] : null;
+  const point = Number.isInteger(cell) ? pack.cells.p?.[cell] : null;
+  if (point) return {x: point[0], y: point[1], cell, name: state.name};
+  const capital = pack.burgs?.[state.capital];
+  if (capital) return {x: capital.x, y: capital.y, cell: capital.cell, name: capital.name};
+  return null;
+}
+
 function getRegimentName(pack, state, node, id, regiments) {
   const proper = node.n
     ? null
@@ -412,26 +822,36 @@ function getRegimentName(pack, state, node, id, regiments) {
         ? pack.burgs[pack.cells.burg[node.cell]].name
         : state.name;
   const number = regiments.filter(regiment => regiment.n === node.n && regiment.i < id).length + 1;
-  const form = node.n ? "Fleet" : "Regiment";
-  return `${number}${proper ? ` (${proper}) ` : " "}${form}`;
+  const form = node.n ? "舰队" : "军团";
+  return `${number}${proper ? `（${proper}）` : ""}${form}`;
 }
 
 function roundUnitMap(units) {
   const result = {};
-  for (const [unit, value] of Object.entries(units)) result[unit] = round(value);
+  for (const unit of MILITARY_UNITS) result[unit.name] = round(units[unit.name] || 0);
   return result;
 }
 
+function countRegimentStatuses(regiments) {
+  const counts = {};
+  for (const regiment of regiments) counts[regiment.status] = (counts[regiment.status] || 0) + 1;
+  return counts;
+}
+
 function emptyMilitaryResult(startedAt) {
-  return {
+  const result = {
+    fronts: [],
     metadata: {
       statesWithMilitary: 0,
       regiments: 0,
       troops: 0,
       navalRegiments: 0,
+      fronts: 0,
+      statuses: {},
       buildMs: roundMs(performance.now() - startedAt)
     }
   };
+  return result;
 }
 
 function average(values) {
