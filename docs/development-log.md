@@ -13948,3 +13948,26 @@ full 矩阵结果：
 后续：
 
 - 若继续军事系统，应先做只读军团总览和军事图层；战斗事件应先作为可保存事件记录进入 `map.battles`，完整模拟后置。
+
+### 纹章与 Coat of Arms 计划
+
+背景：
+
+- WebGL 版目前没有纹章系统；国家、省份、城市只有颜色和部分图标能力。
+- 原版纹章系统牵涉生成器、SVG 渲染、对象编辑、上传下载和 Armoria 外部集成，属于远期复杂系统。
+
+对照结果：
+
+- `src/generators/emblems/generator.ts` 的 `COA.generate()` 会按父纹章、亲缘度、统治关系和类型生成 `t1 / shield / division / ordinaries / charges / custom` 等数据。
+- `draw-emblems.ts` 会为 state / province / burg 三层生成 SVG `<use>`，并用各层 font-size 与 data-size 控制显示尺寸。
+- `emblems-editor.js` 支持选择国家/省份/城市、改盾形、改尺寸、移动、重新生成、上传图片/SVG、下载 SVG/PNG/JPG、下载图库、定位区域和打开 Armoria。
+
+文档：
+
+- 新增 `docs/task-notes/emblems-coa-plan.md`。
+- 文档把后续拆为数据占位与只读显示、轻量纹章图层、生成器按需移植、纹章编辑与导出四阶段。
+- `source-feature-backlog.md` 的纹章行已改为指向专项计划。
+
+后续：
+
+- 若继续纹章系统，应先保证完整地图 JSON 能保留 `coa` 字段并在详情中只读显示；完整生成器和外部 Armoria 集成后置。

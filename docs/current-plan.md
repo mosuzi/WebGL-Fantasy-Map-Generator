@@ -815,6 +815,7 @@ http://127.0.0.1:5410
 190. 视觉主题与样式预设计划已落文档：`docs/task-notes/visual-theme-preset-plan.md` 对照原版 `style-presets.js`、`style.js` 和 `public/styles/*.json`，记录了原版 12 个系统预设、selector/attribute JSON、自定义 localStorage 预设和高度色带语义，并为 WebGL 版明确不直接兼容 SVG selector，而是走 `map.visualTheme` 与 renderer/overlay theme token。后续可先做只读轻量主题预设，再做主题导入导出和少量颜色级编辑；纹理、滤镜、字体和高级后处理暂缓。
 191. 市场、商品与贸易流计划已落文档：`docs/task-notes/economy-market-trade-plan.md` 对照原版 goods editor、markets overview、trade animation editor 和 draw-trade-animation，记录了商品产量/库存/价格、市场覆盖和交易动画语义；WebGL 版已有 `pack.goods / pack.markets / pack.deals` 生成数据，但用户侧应先做只读经济总览和导出诊断，再进入轻量编辑、静态贸易流和按需动画，市场归属刷子和生产链编辑后置。
 192. 军事对象与战斗事件计划已落文档：`docs/task-notes/military-battle-plan.md` 对照原版 regiments overview、regiment editor 和 battle screen，记录了军团筛选/导出、军团编辑、战斗类型推断、士气阶段、伤亡应用和备注事件链路；WebGL 版已有军事生成和国家详情军力摘要，但后续应先做只读军团总览与军事图层，再做军团轻量编辑、战斗事件记录和可撤销战斗模拟。
+193. 纹章与 Coat of Arms 计划已落文档：`docs/task-notes/emblems-coa-plan.md` 对照原版 `generators/emblems`、`draw-emblems.ts` 和 `emblems-editor.js`，记录了国家/省份/城市三层纹章、父级派生、盾形、division、ordinary、charge、SVG defs/use 渲染、上传下载和 Armoria 集成语义；WebGL 版后续应先保留 `coa` 数据占位和只读显示，再做默认关闭的轻量纹章图层，完整生成器和外部集成按需懒加载后置。
 
 ## 约束
 
