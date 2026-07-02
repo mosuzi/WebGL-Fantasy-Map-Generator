@@ -1291,6 +1291,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
   updateMeasurementOverlay(state, documentRef);
+  setGenerationLoading(documentRef, false);
 }
 
 function scheduleAfterPaint(documentRef, callback) {

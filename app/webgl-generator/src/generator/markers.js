@@ -22,6 +22,27 @@ const MARKER_SYMBOL_BY_TYPE = Object.freeze({
   "salt-lakes": "salt",
   "rare-biota": "life",
   "gem-fields": "gem",
+  quarries: "mine",
+  "clay-pits": "mine",
+  coalfields: "mine",
+  "sulfur-springs": "spring",
+  "nitrate-caves": "ruin",
+  "amber-coasts": "gem",
+  "pearl-shoals": "gem",
+  "coral-reefs": "life",
+  fisheries: "drop",
+  "good-harbors": "bridge",
+  "lumber-camps": "life",
+  "resin-forests": "life",
+  "herb-valleys": "life",
+  "dye-fields": "life",
+  "spice-groves": "life",
+  "tea-hills": "life",
+  "silk-groves": "life",
+  "horse-pastures": "market",
+  "salt-meadows": "salt",
+  oases: "drop",
+  "sacred-springs": "spring",
   bridges: "bridge",
   inns: "inn",
   lighthouses: "tower",
@@ -86,6 +107,27 @@ const MARKER_TYPES = [
   {type: "salt-lakes", label: "盐湖", category: "resource", icon: "🧂", weight: 10, resourceKey: "salt", resourceLabel: "盐", economicValue: 14, candidates: saltLakeCells},
   {type: "rare-biota", label: "稀有生物", category: "resource", icon: "✦", weight: 10, resourceKey: "rare-biota", resourceLabel: "稀有生物", economicValue: 16, candidates: rareBiotaCells},
   {type: "gem-fields", label: "宝石矿脉", category: "resource", icon: "◇", weight: 6, resourceKey: "gems", resourceLabel: "宝石", economicValue: 22, candidates: gemFieldCells},
+  {type: "quarries", label: "采石场", category: "resource", icon: "▣", weight: 6, resourceKey: "stone", resourceLabel: "石材", economicValue: 9, candidates: quarryCells},
+  {type: "clay-pits", label: "黏土坑", category: "resource", icon: "▥", weight: 5, resourceKey: "clay", resourceLabel: "陶土", economicValue: 8, candidates: clayPitCells},
+  {type: "coalfields", label: "煤田", category: "resource", icon: "◆", weight: 4, resourceKey: "coal", resourceLabel: "煤", economicValue: 15, candidates: coalfieldCells},
+  {type: "sulfur-springs", label: "硫磺泉", category: "resource", icon: "♨", weight: 4, resourceKey: "sulfur", resourceLabel: "硫磺", economicValue: 12, candidates: sulfurSpringCells},
+  {type: "nitrate-caves", label: "硝石洞", category: "resource", icon: "△", weight: 3, resourceKey: "nitrate", resourceLabel: "硝石", economicValue: 13, candidates: nitrateCaveCells},
+  {type: "amber-coasts", label: "琥珀海岸", category: "resource", icon: "◈", weight: 3, resourceKey: "amber", resourceLabel: "琥珀", economicValue: 15, candidates: amberCoastCells},
+  {type: "pearl-shoals", label: "珍珠滩", category: "resource", icon: "○", weight: 4, resourceKey: "pearls", resourceLabel: "珍珠", economicValue: 18, candidates: pearlShoalCells},
+  {type: "coral-reefs", label: "珊瑚礁", category: "resource", icon: "✧", weight: 4, resourceKey: "coral", resourceLabel: "珊瑚", economicValue: 16, candidates: coralReefCells},
+  {type: "fisheries", label: "渔场", category: "resource", icon: "⌁", weight: 8, resourceKey: "fish", resourceLabel: "渔获", economicValue: 10, candidates: fisheryCells},
+  {type: "good-harbors", label: "良港", category: "resource", icon: "⌂", weight: 5, resourceKey: "harbor", resourceLabel: "良港", economicValue: 18, candidates: goodHarborCells},
+  {type: "lumber-camps", label: "森林木场", category: "resource", icon: "♧", weight: 6, resourceKey: "timber", resourceLabel: "木材", economicValue: 11, candidates: lumberCampCells},
+  {type: "resin-forests", label: "树脂林", category: "resource", icon: "♢", weight: 4, resourceKey: "resin", resourceLabel: "树脂", economicValue: 10, candidates: resinForestCells},
+  {type: "herb-valleys", label: "药草谷", category: "resource", icon: "✤", weight: 5, resourceKey: "herbs", resourceLabel: "药草", economicValue: 12, candidates: herbValleyCells},
+  {type: "dye-fields", label: "染料草场", category: "resource", icon: "✿", weight: 4, resourceKey: "dyes", resourceLabel: "染料", economicValue: 10, candidates: dyeFieldCells},
+  {type: "spice-groves", label: "香料林", category: "resource", icon: "✺", weight: 3, resourceKey: "spices", resourceLabel: "香料", economicValue: 17, candidates: spiceGroveCells},
+  {type: "tea-hills", label: "茶山", category: "resource", icon: "☘", weight: 4, resourceKey: "tea", resourceLabel: "茶", economicValue: 13, candidates: teaHillCells},
+  {type: "silk-groves", label: "丝茧桑园", category: "resource", icon: "◇", weight: 3, resourceKey: "silk", resourceLabel: "丝茧", economicValue: 16, candidates: silkGroveCells},
+  {type: "horse-pastures", label: "马场", category: "resource", icon: "♞", weight: 5, resourceKey: "horses", resourceLabel: "良马", economicValue: 14, candidates: horsePastureCells},
+  {type: "salt-meadows", label: "牧盐草甸", category: "resource", icon: "▧", weight: 4, resourceKey: "salt-meadow", resourceLabel: "盐草", economicValue: 9, candidates: saltMeadowCells},
+  {type: "oases", label: "绿洲", category: "resource", icon: "◌", weight: 4, resourceKey: "oasis", resourceLabel: "绿洲", economicValue: 12, candidates: oasisCells},
+  {type: "sacred-springs", label: "圣泉", category: "resource", icon: "✦", weight: 3, resourceKey: "sacred-water", resourceLabel: "圣泉", economicValue: 14, candidates: sacredSpringCells},
   {type: "bridges", label: "桥梁", category: "infrastructure", icon: "🌉", weight: 8, economicValue: 4, candidates: bridges},
   {type: "inns", label: "驿馆", category: "trade", icon: "🍻", weight: 48, economicValue: 5, candidates: innCells},
   {type: "lighthouses", label: "灯塔", category: "infrastructure", icon: "🚨", weight: 13, economicValue: 4, candidates: ports},
@@ -370,9 +412,69 @@ function resourceCandidateScore({grid, pack}, config, packCell) {
       return 1 + rareBiomeScore(biome) * 1.35 + wet * 0.8 + moderateTemperature * 0.75 + (nearRiver ? 0.65 : 0) + remote * 0.55 + (height >= 55 ? 0.35 : 0);
     case "gem-fields":
       return 1 + bell(height, 72, 24) * 2.1 + roughness * 1.2 + remote * 0.35 + clamp01((100 - precipitation) / 100) * 0.3;
+    case "quarries":
+      return 1 + bell(height, 48, 30) * 1.45 + roughness * 1.35 + clamp01(suitability / 90) * 0.45 + (population > 0 ? 0.25 : 0);
+    case "clay-pits":
+      return 1 + bell(height, 28, 18) * 1.45 + (nearRiver ? 0.85 : 0) + wet * 0.45 + clamp01(suitability / 70) * 0.35;
+    case "coalfields":
+      return 1 + bell(height, 50, 28) * 1.6 + roughness * 0.95 + forestBiomeScore(biome) * 0.5 + remote * 0.3;
+    case "sulfur-springs":
+      return 1 + bell(height, 64, 26) * 1.7 + roughness * 1.1 + (hasRiver ? 0.45 : 0) + warmth * 0.35;
+    case "nitrate-caves":
+      return 1 + bell(height, 48, 30) * 1.3 + dry * 1.25 + roughness * 0.8 + remote * 0.35;
+    case "amber-coasts":
+      return 1 + forestBiomeScore(biome) * 1.1 + wet * 0.45 + moderateTemperature * 0.45 + (nearLand ? 0.3 : 0);
+    case "pearl-shoals":
+      return 1 + warmth * 1.25 + (nearLand ? 0.55 : 0) + clamp01((precipitation + 20) / 150) * 0.25;
+    case "coral-reefs":
+      return 1 + warmth * 1.45 + (nearLand ? 0.35 : 0) + clamp01((height + 20) / 20) * 0.5;
+    case "fisheries":
+      return 1 + (nearLand ? 0.75 : 0) + (nearRiver ? 0.5 : 0) + moderateTemperature * 0.35 + clamp01(population / 12) * 0.3;
+    case "good-harbors":
+      return 1 + (pack.cells.harbor?.[packCell] ? 1.4 : 0) + clamp01(population / 10) * 0.55 + (nearLand ? 0.45 : 0);
+    case "lumber-camps":
+      return 1 + forestBiomeScore(biome) * 1.45 + clamp01(suitability / 80) * 0.45 + (nearRiver ? 0.35 : 0);
+    case "resin-forests":
+      return 1 + resinBiomeScore(biome) * 1.55 + dry * 0.35 + remote * 0.3;
+    case "herb-valleys":
+      return 1 + moderateTemperature * 0.85 + wet * 0.55 + (nearRiver ? 0.75 : 0) + bell(height, 45, 30) * 0.65;
+    case "dye-fields":
+      return 1 + openBiomeScore(biome) * 1.1 + warmth * 0.55 + wet * 0.35 + clamp01(suitability / 75) * 0.35;
+    case "spice-groves":
+      return 1 + warmth * 1.35 + wet * 0.85 + forestBiomeScore(biome) * 0.55 + remote * 0.25;
+    case "tea-hills":
+      return 1 + bell(height, 54, 26) * 1.45 + wet * 0.8 + moderateTemperature * 0.65 + roughness * 0.3;
+    case "silk-groves":
+      return 1 + moderateTemperature * 0.75 + wet * 0.45 + clamp01(suitability / 75) * 0.55 + (population > 0 ? 0.35 : 0);
+    case "horse-pastures":
+      return 1 + openBiomeScore(biome) * 1.25 + bell(height, 34, 24) * 0.75 + clamp01(suitability / 70) * 0.55 + dry * 0.25;
+    case "salt-meadows":
+      return 1 + dry * 1.1 + openBiomeScore(biome) * 0.8 + (nearLand ? 0.35 : 0) + warmth * 0.3;
+    case "oases":
+      return 1 + dry * 1.55 + (nearRiver ? 1.2 : 0) + warmth * 0.35 + clamp01(suitability / 65) * 0.35;
+    case "sacred-springs":
+      return 1 + (hasRiver ? 1.1 : 0) + moderateTemperature * 0.55 + clamp01(suitability / 70) * 0.4 + (pack.cells.culture?.[packCell] ? 0.35 : 0);
     default:
       return 1;
   }
+}
+
+function forestBiomeScore(biome) {
+  if ([6, 7, 8, 9].includes(biome)) return 1;
+  if ([5, 10].includes(biome)) return 0.55;
+  return 0.15;
+}
+
+function resinBiomeScore(biome) {
+  if ([8, 9].includes(biome)) return 1;
+  if ([6, 7, 10].includes(biome)) return 0.55;
+  return 0.1;
+}
+
+function openBiomeScore(biome) {
+  if ([3, 4, 5].includes(biome)) return 1;
+  if ([1, 2].includes(biome)) return 0.65;
+  return 0.2;
 }
 
 function rareBiomeScore(biome) {
@@ -412,6 +514,29 @@ function candidateUnion(...candidateFns) {
 
 function landCells({pack}) {
   return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20);
+}
+
+function hasWaterNeighbor(pack, cell) {
+  return (pack.cells.c?.[cell] || []).some(neighbor => pack.cells.h?.[neighbor] < 20);
+}
+
+function isCoastalLandCell(pack, cell) {
+  return pack.cells.h?.[cell] >= 20 && hasWaterNeighbor(pack, cell);
+}
+
+function isCoastalWaterCell(pack, cell) {
+  return pack.cells.h?.[cell] < 20 && (pack.cells.c?.[cell] || []).some(neighbor => pack.cells.h?.[neighbor] >= 20);
+}
+
+function isLakeWaterCell(pack, cell) {
+  return pack.features?.[pack.cells.f?.[cell]]?.type === "lake";
+}
+
+function hasSaltLakeNeighbor(pack, cell) {
+  return (pack.cells.c?.[cell] || []).some(neighbor => {
+    const feature = pack.features?.[pack.cells.f?.[neighbor]];
+    return feature?.type === "lake" && pack.cells.h?.[neighbor] < 20;
+  });
 }
 
 function highCells(minHeight) {
@@ -566,6 +691,164 @@ function gemFieldCells({pack}) {
     const suitability = pack.cells.s?.[cell] || 0;
     return suitability > 0 || (pack.cells.c?.[cell] || []).some(neighbor => pack.cells.s?.[neighbor] > 0);
   });
+}
+
+function quarryCells({pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 32 || pack.cells.h[cell] > 78 || pack.cells.burg?.[cell]) return false;
+    return terrainRoughness(pack, cell, pack.cells.c?.[cell] || []) >= 0.18 || pack.cells.h[cell] >= 55;
+  });
+}
+
+function clayPitCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 20 || pack.cells.h[cell] > 48 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const precipitation = grid.cells.prec?.[gridCell] ?? 100;
+    return precipitation >= 25 && (pack.cells.r?.[cell] || hasWaterNeighbor(pack, cell) || (pack.cells.s?.[cell] || 0) > 20);
+  });
+}
+
+function coalfieldCells({pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 30 || pack.cells.h[cell] > 74 || pack.cells.burg?.[cell]) return false;
+    return [5, 6, 7, 8, 9].includes(pack.cells.biome?.[cell]) || terrainRoughness(pack, cell, pack.cells.c?.[cell] || []) > 0.22;
+  });
+}
+
+function sulfurSpringCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 45 || pack.cells.h[cell] > 90 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const temperature = grid.cells.temp?.[gridCell] ?? 0;
+    return temperature >= -5 && (pack.cells.r?.[cell] || terrainRoughness(pack, cell, pack.cells.c?.[cell] || []) > 0.24);
+  });
+}
+
+function nitrateCaveCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 32 || pack.cells.h[cell] > 78 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const precipitation = grid.cells.prec?.[gridCell] ?? 100;
+    return precipitation <= 45 || [1, 2, 3].includes(pack.cells.biome?.[cell]);
+  });
+}
+
+function amberCoastCells({pack}) {
+  return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && !pack.cells.burg?.[cell] && isCoastalLandCell(pack, cell) && [6, 7, 8, 9, 10].includes(pack.cells.biome?.[cell]));
+}
+
+function pearlShoalCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (!isCoastalWaterCell(pack, cell) || isLakeWaterCell(pack, cell)) return false;
+    const gridCell = pack.cells.g[cell];
+    const temperature = grid.cells.temp?.[gridCell] ?? 0;
+    return temperature >= 12 && (pack.cells.t?.[cell] ?? 0) >= -2;
+  });
+}
+
+function coralReefCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (!isCoastalWaterCell(pack, cell) || isLakeWaterCell(pack, cell)) return false;
+    const gridCell = pack.cells.g[cell];
+    const temperature = grid.cells.temp?.[gridCell] ?? 0;
+    return temperature >= 20 && (pack.cells.t?.[cell] ?? 0) >= -3;
+  });
+}
+
+function fisheryCells({pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] >= 20) return false;
+    if (isLakeWaterCell(pack, cell)) return true;
+    return isCoastalWaterCell(pack, cell) || (pack.cells.c?.[cell] || []).some(neighbor => pack.cells.r?.[neighbor] || pack.cells.harbor?.[neighbor]);
+  });
+}
+
+function goodHarborCells({pack}) {
+  const burgPorts = ports({pack});
+  const coastalLand = pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && isCoastalLandCell(pack, cell) && (pack.cells.harbor?.[cell] || (pack.cells.s?.[cell] || 0) > 20));
+  return [...burgPorts, ...coastalLand];
+}
+
+function lumberCampCells({pack}) {
+  return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && !pack.cells.burg?.[cell] && [6, 7, 8, 9].includes(pack.cells.biome?.[cell]));
+}
+
+function resinForestCells({pack}) {
+  return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && !pack.cells.burg?.[cell] && [8, 9].includes(pack.cells.biome?.[cell]));
+}
+
+function herbValleyCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 24 || pack.cells.h[cell] > 68 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const precipitation = grid.cells.prec?.[gridCell] ?? 100;
+    return precipitation >= 45 && (pack.cells.r?.[cell] || hasWaterNeighbor(pack, cell) || [5, 6, 7].includes(pack.cells.biome?.[cell]));
+  });
+}
+
+function dyeFieldCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 20 || pack.cells.h[cell] > 55 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const temperature = grid.cells.temp?.[gridCell] ?? 0;
+    return temperature >= 4 && [3, 4, 5, 6].includes(pack.cells.biome?.[cell]) && (pack.cells.s?.[cell] || 0) > 0;
+  });
+}
+
+function spiceGroveCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 20 || pack.cells.h[cell] > 62 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const temperature = grid.cells.temp?.[gridCell] ?? 0;
+    const precipitation = grid.cells.prec?.[gridCell] ?? 0;
+    return temperature >= 18 && precipitation >= 60 && [1, 2, 6, 7].includes(pack.cells.biome?.[cell]);
+  });
+}
+
+function teaHillCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 32 || pack.cells.h[cell] > 74 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const precipitation = grid.cells.prec?.[gridCell] ?? 0;
+    const temperature = grid.cells.temp?.[gridCell] ?? 0;
+    return precipitation >= 45 && temperature >= 2 && temperature <= 24 && [5, 6, 7, 8].includes(pack.cells.biome?.[cell]);
+  });
+}
+
+function silkGroveCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 20 || pack.cells.h[cell] > 55) return false;
+    const gridCell = pack.cells.g[cell];
+    const temperature = grid.cells.temp?.[gridCell] ?? 0;
+    return temperature >= 8 && temperature <= 26 && (pack.cells.s?.[cell] || 0) > 15 && [4, 5, 6, 7].includes(pack.cells.biome?.[cell]);
+  });
+}
+
+function horsePastureCells({pack}) {
+  return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && pack.cells.h[cell] <= 55 && !pack.cells.burg?.[cell] && [3, 4, 5].includes(pack.cells.biome?.[cell]) && (pack.cells.s?.[cell] || 0) > 0);
+}
+
+function saltMeadowCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 20 || pack.cells.h[cell] > 42 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const precipitation = grid.cells.prec?.[gridCell] ?? 100;
+    return precipitation <= 45 && [2, 3, 4].includes(pack.cells.biome?.[cell]) && (isCoastalLandCell(pack, cell) || hasSaltLakeNeighbor(pack, cell));
+  });
+}
+
+function oasisCells({grid, pack}) {
+  return pack.cells.i.filter(cell => {
+    if (pack.cells.h[cell] < 20 || pack.cells.h[cell] > 45 || pack.cells.burg?.[cell]) return false;
+    const gridCell = pack.cells.g[cell];
+    const precipitation = grid.cells.prec?.[gridCell] ?? 100;
+    return precipitation <= 35 && [1, 2, 3].includes(pack.cells.biome?.[cell]) && (pack.cells.r?.[cell] || hasWaterNeighbor(pack, cell));
+  });
+}
+
+function sacredSpringCells({pack}) {
+  return pack.cells.i.filter(cell => pack.cells.h[cell] >= 20 && !pack.cells.burg?.[cell] && (pack.cells.r?.[cell] || hasWaterNeighbor(pack, cell)) && (pack.cells.culture?.[cell] || pack.cells.religion?.[cell]));
 }
 
 function lowPopulationLandCells({pack}) {
