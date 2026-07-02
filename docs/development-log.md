@@ -14343,6 +14343,44 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
 - Playwright + 系统 Chrome 通过 Vite 程序化服务访问 `http://127.0.0.1:5410/?slider_change_verify=3`：控制面板中拖动比例尺滑条时，鼠标按下移动阶段隐藏 range 事件为 `input=0 / change=0`，松手后为 `input=0 / change=1`，比例读数更新为 `1 cm = 777 km`；拖动赤道温度滑条同样在移动阶段 `input=0 / change=0`，松手后 `change=1`，且页面无 console/page error。
 
+### 城镇标签拾取穿透
+
+背景：
+
+- 用户反馈城镇标签会影响城镇本体点击，需要把城镇标签全部视为不可点击展示层。
+
+修正：
+
+- `PlaceholderMapRenderer.pickLabel()` 现在跳过 `LABEL_TARGET_KIND.CITY`，地图拾取不再把生成的城镇名称返回为 `OBJECT_KIND.LABEL`。
+- 自定义标签和国家名称仍可按现有逻辑作为标签对象拾取；城镇名称的隐藏、重命名和备注继续通过标签管理面板处理。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 系统 Chrome 通过 Vite 程序化服务访问 `http://127.0.0.1:5410/?city_label_pick_verify=1`：可见城镇标签“兴苑”的标签框中心拾取结果 `labelKind = null`，不再返回 `city` 标签；点击同一城市的本体坐标返回 `objectKind = city / cityObjectId = 6`，页面无 console/page error。
+
+### PNG 导出补齐地图 overlay
+
+背景：
+
+- 用户反馈导出的图片没有标签等信息，需要根据当前视图和图层充分导出地图内容。
+- 同时要求不要把比例尺、控制面板、浮层面板、loading 等 UI 信息导出到图片里。
+
+修正：
+
+- `downloadCanvasPng()` 改为异步合成：先读回 WebGL framebuffer，再把当前可见地图 overlay 合成到导出 canvas，最后再 `toBlob()`。
+- 导出 overlay 只读取 `.map-overlay` 中当前 `.visible` 的地图元素，包括城镇标签、国家名称、自定义标签、近景城镇剪影和资源/标记图标。
+- SVG 图标会在导出时内联当前 computed style，再转成图片绘制到导出 canvas，保证配色和当前图层状态一致。
+- 导出不再手动画 `map-badge` 和 `map-scale-bar`，因此不会把右上角尺寸、左下角比例尺、控制面板、浮层面板或 loading 合成进 PNG。
+- 导出 overlay 的可见性不再受 CSS 过渡瞬间 `opacity: 0` 影响，只要元素已经处于 `.visible` 状态，就按最终语义透明度参与导出；资源图标与城市重叠时仍保留半透明表现。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 系统 Chrome 通过 Vite 程序化服务访问 `http://127.0.0.1:5410/?export_overlay_verify=2`：拦截导出 canvas 的 `fillText/drawImage/toBlob`，确认导出绘制了当前可见的全部 `27` 个地图标签文本和 `9` 个可见地图图标；`500 千米` 比例尺文字和右上角 `3,810 千米 x 2,540 千米` 尺寸 badge 均没有进入导出 canvas，页面无 console/page error。
+
 ### README 人类化重写与许可证补充
 
 背景：

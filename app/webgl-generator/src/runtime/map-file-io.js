@@ -150,22 +150,13 @@ export function downloadText(documentRef, text, filename, type = "text/plain;cha
   downloadBlob(documentRef, new Blob([text], {type}), filename);
 }
 
-export function downloadCanvasPng(documentRef, canvas, filename, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!canvas?.toBlob) {
-      reject(new Error("当前浏览器不支持 canvas 图片导出"));
-      return;
-    }
-    const exportCanvas = options.includeMapOverlays || options.renderer ? composeMapExportCanvas(documentRef, canvas, options) : canvas;
-    exportCanvas.toBlob(blob => {
-      if (!blob) {
-        reject(new Error("图片导出失败"));
-        return;
-      }
-      downloadBlob(documentRef, blob, filename);
-      resolve();
-    }, "image/png");
-  });
+export async function downloadCanvasPng(documentRef, canvas, filename, options = {}) {
+  if (!canvas?.toBlob) throw new Error("当前浏览器不支持 canvas 图片导出");
+  const exportCanvas = options.includeMapOverlays || options.renderer
+    ? await composeMapExportCanvas(documentRef, canvas, options)
+    : canvas;
+  const blob = await canvasToBlob(exportCanvas);
+  downloadBlob(documentRef, blob, filename);
 }
 
 export function mapFileBaseName(map) {
@@ -616,7 +607,7 @@ function downloadBlob(documentRef, blob, filename) {
   view.setTimeout(() => view.URL.revokeObjectURL(url), 0);
 }
 
-function composeMapExportCanvas(documentRef, canvas, options = {}) {
+async function composeMapExportCanvas(documentRef, canvas, options = {}) {
   const output = documentRef.createElement("canvas");
   output.width = canvas.width;
   output.height = canvas.height;
@@ -633,9 +624,20 @@ function composeMapExportCanvas(documentRef, canvas, options = {}) {
     y: output.height / canvasRect.height
   };
 
-  drawMapBadge(documentRef, context, canvasRect, scale);
-  drawMapScaleBar(documentRef, context, canvasRect, scale);
+  await drawMapOverlayElements(documentRef, context, canvasRect, scale, options);
   return output;
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      if (!blob) {
+        reject(new Error("图片导出失败"));
+        return;
+      }
+      resolve(blob);
+    }, "image/png");
+  });
 }
 
 function copyWebglCanvasTo2d(context, canvas, renderer) {
@@ -673,61 +675,209 @@ function copyWebglCanvasTo2d(context, canvas, renderer) {
   }
 }
 
-function drawMapBadge(documentRef, context, canvasRect, scale) {
-  const badge = documentRef.getElementById("map-badge");
-  if (!isVisibleElement(badge)) return;
-  const box = elementBox(badge, canvasRect, scale);
-  if (!box) return;
-  drawPanel(context, box, 6 * scale.x, "rgba(12, 18, 22, 0.8)", "rgba(208, 221, 225, 0.24)");
-  drawText(context, badge.textContent.trim(), box.x + 10 * scale.x, box.y + box.height / 2, {
-    color: "#d7e1e5",
-    fontSize: 12 * scale.y,
-    baseline: "middle",
-    maxWidth: box.width - 20 * scale.x
+async function drawMapOverlayElements(documentRef, context, canvasRect, scale, options = {}) {
+  const overlay = options.renderer?.overlay || documentRef.querySelector(".map-overlay");
+  if (!overlay) return;
+  const elements = Array.from(overlay.querySelectorAll([
+    ".city-map-icon.visible",
+    ".marker-map-icon.visible",
+    ".state-label.visible",
+    ".city-label.visible",
+    ".custom-label.visible"
+  ].join(", "))).filter(isVisibleElement);
+  elements.sort((a, b) => overlayZIndex(a) - overlayZIndex(b));
+
+  for (const element of elements) {
+    if (element.matches(".city-map-icon, .marker-map-icon")) {
+      await drawSvgOverlayElement(context, element, canvasRect, scale);
+    } else {
+      drawTextOverlayElement(context, element, canvasRect, scale);
+    }
+  }
+}
+
+function overlayZIndex(element) {
+  const value = Number(element.ownerDocument.defaultView.getComputedStyle(element).zIndex);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function drawTextOverlayElement(context, element, canvasRect, scale) {
+  const text = element.textContent?.trim();
+  if (!text) return;
+  const box = elementBox(element, canvasRect, scale);
+  if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  const opacity = exportOverlayOpacity(element, style);
+  if (opacity <= 0) return;
+  const isStateLabel = element.classList.contains("state-label");
+  const isCustomLabel = element.classList.contains("custom-label");
+  const background = style.backgroundColor;
+  const borderColor = style.borderColor;
+
+  context.save();
+  context.globalAlpha = opacity;
+  if (!isStateLabel && isPaintedColor(background)) {
+    drawPanel(context, box, cssPixelValue(style.borderRadius, scale.x), background, isPaintedColor(borderColor) ? borderColor : "transparent");
+  }
+  context.font = cssCanvasFont(style, scale.y);
+  context.fillStyle = style.color || "#111";
+  context.textBaseline = "middle";
+  context.textAlign = "center";
+
+  if (isStateLabel) {
+    const rotation = cssRotationDegrees(element);
+    context.translate(box.x + box.width / 2, box.y + box.height / 2);
+    context.rotate(rotation * Math.PI / 180);
+    drawTextShadow(context, element, scale);
+    context.fillText(text, 0, 0, Math.max(40, box.width * 0.92));
+  } else {
+    drawTextShadow(context, element, scale);
+    const maxWidth = Math.max(20, box.width - (isCustomLabel ? 10 * scale.x : 0));
+    context.fillText(text, box.x + box.width / 2, box.y + box.height / 2, maxWidth);
+  }
+  context.restore();
+}
+
+async function drawSvgOverlayElement(context, element, canvasRect, scale) {
+  const box = elementBox(element, canvasRect, scale);
+  if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const svg = element.querySelector("svg");
+  if (!svg) return;
+  const dataUrl = svgElementDataUrl(svg);
+  if (!dataUrl) return;
+  const image = await loadImage(element.ownerDocument, dataUrl);
+  if (!image) return;
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  context.save();
+  context.globalAlpha = exportOverlayOpacity(element, style);
+  if (element.classList.contains("city-map-icon")) {
+    context.shadowColor = "rgba(10, 13, 12, 0.38)";
+    context.shadowBlur = 2.5 * Math.min(scale.x, scale.y);
+    context.shadowOffsetY = 1.5 * scale.y;
+  } else {
+    context.shadowColor = "rgba(3, 6, 7, 0.42)";
+    context.shadowBlur = 3 * Math.min(scale.x, scale.y);
+    context.shadowOffsetY = 2 * scale.y;
+  }
+  context.drawImage(image, box.x, box.y, box.width, box.height);
+  context.restore();
+}
+
+function svgElementDataUrl(svg) {
+  const clone = svg.cloneNode(true);
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  inlineSvgStyles(svg, clone);
+  const text = new XMLSerializer().serializeToString(clone);
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(text)}`;
+}
+
+function inlineSvgStyles(source, target) {
+  const style = source.ownerDocument.defaultView.getComputedStyle(source);
+  const declarations = SVG_STYLE_PROPERTIES
+    .map(property => {
+      const value = style.getPropertyValue(property);
+      return value ? `${property}:${value}` : "";
+    })
+    .filter(Boolean)
+    .join(";");
+  if (declarations) target.setAttribute("style", declarations);
+  const sourceChildren = Array.from(source.children || []);
+  const targetChildren = Array.from(target.children || []);
+  for (let index = 0; index < sourceChildren.length; index += 1) {
+    if (targetChildren[index]) inlineSvgStyles(sourceChildren[index], targetChildren[index]);
+  }
+}
+
+const SVG_STYLE_PROPERTIES = Object.freeze([
+  "fill",
+  "fill-opacity",
+  "filter",
+  "opacity",
+  "stroke",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-opacity",
+  "stroke-width",
+  "transform"
+]);
+
+function loadImage(documentRef, src) {
+  return new Promise(resolve => {
+    const image = new documentRef.defaultView.Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
   });
 }
 
-function drawMapScaleBar(documentRef, context, canvasRect, scale) {
-  const scaleBar = documentRef.getElementById("map-scale-bar");
-  const line = scaleBar?.querySelector(".map-scale-line");
-  const label = scaleBar?.querySelector(".map-scale-label");
-  if (!isVisibleElement(scaleBar) || !isVisibleElement(line) || !label?.textContent.trim()) return;
+function cssCanvasFont(style, scaleY) {
+  const fontSize = Math.max(8, cssPixelValue(style.fontSize, scaleY));
+  const weight = style.fontWeight || "400";
+  const family = style.fontFamily || "system-ui, sans-serif";
+  const fontStyle = style.fontStyle && style.fontStyle !== "normal" ? `${style.fontStyle} ` : "";
+  return `${fontStyle}${weight} ${fontSize}px ${family}`;
+}
 
-  const box = elementBox(scaleBar, canvasRect, scale);
-  const lineBox = elementBox(line, canvasRect, scale);
-  const labelBox = elementBox(label, canvasRect, scale);
-  if (!box || !lineBox || !labelBox) return;
+function drawTextShadow(context, element, scale) {
+  if (element.classList.contains("state-label")) {
+    drawShadowedText(context, "rgba(4, 7, 8, 0.82)", 4 * Math.min(scale.x, scale.y), 0, 2 * scale.y);
+    return;
+  }
+  if (element.classList.contains("city-label")) {
+    drawShadowedText(context, "rgba(246, 239, 216, 0.72)", 3.5 * Math.min(scale.x, scale.y), 0, 1 * scale.y);
+    return;
+  }
+  drawShadowedText(context, "rgba(4, 7, 8, 0.62)", 2 * Math.min(scale.x, scale.y), 0, 1 * scale.y);
+}
 
-  drawPanel(context, box, 8 * scale.x, "rgba(12, 18, 22, 0.74)", "rgba(208, 221, 225, 0.24)");
-  const lineWidth = Math.max(1, 2 * Math.min(scale.x, scale.y));
-  const bottom = lineBox.y + lineBox.height - lineWidth / 2;
-  const top = lineBox.y + lineWidth / 2;
-  const left = lineBox.x + lineWidth / 2;
-  const right = lineBox.x + lineBox.width - lineWidth / 2;
-  context.save();
-  context.strokeStyle = "#edf4f6";
-  context.lineWidth = lineWidth;
-  context.beginPath();
-  context.moveTo(left, top);
-  context.lineTo(left, bottom);
-  context.lineTo(right, bottom);
-  context.lineTo(right, top);
-  context.stroke();
-  context.restore();
+function drawShadowedText(context, color, blur, offsetX, offsetY) {
+  context.shadowColor = color;
+  context.shadowBlur = blur;
+  context.shadowOffsetX = offsetX;
+  context.shadowOffsetY = offsetY;
+}
 
-  drawText(context, label.textContent.trim(), labelBox.x, labelBox.y + labelBox.height / 2, {
-    color: "rgba(242, 248, 249, 0.94)",
-    fontSize: 11 * scale.y,
-    fontWeight: 700,
-    baseline: "middle",
-    maxWidth: box.width - 20 * scale.x
-  });
+function cssRotationDegrees(element) {
+  const raw = element.style.getPropertyValue("--label-rotation") || "0";
+  const number = Number(String(raw).replace("deg", "").trim());
+  return Number.isFinite(number) ? number : 0;
+}
+
+function cssOpacity(style) {
+  const opacity = Number(style.opacity);
+  return Number.isFinite(opacity) ? Math.max(0, Math.min(1, opacity)) : 1;
+}
+
+function exportOverlayOpacity(element, style) {
+  const current = cssOpacity(style);
+  if (current > 0 || !element.classList.contains("visible")) return current;
+  if (element.classList.contains("state-label")) {
+    const labelOpacity = Number(style.getPropertyValue("--state-label-opacity"));
+    return Number.isFinite(labelOpacity) ? Math.max(0, Math.min(1, labelOpacity)) : 1;
+  }
+  if (element.classList.contains("marker-map-icon--resource") && element.classList.contains("city-overlap")) {
+    return element.classList.contains("selected") ? 0.72 : 0.42;
+  }
+  return 1;
+}
+
+function isPaintedColor(color) {
+  return Boolean(color) && color !== "transparent" && !/rgba?\([^)]*,\s*0\)$/i.test(color);
+}
+
+function boxIntersectsCanvas(box, canvas) {
+  return box.x < canvas.width && box.y < canvas.height && box.x + box.width > 0 && box.y + box.height > 0;
+}
+
+function cssPixelValue(value, scale = 1) {
+  const number = Number(String(value || "").replace("px", ""));
+  return Number.isFinite(number) ? number * scale : 0;
 }
 
 function isVisibleElement(element) {
   if (!element || element.hidden) return false;
   const style = element.ownerDocument.defaultView.getComputedStyle(element);
-  if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+  if (style.display === "none" || style.visibility === "hidden") return false;
   const rect = element.getBoundingClientRect();
   return rect.width > 0 && rect.height > 0;
 }

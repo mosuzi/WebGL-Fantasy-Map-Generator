@@ -958,6 +958,7 @@ export class PlaceholderMapRenderer {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     for (const item of this.labelItems) {
+      if (item.targetKind === LABEL_TARGET_KIND.CITY) continue;
       if (!item.visible || !item.box) continue;
       if (x < item.box.left || x > item.box.right || y < item.box.top || y > item.box.bottom) continue;
       return {
