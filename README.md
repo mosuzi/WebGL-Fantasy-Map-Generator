@@ -53,13 +53,18 @@ pnpm run regress:rendering
 - `app/webgl-generator`：新的 WebGL 地图生成器应用。
 - `docs`：开发计划、专题设计、性能记录和阶段日志。
 - `tools`：本地 profiling、回归和辅助脚本。
-- `source/Fantasy-Map-Generator`：原 Fantasy Map Generator 的只读参考源码，用于理解行为、数据和视觉效果。
+
+## 作者与生成方式
+
+项目作者：mosuzi。
+
+本项目的代码、文档和项目说明完全由 Codex + GPT 生成。人的工作主要是提出方向、审阅结果、指出问题，并决定这个项目应该去往哪里。
 
 ## 向原作者致敬
 
 本项目基于对 [Azgaar/Fantasy-Map-Generator](https://github.com/Azgaar/Fantasy-Map-Generator) 的长期学习和致敬。Fantasy Map Generator 由 Max Haniyeu（Azgaar）创作，并由社区持续贡献，它不仅是一个出色的地图工具，也是一套很值得研究的程序化世界生成范式。
 
-本仓库保留 `source/Fantasy-Map-Generator` 作为参考实现。原项目的版权与许可证声明保留在 `source/Fantasy-Map-Generator/LICENSE` 中。
+原项目的版权与许可证声明请以 [Azgaar/Fantasy-Map-Generator](https://github.com/Azgaar/Fantasy-Map-Generator) 仓库为准。
 
 ## License
 
