@@ -1,6 +1,6 @@
 # docs 目录索引
 
-`docs/` 根目录只保留接手入口和总日志，其他文档按用途分组。
+`docs/` 根目录只保留接手入口和总日志，其他文档按用途分组。不要把本地 server 日志、截图、profile 输出或临时报告直接放在根目录。
 
 ## 根目录
 
@@ -16,13 +16,22 @@
 - `milestones/`：里程碑说明。
 - `performance/`：性能基线说明和长期性能对照。
 - `audits/`：审查、复盘和整改方案。
+- `deployment/`：部署说明和线上环境约定。
+- `task-notes/`：可入库的专题计划、评估记录、执行细则和功能积压。新增专题前先读 `task-notes/README.md`，并同步更新该索引。
 
 ## 本地或生成内容
 
 以下目录默认不进入版本库：
 
-- `task-notes/`：执行细则、评估记录和阶段性施工图。
 - `generated/`：baseline、snapshot、报告和本地预览图等生成产物。
 - `local-logs/`：本地 server 日志。
 
-如果某个生成报告需要长期保留，应先整理为总结性文档，再放入上面的长期文档目录。
+## 放置规则
+
+- 长期架构约束放入 `architecture/`。
+- 阶段验收或总体路线放入 `plans/` 或 `milestones/`。
+- 某个功能、专题、source 对照或后续施工图放入 `task-notes/`，并维护 `task-notes/README.md`。
+- 脚本生成的 JSON、Markdown 报告、截图和 profile 输出放入 `generated/`。
+- 本地 dev server、preview server 和临时静态服务日志放入 `local-logs/`。
+
+如果某个生成报告需要长期保留，应先整理为总结性文档，再放入上面的长期文档目录。`docs/` 根目录出现新的 `.log`、截图或生成报告时，应优先移动到 `local-logs/` 或 `generated/`，不要让根目录重新堆积。

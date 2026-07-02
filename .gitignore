@@ -23,23 +23,18 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Local visual previews moved out of tracked docs.
+# Local visual previews, generated reports, and server logs.
 docs/local-preview-images/
 docs/generated/
 docs/local-logs/
-docs/task-notes/
 
-# Generated reports and execution-detail docs.
+# Guard rails for misplaced generated reports in docs root.
 docs/source-baselines/
 docs/webgl-generator-snapshot-*/
 docs/*-results.json
 docs/*-results.md
 docs/*-smoke.json
 docs/*-smoke.md
-docs/source-first-*-task-plan.md
-docs/source-first-*-execution-plan.md
-docs/chinese-naming-library-evaluation.md
-docs/editor-and-stat-panel-inventory.md
 
 # Environment and local config
 .env

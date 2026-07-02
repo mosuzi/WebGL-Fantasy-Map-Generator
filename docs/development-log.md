@@ -14135,3 +14135,32 @@ full 矩阵结果：
 后续：
 
 - 视图页的两个图层开关暂时保留当前双列样式；后续若整体控制面板继续放宽，可以统一检查图层、单位和生成 tab 的行距节奏。
+
+### docs 结构整理第一刀
+
+背景：
+
+- 用户指出 docs 结构又开始散乱。
+- 实际盘点发现 `docs/` 根目录重新堆积了 30 多个本地 server / Vite 日志；同时 `.gitignore` 仍忽略整个 `docs/task-notes/`，导致若干重要计划和评估文档虽然被 `current-plan.md` 引用，却不会进入版本库。
+- `AGENTS.md` 接手清单还把 `docs/generated/reports/...` 里的本地生成报告列为必读，但 `docs/generated/` 本来就是忽略目录，fresh clone 不能依赖这些文件存在。
+
+修正：
+
+- `docs/` 根目录重新收敛为 `README.md / current-plan.md / development-log.md`，散落的 `.log` 文件移动到 `docs/local-logs/`。
+- `.gitignore` 移除 `docs/task-notes/` 的整目录忽略，只保留 `docs/generated/`、`docs/local-logs/` 和误落在根目录的生成报告 guard。
+- `docs/README.md` 明确根目录不得放本地日志、截图、profile 输出或临时报告，并写清 `architecture / plans / milestones / performance / audits / deployment / task-notes / generated / local-logs` 的用途。
+- 新增 `docs/task-notes/README.md`，按 Source 对照与生成质量、编辑器与用户外壳、导入导出与 GIS、名称库、世界系统与后续大功能分类索引现有专题文档。
+- `AGENTS.md` 新增 `docs/README.md` 和 `docs/task-notes/README.md` 作为接手入口，并从必读清单移除默认不入库的 `docs/generated/reports/...` 文件。
+- `docs/task-notes/chinese-naming-library-evaluation.md`、`editor-and-stat-panel-inventory.md`、`source-first-detailed-task-plan.md` 和 `source-first-recovery-execution-plan.md` 因取消忽略后重新显露为待入库专题文档。
+
+验证：
+
+- `git diff --check` 通过。
+- `docs/` 根目录当前只剩 `README.md`、`current-plan.md` 和 `development-log.md`。
+- `git check-ignore` 确认 `docs/generated/` 和 `docs/local-logs/` 仍被忽略，`docs/task-notes/*.md` 不再被忽略。
+- Markdown 引用检查未发现指向已移动根目录 `.log` 的文档引用；已知 `docs/generated/` 引用仍代表本地可复现报告，不作为 fresh clone 必读前置。
+
+后续：
+
+- 下一轮若继续整理，可考虑把超长 `docs/current-plan.md` 做阶段归档，但这会触及大量历史引用，应单独做。
+- 运行本地服务时应把日志直接写入 `docs/local-logs/`，避免再次污染 `docs/` 根目录。

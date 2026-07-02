@@ -1,0 +1,41 @@
+# task-notes 专题索引
+
+`task-notes/` 用来保存需要入库的专题计划、评估记录、执行细则和功能积压。这里的文档不是生成产物；新增或移动专题文档时，必须同步更新本索引。
+
+## Source 对照与生成质量
+
+- `source-first-recovery-execution-plan.md`：source 优先复位整改总纲。
+- `source-first-detailed-task-plan.md`：source 优先复位整改详细施工图。
+- `source-feature-backlog.md`：对照原版后整理的功能积压。
+- `chinese-naming-library-evaluation.md`：中文命名库评估记录。
+- `heightmap-image-converter-plan.md`：高度图图片导入工作台计划。
+
+## 编辑器与用户外壳
+
+- `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
+- `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
+- `object-notes-implementation-plan.md`：对象备注实现计划。
+- `measurement-rulers-plan.md`：测量对象与路线贴合计划。
+- `visual-theme-preset-plan.md`：视觉主题与样式预设计划。
+
+## 导入导出与 GIS
+
+- `export-capability-matrix.md`：导出能力矩阵。
+- `political-geojson-dissolve-plan.md`：政治面 GeoJSON 与 dissolve 计划。
+
+## 名称库
+
+- `namebase-editor-plan.md`：名称库编辑器计划。
+- `namebase-generation-binding-plan.md`：名称库绑定生成计划。
+
+## 世界系统与后续大功能
+
+- `economy-market-trade-plan.md`：市场、商品与贸易流计划。
+- `military-battle-plan.md`：军事对象与战斗事件计划。
+- `emblems-coa-plan.md`：纹章与 Coat of Arms 计划。
+
+## 维护规则
+
+- 临时日志不放在本目录，写入 `docs/local-logs/`。
+- 脚本产出的报告、截图和 baseline 不放在本目录，写入 `docs/generated/`。
+- 如果文档已经进入稳定架构约束、部署说明、性能基线或里程碑说明，应移动到 `docs/architecture/`、`docs/deployment/`、`docs/performance/` 或 `docs/milestones/`，本索引只保留指向它的说明。

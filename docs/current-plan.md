@@ -825,6 +825,7 @@ http://127.0.0.1:5410
 196. 灰度高度图入口已迁入高度编辑面板：生成 tab 不再常驻灰度导入区块；高度编辑浮层新增灰度高度图区块并保留旧 DOM id 契约，`#heightmap-image-file` 改为 document 事件委托以适配懒加载面板。构建与 5410 浏览器验证通过，实际导入测试中地图切到 `grayscale-import`，source 记录 `heightMin / heightMax / fitMode` 正确。后续高度图预览、彩色图识别和色阶映射继续沿高度编辑/高度图工作台推进。
 197. 右上角生成状态提示已清理，loading 文案已神话化：`#map-badge` 初始为空且空内容隐藏，运行中不再写入“等待生成任务 / 生成中 / 生成失败”，只在地图可用后显示图幅尺寸；`generation-loading` 覆盖生成、worker 阶段、WebGL 装载、地图数据导入和灰度高度图导入，按 stage id 显示“星图启明、山海初开、群山起脉、大禹治水、诸侯封疆、展开乾坤”等短句。5410 浏览器观察器验证中，loading 文案未再出现旧等待/生成文案，badge 样本为空 -> 地图尺寸，console/page error 为 `0`。
 198. 视图选择按钮矩阵已放宽：`view-mode-segmented` 不再使用单行横向滚动，而是独立改为 3 列矩阵，按钮高度约 `42px`，11 个视图项自然排成 4 行，撑开“视图” tab 的控制面板高度；Element Plus segmented 的默认滑动选中块在该矩阵内隐藏，改由按钮自身边框和暗金背景表示选中态。5410 浏览器验证中 `.el-segmented__group` 为 grid，列数 `3`、行数 `4`、标签截断 `0`、横向溢出 `0`、console/page error 为 `0`。
+199. docs 结构整理第一刀已完成：`docs/` 根目录重新收敛为 `README.md / current-plan.md / development-log.md`，散落的本地 `.log` 已移动到 `docs/local-logs/`；`.gitignore` 不再忽略 `docs/task-notes/`，专题计划、评估记录和执行细则应入库并维护 `docs/task-notes/README.md` 分类索引；`AGENTS.md` 接手清单改为只依赖入库文档，`docs/generated/` 报告继续作为本地可复现产物。后续新增专题文档时必须同步更新 `docs/task-notes/README.md`，生成报告和服务器日志分别进入 `docs/generated/` 与 `docs/local-logs/`。
 
 ## 约束
 

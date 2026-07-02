@@ -19,17 +19,18 @@
 - 计划、阶段进度、重要决策、风险和执行结果都要及时写入 `docs/`。
 - 如果新增脚本会生成 Markdown 报告，生成内容也应为中文。
 - 关键文档：
+  - `docs/README.md`：docs 目录结构和文档放置规则。
   - `graphics-reimplementation-plan.md`：早期图形化重实现分析，已被新复刻计划取代，仅作参考。
   - `docs/plans/gl-reimplementation-acceptance-plan.md`：独立 WebGL 地图生成器复刻可验收计划。
   - `docs/current-plan.md`：当前开发计划和下一步。
   - `docs/development-log.md`：开发历史与决策记录。
   - `docs/performance/performance-baseline.md`：第 0 里程碑 profiling 工具说明。
-  - `docs/generated/reports/performance-baseline-results.md`：当前可信性能基线报告。
   - `docs/milestones/milestone-1-webgl-prototype.md`：第 1 里程碑 WebGL cells 原型说明。
   - `docs/performance/webgl-svg-performance-comparison.md`：WebGL 原型与 SVG 基线性能对照。
-  - `docs/generated/reports/webgl-prototype-profile-results.md`：WebGL 原型当前性能采集结果。
   - `docs/audits/source-generation-audit-and-rectification-plan.md`：source 生成算法重新审查和正式应用生成质量整改方案。
+  - `docs/task-notes/README.md`：专题计划、评估记录和执行细则索引。
   - `docs/task-notes/editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单，记录各领域面板职责、优先级和暂缓范围。
+  - `docs/generated/` 下的报告、截图和 baseline 是本地可复现产物，默认不作为接手必读文件。
 
 ## 提交约定
 
@@ -151,15 +152,15 @@ node .\tools\serve-prototype.mjs --port 5400
 新智能体接手时，按顺序阅读：
 
 1. `AGENTS.md`
-2. `docs/current-plan.md`
-3. `docs/development-log.md`
-4. `graphics-reimplementation-plan.md`
-5. `docs/performance/performance-baseline.md`
-6. `docs/generated/reports/performance-baseline-results.md`
+2. `docs/README.md`
+3. `docs/current-plan.md`
+4. `docs/development-log.md`
+5. `graphics-reimplementation-plan.md`
+6. `docs/performance/performance-baseline.md`
 7. `docs/milestones/milestone-1-webgl-prototype.md`
 8. `docs/performance/webgl-svg-performance-comparison.md`
-9. `docs/generated/reports/webgl-prototype-profile-results.md`
-10. `docs/audits/source-generation-audit-and-rectification-plan.md`
+9. `docs/audits/source-generation-audit-and-rectification-plan.md`
+10. `docs/task-notes/README.md`
 11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
 然后根据用户最新指令继续。当前下一步建议是按 `docs/task-notes/editor-and-stat-panel-inventory.md` 进入正式版编辑器基础设施：先补 edit command / undo command、selection store、highlight / locate API、对象表格组件和派生重建调度，再做独立浮动 `river-panel`、高度编辑器第一刀和国家编辑器第一刀。
