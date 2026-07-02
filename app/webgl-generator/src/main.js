@@ -8,6 +8,9 @@ try {
   const message = error instanceof Error ? error.message : String(error);
   const status = document.getElementById("app-status");
   if (status) status.textContent = `启动失败：${message}`;
-  document.getElementById("map-badge").textContent = "启动失败，查看 Console";
+  const loading = document.getElementById("generation-loading");
+  const loadingText = document.getElementById("generation-loading-text");
+  if (loadingText) loadingText.textContent = "星图失序";
+  if (loading) loading.hidden = false;
   console.error(error);
 }

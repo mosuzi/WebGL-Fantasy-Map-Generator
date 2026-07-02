@@ -45,55 +45,6 @@
       <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
       <UiField label="高度" input-id="height-input" type="number" :model-value="960" :input-attrs="{min: 480, max: 4096, step: 80}" />
       <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />
-      <section class="heightmap-import-section" aria-labelledby="heightmap-import-title">
-        <h2 id="heightmap-import-title">灰度高度图</h2>
-        <div class="heightmap-import-fields">
-          <UiSliderField
-            label="最低高度"
-            input-id="heightmap-import-min"
-            output-id="heightmap-import-min-value"
-            field-class="heightmap-import-field"
-            value-tag="output"
-            :model-value="heightmapImportMin"
-            :display-value="heightmapImportMin"
-            :min="0"
-            :max="99"
-            :step="1"
-            @input="setHeightmapImportMin"
-          />
-          <UiSliderField
-            label="最高高度"
-            input-id="heightmap-import-max"
-            output-id="heightmap-import-max-value"
-            field-class="heightmap-import-field"
-            value-tag="output"
-            :model-value="heightmapImportMax"
-            :display-value="heightmapImportMax"
-            :min="1"
-            :max="100"
-            :step="1"
-            @input="setHeightmapImportMax"
-          />
-          <UiSwitchField
-            label="反转黑白"
-            input-id="heightmap-import-invert"
-            field-class="heightmap-import-check"
-            :checked="heightmapImportInvert"
-            @change="heightmapImportInvert = $event"
-          />
-          <UiSelectField
-            label="适应方式"
-            input-id="heightmap-import-fit"
-            class-name="heightmap-import-select"
-            :model-value="heightmapImportFit"
-            :options="heightmapFitOptions"
-            @update:model-value="heightmapImportFit = $event"
-          />
-          <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerFileInput('heightmap-image-file')">导入灰度图</UiButton>
-          <input id="heightmap-image-file" type="file" accept="image/*" hidden />
-        </div>
-        <p id="heightmap-import-status" class="file-operation-status" aria-live="polite"></p>
-      </section>
       <section class="generation-climate-section" aria-labelledby="generation-climate-title">
         <h2 id="generation-climate-title">气候</h2>
         <input id="climate-latitude-mode" type="hidden" :value="climateLatitudeMode" />
@@ -233,7 +184,7 @@
     </div>
 
     <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
-      <UiSegmented label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
+      <UiSegmented class="view-mode-segmented" label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
       <div class="preference-toggle-grid">
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
         <UiSwitchField label="平滑边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
@@ -421,10 +372,6 @@ const windBands = ref(defaultWindProfile());
 const temperatureEquator = ref(25);
 const temperatureNorthPole = ref(-25);
 const temperatureSouthPole = ref(-15);
-const heightmapImportMin = ref(0);
-const heightmapImportMax = ref(100);
-const heightmapImportInvert = ref(false);
-const heightmapImportFit = ref("stretch");
 const cultureInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const religionInheritanceMode = ref(DEFAULT_INHERITANCE_MODE);
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
@@ -482,11 +429,6 @@ const terrainTemplates = Object.freeze([
   {value: "peninsula", label: "一侧大陆"},
   {value: "pangea", label: "盘古大陆"},
   {value: "archipelago", label: "群岛"}
-]);
-
-const heightmapFitOptions = Object.freeze([
-  {value: "stretch", label: "拉伸铺满"},
-  {value: "crop", label: "保持比例裁剪"}
 ]);
 
 const themes = Object.freeze([
@@ -552,14 +494,6 @@ function patchUnitPreference(patch) {
   const next = normalizeUnitPreferences({...unitPreferences.value, ...patch});
   if (patch.distanceUnit) next.areaUnit = areaUnitForDistanceUnit(patch.distanceUnit);
   config.patchPreferences({units: next});
-}
-
-function setHeightmapImportMin(value) {
-  heightmapImportMin.value = Math.min(Number(value) || 0, heightmapImportMax.value - 1);
-}
-
-function setHeightmapImportMax(value) {
-  heightmapImportMax.value = Math.max(Number(value) || 100, heightmapImportMin.value + 1);
 }
 
 function toggleLatitudeMode() {

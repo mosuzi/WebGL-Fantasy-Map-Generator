@@ -14,10 +14,10 @@
         <div class="map-overlay" id="map-overlay"></div>
         <div id="vue-state-root"></div>
         <div id="map-toolbar" class="map-toolbar" aria-label="地图工具"></div>
-        <div class="map-badge" id="map-badge">等待生成</div>
+        <div class="map-badge" id="map-badge" aria-live="polite"></div>
         <div class="generation-loading-bubble" id="generation-loading" role="status" aria-live="polite" hidden>
           <span class="generation-loading-dot"></span>
-          <span id="generation-loading-text">正在生成地图</span>
+          <span id="generation-loading-text">山海初开</span>
         </div>
         <div class="hover-overlay" id="hover-overlay" hidden></div>
         <div class="map-legend" id="map-legend" hidden></div>
@@ -35,7 +35,10 @@
     <script>
       window.setTimeout(() => {
         if (window.__webglGeneratorApp) return;
-        document.getElementById("map-badge").textContent = "脚本未启动";
+        const loading = document.getElementById("generation-loading");
+        const loadingText = document.getElementById("generation-loading-text");
+        if (loadingText) loadingText.textContent = "星图未启";
+        if (loading) loading.hidden = false;
         const status = document.getElementById("app-status");
         if (status) status.textContent = "脚本尚未启动，请检查 DevTools 是否暂停或禁用 JavaScript";
       }, 3000);

@@ -51,6 +51,54 @@ import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 
+const LOADING_MESSAGES = Object.freeze({
+  request: "星图启明",
+  generate: "山海初开",
+  "map-import-read": "启封舆图",
+  "map-import-render": "山河归卷",
+  "heightmap-read": "墨影探山",
+  "heightmap-generate": "借影塑岳",
+  "heightmap-render": "重理水陆",
+  "panel-refresh": "诸域归册",
+  "normalize-options": "校准天机",
+  "random-grid": "分拨星种",
+  "random-main": "点燃灵机",
+  heightmap: "群山起脉",
+  grid: "山海初开",
+  features: "水陆分判",
+  "random-climate": "候风听令",
+  climate: "羲和布候",
+  pack: "九州成图",
+  rivers: "大禹治水",
+  "biomes-population": "万物择居",
+  "society-cultures": "百族生烟",
+  "river-names": "洛书题水",
+  "settlements-initial": "城郭初立",
+  politics: "诸侯封疆",
+  "settlements-finalize": "车马连城",
+  markers: "灵藏点星",
+  economy: "市井开张",
+  "religions-finalize": "神祠归位",
+  diplomacy: "纵横定盟",
+  military: "六军列阵",
+  zones: "秘境入册",
+  palette: "丹青设色",
+  summary: "太史校图",
+  metadata: "封存星卷",
+  "object-picking-index": "司南定物",
+  "cell-visual-mesh": "灵纹铺地",
+  "shore-cache": "沧海描岸",
+  "state-boundaries": "列国划疆",
+  "province-boundaries": "郡县分野",
+  "political-meshes": "诸侯着色",
+  "surface-vertices": "山川上卷",
+  "line-vertices": "川道刻线",
+  "point-vertices": "星标入图",
+  "gpu-upload": "星火入阵",
+  labels: "题名山河",
+  "fit-draw": "展开乾坤"
+});
+
 export function createGeneratorApp(documentRef) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
@@ -1136,6 +1184,21 @@ function normalizeLayerVisibilityPreferences(layers = {}) {
   return normalized;
 }
 
+function setMythicGenerationLoading(documentRef, visible, stageOrKey) {
+  if (!visible) {
+    setGenerationLoading(documentRef, false);
+    return;
+  }
+  setGenerationLoading(documentRef, true, loadingMessage(stageOrKey));
+}
+
+function loadingMessage(stageOrKey) {
+  if (typeof stageOrKey === "string") return LOADING_MESSAGES[stageOrKey] || stageOrKey;
+  const stageId = stageOrKey?.id;
+  if (stageId && LOADING_MESSAGES[stageId]) return LOADING_MESSAGES[stageId];
+  return stageOrKey?.label || "山海流转";
+}
+
 function requestGenerate(state, documentRef) {
   try {
     if (documentRef.getElementById("auto-random-seed").checked) {
@@ -1145,7 +1208,7 @@ function requestGenerate(state, documentRef) {
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     const generateId = state.pendingGenerateId;
     setGenerationStatus(documentRef, state.options, "等待生成任务");
-    setGenerationLoading(documentRef, true, "静候星图显影");
+    setMythicGenerationLoading(documentRef, true, "request");
     scheduleAfterPaint(documentRef, () => {
       if (generateId !== state.pendingGenerateId) return;
       void runGenerateNow(state, documentRef, generateId);
@@ -1159,12 +1222,12 @@ function requestGenerate(state, documentRef) {
 async function runGenerateNow(state, documentRef, generateId) {
   try {
     setGenerationStatus(documentRef, state.options, "生成中");
-    setGenerationLoading(documentRef, true, "正在推演山海脉络");
+    setMythicGenerationLoading(documentRef, true, "generate");
     await yieldToBrowser(documentRef);
     const map = await generateMapOffMainThread(documentRef, state.options, generateId);
     if (generateId !== state.pendingGenerateId) return;
     await loadMapIntoRuntime(state, documentRef, map, {
-      loadingMessages: ["正在铺展灵纹图层", "正在誊清诸域卷册"]
+      loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")]
     });
     setGenerationLoading(documentRef, false);
   } catch (error) {
@@ -1201,7 +1264,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   }
   if (typeof state.renderer.loadMapAsync === "function") {
     await state.renderer.loadMapAsync(state.map, {
-      onStage: label => setGenerationLoading(documentRef, true, label),
+      onStage: stage => setMythicGenerationLoading(documentRef, true, stage),
       yieldToBrowser: () => yieldToBrowser(documentRef)
     });
   } else {
@@ -1295,7 +1358,7 @@ function generateMapOffMainThread(documentRef, options, generateId) {
       const data = event.data || {};
       if (data.requestId !== generateId) return;
       if (data.type === "generation-stage") {
-        setGenerationLoading(documentRef, true, data.stage?.label || "生成中");
+        setMythicGenerationLoading(documentRef, true, data.stage);
         return;
       }
       if (data.type === "generation-stage-complete") {
@@ -1320,14 +1383,12 @@ function generateMapOffMainThread(documentRef, options, generateId) {
 function setGenerationStatus(documentRef, options, status) {
   const appStatus = documentRef.getElementById("app-status");
   if (appStatus) appStatus.textContent = `${status}，seed ${options.seed}`;
-  documentRef.getElementById("map-badge").textContent = status;
 }
 
 function reportGenerateError(documentRef, error) {
   const message = error instanceof Error ? error.message : String(error);
   const appStatus = documentRef.getElementById("app-status");
   if (appStatus) appStatus.textContent = `生成失败：${message}`;
-  documentRef.getElementById("map-badge").textContent = "生成失败";
   console.error(error);
 }
 
@@ -1571,7 +1632,7 @@ async function importMapData(state, documentRef, file) {
   if (!file) return;
   try {
     setFileOperationStatus(documentRef, "正在读取地图数据...");
-    setGenerationLoading(documentRef, true, "正在读取本地地图文件");
+    setMythicGenerationLoading(documentRef, true, "map-import-read");
     const document = parseMapDocument(await file.text());
     const options = normalizeOptions(document.map.options || document.options || state.options);
     document.map.options = options;
@@ -1579,7 +1640,7 @@ async function importMapData(state, documentRef, file) {
     syncGenerationInputs(documentRef, options);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     await loadMapIntoRuntime(state, documentRef, document.map, {
-      loadingMessages: ["正在复原 WebGL 图层", "正在刷新地图面板"]
+      loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")]
     });
     setGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
@@ -1593,7 +1654,7 @@ async function importHeightmapImage(state, documentRef, file) {
   if (!file) return;
   try {
     setFileOperationStatus(documentRef, "正在读取灰度高度图...", ["heightmap-import-status"]);
-    setGenerationLoading(documentRef, true, "正在读取灰度高度图");
+    setMythicGenerationLoading(documentRef, true, "heightmap-read");
     const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
     const settings = readHeightmapImportSettings(documentRef);
     const importGenerateId = (state.pendingGenerateId || 0) + 1;
@@ -1605,7 +1666,7 @@ async function importHeightmapImage(state, documentRef, file) {
       return;
     }
     state.options = options;
-    setGenerationLoading(documentRef, true, "正在按灰度图生成地图");
+    setMythicGenerationLoading(documentRef, true, "heightmap-generate");
     const map = generatePlaceholderMap(options, {heightmap});
     if (importGenerateId !== state.pendingGenerateId) {
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
@@ -1613,7 +1674,7 @@ async function importHeightmapImage(state, documentRef, file) {
     }
     state.options = map.options;
     await loadMapIntoRuntime(state, documentRef, map, {
-      loadingMessages: ["正在重建水陆与气候", "正在刷新地图面板"]
+      loadingMessages: [loadingMessage("heightmap-render"), loadingMessage("panel-refresh")]
     });
     setGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, `已导入灰度高度图：${heightmap.source.filename || "本地图片"}，高度 ${heightmap.source.heightMin}-${heightmap.source.heightMax}，${heightmapFitLabel(heightmap.source.fitMode)}`, ["heightmap-import-status"]);

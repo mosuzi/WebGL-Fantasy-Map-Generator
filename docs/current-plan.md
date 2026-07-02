@@ -12,7 +12,7 @@
 
 刚完成的观感修正：
 
-- 生成 loading 文案不再显示目标 `cells`，运行中 badge 只显示状态和地图尺寸；loading bubble 显示“静候星图显影 / 正在推演山海脉络 / 正在铺展灵纹图层 / 正在誊清诸域卷册”。
+- 生成 loading 文案不再显示目标 `cells`，右上角 badge 不再承载“等待生成任务 / 生成中”等状态，只在地图可用后显示图幅尺寸；正上方 loading bubble 改为阶段化神话文案，例如“星图启明 / 山海初开 / 群山起脉 / 大禹治水 / 诸侯封疆 / 展开乾坤”。
 - 人口显示口径已从内部 FMG 千人单位修正为“人”：国家、省份、文化、宗教、城市、外交矩阵和悬停详情等统一乘以 `1000` 后再套用人口倍率；生成数据、经济和军事公式仍保留内部单位。
 - 所有 `UiSelectField` 下拉已从原生浏览器菜单改为统一自绘菜单，同时保留隐藏 select 作为旧运行时代码读取 `.value` 的数据源。
 - 浮动面板统一限制在视口内：最大高度不超过宿主视口 `97%`，最小高度 `200px`，面板内容超出后在 body 内滚动。
@@ -821,6 +821,10 @@ http://127.0.0.1:5410
 192. 军事对象与战斗事件计划已落文档：`docs/task-notes/military-battle-plan.md` 对照原版 regiments overview、regiment editor 和 battle screen，记录了军团筛选/导出、军团编辑、战斗类型推断、士气阶段、伤亡应用和备注事件链路；WebGL 版已有军事生成和国家详情军力摘要，但后续应先做只读军团总览与军事图层，再做军团轻量编辑、战斗事件记录和可撤销战斗模拟。
 193. 纹章与 Coat of Arms 计划已落文档：`docs/task-notes/emblems-coa-plan.md` 对照原版 `generators/emblems`、`draw-emblems.ts` 和 `emblems-editor.js`，记录了国家/省份/城市三层纹章、父级派生、盾形、division、ordinary、charge、SVG defs/use 渲染、上传下载和 Armoria 集成语义；WebGL 版后续应先保留 `coa` 数据占位和只读显示，再做默认关闭的轻量纹章图层，完整生成器和外部集成按需懒加载后置。
 194. 构建产物子路径加载问题已修复：`vite.config.mjs` 新增 `base: "./"`，避免生产 `index.html` 继续输出 `/assets/...` 根路径资源。复现时，页面挂在 `/webgl-generator/` 下会请求根 `/assets/index-*.js` 并 404，最终停在“脚本未启动”；修复后入口脚本、modulepreload 和 stylesheet 都改为 `./assets/...`。重新构建后，Playwright 分别访问根路径 `/` 与子路径 `/webgl-generator/`，两者均 `appReady = true`、canvas 为 `1280x800`、toolbar Element 按钮为 `3`、无 request failed、无 404、无 console/page error。
+195. 面板样式统一第一刀已完成：Element Plus 全局暗色变量和 `UiObjectTable` 深色穿透样式已补齐，国家、城市、文化、资源标记、备注总览和名称库面板巡检中表格白底节点均为 `0`；视图区域互斥按钮曾先改为单行横向滚动并避免标签截断，后续已按第 198 条改为更松散的矩阵布局。后续继续收敛下拉弹层、排序按钮组和仍残留的旧式原生控件。
+196. 灰度高度图入口已迁入高度编辑面板：生成 tab 不再常驻灰度导入区块；高度编辑浮层新增灰度高度图区块并保留旧 DOM id 契约，`#heightmap-image-file` 改为 document 事件委托以适配懒加载面板。构建与 5410 浏览器验证通过，实际导入测试中地图切到 `grayscale-import`，source 记录 `heightMin / heightMax / fitMode` 正确。后续高度图预览、彩色图识别和色阶映射继续沿高度编辑/高度图工作台推进。
+197. 右上角生成状态提示已清理，loading 文案已神话化：`#map-badge` 初始为空且空内容隐藏，运行中不再写入“等待生成任务 / 生成中 / 生成失败”，只在地图可用后显示图幅尺寸；`generation-loading` 覆盖生成、worker 阶段、WebGL 装载、地图数据导入和灰度高度图导入，按 stage id 显示“星图启明、山海初开、群山起脉、大禹治水、诸侯封疆、展开乾坤”等短句。5410 浏览器观察器验证中，loading 文案未再出现旧等待/生成文案，badge 样本为空 -> 地图尺寸，console/page error 为 `0`。
+198. 视图选择按钮矩阵已放宽：`view-mode-segmented` 不再使用单行横向滚动，而是独立改为 3 列矩阵，按钮高度约 `42px`，11 个视图项自然排成 4 行，撑开“视图” tab 的控制面板高度；Element Plus segmented 的默认滑动选中块在该矩阵内隐藏，改由按钮自身边框和暗金背景表示选中态。5410 浏览器验证中 `.el-segmented__group` 为 grid，列数 `3`、行数 `4`、标签截断 `0`、横向溢出 `0`、console/page error 为 `0`。
 
 ## 约束
 

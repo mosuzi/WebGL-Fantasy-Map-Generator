@@ -99,7 +99,8 @@ export function bindRuntimePanel(documentRef, handlers) {
     if (file) handlers.onImportMapData?.(file);
     event.target.value = "";
   });
-  documentRef.getElementById("heightmap-image-file")?.addEventListener("change", event => {
+  documentRef.addEventListener("change", event => {
+    if (event.target?.id !== "heightmap-image-file") return;
     const file = event.target.files?.[0];
     if (file) handlers.onImportHeightmapImage?.(file);
     event.target.value = "";
@@ -442,7 +443,7 @@ function updateRegenerationDebugStatus(documentRef, result = {}) {
   appStatus.textContent = `${action}${result.status}${result.constraint ? ` / ${result.constraint}` : ""}`;
 }
 
-export function setGenerationLoading(documentRef, visible, message = "正在生成地图") {
+export function setGenerationLoading(documentRef, visible, message = "山海初开") {
   const bubble = documentRef.getElementById("generation-loading");
   if (!bubble) return;
   const text = documentRef.getElementById("generation-loading-text");

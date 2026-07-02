@@ -236,7 +236,7 @@ export class PlaceholderMapRenderer {
   async loadMapAsync(map, {onStage = () => {}, yieldToBrowser = () => Promise.resolve()} = {}) {
     const profile = createRendererLoadProfile();
     const stage = async (id, label, task) => {
-      onStage(label);
+      onStage({id, label});
       await yieldToBrowser();
       const result = profile.stage(id, label, task);
       await yieldToBrowser();

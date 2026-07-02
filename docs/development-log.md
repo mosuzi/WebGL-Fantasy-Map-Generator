@@ -14035,3 +14035,103 @@ full 矩阵结果：
 
 - 继续关注首屏 bundle：静态导入 Delaunator 后主入口体积上升，后续应结合现有懒加载策略拆分生成器或 vendor，而不是回到顶层动态导入。
 - 浏览器验证加载问题时，必须使用用户实际端口和当前页面状态；独立干净会话只能作为辅助证明。
+
+### 面板样式统一第一刀
+
+背景：
+
+- 用户反馈 Element Plus 表格仍是白底，与整体暗色地图编辑器不匹配。
+- 用户进一步澄清需要修正的不是控制面板顶层 tab，而是“视图”区域里的互斥按钮组；该按钮组此前为了容纳 11 个视图模式改成换行网格，实际观感像装修未收口。
+
+修正：
+
+- `:root` 补齐 Element Plus 暗色主题 token，让按钮、输入、弹层、表格等默认变量先进入同一套深色基调。
+- `UiSegmented` 的 Element segmented 适配层改为不换行的横向滚动按钮组，增加选中态边框、暗金背景和细滚动条；视图模式独立使用更宽按钮，避免“生物群系”等中文标签被省略。
+- `UiObjectTable` 的 Element Table 背景、表头、行、固定列、空态、滚动容器和 hover/选中态增加高优先级暗色覆盖，消除表格内部白底穿透。
+- `ControlPanel.vue` 为视图互斥按钮组增加 `view-mode-segmented` class，避免影响其他短选项 segmented。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?style_verify=...`：默认地图可加载，视图互斥按钮为 `1` 行，按钮组 `overflow-x: auto`，11 个视图标签均无截断；国家表格白底节点为 `0`。
+- 更完整的面板巡检打开了国家、城市、文化、资源标记、备注总览和名称库浮层：各表格背景为 `rgb(15, 21, 25)`，表头为 `rgb(17, 26, 32)`，面板内白底节点均为 `0`，console/page error 为 `0`。
+
+后续：
+
+- 这次只处理当前最突兀的表格白底和视图互斥按钮；下拉弹层、排序按钮组和其他旧式原生按钮仍应在后续 Element Plus 替换中继续统一。
+
+### 灰度高度图入口迁入高度编辑面板
+
+背景：
+
+- 用户指出灰度导入属于高度编辑相关能力，不应一直显示在控制面板生成参数中。
+- 当前高度编辑面板已是懒加载浮层，适合作为灰度高度图导入和后续高度图工作台的入口。
+
+修正：
+
+- `ControlPanel.vue` 移除生成 tab 中常驻的“灰度高度图”区块，只保留地形模板、气候、继承结构和生成按钮。
+- `HeightPanel.vue` 新增“灰度高度图”区块，复用最低高度、最高高度、反转黑白、适应方式、导入按钮和状态提示，并保留 `heightmap-import-* / heightmap-image-file / heightmap-import-status` 等旧 id 契约。
+- `panel.js` 将 `#heightmap-image-file` 的 `change` 监听改为 document 事件委托，保证高度编辑面板首次懒加载后创建的 file input 仍能触发原有导入流程。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和大 chunk 警告。主入口从上一轮约 `670.62KB / 203.28KB gzip` 降到约 `660.85KB / 200.22KB gzip`，高度面板 chunk 增至约 `4.21KB / 1.80KB gzip`。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?height_import_move=...`：生成 tab 内 `#heightmap-image-file = 0`，生成 tab 灰度导入区块为 `0`，文本不再包含“灰度高度图”。
+- 打开管理 tab 的高度编辑浮层后，灰度导入区块可见，`#heightmap-image-file accept = image/*`，默认最低/最高高度为 `0 / 100`，适应方式为 `stretch`。
+- 用内存构造的 `height-panel-gray.svg` 触发导入后，状态为“已导入灰度高度图：height-panel-gray.svg，高度 20-80，拉伸铺满”，地图 `heightmap.template = grayscale-import`，source 记录 `heightMin = 20 / heightMax = 80 / fitMode = stretch`，console/page error 为 `0`。
+
+后续：
+
+- 后续彩色高度图识别、预览和色阶映射应继续沿高度编辑/高度图工作台方向推进，而不是回到生成参数常驻区。
+
+### 右上角状态清理与神话化 loading 文案
+
+背景：
+
+- 用户认为右上角“等待生成任务”一类 loading 提示可以去掉，当前正上方 loading bubble 已经足够清楚。
+- 用户希望每一步 loading 更有神话叙事感，例如“山海初开”“大禹治水”，但仍要覆盖当前真实加载阶段。
+
+修正：
+
+- `index.html` 中 `#map-badge` 初始文案从“等待生成”改为空，CSS 新增 `.map-badge:empty { display: none; }`；启动兜底和 `main.js` 启动异常不再写右上角 badge，改为正上方提示“星图未启 / 星图失序”。
+- `setGenerationStatus()` 和 `reportGenerateError()` 不再写 `#map-badge`，右上角 badge 只由 `updateRuntimePanel()` 写入地图图幅尺寸。
+- `runtime/app.js` 新增 `LOADING_MESSAGES` 映射，覆盖生成阶段、worker 阶段、WebGL 装载阶段、地图数据导入和灰度高度图导入；示例包括“星图启明、山海初开、群山起脉、水陆分判、羲和布候、大禹治水、诸侯封疆、展开乾坤”。
+- `PlaceholderMapRenderer.loadMapAsync()` 的 `onStage` 回调从只传 label 改为传 `{id, label}`，让用户文案可以按稳定 stage id 映射；原始技术 label 仍保留在 profile 和开发模式统计里。
+- `setGenerationLoading()` 的默认文案改为“山海初开”，避免后续漏传文案时回到旧的普通生成提示。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?loading_copy=...`，在页面启动前注入观察器记录 `#generation-loading-text` 和 `#map-badge` 所有变化。
+- 观察到 loading 文案序列包含“星图启明、山海初开、校准天机、群山起脉、水陆分判、羲和布候、九州成图、大禹治水、诸侯封疆、灵纹铺地、展开乾坤、诸域归册”等；旧文案“等待生成 / 正在生成地图 / 静候星图显影 / 正在推演 / 正在铺展 / 正在誊清”均未出现。
+- badge 样本为初始空文本，然后变为 `3,810 千米 x 2,540 千米`；未再出现等待或生成状态。最终 loading hidden，地图 ready，console/page error 为 `0`。
+
+后续：
+
+- 目前仅处理正上方生成/装载 loading；各懒加载面板内部“正在加载某面板...”仍属于局部占位文案，后续可在统一面板空态时再决定是否也神话化。
+
+### 视图选择按钮矩阵放宽
+
+背景：
+
+- 用户指出“视图” tab 下的视图选择按钮不需要继续挤成一行，可以松散一些，并通过按钮尺寸撑起该 tab 的控制面板高度。
+- 上一轮为避免折行把视图 segmented 做成了横向滚动，但实际桌面控制面板宽度足够承载更直观的矩阵按钮。
+
+修正：
+
+- `view-mode-segmented` 独立改为 3 列 CSS grid，按钮高度提升到约 `42px`，间距增加到 `8px`，11 个视图模式自然排成 4 行。
+- 隐藏该矩阵内 Element Plus segmented 的默认滑动选中块，改由按钮自身的边框、暗金渐变背景和文字色表达选中态，避免出现一条独立高亮块。
+- 该修改只作用于视图选择矩阵，其他 `UiSegmented` 仍保持原有横向滚动或紧凑样式。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和大 chunk 警告。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?view_matrix_verify=...`，打开控制面板并切到“视图”：按钮组为 grid，列数 `3`、行数 `4`、单按钮约 `165px x 42px`，文本截断 `0`，横向溢出 `0`，选中滑块 display 为 `none`，console/page error 为 `0`。
+
+后续：
+
+- 视图页的两个图层开关暂时保留当前双列样式；后续若整体控制面板继续放宽，可以统一检查图层、单位和生成 tab 的行距节奏。
