@@ -14164,3 +14164,34 @@ full 矩阵结果：
 
 - 下一轮若继续整理，可考虑把超长 `docs/current-plan.md` 做阶段归档，但这会触及大量历史引用，应单独做。
 - 运行本地服务时应把日志直接写入 `docs/local-logs/`，避免再次污染 `docs/` 根目录。
+
+### 高度图导入工作台第一刀与生成 tab 收敛
+
+背景：
+
+- 用户要求继续按高度图导入工作台作为第一优先，同时修正高度编辑动作按钮拥挤、灰度导入平铺在高度编辑里、生成 tab 仍暴露文化/宗教继承结构等问题。
+- 灰度导入本质属于高度编辑与地形导入能力，不应作为普通生成参数常驻展示；文化和宗教继承结构也应默认随机生成，后续调整交给对应编辑面板。
+
+修正：
+
+- `ControlPanel.vue` 移除生成 tab 的“继承结构”区块，不再展示文化/宗教继承结构下拉；运行时 `readOptionsFromPanel()` 继续保留上一轮 options，生成器的 `normalizeOptions()` 会用内部默认继承模式兜底。
+- `HeightPanel.vue` 把灰度图导入配置收进独立可拖动的“高度图导入工作台”：高度编辑主体只保留入口和导入状态，最低/最高高度、反转黑白、适应方式和 file input 都在工作台内。
+- 选择图片后只更新 canvas 预览、图片尺寸、目标图幅、亮度范围和高度映射；点击“应用到地图”后通过 `heightmap-import-apply` 事件触发原有 `grayscale-import` 完整重生成闭环。
+- 高度编辑动作 `抬升 / 降低 / 平滑` 改为 3 列矩阵按钮，增加间距和固定高度，避免挤成一排。
+- 补齐 `UiButton / ElButton` 的 primary/secondary 暗色 CSS 变量，避免高度面板和工作台按钮回退到 Element 默认白底。
+- `height-panel.js` 和 `runtime/app.js` 向高度面板传入当前图幅宽高，用于工作台预览比例和目标尺寸展示。
+- `docs/current-plan.md`、`docs/task-notes/heightmap-image-converter-plan.md` 和 `docs/task-notes/user-facing-shell-debug-export-and-naming-plan.md` 同步记录入口迁移与阶段 1 落地状态。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?height_workbench_final=...`：生成 tab 内 `#culture-inheritance-mode / #religion-inheritance-mode / .generation-inheritance-section` 均不存在。
+- 打开管理 tab 的高度编辑浮层后，`.height-action-group .el-segmented__group` 为 grid，列数 `3`，三个动作标签无截断；高度编辑主体内不存在平铺的 `.heightmap-import-fields`，工作台打开前也不存在 `#heightmap-image-file`。
+- 打开高度图导入工作台后，file input 保持 hidden 且 `accept = image/*`，默认高度区间 `0-100`、适应方式 `stretch`；选择合成 SVG 后预览状态为“预览已更新，点击应用后才会重建地图。”，canvas 有非透明像素，统计显示图片尺寸、目标图幅、亮度范围和高度映射。
+- 点击“应用到地图”后地图切换到 `heightmap.template = grayscale-import`，source 记录 `filename / brightnessMin / brightnessMax / heightMin / heightMax / invert / fitMode`，状态更新为“已导入灰度高度图...”，顶部 loading 收起，WebGL `glError = 0`，console/page error 和 request failed 均为 `0`。
+- 截图 `docs/generated/reports/tmp-heightmap-workbench-final.png` 确认高度编辑浮层和高度图导入工作台为两个并列浮层，按钮已回到暗色主题。
+
+后续：
+
+- 高度图工作台下一步应进入轻量色板量化、自动亮度/色相/FMG 色带映射和手动色块赋高；不要再把彩色识别塞回当前灰度导入函数。

@@ -10,6 +10,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     falloff: true,
     lastAffected: 0,
     lastHeight: "none",
+    graphWidth: 1440,
+    graphHeight: 960,
     history: null
   });
   const panelCallbacks = {
@@ -50,9 +52,17 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       manager.open("height-panel");
       lazyPanel.load();
     },
-    update({lastAffected = panelState.lastAffected, lastHeight = panelState.lastHeight, history = panelState.history} = {}) {
+    update({
+      lastAffected = panelState.lastAffected,
+      lastHeight = panelState.lastHeight,
+      graphWidth = panelState.graphWidth,
+      graphHeight = panelState.graphHeight,
+      history = panelState.history
+    } = {}) {
       panelState.lastAffected = lastAffected;
       panelState.lastHeight = lastHeight;
+      panelState.graphWidth = graphWidth;
+      panelState.graphHeight = graphHeight;
       panelState.history = history;
     },
     getBrush() {

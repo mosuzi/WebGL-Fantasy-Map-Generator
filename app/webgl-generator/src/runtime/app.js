@@ -2963,6 +2963,8 @@ function updateHeightPanel(state) {
   state.panels.height?.update({
     lastAffected: state.heightEdit.lastAffected,
     lastHeight: state.heightEdit.lastHeight,
+    graphWidth: state.options?.graphWidth,
+    graphHeight: state.options?.graphHeight,
     history: state.editHistory.getStats()
   });
 }

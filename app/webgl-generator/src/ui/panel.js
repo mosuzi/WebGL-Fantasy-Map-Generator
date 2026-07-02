@@ -99,11 +99,9 @@ export function bindRuntimePanel(documentRef, handlers) {
     if (file) handlers.onImportMapData?.(file);
     event.target.value = "";
   });
-  documentRef.addEventListener("change", event => {
-    if (event.target?.id !== "heightmap-image-file") return;
-    const file = event.target.files?.[0];
+  documentRef.addEventListener("heightmap-import-apply", event => {
+    const file = event.detail?.file;
     if (file) handlers.onImportHeightmapImage?.(file);
-    event.target.value = "";
   });
   for (const button of documentRef.querySelectorAll("[data-regenerate-kind]")) {
     button.addEventListener("click", () => handlers.onRegenerate?.(button.dataset.regenerateKind));
@@ -210,8 +208,6 @@ function editLockControls(documentRef) {
     "#width-input",
     "#height-input",
     "#heightmap-template",
-    "#culture-inheritance-mode",
-    "#religion-inheritance-mode",
     "#auto-random-seed",
     "#show-ocean-height",
     "#smooth-cell-borders",
@@ -465,8 +461,8 @@ export function readOptionsFromPanel(documentRef, previousOptions) {
     temperatureEquator: documentRef.getElementById("temperature-equator")?.value || previousOptions?.temperatureEquator,
     temperatureNorthPole: documentRef.getElementById("temperature-north-pole")?.value || previousOptions?.temperatureNorthPole,
     temperatureSouthPole: documentRef.getElementById("temperature-south-pole")?.value || previousOptions?.temperatureSouthPole,
-    cultureInheritanceMode: documentRef.getElementById("culture-inheritance-mode")?.value || previousOptions?.cultureInheritanceMode,
-    religionInheritanceMode: documentRef.getElementById("religion-inheritance-mode")?.value || previousOptions?.religionInheritanceMode,
+    cultureInheritanceMode: previousOptions?.cultureInheritanceMode,
+    religionInheritanceMode: previousOptions?.religionInheritanceMode,
     cellsTarget: documentRef.getElementById("cells-input").value,
     graphWidth: documentRef.getElementById("width-input").value,
     graphHeight: documentRef.getElementById("height-input").value

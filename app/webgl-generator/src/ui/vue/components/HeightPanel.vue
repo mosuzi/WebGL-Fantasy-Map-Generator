@@ -17,59 +17,97 @@
     <UiButton variant="secondary" @click="callbacks.onRedo?.()">重做上次</UiButton>
   </div>
 
-  <section class="heightmap-import-section height-panel-import-section" aria-labelledby="heightmap-import-title">
-    <h2 id="heightmap-import-title">灰度高度图</h2>
-    <div class="heightmap-import-fields">
-      <UiSliderField
-        label="最低高度"
-        input-id="heightmap-import-min"
-        output-id="heightmap-import-min-value"
-        field-class="heightmap-import-field"
-        value-tag="output"
-        :model-value="heightmapImportMin"
-        :display-value="heightmapImportMin"
-        :min="0"
-        :max="99"
-        :step="1"
-        @input="setHeightmapImportMin"
-      />
-      <UiSliderField
-        label="最高高度"
-        input-id="heightmap-import-max"
-        output-id="heightmap-import-max-value"
-        field-class="heightmap-import-field"
-        value-tag="output"
-        :model-value="heightmapImportMax"
-        :display-value="heightmapImportMax"
-        :min="1"
-        :max="100"
-        :step="1"
-        @input="setHeightmapImportMax"
-      />
-      <UiSwitchField
-        label="反转黑白"
-        input-id="heightmap-import-invert"
-        field-class="heightmap-import-check"
-        :checked="heightmapImportInvert"
-        @change="heightmapImportInvert = $event"
-      />
-      <UiSelectField
-        label="适应方式"
-        input-id="heightmap-import-fit"
-        class-name="heightmap-import-select"
-        :model-value="heightmapImportFit"
-        :options="heightmapFitOptions"
-        @update:model-value="heightmapImportFit = $event"
-      />
-      <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerHeightmapFileInput">导入灰度图</UiButton>
-      <input id="heightmap-image-file" type="file" accept="image/*" hidden />
+  <section class="heightmap-import-launcher" aria-labelledby="heightmap-import-title">
+    <div>
+      <h2 id="heightmap-import-title">高度图导入</h2>
+      <p>在独立工作台预览灰度图，再应用到当前地图。</p>
     </div>
+    <UiButton class="heightmap-workbench-open" variant="secondary" @click="openImportWorkbench">打开导入工作台</UiButton>
     <p id="heightmap-import-status" class="file-operation-status" aria-live="polite"></p>
   </section>
+
+  <Teleport to="body">
+    <section
+      v-if="workbenchOpen"
+      class="heightmap-import-workbench"
+      :style="workbenchStyle"
+      role="dialog"
+      aria-labelledby="heightmap-workbench-title"
+      @pointerdown.stop
+      @wheel.stop
+    >
+      <header class="heightmap-workbench-header" @pointerdown="startWorkbenchDrag">
+        <strong id="heightmap-workbench-title">高度图导入工作台</strong>
+        <ElButton class="heightmap-workbench-close" text circle aria-label="关闭高度图导入工作台" @click="closeImportWorkbench">×</ElButton>
+      </header>
+
+      <div class="heightmap-workbench-body">
+        <div class="heightmap-preview-card">
+          <canvas ref="previewCanvas" class="heightmap-preview-canvas" :class="{empty: !previewStats}"></canvas>
+          <div v-if="!previewStats" class="heightmap-preview-placeholder">选择本地图片后预览</div>
+        </div>
+
+        <UiMetricGrid :metrics="previewMetrics" class-name="heightmap-preview-metrics" />
+
+        <div class="heightmap-import-fields">
+          <UiSliderField
+            label="最低高度"
+            input-id="heightmap-import-min"
+            output-id="heightmap-import-min-value"
+            field-class="heightmap-import-field"
+            value-tag="output"
+            :model-value="heightmapImportMin"
+            :display-value="heightmapImportMin"
+            :min="0"
+            :max="99"
+            :step="1"
+            @input="setHeightmapImportMin"
+          />
+          <UiSliderField
+            label="最高高度"
+            input-id="heightmap-import-max"
+            output-id="heightmap-import-max-value"
+            field-class="heightmap-import-field"
+            value-tag="output"
+            :model-value="heightmapImportMax"
+            :display-value="heightmapImportMax"
+            :min="1"
+            :max="100"
+            :step="1"
+            @input="setHeightmapImportMax"
+          />
+          <UiSwitchField
+            label="反转黑白"
+            input-id="heightmap-import-invert"
+            field-class="heightmap-import-check"
+            :checked="heightmapImportInvert"
+            @change="heightmapImportInvert = $event"
+          />
+          <UiSelectField
+            label="适应方式"
+            input-id="heightmap-import-fit"
+            class-name="heightmap-import-select"
+            :model-value="heightmapImportFit"
+            :options="heightmapFitOptions"
+            @update:model-value="heightmapImportFit = $event"
+          />
+        </div>
+
+        <div class="heightmap-workbench-actions">
+          <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerHeightmapFileInput">选择图片</UiButton>
+          <UiButton class="heightmap-apply-action" variant="primary" :disabled="!selectedFile" @click="applyHeightmapImport">应用到地图</UiButton>
+          <UiButton variant="secondary" @click="closeImportWorkbench">取消</UiButton>
+          <input id="heightmap-image-file" ref="fileInput" type="file" accept="image/*" hidden @change="onHeightmapFileChange" />
+        </div>
+
+        <p class="heightmap-preview-status" aria-live="polite">{{ previewStatus }}</p>
+      </div>
+    </section>
+  </Teleport>
 </template>
 
 <script setup>
-import {computed, ref} from "vue";
+import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiSegmented from "./base/UiSegmented.vue";
@@ -108,6 +146,15 @@ const heightmapImportMin = ref(0);
 const heightmapImportMax = ref(100);
 const heightmapImportInvert = ref(false);
 const heightmapImportFit = ref("stretch");
+const workbenchOpen = ref(false);
+const fileInput = ref(null);
+const previewCanvas = ref(null);
+const previewImage = ref(null);
+const selectedFile = ref(null);
+const previewStats = ref(null);
+const previewStatus = ref("尚未选择图片");
+const workbenchPosition = ref({left: 760, top: 110});
+let dragState = null;
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
@@ -115,6 +162,28 @@ const summaryMetrics = computed(() => [
   {label: "高度", value: formatHeightRange(props.state.lastHeight)},
   {label: "历史", value: props.state.history ? `undo ${props.state.history.undo} / redo ${props.state.history.redo}` : "none"}
 ]);
+
+const targetSizeLabel = computed(() => `${Number(props.state.graphWidth) || 1440} x ${Number(props.state.graphHeight) || 960}`);
+const workbenchStyle = computed(() => ({
+  left: `${workbenchPosition.value.left}px`,
+  top: `${workbenchPosition.value.top}px`
+}));
+const previewMetrics = computed(() => [
+  {label: "图片", value: previewStats.value?.filename || "未选择"},
+  {label: "图片尺寸", value: previewStats.value ? `${previewStats.value.imageWidth} x ${previewStats.value.imageHeight}` : "-"},
+  {label: "目标图幅", value: targetSizeLabel.value},
+  {label: "亮度范围", value: previewStats.value ? `${previewStats.value.brightnessMin} - ${previewStats.value.brightnessMax}` : "-"},
+  {label: "高度映射", value: `${heightmapImportMin.value} - ${heightmapImportMax.value}`},
+  {label: "适应方式", value: heightmapImportFit.value === "crop" ? "保持比例裁剪" : "拉伸铺满"}
+]);
+
+watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit], () => {
+  drawPreview();
+});
+
+onBeforeUnmount(() => {
+  removeDragListeners();
+});
 
 function setActive(active) {
   props.state.active = active;
@@ -145,11 +214,191 @@ function setHeightmapImportMax(value) {
   heightmapImportMax.value = Math.max(Number(value) || 100, heightmapImportMin.value + 1);
 }
 
+function openImportWorkbench() {
+  workbenchOpen.value = true;
+  nextTick(() => drawPreview());
+}
+
+function closeImportWorkbench() {
+  workbenchOpen.value = false;
+  removeDragListeners();
+}
+
 function triggerHeightmapFileInput() {
-  const input = document.getElementById("heightmap-image-file");
-  if (!input) return;
-  input.value = "";
-  input.click();
+  if (!fileInput.value) return;
+  fileInput.value.value = "";
+  fileInput.value.click();
+}
+
+async function onHeightmapFileChange(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  try {
+    previewStatus.value = "正在读取图片...";
+    selectedFile.value = file;
+    previewImage.value = await loadPreviewImage(file);
+    await nextTick();
+    drawPreview();
+    previewStatus.value = "预览已更新，点击应用后才会重建地图。";
+  } catch (error) {
+    selectedFile.value = null;
+    previewImage.value = null;
+    previewStats.value = null;
+    clearPreviewCanvas();
+    previewStatus.value = `图片预览失败：${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+function applyHeightmapImport() {
+  if (!selectedFile.value) {
+    previewStatus.value = "请先选择一张图片。";
+    return;
+  }
+  document.dispatchEvent(new CustomEvent("heightmap-import-apply", {detail: {file: selectedFile.value}}));
+  previewStatus.value = "已提交导入任务。";
+  closeImportWorkbench();
+}
+
+function drawPreview() {
+  const image = previewImage.value;
+  const canvas = previewCanvas.value;
+  if (!image || !canvas) {
+    clearPreviewCanvas();
+    return;
+  }
+  const size = previewSize();
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const context = canvas.getContext("2d", {willReadFrequently: true});
+  if (!context) return;
+  context.clearRect(0, 0, size.width, size.height);
+  drawImageToCanvas(context, image, size.width, size.height, heightmapImportFit.value);
+  const imageData = context.getImageData(0, 0, size.width, size.height);
+  const brightness = readBrightnessStats(imageData.data, heightmapImportInvert.value);
+  previewStats.value = {
+    filename: selectedFile.value?.name || "本地图片",
+    imageWidth: image.naturalWidth || image.width || 0,
+    imageHeight: image.naturalHeight || image.height || 0,
+    brightnessMin: Math.round(brightness.min),
+    brightnessMax: Math.round(brightness.max)
+  };
+}
+
+function clearPreviewCanvas() {
+  const canvas = previewCanvas.value;
+  if (!canvas) return;
+  const context = canvas.getContext("2d");
+  context?.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function previewSize() {
+  const ratio = Math.max(0.1, (Number(props.state.graphWidth) || 1440) / (Number(props.state.graphHeight) || 960));
+  let width = 380;
+  let height = Math.round(width / ratio);
+  if (height > 230) {
+    height = 230;
+    width = Math.round(height * ratio);
+  }
+  return {width: Math.max(160, width), height: Math.max(120, height)};
+}
+
+function drawImageToCanvas(context, image, width, height, fitMode) {
+  if (fitMode !== "crop") {
+    context.drawImage(image, 0, 0, width, height);
+    return;
+  }
+  const imageWidth = Math.max(1, image.naturalWidth || image.width || width);
+  const imageHeight = Math.max(1, image.naturalHeight || image.height || height);
+  const targetRatio = width / height;
+  const imageRatio = imageWidth / imageHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+  let sourceWidth = imageWidth;
+  let sourceHeight = imageHeight;
+  if (imageRatio > targetRatio) {
+    sourceWidth = imageHeight * targetRatio;
+    sourceX = (imageWidth - sourceWidth) / 2;
+  } else if (imageRatio < targetRatio) {
+    sourceHeight = imageWidth / targetRatio;
+    sourceY = (imageHeight - sourceHeight) / 2;
+  }
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+}
+
+function readBrightnessStats(data, invert) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const alpha = data[offset + 3] / 255;
+    const red = data[offset] * alpha + 255 * (1 - alpha);
+    const green = data[offset + 1] * alpha + 255 * (1 - alpha);
+    const blue = data[offset + 2] * alpha + 255 * (1 - alpha);
+    const raw = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+    const value = invert ? 255 - raw : raw;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return {min: 0, max: 255};
+  return {min, max};
+}
+
+function loadPreviewImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("图片读取失败"));
+    };
+    image.src = url;
+  });
+}
+
+function startWorkbenchDrag(event) {
+  if (event.button !== 0 || event.target.closest("button")) return;
+  event.preventDefault();
+  const view = document.defaultView || window;
+  dragState = {
+    startX: event.clientX,
+    startY: event.clientY,
+    startLeft: workbenchPosition.value.left,
+    startTop: workbenchPosition.value.top
+  };
+  view.addEventListener("pointermove", onWorkbenchDrag);
+  view.addEventListener("pointerup", stopWorkbenchDrag);
+  view.addEventListener("pointercancel", stopWorkbenchDrag);
+}
+
+function onWorkbenchDrag(event) {
+  if (!dragState) return;
+  const view = document.defaultView || window;
+  const nextLeft = dragState.startLeft + event.clientX - dragState.startX;
+  const nextTop = dragState.startTop + event.clientY - dragState.startY;
+  workbenchPosition.value = {
+    left: clamp(nextLeft, 8, Math.max(8, (view.innerWidth || 1024) - 468)),
+    top: clamp(nextTop, 8, Math.max(8, (view.innerHeight || 768) - 260))
+  };
+}
+
+function stopWorkbenchDrag() {
+  dragState = null;
+  removeDragListeners();
+}
+
+function removeDragListeners() {
+  const view = document.defaultView || window;
+  view.removeEventListener("pointermove", onWorkbenchDrag);
+  view.removeEventListener("pointerup", stopWorkbenchDrag);
+  view.removeEventListener("pointercancel", stopWorkbenchDrag);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function formatHeightRange(value) {
