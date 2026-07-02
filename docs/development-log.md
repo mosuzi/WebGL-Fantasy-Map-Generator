@@ -8091,6 +8091,28 @@
 验证：
 
 - `git diff --check` 通过。
+
+### 滑动条精确输入与动态比例尺第一刀
+
+背景：
+
+- 用户要求所有滑动条都必须配套可精确输入的控件，Element Plus 已有可复用成品。
+- 当前比例尺线段长度基本固定，随地图比例和相机缩放换算后会显示 `264.6 千米` 这类不直观的小数长度。
+
+修正：
+
+- `UiSliderField.vue` 在 `ElSlider` 旁新增 `ElInputNumber`，滑动、输入和步进按钮共用同一套 `commitValue()`，并按 `step` 推导精度。
+- 隐藏原生 `input[type=range]` 继续保留并同步派发 `input/change`，保证旧 runtime 通过 DOM id 读取 `.value` 的链路不被破坏。
+- `styles.css` 为高度、气候、单位、标签上限、国家/省份半径、高度图工作台和河流宽度等滑条布局补充第四列数字输入，并补深色 Element InputNumber 样式。
+- `updateMapScaleBar()` 改为先计算可接受像素宽度对应的实际距离区间，再选择 1/2/5 序列的整公里距离，最后反推线段宽度；比例尺标签继续复用当前显示单位。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；构建产物主入口约 `677.49KB / 205.29KB gzip`，仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Playwright + 系统 Chrome 访问 `http://127.0.0.1:5410/?slider_scale_verify=4`：控制面板展开后已挂载滑条 `8` 个、数字输入 `8` 个、隐藏 range `8` 个，可见原生 range `0`；单位页把比例尺精确输入为 `250` 后，`#map-scale-km-per-cm.value = 250`、数字输入值 `250`、输出 `250 km/cm`。
+- 同一烟测打开高度编辑懒加载浮层后，高度半径/强度滑条拥有 `2` 个数字输入和 `2` 个隐藏 range；比例尺初始标签 `500 千米`，比例尺设为 `250 km/cm` 后标签 `1,000 千米`，派发 canvas wheel 后相机缩放到 `2.46`，比例尺回到 `500 千米` 且线宽随之更新，console/page error 和 request failed 均为 `0`。
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
 
 ## 2026-06-28 国家名称渐隐丝滑度修正

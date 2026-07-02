@@ -27,12 +27,25 @@
         @change="commitValue"
       />
     </span>
+    <ElInputNumber
+      class="ui-slider-number"
+      :model-value="currentValue"
+      :min="min"
+      :max="max"
+      :step="step"
+      :step-strictly="true"
+      :precision="inputPrecision"
+      controls-position="right"
+      size="small"
+      @update:model-value="commitValue"
+      @change="commitValue"
+    />
     <component :is="valueTag" :id="outputId || null" :for="inputId || null">{{ displayValue ?? currentValue }}</component>
   </label>
 </template>
 
 <script setup>
-import {nextTick, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 
 defineOptions({
   name: "UiSliderField"
@@ -85,6 +98,7 @@ const emit = defineEmits(["input"]);
 
 const nativeInput = ref(null);
 const currentValue = ref(clampValue(props.modelValue));
+const inputPrecision = computed(() => decimalPlaces(props.step));
 
 watch(() => props.modelValue, next => {
   currentValue.value = clampValue(next);
@@ -112,6 +126,22 @@ function commitValue(value, {dispatchNative = true} = {}) {
 function clampValue(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return props.min;
-  return Math.min(props.max, Math.max(props.min, number));
+  const clamped = Math.min(props.max, Math.max(props.min, number));
+  return roundToStep(clamped);
+}
+
+function roundToStep(value) {
+  const step = Number(props.step);
+  if (!Number.isFinite(step) || step <= 0) return value;
+  const min = Number(props.min) || 0;
+  const precision = decimalPlaces(step);
+  const rounded = min + Math.round((value - min) / step) * step;
+  return Number(rounded.toFixed(Math.min(8, precision + 2)));
+}
+
+function decimalPlaces(value) {
+  const text = String(value);
+  if (!text.includes(".")) return 0;
+  return text.split(".")[1]?.length || 0;
 }
 </script>

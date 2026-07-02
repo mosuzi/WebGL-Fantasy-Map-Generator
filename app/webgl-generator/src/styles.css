@@ -1625,7 +1625,7 @@ select:disabled {
 
 .river-width-editor label {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 48px;
+  grid-template-columns: 72px minmax(0, 1fr) 84px 48px;
   align-items: center;
   gap: 8px;
 }
@@ -1750,7 +1750,7 @@ select:disabled {
 
 .height-range-field {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 38px;
+  grid-template-columns: 44px minmax(0, 1fr) 84px 38px;
   align-items: center;
   gap: 8px;
   margin: 9px 0;
@@ -1920,7 +1920,7 @@ select:disabled {
 .state-capital-field,
 .state-range-field {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 38px;
+  grid-template-columns: 64px minmax(0, 1fr) 84px 38px;
   align-items: center;
   gap: 8px;
   margin: 9px 0;
@@ -2168,7 +2168,7 @@ select:disabled {
 .province-select-field,
 .province-range-field {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 38px;
+  grid-template-columns: 64px minmax(0, 1fr) 84px 38px;
   align-items: center;
   gap: 8px;
   margin: 9px 0;
@@ -2635,7 +2635,7 @@ select:disabled {
 
 .heightmap-import-field {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 36px;
+  grid-template-columns: 72px minmax(0, 1fr) 84px 36px;
   align-items: center;
   gap: 8px;
   color: #cbd7dc;
@@ -2855,7 +2855,7 @@ select:disabled {
 
 .climate-slider-field {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 56px;
+  grid-template-columns: 42px minmax(0, 1fr) 78px 56px;
   align-items: center;
   gap: 7px;
   color: #cbd7dc;
@@ -3034,7 +3034,7 @@ select:disabled {
 
 .unit-scale-field {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) 74px;
+  grid-template-columns: 82px minmax(0, 1fr) 88px 74px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -3180,7 +3180,7 @@ input.ui-switch-native {
 
 .label-limit-field {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 38px;
+  grid-template-columns: 92px minmax(0, 1fr) 90px 38px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -3253,6 +3253,41 @@ input.ui-switch-native {
 
 .ui-slider-el .el-slider__button-wrapper {
   top: -15px;
+}
+
+.ui-slider-number.el-input-number {
+  width: 100%;
+  min-width: 0;
+  --el-color-primary: #d7a84f;
+  --el-border-color: #33444f;
+  --el-border-color-hover: #d7a84f;
+  --el-fill-color-blank: #10171b;
+  --el-fill-color-light: #172127;
+  --el-text-color-primary: #edf4f6;
+  --el-text-color-regular: #cbd7dc;
+}
+
+.ui-slider-number.el-input-number .el-input__wrapper {
+  min-height: 28px;
+  background: #10171b;
+  box-shadow: 0 0 0 1px #33444f inset;
+}
+
+.ui-slider-number.el-input-number .el-input__inner {
+  color: #edf4f6;
+  font-size: 12px;
+}
+
+.ui-slider-number.el-input-number .el-input-number__decrease,
+.ui-slider-number.el-input-number .el-input-number__increase {
+  border-color: #273640;
+  background: #142129;
+  color: #9fb0ba;
+}
+
+.ui-slider-number.el-input-number .el-input-number__decrease:hover,
+.ui-slider-number.el-input-number .el-input-number__increase:hover {
+  color: #ffe0a1;
 }
 
 .management-panel {

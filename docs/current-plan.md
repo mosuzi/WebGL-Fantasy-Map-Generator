@@ -831,6 +831,7 @@ http://127.0.0.1:5410
 198. 视图选择按钮矩阵已放宽：`view-mode-segmented` 不再使用单行横向滚动，而是独立改为 3 列矩阵，按钮高度约 `42px`，11 个视图项自然排成 4 行，撑开“视图” tab 的控制面板高度；Element Plus segmented 的默认滑动选中块在该矩阵内隐藏，改由按钮自身边框和暗金背景表示选中态。5410 浏览器验证中 `.el-segmented__group` 为 grid，列数 `3`、行数 `4`、标签截断 `0`、横向溢出 `0`、console/page error 为 `0`。
 199. docs 结构整理第一刀已完成：`docs/` 根目录重新收敛为 `README.md / current-plan.md / development-log.md`，散落的本地 `.log` 已移动到 `docs/local-logs/`；`.gitignore` 不再忽略 `docs/task-notes/`，专题计划、评估记录和执行细则应入库并维护 `docs/task-notes/README.md` 分类索引；`AGENTS.md` 接手清单改为只依赖入库文档，`docs/generated/` 报告继续作为本地可复现产物。后续新增专题文档时必须同步更新 `docs/task-notes/README.md`，生成报告和服务器日志分别进入 `docs/generated/` 与 `docs/local-logs/`。
 200. 高度图导入工作台第一刀已完成：高度编辑面板只保留“打开导入工作台”入口，最低/最高高度、反转黑白、适应方式和本地图片输入都移入独立可拖动三级浮层；选择图片只更新 canvas 预览、图片尺寸、目标图幅、亮度范围和高度映射，点击“应用到地图”后才触发 `grayscale-import` 完整重生成。高度编辑动作按钮改为 3 列矩阵，抬升/降低/平滑不再挤在一起；`UiButton / ElButton` 的 primary/secondary 暗色变量已补齐，避免高度面板和工作台按钮回到白底。控制面板“生成”tab 已移除文化/宗教继承结构选择，内部仍按默认继承模式随机生成，后续调整交给文化/宗教编辑面板。
+201. 滑动条精确输入与动态比例尺第一刀已完成：`UiSliderField` 在 `ElSlider` 旁新增 `ElInputNumber` 精确输入，隐藏原生 range 桥继续保留旧 runtime 的 `id/value/input/change` 契约，气候、单位、图层标签上限、高度编辑、高度图导入、国家/省份半径和河流宽度等现有滑条自动获得精确输入。比例尺图层改为按当前相机缩放和单位配置，在可视宽度内选择 1/2/5 序列的整公里代表距离，再反推线段像素长度，不再固定渲染长度导致 `264.6 千米` 这类小数标签。
 
 ## 约束
 

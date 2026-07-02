@@ -5,6 +5,7 @@ import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {
   formatDistance as formatDisplayDistance,
   formatHeight as formatDisplayHeight,
+  mapUnitsToKm,
   formatNumber as formatDisplayNumber,
   formatPopulation as formatDisplayPopulation,
   formatPrecipitation as formatDisplayPrecipitation,
@@ -318,7 +319,7 @@ function applyUnitPreferences(documentRef, preferences = {}) {
   setControlValue(documentRef, "map-scale-km-per-cm", units.mapScaleKmPerCm);
   setControlValue(documentRef, "population-scale", units.populationScale);
   setControlValue(documentRef, "precipitation-scale", units.precipitationScale);
-  setOutputText(documentRef, "map-scale-km-per-cm-value", `${units.mapScaleKmPerCm} km`);
+  setOutputText(documentRef, "map-scale-km-per-cm-value", `${units.mapScaleKmPerCm} km/cm`);
   setOutputText(documentRef, "population-scale-value", formatScaleMultiplier(units.populationScale));
   setOutputText(documentRef, "precipitation-scale-value", formatScaleMultiplier(units.precipitationScale));
 }
@@ -642,22 +643,40 @@ function updateMapScaleBar(documentRef, map, stats, unitPreferences) {
   const rect = canvas.getBoundingClientRect();
   const cameraScale = Math.max(0.001, Number(stats.camera?.scale) || 1);
   const worldPerPixel = map.metadata.graphWidth / Math.max(1, rect.width * cameraScale);
-  const targetPixels = Math.max(86, Math.min(180, rect.width * 0.12));
-  const distance = niceScaleDistance(worldPerPixel * targetPixels);
-  const widthPx = Math.max(72, Math.min(220, distance / worldPerPixel));
+  const minPixels = 82;
+  const maxPixels = Math.max(minPixels, Math.min(220, rect.width * 0.2));
+  const distance = niceScaleDistance(worldPerPixel * minPixels, worldPerPixel * maxPixels, unitPreferences);
+  const widthPx = distance / worldPerPixel;
 
   line.style.width = `${Math.round(widthPx)}px`;
   label.textContent = formatDisplayDistance(distance, unitPreferences);
   scaleBar.hidden = false;
 }
 
-function niceScaleDistance(distance) {
-  if (!Number.isFinite(distance) || distance <= 0) return 1;
-  const exponent = Math.floor(Math.log10(distance));
-  const base = 10 ** exponent;
-  const normalized = distance / base;
-  const step = normalized >= 5 ? 5 : normalized >= 2 ? 2 : 1;
-  return step * base;
+function niceScaleDistance(minMapUnits, maxMapUnits, unitPreferences) {
+  const minKm = mapUnitsToKm(minMapUnits, unitPreferences);
+  const maxKm = mapUnitsToKm(maxMapUnits, unitPreferences);
+  const distanceKm = niceDistanceBetween(minKm, maxKm);
+  const scale = normalizeUnitPreferences(unitPreferences).mapScaleKmPerCm;
+  return distanceKm * (96 / 2.54) / Math.max(0.0001, scale);
+}
+
+function niceDistanceBetween(min, max) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= 0) return 1;
+  const lower = Math.max(0.000001, Math.min(min, max));
+  const upper = Math.max(lower, max);
+  const minExponent = Math.floor(Math.log10(lower)) - 1;
+  const maxExponent = Math.ceil(Math.log10(upper)) + 1;
+  let fallback = upper;
+  for (let exponent = minExponent; exponent <= maxExponent; exponent++) {
+    const base = 10 ** exponent;
+    for (const factor of [1, 2, 5]) {
+      const candidate = factor * base;
+      if (candidate >= lower && candidate <= upper) return candidate;
+      if (candidate > upper) fallback = Math.min(fallback, candidate);
+    }
+  }
+  return fallback;
 }
 
 function legendTitle(documentRef, text) {
