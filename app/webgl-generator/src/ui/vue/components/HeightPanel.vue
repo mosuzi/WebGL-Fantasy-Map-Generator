@@ -55,6 +55,32 @@
             <span>{{ profileMatchSummary }}</span>
           </header>
           <UiMetricGrid :metrics="profileMatchMetrics" class-name="heightmap-profile-metrics" />
+          <div v-if="profileMismatchVisible" class="heightmap-profile-mismatch">
+            <div v-if="profileMissingPreview.length" class="heightmap-profile-mismatch-group">
+              <span>未匹配配置色</span>
+              <div>
+                <span v-for="entry in profileMissingPreview" :key="`missing-${entry.key}`" class="heightmap-profile-chip">
+                  <i :style="{backgroundColor: entry.color}"></i>
+                  {{ entry.color }}
+                </span>
+              </div>
+            </div>
+            <div v-if="profileCurrentOnlyPreview.length" class="heightmap-profile-mismatch-group">
+              <span>当前额外色</span>
+              <div>
+                <button
+                  v-for="entry in profileCurrentOnlyPreview"
+                  :key="`extra-${entry.key}`"
+                  type="button"
+                  class="heightmap-profile-chip heightmap-profile-chip-button"
+                  @click="selectPaletteEntry(entry.key)"
+                >
+                  <i :style="{backgroundColor: entry.hex}"></i>
+                  {{ entry.hex }}
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section v-if="previewHistogram.length" class="heightmap-histogram-section" aria-label="亮度直方图">
@@ -415,6 +441,7 @@ const batchPaletteKeys = ref([]);
 const batchAssignmentHeight = ref(45);
 const manualAssignments = ref({});
 const importedProfileKeys = ref([]);
+const importedProfileAssignments = ref([]);
 const importedProfileName = ref("");
 const profileMatchStats = ref(null);
 const previewStatus = ref("尚未选择图片");
@@ -539,6 +566,9 @@ const profileMatchSummary = computed(() => {
   const name = stats.filename ? `${stats.filename} / ` : "";
   return `${name}匹配 ${stats.matched}/${stats.profileTotal}`;
 });
+const profileMismatchVisible = computed(() => Boolean(profileMissingPreview.value.length || profileCurrentOnlyPreview.value.length));
+const profileMissingPreview = computed(() => profileMatchStats.value?.missingEntries?.slice(0, 8) || []);
+const profileCurrentOnlyPreview = computed(() => profileMatchStats.value?.currentOnlyEntries?.slice(0, 8) || []);
 const heightDifferenceSummary = computed(() => {
   const stats = heightDifferenceStats.value;
   if (!stats) return "未生成";
@@ -666,6 +696,7 @@ async function onHeightmapFileChange(event) {
     batchPaletteKeys.value = [];
     manualAssignments.value = {};
     importedProfileKeys.value = [];
+    importedProfileAssignments.value = [];
     importedProfileName.value = "";
     profileMatchStats.value = null;
     clearPreviewCanvas();
@@ -793,6 +824,7 @@ function applyHeightmapProfile(profile, filename = "") {
   const normalized = normalizeProfileAssignments(profile.assignments);
   manualAssignments.value = normalized;
   importedProfileKeys.value = Object.keys(normalized);
+  importedProfileAssignments.value = normalizeProfileAssignmentList(profile.assignments);
   importedProfileName.value = filename;
   selectedPaletteKey.value = null;
   batchPaletteKeys.value = [];
@@ -809,6 +841,22 @@ function normalizeProfileAssignments(assignments) {
     normalized[key] = clamp(Math.round(height), 0, 100);
   }
   return normalized;
+}
+
+function normalizeProfileAssignmentList(assignments) {
+  return (assignments || [])
+    .map(assignment => {
+      const key = String(assignment?.key ?? "");
+      const height = Number(assignment?.height);
+      const color = normalizeHexColor(assignment?.color);
+      if (!key || !Number.isFinite(height) || !color) return null;
+      return {
+        key,
+        color,
+        height: clamp(Math.round(height), 0, 100)
+      };
+    })
+    .filter(Boolean);
 }
 
 function drawPreview() {
@@ -869,13 +917,18 @@ function updateProfileMatchStats() {
     return;
   }
   const currentKeys = new Set(previewPalette.value.map(entry => String(entry.key)));
+  const profileKeys = new Set(importedProfileKeys.value);
   const matched = importedProfileKeys.value.filter(key => currentKeys.has(key)).length;
+  const missingEntries = importedProfileAssignments.value.filter(entry => !currentKeys.has(String(entry.key)));
+  const currentOnlyEntries = previewPalette.value.filter(entry => !profileKeys.has(String(entry.key)));
   profileMatchStats.value = {
     filename: importedProfileName.value,
     profileTotal: importedProfileKeys.value.length,
     matched,
     missing: Math.max(0, importedProfileKeys.value.length - matched),
-    currentOnly: Math.max(0, previewPalette.value.length - matched)
+    currentOnly: Math.max(0, previewPalette.value.length - matched),
+    missingEntries,
+    currentOnlyEntries
   };
 }
 
@@ -1370,6 +1423,11 @@ function hexToRgb(hex) {
     Number.parseInt(normalized.slice(2, 4), 16),
     Number.parseInt(normalized.slice(4, 6), 16)
   ];
+}
+
+function normalizeHexColor(hex) {
+  const normalized = String(hex || "").trim().replace("#", "");
+  return /^[\da-f]{6}$/i.test(normalized) ? `#${normalized.toLowerCase()}` : "";
 }
 
 function rgbToHsl(red, green, blue) {

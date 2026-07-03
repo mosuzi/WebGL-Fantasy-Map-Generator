@@ -202,7 +202,7 @@
 - 工作台动作栏新增“导出配置 / 导入配置”，导出的 JSON 使用 `type = webgl-generator-heightmap-import-profile`、`version = 1`。
 - profile 保存当前最低/最高高度、反转、适应方式、色板上限、映射模式、未分配高度和当前色板 assignments。
 - 导入 profile 会校验类型和版本，恢复工作台设置，并把 profile 中的色块高度作为显式 assignment 应用到当前预览色板；导入本身不重建地图。
-- 导入 profile 后工作台会显示配置色块匹配摘要，区分已匹配、未匹配和当前图片额外色块；支持先导入 profile 再选择图片，选择图片时不会丢失已导入的 profile assignments。
+- 导入 profile 后工作台会显示配置色块匹配摘要，区分已匹配、未匹配和当前图片额外色块；失配时会列出未匹配的配置色和当前图片额外色，当前额外色可点击高亮预览区域；支持先导入 profile 再选择图片，选择图片时不会丢失已导入的 profile assignments。
 - 选择图片、导入 profile、应用到地图仍是分离步骤；真正写入地图和触发完整重生成只发生在“应用到地图”。
 
 暂缓：

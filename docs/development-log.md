@@ -15110,3 +15110,31 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：先从 4 色 SVG 导出 `.heightmap-import-profile.json`，再在新页面先导入 profile、后选择同一图片，匹配摘要从 `0/4` 更新为 `4/4`。
 - 同次烟测中 profile 区块显示 `配置色块4 / 已匹配4 / 未匹配0 / 当前额外0`，4 个色块均显示手动高度；地图 checksum 保持 `1e9dc992 -> 1e9dc992`，说明 profile 匹配只刷新预览、不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1229.3ms`，纯生成 `608.3ms`，WebGL 加载 `343.9ms`，最慢加载阶段为 `cell-visual-mesh 52.7ms`，`fit-draw = 2.4ms`，`glError = 0`。
+
+### 高度图 profile 失配色块定位
+
+背景：
+
+- profile 匹配摘要能显示已匹配、未匹配和当前额外数量，但用户仍需要知道具体哪些颜色失配。
+- 当前图片额外色已经存在于预览色板中，应能直接定位到预览图里的对应区域；profile 中未匹配的颜色不在当前图片中，只适合展示为缺失列表。
+
+修正：
+
+- “导入配置匹配”区块新增 `未匹配配置色` 和 `当前额外色` 两组列表。
+- 未匹配配置色显示 profile 中未命中的颜色 swatch 和十六进制值。
+- 当前额外色显示当前图片里 profile 未覆盖的色块，并作为按钮复用 `selectPaletteEntry()` 高亮预览区域。
+- 列表最多展示前 `8` 个，避免大型 profile 把工作台撑得过长；该功能只读展示，不写地图、不触发重生成。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`HeightPanel` 懒加载 chunk 约 `34.04KB / gzip 11.50KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：先从 4 色 SVG 导出 profile，再导入到只匹配 3 色且新增 2 色的目标 SVG，匹配摘要为 `3/4`。
+- 同次烟测中 profile 区块显示 `配置色块4 / 已匹配3 / 未匹配1 / 当前额外2`，未匹配配置色列出 `#d9c58d`，当前额外色列出 `#aa33cc / #eeeeaa`；点击一个当前额外色后，对应主色板项被高亮。
+- 同次烟测中地图 checksum 保持 `b5e69d57 -> b5e69d57`，说明失配定位只刷新预览、不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1178.7ms`，纯生成 `612.7ms`，WebGL 加载 `344.4ms`，最慢加载阶段为 `cell-visual-mesh 50ms`，`fit-draw = 2.3ms`，`glError = 0`。
