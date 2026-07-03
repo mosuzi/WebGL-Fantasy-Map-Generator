@@ -876,6 +876,7 @@ function createFrontLine(pack, campaign, fromState, toState, stance) {
     to: toPoint,
     borderCells: frontSegment.cells,
     borderCellPairs: frontSegment.cellPairs,
+    direction: frontSegment.direction,
     length: frontSegment.length,
     maxLength: frontSegment.maxLength,
     points: orientFrontSegment(frontSegment.points, fromPoint, toPoint)
@@ -944,9 +945,33 @@ function selectFrontBoundarySegment(pack, edges, startIndex, maxLength) {
     points: points.length >= 2 ? points : start.points,
     cells: Array.from(new Set(cells)),
     cellPairs,
+    direction: frontDirectionFromCellPairs(pack, cellPairs),
     length: round(length),
     maxLength: round(maxLength)
   };
+}
+
+function frontDirectionFromCellPairs(pack, cellPairs) {
+  let fromX = 0;
+  let fromY = 0;
+  let toX = 0;
+  let toY = 0;
+  let count = 0;
+  for (const [fromCell, toCell] of cellPairs) {
+    const from = pack.cells.p?.[fromCell];
+    const to = pack.cells.p?.[toCell];
+    if (!from || !to) continue;
+    fromX += from[0];
+    fromY += from[1];
+    toX += to[0];
+    toY += to[1];
+    count++;
+  }
+  if (!count) return null;
+  const dx = toX / count - fromX / count;
+  const dy = toY / count - fromY / count;
+  const length = Math.hypot(dx, dy);
+  return length > 0.000001 ? {x: round(dx / length, 4), y: round(dy / length, 4)} : null;
 }
 
 function farthestFrontEdgePoints(edges) {
@@ -968,7 +993,7 @@ function bestFrontBoundaryExtension(edges, selected, path, remainingLength) {
   for (let index = 0; index < edges.length; index++) {
     if (selected.has(index)) continue;
     const edge = edges[index];
-    if (edge.length > remainingLength && selected.size > 1) continue;
+    if (edge.length > remainingLength) continue;
     const [a, b] = edge.vertices;
     const match =
       a === startVertex ? {side: "start", nextVertex: b} :
@@ -998,7 +1023,7 @@ function frontMaxBoundaryLength(pack, fromPoint, toPoint) {
   const width = Number.isFinite(minX) ? maxX - minX : 1440;
   const height = Number.isFinite(minY) ? maxY - minY : 720;
   const span = Math.max(width, height);
-  return clamp(Math.min(distance([fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]) * 0.18, span / 18), 24, span / 10);
+  return clamp(Math.min(distance([fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]) * 0.08, span / 36), 14, span / 24);
 }
 
 function orientFrontSegment(points, fromPoint, toPoint) {
