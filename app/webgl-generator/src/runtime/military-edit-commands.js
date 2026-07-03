@@ -500,7 +500,9 @@ function normalizeBattleEventInput(event = {}) {
     outcome,
     outcomeLabel: BATTLE_EVENT_OUTCOMES[outcome] || event.outcomeLabel || outcome,
     description: String(event.description || event.note || "").trim(),
-    applyResult: Boolean(event.applyResult)
+    applyResult: Boolean(event.applyResult),
+    chainKey: String(event.chainKey || event.chainId || event.campaignKey || "").trim(),
+    chainLabel: String(event.chainLabel || event.campaignLabel || event.chainName || "").trim()
   };
 }
 
@@ -517,10 +519,13 @@ function prepareImportedBattleEvents(map, document) {
     if (!state?.i || !regiment) continue;
     const sequence = Number(source.sequence) > 0 ? Number(source.sequence) : ++nextSequence;
     const input = normalizeBattleEventInput(source);
+    const chain = resolveBattleEventChain(state, regiment, input);
     const event = {
       id: String(source.id || `${regiment.id || `${state.i}:${regiment.i}`}:battle:${sequence}`),
       sequence,
       kind: "battle",
+      chainKey: chain.chainKey,
+      chainLabel: chain.chainLabel,
       type: input.type,
       typeLabel: source.typeLabel || input.typeLabel,
       outcome: input.outcome,
@@ -752,10 +757,13 @@ function createBattleEvent(map, state, regiment, eventInput) {
   const military = ensureMilitaryEventStore(map);
   const sequence = Number(military.metadata.eventSequence || 0) + 1;
   military.metadata.eventSequence = sequence;
+  const chain = resolveBattleEventChain(state, regiment, eventInput);
   return {
     id: `${regiment.id || `${state.i}:${regiment.i}`}:battle:${sequence}`,
     sequence,
     kind: "battle",
+    chainKey: chain.chainKey,
+    chainLabel: chain.chainLabel,
     type: eventInput.type,
     typeLabel: eventInput.typeLabel,
     outcome: eventInput.outcome,
@@ -771,6 +779,36 @@ function createBattleEvent(map, state, regiment, eventInput) {
     y: regiment.y,
     at: new Date().toISOString()
   };
+}
+
+function resolveBattleEventChain(state, regiment, eventInput = {}) {
+  if (eventInput.chainKey || eventInput.chainLabel) {
+    const fallback = eventInput.chainLabel || eventInput.chainKey || "战报链";
+    return {
+      chainKey: eventInput.chainKey || `manual:${state.i}:${slugText(fallback)}`,
+      chainLabel: eventInput.chainLabel || eventInput.chainKey
+    };
+  }
+  const campaign = firstStateCampaign(state);
+  if (campaign) {
+    const key = campaign.id ?? campaign.i ?? campaign.key ?? campaign.cause ?? campaign.causeLabel ?? "campaign";
+    return {
+      chainKey: `campaign:${state.i}:${slugText(key)}`,
+      chainLabel: campaign.name || campaign.label || campaign.causeLabel || campaign.cause || "战争战报"
+    };
+  }
+  return {
+    chainKey: `regiment:${state.i}:${regiment.i}:local`,
+    chainLabel: "本地战报"
+  };
+}
+
+function firstStateCampaign(state) {
+  return (state?.campaigns || []).find(campaign => campaign && (campaign.name || campaign.label || campaign.causeLabel || campaign.cause || campaign.id || campaign.i)) || null;
+}
+
+function slugText(value) {
+  return String(value || "chain").trim().replace(/\s+/g, "-").replace(/[^\w\u4e00-\u9fa5:-]/g, "").slice(0, 48) || "chain";
 }
 
 function applyBattleResult(map, state, regiment, event, eventInput) {

@@ -98,6 +98,10 @@
     <div v-if="selectedBattleEventTotal" class="military-event-chain" aria-label="战报链摘要">
       <span>
         <small>链路</small>
+        <b>{{ battleEventChainSummary.chainLabel }}</b>
+      </span>
+      <span>
+        <small>事件</small>
         <b>{{ battleEventChainSummary.totalLabel }}</b>
       </span>
       <span>
@@ -119,6 +123,14 @@
     </div>
     <div class="military-event-tools">
       <div class="military-event-filters">
+        <UiSelectField
+          input-id="military-event-chain-filter"
+          class-name="military-event-filter"
+          label="链路"
+          :model-value="eventChainFilter"
+          :options="selectedBattleChainOptions"
+          @update:model-value="value => eventChainFilter = value"
+        />
         <UiSelectField
           input-id="military-event-type-filter"
           class-name="military-event-filter"
@@ -166,6 +178,7 @@
           <span>{{ formatEventDate(event.at) }}</span>
         </div>
         <div class="military-event-meta">
+          <span>{{ battleEventChainLabel(event) }}</span>
           <span>{{ battleEventSequenceLabel(event) }}</span>
           <span :class="battleEventAppliedClass(event)">{{ battleEventAppliedLabel(event) }}</span>
           <span>{{ battleEventLossLabel(event) }}</span>
@@ -395,6 +408,7 @@ const batchStatusDraft = ref("garrisoned");
 const stationDestinationDraft = ref("capital");
 const battleEventsImportInput = ref(null);
 const battleEventsImportStatus = ref("");
+const eventChainFilter = ref("all");
 const eventTypeFilter = ref("all");
 const eventOutcomeFilter = ref("all");
 const eventApplyFilter = ref("all");
@@ -473,7 +487,8 @@ const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
 const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
 const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents.value, selected.value));
-const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value, eventApplyFilter.value));
+const selectedBattleChainOptions = computed(() => battleEventChainFilterOptions(selectedBattleEventRows.value));
+const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventChainFilter.value, eventTypeFilter.value, eventOutcomeFilter.value, eventApplyFilter.value));
 const selectedLatestBattleEventLabel = computed(() => latestBattleEventLabel(selectedBattleEventRows.value, "暂无战斗事件"));
 const selectedBattleEventsCanExpand = computed(() => selectedFilteredBattleEvents.value.length > 5);
 const selectedBattleEvents = computed(() => showAllSelectedBattleEvents.value ? newestFirstBattleEvents(selectedFilteredBattleEvents.value) : latestBattleEvents(selectedFilteredBattleEvents.value, 5));
@@ -557,7 +572,8 @@ watch(() => selected.value?.id, syncStatusDraft, {immediate: true});
 watch(() => selected.value?.status, syncStatusDraft);
 watch(() => selected.value?.id, syncStationDestinationDraft, {immediate: true});
 watch(() => stationDestinationOptions.value.map(option => option.value).join("|"), syncStationDestinationDraft);
-watch(() => `${selected.value?.id || ""}|${eventTypeFilter.value}|${eventOutcomeFilter.value}|${eventApplyFilter.value}`, () => {
+watch(() => `${selected.value?.id || ""}|${selectedBattleChainOptions.value.map(option => option.value).join("|")}`, syncBattleChainFilter, {immediate: true});
+watch(() => `${selected.value?.id || ""}|${eventChainFilter.value}|${eventTypeFilter.value}|${eventOutcomeFilter.value}|${eventApplyFilter.value}`, () => {
   showAllSelectedBattleEvents.value = false;
 });
 
@@ -755,6 +771,11 @@ function clearBattleEventDescription() {
   battleEventDraft.description = "";
 }
 
+function syncBattleChainFilter() {
+  if (selectedBattleChainOptions.value.some(option => option.value === eventChainFilter.value)) return;
+  eventChainFilter.value = "all";
+}
+
 function applyRename(name) {
   if (!selected.value) return;
   props.callbacks.onRename?.(militaryTarget(selected.value), name);
@@ -876,7 +897,7 @@ function collectBattleEvents(map, rows = []) {
 function addBattleEvent(byId, event) {
   if (!event || event.kind !== "battle") return;
   const key = event.id || `${event.stateId}:${event.regimentId}:${event.sequence || byId.size}`;
-  if (!byId.has(key)) byId.set(key, event);
+  if (!byId.has(key)) byId.set(key, normalizeBattleEventForPanel(event));
 }
 
 function eventsForRegiment(events = [], regiment) {
@@ -885,12 +906,33 @@ function eventsForRegiment(events = [], regiment) {
     .filter(event => eventBelongsToRegiment(event, regiment));
 }
 
-function filterBattleEvents(events = [], type = "all", outcome = "all", applyStatus = "all") {
+function filterBattleEvents(events = [], chainKey = "all", type = "all", outcome = "all", applyStatus = "all") {
   return events.filter(event =>
-    (type === "all" || event.type === type)
+    (chainKey === "all" || event.chainKey === chainKey)
+    && (type === "all" || event.type === type)
     && (outcome === "all" || event.outcome === outcome)
     && (applyStatus === "all" || (applyStatus === "applied" ? Boolean(event.resultApplied) : !event.resultApplied))
   );
+}
+
+function normalizeBattleEventForPanel(event) {
+  const chainKey = String(event.chainKey || event.chainId || event.campaignKey || `regiment:${event.stateId || "unknown"}:${event.regimentId || "unknown"}:local`);
+  return {
+    ...event,
+    chainKey,
+    chainLabel: event.chainLabel || event.campaignLabel || event.chainName || "本地战报"
+  };
+}
+
+function battleEventChainFilterOptions(events = []) {
+  const chains = summarizeBattleEventChains(events);
+  return [
+    {value: "all", label: "全部链路"},
+    ...chains.map(chain => ({
+      value: chain.key,
+      label: `${chain.label}（${formatNumber(chain.count)}）`
+    }))
+  ];
 }
 
 function latestBattleEvents(events = [], limit = 5) {
@@ -904,10 +946,13 @@ function newestFirstBattleEvents(events = []) {
 function buildBattleEventChainSummary(events = []) {
   const appliedEvents = events.filter(event => event?.resultApplied);
   const pendingEvents = events.filter(event => !event?.resultApplied);
+  const chains = summarizeBattleEventChains(events);
   const casualties = appliedEvents.reduce((sum, event) => sum + battleEventCasualties(event), 0);
   const latest = events.at(-1);
   return {
     total: events.length,
+    chainCount: chains.length,
+    chains,
     applied: appliedEvents.length,
     pending: pendingEvents.length,
     casualties,
@@ -920,12 +965,23 @@ function buildBattleEventChainSummary(events = []) {
       outcomeLabel: latest.outcomeLabel || latest.outcome || "结果",
       at: latest.at || ""
     } : null,
+    chainLabel: chains.length === 1 ? chains[0].label : `${formatNumber(chains.length)} 条`,
     totalLabel: `${formatNumber(events.length)} 条`,
     appliedLabel: appliedEvents.length ? `${formatNumber(appliedEvents.length)} 条` : "无",
     pendingLabel: pendingEvents.length ? `${formatNumber(pendingEvents.length)} 条` : "无",
     casualtyLabel: casualties ? formatNumber(casualties) : "无",
     latestLabel: latest ? `${latest.typeLabel || latest.type || "事件"} / ${latest.outcomeLabel || latest.outcome || "结果"}` : "无"
   };
+}
+
+function summarizeBattleEventChains(events = []) {
+  const chains = new Map();
+  for (const event of events) {
+    const key = event.chainKey || "unknown";
+    if (!chains.has(key)) chains.set(key, {key, label: event.chainLabel || key || "本地战报", count: 0});
+    chains.get(key).count += 1;
+  }
+  return [...chains.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-CN"));
 }
 
 function battleEventCasualties(event) {
@@ -948,6 +1004,8 @@ function battleEventExportScopeLabel(scope) {
 
 function battleEventExportFilters() {
   return {
+    chainKey: eventChainFilter.value,
+    chainLabel: selectOptionLabel(selectedBattleChainOptions.value, eventChainFilter.value),
     type: eventTypeFilter.value,
     typeLabel: selectOptionLabel(battleEventFilterTypeOptions, eventTypeFilter.value),
     outcome: eventOutcomeFilter.value,
@@ -985,7 +1043,11 @@ function formatEventDate(value) {
 
 function battleEventSequenceLabel(event) {
   const sequence = Number(event?.sequence);
-  return Number.isFinite(sequence) && sequence > 0 ? `链路 #${formatNumber(sequence)}` : "链路未编号";
+  return Number.isFinite(sequence) && sequence > 0 ? `序号 #${formatNumber(sequence)}` : "序号未编号";
+}
+
+function battleEventChainLabel(event) {
+  return event?.chainLabel || event?.chainKey || "本地战报";
 }
 
 function battleEventAppliedLabel(event) {
@@ -1152,7 +1214,7 @@ function exportBattleEventsCsv() {
     return [
       event.id || "",
       event.sequence || "",
-      battleEventSequenceLabel(event),
+      battleEventChainLabel(event),
       event.at || "",
       event.stateName || event.stateId || "",
       event.regimentName || event.regimentObjectId || event.regimentId || "",
