@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {getGovernmentEffects} from "./governments.js";
 
 export const DIPLOMACY_RELATIONS = Object.freeze({
   Ally: Object.freeze({value: "Ally", label: "盟友", color: "#2fa85a", polarity: 3}),
@@ -31,6 +32,7 @@ const WAR_CAUSE_LABELS = Object.freeze({
   rivalry: "宿敌旧怨",
   power: "强权扩张",
   culture: "文化宗教矛盾",
+  government: "政体冲突",
   trade: "贸易路线争端",
   manual: "外交宣战"
 });
@@ -123,15 +125,21 @@ function choosePairRelation({pack, society, states, from, to, random, context}) 
   const sharedCulture = sharesHeritage(society?.cultures, from.culture, to.culture);
   const sharedReligion = sharesHeritage(society?.religions, from.religion, to.religion);
   const sameType = from.type && from.type === to.type;
+  const governmentRelation = compareGovernments(from, to);
+  const fromGovernment = getGovernmentEffects(from);
+  const toGovernment = getGovernmentEffects(to);
+  const combinedAggression = Math.max(0, (fromGovernment.diplomacyAggression || 0) + (toGovernment.diplomacyAggression || 0));
   const powerRatio = statePower(context, from.i) / Math.max(1, statePower(context, to.i));
   const resourceCompetition = Math.min(from.resourcePotential || 0, to.resourcePotential || 0) > context.averageResource * 0.8;
 
   if (sharedCulture && random.next() < 0.5) relation = improveRelation(relation, random);
   if (sharedReligion && random.next() < 0.38) relation = improveRelation(relation, random);
   if (sameType && !neighbors && random.next() < 0.2) relation = improveRelation(relation, random);
+  if (governmentRelation.sameFamily && random.next() < 0.24 + Math.max(fromGovernment.diplomacyAffinity, toGovernment.diplomacyAffinity, 0)) relation = improveRelation(relation, random);
+  if (governmentRelation.tension && random.next() < 0.22 + combinedAggression) relation = worsenRelation(relation, random);
   if (neighbors && !sharedCulture && random.next() < 0.38) relation = worsenRelation(relation, random);
   if (neighbors && !sharedReligion && random.next() < 0.24) relation = worsenRelation(relation, random);
-  if (neighbors && resourceCompetition && random.next() < 0.35) relation = worsenRelation(relation, random);
+  if (neighbors && resourceCompetition && random.next() < 0.35 + combinedAggression * 0.35) relation = worsenRelation(relation, random);
   if (!neighbors && !neighborsOfNeighbors && !sharedCulture && !sharedReligion && random.next() < 0.2) relation = "Unknown";
 
   const stronger = powerRatio >= 1 ? from : to;
@@ -139,7 +147,8 @@ function choosePairRelation({pack, society, states, from, to, random, context}) 
   const strongerPower = statePower(context, stronger.i);
   const weakerPower = statePower(context, weaker.i);
   const canVassalize = neighbors && strongerPower > context.averagePower && weakerPower < context.averagePower && strongerPower / Math.max(1, weakerPower) > 2.25;
-  if (canVassalize && random.next() < 0.32) return stronger === from ? "Suzerain" : "Vassal";
+  const vassalization = Math.max(getGovernmentEffects(stronger).vassalization || 1, 0.2);
+  if (canVassalize && random.next() < 0.32 * vassalization) return stronger === from ? "Suzerain" : "Vassal";
   return relation;
 }
 
@@ -158,7 +167,8 @@ function declareRivalWars({states, validStates, random, context, chronicle, opti
 
     const defender = states[rivalIds[Math.floor(random.next() * rivalIds.length)]];
     if (!defender?.i) continue;
-    const attackerPower = statePower(context, attacker.i) * Math.max(0.5, attacker.expansionism || 1);
+    const attackerAggression = Math.max(0.7, 1 + (getGovernmentEffects(attacker).diplomacyAggression || 0) * 1.8);
+    const attackerPower = statePower(context, attacker.i) * Math.max(0.5, attacker.expansionism || 1) * attackerAggression;
     const defenderPower = statePower(context, defender.i) * Math.max(0.5, defender.expansionism || 1);
     if (attackerPower < defenderPower * random.range(1.25, 2.2)) continue;
 
@@ -185,6 +195,7 @@ function chooseWarCause(attacker, defender, context, random) {
   const neighbors = (attacker.neighbors || []).includes(defender.i);
   const sharedCulture = sharesHeritage(context.cultureItems, attacker.culture, defender.culture);
   const sharedReligion = sharesHeritage(context.religionItems, attacker.religion, defender.religion);
+  const governmentRelation = compareGovernments(attacker, defender);
   const attackerPower = statePower(context, attacker.i);
   const defenderPower = statePower(context, defender.i);
 
@@ -194,6 +205,9 @@ function chooseWarCause(attacker, defender, context, random) {
   if (neighbors && random.next() < 0.36) return createWarCause("border", `${attacker.name}与${defender.name}在边境据点和通行权上爆发冲突。`);
   if (!sharedCulture || !sharedReligion) {
     if (random.next() < 0.28) return createWarCause("culture", `${attacker.name}与${defender.name}的文化或宗教裂痕被贵族派系点燃。`);
+  }
+  if (governmentRelation.tension && random.next() < 0.3) {
+    return createWarCause("government", `${attacker.name}与${defender.name}围绕${formatGovernmentConflict(attacker, defender)}持续对立，边境派系借机升级冲突。`);
   }
   if (attackerPower > defenderPower * 1.7 && random.next() < 0.34) return createWarCause("power", `${attacker.name}试图扩大势力范围，迫使${defender.name}退让。`);
   if (random.next() < 0.26) return createWarCause("trade", `${attacker.name}与${defender.name}围绕商路、港口或关税爆发争端。`);
@@ -243,6 +257,30 @@ function sharedResourceKeys(a, b) {
 function formatResourceCause(keys) {
   const labels = {ore: "矿产", salt: "盐路", geothermal: "地热", gems: "宝石", "rare-biota": "稀有生物"};
   return keys.map(key => labels[key] || key).join("、") || "关键资源";
+}
+
+function compareGovernments(left, right) {
+  const leftFamily = left?.governmentFamily || left?.government?.family || "";
+  const rightFamily = right?.governmentFamily || right?.government?.family || "";
+  const sameFamily = Boolean(leftFamily && leftFamily === rightFamily);
+  const tension = hasGovernmentTension(leftFamily, rightFamily)
+    || (leftFamily === "theocracy" && left?.religion !== right?.religion)
+    || (rightFamily === "theocracy" && left?.religion !== right?.religion);
+  return {sameFamily, tension};
+}
+
+function hasGovernmentTension(leftFamily, rightFamily) {
+  const pair = new Set([leftFamily, rightFamily]);
+  if (pair.has("autocracy") && pair.has("republic")) return true;
+  if (pair.has("theocracy") && pair.has("republic")) return true;
+  if (pair.has("league") && pair.has("autocracy")) return true;
+  return false;
+}
+
+function formatGovernmentConflict(attacker, defender) {
+  const left = attacker.governmentLabel || "旧制";
+  const right = defender.governmentLabel || "异制";
+  return `${left}与${right}的正统之争`;
 }
 
 function createDiplomacyContext(pack, society, validStates) {

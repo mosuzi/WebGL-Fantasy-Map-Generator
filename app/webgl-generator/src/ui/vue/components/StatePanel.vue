@@ -40,6 +40,20 @@
       />
     </template>
 
+    <template #government>
+      <div class="state-government-field">
+        <UiSelectField
+          label="政体"
+          class-name="state-government-select"
+          :model-value="governmentDraft"
+          :options="governmentOptions"
+          @update:model-value="governmentDraft = $event"
+        />
+        <UiButton variant="secondary" @click="callbacks.onGovernmentChange(selected.id, governmentDraft)">套用政体</UiButton>
+        <p class="state-government-note">{{ governmentNote }}</p>
+      </div>
+    </template>
+
     <template #capital>
       <div class="state-capital-field">
         <UiSelectField
@@ -111,6 +125,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {GOVERNMENT_OPTIONS} from "../../../generator/governments.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -150,6 +165,7 @@ const sortOptions = Object.freeze([
 const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
+  {key: "governmentLabel", label: "政体"},
   {key: "capitalName", label: "首都"},
   {key: "burgs", label: "城镇", align: "right", format: value => formatNumber(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)},
@@ -160,6 +176,7 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const capitalDraft = ref(0);
+const governmentDraft = ref("monarchy");
 const metrics = computed(() => {
   props.state.version;
   return buildStateMetrics(props.state.map);
@@ -168,10 +185,16 @@ const stateOptions = computed(() => stateRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
 const capitalOptions = computed(() => stateCities(props.state.map, selected.value?.id));
+const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
+  value: option.value,
+  label: `${option.label} / ${option.category}`
+})));
+const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体会影响国号后缀、税收、外交倾向和军事动员。");
 const stateActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "edit", label: "进入编辑", icon: "◎"},
   {key: "color", label: "调整颜色", icon: "◐"},
+  {key: "government", label: "调整政体", icon: "⚖"},
   {key: "capital", label: "设置首都", icon: "♛", disabled: !capitalOptions.value.length},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
@@ -188,6 +211,9 @@ const summaryMetrics = computed(() => [
 
 const detailRows = computed(() => selected.value ? [
   {label: "全称", value: selected.value.fullName},
+  {label: "政体", value: selected.value.governmentLabel},
+  {label: "国号后缀", value: selected.value.formName},
+  {label: "政体影响", value: selected.value.governmentEffectSummary},
   {label: "首都", value: selected.value.capitalName},
   {label: "文化", value: selected.value.culture},
   {label: "宗教", value: selected.value.religion},
@@ -215,6 +241,10 @@ watch(() => selected.value?.capitalBurgId, next => {
   capitalDraft.value = Number(next) || capitalOptions.value[0]?.burgId || 0;
 }, {immediate: true});
 
+watch(() => selected.value?.governmentKey, next => {
+  governmentDraft.value = next || "monarchy";
+}, {immediate: true});
+
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
 });
@@ -233,6 +263,10 @@ function buildStateMetrics(map) {
       name: neutral ? "中立" : stateItem?.fullName || stateItem?.name || row.name,
       rawName: neutral ? "中立" : stateItem?.name || row.name,
       fullName: neutral ? "中立" : stateItem?.fullName || stateItem?.name || row.name,
+      formName: neutral ? "无" : stateItem?.formName || "国",
+      governmentKey: neutral ? "" : stateItem?.governmentKey || "monarchy",
+      governmentLabel: neutral ? "无" : stateItem?.governmentLabel || "君主制",
+      governmentEffectSummary: neutral ? "无" : formatGovernmentEffects(stateItem),
       capitalName: neutral ? "无" : capitalCity?.name || "none",
       capitalBurgId: stateItem?.capital || capitalCity?.burgId || null,
       culture: neutral ? "混合" : indexedName(map?.society?.cultures, stateItem?.culture),
@@ -269,6 +303,7 @@ function filterRows(rows, filter) {
     String(row.id).includes(query)
     || row.name.toLowerCase().includes(query)
     || row.rawName.toLowerCase().includes(query)
+    || row.governmentLabel.toLowerCase().includes(query)
     || row.capitalName.toLowerCase().includes(query)
   );
 }
@@ -357,6 +392,24 @@ function formatDiplomacyCounts(counts = {}) {
     .map(([key, label]) => Number(counts[key] || 0) ? `${label} ${formatNumber(counts[key])}` : "")
     .filter(Boolean);
   return parts.join(" / ") || "中立";
+}
+
+function formatGovernmentEffects(stateItem) {
+  const effects = stateItem?.government?.effects || {};
+  const parts = [
+    formatSignedPercent("经济", effects.economyMultiplier),
+    formatSignedPercent("贸易", effects.tradeMultiplier),
+    formatSignedPercent("征兵", effects.militaryRecruitment)
+  ].filter(Boolean);
+  const family = stateItem?.government?.sizeLabel || "";
+  return [family, ...parts].filter(Boolean).join(" / ") || "无";
+}
+
+function formatSignedPercent(label, value) {
+  const numeric = Number(value || 1);
+  if (!Number.isFinite(numeric) || Math.abs(numeric - 1) < 0.005) return "";
+  const percent = Math.round((numeric - 1) * 100);
+  return `${label}${percent > 0 ? "+" : ""}${percent}%`;
 }
 
 function normalizeHexColor(color) {

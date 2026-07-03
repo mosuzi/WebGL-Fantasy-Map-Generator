@@ -48,7 +48,7 @@ import {resolveObject} from "./object-resolver.js";
 import {createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
-import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, createSetStateGovernmentCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
@@ -291,6 +291,18 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       updateStatePanel(state);
       updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onGovernmentChange: (stateId, governmentKey) => {
+      const context = {map: state.map};
+      const command = createSetStateGovernmentCommand(stateId, governmentKey);
+      if (!command.isNoop(context)) {
+        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
+      }
+      updateStatePanel(state);
+      updateDiplomacyPanel(state);
+      updateMilitaryPanel(state);
+      updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },
     onCapitalChange: (stateId, burgId) => {
@@ -2403,6 +2415,7 @@ function markDerivedStale(map, systems) {
   if (map?.zones?.metadata) map.zones.metadata.stale = stale.systems.includes("zones");
   if (map?.markers?.metadata) map.markers.metadata.stale = stale.systems.includes("markers");
   if (map?.economy?.metadata) map.economy.metadata.stale = stale.systems.includes("economy");
+  if (map?.diplomacy?.metadata) map.diplomacy.metadata.stale = stale.systems.includes("diplomacy");
 }
 
 function markDerivedFresh(map, systems) {
@@ -2421,6 +2434,7 @@ function markDerivedFresh(map, systems) {
   if (map?.zones?.metadata) map.zones.metadata.stale = nextSystems.includes("zones");
   if (map?.markers?.metadata) map.markers.metadata.stale = nextSystems.includes("markers");
   if (map?.economy?.metadata) map.economy.metadata.stale = nextSystems.includes("economy");
+  if (map?.diplomacy?.metadata) map.diplomacy.metadata.stale = nextSystems.includes("diplomacy");
 }
 
 function clearGeneratedCityLabelHides(map) {

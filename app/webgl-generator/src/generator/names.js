@@ -290,24 +290,24 @@ const HIGHLAND_SUFFIXES = ["山", "岭", "岳", "峰", "陵", "关"];
 const PORT_SUFFIXES = ["港", "津", "浦", "湾"];
 const LAKE_SUFFIXES = ["湖", "泽", "泊", "潭", "海"];
 const CULTURE_STYLE_CONFIG = {
-  European: {place: WESTERN_PLACE_STEMS, hydro: WESTERN_HYDRO_STEMS, forms: ["国", "侯国", "伯国", "邦", "朝"], suffixes: ["堡", "顿", "维尔", "港", "城", "郡"]},
+  European: {place: WESTERN_PLACE_STEMS, hydro: WESTERN_HYDRO_STEMS, forms: ["国", "王国", "共和国", "帝国"], suffixes: ["堡", "顿", "维尔", "港", "城", "郡"]},
   Generic: null,
-  Highland: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "霜", "冰", "洛恩"], forms: ["山国", "侯国", "伯国", "邦", "朝"], suffixes: HIGHLAND_SUFFIXES},
-  Naval: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["海国", "侯国", "伯国", "海邦", "朝"], suffixes: PORT_SUFFIXES},
-  Lake: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["泽国", "侯国", "伯国", "邦", "朝"], suffixes: WATER_SUFFIXES},
-  Nomadic: {place: STEPPE_PLACE_STEMS, hydro: ["乌勒", "呼伦", "阿兰", "苍", "金", "青"], forms: ["汗国", "侯国", "伯国", "邦", "朝"], suffixes: ["原", "帐", "河", "岭", "城"]},
-  Hunting: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "森", "鹿", "霜"], forms: ["林国", "侯国", "伯国", "邦", "朝"], suffixes: ["林", "谷", "岭", "泉", "城"]},
-  River: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["河国", "侯国", "伯国", "邦", "朝"], suffixes: WATER_SUFFIXES},
-  Desert: {place: SOUTHERN_PLACE_STEMS, hydro: ["萨赫", "阿曼", "纳赛", "金", "赤", "白"], forms: ["沙国", "侯国", "伯国", "邦", "朝"], suffixes: ["城", "绿洲", "港", "河", "原"]}
+  Highland: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "霜", "冰", "洛恩"], forms: ["山国", "王国", "部盟", "帝国"], suffixes: HIGHLAND_SUFFIXES},
+  Naval: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["海国", "王国", "共和国", "帝国"], suffixes: PORT_SUFFIXES},
+  Lake: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["泽国", "王国", "联邦", "帝国"], suffixes: WATER_SUFFIXES},
+  Nomadic: {place: STEPPE_PLACE_STEMS, hydro: ["乌勒", "呼伦", "阿兰", "苍", "金", "青"], forms: ["汗国", "部盟", "王国", "帝国"], suffixes: ["原", "帐", "河", "岭", "城"]},
+  Hunting: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "森", "鹿", "霜"], forms: ["林国", "部盟", "王国", "帝国"], suffixes: ["林", "谷", "岭", "泉", "城"]},
+  River: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["河国", "王国", "共和国", "帝国"], suffixes: WATER_SUFFIXES},
+  Desert: {place: SOUTHERN_PLACE_STEMS, hydro: ["萨赫", "阿曼", "纳赛", "金", "赤", "白"], forms: ["沙国", "王国", "教国", "帝国"], suffixes: ["城", "绿洲", "港", "河", "原"]}
 };
 const STATE_FORMS = {
-  Naval: ["海国", "侯国", "伯国", "海邦", "朝"],
-  Lake: ["泽国", "侯国", "伯国", "湖邦", "朝"],
-  Highland: ["山国", "侯国", "伯国", "山邦", "朝"],
-  River: ["河国", "侯国", "伯国", "河邦", "朝"],
+  Naval: ["海国", "王国", "共和国", "帝国"],
+  Lake: ["泽国", "王国", "联邦", "帝国"],
+  Highland: ["山国", "王国", "部盟", "帝国"],
+  River: ["河国", "王国", "共和国", "帝国"],
   Nomadic: ["汗国", "部盟", "诸帐"],
   Hunting: ["林国", "诸部", "林盟"],
-  Generic: ["国", "侯国", "伯国", "邦", "朝"]
+  Generic: ["国", "王国", "共和国", "帝国"]
 };
 const PROVINCE_FORMS = ["郡", "州", "道", "府", "领", "司"];
 const DIRECTION_PREFIXES = ["东", "西", "南", "北", "上", "下", "新", "古"];
@@ -660,7 +660,7 @@ function hasGeographicSuffix(name) {
 }
 
 function trimPoliticalForm(name) {
-  return String(name || "").replace(/(共和国|王国|公国|侯国|伯国|海国|山国|泽国|河国|汗国|邦联|诸州|诸港|诸帐|部盟|海邦|湖邦|山邦|河邦|邦|朝|国)$/u, "");
+  return String(name || "").replace(/(联邦共和国|共和国|王国|帝国|公国|侯国|伯国|海国|山国|泽国|河国|沙国|林国|教国|汗国|邦联|联邦|诸州|诸港|诸帐|诸部|部盟|林盟|海邦|湖邦|山邦|河邦|自由邦|邦|王朝|朝|国)$/u, "");
 }
 
 function combineStemAndSuffix(stem, suffix) {

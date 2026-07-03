@@ -1,5 +1,6 @@
 import {MinPriorityQueue} from "./priority-queue.js";
-import {createChineseNameGenerator, getStateFullName, isAncientStateNameRoot} from "./names.js";
+import {chooseStateGovernment, applyStateGovernment, summarizeStateGovernments} from "./governments.js";
+import {createChineseNameGenerator, getStateFullName} from "./names.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
 
@@ -29,6 +30,7 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
   const states = profile.stage("states-build", "生成国家中心", () => buildStates(grid, politicalCells, society, random));
   grid.cells.state = profile.stage("states-expand", "扩张国家", () => expandStates(grid, features, states, riverCells));
   profile.stage("states-neighbors", "计算国家相邻关系", () => findGridStateNeighbors(grid, states));
+  profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options));
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
 
   const provinces = profile.stage("provinces-build", "生成省份中心", () => buildProvinces(grid, politicalCells, states, society, random));
@@ -49,7 +51,8 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
       states: states.length,
       provinces: provinces.length,
       regions: regions.length,
-      stateNames: states.map(state => state.name),
+      stateNames: states.map(state => state.fullName || state.name),
+      stateGovernments: summarizeStateGovernments(states),
       provinceNames: provinces.map(province => province.name),
       regionNames: regions.map(region => region.name)
     }
@@ -73,7 +76,7 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
   profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
   profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
   profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states));
-  profile.stage("states-forms", "定义国家形态", () => defineStateForms(states, nameGenerator));
+  profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options));
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
   grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack));
 
@@ -122,7 +125,7 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
   profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
   profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
   profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states));
-  profile.stage("states-forms", "定义国家形态", () => defineStateForms(states, nameGenerator));
+  profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options));
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
   grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack));
 
@@ -144,7 +147,8 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
       states: validStates.length,
       provinces: provinces.filter(province => province?.i).length,
       regions: regions.length,
-      stateNames: validStates.map(state => state.name),
+      stateNames: validStates.map(state => state.fullName || state.name),
+      stateGovernments: summarizeStateGovernments(validStates),
       provinceNames: provinces.filter(province => province?.i).map(province => province.name),
       regionNames: regions.map(region => region.name)
     }
@@ -166,9 +170,13 @@ function buildStates(grid, landCells, society, random) {
   return centers.map((center, id) => {
     const culture = society.cultures[grid.cells.culture[center.cell]];
     const root = culture?.name?.replace("文化", "") || STATE_ROOTS[id % STATE_ROOTS.length];
+    const formName = id % 5 === 0 ? "王国" : "国";
     return {
       id,
-      name: `${root}${id % 3 === 0 ? "国" : id % 3 === 1 ? "邦" : "王国"}`,
+      name: root,
+      form: "Monarchy",
+      formName,
+      fullName: getStateFullName(root, formName),
       center: center.cell,
       culture: grid.cells.culture[center.cell],
       religion: grid.cells.religion[center.cell]
@@ -323,32 +331,32 @@ function createPackPoliticsMetadata(states, provinces, regions = []) {
     provinces: validProvinces.length,
     regions: regions.length,
     stateNames: validStates.map(state => state.fullName || state.name),
+    stateGovernments: summarizeStateGovernments(validStates),
     provinceNames: validProvinces.map(province => province.fullName || province.name),
     regionNames: regions.map(region => region.name)
   };
 }
 
-function defineStateForms(states, nameGenerator) {
-  const validStates = states.filter(state => state?.i && !state.removed);
+function defineStateGovernments(states, options = {}) {
+  const validStates = states.filter(state => state && !state.removed && (state.i > 0 || (state.i === undefined && Number.isInteger(state.id))));
   if (!validStates.length) return;
   const areas = validStates.map(state => state.area || 0).sort((a, b) => a - b);
   const medianArea = areas[Math.floor(areas.length / 2)] || 1;
   const empireThreshold = [...areas].sort((a, b) => b - a)[Math.max(Math.ceil(validStates.length ** 0.4) - 2, 0)] || medianArea;
 
   for (const state of validStates) {
-    let tier = Math.min(Math.floor(((state.area || medianArea) / medianArea) * 2.6), 4);
-    if (tier === 4 && (state.area || 0) < empireThreshold) tier = 3;
-    state.formName = nameGenerator.makeStateFormName({
-      id: state.i,
-      cell: state.center,
-      culture: state.culture,
-      cultureType: state.nameStyle || state.type,
-      type: state.type,
-      root: state.name,
-      ancientRoot: isAncientStateNameRoot(state.name),
-      tier
+    const government = chooseStateGovernment(state, {
+      seed: options.seed,
+      medianArea,
+      empireThreshold,
+      states: validStates
     });
-    state.fullName = getStateFullName(state.name, state.formName);
+    applyStateGovernment(state, government, {
+      seed: options.seed,
+      medianArea,
+      empireThreshold,
+      states: validStates
+    });
   }
 }
 

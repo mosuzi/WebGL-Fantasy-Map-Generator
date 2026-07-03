@@ -51,6 +51,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.radius = radius;
     },
     onColorChange: (stateId, color) => callbacks.onColorChange?.(stateId, color),
+    onGovernmentChange: (stateId, governmentKey) => callbacks.onGovernmentChange?.(stateId, governmentKey),
     onCapitalChange: (stateId, burgId) => callbacks.onCapitalChange?.(stateId, burgId),
     onNoteChange: (stateId, body) => callbacks.onNoteChange?.(stateId, body),
     onSampleSelection: () => callbacks.onSampleSelection?.(),
@@ -128,6 +129,8 @@ function stateObject(row) {
     id: row.id,
     name: row.rawName,
     fullName: row.fullName,
+    government: row.governmentLabel,
+    governmentKey: row.governmentKey,
     capitalName: row.capitalName,
     culture: row.culture,
     religion: row.religion,

@@ -33,6 +33,7 @@
 ## 世界系统与后续大功能
 
 - `economy-market-trade-plan.md`：市场、商品与贸易流计划。
+- `government-system-and-state-title-plan.md`：政体系统、国家国号后缀和政体影响规则。
 - `military-battle-plan.md`：军事系统、图层与管理面板设计。
 - `emblems-coa-plan.md`：纹章与 Coat of Arms 计划。
 

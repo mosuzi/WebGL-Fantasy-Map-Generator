@@ -1,11 +1,12 @@
 import {createRandom} from "./random.js";
+import {getGovernmentEffects} from "./governments.js";
 
 export const MILITARY_UNITS = Object.freeze([
-  {name: "infantry", label: "步兵", icon: "步", rural: 0.25, urban: 0.2, baseRatio: 0.46, type: "melee", separate: 0, speed: 0.78},
-  {name: "archers", label: "弓兵", icon: "弓", rural: 0.12, urban: 0.2, baseRatio: 0.22, type: "ranged", separate: 0, speed: 0.82},
-  {name: "cavalry", label: "骑兵", icon: "骑", rural: 0.12, urban: 0.03, baseRatio: 0.16, type: "mounted", separate: 0, speed: 1.22},
-  {name: "artillery", label: "器械", icon: "械", rural: 0, urban: 0.03, baseRatio: 0.06, type: "machinery", separate: 0, speed: 0.48},
-  {name: "fleet", label: "舰队", icon: "舟", rural: 0, urban: 0.015, baseRatio: 0.1, type: "naval", separate: 1, speed: 0.9}
+  {name: "infantry", label: "步兵", icon: "▴", rural: 0.25, urban: 0.2, baseRatio: 0.46, type: "melee", separate: 0, speed: 0.78},
+  {name: "archers", label: "弓兵", icon: "🏹", rural: 0.12, urban: 0.2, baseRatio: 0.22, type: "ranged", separate: 0, speed: 0.82},
+  {name: "cavalry", label: "骑兵", icon: "♞", rural: 0.12, urban: 0.03, baseRatio: 0.16, type: "mounted", separate: 0, speed: 1.22},
+  {name: "artillery", label: "器械", icon: "⚙", rural: 0, urban: 0.03, baseRatio: 0.06, type: "machinery", separate: 0, speed: 0.48},
+  {name: "fleet", label: "舰队", icon: "⛵", rural: 0, urban: 0.015, baseRatio: 0.1, type: "naval", separate: 1, speed: 0.9}
 ]);
 
 export const MILITARY_STATUSES = Object.freeze({
@@ -63,6 +64,18 @@ const CIVILIZATION_RATIO_MODIFIERS = Object.freeze({
 });
 
 const WAR_RELATIONS = new Set(["Enemy", "Rival", "Suspicion"]);
+const REGIMENT_ICON_LABELS = Object.freeze({
+  "fleet-large": "大舰队",
+  "fleet-small": "小舰队",
+  "archers": "弓兵",
+  "archers-heavy": "重装弓兵",
+  "cavalry": "骑兵",
+  "cavalry-heavy": "重骑兵",
+  "infantry": "步兵",
+  "infantry-heavy": "重步兵",
+  "mountain": "山地兵",
+  "artillery": "器械"
+});
 
 export function buildMilitary(pack, options = {}) {
   const startedAt = performance.now();
@@ -208,6 +221,7 @@ function createRegiments({pack, state, nodes, target, spatialMerge, policy, rand
     const unitMap = roundUnitMap(units);
     const dominantUnit = dominantUnitName(unitMap);
     const status = getRegimentStatus(pack, state, lead, dominantUnit, policy, random);
+    const terrainType = getCellType(pack.cells, lead.cell);
     const suitability = getCellSuitability(pack, lead.cell, dominantUnit, total);
     const unitDefinition = unitByName(dominantUnit);
     const regiment = {
@@ -225,11 +239,11 @@ function createRegiments({pack, state, nodes, target, spatialMerge, policy, rand
       type: lead.n ? "fleet" : "regiment",
       dominantUnit,
       dominantUnitLabel: unitDefinition.label,
-      icon: unitDefinition.icon,
       status,
       statusLabel: MILITARY_STATUSES[status]?.label || status,
       order: getRegimentOrder(pack, state, lead, status),
       suitability,
+      terrainType,
       movementSpeed: round((unitDefinition.speed || 0.8) * suitability.total, 2),
       pressure: {
         front: round(policy.diplomacyPressure || 1, 2),
@@ -238,7 +252,7 @@ function createRegiments({pack, state, nodes, target, spatialMerge, policy, rand
       name: getRegimentName(pack, state, lead, id, regiments),
       state: state.i
     };
-    regiments.push(regiment);
+    regiments.push(applyRegimentIconProfile(regiment));
   }
 
   return scaleRegimentsToPolicy(regiments, policy);
@@ -365,13 +379,14 @@ function getStateRegimentTargetDetails(state, cellsForState, burgsForState, aler
   const cellFactor = Math.sqrt(Math.max(1, cellsForState.length)) * 0.18;
   const areaFactor = Math.sqrt(Math.max(1, state.area || 1)) * 0.02;
   const economicTargetModifier = getStateEconomicTargetModifier(state);
+  const governmentTargetModifier = getGovernmentEffects(state).militaryTarget;
   const minimum = burgsForState.length ? 1 : 0;
-  const rawTarget = Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor * economicTargetModifier);
+  const rawTarget = Math.round((burgFactor + cellFactor + areaFactor) * Math.sqrt(alert) * densityFactor * economicTargetModifier * governmentTargetModifier);
   const troopTarget = policy?.finalTroops ? Math.ceil(policy.finalTroops / getExpectedRegimentSize()) : 0;
   const burgBackedTarget = getBurgBackedRegimentTarget(burgsForState.length, options);
   const desiredTarget = Math.max(rawTarget, troopTarget);
   const finalTarget = clamp(Math.min(desiredTarget, burgBackedTarget), minimum, 26);
-  return {rawTarget, troopTarget, burgBackedTarget, finalTarget, minimum, densityFactor, economicTargetModifier};
+  return {rawTarget, troopTarget, burgBackedTarget, finalTarget, minimum, densityFactor, economicTargetModifier, governmentTargetModifier};
 }
 
 function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState, targetDetails, nodes, regiments, spatialMerge}) {
@@ -395,7 +410,9 @@ function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState,
     economicPower: round(state.economicPower || 0, 2),
     resourcePotential: round(state.resourcePotential || 0, 2),
     economicTargetModifier: round(targetDetails.economicTargetModifier || 1, 3),
+    governmentTargetModifier: round(targetDetails.governmentTargetModifier || 1, 3),
     militarySupply: round(state.militarySupply || 1, 3),
+    government: state.governmentLabel || state.governmentKey || "none",
     civilizationType: state.civilizationType || "agrarian",
     diplomacyPressure: round(state.militaryPolicy?.diplomacyPressure || 1, 3),
     resourcePressure: round(state.militaryPolicy?.resourcePressure || 1, 3),
@@ -423,8 +440,9 @@ function describeStateMilitaryFunnel({pack, state, cellsForState, burgsForState,
 function buildMilitaryPolicy({state, burgsForState, diplomacyPressure, resourcePressure, alert}) {
   const populationPeople = Math.max(0, (Number(state.rural || 0) + Number(state.urban || 0)) * 1000);
   const dominantCivilization = state.civilizationType || dominantCivilizationFromBurgs(burgsForState);
-  const troopCapRatio = getTroopCapRatio(state, dominantCivilization);
-  const recruitment = 0.012 * (CIVILIZATION_RECRUITMENT[dominantCivilization] || 1);
+  const governmentEffects = getGovernmentEffects(state);
+  const troopCapRatio = getTroopCapRatio(state, dominantCivilization, governmentEffects);
+  const recruitment = 0.012 * (CIVILIZATION_RECRUITMENT[dominantCivilization] || 1) * governmentEffects.militaryRecruitment;
   const economicModifier = getStateEconomicRecruitmentModifier(state);
   const desiredTroops = round(populationPeople * recruitment * economicModifier * diplomacyPressure * resourcePressure);
   const capTroops = round(populationPeople * troopCapRatio);
@@ -444,6 +462,12 @@ function buildMilitaryPolicy({state, burgsForState, diplomacyPressure, resourceP
     dominantCivilization,
     civilizationLabel: state.civilizationLabel || dominantCivilization,
     civilizationProfile: {...(state.civilizationProfile || {})},
+    government: {
+      key: state.governmentKey || "monarchy",
+      label: state.governmentLabel || "君主制",
+      recruitmentModifier: round(governmentEffects.militaryRecruitment || 1, 3),
+      capAdd: round(governmentEffects.militaryCapAdd || 0, 4)
+    },
     posture: militaryPosture(diplomacyPressure),
     diplomacyPressure: round(diplomacyPressure, 3),
     resourcePressure: round(resourcePressure, 3)
@@ -454,6 +478,7 @@ function buildDefaultUnitRatios(state, burgsForState, dominantCivilization) {
   const ratios = Object.fromEntries(MILITARY_UNITS.map(unit => [unit.name, unit.baseRatio]));
   applyRatioModifier(ratios, CIVILIZATION_RATIO_MODIFIERS[dominantCivilization]);
   applyRatioModifier(ratios, CIVILIZATION_RATIO_MODIFIERS[state.type?.toLowerCase?.()]);
+  applyRatioModifier(ratios, getGovernmentEffects(state).unitRatios);
   const ports = burgsForState.filter(burg => burg.port).length;
   if (!ports && state.type !== "Naval") ratios.fleet *= 0.15;
   if (ports >= Math.max(1, burgsForState.length * 0.25)) ratios.fleet *= 1.45;
@@ -489,13 +514,14 @@ function applyRatioModifier(ratios, modifiers) {
   }
 }
 
-function getTroopCapRatio(state, civilization) {
+function getTroopCapRatio(state, civilization, governmentEffects = null) {
   let cap = CIVILIZATION_CAP_RATIOS[civilization] || CIVILIZATION_CAP_RATIOS.agrarian;
   if (state.type === "Nomadic") cap += 0.015;
   if (state.type === "Hunting") cap += 0.008;
   if (state.type === "Naval") cap += 0.004;
   if ((state.diplomacySummary?.Enemy || 0) > 0) cap += 0.006;
   if ((state.diplomacySummary?.Rival || 0) > 1) cap += 0.004;
+  cap += governmentEffects?.militaryCapAdd || 0;
   return clamp(cap, 0.018, 0.095);
 }
 
@@ -732,12 +758,64 @@ function scaleRegimentsToPolicy(regiments, policy) {
     for (const [unit, value] of Object.entries(regiment.u || {})) units[unit] = Math.max(0, round(Number(value || 0) * scale));
     regiment.u = units;
     regiment.a = round(Object.values(units).reduce((sum, value) => sum + value, 0));
+    applyRegimentIconProfile(regiment);
   }
   return regiments.filter(regiment => regiment.a > 0);
 }
 
+function applyRegimentIconProfile(regiment) {
+  const profile = getRegimentIconProfile(regiment);
+  regiment.icon = profile.icon;
+  regiment.iconVariant = profile.variant;
+  regiment.iconLabel = profile.label;
+  return regiment;
+}
+
+function getRegimentIconProfile(regiment) {
+  const dominantUnit = regiment.dominantUnit || dominantUnitName(regiment.u);
+  const troops = Math.max(0, Number(regiment.a || sumUnitTroops(regiment.u)));
+  const unitTroops = Math.max(0, Number(regiment.u?.[dominantUnit] || 0));
+  const share = troops > 0 ? unitTroops / troops : 0;
+  if (regiment.type === "fleet" || regiment.n || dominantUnit === "fleet") {
+    const large = troops >= 8000 || Number(regiment.u?.fleet || 0) >= 6000;
+    return iconProfile(large ? "🚢" : "⛵", large ? "fleet-large" : "fleet-small");
+  }
+  if (isMountainRegiment(regiment, dominantUnit, share)) return iconProfile("👒", "mountain");
+  if (dominantUnit === "archers") {
+    const heavy = isHeavyRegiment(regiment, "archers", share);
+    return iconProfile(heavy ? "🏹⋯" : "🏹", heavy ? "archers-heavy" : "archers");
+  }
+  if (dominantUnit === "cavalry") {
+    const heavy = isHeavyRegiment(regiment, "cavalry", share);
+    return iconProfile(heavy ? "♞◈" : "♞", heavy ? "cavalry-heavy" : "cavalry");
+  }
+  if (dominantUnit === "artillery") return iconProfile("⚙", "artillery");
+  const heavy = isHeavyRegiment(regiment, "infantry", share);
+  return iconProfile(heavy ? "▴🛡" : "▴", heavy ? "infantry-heavy" : "infantry");
+}
+
+function iconProfile(icon, variant) {
+  return {icon, variant, label: REGIMENT_ICON_LABELS[variant] || variant};
+}
+
+function isMountainRegiment(regiment, dominantUnit, share) {
+  if (!["infantry", "archers"].includes(dominantUnit)) return false;
+  return regiment.terrainType === "highland" && share >= 0.34;
+}
+
+function isHeavyRegiment(regiment, unit, share) {
+  const unitTroops = Number(regiment.u?.[unit] || 0);
+  const thresholds = {infantry: 5200, archers: 3600, cavalry: 2800};
+  const threshold = thresholds[unit] || 5000;
+  return (unitTroops >= threshold && share >= 0.42) || (unitTroops >= threshold * 1.55 && share >= 0.32);
+}
+
 function sumRegimentTroops(regiments = []) {
   return regiments.reduce((sum, regiment) => sum + Number(regiment.a || 0), 0);
+}
+
+function sumUnitTroops(units = {}) {
+  return Object.values(units).reduce((sum, value) => sum + Number(value || 0), 0);
 }
 
 function dominantUnitName(units) {

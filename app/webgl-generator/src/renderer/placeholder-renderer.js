@@ -1583,7 +1583,9 @@ function getMilitaryIconItems(map) {
       type: regiment.type,
       name: regiment.name || `军团 #${regiment.i}`,
       stateName: regiment.stateName || map?.politics?.states?.[regiment.state]?.name || "none",
-      icon: regiment.icon || militaryIconForUnit(regiment.dominantUnit),
+      icon: militaryIconForRegiment(regiment),
+      iconVariant: regiment.iconVariant || militaryIconVariantForUnit(regiment.dominantUnit),
+      iconLabel: regiment.iconLabel,
       troops: Number(regiment.a || 0),
       status: regiment.status,
       statusLabel: regiment.statusLabel,
@@ -1615,6 +1617,7 @@ function militaryIconTooltip(regiment, map) {
 function militaryIconClassName(item) {
   const classes = ["military-map-icon"];
   if (item.type === "fleet") classes.push("military-map-icon--fleet");
+  if (item.iconVariant) classes.push(`military-map-icon--${item.iconVariant}`);
   return classes.join(" ");
 }
 
@@ -1634,7 +1637,7 @@ function militaryObjectFromIconItem(item) {
     dominantUnitLabel: regiment.dominantUnitLabel || item.dominantUnitLabel,
     troops: regiment.a ?? item.troops,
     units: regiment.u,
-    icon: regiment.icon || item.icon,
+    icon: militaryIconForRegiment(regiment) || item.icon,
     cell: regiment.cell,
     x: regiment.x,
     y: regiment.y,
@@ -1661,11 +1664,51 @@ function militaryIconScale(scale, item) {
 }
 
 function militaryIconForUnit(unit) {
-  if (unit === "archers") return "弓";
-  if (unit === "cavalry") return "骑";
-  if (unit === "artillery") return "械";
-  if (unit === "fleet") return "舟";
-  return "步";
+  if (unit === "archers") return "🏹";
+  if (unit === "cavalry") return "♞";
+  if (unit === "artillery") return "⚙";
+  if (unit === "fleet") return "⛵";
+  return "▴";
+}
+
+function militaryIconForRegiment(regiment = {}) {
+  const sanitized = sanitizeMilitaryIcon(regiment.icon);
+  if (sanitized) return sanitized;
+  if (regiment.iconVariant) return militaryIconForVariant(regiment.iconVariant);
+  return militaryIconForUnit(regiment.dominantUnit);
+}
+
+function sanitizeMilitaryIcon(icon) {
+  const value = String(icon || "").trim();
+  if (!value) return "";
+  const legacy = {
+    "步": "▴",
+    "弓": "🏹",
+    "骑": "♞",
+    "械": "⚙",
+    "舟": "⛵"
+  };
+  if (legacy[value]) return legacy[value];
+  return /[\u4e00-\u9fff]/u.test(value) ? "" : value;
+}
+
+function militaryIconForVariant(variant) {
+  if (variant === "fleet-large") return "🚢";
+  if (variant === "fleet-small") return "⛵";
+  if (variant === "archers-heavy") return "🏹⋯";
+  if (variant === "cavalry-heavy") return "♞◈";
+  if (variant === "infantry-heavy") return "▴🛡";
+  if (variant === "mountain") return "👒";
+  if (variant === "artillery") return "⚙";
+  return militaryIconForUnit(variant);
+}
+
+function militaryIconVariantForUnit(unit) {
+  if (unit === "archers") return "archers";
+  if (unit === "cavalry") return "cavalry";
+  if (unit === "artillery") return "artillery";
+  if (unit === "fleet") return "fleet-small";
+  return "infantry";
 }
 
 function formatMilitaryTroops(value) {

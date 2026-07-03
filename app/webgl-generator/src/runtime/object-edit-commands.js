@@ -1,5 +1,6 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
+import {getStateFullName} from "../generator/names.js";
 
 const OBJECT_NAME_EFFECTS = Object.freeze({
   render: "draw",
@@ -254,7 +255,7 @@ function writeStateName(map, stateId, name) {
   const state = map?.politics?.states?.[stateId];
   if (!state) throw new Error(`找不到国家 #${stateId}`);
   state.name = name;
-  state.fullName = state.formName ? `${name}${state.formName}` : name;
+  state.fullName = getStateFullName(name, state.formName);
 }
 
 function restoreStateName(map, target, previous) {

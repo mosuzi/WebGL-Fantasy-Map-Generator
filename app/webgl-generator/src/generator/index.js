@@ -170,7 +170,8 @@ export function createGenerationSummary(options, grid, features, climate, societ
       regions: grid.cells.region.slice(0, 12),
       stateCount: politics.metadata.states,
       provinceCount: politics.metadata.provinces,
-      regionCount: politics.metadata.regions
+      regionCount: politics.metadata.regions,
+      stateGovernments: politics.metadata.stateGovernments || {}
     },
     diplomacy: diplomacy?.metadata || null,
     settlements: {

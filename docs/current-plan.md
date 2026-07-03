@@ -19,7 +19,9 @@
 - 浮动面板统一限制在视口内：最大高度不超过宿主视口 `97%`，最小高度 `200px`，面板内容超出后在 body 内滚动。
 - 列表选中态已补稳定 id 规范化：共享对象表格、国家/省份/城市/文化/宗教/路线/河流/marker/外交面板统一处理数字 id 与字符串 id，避免“摘要显示目标对象但详情区仍显示未选中”的半选中状态。
 - 列表面板详细编辑入口已第一轮收束为图标二级操作：国家、省份、城市、文化、宗教、河流、资源/marker 和外交关系面板默认显示详情与图标工具条，重命名、调色、继承、人口、首都、剪影、宽度、外交关系等细项点击图标后再展开。
-- 国家根名现在优先从所属文化 `root` 派生，同文化多国用“东/西/新/古”等变体保持关联；国家形制继续按文化类型生成，例如游牧文化倾向 `汗国 / 诸帐`，海洋文化倾向 `海国 / 诸港 / 海盟`。
+- 国家根名现在优先从所属文化 `root` 派生，同文化多国用“东/西/新/古”等变体保持关联；国家后缀不再使用“朝”，改由政体、国家规模和自我定位决定，小国多为 `国`，君主国家可为 `王国 / 帝国`，共和或联邦国家可为 `共和国 / 联邦 / 联邦共和国`，游牧、神权和部盟国家保留 `汗国 / 教国 / 部盟` 等特化国号。
+- 政体系统第一刀已完成：生成国家时会随机赋予 `君主制 / 帝制官僚 / 封建王权 / 共和制 / 商业共和国 / 联邦制 / 邦联制 / 神权制 / 汗廷 / 部盟 / 军府 / 寡头制` 等政体，并写入 `governmentKey / governmentLabel / governmentFamily / government`；政体会温和影响经济税率和贸易、外交亲和/冲突/附庸倾向、军事征兵/上限/兵种偏好；国家管理面板新增二级“调整政体”操作，详见 `docs/task-notes/government-system-and-state-title-plan.md`。
+- 军事单位地图图标已从汉字兵种牌改为抽象符号：舰队按规模显示大船/帆船，弓兵、骑兵、步兵和器械分别使用弓、马形、枪头和齿轮符号，重装兵种使用复合符号，山地兵以草帽符号表示；渲染层会把旧存档中的“步/弓/骑/械/舟”兼容映射为新图标。
 - marker 细化第一刀已完成：旧的统一浅白点改为按类别着色，marker 数据补充中文 `label`、`category/categoryLabel`、`resourceKey/resourceLabel`、`economicValue` 和 RGBA `color`；新增盐湖、稀有生物、宝石矿脉等资源 marker，矿山候选也扩展到高地适居资源 cell。
 - marker 资源点类型细分第二刀已完成：资源候选从原先少量通用类型扩展到 `26` 种资源类型，新增采石场、黏土坑、煤田、硫磺泉、硝石洞、琥珀海岸、珍珠滩、珊瑚礁、渔场、良港、森林木场、树脂林、药草谷、染料草场、香料林、茶山、丝茧桑园、马场、牧盐草甸、绿洲和圣泉；默认 marker 总量公式不变，按地形、海岸、湖泊、河流、生物群系、温度、降水、人口、适居度和粗糙度为资源候选排序。
 - marker 资源经济已接入国家/省份对象：生成 marker 时按 `state/province` 汇总 `resourcePotential / markerEconomicPotential / resourceTypes / markerCategories`，水域资源会归属到邻接陆地政区；经济阶段新增 `economicPower` 和 `economy.metadata.markerEconomy`，但暂不改 source 已收敛的税收/国库公式。
@@ -75,8 +77,9 @@
 6. 文化/宗教继承结构目前只影响数据、统计和手动管理；后续可以让派生关系参与名称变体、图标预制、宗教改革事件、文化同化速度、国家合法性和国力计算。
 7. 外交系统当前已生成关系、附庸、战争历史、管理面板、专题着色、关系矩阵和 CSV/JSON 导出；战争尚未驱动军事行动或地图事件，后续可继续做战争事件、军事行动、经济制裁和贸易偏好联动。
 8. 重新生成后的内部状态提示已收敛到 debug 模式；若后续要给普通用户反馈，应改为简短 toast 或状态灯，而不是展示派生系统和调试细节。
-9. 再下一步可以继续补文化预制图标包和批量应用入口，或进入资源点到 goods/market/deals 的正式贸易链路。
-10. 高度图导入工作台已完成灰度预览第一刀；后续若继续做“第一优先”，应进入轻量色板量化、自动亮度/色相/FMG 色带映射和手动色块赋高，而不是把彩色识别塞回灰度导入函数。
+9. 政体系统当前已进入生成、经济、外交、军事和国家面板；后续应补独立“政体管理”总览、政体图层、政体事件和批量调整。
+10. 再下一步可以继续补文化预制图标包和批量应用入口，或进入资源点到 goods/market/deals 的正式贸易链路。
+11. 高度图导入工作台已完成灰度预览第一刀；后续若继续做“第一优先”，应进入轻量色板量化、自动亮度/色相/FMG 色带映射和手动色块赋高，而不是把彩色识别塞回灰度导入函数。
 
 ## 2026-06-18 计划复位
 
@@ -752,7 +755,7 @@ http://127.0.0.1:5410
 112. 用户外壳、开发模式、导入导出和命名策略进入新阶段：详见 `docs/task-notes/user-facing-shell-debug-export-and-naming-plan.md`。优先顺序为全屏地图与开发模式浮动面板、比例尺图层、README 和简介 tab；Element Plus 迁移、完整导入导出、灰度高度图导入和春秋古国风命名作为后续独立阶段推进并分别提交。
 113. 用户外壳第一批已完成：常驻侧栏移除，地图默认全屏显示；生成控制迁入可拖动“控制面板”浮层，调试、性能、WebGL 统计和内部状态迁入“开发模式”浮层。开发模式仅在 `?debug=1` 或 `window.__webglGeneratorDebug.enabled = true` 时可见，收起后保留小按钮；普通模式只保留地图、图例、悬停信息、比例尺和控制入口。图层新增“比例尺”开关，比例尺按当前相机缩放和单位配置显示实际距离。README 与控制面板“简介”tab 已补齐项目定位、仓库链接和后续计划。后续优先进入 Element Plus 按需迁移、完整导入导出、灰度高度图导入和春秋古国风命名阶段。
 114. 本地导入导出第一刀已完成：简介 tab 新增导出图片、导出地图数据、导出 GeoJSON 和导入地图数据入口。完整地图数据格式为 `webgl-generator-map v1`，保存 `options / metadata / map`，并显式序列化 typed arrays，导入后会重建 renderer、清空选择和编辑历史、刷新对象面板与运行统计。GeoJSON 先按 pack cell 输出 Polygon FeatureCollection，属性包含 height、feature、biome、state/province/culture/religion 名称和人口。PNG 导出现在会合成 WebGL canvas、地图尺寸摘要和比例尺；仍暂不合成完整 DOM 标签、图例或浮动面板。后续可做压缩、范围选择、更多所见即所得 overlay 合成和格式兼容诊断。
-115. 国家命名策略第一刀已完成：国家根名不再高概率复用文化根名，改为优先抽取春秋/周代诸侯国启发的单字与短根名，并用 `state-family` 去重避免同一根名反复派生“东/西/南/北”相邻变体；文化根名只作为低概率首选。国家形制收敛为“国、侯国、伯国、邦、朝”和少量地貌特化形式，不再生成“王朝、诸帐、林盟、水府、诸州”等旧形制。三组 seed 抽样中，20 个国家的短根名为 `19-20` 个、单字根名为 `8-11` 个、同根重复为 `0`。
+115. 国家命名策略第一刀已完成：国家根名不再高概率复用文化根名，改为优先抽取春秋/周代诸侯国启发的单字与短根名，并用 `state-family` 去重避免同一根名反复派生“东/西/南/北”相邻变体；文化根名只作为低概率首选。该阶段曾把国家形制收敛到“国、侯国、伯国、邦、朝”和少量地貌特化形式，后续已被政体驱动的国号规则取代，不再使用“朝 / 侯国 / 伯国 / 自由邦”等旧目标。三组 seed 抽样中，20 个国家的短根名为 `19-20` 个、单字根名为 `8-11` 个、同根重复为 `0`。
 116. Element Plus 迁移第一刀已完成：新增 `element-plus`、`@element-plus/icons-vue` 和按需导入相关插件，Vite 仅启用 `unplugin-vue-components` 的 `ElementPlusResolver({importStyle: "css"})`，不全局 `app.use(ElementPlus)`，不引入整包 CSS。`UiButton` 已改为 `ElButton` 适配层，同时保留原 `variant / active / buttonType` API 和 `.primary-action / .secondary-action` 样式类。生产构建 gzip 体积从命名阶段约 `208.39KB JS / 8.40KB CSS` 增至 `218.56KB JS / 12.10KB CSS`，作为后续迁移体积基线。
 117. 灰度高度图导入第一刀已完成：生成 tab 的地形配置后新增本地图片导入、最低/最高高度滑块和黑白反转开关；导入时浏览器读取图片像素，按亮度 min/max 自动归一化，并按 `grid.points` 坐标采样为 `grayscale-import` 高度模板，再走完整 `generatePlaceholderMap()` 派生链路。采样型 heightmap 会把下游有效 `heightmapTemplate` 也改为 `grayscale-import`，避免继续触发导入前下拉模板的专属启发式。合成 `32x24` 灰度 PNG 端到端验证中，设置 `10..90` 后实际高度范围为 `10..90`，checksum 变化为 `0de77532 -> f26a4db9`，并重新生成 `features=5 / packCells=9709 / states=20 / cities=1349 / rivers=121`。后续可补裁剪/保持比例、平滑/降噪和原版彩色高度图方案识别。
 118. Element Plus 迁移第二刀已完成：`UiFilterInput` 改为 `ElInput`，`UiTextEditField` 改为 `ElInput`，`UiNumberField` 改为 `ElInputNumber`，`UiSortBar` 复用 `UiButton/ElButton`；业务面板调用 API 不变。新增 Element 输入暗色适配 CSS，避免旧 `*-panel-controls input` 样式打坏 Element 输入内部结构。生产构建约 `756.84KB JS / 234.58KB gzip`、`93.80KB CSS / 14.38KB gzip`；城市面板验证中筛选框、排序按钮、重命名浮层和人口数字浮层均正常。后续迁移 `UiSliderField / UiSwitchField` 前必须先设计原生 DOM id 桥，否则会断 runtime 读取。
@@ -782,7 +785,7 @@ http://127.0.0.1:5410
 142. 城市要素 GeoJSON 第一刀已完成：`createMapFeatureGeoJson()` 新增 `city` Point 图层，properties 输出 id、burg、name、type、group、population、capital、provincial、port、state/province/culture/religion、cell、packCell、hasNote 和 note；`layerSet` 更新为 `cities-routes-rivers-markers-zones`。后续可继续补国家/省份 dissolve、分层选择和范围导出。
 143. 要素 GeoJSON 分层选择第一刀已完成：简介 tab 新增“要素 GeoJSON 图层”开关，可独立控制 city、route、river、marker、zone 是否进入 `.features.geojson`；导出时 `createMapFeatureGeoJson(map, {layers})` 只生成选中图层，metadata 的 `layerSet` 和各图层计数同步反映选择。后续可继续补国家/省份 dissolve、范围导出和 CRS 元数据配置。
 144. 政治面 GeoJSON / dissolve 已先落实计划文档：`docs/task-notes/political-geojson-dissolve-plan.md` 区分了第一阶段 `state/province` 非 dissolve MultiPolygon 集合与第二阶段真正拓扑 dissolve 外轮廓，记录了字段、算法、风险和验收。后续不要把 pack cell 集合误称为真正 dissolve；若引入几何库，需要先评估懒加载或拆包。
-145. 春秋古国风命名第二刀已完成：国家根名词库补入更多周代/春秋小国启发的单字和短根名，例如单、芮、舒、郯、鄣、鄀、轸、邿、鄅、根牟、须句、逼阳、钟吾和群舒分支；国家根名抽取更偏向古国短名，文化地貌词根概率降低。古国根名定义国家形制时优先使用“国、侯国、伯国、邦、朝”，避免再出现“芮海邦 / 郯河国”这类单字古国根名加地貌形制的怪名；`state-family` 也补了 `舒*`、`曾/鄫/缯`、`谭/郯` 的近源归并。五组 seed 抽样中，20 个国家的短根名为 `19-20` 个、单字根名为 `8-13` 个、同根重复为 `0`。
+145. 春秋古国风命名第二刀已完成：国家根名词库补入更多周代/春秋小国启发的单字和短根名，例如单、芮、舒、郯、鄣、鄀、轸、邿、鄅、根牟、须句、逼阳、钟吾和群舒分支；国家根名抽取更偏向古国短名，文化地貌词根概率降低。该阶段曾让古国根名优先使用短国号以避免“芮海邦 / 郯河国”这类怪名；后续已升级为政体、规模和自我定位共同决定国号后缀。`state-family` 也补了 `舒*`、`曾/鄫/缯`、`谭/郯` 的近源归并。五组 seed 抽样中，20 个国家的短根名为 `19-20` 个、单字根名为 `8-13` 个、同根重复为 `0`。
 146. 政治面 GeoJSON 第一阶段已完成：简介 tab 的“要素 GeoJSON 图层”新增默认关闭的“国家面 / 省份面”开关，导出时会按 `pack.cells.state / province` 分组陆地 cell，输出 `state` 与 `province` MultiPolygon Feature，并在 properties 中明确 `dissolved=false`。构建产物验证中开启国家面和省份面后导出 `states-provinces-cities-routes-rivers-markers-zones`，包含 state `20`、province `213`、city `817`、route `602`、river `164`、marker `44`、zone `9`，政治面 `233` 个且 bad `0`，console/page error 为 `0`。后续真正 dissolve 仍按计划文档进入拓扑边界合并原型。
 147. GeoJSON bbox 第一刀已完成：pack cell GeoJSON 与要素 GeoJSON 导出都会为每个 Feature 和整个 FeatureCollection 写入标准 `bbox = [minLon, minLat, maxLon, maxLat]`。Node 验证中 pack cell 与 `states-provinces-cities` 要素导出的 collection bbox 和前 20 个 feature bbox 均有效；`pnpm run build:app` 通过，构建产物约 `957.83KB JS / 295.96KB gzip`、`149.39KB CSS / 22.20KB gzip`。这为后续范围导出、视口裁剪和外部 GIS 快速索引铺基础。
 148. 备注摘要导出第一刀已完成：备注总览面板新增“导出备注摘要”，会导出当前筛选结果为 `webgl-generator-notes-summary v1` JSON，包含 seed、checksum、筛选备注数、总备注数、note id、kind、对象 id、名称、正文、字数、孤儿状态和时间戳。构建产物验证中注入 marker 与 label 两条备注后，备注总览显示 `备注2 / 可定位2 / 孤儿备注0 / 筛选2`，导出 `fmg-stage-2-1-0857e6f9.notes.json`，两条备注均保留正文和定位状态，console/page error 为 `0`。

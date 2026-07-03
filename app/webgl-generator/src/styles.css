@@ -1105,8 +1105,8 @@ select:disabled {
   position: absolute;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-width: 44px;
+  gap: 5px;
+  min-width: 48px;
   height: 24px;
   padding: 2px 7px 2px 4px;
   border: 1px solid rgba(255, 221, 142, 0.46);
@@ -1135,13 +1135,17 @@ select:disabled {
 
 .military-map-icon-symbol {
   display: inline-grid;
-  width: 17px;
+  min-width: 18px;
+  width: auto;
   height: 17px;
+  padding: 0 3px;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 999px;
   background: rgba(213, 162, 65, 0.88);
   color: #15201d;
-  font-size: 11px;
+  font-family: "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .military-map-icon-count {
@@ -1156,6 +1160,30 @@ select:disabled {
 
 .military-map-icon--fleet .military-map-icon-symbol {
   background: rgba(94, 170, 222, 0.9);
+}
+
+.military-map-icon--archers .military-map-icon-symbol,
+.military-map-icon--archers-heavy .military-map-icon-symbol {
+  background: rgba(107, 178, 112, 0.9);
+}
+
+.military-map-icon--cavalry .military-map-icon-symbol,
+.military-map-icon--cavalry-heavy .military-map-icon-symbol {
+  background: rgba(218, 178, 91, 0.92);
+}
+
+.military-map-icon--infantry-heavy .military-map-icon-symbol,
+.military-map-icon--cavalry-heavy .military-map-icon-symbol,
+.military-map-icon--archers-heavy .military-map-icon-symbol {
+  background: rgba(178, 190, 188, 0.92);
+}
+
+.military-map-icon--mountain .military-map-icon-symbol {
+  background: rgba(175, 157, 92, 0.92);
+}
+
+.military-map-icon--artillery .military-map-icon-symbol {
+  background: rgba(199, 119, 89, 0.92);
 }
 
 .military-map-icon.selected {
@@ -2024,6 +2052,7 @@ select:disabled {
 .state-select-field,
 .state-color-field,
 .state-capital-field,
+.state-government-field,
 .state-range-field {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) 84px;
@@ -2046,11 +2075,24 @@ select:disabled {
   grid-template-columns: minmax(0, 1fr) 88px;
 }
 
+.state-government-field {
+  grid-template-columns: minmax(0, 1fr) 96px;
+}
+
+.state-government-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #9fb0ba;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .state-note-editor {
   margin-top: 8px;
 }
 
-.state-capital-field label {
+.state-capital-field label,
+.state-government-field label {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   align-items: center;
@@ -2059,6 +2101,7 @@ select:disabled {
 
 .state-select-field select,
 .state-capital-field select,
+.state-government-field select,
 .state-range-field input {
   width: 100%;
 }

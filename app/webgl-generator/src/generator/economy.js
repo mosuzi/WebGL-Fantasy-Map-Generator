@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {getGovernmentEffects} from "./governments.js";
 
 const RAW_GOODS = [
   "稻米",
@@ -638,8 +639,11 @@ function nearestMarketId(point, markets) {
 
 function initializeTaxRates(states, random) {
   for (const state of states) {
-    state.salesTax = round(0.12 + random.range(0, 0.06), 3);
-    state.pollTax = round(0.16 + random.range(0, 0.07), 3);
+    const governmentEffects = getGovernmentEffects(state);
+    state.salesTax = round((0.12 + random.range(0, 0.06)) * governmentEffects.taxMultiplier, 3);
+    state.pollTax = round((0.16 + random.range(0, 0.07)) * governmentEffects.taxMultiplier, 3);
+    state.governmentEconomicModifier = round(governmentEffects.economyMultiplier, 3);
+    state.governmentTradeModifier = round(governmentEffects.tradeMultiplier, 3);
     state.treasury = 0;
   }
 }
@@ -827,9 +831,11 @@ function getDealValueScale(options) {
 
 function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1, source = "scheduled"}) {
   const sellerState = partyState(pack, sellerType, seller);
-  const salesTax = statesById.get(sellerState)?.salesTax || 0.15;
+  const sellerStateItem = statesById.get(sellerState);
+  const salesTax = sellerStateItem?.salesTax || 0.15;
+  const tradeMultiplier = sellerStateItem?.governmentTradeModifier || 1;
   const roundedUnits = round(units);
-  const roundedPrice = round(price * valueScale);
+  const roundedPrice = round(price * valueScale * tradeMultiplier);
   const taxable = deals.length % 5 === 0;
   const tax = taxable ? round(roundedUnits * roundedPrice * salesTax * 3) : 0;
   const deal = {
@@ -937,7 +943,9 @@ function politicalAverages(groups) {
 function applyPoliticalPowerFields(group, averages, context) {
   const markerPotential = Number(group.markerEconomicPotential || 0);
   const resourcePotential = Number(group.resourcePotential || 0);
-  const economicPower = Number(context.treasury || 0) + markerPotential;
+  const governmentEffects = context.kind === "state" ? getGovernmentEffects(group) : null;
+  const governmentEconomyModifier = governmentEffects?.economyMultiplier || 1;
+  const economicPower = (Number(context.treasury || 0) + markerPotential) * governmentEconomyModifier;
   const populationScore = relativeScore(context.population, averages.population, 42);
   const territoryScore = relativeScore(context.area, averages.area, context.kind === "state" ? 18 : 14);
   const settlementScore = relativeScore(context.burgs, averages.burgs, context.kind === "state" ? 20 : 16);
@@ -947,6 +955,10 @@ function applyPoliticalPowerFields(group, averages, context) {
 
   group.resourcePower = round(resourceScore, 2);
   group.economicPower = round(economicPower, 2);
+  if (context.kind === "state") {
+    group.governmentEconomicModifier = round(governmentEconomyModifier, 3);
+    group.governmentTradeModifier = round(governmentEffects?.tradeMultiplier || 1, 3);
+  }
   group.populationPower = round(populationScore, 2);
   group.territoryPower = round(territoryScore, 2);
   group.settlementPower = round(settlementScore, 2);

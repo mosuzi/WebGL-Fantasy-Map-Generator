@@ -1,3 +1,5 @@
+import {setStateGovernment} from "../generator/governments.js";
+
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
@@ -37,6 +39,14 @@ const STATE_COLOR_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["state-color", "cell-colors", "object-panels"])
+});
+
+const STATE_GOVERNMENT_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["state-government", "object-name", "labels", "object-panels", "defer:economy", "defer:diplomacy", "defer:military"])
 });
 
 export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} = {}) {
@@ -91,6 +101,33 @@ export function createSetStateColorCommand(stateId, color, {beforeColor = null, 
     },
     isNoop() {
       return normalizedStateId <= 0 || !after || before === after;
+    }
+  };
+}
+
+export function createSetStateGovernmentCommand(stateId, governmentKey, {label = "国家政体"} = {}) {
+  const normalizedStateId = normalizeStateId(stateId);
+  const normalizedGovernmentKey = String(governmentKey || "").trim();
+  let previous = null;
+  return {
+    label: `${label} #${normalizedStateId}`,
+    effects: {
+      ...STATE_GOVERNMENT_EFFECTS,
+      affected: [{kind: "state", id: normalizedStateId}]
+    },
+    apply(context) {
+      previous ??= snapshotStateGovernment(context.map, normalizedStateId);
+      setStateGovernment(context.map, normalizedStateId, normalizedGovernmentKey);
+      markDerivedStale(context.map, ["economy", "diplomacy", "military"]);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的政体快照");
+      restoreStateGovernment(context.map, previous);
+      markDerivedStale(context.map, ["economy", "diplomacy", "military"]);
+    },
+    isNoop(context) {
+      const state = context.map?.politics?.states?.[normalizedStateId];
+      return normalizedStateId <= 0 || !state || !normalizedGovernmentKey || state.governmentKey === normalizedGovernmentKey;
     }
   };
 }
@@ -628,6 +665,8 @@ function markDerivedStale(map, systems) {
   if (map?.military?.metadata) map.military.metadata.stale = stale.systems.includes("military");
   if (map?.zones?.metadata) map.zones.metadata.stale = stale.systems.includes("zones");
   if (map?.markers?.metadata) map.markers.metadata.stale = stale.systems.includes("state-markers");
+  if (map?.economy?.metadata) map.economy.metadata.stale = stale.systems.includes("economy");
+  if (map?.diplomacy?.metadata) map.diplomacy.metadata.stale = stale.systems.includes("diplomacy");
 }
 
 function snapshotDerivedStale(map) {
@@ -635,7 +674,9 @@ function snapshotDerivedStale(map) {
     map: map?.metadata?.derivedStale ? {...map.metadata.derivedStale, systems: [...(map.metadata.derivedStale.systems || [])]} : null,
     military: map?.military?.metadata ? map.military.metadata.stale : undefined,
     zones: map?.zones?.metadata ? map.zones.metadata.stale : undefined,
-    markers: map?.markers?.metadata ? map.markers.metadata.stale : undefined
+    markers: map?.markers?.metadata ? map.markers.metadata.stale : undefined,
+    economy: map?.economy?.metadata ? map.economy.metadata.stale : undefined,
+    diplomacy: map?.diplomacy?.metadata ? map.diplomacy.metadata.stale : undefined
   };
 }
 
@@ -648,6 +689,8 @@ function restoreDerivedStale(map, snapshot) {
   if (map?.military?.metadata && snapshot.military !== undefined) map.military.metadata.stale = snapshot.military;
   if (map?.zones?.metadata && snapshot.zones !== undefined) map.zones.metadata.stale = snapshot.zones;
   if (map?.markers?.metadata && snapshot.markers !== undefined) map.markers.metadata.stale = snapshot.markers;
+  if (map?.economy?.metadata && snapshot.economy !== undefined) map.economy.metadata.stale = snapshot.economy;
+  if (map?.diplomacy?.metadata && snapshot.diplomacy !== undefined) map.diplomacy.metadata.stale = snapshot.diplomacy;
 }
 
 function normalizeStateId(value) {
@@ -664,6 +707,51 @@ function setStateColor(map, stateId, color) {
   const state = map?.politics?.states?.[stateId];
   if (!state || !color) return;
   state.color = color;
+}
+
+function snapshotStateGovernment(map, stateId) {
+  return {
+    stateId,
+    politics: snapshotGovernmentFields(map?.politics?.states?.[stateId]),
+    pack: map?.pack?.states?.[stateId] === map?.politics?.states?.[stateId] ? null : snapshotGovernmentFields(map?.pack?.states?.[stateId])
+  };
+}
+
+function snapshotGovernmentFields(state) {
+  if (!state) return null;
+  return {
+    governmentKey: state.governmentKey,
+    governmentLabel: state.governmentLabel,
+    governmentFamily: state.governmentFamily,
+    governmentCategory: state.governmentCategory,
+    governmentEra: state.governmentEra,
+    governmentSize: state.governmentSize,
+    selfStyledGreat: state.selfStyledGreat,
+    government: clonePlain(state.government),
+    form: state.form,
+    formName: state.formName,
+    fullName: state.fullName,
+    governmentEconomicModifier: state.governmentEconomicModifier,
+    governmentTradeModifier: state.governmentTradeModifier
+  };
+}
+
+function restoreStateGovernment(map, snapshot) {
+  restoreGovernmentFields(map?.politics?.states?.[snapshot.stateId], snapshot.politics);
+  if (snapshot.pack) restoreGovernmentFields(map?.pack?.states?.[snapshot.stateId], snapshot.pack);
+}
+
+function restoreGovernmentFields(state, snapshot) {
+  if (!state || !snapshot) return;
+  for (const key of Object.keys(snapshot)) {
+    if (snapshot[key] === undefined) delete state[key];
+    else state[key] = clonePlain(snapshot[key]);
+  }
+}
+
+function clonePlain(value) {
+  if (value === undefined || value === null || typeof value !== "object") return value;
+  return JSON.parse(JSON.stringify(value));
 }
 
 function findBurgForCity(map, city) {

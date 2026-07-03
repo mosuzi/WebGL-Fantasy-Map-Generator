@@ -601,7 +601,7 @@ try {
       }
 
       function countOldPoliticalFormHits(states = []) {
-        const oldForm = /公国|侯国|自由邦|共和国|帝国|联邦|邦联/u;
+        const oldForm = /王朝|朝|自由邦|公国|侯国|伯国/u;
         return countByPredicate(states, state => oldForm.test(`${state?.name || ""}${state?.formName || ""}${state?.fullName || ""}`));
       }
 

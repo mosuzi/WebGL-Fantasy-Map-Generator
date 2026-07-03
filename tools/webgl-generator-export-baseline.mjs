@@ -527,6 +527,7 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
       stateFullNames: countByPredicate(states, item => Boolean(item?.fullName)),
       stateFormNames: countByPredicate(states, item => Boolean(item?.formName)),
       stateForms: countByKey(states, item => item?.formName || "none"),
+      stateGovernments: countByKey(states, item => item?.governmentLabel || item?.governmentKey || "none"),
       stateTypes: countByKey(states, item => item?.type || "none"),
       cultureTypes: countByKey(cultures, item => item?.type || "none"),
       cultureNameStyles: countByKey(cultures, item => item?.nameStyle || "default"),
@@ -537,6 +538,7 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
         name: item.name || "",
         fullName: item.fullName || "",
         formName: item.formName || "",
+        government: item.governmentLabel || item.governmentKey || "",
         type: item.type || "",
         culture: item.culture || 0
       })),
@@ -593,7 +595,7 @@ function describeCandidateLateStages({grid, pack, society, politics, settlements
 }
 
 function countOldPoliticalFormHits(states = []) {
-  const oldForm = /公国|侯国|自由邦|共和国|帝国|联邦|邦联/u;
+  const oldForm = /王朝|朝|自由邦|公国|侯国|伯国/u;
   return countByPredicate(states, state => oldForm.test(`${state?.name || ""}${state?.formName || ""}${state?.fullName || ""}`));
 }
 
