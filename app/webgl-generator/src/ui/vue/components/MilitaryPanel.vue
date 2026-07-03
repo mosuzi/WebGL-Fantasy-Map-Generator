@@ -228,10 +228,20 @@
       />
     </template>
     <template #status>
-      <div class="military-status-panel">
+      <div class="military-status-panel military-editor-panel">
         <div class="military-status-heading">
           <strong>{{ selected?.name || "未选中军团" }}</strong>
           <span>{{ selected?.stateName || "无所属国家" }}</span>
+        </div>
+        <div class="military-editor-context">
+          <span>
+            <small>当前态势</small>
+            <b>{{ selected?.statusLabel || "无" }}</b>
+          </span>
+          <span>
+            <small>当前命令</small>
+            <b>{{ selected?.orderLabel || "无" }}</b>
+          </span>
         </div>
         <UiSelectField
           input-id="military-status-editor"
@@ -246,10 +256,20 @@
       </div>
     </template>
     <template #batchStatus>
-      <div class="military-status-panel">
+      <div class="military-status-panel military-editor-panel">
         <div class="military-status-heading">
           <strong>当前筛选 {{ formatNumber(visibleRows.length) }} 支</strong>
           <span>只影响当前表格中的可见军团</span>
+        </div>
+        <div class="military-editor-context">
+          <span>
+            <small>国家筛选</small>
+            <b>{{ selectedStateFilterLabel }}</b>
+          </span>
+          <span>
+            <small>态势筛选</small>
+            <b>{{ selectedStatusFilterLabel }}</b>
+          </span>
         </div>
         <UiSelectField
           input-id="military-batch-status-editor"
@@ -264,10 +284,20 @@
       </div>
     </template>
     <template #station>
-      <div class="military-status-panel">
+      <div class="military-status-panel military-editor-panel">
         <div class="military-status-heading">
           <strong>{{ selected?.name || "未选中军团" }}</strong>
           <span>驻地 {{ selected?.stationLabel || "未知" }} / 基地 {{ selected?.baseLabel || "未知" }}</span>
+        </div>
+        <div class="military-editor-context">
+          <span>
+            <small>当前驻地</small>
+            <b>{{ selected?.stationLabel || "未知" }}</b>
+          </span>
+          <span>
+            <small>固定基地</small>
+            <b>{{ selected?.baseLabel || "未知" }}</b>
+          </span>
         </div>
         <UiSelectField
           input-id="military-station-destination"
@@ -283,10 +313,20 @@
       </div>
     </template>
     <template #battle>
-      <div class="military-status-panel">
+      <div class="military-status-panel military-editor-panel">
         <div class="military-status-heading">
           <strong>{{ selected?.name || "未选中军团" }}</strong>
           <span>{{ selectedLatestBattleEventLabel }}</span>
+        </div>
+        <div class="military-editor-context">
+          <span>
+            <small>战报链</small>
+            <b>{{ selected?.campaignLabel || "本地战报" }}</b>
+          </span>
+          <span>
+            <small>记录数</small>
+            <b>{{ formatNumber(selectedBattleEventTotal) }}</b>
+          </span>
         </div>
         <UiSelectField
           input-id="military-battle-event-chain"
@@ -336,10 +376,20 @@
       </div>
     </template>
     <template #ratios>
-      <div class="military-ratio-panel">
+      <div class="military-ratio-panel military-editor-panel">
         <div class="military-ratio-heading">
           <strong>{{ selectedState.name }}</strong>
           <span>{{ ratioTotalLabel }}</span>
+        </div>
+        <div class="military-editor-context">
+          <span>
+            <small>国家</small>
+            <b>{{ selectedState.name }}</b>
+          </span>
+          <span>
+            <small>比例合计</small>
+            <b>{{ ratioTotalLabel }}</b>
+          </span>
         </div>
         <div class="military-ratio-list">
           <div v-for="unit in ratioBreakdown" :key="unit.name" class="military-ratio-item">
@@ -517,6 +567,8 @@ const statusOptions = computed(() => {
       .map(([value, label]) => ({value, label}))
   ];
 });
+const selectedStateFilterLabel = computed(() => stateOptions.value.find(option => String(option.value) === String(props.state.selectedStateId))?.label || "全部国家");
+const selectedStatusFilterLabel = computed(() => statusOptions.value.find(option => String(option.value) === String(props.state.selectedStatus))?.label || "全部态势");
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);

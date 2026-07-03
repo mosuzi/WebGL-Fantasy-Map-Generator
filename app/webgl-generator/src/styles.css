@@ -5746,33 +5746,86 @@ input.ui-switch-native {
 
 .military-ratio-panel {
   display: grid;
-  gap: 8px;
-  min-width: 340px;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
 }
 
 .military-status-panel {
   display: grid;
   gap: 10px;
-  min-width: 300px;
-  border: 1px solid rgba(189, 206, 213, 0.12);
-  border-radius: 7px;
-  padding: 9px;
-  background: rgba(7, 12, 15, 0.28);
+  min-width: 0;
+  width: 100%;
+}
+
+.military-editor-panel {
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 1px solid rgba(201, 182, 123, 0.24);
+  border-radius: 8px;
+  padding: 11px;
+  background:
+    linear-gradient(180deg, rgba(38, 48, 49, 0.68), rgba(9, 15, 18, 0.78)),
+    rgba(7, 12, 15, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 28px rgba(0, 0, 0, 0.24);
 }
 
 .military-status-heading {
   display: grid;
-  gap: 2px;
+  gap: 4px;
+  border-bottom: 1px solid rgba(189, 206, 213, 0.12);
+  padding-bottom: 9px;
   color: #e9f2f4;
   font-size: 12px;
 }
 
+.military-status-heading strong,
+.military-ratio-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .military-status-heading span {
   color: #9fb0ba;
+  overflow-wrap: anywhere;
+}
+
+.military-editor-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.military-editor-context span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(9, 15, 18, 0.52);
+}
+
+.military-editor-context small {
+  color: #8fa0aa;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.military-editor-context b {
+  min-width: 0;
+  color: #edf4f6;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .military-status-editor {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 52px minmax(0, 1fr);
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(9, 15, 18, 0.46);
 }
 
 .military-status-apply.el-button {
@@ -5784,6 +5837,8 @@ input.ui-switch-native {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  border-bottom: 1px solid rgba(189, 206, 213, 0.12);
+  padding-bottom: 9px;
   color: #e9f2f4;
   font-size: 12px;
 }
@@ -5800,11 +5855,11 @@ input.ui-switch-native {
 
 .military-ratio-item {
   display: grid;
-  gap: 5px;
-  border: 1px solid rgba(189, 206, 213, 0.12);
-  border-radius: 6px;
-  padding: 7px;
-  background: rgba(7, 12, 15, 0.36);
+  gap: 7px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(9, 15, 18, 0.52);
 }
 
 .military-ratio-item-head {

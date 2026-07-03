@@ -17060,3 +17060,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`DiplomacyPanel` chunk 约 `14.47KB / gzip 5.48KB`，主入口约 `808.50KB / gzip 243.89KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：打开 `外交管理`，点击二级动作“打开国家”，再点击“打开国家面板”后，国家面板打开并命中对象国家 `辰教国`；selection 同步为 `state #2`，`glError = 0`，打开动作前后 health 非 info 事件增量为 `0`，page error 和 console error 为 `0`。debug 模式首屏仍会输出既有 main-thread-long-task warning，但不是该交互新增事件。
 - 正式 e2e 守门通过：点击到出图 `1396.7ms`，纯生成 `721.6ms`，WebGL 加载 `364.3ms`，UI slack `310.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 138.7ms`，最慢加载阶段为 `构建视觉 cell mesh 64.6ms`。
+
+### 军事面板静态编辑浮层第五刀
+
+背景：
+
+- 用户指出军事单位编辑面板仍然很粗糙，样式不对；同时已明确无需继续做动态军事系统。
+- 当前 `军事管理` 主体面板已有概要、档案和战报区，但二级编辑浮层仍像普通表单，缺少当前对象上下文。
+
+修正：
+
+- 态势、批量态势、驻地基地、记录战报和兵种比例二级浮层统一加 `military-editor-panel` 暗色编辑台样式。
+- 各浮层新增只读上下文卡片：当前态势/命令、筛选国家/态势、当前驻地/基地、战报链/记录数、国家/比例合计。
+- 表单字段加边框、背景和更稳定的网格列宽，长国家名、军团名和链路名允许换行，降低窄浮层溢出风险。
+- 本轮只改 `MilitaryPanel.vue` 和 `styles.css` 的显示结构，不新增动态军事系统，不改变命令、战报、战役或生成逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` chunk 约 `42.36KB / gzip 12.68KB`，主入口约 `808.50KB / gzip 243.88KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开 `军事管理` 后逐项打开“调整态势 / 批量态势 / 驻地基地 / 记录战报 / 兵种比例”二级浮层，5 个浮层均显示 `military-editor-panel` 和 2 个上下文卡片；浮层宽 `340px`、编辑内容宽 `318px`，检查范围内无横向溢出；`glError = 0`，打开动作前后 health 非 info 事件增量为 `0`，page error 和 console error 为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1476ms`，纯生成 `823.7ms`，WebGL 加载 `411ms`，UI slack `241.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 163ms`，最慢加载阶段为 `构建视觉 cell mesh 65.5ms`。
