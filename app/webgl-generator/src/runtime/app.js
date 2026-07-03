@@ -15,6 +15,7 @@ import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
 import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
+import {createEconomyPanel} from "../ui/panels/economy-panel.js";
 import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createGovernmentPanel} from "../ui/panels/government-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
@@ -172,6 +173,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let culturePanel = null;
   let religionPanel = null;
   let diplomacyPanel = null;
+  let economyPanel = null;
   let militaryPanel = null;
   let riverPanel = null;
   let routePanel = null;
@@ -732,6 +734,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.diplomacy = diplomacyPanel;
+  economyPanel = createEconomyPanel(documentRef, panelManager, {
+    onLocate: object => {
+      locateObject(state, object, documentRef);
+    }
+  });
+  state.panels.economy = economyPanel;
   militaryPanel = createMilitaryPanel(documentRef, panelManager, {
     onSelect: object => {
       selectionStore.setSelection({object});
@@ -1311,6 +1319,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       state.panels.diplomacy.open(state.map, state.selection, state.editHistory.getStats());
     },
+    onOpenEconomyPanel: () => {
+      state.panels.economy.open(state.map, state.selection, state.editHistory.getStats());
+    },
     onOpenMilitaryPanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.MILITARY) {
         state.panels.military.setSelectedRegimentId(state.selection.object.id);
@@ -1637,6 +1648,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateCulturePanel(state);
   updateReligionPanel(state);
   updateDiplomacyPanel(state);
+  updateEconomyPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
   state.panels.namebase.update(state.map);
@@ -3242,6 +3254,7 @@ function applyMarkerCollectionCommand(state, documentRef, command, {selectCreate
   }
 
   updateMarkerPanel(state);
+  updateEconomyPanel(state);
   updateStatePanel(state);
   updateProvincePanel(state);
   updateRuntimePanel(documentRef, state);
@@ -3579,6 +3592,10 @@ function updateDiplomacyPanel(state) {
   state.panels.diplomacy?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
+function updateEconomyPanel(state) {
+  state.panels.economy?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
 function updateMilitaryPanel(state) {
   state.panels.military?.update(state.map, state.selection, state.editHistory.getStats());
 }
@@ -3603,6 +3620,7 @@ function updateAllObjectPanels(state) {
   updateCulturePanel(state);
   updateReligionPanel(state);
   updateDiplomacyPanel(state);
+  updateEconomyPanel(state);
   updateMilitaryPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);

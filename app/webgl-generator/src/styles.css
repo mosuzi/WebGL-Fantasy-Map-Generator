@@ -4635,6 +4635,7 @@ input.ui-switch-native {
 
 .culture-panel-summary,
 .religion-panel-summary,
+.economy-panel-summary,
 .government-panel-summary {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -4651,6 +4652,7 @@ input.ui-switch-native {
 
 .culture-panel-summary div,
 .religion-panel-summary div,
+.economy-panel-summary div,
 .government-panel-summary div,
 .diplomacy-panel-summary div {
   display: grid;
@@ -4659,6 +4661,7 @@ input.ui-switch-native {
 
 .culture-panel-summary span,
 .religion-panel-summary span,
+.economy-panel-summary span,
 .government-panel-summary span,
 .diplomacy-panel-summary span {
   color: #80919c;
@@ -4667,11 +4670,54 @@ input.ui-switch-native {
 
 .culture-panel-summary strong,
 .religion-panel-summary strong,
+.economy-panel-summary strong,
 .government-panel-summary strong,
 .diplomacy-panel-summary strong {
   color: #edf4f6;
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.economy-panel-controls {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.55fr) minmax(260px, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.economy-panel-controls input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #10171b;
+  color: #edf4f6;
+}
+
+.economy-panel-sort {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.economy-panel-sort .el-button {
+  min-height: 28px;
+  margin-left: 0;
+  padding-inline: 8px;
+}
+
+.economy-panel-limit {
+  margin: 6px 0 0;
+  color: #8fa0aa;
+  font-size: 11px;
+  text-align: right;
+}
+
+.economy-panel-details {
+  margin-top: 8px;
 }
 
 .government-panel-controls {

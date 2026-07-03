@@ -87,6 +87,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-culture-panel")?.addEventListener("click", handlers.onOpenCulturePanel);
   documentRef.getElementById("open-religion-panel")?.addEventListener("click", handlers.onOpenReligionPanel);
   documentRef.getElementById("open-diplomacy-panel")?.addEventListener("click", handlers.onOpenDiplomacyPanel);
+  documentRef.getElementById("open-economy-panel")?.addEventListener("click", handlers.onOpenEconomyPanel);
   documentRef.getElementById("open-military-panel")?.addEventListener("click", handlers.onOpenMilitaryPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
