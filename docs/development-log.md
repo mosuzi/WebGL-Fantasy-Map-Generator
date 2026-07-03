@@ -14998,3 +14998,31 @@ full 矩阵结果：
 - 同次烟测中阻断阶段 checksum 保持 `d2f19819 -> d2f19819`，说明没有提交导入或重建地图；切到 `合并最近色` 后警告消失、应用按钮恢复可用。
 - 同次烟测继续点击应用后，结果为 `source.kind = image-palette`、`source.mappingMode = hue`、`source.unassignedStrategy = nearest-palette`、`source.unassignedPixels = 921600`、`assignments = 16`，checksum `d2f19819 -> 724c03e0`，`loadMap.totalMs = 672.3ms`，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1227.4ms`，纯生成 `625.5ms`，WebGL 加载 `353.9ms`，最慢加载阶段为 `cell-visual-mesh 53.9ms`，`fit-draw = 2.4ms`，`glError = 0`。
+
+### 高度图待处理颜色列表第一刀
+
+背景：
+
+- `标记待处理` 已能阻断应用，但用户只能看到待处理像素和颜色桶总数，无法判断具体哪些颜色被挡在色板上限之外。
+- 本步先补只读列表和扩大色板操作，不做待处理颜色的直接手动赋高，避免扩大交互面。
+
+修正：
+
+- `quantizePalette()` 现在会从未分配桶中取像素数最高的前 `12` 个，生成待处理颜色列表项。
+- 当 `标记待处理` 阻断应用时，工作台显示“待处理颜色”区块，列出颜色圆点、十六进制颜色、像素数和占比。
+- 待处理区块提供“扩大色板”按钮，把 `16 -> 32 -> 64 -> 128` 推进到下一档，并复用已有预览刷新链路。
+- 列表复用当前预览量化结果，不额外读取图片、不写地图、不触发重生成。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `740.60KB / gzip 223.72KB`，`HeightPanel` 懒加载 chunk 约 `29.00KB / gzip 10.07KB`。
+- Playwright + 系统 Chrome 待处理颜色列表烟测通过：导入 64 色合成 SVG，色板上限降到 `16`，映射模式切到色相，未分配颜色切到 `标记待处理` 后，待处理列表显示 `12` 项，首项为 `#7babea`，摘要为 `显示前 12 色 / 共 109 桶`，提示 `6.1万` 个像素待处理。
+- 同次烟测点击“扩大色板”后，色板上限变为 `32`，色板项为 `32`，待处理列表仍显示前 `12` 项，摘要更新为 `显示前 12 色 / 共 93 桶`，提示 `4.3万` 个像素待处理。
+- 同次烟测中地图 checksum 保持 `7c6bcbad -> 7c6bcbad`，说明待处理列表和扩大色板只刷新预览，不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1127ms`，纯生成 `531.4ms`，WebGL 加载 `334.5ms`，最慢加载阶段为 `cell-visual-mesh 47.1ms`，`fit-draw = 2.6ms`，`glError = 0`。

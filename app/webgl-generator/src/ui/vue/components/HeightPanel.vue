@@ -256,6 +256,23 @@
           </div>
         </section>
 
+        <section v-if="pendingUnassignedBlocked && pendingPalette.length" class="heightmap-pending-section" aria-label="待处理颜色">
+          <header class="heightmap-pending-header">
+            <div>
+              <strong>待处理颜色</strong>
+              <span>{{ pendingPaletteSummary }}</span>
+            </div>
+            <UiButton v-if="canExpandColorLimit" variant="secondary" @click="expandHeightmapColorLimit">扩大色板</UiButton>
+          </header>
+          <div class="heightmap-pending-grid">
+            <div v-for="entry in pendingPalette" :key="entry.key" class="heightmap-pending-item">
+              <i :style="{backgroundColor: entry.hex}"></i>
+              <span>{{ entry.hex }}</span>
+              <small>{{ entry.percent }} / {{ formatNumber(entry.pixels, unitPreferences) }} px</small>
+            </div>
+          </div>
+        </section>
+
         <div class="heightmap-workbench-actions">
           <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerHeightmapFileInput">选择图片</UiButton>
           <UiButton variant="secondary" :disabled="!previewPalette.length" @click="exportHeightmapProfile">导出配置</UiButton>
@@ -373,6 +390,7 @@ const previewStats = ref(null);
 const previewHistogram = ref([]);
 const heightBandStats = ref(null);
 const previewPalette = ref([]);
+const pendingPalette = ref([]);
 const selectedPaletteKey = ref(null);
 const batchPaletteKeys = ref([]);
 const batchAssignmentHeight = ref(45);
@@ -420,11 +438,18 @@ const pendingUnassignedBlocked = computed(() => (
   Number(previewStats.value?.unassignedPixels || 0) > 0
 ));
 const canApplyHeightmap = computed(() => Boolean(selectedFile.value) && !pendingUnassignedBlocked.value);
+const canExpandColorLimit = computed(() => nextColorLimit(heightmapColorLimit.value) > heightmapColorLimit.value);
 const pendingUnassignedWarning = computed(() => {
   if (!pendingUnassignedBlocked.value) return "";
   const pixels = formatNumber(previewStats.value.unassignedPixels, unitPreferences.value);
   const buckets = formatNumber(previewStats.value.unassignedBuckets, unitPreferences.value);
   return `仍有 ${pixels} 个像素、${buckets} 个颜色桶待处理；请扩大色板上限、改为合并最近色，或切回固定高度后再应用。`;
+});
+const pendingPaletteSummary = computed(() => {
+  const stats = previewStats.value;
+  if (!stats) return "未生成";
+  const shown = pendingPalette.value.length;
+  return `显示前 ${shown} 色 / 共 ${formatNumber(stats.unassignedBuckets, unitPreferences.value)} 桶`;
 });
 const batchSelectedEntries = computed(() => previewPalette.value.filter(entry => batchPaletteKeys.value.includes(entry.key)));
 const batchPaletteSummary = computed(() => {
@@ -529,6 +554,10 @@ function setHeightmapUnassignedStrategy(value) {
   heightmapUnassignedStrategy.value = heightmapUnassignedStrategyOptions.some(option => option.value === value) ? value : "fixed-height";
 }
 
+function expandHeightmapColorLimit() {
+  setHeightmapColorLimit(nextColorLimit(heightmapColorLimit.value));
+}
+
 function openImportWorkbench() {
   workbenchOpen.value = true;
   nextTick(() => drawPreview());
@@ -572,6 +601,7 @@ async function onHeightmapFileChange(event) {
     previewHistogram.value = [];
     heightBandStats.value = null;
     previewPalette.value = [];
+    pendingPalette.value = [];
     selectedPaletteKey.value = null;
     batchPaletteKeys.value = [];
     manualAssignments.value = {};
@@ -733,6 +763,7 @@ function drawPreview() {
   previewHistogram.value = brightness.histogram;
   const palette = quantizePalette(imageData.data, heightmapColorLimit.value, brightness);
   previewPalette.value = palette.entries;
+  pendingPalette.value = palette.pendingEntries;
   drawHeightBandPreview(imageData, palette.entries, brightness);
   if (!previewPalette.value.some(entry => entry.key === selectedPaletteKey.value)) selectedPaletteKey.value = null;
   trimBatchPaletteSelection();
@@ -759,6 +790,7 @@ function clearPreviewCanvas() {
   const context = canvas.getContext("2d", {willReadFrequently: true});
   context?.clearRect(0, 0, canvas.width, canvas.height);
   previewHistogram.value = [];
+  pendingPalette.value = [];
   clearHeightBandCanvas();
 }
 
@@ -874,7 +906,20 @@ function quantizePalette(data, limit, brightnessStats) {
     entries,
     bucketCount: buckets.size,
     unassignedBuckets: unassigned.length,
-    unassignedPixels: unassigned.reduce((sum, bucket) => sum + bucket.pixels, 0)
+    unassignedPixels: unassigned.reduce((sum, bucket) => sum + bucket.pixels, 0),
+    pendingEntries: unassigned.slice(0, 12).map(bucket => {
+      const color = {
+        red: bucket.red / bucket.pixels,
+        green: bucket.green / bucket.pixels,
+        blue: bucket.blue / bucket.pixels
+      };
+      return {
+        key: bucket.key,
+        pixels: bucket.pixels,
+        percent: `${((bucket.pixels / totalPixels) * 100).toFixed(bucket.pixels / totalPixels > 0.1 ? 0 : 1)}%`,
+        hex: rgbToHex(color.red, color.green, color.blue)
+      };
+    })
   };
 }
 
@@ -1191,6 +1236,11 @@ function formatSignedNumber(value) {
 function formatSignedPercent(value) {
   const rounded = Math.round((Number(value) || 0) * 100);
   return rounded > 0 ? `+${rounded}%` : `${rounded}%`;
+}
+
+function nextColorLimit(value) {
+  const current = Number(value) || 32;
+  return heightmapColorLimitOptions.find(option => option.value > current)?.value ?? current;
 }
 
 function hexByte(value) {
