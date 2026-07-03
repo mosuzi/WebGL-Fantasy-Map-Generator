@@ -36,7 +36,7 @@ const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.LABEL]: object => `${object.targetKind} / ${object.targetName}`,
   [OBJECT_KIND.MARKER]: (object, units) => formatMarkerObjectSummary(object, units),
   [OBJECT_KIND.ROUTE]: (object, units) => `${object.type} / ${object.level} / distance ${formatDisplayDistance(object.distance, units)}`,
-  [OBJECT_KIND.TRADE_FLOW]: (object, units) => `${object.sellerName || "卖方"} -> ${object.buyerName || "买方"} / 金额 ${formatDisplayNumber(object.value, units)}`,
+  [OBJECT_KIND.TRADE_FLOW]: (object, units) => `${object.sellerName || "卖方"} -> ${object.buyerName || "买方"} / 金额 ${formatDisplayNumber(object.value, units)} / 价差 ${formatSignedDisplayNumber(object.priceDelta, units)}`,
   [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${formatDisplayNumber(object.flux, units)} / length ${formatDisplayDistance(object.length, units)}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
   [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
@@ -838,7 +838,7 @@ function formatHoverObjectLine(pick, unitPreferences = {}) {
   if (pick.label) return `${pick.label.text} / ${pick.label.targetKind}`;
   if (pick.city && pick.city !== "none") return pick.city;
   if (pick.marker) return formatMarkerObjectSummary(pick.marker, unitPreferences);
-  if (pick.tradeFlow) return `${pick.tradeFlow.goodName} / ${pick.tradeFlow.sellerName} -> ${pick.tradeFlow.buyerName}`;
+  if (pick.tradeFlow) return `${pick.tradeFlow.goodName} / ${pick.tradeFlow.sellerName} -> ${pick.tradeFlow.buyerName} / ${pick.tradeFlow.priceSignalLabel || "平稳"} ${formatSignedDisplayNumber(pick.tradeFlow.priceDelta, unitPreferences)}`;
   if (isNamedRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
   if (pick.river) return `河流 #${pick.river.id} / flux ${formatDisplayNumber(pick.river.flux, unitPreferences)}`;
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
@@ -879,6 +879,11 @@ function formatMarkerObjectSummary(marker = {}, unitPreferences = {}) {
   const resource = marker.resourceLabel ? ` / ${marker.resourceLabel}` : "";
   const economic = Number(marker.economicValue || 0) > 0 ? ` / 潜力 ${formatDisplayNumber(marker.economicValue, unitPreferences)}` : "";
   return `${label} / ${category}${resource}${economic} / cell ${marker.cell}`;
+}
+
+function formatSignedDisplayNumber(value, unitPreferences = {}) {
+  const numeric = Number(value || 0);
+  return `${numeric > 0 ? "+" : ""}${formatDisplayNumber(numeric, unitPreferences)}`;
 }
 
 function formatMarkerResources(map, unitPreferences = {}) {

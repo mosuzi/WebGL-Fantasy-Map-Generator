@@ -760,6 +760,10 @@ export class PlaceholderMapRenderer {
         units: item.units,
         basePrice: item.basePrice,
         price: item.price,
+        effectivePrice: item.effectivePrice,
+        priceDelta: item.priceDelta,
+        pricePressure: item.pricePressure,
+        priceSignalLabel: item.priceSignalLabel,
         value: item.value,
         tradeDistance: item.tradeDistance,
         distanceCost: item.distanceCost,
@@ -2420,13 +2424,15 @@ function buildTradeFlowMeshVertices(map, camera, canvas) {
     }
     const before = vertices.length;
     const widthPx = tradeFlowWidthPx(deal) * pixelRatio;
-    pushScreenPolyline(vertices, context, [seller.point, buyer.point], tradeFlowColor(deal), widthPx);
+    const priceSignal = tradeFlowPriceSignal(map, deal);
+    pushScreenPolyline(vertices, context, [seller.point, buyer.point], tradeFlowColor(deal, priceSignal), widthPx);
     const addedVertices = (vertices.length - before) / 6;
     if (addedVertices <= 0) continue;
     stats.renderedDeals++;
+    if (Math.abs(Number(priceSignal?.priceDelta || 0)) > 0.05) stats.priceSignalDeals++;
     stats.vertices += addedVertices;
     stats.tradeValue = roundValue(stats.tradeValue + tradeDealValue(deal));
-    pickItems.push(tradeFlowPickItem(map, deal, seller, buyer));
+    pickItems.push(tradeFlowPickItem(map, deal, seller, buyer, priceSignal));
     if (stats.vertices > MAX_TRADE_FLOW_VERTICES) {
       stats.vertexBudgetExceeded = true;
       break;
@@ -2465,7 +2471,7 @@ function tradePartyInfo(map, type, id) {
   };
 }
 
-function tradeFlowPickItem(map, deal, seller, buyer) {
+function tradeFlowPickItem(map, deal, seller, buyer, priceSignal = null) {
   const good = (map?.pack?.goods || []).find(item => item?.i === deal.good) || map?.pack?.goods?.[deal.good];
   return {
     dealId: deal.i,
@@ -2480,6 +2486,10 @@ function tradeFlowPickItem(map, deal, seller, buyer) {
     units: Number(deal.units || 0),
     basePrice: Number(deal.basePrice ?? deal.price ?? 0),
     price: Number(deal.price || 0),
+    effectivePrice: Number(priceSignal?.effectivePrice ?? deal.price ?? 0),
+    priceDelta: Number(priceSignal?.priceDelta || 0),
+    pricePressure: Number(priceSignal?.pricePressure || 0),
+    priceSignalLabel: tradeFlowPriceSignalLabel(priceSignal),
     value: tradeDealValue(deal),
     tradeDistance: Number.isFinite(deal.distance) ? Number(deal.distance) : roundValue(Math.hypot(seller.point[0] - buyer.point[0], seller.point[1] - buyer.point[1]), 2),
     distanceCost: Number(deal.distanceCost || 0),
@@ -2499,11 +2509,46 @@ function tradeFlowWidthPx(deal) {
   return clamp(1.1 + Math.sqrt(tradeDealValue(deal)) * 0.32, 1.2, 5.2);
 }
 
-function tradeFlowColor(deal) {
+function tradeFlowColor(deal, priceSignal = null) {
+  const base = tradeFlowBaseColor(deal);
+  const delta = Number(priceSignal?.priceDelta || 0);
+  if (delta > 0.05) return mix(base, [0.96, 0.34, 0.24, 0.72], clamp(delta / 4, 0.18, 0.72));
+  if (delta < -0.05) return mix(base, [0.26, 0.72, 0.95, 0.66], clamp(Math.abs(delta) / 2, 0.18, 0.64));
+  return base;
+}
+
+function tradeFlowBaseColor(deal) {
   if (deal.sellerType === "market" && deal.buyerType === "market") return [0.95, 0.66, 0.2, 0.5];
   if (deal.source === "marker-resource") return [0.36, 0.9, 0.5, 0.56];
   if (deal.source === "market-resource") return [0.56, 0.78, 0.38, 0.52];
   return [0.92, 0.8, 0.46, 0.46];
+}
+
+function tradeFlowPriceSignal(map, deal) {
+  const buyerMarketId = tradePartyMarketId(map, deal.buyerType, deal.buyer);
+  const sellerMarketId = tradePartyMarketId(map, deal.sellerType, deal.seller);
+  const market = map?.pack?.markets?.[buyerMarketId] || map?.pack?.markets?.[sellerMarketId];
+  const record = market?.goods?.[deal.good];
+  if (!record) return null;
+  return {
+    marketId: market.i,
+    effectivePrice: Number(record.effectivePrice ?? record.price ?? deal.price ?? 0),
+    priceDelta: Number(record.priceDelta || 0),
+    pricePressure: Number(record.pricePressure || 0)
+  };
+}
+
+function tradePartyMarketId(map, type, id) {
+  if (type === "market") return Number(id || 0);
+  if (type === "burg") return Number(map?.pack?.burgs?.[id]?.market || 0);
+  return 0;
+}
+
+function tradeFlowPriceSignalLabel(priceSignal) {
+  const delta = Number(priceSignal?.priceDelta || 0);
+  if (delta > 0.05) return "涨价";
+  if (delta < -0.05) return "降价";
+  return "平稳";
 }
 
 function tradeSourceLabel(source) {
@@ -2530,6 +2575,7 @@ function emptyTradeFlowRenderStats() {
     shortDeals: 0,
     vertices: 0,
     tradeValue: 0,
+    priceSignalDeals: 0,
     maxDeals: MAX_TRADE_FLOW_LINES,
     vertexBudgetExceeded: false
   };

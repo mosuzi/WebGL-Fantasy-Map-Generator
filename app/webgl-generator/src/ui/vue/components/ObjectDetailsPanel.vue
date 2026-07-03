@@ -85,6 +85,10 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "数量", value: formatNumberValue(object.units)},
     {label: "基础单价", value: formatNumberValue(object.basePrice)},
     {label: "单价", value: formatNumberValue(object.price)},
+    {label: "有效价", value: formatNumberValue(object.effectivePrice)},
+    {label: "价差信号", value: object.priceSignalLabel || "平稳"},
+    {label: "价差", value: formatSignedNumberValue(object.priceDelta)},
+    {label: "价格压力", value: formatSignedNumberValue(object.pricePressure)},
     {label: "运距成本", value: formatNumberValue(object.distanceCost)},
     {label: "距离倍率", value: `${formatNumberValue(object.distanceMultiplier || 1)}x`},
     {label: "金额", value: formatNumberValue(object.value)},
@@ -175,5 +179,10 @@ function formatPopulationValue(value) {
 
 function formatNumberValue(value) {
   return formatNumber(value, unitPreferences.value);
+}
+
+function formatSignedNumberValue(value) {
+  const numeric = Number(value || 0);
+  return `${numeric > 0 ? "+" : ""}${formatNumber(numeric, unitPreferences.value)}`;
 }
 </script>

@@ -16930,3 +16930,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`EconomyPanel` chunk 约 `21.79KB / gzip 6.68KB`，主入口约 `806.25KB / gzip 243.17KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：经济面板显示“价格信号 / 有效价 / 价差”，`2059` 条市场商品记录均带有效价/价差/价格压力，`1562` 条带交易流入或流出；面板无横向溢出，`glError = 0`、console/page error 为 `0`，打开面板后 health 非 info 事件为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1460.3ms`，纯生成 `763.3ms`，WebGL 加载 `377.1ms`，UI slack `319.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 118.3ms`，最慢加载阶段为 `构建视觉 cell mesh 52.9ms`。
+
+### 贸易流价格信号第一刀
+
+背景：
+
+- 静态价格传播诊断已经为市场商品写入 `effectivePrice / priceDelta / pricePressure`，但地图上的贸易流仍只按交易来源和类型着色。
+- 当前贸易流默认关闭、只绘制 top 交易，适合作为轻量价格信号入口；但不能增加默认线数、不能做动画，也不能把价格信号写回交易。
+
+修正：
+
+- 贸易流渲染读取买方市场同商品的价格信号：`priceDelta > 0` 的线在原来源色基础上混入红色，`priceDelta < 0` 的线混入蓝色。
+- `tradeFlowPickItem` 和点击对象详情补充 `effectivePrice / priceDelta / pricePressure / priceSignalLabel`。
+- hover 和右侧拾取统计会显示贸易流价差信号。
+- 渲染统计新增 `priceSignalDeals`，便于烟测确认价格信号进入可视化层。
+- 本轮不改变 top 交易选择、不增加线条数量、不做贸易动画、不覆盖交易单价。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `807.77KB / gzip 243.66KB`，本轮未增大经济面板 chunk，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：开启贸易流图层后渲染 `172` 条贸易流、`1032` 个顶点，`priceSignalDeals = 172`，未超出 `180` 条 top 交易上限；点击贸易流详情显示“有效价 / 价差信号 / 价差 / 价格压力”，`glError = 0`、console/page error 为 `0`，打开图层和详情后 health 非 info 事件为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1478.7ms`，纯生成 `807.8ms`，WebGL 加载 `341.6ms`，UI slack `329.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 148.8ms`，最慢加载阶段为 `构建视觉 cell mesh 49.8ms`。
