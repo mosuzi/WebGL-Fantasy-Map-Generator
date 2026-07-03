@@ -1312,6 +1312,10 @@ function getObjectBounds(map, object) {
     const route = map.settlements.routes.find(item => item.id === object.id);
     return route ? pointsBounds(route.points, 36) : null;
   }
+  if (object.kind === OBJECT_KIND.TRADE_FLOW) {
+    const points = tradeFlowBoundsPoints(map, object);
+    return points ? pointsBounds(points, 60) : null;
+  }
   if (object.kind === OBJECT_KIND.RIVER) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
     return river ? pointsBounds(river.points, 42) : null;
@@ -1340,6 +1344,15 @@ function pointsBounds(points, padding) {
     bounds = includePoint(bounds, point[0], point[1]);
   }
   return bounds ? expandBounds(bounds, padding) : null;
+}
+
+function tradeFlowBoundsPoints(map, object) {
+  if (isWorldPoint(object.from) && isWorldPoint(object.to)) return [object.from, object.to];
+  const deal = (map?.pack?.deals || []).find(item => item?.i === Number(object.id));
+  if (!deal) return null;
+  const seller = tradePartyInfo(map, deal.sellerType, deal.seller).point;
+  const buyer = tradePartyInfo(map, deal.buyerType, deal.buyer).point;
+  return isWorldPoint(seller) && isWorldPoint(buyer) ? [seller, buyer] : null;
 }
 
 function pointBounds(x, y, padding) {

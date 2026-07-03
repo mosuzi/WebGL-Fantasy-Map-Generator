@@ -1,5 +1,6 @@
-import {shallowReactive} from "vue";
-import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {createApp, shallowReactive} from "vue";
+import ObjectDetailsPanel from "../vue/components/ObjectDetailsPanel.vue";
+import {pinia} from "../vue/pinia.js";
 
 export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
@@ -25,25 +26,17 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
   const root = documentRef.createElement("div");
   root.className = "vue-object-details-root";
   record.body.replaceChildren(root);
-  const lazyPanel = createLazyVuePanel(
-    documentRef,
-    root,
-    () => import("../vue/components/ObjectDetailsPanel.vue"),
-    {
-      state: panelState,
-      callbacks: {
-        onEdit: () => callbacks.onEdit?.(panelState.object),
-        onCancelEdit: () => callbacks.onCancelEdit?.(),
-        onLocate: () => callbacks.onLocate?.(panelState.object),
-        onRename: name => callbacks.onRename?.(panelState.object, name)
-      }
-    },
-    {
-      initial: "对象详情将在首次打开时加载。",
-      loading: "正在加载对象详情...",
-      failure: "对象详情加载失败，请检查开发模式日志。"
+  const app = createApp(ObjectDetailsPanel, {
+    state: panelState,
+    callbacks: {
+      onEdit: () => callbacks.onEdit?.(panelState.object),
+      onCancelEdit: () => callbacks.onCancelEdit?.(),
+      onLocate: () => callbacks.onLocate?.(panelState.object),
+      onRename: name => callbacks.onRename?.(panelState.object, name)
     }
-  );
+  });
+  app.use(pinia);
+  app.mount(root);
 
   return {
     show(selection, editingObject = null) {
@@ -69,13 +62,12 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
       }
       suppressNextViewOpenFor = null;
       manager.open("object-details");
-      lazyPanel.load();
     },
     clear() {
       manager.close("object-details");
     },
     unmount() {
-      lazyPanel.unmount();
+      app.unmount();
     }
   };
 }

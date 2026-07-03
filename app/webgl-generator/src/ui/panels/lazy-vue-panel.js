@@ -88,6 +88,7 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
 export function scheduleLazyVuePanelPreload(documentRef, options = {}) {
   const view = documentRef.defaultView || window;
   if (view.__webglGeneratorLazyPreload?.started) return view.__webglGeneratorLazyPreload;
+  const inputTracker = ensureLazyPreloadInputTracker(view);
 
   const entries = Array.from(lazyVuePanelEntries).filter(entry => !entry.isDisposed());
   const queue = entries.filter(entry => shouldPreloadEntry(entry));
@@ -128,6 +129,10 @@ export function scheduleLazyVuePanelPreload(documentRef, options = {}) {
   }
 
   const runNext = () => {
+    if (!hasQuietInputWindow(view, inputTracker, options.quietInputMs ?? 1400)) {
+      scheduleLazyPreloadIdle(view, runNext, {...options, delayMs: options.quietRetryMs ?? 900});
+      return;
+    }
     const entry = queue.shift();
     const item = items[state.total - queue.length - 1];
     state.pending = queue.length + (entry ? 1 : 0);
@@ -206,6 +211,24 @@ function scheduleLazyPreloadIdle(view, callback, options = {}) {
     return;
   }
   run();
+}
+
+function ensureLazyPreloadInputTracker(view) {
+  if (view.__webglGeneratorLazyPreloadInput) return view.__webglGeneratorLazyPreloadInput;
+  const tracker = {lastInputAt: 0};
+  const markInput = () => {
+    tracker.lastInputAt = currentTime(view);
+  };
+  for (const eventName of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+    view.addEventListener?.(eventName, markInput, {capture: true, passive: true});
+  }
+  view.__webglGeneratorLazyPreloadInput = tracker;
+  return tracker;
+}
+
+function hasQuietInputWindow(view, tracker, quietMs) {
+  if (!tracker.lastInputAt) return true;
+  return currentTime(view) - tracker.lastInputAt >= quietMs;
 }
 
 function finishLazyPreload(state, view) {

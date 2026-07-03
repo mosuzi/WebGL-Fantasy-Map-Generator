@@ -1680,9 +1680,11 @@ function scheduleLazyPanelsAfterMapReady(state, documentRef) {
   scheduleAfterPaint(documentRef, () => {
     scheduleLazyVuePanelPreload(documentRef, {
       reason: "map-ready",
-      firstDelayMs: 420,
-      gapMs: 120,
-      timeoutMs: 1600
+      firstDelayMs: 2400,
+      gapMs: 220,
+      quietInputMs: 1400,
+      quietRetryMs: 900,
+      timeoutMs: 1800
     });
   });
 }

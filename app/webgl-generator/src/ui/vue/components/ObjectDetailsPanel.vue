@@ -10,7 +10,7 @@
     />
     <div class="object-details-actions">
       <UiButton variant="secondary" @click="callbacks.onLocate">定位</UiButton>
-      <UiButton variant="secondary" @click="editing ? callbacks.onCancelEdit?.() : callbacks.onEdit?.()">
+      <UiButton v-if="canEdit" variant="secondary" @click="editing ? callbacks.onCancelEdit?.() : callbacks.onEdit?.()">
         {{ editing ? "退出编辑" : "编辑" }}
       </UiButton>
     </div>
@@ -43,6 +43,7 @@ const props = defineProps({
 
 const editing = computed(() => isSameObject(props.state.object, props.state.editingObject));
 const title = computed(() => formatObjectTitle(props.state.object));
+const canEdit = computed(() => canEditObject(props.state.object));
 const canRename = computed(() => canRenameObject(props.state.object));
 const editableName = computed(() => props.state.object?.name || props.state.object?.text || props.state.object?.targetName || "");
 const detailRowsWithState = computed(() => [...detailRows(props.state.object), {label: "状态", value: editing.value ? "编辑" : "查看"}]);
@@ -53,6 +54,7 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.LABEL]: object => `标签 ${object.text}`,
   [OBJECT_KIND.MARKER]: object => `标记 ${formatMarkerTitle(object)}`,
   [OBJECT_KIND.ROUTE]: object => `路线 ${object.from} -> ${object.to}`,
+  [OBJECT_KIND.TRADE_FLOW]: object => `贸易流 ${object.goodName || `#${object.id}`}`,
   [OBJECT_KIND.RIVER]: object => `河流 ${object.name || `#${object.id}`}`,
   [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
   [OBJECT_KIND.REGION]: object => `区域 ${object.name}`
@@ -73,6 +75,18 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "终点", value: object.to},
     {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
     {label: "对象 id", value: object.id, debug: true}
+  ],
+  [OBJECT_KIND.TRADE_FLOW]: object => [
+    {label: "商品", value: object.goodName || `商品 #${object.goodId}`},
+    {label: "卖方", value: object.sellerName || `${object.sellerType} #${object.sellerId}`},
+    {label: "买方", value: object.buyerName || `${object.buyerType} #${object.buyerId}`},
+    {label: "来源", value: object.sourceLabel || object.source || "计划交易"},
+    {label: "数量", value: formatNumberValue(object.units)},
+    {label: "单价", value: formatNumberValue(object.price)},
+    {label: "金额", value: formatNumberValue(object.value)},
+    {label: "税额", value: formatNumberValue(object.tax)},
+    {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
+    {label: "deal id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.MARKER]: object => [
     {label: "类型", value: `${object.label || object.type} / ${object.type}`},
@@ -128,6 +142,10 @@ function detailRows(object) {
 
 function canRenameObject(object) {
   return object?.kind === OBJECT_KIND.CITY || (object?.kind === OBJECT_KIND.LABEL && (object.targetKind === LABEL_TARGET_KIND.CITY || object.targetKind === LABEL_TARGET_KIND.STATE));
+}
+
+function canEditObject(object) {
+  return object?.kind !== OBJECT_KIND.TRADE_FLOW;
 }
 
 function formatMarkerTitle(object) {
