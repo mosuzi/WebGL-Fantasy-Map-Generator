@@ -2866,7 +2866,8 @@ select:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.heightmap-histogram-section {
+.heightmap-histogram-section,
+.heightmap-profile-section {
   display: grid;
   gap: 6px;
   border: 1px solid rgba(189, 206, 213, 0.14);
@@ -2875,7 +2876,8 @@ select:disabled {
   background: rgba(8, 13, 16, 0.68);
 }
 
-.heightmap-histogram-section header {
+.heightmap-histogram-section header,
+.heightmap-profile-section header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2884,8 +2886,13 @@ select:disabled {
   font-size: 12px;
 }
 
-.heightmap-histogram-section strong {
+.heightmap-histogram-section strong,
+.heightmap-profile-section strong {
   color: #edf4f6;
+}
+
+.heightmap-profile-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .heightmap-histogram-bars {

@@ -49,6 +49,14 @@
 
         <UiMetricGrid :metrics="previewMetrics" class-name="heightmap-preview-metrics" />
 
+        <section v-if="profileMatchStats" class="heightmap-profile-section" aria-label="导入配置匹配">
+          <header>
+            <strong>导入配置匹配</strong>
+            <span>{{ profileMatchSummary }}</span>
+          </header>
+          <UiMetricGrid :metrics="profileMatchMetrics" class-name="heightmap-profile-metrics" />
+        </section>
+
         <section v-if="previewHistogram.length" class="heightmap-histogram-section" aria-label="亮度直方图">
           <header>
             <strong>亮度直方图</strong>
@@ -406,6 +414,9 @@ const selectedPaletteKey = ref(null);
 const batchPaletteKeys = ref([]);
 const batchAssignmentHeight = ref(45);
 const manualAssignments = ref({});
+const importedProfileKeys = ref([]);
+const importedProfileName = ref("");
+const profileMatchStats = ref(null);
 const previewStatus = ref("尚未选择图片");
 const workbenchPosition = ref({left: 760, top: 110});
 let dragState = null;
@@ -434,6 +445,7 @@ const previewMetrics = computed(() => [
   {label: "高度映射", value: `${heightmapImportMin.value} - ${heightmapImportMax.value}`},
   {label: "未分配高度", value: heightmapUnassignedHeight.value},
   {label: "未分配颜色", value: unassignedStrategyLabel(heightmapUnassignedStrategy.value)},
+  {label: "配置匹配", value: profileMatchStats.value ? `${profileMatchStats.value.matched}/${profileMatchStats.value.profileTotal}` : "-"},
   {label: "适应方式", value: heightmapImportFit.value === "crop" ? "保持比例裁剪" : "拉伸铺满"}
 ]);
 const paletteSummary = computed(() => {
@@ -510,6 +522,22 @@ const comparisonSummary = computed(() => {
   const next = heightBandStats.value;
   if (!current || !next) return "未生成";
   return `平均 ${formatSignedNumber(next.average - current.average)} / 水域 ${formatSignedPercent(next.water / next.total - current.water / current.total)}`;
+});
+const profileMatchMetrics = computed(() => {
+  const stats = profileMatchStats.value;
+  if (!stats) return [];
+  return [
+    {label: "配置色块", value: stats.profileTotal},
+    {label: "已匹配", value: stats.matched},
+    {label: "未匹配", value: stats.missing},
+    {label: "当前额外", value: stats.currentOnly}
+  ];
+});
+const profileMatchSummary = computed(() => {
+  const stats = profileMatchStats.value;
+  if (!stats) return "未导入";
+  const name = stats.filename ? `${stats.filename} / ` : "";
+  return `${name}匹配 ${stats.matched}/${stats.profileTotal}`;
 });
 const heightDifferenceSummary = computed(() => {
   const stats = heightDifferenceStats.value;
@@ -620,10 +648,12 @@ async function onHeightmapFileChange(event) {
     previewImage.value = await loadPreviewImage(file);
     selectedPaletteKey.value = null;
     batchPaletteKeys.value = [];
-    manualAssignments.value = {};
+    if (!importedProfileKeys.value.length) manualAssignments.value = {};
     await nextTick();
     drawPreview();
-    previewStatus.value = "预览已更新，点击应用后才会重建地图。";
+    previewStatus.value = importedProfileKeys.value.length
+      ? `预览已更新，已套用配置匹配 ${profileMatchStats.value?.matched || 0} 个色块。`
+      : "预览已更新，点击应用后才会重建地图。";
   } catch (error) {
     selectedFile.value = null;
     previewImage.value = null;
@@ -635,6 +665,9 @@ async function onHeightmapFileChange(event) {
     selectedPaletteKey.value = null;
     batchPaletteKeys.value = [];
     manualAssignments.value = {};
+    importedProfileKeys.value = [];
+    importedProfileName.value = "";
+    profileMatchStats.value = null;
     clearPreviewCanvas();
     previewStatus.value = `图片预览失败：${error instanceof Error ? error.message : String(error)}`;
   }
@@ -665,10 +698,10 @@ async function onHeightmapProfileFileChange(event) {
   if (!file) return;
   try {
     const profile = parseHeightmapProfile(await file.text());
-    applyHeightmapProfile(profile);
-    const matched = previewPalette.value.filter(entry => Number.isFinite(manualAssignments.value[String(entry.key)])).length;
+    applyHeightmapProfile(profile, file.name);
+    const stats = profileMatchStats.value;
     previewStatus.value = previewPalette.value.length
-      ? `已导入配置：${file.name}，当前图片匹配 ${matched} 个色块。`
+      ? `已导入配置：${file.name}，匹配 ${stats?.matched || 0}/${stats?.profileTotal || 0} 个色块。`
       : `已导入配置：${file.name}，选择图片后可预览。`;
   } catch (error) {
     previewStatus.value = `配置导入失败：${error instanceof Error ? error.message : String(error)}`;
@@ -745,7 +778,7 @@ function parseHeightmapProfile(text) {
   return profile;
 }
 
-function applyHeightmapProfile(profile) {
+function applyHeightmapProfile(profile, filename = "") {
   const settings = profile.settings || {};
   const minHeight = clamp(Math.round(Number(settings.minHeight) || 0), 0, 99);
   const maxHeight = clamp(Math.round(Number(settings.maxHeight) || 100), minHeight + 1, 100);
@@ -757,10 +790,14 @@ function applyHeightmapProfile(profile) {
   setHeightmapMappingMode(settings.mappingMode);
   setHeightmapUnassignedHeight(settings.unassignedHeight);
   setHeightmapUnassignedStrategy(settings.unassignedStrategy);
-  manualAssignments.value = normalizeProfileAssignments(profile.assignments);
+  const normalized = normalizeProfileAssignments(profile.assignments);
+  manualAssignments.value = normalized;
+  importedProfileKeys.value = Object.keys(normalized);
+  importedProfileName.value = filename;
   selectedPaletteKey.value = null;
   batchPaletteKeys.value = [];
   drawPreview();
+  updateProfileMatchStats();
 }
 
 function normalizeProfileAssignments(assignments) {
@@ -794,6 +831,7 @@ function drawPreview() {
   const palette = quantizePalette(imageData.data, heightmapColorLimit.value, brightness);
   previewPalette.value = palette.entries;
   pendingPalette.value = palette.pendingEntries;
+  updateProfileMatchStats();
   drawHeightBandPreview(imageData, palette.entries, brightness);
   if (!previewPalette.value.some(entry => entry.key === selectedPaletteKey.value)) selectedPaletteKey.value = null;
   trimBatchPaletteSelection();
@@ -821,7 +859,24 @@ function clearPreviewCanvas() {
   context?.clearRect(0, 0, canvas.width, canvas.height);
   previewHistogram.value = [];
   pendingPalette.value = [];
+  if (!previewImage.value) profileMatchStats.value = null;
   clearHeightBandCanvas();
+}
+
+function updateProfileMatchStats() {
+  if (!importedProfileKeys.value.length) {
+    profileMatchStats.value = null;
+    return;
+  }
+  const currentKeys = new Set(previewPalette.value.map(entry => String(entry.key)));
+  const matched = importedProfileKeys.value.filter(key => currentKeys.has(key)).length;
+  profileMatchStats.value = {
+    filename: importedProfileName.value,
+    profileTotal: importedProfileKeys.value.length,
+    matched,
+    missing: Math.max(0, importedProfileKeys.value.length - matched),
+    currentOnly: Math.max(0, previewPalette.value.length - matched)
+  };
 }
 
 function clearHeightBandCanvas() {

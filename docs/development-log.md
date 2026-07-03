@@ -15083,3 +15083,30 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：导入渐变 SVG 后，差值热力图 canvas 为 `345 x 230`，非空像素 `79350`，采样颜色 `16` 种，摘要为 `升高 92% / 降低 7% / 最大 +99`。
 - 同次烟测中应用前后对比摘要为 `平均 +30.3 / 水域 -59%`，地图 checksum 保持 `1bf34089 -> 1bf34089`，说明差值热力图只刷新预览、不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1203.8ms`，纯生成 `601.2ms`，WebGL 加载 `330.5ms`，最慢加载阶段为 `cell-visual-mesh 51.1ms`，`fit-draw = 2.4ms`，`glError = 0`。
+
+### 高度图导入 profile 匹配摘要
+
+背景：
+
+- profile 导入已经能恢复 settings 和 assignments，但工作台只提示“匹配 N 个色块”，用户看不到配置里有多少色块未匹配，也看不到当前图片额外出现了多少色块。
+- 复核时发现“先导入 profile、后选择图片”的提示与实际行为不一致：选择图片会清空 `manualAssignments`，导致已导入的 profile 无法套用到随后选择的图片。
+
+修正：
+
+- 工作台新增“导入配置匹配”区块，展示配置色块、已匹配、未匹配和当前额外色块数。
+- 预览指标区新增“配置匹配”一项，便于不展开详情时快速确认 `matched / profileTotal`。
+- 导入 profile 时记录 profile key 集合和文件名；选择图片时如果已经导入 profile，不再清空 `manualAssignments`。
+- 选择图片、导入 profile、切换设置和重新量化后都会刷新匹配摘要；该摘要只读展示，不写地图、不触发重生成。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`HeightPanel` 懒加载 chunk 约 `32.53KB / gzip 11.14KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：先从 4 色 SVG 导出 `.heightmap-import-profile.json`，再在新页面先导入 profile、后选择同一图片，匹配摘要从 `0/4` 更新为 `4/4`。
+- 同次烟测中 profile 区块显示 `配置色块4 / 已匹配4 / 未匹配0 / 当前额外0`，4 个色块均显示手动高度；地图 checksum 保持 `1e9dc992 -> 1e9dc992`，说明 profile 匹配只刷新预览、不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1229.3ms`，纯生成 `608.3ms`，WebGL 加载 `343.9ms`，最慢加载阶段为 `cell-visual-mesh 52.7ms`，`fit-draw = 2.4ms`，`glError = 0`。
