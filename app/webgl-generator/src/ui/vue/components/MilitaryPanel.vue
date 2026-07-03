@@ -105,6 +105,10 @@
         <b>{{ battleEventChainSummary.appliedLabel }}</b>
       </span>
       <span>
+        <small>未应用</small>
+        <b>{{ battleEventChainSummary.pendingLabel }}</b>
+      </span>
+      <span>
         <small>累计损耗</small>
         <b>{{ battleEventChainSummary.casualtyLabel }}</b>
       </span>
@@ -898,11 +902,13 @@ function newestFirstBattleEvents(events = []) {
 
 function buildBattleEventChainSummary(events = []) {
   const appliedEvents = events.filter(event => event?.resultApplied);
+  const pendingEvents = events.filter(event => !event?.resultApplied);
   const casualties = appliedEvents.reduce((sum, event) => sum + battleEventCasualties(event), 0);
   const latest = events.at(-1);
   return {
     total: events.length,
     applied: appliedEvents.length,
+    pending: pendingEvents.length,
     casualties,
     latest: latest ? {
       id: latest.id || "",
@@ -915,6 +921,7 @@ function buildBattleEventChainSummary(events = []) {
     } : null,
     totalLabel: `${formatNumber(events.length)} 条`,
     appliedLabel: appliedEvents.length ? `${formatNumber(appliedEvents.length)} 条` : "无",
+    pendingLabel: pendingEvents.length ? `${formatNumber(pendingEvents.length)} 条` : "无",
     casualtyLabel: casualties ? formatNumber(casualties) : "无",
     latestLabel: latest ? `${latest.typeLabel || latest.type || "事件"} / ${latest.outcomeLabel || latest.outcome || "结果"}` : "无"
   };

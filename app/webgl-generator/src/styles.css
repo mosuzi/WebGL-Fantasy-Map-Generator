@@ -5234,7 +5234,7 @@ input.ui-switch-native {
 
 .military-event-chain {
   display: grid;
-  grid-template-columns: 0.75fr 0.8fr 0.95fr minmax(0, 1.35fr);
+  grid-template-columns: repeat(4, minmax(62px, 0.8fr)) minmax(0, 1.4fr);
   gap: 0;
   overflow: hidden;
   border: 1px solid rgba(189, 206, 213, 0.12);

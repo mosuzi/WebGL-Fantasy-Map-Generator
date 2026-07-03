@@ -16010,3 +16010,28 @@ full 矩阵结果：
 - Playwright + Chrome 构建产物烟测通过：给同一军团注入 `7` 条事件后，默认显示最近 `5` 条且可展开；切换 `结算 = 未应用` 后列表显示 `3 / 7 条`，只剩 `链路 #6 / #4 / #2` 的未应用事件，不再出现展开按钮。
 - 同次烟测确认按 `当前筛选` 导出的战斗事件 CSV 只有 `3` 条未应用记录，均包含 `否 / 未应用 / 损耗未计入`，筛选工具区无横向溢出，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1428.1ms`，纯生成 `716.4ms`，WebGL 加载 `376.6ms`，UI slack `335.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 119.5ms`，最慢加载阶段为 `构建视觉 cell mesh 60.1ms`，`line-vertices = 49.3ms`，`fit-draw = 2.4ms`。
+
+### 战报链未应用摘要
+
+背景：
+
+- 战斗事件链路已经支持按 `已应用 / 未应用` 筛选，但战报链摘要仍只显示已应用数量。
+- 复盘长链路时，用户需要快速判断还有多少事件未结算，不应依赖手动相减或切筛选后再看计数。
+
+修正：
+
+- `buildBattleEventChainSummary()` 新增 `pending / pendingLabel`，事件 JSON 导出的 `summary` 会自然带出未应用数量。
+- 选中军团战报链摘要新增 `未应用` 一格，和 `链路 / 已应用 / 累计损耗 / 最近` 并列展示。
+- 战报链摘要样式从 4 格改为 5 格，保留“最近”列更宽，避免最近事件文案被压到不可读。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 252 项。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `30.01KB / gzip 9.52KB`，主入口约 `768.43KB / gzip 232.23KB`。
+- Playwright + Chrome 构建产物烟测通过：给同一军团注入 `7` 条事件后，战报链摘要显示 `链路 7 条 / 已应用 4 条 / 未应用 3 条 / 累计损耗 160 / 最近 袭扰 / 损耗`。
+- 同次烟测确认战斗事件 JSON 导出的 `summary.pending = 3`、`summary.applied = 4`，战报链摘要无横向溢出，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1379.7ms`，纯生成 `683.2ms`，WebGL 加载 `387.4ms`，UI slack `309.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 121.4ms`，最慢加载阶段为 `构建标签 60.2ms`，`line-vertices = 46ms`，`fit-draw = 4.7ms`。
