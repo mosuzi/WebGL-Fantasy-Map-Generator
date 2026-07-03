@@ -1,6 +1,7 @@
 import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
 import {DIPLOMACY_RELATIONS} from "../generator/diplomacy.js";
+import {GOVERNMENT_FAMILY_LEGEND} from "../renderer/color-modes.js";
 import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {
   formatDistance as formatDisplayDistance,
@@ -635,6 +636,15 @@ function updateMapLegend(documentRef, map, stats) {
     return;
   }
 
+  if (colorMode === "governments") {
+    legend.hidden = false;
+    legend.replaceChildren(
+      legendTitle(documentRef, "政体"),
+      governmentLegendList(documentRef, map)
+    );
+    return;
+  }
+
   legend.hidden = true;
   legend.replaceChildren();
 }
@@ -721,6 +731,33 @@ function diplomacyLegendList(documentRef) {
     list.append(legendSwatch(documentRef, relation.color, relation.label));
   }
   return list;
+}
+
+function governmentLegendList(documentRef, map) {
+  const list = documentRef.createElement("div");
+  list.className = "legend-list governments";
+  const rows = governmentFamilyCounts(map);
+  if (!rows.length) {
+    list.append(legendSwatch(documentRef, GOVERNMENT_FAMILY_LEGEND.unknown.color, "未归类"));
+    return list;
+  }
+  for (const row of rows) {
+    list.append(legendSwatch(documentRef, row.color, `${row.label} ${row.count}`));
+  }
+  return list;
+}
+
+function governmentFamilyCounts(map) {
+  const counts = new Map();
+  for (const state of map?.politics?.states || map?.pack?.states || []) {
+    if (!state?.i || state.removed) continue;
+    const family = state.governmentFamily || state.government?.family || "unknown";
+    counts.set(family, (counts.get(family) || 0) + 1);
+  }
+  return Array.from(counts, ([family, count]) => {
+    const entry = GOVERNMENT_FAMILY_LEGEND[family] || GOVERNMENT_FAMILY_LEGEND.unknown;
+    return {family, count, label: entry.label, color: entry.color};
+  }).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-CN"));
 }
 
 function legendSwatch(documentRef, color, label) {

@@ -75,8 +75,8 @@ function colorForGovernment(stateId, map) {
   if (!stateId) return [0.46, 0.48, 0.46, 1];
   const state = map.politics.states[stateId] || map.pack?.states?.[stateId];
   const family = state?.governmentFamily || state?.government?.family || "unknown";
-  const familyColor = GOVERNMENT_FAMILY_COLORS[family];
-  if (familyColor) return familyColor;
+  const familyEntry = GOVERNMENT_FAMILY_LEGEND[family];
+  if (familyEntry) return hexToRgba(familyEntry.color);
   return indexedColor(hashString(state?.governmentKey || family || String(stateId)), 0.18);
 }
 
@@ -86,15 +86,15 @@ function diplomacySubjectId(map, preferredId) {
   return (map.politics.states || []).find(state => state?.i && !state.removed)?.i || 0;
 }
 
-const GOVERNMENT_FAMILY_COLORS = Object.freeze({
-  autocracy: [0.76, 0.26, 0.22, 1],
-  monarchy: [0.82, 0.55, 0.22, 1],
-  republic: [0.25, 0.58, 0.66, 1],
-  league: [0.46, 0.68, 0.34, 1],
-  theocracy: [0.58, 0.46, 0.78, 1],
-  oligarchy: [0.62, 0.52, 0.44, 1],
-  military: [0.42, 0.46, 0.5, 1],
-  unknown: [0.58, 0.6, 0.58, 1]
+export const GOVERNMENT_FAMILY_LEGEND = Object.freeze({
+  autocracy: {label: "专制集权", color: "#c24238"},
+  monarchy: {label: "君主系", color: "#d18c38"},
+  republic: {label: "共和系", color: "#4094a8"},
+  league: {label: "联盟系", color: "#75ad57"},
+  theocracy: {label: "神权系", color: "#9475c7"},
+  oligarchy: {label: "寡头系", color: "#9e8570"},
+  military: {label: "军政系", color: "#6b757f"},
+  unknown: {label: "未归类", color: "#949994"}
 });
 
 function colorForCulture(cultureId, map) {

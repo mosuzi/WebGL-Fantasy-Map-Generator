@@ -16535,3 +16535,22 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `788.42KB / gzip 237.77KB`。
 - 构建产物浏览器烟测通过：切换 `governments` 后 `colorMode = governments`，按钮 active，主动重绘后非空像素 `1,382,400`，示例陆地国家 cell 可拾取到 `state #12`，`drawMs = 0.2ms`，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1444ms`，纯生成 `718.5ms`，WebGL 加载 `385.3ms`，UI slack `340.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 142.7ms`，最慢加载阶段为 `构建线层顶点 61.4ms`。
+
+### 政体专题图例第一刀
+
+背景：
+
+- 政体专题图层已经能着色，但缺少图例说明，用户无法直接判断颜色对应哪类政体。
+- 本轮继续保持只读展示，不做政体事件、批量调整或新派生系统。
+
+修正：
+
+- `color-modes.js` 将政体家族配色抽成 `GOVERNMENT_FAMILY_LEGEND`，renderer 和 UI 图例共用同一份颜色与中文标签。
+- `updateMapLegend()` 新增 `governments` 分支，政体视图下显示左下角图例。
+- 图例按当前地图实际存在的 `governmentFamily` 统计国家数，只扫描国家数组，不触发生成、派生重算或渲染重建。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `789.29KB / gzip 238.18KB`。
+- 构建产物浏览器烟测通过：切换政体视图后图例标题为 `政体`，显示 `6` 个家族条目，包含 `专制集权 7 / 共和系 4 / 神权系 3 / 寡头系 2 / 君主系 2 / 联盟系 2`，与地图国家 `governmentFamily` 统计一致；`drawMs = 0.1ms`，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1394ms`，纯生成 `757.7ms`，WebGL 加载 `333.6ms`，UI slack `302.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 134.5ms`，最慢加载阶段为 `构建视觉 cell mesh 47.2ms`。
