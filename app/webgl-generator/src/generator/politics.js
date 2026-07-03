@@ -1,12 +1,13 @@
 import {MinPriorityQueue} from "./priority-queue.js";
 import {chooseStateGovernment, applyStateGovernment, summarizeStateGovernments} from "./governments.js";
-import {createChineseNameGenerator, getStateFullName} from "./names.js";
+import {createChineseNameGenerator, getStateFullName, isAncientStateNameRoot} from "./names.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
 const PROVINCE_SUFFIXES = ["郡", "州", "道", "府", "领", "司"];
 const REGION_NAMES = ["北境", "南陆", "西岭", "东湾", "中原", "湖泽"];
+const STATE_CARDINAL_PREFIXES = ["东", "西", "南", "北"];
 const BIOME_COST = [10, 200, 150, 60, 50, 70, 70, 80, 90, 200, 1000, 5000, 150];
 const STATE_COLOR_PALETTE = [
   "#5b8ff9", "#f4664a", "#5ad8a6", "#ff99c3", "#f6bd16", "#6dc8ec",
@@ -75,6 +76,7 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
   profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states));
   profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
   profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
+  profile.stage("states-name-orientation", "校正国家方位名", () => orientPackStateDirectionalNames(pack, states));
   profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states));
   profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options));
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
@@ -124,6 +126,7 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
   profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states));
   profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
   profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
+  profile.stage("states-name-orientation", "校正国家方位名", () => orientPackStateDirectionalNames(pack, states));
   profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states));
   profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options));
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
@@ -335,6 +338,109 @@ function createPackPoliticsMetadata(states, provinces, regions = []) {
     provinceNames: validProvinces.map(province => province.fullName || province.name),
     regionNames: regions.map(region => region.name)
   };
+}
+
+function orientPackStateDirectionalNames(pack, states) {
+  const groups = new Map();
+  const validStates = states.filter(state => state?.i && !state.removed);
+  for (const state of validStates) {
+    const parsed = parseDirectionalStateName(state.name);
+    if (!parsed?.directional) continue;
+    if (!groups.has(parsed.base)) groups.set(parsed.base, []);
+    groups.get(parsed.base).push({...parsed, state, point: stateNamePoint(pack, state)});
+  }
+
+  if (!groups.size) return;
+
+  for (const state of validStates) {
+    const name = String(state.name || "");
+    if (!groups.has(name)) continue;
+    groups.get(name).push({base: name, prefix: "", directional: false, state, point: stateNamePoint(pack, state)});
+  }
+
+  for (const [base, members] of groups) {
+    const directionalMembers = members.filter(member => member.directional);
+    if (!directionalMembers.length) continue;
+    const pointMembers = members.filter(member => member.point);
+    if (members.length === 1) {
+      applyStateRootName(directionalMembers[0].state, base, "isolated-directional");
+      continue;
+    }
+    if (pointMembers.length < 2) continue;
+
+    const bounds = stateNameBounds(pointMembers);
+    const used = new Set();
+    for (const member of directionalMembers.sort((a, b) => directionStrength(b.point, bounds) - directionStrength(a.point, bounds))) {
+      const prefix = preferredStateDirection(member.point, bounds, used);
+      if (!prefix) continue;
+      used.add(prefix);
+      applyStateRootName(member.state, `${prefix}${base}`, "relative-directional");
+    }
+  }
+}
+
+function parseDirectionalStateName(name) {
+  const rawName = String(name || "").trim();
+  const chars = Array.from(rawName);
+  if (chars.length < 2) return null;
+  const prefix = chars[0];
+  if (!STATE_CARDINAL_PREFIXES.includes(prefix)) return isAncientStateNameRoot(rawName) ? {base: rawName, prefix: "", directional: false} : null;
+  const base = chars.slice(1).join("");
+  if (!base || !isAncientStateNameRoot(rawName)) return null;
+  return {base, prefix, directional: true};
+}
+
+function stateNamePoint(pack, state) {
+  const cellPoint = pack?.cells?.p?.[state.center];
+  if (Array.isArray(cellPoint)) return {x: Number(cellPoint[0]) || 0, y: Number(cellPoint[1]) || 0};
+  const capital = pack?.burgs?.[state.capital];
+  if (capital && Number.isFinite(capital.x) && Number.isFinite(capital.y)) return {x: capital.x, y: capital.y};
+  return null;
+}
+
+function stateNameBounds(members) {
+  const xs = members.map(member => member.point.x);
+  const ys = members.map(member => member.point.y);
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys)
+  };
+}
+
+function preferredStateDirection(point, bounds, used) {
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  const dx = (point.x - centerX) / width;
+  const dy = (point.y - centerY) / height;
+  const horizontal = dx < 0 ? "西" : "东";
+  const vertical = dy < 0 ? "北" : "南";
+  const secondaryHorizontal = horizontal === "西" ? "东" : "西";
+  const secondaryVertical = vertical === "北" ? "南" : "北";
+  const preferences = Math.abs(dx) >= Math.abs(dy)
+    ? [horizontal, vertical, secondaryHorizontal, secondaryVertical]
+    : [vertical, horizontal, secondaryVertical, secondaryHorizontal];
+  return preferences.find(prefix => !used.has(prefix)) || "";
+}
+
+function directionStrength(point, bounds) {
+  if (!point) return 0;
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  return Math.max(Math.abs((point.x - centerX) / width), Math.abs((point.y - centerY) / height));
+}
+
+function applyStateRootName(state, nextName, reason) {
+  if (!state || !nextName || state.name === nextName) return;
+  const previousName = state.name;
+  state.name = nextName;
+  if (state.formName) state.fullName = getStateFullName(nextName, state.formName);
+  state.nameOrientation = {from: previousName, to: nextName, reason};
 }
 
 function defineStateGovernments(states, options = {}) {

@@ -15300,3 +15300,29 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：默认地图打开军事管理后，概要标题为 `1（澜镇）军团`、态势为 `驻防中`、概要指标 `3` 项、兵种条 `4` 条、表格 `111` 行。
 - 同次烟测中点击“兵种比例”后，二级面板仍显示国家 `赤原国`、滑条 `5` 个和应用按钮；地图 checksum 保持 `30370b34`，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1502.2ms`，纯生成 `757.5ms`，WebGL 加载 `410.2ms`，UI slack `334.5ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 131.9ms`，最慢加载阶段为 `构建视觉 cell mesh 61.7ms`，`fit-draw = 3.2ms`，`glError = 0`。
+
+### 国名方位语义约束第一刀
+
+背景：
+
+- 用户发现国家随机名会出现北边国家叫“南某”、南边国家叫“北某”的情况。
+- 这类方位前缀只有在同名或同根参照国存在时才合理；孤立国家不应随机带误导性方位。
+
+修正：
+
+- 在 pack 国家扩张、边界整理和统计完成后，新增 `states-name-orientation` 阶段。
+- 仅处理 `东/西/南/北 + 古国根名` 的明显方位变体，例如 `南楚 / 北燕 / 西秦`。
+- 如果没有同根参照国，去掉方位前缀；如果有同根国家，则按国家中心相对位置选择东、西、南、北。
+- `北辰 / 南浦` 这类本身是双字地名的根名不会被拆成 `辰 / 浦`。
+- 校正发生在套用政体国号前，后续 `fullName` 会使用校正后的国家根名。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `743.85KB / gzip 224.89KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：默认地图生成后，国家数 `20`，校正记录包含 `南越 -> 越`、`南楚 -> 楚`、`西秦 -> 秦`，同时保留 `北辰`。
+- 同次烟测中 checksum 为 `b91ee397`，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1552.8ms`，纯生成 `750ms`，WebGL 加载 `510.6ms`，UI slack `292.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 136.5ms`，最慢加载阶段为 `构建线层顶点 69.2ms`，`fit-draw = 3.1ms`，`glError = 0`。
