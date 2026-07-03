@@ -16706,3 +16706,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `783.47KB / gzip 235.97KB`，`EconomyPanel` chunk 约 `13.45KB / gzip 4.42KB`。
 - 构建产物浏览器烟测通过：商品 CSV 下载为 `fmg-economy-goods-stage-2-1.csv`，共 `72` 行，表头为 `商品ID,商品,类型,基价,库存,资源Cells,生产记录,交易记录,交易额,可见`；交易 JSON 下载为 `fmg-economy-deals-stage-2-1.json`，`type = fmg-economy-summary`、`tab = deals`、`count = rows = summary.deals = 15068`，与地图交易数一致；`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1391.5ms`，纯生成 `704.1ms`，WebGL 加载 `389.6ms`，UI slack `297.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 136.1ms`，最慢加载阶段为 `构建视觉 cell mesh 59.7ms`。
+
+### 经济开发诊断第一刀
+
+背景：
+
+- 经济总览已能查看和导出商品、市场、交易，但阶段 2 仍缺少开发模式下的异常诊断。
+- 诊断信息不应进入普通模式，避免把内部 id、cell、孤儿记录等调试概念暴露给普通用户。
+- 本轮只做轻量计数和少量样例，不做导出诊断、不做市场归属编辑、不做贸易动画。
+
+修正：
+
+- `EconomyPanel` 接入现有 `useDebugMode()`，仅在 `?debug=1` 或开发模式开启时显示“开发诊断”区。
+- 诊断区显示无市场城镇、缺中心市场、无覆盖市场、无库存商品、孤儿交易和无税交易计数。
+- 选中详情在 debug 模式下补充商品 id、市场 id、中心 burg/cell、交易 id、买卖方 id 和交易来源等内部字段。
+- 诊断区只显示少量样例，避免在大地图下渲染全量异常列表。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `783.47KB / gzip 235.99KB`，`EconomyPanel` chunk 约 `16.49KB / gzip 5.36KB`。
+- 构建产物浏览器烟测通过：普通模式打开经济总览并切到交易 tab 后不显示诊断和 debug 详情，`healthErrors = []`；`?debug=1` 下显示“开发诊断”，诊断摘要为 `8 项需复查`，详情区显示 `deal id` 等内部字段；两种模式交易表均只渲染 `500` 行，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1440.9ms`，纯生成 `725ms`，WebGL 加载 `435.7ms`，UI slack `280.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 160.6ms`，最慢加载阶段为 `构建视觉 cell mesh 65.2ms`。

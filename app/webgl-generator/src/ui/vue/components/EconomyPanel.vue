@@ -45,6 +45,17 @@
   </p>
 
   <UiDetailGrid class-name="economy-panel-details" empty-text="未选中经济对象" :rows="detailRows" />
+
+  <section v-if="debugEnabled" class="economy-panel-diagnostics" aria-label="经济开发诊断">
+    <div class="economy-panel-diagnostics-header">
+      <h3>开发诊断</h3>
+      <span>{{ diagnosticsSummary }}</span>
+    </div>
+    <UiDetailGrid class-name="economy-panel-diagnostic-grid" empty-text="暂无诊断" :rows="diagnosticRows" />
+    <p v-if="metrics.diagnostics.samples.length" class="economy-panel-diagnostic-samples">
+      {{ metrics.diagnostics.samples.join("；") }}
+    </p>
+  </section>
 </template>
 
 <script setup>
@@ -58,6 +69,7 @@ import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -76,6 +88,7 @@ const props = defineProps({
 });
 const callbacks = props.callbacks;
 const unitPreferences = useUnitPreferences();
+const debugEnabled = useDebugMode();
 const ROW_LIMIT = 500;
 
 const tabOptions = Object.freeze([
@@ -136,7 +149,7 @@ const dealColumns = Object.freeze([
 
 const metrics = computed(() => {
   props.state.version;
-  return buildEconomyMetrics(props.state.map);
+  return buildEconomyMetrics(props.state.map, {includeDiagnostics: debugEnabled.value});
 });
 const activeSortOptions = computed(() => {
   if (props.state.tab === "markets") return marketSortOptions;
@@ -181,7 +194,10 @@ const detailRows = computed(() => {
     {label: "覆盖城镇", value: formatNumber(selectedMarket.value.burgs)},
     {label: "库存", value: formatNumber(selectedMarket.value.stock)},
     {label: "资源供给", value: formatNumber(selectedMarket.value.resourceSupply)},
-    {label: "交易额", value: formatNumber(selectedMarket.value.tradeValue)}
+    {label: "交易额", value: formatNumber(selectedMarket.value.tradeValue)},
+    {label: "market id", value: selectedMarket.value.id, debug: true},
+    {label: "center burg", value: selectedMarket.value.centerBurgId || "none", debug: true},
+    {label: "cell", value: selectedMarket.value.cell ?? "none", debug: true}
   ] : [];
   if (props.state.tab === "deals") return selectedDeal.value ? [
     {label: "商品", value: selectedDeal.value.goodName},
@@ -192,7 +208,11 @@ const detailRows = computed(() => {
     {label: "数量", value: formatNumber(selectedDeal.value.units)},
     {label: "单价", value: formatNumber(selectedDeal.value.price)},
     {label: "距离", value: selectedDeal.value.distanceLabel},
-    {label: "税额", value: formatNumber(selectedDeal.value.tax)}
+    {label: "税额", value: formatNumber(selectedDeal.value.tax)},
+    {label: "deal id", value: selectedDeal.value.id, debug: true},
+    {label: "seller", value: `${selectedDeal.value.sellerType} #${selectedDeal.value.sellerId}`, debug: true},
+    {label: "buyer", value: `${selectedDeal.value.buyerType} #${selectedDeal.value.buyerId}`, debug: true},
+    {label: "source", value: selectedDeal.value.source || "scheduled", debug: true}
   ] : [];
   return selectedGood.value ? [
     {label: "商品", value: selectedGood.value.name},
@@ -202,8 +222,24 @@ const detailRows = computed(() => {
     {label: "资源 cells", value: formatNumber(selectedGood.value.sourceCells)},
     {label: "生产记录", value: formatNumber(selectedGood.value.production)},
     {label: "交易记录", value: formatNumber(selectedGood.value.deals)},
-    {label: "交易额", value: formatNumber(selectedGood.value.tradeValue)}
+    {label: "交易额", value: formatNumber(selectedGood.value.tradeValue)},
+    {label: "good id", value: selectedGood.value.id, debug: true},
+    {label: "visible", value: selectedGood.value.visibleLabel, debug: true}
   ] : [];
+});
+
+const diagnosticRows = computed(() => [
+  {label: "无市场城镇", value: formatNumber(metrics.value.diagnostics.burgsWithoutMarket)},
+  {label: "缺中心市场", value: formatNumber(metrics.value.diagnostics.marketsWithoutCenter)},
+  {label: "无覆盖市场", value: formatNumber(metrics.value.diagnostics.marketsWithoutCells)},
+  {label: "无库存商品", value: formatNumber(metrics.value.diagnostics.goodsWithoutStock)},
+  {label: "孤儿交易", value: formatNumber(metrics.value.diagnostics.invalidDeals)},
+  {label: "无税交易", value: formatNumber(metrics.value.diagnostics.untaxedDeals)}
+]);
+
+const diagnosticsSummary = computed(() => {
+  const total = metrics.value.diagnostics.totalIssues;
+  return total ? `${formatNumber(total)} 项需复查` : "未发现明显异常";
 });
 
 watch(activeSortOptions, options => {
@@ -211,11 +247,12 @@ watch(activeSortOptions, options => {
   callbacks.onSort?.(options[0]?.key || "id");
 });
 
-function buildEconomyMetrics(map) {
+function buildEconomyMetrics(map, {includeDiagnostics = false} = {}) {
   const pack = map?.pack || {};
   const goods = (pack.goods || []).filter(good => good?.i);
   const markets = (pack.markets || []).filter(market => market?.i);
   const deals = (pack.deals || []).filter(deal => Number.isInteger(deal?.i));
+  const aliveBurgs = includeDiagnostics ? (pack.burgs || []).filter(burg => burg?.i && !burg.removed) : [];
   const goodsById = new Map(goods.map(good => [good.i, good]));
   const marketsById = new Map(markets.map(market => [market.i, market]));
   const stockByGood = new Map();
@@ -277,6 +314,8 @@ function buildEconomyMetrics(map) {
     return withSearchText({
       id: market.i,
       name: market.name || `市场 #${market.i}`,
+      centerBurgId: market.centerBurgId || 0,
+      cell: market.cell ?? null,
       stateName: state?.fullName || state?.name || "无",
       cityName: city?.name || `城镇 #${market.centerBurgId || 0}`,
       cells: marketCells.get(market.i) || 0,
@@ -289,17 +328,31 @@ function buildEconomyMetrics(map) {
     });
   });
 
+  const invalidDealSamples = [];
   const dealRows = deals.map(deal => {
     const seller = partyInfo(pack, deal.sellerType, deal.seller, marketsById);
     const buyer = partyInfo(pack, deal.buyerType, deal.buyer, marketsById);
+    const good = goodsById.get(deal.good);
     const distance = partyDistance(seller, buyer);
     const value = dealValue(deal);
+    if (includeDiagnostics && (!good || !seller.valid || !buyer.valid) && invalidDealSamples.length < 5) {
+      invalidDealSamples.push(`交易 #${deal.i}: ${good ? "" : "缺商品"}${seller.valid ? "" : " 缺卖方"}${buyer.valid ? "" : " 缺买方"}`.trim());
+    }
     return withSearchText({
       id: deal.i,
-      goodName: goodsById.get(deal.good)?.name || `商品 #${deal.good}`,
+      goodId: deal.good,
+      goodValid: Boolean(good),
+      goodName: good?.name || `商品 #${deal.good}`,
+      sellerType: deal.sellerType,
+      sellerId: deal.seller,
+      sellerValid: seller.valid,
       sellerName: seller.name,
+      buyerType: deal.buyerType,
+      buyerId: deal.buyer,
+      buyerValid: buyer.valid,
       buyerName: buyer.name,
       routeLabel: routeLabel(deal),
+      source: deal.source || "scheduled",
       sourceLabel: sourceLabel(deal.source),
       units: Number(deal.units || 0),
       price: Number(deal.price || 0),
@@ -310,6 +363,17 @@ function buildEconomyMetrics(map) {
       locateObject: seller.locateObject || buyer.locateObject
     });
   });
+
+  const diagnostics = includeDiagnostics
+    ? buildEconomyDiagnostics({
+      goods: goodRows,
+      markets: marketRows,
+      deals: dealRows,
+      aliveBurgs,
+      marketsById,
+      invalidDealSamples
+    })
+    : emptyDiagnostics();
 
   return {
     goods: goodRows,
@@ -322,7 +386,45 @@ function buildEconomyMetrics(map) {
       resourceMarkers: pack.markers?.filter(marker => marker?.category === "resource").length || map?.markers?.metadata?.resourceMarkers || 0,
       stock: round(sumRows(marketRows, "stock")),
       tradeValue: round(sumRows(dealRows, "value"))
-    }
+    },
+    diagnostics
+  };
+}
+
+function emptyDiagnostics() {
+  return {
+    burgsWithoutMarket: 0,
+    marketsWithoutCenter: 0,
+    marketsWithoutCells: 0,
+    goodsWithoutStock: 0,
+    invalidDeals: 0,
+    untaxedDeals: 0,
+    totalIssues: 0,
+    samples: []
+  };
+}
+
+function buildEconomyDiagnostics({goods, markets, deals, aliveBurgs, marketsById, invalidDealSamples}) {
+  const burgsWithoutMarket = aliveBurgs.filter(burg => !burg.market || !marketsById.has(burg.market)).length;
+  const marketsWithoutCenter = markets.filter(market => !market.centerBurgId).length;
+  const marketsWithoutCells = markets.filter(market => !market.cells).length;
+  const goodsWithoutStock = goods.filter(good => good.stock <= 0).length;
+  const invalidDeals = deals.filter(deal => !deal.goodValid || !deal.sellerValid || !deal.buyerValid).length;
+  const untaxedDeals = deals.filter(deal => !deal.tax).length;
+  const samples = [
+    ...invalidDealSamples,
+    ...markets.filter(market => !market.centerBurgId).slice(0, 3).map(market => `市场 #${market.id}: 缺中心城镇`),
+    ...goods.filter(good => good.stock <= 0).slice(0, 3).map(good => `商品 #${good.id}: 无库存`)
+  ].slice(0, 6);
+  return {
+    burgsWithoutMarket,
+    marketsWithoutCenter,
+    marketsWithoutCells,
+    goodsWithoutStock,
+    invalidDeals,
+    untaxedDeals,
+    totalIssues: burgsWithoutMarket + marketsWithoutCenter + marketsWithoutCells + goodsWithoutStock + invalidDeals,
+    samples
   };
 }
 
@@ -483,6 +585,7 @@ function partyInfo(pack, type, id, marketsById) {
       name: burg?.name || `城镇 #${id}`,
       x: burg?.x,
       y: burg?.y,
+      valid: Boolean(burg),
       locateObject: cityLocateObject(id)
     };
   }
@@ -492,6 +595,7 @@ function partyInfo(pack, type, id, marketsById) {
     name: market?.name || `市场 #${id}`,
     x: market?.x ?? city?.x,
     y: market?.y ?? city?.y,
+    valid: Boolean(market),
     locateObject: cityLocateObject(market?.centerBurgId)
   };
 }

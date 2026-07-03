@@ -4732,6 +4732,63 @@ input.ui-switch-native {
   margin-top: 8px;
 }
 
+.economy-panel-diagnostics {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgba(255, 206, 122, 0.18);
+  border-radius: 7px;
+  background: rgba(34, 25, 10, 0.28);
+}
+
+.economy-panel-diagnostics-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.economy-panel-diagnostics-header h3 {
+  margin: 0;
+  color: #ffe0a1;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.economy-panel-diagnostics-header span,
+.economy-panel-diagnostic-samples {
+  color: #b8a780;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.economy-panel-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.economy-panel-diagnostic-grid div {
+  display: grid;
+  gap: 2px;
+}
+
+.economy-panel-diagnostic-grid span {
+  color: #9c917b;
+  font-size: 10px;
+}
+
+.economy-panel-diagnostic-grid strong {
+  color: #edf4f6;
+  font-size: 12px;
+}
+
+.economy-panel-diagnostic-samples {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .government-panel-controls {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.48fr) auto;
