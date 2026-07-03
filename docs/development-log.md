@@ -15543,3 +15543,30 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：给军团 `1:0` 记录 `袭扰 / 相持：边境试探，双方保持接触`，生成事件 `1:0:battle:1`，军团事件数和全局事件数均 `0 -> 1`。
 - 同次烟测中撤销后事件数恢复为 `0`，`metadata.events = 0`；重做后事件数恢复为 `1`，复用同一事件 id 和 sequence；最终刷新摘要为 `render = none / derived = object-panels`，`glError = 0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1709.8ms`，纯生成 `927.3ms`，WebGL 加载 `497.8ms`，UI slack `284.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 163.4ms`，最慢加载阶段为 `构建标签 71.6ms`，`line-vertices = 52.9ms`，`fit-draw = 3.7ms`，`glError = 0`。
+
+### 军团战斗事件列表与导出
+
+背景：
+
+- 上一刀已经能给军团记录战斗事件，但事件只能通过最新事件摘要间接看到，不能作为列表检查，也没有单独导出入口。
+- 在进入任何轻量战斗结果应用之前，先把事件链路做成可查、可导出的只读数据，更便于后续验证和导入导出回归。
+
+修正：
+
+- `MilitaryPanel.vue` 新增全局战斗事件收集逻辑，会合并 `map.military.events[]` 和各军团 `events[]`，按事件 id 去重。
+- `军事管理` 摘要新增“事件”指标。
+- 选中军团详情下方新增最近战斗事件列表，最多展示最近 `5` 条，显示事件类型、结果、时间和说明；无事件时显示空态。
+- 工具栏新增“导出事件”，导出 `fmg-military-events-<seed>.json`，包含 seed、导出时间、事件总数和事件数组。
+- 常规军事 JSON 导出也同步带上 `events` 字段，便于一次性导出军事状态和事件链。
+- 新增列表样式，限制长说明的换行和容器尺寸，避免事件文本撑破军事面板。
+
+文档：
+
+- 更新 `docs/current-plan.md`，把战斗事件从“可记录”推进到“可查看 / 可导出”，并把下一步限定为轻量战斗结果应用，不进入完整模拟。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `21.11KB / gzip 6.98KB`，主入口仍约 `757.07KB / gzip 228.47KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：给军团 `1:0` 记录 `攻城 / 小胜：攻破边堡，缴获粮草` 后，事件列表显示 `1` 条，标题显示 `1 条`，`map.military.events = 1`、`metadata.events = 1`。
+- 同次烟测中“导出事件”下载 `fmg-military-events-stage-2-1.json`，导出 `count = 1`，首条事件与面板记录一致；`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1409.7ms`，纯生成 `712.9ms`，WebGL 加载 `372.9ms`，UI slack `323.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 132ms`，最慢加载阶段为 `构建视觉 cell mesh 56.1ms`，`line-vertices = 47.1ms`，`fit-draw = 2.6ms`，`glError = 0`。

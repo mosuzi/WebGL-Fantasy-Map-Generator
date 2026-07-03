@@ -24,6 +24,7 @@
   <div class="military-edit-toolbar">
     <UiButton variant="secondary" @click="exportCsv">导出 CSV</UiButton>
     <UiButton variant="secondary" @click="exportJson">导出 JSON</UiButton>
+    <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEvents">导出事件</UiButton>
   </div>
 
   <UiSortBar class-name="military-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -71,6 +72,23 @@
   </section>
 
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
+
+  <section v-if="selected" class="military-event-list" aria-label="选中军团战斗事件">
+    <div class="military-event-list-heading">
+      <strong>战斗事件</strong>
+      <span>{{ selectedBattleEventTotal ? `${formatNumber(selectedBattleEventTotal)} 条` : "暂无" }}</span>
+    </div>
+    <p v-if="!selectedBattleEvents.length" class="military-event-empty">当前军团还没有战斗事件。</p>
+    <ol v-else>
+      <li v-for="event in selectedBattleEvents" :key="event.id || `${event.regimentObjectId}-${event.sequence}`" class="military-event-item">
+        <div>
+          <strong>{{ event.typeLabel || event.type || "事件" }} / {{ event.outcomeLabel || event.outcome || "结果" }}</strong>
+          <span>{{ formatEventDate(event.at) }}</span>
+        </div>
+        <p>{{ event.description || "无说明" }}</p>
+      </li>
+    </ol>
+  </section>
 
   <UiActionDock v-if="selectedState" v-model:active="activeAction" :actions="militaryActions">
     <template #rename>
@@ -312,6 +330,9 @@ const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.f
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
+const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
+const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
+const selectedBattleEvents = computed(() => latestEventsForRegiment(allBattleEvents.value, selected.value, 5));
 const selectedState = computed(() => selected.value ? metrics.value.states.find(state => state.id === selected.value.stateId) : metrics.value.states.find(state => state.id === Number(props.state.selectedStateId)) || null);
 const ratioTotalLabel = computed(() => `${Math.round(Object.values(ratioDraft).reduce((sum, value) => sum + Number(value || 0), 0))}%`);
 const ratioBreakdown = computed(() => unitDefinitions.map(unit => {
@@ -345,6 +366,7 @@ const summaryMetrics = computed(() => [
   {label: "总兵力", value: formatNumber(metrics.value.troops)},
   {label: "舰队", value: formatNumber(metrics.value.fleets)},
   {label: "战线", value: formatNumber(metrics.value.fronts)},
+  {label: "事件", value: formatNumber(allBattleEvents.value.length)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -648,6 +670,53 @@ function latestBattleEventLabel(events = []) {
   return `${event.typeLabel || event.type || "事件"} / ${event.outcomeLabel || event.outcome || "结果"}${detail}`;
 }
 
+function collectBattleEvents(map, rows = []) {
+  const byId = new Map();
+  const militaryEvents = map?.military?.events || map?.pack?.military?.events || [];
+  for (const event of militaryEvents) addBattleEvent(byId, event);
+  for (const row of rows) {
+    for (const event of row.events || []) addBattleEvent(byId, {
+      ...event,
+      stateId: event.stateId ?? row.stateId,
+      stateName: event.stateName || row.stateName,
+      regimentId: event.regimentId ?? row.regimentId,
+      regimentObjectId: event.regimentObjectId || row.id,
+      regimentName: event.regimentName || row.name
+    });
+  }
+  return [...byId.values()].sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+}
+
+function addBattleEvent(byId, event) {
+  if (!event || event.kind !== "battle") return;
+  const key = event.id || `${event.stateId}:${event.regimentId}:${event.sequence || byId.size}`;
+  if (!byId.has(key)) byId.set(key, event);
+}
+
+function latestEventsForRegiment(events = [], regiment, limit = 5) {
+  if (!regiment) return [];
+  return events
+    .filter(event => eventBelongsToRegiment(event, regiment))
+    .slice(-limit)
+    .reverse();
+}
+
+function countEventsForRegiment(events = [], regiment) {
+  if (!regiment) return 0;
+  return events.filter(event => eventBelongsToRegiment(event, regiment)).length;
+}
+
+function eventBelongsToRegiment(event, regiment) {
+  return event.regimentObjectId === regiment.id || (Number(event.stateId) === regiment.stateId && Number(event.regimentId) === regiment.regimentId);
+}
+
+function formatEventDate(value) {
+  if (!value) return "未记录时间";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("zh-CN", {month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"});
+}
+
 function nearestPackCell(map, x, y) {
   const targetX = Number(x);
   const targetY = Number(y);
@@ -726,9 +795,22 @@ function exportJson() {
     seed,
     metadata: map?.military?.metadata || {},
     fronts: map?.military?.fronts || [],
+    events: allBattleEvents.value,
     regiments: visibleRows.value
   };
   downloadText(`fmg-military-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function exportBattleEvents() {
+  const map = props.state.map;
+  const seed = map?.metadata?.seed || "map";
+  const payload = {
+    seed,
+    exportedAt: new Date().toISOString(),
+    count: allBattleEvents.value.length,
+    events: allBattleEvents.value
+  };
+  downloadText(`fmg-military-events-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
 function downloadText(filename, text, type) {

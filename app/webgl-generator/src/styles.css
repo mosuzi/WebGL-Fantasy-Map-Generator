@@ -4948,7 +4948,7 @@ input.ui-switch-native {
 }
 
 .military-edit-toolbar {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .military-overview {
@@ -5059,6 +5059,74 @@ input.ui-switch-native {
   border-radius: 999px;
   background: linear-gradient(90deg, #d9b45f, #7fb3a4);
   box-shadow: 0 0 10px rgba(127, 179, 164, 0.18);
+}
+
+.military-event-list {
+  display: grid;
+  gap: 7px;
+  margin: 8px 0 10px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 9px;
+  background: rgba(9, 15, 18, 0.34);
+}
+
+.military-event-list-heading,
+.military-event-item div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.military-event-list-heading strong {
+  color: #edf4f6;
+  font-size: 13px;
+}
+
+.military-event-list-heading span,
+.military-event-item span,
+.military-event-empty {
+  color: #8ca0aa;
+  font-size: 11px;
+}
+
+.military-event-list ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.military-event-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border-left: 2px solid rgba(240, 206, 124, 0.55);
+  padding: 6px 8px;
+  background: rgba(7, 12, 15, 0.42);
+}
+
+.military-event-item strong {
+  overflow: hidden;
+  color: #f6d78c;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.military-event-item p,
+.military-event-empty {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.military-event-item p {
+  color: #d8e5e8;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .military-ratio-panel {
