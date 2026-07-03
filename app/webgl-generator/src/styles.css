@@ -4971,6 +4971,21 @@ input.ui-switch-native {
   grid-template-columns: 44px minmax(0, 1fr);
 }
 
+.military-panel-sort {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.military-panel-sort .el-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  margin-left: 0;
+  padding-inline: 6px;
+}
+
 .diplomacy-edit-toolbar,
 .military-edit-toolbar {
   display: grid;

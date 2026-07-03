@@ -16453,3 +16453,25 @@ full 矩阵结果：
 - 构建产物浏览器烟测通过：`stage-2-1231411414` 生成 `2` 条 front，长度均为 `6`，战线图层顶点增量 `36`；临时注入缺少 `borderCellPairs` 的旧 front 后战线顶点增量为 `0`；`glError = 0`、console/page error 为 `0`。
 - 已保存近景截图 `docs/generated/reports/military-front-arrow-smoke.png` 用于人工检查，态势线表现为短边界宽带和内嵌方向箭头。
 - e2e 守门通过：点击到出图 `1342.9ms`，纯生成 `676.9ms`，WebGL 加载 `356.9ms`，UI slack `309.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 127.9ms`，最慢加载阶段为 `构建视觉 cell mesh 55ms`，`line-vertices = 51.1ms`。
+
+### 军事面板静态布局第三刀
+
+背景：
+
+- 用户明确指出当前方向有点跑偏，无需继续做动态军事系统。
+- 军事面板仍有明显的粗糙感：选中军团概要和详情被长表格压到后面，首屏更像对象列表而不是军事单位编辑面板。
+- 本轮只做静态布局和样式收束，不新增战役模拟、战争行动链路、战役自动结束或外交联动。
+
+修正：
+
+- `军事管理` 面板首屏改为优先展示选中军团概要和详情网格。
+- 军团排序条和军团表格下移为对象切换区，避免选中对象的编辑信息被表格淹没。
+- 军事排序条补紧凑网格样式，按钮宽度、间距和高度统一收紧，降低整排大按钮的堆叠感。
+- 当前计划同步改写后续军事方向：除非用户重新要求，不再继续推进动态军事系统，优先做静态面板观感、导出体验和可读性收尾。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `783.94KB / gzip 236.85KB`，`MilitaryPanel` chunk 约 `39.74KB / gzip 12.16KB`。
+- 构建产物浏览器烟测通过：`stage-2-1` 打开军事面板后，选中军团概要位于表格之前，`overviewVisibleBeforeTable = true`，`overviewTop = 228`，`firstTableTop = 886`，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1422.7ms`，纯生成 `675.4ms`，WebGL 加载 `399.5ms`，UI slack `347.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 120.4ms`，最慢加载阶段为 `构建视觉 cell mesh 64.4ms`，`line-vertices = 47.9ms`，`fit-draw = 2.6ms`。

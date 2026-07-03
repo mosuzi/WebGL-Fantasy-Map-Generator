@@ -41,17 +41,6 @@
   <input ref="battleEventsImportInput" class="military-import-input" type="file" accept="application/json,.json" @change="importBattleEventsFile" />
   <p v-if="battleEventsImportStatus" class="military-import-status">{{ battleEventsImportStatus }}</p>
 
-  <UiSortBar class-name="military-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
-  <UiObjectTable
-    :columns="columns"
-    :rows="visibleRows"
-    :selected-id="state.selectedRegimentId"
-    empty-text="没有匹配的军团"
-    @select="callbacks.onSelect"
-    @locate="callbacks.onLocate"
-  />
-
   <section v-if="selected" class="military-overview" aria-label="选中军团概要">
     <div class="military-overview-heading">
       <div class="military-overview-title">
@@ -89,6 +78,17 @@
   </section>
 
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
+
+  <UiSortBar class-name="military-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
+
+  <UiObjectTable
+    :columns="columns"
+    :rows="visibleRows"
+    :selected-id="state.selectedRegimentId"
+    empty-text="没有匹配的军团"
+    @select="callbacks.onSelect"
+    @locate="callbacks.onLocate"
+  />
 
   <section v-if="selected" class="military-event-list" aria-label="选中军团战斗事件">
     <div class="military-event-list-heading">
