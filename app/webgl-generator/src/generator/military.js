@@ -1113,7 +1113,7 @@ function frontMaxBoundaryLength(pack, fromPoint, toPoint) {
   const width = Number.isFinite(minX) ? maxX - minX : 1440;
   const height = Number.isFinite(minY) ? maxY - minY : 720;
   const span = Math.max(width, height);
-  return clamp(Math.min(distance([fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]) * 0.035, span / 72), 8, span / 60);
+  return clamp(Math.min(distance([fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]) * 0.025, span / 96), 6, span / 80);
 }
 
 function orientFrontSegment(points, fromPoint, toPoint) {

@@ -590,6 +590,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "外交压力", value: formatNumber(selected.value.diplomacyPressure)},
   {label: "资源压力", value: formatNumber(selected.value.resourcePressure)},
   {label: "战役", value: selected.value.campaignLabel},
+  {label: "战役摘要", value: selected.value.campaignSummaryLabel},
   {label: "战争原因", value: selected.value.warCauseLabel || "无"}
 ] : []);
 const stationDestinationOptions = computed(() => buildStationDestinationOptions(props.state.map, selected.value, selectedState.value?.state));
@@ -651,6 +652,7 @@ function buildMilitaryMetrics(map) {
       resourcePressure: Number(policy.resourcePressure || 1),
       campaigns: stateCampaigns,
       campaignLabel: campaignLabelForState(stateCampaigns),
+      campaignSummaryLabel: campaignSummaryLabelForState(stateCampaigns),
       warCauseLabel: firstWarCause(state.state)
     };
   }));
@@ -682,6 +684,21 @@ function campaignLabelForState(campaigns = []) {
     return `${campaign.name || "战役"}（${opponent}）`;
   }
   return `${formatNumber(campaigns.length)} 场`;
+}
+
+function campaignSummaryLabelForState(campaigns = []) {
+  if (!campaigns.length) return "无";
+  const events = campaigns.reduce((sum, campaign) => sum + Number(campaign.events || 0), 0);
+  if (!events) return "无事件";
+  const applied = campaigns.reduce((sum, campaign) => sum + Number(campaign.appliedEvents || 0), 0);
+  const casualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.casualties || 0), 0);
+  const attackerCasualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.attackerCasualties || 0), 0);
+  const defenderCasualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.defenderCasualties || 0), 0);
+  const parts = [`事件 ${formatNumber(events)}`, `已应用 ${formatNumber(applied)}`];
+  if (attackerCasualties) parts.push(`攻方损耗 ${formatNumber(attackerCasualties)}`);
+  if (defenderCasualties) parts.push(`守方损耗 ${formatNumber(defenderCasualties)}`);
+  if (!attackerCasualties && !defenderCasualties && casualties) parts.push(`损耗 ${formatNumber(casualties)}`);
+  return parts.join(" / ");
 }
 
 function stateRows(map) {

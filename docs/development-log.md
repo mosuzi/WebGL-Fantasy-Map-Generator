@@ -16341,3 +16341,44 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `774.36KB / gzip 234.00KB`，`MilitaryPanel` chunk 约 `37.98KB / gzip 11.65KB`。
 - e2e 守门通过：点击到出图 `1593.7ms`，纯生成 `856ms`，WebGL 加载 `473ms`，UI slack `264.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 159.9ms`，最慢加载阶段为 `构建视觉 cell mesh 88.6ms`，`line-vertices = 53.2ms`，`drawMs = 0.1ms`，`glError = 0`。
 - 构建产物浏览器烟测通过：军事面板概要显示 `战役1`，军事 JSON 导出 `campaigns = 1`、`metadata.campaigns = 1`；切到参战军团后详情显示 `徐-麇之战（徐王国 / 麇国）`，`drawMs = 0.4ms`、`glError = 0`、console/page error 为 `0`。
+
+### 战役对象战报摘要第一刀
+
+背景：
+
+- `map.military.campaigns` 已经承载战役清单，但战斗事件记录、导入和清空后，战役对象本身还不会吸收事件摘要。
+- 后续双方结算、战役推进和外交战争状态变化都需要一个稳定的战役级摘要入口。
+- 本轮只同步摘要，不自动扣对手兵力、不推进阶段、不改外交。
+
+修正：
+
+- `refreshMilitaryEventMetadata()` 现在会同步刷新 `map.military.campaigns`。
+- 战役对象会按共享 `campaign:*` 链路重算事件数、已应用/未应用、累计损耗、攻方/守方/参战/本地/手动损耗、最近事件。
+- 同步时会从当前双方军团重算 `attackerRegiments / defenderRegiments / attackerTroops / defenderTroops / troopBalance`，让轻量结果应用后的战役兵力摘要跟随变化。
+- 军事管理详情新增“战役摘要”，显示事件数、已应用数和攻防损耗；军事 JSON 导出自然包含这些字段。
+
+验证：
+
+- 命令层烟测通过：给 `stage-2-1231411414` 的 campaign 记录并应用一条攻方战斗事件后，`events = 1`、`appliedEvents = 1`、`attackerCasualties = 2063`、最近事件 id 为 `17:0:battle:1`，攻方兵力 `67962 -> 65899`；撤销后事件数、损耗和 metadata 事件数都回到 `0`。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `777.48KB / gzip 234.91KB`，`MilitaryPanel` chunk 约 `38.56KB / gzip 11.77KB`。
+
+### 军事态势线贴边第五刀
+
+背景：
+
+- 用户再次指出军事态势线观感仍不对：不能太长，最多只在边界上存在；不要跨海；不能是细线，而要是宽体渐变色指向方向型箭头。
+- 第四刀虽然已避免跨海和长线，但渲染仍在每个边界小段重复塞小箭头，远景下仍可能像碎细线。
+
+修正：
+
+- `frontMaxBoundaryLength()` 继续收紧，从国家距离 `0.035` 与 `span / 72` 上限改为 `0.025` 与 `span / 96` 上限，最低允许 `6` 个世界单位。
+- front 仍只来自双方陆地 pack cell 的共享 Voronoi 边；没有共享陆地边界时不画战线。
+- 渲染宽度从约 `12` 世界单位提升为 `18-30` 范围，视觉上明确成为宽体标记。
+- 战线渲染改为整条边界渐变带 + 单个指向敌方的宽箭头头部，不再每段重复小三角。
+
+验证：
+
+- `git diff --check` 通过。
+- 数据烟测覆盖 `stage-2-1231411414 / front-check-1 / front-audit-1 / front-audit-2`：有战线样本均为 `2` 条 front，`invalid = 0`、`long = 0`，最大长度 `8`；无共享陆地边界样本保持 `fronts = 0`。
+- 构建产物浏览器烟测通过：`stage-2-1231411414` 生成 `2` 条 front，长度均为 `6`、上限 `6`；战线图层开关只增加 `36` 个 line 顶点，`drawMs = 0`、`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1838.2ms`，纯生成 `980.8ms`，WebGL 加载 `559.6ms`，UI slack `297.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 176.4ms`，最慢加载阶段为 `构建视觉 cell mesh 58.5ms`，`line-vertices = 50.8ms`，`glError = 0`。

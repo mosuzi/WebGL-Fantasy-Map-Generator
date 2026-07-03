@@ -1710,7 +1710,8 @@ function colorForRegiment(regiment) {
 }
 
 function pushMilitaryFrontLines(vertices, context, map, visibility) {
-  const width = Math.max(12, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 130);
+  const span = Math.max(map.metadata.graphWidth, map.metadata.graphHeight);
+  const width = clamp(span / 72, 18, 30);
   for (const front of map?.military?.fronts || []) {
     pushMilitaryFrontArrow(vertices, context, front, width);
   }
@@ -1722,8 +1723,10 @@ function pushMilitaryFrontArrow(vertices, context, front, widthWorld) {
   if (source.length < 2) return;
   const direction = militaryFrontRawDirection(source, front);
   const palette = militaryFrontArrowPalette(front?.stance);
-  pushMilitaryFrontBoundaryBand(vertices, context, source, direction, widthWorld * 1.28, palette.halo);
+  pushMilitaryFrontBoundaryBand(vertices, context, source, direction, widthWorld * 1.45, palette.halo);
+  pushMilitaryFrontBoundaryHead(vertices, context, source, direction, widthWorld * 1.45, palette.halo);
   pushMilitaryFrontBoundaryBand(vertices, context, source, direction, widthWorld, palette);
+  pushMilitaryFrontBoundaryHead(vertices, context, source, direction, widthWorld, palette);
 }
 
 function pushMilitaryFrontBoundaryBand(vertices, context, points, direction, widthWorld, palette) {
@@ -1742,7 +1745,6 @@ function pushMilitaryFrontBoundaryBand(vertices, context, points, direction, wid
     const headEnd = [end[0] + normal.x * halfWidth, end[1] + normal.y * halfWidth];
     pushWorldTriangleWithColors(vertices, context, tailStart, headStart, headEnd, palette.tail, palette.body, palette.head);
     pushWorldTriangleWithColors(vertices, context, tailStart, headEnd, tailEnd, palette.tail, palette.head, palette.body);
-    pushMilitaryFrontBoundaryHead(vertices, context, start, end, normal, halfWidth, palette);
   }
 }
 
@@ -1753,19 +1755,46 @@ function militaryFrontSegmentNormal(dx, dy, direction) {
   return normal;
 }
 
-function pushMilitaryFrontBoundaryHead(vertices, context, start, end, normal, halfWidth, palette) {
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  const length = Math.hypot(dx, dy);
-  if (length <= 0.000001) return;
-  const tangent = {x: dx / length, y: dy / length};
-  const center = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
-  const baseHalf = Math.min(length * 0.32, halfWidth * 0.9);
-  const baseCenter = [center[0] - normal.x * halfWidth * 0.24, center[1] - normal.y * halfWidth * 0.24];
-  const tip = [center[0] + normal.x * halfWidth * 0.86, center[1] + normal.y * halfWidth * 0.86];
-  const left = [baseCenter[0] - tangent.x * baseHalf, baseCenter[1] - tangent.y * baseHalf];
-  const right = [baseCenter[0] + tangent.x * baseHalf, baseCenter[1] + tangent.y * baseHalf];
+function pushMilitaryFrontBoundaryHead(vertices, context, points, direction, widthWorld, palette) {
+  const anchor = militaryFrontHeadAnchor(points, direction);
+  if (!anchor) return;
+  const halfWidth = Math.max(1, widthWorld / 2);
+  const baseHalf = Math.min(anchor.totalLength * 0.46, widthWorld * 0.92);
+  if (baseHalf <= 0.000001) return;
+  const baseCenter = [anchor.center[0] - anchor.normal.x * halfWidth * 0.52, anchor.center[1] - anchor.normal.y * halfWidth * 0.52];
+  const tip = [anchor.center[0] + anchor.normal.x * halfWidth * 1.18, anchor.center[1] + anchor.normal.y * halfWidth * 1.18];
+  const left = [baseCenter[0] - anchor.tangent.x * baseHalf, baseCenter[1] - anchor.tangent.y * baseHalf];
+  const right = [baseCenter[0] + anchor.tangent.x * baseHalf, baseCenter[1] + anchor.tangent.y * baseHalf];
   pushWorldTriangleWithColors(vertices, context, left, tip, right, palette.body, palette.head, palette.body);
+}
+
+function militaryFrontHeadAnchor(points, direction) {
+  const segments = [];
+  let totalLength = 0;
+  for (let index = 0; index < points.length - 1; index++) {
+    const start = points[index];
+    const end = points[index + 1];
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.000001) continue;
+    segments.push({start, end, dx, dy, length, from: totalLength});
+    totalLength += length;
+  }
+  if (!segments.length) return null;
+  const target = totalLength / 2;
+  const segment = segments.find(item => target >= item.from && target <= item.from + item.length) || segments[Math.floor(segments.length / 2)];
+  const local = clamp((target - segment.from) / segment.length, 0.12, 0.88);
+  const tangent = {x: segment.dx / segment.length, y: segment.dy / segment.length};
+  return {
+    center: [
+      segment.start[0] + segment.dx * local,
+      segment.start[1] + segment.dy * local
+    ],
+    tangent,
+    normal: militaryFrontSegmentNormal(segment.dx, segment.dy, direction),
+    totalLength
+  };
 }
 
 function militaryFrontRawDirection(points, front) {

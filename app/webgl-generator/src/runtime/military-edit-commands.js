@@ -1037,6 +1037,111 @@ function refreshMilitaryEventMetadata(map) {
   const military = map?.pack?.military || map?.military;
   if (!military?.metadata) return;
   military.metadata.events = Array.isArray(military.events) ? military.events.length : 0;
+  refreshMilitaryCampaignEventSummaries(map, military);
+}
+
+function refreshMilitaryCampaignEventSummaries(map, military = map?.pack?.military || map?.military) {
+  if (!Array.isArray(military?.campaigns)) return;
+  const campaignByKey = new Map();
+  for (const campaign of military.campaigns) {
+    resetCampaignEventSummary(map, campaign);
+    for (const key of campaignEventKeys(campaign)) campaignByKey.set(key, campaign);
+  }
+
+  const events = Array.isArray(military.events) ? military.events : [];
+  for (const event of events) {
+    if (!event || event.kind !== "battle") continue;
+    const campaign = campaignByKey.get(String(event.chainKey || event.campaignKey || ""));
+    if (!campaign) continue;
+    campaign.events += 1;
+    if (event.resultApplied) campaign.appliedEvents += 1;
+    else campaign.pendingEvents += 1;
+    const casualties = event.resultApplied ? battleEventCasualties(event) : 0;
+    if (casualties) {
+      campaign.casualties += casualties;
+      const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
+      campaign.sideCasualties[side] += casualties;
+      campaign.attackerCasualties = campaign.sideCasualties.attacker;
+      campaign.defenderCasualties = campaign.sideCasualties.defender;
+      campaign.participantCasualties = campaign.sideCasualties.participant;
+      campaign.localCasualties = campaign.sideCasualties.local;
+      campaign.manualCasualties = campaign.sideCasualties.manual;
+    }
+    if (!campaign.latestEvent || Number(event.sequence || 0) >= Number(campaign.latestEvent.sequence || 0)) {
+      campaign.latestEvent = summarizeBattleEvent(event);
+    }
+  }
+
+  for (const campaign of military.campaigns) {
+    campaign.casualties = roundValue(campaign.casualties, 0);
+    campaign.attackerCasualties = roundValue(campaign.attackerCasualties, 0);
+    campaign.defenderCasualties = roundValue(campaign.defenderCasualties, 0);
+    campaign.participantCasualties = roundValue(campaign.participantCasualties, 0);
+    campaign.localCasualties = roundValue(campaign.localCasualties, 0);
+    campaign.manualCasualties = roundValue(campaign.manualCasualties, 0);
+  }
+}
+
+function resetCampaignEventSummary(map, campaign) {
+  const attacker = map?.pack?.states?.[campaign.attacker] || map?.politics?.states?.[campaign.attacker];
+  const defender = map?.pack?.states?.[campaign.defender] || map?.politics?.states?.[campaign.defender];
+  const attackerRegiments = attacker?.military || [];
+  const defenderRegiments = defender?.military || [];
+  campaign.attackerRegiments = attackerRegiments.length;
+  campaign.defenderRegiments = defenderRegiments.length;
+  campaign.attackerTroops = roundValue(attackerRegiments.reduce((sum, regiment) => sum + Number(regiment.a || 0), 0), 0);
+  campaign.defenderTroops = roundValue(defenderRegiments.reduce((sum, regiment) => sum + Number(regiment.a || 0), 0), 0);
+  campaign.troopBalance = roundValue(campaign.attackerTroops - campaign.defenderTroops, 0);
+  campaign.events = 0;
+  campaign.appliedEvents = 0;
+  campaign.pendingEvents = 0;
+  campaign.casualties = 0;
+  campaign.sideCasualties = createEmptyBattleSideCasualties();
+  campaign.attackerCasualties = 0;
+  campaign.defenderCasualties = 0;
+  campaign.participantCasualties = 0;
+  campaign.localCasualties = 0;
+  campaign.manualCasualties = 0;
+  campaign.latestEvent = null;
+}
+
+function campaignEventKeys(campaign = {}) {
+  return [campaign.chainKey, campaign.id, campaign.key ? `campaign:${slugText(campaign.key)}` : ""]
+    .filter(Boolean)
+    .map(String);
+}
+
+function battleEventCasualties(event) {
+  const result = event?.result || {};
+  const direct = Number(result.casualties);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const delta = Math.abs(Number(result.troopDelta || 0));
+  return Number.isFinite(delta) ? delta : 0;
+}
+
+function normalizeBattleChainSide(side) {
+  if (side === "attacker" || side === "defender" || side === "participant" || side === "manual") return side;
+  return "local";
+}
+
+function createEmptyBattleSideCasualties() {
+  return {attacker: 0, defender: 0, participant: 0, local: 0, manual: 0};
+}
+
+function summarizeBattleEvent(event) {
+  return {
+    id: event.id || "",
+    sequence: Number(event.sequence || 0),
+    chainSide: event.chainSide || event.side || "local",
+    chainSideLabel: event.chainSideLabel || battleChainSideLabel(event.chainSide || event.side || "local"),
+    type: event.type || "",
+    typeLabel: event.typeLabel || event.type || "事件",
+    outcome: event.outcome || "",
+    outcomeLabel: event.outcomeLabel || event.outcome || "结果",
+    resultApplied: Boolean(event.resultApplied),
+    casualties: event.resultApplied ? battleEventCasualties(event) : 0,
+    at: event.at || ""
+  };
 }
 
 function sumUnitTroops(units = {}) {
