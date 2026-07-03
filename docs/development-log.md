@@ -17399,3 +17399,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `818.36KB / gzip 246.91KB`，名称库懒加载 chunk 约 `12.00KB / gzip 4.34KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入 `culture-state-ui / culture-place-ui / culture-hydro-ui` 三个用户库后，打开名称库面板，在“文化绑定”区选择文化 #1 并分别设置三项绑定；`map.namebases.bindings.cultures["1"]` 写入 `{stateRoot, place, hydro}`，面板显示“文化 #1 国家根名 / 地名 / 水文”绑定用途，面板无横向溢出；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1429.1ms`，纯生成 `758.4ms`，WebGL 加载 `363ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `135.1ms`，最慢加载阶段为“构建线层顶点” `44.8ms`。
+
+### 名称库绑定候选类型过滤第一刀
+
+背景：
+
+- 名称库全局绑定和文化绑定已经能写入 `stateRoot / place / hydro`，但下拉候选此前会显示所有名称库。
+- 如果把水文库、后缀库或形制库误绑定到国家根名，后续生成会变得难以理解。
+- 本轮只收束 UI 候选，不改变已保存绑定、不批量改名，也不触碰动态军事系统。
+
+修正：
+
+- `NamebasePanel.vue` 新增绑定目标到 `kind` 的兼容表。
+- `stateRoot` 候选只显示 `state-root / generic`，`place` 候选显示 `place / place-part / generic`，`hydro` 候选显示 `hydro / generic`。
+- 当前绑定如果已经指向类型不匹配但仍存在的词池，会作为“当前不匹配”选项保留，便于用户看见并修复；真正不存在的 id 仍显示“失效引用”。
+- `docs/task-notes/namebase-generation-binding-plan.md` 和 `docs/current-plan.md` 已同步记录该边界。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；名称库懒加载 chunk 约 `12.33KB / gzip 4.45KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：注入 `state-root / place / hydro / generic / suffix` 五类用户库，并故意让全局国家根名绑定到水文库；国家根名下拉显示 `u-state / u-generic` 并保留 `u-hydro` 为“当前不匹配”，不显示 `u-place / u-suffix`；地名下拉显示 `u-place / u-generic`，水文下拉显示 `u-hydro / u-generic`；面板无横向溢出，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1367.9ms`，纯生成 `699.6ms`，WebGL 加载 `357.7ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `131.2ms`，最慢加载阶段为“构建视觉 cell mesh” `55.7ms`，`glError = 0`。

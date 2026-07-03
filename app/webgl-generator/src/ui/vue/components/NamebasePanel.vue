@@ -194,6 +194,11 @@ const globalBindingTargets = Object.freeze([
   {key: "place", label: "地名"},
   {key: "hydro", label: "水文"}
 ]);
+const bindingCompatibleKinds = Object.freeze({
+  stateRoot: new Set(["state-root", "generic"]),
+  place: new Set(["place", "place-part", "generic"]),
+  hydro: new Set(["hydro", "generic"])
+});
 
 const columns = Object.freeze([
   {key: "category", label: "分类"},
@@ -329,17 +334,28 @@ function formatNumber(value) {
 
 function bindingOptions(targetKey, value = globalBindings.value[targetKey]) {
   const current = String(value || "");
+  const candidates = rows.value.filter(row => isBindingCandidate(row, targetKey));
   const options = [
     {value: "", label: "使用内置策略"},
-    ...rows.value.map(row => ({
+    ...candidates.map(row => ({
       value: row.id,
       label: `${row.name}（${row.origin} / ${row.kind}）`
     }))
   ];
   if (current && !options.some(option => String(option.value) === current)) {
-    options.splice(1, 0, {value: current, label: `失效引用：${current}`});
+    const currentRow = rows.value.find(row => String(row.id) === current);
+    options.splice(1, 0, {
+      value: current,
+      label: currentRow ? `${currentRow.name}（当前不匹配 / ${currentRow.kind}）` : `失效引用：${current}`
+    });
   }
   return options;
+}
+
+function isBindingCandidate(row, targetKey) {
+  const compatibleKinds = bindingCompatibleKinds[targetKey];
+  if (!compatibleKinds) return true;
+  return compatibleKinds.has(String(row?.kind || "").trim());
 }
 
 function collectCultures(map) {
