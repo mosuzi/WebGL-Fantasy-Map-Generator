@@ -16139,3 +16139,31 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：打开控制面板和 `军事管理`，通过二级“战斗事件”记录 `链路分组烟测：边境遭遇。` 后，列表显示链路名与 `序号 #`，链路筛选出现非 `all` 选项。
 - 同次烟测切到该链路并按 `当前筛选` 导出 JSON：`count = 1`，事件包含 `chainKey = campaign:1:rivalry`、`chainLabel = 谭-赤原之战`，`filters.chainKey` 保持同值，`summary.chainCount = 1`；战斗事件列表无横向溢出，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1302.9ms`，纯生成 `675.9ms`，WebGL 加载 `350.8ms`，UI slack `276.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 113.5ms`，最慢加载阶段为 `构建视觉 cell mesh 60.7ms`。
+
+### 战报链双方字段
+
+背景：
+
+- 多条战报链路已经能按 `chainKey / chainLabel` 分组，但事件还不知道本方是进攻方还是防守方，也不知道对手国家。
+- 上一刀的 campaign 链路 key 带了当前国家 id，同一场战争的攻防双方会形成不同 key，不利于后续双方结算。
+- 本轮仍只补双方上下文字段，不做自动战役推进、外交状态改写或完整战斗模拟。
+
+修正：
+
+- campaign 战斗事件的 `chainKey` 改为双方共享的 `campaign:*` key。
+- 新记录和导入事件会写入 `chainSide / chainSideLabel`、`opponentStateId / opponentStateName`、`attackerStateId / attackerStateName`、`defenderStateId / defenderStateName`。
+- 手动或旧格式导入事件会保留显式链路字段，并把缺失阵营归为 `手动`。
+- 军事面板事件条目新增“进攻方 / 防守方 + 对手”状态胶囊。
+- 战斗事件 CSV 导出新增 `阵营` 和 `对手` 两列；JSON 导出随事件保留完整双方字段，链路摘要中的 `chains` 也带出阵营、对手、已应用、未应用和损耗。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 12 项。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `32.95KB / gzip 10.36KB`，主入口约 `771.76KB / gzip 233.18KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开控制面板和 `军事管理`，通过二级“战斗事件”记录 `双方字段烟测：攻防链路。` 后，事件显示对手信息。
+- 同次烟测切到该链路并按 `当前筛选` 导出 JSON 和 CSV：事件 `chainKey = campaign:16:1:991:rivalry`，不再带当前国家前缀；`chainSide = defender / 防守方`，`opponentStateName = 谭帝国`，`attackerStateName = 谭帝国`，`defenderStateName = 赤原国`；JSON `summary.chains[0]` 带出阵营和对手，CSV 表头包含 `阵营 / 对手`，战斗事件列表无横向溢出，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1602.2ms`，纯生成 `812.7ms`，WebGL 加载 `491.9ms`，UI slack `297.6ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 133.8ms`，最慢加载阶段为 `构建视觉 cell mesh 66ms`。

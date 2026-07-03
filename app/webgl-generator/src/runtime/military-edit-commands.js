@@ -502,7 +502,15 @@ function normalizeBattleEventInput(event = {}) {
     description: String(event.description || event.note || "").trim(),
     applyResult: Boolean(event.applyResult),
     chainKey: String(event.chainKey || event.chainId || event.campaignKey || "").trim(),
-    chainLabel: String(event.chainLabel || event.campaignLabel || event.chainName || "").trim()
+    chainLabel: String(event.chainLabel || event.campaignLabel || event.chainName || "").trim(),
+    chainSide: String(event.chainSide || event.side || "").trim(),
+    chainSideLabel: String(event.chainSideLabel || event.sideLabel || "").trim(),
+    opponentStateId: optionalNumber(event.opponentStateId ?? event.opponentId),
+    opponentStateName: String(event.opponentStateName || event.opponentName || "").trim(),
+    attackerStateId: optionalNumber(event.attackerStateId ?? event.attacker),
+    attackerStateName: String(event.attackerStateName || event.attackerName || "").trim(),
+    defenderStateId: optionalNumber(event.defenderStateId ?? event.defender),
+    defenderStateName: String(event.defenderStateName || event.defenderName || "").trim()
   };
 }
 
@@ -519,13 +527,21 @@ function prepareImportedBattleEvents(map, document) {
     if (!state?.i || !regiment) continue;
     const sequence = Number(source.sequence) > 0 ? Number(source.sequence) : ++nextSequence;
     const input = normalizeBattleEventInput(source);
-    const chain = resolveBattleEventChain(state, regiment, input);
+    const chain = resolveBattleEventChain(map, state, regiment, input);
     const event = {
       id: String(source.id || `${regiment.id || `${state.i}:${regiment.i}`}:battle:${sequence}`),
       sequence,
       kind: "battle",
       chainKey: chain.chainKey,
       chainLabel: chain.chainLabel,
+      chainSide: chain.chainSide,
+      chainSideLabel: chain.chainSideLabel,
+      opponentStateId: chain.opponentStateId,
+      opponentStateName: chain.opponentStateName,
+      attackerStateId: chain.attackerStateId,
+      attackerStateName: chain.attackerStateName,
+      defenderStateId: chain.defenderStateId,
+      defenderStateName: chain.defenderStateName,
       type: input.type,
       typeLabel: source.typeLabel || input.typeLabel,
       outcome: input.outcome,
@@ -757,13 +773,21 @@ function createBattleEvent(map, state, regiment, eventInput) {
   const military = ensureMilitaryEventStore(map);
   const sequence = Number(military.metadata.eventSequence || 0) + 1;
   military.metadata.eventSequence = sequence;
-  const chain = resolveBattleEventChain(state, regiment, eventInput);
+  const chain = resolveBattleEventChain(map, state, regiment, eventInput);
   return {
     id: `${regiment.id || `${state.i}:${regiment.i}`}:battle:${sequence}`,
     sequence,
     kind: "battle",
     chainKey: chain.chainKey,
     chainLabel: chain.chainLabel,
+    chainSide: chain.chainSide,
+    chainSideLabel: chain.chainSideLabel,
+    opponentStateId: chain.opponentStateId,
+    opponentStateName: chain.opponentStateName,
+    attackerStateId: chain.attackerStateId,
+    attackerStateName: chain.attackerStateName,
+    defenderStateId: chain.defenderStateId,
+    defenderStateName: chain.defenderStateName,
     type: eventInput.type,
     typeLabel: eventInput.typeLabel,
     outcome: eventInput.outcome,
@@ -781,26 +805,73 @@ function createBattleEvent(map, state, regiment, eventInput) {
   };
 }
 
-function resolveBattleEventChain(state, regiment, eventInput = {}) {
+function resolveBattleEventChain(map, state, regiment, eventInput = {}) {
   if (eventInput.chainKey || eventInput.chainLabel) {
     const fallback = eventInput.chainLabel || eventInput.chainKey || "战报链";
     return {
       chainKey: eventInput.chainKey || `manual:${state.i}:${slugText(fallback)}`,
-      chainLabel: eventInput.chainLabel || eventInput.chainKey
+      chainLabel: eventInput.chainLabel || eventInput.chainKey,
+      ...resolveExplicitBattleChainSide(eventInput)
     };
   }
   const campaign = firstStateCampaign(state);
   if (campaign) {
-    const key = campaign.id ?? campaign.i ?? campaign.key ?? campaign.cause ?? campaign.causeLabel ?? "campaign";
+    const attacker = map?.pack?.states?.[campaign.attacker] || map?.politics?.states?.[campaign.attacker];
+    const defender = map?.pack?.states?.[campaign.defender] || map?.politics?.states?.[campaign.defender];
+    const side = Number(state.i) === Number(campaign.attacker) ? "attacker" : Number(state.i) === Number(campaign.defender) ? "defender" : "participant";
+    const opponent = side === "attacker" ? defender : side === "defender" ? attacker : null;
+    const key = campaign.id ?? campaign.i ?? campaign.key ?? `${campaign.attacker}:${campaign.defender}:${campaign.start || ""}:${campaign.cause || campaign.causeLabel || campaign.name || "campaign"}`;
     return {
-      chainKey: `campaign:${state.i}:${slugText(key)}`,
-      chainLabel: campaign.name || campaign.label || campaign.causeLabel || campaign.cause || "战争战报"
+      chainKey: `campaign:${slugText(key)}`,
+      chainLabel: campaign.name || campaign.label || campaign.causeLabel || campaign.cause || "战争战报",
+      chainSide: side,
+      chainSideLabel: battleChainSideLabel(side),
+      opponentStateId: opponent?.i ?? null,
+      opponentStateName: stateName(opponent),
+      attackerStateId: attacker?.i ?? campaign.attacker ?? null,
+      attackerStateName: stateName(attacker),
+      defenderStateId: defender?.i ?? campaign.defender ?? null,
+      defenderStateName: stateName(defender)
     };
   }
   return {
     chainKey: `regiment:${state.i}:${regiment.i}:local`,
-    chainLabel: "本地战报"
+    chainLabel: "本地战报",
+    chainSide: "local",
+    chainSideLabel: "本地",
+    opponentStateId: null,
+    opponentStateName: "",
+    attackerStateId: null,
+    attackerStateName: "",
+    defenderStateId: null,
+    defenderStateName: ""
   };
+}
+
+function resolveExplicitBattleChainSide(eventInput = {}) {
+  const side = eventInput.chainSide || "manual";
+  return {
+    chainSide: side,
+    chainSideLabel: eventInput.chainSideLabel || battleChainSideLabel(side),
+    opponentStateId: Number.isFinite(eventInput.opponentStateId) ? eventInput.opponentStateId : null,
+    opponentStateName: eventInput.opponentStateName || "",
+    attackerStateId: Number.isFinite(eventInput.attackerStateId) ? eventInput.attackerStateId : null,
+    attackerStateName: eventInput.attackerStateName || "",
+    defenderStateId: Number.isFinite(eventInput.defenderStateId) ? eventInput.defenderStateId : null,
+    defenderStateName: eventInput.defenderStateName || ""
+  };
+}
+
+function battleChainSideLabel(side) {
+  if (side === "attacker") return "进攻方";
+  if (side === "defender") return "防守方";
+  if (side === "participant") return "参战方";
+  if (side === "local") return "本地";
+  return "手动";
+}
+
+function stateName(state) {
+  return state?.fullName || state?.name || (state?.i ? `国家 #${state.i}` : "");
 }
 
 function firstStateCampaign(state) {

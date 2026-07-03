@@ -179,6 +179,7 @@
         </div>
         <div class="military-event-meta">
           <span>{{ battleEventChainLabel(event) }}</span>
+          <span>{{ battleEventCampaignSideLabel(event) }}</span>
           <span>{{ battleEventSequenceLabel(event) }}</span>
           <span :class="battleEventAppliedClass(event)">{{ battleEventAppliedLabel(event) }}</span>
           <span>{{ battleEventLossLabel(event) }}</span>
@@ -920,7 +921,15 @@ function normalizeBattleEventForPanel(event) {
   return {
     ...event,
     chainKey,
-    chainLabel: event.chainLabel || event.campaignLabel || event.chainName || "本地战报"
+    chainLabel: event.chainLabel || event.campaignLabel || event.chainName || "本地战报",
+    chainSide: event.chainSide || event.side || "local",
+    chainSideLabel: event.chainSideLabel || event.sideLabel || battleChainSideLabel(event.chainSide || event.side || "local"),
+    opponentStateId: event.opponentStateId ?? event.opponentId ?? null,
+    opponentStateName: event.opponentStateName || event.opponentName || "",
+    attackerStateId: event.attackerStateId ?? event.attacker ?? null,
+    attackerStateName: event.attackerStateName || event.attackerName || "",
+    defenderStateId: event.defenderStateId ?? event.defender ?? null,
+    defenderStateName: event.defenderStateName || event.defenderName || ""
   };
 }
 
@@ -979,7 +988,22 @@ function summarizeBattleEventChains(events = []) {
   for (const event of events) {
     const key = event.chainKey || "unknown";
     if (!chains.has(key)) chains.set(key, {key, label: event.chainLabel || key || "本地战报", count: 0});
-    chains.get(key).count += 1;
+    const chain = chains.get(key);
+    chain.count += 1;
+    chain.applied = Number(chain.applied || 0) + (event.resultApplied ? 1 : 0);
+    chain.pending = Number(chain.pending || 0) + (event.resultApplied ? 0 : 1);
+    chain.casualties = Number(chain.casualties || 0) + (event.resultApplied ? battleEventCasualties(event) : 0);
+    if (event.opponentStateName) chain.opponentStateName = event.opponentStateName;
+    if (event.chainSideLabel) chain.chainSideLabel = event.chainSideLabel;
+    chain.latest = {
+      id: event.id || "",
+      sequence: event.sequence || null,
+      type: event.type || "",
+      typeLabel: event.typeLabel || event.type || "事件",
+      outcome: event.outcome || "",
+      outcomeLabel: event.outcomeLabel || event.outcome || "结果",
+      at: event.at || ""
+    };
   }
   return [...chains.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-CN"));
 }
@@ -1048,6 +1072,19 @@ function battleEventSequenceLabel(event) {
 
 function battleEventChainLabel(event) {
   return event?.chainLabel || event?.chainKey || "本地战报";
+}
+
+function battleEventCampaignSideLabel(event) {
+  const side = event?.chainSideLabel || battleChainSideLabel(event?.chainSide || "local");
+  return event?.opponentStateName ? `${side} / 对手 ${event.opponentStateName}` : side;
+}
+
+function battleChainSideLabel(side) {
+  if (side === "attacker") return "进攻方";
+  if (side === "defender") return "防守方";
+  if (side === "participant") return "参战方";
+  if (side === "manual") return "手动";
+  return "本地";
 }
 
 function battleEventAppliedLabel(event) {
@@ -1193,6 +1230,8 @@ function exportBattleEventsCsv() {
     "事件ID",
     "序号",
     "链路",
+    "阵营",
+    "对手",
     "时间",
     "国家",
     "军团",
@@ -1215,6 +1254,8 @@ function exportBattleEventsCsv() {
       event.id || "",
       event.sequence || "",
       battleEventChainLabel(event),
+      event.chainSideLabel || "",
+      event.opponentStateName || "",
       event.at || "",
       event.stateName || event.stateId || "",
       event.regimentName || event.regimentObjectId || event.regimentId || "",
