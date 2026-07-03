@@ -24,7 +24,8 @@
   <div class="military-edit-toolbar">
     <UiButton variant="secondary" @click="exportCsv">导出 CSV</UiButton>
     <UiButton variant="secondary" @click="exportJson">导出 JSON</UiButton>
-    <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEvents">导出事件</UiButton>
+    <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEvents">事件 JSON</UiButton>
+    <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEventsCsv">事件 CSV</UiButton>
   </div>
 
   <UiSortBar class-name="military-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -843,6 +844,49 @@ function exportBattleEvents() {
     events: allBattleEvents.value
   };
   downloadText(`fmg-military-events-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function exportBattleEventsCsv() {
+  const map = props.state.map;
+  const seed = map?.metadata?.seed || "map";
+  const header = [
+    "事件ID",
+    "序号",
+    "时间",
+    "国家",
+    "军团",
+    "类型",
+    "结果",
+    "说明",
+    "已应用",
+    "结果摘要",
+    "兵力前",
+    "兵力后",
+    "损耗",
+    "态势前",
+    "态势后"
+  ];
+  const body = allBattleEvents.value.map(event => {
+    const result = event.result || {};
+    return [
+      event.id || "",
+      event.sequence || "",
+      event.at || "",
+      event.stateName || event.stateId || "",
+      event.regimentName || event.regimentObjectId || event.regimentId || "",
+      event.typeLabel || event.type || "",
+      event.outcomeLabel || event.outcome || "",
+      event.description || "",
+      event.resultApplied ? "是" : "否",
+      event.resultApplied ? battleResultSummary(event) : "",
+      result.troopBefore ?? "",
+      result.troopAfter ?? "",
+      (result.casualties ?? Math.abs(result.troopDelta || 0)) || "",
+      result.statusBeforeLabel || result.statusBefore || "",
+      result.statusAfterLabel || result.statusAfter || ""
+    ];
+  });
+  downloadText(`fmg-military-events-${safeFilePart(seed)}.csv`, [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
 }
 
 function downloadText(filename, text, type) {

@@ -15598,3 +15598,29 @@ full 矩阵结果：
 - 命令烟测通过：给军团 `1:0` 记录 `袭扰 / 损耗：后卫被伏击，辎重受损` 并应用结果后，兵力 `16250 -> 12187`，态势 `garrisoned -> routed`，`metadata.troops 613002 -> 608939`，`metadata.events 0 -> 1`，事件写入 `resultApplied = true` 和 `casualties = 4063`。
 - 同次烟测中撤销恢复兵力、态势、事件和 metadata，重做再次应用同一结果；刷新范围为 `point-layers / object-index / object-panels`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1332.3ms`，纯生成 `658.8ms`，WebGL 加载 `363ms`，UI slack `310.5ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 121.6ms`，最慢加载阶段为 `构建视觉 cell mesh 52.8ms`，`line-vertices = 49.6ms`，`fit-draw = 2.6ms`，`glError = 0`。
+
+### 战斗事件 CSV 导出
+
+背景：
+
+- 事件 JSON 已能保留完整结构，但轻量结果应用后的兵力前后、损耗和态势变化不方便直接表格核对。
+- 本轮只补事件导出回归，不改战斗模拟、不改军事生成，也不改常规军团 CSV/JSON 的字段。
+
+修正：
+
+- `军事管理` 工具栏将原“导出事件”拆成“事件 JSON”和“事件 CSV”。
+- 新增事件 CSV 导出，字段包括事件 id、序号、时间、国家、军团、类型、结果、说明、是否应用、结果摘要、兵力前后、损耗和态势前后。
+- 工具栏从三列改为四列，避免新增按钮后挤压布局。
+- CSV 使用面板现有的 `allBattleEvents` 合并去重结果，保证与事件 JSON 的来源一致。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 239 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `23.08KB / gzip 7.57KB`，主入口约 `760.65KB / gzip 229.66KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开控制面板的“管理”tab，进入 `军事管理`，记录并应用 `CSV导出验证，含结果列` 后下载 `fmg-military-events-stage-2-1.csv`。
+- CSV 表头为 `事件ID,序号,时间,国家,军团,类型,结果,说明,已应用,结果摘要,兵力前,兵力后,损耗,态势前,态势后`；首条事件为 `1:0:battle:1`，兵力 `576 -> 553`，损耗 `23`，态势 `行军中 -> 修整中`，`resultApplied = true`。
+- 同次烟测 `metadata.events = 1`，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1343.1ms`，纯生成 `625.4ms`，WebGL 加载 `423.4ms`，UI slack `294.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 105.4ms`，最慢加载阶段为 `构建视觉 cell mesh 72.1ms`，`line-vertices = 48.9ms`，`fit-draw = 2.8ms`，`glError = 0`。
