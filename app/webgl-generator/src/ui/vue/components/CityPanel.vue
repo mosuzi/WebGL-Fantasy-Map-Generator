@@ -113,6 +113,7 @@ const props = defineProps({
 
 const sortOptions = Object.freeze([
   {key: "population", label: "人口"},
+  {key: "resourceCells", label: "资源"},
   {key: "type", label: "类型"},
   {key: "stateName", label: "国家"},
   {key: "provinceName", label: "省份"},
@@ -128,6 +129,7 @@ const columns = Object.freeze([
   {key: "type", label: "类型"},
   {key: "stateName", label: "国家"},
   {key: "provinceName", label: "省份"},
+  {key: "resourceCells", label: "资源", align: "right", format: value => formatNumberValue(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
 ]);
 
@@ -155,6 +157,7 @@ const summaryMetrics = computed(() => [
   {label: "城市", value: formatNumberValue(metrics.value.total)},
   {label: "首都", value: formatNumberValue(metrics.value.capitals)},
   {label: "港口", value: formatNumberValue(metrics.value.ports)},
+  {label: "资源城镇", value: formatNumberValue(metrics.value.resourceCities)},
   {label: "人口", value: formatPopulationValue(metrics.value.totalPopulation)},
   {label: "筛选", value: formatNumberValue(visibleRows.value.length)}
 ]);
@@ -163,6 +166,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "标记", value: selected.value.flags},
+  {label: "资源 cells", value: formatNumberValue(selected.value.resourceCells)},
+  {label: "资源种类", value: selected.value.resourceGoodNames || "无"},
   {label: "所属国家", value: selected.value.stateName},
   {label: "所属省份", value: selected.value.provinceName},
   {label: "所在 cell 归属", value: selected.value.cellOwnerName, debug: true},
@@ -211,6 +216,11 @@ function buildCityMetrics(map) {
       type: formatCityType(city, burg, population),
       flags: flags.join(" / ") || "普通",
       population,
+      resourceCells: numberOrFallback(city.resourceCells, burg?.resourceCells, 0),
+      markerResourceCells: numberOrFallback(city.markerResourceCells, burg?.markerResourceCells, 0),
+      resourceGoodIds: city.resourceGoodIds || burg?.resourceGoodIds || [],
+      resourceGoodNames: cityResourceGoodNames(map, city.resourceGoodIds || burg?.resourceGoodIds || []),
+      resourceScore: Number(city.resourceScore ?? burg?.resourceScore ?? 0) || 0,
       stateId,
       stateName: indexedName(map?.politics?.states, stateId),
       provinceId,
@@ -243,8 +253,17 @@ function buildCityMetrics(map) {
     total: rows.length,
     capitals: rows.filter(row => row.capital).length,
     ports: rows.filter(row => row.port).length,
+    resourceCities: rows.filter(row => row.resourceCells > 0).length,
     totalPopulation: rows.reduce((sum, row) => sum + row.population, 0)
   };
+}
+
+function cityResourceGoodNames(map, ids) {
+  if (!ids?.length) return "";
+  return ids
+    .map(id => map?.economy?.goods?.[id]?.name || map?.pack?.goods?.[id]?.name || `#${id}`)
+    .slice(0, 5)
+    .join("、");
 }
 
 function cityRows(map) {

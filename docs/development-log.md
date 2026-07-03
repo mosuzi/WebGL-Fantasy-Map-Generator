@@ -16862,3 +16862,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；`RoutePanel` chunk 约 `5.32KB / gzip 2.28KB`，主入口约 `802.41KB / gzip 241.95KB`。
 - 构建产物浏览器烟测通过：同 seed 生成 `597` 条路线，其中 `410` 条资源路线、资源路线 cell 总数 `896`，与 `settlements.metadata.routeResourceCells` 一致；路线管理面板显示“资源路线 / 资源 cells / 资源种类”，`glError = 0`、console/page error 为 `0`，打开路线面板后无新的非 info 健康事件。
+
+### 资源货物城镇选址第一刀
+
+背景：
+
+- 基础 goods 已在生物群系和人口评分前写入，资源货物能间接提高适居度，但城镇候选评分没有显式的资源腹地字段。
+- 上一刀已经让陆路寻路温和偏好资源 cell；当前计划中经济链路的剩余静态生成目标是让资源货物进一步影响城镇选址。
+- marker 资源是在城镇之后生成的，本轮不让后生成资源反向搬城，也不做贸易动画、市场归属刷子或军事联动。
+
+修正：
+
+- 城镇和首都候选评分改为 `citySiteScore()`，在原适居度基础上加入所在 cell 与邻近 cell 的自然资源货物腹地 bonus。
+- 城市和 burg 对象写入 `resourceCells / markerResourceCells / resourceGoodIds / resourceScore`，`settlements.metadata` 汇总 `citiesWithResources / cityResourceCells / cityMarkerResourceCells`。
+- 城市管理面板新增“资源”排序和列，摘要显示资源城镇数，详情显示资源 cells 与前几个资源种类。
+- city GeoJSON properties 同步输出资源 cell 数、marker 资源 cell 数和资源 good id，方便外部检查。
+
+验证：
+
+- Node 纯生成探针通过：`stage-2-1 / continents / 10000` 生成 `812` 个城市，其中 `730` 个带资源腹地，资源 cell 总数 `1697`，与 metadata 一致；markerResource 为 `0`，符合当前生成顺序。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`CityPanel` chunk 约 `12.19KB / gzip 4.52KB`，主入口约 `803.88KB / gzip 242.32KB`。
+- 构建产物浏览器烟测通过：同 seed 生成 `821` 个城市，其中 `728` 个带资源腹地，资源 cell 总数 `1694`，与 metadata 一致；城市管理面板显示“资源城镇 / 资源 cells / 资源种类”，`glError = 0`、console/page error 为 `0`，打开城市面板后无新的非 info 健康事件。

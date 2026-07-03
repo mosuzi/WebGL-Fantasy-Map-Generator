@@ -347,6 +347,9 @@ function cityFeatures(map) {
         religionName: map.society?.religions?.[religionId]?.name || "",
         cell: city.cell ?? -1,
         packCell: city.packCell ?? burg?.cell ?? -1,
+        resourceCells: city.resourceCells ?? burg?.resourceCells ?? 0,
+        markerResourceCells: city.markerResourceCells ?? burg?.markerResourceCells ?? 0,
+        resourceGoodIds: city.resourceGoodIds || burg?.resourceGoodIds || [],
         hasNote: Boolean(note?.body),
         note: note?.body || ""
       },

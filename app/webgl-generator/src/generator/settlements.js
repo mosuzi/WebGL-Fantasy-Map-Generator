@@ -8,6 +8,7 @@ import {defaultCityVisual} from "../runtime/city-visuals.js";
 const MIN_PASSABLE_SEA_TEMP = -4;
 const MIN_NAVIGABLE_FLUX = 100;
 const RIVER_ROUTE_TYPE_MODIFIER = 1.5;
+const GOOD_SOURCE_MARKER = 2;
 const NON_NAVIGABLE_LAKE_GROUPS = new Set(["dry", "frozen", "lava"]);
 const CITY_CIVILIZATION_LABELS = Object.freeze({
   nomadic: "游牧",
@@ -87,10 +88,14 @@ function createSettlementResult({grid, features, population, cities, routes, pac
 
 function createSettlementMetadata({grid, features, population, cities, routes, pack, populationPoints = null}) {
   const routeResources = routeResourceStats(routes);
+  const cityResources = cityResourceStats(cities);
   return {
     cities: cities.length,
     capitals: cities.filter(city => city.capital).length,
     ports: cities.filter(city => city.port).length,
+    citiesWithResources: cityResources.citiesWithResources,
+    cityResourceCells: cityResources.resourceCells,
+    cityMarkerResourceCells: cityResources.markerResourceCells,
     routes: routes.length,
     routeSegments: routes.reduce((sum, route) => sum + Math.max(0, route.points.length - 1), 0),
     routeResourceCells: routeResources.resourceCells,
@@ -135,8 +140,8 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   }
 
   const targetTowns = getTownsNumber(populated.length, grid.points.length);
-  const score = new Int16Array(cells.i.length);
-  for (const cell of populated) score[cell] = (cells.s[cell] || 0) * gaussian(random, 1, 3, 0, 20, 3);
+  const score = new Float32Array(cells.i.length);
+  for (const cell of populated) score[cell] = citySiteScore(pack, cell) * gaussian(random, 1, 3, 0, 20, 3);
   const sorted = [...populated].sort((a, b) => score[b] - score[a]);
   let spacing = ((grid.metadata.graphWidth + grid.metadata.graphHeight) / 150) / (targetTowns ** 0.7 / 66);
 
@@ -249,8 +254,8 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
 function addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator}) {
   const {cells} = pack;
   const targetTowns = getTownsNumber(populated.length, grid.points.length);
-  const score = new Int16Array(cells.i.length);
-  for (const cell of populated) score[cell] = (cells.s[cell] || 0) * gaussian(random, 1, 3, 0, 20, 3);
+  const score = new Float32Array(cells.i.length);
+  for (const cell of populated) score[cell] = citySiteScore(pack, cell) * gaussian(random, 1, 3, 0, 20, 3);
   const sorted = [...populated].sort((a, b) => score[b] - score[a]);
   let spacing = ((grid.metadata.graphWidth + grid.metadata.graphHeight) / 150) / (targetTowns ** 0.7 / 66);
 
@@ -275,8 +280,8 @@ function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid
   const {cells} = pack;
   const capitalsNumber = getCapitalsNumber(populated.length, options.statesNumber);
   if (!capitalsNumber) return;
-  const score = new Int16Array(cells.i.length);
-  for (const cell of populated) score[cell] = (cells.s[cell] || 0) * random.range(0.5, 1);
+  const score = new Float32Array(cells.i.length);
+  for (const cell of populated) score[cell] = citySiteScore(pack, cell) * random.range(0.5, 1);
   const sorted = [...populated].sort((a, b) => score[b] - score[a]);
   let spacing = (grid.metadata.graphWidth + grid.metadata.graphHeight) / 2 / capitalsNumber;
   let selected = [];
@@ -319,6 +324,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   const cultureId = cells.culture[packCell] || 0;
   const culture = pack.cultures?.[cultureId];
   const population = defineBurgPopulation(pack, packCell, Boolean(flags.capital), random);
+  const resourceContext = collectCityResourceContext(pack, packCell);
   const groupHint = flags.capital ? "capital" : flags.provincial || population >= 5 ? "city" : population <= 0.1 ? "hamlet" : population <= 1 ? "village" : "town";
   const name = flags.name || nameGenerator.makePlaceName({
     id: cityId,
@@ -348,6 +354,10 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     capital: flags.capital ? 1 : 0,
     port: 0,
     population,
+    resourceCells: resourceContext.resourceCells,
+    markerResourceCells: resourceContext.markerResourceCells,
+    resourceGoodIds: resourceContext.goodIds,
+    resourceScore: resourceContext.score,
     type,
     civilizationType: "agrarian",
     civilizationLabel: CITY_CIVILIZATION_LABELS.agrarian,
@@ -363,6 +373,10 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
     x,
     y,
     population,
+    resourceCells: resourceContext.resourceCells,
+    markerResourceCells: resourceContext.markerResourceCells,
+    resourceGoodIds: resourceContext.goodIds,
+    resourceScore: resourceContext.score,
     state,
     province,
     culture: sourceBurg.culture,
@@ -671,6 +685,10 @@ function specifyBurgs(pack, cities, burgs, nameGenerator) {
     city.plaza = burg.plaza;
     city.walls = burg.walls;
     city.temple = burg.temple;
+    city.resourceCells = burg.resourceCells || city.resourceCells || 0;
+    city.markerResourceCells = burg.markerResourceCells || city.markerResourceCells || 0;
+    city.resourceGoodIds = burg.resourceGoodIds || city.resourceGoodIds || [];
+    city.resourceScore = burg.resourceScore || city.resourceScore || 0;
     assignCityCivilization(pack, city, burg);
     syncCityVisual(pack, city, burg);
   }
@@ -1077,7 +1095,7 @@ function landRouteResourceModifier(pack, cell) {
     const source = pack.cells.goodSource?.[cell] || 0;
     const supply = Number(pack.cells.goodSupply?.[cell] || 1);
     const value = Number(pack.goods?.[goodId]?.value || 2);
-    const sourceBonus = source >= 2 ? 0.1 : 0;
+    const sourceBonus = source >= GOOD_SOURCE_MARKER ? 0.1 : 0;
     const supplyBonus = Math.min(0.08, supply * 0.015);
     const valueBonus = Math.min(0.06, value / 300);
     return clamp(0.84 - sourceBonus - supplyBonus - valueBonus, 0.68, 1);
@@ -1085,6 +1103,42 @@ function landRouteResourceModifier(pack, cell) {
 
   const neighbors = pack.cells.c?.[cell] || [];
   return neighbors.some(neighbor => pack.cells.good?.[neighbor]) ? 0.94 : 1;
+}
+
+function citySiteScore(pack, cell) {
+  return (pack.cells.s?.[cell] || 0) + settlementResourceScore(pack, cell);
+}
+
+function settlementResourceScore(pack, cell) {
+  return collectCityResourceContext(pack, cell).score;
+}
+
+function collectCityResourceContext(pack, cell) {
+  const candidates = new Set([cell, ...(pack.cells.c?.[cell] || [])]);
+  const goodIds = new Set();
+  let resourceCells = 0;
+  let markerResourceCells = 0;
+  let score = 0;
+
+  for (const candidate of candidates) {
+    const goodId = pack.cells.good?.[candidate] || 0;
+    if (!goodId) continue;
+    const distanceFactor = candidate === cell ? 1 : 0.55;
+    const value = Number(pack.goods?.[goodId]?.value || 2);
+    const supply = Number(pack.cells.goodSupply?.[candidate] || 1);
+    const source = pack.cells.goodSource?.[candidate] || 0;
+    resourceCells++;
+    goodIds.add(goodId);
+    if (source >= GOOD_SOURCE_MARKER) markerResourceCells++;
+    score += distanceFactor * Math.min(18, value * 0.45 + supply * 2.4 + (source >= GOOD_SOURCE_MARKER ? 4 : 0));
+  }
+
+  return {
+    resourceCells,
+    markerResourceCells,
+    goodIds: [...goodIds].sort((a, b) => a - b),
+    score: round(score, 2)
+  };
 }
 
 function buildRiverEdges(pack) {
@@ -1282,7 +1336,7 @@ function countRouteResources(pack, cells) {
     if (!goodId) continue;
     resourceCells++;
     goodIds.add(goodId);
-    if ((pack.cells.goodSource?.[cell] || 0) >= 2) markerResourceCells++;
+    if ((pack.cells.goodSource?.[cell] || 0) >= GOOD_SOURCE_MARKER) markerResourceCells++;
   }
 
   return {resourceCells, markerResourceCells, goodIds: [...goodIds].sort((a, b) => a - b)};
@@ -1301,6 +1355,21 @@ function routeResourceStats(routes) {
   }
 
   return {resourceCells, markerResourceCells, routesWithResources};
+}
+
+function cityResourceStats(cities) {
+  let resourceCells = 0;
+  let markerResourceCells = 0;
+  let citiesWithResources = 0;
+
+  for (const city of cities || []) {
+    const cityResourceCells = Number(city.resourceCells || 0);
+    resourceCells += cityResourceCells;
+    markerResourceCells += Number(city.markerResourceCells || 0);
+    if (cityResourceCells > 0) citiesWithResources++;
+  }
+
+  return {resourceCells, markerResourceCells, citiesWithResources};
 }
 
 function routeMajorityCellValue(pack, cells, field) {
