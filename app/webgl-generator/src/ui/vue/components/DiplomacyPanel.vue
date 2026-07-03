@@ -59,6 +59,19 @@
 
   <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
 
+  <section v-if="relationHistoryPreview.length" class="diplomacy-history-preview" aria-label="外交历史">
+    <div class="diplomacy-history-heading">
+      <strong>外交历史</strong>
+      <span>{{ relationHistoryLabel }}</span>
+    </div>
+    <ol>
+      <li v-for="entry in relationHistoryPreview" :key="`${entry.index}:${entry.type}:${entry.text}`">
+        <strong>{{ entry.type }}</strong>
+        <span>{{ entry.text }}</span>
+      </li>
+    </ol>
+  </section>
+
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="diplomacyActions">
     <template #openState>
       <div class="diplomacy-open-state-panel">
@@ -200,6 +213,25 @@ const relationContextMetrics = computed(() => selected.value ? [
   {label: "国力", value: formatNumber(selected.value.powerScore)},
   {label: "文化/宗教", value: `${selected.value.cultureName} / ${selected.value.religionName}`}
 ] : []);
+const diplomacyChronicleRows = computed(() => {
+  props.state.version;
+  return diplomacyChronicle(props.state.map);
+});
+const relationHistoryRows = computed(() => {
+  if (!selected.value) return [];
+  const subjectAliases = [selected.value.subjectName, selected.value.subjectRawName].filter(Boolean);
+  const objectAliases = [selected.value.name, selected.value.rawName].filter(Boolean);
+  return diplomacyChronicleRows.value.filter(entry => includesAny(entry.text, subjectAliases) && includesAny(entry.text, objectAliases));
+});
+const relationHistoryPreview = computed(() => {
+  const source = relationHistoryRows.value.length ? relationHistoryRows.value : diplomacyChronicleRows.value;
+  return source.slice(-4).reverse();
+});
+const relationHistoryLabel = computed(() => {
+  const total = diplomacyChronicleRows.value.length;
+  if (relationHistoryRows.value.length) return `相关 ${formatNumber(relationHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
+  return `最近 ${formatNumber(Math.min(4, total))} / 全部 ${formatNumber(total)}`;
+});
 
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
@@ -226,6 +258,7 @@ function buildDiplomacyMetrics(map, selectedStateId) {
         id: state.id,
         subjectId: subject.id,
         subjectName: subject.name,
+        subjectRawName: subject.state?.name || subject.name,
         name: state.name,
         rawName: stateItem?.name || state.name,
         relation,
@@ -350,6 +383,10 @@ function relationPolarityLabel(value) {
   if (number > 0) return `友好 +${formatNumber(number)}`;
   if (number < 0) return `敌对 ${formatNumber(number)}`;
   return "中立 0";
+}
+
+function includesAny(text, values) {
+  return values.some(value => value && text.includes(value));
 }
 
 function indexedName(items, id) {

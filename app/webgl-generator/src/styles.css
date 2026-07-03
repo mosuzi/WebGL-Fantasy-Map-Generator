@@ -6177,6 +6177,67 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.diplomacy-history-preview {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  border: 1px solid rgba(127, 179, 164, 0.16);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(9, 15, 18, 0.42);
+}
+
+.diplomacy-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.diplomacy-history-heading strong {
+  color: #e9f2f4;
+  font-size: 12px;
+}
+
+.diplomacy-history-heading span {
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
+.diplomacy-history-preview ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diplomacy-history-preview li {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.1);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: rgba(7, 12, 15, 0.36);
+}
+
+.diplomacy-history-preview li strong {
+  min-width: 0;
+  color: #f0ce7c;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.diplomacy-history-preview li span {
+  min-width: 0;
+  color: #d8e5e8;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .culture-name-editor label,
 .culture-color-field,
 .religion-name-editor label,

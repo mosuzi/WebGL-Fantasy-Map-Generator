@@ -23,7 +23,7 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
     apply(context) {
       if (!normalizedRelation) throw new Error("不支持的外交关系");
       snapshot ??= snapshotDiplomacy(context.map);
-      const changed = setDiplomacyRelation(context.map?.pack, normalizedSubjectId, normalizedObjectId, normalizedRelation, {record: true, reason: "manual"});
+      const changed = setDiplomacyRelation(context.map?.pack, normalizedSubjectId, normalizedObjectId, normalizedRelation, {record: true, reason: "手动关系编辑"});
       if (!changed) throw new Error("无法设置外交关系");
       syncDiplomacy(context.map);
     },
