@@ -14941,3 +14941,32 @@ full 矩阵结果：
 - 同次烟测中预览指标显示 `色板16 / 93`、`未分配颜色合并最近色`，应用后 `source.kind = image-palette`、`source.mappingMode = hue`、`source.unassignedStrategy = nearest-palette`、`source.unassignedBuckets = 32`、`source.unassignedPixels = 921600`、`assignments = 16`。
 - 同次烟测中 grid 高度落到固定未分配高度 `12` 的采样点为 `0`，说明未分配颜色按最近色高度归并；checksum `82a16da8 -> de922a86`，`loadMap.totalMs = 644.7ms`，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1221.8ms`，纯生成 `631.1ms`，WebGL 加载 `336ms`，最慢加载阶段为 `cell-visual-mesh 45.1ms`，`fit-draw = 2.4ms`，`glError = 0`。
+
+### 高度图应用前后对比第一刀
+
+背景：
+
+- 高度图工作台已经有原图预览、亮度直方图、导入高度色带和未分配颜色策略，但用户在点击“应用到地图”前仍缺少当前地图与导入结果之间的摘要对照。
+- 本步先做只读指标对比，不引入差值热力图，也不触碰生成、worker 或 renderer 逻辑。
+
+修正：
+
+- 高度图工作台在高度色带预览下方新增“应用前后对比”区块。
+- runtime 更新高度面板时，从当前 `map.grid.cells.h` 扫描出高度范围、水域数量、总数和平均高度，只传小摘要对象给 Vue，避免把完整高度数组放进响应式状态。
+- 导入预览侧复用高度色带预览统计，并补平均高度。
+- 对比指标展示当前高度、导入高度、当前水域、导入水域、平均变化和水域变化；摘要行显示平均变化和水域变化。
+- 该能力只读展示，不写 `map`，不触发重生成。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `740.60KB / gzip 223.74KB`，`HeightPanel` 懒加载 chunk 约 `27.25KB / gzip 9.61KB`。
+- Playwright + 系统 Chrome 应用前后对比烟测通过：导入渐变 SVG 后，对比区显示 `当前高度0-93 / 导入高度0-100 / 当前水域66% / 导入水域13% / 平均变化+31.3 / 水域变化-53%`。
+- 同次烟测中高度色带摘要为 `高度 0-100 / 水域 13%`，直方图仍为 `24` 桶；地图 checksum 保持 `c76792ee -> c76792ee`，说明对比预览没有写地图；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1243.1ms`，纯生成 `592.2ms`，WebGL 加载 `394.5ms`，最慢加载阶段为 `cell-visual-mesh 61.2ms`，`fit-draw = 2.5ms`，`glError = 0`。

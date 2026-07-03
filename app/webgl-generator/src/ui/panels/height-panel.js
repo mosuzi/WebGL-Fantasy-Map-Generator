@@ -12,6 +12,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     lastHeight: "none",
     graphWidth: 1440,
     graphHeight: 960,
+    currentHeightStats: null,
     history: null
   });
   const panelCallbacks = {
@@ -57,12 +58,14 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       lastHeight = panelState.lastHeight,
       graphWidth = panelState.graphWidth,
       graphHeight = panelState.graphHeight,
+      currentHeightStats = panelState.currentHeightStats,
       history = panelState.history
     } = {}) {
       panelState.lastAffected = lastAffected;
       panelState.lastHeight = lastHeight;
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;
+      panelState.currentHeightStats = currentHeightStats;
       panelState.history = history;
     },
     getBrush() {

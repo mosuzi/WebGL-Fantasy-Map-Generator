@@ -3305,8 +3305,33 @@ function updateHeightPanel(state) {
     lastHeight: state.heightEdit.lastHeight,
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,
+    currentHeightStats: summarizeCurrentHeightStats(state.map),
     history: state.editHistory.getStats()
   });
+}
+
+function summarizeCurrentHeightStats(map) {
+  const heights = map?.grid?.cells?.h;
+  if (!heights?.length) return null;
+  let min = Infinity;
+  let max = -Infinity;
+  let water = 0;
+  let sum = 0;
+  for (const height of heights) {
+    const value = Number(height) || 0;
+    if (value < min) min = value;
+    if (value > max) max = value;
+    if (value < 20) water += 1;
+    sum += value;
+  }
+  const total = heights.length;
+  return {
+    min: Math.round(min),
+    max: Math.round(max),
+    water,
+    total,
+    average: Math.round((sum / Math.max(1, total)) * 10) / 10
+  };
 }
 
 function updateStatePanel(state) {

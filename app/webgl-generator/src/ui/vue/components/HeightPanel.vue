@@ -76,6 +76,14 @@
           <canvas ref="heightBandCanvas" class="heightmap-band-canvas"></canvas>
         </section>
 
+        <section v-if="comparisonMetrics.length" class="heightmap-comparison-section" aria-label="应用前后对比">
+          <header>
+            <strong>应用前后对比</strong>
+            <span>{{ comparisonSummary }}</span>
+          </header>
+          <UiMetricGrid :metrics="comparisonMetrics" class-name="heightmap-comparison-metrics" />
+        </section>
+
         <div class="heightmap-import-fields">
           <UiSliderField
             label="最低高度"
@@ -432,6 +440,25 @@ const heightBandSummary = computed(() => {
   const stats = heightBandStats.value;
   if (!stats) return "未生成";
   return `高度 ${stats.min}-${stats.max} / 水域 ${formatPercent(stats.water / stats.total)}`;
+});
+const comparisonMetrics = computed(() => {
+  const current = props.state.currentHeightStats;
+  const next = heightBandStats.value;
+  if (!current || !next) return [];
+  return [
+    {label: "当前高度", value: `${current.min}-${current.max}`},
+    {label: "导入高度", value: `${next.min}-${next.max}`},
+    {label: "当前水域", value: formatPercent(current.water / current.total)},
+    {label: "导入水域", value: formatPercent(next.water / next.total)},
+    {label: "平均变化", value: formatSignedNumber(next.average - current.average)},
+    {label: "水域变化", value: formatSignedPercent(next.water / next.total - current.water / current.total)}
+  ];
+});
+const comparisonSummary = computed(() => {
+  const current = props.state.currentHeightStats;
+  const next = heightBandStats.value;
+  if (!current || !next) return "未生成";
+  return `平均 ${formatSignedNumber(next.average - current.average)} / 水域 ${formatSignedPercent(next.water / next.total - current.water / current.total)}`;
 });
 
 watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode, heightmapUnassignedStrategy], () => {
@@ -850,6 +877,7 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
   let min = Infinity;
   let max = -Infinity;
   let water = 0;
+  let sum = 0;
 
   for (let offset = 0; offset < imageData.data.length; offset += 4) {
     const color = compositedRgb(imageData.data, offset);
@@ -868,6 +896,7 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
     min = Math.min(min, height);
     max = Math.max(max, height);
     if (height < 20) water += 1;
+    sum += height;
   }
 
   context.putImageData(output, 0, 0);
@@ -876,7 +905,8 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
     min: Number.isFinite(min) ? Math.round(min) : 0,
     max: Number.isFinite(max) ? Math.round(max) : 0,
     water,
-    total
+    total,
+    average: Math.round((sum / total) * 10) / 10
   };
 }
 
@@ -1135,6 +1165,16 @@ function histogramBinLabel(index, totalBins) {
 
 function formatPercent(value) {
   return `${Math.round(clamp(value, 0, 1) * 100)}%`;
+}
+
+function formatSignedNumber(value) {
+  const rounded = Math.round((Number(value) || 0) * 10) / 10;
+  return rounded > 0 ? `+${rounded}` : String(rounded);
+}
+
+function formatSignedPercent(value) {
+  const rounded = Math.round((Number(value) || 0) * 100);
+  return rounded > 0 ? `+${rounded}%` : `${rounded}%`;
 }
 
 function hexByte(value) {
