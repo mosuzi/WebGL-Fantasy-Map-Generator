@@ -1180,18 +1180,28 @@ function summarizeBattleEventChains(events = []) {
 function summarizeBattleEventSideCasualties(events = []) {
   const summary = createEmptyBattleSideCasualties();
   for (const event of events) {
+    const sideCasualties = normalizeBattleSideCasualties(event?.result?.sideCasualties);
+    const sideTotal = sumBattleSideCasualties(sideCasualties);
+    if (sideTotal > 0) {
+      for (const [side, casualties] of Object.entries(sideCasualties)) summary[side] += casualties;
+      continue;
+    }
     const casualties = battleEventCasualties(event);
-    if (!casualties) continue;
-    const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
-    summary[side] += casualties;
+    if (casualties) summary[normalizeBattleChainSide(event.chainSide || event.side || "local")] += casualties;
   }
   return summary;
 }
 
 function addBattleEventSideCasualties(chain, event, casualties) {
   chain.sideCasualties ||= createEmptyBattleSideCasualties();
-  const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
-  chain.sideCasualties[side] += casualties;
+  const sideCasualties = normalizeBattleSideCasualties(event?.result?.sideCasualties);
+  const sideTotal = sumBattleSideCasualties(sideCasualties);
+  if (sideTotal > 0) {
+    for (const [side, value] of Object.entries(sideCasualties)) chain.sideCasualties[side] += value;
+  } else {
+    const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
+    chain.sideCasualties[side] += casualties;
+  }
   chain.attackerCasualties = chain.sideCasualties.attacker;
   chain.defenderCasualties = chain.sideCasualties.defender;
   chain.participantCasualties = chain.sideCasualties.participant;
@@ -1210,10 +1220,25 @@ function normalizeBattleChainSide(side) {
 
 function battleEventCasualties(event) {
   const result = event?.result || {};
+  const sideTotal = sumBattleSideCasualties(result.sideCasualties);
+  if (sideTotal > 0) return sideTotal;
   const direct = Number(result.casualties);
   if (Number.isFinite(direct) && direct > 0) return direct;
   const delta = Math.abs(Number(result.troopDelta || 0));
   return Number.isFinite(delta) ? delta : 0;
+}
+
+function normalizeBattleSideCasualties(sideCasualties = {}) {
+  const result = createEmptyBattleSideCasualties();
+  for (const side of Object.keys(result)) {
+    const value = Number(sideCasualties?.[side] || 0);
+    result[side] = Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  return result;
+}
+
+function sumBattleSideCasualties(sideCasualties = {}) {
+  return Object.values(sideCasualties || {}).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0);
 }
 
 function battleEventRowsForExport(scope) {
@@ -1255,6 +1280,10 @@ function countEventsForRegiment(events = [], regiment) {
 }
 
 function eventBelongsToRegiment(event, regiment) {
+  if ((event.affectedRegiments || []).some(item =>
+    item?.regimentObjectId === regiment.id
+    || (Number(item?.stateId) === regiment.stateId && Number(item?.regimentId) === regiment.regimentId)
+  )) return true;
   return event.regimentObjectId === regiment.id || (Number(event.stateId) === regiment.stateId && Number(event.regimentId) === regiment.regimentId);
 }
 

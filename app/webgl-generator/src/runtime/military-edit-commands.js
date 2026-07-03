@@ -57,6 +57,14 @@ const BATTLE_RESULT_RULES = Object.freeze({
   regroup: Object.freeze({lossRate: 0.02, status: "mustering", label: "重整集结"})
 });
 
+const BATTLE_OPPONENT_RESULT_RULES = Object.freeze({
+  victory: Object.freeze({lossRate: 0.18, status: "routed", label: "对手受挫"}),
+  defeat: Object.freeze({lossRate: 0.04, status: "resting", label: "对手小胜"}),
+  draw: Object.freeze({lossRate: 0.08, status: "resting", label: "对手相持"}),
+  loss: Object.freeze({lossRate: 0.03, status: "resting", label: "对手追击"}),
+  regroup: Object.freeze({lossRate: 0, status: null, label: "对手未变"})
+});
+
 export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整兵种比例"} = {}) {
   const normalizedStateId = Number(stateId);
   const normalizedRatios = normalizeUnitRatios(ratios);
@@ -189,9 +197,10 @@ export function createRecordMilitaryBattleEventCommand(target, event = {}, {labe
     apply(context) {
       const {state, regiment} = findRegiment(context.map, normalizedTarget);
       if (!state?.i || !regiment) throw new Error("找不到军团");
-      previous ??= snapshotBattleEvents(context.map, state, regiment);
+      const opponent = eventInput.applyResult ? findOpponentBattleRegiment(context.map, state, regiment, eventInput) : null;
+      previous ??= snapshotBattleEvents(context.map, state, regiment, opponent);
       nextEvent ??= createBattleEvent(context.map, state, regiment, eventInput);
-      if (eventInput.applyResult) applyBattleResult(context.map, state, regiment, nextEvent, eventInput);
+      if (eventInput.applyResult) applyBattleResult(context.map, state, regiment, nextEvent, eventInput, opponent);
       appendBattleEvent(context.map, regiment, nextEvent);
       syncMilitary(context.map);
       refreshMilitaryTroopMetadata(context.map);
@@ -594,6 +603,10 @@ function countBattleEventsForTarget(map, target, regiment, eventIds = null) {
 
 function battleEventMatchesTarget(event, target) {
   if (!event || event.kind !== "battle") return false;
+  if ((event.affectedRegiments || []).some(item =>
+    item?.regimentObjectId === target.id
+    || (Number(item?.stateId) === target.stateId && Number(item?.regimentId) === target.regimentId)
+  )) return true;
   if (event.regimentObjectId && target.id && event.regimentObjectId === target.id) return true;
   return Number(event.stateId) === target.stateId && Number(event.regimentId) === target.regimentId;
 }
@@ -651,14 +664,23 @@ function snapshotRegimentBase(regiment) {
   };
 }
 
-function snapshotBattleEvents(map, state, regiment) {
+function snapshotBattleEvents(map, state, regiment, opponent = null) {
   const military = map?.pack?.military || map?.military || {};
   return {
     militaryEvents: Array.isArray(military.events) ? clonePlain(military.events) : null,
     regimentEvents: Array.isArray(regiment.events) ? clonePlain(regiment.events) : null,
     metadata: military.metadata ? clonePlain(military.metadata) : null,
     regiment: snapshotRegimentBattleResult(regiment),
-    stateMilitaryPolicy: state?.militaryPolicy ? clonePlain(state.militaryPolicy) : null
+    stateMilitaryPolicy: state?.militaryPolicy ? clonePlain(state.militaryPolicy) : null,
+    opponent: opponent?.regiment ? {
+      target: {
+        id: opponent.regiment.id || `${opponent.state.i}:${opponent.regiment.i}`,
+        stateId: opponent.state.i,
+        regimentId: opponent.regiment.i
+      },
+      regiment: snapshotRegimentBattleResult(opponent.regiment),
+      stateMilitaryPolicy: opponent.state?.militaryPolicy ? clonePlain(opponent.state.militaryPolicy) : null
+    } : null
   };
 }
 
@@ -725,6 +747,11 @@ function restoreBattleEvents(map, state, regiment, snapshot) {
   if (snapshot.metadata) military.metadata = clonePlain(snapshot.metadata);
   if (snapshot.regiment) restoreRegimentBattleResult(regiment, snapshot.regiment);
   if (state && snapshot.stateMilitaryPolicy) state.militaryPolicy = clonePlain(snapshot.stateMilitaryPolicy);
+  if (snapshot.opponent) {
+    const {state: opponentState, regiment: opponentRegiment} = findRegiment(map, snapshot.opponent.target);
+    if (opponentRegiment && snapshot.opponent.regiment) restoreRegimentBattleResult(opponentRegiment, snapshot.opponent.regiment);
+    if (opponentState && snapshot.opponent.stateMilitaryPolicy) opponentState.militaryPolicy = clonePlain(snapshot.opponent.stateMilitaryPolicy);
+  }
 }
 
 function restoreRegimentBattleResult(regiment, snapshot) {
@@ -870,6 +897,12 @@ function battleChainSideLabel(side) {
   return "手动";
 }
 
+function oppositeBattleSide(side) {
+  if (side === "attacker") return "defender";
+  if (side === "defender") return "attacker";
+  return "participant";
+}
+
 function stateName(state) {
   return state?.fullName || state?.name || (state?.i ? `国家 #${state.i}` : "");
 }
@@ -882,8 +915,120 @@ function slugText(value) {
   return String(value || "chain").trim().replace(/\s+/g, "-").replace(/[^\w\u4e00-\u9fa5:-]/g, "").slice(0, 48) || "chain";
 }
 
-function applyBattleResult(map, state, regiment, event, eventInput) {
+function findOpponentBattleRegiment(map, state, regiment, eventInput) {
+  const side = normalizeBattleChainSide(eventInput.chainSide || "local");
+  if (side !== "attacker" && side !== "defender") return null;
+  const opponentStateId = Number(eventInput.opponentStateId);
+  const opponentState = Number.isInteger(opponentStateId)
+    ? map?.pack?.states?.[opponentStateId] || map?.politics?.states?.[opponentStateId]
+    : null;
+  if (!opponentState?.i || opponentState.i === state.i || !Array.isArray(opponentState.military)) return null;
+  const naval = Boolean(regiment.n || regiment.type === "fleet" || eventInput.type === "naval");
+  const candidates = opponentState.military
+    .filter(item => item && Number(item.a || 0) > 0 && Boolean(item.n || item.type === "fleet") === naval)
+    .sort((a, b) => distanceBetweenRegiments(regiment, a) - distanceBetweenRegiments(regiment, b) || Number(b.a || 0) - Number(a.a || 0));
+  const fallback = opponentState.military
+    .filter(item => item && Number(item.a || 0) > 0)
+    .sort((a, b) => distanceBetweenRegiments(regiment, a) - distanceBetweenRegiments(regiment, b) || Number(b.a || 0) - Number(a.a || 0));
+  const opponentRegiment = candidates[0] || fallback[0] || null;
+  return opponentRegiment ? {state: opponentState, regiment: opponentRegiment} : null;
+}
+
+function distanceBetweenRegiments(a = {}, b = {}) {
+  const ax = Number(a.x);
+  const ay = Number(a.y);
+  const bx = Number(b.x);
+  const by = Number(b.y);
+  if (![ax, ay, bx, by].every(Number.isFinite)) return Infinity;
+  return Math.hypot(ax - bx, ay - by);
+}
+
+function battleEventRegimentReference(state, regiment, side, sideLabel, casualties) {
+  return {
+    stateId: state.i,
+    stateName: stateName(state),
+    regimentId: regiment.i,
+    regimentObjectId: regiment.id || `${state.i}:${regiment.i}`,
+    regimentName: regiment.name || `军团 #${regiment.i}`,
+    side,
+    sideLabel,
+    casualties
+  };
+}
+
+function applyBattleResult(map, state, regiment, event, eventInput, opponent = null) {
   const rule = BATTLE_RESULT_RULES[eventInput.outcome] || BATTLE_RESULT_RULES.draw;
+  const ownResult = applyBattleResultRule(map, state, regiment, rule);
+  const side = normalizeBattleChainSide(event.chainSide || eventInput.chainSide || "local");
+  const affectedRegiments = [battleEventRegimentReference(state, regiment, side, battleChainSideLabel(side), ownResult.casualties)];
+  const sideCasualties = createEmptyBattleSideCasualties();
+  sideCasualties[side] += ownResult.casualties;
+  let opponentResult = null;
+
+  if (opponent?.state && opponent.regiment) {
+    const opponentSide = oppositeBattleSide(side);
+    const opponentRule = BATTLE_OPPONENT_RESULT_RULES[eventInput.outcome] || BATTLE_OPPONENT_RESULT_RULES.draw;
+    opponentResult = applyBattleResultRule(map, opponent.state, opponent.regiment, opponentRule);
+    affectedRegiments.push(battleEventRegimentReference(opponent.state, opponent.regiment, opponentSide, battleChainSideLabel(opponentSide), opponentResult.casualties));
+    sideCasualties[opponentSide] += opponentResult.casualties;
+  }
+
+  event.resultApplied = true;
+  event.affectedRegiments = affectedRegiments;
+  event.result = {
+    label: rule.label,
+    summary: buildBattleResultSummary({
+      label: rule.label,
+      troopBefore: ownResult.troopBefore,
+      troopAfter: ownResult.troopAfter,
+      casualties: ownResult.casualties,
+      statusAfterLabel: ownResult.statusAfterLabel,
+      opponent: opponentResult
+    }),
+    unitLossSummary: formatUnitLossSummary(ownResult.unitLosses),
+    lossRate: rule.lossRate,
+    troopBefore: ownResult.troopBefore,
+    troopAfter: ownResult.troopAfter,
+    troopDelta: ownResult.troopDelta,
+    casualties: ownResult.casualties,
+    unitLosses: ownResult.unitLosses,
+    statusBefore: ownResult.statusBefore,
+    statusBeforeLabel: ownResult.statusBeforeLabel,
+    statusAfter: ownResult.statusAfter,
+    statusAfterLabel: ownResult.statusAfterLabel,
+    sideCasualties,
+    opponent: opponentResult ? {
+      stateId: opponent.state.i,
+      stateName: stateName(opponent.state),
+      regimentId: opponent.regiment.i,
+      regimentObjectId: opponent.regiment.id || `${opponent.state.i}:${opponent.regiment.i}`,
+      regimentName: opponent.regiment.name || `军团 #${opponent.regiment.i}`,
+      side: oppositeBattleSide(side),
+      sideLabel: battleChainSideLabel(oppositeBattleSide(side)),
+      label: opponentResult.label,
+      summary: buildBattleResultSummary(opponentResult),
+      unitLossSummary: formatUnitLossSummary(opponentResult.unitLosses),
+      lossRate: opponentResult.lossRate,
+      troopBefore: opponentResult.troopBefore,
+      troopAfter: opponentResult.troopAfter,
+      troopDelta: opponentResult.troopDelta,
+      casualties: opponentResult.casualties,
+      unitLosses: opponentResult.unitLosses,
+      statusBefore: opponentResult.statusBefore,
+      statusBeforeLabel: opponentResult.statusBeforeLabel,
+      statusAfter: opponentResult.statusAfter,
+      statusAfterLabel: opponentResult.statusAfterLabel
+    } : null
+  };
+}
+
+function buildBattleResultSummary(result) {
+  const primary = `${result.label || "战斗结果"}：${formatNumber(result.troopBefore)} -> ${formatNumber(result.troopAfter)}，损耗 ${formatNumber(result.casualties)}，态势改为${result.statusAfterLabel || "未知"}`;
+  const opponent = result.opponent ? `；对手 ${formatNumber(result.opponent.troopBefore)} -> ${formatNumber(result.opponent.troopAfter)}，损耗 ${formatNumber(result.opponent.casualties)}` : "";
+  return `${primary}${opponent}`;
+}
+
+function applyBattleResultRule(map, state, regiment, rule) {
   const beforeTroops = Math.max(0, Math.round(Number(regiment.a || sumUnitTroops(regiment.u))));
   const casualties = getBattleCasualties(beforeTroops, rule.lossRate);
   const afterTroops = Math.max(beforeTroops > 0 ? 1 : 0, beforeTroops - casualties);
@@ -892,31 +1037,23 @@ function applyBattleResult(map, state, regiment, event, eventInput) {
   const unitLosses = getUnitLosses(beforeUnits, nextUnits);
   const previousStatus = {
     status: regiment.status,
-    statusLabel: regiment.statusLabel,
-    order: regiment.order ? clonePlain(regiment.order) : null
+    statusLabel: regiment.statusLabel
   };
 
   regiment.u = nextUnits;
   regiment.a = Object.values(nextUnits).reduce((sum, value) => sum + Number(value || 0), 0);
   regiment.dominantUnit = dominantUnitName(nextUnits);
   regiment.dominantUnitLabel = unitLabel(regiment.dominantUnit);
-  regiment.status = rule.status;
-  regiment.statusLabel = MILITARY_STATUSES[rule.status]?.label || rule.status;
-  regiment.order = createManualOrder(map, state, regiment, rule.status);
+  if (rule.status) {
+    regiment.status = rule.status;
+    regiment.statusLabel = MILITARY_STATUSES[rule.status]?.label || rule.status;
+    regiment.order = createManualOrder(map, state, regiment, rule.status);
+  }
   applyRegimentIconProfile(regiment);
   refreshStateGeneratedTroops(state);
 
-  event.resultApplied = true;
-  event.result = {
+  return {
     label: rule.label,
-    summary: buildBattleResultSummary({
-      label: rule.label,
-      troopBefore: beforeTroops,
-      troopAfter: regiment.a,
-      casualties: beforeTroops - regiment.a,
-      statusAfterLabel: regiment.statusLabel
-    }),
-    unitLossSummary: formatUnitLossSummary(unitLosses),
     lossRate: rule.lossRate,
     troopBefore: beforeTroops,
     troopAfter: regiment.a,
@@ -928,10 +1065,6 @@ function applyBattleResult(map, state, regiment, event, eventInput) {
     statusAfter: regiment.status,
     statusAfterLabel: regiment.statusLabel
   };
-}
-
-function buildBattleResultSummary(result) {
-  return `${result.label || "战斗结果"}：${formatNumber(result.troopBefore)} -> ${formatNumber(result.troopAfter)}，损耗 ${formatNumber(result.casualties)}，态势改为${result.statusAfterLabel || "未知"}`;
 }
 
 function formatUnitLossSummary(unitLosses = {}) {
@@ -1056,17 +1189,7 @@ function refreshMilitaryCampaignEventSummaries(map, military = map?.pack?.milita
     campaign.events += 1;
     if (event.resultApplied) campaign.appliedEvents += 1;
     else campaign.pendingEvents += 1;
-    const casualties = event.resultApplied ? battleEventCasualties(event) : 0;
-    if (casualties) {
-      campaign.casualties += casualties;
-      const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
-      campaign.sideCasualties[side] += casualties;
-      campaign.attackerCasualties = campaign.sideCasualties.attacker;
-      campaign.defenderCasualties = campaign.sideCasualties.defender;
-      campaign.participantCasualties = campaign.sideCasualties.participant;
-      campaign.localCasualties = campaign.sideCasualties.local;
-      campaign.manualCasualties = campaign.sideCasualties.manual;
-    }
+    if (event.resultApplied) addCampaignBattleEventCasualties(campaign, event);
     if (!campaign.latestEvent || Number(event.sequence || 0) >= Number(campaign.latestEvent.sequence || 0)) {
       campaign.latestEvent = summarizeBattleEvent(event);
     }
@@ -1113,10 +1236,46 @@ function campaignEventKeys(campaign = {}) {
 
 function battleEventCasualties(event) {
   const result = event?.result || {};
+  const sideTotal = sumBattleSideCasualties(result.sideCasualties);
+  if (sideTotal > 0) return sideTotal;
   const direct = Number(result.casualties);
   if (Number.isFinite(direct) && direct > 0) return direct;
   const delta = Math.abs(Number(result.troopDelta || 0));
   return Number.isFinite(delta) ? delta : 0;
+}
+
+function addCampaignBattleEventCasualties(campaign, event) {
+  const result = event?.result || {};
+  const sideCasualties = normalizeBattleSideCasualties(result.sideCasualties);
+  const sideTotal = sumBattleSideCasualties(sideCasualties);
+  if (sideTotal > 0) {
+    for (const [side, casualties] of Object.entries(sideCasualties)) campaign.sideCasualties[side] += casualties;
+    campaign.casualties += sideTotal;
+  } else {
+    const casualties = battleEventCasualties(event);
+    if (!casualties) return;
+    const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
+    campaign.sideCasualties[side] += casualties;
+    campaign.casualties += casualties;
+  }
+  campaign.attackerCasualties = campaign.sideCasualties.attacker;
+  campaign.defenderCasualties = campaign.sideCasualties.defender;
+  campaign.participantCasualties = campaign.sideCasualties.participant;
+  campaign.localCasualties = campaign.sideCasualties.local;
+  campaign.manualCasualties = campaign.sideCasualties.manual;
+}
+
+function normalizeBattleSideCasualties(sideCasualties = {}) {
+  const result = createEmptyBattleSideCasualties();
+  for (const side of Object.keys(result)) {
+    const value = Number(sideCasualties?.[side] || 0);
+    result[side] = Number.isFinite(value) && value > 0 ? value : 0;
+  }
+  return result;
+}
+
+function sumBattleSideCasualties(sideCasualties = {}) {
+  return Object.values(sideCasualties || {}).reduce((sum, value) => sum + Math.max(0, Number(value || 0)), 0);
 }
 
 function normalizeBattleChainSide(side) {

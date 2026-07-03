@@ -16382,3 +16382,27 @@ full 矩阵结果：
 - 数据烟测覆盖 `stage-2-1231411414 / front-check-1 / front-audit-1 / front-audit-2`：有战线样本均为 `2` 条 front，`invalid = 0`、`long = 0`，最大长度 `8`；无共享陆地边界样本保持 `fronts = 0`。
 - 构建产物浏览器烟测通过：`stage-2-1231411414` 生成 `2` 条 front，长度均为 `6`、上限 `6`；战线图层开关只增加 `36` 个 line 顶点，`drawMs = 0`、`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1838.2ms`，纯生成 `980.8ms`，WebGL 加载 `559.6ms`，UI slack `297.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 176.4ms`，最慢加载阶段为 `构建视觉 cell mesh 58.5ms`，`line-vertices = 50.8ms`，`glError = 0`。
+
+### 战役轻量双方结算第一刀
+
+背景：
+
+- 战斗事件已经能挂到共享 `campaign:*` 链路，并且战役对象能汇总攻方/守方损耗。
+- 但“应用轻量结果”仍只会扣当前军团，战役对象只能看到单边损耗，离真正双方结算还差一层。
+- 本轮只做轻量双方结算，不推进战役阶段、不改外交战争状态、不引入完整战斗模拟。
+
+修正：
+
+- 记录 campaign 战斗事件且启用“应用轻量结果”时，会根据 `opponentStateId` 为对手国家选择一支最近的同域军团；本地战报仍保持单军团结算。
+- 同一条事件写入 `affectedRegiments`、`result.opponent` 和 `result.sideCasualties`，避免复制两条全局事件。
+- 当前军团和对手军团会在同一条 `EditHistory` 命令里同步扣兵、调整态势、刷新图标和国家兵力；撤销会恢复双方军团、事件列表、metadata 和战役摘要。
+- 战役对象刷新会优先读取 `result.sideCasualties`，准确汇总攻方/守方损耗；旧事件仍按旧的单边字段回退。
+- 军事面板的事件归属识别 `affectedRegiments`，对手军团也能在自己的事件列表里看到同一条战报；战报链概览按攻守双方损耗展示。
+
+验证：
+
+- `git diff --check` 通过。
+- 命令层烟测通过：`stage-2-1231411414` 中给攻方军团记录 `campaign` 小胜并应用轻量结果后，当前军团 `8253 -> 7923`，对手军团 `4639 -> 3804`，`result.sideCasualties.attacker = 330`、`defender = 835`，战役摘要 `events = 1`、`attackerCasualties = 330`、`defenderCasualties = 835`、`casualties = 1165`，军事总兵力从 `613002` 降到 `611837`；撤销后双方兵力、事件数、战役损耗和总兵力全部恢复。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `781.30KB / gzip 235.94KB`，`MilitaryPanel` chunk 约 `39.14KB / gzip 11.95KB`。
+- 构建产物浏览器烟测通过：注入同一条带 `affectedRegiments / sideCasualties` 的双方战报后，攻方军团和守方军团视角都能在军事面板看到 `攻方损耗 111`、`守方损耗 222` 和战报说明，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1721.6ms`，纯生成 `835.5ms`，WebGL 加载 `543.7ms`，UI slack `342.4ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 151.6ms`，最慢加载阶段为 `构建线层顶点 59.1ms`，`glError = 0`。
