@@ -865,6 +865,18 @@ function buildBattleEventChainSummary(events = []) {
   const casualties = appliedEvents.reduce((sum, event) => sum + battleEventCasualties(event), 0);
   const latest = events.at(-1);
   return {
+    total: events.length,
+    applied: appliedEvents.length,
+    casualties,
+    latest: latest ? {
+      id: latest.id || "",
+      sequence: latest.sequence || null,
+      type: latest.type || "",
+      typeLabel: latest.typeLabel || latest.type || "事件",
+      outcome: latest.outcome || "",
+      outcomeLabel: latest.outcomeLabel || latest.outcome || "结果",
+      at: latest.at || ""
+    } : null,
     totalLabel: `${formatNumber(events.length)} 条`,
     appliedLabel: appliedEvents.length ? `${formatNumber(appliedEvents.length)} 条` : "无",
     casualtyLabel: casualties ? formatNumber(casualties) : "无",
@@ -1025,6 +1037,7 @@ function exportBattleEvents() {
     scopeLabel: battleEventExportScopeLabel(scope),
     exportedAt: new Date().toISOString(),
     count: events.length,
+    summary: buildBattleEventChainSummary(events),
     events
   };
   downloadText(`fmg-military-events-${safeFilePart(seed)}-${battleEventExportScopeSuffix(scope)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");

@@ -15834,3 +15834,27 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410` 后进入军事管理，给军团 `1:0` 注入两条事件，其中一条带 `result.casualties = 123`；摘要显示 `链路 2 条 / 已应用 1 条 / 累计损耗 123 / 最近 攻城 / 小胜`。
 - 同次烟测确认战报链摘要和事件区无横向溢出，`glError = 0`、console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1595.3ms`，纯生成 `859.3ms`，WebGL 加载 `401ms`，UI slack `335ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 163.3ms`，最慢加载阶段为 `构建视觉 cell mesh 68.8ms`，`line-vertices = 50.7ms`，`fit-draw = 3.5ms`。
+
+### 战斗事件 JSON 导出摘要
+
+背景：
+
+- 面板已经有战报链摘要，但事件 JSON 导出仍只包含 `scope/count/events`。
+- 继续推进多条战报链路时，需要导出文件也带摘要，便于脱离 UI 核对。
+
+修正：
+
+- 事件 JSON 顶层新增 `summary`。
+- `summary` 复用战报链摘要，包含 `total / applied / casualties / latest` 和展示标签。
+- 导入逻辑仍只消费 `events`，旧 JSON 和带摘要的新 JSON 都兼容。
+- CSV 本轮不改，避免扩大字段面。
+
+文档：
+
+- 更新 `docs/current-plan.md` 第 248 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `28.41KB / gzip 9.08KB`，主入口约 `765.90KB / gzip 231.17KB`。
+- Playwright + Chrome 构建产物烟测通过：下载 `fmg-military-events-stage-2-1-all.json`，`summary.total = 2`、`summary.applied = 1`、`summary.casualties = 456`、`summary.latest.type = siege`，事件数组仍含 `raid / siege`，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1406.4ms`，纯生成 `723ms`，WebGL 加载 `402.4ms`，UI slack `281ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 130.3ms`，最慢加载阶段为 `构建视觉 cell mesh 62.7ms`，`line-vertices = 49.5ms`，`fit-draw = 3ms`。
