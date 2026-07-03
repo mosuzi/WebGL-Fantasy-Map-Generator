@@ -21,12 +21,22 @@
     <UiFilterInput :model-value="state.filter" placeholder="筛选军团 / 国家 / 兵种" @update:model-value="callbacks.onFilter" />
   </div>
 
-  <div class="military-edit-toolbar">
-    <UiButton variant="secondary" @click="exportCsv">导出 CSV</UiButton>
-    <UiButton variant="secondary" @click="exportJson">导出 JSON</UiButton>
-    <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEvents">事件 JSON</UiButton>
-    <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEventsCsv">事件 CSV</UiButton>
-    <UiButton variant="secondary" @click="openBattleEventsImport">导入事件</UiButton>
+  <div class="military-edit-toolbar" aria-label="军事数据工具">
+    <div class="military-toolbar-group">
+      <span>军团数据</span>
+      <div>
+        <UiButton variant="secondary" @click="exportCsv">导出 CSV</UiButton>
+        <UiButton variant="secondary" @click="exportJson">导出 JSON</UiButton>
+      </div>
+    </div>
+    <div class="military-toolbar-group">
+      <span>战斗事件</span>
+      <div>
+        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEvents">JSON</UiButton>
+        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEventsCsv">CSV</UiButton>
+        <UiButton variant="secondary" @click="openBattleEventsImport">导入</UiButton>
+      </div>
+    </div>
   </div>
   <input ref="battleEventsImportInput" class="military-import-input" type="file" accept="application/json,.json" @change="importBattleEventsFile" />
   <p v-if="battleEventsImportStatus" class="military-import-status">{{ battleEventsImportStatus }}</p>
@@ -44,9 +54,12 @@
 
   <section v-if="selected" class="military-overview" aria-label="选中军团概要">
     <div class="military-overview-heading">
-      <div>
-        <strong>{{ selected.name }}</strong>
-        <span>{{ selected.stateName }} / {{ selected.orderLabel }}</span>
+      <div class="military-overview-title">
+        <span class="military-overview-icon" aria-hidden="true">{{ overviewMilitaryIcon(selected) }}</span>
+        <div>
+          <strong>{{ selected.name }}</strong>
+          <span>{{ selected.stateName }} / {{ selected.orderLabel }}</span>
+        </div>
       </div>
       <span class="military-status-pill">{{ selected.statusLabel }}</span>
     </div>
@@ -82,33 +95,37 @@
       <strong>战斗事件</strong>
       <span>{{ battleEventCountLabel }}</span>
     </div>
-    <div class="military-event-filters">
-      <UiSelectField
-        input-id="military-event-type-filter"
-        class-name="military-event-filter"
-        label="类型"
-        :model-value="eventTypeFilter"
-        :options="battleEventFilterTypeOptions"
-        @update:model-value="value => eventTypeFilter = value"
-      />
-      <UiSelectField
-        input-id="military-event-outcome-filter"
-        class-name="military-event-filter"
-        label="结果"
-        :model-value="eventOutcomeFilter"
-        :options="battleEventFilterOutcomeOptions"
-        @update:model-value="value => eventOutcomeFilter = value"
-      />
-      <UiSelectField
-        input-id="military-event-export-scope"
-        class-name="military-event-export-scope"
-        label="导出"
-        :model-value="eventExportScope"
-        :options="battleEventExportScopeOptions"
-        @update:model-value="value => eventExportScope = value"
-      />
-      <UiButton variant="secondary" :disabled="!selectedFilteredBattleEvents.length" @click="clearFilteredBattleEvents">清空筛选</UiButton>
-      <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
+    <div class="military-event-tools">
+      <div class="military-event-filters">
+        <UiSelectField
+          input-id="military-event-type-filter"
+          class-name="military-event-filter"
+          label="类型"
+          :model-value="eventTypeFilter"
+          :options="battleEventFilterTypeOptions"
+          @update:model-value="value => eventTypeFilter = value"
+        />
+        <UiSelectField
+          input-id="military-event-outcome-filter"
+          class-name="military-event-filter"
+          label="结果"
+          :model-value="eventOutcomeFilter"
+          :options="battleEventFilterOutcomeOptions"
+          @update:model-value="value => eventOutcomeFilter = value"
+        />
+        <UiSelectField
+          input-id="military-event-export-scope"
+          class-name="military-event-export-scope"
+          label="导出"
+          :model-value="eventExportScope"
+          :options="battleEventExportScopeOptions"
+          @update:model-value="value => eventExportScope = value"
+        />
+      </div>
+      <div class="military-event-actions">
+        <UiButton variant="secondary" :disabled="!selectedFilteredBattleEvents.length" @click="clearFilteredBattleEvents">清空筛选</UiButton>
+        <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
+      </div>
     </div>
     <p v-if="!selectedBattleEvents.length" class="military-event-empty">{{ selectedBattleEventTotal ? "没有匹配当前筛选的战斗事件。" : "当前军团还没有战斗事件。" }}</p>
     <ol v-else>
@@ -323,6 +340,18 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const unitDefinitions = MILITARY_UNITS;
+const militaryOverviewIcons = Object.freeze({
+  "fleet-large": "≋",
+  "fleet-small": "≈",
+  archers: "⌁",
+  "archers-heavy": "⌁",
+  cavalry: "◇",
+  "cavalry-heavy": "◇",
+  infantry: "△",
+  "infantry-heavy": "△",
+  mountain: "⌂",
+  artillery: "✦"
+});
 const activeAction = ref(null);
 const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
@@ -693,6 +722,11 @@ function unitSummary(units = {}) {
     })
     .filter(Boolean)
     .join(" / ") || "无";
+}
+
+function overviewMilitaryIcon(regiment) {
+  const variant = regiment?.iconVariant || regiment?.icon || regiment?.dominantUnit || "infantry";
+  return militaryOverviewIcons[variant] || militaryOverviewIcons[regiment?.dominantUnit] || "◆";
 }
 
 function buildStationDestinationOptions(map, regiment, state) {

@@ -15783,3 +15783,29 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `26.41KB / gzip 8.47KB`，主入口约 `765.90KB / gzip 231.17KB`。
 - Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，给军团 `1:0` 注入 `袭扰 / 损耗` 与 `攻城 / 小胜` 两条事件；类型筛选切到 `袭扰` 后标题为 `1 / 2 条`，点击“清空筛选”后全局和军团本地事件均只剩 `siege`，历史为 `清空筛选战斗事件 #1:0`；撤销后恢复 `raid / siege`，`glError = 0`、console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1447.1ms`，纯生成 `663.7ms`，WebGL 加载 `465.8ms`，UI slack `317.6ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 123.9ms`，最慢加载阶段为 `构建线层顶点 84.2ms`，`fit-draw = 3.6ms`。
+
+### 军事面板布局整理
+
+背景：
+
+- 军事管理面板的功能已经覆盖态势、驻地、兵种比例和战斗事件，但顶部工具条和事件筛选区仍像按钮堆叠，层级不够清楚。
+- 上一轮新增“清空筛选”后，事件筛选区在 720px 面板内更容易显得拥挤，需要整理为更稳定的操作面。
+
+修正：
+
+- 顶部工具条改为“军团数据 / 战斗事件”两组，分别容纳军团 CSV/JSON 和事件 JSON/CSV/导入。
+- 选中军团概要新增抽象兵种符号，并用本地映射避免露出 `archers`、`fleet-small` 等内部 key。
+- 战斗事件区域把“类型 / 结果 / 导出”筛选和“清空筛选 / 清空当前”动作拆成两段布局。
+- 局部归零 Element Plus 相邻按钮默认 `margin-left`，避免工具条和事件动作区产生横向溢出。
+- 本轮只整理军事面板布局，不改变事件数据结构、命令语义、战斗结果应用规则或地图渲染。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 246 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `27.18KB / gzip 8.75KB`，主入口约 `765.90KB / gzip 231.18KB`。
+- Playwright + 系统 Chrome 构建产物布局烟测通过：打开 `http://127.0.0.1:5410` 后进入军事管理，工具条分组为 `军团数据 / 战斗事件`；工具条、事件工具和事件动作区均满足 `scrollWidth == clientWidth`；概要符号为抽象符号 `⌁`，不再显示内部 key `archers`。
+- 同次烟测继续验证事件功能：类型筛选到 `袭扰` 后点击“清空筛选”，临时注入的 `raid / siege` 事件只剩 `siege`，历史为 `清空筛选战斗事件 #1:0`，`glError = 0`、console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1370.6ms`，纯生成 `693.2ms`，WebGL 加载 `370.5ms`，UI slack `306.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 120.5ms`，最慢加载阶段为 `构建视觉 cell mesh 53.3ms`，`line-vertices = 45.2ms`，`fit-draw = 2.5ms`。

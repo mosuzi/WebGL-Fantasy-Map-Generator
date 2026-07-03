@@ -4942,13 +4942,55 @@ input.ui-switch-native {
 .diplomacy-edit-toolbar,
 .military-edit-toolbar {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }
 
+.diplomacy-edit-toolbar {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .military-edit-toolbar {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  align-items: stretch;
+}
+
+.military-toolbar-group {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 7px;
+  background: rgba(9, 15, 18, 0.28);
+}
+
+.military-toolbar-group > span {
+  color: #8ca0aa;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.military-toolbar-group > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.military-toolbar-group .el-button,
+.military-event-actions .el-button {
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+.military-toolbar-group .el-button + .el-button,
+.military-event-actions .el-button + .el-button {
+  margin-left: 0;
 }
 
 .military-import-input {
@@ -4965,11 +5007,11 @@ input.ui-switch-native {
   display: grid;
   gap: 10px;
   margin: 10px 0;
-  padding: 10px;
+  padding: 11px;
   border: 1px solid rgba(189, 206, 213, 0.16);
   border-radius: 7px;
   background:
-    linear-gradient(135deg, rgba(42, 63, 69, 0.78), rgba(18, 25, 29, 0.88)),
+    linear-gradient(135deg, rgba(39, 56, 58, 0.84), rgba(15, 22, 25, 0.92)),
     #12191d;
 }
 
@@ -4980,10 +5022,31 @@ input.ui-switch-native {
   gap: 10px;
 }
 
-.military-overview-heading div {
+.military-overview-title {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.military-overview-title div {
   display: grid;
   gap: 3px;
   min-width: 0;
+}
+
+.military-overview-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(240, 206, 124, 0.25);
+  border-radius: 6px;
+  background: rgba(7, 12, 15, 0.44);
+  color: #f0ce7c;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .military-overview-heading strong {
@@ -4997,6 +5060,11 @@ input.ui-switch-native {
 .military-overview-heading span {
   color: #9fb0ba;
   font-size: 12px;
+}
+
+.military-overview-heading .military-overview-icon {
+  color: #f0ce7c;
+  font-size: 18px;
 }
 
 .military-status-pill {
@@ -5104,9 +5172,24 @@ input.ui-switch-native {
 
 .military-event-filters {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 7px;
   align-items: end;
+}
+
+.military-event-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 190px);
+  gap: 7px;
+  align-items: end;
+}
+
+.military-event-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  align-items: end;
+  min-width: 0;
 }
 
 .military-event-filter,
