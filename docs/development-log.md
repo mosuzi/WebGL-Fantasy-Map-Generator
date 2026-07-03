@@ -15884,3 +15884,29 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `768.43KB / gzip 232.22KB`，仍只有既有大 chunk 提示。
 - Playwright + Chrome 构建产物烟测通过：固定 seed 下战线图层开启，战线开关顶点差为 `18`，即 `2` 个箭头各 `3` 个三角形；局部截图 `docs/generated/war-front-arrow-crop.png` 可见宽体渐变箭头，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1352.2ms`，纯生成 `694.1ms`，WebGL 加载 `373ms`，UI slack `285.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 123.1ms`，最慢加载阶段为 `构建标签 54.2ms`，`line-vertices = 50.2ms`，`fit-draw = 2.5ms`。
+
+### 军事面板样式第二刀
+
+背景：
+
+- 军事管理面板功能已经覆盖态势、驻地、兵种比例和战斗事件，但顶部统计、详情网格和战报摘要仍偏裸文本，和其他对象面板相比显得粗糙。
+- 本轮只收束视觉层级，不改变军事数据结构、命令、导入导出或战斗事件语义。
+
+修正：
+
+- `military-panel-summary` 新增卡片式统计网格，避免顶部汇总散成裸文本。
+- `military-overview` 调整为更像指挥卡的暗色面板，加强军团图标、状态胶囊、核心指标和兵种比例条。
+- `military-panel-details` 新增三列详情网格样式，和概要卡形成清晰层级。
+- `military-event-list`、`military-event-chain` 和事件项统一为紧凑战报区；战报链摘要改为连续状态带。
+- `military-status-panel` 补边框、背景和内边距，使二级态势面板不再像悬浮裸表单。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 250 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主 CSS 约 `128.78KB / gzip 20.21KB`，主入口约 `768.43KB / gzip 232.23KB`，仍只有既有大 chunk 提示。
+- Playwright + Chrome 构建产物布局烟测通过：打开 `军事管理`，注入两条战斗事件，并打开“调整态势”二级面板；`military-panel-summary / controls / toolbar / overview / details / event list / event tools / event chain / secondary panel` 均无横向溢出。
+- 同次烟测战报链显示 `链路 2 条 / 已应用 1 条 / 累计损耗 132 / 最近 攻城 / 小胜`，`glError = 0`、console/page error 为 `0`，截图为 `docs/generated/military-panel-style-smoke.png`。
+- e2e 守门通过：点击到出图 `1411ms`，纯生成 `706.5ms`，WebGL 加载 `392.5ms`，UI slack `312ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 124.3ms`，最慢加载阶段为 `构建视觉 cell mesh 55.9ms`，`line-vertices = 45.5ms`，`fit-draw = 2.8ms`。

@@ -4927,6 +4927,38 @@ input.ui-switch-native {
   gap: 8px;
 }
 
+.military-panel-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.military-panel-summary div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(7, 12, 15, 0.34);
+}
+
+.military-panel-summary span,
+.military-panel-details span {
+  color: #80919c;
+  font-size: 11px;
+}
+
+.military-panel-summary strong,
+.military-panel-details strong {
+  overflow: hidden;
+  color: #edf4f6;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .military-panel-controls {
   display: grid;
   grid-template-columns: minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(0, 1.2fr);
@@ -5005,14 +5037,17 @@ input.ui-switch-native {
 
 .military-overview {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin: 10px 0;
-  padding: 11px;
-  border: 1px solid rgba(189, 206, 213, 0.16);
-  border-radius: 7px;
+  padding: 12px;
+  border: 1px solid rgba(240, 206, 124, 0.2);
+  border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(39, 56, 58, 0.84), rgba(15, 22, 25, 0.92)),
+    linear-gradient(135deg, rgba(44, 53, 45, 0.9) 0%, rgba(18, 25, 29, 0.96) 56%, rgba(22, 18, 16, 0.98) 100%),
     #12191d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
 .military-overview-heading {
@@ -5024,7 +5059,7 @@ input.ui-switch-native {
 
 .military-overview-title {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 42px minmax(0, 1fr);
   align-items: center;
   gap: 9px;
   min-width: 0;
@@ -5039,20 +5074,24 @@ input.ui-switch-native {
 .military-overview-icon {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(240, 206, 124, 0.25);
-  border-radius: 6px;
-  background: rgba(7, 12, 15, 0.44);
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(240, 206, 124, 0.34);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(240, 206, 124, 0.16), rgba(7, 12, 15, 0.5)),
+    rgba(7, 12, 15, 0.46);
   color: #f0ce7c;
-  font-size: 18px;
+  font-size: 21px;
   line-height: 1;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
 }
 
 .military-overview-heading strong {
   overflow: hidden;
   color: #f6fbfc;
   font-size: 15px;
+  letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5064,7 +5103,7 @@ input.ui-switch-native {
 
 .military-overview-heading .military-overview-icon {
   color: #f0ce7c;
-  font-size: 18px;
+  font-size: 21px;
 }
 
 .military-status-pill {
@@ -5078,20 +5117,39 @@ input.ui-switch-native {
   font-weight: 800;
 }
 
+.military-panel-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(7, 12, 15, 0.3);
+}
+
+.military-panel-details div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .military-overview-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 7px;
+  gap: 8px;
 }
 
 .military-overview-stats span {
   display: grid;
   gap: 3px;
   min-width: 0;
-  border: 1px solid rgba(189, 206, 213, 0.11);
-  border-radius: 6px;
-  padding: 7px;
-  background: rgba(7, 12, 15, 0.38);
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 7px;
+  padding: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    rgba(7, 12, 15, 0.42);
 }
 
 .military-overview-stats small {
@@ -5102,19 +5160,21 @@ input.ui-switch-native {
 .military-overview-stats b {
   overflow: hidden;
   color: #edf4f6;
-  font-size: 13px;
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .military-unit-bars {
   display: grid;
-  gap: 7px;
+  gap: 8px;
+  border-top: 1px solid rgba(189, 206, 213, 0.12);
+  padding-top: 2px;
 }
 
 .military-unit-bar {
   display: grid;
-  gap: 4px;
+  gap: 5px;
 }
 
 .military-unit-bar div {
@@ -5132,21 +5192,23 @@ input.ui-switch-native {
 
 .military-unit-bar i {
   display: block;
-  height: 5px;
+  height: 6px;
   min-width: 5px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #d9b45f, #7fb3a4);
-  box-shadow: 0 0 10px rgba(127, 179, 164, 0.18);
+  background: linear-gradient(90deg, #d9b45f, #7fb3a4 62%, #78a7d9);
+  box-shadow: 0 0 12px rgba(127, 179, 164, 0.2);
 }
 
 .military-event-list {
   display: grid;
-  gap: 7px;
+  gap: 9px;
   margin: 8px 0 10px;
-  border: 1px solid rgba(189, 206, 213, 0.12);
-  border-radius: 7px;
-  padding: 9px;
-  background: rgba(9, 15, 18, 0.34);
+  border: 1px solid rgba(189, 206, 213, 0.15);
+  border-radius: 8px;
+  padding: 10px;
+  background:
+    linear-gradient(180deg, rgba(22, 31, 35, 0.74), rgba(9, 15, 18, 0.72)),
+    rgba(9, 15, 18, 0.4);
 }
 
 .military-event-list-heading,
@@ -5173,17 +5235,26 @@ input.ui-switch-native {
 .military-event-chain {
   display: grid;
   grid-template-columns: 0.75fr 0.8fr 0.95fr minmax(0, 1.35fr);
-  gap: 6px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  background: rgba(7, 12, 15, 0.38);
 }
 
 .military-event-chain span {
   display: grid;
   gap: 2px;
   min-width: 0;
-  border: 1px solid rgba(189, 206, 213, 0.1);
-  border-radius: 6px;
-  padding: 6px 7px;
-  background: rgba(7, 12, 15, 0.36);
+  border: 0;
+  border-right: 1px solid rgba(189, 206, 213, 0.1);
+  border-radius: 0;
+  padding: 7px 8px;
+  background: transparent;
+}
+
+.military-event-chain span:last-child {
+  border-right: 0;
 }
 
 .military-event-chain small {
@@ -5238,9 +5309,11 @@ input.ui-switch-native {
   display: grid;
   gap: 3px;
   min-width: 0;
-  border-left: 2px solid rgba(240, 206, 124, 0.55);
-  padding: 6px 8px;
-  background: rgba(7, 12, 15, 0.42);
+  border: 1px solid rgba(189, 206, 213, 0.1);
+  border-left: 3px solid rgba(240, 206, 124, 0.62);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: rgba(7, 12, 15, 0.44);
 }
 
 .military-event-item strong {
@@ -5300,6 +5373,10 @@ input.ui-switch-native {
   display: grid;
   gap: 10px;
   min-width: 300px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 9px;
+  background: rgba(7, 12, 15, 0.28);
 }
 
 .military-status-heading {
