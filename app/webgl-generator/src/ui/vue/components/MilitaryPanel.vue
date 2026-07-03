@@ -132,6 +132,14 @@
           @update:model-value="value => eventOutcomeFilter = value"
         />
         <UiSelectField
+          input-id="military-event-apply-filter"
+          class-name="military-event-filter"
+          label="结算"
+          :model-value="eventApplyFilter"
+          :options="battleEventApplyFilterOptions"
+          @update:model-value="value => eventApplyFilter = value"
+        />
+        <UiSelectField
           input-id="military-event-export-scope"
           class-name="military-event-export-scope"
           label="导出"
@@ -385,6 +393,7 @@ const battleEventsImportInput = ref(null);
 const battleEventsImportStatus = ref("");
 const eventTypeFilter = ref("all");
 const eventOutcomeFilter = ref("all");
+const eventApplyFilter = ref("all");
 const eventExportScope = ref("all");
 const showAllSelectedBattleEvents = ref(false);
 const battleEventDraft = reactive({
@@ -416,6 +425,11 @@ const battleEventFilterTypeOptions = Object.freeze([
 const battleEventFilterOutcomeOptions = Object.freeze([
   {value: "all", label: "全部结果"},
   ...battleEventOutcomeOptions
+]);
+const battleEventApplyFilterOptions = Object.freeze([
+  {value: "all", label: "全部结算"},
+  {value: "applied", label: "已应用"},
+  {value: "pending", label: "未应用"}
 ]);
 const battleEventExportScopeOptions = Object.freeze([
   {value: "all", label: "全部事件"},
@@ -455,7 +469,7 @@ const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
 const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
 const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents.value, selected.value));
-const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value));
+const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value, eventApplyFilter.value));
 const selectedBattleEventsCanExpand = computed(() => selectedFilteredBattleEvents.value.length > 5);
 const selectedBattleEvents = computed(() => showAllSelectedBattleEvents.value ? newestFirstBattleEvents(selectedFilteredBattleEvents.value) : latestBattleEvents(selectedFilteredBattleEvents.value, 5));
 const battleEventChainSummary = computed(() => buildBattleEventChainSummary(selectedBattleEventRows.value));
@@ -538,7 +552,7 @@ watch(() => selected.value?.id, syncStatusDraft, {immediate: true});
 watch(() => selected.value?.status, syncStatusDraft);
 watch(() => selected.value?.id, syncStationDestinationDraft, {immediate: true});
 watch(() => stationDestinationOptions.value.map(option => option.value).join("|"), syncStationDestinationDraft);
-watch(() => `${selected.value?.id || ""}|${eventTypeFilter.value}|${eventOutcomeFilter.value}`, () => {
+watch(() => `${selected.value?.id || ""}|${eventTypeFilter.value}|${eventOutcomeFilter.value}|${eventApplyFilter.value}`, () => {
   showAllSelectedBattleEvents.value = false;
 });
 
@@ -866,10 +880,11 @@ function eventsForRegiment(events = [], regiment) {
     .filter(event => eventBelongsToRegiment(event, regiment));
 }
 
-function filterBattleEvents(events = [], type = "all", outcome = "all") {
+function filterBattleEvents(events = [], type = "all", outcome = "all", applyStatus = "all") {
   return events.filter(event =>
     (type === "all" || event.type === type)
     && (outcome === "all" || event.outcome === outcome)
+    && (applyStatus === "all" || (applyStatus === "applied" ? Boolean(event.resultApplied) : !event.resultApplied))
   );
 }
 
