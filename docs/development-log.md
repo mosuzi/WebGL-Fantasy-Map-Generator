@@ -17312,3 +17312,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `814.08KB / gzip 245.76KB`，名称库懒加载 chunk 约 `10.50KB / gzip 3.99KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：新建 1 个用户名称库后，把全局 `stateRoot` 绑定到 `user-namebase-1`，`map.namebases.bindings.global.stateRoot` 写入成功，名称库行显示“全局国家根名”；再恢复“使用内置策略”后绑定值清空，行显示“未绑定”。绑定和清空前后地图 checksum 均为 `9f015921`，确认不改写当前地图名称；面板无横向溢出，`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1586.8ms`，纯生成 `776.1ms`，WebGL 加载 `440ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `147ms`，最慢加载阶段为“构建标签” `72.2ms`。
+
+### 名称库全局绑定生成接入第一刀
+
+背景：
+
+- 名称库总览已经能写入全局 `stateRoot / place / hydro` 绑定，但生成器尚未读取这些偏好。
+- 本轮只接当前地图内的受约束重生成：国家/省份、城镇和河湖命名读取当前 `map.namebases`；不做整图生成继承用户库，不自动批量改写当前地图已有名称。
+
+修正：
+
+- `createChineseNameGenerator(seed, {namebases})` 新增全局绑定解析，支持内置库和用户库 id，失效绑定会自动退回内置策略。
+- `stateRoot` 绑定只替换国家根名候选源，仍经过 `cleanStateRootCandidate()`、国家形制和 `state-family` 去重。
+- `place` 绑定只影响新生成城镇名；港口仍会按港口后缀修正。
+- `hydro` 绑定只影响新生成河流和湖泊名，并避免对已有水文后缀重复追加。
+- 国家/省份、城镇和水文重生成入口会传入当前 `map.namebases`；普通生成参数 `options` 不持久化用户库对象。
+
+验证：
+
+- 绑定解析小测通过：自定义 `stateRoot` 样本生成 `8/8` 命中用户库；失效绑定小测中 `getNamebaseUsage()` 返回空绑定并正常退回内置名称。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `814.43KB / gzip 245.82KB`，名称库懒加载 chunk 约 `10.50KB / gzip 3.99KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入 3 个用户名称库并设置全局 `stateRoot / place / hydro` 绑定后，依次触发国家、城镇和水文重生成；国家根名 `18/20` 明确命中用户根名库，城镇 `666/1003` 命中用户地名库，河流/湖泊 `131/157` 命中用户水文库；未命中项来自首都/省会锚点、方位/去重变体和兜底策略；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1761.6ms`，纯生成 `923.9ms`，WebGL 加载 `504.4ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `161.6ms`，最慢加载阶段为“构建线层顶点” `126.2ms`。

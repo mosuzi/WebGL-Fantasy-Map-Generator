@@ -65,7 +65,7 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
   if (!pack?.cells?.i?.length || !pack?.burgs?.length) return null;
   const profile = createStageProfile();
   const random = profile.stage("random-states", "初始化国家重算随机源", () => createRandom(regenerationSeed(options, "regenerate-states", salt)));
-  const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-politics-names", salt)));
+  const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-politics-names", salt), {namebases: options.namebases}));
 
   const selectedCapitals = profile.stage("capitals-select", "重新选择国家首都", () => selectRegeneratedCapitalBurgs(pack, settlements, options, random));
   if (!selectedCapitals.length) return null;
@@ -100,7 +100,7 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
   if (!pack?.cells?.i?.length || !pack?.states?.some?.(state => state?.i)) return null;
   const profile = createStageProfile();
   const random = profile.stage("random-provinces", "初始化省份重算随机源", () => createRandom(regenerationSeed(options, "regenerate-provinces", salt)));
-  const nameGenerator = profile.stage("name-generator", "初始化省份命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-province-names", salt)));
+  const nameGenerator = profile.stage("name-generator", "初始化省份命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-province-names", salt), {namebases: options.namebases}));
   const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, random, options, nameGenerator));
   grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack));
   const timing = profile.finish();
@@ -119,7 +119,7 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
   const profile = createStageProfile();
   const riverCells = profile.stage("river-cell-index", "建立河流 cell 索引", () => new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells)));
 
-  const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(options.seed));
+  const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(options.seed, {namebases: options.namebases}));
   const states = profile.stage("states-build", "生成国家对象", () => buildPackStates(pack, society, random, nameGenerator));
   profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society));
   profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states));

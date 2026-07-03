@@ -15,7 +15,7 @@ export function buildRivers(grid, features, pack, options = {}) {
   if (!pack?.cells?.t) return buildEmptyRivers();
 
   const profile = createStageProfile();
-  const nameGenerator = profile.stage("name-generator", "初始化河流命名器", () => createChineseNameGenerator(getHydronymSeed(options)));
+  const nameGenerator = profile.stage("name-generator", "初始化河流命名器", () => createChineseNameGenerator(getHydronymSeed(options), {namebases: options.namebases}));
   const cells = pack.cells;
   const riverPaths = new Map();
   const riverParents = new Map();
@@ -129,7 +129,7 @@ export function buildRivers(grid, features, pack, options = {}) {
 }
 
 export function renameHydronymsByCulture(rivers, pack, options = {}) {
-  const nameGenerator = createChineseNameGenerator(getHydronymSeed(options));
+  const nameGenerator = createChineseNameGenerator(getHydronymSeed(options), {namebases: options.namebases});
   for (const river of rivers.rivers || []) {
     if (!river?.i) continue;
     const cultureId = pack.cells.culture?.[river.source] || 0;

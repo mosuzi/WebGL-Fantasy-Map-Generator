@@ -326,13 +326,53 @@ const SHIELDS = ["heater", "kite", "round", "horsehead", "banner"];
 const CHARGES = ["mount", "river", "star", "gate", "wave", "tree", "tower", "sun", "moon", "bridge"];
 const FIELD_TINCTURES = ["#b94b4b", "#3d6f9e", "#4f7f52", "#a47a35", "#6e579b", "#9a9a70", "#3e7b7d", "#704f38"];
 const METAL_TINCTURES = ["#f0d889", "#e8e4d6", "#d8b56d", "#f3efe1"];
+const HYDRO_NAME_SUFFIXES = [...new Set([...WATER_SUFFIXES, ...LAKE_SUFFIXES, "溪", "水", "河", "江", "川"])];
 
-export function createChineseNameGenerator(seed = "map") {
+const BUILTIN_NAMEBASE_SOURCES = {
+  "ancient-state-roots": ANCIENT_STATE_ROOTS,
+  "ancient-state-compounds": ANCIENT_STATE_COMPOUND_ROOTS,
+  "state-forms-generic": STATE_FORMS.Generic,
+  "state-forms-naval": STATE_FORMS.Naval,
+  "state-forms-lake": STATE_FORMS.Lake,
+  "state-forms-highland": STATE_FORMS.Highland,
+  "state-forms-river": STATE_FORMS.River,
+  "state-forms-nomadic": STATE_FORMS.Nomadic,
+  "state-forms-hunting": STATE_FORMS.Hunting,
+  "state-forms-desert": STATE_FORMS.Desert,
+  "place-stems": PLACE_STEMS,
+  "chinese-first-chars": CHINESE_FIRST_CHARS,
+  "chinese-second-chars": CHINESE_SECOND_CHARS,
+  "port-stems": CHINESE_PORT_STEMS,
+  "hydro-prefixes": HYDRO_PREFIXES,
+  "light-fantasy-prefixes": LIGHT_FANTASY_PREFIXES,
+  "high-fantasy-stems": HIGH_FANTASY_STEMS,
+  "land-suffixes": LAND_SUFFIXES,
+  "water-suffixes": WATER_SUFFIXES,
+  "highland-suffixes": HIGHLAND_SUFFIXES,
+  "port-suffixes": PORT_SUFFIXES,
+  "lake-suffixes": LAKE_SUFFIXES,
+  "small-settlement-prefixes": SMALL_SETTLEMENT_PREFIXES,
+  "western-place-stems": WESTERN_PLACE_STEMS,
+  "western-hydro-stems": WESTERN_HYDRO_STEMS,
+  "northern-place-stems": NORTHERN_PLACE_STEMS,
+  "steppe-place-stems": STEPPE_PLACE_STEMS,
+  "southern-place-stems": SOUTHERN_PLACE_STEMS
+};
+
+for (const [style, config] of Object.entries(CULTURE_STYLE_CONFIG)) {
+  if (!config) continue;
+  BUILTIN_NAMEBASE_SOURCES[`culture-${style.toLowerCase()}-place`] = config.place || [];
+  BUILTIN_NAMEBASE_SOURCES[`culture-${style.toLowerCase()}-hydro`] = config.hydro || [];
+}
+
+export function createChineseNameGenerator(seed = "map", context = {}) {
   const used = new Map();
+  const namebaseSources = resolveNamebaseSources(context?.namebases || context);
 
   return {
     makePlaceName(options = {}) {
       const rng = rngFor(seed, "place", options);
+      const boundPlaceSource = namebaseSources.place;
       const makeCandidate = () => {
         const style = choosePlaceStyle(rng, options);
         const transliterationStyle = getTransliterationStyle(options);
@@ -340,7 +380,8 @@ export function createChineseNameGenerator(seed = "map") {
         const suffixes = getPlaceSuffixes(options, cultureStyle);
         let name;
 
-        if (transliterationStyle?.place) name = combineStemAndSuffix(pick(rng, transliterationStyle.place), pick(rng, suffixes));
+        if (boundPlaceSource.length) name = makeBoundPlaceName(rng, boundPlaceSource, options, suffixes);
+        else if (transliterationStyle?.place) name = combineStemAndSuffix(pick(rng, transliterationStyle.place), pick(rng, suffixes));
         else if (style === "real") name = makeChinesePlaceName(rng, options, suffixes);
         else if (style === "light") name = makeChineseLightPlaceName(rng, options, suffixes);
         else name = pick(rng, HIGH_FANTASY_STEMS);
@@ -356,26 +397,35 @@ export function createChineseNameGenerator(seed = "map") {
     makeRiverName(options = {}) {
       const rng = rngFor(seed, "river", options);
       const cultureStyle = getCultureStyle(options);
+      const boundHydroSource = namebaseSources.hydro;
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
-      const prefix = cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.82 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
-      return makeUnique(used, "river", `${prefix}${pick(rng, ["溪", "水", "河", "江", "川"])}`, rng);
+      const prefix = boundHydroSource.length
+        ? pickNamebaseValue(rng, boundHydroSource)
+        : cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.82 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
+      return makeUnique(used, "river", makeHydroName(prefix, rng, ["溪", "水", "河", "江", "川"]), rng);
     },
 
     makeLakeName(options = {}) {
       const rng = rngFor(seed, "lake", options);
       const cultureStyle = getCultureStyle(options);
+      const boundHydroSource = namebaseSources.hydro;
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
-      const prefix = cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.78 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
-      return makeUnique(used, "lake", `${prefix}${pick(rng, LAKE_SUFFIXES)}`, rng);
+      const prefix = boundHydroSource.length
+        ? pickNamebaseValue(rng, boundHydroSource)
+        : cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.78 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
+      return makeUnique(used, "lake", makeHydroName(prefix, rng, LAKE_SUFFIXES), rng);
     },
 
     makeStateRoot(options = {}) {
       const rng = rngFor(seed, "state-root", options);
+      const boundStateRootSource = namebaseSources.stateRoot;
       const capitalRoot = normalizeNameRoot(options.capitalName);
       const cultureRoot = cleanStateRootCandidate(options.cultureRoot);
       const allowCapitalName = Boolean(options.allowCapitalName);
-      const generate = () => makeStateRootCandidateAvoiding(rng, options, allowCapitalName ? "" : capitalRoot);
-      if (cultureRoot && rng.next() < 0.24 && claimStateRoot(used, cultureRoot)) return cultureRoot;
+      const generate = () => boundStateRootSource.length
+        ? makeBoundStateRootCandidateAvoiding(rng, boundStateRootSource, allowCapitalName ? "" : capitalRoot)
+        : makeStateRootCandidateAvoiding(rng, options, allowCapitalName ? "" : capitalRoot);
+      if (!boundStateRootSource.length && cultureRoot && rng.next() < 0.24 && claimStateRoot(used, cultureRoot)) return cultureRoot;
       const initialName = allowCapitalName && capitalRoot && rng.next() < 0.28 ? capitalRoot : generate();
       return makeUniqueStateGenerated(used, initialName, rng, generate, 96);
     },
@@ -411,6 +461,10 @@ export function createChineseNameGenerator(seed = "map") {
         tinctures: {field, charge: chargeColor},
         charges: [{charge, tincture: chargeColor}]
       };
+    },
+
+    getNamebaseUsage() {
+      return namebaseSources.usage;
     }
   };
 }
@@ -510,6 +564,70 @@ function makeChineseTwoCharName(rng) {
   let second = pick(rng, CHINESE_SECOND_CHARS);
   if (first === second) second = pick(rng, CHINESE_SECOND_CHARS);
   return `${first}${second}`;
+}
+
+function resolveNamebaseSources(namebases) {
+  const bindings = namebases?.bindings && typeof namebases.bindings === "object" ? namebases.bindings : {};
+  const globalBindings = bindings.global && typeof bindings.global === "object" ? bindings.global : {};
+  const rows = new Map(Object.entries(BUILTIN_NAMEBASE_SOURCES).map(([id, source]) => [id, normalizeNamebaseSourceValues(source)]));
+  for (const base of namebases?.bases || []) {
+    const id = String(base?.id || "").trim();
+    if (!id) continue;
+    const source = normalizeNamebaseSourceValues(base.source);
+    if (source.length) rows.set(id, source);
+  }
+  const stateRootId = String(globalBindings.stateRoot || "").trim();
+  const placeId = String(globalBindings.place || "").trim();
+  const hydroId = String(globalBindings.hydro || "").trim();
+  return {
+    stateRoot: rows.get(stateRootId) || [],
+    place: rows.get(placeId) || [],
+    hydro: rows.get(hydroId) || [],
+    usage: {
+      stateRoot: rows.has(stateRootId) ? stateRootId : "",
+      place: rows.has(placeId) ? placeId : "",
+      hydro: rows.has(hydroId) ? hydroId : ""
+    }
+  };
+}
+
+function normalizeNamebaseSourceValues(source) {
+  const values = Array.isArray(source) ? source : String(source || "").split(/[,，\n\r]+/u);
+  const result = [];
+  const seen = new Set();
+  for (const value of values) {
+    const normalized = String(value || "").trim().replace(/\s+/gu, "");
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function pickNamebaseValue(rng, source) {
+  return source.length ? source[Math.floor(rng.next() * source.length)] || source[0] || "" : "";
+}
+
+function makeBoundPlaceName(rng, source, options, suffixes) {
+  let name = pickNamebaseValue(rng, source);
+  if (options.port && !PORT_SUFFIXES.some(suffix => name.endsWith(suffix))) name = trimGeographicSuffix(name) + pick(rng, PORT_SUFFIXES);
+  if (!name && suffixes?.length) name = `${makeChineseTwoCharName(rng)}${pick(rng, suffixes)}`;
+  return name || makeChineseTwoCharName(rng);
+}
+
+function makeHydroName(prefix, rng, suffixes) {
+  const normalized = String(prefix || "").replace(/\s+/gu, "");
+  if (!normalized) return `${pick(rng, HYDRO_PREFIXES)}${pick(rng, suffixes)}`;
+  if (HYDRO_NAME_SUFFIXES.some(suffix => normalized.endsWith(suffix))) return normalized;
+  return `${normalized}${pick(rng, suffixes)}`;
+}
+
+function makeBoundStateRootCandidateAvoiding(rng, source, avoidedRoot = "") {
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const candidate = cleanStateRootCandidate(pickNamebaseValue(rng, source));
+    if (candidate && !hasSameNameRoot(candidate, avoidedRoot)) return candidate;
+  }
+  return makeStateRootCandidateAvoiding(rng, {}, avoidedRoot);
 }
 
 function makeStateRootCandidate(rng, options = {}) {

@@ -25,7 +25,7 @@ export function buildSettlements(grid, features, politics, rivers, random, pack,
   const population = grid.cells.pop?.some?.(value => value > 0) ? grid.cells.pop : buildPopulation(grid, features, riverCells);
   const result = pack?.cells?.s
     ? buildPackSettlements(grid, features, politics, random, pack, options)
-    : buildGridSettlements(grid, features, politics, riverCells, population, random);
+    : buildGridSettlements(grid, features, politics, riverCells, population, random, options);
   const routes = politics ? buildRoutes(grid, features, politics, result.cities, pack, options) : [];
 
   grid.cells.pop = population;
@@ -110,7 +110,7 @@ function createSettlementMetadata({grid, features, population, cities, routes, p
 
 function buildPackSettlements(grid, features, politics, random, pack, options) {
   const {cells} = pack;
-  const nameGenerator = createChineseNameGenerator(options.seed);
+  const nameGenerator = createChineseNameGenerator(options.seed, {namebases: options.namebases});
   const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
   const cities = [];
   const burgs = [null];
@@ -174,7 +174,7 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
 
 function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options, settlements) {
   const {cells} = pack;
-  const nameGenerator = createChineseNameGenerator(options.seed);
+  const nameGenerator = createChineseNameGenerator(options.seed, {namebases: options.namebases});
   const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
   const cities = [];
   const burgs = [null];
@@ -803,11 +803,11 @@ function getCloseToEdgePoint(pack, landCell, waterCell) {
   return [round(x0 + 0.55 * (x1 - x0), 2), round(y0 + 0.55 * (y1 - y0), 2)];
 }
 
-function buildGridSettlements(grid, features, politics, riverCells, population, random) {
+function buildGridSettlements(grid, features, politics, riverCells, population, random, options = {}) {
   const landCells = grid.points
     .map((point, cell) => ({cell, point, height: grid.cells.h[cell], prec: grid.cells.prec[cell]}))
     .filter(item => isLandFeature(features, grid, item.cell));
-  const cities = buildGridCities(grid, features, politics, riverCells, landCells, population, random);
+  const cities = buildGridCities(grid, features, politics, riverCells, landCells, population, random, options);
   return {cities};
 }
 
@@ -824,8 +824,8 @@ function buildPopulation(grid, features, riverCells) {
   });
 }
 
-function buildGridCities(grid, features, politics, riverCells, landCells, population, random) {
-  const nameGenerator = createChineseNameGenerator(`${grid.metadata.actualCells || grid.points.length}:grid`);
+function buildGridCities(grid, features, politics, riverCells, landCells, population, random, options = {}) {
+  const nameGenerator = createChineseNameGenerator(`${grid.metadata.actualCells || grid.points.length}:grid`, {namebases: options.namebases});
   const requiredCells = new Map();
   for (const state of politics.states) requiredCells.set(state.center, {capital: true});
   for (const province of politics.provinces) {

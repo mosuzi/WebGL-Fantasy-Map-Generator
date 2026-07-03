@@ -112,11 +112,11 @@
 目标：
 
 - 名称库总览先提供全局 `stateRoot / place / hydro` 绑定编辑入口。（数据写入已完成第一刀）
-- `createChineseNameGenerator(seed, {namebases})` 接收名称库上下文。
+- `createChineseNameGenerator(seed, {namebases})` 接收名称库上下文。（当前地图内受约束重生成已完成第一刀）
 - 先接全局 `stateRoot / place / hydro` 三类：
-  - `stateRoot` 只替换根名候选源，仍走国家形制、古国短名偏好和 `state-family` 去重。
-  - `place` 只影响新生成城市名候选，不影响已有城市。
-  - `hydro` 只影响河流/湖泊新命名。
+  - `stateRoot` 只替换根名候选源，仍走国家形制、古国短名偏好和 `state-family` 去重。（已接入国家重生成）
+  - `place` 只影响新生成城市名候选，不影响已有城市。（已接入城镇重生成）
+  - `hydro` 只影响河流/湖泊新命名。（已接入水文重生成）
 
 实现建议：
 
@@ -132,7 +132,9 @@
 当前状态：
 
 - 已完成全局绑定编辑入口：用户可把 `stateRoot / place / hydro` 指向内置或用户名称库，也可恢复“使用内置策略”；失效引用会作为可见选项保留。
-- 尚未让生成器读取绑定，因此当前只保存偏好，不改变生成结果。
+- 已完成全局绑定生成接入第一刀：`createChineseNameGenerator(seed, {namebases})` 会解析 `map.namebases.bindings.global`，当前地图内的国家/省份、城镇和水文受约束重生成会传入当前 `map.namebases`。
+- 绑定值指向不存在词池时，生成器会退回内置策略；当前地图已有名称不会因为导入、编辑或绑定变化自动批量改写。
+- 整图重新生成继承用户名称库尚未完成；这需要后续增加应用级名称库偏好或生成前继承策略，避免把用户库塞进普通 `options`。
 
 ### 阶段 3：文化级绑定
 

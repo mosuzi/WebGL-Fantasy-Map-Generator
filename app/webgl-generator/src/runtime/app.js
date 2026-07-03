@@ -2480,11 +2480,11 @@ function regenerateStates(state, documentRef) {
   const beforeProvinces = map.politics?.metadata?.provinces || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const stateSalt = nextRegenerationSalt(map, "states");
-  const result = regeneratePackStatesAndProvinces(map.grid, map.society, map.options, map.pack, map.settlements, {salt: stateSalt});
+  const result = regeneratePackStatesAndProvinces(map.grid, map.society, {...map.options, namebases: map.namebases}, map.pack, map.settlements, {salt: stateSalt});
   if (!result) return regenerationResult("states", "未执行", "当前地图缺少可用城镇或 pack 语义图，无法重选首都并扩张国家。");
 
   applyPoliticsRegenerationResult(map, result);
-  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, pruneNeutralSettlements: true, routeRegenerationSalt: stateSalt});
+  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, namebases: map.namebases, pruneNeutralSettlements: true, routeRegenerationSalt: stateSalt});
   markDerivedFresh(map, ["states", "provinces", "cities"]);
   markDerivedStale(map, ["religions", "markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
@@ -2507,11 +2507,11 @@ function regenerateProvinces(state, documentRef) {
   const beforeProvinces = map.politics?.metadata?.provinces || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const provinceSalt = nextRegenerationSalt(map, "provinces");
-  const result = regeneratePackProvincesWithinStates(map.grid, map.society, map.options, map.pack, {salt: provinceSalt});
+  const result = regeneratePackProvincesWithinStates(map.grid, map.society, {...map.options, namebases: map.namebases}, map.pack, {salt: provinceSalt});
   if (!result) return regenerationResult("provinces", "未执行", "当前地图缺少可用国家或 pack 语义图，无法在国家内重建省份。");
 
   applyPoliticsRegenerationResult(map, result);
-  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, routeRegenerationSalt: provinceSalt});
+  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, namebases: map.namebases, routeRegenerationSalt: provinceSalt});
   markDerivedFresh(map, ["provinces", "cities"]);
   markDerivedStale(map, ["markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
@@ -2548,7 +2548,7 @@ function regenerateRivers(state, documentRef) {
   const map = state.map;
   const beforeRivers = map.rivers?.rivers?.length || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
-  const riverOptions = {...map.options, riverRegenerationSalt: nextRegenerationSalt(map, "rivers")};
+  const riverOptions = {...map.options, namebases: map.namebases, riverRegenerationSalt: nextRegenerationSalt(map, "rivers")};
   const nextRivers = buildRivers(map.grid, map.features, map.pack, riverOptions);
   renameHydronymsByCulture(nextRivers, map.pack, riverOptions);
   map.rivers = nextRivers;
@@ -2581,7 +2581,7 @@ function regenerateCities(state, documentRef) {
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const citySalt = nextRegenerationSalt(map, "cities");
 
-  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, settlementRegenerationSalt: citySalt, routeRegenerationSalt: citySalt});
+  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, namebases: map.namebases, settlementRegenerationSalt: citySalt, routeRegenerationSalt: citySalt});
   clearGeneratedCityLabelHides(map);
   markDerivedFresh(map, ["cities"]);
   markDerivedStale(map, ["provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
