@@ -246,7 +246,7 @@
       <div class="military-status-panel">
         <div class="military-status-heading">
           <strong>{{ selected?.name || "未选中军团" }}</strong>
-          <span>{{ selected?.latestEventLabel || "暂无战斗事件" }}</span>
+          <span>{{ selectedLatestBattleEventLabel }}</span>
         </div>
         <UiSelectField
           input-id="military-battle-event-type"
@@ -474,6 +474,7 @@ const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metr
 const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
 const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents.value, selected.value));
 const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value, eventApplyFilter.value));
+const selectedLatestBattleEventLabel = computed(() => latestBattleEventLabel(selectedBattleEventRows.value, "暂无战斗事件"));
 const selectedBattleEventsCanExpand = computed(() => selectedFilteredBattleEvents.value.length > 5);
 const selectedBattleEvents = computed(() => showAllSelectedBattleEvents.value ? newestFirstBattleEvents(selectedFilteredBattleEvents.value) : latestBattleEvents(selectedFilteredBattleEvents.value, 5));
 const battleEventChainSummary = computed(() => buildBattleEventChainSummary(selectedBattleEventRows.value));
@@ -539,7 +540,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "主兵种", value: selected.value.dominantUnitLabel},
   {label: "驻地", value: selected.value.stationLabel},
   {label: "基地", value: selected.value.baseLabel},
-  {label: "战斗事件", value: selected.value.latestEventLabel},
+  {label: "战斗事件", value: selectedLatestBattleEventLabel.value},
   {label: "驻扎适宜度", value: `${Math.round(selected.value.suitabilityScore * 100)}%`},
   {label: "移动速度", value: formatNumber(selected.value.movementSpeed)},
   {label: "文明", value: selected.value.civilizationLabel},
@@ -848,9 +849,9 @@ function latestBattleEvent(events = []) {
   return [...(events || [])].filter(event => event?.kind === "battle").at(-1) || null;
 }
 
-function latestBattleEventLabel(events = []) {
+function latestBattleEventLabel(events = [], emptyLabel = "无") {
   const event = latestBattleEvent(events);
-  if (!event) return "无";
+  if (!event) return emptyLabel;
   const detail = event.description ? `：${event.description}` : "";
   return `${event.typeLabel || event.type || "事件"} / ${event.outcomeLabel || event.outcome || "结果"}${detail}`;
 }

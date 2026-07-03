@@ -16060,3 +16060,29 @@ full 矩阵结果：
 - Playwright + Chrome 构建产物烟测通过：设置 `类型 = 袭扰`、`结果 = 相持`、`结算 = 未应用`、`导出 = 当前筛选` 后下载战斗事件 JSON；导出 `filters` 为 `raid / 袭扰`、`draw / 相持`、`pending / 未应用`。
 - 同次烟测确认 JSON `count = 2`、`events.length = 2`，所有导出事件均为未应用的袭扰相持事件，`summary.total = 2`、`summary.pending = 2`、`summary.applied = 0`，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1544.4ms`，纯生成 `783.3ms`，WebGL 加载 `392.3ms`，UI slack `368.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 142.9ms`，最慢加载阶段为 `构建线层顶点 63.7ms`，`fit-draw = 2.2ms`。
+
+### 选中军团最新战报口径统一
+
+背景：
+
+- 选中军团事件列表和战报链摘要会合并 `map.military.events` 与军团本地 `regiment.events`。
+- 但详情区的 `战斗事件` 行和记录战斗事件二级面板标题仍读取 `selected.latestEventLabel`，该字段只来自军团本地事件。
+- 当导入或全局事件写入后，列表能看到战报，概要却可能显示 `无` 或 `暂无战斗事件`。
+
+修正：
+
+- 新增 `selectedLatestBattleEventLabel`，基于合并后的 `selectedBattleEventRows` 计算最新战报标签。
+- 详情区 `战斗事件` 和战斗事件记录面板标题统一读取该 computed 标签。
+- `latestBattleEventLabel()` 增加可传入空状态文案，保留列表行默认 `无`，面板标题使用 `暂无战斗事件`。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 252 项。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `30.26KB / gzip 9.61KB`，主入口约 `768.43KB / gzip 232.22KB`。
+- Playwright + Chrome 构建产物烟测通过：只写入 `map.military.events`、清空对应 `regiment.events` 后，事件列表、详情区 `战斗事件` 行和战斗事件记录二级面板标题都显示 `攻城 / 相持：全局战报口径烟测`。
+- 同次烟测确认战报链摘要显示 `链路 1 条 / 未应用 1 条`，没有回落到 `无` 或 `暂无战斗事件`，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1276.7ms`，纯生成 `598ms`，WebGL 加载 `358.8ms`，UI slack `319.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 101.9ms`，最慢加载阶段为 `构建视觉 cell mesh 47.5ms`，`line-vertices = 42.6ms`，`fit-draw = 2.4ms`。
