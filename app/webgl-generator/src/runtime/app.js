@@ -602,6 +602,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateCulturePanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onNamebaseBinding: cultureId => {
+      state.panels.namebase.open(state.map, {cultureId});
+    },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterEdit(state, command);

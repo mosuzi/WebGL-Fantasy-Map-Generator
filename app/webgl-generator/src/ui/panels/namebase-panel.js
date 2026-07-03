@@ -15,6 +15,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     sortKey: "category",
     sortDir: "asc",
     selectedNamebaseId: null,
+    focusCultureId: "",
+    focusCultureNonce: 0,
     version: 0
   });
   const panelCallbacks = {
@@ -99,10 +101,15 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   );
 
   return {
-    open(map = null) {
+    open(map = null, options = {}) {
       pendingImportFile = null;
       clearImportPreview(panelState);
       panelState.map = map;
+      const cultureId = options.cultureId ?? "";
+      if (cultureId !== "") {
+        panelState.focusCultureId = String(cultureId);
+        panelState.focusCultureNonce++;
+      }
       refreshSummaries(panelState);
       panelState.open = true;
       panelState.version++;

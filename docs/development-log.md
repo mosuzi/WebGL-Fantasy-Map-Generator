@@ -17421,3 +17421,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；名称库懒加载 chunk 约 `12.33KB / gzip 4.45KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：注入 `state-root / place / hydro / generic / suffix` 五类用户库，并故意让全局国家根名绑定到水文库；国家根名下拉显示 `u-state / u-generic` 并保留 `u-hydro` 为“当前不匹配”，不显示 `u-place / u-suffix`；地名下拉显示 `u-place / u-generic`，水文下拉显示 `u-hydro / u-generic`；面板无横向溢出，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1367.9ms`，纯生成 `699.6ms`，WebGL 加载 `357.7ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `131.2ms`，最慢加载阶段为“构建视觉 cell mesh” `55.7ms`，`glError = 0`。
+
+### 文化面板名称库绑定快捷入口
+
+背景：
+
+- 名称库面板已经能为文化设置 `stateRoot / place / hydro` 覆盖，但用户在文化管理面板中看见某个文化后，还需要手动切到名称库面板再重新选择文化。
+- 当前计划中的名称库下一步是补文化管理面板快捷入口。
+- 本轮只做跨面板导航，不改生成、不改地图数据，也不触碰动态军事系统。
+
+修正：
+
+- `NamebasePanel` 支持打开时接收目标 `cultureId`，并把文化绑定区的文化选择聚焦到该文化。
+- `CulturePanel` 的二级操作新增“名称库绑定”按钮。
+- runtime 将文化面板的快捷入口接到名称库面板，复用现有文化绑定 UI 和写入逻辑。
+- `docs/current-plan.md`、`docs/task-notes/namebase-generation-binding-plan.md`、`docs/task-notes/namebase-editor-plan.md` 和 `docs/task-notes/source-feature-backlog.md` 已同步更新。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`CulturePanel` 懒加载 chunk 约 `10.34KB / gzip 4.08KB`，`NamebasePanel` 懒加载 chunk 约 `12.48KB / gzip 4.50KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开文化管理面板，选中文化 #2，点击“名称库绑定”后名称库面板打开，`#namebase-binding-culture` 的值为 `2`，显示“清河文化 #2”；文化面板和名称库面板均无横向溢出，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1597.3ms`，纯生成 `765.9ms`，WebGL 加载 `483.9ms`，最慢加载阶段为“构建线层顶点” `92.1ms`，`drawMs = 0.2ms`，`glError = 0`。

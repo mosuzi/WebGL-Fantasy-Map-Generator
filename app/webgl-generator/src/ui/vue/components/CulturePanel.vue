@@ -39,7 +39,7 @@
 
   <UiDetailGrid class-name="culture-panel-details" empty-text="未选中文化" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cultureActions">
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="culture-name-editor"
@@ -150,6 +150,7 @@ const cultureActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
   {key: "parent", label: "调整继承", icon: "↳"},
+  {key: "namebase", label: "名称库绑定", icon: "名"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
@@ -187,6 +188,12 @@ watch(() => selected.value?.id, () => {
 
 function selectTreeNode(node) {
   props.callbacks.onSelect?.(node);
+}
+
+function handleActionSelect(actionKey) {
+  if (actionKey !== "namebase" || !selected.value) return;
+  activeAction.value = null;
+  props.callbacks.onNamebaseBinding?.(selected.value.id);
 }
 
 function buildCultureMetrics(map) {

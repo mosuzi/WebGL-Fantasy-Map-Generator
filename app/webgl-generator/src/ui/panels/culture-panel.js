@@ -35,6 +35,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onColorChange: (cultureId, color) => callbacks.onColorChange?.(cultureId, color),
     onParentChange: (cultureId, parentId) => callbacks.onParentChange?.(cultureId, parentId),
     onNoteChange: (cultureId, body) => callbacks.onNoteChange?.(cultureId, body),
+    onNamebaseBinding: cultureId => callbacks.onNamebaseBinding?.(cultureId),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };

@@ -158,8 +158,9 @@
 
 - 已完成文化级绑定生成读取第一刀：`createChineseNameGenerator()` 会按命名对象的 `culture` 读取 `map.namebases.bindings.cultures[cultureId]`，文化绑定优先于全局绑定。
 - 文化绑定为空时继续使用全局绑定；文化绑定填了但指向不存在词池时回退内置策略，不静默使用全局绑定。
-- 已完成名称库面板文化绑定 UI 第一刀：面板可选择文化，并分别设置该文化的 `stateRoot / place / hydro` 覆盖；文化管理面板内的快捷入口仍待做。
+- 已完成名称库面板文化绑定 UI 第一刀：面板可选择文化，并分别设置该文化的 `stateRoot / place / hydro` 覆盖。
 - 已完成绑定候选按类型过滤第一刀：`stateRoot` 只显示 `state-root / generic`，`place` 显示 `place / place-part / generic`，`hydro` 显示 `hydro / generic`；后缀、形制等不再混入普通绑定下拉。
+- 已完成文化管理面板快捷入口第一刀：文化管理的二级操作可直接打开名称库面板，并聚焦到当前文化的绑定区。
 
 ### 阶段 4：名称生成预览和质量分析
 

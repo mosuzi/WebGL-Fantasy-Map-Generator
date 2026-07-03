@@ -400,6 +400,13 @@ watch(() => [selected.value?.id, selectedSourceFingerprint.value], () => {
   generatedExamples.value = [];
 }, {immediate: true});
 
+watch(() => props.state.focusCultureNonce, () => {
+  const cultureId = String(props.state.focusCultureId || "");
+  if (cultureId && cultures.value.some(culture => String(culture.id) === cultureId)) {
+    selectedCultureId.value = cultureId;
+  }
+}, {immediate: true});
+
 watch(cultures, value => {
   if (!value.length) {
     selectedCultureId.value = "";
