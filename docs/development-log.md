@@ -16297,3 +16297,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `37.35KB / gzip 11.46KB`，主入口约 `772.95KB / gzip 233.59KB`。
 - 构建产物浏览器烟测通过：给同一 campaign 注入攻方 `120` 与守方 `340` 损耗事件，选中攻方军团时链路概览显示 `攻方损耗 120`，选中守方军团时显示 `守方损耗 340`，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1651.8ms`，纯生成 `884.5ms`，WebGL 加载 `504.9ms`，UI slack `262.4ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 178.4ms`，最慢加载阶段为 `构建视觉 cell mesh 91.4ms`，`line-vertices = 49.9ms`，`drawMs = 0.1ms`，`glError = 0`。
+
+### 军事态势线贴边第四刀
+
+背景：
+
+- 用户再次指出军事态势线仍不好看：不能太长，最多只在边界上存在；不要跨海；不能是细线，而要是宽体渐变色指向方向型箭头。
+- 上一轮虽然已经改为共享陆地边界，但渲染侧仍会把边界段重组成一条视觉线，再把箭头头部沿法线推出边界外；当最佳共享边本身略长于上限时，生成侧也会保留整条边。
+
+修正：
+
+- `frontMaxBoundaryLength()` 再次收紧，从基于国家间距 `0.08` 改为 `0.035`，地图跨度上限从 `span / 36` 改为 `span / 72`。
+- `selectFrontBoundarySegment()` 在起始共享边已超过上限时，会围绕共享边中点裁剪出短段，不再因为单条边过长突破 `maxLength`。
+- `pushMilitaryFrontArrow()` 不再根据中点和 `maxLength` 重造视觉起止点，也不再把箭头头部推出到边界外侧。
+- 新的 `pushMilitaryFrontBoundaryBand()` 直接沿 `front.points` 分段绘制暗色外沿和内层宽体渐变带，方向由双方边界 cell 质心决定；每个边界分段内部再绘制短三角箭头头部，避免退回细线观感。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `773.01KB / gzip 233.56KB`。
+- 数据审计覆盖 `stage-2-1 / stage-2-1231411414 / front-audit-1 / front-audit-2`：有战线的 `stage-2-1231411414` 生成 `2` 条 front，`invalid = 0`、`long = 0`、最大长度约 `11`、最大长度比 `1`；无战线的 seed 保持 `fronts = 0`。
+- 首次 e2e 因一次不稳定 `main-thread-long-task` 健康告警失败，但单 case 指标本身通过；立即复跑同 case 通过，且无 console/page error。
+- 最终 e2e 守门通过：点击到出图 `1547.5ms`，纯生成 `789.1ms`，WebGL 加载 `418.3ms`，UI slack `340.1ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 134.2ms`，最慢加载阶段为 `构建视觉 cell mesh 64ms`，`line-vertices = 53.3ms`，`drawMs = 0.1ms`，`glError = 0`。

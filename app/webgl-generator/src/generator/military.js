@@ -924,6 +924,17 @@ function sharedPackEdge(pack, cellA, cellB) {
 function selectFrontBoundarySegment(pack, edges, startIndex, maxLength) {
   const selected = new Set([startIndex]);
   const start = edges[startIndex];
+  if (start.length > maxLength) {
+    const points = clipFrontEdgePoints(start.points, maxLength);
+    return {
+      points,
+      cells: Array.from(new Set(start.cells)),
+      cellPairs: [start.cells],
+      direction: frontDirectionFromCellPairs(pack, [start.cells]),
+      length: round(Math.min(start.length, maxLength)),
+      maxLength: round(maxLength)
+    };
+  }
   const path = start.vertices.slice();
   let length = start.length;
 
@@ -949,6 +960,21 @@ function selectFrontBoundarySegment(pack, edges, startIndex, maxLength) {
     length: round(length),
     maxLength: round(maxLength)
   };
+}
+
+function clipFrontEdgePoints(points, maxLength) {
+  const [start, end] = points || [];
+  if (!start || !end) return points;
+  const length = distance(start, end);
+  if (!Number.isFinite(length) || length <= maxLength || length <= 0.000001) return points;
+  const halfRatio = (maxLength / length) / 2;
+  const mid = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  return [
+    [mid[0] - dx * halfRatio, mid[1] - dy * halfRatio],
+    [mid[0] + dx * halfRatio, mid[1] + dy * halfRatio]
+  ];
 }
 
 function frontDirectionFromCellPairs(pack, cellPairs) {
@@ -1023,7 +1049,7 @@ function frontMaxBoundaryLength(pack, fromPoint, toPoint) {
   const width = Number.isFinite(minX) ? maxX - minX : 1440;
   const height = Number.isFinite(minY) ? maxY - minY : 720;
   const span = Math.max(width, height);
-  return clamp(Math.min(distance([fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]) * 0.08, span / 36), 14, span / 24);
+  return clamp(Math.min(distance([fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]) * 0.035, span / 72), 8, span / 60);
 }
 
 function orientFrontSegment(points, fromPoint, toPoint) {
