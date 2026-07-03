@@ -96,6 +96,13 @@
             :options="heightmapColorLimitOptions"
             @update:model-value="setHeightmapColorLimit"
           />
+          <UiSelectField
+            label="映射模式"
+            class-name="heightmap-import-select"
+            :model-value="heightmapMappingMode"
+            :options="heightmapMappingModeOptions"
+            @update:model-value="setHeightmapMappingMode"
+          />
         </div>
 
         <section class="heightmap-palette-section" aria-label="量化色板">
@@ -110,15 +117,43 @@
               type="button"
               class="heightmap-palette-swatch"
               :class="{active: selectedPaletteKey === entry.key}"
-              :title="`${entry.hex} / ${entry.pixels} px / 预估高度 ${entry.height}`"
+              :title="`${entry.hex} / ${entry.pixels} px / 高度 ${entry.height}${entry.manual ? ' / 手动' : ''}`"
               @click="selectPaletteEntry(entry.key)"
             >
               <i :style="{backgroundColor: entry.hex}"></i>
               <span>{{ entry.hex }}</span>
-              <small>{{ entry.percent }} / h {{ entry.height }}</small>
+              <small>{{ entry.percent }} / h {{ entry.height }}{{ entry.manual ? " 手动" : "" }}</small>
             </button>
           </div>
           <p v-else class="heightmap-palette-empty">选择图片后生成采样色板。</p>
+        </section>
+
+        <section v-if="selectedPaletteEntry" class="heightmap-assignment-panel" aria-label="色块高度赋值">
+          <header>
+            <span class="heightmap-assignment-color" :style="{backgroundColor: selectedPaletteEntry.hex}"></span>
+            <strong>{{ selectedPaletteEntry.hex }}</strong>
+            <span>{{ selectedPaletteEntry.manual ? "手动高度" : `自动高度 ${selectedPaletteEntry.autoHeight}` }}</span>
+          </header>
+          <UiSliderField
+            label="色块高度"
+            field-class="heightmap-assignment-slider"
+            :model-value="selectedPaletteEntry.height"
+            :min="0"
+            :max="100"
+            :step="1"
+            @input="setSelectedPaletteHeight"
+          />
+          <div class="heightmap-assignment-presets">
+            <UiButton
+              v-for="preset in heightAssignmentPresets"
+              :key="preset.value"
+              variant="secondary"
+              @click="assignSelectedPaletteHeight(preset.value)"
+            >
+              {{ preset.label }}
+            </UiButton>
+            <UiButton variant="secondary" @click="clearSelectedPaletteHeight">恢复自动</UiButton>
+          </div>
         </section>
 
         <div class="heightmap-workbench-actions">
@@ -175,12 +210,36 @@ const heightmapColorLimitOptions = Object.freeze([
   {value: 64, label: "64 色"},
   {value: 128, label: "128 色"}
 ]);
+const heightmapMappingModeOptions = Object.freeze([
+  {value: "grayscale", label: "灰度"},
+  {value: "luminance", label: "亮度"},
+  {value: "hue", label: "色相"},
+  {value: "fmg-scheme", label: "FMG 色带"},
+  {value: "manual", label: "手动"}
+]);
+const heightAssignmentPresets = Object.freeze([
+  {value: 8, label: "水域"},
+  {value: 28, label: "低地"},
+  {value: 45, label: "丘陵"},
+  {value: 68, label: "山地"},
+  {value: 92, label: "峰值"}
+]);
+const fmgHeightColorStops = Object.freeze([
+  {height: 8, color: [38, 92, 145]},
+  {height: 18, color: [63, 126, 174]},
+  {height: 24, color: [88, 142, 76]},
+  {height: 42, color: [135, 157, 82]},
+  {height: 58, color: [158, 127, 72]},
+  {height: 76, color: [128, 118, 106]},
+  {height: 92, color: [232, 228, 212]}
+]);
 const unitPreferences = useUnitPreferences();
 const heightmapImportMin = ref(0);
 const heightmapImportMax = ref(100);
 const heightmapImportInvert = ref(false);
 const heightmapImportFit = ref("stretch");
 const heightmapColorLimit = ref(32);
+const heightmapMappingMode = ref("grayscale");
 const workbenchOpen = ref(false);
 const fileInput = ref(null);
 const previewCanvas = ref(null);
@@ -189,6 +248,7 @@ const selectedFile = ref(null);
 const previewStats = ref(null);
 const previewPalette = ref([]);
 const selectedPaletteKey = ref(null);
+const manualAssignments = ref({});
 const previewStatus = ref("尚未选择图片");
 const workbenchPosition = ref({left: 760, top: 110});
 let dragState = null;
@@ -212,6 +272,7 @@ const previewMetrics = computed(() => [
   {label: "目标图幅", value: targetSizeLabel.value},
   {label: "亮度范围", value: previewStats.value ? `${previewStats.value.brightnessMin} - ${previewStats.value.brightnessMax}` : "-"},
   {label: "色板", value: previewStats.value ? `${previewStats.value.paletteColors} / ${previewStats.value.paletteBuckets}` : "-"},
+  {label: "映射模式", value: mappingModeLabel(heightmapMappingMode.value)},
   {label: "高度映射", value: `${heightmapImportMin.value} - ${heightmapImportMax.value}`},
   {label: "适应方式", value: heightmapImportFit.value === "crop" ? "保持比例裁剪" : "拉伸铺满"}
 ]);
@@ -221,8 +282,9 @@ const paletteSummary = computed(() => {
   if (selected) return `${previewPalette.value.length} 色，已高亮 ${selected.hex}`;
   return `${previewPalette.value.length} 色，点击色块高亮区域`;
 });
+const selectedPaletteEntry = computed(() => previewPalette.value.find(entry => entry.key === selectedPaletteKey.value) || null);
 
-watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit], () => {
+watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode], () => {
   drawPreview();
 });
 
@@ -264,6 +326,10 @@ function setHeightmapColorLimit(value) {
   heightmapColorLimit.value = [16, 32, 64, 128].includes(next) ? next : 32;
 }
 
+function setHeightmapMappingMode(value) {
+  heightmapMappingMode.value = heightmapMappingModeOptions.some(option => option.value === value) ? value : "grayscale";
+}
+
 function openImportWorkbench() {
   workbenchOpen.value = true;
   nextTick(() => drawPreview());
@@ -289,6 +355,7 @@ async function onHeightmapFileChange(event) {
     selectedFile.value = file;
     previewImage.value = await loadPreviewImage(file);
     selectedPaletteKey.value = null;
+    manualAssignments.value = {};
     await nextTick();
     drawPreview();
     previewStatus.value = "预览已更新，点击应用后才会重建地图。";
@@ -298,6 +365,7 @@ async function onHeightmapFileChange(event) {
     previewStats.value = null;
     previewPalette.value = [];
     selectedPaletteKey.value = null;
+    manualAssignments.value = {};
     clearPreviewCanvas();
     previewStatus.value = `图片预览失败：${error instanceof Error ? error.message : String(error)}`;
   }
@@ -430,22 +498,92 @@ function quantizePalette(data, limit, brightnessStats) {
     .sort((a, b) => b.pixels - a.pixels)
     .slice(0, maxEntries)
     .map(bucket => {
-      const brightness = bucket.brightness / bucket.pixels;
-      const normalized = clamp((brightness - brightnessStats.min) / range, 0, 1);
-      const height = Math.round(heightmapImportMin.value + normalized * (heightmapImportMax.value - heightmapImportMin.value));
+      const color = {
+        red: bucket.red / bucket.pixels,
+        green: bucket.green / bucket.pixels,
+        blue: bucket.blue / bucket.pixels,
+        brightness: bucket.brightness / bucket.pixels
+      };
+      const autoHeight = automaticHeightForColor(color, brightnessStats, range);
+      const manualHeight = manualAssignments.value[String(bucket.key)];
+      const manual = Number.isFinite(manualHeight);
+      const height = manual ? manualHeight : autoHeight;
       return {
         key: bucket.key,
         pixels: bucket.pixels,
         percent: `${((bucket.pixels / totalPixels) * 100).toFixed(bucket.pixels / totalPixels > 0.1 ? 0 : 1)}%`,
-        hex: rgbToHex(bucket.red / bucket.pixels, bucket.green / bucket.pixels, bucket.blue / bucket.pixels),
-        height
+        hex: rgbToHex(color.red, color.green, color.blue),
+        autoHeight,
+        height,
+        manual
       };
     });
   return {entries, bucketCount: buckets.size};
 }
 
+function automaticHeightForColor(color, brightnessStats, brightnessRange) {
+  if (heightmapMappingMode.value === "manual") return 0;
+  if (heightmapMappingMode.value === "hue") return hueMappedHeight(color);
+  if (heightmapMappingMode.value === "fmg-scheme") return nearestFmgHeight(color);
+  const normalized = clamp((color.brightness - brightnessStats.min) / brightnessRange, 0, 1);
+  if (heightmapMappingMode.value === "luminance") {
+    const adjusted = normalized < 0.18 ? normalized * 0.7 : 0.2 + Math.pow((normalized - 0.18) / 0.82, 0.92) * 0.8;
+    return scaledHeight(adjusted);
+  }
+  return scaledHeight(normalized);
+}
+
+function scaledHeight(normalized) {
+  return Math.round(heightmapImportMin.value + clamp(normalized, 0, 1) * (heightmapImportMax.value - heightmapImportMin.value));
+}
+
+function hueMappedHeight(color) {
+  const hsl = rgbToHsl(color.red, color.green, color.blue);
+  if (hsl.saturation < 0.12) return scaledHeight(Math.pow(hsl.lightness, 1.25));
+  const hue = hsl.hue;
+  if (hue >= 185 && hue <= 255) return scaledHeight(0.04 + clamp((hsl.lightness - 0.18) / 0.7, 0, 1) * 0.16);
+  if (hue >= 70 && hue < 185) return scaledHeight(0.24 + clamp(hsl.lightness, 0, 1) * 0.32);
+  if (hue >= 25 && hue < 70) return scaledHeight(0.42 + clamp(hsl.lightness, 0, 1) * 0.3);
+  return scaledHeight(0.52 + clamp(hsl.lightness, 0, 1) * 0.42);
+}
+
+function nearestFmgHeight(color) {
+  let best = fmgHeightColorStops[0];
+  let bestDistance = Infinity;
+  for (const stop of fmgHeightColorStops) {
+    const distance = colorDistance(color, stop.color);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = stop;
+    }
+  }
+  return clamp(Math.round(best.height), heightmapImportMin.value, heightmapImportMax.value);
+}
+
 function selectPaletteEntry(key) {
   selectedPaletteKey.value = selectedPaletteKey.value === key ? null : key;
+  drawPreview();
+}
+
+function setSelectedPaletteHeight(value) {
+  assignSelectedPaletteHeight(value);
+}
+
+function assignSelectedPaletteHeight(value) {
+  if (selectedPaletteKey.value === null) return;
+  const height = clamp(Math.round(Number(value) || 0), 0, 100);
+  manualAssignments.value = {
+    ...manualAssignments.value,
+    [String(selectedPaletteKey.value)]: height
+  };
+  drawPreview();
+}
+
+function clearSelectedPaletteHeight() {
+  if (selectedPaletteKey.value === null) return;
+  const next = {...manualAssignments.value};
+  delete next[String(selectedPaletteKey.value)];
+  manualAssignments.value = next;
   drawPreview();
 }
 
@@ -484,6 +622,35 @@ function colorBucketKey(red, green, blue) {
 
 function rgbToHex(red, green, blue) {
   return `#${hexByte(red)}${hexByte(green)}${hexByte(blue)}`;
+}
+
+function rgbToHsl(red, green, blue) {
+  const r = clamp(red, 0, 255) / 255;
+  const g = clamp(green, 0, 255) / 255;
+  const b = clamp(blue, 0, 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  let hue = 0;
+  if (delta !== 0) {
+    if (max === r) hue = 60 * (((g - b) / delta) % 6);
+    else if (max === g) hue = 60 * ((b - r) / delta + 2);
+    else hue = 60 * ((r - g) / delta + 4);
+  }
+  return {hue: hue < 0 ? hue + 360 : hue, saturation, lightness};
+}
+
+function colorDistance(color, target) {
+  const dr = color.red - target[0];
+  const dg = color.green - target[1];
+  const db = color.blue - target[2];
+  return dr * dr * 0.3 + dg * dg * 0.5 + db * db * 0.2;
+}
+
+function mappingModeLabel(value) {
+  return heightmapMappingModeOptions.find(option => option.value === value)?.label || "灰度";
 }
 
 function hexByte(value) {

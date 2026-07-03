@@ -14700,3 +14700,35 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 通过构建产物一次性静态服务验证：默认地图 loading 已隐藏，跨画布 `25/25` 个采样点非空，`glError = 0`，`loadMap.totalMs = 353.5ms`，`fit-draw = 7.6ms`，`route-screen-mesh = 13.5ms`。
 - 在高度图导入工作台导入合成彩色 SVG 后生成 `32` 个色块，指标显示 `32 / 100`；点击首个色块后摘要为“32 色，已高亮 #204f9a”，预览 canvas 非空。
 - 预览、点击色块和取消工作台前后 checksum 保持 `55c7bf9c`，说明本刀没有写入地图数据；console warning/error 为 `0`。
+
+### 高度图导入工作台自动映射预览第一刀
+
+背景：
+
+- 色板量化已经能看见彩色图片的主要色块，但每个色块仍只按灰度区间估算高度。
+- 对照原版 Image Converter，下一步应先让自动映射和手动赋高在工作台中可解释、可回退，再考虑真正应用到地图。
+- 本阶段仍不能把彩色色板识别直接塞进现有灰度导入闭环，避免在没有元数据契约时产生不可复查的高度图。
+
+修正：
+
+- 高度图导入工作台新增“映射模式”，支持 `灰度 / 亮度 / 色相 / FMG 色带 / 手动`。
+- 色板条目新增 `autoHeight / height / manual` 状态；灰度和亮度模式按图片亮度范围归一化，色相模式把蓝色系压向水域，绿黄棕等颜色推向陆地高度，FMG 色带模式按 WebGL 版高度色带最近色匹配。
+- 选中色块后显示独立赋值面板，可用滑条设置 `0-100` 高度，也可一键设为 `水域 / 低地 / 丘陵 / 山地 / 峰值` 或恢复自动。
+- 手动覆盖会立即刷新色板标题、色块摘要和预览高亮，但只修改工作台状态，不写 `map`，不触发重生成。
+- `应用到地图` 仍沿用当前 `grayscale-import` 路径；`image-palette` sampled heightmap、未分配颜色策略和 JSON 元数据留到下一阶段。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1084.1ms`，纯生成 `494.1ms`，WebGL 加载 `347.5ms`，最慢加载阶段为 `cell-visual-mesh 46.2ms`，`fit-draw = 2.5ms`，`glError = 0`。
+- Playwright + 系统 Chrome 通过构建产物一次性静态服务验证：默认地图 loading 已隐藏，跨画布 `25/25` 个采样点非空，`glError = 0`，`loadMap.totalMs = 364.8ms`，最慢加载阶段为 `line-vertices 49.3ms`，`fit-draw = 8.7ms`。
+- 在高度图导入工作台导入合成彩色 SVG 后生成 `6` 个色块，指标显示“映射模式灰度”；通过原生 select 桥切到“色相”后指标同步更新。
+- 点击首个色块并设为“山地”后，色块标题变为 `高度 68 / 手动`，摘要显示 `h 68 手动`，赋值面板显示“手动高度”。
+- 预览、切换映射模式和手动赋高前后地图 checksum 保持 `0a74dfc6`，说明本刀仍未写入地图数据。
+- 浏览器健康监控在初始生成阶段记录一次约 `304.8ms` 的 `main-thread-long-task` warn；该事件发生在高度图交互前，正式 e2e 守门未超预算，后续若继续压初始生成长任务，应作为独立性能任务处理。

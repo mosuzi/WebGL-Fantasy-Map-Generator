@@ -2997,6 +2997,57 @@ select:disabled {
   font-size: 10px;
 }
 
+.heightmap-assignment-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(255, 207, 126, 0.2);
+  border-radius: 7px;
+  padding: 9px;
+  background: rgba(29, 25, 17, 0.7);
+}
+
+.heightmap-assignment-panel header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #9fb0ba;
+  font-size: 12px;
+}
+
+.heightmap-assignment-panel header strong {
+  color: #edf4f6;
+}
+
+.heightmap-assignment-color {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.heightmap-assignment-slider {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 84px;
+  gap: 8px;
+  align-items: center;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.heightmap-assignment-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.heightmap-assignment-presets .el-button {
+  min-width: 0;
+  min-height: 30px;
+  padding-inline: 6px;
+}
+
 .heightmap-import-action {
   display: inline-flex;
   align-items: center;
