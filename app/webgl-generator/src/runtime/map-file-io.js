@@ -409,6 +409,9 @@ function routeFeatures(map) {
         from: route.from ?? -1,
         to: route.to ?? -1,
         cells: route.cells?.length || 0,
+        resourceCells: route.resourceCells || 0,
+        markerResourceCells: route.markerResourceCells || 0,
+        resourceGoodIds: route.resourceGoodIds || [],
         distance: roundCoordinate(worldLineLength(route.points)),
         hasNote: Boolean(note?.body),
         note: note?.body || ""

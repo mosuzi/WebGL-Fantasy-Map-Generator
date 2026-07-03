@@ -16840,3 +16840,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；`EconomyPanel` chunk 约 `19.66KB / gzip 6.15KB`，主入口约 `801.24KB / gzip 241.62KB`。
 - 开发服务器浏览器烟测通过：`stage-2-1 / continents / 10000` 生成 `29` 个市场、`71` 个商品和 `2059` 条市场商品记录，全部带需求/供给/缺口/过剩字段，其中 `2054` 条有正缺口；全局总需求 `481859.53`、总供给 `16354.63`、缺口 `466021.35`。经济面板显示“供需缺口 / 需求 / 供给 / 缺口 / 过剩”，`glError = 0`、console/page error 为 `0`，打开面板后无新的非 info 健康事件。
+
+### 资源货物路线权重第一刀
+
+背景：
+
+- goods 已在 `rankCells()` 前写入自然资源，资源货物已经能影响适居度和城镇候选。
+- 路线 pack A* 仍只看地形、适居度、已有连接和城镇，不能表达商路倾向于贴近粮食、鱼盐、木材、矿产等资源节点。
+- 用户已明确无需动态军事系统，本轮只做静态路线生成偏好和诊断字段，不触发贸易动画、市场刷子、军事或外交联动。
+
+修正：
+
+- 陆路 `packRouteStepCost()` 新增资源成本折扣：经过资源 cell 会按货物价值、供给量和 marker 来源做温和折扣；邻近资源 cell 也有更小折扣。
+- 路线对象新增 `resourceCells / markerResourceCells / resourceGoodIds`，`settlements.metadata` 汇总 `routeResourceCells / routeMarkerResourceCells / routesWithResources`。
+- 路线管理面板新增“资源”排序和列，摘要显示资源路线数，详情显示资源 cells 与前几个资源种类。
+- route GeoJSON properties 同步输出资源 cell 数、marker 资源 cell 数和资源 good id，方便外部检查。
+
+验证：
+
+- Node 纯生成探针通过：`stage-2-1 / continents / 10000` 生成 `571` 条路线，无空路径；其中 `376` 条路线经过资源 cell，路线资源 cell 总数 `736`，与 metadata 一致。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`RoutePanel` chunk 约 `5.32KB / gzip 2.28KB`，主入口约 `802.41KB / gzip 241.95KB`。
+- 构建产物浏览器烟测通过：同 seed 生成 `597` 条路线，其中 `410` 条资源路线、资源路线 cell 总数 `896`，与 `settlements.metadata.routeResourceCells` 一致；路线管理面板显示“资源路线 / 资源 cells / 资源种类”，`glError = 0`、console/page error 为 `0`，打开路线面板后无新的非 info 健康事件。

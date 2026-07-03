@@ -65,6 +65,7 @@ const props = defineProps({
 const sortOptions = Object.freeze([
   {key: "length", label: "长度"},
   {key: "segments", label: "段数"},
+  {key: "resourceCells", label: "资源"},
   {key: "type", label: "类型"},
   {key: "id", label: "ID"}
 ]);
@@ -74,6 +75,7 @@ const columns = Object.freeze([
   {key: "typeLabel", label: "类型"},
   {key: "fromName", label: "起点"},
   {key: "toName", label: "终点"},
+  {key: "resourceCells", label: "资源", align: "right", format: value => formatNumberValue(value)},
   {key: "length", label: "长度", align: "right", format: value => formatRouteLength(value)}
 ]);
 
@@ -94,6 +96,7 @@ const summaryMetrics = computed(() => [
   {label: "路线", value: formatNumberValue(rows.value.length)},
   {label: "筛选", value: formatNumberValue(visibleRows.value.length)},
   {label: "总长度", value: formatRouteLength(totalLength.value)},
+  {label: "资源路线", value: formatNumberValue(rows.value.filter(row => row.resourceCells > 0).length)},
   {label: "海路", value: formatNumberValue(rows.value.filter(row => row.type === "searoute").length)}
 ]);
 
@@ -104,6 +107,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "终点", value: selected.value.toName},
   {label: "长度", value: formatRouteLength(selected.value.length)},
   {label: "段数", value: formatNumberValue(selected.value.segments)},
+  {label: "资源 cells", value: formatNumberValue(selected.value.resourceCells)},
+  {label: "资源种类", value: selected.value.resourceGoodNames || "无"},
   {label: "grid cells", value: formatNumberValue(selected.value.cellCount), debug: true},
   {label: "pack cells", value: formatNumberValue(selected.value.packCellCount), debug: true},
   {label: "feature", value: selected.value.feature, debug: true},
@@ -130,6 +135,9 @@ function routeRows(map) {
       toName: to?.name || (route.to >= 0 ? `#${route.to}` : "unknown"),
       length: routeLength(route),
       segments: Math.max(0, (route.points || []).length - 1),
+      resourceCells: Number(route.resourceCells || 0),
+      markerResourceCells: Number(route.markerResourceCells || 0),
+      resourceGoodNames: routeResourceGoodNames(map, route),
       cellCount: route.cells?.length || 0,
       packCellCount: route.packCells?.length || 0,
       feature: route.feature ?? "none",
@@ -137,6 +145,15 @@ function routeRows(map) {
       noteUpdatedAt: note?.updatedAt || ""
     };
   });
+}
+
+function routeResourceGoodNames(map, route) {
+  const ids = route.resourceGoodIds || [];
+  if (!ids.length) return "";
+  return ids
+    .map(id => map?.economy?.goods?.[id]?.name || map?.pack?.goods?.[id]?.name || `#${id}`)
+    .slice(0, 5)
+    .join("、");
 }
 
 function filterRows(sourceRows, filter) {

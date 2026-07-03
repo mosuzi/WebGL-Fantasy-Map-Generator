@@ -86,12 +86,16 @@ function createSettlementResult({grid, features, population, cities, routes, pac
 }
 
 function createSettlementMetadata({grid, features, population, cities, routes, pack, populationPoints = null}) {
+  const routeResources = routeResourceStats(routes);
   return {
     cities: cities.length,
     capitals: cities.filter(city => city.capital).length,
     ports: cities.filter(city => city.port).length,
     routes: routes.length,
     routeSegments: routes.reduce((sum, route) => sum + Math.max(0, route.points.length - 1), 0),
+    routeResourceCells: routeResources.resourceCells,
+    routeMarkerResourceCells: routeResources.markerResourceCells,
+    routesWithResources: routeResources.routesWithResources,
     populationCells: population.filter(value => value > 0).length,
     ruralPopulationPoints: (populationPoints || buildPopulationPoints(grid, features, population)).length,
     maxPopulation: maxValue(cities.map(city => city.population)),
@@ -941,6 +945,8 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
     feature: route.feature,
     state: route.state,
     province: route.province,
+    resourceCells: route.resourceCells || 0,
+    markerResourceCells: route.markerResourceCells || 0,
     points: route.points.map((point, index) => [point[0], point[1], route.packCells[index]])
   }));
   pack.cells.routes = buildPackRouteLinks(routes);
@@ -1061,7 +1067,24 @@ function packRouteStepCost(pack, current, next, water, connections, variation = 
   const habitabilityModifier = 1 + Math.max(100 - habitability, 0) / 1000;
   const heightModifier = 1 + Math.max(height - 25, 25) / 25;
   const burgModifier = pack.cells.burg?.[next] ? 1 : 3;
-  return distanceCost * habitabilityModifier * heightModifier * connected * burgModifier * variationFactor;
+  const resourceModifier = landRouteResourceModifier(pack, next);
+  return distanceCost * habitabilityModifier * heightModifier * connected * burgModifier * resourceModifier * variationFactor;
+}
+
+function landRouteResourceModifier(pack, cell) {
+  const goodId = pack.cells.good?.[cell] || 0;
+  if (goodId) {
+    const source = pack.cells.goodSource?.[cell] || 0;
+    const supply = Number(pack.cells.goodSupply?.[cell] || 1);
+    const value = Number(pack.goods?.[goodId]?.value || 2);
+    const sourceBonus = source >= 2 ? 0.1 : 0;
+    const supplyBonus = Math.min(0.08, supply * 0.015);
+    const valueBonus = Math.min(0.06, value / 300);
+    return clamp(0.84 - sourceBonus - supplyBonus - valueBonus, 0.68, 1);
+  }
+
+  const neighbors = pack.cells.c?.[cell] || [];
+  return neighbors.some(neighbor => pack.cells.good?.[neighbor]) ? 0.94 : 1;
 }
 
 function buildRiverEdges(pack) {
@@ -1229,6 +1252,7 @@ function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, city
   const toBurg = pack.burgs?.[pack.cells.burg?.[cells.at(-1)]] || pack.burgs?.[toBurgId];
   const fromCity = cityByBurg.get(fromBurg?.i);
   const toCity = cityByBurg.get(toBurg?.i);
+  const resources = countRouteResources(pack, cells);
 
   routes.push({
     id,
@@ -1241,8 +1265,42 @@ function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, city
     to: toCity?.id ?? -1,
     cells: cells.map(cell => pack.cells.g[cell]),
     packCells: cells,
+    resourceCells: resources.resourceCells,
+    markerResourceCells: resources.markerResourceCells,
+    resourceGoodIds: resources.goodIds,
     points: cells.map(cell => pointsArray[cell])
   });
+}
+
+function countRouteResources(pack, cells) {
+  const goodIds = new Set();
+  let resourceCells = 0;
+  let markerResourceCells = 0;
+
+  for (const cell of cells || []) {
+    const goodId = pack.cells.good?.[cell] || 0;
+    if (!goodId) continue;
+    resourceCells++;
+    goodIds.add(goodId);
+    if ((pack.cells.goodSource?.[cell] || 0) >= 2) markerResourceCells++;
+  }
+
+  return {resourceCells, markerResourceCells, goodIds: [...goodIds].sort((a, b) => a - b)};
+}
+
+function routeResourceStats(routes) {
+  let resourceCells = 0;
+  let markerResourceCells = 0;
+  let routesWithResources = 0;
+
+  for (const route of routes || []) {
+    const routeResourceCells = Number(route.resourceCells || 0);
+    resourceCells += routeResourceCells;
+    markerResourceCells += Number(route.markerResourceCells || 0);
+    if (routeResourceCells > 0) routesWithResources++;
+  }
+
+  return {resourceCells, markerResourceCells, routesWithResources};
 }
 
 function routeMajorityCellValue(pack, cells, field) {
