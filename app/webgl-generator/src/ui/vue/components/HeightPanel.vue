@@ -269,6 +269,7 @@
               <i :style="{backgroundColor: entry.hex}"></i>
               <span>{{ entry.hex }}</span>
               <small>{{ entry.percent }} / {{ formatNumber(entry.pixels, unitPreferences) }} px</small>
+              <UiButton variant="secondary" @click="promotePendingPaletteEntry(entry)">加入</UiButton>
             </div>
           </div>
         </section>
@@ -556,6 +557,15 @@ function setHeightmapUnassignedStrategy(value) {
 
 function expandHeightmapColorLimit() {
   setHeightmapColorLimit(nextColorLimit(heightmapColorLimit.value));
+}
+
+function promotePendingPaletteEntry(entry) {
+  manualAssignments.value = {
+    ...manualAssignments.value,
+    [String(entry.key)]: clamp(Math.round(Number(entry.autoHeight) || 0), 0, 100)
+  };
+  selectedPaletteKey.value = entry.key;
+  drawPreview();
 }
 
 function openImportWorkbench() {
@@ -878,49 +888,65 @@ function quantizePalette(data, limit, brightnessStats) {
   const range = Math.max(1e-6, brightnessStats.max - brightnessStats.min);
   const maxEntries = clamp(Number(limit) || 32, 1, 128);
   const bucketList = Array.from(buckets.values()).sort((a, b) => b.pixels - a.pixels);
-  const entries = bucketList
-    .slice(0, maxEntries)
-    .map(bucket => {
-      const color = {
-        red: bucket.red / bucket.pixels,
-        green: bucket.green / bucket.pixels,
-        blue: bucket.blue / bucket.pixels,
-        brightness: bucket.brightness / bucket.pixels
-      };
-      const autoHeight = automaticHeightForColor(color, brightnessStats, range);
-      const manualHeight = manualAssignments.value[String(bucket.key)];
-      const manual = Number.isFinite(manualHeight);
-      const height = manual ? manualHeight : autoHeight;
-      return {
-        key: bucket.key,
-        pixels: bucket.pixels,
-        percent: `${((bucket.pixels / totalPixels) * 100).toFixed(bucket.pixels / totalPixels > 0.1 ? 0 : 1)}%`,
-        hex: rgbToHex(color.red, color.green, color.blue),
-        autoHeight,
-        height,
-        manual
-      };
-    });
-  const unassigned = bucketList.slice(maxEntries);
+  const promotedKeys = new Set(Object.keys(manualAssignments.value).map(key => Number(key)).filter(Number.isFinite));
+  const selectedBuckets = bucketList.slice(0, maxEntries);
+  const selectedKeys = new Set(selectedBuckets.map(bucket => bucket.key));
+  for (const bucket of bucketList.slice(maxEntries)) {
+    if (!promotedKeys.has(bucket.key) || selectedKeys.has(bucket.key)) continue;
+    selectedBuckets.push(bucket);
+    selectedKeys.add(bucket.key);
+  }
+  const entries = selectedBuckets.map(bucket => createPaletteEntry(bucket, brightnessStats, range, totalPixels));
+  const unassigned = bucketList.filter(bucket => !selectedKeys.has(bucket.key));
   return {
     entries,
     bucketCount: buckets.size,
     unassignedBuckets: unassigned.length,
     unassignedPixels: unassigned.reduce((sum, bucket) => sum + bucket.pixels, 0),
-    pendingEntries: unassigned.slice(0, 12).map(bucket => {
-      const color = {
-        red: bucket.red / bucket.pixels,
-        green: bucket.green / bucket.pixels,
-        blue: bucket.blue / bucket.pixels
-      };
-      return {
-        key: bucket.key,
-        pixels: bucket.pixels,
-        percent: `${((bucket.pixels / totalPixels) * 100).toFixed(bucket.pixels / totalPixels > 0.1 ? 0 : 1)}%`,
-        hex: rgbToHex(color.red, color.green, color.blue)
-      };
-    })
+    pendingEntries: unassigned.slice(0, 12).map(bucket => createPendingPaletteEntry(bucket, brightnessStats, range, totalPixels))
   };
+}
+
+function createPaletteEntry(bucket, brightnessStats, range, totalPixels) {
+  const color = averagePreviewBucketColor(bucket);
+  const autoHeight = automaticHeightForColor(color, brightnessStats, range);
+  const manualHeight = manualAssignments.value[String(bucket.key)];
+  const manual = Number.isFinite(manualHeight);
+  const height = manual ? manualHeight : autoHeight;
+  return {
+    key: bucket.key,
+    pixels: bucket.pixels,
+    percent: paletteBucketPercent(bucket.pixels, totalPixels),
+    hex: rgbToHex(color.red, color.green, color.blue),
+    autoHeight,
+    height,
+    manual
+  };
+}
+
+function createPendingPaletteEntry(bucket, brightnessStats, range, totalPixels) {
+  const color = averagePreviewBucketColor(bucket);
+  return {
+    key: bucket.key,
+    pixels: bucket.pixels,
+    percent: paletteBucketPercent(bucket.pixels, totalPixels),
+    hex: rgbToHex(color.red, color.green, color.blue),
+    autoHeight: automaticHeightForColor(color, brightnessStats, range)
+  };
+}
+
+function averagePreviewBucketColor(bucket) {
+  return {
+    red: bucket.red / bucket.pixels,
+    green: bucket.green / bucket.pixels,
+    blue: bucket.blue / bucket.pixels,
+    brightness: bucket.brightness / bucket.pixels
+  };
+}
+
+function paletteBucketPercent(pixels, totalPixels) {
+  const ratio = pixels / totalPixels;
+  return `${(ratio * 100).toFixed(ratio > 0.1 ? 0 : 1)}%`;
 }
 
 function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {

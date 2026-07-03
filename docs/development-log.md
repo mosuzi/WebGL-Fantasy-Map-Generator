@@ -15026,3 +15026,32 @@ full 矩阵结果：
 - 同次烟测点击“扩大色板”后，色板上限变为 `32`，色板项为 `32`，待处理列表仍显示前 `12` 项，摘要更新为 `显示前 12 色 / 共 93 桶`，提示 `4.3万` 个像素待处理。
 - 同次烟测中地图 checksum 保持 `7c6bcbad -> 7c6bcbad`，说明待处理列表和扩大色板只刷新预览，不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1127ms`，纯生成 `531.4ms`，WebGL 加载 `334.5ms`，最慢加载阶段为 `cell-visual-mesh 47.1ms`，`fit-draw = 2.6ms`，`glError = 0`。
+
+### 高度图待处理颜色转入色板第一刀
+
+背景：
+
+- 待处理颜色列表只能查看和扩大色板，不能把某个具体颜色纳入主色板后单独赋高。
+- 如果只在预览里追加色块而不改 runtime，最终 `image-palette` 仍会按前 N 个高频桶生成，导致预览和应用不一致；因此本步同时补预览选桶和最终选桶契约。
+
+修正：
+
+- 待处理颜色项新增“加入”按钮。
+- 点击“加入”后，该颜色会以当前自动高度写入显式 assignment，进入主色板并被选中，用户可继续用既有色块高度面板调整高度。
+- 预览量化会把显式 assignment 对应的颜色桶并入 active palette，并从待处理统计里排除。
+- `createPaletteHeightmapFromImage()` 会把手动 assignment 对应的桶并入最终选桶，即使该桶不在当前 `colorLimit` 的前 N 个高频色里，保证 `map.heightmap.source.assignments` 与预览一致。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\runtime\heightmap-import.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `740.81KB / gzip 223.81KB`，`HeightPanel` 懒加载 chunk 约 `29.47KB / gzip 10.21KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：导入 20 条纯色色带 SVG，色板上限降到 `16`，映射模式切到色相，未分配颜色切到 `标记待处理` 后，应用按钮禁用，待处理列表显示 `4` 项。
+- 同次烟测点击最后一个待处理色 `#653421` 的“加入”后，主色板从 `16` 变为 `17`，待处理项降为 `3`，选中色块显示“手动高度”，地图 checksum 保持 `69cf0151 -> 69cf0151`，说明该操作只刷新预览、不提前重建地图。
+- 同次烟测切到 `合并最近色` 后应用，结果为 `source.kind = image-palette`、`source.mappingMode = hue`、`source.unassignedStrategy = nearest-palette`、`assignments = 17`、`manualCount = 1`、promoted 色块为手动 assignment，checksum `69cf0151 -> 0e5e4c48`，`loadMap.totalMs = 288.5ms`，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1229.6ms`，纯生成 `614.5ms`，WebGL 加载 `351.1ms`，最慢加载阶段为 `cell-visual-mesh 50.5ms`，`fit-draw = 3.6ms`，`glError = 0`。

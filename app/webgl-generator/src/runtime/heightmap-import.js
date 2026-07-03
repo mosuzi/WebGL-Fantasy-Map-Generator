@@ -90,12 +90,14 @@ export async function createPaletteHeightmapFromImage(documentRef, file, options
   const unassignedStrategy = normalizeUnassignedStrategy(settings.unassignedStrategy);
   const buckets = collectColorBuckets(imageData.data, invert);
   const bucketList = Array.from(buckets.values()).sort((a, b) => b.pixels - a.pixels);
-  const topBuckets = bucketList.slice(0, colorLimit);
-  const unassignedBuckets = Math.max(0, bucketList.length - topBuckets.length);
-  const unassignedPixels = bucketList.slice(colorLimit).reduce((sum, bucket) => sum + bucket.pixels, 0);
+  const manualAssignments = normalizeManualAssignments(settings.assignments);
+  const topBuckets = selectPaletteBuckets(bucketList, colorLimit, manualAssignments);
+  const selectedKeys = new Set(topBuckets.map(bucket => bucket.key));
+  const unassignedBucketList = bucketList.filter(bucket => !selectedKeys.has(bucket.key));
+  const unassignedBuckets = unassignedBucketList.length;
+  const unassignedPixels = unassignedBucketList.reduce((sum, bucket) => sum + bucket.pixels, 0);
   const heightByKey = new Map();
   const paletteBuckets = [];
-  const manualAssignments = normalizeManualAssignments(settings.assignments);
   const brightnessRange = Math.max(1e-6, stats.max - stats.min);
   const assignments = topBuckets.map(bucket => {
     const color = averageBucketColor(bucket);
@@ -269,6 +271,18 @@ function averageBucketColor(bucket) {
     blue: bucket.blue / pixels,
     brightness: bucket.brightness / pixels
   };
+}
+
+function selectPaletteBuckets(bucketList, colorLimit, manualAssignments) {
+  const selected = bucketList.slice(0, colorLimit);
+  const selectedKeys = new Set(selected.map(bucket => bucket.key));
+  if (!manualAssignments.size) return selected;
+  for (const bucket of bucketList.slice(colorLimit)) {
+    if (!manualAssignments.has(String(bucket.key)) || selectedKeys.has(bucket.key)) continue;
+    selected.push(bucket);
+    selectedKeys.add(bucket.key);
+  }
+  return selected;
 }
 
 function buildPaletteSampledHeights(data, heightByKey, unassignedHeight, options = {}) {
