@@ -16975,3 +16975,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；经济面板 chunk 约 `23.49KB / gzip 7.17KB`，主入口约 `807.77KB / gzip 243.66KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：经济面板市场 tab 可显示“跨国 / 陆地覆盖 / 本国覆盖 / 无国家覆盖”，统计 `29` 个市场、`4188` 个归属 cells、`0` 个无效归属、`0` 个跨国覆盖 cells、约 `169` 个无国家覆盖 cells；`glError = 0`，console/page error 为 `0`，health 非 info 事件为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1498.8ms`，纯生成 `813.7ms`，WebGL 加载 `365.3ms`，UI slack `319.8ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 145.1ms`，最慢加载阶段为 `构建视觉 cell mesh 54.3ms`。
+
+### 军事态势线边界裁切收尾
+
+背景：
+
+- 用户明确要求军事态势线不能太长、不能跨海、不能是细线，而要是边界上的宽体渐变方向箭头。
+- 当前实现已经只绘制带 `borderCellPairs` 的共享陆地边界，并在渲染层用宽体渐变带和箭头头部表示方向。
+- 本轮继续做静态观感收尾，不新增动态军事系统，不改变战役、战报或外交状态。
+
+修正：
+
+- 战线生成扩展相邻共享边界时，如果下一条共享边略超剩余长度预算，会裁取该边从当前端点出发的一小段。
+- 裁切点仍在真实共享边界上，`borderCellPairs` 仍记录对应双方陆地 cell；不会回退到 `from -> to` 长线，也不会跨海连接。
+- `front.points` 可以同时包含真实边界顶点和裁切点，后续长度仍按点列计算并受 `maxLength` 约束。
+
+验证：
+
+- Node 生成契约探针通过：`stage-2-2 / continents / 10000` 生成 `1` 个战役和 `2` 条 front；两条 front 均有 `borderCellPairs`，双方 cell 都是陆地且国家归属匹配，点列长度约 `7.42 / 7.45`，均未超过 `maxLength`。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `808.32KB / gzip 243.86KB`，`MilitaryPanel` chunk 约 `40.84KB / gzip 12.42KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：扫到 `front-a / continents / 10000` 生成 `1` 个战役和 `2` 条 front；军事图层打开后 `glError = 0`，health 非 info 事件为 `0`，console/page error 为 `0`。
+- 正式 e2e 守门通过：`front-a / continents / 10000` 点击到出图 `1389.1ms`，纯生成 `710.8ms`，WebGL 加载 `358.6ms`，UI slack `319.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 128.4ms`，最慢加载阶段为 `构建视觉 cell mesh 55.6ms`，`构建线层顶点 33.3ms`。

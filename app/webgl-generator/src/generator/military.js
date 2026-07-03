@@ -1012,13 +1012,18 @@ function selectFrontBoundarySegment(pack, edges, startIndex, maxLength) {
     const extension = bestFrontBoundaryExtension(edges, selected, path, maxLength - length);
     if (!extension) break;
     selected.add(extension.index);
-    length += extension.edge.length;
+    length += extension.length;
+    if (extension.partialPoint) {
+      if (extension.side === "start") path.unshift(extension.partialPoint);
+      else path.push(extension.partialPoint);
+      break;
+    }
     if (extension.side === "start") path.unshift(extension.nextVertex);
     else path.push(extension.nextVertex);
   }
 
   const selectedEdges = Array.from(selected).map(index => edges[index]);
-  let points = path.map(vertex => pack.vertices?.p?.[vertex]).filter(Boolean);
+  let points = path.map(item => Array.isArray(item) ? item : pack.vertices?.p?.[item]).filter(Boolean);
   if (points.length < 3 && selectedEdges.length > 1) points = farthestFrontEdgePoints(selectedEdges);
   const cellPairs = selectedEdges.map(edge => edge.cells);
   const cells = cellPairs.flat();
@@ -1106,10 +1111,27 @@ function bestFrontBoundaryExtension(edges, selected, path, remainingLength) {
             b === endVertex ? {side: "end", nextVertex: a} :
               null;
     if (!match) continue;
-    const candidate = {index, edge, ...match};
+    const length = Math.min(edge.length, remainingLength);
+    if (edge.length > remainingLength) {
+      if (remainingLength < Math.min(2, edge.length * 0.2)) continue;
+      match.partialPoint = partialFrontEdgePoint(edge, match.side === "start" ? startVertex : endVertex, match.nextVertex, remainingLength);
+      if (!match.partialPoint) continue;
+    }
+    const candidate = {index, edge, length, ...match};
     if (!best || edge.score < best.edge.score) best = candidate;
   }
   return best;
+}
+
+function partialFrontEdgePoint(edge, anchorVertex, nextVertex, length) {
+  if (!edge?.points || !edge?.vertices || edge.length <= 0.000001) return null;
+  const anchorIndex = edge.vertices[0] === anchorVertex && edge.vertices[1] === nextVertex ? 0 :
+    edge.vertices[1] === anchorVertex && edge.vertices[0] === nextVertex ? 1 : -1;
+  if (anchorIndex < 0) return null;
+  const start = edge.points[anchorIndex];
+  const end = edge.points[anchorIndex ? 0 : 1];
+  const ratio = clamp(length / edge.length, 0, 1);
+  return [start[0] + (end[0] - start[0]) * ratio, start[1] + (end[1] - start[1]) * ratio];
 }
 
 function frontMaxBoundaryLength(pack, fromPoint, toPoint) {
