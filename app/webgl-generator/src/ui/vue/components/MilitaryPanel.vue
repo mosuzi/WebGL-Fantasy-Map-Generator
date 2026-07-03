@@ -138,6 +138,42 @@
         <UiButton class="military-status-apply" variant="secondary" :disabled="!selected" @click="applySetBase">设当前位置为基地</UiButton>
       </div>
     </template>
+    <template #battle>
+      <div class="military-status-panel">
+        <div class="military-status-heading">
+          <strong>{{ selected?.name || "未选中军团" }}</strong>
+          <span>{{ selected?.latestEventLabel || "暂无战斗事件" }}</span>
+        </div>
+        <UiSelectField
+          input-id="military-battle-event-type"
+          class-name="military-status-editor"
+          label="类型"
+          :model-value="battleEventDraft.type"
+          :options="battleEventTypeOptions"
+          :disabled="!selected"
+          @update:model-value="value => battleEventDraft.type = value"
+        />
+        <UiSelectField
+          input-id="military-battle-event-outcome"
+          class-name="military-status-editor"
+          label="结果"
+          :model-value="battleEventDraft.outcome"
+          :options="battleEventOutcomeOptions"
+          :disabled="!selected"
+          @update:model-value="value => battleEventDraft.outcome = value"
+        />
+        <UiNoteField
+          class-name="military-battle-event-note"
+          label="说明"
+          action-label="记录事件"
+          :model-value="battleEventDraft.description"
+          :rows="3"
+          :max-length="180"
+          @apply="applyBattleEvent"
+          @clear="clearBattleEventDescription"
+        />
+      </div>
+    </template>
     <template #ratios>
       <div class="military-ratio-panel">
         <div class="military-ratio-heading">
@@ -182,6 +218,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
@@ -231,6 +268,27 @@ const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
 const stationDestinationDraft = ref("capital");
+const battleEventDraft = reactive({
+  type: "skirmish",
+  outcome: "victory",
+  description: ""
+});
+
+const battleEventTypeOptions = Object.freeze([
+  {value: "skirmish", label: "遭遇战"},
+  {value: "siege", label: "攻城"},
+  {value: "raid", label: "袭扰"},
+  {value: "naval", label: "海战"},
+  {value: "retreat", label: "撤退"},
+  {value: "report", label: "战报"}
+]);
+const battleEventOutcomeOptions = Object.freeze([
+  {value: "victory", label: "小胜"},
+  {value: "defeat", label: "受挫"},
+  {value: "draw", label: "相持"},
+  {value: "loss", label: "损耗"},
+  {value: "regroup", label: "重整"}
+]);
 
 const metrics = computed(() => {
   props.state.version;
@@ -277,6 +335,7 @@ const militaryActions = computed(() => [
   {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
   {key: "batchStatus", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
   {key: "station", label: "驻地基地", icon: "⌖", disabled: !selected.value},
+  {key: "battle", label: "战斗事件", icon: "⚔", disabled: !selected.value},
   {key: "ratios", label: "兵种比例", icon: "⚖"}
 ]);
 
@@ -299,6 +358,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "主兵种", value: selected.value.dominantUnitLabel},
   {label: "驻地", value: selected.value.stationLabel},
   {label: "基地", value: selected.value.baseLabel},
+  {label: "战斗事件", value: selected.value.latestEventLabel},
   {label: "驻扎适宜度", value: `${Math.round(selected.value.suitabilityScore * 100)}%`},
   {label: "移动速度", value: formatNumber(selected.value.movementSpeed)},
   {label: "文明", value: selected.value.civilizationLabel},
@@ -347,6 +407,10 @@ function buildMilitaryMetrics(map) {
       baseX: Number(regiment.bx),
       baseY: Number(regiment.by),
       baseLabel: baseLabelForRegiment(map, regiment),
+      events: Array.isArray(regiment.events) ? regiment.events : [],
+      eventCount: Array.isArray(regiment.events) ? regiment.events.length : 0,
+      latestEvent: latestBattleEvent(regiment.events),
+      latestEventLabel: latestBattleEventLabel(regiment.events),
       suitabilityScore: Number(regiment.suitability?.total || 0),
       movementSpeed: Number(regiment.movementSpeed || 0),
       civilizationLabel: policy.civilizationLabel || state.state.civilizationLabel || "未知",
@@ -473,6 +537,21 @@ function applySetBase() {
   activeAction.value = null;
 }
 
+function applyBattleEvent(description) {
+  if (!selected.value) return;
+  props.callbacks.onBattleEventApply?.(militaryTarget(selected.value), {
+    type: battleEventDraft.type,
+    outcome: battleEventDraft.outcome,
+    description
+  });
+  battleEventDraft.description = "";
+  activeAction.value = null;
+}
+
+function clearBattleEventDescription() {
+  battleEventDraft.description = "";
+}
+
 function applyRename(name) {
   if (!selected.value) return;
   props.callbacks.onRename?.(militaryTarget(selected.value), name);
@@ -556,6 +635,17 @@ function baseLabelForRegiment(map, regiment = {}) {
   if (Number.isInteger(cell)) return packCellLabel(map, cell);
   if (Number.isFinite(Number(regiment.bx)) && Number.isFinite(Number(regiment.by))) return `坐标 ${roundValue(regiment.bx, 1)}, ${roundValue(regiment.by, 1)}`;
   return "未知";
+}
+
+function latestBattleEvent(events = []) {
+  return [...(events || [])].filter(event => event?.kind === "battle").at(-1) || null;
+}
+
+function latestBattleEventLabel(events = []) {
+  const event = latestBattleEvent(events);
+  if (!event) return "无";
+  const detail = event.description ? `：${event.description}` : "";
+  return `${event.typeLabel || event.type || "事件"} / ${event.outcomeLabel || event.outcome || "结果"}${detail}`;
 }
 
 function nearestPackCell(map, x, y) {

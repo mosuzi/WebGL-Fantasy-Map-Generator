@@ -15517,3 +15517,29 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：军团 `2:0` 从 `cell 5201 / 771.47,762.76 / patrolling` 移动到国家中心 `cell 5399 / 802.69,781.64 / garrisoned`，命令为 `garrison`。
 - 同次烟测中撤销恢复旧驻地与 `patrolling`，重做再次迁到国家中心；随后“设当前位置为基地”写入 `baseCell = bcell = 5399` 和 `bx/by = 802.69/781.64`，撤销后恢复旧基地字段；刷新摘要为 `point-layers, object-index, object-panels`，`glError = 0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1583.7ms`，纯生成 `827ms`，WebGL 加载 `473.4ms`，UI slack `283.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 149.4ms`，最慢加载阶段为 `构建线层顶点 77.3ms`，`fit-draw = 3.8ms`，`glError = 0`。
+
+### 军团战斗事件记录第一刀
+
+背景：
+
+- `docs/task-notes/military-battle-plan.md` 的阶段 5 包含战斗事件与模拟，但完整战斗模拟会牵涉士气、伤亡、战争状态和战报链路。
+- 当前更适合作为第一刀的是“记录事件”：能把军团遭遇、袭扰、攻城等事实挂到目标军团上，并接入撤销/重做，但不改变兵力和外交战争状态。
+
+修正：
+
+- `military-edit-commands.js` 新增 `createRecordMilitaryBattleEventCommand()`。
+- 命令会把事件写入目标军团 `events[]` 和全局 `map.military.events[]`，并维护 `metadata.events / eventSequence`。
+- 事件包含类型、结果、说明、国家、军团、位置、序号和时间戳；撤销会恢复军团事件、全局事件和 metadata，重做复用同一事件 id。
+- `军事管理` 的二级操作新增“战斗事件”，提供类型、结果和说明输入；详情区显示最新战斗事件。
+- 该命令刷新范围收窄为 `object-panels`，不触发点图层、线层、标签或完整军事派生重建。
+
+文档：
+
+- 更新 `docs/current-plan.md`，把军团战斗事件记录记录为已完成，并明确下一步可做事件列表/导出或轻量战斗结果应用，不直接进入完整战斗模拟。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。
+- Playwright + 系统 Chrome 构建产物烟测通过：给军团 `1:0` 记录 `袭扰 / 相持：边境试探，双方保持接触`，生成事件 `1:0:battle:1`，军团事件数和全局事件数均 `0 -> 1`。
+- 同次烟测中撤销后事件数恢复为 `0`，`metadata.events = 0`；重做后事件数恢复为 `1`，复用同一事件 id 和 sequence；最终刷新摘要为 `render = none / derived = object-panels`，`glError = 0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1709.8ms`，纯生成 `927.3ms`，WebGL 加载 `497.8ms`，UI slack `284.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 163.4ms`，最慢加载阶段为 `构建标签 71.6ms`，`line-vertices = 52.9ms`，`fit-draw = 3.7ms`，`glError = 0`。

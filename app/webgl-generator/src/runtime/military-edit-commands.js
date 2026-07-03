@@ -16,6 +16,31 @@ const MILITARY_REGIMENT_EFFECTS = Object.freeze({
   derived: Object.freeze(["point-layers", "object-index", "object-panels"])
 });
 
+const MILITARY_EVENT_EFFECTS = Object.freeze({
+  render: "none",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-panels"])
+});
+
+const BATTLE_EVENT_TYPES = Object.freeze({
+  skirmish: "遭遇战",
+  siege: "攻城",
+  raid: "袭扰",
+  naval: "海战",
+  retreat: "撤退",
+  report: "战报"
+});
+
+const BATTLE_EVENT_OUTCOMES = Object.freeze({
+  victory: "小胜",
+  defeat: "受挫",
+  draw: "相持",
+  loss: "损耗",
+  regroup: "重整"
+});
+
 export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整兵种比例"} = {}) {
   const normalizedStateId = Number(stateId);
   const normalizedRatios = normalizeUnitRatios(ratios);
@@ -128,6 +153,42 @@ export function createSetMilitaryStatusBatchCommand(targets, status, {label = "�
         const {regiment} = findRegiment(context.map, target);
         return !regiment || String(regiment.status || "") === nextStatus;
       });
+    }
+  };
+}
+
+export function createRecordMilitaryBattleEventCommand(target, event = {}, {label = "记录军团战斗事件"} = {}) {
+  const normalizedTarget = normalizeRegimentTarget(target);
+  const eventInput = normalizeBattleEventInput(event);
+  let previous = null;
+  let nextEvent = null;
+
+  return {
+    label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    effects: {
+      ...MILITARY_EVENT_EFFECTS,
+      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+    },
+    apply(context) {
+      const {state, regiment} = findRegiment(context.map, normalizedTarget);
+      if (!state?.i || !regiment) throw new Error("找不到军团");
+      previous ??= snapshotBattleEvents(context.map, regiment);
+      nextEvent ??= createBattleEvent(context.map, state, regiment, eventInput);
+      appendBattleEvent(context.map, regiment, nextEvent);
+      syncMilitary(context.map);
+      refreshMilitaryEventMetadata(context.map);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的军团战斗事件快照");
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      restoreBattleEvents(context.map, regiment, previous);
+      syncMilitary(context.map);
+      refreshMilitaryEventMetadata(context.map);
+    },
+    isNoop(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      return !regiment || !eventInput.type || !eventInput.outcome;
     }
   };
 }
@@ -315,6 +376,18 @@ function normalizeRegimentDestination(destination = {}) {
   };
 }
 
+function normalizeBattleEventInput(event = {}) {
+  const type = String(event.type || "skirmish");
+  const outcome = String(event.outcome || "victory");
+  return {
+    type,
+    typeLabel: BATTLE_EVENT_TYPES[type] || event.typeLabel || type,
+    outcome,
+    outcomeLabel: BATTLE_EVENT_OUTCOMES[outcome] || event.outcomeLabel || outcome,
+    description: String(event.description || event.note || "").trim()
+  };
+}
+
 function uniqueRegimentTargets(targets = []) {
   const result = [];
   const seen = new Set();
@@ -363,6 +436,15 @@ function snapshotRegimentBase(regiment) {
   };
 }
 
+function snapshotBattleEvents(map, regiment) {
+  const military = map?.pack?.military || map?.military || {};
+  return {
+    militaryEvents: Array.isArray(military.events) ? clonePlain(military.events) : null,
+    regimentEvents: Array.isArray(regiment.events) ? clonePlain(regiment.events) : null,
+    metadata: military.metadata ? clonePlain(military.metadata) : null
+  };
+}
+
 function snapshotRegimentStatuses(map, targets) {
   return targets
     .map(target => {
@@ -402,6 +484,15 @@ function restoreRegimentBase(regiment, snapshot) {
   else regiment.by = snapshot.by;
 }
 
+function restoreBattleEvents(map, regiment, snapshot) {
+  const military = ensureMilitaryEventStore(map);
+  if (snapshot.militaryEvents) military.events = clonePlain(snapshot.militaryEvents);
+  else delete military.events;
+  if (snapshot.regimentEvents) regiment.events = clonePlain(snapshot.regimentEvents);
+  else delete regiment.events;
+  if (snapshot.metadata) military.metadata = clonePlain(snapshot.metadata);
+}
+
 function resolveRegimentDestination(map, destination) {
   const cell = Number(destination.cell);
   if (!Number.isInteger(cell) || !map?.pack?.cells?.p?.[cell]) return null;
@@ -415,6 +506,50 @@ function resolveRegimentDestination(map, destination) {
     y: roundValue(y, 2),
     name: destination.name
   };
+}
+
+function appendBattleEvent(map, regiment, event) {
+  const military = ensureMilitaryEventStore(map);
+  military.metadata.eventSequence = Math.max(Number(military.metadata.eventSequence || 0), Number(event.sequence || 0));
+  military.events = (military.events || []).filter(item => item?.id !== event.id);
+  military.events.push(clonePlain(event));
+  regiment.events = (regiment.events || []).filter(item => item?.id !== event.id);
+  regiment.events.push(clonePlain(event));
+}
+
+function createBattleEvent(map, state, regiment, eventInput) {
+  const military = ensureMilitaryEventStore(map);
+  const sequence = Number(military.metadata.eventSequence || 0) + 1;
+  military.metadata.eventSequence = sequence;
+  return {
+    id: `${regiment.id || `${state.i}:${regiment.i}`}:battle:${sequence}`,
+    sequence,
+    kind: "battle",
+    type: eventInput.type,
+    typeLabel: eventInput.typeLabel,
+    outcome: eventInput.outcome,
+    outcomeLabel: eventInput.outcomeLabel,
+    description: eventInput.description,
+    stateId: state.i,
+    stateName: state.name || state.fullName || `国家 #${state.i}`,
+    regimentId: regiment.i,
+    regimentObjectId: regiment.id || `${state.i}:${regiment.i}`,
+    regimentName: regiment.name || `军团 #${regiment.i}`,
+    cell: regiment.cell,
+    x: regiment.x,
+    y: regiment.y,
+    at: new Date().toISOString()
+  };
+}
+
+function ensureMilitaryEventStore(map) {
+  if (!map.military || typeof map.military !== "object") map.military = {};
+  const military = map?.pack?.military && typeof map.pack.military === "object" ? map.pack.military : map.military;
+  map.military = military;
+  if (map?.pack) map.pack.military = military;
+  if (!Array.isArray(military.events)) military.events = [];
+  if (!military.metadata || typeof military.metadata !== "object") military.metadata = {};
+  return military;
 }
 
 function createManualOrder(map, state, regiment, status) {
@@ -450,6 +585,12 @@ function refreshMilitaryStatusMetadata(map) {
     counts[status] = (counts[status] || 0) + 1;
     return counts;
   }, {});
+}
+
+function refreshMilitaryEventMetadata(map) {
+  const military = map?.pack?.military || map?.military;
+  if (!military?.metadata) return;
+  military.metadata.events = Array.isArray(military.events) ? military.events.length : 0;
 }
 
 function ratiosEqual(a, b) {

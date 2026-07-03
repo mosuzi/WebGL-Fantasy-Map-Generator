@@ -52,6 +52,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     onBatchStatusApply: (targets, status) => callbacks.onBatchStatusApply?.(targets, status),
     onStationApply: (target, destination) => callbacks.onStationApply?.(target, destination),
     onBaseApply: target => callbacks.onBaseApply?.(target),
+    onBattleEventApply: (target, event) => callbacks.onBattleEventApply?.(target, event),
     onRename: (target, name) => callbacks.onRename?.(target, name),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
@@ -141,7 +142,9 @@ function militaryObject(row) {
     cell: row.cell,
     baseCell: row.baseCell,
     bx: row.baseX,
-    by: row.baseY
+    by: row.baseY,
+    eventCount: row.eventCount,
+    latestEvent: row.latestEvent
   };
 }
 
