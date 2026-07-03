@@ -40,9 +40,9 @@
 
 - 当前预览仍没有直方图、采样格高度色带预览或应用前后对比。
 - 色板已经可量化、自动估高、手动覆盖并参与 `image-palette` 最终高度采样。
-- 色板已经支持单色和批量手动覆盖；profile 导入导出仍未完成。
+- 色板已经支持单色和批量手动覆盖；profile 导出和导入复用已完成第一刀。
 - 未分配颜色高度已可配置，但还没有更细的“忽略 / 合并到最近色 / 标记为待处理”策略。
-- 导入方案已写入完整地图 JSON 的 `map.heightmap.source`，但还没有独立 profile 导入导出。
+- 导入方案已写入完整地图 JSON 的 `map.heightmap.source`，也可以独立导出 `.heightmap-import-profile.json` 复用。
 
 ## 数据契约建议
 
@@ -185,6 +185,13 @@
 - 支持把一套 assignments 导出为 `.heightmap-import-profile.json`。
 - 支持把 profile 应用到同类色带图片。
 - 可选支持原版 FMG colored heightmap 导出图的专用识别。
+
+当前落地状态：
+
+- 工作台动作栏新增“导出配置 / 导入配置”，导出的 JSON 使用 `type = webgl-generator-heightmap-import-profile`、`version = 1`。
+- profile 保存当前最低/最高高度、反转、适应方式、色板上限、映射模式、未分配高度和当前色板 assignments。
+- 导入 profile 会校验类型和版本，恢复工作台设置，并把 profile 中的色块高度作为显式 assignment 应用到当前预览色板；导入本身不重建地图。
+- 选择图片、导入 profile、应用到地图仍是分离步骤；真正写入地图和触发完整重生成只发生在“应用到地图”。
 
 暂缓：
 

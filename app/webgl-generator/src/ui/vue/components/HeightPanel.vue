@@ -213,9 +213,12 @@
 
         <div class="heightmap-workbench-actions">
           <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerHeightmapFileInput">选择图片</UiButton>
+          <UiButton variant="secondary" :disabled="!previewPalette.length" @click="exportHeightmapProfile">导出配置</UiButton>
+          <UiButton class="file-import-action" variant="secondary" @click="triggerProfileFileInput">导入配置</UiButton>
           <UiButton class="heightmap-apply-action" variant="primary" :disabled="!selectedFile" @click="applyHeightmapImport">应用到地图</UiButton>
           <UiButton variant="secondary" @click="closeImportWorkbench">取消</UiButton>
           <input id="heightmap-image-file" ref="fileInput" type="file" accept="image/*" hidden @change="onHeightmapFileChange" />
+          <input ref="profileFileInput" type="file" accept=".heightmap-import-profile.json,.json,application/json" hidden @change="onHeightmapProfileFileChange" />
         </div>
 
         <p class="heightmap-preview-status" aria-live="polite">{{ previewStatus }}</p>
@@ -279,6 +282,8 @@ const heightAssignmentPresets = Object.freeze([
   {value: 68, label: "山地"},
   {value: 92, label: "峰值"}
 ]);
+const heightmapProfileDocumentType = "webgl-generator-heightmap-import-profile";
+const heightmapProfileDocumentVersion = 1;
 const fmgHeightColorStops = Object.freeze([
   {height: 8, color: [38, 92, 145]},
   {height: 18, color: [63, 126, 174]},
@@ -298,6 +303,7 @@ const heightmapMappingMode = ref("grayscale");
 const heightmapUnassignedHeight = ref(0);
 const workbenchOpen = ref(false);
 const fileInput = ref(null);
+const profileFileInput = ref(null);
 const previewCanvas = ref(null);
 const previewImage = ref(null);
 const selectedFile = ref(null);
@@ -414,6 +420,12 @@ function triggerHeightmapFileInput() {
   fileInput.value.click();
 }
 
+function triggerProfileFileInput() {
+  if (!profileFileInput.value) return;
+  profileFileInput.value.value = "";
+  profileFileInput.value.click();
+}
+
 async function onHeightmapFileChange(event) {
   const file = event.target.files?.[0];
   event.target.value = "";
@@ -456,6 +468,33 @@ function applyHeightmapImport() {
   closeImportWorkbench();
 }
 
+async function onHeightmapProfileFileChange(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  try {
+    const profile = parseHeightmapProfile(await file.text());
+    applyHeightmapProfile(profile);
+    const matched = previewPalette.value.filter(entry => Number.isFinite(manualAssignments.value[String(entry.key)])).length;
+    previewStatus.value = previewPalette.value.length
+      ? `已导入配置：${file.name}，当前图片匹配 ${matched} 个色块。`
+      : `已导入配置：${file.name}，选择图片后可预览。`;
+  } catch (error) {
+    previewStatus.value = `配置导入失败：${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+function exportHeightmapProfile() {
+  if (!previewPalette.value.length) {
+    previewStatus.value = "请先选择图片并生成色板。";
+    return;
+  }
+  const profile = createHeightmapProfileDocument();
+  const filename = `${safeFilePart(selectedFile.value?.name || "heightmap")}.heightmap-import-profile.json`;
+  downloadJsonText(filename, JSON.stringify(profile, null, 2));
+  previewStatus.value = `配置已导出：${filename}`;
+}
+
 function createHeightmapImportSettings() {
   const assignments = previewPalette.value.map(entry => ({
     key: entry.key,
@@ -478,6 +517,69 @@ function createHeightmapImportSettings() {
     unassignedHeight: heightmapUnassignedHeight.value,
     assignments
   };
+}
+
+function createHeightmapProfileDocument() {
+  return {
+    type: heightmapProfileDocumentType,
+    version: heightmapProfileDocumentVersion,
+    exportedAt: new Date().toISOString(),
+    app: "fmg-webgl-reimplementation",
+    settings: {
+      minHeight: heightmapImportMin.value,
+      maxHeight: heightmapImportMax.value,
+      invert: heightmapImportInvert.value,
+      fitMode: heightmapImportFit.value,
+      colorLimit: heightmapColorLimit.value,
+      mappingMode: heightmapMappingMode.value,
+      unassignedHeight: heightmapUnassignedHeight.value
+    },
+    assignments: previewPalette.value.map(entry => ({
+      key: entry.key,
+      color: entry.hex,
+      height: entry.height,
+      autoHeight: entry.autoHeight,
+      pixels: entry.pixels,
+      manual: entry.manual
+    }))
+  };
+}
+
+function parseHeightmapProfile(text) {
+  const profile = JSON.parse(text);
+  if (profile?.type !== heightmapProfileDocumentType) throw new Error("文件不是高度图导入配置");
+  if (profile.version !== heightmapProfileDocumentVersion) throw new Error(`暂不支持的配置版本：${profile.version}`);
+  if (!profile.settings || typeof profile.settings !== "object") throw new Error("配置文件缺少 settings");
+  if (!Array.isArray(profile.assignments)) throw new Error("配置文件缺少 assignments");
+  return profile;
+}
+
+function applyHeightmapProfile(profile) {
+  const settings = profile.settings || {};
+  const minHeight = clamp(Math.round(Number(settings.minHeight) || 0), 0, 99);
+  const maxHeight = clamp(Math.round(Number(settings.maxHeight) || 100), minHeight + 1, 100);
+  heightmapImportMin.value = minHeight;
+  heightmapImportMax.value = maxHeight;
+  heightmapImportInvert.value = Boolean(settings.invert);
+  heightmapImportFit.value = settings.fitMode === "crop" ? "crop" : "stretch";
+  setHeightmapColorLimit(settings.colorLimit);
+  setHeightmapMappingMode(settings.mappingMode);
+  setHeightmapUnassignedHeight(settings.unassignedHeight);
+  manualAssignments.value = normalizeProfileAssignments(profile.assignments);
+  selectedPaletteKey.value = null;
+  batchPaletteKeys.value = [];
+  drawPreview();
+}
+
+function normalizeProfileAssignments(assignments) {
+  const normalized = {};
+  for (const assignment of assignments || []) {
+    const key = String(assignment?.key ?? "");
+    const height = Number(assignment?.height);
+    if (!key || !Number.isFinite(height)) continue;
+    normalized[key] = clamp(Math.round(height), 0, 100);
+  }
+  return normalized;
 }
 
 function drawPreview() {
@@ -820,6 +922,27 @@ function loadPreviewImage(file) {
     };
     image.src = url;
   });
+}
+
+function downloadJsonText(filename, text) {
+  const blob = new Blob([text], {type: "application/json;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noreferrer";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function safeFilePart(value) {
+  return String(value || "heightmap")
+    .replace(/\.[^.]+$/, "")
+    .replace(/[\\/:*?"<>|\s]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72) || "heightmap";
 }
 
 function startWorkbenchDrag(event) {

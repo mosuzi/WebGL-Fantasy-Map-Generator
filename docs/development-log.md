@@ -14824,3 +14824,34 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 批量赋高烟测通过：导入 4 色合成 SVG，切到色相模式后批量选择 2 个色块并点击“低地”，应用后 `source.kind = image-palette`、`source.mappingMode = hue`、手动 `height = 28` 的 assignments 为 `2` 个，checksum `f78211ea -> 52939e78`，`loadMap.totalMs = 469.9ms`，`fit-draw = 8.5ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
 - 同次烟测仅记录一次初始加载阶段 `main-thread-long-task` warn，未发生在高度图导入或应用阶段。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1194.1ms`，纯生成 `609.7ms`，WebGL 加载 `339.1ms`，最慢加载阶段为 `cell-visual-mesh 52.1ms`，`fit-draw = 2.4ms`，`glError = 0`。
+
+### 高度图导入 profile 复用第一刀
+
+背景：
+
+- 高度图导入工作台已经支持彩色色板、自动映射、单色/批量手动赋高和 `image-palette` 应用，但这些配置只能留在当前工作台会话里。
+- 阶段 5 目标要求把一套 assignments 导出为 `.heightmap-import-profile.json`，并能应用到同类色带图片。
+- profile 复用应只恢复工作台配置，不应绕过预览直接重建地图；真正写地图仍必须由“应用到地图”触发。
+
+修正：
+
+- 工作台动作栏新增“导出配置 / 导入配置”，并把动作栏改为均匀三列，避免五个按钮挤压。
+- 导出的 profile 使用 `type = webgl-generator-heightmap-import-profile`、`version = 1`，记录导出时间、应用标识、工作台 settings 和当前色板 assignments。
+- 导入 profile 会校验类型、版本、settings 和 assignments，恢复最低/最高高度、反转、适应方式、色板上限、映射模式和未分配高度。
+- 导入 profile 会把 profile 中色块高度写入工作台的显式 assignment 状态，并立即重绘当前预览；该动作不写 `map`，不触发重生成。
+- profile 导入后仍需用户点击“应用到地图”，才会通过既有 `heightmap-import-apply` 和 worker 生成链路进入 `image-palette` 地图。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`HeightPanel` 懒加载 chunk 为 `21.55KB / gzip 7.88KB`，主入口仍约 `739.15KB / gzip 223.22KB`。
+- Playwright + 系统 Chrome profile 复用烟测通过：导入 4 色合成 SVG，批量选择 2 个色块并设为“低地”后导出 profile，profile `type/version` 正确，`assignments = 7`、其中 `manual = 2`。
+- 同次烟测清除手动覆盖后导入 profile，当前预览匹配 `7` 个色块，工作台动作栏按钮为 `选择图片 / 导出配置 / 导入配置 / 应用到地图 / 取消`，三列宽度均约 `139.3px`。
+- 导入 profile 后点击“应用到地图”，结果为 `source.kind = image-palette`、`source.mappingMode = grayscale`、`assignmentCount = 4`、`manualCount = 4`、低地手动色块 `2` 个，checksum `4d28006c -> aeca03c6`，`loadMap.totalMs = 533.3ms`，`fit-draw = 5ms`，`glError = 0`，health error 为 `0`，console/page error 为 `0`。
+- 同次 smoke 只记录一次初始加载阶段 `main-thread-long-task` warn，未发生在 profile 导入、应用或绘制阶段。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1205.9ms`，纯生成 `618.4ms`，WebGL 加载 `366.4ms`，最慢加载阶段为 `cell-visual-mesh 55.8ms`，`fit-draw = 2.3ms`，`glError = 0`。
