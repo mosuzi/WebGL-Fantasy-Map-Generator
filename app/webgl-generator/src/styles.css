@@ -4481,6 +4481,26 @@ input.ui-switch-native {
   width: 100%;
 }
 
+.namebase-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 6px;
+  background: rgba(13, 20, 24, 0.72);
+}
+
+.namebase-history-actions span {
+  min-width: 0;
+  color: #94a8b0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .namebase-panel-sort {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

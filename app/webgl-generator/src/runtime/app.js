@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, createNamebaseImportPreview, createUserNamebase, deleteUserNamebase, importNamebaseDocument, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument, renameUserNamebase, setNamebaseBinding, updateUserNamebaseSource} from "../generator/namebase-store.js";
+import {createNamebaseDocument, createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -43,6 +43,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-e
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
+import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -604,7 +605,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onNamebaseBinding: cultureId => {
-      state.panels.namebase.open(state.map, {cultureId});
+      state.panels.namebase.open(state.map, {cultureId, history: state.editHistory.getStats()});
     },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
@@ -1086,7 +1087,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onDeleteUser: row => deleteImportedNamebase(state, documentRef, row),
     onClearUser: () => clearImportedNamebases(state, documentRef),
     onSetGlobalBinding: (target, value) => setGlobalNamebaseBinding(state, documentRef, target, value),
-    onSetCultureBinding: (cultureId, target, value) => setCultureNamebaseBinding(state, documentRef, cultureId, target, value)
+    onSetCultureBinding: (cultureId, target, value) => setCultureNamebaseBinding(state, documentRef, cultureId, target, value),
+    onUndo: () => undoNamebaseEdit(state, documentRef),
+    onRedo: () => redoNamebaseEdit(state, documentRef)
   });
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
@@ -1369,7 +1372,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.notes.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenNamebasePanel: () => {
-      state.panels.namebase.open(state.map);
+      state.panels.namebase.open(state.map, {history: state.editHistory.getStats()});
     },
     onExportImage: () => exportMapImage(state, documentRef),
     onExportMapData: () => exportMapData(state, documentRef),
@@ -1765,7 +1768,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateEconomyPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
-  state.panels.namebase.update(state.map);
+  state.panels.namebase.update(state.map, state.editHistory.getStats());
   state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateEditingInteractionLock(state, documentRef);
@@ -2074,15 +2077,75 @@ function exportNamebases(state, documentRef) {
   }
 }
 
+function executeNamebaseEdit(state, documentRef, command) {
+  const executed = state.editHistory.execute(command, {map: state.map});
+  refreshAfterNamebaseEdit(state, documentRef);
+  return executed.getResult?.() || null;
+}
+
+function undoNamebaseEdit(state, documentRef) {
+  try {
+    const command = state.editHistory.undo({map: state.map});
+    if (!command) {
+      setFileOperationStatus(documentRef, "没有可撤销的名称库编辑。");
+      return null;
+    }
+    refreshAfterUndoRedoCommand(state, documentRef, command);
+    setFileOperationStatus(documentRef, `已撤销：${command.label}。`);
+    return command;
+  } catch (error) {
+    reportFileOperationError(documentRef, "撤销名称库编辑失败", error);
+    return null;
+  }
+}
+
+function redoNamebaseEdit(state, documentRef) {
+  try {
+    const command = state.editHistory.redo({map: state.map});
+    if (!command) {
+      setFileOperationStatus(documentRef, "没有可重做的名称库编辑。");
+      return null;
+    }
+    refreshAfterUndoRedoCommand(state, documentRef, command);
+    setFileOperationStatus(documentRef, `已重做：${command.label}。`);
+    return command;
+  } catch (error) {
+    reportFileOperationError(documentRef, "重做名称库编辑失败", error);
+    return null;
+  }
+}
+
+function refreshAfterNamebaseEdit(state, documentRef) {
+  state.panels.namebase.update(state.map, state.editHistory.getStats());
+  persistNamebasePreferences(state, documentRef);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
+function refreshAfterUndoRedoCommand(state, documentRef, command) {
+  if (command?.domain === "namebase") {
+    refreshAfterNamebaseEdit(state, documentRef);
+    return;
+  }
+  refreshAfterEdit(state, command);
+  updateAllObjectPanels(state);
+  state.panels.namebase.update(state.map, state.editHistory.getStats());
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
 async function importNamebases(state, documentRef, file, mode = "append") {
   if (!file) return;
   try {
     assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导入名称库...");
     const document = parseNamebaseDocument(await file.text());
-    const result = importNamebaseDocument(state.map, document, {filename: file.name, mode});
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
+    const command = createImportNamebasesCommand(document, {filename: file.name, mode});
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, "未导入名称库：文件中没有可写入的词池。");
+      return null;
+    }
+    const result = executeNamebaseEdit(state, documentRef, command);
     const replacedText = result.replaced ? `，已替换原用户库 ${result.replaced} 个` : "";
     setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池${replacedText}，当前用户库 ${result.total} 个，已保存为本地偏好。`);
     return result;
@@ -2112,11 +2175,14 @@ async function previewNamebaseImport(state, documentRef, file, mode = "append") 
 function setGlobalNamebaseBinding(state, documentRef, target, value) {
   try {
     assertMapAvailable(state);
-    const result = setNamebaseBinding(state.map, target, value);
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
     const targetLabel = NAMEBASE_BINDING_TARGETS.find(item => item.key === target)?.label || target;
     const sourceLabel = String(value || "").trim() || "内置策略";
+    const command = createSetNamebaseBindingCommand(target, value);
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, `全局${targetLabel}名称库没有变化。`);
+      return null;
+    }
+    const result = executeNamebaseEdit(state, documentRef, command);
     const invalidText = result.invalidCount ? `；当前还有 ${result.invalidCount} 个失效绑定引用` : "";
     setFileOperationStatus(documentRef, `已设置全局${targetLabel}名称库：${sourceLabel}${invalidText}。`);
     return result;
@@ -2131,13 +2197,16 @@ function setCultureNamebaseBinding(state, documentRef, cultureId, target, value)
     assertMapAvailable(state);
     const cultureKey = String(cultureId || "").trim();
     if (!cultureKey) throw new Error("请先选择文化");
-    const result = setNamebaseBinding(state.map, target, value, {cultureId: cultureKey});
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
     const targetLabel = NAMEBASE_BINDING_TARGETS.find(item => item.key === target)?.label || target;
     const culture = state.map.pack?.cultures?.[cultureKey] || state.map.society?.cultures?.[cultureKey] || null;
     const cultureLabel = culture?.name || culture?.root || `文化 #${cultureKey}`;
     const sourceLabel = String(value || "").trim() || "内置策略";
+    const command = createSetNamebaseBindingCommand(target, value, {cultureId: cultureKey});
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, `${cultureLabel}${targetLabel}名称库没有变化。`);
+      return null;
+    }
+    const result = executeNamebaseEdit(state, documentRef, command);
     const invalidText = result.invalidCount ? `；当前还有 ${result.invalidCount} 个失效绑定引用` : "";
     setFileOperationStatus(documentRef, `已设置${cultureLabel}${targetLabel}名称库：${sourceLabel}${invalidText}。`);
     return result;
@@ -2183,13 +2252,16 @@ function copyBuiltinNamebase(state, documentRef, row) {
       setFileOperationStatus(documentRef, "请选择一个内置名称库进行复制。");
       return;
     }
-    const result = copyBuiltinNamebaseToUser(state.map, row.id);
+    const command = createCopyBuiltinNamebaseCommand(row.id, {name: row.name});
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, "未找到可复制的内置名称库。");
+      return;
+    }
+    const result = executeNamebaseEdit(state, documentRef, command);
     if (!result.copied) {
       setFileOperationStatus(documentRef, "未找到可复制的内置名称库。");
       return;
     }
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
     setFileOperationStatus(documentRef, `已复制“${row.name}”为用户名称库“${result.name}”，当前用户库 ${result.total} 个，已保存为本地偏好。`);
   } catch (error) {
     reportFileOperationError(documentRef, "复制名称库失败", error);
@@ -2199,9 +2271,7 @@ function copyBuiltinNamebase(state, documentRef, row) {
 function createManualNamebase(state, documentRef) {
   try {
     assertMapAvailable(state);
-    const result = createUserNamebase(state.map);
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
+    const result = executeNamebaseEdit(state, documentRef, createCreateUserNamebaseCommand());
     setFileOperationStatus(documentRef, `已新建用户名称库“${result.name}”，样本 ${result.samples} 个，当前用户库 ${result.total} 个，已保存为本地偏好。`);
     return result;
   } catch (error) {
@@ -2217,17 +2287,16 @@ function renameImportedNamebase(state, documentRef, row, name) {
       setFileOperationStatus(documentRef, "请选择一个用户名称库进行重命名。");
       return;
     }
-    const result = renameUserNamebase(state.map, row.id, name);
-    if (result.unchanged) {
+    const command = createRenameUserNamebaseCommand(row.id, name);
+    if (command.isNoop({map: state.map})) {
       setFileOperationStatus(documentRef, "名称库名称没有变化。");
       return;
     }
+    const result = executeNamebaseEdit(state, documentRef, command);
     if (!result.renamed) {
       setFileOperationStatus(documentRef, "未找到可重命名的用户名称库。");
       return;
     }
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
     setFileOperationStatus(documentRef, `已重命名用户名称库“${result.previousName}”为“${result.name}”。`);
   } catch (error) {
     reportFileOperationError(documentRef, "重命名名称库失败", error);
@@ -2241,13 +2310,16 @@ function updateImportedNamebaseSource(state, documentRef, row, sourceText) {
       setFileOperationStatus(documentRef, "请选择一个用户名称库编辑样本。");
       return;
     }
-    const result = updateUserNamebaseSource(state.map, row.id, sourceText);
+    const command = createUpdateUserNamebaseSourceCommand(row.id, sourceText);
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, "名称库样本没有变化。");
+      return;
+    }
+    const result = executeNamebaseEdit(state, documentRef, command);
     if (!result.updated) {
       setFileOperationStatus(documentRef, "未找到可编辑的用户名称库。");
       return;
     }
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
     setFileOperationStatus(documentRef, `已更新用户名称库“${result.name}”，样本 ${result.samples} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "编辑名称库样本失败", error);
@@ -2264,9 +2336,7 @@ function clearImportedNamebases(state, documentRef) {
     }
     const view = documentRef.defaultView || window;
     if (typeof view.confirm === "function" && !view.confirm(`确定清空 ${count} 个用户名称库？`)) return;
-    const result = clearUserNamebases(state.map);
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
+    const result = executeNamebaseEdit(state, documentRef, createClearUserNamebasesCommand());
     setFileOperationStatus(documentRef, `已清空 ${result.removed} 个用户名称库。`);
   } catch (error) {
     reportFileOperationError(documentRef, "清空名称库失败", error);
@@ -2285,13 +2355,16 @@ function deleteImportedNamebase(state, documentRef, row) {
     const view = documentRef.defaultView || window;
     const name = row.name || id;
     if (typeof view.confirm === "function" && !view.confirm(`确定删除用户名称库“${name}”？`)) return;
-    const result = deleteUserNamebase(state.map, id);
+    const command = createDeleteUserNamebaseCommand(id, {name});
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, "未找到可删除的用户名称库。");
+      return;
+    }
+    const result = executeNamebaseEdit(state, documentRef, command);
     if (!result.removed) {
       setFileOperationStatus(documentRef, "未找到可删除的用户名称库。");
       return;
     }
-    state.panels.namebase.update(state.map);
-    persistNamebasePreferences(state, documentRef);
     setFileOperationStatus(documentRef, `已删除用户名称库“${result.name || name}”，当前用户库 ${result.total} 个，已更新本地偏好。`);
   } catch (error) {
     reportFileOperationError(documentRef, "删除名称库失败", error);

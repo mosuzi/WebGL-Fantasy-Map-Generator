@@ -7,6 +7,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
     open: false,
     map: null,
+    history: null,
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     bindingStatus: getNamebaseBindingStatus(null),
     filter: "",
@@ -72,7 +73,9 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onDeleteUser: row => callbacks.onDeleteUser?.(row),
     onClearUser: () => callbacks.onClearUser?.(),
     onSetGlobalBinding: (target, value) => callbacks.onSetGlobalBinding?.(target, value),
-    onSetCultureBinding: (cultureId, target, value) => callbacks.onSetCultureBinding?.(cultureId, target, value)
+    onSetCultureBinding: (cultureId, target, value) => callbacks.onSetCultureBinding?.(cultureId, target, value),
+    onUndo: () => callbacks.onUndo?.(),
+    onRedo: () => callbacks.onRedo?.()
   };
 
   const record = manager.registerPanel("namebase-panel", {
@@ -110,16 +113,18 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
         panelState.focusCultureId = String(cultureId);
         panelState.focusCultureNonce++;
       }
+      panelState.history = options.history || null;
       refreshSummaries(panelState);
       panelState.open = true;
       panelState.version++;
       manager.open("namebase-panel");
       lazyPanel.load();
     },
-    update(map = null) {
+    update(map = null, history = null) {
       pendingImportFile = null;
       clearImportPreview(panelState);
       panelState.map = map;
+      panelState.history = history;
       refreshSummaries(panelState);
       panelState.version++;
     },

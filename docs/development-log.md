@@ -17514,3 +17514,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `818.88KB / gzip 246.96KB`，`NamebasePanel` chunk 约 `12.92KB / gzip 4.74KB`，`names` chunk 约 `23.39KB / gzip 9.82KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：新建用户库并把样本改为 `青川 / 青泽 / 云川` 后，面板详情显示“链路多样性 1.5”，生成预览输出 `青云 / 云泽 / 云青` 等链式组合，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1488ms`，纯生成 `662.6ms`，WebGL 加载 `492.6ms`，最慢加载阶段为“刷新标签和图标” `88.5ms`，`drawMs = 0.2ms`，`glError = 0`。
+
+### 名称库编辑历史第一刀
+
+背景：
+
+- 用户校准当前路线：无需继续做动态军事系统，后续军事只保留静态面板、态势线观感和导出可读性收尾。
+- 名称库导入、编辑、绑定、本地偏好、样本权重和 Markov 链路已完成，但写操作此前仍直接修改 `map.namebases`，误操作不能从面板内撤销。
+- 本轮回到名称库编辑器待办，不触碰军事战役、战报自动推进或动态军事链路。
+
+修正：
+
+- 新增 `app/webgl-generator/src/runtime/namebase-edit-commands.js`，用快照命令封装名称库导入、新建、复制、重命名、样本编辑、删除、清空和全局/文化绑定修改。
+- 名称库写操作改为进入 `EditHistory`；命令带 `domain = "namebase"`，撤销/重做时只恢复 `map.namebases` 和本地偏好，不走地图 mesh 重建或重绘。
+- 名称库面板新增历史操作条，显示 undo / redo / 最近命令，并提供“撤销上次 / 重做上次”。
+- 修复空地图首次创建名称库后的撤销快照问题：`null` 快照表示撤销回没有 `map.namebases`，不再误判为缺少快照。
+- `docs/current-plan.md`、`docs/task-notes/namebase-editor-plan.md`、`docs/task-notes/namebase-generation-binding-plan.md`、`docs/task-notes/source-feature-backlog.md` 和 README 已同步更新。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开名称库面板，新建用户名称库后 `undo = 1`；点击面板“撤销上次”后用户库数量从 `1` 回到 `0` 且 `redo = 1`；点击“重做上次”后用户库恢复为 `1`。整个过程 `generationTiming.totalMs` 保持 `665.4ms` 不变，`glError = 0`，page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过。
