@@ -16319,3 +16319,25 @@ full 矩阵结果：
 - 数据审计覆盖 `stage-2-1 / stage-2-1231411414 / front-audit-1 / front-audit-2`：有战线的 `stage-2-1231411414` 生成 `2` 条 front，`invalid = 0`、`long = 0`、最大长度约 `11`、最大长度比 `1`；无战线的 seed 保持 `fronts = 0`。
 - 首次 e2e 因一次不稳定 `main-thread-long-task` 健康告警失败，但单 case 指标本身通过；立即复跑同 case 通过，且无 console/page error。
 - 最终 e2e 守门通过：点击到出图 `1547.5ms`，纯生成 `789.1ms`，WebGL 加载 `418.3ms`，UI slack `340.1ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 134.2ms`，最慢加载阶段为 `构建视觉 cell mesh 64ms`，`line-vertices = 53.3ms`，`drawMs = 0.1ms`，`glError = 0`。
+
+### 只读战役对象第一刀
+
+背景：
+
+- 军事面板已经有共享 `campaign:*` 战报链、攻防双方字段和双方损耗分桶，但缺少一个 `map.military.campaigns` 级别的战役清单承载双方兵力、front 和战役元信息。
+- 本轮只建立只读战役对象和面板/导出摘要，不做双方自动扣兵、战役推进或外交状态变化。
+
+修正：
+
+- `buildMilitary()` 现在会从外交 `state.campaigns` 汇总 `map.military.campaigns`，并在 `metadata.campaigns` 记录数量。
+- 每个战役对象写入 `id / chainKey / name / start / attacker / defender / cause / frontIds / attackerTroops / defenderTroops / troopBalance` 等字段，`chainKey` 与现有战斗事件链路规则保持一致。
+- 军事管理顶部统计新增“战役”，选中参战国家军团时详情显示所属战役。
+- 军事 JSON 导出新增 `campaigns` 字段，便于后续双方结算和战役推进复用同一对象。
+
+验证：
+
+- `git diff --check` 通过。
+- 数据审计覆盖 `stage-2-1231411414 / stage-2-1 / campaign-audit-1 / campaign-audit-2`：有战役的 seed 中 `campaigns = metadataCampaigns = 1`、`fronts = 2`、`badChain = 0`、`badStates = 0`、`badTroops = 0`。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `774.36KB / gzip 234.00KB`，`MilitaryPanel` chunk 约 `37.98KB / gzip 11.65KB`。
+- e2e 守门通过：点击到出图 `1593.7ms`，纯生成 `856ms`，WebGL 加载 `473ms`，UI slack `264.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 159.9ms`，最慢加载阶段为 `构建视觉 cell mesh 88.6ms`，`line-vertices = 53.2ms`，`drawMs = 0.1ms`，`glError = 0`。
+- 构建产物浏览器烟测通过：军事面板概要显示 `战役1`，军事 JSON 导出 `campaigns = 1`、`metadata.campaigns = 1`；切到参战军团后详情显示 `徐-麇之战（徐王国 / 麇国）`，`drawMs = 0.4ms`、`glError = 0`、console/page error 为 `0`。

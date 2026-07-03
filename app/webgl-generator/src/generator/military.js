@@ -124,14 +124,17 @@ export function buildMilitary(pack, options = {}) {
   }
 
   const fronts = buildMilitaryFronts(pack, validStates);
+  const campaigns = buildMilitaryCampaigns(pack, validStates, fronts);
   const regiments = validStates.flatMap(state => state.military || []);
   const result = {
+    campaigns,
     fronts,
     metadata: {
       statesWithMilitary: validStates.filter(state => state.military?.length).length,
       regiments: regiments.length,
       troops: round(regiments.reduce((sum, regiment) => sum + (regiment.a || 0), 0)),
       navalRegiments: regiments.filter(regiment => regiment.n).length,
+      campaigns: campaigns.length,
       fronts: fronts.length,
       statuses: countRegimentStatuses(regiments),
       buildMs: roundMs(performance.now() - startedAt)
@@ -761,6 +764,67 @@ function scaleRegimentsToPolicy(regiments, policy) {
     applyRegimentIconProfile(regiment);
   }
   return regiments.filter(regiment => regiment.a > 0);
+}
+
+function buildMilitaryCampaigns(pack, states, fronts = []) {
+  const campaigns = [];
+  const seen = new Set();
+  for (const attacker of states) {
+    for (const campaign of attacker.campaigns || []) {
+      if (campaign.attacker !== attacker.i) continue;
+      const defender = pack.states?.[campaign.defender];
+      if (!defender?.i || defender.removed) continue;
+      const key = campaignIdentity(campaign);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const matchingFronts = fronts.filter(front =>
+        Number(front.attacker) === Number(campaign.attacker)
+        && Number(front.defender) === Number(campaign.defender)
+        && String(front.campaign || "") === String(campaign.name || "")
+      );
+      const attackerRegiments = attacker.military || [];
+      const defenderRegiments = defender.military || [];
+      const attackerTroops = sumRegimentTroops(attackerRegiments);
+      const defenderTroops = sumRegimentTroops(defenderRegiments);
+      campaigns.push({
+        id: `campaign:${slugText(key)}`,
+        key,
+        chainKey: `campaign:${slugText(key)}`,
+        name: campaign.name || `${attacker.name}-${defender.name}之战`,
+        start: campaign.start || null,
+        status: "active",
+        attacker: attacker.i,
+        attackerName: stateDisplayName(attacker),
+        defender: defender.i,
+        defenderName: stateDisplayName(defender),
+        cause: campaign.cause || "rivalry",
+        causeLabel: campaign.causeLabel || "战争原因",
+        causeDetail: campaign.causeDetail || "",
+        resourceKeys: Array.isArray(campaign.resourceKeys) ? [...campaign.resourceKeys] : [],
+        fronts: matchingFronts.length,
+        frontIds: matchingFronts.map(front => front.id),
+        hasSharedLandFront: matchingFronts.length > 0,
+        attackerRegiments: attackerRegiments.length,
+        defenderRegiments: defenderRegiments.length,
+        attackerTroops: round(attackerTroops),
+        defenderTroops: round(defenderTroops),
+        troopBalance: round(attackerTroops - defenderTroops)
+      });
+    }
+  }
+  return campaigns;
+}
+
+function campaignIdentity(campaign = {}) {
+  return campaign.id ?? campaign.i ?? campaign.key ?? `${campaign.attacker}:${campaign.defender}:${campaign.start || ""}:${campaign.cause || campaign.causeLabel || campaign.name || "campaign"}`;
+}
+
+function stateDisplayName(state) {
+  return state?.fullName || state?.name || (state?.i ? `国家 #${state.i}` : "");
+}
+
+function slugText(value) {
+  return String(value || "campaign").trim().replace(/\s+/g, "-").replace(/[^\w\u4e00-\u9fa5:-]/g, "").slice(0, 48) || "campaign";
 }
 
 export function applyRegimentIconProfile(regiment) {

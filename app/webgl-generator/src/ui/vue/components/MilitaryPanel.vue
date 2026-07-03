@@ -567,6 +567,7 @@ const summaryMetrics = computed(() => [
   {label: "军团", value: formatNumber(metrics.value.rows.length)},
   {label: "总兵力", value: formatNumber(metrics.value.troops)},
   {label: "舰队", value: formatNumber(metrics.value.fleets)},
+  {label: "战役", value: formatNumber(metrics.value.campaigns)},
   {label: "战线", value: formatNumber(metrics.value.fronts)},
   {label: "事件", value: formatNumber(allBattleEvents.value.length)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
@@ -588,6 +589,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "文明", value: selected.value.civilizationLabel},
   {label: "外交压力", value: formatNumber(selected.value.diplomacyPressure)},
   {label: "资源压力", value: formatNumber(selected.value.resourcePressure)},
+  {label: "战役", value: selected.value.campaignLabel},
   {label: "战争原因", value: selected.value.warCauseLabel || "无"}
 ] : []);
 const stationDestinationOptions = computed(() => buildStationDestinationOptions(props.state.map, selected.value, selectedState.value?.state));
@@ -607,9 +609,11 @@ watch(() => `${selected.value?.id || ""}|${eventChainFilter.value}|${eventTypeFi
 
 function buildMilitaryMetrics(map) {
   const states = stateRows(map);
+  const campaigns = militaryCampaigns(map);
   const rows = states.flatMap(state => (state.state.military || []).map(regiment => {
     const id = regiment.id ?? `${state.id}:${regiment.i}`;
     const policy = state.state.militaryPolicy || {};
+    const stateCampaigns = campaignsForState(campaigns, state.id);
     return {
       id,
       regimentId: regiment.i,
@@ -645,6 +649,8 @@ function buildMilitaryMetrics(map) {
       civilizationLabel: policy.civilizationLabel || state.state.civilizationLabel || "未知",
       diplomacyPressure: Number(policy.diplomacyPressure || 1),
       resourcePressure: Number(policy.resourcePressure || 1),
+      campaigns: stateCampaigns,
+      campaignLabel: campaignLabelForState(stateCampaigns),
       warCauseLabel: firstWarCause(state.state)
     };
   }));
@@ -654,8 +660,28 @@ function buildMilitaryMetrics(map) {
     rows,
     troops: rows.reduce((sum, row) => sum + row.troops, 0),
     fleets: rows.filter(row => row.type === "fleet").length,
+    campaigns: map?.military?.metadata?.campaigns || campaigns.length,
     fronts: map?.military?.metadata?.fronts || map?.military?.fronts?.length || 0
   };
+}
+
+function militaryCampaigns(map) {
+  return Array.isArray(map?.military?.campaigns) ? map.military.campaigns : [];
+}
+
+function campaignsForState(campaigns = [], stateId) {
+  const id = Number(stateId);
+  return campaigns.filter(campaign => Number(campaign.attacker) === id || Number(campaign.defender) === id);
+}
+
+function campaignLabelForState(campaigns = []) {
+  if (!campaigns.length) return "无";
+  if (campaigns.length === 1) {
+    const campaign = campaigns[0];
+    const opponent = campaign.attackerName && campaign.defenderName ? `${campaign.attackerName} / ${campaign.defenderName}` : campaign.name;
+    return `${campaign.name || "战役"}（${opponent}）`;
+  }
+  return `${formatNumber(campaigns.length)} 场`;
 }
 
 function stateRows(map) {
@@ -1378,6 +1404,7 @@ function exportJson() {
   const payload = {
     seed,
     metadata: map?.military?.metadata || {},
+    campaigns: map?.military?.campaigns || [],
     fronts: map?.military?.fronts || [],
     events: allBattleEvents.value,
     regiments: visibleRows.value
