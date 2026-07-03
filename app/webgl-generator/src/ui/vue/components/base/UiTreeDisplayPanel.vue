@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <section v-if="open" ref="panel" class="ui-tree-display-panel" role="dialog" :aria-label="title" :style="panelStyle">
-      <header class="ui-tree-display-header" @pointerdown="startDrag">
+      <header class="ui-tree-display-header" @pointerdown="startPanelDrag">
         <strong>{{ title }}</strong>
         <span>{{ nodes.length }} 节点</span>
         <ElButton class="ui-tree-display-close" text circle :icon="Close" aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)" />
@@ -36,8 +36,9 @@
 </template>
 
 <script setup>
-import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import {Close} from "@element-plus/icons-vue";
+import {useDraggableFloatingPanel} from "../../composables/use-draggable-floating-panel.js";
 
 defineOptions({
   name: "UiTreeDisplayPanel"
@@ -64,12 +65,19 @@ const props = defineProps({
 
 const emit = defineEmits(["update:open", "select"]);
 const panel = ref(null);
-const position = ref(null);
-let dragState = null;
 const layout = computed(() => buildTreeLayout(props.nodes));
-const panelStyle = computed(() => position.value
-  ? {left: `${position.value.x}px`, top: `${position.value.y}px`}
-  : {});
+const {
+  panelStyle,
+  position,
+  setPanelPosition,
+  constrainPanel,
+  startDrag: startPanelDrag,
+  stopDrag
+} = useDraggableFloatingPanel(panel, {
+  defaultWidth: 760,
+  defaultHeight: 650,
+  margin: 8
+});
 
 watch(() => props.open, open => {
   if (!open) {
@@ -77,12 +85,9 @@ watch(() => props.open, open => {
     return;
   }
   nextTick(() => {
-    if (!position.value) position.value = defaultPanelPosition();
+    if (!position.value) setPanelPosition(defaultPanelPosition(), {save: false});
+    else constrainPanel();
   });
-});
-
-onBeforeUnmount(() => {
-  stopDrag();
 });
 
 function buildTreeLayout(nodes) {
@@ -128,38 +133,6 @@ function buildTreeLayout(nodes) {
   };
 }
 
-function startDrag(event) {
-  if (event.button !== 0) return;
-  const rect = panel.value?.getBoundingClientRect();
-  if (!rect) return;
-  dragState = {
-    pointerId: event.pointerId,
-    offsetX: event.clientX - rect.left,
-    offsetY: event.clientY - rect.top
-  };
-  event.currentTarget.setPointerCapture?.(event.pointerId);
-  window.addEventListener("pointermove", dragPanel);
-  window.addEventListener("pointerup", stopDrag);
-}
-
-function dragPanel(event) {
-  if (!dragState || event.pointerId !== dragState.pointerId) return;
-  const rect = panel.value?.getBoundingClientRect();
-  const width = rect?.width || 760;
-  const height = rect?.height || 650;
-  const margin = 8;
-  position.value = {
-    x: clamp(event.clientX - dragState.offsetX, margin, window.innerWidth - width - margin),
-    y: clamp(event.clientY - dragState.offsetY, margin, window.innerHeight - height - margin)
-  };
-}
-
-function stopDrag() {
-  dragState = null;
-  window.removeEventListener("pointermove", dragPanel);
-  window.removeEventListener("pointerup", stopDrag);
-}
-
 function defaultPanelPosition() {
   const width = Math.min(760, window.innerWidth - 48);
   return {
@@ -168,7 +141,4 @@ function defaultPanelPosition() {
   };
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(Math.max(min, max), value));
-}
 </script>

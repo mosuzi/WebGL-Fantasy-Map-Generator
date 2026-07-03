@@ -1252,6 +1252,10 @@ select:disabled {
   user-select: none;
 }
 
+.floating-panel-header:active {
+  cursor: grabbing;
+}
+
 .floating-panel-header h2 {
   margin: 0;
   color: #d8e2e7;
@@ -2642,6 +2646,13 @@ select:disabled {
   grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
   gap: 8px;
+  cursor: move;
+  user-select: none;
+}
+
+.project-export-panel-header.dragging,
+.project-export-panel-header:active {
+  cursor: grabbing;
 }
 
 .project-export-panel-header strong {
@@ -4308,6 +4319,10 @@ input.ui-switch-native {
   padding: 0 8px 0 12px;
   cursor: move;
   user-select: none;
+}
+
+.ui-tree-display-header:active {
+  cursor: grabbing;
 }
 
 .ui-tree-display-header strong {

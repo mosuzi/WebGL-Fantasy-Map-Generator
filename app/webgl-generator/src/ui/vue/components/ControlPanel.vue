@@ -47,9 +47,9 @@
           aria-labelledby="project-export-panel-title"
           @click.stop
         >
-          <div class="project-export-panel-header">
+          <div class="project-export-panel-header" :class="{dragging: exportPanelDragging}" @pointerdown="startExportPanelDrag">
             <strong id="project-export-panel-title">导出</strong>
-            <button type="button" class="project-export-panel-close" aria-label="关闭导出面板" @click="closeExportPanel">×</button>
+            <button type="button" class="project-export-panel-close" aria-label="关闭导出面板" @pointerdown.stop @click="closeExportPanel">×</button>
           </div>
           <div class="project-export-action-grid">
             <UiButton id="export-map-image" variant="secondary" @click="closeExportPanel">图片</UiButton>
@@ -350,6 +350,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTabs from "./base/UiTabs.vue";
+import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {
   DISTANCE_UNIT_OPTIONS,
   NUMBER_ABBREVIATION_OPTIONS,
@@ -378,7 +379,19 @@ const activeTab = ref("generation");
 const exportPanelOpen = ref(false);
 const exportAnchorRef = ref(null);
 const exportPanelRef = ref(null);
-const exportPanelStyle = ref({});
+const {
+  dragging: exportPanelDragging,
+  panelStyle: exportPanelStyle,
+  position: exportPanelPosition,
+  positionNear: positionExportPanelNear,
+  constrainPanel: constrainExportPanel,
+  startDrag: startExportPanelDrag
+} = useDraggableFloatingPanel(exportPanelRef, {
+  defaultWidth: 320,
+  defaultHeight: 300,
+  margin: 12,
+  storageKey: "webgl-generator-panel:project-export"
+});
 const climateLatitudeMode = ref("auto");
 const climateLatitudeCenter = ref(0);
 const climateLatitudeSpan = ref(45);
@@ -539,7 +552,7 @@ function triggerFileInput(inputId) {
 
 function toggleExportPanel() {
   exportPanelOpen.value = !exportPanelOpen.value;
-  if (exportPanelOpen.value) nextTick(positionExportPanel);
+  if (exportPanelOpen.value) nextTick(openExportPanelAtUsablePosition);
 }
 
 function closeExportPanel() {
@@ -549,15 +562,13 @@ function closeExportPanel() {
 function positionExportPanel() {
   const anchor = exportAnchorRef.value;
   if (!anchor) return;
-  const rect = anchor.getBoundingClientRect();
   const width = Math.min(360, Math.max(280, window.innerWidth - 24));
-  const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left));
-  const top = Math.max(12, Math.min(window.innerHeight - 260, rect.bottom + 8));
-  exportPanelStyle.value = {
-    left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`,
-    width: `${Math.round(width)}px`
-  };
+  positionExportPanelNear(anchor, {width, minWidth: 280, estimatedHeight: 300, topOffset: 8});
+}
+
+function openExportPanelAtUsablePosition() {
+  if (exportPanelPosition.value) constrainExportPanel();
+  else positionExportPanel();
 }
 
 function handleExportPanelOutsideClick(event) {
@@ -568,7 +579,7 @@ function handleExportPanelOutsideClick(event) {
 }
 
 function handleExportPanelReposition() {
-  if (exportPanelOpen.value) positionExportPanel();
+  if (exportPanelOpen.value) constrainExportPanel();
 }
 
 function windDirectionLabel(angle) {
