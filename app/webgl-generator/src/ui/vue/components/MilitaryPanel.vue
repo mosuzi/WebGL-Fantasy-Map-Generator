@@ -141,6 +141,7 @@
         />
       </div>
       <div class="military-event-actions">
+        <UiButton v-if="selectedBattleEventsCanExpand" variant="secondary" @click="toggleBattleEventDisplay">{{ battleEventDisplayToggleLabel }}</UiButton>
         <UiButton variant="secondary" :disabled="!selectedFilteredBattleEvents.length" @click="clearFilteredBattleEvents">清空筛选</UiButton>
         <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
       </div>
@@ -385,6 +386,7 @@ const battleEventsImportStatus = ref("");
 const eventTypeFilter = ref("all");
 const eventOutcomeFilter = ref("all");
 const eventExportScope = ref("all");
+const showAllSelectedBattleEvents = ref(false);
 const battleEventDraft = reactive({
   type: "skirmish",
   outcome: "victory",
@@ -454,9 +456,11 @@ const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metr
 const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
 const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents.value, selected.value));
 const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value));
-const selectedBattleEvents = computed(() => latestBattleEvents(selectedFilteredBattleEvents.value, 5));
+const selectedBattleEventsCanExpand = computed(() => selectedFilteredBattleEvents.value.length > 5);
+const selectedBattleEvents = computed(() => showAllSelectedBattleEvents.value ? newestFirstBattleEvents(selectedFilteredBattleEvents.value) : latestBattleEvents(selectedFilteredBattleEvents.value, 5));
 const battleEventChainSummary = computed(() => buildBattleEventChainSummary(selectedBattleEventRows.value));
 const exportBattleEventRows = computed(() => battleEventRowsForExport(eventExportScope.value));
+const battleEventDisplayToggleLabel = computed(() => showAllSelectedBattleEvents.value ? "收起最近" : `展开全部 ${formatNumber(selectedFilteredBattleEvents.value.length)}`);
 const battleEventCountLabel = computed(() => {
   if (!selectedBattleEventTotal.value) return "暂无";
   if (selectedFilteredBattleEvents.value.length === selectedBattleEventTotal.value) return `${formatNumber(selectedBattleEventTotal.value)} 条`;
@@ -534,6 +538,9 @@ watch(() => selected.value?.id, syncStatusDraft, {immediate: true});
 watch(() => selected.value?.status, syncStatusDraft);
 watch(() => selected.value?.id, syncStationDestinationDraft, {immediate: true});
 watch(() => stationDestinationOptions.value.map(option => option.value).join("|"), syncStationDestinationDraft);
+watch(() => `${selected.value?.id || ""}|${eventTypeFilter.value}|${eventOutcomeFilter.value}`, () => {
+  showAllSelectedBattleEvents.value = false;
+});
 
 function buildMilitaryMetrics(map) {
   const states = stateRows(map);
@@ -720,6 +727,11 @@ function clearFilteredBattleEvents() {
   props.callbacks.onBattleEventsClear?.(militaryTarget(selected.value), eventIds);
 }
 
+function toggleBattleEventDisplay() {
+  if (!selectedBattleEventsCanExpand.value) return;
+  showAllSelectedBattleEvents.value = !showAllSelectedBattleEvents.value;
+}
+
 function clearBattleEventDescription() {
   battleEventDraft.description = "";
 }
@@ -862,7 +874,11 @@ function filterBattleEvents(events = [], type = "all", outcome = "all") {
 }
 
 function latestBattleEvents(events = [], limit = 5) {
-  return events.slice(-limit).reverse();
+  return newestFirstBattleEvents(events).slice(0, limit);
+}
+
+function newestFirstBattleEvents(events = []) {
+  return [...events].reverse();
 }
 
 function buildBattleEventChainSummary(events = []) {
