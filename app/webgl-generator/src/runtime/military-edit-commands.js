@@ -132,6 +132,96 @@ export function createSetMilitaryStatusBatchCommand(targets, status, {label = "�
   };
 }
 
+export function createMoveMilitaryStationCommand(target, destination, {label = "移动军团驻地"} = {}) {
+  const normalizedTarget = normalizeRegimentTarget(target);
+  const normalizedDestination = normalizeRegimentDestination(destination);
+  let previous = null;
+
+  return {
+    label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    effects: {
+      ...MILITARY_REGIMENT_EFFECTS,
+      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+    },
+    apply(context) {
+      const {state, regiment} = findRegiment(context.map, normalizedTarget);
+      if (!state?.i || !regiment) throw new Error("找不到军团");
+      const destinationPoint = resolveRegimentDestination(context.map, normalizedDestination);
+      if (!destinationPoint) throw new Error("找不到可移动的驻地目标");
+      previous ??= snapshotRegimentStation(regiment);
+      regiment.cell = destinationPoint.cell;
+      regiment.x = destinationPoint.x;
+      regiment.y = destinationPoint.y;
+      regiment.status = "garrisoned";
+      regiment.statusLabel = MILITARY_STATUSES.garrisoned?.label || "驻防中";
+      regiment.order = {
+        kind: "garrison",
+        targetCell: destinationPoint.cell,
+        targetName: destinationPoint.name || getOrderTargetName(context.map, state, destinationPoint.cell)
+      };
+      syncMilitary(context.map);
+      refreshMilitaryStatusMetadata(context.map);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的军团驻地快照");
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      restoreRegimentStation(regiment, previous);
+      syncMilitary(context.map);
+      refreshMilitaryStatusMetadata(context.map);
+    },
+    isNoop(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) return true;
+      const destinationPoint = resolveRegimentDestination(context.map, normalizedDestination);
+      if (!destinationPoint) return true;
+      return Number(regiment.cell) === destinationPoint.cell
+        && nearlyEqual(regiment.x, destinationPoint.x)
+        && nearlyEqual(regiment.y, destinationPoint.y)
+        && String(regiment.status || "") === "garrisoned";
+    }
+  };
+}
+
+export function createSetMilitaryBaseCommand(target, {label = "设置军团基地"} = {}) {
+  const normalizedTarget = normalizeRegimentTarget(target);
+  let previous = null;
+
+  return {
+    label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    effects: {
+      ...MILITARY_REGIMENT_EFFECTS,
+      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+    },
+    apply(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      if (!Number.isFinite(Number(regiment.x)) || !Number.isFinite(Number(regiment.y))) throw new Error("军团没有可用驻地坐标");
+      previous ??= snapshotRegimentBase(regiment);
+      regiment.baseCell = Number.isFinite(Number(regiment.cell)) ? Number(regiment.cell) : undefined;
+      regiment.bcell = regiment.baseCell;
+      regiment.bx = roundValue(regiment.x, 2);
+      regiment.by = roundValue(regiment.y, 2);
+      syncMilitary(context.map);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的军团基地快照");
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      restoreRegimentBase(regiment, previous);
+      syncMilitary(context.map);
+    },
+    isNoop(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) return true;
+      const cell = Number(regiment.cell);
+      return Number(regiment.baseCell ?? regiment.bcell) === cell
+        && nearlyEqual(regiment.bx, regiment.x)
+        && nearlyEqual(regiment.by, regiment.y);
+    }
+  };
+}
+
 export function createRenameMilitaryRegimentCommand(target, name, {label = "重命名军团"} = {}) {
   const normalizedTarget = normalizeRegimentTarget(target);
   const nextName = String(name || "").trim();
@@ -216,6 +306,15 @@ function normalizeRegimentTarget(target = {}) {
   };
 }
 
+function normalizeRegimentDestination(destination = {}) {
+  return {
+    cell: Number(destination.cell ?? destination.packCell),
+    x: optionalNumber(destination.x),
+    y: optionalNumber(destination.y),
+    name: String(destination.name || destination.targetName || destination.label || "")
+  };
+}
+
 function uniqueRegimentTargets(targets = []) {
   const result = [];
   const seen = new Set();
@@ -244,6 +343,26 @@ function snapshotRegimentStatus(regiment) {
   };
 }
 
+function snapshotRegimentStation(regiment) {
+  return {
+    cell: regiment.cell,
+    x: regiment.x,
+    y: regiment.y,
+    status: regiment.status,
+    statusLabel: regiment.statusLabel,
+    order: regiment.order ? clonePlain(regiment.order) : null
+  };
+}
+
+function snapshotRegimentBase(regiment) {
+  return {
+    baseCell: regiment.baseCell,
+    bcell: regiment.bcell,
+    bx: regiment.bx,
+    by: regiment.by
+  };
+}
+
 function snapshotRegimentStatuses(map, targets) {
   return targets
     .map(target => {
@@ -260,6 +379,42 @@ function restoreRegimentStatus(regiment, snapshot) {
   else regiment.statusLabel = snapshot.statusLabel;
   if (snapshot.order) regiment.order = clonePlain(snapshot.order);
   else delete regiment.order;
+}
+
+function restoreRegimentStation(regiment, snapshot) {
+  if (snapshot.cell === undefined) delete regiment.cell;
+  else regiment.cell = snapshot.cell;
+  if (snapshot.x === undefined) delete regiment.x;
+  else regiment.x = snapshot.x;
+  if (snapshot.y === undefined) delete regiment.y;
+  else regiment.y = snapshot.y;
+  restoreRegimentStatus(regiment, snapshot);
+}
+
+function restoreRegimentBase(regiment, snapshot) {
+  if (snapshot.baseCell === undefined) delete regiment.baseCell;
+  else regiment.baseCell = snapshot.baseCell;
+  if (snapshot.bcell === undefined) delete regiment.bcell;
+  else regiment.bcell = snapshot.bcell;
+  if (snapshot.bx === undefined) delete regiment.bx;
+  else regiment.bx = snapshot.bx;
+  if (snapshot.by === undefined) delete regiment.by;
+  else regiment.by = snapshot.by;
+}
+
+function resolveRegimentDestination(map, destination) {
+  const cell = Number(destination.cell);
+  if (!Number.isInteger(cell) || !map?.pack?.cells?.p?.[cell]) return null;
+  const point = map.pack.cells.p[cell];
+  const x = Number.isFinite(destination.x) ? destination.x : point[0];
+  const y = Number.isFinite(destination.y) ? destination.y : point[1];
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
+    cell,
+    x: roundValue(x, 2),
+    y: roundValue(y, 2),
+    name: destination.name
+  };
 }
 
 function createManualOrder(map, state, regiment, status) {
@@ -301,6 +456,20 @@ function ratiosEqual(a, b) {
   const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
   for (const key of keys) if (Math.abs(Number(a?.[key] || 0) - Number(b?.[key] || 0)) > 0.0001) return false;
   return true;
+}
+
+function nearlyEqual(a, b) {
+  return Math.abs(Number(a || 0) - Number(b || 0)) < 0.01;
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || value === "") return NaN;
+  return Number(value);
+}
+
+function roundValue(value, digits = 2) {
+  const factor = 10 ** digits;
+  return Math.round(Number(value || 0) * factor) / factor;
 }
 
 function clonePlain(value) {

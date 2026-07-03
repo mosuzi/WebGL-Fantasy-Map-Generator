@@ -15491,3 +15491,29 @@ full 矩阵结果：
 - 同次烟测中撤销后全部目标恢复原态势，重做后全部再次变为 `marching`；最终刷新摘要为 `point-layers, object-index, object-panels`，`glError = 0`。
 - 收窄刷新前 smoke 健康警告为 `12` 条；收窄后同路径为 `4` 条，剩余主要来自初始生成和面板加载阶段。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1773.3ms`，纯生成 `897ms`，WebGL 加载 `568.3ms`，UI slack `308ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 168.8ms`，最慢加载阶段为 `构建视觉 cell mesh 83ms`，`line-vertices = 47ms`，`fit-draw = 3.1ms`，`glError = 0`。
+
+### 军团驻地与基地轻量编辑
+
+背景：
+
+- `docs/task-notes/military-battle-plan.md` 的阶段 4 包含“移动驻地/基地”。
+- 完整地图点选迁移会牵涉编辑锁、拾取和候选校验，本轮先做可验证的轻量编辑：在军事面板内把军团迁到国家中心/首都 cell，并能把当前位置保存为基地。
+
+修正：
+
+- `military-edit-commands.js` 新增 `createMoveMilitaryStationCommand()` 和 `createSetMilitaryBaseCommand()`。
+- 移动驻地会写入 `cell / x / y`，把军团设为 `garrisoned`，并生成 `garrison` 命令；撤销会恢复旧驻地、状态和命令。
+- 设置基地会把当前驻地写入 `baseCell / bcell / bx / by`，同时保留 `bcell` 兼容旧式字段命名。
+- 军事面板详情新增“驻地 / 基地”行，二级操作新增“驻地基地”，提供“移动驻地”和“设当前位置为基地”。
+- 目标构造优先使用 pack cell 的真实坐标；本轮修正了 `Number(null) === 0` 导致可选坐标误落到 `(0,0)` 的问题。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `16.72KB / gzip 5.73KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：军团 `2:0` 从 `cell 5201 / 771.47,762.76 / patrolling` 移动到国家中心 `cell 5399 / 802.69,781.64 / garrisoned`，命令为 `garrison`。
+- 同次烟测中撤销恢复旧驻地与 `patrolling`，重做再次迁到国家中心；随后“设当前位置为基地”写入 `baseCell = bcell = 5399` 和 `bx/by = 802.69/781.64`，撤销后恢复旧基地字段；刷新摘要为 `point-layers, object-index, object-panels`，`glError = 0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1583.7ms`，纯生成 `827ms`，WebGL 加载 `473.4ms`，UI slack `283.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 149.4ms`，最慢加载阶段为 `构建线层顶点 77.3ms`，`fit-draw = 3.8ms`，`glError = 0`。

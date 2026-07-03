@@ -119,6 +119,25 @@
         <UiButton class="military-status-apply" variant="secondary" :disabled="!visibleRows.length" @click="applyBatchStatus">应用到筛选</UiButton>
       </div>
     </template>
+    <template #station>
+      <div class="military-status-panel">
+        <div class="military-status-heading">
+          <strong>{{ selected?.name || "未选中军团" }}</strong>
+          <span>驻地 {{ selected?.stationLabel || "未知" }} / 基地 {{ selected?.baseLabel || "未知" }}</span>
+        </div>
+        <UiSelectField
+          input-id="military-station-destination"
+          class-name="military-status-editor"
+          label="目标"
+          :model-value="stationDestinationDraft"
+          :options="stationDestinationOptions"
+          :disabled="!selected || !stationDestinationOptions.length"
+          @update:model-value="setStationDestinationDraft"
+        />
+        <UiButton class="military-status-apply" variant="secondary" :disabled="!selectedStationDestination" @click="applyStationMove">移动驻地</UiButton>
+        <UiButton class="military-status-apply" variant="secondary" :disabled="!selected" @click="applySetBase">设当前位置为基地</UiButton>
+      </div>
+    </template>
     <template #ratios>
       <div class="military-ratio-panel">
         <div class="military-ratio-heading">
@@ -211,6 +230,7 @@ const activeAction = ref(null);
 const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
+const stationDestinationDraft = ref("capital");
 
 const metrics = computed(() => {
   props.state.version;
@@ -256,6 +276,7 @@ const militaryActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎", disabled: !selected.value},
   {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
   {key: "batchStatus", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
+  {key: "station", label: "驻地基地", icon: "⌖", disabled: !selected.value},
   {key: "ratios", label: "兵种比例", icon: "⚖"}
 ]);
 
@@ -276,6 +297,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "兵力", value: formatNumber(selected.value.troops)},
   {label: "兵种", value: selected.value.unitSummary},
   {label: "主兵种", value: selected.value.dominantUnitLabel},
+  {label: "驻地", value: selected.value.stationLabel},
+  {label: "基地", value: selected.value.baseLabel},
   {label: "驻扎适宜度", value: `${Math.round(selected.value.suitabilityScore * 100)}%`},
   {label: "移动速度", value: formatNumber(selected.value.movementSpeed)},
   {label: "文明", value: selected.value.civilizationLabel},
@@ -283,11 +306,15 @@ const detailRows = computed(() => selected.value ? [
   {label: "资源压力", value: formatNumber(selected.value.resourcePressure)},
   {label: "战争原因", value: selected.value.warCauseLabel || "无"}
 ] : []);
+const stationDestinationOptions = computed(() => buildStationDestinationOptions(props.state.map, selected.value, selectedState.value?.state));
+const selectedStationDestination = computed(() => stationDestinationOptions.value.find(option => String(option.value) === String(stationDestinationDraft.value)) || null);
 
 watch(() => selectedState.value?.id, syncRatioDraft, {immediate: true});
 watch(() => props.state.version, syncRatioDraft);
 watch(() => selected.value?.id, syncStatusDraft, {immediate: true});
 watch(() => selected.value?.status, syncStatusDraft);
+watch(() => selected.value?.id, syncStationDestinationDraft, {immediate: true});
+watch(() => stationDestinationOptions.value.map(option => option.value).join("|"), syncStationDestinationDraft);
 
 function buildMilitaryMetrics(map) {
   const states = stateRows(map);
@@ -315,6 +342,11 @@ function buildMilitaryMetrics(map) {
       x: regiment.x,
       y: regiment.y,
       cell: regiment.cell,
+      stationLabel: packCellLabel(map, regiment.cell),
+      baseCell: baseCellForRegiment(map, regiment),
+      baseX: Number(regiment.bx),
+      baseY: Number(regiment.by),
+      baseLabel: baseLabelForRegiment(map, regiment),
       suitabilityScore: Number(regiment.suitability?.total || 0),
       movementSpeed: Number(regiment.movementSpeed || 0),
       civilizationLabel: policy.civilizationLabel || state.state.civilizationLabel || "未知",
@@ -399,6 +431,15 @@ function setBatchStatusDraft(value) {
   batchStatusDraft.value = value;
 }
 
+function syncStationDestinationDraft() {
+  if (stationDestinationOptions.value.some(option => String(option.value) === String(stationDestinationDraft.value))) return;
+  stationDestinationDraft.value = stationDestinationOptions.value[0]?.value || "capital";
+}
+
+function setStationDestinationDraft(value) {
+  stationDestinationDraft.value = value;
+}
+
 function applyStatus() {
   if (!selected.value) return;
   props.callbacks.onStatusApply?.({
@@ -420,14 +461,30 @@ function applyBatchStatus() {
   activeAction.value = null;
 }
 
+function applyStationMove() {
+  if (!selected.value || !selectedStationDestination.value) return;
+  props.callbacks.onStationApply?.(militaryTarget(selected.value), selectedStationDestination.value.destination);
+  activeAction.value = null;
+}
+
+function applySetBase() {
+  if (!selected.value) return;
+  props.callbacks.onBaseApply?.(militaryTarget(selected.value));
+  activeAction.value = null;
+}
+
 function applyRename(name) {
   if (!selected.value) return;
-  props.callbacks.onRename?.({
-    id: selected.value.id,
-    stateId: selected.value.stateId,
-    regimentId: selected.value.regimentId
-  }, name);
+  props.callbacks.onRename?.(militaryTarget(selected.value), name);
   activeAction.value = null;
+}
+
+function militaryTarget(row) {
+  return {
+    id: row.id,
+    stateId: row.stateId,
+    regimentId: row.regimentId
+  };
 }
 
 function unitSummary(units = {}) {
@@ -438,6 +495,95 @@ function unitSummary(units = {}) {
     })
     .filter(Boolean)
     .join(" / ") || "无";
+}
+
+function buildStationDestinationOptions(map, regiment, state) {
+  if (!regiment) return [];
+  const options = [];
+  const capitalDestination = destinationForCell(map, state?.center, "国家中心");
+  if (capitalDestination) options.push({
+    value: "capital",
+    label: `国家中心：${capitalDestination.label}`,
+    destination: capitalDestination
+  });
+  const baseCell = regiment.baseCell ?? nearestPackCell(map, regiment.baseX, regiment.baseY);
+  const baseDestination = destinationForCell(map, baseCell, "当前基地", regiment.baseX, regiment.baseY);
+  if (baseDestination) options.push({
+    value: "base",
+    label: `当前基地：${baseDestination.label}`,
+    destination: baseDestination
+  });
+  return options;
+}
+
+function destinationForCell(map, cell, fallbackName, x = null, y = null) {
+  const normalizedCell = Number(cell);
+  const point = map?.pack?.cells?.p?.[normalizedCell];
+  if (!Number.isInteger(normalizedCell) || !point) return null;
+  const destinationX = isProvidedNumber(x) ? Number(x) : point[0];
+  const destinationY = isProvidedNumber(y) ? Number(y) : point[1];
+  if (!Number.isFinite(destinationX) || !Number.isFinite(destinationY)) return null;
+  const label = packCellLabel(map, normalizedCell);
+  return {
+    cell: normalizedCell,
+    x: roundValue(destinationX, 2),
+    y: roundValue(destinationY, 2),
+    name: label || fallbackName,
+    label
+  };
+}
+
+function packCellLabel(map, cell) {
+  const normalizedCell = Number(cell);
+  if (!Number.isInteger(normalizedCell) || !map?.pack?.cells?.p?.[normalizedCell]) return "未知";
+  const burgId = map.pack.cells.burg?.[normalizedCell];
+  const provinceId = map.pack.cells.province?.[normalizedCell];
+  const burgName = map.pack.burgs?.[burgId]?.name;
+  const provinceName = map.pack.provinces?.[provinceId]?.name;
+  if (burgName) return `${burgName} #${normalizedCell}`;
+  if (provinceName) return `${provinceName} #${normalizedCell}`;
+  return `cell #${normalizedCell}`;
+}
+
+function baseCellForRegiment(map, regiment = {}) {
+  const direct = Number(regiment.baseCell ?? regiment.bcell);
+  if (Number.isInteger(direct) && map?.pack?.cells?.p?.[direct]) return direct;
+  return nearestPackCell(map, regiment.bx, regiment.by);
+}
+
+function baseLabelForRegiment(map, regiment = {}) {
+  const cell = baseCellForRegiment(map, regiment);
+  if (Number.isInteger(cell)) return packCellLabel(map, cell);
+  if (Number.isFinite(Number(regiment.bx)) && Number.isFinite(Number(regiment.by))) return `坐标 ${roundValue(regiment.bx, 1)}, ${roundValue(regiment.by, 1)}`;
+  return "未知";
+}
+
+function nearestPackCell(map, x, y) {
+  const targetX = Number(x);
+  const targetY = Number(y);
+  const points = map?.pack?.cells?.p;
+  if (!Number.isFinite(targetX) || !Number.isFinite(targetY) || !points) return null;
+  let bestCell = null;
+  let bestDistance = Infinity;
+  for (let cell = 0; cell < points.length; cell++) {
+    const point = points[cell];
+    if (!point) continue;
+    const distance = (point[0] - targetX) ** 2 + (point[1] - targetY) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestCell = cell;
+    }
+  }
+  return bestCell;
+}
+
+function roundValue(value, digits = 2) {
+  const factor = 10 ** digits;
+  return Math.round(Number(value || 0) * factor) / factor;
+}
+
+function isProvidedNumber(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
 }
 
 function unitBreakdown(regiment) {
