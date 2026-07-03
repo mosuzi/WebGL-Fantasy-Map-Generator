@@ -463,6 +463,7 @@ const themes = Object.freeze([
   {value: "cultures", label: "文化"},
   {value: "religions", label: "宗教"},
   {value: "diplomacy", label: "外交"},
+  {value: "governments", label: "政体"},
   {value: "states", label: "国家"},
   {value: "provinces", label: "省份"},
   {value: "regions", label: "区域"},

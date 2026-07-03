@@ -16515,3 +16515,23 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `787.73KB / gzip 237.52KB`，新增 `GovernmentPanel` chunk 约 `6.96KB / gzip 2.75KB`。
 - 构建产物浏览器烟测通过：默认 `stage-2-1` 地图打开政体管理后显示 `8` 类政体、`20` 个国家，选中政体详情和国家列表均有数据，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1427ms`，纯生成 `744.9ms`，WebGL 加载 `438ms`，UI slack `244.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 149.4ms`，最慢加载阶段为 `构建视觉 cell mesh 59.6ms`。
+
+### 政体专题图层第一刀
+
+背景：
+
+- 政体管理总览已经能查看政体分布，但地图视图仍无法直接按政体观察国家空间分布。
+- 当前阶段只需要只读专题视图，不做政体事件、批量调整或新的动态系统。
+
+修正：
+
+- 控制面板“视图”tab 新增“政体”专题按钮。
+- renderer 的 `colorForCell()` 新增 `governments` 分支，按国家 `governmentFamily` 为陆地国家着色，水域仍沿用既有水色逻辑。
+- 政体视图下点击陆地仍返回国家政治对象，保持与国家/外交专题一致的对象选择语义。
+- README 和当前计划同步把政体专题视图移入已完成范围。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `788.42KB / gzip 237.77KB`。
+- 构建产物浏览器烟测通过：切换 `governments` 后 `colorMode = governments`，按钮 active，主动重绘后非空像素 `1,382,400`，示例陆地国家 cell 可拾取到 `state #12`，`drawMs = 0.2ms`，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1444ms`，纯生成 `718.5ms`，WebGL 加载 `385.3ms`，UI slack `340.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 142.7ms`，最慢加载阶段为 `构建线层顶点 61.4ms`。

@@ -11,6 +11,7 @@ export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode === "cultures") return colorForCulture(map.grid.cells.culture[cellIndex], map);
   if (colorMode === "religions") return colorForReligion(map.grid.cells.religion[cellIndex], map);
   if (colorMode === "diplomacy") return colorForDiplomacy(map.grid.cells.state[cellIndex], map, viewOptions);
+  if (colorMode === "governments") return colorForGovernment(map.grid.cells.state[cellIndex], map);
   if (colorMode === "states") return colorForState(map.grid.cells.state[cellIndex], map);
   if (colorMode === "provinces") return colorForProvince(map.grid.cells.province[cellIndex], map);
   if (colorMode === "regions") return indexedColorOrWater(map.grid.cells.region[cellIndex], 0.77, map.layers.ocean);
@@ -69,11 +70,32 @@ function colorForDiplomacy(stateId, map, viewOptions = {}) {
   return hexToRgba(diplomacyRelationColor(relation)) || [0.62, 0.65, 0.66, 1];
 }
 
+function colorForGovernment(stateId, map) {
+  if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
+  if (!stateId) return [0.46, 0.48, 0.46, 1];
+  const state = map.politics.states[stateId] || map.pack?.states?.[stateId];
+  const family = state?.governmentFamily || state?.government?.family || "unknown";
+  const familyColor = GOVERNMENT_FAMILY_COLORS[family];
+  if (familyColor) return familyColor;
+  return indexedColor(hashString(state?.governmentKey || family || String(stateId)), 0.18);
+}
+
 function diplomacySubjectId(map, preferredId) {
   const preferred = Number(preferredId);
   if (Number.isInteger(preferred) && preferred > 0 && map.politics.states[preferred] && !map.politics.states[preferred].removed) return preferred;
   return (map.politics.states || []).find(state => state?.i && !state.removed)?.i || 0;
 }
+
+const GOVERNMENT_FAMILY_COLORS = Object.freeze({
+  autocracy: [0.76, 0.26, 0.22, 1],
+  monarchy: [0.82, 0.55, 0.22, 1],
+  republic: [0.25, 0.58, 0.66, 1],
+  league: [0.46, 0.68, 0.34, 1],
+  theocracy: [0.58, 0.46, 0.78, 1],
+  oligarchy: [0.62, 0.52, 0.44, 1],
+  military: [0.42, 0.46, 0.5, 1],
+  unknown: [0.58, 0.6, 0.58, 1]
+});
 
 function colorForCulture(cultureId, map) {
   if (cultureId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
@@ -105,6 +127,15 @@ function indexedColor(index, offset) {
 function indexedColorOrWater(index, offset, waterColor) {
   if (index < 0) return mix(waterColor, [0.05, 0.08, 0.1, 1], 0.3);
   return indexedColor(index, offset);
+}
+
+function hashString(value) {
+  let hash = 0;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index++) {
+    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+  }
+  return hash || 1;
 }
 
 function hexToRgba(color) {

@@ -219,6 +219,7 @@ export function pickMarker(map, index, worldX, worldY, maxDistance, predicate = 
 export function pickPoliticalObject(map, pickResult, colorMode = "height") {
   if (!pickResult || pickResult.gridCell === null || !pickResult.featureLand) return null;
   if (colorMode === "states") return buildStateObject(map, pickResult.gridCell);
+  if (colorMode === "governments") return buildStateObject(map, pickResult.gridCell);
   if (colorMode === "diplomacy") return buildStateObject(map, pickResult.gridCell);
   if (colorMode === "regions") return buildRegionObject(map, pickResult.gridCell);
   if (colorMode === "provinces") return buildProvinceObject(map, pickResult.gridCell);
