@@ -1566,23 +1566,221 @@ function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
 }
 
+function militaryExportSummary(seed, map, rows, events) {
+  const eventSummary = buildBattleEventChainSummary(events);
+  return {
+    seed,
+    exportedAt: new Date().toISOString(),
+    filters: {
+      state: selectedStateFilterLabel.value,
+      status: selectedStatusFilterLabel.value,
+      text: props.state.filter || "",
+      sort: props.state.sortKey,
+      direction: props.state.sortDir
+    },
+    totals: {
+      states: metrics.value.states.length,
+      allRegiments: metrics.value.rows.length,
+      exportedRegiments: rows.length,
+      troops: rows.reduce((sum, row) => sum + Number(row.troops || 0), 0),
+      fleets: rows.filter(row => row.type === "fleet").length,
+      campaigns: map?.military?.metadata?.campaigns || militaryCampaigns(map).length,
+      fronts: map?.military?.metadata?.fronts || map?.military?.fronts?.length || 0,
+      battleEvents: events.length,
+      battleEventChains: eventSummary.chainCount,
+      appliedBattleEvents: eventSummary.applied,
+      pendingBattleEvents: eventSummary.pending,
+      casualties: eventSummary.casualties
+    }
+  };
+}
+
+function militaryStateSummaries(rows) {
+  const byState = new Map();
+  for (const row of rows) {
+    const summary = byState.get(row.stateId) || {
+      stateId: row.stateId,
+      stateName: row.stateName,
+      regiments: 0,
+      troops: 0,
+      fleets: 0,
+      landRegiments: 0,
+      campaigns: row.campaignLabel || "无",
+      latestBattleEvent: "无",
+      statuses: new Map(),
+      dominantUnits: new Map()
+    };
+    summary.regiments++;
+    summary.troops += Number(row.troops || 0);
+    if (row.type === "fleet") summary.fleets++;
+    else summary.landRegiments++;
+    incrementCount(summary.statuses, row.statusLabel || "未知");
+    incrementCount(summary.dominantUnits, row.dominantUnitLabel || "未知");
+    if (row.latestEventLabel && row.latestEventLabel !== "无") summary.latestBattleEvent = row.latestEventLabel;
+    byState.set(row.stateId, summary);
+  }
+  return [...byState.values()]
+    .sort((a, b) => b.troops - a.troops || a.stateName.localeCompare(b.stateName, "zh-CN"))
+    .map(summary => ({
+      ...summary,
+      statuses: countMapLabel(summary.statuses),
+      dominantUnits: countMapLabel(summary.dominantUnits)
+    }));
+}
+
+function militaryRegimentExportRows(rows) {
+  return rows.map(row => ({
+    id: row.id,
+    stateId: row.stateId,
+    stateName: row.stateName,
+    regimentId: row.regimentId,
+    name: row.name,
+    type: row.type || "",
+    status: row.status || "",
+    statusLabel: row.statusLabel,
+    order: row.orderLabel,
+    dominantUnit: row.dominantUnit || "",
+    dominantUnitLabel: row.dominantUnitLabel,
+    troops: row.troops,
+    units: row.units,
+    unitSummary: row.unitSummary,
+    station: row.stationLabel,
+    stationCell: row.cell,
+    base: row.baseLabel,
+    baseCell: row.baseCell,
+    suitabilityScore: row.suitabilityScore,
+    movementSpeed: row.movementSpeed,
+    civilization: row.civilizationLabel,
+    diplomacyPressure: row.diplomacyPressure,
+    resourcePressure: row.resourcePressure,
+    campaign: row.campaignLabel,
+    campaignSummary: row.campaignSummaryLabel,
+    warCause: row.warCauseLabel || "无",
+    battleEvents: row.eventCount,
+    latestBattleEvent: row.latestEventLabel
+  }));
+}
+
+function militaryCampaignExportRows(map) {
+  return militaryCampaigns(map).map(campaign => ({
+    id: campaign.id || campaign.key || "",
+    name: campaign.name || "战役",
+    attacker: campaign.attackerName || campaign.attacker || "",
+    defender: campaign.defenderName || campaign.defender || "",
+    cause: campaign.causeLabel || campaign.cause || "",
+    phase: campaign.phaseLabel || "",
+    momentum: campaign.momentumLabel || "",
+    progress: campaign.progressLabel || campaign.progress || "",
+    events: Number(campaign.events || 0),
+    appliedEvents: Number(campaign.appliedEvents || 0),
+    pendingEvents: Math.max(0, Number(campaign.events || 0) - Number(campaign.appliedEvents || 0)),
+    casualties: Number(campaign.casualties || 0),
+    attackerCasualties: Number(campaign.attackerCasualties || 0),
+    defenderCasualties: Number(campaign.defenderCasualties || 0),
+    attackerTroops: Number(campaign.attackerTroops || 0),
+    defenderTroops: Number(campaign.defenderTroops || 0),
+    fronts: Array.isArray(campaign.fronts) ? campaign.fronts.length : 0
+  }));
+}
+
+function militaryFrontExportRows(map) {
+  return (map?.military?.fronts || []).map(front => ({
+    id: front.id || "",
+    attacker: front.attackerName || front.attacker || front.from || "",
+    defender: front.defenderName || front.defender || front.to || "",
+    length: roundValue(front.length ?? front.points?.length ?? 0, 2),
+    maxLength: roundValue(front.maxLength || 0, 2),
+    borderSegments: Array.isArray(front.borderCellPairs) ? front.borderCellPairs.length : 0,
+    points: Array.isArray(front.points) ? front.points.length : 0
+  }));
+}
+
+function incrementCount(map, key) {
+  map.set(key, Number(map.get(key) || 0) + 1);
+}
+
+function countMapLabel(map) {
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-CN"))
+    .map(([label, count]) => `${label} ${formatNumber(count)}`)
+    .join(" / ") || "无";
+}
+
+function appendCsvSection(rows, title, records) {
+  rows.push([title]);
+  rows.push(...records);
+  rows.push([]);
+}
+
 function exportCsv() {
-  const seed = props.state.map?.metadata?.seed || "map";
-  const header = ["国家", "军团", "态势", "主兵种", "兵力", "适宜度", "速度"];
-  const body = visibleRows.value.map(row => [row.stateName, row.name, row.statusLabel, row.dominantUnitLabel, row.troops, row.suitabilityScore, row.movementSpeed]);
-  downloadText(`fmg-military-${safeFilePart(seed)}.csv`, [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+  const map = props.state.map;
+  const seed = map?.metadata?.seed || "map";
+  const rows = visibleRows.value;
+  const events = allBattleEvents.value;
+  const summary = militaryExportSummary(seed, map, rows, events);
+  const stateSummaries = militaryStateSummaries(rows);
+  const regimentRows = militaryRegimentExportRows(rows);
+  const csvRows = [];
+  appendCsvSection(csvRows, "军事导出摘要", [
+    ["字段", "值"],
+    ["seed", seed],
+    ["导出时间", summary.exportedAt],
+    ["国家筛选", summary.filters.state],
+    ["态势筛选", summary.filters.status],
+    ["文本筛选", summary.filters.text],
+    ["导出军团", summary.totals.exportedRegiments],
+    ["总军团", summary.totals.allRegiments],
+    ["导出兵力", summary.totals.troops],
+    ["舰队", summary.totals.fleets],
+    ["战役", summary.totals.campaigns],
+    ["战线", summary.totals.fronts],
+    ["战报记录", summary.totals.battleEvents],
+    ["战报链", summary.totals.battleEventChains],
+    ["已结算战报", summary.totals.appliedBattleEvents],
+    ["未结算战报", summary.totals.pendingBattleEvents],
+    ["累计损耗", summary.totals.casualties]
+  ]);
+  appendCsvSection(csvRows, "国家军事汇总", [
+    ["国家ID", "国家", "军团", "陆军", "舰队", "兵力", "态势分布", "主兵种分布", "战役", "最近战报"],
+    ...stateSummaries.map(row => [row.stateId, row.stateName, row.regiments, row.landRegiments, row.fleets, row.troops, row.statuses, row.dominantUnits, row.campaigns, row.latestBattleEvent])
+  ]);
+  appendCsvSection(csvRows, "军团明细", [
+    ["对象ID", "国家ID", "国家", "军团ID", "军团", "类型", "态势", "命令", "主兵种", "兵力", "兵种构成", "驻地", "驻地cell", "基地", "基地cell", "适宜度", "速度", "文明", "外交压力", "资源压力", "战役", "链路摘要", "战争原因", "战报记录", "最近战报"],
+    ...regimentRows.map(row => [row.id, row.stateId, row.stateName, row.regimentId, row.name, row.type, row.statusLabel, row.order, row.dominantUnitLabel, row.troops, row.unitSummary, row.station, row.stationCell, row.base, row.baseCell, row.suitabilityScore, row.movementSpeed, row.civilization, row.diplomacyPressure, row.resourcePressure, row.campaign, row.campaignSummary, row.warCause, row.battleEvents, row.latestBattleEvent])
+  ]);
+  appendCsvSection(csvRows, "战役摘要", [
+    ["ID", "战役", "进攻方", "防守方", "原因", "阶段", "优势", "进展", "记录", "已结算", "未结算", "累计损耗", "攻方损耗", "守方损耗", "攻方兵力", "守方兵力", "战线"],
+    ...militaryCampaignExportRows(map).map(row => [row.id, row.name, row.attacker, row.defender, row.cause, row.phase, row.momentum, row.progress, row.events, row.appliedEvents, row.pendingEvents, row.casualties, row.attackerCasualties, row.defenderCasualties, row.attackerTroops, row.defenderTroops, row.fronts])
+  ]);
+  appendCsvSection(csvRows, "战线摘要", [
+    ["ID", "进攻方", "防守方", "长度", "上限", "边界段", "点数"],
+    ...militaryFrontExportRows(map).map(row => [row.id, row.attacker, row.defender, row.length, row.maxLength, row.borderSegments, row.points])
+  ]);
+  downloadText(`fmg-military-${safeFilePart(seed)}.csv`, csvRows.map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
 }
 
 function exportJson() {
   const map = props.state.map;
   const seed = map?.metadata?.seed || "map";
+  const rows = visibleRows.value;
+  const events = allBattleEvents.value;
+  const eventSummary = buildBattleEventChainSummary(events);
   const payload = {
+    type: "webgl-generator-military-summary",
+    version: 1,
     seed,
+    exportedAt: new Date().toISOString(),
     metadata: map?.military?.metadata || {},
-    campaigns: map?.military?.campaigns || [],
-    fronts: map?.military?.fronts || [],
-    events: allBattleEvents.value,
-    regiments: visibleRows.value
+    summary: militaryExportSummary(seed, map, rows, events),
+    states: militaryStateSummaries(rows),
+    regiments: militaryRegimentExportRows(rows),
+    campaigns: militaryCampaignExportRows(map),
+    fronts: militaryFrontExportRows(map),
+    battleEvents: {
+      count: events.length,
+      summary: eventSummary,
+      events
+    }
   };
   downloadText(`fmg-military-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }

@@ -17081,3 +17081,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` chunk 约 `42.36KB / gzip 12.68KB`，主入口约 `808.50KB / gzip 243.88KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：打开 `军事管理` 后逐项打开“调整态势 / 批量态势 / 驻地基地 / 记录战报 / 兵种比例”二级浮层，5 个浮层均显示 `military-editor-panel` 和 2 个上下文卡片；浮层宽 `340px`、编辑内容宽 `318px`，检查范围内无横向溢出；`glError = 0`，打开动作前后 health 非 info 事件增量为 `0`，page error 和 console error 为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1476ms`，纯生成 `823.7ms`，WebGL 加载 `411ms`，UI slack `241.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 163ms`，最慢加载阶段为 `构建视觉 cell mesh 65.5ms`。
+
+### 军事静态导出可读性第六刀
+
+背景：
+
+- 当前 `军事管理` 的主 CSV 只有国家、军团、态势、主兵种、兵力、适宜度和速度，外部打开后缺少筛选上下文、国家汇总、驻防、战役和战线说明。
+- 用户已明确无需动态军事系统，本轮只做静态导出整理，不改变任何军事生成、命令、战报或战役结算。
+
+修正：
+
+- 军事 CSV 扩展为“军事导出摘要 / 国家军事汇总 / 军团明细 / 战役摘要 / 战线摘要”分段。
+- 军团明细补对象 id、国家 id、命令、兵种构成、驻地/基地 cell、文明、外交/资源压力、战役、链路摘要、战争原因、战报记录和最近战报。
+- JSON 改为 `webgl-generator-military-summary v1`，增加导出时间、筛选上下文、汇总、国家汇总、军团明细、战役摘要、战线摘要和战报摘要。
+- 本轮只读取当前面板已有 `visibleRows / allBattleEvents / map.military`，不新增动态军事系统，不改变地图数据。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` chunk 约 `47.94KB / gzip 14.22KB`，主入口约 `808.50KB / gzip 243.89KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器下载烟测通过：打开 `军事管理` 后导出主 CSV/JSON，CSV 包含“军事导出摘要 / 国家军事汇总 / 军团明细 / 战役摘要 / 战线摘要”；JSON 类型为 `webgl-generator-military-summary`、版本 `1`，默认地图导出 `107` 支军团、`20` 个国家，`exportedRegiments` 与 `regiments.length` 一致；`glError = 0`，导出动作前后 health 非 info 事件增量为 `0`，page error 和 console error 为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1497.7ms`，纯生成 `740.6ms`，WebGL 加载 `403.8ms`，UI slack `353.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 129.3ms`，最慢加载阶段为 `刷新标签和图标 60.3ms`。
