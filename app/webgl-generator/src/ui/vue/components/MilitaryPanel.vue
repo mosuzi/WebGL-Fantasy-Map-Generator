@@ -1074,6 +1074,7 @@ function buildBattleEventChainSummary(events = []) {
   const pendingEvents = events.filter(event => !event?.resultApplied);
   const chains = summarizeBattleEventChains(events);
   const casualties = appliedEvents.reduce((sum, event) => sum + battleEventCasualties(event), 0);
+  const sideCasualties = summarizeBattleEventSideCasualties(appliedEvents);
   const latest = events.at(-1);
   return {
     total: events.length,
@@ -1082,6 +1083,12 @@ function buildBattleEventChainSummary(events = []) {
     applied: appliedEvents.length,
     pending: pendingEvents.length,
     casualties,
+    sideCasualties,
+    attackerCasualties: sideCasualties.attacker,
+    defenderCasualties: sideCasualties.defender,
+    participantCasualties: sideCasualties.participant,
+    localCasualties: sideCasualties.local,
+    manualCasualties: sideCasualties.manual,
     latest: latest ? {
       id: latest.id || "",
       sequence: latest.sequence || null,
@@ -1106,10 +1113,12 @@ function summarizeBattleEventChains(events = []) {
     const key = event.chainKey || "unknown";
     if (!chains.has(key)) chains.set(key, {key, label: event.chainLabel || key || "本地战报", count: 0});
     const chain = chains.get(key);
+    const casualties = event.resultApplied ? battleEventCasualties(event) : 0;
     chain.count += 1;
     chain.applied = Number(chain.applied || 0) + (event.resultApplied ? 1 : 0);
     chain.pending = Number(chain.pending || 0) + (event.resultApplied ? 0 : 1);
-    chain.casualties = Number(chain.casualties || 0) + (event.resultApplied ? battleEventCasualties(event) : 0);
+    chain.casualties = Number(chain.casualties || 0) + casualties;
+    if (casualties) addBattleEventSideCasualties(chain, event, casualties);
     if (event.opponentStateName) chain.opponentStateName = event.opponentStateName;
     if (event.chainSideLabel) chain.chainSideLabel = event.chainSideLabel;
     chain.latest = {
@@ -1123,6 +1132,37 @@ function summarizeBattleEventChains(events = []) {
     };
   }
   return [...chains.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "zh-CN"));
+}
+
+function summarizeBattleEventSideCasualties(events = []) {
+  const summary = createEmptyBattleSideCasualties();
+  for (const event of events) {
+    const casualties = battleEventCasualties(event);
+    if (!casualties) continue;
+    const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
+    summary[side] += casualties;
+  }
+  return summary;
+}
+
+function addBattleEventSideCasualties(chain, event, casualties) {
+  chain.sideCasualties ||= createEmptyBattleSideCasualties();
+  const side = normalizeBattleChainSide(event.chainSide || event.side || "local");
+  chain.sideCasualties[side] += casualties;
+  chain.attackerCasualties = chain.sideCasualties.attacker;
+  chain.defenderCasualties = chain.sideCasualties.defender;
+  chain.participantCasualties = chain.sideCasualties.participant;
+  chain.localCasualties = chain.sideCasualties.local;
+  chain.manualCasualties = chain.sideCasualties.manual;
+}
+
+function createEmptyBattleSideCasualties() {
+  return {attacker: 0, defender: 0, participant: 0, local: 0, manual: 0};
+}
+
+function normalizeBattleChainSide(side) {
+  if (side === "attacker" || side === "defender" || side === "participant" || side === "manual") return side;
+  return "local";
 }
 
 function battleEventCasualties(event) {
@@ -1200,8 +1240,20 @@ function battleChainCountSummary(chain = {}) {
   const parts = [`事件 ${formatNumber(chain.count || 0)}`];
   if (chain.applied) parts.push(`已应用 ${formatNumber(chain.applied)}`);
   if (chain.pending) parts.push(`未应用 ${formatNumber(chain.pending)}`);
-  if (chain.casualties) parts.push(`损耗 ${formatNumber(chain.casualties)}`);
+  const sideLossParts = battleChainSideLossParts(chain);
+  parts.push(...sideLossParts);
+  if (chain.casualties && !sideLossParts.length) parts.push(`损耗 ${formatNumber(chain.casualties)}`);
   return parts.join(" / ");
+}
+
+function battleChainSideLossParts(chain = {}) {
+  const parts = [];
+  if (chain.attackerCasualties) parts.push(`攻方损耗 ${formatNumber(chain.attackerCasualties)}`);
+  if (chain.defenderCasualties) parts.push(`守方损耗 ${formatNumber(chain.defenderCasualties)}`);
+  if (chain.participantCasualties) parts.push(`参战损耗 ${formatNumber(chain.participantCasualties)}`);
+  if (chain.localCasualties) parts.push(`本地损耗 ${formatNumber(chain.localCasualties)}`);
+  if (chain.manualCasualties) parts.push(`手动损耗 ${formatNumber(chain.manualCasualties)}`);
+  return parts;
 }
 
 function battleEventCampaignSideLabel(event) {

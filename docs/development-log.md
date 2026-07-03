@@ -16271,3 +16271,29 @@ full 矩阵结果：
 - 多 seed 生成审计覆盖 `continents / archipelago / mediterranean / highIsland / lowIsland / peninsula / pangea` 共 `112` 张 10k 地图，校正 `231` 个孤立方位国名，剩余无同根参照的方位国名为 `0`。
 - 旧问题 seed `direction-gap-continents-00` 中 `东衡 / 南唐` 已分别校正为 `衡 / 唐`，并写入 `nameOrientation.reason = isolated-directional`。
 - e2e 守门通过：点击到出图 `1742.3ms`，纯生成 `996.1ms`，WebGL 加载 `432.5ms`，UI slack `313.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 174.3ms`，最慢加载阶段为 `构建视觉 cell mesh 64.4ms`，`line-vertices = 53.8ms`，`glError = 0`。
+
+### 战报链双方损耗摘要
+
+背景：
+
+- 战报链已经有共享 campaign key、进攻/防守方字段、对手字段和可点击链路概览。
+- 轻量结果应用只对当前军团生效，不做真正双方结算；但复盘时需要先能看出同一战报链中攻方、守方各自已记录多少损耗。
+- 本轮只做摘要分桶，不自动扣对手军团兵力、不推进战役、不改外交状态。
+
+修正：
+
+- `buildBattleEventChainSummary()` 新增 `sideCasualties` 和 `attackerCasualties / defenderCasualties / participantCasualties / localCasualties / manualCasualties`。
+- `summarizeBattleEventChains()` 对每条链按 `chainSide` 汇总已应用损耗。
+- 战报链概览 chip 会优先显示 `攻方损耗 / 守方损耗 / 参战损耗 / 本地损耗 / 手动损耗`，没有分桶时保留旧的累计损耗回退。
+- JSON 事件导出的 `summary.chains` 会自然包含这些分桶字段，供后续双方结算和战役对象使用。
+
+文档：
+
+- 更新 `docs/current-plan.md` 第 12 项和进度条目。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `37.35KB / gzip 11.46KB`，主入口约 `772.95KB / gzip 233.59KB`。
+- 构建产物浏览器烟测通过：给同一 campaign 注入攻方 `120` 与守方 `340` 损耗事件，选中攻方军团时链路概览显示 `攻方损耗 120`，选中守方军团时显示 `守方损耗 340`，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1651.8ms`，纯生成 `884.5ms`，WebGL 加载 `504.9ms`，UI slack `262.4ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 178.4ms`，最慢加载阶段为 `构建视觉 cell mesh 91.4ms`，`line-vertices = 49.9ms`，`drawMs = 0.1ms`，`glError = 0`。
