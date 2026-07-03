@@ -15731,3 +15731,29 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `25.41KB / gzip 8.25KB`，主入口约 `765.60KB / gzip 231.08KB`。
 - Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，用命令层先记录 `袭扰 / 损耗` 与 `攻城 / 小胜` 两条事件，再打开军事管理；事件标题为 `2 条`，类型筛选切到 `袭扰` 后变为 `1 / 2 条`，列表仅显示 `袭扰 / 损耗`。点击“清空当前”后标题为 `暂无`，`map.military.events = 0`，历史为 `undo 3 / redo 0 / 清空军团战斗事件 #1:0`；撤销后事件数恢复为 `2`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1369.4ms`，纯生成 `677.8ms`，WebGL 加载 `389.9ms`，UI slack `301.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 140.1ms`，最慢加载阶段为 `构建标签 57.2ms`，`line-vertices = 49.6ms`，`fit-draw = 2.5ms`，`glError = 0`。
+
+### 战斗事件按范围导出
+
+背景：
+
+- 选中军团事件区已经支持类型/结果筛选，但顶部“事件 JSON / 事件 CSV”仍固定导出全量事件。
+- 用户核查单个军团或当前筛选结果时，需要导出和面板所见范围一致的数据。
+
+修正：
+
+- 事件筛选区新增“导出”范围下拉，默认 `全部事件`，可切换为 `当前军团` 或 `当前筛选`。
+- “事件 JSON / 事件 CSV”按钮按当前导出范围输出；旧默认行为保持为全量导出。
+- 事件 JSON 增加 `scope / scopeLabel / count`，便于回看文件来源范围。
+- 导出文件名追加 `all / selected / filtered` 后缀，避免不同范围导出互相覆盖。
+- 本轮只改导出范围，不改变记录、导入、清空或轻量结果应用语义。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 244 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `26.12KB / gzip 8.43KB`，主入口约 `765.60KB / gzip 231.08KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，用命令层记录 `袭扰 / 损耗` 与 `攻城 / 小胜` 两条事件；类型筛选切到 `袭扰`、导出范围切到 `当前筛选` 后，标题为 `1 / 2 条`。
+- 同次烟测下载 `fmg-military-events-stage-2-1-filtered.json`，其中 `scope = filtered`、`count = 1`、唯一事件 type 为 `raid`；下载 `fmg-military-events-stage-2-1-filtered.csv` 只有表头和一条 `袭扰` 事件，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1465ms`，纯生成 `767.7ms`，WebGL 加载 `369.5ms`，UI slack `327.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 138.7ms`，最慢加载阶段为 `构建视觉 cell mesh 53.3ms`，`line-vertices = 44.2ms`，`fit-draw = 2.5ms`，`glError = 0`。

@@ -24,8 +24,8 @@
   <div class="military-edit-toolbar">
     <UiButton variant="secondary" @click="exportCsv">导出 CSV</UiButton>
     <UiButton variant="secondary" @click="exportJson">导出 JSON</UiButton>
-    <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEvents">事件 JSON</UiButton>
-    <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEventsCsv">事件 CSV</UiButton>
+    <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEvents">事件 JSON</UiButton>
+    <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEventsCsv">事件 CSV</UiButton>
     <UiButton variant="secondary" @click="openBattleEventsImport">导入事件</UiButton>
   </div>
   <input ref="battleEventsImportInput" class="military-import-input" type="file" accept="application/json,.json" @change="importBattleEventsFile" />
@@ -98,6 +98,14 @@
         :model-value="eventOutcomeFilter"
         :options="battleEventFilterOutcomeOptions"
         @update:model-value="value => eventOutcomeFilter = value"
+      />
+      <UiSelectField
+        input-id="military-event-export-scope"
+        class-name="military-event-export-scope"
+        label="导出"
+        :model-value="eventExportScope"
+        :options="battleEventExportScopeOptions"
+        @update:model-value="value => eventExportScope = value"
       />
       <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
     </div>
@@ -323,6 +331,7 @@ const battleEventsImportInput = ref(null);
 const battleEventsImportStatus = ref("");
 const eventTypeFilter = ref("all");
 const eventOutcomeFilter = ref("all");
+const eventExportScope = ref("all");
 const battleEventDraft = reactive({
   type: "skirmish",
   outcome: "victory",
@@ -352,6 +361,11 @@ const battleEventFilterTypeOptions = Object.freeze([
 const battleEventFilterOutcomeOptions = Object.freeze([
   {value: "all", label: "全部结果"},
   ...battleEventOutcomeOptions
+]);
+const battleEventExportScopeOptions = Object.freeze([
+  {value: "all", label: "全部事件"},
+  {value: "selected", label: "当前军团"},
+  {value: "filtered", label: "当前筛选"}
 ]);
 const battleResultRules = Object.freeze({
   victory: {lossRate: 0.04, statusLabel: "修整中", label: "小胜后整队"},
@@ -385,8 +399,10 @@ const selected = computed(() => findByObjectId(visibleRows.value, props.state.se
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
 const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
+const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents.value, selected.value));
 const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value));
 const selectedBattleEvents = computed(() => latestBattleEvents(selectedFilteredBattleEvents.value, 5));
+const exportBattleEventRows = computed(() => battleEventRowsForExport(eventExportScope.value));
 const battleEventCountLabel = computed(() => {
   if (!selectedBattleEventTotal.value) return "暂无";
   if (selectedFilteredBattleEvents.value.length === selectedBattleEventTotal.value) return `${formatNumber(selectedBattleEventTotal.value)} 条`;
@@ -783,6 +799,22 @@ function latestBattleEvents(events = [], limit = 5) {
   return events.slice(-limit).reverse();
 }
 
+function battleEventRowsForExport(scope) {
+  if (scope === "filtered") return selectedFilteredBattleEvents.value;
+  if (scope === "selected") return selectedBattleEventRows.value;
+  return allBattleEvents.value;
+}
+
+function battleEventExportScopeLabel(scope) {
+  return battleEventExportScopeOptions.find(option => option.value === scope)?.label || "全部事件";
+}
+
+function battleEventExportScopeSuffix(scope) {
+  if (scope === "filtered") return "filtered";
+  if (scope === "selected") return "selected";
+  return "all";
+}
+
 function countEventsForRegiment(events = [], regiment) {
   if (!regiment) return 0;
   return events.filter(event => eventBelongsToRegiment(event, regiment)).length;
@@ -904,18 +936,24 @@ function exportJson() {
 function exportBattleEvents() {
   const map = props.state.map;
   const seed = map?.metadata?.seed || "map";
+  const events = exportBattleEventRows.value;
+  const scope = eventExportScope.value;
   const payload = {
     seed,
+    scope,
+    scopeLabel: battleEventExportScopeLabel(scope),
     exportedAt: new Date().toISOString(),
-    count: allBattleEvents.value.length,
-    events: allBattleEvents.value
+    count: events.length,
+    events
   };
-  downloadText(`fmg-military-events-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  downloadText(`fmg-military-events-${safeFilePart(seed)}-${battleEventExportScopeSuffix(scope)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
 function exportBattleEventsCsv() {
   const map = props.state.map;
   const seed = map?.metadata?.seed || "map";
+  const events = exportBattleEventRows.value;
+  const scope = eventExportScope.value;
   const header = [
     "事件ID",
     "序号",
@@ -933,7 +971,7 @@ function exportBattleEventsCsv() {
     "态势前",
     "态势后"
   ];
-  const body = allBattleEvents.value.map(event => {
+  const body = events.map(event => {
     const result = event.result || {};
     return [
       event.id || "",
@@ -953,7 +991,7 @@ function exportBattleEventsCsv() {
       result.statusAfterLabel || result.statusAfter || ""
     ];
   });
-  downloadText(`fmg-military-events-${safeFilePart(seed)}.csv`, [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+  downloadText(`fmg-military-events-${safeFilePart(seed)}-${battleEventExportScopeSuffix(scope)}.csv`, [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
 }
 
 function openBattleEventsImport() {
