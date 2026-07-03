@@ -3204,6 +3204,17 @@ select:disabled {
   min-height: 34px;
 }
 
+.heightmap-pending-warning {
+  margin: 0;
+  border: 1px solid rgba(229, 182, 92, 0.32);
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: #f0d28f;
+  background: rgba(72, 51, 18, 0.34);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .heightmap-preview-status {
   min-height: 18px;
   margin: 0;

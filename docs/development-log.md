@@ -14970,3 +14970,31 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 应用前后对比烟测通过：导入渐变 SVG 后，对比区显示 `当前高度0-93 / 导入高度0-100 / 当前水域66% / 导入水域13% / 平均变化+31.3 / 水域变化-53%`。
 - 同次烟测中高度色带摘要为 `高度 0-100 / 水域 13%`，直方图仍为 `24` 桶；地图 checksum 保持 `c76792ee -> c76792ee`，说明对比预览没有写地图；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1243.1ms`，纯生成 `592.2ms`，WebGL 加载 `394.5ms`，最慢加载阶段为 `cell-visual-mesh 61.2ms`，`fit-draw = 2.5ms`，`glError = 0`。
+
+### 高度图标记待处理阻断
+
+背景：
+
+- `标记待处理` 第一刀此前只保存策略和未分配统计，实际应用时仍按固定高度兜底。
+- 这容易让用户以为未分配颜色已经被审核，但导入结果已经悄悄落到固定高度；本步先把它升级为基础阻断。
+
+修正：
+
+- 高度图工作台新增待处理阻断判断：只有本次导入会走 `image-palette`，且当前色板上限之外仍有未分配像素时，`标记待处理` 才阻止应用。
+- 阻断时禁用“应用到地图”，并显示待处理像素数和颜色桶数，提示扩大色板上限、改为合并最近色，或切回固定高度后再应用。
+- 默认灰度连续导入不受颜色待处理策略影响。
+- `applyHeightmapImport()` 增加兜底检查，避免通过脚本或状态竞态绕过阻断。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `740.60KB / gzip 223.74KB`，`HeightPanel` 懒加载 chunk 约 `27.75KB / gzip 9.82KB`。
+- Playwright + 系统 Chrome `标记待处理` 阻断烟测通过：导入 48 色合成 SVG，色板上限降到 `16`，映射模式切到色相，未分配颜色切到 `标记待处理` 后，应用按钮禁用，提示 `5.5万` 个像素、`77` 个颜色桶待处理。
+- 同次烟测中阻断阶段 checksum 保持 `d2f19819 -> d2f19819`，说明没有提交导入或重建地图；切到 `合并最近色` 后警告消失、应用按钮恢复可用。
+- 同次烟测继续点击应用后，结果为 `source.kind = image-palette`、`source.mappingMode = hue`、`source.unassignedStrategy = nearest-palette`、`source.unassignedPixels = 921600`、`assignments = 16`，checksum `d2f19819 -> 724c03e0`，`loadMap.totalMs = 672.3ms`，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1227.4ms`，纯生成 `625.5ms`，WebGL 加载 `353.9ms`，最慢加载阶段为 `cell-visual-mesh 53.9ms`，`fit-draw = 2.4ms`，`glError = 0`。

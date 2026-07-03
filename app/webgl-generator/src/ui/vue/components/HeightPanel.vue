@@ -260,12 +260,13 @@
           <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerHeightmapFileInput">选择图片</UiButton>
           <UiButton variant="secondary" :disabled="!previewPalette.length" @click="exportHeightmapProfile">导出配置</UiButton>
           <UiButton class="file-import-action" variant="secondary" @click="triggerProfileFileInput">导入配置</UiButton>
-          <UiButton class="heightmap-apply-action" variant="primary" :disabled="!selectedFile" @click="applyHeightmapImport">应用到地图</UiButton>
+          <UiButton class="heightmap-apply-action" variant="primary" :disabled="!canApplyHeightmap" @click="applyHeightmapImport">应用到地图</UiButton>
           <UiButton variant="secondary" @click="closeImportWorkbench">取消</UiButton>
           <input id="heightmap-image-file" ref="fileInput" type="file" accept="image/*" hidden @change="onHeightmapFileChange" />
           <input ref="profileFileInput" type="file" accept=".heightmap-import-profile.json,.json,application/json" hidden @change="onHeightmapProfileFileChange" />
         </div>
 
+        <p v-if="pendingUnassignedWarning" class="heightmap-pending-warning">{{ pendingUnassignedWarning }}</p>
         <p class="heightmap-preview-status" aria-live="polite">{{ previewStatus }}</p>
       </div>
     </section>
@@ -412,6 +413,19 @@ const paletteSummary = computed(() => {
   return `${previewPalette.value.length} 色，点击色块高亮区域`;
 });
 const selectedPaletteEntry = computed(() => previewPalette.value.find(entry => entry.key === selectedPaletteKey.value) || null);
+const usesPaletteImport = computed(() => heightmapMappingMode.value !== "grayscale" || previewPalette.value.some(entry => entry.manual));
+const pendingUnassignedBlocked = computed(() => (
+  usesPaletteImport.value &&
+  heightmapUnassignedStrategy.value === "mark-pending" &&
+  Number(previewStats.value?.unassignedPixels || 0) > 0
+));
+const canApplyHeightmap = computed(() => Boolean(selectedFile.value) && !pendingUnassignedBlocked.value);
+const pendingUnassignedWarning = computed(() => {
+  if (!pendingUnassignedBlocked.value) return "";
+  const pixels = formatNumber(previewStats.value.unassignedPixels, unitPreferences.value);
+  const buckets = formatNumber(previewStats.value.unassignedBuckets, unitPreferences.value);
+  return `仍有 ${pixels} 个像素、${buckets} 个颜色桶待处理；请扩大色板上限、改为合并最近色，或切回固定高度后再应用。`;
+});
 const batchSelectedEntries = computed(() => previewPalette.value.filter(entry => batchPaletteKeys.value.includes(entry.key)));
 const batchPaletteSummary = computed(() => {
   if (!batchPaletteKeys.value.length) return "未选";
@@ -571,6 +585,10 @@ function applyHeightmapImport() {
     previewStatus.value = "请先选择一张图片。";
     return;
   }
+  if (pendingUnassignedBlocked.value) {
+    previewStatus.value = pendingUnassignedWarning.value;
+    return;
+  }
   document.dispatchEvent(new CustomEvent("heightmap-import-apply", {
     detail: {
       file: selectedFile.value,
@@ -617,10 +635,8 @@ function createHeightmapImportSettings() {
     pixels: entry.pixels,
     manual: entry.manual
   }));
-  const hasManualAssignments = assignments.some(entry => entry.manual);
-  const shouldUsePalette = heightmapMappingMode.value !== "grayscale" || hasManualAssignments;
   return {
-    kind: shouldUsePalette ? "image-palette" : "image-grayscale",
+    kind: usesPaletteImport.value ? "image-palette" : "image-grayscale",
     minHeight: heightmapImportMin.value,
     maxHeight: heightmapImportMax.value,
     invert: heightmapImportInvert.value,
