@@ -1,4 +1,4 @@
-import {buildMilitary, normalizeUnitRatios} from "../generator/military.js";
+import {buildMilitary, MILITARY_STATUSES, normalizeUnitRatios} from "../generator/military.js";
 
 const MILITARY_EFFECTS = Object.freeze({
   render: "draw",
@@ -35,6 +35,44 @@ export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整
       const state = context.map?.pack?.states?.[normalizedStateId] || context.map?.politics?.states?.[normalizedStateId];
       if (!state?.i) return true;
       return ratiosEqual(normalizeUnitRatios(state.militaryPolicy?.unitRatios), normalizedRatios);
+    }
+  };
+}
+
+export function createSetMilitaryStatusCommand(target, status, {label = "调整军团态势"} = {}) {
+  const normalizedTarget = normalizeRegimentTarget(target);
+  const nextStatus = String(status || "");
+  const nextStatusLabel = MILITARY_STATUSES[nextStatus]?.label || nextStatus || "未知";
+  let previous = null;
+
+  return {
+    label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    effects: {
+      ...MILITARY_EFFECTS,
+      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+    },
+    apply(context) {
+      const {state, regiment} = findRegiment(context.map, normalizedTarget);
+      if (!state?.i || !regiment) throw new Error("找不到军团");
+      previous ??= snapshotRegimentStatus(regiment);
+      regiment.status = nextStatus;
+      regiment.statusLabel = nextStatusLabel;
+      regiment.order = createManualOrder(context.map, state, regiment, nextStatus);
+      syncMilitary(context.map);
+      refreshMilitaryStatusMetadata(context.map);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的军团态势快照");
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      restoreRegimentStatus(regiment, previous);
+      syncMilitary(context.map);
+      refreshMilitaryStatusMetadata(context.map);
+    },
+    isNoop(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) return true;
+      return String(regiment.status || "") === nextStatus;
     }
   };
 }
@@ -76,6 +114,75 @@ function restoreMilitary(map, snapshot) {
 function syncMilitary(map) {
   if (!map?.pack?.military) return;
   map.military = map.pack.military;
+}
+
+function normalizeRegimentTarget(target = {}) {
+  const idParts = String(target.id || "").split(":");
+  const stateId = Number(target.stateId ?? target.state ?? idParts[0]);
+  const regimentId = Number(target.regimentId ?? target.i ?? idParts[1]);
+  return {
+    id: target.id || (Number.isFinite(stateId) && Number.isFinite(regimentId) ? `${stateId}:${regimentId}` : ""),
+    stateId,
+    regimentId
+  };
+}
+
+function findRegiment(map, target) {
+  const state = map?.pack?.states?.[target.stateId] || map?.politics?.states?.[target.stateId];
+  const regiment = (state?.military || []).find(item => item.i === target.regimentId || item.id === target.id) || null;
+  return {state, regiment};
+}
+
+function snapshotRegimentStatus(regiment) {
+  return {
+    status: regiment.status,
+    statusLabel: regiment.statusLabel,
+    order: regiment.order ? clonePlain(regiment.order) : null
+  };
+}
+
+function restoreRegimentStatus(regiment, snapshot) {
+  if (snapshot.status === undefined) delete regiment.status;
+  else regiment.status = snapshot.status;
+  if (snapshot.statusLabel === undefined) delete regiment.statusLabel;
+  else regiment.statusLabel = snapshot.statusLabel;
+  if (snapshot.order) regiment.order = clonePlain(snapshot.order);
+  else delete regiment.order;
+}
+
+function createManualOrder(map, state, regiment, status) {
+  const kind = {
+    patrolling: "patrol",
+    marching: "advance",
+    resting: "rest",
+    mustering: "muster",
+    routed: "retreat",
+    garrisoned: "garrison"
+  }[status] || "garrison";
+  const cell = status === "routed" ? state.center : regiment.cell;
+  return {
+    kind,
+    targetCell: cell,
+    targetName: getOrderTargetName(map, state, cell)
+  };
+}
+
+function getOrderTargetName(map, state, cell) {
+  const burgId = map?.pack?.cells?.burg?.[cell];
+  const provinceId = map?.pack?.cells?.province?.[cell];
+  return map?.pack?.burgs?.[burgId]?.name || map?.pack?.provinces?.[provinceId]?.name || state.name || `国家 #${state.i}`;
+}
+
+function refreshMilitaryStatusMetadata(map) {
+  const military = map?.pack?.military || map?.military;
+  if (!military?.metadata) return;
+  const states = map?.pack?.states || map?.politics?.states || [];
+  const regiments = states.flatMap(state => state?.military || []);
+  military.metadata.statuses = regiments.reduce((counts, regiment) => {
+    const status = regiment.status || "unknown";
+    counts[status] = (counts[status] || 0) + 1;
+    return counts;
+  }, {});
 }
 
 function ratiosEqual(a, b) {

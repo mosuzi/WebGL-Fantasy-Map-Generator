@@ -48,6 +48,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       callbacks.onLocate?.(militaryObject(row));
     },
     onRatiosApply: (stateId, ratios) => callbacks.onRatiosApply?.(stateId, ratios),
+    onStatusApply: (target, status) => callbacks.onStatusApply?.(target, status),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };

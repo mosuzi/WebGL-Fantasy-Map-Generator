@@ -73,6 +73,24 @@
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
 
   <UiActionDock v-if="selectedState" v-model:active="activeAction" :actions="militaryActions">
+    <template #status>
+      <div class="military-status-panel">
+        <div class="military-status-heading">
+          <strong>{{ selected?.name || "未选中军团" }}</strong>
+          <span>{{ selected?.stateName || "无所属国家" }}</span>
+        </div>
+        <UiSelectField
+          input-id="military-status-editor"
+          class-name="military-status-editor"
+          label="态势"
+          :model-value="statusDraft"
+          :options="statusEditOptions"
+          :disabled="!selected"
+          @update:model-value="setStatusDraft"
+        />
+        <UiButton class="military-status-apply" variant="secondary" :disabled="!selected || statusDraft === selected.status" @click="applyStatus">应用态势</UiButton>
+      </div>
+    </template>
     <template #ratios>
       <div class="military-ratio-panel">
         <div class="military-ratio-heading">
@@ -110,7 +128,7 @@
 
 <script setup>
 import {computed, reactive, ref, watch} from "vue";
-import {MILITARY_UNITS, normalizeUnitRatios} from "../../../generator/military.js";
+import {MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../../../generator/military.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -162,6 +180,7 @@ const unitPreferences = useUnitPreferences();
 const unitDefinitions = MILITARY_UNITS;
 const activeAction = ref(null);
 const ratioDraft = reactive({});
+const statusDraft = ref("garrisoned");
 
 const metrics = computed(() => {
   props.state.version;
@@ -196,7 +215,15 @@ const ratioBreakdown = computed(() => unitDefinitions.map(unit => {
     width: Math.max(3, Math.min(100, value))
   };
 }));
-const militaryActions = Object.freeze([
+const statusEditOptions = computed(() => {
+  const options = Object.values(MILITARY_STATUSES).map(status => ({value: status.value, label: status.label}));
+  if (selected.value?.status && !options.some(option => option.value === selected.value.status)) {
+    options.push({value: selected.value.status, label: selected.value.statusLabel || selected.value.status});
+  }
+  return options;
+});
+const militaryActions = computed(() => [
+  {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
   {key: "ratios", label: "兵种比例", icon: "⚖"}
 ]);
 
@@ -227,6 +254,8 @@ const detailRows = computed(() => selected.value ? [
 
 watch(() => selectedState.value?.id, syncRatioDraft, {immediate: true});
 watch(() => props.state.version, syncRatioDraft);
+watch(() => selected.value?.id, syncStatusDraft, {immediate: true});
+watch(() => selected.value?.status, syncStatusDraft);
 
 function buildMilitaryMetrics(map) {
   const states = stateRows(map);
@@ -323,6 +352,24 @@ function applyRatios() {
   const ratios = {};
   for (const unit of unitDefinitions) ratios[unit.name] = Number(ratioDraft[unit.name] || 0);
   props.callbacks.onRatiosApply?.(selectedState.value.id, normalizeUnitRatios(ratios));
+  activeAction.value = null;
+}
+
+function syncStatusDraft() {
+  statusDraft.value = selected.value?.status || "garrisoned";
+}
+
+function setStatusDraft(value) {
+  statusDraft.value = value;
+}
+
+function applyStatus() {
+  if (!selected.value) return;
+  props.callbacks.onStatusApply?.({
+    id: selected.value.id,
+    stateId: selected.value.stateId,
+    regimentId: selected.value.regimentId
+  }, statusDraft.value);
   activeAction.value = null;
 }
 

@@ -5067,6 +5067,31 @@ input.ui-switch-native {
   min-width: 340px;
 }
 
+.military-status-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 300px;
+}
+
+.military-status-heading {
+  display: grid;
+  gap: 2px;
+  color: #e9f2f4;
+  font-size: 12px;
+}
+
+.military-status-heading span {
+  color: #9fb0ba;
+}
+
+.military-status-editor {
+  grid-template-columns: 44px minmax(0, 1fr);
+}
+
+.military-status-apply.el-button {
+  width: 100%;
+}
+
 .military-ratio-heading {
   display: flex;
   align-items: center;

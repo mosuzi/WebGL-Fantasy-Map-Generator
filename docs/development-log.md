@@ -15393,3 +15393,28 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：默认地图打开军事管理后，态势选项为 `全部态势 / 败逃中 / 集结中 / 行军中 / 修整中 / 巡逻中 / 驻防中`。
 - 同次烟测中选择 `败逃中` 后，表格从 `111` 行收敛到 `1` 行，表格状态列和概要标签均为 `败逃中`；三列控制区宽度约 `195.6px / 169.5px / 312.9px`，`webgl2 = true`、`glError = 0`、console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1637.2ms`，纯生成 `805.5ms`，WebGL 加载 `432.6ms`，UI slack `399.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 129.3ms`，最慢加载阶段为 `构建视觉 cell mesh 56.5ms`，`fit-draw = 3.2ms`，`glError = 0`。
+
+### 军团手动态势调整
+
+背景：
+
+- 军事面板已经能查看、筛选和调整国家兵种比例，但还不能编辑单个军团。
+- `docs/task-notes/military-battle-plan.md` 的阶段 4 明确列出轻量军团编辑，第一项之一是“手动调整状态”。
+
+修正：
+
+- `military-edit-commands.js` 新增 `createSetMilitaryStatusCommand()`。
+- 命令只修改目标军团的 `status / statusLabel / order`，不重建完整军事数据。
+- 命令会刷新 `map.military.metadata.statuses`，并接入既有 `EditHistory`、对象索引、军事图层和面板刷新链路。
+- `军事管理` 的二级操作新增“调整态势”，使用生成器内的 `MILITARY_STATUSES` 作为唯一状态枚举来源。
+
+文档：
+
+- 更新 `docs/current-plan.md`，把军事面板当前状态推进到“可撤销地修改单个军团态势”，并把后续方向写为重命名、驻地/基地移动或批量态势命令。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `746.61KB / gzip 225.55KB`，`MilitaryPanel` 懒加载 chunk 约 `12.17KB / gzip 4.47KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：选中 `13:0` 军团后，从 `patrolling / 巡逻中` 改为 `marching / 行军中`，`order.kind` 变为 `advance`，历史为 `undo 1 / redo 0 / 调整军团态势 #13:0`。
+- 同次烟测中点击“撤销上次”恢复 `patrolling`，点击“重做上次”再次变为 `marching`；`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1659.2ms`，纯生成 `766.4ms`，WebGL 加载 `534.9ms`，UI slack `357.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 144.8ms`，最慢加载阶段为 `构建视觉 cell mesh 66ms`，`fit-draw = 5.2ms`，`glError = 0`。

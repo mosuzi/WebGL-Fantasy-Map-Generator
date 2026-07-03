@@ -40,7 +40,7 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
-import {createSetMilitaryRatiosCommand} from "./military-edit-commands.js";
+import {createSetMilitaryRatiosCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -709,6 +709,19 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         markDerivedFresh(state.map, ["military"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `update military ratios: state=${stateId}, regiments=${state.map.military?.metadata?.regiments || 0}`);
+      }
+      updateMilitaryPanel(state);
+      updateStatePanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onStatusApply: (target, status) => {
+      const command = createSetMilitaryStatusCommand(target, status);
+      if (!command.isNoop({map: state.map})) {
+        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+        markDerivedFresh(state.map, ["military"]);
+        refreshGenerationSummary(state.map);
+        appendGenerationLog(state.map, `update military status: regiment=${target.id}, status=${status}`);
       }
       updateMilitaryPanel(state);
       updateStatePanel(state);
