@@ -15624,3 +15624,29 @@ full 矩阵结果：
 - CSV 表头为 `事件ID,序号,时间,国家,军团,类型,结果,说明,已应用,结果摘要,兵力前,兵力后,损耗,态势前,态势后`；首条事件为 `1:0:battle:1`，兵力 `576 -> 553`，损耗 `23`，态势 `行军中 -> 修整中`，`resultApplied = true`。
 - 同次烟测 `metadata.events = 1`，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1343.1ms`，纯生成 `625.4ms`，WebGL 加载 `423.4ms`，UI slack `294.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 105.4ms`，最慢加载阶段为 `构建视觉 cell mesh 72.1ms`，`line-vertices = 48.9ms`，`fit-draw = 2.8ms`，`glError = 0`。
+
+### 轻量战斗结果预览明细
+
+背景：
+
+- “应用轻量结果”开关已有百分比预览，但用户在提交前看不到当前选中军团会损耗多少兵力。
+- 本轮只补提交前说明，不改变命令层损耗规则、不写地图数据，也不进入完整战斗模拟。
+
+修正：
+
+- `battleResultPreview` 改为读取当前选中军团兵力，并按结果规则计算预计损耗和兵力变化。
+- 预览规则与命令层保持一致：小胜 `4%`、受挫 `18%`、相持 `8%`、损耗 `25%`、重整 `2%`，且至少保留 `1` 名兵力。
+- 预览文案补充规则标签，例如“小胜后整队”“损耗败退”。
+- 预览样式增加行高和自动换行，避免较长文案撑破二级浮层。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 240 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `23.47KB / gzip 7.72KB`，主入口约 `760.65KB / gzip 229.66KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开控制面板的“管理”tab，进入 `军事管理`，打开“战斗事件”并启用“应用轻量结果”。
+- 选中军团 `1:0`、兵力 `576` 时，默认“小胜”预览为 `小胜后整队：576 -> 553，预计损耗 23，态势改为修整中`；切换“损耗”后预览为 `损耗败退：576 -> 432，预计损耗 144，态势改为败逃中`。
+- 同次烟测 `glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1346.3ms`，纯生成 `673ms`，WebGL 加载 `372.8ms`，UI slack `300.5ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 120.9ms`，最慢加载阶段为 `构建标签 55.4ms`，`line-vertices = 45.8ms`，`fit-draw = 2.6ms`，`glError = 0`。

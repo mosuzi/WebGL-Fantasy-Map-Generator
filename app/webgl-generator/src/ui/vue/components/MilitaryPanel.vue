@@ -320,11 +320,11 @@ const battleEventOutcomeOptions = Object.freeze([
   {value: "regroup", label: "重整"}
 ]);
 const battleResultRules = Object.freeze({
-  victory: {lossRate: 0.04, statusLabel: "修整中"},
-  defeat: {lossRate: 0.18, statusLabel: "败逃中"},
-  draw: {lossRate: 0.08, statusLabel: "修整中"},
-  loss: {lossRate: 0.25, statusLabel: "败逃中"},
-  regroup: {lossRate: 0.02, statusLabel: "集结中"}
+  victory: {lossRate: 0.04, statusLabel: "修整中", label: "小胜后整队"},
+  defeat: {lossRate: 0.18, statusLabel: "败逃中", label: "受挫败退"},
+  draw: {lossRate: 0.08, statusLabel: "修整中", label: "相持修整"},
+  loss: {lossRate: 0.25, statusLabel: "败逃中", label: "损耗败退"},
+  regroup: {lossRate: 0.02, statusLabel: "集结中", label: "重整集结"}
 });
 
 const metrics = computed(() => {
@@ -354,7 +354,11 @@ const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattle
 const selectedBattleEvents = computed(() => latestEventsForRegiment(allBattleEvents.value, selected.value, 5));
 const battleResultPreview = computed(() => {
   const rule = battleResultRules[battleEventDraft.outcome] || battleResultRules.draw;
-  return `兵力约 -${Math.round(rule.lossRate * 100)}%，态势改为${rule.statusLabel}`;
+  const troops = Math.max(0, Math.round(Number(selected.value?.troops || 0)));
+  if (!troops) return `${rule.label}：兵力约 -${Math.round(rule.lossRate * 100)}%，态势改为${rule.statusLabel}`;
+  const casualties = battlePreviewCasualties(troops, rule.lossRate);
+  const afterTroops = Math.max(troops > 0 ? 1 : 0, troops - casualties);
+  return `${rule.label}：${formatNumber(troops)} -> ${formatNumber(afterTroops)}，预计损耗 ${formatNumber(casualties)}，态势改为${rule.statusLabel}`;
 });
 const selectedState = computed(() => selected.value ? metrics.value.states.find(state => state.id === selected.value.stateId) : metrics.value.states.find(state => state.id === Number(props.state.selectedStateId)) || null);
 const ratioTotalLabel = computed(() => `${Math.round(Object.values(ratioDraft).reduce((sum, value) => sum + Number(value || 0), 0))}%`);
@@ -748,6 +752,11 @@ function battleResultSummary(event) {
   const casualties = formatNumber(result.casualties || Math.abs(result.troopDelta || 0));
   const status = result.statusAfterLabel || result.statusAfter || "未知态势";
   return `已应用：${before} -> ${after}，损耗 ${casualties}，${status}`;
+}
+
+function battlePreviewCasualties(troops, lossRate) {
+  if (troops <= 1 || lossRate <= 0) return 0;
+  return Math.min(troops - 1, Math.max(1, Math.round(troops * lossRate)));
 }
 
 function nearestPackCell(map, x, y) {

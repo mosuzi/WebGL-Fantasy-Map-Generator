@@ -5152,6 +5152,8 @@ input.ui-switch-native {
   margin: -4px 0 0;
   color: #f0ce7c;
   font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .military-ratio-panel {
