@@ -14855,3 +14855,30 @@ full 矩阵结果：
 - 导入 profile 后点击“应用到地图”，结果为 `source.kind = image-palette`、`source.mappingMode = grayscale`、`assignmentCount = 4`、`manualCount = 4`、低地手动色块 `2` 个，checksum `4d28006c -> aeca03c6`，`loadMap.totalMs = 533.3ms`，`fit-draw = 5ms`，`glError = 0`，health error 为 `0`，console/page error 为 `0`。
 - 同次 smoke 只记录一次初始加载阶段 `main-thread-long-task` warn，未发生在 profile 导入、应用或绘制阶段。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1205.9ms`，纯生成 `618.4ms`，WebGL 加载 `366.4ms`，最慢加载阶段为 `cell-visual-mesh 55.8ms`，`fit-draw = 2.3ms`，`glError = 0`。
+
+### 高度图导入亮度直方图
+
+背景：
+
+- 高度图导入工作台已经支持彩色色板、手动赋高和 profile 复用，但预览质量缺口中仍明确缺少直方图、采样格高度色带预览和应用前后对比。
+- 本步先补最低风险的亮度直方图；它只依赖已有预览 canvas 像素，不需要触碰生成器、worker 或 renderer。
+
+修正：
+
+- 工作台在预览图和指标区下方新增“亮度直方图”区块。
+- `readBrightnessStats()` 在同一次预览扫描中同步生成 24 桶亮度计数，避免额外读取大图。
+- 直方图显示每个亮度桶的相对高度，并在标题中汇总暗 / 中 / 亮像素占比。
+- 没有选择图片或清空预览时会清空直方图；选择图片只更新工作台状态，不写 `map`，不触发重生成。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`HeightPanel` 懒加载 chunk 为 `22.84KB / gzip 8.32KB`，主入口约 `739.15KB / gzip 223.21KB`。
+- Playwright + 系统 Chrome 直方图烟测通过：导入渐变 SVG 后直方图可见，`barCount = 24`、`nonZeroBars = 21`、高度范围 `4..100`，摘要为 `暗 38% / 中 44% / 亮 18%`，轴标签为 `暗/亮`，色板项为 `32`。
+- 同次烟测中地图 checksum 保持 `1c333dd7 -> 1c333dd7`，说明预览和直方图没有写地图；`loadMap.totalMs = 352.3ms`，`fit-draw = 8ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1191.9ms`，纯生成 `581.4ms`，WebGL 加载 `326.7ms`，最慢加载阶段为 `labels 45.9ms`，`fit-draw = 2.6ms`，`glError = 0`。

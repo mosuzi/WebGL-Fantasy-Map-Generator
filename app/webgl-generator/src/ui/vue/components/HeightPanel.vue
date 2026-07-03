@@ -49,6 +49,25 @@
 
         <UiMetricGrid :metrics="previewMetrics" class-name="heightmap-preview-metrics" />
 
+        <section v-if="previewHistogram.length" class="heightmap-histogram-section" aria-label="亮度直方图">
+          <header>
+            <strong>亮度直方图</strong>
+            <span>{{ histogramSummary }}</span>
+          </header>
+          <div class="heightmap-histogram-bars">
+            <i
+              v-for="bin in histogramBars"
+              :key="bin.index"
+              :style="{height: `${bin.height}%`}"
+              :title="bin.title"
+            ></i>
+          </div>
+          <div class="heightmap-histogram-axis">
+            <span>暗</span>
+            <span>亮</span>
+          </div>
+        </section>
+
         <div class="heightmap-import-fields">
           <UiSliderField
             label="最低高度"
@@ -308,6 +327,7 @@ const previewCanvas = ref(null);
 const previewImage = ref(null);
 const selectedFile = ref(null);
 const previewStats = ref(null);
+const previewHistogram = ref([]);
 const previewPalette = ref([]);
 const selectedPaletteKey = ref(null);
 const batchPaletteKeys = ref([]);
@@ -352,6 +372,25 @@ const batchSelectedEntries = computed(() => previewPalette.value.filter(entry =>
 const batchPaletteSummary = computed(() => {
   if (!batchPaletteKeys.value.length) return "未选";
   return `已选 ${batchPaletteKeys.value.length} 色`;
+});
+const histogramBars = computed(() => {
+  const counts = previewHistogram.value;
+  const max = Math.max(...counts, 1);
+  return counts.map((count, index) => ({
+    index,
+    height: Math.max(4, Math.round((count / max) * 100)),
+    title: `${histogramBinLabel(index, counts.length)}：${formatPercent(count / histogramTotal(counts))}`
+  }));
+});
+const histogramSummary = computed(() => {
+  const counts = previewHistogram.value;
+  if (!counts.length) return "未生成";
+  const total = histogramTotal(counts);
+  const third = Math.max(1, Math.floor(counts.length / 3));
+  const low = sumHistogramRange(counts, 0, third);
+  const middle = sumHistogramRange(counts, third, third * 2);
+  const high = Math.max(0, total - low - middle);
+  return `暗 ${formatPercent(low / total)} / 中 ${formatPercent(middle / total)} / 亮 ${formatPercent(high / total)}`;
 });
 
 watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode], () => {
@@ -444,6 +483,7 @@ async function onHeightmapFileChange(event) {
     selectedFile.value = null;
     previewImage.value = null;
     previewStats.value = null;
+    previewHistogram.value = [];
     previewPalette.value = [];
     selectedPaletteKey.value = null;
     batchPaletteKeys.value = [];
@@ -598,6 +638,7 @@ function drawPreview() {
   drawImageToCanvas(context, image, size.width, size.height, heightmapImportFit.value);
   const imageData = context.getImageData(0, 0, size.width, size.height);
   const brightness = readBrightnessStats(imageData.data, heightmapImportInvert.value);
+  previewHistogram.value = brightness.histogram;
   const palette = quantizePalette(imageData.data, heightmapColorLimit.value, brightness);
   previewPalette.value = palette.entries;
   if (!previewPalette.value.some(entry => entry.key === selectedPaletteKey.value)) selectedPaletteKey.value = null;
@@ -622,6 +663,7 @@ function clearPreviewCanvas() {
   if (!canvas) return;
   const context = canvas.getContext("2d", {willReadFrequently: true});
   context?.clearRect(0, 0, canvas.width, canvas.height);
+  previewHistogram.value = [];
 }
 
 function previewSize() {
@@ -661,6 +703,7 @@ function drawImageToCanvas(context, image, width, height, fitMode) {
 function readBrightnessStats(data, invert) {
   let min = Infinity;
   let max = -Infinity;
+  const histogram = Array.from({length: 24}, () => 0);
   for (let offset = 0; offset < data.length; offset += 4) {
     const alpha = data[offset + 3] / 255;
     const red = data[offset] * alpha + 255 * (1 - alpha);
@@ -670,9 +713,10 @@ function readBrightnessStats(data, invert) {
     const value = invert ? 255 - raw : raw;
     min = Math.min(min, value);
     max = Math.max(max, value);
+    histogram[clamp(Math.floor((value / 256) * histogram.length), 0, histogram.length - 1)] += 1;
   }
-  if (!Number.isFinite(min) || !Number.isFinite(max)) return {min: 0, max: 255};
-  return {min, max};
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return {min: 0, max: 255, histogram};
+  return {min, max, histogram};
 }
 
 function quantizePalette(data, limit, brightnessStats) {
@@ -902,6 +946,24 @@ function colorDistance(color, target) {
 
 function mappingModeLabel(value) {
   return heightmapMappingModeOptions.find(option => option.value === value)?.label || "灰度";
+}
+
+function histogramTotal(counts) {
+  return Math.max(1, counts.reduce((sum, count) => sum + count, 0));
+}
+
+function sumHistogramRange(counts, start, end) {
+  return counts.slice(start, end).reduce((sum, count) => sum + count, 0);
+}
+
+function histogramBinLabel(index, totalBins) {
+  const start = Math.round((index / totalBins) * 255);
+  const end = Math.round(((index + 1) / totalBins) * 255);
+  return `${start}-${end}`;
+}
+
+function formatPercent(value) {
+  return `${Math.round(clamp(value, 0, 1) * 100)}%`;
 }
 
 function hexByte(value) {
