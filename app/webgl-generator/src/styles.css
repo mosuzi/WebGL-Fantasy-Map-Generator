@@ -2945,6 +2945,17 @@ select:disabled {
   color: #f4e8c0;
 }
 
+.heightmap-profile-extra-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.heightmap-profile-extra-entry .el-button {
+  min-height: 24px;
+  padding-inline: 7px;
+}
+
 .heightmap-histogram-bars {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));

@@ -15138,3 +15138,30 @@ full 矩阵结果：
 - 同次烟测中 profile 区块显示 `配置色块4 / 已匹配3 / 未匹配1 / 当前额外2`，未匹配配置色列出 `#d9c58d`，当前额外色列出 `#aa33cc / #eeeeaa`；点击一个当前额外色后，对应主色板项被高亮。
 - 同次烟测中地图 checksum 保持 `b5e69d57 -> b5e69d57`，说明失配定位只刷新预览、不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1178.7ms`，纯生成 `612.7ms`，WebGL 加载 `344.4ms`，最慢加载阶段为 `cell-visual-mesh 50ms`，`fit-draw = 2.3ms`，`glError = 0`。
+
+### 高度图 profile 当前额外色加入配置
+
+背景：
+
+- profile 失配区已经能显示当前图片相对配置多出的颜色，并可点击定位到主色板。
+- 继续复用同类图片时，用户需要把确认可接受的额外色纳入当前配置，而不是手动重新调一遍色块高度。
+
+修正：
+
+- `当前额外色` 列表中每个色块旁新增“加入”按钮。
+- 点击“加入”后，会用该色块当前自动高度写入 `manualAssignments`，同时追加到已导入 profile key 集和 profile assignments。
+- 加入后的色块会进入主色板手动高度状态并被选中，匹配摘要立即刷新。
+- 该操作只更新工作台预览状态，不写 `map`，不触发 worker 或 renderer 重载。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`HeightPanel` 懒加载 chunk 约 `34.64KB / gzip 11.65KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：先从 4 色 SVG 导出 profile，再导入到只匹配 3 色且新增 2 色的目标 SVG；点击第一个当前额外色的“加入”后，配置色块从 `4` 增至 `5`，匹配从 `3/4` 增至 `4/5`，当前额外从 `2` 降至 `1`。
+- 同次烟测中主色板有 `4` 个手动色块，新增色块被选中，地图 checksum 保持稳定；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1240.9ms`，纯生成 `633.7ms`，WebGL 加载 `352.1ms`，最慢加载阶段为 `cell-visual-mesh 51.5ms`，`fit-draw = 2.3ms`，`glError = 0`。

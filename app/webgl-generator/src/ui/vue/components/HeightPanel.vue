@@ -68,16 +68,21 @@
             <div v-if="profileCurrentOnlyPreview.length" class="heightmap-profile-mismatch-group">
               <span>当前额外色</span>
               <div>
-                <button
+                <span
                   v-for="entry in profileCurrentOnlyPreview"
                   :key="`extra-${entry.key}`"
-                  type="button"
-                  class="heightmap-profile-chip heightmap-profile-chip-button"
-                  @click="selectPaletteEntry(entry.key)"
+                  class="heightmap-profile-extra-entry"
                 >
-                  <i :style="{backgroundColor: entry.hex}"></i>
-                  {{ entry.hex }}
-                </button>
+                  <button
+                    type="button"
+                    class="heightmap-profile-chip heightmap-profile-chip-button"
+                    @click="selectPaletteEntry(entry.key)"
+                  >
+                    <i :style="{backgroundColor: entry.hex}"></i>
+                    {{ entry.hex }}
+                  </button>
+                  <UiButton variant="secondary" @click="addCurrentOnlyProfileEntry(entry)">加入</UiButton>
+                </span>
               </div>
             </div>
           </div>
@@ -832,6 +837,22 @@ function applyHeightmapProfile(profile, filename = "") {
   updateProfileMatchStats();
 }
 
+function addCurrentOnlyProfileEntry(entry) {
+  const key = String(entry?.key ?? "");
+  const color = normalizeHexColor(entry?.hex);
+  const height = clamp(Math.round(Number(entry?.height ?? entry?.autoHeight) || 0), 0, 100);
+  if (!key || !color) return;
+  manualAssignments.value = {
+    ...manualAssignments.value,
+    [key]: height
+  };
+  if (!importedProfileKeys.value.includes(key)) importedProfileKeys.value = [...importedProfileKeys.value, key];
+  importedProfileAssignments.value = upsertProfileAssignment(importedProfileAssignments.value, {key, color, height});
+  selectedPaletteKey.value = entry.key;
+  drawPreview();
+  previewStatus.value = `已加入配置：${color}，高度 ${height}。`;
+}
+
 function normalizeProfileAssignments(assignments) {
   const normalized = {};
   for (const assignment of assignments || []) {
@@ -857,6 +878,21 @@ function normalizeProfileAssignmentList(assignments) {
       };
     })
     .filter(Boolean);
+}
+
+function upsertProfileAssignment(assignments, nextAssignment) {
+  const next = [];
+  let replaced = false;
+  for (const assignment of assignments || []) {
+    if (String(assignment.key) === String(nextAssignment.key)) {
+      next.push(nextAssignment);
+      replaced = true;
+    } else {
+      next.push(assignment);
+    }
+  }
+  if (!replaced) next.push(nextAssignment);
+  return next;
 }
 
 function drawPreview() {
