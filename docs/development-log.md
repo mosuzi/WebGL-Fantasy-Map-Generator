@@ -16246,3 +16246,28 @@ full 矩阵结果：
 - 数据烟测 `front-check-1 / continents / 10000`：生成 `2` 条 front，长度均为 `20`、上限 `26`，所有 `borderCellPairs` 两侧 cell 都是陆地、互为邻居且属于交战双方。
 - 构建产物浏览器烟测：同 seed 生成 `2` 条 front，长度均为 `13`、上限 `14`，战线图层开关顶点差为 `60`，即每条 front `30` 个顶点，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1764.7ms`，纯生成 `841.6ms`，WebGL 加载 `638.5ms`，UI slack `284.6ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 154.4ms`，最慢加载阶段为 `构建视觉 cell mesh 55.8ms`，`line-vertices = 51.8ms`，`glError = 0`。
+
+### 国名方位语义第二刀
+
+背景：
+
+- 用户指出随机国名也要看方位：北边国家不应孤立地叫“南某”，南边国家不应孤立地叫“北某”，除非同根国家在对应方向上形成相对关系。
+- 第一刀只覆盖 `南越 / 北燕` 这类古国复合根名，普通地名根如 `东衡 / 南衡 / 北辰 / 西陵` 仍可能作为孤立国家名出现。
+
+修正：
+
+- `orientPackStateDirectionalNames()` 不再只处理古国复合根名，所有 `东/西/南/北 + 根名` 的国家都会进入同根方位组。
+- 孤立方位根名改成无方位根名；若重名，则尝试 `新/古/上/中` 等中性变体。
+- 多个同根国家仍保留相对方位语义：前缀只在存在同根参照时成立。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和进度条目。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `772.95KB / gzip 233.59KB`，`MilitaryPanel` 懒加载 chunk 约 `36.10KB / gzip 11.16KB`。
+- 多 seed 生成审计覆盖 `continents / archipelago / mediterranean / highIsland / lowIsland / peninsula / pangea` 共 `112` 张 10k 地图，校正 `231` 个孤立方位国名，剩余无同根参照的方位国名为 `0`。
+- 旧问题 seed `direction-gap-continents-00` 中 `东衡 / 南唐` 已分别校正为 `衡 / 唐`，并写入 `nameOrientation.reason = isolated-directional`。
+- e2e 守门通过：点击到出图 `1742.3ms`，纯生成 `996.1ms`，WebGL 加载 `432.5ms`，UI slack `313.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 174.3ms`，最慢加载阶段为 `构建视觉 cell mesh 64.4ms`，`line-vertices = 53.8ms`，`glError = 0`。

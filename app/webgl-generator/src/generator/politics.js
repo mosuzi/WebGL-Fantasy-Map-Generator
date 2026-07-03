@@ -8,6 +8,7 @@ const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓",
 const PROVINCE_SUFFIXES = ["郡", "州", "道", "府", "领", "司"];
 const REGION_NAMES = ["北境", "南陆", "西岭", "东湾", "中原", "湖泽"];
 const STATE_CARDINAL_PREFIXES = ["东", "西", "南", "北"];
+const STATE_NEUTRAL_VARIANT_PREFIXES = ["新", "古", "上", "中"];
 const BIOME_COST = [10, 200, 150, 60, 50, 70, 70, 80, 90, 200, 1000, 5000, 150];
 const STATE_COLOR_PALETTE = [
   "#5b8ff9", "#f4664a", "#5ad8a6", "#ff99c3", "#f6bd16", "#6dc8ec",
@@ -363,10 +364,13 @@ function orientPackStateDirectionalNames(pack, states) {
     if (!directionalMembers.length) continue;
     const pointMembers = members.filter(member => member.point);
     if (members.length === 1) {
-      applyStateRootName(directionalMembers[0].state, base, "isolated-directional");
+      applyStateRootName(directionalMembers[0].state, neutralStateDirectionalName(base, directionalMembers[0].state, validStates), "isolated-directional");
       continue;
     }
-    if (pointMembers.length < 2) continue;
+    if (pointMembers.length < 2) {
+      for (const member of directionalMembers) applyStateRootName(member.state, neutralStateDirectionalName(base, member.state, validStates), "unresolved-directional");
+      continue;
+    }
 
     const bounds = stateNameBounds(pointMembers);
     const used = new Set();
@@ -386,8 +390,14 @@ function parseDirectionalStateName(name) {
   const prefix = chars[0];
   if (!STATE_CARDINAL_PREFIXES.includes(prefix)) return isAncientStateNameRoot(rawName) ? {base: rawName, prefix: "", directional: false} : null;
   const base = chars.slice(1).join("");
-  if (!base || !isAncientStateNameRoot(rawName)) return null;
+  if (!base) return null;
   return {base, prefix, directional: true};
+}
+
+function neutralStateDirectionalName(base, state, states) {
+  const usedNames = new Set(states.filter(item => item !== state).map(item => item.name).filter(Boolean));
+  const candidates = [base, ...STATE_NEUTRAL_VARIANT_PREFIXES.map(prefix => `${prefix}${base}`)];
+  return candidates.find(candidate => candidate && !usedNames.has(candidate)) || `${base}${state.i}`;
 }
 
 function stateNamePoint(pack, state) {
