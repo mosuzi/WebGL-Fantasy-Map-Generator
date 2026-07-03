@@ -17357,3 +17357,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `817.73KB / gzip 246.72KB`，generation worker 约 `276.71KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入 `3` 个用户名称库并设置全局 `stateRoot / place / hydro` 绑定后，真实点击整图生成；新地图继承 `3` 个用户库，`map.options.namebases = false`，生成日志显示 `namebase context: bases=3, stateRoot=inherit-state-roots, place=inherit-place-roots, hydro=inherit-hydro-roots`；国家根名 `20/20` 命中用户根名库，城镇 `621/757` 命中用户地名库，河流/湖泊 `180/211` 命中用户水文库；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1562.9ms`，纯生成 `766.5ms`，WebGL 加载 `457.6ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `137.2ms`，最慢加载阶段为“构建视觉 cell mesh” `56.1ms`。
+
+### 名称库文化级绑定生成读取第一刀
+
+背景：
+
+- 名称库绑定计划要求 `cultures[cultureId]` 覆盖全局 `stateRoot / place / hydro` 绑定，但此前生成器只读取全局绑定。
+- 本轮只做生成读取，不新增文化绑定 UI；后续 UI 可以复用已有 `setNamebaseBinding(map, target, value, {cultureId})`。
+
+修正：
+
+- `createChineseNameGenerator()` 在每次命名时按 `options.culture` 查找文化级绑定。
+- 文化绑定优先于全局绑定；文化绑定为空时使用全局绑定；文化绑定填了但指向不存在词池时回退内置策略，不静默使用全局绑定。
+- `getNamebaseUsage()` 现在会返回有效文化绑定摘要，便于后续开发模式或面板诊断复用。
+
+验证：
+
+- Node 小测通过：文化 #1 的 `place/stateRoot/hydro` 使用文化库，文化 #3 使用全局库，文化 #2 的失效 `place` 绑定回退内置地名。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `817.73KB / gzip 246.71KB`，名称库懒加载 chunk 约 `10.50KB / gzip 3.99KB`，generation worker 约 `277.28KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入全局库和目标文化专属库后，依次重生成国家、城镇和水文；目标文化国家根名 `6/6` 命中文化库，其它国家 `14/14` 命中全局库；目标文化城镇 `177/271` 命中文化库，其它城镇 `493/732` 命中全局库；目标文化河流/湖泊 `45/46` 命中文化库，其它水文 `105/111` 命中全局库；未命中城镇主要来自首都/省会锚点保留旧名；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1564.6ms`，纯生成 `719.2ms`，WebGL 加载 `519.1ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `129.8ms`，最慢加载阶段为“构建线层顶点” `76.8ms`。

@@ -372,7 +372,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
   return {
     makePlaceName(options = {}) {
       const rng = rngFor(seed, "place", options);
-      const boundPlaceSource = namebaseSources.place;
+      const boundPlaceSource = namebaseSources.sourceFor("place", options);
       const makeCandidate = () => {
         const style = choosePlaceStyle(rng, options);
         const transliterationStyle = getTransliterationStyle(options);
@@ -397,7 +397,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
     makeRiverName(options = {}) {
       const rng = rngFor(seed, "river", options);
       const cultureStyle = getCultureStyle(options);
-      const boundHydroSource = namebaseSources.hydro;
+      const boundHydroSource = namebaseSources.sourceFor("hydro", options);
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
       const prefix = boundHydroSource.length
         ? pickNamebaseValue(rng, boundHydroSource)
@@ -408,7 +408,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
     makeLakeName(options = {}) {
       const rng = rngFor(seed, "lake", options);
       const cultureStyle = getCultureStyle(options);
-      const boundHydroSource = namebaseSources.hydro;
+      const boundHydroSource = namebaseSources.sourceFor("hydro", options);
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
       const prefix = boundHydroSource.length
         ? pickNamebaseValue(rng, boundHydroSource)
@@ -418,7 +418,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
 
     makeStateRoot(options = {}) {
       const rng = rngFor(seed, "state-root", options);
-      const boundStateRootSource = namebaseSources.stateRoot;
+      const boundStateRootSource = namebaseSources.sourceFor("stateRoot", options);
       const capitalRoot = normalizeNameRoot(options.capitalName);
       const cultureRoot = cleanStateRootCandidate(options.cultureRoot);
       const allowCapitalName = Boolean(options.allowCapitalName);
@@ -569,6 +569,7 @@ function makeChineseTwoCharName(rng) {
 function resolveNamebaseSources(namebases) {
   const bindings = namebases?.bindings && typeof namebases.bindings === "object" ? namebases.bindings : {};
   const globalBindings = bindings.global && typeof bindings.global === "object" ? bindings.global : {};
+  const cultureBindings = bindings.cultures && typeof bindings.cultures === "object" ? bindings.cultures : {};
   const rows = new Map(Object.entries(BUILTIN_NAMEBASE_SOURCES).map(([id, source]) => [id, normalizeNamebaseSourceValues(source)]));
   for (const base of namebases?.bases || []) {
     const id = String(base?.id || "").trim();
@@ -579,16 +580,39 @@ function resolveNamebaseSources(namebases) {
   const stateRootId = String(globalBindings.stateRoot || "").trim();
   const placeId = String(globalBindings.place || "").trim();
   const hydroId = String(globalBindings.hydro || "").trim();
+  const sourceFor = (target, options = {}) => {
+    const cultureId = String(options.culture ?? options.cultureId ?? "").trim();
+    const culture = cultureId && cultureBindings[cultureId] && typeof cultureBindings[cultureId] === "object" ? cultureBindings[cultureId] : null;
+    const cultureValue = String(culture?.[target] || "").trim();
+    if (cultureValue) return rows.get(cultureValue) || [];
+    const globalValue = String(globalBindings[target] || "").trim();
+    return globalValue ? rows.get(globalValue) || [] : [];
+  };
   return {
-    stateRoot: rows.get(stateRootId) || [],
-    place: rows.get(placeId) || [],
-    hydro: rows.get(hydroId) || [],
+    sourceFor,
     usage: {
       stateRoot: rows.has(stateRootId) ? stateRootId : "",
       place: rows.has(placeId) ? placeId : "",
-      hydro: rows.has(hydroId) ? hydroId : ""
+      hydro: rows.has(hydroId) ? hydroId : "",
+      cultures: getValidCultureNamebaseUsage(cultureBindings, rows)
     }
   };
+}
+
+function getValidCultureNamebaseUsage(cultureBindings, rows) {
+  const result = {};
+  for (const [cultureId, bindings] of Object.entries(cultureBindings || {})) {
+    if (!bindings || typeof bindings !== "object") continue;
+    const stateRoot = String(bindings.stateRoot || "").trim();
+    const place = String(bindings.place || "").trim();
+    const hydro = String(bindings.hydro || "").trim();
+    result[String(cultureId)] = {
+      stateRoot: rows.has(stateRoot) ? stateRoot : "",
+      place: rows.has(place) ? place : "",
+      hydro: rows.has(hydro) ? hydro : ""
+    };
+  }
+  return result;
 }
 
 function normalizeNamebaseSourceValues(source) {
