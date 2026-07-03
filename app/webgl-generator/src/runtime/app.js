@@ -1573,6 +1573,7 @@ function requestGenerate(state, documentRef) {
 
 async function runGenerateNow(state, documentRef, generateId) {
   try {
+    const hadMap = Boolean(state.map);
     setGenerationStatus(documentRef, state.options, "生成中");
     setMythicGenerationLoading(documentRef, true, "generate");
     emitLoadTrace(documentRef, {phase: "start", id: "generate", message: loadingMessage("generate"), delayMs: readDebugLoadDelayMs(documentRef)});
@@ -1581,7 +1582,8 @@ async function runGenerateNow(state, documentRef, generateId) {
     emitLoadTrace(documentRef, {phase: "end", id: "generate", message: loadingMessage("generate")});
     if (generateId !== state.pendingGenerateId) return;
     await loadMapIntoRuntime(state, documentRef, map, {
-      loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")]
+      loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")],
+      completionToast: hadMap ? "生成完成" : ""
     });
     updateGenerationLoading(documentRef, false);
   } catch (error) {
@@ -1590,7 +1592,7 @@ async function runGenerateNow(state, documentRef, generateId) {
   }
 }
 
-async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}) {
+async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = ""} = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   state.map = map;
   state.pick = null;
@@ -1677,6 +1679,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
     loadMap: state.renderer?.getStats?.().loadMap || null
   });
   updateGenerationLoading(documentRef, false);
+  showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);
 }
 
@@ -1850,6 +1853,22 @@ function fallbackGenerationOverrides(overrides = {}) {
 function setGenerationStatus(documentRef, options, status) {
   const appStatus = documentRef.getElementById("app-status");
   if (appStatus) appStatus.textContent = `${status}，seed ${options.seed}`;
+}
+
+function showMapToast(documentRef, message, durationMs = 2200) {
+  const text = String(message || "").trim();
+  if (!text) return;
+  const toast = documentRef.getElementById("map-toast");
+  if (!toast) return;
+  const view = documentRef.defaultView || window;
+  if (view.__webglGeneratorToastTimer) view.clearTimeout(view.__webglGeneratorToastTimer);
+  toast.textContent = text;
+  toast.hidden = false;
+  view.__webglGeneratorToastTimer = view.setTimeout(() => {
+    toast.hidden = true;
+    toast.textContent = "";
+    view.__webglGeneratorToastTimer = null;
+  }, durationMs);
 }
 
 function reportGenerateError(documentRef, error) {
@@ -2138,7 +2157,8 @@ async function importMapData(state, documentRef, file) {
     syncGenerationInputs(documentRef, options);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     await loadMapIntoRuntime(state, documentRef, document.map, {
-      loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")]
+      loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
+      completionToast: "地图数据已导入"
     });
     updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
@@ -2182,7 +2202,8 @@ async function importHeightmapImage(state, documentRef, payload) {
     }
     state.options = map.options;
     await loadMapIntoRuntime(state, documentRef, map, {
-      loadingMessages: [loadingMessage("heightmap-render"), loadingMessage("panel-refresh")]
+      loadingMessages: [loadingMessage("heightmap-render"), loadingMessage("panel-refresh")],
+      completionToast: "高度图已应用"
     });
     updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, heightmapImportSuccessMessage(heightmap), ["heightmap-import-status"]);
