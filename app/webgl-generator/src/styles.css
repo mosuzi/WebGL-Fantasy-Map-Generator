@@ -5075,8 +5075,53 @@ input.ui-switch-native {
   font-weight: 800;
 }
 
+.military-ratio-list {
+  display: grid;
+  gap: 9px;
+}
+
+.military-ratio-item {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 6px;
+  padding: 7px;
+  background: rgba(7, 12, 15, 0.36);
+}
+
+.military-ratio-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #edf4f6;
+  font-size: 12px;
+}
+
+.military-ratio-item-head small {
+  color: #f0ce7c;
+  font-weight: 800;
+}
+
+.military-ratio-item > i {
+  display: block;
+  height: 5px;
+  min-width: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #bd7d52, #d9b45f);
+  box-shadow: 0 0 10px rgba(217, 180, 95, 0.14);
+}
+
 .military-ratio-field {
-  grid-template-columns: 54px minmax(120px, 1fr) 92px 26px;
+  grid-template-columns: minmax(0, 1fr) 92px 26px;
+}
+
+.military-ratio-field > span:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .military-ratio-apply.el-button {

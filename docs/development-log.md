@@ -15344,3 +15344,27 @@ full 矩阵结果：
 
 - 该步只修改 README 和中文计划/日志，不涉及运行时代码。
 - `git diff --check` 通过。
+
+### 军事兵种比例二级面板展示优化
+
+背景：
+
+- 军事管理面板已经有军团概要区，但“兵种比例”二级面板仍是裸滑条列表。
+- 用户指出军事单位编辑面板样式粗糙，这个二级面板也需要和概要区保持同一视觉层级。
+
+修正：
+
+- `兵种比例` 二级面板新增比例项列表。
+- 每个兵种显示名称、当前百分比和横向比例条。
+- 保留原有滑条、应用按钮、比例归一化和 `EditHistory` 命令入口，不改军事生成逻辑。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `743.85KB / gzip 224.87KB`，`MilitaryPanel` 懒加载 chunk 约 `10.33KB / gzip 4.01KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开军事管理和“兵种比例”后，比例面板显示 `5` 个比例项、`5` 个滑条和应用按钮；示例比例为步兵 `49%`、弓兵 `26%`、骑兵 `3%`、器械 `8%`、舰队 `15%`。
+- 同次烟测中地图 checksum 为 `535004fa`，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1560ms`，纯生成 `809.8ms`，WebGL 加载 `463.6ms`，UI slack `286.6ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 147.2ms`，最慢加载阶段为 `构建视觉 cell mesh 60.9ms`，`fit-draw = 2.8ms`，`glError = 0`。

@@ -71,20 +71,27 @@
           <strong>{{ selectedState.name }}</strong>
           <span>{{ ratioTotalLabel }}</span>
         </div>
-        <UiSliderField
-          v-for="unit in unitDefinitions"
-          :key="unit.name"
-          :label="unit.label"
-          :input-id="`military-ratio-${unit.name}`"
-          field-class="military-ratio-field"
-          :model-value="ratioDraft[unit.name] ?? 0"
-          :min="0"
-          :max="100"
-          :step="1"
-          unit-label="%"
-          @input="value => setRatio(unit.name, value)"
-          @change="value => setRatio(unit.name, value)"
-        />
+        <div class="military-ratio-list">
+          <div v-for="unit in ratioBreakdown" :key="unit.name" class="military-ratio-item">
+            <div class="military-ratio-item-head">
+              <span>{{ unit.label }}</span>
+              <small>{{ unit.value }}%</small>
+            </div>
+            <i :style="{width: `${unit.width}%`}"></i>
+            <UiSliderField
+              :label="unit.label"
+              :input-id="`military-ratio-${unit.name}`"
+              field-class="military-ratio-field"
+              :model-value="ratioDraft[unit.name] ?? 0"
+              :min="0"
+              :max="100"
+              :step="1"
+              unit-label="%"
+              @input="value => setRatio(unit.name, value)"
+              @change="value => setRatio(unit.name, value)"
+            />
+          </div>
+        </div>
         <UiButton class="military-ratio-apply" variant="secondary" @click="applyRatios">应用比例</UiButton>
       </div>
     </template>
@@ -162,6 +169,15 @@ const selected = computed(() => findByObjectId(metrics.value.rows, props.state.s
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const selectedState = computed(() => selected.value ? metrics.value.states.find(state => state.id === selected.value.stateId) : metrics.value.states.find(state => state.id === Number(props.state.selectedStateId)) || null);
 const ratioTotalLabel = computed(() => `${Math.round(Object.values(ratioDraft).reduce((sum, value) => sum + Number(value || 0), 0))}%`);
+const ratioBreakdown = computed(() => unitDefinitions.map(unit => {
+  const value = Math.round(Number(ratioDraft[unit.name] || 0));
+  return {
+    name: unit.name,
+    label: unit.label,
+    value,
+    width: Math.max(3, Math.min(100, value))
+  };
+}));
 const militaryActions = Object.freeze([
   {key: "ratios", label: "兵种比例", icon: "⚖"}
 ]);
