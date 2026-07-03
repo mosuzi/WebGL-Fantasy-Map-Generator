@@ -1001,8 +1001,8 @@ function selectFrontBoundarySegment(pack, edges, startIndex, maxLength) {
       cells: Array.from(new Set(start.cells)),
       cellPairs: [start.cells],
       direction: frontDirectionFromCellPairs(pack, [start.cells]),
-      length: round(Math.min(start.length, maxLength)),
-      maxLength: round(maxLength)
+      length: round(frontPointPathLength(points), 2),
+      maxLength: round(maxLength, 2)
     };
   }
   const path = start.vertices.slice();
@@ -1027,9 +1027,17 @@ function selectFrontBoundarySegment(pack, edges, startIndex, maxLength) {
     cells: Array.from(new Set(cells)),
     cellPairs,
     direction: frontDirectionFromCellPairs(pack, cellPairs),
-    length: round(length),
-    maxLength: round(maxLength)
+    length: round(frontPointPathLength(points.length >= 2 ? points : start.points), 2),
+    maxLength: round(maxLength, 2)
   };
+}
+
+function frontPointPathLength(points = []) {
+  let total = 0;
+  for (let index = 0; index < points.length - 1; index++) {
+    total += distance(points[index], points[index + 1]);
+  }
+  return total;
 }
 
 function clipFrontEdgePoints(points, maxLength) {
@@ -1123,12 +1131,13 @@ function frontMaxBoundaryLength(pack, fromPoint, toPoint) {
 }
 
 function orientFrontSegment(points, fromPoint, toPoint) {
+  if (!Array.isArray(points) || points.length < 2) return points;
   const [a, b] = points;
   const edgeX = b[0] - a[0];
   const edgeY = b[1] - a[1];
   const targetX = toPoint.x - fromPoint.x;
   const targetY = toPoint.y - fromPoint.y;
-  return edgeX * targetX + edgeY * targetY < 0 ? [b, a] : [a, b];
+  return edgeX * targetX + edgeY * targetY < 0 ? points.slice().reverse() : points;
 }
 
 function regimentOrStatePoint(pack, state) {

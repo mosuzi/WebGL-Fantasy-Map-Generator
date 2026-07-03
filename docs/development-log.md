@@ -16430,3 +16430,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `782.95KB / gzip 236.55KB`，`MilitaryPanel` chunk 约 `39.74KB / gzip 12.16KB`。
 - 构建产物浏览器烟测通过：军事面板能显示 `边境交战`、`11%`、`拉锯`、`攻方损耗 330`、`守方损耗 835`，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1503.2ms`，纯生成 `769ms`，WebGL 加载 `394.2ms`，UI slack `340ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 155.9ms`，最慢加载阶段为 `构建视觉 cell mesh 60ms`，`line-vertices = 51.8ms`，`glError = 0`。
+
+### 军事态势线贴边第六刀
+
+背景：
+
+- 用户再次指出军事态势线不好看：不能太长，最多只在边界上存在；不要跨海；不能是细线，而要是宽体渐变色指向方向型箭头。
+- 现有数据生成已经基本限制在共享陆地边界，但渲染层仍保留旧 front 的 `from -> to` 长线兜底；近景截图也显示箭头头部被法线方向推出太远，容易像斜插出边界的大色块。
+
+修正：
+
+- `orientFrontSegment()` 不再只返回前两个点，多段共享边界会保留完整点列。
+- front 的 `length / maxLength` 改为按真实边界点列保存两位小数，避免整数取整让实际长度略超上限。
+- 战线渲染只接受带 `borderCellPairs` 的合法边界 front；缺少共享边界元数据的旧 front 不再回退画 `from -> to` 长线，避免跨海或跨国长线复发。
+- 宽体带的渐变方向改为从己方侧到敌方侧；箭头头部收进边界宽带内部，保留方向性但不再大幅推出边界。
+
+验证：
+
+- `git diff --check` 通过。
+- 数据烟测覆盖 `stage-2-1231411414 / front-check-1 / front-audit-1 / front-audit-2`：有战线样本均为 `2` 条 front，`invalid = 0`、`overLength = 0`、`missingBoundary = 0`；无共享陆地边界样本保持 `fronts = 0`。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `783.94KB / gzip 236.86KB`，`MilitaryPanel` chunk 约 `39.74KB / gzip 12.16KB`。
+- 构建产物浏览器烟测通过：`stage-2-1231411414` 生成 `2` 条 front，长度均为 `6`，战线图层顶点增量 `36`；临时注入缺少 `borderCellPairs` 的旧 front 后战线顶点增量为 `0`；`glError = 0`、console/page error 为 `0`。
+- 已保存近景截图 `docs/generated/reports/military-front-arrow-smoke.png` 用于人工检查，态势线表现为短边界宽带和内嵌方向箭头。
+- e2e 守门通过：点击到出图 `1342.9ms`，纯生成 `676.9ms`，WebGL 加载 `356.9ms`，UI slack `309.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 127.9ms`，最慢加载阶段为 `构建视觉 cell mesh 55ms`，`line-vertices = 51.1ms`。
