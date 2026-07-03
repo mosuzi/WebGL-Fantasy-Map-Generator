@@ -100,6 +100,7 @@ const tabOptions = Object.freeze([
 ]);
 
 const goodSortOptions = Object.freeze([
+  {key: "priceDelta", label: "价差"},
   {key: "shortage", label: "缺口"},
   {key: "stock", label: "库存"},
   {key: "tradeValue", label: "交易额"},
@@ -108,6 +109,7 @@ const goodSortOptions = Object.freeze([
   {key: "name", label: "名称"}
 ]);
 const marketSortOptions = Object.freeze([
+  {key: "priceDelta", label: "价差"},
   {key: "shortage", label: "缺口"},
   {key: "tradeValue", label: "交易额"},
   {key: "stock", label: "库存"},
@@ -129,6 +131,8 @@ const goodColumns = Object.freeze([
   {key: "name", label: "商品"},
   {key: "typeLabel", label: "类型"},
   {key: "value", label: "基价", align: "right", format: value => formatNumber(value)},
+  {key: "effectivePrice", label: "有效价", align: "right", format: value => formatNumber(value)},
+  {key: "priceDelta", label: "价差", align: "right", format: value => formatSignedNumber(value)},
   {key: "stock", label: "库存", align: "right", format: value => formatNumber(value)},
   {key: "shortage", label: "缺口", align: "right", format: value => formatNumber(value)},
   {key: "deals", label: "交易", align: "right", format: value => formatNumber(value)},
@@ -140,6 +144,7 @@ const marketColumns = Object.freeze([
   {key: "stateName", label: "国家"},
   {key: "cityName", label: "中心"},
   {key: "cells", label: "覆盖", align: "right", format: value => formatNumber(value)},
+  {key: "priceDelta", label: "价差", align: "right", format: value => formatSignedNumber(value)},
   {key: "stock", label: "库存", align: "right", format: value => formatNumber(value)},
   {key: "shortage", label: "缺口", align: "right", format: value => formatNumber(value)},
   {key: "tradeValue", label: "交易额", align: "right", format: value => formatNumber(value)}
@@ -198,6 +203,7 @@ const summaryMetrics = computed(() => [
   {label: "资源点", value: formatNumber(metrics.value.summary.resourceMarkers)},
   {label: "总库存", value: formatNumber(metrics.value.summary.stock)},
   {label: "供需缺口", value: formatNumber(metrics.value.summary.shortage)},
+  {label: "价格信号", value: formatNumber(metrics.value.summary.priceSignals)},
   {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)}
 ]);
 
@@ -213,6 +219,9 @@ const detailRows = computed(() => {
     {label: "供给", value: formatNumber(selectedMarket.value.supply)},
     {label: "缺口", value: formatNumber(selectedMarket.value.shortage)},
     {label: "过剩", value: formatNumber(selectedMarket.value.surplus)},
+    {label: "平均价差", value: formatSignedNumber(selectedMarket.value.priceDelta)},
+    {label: "价格信号商品", value: formatNumber(selectedMarket.value.priceSignals)},
+    {label: "流入/流出", value: `${formatNumber(selectedMarket.value.tradeInValue)} / ${formatNumber(selectedMarket.value.tradeOutValue)}`},
     {label: "资源供给", value: formatNumber(selectedMarket.value.resourceSupply)},
     {label: "交易额", value: formatNumber(selectedMarket.value.tradeValue)},
     {label: "market id", value: selectedMarket.value.id, debug: true},
@@ -241,6 +250,9 @@ const detailRows = computed(() => {
     {label: "商品", value: selectedGood.value.name},
     {label: "类型", value: selectedGood.value.typeLabel},
     {label: "基价", value: formatNumber(selectedGood.value.value)},
+    {label: "平均有效价", value: formatNumber(selectedGood.value.effectivePrice)},
+    {label: "平均价差", value: formatSignedNumber(selectedGood.value.priceDelta)},
+    {label: "价格压力", value: formatSignedNumber(selectedGood.value.pricePressure)},
     {label: "市场库存", value: formatNumber(selectedGood.value.stock)},
     {label: "市场需求", value: formatNumber(selectedGood.value.demand)},
     {label: "供需缺口", value: formatNumber(selectedGood.value.shortage)},
@@ -248,6 +260,7 @@ const detailRows = computed(() => {
     {label: "资源 cells", value: formatNumber(selectedGood.value.sourceCells)},
     {label: "生产记录", value: formatNumber(selectedGood.value.production)},
     {label: "交易记录", value: formatNumber(selectedGood.value.deals)},
+    {label: "流入/流出", value: `${formatNumber(selectedGood.value.tradeInUnits)} / ${formatNumber(selectedGood.value.tradeOutUnits)}`},
     {label: "交易额", value: formatNumber(selectedGood.value.tradeValue)},
     {label: "good id", value: selectedGood.value.id, debug: true},
     {label: "visible", value: selectedGood.value.visibleLabel, debug: true}
@@ -286,6 +299,11 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
   const supplyByGood = new Map();
   const shortageByGood = new Map();
   const surplusByGood = new Map();
+  const effectivePriceByGood = new Map();
+  const priceDeltaByGood = new Map();
+  const pricePressureByGood = new Map();
+  const tradeInUnitsByGood = new Map();
+  const tradeOutUnitsByGood = new Map();
   const marketStock = new Map();
   const marketResourceSupply = new Map();
   const marketCells = countByValue(pack.cells?.market || []);
@@ -307,12 +325,22 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       const supply = Number(record.supply || amount);
       const shortage = Number(record.shortage || 0);
       const surplus = Number(record.surplus || 0);
+      const effectivePrice = Number(record.effectivePrice ?? record.price ?? 0);
+      const priceDelta = Number(record.priceDelta || 0);
+      const pricePressure = Number(record.pricePressure || 0);
+      const tradeInUnits = Number(record.tradeInUnits || 0);
+      const tradeOutUnits = Number(record.tradeOutUnits || 0);
       stock += amount;
       stockByGood.set(goodId, round((stockByGood.get(goodId) || 0) + amount));
       demandByGood.set(goodId, round((demandByGood.get(goodId) || 0) + demand));
       supplyByGood.set(goodId, round((supplyByGood.get(goodId) || 0) + supply));
       shortageByGood.set(goodId, round((shortageByGood.get(goodId) || 0) + shortage));
       surplusByGood.set(goodId, round((surplusByGood.get(goodId) || 0) + surplus));
+      effectivePriceByGood.set(goodId, averageAccumulator(effectivePriceByGood.get(goodId), effectivePrice));
+      priceDeltaByGood.set(goodId, averageAccumulator(priceDeltaByGood.get(goodId), priceDelta));
+      pricePressureByGood.set(goodId, averageAccumulator(pricePressureByGood.get(goodId), pricePressure));
+      tradeInUnitsByGood.set(goodId, round((tradeInUnitsByGood.get(goodId) || 0) + tradeInUnits));
+      tradeOutUnitsByGood.set(goodId, round((tradeOutUnitsByGood.get(goodId) || 0) + tradeOutUnits));
       const best = bestMarketByGood.get(goodId);
       if (!best || amount > best.stock) bestMarketByGood.set(goodId, {market, stock: amount});
     }
@@ -336,6 +364,9 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       name: good.name || `商品 #${good.i}`,
       typeLabel: goodTypeLabel(good),
       value: Number(good.value || 0),
+      effectivePrice: averageValue(effectivePriceByGood.get(good.i)),
+      priceDelta: averageValue(priceDeltaByGood.get(good.i)),
+      pricePressure: averageValue(pricePressureByGood.get(good.i)),
       stock: stockByGood.get(good.i) || 0,
       demand: demandByGood.get(good.i) || 0,
       supply: supplyByGood.get(good.i) || 0,
@@ -344,6 +375,8 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       sourceCells: goodSourceCells.get(good.i) || 0,
       production: goodProduction.get(good.i) || 0,
       deals: dealStats.count,
+      tradeInUnits: tradeInUnitsByGood.get(good.i) || 0,
+      tradeOutUnits: tradeOutUnitsByGood.get(good.i) || 0,
       tradeValue: round(dealStats.value),
       visibleLabel: good.visible === false ? "隐藏" : "显示",
       searchText: "",
@@ -369,6 +402,10 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       supply: Number(market.demandSummary?.supply || 0),
       shortage: Number(market.demandSummary?.shortage || 0),
       surplus: Number(market.demandSummary?.surplus || 0),
+      priceDelta: Number(market.priceSummary?.averageDelta || 0),
+      priceSignals: Number(market.priceSummary?.pressureGoods || 0),
+      tradeInValue: Number(market.priceSummary?.tradeInValue || 0),
+      tradeOutValue: Number(market.priceSummary?.tradeOutValue || 0),
       resourceSupply: marketResourceSupply.get(market.i) || 0,
       deals: dealStats.count,
       tradeValue: round(dealStats.value),
@@ -441,6 +478,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       demand: round(sumRows(marketRows, "demand")),
       shortage: round(sumRows(marketRows, "shortage")),
       surplus: round(sumRows(marketRows, "surplus")),
+      priceSignals: round(sumRows(marketRows, "priceSignals")),
       tradeValue: round(totalTradeValue)
     },
     diagnostics
@@ -569,6 +607,10 @@ function exportColumns() {
     {key: "supply", label: "供给"},
     {key: "shortage", label: "缺口"},
     {key: "surplus", label: "过剩"},
+    {key: "priceDelta", label: "平均价差"},
+    {key: "priceSignals", label: "价格信号商品"},
+    {key: "tradeInValue", label: "流入额"},
+    {key: "tradeOutValue", label: "流出额"},
     {key: "resourceSupply", label: "资源供给"},
     {key: "deals", label: "交易数"},
     {key: "tradeValue", label: "交易额"}
@@ -594,6 +636,9 @@ function exportColumns() {
     {key: "name", label: "商品"},
     {key: "typeLabel", label: "类型"},
     {key: "value", label: "基价"},
+    {key: "effectivePrice", label: "平均有效价"},
+    {key: "priceDelta", label: "平均价差"},
+    {key: "pricePressure", label: "平均价格压力"},
     {key: "stock", label: "库存"},
     {key: "demand", label: "需求"},
     {key: "supply", label: "供给"},
@@ -602,6 +647,8 @@ function exportColumns() {
     {key: "sourceCells", label: "资源Cells"},
     {key: "production", label: "生产记录"},
     {key: "deals", label: "交易记录"},
+    {key: "tradeInUnits", label: "流入数量"},
+    {key: "tradeOutUnits", label: "流出数量"},
     {key: "tradeValue", label: "交易额"},
     {key: "visibleLabel", label: "可见"}
   ];
@@ -637,6 +684,18 @@ function withSearchText(row) {
       .join(" ")
       .toLowerCase()
   };
+}
+
+function averageAccumulator(current, value) {
+  if (!Number.isFinite(value)) return current || {sum: 0, count: 0};
+  return {
+    sum: round(Number(current?.sum || 0) + value),
+    count: Number(current?.count || 0) + 1
+  };
+}
+
+function averageValue(item) {
+  return item?.count ? round(Number(item.sum || 0) / item.count, 3) : 0;
 }
 
 function countByValue(values) {
@@ -746,6 +805,11 @@ function sumRows(rows, key) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function formatSignedNumber(value) {
+  const numeric = Number(value || 0);
+  return `${numeric > 0 ? "+" : ""}${formatNumber(numeric)}`;
 }
 
 function formatDistanceValue(value) {

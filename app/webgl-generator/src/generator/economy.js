@@ -144,6 +144,7 @@ export function buildEconomy(pack, options = {}) {
   initializeTaxRates(states, random);
   const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
   pack.deals = deals;
+  const pricePropagation = applyPricePropagationDiagnostics(pack, pack.markets, deals, goods);
   collectStateTreasuries(states, deals, pack.markets, pack);
   const markerEconomy = refreshPoliticalEconomicPower(pack);
 
@@ -165,6 +166,7 @@ export function buildEconomy(pack, options = {}) {
       markerResourceDeals: deals.filter(deal => deal.source === "marker-resource").length
     },
     demand,
+    pricePropagation,
     tradeDistance: summarizeTradeDistance(deals),
     statesWithTaxes: states.filter(state => Number.isFinite(state.salesTax) && Number.isFinite(state.pollTax)).length,
     markerEconomy
@@ -732,6 +734,151 @@ function marketGoodDemand(good, base) {
   const consumerBase = Math.sqrt(Math.max(0, base.rural)) * 1.15 + Number(base.urban || 0) * 2.4 + Number(base.burgs || 0) * 0.18 + 0.35;
   const typeFactor = good.distribution && !good.recipes?.length ? 1.08 : good.recipes?.length ? 0.82 : 1;
   return round(Math.max(0.05, consumerBase * (0.25 + urbanCoverage * 0.58 + ruralCoverage * 0.34) * typeFactor), 2);
+}
+
+function applyPricePropagationDiagnostics(pack, markets, deals, goods) {
+  const validMarkets = (markets || []).filter(Boolean);
+  const goodsList = (goods || []).filter(Boolean);
+  const flows = buildTradeFlowByMarketGood(pack, deals);
+  const metadata = {
+    records: 0,
+    marketsWithSignals: 0,
+    priceRisers: 0,
+    priceFallers: 0,
+    averageDelta: 0,
+    maxDelta: 0,
+    topRisers: [],
+    topFallers: []
+  };
+  const topSignals = [];
+  let totalDelta = 0;
+
+  for (const market of validMarkets) {
+    let marketDelta = 0;
+    let marketPressureGoods = 0;
+    let marketTradeIn = 0;
+    let marketTradeOut = 0;
+
+    for (const good of goodsList) {
+      const record = market.goods?.[good.i];
+      if (!record) continue;
+      const flow = flows.get(flowKey(market.i, good.i)) || emptyMarketGoodFlow();
+      const localPrice = Number(record.price || 0);
+      const demand = Number(record.demand || 0);
+      const supply = Number(record.supply || record.stock || 0);
+      const shortage = Number(record.shortage || 0);
+      const surplus = Number(record.surplus || 0);
+      const resourceSupply = Number(market.resourceSupply?.[good.i] || 0);
+      const demandBase = Math.max(1, demand);
+      const tradeBase = Math.max(1, demand + supply);
+      const demandPressure = clamp((shortage - surplus * 0.25) / demandBase, -0.28, 0.42);
+      const tradePressure = clamp((flow.outUnits - flow.inUnits) / tradeBase, -0.18, 0.24);
+      const resourceRelief = clamp(resourceSupply / demandBase, 0, 0.22);
+      const pressure = round(demandPressure + tradePressure - resourceRelief, 3);
+      const effectivePrice = round(Math.max(0.35, localPrice * (1 + pressure)), 2);
+      const delta = round(effectivePrice - localPrice, 2);
+
+      record.localPrice = round(localPrice, 2);
+      record.effectivePrice = effectivePrice;
+      record.priceDelta = delta;
+      record.pricePressure = pressure;
+      record.tradeInUnits = round(flow.inUnits, 2);
+      record.tradeOutUnits = round(flow.outUnits, 2);
+      record.netTradeUnits = round(flow.inUnits - flow.outUnits, 2);
+      record.tradeInValue = round(flow.inValue, 2);
+      record.tradeOutValue = round(flow.outValue, 2);
+      record.netTradeValue = round(flow.inValue - flow.outValue, 2);
+
+      metadata.records++;
+      totalDelta = round(totalDelta + delta, 2);
+      marketDelta = round(marketDelta + delta, 2);
+      marketTradeIn = round(marketTradeIn + flow.inValue, 2);
+      marketTradeOut = round(marketTradeOut + flow.outValue, 2);
+      metadata.maxDelta = round(Math.max(metadata.maxDelta, Math.abs(delta)), 2);
+      if (delta > 0.01) metadata.priceRisers++;
+      if (delta < -0.01) metadata.priceFallers++;
+      if (Math.abs(delta) > 0.01) {
+        marketPressureGoods++;
+        topSignals.push({
+          market: market.i,
+          marketName: market.name,
+          good: good.i,
+          name: good.name || `good-${good.i}`,
+          delta,
+          effectivePrice,
+          localPrice: round(localPrice, 2)
+        });
+      }
+    }
+
+    market.priceSummary = {
+      averageDelta: round(marketDelta / Math.max(1, goodsList.length), 3),
+      pressureGoods: marketPressureGoods,
+      tradeInValue: marketTradeIn,
+      tradeOutValue: marketTradeOut,
+      netTradeValue: round(marketTradeIn - marketTradeOut, 2)
+    };
+    if (marketPressureGoods) metadata.marketsWithSignals++;
+  }
+
+  metadata.averageDelta = round(totalDelta / Math.max(1, metadata.records), 3);
+  metadata.topRisers = topSignals
+    .filter(item => item.delta > 0)
+    .sort((a, b) => b.delta - a.delta || a.market - b.market || a.good - b.good)
+    .slice(0, 8);
+  metadata.topFallers = topSignals
+    .filter(item => item.delta < 0)
+    .sort((a, b) => a.delta - b.delta || a.market - b.market || a.good - b.good)
+    .slice(0, 8);
+  return metadata;
+}
+
+function buildTradeFlowByMarketGood(pack, deals) {
+  const flows = new Map();
+  for (const deal of deals || []) {
+    const goodId = Number(deal.good || 0);
+    if (!goodId) continue;
+    const units = Number(deal.units || 0);
+    const value = round(units * Number(deal.price || 0), 2);
+    const sellerMarket = tradePartyMarketId(pack, deal.sellerType, deal.seller);
+    const buyerMarket = tradePartyMarketId(pack, deal.buyerType, deal.buyer);
+
+    if (sellerMarket) {
+      const flow = ensureMarketGoodFlow(flows, sellerMarket, goodId);
+      flow.outUnits = round(flow.outUnits + units, 2);
+      flow.outValue = round(flow.outValue + value, 2);
+    }
+    if (buyerMarket) {
+      const flow = ensureMarketGoodFlow(flows, buyerMarket, goodId);
+      flow.inUnits = round(flow.inUnits + units, 2);
+      flow.inValue = round(flow.inValue + value, 2);
+    }
+  }
+  return flows;
+}
+
+function tradePartyMarketId(pack, type, id) {
+  if (type === "market") return Number(id || 0);
+  if (type === "burg") return Number(pack?.burgs?.[id]?.market || 0);
+  return 0;
+}
+
+function ensureMarketGoodFlow(flows, marketId, goodId) {
+  const key = flowKey(marketId, goodId);
+  let flow = flows.get(key);
+  if (!flow) {
+    flow = emptyMarketGoodFlow();
+    flows.set(key, flow);
+  }
+  return flow;
+}
+
+function emptyMarketGoodFlow() {
+  return {inUnits: 0, outUnits: 0, inValue: 0, outValue: 0};
+}
+
+function flowKey(marketId, goodId) {
+  return `${marketId}:${goodId}`;
 }
 
 function nearestMarketId(point, markets) {

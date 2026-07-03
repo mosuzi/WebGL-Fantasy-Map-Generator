@@ -16906,3 +16906,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` chunk 约 `40.84KB / gzip 12.42KB`，主入口约 `803.88KB / gzip 242.32KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：打开 `军事管理` 后，`military-panel-summary / military-overview / military-dossier / military-panel-details / military-edit-toolbar / military-event-list` 均无横向溢出；面板显示“战报档案 / 战报记录”，不再裸露“战斗事件 / 已应用 / 未应用”；`glError = 0`、console/page error 为 `0`，打开面板后 health 非 info 事件为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1517.9ms`，纯生成 `759.2ms`，WebGL 加载 `518.7ms`，UI slack `240ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 137.4ms`，最慢加载阶段为 `构建视觉 cell mesh 79.3ms`。
+
+### 静态价格传播诊断第一刀
+
+背景：
+
+- 经济面板已经能查看商品、市场、交易、运距成本和供需缺口，但市场商品价格仍只有本地基础价格，不能解释贸易流入、流出和缺口对价格的方向性影响。
+- 当前计划要求逐步补价格传播，但仍不进入贸易动画、市场归属刷子、经济驱动外交或动态军事联动。
+- 本轮先做静态诊断字段，保留原 `price` 作为交易生成时使用的单价。
+
+修正：
+
+- 交易生成后新增 `applyPricePropagationDiagnostics()`，按 `market + good` 汇总交易流入/流出、供需缺口、过剩和资源供给。
+- 市场商品记录写入 `localPrice / effectivePrice / priceDelta / pricePressure / tradeInUnits / tradeOutUnits / netTradeUnits / tradeInValue / tradeOutValue / netTradeValue`。
+- 市场写入 `priceSummary`，经济 metadata 写入 `pricePropagation`，记录市场数、记录数、涨跌价差和 Top 涨跌商品。
+- 经济总览、商品/市场列表、详情和 CSV/JSON 导出展示有效价、价差、价格压力和流入流出字段。
+- 本轮不覆盖原始 `price`，不重算既有交易，不触发军事、外交或市场归属自动变化。
+
+验证：
+
+- Node 纯生成探针通过：`stage-2-1 / continents / 10000` 生成 `29` 个市场、`71` 个商品、`14906` 条交易和 `2059` 条市场商品价格记录；`2059` 条均带有效价/价差/价格压力，`1223` 条带交易流入或流出，metadata 记录数一致。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`EconomyPanel` chunk 约 `21.79KB / gzip 6.68KB`，主入口约 `806.25KB / gzip 243.17KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：经济面板显示“价格信号 / 有效价 / 价差”，`2059` 条市场商品记录均带有效价/价差/价格压力，`1562` 条带交易流入或流出；面板无横向溢出，`glError = 0`、console/page error 为 `0`，打开面板后 health 非 info 事件为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1460.3ms`，纯生成 `763.3ms`，WebGL 加载 `377.1ms`，UI slack `319.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 118.3ms`，最慢加载阶段为 `构建视觉 cell mesh 52.9ms`。
