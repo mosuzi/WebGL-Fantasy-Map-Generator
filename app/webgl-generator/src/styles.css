@@ -5102,6 +5102,17 @@ input.ui-switch-native {
   font-size: 11px;
 }
 
+.military-event-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: end;
+}
+
+.military-event-filter {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
 .military-event-list ol {
   display: grid;
   gap: 6px;

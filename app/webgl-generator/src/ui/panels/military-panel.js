@@ -54,6 +54,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     onBaseApply: target => callbacks.onBaseApply?.(target),
     onBattleEventApply: (target, event) => callbacks.onBattleEventApply?.(target, event),
     onBattleEventsImport: file => callbacks.onBattleEventsImport?.(file),
+    onBattleEventsClear: target => callbacks.onBattleEventsClear?.(target),
     onRename: (target, name) => callbacks.onRename?.(target, name),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()

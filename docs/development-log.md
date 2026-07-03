@@ -15704,3 +15704,30 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `24.26KB / gzip 8.00KB`，主入口约 `763.99KB / gzip 230.80KB`。
 - Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，进入军事管理，对隐藏文件输入设置临时 JSON；面板显示 `已导入 1 条，跳过 1 条`，事件摘要为 `导入战报摘要`，军团兵力保持 `576`，军团事件数为 `1`，历史为 `undo 1 / redo 0 / 导入军团战斗事件`；撤销后事件消失，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1379.2ms`，纯生成 `717.1ms`，WebGL 加载 `368ms`，UI slack `294.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 144.9ms`，最慢加载阶段为 `构建视觉 cell mesh 58.2ms`，`line-vertices = 53.9ms`，`fit-draw = 3ms`，`glError = 0`。
+
+### 战斗事件筛选与清空
+
+背景：
+
+- 战斗事件已能记录、导出、导入，但选中军团的事件列表只能显示最近 `5` 条，无法按类型或结果收窄。
+- 导入或多次记录后缺少可撤销的当前军团事件清理入口。
+- 本轮只处理事件记录列表，不回滚已应用的兵力损耗、不改变外交战争状态，也不进入完整战斗模拟。
+
+修正：
+
+- `MilitaryPanel` 的选中军团事件区新增“类型 / 结果”筛选。
+- 筛选后标题显示 `匹配数 / 总数`，列表仍只展示最近 `5` 条匹配事件，避免事件多时撑大面板。
+- 新增“清空当前”按钮，清空当前选中军团在 `map.military.events` 和 `regiment.events[]` 中的战斗事件。
+- `createClearMilitaryBattleEventsCommand()` 接入 `EditHistory`，撤销/重做恢复全局事件列表、军团事件列表和事件 metadata。
+- 清空只影响事件记录，不回滚已经通过轻量结果应用写入的兵力、兵种、态势或命令。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 243 项。
+
+验证：
+
+- 命令烟测通过：给军团 `1:0` 记录 `2` 条不同类型事件后执行清空，`map.military.events` 和军团事件数均从 `2` 变为 `0`，兵力保持 `16250`；撤销后全局事件和军团事件均恢复为 `2`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `25.41KB / gzip 8.25KB`，主入口约 `765.60KB / gzip 231.08KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，用命令层先记录 `袭扰 / 损耗` 与 `攻城 / 小胜` 两条事件，再打开军事管理；事件标题为 `2 条`，类型筛选切到 `袭扰` 后变为 `1 / 2 条`，列表仅显示 `袭扰 / 损耗`。点击“清空当前”后标题为 `暂无`，`map.military.events = 0`，历史为 `undo 3 / redo 0 / 清空军团战斗事件 #1:0`；撤销后事件数恢复为 `2`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1369.4ms`，纯生成 `677.8ms`，WebGL 加载 `389.9ms`，UI slack `301.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 140.1ms`，最慢加载阶段为 `构建标签 57.2ms`，`line-vertices = 49.6ms`，`fit-draw = 2.5ms`，`glError = 0`。

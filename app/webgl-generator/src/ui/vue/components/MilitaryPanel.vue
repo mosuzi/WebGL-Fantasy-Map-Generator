@@ -80,9 +80,28 @@
   <section v-if="selected" class="military-event-list" aria-label="选中军团战斗事件">
     <div class="military-event-list-heading">
       <strong>战斗事件</strong>
-      <span>{{ selectedBattleEventTotal ? `${formatNumber(selectedBattleEventTotal)} 条` : "暂无" }}</span>
+      <span>{{ battleEventCountLabel }}</span>
     </div>
-    <p v-if="!selectedBattleEvents.length" class="military-event-empty">当前军团还没有战斗事件。</p>
+    <div class="military-event-filters">
+      <UiSelectField
+        input-id="military-event-type-filter"
+        class-name="military-event-filter"
+        label="类型"
+        :model-value="eventTypeFilter"
+        :options="battleEventFilterTypeOptions"
+        @update:model-value="value => eventTypeFilter = value"
+      />
+      <UiSelectField
+        input-id="military-event-outcome-filter"
+        class-name="military-event-filter"
+        label="结果"
+        :model-value="eventOutcomeFilter"
+        :options="battleEventFilterOutcomeOptions"
+        @update:model-value="value => eventOutcomeFilter = value"
+      />
+      <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
+    </div>
+    <p v-if="!selectedBattleEvents.length" class="military-event-empty">{{ selectedBattleEventTotal ? "没有匹配当前筛选的战斗事件。" : "当前军团还没有战斗事件。" }}</p>
     <ol v-else>
       <li v-for="event in selectedBattleEvents" :key="event.id || `${event.regimentObjectId}-${event.sequence}`" class="military-event-item">
         <div>
@@ -302,6 +321,8 @@ const batchStatusDraft = ref("garrisoned");
 const stationDestinationDraft = ref("capital");
 const battleEventsImportInput = ref(null);
 const battleEventsImportStatus = ref("");
+const eventTypeFilter = ref("all");
+const eventOutcomeFilter = ref("all");
 const battleEventDraft = reactive({
   type: "skirmish",
   outcome: "victory",
@@ -323,6 +344,14 @@ const battleEventOutcomeOptions = Object.freeze([
   {value: "draw", label: "相持"},
   {value: "loss", label: "损耗"},
   {value: "regroup", label: "重整"}
+]);
+const battleEventFilterTypeOptions = Object.freeze([
+  {value: "all", label: "全部类型"},
+  ...battleEventTypeOptions
+]);
+const battleEventFilterOutcomeOptions = Object.freeze([
+  {value: "all", label: "全部结果"},
+  ...battleEventOutcomeOptions
 ]);
 const battleResultRules = Object.freeze({
   victory: {lossRate: 0.04, statusLabel: "修整中", label: "小胜后整队"},
@@ -356,7 +385,13 @@ const selected = computed(() => findByObjectId(visibleRows.value, props.state.se
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
 const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
-const selectedBattleEvents = computed(() => latestEventsForRegiment(allBattleEvents.value, selected.value, 5));
+const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value));
+const selectedBattleEvents = computed(() => latestBattleEvents(selectedFilteredBattleEvents.value, 5));
+const battleEventCountLabel = computed(() => {
+  if (!selectedBattleEventTotal.value) return "暂无";
+  if (selectedFilteredBattleEvents.value.length === selectedBattleEventTotal.value) return `${formatNumber(selectedBattleEventTotal.value)} 条`;
+  return `${formatNumber(selectedFilteredBattleEvents.value.length)} / ${formatNumber(selectedBattleEventTotal.value)} 条`;
+});
 const battleResultPreview = computed(() => {
   const rule = battleResultRules[battleEventDraft.outcome] || battleResultRules.draw;
   const troops = Math.max(0, Math.round(Number(selected.value?.troops || 0)));
@@ -603,6 +638,11 @@ function applyBattleEvent(description) {
   activeAction.value = null;
 }
 
+function clearSelectedBattleEvents() {
+  if (!selected.value || !selectedBattleEventTotal.value) return;
+  props.callbacks.onBattleEventsClear?.(militaryTarget(selected.value));
+}
+
 function clearBattleEventDescription() {
   battleEventDraft.description = "";
 }
@@ -726,12 +766,21 @@ function addBattleEvent(byId, event) {
   if (!byId.has(key)) byId.set(key, event);
 }
 
-function latestEventsForRegiment(events = [], regiment, limit = 5) {
+function eventsForRegiment(events = [], regiment) {
   if (!regiment) return [];
   return events
-    .filter(event => eventBelongsToRegiment(event, regiment))
-    .slice(-limit)
-    .reverse();
+    .filter(event => eventBelongsToRegiment(event, regiment));
+}
+
+function filterBattleEvents(events = [], type = "all", outcome = "all") {
+  return events.filter(event =>
+    (type === "all" || event.type === type)
+    && (outcome === "all" || event.outcome === outcome)
+  );
+}
+
+function latestBattleEvents(events = [], limit = 5) {
+  return events.slice(-limit).reverse();
 }
 
 function countEventsForRegiment(events = [], regiment) {

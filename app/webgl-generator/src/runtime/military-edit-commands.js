@@ -261,6 +261,52 @@ export function createImportMilitaryBattleEventsCommand(document, {label = "导�
   };
 }
 
+export function createClearMilitaryBattleEventsCommand(target, {label = "清空军团战斗事件"} = {}) {
+  const normalizedTarget = normalizeRegimentTarget(target);
+  let previous = null;
+  let removed = 0;
+
+  return {
+    label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    effects: {
+      ...MILITARY_EVENT_EFFECTS,
+      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+    },
+    apply(context) {
+      const {state, regiment} = findRegiment(context.map, normalizedTarget);
+      if (!state?.i || !regiment) throw new Error("找不到军团");
+      previous ??= snapshotBattleEvents(context.map, state, regiment);
+      const military = ensureMilitaryEventStore(context.map);
+      const beforeGlobal = military.events.length;
+      military.events = military.events.filter(event => !battleEventMatchesTarget(event, normalizedTarget));
+      removed = beforeGlobal - military.events.length;
+      if (Array.isArray(regiment.events)) {
+        const beforeRegiment = regiment.events.length;
+        regiment.events = regiment.events.filter(event => !battleEventMatchesTarget(event, normalizedTarget));
+        removed = Math.max(removed, beforeRegiment - regiment.events.length);
+      }
+      if (!removed) throw new Error("当前军团没有可清空的战斗事件");
+      syncMilitary(context.map);
+      refreshMilitaryEventMetadata(context.map);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的军团战斗事件快照");
+      const {state, regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      restoreBattleEvents(context.map, state, regiment, previous);
+      syncMilitary(context.map);
+      refreshMilitaryEventMetadata(context.map);
+    },
+    isNoop(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      return !regiment || !countBattleEventsForTarget(context.map, normalizedTarget, regiment);
+    },
+    getResult() {
+      return {removed};
+    }
+  };
+}
+
 export function createMoveMilitaryStationCommand(target, destination, {label = "移动军团驻地"} = {}) {
   const normalizedTarget = normalizeRegimentTarget(target);
   const normalizedDestination = normalizeRegimentDestination(destination);
@@ -515,6 +561,19 @@ function importedBattleEventTarget(event = {}) {
     stateId: event.stateId ?? idParts[0],
     regimentId: event.regimentId ?? idParts[1]
   });
+}
+
+function countBattleEventsForTarget(map, target, regiment) {
+  const military = map?.pack?.military || map?.military || {};
+  const globalCount = (Array.isArray(military.events) ? military.events : []).filter(event => battleEventMatchesTarget(event, target)).length;
+  const regimentCount = (Array.isArray(regiment?.events) ? regiment.events : []).filter(event => battleEventMatchesTarget(event, target)).length;
+  return Math.max(globalCount, regimentCount);
+}
+
+function battleEventMatchesTarget(event, target) {
+  if (!event || event.kind !== "battle") return false;
+  if (event.regimentObjectId && target.id && event.regimentObjectId === target.id) return true;
+  return Number(event.stateId) === target.stateId && Number(event.regimentId) === target.regimentId;
 }
 
 function uniqueRegimentTargets(targets = []) {
