@@ -15165,3 +15165,30 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：先从 4 色 SVG 导出 profile，再导入到只匹配 3 色且新增 2 色的目标 SVG；点击第一个当前额外色的“加入”后，配置色块从 `4` 增至 `5`，匹配从 `3/4` 增至 `4/5`，当前额外从 `2` 降至 `1`。
 - 同次烟测中主色板有 `4` 个手动色块，新增色块被选中，地图 checksum 保持稳定；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1240.9ms`，纯生成 `633.7ms`，WebGL 加载 `352.1ms`，最慢加载阶段为 `cell-visual-mesh 51.5ms`，`fit-draw = 2.3ms`，`glError = 0`。
+
+### 高度图 profile 色块从配置移除
+
+背景：
+
+- profile 当前额外色已经可以一键加入配置，但误加入后只能通过恢复自动高度绕开，profile key 集仍会把该色视为配置色。
+- 用户需要一个明确的撤回动作，把色块从当前 profile 配置里移除，并让匹配摘要回到加入前状态。
+
+修正：
+
+- 当选中色块属于已导入 profile key 集时，色块高度赋值面板新增“从配置移除”。
+- 点击后同步删除 `importedProfileKeys`、`importedProfileAssignments` 和对应 `manualAssignments`。
+- 移除后该色块仍保持选中以便观察预览，但不再显示手动高度，也会重新计入当前额外色。
+- 该操作只刷新工作台预览状态，不写 `map`，不触发 worker 或 renderer 重载。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`HeightPanel` 懒加载 chunk 约 `35.22KB / gzip 11.79KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：先从 4 色 SVG 导出 profile，再导入到只匹配 3 色且新增 2 色的目标 SVG；点击“加入”后匹配为 `4/5`、手动色块为 `4` 个，再点击“从配置移除”后匹配回到 `3/4`、手动色块回到 `3` 个。
+- 同次烟测中移除后当前额外色回到 `2`，选中色块不再显示手动高度，地图 checksum 保持稳定；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1231.2ms`，纯生成 `628.6ms`，WebGL 加载 `379ms`，最慢加载阶段为 `line-vertices 54.6ms`，`fit-draw = 2.4ms`，`glError = 0`。

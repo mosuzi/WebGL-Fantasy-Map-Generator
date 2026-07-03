@@ -301,6 +301,9 @@
             </UiButton>
             <UiButton variant="secondary" @click="clearSelectedPaletteHeight">恢复自动</UiButton>
           </div>
+          <div v-if="selectedPaletteInProfile" class="heightmap-profile-selected-actions">
+            <UiButton variant="secondary" @click="removeSelectedProfileEntry">从配置移除</UiButton>
+          </div>
         </section>
 
         <section v-if="pendingUnassignedBlocked && pendingPalette.length" class="heightmap-pending-section" aria-label="待处理颜色">
@@ -487,6 +490,9 @@ const paletteSummary = computed(() => {
   return `${previewPalette.value.length} 色，点击色块高亮区域`;
 });
 const selectedPaletteEntry = computed(() => previewPalette.value.find(entry => entry.key === selectedPaletteKey.value) || null);
+const selectedPaletteInProfile = computed(() => (
+  selectedPaletteKey.value !== null && importedProfileKeys.value.includes(String(selectedPaletteKey.value))
+));
 const usesPaletteImport = computed(() => heightmapMappingMode.value !== "grayscale" || previewPalette.value.some(entry => entry.manual));
 const pendingUnassignedBlocked = computed(() => (
   usesPaletteImport.value &&
@@ -851,6 +857,21 @@ function addCurrentOnlyProfileEntry(entry) {
   selectedPaletteKey.value = entry.key;
   drawPreview();
   previewStatus.value = `已加入配置：${color}，高度 ${height}。`;
+}
+
+function removeSelectedProfileEntry() {
+  if (selectedPaletteKey.value === null) return;
+  const key = String(selectedPaletteKey.value);
+  const entry = selectedPaletteEntry.value;
+  const color = normalizeHexColor(entry?.hex) || normalizeHexColor(importedProfileAssignments.value.find(item => String(item.key) === key)?.color) || "该色块";
+  importedProfileKeys.value = importedProfileKeys.value.filter(item => String(item) !== key);
+  importedProfileAssignments.value = importedProfileAssignments.value.filter(item => String(item.key) !== key);
+  const nextManualAssignments = {...manualAssignments.value};
+  delete nextManualAssignments[key];
+  manualAssignments.value = nextManualAssignments;
+  selectedPaletteKey.value = entry?.key ?? null;
+  drawPreview();
+  previewStatus.value = `已从配置移除：${color}。`;
 }
 
 function normalizeProfileAssignments(assignments) {

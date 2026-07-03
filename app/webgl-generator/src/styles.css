@@ -2956,6 +2956,15 @@ select:disabled {
   padding-inline: 7px;
 }
 
+.heightmap-profile-selected-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.heightmap-profile-selected-actions .el-button {
+  min-height: 26px;
+}
+
 .heightmap-histogram-bars {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
