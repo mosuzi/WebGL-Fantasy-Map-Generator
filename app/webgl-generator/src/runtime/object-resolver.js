@@ -139,6 +139,7 @@ function resolveTradeFlow(map, object) {
   const good = map.pack?.goods?.find(item => item?.i === deal.good) || map.pack?.goods?.[deal.good];
   const seller = tradePartyInfo(map, deal.sellerType, deal.seller);
   const buyer = tradePartyInfo(map, deal.buyerType, deal.buyer);
+  const tradeDistance = Number.isFinite(deal.distance) ? Number(deal.distance) : pointDistance(seller.point, buyer.point);
   return {
     ...object,
     kind: OBJECT_KIND.TRADE_FLOW,
@@ -152,14 +153,24 @@ function resolveTradeFlow(map, object) {
     buyerId: deal.buyer,
     buyerName: buyer.name,
     units: Number(deal.units || 0),
+    basePrice: Number(deal.basePrice ?? deal.price ?? 0),
     price: Number(deal.price || 0),
     value: roundValue(Number(deal.units || 0) * Number(deal.price || 0)),
+    tradeDistance,
+    distanceCost: Number(deal.distanceCost || 0),
+    distanceMultiplier: Number(deal.distanceMultiplier || 1),
     tax: Number(deal.tax || 0),
     source: deal.source || "scheduled",
     sourceLabel: tradeSourceLabel(deal.source),
     from: seller.point,
     to: buyer.point
   };
+}
+
+function pointDistance(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return null;
+  if (!Number.isFinite(a[0]) || !Number.isFinite(a[1]) || !Number.isFinite(b[0]) || !Number.isFinite(b[1])) return null;
+  return roundValue(Math.hypot(a[0] - b[0], a[1] - b[1]), 2);
 }
 
 function resolveRiver(map, object) {

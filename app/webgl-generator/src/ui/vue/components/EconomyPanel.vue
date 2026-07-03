@@ -90,6 +90,8 @@ const callbacks = props.callbacks;
 const unitPreferences = useUnitPreferences();
 const debugEnabled = useDebugMode();
 const ROW_LIMIT = 500;
+const DEAL_ROW_LIMIT = 48;
+const DEAL_METRIC_LIMIT = 120;
 
 const tabOptions = Object.freeze([
   {value: "goods", label: "商品"},
@@ -116,6 +118,7 @@ const dealSortOptions = Object.freeze([
   {key: "units", label: "数量"},
   {key: "price", label: "单价"},
   {key: "distance", label: "距离"},
+  {key: "distanceCost", label: "运费"},
   {key: "routeLabel", label: "类型"}
 ]);
 
@@ -143,13 +146,21 @@ const dealColumns = Object.freeze([
   {key: "sellerName", label: "卖方"},
   {key: "buyerName", label: "买方"},
   {key: "routeLabel", label: "类型"},
+  {key: "distance", label: "距离", align: "right", format: value => formatDistanceValue(value)},
+  {key: "distanceCost", label: "运费", align: "right", format: value => formatNumber(value)},
   {key: "units", label: "数量", align: "right", format: value => formatNumber(value)},
   {key: "value", label: "金额", align: "right", format: value => formatNumber(value)}
 ]);
 
 const metrics = computed(() => {
   props.state.version;
-  return buildEconomyMetrics(props.state.map, {includeDiagnostics: debugEnabled.value});
+  return buildEconomyMetrics(props.state.map, {
+    includeDiagnostics: debugEnabled.value,
+    dealRowLimit: DEAL_METRIC_LIMIT,
+    selectedDealId: props.state.selectedDealId,
+    dealSortKey: props.state.sortKey,
+    dealSortDir: props.state.sortDir
+  });
 });
 const activeSortOptions = computed(() => {
   if (props.state.tab === "markets") return marketSortOptions;
@@ -161,10 +172,10 @@ const filteredMarketRows = computed(() => sortRows(filterRows(metrics.value.mark
 const filteredDealRows = computed(() => sortRows(filterRows(metrics.value.deals, props.state.filter), props.state.sortKey, props.state.sortDir));
 const visibleGoodRows = computed(() => filteredGoodRows.value.slice(0, ROW_LIMIT));
 const visibleMarketRows = computed(() => filteredMarketRows.value.slice(0, ROW_LIMIT));
-const visibleDealRows = computed(() => filteredDealRows.value.slice(0, ROW_LIMIT));
+const visibleDealRows = computed(() => filteredDealRows.value.slice(0, DEAL_ROW_LIMIT));
 const activeTotalRows = computed(() => {
   if (props.state.tab === "markets") return filteredMarketRows.value.length;
-  if (props.state.tab === "deals") return filteredDealRows.value.length;
+  if (props.state.tab === "deals") return props.state.filter ? filteredDealRows.value.length : metrics.value.summary.deals;
   return filteredGoodRows.value.length;
 });
 const activeVisibleRows = computed(() => {
@@ -206,8 +217,11 @@ const detailRows = computed(() => {
     {label: "类型", value: selectedDeal.value.routeLabel},
     {label: "来源", value: selectedDeal.value.sourceLabel},
     {label: "数量", value: formatNumber(selectedDeal.value.units)},
+    {label: "基础单价", value: formatNumber(selectedDeal.value.basePrice)},
     {label: "单价", value: formatNumber(selectedDeal.value.price)},
     {label: "距离", value: selectedDeal.value.distanceLabel},
+    {label: "运距成本", value: formatNumber(selectedDeal.value.distanceCost)},
+    {label: "距离倍率", value: `${formatNumber(selectedDeal.value.distanceMultiplier)}x`},
     {label: "税额", value: formatNumber(selectedDeal.value.tax)},
     {label: "deal id", value: selectedDeal.value.id, debug: true},
     {label: "seller", value: `${selectedDeal.value.sellerType} #${selectedDeal.value.sellerId}`, debug: true},
@@ -247,7 +261,7 @@ watch(activeSortOptions, options => {
   callbacks.onSort?.(options[0]?.key || "id");
 });
 
-function buildEconomyMetrics(map, {includeDiagnostics = false} = {}) {
+function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = Infinity, selectedDealId = null, dealSortKey = "value", dealSortDir = "desc"} = {}) {
   const pack = map?.pack || {};
   const goods = (pack.goods || []).filter(good => good?.i);
   const markets = (pack.markets || []).filter(market => market?.i);
@@ -265,6 +279,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false} = {}) {
   const goodDeals = new Map();
   const marketDeals = new Map();
   const bestMarketByGood = new Map();
+  let totalTradeValue = 0;
 
   for (const market of markets) {
     let stock = 0;
@@ -284,6 +299,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false} = {}) {
 
   for (const deal of deals) {
     const value = dealValue(deal);
+    totalTradeValue = round(totalTradeValue + value);
     goodDeals.set(deal.good, accumulateDeal(goodDeals.get(deal.good), value));
     for (const marketId of dealMarketIds(deal)) marketDeals.set(marketId, accumulateDeal(marketDeals.get(marketId), value));
   }
@@ -329,11 +345,13 @@ function buildEconomyMetrics(map, {includeDiagnostics = false} = {}) {
   });
 
   const invalidDealSamples = [];
-  const dealRows = deals.map(deal => {
+  const panelDeals = selectDealRowsForPanel(deals, {limit: dealRowLimit, selectedDealId, sortKey: dealSortKey, sortDir: dealSortDir});
+  const dealRows = panelDeals.map(deal => {
     const seller = partyInfo(pack, deal.sellerType, deal.seller, marketsById);
     const buyer = partyInfo(pack, deal.buyerType, deal.buyer, marketsById);
     const good = goodsById.get(deal.good);
-    const distance = partyDistance(seller, buyer);
+    const fallbackDistance = partyDistance(seller, buyer);
+    const distance = Number.isFinite(deal.distance) ? Number(deal.distance) : fallbackDistance;
     const value = dealValue(deal);
     if (includeDiagnostics && (!good || !seller.valid || !buyer.valid) && invalidDealSamples.length < 5) {
       invalidDealSamples.push(`交易 #${deal.i}: ${good ? "" : "缺商品"}${seller.valid ? "" : " 缺卖方"}${buyer.valid ? "" : " 缺买方"}`.trim());
@@ -355,10 +373,13 @@ function buildEconomyMetrics(map, {includeDiagnostics = false} = {}) {
       source: deal.source || "scheduled",
       sourceLabel: sourceLabel(deal.source),
       units: Number(deal.units || 0),
+      basePrice: Number(deal.basePrice ?? deal.price ?? 0),
       price: Number(deal.price || 0),
       value,
       tax: Number(deal.tax || 0),
       distance,
+      distanceCost: Number(deal.distanceCost || 0),
+      distanceMultiplier: Number(deal.distanceMultiplier || 1),
       distanceLabel: Number.isFinite(distance) ? formatDistance(distance, unitPreferences.value) : "未知",
       locateObject: seller.locateObject || buyer.locateObject
     });
@@ -385,10 +406,40 @@ function buildEconomyMetrics(map, {includeDiagnostics = false} = {}) {
       deals: deals.length,
       resourceMarkers: pack.markers?.filter(marker => marker?.category === "resource").length || map?.markers?.metadata?.resourceMarkers || 0,
       stock: round(sumRows(marketRows, "stock")),
-      tradeValue: round(sumRows(dealRows, "value"))
+      tradeValue: round(totalTradeValue)
     },
     diagnostics
   };
+}
+
+function selectDealRowsForPanel(deals, {limit = Infinity, selectedDealId = null, sortKey = "value", sortDir = "desc"} = {}) {
+  if (!Number.isFinite(limit)) return deals;
+  const sorted = [...deals].sort((a, b) => compareRawDeals(a, b, sortKey, sortDir));
+  const selectedId = Number(selectedDealId);
+  const rows = sorted.slice(0, Math.max(0, limit));
+  if (Number.isInteger(selectedId) && !rows.some(deal => deal?.i === selectedId)) {
+    const selected = deals.find(deal => deal?.i === selectedId);
+    if (selected) rows.push(selected);
+  }
+  return rows;
+}
+
+function compareRawDeals(a, b, key, direction) {
+  const factor = direction === "asc" ? 1 : -1;
+  const aValue = rawDealSortValue(a, key);
+  const bValue = rawDealSortValue(b, key);
+  if (aValue === bValue) return Number(a?.i || 0) - Number(b?.i || 0);
+  if (typeof aValue === "string" || typeof bValue === "string") return String(aValue || "").localeCompare(String(bValue || ""), "zh-CN") * factor;
+  return (Number(aValue || 0) > Number(bValue || 0) ? 1 : -1) * factor;
+}
+
+function rawDealSortValue(deal, key) {
+  if (key === "units") return Number(deal?.units || 0);
+  if (key === "price") return Number(deal?.price || 0);
+  if (key === "distance") return Number(deal?.distance || 0);
+  if (key === "distanceCost") return Number(deal?.distanceCost || 0);
+  if (key === "routeLabel") return routeLabel(deal || {});
+  return dealValue(deal || {});
 }
 
 function emptyDiagnostics() {
@@ -460,7 +511,13 @@ function exportJson() {
 
 function exportRows() {
   if (props.state.tab === "markets") return filteredMarketRows.value;
-  if (props.state.tab === "deals") return filteredDealRows.value;
+  if (props.state.tab === "deals") {
+    const fullMetrics = buildEconomyMetrics(props.state.map, {
+      includeDiagnostics: false,
+      dealRowLimit: Infinity
+    });
+    return sortRows(filterRows(fullMetrics.deals, props.state.filter), props.state.sortKey, props.state.sortDir);
+  }
   return filteredGoodRows.value;
 }
 
@@ -485,10 +542,13 @@ function exportColumns() {
     {key: "routeLabel", label: "类型"},
     {key: "sourceLabel", label: "来源"},
     {key: "units", label: "数量"},
+    {key: "basePrice", label: "基础单价"},
     {key: "price", label: "单价"},
     {key: "value", label: "金额"},
     {key: "tax", label: "税额"},
-    {key: "distance", label: "距离"}
+    {key: "distance", label: "距离"},
+    {key: "distanceCost", label: "运距成本"},
+    {key: "distanceMultiplier", label: "距离倍率"}
   ];
   return [
     {key: "id", label: "商品ID"},
@@ -643,6 +703,10 @@ function sumRows(rows, key) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function formatDistanceValue(value) {
+  return Number.isFinite(value) ? formatDistance(value, unitPreferences.value) : "未知";
 }
 
 function round(value, digits = 2) {

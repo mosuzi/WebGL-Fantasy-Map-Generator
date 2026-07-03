@@ -81,8 +81,12 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "卖方", value: object.sellerName || `${object.sellerType} #${object.sellerId}`},
     {label: "买方", value: object.buyerName || `${object.buyerType} #${object.buyerId}`},
     {label: "来源", value: object.sourceLabel || object.source || "计划交易"},
+    {label: "贸易距离", value: formatOptionalDistanceValue(object.tradeDistance)},
     {label: "数量", value: formatNumberValue(object.units)},
+    {label: "基础单价", value: formatNumberValue(object.basePrice)},
     {label: "单价", value: formatNumberValue(object.price)},
+    {label: "运距成本", value: formatNumberValue(object.distanceCost)},
+    {label: "距离倍率", value: `${formatNumberValue(object.distanceMultiplier || 1)}x`},
     {label: "金额", value: formatNumberValue(object.value)},
     {label: "税额", value: formatNumberValue(object.tax)},
     {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
@@ -159,6 +163,10 @@ function formatMarkerData(data = {}) {
 
 function formatDistanceValue(value) {
   return formatDistance(value, unitPreferences.value);
+}
+
+function formatOptionalDistanceValue(value) {
+  return Number.isFinite(value) ? formatDistance(value, unitPreferences.value) : "未知";
 }
 
 function formatPopulationValue(value) {

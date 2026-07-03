@@ -163,6 +163,7 @@ export function buildEconomy(pack, options = {}) {
       resourceDeals: deals.filter(deal => deal.source === "market-resource" || deal.source === "marker-resource").length,
       markerResourceDeals: deals.filter(deal => deal.source === "marker-resource").length
     },
+    tradeDistance: summarizeTradeDistance(deals),
     statesWithTaxes: states.filter(state => Number.isFinite(state.salesTax) && Number.isFinite(state.pollTax)).length,
     markerEconomy
   };
@@ -652,6 +653,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   const deals = [];
   const stateDealTax = new Map();
   const statesById = new Map(states.map(state => [state.i, state]));
+  const distanceContext = createTradeDistanceContext(pack, options);
   const localProductionRate = getLocalProductionRate(options);
   const dealProductWeight = getDealProductWeight(options);
   const dealValueScale = getDealValueScale(options);
@@ -693,7 +695,8 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         units: 1,
         price: marketPrice(localMarket, selectedGood.good.i),
         valueScale: dealValueScale,
-        source: selectedGood.source
+        source: selectedGood.source,
+        distanceContext
       });
       burg.production.push({dealId: deal.i});
     }
@@ -715,7 +718,8 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         units: 0.8 + (index % 2) * 0.2,
         price: marketPrice(localMarket, goodId) * 0.75,
         valueScale: dealValueScale,
-        source: selectedGood.source
+        source: selectedGood.source,
+        distanceContext
       });
       burg.production.push({dealId: deal.i});
     }
@@ -744,7 +748,8 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         units: 1.5 + (index % 3) * 0.25,
         price: marketPrice(market, selectedGood.good.i),
         valueScale: dealValueScale,
-        source: selectedGood.source
+        source: selectedGood.source,
+        distanceContext
       });
     }
   }
@@ -829,13 +834,18 @@ function getDealValueScale(options) {
   return clamp((cellsTarget / 100000) ** 0.18, 0.66, 1);
 }
 
-function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1, source = "scheduled"}) {
+function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1, source = "scheduled", distanceContext = null}) {
   const sellerState = partyState(pack, sellerType, seller);
   const sellerStateItem = statesById.get(sellerState);
   const salesTax = sellerStateItem?.salesTax || 0.15;
   const tradeMultiplier = sellerStateItem?.governmentTradeModifier || 1;
   const roundedUnits = round(units);
-  const roundedPrice = round(price * valueScale * tradeMultiplier);
+  const basePrice = round(price * valueScale * tradeMultiplier);
+  const distance = tradePartyDistance(pack, sellerType, seller, buyerType, buyer);
+  const distanceRate = tradeDistanceRate(distance, sellerType, buyerType, distanceContext);
+  const distanceMultiplier = round(1 + distanceRate, 3);
+  const distanceCost = round(basePrice * distanceRate);
+  const roundedPrice = round(basePrice + distanceCost);
   const taxable = deals.length % 5 === 0;
   const tax = taxable ? round(roundedUnits * roundedPrice * salesTax * 3) : 0;
   const deal = {
@@ -846,13 +856,79 @@ function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, sel
     buyerType,
     buyer,
     units: roundedUnits,
+    basePrice,
     price: roundedPrice,
+    distance: Number.isFinite(distance) ? round(distance, 2) : null,
+    distanceCost,
+    distanceMultiplier,
     tax,
     source
   };
   deals.push(deal);
   if (sellerState > 0) stateDealTax.set(sellerState, round((stateDealTax.get(sellerState) || 0) + tax));
   return deal;
+}
+
+function createTradeDistanceContext(pack, options = {}) {
+  const extent = pointExtent(pack?.cells?.p || []);
+  const width = Math.max(1, Number(options.graphWidth || 0) || extent.width || 1440);
+  const height = Math.max(1, Number(options.graphHeight || 0) || extent.height || 960);
+  return {
+    diagonal: Math.max(1, Math.hypot(width, height))
+  };
+}
+
+function pointExtent(points) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points || []) {
+    if (!Array.isArray(point) || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) continue;
+    minX = Math.min(minX, point[0]);
+    minY = Math.min(minY, point[1]);
+    maxX = Math.max(maxX, point[0]);
+    maxY = Math.max(maxY, point[1]);
+  }
+  return Number.isFinite(minX) ? {width: maxX - minX, height: maxY - minY} : {width: 0, height: 0};
+}
+
+function tradePartyDistance(pack, sellerType, seller, buyerType, buyer) {
+  const from = tradePartyPoint(pack, sellerType, seller);
+  const to = tradePartyPoint(pack, buyerType, buyer);
+  if (!from || !to) return null;
+  return Math.hypot(from[0] - to[0], from[1] - to[1]);
+}
+
+function tradePartyPoint(pack, type, id) {
+  if (type === "burg") {
+    const burg = pack?.burgs?.[id];
+    return Number.isFinite(burg?.x) && Number.isFinite(burg?.y) ? [burg.x, burg.y] : null;
+  }
+  const market = pack?.markets?.[id];
+  const center = pack?.burgs?.[market?.centerBurgId];
+  const x = Number.isFinite(market?.x) ? market.x : center?.x;
+  const y = Number.isFinite(market?.y) ? market.y : center?.y;
+  return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null;
+}
+
+function tradeDistanceRate(distance, sellerType, buyerType, context) {
+  if (!Number.isFinite(distance) || distance <= 0) return 0;
+  const normalized = distance / Math.max(1, Number(context?.diagonal || 1));
+  const routeWeight = sellerType === "market" && buyerType === "market" ? 1.25 : 0.72;
+  return round(clamp(normalized * routeWeight * 0.26, 0, 0.28), 4);
+}
+
+function summarizeTradeDistance(deals) {
+  const distances = deals.map(deal => Number(deal.distance)).filter(Number.isFinite);
+  const costs = deals.map(deal => Number(deal.distanceCost || 0));
+  return {
+    dealsWithDistance: distances.length,
+    averageDistance: round(average(distances), 2),
+    maxDistance: round(Math.max(0, ...distances), 2),
+    totalDistanceCost: round(sumValues(costs), 2),
+    averageDistanceCost: round(average(costs), 3)
+  };
 }
 
 function partyState(pack, type, id) {
