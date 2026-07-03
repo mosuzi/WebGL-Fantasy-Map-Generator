@@ -15192,3 +15192,32 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：先从 4 色 SVG 导出 profile，再导入到只匹配 3 色且新增 2 色的目标 SVG；点击“加入”后匹配为 `4/5`、手动色块为 `4` 个，再点击“从配置移除”后匹配回到 `3/4`、手动色块回到 `3` 个。
 - 同次烟测中移除后当前额外色回到 `2`，选中色块不再显示手动高度，地图 checksum 保持稳定；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1231.2ms`，纯生成 `628.6ms`，WebGL 加载 `379ms`，最慢加载阶段为 `line-vertices 54.6ms`，`fit-draw = 2.4ms`，`glError = 0`。
+
+### 高度图 profile 导出差异确认
+
+背景：
+
+- “加入配置 / 从配置移除”已经改变了工作台中的 profile key 集，但原先 `导出配置` 始终导出当前预览色板全部色块。
+- 这会让用户没有加入的当前额外色也进入导出的新 profile，削弱失配审核和移除动作的语义。
+
+修正：
+
+- 导入 profile 后，匹配区新增导出摘要：显示导出将包含多少配置色、保留多少未匹配配置色、排除多少当前额外色。
+- `createHeightmapProfileDocument()` 改为调用 profile-aware assignment 生成逻辑。
+- 没有导入 profile 时，继续导出当前预览色板全部色块，保持旧的建档行为。
+- 已导入 profile 时，导出只使用当前 profile key 集：未加入的当前额外色会被排除，已加入的额外色会进入，未匹配但仍属于配置的原色会保留。
+- 导出完成提示会显示本次写出的色块数量。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`HeightPanel` 懒加载 chunk 约 `36.28KB / gzip 12.07KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：源 profile 为 `4` 色，目标图片为 `3` 个匹配色 + `2` 个额外色；未加入时导出仍为 `4` 色并保留缺失的 `#d9c58d`，不包含 `#aa33cc / #eeeeaa`。
+- 同次烟测中点击“加入”后导出为 `5` 色，包含 `#aa33cc` 且仍排除未加入的 `#eeeeaa`；再点击“从配置移除”后导出回到 `4` 色并排除 `#aa33cc`。
+- 全程地图 checksum 保持稳定；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1424.2ms`，纯生成 `723.3ms`，WebGL 加载 `382ms`，最慢加载阶段为 `cell-visual-mesh 65.6ms`，`fit-draw = 3.5ms`，`glError = 0`。

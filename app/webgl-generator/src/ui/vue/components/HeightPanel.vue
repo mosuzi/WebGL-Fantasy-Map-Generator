@@ -86,6 +86,7 @@
               </div>
             </div>
           </div>
+          <p v-if="profileExportSummary" class="heightmap-profile-export-summary">{{ profileExportSummary }}</p>
         </section>
 
         <section v-if="previewHistogram.length" class="heightmap-histogram-section" aria-label="亮度直方图">
@@ -580,6 +581,11 @@ const profileMatchSummary = computed(() => {
 const profileMismatchVisible = computed(() => Boolean(profileMissingPreview.value.length || profileCurrentOnlyPreview.value.length));
 const profileMissingPreview = computed(() => profileMatchStats.value?.missingEntries?.slice(0, 8) || []);
 const profileCurrentOnlyPreview = computed(() => profileMatchStats.value?.currentOnlyEntries?.slice(0, 8) || []);
+const profileExportSummary = computed(() => {
+  const stats = profileMatchStats.value;
+  if (!stats || !importedProfileKeys.value.length) return "";
+  return `导出配置将包含 ${stats.profileTotal} 色，保留 ${stats.missing} 个未匹配配置色，排除 ${stats.currentOnly} 个当前额外色。`;
+});
 const heightDifferenceSummary = computed(() => {
   const stats = heightDifferenceStats.value;
   if (!stats) return "未生成";
@@ -758,7 +764,7 @@ function exportHeightmapProfile() {
   const profile = createHeightmapProfileDocument();
   const filename = `${safeFilePart(selectedFile.value?.name || "heightmap")}.heightmap-import-profile.json`;
   downloadJsonText(filename, JSON.stringify(profile, null, 2));
-  previewStatus.value = `配置已导出：${filename}`;
+  previewStatus.value = `配置已导出：${filename}，${profile.assignments.length} 个色块。`;
 }
 
 function createHeightmapImportSettings() {
@@ -800,14 +806,45 @@ function createHeightmapProfileDocument() {
       unassignedHeight: heightmapUnassignedHeight.value,
       unassignedStrategy: heightmapUnassignedStrategy.value
     },
-    assignments: previewPalette.value.map(entry => ({
-      key: entry.key,
-      color: entry.hex,
-      height: entry.height,
-      autoHeight: entry.autoHeight,
-      pixels: entry.pixels,
-      manual: entry.manual
-    }))
+    assignments: createHeightmapProfileAssignments()
+  };
+}
+
+function createHeightmapProfileAssignments() {
+  if (!importedProfileKeys.value.length) {
+    return previewPalette.value.map(profileAssignmentFromPaletteEntry);
+  }
+  const currentByKey = new Map(previewPalette.value.map(entry => [String(entry.key), entry]));
+  const storedByKey = new Map(importedProfileAssignments.value.map(entry => [String(entry.key), entry]));
+  return importedProfileKeys.value
+    .map(key => profileAssignmentForKey(String(key), currentByKey, storedByKey))
+    .filter(Boolean);
+}
+
+function profileAssignmentFromPaletteEntry(entry) {
+  return {
+    key: entry.key,
+    color: entry.hex,
+    height: entry.height,
+    autoHeight: entry.autoHeight,
+    pixels: entry.pixels,
+    manual: entry.manual
+  };
+}
+
+function profileAssignmentForKey(key, currentByKey, storedByKey) {
+  const current = currentByKey.get(key);
+  if (current) return profileAssignmentFromPaletteEntry(current);
+  const stored = storedByKey.get(key);
+  if (!stored) return null;
+  const height = clamp(Math.round(Number(stored.height) || 0), 0, 100);
+  return {
+    key,
+    color: stored.color,
+    height,
+    autoHeight: Number.isFinite(Number(stored.autoHeight)) ? clamp(Math.round(Number(stored.autoHeight)), 0, 100) : height,
+    pixels: Math.max(0, Math.round(Number(stored.pixels) || 0)),
+    manual: stored.manual !== false
   };
 }
 
@@ -895,7 +932,10 @@ function normalizeProfileAssignmentList(assignments) {
       return {
         key,
         color,
-        height: clamp(Math.round(height), 0, 100)
+        height: clamp(Math.round(height), 0, 100),
+        autoHeight: Number.isFinite(Number(assignment?.autoHeight)) ? clamp(Math.round(Number(assignment.autoHeight)), 0, 100) : undefined,
+        pixels: Math.max(0, Math.round(Number(assignment?.pixels) || 0)),
+        manual: assignment?.manual !== false
       };
     })
     .filter(Boolean);

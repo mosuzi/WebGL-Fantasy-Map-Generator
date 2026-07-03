@@ -2965,6 +2965,12 @@ select:disabled {
   min-height: 26px;
 }
 
+.heightmap-profile-export-summary {
+  margin: 0;
+  color: #aebfc6;
+  font-size: 11px;
+}
+
 .heightmap-histogram-bars {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
