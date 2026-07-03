@@ -16576,3 +16576,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `790.43KB / gzip 238.44KB`，`GovernmentPanel` chunk 约 `7.98KB / gzip 3.12KB`。
 - 构建产物浏览器烟测通过：打开 `政体管理` 后，将 `confederation` 分组的 `2` 国批量套用为 `monarchy`；国家 `9 / 12` 从 `邦联制` 变为 `君主制`，`钟吾国 / 越邦联` 变为 `钟吾王国 / 越国`；撤销后恢复原政体和全名，重做后再次套用成功；撤销栈标签为 `批量调整政体 2国`，待派生系统为 `economy / diplomacy / military`，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1383.6ms`，纯生成 `741.6ms`，WebGL 加载 `353.9ms`，UI slack `288.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 151.8ms`，最慢加载阶段为 `构建线层顶点 46.1ms`。
+
+### 政体导出第一刀
+
+背景：
+
+- 政体管理已经支持总览、专题图例和分组批量调整，但缺少把当前政体分布带出面板的轻量导出能力。
+- 本轮继续沿政体管理可读性推进，不做政体事件，也不触碰动态军事系统。
+
+修正：
+
+- `政体管理` 筛选区新增 `导出 CSV / 导出 JSON` 按钮。
+- CSV 按当前筛选命中的政体分组展开到国家逐行导出，字段包含国家 ID、国家名、政体 key、政体、类型、时代、家族、首都、人口、面积、经济力、军力和城镇数。
+- JSON 导出 `fmg-government-summary`，包含导出时间、seed、筛选条件、选中政体、政体分组汇总、家族统计和国家明细。
+- README 和当前计划同步把政体 CSV/JSON 导出纳入已完成范围。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `790.43KB / gzip 238.43KB`，`GovernmentPanel` chunk 约 `10.98KB / gzip 3.98KB`。
+- 构建产物浏览器烟测通过：默认 `stage-2-1` 打开 `政体管理` 后下载 `fmg-governments-stage-2-1.csv` 和 `fmg-governments-stage-2-1.json`；CSV 为 `21` 行，表头包含 `政体Key`，JSON `type = fmg-government-summary`、`exportedStates = 20`、`governments = 8`、国家明细 `20` 条、政体分组 `8` 条；`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1521.2ms`，纯生成 `866.7ms`，WebGL 加载 `366.6ms`，UI slack `287.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 169.1ms`，最慢加载阶段为 `构建视觉 cell mesh 53.6ms`。

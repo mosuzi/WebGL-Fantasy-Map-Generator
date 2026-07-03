@@ -3,6 +3,10 @@
 
   <div class="government-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选政体 / 类型 / 国家" @update:model-value="callbacks.onFilter" />
+    <div class="government-panel-export-actions" aria-label="政体导出">
+      <UiButton id="government-export-csv" variant="secondary" :disabled="!exportStateRows.length" @click="exportCsv">导出 CSV</UiButton>
+      <UiButton id="government-export-json" variant="secondary" :disabled="!visibleGovernmentRows.length" @click="exportJson">导出 JSON</UiButton>
+    </div>
   </div>
 
   <UiSortBar class-name="government-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -121,6 +125,10 @@ const selectedGovernmentKey = computed(() => (
     : visibleGovernmentRows.value[0]?.key ?? null
 ));
 const selectedGovernment = computed(() => visibleGovernmentRows.value.find(row => row.key === selectedGovernmentKey.value) || null);
+const visibleGovernmentKeys = computed(() => new Set(visibleGovernmentRows.value.map(row => row.key)));
+const exportStateRows = computed(() => metrics.value.states
+  .filter(row => visibleGovernmentKeys.value.has(row.governmentKey))
+  .sort((a, b) => a.governmentLabel.localeCompare(b.governmentLabel, "zh-CN") || b.population - a.population || a.id - b.id));
 const selectedStateRows = computed(() => metrics.value.states
   .filter(row => row.governmentKey === selectedGovernmentKey.value)
   .sort((a, b) => b.population - a.population || b.economicPower - a.economicPower || a.id - b.id));
@@ -211,6 +219,63 @@ function applyBatchGovernment() {
   callbacks.onBatchGovernmentChange?.(selectedStateRows.value.map(row => row.id), batchGovernmentKey.value);
 }
 
+function exportCsv() {
+  if (!exportStateRows.value.length) return;
+  const header = [
+    "国家ID",
+    "国家",
+    "政体Key",
+    "政体",
+    "类型",
+    "时代",
+    "家族",
+    "首都",
+    "人口",
+    "面积",
+    "经济力",
+    "军力",
+    "城镇"
+  ];
+  const body = exportStateRows.value.map(row => [
+    row.id,
+    row.name,
+    row.governmentKey,
+    row.governmentLabel,
+    row.governmentCategory,
+    row.governmentEra,
+    row.governmentFamily,
+    row.capitalName,
+    roundExportNumber(row.population),
+    roundExportNumber(row.area),
+    roundExportNumber(row.economicPower),
+    roundExportNumber(row.militaryPower),
+    row.burgs
+  ]);
+  const text = [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n");
+  downloadText(`fmg-governments-${safeFilePart(props.state.map?.metadata?.seed)}.csv`, text, "text/csv;charset=utf-8");
+}
+
+function exportJson() {
+  if (!visibleGovernmentRows.value.length) return;
+  const payload = {
+    type: "fmg-government-summary",
+    exportedAt: new Date().toISOString(),
+    seed: props.state.map?.metadata?.seed || "",
+    filter: props.state.filter || "",
+    selectedGovernmentKey: selectedGovernmentKey.value,
+    summary: {
+      totalStates: metrics.value.totalStates,
+      exportedStates: exportStateRows.value.length,
+      governments: visibleGovernmentRows.value.length,
+      dominantGovernmentLabel: metrics.value.dominantGovernmentLabel,
+      familyCounts: metrics.value.familyCounts
+    },
+    governments: visibleGovernmentRows.value.map(row => exportGovernmentRow(row)),
+    states: exportStateRows.value.map(row => exportStateRow(row))
+  };
+  downloadText(`fmg-governments-${safeFilePart(props.state.map?.metadata?.seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
 function ensureGovernmentGroup(groups, key) {
   const type = GOVERNMENT_BY_KEY.get(key) || null;
   const normalizedKey = key || "unknown";
@@ -238,12 +303,16 @@ function stateRows(map) {
     .filter(stateItem => stateItem?.i && !stateItem.removed)
     .map(stateItem => {
       const capital = findCapitalCity(map, stateItem.capital);
+      const governmentType = GOVERNMENT_BY_KEY.get(stateItem.governmentKey) || null;
       return {
         id: stateItem.i ?? stateItem.id,
         name: stateItem.fullName || stateItem.name || `国家 #${stateItem.i ?? stateItem.id}`,
         rawName: stateItem.name || stateItem.fullName || `国家 #${stateItem.i ?? stateItem.id}`,
         governmentKey: stateItem.governmentKey || "unknown",
-        governmentLabel: stateItem.governmentLabel || GOVERNMENT_BY_KEY.get(stateItem.governmentKey)?.label || "未知政体",
+        governmentLabel: stateItem.governmentLabel || governmentType?.label || "未知政体",
+        governmentCategory: stateItem.governmentCategory || governmentType?.category || "未归类",
+        governmentEra: stateItem.governmentEra || governmentType?.era || "未标注",
+        governmentFamily: stateItem.governmentFamily || governmentType?.family || "unknown",
         population: Number(stateItem.urban || 0) + Number(stateItem.rural || 0),
         area: Number(stateItem.area || stateItem.cells || 0),
         economicPower: Number(stateItem.economicPower || 0),
@@ -322,5 +391,67 @@ function formatPopulationValue(value) {
 
 function formatAreaValue(value) {
   return formatArea(value, unitPreferences.value);
+}
+
+function exportGovernmentRow(row) {
+  return {
+    key: row.key,
+    label: row.label,
+    category: row.category,
+    era: row.era,
+    family: row.family,
+    count: row.count,
+    population: roundExportNumber(row.population),
+    area: roundExportNumber(row.area),
+    economicPower: roundExportNumber(row.economicPower),
+    militaryPower: roundExportNumber(row.militaryPower),
+    effectSummary: row.effectSummary,
+    sampleStates: row.sampleStates
+  };
+}
+
+function exportStateRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    rawName: row.rawName,
+    governmentKey: row.governmentKey,
+    governmentLabel: row.governmentLabel,
+    governmentCategory: row.governmentCategory,
+    governmentEra: row.governmentEra,
+    governmentFamily: row.governmentFamily,
+    capitalName: row.capitalName,
+    population: roundExportNumber(row.population),
+    area: roundExportNumber(row.area),
+    economicPower: roundExportNumber(row.economicPower),
+    militaryPower: roundExportNumber(row.militaryPower),
+    burgs: row.burgs,
+    centerCell: row.centerCell
+  };
+}
+
+function roundExportNumber(value, digits = 3) {
+  const numeric = Number(value) || 0;
+  const factor = 10 ** digits;
+  return Math.round(numeric * factor) / factor;
+}
+
+function csvEscape(value) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function safeFilePart(value) {
+  return String(value || "map").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "map";
+}
+
+function downloadText(filename, text, type) {
+  const blob = new Blob([text], {type});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 </script>
