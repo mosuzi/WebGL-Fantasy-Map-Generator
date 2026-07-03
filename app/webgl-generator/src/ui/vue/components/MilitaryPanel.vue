@@ -26,7 +26,10 @@
     <UiButton variant="secondary" @click="exportJson">导出 JSON</UiButton>
     <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEvents">事件 JSON</UiButton>
     <UiButton variant="secondary" :disabled="!allBattleEvents.length" @click="exportBattleEventsCsv">事件 CSV</UiButton>
+    <UiButton variant="secondary" @click="openBattleEventsImport">导入事件</UiButton>
   </div>
+  <input ref="battleEventsImportInput" class="military-import-input" type="file" accept="application/json,.json" @change="importBattleEventsFile" />
+  <p v-if="battleEventsImportStatus" class="military-import-status">{{ battleEventsImportStatus }}</p>
 
   <UiSortBar class-name="military-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
 
@@ -297,6 +300,8 @@ const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
 const stationDestinationDraft = ref("capital");
+const battleEventsImportInput = ref(null);
+const battleEventsImportStatus = ref("");
 const battleEventDraft = reactive({
   type: "skirmish",
   outcome: "victory",
@@ -900,6 +905,21 @@ function exportBattleEventsCsv() {
     ];
   });
   downloadText(`fmg-military-events-${safeFilePart(seed)}.csv`, [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+}
+
+function openBattleEventsImport() {
+  battleEventsImportInput.value?.click();
+}
+
+async function importBattleEventsFile(event) {
+  const file = event.target?.files?.[0];
+  if (!file) return;
+  battleEventsImportStatus.value = "正在导入战斗事件...";
+  const result = await props.callbacks.onBattleEventsImport?.(file);
+  battleEventsImportStatus.value = result
+    ? `已导入 ${formatNumber(result.imported)} 条，跳过 ${formatNumber(result.skipped)} 条`
+    : "战斗事件导入失败";
+  event.target.value = "";
 }
 
 function downloadText(filename, text, type) {

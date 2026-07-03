@@ -215,6 +215,52 @@ export function createRecordMilitaryBattleEventCommand(target, event = {}, {labe
   };
 }
 
+export function createImportMilitaryBattleEventsCommand(document, {label = "导入军团战斗事件"} = {}) {
+  let previous = null;
+  let preparedEvents = null;
+  let lastResult = null;
+
+  return {
+    label,
+    effects: {
+      ...MILITARY_EVENT_EFFECTS,
+      affected: [{kind: "military", id: "events"}]
+    },
+    apply(context) {
+      const prepared = preparedEvents ?? prepareImportedBattleEvents(context.map, document);
+      preparedEvents = prepared;
+      if (!prepared.events.length) throw new Error("没有可导入的战斗事件");
+      previous ??= snapshotMilitary(context.map);
+      for (const item of prepared.events) {
+        const {regiment} = findRegiment(context.map, item.target);
+        if (regiment) appendBattleEvent(context.map, regiment, item.event);
+      }
+      syncMilitary(context.map);
+      refreshMilitaryEventMetadata(context.map);
+      lastResult = {
+        total: prepared.total,
+        imported: prepared.events.length,
+        skipped: prepared.skipped
+      };
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的战斗事件导入快照");
+      restoreMilitary(context.map, previous);
+    },
+    isNoop(context) {
+      preparedEvents ??= prepareImportedBattleEvents(context.map, document);
+      return !preparedEvents.events.length;
+    },
+    getResult() {
+      return lastResult || {
+        total: preparedEvents?.total || 0,
+        imported: preparedEvents?.events?.length || 0,
+        skipped: preparedEvents?.skipped || 0
+      };
+    }
+  };
+}
+
 export function createMoveMilitaryStationCommand(target, destination, {label = "移动军团驻地"} = {}) {
   const normalizedTarget = normalizeRegimentTarget(target);
   const normalizedDestination = normalizeRegimentDestination(destination);
@@ -409,6 +455,66 @@ function normalizeBattleEventInput(event = {}) {
     description: String(event.description || event.note || "").trim(),
     applyResult: Boolean(event.applyResult)
   };
+}
+
+function prepareImportedBattleEvents(map, document) {
+  const imported = importedBattleEventItems(document);
+  const military = map?.pack?.military || map?.military || {};
+  const existingEvents = Array.isArray(military.events) ? military.events : [];
+  let nextSequence = Math.max(0, Number(military.metadata?.eventSequence || 0), ...(existingEvents.map(event => Number(event.sequence || 0))));
+  const events = [];
+
+  for (const source of imported) {
+    const target = importedBattleEventTarget(source);
+    const {state, regiment} = findRegiment(map, target);
+    if (!state?.i || !regiment) continue;
+    const sequence = Number(source.sequence) > 0 ? Number(source.sequence) : ++nextSequence;
+    const input = normalizeBattleEventInput(source);
+    const event = {
+      id: String(source.id || `${regiment.id || `${state.i}:${regiment.i}`}:battle:${sequence}`),
+      sequence,
+      kind: "battle",
+      type: input.type,
+      typeLabel: source.typeLabel || input.typeLabel,
+      outcome: input.outcome,
+      outcomeLabel: source.outcomeLabel || input.outcomeLabel,
+      description: input.description,
+      stateId: state.i,
+      stateName: state.name || state.fullName || `国家 #${state.i}`,
+      regimentId: regiment.i,
+      regimentObjectId: regiment.id || `${state.i}:${regiment.i}`,
+      regimentName: regiment.name || `军团 #${regiment.i}`,
+      cell: Number.isInteger(source.cell) ? source.cell : regiment.cell,
+      x: Number.isFinite(Number(source.x)) ? Number(source.x) : regiment.x,
+      y: Number.isFinite(Number(source.y)) ? Number(source.y) : regiment.y,
+      at: source.at || new Date().toISOString()
+    };
+    if (source.resultApplied !== undefined) event.resultApplied = Boolean(source.resultApplied);
+    if (source.result && typeof source.result === "object") event.result = clonePlain(source.result);
+    events.push({event, target: {id: regiment.id || `${state.i}:${regiment.i}`, stateId: state.i, regimentId: regiment.i}});
+  }
+
+  return {
+    total: imported.length,
+    skipped: imported.length - events.length,
+    events
+  };
+}
+
+function importedBattleEventItems(document) {
+  const source = document?.events || document?.military?.events || document?.pack?.military?.events || document;
+  return (Array.isArray(source) ? source : [])
+    .filter(event => event && typeof event === "object")
+    .filter(event => !event.kind || event.kind === "battle");
+}
+
+function importedBattleEventTarget(event = {}) {
+  const idParts = String(event.regimentObjectId || event.id || "").split(":");
+  return normalizeRegimentTarget({
+    id: event.regimentObjectId || (idParts.length >= 2 ? `${idParts[0]}:${idParts[1]}` : ""),
+    stateId: event.stateId ?? idParts[0],
+    regimentId: event.regimentId ?? idParts[1]
+  });
 }
 
 function uniqueRegimentTargets(targets = []) {

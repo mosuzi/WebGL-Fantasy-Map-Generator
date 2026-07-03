@@ -40,7 +40,7 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
-import {createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
+import {createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -780,6 +780,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onBattleEventsImport: file => importMilitaryBattleEvents(state, documentRef, file),
     onRename: (target, name) => {
       const command = createRenameMilitaryRegimentCommand(target, name);
       if (!command.isNoop({map: state.map})) {
@@ -1878,6 +1879,35 @@ async function importNamebases(state, documentRef, file, mode = "append") {
     setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池${replacedText}，当前用户库 ${result.total} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导入失败", error);
+  }
+}
+
+async function importMilitaryBattleEvents(state, documentRef, file) {
+  if (!file) return null;
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导入战斗事件...");
+    const document = JSON.parse(await file.text());
+    const command = createImportMilitaryBattleEventsCommand(document);
+    if (command.isNoop({map: state.map})) {
+      const result = command.getResult();
+      setFileOperationStatus(documentRef, `未导入战斗事件：${result.total} 条记录中没有匹配当前地图军团的事件。`);
+      return result;
+    }
+    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+    markDerivedFresh(state.map, ["military"]);
+    refreshGenerationSummary(state.map);
+    updateMilitaryPanel(state);
+    updateStatePanel(state);
+    updateRuntimePanel(documentRef, state);
+    updateEditingInteractionLock(state, documentRef);
+    const result = command.getResult();
+    appendGenerationLog(state.map, `import military battle events: imported=${result.imported}, skipped=${result.skipped}`);
+    setFileOperationStatus(documentRef, `战斗事件已导入 ${result.imported} 条，跳过 ${result.skipped} 条。`);
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "战斗事件导入失败", error);
+    return null;
   }
 }
 

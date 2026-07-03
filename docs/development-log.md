@@ -15676,3 +15676,31 @@ full 矩阵结果：
 - 同次烟测中撤销后兵力恢复 `16250`、事件数和军团事件数回到 `0`；重做后同一摘要恢复，兵力回到 `12187`。
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `23.61KB / gzip 7.77KB`，主入口约 `761.16KB / gzip 229.84KB`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1406.7ms`，纯生成 `686.6ms`，WebGL 加载 `380.4ms`，UI slack `339.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 129.8ms`，最慢加载阶段为 `构建标签 57.3ms`，`line-vertices = 43.3ms`，`fit-draw = 3ms`，`glError = 0`。
+
+### 战斗事件 JSON 导入兼容
+
+背景：
+
+- 事件 JSON/CSV 已能导出，但还不能把已导出的事件记录导回当前地图。
+- 本轮只做事件记录兼容导入，不把 `resultApplied` 重新应用到兵力，也不改变外交战争状态或完整战斗模拟。
+
+修正：
+
+- `createImportMilitaryBattleEventsCommand()` 新增可撤销事件导入命令。
+- 导入源支持数组、`events`、`military.events` 和 `pack.military.events`，只接收 `kind` 为空或 `battle` 的事件。
+- 导入会按 `regimentObjectId` 或 `stateId/regimentId` 匹配当前地图军团；不能匹配的事件跳过。
+- 导入保留事件 id、sequence、类型、结果、说明、时间、`resultApplied` 和 `result` 摘要字段；没有 id 时按当前军团和 sequence 生成。
+- 重复 id 会覆盖同 id 事件；撤销/重做通过 `EditHistory` 恢复全局事件和各军团事件列表。
+- `军事管理` 工具栏新增“导入事件”，用隐藏 JSON 文件输入读取文件，并在面板内显示导入条数和跳过条数。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 242 项。
+
+验证：
+
+- 命令烟测通过：导入 `2` 条事件，`1` 条匹配当前军团、`1` 条无效，结果为 `imported 1 / skipped 1`；军团兵力保持 `16250`，全局事件和军团事件均为 `1`。
+- 同次烟测中撤销后兵力仍为 `16250`、事件数回到 `0`；重做后兵力仍不变，军团事件数回到 `1`。首次实现曾在重做时复用撤销前的军团对象引用，烟测发现后已改为每次 apply 重新解析当前地图军团。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `24.26KB / gzip 8.00KB`，主入口约 `763.99KB / gzip 230.80KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，进入军事管理，对隐藏文件输入设置临时 JSON；面板显示 `已导入 1 条，跳过 1 条`，事件摘要为 `导入战报摘要`，军团兵力保持 `576`，军团事件数为 `1`，历史为 `undo 1 / redo 0 / 导入军团战斗事件`；撤销后事件消失，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1379.2ms`，纯生成 `717.1ms`，WebGL 加载 `368ms`，UI slack `294.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 144.9ms`，最慢加载阶段为 `构建视觉 cell mesh 58.2ms`，`line-vertices = 53.9ms`，`fit-draw = 3ms`，`glError = 0`。

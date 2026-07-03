@@ -4948,7 +4948,17 @@ input.ui-switch-native {
 }
 
 .military-edit-toolbar {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.military-import-input {
+  display: none;
+}
+
+.military-import-status {
+  margin: -2px 0 8px;
+  color: rgba(221, 231, 235, 0.68);
+  font-size: 12px;
 }
 
 .military-overview {
