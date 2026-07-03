@@ -147,7 +147,8 @@ export function readHeightmapImportSettings(documentRef) {
   const maxHeight = readNumberInput(documentRef, "heightmap-import-max", 100);
   const invert = Boolean(documentRef.getElementById("heightmap-import-invert")?.checked);
   const fitMode = documentRef.getElementById("heightmap-import-fit")?.value || "stretch";
-  return {minHeight, maxHeight, invert, fitMode};
+  const unassignedHeight = readNumberInput(documentRef, "heightmap-unassigned-height", 0);
+  return {minHeight, maxHeight, invert, fitMode, unassignedHeight};
 }
 
 export function normalizeHeightmapImportPayload(payload, documentRef) {

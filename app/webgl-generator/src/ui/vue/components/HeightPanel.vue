@@ -103,6 +103,16 @@
             :options="heightmapMappingModeOptions"
             @update:model-value="setHeightmapMappingMode"
           />
+          <UiSliderField
+            label="未分配高度"
+            input-id="heightmap-unassigned-height"
+            field-class="heightmap-import-field"
+            :model-value="heightmapUnassignedHeight"
+            :min="0"
+            :max="100"
+            :step="1"
+            @input="setHeightmapUnassignedHeight"
+          />
         </div>
 
         <section class="heightmap-palette-section" aria-label="量化色板">
@@ -240,6 +250,7 @@ const heightmapImportInvert = ref(false);
 const heightmapImportFit = ref("stretch");
 const heightmapColorLimit = ref(32);
 const heightmapMappingMode = ref("grayscale");
+const heightmapUnassignedHeight = ref(0);
 const workbenchOpen = ref(false);
 const fileInput = ref(null);
 const previewCanvas = ref(null);
@@ -274,6 +285,7 @@ const previewMetrics = computed(() => [
   {label: "色板", value: previewStats.value ? `${previewStats.value.paletteColors} / ${previewStats.value.paletteBuckets}` : "-"},
   {label: "映射模式", value: mappingModeLabel(heightmapMappingMode.value)},
   {label: "高度映射", value: `${heightmapImportMin.value} - ${heightmapImportMax.value}`},
+  {label: "未分配高度", value: heightmapUnassignedHeight.value},
   {label: "适应方式", value: heightmapImportFit.value === "crop" ? "保持比例裁剪" : "拉伸铺满"}
 ]);
 const paletteSummary = computed(() => {
@@ -328,6 +340,10 @@ function setHeightmapColorLimit(value) {
 
 function setHeightmapMappingMode(value) {
   heightmapMappingMode.value = heightmapMappingModeOptions.some(option => option.value === value) ? value : "grayscale";
+}
+
+function setHeightmapUnassignedHeight(value) {
+  heightmapUnassignedHeight.value = clamp(Math.round(Number(value) || 0), 0, 100);
 }
 
 function openImportWorkbench() {
@@ -405,7 +421,7 @@ function createHeightmapImportSettings() {
     fitMode: heightmapImportFit.value,
     colorLimit: heightmapColorLimit.value,
     mappingMode: heightmapMappingMode.value,
-    unassignedHeight: 0,
+    unassignedHeight: heightmapUnassignedHeight.value,
     assignments
   };
 }

@@ -14767,3 +14767,31 @@ full 矩阵结果：
 - 修复后 Playwright + 系统 Chrome 彩色导入烟测通过：默认地图 loading 已隐藏，跨画布 `25/25` 个采样点非空；导入合成彩色 SVG，切到色相模式并把首个色块设为“山地”后点击应用，checksum `d21222dd -> fe4e8d88`，`source.kind = image-palette`，`source.mappingMode = hue`，`assignments = 4`，首个手动 assignment 高度 `68`，状态显示“已导入彩色高度图”，`loadMap.totalMs = 338.2ms`，`fit-draw = 7ms`，`draw.glError = 0`，console/page error 为 `0`，health error 为 `0`。
 - 默认灰度兼容烟测通过：不切映射模式、不手动覆盖时应用灰度 SVG，`source.kind = image-grayscale`，状态仍显示“已导入灰度高度图”，`loadMap.totalMs = 321.2ms`，`fit-draw = 4ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1243.4ms`，纯生成 `638.7ms`，WebGL 加载 `330.2ms`，最慢加载阶段为 `cell-visual-mesh 46.1ms`，`fit-draw = 2.2ms`，`glError = 0`。
+
+### 高度图未分配高度配置
+
+背景：
+
+- `image-palette` 应用链路已经能把前 N 个量化色块写成 assignments，但未进入色板上限的颜色固定落到高度 `0`。
+- 原版 Image Converter 会显式呈现未分配颜色；当前 WebGL 工作台至少需要让用户控制未分配颜色高度，避免彩色图中被截掉的次要色都强制变成深水。
+
+修正：
+
+- 高度图导入工作台新增“未分配高度”滑条，范围 `0-100`，默认 `0`。
+- 工作台指标新增“未分配高度”，便于应用前确认当前值。
+- `heightmap-import-apply` 事件会把 `unassignedHeight` 写入 settings。
+- `readHeightmapImportSettings()` 同步读取 `#heightmap-unassigned-height`，保留 legacy DOM 读取兼容。
+- `createPaletteHeightmapFromImage()` 继续使用既有 `unassignedHeight`，未进入前 N 色板的像素按用户设置写入采样高度。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/heightmap-import.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。
+- Playwright + 系统 Chrome 未分配高度烟测通过：导入 20 色条合成 SVG，色板上限设为 `16`、映射模式设为色相、未分配高度设为 `12` 后应用，`source.kind = image-palette`、`source.colorLimit = 16`、`source.unassignedHeight = 12`、`source.assignments.length = 16`，grid 高度中有 `1973` 个采样点为 `12`，`loadMap.totalMs = 285.9ms`，`fit-draw = 4.1ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1177.3ms`，纯生成 `620.1ms`，WebGL 加载 `344.6ms`，最慢加载阶段为 `cell-visual-mesh 52.2ms`，`fit-draw = 2.3ms`，`glError = 0`。
