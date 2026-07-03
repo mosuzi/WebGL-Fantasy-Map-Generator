@@ -41,7 +41,7 @@
 - 亮度直方图和采样格高度色带预览已完成第一刀；当前预览仍没有应用前后对比。
 - 色板已经可量化、自动估高、手动覆盖并参与 `image-palette` 最终高度采样。
 - 色板已经支持单色和批量手动覆盖；profile 导出和导入复用已完成第一刀。
-- 未分配颜色高度已可配置，但还没有更细的“忽略 / 合并到最近色 / 标记为待处理”策略。
+- 未分配颜色策略已完成第一刀，后续仍可补更严格的待处理阻断、审核队列或应用前后对比。
 - 导入方案已写入完整地图 JSON 的 `map.heightmap.source`，也可以独立导出 `.heightmap-import-profile.json` 复用。
 
 ## 数据契约建议
@@ -59,6 +59,9 @@
   mappingMode: "grayscale" | "luminance" | "hue" | "fmg-scheme" | "manual",
   colorLimit: 64,
   unassignedHeight: 0,
+  unassignedStrategy: "fixed-height" | "nearest-palette" | "mark-pending",
+  unassignedBuckets: 0,
+  unassignedPixels: 0,
   assignments: [
     {color: "#3f7fb8", height: 12, pixels: 3041},
     {color: "#8f9d53", height: 42, pixels: 920}
@@ -154,6 +157,7 @@
 - 色相模式会把蓝色系压向水域，绿黄棕等陆地色推向低地、丘陵和山地；FMG 色带模式按 WebGL 版高度色带最近色匹配。
 - 手动模式下未覆盖色块默认为 `0`，用于显式暴露未分配颜色。
 - 工作台新增“未分配高度”滑条，默认 `0`，用于控制未进入当前色板上限的颜色最终落到哪个高度。
+- 工作台新增“未分配颜色”策略，默认 `固定高度`；`合并最近色` 会把未进入色板上限的颜色按 RGB 距离归并到最近已分配色块，`标记待处理` 第一刀先保留固定高度兜底并在元数据中记录策略和未分配统计。
 - 当映射模式不是默认灰度，或存在任一手动覆盖时，`应用到地图` 会消费这些 assignment 并生成 `image-palette` sampled heightmap。
 
 ### 阶段 4：手动修正与应用
@@ -178,6 +182,7 @@
 - 批量选择只影响赋高目标，不改变当前高亮色块；高亮仍用于观察预览中的对应区域。
 - 手动覆盖会立即刷新色板显示和预览高亮；点击应用后会进入 `map.heightmap.source.assignments`，记录色块、自动高度、最终高度、像素数和是否手动。
 - `createPaletteHeightmapFromImage()` 会在完整图幅 canvas 上重新量化前 N 个色块，使用工作台传入的手动覆盖，未进入前 N 的颜色按工作台“未分配高度”处理。
+- `createPaletteHeightmapFromImage()` 会保存 `unassignedStrategy / unassignedBuckets / unassignedPixels`；选择 `合并最近色` 时，未进入前 N 的颜色不再直接落到未分配高度，而是按最近色块高度采样。
 - `image-palette` 和默认灰度导入都会把采样高度缓存为可结构化克隆的 `Uint8Array`，导入重生成通过 `generation-worker` 恢复 sampled heightmap，避免在主线程同步跑完整生成链。
 
 ### 阶段 5：预设与复用

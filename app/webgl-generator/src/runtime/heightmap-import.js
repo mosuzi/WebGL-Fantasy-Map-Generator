@@ -1,6 +1,7 @@
 import {createSampledHeightmap} from "../generator/heightmap.js";
 
 const PALETTE_MAPPING_MODES = Object.freeze(["grayscale", "luminance", "hue", "fmg-scheme", "manual"]);
+const UNASSIGNED_STRATEGIES = Object.freeze(["fixed-height", "nearest-palette", "mark-pending"]);
 const FMG_HEIGHT_COLOR_STOPS = Object.freeze([
   {height: 8, color: [38, 92, 145]},
   {height: 18, color: [63, 126, 174]},
@@ -86,10 +87,14 @@ export async function createPaletteHeightmapFromImage(documentRef, file, options
   const mappingMode = normalizeMappingMode(settings.mappingMode);
   const colorLimit = clampInteger(Number(settings.colorLimit) || 32, 1, 128);
   const unassignedHeight = clampInteger(Number(settings.unassignedHeight) || 0, 0, 100);
+  const unassignedStrategy = normalizeUnassignedStrategy(settings.unassignedStrategy);
   const buckets = collectColorBuckets(imageData.data, invert);
   const bucketList = Array.from(buckets.values()).sort((a, b) => b.pixels - a.pixels);
   const topBuckets = bucketList.slice(0, colorLimit);
+  const unassignedBuckets = Math.max(0, bucketList.length - topBuckets.length);
+  const unassignedPixels = bucketList.slice(colorLimit).reduce((sum, bucket) => sum + bucket.pixels, 0);
   const heightByKey = new Map();
+  const paletteBuckets = [];
   const manualAssignments = normalizeManualAssignments(settings.assignments);
   const brightnessRange = Math.max(1e-6, stats.max - stats.min);
   const assignments = topBuckets.map(bucket => {
@@ -103,6 +108,7 @@ export async function createPaletteHeightmapFromImage(documentRef, file, options
     const manual = Number.isFinite(manualHeight);
     const heightValue = manual ? manualHeight : autoHeight;
     heightByKey.set(bucket.key, heightValue);
+    paletteBuckets.push({key: bucket.key, color, height: heightValue});
     return {
       key: bucket.key,
       color: rgbToHex(color.red, color.green, color.blue),
@@ -112,7 +118,10 @@ export async function createPaletteHeightmapFromImage(documentRef, file, options
       manual
     };
   });
-  const sampledHeights = buildPaletteSampledHeights(imageData.data, heightByKey, unassignedHeight);
+  const sampledHeights = buildPaletteSampledHeights(imageData.data, heightByKey, unassignedHeight, {
+    strategy: unassignedStrategy,
+    paletteBuckets
+  });
 
   const heightmap = createSampledHeightmap(options, {
     template: "grayscale-import",
@@ -130,6 +139,9 @@ export async function createPaletteHeightmapFromImage(documentRef, file, options
     mappingMode,
     colorLimit,
     unassignedHeight,
+    unassignedStrategy,
+    unassignedBuckets,
+    unassignedPixels,
     assignments,
     normalization: "palette-assignment",
     sampleHeight: point => {
@@ -148,7 +160,10 @@ export function readHeightmapImportSettings(documentRef) {
   const invert = Boolean(documentRef.getElementById("heightmap-import-invert")?.checked);
   const fitMode = documentRef.getElementById("heightmap-import-fit")?.value || "stretch";
   const unassignedHeight = readNumberInput(documentRef, "heightmap-unassigned-height", 0);
-  return {minHeight, maxHeight, invert, fitMode, unassignedHeight};
+  const colorLimit = readNumberInput(documentRef, "heightmap-color-limit", 32);
+  const mappingMode = documentRef.getElementById("heightmap-mapping-mode")?.value || "grayscale";
+  const unassignedStrategy = documentRef.getElementById("heightmap-unassigned-strategy")?.value || "fixed-height";
+  return {minHeight, maxHeight, invert, fitMode, colorLimit, mappingMode, unassignedHeight, unassignedStrategy};
 }
 
 export function normalizeHeightmapImportPayload(payload, documentRef) {
@@ -256,14 +271,38 @@ function averageBucketColor(bucket) {
   };
 }
 
-function buildPaletteSampledHeights(data, heightByKey, unassignedHeight) {
+function buildPaletteSampledHeights(data, heightByKey, unassignedHeight, options = {}) {
   const heights = new Uint8Array(data.length / 4);
+  const nearestHeightByKey = new Map();
   for (let offset = 0, pixel = 0; offset < data.length; offset += 4, pixel += 1) {
     const color = compositedRgb(data, offset);
     const key = colorBucketKey(color.red, color.green, color.blue);
-    heights[pixel] = heightByKey.get(key) ?? unassignedHeight;
+    heights[pixel] = heightByKey.get(key) ?? fallbackPaletteHeight(key, color, unassignedHeight, options, nearestHeightByKey);
   }
   return heights;
+}
+
+function fallbackPaletteHeight(key, color, unassignedHeight, options, nearestHeightByKey) {
+  if (options.strategy === "nearest-palette" && options.paletteBuckets?.length) {
+    if (!nearestHeightByKey.has(key)) {
+      nearestHeightByKey.set(key, nearestPaletteBucketHeight(color, options.paletteBuckets, unassignedHeight));
+    }
+    return nearestHeightByKey.get(key);
+  }
+  return unassignedHeight;
+}
+
+function nearestPaletteBucketHeight(color, paletteBuckets, fallback) {
+  let best = null;
+  let bestDistance = Infinity;
+  for (const bucket of paletteBuckets) {
+    const distance = colorDistance(color, bucket.color);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = bucket;
+    }
+  }
+  return best?.height ?? fallback;
 }
 
 function automaticPaletteHeight(color, brightnessStats, brightnessRange, settings) {
@@ -321,6 +360,10 @@ function normalizeMappingMode(value) {
   return PALETTE_MAPPING_MODES.includes(value) ? value : "grayscale";
 }
 
+function normalizeUnassignedStrategy(value) {
+  return UNASSIGNED_STRATEGIES.includes(value) ? value : "fixed-height";
+}
+
 function compositedRgb(data, offset) {
   const alpha = data[offset + 3] / 255;
   const red = Math.round(data[offset] * alpha + 255 * (1 - alpha));
@@ -361,9 +404,12 @@ function rgbToHsl(red, green, blue) {
 }
 
 function colorDistance(color, target) {
-  const dr = color.red - target[0];
-  const dg = color.green - target[1];
-  const db = color.blue - target[2];
+  const targetRed = target.red ?? target[0];
+  const targetGreen = target.green ?? target[1];
+  const targetBlue = target.blue ?? target[2];
+  const dr = color.red - targetRed;
+  const dg = color.green - targetGreen;
+  const db = color.blue - targetBlue;
   return dr * dr * 0.3 + dg * dg * 0.5 + db * db * 0.2;
 }
 

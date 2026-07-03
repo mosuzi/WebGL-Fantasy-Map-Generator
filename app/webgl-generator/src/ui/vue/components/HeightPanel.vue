@@ -118,6 +118,7 @@
           />
           <UiSelectField
             label="色板上限"
+            input-id="heightmap-color-limit"
             class-name="heightmap-import-select"
             :model-value="heightmapColorLimit"
             :options="heightmapColorLimitOptions"
@@ -125,6 +126,7 @@
           />
           <UiSelectField
             label="映射模式"
+            input-id="heightmap-mapping-mode"
             class-name="heightmap-import-select"
             :model-value="heightmapMappingMode"
             :options="heightmapMappingModeOptions"
@@ -139,6 +141,14 @@
             :max="100"
             :step="1"
             @input="setHeightmapUnassignedHeight"
+          />
+          <UiSelectField
+            label="未分配颜色"
+            input-id="heightmap-unassigned-strategy"
+            class-name="heightmap-import-select"
+            :model-value="heightmapUnassignedStrategy"
+            :options="heightmapUnassignedStrategyOptions"
+            @update:model-value="setHeightmapUnassignedStrategy"
           />
         </div>
 
@@ -302,6 +312,11 @@ const heightmapMappingModeOptions = Object.freeze([
   {value: "fmg-scheme", label: "FMG 色带"},
   {value: "manual", label: "手动"}
 ]);
+const heightmapUnassignedStrategyOptions = Object.freeze([
+  {value: "fixed-height", label: "固定高度"},
+  {value: "nearest-palette", label: "合并最近色"},
+  {value: "mark-pending", label: "标记待处理"}
+]);
 const heightAssignmentPresets = Object.freeze([
   {value: 8, label: "水域"},
   {value: 28, label: "低地"},
@@ -337,6 +352,7 @@ const heightmapImportFit = ref("stretch");
 const heightmapColorLimit = ref(32);
 const heightmapMappingMode = ref("grayscale");
 const heightmapUnassignedHeight = ref(0);
+const heightmapUnassignedStrategy = ref("fixed-height");
 const workbenchOpen = ref(false);
 const fileInput = ref(null);
 const profileFileInput = ref(null);
@@ -378,6 +394,7 @@ const previewMetrics = computed(() => [
   {label: "映射模式", value: mappingModeLabel(heightmapMappingMode.value)},
   {label: "高度映射", value: `${heightmapImportMin.value} - ${heightmapImportMax.value}`},
   {label: "未分配高度", value: heightmapUnassignedHeight.value},
+  {label: "未分配颜色", value: unassignedStrategyLabel(heightmapUnassignedStrategy.value)},
   {label: "适应方式", value: heightmapImportFit.value === "crop" ? "保持比例裁剪" : "拉伸铺满"}
 ]);
 const paletteSummary = computed(() => {
@@ -417,7 +434,7 @@ const heightBandSummary = computed(() => {
   return `高度 ${stats.min}-${stats.max} / 水域 ${formatPercent(stats.water / stats.total)}`;
 });
 
-watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode], () => {
+watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode, heightmapUnassignedStrategy], () => {
   drawPreview();
 });
 
@@ -465,6 +482,10 @@ function setHeightmapMappingMode(value) {
 
 function setHeightmapUnassignedHeight(value) {
   heightmapUnassignedHeight.value = clamp(Math.round(Number(value) || 0), 0, 100);
+}
+
+function setHeightmapUnassignedStrategy(value) {
+  heightmapUnassignedStrategy.value = heightmapUnassignedStrategyOptions.some(option => option.value === value) ? value : "fixed-height";
 }
 
 function openImportWorkbench() {
@@ -580,6 +601,7 @@ function createHeightmapImportSettings() {
     colorLimit: heightmapColorLimit.value,
     mappingMode: heightmapMappingMode.value,
     unassignedHeight: heightmapUnassignedHeight.value,
+    unassignedStrategy: heightmapUnassignedStrategy.value,
     assignments
   };
 }
@@ -597,7 +619,8 @@ function createHeightmapProfileDocument() {
       fitMode: heightmapImportFit.value,
       colorLimit: heightmapColorLimit.value,
       mappingMode: heightmapMappingMode.value,
-      unassignedHeight: heightmapUnassignedHeight.value
+      unassignedHeight: heightmapUnassignedHeight.value,
+      unassignedStrategy: heightmapUnassignedStrategy.value
     },
     assignments: previewPalette.value.map(entry => ({
       key: entry.key,
@@ -630,6 +653,7 @@ function applyHeightmapProfile(profile) {
   setHeightmapColorLimit(settings.colorLimit);
   setHeightmapMappingMode(settings.mappingMode);
   setHeightmapUnassignedHeight(settings.unassignedHeight);
+  setHeightmapUnassignedStrategy(settings.unassignedStrategy);
   manualAssignments.value = normalizeProfileAssignments(profile.assignments);
   selectedPaletteKey.value = null;
   batchPaletteKeys.value = [];
@@ -680,7 +704,9 @@ function drawPreview() {
     brightnessMin: Math.round(brightness.min),
     brightnessMax: Math.round(brightness.max),
     paletteColors: palette.entries.length,
-    paletteBuckets: palette.bucketCount
+    paletteBuckets: palette.bucketCount,
+    unassignedBuckets: palette.unassignedBuckets,
+    unassignedPixels: palette.unassignedPixels
   };
 }
 
@@ -776,8 +802,8 @@ function quantizePalette(data, limit, brightnessStats) {
   const totalPixels = Math.max(1, data.length / 4);
   const range = Math.max(1e-6, brightnessStats.max - brightnessStats.min);
   const maxEntries = clamp(Number(limit) || 32, 1, 128);
-  const entries = Array.from(buckets.values())
-    .sort((a, b) => b.pixels - a.pixels)
+  const bucketList = Array.from(buckets.values()).sort((a, b) => b.pixels - a.pixels);
+  const entries = bucketList
     .slice(0, maxEntries)
     .map(bucket => {
       const color = {
@@ -800,7 +826,13 @@ function quantizePalette(data, limit, brightnessStats) {
         manual
       };
     });
-  return {entries, bucketCount: buckets.size};
+  const unassigned = bucketList.slice(maxEntries);
+  return {
+    entries,
+    bucketCount: buckets.size,
+    unassignedBuckets: unassigned.length,
+    unassignedPixels: unassigned.reduce((sum, bucket) => sum + bucket.pixels, 0)
+  };
 }
 
 function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
@@ -812,6 +844,7 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
   if (!context) return;
   const output = context.createImageData(imageData.width, imageData.height);
   const heightByKey = new Map(paletteEntries.map(entry => [entry.key, entry.height]));
+  const nearestHeightCache = new Map();
   const usePalette = shouldUsePalettePreview(paletteEntries);
   const brightnessRange = Math.max(1e-6, brightnessStats.max - brightnessStats.min);
   let min = Infinity;
@@ -822,7 +855,7 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
     const color = compositedRgb(imageData.data, offset);
     const key = colorBucketKey(color.red, color.green, color.blue);
     const height = usePalette
-      ? (heightByKey.get(key) ?? heightmapUnassignedHeight.value)
+      ? paletteHeightForColorKey(key, color, paletteEntries, heightByKey, nearestHeightCache)
       : automaticHeightForColor({
         ...color,
         brightness: heightmapImportInvert.value ? 255 - color.brightness : color.brightness
@@ -849,6 +882,34 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
 
 function shouldUsePalettePreview(paletteEntries) {
   return heightmapMappingMode.value !== "grayscale" || paletteEntries.some(entry => entry.manual);
+}
+
+function paletteHeightForColorKey(key, color, paletteEntries, heightByKey, nearestHeightCache) {
+  const direct = heightByKey.get(key);
+  if (Number.isFinite(direct)) return direct;
+  if (heightmapUnassignedStrategy.value === "nearest-palette" && paletteEntries.length) {
+    if (!nearestHeightCache.has(key)) nearestHeightCache.set(key, nearestPaletteHeight(color, paletteEntries));
+    return nearestHeightCache.get(key);
+  }
+  return heightmapUnassignedHeight.value;
+}
+
+function nearestPaletteHeight(color, paletteEntries) {
+  let best = paletteEntries[0];
+  let bestDistance = Infinity;
+  for (const entry of paletteEntries) {
+    const target = hexToRgb(entry.hex);
+    const distance = colorDistance(color, target);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = entry;
+    }
+  }
+  return best?.height ?? heightmapUnassignedHeight.value;
+}
+
+function unassignedStrategyLabel(value) {
+  return heightmapUnassignedStrategyOptions.find(option => option.value === value)?.label ?? "固定高度";
 }
 
 function heightPreviewColor(height) {
@@ -1017,6 +1078,16 @@ function colorBucketKey(red, green, blue) {
 
 function rgbToHex(red, green, blue) {
   return `#${hexByte(red)}${hexByte(green)}${hexByte(blue)}`;
+}
+
+function hexToRgb(hex) {
+  const normalized = String(hex || "").replace("#", "");
+  if (!/^[\da-f]{6}$/i.test(normalized)) return [0, 0, 0];
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16),
+    Number.parseInt(normalized.slice(2, 4), 16),
+    Number.parseInt(normalized.slice(4, 6), 16)
+  ];
 }
 
 function rgbToHsl(red, green, blue) {

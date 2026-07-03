@@ -14910,3 +14910,34 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 色带预览烟测通过：导入渐变 SVG 后色带预览可见，canvas 为 `345 x 230`，`coloredPixels = 79350`，采样到 `12` 种颜色，摘要为 `高度 0-100 / 水域 15%`，直方图仍为 `24` 桶，色板项为 `32`。
 - 同次烟测中地图 checksum 保持 `ac140459 -> ac140459`，说明色带预览没有写地图；`loadMap.totalMs = 349.5ms`，`fit-draw = 7.3ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1260ms`，纯生成 `655ms`，WebGL 加载 `330.7ms`，最慢加载阶段为 `cell-visual-mesh 48.4ms`，`fit-draw = 2.1ms`，`glError = 0`。
+
+### 高度图未分配颜色策略第一刀
+
+背景：
+
+- 高度图导入工作台已经支持未分配高度，但未进入色板上限的颜色只能统一落到固定高度。
+- 当前专题计划还缺“合并到最近色 / 标记待处理”一类策略；本步先补低风险策略入口和最终采样路径，避免继续扩大导入工作台的黑箱行为。
+
+修正：
+
+- 工作台新增“未分配颜色”选择，支持 `固定高度 / 合并最近色 / 标记待处理`。
+- `固定高度` 继续使用既有 `unassignedHeight` 兜底，保持兼容。
+- `合并最近色` 在预览和最终 `image-palette` 采样中都会按 RGB 距离归并到最近已分配色块，并按 5-bit 颜色桶缓存最近高度，避免逐像素重复扫描完整色板。
+- `标记待处理` 第一刀先保存策略和未分配统计，实际高度仍按固定高度兜底，后续可再做导入阻断或审核队列。
+- profile settings 和 `map.heightmap.source` 会保存 `unassignedStrategy`，最终元数据还会记录 `unassignedBuckets / unassignedPixels`。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/heightmap-import.js` 通过。
+- `node --check app/webgl-generator/src/generator/heightmap.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `740.20KB / gzip 223.57KB`，`HeightPanel` 懒加载 chunk 约 `26.18KB / gzip 9.35KB`。
+- Playwright + 系统 Chrome 未分配颜色策略烟测通过：导入 48 色合成 SVG，色板上限降到 `16`，映射模式切到色相，未分配高度设为 `12`，未分配颜色切到 `合并最近色` 后应用。
+- 同次烟测中预览指标显示 `色板16 / 93`、`未分配颜色合并最近色`，应用后 `source.kind = image-palette`、`source.mappingMode = hue`、`source.unassignedStrategy = nearest-palette`、`source.unassignedBuckets = 32`、`source.unassignedPixels = 921600`、`assignments = 16`。
+- 同次烟测中 grid 高度落到固定未分配高度 `12` 的采样点为 `0`，说明未分配颜色按最近色高度归并；checksum `82a16da8 -> de922a86`，`loadMap.totalMs = 644.7ms`，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1221.8ms`，纯生成 `631.1ms`，WebGL 加载 `336ms`，最慢加载阶段为 `cell-visual-mesh 45.1ms`，`fit-draw = 2.4ms`，`glError = 0`。

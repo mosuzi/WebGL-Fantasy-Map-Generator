@@ -157,6 +157,9 @@ export function createSampledHeightmap(options, source) {
       mappingMode: source.mappingMode || "grayscale",
       colorLimit: source.colorLimit ?? 0,
       unassignedHeight: source.unassignedHeight ?? 0,
+      unassignedStrategy: source.unassignedStrategy || "fixed-height",
+      unassignedBuckets: source.unassignedBuckets ?? 0,
+      unassignedPixels: source.unassignedPixels ?? 0,
       assignments: Array.isArray(source.assignments) ? source.assignments.map(normalizeHeightmapAssignment) : [],
       normalization: source.normalization || "image-min-max"
     }
