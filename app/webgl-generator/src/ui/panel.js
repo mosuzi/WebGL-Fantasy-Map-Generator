@@ -188,6 +188,7 @@ function editLockControls(documentRef) {
     "#open-label-naming-panel",
     "#open-notes-panel",
     "#open-namebase-panel",
+    "#open-export-panel",
     "#export-map-image",
     "#export-map-data",
     "#export-map-geojson",

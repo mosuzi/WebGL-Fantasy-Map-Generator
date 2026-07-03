@@ -13,30 +13,64 @@
           当前已接入地形、气候、河流、文化、宗教、国家、省份、城镇、道路、资源点、外交、经济、军事和区域等系统，
           并提供 Vue 浮动面板用于查看、编辑和局部重新生成地图对象。
         </p>
-        <a href="https://github.com/mosuzi/fmg-gl" target="_blank" rel="noreferrer">打开当前仓库</a>
-        <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">查看原项目</a>
-        <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
-          <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>
-          <div class="feature-export-layer-grid">
-            <UiSwitchField label="国家面" input-id="feature-export-layer-state" field-class="feature-export-layer-switch" />
-            <UiSwitchField label="省份面" input-id="feature-export-layer-province" field-class="feature-export-layer-switch" />
-            <UiSwitchField label="城市" input-id="feature-export-layer-city" field-class="feature-export-layer-switch" :checked="true" />
-            <UiSwitchField label="路线" input-id="feature-export-layer-route" field-class="feature-export-layer-switch" :checked="true" />
-            <UiSwitchField label="河流" input-id="feature-export-layer-river" field-class="feature-export-layer-switch" :checked="true" />
-            <UiSwitchField label="标记" input-id="feature-export-layer-marker" field-class="feature-export-layer-switch" :checked="true" />
-            <UiSwitchField label="区域" input-id="feature-export-layer-zone" field-class="feature-export-layer-switch" :checked="true" />
-          </div>
-        </section>
+        <div class="project-link-row" aria-label="项目链接">
+          <a href="https://github.com/mosuzi/fmg-gl" target="_blank" rel="noreferrer">当前项目</a>
+          <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">原版仓库</a>
+          <a href="https://azgaar.github.io/Fantasy-Map-Generator/" target="_blank" rel="noreferrer">原版在线版</a>
+        </div>
         <div class="project-file-actions" aria-label="本地文件操作">
-          <UiButton id="export-map-image" variant="secondary">导出图片</UiButton>
-          <UiButton id="export-map-data" variant="secondary">导出地图数据</UiButton>
-          <UiButton id="export-map-geojson" variant="secondary">导出 GeoJSON</UiButton>
-          <UiButton id="export-map-features-geojson" variant="secondary">导出要素 GeoJSON</UiButton>
+          <div ref="exportAnchorRef" class="project-action-anchor">
+            <UiButton
+              id="open-export-panel"
+              variant="secondary"
+              :active="exportPanelOpen"
+              aria-haspopup="dialog"
+              :aria-expanded="exportPanelOpen ? 'true' : 'false'"
+              @click.stop="toggleExportPanel"
+            >
+              导出
+            </UiButton>
+          </div>
           <UiButton class="file-import-action" variant="secondary" @click="triggerFileInput('import-map-file')">导入地图数据</UiButton>
           <input id="import-map-file" type="file" accept=".json,application/json" hidden />
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
       </section>
+
+      <Teleport to="body">
+        <section
+          v-show="exportPanelOpen"
+          ref="exportPanelRef"
+          class="project-export-panel"
+          :style="exportPanelStyle"
+          role="dialog"
+          aria-labelledby="project-export-panel-title"
+          @click.stop
+        >
+          <div class="project-export-panel-header">
+            <strong id="project-export-panel-title">导出</strong>
+            <button type="button" class="project-export-panel-close" aria-label="关闭导出面板" @click="closeExportPanel">×</button>
+          </div>
+          <div class="project-export-action-grid">
+            <UiButton id="export-map-image" variant="secondary" @click="closeExportPanel">图片</UiButton>
+            <UiButton id="export-map-data" variant="secondary" @click="closeExportPanel">地图数据</UiButton>
+            <UiButton id="export-map-geojson" variant="secondary" @click="closeExportPanel">GeoJSON</UiButton>
+            <UiButton id="export-map-features-geojson" variant="secondary" @click="closeExportPanel">要素 GeoJSON</UiButton>
+          </div>
+          <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
+            <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>
+            <div class="feature-export-layer-grid">
+              <UiSwitchField label="国家面" input-id="feature-export-layer-state" field-class="feature-export-layer-switch" />
+              <UiSwitchField label="省份面" input-id="feature-export-layer-province" field-class="feature-export-layer-switch" />
+              <UiSwitchField label="城市" input-id="feature-export-layer-city" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="路线" input-id="feature-export-layer-route" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="河流" input-id="feature-export-layer-river" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="标记" input-id="feature-export-layer-marker" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="区域" input-id="feature-export-layer-zone" field-class="feature-export-layer-switch" :checked="true" />
+            </div>
+          </section>
+        </section>
+      </Teleport>
     </div>
 
     <div class="generation-panel-form" data-control-panel="generation" :hidden="activeTab !== 'generation'">
@@ -306,7 +340,7 @@
 </template>
 
 <script setup>
-import {computed, nextTick, ref} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref} from "vue";
 import {storeToRefs} from "pinia";
 import UiButton from "./base/UiButton.vue";
 import UiField from "./base/UiField.vue";
@@ -341,6 +375,10 @@ defineOptions({
 const config = useGlobalConfigStore();
 const {preferences} = storeToRefs(config);
 const activeTab = ref("generation");
+const exportPanelOpen = ref(false);
+const exportAnchorRef = ref(null);
+const exportPanelRef = ref(null);
+const exportPanelStyle = ref({});
 const climateLatitudeMode = ref("auto");
 const climateLatitudeCenter = ref(0);
 const climateLatitudeSpan = ref(45);
@@ -499,6 +537,40 @@ function triggerFileInput(inputId) {
   input.click();
 }
 
+function toggleExportPanel() {
+  exportPanelOpen.value = !exportPanelOpen.value;
+  if (exportPanelOpen.value) nextTick(positionExportPanel);
+}
+
+function closeExportPanel() {
+  exportPanelOpen.value = false;
+}
+
+function positionExportPanel() {
+  const anchor = exportAnchorRef.value;
+  if (!anchor) return;
+  const rect = anchor.getBoundingClientRect();
+  const width = Math.min(360, Math.max(280, window.innerWidth - 24));
+  const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left));
+  const top = Math.max(12, Math.min(window.innerHeight - 260, rect.bottom + 8));
+  exportPanelStyle.value = {
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+    width: `${Math.round(width)}px`
+  };
+}
+
+function handleExportPanelOutsideClick(event) {
+  if (!exportPanelOpen.value) return;
+  const target = event.target;
+  if (exportPanelRef.value?.contains(target) || exportAnchorRef.value?.contains(target)) return;
+  closeExportPanel();
+}
+
+function handleExportPanelReposition() {
+  if (exportPanelOpen.value) positionExportPanel();
+}
+
 function windDirectionLabel(angle) {
   return windDirectionLabelFromAngle(angle);
 }
@@ -548,4 +620,16 @@ function emitClimateControlsChange() {
     target?.dispatchEvent(new Event("change", {bubbles: true}));
   });
 }
+
+onMounted(() => {
+  document.addEventListener("click", handleExportPanelOutsideClick, true);
+  window.addEventListener("resize", handleExportPanelReposition);
+  window.addEventListener("scroll", handleExportPanelReposition, true);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("click", handleExportPanelOutsideClick, true);
+  window.removeEventListener("resize", handleExportPanelReposition);
+  window.removeEventListener("scroll", handleExportPanelReposition, true);
+});
 </script>
