@@ -15248,3 +15248,30 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：导入 20 色 SVG 后，色板上限 `16`、映射模式 `色相`、未分配颜色 `标记待处理` 下，点击“加入显示色”前待处理项为 `4`、主色板 `16`、手动项 `0`。
 - 同次烟测中点击后主色板增至 `18`、手动项为 `4`，剩余待处理项因后续颜色桶补入变为 `12`，应用按钮仍保持阻断；地图 checksum 保持稳定，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1555ms`，纯生成 `750ms`，WebGL 加载 `379ms`，UI slack `426ms`，最慢生成阶段为 `构建 grid / Voronoi / 高度 132ms`，最慢加载阶段为 `构建线层顶点 55.6ms`，`fit-draw = 2.7ms`，`glError = 0`。
+
+### 高度图待处理颜色分页审核
+
+背景：
+
+- 待处理颜色已经支持“加入显示色”，但列表仍只展示前 `12` 个颜色桶。
+- 如果直接实现“全部加入”，大量未分配颜色会一次性进入主色板和 DOM，不利于保持预览面板轻量。
+
+修正：
+
+- 待处理颜色列表改为分页展示，每页仍只渲染 `12` 个颜色。
+- header 新增“上一页 / 下一页”，并显示当前页、总页数、当前页数量和总待处理桶数。
+- 切换图片、色板上限、映射模式或未分配策略时重置到第一页。
+- “加入显示色”作用于当前页；加入后显式 assignment 仍按既有逻辑进入主色板，不写地图、不触发 worker 或 renderer 重载。
+
+文档：
+
+- 更新 `docs/current-plan.md`，并补入军事面板、国名方位和 README 刷新的后续计划。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`HeightPanel` 懒加载 chunk 约 `37.40KB / gzip 12.37KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：导入 64 色 SVG 后，色板上限 `16`、映射模式 `色相`、未分配颜色 `标记待处理` 下，第一页摘要为 `第 1/10 页，显示 12 色 / 共 109 桶`。
+- 同次烟测中点击“下一页”后摘要为 `第 2/10 页`，上一页按钮可用，颜色集合发生变化；点击“加入显示色”后主色板为 `28` 项、手动项为 `12`，待处理摘要变为 `第 2/9 页，显示 12 色 / 共 97 桶`。
+- 地图 checksum 保持 `61c027de`，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1519.1ms`，纯生成 `797.1ms`，WebGL 加载 `422.3ms`，UI slack `299.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 152.1ms`，最慢加载阶段为 `构建视觉 cell mesh 76.4ms`，`fit-draw = 3.2ms`，`glError = 0`。

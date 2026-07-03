@@ -313,8 +313,12 @@
               <strong>待处理颜色</strong>
               <span>{{ pendingPaletteSummary }}</span>
             </div>
-            <UiButton variant="secondary" @click="promoteVisiblePendingPaletteEntries">加入显示色</UiButton>
-            <UiButton v-if="canExpandColorLimit" variant="secondary" @click="expandHeightmapColorLimit">扩大色板</UiButton>
+            <div class="heightmap-pending-actions">
+              <UiButton variant="secondary" :disabled="!canPagePendingPaletteBack" @click="changePendingPalettePage(-1)">上一页</UiButton>
+              <UiButton variant="secondary" :disabled="!canPagePendingPaletteForward" @click="changePendingPalettePage(1)">下一页</UiButton>
+              <UiButton variant="secondary" @click="promoteVisiblePendingPaletteEntries">加入显示色</UiButton>
+              <UiButton v-if="canExpandColorLimit" variant="secondary" @click="expandHeightmapColorLimit">扩大色板</UiButton>
+            </div>
           </header>
           <div class="heightmap-pending-grid">
             <div v-for="entry in pendingPalette" :key="entry.key" class="heightmap-pending-item">
@@ -405,6 +409,7 @@ const heightAssignmentPresets = Object.freeze([
 ]);
 const heightmapProfileDocumentType = "webgl-generator-heightmap-import-profile";
 const heightmapProfileDocumentVersion = 1;
+const pendingPalettePageSize = 12;
 const fmgHeightColorStops = Object.freeze([
   {height: 8, color: [38, 92, 145]},
   {height: 18, color: [63, 126, 174]},
@@ -446,6 +451,8 @@ const heightBandStats = ref(null);
 const heightDifferenceStats = ref(null);
 const previewPalette = ref([]);
 const pendingPalette = ref([]);
+const pendingPalettePage = ref(0);
+const pendingPalettePageCount = ref(0);
 const selectedPaletteKey = ref(null);
 const batchPaletteKeys = ref([]);
 const batchAssignmentHeight = ref(45);
@@ -503,6 +510,8 @@ const pendingUnassignedBlocked = computed(() => (
 ));
 const canApplyHeightmap = computed(() => Boolean(selectedFile.value) && !pendingUnassignedBlocked.value);
 const canExpandColorLimit = computed(() => nextColorLimit(heightmapColorLimit.value) > heightmapColorLimit.value);
+const canPagePendingPaletteBack = computed(() => pendingPalettePage.value > 0);
+const canPagePendingPaletteForward = computed(() => pendingPalettePage.value + 1 < pendingPalettePageCount.value);
 const pendingUnassignedWarning = computed(() => {
   if (!pendingUnassignedBlocked.value) return "";
   const pixels = formatNumber(previewStats.value.unassignedPixels, unitPreferences.value);
@@ -513,7 +522,10 @@ const pendingPaletteSummary = computed(() => {
   const stats = previewStats.value;
   if (!stats) return "未生成";
   const shown = pendingPalette.value.length;
-  return `显示前 ${shown} 色 / 共 ${formatNumber(stats.unassignedBuckets, unitPreferences.value)} 桶`;
+  if (pendingPalettePageCount.value > 1) {
+    return `第 ${pendingPalettePage.value + 1}/${pendingPalettePageCount.value} 页，显示 ${shown} 色 / 共 ${formatNumber(stats.unassignedBuckets, unitPreferences.value)} 桶`;
+  }
+  return `显示 ${shown} 色 / 共 ${formatNumber(stats.unassignedBuckets, unitPreferences.value)} 桶`;
 });
 const batchSelectedEntries = computed(() => previewPalette.value.filter(entry => batchPaletteKeys.value.includes(entry.key)));
 const batchPaletteSummary = computed(() => {
@@ -637,10 +649,12 @@ function setHeightmapImportMax(value) {
 function setHeightmapColorLimit(value) {
   const next = Number(value);
   heightmapColorLimit.value = [16, 32, 64, 128].includes(next) ? next : 32;
+  pendingPalettePage.value = 0;
 }
 
 function setHeightmapMappingMode(value) {
   heightmapMappingMode.value = heightmapMappingModeOptions.some(option => option.value === value) ? value : "grayscale";
+  pendingPalettePage.value = 0;
 }
 
 function setHeightmapUnassignedHeight(value) {
@@ -649,10 +663,17 @@ function setHeightmapUnassignedHeight(value) {
 
 function setHeightmapUnassignedStrategy(value) {
   heightmapUnassignedStrategy.value = heightmapUnassignedStrategyOptions.some(option => option.value === value) ? value : "fixed-height";
+  pendingPalettePage.value = 0;
 }
 
 function expandHeightmapColorLimit() {
   setHeightmapColorLimit(nextColorLimit(heightmapColorLimit.value));
+}
+
+function changePendingPalettePage(offset) {
+  const pageCount = Math.max(1, pendingPalettePageCount.value || 1);
+  pendingPalettePage.value = clamp(pendingPalettePage.value + offset, 0, pageCount - 1);
+  drawPreview();
 }
 
 function promotePendingPaletteEntry(entry) {
@@ -709,6 +730,7 @@ async function onHeightmapFileChange(event) {
     previewImage.value = await loadPreviewImage(file);
     selectedPaletteKey.value = null;
     batchPaletteKeys.value = [];
+    pendingPalettePage.value = 0;
     if (!importedProfileKeys.value.length) manualAssignments.value = {};
     await nextTick();
     drawPreview();
@@ -723,6 +745,8 @@ async function onHeightmapFileChange(event) {
     heightBandStats.value = null;
     previewPalette.value = [];
     pendingPalette.value = [];
+    pendingPalettePage.value = 0;
+    pendingPalettePageCount.value = 0;
     selectedPaletteKey.value = null;
     batchPaletteKeys.value = [];
     manualAssignments.value = {};
@@ -1018,6 +1042,8 @@ function clearPreviewCanvas() {
   context?.clearRect(0, 0, canvas.width, canvas.height);
   previewHistogram.value = [];
   pendingPalette.value = [];
+  pendingPalettePage.value = 0;
+  pendingPalettePageCount.value = 0;
   if (!previewImage.value) profileMatchStats.value = null;
   clearHeightBandCanvas();
 }
@@ -1139,12 +1165,19 @@ function quantizePalette(data, limit, brightnessStats) {
   }
   const entries = selectedBuckets.map(bucket => createPaletteEntry(bucket, brightnessStats, range, totalPixels));
   const unassigned = bucketList.filter(bucket => !selectedKeys.has(bucket.key));
+  const pendingPageCount = Math.ceil(unassigned.length / pendingPalettePageSize);
+  pendingPalettePageCount.value = pendingPageCount;
+  if (!pendingPageCount) pendingPalettePage.value = 0;
+  else if (pendingPalettePage.value >= pendingPageCount) pendingPalettePage.value = pendingPageCount - 1;
+  const pendingStart = pendingPalettePage.value * pendingPalettePageSize;
   return {
     entries,
     bucketCount: buckets.size,
     unassignedBuckets: unassigned.length,
     unassignedPixels: unassigned.reduce((sum, bucket) => sum + bucket.pixels, 0),
-    pendingEntries: unassigned.slice(0, 12).map(bucket => createPendingPaletteEntry(bucket, brightnessStats, range, totalPixels))
+    pendingEntries: unassigned
+      .slice(pendingStart, pendingStart + pendingPalettePageSize)
+      .map(bucket => createPendingPaletteEntry(bucket, brightnessStats, range, totalPixels))
   };
 }
 
