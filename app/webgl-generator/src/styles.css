@@ -5170,6 +5170,35 @@ input.ui-switch-native {
   font-size: 11px;
 }
 
+.military-event-chain {
+  display: grid;
+  grid-template-columns: 0.75fr 0.8fr 0.95fr minmax(0, 1.35fr);
+  gap: 6px;
+}
+
+.military-event-chain span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.1);
+  border-radius: 6px;
+  padding: 6px 7px;
+  background: rgba(7, 12, 15, 0.36);
+}
+
+.military-event-chain small {
+  color: #8ca0aa;
+  font-size: 10px;
+}
+
+.military-event-chain b {
+  overflow: hidden;
+  color: #edf4f6;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .military-event-filters {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr);

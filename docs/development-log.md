@@ -15809,3 +15809,28 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物布局烟测通过：打开 `http://127.0.0.1:5410` 后进入军事管理，工具条分组为 `军团数据 / 战斗事件`；工具条、事件工具和事件动作区均满足 `scrollWidth == clientWidth`；概要符号为抽象符号 `⌁`，不再显示内部 key `archers`。
 - 同次烟测继续验证事件功能：类型筛选到 `袭扰` 后点击“清空筛选”，临时注入的 `raid / siege` 事件只剩 `siege`，历史为 `清空筛选战斗事件 #1:0`，`glError = 0`、console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1370.6ms`，纯生成 `693.2ms`，WebGL 加载 `370.5ms`，UI slack `306.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 120.5ms`，最慢加载阶段为 `构建视觉 cell mesh 53.3ms`，`line-vertices = 45.2ms`，`fit-draw = 2.5ms`。
+
+### 战报链摘要
+
+背景：
+
+- 战斗事件已经支持记录、导入、筛选、清理和导出，但多条事件只能从列表逐条扫读。
+- 继续推进“多条战报链路”时，先补只读摘要，而不是进入完整战斗模拟或双方结算。
+
+修正：
+
+- 选中军团的战斗事件区新增“战报链摘要”。
+- 摘要展示事件链路条数、已应用结果条数、累计损耗和最近事件。
+- 累计损耗优先读取 `event.result.casualties`，缺失时回退到 `result.troopDelta` 的绝对值。
+- 本轮只读展示，不改变事件记录、导入、清理、导出、轻量结果应用或地图渲染。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 247 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `28.16KB / gzip 9.00KB`，主入口约 `765.90KB / gzip 231.17KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410` 后进入军事管理，给军团 `1:0` 注入两条事件，其中一条带 `result.casualties = 123`；摘要显示 `链路 2 条 / 已应用 1 条 / 累计损耗 123 / 最近 攻城 / 小胜`。
+- 同次烟测确认战报链摘要和事件区无横向溢出，`glError = 0`、console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1595.3ms`，纯生成 `859.3ms`，WebGL 加载 `401ms`，UI slack `335ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 163.3ms`，最慢加载阶段为 `构建视觉 cell mesh 68.8ms`，`line-vertices = 50.7ms`，`fit-draw = 3.5ms`。

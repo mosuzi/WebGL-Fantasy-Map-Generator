@@ -95,6 +95,24 @@
       <strong>战斗事件</strong>
       <span>{{ battleEventCountLabel }}</span>
     </div>
+    <div v-if="selectedBattleEventTotal" class="military-event-chain" aria-label="战报链摘要">
+      <span>
+        <small>链路</small>
+        <b>{{ battleEventChainSummary.totalLabel }}</b>
+      </span>
+      <span>
+        <small>已应用</small>
+        <b>{{ battleEventChainSummary.appliedLabel }}</b>
+      </span>
+      <span>
+        <small>累计损耗</small>
+        <b>{{ battleEventChainSummary.casualtyLabel }}</b>
+      </span>
+      <span>
+        <small>最近</small>
+        <b>{{ battleEventChainSummary.latestLabel }}</b>
+      </span>
+    </div>
     <div class="military-event-tools">
       <div class="military-event-filters">
         <UiSelectField
@@ -432,6 +450,7 @@ const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattle
 const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents.value, selected.value));
 const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventTypeFilter.value, eventOutcomeFilter.value));
 const selectedBattleEvents = computed(() => latestBattleEvents(selectedFilteredBattleEvents.value, 5));
+const battleEventChainSummary = computed(() => buildBattleEventChainSummary(selectedBattleEventRows.value));
 const exportBattleEventRows = computed(() => battleEventRowsForExport(eventExportScope.value));
 const battleEventCountLabel = computed(() => {
   if (!selectedBattleEventTotal.value) return "暂无";
@@ -839,6 +858,26 @@ function filterBattleEvents(events = [], type = "all", outcome = "all") {
 
 function latestBattleEvents(events = [], limit = 5) {
   return events.slice(-limit).reverse();
+}
+
+function buildBattleEventChainSummary(events = []) {
+  const appliedEvents = events.filter(event => event?.resultApplied);
+  const casualties = appliedEvents.reduce((sum, event) => sum + battleEventCasualties(event), 0);
+  const latest = events.at(-1);
+  return {
+    totalLabel: `${formatNumber(events.length)} 条`,
+    appliedLabel: appliedEvents.length ? `${formatNumber(appliedEvents.length)} 条` : "无",
+    casualtyLabel: casualties ? formatNumber(casualties) : "无",
+    latestLabel: latest ? `${latest.typeLabel || latest.type || "事件"} / ${latest.outcomeLabel || latest.outcome || "结果"}` : "无"
+  };
+}
+
+function battleEventCasualties(event) {
+  const result = event?.result || {};
+  const direct = Number(result.casualties);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+  const delta = Math.abs(Number(result.troopDelta || 0));
+  return Number.isFinite(delta) ? delta : 0;
 }
 
 function battleEventRowsForExport(scope) {
