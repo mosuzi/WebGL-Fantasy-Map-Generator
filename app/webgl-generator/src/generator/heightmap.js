@@ -154,6 +154,10 @@ export function createSampledHeightmap(options, source) {
       heightMax: source.heightMax ?? 100,
       invert: Boolean(source.invert),
       fitMode: source.fitMode || "stretch",
+      mappingMode: source.mappingMode || "grayscale",
+      colorLimit: source.colorLimit ?? 0,
+      unassignedHeight: source.unassignedHeight ?? 0,
+      assignments: Array.isArray(source.assignments) ? source.assignments.map(normalizeHeightmapAssignment) : [],
       normalization: source.normalization || "image-min-max"
     }
   };
@@ -162,6 +166,31 @@ export function createSampledHeightmap(options, source) {
     enumerable: false
   });
   return descriptor;
+}
+
+export function createSampledHeightmapFromPayload(options, payload = {}) {
+  const sampleWidth = Math.max(1, Number(payload.sampleWidth) || Number(options.graphWidth) || 1);
+  const sampleHeight = Math.max(1, Number(payload.sampleHeight) || Number(options.graphHeight) || 1);
+  const samples = payload.samples || new Uint8Array(sampleWidth * sampleHeight);
+  return createSampledHeightmap(options, {
+    ...(payload.source || {}),
+    sampleHeight: point => {
+      const x = clamp(Math.round(point[0]), 0, sampleWidth - 1);
+      const y = clamp(Math.round(point[1]), 0, sampleHeight - 1);
+      return samples[y * sampleWidth + x] ?? 0;
+    }
+  });
+}
+
+function normalizeHeightmapAssignment(assignment) {
+  return {
+    key: assignment.key,
+    color: assignment.color || "",
+    height: assignment.height ?? 0,
+    autoHeight: assignment.autoHeight ?? assignment.height ?? 0,
+    pixels: assignment.pixels ?? 0,
+    manual: Boolean(assignment.manual)
+  };
 }
 
 export function applyHeightmap(heightmap, grid, layout, random) {

@@ -103,7 +103,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   });
   documentRef.addEventListener("heightmap-import-apply", event => {
     const file = event.detail?.file;
-    if (file) handlers.onImportHeightmapImage?.(file);
+    if (file) handlers.onImportHeightmapImage?.(event.detail);
   });
   for (const button of documentRef.querySelectorAll("[data-regenerate-kind]")) {
     button.addEventListener("click", () => handlers.onRegenerate?.(button.dataset.regenerateKind));

@@ -14732,3 +14732,38 @@ full 矩阵结果：
 - 点击首个色块并设为“山地”后，色块标题变为 `高度 68 / 手动`，摘要显示 `h 68 手动`，赋值面板显示“手动高度”。
 - 预览、切换映射模式和手动赋高前后地图 checksum 保持 `0a74dfc6`，说明本刀仍未写入地图数据。
 - 浏览器健康监控在初始生成阶段记录一次约 `304.8ms` 的 `main-thread-long-task` warn；该事件发生在高度图交互前，正式 e2e 守门未超预算，后续若继续压初始生成长任务，应作为独立性能任务处理。
+
+### 高度图 image-palette 应用链路
+
+背景：
+
+- 上一步已经能在工作台里自动估高和手动覆盖色块，但点击应用仍只走灰度导入，彩色色板不会进入最终地图。
+- 专题计划要求 `image-palette` 应用后完整重建 feature、climate、biome、pack、river、politics 和 settlements，并把 assignments 写入地图元数据。
+- 首轮浏览器验证发现，虽然彩色导入功能生效，但高度图导入路径仍在主线程同步执行 `generatePlaceholderMap()`，触发 health `main-thread-long-task` error；这违反“遇到加载或绘制卡顿先处理”的要求。
+
+修正：
+
+- `HeightPanel.vue` 的 `heightmap-import-apply` 事件现在会携带 `settings`，包括 `kind / minHeight / maxHeight / invert / fitMode / colorLimit / mappingMode / unassignedHeight / assignments`。
+- 默认灰度且无手动覆盖时继续请求 `image-grayscale`，避免普通灰度图突然变成量化高度图；切到亮度、色相、FMG 色带、手动模式或存在手动覆盖时才请求 `image-palette`。
+- `runtime/heightmap-import.js` 新增 `createPaletteHeightmapFromImage()`：在完整图幅 canvas 上重新量化 5-bit RGB 色块，按当前映射模式和手动覆盖生成高度；前 N 个色块进入 assignments，未进入前 N 的颜色按 `unassignedHeight = 0` 处理。
+- `createSampledHeightmap()` 的 source 元数据补充 `mappingMode / colorLimit / unassignedHeight / assignments`，完整地图 JSON 可以复查彩色图片如何映射为高度。
+- 灰度和彩色色板导入都会把采样高度缓存为 `Uint8Array`，并以不可枚举 `workerPayload` 传给 runtime。
+- `generation-worker.js` 支持接收 sampled heightmap payload，在 worker 内恢复 `sampleHeight` 后执行完整生成；`importHeightmapImage()` 改为复用普通生成的 worker 路径，worker 不可用时才回退主线程。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/heightmap-import.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/runtime/generation-worker.js` 通过。
+- `node --check app/webgl-generator/src/generator/heightmap.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。
+- 首轮彩色导入烟测确认功能生效但捕获到 health `main-thread-long-task` error，随后完成 worker 化修复。
+- 修复后 Playwright + 系统 Chrome 彩色导入烟测通过：默认地图 loading 已隐藏，跨画布 `25/25` 个采样点非空；导入合成彩色 SVG，切到色相模式并把首个色块设为“山地”后点击应用，checksum `d21222dd -> fe4e8d88`，`source.kind = image-palette`，`source.mappingMode = hue`，`assignments = 4`，首个手动 assignment 高度 `68`，状态显示“已导入彩色高度图”，`loadMap.totalMs = 338.2ms`，`fit-draw = 7ms`，`draw.glError = 0`，console/page error 为 `0`，health error 为 `0`。
+- 默认灰度兼容烟测通过：不切映射模式、不手动覆盖时应用灰度 SVG，`source.kind = image-grayscale`，状态仍显示“已导入灰度高度图”，`loadMap.totalMs = 321.2ms`，`fit-draw = 4ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1243.4ms`，纯生成 `638.7ms`，WebGL 加载 `330.2ms`，最慢加载阶段为 `cell-visual-mesh 46.1ms`，`fit-draw = 2.2ms`，`glError = 0`。

@@ -1,11 +1,14 @@
 import {generatePlaceholderMap} from "../generator/index.js";
+import {createSampledHeightmapFromPayload} from "../generator/heightmap.js";
 
 self.addEventListener("message", event => {
-  const {type, requestId, options} = event.data || {};
+  const {type, requestId, options, heightmapPayload} = event.data || {};
   if (type !== "generate-map") return;
 
   try {
+    const heightmap = heightmapPayload ? createSampledHeightmapFromPayload(options, heightmapPayload) : null;
     const map = generatePlaceholderMap(options, {
+      ...(heightmap ? {heightmap} : {}),
       onStageStart: stage => self.postMessage({type: "generation-stage", requestId, stage}),
       onStageEnd: stage => self.postMessage({type: "generation-stage-complete", requestId, stage})
     });

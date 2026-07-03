@@ -32,7 +32,7 @@ import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
-import {createGrayscaleHeightmapFromImage, readHeightmapImportSettings} from "./heightmap-import.js";
+import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
 import {createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
@@ -1209,7 +1209,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onExportGeoJson: () => exportGeoJson(state, documentRef),
     onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef),
     onImportMapData: file => importMapData(state, documentRef, file),
-    onImportHeightmapImage: file => importHeightmapImage(state, documentRef, file),
+    onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload),
     onRegenerate: kind => {
       updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
     },
@@ -1600,16 +1600,16 @@ function createGenerationTrace(documentRef) {
   };
 }
 
-function generateMapOffMainThread(documentRef, options, generateId) {
+function generateMapOffMainThread(documentRef, options, generateId, overrides = {}) {
   const view = documentRef.defaultView || window;
   const generationTrace = createGenerationTrace(documentRef);
-  if (typeof view.Worker !== "function") return Promise.resolve(generatePlaceholderMap(options, generationTrace));
+  if (typeof view.Worker !== "function") return Promise.resolve(generatePlaceholderMap(options, {...generationTrace, ...fallbackGenerationOverrides(overrides)}));
 
   let worker;
   try {
     worker = new GenerationWorker();
   } catch {
-    return Promise.resolve(generatePlaceholderMap(options, generationTrace));
+    return Promise.resolve(generatePlaceholderMap(options, {...generationTrace, ...fallbackGenerationOverrides(overrides)}));
   }
 
   return new Promise((resolve, reject) => {
@@ -1628,7 +1628,7 @@ function generateMapOffMainThread(documentRef, options, generateId) {
 
     const fallbackToMainThread = () => {
       try {
-        const map = generatePlaceholderMap(options, generationTrace);
+        const map = generatePlaceholderMap(options, {...generationTrace, ...fallbackGenerationOverrides(overrides)});
         finish(() => resolve(map));
       } catch (error) {
         finish(() => reject(error));
@@ -1670,8 +1670,17 @@ function generateMapOffMainThread(documentRef, options, generateId) {
     worker.addEventListener("error", fallbackToMainThread);
     worker.addEventListener("messageerror", fallbackToMainThread);
 
-    worker.postMessage({type: "generate-map", requestId: generateId, options});
+    worker.postMessage({
+      type: "generate-map",
+      requestId: generateId,
+      options,
+      heightmapPayload: overrides.heightmapPayload || null
+    });
   });
+}
+
+function fallbackGenerationOverrides(overrides = {}) {
+  return overrides.heightmap ? {heightmap: overrides.heightmap} : {};
 }
 
 function setGenerationStatus(documentRef, options, status) {
@@ -1946,19 +1955,21 @@ async function importMapData(state, documentRef, file) {
   }
 }
 
-async function importHeightmapImage(state, documentRef, file) {
+async function importHeightmapImage(state, documentRef, payload) {
+  const {file, settings} = normalizeHeightmapImportPayload(payload, documentRef);
   if (!file) return;
   try {
     resetLoadTrace(documentRef);
     emitLoadTrace(documentRef, {phase: "request", id: "heightmap-read", message: loadingMessage("heightmap-read")});
-    setFileOperationStatus(documentRef, "正在读取灰度高度图...", ["heightmap-import-status"]);
+    setFileOperationStatus(documentRef, "正在读取高度图...", ["heightmap-import-status"]);
     setMythicGenerationLoading(documentRef, true, "heightmap-read");
     const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
-    const settings = readHeightmapImportSettings(documentRef);
     const importGenerateId = (state.pendingGenerateId || 0) + 1;
     state.pendingGenerateId = importGenerateId;
     state.heightmapImportId = importGenerateId;
-    const heightmap = await createGrayscaleHeightmapFromImage(documentRef, file, options, settings);
+    const heightmap = settings.kind === "image-palette"
+      ? await createPaletteHeightmapFromImage(documentRef, file, options, settings)
+      : await createGrayscaleHeightmapFromImage(documentRef, file, options, settings);
     if (importGenerateId !== state.pendingGenerateId) {
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
       return;
@@ -1966,7 +1977,11 @@ async function importHeightmapImage(state, documentRef, file) {
     state.options = options;
     setMythicGenerationLoading(documentRef, true, "heightmap-generate");
     emitLoadTrace(documentRef, {phase: "start", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
-    const map = generatePlaceholderMap(options, {...createGenerationTrace(documentRef), heightmap});
+    await yieldToBrowser(documentRef, {debugDelay: true});
+    const map = await generateMapOffMainThread(documentRef, options, importGenerateId, {
+      heightmap,
+      heightmapPayload: heightmap.workerPayload || null
+    });
     emitLoadTrace(documentRef, {phase: "end", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     if (importGenerateId !== state.pendingGenerateId) {
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
@@ -1977,11 +1992,28 @@ async function importHeightmapImage(state, documentRef, file) {
       loadingMessages: [loadingMessage("heightmap-render"), loadingMessage("panel-refresh")]
     });
     updateGenerationLoading(documentRef, false);
-    setFileOperationStatus(documentRef, `已导入灰度高度图：${heightmap.source.filename || "本地图片"}，高度 ${heightmap.source.heightMin}-${heightmap.source.heightMax}，${heightmapFitLabel(heightmap.source.fitMode)}`, ["heightmap-import-status"]);
+    setFileOperationStatus(documentRef, heightmapImportSuccessMessage(heightmap), ["heightmap-import-status"]);
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    reportFileOperationError(documentRef, "灰度高度图导入失败", error, ["heightmap-import-status"]);
+    reportFileOperationError(documentRef, "高度图导入失败", error, ["heightmap-import-status"]);
   }
+}
+
+function heightmapImportSuccessMessage(heightmap) {
+  const source = heightmap.source || {};
+  if (source.kind === "image-palette") {
+    const assignments = Array.isArray(source.assignments) ? source.assignments.length : 0;
+    return `已导入彩色高度图：${source.filename || "本地图片"}，${mappingModeStatusLabel(source.mappingMode)}，${assignments} 个色块，未分配高度 ${source.unassignedHeight}`;
+  }
+  return `已导入灰度高度图：${source.filename || "本地图片"}，高度 ${source.heightMin}-${source.heightMax}，${heightmapFitLabel(source.fitMode)}`;
+}
+
+function mappingModeStatusLabel(mappingMode) {
+  if (mappingMode === "luminance") return "亮度映射";
+  if (mappingMode === "hue") return "色相映射";
+  if (mappingMode === "fmg-scheme") return "FMG 色带映射";
+  if (mappingMode === "manual") return "手动映射";
+  return "灰度映射";
 }
 
 function heightmapFitLabel(fitMode) {

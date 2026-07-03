@@ -376,9 +376,38 @@ function applyHeightmapImport() {
     previewStatus.value = "请先选择一张图片。";
     return;
   }
-  document.dispatchEvent(new CustomEvent("heightmap-import-apply", {detail: {file: selectedFile.value}}));
+  document.dispatchEvent(new CustomEvent("heightmap-import-apply", {
+    detail: {
+      file: selectedFile.value,
+      settings: createHeightmapImportSettings()
+    }
+  }));
   previewStatus.value = "已提交导入任务。";
   closeImportWorkbench();
+}
+
+function createHeightmapImportSettings() {
+  const assignments = previewPalette.value.map(entry => ({
+    key: entry.key,
+    color: entry.hex,
+    height: entry.height,
+    autoHeight: entry.autoHeight,
+    pixels: entry.pixels,
+    manual: entry.manual
+  }));
+  const hasManualAssignments = assignments.some(entry => entry.manual);
+  const shouldUsePalette = heightmapMappingMode.value !== "grayscale" || hasManualAssignments;
+  return {
+    kind: shouldUsePalette ? "image-palette" : "image-grayscale",
+    minHeight: heightmapImportMin.value,
+    maxHeight: heightmapImportMax.value,
+    invert: heightmapImportInvert.value,
+    fitMode: heightmapImportFit.value,
+    colorLimit: heightmapColorLimit.value,
+    mappingMode: heightmapMappingMode.value,
+    unassignedHeight: 0,
+    assignments
+  };
 }
 
 function drawPreview() {
