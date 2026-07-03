@@ -4676,7 +4676,7 @@ input.ui-switch-native {
 
 .government-panel-controls {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 0.48fr) auto;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
@@ -4702,6 +4702,10 @@ input.ui-switch-native {
   min-height: 30px;
   margin-left: 0;
   padding-inline: 8px;
+}
+
+.government-family-filter {
+  min-width: 0;
 }
 
 .government-panel-sort {

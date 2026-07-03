@@ -9,6 +9,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: "",
+    familyFilter: "all",
     sortKey: "count",
     sortDir: "desc",
     selectedGovernmentKey: null,
@@ -18,6 +19,9 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+    },
+    onFamilyFilter: value => {
+      panelState.familyFilter = String(value || "all");
     },
     onSort: key => {
       if (panelState.sortKey === key) {

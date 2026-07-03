@@ -3,6 +3,14 @@
 
   <div class="government-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选政体 / 类型 / 国家" @update:model-value="callbacks.onFilter" />
+    <UiSelectField
+      input-id="government-family-filter"
+      class-name="government-family-filter"
+      label="家族"
+      :model-value="state.familyFilter"
+      :options="familyFilterOptions"
+      @update:model-value="callbacks.onFamilyFilter"
+    />
     <div class="government-panel-export-actions" aria-label="政体导出">
       <UiButton id="government-export-csv" variant="secondary" :disabled="!exportStateRows.length" @click="exportCsv">导出 CSV</UiButton>
       <UiButton id="government-export-json" variant="secondary" :disabled="!visibleGovernmentRows.length" @click="exportJson">导出 JSON</UiButton>
@@ -56,6 +64,7 @@
 <script setup>
 import {computed, ref, watch} from "vue";
 import {GOVERNMENT_OPTIONS, GOVERNMENT_TYPES} from "../../../generator/governments.js";
+import {GOVERNMENT_FAMILY_LEGEND} from "../../../renderer/color-modes.js";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -118,7 +127,19 @@ const metrics = computed(() => {
   props.state.version;
   return buildGovernmentMetrics(props.state.map);
 });
-const visibleGovernmentRows = computed(() => sortRows(filterGovernmentRows(metrics.value.governments, metrics.value.states, props.state.filter), props.state.sortKey, props.state.sortDir));
+const familyFilterOptions = computed(() => [
+  {value: "all", label: "全部家族"},
+  ...Object.entries(metrics.value.familyCounts)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => familyLabel(a[0]).localeCompare(familyLabel(b[0]), "zh-CN"))
+    .map(([family, count]) => ({value: family, label: `${familyLabel(family)} ${formatNumber(count)}`}))
+]);
+const visibleGovernmentRows = computed(() => sortRows(filterGovernmentRows(
+  metrics.value.governments,
+  metrics.value.states,
+  props.state.filter,
+  props.state.familyFilter
+), props.state.sortKey, props.state.sortDir));
 const selectedGovernmentKey = computed(() => (
   visibleGovernmentRows.value.some(row => row.key === props.state.selectedGovernmentKey)
     ? props.state.selectedGovernmentKey
@@ -262,6 +283,7 @@ function exportJson() {
     exportedAt: new Date().toISOString(),
     seed: props.state.map?.metadata?.seed || "",
     filter: props.state.filter || "",
+    familyFilter: props.state.familyFilter || "all",
     selectedGovernmentKey: selectedGovernmentKey.value,
     summary: {
       totalStates: metrics.value.totalStates,
@@ -324,19 +346,21 @@ function stateRows(map) {
     });
 }
 
-function filterGovernmentRows(governments, states, filter) {
+function filterGovernmentRows(governments, states, filter, familyFilter = "all") {
   const query = String(filter || "").trim().toLowerCase();
-  if (!query) return governments;
+  const family = String(familyFilter || "all");
   const matchedGovernmentKeys = new Set(states
     .filter(row => row.name.toLowerCase().includes(query) || String(row.id).includes(query))
     .map(row => row.governmentKey));
-  return governments.filter(row =>
-    row.label.toLowerCase().includes(query)
-    || row.category.toLowerCase().includes(query)
-    || row.era.toLowerCase().includes(query)
-    || row.key.toLowerCase().includes(query)
-    || matchedGovernmentKeys.has(row.key)
-  );
+  return governments
+    .filter(row => family === "all" || row.family === family)
+    .filter(row => !query
+      || row.label.toLowerCase().includes(query)
+      || row.category.toLowerCase().includes(query)
+      || row.era.toLowerCase().includes(query)
+      || familyLabel(row.family).toLowerCase().includes(query)
+      || row.key.toLowerCase().includes(query)
+      || matchedGovernmentKeys.has(row.key));
 }
 
 function sortRows(rows, key, direction) {
@@ -391,6 +415,10 @@ function formatPopulationValue(value) {
 
 function formatAreaValue(value) {
   return formatArea(value, unitPreferences.value);
+}
+
+function familyLabel(family) {
+  return GOVERNMENT_FAMILY_LEGEND[family]?.label || family || "未归类";
 }
 
 function exportGovernmentRow(row) {

@@ -16597,3 +16597,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `790.43KB / gzip 238.43KB`，`GovernmentPanel` chunk 约 `10.98KB / gzip 3.98KB`。
 - 构建产物浏览器烟测通过：默认 `stage-2-1` 打开 `政体管理` 后下载 `fmg-governments-stage-2-1.csv` 和 `fmg-governments-stage-2-1.json`；CSV 为 `21` 行，表头包含 `政体Key`，JSON `type = fmg-government-summary`、`exportedStates = 20`、`governments = 8`、国家明细 `20` 条、政体分组 `8` 条；`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1521.2ms`，纯生成 `866.7ms`，WebGL 加载 `366.6ms`，UI slack `287.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 169.1ms`，最慢加载阶段为 `构建视觉 cell mesh 53.6ms`。
+
+### 政体家族筛选第一刀
+
+背景：
+
+- 政体管理已经能文本筛选和导出，但政体专题图例本身按 `governmentFamily` 分组，管理面板还缺少同一口径的快速过滤。
+- 本轮继续只做政体管理的静态可读性，不新增政体事件，也不触碰动态军事系统。
+
+修正：
+
+- `政体管理` 筛选区新增“家族”下拉，可按 `专制集权 / 君主系 / 共和系 / 联盟系 / 神权系 / 寡头系 / 军政系 / 未归类` 等实际存在的政体家族过滤。
+- 政体表、下方国家列表、CSV 导出和 JSON 导出都跟随家族筛选；JSON 新增 `familyFilter` 字段，便于还原导出上下文。
+- 控制区布局调整为“文本筛选 / 家族筛选 / 导出按钮”三列，避免导出按钮和筛选框互相挤压。
+- 当前计划同步把政体管理的已完成范围更新为家族筛选和导出上下文。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `780.69KB / gzip 235.43KB`，`GovernmentPanel` chunk 约 `11.68KB / gzip 4.21KB`。
+- 构建产物浏览器烟测通过：默认 `stage-2-1` 打开 `政体管理` 后选择 `autocracy / 专制集权` 家族，面板筛出 `7` 个国家、`3` 类政体；JSON 导出 `familyFilter = autocracy`、`exportedStates = 7`、`governments = 3`，国家明细全部为 `autocracy`；CSV 为 `8` 行，控制区无横向溢出，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1344.8ms`，纯生成 `722.6ms`，WebGL 加载 `398.3ms`，UI slack `223.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 140.1ms`，最慢加载阶段为 `构建线层顶点 67ms`。
