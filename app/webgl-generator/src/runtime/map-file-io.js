@@ -696,6 +696,8 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   for (const element of elements) {
     if (element.matches(".city-map-icon, .marker-map-icon")) {
       await drawSvgOverlayElement(context, element, canvasRect, scale);
+    } else if (element.matches(".military-map-icon")) {
+      await drawMilitaryOverlayElement(context, element, canvasRect, scale);
     } else {
       drawTextOverlayElement(context, element, canvasRect, scale);
     }
@@ -766,6 +768,60 @@ async function drawSvgOverlayElement(context, element, canvasRect, scale) {
     context.shadowOffsetY = 2 * scale.y;
   }
   context.drawImage(image, box.x, box.y, box.width, box.height);
+  context.restore();
+}
+
+async function drawMilitaryOverlayElement(context, element, canvasRect, scale) {
+  const box = elementBox(element, canvasRect, scale);
+  if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  const opacity = exportOverlayOpacity(element, style);
+  if (opacity <= 0) return;
+
+  const background = style.backgroundColor;
+  const borderColor = style.borderColor;
+  const iconNode = element.querySelector(".military-map-icon-image");
+  const countNode = element.querySelector(".military-map-icon-count");
+  const countText = countNode?.textContent?.trim() || "";
+
+  context.save();
+  context.globalAlpha = opacity;
+  context.shadowColor = "rgba(3, 6, 7, 0.42)";
+  context.shadowBlur = 3 * Math.min(scale.x, scale.y);
+  context.shadowOffsetY = 2 * scale.y;
+  if (isPaintedColor(background)) {
+    drawPanel(context, box, cssPixelValue(style.borderRadius, scale.x), background, isPaintedColor(borderColor) ? borderColor : "transparent");
+  }
+  context.shadowColor = "transparent";
+  context.shadowBlur = 0;
+  context.shadowOffsetY = 0;
+
+  if (iconNode) {
+    const image = await loadImage(element.ownerDocument, iconNode.currentSrc || iconNode.src || iconNode.getAttribute("src"));
+    const iconBox = elementBox(iconNode, canvasRect, scale);
+    if (image && iconBox) {
+      context.shadowColor = "rgba(1, 4, 4, 0.5)";
+      context.shadowBlur = 1.4 * Math.min(scale.x, scale.y);
+      context.shadowOffsetY = 0.8 * scale.y;
+      context.drawImage(image, iconBox.x, iconBox.y, iconBox.width, iconBox.height);
+      context.shadowColor = "transparent";
+      context.shadowBlur = 0;
+      context.shadowOffsetY = 0;
+    }
+  }
+
+  if (countText && countNode) {
+    const countBox = elementBox(countNode, canvasRect, scale);
+    const countStyle = element.ownerDocument.defaultView.getComputedStyle(countNode);
+    if (countBox) {
+      context.font = cssCanvasFont(style, scale.y);
+      context.fillStyle = countStyle.color || style.color || "#f7e5ad";
+      context.textAlign = "right";
+      context.textBaseline = "middle";
+      context.fillText(countText, countBox.x + countBox.width, box.y + box.height / 2, countBox.width);
+    }
+  }
+
   context.restore();
 }
 

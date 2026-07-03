@@ -173,6 +173,8 @@ function resolveMilitary(map, object) {
     troops: regiment.a,
     units: regiment.u,
     icon: regiment.icon,
+    iconVariant: regiment.iconVariant,
+    iconLabel: regiment.iconLabel,
     x: regiment.x,
     y: regiment.y,
     cell: regiment.cell,

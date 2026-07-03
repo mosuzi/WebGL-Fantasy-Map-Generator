@@ -44,6 +44,7 @@ import {
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
+import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 
 const MARKER_ICON_MIN_SCALE = 2.15;
 const MARKER_ICON_RELAXED_SCALE = 4.4;
@@ -866,7 +867,13 @@ export class PlaceholderMapRenderer {
       node.dataset.stateId = String(item.stateId);
       const symbol = documentRef.createElement("span");
       symbol.className = "military-map-icon-symbol";
-      symbol.textContent = item.icon;
+      const icon = documentRef.createElement("img");
+      icon.className = "military-map-icon-image";
+      icon.src = item.iconUrl;
+      icon.alt = item.iconLabel || item.dominantUnitLabel || "军种";
+      icon.decoding = "async";
+      icon.draggable = false;
+      symbol.append(icon);
       const count = documentRef.createElement("span");
       count.className = "military-map-icon-count";
       count.textContent = formatMilitaryTroops(item.troops);
@@ -1575,27 +1582,31 @@ function markerIconClassName(item) {
 function getMilitaryIconItems(map) {
   return militaryRegiments(map)
     .sort((a, b) => Number(b.a || 0) - Number(a.a || 0))
-    .map(regiment => ({
-      id: regiment.id ?? `${regiment.state}:${regiment.i}`,
-      regiment,
-      stateId: regiment.state,
-      regimentId: regiment.i,
-      type: regiment.type,
-      name: regiment.name || `军团 #${regiment.i}`,
-      stateName: regiment.stateName || map?.politics?.states?.[regiment.state]?.name || "none",
-      icon: militaryIconForRegiment(regiment),
-      iconVariant: regiment.iconVariant || militaryIconVariantForUnit(regiment.dominantUnit),
-      iconLabel: regiment.iconLabel,
-      troops: Number(regiment.a || 0),
-      status: regiment.status,
-      statusLabel: regiment.statusLabel,
-      dominantUnit: regiment.dominantUnit,
-      dominantUnitLabel: regiment.dominantUnitLabel,
-      tooltip: militaryIconTooltip(regiment, map),
-      minScale: regiment.a >= 8000 ? MILITARY_ICON_MIN_SCALE * 0.82 : MILITARY_ICON_MIN_SCALE,
-      x: regiment.x,
-      y: regiment.y
-    }));
+    .map(regiment => {
+      const iconVariant = militaryIconForRegiment(regiment);
+      return {
+        id: regiment.id ?? `${regiment.state}:${regiment.i}`,
+        regiment,
+        stateId: regiment.state,
+        regimentId: regiment.i,
+        type: regiment.type,
+        name: regiment.name || `军团 #${regiment.i}`,
+        stateName: regiment.stateName || map?.politics?.states?.[regiment.state]?.name || "none",
+        icon: iconVariant,
+        iconVariant,
+        iconUrl: militaryIconUrlForVariant(iconVariant),
+        iconLabel: regiment.iconLabel || militaryIconLabelForVariant(iconVariant),
+        troops: Number(regiment.a || 0),
+        status: regiment.status,
+        statusLabel: regiment.statusLabel,
+        dominantUnit: regiment.dominantUnit,
+        dominantUnitLabel: regiment.dominantUnitLabel,
+        tooltip: militaryIconTooltip(regiment, map),
+        minScale: regiment.a >= 8000 ? MILITARY_ICON_MIN_SCALE * 0.82 : MILITARY_ICON_MIN_SCALE,
+        x: regiment.x,
+        y: regiment.y
+      };
+    });
 }
 
 function militaryRegiments(map) {
@@ -1617,7 +1628,8 @@ function militaryIconTooltip(regiment, map) {
 function militaryIconClassName(item) {
   const classes = ["military-map-icon"];
   if (item.type === "fleet") classes.push("military-map-icon--fleet");
-  if (item.iconVariant) classes.push(`military-map-icon--${item.iconVariant}`);
+  const iconVariant = normalizeMilitaryIconVariant(item.iconVariant || item.icon, militaryIconVariantForUnit(item.dominantUnit));
+  if (iconVariant) classes.push(`military-map-icon--${iconVariant}`);
   return classes.join(" ");
 }
 
@@ -1637,7 +1649,9 @@ function militaryObjectFromIconItem(item) {
     dominantUnitLabel: regiment.dominantUnitLabel || item.dominantUnitLabel,
     troops: regiment.a ?? item.troops,
     units: regiment.u,
-    icon: militaryIconForRegiment(regiment) || item.icon,
+    icon: item.iconVariant || item.icon,
+    iconVariant: item.iconVariant,
+    iconLabel: item.iconLabel,
     cell: regiment.cell,
     x: regiment.x,
     y: regiment.y,
@@ -1664,43 +1678,12 @@ function militaryIconScale(scale, item) {
 }
 
 function militaryIconForUnit(unit) {
-  if (unit === "archers") return "🏹";
-  if (unit === "cavalry") return "♞";
-  if (unit === "artillery") return "⚙";
-  if (unit === "fleet") return "⛵";
-  return "▴";
+  return militaryIconVariantForUnit(unit);
 }
 
 function militaryIconForRegiment(regiment = {}) {
-  const sanitized = sanitizeMilitaryIcon(regiment.icon);
-  if (sanitized) return sanitized;
-  if (regiment.iconVariant) return militaryIconForVariant(regiment.iconVariant);
-  return militaryIconForUnit(regiment.dominantUnit);
-}
-
-function sanitizeMilitaryIcon(icon) {
-  const value = String(icon || "").trim();
-  if (!value) return "";
-  const legacy = {
-    "步": "▴",
-    "弓": "🏹",
-    "骑": "♞",
-    "械": "⚙",
-    "舟": "⛵"
-  };
-  if (legacy[value]) return legacy[value];
-  return /[\u4e00-\u9fff]/u.test(value) ? "" : value;
-}
-
-function militaryIconForVariant(variant) {
-  if (variant === "fleet-large") return "🚢";
-  if (variant === "fleet-small") return "⛵";
-  if (variant === "archers-heavy") return "🏹⋯";
-  if (variant === "cavalry-heavy") return "♞◈";
-  if (variant === "infantry-heavy") return "▴🛡";
-  if (variant === "mountain") return "👒";
-  if (variant === "artillery") return "⚙";
-  return militaryIconForUnit(variant);
+  const fallback = militaryIconVariantForUnit(regiment.dominantUnit);
+  return normalizeMilitaryIconVariant(regiment.iconVariant || regiment.icon, fallback);
 }
 
 function militaryIconVariantForUnit(unit) {

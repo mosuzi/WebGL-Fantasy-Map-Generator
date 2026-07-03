@@ -181,6 +181,8 @@ function buildMilitaryMetrics(map) {
       units: regiment.u || {},
       unitSummary: unitSummary(regiment.u),
       icon: regiment.icon,
+      iconVariant: regiment.iconVariant,
+      iconLabel: regiment.iconLabel,
       x: regiment.x,
       y: regiment.y,
       cell: regiment.cell,

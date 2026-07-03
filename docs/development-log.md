@@ -14619,3 +14619,19 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 体积警告。
 - 用临时静态服务器加载构建产物并通过 Playwright 打开国家面板：页面 ready、loading 已 `hidden`，20 个国家覆盖 8 类政体，国家面板二级“调整政体”浮层可打开，console/page error 为 `0`。
+
+### 军种图标资产化
+
+背景：
+
+- 用户指出军事单位 icon 不能继续复用 emoji 或符号组合，因为不同用户字符系统会导致显示不一致，且组合符号无法准确表达重装弓兵、山地兵等军种。
+- 山地兵需要接近丛林伪装草帽的抽象图标，而不是女士草帽 emoji；重装弓兵需要三支箭同时搭弓的图标。
+
+修正：
+
+- 使用 imagegen 生成一张 5x2 军种 sprite sheet，并切分为十个透明 PNG 资产：
+  - `fleet-large / fleet-small / archers / archers-heavy / cavalry / cavalry-heavy / infantry / infantry-heavy / mountain / artillery`
+- 新增 `renderer/military-icon-assets.js`，统一管理图标 URL、中文标签和旧数据兼容映射。
+- 军事生成器不再写入 emoji 或符号，`regiment.icon` 与 `regiment.iconVariant` 均使用稳定的纯文本类型键。
+- 地图军事 overlay 从文字节点改为 `<img>` 图标节点，保留原有兵力数字、选中状态、碰撞避让和点击热区。
+- PNG/JPEG 导出新增军事 overlay 绘制分支，会导出军事图标和兵力数字，而不是只导出文本。

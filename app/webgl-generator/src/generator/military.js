@@ -2,11 +2,11 @@ import {createRandom} from "./random.js";
 import {getGovernmentEffects} from "./governments.js";
 
 export const MILITARY_UNITS = Object.freeze([
-  {name: "infantry", label: "步兵", icon: "▴", rural: 0.25, urban: 0.2, baseRatio: 0.46, type: "melee", separate: 0, speed: 0.78},
-  {name: "archers", label: "弓兵", icon: "🏹", rural: 0.12, urban: 0.2, baseRatio: 0.22, type: "ranged", separate: 0, speed: 0.82},
-  {name: "cavalry", label: "骑兵", icon: "♞", rural: 0.12, urban: 0.03, baseRatio: 0.16, type: "mounted", separate: 0, speed: 1.22},
-  {name: "artillery", label: "器械", icon: "⚙", rural: 0, urban: 0.03, baseRatio: 0.06, type: "machinery", separate: 0, speed: 0.48},
-  {name: "fleet", label: "舰队", icon: "⛵", rural: 0, urban: 0.015, baseRatio: 0.1, type: "naval", separate: 1, speed: 0.9}
+  {name: "infantry", label: "步兵", icon: "infantry", rural: 0.25, urban: 0.2, baseRatio: 0.46, type: "melee", separate: 0, speed: 0.78},
+  {name: "archers", label: "弓兵", icon: "archers", rural: 0.12, urban: 0.2, baseRatio: 0.22, type: "ranged", separate: 0, speed: 0.82},
+  {name: "cavalry", label: "骑兵", icon: "cavalry", rural: 0.12, urban: 0.03, baseRatio: 0.16, type: "mounted", separate: 0, speed: 1.22},
+  {name: "artillery", label: "器械", icon: "artillery", rural: 0, urban: 0.03, baseRatio: 0.06, type: "machinery", separate: 0, speed: 0.48},
+  {name: "fleet", label: "舰队", icon: "fleet-small", rural: 0, urban: 0.015, baseRatio: 0.1, type: "naval", separate: 1, speed: 0.9}
 ]);
 
 export const MILITARY_STATUSES = Object.freeze({
@@ -778,24 +778,24 @@ function getRegimentIconProfile(regiment) {
   const share = troops > 0 ? unitTroops / troops : 0;
   if (regiment.type === "fleet" || regiment.n || dominantUnit === "fleet") {
     const large = troops >= 8000 || Number(regiment.u?.fleet || 0) >= 6000;
-    return iconProfile(large ? "🚢" : "⛵", large ? "fleet-large" : "fleet-small");
+    return iconProfile(large ? "fleet-large" : "fleet-small");
   }
-  if (isMountainRegiment(regiment, dominantUnit, share)) return iconProfile("👒", "mountain");
+  if (isMountainRegiment(regiment, dominantUnit, share)) return iconProfile("mountain");
   if (dominantUnit === "archers") {
     const heavy = isHeavyRegiment(regiment, "archers", share);
-    return iconProfile(heavy ? "🏹⋯" : "🏹", heavy ? "archers-heavy" : "archers");
+    return iconProfile(heavy ? "archers-heavy" : "archers");
   }
   if (dominantUnit === "cavalry") {
     const heavy = isHeavyRegiment(regiment, "cavalry", share);
-    return iconProfile(heavy ? "♞◈" : "♞", heavy ? "cavalry-heavy" : "cavalry");
+    return iconProfile(heavy ? "cavalry-heavy" : "cavalry");
   }
-  if (dominantUnit === "artillery") return iconProfile("⚙", "artillery");
+  if (dominantUnit === "artillery") return iconProfile("artillery");
   const heavy = isHeavyRegiment(regiment, "infantry", share);
-  return iconProfile(heavy ? "▴🛡" : "▴", heavy ? "infantry-heavy" : "infantry");
+  return iconProfile(heavy ? "infantry-heavy" : "infantry");
 }
 
-function iconProfile(icon, variant) {
-  return {icon, variant, label: REGIMENT_ICON_LABELS[variant] || variant};
+function iconProfile(variant) {
+  return {icon: variant, variant, label: REGIMENT_ICON_LABELS[variant] || variant};
 }
 
 function isMountainRegiment(regiment, dominantUnit, share) {

@@ -1135,17 +1135,24 @@ select:disabled {
 
 .military-map-icon-symbol {
   display: inline-grid;
-  min-width: 18px;
-  width: auto;
-  height: 17px;
-  padding: 0 3px;
+  width: 22px;
+  height: 20px;
+  padding: 0;
   place-items: center;
-  border-radius: 999px;
+  overflow: hidden;
+  border-radius: 5px;
   background: rgba(213, 162, 65, 0.88);
-  color: #15201d;
-  font-family: "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", system-ui, sans-serif;
-  font-size: 12px;
-  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(255, 242, 190, 0.22);
+}
+
+.military-map-icon-image {
+  display: block;
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(1, 4, 4, 0.56));
+  user-select: none;
 }
 
 .military-map-icon-count {

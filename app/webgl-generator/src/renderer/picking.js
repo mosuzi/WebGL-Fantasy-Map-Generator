@@ -401,6 +401,8 @@ function regimentPickObject(map, regiment, distance, candidateCount) {
     troops: regiment.a,
     units: regiment.u,
     icon: regiment.icon,
+    iconVariant: regiment.iconVariant,
+    iconLabel: regiment.iconLabel,
     cell: regiment.cell,
     x: regiment.x,
     y: regiment.y,

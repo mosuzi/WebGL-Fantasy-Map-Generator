@@ -116,6 +116,8 @@ function militaryObject(row) {
     troops: row.troops,
     units: row.units,
     icon: row.icon,
+    iconVariant: row.iconVariant,
+    iconLabel: row.iconLabel,
     x: row.x,
     y: row.y,
     cell: row.cell
