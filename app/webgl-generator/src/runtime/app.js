@@ -111,6 +111,7 @@ const LOADING_MESSAGES = Object.freeze({
 const LOAD_TRACE_EVENT_NAME = "webgl-generator-load-stage";
 const LOAD_TRACE_DELAY_PARAMS = Object.freeze(["loadStepDelay", "debugLoadDelay", "loadTraceDelay"]);
 const MAX_DEBUG_LOAD_DELAY_MS = 2000;
+const NAMEBASE_PREFERENCES_STORAGE_KEY = "webgl-generator-namebase-preferences-v1";
 
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -1561,7 +1562,7 @@ function requestGenerate(state, documentRef) {
       setSeedInput(documentRef, createRandomSeed());
     }
     state.options = readOptionsFromPanel(documentRef, state.options);
-    const namebaseSnapshot = createGenerationNamebaseSnapshot(state.map);
+    const namebaseSnapshot = resolveGenerationNamebaseSnapshot(state, documentRef);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     const generateId = state.pendingGenerateId;
     resetLoadTrace(documentRef);
@@ -1603,7 +1604,11 @@ function generationOptionsWithNamebases(options, namebaseSnapshot) {
   return namebaseSnapshot ? {...options, namebases: namebaseSnapshot} : options;
 }
 
-function createGenerationNamebaseSnapshot(map) {
+function resolveGenerationNamebaseSnapshot(state, documentRef) {
+  return createGenerationNamebaseSnapshot(state.map) || readNamebasePreferenceSnapshot(documentRef);
+}
+
+function createGenerationNamebaseSnapshot(map, metadata = {}) {
   const namebases = map?.namebases;
   if (!namebases || typeof namebases !== "object") return null;
   const bases = Array.isArray(namebases.bases)
@@ -1637,10 +1642,43 @@ function createGenerationNamebaseSnapshot(map) {
     bindings,
     metadata: {
       ...(namebases.metadata || {}),
+      ...metadata,
       bases: bases.length,
       inheritedFromMap: map.metadata?.checksum || map.summary?.checksum || ""
     }
   };
+}
+
+function readNamebasePreferenceSnapshot(documentRef) {
+  try {
+    const storage = documentRef.defaultView?.localStorage;
+    if (!storage) return null;
+    const raw = storage.getItem(NAMEBASE_PREFERENCES_STORAGE_KEY);
+    if (!raw) return null;
+    const namebases = JSON.parse(raw);
+    return createGenerationNamebaseSnapshot({
+      namebases,
+      metadata: {checksum: "local-namebase-preferences"}
+    }, {inheritedFromPreference: true});
+  } catch {
+    return null;
+  }
+}
+
+function persistNamebasePreferences(state, documentRef) {
+  try {
+    const storage = documentRef.defaultView?.localStorage;
+    if (!storage) return false;
+    const snapshot = createGenerationNamebaseSnapshot(state.map, {savedAt: new Date().toISOString()});
+    if (!snapshot) {
+      storage.removeItem(NAMEBASE_PREFERENCES_STORAGE_KEY);
+      return false;
+    }
+    storage.setItem(NAMEBASE_PREFERENCES_STORAGE_KEY, JSON.stringify(snapshot));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeGenerationCultureNamebaseBindings(cultures) {
@@ -2044,8 +2082,9 @@ async function importNamebases(state, documentRef, file, mode = "append") {
     const document = parseNamebaseDocument(await file.text());
     const result = importNamebaseDocument(state.map, document, {filename: file.name, mode});
     state.panels.namebase.update(state.map);
+    persistNamebasePreferences(state, documentRef);
     const replacedText = result.replaced ? `，已替换原用户库 ${result.replaced} 个` : "";
-    setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池${replacedText}，当前用户库 ${result.total} 个。`);
+    setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池${replacedText}，当前用户库 ${result.total} 个，已保存为本地偏好。`);
     return result;
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导入失败", error);
@@ -2075,6 +2114,7 @@ function setGlobalNamebaseBinding(state, documentRef, target, value) {
     assertMapAvailable(state);
     const result = setNamebaseBinding(state.map, target, value);
     state.panels.namebase.update(state.map);
+    persistNamebasePreferences(state, documentRef);
     const targetLabel = NAMEBASE_BINDING_TARGETS.find(item => item.key === target)?.label || target;
     const sourceLabel = String(value || "").trim() || "内置策略";
     const invalidText = result.invalidCount ? `；当前还有 ${result.invalidCount} 个失效绑定引用` : "";
@@ -2093,6 +2133,7 @@ function setCultureNamebaseBinding(state, documentRef, cultureId, target, value)
     if (!cultureKey) throw new Error("请先选择文化");
     const result = setNamebaseBinding(state.map, target, value, {cultureId: cultureKey});
     state.panels.namebase.update(state.map);
+    persistNamebasePreferences(state, documentRef);
     const targetLabel = NAMEBASE_BINDING_TARGETS.find(item => item.key === target)?.label || target;
     const culture = state.map.pack?.cultures?.[cultureKey] || state.map.society?.cultures?.[cultureKey] || null;
     const cultureLabel = culture?.name || culture?.root || `文化 #${cultureKey}`;
@@ -2148,7 +2189,8 @@ function copyBuiltinNamebase(state, documentRef, row) {
       return;
     }
     state.panels.namebase.update(state.map);
-    setFileOperationStatus(documentRef, `已复制“${row.name}”为用户名称库“${result.name}”，当前用户库 ${result.total} 个。`);
+    persistNamebasePreferences(state, documentRef);
+    setFileOperationStatus(documentRef, `已复制“${row.name}”为用户名称库“${result.name}”，当前用户库 ${result.total} 个，已保存为本地偏好。`);
   } catch (error) {
     reportFileOperationError(documentRef, "复制名称库失败", error);
   }
@@ -2159,7 +2201,8 @@ function createManualNamebase(state, documentRef) {
     assertMapAvailable(state);
     const result = createUserNamebase(state.map);
     state.panels.namebase.update(state.map);
-    setFileOperationStatus(documentRef, `已新建用户名称库“${result.name}”，样本 ${result.samples} 个，当前用户库 ${result.total} 个。`);
+    persistNamebasePreferences(state, documentRef);
+    setFileOperationStatus(documentRef, `已新建用户名称库“${result.name}”，样本 ${result.samples} 个，当前用户库 ${result.total} 个，已保存为本地偏好。`);
     return result;
   } catch (error) {
     reportFileOperationError(documentRef, "新建名称库失败", error);
@@ -2184,6 +2227,7 @@ function renameImportedNamebase(state, documentRef, row, name) {
       return;
     }
     state.panels.namebase.update(state.map);
+    persistNamebasePreferences(state, documentRef);
     setFileOperationStatus(documentRef, `已重命名用户名称库“${result.previousName}”为“${result.name}”。`);
   } catch (error) {
     reportFileOperationError(documentRef, "重命名名称库失败", error);
@@ -2203,6 +2247,7 @@ function updateImportedNamebaseSource(state, documentRef, row, sourceText) {
       return;
     }
     state.panels.namebase.update(state.map);
+    persistNamebasePreferences(state, documentRef);
     setFileOperationStatus(documentRef, `已更新用户名称库“${result.name}”，样本 ${result.samples} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "编辑名称库样本失败", error);
@@ -2221,6 +2266,7 @@ function clearImportedNamebases(state, documentRef) {
     if (typeof view.confirm === "function" && !view.confirm(`确定清空 ${count} 个用户名称库？`)) return;
     const result = clearUserNamebases(state.map);
     state.panels.namebase.update(state.map);
+    persistNamebasePreferences(state, documentRef);
     setFileOperationStatus(documentRef, `已清空 ${result.removed} 个用户名称库。`);
   } catch (error) {
     reportFileOperationError(documentRef, "清空名称库失败", error);
@@ -2245,7 +2291,8 @@ function deleteImportedNamebase(state, documentRef, row) {
       return;
     }
     state.panels.namebase.update(state.map);
-    setFileOperationStatus(documentRef, `已删除用户名称库“${result.name || name}”，当前用户库 ${result.total} 个。`);
+    persistNamebasePreferences(state, documentRef);
+    setFileOperationStatus(documentRef, `已删除用户名称库“${result.name || name}”，当前用户库 ${result.total} 个，已更新本地偏好。`);
   } catch (error) {
     reportFileOperationError(documentRef, "删除名称库失败", error);
   }
@@ -2280,6 +2327,7 @@ async function importMapData(state, documentRef, file) {
       loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
       completionToast: "地图数据已导入"
     });
+    if (createGenerationNamebaseSnapshot(state.map)) persistNamebasePreferences(state, documentRef);
     updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
   } catch (error) {
@@ -2297,7 +2345,7 @@ async function importHeightmapImage(state, documentRef, payload) {
     setFileOperationStatus(documentRef, "正在读取高度图...", ["heightmap-import-status"]);
     setMythicGenerationLoading(documentRef, true, "heightmap-read");
     const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
-    const namebaseSnapshot = createGenerationNamebaseSnapshot(state.map);
+    const namebaseSnapshot = resolveGenerationNamebaseSnapshot(state, documentRef);
     const importGenerateId = (state.pendingGenerateId || 0) + 1;
     state.pendingGenerateId = importGenerateId;
     state.heightmapImportId = importGenerateId;
@@ -2721,7 +2769,7 @@ function regenerateDiplomacy(state, documentRef) {
   return regenerationResult(
     "diplomacy",
     `外交已按当前国家邻接、文化、宗教、国力、资源竞争和海洋势力重算（扰动 #${salt}）：关系 ${beforePairs} -> ${map.diplomacy.metadata.pairs}；战争 ${beforeEnemies} -> ${map.diplomacy.metadata.enemies}`,
-    "外交重算不会改写国家边界、城镇、经济或军队；后续可把战争状态进一步接入军事行动和事件。"
+    "外交重算不会改写国家边界、城镇、经济或军队；战争状态只保留为外交记录和静态军事摘要上下文。"
   );
 }
 

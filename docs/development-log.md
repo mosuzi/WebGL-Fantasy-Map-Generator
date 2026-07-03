@@ -17443,3 +17443,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`CulturePanel` 懒加载 chunk 约 `10.34KB / gzip 4.08KB`，`NamebasePanel` 懒加载 chunk 约 `12.48KB / gzip 4.50KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：打开文化管理面板，选中文化 #2，点击“名称库绑定”后名称库面板打开，`#namebase-binding-culture` 的值为 `2`，显示“清河文化 #2”；文化面板和名称库面板均无横向溢出，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1597.3ms`，纯生成 `765.9ms`，WebGL 加载 `483.9ms`，最慢加载阶段为“构建线层顶点” `92.1ms`，`drawMs = 0.2ms`，`glError = 0`。
+
+### 名称库应用级本地偏好第一刀
+
+背景：
+
+- 名称库用户库和绑定此前随当前地图保存；点击生成会继承当前地图快照，但如果当前地图没有 `map.namebases`，新生成不会使用用户维护过的名称库偏好。
+- 当前计划要求补应用级用户库偏好。
+- 本轮只做浏览器本地偏好，不做云同步、账户偏好或自动批量改名，也不进入动态军事系统。
+
+修正：
+
+- runtime 新增 `webgl-generator-namebase-preferences-v1` 本地存储键。
+- 名称库导入、新建、复制、重命名、样本编辑、删除、清空以及全局/文化绑定变更成功后，会保存当前名称库快照为本地偏好。
+- 生成按钮和高度图导入现在优先使用当前地图名称库；当前地图没有 `namebases` 时，读取本地偏好作为临时生成上下文。
+- 导入带名称库的完整地图会同步保存其名称库偏好；导入不带名称库的地图不会清空已有偏好。
+- 外交重生成完成提示同步收口，战争状态只作为外交记录和静态军事摘要上下文，不再提示后续接入军事行动。
+- 该能力只影响后续生成或高度图导入，不自动改写当前地图对象名称。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `819.32KB / gzip 247.18KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：新建 `user-namebase-1` 后 localStorage 写入该库，把全局 `stateRoot` 绑定到它后 localStorage 同步更新；删除当前地图 `namebases` 后重新生成，新地图仍包含 `user-namebase-1`，绑定仍为 `stateRoot=user-namebase-1`，生成日志显示 `namebase context: bases=1, stateRoot=user-namebase-1`，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1726.9ms`，纯生成 `821ms`，WebGL 加载 `579.9ms`，最慢加载阶段为“构建标签” `80ms`，`drawMs = 0.1ms`，`glError = 0`。

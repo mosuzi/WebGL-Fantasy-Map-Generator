@@ -135,7 +135,7 @@
 - 已完成全局绑定生成接入第一刀：`createChineseNameGenerator(seed, {namebases})` 会解析 `map.namebases.bindings.global`，当前地图内的国家/省份、城镇和水文受约束重生成会传入当前 `map.namebases`。
 - 绑定值指向不存在词池时，生成器会退回内置策略；当前地图已有名称不会因为导入、编辑或绑定变化自动批量改写。
 - 已完成整图生成继承第一刀：生成按钮和高度图导入会从当前地图复制用户名称库和绑定快照，作为本次生成的临时 `namebases` 上下文；新地图会保留 `map.namebases` 和 `metadata.namebases`，但 `map.options` 不写入用户库对象。
-- 后续如果要让空白启动后的首次生成也读取用户名称库，需要增加应用级名称库偏好或本地存储策略。
+- 空白启动或当前地图没有 `namebases` 时，生成按钮和高度图导入已可读取应用级本地偏好；第一刀只使用 `localStorage` 快照，不引入云同步或账户级偏好。
 
 ### 阶段 3：文化级绑定
 
@@ -161,6 +161,7 @@
 - 已完成名称库面板文化绑定 UI 第一刀：面板可选择文化，并分别设置该文化的 `stateRoot / place / hydro` 覆盖。
 - 已完成绑定候选按类型过滤第一刀：`stateRoot` 只显示 `state-root / generic`，`place` 显示 `place / place-part / generic`，`hydro` 显示 `hydro / generic`；后缀、形制等不再混入普通绑定下拉。
 - 已完成文化管理面板快捷入口第一刀：文化管理的二级操作可直接打开名称库面板，并聚焦到当前文化的绑定区。
+- 已完成应用级本地偏好第一刀：名称库写操作会保存快照到浏览器 `localStorage`，生成按钮和高度图导入可在当前地图没有 `namebases` 时继承该偏好。
 
 ### 阶段 4：名称生成预览和质量分析
 
