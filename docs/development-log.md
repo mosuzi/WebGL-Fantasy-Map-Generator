@@ -17018,3 +17018,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`DiplomacyPanel` chunk 约 `11.93KB / gzip 4.58KB`，主入口约 `808.32KB / gzip 243.86KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器下载烟测通过：外交面板导出 CSV 包含“外交导出摘要 / 当前主体关系明细 / 外交关系矩阵”，JSON 类型为 `webgl-generator-diplomacy-summary`，默认地图 `20` 个国家、主体关系明细 `19` 条；`glError = 0`，health 非 info 事件为 `0`，console/page error 为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1391.6ms`，纯生成 `746.3ms`，WebGL 加载 `350.1ms`，UI slack `295.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 128.5ms`，最慢加载阶段为 `构建标签 53.4ms`。
+
+### 外交贸易偏好展示第一刀
+
+背景：
+
+- 当前计划要求外交系统后续补贸易偏好展示，但不把贸易关系继续驱动军事行动。
+- 经济系统已有静态 `pack.deals`，可以作为外交面板的只读贸易上下文，不需要重算经济或外交。
+
+修正：
+
+- `DiplomacyPanel` 构建指标时只扫描一次 `pack.deals`，按国家对汇总直接交易数、贸易量、贸易额和主体国流入/流出。
+- 外交关系列表新增“贸易”排序与列，选中详情新增贸易方向、贸易额、贸易量、交易数和净流向。
+- 外交 CSV/JSON 的主体关系明细同步导出 `trade` 摘要。
+- 本轮只做只读展示和导出，不改变外交关系、战争 campaign、经济交易或军事系统。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`DiplomacyPanel` chunk 约 `14.17KB / gzip 5.39KB`，主入口约 `808.32KB / gzip 243.86KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：默认地图经济交易 `15068` 条、外交国家 `20` 个；外交面板详情显示“贸易方向 / 贸易量”，外交 JSON 主体关系中 `17` 条带直接贸易摘要；`glError = 0`，health 非 info 事件为 `0`，console/page error 为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1418.7ms`，纯生成 `814.8ms`，WebGL 加载 `353.8ms`，UI slack `250.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 147.5ms`，最慢加载阶段为 `构建视觉 cell mesh 50.2ms`。

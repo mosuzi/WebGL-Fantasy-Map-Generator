@@ -108,6 +108,7 @@ const props = defineProps({
 
 const sortOptions = Object.freeze([
   {key: "relationWeight", label: "关系"},
+  {key: "tradeWeight", label: "贸易"},
   {key: "powerScore", label: "国力"},
   {key: "population", label: "人口"},
   {key: "neighborRank", label: "邻接"},
@@ -118,6 +119,7 @@ const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "国家"},
   {key: "relationLabel", label: "关系"},
+  {key: "tradeLabel", label: "贸易"},
   {key: "powerScore", label: "国力", align: "right", format: value => formatNumber(value)},
   {key: "neighborLabel", label: "邻接"},
   {key: "cultureName", label: "文化"}
@@ -159,6 +161,11 @@ const detailRows = computed(() => selected.value ? [
   {label: "文化", value: selected.value.cultureName},
   {label: "宗教", value: selected.value.religionName},
   {label: "邻接", value: selected.value.neighborLabel},
+  {label: "贸易方向", value: selected.value.tradeLabel},
+  {label: "贸易额", value: formatNumber(selected.value.tradeValue)},
+  {label: "贸易量", value: formatNumber(selected.value.tradeUnits)},
+  {label: "交易数", value: formatNumber(selected.value.tradeDeals)},
+  {label: "净流向", value: selected.value.tradeBalanceLabel},
   {label: "国力", value: formatNumber(selected.value.powerScore)},
   {label: "经济力", value: formatNumber(selected.value.economicPower)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
@@ -174,6 +181,7 @@ function buildDiplomacyMetrics(map, selectedStateId) {
   const states = stateRows(map);
   const subject = states.find(state => sameObjectId(state.id, selectedStateId)) || states[0] || null;
   if (!subject) return {states, subjectName: "none", rows: [], counts: {}, history: 0};
+  const tradeContext = buildDiplomacyTradeContext(map);
 
   const rows = states
     .filter(state => state.id !== subject.id)
@@ -182,6 +190,10 @@ function buildDiplomacyMetrics(map, selectedStateId) {
       const relation = normalizeRelation(subject.state.diplomacy?.[state.id]);
       const population = Number(stateItem?.rural || 0) + Number(stateItem?.urban || 0);
       const neighbor = (subject.state.neighbors || []).includes(state.id);
+      const trade = tradeContext.get(pairKey(subject.id, state.id)) || emptyTradeSummary();
+      const subjectOutValue = trade.outByState.get(subject.id) || 0;
+      const subjectInValue = trade.inByState.get(subject.id) || 0;
+      const tradeBalance = subjectInValue - subjectOutValue;
       return {
         id: state.id,
         subjectId: subject.id,
@@ -196,6 +208,15 @@ function buildDiplomacyMetrics(map, selectedStateId) {
         cultureName: indexedName(map?.society?.cultures, stateItem?.culture),
         religionName: indexedName(map?.society?.religions, stateItem?.religion),
         governmentName: stateItem?.governmentLabel || stateItem?.government?.label || stateItem?.form || "未知政体",
+        tradeDeals: trade.deals,
+        tradeValue: trade.value,
+        tradeUnits: trade.units,
+        tradeWeight: trade.value || trade.units,
+        tradeSubjectInValue: subjectInValue,
+        tradeSubjectOutValue: subjectOutValue,
+        tradeBalance,
+        tradeLabel: trade.deals ? `${formatNumber(trade.deals)} 笔 / ${formatNumber(trade.units)} 量 / ${formatNumber(trade.value)} 额` : "无直接交易",
+        tradeBalanceLabel: trade.deals ? tradeBalanceLabel(tradeBalance) : "无",
         neighborRank: neighbor ? 1 : 0,
         neighborLabel: neighbor ? "邻国" : "远方",
         centerCell: stateItem?.center ?? "none",
@@ -362,7 +383,7 @@ function diplomacyToCsv({seed, map, metrics, matrix}) {
     ["历史记录", diplomacyChronicle(map).length]
   ]);
   appendCsvSection(rows, "当前主体关系明细", [
-    ["主体", "对象ID", "对象国家", "关系", "关系代码", "关系倾向", "邻接", "文化", "宗教", "政体", "人口", "面积", "国力", "经济力", "城镇"],
+    ["主体", "对象ID", "对象国家", "关系", "关系代码", "关系倾向", "邻接", "贸易额", "贸易量", "交易数", "主体流入", "主体流出", "净流向", "文化", "宗教", "政体", "人口", "面积", "国力", "经济力", "城镇"],
     ...metrics.rows.map(row => [
       metrics.subjectName,
       row.id,
@@ -371,6 +392,12 @@ function diplomacyToCsv({seed, map, metrics, matrix}) {
       row.relation,
       row.relationPolarity,
       row.neighborLabel,
+      row.tradeValue,
+      row.tradeUnits,
+      row.tradeDeals,
+      row.tradeSubjectInValue,
+      row.tradeSubjectOutValue,
+      row.tradeBalance,
       row.cultureName,
       row.religionName,
       row.governmentName,
@@ -414,6 +441,15 @@ function diplomacyRelationExportRow(row) {
     relationLabel: row.relationLabel,
     relationPolarity: row.relationPolarity,
     neighbor: row.neighborLabel,
+    trade: {
+      deals: row.tradeDeals,
+      value: row.tradeValue,
+      units: row.tradeUnits,
+      subjectInValue: row.tradeSubjectInValue,
+      subjectOutValue: row.tradeSubjectOutValue,
+      balance: row.tradeBalance,
+      balanceLabel: row.tradeBalanceLabel
+    },
     culture: row.cultureName,
     religion: row.religionName,
     government: row.governmentName,
@@ -456,6 +492,74 @@ function matrixToCsvRows(matrixValue) {
   const header = ["国家", ...matrixValue.states.map(state => `#${state.id} ${state.name}`)];
   const rows = matrixValue.rows.map(row => [row.name, ...row.cells.map(cell => cell.self ? "本国" : `${cell.label}(${cell.relation})`)]);
   return [header, ...rows];
+}
+
+function buildDiplomacyTradeContext(map) {
+  const context = new Map();
+  const pack = map?.pack || {};
+  for (const deal of pack.deals || []) {
+    const sellerState = tradePartyState(pack, deal.sellerType, deal.seller);
+    const buyerState = tradePartyState(pack, deal.buyerType, deal.buyer);
+    if (!sellerState || !buyerState || sellerState === buyerState) continue;
+    const item = ensureTradeSummary(context, sellerState, buyerState);
+    const value = Number(deal.value || 0);
+    const units = Number(deal.units || 0);
+    item.deals++;
+    item.value += value;
+    item.units += units;
+    item.outByState.set(sellerState, (item.outByState.get(sellerState) || 0) + value);
+    item.inByState.set(buyerState, (item.inByState.get(buyerState) || 0) + value);
+  }
+  for (const item of context.values()) {
+    item.value = roundValue(item.value);
+    item.units = roundValue(item.units);
+    for (const [stateId, value] of item.outByState) item.outByState.set(stateId, roundValue(value));
+    for (const [stateId, value] of item.inByState) item.inByState.set(stateId, roundValue(value));
+  }
+  return context;
+}
+
+function ensureTradeSummary(context, leftState, rightState) {
+  const key = pairKey(leftState, rightState);
+  let item = context.get(key);
+  if (!item) {
+    item = emptyTradeSummary();
+    context.set(key, item);
+  }
+  return item;
+}
+
+function emptyTradeSummary() {
+  return {deals: 0, value: 0, units: 0, inByState: new Map(), outByState: new Map()};
+}
+
+function tradePartyState(pack, type, id) {
+  id = Number(id);
+  if (!Number.isInteger(id) || id <= 0) return 0;
+  if (type === "burg") return Number(pack.burgs?.[id]?.state || 0);
+  if (type === "market") {
+    const market = pack.markets?.[id];
+    if (market?.state) return Number(market.state || 0);
+    return Number(pack.burgs?.[market?.centerBurgId]?.state || 0);
+  }
+  return 0;
+}
+
+function pairKey(left, right) {
+  left = Number(left);
+  right = Number(right);
+  return left < right ? `${left}:${right}` : `${right}:${left}`;
+}
+
+function tradeBalanceLabel(value) {
+  const amount = Math.abs(Number(value || 0));
+  if (amount < 0.0001) return "均衡";
+  return value > 0 ? `净流入 ${formatNumber(amount)}` : `净流出 ${formatNumber(amount)}`;
+}
+
+function roundValue(value, digits = 2) {
+  const factor = 10 ** digits;
+  return Math.round(Number(value || 0) * factor) / factor;
 }
 
 function csvEscape(value) {
