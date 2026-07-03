@@ -327,6 +327,7 @@ const CHARGES = ["mount", "river", "star", "gate", "wave", "tree", "tower", "sun
 const FIELD_TINCTURES = ["#b94b4b", "#3d6f9e", "#4f7f52", "#a47a35", "#6e579b", "#9a9a70", "#3e7b7d", "#704f38"];
 const METAL_TINCTURES = ["#f0d889", "#e8e4d6", "#d8b56d", "#f3efe1"];
 const HYDRO_NAME_SUFFIXES = [...new Set([...WATER_SUFFIXES, ...LAKE_SUFFIXES, "溪", "水", "河", "江", "川"])];
+const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null});
 
 const BUILTIN_NAMEBASE_SOURCES = {
   "ancient-state-roots": ANCIENT_STATE_ROOTS,
@@ -380,7 +381,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
         const suffixes = getPlaceSuffixes(options, cultureStyle);
         let name;
 
-        if (boundPlaceSource.length) name = makeBoundPlaceName(rng, boundPlaceSource, options, suffixes);
+        if (boundPlaceSource.records.length) name = makeBoundPlaceName(rng, boundPlaceSource, options, suffixes);
         else if (transliterationStyle?.place) name = combineStemAndSuffix(pick(rng, transliterationStyle.place), pick(rng, suffixes));
         else if (style === "real") name = makeChinesePlaceName(rng, options, suffixes);
         else if (style === "light") name = makeChineseLightPlaceName(rng, options, suffixes);
@@ -399,8 +400,8 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const cultureStyle = getCultureStyle(options);
       const boundHydroSource = namebaseSources.sourceFor("hydro", options);
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
-      const prefix = boundHydroSource.length
-        ? pickNamebaseValue(rng, boundHydroSource)
+      const prefix = boundHydroSource.records.length
+        ? generateNamebaseCandidate(rng, boundHydroSource, {maxLength: 5})
         : cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.82 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
       return makeUnique(used, "river", makeHydroName(prefix, rng, ["溪", "水", "河", "江", "川"]), rng);
     },
@@ -410,8 +411,8 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const cultureStyle = getCultureStyle(options);
       const boundHydroSource = namebaseSources.sourceFor("hydro", options);
       const hydro = cultureStyle?.hydro || HYDRO_PREFIXES;
-      const prefix = boundHydroSource.length
-        ? pickNamebaseValue(rng, boundHydroSource)
+      const prefix = boundHydroSource.records.length
+        ? generateNamebaseCandidate(rng, boundHydroSource, {maxLength: 5})
         : cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.78 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
       return makeUnique(used, "lake", makeHydroName(prefix, rng, LAKE_SUFFIXES), rng);
     },
@@ -422,10 +423,10 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const capitalRoot = normalizeNameRoot(options.capitalName);
       const cultureRoot = cleanStateRootCandidate(options.cultureRoot);
       const allowCapitalName = Boolean(options.allowCapitalName);
-      const generate = () => boundStateRootSource.length
+      const generate = () => boundStateRootSource.records.length
         ? makeBoundStateRootCandidateAvoiding(rng, boundStateRootSource, allowCapitalName ? "" : capitalRoot)
         : makeStateRootCandidateAvoiding(rng, options, allowCapitalName ? "" : capitalRoot);
-      if (!boundStateRootSource.length && cultureRoot && rng.next() < 0.24 && claimStateRoot(used, cultureRoot)) return cultureRoot;
+      if (!boundStateRootSource.records.length && cultureRoot && rng.next() < 0.24 && claimStateRoot(used, cultureRoot)) return cultureRoot;
       const initialName = allowCapitalName && capitalRoot && rng.next() < 0.28 ? capitalRoot : generate();
       return makeUniqueStateGenerated(used, initialName, rng, generate, 96);
     },
@@ -570,12 +571,12 @@ function resolveNamebaseSources(namebases) {
   const bindings = namebases?.bindings && typeof namebases.bindings === "object" ? namebases.bindings : {};
   const globalBindings = bindings.global && typeof bindings.global === "object" ? bindings.global : {};
   const cultureBindings = bindings.cultures && typeof bindings.cultures === "object" ? bindings.cultures : {};
-  const rows = new Map(Object.entries(BUILTIN_NAMEBASE_SOURCES).map(([id, source]) => [id, parseNamebaseWeightedSamples(source)]));
+  const rows = new Map(Object.entries(BUILTIN_NAMEBASE_SOURCES).map(([id, source]) => [id, createNamebaseSourceEntry(source)]));
   for (const base of namebases?.bases || []) {
     const id = String(base?.id || "").trim();
     if (!id) continue;
-    const source = parseNamebaseWeightedSamples(base.source);
-    if (source.length) rows.set(id, source);
+    const source = createNamebaseSourceEntry(base.source);
+    if (source.records.length) rows.set(id, source);
   }
   const stateRootId = String(globalBindings.stateRoot || "").trim();
   const placeId = String(globalBindings.place || "").trim();
@@ -584,9 +585,9 @@ function resolveNamebaseSources(namebases) {
     const cultureId = String(options.culture ?? options.cultureId ?? "").trim();
     const culture = cultureId && cultureBindings[cultureId] && typeof cultureBindings[cultureId] === "object" ? cultureBindings[cultureId] : null;
     const cultureValue = String(culture?.[target] || "").trim();
-    if (cultureValue) return rows.get(cultureValue) || [];
+    if (cultureValue) return rows.get(cultureValue) || EMPTY_NAMEBASE_SOURCE;
     const globalValue = String(globalBindings[target] || "").trim();
-    return globalValue ? rows.get(globalValue) || [] : [];
+    return globalValue ? rows.get(globalValue) || EMPTY_NAMEBASE_SOURCE : EMPTY_NAMEBASE_SOURCE;
   };
   return {
     sourceFor,
@@ -663,19 +664,104 @@ function formatNamebaseWeight(value) {
   return String(clampNamebaseWeight(value)).replace(/\.0$/u, "");
 }
 
+export function createNamebaseSourceEntry(source) {
+  const records = parseNamebaseWeightedSamples(source);
+  return {
+    records,
+    chain: calculateNamebaseChain(records)
+  };
+}
+
+export function calculateNamebaseChain(records) {
+  const starts = [];
+  const startsByLength = new Map();
+  const lengths = [];
+  const transitions = new Map();
+  const normalizedRecords = Array.isArray(records) ? records : parseNamebaseWeightedSamples(records);
+  for (const record of normalizedRecords) {
+    const chars = Array.from(record.value || "").filter(char => !/\s/u.test(char));
+    if (!chars.length) continue;
+    const length = Math.max(1, Math.min(chars.length, 8));
+    const repeats = namebaseWeightRepeats(record.weight);
+    for (let repeat = 0; repeat < repeats; repeat += 1) {
+      starts.push(chars[0]);
+      lengths.push(length);
+      if (!startsByLength.has(length)) startsByLength.set(length, []);
+      startsByLength.get(length).push(chars[0]);
+      for (let index = 0; index < chars.length - 1; index += 1) {
+        const current = chars[index];
+        const next = chars[index + 1];
+        if (!transitions.has(current)) transitions.set(current, []);
+        transitions.get(current).push(next);
+      }
+    }
+  }
+  return {
+    starts,
+    startsByLength,
+    lengths,
+    transitions,
+    diversity: calculateNamebaseChainDiversity(transitions)
+  };
+}
+
+export function generateNamebaseMarkovName(chain, rng, {maxLength = 8} = {}) {
+  if (!chain?.starts?.length) return "";
+  const targetLength = Math.max(1, Math.min(maxLength, pickNamebaseWeightedValue(rng, chain.lengths) || 1));
+  const starts = chain.startsByLength.get(targetLength) || chain.starts;
+  const chars = [pickNamebaseWeightedValue(rng, starts)];
+  while (chars.length < targetLength) {
+    const nextValues = chain.transitions.get(chars[chars.length - 1]) || chain.starts;
+    chars.push(pickNamebaseWeightedValue(rng, nextValues));
+  }
+  return chars.join("");
+}
+
 function pickNamebaseValue(rng, source) {
-  if (!source.length) return "";
-  const totalWeight = source.reduce((sum, item) => sum + Math.max(0.1, Number(item?.weight ?? 1) || 1), 0);
-  let roll = rng.next() * totalWeight;
-  for (const item of source) {
+  const records = Array.isArray(source) ? source : source?.records || [];
+  if (!records.length) return "";
+  const totalWeight = records.reduce((sum, item) => sum + Math.max(0.1, Number(item?.weight ?? 1) || 1), 0);
+  let roll = namebaseRandom(rng) * totalWeight;
+  for (const item of records) {
     roll -= Math.max(0.1, Number(item?.weight ?? 1) || 1);
     if (roll <= 0) return item?.value || item || "";
   }
-  return source[0]?.value || source[0] || "";
+  return records[0]?.value || records[0] || "";
+}
+
+function generateNamebaseCandidate(rng, source, {maxLength = 8} = {}) {
+  const records = Array.isArray(source) ? source : source?.records || [];
+  if (!records.length) return "";
+  const chain = Array.isArray(source) ? calculateNamebaseChain(records) : source?.chain;
+  const canUseMarkov = records.length >= 3 && chain?.diversity >= 1.25;
+  if (canUseMarkov && namebaseRandom(rng) < 0.72) {
+    const generated = generateNamebaseMarkovName(chain, rng, {maxLength});
+    if (generated) return generated;
+  }
+  return pickNamebaseValue(rng, source);
+}
+
+function calculateNamebaseChainDiversity(transitions) {
+  const counts = [...transitions.values()].map(values => new Set(values).size);
+  if (!counts.length) return 0;
+  return Math.round((counts.reduce((sum, count) => sum + count, 0) / counts.length) * 100) / 100;
+}
+
+function namebaseWeightRepeats(weight) {
+  return Math.max(1, Math.min(40, Math.round((Number(weight) || 1) * 3)));
+}
+
+function pickNamebaseWeightedValue(rng, values) {
+  if (!values.length) return "";
+  return values[Math.floor(namebaseRandom(rng) * values.length)] || values[0] || "";
+}
+
+function namebaseRandom(rng) {
+  return typeof rng === "function" ? rng() : rng.next();
 }
 
 function makeBoundPlaceName(rng, source, options, suffixes) {
-  let name = pickNamebaseValue(rng, source);
+  let name = generateNamebaseCandidate(rng, source, {maxLength: getSettlementScale(options) === "small" ? 5 : 6});
   if (options.port && !PORT_SUFFIXES.some(suffix => name.endsWith(suffix))) name = trimGeographicSuffix(name) + pick(rng, PORT_SUFFIXES);
   if (!name && suffixes?.length) name = `${makeChineseTwoCharName(rng)}${pick(rng, suffixes)}`;
   return name || makeChineseTwoCharName(rng);
@@ -690,7 +776,7 @@ function makeHydroName(prefix, rng, suffixes) {
 
 function makeBoundStateRootCandidateAvoiding(rng, source, avoidedRoot = "") {
   for (let attempt = 0; attempt < 24; attempt++) {
-    const candidate = cleanStateRootCandidate(pickNamebaseValue(rng, source));
+    const candidate = cleanStateRootCandidate(generateNamebaseCandidate(rng, source, {maxLength: 4}));
     if (candidate && !hasSameNameRoot(candidate, avoidedRoot)) return candidate;
   }
   return makeStateRootCandidateAvoiding(rng, {}, avoidedRoot);
@@ -912,6 +998,7 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
   const duplicateValues = [...counts.entries()].filter(([, count]) => count > 1).map(([value]) => value);
   const lengths = uniqueValues.map(value => Array.from(value).length);
   const weightedSamples = Math.round(records.reduce((sum, record) => sum + record.weight, 0) * 10) / 10;
+  const chainDiversity = calculateNamebaseChain(records).diversity;
   const summary = {
     id,
     name,
@@ -919,6 +1006,7 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
     category,
     samples: normalizedValues.length,
     weightedSamples,
+    chainDiversity,
     uniqueSamples: uniqueValues.length,
     duplicateSamples: normalizedValues.length - uniqueValues.length,
     duplicateNames: duplicateValues.slice(0, 12),

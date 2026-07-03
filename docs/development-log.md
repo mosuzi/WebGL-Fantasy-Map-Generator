@@ -13378,9 +13378,9 @@ full 矩阵结果：
 - `$env:CI='true'; npm run build` 通过；产物为 `dist/webgl-generator/assets/index-D4zvlRey.js`，gzip 约 `302.94KB`。仍有既有的 Rolldown `#__PURE__` 注释警告和大 chunk 警告。
 - Playwright 构建产物烟测通过：复制“春秋古国根名”后把用户库样本编辑为 `甲 / 乙 / 丙 / 丁 / 戊`，详情中显示“质量 / 样本偏少”；筛选“偏少”后可见行数 `49`，其中复制用户库命中 `1`，console/page error 为 `0`。
 
-后续：
+后续追记：
 
-- 后续如果实现 Markov chain，再补链路多样性和生成样例质量提示。
+- 后续已补项目内 Markov chain、链路多样性和生成样例质量第一刀。
 
 ### Element Plus 迁移第八刀：分段控件
 
@@ -17491,3 +17491,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `819.63KB / gzip 247.24KB`，`NamebasePanel` chunk 约 `12.82KB / gzip 4.70KB`，`names` chunk 约 `21.76KB / gzip 9.23KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：新建用户库并把样本改为 `青川|9 / 云泽 / 鹿原` 后，面板详情显示“样本权重 11”，生成预览包含高权重样本，地图数据和 `localStorage["webgl-generator-namebase-preferences-v1"]` 均保留 `青川|9`，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1884.8ms`，纯生成 `1021.3ms`，WebGL 加载 `480.7ms`，最慢加载阶段为“构建视觉 cell mesh” `76.2ms`，`drawMs = 0.2ms`，`glError = 0`。
+
+### 名称库 Markov 链路质量第一刀
+
+背景：
+
+- 名称库样本权重已经能影响抽样，但生成预览和绑定生成仍缺少更接近原版 `Names.calculateChain()` 的项目内共享链路。
+- 当前计划要求补 Markov 链路质量。
+- 本轮只做项目内纯函数 Markov chain，不依赖 `source/` 全局状态，不自动批量改写当前地图名称，也不进入动态军事方向。
+
+修正：
+
+- `names.js` 新增 `createNamebaseSourceEntry()`、`calculateNamebaseChain()` 和 `generateNamebaseMarkovName()`，从权重样本构建字符链并按样本长度分桶生成候选。
+- 名称库绑定命中的国家根名、地名和水文用户库现在优先尝试 Markov 链式候选，再落回加权样本抽取；国家根名仍进入既有根名清洗和 `state-family` 去重，地名和水文仍进入既有后缀处理。
+- 名称库面板生成预览改为复用同一套 Markov 纯函数，保留词根重组补充路径。
+- 名称库摘要新增 `chainDiversity`，面板详情显示“链路多样性”。
+
+验证：
+
+- Node 小测通过：`青川 / 青泽 / 云川` 样本会生成 `青云 / 云泽 / 云青` 等链式组合，`createChineseNameGenerator()` 绑定用户库后可生成链路候选。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `818.88KB / gzip 246.96KB`，`NamebasePanel` chunk 约 `12.92KB / gzip 4.74KB`，`names` chunk 约 `23.39KB / gzip 9.82KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：新建用户库并把样本改为 `青川 / 青泽 / 云川` 后，面板详情显示“链路多样性 1.5”，生成预览输出 `青云 / 云泽 / 云青` 等链式组合，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1488ms`，纯生成 `662.6ms`，WebGL 加载 `492.6ms`，最慢加载阶段为“刷新标签和图标” `88.5ms`，`drawMs = 0.2ms`，`glError = 0`。

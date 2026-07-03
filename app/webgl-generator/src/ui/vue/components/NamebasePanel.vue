@@ -269,6 +269,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.kind},
   {label: "样本数", value: formatNumber(selected.value.samples)},
   {label: "样本权重", value: formatWeight(selected.value.weightedSamples)},
+  {label: "链路多样性", value: formatWeight(selected.value.chainDiversity)},
   {label: "唯一样本", value: formatNumber(selected.value.uniqueSamples)},
   {label: "重复样本", value: formatNumber(selected.value.duplicateSamples)},
   {label: "质量", value: selected.value.qualityLabel},
@@ -295,6 +296,7 @@ function qualityLabel(summary) {
   if (samples < 30) return "样本偏少";
   if (samples < 100) return "样本可用";
   if (samples > 400) return "样本过多";
+  if ((summary.chainDiversity || 0) < 1.35) return "链路偏窄";
   if ((summary.duplicateSamples || 0) > 0) return "有重复样本";
   return "样本充足";
 }

@@ -1,4 +1,4 @@
-import {formatNamebaseWeightedSample, getBuiltinNamebaseSummaries, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
+import {createNamebaseSourceEntry, formatNamebaseWeightedSample, generateNamebaseMarkovName, getBuiltinNamebaseSummaries, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
 
 export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
 export const NAMEBASE_DOCUMENT_VERSION = 1;
@@ -343,9 +343,9 @@ export function getNamebaseBindingStatus(map) {
 }
 
 export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", salt = 0} = {}) {
-  const records = parseNamebaseWeightedSamples(source);
+  const entry = createNamebaseSourceEntry(source);
+  const records = entry.records;
   if (!records.length) return [];
-  const chain = createPreviewChain(records);
   const rng = createPreviewRng(`${seed}|${salt}|${records.map(formatNamebaseWeightedSample).join("|")}`);
   const maxLength = records.reduce((max, record) => Math.max(max, Math.min(12, Array.from(record.value).length)), 1);
   const result = [];
@@ -354,7 +354,7 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
   for (let attempt = 0; result.length < count && attempt < maxAttempts; attempt += 1) {
     const candidate = attempt % 4 === 3
       ? recombinePreviewName(records, rng)
-      : generatePreviewName(chain, rng);
+      : generateNamebaseMarkovName(entry.chain, rng, {maxLength});
     const normalized = normalizePreviewName(candidate, maxLength);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
@@ -439,44 +439,6 @@ function normalizeSourceValues(source) {
     .filter(Boolean);
 }
 
-function createPreviewChain(records) {
-  const starts = [];
-  const startsByLength = new Map();
-  const lengths = [];
-  const transitions = new Map();
-  for (const record of records) {
-    const chars = Array.from(record.value).filter(char => !/\s/u.test(char));
-    if (!chars.length) continue;
-    const length = Math.max(1, Math.min(chars.length, 8));
-    const repeats = previewWeightRepeats(record.weight);
-    for (let repeat = 0; repeat < repeats; repeat += 1) {
-      starts.push(chars[0]);
-      lengths.push(length);
-      if (!startsByLength.has(length)) startsByLength.set(length, []);
-      startsByLength.get(length).push(chars[0]);
-      for (let index = 0; index < chars.length - 1; index += 1) {
-        const current = chars[index];
-        const next = chars[index + 1];
-        if (!transitions.has(current)) transitions.set(current, []);
-        transitions.get(current).push(next);
-      }
-    }
-  }
-  return {starts, startsByLength, lengths, transitions};
-}
-
-function generatePreviewName(chain, rng) {
-  if (!chain.starts.length) return "";
-  const targetLength = pickPreviewValue(chain.lengths, rng) || 1;
-  const starts = chain.startsByLength.get(targetLength) || chain.starts;
-  const chars = [pickPreviewValue(starts, rng)];
-  while (chars.length < targetLength) {
-    const options = chain.transitions.get(chars[chars.length - 1]) || chain.starts;
-    chars.push(pickPreviewValue(options, rng));
-  }
-  return chars.join("");
-}
-
 function recombinePreviewName(records, rng) {
   if (records.length < 2) return records[0]?.value || "";
   const left = Array.from(pickPreviewRecord(records, rng));
@@ -500,11 +462,6 @@ function hasAdjacentRepeatedChar(chars) {
   return false;
 }
 
-function pickPreviewValue(values, rng) {
-  if (!values.length) return "";
-  return values[Math.floor(rng() * values.length)] || values[0] || "";
-}
-
 function pickPreviewRecord(records, rng) {
   const totalWeight = records.reduce((sum, record) => sum + Math.max(0.1, Number(record.weight || 1)), 0);
   let roll = rng() * totalWeight;
@@ -513,10 +470,6 @@ function pickPreviewRecord(records, rng) {
     if (roll <= 0) return record.value;
   }
   return records[0]?.value || "";
-}
-
-function previewWeightRepeats(weight) {
-  return Math.max(1, Math.min(24, Math.round((Number(weight) || 1) * 2)));
 }
 
 function createPreviewRng(seed) {
