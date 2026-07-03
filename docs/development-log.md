@@ -16554,3 +16554,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `789.29KB / gzip 238.18KB`。
 - 构建产物浏览器烟测通过：切换政体视图后图例标题为 `政体`，显示 `6` 个家族条目，包含 `专制集权 7 / 共和系 4 / 神权系 3 / 寡头系 2 / 君主系 2 / 联盟系 2`，与地图国家 `governmentFamily` 统计一致；`drawMs = 0.1ms`，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1394ms`，纯生成 `757.7ms`，WebGL 加载 `333.6ms`，UI slack `302.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 134.5ms`，最慢加载阶段为 `构建视觉 cell mesh 47.2ms`。
+
+### 政体批量调整第一刀
+
+背景：
+
+- 政体管理已经有只读总览、专题图层和专题图例，但还缺少面向一组国家的轻量编辑入口。
+- 用户已明确校准军事方向：无需继续做动态军事系统。本轮只推进政体编辑能力，不新增政体事件、战役自动推进或军事行动链路。
+
+修正：
+
+- `state-edit-commands.js` 新增 `createSetStatesGovernmentBatchCommand()`，按国家列表快照并批量调用既有 `setStateGovernment()`，撤销时恢复 `governmentKey / governmentLabel / governmentFamily / form / formName / fullName / government effects` 等字段。
+- `政体管理` 面板新增“批量套用”控件，可把当前选中的政体分组一次性套用到另一个政体；无有效目标或目标与当前分组相同时禁用按钮。
+- runtime 将批量调整接入 `EditHistory`，执行后刷新国家、政体、外交、军事和运行状态面板，并只把经济、外交、军事标记为待派生，不重建下游系统。
+- 顺手修复 `GovernmentPanel.vue` 脚本区未声明 `callbacks` 的潜在错误；此前只读路径未触发，新增按钮点击会暴露该问题。
+- README、当前计划同步记录政体分组批量调整，并把旧的“战争驱动军事行动”后续表述收回为外交展示和编辑体验方向。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `790.43KB / gzip 238.44KB`，`GovernmentPanel` chunk 约 `7.98KB / gzip 3.12KB`。
+- 构建产物浏览器烟测通过：打开 `政体管理` 后，将 `confederation` 分组的 `2` 国批量套用为 `monarchy`；国家 `9 / 12` 从 `邦联制` 变为 `君主制`，`钟吾国 / 越邦联` 变为 `钟吾王国 / 越国`；撤销后恢复原政体和全名，重做后再次套用成功；撤销栈标签为 `批量调整政体 2国`，待派生系统为 `economy / diplomacy / military`，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1383.6ms`，纯生成 `741.6ms`，WebGL 加载 `353.9ms`，UI slack `288.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 151.8ms`，最慢加载阶段为 `构建线层顶点 46.1ms`。

@@ -36,7 +36,8 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelectState?.(stateObject(row));
     },
     onLocateState: row => callbacks.onLocateState?.(stateObject(row)),
-    onOpenState: row => callbacks.onOpenState?.(stateObject(row))
+    onOpenState: row => callbacks.onOpenState?.(stateObject(row)),
+    onBatchGovernmentChange: (stateIds, governmentKey) => callbacks.onBatchGovernmentChange?.(stateIds, governmentKey)
   };
 
   const record = manager.registerPanel("government-panel", {

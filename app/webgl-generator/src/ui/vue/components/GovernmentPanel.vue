@@ -19,6 +19,22 @@
 
   <UiDetailGrid class-name="government-panel-details" empty-text="未选中政体" :rows="detailRows" />
 
+  <section class="government-panel-batch" aria-label="批量调整政体">
+    <div>
+      <strong>批量套用</strong>
+      <span>当前分组 {{ formatNumber(selectedStateRows.length) }} 国</span>
+    </div>
+    <UiSelectField
+      class-name="government-panel-batch-select"
+      label="目标政体"
+      :model-value="batchGovernmentKey"
+      :options="batchGovernmentOptions"
+      :disabled="!batchGovernmentOptions.length"
+      @update:model-value="batchGovernmentKey = $event"
+    />
+    <UiButton variant="secondary" :disabled="!canApplyBatchGovernment" @click="applyBatchGovernment">套用到当前分组</UiButton>
+  </section>
+
   <UiObjectTable
     :columns="stateColumns"
     :rows="selectedStateRows"
@@ -34,13 +50,14 @@
 </template>
 
 <script setup>
-import {computed, watch} from "vue";
-import {GOVERNMENT_TYPES} from "../../../generator/governments.js";
+import {computed, ref, watch} from "vue";
+import {GOVERNMENT_OPTIONS, GOVERNMENT_TYPES} from "../../../generator/governments.js";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
@@ -60,9 +77,11 @@ const props = defineProps({
     default: () => ({})
   }
 });
+const callbacks = props.callbacks;
 
 const GOVERNMENT_BY_KEY = new Map(GOVERNMENT_TYPES.map(type => [type.key, type]));
 const unitPreferences = useUnitPreferences();
+const batchGovernmentKey = ref("");
 
 const sortOptions = Object.freeze([
   {key: "count", label: "国家"},
@@ -106,6 +125,18 @@ const selectedStateRows = computed(() => metrics.value.states
   .filter(row => row.governmentKey === selectedGovernmentKey.value)
   .sort((a, b) => b.population - a.population || b.economicPower - a.economicPower || a.id - b.id));
 const selectedState = computed(() => findByObjectId(selectedStateRows.value, props.state.selectedStateId) || selectedStateRows.value[0] || null);
+const batchGovernmentOptions = computed(() => GOVERNMENT_OPTIONS
+  .filter(option => option.value !== selectedGovernmentKey.value)
+  .map(option => ({
+    value: option.value,
+    label: `${option.label} / ${option.category}`
+  })));
+const canApplyBatchGovernment = computed(() => Boolean(
+  selectedStateRows.value.length
+  && batchGovernmentKey.value
+  && batchGovernmentKey.value !== selectedGovernmentKey.value
+  && batchGovernmentOptions.value.some(option => option.value === batchGovernmentKey.value)
+));
 
 const summaryMetrics = computed(() => [
   {label: "政体", value: formatNumber(metrics.value.governments.length)},
@@ -131,7 +162,10 @@ const detailRows = computed(() => selectedGovernment.value ? [
 
 watch(selectedGovernmentKey, key => {
   if (key && key !== props.state.selectedGovernmentKey) callbacks.onSelectGovernment?.({key});
+  syncBatchGovernmentKey();
 });
+
+watch(() => props.state.version, syncBatchGovernmentKey, {immediate: true});
 
 function buildGovernmentMetrics(map) {
   const states = stateRows(map);
@@ -161,6 +195,20 @@ function buildGovernmentMetrics(map) {
     dominantGovernmentLabel: dominant?.label || "无",
     familyCounts
   };
+}
+
+function syncBatchGovernmentKey() {
+  if (!batchGovernmentOptions.value.length) {
+    batchGovernmentKey.value = "";
+    return;
+  }
+  if (batchGovernmentOptions.value.some(option => option.value === batchGovernmentKey.value)) return;
+  batchGovernmentKey.value = batchGovernmentOptions.value[0].value;
+}
+
+function applyBatchGovernment() {
+  if (!canApplyBatchGovernment.value) return;
+  callbacks.onBatchGovernmentChange?.(selectedStateRows.value.map(row => row.id), batchGovernmentKey.value);
 }
 
 function ensureGovernmentGroup(groups, key) {

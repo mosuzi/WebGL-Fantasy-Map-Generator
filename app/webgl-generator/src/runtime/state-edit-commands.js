@@ -1,4 +1,4 @@
-import {setStateGovernment} from "../generator/governments.js";
+import {GOVERNMENT_BY_KEY, setStateGovernment} from "../generator/governments.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -128,6 +128,41 @@ export function createSetStateGovernmentCommand(stateId, governmentKey, {label =
     isNoop(context) {
       const state = context.map?.politics?.states?.[normalizedStateId];
       return normalizedStateId <= 0 || !state || !normalizedGovernmentKey || state.governmentKey === normalizedGovernmentKey;
+    }
+  };
+}
+
+export function createSetStatesGovernmentBatchCommand(stateIds, governmentKey, {label = "批量调整政体"} = {}) {
+  const normalizedStateIds = uniqueStateIds(stateIds);
+  const normalizedGovernmentKey = String(governmentKey || "").trim();
+  let previous = null;
+  return {
+    label: `${label} ${normalizedStateIds.length}国`,
+    effects: {
+      ...STATE_GOVERNMENT_EFFECTS,
+      affected: normalizedStateIds.map(id => ({kind: "state", id}))
+    },
+    apply(context) {
+      previous ??= snapshotBatchStateGovernments(context.map, normalizedStateIds, normalizedGovernmentKey);
+      let changed = 0;
+      for (const item of previous) {
+        if (!setStateGovernment(context.map, item.stateId, normalizedGovernmentKey)) continue;
+        changed++;
+      }
+      if (!changed) throw new Error("没有可调整政体的国家");
+      markDerivedStale(context.map, ["economy", "diplomacy", "military"]);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的批量政体快照");
+      for (const item of previous) restoreStateGovernment(context.map, item);
+      markDerivedStale(context.map, ["economy", "diplomacy", "military"]);
+    },
+    isNoop(context) {
+      if (!normalizedStateIds.length || !hasGovernmentKey(normalizedGovernmentKey)) return true;
+      return normalizedStateIds.every(stateId => {
+        const state = context.map?.politics?.states?.[stateId] || context.map?.pack?.states?.[stateId];
+        return !state || state.removed || state.governmentKey === normalizedGovernmentKey;
+      });
     }
   };
 }
@@ -698,6 +733,10 @@ function normalizeStateId(value) {
   return Number.isInteger(numeric) ? Math.max(0, numeric) : 0;
 }
 
+function uniqueStateIds(stateIds) {
+  return [...new Set((stateIds || []).map(normalizeStateId).filter(stateId => stateId > 0))];
+}
+
 function normalizeProvinceId(value) {
   const numeric = Number(value);
   return Number.isInteger(numeric) ? Math.max(0, numeric) : 0;
@@ -715,6 +754,20 @@ function snapshotStateGovernment(map, stateId) {
     politics: snapshotGovernmentFields(map?.politics?.states?.[stateId]),
     pack: map?.pack?.states?.[stateId] === map?.politics?.states?.[stateId] ? null : snapshotGovernmentFields(map?.pack?.states?.[stateId])
   };
+}
+
+function snapshotBatchStateGovernments(map, stateIds, governmentKey) {
+  return stateIds
+    .map(stateId => {
+      const state = map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId];
+      if (!state || state.removed || state.governmentKey === governmentKey) return null;
+      return snapshotStateGovernment(map, stateId);
+    })
+    .filter(Boolean);
+}
+
+function hasGovernmentKey(governmentKey) {
+  return Boolean(governmentKey && GOVERNMENT_BY_KEY[governmentKey]);
 }
 
 function snapshotGovernmentFields(state) {

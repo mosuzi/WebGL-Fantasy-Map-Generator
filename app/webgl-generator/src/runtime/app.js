@@ -50,7 +50,7 @@ import {resolveObject} from "./object-resolver.js";
 import {createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
-import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, createSetStateGovernmentCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
@@ -358,6 +358,19 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectionStore.setSelection({object});
       setStatePanelTarget(state, object.id);
       state.panels.state.open(state.map, state.editHistory.getStats());
+    },
+    onBatchGovernmentChange: (stateIds, governmentKey) => {
+      const context = {map: state.map};
+      const command = createSetStatesGovernmentBatchCommand(stateIds, governmentKey);
+      if (!command.isNoop(context)) {
+        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
+      }
+      updateStatePanel(state);
+      updateGovernmentPanel(state);
+      updateDiplomacyPanel(state);
+      updateMilitaryPanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
     }
   });
   state.panels.government = governmentPanel;

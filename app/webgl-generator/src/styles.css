@@ -4730,6 +4730,38 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.government-panel-batch {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(220px, 1.3fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin: 0 0 10px;
+  padding: 9px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  background: rgba(11, 18, 21, 0.38);
+}
+
+.government-panel-batch > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.government-panel-batch strong {
+  color: #edf4f6;
+  font-size: 13px;
+}
+
+.government-panel-batch span {
+  color: #80919c;
+  font-size: 11px;
+}
+
+.government-panel-batch-select {
+  min-width: 0;
+}
+
 .government-panel-actions {
   display: flex;
   justify-content: flex-end;
