@@ -263,6 +263,15 @@
           <span>{{ selectedLatestBattleEventLabel }}</span>
         </div>
         <UiSelectField
+          input-id="military-battle-event-chain"
+          class-name="military-status-editor"
+          label="链路"
+          :model-value="battleEventDraft.chainKey"
+          :options="battleEventRecordChainOptions"
+          :disabled="!selected || !battleEventRecordChainOptions.length"
+          @update:model-value="setBattleEventChainDraft"
+        />
+        <UiSelectField
           input-id="military-battle-event-type"
           class-name="military-status-editor"
           label="类型"
@@ -416,6 +425,7 @@ const eventApplyFilter = ref("all");
 const eventExportScope = ref("all");
 const showAllSelectedBattleEvents = ref(false);
 const battleEventDraft = reactive({
+  chainKey: "",
   type: "skirmish",
   outcome: "victory",
   description: "",
@@ -491,6 +501,8 @@ const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents
 const selectedBattleChainOptions = computed(() => battleEventChainFilterOptions(selectedBattleEventRows.value));
 const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventChainFilter.value, eventTypeFilter.value, eventOutcomeFilter.value, eventApplyFilter.value));
 const selectedLatestBattleEventLabel = computed(() => latestBattleEventLabel(selectedBattleEventRows.value, "暂无战斗事件"));
+const battleEventRecordChainOptions = computed(() => buildBattleEventRecordChainOptions(props.state.map, selectedState.value?.state, selected.value));
+const selectedBattleEventRecordChain = computed(() => battleEventRecordChainOptions.value.find(option => option.value === battleEventDraft.chainKey) || battleEventRecordChainOptions.value[0] || null);
 const selectedBattleEventsCanExpand = computed(() => selectedFilteredBattleEvents.value.length > 5);
 const selectedBattleEvents = computed(() => showAllSelectedBattleEvents.value ? newestFirstBattleEvents(selectedFilteredBattleEvents.value) : latestBattleEvents(selectedFilteredBattleEvents.value, 5));
 const battleEventChainSummary = computed(() => buildBattleEventChainSummary(selectedBattleEventRows.value));
@@ -574,6 +586,7 @@ watch(() => selected.value?.status, syncStatusDraft);
 watch(() => selected.value?.id, syncStationDestinationDraft, {immediate: true});
 watch(() => stationDestinationOptions.value.map(option => option.value).join("|"), syncStationDestinationDraft);
 watch(() => `${selected.value?.id || ""}|${selectedBattleChainOptions.value.map(option => option.value).join("|")}`, syncBattleChainFilter, {immediate: true});
+watch(() => `${selected.value?.id || ""}|${battleEventRecordChainOptions.value.map(option => option.value).join("|")}`, syncBattleEventChainDraft, {immediate: true});
 watch(() => `${selected.value?.id || ""}|${eventChainFilter.value}|${eventTypeFilter.value}|${eventOutcomeFilter.value}|${eventApplyFilter.value}`, () => {
   showAllSelectedBattleEvents.value = false;
 });
@@ -706,6 +719,10 @@ function setStationDestinationDraft(value) {
   stationDestinationDraft.value = value;
 }
 
+function setBattleEventChainDraft(value) {
+  battleEventDraft.chainKey = value;
+}
+
 function applyStatus() {
   if (!selected.value) return;
   props.callbacks.onStatusApply?.({
@@ -742,6 +759,7 @@ function applySetBase() {
 function applyBattleEvent(description) {
   if (!selected.value) return;
   props.callbacks.onBattleEventApply?.(militaryTarget(selected.value), {
+    ...battleEventRecordChainPayload(selectedBattleEventRecordChain.value),
     type: battleEventDraft.type,
     outcome: battleEventDraft.outcome,
     description,
@@ -775,6 +793,11 @@ function clearBattleEventDescription() {
 function syncBattleChainFilter() {
   if (selectedBattleChainOptions.value.some(option => option.value === eventChainFilter.value)) return;
   eventChainFilter.value = "all";
+}
+
+function syncBattleEventChainDraft() {
+  if (battleEventRecordChainOptions.value.some(option => option.value === battleEventDraft.chainKey)) return;
+  battleEventDraft.chainKey = battleEventRecordChainOptions.value[0]?.value || "";
 }
 
 function applyRename(name) {
@@ -823,6 +846,82 @@ function buildStationDestinationOptions(map, regiment, state) {
     destination: baseDestination
   });
   return options;
+}
+
+function buildBattleEventRecordChainOptions(map, state, regiment) {
+  if (!state?.i || !regiment) return [];
+  const campaignOptions = (state.campaigns || [])
+    .map(campaign => battleCampaignRecordOption(map, state, campaign))
+    .filter(Boolean);
+  const localKey = `regiment:${state.i}:${regiment.regimentId}:local`;
+  return [
+    ...campaignOptions,
+    {
+      value: localKey,
+      label: "本地战报",
+      chainKey: localKey,
+      chainLabel: "本地战报",
+      chainSide: "local",
+      chainSideLabel: "本地",
+      opponentStateId: null,
+      opponentStateName: "",
+      attackerStateId: null,
+      attackerStateName: "",
+      defenderStateId: null,
+      defenderStateName: ""
+    }
+  ];
+}
+
+function battleCampaignRecordOption(map, state, campaign = {}) {
+  if (!campaign || (!campaign.attacker && !campaign.defender && !campaign.name)) return null;
+  const attacker = map?.pack?.states?.[campaign.attacker] || map?.politics?.states?.[campaign.attacker];
+  const defender = map?.pack?.states?.[campaign.defender] || map?.politics?.states?.[campaign.defender];
+  const side = Number(state.i) === Number(campaign.attacker) ? "attacker" : Number(state.i) === Number(campaign.defender) ? "defender" : "participant";
+  const opponent = side === "attacker" ? defender : side === "defender" ? attacker : null;
+  const key = campaign.id ?? campaign.i ?? campaign.key ?? `${campaign.attacker}:${campaign.defender}:${campaign.start || ""}:${campaign.cause || campaign.causeLabel || campaign.name || "campaign"}`;
+  const chainLabel = campaign.name || campaign.label || campaign.causeLabel || campaign.cause || "战争战报";
+  const chainSideLabel = battleChainSideLabel(side);
+  const opponentStateName = stateDisplayName(opponent);
+  const label = opponentStateName ? `${chainLabel} / ${chainSideLabel} / 对手 ${opponentStateName}` : `${chainLabel} / ${chainSideLabel}`;
+  return {
+    value: `campaign:${slugText(key)}`,
+    label,
+    chainKey: `campaign:${slugText(key)}`,
+    chainLabel,
+    chainSide: side,
+    chainSideLabel,
+    opponentStateId: opponent?.i ?? null,
+    opponentStateName,
+    attackerStateId: attacker?.i ?? campaign.attacker ?? null,
+    attackerStateName: stateDisplayName(attacker),
+    defenderStateId: defender?.i ?? campaign.defender ?? null,
+    defenderStateName: stateDisplayName(defender)
+  };
+}
+
+function battleEventRecordChainPayload(option) {
+  if (!option) return {};
+  return {
+    chainKey: option.chainKey,
+    chainLabel: option.chainLabel,
+    chainSide: option.chainSide,
+    chainSideLabel: option.chainSideLabel,
+    opponentStateId: option.opponentStateId,
+    opponentStateName: option.opponentStateName,
+    attackerStateId: option.attackerStateId,
+    attackerStateName: option.attackerStateName,
+    defenderStateId: option.defenderStateId,
+    defenderStateName: option.defenderStateName
+  };
+}
+
+function stateDisplayName(state) {
+  return state?.fullName || state?.name || (state?.i ? `国家 #${state.i}` : "");
+}
+
+function slugText(value) {
+  return String(value || "chain").trim().replace(/\s+/g, "-").replace(/[^\w\u4e00-\u9fa5:-]/g, "").slice(0, 48) || "chain";
 }
 
 function destinationForCell(map, cell, fallbackName, x = null, y = null) {

@@ -16167,3 +16167,30 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：打开控制面板和 `军事管理`，通过二级“战斗事件”记录 `双方字段烟测：攻防链路。` 后，事件显示对手信息。
 - 同次烟测切到该链路并按 `当前筛选` 导出 JSON 和 CSV：事件 `chainKey = campaign:16:1:991:rivalry`，不再带当前国家前缀；`chainSide = defender / 防守方`，`opponentStateName = 谭帝国`，`attackerStateName = 谭帝国`，`defenderStateName = 赤原国`；JSON `summary.chains[0]` 带出阵营和对手，CSV 表头包含 `阵营 / 对手`，战斗事件列表无横向溢出，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1602.2ms`，纯生成 `812.7ms`，WebGL 加载 `491.9ms`，UI slack `297.6ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 133.8ms`，最慢加载阶段为 `构建视觉 cell mesh 66ms`。
+
+### 战斗事件记录链路选择
+
+背景：
+
+- 战报事件已经带有共享 campaign key 和攻防双方字段，但记录新事件时仍只能自动挂到第一条 campaign。
+- 当国家存在多条战争或需要记录非战役事件时，用户需要在记录入口明确选择战报链。
+- 本轮仍不进入自动战役推进、双方损耗结算或外交状态改写。
+
+修正：
+
+- 二级“战斗事件”面板新增“链路”下拉。
+- 链路选项来自选中军团所属国家的 `campaigns`，显示战役名、进攻/防守方和对手国家。
+- 选项末尾保留“本地战报”，用于无战役或不归属 campaign 的记录。
+- 记录事件时会把所选链路的 `chainKey / chainLabel / chainSide / opponentStateName / attackerStateName / defenderStateName` 显式传入命令层。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 12 项。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `35.34KB / gzip 10.95KB`，主入口约 `771.76KB / gzip 233.18KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开控制面板和 `军事管理`，打开二级“战斗事件”后，链路下拉包含 `谭-赤原之战 / 防守方 / 对手 谭帝国` 和 `本地战报`。
+- 同次烟测选择 `本地战报` 记录 `本地链路选择烟测。` 后按当前筛选导出 JSON：`chainKey = regiment:1:0:local`，`chainLabel = 本地战报`，`chainSide = local / 本地`，`filters.chainKey` 保持同值；战斗事件列表无横向溢出，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1607.2ms`，纯生成 `795.2ms`，WebGL 加载 `520.8ms`，UI slack `291.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 164.9ms`，最慢加载阶段为 `构建标签 59.4ms`。
