@@ -1,5 +1,5 @@
 import {shallowReactive} from "vue";
-import {getNamebaseSummariesForMap} from "../../generator/namebase-store.js";
+import {getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../../generator/namebase-store.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 
 export function createNamebasePanel(documentRef, manager, callbacks = {}) {
@@ -8,6 +8,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     open: false,
     map: null,
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
+    bindingStatus: getNamebaseBindingStatus(null),
     filter: "",
     importMode: "append",
     importPreview: null,
@@ -124,6 +125,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
 
 function refreshSummaries(panelState) {
   panelState.summaries = getNamebaseSummariesForMap(panelState.map, {includeSource: true});
+  panelState.bindingStatus = getNamebaseBindingStatus(panelState.map);
   if (!panelState.selectedNamebaseId || !panelState.summaries.some(row => row.id === panelState.selectedNamebaseId)) {
     panelState.selectedNamebaseId = panelState.summaries[0]?.id || null;
   }

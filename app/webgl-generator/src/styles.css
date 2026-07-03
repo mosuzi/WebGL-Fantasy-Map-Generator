@@ -4414,6 +4414,27 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.namebase-binding-warning {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(215, 168, 79, 0.34);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: rgba(43, 36, 21, 0.48);
+  color: #dce7eb;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.namebase-binding-warning strong {
+  color: #ffe0a1;
+}
+
+.namebase-binding-warning span {
+  overflow-wrap: anywhere;
+}
+
 .namebase-panel-controls {
   margin-bottom: 8px;
 }

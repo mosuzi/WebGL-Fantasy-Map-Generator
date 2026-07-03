@@ -1,6 +1,11 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="namebase-panel-summary" />
 
+  <div v-if="bindingInvalidEntries.length" class="namebase-binding-warning">
+    <strong>失效绑定引用</strong>
+    <span>{{ bindingInvalidLabel }}</span>
+  </div>
+
   <div class="namebase-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 分类 / 类型 / 样例" @update:model-value="callbacks.onFilter" />
   </div>
@@ -145,7 +150,8 @@ const columns = Object.freeze([
   {key: "kind", label: "类型"},
   {key: "samples", label: "样本", align: "right", format: value => formatNumber(value)},
   {key: "duplicateSamples", label: "重复", align: "right", format: value => formatNumber(value)},
-  {key: "lengthRange", label: "长度"}
+  {key: "lengthRange", label: "长度"},
+  {key: "bindingUsageLabel", label: "绑定"}
 ]);
 
 const rows = computed(() => {
@@ -165,6 +171,8 @@ const summaryMetrics = computed(() => [
   {label: "唯一样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.uniqueSamples, 0))},
   {label: "重复", value: formatNumber(rows.value.reduce((sum, row) => sum + row.duplicateSamples, 0))}
 ]);
+const bindingInvalidEntries = computed(() => props.state.bindingStatus?.invalid || []);
+const bindingInvalidLabel = computed(() => bindingInvalidEntries.value.map(item => `${item.label} -> ${item.id}`).join("；"));
 const importPreviewMetrics = computed(() => {
   const preview = props.state.importPreview;
   if (!preview) return [];
@@ -196,6 +204,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "唯一样本", value: formatNumber(selected.value.uniqueSamples)},
   {label: "重复样本", value: formatNumber(selected.value.duplicateSamples)},
   {label: "质量", value: selected.value.qualityLabel},
+  {label: "绑定状态", value: selected.value.bindingUsageLabel},
   {label: "最短", value: `${formatNumber(selected.value.minLength)}字`},
   {label: "最长", value: `${formatNumber(selected.value.maxLength)}字`},
   {label: "说明", value: selected.value.note || "内置词池"}
@@ -237,6 +246,7 @@ function filterRows(sourceRows, filter) {
     row.category,
     row.note,
     row.qualityLabel,
+    row.bindingUsageLabel,
     row.examplesLabel,
     row.duplicateLabel
   ].some(value => String(value || "").toLowerCase().includes(query)));

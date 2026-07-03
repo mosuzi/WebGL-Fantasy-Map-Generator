@@ -17270,3 +17270,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `811.54KB / gzip 244.88KB`，名称库懒加载 chunk 约 `9.02KB / gzip 3.45KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：打开名称库总览，新建 1 个用户库后导入包含 `2` 个有效词池和 `1` 个空词池的测试 JSON；预览阶段用户库数量保持 `1`，预览显示“可导入 2 / 样本 7 / 将替换 0 / 可能重名 1”，并提示空词池跳过和重名/同源风险；点击“确认导入”后用户库变为 `3`，状态提示“名称库已导入 2 个词池，当前用户库 3 个。”，预览面板收起；预览区无横向溢出，`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1510ms`，纯生成 `776.6ms`，WebGL 加载 `427.6ms`，UI slack `305.8ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 135.5ms`，最慢加载阶段为 `构建标签 57.9ms`。
+
+### 名称库绑定状态第一刀
+
+背景：
+
+- 名称库绑定计划要求先建立 `map.namebases.bindings` 的读写 helper 和失效引用显示，再进入真正生成绑定。
+- 当前用户已明确不需要动态军事系统，本轮继续沿名称库安全管理路线推进，不接触军事和渲染热路径。
+
+修正：
+
+- `namebase-store.js` 新增 `NAMEBASE_BINDING_TARGETS`、`getNamebaseBindings()`、`setNamebaseBinding()` 和 `getNamebaseBindingStatus()`。
+- 名称库总览行新增“绑定”列，详情新增“绑定状态”，可显示“全局国家根名 / 文化 #1 地名”等绑定用途。
+- 当绑定指向已删除或不存在的名称库 id 时，面板显示“失效绑定引用”，不会抛错。
+- 本轮只做只读诊断和 helper，不改变生成结果，不批量改名，也不提供绑定编辑入口。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `813.04KB / gzip 245.44KB`，名称库懒加载 chunk 约 `9.41KB / gzip 3.59KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入 `user-state-roots` 用户名称库，并设置 `global.stateRoot = user-state-roots`、`cultures.1.hydro = user-state-roots`、`global.place = missing-place`、`cultures.1.place = missing-culture-place`；名称库总览中用户库行显示“全局国家根名、文化 #1 水文”，失效提示显示“全局地名 -> missing-place；文化 #1 地名 -> missing-culture-place”；提示卡和面板无横向溢出，`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1555.9ms`，纯生成 `776.3ms`，WebGL 加载 `522.1ms`，UI slack `257.5ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 148.8ms`，最慢加载阶段为 `构建视觉 cell mesh 67.9ms`。

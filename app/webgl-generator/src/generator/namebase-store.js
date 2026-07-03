@@ -2,6 +2,13 @@ import {getBuiltinNamebaseSummaries, summarizeNamebaseSource} from "./names.js";
 
 export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
 export const NAMEBASE_DOCUMENT_VERSION = 1;
+export const NAMEBASE_BINDING_TARGETS = Object.freeze([
+  {key: "stateRoot", label: "国家根名"},
+  {key: "place", label: "地名"},
+  {key: "hydro", label: "水文"},
+  {key: "culture", label: "文化"},
+  {key: "religion", label: "宗教"}
+]);
 
 export function createNamebaseDocument(map = null, {includeUser = true} = {}) {
   const builtinBases = getBuiltinNamebaseSummaries({includeSource: true}).map(row => ({
@@ -243,6 +250,7 @@ export function updateUserNamebaseSource(map, id, sourceText) {
 }
 
 export function getNamebaseSummariesForMap(map, options = {}) {
+  const bindingStatus = getNamebaseBindingStatus(map);
   const builtinRows = getBuiltinNamebaseSummaries(options).map(row => ({
     ...row,
     builtin: true,
@@ -253,7 +261,85 @@ export function getNamebaseSummariesForMap(map, options = {}) {
     builtin: false,
     origin: base.origin || "导入"
   }));
-  return [...builtinRows, ...customRows].map((row, index) => ({...row, index}));
+  return [...builtinRows, ...customRows].map((row, index) => {
+    const usage = bindingStatus.usageById[row.id] || [];
+    return {
+      ...row,
+      index,
+      bindingUsageCount: usage.length,
+      bindingUsageLabel: usage.length ? usage.map(item => item.label).join("、") : "未绑定"
+    };
+  });
+}
+
+export function getNamebaseBindings(map) {
+  return normalizeNamebaseBindings(map?.namebases?.bindings);
+}
+
+export function setNamebaseBinding(map, target, value, {cultureId = ""} = {}) {
+  if (!map) throw new Error("当前没有可设置名称库绑定的地图");
+  const store = ensureNamebaseStore(map);
+  const targetKey = String(target || "").trim();
+  if (!NAMEBASE_BINDING_TARGETS.some(item => item.key === targetKey)) throw new Error(`未知名称库绑定目标：${targetKey}`);
+  const bindingValue = String(value || "").trim();
+  if (cultureId !== "") {
+    const cultureKey = String(cultureId);
+    if (!store.bindings.cultures || typeof store.bindings.cultures !== "object") store.bindings.cultures = {};
+    if (!store.bindings.cultures[cultureKey] || typeof store.bindings.cultures[cultureKey] !== "object") store.bindings.cultures[cultureKey] = {};
+    store.bindings.cultures[cultureKey][targetKey] = bindingValue;
+  } else {
+    if (!store.bindings.global || typeof store.bindings.global !== "object") store.bindings.global = {};
+    store.bindings.global[targetKey] = bindingValue;
+  }
+  updateNamebaseMetadata(store);
+  return getNamebaseBindingStatus(map);
+}
+
+export function getNamebaseBindingStatus(map) {
+  const bindings = getNamebaseBindings(map);
+  const rows = [
+    ...getBuiltinNamebaseSummaries({includeSource: false}),
+    ...(map?.namebases?.bases || []).map(base => summarizeNamebaseSource(base, {includeSource: false}))
+  ];
+  const validIds = new Set(rows.map(row => row.id).filter(Boolean));
+  const usageById = {};
+  const invalid = [];
+  const addUsage = (id, entry) => {
+    if (!id) return;
+    if (!validIds.has(id)) {
+      invalid.push({...entry, id});
+      return;
+    }
+    if (!usageById[id]) usageById[id] = [];
+    usageById[id].push(entry);
+  };
+  for (const target of NAMEBASE_BINDING_TARGETS) {
+    addUsage(bindings.global[target.key], {
+      scope: "global",
+      target: target.key,
+      label: `全局${target.label}`
+    });
+  }
+  for (const [cultureId, cultureBindings] of Object.entries(bindings.cultures)) {
+    if (!cultureBindings || typeof cultureBindings !== "object") continue;
+    for (const target of NAMEBASE_BINDING_TARGETS) {
+      if (!["stateRoot", "place", "hydro"].includes(target.key)) continue;
+      addUsage(cultureBindings[target.key], {
+        scope: "culture",
+        cultureId,
+        target: target.key,
+        label: `文化 #${cultureId} ${target.label}`
+      });
+    }
+  }
+  const used = Object.values(usageById).reduce((sum, entries) => sum + entries.length, 0);
+  return {
+    bindings,
+    usageById,
+    used,
+    invalid,
+    invalidCount: invalid.length
+  };
 }
 
 export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", salt = 0} = {}) {
@@ -298,6 +384,24 @@ function ensureNamebaseStore(map) {
   if (!map.namebases.bindings || typeof map.namebases.bindings !== "object") map.namebases.bindings = {};
   if (!map.namebases.metadata || typeof map.namebases.metadata !== "object") map.namebases.metadata = {};
   return map.namebases;
+}
+
+function normalizeNamebaseBindings(bindings) {
+  const source = bindings && typeof bindings === "object" ? bindings : {};
+  const global = source.global && typeof source.global === "object" ? source.global : {};
+  const cultures = source.cultures && typeof source.cultures === "object" ? source.cultures : {};
+  const normalizedCultures = {};
+  for (const [cultureId, cultureBindings] of Object.entries(cultures)) {
+    if (!cultureBindings || typeof cultureBindings !== "object") continue;
+    normalizedCultures[String(cultureId)] = {};
+    for (const target of NAMEBASE_BINDING_TARGETS) {
+      normalizedCultures[String(cultureId)][target.key] = String(cultureBindings[target.key] || "").trim();
+    }
+  }
+  return {
+    global: Object.fromEntries(NAMEBASE_BINDING_TARGETS.map(target => [target.key, String(global[target.key] || "").trim()])),
+    cultures: normalizedCultures
+  };
 }
 
 function updateNamebaseMetadata(store) {
