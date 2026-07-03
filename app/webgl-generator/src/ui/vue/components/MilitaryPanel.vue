@@ -30,10 +30,10 @@
       </div>
     </div>
     <div class="military-toolbar-group">
-      <span>战斗事件</span>
+      <span>战报档案</span>
       <div>
-        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEvents">JSON</UiButton>
-        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEventsCsv">CSV</UiButton>
+        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEvents">档案 JSON</UiButton>
+        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEventsCsv">档案 CSV</UiButton>
         <UiButton variant="secondary" @click="openBattleEventsImport">导入</UiButton>
       </div>
     </div>
@@ -77,6 +77,18 @@
     </div>
   </section>
 
+  <section v-if="selected" class="military-dossier" aria-label="军团静态档案">
+    <div v-for="group in militaryDossierGroups" :key="group.title" class="military-dossier-group">
+      <strong>{{ group.title }}</strong>
+      <div>
+        <span v-for="item in group.items" :key="item.label">
+          <small>{{ item.label }}</small>
+          <b>{{ item.value }}</b>
+        </span>
+      </div>
+    </div>
+  </section>
+
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
 
   <UiSortBar class-name="military-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -90,26 +102,26 @@
     @locate="callbacks.onLocate"
   />
 
-  <section v-if="selected" class="military-event-list" aria-label="选中军团战斗事件">
+  <section v-if="selected" class="military-event-list" aria-label="选中军团战报记录">
     <div class="military-event-list-heading">
-      <strong>战斗事件</strong>
+      <strong>战报记录</strong>
       <span>{{ battleEventCountLabel }}</span>
     </div>
-    <div v-if="selectedBattleEventTotal" class="military-event-chain" aria-label="战报链摘要">
+    <div v-if="selectedBattleEventTotal" class="military-event-chain" aria-label="战报档案摘要">
       <span>
         <small>链路</small>
         <b>{{ battleEventChainSummary.chainLabel }}</b>
       </span>
       <span>
-        <small>事件</small>
+        <small>记录</small>
         <b>{{ battleEventChainSummary.totalLabel }}</b>
       </span>
       <span>
-        <small>已应用</small>
+        <small>已结算</small>
         <b>{{ battleEventChainSummary.appliedLabel }}</b>
       </span>
       <span>
-        <small>未应用</small>
+        <small>未结算</small>
         <b>{{ battleEventChainSummary.pendingLabel }}</b>
       </span>
       <span>
@@ -121,7 +133,7 @@
         <b>{{ battleEventChainSummary.latestLabel }}</b>
       </span>
     </div>
-    <div v-if="battleEventChainSummary.chains.length" class="military-chain-overview" aria-label="战报链概览">
+    <div v-if="battleEventChainSummary.chains.length" class="military-chain-overview" aria-label="战报档案概览">
       <button
         v-for="chain in battleEventChainSummary.chains"
         :key="chain.key"
@@ -184,7 +196,7 @@
         <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
       </div>
     </div>
-    <p v-if="!selectedBattleEvents.length" class="military-event-empty">{{ selectedBattleEventTotal ? "没有匹配当前筛选的战斗事件。" : "当前军团还没有战斗事件。" }}</p>
+    <p v-if="!selectedBattleEvents.length" class="military-event-empty">{{ selectedBattleEventTotal ? "没有匹配当前筛选的战报记录。" : "当前军团还没有战报记录。" }}</p>
     <ol v-else>
       <li v-for="event in selectedBattleEvents" :key="event.id || `${event.regimentObjectId}-${event.sequence}`" class="military-event-item">
         <div class="military-event-item-head">
@@ -304,7 +316,7 @@
           @update:model-value="value => battleEventDraft.outcome = value"
         />
         <UiSwitchField
-          label="应用轻量结果"
+          label="记录轻量结算"
           input-id="military-battle-apply-result"
           field-class="military-result-switch"
           :checked="battleEventDraft.applyResult"
@@ -314,7 +326,7 @@
         <UiNoteField
           class-name="military-battle-event-note"
           label="说明"
-          :action-label="battleEventDraft.applyResult ? '记录并应用' : '记录事件'"
+          :action-label="battleEventDraft.applyResult ? '记录并结算' : '记录战报'"
           :model-value="battleEventDraft.description"
           :rows="3"
           :max-length="180"
@@ -471,11 +483,11 @@ const battleEventFilterOutcomeOptions = Object.freeze([
 ]);
 const battleEventApplyFilterOptions = Object.freeze([
   {value: "all", label: "全部结算"},
-  {value: "applied", label: "已应用"},
-  {value: "pending", label: "未应用"}
+  {value: "applied", label: "已结算"},
+  {value: "pending", label: "未结算"}
 ]);
 const battleEventExportScopeOptions = Object.freeze([
-  {value: "all", label: "全部事件"},
+  {value: "all", label: "全部记录"},
   {value: "selected", label: "当前军团"},
   {value: "filtered", label: "当前筛选"}
 ]);
@@ -514,7 +526,7 @@ const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattle
 const selectedBattleEventRows = computed(() => eventsForRegiment(allBattleEvents.value, selected.value));
 const selectedBattleChainOptions = computed(() => battleEventChainFilterOptions(selectedBattleEventRows.value));
 const selectedFilteredBattleEvents = computed(() => filterBattleEvents(eventsForRegiment(allBattleEvents.value, selected.value), eventChainFilter.value, eventTypeFilter.value, eventOutcomeFilter.value, eventApplyFilter.value));
-const selectedLatestBattleEventLabel = computed(() => latestBattleEventLabel(selectedBattleEventRows.value, "暂无战斗事件"));
+const selectedLatestBattleEventLabel = computed(() => latestBattleEventLabel(selectedBattleEventRows.value, "暂无战报记录"));
 const battleEventRecordChainOptions = computed(() => buildBattleEventRecordChainOptions(props.state.map, selectedState.value?.state, selected.value));
 const selectedBattleEventRecordChain = computed(() => battleEventRecordChainOptions.value.find(option => option.value === battleEventDraft.chainKey) || battleEventRecordChainOptions.value[0] || null);
 const selectedBattleEventsCanExpand = computed(() => selectedFilteredBattleEvents.value.length > 5);
@@ -558,7 +570,7 @@ const militaryActions = computed(() => [
   {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
   {key: "batchStatus", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
   {key: "station", label: "驻地基地", icon: "⌖", disabled: !selected.value},
-  {key: "battle", label: "战斗事件", icon: "⚔", disabled: !selected.value},
+  {key: "battle", label: "记录战报", icon: "⚔", disabled: !selected.value},
   {key: "ratios", label: "兵种比例", icon: "⚖"}
 ]);
 
@@ -567,11 +579,50 @@ const summaryMetrics = computed(() => [
   {label: "军团", value: formatNumber(metrics.value.rows.length)},
   {label: "总兵力", value: formatNumber(metrics.value.troops)},
   {label: "舰队", value: formatNumber(metrics.value.fleets)},
-  {label: "战役", value: formatNumber(metrics.value.campaigns)},
+  {label: "战报链", value: formatNumber(metrics.value.campaigns)},
   {label: "战线", value: formatNumber(metrics.value.fronts)},
-  {label: "事件", value: formatNumber(allBattleEvents.value.length)},
+  {label: "记录", value: formatNumber(allBattleEvents.value.length)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
+
+const militaryDossierGroups = computed(() => selected.value ? [
+  {
+    title: "驻防",
+    items: [
+      dossierItem("态势", selected.value.statusLabel),
+      dossierItem("驻地", selected.value.stationLabel),
+      dossierItem("基地", selected.value.baseLabel),
+      dossierItem("命令", selected.value.orderLabel)
+    ]
+  },
+  {
+    title: "兵力",
+    items: [
+      dossierItem("总兵力", formatNumber(selected.value.troops)),
+      dossierItem("主兵种", selected.value.dominantUnitLabel),
+      dossierItem("驻扎适宜", `${Math.round(selected.value.suitabilityScore * 100)}%`),
+      dossierItem("移动速度", formatNumber(selected.value.movementSpeed))
+    ]
+  },
+  {
+    title: "背景",
+    items: [
+      dossierItem("文明", selected.value.civilizationLabel),
+      dossierItem("外交压力", `x${formatNumber(selected.value.diplomacyPressure)}`),
+      dossierItem("资源压力", `x${formatNumber(selected.value.resourcePressure)}`),
+      dossierItem("战争原因", selected.value.warCauseLabel || "无")
+    ]
+  },
+  {
+    title: "档案",
+    items: [
+      dossierItem("战报链", selected.value.campaignLabel),
+      dossierItem("链路摘要", selected.value.campaignSummaryLabel),
+      dossierItem("最近记录", selectedLatestBattleEventLabel.value),
+      dossierItem("记录数", formatNumber(selectedBattleEventTotal.value))
+    ]
+  }
+] : []);
 
 const detailRows = computed(() => selected.value ? [
   {label: "国家", value: selected.value.stateName},
@@ -583,14 +634,14 @@ const detailRows = computed(() => selected.value ? [
   {label: "主兵种", value: selected.value.dominantUnitLabel},
   {label: "驻地", value: selected.value.stationLabel},
   {label: "基地", value: selected.value.baseLabel},
-  {label: "战斗事件", value: selectedLatestBattleEventLabel.value},
+  {label: "战报记录", value: selectedLatestBattleEventLabel.value},
   {label: "驻扎适宜度", value: `${Math.round(selected.value.suitabilityScore * 100)}%`},
   {label: "移动速度", value: formatNumber(selected.value.movementSpeed)},
   {label: "文明", value: selected.value.civilizationLabel},
   {label: "外交压力", value: formatNumber(selected.value.diplomacyPressure)},
   {label: "资源压力", value: formatNumber(selected.value.resourcePressure)},
-  {label: "战役", value: selected.value.campaignLabel},
-  {label: "战役摘要", value: selected.value.campaignSummaryLabel},
+  {label: "战报链", value: selected.value.campaignLabel},
+  {label: "链路摘要", value: selected.value.campaignSummaryLabel},
   {label: "战争原因", value: selected.value.warCauseLabel || "无"}
 ] : []);
 const stationDestinationOptions = computed(() => buildStationDestinationOptions(props.state.map, selected.value, selectedState.value?.state));
@@ -698,7 +749,7 @@ function campaignSummaryLabelForState(campaigns = []) {
   const attackerCasualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.attackerCasualties || 0), 0);
   const defenderCasualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.defenderCasualties || 0), 0);
   const momentum = campaignMomentumLabelForState(campaigns);
-  const parts = [phaseLabel, progressLabel, momentum, `事件 ${formatNumber(events)}`, `已应用 ${formatNumber(applied)}`];
+  const parts = [phaseLabel, progressLabel, momentum, `记录 ${formatNumber(events)}`, `已结算 ${formatNumber(applied)}`];
   if (attackerCasualties) parts.push(`攻方损耗 ${formatNumber(attackerCasualties)}`);
   if (defenderCasualties) parts.push(`守方损耗 ${formatNumber(defenderCasualties)}`);
   if (!attackerCasualties && !defenderCasualties && casualties) parts.push(`损耗 ${formatNumber(casualties)}`);
@@ -1270,7 +1321,7 @@ function battleEventRowsForExport(scope) {
 }
 
 function battleEventExportScopeLabel(scope) {
-  return battleEventExportScopeOptions.find(option => option.value === scope)?.label || "全部事件";
+  return battleEventExportScopeOptions.find(option => option.value === scope)?.label || "全部记录";
 }
 
 function battleEventExportFilters() {
@@ -1331,9 +1382,9 @@ function battleChainSideSummary(chain = {}) {
 }
 
 function battleChainCountSummary(chain = {}) {
-  const parts = [`事件 ${formatNumber(chain.count || 0)}`];
-  if (chain.applied) parts.push(`已应用 ${formatNumber(chain.applied)}`);
-  if (chain.pending) parts.push(`未应用 ${formatNumber(chain.pending)}`);
+  const parts = [`记录 ${formatNumber(chain.count || 0)}`];
+  if (chain.applied) parts.push(`已结算 ${formatNumber(chain.applied)}`);
+  if (chain.pending) parts.push(`未结算 ${formatNumber(chain.pending)}`);
   const sideLossParts = battleChainSideLossParts(chain);
   parts.push(...sideLossParts);
   if (chain.casualties && !sideLossParts.length) parts.push(`损耗 ${formatNumber(chain.casualties)}`);
@@ -1364,7 +1415,7 @@ function battleChainSideLabel(side) {
 }
 
 function battleEventAppliedLabel(event) {
-  return event?.resultApplied ? "已应用" : "未应用";
+  return event?.resultApplied ? "已结算" : "未结算";
 }
 
 function battleEventAppliedClass(event) {
@@ -1387,7 +1438,7 @@ function battleResultSummary(event) {
   const after = formatNumber(result.troopAfter || 0);
   const casualties = formatNumber(result.casualties || Math.abs(result.troopDelta || 0));
   const status = result.statusAfterLabel || result.statusAfter || "未知态势";
-  return `已应用：${before} -> ${after}，损耗 ${casualties}，${status}`;
+  return `已结算：${before} -> ${after}，损耗 ${casualties}，${status}`;
 }
 
 function battlePreviewCasualties(troops, lossRate) {
@@ -1421,6 +1472,10 @@ function roundValue(value, digits = 2) {
 
 function isProvidedNumber(value) {
   return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
+
+function dossierItem(label, value) {
+  return {label, value: value || "无"};
 }
 
 function unitBreakdown(regiment) {
@@ -1515,8 +1570,8 @@ function exportBattleEventsCsv() {
     "类型",
     "结果",
     "说明",
-    "已应用",
-    "应用状态",
+    "已结算",
+    "结算状态",
     "损耗状态",
     "结果摘要",
     "兵力前",
@@ -1560,11 +1615,11 @@ function openBattleEventsImport() {
 async function importBattleEventsFile(event) {
   const file = event.target?.files?.[0];
   if (!file) return;
-  battleEventsImportStatus.value = "正在导入战斗事件...";
+  battleEventsImportStatus.value = "正在导入战报记录...";
   const result = await props.callbacks.onBattleEventsImport?.(file);
   battleEventsImportStatus.value = result
     ? `已导入 ${formatNumber(result.imported)} 条，跳过 ${formatNumber(result.skipped)} 条`
-    : "战斗事件导入失败";
+    : "战报记录导入失败";
   event.target.value = "";
 }
 

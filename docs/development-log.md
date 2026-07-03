@@ -16884,3 +16884,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；`CityPanel` chunk 约 `12.19KB / gzip 4.52KB`，主入口约 `803.88KB / gzip 242.32KB`。
 - 构建产物浏览器烟测通过：同 seed 生成 `821` 个城市，其中 `728` 个带资源腹地，资源 cell 总数 `1694`，与 metadata 一致；城市管理面板显示“资源城镇 / 资源 cells / 资源种类”，`glError = 0`、console/page error 为 `0`，打开城市面板后无新的非 info 健康事件。
+
+### 军事面板静态档案第四刀
+
+背景：
+
+- 用户已明确校准：无需继续做动态军事系统。
+- 军事管理面板虽然已经做过布局和样式整理，但用户面上仍残留“战斗事件 / 已应用”等偏动态系统的文案。
+- 后续军事只保留静态面板、态势线观感、军团展示和既有记录查看/清理，不再扩展战斗模拟或自动战役推进。
+
+修正：
+
+- `MilitaryPanel.vue` 新增军团静态档案分组，把驻防、兵力、背景和战报档案分块展示，减少详情区裸字段堆叠感。
+- 面板文案从“战斗事件 / 已应用 / 未应用”收敛为“战报记录 / 已结算 / 未结算”，二级入口改为“记录战报”。
+- README 将军事能力描述改为“战报档案”，并明确后续不再扩展动态战争系统。
+- 本轮只改展示、文案和文档，不改军事生成、战报兼容字段、轻量结算命令或外交状态。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` chunk 约 `40.84KB / gzip 12.42KB`，主入口约 `803.88KB / gzip 242.32KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开 `军事管理` 后，`military-panel-summary / military-overview / military-dossier / military-panel-details / military-edit-toolbar / military-event-list` 均无横向溢出；面板显示“战报档案 / 战报记录”，不再裸露“战斗事件 / 已应用 / 未应用”；`glError = 0`、console/page error 为 `0`，打开面板后 health 非 info 事件为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1517.9ms`，纯生成 `759.2ms`，WebGL 加载 `518.7ms`，UI slack `240ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 137.4ms`，最慢加载阶段为 `构建视觉 cell mesh 79.3ms`。
