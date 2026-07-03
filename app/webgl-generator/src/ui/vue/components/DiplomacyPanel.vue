@@ -59,17 +59,26 @@
 
   <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
 
-  <section v-if="relationHistoryPreview.length" class="diplomacy-history-preview" aria-label="外交历史">
+  <section v-if="diplomacyChronicleRows.length" class="diplomacy-history-preview" aria-label="外交历史">
     <div class="diplomacy-history-heading">
       <strong>外交历史</strong>
       <span>{{ relationHistoryLabel }}</span>
     </div>
-    <ol>
+    <UiSelectField
+      input-id="diplomacy-history-filter"
+      class-name="diplomacy-history-filter"
+      label="范围"
+      :model-value="historyFilterMode"
+      :options="historyFilterOptions"
+      @update:model-value="setHistoryFilter"
+    />
+    <ol v-if="relationHistoryPreview.length">
       <li v-for="entry in relationHistoryPreview" :key="`${entry.index}:${entry.type}:${entry.text}`">
         <strong>{{ entry.type }}</strong>
         <span>{{ entry.text }}</span>
       </li>
     </ol>
+    <p v-else class="diplomacy-history-empty">当前范围暂无外交历史。</p>
   </section>
 
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="diplomacyActions">
@@ -169,7 +178,13 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const relationReasonDraft = ref("");
+const historyFilterMode = ref("selected");
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
+const historyFilterOptions = Object.freeze([
+  {value: "selected", label: "当前关系"},
+  {value: "subject", label: "主体国家"},
+  {value: "all", label: "全部历史"}
+]);
 const metrics = computed(() => {
   props.state.version;
   return buildDiplomacyMetrics(props.state.map, props.state.selectedStateId);
@@ -227,20 +242,30 @@ const diplomacyChronicleRows = computed(() => {
   props.state.version;
   return diplomacyChronicle(props.state.map);
 });
+const subjectHistoryRows = computed(() => {
+  if (!selected.value) return [];
+  const subjectAliases = [selected.value.subjectName, selected.value.subjectRawName].filter(Boolean);
+  return diplomacyChronicleRows.value.filter(entry => includesAny(entry.text, subjectAliases));
+});
 const relationHistoryRows = computed(() => {
   if (!selected.value) return [];
   const subjectAliases = [selected.value.subjectName, selected.value.subjectRawName].filter(Boolean);
   const objectAliases = [selected.value.name, selected.value.rawName].filter(Boolean);
   return diplomacyChronicleRows.value.filter(entry => includesAny(entry.text, subjectAliases) && includesAny(entry.text, objectAliases));
 });
+const filteredHistoryRows = computed(() => {
+  if (historyFilterMode.value === "all") return diplomacyChronicleRows.value;
+  if (historyFilterMode.value === "subject") return subjectHistoryRows.value;
+  return relationHistoryRows.value;
+});
 const relationHistoryPreview = computed(() => {
-  const source = relationHistoryRows.value.length ? relationHistoryRows.value : diplomacyChronicleRows.value;
-  return source.slice(-4).reverse();
+  return filteredHistoryRows.value.slice(-4).reverse();
 });
 const relationHistoryLabel = computed(() => {
   const total = diplomacyChronicleRows.value.length;
-  if (relationHistoryRows.value.length) return `相关 ${formatNumber(relationHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
-  return `最近 ${formatNumber(Math.min(4, total))} / 全部 ${formatNumber(total)}`;
+  if (historyFilterMode.value === "all") return `全部 ${formatNumber(total)}`;
+  if (historyFilterMode.value === "subject") return `主体 ${formatNumber(subjectHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
+  return `当前关系 ${formatNumber(relationHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
 });
 
 watch(() => selected.value?.id, () => {
@@ -252,6 +277,10 @@ function applyRelationChange(relation) {
   const row = selected.value;
   if (!row) return;
   props.callbacks.onRelationChange?.(row.subjectId, row.id, relation, relationReasonDraft.value);
+}
+
+function setHistoryFilter(value) {
+  historyFilterMode.value = ["selected", "subject", "all"].includes(value) ? value : "selected";
 }
 
 function buildDiplomacyMetrics(map, selectedStateId) {

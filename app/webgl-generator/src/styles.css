@@ -6241,6 +6241,11 @@ input.ui-switch-native {
   font-size: 11px;
 }
 
+.diplomacy-history-filter {
+  grid-template-columns: 36px minmax(0, 1fr);
+  max-width: 260px;
+}
+
 .diplomacy-history-preview ol {
   display: grid;
   gap: 6px;
@@ -6273,6 +6278,17 @@ input.ui-switch-native {
   font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.diplomacy-history-empty {
+  margin: 0;
+  border: 1px solid rgba(189, 206, 213, 0.1);
+  border-radius: 6px;
+  padding: 8px;
+  background: rgba(7, 12, 15, 0.28);
+  color: #8ea2ad;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .culture-name-editor label,
