@@ -16750,3 +16750,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `786.43KB / gzip 236.80KB`，本轮未新增面板 chunk。
 - 构建产物浏览器烟测通过：`tradeFlows` 默认关闭，初始 `tradeFlowVertexCount = 0`；开启图层后绘制 `177` 条交易、`1062` 个顶点、`354` 个三角形，`tradeFlowBuildMs = 12.4ms`，`glError = 0`，console/page error 为 `0`，开启图层后无非 info 健康事件。
 - e2e 守门通过：点击到出图 `1448.8ms`，纯生成 `727.9ms`，WebGL 加载 `409.2ms`，UI slack `311.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 125.5ms`，最慢加载阶段为 `构建线层顶点 52ms`。
+
+### 贸易流拾取与轻量详情第一刀
+
+背景：
+
+- 静态贸易流图层已经能绘制 top 交易，但地图点击仍只能落到路线、河流或底层政区，无法知道某条贸易线代表哪笔交易。
+- 阶段 4 的验收要求点击贸易流能查看交易详情；但贸易流图层默认关闭，拾取不能增加默认首屏对象索引压力。
+- 本轮继续保持静态可视化边界，不做贸易动画、市场归属编辑或经济重算。
+
+修正：
+
+- 新增 `trade-flow` 对象类型和解析逻辑，可从 deal id 还原商品、卖方、买方、数量、单价、金额、税额和交易来源。
+- renderer 在构建贸易流动态 buffer 时顺带缓存已绘制的 top 交易端点；拾取只扫描这批最多 `180` 条已绘制交易，不在 hover 时排序全量 `pack.deals`。
+- 点击贸易流会选中 `trade-flow` 对象，并显示轻量对象详情；若经济总览已经打开，或用户之后手动打开经济总览，会切到对应交易。
+- 首次实现曾让点击贸易流自动打开经济总览，浏览器烟测捕捉到首次加载面板触发 `main-thread-long-task`；已改为地图点击不自动加载重面板，避免一次拾取造成卡顿。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `790.54KB / gzip 238.14KB`，本轮未新增面板 chunk。
+- 构建产物浏览器烟测通过：开启贸易流后点击交易 `#14950`，`pick.object.kind = trade-flow`，当前选择对象为 `trade-flow #14950`，对象详情显示“贸易流 / 啤酒”；经济总览未自动打开，`tradeFlowPickItemCount = 177`，`tradeFlowVertexCount = 1062`，`tradeFlowBuildMs = 13.2ms`，`glError = 0`，console/page error 为 `0`，点击后无非 info 健康事件。
+- e2e 守门通过：点击到出图 `1395.9ms`，纯生成 `712ms`，WebGL 加载 `406.6ms`，UI slack `277.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 134.3ms`，最慢加载阶段为 `构建线层顶点 54ms`。

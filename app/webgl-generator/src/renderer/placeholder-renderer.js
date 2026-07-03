@@ -135,6 +135,7 @@ export class PlaceholderMapRenderer {
     this.vertexCount = 0;
     this.routeVertexCount = 0;
     this.tradeFlowVertexCount = 0;
+    this.tradeFlowPickItems = [];
     this.riverVertexCount = 0;
     this.selectionVertexCount = 0;
     this.lineVertexCount = 0;
@@ -235,12 +236,16 @@ export class PlaceholderMapRenderer {
     const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
+    this.tradeFlowVertexCount = 0;
+    this.tradeFlowPickItems = [];
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
@@ -295,12 +300,16 @@ export class PlaceholderMapRenderer {
     const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
+    this.tradeFlowVertexCount = 0;
+    this.tradeFlowPickItems = [];
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     await stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
@@ -587,6 +596,7 @@ export class PlaceholderMapRenderer {
       tradeFlowTriangleCount: this.tradeFlowVertexCount / 3,
       tradeFlowBuildMs: this.tradeFlowBuildMs,
       tradeFlowRenderStats: {...this.tradeFlowRenderStats},
+      tradeFlowPickItemCount: this.tradeFlowPickItems.length,
       riverVertexCount: this.riverVertexCount,
       riverTriangleCount: this.riverVertexCount / 3,
       riverBuildMs: this.riverBuildMs,
@@ -664,12 +674,13 @@ export class PlaceholderMapRenderer {
       : null;
     const marker = markerIcon || pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
     const military = militaryIcon || (this.layerVisibility.military !== false ? pickMilitary(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(13)) : null);
+    const tradeFlow = this.layerVisibility.tradeFlows ? this.pickTradeFlow(world.x, world.y, this.pickThresholdWorld(9)) : null;
     const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
     const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
-    const object = militaryIcon || markerIcon || label || cityObject || marker || military || river || route || politicalObject;
-    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (politicalObject ? 1 : 0);
-    return result ? {...result, label, cityObject, marker, military, route, river, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
+    const object = militaryIcon || markerIcon || label || cityObject || marker || military || tradeFlow || river || route || politicalObject;
+    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (politicalObject ? 1 : 0);
+    return result ? {...result, label, cityObject, marker, military, tradeFlow, route, river, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
 
   screenToWorld(clientX, clientY) {
@@ -717,13 +728,46 @@ export class PlaceholderMapRenderer {
 
   updateTradeFlowBuffer() {
     const startedAt = performance.now();
-    const {vertices, stats} = buildTradeFlowMeshVertices(this.map, this.camera, this.canvas);
+    const {vertices, stats, pickItems} = buildTradeFlowMeshVertices(this.map, this.camera, this.canvas);
     this.tradeFlowVertexCount = vertices.length / 6;
+    this.tradeFlowPickItems = pickItems;
     this.tradeFlowRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
     this.tradeFlowBuildMs = roundMs(performance.now() - startedAt);
     this.dynamicBuffersDirty.tradeFlows = false;
+  }
+
+  pickTradeFlow(worldX, worldY, maxDistance) {
+    if (!this.tradeFlowPickItems.length) return null;
+    let best = null;
+    let candidateCount = 0;
+    for (const item of this.tradeFlowPickItems) {
+      candidateCount++;
+      const distance = distanceToWorldSegment(worldX, worldY, item.from, item.to);
+      if (distance > maxDistance || (best && distance >= best.distance)) continue;
+      best = {
+        kind: OBJECT_KIND.TRADE_FLOW,
+        id: item.dealId,
+        goodId: item.goodId,
+        goodName: item.goodName,
+        sellerType: item.sellerType,
+        sellerId: item.sellerId,
+        sellerName: item.sellerName,
+        buyerType: item.buyerType,
+        buyerId: item.buyerId,
+        buyerName: item.buyerName,
+        units: item.units,
+        price: item.price,
+        value: item.value,
+        source: item.source,
+        sourceLabel: item.sourceLabel,
+        distance,
+        candidateCount
+      };
+    }
+    if (best) best.candidateCount = candidateCount;
+    return best;
   }
 
   updateRiverBuffer() {
@@ -2341,29 +2385,31 @@ function buildTradeFlowMeshVertices(map, camera, canvas) {
   const context = createRenderContext(map, {camera, canvas});
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
   const vertices = [];
+  const pickItems = [];
   const stats = emptyTradeFlowRenderStats();
   const deals = topTradeFlowDeals(map);
 
   for (const deal of deals) {
-    const seller = tradePartyPoint(map, deal.sellerType, deal.seller);
-    const buyer = tradePartyPoint(map, deal.buyerType, deal.buyer);
-    if (!seller || !buyer) {
+    const seller = tradePartyInfo(map, deal.sellerType, deal.seller);
+    const buyer = tradePartyInfo(map, deal.buyerType, deal.buyer);
+    if (!seller.point || !buyer.point) {
       stats.invalidDeals++;
       continue;
     }
-    const distance = Math.hypot(seller[0] - buyer[0], seller[1] - buyer[1]);
+    const distance = Math.hypot(seller.point[0] - buyer.point[0], seller.point[1] - buyer.point[1]);
     if (!Number.isFinite(distance) || distance <= 1) {
       stats.shortDeals++;
       continue;
     }
     const before = vertices.length;
     const widthPx = tradeFlowWidthPx(deal) * pixelRatio;
-    pushScreenPolyline(vertices, context, [seller, buyer], tradeFlowColor(deal), widthPx);
+    pushScreenPolyline(vertices, context, [seller.point, buyer.point], tradeFlowColor(deal), widthPx);
     const addedVertices = (vertices.length - before) / 6;
     if (addedVertices <= 0) continue;
     stats.renderedDeals++;
     stats.vertices += addedVertices;
     stats.tradeValue = roundValue(stats.tradeValue + tradeDealValue(deal));
+    pickItems.push(tradeFlowPickItem(map, deal, seller, buyer));
     if (stats.vertices > MAX_TRADE_FLOW_VERTICES) {
       stats.vertexBudgetExceeded = true;
       break;
@@ -2372,7 +2418,8 @@ function buildTradeFlowMeshVertices(map, camera, canvas) {
 
   return {
     vertices: new Float32Array(vertices),
-    stats
+    stats,
+    pickItems
   };
 }
 
@@ -2383,15 +2430,44 @@ function topTradeFlowDeals(map) {
     .slice(0, MAX_TRADE_FLOW_LINES);
 }
 
-function tradePartyPoint(map, type, id) {
+function tradePartyInfo(map, type, id) {
   if (type === "burg") {
     const burg = map?.pack?.burgs?.[id] || map?.settlements?.cities?.find(city => city?.burgId === id || city?.id === id);
-    return Number.isFinite(burg?.x) && Number.isFinite(burg?.y) ? [burg.x, burg.y] : null;
+    return {
+      name: burg?.name || `城镇 #${id}`,
+      point: Number.isFinite(burg?.x) && Number.isFinite(burg?.y) ? [burg.x, burg.y] : null
+    };
   }
   const market = map?.pack?.markets?.[id];
-  if (Number.isFinite(market?.x) && Number.isFinite(market?.y)) return [market.x, market.y];
   const center = map?.pack?.burgs?.[market?.centerBurgId];
-  return Number.isFinite(center?.x) && Number.isFinite(center?.y) ? [center.x, center.y] : null;
+  const x = Number.isFinite(market?.x) ? market.x : center?.x;
+  const y = Number.isFinite(market?.y) ? market.y : center?.y;
+  return {
+    name: market?.name || `市场 #${id}`,
+    point: Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null
+  };
+}
+
+function tradeFlowPickItem(map, deal, seller, buyer) {
+  const good = (map?.pack?.goods || []).find(item => item?.i === deal.good) || map?.pack?.goods?.[deal.good];
+  return {
+    dealId: deal.i,
+    goodId: deal.good,
+    goodName: good?.name || `商品 #${deal.good}`,
+    sellerType: deal.sellerType,
+    sellerId: deal.seller,
+    sellerName: seller.name,
+    buyerType: deal.buyerType,
+    buyerId: deal.buyer,
+    buyerName: buyer.name,
+    units: Number(deal.units || 0),
+    price: Number(deal.price || 0),
+    value: tradeDealValue(deal),
+    source: deal.source || "scheduled",
+    sourceLabel: tradeSourceLabel(deal.source),
+    from: seller.point,
+    to: buyer.point
+  };
 }
 
 function tradeDealValue(deal) {
@@ -2407,6 +2483,23 @@ function tradeFlowColor(deal) {
   if (deal.source === "marker-resource") return [0.36, 0.9, 0.5, 0.56];
   if (deal.source === "market-resource") return [0.56, 0.78, 0.38, 0.52];
   return [0.92, 0.8, 0.46, 0.46];
+}
+
+function tradeSourceLabel(source) {
+  return {
+    scheduled: "计划交易",
+    "market-resource": "市场资源",
+    "marker-resource": "资源点"
+  }[source] || source || "计划交易";
+}
+
+function distanceToWorldSegment(x, y, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 0.000001) return Math.hypot(x - a[0], y - a[1]);
+  const t = clamp(((x - a[0]) * dx + (y - a[1]) * dy) / lengthSquared, 0, 1);
+  return Math.hypot(x - (a[0] + dx * t), y - (a[1] + dy * t));
 }
 
 function emptyTradeFlowRenderStats() {

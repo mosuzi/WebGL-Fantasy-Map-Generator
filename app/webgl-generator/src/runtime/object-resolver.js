@@ -5,6 +5,7 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.LABEL]: resolveLabel,
   [OBJECT_KIND.MARKER]: resolveMarker,
   [OBJECT_KIND.ROUTE]: resolveRoute,
+  [OBJECT_KIND.TRADE_FLOW]: resolveTradeFlow,
   [OBJECT_KIND.RIVER]: resolveRiver,
   [OBJECT_KIND.MILITARY]: resolveMilitary,
   [OBJECT_KIND.STATE]: resolveState,
@@ -132,6 +133,35 @@ function resolveRoute(map, object) {
   };
 }
 
+function resolveTradeFlow(map, object) {
+  const deal = (map?.pack?.deals || []).find(item => item?.i === Number(object.id));
+  if (!deal) return null;
+  const good = map.pack?.goods?.find(item => item?.i === deal.good) || map.pack?.goods?.[deal.good];
+  const seller = tradePartyInfo(map, deal.sellerType, deal.seller);
+  const buyer = tradePartyInfo(map, deal.buyerType, deal.buyer);
+  return {
+    ...object,
+    kind: OBJECT_KIND.TRADE_FLOW,
+    id: deal.i,
+    goodId: deal.good,
+    goodName: good?.name || object.goodName || `商品 #${deal.good}`,
+    sellerType: deal.sellerType,
+    sellerId: deal.seller,
+    sellerName: seller.name,
+    buyerType: deal.buyerType,
+    buyerId: deal.buyer,
+    buyerName: buyer.name,
+    units: Number(deal.units || 0),
+    price: Number(deal.price || 0),
+    value: roundValue(Number(deal.units || 0) * Number(deal.price || 0)),
+    tax: Number(deal.tax || 0),
+    source: deal.source || "scheduled",
+    sourceLabel: tradeSourceLabel(deal.source),
+    from: seller.point,
+    to: buyer.point
+  };
+}
+
 function resolveRiver(map, object) {
   const river = map.rivers.rivers.find(item => item.id === object.id);
   if (!river) return null;
@@ -152,6 +182,37 @@ function resolveRiver(map, object) {
     cells: river.cells,
     points: river.points
   };
+}
+
+function tradePartyInfo(map, type, id) {
+  if (type === "burg") {
+    const burg = map?.pack?.burgs?.[id] || map?.settlements?.cities?.find(city => city?.burgId === id || city?.id === id);
+    return {
+      name: burg?.name || `城镇 #${id}`,
+      point: Number.isFinite(burg?.x) && Number.isFinite(burg?.y) ? [burg.x, burg.y] : null
+    };
+  }
+  const market = map?.pack?.markets?.[id];
+  const center = map?.pack?.burgs?.[market?.centerBurgId];
+  const x = Number.isFinite(market?.x) ? market.x : center?.x;
+  const y = Number.isFinite(market?.y) ? market.y : center?.y;
+  return {
+    name: market?.name || `市场 #${id}`,
+    point: Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null
+  };
+}
+
+function tradeSourceLabel(source) {
+  return {
+    scheduled: "计划交易",
+    "market-resource": "市场资源",
+    "marker-resource": "资源点"
+  }[source] || source || "计划交易";
+}
+
+function roundValue(value, digits = 2) {
+  const factor = 10 ** digits;
+  return Math.round((Number(value) || 0) * factor) / factor;
 }
 
 function resolveMilitary(map, object) {

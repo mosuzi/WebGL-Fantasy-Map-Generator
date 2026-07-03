@@ -84,6 +84,17 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       manager.open("economy-panel");
       lazyPanel.load();
     },
+    setSelectedDealId(dealId) {
+      const id = normalizeId(dealId);
+      if (!dealExists(panelState.map, id)) return false;
+      panelState.tab = "deals";
+      panelState.filter = "";
+      panelState.sortKey = "value";
+      panelState.sortDir = "desc";
+      panelState.selectedDealId = id;
+      panelState.version++;
+      return true;
+    },
     update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;

@@ -1321,6 +1321,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onOpenEconomyPanel: () => {
       state.panels.economy.open(state.map, state.selection, state.editHistory.getStats());
+      if (state.selection?.object?.kind === OBJECT_KIND.TRADE_FLOW) {
+        state.panels.economy.setSelectedDealId?.(state.selection.object.id);
+      }
     },
     onOpenMilitaryPanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.MILITARY) {
@@ -2327,6 +2330,13 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     state.panels.objectDetails.clear();
     state.panels.route.setSelectedRouteId(selection.object.id);
     state.panels.route.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.TRADE_FLOW]: (state, selection) => {
+    if (!state.panels.economy?.isOpen?.()) return false;
+    state.panels.objectDetails.clear();
+    state.panels.economy.open(state.map, selection, state.editHistory.getStats());
+    state.panels.economy.setSelectedDealId?.(selection.object.id);
     return true;
   },
   [OBJECT_KIND.MARKER]: (state, selection) => {

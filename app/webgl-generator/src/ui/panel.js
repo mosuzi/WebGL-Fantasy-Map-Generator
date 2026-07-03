@@ -22,6 +22,7 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.LABEL]: object => `标签 ${object.text}`,
   [OBJECT_KIND.MARKER]: object => `标记 ${object.name}`,
   [OBJECT_KIND.ROUTE]: object => `路线 ${object.from} -> ${object.to}`,
+  [OBJECT_KIND.TRADE_FLOW]: object => `贸易流 ${object.goodName || `#${object.id}`}`,
   [OBJECT_KIND.RIVER]: object => `河流 #${object.id}`,
   [OBJECT_KIND.STATE]: object => `国家 ${object.name}`,
   [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
@@ -35,6 +36,7 @@ const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.LABEL]: object => `${object.targetKind} / ${object.targetName}`,
   [OBJECT_KIND.MARKER]: (object, units) => formatMarkerObjectSummary(object, units),
   [OBJECT_KIND.ROUTE]: (object, units) => `${object.type} / ${object.level} / distance ${formatDisplayDistance(object.distance, units)}`,
+  [OBJECT_KIND.TRADE_FLOW]: (object, units) => `${object.sellerName || "卖方"} -> ${object.buyerName || "买方"} / 金额 ${formatDisplayNumber(object.value, units)}`,
   [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${formatDisplayNumber(object.flux, units)} / length ${formatDisplayDistance(object.length, units)}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
   [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
@@ -836,6 +838,7 @@ function formatHoverObjectLine(pick, unitPreferences = {}) {
   if (pick.label) return `${pick.label.text} / ${pick.label.targetKind}`;
   if (pick.city && pick.city !== "none") return pick.city;
   if (pick.marker) return formatMarkerObjectSummary(pick.marker, unitPreferences);
+  if (pick.tradeFlow) return `${pick.tradeFlow.goodName} / ${pick.tradeFlow.sellerName} -> ${pick.tradeFlow.buyerName}`;
   if (isNamedRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
   if (pick.river) return `河流 #${pick.river.id} / flux ${formatDisplayNumber(pick.river.flux, unitPreferences)}`;
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
