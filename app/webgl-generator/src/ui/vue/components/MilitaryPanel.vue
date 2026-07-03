@@ -945,6 +945,21 @@ function battleEventExportScopeLabel(scope) {
   return battleEventExportScopeOptions.find(option => option.value === scope)?.label || "全部事件";
 }
 
+function battleEventExportFilters() {
+  return {
+    type: eventTypeFilter.value,
+    typeLabel: selectOptionLabel(battleEventFilterTypeOptions, eventTypeFilter.value),
+    outcome: eventOutcomeFilter.value,
+    outcomeLabel: selectOptionLabel(battleEventFilterOutcomeOptions, eventOutcomeFilter.value),
+    applyStatus: eventApplyFilter.value,
+    applyStatusLabel: selectOptionLabel(battleEventApplyFilterOptions, eventApplyFilter.value)
+  };
+}
+
+function selectOptionLabel(options, value) {
+  return options.find(option => String(option.value) === String(value))?.label || String(value || "");
+}
+
 function battleEventExportScopeSuffix(scope) {
   if (scope === "filtered") return "filtered";
   if (scope === "selected") return "selected";
@@ -1097,6 +1112,7 @@ function exportBattleEvents() {
     seed,
     scope,
     scopeLabel: battleEventExportScopeLabel(scope),
+    filters: battleEventExportFilters(),
     exportedAt: new Date().toISOString(),
     count: events.length,
     summary: buildBattleEventChainSummary(events),

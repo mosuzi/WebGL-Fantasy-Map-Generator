@@ -16035,3 +16035,28 @@ full 矩阵结果：
 - Playwright + Chrome 构建产物烟测通过：给同一军团注入 `7` 条事件后，战报链摘要显示 `链路 7 条 / 已应用 4 条 / 未应用 3 条 / 累计损耗 160 / 最近 袭扰 / 损耗`。
 - 同次烟测确认战斗事件 JSON 导出的 `summary.pending = 3`、`summary.applied = 4`，战报链摘要无横向溢出，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1379.7ms`，纯生成 `683.2ms`，WebGL 加载 `387.4ms`，UI slack `309.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 121.4ms`，最慢加载阶段为 `构建标签 60.2ms`，`line-vertices = 46ms`，`fit-draw = 4.7ms`。
+
+### 战斗事件 JSON 筛选上下文
+
+背景：
+
+- 战斗事件 JSON 已支持按 `全部事件 / 当前军团 / 当前筛选` 范围导出。
+- 当范围为 `当前筛选` 时，导出文件只有 `scopeLabel`，没有记录当时的类型、结果和结算筛选条件，后续复盘会丢失上下文。
+
+修正：
+
+- `exportBattleEvents()` 新增 `filters` 对象。
+- `filters` 记录 `type / typeLabel`、`outcome / outcomeLabel`、`applyStatus / applyStatusLabel`。
+- 筛选标签复用现有下拉选项，避免导出文案和面板显示不一致。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 252 项。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `30.27KB / gzip 9.60KB`，主入口约 `768.43KB / gzip 232.23KB`。
+- Playwright + Chrome 构建产物烟测通过：设置 `类型 = 袭扰`、`结果 = 相持`、`结算 = 未应用`、`导出 = 当前筛选` 后下载战斗事件 JSON；导出 `filters` 为 `raid / 袭扰`、`draw / 相持`、`pending / 未应用`。
+- 同次烟测确认 JSON `count = 2`、`events.length = 2`，所有导出事件均为未应用的袭扰相持事件，`summary.total = 2`、`summary.pending = 2`、`summary.applied = 0`，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1544.4ms`，纯生成 `783.3ms`，WebGL 加载 `392.3ms`，UI slack `368.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 142.9ms`，最慢加载阶段为 `构建线层顶点 63.7ms`，`fit-draw = 2.2ms`。
