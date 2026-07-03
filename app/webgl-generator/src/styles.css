@@ -4502,6 +4502,96 @@ input.ui-switch-native {
   margin: 8px 0 10px;
 }
 
+.namebase-import-preview {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 10px;
+  padding: 10px;
+  border: 1px solid rgba(215, 168, 79, 0.32);
+  border-radius: 6px;
+  background: rgba(43, 36, 21, 0.45);
+  color: #dce7eb;
+  font-size: 12px;
+}
+
+.namebase-import-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.namebase-import-preview-header strong {
+  color: #ffe0a1;
+}
+
+.namebase-import-preview-header span {
+  color: #aab8bf;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.namebase-import-preview-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.namebase-import-preview-metrics div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 6px;
+  background: rgba(16, 23, 27, 0.62);
+}
+
+.namebase-import-preview-metrics span {
+  color: #80919c;
+  font-size: 11px;
+}
+
+.namebase-import-preview-metrics strong {
+  color: #edf4f6;
+  overflow-wrap: anywhere;
+}
+
+.namebase-import-preview-note {
+  margin: 0;
+  color: #cbd7dc;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.namebase-import-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.namebase-import-preview-list span {
+  max-width: 100%;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(16, 23, 27, 0.65);
+  color: #dce7eb;
+  overflow-wrap: anywhere;
+}
+
+.namebase-import-preview-list span.conflict {
+  border-color: rgba(215, 168, 79, 0.45);
+  color: #ffe0a1;
+}
+
+.namebase-import-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .namebase-source-editor {
   display: grid;
   gap: 8px;

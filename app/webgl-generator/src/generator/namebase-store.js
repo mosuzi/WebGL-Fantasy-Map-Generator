@@ -73,6 +73,59 @@ export function importNamebaseDocument(map, document, {filename = "", mode = "ap
   };
 }
 
+export function createNamebaseImportPreview(map, document, {filename = "", mode = "append"} = {}) {
+  if (!map) throw new Error("当前没有可导入名称库的地图");
+  const userBases = Array.isArray(map.namebases?.bases) ? map.namebases.bases : [];
+  const existingNameKeys = new Set(userBases.map(base => normalizeNamebaseKey(base?.name)).filter(Boolean));
+  const existingSourceKeys = new Set(userBases.flatMap(base => [
+    normalizeNamebaseKey(base?.id),
+    normalizeNamebaseKey(base?.sourceId)
+  ]).filter(Boolean));
+  const nameCounts = new Map();
+  const candidates = document.bases.map((base, index) => {
+    const values = normalizeSourceValues(base?.source);
+    const name = base?.name ? String(base.name) : `导入名称库 ${index + 1}`;
+    const sourceKey = normalizeNamebaseKey(base?.id || base?.sourceId);
+    const nameKey = normalizeNamebaseKey(name);
+    if (nameKey) nameCounts.set(nameKey, (nameCounts.get(nameKey) || 0) + 1);
+    return {
+      index,
+      valid: values.length > 0,
+      name,
+      id: String(base?.id || ""),
+      kind: base?.kind || "generic",
+      category: base?.category || "用户名称库",
+      builtin: base?.builtin === true,
+      samples: values.length,
+      duplicateSamples: Math.max(0, values.length - new Set(values).size),
+      conflictsExistingName: existingNameKeys.has(nameKey),
+      conflictsExistingSource: sourceKey ? existingSourceKeys.has(sourceKey) : false
+    };
+  });
+  const validCandidates = candidates.filter(item => item.valid);
+  const repeatedNames = validCandidates.filter(item => (nameCounts.get(normalizeNamebaseKey(item.name)) || 0) > 1);
+  return {
+    filename: filename || "未命名文件",
+    mode: mode === "replace" ? "replace" : "append",
+    total: document.bases.length,
+    valid: validCandidates.length,
+    skipped: candidates.length - validCandidates.length,
+    samples: validCandidates.reduce((sum, item) => sum + item.samples, 0),
+    duplicateSamples: validCandidates.reduce((sum, item) => sum + item.duplicateSamples, 0),
+    builtinRecords: validCandidates.filter(item => item.builtin).length,
+    existingUserBases: userBases.length,
+    replaceCount: mode === "replace" ? userBases.length : 0,
+    existingConflicts: validCandidates.filter(item => item.conflictsExistingName || item.conflictsExistingSource).length,
+    repeatedNames: repeatedNames.length,
+    examples: validCandidates.slice(0, 6).map(item => ({
+      name: item.name,
+      samples: item.samples,
+      category: item.category,
+      conflict: item.conflictsExistingName || item.conflictsExistingSource
+    }))
+  };
+}
+
 export function copyBuiltinNamebaseToUser(map, id) {
   if (!map) throw new Error("当前没有可复制名称库的地图");
   const sourceBase = getBuiltinNamebaseSummaries({includeSource: true}).find(base => base.id === id);
@@ -404,4 +457,8 @@ function sanitizeId(value) {
     .replace(/[^a-z0-9\u4e00-\u9fa5_-]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 72) || "namebase";
+}
+
+function normalizeNamebaseKey(value) {
+  return String(value || "").trim().toLowerCase();
 }

@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, createUserNamebase, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument, renameUserNamebase, updateUserNamebaseSource} from "../generator/namebase-store.js";
+import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, createNamebaseImportPreview, createUserNamebase, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument, renameUserNamebase, updateUserNamebaseSource} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -1073,6 +1073,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.labelNaming = labelNamingPanel;
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
     onExport: () => exportNamebases(state, documentRef),
+    onImportPreview: (file, mode) => previewNamebaseImport(state, documentRef, file, mode),
     onImport: (file, mode) => importNamebases(state, documentRef, file, mode),
     onCreateUser: () => createManualNamebase(state, documentRef),
     onCopyBuiltin: row => copyBuiltinNamebase(state, documentRef, row),
@@ -1981,8 +1982,27 @@ async function importNamebases(state, documentRef, file, mode = "append") {
     state.panels.namebase.update(state.map);
     const replacedText = result.replaced ? `，已替换原用户库 ${result.replaced} 个` : "";
     setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池${replacedText}，当前用户库 ${result.total} 个。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导入失败", error);
+    return null;
+  }
+}
+
+async function previewNamebaseImport(state, documentRef, file, mode = "append") {
+  if (!file) return null;
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在读取名称库导入预览...");
+    const document = parseNamebaseDocument(await file.text());
+    const preview = createNamebaseImportPreview(state.map, document, {filename: file.name, mode});
+    const replaceText = preview.replaceCount ? `，确认后会替换 ${preview.replaceCount} 个用户库` : "";
+    const conflictText = preview.existingConflicts ? `，其中 ${preview.existingConflicts} 个可能与现有用户库重名或同源` : "";
+    setFileOperationStatus(documentRef, `已读取名称库预览：可导入 ${preview.valid} 个词池${replaceText}${conflictText}。`);
+    return preview;
+  } catch (error) {
+    reportFileOperationError(documentRef, "名称库导入预览失败", error);
+    return null;
   }
 }
 

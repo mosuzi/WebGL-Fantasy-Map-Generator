@@ -16,6 +16,28 @@
     @update:model-value="callbacks.onImportMode"
   />
 
+  <div v-if="state.importPreview" class="namebase-import-preview">
+    <div class="namebase-import-preview-header">
+      <strong>导入预览</strong>
+      <span>{{ state.importPreview.filename }}</span>
+    </div>
+    <UiMetricGrid :metrics="importPreviewMetrics" class-name="namebase-import-preview-metrics" />
+    <p class="namebase-import-preview-note">{{ importPreviewNote }}</p>
+    <div v-if="state.importPreview.examples?.length" class="namebase-import-preview-list">
+      <span
+        v-for="item in state.importPreview.examples"
+        :key="`${item.name}-${item.samples}`"
+        :class="{conflict: item.conflict}"
+      >
+        {{ item.name }} · {{ formatNumber(item.samples) }}
+      </span>
+    </div>
+    <div class="namebase-import-preview-actions">
+      <UiButton variant="secondary" @click="callbacks.onCancelImport">取消</UiButton>
+      <UiButton @click="callbacks.onConfirmImport">确认导入</UiButton>
+    </div>
+  </div>
+
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
@@ -143,6 +165,28 @@ const summaryMetrics = computed(() => [
   {label: "唯一样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.uniqueSamples, 0))},
   {label: "重复", value: formatNumber(rows.value.reduce((sum, row) => sum + row.duplicateSamples, 0))}
 ]);
+const importPreviewMetrics = computed(() => {
+  const preview = props.state.importPreview;
+  if (!preview) return [];
+  return [
+    {label: "可导入", value: formatNumber(preview.valid)},
+    {label: "样本", value: formatNumber(preview.samples)},
+    {label: "将替换", value: formatNumber(preview.replaceCount)},
+    {label: "可能重名", value: formatNumber(preview.existingConflicts)}
+  ];
+});
+const importPreviewNote = computed(() => {
+  const preview = props.state.importPreview;
+  if (!preview) return "";
+  const notes = [];
+  if (preview.mode === "replace" && preview.replaceCount) notes.push(`确认后会先替换当前 ${formatNumber(preview.replaceCount)} 个用户库`);
+  if (preview.skipped) notes.push(`${formatNumber(preview.skipped)} 个空词池会跳过`);
+  if (preview.builtinRecords) notes.push(`${formatNumber(preview.builtinRecords)} 个内置词池会作为用户库导入`);
+  if (preview.existingConflicts) notes.push(`${formatNumber(preview.existingConflicts)} 个词池可能与现有用户库重名或同源，导入后会并存为新用户库`);
+  if (preview.repeatedNames) notes.push(`文件内有 ${formatNumber(preview.repeatedNames)} 个重名词池`);
+  if (!notes.length) notes.push("确认后只写入用户名称库，不会改写当前地图对象名称");
+  return notes.join("；");
+});
 const detailRows = computed(() => selected.value ? [
   {label: "分类", value: selected.value.category},
   {label: "来源", value: selected.value.origin},
@@ -214,7 +258,10 @@ function formatNumber(value) {
 
 function handleImportFile(event) {
   const file = event.target.files?.[0];
-  if (file) props.callbacks.onImport?.(file);
+  if (file) {
+    if (props.callbacks.onImportPreview) props.callbacks.onImportPreview(file);
+    else props.callbacks.onImport?.(file);
+  }
   event.target.value = "";
 }
 

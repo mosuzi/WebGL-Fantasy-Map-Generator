@@ -3,12 +3,14 @@ import {getNamebaseSummariesForMap} from "../../generator/namebase-store.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 
 export function createNamebasePanel(documentRef, manager, callbacks = {}) {
+  let pendingImportFile = null;
   const panelState = shallowReactive({
     open: false,
     map: null,
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     filter: "",
     importMode: "append",
+    importPreview: null,
     sortKey: "category",
     sortDir: "asc",
     selectedNamebaseId: null,
@@ -32,8 +34,31 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onExport: () => callbacks.onExport?.(),
     onImportMode: mode => {
       panelState.importMode = mode;
+      pendingImportFile = null;
+      clearImportPreview(panelState);
     },
-    onImport: file => callbacks.onImport?.(file, panelState.importMode),
+    onImportPreview: async file => {
+      const preview = await callbacks.onImportPreview?.(file, panelState.importMode);
+      if (!preview) {
+        pendingImportFile = null;
+        panelState.importPreview = null;
+        return;
+      }
+      pendingImportFile = file;
+      panelState.importPreview = preview;
+    },
+    onConfirmImport: async () => {
+      if (!pendingImportFile) return;
+      const result = await callbacks.onImport?.(pendingImportFile, panelState.importMode);
+      if (result) {
+        pendingImportFile = null;
+        clearImportPreview(panelState);
+      }
+    },
+    onCancelImport: () => {
+      pendingImportFile = null;
+      clearImportPreview(panelState);
+    },
     onCreateUser: () => {
       const result = callbacks.onCreateUser?.();
       if (result?.id) panelState.selectedNamebaseId = result.id;
@@ -72,6 +97,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
 
   return {
     open(map = null) {
+      pendingImportFile = null;
+      clearImportPreview(panelState);
       panelState.map = map;
       refreshSummaries(panelState);
       panelState.open = true;
@@ -80,6 +107,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
       lazyPanel.load();
     },
     update(map = null) {
+      pendingImportFile = null;
+      clearImportPreview(panelState);
       panelState.map = map;
       refreshSummaries(panelState);
       panelState.version++;
@@ -98,4 +127,8 @@ function refreshSummaries(panelState) {
   if (!panelState.selectedNamebaseId || !panelState.summaries.some(row => row.id === panelState.selectedNamebaseId)) {
     panelState.selectedNamebaseId = panelState.summaries[0]?.id || null;
   }
+}
+
+function clearImportPreview(panelState) {
+  panelState.importPreview = null;
 }
