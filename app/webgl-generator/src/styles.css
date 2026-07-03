@@ -4945,6 +4945,116 @@ input.ui-switch-native {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.military-overview {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(42, 63, 69, 0.78), rgba(18, 25, 29, 0.88)),
+    #12191d;
+}
+
+.military-overview-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.military-overview-heading div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.military-overview-heading strong {
+  overflow: hidden;
+  color: #f6fbfc;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.military-overview-heading span {
+  color: #9fb0ba;
+  font-size: 12px;
+}
+
+.military-status-pill {
+  flex: 0 0 auto;
+  border: 1px solid rgba(240, 206, 124, 0.42);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(240, 206, 124, 0.12);
+  color: #f6d78c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.military-overview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.military-overview-stats span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.11);
+  border-radius: 6px;
+  padding: 7px;
+  background: rgba(7, 12, 15, 0.38);
+}
+
+.military-overview-stats small {
+  color: #8ca0aa;
+  font-size: 11px;
+}
+
+.military-overview-stats b {
+  overflow: hidden;
+  color: #edf4f6;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.military-unit-bars {
+  display: grid;
+  gap: 7px;
+}
+
+.military-unit-bar {
+  display: grid;
+  gap: 4px;
+}
+
+.military-unit-bar div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #d8e5e8;
+  font-size: 12px;
+}
+
+.military-unit-bar small {
+  color: #9fb0ba;
+}
+
+.military-unit-bar i {
+  display: block;
+  height: 5px;
+  min-width: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #d9b45f, #7fb3a4);
+  box-shadow: 0 0 10px rgba(127, 179, 164, 0.18);
+}
+
 .military-ratio-panel {
   display: grid;
   gap: 8px;

@@ -29,6 +29,39 @@
     @locate="callbacks.onLocate"
   />
 
+  <section v-if="selected" class="military-overview" aria-label="选中军团概要">
+    <div class="military-overview-heading">
+      <div>
+        <strong>{{ selected.name }}</strong>
+        <span>{{ selected.stateName }} / {{ selected.orderLabel }}</span>
+      </div>
+      <span class="military-status-pill">{{ selected.statusLabel }}</span>
+    </div>
+    <div class="military-overview-stats">
+      <span>
+        <small>兵力</small>
+        <b>{{ formatNumber(selected.troops) }}</b>
+      </span>
+      <span>
+        <small>主兵种</small>
+        <b>{{ selected.dominantUnitLabel }}</b>
+      </span>
+      <span>
+        <small>驻扎适宜</small>
+        <b>{{ Math.round(selected.suitabilityScore * 100) }}%</b>
+      </span>
+    </div>
+    <div class="military-unit-bars">
+      <div v-for="unit in selectedUnitBreakdown" :key="unit.name" class="military-unit-bar">
+        <div>
+          <span>{{ unit.label }}</span>
+          <small>{{ unit.valueLabel }} / {{ unit.percent }}%</small>
+        </div>
+        <i :style="{width: `${unit.percent}%`}"></i>
+      </div>
+    </div>
+  </section>
+
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
 
   <UiActionDock v-if="selectedState" v-model:active="activeAction" :actions="militaryActions">
@@ -126,6 +159,7 @@ const stateOptions = computed(() => [
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedRegimentId) || visibleRows.value[0] || null);
+const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const selectedState = computed(() => selected.value ? metrics.value.states.find(state => state.id === selected.value.stateId) : metrics.value.states.find(state => state.id === Number(props.state.selectedStateId)) || null);
 const ratioTotalLabel = computed(() => `${Math.round(Object.values(ratioDraft).reduce((sum, value) => sum + Number(value || 0), 0))}%`);
 const militaryActions = Object.freeze([
@@ -261,6 +295,24 @@ function unitSummary(units = {}) {
     })
     .filter(Boolean)
     .join(" / ") || "无";
+}
+
+function unitBreakdown(regiment) {
+  if (!regiment) return [];
+  const total = Math.max(1, Number(regiment.troops || 0));
+  return unitDefinitions
+    .map(unit => {
+      const value = Number(regiment.units?.[unit.name] || 0);
+      const percent = Math.max(1, Math.round((value / total) * 100));
+      return value > 0 ? {
+        name: unit.name,
+        label: unit.label,
+        value,
+        valueLabel: formatNumber(value),
+        percent: Math.min(100, percent)
+      } : null;
+    })
+    .filter(Boolean);
 }
 
 function unitLabel(unitName) {

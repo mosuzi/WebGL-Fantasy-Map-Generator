@@ -15275,3 +15275,28 @@ full 矩阵结果：
 - 同次烟测中点击“下一页”后摘要为 `第 2/10 页`，上一页按钮可用，颜色集合发生变化；点击“加入显示色”后主色板为 `28` 项、手动项为 `12`，待处理摘要变为 `第 2/9 页，显示 12 色 / 共 97 桶`。
 - 地图 checksum 保持 `61c027de`，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1519.1ms`，纯生成 `797.1ms`，WebGL 加载 `422.3ms`，UI slack `299.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 152.1ms`，最慢加载阶段为 `构建视觉 cell mesh 76.4ms`，`fit-draw = 3.2ms`，`glError = 0`。
+
+### 军事单位编辑面板展示层第一刀
+
+背景：
+
+- 用户指出军事单位编辑面板目前非常粗糙，样式完全不对。
+- 当前军事管理面板已有筛选、排序、定位、导出和兵种比例调整，但主要信息仍以表格和详情字段堆叠呈现，不像正式对象编辑面板。
+
+修正：
+
+- 在军团表格和详情之间新增选中军团概要区。
+- 概要区显示军团名、国家、命令、态势标签、兵力、主兵种和驻扎适宜度。
+- 基于当前军团 `units` 生成兵种构成条，突出具体军队组成。
+- 保留原有表格、导出、定位和“兵种比例”二级面板 API，不改军事生成和编辑命令。
+
+文档：
+
+- 更新 `docs/current-plan.md`，把军事面板整改第一刀标记为已完成，并保留后续国名方位和 README 刷新计划。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`MilitaryPanel` 懒加载 chunk 约 `9.95KB / gzip 3.93KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：默认地图打开军事管理后，概要标题为 `1（澜镇）军团`、态势为 `驻防中`、概要指标 `3` 项、兵种条 `4` 条、表格 `111` 行。
+- 同次烟测中点击“兵种比例”后，二级面板仍显示国家 `赤原国`、滑条 `5` 个和应用按钮；地图 checksum 保持 `30370b34`，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1502.2ms`，纯生成 `757.5ms`，WebGL 加载 `410.2ms`，UI slack `334.5ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 131.9ms`，最慢加载阶段为 `构建视觉 cell mesh 61.7ms`，`fit-draw = 3.2ms`，`glError = 0`。
