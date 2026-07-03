@@ -4784,6 +4784,8 @@ input.ui-switch-native {
 
 .government-panel-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   justify-content: flex-end;
   margin-top: 8px;
 }

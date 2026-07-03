@@ -57,6 +57,7 @@
   />
 
   <div class="government-panel-actions">
+    <UiButton id="government-open-diplomacy" variant="secondary" :disabled="!selectedState" @click="callbacks.onOpenDiplomacy?.(selectedState)">外交视角</UiButton>
     <UiButton variant="secondary" :disabled="!selectedState" @click="callbacks.onOpenState?.(selectedState)">打开国家编辑</UiButton>
   </div>
 </template>

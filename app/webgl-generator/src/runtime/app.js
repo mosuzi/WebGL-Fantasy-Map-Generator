@@ -359,6 +359,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       setStatePanelTarget(state, object.id);
       state.panels.state.open(state.map, state.editHistory.getStats());
     },
+    onOpenDiplomacy: object => {
+      selectionStore.setSelection({object});
+      setStatePanelTarget(state, object.id);
+      setDiplomacyThemeSubject(state, documentRef, object.id);
+      state.panels.diplomacy.open(state.map, state.selection, state.editHistory.getStats());
+      updateDiplomacyPanel(state);
+    },
     onBatchGovernmentChange: (stateIds, governmentKey) => {
       const context = {map: state.map};
       const command = createSetStatesGovernmentBatchCommand(stateIds, governmentKey);

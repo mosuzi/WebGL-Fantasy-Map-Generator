@@ -41,6 +41,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     },
     onLocateState: row => callbacks.onLocateState?.(stateObject(row)),
     onOpenState: row => callbacks.onOpenState?.(stateObject(row)),
+    onOpenDiplomacy: row => callbacks.onOpenDiplomacy?.(stateObject(row)),
     onBatchGovernmentChange: (stateIds, governmentKey) => callbacks.onBatchGovernmentChange?.(stateIds, governmentKey)
   };
 

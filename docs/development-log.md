@@ -16639,3 +16639,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `780.69KB / gzip 235.43KB`，`GovernmentPanel` chunk 约 `13.61KB / gzip 4.75KB`。
 - 构建产物浏览器烟测通过：打开 `政体管理` 后详情区显示 `国力 / 资源潜力 / 贸易修正 / 战争 / 宿敌 / 盟友 / 附庸`；JSON 政体分组包含 `diplomacy` 与 `tradeModifierAverage`，国家明细包含 `diplomacySummary` 与 `governmentTradeModifier`；CSV 表头包含 `国力 / 资源潜力 / 贸易修正 / 战争`；控制区无横向溢出，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1410.6ms`，纯生成 `718.2ms`，WebGL 加载 `375.3ms`，UI slack `317.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 124.5ms`，最慢加载阶段为 `构建视觉 cell mesh 53.8ms`。
+
+### 政体外交定位第一刀
+
+背景：
+
+- 政体管理已经能汇总经济和外交静态摘要，但从政体分组回到外交专题仍需要用户手动打开外交面板并重新选择主体国家。
+- 用户明确校准：无需做动态军事系统。后续军事方向只保留静态面板、态势线观感和导出可读性收尾。
+- 本轮只做跨面板只读定位，不修改外交关系、不重生成、不触发军事派生。
+
+修正：
+
+- `政体管理` 国家列表下方新增“外交视角”按钮。
+- 点击后会把当前政体分组中选中的国家设为当前选择对象，打开 `外交管理`，并把外交专题着色主体切到该国家。
+- 该入口复用现有 `setDiplomacyThemeSubject()` 和外交面板状态，不新增任何战争行动链路、战斗模拟或自动战役阶段。
+- `docs/current-plan.md` 同步收窄军事后续范围，明确不再继续动态军事系统。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `780.88KB / gzip 235.46KB`，`GovernmentPanel` chunk 约 `13.81KB / gzip 4.78KB`。
+- 构建产物浏览器烟测通过：打开 `政体管理` 后当前国家为 `state #9`，点击“外交视角”后 `外交管理` 打开，`diplomacy-subject-select = 9`，当前选择对象为 `state #9`，专题色切到 `diplomacy`，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1474.6ms`，纯生成 `816.8ms`，WebGL 加载 `363.4ms`，UI slack `294.4ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 158.1ms`，最慢加载阶段为 `构建标签 46.4ms`。
