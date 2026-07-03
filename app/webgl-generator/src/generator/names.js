@@ -570,11 +570,11 @@ function resolveNamebaseSources(namebases) {
   const bindings = namebases?.bindings && typeof namebases.bindings === "object" ? namebases.bindings : {};
   const globalBindings = bindings.global && typeof bindings.global === "object" ? bindings.global : {};
   const cultureBindings = bindings.cultures && typeof bindings.cultures === "object" ? bindings.cultures : {};
-  const rows = new Map(Object.entries(BUILTIN_NAMEBASE_SOURCES).map(([id, source]) => [id, normalizeNamebaseSourceValues(source)]));
+  const rows = new Map(Object.entries(BUILTIN_NAMEBASE_SOURCES).map(([id, source]) => [id, parseNamebaseWeightedSamples(source)]));
   for (const base of namebases?.bases || []) {
     const id = String(base?.id || "").trim();
     if (!id) continue;
-    const source = normalizeNamebaseSourceValues(base.source);
+    const source = parseNamebaseWeightedSamples(base.source);
     if (source.length) rows.set(id, source);
   }
   const stateRootId = String(globalBindings.stateRoot || "").trim();
@@ -615,21 +615,63 @@ function getValidCultureNamebaseUsage(cultureBindings, rows) {
   return result;
 }
 
-function normalizeNamebaseSourceValues(source) {
+export function parseNamebaseWeightedSamples(source, {dedupe = true} = {}) {
   const values = Array.isArray(source) ? source : String(source || "").split(/[,，\n\r]+/u);
-  const result = [];
-  const seen = new Set();
+  const records = [];
   for (const value of values) {
-    const normalized = String(value || "").trim().replace(/\s+/gu, "");
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    result.push(normalized);
+    const record = parseNamebaseWeightedSample(value);
+    if (!record.value) continue;
+    records.push(record);
   }
-  return result;
+  if (!dedupe) return records;
+
+  const merged = new Map();
+  for (const record of records) {
+    const existing = merged.get(record.value);
+    if (existing) existing.weight += record.weight;
+    else merged.set(record.value, {...record});
+  }
+  return [...merged.values()].map(record => ({
+    ...record,
+    weight: clampNamebaseWeight(record.weight)
+  }));
+}
+
+export function formatNamebaseWeightedSample(record) {
+  const value = String(record?.value || "").trim().replace(/\s+/gu, "");
+  if (!value) return "";
+  const weight = clampNamebaseWeight(record?.weight ?? 1);
+  return weight === 1 ? value : `${value}|${formatNamebaseWeight(weight)}`;
+}
+
+function parseNamebaseWeightedSample(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return {value: "", weight: 1};
+  const match = raw.match(/^(.+?)(?:\s*(?:\||\*|×|x)\s*(\d+(?:\.\d+)?))$/u);
+  const name = (match ? match[1] : raw).trim().replace(/\s+/gu, "");
+  const weight = match ? clampNamebaseWeight(Number(match[2])) : 1;
+  return {value: name, weight};
+}
+
+function clampNamebaseWeight(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Math.max(0.1, Math.min(20, Math.round(number * 10) / 10));
+}
+
+function formatNamebaseWeight(value) {
+  return String(clampNamebaseWeight(value)).replace(/\.0$/u, "");
 }
 
 function pickNamebaseValue(rng, source) {
-  return source.length ? source[Math.floor(rng.next() * source.length)] || source[0] || "" : "";
+  if (!source.length) return "";
+  const totalWeight = source.reduce((sum, item) => sum + Math.max(0.1, Number(item?.weight ?? 1) || 1), 0);
+  let roll = rng.next() * totalWeight;
+  for (const item of source) {
+    roll -= Math.max(0.1, Number(item?.weight ?? 1) || 1);
+    if (roll <= 0) return item?.value || item || "";
+  }
+  return source[0]?.value || source[0] || "";
 }
 
 function makeBoundPlaceName(rng, source, options, suffixes) {
@@ -862,18 +904,21 @@ export function summarizeNamebaseSource(source, {includeSource = false} = {}) {
 }
 
 function analyzeNamebase(id, name, kind, category, values, note = "", {includeSource = false} = {}) {
-  const normalizedValues = values.map(value => String(value || "").trim()).filter(Boolean);
+  const records = parseNamebaseWeightedSamples(values, {dedupe: false});
+  const normalizedValues = records.map(record => record.value);
   const counts = new Map();
   for (const value of normalizedValues) counts.set(value, (counts.get(value) || 0) + 1);
   const uniqueValues = [...counts.keys()];
   const duplicateValues = [...counts.entries()].filter(([, count]) => count > 1).map(([value]) => value);
   const lengths = uniqueValues.map(value => Array.from(value).length);
+  const weightedSamples = Math.round(records.reduce((sum, record) => sum + record.weight, 0) * 10) / 10;
   const summary = {
     id,
     name,
     kind,
     category,
     samples: normalizedValues.length,
+    weightedSamples,
     uniqueSamples: uniqueValues.length,
     duplicateSamples: normalizedValues.length - uniqueValues.length,
     duplicateNames: duplicateValues.slice(0, 12),
@@ -882,7 +927,7 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
     examples: uniqueValues.slice(0, 16),
     note
   };
-  if (includeSource) summary.source = [...normalizedValues];
+  if (includeSource) summary.source = records.map(formatNamebaseWeightedSample).filter(Boolean);
   return summary;
 }
 

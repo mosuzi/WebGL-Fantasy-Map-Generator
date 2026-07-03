@@ -1,4 +1,4 @@
-import {getBuiltinNamebaseSummaries, summarizeNamebaseSource} from "./names.js";
+import {formatNamebaseWeightedSample, getBuiltinNamebaseSummaries, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
 
 export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
 export const NAMEBASE_DOCUMENT_VERSION = 1;
@@ -343,17 +343,17 @@ export function getNamebaseBindingStatus(map) {
 }
 
 export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", salt = 0} = {}) {
-  const values = [...new Set(normalizeSourceValues(source))];
-  if (!values.length) return [];
-  const chain = createPreviewChain(values);
-  const rng = createPreviewRng(`${seed}|${salt}|${values.join("|")}`);
-  const maxLength = values.reduce((max, value) => Math.max(max, Math.min(12, Array.from(value).length)), 1);
+  const records = parseNamebaseWeightedSamples(source);
+  if (!records.length) return [];
+  const chain = createPreviewChain(records);
+  const rng = createPreviewRng(`${seed}|${salt}|${records.map(formatNamebaseWeightedSample).join("|")}`);
+  const maxLength = records.reduce((max, record) => Math.max(max, Math.min(12, Array.from(record.value).length)), 1);
   const result = [];
   const seen = new Set();
   const maxAttempts = Math.max(80, count * 24);
   for (let attempt = 0; result.length < count && attempt < maxAttempts; attempt += 1) {
     const candidate = attempt % 4 === 3
-      ? recombinePreviewName(values, rng)
+      ? recombinePreviewName(records, rng)
       : generatePreviewName(chain, rng);
     const normalized = normalizePreviewName(candidate, maxLength);
     if (!normalized || seen.has(normalized)) continue;
@@ -361,9 +361,9 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
     result.push(normalized);
   }
 
-  for (const value of values) {
+  for (const record of records) {
     if (result.length >= count) break;
-    const normalized = normalizePreviewName(value, maxLength);
+    const normalized = normalizePreviewName(record.value, maxLength);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     result.push(normalized);
@@ -434,28 +434,32 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
 }
 
 function normalizeSourceValues(source) {
-  const values = Array.isArray(source) ? source : String(source || "").split(/[,，\n\r]+/u);
-  return values.map(value => String(value || "").trim()).filter(Boolean);
+  return parseNamebaseWeightedSamples(source, {dedupe: false})
+    .map(formatNamebaseWeightedSample)
+    .filter(Boolean);
 }
 
-function createPreviewChain(values) {
+function createPreviewChain(records) {
   const starts = [];
   const startsByLength = new Map();
   const lengths = [];
   const transitions = new Map();
-  for (const value of values) {
-    const chars = Array.from(value).filter(char => !/\s/u.test(char));
+  for (const record of records) {
+    const chars = Array.from(record.value).filter(char => !/\s/u.test(char));
     if (!chars.length) continue;
     const length = Math.max(1, Math.min(chars.length, 8));
-    starts.push(chars[0]);
-    lengths.push(length);
-    if (!startsByLength.has(length)) startsByLength.set(length, []);
-    startsByLength.get(length).push(chars[0]);
-    for (let index = 0; index < chars.length - 1; index += 1) {
-      const current = chars[index];
-      const next = chars[index + 1];
-      if (!transitions.has(current)) transitions.set(current, []);
-      transitions.get(current).push(next);
+    const repeats = previewWeightRepeats(record.weight);
+    for (let repeat = 0; repeat < repeats; repeat += 1) {
+      starts.push(chars[0]);
+      lengths.push(length);
+      if (!startsByLength.has(length)) startsByLength.set(length, []);
+      startsByLength.get(length).push(chars[0]);
+      for (let index = 0; index < chars.length - 1; index += 1) {
+        const current = chars[index];
+        const next = chars[index + 1];
+        if (!transitions.has(current)) transitions.set(current, []);
+        transitions.get(current).push(next);
+      }
     }
   }
   return {starts, startsByLength, lengths, transitions};
@@ -473,10 +477,10 @@ function generatePreviewName(chain, rng) {
   return chars.join("");
 }
 
-function recombinePreviewName(values, rng) {
-  if (values.length < 2) return values[0] || "";
-  const left = Array.from(pickPreviewValue(values, rng));
-  const right = Array.from(pickPreviewValue(values, rng));
+function recombinePreviewName(records, rng) {
+  if (records.length < 2) return records[0]?.value || "";
+  const left = Array.from(pickPreviewRecord(records, rng));
+  const right = Array.from(pickPreviewRecord(records, rng));
   if (!left.length || !right.length) return "";
   const leftCut = Math.max(1, Math.ceil(left.length * (0.35 + rng() * 0.45)));
   const rightStart = Math.max(0, Math.floor(right.length * rng() * 0.65));
@@ -499,6 +503,20 @@ function hasAdjacentRepeatedChar(chars) {
 function pickPreviewValue(values, rng) {
   if (!values.length) return "";
   return values[Math.floor(rng() * values.length)] || values[0] || "";
+}
+
+function pickPreviewRecord(records, rng) {
+  const totalWeight = records.reduce((sum, record) => sum + Math.max(0.1, Number(record.weight || 1)), 0);
+  let roll = rng() * totalWeight;
+  for (const record of records) {
+    roll -= Math.max(0.1, Number(record.weight || 1));
+    if (roll <= 0) return record.value;
+  }
+  return records[0]?.value || "";
+}
+
+function previewWeightRepeats(weight) {
+  return Math.max(1, Math.min(24, Math.round((Number(weight) || 1) * 2)));
 }
 
 function createPreviewRng(seed) {

@@ -17467,3 +17467,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `819.32KB / gzip 247.18KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：新建 `user-namebase-1` 后 localStorage 写入该库，把全局 `stateRoot` 绑定到它后 localStorage 同步更新；删除当前地图 `namebases` 后重新生成，新地图仍包含 `user-namebase-1`，绑定仍为 `stateRoot=user-namebase-1`，生成日志显示 `namebase context: bases=1, stateRoot=user-namebase-1`，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1726.9ms`，纯生成 `821ms`，WebGL 加载 `579.9ms`，最慢加载阶段为“构建标签” `80ms`，`drawMs = 0.1ms`，`glError = 0`。
+
+### 名称库样本权重第一刀
+
+背景：
+
+- 名称库已经能导入、编辑、绑定、继承和保存本地偏好，但同一用户库内的样本此前仍是均匀抽样。
+- `docs/task-notes/namebase-generation-binding-plan.md` 中的生成接入阶段允许先用加权抽样，不急于复刻完整 Markov chain。
+- 本轮只做样本权重，不做自动批量重命名，也不进入动态军事方向。
+
+修正：
+
+- `names.js` 新增权重样本解析，支持 `名称|3`、`名称*3`、`名称×3` 和重复同名样本；同名样本会合并权重，权重限制在 `0.1-20`。
+- 绑定命中的国家根名、地名和水文用户库会按合并后的权重抽样；未写权重的旧样本继续按 `1` 处理。
+- 名称库导入、导出、本地偏好和生成快照会保留规范化后的权重样本。
+- 生成预览的轻量字符链和词根重组会读取样本权重。
+- 名称库面板详情新增“样本权重”，样本编辑区补 `名称|3` 语法说明。
+
+验证：
+
+- Node 小测通过：`青川|5 + 青川|2` 会合并为 `青川` 权重 `7`，生成预览可读取 `青川|8 / 云泽|1 / 鹿原|1`。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `819.63KB / gzip 247.24KB`，`NamebasePanel` chunk 约 `12.82KB / gzip 4.70KB`，`names` chunk 约 `21.76KB / gzip 9.23KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：新建用户库并把样本改为 `青川|9 / 云泽 / 鹿原` 后，面板详情显示“样本权重 11”，生成预览包含高权重样本，地图数据和 `localStorage["webgl-generator-namebase-preferences-v1"]` 均保留 `青川|9`，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1884.8ms`，纯生成 `1021.3ms`，WebGL 加载 `480.7ms`，最慢加载阶段为“构建视觉 cell mesh” `76.2ms`，`drawMs = 0.2ms`，`glError = 0`。

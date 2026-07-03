@@ -129,6 +129,7 @@
       <span>样本</span>
       <ElInput v-model="sourceDraft" type="textarea" :rows="5" resize="vertical" />
     </label>
+    <p class="namebase-source-editor-note">每行可写“清河|3”提高抽样权重；重复样本也会合并为更高权重。未写权重时按 1 处理。</p>
     <UiButton variant="secondary" @click="callbacks.onUpdateSource(selectedUserRow, sourceDraft)">应用样本</UiButton>
   </div>
 
@@ -267,6 +268,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "名称", value: selected.value.name},
   {label: "类型", value: selected.value.kind},
   {label: "样本数", value: formatNumber(selected.value.samples)},
+  {label: "样本权重", value: formatWeight(selected.value.weightedSamples)},
   {label: "唯一样本", value: formatNumber(selected.value.uniqueSamples)},
   {label: "重复样本", value: formatNumber(selected.value.duplicateSamples)},
   {label: "质量", value: selected.value.qualityLabel},
@@ -330,6 +332,12 @@ function compareValue(a, b) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function formatWeight(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  return number % 1 === 0 ? formatNumber(number) : String(Math.round(number * 10) / 10);
 }
 
 function bindingOptions(targetKey, value = globalBindings.value[targetKey]) {

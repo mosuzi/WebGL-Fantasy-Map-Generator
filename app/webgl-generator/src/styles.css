@@ -4664,6 +4664,14 @@ input.ui-switch-native {
   font-size: 12px;
 }
 
+.namebase-source-editor-note {
+  margin: 0;
+  color: #9fb0ba;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .city-panel-details {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
