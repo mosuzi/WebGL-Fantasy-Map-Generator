@@ -378,14 +378,20 @@ function canonicalPairRelation(a, b) {
 function createRelationHistoryEntry(subject, object, oldRelation, relation, reason) {
   const subjectName = subject.name || `#${subject.i}`;
   const objectName = object.name || `#${object.i}`;
-  if (oldRelation === "Enemy") return ["停战", `${subjectName}与${objectName}结束战争，关系改为${diplomacyRelationLabel(relation)}`];
-  if (relation === "Enemy") return ["战争爆发", `${subjectName}向${objectName}宣战`];
-  if (relation === "Ally") return ["防御盟约", `${subjectName}与${objectName}缔结同盟`];
-  if (relation === "Vassal") return ["附庸关系", `${subjectName}成为${objectName}的附庸`];
-  if (relation === "Suzerain") return ["附庸关系", `${subjectName}使${objectName}成为附庸`];
-  if (relation === "Rival") return ["宿敌关系", `${subjectName}与${objectName}成为宿敌`];
-  if (relation === "Unknown") return ["断绝往来", `${subjectName}与${objectName}断绝正式往来`];
-  return ["外交变化", `${subjectName}与${objectName}的关系改为${diplomacyRelationLabel(relation)}（${reason}）`];
+  const suffix = formatReasonSuffix(reason);
+  if (oldRelation === "Enemy") return ["停战", `${subjectName}与${objectName}结束战争，关系改为${diplomacyRelationLabel(relation)}${suffix}`];
+  if (relation === "Enemy") return ["战争爆发", `${subjectName}向${objectName}宣战${suffix}`];
+  if (relation === "Ally") return ["防御盟约", `${subjectName}与${objectName}缔结同盟${suffix}`];
+  if (relation === "Vassal") return ["附庸关系", `${subjectName}成为${objectName}的附庸${suffix}`];
+  if (relation === "Suzerain") return ["附庸关系", `${subjectName}使${objectName}成为附庸${suffix}`];
+  if (relation === "Rival") return ["宿敌关系", `${subjectName}与${objectName}成为宿敌${suffix}`];
+  if (relation === "Unknown") return ["断绝往来", `${subjectName}与${objectName}断绝正式往来${suffix}`];
+  return ["外交变化", `${subjectName}与${objectName}的关系改为${diplomacyRelationLabel(relation)}${suffix}`];
+}
+
+function formatReasonSuffix(reason) {
+  const text = String(reason || "").trim();
+  return text ? `（${text.slice(0, 80)}）` : "";
 }
 
 function isRemoteNavalPair(pack, from, to) {

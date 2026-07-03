@@ -692,8 +692,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.state.open(state.map, state.editHistory.getStats());
       updateStatePanel(state);
     },
-    onRelationChange: (subjectId, objectId, relation) => {
-      const command = createSetDiplomacyRelationCommand(subjectId, objectId, relation);
+    onRelationChange: (subjectId, objectId, relation, reason) => {
+      const command = createSetDiplomacyRelationCommand(subjectId, objectId, relation, {reason});
       if (!command.isNoop({map: state.map})) {
         refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
         refreshGenerationSummary(state.map);

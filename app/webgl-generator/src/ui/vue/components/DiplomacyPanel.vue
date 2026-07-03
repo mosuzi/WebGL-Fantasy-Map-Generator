@@ -97,9 +97,18 @@
           label="关系"
           :model-value="selected.relation"
           :options="relationOptions"
-          @update:model-value="relation => callbacks.onRelationChange(selected.subjectId, selected.id, relation)"
+          @update:model-value="relation => applyRelationChange(relation)"
         />
-        <p class="diplomacy-relation-note">选择后会立即写入当前关系并进入撤销记录，不会触发军事行动。</p>
+        <label class="diplomacy-relation-reason">
+          <span>说明</span>
+          <textarea
+            v-model="relationReasonDraft"
+            maxlength="80"
+            rows="2"
+            placeholder="可选，例如边境谈判、贸易让步、宗教摩擦"
+          />
+        </label>
+        <p class="diplomacy-relation-note">选择后会立即写入当前关系并进入撤销记录；说明会进入外交历史，不会触发军事行动。</p>
       </div>
     </template>
   </UiActionDock>
@@ -159,6 +168,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const relationReasonDraft = ref("");
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
 const metrics = computed(() => {
   props.state.version;
@@ -235,7 +245,14 @@ const relationHistoryLabel = computed(() => {
 
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
+  relationReasonDraft.value = "";
 });
+
+function applyRelationChange(relation) {
+  const row = selected.value;
+  if (!row) return;
+  props.callbacks.onRelationChange?.(row.subjectId, row.id, relation, relationReasonDraft.value);
+}
 
 function buildDiplomacyMetrics(map, selectedStateId) {
   const states = stateRows(map);

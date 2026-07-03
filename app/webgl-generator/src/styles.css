@@ -6172,6 +6172,43 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.diplomacy-relation-reason {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.diplomacy-relation-reason span {
+  color: #94a7b0;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.diplomacy-relation-reason textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 7px;
+  padding: 8px 9px;
+  background: rgba(6, 10, 13, 0.72);
+  color: #e5eef2;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.diplomacy-relation-reason textarea:focus {
+  border-color: rgba(127, 179, 164, 0.58);
+  box-shadow: 0 0 0 2px rgba(127, 179, 164, 0.12);
+}
+
+.diplomacy-relation-reason textarea::placeholder {
+  color: #62727a;
+}
+
 .diplomacy-relation-note {
   margin: -2px 0 0;
   overflow-wrap: anywhere;

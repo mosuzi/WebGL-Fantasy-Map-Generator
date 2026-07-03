@@ -8,10 +8,11 @@ const DIPLOMACY_EFFECTS = Object.freeze({
   derived: Object.freeze(["diplomacy", "cell-colors", "object-panels"])
 });
 
-export function createSetDiplomacyRelationCommand(subjectId, objectId, relation, {label = "外交关系"} = {}) {
+export function createSetDiplomacyRelationCommand(subjectId, objectId, relation, {label = "外交关系", reason = "手动关系编辑"} = {}) {
   const normalizedSubjectId = Number(subjectId);
   const normalizedObjectId = Number(objectId);
   const normalizedRelation = normalizeDiplomacyRelation(relation);
+  const historyReason = normalizeRelationReason(reason);
   let snapshot = null;
 
   return {
@@ -23,7 +24,7 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
     apply(context) {
       if (!normalizedRelation) throw new Error("不支持的外交关系");
       snapshot ??= snapshotDiplomacy(context.map);
-      const changed = setDiplomacyRelation(context.map?.pack, normalizedSubjectId, normalizedObjectId, normalizedRelation, {record: true, reason: "手动关系编辑"});
+      const changed = setDiplomacyRelation(context.map?.pack, normalizedSubjectId, normalizedObjectId, normalizedRelation, {record: true, reason: historyReason});
       if (!changed) throw new Error("无法设置外交关系");
       syncDiplomacy(context.map);
     },
@@ -36,6 +37,11 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
       return !state || !normalizedRelation || state.diplomacy?.[normalizedObjectId] === normalizedRelation || normalizedSubjectId === normalizedObjectId;
     }
   };
+}
+
+function normalizeRelationReason(reason) {
+  const text = String(reason || "").trim();
+  return text ? text.slice(0, 80) : "手动关系编辑";
 }
 
 export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成外交"} = {}) {

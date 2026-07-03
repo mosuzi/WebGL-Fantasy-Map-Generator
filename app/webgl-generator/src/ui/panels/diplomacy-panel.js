@@ -50,7 +50,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedObjectId = row.id;
       callbacks.onOpenState?.(stateObject(row));
     },
-    onRelationChange: (subjectId, objectId, relation) => callbacks.onRelationChange?.(subjectId, objectId, relation),
+    onRelationChange: (subjectId, objectId, relation, reason) => callbacks.onRelationChange?.(subjectId, objectId, relation, reason),
     onRegenerate: () => callbacks.onRegenerate?.(),
     onShowTheme: stateId => callbacks.onShowTheme?.(stateId),
     onUndo: () => callbacks.onUndo?.(),
