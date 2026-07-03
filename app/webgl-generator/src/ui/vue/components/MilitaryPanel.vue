@@ -1075,6 +1075,7 @@ function exportBattleEventsCsv() {
   const header = [
     "事件ID",
     "序号",
+    "链路",
     "时间",
     "国家",
     "军团",
@@ -1082,6 +1083,8 @@ function exportBattleEventsCsv() {
     "结果",
     "说明",
     "已应用",
+    "应用状态",
+    "损耗状态",
     "结果摘要",
     "兵力前",
     "兵力后",
@@ -1094,6 +1097,7 @@ function exportBattleEventsCsv() {
     return [
       event.id || "",
       event.sequence || "",
+      battleEventSequenceLabel(event),
       event.at || "",
       event.stateName || event.stateId || "",
       event.regimentName || event.regimentObjectId || event.regimentId || "",
@@ -1101,6 +1105,8 @@ function exportBattleEventsCsv() {
       event.outcomeLabel || event.outcome || "",
       event.description || "",
       event.resultApplied ? "是" : "否",
+      battleEventAppliedLabel(event),
+      battleEventLossLabel(event),
       event.resultApplied ? battleResultSummary(event) : "",
       result.troopBefore ?? "",
       result.troopAfter ?? "",

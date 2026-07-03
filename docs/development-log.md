@@ -15935,3 +15935,27 @@ full 矩阵结果：
 - Playwright + Chrome 构建产物烟测通过：打开 `军事管理`，给同一军团注入两条事件；最新事件显示 `链路 #12 / 未应用 / 损耗未计入`，上一条显示 `链路 #11 / 已应用 / 损耗 132`。
 - 同次烟测确认事件列表和首条事件无横向溢出，战报链摘要仍为 `链路 2 条 / 已应用 1 条 / 累计损耗 132 / 最近 攻城 / 小胜`，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1386.1ms`，纯生成 `720.1ms`，WebGL 加载 `388.3ms`，UI slack `277.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 136.9ms`，最慢加载阶段为 `构建视觉 cell mesh 56.8ms`，`line-vertices = 53.3ms`，`fit-draw = 3.1ms`。
+
+### 战斗事件 CSV 链路字段
+
+背景：
+
+- 战斗事件列表已经显示 `链路 #序号 / 已应用或未应用 / 损耗状态`，但 CSV 事件导出仍只有原始序号和 `已应用` 布尔列。
+- 多条战报链路需要导出后直接扫读，因此 CSV 应保留机器友好的旧列，同时补充和界面一致的人读状态字段。
+
+修正：
+
+- `exportBattleEventsCsv()` 新增 `链路`、`应用状态` 和 `损耗状态` 三列。
+- 新列复用现有 `battleEventSequenceLabel()`、`battleEventAppliedLabel()` 和 `battleEventLossLabel()`，避免界面与导出对同一事件给出不同文案。
+- 原有 `序号`、`已应用`、结果摘要和兵力变化列全部保留，避免破坏已有 CSV 消费路径。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 252 项。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `28.99KB / gzip 9.27KB`，主入口约 `768.43KB / gzip 232.23KB`。
+- Playwright + Chrome 构建产物烟测通过：打开 `军事管理`，给同一军团注入两条事件并下载战斗事件 CSV；表头包含 `链路 / 应用状态 / 损耗状态`，两条记录分别包含 `链路 #11 / 已应用 / 损耗 132` 与 `链路 #12 / 未应用 / 损耗未计入`，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1409.2ms`，纯生成 `764ms`，WebGL 加载 `337.3ms`，UI slack `307.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 157ms`，最慢加载阶段为 `构建视觉 cell mesh 50.8ms`，`line-vertices = 41.8ms`，`fit-draw = 2.6ms`。
