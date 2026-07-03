@@ -17335,3 +17335,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `814.43KB / gzip 245.82KB`，名称库懒加载 chunk 约 `10.50KB / gzip 3.99KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入 3 个用户名称库并设置全局 `stateRoot / place / hydro` 绑定后，依次触发国家、城镇和水文重生成；国家根名 `18/20` 明确命中用户根名库，城镇 `666/1003` 命中用户地名库，河流/湖泊 `131/157` 命中用户水文库；未命中项来自首都/省会锚点、方位/去重变体和兜底策略；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1761.6ms`，纯生成 `923.9ms`，WebGL 加载 `504.4ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `161.6ms`，最慢加载阶段为“构建线层顶点” `126.2ms`。
+
+### 名称库整图生成继承第一刀
+
+背景：
+
+- 全局名称库绑定已经能影响当前地图内的国家、城镇和水文受约束重生成，但点击整图“生成”会创建新地图，之前不会继承当前地图的用户名称库与绑定。
+- 本轮只做生成前快照继承，不建立长期应用级名称库偏好，也不把用户库写入普通 `options`。
+
+修正：
+
+- `generatePlaceholderMap()` 会在 `normalizeOptions()` 之外保留临时 `namebases` 上下文，并把它传给水文、城镇和国家命名阶段。
+- 生成出的新地图会写回 `map.namebases`，`metadata.namebases` 记录继承的用户库数量和全局绑定，生成日志新增 `namebase context` 行。
+- runtime 的“生成”按钮和高度图导入会从当前地图复制用户名称库与绑定快照，传给本次生成；`state.options` 和 `map.options` 仍保持不含用户库对象。
+- 地图数据导入仍以导入文件自身的 `map.namebases` 为准，不从当前地图强行继承。
+
+验证：
+
+- Node 整图生成小测通过：传入 `namebases` 后生成地图保留 `map.namebases.bases = 1`，`metadata.namebases.globalBindings.stateRoot = u-state-roots`，且 `map.options.namebases` 为 `false`。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `817.73KB / gzip 246.72KB`，generation worker 约 `276.71KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入 `3` 个用户名称库并设置全局 `stateRoot / place / hydro` 绑定后，真实点击整图生成；新地图继承 `3` 个用户库，`map.options.namebases = false`，生成日志显示 `namebase context: bases=3, stateRoot=inherit-state-roots, place=inherit-place-roots, hydro=inherit-hydro-roots`；国家根名 `20/20` 命中用户根名库，城镇 `621/757` 命中用户地名库，河流/湖泊 `180/211` 命中用户水文库；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1562.9ms`，纯生成 `766.5ms`，WebGL 加载 `457.6ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `137.2ms`，最慢加载阶段为“构建视觉 cell mesh” `56.1ms`。

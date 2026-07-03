@@ -1557,6 +1557,7 @@ function requestGenerate(state, documentRef) {
       setSeedInput(documentRef, createRandomSeed());
     }
     state.options = readOptionsFromPanel(documentRef, state.options);
+    const namebaseSnapshot = createGenerationNamebaseSnapshot(state.map);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     const generateId = state.pendingGenerateId;
     resetLoadTrace(documentRef);
@@ -1565,7 +1566,7 @@ function requestGenerate(state, documentRef) {
     setMythicGenerationLoading(documentRef, true, "request");
     scheduleAfterPaint(documentRef, () => {
       if (generateId !== state.pendingGenerateId) return;
-      void runGenerateNow(state, documentRef, generateId);
+      void runGenerateNow(state, documentRef, generateId, namebaseSnapshot);
     });
   } catch (error) {
     updateGenerationLoading(documentRef, false);
@@ -1573,14 +1574,14 @@ function requestGenerate(state, documentRef) {
   }
 }
 
-async function runGenerateNow(state, documentRef, generateId) {
+async function runGenerateNow(state, documentRef, generateId, namebaseSnapshot = null) {
   try {
     const hadMap = Boolean(state.map);
     setGenerationStatus(documentRef, state.options, "生成中");
     setMythicGenerationLoading(documentRef, true, "generate");
     emitLoadTrace(documentRef, {phase: "start", id: "generate", message: loadingMessage("generate"), delayMs: readDebugLoadDelayMs(documentRef)});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const map = await generateMapOffMainThread(documentRef, state.options, generateId);
+    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(state.options, namebaseSnapshot), generateId);
     emitLoadTrace(documentRef, {phase: "end", id: "generate", message: loadingMessage("generate")});
     if (generateId !== state.pendingGenerateId) return;
     await loadMapIntoRuntime(state, documentRef, map, {
@@ -1592,6 +1593,64 @@ async function runGenerateNow(state, documentRef, generateId) {
     updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
   }
+}
+
+function generationOptionsWithNamebases(options, namebaseSnapshot) {
+  return namebaseSnapshot ? {...options, namebases: namebaseSnapshot} : options;
+}
+
+function createGenerationNamebaseSnapshot(map) {
+  const namebases = map?.namebases;
+  if (!namebases || typeof namebases !== "object") return null;
+  const bases = Array.isArray(namebases.bases)
+    ? namebases.bases.map(base => ({
+      id: String(base?.id || "").trim(),
+      sourceId: String(base?.sourceId || ""),
+      name: String(base?.name || base?.id || ""),
+      kind: String(base?.kind || "generic"),
+      category: String(base?.category || "用户名称库"),
+      note: String(base?.note || ""),
+      source: Array.isArray(base?.source) ? base.source.map(value => String(value || "").trim()).filter(Boolean) : [],
+      builtin: false,
+      origin: String(base?.origin || "继承"),
+      importedAt: base?.importedAt || "",
+      importedFrom: base?.importedFrom || ""
+    })).filter(base => base.id && base.source.length)
+    : [];
+  const bindings = {
+    global: {
+      stateRoot: String(namebases.bindings?.global?.stateRoot || "").trim(),
+      place: String(namebases.bindings?.global?.place || "").trim(),
+      hydro: String(namebases.bindings?.global?.hydro || "").trim()
+    },
+    cultures: normalizeGenerationCultureNamebaseBindings(namebases.bindings?.cultures)
+  };
+  const hasBindings = Object.values(bindings.global).some(Boolean) || Object.values(bindings.cultures).some(culture => Object.values(culture).some(Boolean));
+  if (!bases.length && !hasBindings) return null;
+  return {
+    version: 1,
+    bases,
+    bindings,
+    metadata: {
+      ...(namebases.metadata || {}),
+      bases: bases.length,
+      inheritedFromMap: map.metadata?.checksum || map.summary?.checksum || ""
+    }
+  };
+}
+
+function normalizeGenerationCultureNamebaseBindings(cultures) {
+  if (!cultures || typeof cultures !== "object") return {};
+  const result = {};
+  for (const [cultureId, binding] of Object.entries(cultures)) {
+    if (!binding || typeof binding !== "object") continue;
+    result[String(cultureId)] = {
+      stateRoot: String(binding.stateRoot || "").trim(),
+      place: String(binding.place || "").trim(),
+      hydro: String(binding.hydro || "").trim()
+    };
+  }
+  return result;
 }
 
 async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = ""} = {}) {
@@ -2214,6 +2273,7 @@ async function importHeightmapImage(state, documentRef, payload) {
     setFileOperationStatus(documentRef, "正在读取高度图...", ["heightmap-import-status"]);
     setMythicGenerationLoading(documentRef, true, "heightmap-read");
     const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+    const namebaseSnapshot = createGenerationNamebaseSnapshot(state.map);
     const importGenerateId = (state.pendingGenerateId || 0) + 1;
     state.pendingGenerateId = importGenerateId;
     state.heightmapImportId = importGenerateId;
@@ -2228,7 +2288,7 @@ async function importHeightmapImage(state, documentRef, payload) {
     setMythicGenerationLoading(documentRef, true, "heightmap-generate");
     emitLoadTrace(documentRef, {phase: "start", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const map = await generateMapOffMainThread(documentRef, options, importGenerateId, {
+    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(options, namebaseSnapshot), importGenerateId, {
       heightmap,
       heightmapPayload: heightmap.workerPayload || null
     });

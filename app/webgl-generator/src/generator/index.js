@@ -23,24 +23,26 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
     onStageEnd: overrides.onStageEnd
   });
   const options = profile.stage("normalize-options", "标准化参数", () => normalizeOptions(inputOptions));
+  const namebases = profile.stage("namebase-context", "继承名称库上下文", () => normalizeGenerationNamebases(inputOptions.namebases));
   const gridRandom = profile.stage("random-grid", "初始化 grid 随机源", () => createRandom(options.seed));
   const random = profile.stage("random-main", "初始化主随机源", () => createRandom(options.seed));
   const heightmap = profile.stage("heightmap", "生成高度模板", () => overrides.heightmap || createHeightmap(options, random));
   const generationOptions = heightmap.template === options.heightmapTemplate ? options : {...options, heightmapTemplate: heightmap.template};
+  const stageOptions = namebases ? {...generationOptions, namebases} : generationOptions;
   const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(generationOptions, gridRandom, heightmap, random));
   const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
   const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(generationOptions.seed));
   const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, generationOptions, climateRandom));
   const pack = profile.stage("pack", "构建 pack 语义图", () => buildPack(grid, features));
-  const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, generationOptions));
+  const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, stageOptions));
   const biomes = profile.stage("biomes-population", "生成生物群系与人口评分", () => defineBiomesAndPopulation(grid, pack, generationOptions));
   climate.biomes = biomes.biomes;
   climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
   const society = profile.stage("society-cultures", "生成文化初稿", () => buildSociety(grid, features, climate, rivers, random, pack, generationOptions));
-  profile.stage("river-names", "按文化命名河流", () => renameHydronymsByCulture(rivers, pack, generationOptions));
-  const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, generationOptions));
-  const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, generationOptions, pack));
-  profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...generationOptions, pruneNeutralSettlements: true}));
+  profile.stage("river-names", "按文化命名河流", () => renameHydronymsByCulture(rivers, pack, stageOptions));
+  const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, stageOptions));
+  const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, stageOptions, pack));
+  profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...stageOptions, pruneNeutralSettlements: true}));
   const markers = profile.stage("markers", "生成标记 / 资源点", () => buildMarkers(grid, features, politics, rivers, pack, generationOptions));
   pack.markers = markers.markers;
   const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, generationOptions));
@@ -66,6 +68,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
       graphWidth: generationOptions.graphWidth,
       graphHeight: generationOptions.graphHeight,
       checksum: summary.checksum,
+      namebases: namebases ? createGenerationNamebaseMetadata(namebases) : null,
       generatedAt,
       generationTiming
     },
@@ -86,9 +89,11 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
     pack,
     features,
     rivers,
+    ...(namebases ? {namebases} : {}),
     summary,
     generationLog: [
       `normalize options: seed=${generationOptions.seed}, cells=${generationOptions.cellsTarget}, size=${generationOptions.graphWidth}x${generationOptions.graphHeight}`,
+      `namebase context: ${namebases ? namebaseContextLog(namebases) : "none"}`,
       `heightmap template: ${heightmap.template}`,
       `initialize seeded random: ${summary.randomPreview.join(", ")}`,
       `build grid: ${grid.metadata.actualCells} cells, ${grid.metadata.vertexCount} vertices, ${grid.metadata.triangles} triangles`,
@@ -219,6 +224,104 @@ function createPalette(random) {
     land: [round(0.46 + landShift, 4), round(0.55 + landShift, 4), round(0.35 + landShift, 4), 1],
     highland: [round(0.7 + landShift, 4), round(0.66 + landShift, 4), round(0.52 + landShift, 4), 1]
   };
+}
+
+function normalizeGenerationNamebases(namebases) {
+  if (!namebases || typeof namebases !== "object") return null;
+  const bases = Array.isArray(namebases.bases)
+    ? namebases.bases.map(normalizeGenerationNamebase).filter(Boolean)
+    : [];
+  const bindings = normalizeGenerationNamebaseBindings(namebases.bindings);
+  const hasGlobalBindings = Object.values(bindings.global).some(Boolean);
+  const hasCultureBindings = Object.values(bindings.cultures).some(culture => Object.values(culture).some(Boolean));
+  if (!bases.length && !hasGlobalBindings && !hasCultureBindings) return null;
+  return {
+    version: 1,
+    bases,
+    bindings,
+    metadata: {
+      bases: bases.length,
+      inherited: true,
+      inheritedAt: new Date().toISOString()
+    }
+  };
+}
+
+function normalizeGenerationNamebase(base) {
+  const id = String(base?.id || "").trim();
+  const source = normalizeGenerationNamebaseSource(base?.source);
+  if (!id || !source.length) return null;
+  return {
+    id,
+    sourceId: String(base.sourceId || ""),
+    name: String(base.name || id),
+    kind: String(base.kind || "generic"),
+    category: String(base.category || "用户名称库"),
+    note: String(base.note || ""),
+    source,
+    builtin: false,
+    origin: String(base.origin || "继承"),
+    importedAt: base.importedAt || "",
+    importedFrom: base.importedFrom || ""
+  };
+}
+
+function normalizeGenerationNamebaseSource(source) {
+  const values = Array.isArray(source) ? source : String(source || "").split(/[,，\n\r]+/u);
+  const result = [];
+  const seen = new Set();
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function normalizeGenerationNamebaseBindings(bindings) {
+  const source = bindings && typeof bindings === "object" ? bindings : {};
+  const global = source.global && typeof source.global === "object" ? source.global : {};
+  const cultures = source.cultures && typeof source.cultures === "object" ? source.cultures : {};
+  const normalizedCultures = {};
+  for (const [cultureId, cultureBindings] of Object.entries(cultures)) {
+    if (!cultureBindings || typeof cultureBindings !== "object") continue;
+    normalizedCultures[String(cultureId)] = {
+      stateRoot: String(cultureBindings.stateRoot || "").trim(),
+      place: String(cultureBindings.place || "").trim(),
+      hydro: String(cultureBindings.hydro || "").trim()
+    };
+  }
+  return {
+    global: {
+      stateRoot: String(global.stateRoot || "").trim(),
+      place: String(global.place || "").trim(),
+      hydro: String(global.hydro || "").trim()
+    },
+    cultures: normalizedCultures
+  };
+}
+
+function createGenerationNamebaseMetadata(namebases) {
+  const global = namebases.bindings?.global || {};
+  return {
+    bases: namebases.bases.length,
+    inherited: Boolean(namebases.metadata?.inherited),
+    globalBindings: {
+      stateRoot: global.stateRoot || "",
+      place: global.place || "",
+      hydro: global.hydro || ""
+    }
+  };
+}
+
+function namebaseContextLog(namebases) {
+  const metadata = createGenerationNamebaseMetadata(namebases);
+  const bindings = Object.entries(metadata.globalBindings)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(", ");
+  return `bases=${metadata.bases}${bindings ? `, ${bindings}` : ""}`;
 }
 
 function round(value, digits) {
