@@ -14882,3 +14882,31 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 直方图烟测通过：导入渐变 SVG 后直方图可见，`barCount = 24`、`nonZeroBars = 21`、高度范围 `4..100`，摘要为 `暗 38% / 中 44% / 亮 18%`，轴标签为 `暗/亮`，色板项为 `32`。
 - 同次烟测中地图 checksum 保持 `1c333dd7 -> 1c333dd7`，说明预览和直方图没有写地图；`loadMap.totalMs = 352.3ms`，`fit-draw = 8ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1191.9ms`，纯生成 `581.4ms`，WebGL 加载 `326.7ms`，最慢加载阶段为 `labels 45.9ms`，`fit-draw = 2.6ms`，`glError = 0`。
+
+### 高度图采样格高度色带预览
+
+背景：
+
+- 亮度直方图只能说明图片明暗分布，不能直接看当前导入设置会把采样格映射成什么高度地形。
+- 专题计划仍缺采样格高度色带预览和应用前后对比；本步先补只读色带预览，继续保持预览与应用分离。
+
+修正：
+
+- 工作台新增“高度色带预览”canvas，放在直方图后方。
+- 色带预览复用现有预览 canvas 像素和高度映射函数，不额外读取原始大图。
+- 默认灰度且无手动覆盖时，色带预览按连续亮度高度着色，贴近 `image-grayscale` 应用路径。
+- 切到非灰度模式或存在手动覆盖时，色带预览按当前量化色板、assignment 和未分配高度着色，贴近 `image-palette` 应用路径。
+- 预览仅更新工作台状态，不写 `map`，不触发 worker 或 renderer 重新加载。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`HeightPanel` 懒加载 chunk 为 `24.83KB / gzip 8.91KB`，主入口约 `739.15KB / gzip 223.22KB`。
+- Playwright + 系统 Chrome 色带预览烟测通过：导入渐变 SVG 后色带预览可见，canvas 为 `345 x 230`，`coloredPixels = 79350`，采样到 `12` 种颜色，摘要为 `高度 0-100 / 水域 15%`，直方图仍为 `24` 桶，色板项为 `32`。
+- 同次烟测中地图 checksum 保持 `ac140459 -> ac140459`，说明色带预览没有写地图；`loadMap.totalMs = 349.5ms`，`fit-draw = 7.3ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1260ms`，纯生成 `655ms`，WebGL 加载 `330.7ms`，最慢加载阶段为 `cell-visual-mesh 48.4ms`，`fit-draw = 2.1ms`，`glError = 0`。

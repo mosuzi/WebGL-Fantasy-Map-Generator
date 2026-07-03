@@ -68,6 +68,14 @@
           </div>
         </section>
 
+        <section v-show="previewStats" class="heightmap-band-section" aria-label="采样格高度色带预览">
+          <header>
+            <strong>高度色带预览</strong>
+            <span>{{ heightBandSummary }}</span>
+          </header>
+          <canvas ref="heightBandCanvas" class="heightmap-band-canvas"></canvas>
+        </section>
+
         <div class="heightmap-import-fields">
           <UiSliderField
             label="最低高度"
@@ -312,6 +320,15 @@ const fmgHeightColorStops = Object.freeze([
   {height: 76, color: [128, 118, 106]},
   {height: 92, color: [232, 228, 212]}
 ]);
+const heightPreviewStops = Object.freeze([
+  {height: 0, color: [28, 65, 111]},
+  {height: 18, color: [58, 117, 169]},
+  {height: 22, color: [91, 139, 73]},
+  {height: 45, color: [145, 158, 83]},
+  {height: 65, color: [158, 127, 72]},
+  {height: 82, color: [128, 118, 106]},
+  {height: 100, color: [236, 232, 218]}
+]);
 const unitPreferences = useUnitPreferences();
 const heightmapImportMin = ref(0);
 const heightmapImportMax = ref(100);
@@ -324,10 +341,12 @@ const workbenchOpen = ref(false);
 const fileInput = ref(null);
 const profileFileInput = ref(null);
 const previewCanvas = ref(null);
+const heightBandCanvas = ref(null);
 const previewImage = ref(null);
 const selectedFile = ref(null);
 const previewStats = ref(null);
 const previewHistogram = ref([]);
+const heightBandStats = ref(null);
 const previewPalette = ref([]);
 const selectedPaletteKey = ref(null);
 const batchPaletteKeys = ref([]);
@@ -391,6 +410,11 @@ const histogramSummary = computed(() => {
   const middle = sumHistogramRange(counts, third, third * 2);
   const high = Math.max(0, total - low - middle);
   return `暗 ${formatPercent(low / total)} / 中 ${formatPercent(middle / total)} / 亮 ${formatPercent(high / total)}`;
+});
+const heightBandSummary = computed(() => {
+  const stats = heightBandStats.value;
+  if (!stats) return "未生成";
+  return `高度 ${stats.min}-${stats.max} / 水域 ${formatPercent(stats.water / stats.total)}`;
 });
 
 watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode], () => {
@@ -484,6 +508,7 @@ async function onHeightmapFileChange(event) {
     previewImage.value = null;
     previewStats.value = null;
     previewHistogram.value = [];
+    heightBandStats.value = null;
     previewPalette.value = [];
     selectedPaletteKey.value = null;
     batchPaletteKeys.value = [];
@@ -641,6 +666,7 @@ function drawPreview() {
   previewHistogram.value = brightness.histogram;
   const palette = quantizePalette(imageData.data, heightmapColorLimit.value, brightness);
   previewPalette.value = palette.entries;
+  drawHeightBandPreview(imageData, palette.entries, brightness);
   if (!previewPalette.value.some(entry => entry.key === selectedPaletteKey.value)) selectedPaletteKey.value = null;
   trimBatchPaletteSelection();
   if (selectedPaletteKey.value !== null) {
@@ -664,6 +690,16 @@ function clearPreviewCanvas() {
   const context = canvas.getContext("2d", {willReadFrequently: true});
   context?.clearRect(0, 0, canvas.width, canvas.height);
   previewHistogram.value = [];
+  clearHeightBandCanvas();
+}
+
+function clearHeightBandCanvas() {
+  const canvas = heightBandCanvas.value;
+  if (canvas) {
+    const context = canvas.getContext("2d", {willReadFrequently: true});
+    context?.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  heightBandStats.value = null;
 }
 
 function previewSize() {
@@ -765,6 +801,70 @@ function quantizePalette(data, limit, brightnessStats) {
       };
     });
   return {entries, bucketCount: buckets.size};
+}
+
+function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
+  const canvas = heightBandCanvas.value;
+  if (!canvas) return;
+  canvas.width = imageData.width;
+  canvas.height = imageData.height;
+  const context = canvas.getContext("2d", {willReadFrequently: true});
+  if (!context) return;
+  const output = context.createImageData(imageData.width, imageData.height);
+  const heightByKey = new Map(paletteEntries.map(entry => [entry.key, entry.height]));
+  const usePalette = shouldUsePalettePreview(paletteEntries);
+  const brightnessRange = Math.max(1e-6, brightnessStats.max - brightnessStats.min);
+  let min = Infinity;
+  let max = -Infinity;
+  let water = 0;
+
+  for (let offset = 0; offset < imageData.data.length; offset += 4) {
+    const color = compositedRgb(imageData.data, offset);
+    const key = colorBucketKey(color.red, color.green, color.blue);
+    const height = usePalette
+      ? (heightByKey.get(key) ?? heightmapUnassignedHeight.value)
+      : automaticHeightForColor({
+        ...color,
+        brightness: heightmapImportInvert.value ? 255 - color.brightness : color.brightness
+      }, brightnessStats, brightnessRange);
+    const ramp = heightPreviewColor(height);
+    output.data[offset] = ramp[0];
+    output.data[offset + 1] = ramp[1];
+    output.data[offset + 2] = ramp[2];
+    output.data[offset + 3] = 255;
+    min = Math.min(min, height);
+    max = Math.max(max, height);
+    if (height < 20) water += 1;
+  }
+
+  context.putImageData(output, 0, 0);
+  const total = Math.max(1, imageData.data.length / 4);
+  heightBandStats.value = {
+    min: Number.isFinite(min) ? Math.round(min) : 0,
+    max: Number.isFinite(max) ? Math.round(max) : 0,
+    water,
+    total
+  };
+}
+
+function shouldUsePalettePreview(paletteEntries) {
+  return heightmapMappingMode.value !== "grayscale" || paletteEntries.some(entry => entry.manual);
+}
+
+function heightPreviewColor(height) {
+  const value = clamp(Math.round(height), 0, 100);
+  for (let index = 1; index < heightPreviewStops.length; index += 1) {
+    const previous = heightPreviewStops[index - 1];
+    const next = heightPreviewStops[index];
+    if (value > next.height) continue;
+    const t = clamp((value - previous.height) / Math.max(1, next.height - previous.height), 0, 1);
+    return [
+      Math.round(previous.color[0] + (next.color[0] - previous.color[0]) * t),
+      Math.round(previous.color[1] + (next.color[1] - previous.color[1]) * t),
+      Math.round(previous.color[2] + (next.color[2] - previous.color[2]) * t)
+    ];
+  }
+  return heightPreviewStops[heightPreviewStops.length - 1].color;
 }
 
 function automaticHeightForColor(color, brightnessStats, brightnessRange) {

@@ -2915,6 +2915,38 @@ select:disabled {
   font-size: 11px;
 }
 
+.heightmap-band-section {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 7px;
+  padding: 8px 9px;
+  background: rgba(8, 13, 16, 0.68);
+}
+
+.heightmap-band-section header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #8fa1aa;
+  font-size: 12px;
+}
+
+.heightmap-band-section strong {
+  color: #edf4f6;
+}
+
+.heightmap-band-canvas {
+  display: block;
+  width: 100%;
+  max-height: 112px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 6px;
+  background: #0b1115;
+  image-rendering: auto;
+}
+
 .heightmap-import-fields {
   display: grid;
   gap: 8px;
