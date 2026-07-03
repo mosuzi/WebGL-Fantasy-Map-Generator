@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, createNamebaseImportPreview, createUserNamebase, deleteUserNamebase, importNamebaseDocument, parseNamebaseDocument, renameUserNamebase, updateUserNamebaseSource} from "../generator/namebase-store.js";
+import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseDocument, createNamebaseImportPreview, createUserNamebase, deleteUserNamebase, importNamebaseDocument, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument, renameUserNamebase, setNamebaseBinding, updateUserNamebaseSource} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -1080,7 +1080,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onRenameUser: (row, name) => renameImportedNamebase(state, documentRef, row, name),
     onUpdateSource: (row, sourceText) => updateImportedNamebaseSource(state, documentRef, row, sourceText),
     onDeleteUser: row => deleteImportedNamebase(state, documentRef, row),
-    onClearUser: () => clearImportedNamebases(state, documentRef)
+    onClearUser: () => clearImportedNamebases(state, documentRef),
+    onSetGlobalBinding: (target, value) => setGlobalNamebaseBinding(state, documentRef, target, value)
   });
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
@@ -2002,6 +2003,22 @@ async function previewNamebaseImport(state, documentRef, file, mode = "append") 
     return preview;
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导入预览失败", error);
+    return null;
+  }
+}
+
+function setGlobalNamebaseBinding(state, documentRef, target, value) {
+  try {
+    assertMapAvailable(state);
+    const result = setNamebaseBinding(state.map, target, value);
+    state.panels.namebase.update(state.map);
+    const targetLabel = NAMEBASE_BINDING_TARGETS.find(item => item.key === target)?.label || target;
+    const sourceLabel = String(value || "").trim() || "内置策略";
+    const invalidText = result.invalidCount ? `；当前还有 ${result.invalidCount} 个失效绑定引用` : "";
+    setFileOperationStatus(documentRef, `已设置全局${targetLabel}名称库：${sourceLabel}${invalidText}。`);
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "设置名称库绑定失败", error);
     return null;
   }
 }

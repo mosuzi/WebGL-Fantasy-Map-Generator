@@ -6,6 +6,25 @@
     <span>{{ bindingInvalidLabel }}</span>
   </div>
 
+  <section class="namebase-binding-editor" aria-label="全局名称库绑定">
+    <div class="namebase-binding-editor-header">
+      <strong>全局绑定</strong>
+      <span>只保存后续生成偏好，不改写当前地图名称。</span>
+    </div>
+    <div class="namebase-binding-fields">
+      <UiSelectField
+        v-for="target in globalBindingTargets"
+        :key="target.key"
+        :class-name="'namebase-binding-select'"
+        :input-id="`namebase-binding-${target.key}`"
+        :label="target.label"
+        :model-value="globalBindings[target.key] || ''"
+        :options="bindingOptions(target.key)"
+        @update:model-value="value => callbacks.onSetGlobalBinding?.(target.key, value)"
+      />
+    </div>
+  </section>
+
   <div class="namebase-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 分类 / 类型 / 样例" @update:model-value="callbacks.onFilter" />
   </div>
@@ -142,6 +161,11 @@ const importModeOptions = Object.freeze([
   {value: "append", label: "追加到用户库"},
   {value: "replace", label: "替换用户库"}
 ]);
+const globalBindingTargets = Object.freeze([
+  {key: "stateRoot", label: "国家根名"},
+  {key: "place", label: "地名"},
+  {key: "hydro", label: "水文"}
+]);
 
 const columns = Object.freeze([
   {key: "category", label: "分类"},
@@ -173,6 +197,7 @@ const summaryMetrics = computed(() => [
 ]);
 const bindingInvalidEntries = computed(() => props.state.bindingStatus?.invalid || []);
 const bindingInvalidLabel = computed(() => bindingInvalidEntries.value.map(item => `${item.label} -> ${item.id}`).join("；"));
+const globalBindings = computed(() => props.state.bindingStatus?.bindings?.global || {});
 const importPreviewMetrics = computed(() => {
   const preview = props.state.importPreview;
   if (!preview) return [];
@@ -264,6 +289,21 @@ function compareValue(a, b) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function bindingOptions(targetKey) {
+  const current = String(globalBindings.value[targetKey] || "");
+  const options = [
+    {value: "", label: "使用内置策略"},
+    ...rows.value.map(row => ({
+      value: row.id,
+      label: `${row.name}（${row.origin} / ${row.kind}）`
+    }))
+  ];
+  if (current && !options.some(option => String(option.value) === current)) {
+    options.splice(1, 0, {value: current, label: `失效引用：${current}`});
+  }
+  return options;
 }
 
 function handleImportFile(event) {

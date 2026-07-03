@@ -17291,3 +17291,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `813.04KB / gzip 245.44KB`，名称库懒加载 chunk 约 `9.41KB / gzip 3.59KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入 `user-state-roots` 用户名称库，并设置 `global.stateRoot = user-state-roots`、`cultures.1.hydro = user-state-roots`、`global.place = missing-place`、`cultures.1.place = missing-culture-place`；名称库总览中用户库行显示“全局国家根名、文化 #1 水文”，失效提示显示“全局地名 -> missing-place；文化 #1 地名 -> missing-culture-place”；提示卡和面板无横向溢出，`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1555.9ms`，纯生成 `776.3ms`，WebGL 加载 `522.1ms`，UI slack `257.5ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 148.8ms`，最慢加载阶段为 `构建视觉 cell mesh 67.9ms`。
+
+### 名称库全局绑定编辑第一刀
+
+背景：
+
+- 名称库绑定状态已经能只读显示用途和失效引用，但用户还不能在界面中设置全局 `stateRoot / place / hydro`。
+- 本轮只做数据管理入口，不让绑定影响生成，不自动改写已有地图名称，也不进入动态军事方向。
+
+修正：
+
+- 名称库总览新增“全局绑定”区，提供 `国家根名 / 地名 / 水文` 三个下拉。
+- 每个下拉包含“使用内置策略”和当前全部内置/用户名称库；已有失效引用会作为“失效引用：id”选项保留，便于用户改回有效词池。
+- runtime 新增 `setGlobalNamebaseBinding()`，调用现有 `setNamebaseBinding()` 写入 `map.namebases.bindings.global`，刷新名称库面板和文件操作状态。
+- 本轮不改变 `createChineseNameGenerator()`，不触发重新生成，不批量改名。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `814.08KB / gzip 245.76KB`，名称库懒加载 chunk 约 `10.50KB / gzip 3.99KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：新建 1 个用户名称库后，把全局 `stateRoot` 绑定到 `user-namebase-1`，`map.namebases.bindings.global.stateRoot` 写入成功，名称库行显示“全局国家根名”；再恢复“使用内置策略”后绑定值清空，行显示“未绑定”。绑定和清空前后地图 checksum 均为 `9f015921`，确认不改写当前地图名称；面板无横向溢出，`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1586.8ms`，纯生成 `776.1ms`，WebGL 加载 `440ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `147ms`，最慢加载阶段为“构建标签” `72.2ms`。

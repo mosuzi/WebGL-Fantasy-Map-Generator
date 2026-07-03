@@ -4435,6 +4435,40 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.namebase-binding-editor {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(16, 23, 27, 0.68);
+}
+
+.namebase-binding-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  color: #aab8bf;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.namebase-binding-editor-header strong {
+  color: #ffe0a1;
+}
+
+.namebase-binding-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.namebase-binding-select {
+  min-width: 0;
+}
+
 .namebase-panel-controls {
   margin-bottom: 8px;
 }

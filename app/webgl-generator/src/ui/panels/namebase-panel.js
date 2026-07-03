@@ -68,7 +68,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onRenameUser: (row, name) => callbacks.onRenameUser?.(row, name),
     onUpdateSource: (row, sourceText) => callbacks.onUpdateSource?.(row, sourceText),
     onDeleteUser: row => callbacks.onDeleteUser?.(row),
-    onClearUser: () => callbacks.onClearUser?.()
+    onClearUser: () => callbacks.onClearUser?.(),
+    onSetGlobalBinding: (target, value) => callbacks.onSetGlobalBinding?.(target, value)
   };
 
   const record = manager.registerPanel("namebase-panel", {
