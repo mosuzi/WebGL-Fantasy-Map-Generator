@@ -1710,12 +1710,68 @@ function colorForRegiment(regiment) {
 }
 
 function pushMilitaryFrontLines(vertices, context, map, visibility) {
-  const width = Math.max(1.2, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 1900);
+  const width = Math.max(5.2, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 270);
   for (const front of map?.military?.fronts || []) {
     const points = front.points || [[front.from?.x, front.from?.y], [front.to?.x, front.to?.y]];
-    const color = front.stance === "defense" ? [0.34, 0.64, 0.92, 0.72] : [0.92, 0.38, 0.25, 0.78];
-    pushWorldPolylineMesh(vertices, context, points, color, width, {joinSegments: 8, joinMode: "caps"});
+    pushMilitaryFrontArrow(vertices, context, points, front.stance, width);
   }
+}
+
+function pushMilitaryFrontArrow(vertices, context, points, stance, widthWorld) {
+  const source = (points || []).filter(isWorldPoint);
+  if (source.length < 2) return;
+  const start = source[0];
+  const end = source[source.length - 1];
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length <= 0.000001) return;
+
+  const unit = {x: dx / length, y: dy / length};
+  const normal = {x: -unit.y, y: unit.x};
+  const arrowLength = Math.min(length * 0.48, widthWorld * 1.8);
+  const neck = [end[0] - unit.x * arrowLength, end[1] - unit.y * arrowLength];
+  const tailHalf = widthWorld * 0.24;
+  const bodyHalf = widthWorld * 0.46;
+  const headHalf = widthWorld * 0.82;
+  const palette = militaryFrontArrowPalette(stance);
+
+  const tailLeft = offsetPoint(start, normal, tailHalf);
+  const tailRight = offsetPoint(start, normal, -tailHalf);
+  const neckLeft = offsetPoint(neck, normal, bodyHalf);
+  const neckRight = offsetPoint(neck, normal, -bodyHalf);
+  const headLeft = offsetPoint(neck, normal, headHalf);
+  const headRight = offsetPoint(neck, normal, -headHalf);
+
+  pushWorldVertex(vertices, context, tailLeft, palette.tail);
+  pushWorldVertex(vertices, context, neckLeft, palette.body);
+  pushWorldVertex(vertices, context, neckRight, palette.body);
+  pushWorldVertex(vertices, context, tailLeft, palette.tail);
+  pushWorldVertex(vertices, context, neckRight, palette.body);
+  pushWorldVertex(vertices, context, tailRight, palette.tail);
+
+  pushWorldVertex(vertices, context, headLeft, palette.body);
+  pushWorldVertex(vertices, context, end, palette.head);
+  pushWorldVertex(vertices, context, headRight, palette.body);
+}
+
+function offsetPoint(point, normal, distance) {
+  return [point[0] + normal.x * distance, point[1] + normal.y * distance];
+}
+
+function militaryFrontArrowPalette(stance) {
+  if (stance === "defense") {
+    return {
+      tail: [0.2, 0.42, 0.92, 0.12],
+      body: [0.34, 0.68, 1, 0.62],
+      head: [0.72, 0.92, 1, 0.92]
+    };
+  }
+  return {
+    tail: [0.72, 0.18, 0.08, 0.12],
+    body: [0.96, 0.34, 0.14, 0.66],
+    head: [1, 0.74, 0.22, 0.94]
+  };
 }
 
 function findRegiment(map, object) {

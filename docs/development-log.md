@@ -15443,3 +15443,25 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：`13:0` 军团从 `1（松岳镇）军团` 改为 `1（松岳镇）军团-改名`，底层数据、表格行和概要标题同步更新，历史为 `undo 1 / redo 0 / 重命名军团 #13:0`。
 - 同次烟测中点击“撤销上次”恢复原名，点击“重做上次”再次应用新名；`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1869.8ms`，纯生成 `847.4ms`，WebGL 加载 `484.8ms`，UI slack `537.6ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 138ms`，最慢加载阶段为 `构建标签 74.9ms`，`fit-draw = 5.5ms`，`glError = 0`。
+
+### 军事态势线边界箭头整改
+
+背景：
+
+- 用户指出军事态势线当前不好看：不应太长，最多只在边界上存在；不应跨海；不应是细线，而应是宽体渐变色、指向方向型的箭头。
+- 旧实现从本国主力或国家中心直接连到敌国中心，天然会出现跨海和长线。
+
+修正：
+
+- `buildMilitaryFronts()` 仍按外交战争生成 front，但 `createFrontLine()` 现在只接受共享陆地边界。
+- front 的 `points` 改为两国相邻陆地 pack cell 的共享 Voronoi 边；没有共享陆地边界时不生成 front。
+- 渲染层 `pushMilitaryFrontLines()` 不再画普通细线，改为自绘宽体箭头 mesh。
+- 每条 front 箭头由 3 个三角形组成，共 `9` 个 line vertices；尾部半透明，箭身和箭头逐步增强，进攻为暖色，防守为冷色。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `748.91KB / gzip 226.27KB`。
+- 默认 `stage-2-1231411414 / continents / 10000` 中非相邻战争不再生成跨海或长距离 front。
+- Playwright + 系统 Chrome 构建产物烟测通过：`front-check-1 / continents / 10000` 生成 `2` 条 front，长度均约 `13`；每条 front 的 `borderCells` 两侧均为陆地、互为邻居，且 state 分别为 `fromState / toState`。
+- 同次烟测中关闭/开启 `warFronts` 后 line vertices 从 `193632` 到 `193650`，增量 `18`，即每条宽体箭头 `9` 个顶点；`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1770.5ms`，纯生成 `1001.8ms`，WebGL 加载 `487.4ms`，UI slack `281.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 215.7ms`，最慢加载阶段为 `构建视觉 cell mesh 71.9ms`，`line-vertices = 49.9ms`，`fit-draw = 2.7ms`，`glError = 0`。

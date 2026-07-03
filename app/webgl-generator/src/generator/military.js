@@ -858,6 +858,8 @@ function createFrontLine(pack, campaign, fromState, toState, stance) {
   const fromPoint = regimentOrStatePoint(pack, fromState);
   const toPoint = statePoint(pack, toState);
   if (!fromPoint || !toPoint) return null;
+  const frontSegment = findSharedLandFrontSegment(pack, fromState.i, toState.i, fromPoint, toPoint);
+  if (!frontSegment) return null;
   return {
     id: `${campaign.attacker}:${campaign.defender}:${stance}:${campaign.start}`,
     campaign: campaign.name,
@@ -872,8 +874,50 @@ function createFrontLine(pack, campaign, fromState, toState, stance) {
     label: `${stance === "attack" ? "进攻" : "防守"}：${fromState.name} -> ${toState.name}`,
     from: fromPoint,
     to: toPoint,
-    points: [[fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]]
+    borderCells: frontSegment.cells,
+    points: orientFrontSegment(frontSegment.points, fromPoint, toPoint)
   };
+}
+
+function findSharedLandFrontSegment(pack, fromStateId, toStateId, fromPoint, toPoint) {
+  const {cells} = pack || {};
+  if (!cells?.i || !cells?.c || !cells?.state || !cells?.h) return null;
+  const targetMid = [(fromPoint.x + toPoint.x) / 2, (fromPoint.y + toPoint.y) / 2];
+  let best = null;
+
+  for (const cell of cells.i) {
+    if (cells.state[cell] !== fromStateId || cells.h[cell] < 20) continue;
+    for (const neighbor of cells.c[cell] || []) {
+      if (cells.state[neighbor] !== toStateId || cells.h[neighbor] < 20) continue;
+      const edge = sharedPackEdge(pack, cell, neighbor);
+      if (!edge) continue;
+      const mid = [(edge[0][0] + edge[1][0]) / 2, (edge[0][1] + edge[1][1]) / 2];
+      const length = distance(edge[0], edge[1]);
+      const score = distance(mid, targetMid) - length * 1.8;
+      if (!best || score < best.score) best = {score, points: edge, cells: [cell, neighbor]};
+    }
+  }
+
+  return best;
+}
+
+function sharedPackEdge(pack, cellA, cellB) {
+  const verticesA = pack.cells.v?.[cellA] || [];
+  const verticesB = new Set(pack.cells.v?.[cellB] || []);
+  const shared = verticesA.filter(vertex => verticesB.has(vertex));
+  if (shared.length < 2) return null;
+  const first = pack.vertices?.p?.[shared[0]];
+  const second = pack.vertices?.p?.[shared[1]];
+  return first && second ? [first, second] : null;
+}
+
+function orientFrontSegment(points, fromPoint, toPoint) {
+  const [a, b] = points;
+  const edgeX = b[0] - a[0];
+  const edgeY = b[1] - a[1];
+  const targetX = toPoint.x - fromPoint.x;
+  const targetY = toPoint.y - fromPoint.y;
+  return edgeX * targetX + edgeY * targetY < 0 ? [b, a] : [a, b];
 }
 
 function regimentOrStatePoint(pack, state) {
@@ -940,6 +984,10 @@ function average(values) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function distance(a, b) {
+  return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }
 
 function round(value, digits = 0) {
