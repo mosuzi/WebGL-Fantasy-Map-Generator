@@ -117,6 +117,12 @@
             placeholder="可选，例如边境谈判、贸易让步、宗教摩擦"
           />
         </label>
+        <div class="diplomacy-relation-safety" aria-label="关系变更影响">
+          <span v-for="item in relationSafetyRows" :key="item.label">
+            <small>{{ item.label }}</small>
+            <b>{{ item.value }}</b>
+          </span>
+        </div>
         <p class="diplomacy-relation-note">选择后会立即写入当前关系并进入撤销记录；说明会进入外交历史，不会触发军事行动。</p>
       </div>
     </template>
@@ -237,6 +243,12 @@ const relationContextMetrics = computed(() => selected.value ? [
   {label: "直接贸易", value: selected.value.tradeLabel},
   {label: "国力", value: formatNumber(selected.value.powerScore)},
   {label: "文化/宗教", value: `${selected.value.cultureName} / ${selected.value.religionName}`}
+] : []);
+const relationSafetyRows = computed(() => selected.value ? [
+  {label: "提交方式", value: "选择即提交，可撤销"},
+  {label: "写入范围", value: "外交矩阵 / 历史"},
+  {label: "战争选项", value: "只记录外交状态"},
+  {label: "说明写入", value: relationReasonDraft.value.trim() || "手动关系编辑"}
 ] : []);
 const diplomacyChronicleRows = computed(() => {
   props.state.version;
