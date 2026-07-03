@@ -77,6 +77,40 @@ export function createSetMilitaryStatusCommand(target, status, {label = "调整�
   };
 }
 
+export function createRenameMilitaryRegimentCommand(target, name, {label = "重命名军团"} = {}) {
+  const normalizedTarget = normalizeRegimentTarget(target);
+  const nextName = String(name || "").trim();
+  let previousName = null;
+
+  return {
+    label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    effects: {
+      ...MILITARY_EFFECTS,
+      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+    },
+    apply(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      if (!nextName) throw new Error("军团名称不能为空");
+      previousName ??= regiment.name;
+      regiment.name = nextName;
+      syncMilitary(context.map);
+    },
+    revert(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) throw new Error("找不到军团");
+      if (previousName === undefined) delete regiment.name;
+      else regiment.name = previousName;
+      syncMilitary(context.map);
+    },
+    isNoop(context) {
+      const {regiment} = findRegiment(context.map, normalizedTarget);
+      if (!regiment) return true;
+      return !nextName || String(regiment.name || "").trim() === nextName;
+    }
+  };
+}
+
 function snapshotMilitary(map) {
   const states = map?.pack?.states || map?.politics?.states || [];
   return {

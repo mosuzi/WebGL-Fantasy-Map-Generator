@@ -15418,3 +15418,28 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：选中 `13:0` 军团后，从 `patrolling / 巡逻中` 改为 `marching / 行军中`，`order.kind` 变为 `advance`，历史为 `undo 1 / redo 0 / 调整军团态势 #13:0`。
 - 同次烟测中点击“撤销上次”恢复 `patrolling`，点击“重做上次”再次变为 `marching`；`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1659.2ms`，纯生成 `766.4ms`，WebGL 加载 `534.9ms`，UI slack `357.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 144.8ms`，最慢加载阶段为 `构建视觉 cell mesh 66ms`，`fit-draw = 5.2ms`，`glError = 0`。
+
+### 军团重命名
+
+背景：
+
+- 阶段 4 的轻量军团编辑还包括“重命名军团”。
+- 该能力比驻地移动和战斗事件更小，适合作为军团对象编辑的下一步。
+
+修正：
+
+- `military-edit-commands.js` 新增 `createRenameMilitaryRegimentCommand()`。
+- 命令只修改目标军团 `name`，不重建完整军事数据。
+- `军事管理` 的二级操作新增“重命名”，复用 `UiTextEditField`。
+- 重命名结果会刷新表格、概要、对象索引、图层和历史状态。
+
+文档：
+
+- 更新 `docs/current-plan.md`，把军团重命名记录为已完成，并把下一步切到用户新指出的军事态势线表现修正。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `747.45KB / gzip 225.64KB`，`MilitaryPanel` 懒加载 chunk 约 `12.60KB / gzip 4.60KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：`13:0` 军团从 `1（松岳镇）军团` 改为 `1（松岳镇）军团-改名`，底层数据、表格行和概要标题同步更新，历史为 `undo 1 / redo 0 / 重命名军团 #13:0`。
+- 同次烟测中点击“撤销上次”恢复原名，点击“重做上次”再次应用新名；`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1869.8ms`，纯生成 `847.4ms`，WebGL 加载 `484.8ms`，UI slack `537.6ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 138ms`，最慢加载阶段为 `构建标签 74.9ms`，`fit-draw = 5.5ms`，`glError = 0`。

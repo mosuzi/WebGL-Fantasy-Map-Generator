@@ -49,6 +49,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     },
     onRatiosApply: (stateId, ratios) => callbacks.onRatiosApply?.(stateId, ratios),
     onStatusApply: (target, status) => callbacks.onStatusApply?.(target, status),
+    onRename: (target, name) => callbacks.onRename?.(target, name),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };

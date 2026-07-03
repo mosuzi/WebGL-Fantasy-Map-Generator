@@ -73,6 +73,16 @@
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
 
   <UiActionDock v-if="selectedState" v-model:active="activeAction" :actions="militaryActions">
+    <template #rename>
+      <UiTextEditField
+        class-name="military-name-editor"
+        label="军团"
+        action-label="应用名称"
+        :model-value="selected?.name || ''"
+        :max-length="40"
+        @apply="applyRename"
+      />
+    </template>
     <template #status>
       <div class="military-status-panel">
         <div class="military-status-heading">
@@ -139,6 +149,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
+import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -223,6 +234,7 @@ const statusEditOptions = computed(() => {
   return options;
 });
 const militaryActions = computed(() => [
+  {key: "rename", label: "重命名", icon: "✎", disabled: !selected.value},
   {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
   {key: "ratios", label: "兵种比例", icon: "⚖"}
 ]);
@@ -370,6 +382,16 @@ function applyStatus() {
     stateId: selected.value.stateId,
     regimentId: selected.value.regimentId
   }, statusDraft.value);
+  activeAction.value = null;
+}
+
+function applyRename(name) {
+  if (!selected.value) return;
+  props.callbacks.onRename?.({
+    id: selected.value.id,
+    stateId: selected.value.stateId,
+    regimentId: selected.value.regimentId
+  }, name);
   activeAction.value = null;
 }
 
