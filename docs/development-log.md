@@ -15326,3 +15326,21 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：默认地图生成后，国家数 `20`，校正记录包含 `南越 -> 越`、`南楚 -> 楚`、`西秦 -> 秦`，同时保留 `北辰`。
 - 同次烟测中 checksum 为 `b91ee397`，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1552.8ms`，纯生成 `750ms`，WebGL 加载 `510.6ms`，UI slack `292.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 136.5ms`，最慢加载阶段为 `构建线层顶点 69.2ms`，`fit-draw = 3.1ms`，`glError = 0`。
+
+### README 当前状态刷新
+
+背景：
+
+- 用户要求 README 更新一波，主要说明已经做了哪些任务、还要做哪些任务。
+- 原 README 更偏项目愿景和运行方式，对当前阶段的具体能力覆盖不足。
+
+修正：
+
+- 在 README 的“现在可以做什么”后新增“已经完成”。
+- 已完成部分整理 WebGL 主视图、独立生成链路、对象管理面板、轻量编辑、高度图导入、导出、运行时体验和中文命名优化。
+- 新增“还要做”，列出军事事件、经济贸易、用户文档、纹章主题、名称库绑定和大地图性能等后续方向。
+
+验证：
+
+- 该步只修改 README 和中文计划/日志，不涉及运行时代码。
+- `git diff --check` 通过。
