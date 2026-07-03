@@ -107,6 +107,7 @@
         :options="battleEventExportScopeOptions"
         @update:model-value="value => eventExportScope = value"
       />
+      <UiButton variant="secondary" :disabled="!selectedFilteredBattleEvents.length" @click="clearFilteredBattleEvents">清空筛选</UiButton>
       <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
     </div>
     <p v-if="!selectedBattleEvents.length" class="military-event-empty">{{ selectedBattleEventTotal ? "没有匹配当前筛选的战斗事件。" : "当前军团还没有战斗事件。" }}</p>
@@ -657,6 +658,13 @@ function applyBattleEvent(description) {
 function clearSelectedBattleEvents() {
   if (!selected.value || !selectedBattleEventTotal.value) return;
   props.callbacks.onBattleEventsClear?.(militaryTarget(selected.value));
+}
+
+function clearFilteredBattleEvents() {
+  if (!selected.value || !selectedFilteredBattleEvents.value.length) return;
+  const eventIds = selectedFilteredBattleEvents.value.map(event => event.id).filter(Boolean);
+  if (!eventIds.length) return;
+  props.callbacks.onBattleEventsClear?.(militaryTarget(selected.value), eventIds);
 }
 
 function clearBattleEventDescription() {

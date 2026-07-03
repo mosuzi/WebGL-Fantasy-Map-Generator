@@ -15757,3 +15757,29 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，用命令层记录 `袭扰 / 损耗` 与 `攻城 / 小胜` 两条事件；类型筛选切到 `袭扰`、导出范围切到 `当前筛选` 后，标题为 `1 / 2 条`。
 - 同次烟测下载 `fmg-military-events-stage-2-1-filtered.json`，其中 `scope = filtered`、`count = 1`、唯一事件 type 为 `raid`；下载 `fmg-military-events-stage-2-1-filtered.csv` 只有表头和一条 `袭扰` 事件，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1465ms`，纯生成 `767.7ms`，WebGL 加载 `369.5ms`，UI slack `327.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 138.7ms`，最慢加载阶段为 `构建视觉 cell mesh 53.3ms`，`line-vertices = 44.2ms`，`fit-draw = 2.5ms`，`glError = 0`。
+
+### 战斗事件按筛选清理
+
+背景：
+
+- 选中军团事件区已经支持类型/结果筛选和按筛选导出，但清理入口仍只有“清空当前”，会删除当前军团全部事件。
+- 导入或连续记录多条事件后，用户需要只删除当前筛选命中的事件，保留同军团其他事件。
+
+修正：
+
+- `createClearMilitaryBattleEventsCommand()` 增加可选 `eventIds` 范围。
+- 清理命令会同时校验事件属于当前军团和事件 id 命中范围；没有传范围时保留原来的“清空当前军团”语义。
+- `军事管理` 事件筛选区新增“清空筛选”按钮，旧“清空当前”继续保留。
+- 运行时清理回调支持传入筛选事件 id，并在历史标签中区分 `清空筛选战斗事件` 与 `清空军团战斗事件`。
+- 本轮只清理事件记录，不回滚已经应用过的兵力、兵种、态势、命令或外交战争状态。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 245 项。
+
+验证：
+
+- 命令烟测通过：给军团 `1:0` 记录 `raid / siege` 两条事件后，按 `raid` 事件 id 执行清理，清理后全局事件只剩 `siege`；撤销后恢复 `raid / siege`，兵力保持不变。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `26.41KB / gzip 8.47KB`，主入口约 `765.90KB / gzip 231.17KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：打开 `http://127.0.0.1:5410`，给军团 `1:0` 注入 `袭扰 / 损耗` 与 `攻城 / 小胜` 两条事件；类型筛选切到 `袭扰` 后标题为 `1 / 2 条`，点击“清空筛选”后全局和军团本地事件均只剩 `siege`，历史为 `清空筛选战斗事件 #1:0`；撤销后恢复 `raid / siege`，`glError = 0`、console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1447.1ms`，纯生成 `663.7ms`，WebGL 加载 `465.8ms`，UI slack `317.6ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 123.9ms`，最慢加载阶段为 `构建线层顶点 84.2ms`，`fit-draw = 3.6ms`。

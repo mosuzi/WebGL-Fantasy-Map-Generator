@@ -261,8 +261,9 @@ export function createImportMilitaryBattleEventsCommand(document, {label = "导�
   };
 }
 
-export function createClearMilitaryBattleEventsCommand(target, {label = "清空军团战斗事件"} = {}) {
+export function createClearMilitaryBattleEventsCommand(target, {label = "清空军团战斗事件", eventIds = null} = {}) {
   const normalizedTarget = normalizeRegimentTarget(target);
+  const scopedEventIds = eventIds?.length ? new Set(eventIds.filter(Boolean).map(String)) : null;
   let previous = null;
   let removed = 0;
 
@@ -278,11 +279,11 @@ export function createClearMilitaryBattleEventsCommand(target, {label = "清空�
       previous ??= snapshotBattleEvents(context.map, state, regiment);
       const military = ensureMilitaryEventStore(context.map);
       const beforeGlobal = military.events.length;
-      military.events = military.events.filter(event => !battleEventMatchesTarget(event, normalizedTarget));
+      military.events = military.events.filter(event => !battleEventMatchesClearScope(event, normalizedTarget, scopedEventIds));
       removed = beforeGlobal - military.events.length;
       if (Array.isArray(regiment.events)) {
         const beforeRegiment = regiment.events.length;
-        regiment.events = regiment.events.filter(event => !battleEventMatchesTarget(event, normalizedTarget));
+        regiment.events = regiment.events.filter(event => !battleEventMatchesClearScope(event, normalizedTarget, scopedEventIds));
         removed = Math.max(removed, beforeRegiment - regiment.events.length);
       }
       if (!removed) throw new Error("当前军团没有可清空的战斗事件");
@@ -299,7 +300,7 @@ export function createClearMilitaryBattleEventsCommand(target, {label = "清空�
     },
     isNoop(context) {
       const {regiment} = findRegiment(context.map, normalizedTarget);
-      return !regiment || !countBattleEventsForTarget(context.map, normalizedTarget, regiment);
+      return !regiment || !countBattleEventsForTarget(context.map, normalizedTarget, regiment, scopedEventIds);
     },
     getResult() {
       return {removed};
@@ -563,10 +564,10 @@ function importedBattleEventTarget(event = {}) {
   });
 }
 
-function countBattleEventsForTarget(map, target, regiment) {
+function countBattleEventsForTarget(map, target, regiment, eventIds = null) {
   const military = map?.pack?.military || map?.military || {};
-  const globalCount = (Array.isArray(military.events) ? military.events : []).filter(event => battleEventMatchesTarget(event, target)).length;
-  const regimentCount = (Array.isArray(regiment?.events) ? regiment.events : []).filter(event => battleEventMatchesTarget(event, target)).length;
+  const globalCount = (Array.isArray(military.events) ? military.events : []).filter(event => battleEventMatchesClearScope(event, target, eventIds)).length;
+  const regimentCount = (Array.isArray(regiment?.events) ? regiment.events : []).filter(event => battleEventMatchesClearScope(event, target, eventIds)).length;
   return Math.max(globalCount, regimentCount);
 }
 
@@ -574,6 +575,11 @@ function battleEventMatchesTarget(event, target) {
   if (!event || event.kind !== "battle") return false;
   if (event.regimentObjectId && target.id && event.regimentObjectId === target.id) return true;
   return Number(event.stateId) === target.stateId && Number(event.regimentId) === target.regimentId;
+}
+
+function battleEventMatchesClearScope(event, target, eventIds = null) {
+  if (!battleEventMatchesTarget(event, target)) return false;
+  return !eventIds || eventIds.has(String(event.id || ""));
 }
 
 function uniqueRegimentTargets(targets = []) {
