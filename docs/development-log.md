@@ -14648,3 +14648,22 @@ full 矩阵结果：
 - 新增 `useDraggableFloatingPanel()`，为 Vue Teleport 浮层提供通用定位、拖动、视口约束和可选本地位置保存。
 - 导出面板接入该通用能力：首次打开定位到导出按钮附近，用户拖动后保留位置，窗口变化时只约束在视口内。
 - 树状总览面板改用同一 composable，减少后续二级浮层重复实现拖动逻辑。
+
+### 异步面板空闲预热
+
+背景：
+
+- Element Plus 和 Vue 面板拆成异步 chunk 后，首屏资源更轻，但用户首次打开复杂面板时仍可能遇到临时加载等待。
+- 用户希望保留拆包收益，同时在页面初次加载后利用执行空隙主动把异步组件加载好。
+
+修正：
+
+- `createLazyVuePanel()` 新增组件模块缓存和 `preload()` 能力，预热只触发动态 import，不挂载 Vue app、不打开面板、不改变面板内容。
+- 新增统一空闲预热队列：地图进入可交互状态后，运行时会按 `requestIdleCallback` 或 `setTimeout` fallback 逐个预热异步面板 chunk，避免集中抢占主线程。
+- 预热状态挂到 `window.__webglGeneratorLazyPreload.getStats()`，可查看总数、完成数、失败数、当前活跃面板和每个 chunk 的耗时。
+
+### 构建日志噪声收敛
+
+- Vite 8 / Rolldown 会报告 `@vueuse/core` 内部 misplaced `/* #__PURE__ */` 注释，日志代码为 `INVALID_ANNOTATION`；该问题来自上游包注释位置，不影响当前构建产物和运行时。
+- `vite.config.mjs` 已通过 `build.rolldownOptions.onLog` 精准过滤 `@vueuse/core/dist/index.js` 当前两个已知行号上的 `INVALID_ANNOTATION`，不全局关闭该 warning 类型。
+- 大 chunk 提示暂保留；当前主包 gzip 约 `221 kB`，后续如需继续优化，应先做 bundle 分析再拆首屏非必要模块。

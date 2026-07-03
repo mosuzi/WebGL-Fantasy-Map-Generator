@@ -28,6 +28,7 @@ import {createReligionPanel} from "../ui/panels/religion-panel.js";
 import {createRiverPanel} from "../ui/panels/river-panel.js";
 import {createRoutePanel} from "../ui/panels/route-panel.js";
 import {createStatePanel} from "../ui/panels/state-panel.js";
+import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
@@ -155,6 +156,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     pendingGenerateId: 0,
     heightmapImportId: 0,
     healthMonitor,
+    lazyPanelPreloadScheduled: false,
     panels: {}
   };
   let selectionStore = null;
@@ -1513,6 +1515,20 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
     loadMap: state.renderer?.getStats?.().loadMap || null
   });
   updateGenerationLoading(documentRef, false);
+  scheduleLazyPanelsAfterMapReady(state, documentRef);
+}
+
+function scheduleLazyPanelsAfterMapReady(state, documentRef) {
+  if (state.lazyPanelPreloadScheduled) return;
+  state.lazyPanelPreloadScheduled = true;
+  scheduleAfterPaint(documentRef, () => {
+    scheduleLazyVuePanelPreload(documentRef, {
+      reason: "map-ready",
+      firstDelayMs: 420,
+      gapMs: 120,
+      timeoutMs: 1600
+    });
+  });
 }
 
 function scheduleAfterPaint(documentRef, callback) {
