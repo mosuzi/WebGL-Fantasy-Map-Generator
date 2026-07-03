@@ -6,17 +6,16 @@
       <section class="project-about-card" aria-labelledby="project-about-title">
         <h2 id="project-about-title">WebGL 地图生成器</h2>
         <p>
-          这是一个参考 Azgaar/Fantasy-Map-Generator 的生成流程、数据结构和视觉经验，
-          以 WebGL2 canvas 重新实现的独立地图生成器。
+          本项目受 Azgaar/Fantasy Map Generator 启发，尝试用 WebGL 重新铺开一张
+          可生成、可编辑、可导出的幻想世界地图。
         </p>
         <p>
-          当前已接入地形、气候、河流、文化、宗教、国家、省份、城镇、道路、资源点、外交、经济、军事和区域等系统，
-          并提供 Vue 浮动面板用于查看、编辑和局部重新生成地图对象。
+          愿它保留原作那种“世界自己长出来”的惊喜，也成为一次面向现代浏览器的轻量重写实验。
         </p>
         <div class="project-link-row" aria-label="项目链接">
-          <a href="https://github.com/mosuzi/fmg-gl" target="_blank" rel="noreferrer">当前项目</a>
-          <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">原版仓库</a>
-          <a href="https://azgaar.github.io/Fantasy-Map-Generator/" target="_blank" rel="noreferrer">原版在线版</a>
+          <a href="https://github.com/mosuzi/fmg-gl" target="_blank" rel="noreferrer">查看此卷</a>
+          <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">拜访原作</a>
+          <a href="https://azgaar.github.io/Fantasy-Map-Generator/" target="_blank" rel="noreferrer">体验原作</a>
         </div>
         <div class="project-file-actions" aria-label="本地文件操作">
           <div ref="exportAnchorRef" class="project-action-anchor">

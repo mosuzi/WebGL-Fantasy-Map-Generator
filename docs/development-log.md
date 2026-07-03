@@ -14667,3 +14667,8 @@ full 矩阵结果：
 - Vite 8 / Rolldown 会报告 `@vueuse/core` 内部 misplaced `/* #__PURE__ */` 注释，日志代码为 `INVALID_ANNOTATION`；该问题来自上游包注释位置，不影响当前构建产物和运行时。
 - `vite.config.mjs` 已通过 `build.rolldownOptions.onLog` 精准过滤 `@vueuse/core/dist/index.js` 当前两个已知行号上的 `INVALID_ANNOTATION`，不全局关闭该 warning 类型。
 - 大 chunk 提示暂保留；当前主包 gzip 约 `221 kB`，后续如需继续优化，应先做 bundle 分析再拆首屏非必要模块。
+
+### 简介文案诗意化
+
+- 控制面板“简介”tab 的项目介绍改为更偏致敬和创作感的表达，避免“原版在线版 / 原版仓库”等生硬措辞。
+- 项目链接按钮改为“查看此卷 / 拜访原作 / 体验原作”。
