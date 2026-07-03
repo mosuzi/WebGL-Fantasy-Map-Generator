@@ -4921,15 +4921,21 @@ input.ui-switch-native {
   color: #edf4f6;
 }
 
-.diplomacy-panel-controls,
-.military-panel-controls {
+.diplomacy-panel-controls {
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
   gap: 8px;
 }
 
+.military-panel-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(0, 1.2fr);
+  gap: 8px;
+}
+
 .diplomacy-subject-select,
-.military-state-select {
+.military-state-select,
+.military-status-select {
   grid-template-columns: 44px minmax(0, 1fr);
 }
 

@@ -11,6 +11,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     sortKey: "troops",
     sortDir: "desc",
     selectedStateId: "all",
+    selectedStatus: "all",
     selectedRegimentId: null,
     version: 0
   });
@@ -20,7 +21,15 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     },
     onStateChange: stateId => {
       panelState.selectedStateId = stateId === "all" ? "all" : Number(stateId);
-      if (!regimentExists(panelState.map, panelState.selectedRegimentId, panelState.selectedStateId)) panelState.selectedRegimentId = firstRegimentId(panelState.map, panelState.selectedStateId);
+      if (!regimentExists(panelState.map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
+        panelState.selectedRegimentId = firstRegimentId(panelState.map, panelState.selectedStateId, panelState.selectedStatus);
+      }
+    },
+    onStatusChange: status => {
+      panelState.selectedStatus = status || "all";
+      if (!regimentExists(panelState.map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
+        panelState.selectedRegimentId = firstRegimentId(panelState.map, panelState.selectedStateId, panelState.selectedStatus);
+      }
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -74,7 +83,9 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.history = history;
       if (selection?.object?.kind === "military") panelState.selectedRegimentId = selection.object.id;
-      if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId)) panelState.selectedRegimentId = firstRegimentId(map, panelState.selectedStateId);
+      if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
+        panelState.selectedRegimentId = firstRegimentId(map, panelState.selectedStateId, panelState.selectedStatus);
+      }
       panelState.version++;
       panelState.open = true;
       manager.open("military-panel");
@@ -84,11 +95,13 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId)) panelState.selectedRegimentId = firstRegimentId(map, panelState.selectedStateId);
+      if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
+        panelState.selectedRegimentId = firstRegimentId(map, panelState.selectedStateId, panelState.selectedStatus);
+      }
       panelState.version++;
     },
     setSelectedRegimentId(regimentId) {
-      if (!regimentExists(panelState.map, regimentId, panelState.selectedStateId)) return;
+      if (!regimentExists(panelState.map, regimentId, panelState.selectedStateId, panelState.selectedStatus)) return;
       panelState.selectedRegimentId = regimentId;
     },
     isOpen() {
@@ -124,12 +137,22 @@ function militaryObject(row) {
   };
 }
 
-function firstRegimentId(map, stateId = "all") {
-  return regimentRows(map).find(row => stateId === "all" || row.stateId === Number(stateId))?.id ?? null;
+function firstRegimentId(map, stateId = "all", status = "all") {
+  return regimentRows(map).find(row => regimentMatches(row, stateId, status))?.id ?? null;
 }
 
-function regimentExists(map, regimentId, stateId = "all") {
-  return Boolean(regimentRows(map).find(row => row.id === regimentId && (stateId === "all" || row.stateId === Number(stateId))));
+function regimentExists(map, regimentId, stateId = "all", status = "all") {
+  return Boolean(regimentRows(map).find(row => row.id === regimentId && regimentMatches(row, stateId, status)));
+}
+
+function regimentMatches(row, stateId, status) {
+  const matchesState = stateId === "all" || row.stateId === Number(stateId);
+  const matchesStatus = status === "all" || statusValue(row) === status;
+  return matchesState && matchesStatus;
+}
+
+function statusValue(row) {
+  return String(row.status || row.statusLabel || "unknown");
 }
 
 function regimentRows(map) {
@@ -140,6 +163,8 @@ function regimentRows(map) {
       regimentId: regiment.i,
       stateId: state.i,
       stateName: state.name || state.fullName || `国家 #${state.i}`,
-      name: regiment.name || `军团 #${regiment.i}`
+      name: regiment.name || `军团 #${regiment.i}`,
+      status: regiment.status,
+      statusLabel: regiment.statusLabel
     })));
 }

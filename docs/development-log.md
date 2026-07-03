@@ -15368,3 +15368,28 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：打开军事管理和“兵种比例”后，比例面板显示 `5` 个比例项、`5` 个滑条和应用按钮；示例比例为步兵 `49%`、弓兵 `26%`、骑兵 `3%`、器械 `8%`、舰队 `15%`。
 - 同次烟测中地图 checksum 为 `535004fa`，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1560ms`，纯生成 `809.8ms`，WebGL 加载 `463.6ms`，UI slack `286.6ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 147.2ms`，最慢加载阶段为 `构建视觉 cell mesh 60.9ms`，`fit-draw = 2.8ms`，`glError = 0`。
+
+### 军事面板态势筛选
+
+背景：
+
+- 军事管理面板已经完成概要区和兵种比例二级面板，但军团列表仍只能按国家和文本搜索收敛。
+- 用户指出军事单位编辑面板样式粗糙，本轮不继续做纯视觉微调，而是补一个正式管理面板应有的轻量筛选能力。
+
+修正：
+
+- `军事管理` 控制区新增“态势”下拉，选项来自当前地图军团的 `status / statusLabel`。
+- 国家筛选、态势筛选和文本筛选会共同约束军团表格。
+- 切换态势后，如果原选中军团不在当前筛选结果中，概要区会自动落到第一条可见军团，避免列表和详情不一致。
+- 控制区从两列改为三列，国家、态势和搜索框各自保持稳定宽度。
+
+文档：
+
+- 更新 `docs/current-plan.md`，把军事面板当前状态改为概要、比例面板和态势筛选已完成，并把后续方向收敛到批量命令、军团编辑和战斗事件。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `744.34KB / gzip 224.94KB`，`MilitaryPanel` 懒加载 chunk 约 `10.95KB / gzip 4.16KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：默认地图打开军事管理后，态势选项为 `全部态势 / 败逃中 / 集结中 / 行军中 / 修整中 / 巡逻中 / 驻防中`。
+- 同次烟测中选择 `败逃中` 后，表格从 `111` 行收敛到 `1` 行，表格状态列和概要标签均为 `败逃中`；三列控制区宽度约 `195.6px / 169.5px / 312.9px`，`webgl2 = true`、`glError = 0`、console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1637.2ms`，纯生成 `805.5ms`，WebGL 加载 `432.6ms`，UI slack `399.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 129.3ms`，最慢加载阶段为 `构建视觉 cell mesh 56.5ms`，`fit-draw = 3.2ms`，`glError = 0`。

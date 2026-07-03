@@ -10,7 +10,15 @@
       :options="stateOptions"
       @update:model-value="callbacks.onStateChange"
     />
-    <UiFilterInput :model-value="state.filter" placeholder="筛选军团 / 国家 / 状态 / 兵种" @update:model-value="callbacks.onFilter" />
+    <UiSelectField
+      input-id="military-status-filter"
+      class-name="military-status-select"
+      label="态势"
+      :model-value="state.selectedStatus"
+      :options="statusOptions"
+      @update:model-value="callbacks.onStatusChange"
+    />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选军团 / 国家 / 兵种" @update:model-value="callbacks.onFilter" />
   </div>
 
   <div class="military-edit-toolbar">
@@ -163,9 +171,19 @@ const stateOptions = computed(() => [
   {value: "all", label: "全部国家"},
   ...metrics.value.states.map(state => ({value: state.id, label: state.name}))
 ]);
-const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId));
+const statusOptions = computed(() => {
+  const options = new Map();
+  for (const row of metrics.value.rows) options.set(statusValue(row), row.statusLabel || row.status || "未知");
+  return [
+    {value: "all", label: "全部态势"},
+    ...[...options.entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], "zh-CN"))
+      .map(([value, label]) => ({value, label}))
+  ];
+});
+const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
-const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedRegimentId) || visibleRows.value[0] || null);
+const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const selectedState = computed(() => selected.value ? metrics.value.states.find(state => state.id === selected.value.stateId) : metrics.value.states.find(state => state.id === Number(props.state.selectedStateId)) || null);
 const ratioTotalLabel = computed(() => `${Math.round(Object.values(ratioDraft).reduce((sum, value) => sum + Number(value || 0), 0))}%`);
@@ -264,17 +282,22 @@ function stateRows(map) {
     }));
 }
 
-function filterRows(rows, filter, stateId) {
+function filterRows(rows, filter, stateId, status = "all") {
   const filteredByState = stateId === "all" ? rows : rows.filter(row => row.stateId === Number(stateId));
+  const filteredByStatus = status === "all" ? filteredByState : filteredByState.filter(row => statusValue(row) === status);
   const query = filter.trim().toLowerCase();
-  if (!query) return filteredByState;
-  return filteredByState.filter(row =>
+  if (!query) return filteredByStatus;
+  return filteredByStatus.filter(row =>
     row.id.toLowerCase().includes(query)
     || row.name.toLowerCase().includes(query)
     || row.stateName.toLowerCase().includes(query)
     || row.statusLabel.toLowerCase().includes(query)
     || row.dominantUnitLabel.toLowerCase().includes(query)
   );
+}
+
+function statusValue(row) {
+  return String(row.status || row.statusLabel || "unknown");
 }
 
 function sortRows(rows, key, direction) {
