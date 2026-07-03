@@ -192,9 +192,15 @@
       </div>
       <div class="military-event-actions">
         <UiButton v-if="selectedBattleEventsCanExpand" variant="secondary" @click="toggleBattleEventDisplay">{{ battleEventDisplayToggleLabel }}</UiButton>
-        <UiButton variant="secondary" :disabled="!selectedFilteredBattleEvents.length" @click="clearFilteredBattleEvents">清空筛选</UiButton>
-        <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">清空当前</UiButton>
+        <UiButton variant="secondary" :disabled="!selectedFilteredBattleEvents.length" @click="clearFilteredBattleEvents">{{ clearFilteredBattleEventsLabel }}</UiButton>
+        <UiButton variant="secondary" :disabled="!selectedBattleEventTotal" @click="clearSelectedBattleEvents">{{ clearSelectedBattleEventsLabel }}</UiButton>
       </div>
+    </div>
+    <div class="military-event-scope-summary" aria-label="战报清理范围">
+      <span v-for="item in battleEventScopeMetrics" :key="item.label">
+        <small>{{ item.label }}</small>
+        <b>{{ item.value }}</b>
+      </span>
     </div>
     <p v-if="!selectedBattleEvents.length" class="military-event-empty">{{ selectedBattleEventTotal ? "没有匹配当前筛选的战报记录。" : "当前军团还没有战报记录。" }}</p>
     <ol v-else>
@@ -591,6 +597,14 @@ const battleEventCountLabel = computed(() => {
   if (selectedFilteredBattleEvents.value.length === selectedBattleEventTotal.value) return `${formatNumber(selectedBattleEventTotal.value)} 条`;
   return `${formatNumber(selectedFilteredBattleEvents.value.length)} / ${formatNumber(selectedBattleEventTotal.value)} 条`;
 });
+const battleEventScopeMetrics = computed(() => [
+  {label: "当前军团", value: `${formatNumber(selectedBattleEventTotal.value)} 条`},
+  {label: "当前筛选", value: `${formatNumber(selectedFilteredBattleEvents.value.length)} 条`},
+  {label: "当前显示", value: `${formatNumber(selectedBattleEvents.value.length)} 条`},
+  {label: "导出范围", value: `${battleEventExportScopeLabel(eventExportScope.value)} ${formatNumber(exportBattleEventRows.value.length)} 条`}
+]);
+const clearFilteredBattleEventsLabel = computed(() => selectedFilteredBattleEvents.value.length ? `清空筛选 ${formatNumber(selectedFilteredBattleEvents.value.length)}` : "清空筛选");
+const clearSelectedBattleEventsLabel = computed(() => selectedBattleEventTotal.value ? `清空当前 ${formatNumber(selectedBattleEventTotal.value)}` : "清空当前");
 const battleResultPreview = computed(() => {
   const rule = battleResultRules[battleEventDraft.outcome] || battleResultRules.draw;
   const troops = Math.max(0, Math.round(Number(selected.value?.troops || 0)));

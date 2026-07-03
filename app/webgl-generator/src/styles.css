@@ -5642,6 +5642,36 @@ input.ui-switch-native {
   min-width: 0;
 }
 
+.military-event-scope-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 7px;
+}
+
+.military-event-scope-summary span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 7px 8px;
+  background: rgba(7, 12, 15, 0.36);
+}
+
+.military-event-scope-summary small {
+  color: #8ca0aa;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.military-event-scope-summary b {
+  min-width: 0;
+  color: #edf4f6;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .ui-select-field.military-event-filter,
 .ui-select-field.military-event-export-scope {
   grid-template-columns: 34px minmax(0, 1fr);
