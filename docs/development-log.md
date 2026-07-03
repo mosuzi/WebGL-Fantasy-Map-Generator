@@ -16618,3 +16618,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `780.69KB / gzip 235.43KB`，`GovernmentPanel` chunk 约 `11.68KB / gzip 4.21KB`。
 - 构建产物浏览器烟测通过：默认 `stage-2-1` 打开 `政体管理` 后选择 `autocracy / 专制集权` 家族，面板筛出 `7` 个国家、`3` 类政体；JSON 导出 `familyFilter = autocracy`、`exportedStates = 7`、`governments = 3`，国家明细全部为 `autocracy`；CSV 为 `8` 行，控制区无横向溢出，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1344.8ms`，纯生成 `722.6ms`，WebGL 加载 `398.3ms`，UI slack `223.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 140.1ms`，最慢加载阶段为 `构建线层顶点 67ms`。
+
+### 政体静态交叉摘要第一刀
+
+背景：
+
+- 政体系统已经影响经济和外交，但 `政体管理` 详情仍只显示政体自身和人口/面积/经济/军力，缺少从已有国家字段聚合出的经济、资源和外交上下文。
+- 本轮只做只读静态摘要，不重算经济、外交或军事，不新增政体事件。
+
+修正：
+
+- `政体管理` 选中政体详情新增国力、资源潜力、平均贸易修正、战争/宿敌计数、盟友/附庸计数。
+- 政体分组聚合复用已有 `powerScore / resourcePotential / governmentTradeModifier / diplomacySummary` 字段。
+- JSON 导出的政体分组新增 `powerScore / resourcePotential / tradeModifierAverage / diplomacy`，国家明细新增 `powerScore / resourcePotential / governmentTradeModifier / diplomacySummary`。
+- CSV 导出新增 `国力 / 资源潜力 / 贸易修正 / 盟友 / 战争 / 宿敌 / 附庸` 列，便于离线分析政体与经济外交状态。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `780.69KB / gzip 235.43KB`，`GovernmentPanel` chunk 约 `13.61KB / gzip 4.75KB`。
+- 构建产物浏览器烟测通过：打开 `政体管理` 后详情区显示 `国力 / 资源潜力 / 贸易修正 / 战争 / 宿敌 / 盟友 / 附庸`；JSON 政体分组包含 `diplomacy` 与 `tradeModifierAverage`，国家明细包含 `diplomacySummary` 与 `governmentTradeModifier`；CSV 表头包含 `国力 / 资源潜力 / 贸易修正 / 战争`；控制区无横向溢出，`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1410.6ms`，纯生成 `718.2ms`，WebGL 加载 `375.3ms`，UI slack `317.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 124.5ms`，最慢加载阶段为 `构建视觉 cell mesh 53.8ms`。

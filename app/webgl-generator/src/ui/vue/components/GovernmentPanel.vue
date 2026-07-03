@@ -183,8 +183,13 @@ const detailRows = computed(() => selectedGovernment.value ? [
   {label: "国家", value: formatNumber(selectedGovernment.value.count)},
   {label: "人口", value: formatPopulationValue(selectedGovernment.value.population)},
   {label: "面积", value: formatAreaValue(selectedGovernment.value.area)},
+  {label: "国力", value: formatNumber(selectedGovernment.value.powerScore)},
   {label: "经济力", value: formatNumber(selectedGovernment.value.economicPower)},
+  {label: "资源潜力", value: formatNumber(selectedGovernment.value.resourcePotential)},
+  {label: "贸易修正", value: formatTradeModifier(selectedGovernment.value.tradeModifierAverage)},
   {label: "军力", value: formatNumber(selectedGovernment.value.militaryPower)},
+  {label: "战争 / 宿敌", value: `${formatNumber(selectedGovernment.value.diplomacy.Enemy || 0)} / ${formatNumber(selectedGovernment.value.diplomacy.Rival || 0)}`},
+  {label: "盟友 / 附庸", value: `${formatNumber(selectedGovernment.value.diplomacy.Ally || 0)} / ${formatNumber(selectedGovernment.value.diplomacy.Vassal || 0)}`},
   {label: "效果", value: selectedGovernment.value.effectSummary},
   {label: "代表国家", value: selectedGovernment.value.sampleStates}
 ] : []);
@@ -205,11 +210,16 @@ function buildGovernmentMetrics(map) {
     group.population += row.population;
     group.area += row.area;
     group.economicPower += row.economicPower;
+    group.resourcePotential += row.resourcePotential;
+    group.powerScore += row.powerScore;
     group.militaryPower += row.militaryPower;
+    group.tradeModifierTotal += row.governmentTradeModifier;
+    mergeDiplomacyCounts(group.diplomacy, row.diplomacyCounts);
     if (group.samples.length < 4) group.samples.push(row.name);
   }
   const governments = Array.from(groups.values()).map(group => ({
     ...group,
+    tradeModifierAverage: group.count ? roundExportNumber(group.tradeModifierTotal / group.count, 3) : 1,
     sampleStates: group.samples.join(" / ") || "无"
   }));
   const dominant = governments.reduce((best, row) => row.count > (best?.count || 0) ? row : best, null);
@@ -253,8 +263,15 @@ function exportCsv() {
     "首都",
     "人口",
     "面积",
+    "国力",
     "经济力",
+    "资源潜力",
+    "贸易修正",
     "军力",
+    "盟友",
+    "战争",
+    "宿敌",
+    "附庸",
     "城镇"
   ];
   const body = exportStateRows.value.map(row => [
@@ -268,8 +285,15 @@ function exportCsv() {
     row.capitalName,
     roundExportNumber(row.population),
     roundExportNumber(row.area),
+    roundExportNumber(row.powerScore),
     roundExportNumber(row.economicPower),
+    roundExportNumber(row.resourcePotential),
+    roundExportNumber(row.governmentTradeModifier),
     roundExportNumber(row.militaryPower),
+    row.diplomacyCounts.Ally || 0,
+    row.diplomacyCounts.Enemy || 0,
+    row.diplomacyCounts.Rival || 0,
+    row.diplomacyCounts.Vassal || 0,
     row.burgs
   ]);
   const text = [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n");
@@ -313,7 +337,11 @@ function ensureGovernmentGroup(groups, key) {
       population: 0,
       area: 0,
       economicPower: 0,
+      resourcePotential: 0,
+      powerScore: 0,
       militaryPower: 0,
+      tradeModifierTotal: 0,
+      diplomacy: {},
       samples: []
     });
   }
@@ -338,6 +366,10 @@ function stateRows(map) {
         population: Number(stateItem.urban || 0) + Number(stateItem.rural || 0),
         area: Number(stateItem.area || stateItem.cells || 0),
         economicPower: Number(stateItem.economicPower || 0),
+        resourcePotential: Number(stateItem.resourcePotential || 0),
+        powerScore: Number(stateItem.powerScore || 0),
+        governmentTradeModifier: Number(stateItem.governmentTradeModifier || stateItem.government?.effects?.tradeMultiplier || 1),
+        diplomacyCounts: normalizeDiplomacyCounts(stateItem.diplomacySummary),
         militaryPower: sumMilitaryPower(stateItem.military),
         capitalName: capital?.name || "无",
         centerCell: stateItem.center ?? stateItem.gridCenter ?? null,
@@ -421,6 +453,13 @@ function familyLabel(family) {
   return GOVERNMENT_FAMILY_LEGEND[family]?.label || family || "未归类";
 }
 
+function formatTradeModifier(value) {
+  const numeric = Number(value || 1);
+  if (!Number.isFinite(numeric)) return "基准";
+  const percent = Math.round((numeric - 1) * 100);
+  return percent ? `${percent > 0 ? "+" : ""}${percent}%` : "基准";
+}
+
 function exportGovernmentRow(row) {
   return {
     key: row.key,
@@ -431,8 +470,12 @@ function exportGovernmentRow(row) {
     count: row.count,
     population: roundExportNumber(row.population),
     area: roundExportNumber(row.area),
+    powerScore: roundExportNumber(row.powerScore),
     economicPower: roundExportNumber(row.economicPower),
+    resourcePotential: roundExportNumber(row.resourcePotential),
+    tradeModifierAverage: roundExportNumber(row.tradeModifierAverage),
     militaryPower: roundExportNumber(row.militaryPower),
+    diplomacy: {...row.diplomacy},
     effectSummary: row.effectSummary,
     sampleStates: row.sampleStates
   };
@@ -451,8 +494,12 @@ function exportStateRow(row) {
     capitalName: row.capitalName,
     population: roundExportNumber(row.population),
     area: roundExportNumber(row.area),
+    powerScore: roundExportNumber(row.powerScore),
     economicPower: roundExportNumber(row.economicPower),
+    resourcePotential: roundExportNumber(row.resourcePotential),
+    governmentTradeModifier: roundExportNumber(row.governmentTradeModifier),
     militaryPower: roundExportNumber(row.militaryPower),
+    diplomacySummary: {...row.diplomacyCounts},
     burgs: row.burgs,
     centerCell: row.centerCell
   };
@@ -462,6 +509,26 @@ function roundExportNumber(value, digits = 3) {
   const numeric = Number(value) || 0;
   const factor = 10 ** digits;
   return Math.round(numeric * factor) / factor;
+}
+
+function normalizeDiplomacyCounts(counts = {}) {
+  return {
+    Ally: Number(counts.Ally || 0),
+    Friendly: Number(counts.Friendly || 0),
+    Neutral: Number(counts.Neutral || 0),
+    Suspicion: Number(counts.Suspicion || 0),
+    Rival: Number(counts.Rival || 0),
+    Enemy: Number(counts.Enemy || 0),
+    Vassal: Number(counts.Vassal || 0),
+    Suzerain: Number(counts.Suzerain || 0),
+    Unknown: Number(counts.Unknown || 0)
+  };
+}
+
+function mergeDiplomacyCounts(target, source) {
+  for (const [key, value] of Object.entries(source || {})) {
+    target[key] = (target[key] || 0) + Number(value || 0);
+  }
 }
 
 function csvEscape(value) {
