@@ -1202,6 +1202,7 @@ function refreshMilitaryCampaignEventSummaries(map, military = map?.pack?.milita
     campaign.participantCasualties = roundValue(campaign.participantCasualties, 0);
     campaign.localCasualties = roundValue(campaign.localCasualties, 0);
     campaign.manualCasualties = roundValue(campaign.manualCasualties, 0);
+    updateCampaignPhaseSummary(campaign);
   }
 }
 
@@ -1226,6 +1227,60 @@ function resetCampaignEventSummary(map, campaign) {
   campaign.localCasualties = 0;
   campaign.manualCasualties = 0;
   campaign.latestEvent = null;
+  updateCampaignPhaseSummary(campaign);
+}
+
+function updateCampaignPhaseSummary(campaign) {
+  if (!Number(campaign.events || 0)) {
+    const momentum = campaignMomentum(campaign);
+    campaign.phaseKey = "mobilizing";
+    campaign.phaseLabel = "动员对峙";
+    campaign.momentumKey = momentum.key;
+    campaign.momentumLabel = momentum.label;
+    campaign.progress = 0;
+    campaign.progressLabel = "0%";
+    return;
+  }
+  const attackerInitial = Math.max(0, Number(campaign.attackerTroops || 0) + Number(campaign.attackerCasualties || 0));
+  const defenderInitial = Math.max(0, Number(campaign.defenderTroops || 0) + Number(campaign.defenderCasualties || 0));
+  const initialTotal = Math.max(1, attackerInitial + defenderInitial);
+  const casualtyRatio = Number(campaign.casualties || 0) / initialTotal;
+  const eventPressure = Math.min(40, Number(campaign.appliedEvents || 0) * 8 + Number(campaign.pendingEvents || 0) * 3);
+  const lossPressure = Math.min(45, casualtyRatio * 180);
+  const balancePressure = Math.min(15, Math.abs(Number(campaign.troopBalance || 0)) / Math.max(1, Math.max(Number(campaign.attackerTroops || 0), Number(campaign.defenderTroops || 0))) * 30);
+  const progress = roundValue(Math.min(100, eventPressure + lossPressure + balancePressure), 0);
+  const phase = campaignPhaseForProgress(campaign, progress);
+  const momentum = campaignMomentum(campaign);
+  campaign.phaseKey = phase.key;
+  campaign.phaseLabel = phase.label;
+  campaign.momentumKey = momentum.key;
+  campaign.momentumLabel = momentum.label;
+  campaign.progress = progress;
+  campaign.progressLabel = `${progress}%`;
+}
+
+function campaignPhaseForProgress(campaign, progress) {
+  if (!Number(campaign.events || 0)) return {key: "mobilizing", label: "动员对峙"};
+  if (!Number(campaign.appliedEvents || 0)) return {key: "probing", label: "前哨接触"};
+  if (progress < 25) return {key: "skirmishing", label: "边境交战"};
+  if (progress < 55) return {key: "engaged", label: "战线胶着"};
+  if (progress < 80) return {key: "decisive", label: "决战推进"};
+  return {key: "exhausted", label: "战役消耗"};
+}
+
+function campaignMomentum(campaign) {
+  const attackerTroops = Number(campaign.attackerTroops || 0);
+  const defenderTroops = Number(campaign.defenderTroops || 0);
+  const attackerInitial = Math.max(1, attackerTroops + Number(campaign.attackerCasualties || 0));
+  const defenderInitial = Math.max(1, defenderTroops + Number(campaign.defenderCasualties || 0));
+  const attackerRemaining = attackerTroops / attackerInitial;
+  const defenderRemaining = defenderTroops / defenderInitial;
+  const remainingDelta = attackerRemaining - defenderRemaining;
+  const troopDelta = (attackerTroops - defenderTroops) / Math.max(1, Math.max(attackerTroops, defenderTroops));
+  if (remainingDelta > 0.08 || troopDelta > 0.18) return {key: "attacker", label: "攻方占优"};
+  if (remainingDelta < -0.08 || troopDelta < -0.18) return {key: "defender", label: "守方占优"};
+  if (Number(campaign.appliedEvents || 0)) return {key: "contested", label: "拉锯"};
+  return {key: "balanced", label: "均势"};
 }
 
 function campaignEventKeys(campaign = {}) {

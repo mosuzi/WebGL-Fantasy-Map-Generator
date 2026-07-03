@@ -16406,3 +16406,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `781.30KB / gzip 235.94KB`，`MilitaryPanel` chunk 约 `39.14KB / gzip 11.95KB`。
 - 构建产物浏览器烟测通过：注入同一条带 `affectedRegiments / sideCasualties` 的双方战报后，攻方军团和守方军团视角都能在军事面板看到 `攻方损耗 111`、`守方损耗 222` 和战报说明，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1721.6ms`，纯生成 `835.5ms`，WebGL 加载 `543.7ms`，UI slack `342.4ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 151.6ms`，最慢加载阶段为 `构建线层顶点 59.1ms`，`glError = 0`。
+
+### 战役阶段摘要第一刀
+
+背景：
+
+- campaign 已经能汇总事件、攻守损耗和双方当前兵力，但仍缺少“战役推进到哪一步”的摘要。
+- 后续战争行动链路、战役结束条件和外交状态联动需要先有稳定的只读阶段字段。
+- 本轮只做派生阶段摘要，不自动结束战役、不改外交关系。
+
+修正：
+
+- 新生成的 `map.military.campaigns` 默认写入 `phaseKey / phaseLabel / momentumKey / momentumLabel / progress / progressLabel`。
+- `refreshMilitaryCampaignEventSummaries()` 在记录、撤销、导入或清空事件后重算阶段摘要。
+- 阶段按事件数、已应用数、攻守损耗、当前兵力差和损耗比例派生为 `动员对峙 / 前哨接触 / 边境交战 / 战线胶着 / 决战推进 / 战役消耗`。
+- 优势摘要派生为 `攻方占优 / 守方占优 / 拉锯 / 均势`；无战报时进展固定为 `0%`，避免单纯兵力差让未开战战役显示进展。
+- 军事面板“战役摘要”现在显示阶段、进展、优势、事件数、已应用数和攻守损耗。
+
+验证：
+
+- `git diff --check` 通过。
+- 命令层烟测通过：`stage-2-1231411414` 中记录并应用一条 campaign 小胜后，战役阶段为 `边境交战`、优势为 `拉锯`、进展 `11%`、事件 `1`、攻方损耗 `330`、守方损耗 `835`；撤销后回到 `动员对峙 / 均势 / 0%`，事件和损耗归零。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `782.95KB / gzip 236.55KB`，`MilitaryPanel` chunk 约 `39.74KB / gzip 12.16KB`。
+- 构建产物浏览器烟测通过：军事面板能显示 `边境交战`、`11%`、`拉锯`、`攻方损耗 330`、`守方损耗 835`，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1503.2ms`，纯生成 `769ms`，WebGL 加载 `394.2ms`，UI slack `340ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 155.9ms`，最慢加载阶段为 `构建视觉 cell mesh 60ms`，`line-vertices = 51.8ms`，`glError = 0`。

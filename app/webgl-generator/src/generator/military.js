@@ -808,7 +808,13 @@ function buildMilitaryCampaigns(pack, states, fronts = []) {
         defenderRegiments: defenderRegiments.length,
         attackerTroops: round(attackerTroops),
         defenderTroops: round(defenderTroops),
-        troopBalance: round(attackerTroops - defenderTroops)
+        troopBalance: round(attackerTroops - defenderTroops),
+        phaseKey: "mobilizing",
+        phaseLabel: "动员对峙",
+        momentumKey: "balanced",
+        momentumLabel: "均势",
+        progress: 0,
+        progressLabel: "0%"
       });
     }
   }

@@ -689,16 +689,38 @@ function campaignLabelForState(campaigns = []) {
 function campaignSummaryLabelForState(campaigns = []) {
   if (!campaigns.length) return "无";
   const events = campaigns.reduce((sum, campaign) => sum + Number(campaign.events || 0), 0);
-  if (!events) return "无事件";
+  const phaseLabel = campaignPhaseLabelForState(campaigns);
+  const progress = campaigns.reduce((sum, campaign) => sum + Number(campaign.progress || 0), 0);
+  const progressLabel = campaigns.length === 1 ? campaigns[0].progressLabel || `${formatNumber(progress)}%` : `均值 ${formatNumber(progress / Math.max(1, campaigns.length))}%`;
+  if (!events) return `${phaseLabel} / ${progressLabel}`;
   const applied = campaigns.reduce((sum, campaign) => sum + Number(campaign.appliedEvents || 0), 0);
   const casualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.casualties || 0), 0);
   const attackerCasualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.attackerCasualties || 0), 0);
   const defenderCasualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.defenderCasualties || 0), 0);
-  const parts = [`事件 ${formatNumber(events)}`, `已应用 ${formatNumber(applied)}`];
+  const momentum = campaignMomentumLabelForState(campaigns);
+  const parts = [phaseLabel, progressLabel, momentum, `事件 ${formatNumber(events)}`, `已应用 ${formatNumber(applied)}`];
   if (attackerCasualties) parts.push(`攻方损耗 ${formatNumber(attackerCasualties)}`);
   if (defenderCasualties) parts.push(`守方损耗 ${formatNumber(defenderCasualties)}`);
   if (!attackerCasualties && !defenderCasualties && casualties) parts.push(`损耗 ${formatNumber(casualties)}`);
   return parts.join(" / ");
+}
+
+function campaignPhaseLabelForState(campaigns = []) {
+  if (!campaigns.length) return "无战役";
+  if (campaigns.length === 1) return campaigns[0].phaseLabel || "动员对峙";
+  const active = campaigns.filter(campaign => Number(campaign.events || 0) > 0).length;
+  return active ? `${formatNumber(active)} 场有战报` : `${formatNumber(campaigns.length)} 场待战`;
+}
+
+function campaignMomentumLabelForState(campaigns = []) {
+  if (!campaigns.length) return "均势";
+  if (campaigns.length === 1) return campaigns[0].momentumLabel || "均势";
+  const counts = campaigns.reduce((map, campaign) => {
+    const label = campaign.momentumLabel || "均势";
+    map.set(label, Number(map.get(label) || 0) + 1);
+    return map;
+  }, new Map());
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "均势";
 }
 
 function stateRows(map) {
