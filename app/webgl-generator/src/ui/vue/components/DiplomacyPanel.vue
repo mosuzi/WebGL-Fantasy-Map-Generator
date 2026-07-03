@@ -60,6 +60,12 @@
   <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
 
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="diplomacyActions">
+    <template #openState>
+      <div class="diplomacy-open-state-panel">
+        <p>{{ selected.name }}</p>
+        <UiButton variant="secondary" @click="callbacks.onOpenState?.(selected)">打开国家面板</UiButton>
+      </div>
+    </template>
     <template #relation>
       <UiSelectField
         input-id="diplomacy-relation-select"
@@ -141,6 +147,7 @@ const matrix = computed(() => {
   return buildDiplomacyMatrix(props.state.map);
 });
 const diplomacyActions = Object.freeze([
+  {key: "openState", label: "打开国家", icon: "◎"},
   {key: "relation", label: "调整关系", icon: "⇄"}
 ]);
 

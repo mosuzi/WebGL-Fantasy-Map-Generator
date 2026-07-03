@@ -686,6 +686,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onLocate: object => {
       locateObject(state, object, documentRef);
     },
+    onOpenState: object => {
+      selectionStore.setSelection({object});
+      setStatePanelTarget(state, object.id);
+      state.panels.state.open(state.map, state.editHistory.getStats());
+      updateStatePanel(state);
+    },
     onRelationChange: (subjectId, objectId, relation) => {
       const command = createSetDiplomacyRelationCommand(subjectId, objectId, relation);
       if (!command.isNoop({map: state.map})) {

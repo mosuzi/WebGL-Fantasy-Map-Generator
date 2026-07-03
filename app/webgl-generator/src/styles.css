@@ -6002,6 +6002,23 @@ input.ui-switch-native {
   margin: 8px 0 10px;
 }
 
+.diplomacy-open-state-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.diplomacy-open-state-panel p {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid #263843;
+  border-radius: 6px;
+  background: #10171b;
+  color: #dce8ec;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .culture-name-editor label,
 .culture-color-field,
 .religion-name-editor label,

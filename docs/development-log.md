@@ -17039,3 +17039,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`DiplomacyPanel` chunk 约 `14.17KB / gzip 5.39KB`，主入口约 `808.32KB / gzip 243.86KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：默认地图经济交易 `15068` 条、外交国家 `20` 个；外交面板详情显示“贸易方向 / 贸易量”，外交 JSON 主体关系中 `17` 条带直接贸易摘要；`glError = 0`，health 非 info 事件为 `0`，console/page error 为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1418.7ms`，纯生成 `814.8ms`，WebGL 加载 `353.8ms`，UI slack `250.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 147.5ms`，最慢加载阶段为 `构建视觉 cell mesh 50.2ms`。
+
+### 外交跨面板定位第一刀
+
+背景：
+
+- 外交面板已经能选中、定位对象国家，但用户若要编辑该国家仍需要手动打开国家编辑并重新找目标。
+- 当前路线继续收窄军事方向：无需动态军事系统；本轮只做外交与国家面板之间的静态导航，不让外交关系触发军事行动。
+
+修正：
+
+- `外交管理` 的对象二级操作新增“打开国家”入口，显示当前外交对象并可直接打开国家面板。
+- `diplomacy-panel.js` 将选中外交行转换为既有 `state` object，runtime 复用 `setStatePanelTarget()` 和国家面板 `open()`。
+- 打开国家面板时同步 selection 与目标国家，便于后续继续编辑名称、颜色、首都等国家字段。
+- 本轮不改变外交关系、外交生成、战争 campaign、军事图层或战报数据。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`DiplomacyPanel` chunk 约 `14.47KB / gzip 5.48KB`，主入口约 `808.50KB / gzip 243.89KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开 `外交管理`，点击二级动作“打开国家”，再点击“打开国家面板”后，国家面板打开并命中对象国家 `辰教国`；selection 同步为 `state #2`，`glError = 0`，打开动作前后 health 非 info 事件增量为 `0`，page error 和 console error 为 `0`。debug 模式首屏仍会输出既有 main-thread-long-task warning，但不是该交互新增事件。
+- 正式 e2e 守门通过：点击到出图 `1396.7ms`，纯生成 `721.6ms`，WebGL 加载 `364.3ms`，UI slack `310.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 138.7ms`，最慢加载阶段为 `构建视觉 cell mesh 64.6ms`。
