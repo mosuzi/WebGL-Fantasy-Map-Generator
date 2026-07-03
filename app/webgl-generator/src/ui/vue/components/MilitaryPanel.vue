@@ -747,6 +747,10 @@ function formatEventDate(value) {
 
 function battleResultSummary(event) {
   const result = event?.result || {};
+  if (result.summary) {
+    const unitLoss = result.unitLossSummary && result.unitLossSummary !== "无兵种损耗" ? `；${result.unitLossSummary}` : "";
+    return `${result.summary}${unitLoss}`;
+  }
   const before = formatNumber(result.troopBefore || 0);
   const after = formatNumber(result.troopAfter || 0);
   const casualties = formatNumber(result.casualties || Math.abs(result.troopDelta || 0));

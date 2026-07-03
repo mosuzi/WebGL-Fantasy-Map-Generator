@@ -629,6 +629,14 @@ function applyBattleResult(map, state, regiment, event, eventInput) {
   event.resultApplied = true;
   event.result = {
     label: rule.label,
+    summary: buildBattleResultSummary({
+      label: rule.label,
+      troopBefore: beforeTroops,
+      troopAfter: regiment.a,
+      casualties: beforeTroops - regiment.a,
+      statusAfterLabel: regiment.statusLabel
+    }),
+    unitLossSummary: formatUnitLossSummary(unitLosses),
     lossRate: rule.lossRate,
     troopBefore: beforeTroops,
     troopAfter: regiment.a,
@@ -640,6 +648,21 @@ function applyBattleResult(map, state, regiment, event, eventInput) {
     statusAfter: regiment.status,
     statusAfterLabel: regiment.statusLabel
   };
+}
+
+function buildBattleResultSummary(result) {
+  return `${result.label || "战斗结果"}：${formatNumber(result.troopBefore)} -> ${formatNumber(result.troopAfter)}，损耗 ${formatNumber(result.casualties)}，态势改为${result.statusAfterLabel || "未知"}`;
+}
+
+function formatUnitLossSummary(unitLosses = {}) {
+  const parts = Object.entries(unitLosses)
+    .filter(([, value]) => Number(value || 0) > 0)
+    .map(([unit, value]) => `${unitLabel(unit)} ${formatNumber(value)}`);
+  return parts.length ? parts.join(" / ") : "无兵种损耗";
+}
+
+function formatNumber(value) {
+  return String(Math.round(Number(value || 0)));
 }
 
 function getBattleCasualties(troops, lossRate) {

@@ -15650,3 +15650,29 @@ full 矩阵结果：
 - 选中军团 `1:0`、兵力 `576` 时，默认“小胜”预览为 `小胜后整队：576 -> 553，预计损耗 23，态势改为修整中`；切换“损耗”后预览为 `损耗败退：576 -> 432，预计损耗 144，态势改为败逃中`。
 - 同次烟测 `glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1346.3ms`，纯生成 `673ms`，WebGL 加载 `372.8ms`，UI slack `300.5ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 120.9ms`，最慢加载阶段为 `构建标签 55.4ms`，`line-vertices = 45.8ms`，`fit-draw = 2.6ms`，`glError = 0`。
+
+### 战斗结果持久战报摘要
+
+背景：
+
+- 轻量结果应用已经会写入兵力前后、损耗和态势字段，但可读中文摘要仍由军事面板临时拼接。
+- 事件 JSON/CSV 和后续导入兼容更需要事件自身携带稳定的战报摘要，而不是依赖当前 UI 版本的展示函数。
+
+修正：
+
+- `applyBattleResult()` 在事件 `result` 中新增 `summary` 和 `unitLossSummary`。
+- `summary` 保存规则标签、兵力前后、损耗和目标态势，例如 `损耗败退：16250 -> 12187，损耗 4063，态势改为败逃中`。
+- `unitLossSummary` 按兵种输出损耗，例如 `步兵 748 / 弓兵 3092 / 骑兵 42 / 器械 181`；无损耗时写为 `无兵种损耗`。
+- 军事面板事件列表和事件 CSV 的“结果摘要”优先读取持久摘要，同时保留旧事件的临时拼接回退。
+- 本轮只补说明字段，不改变损耗规则、撤销/重做机制、外交战争状态或完整战斗模拟边界。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 241 项。
+
+验证：
+
+- 命令烟测通过：给军团 `1:0` 记录 `袭扰 / 损耗：战报摘要验证` 并应用结果后，兵力 `16250 -> 12187`，事件写入 `summary = 损耗败退：16250 -> 12187，损耗 4063，态势改为败逃中`，`unitLossSummary = 步兵 748 / 弓兵 3092 / 骑兵 42 / 器械 181`，`resultApplied = true`。
+- 同次烟测中撤销后兵力恢复 `16250`、事件数和军团事件数回到 `0`；重做后同一摘要恢复，兵力回到 `12187`。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `23.61KB / gzip 7.77KB`，主入口约 `761.16KB / gzip 229.84KB`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1406.7ms`，纯生成 `686.6ms`，WebGL 加载 `380.4ms`，UI slack `339.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 129.8ms`，最慢加载阶段为 `构建标签 57.3ms`，`line-vertices = 43.3ms`，`fit-draw = 3ms`，`glError = 0`。
