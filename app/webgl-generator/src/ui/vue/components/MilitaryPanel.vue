@@ -101,6 +101,24 @@
         <UiButton class="military-status-apply" variant="secondary" :disabled="!selected || statusDraft === selected.status" @click="applyStatus">应用态势</UiButton>
       </div>
     </template>
+    <template #batchStatus>
+      <div class="military-status-panel">
+        <div class="military-status-heading">
+          <strong>当前筛选 {{ formatNumber(visibleRows.length) }} 支</strong>
+          <span>只影响当前表格中的可见军团</span>
+        </div>
+        <UiSelectField
+          input-id="military-batch-status-editor"
+          class-name="military-status-editor"
+          label="态势"
+          :model-value="batchStatusDraft"
+          :options="statusEditOptions"
+          :disabled="!visibleRows.length"
+          @update:model-value="setBatchStatusDraft"
+        />
+        <UiButton class="military-status-apply" variant="secondary" :disabled="!visibleRows.length" @click="applyBatchStatus">应用到筛选</UiButton>
+      </div>
+    </template>
     <template #ratios>
       <div class="military-ratio-panel">
         <div class="military-ratio-heading">
@@ -192,6 +210,7 @@ const unitDefinitions = MILITARY_UNITS;
 const activeAction = ref(null);
 const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
+const batchStatusDraft = ref("garrisoned");
 
 const metrics = computed(() => {
   props.state.version;
@@ -236,6 +255,7 @@ const statusEditOptions = computed(() => {
 const militaryActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎", disabled: !selected.value},
   {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
+  {key: "batchStatus", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
   {key: "ratios", label: "兵种比例", icon: "⚖"}
 ]);
 
@@ -375,6 +395,10 @@ function setStatusDraft(value) {
   statusDraft.value = value;
 }
 
+function setBatchStatusDraft(value) {
+  batchStatusDraft.value = value;
+}
+
 function applyStatus() {
   if (!selected.value) return;
   props.callbacks.onStatusApply?.({
@@ -382,6 +406,17 @@ function applyStatus() {
     stateId: selected.value.stateId,
     regimentId: selected.value.regimentId
   }, statusDraft.value);
+  activeAction.value = null;
+}
+
+function applyBatchStatus() {
+  const targets = visibleRows.value.map(row => ({
+    id: row.id,
+    stateId: row.stateId,
+    regimentId: row.regimentId
+  }));
+  if (!targets.length) return;
+  props.callbacks.onBatchStatusApply?.(targets, batchStatusDraft.value);
   activeAction.value = null;
 }
 

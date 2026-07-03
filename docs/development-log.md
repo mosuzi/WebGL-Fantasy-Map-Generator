@@ -15465,3 +15465,29 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：`front-check-1 / continents / 10000` 生成 `2` 条 front，长度均约 `13`；每条 front 的 `borderCells` 两侧均为陆地、互为邻居，且 state 分别为 `fromState / toState`。
 - 同次烟测中关闭/开启 `warFronts` 后 line vertices 从 `193632` 到 `193650`，增量 `18`，即每条宽体箭头 `9` 个顶点；`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1770.5ms`，纯生成 `1001.8ms`，WebGL 加载 `487.4ms`，UI slack `281.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 215.7ms`，最慢加载阶段为 `构建视觉 cell mesh 71.9ms`，`line-vertices = 49.9ms`，`fit-draw = 2.7ms`，`glError = 0`。
+
+### 军团批量态势命令
+
+背景：
+
+- 军事管理面板已经支持态势筛选、单军团态势调整和军团重命名。
+- 当前计划中的军事下一步是进入批量命令、驻地/基地移动或战斗事件，而不是继续只做展示层微调。
+
+修正：
+
+- `military-edit-commands.js` 新增 `createSetMilitaryStatusBatchCommand()`。
+- 批量命令会归一化并去重目标军团，逐个写入 `status / statusLabel / order`，并保存每支军团的旧态势快照用于撤销。
+- `军事管理` 的二级操作新增“批量态势”，目标范围明确为当前表格可见军团，即国家筛选、态势筛选和文本筛选后的结果。
+- 态势修改和重命名的刷新范围收窄为 `point-layers / object-index / object-panels`，避免这类文本/图标状态变化无关重建战线线层和地图标签；兵种比例仍保留完整军事刷新。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。
+- Playwright + 系统 Chrome 构建产物烟测通过：把 `56` 支 `patrolling` 军团批量改为 `marching`，历史为 `undo 1 / redo 0 / 批量调整军团态势 56支`。
+- 同次烟测中撤销后全部目标恢复原态势，重做后全部再次变为 `marching`；最终刷新摘要为 `point-layers, object-index, object-panels`，`glError = 0`。
+- 收窄刷新前 smoke 健康警告为 `12` 条；收窄后同路径为 `4` 条，剩余主要来自初始生成和面板加载阶段。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1773.3ms`，纯生成 `897ms`，WebGL 加载 `568.3ms`，UI slack `308ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 168.8ms`，最慢加载阶段为 `构建视觉 cell mesh 83ms`，`line-vertices = 47ms`，`fit-draw = 3.1ms`，`glError = 0`。

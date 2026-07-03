@@ -8,6 +8,14 @@ const MILITARY_EFFECTS = Object.freeze({
   derived: Object.freeze(["point-layers", "line-layers", "object-index", "labels", "object-panels"])
 });
 
+const MILITARY_REGIMENT_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["point-layers", "object-index", "object-panels"])
+});
+
 export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整兵种比例"} = {}) {
   const normalizedStateId = Number(stateId);
   const normalizedRatios = normalizeUnitRatios(ratios);
@@ -48,7 +56,7 @@ export function createSetMilitaryStatusCommand(target, status, {label = "调整�
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
     effects: {
-      ...MILITARY_EFFECTS,
+      ...MILITARY_REGIMENT_EFFECTS,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
     },
     apply(context) {
@@ -77,6 +85,53 @@ export function createSetMilitaryStatusCommand(target, status, {label = "调整�
   };
 }
 
+export function createSetMilitaryStatusBatchCommand(targets, status, {label = "批量调整军团态势"} = {}) {
+  const normalizedTargets = uniqueRegimentTargets(targets);
+  const nextStatus = String(status || "");
+  const nextStatusLabel = MILITARY_STATUSES[nextStatus]?.label || nextStatus || "未知";
+  let previous = null;
+
+  return {
+    label: `${label} ${normalizedTargets.length}支`,
+    effects: {
+      ...MILITARY_REGIMENT_EFFECTS,
+      affected: normalizedTargets.map(target => ({kind: "military", id: target.id || `${target.stateId}:${target.regimentId}`}))
+    },
+    apply(context) {
+      previous ??= snapshotRegimentStatuses(context.map, normalizedTargets);
+      let changed = 0;
+      for (const target of normalizedTargets) {
+        const {state, regiment} = findRegiment(context.map, target);
+        if (!state?.i || !regiment || String(regiment.status || "") === nextStatus) continue;
+        regiment.status = nextStatus;
+        regiment.statusLabel = nextStatusLabel;
+        regiment.order = createManualOrder(context.map, state, regiment, nextStatus);
+        changed++;
+      }
+      if (!changed) throw new Error("没有可调整态势的军团");
+      syncMilitary(context.map);
+      refreshMilitaryStatusMetadata(context.map);
+    },
+    revert(context) {
+      if (!previous) throw new Error("缺少可撤销的批量军团态势快照");
+      for (const item of previous) {
+        const {regiment} = findRegiment(context.map, item.target);
+        if (!regiment) continue;
+        restoreRegimentStatus(regiment, item.snapshot);
+      }
+      syncMilitary(context.map);
+      refreshMilitaryStatusMetadata(context.map);
+    },
+    isNoop(context) {
+      if (!normalizedTargets.length || !nextStatus) return true;
+      return normalizedTargets.every(target => {
+        const {regiment} = findRegiment(context.map, target);
+        return !regiment || String(regiment.status || "") === nextStatus;
+      });
+    }
+  };
+}
+
 export function createRenameMilitaryRegimentCommand(target, name, {label = "重命名军团"} = {}) {
   const normalizedTarget = normalizeRegimentTarget(target);
   const nextName = String(name || "").trim();
@@ -85,7 +140,7 @@ export function createRenameMilitaryRegimentCommand(target, name, {label = "重�
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
     effects: {
-      ...MILITARY_EFFECTS,
+      ...MILITARY_REGIMENT_EFFECTS,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
     },
     apply(context) {
@@ -161,6 +216,20 @@ function normalizeRegimentTarget(target = {}) {
   };
 }
 
+function uniqueRegimentTargets(targets = []) {
+  const result = [];
+  const seen = new Set();
+  for (const target of targets || []) {
+    const normalized = normalizeRegimentTarget(target);
+    if (!Number.isFinite(normalized.stateId) || !Number.isFinite(normalized.regimentId)) continue;
+    const key = `${normalized.stateId}:${normalized.regimentId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({...normalized, id: normalized.id || key});
+  }
+  return result;
+}
+
 function findRegiment(map, target) {
   const state = map?.pack?.states?.[target.stateId] || map?.politics?.states?.[target.stateId];
   const regiment = (state?.military || []).find(item => item.i === target.regimentId || item.id === target.id) || null;
@@ -173,6 +242,15 @@ function snapshotRegimentStatus(regiment) {
     statusLabel: regiment.statusLabel,
     order: regiment.order ? clonePlain(regiment.order) : null
   };
+}
+
+function snapshotRegimentStatuses(map, targets) {
+  return targets
+    .map(target => {
+      const {regiment} = findRegiment(map, target);
+      return regiment ? {target, snapshot: snapshotRegimentStatus(regiment)} : null;
+    })
+    .filter(Boolean);
 }
 
 function restoreRegimentStatus(regiment, snapshot) {
