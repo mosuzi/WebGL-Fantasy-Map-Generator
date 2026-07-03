@@ -16952,3 +16952,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `807.77KB / gzip 243.66KB`，本轮未增大经济面板 chunk，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：开启贸易流图层后渲染 `172` 条贸易流、`1032` 个顶点，`priceSignalDeals = 172`，未超出 `180` 条 top 交易上限；点击贸易流详情显示“有效价 / 价差信号 / 价差 / 价格压力”，`glError = 0`、console/page error 为 `0`，打开图层和详情后 health 非 info 事件为 `0`。
 - 正式 e2e 守门通过：点击到出图 `1478.7ms`，纯生成 `807.8ms`，WebGL 加载 `341.6ms`，UI slack `329.3ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 148.8ms`，最慢加载阶段为 `构建视觉 cell mesh 49.8ms`。
+
+### 市场归属诊断第一刀
+
+背景：
+
+- 经济计划下一阶段会进入市场归属编辑与重新生成，但直接做刷子会牵动 `pack.cells.market`、burg market、生产、交易和财政。
+- 本轮先补只读诊断，让经济面板能看到每个市场的覆盖结构，作为后续编辑前置。
+
+修正：
+
+- `EconomyPanel` 市场 tab 统计 `pack.cells.market`，为每个市场展示覆盖 cells、陆地覆盖、本国覆盖、跨国覆盖和无国家覆盖。
+- 市场排序和列新增“跨国”，市场详情新增归属覆盖字段。
+- 市场 CSV/JSON 导出同步带出陆地覆盖、本国覆盖、跨国覆盖和无国家覆盖。
+- debug 诊断新增“跨国覆盖 cells”和“无效归属 cells”，并在样例中显示跨国覆盖市场。
+- 本轮只读，不修改 `pack.cells.market`，不触发经济重算或市场归属刷写。
+
+验证：
+
+- Node 纯生成探针通过：`stage-2-1 / continents / 10000` 生成 `29` 个市场，`pack.cells.market` 归属 `4188` 个 cells，其中陆地覆盖 `4069`、本国覆盖 `4020`、无国家覆盖 `168`，无无效市场 id。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；经济面板 chunk 约 `23.49KB / gzip 7.17KB`，主入口约 `807.77KB / gzip 243.66KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：经济面板市场 tab 可显示“跨国 / 陆地覆盖 / 本国覆盖 / 无国家覆盖”，统计 `29` 个市场、`4188` 个归属 cells、`0` 个无效归属、`0` 个跨国覆盖 cells、约 `169` 个无国家覆盖 cells；`glError = 0`，console/page error 为 `0`，health 非 info 事件为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1498.8ms`，纯生成 `813.7ms`，WebGL 加载 `365.3ms`，UI slack `319.8ms`，最慢生成阶段为 `生成商品 / 市场 / 交易 / 税收 145.1ms`，最慢加载阶段为 `构建视觉 cell mesh 54.3ms`。

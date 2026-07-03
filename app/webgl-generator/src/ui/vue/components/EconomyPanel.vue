@@ -110,6 +110,7 @@ const goodSortOptions = Object.freeze([
 ]);
 const marketSortOptions = Object.freeze([
   {key: "priceDelta", label: "价差"},
+  {key: "foreignCells", label: "跨国"},
   {key: "shortage", label: "缺口"},
   {key: "tradeValue", label: "交易额"},
   {key: "stock", label: "库存"},
@@ -144,6 +145,7 @@ const marketColumns = Object.freeze([
   {key: "stateName", label: "国家"},
   {key: "cityName", label: "中心"},
   {key: "cells", label: "覆盖", align: "right", format: value => formatNumber(value)},
+  {key: "foreignCells", label: "跨国", align: "right", format: value => formatNumber(value)},
   {key: "priceDelta", label: "价差", align: "right", format: value => formatSignedNumber(value)},
   {key: "stock", label: "库存", align: "right", format: value => formatNumber(value)},
   {key: "shortage", label: "缺口", align: "right", format: value => formatNumber(value)},
@@ -213,6 +215,10 @@ const detailRows = computed(() => {
     {label: "国家", value: selectedMarket.value.stateName},
     {label: "中心城镇", value: selectedMarket.value.cityName},
     {label: "覆盖 cells", value: formatNumber(selectedMarket.value.cells)},
+    {label: "陆地覆盖", value: formatNumber(selectedMarket.value.landCells)},
+    {label: "本国覆盖", value: formatNumber(selectedMarket.value.homeCells)},
+    {label: "跨国覆盖", value: formatNumber(selectedMarket.value.foreignCells)},
+    {label: "无国家覆盖", value: formatNumber(selectedMarket.value.unassignedStateCells)},
     {label: "覆盖城镇", value: formatNumber(selectedMarket.value.burgs)},
     {label: "库存", value: formatNumber(selectedMarket.value.stock)},
     {label: "需求", value: formatNumber(selectedMarket.value.demand)},
@@ -271,6 +277,8 @@ const diagnosticRows = computed(() => [
   {label: "无市场城镇", value: formatNumber(metrics.value.diagnostics.burgsWithoutMarket)},
   {label: "缺中心市场", value: formatNumber(metrics.value.diagnostics.marketsWithoutCenter)},
   {label: "无覆盖市场", value: formatNumber(metrics.value.diagnostics.marketsWithoutCells)},
+  {label: "跨国覆盖 cells", value: formatNumber(metrics.value.diagnostics.foreignMarketCells)},
+  {label: "无效归属 cells", value: formatNumber(metrics.value.diagnostics.invalidMarketCells)},
   {label: "无库存商品", value: formatNumber(metrics.value.diagnostics.goodsWithoutStock)},
   {label: "孤儿交易", value: formatNumber(metrics.value.diagnostics.invalidDeals)},
   {label: "无税交易", value: formatNumber(metrics.value.diagnostics.untaxedDeals)}
@@ -307,6 +315,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
   const marketStock = new Map();
   const marketResourceSupply = new Map();
   const marketCells = countByValue(pack.cells?.market || []);
+  const marketCoverage = summarizeMarketCoverage(pack);
   const marketBurgs = countBurgsByMarket(pack.burgs || []);
   const goodSourceCells = countByValue(pack.cells?.good || []);
   const goodProduction = countProductionByGood(pack.burgs || []);
@@ -388,6 +397,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
     const state = pack.states?.[market.state];
     const city = pack.burgs?.[market.centerBurgId];
     const dealStats = marketDeals.get(market.i) || {count: 0, value: 0};
+    const coverage = marketCoverage.byMarket.get(market.i) || emptyMarketCoverage();
     return withSearchText({
       id: market.i,
       name: market.name || `市场 #${market.i}`,
@@ -396,6 +406,10 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       stateName: state?.fullName || state?.name || "无",
       cityName: city?.name || `城镇 #${market.centerBurgId || 0}`,
       cells: marketCells.get(market.i) || 0,
+      landCells: coverage.landCells,
+      homeCells: coverage.homeCells,
+      foreignCells: coverage.foreignCells,
+      unassignedStateCells: coverage.unassignedStateCells,
       burgs: marketBurgs.get(market.i) || 0,
       stock: marketStock.get(market.i) || 0,
       demand: Number(market.demandSummary?.demand || 0),
@@ -461,6 +475,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       deals: dealRows,
       aliveBurgs,
       marketsById,
+      marketCoverage,
       invalidDealSamples
     })
     : emptyDiagnostics();
@@ -520,6 +535,8 @@ function emptyDiagnostics() {
     burgsWithoutMarket: 0,
     marketsWithoutCenter: 0,
     marketsWithoutCells: 0,
+    foreignMarketCells: 0,
+    invalidMarketCells: 0,
     goodsWithoutStock: 0,
     invalidDeals: 0,
     untaxedDeals: 0,
@@ -528,15 +545,18 @@ function emptyDiagnostics() {
   };
 }
 
-function buildEconomyDiagnostics({goods, markets, deals, aliveBurgs, marketsById, invalidDealSamples}) {
+function buildEconomyDiagnostics({goods, markets, deals, aliveBurgs, marketsById, marketCoverage, invalidDealSamples}) {
   const burgsWithoutMarket = aliveBurgs.filter(burg => !burg.market || !marketsById.has(burg.market)).length;
   const marketsWithoutCenter = markets.filter(market => !market.centerBurgId).length;
   const marketsWithoutCells = markets.filter(market => !market.cells).length;
+  const foreignMarketCells = Number(marketCoverage?.foreignCells || 0);
+  const invalidMarketCells = Number(marketCoverage?.invalidCells || 0);
   const goodsWithoutStock = goods.filter(good => good.stock <= 0).length;
   const invalidDeals = deals.filter(deal => !deal.goodValid || !deal.sellerValid || !deal.buyerValid).length;
   const untaxedDeals = deals.filter(deal => !deal.tax).length;
   const samples = [
     ...invalidDealSamples,
+    ...markets.filter(market => market.foreignCells > 0).slice(0, 3).map(market => `市场 #${market.id}: 跨国覆盖 ${market.foreignCells}`),
     ...markets.filter(market => !market.centerBurgId).slice(0, 3).map(market => `市场 #${market.id}: 缺中心城镇`),
     ...goods.filter(good => good.stock <= 0).slice(0, 3).map(good => `商品 #${good.id}: 无库存`)
   ].slice(0, 6);
@@ -544,10 +564,12 @@ function buildEconomyDiagnostics({goods, markets, deals, aliveBurgs, marketsById
     burgsWithoutMarket,
     marketsWithoutCenter,
     marketsWithoutCells,
+    foreignMarketCells,
+    invalidMarketCells,
     goodsWithoutStock,
     invalidDeals,
     untaxedDeals,
-    totalIssues: burgsWithoutMarket + marketsWithoutCenter + marketsWithoutCells + goodsWithoutStock + invalidDeals,
+    totalIssues: burgsWithoutMarket + marketsWithoutCenter + marketsWithoutCells + foreignMarketCells + invalidMarketCells + goodsWithoutStock + invalidDeals,
     samples
   };
 }
@@ -601,6 +623,10 @@ function exportColumns() {
     {key: "stateName", label: "国家"},
     {key: "cityName", label: "中心城镇"},
     {key: "cells", label: "覆盖Cells"},
+    {key: "landCells", label: "陆地覆盖"},
+    {key: "homeCells", label: "本国覆盖"},
+    {key: "foreignCells", label: "跨国覆盖"},
+    {key: "unassignedStateCells", label: "无国家覆盖"},
     {key: "burgs", label: "覆盖城镇"},
     {key: "stock", label: "库存"},
     {key: "demand", label: "需求"},
@@ -696,6 +722,47 @@ function averageAccumulator(current, value) {
 
 function averageValue(item) {
   return item?.count ? round(Number(item.sum || 0) / item.count, 3) : 0;
+}
+
+function summarizeMarketCoverage(pack = {}) {
+  const byMarket = new Map();
+  const validMarketIds = new Set((pack.markets || []).filter(market => market?.i).map(market => market.i));
+  let invalidCells = 0;
+  let foreignCells = 0;
+  for (const cell of pack.cells?.i || []) {
+    const marketId = Number(pack.cells?.market?.[cell] || 0);
+    if (!marketId) continue;
+    if (!validMarketIds.has(marketId)) {
+      invalidCells++;
+      continue;
+    }
+    const market = pack.markets?.[marketId];
+    const item = ensureMarketCoverage(byMarket, marketId);
+    item.cells++;
+    if ((pack.cells.h?.[cell] || 0) >= 20) item.landCells++;
+    const cellState = Number(pack.cells.state?.[cell] || 0);
+    const marketState = Number(market?.state || 0);
+    if (!cellState) item.unassignedStateCells++;
+    else if (marketState && cellState === marketState) item.homeCells++;
+    else {
+      item.foreignCells++;
+      foreignCells++;
+    }
+  }
+  return {byMarket, invalidCells, foreignCells};
+}
+
+function ensureMarketCoverage(byMarket, marketId) {
+  let item = byMarket.get(marketId);
+  if (!item) {
+    item = emptyMarketCoverage();
+    byMarket.set(marketId, item);
+  }
+  return item;
+}
+
+function emptyMarketCoverage() {
+  return {cells: 0, landCells: 0, homeCells: 0, foreignCells: 0, unassignedStateCells: 0};
 }
 
 function countByValue(values) {
