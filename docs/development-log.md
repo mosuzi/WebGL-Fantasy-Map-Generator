@@ -16728,3 +16728,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `783.47KB / gzip 235.99KB`，`EconomyPanel` chunk 约 `16.49KB / gzip 5.36KB`。
 - 构建产物浏览器烟测通过：普通模式打开经济总览并切到交易 tab 后不显示诊断和 debug 详情，`healthErrors = []`；`?debug=1` 下显示“开发诊断”，诊断摘要为 `8 项需复查`，详情区显示 `deal id` 等内部字段；两种模式交易表均只渲染 `500` 行，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1440.9ms`，纯生成 `725ms`，WebGL 加载 `435.7ms`，UI slack `280.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 160.6ms`，最慢加载阶段为 `构建视觉 cell mesh 65.2ms`。
+
+### 静态贸易流图层第一刀
+
+背景：
+
+- 经济面板已经能查看和导出商品、市场、交易，但地图上还无法直接观察贸易流向。
+- `docs/task-notes/economy-market-trade-plan.md` 阶段 4 要求先做静态贸易流图层，再考虑动画。
+- 本轮必须避免首屏加载和绘制卡顿，因此贸易流图层默认关闭，并使用独立动态 buffer。
+
+修正：
+
+- 控制面板“图层”tab 新增“贸易流”，默认关闭。
+- renderer 新增 `tradeFlowBuffer`，只在 `tradeFlows` 图层开启时构建并绘制。
+- 贸易流从 `pack.deals` 取交易额最高的前 `180` 条，连接卖方和买方中心点，按交易额调整线宽，按市场间交易、资源点交易和普通交易区分颜色。
+- 贸易流会随视口变化重建，但不进入默认首屏线层构建；本轮不做动画、不做拾取、不做交易详情浮层。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `786.43KB / gzip 236.80KB`，本轮未新增面板 chunk。
+- 构建产物浏览器烟测通过：`tradeFlows` 默认关闭，初始 `tradeFlowVertexCount = 0`；开启图层后绘制 `177` 条交易、`1062` 个顶点、`354` 个三角形，`tradeFlowBuildMs = 12.4ms`，`glError = 0`，console/page error 为 `0`，开启图层后无非 info 健康事件。
+- e2e 守门通过：点击到出图 `1448.8ms`，纯生成 `727.9ms`，WebGL 加载 `409.2ms`，UI slack `311.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 125.5ms`，最慢加载阶段为 `构建线层顶点 52ms`。

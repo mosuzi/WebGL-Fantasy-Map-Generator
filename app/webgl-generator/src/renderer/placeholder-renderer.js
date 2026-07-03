@@ -65,6 +65,8 @@ const MAX_ROUTE_RENDER_POINTS_PER_ROUTE = 4096;
 const MAX_ROUTE_RENDER_POINTS_TOTAL = 90000;
 const MAX_ROUTE_RENDER_VERTICES = 900000;
 const MAX_ROUTE_DASH_PIECES = 20000;
+const MAX_TRADE_FLOW_LINES = 180;
+const MAX_TRADE_FLOW_VERTICES = 18000;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -124,6 +126,7 @@ export class PlaceholderMapRenderer {
     };
     this.vertexBuffer = this.gl.createBuffer();
     this.routeBuffer = this.gl.createBuffer();
+    this.tradeFlowBuffer = this.gl.createBuffer();
     this.riverBuffer = this.gl.createBuffer();
     this.selectionBuffer = this.gl.createBuffer();
     this.lineBuffer = this.gl.createBuffer();
@@ -131,6 +134,7 @@ export class PlaceholderMapRenderer {
     this.politicalMeshDebugBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.routeVertexCount = 0;
+    this.tradeFlowVertexCount = 0;
     this.riverVertexCount = 0;
     this.selectionVertexCount = 0;
     this.lineVertexCount = 0;
@@ -161,6 +165,8 @@ export class PlaceholderMapRenderer {
     this.lastObjectCandidateCount = 0;
     this.routeBuildMs = 0;
     this.routeRenderStats = emptyRouteRenderStats();
+    this.tradeFlowBuildMs = 0;
+    this.tradeFlowRenderStats = emptyTradeFlowRenderStats();
     this.riverBuildMs = 0;
     this.selectionBuildMs = 0;
     this.routeWidthMode = "screen-space";
@@ -179,6 +185,7 @@ export class PlaceholderMapRenderer {
     this.labelOptions = {maxCityLabels: 5000};
     this.layerVisibility = {
       routes: true,
+      tradeFlows: false,
       rivers: true,
       cities: true,
       labels: true,
@@ -197,6 +204,7 @@ export class PlaceholderMapRenderer {
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
     this.dynamicBuffersDirty = {
       routes: true,
+      tradeFlows: true,
       rivers: true,
       selection: true
     };
@@ -478,6 +486,7 @@ export class PlaceholderMapRenderer {
       changed = true;
     }
     if (!changed) return;
+    if (layer === "tradeFlows") this.dynamicBuffersDirty.tradeFlows = true;
     if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") this.refreshPointLayers({draw: false});
     if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts")) this.refreshLineLayers({draw: false});
     this.draw();
@@ -487,6 +496,7 @@ export class PlaceholderMapRenderer {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
+    if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) this.updateRiverBuffer();
     if (updateDynamicBuffers && (this.dynamicBuffersDirty.selection || this.locateFlash)) this.updateSelectionBuffer();
 
@@ -516,6 +526,11 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
     if (this.layerVisibility.routes) gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.tradeFlowBuffer);
+    gl.uniform1f(this.locations.scale, 1);
+    gl.uniform2f(this.locations.offset, 0, 0);
+    bindVertexBuffer(gl, this.locations);
+    if (this.layerVisibility.tradeFlows) gl.drawArrays(gl.TRIANGLES, 0, this.tradeFlowVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuffer);
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
@@ -568,6 +583,10 @@ export class PlaceholderMapRenderer {
       routeRenderStats: {...this.routeRenderStats},
       routeWidthMode: this.routeWidthMode,
       routeStyleMode: "primary/secondary road + continuous trail dashed",
+      tradeFlowVertexCount: this.tradeFlowVertexCount,
+      tradeFlowTriangleCount: this.tradeFlowVertexCount / 3,
+      tradeFlowBuildMs: this.tradeFlowBuildMs,
+      tradeFlowRenderStats: {...this.tradeFlowRenderStats},
       riverVertexCount: this.riverVertexCount,
       riverTriangleCount: this.riverVertexCount / 3,
       riverBuildMs: this.riverBuildMs,
@@ -626,6 +645,7 @@ export class PlaceholderMapRenderer {
       draw: this.lastDraw,
       dynamicMeshCache: {
         routesDirty: this.dynamicBuffersDirty.routes,
+        tradeFlowsDirty: this.dynamicBuffersDirty.tradeFlows,
         riversDirty: this.dynamicBuffersDirty.rivers,
         selectionDirty: this.dynamicBuffersDirty.selection
       },
@@ -695,6 +715,17 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.routes = false;
   }
 
+  updateTradeFlowBuffer() {
+    const startedAt = performance.now();
+    const {vertices, stats} = buildTradeFlowMeshVertices(this.map, this.camera, this.canvas);
+    this.tradeFlowVertexCount = vertices.length / 6;
+    this.tradeFlowRenderStats = stats;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+    this.tradeFlowBuildMs = roundMs(performance.now() - startedAt);
+    this.dynamicBuffersDirty.tradeFlows = false;
+  }
+
   updateRiverBuffer() {
     const startedAt = performance.now();
     const {vertices, stats} = buildRiverMeshVertices(this.map, this.camera, this.canvas);
@@ -736,18 +767,21 @@ export class PlaceholderMapRenderer {
   invalidateDynamicBuffers(parts = {}) {
     if (parts.viewport) this.markViewportBuffersDirty();
     if (parts.routes) this.dynamicBuffersDirty.routes = true;
+    if (parts.tradeFlows) this.dynamicBuffersDirty.tradeFlows = true;
     if (parts.rivers) this.dynamicBuffersDirty.rivers = true;
     if (parts.selection) this.dynamicBuffersDirty.selection = true;
   }
 
   markViewportBuffersDirty() {
     this.dynamicBuffersDirty.routes = true;
+    this.dynamicBuffersDirty.tradeFlows = true;
     this.dynamicBuffersDirty.rivers = true;
     this.dynamicBuffersDirty.selection = true;
   }
 
   markAllDynamicBuffersDirty() {
     this.dynamicBuffersDirty.routes = true;
+    this.dynamicBuffersDirty.tradeFlows = true;
     this.dynamicBuffersDirty.rivers = true;
     this.dynamicBuffersDirty.selection = true;
   }
@@ -2301,6 +2335,90 @@ function emptyRiverWidthStats() {
 function riverRenderColor(river) {
   const width = Math.min(1, Math.max(0, (river.width || 0) / 8));
   return mix([0.18, 0.45, 0.78, 0.95], [0.34, 0.68, 0.96, 1], width);
+}
+
+function buildTradeFlowMeshVertices(map, camera, canvas) {
+  const context = createRenderContext(map, {camera, canvas});
+  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
+  const vertices = [];
+  const stats = emptyTradeFlowRenderStats();
+  const deals = topTradeFlowDeals(map);
+
+  for (const deal of deals) {
+    const seller = tradePartyPoint(map, deal.sellerType, deal.seller);
+    const buyer = tradePartyPoint(map, deal.buyerType, deal.buyer);
+    if (!seller || !buyer) {
+      stats.invalidDeals++;
+      continue;
+    }
+    const distance = Math.hypot(seller[0] - buyer[0], seller[1] - buyer[1]);
+    if (!Number.isFinite(distance) || distance <= 1) {
+      stats.shortDeals++;
+      continue;
+    }
+    const before = vertices.length;
+    const widthPx = tradeFlowWidthPx(deal) * pixelRatio;
+    pushScreenPolyline(vertices, context, [seller, buyer], tradeFlowColor(deal), widthPx);
+    const addedVertices = (vertices.length - before) / 6;
+    if (addedVertices <= 0) continue;
+    stats.renderedDeals++;
+    stats.vertices += addedVertices;
+    stats.tradeValue = roundValue(stats.tradeValue + tradeDealValue(deal));
+    if (stats.vertices > MAX_TRADE_FLOW_VERTICES) {
+      stats.vertexBudgetExceeded = true;
+      break;
+    }
+  }
+
+  return {
+    vertices: new Float32Array(vertices),
+    stats
+  };
+}
+
+function topTradeFlowDeals(map) {
+  return (map?.pack?.deals || [])
+    .filter(deal => Number.isInteger(deal?.i) && tradeDealValue(deal) > 0)
+    .sort((a, b) => tradeDealValue(b) - tradeDealValue(a) || a.i - b.i)
+    .slice(0, MAX_TRADE_FLOW_LINES);
+}
+
+function tradePartyPoint(map, type, id) {
+  if (type === "burg") {
+    const burg = map?.pack?.burgs?.[id] || map?.settlements?.cities?.find(city => city?.burgId === id || city?.id === id);
+    return Number.isFinite(burg?.x) && Number.isFinite(burg?.y) ? [burg.x, burg.y] : null;
+  }
+  const market = map?.pack?.markets?.[id];
+  if (Number.isFinite(market?.x) && Number.isFinite(market?.y)) return [market.x, market.y];
+  const center = map?.pack?.burgs?.[market?.centerBurgId];
+  return Number.isFinite(center?.x) && Number.isFinite(center?.y) ? [center.x, center.y] : null;
+}
+
+function tradeDealValue(deal) {
+  return Number(deal?.units || 0) * Number(deal?.price || 0);
+}
+
+function tradeFlowWidthPx(deal) {
+  return clamp(1.1 + Math.sqrt(tradeDealValue(deal)) * 0.32, 1.2, 5.2);
+}
+
+function tradeFlowColor(deal) {
+  if (deal.sellerType === "market" && deal.buyerType === "market") return [0.95, 0.66, 0.2, 0.5];
+  if (deal.source === "marker-resource") return [0.36, 0.9, 0.5, 0.56];
+  if (deal.source === "market-resource") return [0.56, 0.78, 0.38, 0.52];
+  return [0.92, 0.8, 0.46, 0.46];
+}
+
+function emptyTradeFlowRenderStats() {
+  return {
+    renderedDeals: 0,
+    invalidDeals: 0,
+    shortDeals: 0,
+    vertices: 0,
+    tradeValue: 0,
+    maxDeals: MAX_TRADE_FLOW_LINES,
+    vertexBudgetExceeded: false
+  };
 }
 
 function buildRouteMeshVertices(map, camera, canvas, selection) {
