@@ -190,10 +190,12 @@ function buildDiplomacyMetrics(map, selectedStateId) {
         rawName: stateItem?.name || state.name,
         relation,
         relationLabel: relationLabel(relation),
+        relationPolarity: Number(DIPLOMACY_RELATIONS[relation]?.polarity || 0),
         relationWeight: relationWeight(relation),
         relationColor: DIPLOMACY_RELATIONS[relation]?.color || "#9ca3a8",
         cultureName: indexedName(map?.society?.cultures, stateItem?.culture),
         religionName: indexedName(map?.society?.religions, stateItem?.religion),
+        governmentName: stateItem?.governmentLabel || stateItem?.government?.label || stateItem?.form || "未知政体",
         neighborRank: neighbor ? 1 : 0,
         neighborLabel: neighbor ? "邻国" : "远方",
         centerCell: stateItem?.center ?? "none",
@@ -312,17 +314,28 @@ function formatPopulationValue(value) {
 }
 
 function exportCsv() {
+  const map = props.state.map;
   const seed = props.state.map?.metadata?.seed || "map";
-  downloadText(`fmg-diplomacy-${safeFilePart(seed)}.csv`, matrixToCsv(matrix.value), "text/csv;charset=utf-8");
+  downloadText(`fmg-diplomacy-${safeFilePart(seed)}.csv`, diplomacyToCsv({seed, map, metrics: metrics.value, matrix: matrix.value}), "text/csv;charset=utf-8");
 }
 
 function exportJson() {
   const map = props.state.map;
   const seed = map?.metadata?.seed || "map";
   const payload = {
+    type: "webgl-generator-diplomacy-summary",
+    version: 1,
+    exportedAt: new Date().toISOString(),
     seed,
     metadata: map?.diplomacy?.metadata || {},
-    states: matrix.value.states.map(state => ({id: state.id, name: state.name})),
+    subject: {
+      id: selectedSubjectId.value,
+      name: metrics.value.subjectName,
+      relations: metrics.value.rows.length,
+      counts: metrics.value.counts
+    },
+    states: diplomacyStateExportRows(map, matrix.value.states),
+    subjectRelations: metrics.value.rows.map(diplomacyRelationExportRow),
     relations: matrix.value.rows.map(row => ({
       id: row.id,
       name: row.name,
@@ -331,15 +344,118 @@ function exportJson() {
         relation: cell.relation,
         label: cell.label
       }))
-    }))
+    })),
+    chronicle: diplomacyChronicle(map)
   };
   downloadText(`fmg-diplomacy-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
-function matrixToCsv(matrixValue) {
+function diplomacyToCsv({seed, map, metrics, matrix}) {
+  const rows = [];
+  appendCsvSection(rows, "外交导出摘要", [
+    ["字段", "值"],
+    ["seed", seed],
+    ["主体国家", metrics.subjectName],
+    ["国家数", matrix.states.length],
+    ["主体关系数", metrics.rows.length],
+    ["关系统计", relationCountsText(metrics.counts)],
+    ["历史记录", diplomacyChronicle(map).length]
+  ]);
+  appendCsvSection(rows, "当前主体关系明细", [
+    ["主体", "对象ID", "对象国家", "关系", "关系代码", "关系倾向", "邻接", "文化", "宗教", "政体", "人口", "面积", "国力", "经济力", "城镇"],
+    ...metrics.rows.map(row => [
+      metrics.subjectName,
+      row.id,
+      row.name,
+      row.relationLabel,
+      row.relation,
+      row.relationPolarity,
+      row.neighborLabel,
+      row.cultureName,
+      row.religionName,
+      row.governmentName,
+      row.population,
+      row.area,
+      row.powerScore,
+      row.economicPower,
+      row.burgs
+    ])
+  ]);
+  appendCsvSection(rows, "外交关系矩阵", matrixToCsvRows(matrix));
+  const chronicle = diplomacyChronicle(map);
+  if (chronicle.length) {
+    appendCsvSection(rows, "外交历史", [
+      ["序号", "类型", "说明"],
+      ...chronicle.map((entry, index) => [index + 1, entry.type, entry.text])
+    ]);
+  }
+  return rows.map(values => values.map(csvEscape).join(",")).join("\r\n");
+}
+
+function appendCsvSection(rows, title, sectionRows) {
+  if (rows.length) rows.push([]);
+  rows.push([title]);
+  rows.push(...sectionRows);
+}
+
+function relationCountsText(counts = {}) {
+  return DIPLOMACY_RELATION_OPTIONS
+    .map(option => `${option.label}:${counts[option.value] || 0}`)
+    .join("；");
+}
+
+function diplomacyRelationExportRow(row) {
+  return {
+    subjectId: row.subjectId,
+    subjectName: row.subjectName,
+    objectId: row.id,
+    objectName: row.name,
+    relation: row.relation,
+    relationLabel: row.relationLabel,
+    relationPolarity: row.relationPolarity,
+    neighbor: row.neighborLabel,
+    culture: row.cultureName,
+    religion: row.religionName,
+    government: row.governmentName,
+    population: row.population,
+    area: row.area,
+    powerScore: row.powerScore,
+    economicPower: row.economicPower,
+    burgs: row.burgs
+  };
+}
+
+function diplomacyStateExportRows(map, states) {
+  return states.map(state => {
+    const item = map?.politics?.states?.[state.id] || map?.pack?.states?.[state.id] || {};
+    return {
+      id: state.id,
+      name: state.name,
+      rawName: item.name || state.name,
+      culture: indexedName(map?.society?.cultures, item.culture),
+      religion: indexedName(map?.society?.religions, item.religion),
+      government: item.governmentLabel || item.government?.label || item.form || "未知政体",
+      population: Number(item.rural || 0) + Number(item.urban || 0),
+      area: Number(item.area || item.cells || 0),
+      powerScore: Number(item.powerScore || 0),
+      economicPower: Number(item.economicPower || 0),
+      burgs: Number(item.burgs || 0)
+    };
+  });
+}
+
+function diplomacyChronicle(map) {
+  const chronicle = Array.isArray(map?.diplomacy?.chronicle) ? map.diplomacy.chronicle : Array.isArray(map?.pack?.states?.[0]?.diplomacy) ? map.pack.states[0].diplomacy : [];
+  return chronicle.map((entry, index) => {
+    if (Array.isArray(entry)) return {index: index + 1, type: entry[0] || "外交记录", text: entry[1] || ""};
+    return {index: index + 1, type: entry?.type || entry?.title || "外交记录", text: entry?.text || entry?.description || String(entry || "")};
+  });
+}
+
+function matrixToCsvRows(matrixValue) {
   const header = ["国家", ...matrixValue.states.map(state => `#${state.id} ${state.name}`)];
-  const rows = matrixValue.rows.map(row => [row.name, ...row.cells.map(cell => cell.label)]);
-  return [header, ...rows].map(values => values.map(csvEscape).join(",")).join("\r\n");
+  const rows = matrixValue.rows.map(row => [row.name, ...row.cells.map(cell => cell.self ? "本国" : `${cell.label}(${cell.relation})`)]);
+  return [header, ...rows];
 }
 
 function csvEscape(value) {

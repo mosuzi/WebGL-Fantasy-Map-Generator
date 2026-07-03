@@ -16997,3 +16997,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `808.32KB / gzip 243.86KB`，`MilitaryPanel` chunk 约 `40.84KB / gzip 12.42KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：扫到 `front-a / continents / 10000` 生成 `1` 个战役和 `2` 条 front；军事图层打开后 `glError = 0`，health 非 info 事件为 `0`，console/page error 为 `0`。
 - 正式 e2e 守门通过：`front-a / continents / 10000` 点击到出图 `1389.1ms`，纯生成 `710.8ms`，WebGL 加载 `358.6ms`，UI slack `319.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 128.4ms`，最慢加载阶段为 `构建视觉 cell mesh 55.6ms`，`构建线层顶点 33.3ms`。
+
+### 外交导出可读性第一刀
+
+背景：
+
+- 当前外交 CSV 只有一张关系矩阵，外部打开时缺少主体、统计、国家背景和历史上下文。
+- 当前计划要求优先补外交导出可读性，但不把战争关系继续驱动军事行动或动态系统。
+
+修正：
+
+- 外交 CSV 保留关系矩阵，同时增加“外交导出摘要”“当前主体关系明细”和“外交历史”分段。
+- 当前主体关系明细导出对象国家、关系标签与代码、关系倾向、邻接、文化、宗教、政体、人口、面积、国力、经济力和城镇数。
+- 外交 JSON 新增 `type = webgl-generator-diplomacy-summary`、`version = 1`、`exportedAt`、主体摘要、国家摘要、主体关系明细、关系矩阵和历史记录。
+- 本轮只改只读导出，不改变外交生成、关系编辑、战争 campaign、军事联动或地图渲染。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`DiplomacyPanel` chunk 约 `11.93KB / gzip 4.58KB`，主入口约 `808.32KB / gzip 243.86KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器下载烟测通过：外交面板导出 CSV 包含“外交导出摘要 / 当前主体关系明细 / 外交关系矩阵”，JSON 类型为 `webgl-generator-diplomacy-summary`，默认地图 `20` 个国家、主体关系明细 `19` 条；`glError = 0`，health 非 info 事件为 `0`，console/page error 为 `0`。
+- 正式 e2e 守门通过：点击到出图 `1391.6ms`，纯生成 `746.3ms`，WebGL 加载 `350.1ms`，UI slack `295.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 128.5ms`，最慢加载阶段为 `构建标签 53.4ms`。
