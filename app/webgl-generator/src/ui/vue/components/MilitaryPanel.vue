@@ -121,6 +121,20 @@
         <b>{{ battleEventChainSummary.latestLabel }}</b>
       </span>
     </div>
+    <div v-if="battleEventChainSummary.chains.length" class="military-chain-overview" aria-label="战报链概览">
+      <button
+        v-for="chain in battleEventChainSummary.chains"
+        :key="chain.key"
+        type="button"
+        class="military-chain-chip"
+        :class="{active: eventChainFilter === chain.key}"
+        @click="setEventChainFilter(chain.key)"
+      >
+        <strong>{{ chain.label }}</strong>
+        <span>{{ battleChainSideSummary(chain) }}</span>
+        <small>{{ battleChainCountSummary(chain) }}</small>
+      </button>
+    </div>
     <div class="military-event-tools">
       <div class="military-event-filters">
         <UiSelectField
@@ -723,6 +737,10 @@ function setBattleEventChainDraft(value) {
   battleEventDraft.chainKey = value;
 }
 
+function setEventChainFilter(value) {
+  eventChainFilter.value = value;
+}
+
 function applyStatus() {
   if (!selected.value) return;
   props.callbacks.onStatusApply?.({
@@ -1171,6 +1189,19 @@ function battleEventSequenceLabel(event) {
 
 function battleEventChainLabel(event) {
   return event?.chainLabel || event?.chainKey || "本地战报";
+}
+
+function battleChainSideSummary(chain = {}) {
+  const side = chain.chainSideLabel || "本地";
+  return chain.opponentStateName ? `${side} / 对手 ${chain.opponentStateName}` : side;
+}
+
+function battleChainCountSummary(chain = {}) {
+  const parts = [`事件 ${formatNumber(chain.count || 0)}`];
+  if (chain.applied) parts.push(`已应用 ${formatNumber(chain.applied)}`);
+  if (chain.pending) parts.push(`未应用 ${formatNumber(chain.pending)}`);
+  if (chain.casualties) parts.push(`损耗 ${formatNumber(chain.casualties)}`);
+  return parts.join(" / ");
 }
 
 function battleEventCampaignSideLabel(event) {
