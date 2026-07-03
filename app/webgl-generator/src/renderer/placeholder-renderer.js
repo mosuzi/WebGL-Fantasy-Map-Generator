@@ -1710,14 +1710,14 @@ function colorForRegiment(regiment) {
 }
 
 function pushMilitaryFrontLines(vertices, context, map, visibility) {
-  const width = Math.max(5.2, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 270);
+  const width = Math.max(12, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 120);
   for (const front of map?.military?.fronts || []) {
-    const points = front.points || [[front.from?.x, front.from?.y], [front.to?.x, front.to?.y]];
-    pushMilitaryFrontArrow(vertices, context, points, front.stance, width);
+    pushMilitaryFrontArrow(vertices, context, front, width);
   }
 }
 
-function pushMilitaryFrontArrow(vertices, context, points, stance, widthWorld) {
+function pushMilitaryFrontArrow(vertices, context, front, widthWorld) {
+  const points = front?.points || [[front?.from?.x, front?.from?.y], [front?.to?.x, front?.to?.y]];
   const source = (points || []).filter(isWorldPoint);
   if (source.length < 2) return;
   const start = source[0];
@@ -1725,52 +1725,84 @@ function pushMilitaryFrontArrow(vertices, context, points, stance, widthWorld) {
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const length = Math.hypot(dx, dy);
-  if (length <= 0.000001) return;
+  const midpoint = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+  const fallbackDirection = militaryFrontRawDirection(source, front?.to);
+  const tangent = length > 0.000001
+    ? {x: dx / length, y: dy / length}
+    : {x: -fallbackDirection.y, y: fallbackDirection.x};
+  const visualLength = Math.max(length, widthWorld * 2.45);
+  const visualStart = visualLength > length ? [midpoint[0] - tangent.x * visualLength / 2, midpoint[1] - tangent.y * visualLength / 2] : start;
+  const visualEnd = visualLength > length ? [midpoint[0] + tangent.x * visualLength / 2, midpoint[1] + tangent.y * visualLength / 2] : end;
+  const direction = militaryFrontDirection(source, front?.to, tangent);
+  const inset = Math.min(visualLength * 0.12, widthWorld * 0.9);
+  const left = visualLength > inset * 2 ? [visualStart[0] + tangent.x * inset, visualStart[1] + tangent.y * inset] : visualStart;
+  const right = visualLength > inset * 2 ? [visualEnd[0] - tangent.x * inset, visualEnd[1] - tangent.y * inset] : visualEnd;
+  const depth = clamp(widthWorld * 3.1, 18, Math.max(30, length * 1.15));
+  const tailDepth = depth * 0.34;
+  const bodyDepth = depth * 0.16;
+  const tipDepth = depth * 0.98;
+  const palette = militaryFrontArrowPalette(front?.stance);
 
-  const unit = {x: dx / length, y: dy / length};
-  const normal = {x: -unit.y, y: unit.x};
-  const arrowLength = Math.min(length * 0.48, widthWorld * 1.8);
-  const neck = [end[0] - unit.x * arrowLength, end[1] - unit.y * arrowLength];
-  const tailHalf = widthWorld * 0.24;
-  const bodyHalf = widthWorld * 0.46;
-  const headHalf = widthWorld * 0.82;
-  const palette = militaryFrontArrowPalette(stance);
+  const leftTail = offsetPoint(left, direction, -tailDepth);
+  const rightTail = offsetPoint(right, direction, -tailDepth);
+  const leftBody = offsetPoint(left, direction, bodyDepth);
+  const rightBody = offsetPoint(right, direction, bodyDepth);
+  const mid = [(left[0] + right[0]) / 2, (left[1] + right[1]) / 2];
+  const tip = offsetPoint(mid, direction, tipDepth);
 
-  const tailLeft = offsetPoint(start, normal, tailHalf);
-  const tailRight = offsetPoint(start, normal, -tailHalf);
-  const neckLeft = offsetPoint(neck, normal, bodyHalf);
-  const neckRight = offsetPoint(neck, normal, -bodyHalf);
-  const headLeft = offsetPoint(neck, normal, headHalf);
-  const headRight = offsetPoint(neck, normal, -headHalf);
-
-  pushWorldVertex(vertices, context, tailLeft, palette.tail);
-  pushWorldVertex(vertices, context, neckLeft, palette.body);
-  pushWorldVertex(vertices, context, neckRight, palette.body);
-  pushWorldVertex(vertices, context, tailLeft, palette.tail);
-  pushWorldVertex(vertices, context, neckRight, palette.body);
-  pushWorldVertex(vertices, context, tailRight, palette.tail);
-
-  pushWorldVertex(vertices, context, headLeft, palette.body);
-  pushWorldVertex(vertices, context, end, palette.head);
-  pushWorldVertex(vertices, context, headRight, palette.body);
+  pushWorldTriangleWithColors(vertices, context, leftTail, leftBody, rightBody, palette.tail, palette.body, palette.body);
+  pushWorldTriangleWithColors(vertices, context, leftTail, rightBody, rightTail, palette.tail, palette.body, palette.tail);
+  pushWorldTriangleWithColors(vertices, context, leftBody, tip, rightBody, palette.body, palette.head, palette.body);
 }
 
 function offsetPoint(point, normal, distance) {
   return [point[0] + normal.x * distance, point[1] + normal.y * distance];
 }
 
+function militaryFrontDirection(points, target, tangent) {
+  const raw = militaryFrontRawDirection(points, target);
+  const tangentDot = raw.x * tangent.x + raw.y * tangent.y;
+  let direction = {x: raw.x - tangent.x * tangentDot, y: raw.y - tangent.y * tangentDot};
+  let length = Math.hypot(direction.x, direction.y);
+  if (length <= 0.000001) {
+    const normal = {x: -tangent.y, y: tangent.x};
+    const sign = normal.x * raw.x + normal.y * raw.y < 0 ? -1 : 1;
+    direction = {x: normal.x * sign, y: normal.y * sign};
+    length = 1;
+  }
+  return {x: direction.x / length, y: direction.y / length};
+}
+
+function militaryFrontRawDirection(points, target) {
+  const mid = points.reduce((sum, point) => [sum[0] + point[0], sum[1] + point[1]], [0, 0]).map(value => value / points.length);
+  if (!isFinitePointObject(target)) return {x: 0, y: -1};
+  const raw = {x: target.x - mid[0], y: target.y - mid[1]};
+  const length = Math.hypot(raw.x, raw.y);
+  return length > 0.000001 ? {x: raw.x / length, y: raw.y / length} : {x: 0, y: -1};
+}
+
+function isFinitePointObject(point) {
+  return Number.isFinite(point?.x) && Number.isFinite(point?.y);
+}
+
+function pushWorldTriangleWithColors(vertices, context, a, b, c, colorA, colorB, colorC) {
+  pushWorldVertex(vertices, context, a, colorA);
+  pushWorldVertex(vertices, context, b, colorB);
+  pushWorldVertex(vertices, context, c, colorC);
+}
+
 function militaryFrontArrowPalette(stance) {
   if (stance === "defense") {
     return {
-      tail: [0.2, 0.42, 0.92, 0.12],
-      body: [0.34, 0.68, 1, 0.62],
-      head: [0.72, 0.92, 1, 0.92]
+      tail: [0.1, 0.28, 0.82, 0.18],
+      body: [0.25, 0.64, 1, 0.84],
+      head: [0.78, 0.94, 1, 0.96]
     };
   }
   return {
-    tail: [0.72, 0.18, 0.08, 0.12],
-    body: [0.96, 0.34, 0.14, 0.66],
-    head: [1, 0.74, 0.22, 0.94]
+    tail: [0.68, 0.1, 0.05, 0.18],
+    body: [1, 0.26, 0.08, 0.86],
+    head: [1, 0.74, 0.2, 0.98]
   };
 }
 

@@ -15858,3 +15858,29 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `28.41KB / gzip 9.08KB`，主入口约 `765.90KB / gzip 231.17KB`。
 - Playwright + Chrome 构建产物烟测通过：下载 `fmg-military-events-stage-2-1-all.json`，`summary.total = 2`、`summary.applied = 1`、`summary.casualties = 456`、`summary.latest.type = siege`，事件数组仍含 `raid / siege`，`glError = 0`、console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1406.4ms`，纯生成 `723ms`，WebGL 加载 `402.4ms`，UI slack `281ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 130.3ms`，最慢加载阶段为 `构建视觉 cell mesh 62.7ms`，`line-vertices = 49.5ms`，`fit-draw = 3ms`。
+
+### 军事态势线宽体箭头
+
+背景：
+
+- 用户指出军事态势线不好看：不能太长，最多只在边界上存在；不要跨海；不能是细线，而要是宽体渐变色、能表达方向的箭头。
+- 旧渲染虽然已经尝试找共享边界，但数据只有局部边，渲染形态也容易退化成很短、很细、几乎不可见的小箭头。
+
+修正：
+
+- `findSharedLandFrontSegment()` 改为收集交战双方共享的陆地边界边，只接受两侧 `pack.cells.h >= 20` 且 state 分属交战双方的相邻 cell。
+- 战线段会以目标中点附近的共享边为起点，沿连通边界扩展到短段上限，并写入 `borderCellPairs / length / maxLength` 供校验。
+- 没有共享陆地边界时不生成战线，因此隔海战争不会画跨海态势线。
+- 渲染层把战线从细线改为边界附近的宽体渐变箭头：箭头头部朝目标国家，尾部低透明、主体高饱和、头部高亮。
+- 对边界段退化到极短点位的情况，渲染层会给箭头保留最小可视横向长度，避免战线数据存在但肉眼看不到。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 249 项。
+
+验证：
+
+- 数据烟测通过：固定 `stage-2-1231411414 / continents / 10000` 生成 `2` 条战线，最长 `57`，均低于各自上限；所有 `borderCellPairs` 两侧 cell 都是陆地且属于交战双方。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `768.43KB / gzip 232.22KB`，仍只有既有大 chunk 提示。
+- Playwright + Chrome 构建产物烟测通过：固定 seed 下战线图层开启，战线开关顶点差为 `18`，即 `2` 个箭头各 `3` 个三角形；局部截图 `docs/generated/war-front-arrow-crop.png` 可见宽体渐变箭头，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1352.2ms`，纯生成 `694.1ms`，WebGL 加载 `373ms`，UI slack `285.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 123.1ms`，最慢加载阶段为 `构建标签 54.2ms`，`line-vertices = 50.2ms`，`fit-draw = 2.5ms`。

@@ -875,6 +875,9 @@ function createFrontLine(pack, campaign, fromState, toState, stance) {
     from: fromPoint,
     to: toPoint,
     borderCells: frontSegment.cells,
+    borderCellPairs: frontSegment.cellPairs,
+    length: frontSegment.length,
+    maxLength: frontSegment.maxLength,
     points: orientFrontSegment(frontSegment.points, fromPoint, toPoint)
   };
 }
@@ -883,7 +886,8 @@ function findSharedLandFrontSegment(pack, fromStateId, toStateId, fromPoint, toP
   const {cells} = pack || {};
   if (!cells?.i || !cells?.c || !cells?.state || !cells?.h) return null;
   const targetMid = [(fromPoint.x + toPoint.x) / 2, (fromPoint.y + toPoint.y) / 2];
-  let best = null;
+  const edges = [];
+  const seen = new Set();
 
   for (const cell of cells.i) {
     if (cells.state[cell] !== fromStateId || cells.h[cell] < 20) continue;
@@ -891,14 +895,19 @@ function findSharedLandFrontSegment(pack, fromStateId, toStateId, fromPoint, toP
       if (cells.state[neighbor] !== toStateId || cells.h[neighbor] < 20) continue;
       const edge = sharedPackEdge(pack, cell, neighbor);
       if (!edge) continue;
-      const mid = [(edge[0][0] + edge[1][0]) / 2, (edge[0][1] + edge[1][1]) / 2];
-      const length = distance(edge[0], edge[1]);
+      const key = edge.vertices.slice().sort((a, b) => a - b).join(":");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const mid = [(edge.points[0][0] + edge.points[1][0]) / 2, (edge.points[0][1] + edge.points[1][1]) / 2];
+      const length = distance(edge.points[0], edge.points[1]);
       const score = distance(mid, targetMid) - length * 1.8;
-      if (!best || score < best.score) best = {score, points: edge, cells: [cell, neighbor]};
+      edges.push({score, points: edge.points, vertices: edge.vertices, cells: [cell, neighbor], length});
     }
   }
 
-  return best;
+  if (!edges.length) return null;
+  const best = edges.reduce((current, edge, index) => !current || edge.score < current.edge.score ? {edge, index} : current, null);
+  return selectFrontBoundarySegment(pack, edges, best.index, frontMaxBoundaryLength(pack, fromPoint, toPoint));
 }
 
 function sharedPackEdge(pack, cellA, cellB) {
@@ -908,7 +917,88 @@ function sharedPackEdge(pack, cellA, cellB) {
   if (shared.length < 2) return null;
   const first = pack.vertices?.p?.[shared[0]];
   const second = pack.vertices?.p?.[shared[1]];
-  return first && second ? [first, second] : null;
+  return first && second ? {points: [first, second], vertices: [shared[0], shared[1]]} : null;
+}
+
+function selectFrontBoundarySegment(pack, edges, startIndex, maxLength) {
+  const selected = new Set([startIndex]);
+  const start = edges[startIndex];
+  const path = start.vertices.slice();
+  let length = start.length;
+
+  while (length < maxLength) {
+    const extension = bestFrontBoundaryExtension(edges, selected, path, maxLength - length);
+    if (!extension) break;
+    selected.add(extension.index);
+    length += extension.edge.length;
+    if (extension.side === "start") path.unshift(extension.nextVertex);
+    else path.push(extension.nextVertex);
+  }
+
+  const selectedEdges = Array.from(selected).map(index => edges[index]);
+  let points = path.map(vertex => pack.vertices?.p?.[vertex]).filter(Boolean);
+  if (points.length < 3 && selectedEdges.length > 1) points = farthestFrontEdgePoints(selectedEdges);
+  const cellPairs = selectedEdges.map(edge => edge.cells);
+  const cells = cellPairs.flat();
+  return {
+    points: points.length >= 2 ? points : start.points,
+    cells: Array.from(new Set(cells)),
+    cellPairs,
+    length: round(length),
+    maxLength: round(maxLength)
+  };
+}
+
+function farthestFrontEdgePoints(edges) {
+  const points = edges.flatMap(edge => edge.points || []).filter(Boolean);
+  let best = null;
+  for (let a = 0; a < points.length; a++) {
+    for (let b = a + 1; b < points.length; b++) {
+      const length = distance(points[a], points[b]);
+      if (!best || length > best.length) best = {length, points: [points[a], points[b]]};
+    }
+  }
+  return best?.points || points.slice(0, 2);
+}
+
+function bestFrontBoundaryExtension(edges, selected, path, remainingLength) {
+  const startVertex = path[0];
+  const endVertex = path[path.length - 1];
+  let best = null;
+  for (let index = 0; index < edges.length; index++) {
+    if (selected.has(index)) continue;
+    const edge = edges[index];
+    if (edge.length > remainingLength && selected.size > 1) continue;
+    const [a, b] = edge.vertices;
+    const match =
+      a === startVertex ? {side: "start", nextVertex: b} :
+        b === startVertex ? {side: "start", nextVertex: a} :
+          a === endVertex ? {side: "end", nextVertex: b} :
+            b === endVertex ? {side: "end", nextVertex: a} :
+              null;
+    if (!match) continue;
+    const candidate = {index, edge, ...match};
+    if (!best || edge.score < best.edge.score) best = candidate;
+  }
+  return best;
+}
+
+function frontMaxBoundaryLength(pack, fromPoint, toPoint) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const point of pack?.cells?.p || []) {
+    if (!Number.isFinite(point?.[0]) || !Number.isFinite(point?.[1])) continue;
+    minX = Math.min(minX, point[0]);
+    maxX = Math.max(maxX, point[0]);
+    minY = Math.min(minY, point[1]);
+    maxY = Math.max(maxY, point[1]);
+  }
+  const width = Number.isFinite(minX) ? maxX - minX : 1440;
+  const height = Number.isFinite(minY) ? maxY - minY : 720;
+  const span = Math.max(width, height);
+  return clamp(Math.min(distance([fromPoint.x, fromPoint.y], [toPoint.x, toPoint.y]) * 0.18, span / 18), 24, span / 10);
 }
 
 function orientFrontSegment(points, fromPoint, toPoint) {
