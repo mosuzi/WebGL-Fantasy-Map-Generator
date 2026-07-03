@@ -14795,3 +14795,32 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。
 - Playwright + 系统 Chrome 未分配高度烟测通过：导入 20 色条合成 SVG，色板上限设为 `16`、映射模式设为色相、未分配高度设为 `12` 后应用，`source.kind = image-palette`、`source.colorLimit = 16`、`source.unassignedHeight = 12`、`source.assignments.length = 16`，grid 高度中有 `1973` 个采样点为 `12`，`loadMap.totalMs = 285.9ms`，`fit-draw = 4.1ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1177.3ms`，纯生成 `620.1ms`，WebGL 加载 `344.6ms`，最慢加载阶段为 `cell-visual-mesh 52.2ms`，`fit-draw = 2.3ms`，`glError = 0`。
+
+### 高度图色块批量赋高
+
+背景：
+
+- 高度图导入工作台已经支持 `image-palette` 应用链路和未分配高度配置，但手动覆盖仍只能逐个色块操作。
+- 阶段 4 目标要求把多个色块批量设为水域、低地、丘陵、山地或峰值，避免彩色高度图需要重复点击单色赋值。
+- 批量选择不能替代现有高亮预览，否则用户会失去观察单个色块区域的入口。
+
+修正：
+
+- 色板条目新增 checkbox 批量选择状态，并提供“全选 / 清空”工具栏。
+- 批量选择与当前高亮色块分离：checkbox 只控制批量赋高目标，点击色块仍用于高亮预览中的对应区域。
+- 新增“批量赋高”面板，可用滑条设置 `0-100` 高度，也可一键设为 `水域 / 低地 / 丘陵 / 山地 / 峰值` 或恢复自动。
+- 批量手动覆盖复用既有 `manualAssignments`，应用后继续进入 `map.heightmap.source.assignments`，不会新增额外数据契约。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/heightmap-import.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。
+- Playwright + 系统 Chrome 批量赋高烟测通过：导入 4 色合成 SVG，切到色相模式后批量选择 2 个色块并点击“低地”，应用后 `source.kind = image-palette`、`source.mappingMode = hue`、手动 `height = 28` 的 assignments 为 `2` 个，checksum `f78211ea -> 52939e78`，`loadMap.totalMs = 469.9ms`，`fit-draw = 8.5ms`，`glError = 0`，console/page error 为 `0`，health error 为 `0`。
+- 同次烟测仅记录一次初始加载阶段 `main-thread-long-task` warn，未发生在高度图导入或应用阶段。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1194.1ms`，纯生成 `609.7ms`，WebGL 加载 `339.1ms`，最慢加载阶段为 `cell-visual-mesh 52.1ms`，`fit-draw = 2.4ms`，`glError = 0`。

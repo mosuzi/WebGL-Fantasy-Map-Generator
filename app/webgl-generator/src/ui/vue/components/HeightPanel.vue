@@ -120,22 +120,67 @@
             <strong>量化色板</strong>
             <span>{{ paletteSummary }}</span>
           </header>
+          <div v-if="previewPalette.length" class="heightmap-palette-toolbar">
+            <span>{{ batchPaletteSummary }}</span>
+            <UiButton variant="secondary" @click="selectAllBatchPalette">全选</UiButton>
+            <UiButton variant="secondary" :disabled="!batchPaletteKeys.length" @click="clearBatchPaletteSelection">清空</UiButton>
+          </div>
           <div v-if="previewPalette.length" class="heightmap-palette-grid">
-            <button
+            <div
               v-for="entry in previewPalette"
               :key="entry.key"
-              type="button"
-              class="heightmap-palette-swatch"
-              :class="{active: selectedPaletteKey === entry.key}"
-              :title="`${entry.hex} / ${entry.pixels} px / 高度 ${entry.height}${entry.manual ? ' / 手动' : ''}`"
-              @click="selectPaletteEntry(entry.key)"
+              class="heightmap-palette-item"
+              :class="{selected: isBatchPaletteSelected(entry.key)}"
             >
-              <i :style="{backgroundColor: entry.hex}"></i>
-              <span>{{ entry.hex }}</span>
-              <small>{{ entry.percent }} / h {{ entry.height }}{{ entry.manual ? " 手动" : "" }}</small>
-            </button>
+              <label class="heightmap-palette-checkbox">
+                <input
+                  type="checkbox"
+                  :aria-label="`批量选择 ${entry.hex}`"
+                  :checked="isBatchPaletteSelected(entry.key)"
+                  @change="toggleBatchPaletteEntry(entry.key, $event.target.checked)"
+                />
+              </label>
+              <button
+                type="button"
+                class="heightmap-palette-swatch"
+                :class="{active: selectedPaletteKey === entry.key}"
+                :title="`${entry.hex} / ${entry.pixels} px / 高度 ${entry.height}${entry.manual ? ' / 手动' : ''}`"
+                @click="selectPaletteEntry(entry.key)"
+              >
+                <i :style="{backgroundColor: entry.hex}"></i>
+                <span>{{ entry.hex }}</span>
+                <small>{{ entry.percent }} / h {{ entry.height }}{{ entry.manual ? " 手动" : "" }}</small>
+              </button>
+            </div>
           </div>
           <p v-else class="heightmap-palette-empty">选择图片后生成采样色板。</p>
+        </section>
+
+        <section v-if="batchSelectedEntries.length" class="heightmap-assignment-panel" aria-label="批量色块高度赋值">
+          <header>
+            <strong>批量赋高</strong>
+            <span>{{ batchSelectedEntries.length }} 色</span>
+          </header>
+          <UiSliderField
+            label="批量高度"
+            field-class="heightmap-assignment-slider"
+            :model-value="batchAssignmentHeight"
+            :min="0"
+            :max="100"
+            :step="1"
+            @input="setBatchPaletteHeight"
+          />
+          <div class="heightmap-assignment-presets">
+            <UiButton
+              v-for="preset in heightAssignmentPresets"
+              :key="preset.value"
+              variant="secondary"
+              @click="assignBatchPaletteHeight(preset.value)"
+            >
+              {{ preset.label }}
+            </UiButton>
+            <UiButton variant="secondary" @click="clearBatchPaletteHeight">恢复自动</UiButton>
+          </div>
         </section>
 
         <section v-if="selectedPaletteEntry" class="heightmap-assignment-panel" aria-label="色块高度赋值">
@@ -259,6 +304,8 @@ const selectedFile = ref(null);
 const previewStats = ref(null);
 const previewPalette = ref([]);
 const selectedPaletteKey = ref(null);
+const batchPaletteKeys = ref([]);
+const batchAssignmentHeight = ref(45);
 const manualAssignments = ref({});
 const previewStatus = ref("尚未选择图片");
 const workbenchPosition = ref({left: 760, top: 110});
@@ -295,6 +342,11 @@ const paletteSummary = computed(() => {
   return `${previewPalette.value.length} 色，点击色块高亮区域`;
 });
 const selectedPaletteEntry = computed(() => previewPalette.value.find(entry => entry.key === selectedPaletteKey.value) || null);
+const batchSelectedEntries = computed(() => previewPalette.value.filter(entry => batchPaletteKeys.value.includes(entry.key)));
+const batchPaletteSummary = computed(() => {
+  if (!batchPaletteKeys.value.length) return "未选";
+  return `已选 ${batchPaletteKeys.value.length} 色`;
+});
 
 watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode], () => {
   drawPreview();
@@ -371,6 +423,7 @@ async function onHeightmapFileChange(event) {
     selectedFile.value = file;
     previewImage.value = await loadPreviewImage(file);
     selectedPaletteKey.value = null;
+    batchPaletteKeys.value = [];
     manualAssignments.value = {};
     await nextTick();
     drawPreview();
@@ -381,6 +434,7 @@ async function onHeightmapFileChange(event) {
     previewStats.value = null;
     previewPalette.value = [];
     selectedPaletteKey.value = null;
+    batchPaletteKeys.value = [];
     manualAssignments.value = {};
     clearPreviewCanvas();
     previewStatus.value = `图片预览失败：${error instanceof Error ? error.message : String(error)}`;
@@ -445,6 +499,7 @@ function drawPreview() {
   const palette = quantizePalette(imageData.data, heightmapColorLimit.value, brightness);
   previewPalette.value = palette.entries;
   if (!previewPalette.value.some(entry => entry.key === selectedPaletteKey.value)) selectedPaletteKey.value = null;
+  trimBatchPaletteSelection();
   if (selectedPaletteKey.value !== null) {
     applyPaletteHighlight(imageData.data, selectedPaletteKey.value);
     context.putImageData(imageData, 0, 0);
@@ -622,6 +677,55 @@ function assignSelectedPaletteHeight(value) {
     [String(selectedPaletteKey.value)]: height
   };
   drawPreview();
+}
+
+function isBatchPaletteSelected(key) {
+  return batchPaletteKeys.value.includes(key);
+}
+
+function toggleBatchPaletteEntry(key, checked) {
+  if (checked) {
+    if (!batchPaletteKeys.value.includes(key)) batchPaletteKeys.value = [...batchPaletteKeys.value, key];
+    return;
+  }
+  batchPaletteKeys.value = batchPaletteKeys.value.filter(item => item !== key);
+}
+
+function selectAllBatchPalette() {
+  batchPaletteKeys.value = previewPalette.value.map(entry => entry.key);
+}
+
+function clearBatchPaletteSelection() {
+  batchPaletteKeys.value = [];
+}
+
+function setBatchPaletteHeight(value) {
+  batchAssignmentHeight.value = clamp(Math.round(Number(value) || 0), 0, 100);
+  assignBatchPaletteHeight(batchAssignmentHeight.value);
+}
+
+function assignBatchPaletteHeight(value) {
+  if (!batchPaletteKeys.value.length) return;
+  const height = clamp(Math.round(Number(value) || 0), 0, 100);
+  batchAssignmentHeight.value = height;
+  const next = {...manualAssignments.value};
+  for (const key of batchPaletteKeys.value) next[String(key)] = height;
+  manualAssignments.value = next;
+  drawPreview();
+}
+
+function clearBatchPaletteHeight() {
+  if (!batchPaletteKeys.value.length) return;
+  const next = {...manualAssignments.value};
+  for (const key of batchPaletteKeys.value) delete next[String(key)];
+  manualAssignments.value = next;
+  drawPreview();
+}
+
+function trimBatchPaletteSelection() {
+  if (!batchPaletteKeys.value.length) return;
+  const available = new Set(previewPalette.value.map(entry => entry.key));
+  batchPaletteKeys.value = batchPaletteKeys.value.filter(key => available.has(key));
 }
 
 function clearSelectedPaletteHeight() {
