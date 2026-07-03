@@ -33,6 +33,31 @@
     </main>
 
     <script>
+      window.__webglGeneratorPrebootHealth = {
+        storageKey: "webgl-generator-health-events-v1",
+        record(type, detail = {}, severity = "info") {
+          const event = {
+            id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            type,
+            severity,
+            at: new Date().toISOString(),
+            pageTimeMs: Math.round((performance.now ? performance.now() : Date.now()) * 10) / 10,
+            url: location.href,
+            detail
+          };
+          try {
+            const raw = localStorage.getItem(this.storageKey);
+            const events = raw ? JSON.parse(raw) : [];
+            const list = Array.isArray(events) ? events : [];
+            list.push(event);
+            localStorage.setItem(this.storageKey, JSON.stringify(list.slice(-180)));
+          } catch {
+            // 启动失败时仍要尽量显示页面提示，本地存储不可用则跳过记录。
+          }
+          return event;
+        }
+      };
+      window.__webglGeneratorPrebootHealth.record("document-boot", {readyState: document.readyState});
       window.setTimeout(() => {
         if (window.__webglGeneratorApp) return;
         const loading = document.getElementById("generation-loading");
@@ -41,6 +66,7 @@
         if (loading) loading.hidden = false;
         const status = document.getElementById("app-status");
         if (status) status.textContent = "脚本尚未启动，请检查 DevTools 是否暂停或禁用 JavaScript";
+        window.__webglGeneratorPrebootHealth.record("script-not-started", {timeoutMs: 3000}, "error");
       }, 3000);
     </script>
     <script type="module" src="./src/main.js"></script>

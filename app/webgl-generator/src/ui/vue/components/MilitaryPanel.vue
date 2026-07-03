@@ -52,7 +52,7 @@
           @input="value => setRatio(unit.name, value)"
           @change="value => setRatio(unit.name, value)"
         />
-        <UiButton variant="secondary" @click="applyRatios">应用比例</UiButton>
+        <UiButton class="military-ratio-apply" variant="secondary" @click="applyRatios">应用比例</UiButton>
       </div>
     </template>
   </UiActionDock>
@@ -247,7 +247,7 @@ function applyRatios() {
   if (!selectedState.value) return;
   const ratios = {};
   for (const unit of unitDefinitions) ratios[unit.name] = Number(ratioDraft[unit.name] || 0);
-  callbacks.onRatiosApply?.(selectedState.value.id, normalizeUnitRatios(ratios));
+  props.callbacks.onRatiosApply?.(selectedState.value.id, normalizeUnitRatios(ratios));
   activeAction.value = null;
 }
 

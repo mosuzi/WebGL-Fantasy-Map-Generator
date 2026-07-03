@@ -1,10 +1,14 @@
 import {createGeneratorApp} from "./runtime/app.js";
+import {installWebglGeneratorHealthMonitor, recordStartupFailure} from "./runtime/health-monitor.js";
 import {initializeVueStateBridge} from "./ui/vue/state-bridge.js";
+
+const healthMonitor = installWebglGeneratorHealthMonitor(document);
 
 try {
   initializeVueStateBridge(document);
-  createGeneratorApp(document);
+  createGeneratorApp(document, {healthMonitor});
 } catch (error) {
+  recordStartupFailure(document, error);
   const message = error instanceof Error ? error.message : String(error);
   const status = document.getElementById("app-status");
   if (status) status.textContent = `启动失败：${message}`;

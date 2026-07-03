@@ -58,6 +58,12 @@ const MILITARY_ICON_RELAXED_SCALE = 2.6;
 const MILITARY_ICON_BASE_WIDTH = 58;
 const MILITARY_ICON_BASE_HEIGHT = 24;
 const POPULATION_UNIT_PEOPLE = 1000;
+const MAX_OVERLAY_COLLISION_BOXES = 900;
+const ROUTE_BUILD_SLICE_MS = 10;
+const MAX_ROUTE_RENDER_POINTS_PER_ROUTE = 4096;
+const MAX_ROUTE_RENDER_POINTS_TOTAL = 90000;
+const MAX_ROUTE_RENDER_VERTICES = 900000;
+const MAX_ROUTE_DASH_PIECES = 20000;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -153,6 +159,7 @@ export class PlaceholderMapRenderer {
     this.objectPickingIndex = null;
     this.lastObjectCandidateCount = 0;
     this.routeBuildMs = 0;
+    this.routeRenderStats = emptyRouteRenderStats();
     this.riverBuildMs = 0;
     this.selectionBuildMs = 0;
     this.routeWidthMode = "screen-space";
@@ -238,18 +245,33 @@ export class PlaceholderMapRenderer {
     });
     profile.stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
-    profile.stage("fit-draw", "适配视图并绘制", () => this.fitToView());
+    profile.stage("fit-draw", "适配视图并绘制", () => this.fitToView({quick: true}));
+    profile.stage("route-screen-mesh", "构建道路屏幕 mesh", () => {
+      if (this.layerVisibility.routes) this.updateRouteBuffer();
+      else this.clearRouteBuffer();
+    });
+    profile.stage("river-screen-mesh", "构建河流屏幕 mesh", () => {
+      if (this.layerVisibility.rivers) this.updateRiverBuffer();
+    });
+    profile.stage("overlay-draw", "刷新标签和图标", () => this.draw({updateDynamicBuffers: false, updateOverlay: true}));
     this.lastLoad = profile.finish();
   }
 
-  async loadMapAsync(map, {onStage = () => {}, yieldToBrowser = () => Promise.resolve()} = {}) {
+  async loadMapAsync(map, {onStage = () => {}, onStageEnd = () => {}, yieldToBrowser = () => Promise.resolve()} = {}) {
     const profile = createRendererLoadProfile();
     const stage = async (id, label, task) => {
+      const startedAt = performance.now();
       onStage({id, label});
-      await yieldToBrowser();
-      const result = profile.stage(id, label, task);
-      await yieldToBrowser();
-      return result;
+      await yieldToBrowser({debugDelay: true, stageId: id});
+      try {
+        const result = await profile.stageAsync(id, label, task);
+        onStageEnd({id, label, ms: roundMs(performance.now() - startedAt)});
+        await yieldToBrowser({debugDelay: true, stageId: id});
+        return result;
+      } catch (error) {
+        onStageEnd({id, label, ms: roundMs(performance.now() - startedAt), error});
+        throw error;
+      }
     };
 
     this.map = map;
@@ -283,16 +305,25 @@ export class PlaceholderMapRenderer {
     });
     await stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
-    await stage("fit-draw", "适配视图并绘制", () => this.fitToView());
+    await stage("fit-draw", "适配视图并绘制", () => this.fitToView({quick: true}));
+    await stage("route-screen-mesh", "构建道路屏幕 mesh", () => {
+      if (this.layerVisibility.routes) return this.updateRouteBufferAsync({yieldToBrowser});
+      this.clearRouteBuffer();
+      return null;
+    });
+    await stage("river-screen-mesh", "构建河流屏幕 mesh", () => {
+      if (this.layerVisibility.rivers) this.updateRiverBuffer();
+    });
+    await stage("overlay-draw", "刷新标签和图标", () => this.draw({updateDynamicBuffers: false, updateOverlay: true}));
     this.lastLoad = profile.finish();
   }
 
-  fitToView() {
+  fitToView({quick = false} = {}) {
     this.camera.scale = 1;
     this.camera.offsetX = 0;
     this.camera.offsetY = 0;
     this.markViewportBuffersDirty();
-    this.draw();
+    this.draw({updateDynamicBuffers: !quick, updateOverlay: !quick});
     this.onViewChange();
   }
 
@@ -451,12 +482,12 @@ export class PlaceholderMapRenderer {
     this.draw();
   }
 
-  draw() {
+  draw({updateDynamicBuffers = true, updateOverlay = true} = {}) {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
-    if (this.dynamicBuffersDirty.routes) this.updateRouteBuffer();
-    if (this.dynamicBuffersDirty.rivers) this.updateRiverBuffer();
-    if (this.dynamicBuffersDirty.selection || this.locateFlash) this.updateSelectionBuffer();
+    if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
+    if (updateDynamicBuffers && this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) this.updateRiverBuffer();
+    if (updateDynamicBuffers && (this.dynamicBuffersDirty.selection || this.locateFlash)) this.updateSelectionBuffer();
 
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -520,7 +551,7 @@ export class PlaceholderMapRenderer {
       drawMs: roundMs(performance.now() - startedAt),
       glError: gl.getError()
     };
-    this.updateLabels();
+    if (updateOverlay) this.updateLabels();
   }
 
   getStats() {
@@ -533,6 +564,7 @@ export class PlaceholderMapRenderer {
       routeVertexCount: this.routeVertexCount,
       routeTriangleCount: this.routeVertexCount / 3,
       routeBuildMs: this.routeBuildMs,
+      routeRenderStats: {...this.routeRenderStats},
       routeWidthMode: this.routeWidthMode,
       routeStyleMode: "primary/secondary road + continuous trail dashed",
       riverVertexCount: this.riverVertexCount,
@@ -630,11 +662,35 @@ export class PlaceholderMapRenderer {
 
   updateRouteBuffer() {
     const startedAt = performance.now();
-    const routeVertices = buildRouteMeshVertices(this.map, this.camera, this.canvas, this.selection);
+    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, this.camera, this.canvas, this.selection);
     this.routeVertexCount = routeVertices.length / 6;
+    this.routeRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
     this.routeBuildMs = roundMs(performance.now() - startedAt);
+    this.dynamicBuffersDirty.routes = false;
+  }
+
+  async updateRouteBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS} = {}) {
+    const startedAt = performance.now();
+    const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, this.camera, this.canvas, this.selection, {
+      yieldToBrowser,
+      sliceMs
+    });
+    this.routeVertexCount = routeVertices.length / 6;
+    this.routeRenderStats = stats;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
+    this.routeBuildMs = roundMs(performance.now() - startedAt);
+    this.dynamicBuffersDirty.routes = false;
+  }
+
+  clearRouteBuffer() {
+    this.routeVertexCount = 0;
+    this.routeRenderStats = emptyRouteRenderStats();
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    this.routeBuildMs = 0;
     this.dynamicBuffersDirty.routes = false;
   }
 
@@ -768,15 +824,17 @@ export class PlaceholderMapRenderer {
       return;
     }
     this.overlay.replaceChildren();
+    const documentRef = this.overlay.ownerDocument || document;
+    const fragment = documentRef.createDocumentFragment();
     this.labelItems = [...getLabelStates(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
-      const node = document.createElement("span");
+      const node = documentRef.createElement("span");
       node.className = labelClassName(item);
       node.textContent = item.text;
-      this.overlay.append(node);
+      fragment.append(node);
       return {...item, node, box: null, visible: false};
     });
     this.cityIconItems = getCityIconItems(map).map(item => {
-      const node = document.createElement("span");
+      const node = documentRef.createElement("span");
       node.className = cityIconClassName(item);
       node.title = item.tooltip;
       node.setAttribute("aria-label", item.tooltip);
@@ -784,11 +842,11 @@ export class PlaceholderMapRenderer {
       node.dataset.cityKind = item.kind;
       applyCityIconPalette(node, item);
       node.innerHTML = cityIconSvg(item);
-      this.overlay.append(node);
+      fragment.append(node);
       return {...item, node, box: null, visible: false};
     });
     this.markerIconItems = getMarkerIconItems(map).map(item => {
-      const node = document.createElement("span");
+      const node = documentRef.createElement("span");
       node.className = markerIconClassName(item);
       node.title = item.tooltip;
       node.setAttribute("aria-label", item.tooltip);
@@ -796,30 +854,31 @@ export class PlaceholderMapRenderer {
       node.dataset.markerCategory = item.category || "marker";
       applyMarkerIconPalette(node, item);
       node.innerHTML = markerIconSvg(item);
-      this.overlay.append(node);
+      fragment.append(node);
       return {...item, node, box: null, visible: false};
     });
     this.militaryIconItems = getMilitaryIconItems(map).map(item => {
-      const node = document.createElement("span");
+      const node = documentRef.createElement("span");
       node.className = militaryIconClassName(item);
       node.title = item.tooltip;
       node.setAttribute("aria-label", item.tooltip);
       node.dataset.militaryId = String(item.id);
       node.dataset.stateId = String(item.stateId);
-      const symbol = document.createElement("span");
+      const symbol = documentRef.createElement("span");
       symbol.className = "military-map-icon-symbol";
       symbol.textContent = item.icon;
-      const count = document.createElement("span");
+      const count = documentRef.createElement("span");
       count.className = "military-map-icon-count";
       count.textContent = formatMilitaryTroops(item.troops);
       node.append(symbol, count);
-      this.overlay.append(node);
+      fragment.append(node);
       return {...item, node, box: null, visible: false};
     });
-    this.selectionMarker = document.createElement("span");
+    this.selectionMarker = documentRef.createElement("span");
     this.selectionMarker.className = "selection-marker";
     this.selectionMarker.style.display = "none";
-    this.overlay.append(this.selectionMarker);
+    fragment.append(this.selectionMarker);
+    this.overlay.append(fragment);
     this.labelCount = this.labelItems.length;
     this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
     this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
@@ -854,16 +913,24 @@ export class PlaceholderMapRenderer {
       ];
 
     for (const item of labelItems) {
-      const screen = this.worldToScreen(item.x, item.y, rect);
       item.node.classList.toggle("selected", isSelectedLabelItem(this.selection, item));
+      const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
+      const layerVisible = this.isLabelItemLayerVisible(item);
+      const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
+      if (!layerVisible || !withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible)) {
+        item.node.classList.toggle("visible", false);
+        item.visible = false;
+        item.box = null;
+        continue;
+      }
+      const screen = this.worldToScreen(item.x, item.y, rect);
       const box = labelBoxForItem(item, screen);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
-      const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
-      const blocked = stateLabel
-        ? occupiedStates.some(other => boxesOverlap(box, other, padding))
-        : (stateLabelScale.blocksCities && occupiedStates.some(other => boxesOverlap(box, other, padding))) || occupied.some(other => boxesOverlap(box, other, padding));
-      const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
-      const shouldShow = this.isLabelItemLayerVisible(item) && withinLimit && scale >= item.minScale && (!stateLabel || stateLabelScale.visible) && onScreen && !blocked;
+      const canShow = onScreen;
+      const blocked = canShow && (stateLabel
+        ? boxesOverlapAny(occupiedStates, box, padding)
+        : (stateLabelScale.blocksCities && boxesOverlapAny(occupiedStates, box, padding)) || boxesOverlapAny(occupied, box, padding));
+      const shouldShow = canShow && !blocked;
       item.node.classList.toggle("visible", shouldShow);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
@@ -922,15 +989,23 @@ export class PlaceholderMapRenderer {
     let visible = 0;
 
     for (const item of this.cityIconItems) {
+      if (this.layerVisibility.cities === false || scale < item.minScale) {
+        item.node.classList.toggle("visible", false);
+        item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.CITY && this.selection.id === item.id);
+        item.visible = false;
+        item.box = null;
+        continue;
+      }
       const screen = this.worldToScreen(item.x, item.y, rect);
       const sizeScale = cityIconScale(scale, item);
       const box = cityIconBoxForItem(item, screen, sizeScale);
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
-      const blocked = scale < CITY_ICON_RELAXED_SCALE && (
-        occupiedLabels.some(other => boxesOverlap(box, other, iconPadding)) ||
-        occupiedIcons.some(other => boxesOverlap(box, other, iconPadding))
+      const canShow = onScreen;
+      const blocked = canShow && scale < CITY_ICON_RELAXED_SCALE && (
+        boxesOverlapAny(occupiedLabels, box, iconPadding) ||
+        boxesOverlapAny(occupiedIcons, box, iconPadding)
       );
-      const shouldShow = this.layerVisibility.cities !== false && scale >= item.minScale && onScreen && !blocked;
+      const shouldShow = canShow && !blocked;
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.CITY && this.selection.id === item.id);
       item.visible = shouldShow;
@@ -960,16 +1035,25 @@ export class PlaceholderMapRenderer {
     let visible = 0;
 
     for (const item of this.markerIconItems) {
+      const layerVisible = isMarkerLayerVisible(item, this.layerVisibility);
+      if (!iconsEnabled || !layerVisible) {
+        item.node.classList.toggle("visible", false);
+        item.node.classList.toggle("city-overlap", false);
+        item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.MARKER && this.selection.id === item.id);
+        item.visible = false;
+        item.box = null;
+        continue;
+      }
       const screen = this.worldToScreen(item.x, item.y, rect);
       const box = markerIconBoxForItem(item, screen, scale);
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
-      const layerVisible = isMarkerLayerVisible(item, this.layerVisibility);
-      const blocked = scale < MARKER_ICON_RELAXED_SCALE && (
-        occupiedLabels.some(other => boxesOverlap(box, other, iconPadding)) ||
-        occupiedIcons.some(other => boxesOverlap(box, other, iconPadding))
+      const canShow = onScreen;
+      const blocked = canShow && scale < MARKER_ICON_RELAXED_SCALE && (
+        boxesOverlapAny(occupiedLabels, box, iconPadding) ||
+        boxesOverlapAny(occupiedIcons, box, iconPadding)
       );
-      const shouldShow = iconsEnabled && layerVisible && onScreen && !blocked;
-      const cityOverlap = shouldShow && item.category === "resource" && cityIconBoxes.some(other => boxesOverlap(box, other, 0));
+      const shouldShow = canShow && !blocked;
+      const cityOverlap = shouldShow && item.category === "resource" && boxesOverlapAny(cityIconBoxes, box, 0);
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("city-overlap", cityOverlap);
       item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.MARKER && this.selection.id === item.id);
@@ -998,16 +1082,25 @@ export class PlaceholderMapRenderer {
     let visible = 0;
 
     for (const item of this.militaryIconItems) {
+      const selected = this.selection?.kind === OBJECT_KIND.MILITARY && this.selection.id === item.id;
+      if (this.layerVisibility.military === false || scale < item.minScale) {
+        item.node.classList.toggle("visible", false);
+        item.node.classList.toggle("selected", selected);
+        item.node.classList.toggle("military-map-icon--fleet", item.type === "fleet");
+        item.visible = false;
+        item.box = null;
+        continue;
+      }
       const screen = this.worldToScreen(item.x, item.y, rect);
       const sizeScale = militaryIconScale(scale, item);
       const box = militaryIconBoxForItem(item, screen, sizeScale);
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
-      const selected = this.selection?.kind === OBJECT_KIND.MILITARY && this.selection.id === item.id;
-      const blocked = !selected && scale < MILITARY_ICON_RELAXED_SCALE && (
-        occupiedLabels.some(other => boxesOverlap(box, other, iconPadding)) ||
-        occupiedIcons.some(other => boxesOverlap(box, other, iconPadding))
+      const canShow = onScreen;
+      const blocked = canShow && !selected && scale < MILITARY_ICON_RELAXED_SCALE && (
+        boxesOverlapAny(occupiedLabels, box, iconPadding) ||
+        boxesOverlapAny(occupiedIcons, box, iconPadding)
       );
-      const shouldShow = this.layerVisibility.military !== false && scale >= item.minScale && onScreen && !blocked;
+      const shouldShow = canShow && !blocked;
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("selected", selected);
       item.node.classList.toggle("military-map-icon--fleet", item.type === "fleet");
@@ -2010,19 +2103,143 @@ function riverRenderColor(river) {
 }
 
 function buildRouteMeshVertices(map, camera, canvas, selection) {
-  const context = createRenderContext(map, {camera, canvas});
-  const vertices = [];
-  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
+  const build = createRouteMeshBuild(map, camera, canvas, selection);
   for (const route of map.settlements.routes) {
-    const selected = selection?.kind === OBJECT_KIND.ROUTE && selection.id === route.id;
-    const style = routeStyle(route);
-    const color = selected ? [1, 0.82, 0.34, 1] : style.color;
-    const baseWidth = style.width;
-    const widthPx = (selected ? baseWidth + 2.4 : baseWidth) * pixelRatio;
-    const dash = !selected && style.dash ? {dashPx: style.dash[0] * pixelRatio, gapPx: style.dash[1] * pixelRatio} : null;
-    pushScreenPolyline(vertices, context, smoothWorldPath(route.points, LINE_SMOOTHING.route), color, widthPx, dash);
+    if (!pushRouteMesh(build, route)) break;
   }
-  return new Float32Array(vertices);
+  return finalizeRouteMeshBuild(build);
+}
+
+async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS} = {}) {
+  const build = createRouteMeshBuild(map, camera, canvas, selection);
+  let sliceStartedAt = performance.now();
+  for (const route of map.settlements.routes) {
+    if (!pushRouteMesh(build, route)) break;
+    if (performance.now() - sliceStartedAt < sliceMs) continue;
+    await yieldToBrowser();
+    sliceStartedAt = performance.now();
+  }
+  return finalizeRouteMeshBuild(build);
+}
+
+function createRouteMeshBuild(map, camera, canvas, selection) {
+  const context = createRenderContext(map, {camera, canvas});
+  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
+  return {
+    context,
+    pixelRatio,
+    selection,
+    vertices: [],
+    stats: emptyRouteRenderStats()
+  };
+}
+
+function pushRouteMesh(build, route) {
+  if (build.stats.vertexBudgetExceeded || build.stats.pointBudgetExceeded) return false;
+  build.stats.routes++;
+  const points = normalizeRouteRenderPath(route.points, build.stats);
+  if (points.length < 2) {
+    build.stats.skippedRoutes++;
+    return true;
+  }
+  const selected = build.selection?.kind === OBJECT_KIND.ROUTE && build.selection.id === route.id;
+  const style = routeStyle(route);
+  const color = selected ? [1, 0.82, 0.34, 1] : style.color;
+  const baseWidth = style.width;
+  const widthPx = (selected ? baseWidth + 2.4 : baseWidth) * build.pixelRatio;
+  const dash = !selected && style.dash ? {
+    dashPx: style.dash[0] * build.pixelRatio,
+    gapPx: style.dash[1] * build.pixelRatio,
+    maxPieces: MAX_ROUTE_DASH_PIECES
+  } : null;
+  const smoothed = smoothWorldPath(points, LINE_SMOOTHING.route);
+  build.stats.smoothedPoints += smoothed.length;
+  const before = build.vertices.length;
+  pushScreenPolyline(build.vertices, build.context, smoothed, color, widthPx, dash);
+  const addedVertices = (build.vertices.length - before) / 6;
+  if (addedVertices <= 0) return true;
+  build.stats.renderedRoutes++;
+  build.stats.vertices += addedVertices;
+  if (build.stats.vertices > MAX_ROUTE_RENDER_VERTICES) {
+    build.stats.vertexBudgetExceeded = true;
+    build.stats.truncatedRoutes++;
+    return false;
+  }
+  return true;
+}
+
+function finalizeRouteMeshBuild(build) {
+  return {
+    vertices: new Float32Array(build.vertices),
+    stats: build.stats
+  };
+}
+
+function normalizeRouteRenderPath(points, stats) {
+  if (!Array.isArray(points) || points.length < 2) return [];
+  stats.sourcePoints += points.length;
+  const normalized = [];
+  let previous = null;
+  for (const point of points) {
+    if (!isWorldPoint(point)) {
+      stats.invalidPoints++;
+      continue;
+    }
+    if (previous && Math.hypot(point[0] - previous[0], point[1] - previous[1]) <= 0.001) {
+      stats.duplicatePoints++;
+      continue;
+    }
+    normalized.push(point);
+    previous = point;
+  }
+  if (normalized.length < 2) return [];
+
+  const remaining = MAX_ROUTE_RENDER_POINTS_TOTAL - stats.renderPoints;
+  if (remaining < 2) {
+    stats.pointBudgetExceeded = true;
+    stats.truncatedRoutes++;
+    return [];
+  }
+
+  const limit = Math.min(MAX_ROUTE_RENDER_POINTS_PER_ROUTE, remaining);
+  const result = normalized.length > limit ? decimateRoutePath(normalized, limit) : normalized;
+  if (result.length < normalized.length) {
+    stats.decimatedRoutes++;
+    stats.decimatedPoints += normalized.length - result.length;
+    if (remaining <= MAX_ROUTE_RENDER_POINTS_PER_ROUTE) stats.pointBudgetExceeded = true;
+  }
+  stats.renderPoints += result.length;
+  return result;
+}
+
+function decimateRoutePath(points, limit) {
+  if (points.length <= limit) return points;
+  const count = Math.max(2, Math.round(limit));
+  const result = [];
+  const last = points.length - 1;
+  for (let index = 0; index < count; index++) {
+    result.push(points[Math.round((index / (count - 1)) * last)]);
+  }
+  return result;
+}
+
+function emptyRouteRenderStats() {
+  return {
+    routes: 0,
+    renderedRoutes: 0,
+    skippedRoutes: 0,
+    truncatedRoutes: 0,
+    decimatedRoutes: 0,
+    sourcePoints: 0,
+    renderPoints: 0,
+    smoothedPoints: 0,
+    decimatedPoints: 0,
+    duplicatePoints: 0,
+    invalidPoints: 0,
+    vertices: 0,
+    pointBudgetExceeded: false,
+    vertexBudgetExceeded: false
+  };
 }
 
 function routeStyle(route) {
@@ -2169,6 +2386,14 @@ function boxesOverlap(a, b, padding) {
   return a.left - padding < b.right && a.right + padding > b.left && a.top - padding < b.bottom && a.bottom + padding > b.top;
 }
 
+function boxesOverlapAny(boxes, box, padding) {
+  const start = Math.max(0, boxes.length - MAX_OVERLAY_COLLISION_BOXES);
+  for (let index = boxes.length - 1; index >= start; index--) {
+    if (boxesOverlap(box, boxes[index], padding)) return true;
+  }
+  return false;
+}
+
 function withAlpha(color, alpha) {
   return [color?.[0] ?? 0, color?.[1] ?? 0, color?.[2] ?? 0, alpha];
 }
@@ -2209,6 +2434,12 @@ function createRendererLoadProfile() {
     stage(id, label, task) {
       const started = performance.now();
       const result = task();
+      stages.push({id, label, ms: roundMs(performance.now() - started)});
+      return result;
+    },
+    async stageAsync(id, label, task) {
+      const started = performance.now();
+      const result = await task();
       stages.push({id, label, ms: roundMs(performance.now() - started)});
       return result;
     },

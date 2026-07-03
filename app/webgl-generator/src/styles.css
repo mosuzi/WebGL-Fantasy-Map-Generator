@@ -1292,6 +1292,32 @@ select:disabled {
   line-height: 1.45;
 }
 
+.development-load-trace,
+.development-health-events {
+  display: grid;
+  gap: 5px;
+  max-height: 190px;
+  margin: 0;
+  overflow: auto;
+  padding: 0 0 0 18px;
+  color: #dce7ec;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.development-load-trace li::marker,
+.development-health-events li::marker {
+  color: #8ea0a9;
+}
+
+.development-health-events .health-event--warn {
+  color: #ffd38a;
+}
+
+.development-health-events .health-event--error {
+  color: #ff9f91;
+}
+
 .object-details-title {
   margin-bottom: 10px;
   color: #ffe0a1;
@@ -4332,6 +4358,15 @@ input.ui-switch-native {
 
 .military-ratio-field {
   grid-template-columns: 54px minmax(120px, 1fr) 92px 26px;
+}
+
+.military-ratio-apply.el-button {
+  position: sticky;
+  bottom: -10px;
+  z-index: 1;
+  width: 100%;
+  margin-top: 2px;
+  box-shadow: 0 -8px 14px rgba(13, 19, 23, 0.92);
 }
 
 .diplomacy-matrix-wrap {

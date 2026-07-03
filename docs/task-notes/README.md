@@ -14,6 +14,8 @@
 
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
+- `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。
+- `render-health-monitoring.md`：渲染健康监测说明，记录本地卡顿日志、阈值、查询方式和限制。
 - `object-notes-implementation-plan.md`：对象备注实现计划。
 - `measurement-rulers-plan.md`：测量对象与路线贴合计划。
 - `visual-theme-preset-plan.md`：视觉主题与样式预设计划。

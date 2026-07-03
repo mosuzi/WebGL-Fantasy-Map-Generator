@@ -8112,7 +8112,30 @@
 
 - `node --check` 通过军事、外交、城镇、拾取、渲染、运行时和军事编辑命令相关文件。
 - `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
-- 由于本轮提交前主要响应提交推送请求，军事面板的完整浏览器深巡检仍放在下一轮补齐。
+- 后续已按“军事系统验收补齐”完成浏览器深巡检。
+
+### 军事系统验收补齐
+
+背景：
+
+- 军事系统第一刀提交后，还需要用构建产物证明军事图层、军事管理、比例调整、战争原因和撤销链路可以闭环。
+- 浏览器验证时发现两个真实缺口：军事比例面板的“应用比例”函数引用了不存在的脚本变量 `callbacks`，导致点击时报 `ReferenceError`；二级操作浮层在页面滚动后可能跟随视口外锚点定位到视口外。
+
+修正：
+
+- `MilitaryPanel.vue` 的比例应用改为调用 `props.callbacks.onRatiosApply`，恢复兵种比例命令入口。
+- 军事比例面板的“应用比例”按钮改为底部 sticky，避免五个兵种滑条把确认按钮压出二级面板可视区。
+- `UiActionDock` 的二级浮层定位增加视口夹取，即使锚点因为滚动暂时处在视口外，也会把浮层 top 限制在当前视口内。
+
+验证：
+
+- `git diff --check` 通过。
+- `node --check app/webgl-generator/src/generator/military.js` 和 `node --check app/webgl-generator/src/runtime/military-edit-commands.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- Node 生成器审计：`military-audit` seed 生成 `18` 个国家、`98` 个军团、`716` 个城镇，所有国家有 `militaryPolicy`，所有军团有主兵种、图标、态势、适宜度和移动速度，所有城镇有文明类型。
+- 战争 seed 审计：`military-war-1` 生成 `24` 个国家、`2` 个唯一战争 campaign、`2` 个结构化战争原因和 `4` 条攻防战线。
+- 构建产物浏览器验证：默认 seed `stage-2-1` 生成 `20` 个国家、`111` 个军团、`553722` 兵力、`20` 支舰队、`2` 条战线和 `1` 个带原因的战争；军事图标对象 `111` 个、可见 `17` 个，点击图标返回 `kind = military`，关闭军事图层后可见图标为 `0` 且同点不再拾取为军团。
+- 构建产物比例调整验证：军事比例面板可将国家 `#1` 调整为步兵 `100%`，`EditHistory` 变为 `undo = 1 / lastLabel = 调整兵种比例 #1`；点击撤销后所有国家比例恢复，历史变为 `undo = 0 / redo = 1`，console/page error 为 `0`。
 
 ### 滑动条精确输入与动态比例尺第一刀
 
@@ -14419,3 +14442,126 @@ full 矩阵结果：
 验证：
 
 - `git diff --check` 通过。
+
+### 展开乾坤加载卡住修复
+
+背景：
+
+- 用户反馈页面会卡在最后一步“展开乾坤”，地图无法完成进入可交互状态。
+- “展开乾坤”对应 renderer 的 `fit-draw` 阶段；这一阶段前后都会等待浏览器完成一帧绘制，让 loading 文案有机会刷新。
+- 原等待逻辑完全依赖 `requestAnimationFrame`，在浏览器页签、内嵌浏览器或高负载状态被节流时，Promise 可能长期不 resolve，导致生成流程停在最后一个 loading 文案。
+
+修正：
+
+- `scheduleAfterPaint()` 增加 `120ms` 超时兜底，`requestAnimationFrame` 未及时回调时仍会启动生成任务。
+- `yieldToBrowser()` 同样增加 `120ms` 超时兜底，避免 WebGL 装载阶段的任一帧等待永久悬挂。
+- 两个兜底都用一次性 guard，确保 rAF 与 timeout 竞争时不会重复执行回调或重复 resolve。
+
+验证：
+
+- `git diff --check` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- in-app browser 新标签访问 `http://127.0.0.1:5410/` 后，首次加载完成时 `.generation-loading-bubble.hidden = true`，页面文本不包含“展开乾坤”，console warn/error 为 `0`。
+- 在同一浏览器中打开控制面板并点击“生成 grid 地图”，重新生成过程中 loading 短暂显示“沧海描岸”，随后隐藏；轮询样本中未再出现“展开乾坤”，console warn/error 为 `0`。
+- 截图确认地图、标签、图标和控制面板均正常渲染。
+
+### 高 cells 展开乾坤卡住二次修复
+
+背景：
+
+- 用户复测后反馈当前 in-app browser 仍会停在最后一步“展开乾坤”，且浏览器控制接口读取标签列表也会超时。
+- 外部 headless Chrome 复现时发现，默认 `10000` cells 可以完成，但把 `cells-input` 改到 `100000` 后 worker 报 `Maximum call stack size exceeded`，生成失败后页面仍保留旧图，容易和最后 loading 卡住混在一起。
+- 同时检查最后 `fit-draw` 路径，发现 overlay 更新会为大量隐藏标签、城镇图标、资源图标和军事图标继续执行重叠检测；这些对象在当前缩放、图层或视口下本就不会显示，却仍参与了昂贵判断。
+
+修正：
+
+- `grid.js` 与 `pack.js` 的最大邻接度统计不再使用 `Math.max(...neighborDegrees)`，改为迭代求最大值，避免 100k 级数组展开撑爆调用栈。
+- `climate.js` 的温度、降水范围不再使用 `Math.min/Math.max(...array)`，改为一次遍历求范围。
+- `heightmap.js` 的陆地最大高度和柔化高度回写不再使用大数组展开；高度回写改为普通循环。
+- `PlaceholderMapRenderer.buildLabels()` 改为通过 `DocumentFragment` 批量挂载 overlay 节点，减少大量标签和图标节点创建时的布局压力。
+- `updateLabels()`、`updateCityIcons()`、`updateMarkerIcons()` 和 `updateMilitaryIcons()` 先判断图层、缩放、屏幕范围和上限，只有确实可能显示的对象才进入重叠检测。
+
+验证：
+
+- `git diff --check` 通过。
+- `node --check app/webgl-generator/src/generator/grid.js`、`pack.js`、`climate.js`、`heightmap.js`、`renderer/placeholder-renderer.js` 和 `runtime/app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- headless Chrome 访问 `http://127.0.0.1:5410/?headless_100k_verify=4`，先完成默认图，再将 `cells-input` 设为 `100000` 并触发“生成 grid 地图”：最终 `mapCells = 100000`、`packCells = 51749`、`.generation-loading-bubble.hidden = true`、页面不包含“展开乾坤”、console warn/error 为 `0`。
+- 同次验证中 `loadMap.totalMs = 2579.5ms`，`fit-draw = 86.5ms`，`labelCount = 1283`，`visibleLabelCount = 26`，`cityIconCount = 1263`，`visibleCityIconCount = 10`，`markerIconCount = 382`，`visibleMarkerIconCount = 0`。
+- 重新验证时，当前 in-app browser 旧页连读取选中标签页 URL / 标题都会超时；用户 Chrome 扩展新开 5410 标签可以完成导航和标题读取，但进入运行时状态读取后同样超时，说明已经冻结的旧页或用户 profile 状态会拖住浏览器控制通道。
+- 为排除 headless 假阳性，另用干净可见系统 Chrome 访问 `http://127.0.0.1:5410/`：默认图 `mapCells = 10004`、`packCells = 5950`、loading 收起、中心像素块 `nonZero = 9216`、`uniqueColors = 96`；随后通过真实控件改为 `100000` cells 并点击生成，最终 `mapCells = 99846`、`packCells = 51749`、`loadMap.totalMs = 1705.6ms`、`fit-draw = 77.3ms`、`glError = 0`、中心像素块 `nonZero = 9216`、`uniqueColors = 319`、console warn/error 为 `0`。
+- 可见系统 Chrome 截图已保存为 `docs/generated/reverify-5410-headed-initial.png` 和 `docs/generated/reverify-5410-headed-100k.png`，截图确认画布有完整地图、标签、路线、城镇/军事图标和比例尺。
+- 当前已经卡死的 in-app browser 旧页仍会让浏览器控制接口超时，无法直接读 DOM；需要刷新当前页后才能接到本轮修复代码。
+
+### 初始化加载流程与车马入途卡顿修复
+
+背景：
+
+- 用户在自己的 Chrome 中继续复现加载卡顿，拆分阶段后确认当前会停在“车马入途”。
+- “车马入途”对应 renderer 的 `route-screen-mesh` 阶段，即道路屏幕空间 mesh 构建。这个阶段之前是一个同步任务，路线数据或虚线切片一旦异常膨胀，就会表现得像死循环一样占满主线程。
+- 只用干净 headless / 可见 Chrome 验证不够，必须在用户 Chrome profile 下验证。
+
+审查结论：
+
+- 默认 `stage-2-1` 10k/100k 数据的路线规模并不异常：100k 约 `968` 条路线、`10143` 段、最长路线 `596` 点，说明卡顿不是普通数据规模必然导致。
+- 风险集中在 renderer 缺少保护：路线 mesh 一次性同步构建、路线点数无预算、道路顶点无预算、虚线 while 缺少“不前进”保护和切片上限。
+- 初始化流程规约已写入 `docs/task-notes/initialization-loading-flow.md`，明确 `fit-draw / route-screen-mesh / river-screen-mesh / overlay-draw / panel-refresh` 的阶段边界和预算要求。
+
+修正：
+
+- `route-screen-mesh` 在异步加载路径中改为分帧构建，默认每个时间片约 `10ms`，阶段内部可让出浏览器。
+- 道路 renderer 增加异常输入保护：单条路线渲染点上限 `4096`，全图路线渲染点上限 `90000`，道路 mesh 顶点上限 `900000`；超出时抽稀或截断，并记录 `routeRenderStats`。
+- 虚线路线切片增加保护：dash/gap 非法时降级为实线，切片 step 必须前进，单条虚线路线切片上限 `20000`，避免 while 因异常数值锁死。
+- `renderer.getStats()` 新增 `routeRenderStats`，用于开发模式后续展示道路 mesh 是否发生预算降级。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `node --check app/webgl-generator/src/renderer/mesh-writer.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有 VueUse pure annotation 和主 chunk 超过 500KB 警告。
+- 用户 Chrome profile 新标签访问 `http://127.0.0.1:5410/?route_stage_verify=3`：loading 最终 `hidden = true`，页面文本不再包含“车马入途”或“展开乾坤”，状态显示 `source 阶段 19 economy 第一刀，seed stage-2-1`，地图尺寸 badge 为 `3,810 千米 x 2,540 千米`。
+- Chrome 截图确认地图、路线、河流、国家标签、城镇/军事图标和比例尺均已渲染。
+- 在同一用户 Chrome 标签中点击“测量”按钮可进入测量模式，`measurement-active = true`，证明页面未被加载流程锁住。
+
+### 初始化加载追踪开关
+
+背景：
+
+- 用户提出如果仍无法定位卡顿，可以临时在每一步渲染之间插入 `setTimeout` 间隔，并在每一步回调，借此判断真正卡住的阶段。
+- 这个能力只适合开发诊断，不能污染普通用户加载路径。
+
+修正：
+
+- `PlaceholderMapRenderer.loadMapAsync()` 新增 `onStageEnd`，每个渲染装载阶段都会产生开始和结束事件。
+- 运行时把生成 Worker 阶段、主线程 fallback 生成、WebGL 装载、面板刷新和完成状态串成同一条加载追踪。
+- 开发模式面板新增“加载追踪”列表；同时输出 `[FMG load]` console debug 日志、`webgl-generator-load-stage` 页面事件和 `window.__webglGeneratorDebug.loadTrace` 最近事件数组。
+- `?debug=1` 或 `?loadTrace=1` 开启追踪；`loadStepDelay / debugLoadDelay / loadTraceDelay` 可以在阶段边界插入最多 `2000ms` 的临时延迟。
+- 延迟只加在阶段边界，不加在道路 mesh 内部切片上，避免调试模式被大量内部 yield 拖慢。
+
+文档：
+
+- 调试参数、输出位置和注意事项已补充到 `docs/task-notes/initialization-loading-flow.md`。
+
+### 渲染健康监测第一刀
+
+背景：
+
+- 近期连续出现“展开乾坤”“车马入途”等渲染卡顿与加载卡住问题，单次临时追踪只能定位当前卡点，无法保证以后页面加载失败、渲染卡顿和用户操作卡顿都留下证据。
+- 用户明确要求不一定上报远端，但至少要能保留本地临时记录，方便后续排查。
+
+修正：
+
+- 新增 `runtime/health-monitor.js`，默认安装 `window.__webglGeneratorHealth`，本地环形记录最近 `180` 条健康事件到 `localStorage["webgl-generator-health-events-v1"]`。
+- `index.html` 的内联启动哨兵会记录 `document-boot` 和 `script-not-started`，即使模块脚本没有启动也能在本地留下失败证据。
+- `main.js` 在 Vue/runtime 初始化前安装健康监测，启动异常会记录 `startup-error`。
+- 运行时接入 `app-ready / map-ready / page-load-timeout / loading-stuck / load-stage`，普通模式下也能回看最后一个生成或渲染阶段。
+- 浏览器级监测接入主线程 long task、`requestAnimationFrame` 帧间隔、输入事件派发延迟和输入处理阻塞。
+- 视图切换、图层开关、适配视图、显示海底、平滑边界、最大标签数和气候即时重算等同步业务操作会记录 `operation-stall`。
+- 开发模式面板新增“健康监测”列表，显示最近 warn/error 和 `map-ready`；完整事件仍可通过 `window.__webglGeneratorHealth.getEvents()` 读取。
+
+文档：
+
+- 新增 `docs/task-notes/render-health-monitoring.md`，记录监测目标、存储位置、阈值、查询方式和当前缺口。
+- `docs/task-notes/README.md` 和 `docs/current-plan.md` 已同步加入健康监测入口。

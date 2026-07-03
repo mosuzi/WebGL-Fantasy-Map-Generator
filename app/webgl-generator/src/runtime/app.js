@@ -52,6 +52,7 @@ import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColo
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
+import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 
 const LOADING_MESSAGES = Object.freeze({
   request: "星图启明",
@@ -95,13 +96,20 @@ const LOADING_MESSAGES = Object.freeze({
   "political-meshes": "诸侯着色",
   "surface-vertices": "山川上卷",
   "line-vertices": "川道刻线",
+  "route-screen-mesh": "车马入途",
+  "river-screen-mesh": "百川归脉",
   "point-vertices": "星标入图",
   "gpu-upload": "星火入阵",
   labels: "题名山河",
+  "overlay-draw": "题名山河",
   "fit-draw": "展开乾坤"
 });
 
-export function createGeneratorApp(documentRef) {
+const LOAD_TRACE_EVENT_NAME = "webgl-generator-load-stage";
+const LOAD_TRACE_DELAY_PARAMS = Object.freeze(["loadStepDelay", "debugLoadDelay", "loadTraceDelay"]);
+const MAX_DEBUG_LOAD_DELAY_MS = 2000;
+
+export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
   const state = {
@@ -146,6 +154,7 @@ export function createGeneratorApp(documentRef) {
     renderer: null,
     pendingGenerateId: 0,
     heightmapImportId: 0,
+    healthMonitor,
     panels: {}
   };
   let selectionStore = null;
@@ -1065,24 +1074,32 @@ export function createGeneratorApp(documentRef) {
       requestGenerate(state, documentRef);
     },
     onFitView: () => {
-      renderer.fitToView();
-      updateRuntimePanel(documentRef, state);
-      updateMeasurementOverlay(state, documentRef);
+      measureHealthOperation(state, "fit-view", {}, () => {
+        renderer.fitToView();
+        updateRuntimePanel(documentRef, state);
+        updateMeasurementOverlay(state, documentRef);
+      });
     },
     onShowOceanHeight: showOceanHeight => {
-      renderer.setViewOptions({showOceanHeight});
-      updateRuntimePanel(documentRef, state);
+      measureHealthOperation(state, "set-ocean-height-visibility", {showOceanHeight}, () => {
+        renderer.setViewOptions({showOceanHeight});
+        updateRuntimePanel(documentRef, state);
+      });
     },
     onSmoothCellBorders: smoothCellBorders => {
-      renderer.setViewOptions({smoothCellBorders});
-      updateRuntimePanel(documentRef, state);
+      measureHealthOperation(state, "set-smooth-cell-borders", {smoothCellBorders}, () => {
+        renderer.setViewOptions({smoothCellBorders});
+        updateRuntimePanel(documentRef, state);
+      });
     },
     onShowHoverInfo: () => {
       updatePickPanel(documentRef, state);
     },
     onMaxCityLabels: maxCityLabels => {
-      renderer.setLabelOptions({maxCityLabels});
-      updateRuntimePanel(documentRef, state);
+      measureHealthOperation(state, "set-max-city-labels", {maxCityLabels}, () => {
+        renderer.setLabelOptions({maxCityLabels});
+        updateRuntimePanel(documentRef, state);
+      });
     },
     onUnitPreferences: () => {
       updateRuntimePanel(documentRef, state);
@@ -1090,11 +1107,13 @@ export function createGeneratorApp(documentRef) {
       updateMeasurementOverlay(state, documentRef);
     },
     onClimateControls: () => {
-      applyClimateControls(state, documentRef);
+      measureHealthOperation(state, "apply-climate-controls", {}, () => applyClimateControls(state, documentRef));
     },
     onLayerVisible: (layer, visible) => {
-      renderer.setLayerVisible(layer, visible);
-      updateRuntimePanel(documentRef, state);
+      measureHealthOperation(state, "set-layer-visible", {layer, visible}, () => {
+        renderer.setLayerVisible(layer, visible);
+        updateRuntimePanel(documentRef, state);
+      });
     },
     onOpenGenerationPanel: () => {
       state.panels.generation.open();
@@ -1181,30 +1200,48 @@ export function createGeneratorApp(documentRef) {
       updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
     },
     onMode: mode => {
-      if (mode === "diplomacy") {
-        const subjectId = state.selection?.object?.kind === OBJECT_KIND.STATE ? state.selection.object.id : firstDiplomacyStateId(state.map);
-        state.panels.diplomacy?.setSelectedStateId?.(subjectId);
-        renderer.setDiplomacySubjectId?.(subjectId);
-      }
-      renderer.setColorMode(mode);
-      updateRuntimePanel(documentRef, state);
+      measureHealthOperation(state, "set-view-mode", {mode}, () => {
+        if (mode === "diplomacy") {
+          const subjectId = state.selection?.object?.kind === OBJECT_KIND.STATE ? state.selection.object.id : firstDiplomacyStateId(state.map);
+          state.panels.diplomacy?.setSelectedStateId?.(subjectId);
+          renderer.setDiplomacySubjectId?.(subjectId);
+        }
+        renderer.setColorMode(mode);
+        updateRuntimePanel(documentRef, state);
+      });
     }
   });
 
   window.__webglGeneratorApp = state;
+  healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   requestGenerate(state, documentRef);
   return state;
 }
 
+function measureHealthOperation(state, name, detail, task) {
+  const monitor = state.healthMonitor;
+  if (!monitor?.measureSyncOperation) return task();
+  return monitor.measureSyncOperation(name, detail, task);
+}
+
 function applyControlPreferencesToRenderer(documentRef, renderer) {
   const preferences = readControlPreferences(documentRef);
-  if (typeof preferences.colorMode === "string") renderer.setColorMode(preferences.colorMode);
-  if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
-  if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
-  if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
-  const layers = normalizeLayerVisibilityPreferences(preferences.layers || {});
-  for (const [layer, visible] of Object.entries(layers)) {
-    renderer.setLayerVisible(layer, visible);
+  const monitor = getWebglGeneratorHealthMonitor(documentRef);
+  const operation = monitor?.beginOperation?.("apply-render-preferences", {
+    colorMode: preferences.colorMode || "",
+    layers: Object.keys(preferences.layers || {}).length
+  });
+  try {
+    if (typeof preferences.colorMode === "string") renderer.setColorMode(preferences.colorMode);
+    if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
+    if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
+    if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
+    const layers = normalizeLayerVisibilityPreferences(preferences.layers || {});
+    for (const [layer, visible] of Object.entries(layers)) {
+      renderer.setLayerVisible(layer, visible);
+    }
+  } finally {
+    operation?.end();
   }
 }
 
@@ -1237,10 +1274,15 @@ function normalizeLayerVisibilityPreferences(layers = {}) {
 
 function setMythicGenerationLoading(documentRef, visible, stageOrKey) {
   if (!visible) {
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
     return;
   }
-  setGenerationLoading(documentRef, true, loadingMessage(stageOrKey));
+  updateGenerationLoading(documentRef, true, loadingMessage(stageOrKey));
+}
+
+function updateGenerationLoading(documentRef, visible, message = "山海初开") {
+  setGenerationLoading(documentRef, visible, message);
+  getWebglGeneratorHealthMonitor(documentRef)?.markLoading(visible, message);
 }
 
 function loadingMessage(stageOrKey) {
@@ -1248,6 +1290,89 @@ function loadingMessage(stageOrKey) {
   const stageId = stageOrKey?.id;
   if (stageId && LOADING_MESSAGES[stageId]) return LOADING_MESSAGES[stageId];
   return stageOrKey?.label || "山海流转";
+}
+
+function resetLoadTrace(documentRef) {
+  if (!isLoadTraceEnabled(documentRef)) return;
+  const view = documentRef.defaultView || window;
+  view.__webglGeneratorLoadTraceStartedAt = currentLoadTraceTime(view);
+  view.__webglGeneratorDebug?.clearLoadTrace?.();
+}
+
+function emitLoadTrace(documentRef, event = {}) {
+  const view = documentRef.defaultView || window;
+  const now = currentLoadTraceTime(view);
+  if (!Number.isFinite(view.__webglGeneratorLoadTraceStartedAt)) {
+    view.__webglGeneratorLoadTraceStartedAt = now;
+  }
+  const stage = {
+    phase: event.phase || "stage",
+    id: String(event.id || "unknown"),
+    label: event.label || "",
+    message: event.message || loadingMessage(event),
+    at: roundLoadTraceMs(now - view.__webglGeneratorLoadTraceStartedAt)
+  };
+  if (Number.isFinite(event.ms)) stage.ms = roundLoadTraceMs(event.ms);
+  if (Number.isFinite(event.delayMs)) stage.delayMs = roundLoadTraceMs(event.delayMs);
+
+  getWebglGeneratorHealthMonitor(documentRef)?.markLoadStage(stage);
+  if (!isLoadTraceEnabled(documentRef)) return;
+
+  view.__webglGeneratorDebug?.recordLoadStage?.(stage);
+  if (typeof view.CustomEvent === "function") {
+    view.dispatchEvent(new view.CustomEvent(LOAD_TRACE_EVENT_NAME, {detail: stage}));
+  }
+  view.console?.debug?.("[FMG load]", `${stage.phase} ${stage.id}`, stage);
+}
+
+function isLoadTraceEnabled(documentRef) {
+  const view = documentRef.defaultView || window;
+  if (view.__webglGeneratorDebug?.enabled) return true;
+  const params = readSearchParams(documentRef);
+  return readBooleanSearchParam(params, "debug") || readBooleanSearchParam(params, "debugLoad") || readBooleanSearchParam(params, "loadTrace");
+}
+
+function readDebugLoadDelayMs(documentRef) {
+  if (!isLoadTraceEnabled(documentRef)) return 0;
+  const view = documentRef.defaultView || window;
+  const debugDelay = Number(view.__webglGeneratorDebug?.loadStepDelayMs ?? view.__webglGeneratorLoadStepDelayMs);
+  if (Number.isFinite(debugDelay)) return clampDebugLoadDelay(debugDelay);
+
+  const params = readSearchParams(documentRef);
+  for (const key of LOAD_TRACE_DELAY_PARAMS) {
+    const value = params.get(key);
+    if (value === null) continue;
+    const delayMs = Number(value);
+    if (Number.isFinite(delayMs)) return clampDebugLoadDelay(delayMs);
+  }
+  return 0;
+}
+
+function readSearchParams(documentRef) {
+  try {
+    return new URLSearchParams((documentRef.defaultView || window).location.search);
+  } catch {
+    return new URLSearchParams();
+  }
+}
+
+function readBooleanSearchParam(params, key) {
+  if (!params.has(key)) return false;
+  const value = params.get(key);
+  if (value === "" || value === null) return true;
+  return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
+function currentLoadTraceTime(view) {
+  return typeof view.performance?.now === "function" ? view.performance.now() : Date.now();
+}
+
+function roundLoadTraceMs(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function clampDebugLoadDelay(value) {
+  return Math.max(0, Math.min(MAX_DEBUG_LOAD_DELAY_MS, Math.round(value)));
 }
 
 function requestGenerate(state, documentRef) {
@@ -1258,6 +1383,8 @@ function requestGenerate(state, documentRef) {
     state.options = readOptionsFromPanel(documentRef, state.options);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     const generateId = state.pendingGenerateId;
+    resetLoadTrace(documentRef);
+    emitLoadTrace(documentRef, {phase: "request", id: "request", message: loadingMessage("request")});
     setGenerationStatus(documentRef, state.options, "等待生成任务");
     setMythicGenerationLoading(documentRef, true, "request");
     scheduleAfterPaint(documentRef, () => {
@@ -1265,7 +1392,7 @@ function requestGenerate(state, documentRef) {
       void runGenerateNow(state, documentRef, generateId);
     });
   } catch (error) {
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
   }
 }
@@ -1274,20 +1401,23 @@ async function runGenerateNow(state, documentRef, generateId) {
   try {
     setGenerationStatus(documentRef, state.options, "生成中");
     setMythicGenerationLoading(documentRef, true, "generate");
-    await yieldToBrowser(documentRef);
+    emitLoadTrace(documentRef, {phase: "start", id: "generate", message: loadingMessage("generate"), delayMs: readDebugLoadDelayMs(documentRef)});
+    await yieldToBrowser(documentRef, {debugDelay: true});
     const map = await generateMapOffMainThread(documentRef, state.options, generateId);
+    emitLoadTrace(documentRef, {phase: "end", id: "generate", message: loadingMessage("generate")});
     if (generateId !== state.pendingGenerateId) return;
     await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")]
     });
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
   } catch (error) {
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
   }
 }
 
 async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []} = {}) {
+  emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   state.map = map;
   state.pick = null;
   state.editHistory.clear();
@@ -1310,20 +1440,39 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.measurement.pointer = null;
   state.lastEditRefresh = null;
   if (loadingMessages[0]) {
-    setGenerationLoading(documentRef, true, loadingMessages[0]);
-    await yieldToBrowser(documentRef);
+    updateGenerationLoading(documentRef, true, loadingMessages[0]);
+    await yieldToBrowser(documentRef, {debugDelay: true});
   }
   if (typeof state.renderer.loadMapAsync === "function") {
     await state.renderer.loadMapAsync(state.map, {
-      onStage: stage => setMythicGenerationLoading(documentRef, true, stage),
-      yieldToBrowser: () => yieldToBrowser(documentRef)
+      onStage: stage => {
+        setMythicGenerationLoading(documentRef, true, stage);
+        emitLoadTrace(documentRef, {
+          phase: "start",
+          id: stage.id,
+          label: stage.label,
+          message: loadingMessage(stage),
+          delayMs: readDebugLoadDelayMs(documentRef)
+        });
+      },
+      onStageEnd: stage => {
+        emitLoadTrace(documentRef, {
+          phase: stage.error ? "error" : "end",
+          id: stage.id,
+          label: stage.label,
+          message: stage.error ? `${loadingMessage(stage)}：${stage.error.message || "失败"}` : loadingMessage(stage),
+          ms: stage.ms
+        });
+      },
+      yieldToBrowser: options => yieldToBrowser(documentRef, options)
     });
   } else {
     state.renderer.loadMap(state.map);
   }
+  emitLoadTrace(documentRef, {phase: "start", id: "panel-refresh", message: loadingMessage("panel-refresh"), delayMs: readDebugLoadDelayMs(documentRef)});
   if (loadingMessages[1]) {
-    setGenerationLoading(documentRef, true, loadingMessages[1]);
-    await yieldToBrowser(documentRef);
+    updateGenerationLoading(documentRef, true, loadingMessages[1]);
+    await yieldToBrowser(documentRef, {debugDelay: true});
   }
   state.selectionStore.clear();
   updateHeightPanel(state);
@@ -1342,7 +1491,16 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
   updateMeasurementOverlay(state, documentRef);
-  setGenerationLoading(documentRef, false);
+  emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
+  emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
+  emitLoadTrace(documentRef, {phase: "complete", id: "complete", message: "地图进入可交互状态"});
+  getWebglGeneratorHealthMonitor(documentRef)?.markMapReady({
+    seed: state.map?.metadata?.seed || state.options?.seed || "",
+    gridCells: state.map?.metadata?.gridCells || state.map?.grid?.metadata?.actualCells || 0,
+    packCells: state.map?.metadata?.packCells || state.map?.pack?.metadata?.cells || 0,
+    loadMap: state.renderer?.getStats?.().loadMap || null
+  });
+  updateGenerationLoading(documentRef, false);
 }
 
 function scheduleAfterPaint(documentRef, callback) {
@@ -1354,33 +1512,76 @@ function scheduleAfterPaint(documentRef, callback) {
     callback();
   };
 
+  const fallback = view.setTimeout(run, 120);
+  const finish = () => {
+    view.clearTimeout(fallback);
+    run();
+  };
   if (typeof view.requestAnimationFrame === "function") {
-    view.requestAnimationFrame(() => view.setTimeout(run, 0));
+    view.requestAnimationFrame(() => view.setTimeout(finish, 0));
     return;
   }
-  view.setTimeout(run, 0);
+  view.setTimeout(finish, 0);
 }
 
-function yieldToBrowser(documentRef) {
+function yieldToBrowser(documentRef, options = {}) {
   const view = documentRef.defaultView || window;
   return new Promise(resolve => {
+    let resolved = false;
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      const delayMs = options.debugDelay ? readDebugLoadDelayMs(documentRef) : 0;
+      if (delayMs > 0) {
+        view.setTimeout(resolve, delayMs);
+        return;
+      }
+      resolve();
+    };
+    const fallback = view.setTimeout(finish, 120);
+    const finishAfterPaint = () => {
+      view.clearTimeout(fallback);
+      finish();
+    };
     if (typeof view.requestAnimationFrame === "function") {
-      view.requestAnimationFrame(() => view.setTimeout(resolve, 0));
+      view.requestAnimationFrame(() => view.setTimeout(finishAfterPaint, 0));
       return;
     }
-    view.setTimeout(resolve, 0);
+    view.setTimeout(finishAfterPaint, 0);
   });
+}
+
+function createGenerationTrace(documentRef) {
+  return {
+    onStageStart: stage => {
+      setMythicGenerationLoading(documentRef, true, stage);
+      emitLoadTrace(documentRef, {
+        phase: "start",
+        id: stage.id,
+        label: stage.label,
+        message: loadingMessage(stage)
+      });
+    },
+    onStageEnd: stage => emitLoadTrace(documentRef, {
+      phase: "end",
+      id: stage.id,
+      label: stage.label,
+      message: loadingMessage(stage),
+      ms: stage.ms
+    })
+  };
 }
 
 function generateMapOffMainThread(documentRef, options, generateId) {
   const view = documentRef.defaultView || window;
-  if (typeof view.Worker !== "function") return Promise.resolve(generatePlaceholderMap(options));
+  const generationTrace = createGenerationTrace(documentRef);
+  if (typeof view.Worker !== "function") return Promise.resolve(generatePlaceholderMap(options, generationTrace));
 
   let worker;
   try {
     worker = new GenerationWorker();
   } catch {
-    return Promise.resolve(generatePlaceholderMap(options));
+    return Promise.resolve(generatePlaceholderMap(options, generationTrace));
   }
 
   return new Promise((resolve, reject) => {
@@ -1399,7 +1600,7 @@ function generateMapOffMainThread(documentRef, options, generateId) {
 
     const fallbackToMainThread = () => {
       try {
-        const map = generatePlaceholderMap(options);
+        const map = generatePlaceholderMap(options, generationTrace);
         finish(() => resolve(map));
       } catch (error) {
         finish(() => reject(error));
@@ -1411,9 +1612,22 @@ function generateMapOffMainThread(documentRef, options, generateId) {
       if (data.requestId !== generateId) return;
       if (data.type === "generation-stage") {
         setMythicGenerationLoading(documentRef, true, data.stage);
+        emitLoadTrace(documentRef, {
+          phase: "start",
+          id: data.stage?.id,
+          label: data.stage?.label,
+          message: loadingMessage(data.stage)
+        });
         return;
       }
       if (data.type === "generation-stage-complete") {
+        emitLoadTrace(documentRef, {
+          phase: "end",
+          id: data.stage?.id,
+          label: data.stage?.label,
+          message: loadingMessage(data.stage),
+          ms: data.stage?.ms
+        });
         return;
       }
       if (data.type === "generated-map") {
@@ -1683,6 +1897,8 @@ function readFeatureGeoJsonLayerOptions(documentRef) {
 async function importMapData(state, documentRef, file) {
   if (!file) return;
   try {
+    resetLoadTrace(documentRef);
+    emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
     setFileOperationStatus(documentRef, "正在读取地图数据...");
     setMythicGenerationLoading(documentRef, true, "map-import-read");
     const document = parseMapDocument(await file.text());
@@ -1694,10 +1910,10 @@ async function importMapData(state, documentRef, file) {
     await loadMapIntoRuntime(state, documentRef, document.map, {
       loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")]
     });
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
   } catch (error) {
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
     reportFileOperationError(documentRef, "地图数据导入失败", error);
   }
 }
@@ -1705,6 +1921,8 @@ async function importMapData(state, documentRef, file) {
 async function importHeightmapImage(state, documentRef, file) {
   if (!file) return;
   try {
+    resetLoadTrace(documentRef);
+    emitLoadTrace(documentRef, {phase: "request", id: "heightmap-read", message: loadingMessage("heightmap-read")});
     setFileOperationStatus(documentRef, "正在读取灰度高度图...", ["heightmap-import-status"]);
     setMythicGenerationLoading(documentRef, true, "heightmap-read");
     const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
@@ -1719,7 +1937,9 @@ async function importHeightmapImage(state, documentRef, file) {
     }
     state.options = options;
     setMythicGenerationLoading(documentRef, true, "heightmap-generate");
-    const map = generatePlaceholderMap(options, {heightmap});
+    emitLoadTrace(documentRef, {phase: "start", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
+    const map = generatePlaceholderMap(options, {...createGenerationTrace(documentRef), heightmap});
+    emitLoadTrace(documentRef, {phase: "end", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     if (importGenerateId !== state.pendingGenerateId) {
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
       return;
@@ -1728,10 +1948,10 @@ async function importHeightmapImage(state, documentRef, file) {
     await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: [loadingMessage("heightmap-render"), loadingMessage("panel-refresh")]
     });
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, `已导入灰度高度图：${heightmap.source.filename || "本地图片"}，高度 ${heightmap.source.heightMin}-${heightmap.source.heightMax}，${heightmapFitLabel(heightmap.source.fitMode)}`, ["heightmap-import-status"]);
   } catch (error) {
-    setGenerationLoading(documentRef, false);
+    updateGenerationLoading(documentRef, false);
     reportFileOperationError(documentRef, "灰度高度图导入失败", error, ["heightmap-import-status"]);
   }
 }

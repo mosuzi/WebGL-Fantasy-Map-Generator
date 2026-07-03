@@ -21,6 +21,7 @@ export function buildGrid(options, random, heightmap, heightRandom = random) {
     triangles: cells.v.reduce((sum, vertexIds) => sum + Math.max(0, vertexIds.length - 2), 0),
     neighborDegrees: cells.c.map(neighbors => neighbors.length)
   }));
+  const maxNeighborDegree = maxValue(neighborDegrees);
   const timing = profile.finish();
 
   return {
@@ -41,7 +42,7 @@ export function buildGrid(options, random, heightmap, heightRandom = random) {
       triangles,
       neighborMode: "source-delaunator-halfedge",
       averageNeighborDegree: round(average(neighborDegrees), 2),
-      maxNeighborDegree: Math.max(...neighborDegrees),
+      maxNeighborDegree,
       borderCells: cells.b.reduce((sum, value) => sum + (value ? 1 : 0), 0),
       buildMs: roundMs(performance.now() - startedAt),
       timing,
@@ -190,6 +191,12 @@ function circumcenter(a, b, c) {
 
 function average(values) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function maxValue(values) {
+  let max = -Infinity;
+  for (const value of values) if (value > max) max = value;
+  return max === -Infinity ? 0 : max;
 }
 
 function round(value, digits = 0) {

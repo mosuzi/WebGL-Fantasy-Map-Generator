@@ -111,7 +111,15 @@ export function pushVariableScreenPolyline(vertices, context, points, widths, co
 }
 
 function pushDashedScreenPolyline(vertices, context, screenPoints, color, widthPx, dash) {
-  const pattern = dash.dashPx + dash.gapPx;
+  const dashPx = Math.max(0, Number(dash.dashPx) || 0);
+  const gapPx = Math.max(0, Number(dash.gapPx) || 0);
+  const pattern = dashPx + gapPx;
+  if (!Number.isFinite(pattern) || pattern <= 0.5) {
+    pushSolidScreenPolyline(vertices, context, screenPoints, color, widthPx);
+    return;
+  }
+  const maxPieces = Math.max(1, Math.round(Number(dash.maxPieces) || 20000));
+  let pieces = 0;
   let phase = 0;
   for (let index = 0; index < screenPoints.length - 1; index++) {
     const start = screenPoints[index];
@@ -122,15 +130,18 @@ function pushDashedScreenPolyline(vertices, context, screenPoints, color, widthP
     if (length <= 0.5) continue;
     let position = 0;
     while (position < length) {
+      if (pieces >= maxPieces) return;
       const phaseInPattern = phase % pattern;
-      const drawing = phaseInPattern < dash.dashPx;
-      const remainingPattern = (drawing ? dash.dashPx : pattern) - phaseInPattern;
+      const drawing = phaseInPattern < dashPx;
+      const remainingPattern = (drawing ? dashPx : pattern) - phaseInPattern;
       const step = Math.min(remainingPattern, length - position);
+      if (!Number.isFinite(step) || step <= 0.0001) break;
       if (drawing && step > 0.5) {
         pushSolidScreenPolyline(vertices, context, [
           interpolateScreenPoint(start, dx, dy, position / length),
           interpolateScreenPoint(start, dx, dy, (position + step) / length)
         ], color, widthPx);
+        pieces++;
       }
       position += step;
       phase += step;

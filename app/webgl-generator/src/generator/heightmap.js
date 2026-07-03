@@ -558,7 +558,7 @@ function rebalanceHeights(context, targetWaterRatio) {
 function shapeLandRelief(context) {
   const landHeights = context.heights.filter(height => height >= 20);
   if (!landHeights.length) return;
-  const landMax = Math.max(...landHeights) - 20;
+  const landMax = maxValue(landHeights) - 20;
   if (landMax <= 0.05) return;
   const denominator = Math.max(landMax, 0.75);
   const targetPeak = context.heightmap.distribution.at(-1)?.[1] ?? 96;
@@ -611,8 +611,16 @@ function softenAbruptTransitions(context) {
       next[cell] = clamp(height * (1 - weight) + mean * weight, 0, 100);
     }
 
-    context.heights.splice(0, context.heights.length, ...next);
+    for (let cell = 0; cell < context.heights.length; cell++) {
+      context.heights[cell] = next[cell];
+    }
   }
+}
+
+function maxValue(values) {
+  let max = -Infinity;
+  for (const value of values) if (value > max) max = value;
+  return max === -Infinity ? 0 : max;
 }
 
 function addResidualRelief(context) {

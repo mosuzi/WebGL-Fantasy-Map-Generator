@@ -28,6 +28,7 @@ export function buildPack(grid, features) {
   grid.cells.pack = gridToPack;
 
   const neighborDegrees = profile.stage("degree-metrics", "统计 pack 邻接指标", () => cells.c.map(neighbors => neighbors.length));
+  const maxNeighborDegree = maxValue(neighborDegrees);
   const pack = {
     cells,
     vertices,
@@ -41,7 +42,7 @@ export function buildPack(grid, features) {
       keptGridPoints: counters.keptGridPoints,
       coastMidpoints: counters.coastMidpoints,
       averageNeighborDegree: round(average(neighborDegrees), 2),
-      maxNeighborDegree: Math.max(...neighborDegrees),
+      maxNeighborDegree,
       borderCells: cells.b.reduce((sum, value) => sum + (value ? 1 : 0), 0),
       buildMs: roundMs(performance.now() - startedAt)
     }
@@ -404,6 +405,12 @@ function packCellArea(cells, vertices, cellId) {
 
 function average(values) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function maxValue(values) {
+  let max = -Infinity;
+  for (const value of values) if (value > max) max = value;
+  return max === -Infinity ? 0 : max;
 }
 
 function countPositive(values = []) {

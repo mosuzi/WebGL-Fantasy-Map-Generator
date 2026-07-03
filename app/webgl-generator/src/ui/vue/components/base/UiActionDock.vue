@@ -132,14 +132,17 @@ function updatePanelPosition() {
   const width = Math.min(340, viewportWidth - margin * 2);
   const left = Math.min(Math.max(margin, rect.left), Math.max(margin, viewportWidth - width - margin));
   const below = viewportHeight - rect.bottom - margin;
-  const top = below > 180 ? rect.bottom + 8 : Math.max(margin, rect.top - 220);
+  const minHeight = 180;
+  const rawTop = below > minHeight ? rect.bottom + 8 : Math.max(margin, rect.top - 220);
+  const maxTop = Math.max(margin, viewportHeight - minHeight - margin);
+  const top = Math.min(Math.max(margin, rawTop), maxTop);
 
   panelStyle.value = {
     position: "fixed",
     left: `${left}px`,
     top: `${top}px`,
     width: `${width}px`,
-    maxHeight: `${Math.max(180, viewportHeight - top - margin)}px`
+    maxHeight: `${Math.max(minHeight, viewportHeight - top - margin)}px`
   };
 }
 </script>

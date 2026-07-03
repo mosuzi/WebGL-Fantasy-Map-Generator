@@ -34,15 +34,17 @@ export function buildClimate(grid, features, options, random) {
 
   grid.cells.prec = Array.from(prec);
   grid.cells.biome = biome;
+  const temperatureRange = valueRange(grid.cells.temp);
+  const precipitationRange = valueRange(grid.cells.prec);
 
   return {
     biomes: BIOMES,
     mapCoordinates,
     metadata: {
-      temperatureMin: Math.min(...grid.cells.temp),
-      temperatureMax: Math.max(...grid.cells.temp),
-      precipitationMin: Math.min(...grid.cells.prec),
-      precipitationMax: Math.max(...grid.cells.prec),
+      temperatureMin: temperatureRange.min,
+      temperatureMax: temperatureRange.max,
+      precipitationMin: precipitationRange.min,
+      precipitationMax: precipitationRange.max,
       latitudeMode: mapCoordinates.latitudeMode,
       latitudeLabel: mapCoordinates.latitudeLabel,
       latitudeCenter: mapCoordinates.latCenter,
@@ -52,6 +54,19 @@ export function buildClimate(grid, features, options, random) {
       windProfile: windProfile.winds,
       biomeCounts: Object.fromEntries([...biomeCounts.entries()].map(([id, count]) => [BIOMES[id]?.name || id, count]))
     }
+  };
+}
+
+function valueRange(values) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const value of values) {
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  return {
+    min: min === Infinity ? 0 : min,
+    max: max === -Infinity ? 0 : max
   };
 }
 
