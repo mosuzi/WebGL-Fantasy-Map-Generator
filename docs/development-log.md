@@ -15221,3 +15221,30 @@ full 矩阵结果：
 - 同次烟测中点击“加入”后导出为 `5` 色，包含 `#aa33cc` 且仍排除未加入的 `#eeeeaa`；再点击“从配置移除”后导出回到 `4` 色并排除 `#aa33cc`。
 - 全程地图 checksum 保持稳定；`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1424.2ms`，纯生成 `723.3ms`，WebGL 加载 `382ms`，最慢加载阶段为 `cell-visual-mesh 65.6ms`，`fit-draw = 3.5ms`，`glError = 0`。
+
+### 高度图待处理颜色批量加入显示色
+
+背景：
+
+- 待处理颜色列表已经支持单个颜色加入主色板，但用户处理当前可见审核队列时仍需要逐个点击。
+- 批量加入应保持为预览态操作，只更新工作台 assignments，不写地图、不触发完整重生成。
+
+修正：
+
+- 待处理颜色 header 新增“加入显示色”。
+- 点击后会把当前可见的待处理颜色全部按自动高度写入 `manualAssignments`，并选中第一项。
+- 预览会立即刷新；如果图片仍有更多未进入当前色板的颜色桶，应用按钮会继续保持阻断。
+- 修正批量加入提示数量，避免预览刷新后读取新的待处理列表长度造成提示不准。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.13KB`，`HeightPanel` 懒加载 chunk 约 `36.62KB / gzip 12.14KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：导入 20 色 SVG 后，色板上限 `16`、映射模式 `色相`、未分配颜色 `标记待处理` 下，点击“加入显示色”前待处理项为 `4`、主色板 `16`、手动项 `0`。
+- 同次烟测中点击后主色板增至 `18`、手动项为 `4`，剩余待处理项因后续颜色桶补入变为 `12`，应用按钮仍保持阻断；地图 checksum 保持稳定，`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1555ms`，纯生成 `750ms`，WebGL 加载 `379ms`，UI slack `426ms`，最慢生成阶段为 `构建 grid / Voronoi / 高度 132ms`，最慢加载阶段为 `构建线层顶点 55.6ms`，`fit-draw = 2.7ms`，`glError = 0`。

@@ -313,6 +313,7 @@
               <strong>待处理颜色</strong>
               <span>{{ pendingPaletteSummary }}</span>
             </div>
+            <UiButton variant="secondary" @click="promoteVisiblePendingPaletteEntries">加入显示色</UiButton>
             <UiButton v-if="canExpandColorLimit" variant="secondary" @click="expandHeightmapColorLimit">扩大色板</UiButton>
           </header>
           <div class="heightmap-pending-grid">
@@ -661,6 +662,19 @@ function promotePendingPaletteEntry(entry) {
   };
   selectedPaletteKey.value = entry.key;
   drawPreview();
+}
+
+function promoteVisiblePendingPaletteEntries() {
+  if (!pendingPalette.value.length) return;
+  const entries = pendingPalette.value.slice();
+  const next = {...manualAssignments.value};
+  for (const entry of entries) {
+    next[String(entry.key)] = clamp(Math.round(Number(entry.autoHeight) || 0), 0, 100);
+  }
+  manualAssignments.value = next;
+  selectedPaletteKey.value = entries[0].key;
+  drawPreview();
+  previewStatus.value = `已加入显示的 ${entries.length} 个待处理色。`;
 }
 
 function openImportWorkbench() {
