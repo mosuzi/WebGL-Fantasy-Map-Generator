@@ -5212,7 +5212,7 @@ input.ui-switch-native {
 }
 
 .military-event-list-heading,
-.military-event-item div {
+.military-event-item-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -5322,6 +5322,37 @@ input.ui-switch-native {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.military-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.military-event-meta span {
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(7, 12, 15, 0.36);
+  color: #9fb0ba;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.military-event-meta .applied {
+  border-color: rgba(127, 179, 164, 0.26);
+  background: rgba(127, 179, 164, 0.12);
+  color: #a8d8c8;
+}
+
+.military-event-meta .pending {
+  border-color: rgba(240, 206, 124, 0.24);
+  background: rgba(240, 206, 124, 0.1);
+  color: #f0ce7c;
 }
 
 .military-event-item p,

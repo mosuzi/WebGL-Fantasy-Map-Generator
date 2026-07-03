@@ -15910,3 +15910,28 @@ full 矩阵结果：
 - Playwright + Chrome 构建产物布局烟测通过：打开 `军事管理`，注入两条战斗事件，并打开“调整态势”二级面板；`military-panel-summary / controls / toolbar / overview / details / event list / event tools / event chain / secondary panel` 均无横向溢出。
 - 同次烟测战报链显示 `链路 2 条 / 已应用 1 条 / 累计损耗 132 / 最近 攻城 / 小胜`，`glError = 0`、console/page error 为 `0`，截图为 `docs/generated/military-panel-style-smoke.png`。
 - e2e 守门通过：点击到出图 `1411ms`，纯生成 `706.5ms`，WebGL 加载 `392.5ms`，UI slack `312ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 124.3ms`，最慢加载阶段为 `构建视觉 cell mesh 55.9ms`，`line-vertices = 45.5ms`，`fit-draw = 2.8ms`。
+
+### 战斗事件链路元信息
+
+背景：
+
+- 战斗事件列表已有类型、结果、时间、说明和已应用摘要，但多条事件仍需要读正文才能判断链路序号与应用状态。
+- 本轮只增强选中军团事件列表的只读可读性，不改变事件保存格式、导入导出、清理或轻量结果应用。
+
+修正：
+
+- 每条事件新增一行紧凑元信息标签。
+- 标签包含 `链路 #序号`、`已应用 / 未应用` 和 `损耗 N / 损耗未计入`。
+- 已应用事件的损耗值复用现有 `battleEventCasualties()` 逻辑，和战报链摘要保持一致。
+- 未应用事件明确显示“损耗未计入”，避免和已结算损耗混淆。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部观感修正摘要和第 251 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；`MilitaryPanel` 懒加载 chunk 约 `28.94KB / gzip 9.24KB`，主 CSS 约 `129.21KB / gzip 20.28KB`，主入口约 `768.43KB / gzip 232.23KB`。
+- Playwright + Chrome 构建产物烟测通过：打开 `军事管理`，给同一军团注入两条事件；最新事件显示 `链路 #12 / 未应用 / 损耗未计入`，上一条显示 `链路 #11 / 已应用 / 损耗 132`。
+- 同次烟测确认事件列表和首条事件无横向溢出，战报链摘要仍为 `链路 2 条 / 已应用 1 条 / 累计损耗 132 / 最近 攻城 / 小胜`，`glError = 0`、console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1386.1ms`，纯生成 `720.1ms`，WebGL 加载 `388.3ms`，UI slack `277.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 136.9ms`，最慢加载阶段为 `构建视觉 cell mesh 56.8ms`，`line-vertices = 53.3ms`，`fit-draw = 3.1ms`。

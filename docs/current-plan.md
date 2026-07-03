@@ -55,6 +55,7 @@
 - 外交专题点击语义已修正：在外交视图下点击国家只切换外交主体并刷新外交着色，不再自动打开国家编辑面板；非外交视图下仍保留原国家选择/编辑入口行为。
 - 军事态势线观感已修正：战线生成只收集交战双方共享的陆地边界短段，不再用军团/国家中心连成长线，也不会为隔海战争画跨海线；渲染层改为边界附近的宽体渐变方向箭头，退化为很短边界点时也保留最小可视宽度。
 - 军事面板样式第二刀已完成：`军事管理` 的顶部统计、选中军团概要、详情网格、战报链摘要和二级操作面板统一为更清晰的暗色指挥面板样式，减少裸文本和按钮堆叠感；本轮只改 CSS，不改军事数据和命令语义。
+- 战斗事件链路列表已补可读元信息：选中军团事件列表的每条事件现在显示链路序号、已应用/未应用状态和损耗状态，便于扫读多条战报；本轮只读展示，不改变事件保存、导入导出或轻量结果应用。
 - 重新生成区的“待命”提示已移除，后续点击重新生成后的内部状态提示也已收敛到开发模式；普通模式仅保留稳定的用户可读默认说明。
 - Vercel 部署配置已补齐：根目录新增 `vercel.json`，显式使用 `pnpm install --frozen-lockfile`、`pnpm run build:app` 和 `dist/webgl-generator`；`package.json` 补充 `dev / build / preview` 常规脚本和 Vite 8 所需 Node engine；部署说明见 `docs/deployment/vercel.md`。
 - source/candidate baseline 的 `lateStages.names` 已补充国家形制、国家类型、文化类型、旧形制命中数、文化关联国家数和国家命名样本；矩阵后段专题表会显示“文化关联国家 S/C”和“旧形制命中 C”。
@@ -897,6 +898,7 @@ http://127.0.0.1:5410
 248. 战斗事件 JSON 导出摘要已完成：事件 JSON 顶层新增 `summary`，复用战报链摘要字段，包含 `total / applied / casualties / latest` 及对应展示标签；导入逻辑仍只消费 `events`，因此旧 JSON 与新增摘要的 JSON 都保持兼容。浏览器下载烟测中导出 `fmg-military-events-stage-2-1-all.json`，文件包含 `summary.total = 2`、`summary.applied = 1`、`summary.casualties = 456`、`summary.latest.type = siege`，事件数组仍包含 `raid / siege`，`glError = 0`、console/page error 为 `0`。正式 e2e 守门通过：点击到出图 `1406.4ms`，纯生成 `723ms`，WebGL 加载 `402.4ms`，UI slack `281ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 130.3ms`，最慢加载阶段为 `构建视觉 cell mesh 62.7ms`，`line-vertices = 49.5ms`，`fit-draw = 3ms`。
 249. 军事态势线观感修正已完成：军事战线生成改为收集交战双方共享陆地边界上的短段，写入 `borderCellPairs / length / maxLength` 方便校验；隔海没有共享陆地边界时不生成战线。渲染层不再用细线或沿边小箭头，而是在边界附近绘制宽体渐变方向箭头，箭头头部朝向目标国家；边界段退化到很短点位时也有最小可视横向长度。数据烟测中固定 `stage-2-1231411414 / continents / 10000` 生成 `2` 条战线，最长 `57`，均低于各自上限，所有 `borderCellPairs` 两侧 cell 都是陆地且属于交战双方。浏览器烟测中战线开关顶点差为 `18`，即 `2` 个箭头各 `3` 个三角形，局部截图 `docs/generated/war-front-arrow-crop.png` 确认宽体渐变箭头可见，`glError = 0`、console/page error 为 `0`。正式 e2e 守门通过：点击到出图 `1352.2ms`，纯生成 `694.1ms`，WebGL 加载 `373ms`，UI slack `285.1ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 123.1ms`，最慢加载阶段为 `构建标签 54.2ms`，`line-vertices = 50.2ms`，`fit-draw = 2.5ms`。
 250. 军事面板样式第二刀已完成：只改 `styles.css`，把 `military-panel-summary / military-overview / military-panel-details / military-event-list / military-event-chain / military-status-panel` 统一成更规整的暗色指挥面板样式；顶部统计和详情网格不再像裸文本，选中军团概要更突出兵种图标、状态胶囊和兵种比例条，战报链摘要改成紧凑状态带，二级态势面板补边框和背景。浏览器布局烟测打开 `军事管理`、注入两条战斗事件并打开“调整态势”二级面板，确认 summary、controls、toolbar、overview、details、event list、event tools、event chain 和 secondary panel 均无横向溢出，战报链为 `链路 2 条 / 已应用 1 条 / 累计损耗 132 / 最近 攻城 / 小胜`，`glError = 0`、console/page error 为 `0`。正式 e2e 守门通过：点击到出图 `1411ms`，纯生成 `706.5ms`，WebGL 加载 `392.5ms`，UI slack `312ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 124.3ms`，最慢加载阶段为 `构建视觉 cell mesh 55.9ms`，`line-vertices = 45.5ms`，`fit-draw = 2.8ms`。
+251. 战斗事件链路元信息已完成：选中军团事件列表每条事件新增一行只读标签，展示 `链路 #序号`、`已应用 / 未应用` 和 `损耗 N / 损耗未计入`，让多条战报链路不用只靠正文扫读。浏览器烟测给同一军团注入两条事件后，最新事件显示 `链路 #12 / 未应用 / 损耗未计入`，上一条显示 `链路 #11 / 已应用 / 损耗 132`，事件列表和首条事件无横向溢出，战报链摘要仍为 `链路 2 条 / 已应用 1 条 / 累计损耗 132 / 最近 攻城 / 小胜`，`glError = 0`、console/page error 为 `0`。正式 e2e 守门通过：点击到出图 `1386.1ms`，纯生成 `720.1ms`，WebGL 加载 `388.3ms`，UI slack `277.7ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 136.9ms`，最慢加载阶段为 `构建视觉 cell mesh 56.8ms`，`line-vertices = 53.3ms`，`fit-draw = 3.1ms`。
 
 ## 约束
 

@@ -148,9 +148,14 @@
     <p v-if="!selectedBattleEvents.length" class="military-event-empty">{{ selectedBattleEventTotal ? "没有匹配当前筛选的战斗事件。" : "当前军团还没有战斗事件。" }}</p>
     <ol v-else>
       <li v-for="event in selectedBattleEvents" :key="event.id || `${event.regimentObjectId}-${event.sequence}`" class="military-event-item">
-        <div>
+        <div class="military-event-item-head">
           <strong>{{ event.typeLabel || event.type || "事件" }} / {{ event.outcomeLabel || event.outcome || "结果" }}</strong>
           <span>{{ formatEventDate(event.at) }}</span>
+        </div>
+        <div class="military-event-meta">
+          <span>{{ battleEventSequenceLabel(event) }}</span>
+          <span :class="battleEventAppliedClass(event)">{{ battleEventAppliedLabel(event) }}</span>
+          <span>{{ battleEventLossLabel(event) }}</span>
         </div>
         <p>{{ event.description || "无说明" }}</p>
         <small v-if="event.resultApplied" class="military-event-result">{{ battleResultSummary(event) }}</small>
@@ -922,6 +927,25 @@ function formatEventDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString("zh-CN", {month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"});
+}
+
+function battleEventSequenceLabel(event) {
+  const sequence = Number(event?.sequence);
+  return Number.isFinite(sequence) && sequence > 0 ? `链路 #${formatNumber(sequence)}` : "链路未编号";
+}
+
+function battleEventAppliedLabel(event) {
+  return event?.resultApplied ? "已应用" : "未应用";
+}
+
+function battleEventAppliedClass(event) {
+  return event?.resultApplied ? "applied" : "pending";
+}
+
+function battleEventLossLabel(event) {
+  if (!event?.resultApplied) return "损耗未计入";
+  const casualties = battleEventCasualties(event);
+  return casualties ? `损耗 ${formatNumber(casualties)}` : "无兵力损耗";
 }
 
 function battleResultSummary(event) {
