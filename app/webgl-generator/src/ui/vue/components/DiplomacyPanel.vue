@@ -67,14 +67,27 @@
       </div>
     </template>
     <template #relation>
-      <UiSelectField
-        input-id="diplomacy-relation-select"
-        class-name="diplomacy-relation-select"
-        label="关系"
-        :model-value="selected.relation"
-        :options="relationOptions"
-        @update:model-value="relation => callbacks.onRelationChange(selected.subjectId, selected.id, relation)"
-      />
+      <div class="diplomacy-relation-panel">
+        <div class="diplomacy-relation-heading">
+          <strong>{{ selected.subjectName }}</strong>
+          <span>调整对 {{ selected.name }} 的外交关系</span>
+        </div>
+        <div class="diplomacy-relation-context">
+          <span v-for="item in relationContextMetrics" :key="item.label">
+            <small>{{ item.label }}</small>
+            <b>{{ item.value }}</b>
+          </span>
+        </div>
+        <UiSelectField
+          input-id="diplomacy-relation-select"
+          class-name="diplomacy-relation-select"
+          label="关系"
+          :model-value="selected.relation"
+          :options="relationOptions"
+          @update:model-value="relation => callbacks.onRelationChange(selected.subjectId, selected.id, relation)"
+        />
+        <p class="diplomacy-relation-note">选择后会立即写入当前关系并进入撤销记录，不会触发军事行动。</p>
+      </div>
     </template>
   </UiActionDock>
 
@@ -178,6 +191,14 @@ const detailRows = computed(() => selected.value ? [
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "城镇", value: formatNumber(selected.value.burgs)}
+] : []);
+const relationContextMetrics = computed(() => selected.value ? [
+  {label: "当前关系", value: selected.value.relationLabel},
+  {label: "关系倾向", value: relationPolarityLabel(selected.value.relationPolarity)},
+  {label: "邻接", value: selected.value.neighborLabel},
+  {label: "直接贸易", value: selected.value.tradeLabel},
+  {label: "国力", value: formatNumber(selected.value.powerScore)},
+  {label: "文化/宗教", value: `${selected.value.cultureName} / ${selected.value.religionName}`}
 ] : []);
 
 watch(() => selected.value?.id, () => {
@@ -322,6 +343,13 @@ function relationTextColor(relation) {
 function relationWeight(relation) {
   const order = {Ally: 1, Friendly: 2, Suzerain: 3, Vassal: 4, Neutral: 5, Suspicion: 6, Rival: 7, Enemy: 8, Unknown: 9};
   return order[relation] || 10;
+}
+
+function relationPolarityLabel(value) {
+  const number = Number(value || 0);
+  if (number > 0) return `友好 +${formatNumber(number)}`;
+  if (number < 0) return `敌对 ${formatNumber(number)}`;
+  return "中立 0";
 }
 
 function indexedName(items, id) {

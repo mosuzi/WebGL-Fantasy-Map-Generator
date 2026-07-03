@@ -6104,6 +6104,79 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.diplomacy-relation-panel {
+  display: grid;
+  gap: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 1px solid rgba(127, 179, 164, 0.22);
+  border-radius: 8px;
+  padding: 11px;
+  background:
+    linear-gradient(180deg, rgba(28, 44, 43, 0.7), rgba(9, 15, 18, 0.8)),
+    rgba(7, 12, 15, 0.42);
+}
+
+.diplomacy-relation-heading {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid rgba(189, 206, 213, 0.12);
+  padding-bottom: 9px;
+}
+
+.diplomacy-relation-heading strong,
+.diplomacy-relation-heading span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.diplomacy-relation-heading strong {
+  color: #e9f2f4;
+  font-size: 12px;
+}
+
+.diplomacy-relation-heading span,
+.diplomacy-relation-note {
+  color: #9fb0ba;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.diplomacy-relation-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.diplomacy-relation-context span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(9, 15, 18, 0.5);
+}
+
+.diplomacy-relation-context small {
+  color: #8ca0aa;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.diplomacy-relation-context b {
+  min-width: 0;
+  color: #edf4f6;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.diplomacy-relation-note {
+  margin: -2px 0 0;
+  overflow-wrap: anywhere;
+}
+
 .culture-name-editor label,
 .culture-color-field,
 .religion-name-editor label,
