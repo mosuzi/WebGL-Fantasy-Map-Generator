@@ -84,6 +84,14 @@
           <UiMetricGrid :metrics="comparisonMetrics" class-name="heightmap-comparison-metrics" />
         </section>
 
+        <section v-show="previewStats" class="heightmap-difference-section" aria-label="高度差值热力图">
+          <header>
+            <strong>差值热力图</strong>
+            <span>{{ heightDifferenceSummary }}</span>
+          </header>
+          <canvas ref="heightDifferenceCanvas" class="heightmap-difference-canvas"></canvas>
+        </section>
+
         <div class="heightmap-import-fields">
           <UiSliderField
             label="最低高度"
@@ -385,11 +393,13 @@ const fileInput = ref(null);
 const profileFileInput = ref(null);
 const previewCanvas = ref(null);
 const heightBandCanvas = ref(null);
+const heightDifferenceCanvas = ref(null);
 const previewImage = ref(null);
 const selectedFile = ref(null);
 const previewStats = ref(null);
 const previewHistogram = ref([]);
 const heightBandStats = ref(null);
+const heightDifferenceStats = ref(null);
 const previewPalette = ref([]);
 const pendingPalette = ref([]);
 const selectedPaletteKey = ref(null);
@@ -399,6 +409,7 @@ const manualAssignments = ref({});
 const previewStatus = ref("尚未选择图片");
 const workbenchPosition = ref({left: 760, top: 110});
 let dragState = null;
+let latestHeightBandSamples = null;
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
@@ -500,9 +511,18 @@ const comparisonSummary = computed(() => {
   if (!current || !next) return "未生成";
   return `平均 ${formatSignedNumber(next.average - current.average)} / 水域 ${formatSignedPercent(next.water / next.total - current.water / current.total)}`;
 });
+const heightDifferenceSummary = computed(() => {
+  const stats = heightDifferenceStats.value;
+  if (!stats) return "未生成";
+  return `升高 ${formatPercent(stats.raised / stats.total)} / 降低 ${formatPercent(stats.lowered / stats.total)} / 最大 ${formatSignedNumber(stats.maxDelta)}`;
+});
 
 watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit, heightmapMappingMode, heightmapUnassignedStrategy], () => {
   drawPreview();
+});
+
+watch(() => props.state.currentHeightPreview, () => {
+  drawHeightDifferencePreview(latestHeightBandSamples);
 });
 
 onBeforeUnmount(() => {
@@ -811,6 +831,8 @@ function clearHeightBandCanvas() {
     context?.clearRect(0, 0, canvas.width, canvas.height);
   }
   heightBandStats.value = null;
+  latestHeightBandSamples = null;
+  clearHeightDifferenceCanvas();
 }
 
 function previewSize() {
@@ -961,6 +983,7 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
   const nearestHeightCache = new Map();
   const usePalette = shouldUsePalettePreview(paletteEntries);
   const brightnessRange = Math.max(1e-6, brightnessStats.max - brightnessStats.min);
+  const samples = new Uint8Array(imageData.width * imageData.height);
   let min = Infinity;
   let max = -Infinity;
   let water = 0;
@@ -975,6 +998,7 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
         ...color,
         brightness: heightmapImportInvert.value ? 255 - color.brightness : color.brightness
       }, brightnessStats, brightnessRange);
+    samples[offset / 4] = clamp(Math.round(height), 0, 100);
     const ramp = heightPreviewColor(height);
     output.data[offset] = ramp[0];
     output.data[offset + 1] = ramp[1];
@@ -995,6 +1019,92 @@ function drawHeightBandPreview(imageData, paletteEntries, brightnessStats) {
     total,
     average: Math.round((sum / total) * 10) / 10
   };
+  latestHeightBandSamples = {width: imageData.width, height: imageData.height, samples};
+  drawHeightDifferencePreview(latestHeightBandSamples);
+}
+
+function clearHeightDifferenceCanvas() {
+  const canvas = heightDifferenceCanvas.value;
+  if (canvas) {
+    const context = canvas.getContext("2d", {willReadFrequently: true});
+    context?.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  heightDifferenceStats.value = null;
+}
+
+function drawHeightDifferencePreview(nextPreview) {
+  const canvas = heightDifferenceCanvas.value;
+  const current = props.state.currentHeightPreview;
+  if (!canvas || !nextPreview?.samples?.length || !current?.samples?.length) {
+    clearHeightDifferenceCanvas();
+    return;
+  }
+  canvas.width = nextPreview.width;
+  canvas.height = nextPreview.height;
+  const context = canvas.getContext("2d", {willReadFrequently: true});
+  if (!context) return;
+  const output = context.createImageData(nextPreview.width, nextPreview.height);
+  let raised = 0;
+  let lowered = 0;
+  let unchanged = 0;
+  let maxAbs = 0;
+  let maxDelta = 0;
+  let sumAbs = 0;
+
+  for (let y = 0; y < nextPreview.height; y += 1) {
+    const currentY = clamp(Math.floor((y / nextPreview.height) * current.height), 0, current.height - 1);
+    for (let x = 0; x < nextPreview.width; x += 1) {
+      const currentX = clamp(Math.floor((x / nextPreview.width) * current.width), 0, current.width - 1);
+      const nextIndex = y * nextPreview.width + x;
+      const currentHeight = Number(current.samples[currentY * current.width + currentX]) || 0;
+      const nextHeight = Number(nextPreview.samples[nextIndex]) || 0;
+      const delta = nextHeight - currentHeight;
+      const abs = Math.abs(delta);
+      if (abs < 2) unchanged += 1;
+      else if (delta > 0) raised += 1;
+      else lowered += 1;
+      if (abs > maxAbs) {
+        maxAbs = abs;
+        maxDelta = delta;
+      }
+      sumAbs += abs;
+      const color = differenceHeatColor(delta);
+      const offset = nextIndex * 4;
+      output.data[offset] = color[0];
+      output.data[offset + 1] = color[1];
+      output.data[offset + 2] = color[2];
+      output.data[offset + 3] = 255;
+    }
+  }
+
+  context.putImageData(output, 0, 0);
+  const total = Math.max(1, nextPreview.samples.length);
+  heightDifferenceStats.value = {
+    raised,
+    lowered,
+    unchanged,
+    total,
+    maxDelta,
+    averageAbs: Math.round((sumAbs / total) * 10) / 10
+  };
+}
+
+function differenceHeatColor(delta) {
+  const value = clamp(Math.round(delta), -100, 100);
+  const strength = clamp(Math.abs(value) / 55, 0, 1);
+  if (Math.abs(value) < 2) return [42, 48, 50];
+  if (value > 0) {
+    return [
+      Math.round(79 + 176 * strength),
+      Math.round(66 + 78 * strength),
+      Math.round(42 - 22 * strength)
+    ];
+  }
+  return [
+    Math.round(35 - 10 * strength),
+    Math.round(80 + 112 * strength),
+    Math.round(126 + 112 * strength)
+  ];
 }
 
 function shouldUsePalettePreview(paletteEntries) {

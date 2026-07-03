@@ -2916,7 +2916,8 @@ select:disabled {
 }
 
 .heightmap-band-section,
-.heightmap-comparison-section {
+.heightmap-comparison-section,
+.heightmap-difference-section {
   display: grid;
   gap: 6px;
   border: 1px solid rgba(189, 206, 213, 0.14);
@@ -2926,7 +2927,8 @@ select:disabled {
 }
 
 .heightmap-band-section header,
-.heightmap-comparison-section header {
+.heightmap-comparison-section header,
+.heightmap-difference-section header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2936,7 +2938,8 @@ select:disabled {
 }
 
 .heightmap-band-section strong,
-.heightmap-comparison-section strong {
+.heightmap-comparison-section strong,
+.heightmap-difference-section strong {
   color: #edf4f6;
 }
 
@@ -2944,7 +2947,8 @@ select:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.heightmap-band-canvas {
+.heightmap-band-canvas,
+.heightmap-difference-canvas {
   display: block;
   width: 100%;
   max-height: 112px;
@@ -2952,6 +2956,10 @@ select:disabled {
   border-radius: 6px;
   background: #0b1115;
   image-rendering: auto;
+}
+
+.heightmap-difference-canvas {
+  image-rendering: pixelated;
 }
 
 .heightmap-import-fields {

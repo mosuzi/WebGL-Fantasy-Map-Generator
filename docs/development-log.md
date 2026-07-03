@@ -15055,3 +15055,31 @@ full 矩阵结果：
 - 同次烟测点击最后一个待处理色 `#653421` 的“加入”后，主色板从 `16` 变为 `17`，待处理项降为 `3`，选中色块显示“手动高度”，地图 checksum 保持 `69cf0151 -> 69cf0151`，说明该操作只刷新预览、不提前重建地图。
 - 同次烟测切到 `合并最近色` 后应用，结果为 `source.kind = image-palette`、`source.mappingMode = hue`、`source.unassignedStrategy = nearest-palette`、`assignments = 17`、`manualCount = 1`、promoted 色块为手动 assignment，checksum `69cf0151 -> 0e5e4c48`，`loadMap.totalMs = 288.5ms`，`glError = 0`，console/page error 和 health error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1229.6ms`，纯生成 `614.5ms`，WebGL 加载 `351.1ms`，最慢加载阶段为 `cell-visual-mesh 50.5ms`，`fit-draw = 3.6ms`，`glError = 0`。
+
+### 高度图差值热力图预览第一刀
+
+背景：
+
+- 应用前后对比已能给出高度范围、水域占比和平均变化，但用户仍缺少空间维度，无法直观看出导入图片会在哪些区域抬高或压低地形。
+- 本步先补只读缩略热力图，不把差值写入地图，也不进入完整导入元数据。
+
+修正：
+
+- 高度图导入工作台新增“差值热力图” canvas，放在应用前后对比下方。
+- `drawHeightBandPreview()` 复用同一次高度色带预览计算出的高度样本，避免再解析图片；差值热力图用橙色表示导入后升高、蓝色表示导入后降低、深色表示变化很小。
+- runtime 给高度面板新增 `currentHeightPreview` 小型高度栅格，约 `96` 像素宽，从当前 `grid.cells.h` 和 cell 中心点聚合得到；Vue 侧只拿小栅格，不接收完整高度数组。
+- 热力图摘要展示升高占比、降低占比和最大变化，并随导入参数、映射模式、色板和手动 assignment 一起刷新。
+
+文档：
+
+- 更新 `docs/current-plan.md`。
+- 更新 `docs/task-notes/heightmap-image-converter-plan.md`。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。主入口约 `741.73KB / gzip 224.12KB`，`HeightPanel` 懒加载 chunk 约 `31.31KB / gzip 10.80KB`。
+- Playwright + 系统 Chrome 构建产物烟测通过：导入渐变 SVG 后，差值热力图 canvas 为 `345 x 230`，非空像素 `79350`，采样颜色 `16` 种，摘要为 `升高 92% / 降低 7% / 最大 +99`。
+- 同次烟测中应用前后对比摘要为 `平均 +30.3 / 水域 -59%`，地图 checksum 保持 `1bf34089 -> 1bf34089`，说明差值热力图只刷新预览、不写地图、不触发重生成；`glError = 0`，console/page error 和 health error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1203.8ms`，纯生成 `601.2ms`，WebGL 加载 `330.5ms`，最慢加载阶段为 `cell-visual-mesh 51.1ms`，`fit-draw = 2.4ms`，`glError = 0`。

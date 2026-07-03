@@ -3306,6 +3306,7 @@ function updateHeightPanel(state) {
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,
     currentHeightStats: summarizeCurrentHeightStats(state.map),
+    currentHeightPreview: buildCurrentHeightPreview(state.map),
     history: state.editHistory.getStats()
   });
 }
@@ -3332,6 +3333,42 @@ function summarizeCurrentHeightStats(map) {
     total,
     average: Math.round((sum / Math.max(1, total)) * 10) / 10
   };
+}
+
+function buildCurrentHeightPreview(map) {
+  const cells = map?.grid?.cells;
+  const points = map?.grid?.points;
+  const heights = cells?.h;
+  if (!heights?.length || !points?.length || !cells?.p?.length) return null;
+  const graphWidth = Math.max(1, Number(map.metadata?.graphWidth) || Number(map.options?.graphWidth) || 1440);
+  const graphHeight = Math.max(1, Number(map.metadata?.graphHeight) || Number(map.options?.graphHeight) || 960);
+  const width = 96;
+  const height = Math.max(32, Math.round(width * graphHeight / graphWidth));
+  const totals = new Float32Array(width * height);
+  const counts = new Uint16Array(width * height);
+  let globalSum = 0;
+
+  for (let cell = 0; cell < heights.length; cell += 1) {
+    const point = points[cells.p[cell]];
+    if (!point) continue;
+    const sampleX = clampInteger(Math.floor((point[0] / graphWidth) * width), 0, width - 1);
+    const sampleY = clampInteger(Math.floor((point[1] / graphHeight) * height), 0, height - 1);
+    const index = sampleY * width + sampleX;
+    const value = clampInteger(Math.round(Number(heights[cell]) || 0), 0, 100);
+    totals[index] += value;
+    counts[index] += 1;
+    globalSum += value;
+  }
+
+  const fallback = clampInteger(Math.round(globalSum / Math.max(1, heights.length)), 0, 100);
+  const samples = Array.from({length: totals.length}, (_, index) => (
+    counts[index] ? clampInteger(Math.round(totals[index] / counts[index]), 0, 100) : fallback
+  ));
+  return {width, height, samples};
+}
+
+function clampInteger(value, min, max) {
+  return Math.max(min, Math.min(max, Math.round(Number(value) || 0)));
 }
 
 function updateStatePanel(state) {
