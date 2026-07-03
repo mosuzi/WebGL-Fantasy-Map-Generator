@@ -1081,7 +1081,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onUpdateSource: (row, sourceText) => updateImportedNamebaseSource(state, documentRef, row, sourceText),
     onDeleteUser: row => deleteImportedNamebase(state, documentRef, row),
     onClearUser: () => clearImportedNamebases(state, documentRef),
-    onSetGlobalBinding: (target, value) => setGlobalNamebaseBinding(state, documentRef, target, value)
+    onSetGlobalBinding: (target, value) => setGlobalNamebaseBinding(state, documentRef, target, value),
+    onSetCultureBinding: (cultureId, target, value) => setCultureNamebaseBinding(state, documentRef, cultureId, target, value)
   });
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
@@ -2078,6 +2079,26 @@ function setGlobalNamebaseBinding(state, documentRef, target, value) {
     return result;
   } catch (error) {
     reportFileOperationError(documentRef, "设置名称库绑定失败", error);
+    return null;
+  }
+}
+
+function setCultureNamebaseBinding(state, documentRef, cultureId, target, value) {
+  try {
+    assertMapAvailable(state);
+    const cultureKey = String(cultureId || "").trim();
+    if (!cultureKey) throw new Error("请先选择文化");
+    const result = setNamebaseBinding(state.map, target, value, {cultureId: cultureKey});
+    state.panels.namebase.update(state.map);
+    const targetLabel = NAMEBASE_BINDING_TARGETS.find(item => item.key === target)?.label || target;
+    const culture = state.map.pack?.cultures?.[cultureKey] || state.map.society?.cultures?.[cultureKey] || null;
+    const cultureLabel = culture?.name || culture?.root || `文化 #${cultureKey}`;
+    const sourceLabel = String(value || "").trim() || "内置策略";
+    const invalidText = result.invalidCount ? `；当前还有 ${result.invalidCount} 个失效绑定引用` : "";
+    setFileOperationStatus(documentRef, `已设置${cultureLabel}${targetLabel}名称库：${sourceLabel}${invalidText}。`);
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "设置文化名称库绑定失败", error);
     return null;
   }
 }

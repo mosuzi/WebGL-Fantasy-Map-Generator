@@ -17378,3 +17378,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `817.73KB / gzip 246.71KB`，名称库懒加载 chunk 约 `10.50KB / gzip 3.99KB`，generation worker 约 `277.28KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入全局库和目标文化专属库后，依次重生成国家、城镇和水文；目标文化国家根名 `6/6` 命中文化库，其它国家 `14/14` 命中全局库；目标文化城镇 `177/271` 命中文化库，其它城镇 `493/732` 命中全局库；目标文化河流/湖泊 `45/46` 命中文化库，其它水文 `105/111` 命中全局库；未命中城镇主要来自首都/省会锚点保留旧名；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1564.6ms`，纯生成 `719.2ms`，WebGL 加载 `519.1ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `129.8ms`，最慢加载阶段为“构建线层顶点” `76.8ms`。
+
+### 名称库文化级绑定 UI 第一刀
+
+背景：
+
+- 文化级绑定已经能参与生成，但用户还不能在界面中写入 `map.namebases.bindings.cultures[cultureId]`。
+- 本轮只在名称库面板提供入口，不进入文化管理面板快捷入口，也不自动批量改写当前地图名称。
+
+修正：
+
+- 名称库面板新增“文化绑定”区，可选择当前地图文化。
+- 选中文化后可分别设置该文化的 `国家根名 / 地名 / 水文` 名称库覆盖，空值表示使用全局或内置策略。
+- runtime 新增 `setCultureNamebaseBinding()`，复用 `setNamebaseBinding(map, target, value, {cultureId})`，写入后刷新名称库面板和文件操作状态。
+- 面板绑定选项会保留当前失效引用选项，便于用户修复或改回内置策略。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `818.36KB / gzip 246.91KB`，名称库懒加载 chunk 约 `12.00KB / gzip 4.34KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入 `culture-state-ui / culture-place-ui / culture-hydro-ui` 三个用户库后，打开名称库面板，在“文化绑定”区选择文化 #1 并分别设置三项绑定；`map.namebases.bindings.cultures["1"]` 写入 `{stateRoot, place, hydro}`，面板显示“文化 #1 国家根名 / 地名 / 水文”绑定用途，面板无横向溢出；`glError = 0`，health 非 info 事件、console error 和 page error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome` 通过；`stage-2-1 / continents / 10000` 点击到出图 `1429.1ms`，纯生成 `758.4ms`，WebGL 加载 `363ms`，最慢生成阶段为“生成商品 / 市场 / 交易 / 税收” `135.1ms`，最慢加载阶段为“构建线层顶点” `44.8ms`。

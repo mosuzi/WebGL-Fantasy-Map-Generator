@@ -25,6 +25,34 @@
     </div>
   </section>
 
+  <section class="namebase-binding-editor" aria-label="文化名称库绑定">
+    <div class="namebase-binding-editor-header">
+      <strong>文化绑定</strong>
+      <span>覆盖指定文化的后续国家、城镇和水文命名。</span>
+    </div>
+    <UiSelectField
+      class-name="namebase-culture-select"
+      input-id="namebase-binding-culture"
+      label="文化"
+      :model-value="selectedCultureId"
+      :options="cultureOptions"
+      @update:model-value="value => selectedCultureId = value"
+    />
+    <div class="namebase-binding-fields">
+      <UiSelectField
+        v-for="target in globalBindingTargets"
+        :key="`culture-${target.key}`"
+        :class-name="'namebase-binding-select'"
+        :input-id="`namebase-culture-binding-${target.key}`"
+        :label="target.label"
+        :model-value="selectedCultureBindings[target.key] || ''"
+        :options="bindingOptions(target.key, selectedCultureBindings[target.key])"
+        :disabled="!selectedCultureId"
+        @update:model-value="value => callbacks.onSetCultureBinding?.(selectedCultureId, target.key, value)"
+      />
+    </div>
+  </section>
+
   <div class="namebase-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 分类 / 类型 / 样例" @update:model-value="callbacks.onFilter" />
   </div>
@@ -198,6 +226,14 @@ const summaryMetrics = computed(() => [
 const bindingInvalidEntries = computed(() => props.state.bindingStatus?.invalid || []);
 const bindingInvalidLabel = computed(() => bindingInvalidEntries.value.map(item => `${item.label} -> ${item.id}`).join("；"));
 const globalBindings = computed(() => props.state.bindingStatus?.bindings?.global || {});
+const cultureBindings = computed(() => props.state.bindingStatus?.bindings?.cultures || {});
+const cultures = computed(() => collectCultures(props.state.map));
+const cultureOptions = computed(() => cultures.value.length
+  ? cultures.value.map(culture => ({value: String(culture.id), label: culture.label}))
+  : [{value: "", label: "暂无文化"}]
+);
+const selectedCultureId = ref("");
+const selectedCultureBindings = computed(() => cultureBindings.value[String(selectedCultureId.value)] || {});
 const importPreviewMetrics = computed(() => {
   const preview = props.state.importPreview;
   if (!preview) return [];
@@ -291,8 +327,8 @@ function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
 }
 
-function bindingOptions(targetKey) {
-  const current = String(globalBindings.value[targetKey] || "");
+function bindingOptions(targetKey, value = globalBindings.value[targetKey]) {
+  const current = String(value || "");
   const options = [
     {value: "", label: "使用内置策略"},
     ...rows.value.map(row => ({
@@ -304,6 +340,20 @@ function bindingOptions(targetKey) {
     options.splice(1, 0, {value: current, label: `失效引用：${current}`});
   }
   return options;
+}
+
+function collectCultures(map) {
+  const cultures = map?.pack?.cultures || map?.society?.cultures || [];
+  return cultures
+    .filter(culture => culture && (culture.i || culture.id))
+    .map(culture => {
+      const id = culture.i ?? culture.id;
+      const name = culture.name || culture.root || `文化 #${id}`;
+      return {
+        id,
+        label: `${name} #${id}`
+      };
+    });
 }
 
 function handleImportFile(event) {
@@ -332,5 +382,15 @@ function generateExamples() {
 watch(() => [selected.value?.id, selectedSourceFingerprint.value], () => {
   sourceDraft.value = selectedUserRow.value?.source?.join("\n") || "";
   generatedExamples.value = [];
+}, {immediate: true});
+
+watch(cultures, value => {
+  if (!value.length) {
+    selectedCultureId.value = "";
+    return;
+  }
+  if (!value.some(culture => String(culture.id) === String(selectedCultureId.value))) {
+    selectedCultureId.value = String(value[0].id);
+  }
 }, {immediate: true});
 </script>

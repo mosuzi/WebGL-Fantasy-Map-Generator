@@ -69,7 +69,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onUpdateSource: (row, sourceText) => callbacks.onUpdateSource?.(row, sourceText),
     onDeleteUser: row => callbacks.onDeleteUser?.(row),
     onClearUser: () => callbacks.onClearUser?.(),
-    onSetGlobalBinding: (target, value) => callbacks.onSetGlobalBinding?.(target, value)
+    onSetGlobalBinding: (target, value) => callbacks.onSetGlobalBinding?.(target, value),
+    onSetCultureBinding: (cultureId, target, value) => callbacks.onSetCultureBinding?.(cultureId, target, value)
   };
 
   const record = manager.registerPanel("namebase-panel", {

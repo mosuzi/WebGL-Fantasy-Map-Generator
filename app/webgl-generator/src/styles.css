@@ -4465,6 +4465,10 @@ input.ui-switch-native {
   gap: 8px;
 }
 
+.namebase-culture-select {
+  max-width: 280px;
+}
+
 .namebase-binding-select {
   min-width: 0;
 }
