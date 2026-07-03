@@ -1,4 +1,4 @@
-import {buildMilitary, MILITARY_STATUSES, normalizeUnitRatios} from "../generator/military.js";
+import {applyRegimentIconProfile, buildMilitary, MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../generator/military.js";
 
 const MILITARY_EFFECTS = Object.freeze({
   render: "draw",
@@ -24,6 +24,14 @@ const MILITARY_EVENT_EFFECTS = Object.freeze({
   derived: Object.freeze(["object-panels"])
 });
 
+const MILITARY_BATTLE_RESULT_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["point-layers", "object-index", "object-panels"])
+});
+
 const BATTLE_EVENT_TYPES = Object.freeze({
   skirmish: "遭遇战",
   siege: "攻城",
@@ -39,6 +47,14 @@ const BATTLE_EVENT_OUTCOMES = Object.freeze({
   draw: "相持",
   loss: "损耗",
   regroup: "重整"
+});
+
+const BATTLE_RESULT_RULES = Object.freeze({
+  victory: Object.freeze({lossRate: 0.04, status: "resting", label: "小胜后整队"}),
+  defeat: Object.freeze({lossRate: 0.18, status: "routed", label: "受挫败退"}),
+  draw: Object.freeze({lossRate: 0.08, status: "resting", label: "相持修整"}),
+  loss: Object.freeze({lossRate: 0.25, status: "routed", label: "损耗败退"}),
+  regroup: Object.freeze({lossRate: 0.02, status: "mustering", label: "重整集结"})
 });
 
 export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整兵种比例"} = {}) {
@@ -162,28 +178,34 @@ export function createRecordMilitaryBattleEventCommand(target, event = {}, {labe
   const eventInput = normalizeBattleEventInput(event);
   let previous = null;
   let nextEvent = null;
+  const effects = eventInput.applyResult ? MILITARY_BATTLE_RESULT_EFFECTS : MILITARY_EVENT_EFFECTS;
 
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
     effects: {
-      ...MILITARY_EVENT_EFFECTS,
+      ...effects,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
     },
     apply(context) {
       const {state, regiment} = findRegiment(context.map, normalizedTarget);
       if (!state?.i || !regiment) throw new Error("找不到军团");
-      previous ??= snapshotBattleEvents(context.map, regiment);
+      previous ??= snapshotBattleEvents(context.map, state, regiment);
       nextEvent ??= createBattleEvent(context.map, state, regiment, eventInput);
+      if (eventInput.applyResult) applyBattleResult(context.map, state, regiment, nextEvent, eventInput);
       appendBattleEvent(context.map, regiment, nextEvent);
       syncMilitary(context.map);
+      refreshMilitaryTroopMetadata(context.map);
+      refreshMilitaryStatusMetadata(context.map);
       refreshMilitaryEventMetadata(context.map);
     },
     revert(context) {
       if (!previous) throw new Error("缺少可撤销的军团战斗事件快照");
-      const {regiment} = findRegiment(context.map, normalizedTarget);
+      const {state, regiment} = findRegiment(context.map, normalizedTarget);
       if (!regiment) throw new Error("找不到军团");
-      restoreBattleEvents(context.map, regiment, previous);
+      restoreBattleEvents(context.map, state, regiment, previous);
       syncMilitary(context.map);
+      refreshMilitaryTroopMetadata(context.map);
+      refreshMilitaryStatusMetadata(context.map);
       refreshMilitaryEventMetadata(context.map);
     },
     isNoop(context) {
@@ -384,7 +406,8 @@ function normalizeBattleEventInput(event = {}) {
     typeLabel: BATTLE_EVENT_TYPES[type] || event.typeLabel || type,
     outcome,
     outcomeLabel: BATTLE_EVENT_OUTCOMES[outcome] || event.outcomeLabel || outcome,
-    description: String(event.description || event.note || "").trim()
+    description: String(event.description || event.note || "").trim(),
+    applyResult: Boolean(event.applyResult)
   };
 }
 
@@ -436,12 +459,29 @@ function snapshotRegimentBase(regiment) {
   };
 }
 
-function snapshotBattleEvents(map, regiment) {
+function snapshotBattleEvents(map, state, regiment) {
   const military = map?.pack?.military || map?.military || {};
   return {
     militaryEvents: Array.isArray(military.events) ? clonePlain(military.events) : null,
     regimentEvents: Array.isArray(regiment.events) ? clonePlain(regiment.events) : null,
-    metadata: military.metadata ? clonePlain(military.metadata) : null
+    metadata: military.metadata ? clonePlain(military.metadata) : null,
+    regiment: snapshotRegimentBattleResult(regiment),
+    stateMilitaryPolicy: state?.militaryPolicy ? clonePlain(state.militaryPolicy) : null
+  };
+}
+
+function snapshotRegimentBattleResult(regiment) {
+  return {
+    a: regiment.a,
+    u: regiment.u ? clonePlain(regiment.u) : null,
+    status: regiment.status,
+    statusLabel: regiment.statusLabel,
+    order: regiment.order ? clonePlain(regiment.order) : null,
+    dominantUnit: regiment.dominantUnit,
+    dominantUnitLabel: regiment.dominantUnitLabel,
+    icon: regiment.icon,
+    iconVariant: regiment.iconVariant,
+    iconLabel: regiment.iconLabel
   };
 }
 
@@ -484,13 +524,33 @@ function restoreRegimentBase(regiment, snapshot) {
   else regiment.by = snapshot.by;
 }
 
-function restoreBattleEvents(map, regiment, snapshot) {
+function restoreBattleEvents(map, state, regiment, snapshot) {
   const military = ensureMilitaryEventStore(map);
   if (snapshot.militaryEvents) military.events = clonePlain(snapshot.militaryEvents);
   else delete military.events;
   if (snapshot.regimentEvents) regiment.events = clonePlain(snapshot.regimentEvents);
   else delete regiment.events;
   if (snapshot.metadata) military.metadata = clonePlain(snapshot.metadata);
+  if (snapshot.regiment) restoreRegimentBattleResult(regiment, snapshot.regiment);
+  if (state && snapshot.stateMilitaryPolicy) state.militaryPolicy = clonePlain(snapshot.stateMilitaryPolicy);
+}
+
+function restoreRegimentBattleResult(regiment, snapshot) {
+  if (snapshot.a === undefined) delete regiment.a;
+  else regiment.a = snapshot.a;
+  if (snapshot.u) regiment.u = clonePlain(snapshot.u);
+  else delete regiment.u;
+  restoreRegimentStatus(regiment, snapshot);
+  if (snapshot.dominantUnit === undefined) delete regiment.dominantUnit;
+  else regiment.dominantUnit = snapshot.dominantUnit;
+  if (snapshot.dominantUnitLabel === undefined) delete regiment.dominantUnitLabel;
+  else regiment.dominantUnitLabel = snapshot.dominantUnitLabel;
+  if (snapshot.icon === undefined) delete regiment.icon;
+  else regiment.icon = snapshot.icon;
+  if (snapshot.iconVariant === undefined) delete regiment.iconVariant;
+  else regiment.iconVariant = snapshot.iconVariant;
+  if (snapshot.iconLabel === undefined) delete regiment.iconLabel;
+  else regiment.iconLabel = snapshot.iconLabel;
 }
 
 function resolveRegimentDestination(map, destination) {
@@ -542,6 +602,73 @@ function createBattleEvent(map, state, regiment, eventInput) {
   };
 }
 
+function applyBattleResult(map, state, regiment, event, eventInput) {
+  const rule = BATTLE_RESULT_RULES[eventInput.outcome] || BATTLE_RESULT_RULES.draw;
+  const beforeTroops = Math.max(0, Math.round(Number(regiment.a || sumUnitTroops(regiment.u))));
+  const casualties = getBattleCasualties(beforeTroops, rule.lossRate);
+  const afterTroops = Math.max(beforeTroops > 0 ? 1 : 0, beforeTroops - casualties);
+  const beforeUnits = clonePlain(regiment.u || {});
+  const nextUnits = scaleUnitsToTroops(beforeUnits, afterTroops);
+  const unitLosses = getUnitLosses(beforeUnits, nextUnits);
+  const previousStatus = {
+    status: regiment.status,
+    statusLabel: regiment.statusLabel,
+    order: regiment.order ? clonePlain(regiment.order) : null
+  };
+
+  regiment.u = nextUnits;
+  regiment.a = Object.values(nextUnits).reduce((sum, value) => sum + Number(value || 0), 0);
+  regiment.dominantUnit = dominantUnitName(nextUnits);
+  regiment.dominantUnitLabel = unitLabel(regiment.dominantUnit);
+  regiment.status = rule.status;
+  regiment.statusLabel = MILITARY_STATUSES[rule.status]?.label || rule.status;
+  regiment.order = createManualOrder(map, state, regiment, rule.status);
+  applyRegimentIconProfile(regiment);
+  refreshStateGeneratedTroops(state);
+
+  event.resultApplied = true;
+  event.result = {
+    label: rule.label,
+    lossRate: rule.lossRate,
+    troopBefore: beforeTroops,
+    troopAfter: regiment.a,
+    troopDelta: regiment.a - beforeTroops,
+    casualties: beforeTroops - regiment.a,
+    unitLosses,
+    statusBefore: previousStatus.status,
+    statusBeforeLabel: previousStatus.statusLabel,
+    statusAfter: regiment.status,
+    statusAfterLabel: regiment.statusLabel
+  };
+}
+
+function getBattleCasualties(troops, lossRate) {
+  if (troops <= 1 || lossRate <= 0) return 0;
+  return Math.min(troops - 1, Math.max(1, Math.round(troops * lossRate)));
+}
+
+function scaleUnitsToTroops(units = {}, targetTroops) {
+  const entries = Object.entries(units).filter(([, value]) => Number(value || 0) > 0);
+  if (!entries.length || targetTroops <= 0) return {};
+  const total = entries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+  const scale = targetTroops / Math.max(1, total);
+  const result = {};
+  for (const [unit, value] of entries) result[unit] = Math.max(0, Math.round(Number(value || 0) * scale));
+  const current = Object.values(result).reduce((sum, value) => sum + value, 0);
+  const delta = targetTroops - current;
+  if (delta !== 0) {
+    const dominant = dominantUnitName(units);
+    result[dominant] = Math.max(0, Number(result[dominant] || 0) + delta);
+  }
+  return result;
+}
+
+function getUnitLosses(before = {}, after = {}) {
+  return Object.fromEntries(Object.keys({...before, ...after})
+    .map(unit => [unit, Math.max(0, Number(before[unit] || 0) - Number(after[unit] || 0))])
+    .filter(([, value]) => value > 0));
+}
+
 function ensureMilitaryEventStore(map) {
   if (!map.military || typeof map.military !== "object") map.military = {};
   const military = map?.pack?.military && typeof map.pack.military === "object" ? map.pack.military : map.military;
@@ -587,10 +714,46 @@ function refreshMilitaryStatusMetadata(map) {
   }, {});
 }
 
+function refreshMilitaryTroopMetadata(map) {
+  const military = map?.pack?.military || map?.military;
+  if (!military?.metadata) return;
+  const states = map?.pack?.states || map?.politics?.states || [];
+  const regiments = states.flatMap(state => state?.military || []);
+  military.metadata.regiments = regiments.length;
+  military.metadata.troops = roundValue(regiments.reduce((sum, regiment) => sum + Number(regiment.a || 0), 0), 0);
+  military.metadata.navalRegiments = regiments.filter(regiment => regiment.n).length;
+  for (const state of states) refreshStateGeneratedTroops(state);
+}
+
+function refreshStateGeneratedTroops(state) {
+  if (!state?.militaryPolicy) return;
+  state.militaryPolicy.generatedTroops = roundValue((state.military || []).reduce((sum, regiment) => sum + Number(regiment.a || 0), 0), 0);
+}
+
 function refreshMilitaryEventMetadata(map) {
   const military = map?.pack?.military || map?.military;
   if (!military?.metadata) return;
   military.metadata.events = Array.isArray(military.events) ? military.events.length : 0;
+}
+
+function sumUnitTroops(units = {}) {
+  return Object.values(units).reduce((sum, value) => sum + Number(value || 0), 0);
+}
+
+function dominantUnitName(units = {}) {
+  let best = "infantry";
+  let bestValue = -1;
+  for (const [unit, value] of Object.entries(units || {})) {
+    if (Number(value || 0) > bestValue) {
+      best = unit;
+      bestValue = Number(value || 0);
+    }
+  }
+  return best;
+}
+
+function unitLabel(unitName) {
+  return MILITARY_UNITS.find(unit => unit.name === unitName)?.label || unitName || "未知";
 }
 
 function ratiosEqual(a, b) {

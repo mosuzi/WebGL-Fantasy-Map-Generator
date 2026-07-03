@@ -5129,6 +5129,31 @@ input.ui-switch-native {
   line-height: 1.45;
 }
 
+.military-event-result {
+  color: #f0ce7c;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.military-result-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: rgba(7, 12, 15, 0.32);
+  color: #d8e5e8;
+  font-size: 12px;
+}
+
+.military-result-preview {
+  margin: -4px 0 0;
+  color: #f0ce7c;
+  font-size: 11px;
+}
+
 .military-ratio-panel {
   display: grid;
   gap: 8px;

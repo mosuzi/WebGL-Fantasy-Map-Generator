@@ -15570,3 +15570,31 @@ full 矩阵结果：
 - Playwright + 系统 Chrome 构建产物烟测通过：给军团 `1:0` 记录 `攻城 / 小胜：攻破边堡，缴获粮草` 后，事件列表显示 `1` 条，标题显示 `1 条`，`map.military.events = 1`、`metadata.events = 1`。
 - 同次烟测中“导出事件”下载 `fmg-military-events-stage-2-1.json`，导出 `count = 1`，首条事件与面板记录一致；`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1409.7ms`，纯生成 `712.9ms`，WebGL 加载 `372.9ms`，UI slack `323.9ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 132ms`，最慢加载阶段为 `构建视觉 cell mesh 56.1ms`，`line-vertices = 47.1ms`，`fit-draw = 2.6ms`，`glError = 0`。
+
+### 军团轻量战斗结果应用
+
+背景：
+
+- 战斗事件已经可记录、查看和导出，但还不能对军团状态产生可撤销影响。
+- 本轮只做单军团轻量结果应用，不做完整战斗模拟、双方交互、士气阶段或外交战争状态变更。
+
+修正：
+
+- `createRecordMilitaryBattleEventCommand()` 支持 `applyResult`。
+- 关闭“应用轻量结果”时仍只记录事件，刷新范围保持 `object-panels`。
+- 开启后按固定结果规则应用轻量损耗：小胜 `4%` 修整、受挫 `18%` 败逃、相持 `8%` 修整、损耗 `25%` 败逃、重整 `2%` 集结。
+- 应用会同步缩放 `regiment.u`、更新 `regiment.a`、主兵种标签、图标档位、态势、命令、`map.military.metadata.troops/statuses/events` 和 `state.militaryPolicy.generatedTroops`。
+- 事件写入 `resultApplied` 和 `result` 摘要，便于列表展示和后续导出回归。
+- 军事面板新增“应用轻量结果”开关、结果预览和事件列表中的应用摘要。
+- 运行日志记录 `apply=yes/no`，方便排查事件记录是否改变了实际军团状态。
+
+文档：
+
+- 更新 `docs/current-plan.md` 顶部摘要和第 238 项。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仍只有既有大 chunk 提示。`MilitaryPanel` 懒加载 chunk 约 `22.17KB / gzip 7.37KB`，主入口约 `760.65KB / gzip 229.67KB`。
+- 命令烟测通过：给军团 `1:0` 记录 `袭扰 / 损耗：后卫被伏击，辎重受损` 并应用结果后，兵力 `16250 -> 12187`，态势 `garrisoned -> routed`，`metadata.troops 613002 -> 608939`，`metadata.events 0 -> 1`，事件写入 `resultApplied = true` 和 `casualties = 4063`。
+- 同次烟测中撤销恢复兵力、态势、事件和 metadata，重做再次应用同一结果；刷新范围为 `point-layers / object-index / object-panels`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过：点击到出图 `1332.3ms`，纯生成 `658.8ms`，WebGL 加载 `363ms`，UI slack `310.5ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 121.6ms`，最慢加载阶段为 `构建视觉 cell mesh 52.8ms`，`line-vertices = 49.6ms`，`fit-draw = 2.6ms`，`glError = 0`。

@@ -773,7 +773,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
         markDerivedFresh(state.map, ["military"]);
         refreshGenerationSummary(state.map);
-        appendGenerationLog(state.map, `record military battle event: regiment=${target.id}, type=${event.type}, outcome=${event.outcome}`);
+        appendGenerationLog(state.map, `record military battle event: regiment=${target.id}, type=${event.type}, outcome=${event.outcome}, apply=${event.applyResult ? "yes" : "no"}`);
       }
       updateMilitaryPanel(state);
       updateStatePanel(state);

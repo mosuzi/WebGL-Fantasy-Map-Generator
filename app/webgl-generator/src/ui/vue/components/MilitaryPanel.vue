@@ -86,6 +86,7 @@
           <span>{{ formatEventDate(event.at) }}</span>
         </div>
         <p>{{ event.description || "无说明" }}</p>
+        <small v-if="event.resultApplied" class="military-event-result">{{ battleResultSummary(event) }}</small>
       </li>
     </ol>
   </section>
@@ -180,10 +181,18 @@
           :disabled="!selected"
           @update:model-value="value => battleEventDraft.outcome = value"
         />
+        <UiSwitchField
+          label="应用轻量结果"
+          input-id="military-battle-apply-result"
+          field-class="military-result-switch"
+          :checked="battleEventDraft.applyResult"
+          @change="value => battleEventDraft.applyResult = value"
+        />
+        <p v-if="battleEventDraft.applyResult" class="military-result-preview">{{ battleResultPreview }}</p>
         <UiNoteField
           class-name="military-battle-event-note"
           label="说明"
-          action-label="记录事件"
+          :action-label="battleEventDraft.applyResult ? '记录并应用' : '记录事件'"
           :model-value="battleEventDraft.description"
           :rows="3"
           :max-length="180"
@@ -241,6 +250,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
+import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
@@ -289,7 +299,8 @@ const stationDestinationDraft = ref("capital");
 const battleEventDraft = reactive({
   type: "skirmish",
   outcome: "victory",
-  description: ""
+  description: "",
+  applyResult: false
 });
 
 const battleEventTypeOptions = Object.freeze([
@@ -307,6 +318,13 @@ const battleEventOutcomeOptions = Object.freeze([
   {value: "loss", label: "损耗"},
   {value: "regroup", label: "重整"}
 ]);
+const battleResultRules = Object.freeze({
+  victory: {lossRate: 0.04, statusLabel: "修整中"},
+  defeat: {lossRate: 0.18, statusLabel: "败逃中"},
+  draw: {lossRate: 0.08, statusLabel: "修整中"},
+  loss: {lossRate: 0.25, statusLabel: "败逃中"},
+  regroup: {lossRate: 0.02, statusLabel: "集结中"}
+});
 
 const metrics = computed(() => {
   props.state.version;
@@ -333,6 +351,10 @@ const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
 const selectedBattleEventTotal = computed(() => countEventsForRegiment(allBattleEvents.value, selected.value));
 const selectedBattleEvents = computed(() => latestEventsForRegiment(allBattleEvents.value, selected.value, 5));
+const battleResultPreview = computed(() => {
+  const rule = battleResultRules[battleEventDraft.outcome] || battleResultRules.draw;
+  return `兵力约 -${Math.round(rule.lossRate * 100)}%，态势改为${rule.statusLabel}`;
+});
 const selectedState = computed(() => selected.value ? metrics.value.states.find(state => state.id === selected.value.stateId) : metrics.value.states.find(state => state.id === Number(props.state.selectedStateId)) || null);
 const ratioTotalLabel = computed(() => `${Math.round(Object.values(ratioDraft).reduce((sum, value) => sum + Number(value || 0), 0))}%`);
 const ratioBreakdown = computed(() => unitDefinitions.map(unit => {
@@ -564,7 +586,8 @@ function applyBattleEvent(description) {
   props.callbacks.onBattleEventApply?.(militaryTarget(selected.value), {
     type: battleEventDraft.type,
     outcome: battleEventDraft.outcome,
-    description
+    description,
+    applyResult: battleEventDraft.applyResult
   });
   battleEventDraft.description = "";
   activeAction.value = null;
@@ -715,6 +738,15 @@ function formatEventDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString("zh-CN", {month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit"});
+}
+
+function battleResultSummary(event) {
+  const result = event?.result || {};
+  const before = formatNumber(result.troopBefore || 0);
+  const after = formatNumber(result.troopAfter || 0);
+  const casualties = formatNumber(result.casualties || Math.abs(result.troopDelta || 0));
+  const status = result.statusAfterLabel || result.statusAfter || "未知态势";
+  return `已应用：${before} -> ${after}，损耗 ${casualties}，${status}`;
 }
 
 function nearestPackCell(map, x, y) {

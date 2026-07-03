@@ -763,7 +763,7 @@ function scaleRegimentsToPolicy(regiments, policy) {
   return regiments.filter(regiment => regiment.a > 0);
 }
 
-function applyRegimentIconProfile(regiment) {
+export function applyRegimentIconProfile(regiment) {
   const profile = getRegimentIconProfile(regiment);
   regiment.icon = profile.icon;
   regiment.iconVariant = profile.variant;
