@@ -2908,6 +2908,95 @@ select:disabled {
   height: 16px;
 }
 
+.heightmap-palette-section {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 7px;
+  padding: 9px;
+  background: rgba(8, 13, 16, 0.68);
+}
+
+.heightmap-palette-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.heightmap-palette-header strong {
+  color: #edf4f6;
+}
+
+.heightmap-palette-header span,
+.heightmap-palette-empty {
+  color: #8fa1aa;
+}
+
+.heightmap-palette-empty {
+  margin: 0;
+  font-size: 12px;
+}
+
+.heightmap-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 6px;
+  max-height: 172px;
+  overflow: auto;
+}
+
+.heightmap-palette-swatch {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 2px 6px;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 6px;
+  padding: 5px;
+  background: rgba(17, 27, 32, 0.92);
+  color: #edf4f6;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.heightmap-palette-swatch:hover,
+.heightmap-palette-swatch.active {
+  border-color: rgba(255, 207, 126, 0.72);
+  background: rgba(38, 34, 24, 0.96);
+}
+
+.heightmap-palette-swatch i {
+  grid-row: 1 / span 2;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.heightmap-palette-swatch span,
+.heightmap-palette-swatch small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heightmap-palette-swatch span {
+  font-size: 11px;
+}
+
+.heightmap-palette-swatch small {
+  color: #9fb0ba;
+  font-size: 10px;
+}
+
 .heightmap-import-action {
   display: inline-flex;
   align-items: center;
@@ -2918,9 +3007,15 @@ select:disabled {
 }
 
 .heightmap-workbench-actions {
+  position: sticky;
+  bottom: -12px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.7fr);
   gap: 8px;
+  margin: 0 -12px -12px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid rgba(189, 206, 213, 0.12);
+  background: rgba(13, 19, 23, 0.98);
 }
 
 .heightmap-workbench-actions .el-button {

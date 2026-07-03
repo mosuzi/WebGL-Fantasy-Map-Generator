@@ -89,7 +89,37 @@
             :options="heightmapFitOptions"
             @update:model-value="heightmapImportFit = $event"
           />
+          <UiSelectField
+            label="色板上限"
+            class-name="heightmap-import-select"
+            :model-value="heightmapColorLimit"
+            :options="heightmapColorLimitOptions"
+            @update:model-value="setHeightmapColorLimit"
+          />
         </div>
+
+        <section class="heightmap-palette-section" aria-label="量化色板">
+          <header class="heightmap-palette-header">
+            <strong>量化色板</strong>
+            <span>{{ paletteSummary }}</span>
+          </header>
+          <div v-if="previewPalette.length" class="heightmap-palette-grid">
+            <button
+              v-for="entry in previewPalette"
+              :key="entry.key"
+              type="button"
+              class="heightmap-palette-swatch"
+              :class="{active: selectedPaletteKey === entry.key}"
+              :title="`${entry.hex} / ${entry.pixels} px / 预估高度 ${entry.height}`"
+              @click="selectPaletteEntry(entry.key)"
+            >
+              <i :style="{backgroundColor: entry.hex}"></i>
+              <span>{{ entry.hex }}</span>
+              <small>{{ entry.percent }} / h {{ entry.height }}</small>
+            </button>
+          </div>
+          <p v-else class="heightmap-palette-empty">选择图片后生成采样色板。</p>
+        </section>
 
         <div class="heightmap-workbench-actions">
           <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerHeightmapFileInput">选择图片</UiButton>
@@ -139,17 +169,26 @@ const heightmapFitOptions = Object.freeze([
   {value: "stretch", label: "拉伸铺满"},
   {value: "crop", label: "保持比例裁剪"}
 ]);
+const heightmapColorLimitOptions = Object.freeze([
+  {value: 16, label: "16 色"},
+  {value: 32, label: "32 色"},
+  {value: 64, label: "64 色"},
+  {value: 128, label: "128 色"}
+]);
 const unitPreferences = useUnitPreferences();
 const heightmapImportMin = ref(0);
 const heightmapImportMax = ref(100);
 const heightmapImportInvert = ref(false);
 const heightmapImportFit = ref("stretch");
+const heightmapColorLimit = ref(32);
 const workbenchOpen = ref(false);
 const fileInput = ref(null);
 const previewCanvas = ref(null);
 const previewImage = ref(null);
 const selectedFile = ref(null);
 const previewStats = ref(null);
+const previewPalette = ref([]);
+const selectedPaletteKey = ref(null);
 const previewStatus = ref("尚未选择图片");
 const workbenchPosition = ref({left: 760, top: 110});
 let dragState = null;
@@ -164,18 +203,26 @@ const summaryMetrics = computed(() => [
 const targetSizeLabel = computed(() => `${Number(props.state.graphWidth) || 1440} x ${Number(props.state.graphHeight) || 960}`);
 const workbenchStyle = computed(() => ({
   left: `${workbenchPosition.value.left}px`,
-  top: `${workbenchPosition.value.top}px`
+  top: `${workbenchPosition.value.top}px`,
+  maxHeight: `calc(100vh - ${workbenchPosition.value.top + 8}px)`
 }));
 const previewMetrics = computed(() => [
   {label: "图片", value: previewStats.value?.filename || "未选择"},
   {label: "图片尺寸", value: previewStats.value ? `${previewStats.value.imageWidth} x ${previewStats.value.imageHeight}` : "-"},
   {label: "目标图幅", value: targetSizeLabel.value},
   {label: "亮度范围", value: previewStats.value ? `${previewStats.value.brightnessMin} - ${previewStats.value.brightnessMax}` : "-"},
+  {label: "色板", value: previewStats.value ? `${previewStats.value.paletteColors} / ${previewStats.value.paletteBuckets}` : "-"},
   {label: "高度映射", value: `${heightmapImportMin.value} - ${heightmapImportMax.value}`},
   {label: "适应方式", value: heightmapImportFit.value === "crop" ? "保持比例裁剪" : "拉伸铺满"}
 ]);
+const paletteSummary = computed(() => {
+  if (!previewPalette.value.length) return "未生成";
+  const selected = previewPalette.value.find(entry => entry.key === selectedPaletteKey.value);
+  if (selected) return `${previewPalette.value.length} 色，已高亮 ${selected.hex}`;
+  return `${previewPalette.value.length} 色，点击色块高亮区域`;
+});
 
-watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit], () => {
+watch([heightmapImportMin, heightmapImportMax, heightmapImportInvert, heightmapImportFit, heightmapColorLimit], () => {
   drawPreview();
 });
 
@@ -212,6 +259,11 @@ function setHeightmapImportMax(value) {
   heightmapImportMax.value = Math.max(Number(value) || 100, heightmapImportMin.value + 1);
 }
 
+function setHeightmapColorLimit(value) {
+  const next = Number(value);
+  heightmapColorLimit.value = [16, 32, 64, 128].includes(next) ? next : 32;
+}
+
 function openImportWorkbench() {
   workbenchOpen.value = true;
   nextTick(() => drawPreview());
@@ -236,6 +288,7 @@ async function onHeightmapFileChange(event) {
     previewStatus.value = "正在读取图片...";
     selectedFile.value = file;
     previewImage.value = await loadPreviewImage(file);
+    selectedPaletteKey.value = null;
     await nextTick();
     drawPreview();
     previewStatus.value = "预览已更新，点击应用后才会重建地图。";
@@ -243,6 +296,8 @@ async function onHeightmapFileChange(event) {
     selectedFile.value = null;
     previewImage.value = null;
     previewStats.value = null;
+    previewPalette.value = [];
+    selectedPaletteKey.value = null;
     clearPreviewCanvas();
     previewStatus.value = `图片预览失败：${error instanceof Error ? error.message : String(error)}`;
   }
@@ -274,19 +329,28 @@ function drawPreview() {
   drawImageToCanvas(context, image, size.width, size.height, heightmapImportFit.value);
   const imageData = context.getImageData(0, 0, size.width, size.height);
   const brightness = readBrightnessStats(imageData.data, heightmapImportInvert.value);
+  const palette = quantizePalette(imageData.data, heightmapColorLimit.value, brightness);
+  previewPalette.value = palette.entries;
+  if (!previewPalette.value.some(entry => entry.key === selectedPaletteKey.value)) selectedPaletteKey.value = null;
+  if (selectedPaletteKey.value !== null) {
+    applyPaletteHighlight(imageData.data, selectedPaletteKey.value);
+    context.putImageData(imageData, 0, 0);
+  }
   previewStats.value = {
     filename: selectedFile.value?.name || "本地图片",
     imageWidth: image.naturalWidth || image.width || 0,
     imageHeight: image.naturalHeight || image.height || 0,
     brightnessMin: Math.round(brightness.min),
-    brightnessMax: Math.round(brightness.max)
+    brightnessMax: Math.round(brightness.max),
+    paletteColors: palette.entries.length,
+    paletteBuckets: palette.bucketCount
   };
 }
 
 function clearPreviewCanvas() {
   const canvas = previewCanvas.value;
   if (!canvas) return;
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext("2d", {willReadFrequently: true});
   context?.clearRect(0, 0, canvas.width, canvas.height);
 }
 
@@ -339,6 +403,91 @@ function readBrightnessStats(data, invert) {
   }
   if (!Number.isFinite(min) || !Number.isFinite(max)) return {min: 0, max: 255};
   return {min, max};
+}
+
+function quantizePalette(data, limit, brightnessStats) {
+  const buckets = new Map();
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const color = compositedRgb(data, offset);
+    const key = colorBucketKey(color.red, color.green, color.blue);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = {key, pixels: 0, red: 0, green: 0, blue: 0, brightness: 0};
+      buckets.set(key, bucket);
+    }
+    const brightness = heightmapImportInvert.value ? 255 - color.brightness : color.brightness;
+    bucket.pixels += 1;
+    bucket.red += color.red;
+    bucket.green += color.green;
+    bucket.blue += color.blue;
+    bucket.brightness += brightness;
+  }
+
+  const totalPixels = Math.max(1, data.length / 4);
+  const range = Math.max(1e-6, brightnessStats.max - brightnessStats.min);
+  const maxEntries = clamp(Number(limit) || 32, 1, 128);
+  const entries = Array.from(buckets.values())
+    .sort((a, b) => b.pixels - a.pixels)
+    .slice(0, maxEntries)
+    .map(bucket => {
+      const brightness = bucket.brightness / bucket.pixels;
+      const normalized = clamp((brightness - brightnessStats.min) / range, 0, 1);
+      const height = Math.round(heightmapImportMin.value + normalized * (heightmapImportMax.value - heightmapImportMin.value));
+      return {
+        key: bucket.key,
+        pixels: bucket.pixels,
+        percent: `${((bucket.pixels / totalPixels) * 100).toFixed(bucket.pixels / totalPixels > 0.1 ? 0 : 1)}%`,
+        hex: rgbToHex(bucket.red / bucket.pixels, bucket.green / bucket.pixels, bucket.blue / bucket.pixels),
+        height
+      };
+    });
+  return {entries, bucketCount: buckets.size};
+}
+
+function selectPaletteEntry(key) {
+  selectedPaletteKey.value = selectedPaletteKey.value === key ? null : key;
+  drawPreview();
+}
+
+function applyPaletteHighlight(data, selectedKey) {
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const color = compositedRgb(data, offset);
+    const matched = colorBucketKey(color.red, color.green, color.blue) === selectedKey;
+    if (matched) {
+      data[offset] = clamp(data[offset] * 1.08 + 18, 0, 255);
+      data[offset + 1] = clamp(data[offset + 1] * 1.08 + 18, 0, 255);
+      data[offset + 2] = clamp(data[offset + 2] * 1.08 + 18, 0, 255);
+    } else {
+      data[offset] = data[offset] * 0.34 + 5;
+      data[offset + 1] = data[offset + 1] * 0.34 + 9;
+      data[offset + 2] = data[offset + 2] * 0.34 + 11;
+    }
+  }
+}
+
+function compositedRgb(data, offset) {
+  const alpha = data[offset + 3] / 255;
+  const red = Math.round(data[offset] * alpha + 255 * (1 - alpha));
+  const green = Math.round(data[offset + 1] * alpha + 255 * (1 - alpha));
+  const blue = Math.round(data[offset + 2] * alpha + 255 * (1 - alpha));
+  return {
+    red,
+    green,
+    blue,
+    brightness: red * 0.2126 + green * 0.7152 + blue * 0.0722
+  };
+}
+
+function colorBucketKey(red, green, blue) {
+  return ((red >> 3) << 10) | ((green >> 3) << 5) | (blue >> 3);
+}
+
+function rgbToHex(red, green, blue) {
+  return `#${hexByte(red)}${hexByte(green)}${hexByte(blue)}`;
+}
+
+function hexByte(value) {
+  return clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0");
 }
 
 function loadPreviewImage(file) {
