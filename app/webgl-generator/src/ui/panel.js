@@ -80,6 +80,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   bindClimateControls(documentRef, handlers.onClimateControls);
   documentRef.getElementById("open-height-panel")?.addEventListener("click", handlers.onOpenHeightPanel);
   documentRef.getElementById("open-state-panel")?.addEventListener("click", handlers.onOpenStatePanel);
+  documentRef.getElementById("open-government-panel")?.addEventListener("click", handlers.onOpenGovernmentPanel);
   documentRef.getElementById("open-province-panel")?.addEventListener("click", handlers.onOpenProvincePanel);
   documentRef.getElementById("open-city-panel")?.addEventListener("click", handlers.onOpenCityPanel);
   documentRef.getElementById("open-culture-panel")?.addEventListener("click", handlers.onOpenCulturePanel);
@@ -176,6 +177,7 @@ function editLockControls(documentRef) {
     "#fit-view",
     "#open-height-panel",
     "#open-state-panel",
+    "#open-government-panel",
     "#open-province-panel",
     "#open-city-panel",
     "#open-culture-panel",

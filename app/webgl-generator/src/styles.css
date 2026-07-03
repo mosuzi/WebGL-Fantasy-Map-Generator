@@ -4634,7 +4634,8 @@ input.ui-switch-native {
 }
 
 .culture-panel-summary,
-.religion-panel-summary {
+.religion-panel-summary,
+.government-panel-summary {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
@@ -4650,6 +4651,7 @@ input.ui-switch-native {
 
 .culture-panel-summary div,
 .religion-panel-summary div,
+.government-panel-summary div,
 .diplomacy-panel-summary div {
   display: grid;
   gap: 3px;
@@ -4657,6 +4659,7 @@ input.ui-switch-native {
 
 .culture-panel-summary span,
 .religion-panel-summary span,
+.government-panel-summary span,
 .diplomacy-panel-summary span {
   color: #80919c;
   font-size: 11px;
@@ -4664,10 +4667,73 @@ input.ui-switch-native {
 
 .culture-panel-summary strong,
 .religion-panel-summary strong,
+.government-panel-summary strong,
 .diplomacy-panel-summary strong {
   color: #edf4f6;
   font-size: 13px;
   overflow-wrap: anywhere;
+}
+
+.government-panel-controls {
+  margin-bottom: 8px;
+}
+
+.government-panel-controls input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #10171b;
+  color: #edf4f6;
+}
+
+.government-panel-sort {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.government-panel-sort .el-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  margin-left: 0;
+  padding-inline: 6px;
+}
+
+.government-panel-details {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 7px;
+  background: rgba(8, 12, 15, 0.34);
+}
+
+.government-panel-details div {
+  display: grid;
+  gap: 3px;
+}
+
+.government-panel-details span {
+  color: #80919c;
+  font-size: 11px;
+}
+
+.government-panel-details strong {
+  color: #edf4f6;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.government-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 .inheritance-tree-launcher,

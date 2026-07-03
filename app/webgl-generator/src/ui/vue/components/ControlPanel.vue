@@ -489,6 +489,7 @@ const actions = Object.freeze([
   {id: "fit-view", label: "适配视图"},
   {id: "open-height-panel", label: "高度编辑"},
   {id: "open-state-panel", label: "国家编辑"},
+  {id: "open-government-panel", label: "政体管理"},
   {id: "open-province-panel", label: "省份管理"},
   {id: "open-city-panel", label: "城市管理"},
   {id: "open-culture-panel", label: "文化管理"},

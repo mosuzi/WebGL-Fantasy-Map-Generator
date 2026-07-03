@@ -16,6 +16,7 @@ import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
 import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
 import {createGenerationPanel} from "../ui/panels/generation-panel.js";
+import {createGovernmentPanel} from "../ui/panels/government-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
 import {createMarkerPanel} from "../ui/panels/marker-panel.js";
@@ -165,6 +166,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
   let heightPanel = null;
   let statePanel = null;
+  let governmentPanel = null;
   let provincePanel = null;
   let cityPanel = null;
   let culturePanel = null;
@@ -302,6 +304,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         refreshAfterStateEdit(state, state.editHistory.execute(command, context));
       }
       updateStatePanel(state);
+      updateGovernmentPanel(state);
       updateDiplomacyPanel(state);
       updateMilitaryPanel(state);
       updateRuntimePanel(documentRef, state);
@@ -342,6 +345,22 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.state = statePanel;
+  governmentPanel = createGovernmentPanel(documentRef, panelManager, {
+    onSelectState: object => {
+      selectionStore.setSelection({object});
+      setStatePanelTarget(state, object.id);
+    },
+    onLocateState: object => {
+      locateObject(state, object, documentRef);
+      setStatePanelTarget(state, object.id);
+    },
+    onOpenState: object => {
+      selectionStore.setSelection({object});
+      setStatePanelTarget(state, object.id);
+      state.panels.state.open(state.map, state.editHistory.getStats());
+    }
+  });
+  state.panels.government = governmentPanel;
   provincePanel = createProvincePanel(documentRef, panelManager, {
     onActiveChange: active => {
       if (active) {
@@ -1236,6 +1255,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       state.panels.state.open(state.map, state.editHistory.getStats());
     },
+    onOpenGovernmentPanel: () => {
+      if (state.selection?.object?.kind === OBJECT_KIND.STATE) {
+        state.panels.government.setSelectedStateId(state.selection.object.id);
+      }
+      state.panels.government.open(state.map, state.selection, state.editHistory.getStats());
+    },
     onOpenProvincePanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.PROVINCE) {
         state.panels.province.setSelectedProvinceId(state.selection.object.id);
@@ -1586,6 +1611,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.selectionStore.clear();
   updateHeightPanel(state);
   updateStatePanel(state);
+  updateGovernmentPanel(state);
   updateProvincePanel(state);
   updateCityPanel(state);
   updateCulturePanel(state);
@@ -2209,6 +2235,7 @@ function applyClimateControls(state, documentRef) {
   updateReligionPanel(state);
   updateCityPanel(state);
   updateStatePanel(state);
+  updateGovernmentPanel(state);
   updateProvincePanel(state);
 }
 
@@ -2303,6 +2330,7 @@ function refreshAfterEdit(state, commandOrEffects) {
 function refreshAfterStateEdit(state, commandOrEffects) {
   updateStatePickAtLastPointer(state);
   refreshAfterEdit(state, commandOrEffects);
+  updateGovernmentPanel(state);
   updateProvincePanel(state);
   updateCityPanel(state);
 }
@@ -3502,6 +3530,10 @@ function updateStatePanel(state) {
     sourceStateId: state.stateEdit.sourceStateId,
     history: state.editHistory.getStats()
   });
+}
+
+function updateGovernmentPanel(state) {
+  state.panels.government?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateProvincePanel(state) {
