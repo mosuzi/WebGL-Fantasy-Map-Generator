@@ -140,6 +140,7 @@ export function buildEconomy(pack, options = {}) {
   pack.cells.market = assignMarketsToCells(pack, pack.markets);
   const resourceTrade = applyResourceSupplyToMarkets(pack, pack.markets);
   assignMarketsToBurgs(pack, aliveBurgs, pack.markets);
+  const demand = applyMarketDemandDiagnostics(pack, pack.markets, goods);
   initializeTaxRates(states, random);
   const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
   pack.deals = deals;
@@ -163,6 +164,7 @@ export function buildEconomy(pack, options = {}) {
       resourceDeals: deals.filter(deal => deal.source === "market-resource" || deal.source === "marker-resource").length,
       markerResourceDeals: deals.filter(deal => deal.source === "marker-resource").length
     },
+    demand,
     tradeDistance: summarizeTradeDistance(deals),
     statesWithTaxes: states.filter(state => Number.isFinite(state.salesTax) && Number.isFinite(state.pollTax)).length,
     markerEconomy
@@ -623,6 +625,113 @@ function applyResourceSupplyToMarkets(pack, markets) {
 
   metadata.suppliedMarkets = suppliedMarkets.size;
   return metadata;
+}
+
+function applyMarketDemandDiagnostics(pack, markets, goods) {
+  const validMarkets = markets.filter(Boolean);
+  const goodsList = goods.filter(Boolean);
+  const marketDemandBase = new Map(validMarkets.map(market => [market.i, {rural: 0, urban: 0, burgs: 0}]));
+  const goodSummary = new Map(goodsList.map(good => [good.i, {
+    good: good.i,
+    name: good.name || `good-${good.i}`,
+    demand: 0,
+    supply: 0,
+    shortage: 0,
+    surplus: 0
+  }]));
+  const metadata = {
+    totalDemand: 0,
+    totalSupply: 0,
+    shortage: 0,
+    surplus: 0,
+    shortageGoods: 0,
+    shortageMarkets: 0,
+    topShortages: []
+  };
+
+  for (const cell of pack.cells?.i || []) {
+    const marketId = pack.cells.market?.[cell] || 0;
+    const item = marketDemandBase.get(marketId);
+    if (!item || (pack.cells.h?.[cell] || 0) < 20) continue;
+    item.rural += Number(pack.cells.pop?.[cell] || 0);
+  }
+
+  for (const burg of pack.burgs || []) {
+    if (!burg?.i || burg.removed || !burg.market) continue;
+    const item = marketDemandBase.get(burg.market);
+    if (!item) continue;
+    item.urban += Number(burg.population || 0);
+    item.burgs++;
+  }
+
+  for (const market of validMarkets) {
+    const base = marketDemandBase.get(market.i) || {rural: 0, urban: 0, burgs: 0};
+    let marketDemand = 0;
+    let marketSupply = 0;
+    let marketShortage = 0;
+    let marketSurplus = 0;
+
+    for (const good of goodsList) {
+      const record = market.goods?.[good.i];
+      if (!record) continue;
+      const demand = marketGoodDemand(good, base);
+      const supply = round(Number(record.stock || 0) + Number(market.resourceSupply?.[good.i] || 0), 2);
+      const gap = round(supply - demand, 2);
+      const shortage = round(Math.max(0, -gap), 2);
+      const surplus = round(Math.max(0, gap), 2);
+
+      record.demand = demand;
+      record.supply = supply;
+      record.gap = gap;
+      record.shortage = shortage;
+      record.surplus = surplus;
+
+      marketDemand = round(marketDemand + demand, 2);
+      marketSupply = round(marketSupply + supply, 2);
+      marketShortage = round(marketShortage + shortage, 2);
+      marketSurplus = round(marketSurplus + surplus, 2);
+
+      const summary = goodSummary.get(good.i);
+      if (summary) {
+        summary.demand = round(summary.demand + demand, 2);
+        summary.supply = round(summary.supply + supply, 2);
+        summary.shortage = round(summary.shortage + shortage, 2);
+        summary.surplus = round(summary.surplus + surplus, 2);
+      }
+    }
+
+    market.demandSummary = {
+      demand: marketDemand,
+      supply: marketSupply,
+      gap: round(marketSupply - marketDemand, 2),
+      shortage: marketShortage,
+      surplus: marketSurplus
+    };
+
+    metadata.totalDemand = round(metadata.totalDemand + marketDemand, 2);
+    metadata.totalSupply = round(metadata.totalSupply + marketSupply, 2);
+    metadata.shortage = round(metadata.shortage + marketShortage, 2);
+    metadata.surplus = round(metadata.surplus + marketSurplus, 2);
+    if (marketShortage > 0) metadata.shortageMarkets++;
+  }
+
+  metadata.shortageGoods = [...goodSummary.values()].filter(item => item.shortage > 0).length;
+  metadata.topShortages = [...goodSummary.values()]
+    .filter(item => item.shortage > 0)
+    .sort((a, b) => b.shortage - a.shortage || a.good - b.good)
+    .slice(0, 8)
+    .map(item => ({good: item.good, name: item.name, shortage: round(item.shortage, 2)}));
+  metadata.balance = round(metadata.totalSupply - metadata.totalDemand, 2);
+  return metadata;
+}
+
+function marketGoodDemand(good, base) {
+  const coverage = good.demandCoverage || {};
+  const urbanCoverage = Number(coverage.urban ?? 0.36);
+  const ruralCoverage = Number(coverage.rural ?? 0.28);
+  const consumerBase = Math.sqrt(Math.max(0, base.rural)) * 1.15 + Number(base.urban || 0) * 2.4 + Number(base.burgs || 0) * 0.18 + 0.35;
+  const typeFactor = good.distribution && !good.recipes?.length ? 1.08 : good.recipes?.length ? 0.82 : 1;
+  return round(Math.max(0.05, consumerBase * (0.25 + urbanCoverage * 0.58 + ruralCoverage * 0.34) * typeFactor), 2);
 }
 
 function nearestMarketId(point, markets) {

@@ -100,6 +100,7 @@ const tabOptions = Object.freeze([
 ]);
 
 const goodSortOptions = Object.freeze([
+  {key: "shortage", label: "缺口"},
   {key: "stock", label: "库存"},
   {key: "tradeValue", label: "交易额"},
   {key: "deals", label: "交易"},
@@ -107,6 +108,7 @@ const goodSortOptions = Object.freeze([
   {key: "name", label: "名称"}
 ]);
 const marketSortOptions = Object.freeze([
+  {key: "shortage", label: "缺口"},
   {key: "tradeValue", label: "交易额"},
   {key: "stock", label: "库存"},
   {key: "cells", label: "覆盖"},
@@ -128,6 +130,7 @@ const goodColumns = Object.freeze([
   {key: "typeLabel", label: "类型"},
   {key: "value", label: "基价", align: "right", format: value => formatNumber(value)},
   {key: "stock", label: "库存", align: "right", format: value => formatNumber(value)},
+  {key: "shortage", label: "缺口", align: "right", format: value => formatNumber(value)},
   {key: "deals", label: "交易", align: "right", format: value => formatNumber(value)},
   {key: "tradeValue", label: "交易额", align: "right", format: value => formatNumber(value)}
 ]);
@@ -138,6 +141,7 @@ const marketColumns = Object.freeze([
   {key: "cityName", label: "中心"},
   {key: "cells", label: "覆盖", align: "right", format: value => formatNumber(value)},
   {key: "stock", label: "库存", align: "right", format: value => formatNumber(value)},
+  {key: "shortage", label: "缺口", align: "right", format: value => formatNumber(value)},
   {key: "tradeValue", label: "交易额", align: "right", format: value => formatNumber(value)}
 ]);
 const dealColumns = Object.freeze([
@@ -193,6 +197,7 @@ const summaryMetrics = computed(() => [
   {label: "交易", value: formatNumber(metrics.value.summary.deals)},
   {label: "资源点", value: formatNumber(metrics.value.summary.resourceMarkers)},
   {label: "总库存", value: formatNumber(metrics.value.summary.stock)},
+  {label: "供需缺口", value: formatNumber(metrics.value.summary.shortage)},
   {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)}
 ]);
 
@@ -204,6 +209,10 @@ const detailRows = computed(() => {
     {label: "覆盖 cells", value: formatNumber(selectedMarket.value.cells)},
     {label: "覆盖城镇", value: formatNumber(selectedMarket.value.burgs)},
     {label: "库存", value: formatNumber(selectedMarket.value.stock)},
+    {label: "需求", value: formatNumber(selectedMarket.value.demand)},
+    {label: "供给", value: formatNumber(selectedMarket.value.supply)},
+    {label: "缺口", value: formatNumber(selectedMarket.value.shortage)},
+    {label: "过剩", value: formatNumber(selectedMarket.value.surplus)},
     {label: "资源供给", value: formatNumber(selectedMarket.value.resourceSupply)},
     {label: "交易额", value: formatNumber(selectedMarket.value.tradeValue)},
     {label: "market id", value: selectedMarket.value.id, debug: true},
@@ -233,6 +242,9 @@ const detailRows = computed(() => {
     {label: "类型", value: selectedGood.value.typeLabel},
     {label: "基价", value: formatNumber(selectedGood.value.value)},
     {label: "市场库存", value: formatNumber(selectedGood.value.stock)},
+    {label: "市场需求", value: formatNumber(selectedGood.value.demand)},
+    {label: "供需缺口", value: formatNumber(selectedGood.value.shortage)},
+    {label: "过剩供给", value: formatNumber(selectedGood.value.surplus)},
     {label: "资源 cells", value: formatNumber(selectedGood.value.sourceCells)},
     {label: "生产记录", value: formatNumber(selectedGood.value.production)},
     {label: "交易记录", value: formatNumber(selectedGood.value.deals)},
@@ -270,6 +282,10 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
   const goodsById = new Map(goods.map(good => [good.i, good]));
   const marketsById = new Map(markets.map(market => [market.i, market]));
   const stockByGood = new Map();
+  const demandByGood = new Map();
+  const supplyByGood = new Map();
+  const shortageByGood = new Map();
+  const surplusByGood = new Map();
   const marketStock = new Map();
   const marketResourceSupply = new Map();
   const marketCells = countByValue(pack.cells?.market || []);
@@ -287,8 +303,16 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
     for (const record of Object.values(market.goods || {})) {
       const goodId = Number(record.good || 0);
       const amount = Number(record.stock || 0);
+      const demand = Number(record.demand || 0);
+      const supply = Number(record.supply || amount);
+      const shortage = Number(record.shortage || 0);
+      const surplus = Number(record.surplus || 0);
       stock += amount;
       stockByGood.set(goodId, round((stockByGood.get(goodId) || 0) + amount));
+      demandByGood.set(goodId, round((demandByGood.get(goodId) || 0) + demand));
+      supplyByGood.set(goodId, round((supplyByGood.get(goodId) || 0) + supply));
+      shortageByGood.set(goodId, round((shortageByGood.get(goodId) || 0) + shortage));
+      surplusByGood.set(goodId, round((surplusByGood.get(goodId) || 0) + surplus));
       const best = bestMarketByGood.get(goodId);
       if (!best || amount > best.stock) bestMarketByGood.set(goodId, {market, stock: amount});
     }
@@ -313,6 +337,10 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       typeLabel: goodTypeLabel(good),
       value: Number(good.value || 0),
       stock: stockByGood.get(good.i) || 0,
+      demand: demandByGood.get(good.i) || 0,
+      supply: supplyByGood.get(good.i) || 0,
+      shortage: shortageByGood.get(good.i) || 0,
+      surplus: surplusByGood.get(good.i) || 0,
       sourceCells: goodSourceCells.get(good.i) || 0,
       production: goodProduction.get(good.i) || 0,
       deals: dealStats.count,
@@ -337,6 +365,10 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       cells: marketCells.get(market.i) || 0,
       burgs: marketBurgs.get(market.i) || 0,
       stock: marketStock.get(market.i) || 0,
+      demand: Number(market.demandSummary?.demand || 0),
+      supply: Number(market.demandSummary?.supply || 0),
+      shortage: Number(market.demandSummary?.shortage || 0),
+      surplus: Number(market.demandSummary?.surplus || 0),
       resourceSupply: marketResourceSupply.get(market.i) || 0,
       deals: dealStats.count,
       tradeValue: round(dealStats.value),
@@ -406,6 +438,9 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       deals: deals.length,
       resourceMarkers: pack.markers?.filter(marker => marker?.category === "resource").length || map?.markers?.metadata?.resourceMarkers || 0,
       stock: round(sumRows(marketRows, "stock")),
+      demand: round(sumRows(marketRows, "demand")),
+      shortage: round(sumRows(marketRows, "shortage")),
+      surplus: round(sumRows(marketRows, "surplus")),
       tradeValue: round(totalTradeValue)
     },
     diagnostics
@@ -530,6 +565,10 @@ function exportColumns() {
     {key: "cells", label: "覆盖Cells"},
     {key: "burgs", label: "覆盖城镇"},
     {key: "stock", label: "库存"},
+    {key: "demand", label: "需求"},
+    {key: "supply", label: "供给"},
+    {key: "shortage", label: "缺口"},
+    {key: "surplus", label: "过剩"},
     {key: "resourceSupply", label: "资源供给"},
     {key: "deals", label: "交易数"},
     {key: "tradeValue", label: "交易额"}
@@ -556,6 +595,10 @@ function exportColumns() {
     {key: "typeLabel", label: "类型"},
     {key: "value", label: "基价"},
     {key: "stock", label: "库存"},
+    {key: "demand", label: "需求"},
+    {key: "supply", label: "供给"},
+    {key: "shortage", label: "缺口"},
+    {key: "surplus", label: "过剩"},
     {key: "sourceCells", label: "资源Cells"},
     {key: "production", label: "生产记录"},
     {key: "deals", label: "交易记录"},
