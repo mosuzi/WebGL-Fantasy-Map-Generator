@@ -16684,3 +16684,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；主入口约 `783.47KB / gzip 235.98KB`，新增 `EconomyPanel` chunk 约 `10.71KB / gzip 3.62KB`。
 - 构建产物浏览器烟测通过：默认 `stage-2-1` 打开 `经济总览` 后显示商品 `71`、市场 `29`、交易 `1.5万`、资源点 `6`、总库存 `1.2万`、交易额 `4.2万`；商品表 `71` 行，市场表 `29` 行，交易表显示前 `500 / 1.5万`；定位按钮可选中城市对象，`glError = 0`，console/page error 为 `0`。
 - e2e 守门通过：点击到出图 `1534.4ms`，纯生成 `800.9ms`，WebGL 加载 `416.3ms`，UI slack `317.2ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 149.3ms`，最慢加载阶段为 `构建视觉 cell mesh 59.7ms`。
+
+### 经济导出第一刀
+
+背景：
+
+- 经济总览已经能只读查看商品、市场和交易，但数据还不能带出面板离线分析。
+- `docs/task-notes/economy-market-trade-plan.md` 的阶段 2 要求支持商品、市场和交易 CSV/JSON 导出；开发诊断可后置。
+- 本轮仍保持只读，不做市场归属编辑、贸易动画、生产链编辑或动态军事联动。
+
+修正：
+
+- `经济总览` 筛选区新增 `导出 CSV / 导出 JSON` 按钮。
+- 导出按当前 tab、筛选和排序输出商品、市场或交易行。
+- CSV 使用电子表格可读表头；JSON 写入 `type / exportedAt / seed / tab / filter / sortKey / sortDir / summary / count / rows`。
+- 交易表仍只渲染前 `500` 行，但导出会包含当前筛选后的全部交易行。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；主入口约 `783.47KB / gzip 235.97KB`，`EconomyPanel` chunk 约 `13.45KB / gzip 4.42KB`。
+- 构建产物浏览器烟测通过：商品 CSV 下载为 `fmg-economy-goods-stage-2-1.csv`，共 `72` 行，表头为 `商品ID,商品,类型,基价,库存,资源Cells,生产记录,交易记录,交易额,可见`；交易 JSON 下载为 `fmg-economy-deals-stage-2-1.json`，`type = fmg-economy-summary`、`tab = deals`、`count = rows = summary.deals = 15068`，与地图交易数一致；`glError = 0`，console/page error 为 `0`。
+- e2e 守门通过：点击到出图 `1391.5ms`，纯生成 `704.1ms`，WebGL 加载 `389.6ms`，UI slack `297.8ms`，最慢生成阶段为 `生成国家 / 省份 / 区域 136.1ms`，最慢加载阶段为 `构建视觉 cell mesh 59.7ms`。

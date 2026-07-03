@@ -4,6 +4,10 @@
   <div class="economy-panel-controls">
     <UiSegmented label="经济范围" :options="tabOptions" :model-value="state.tab" @select="callbacks.onTab" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选商品 / 市场 / 城镇 / 国家 / 来源" @update:model-value="callbacks.onFilter" />
+    <div class="economy-panel-export-actions" aria-label="经济导出">
+      <UiButton id="economy-export-csv" variant="secondary" :disabled="!activeTotalRows" @click="exportCsv">导出 CSV</UiButton>
+      <UiButton id="economy-export-json" variant="secondary" :disabled="!activeTotalRows" @click="exportJson">导出 JSON</UiButton>
+    </div>
   </div>
 
   <UiSortBar class-name="economy-panel-sort" :options="activeSortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -45,6 +49,7 @@
 
 <script setup>
 import {computed, watch} from "vue";
+import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
@@ -321,6 +326,87 @@ function buildEconomyMetrics(map) {
   };
 }
 
+function exportCsv() {
+  const rows = exportRows();
+  if (!rows.length) return;
+  const header = exportColumns().map(column => column.label);
+  const body = rows.map(row => exportColumns().map(column => exportValue(row, column.key)));
+  const text = [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n");
+  downloadText(`fmg-economy-${props.state.tab}-${safeFilePart(props.state.map?.metadata?.seed)}.csv`, text, "text/csv;charset=utf-8");
+}
+
+function exportJson() {
+  const rows = exportRows();
+  if (!rows.length) return;
+  const payload = {
+    type: "fmg-economy-summary",
+    exportedAt: new Date().toISOString(),
+    seed: props.state.map?.metadata?.seed || "",
+    tab: props.state.tab,
+    filter: props.state.filter || "",
+    sortKey: props.state.sortKey,
+    sortDir: props.state.sortDir,
+    summary: metrics.value.summary,
+    count: rows.length,
+    rows: rows.map(row => exportColumns().reduce((record, column) => {
+      record[column.key] = exportValue(row, column.key);
+      return record;
+    }, {}))
+  };
+  downloadText(`fmg-economy-${props.state.tab}-${safeFilePart(props.state.map?.metadata?.seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function exportRows() {
+  if (props.state.tab === "markets") return filteredMarketRows.value;
+  if (props.state.tab === "deals") return filteredDealRows.value;
+  return filteredGoodRows.value;
+}
+
+function exportColumns() {
+  if (props.state.tab === "markets") return [
+    {key: "id", label: "市场ID"},
+    {key: "name", label: "市场"},
+    {key: "stateName", label: "国家"},
+    {key: "cityName", label: "中心城镇"},
+    {key: "cells", label: "覆盖Cells"},
+    {key: "burgs", label: "覆盖城镇"},
+    {key: "stock", label: "库存"},
+    {key: "resourceSupply", label: "资源供给"},
+    {key: "deals", label: "交易数"},
+    {key: "tradeValue", label: "交易额"}
+  ];
+  if (props.state.tab === "deals") return [
+    {key: "id", label: "交易ID"},
+    {key: "goodName", label: "商品"},
+    {key: "sellerName", label: "卖方"},
+    {key: "buyerName", label: "买方"},
+    {key: "routeLabel", label: "类型"},
+    {key: "sourceLabel", label: "来源"},
+    {key: "units", label: "数量"},
+    {key: "price", label: "单价"},
+    {key: "value", label: "金额"},
+    {key: "tax", label: "税额"},
+    {key: "distance", label: "距离"}
+  ];
+  return [
+    {key: "id", label: "商品ID"},
+    {key: "name", label: "商品"},
+    {key: "typeLabel", label: "类型"},
+    {key: "value", label: "基价"},
+    {key: "stock", label: "库存"},
+    {key: "sourceCells", label: "资源Cells"},
+    {key: "production", label: "生产记录"},
+    {key: "deals", label: "交易记录"},
+    {key: "tradeValue", label: "交易额"},
+    {key: "visibleLabel", label: "可见"}
+  ];
+}
+
+function exportValue(row, key) {
+  const value = row?.[key];
+  return typeof value === "number" ? round(value, 4) : value ?? "";
+}
+
 function sortRows(rows, key, direction) {
   const factor = direction === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
@@ -458,5 +544,24 @@ function formatNumber(value) {
 function round(value, digits = 2) {
   const factor = 10 ** digits;
   return Math.round((Number(value) || 0) * factor) / factor;
+}
+
+function csvEscape(value) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function safeFilePart(value) {
+  return String(value || "map").replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "map";
+}
+
+function downloadText(filename, text, type) {
+  const blob = new Blob([text], {type});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 </script>

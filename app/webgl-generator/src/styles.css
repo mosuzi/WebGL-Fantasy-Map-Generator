@@ -4680,7 +4680,7 @@ input.ui-switch-native {
 
 .economy-panel-controls {
   display: grid;
-  grid-template-columns: minmax(210px, 0.55fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(210px, 0.5fr) minmax(260px, 1fr) auto;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
@@ -4705,6 +4705,18 @@ input.ui-switch-native {
 
 .economy-panel-sort .el-button {
   min-height: 28px;
+  margin-left: 0;
+  padding-inline: 8px;
+}
+
+.economy-panel-export-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.economy-panel-export-actions .el-button {
+  min-height: 30px;
   margin-left: 0;
   padding-inline: 8px;
 }
