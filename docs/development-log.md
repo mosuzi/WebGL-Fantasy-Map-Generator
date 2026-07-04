@@ -19073,3 +19073,21 @@ full 矩阵结果：
 - 名称库小脚本确认内置摘要存在：`samples = 1086`，`weightedSamples = 1129`，`weightedNameSamples = 42`，`maxSampleWeight = 3`。
 - 同一脚本确认内置名称库导出包含该库，并且 `createChineseNameGenerator(seed, {bindings:{global:{place:"k170-burg-names"}}})` 会记录 `usage.place = "k170-burg-names"` 并生成地名候选。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-05 文化面板枚举中文化
+
+背景：
+
+- 用户指出文化类型当前显示为英文内部枚举，命名风格有时直接显示 `default`，不符合中文界面口径。
+- 底层生成和数据格式仍需要保留 `Generic / Naval / default` 等内部 key，因此本轮只调整显示层。
+
+实现：
+
+- `CulturePanel.vue` 为文化类型新增中文显示值：`Generic / Nomadic / Highland / Lake / Naval / River / Hunting / Desert` 分别显示为“通用 / 游牧 / 高地 / 湖泽 / 海洋 / 河流 / 林猎 / 沙漠”。
+- 命名风格新增中文显示值：`default` 显示为“默认”，`European` 显示为“欧式”。
+- 列表列和详情行使用中文显示值；筛选同时匹配内部 key 与中文标签，避免用户按旧英文 key 搜索时找不到对象。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。

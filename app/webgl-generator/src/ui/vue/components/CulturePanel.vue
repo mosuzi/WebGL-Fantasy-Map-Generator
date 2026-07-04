@@ -128,7 +128,7 @@ const sortOptions = Object.freeze([
 const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
-  {key: "type", label: "类型"},
+  {key: "typeLabel", label: "类型"},
   {key: "parentName", label: "父级"},
   {key: "depth", label: "层", align: "right"},
   {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
@@ -166,11 +166,11 @@ const summaryMetrics = computed(() => [
 
 const detailRows = computed(() => selected.value ? [
   {label: "词根", value: selected.value.root},
-  {label: "类型", value: selected.value.type},
+  {label: "类型", value: selected.value.typeLabel},
   {label: "父级", value: selected.value.parentName},
   {label: "子级", value: formatNumber(selected.value.childCount)},
   {label: "继承路径", value: selected.value.treePath},
-  {label: "命名风格", value: selected.value.nameStyle},
+  {label: "命名风格", value: selected.value.nameStyleLabel},
   {label: "扩张", value: formatNumber(selected.value.expansionism)},
   {label: "中心 pack cell", value: selected.value.centerCell, debug: true},
   {label: "中心 grid cell", value: selected.value.gridCenterCell, debug: true},
@@ -243,7 +243,9 @@ function cultureRows(map) {
       rawName: culture.name || `文化 #${culture.i ?? culture.id}`,
       root: culture.root || (culture.name || "").replace(/文化$/, "") || "none",
       type: culture.type || "Generic",
+      typeLabel: cultureTypeLabel(culture.type || "Generic"),
       nameStyle: culture.nameStyle || "default",
+      nameStyleLabel: cultureNameStyleLabel(culture.nameStyle || "default"),
       expansionism: Number.isFinite(culture.expansionism) ? culture.expansionism : "none",
       parentId: Number(culture.parent) || 0,
       depth: Number(culture.depth) || 0,
@@ -265,7 +267,9 @@ function filterRows(rows, filter) {
     || row.name.toLowerCase().includes(query)
     || row.rawName.toLowerCase().includes(query)
     || row.type.toLowerCase().includes(query)
+    || row.typeLabel.toLowerCase().includes(query)
     || row.nameStyle.toLowerCase().includes(query)
+    || row.nameStyleLabel.toLowerCase().includes(query)
     || row.parentName.toLowerCase().includes(query)
     || row.treePath.toLowerCase().includes(query)
     || row.stateSummary.toLowerCase().includes(query)
@@ -291,6 +295,26 @@ function buildTreeFields(rows, rootLabel) {
       treePath
     }];
   }));
+}
+
+function cultureTypeLabel(type) {
+  return {
+    Generic: "通用",
+    Nomadic: "游牧",
+    Highland: "高地",
+    Lake: "湖泽",
+    Naval: "海洋",
+    River: "河流",
+    Hunting: "林猎",
+    Desert: "沙漠"
+  }[type] || type || "通用";
+}
+
+function cultureNameStyleLabel(style) {
+  return {
+    default: "默认",
+    European: "欧式"
+  }[style] || style || "默认";
 }
 
 function buildParentOptions(rows, selectedRow, rootLabel) {
