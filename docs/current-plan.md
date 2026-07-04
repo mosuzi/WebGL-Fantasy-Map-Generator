@@ -36,6 +36,7 @@
 - 地图 DOM overlay 交互降级第一刀已完成：100k 当前代码复测中，完整图层滚轮 frame p95 曾为 `111.7ms`、拖动 p95 为 `41.2ms`；交互期间暂停 `#map-overlay` 的标签、城市剪影、marker 和军事图标更新并隐藏，idle 后恢复完整更新。复测同 seed 后完整图层滚轮 frame p95 为 `6ms`、拖动 p95 为 `17.7ms`，overlay 交互样本全部暂停，idle 后 `finalSuspended = false`。
 - 地图内容 overlay 统一隐藏已完成：拖动 / 缩放期间 `.map-stage` 会进入 `map-stage--interaction-hidden`，统一隐藏 `map-overlay`、测量 SVG、hover 浮层、图例和比例尺，避免非 canvas 标志按旧相机位置滞留导致与画布分离；idle 后统一恢复。浏览器断言确认五类覆盖层交互中 `visibility = hidden`、约 `180ms` idle 后恢复 `visible`。
 - 生成页气候滑条标签折行已修正：`.climate-slider-field` 标签列从 `42px` 放宽到 `68px` 并禁止首列标签换行，`画布纬度` 不再被拆成两行；控制面板生成页截图和浏览器断言确认标签高度 `15px`、`white-space = nowrap`。
+- 控制面板布局审计已接入 `pnpm run audit:panels`：审计会依次覆盖“简介 / 生成 / 视图 / 单位 / 图层 / 管理”tab，检查 tab/body 横向溢出、滑条标签、按钮网格列对齐、按钮文字空间和字段标签空间。`control-panel-audit-final / continents / 10000 / deep` 未发现待复核项，图层页 8 行、管理页 10 行、重新生成网格 4 行均通过列对齐检查。
 
 ### 当前执行队列
 
@@ -45,7 +46,7 @@
    - 目标不是继续把内容硬塞进既有窄列，而是让面板按信息量合理占空间：能放宽面板就放宽，需要换行就换行，详情长字段可跨整行，列表可横向滚动。
    - 先盘点并修正实际高风险样式：固定小列宽、过度 `white-space: nowrap`、`minmax(0, 1fr)` 强挤、多按钮工具条和战报 / 备注 / 长名称区域。
    - 第一优先级是军事管理面板、事件链摘要、导入导出工具条、单位 / 滑条字段、二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
-   - 审计脚本也要跟进：除横向溢出外，增加按钮文字过窄、重要字段被省略号截断、异常多行折断和详情最小项宽检查。
+   - 审计脚本已覆盖控制面板 tab 和主要浮动面板；后续若继续发现真实折行，再扩充重要字段省略号、异常多行折断和详情最小项宽规则。
 2. **overlay 与动态线层性能专项**：
    - `profile:overlay` 已补 idle commit 指标；下一刀继续看 pan/zoom 停止后的路线、河流、选中 mesh 和 DOM overlay 恢复成本。
    - 用 100k 地图继续补测 `measurement-heavy / selection-heavy` 这类变体，先确认卡顿来源，再决定优化对象。

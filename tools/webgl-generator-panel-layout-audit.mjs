@@ -103,13 +103,14 @@ try {
   if (scenario === "deep") await prepareDeepScenario(page);
   const lazyPreload = scenario === "deep" ? await waitForLazyPreload(page) : null;
 
+  const controlPanel = await auditControlPanel(page);
   await openManagementTab(page);
   const panelReports = [];
   for (const panel of panels) {
     panelReports.push(await auditPanel(page, panel));
   }
   const pageAudit = await auditPage(page);
-  const issues = collectIssues(panelReports, pageAudit, consoleErrors);
+  const issues = collectIssues(panelReports, pageAudit, consoleErrors, controlPanel);
   const report = {
     metadata: {
       generatedAt: new Date().toISOString(),
@@ -129,6 +130,7 @@ try {
     },
     generation,
     lazyPreload,
+    controlPanel,
     page: pageAudit,
     panels: panelReports,
     issues,
@@ -280,6 +282,184 @@ async function openManagementTab(page) {
     const panel = document.querySelector("[data-control-panel='management']");
     return panel && panel.hidden === false;
   }, null, {timeout: timeoutMs});
+}
+
+async function auditControlPanel(page) {
+  await page.evaluate(() => document.getElementById("open-generation-panel")?.click());
+  await page.waitForSelector(`.floating-panel[data-panel-id="generation-panel"]:not(.hidden)`, {timeout: timeoutMs});
+  const tabs = [
+    {id: "about", label: "简介"},
+    {id: "generation", label: "生成"},
+    {id: "themes", label: "视图"},
+    {id: "units", label: "单位"},
+    {id: "layers", label: "图层"},
+    {id: "management", label: "管理"}
+  ];
+  const reports = [];
+  for (const tab of tabs) {
+    await page.evaluate(tabId => document.querySelector(`[data-control-tab='${tabId}']`)?.click(), tab.id);
+    await page.waitForFunction(tabId => {
+      const panel = document.querySelector(`[data-control-panel='${tabId}']`);
+      return panel && panel.hidden === false;
+    }, tab.id, {timeout: timeoutMs});
+    await page.waitForTimeout(50);
+    reports.push(await page.evaluate(tab => {
+      function rectOf(element) {
+        if (!element) return {x: 0, y: 0, width: 0, height: 0};
+        const rect = element.getBoundingClientRect();
+        return {
+          x: roundNumber(rect.x),
+          y: roundNumber(rect.y),
+          width: roundNumber(rect.width),
+          height: roundNumber(rect.height)
+        };
+      }
+
+      function isVisibleElement(element) {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return rect.width > 0 &&
+          rect.height > 0 &&
+          element.getAttribute("aria-hidden") !== "true" &&
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity) !== 0;
+      }
+
+      function normalizedText(element) {
+        return (element.textContent || "").replace(/\s+/g, " ").trim();
+      }
+
+      function shortText(text) {
+        return text.length > 24 ? `${text.slice(0, 24)}...` : text;
+      }
+
+      function roundNumber(value) {
+        return Math.round((Number(value) || 0) * 10) / 10;
+      }
+
+      function lineHeightOf(element) {
+        return Number.parseFloat(getComputedStyle(element).lineHeight) || Number.parseFloat(getComputedStyle(element).fontSize) || 14;
+      }
+
+      function findButtonIssues(root) {
+        return [...root.querySelectorAll("button, .el-button")].filter(isVisibleElement).flatMap(element => {
+          const text = normalizedText(element);
+          if (!text || text.length < 3) return [];
+          const rect = element.getBoundingClientRect();
+          const issues = [];
+          if (element.scrollWidth > element.clientWidth + 2) issues.push(`按钮“${shortText(text)}”文字横向溢出`);
+          if (rect.width < 58 && text.length >= 4) issues.push(`按钮“${shortText(text)}”宽度 ${roundNumber(rect.width)}px 偏窄`);
+          return issues;
+        });
+      }
+
+      function findTextIssues(root) {
+        const candidates = [
+          ...root.querySelectorAll(".field-row > span:first-child, .generation-field-row > span:first-child, .unit-derived-row span, .unit-scale-field > span:first-child, .climate-slider-field > span:first-child, .label-limit-field > span:first-child")
+        ].filter(isVisibleElement);
+        const issues = [];
+        for (const element of candidates) {
+          const text = normalizedText(element);
+          if (!text || text.length < 2) continue;
+          const rect = element.getBoundingClientRect();
+          const computed = getComputedStyle(element);
+          const lineHeight = lineHeightOf(element);
+          if (element.scrollWidth > element.clientWidth + 2 && computed.overflowX !== "auto" && computed.overflowX !== "scroll") {
+            issues.push(`文本“${shortText(text)}”横向溢出`);
+            continue;
+          }
+          if (text.length >= 4 && rect.height > lineHeight * 1.45) {
+            issues.push(`文本“${shortText(text)}”疑似折行，高度 ${roundNumber(rect.height)}px`);
+          }
+          if (text.length >= 4 && rect.width < 56) {
+            issues.push(`文本“${shortText(text)}”宽度 ${roundNumber(rect.width)}px 偏窄`);
+          }
+        }
+        return issues.slice(0, 16);
+      }
+
+      function auditSliderLabels(root) {
+        return [...root.querySelectorAll(".ui-slider-field")].filter(isVisibleElement).map(element => {
+          const label = element.querySelector(":scope > span:first-child");
+          const rect = label?.getBoundingClientRect();
+          return {
+            text: normalizedText(label),
+            width: roundNumber(rect?.width),
+            height: roundNumber(rect?.height),
+            whiteSpace: label ? getComputedStyle(label).whiteSpace : ""
+          };
+        });
+      }
+
+      function findGridAlignmentIssues(root) {
+        const grids = [
+          [".layer-toggle-grid", "图层按钮网格"],
+          [".management-panel-actions", "管理按钮网格"],
+          [".regeneration-action-grid", "重新生成按钮网格"],
+          [".generation-button-row", "生成按钮行"]
+        ];
+        const issues = [];
+        const reports = [];
+        for (const [selector, label] of grids) {
+          const grid = root.querySelector(selector);
+          if (!grid || !isVisibleElement(grid)) continue;
+          const children = [...grid.children].filter(isVisibleElement).map(element => {
+            const rect = element.getBoundingClientRect();
+            return {left: roundNumber(rect.left), top: Math.round(rect.top), width: roundNumber(rect.width), text: shortText(normalizedText(element))};
+          });
+          const rows = new Map();
+          for (const child of children) {
+            if (!rows.has(child.top)) rows.set(child.top, []);
+            rows.get(child.top).push(child);
+          }
+          const sortedRows = [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, items]) => items.sort((a, b) => a.left - b.left));
+          const first = sortedRows[0] || [];
+          reports.push({label, rows: sortedRows.length, columns: first.length, lefts: first.map(item => item.left)});
+          for (const row of sortedRows.slice(1)) {
+            for (let index = 0; index < Math.min(row.length, first.length); index += 1) {
+              if (Math.abs(row[index].left - first[index].left) > 2) {
+                issues.push(`${label} 第 ${index + 1} 列从第二行开始偏移 ${roundNumber(row[index].left - first[index].left)}px`);
+                break;
+              }
+            }
+          }
+        }
+        return {reports, issues};
+      }
+
+      const root = document.querySelector(`.floating-panel[data-panel-id="generation-panel"]`);
+      const panel = document.querySelector(`[data-control-panel='${tab.id}']`);
+      const issues = [];
+      if (!root || !panel) return {...tab, missing: true, issues: ["未找到控制面板或 tab"]};
+      const body = root.querySelector(".floating-panel-body");
+      if (body && body.scrollWidth > body.clientWidth + 2) issues.push(`控制面板 body 横向溢出 ${body.scrollWidth - body.clientWidth}px`);
+      if (panel.scrollWidth > panel.clientWidth + 2) issues.push(`${tab.label} tab 横向溢出 ${panel.scrollWidth - panel.clientWidth}px`);
+      const buttonIssues = findButtonIssues(panel);
+      const textIssues = findTextIssues(panel);
+      const gridAlignment = findGridAlignmentIssues(panel);
+      issues.push(...buttonIssues, ...textIssues, ...gridAlignment.issues);
+      return {
+        ...tab,
+        missing: false,
+        rect: rectOf(panel),
+        body: {
+          clientWidth: roundNumber(body?.clientWidth),
+          scrollWidth: roundNumber(body?.scrollWidth)
+        },
+        panelClientWidth: roundNumber(panel.clientWidth),
+        panelScrollWidth: roundNumber(panel.scrollWidth),
+        sliderLabels: auditSliderLabels(panel),
+        gridAlignment: gridAlignment.reports,
+        buttonIssues,
+        textIssues,
+        issues
+      };
+    }, tab));
+  }
+  const issues = reports.flatMap(report => (report.issues || []).map(message => ({scope: `control:${report.id}`, message})));
+  return {tabs: reports, issues};
 }
 
 async function auditPanel(page, panel) {
@@ -555,10 +735,11 @@ async function auditPage(page) {
   }));
 }
 
-function collectIssues(panels, pageAudit, consoleErrors) {
+function collectIssues(panels, pageAudit, consoleErrors, controlPanel = null) {
   const issues = [];
   if (pageAudit.bodyOverflowX > 0) issues.push({scope: "page", message: `页面横向溢出 ${pageAudit.bodyOverflowX}px`});
   for (const error of consoleErrors) issues.push({scope: "console", message: error});
+  for (const issue of controlPanel?.issues || []) issues.push(issue);
   for (const panel of panels) {
     for (const message of panel.issues || []) issues.push({scope: panel.panelId, message});
   }
@@ -580,6 +761,23 @@ function renderMarkdown(report) {
   lines.push(`- 结论：${report.issues.length ? `发现 ${report.issues.length} 个待复核项` : "未发现待复核项"}`);
   lines.push(`- 点击到出图：\`${report.generation.elapsedMs}ms\`，WebGL 加载：\`${report.generation.loadMapMs}ms\``);
   lines.push("");
+  if (report.controlPanel) {
+    lines.push("## 控制面板", "");
+    lines.push("| Tab | 宽度 | tab 溢出 | 滑条标签 | 网格 | 待复核项 |");
+    lines.push("|---|---:|---:|---:|---:|---:|");
+    for (const tab of report.controlPanel.tabs || []) {
+      const sliderLabelMinWidth = minAuditValue(tab.sliderLabels, "width");
+      lines.push([
+        tab.label,
+        px(tab.rect?.width),
+        px(Math.max(0, (tab.panelScrollWidth || 0) - (tab.panelClientWidth || 0))),
+        px(sliderLabelMinWidth),
+        tab.gridAlignment?.map(item => `${item.label} ${item.rows}行`).join("；") || "none",
+        tab.issues?.length || 0
+      ].join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+    }
+    lines.push("");
+  }
   lines.push("## 总览", "");
   lines.push("| 面板 | 宽度 | body 溢出 | summary 最小项 | detail 最小项 | 二级面板 | 表格横滚 | 待复核项 |");
   lines.push("|---|---:|---:|---:|---:|---:|---:|---:|");
@@ -603,6 +801,19 @@ function renderMarkdown(report) {
     lines.push("", "## 健康监控事件", "");
     lines.push("这些事件不计入布局待复核项；加载 / 绘制性能以 e2e 和 overlay profile 守门为准。");
     for (const event of report.metadata.healthEvents) lines.push(`- ${event}`);
+  }
+  if (report.controlPanel?.tabs?.length) {
+    lines.push("", "## 控制面板详情", "");
+    for (const tab of report.controlPanel.tabs) {
+      lines.push(`### ${tab.label}`, "");
+      lines.push(`- tab：client ${px(tab.panelClientWidth)} / scroll ${px(tab.panelScrollWidth)}`);
+      lines.push(`- 滑条标签：${tab.sliderLabels?.map(item => `${item.text || "未命名"} ${px(item.width)} x ${px(item.height)} ${item.whiteSpace}`).join("；") || "none"}`);
+      lines.push(`- 网格：${tab.gridAlignment?.map(item => `${item.label} ${item.rows}行 / ${item.columns}列 / left ${item.lefts.join(",")}`).join("；") || "none"}`);
+      if (tab.issues?.length) {
+        for (const issue of tab.issues) lines.push(`  - ${issue}`);
+      }
+      lines.push("");
+    }
   }
   lines.push("", "## 详情", "");
   for (const panel of report.panels) {

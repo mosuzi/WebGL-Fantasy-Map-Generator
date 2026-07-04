@@ -18321,3 +18321,24 @@ full 矩阵结果：
 - 构建产物浏览器截图确认“画布纬度”单行显示；浏览器断言中该标签宽度 `68px`、高度 `15px`、`white-space = nowrap`。
 - 浮动面板 deep 审计 `panel-space-deep-current / continents / 10000` 未发现待复核项，点击到出图 `1243ms`，WebGL 加载 `316.5ms`。
 - e2e 守门 `climate-label-layout-smoke / continents / 10000` 通过：点击到出图 `1329.6ms`，纯生成 `664.6ms`，WebGL 加载 `376.1ms`，最慢加载阶段为“构建标签” `63.1ms`。
+
+### 2026-07-04 控制面板布局审计扩展
+
+背景：
+
+- 本地预览曾暴露图层、管理和重新生成按钮网格的第二行错位；虽然样式已修正，但原 `audit:panels` 主要覆盖对象浮动面板，未系统检查控制面板各 tab。
+- 用户也指出部分面板存在奇怪折行和空间过窄风险，后续需要让审计先发现问题，避免靠肉眼反复巡检。
+
+实现：
+
+- `tools/webgl-generator-panel-layout-audit.mjs` 在打开管理类面板前，先打开主控制面板并依次切换“简介 / 生成 / 视图 / 单位 / 图层 / 管理”tab。
+- 控制面板审计新增 tab/body 横向溢出、滑条标签尺寸、按钮网格行列 left 对齐、按钮文字空间和字段标签空间检查。
+- Markdown 报告新增“控制面板”和“控制面板详情”章节，直接列出每个 tab 宽度、溢出、滑条标签最小宽度、网格行数和待复核项。
+- 读数文本、单位后缀等本来就允许紧凑显示的元素不再作为“疑似折行 / 宽度过窄”候选，避免把正常 readout 误报为布局问题。
+
+验证：
+
+- `node --check .\tools\webgl-generator-panel-layout-audit.mjs`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run audit:panels -- --browser-channel chrome --cells 10000 --seed control-panel-audit-final --template continents --scenario deep --timeout 180000 --fail-on-issues --out "$env:TEMP\fmg-control-panel-audit-final.json" --markdown "$env:TEMP\fmg-control-panel-audit-final.md"` 通过：未发现待复核项，点击到出图 `1250.4ms`，WebGL 加载 `336ms`；图层页 8 行、管理页 10 行、重新生成按钮网格 4 行均通过列对齐检查。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed control-panel-audit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-control-panel-audit-e2e.json" --markdown "$env:TEMP\fmg-control-panel-audit-e2e.md"` 通过：点击到出图 `1333.7ms`，纯生成 `731.2ms`，WebGL 加载 `370.7ms`，最慢加载阶段为“构建线层顶点” `78.3ms`。
