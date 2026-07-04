@@ -18468,3 +18468,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 军事面板 deep 布局审计 `military-event-chain-space-smoke / continents / 10000` 通过：未发现待复核项；军事管理面板宽 `720px`，战报摘要为 `6 项 / 2 行 / min 126.8px / overflow none`，点击到出图 `1395.6ms`，WebGL 加载 `360.2ms`。
 - e2e 守门 `military-event-chain-space-e2e / continents / 10000` 通过：点击到出图 `1280.1ms`，纯生成 `625.2ms`，WebGL 加载 `339.7ms`，最慢加载阶段为“构建视觉 cell mesh” `54.2ms`。
+
+### 2026-07-04 面板工具按钮组审计补齐
+
+背景：
+
+- 面板空间专项中，summary/detail、segmented、表格和军事战报摘要已经有审计指标，但普通 actions / toolbar 工具按钮组只靠按钮文字溢出检查，缺少行数和最小按钮宽的持续报告。
+- 名称库、军事、资源标记、政体、备注等面板都有多按钮工具条，需要先把真实空间占用量化，避免继续凭肉眼判断“是否太挤”。
+
+实现：
+
+- `tools/webgl-generator-panel-layout-audit.mjs` 在每个浮动面板内扫描 class 含 `actions` 或 `toolbar` 的可见容器。
+- 对每个至少包含两个按钮的工具组记录按钮数、行数、最小按钮宽、最大按钮高和横向溢出。
+- 审计 Markdown 新增“工具按钮组”详情行；工具组横向溢出或最小按钮宽低于 `72px` 会进入待复核项。
+
+验证：
+
+- `node --check .\tools\webgl-generator-panel-layout-audit.mjs`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 全量 deep 面板审计 `action-group-audit-smoke / continents / 10000` 通过：未发现待复核项，点击到出图 `1289.2ms`，WebGL 加载 `307ms`；名称库工具按钮组为 `7 项 / 2 行 / min 140.4px / overflow none`，军事编辑工具条为 `5 项 / 1 行 / min 103.6px / overflow none`。
+- 新指标暴露两个后续可优先复查的偏紧工具条：政体导出按钮组 `2 项 / 1 行 / min 75.8px / overflow none`，资源标记工具条 `5 项 / 1 行 / min 76px / overflow none`。
+- e2e 守门 `action-group-audit-e2e / continents / 10000` 通过：点击到出图 `1389.4ms`，纯生成 `722ms`，WebGL 加载 `411.3ms`，最慢加载阶段为“构建视觉 cell mesh” `68.7ms`。

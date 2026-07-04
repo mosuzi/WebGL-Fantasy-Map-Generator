@@ -682,6 +682,23 @@ async function auditPanel(page, panel) {
       overflowX: getComputedStyle(element).overflowX,
       scrollable: element.scrollWidth > element.clientWidth + 2
     }));
+    const actionGroups = [...root.querySelectorAll("[class*='actions'], [class*='toolbar']")]
+      .filter(isVisibleElement)
+      .map(element => {
+        const buttons = [...element.querySelectorAll("button, .el-button")].filter(isVisibleElement);
+        if (buttons.length < 2) return null;
+        return {
+          className: element.className,
+          rect: rectOf(element),
+          clientWidth: roundNumber(element.clientWidth),
+          scrollWidth: roundNumber(element.scrollWidth),
+          buttonCount: buttons.length,
+          lineCount: buttonLineCount(buttons),
+          minButtonWidth: minRectValue(buttons, "width"),
+          maxButtonHeight: maxRectValue(buttons, "height")
+        };
+      })
+      .filter(Boolean);
     const militaryEventChains = auditCollection(root, ".military-event-chain", element => {
       const items = [...element.querySelectorAll(":scope > span")].filter(isVisibleElement);
       return {
@@ -703,6 +720,10 @@ async function auditPanel(page, panel) {
     }
     for (const item of details) {
       if (item.minItemWidth && item.minItemWidth < 120) issues.push(`detail 最小项宽 ${item.minItemWidth}px 低于 120px`);
+    }
+    for (const group of actionGroups) {
+      if (group.scrollWidth > group.clientWidth + 2) issues.push(`工具按钮组横向溢出 ${group.scrollWidth - group.clientWidth}px`);
+      if (group.minButtonWidth && group.minButtonWidth < 72) issues.push(`工具按钮组最小按钮宽 ${group.minButtonWidth}px 低于 72px`);
     }
     for (const chain of militaryEventChains) {
       if (chain.scrollWidth > chain.clientWidth + 2) issues.push(`战报摘要横向溢出 ${chain.scrollWidth - chain.clientWidth}px`);
@@ -760,6 +781,7 @@ async function auditPanel(page, panel) {
       sortBars,
       segmented,
       tables,
+      actionGroups,
       militaryEventChains,
       secondaryPanels,
       buttonIssues,
@@ -897,6 +919,7 @@ function renderMarkdown(report) {
     lines.push(`- summary 最小项：${px(minAuditValue(panel.metrics, "minItemWidth"))}`);
     lines.push(`- detail 最小项：${px(minAuditValue(panel.details, "minItemWidth"))}`);
     lines.push(`- segmented：${panel.segmented?.map(item => `${item.itemCount} 项 / ${item.lineCount} 行 / min ${px(item.minItemWidth)}`).join("；") || "none"}`);
+    lines.push(`- 工具按钮组：${panel.actionGroups?.map(item => `${shortClassName(item.className)} ${item.buttonCount} 项 / ${item.lineCount} 行 / min ${px(item.minButtonWidth)} / overflow ${px(Math.max(0, (item.scrollWidth || 0) - (item.clientWidth || 0)))}`).join("；") || "none"}`);
     lines.push(`- 战报摘要：${panel.militaryEventChains?.map(item => `${item.itemCount} 项 / ${item.lineCount} 行 / min ${px(item.minItemWidth)} / overflow ${px(Math.max(0, (item.scrollWidth || 0) - (item.clientWidth || 0)))}`).join("；") || "none"}`);
     lines.push(`- 二级面板：${panel.secondaryPanels?.map(item => `${item.label} ${px(item.rect?.width)}`).join("；") || "none"}`);
     lines.push(`- 表格横向滚动：${panel.tables?.filter(item => item.scrollable).length || 0}`);
@@ -1019,6 +1042,11 @@ function delay(ms) {
 function minAuditValue(items, key) {
   const values = (items || []).map(item => Number(item[key])).filter(Number.isFinite);
   return values.length ? Math.min(...values) : 0;
+}
+
+function shortClassName(className = "") {
+  const text = String(className || "").trim().replace(/\s+/g, ".");
+  return text.length > 36 ? `${text.slice(0, 36)}...` : text || "工具组";
 }
 
 function px(value) {
