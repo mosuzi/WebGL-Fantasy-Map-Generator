@@ -28,6 +28,7 @@
 - overlay pan/zoom profile 第一刀已完成：renderer stats 已能输出 overlay 节点数、labels / city icons / marker icons / military icons 分项耗时，`pnpm run profile:overlay` 已支持 10k / 50k / 100k 与 `full,noRoutesRivers` 变体。当前证据显示 DOM overlay 不是 100k 交互主瓶颈，路线 / 河流 screen-space 动态 mesh 才是主要耗时。
 - 视口交互动态线层降级第一刀已完成：拖动 / 滚轮期间暂不重建和绘制 dirty 的路线、河流、选中 screen mesh，停止输入约 `120ms` 后完整重建。100k 完整图层中键拖动画布 frame p95 已从约 `88.2ms` 降至 `35.3ms`，最终 idle 后 dynamic buffers 会恢复 clean。
 - 路线 / 河流 viewport 粗筛第一刀已完成：screen-space 动态 mesh 构建会按当前相机视口世界范围加 `96px` margin 跳过完全屏幕外的路线和河流，并把 `culledRoutes / culledRivers` 写入 stats 与 overlay profile 报告。100k 完整图层缩放 profile 中路线渲染 / 筛掉为 `742 / 434`，河流渲染 / 筛掉为 `466 / 279`。
+- 小路普通渲染已改为连续细实线：此前 `trail` 使用长 dash/gap，选中态又会绕过 dash，因此会出现普通视图像断线、选中高亮却完整的错觉；当前不再把小路画成虚线，`routeStyleMode` 为 `primary/secondary road + solid trail`。
 - overlay profile 矩阵补全已完成：`pnpm run profile:overlay` 支持 `overlayMatrix`，会分别采集完整图层、关闭文字标签、关闭城市图标、关闭资源 / 标记图标、关闭军事图标、关闭路线 / 河流。100k 矩阵中 overlay p95 最高约 `5.1ms`，关闭路线 / 河流时动态线层构建为 `0ms`；当前仍没有证据支持把标签、城市剪影、marker 或军事图标默认迁移到 WebGL。
 - 面板布局第二轮已修正经济 / marker 的 segmented 控件：共享 `UiSegmented` 改为可换行 grid，选中态不再依赖额外内部指示层，经济三段控件窄列时自然换行，marker 三段控件保持一行三列。
 - 面板布局自动审计第一刀已完成：新增 `pnpm run audit:panels`，可打开主要浮动面板并报告 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横滚和疑似文字溢出；当前 1280 x 820 构建产物审计未发现待复核项。资源标记面板的三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。
@@ -591,8 +592,8 @@
   - 路线已接入第一版 hover picking，悬停面板可显示路线起终点、类型和命中距离。
   - 城市和路线已接入第一版对象级 picking；点击 canvas 上的城市或路线会在现有悬停面板中记录选中对象摘要，暂不新增详情面板。
   - 选中城市已有 overlay 标记，选中路线已有更亮、更宽的 route mesh 高亮。
-  - 道路样式已区分 `road` 实线和 `trail` 虚线，虚线由 WebGL route mesh 生成，并沿整条路线保持连续 dash phase。
-  - 路线数据已有 `level`：`primary`、`secondary` 和 `trail`；renderer 按等级设置道路宽度、颜色和虚线样式，route 详情显示等级。
+  - 道路样式已区分 `road` 和 `trail`：主路 / 次路为较宽实线，小路为更细的连续实线，避免普通视图出现断路错觉。
+  - 路线数据已有 `level`：`primary`、`secondary` 和 `trail`；renderer 按等级设置道路宽度和颜色，route 详情显示等级。
   - 城市、路线和河流对象 picking 已从直接遍历升级为第一版 world-space bucket 索引，运行时统计显示索引 bucket、路线段和河流段数量。
   - 已新增第一版浮动对象详情面板：点击选中城市、路线或河流时打开只读详情，面板可拖动和关闭，生成新地图时关闭；面板位置会保存到浏览器 `localStorage` 并在下次打开时恢复。
   - 选中河流已有独立 screen-space mesh 高亮；主河流线层仍保留为阶段性 `gl.LINES`。

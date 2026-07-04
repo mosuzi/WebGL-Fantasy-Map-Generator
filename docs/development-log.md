@@ -19112,3 +19112,23 @@ full 矩阵结果：
 
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-05 小路连续渲染修正
+
+背景：
+
+- 用户指出地图上的小路普通显示大多断开，但选中后高亮路径是完整的，说明路线数据本身大概率完整，问题集中在普通路线渲染样式。
+- 现有 `trail` 使用 `dash: [9, 6]`，而选中态会绕过 dash 绘制整条连续高亮线，因此普通视图容易被误读为只渲染了部分路线。
+
+实现：
+
+- `routeStyle()` 中 `trail` 不再返回 dash 配置，改为更细、更低透明度的连续实线。
+- `routeStyleMode` 更新为 `primary/secondary road + solid trail`，运行时统计不再描述为小路虚线。
+- 本轮只改渲染样式，不改路线生成、路线点数据、picking 或动态 mesh 构建策略。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测读取运行时统计：`routeStyleMode = primary/secondary road + solid trail`，默认图 `trailCount = 424`，路线 `580 / 580` 条渲染，`routeVertexCount = 34860`，`pointBudgetExceeded = false`，`vertexBudgetExceeded = false`，`glError = 0`，console/page error 为 `0`。

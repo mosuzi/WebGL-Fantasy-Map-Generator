@@ -659,7 +659,7 @@ export class PlaceholderMapRenderer {
       routeBuildMs: this.routeBuildMs,
       routeRenderStats: {...this.routeRenderStats},
       routeWidthMode: this.routeWidthMode,
-      routeStyleMode: "primary/secondary road + continuous trail dashed",
+      routeStyleMode: "primary/secondary road + solid trail",
       tradeFlowVertexCount: this.tradeFlowVertexCount,
       tradeFlowTriangleCount: this.tradeFlowVertexCount / 3,
       tradeFlowBuildMs: this.tradeFlowBuildMs,
@@ -3164,7 +3164,7 @@ function emptyRouteRenderStats() {
 function routeStyle(route) {
   if (route.level === "primary") return {color: [0.56, 0.47, 0.34, 0.88], width: 3.6};
   if (route.level === "secondary") return {color: [0.5, 0.43, 0.33, 0.8], width: 2.6};
-  return {color: [0.43, 0.38, 0.31, 0.72], width: 2, dash: [9, 6]};
+  return {color: [0.43, 0.38, 0.31, 0.64], width: 1.8};
 }
 
 function buildPointVertices(map, visibility = {}) {
