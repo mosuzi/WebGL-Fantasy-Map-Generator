@@ -18447,3 +18447,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 面板 deep 布局审计 `economy-control-space-smoke / continents / 10000` 通过：未发现待复核项；经济总览面板宽 `820px`、body 无横向溢出，segmented 变为 `3 项 / 1 行 / min 90px`，点击到出图 `1212.2ms`，WebGL 加载 `327.7ms`。
 - e2e 守门 `economy-control-space-e2e / continents / 10000` 通过：点击到出图 `1180.9ms`，纯生成 `607.9ms`，WebGL 加载 `316.6ms`，最慢加载阶段为“构建视觉 cell mesh” `48.6ms`。
+
+### 2026-07-04 军事战报摘要空间第二刀
+
+背景：
+
+- 面板空间专项继续按“先找真实硬挤点，再小步修”的方式推进；军事面板主体筛选、导出工具条和排序栏在 720px 面板下没有直接溢出。
+- 读代码发现有战报时出现的 `.military-event-chain` 仍是固定 6 列布局，前 5 列按较窄比例分配，容易把“累计损耗 / 最近”等摘要项压得过窄。
+- 旧 deep 面板审计没有注入战报，导致这块有数据才出现的区域没有被报告覆盖。
+
+实现：
+
+- `.military-event-chain` 改为 `repeat(auto-fit, minmax(124px, 1fr))`，每个摘要项改成独立卡片，允许摘要自然换成两行。
+- `tools/webgl-generator-panel-layout-audit.mjs` 的 deep 场景会给每支军团追加两条固定战报，一条已结算、一条未结算，保证默认选中行也能渲染战报记录区。
+- 面板审计新增 `militaryEventChains` 指标，记录战报摘要项数、行数、最小项宽和横向溢出；最小项低于 `112px` 或横向溢出会进入待复核项。
+
+验证：
+
+- `node --check .\tools\webgl-generator-panel-layout-audit.mjs`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 军事面板 deep 布局审计 `military-event-chain-space-smoke / continents / 10000` 通过：未发现待复核项；军事管理面板宽 `720px`，战报摘要为 `6 项 / 2 行 / min 126.8px / overflow none`，点击到出图 `1395.6ms`，WebGL 加载 `360.2ms`。
+- e2e 守门 `military-event-chain-space-e2e / continents / 10000` 通过：点击到出图 `1280.1ms`，纯生成 `625.2ms`，WebGL 加载 `339.7ms`，最慢加载阶段为“构建视觉 cell mesh” `54.2ms`。

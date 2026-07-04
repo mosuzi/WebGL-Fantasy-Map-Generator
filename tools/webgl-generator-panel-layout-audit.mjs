@@ -227,6 +227,63 @@ async function prepareDeepScenario(page) {
       state.government.sizeLabel = "跨海复合行政";
       state.government.effects = {economyMultiplier: 1.18, tradeMultiplier: 1.22, militaryRecruitment: 0.94};
     }
+    for (const militaryState of map.politics?.states || map.pack?.states || []) {
+      if (!militaryState?.i || militaryState.removed || !Array.isArray(militaryState.military)) continue;
+      for (const regiment of militaryState.military) {
+        const stateId = militaryState.i;
+        const regimentId = regiment.i ?? regiment.id ?? 0;
+        const regimentObjectId = regiment.id ?? `${stateId}:${regimentId}`;
+        const chainKey = `deep-audit-chain:${stateId}:${regimentId}`;
+        const existing = new Set((regiment.events || []).map(event => event?.id));
+        const events = [
+          {
+            id: `deep-audit-battle-applied:${stateId}:${regimentId}`,
+            kind: "battle",
+            sequence: 991,
+            at: "深场景审计",
+            stateId,
+            stateName: militaryState.fullName || militaryState.name || `国家 #${stateId}`,
+            regimentId,
+            regimentObjectId,
+            regimentName: regiment.name || `军团 #${regimentId}`,
+            chainKey,
+            chainLabel: `${longName}边境战报链`,
+            chainSide: "attacker",
+            chainSideLabel: "攻方",
+            type: "siege",
+            typeLabel: "攻城",
+            outcome: "minor-victory",
+            outcomeLabel: "小胜",
+            resultApplied: true,
+            result: {casualties: 132, sideCasualties: {attacker: 132, defender: 0, participant: 0, local: 0, manual: 0}},
+            description: "深场景审计战报：长链路、损耗摘要和说明文字用于验证军事面板不会把战报区域压成异常窄列。"
+          },
+          {
+            id: `deep-audit-battle-pending:${stateId}:${regimentId}`,
+            kind: "battle",
+            sequence: 992,
+            at: "深场景审计",
+            stateId,
+            stateName: militaryState.fullName || militaryState.name || `国家 #${stateId}`,
+            regimentId,
+            regimentObjectId,
+            regimentName: regiment.name || `军团 #${regimentId}`,
+            chainKey,
+            chainLabel: `${longName}边境战报链`,
+            chainSide: "attacker",
+            chainSideLabel: "攻方",
+            type: "ambush",
+            typeLabel: "伏击",
+            outcome: "stalemate",
+            outcomeLabel: "相持",
+            resultApplied: false,
+            result: {casualties: 0, sideCasualties: {attacker: 0, defender: 0, participant: 0, local: 0, manual: 0}},
+            description: "深场景审计待结算战报：用于保持战报筛选、清理按钮和摘要链在有数据时也被布局审计覆盖。"
+          }
+        ];
+        regiment.events = [...(regiment.events || []), ...events.filter(event => !existing.has(event.id))];
+      }
+    }
 
     const province = firstUsable(map.politics?.provinces || map.pack?.provinces);
     if (province) province.name = `${longName}直属边境贸易省`;
@@ -625,6 +682,18 @@ async function auditPanel(page, panel) {
       overflowX: getComputedStyle(element).overflowX,
       scrollable: element.scrollWidth > element.clientWidth + 2
     }));
+    const militaryEventChains = auditCollection(root, ".military-event-chain", element => {
+      const items = [...element.querySelectorAll(":scope > span")].filter(isVisibleElement);
+      return {
+        className: element.className,
+        rect: rectOf(element),
+        clientWidth: roundNumber(element.clientWidth),
+        scrollWidth: roundNumber(element.scrollWidth),
+        itemCount: items.length,
+        lineCount: buttonLineCount(items),
+        minItemWidth: minRectValue(items, "width")
+      };
+    });
     const buttonIssues = findButtonIssues(root);
     const textIssues = findTextIssues(root);
     const issues = [];
@@ -634,6 +703,10 @@ async function auditPanel(page, panel) {
     }
     for (const item of details) {
       if (item.minItemWidth && item.minItemWidth < 120) issues.push(`detail 最小项宽 ${item.minItemWidth}px 低于 120px`);
+    }
+    for (const chain of militaryEventChains) {
+      if (chain.scrollWidth > chain.clientWidth + 2) issues.push(`战报摘要横向溢出 ${chain.scrollWidth - chain.clientWidth}px`);
+      if (chain.minItemWidth && chain.minItemWidth < 112) issues.push(`战报摘要最小项宽 ${chain.minItemWidth}px 低于 112px`);
     }
     for (const issue of buttonIssues) issues.push(issue.message);
     for (const issue of textIssues) issues.push(issue.message);
@@ -687,6 +760,7 @@ async function auditPanel(page, panel) {
       sortBars,
       segmented,
       tables,
+      militaryEventChains,
       secondaryPanels,
       buttonIssues,
       textIssues,
@@ -823,6 +897,7 @@ function renderMarkdown(report) {
     lines.push(`- summary 最小项：${px(minAuditValue(panel.metrics, "minItemWidth"))}`);
     lines.push(`- detail 最小项：${px(minAuditValue(panel.details, "minItemWidth"))}`);
     lines.push(`- segmented：${panel.segmented?.map(item => `${item.itemCount} 项 / ${item.lineCount} 行 / min ${px(item.minItemWidth)}`).join("；") || "none"}`);
+    lines.push(`- 战报摘要：${panel.militaryEventChains?.map(item => `${item.itemCount} 项 / ${item.lineCount} 行 / min ${px(item.minItemWidth)} / overflow ${px(Math.max(0, (item.scrollWidth || 0) - (item.clientWidth || 0)))}`).join("；") || "none"}`);
     lines.push(`- 二级面板：${panel.secondaryPanels?.map(item => `${item.label} ${px(item.rect?.width)}`).join("；") || "none"}`);
     lines.push(`- 表格横向滚动：${panel.tables?.filter(item => item.scrollable).length || 0}`);
     if (panel.issues?.length) {

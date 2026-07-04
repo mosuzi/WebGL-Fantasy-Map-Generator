@@ -41,6 +41,7 @@
 - viewport idle commit 分帧第一刀已完成：pan/zoom 停止后继续隐藏地图内容 overlay，路线 mesh 使用已有 async 构建按时间片让出浏览器帧，旧 commit 会在新交互开始后作废；河流和选中态在路线后分帧恢复。交互隐藏期间不再重建测量 SVG，idle 恢复时再刷新。100k `overlay-idle-async-final-100k` 中完整图层 idle frame p95 为 `17.7ms / 17.6ms`，测量 180 条对象为 `35.3ms / 35.3ms`，选中大国为 `29.5ms / 11.9ms`，各变体 dirty 均恢复 `clean`。
 - 程序化视口变换 overlay 隐藏补洞已完成：`fitToView()`、对象定位和测量定位也改走 `drawViewportPreview()` / idle commit 路径，不再只让手动拖拽 / 滚轮隐藏地图标志。当前取舍继续采用“视口交互中隐藏非 canvas 地图内容，idle 后恢复”，不默认把城市剪影、资源 / 标记图标、军事图标或测量 SVG 迁入 WebGL。构建产物浏览器烟测覆盖滚轮、拖拽、适配视图和对象定位，四类路径均能在交互中隐藏 `map-overlay / hover / 比例尺` 并在 idle 后恢复；100k `viewport-overlay-unified-100k` 完整图层滚轮 / 拖动 frame p95 为 `6ms / 17.7ms`，idle commit dirty 恢复 `clean`；10k e2e WebGL 加载 `396ms`。
 - 经济面板控制栏空间第二刀已完成：控制栏从“三列硬挤”改为“两列主控 + 导出按钮独占下一行”，三段切换最小项宽从审计中的 `82px` 提升到 `90px`，并从 `3 项 / 2 行` 回到 `3 项 / 1 行`。`economy-control-space-smoke / continents / 10000 / deep` 面板审计未发现待复核项，点击到出图 `1212.2ms`、WebGL 加载 `327.7ms`；e2e 守门 `economy-control-space-e2e` 通过，点击到出图 `1180.9ms`、WebGL 加载 `316.6ms`。
+- 军事战报摘要空间第二刀已完成：`.military-event-chain` 从固定 6 窄列改为 `minmax(124px, 1fr)` 的自适应卡片，允许摘要占两行而不是压缩“累计损耗 / 最近”等字段；deep 面板审计会为军团注入两条战报并报告战报摘要项数、行数、最小项宽和横向溢出。`military-event-chain-space-smoke / continents / 10000 / deep` 中战报摘要为 `6 项 / 2 行 / min 126.8px / overflow none`，无待复核项；e2e 守门 `military-event-chain-space-e2e` 通过，点击到出图 `1280.1ms`、WebGL 加载 `339.7ms`。
 
 ### 当前执行队列
 
@@ -48,7 +49,7 @@
 
 1. **面板空间策略专项**：
    - 目标不是继续把内容硬塞进既有窄列，而是让面板按信息量合理占空间：能放宽面板就放宽，需要换行就换行，详情长字段可跨整行，列表可横向滚动。
-   - 已修经济面板控制栏三列硬挤导致的三段切换折行；继续盘点并修正真实高风险样式：固定小列宽、过度 `white-space: nowrap`、`minmax(0, 1fr)` 强挤、多按钮工具条和战报 / 备注 / 长名称区域。
+   - 已修经济面板控制栏三列硬挤导致的三段切换折行，以及军事战报摘要固定 6 窄列；继续盘点并修正真实高风险样式：固定小列宽、过度 `white-space: nowrap`、`minmax(0, 1fr)` 强挤、多按钮工具条和备注 / 长名称区域。
    - 第一优先级是军事管理面板、事件链摘要、导入导出工具条、单位 / 滑条字段、二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
    - 审计脚本已覆盖控制面板 tab 和主要浮动面板；后续若继续发现真实折行，再扩充重要字段省略号、异常多行折断和详情最小项宽规则。
 2. **overlay 与动态线层性能专项**：
