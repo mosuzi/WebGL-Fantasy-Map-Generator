@@ -22,6 +22,7 @@ const outPath = resolve(args.out || join(rootDir, "docs", "generated", "reports"
 const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated", "reports", "panel-layout-audit-results.md"));
 const viewport = parseViewport(args.viewport || "1280x820");
 const failOnIssues = Boolean(args["fail-on-issues"]);
+const scenario = String(args.scenario || "default");
 
 const defaultPanels = [
   ["open-state-panel", "state-panel", "国家编辑"],
@@ -82,8 +83,15 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
+  const healthEvents = [];
   page.on("console", message => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() !== "error") return;
+    const text = message.text();
+    if (text.startsWith("[FMG health]")) {
+      healthEvents.push(text);
+      return;
+    }
+    consoleErrors.push(text);
   });
   page.on("pageerror", error => consoleErrors.push(error.message));
 
@@ -92,6 +100,8 @@ try {
   await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2, null, {timeout: timeoutMs});
   await page.waitForFunction(() => window.__webglGeneratorApp?.map?.metadata?.generationTiming?.totalMs, null, {timeout: timeoutMs});
   const generation = await generateCase(page, {cells, seed, template, graphWidth, graphHeight});
+  if (scenario === "deep") await prepareDeepScenario(page);
+  const lazyPreload = scenario === "deep" ? await waitForLazyPreload(page) : null;
 
   await openManagementTab(page);
   const panelReports = [];
@@ -112,10 +122,13 @@ try {
       graphHeight,
       viewport,
       browserChannel,
+      scenario,
       failOnIssues,
-      consoleErrors
+      consoleErrors,
+      healthEvents
     },
     generation,
+    lazyPreload,
     page: pageAudit,
     panels: panelReports,
     issues,
@@ -181,6 +194,84 @@ async function generateCase(page, {cells, seed, template, graphWidth, graphHeigh
   }, startedAt);
 }
 
+async function waitForLazyPreload(page) {
+  await page.waitForFunction(() => window.__webglGeneratorLazyPreload?.started || false, null, {timeout: Math.min(timeoutMs, 10000)}).catch(() => {});
+  await page.waitForFunction(() => {
+    const preload = window.__webglGeneratorLazyPreload;
+    return !preload || preload.finishedAt || preload.pending === 0;
+  }, null, {timeout: Math.min(timeoutMs, 90000)}).catch(() => {});
+  return page.evaluate(() => window.__webglGeneratorLazyPreload?.getStats?.() || null);
+}
+
+async function prepareDeepScenario(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const map = app?.map;
+    if (!map) return;
+    const longName = "北辰南麓联合海陆商贸保护自治领";
+    const longSuffix = "边境商港与高原粮道共治委员会";
+    const longSummary = "盐铁、良港、森林木场、药草谷、琥珀海岸、茶山、马场、硝石洞";
+    const longNote = "这是一条用于面板深场景审计的长备注，覆盖国家、城市、资源、战报、名称库等详情字段，确保文字可以自然换行而不是被压成奇怪的窄列。";
+
+    const firstUsable = items => (items || []).find((item, index) => item && !item.removed && (item.i || item.id || index > 0));
+    const state = firstUsable(map.politics?.states);
+    if (state) {
+      state.name = longName;
+      state.fullName = `${longName}${longSuffix}`;
+      state.formName = "联邦保护自治领";
+      state.resourceTypes = {salt: 12, timber: 9, amber: 7, tea: 6, horses: 5, niter: 4};
+      state.diplomacySummary = {Ally: 3, Rival: 2, Vassal: 1, Suzerain: 1};
+      state.government = state.government || {};
+      state.government.sizeLabel = "跨海复合行政";
+      state.government.effects = {economyMultiplier: 1.18, tradeMultiplier: 1.22, militaryRecruitment: 0.94};
+    }
+
+    const province = firstUsable(map.politics?.provinces || map.pack?.provinces);
+    if (province) province.name = `${longName}直属边境贸易省`;
+    const city = firstUsable(map.settlements?.cities);
+    if (city) {
+      city.name = `${longName}银帆港`;
+      city.resourceGoodIds = ["salt", "timber", "amber", "tea", "horses", "niter"];
+    }
+    const culture = firstUsable(map.society?.cultures);
+    if (culture) culture.name = `${longName}山海混合文化圈`;
+    const religion = firstUsable(map.society?.religions);
+    if (religion) religion.name = `${longName}诸圣共祭教团`;
+    const route = firstUsable(map.settlements?.routes);
+    if (route) {
+      route.name = `${longName}盐铁驿路与海港联络线`;
+      route.resourceGoodIds = ["salt", "iron", "timber", "amber", "tea", "horses"];
+    }
+    const river = firstUsable(map.rivers?.rivers);
+    if (river) river.name = `${longName}曲折长河`;
+    const lake = firstUsable(map.pack?.features?.filter(feature => feature?.type === "lake"));
+    if (lake) lake.name = `${longName}内海湖`;
+    const marker = firstUsable(map.markers?.markers);
+    if (marker) {
+      marker.name = `${longName}琥珀盐铁复合资源点`;
+      marker.label = `${longName}琥珀盐铁复合资源点`;
+      marker.resourceLabel = longSummary;
+    }
+    const label = firstUsable(map.labels?.labels || map.labels?.items);
+    if (label) label.text = `${longName}边疆总标注`;
+
+    if (!map.notes || typeof map.notes !== "object") map.notes = {notes: [], metadata: {}};
+    if (!Array.isArray(map.notes.notes)) map.notes.notes = [];
+    const noteTargetId = state ? `state:${state.id ?? state.i}` : "map:deep-layout";
+    map.notes.notes = map.notes.notes.filter(note => note?.id !== noteTargetId);
+    map.notes.notes.push({
+      id: noteTargetId,
+      target: state ? {kind: "state", id: state.id ?? state.i} : {kind: "map", id: "deep-layout"},
+      body: longNote,
+      updatedAt: new Date().toISOString()
+    });
+    map.notes.metadata.notes = map.notes.notes.length;
+
+    app.renderer?.buildLabels?.(map);
+    app.renderer?.updateLabels?.();
+  });
+}
+
 async function openManagementTab(page) {
   await page.evaluate(() => {
     document.querySelector("[data-control-tab='management']")?.click();
@@ -192,6 +283,7 @@ async function openManagementTab(page) {
 }
 
 async function auditPanel(page, panel) {
+  await closeSecondaryPanels(page);
   await page.evaluate(buttonId => {
     document.getElementById(buttonId)?.click();
   }, panel.buttonId);
@@ -203,6 +295,7 @@ async function auditPanel(page, panel) {
     return !bodyText.includes("正在加载") && !bodyText.includes("将在首次打开时加载");
   }, panel.panelId, {timeout: timeoutMs});
   await page.waitForTimeout(80);
+  if (scenario === "deep") await preparePanelDeepState(page, panel.panelId);
 
   const report = await page.evaluate(panel => {
     function rectOf(element) {
@@ -364,6 +457,42 @@ async function auditPanel(page, panel) {
     }
     for (const issue of buttonIssues) issues.push(issue.message);
     for (const issue of textIssues) issues.push(issue.message);
+    const secondaryPanels = [...document.querySelectorAll(".ui-secondary-action-panel")]
+      .filter(isVisibleElement)
+      .map(element => {
+        const secondaryBody = element.querySelector(".ui-secondary-action-body") || element;
+        const secondaryMetrics = auditGrid(element, ".ui-metric-grid", ".ui-metric-grid > div");
+        const secondaryDetails = auditGrid(element, ".ui-detail-grid", ".ui-detail-grid > div");
+        const secondaryButtonIssues = findButtonIssues(element);
+        const secondaryTextIssues = findTextIssues(element);
+        const secondaryIssues = [];
+        if (secondaryBody.scrollWidth > secondaryBody.clientWidth + 2) secondaryIssues.push(`二级面板 body 横向溢出 ${secondaryBody.scrollWidth - secondaryBody.clientWidth}px`);
+        for (const item of secondaryMetrics) {
+          if (item.minItemWidth && item.minItemWidth < 112) secondaryIssues.push(`二级 summary 最小项宽 ${item.minItemWidth}px 低于 112px`);
+        }
+        for (const item of secondaryDetails) {
+          if (item.minItemWidth && item.minItemWidth < 120) secondaryIssues.push(`二级 detail 最小项宽 ${item.minItemWidth}px 低于 120px`);
+        }
+        for (const issue of secondaryButtonIssues) secondaryIssues.push(issue.message);
+        for (const issue of secondaryTextIssues) secondaryIssues.push(issue.message);
+        return {
+          label: normalizedText(element.querySelector(".ui-secondary-action-header strong")) || "二级编辑面板",
+          rect: rectOf(element),
+          body: {
+            rect: rectOf(secondaryBody),
+            clientWidth: roundNumber(secondaryBody.clientWidth),
+            scrollWidth: roundNumber(secondaryBody.scrollWidth)
+          },
+          metrics: secondaryMetrics,
+          details: secondaryDetails,
+          buttonIssues: secondaryButtonIssues,
+          textIssues: secondaryTextIssues,
+          issues: secondaryIssues
+        };
+      });
+    for (const secondary of secondaryPanels) {
+      for (const issue of secondary.issues || []) issues.push(`${secondary.label}: ${issue}`);
+    }
     return {
       ...panel,
       missing: false,
@@ -378,6 +507,7 @@ async function auditPanel(page, panel) {
       sortBars,
       segmented,
       tables,
+      secondaryPanels,
       buttonIssues,
       textIssues,
       issues
@@ -385,7 +515,35 @@ async function auditPanel(page, panel) {
   }, panel);
 
   await page.locator(`.floating-panel[data-panel-id="${panel.panelId}"] .floating-panel-close`).click();
+  await closeSecondaryPanels(page);
   return report;
+}
+
+async function closeSecondaryPanels(page) {
+  await page.evaluate(() => {
+    for (const button of document.querySelectorAll(".ui-secondary-action-panel .ui-secondary-action-close")) {
+      button.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
+    }
+  });
+  await page.waitForTimeout(30);
+}
+
+async function preparePanelDeepState(page, panelId) {
+  await page.evaluate(panelId => {
+    const panel = document.querySelector(`.floating-panel[data-panel-id="${panelId}"]`);
+    const rows = [...(panel?.querySelectorAll(".el-table__body-wrapper tbody tr") || [])]
+      .filter(row => row.getBoundingClientRect().width > 0 && row.getBoundingClientRect().height > 0);
+    const row = panelId === "state-panel" ? rows[1] || rows[0] : rows[0];
+    row?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
+  }, panelId);
+  await page.waitForTimeout(80);
+  await page.evaluate(panelId => {
+    const panel = document.querySelector(`.floating-panel[data-panel-id="${panelId}"]`);
+    const actions = [...(panel?.querySelectorAll(".ui-action-dock .ui-icon-action") || [])]
+      .filter(button => !button.disabled && button.getBoundingClientRect().width > 0);
+    actions[0]?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
+  }, panelId);
+  await page.waitForTimeout(120);
 }
 
 async function auditPage(page) {
@@ -415,12 +573,16 @@ function renderMarkdown(report) {
   lines.push(`- 地形模板：\`${report.metadata.template}\``);
   lines.push(`- cells：\`${report.metadata.cells}\``);
   lines.push(`- 视口：\`${report.metadata.viewport.width} x ${report.metadata.viewport.height}\``);
+  lines.push(`- 场景：\`${report.metadata.scenario}\``);
+  if (report.lazyPreload) {
+    lines.push(`- 面板预热：完成 ${report.lazyPreload.completed} / ${report.lazyPreload.total}，失败 ${report.lazyPreload.failed}`);
+  }
   lines.push(`- 结论：${report.issues.length ? `发现 ${report.issues.length} 个待复核项` : "未发现待复核项"}`);
   lines.push(`- 点击到出图：\`${report.generation.elapsedMs}ms\`，WebGL 加载：\`${report.generation.loadMapMs}ms\``);
   lines.push("");
   lines.push("## 总览", "");
-  lines.push("| 面板 | 宽度 | body 溢出 | summary 最小项 | detail 最小项 | 表格横滚 | 待复核项 |");
-  lines.push("|---|---:|---:|---:|---:|---:|---:|");
+  lines.push("| 面板 | 宽度 | body 溢出 | summary 最小项 | detail 最小项 | 二级面板 | 表格横滚 | 待复核项 |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|");
   for (const panel of report.panels) {
     lines.push([
       panel.label,
@@ -428,6 +590,7 @@ function renderMarkdown(report) {
       px(Math.max(0, (panel.body?.scrollWidth || 0) - (panel.body?.clientWidth || 0))),
       px(minAuditValue(panel.metrics, "minItemWidth")),
       px(minAuditValue(panel.details, "minItemWidth")),
+      panel.secondaryPanels?.length || 0,
       panel.tables?.filter(table => table.scrollable).length || 0,
       panel.issues?.length || 0
     ].join(" | ").replace(/^/, "| ").replace(/$/, " |"));
@@ -435,6 +598,11 @@ function renderMarkdown(report) {
   if (report.issues.length) {
     lines.push("", "## 待复核项", "");
     for (const issue of report.issues) lines.push(`- ${issue.scope}: ${issue.message}`);
+  }
+  if (report.metadata.healthEvents.length) {
+    lines.push("", "## 健康监控事件", "");
+    lines.push("这些事件不计入布局待复核项；加载 / 绘制性能以 e2e 和 overlay profile 守门为准。");
+    for (const event of report.metadata.healthEvents) lines.push(`- ${event}`);
   }
   lines.push("", "## 详情", "");
   for (const panel of report.panels) {
@@ -444,6 +612,7 @@ function renderMarkdown(report) {
     lines.push(`- summary 最小项：${px(minAuditValue(panel.metrics, "minItemWidth"))}`);
     lines.push(`- detail 最小项：${px(minAuditValue(panel.details, "minItemWidth"))}`);
     lines.push(`- segmented：${panel.segmented?.map(item => `${item.itemCount} 项 / ${item.lineCount} 行 / min ${px(item.minItemWidth)}`).join("；") || "none"}`);
+    lines.push(`- 二级面板：${panel.secondaryPanels?.map(item => `${item.label} ${px(item.rect?.width)}`).join("；") || "none"}`);
     lines.push(`- 表格横向滚动：${panel.tables?.filter(item => item.scrollable).length || 0}`);
     if (panel.issues?.length) {
       for (const issue of panel.issues) lines.push(`  - ${issue}`);

@@ -18179,3 +18179,31 @@ full 矩阵结果：
 - 本轮只整理中文文档，不改运行时代码。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed current-plan-cleanup-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-current-plan-cleanup-e2e.json" --markdown "$env:TEMP\fmg-current-plan-cleanup-e2e.md"` 通过；点击到出图 `1448.1ms`，纯生成 `738.9ms`，WebGL 加载 `394.7ms`，最慢加载阶段为“构建线层顶点” `69.9ms`。
+
+### 面板 deep 场景审计
+
+背景：
+
+- 默认和窄视口审计已经覆盖主要面板，但用户指出仍可能有长字段、二级编辑区和局部空间过窄导致的奇怪折行。
+- 继续靠默认面板样本无法证明选中详情和二级编辑弹层的布局质量。
+
+修正：
+
+- `tools/webgl-generator-panel-layout-audit.mjs` 新增 `--scenario deep`。
+- deep 场景会在浏览器内临时注入长国家、城市、文化、宗教、路线、河流、湖泊、marker 和备注样本，不写入文件或存档。
+- deep 场景会等待异步 Vue 面板预热完成后，再逐个打开主要面板、点击首个可用表格行，并展开可用的 `UiActionDock` 二级编辑面板。
+- 审计现在会记录二级编辑面板的 body 溢出、summary/detail 最小项宽、按钮文字溢出和异常折行。
+- Teleport 到 body 的二级编辑面板会在每个面板审计前后主动关闭，避免前一个面板的弹层污染后一个面板结果。
+- health 监控事件会单独列入报告，不再计入布局待复核项；加载 / 绘制性能仍以 e2e、overlay profile 和后续专门 panel-open profile 判断。
+
+验证：
+
+- `node --check .\tools\webgl-generator-panel-layout-audit.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run audit:panels -- --browser-channel chrome --cells 10000 --seed panel-layout-deep-smoke --template continents --scenario deep --timeout 180000 --out "$env:TEMP\fmg-panel-layout-deep.json" --markdown "$env:TEMP\fmg-panel-layout-deep.md"` 通过；面板预热 `18 / 18` 完成，布局待复核项 `0`，点击到出图 `1464.9ms`，WebGL 加载 `410.8ms`。报告仍单独列出连续打开面板产生的 health 长任务事件，后续应按 panel-open 性能问题单独处理。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed panel-layout-deep-audit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-panel-layout-deep-e2e.json" --markdown "$env:TEMP\fmg-panel-layout-deep-e2e.md"` 通过；点击到出图 `1444.5ms`，纯生成 `768.8ms`，WebGL 加载 `355.3ms`，最慢加载阶段为“构建线层顶点” `59.3ms`。
+
+结论：
+
+- default、narrow 和 deep 三类面板布局审计当前都没有发现实际折行或横向溢出问题。
+- 下一步若继续 UI 方向，应优先诊断连续打开 / 挂载面板的 health 长任务，而不是继续扩大普通布局样本。

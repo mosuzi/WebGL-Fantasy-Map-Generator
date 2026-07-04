@@ -64,6 +64,7 @@
 - summary / detail 指标项最小宽度默认不低于 `112px`；确需更密集的面板必须显式说明。
 - 长摘要字段能自然跨行或跨整行，不出现单字竖排式折行。
 - 构建通过，正式 e2e 守门不退化。
+- default、narrow 和 deep 三类审计均已满足布局验收；下一步不再扩普通审计样本，除非用户提供新截图、具体面板或 seed。
 
 ## 阶段 2：overlay pan/zoom profile
 
@@ -82,6 +83,7 @@
 - 面板布局自动审计第一刀已完成：新增 `tools/webgl-generator-panel-layout-audit.mjs` 和 `pnpm run audit:panels`，可服务构建产物、生成固定地图、打开主要浮动面板并记录 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横向滚动和疑似文字溢出。`panel-layout-audit-smoke / continents / 10000 / 1280x820` 最终审计未发现待复核项；资源标记面板三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。审计已排除隐藏的 `UiSegmented` bridge button，避免把兼容按钮误判成可见溢出。
 - 窄视口审计已完成：`panel-layout-narrow-smoke / continents / 10000 / 1024x720` 构建产物审计未发现待复核项，页面横向溢出为 `0`，同 seed e2e 守门 WebGL 加载 `323.7ms`。面板后续若继续，应优先转向长字段、表格列较多和二级编辑展开态，而不是重复默认 / 窄视口样本。
 - overlay 图层矩阵已完成：`tools/webgl-generator-overlay-profile.mjs` 支持 `overlayMatrix`，依次采集完整图层、关闭文字标签、关闭城市图标、关闭资源 / 标记图标、关闭军事图标、关闭路线 / 河流。`overlay-matrix-100k / continents / 100000` 通过守门；完整图层缩放 frame p95 `88.3ms`、拖动 frame p95 `35.3ms`，overlay p95 最高约 `5.1ms`；关闭路线 / 河流时 route / river 构建耗时和渲染数量在报告中归零，避免缓存统计误导。该矩阵仍不支持把标签、城市剪影、marker 或军事图标默认迁到 WebGL，后续只在测量 SVG 多对象、选中态高频变化或极端标签数量能复现问题时继续降负。
+- 面板 deep 场景审计已完成：`tools/webgl-generator-panel-layout-audit.mjs` 支持 `--scenario deep`，会注入长字段样本、等待异步面板预热完成、打开主要面板、选中对象并展开可用二级编辑面板，同时把 health 事件单独列出而不计入布局待复核项。`panel-layout-deep-smoke / continents / 10000 / 1280x820` 未发现布局待复核项，面板预热 `18 / 18` 完成；连续打开面板仍有 health 长任务事件，后续应转为独立 panel-open 性能诊断。
 
 步骤：
 
