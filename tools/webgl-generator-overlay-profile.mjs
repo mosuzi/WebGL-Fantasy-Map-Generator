@@ -1,0 +1,461 @@
+#!/usr/bin/env node
+import {createReadStream, existsSync, mkdirSync, statSync, writeFileSync} from "node:fs";
+import {createServer} from "node:http";
+import {createRequire} from "node:module";
+import {dirname, extname, join, normalize, resolve} from "node:path";
+import {fileURLToPath} from "node:url";
+
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
+const args = parseArgs(process.argv.slice(2));
+const host = String(args.host || "127.0.0.1");
+const port = Number(args.port || 5448);
+const timeoutMs = Number(args.timeout || 240000);
+const cells = Number(args.cells || 10000);
+const seed = String(args.seed || "overlay-profile-smoke");
+const template = String(args.template || "continents");
+const graphWidth = Number(args.width || 1440);
+const graphHeight = Number(args.height || 960);
+const browserChannel = args["browser-channel"] || args.channel || "chrome";
+const distDir = resolve(args.dir || join(rootDir, "dist", "webgl-generator"));
+const outPath = resolve(args.out || join(rootDir, "docs", "generated", "reports", "overlay-profile-results.json"));
+const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated", "reports", "overlay-profile-results.md"));
+const viewport = parseViewport(args.viewport || "1280x820");
+const maxFrameP95Ms = Number(args["max-frame-p95-ms"] || 80);
+const maxOverlayP95Ms = Number(args["max-overlay-p95-ms"] || 35);
+
+if (!existsSync(distDir)) fail(`构建产物不存在：${distDir}`);
+mkdirSync(dirname(outPath), {recursive: true});
+mkdirSync(dirname(markdownPath), {recursive: true});
+
+const playwright = await loadPlaywright(sourceDir);
+const server = await startStaticServer({host, port, publicDir: distDir});
+let browser = null;
+
+try {
+  browser = await launchBrowser(playwright, {headless: !args.headful, browserChannel});
+  const context = await browser.newContext({viewport, deviceScaleFactor: 1});
+  await context.addInitScript(() => {
+    localStorage.setItem("webgl-generator-control-preferences", JSON.stringify({
+      colorMode: "height",
+      showOceanHeight: false,
+      smoothCellBorders: true,
+      showHoverInfo: true,
+      maxCityLabels: 5000,
+      layers: {
+        cities: true,
+        labels: true,
+        stateLabels: true,
+        markers: true,
+        resources: true,
+        military: true,
+        coastline: true,
+        lakeShore: true,
+        stateBorders: true,
+        provinceBorders: true
+      }
+    }));
+  });
+
+  const page = await context.newPage();
+  page.setDefaultTimeout(timeoutMs);
+  const consoleErrors = [];
+  page.on("console", message => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", error => consoleErrors.push(error.message));
+
+  const baseUrl = `http://${host}:${port}`;
+  await page.goto(baseUrl, {waitUntil: "domcontentloaded", timeout: timeoutMs});
+  await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2, null, {timeout: timeoutMs});
+  await page.waitForFunction(() => window.__webglGeneratorApp?.map?.metadata?.generationTiming?.totalMs, null, {timeout: timeoutMs});
+  await generateCase(page, {cells, seed, template, graphWidth, graphHeight});
+
+  const initialStats = await readStats(page);
+  const zoom = await profileZoom(page);
+  const pan = await profilePan(page);
+  const finalStats = await readStats(page);
+  const cases = [zoom, pan];
+  const failures = [];
+  for (const item of cases) {
+    if (item.frames.p95Ms > maxFrameP95Ms) failures.push(`${item.label} 帧 p95 ${item.frames.p95Ms}ms 超过 ${maxFrameP95Ms}ms`);
+    if (item.overlay.totalP95Ms > maxOverlayP95Ms) failures.push(`${item.label} overlay p95 ${item.overlay.totalP95Ms}ms 超过 ${maxOverlayP95Ms}ms`);
+    if (item.glErrors.some(value => value !== 0)) failures.push(`${item.label} WebGL error 不为 0`);
+  }
+
+  const report = {
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      url: baseUrl,
+      distDir,
+      seed,
+      cells,
+      template,
+      graphWidth,
+      graphHeight,
+      viewport,
+      browserChannel,
+      maxFrameP95Ms,
+      maxOverlayP95Ms,
+      consoleErrors
+    },
+    initialStats,
+    finalStats,
+    interactions: cases,
+    failures,
+    passed: !consoleErrors.length && failures.length === 0
+  };
+
+  writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  writeFileSync(markdownPath, renderMarkdown(report), "utf8");
+  console.log(`Wrote ${outPath}`);
+  console.log(`Wrote ${markdownPath}`);
+  if (!report.passed) {
+    console.error(renderFailureSummary(report));
+    process.exitCode = 1;
+  }
+} finally {
+  if (browser) await Promise.race([browser.close(), delay(5000)]);
+  await new Promise(resolveClose => server.close(resolveClose));
+}
+
+async function generateCase(page, {cells, seed, template, graphWidth, graphHeight}) {
+  await page.waitForSelector("#cells-input", {state: "attached", timeout: timeoutMs});
+  await page.evaluate(({cells, seed, template, graphWidth, graphHeight}) => {
+    window.__overlayProfilePreviousMap = window.__webglGeneratorApp?.map || null;
+    document.getElementById("auto-random-seed").checked = false;
+    document.getElementById("seed-input").value = seed;
+    document.getElementById("cells-input").value = String(cells);
+    document.getElementById("width-input").value = String(graphWidth);
+    document.getElementById("height-input").value = String(graphHeight);
+    document.getElementById("heightmap-template").value = template;
+    document.getElementById("generate-map").click();
+  }, {cells, seed, template, graphWidth, graphHeight});
+
+  await page.waitForFunction(
+    expected => {
+      const app = window.__webglGeneratorApp;
+      const loading = document.getElementById("generation-loading");
+      return app?.map &&
+        app.map !== window.__overlayProfilePreviousMap &&
+        app.map.metadata?.seed === expected.seed &&
+        app.map.metadata?.cellsTarget === expected.cells &&
+        app.renderer?.getStats?.()?.draw?.glError === 0 &&
+        loading?.hidden === true;
+    },
+    {cells, seed},
+    {timeout: timeoutMs}
+  );
+}
+
+async function profileZoom(page) {
+  const canvasBox = await page.locator("#map-canvas").boundingBox();
+  const center = canvasCenter(canvasBox);
+  await page.mouse.move(center.x, center.y);
+  await startFrameRecorder(page);
+  const samples = [];
+  for (let index = 0; index < 18; index++) {
+    await page.mouse.wheel(0, index < 9 ? -220 : 170);
+    await delay(34);
+    samples.push(await readStats(page));
+  }
+  const frames = await stopFrameRecorder(page);
+  return summarizeInteraction("zoom", "连续滚轮缩放", samples, frames);
+}
+
+async function profilePan(page) {
+  const canvasBox = await page.locator("#map-canvas").boundingBox();
+  const center = canvasCenter(canvasBox);
+  await page.mouse.move(center.x - 150, center.y - 60);
+  await startFrameRecorder(page);
+  await page.mouse.down({button: "middle"});
+  const samples = [];
+  for (let index = 0; index < 24; index++) {
+    const t = index / 23;
+    const x = center.x - 150 + Math.sin(t * Math.PI * 2) * 180;
+    const y = center.y - 60 + Math.cos(t * Math.PI * 2) * 90;
+    await page.mouse.move(x, y, {steps: 2});
+    await delay(24);
+    samples.push(await readStats(page));
+  }
+  await page.mouse.up({button: "middle"});
+  const frames = await stopFrameRecorder(page);
+  return summarizeInteraction("pan", "中键拖动画布", samples, frames);
+}
+
+async function startFrameRecorder(page) {
+  await page.evaluate(() => {
+    const profile = {
+      frames: [],
+      longTasks: [],
+      running: true,
+      lastFrameAt: 0,
+      observer: null
+    };
+    if ("PerformanceObserver" in window) {
+      try {
+        profile.observer = new PerformanceObserver(list => {
+          for (const entry of list.getEntries()) profile.longTasks.push({startTime: entry.startTime, duration: entry.duration});
+        });
+        profile.observer.observe({entryTypes: ["longtask"]});
+      } catch {
+        profile.observer = null;
+      }
+    }
+    function tick(now) {
+      if (profile.lastFrameAt) profile.frames.push(now - profile.lastFrameAt);
+      profile.lastFrameAt = now;
+      if (profile.running) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    window.__webglGeneratorOverlayProfile = profile;
+  });
+}
+
+async function stopFrameRecorder(page) {
+  return page.evaluate(() => {
+    const profile = window.__webglGeneratorOverlayProfile;
+    if (!profile) return {frames: [], longTasks: []};
+    profile.running = false;
+    profile.observer?.disconnect?.();
+    return {
+      frames: profile.frames,
+      longTasks: profile.longTasks
+    };
+  });
+}
+
+async function readStats(page) {
+  return page.evaluate(() => {
+    const stats = window.__webglGeneratorApp?.renderer?.getStats?.() || {};
+    return {
+      drawMs: stats.draw?.drawMs || 0,
+      glError: stats.draw?.glError ?? null,
+      camera: stats.camera || null,
+      overlay: stats.overlay?.update || {},
+      overlayChildCount: stats.overlay?.childCount || 0,
+      labelCount: stats.labelCount || 0,
+      visibleLabelCount: stats.visibleLabelCount || 0,
+      cityIconCount: stats.cityIconCount || 0,
+      visibleCityIconCount: stats.visibleCityIconCount || 0,
+      markerIconCount: stats.markerIconCount || 0,
+      visibleMarkerIconCount: stats.visibleMarkerIconCount || 0,
+      militaryIconCount: stats.militaryIconCount || 0,
+      visibleMilitaryIconCount: stats.visibleMilitaryIconCount || 0
+    };
+  });
+}
+
+function summarizeInteraction(id, label, samples, frameData) {
+  const overlayTotals = samples.map(sample => sample.overlay?.totalMs || 0);
+  const draws = samples.map(sample => sample.drawMs || 0);
+  return {
+    id,
+    label,
+    sampleCount: samples.length,
+    frames: summarizeMs(frameData.frames || []),
+    longTasks: (frameData.longTasks || []).map(item => ({
+      startTime: roundMs(item.startTime),
+      duration: roundMs(item.duration)
+    })),
+    draw: {
+      averageMs: averageMs(draws),
+      p95Ms: percentileMs(draws, 0.95),
+      maxMs: maxMs(draws)
+    },
+    overlay: {
+      averageMs: averageMs(overlayTotals),
+      totalP95Ms: percentileMs(overlayTotals, 0.95),
+      maxMs: maxMs(overlayTotals),
+      labelsAverageMs: averageMs(samples.map(sample => sample.overlay?.labelsMs || 0)),
+      cityIconsAverageMs: averageMs(samples.map(sample => sample.overlay?.cityIconsMs || 0)),
+      markerIconsAverageMs: averageMs(samples.map(sample => sample.overlay?.markerIconsMs || 0)),
+      militaryIconsAverageMs: averageMs(samples.map(sample => sample.overlay?.militaryIconsMs || 0)),
+      selectionAverageMs: averageMs(samples.map(sample => sample.overlay?.selectionMs || 0))
+    },
+    counts: summarizeCounts(samples),
+    glErrors: [...new Set(samples.map(sample => sample.glError))]
+  };
+}
+
+function summarizeCounts(samples) {
+  const last = samples.at(-1) || {};
+  return {
+    overlayChildCount: last.overlayChildCount || 0,
+    labels: {total: last.labelCount || 0, visible: last.visibleLabelCount || 0},
+    cityIcons: {total: last.cityIconCount || 0, visible: last.visibleCityIconCount || 0},
+    markerIcons: {total: last.markerIconCount || 0, visible: last.visibleMarkerIconCount || 0},
+    militaryIcons: {total: last.militaryIconCount || 0, visible: last.visibleMilitaryIconCount || 0}
+  };
+}
+
+function summarizeMs(values) {
+  return {
+    count: values.length,
+    averageMs: averageMs(values),
+    p95Ms: percentileMs(values, 0.95),
+    maxMs: maxMs(values)
+  };
+}
+
+function averageMs(values) {
+  if (!values.length) return 0;
+  return roundMs(values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length);
+}
+
+function percentileMs(values, percentile) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * percentile) - 1));
+  return roundMs(sorted[index]);
+}
+
+function maxMs(values) {
+  return values.length ? roundMs(Math.max(...values)) : 0;
+}
+
+function renderMarkdown(report) {
+  const lines = [];
+  lines.push("# WebGL Overlay 交互性能报告", "");
+  lines.push(`- 生成时间：${report.metadata.generatedAt}`);
+  lines.push(`- seed：\`${report.metadata.seed}\``);
+  lines.push(`- 地形模板：\`${report.metadata.template}\``);
+  lines.push(`- cells：\`${report.metadata.cells}\``);
+  lines.push(`- 帧 p95 上限：\`${report.metadata.maxFrameP95Ms}ms\``);
+  lines.push(`- overlay p95 上限：\`${report.metadata.maxOverlayP95Ms}ms\``);
+  lines.push(`- 结论：${report.passed ? "通过" : "失败"}`);
+  lines.push("");
+  lines.push("## 初始 overlay", "");
+  lines.push(`- overlay 节点：${report.initialStats.overlayChildCount}`);
+  lines.push(`- 标签：${report.initialStats.visibleLabelCount} / ${report.initialStats.labelCount}`);
+  lines.push(`- 城市图标：${report.initialStats.visibleCityIconCount} / ${report.initialStats.cityIconCount}`);
+  lines.push(`- marker 图标：${report.initialStats.visibleMarkerIconCount} / ${report.initialStats.markerIconCount}`);
+  lines.push(`- 军事图标：${report.initialStats.visibleMilitaryIconCount} / ${report.initialStats.militaryIconCount}`);
+  lines.push("");
+  lines.push("## 交互摘要", "");
+  lines.push("| 场景 | 样本 | 帧均值 | 帧 p95 | 帧最大 | draw 均值 | overlay 均值 | overlay p95 | overlay 最大 | 长任务 |");
+  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+  for (const item of report.interactions) {
+    lines.push(`| ${item.label} | ${item.sampleCount} | ${item.frames.averageMs}ms | ${item.frames.p95Ms}ms | ${item.frames.maxMs}ms | ${item.draw.averageMs}ms | ${item.overlay.averageMs}ms | ${item.overlay.totalP95Ms}ms | ${item.overlay.maxMs}ms | ${item.longTasks.length} |`);
+  }
+  lines.push("");
+  lines.push("## overlay 分项均值", "");
+  lines.push("| 场景 | labels | city icons | marker icons | military icons | selection |");
+  lines.push("|---|---:|---:|---:|---:|---:|");
+  for (const item of report.interactions) {
+    lines.push(`| ${item.label} | ${item.overlay.labelsAverageMs}ms | ${item.overlay.cityIconsAverageMs}ms | ${item.overlay.markerIconsAverageMs}ms | ${item.overlay.militaryIconsAverageMs}ms | ${item.overlay.selectionAverageMs}ms |`);
+  }
+  if (report.failures.length) {
+    lines.push("", "## 失败项", "");
+    for (const failure of report.failures) lines.push(`- ${failure}`);
+  }
+  if (report.metadata.consoleErrors.length) {
+    lines.push("", "## Console Errors", "");
+    for (const error of report.metadata.consoleErrors) lines.push(`- ${error}`);
+  }
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
+function renderFailureSummary(report) {
+  const lines = ["Overlay 交互性能守门失败："];
+  for (const failure of report.failures) lines.push(`- ${failure}`);
+  for (const error of report.metadata.consoleErrors) lines.push(`- console error: ${error}`);
+  return lines.join("\n");
+}
+
+async function startStaticServer({host, port, publicDir}) {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url || "/", `http://${host}:${port}`);
+    const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+    const target = resolve(publicDir, `.${normalize(pathname)}`);
+
+    if (!target.startsWith(publicDir)) {
+      response.writeHead(403);
+      response.end("Forbidden");
+      return;
+    }
+    if (!existsSync(target) || !statSync(target).isFile()) {
+      response.writeHead(404);
+      response.end("Not found");
+      return;
+    }
+
+    response.writeHead(200, {
+      "content-type": getContentType(target),
+      "cache-control": "no-store, max-age=0"
+    });
+    createReadStream(target).pipe(response);
+  });
+
+  await new Promise((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(port, host, () => {
+      server.off("error", rejectListen);
+      resolveListen();
+    });
+  });
+  return server;
+}
+
+function getContentType(file) {
+  const types = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png"
+  };
+  return types[extname(file).toLowerCase()] || "application/octet-stream";
+}
+
+async function loadPlaywright(packageDir) {
+  const requireFromSource = createRequire(join(packageDir, "package.json"));
+  return requireFromSource("playwright");
+}
+
+async function launchBrowser(playwright, {headless, browserChannel}) {
+  return playwright.chromium.launch({
+    headless,
+    channel: browserChannel || undefined
+  });
+}
+
+function parseArgs(argv) {
+  const parsed = {};
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === "--") continue;
+    if (!arg.startsWith("--")) continue;
+    const [key, inlineValue] = arg.slice(2).split("=");
+    parsed[key] = inlineValue ?? argv[++index] ?? true;
+  }
+  return parsed;
+}
+
+function parseViewport(value) {
+  const match = /^(\d+)x(\d+)$/i.exec(String(value || ""));
+  if (!match) return {width: 1280, height: 820};
+  return {width: Number(match[1]), height: Number(match[2])};
+}
+
+function canvasCenter(box) {
+  return {
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2
+  };
+}
+
+function roundMs(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function delay(ms) {
+  return new Promise(resolveDelay => setTimeout(resolveDelay, ms));
+}
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}

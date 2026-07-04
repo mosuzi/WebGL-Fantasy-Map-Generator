@@ -17981,3 +17981,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed panel-layout-first-pass-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1335.1ms`，纯生成 `666.4ms`，WebGL 加载 `370.7ms`，最慢加载阶段为“构建标签” `67.7ms`。
 - 构建产物 DOM 审计通过：国家 / 省份 / 城市 / 文化 / 宗教 / 经济 / 军事 / 资源标记面板 body 均无横向滚动；文化 summary 最小项宽约 `133px`，宗教 summary 最小项宽约 `138px`，军事 summary 最小项宽约 `132px`。
 - 单独首屏加载检查无 console error、无健康监测 error，canvas 可见；一次性打开多组懒加载管理面板时出现一次主线程长任务记录，归入后续 overlay / 面板 profile 阶段继续跟踪，不作为本轮加载或绘制回退。
+
+### Overlay 交互性能 profile 第一刀
+
+背景：
+
+- 地图上的国家 / 城市 / 自定义标签、城市剪影、marker 图标、军事图标和测量 SVG 都是 DOM/SVG overlay。
+- 用户反馈移动和缩放画布可能变卡，当前计划要求先量化，不要直接把所有 overlay 迁回 WebGL 或删除近景表现。
+
+修正：
+
+- renderer `getStats()` 新增 `overlay.childCount / overlay.update`，记录最近一次 overlay 更新总耗时，以及 labels、city icons、marker icons、military icons、selection marker 分项耗时。
+- `getStats()` 补充 `militaryIconCount / visibleMilitaryIconCount`，让军事图标也进入统一 overlay 计数。
+- 新增 `tools/webgl-generator-overlay-profile.mjs` 和 `pnpm run profile:overlay`，可服务构建产物、生成固定地图、执行连续滚轮缩放与中键拖动画布，并输出 JSON / Markdown 报告。
+- `docs/task-notes/panel-layout-overlay-performance-plan.md` 已记录第一版 10k 基线和后续判断方向。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js`、`node --check tools\webgl-generator-overlay-profile.mjs` 均通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run profile:overlay -- --browser-channel chrome --cells 10000 --seed overlay-profile-smoke --template continents --max-frame-p95-ms 80 --max-overlay-p95-ms 35` 通过；初始 overlay 节点 `1944`，标签 `24 / 901`，城市图标 `8 / 881`，marker 图标 `0 / 46`，军事图标 `21 / 115`。连续滚轮缩放 frame p95 `58.8ms`、overlay p95 `3.2ms`；中键拖动画布 frame p95 `35.3ms`、overlay p95 `1.6ms`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed overlay-profile-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1269.8ms`，纯生成 `688ms`，WebGL 加载 `351.4ms`，最慢加载阶段为“构建线层顶点” `49.2ms`。

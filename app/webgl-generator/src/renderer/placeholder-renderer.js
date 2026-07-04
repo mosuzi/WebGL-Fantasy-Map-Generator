@@ -213,6 +213,7 @@ export class PlaceholderMapRenderer {
     };
     this.lastDraw = {drawMs: 0};
     this.lastLoad = emptyRendererLoadStats();
+    this.lastOverlayUpdate = emptyOverlayUpdateStats();
     installCanvasInteractions(this.canvas, this.camera, () => {
       this.markViewportBuffersDirty();
       this.draw();
@@ -650,6 +651,8 @@ export class PlaceholderMapRenderer {
       markerIconCount: this.markerIconCount,
       visibleMarkerIconCount: this.visibleMarkerIconCount,
       markerIconScaleThreshold: this.markerIconScaleThreshold,
+      militaryIconCount: this.militaryIconCount,
+      visibleMilitaryIconCount: this.visibleMilitaryIconCount,
       labelCount: this.labelCount,
       visibleLabelCount: this.visibleLabelCount,
       cityLabelCount: this.cityLabelCount,
@@ -664,6 +667,10 @@ export class PlaceholderMapRenderer {
       camera: {...this.camera},
       loadMap: this.lastLoad,
       draw: this.lastDraw,
+      overlay: {
+        childCount: this.overlay?.childElementCount || 0,
+        update: {...this.lastOverlayUpdate}
+      },
       dynamicMeshCache: {
         routesDirty: this.dynamicBuffersDirty.routes,
         tradeFlowsDirty: this.dynamicBuffersDirty.tradeFlows,
@@ -1038,7 +1045,11 @@ export class PlaceholderMapRenderer {
   }
 
   updateLabels() {
-    if (!this.overlay || !this.map) return;
+    if (!this.overlay || !this.map) {
+      this.lastOverlayUpdate = emptyOverlayUpdateStats();
+      return;
+    }
+    const startedAt = performance.now();
     const rect = this.canvas.getBoundingClientRect();
     const occupied = [];
     const occupiedStates = [];
@@ -1056,6 +1067,7 @@ export class PlaceholderMapRenderer {
         ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE)
       ];
 
+    const labelStartedAt = performance.now();
     for (const item of labelItems) {
       item.node.classList.toggle("selected", isSelectedLabelItem(this.selection, item));
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
@@ -1093,10 +1105,36 @@ export class PlaceholderMapRenderer {
     this.visibleLabelCount = visible;
     this.visibleCityLabelCount = visibleCities;
     this.visibleStateLabelCount = visibleStates;
+    const labelsMs = roundMs(performance.now() - labelStartedAt);
+    const cityStartedAt = performance.now();
     const cityIconBoxes = this.updateCityIcons(rect, occupiedStates);
+    const cityIconsMs = roundMs(performance.now() - cityStartedAt);
+    const markerStartedAt = performance.now();
     this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes], cityIconBoxes);
+    const markerIconsMs = roundMs(performance.now() - markerStartedAt);
+    const militaryStartedAt = performance.now();
     this.updateMilitaryIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes]);
+    const militaryIconsMs = roundMs(performance.now() - militaryStartedAt);
+    const selectionStartedAt = performance.now();
     this.updateSelectionMarker(rect);
+    const selectionMs = roundMs(performance.now() - selectionStartedAt);
+    this.lastOverlayUpdate = {
+      totalMs: roundMs(performance.now() - startedAt),
+      labelsMs,
+      cityIconsMs,
+      markerIconsMs,
+      militaryIconsMs,
+      selectionMs,
+      overlayChildren: this.overlay.childElementCount,
+      labelItems: this.labelItems.length,
+      visibleLabels: this.visibleLabelCount,
+      cityIconItems: this.cityIconItems.length,
+      visibleCityIcons: this.visibleCityIconCount,
+      markerIconItems: this.markerIconItems.length,
+      visibleMarkerIcons: this.visibleMarkerIconCount,
+      militaryIconItems: this.militaryIconItems.length,
+      visibleMilitaryIcons: this.visibleMilitaryIconCount
+    };
   }
 
   isLabelItemLayerVisible(item) {
@@ -3049,6 +3087,26 @@ function createRendererLoadProfile() {
 
 function emptyRendererLoadStats() {
   return {totalMs: 0, stages: [], slowest: null};
+}
+
+function emptyOverlayUpdateStats() {
+  return {
+    totalMs: 0,
+    labelsMs: 0,
+    cityIconsMs: 0,
+    markerIconsMs: 0,
+    militaryIconsMs: 0,
+    selectionMs: 0,
+    overlayChildren: 0,
+    labelItems: 0,
+    visibleLabels: 0,
+    cityIconItems: 0,
+    visibleCityIcons: 0,
+    markerIconItems: 0,
+    visibleMarkerIcons: 0,
+    militaryIconItems: 0,
+    visibleMilitaryIcons: 0
+  };
 }
 
 function roundValue(value) {

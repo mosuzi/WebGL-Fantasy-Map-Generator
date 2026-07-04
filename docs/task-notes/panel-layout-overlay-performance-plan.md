@@ -69,6 +69,13 @@
 
 目标：先量化移动和缩放卡顿来源，再决定降负方式。
 
+当前进展：
+
+- 已新增 `tools/webgl-generator-overlay-profile.mjs` 和 `pnpm run profile:overlay`，可服务构建产物、生成固定地图、执行连续滚轮缩放与中键拖动画布，并输出 frame interval、WebGL draw、overlay 更新分项、overlay 节点数和长任务数量。
+- renderer `getStats()` 已补 `overlay.childCount / overlay.update`，其中 `overlay.update` 记录 `labels / cityIcons / markerIcons / militaryIcons / selection` 分项耗时、总耗时和总数 / 可见数。
+- 2026-07-04 以 `overlay-profile-smoke / continents / 10000` 跑出第一版基线：初始 overlay 节点 `1944`，标签 `24 / 901`，城市图标 `8 / 881`，marker 图标 `0 / 46`，军事图标 `21 / 115`。
+- 同一基线中，连续滚轮缩放 overlay p95 `3.2ms`、拖动画布 overlay p95 `1.6ms`；当前 10k 样本下 overlay DOM 更新不是主要瓶颈。帧 p95 仍有缩放 `58.8ms`、拖动 `35.3ms` 的浏览器调度 / draw 抖动，后续应优先扩大到 50k / 100k 与图层开关矩阵再判断是否做降负。
+
 步骤：
 
 1. 新增或扩展临时 / 正式 profile 脚本，固定地图 seed 后执行：
@@ -89,6 +96,7 @@
 - 能复现拖动 / 缩放时的帧耗时分布。
 - 能区分 WebGL 绘制慢、overlay 更新慢、面板 / 其它 DOM 慢。
 - 没有证据前不做大迁移。
+- 10k 基线已满足前三项；更高 cells 与图层矩阵尚未完成。
 
 ## 阶段 3：overlay 降负第一刀
 
