@@ -912,6 +912,10 @@ select:disabled {
   pointer-events: none;
 }
 
+.map-overlay.map-overlay--interaction-hidden {
+  visibility: hidden;
+}
+
 .city-label,
 .custom-label {
   position: absolute;

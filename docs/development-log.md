@@ -18234,3 +18234,29 @@ full 矩阵结果：
 结论：
 
 - 面板打开长任务第一刀已完成，当前执行队列后续转向具体折行 / 空间不足复现、当前 pan/zoom 卡顿复测和路线 / 河流动态线层后续优化。
+
+### 2026-07-04 地图 DOM overlay 交互降级
+
+背景：
+
+- 用户反馈非 WebGL 内容越来越多，移动和缩放画布时仍有卡顿。
+- `current-overlay-retest-100k / continents / 100000` 复测显示：完整图层滚轮 frame p95 为 `111.7ms`、拖动 p95 为 `41.2ms`；关闭地图 DOM 图标和标签后滚轮 p95 降为 `6ms`、拖动 p95 降为 `17.7ms`。renderer 内部 `updateLabels()` p95 只有约 `4.9ms`，说明浏览器样式 / 布局成本没有被内部分项完全捕获。
+
+实现：
+
+- `drawViewportPreview()` 进入拖动 / 滚轮预览时，会给 `#map-overlay` 添加 `map-overlay--interaction-hidden`，并用 `draw({updateOverlay: false})` 跳过标签、城市剪影、marker 图标、军事图标和选中 DOM marker 更新。
+- `scheduleViewportCommit()` 的 idle commit 会移除隐藏类，再执行完整 `draw()` 和 overlay 更新，保持静止状态的地图标注完整。
+- `getStats()` 暴露 `overlay.interactionSuspended`，`tools/webgl-generator-overlay-profile.mjs` 在 suspended 样本中把 overlay / 动态 buffer 构建计为 `0ms`，并等待 idle 后再读取 final stats。
+- 本轮不迁移 DOM overlay 到 WebGL，也不处理测量 SVG；测量对象仍由独立 overlay 管理。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js`、`node --check .\tools\webgl-generator-overlay-profile.mjs`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run profile:overlay -- --browser-channel chrome --cells 100000 --seed current-overlay-retest-100k --template continents --variants full,noDomOverlays,noRoutesRivers --max-frame-p95-ms 180 --max-overlay-p95-ms 70 --out "$env:TEMP\fmg-current-overlay-retest-100k-final3.json" --markdown "$env:TEMP\fmg-current-overlay-retest-100k-final3.md"` 通过；完整图层滚轮 frame p95 `6ms`，拖动 frame p95 `17.7ms`，overlay 暂停样本分别为 `18 / 24`，完整图层 longtask 为 `0 / 0`，idle 后 `finalSuspended = false`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed overlay-interaction-suspend-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-overlay-interaction-suspend-e2e.json" --markdown "$env:TEMP\fmg-overlay-interaction-suspend-e2e.md"` 通过；点击到出图 `1335.2ms`，纯生成 `751.1ms`，WebGL 加载 `342.2ms`，最慢加载阶段为“构建视觉 cell mesh” `49.6ms`。
+
+结论：
+
+- 地图 DOM overlay 已纳入交互降级，pan/zoom 卡顿在 100k 样本中明显收敛。
+- 下一步性能方向应转向路线 / 河流 idle commit 的分块缓存、跨帧重建或更轻交互态线层；只有具体复现证明测量 SVG 或选中态仍卡顿时，再单独治理。

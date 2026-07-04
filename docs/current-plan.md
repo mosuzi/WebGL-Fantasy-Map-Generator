@@ -26,6 +26,7 @@
 - 面板窄视口审计已完成：`1024 x 720` 构建产物审计未发现待复核项，页面横向溢出为 `0`；同 seed e2e 守门通过，WebGL 加载 `323.7ms`。
 - 面板深场景审计已完成：`pnpm run audit:panels -- --scenario deep` 会注入长国家 / 城市 / 文化 / 宗教 / 路线 / 河流 / 湖泊 / marker / 备注样本，等待异步面板预热完成后逐个打开主要面板、选中首个对象并展开可用二级编辑面板。`panel-layout-deep-smoke` 未发现布局待复核项；连续打开面板仍会产生 health 长任务事件，后续应作为面板打开性能单独诊断，不混入布局失败。
 - 面板打开长任务诊断与第一刀优化已完成：新增 `pnpm run profile:panels`，并把共享 `UiObjectTable` 从 Element Plus `ElTable` 换成轻量原生 table，保留列最小宽、选中、定位和横向滚动。全量 17 个面板 profile 中最慢为城市管理 `371.3ms`、标签管理 `368.8ms`，health 事件 `0`；deep 布局审计仍未发现待复核项。
+- 地图 DOM overlay 交互降级第一刀已完成：100k 当前代码复测中，完整图层滚轮 frame p95 曾为 `111.7ms`、拖动 p95 为 `41.2ms`；交互期间暂停 `#map-overlay` 的标签、城市剪影、marker 和军事图标更新并隐藏，idle 后恢复完整更新。复测同 seed 后完整图层滚轮 frame p95 为 `6ms`、拖动 p95 为 `17.7ms`，overlay 交互样本全部暂停，idle 后 `finalSuspended = false`。
 
 ### 当前执行队列
 
@@ -35,21 +36,18 @@
    - 当前默认、窄视口和 deep 场景审计均未发现布局待复核项；后续只修审计或本地预览能复现的具体折行、错位和窄控件，不做单个面板的大重排。
    - 修正原则是不继续吝啬空间：横向不足时优先扩大面板宽度、让字段跨整行、按钮自然换行或表格横向滚动；不得把长文本硬塞成单字竖排式折行。
    - 共享组件优先级为 `UiDetailGrid` 长字段显式跨整行、`UiMetricGrid` 面板级最小宽度、`UiSortBar / UiSegmented` 换行策略，以及原生 `UiObjectTable` 列最小宽和滚动体验。
-2. **当前覆盖层与 pan/zoom 卡顿复测**：
-   - 用户反馈非 WebGL 内容越来越多、移动和缩放画布会有卡顿；虽然 100k `overlayMatrix` 暂未证明 DOM overlay 是主瓶颈，但后续应以当前代码重新复测 pan/zoom，并把测量 SVG、多对象选中态和极端标签数量作为补充场景。
-   - 先判断是 DOM overlay、路线 / 河流动态 mesh，还是面板 / selection 联动造成；不得在没有证据时把所有 overlay 默认迁到 WebGL。
-3. **路线 / 河流动态线层后续优化**：
+2. **路线 / 河流动态线层后续优化**：
    - 当前证据显示 100k 交互主要瓶颈不是 DOM overlay，而是路线 / 河流 screen-space 动态 mesh。
-   - viewport 粗筛第一刀已经完成；若继续处理拖动 / 缩放手感，应优先评估分块缓存、跨帧重建或更轻的交互态线层。
+   - 交互期间已暂停路线 / 河流动态 mesh 和地图 DOM overlay 更新；若继续处理 idle commit 或大图切换后的卡顿，应优先评估路线 / 河流分块缓存、跨帧重建或更轻的交互态线层。
    - 不把标签、城市剪影、marker 图标或军事图标迁移到 WebGL 作为默认方案；只有 profile 证明 DOM overlay 成为主瓶颈时再讨论。
-4. **overlay profile 后续深场景**：
+3. **overlay profile 后续深场景**：
    - 100k `overlayMatrix` 已覆盖标签、城市剪影、资源 / marker、军事图标、路线和河流的单项开关；当前结论仍是 DOM overlay 不是主要瓶颈。
    - 后续只在具体复现场景下补测量 SVG 多对象、选中态高频变化和极端标签数量，不提前重写测量编辑层。
    - profile 报告中关闭路线 / 河流时会把动态线层耗时和数量置零，避免沿用上一轮缓存统计误导判断。
-5. **贸易查看列表化设计**：
+4. **贸易查看列表化设计**：
    - 贸易流地图常驻连线已退役，不再作为图层恢复。
    - 若继续贸易查看，应做经济面板子视图或独立列表面板，按国家、地区、市场、商品、卖方和买方筛选；默认不画连线，只提供定位相关城市、市场或国家的动作。
-6. **source/candidate 剩余 warn 只读跟踪**：
+5. **source/candidate 剩余 warn 只读跟踪**：
    - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。
    - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 

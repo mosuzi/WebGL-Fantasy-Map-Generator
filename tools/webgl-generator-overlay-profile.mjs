@@ -78,7 +78,9 @@ try {
     await applyVariant(page, variant);
     const initialStats = await readStats(page);
     const zoom = await profileZoom(page);
+    await waitForOverlayIdle(page);
     const pan = await profilePan(page);
+    await waitForOverlayIdle(page);
     const finalStats = await readStats(page);
     const interactions = [zoom, pan];
     variantReports.push({id: variant.id, label: variant.label, initialStats, finalStats, interactions});
@@ -213,6 +215,17 @@ async function applyVariant(page, variant) {
   await page.waitForTimeout(150);
 }
 
+async function waitForOverlayIdle(page) {
+  await page.waitForFunction(() => {
+    const stats = window.__webglGeneratorApp?.renderer?.getStats?.();
+    if (!stats || stats.overlay?.interactionSuspended !== false) return false;
+    const routesClean = stats.layerVisibility?.routes === false || stats.dynamicMeshCache?.routesDirty === false;
+    const riversClean = stats.layerVisibility?.rivers === false || stats.dynamicMeshCache?.riversDirty === false;
+    return routesClean && riversClean;
+  }, null, {timeout: Math.min(timeoutMs, 10000)}).catch(() => {});
+  await page.waitForTimeout(40);
+}
+
 async function startFrameRecorder(page) {
   await page.evaluate(() => {
     const profile = {
@@ -264,6 +277,7 @@ async function readStats(page) {
       camera: stats.camera || null,
       layerVisibility: stats.layerVisibility || {},
       overlay: stats.overlay?.update || {},
+      overlayInteractionSuspended: Boolean(stats.overlay?.interactionSuspended),
       overlayChildCount: stats.overlay?.childCount || 0,
       labelCount: stats.labelCount || 0,
       visibleLabelCount: stats.visibleLabelCount || 0,
@@ -280,16 +294,17 @@ async function readStats(page) {
       riverVertexCount: stats.riverVertexCount || 0,
       riverWidthStats: stats.riverWidthStats || {},
       selectionBuildMs: stats.selectionBuildMs || 0,
-      selectionVertexCount: stats.selectionVertexCount || 0
+      selectionVertexCount: stats.selectionVertexCount || 0,
+      dynamicMeshCache: stats.dynamicMeshCache || {}
     };
   });
 }
 
 function summarizeInteraction(id, label, samples, frameData) {
-  const overlayTotals = samples.map(sample => sample.overlay?.totalMs || 0);
+  const overlayTotals = samples.map(sample => sample.overlayInteractionSuspended ? 0 : sample.overlay?.totalMs || 0);
   const draws = samples.map(sample => sample.drawMs || 0);
-  const routeBuilds = samples.map(sample => sample.layerVisibility?.routes === false ? 0 : sample.routeBuildMs || 0);
-  const riverBuilds = samples.map(sample => sample.layerVisibility?.rivers === false ? 0 : sample.riverBuildMs || 0);
+  const routeBuilds = samples.map(sample => sample.layerVisibility?.routes === false || sample.dynamicMeshCache?.routesDirty ? 0 : sample.routeBuildMs || 0);
+  const riverBuilds = samples.map(sample => sample.layerVisibility?.rivers === false || sample.dynamicMeshCache?.riversDirty ? 0 : sample.riverBuildMs || 0);
   return {
     id,
     label,
@@ -308,11 +323,12 @@ function summarizeInteraction(id, label, samples, frameData) {
       averageMs: averageMs(overlayTotals),
       totalP95Ms: percentileMs(overlayTotals, 0.95),
       maxMs: maxMs(overlayTotals),
-      labelsAverageMs: averageMs(samples.map(sample => sample.overlay?.labelsMs || 0)),
-      cityIconsAverageMs: averageMs(samples.map(sample => sample.overlay?.cityIconsMs || 0)),
-      markerIconsAverageMs: averageMs(samples.map(sample => sample.overlay?.markerIconsMs || 0)),
-      militaryIconsAverageMs: averageMs(samples.map(sample => sample.overlay?.militaryIconsMs || 0)),
-      selectionAverageMs: averageMs(samples.map(sample => sample.overlay?.selectionMs || 0))
+      suspendedSamples: samples.filter(sample => sample.overlayInteractionSuspended).length,
+      labelsAverageMs: averageMs(samples.map(sample => sample.overlayInteractionSuspended ? 0 : sample.overlay?.labelsMs || 0)),
+      cityIconsAverageMs: averageMs(samples.map(sample => sample.overlayInteractionSuspended ? 0 : sample.overlay?.cityIconsMs || 0)),
+      markerIconsAverageMs: averageMs(samples.map(sample => sample.overlayInteractionSuspended ? 0 : sample.overlay?.markerIconsMs || 0)),
+      militaryIconsAverageMs: averageMs(samples.map(sample => sample.overlayInteractionSuspended ? 0 : sample.overlay?.militaryIconsMs || 0)),
+      selectionAverageMs: averageMs(samples.map(sample => sample.overlayInteractionSuspended ? 0 : sample.overlay?.selectionMs || 0))
     },
     dynamic: {
       routeBuildAverageMs: averageMs(routeBuilds),
@@ -329,8 +345,8 @@ function summarizeInteraction(id, label, samples, frameData) {
 
 function summarizeCounts(samples) {
   const last = samples.at(-1) || {};
-  const routesVisible = last.layerVisibility?.routes !== false;
-  const riversVisible = last.layerVisibility?.rivers !== false;
+  const routesVisible = last.layerVisibility?.routes !== false && !last.dynamicMeshCache?.routesDirty;
+  const riversVisible = last.layerVisibility?.rivers !== false && !last.dynamicMeshCache?.riversDirty;
   return {
     overlayChildCount: last.overlayChildCount || 0,
     routeVertices: routesVisible ? last.routeVertexCount || 0 : 0,
@@ -397,10 +413,10 @@ function renderMarkdown(report) {
   }
   lines.push("");
   lines.push("## 交互摘要", "");
-  lines.push("| 变体 | 场景 | 样本 | 帧均值 | 帧 p95 | 帧最大 | draw 均值 | overlay 均值 | overlay p95 | overlay 最大 | 长任务 |");
-  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+  lines.push("| 变体 | 场景 | 样本 | 帧均值 | 帧 p95 | 帧最大 | draw 均值 | overlay 均值 | overlay p95 | overlay 最大 | overlay 暂停 | 长任务 |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
   for (const item of report.interactions) {
-    lines.push(`| ${item.variantLabel} | ${item.label} | ${item.sampleCount} | ${item.frames.averageMs}ms | ${item.frames.p95Ms}ms | ${item.frames.maxMs}ms | ${item.draw.averageMs}ms | ${item.overlay.averageMs}ms | ${item.overlay.totalP95Ms}ms | ${item.overlay.maxMs}ms | ${item.longTasks.length} |`);
+    lines.push(`| ${item.variantLabel} | ${item.label} | ${item.sampleCount} | ${item.frames.averageMs}ms | ${item.frames.p95Ms}ms | ${item.frames.maxMs}ms | ${item.draw.averageMs}ms | ${item.overlay.averageMs}ms | ${item.overlay.totalP95Ms}ms | ${item.overlay.maxMs}ms | ${item.overlay.suspendedSamples} | ${item.longTasks.length} |`);
   }
   lines.push("");
   lines.push("## overlay 分项均值", "");

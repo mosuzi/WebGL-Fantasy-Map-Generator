@@ -214,6 +214,7 @@ export class PlaceholderMapRenderer {
     this.lastDraw = {drawMs: 0};
     this.lastLoad = emptyRendererLoadStats();
     this.lastOverlayUpdate = emptyOverlayUpdateStats();
+    this.overlayInteractionSuspended = false;
     this.viewportCommitTimer = 0;
     installCanvasInteractions(this.canvas, this.camera, () => {
       this.drawViewportPreview();
@@ -668,7 +669,8 @@ export class PlaceholderMapRenderer {
       draw: this.lastDraw,
       overlay: {
         childCount: this.overlay?.childElementCount || 0,
-        update: {...this.lastOverlayUpdate}
+        update: {...this.lastOverlayUpdate},
+        interactionSuspended: this.overlayInteractionSuspended
       },
       dynamicMeshCache: {
         routesDirty: this.dynamicBuffersDirty.routes,
@@ -867,10 +869,23 @@ export class PlaceholderMapRenderer {
   }
 
   drawViewportPreview() {
+    this.suspendOverlayForInteraction();
     this.markViewportBuffersDirty();
-    this.draw({updateDynamicBuffers: false, drawDirtyDynamicBuffers: false});
+    this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
     this.onViewChange();
     this.scheduleViewportCommit();
+  }
+
+  suspendOverlayForInteraction() {
+    if (this.overlayInteractionSuspended) return;
+    this.overlayInteractionSuspended = true;
+    this.overlay?.classList.add("map-overlay--interaction-hidden");
+  }
+
+  resumeOverlayAfterInteraction() {
+    if (!this.overlayInteractionSuspended) return;
+    this.overlayInteractionSuspended = false;
+    this.overlay?.classList.remove("map-overlay--interaction-hidden");
   }
 
   scheduleViewportCommit() {
@@ -879,6 +894,7 @@ export class PlaceholderMapRenderer {
     const setTimer = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : setTimeout;
     this.viewportCommitTimer = setTimer(() => {
       this.viewportCommitTimer = 0;
+      this.resumeOverlayAfterInteraction();
       this.draw();
       this.onViewChange();
     }, 120);

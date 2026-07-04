@@ -84,6 +84,7 @@
 - 窄视口审计已完成：`panel-layout-narrow-smoke / continents / 10000 / 1024x720` 构建产物审计未发现待复核项，页面横向溢出为 `0`，同 seed e2e 守门 WebGL 加载 `323.7ms`。面板后续若继续，应优先转向长字段、表格列较多和二级编辑展开态，而不是重复默认 / 窄视口样本。
 - overlay 图层矩阵已完成：`tools/webgl-generator-overlay-profile.mjs` 支持 `overlayMatrix`，依次采集完整图层、关闭文字标签、关闭城市图标、关闭资源 / 标记图标、关闭军事图标、关闭路线 / 河流。`overlay-matrix-100k / continents / 100000` 通过守门；完整图层缩放 frame p95 `88.3ms`、拖动 frame p95 `35.3ms`，overlay p95 最高约 `5.1ms`；关闭路线 / 河流时 route / river 构建耗时和渲染数量在报告中归零，避免缓存统计误导。该矩阵仍不支持把标签、城市剪影、marker 或军事图标默认迁到 WebGL，后续只在测量 SVG 多对象、选中态高频变化或极端标签数量能复现问题时继续降负。
 - 面板 deep 场景审计已完成：`tools/webgl-generator-panel-layout-audit.mjs` 支持 `--scenario deep`，会注入长字段样本、等待异步面板预热完成、打开主要面板、选中对象并展开可用二级编辑面板，同时把 health 事件单独列出而不计入布局待复核项。`panel-layout-deep-smoke / continents / 10000 / 1280x820` 未发现布局待复核项，面板预热 `18 / 18` 完成；连续打开面板仍有 health 长任务事件，后续应转为独立 panel-open 性能诊断。
+- 当前 overlay 复测与交互降级已完成：`current-overlay-retest-100k / continents / 100000` 复测显示，完整图层滚轮 frame p95 曾为 `111.7ms`，关闭地图 DOM 图标和标签后降为 `6ms`，说明浏览器样式 / 布局成本没有被 renderer 内部 overlay 分项完全捕获。本轮让 `drawViewportPreview()` 在拖动 / 滚轮期间隐藏 `#map-overlay` 并跳过 `updateLabels()`，idle commit 后恢复。最终同 seed 完整图层滚轮 p95 `6ms`、拖动 p95 `17.7ms`，overlay 交互样本全部暂停，idle 后 `finalSuspended = false`。
 
 步骤：
 
@@ -156,7 +157,8 @@
 
 - `requestAnimationFrame` 合并曾做临时验证，但 100k profile 变差，未保留。
 - 第一刀采用“交互中降级”，因为证据显示连续交互时最重的是路线 / 河流 screen mesh 重建，而不是 overlay DOM 更新。
-- 后续如果继续优化，应优先让路线 / 河流 screen mesh 支持 viewport 粗筛或分块缓存，而不是先迁移标签、城市剪影、marker 图标或军事图标。
+- 第二刀把地图 DOM overlay 也纳入“交互中降级”：拖动 / 滚轮期间隐藏 `#map-overlay` 并跳过标签、城市剪影、marker 图标和军事图标更新，停止输入约 `120ms` 后恢复完整 overlay。该方案不迁移 overlay 到 WebGL，也不影响测量 SVG。
+- 后续如果继续优化，应优先处理路线 / 河流 idle commit 的分块缓存、跨帧重建或轻量交互态线层，而不是迁移标签、城市剪影、marker 图标或军事图标。
 
 ## 阶段 4：复测与提交规则
 
