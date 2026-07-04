@@ -1773,7 +1773,17 @@ select:disabled {
 }
 
 .ui-secondary-action-close.el-button {
+  --el-button-bg-color: transparent;
+  --el-button-border-color: transparent;
+  --el-button-text-color: #9fb0ba;
+  --el-button-hover-bg-color: #1b252b;
+  --el-button-hover-border-color: #3e525f;
+  --el-button-hover-text-color: #edf4f6;
+  --el-button-active-bg-color: #10171b;
+  --el-button-active-border-color: #d7a84f;
+  --el-button-active-text-color: #ffe0a1;
   width: 26px;
+  flex: 0 0 26px;
   height: 26px;
   min-width: 26px;
   border: 1px solid transparent;
@@ -1787,10 +1797,21 @@ select:disabled {
   padding: 0;
 }
 
+.ui-secondary-action-close.el-button.is-text:not(.is-disabled):hover,
+.ui-secondary-action-close.el-button.is-text:not(.is-disabled):focus,
+.ui-secondary-action-close.el-button.is-text:not(.is-disabled):focus-visible,
+.ui-secondary-action-close.el-button.is-text:not(.is-disabled):active,
 .ui-secondary-action-close.el-button:hover {
   border-color: #3e525f;
   background: #1b252b;
   color: #edf4f6;
+  box-shadow: none;
+}
+
+.ui-secondary-action-close.el-button.is-text:not(.is-disabled):active {
+  border-color: #d7a84f;
+  background: #10171b;
+  color: #ffe0a1;
 }
 
 .ui-secondary-action-body {

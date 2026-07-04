@@ -2,6 +2,22 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：颜色编辑二级面板关闭按钮 hover 修正
+
+用户反馈颜色编辑面板右上角关闭按钮在悬停时会变成白色椭圆。复查后确认该按钮来自共享 `UiActionDock` 二级编辑浮层，使用 Element Plus `text circle` 按钮；虽然项目 CSS 已写暗色 hover，但未覆盖 Element 按钮变量和 `.is-text` 状态，导致特定状态下仍可能回到默认浅色背景。
+
+修正：
+
+- `.ui-secondary-action-close.el-button` 增加局部 Element Plus 按钮变量，固定基础、hover、active 的背景、边框和文字颜色。
+- 覆盖 `.is-text:not(.is-disabled):hover / focus / focus-visible / active`，避免 text button 默认白底介入。
+- 固定关闭按钮 `26px x 26px` 与 `border-radius: 6px`，保持深色方形按钮观感。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开国家编辑的“调整颜色”二级面板并 hover 关闭按钮，按钮为 `26 x 26`、背景 `rgba(27, 37, 43, 1)`、边框 `rgba(62, 82, 95, 1)`、圆角 `6px`、`box-shadow = none`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-04：标签管理新增标签拖动放置
 
 用户反馈标签管理新增标签时需要支持拖动标签，并指出“新增标签 / 删除标签”按钮与下方“撤销 / 重做”按钮之间没有间隔；同时询问各面板重复出现“重做”的实际作用，希望后续考虑全局统一撤销。
