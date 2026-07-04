@@ -36,7 +36,7 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
-import {createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
+import {createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
@@ -486,6 +486,19 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createRenameObjectCommand(object, name);
       if (!command.isNoop(context)) {
         refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onRenameVisibleFromNamebase: cityIds => {
+      const context = {map: state.map};
+      const command = createRenameCitiesFromNamebaseCommand(cityIds);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+        const result = command.getResult?.();
+        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 个城市。`);
+      } else {
+        setFileOperationStatus(documentRef, "当前筛选城市没有可按名称库更新的名称。");
       }
       updateCityPanel(state);
       updateEditingInteractionLock(state, documentRef);

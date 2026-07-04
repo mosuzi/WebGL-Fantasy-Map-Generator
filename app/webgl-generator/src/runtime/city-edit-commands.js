@@ -1,6 +1,7 @@
 import {defaultCityVisual, normalizeCityVisualPatch, resolveCityVisual} from "./city-visuals.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
+import {createChineseNameGenerator} from "../generator/names.js";
 
 const CITY_POPULATION_EFFECTS = Object.freeze({
   render: "draw",
@@ -32,6 +33,14 @@ const CITY_NOTE_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["object-panels"])
+});
+
+const CITY_NAME_BATCH_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-name", "labels", "object-panels"])
 });
 
 export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口"} = {}) {
@@ -212,6 +221,34 @@ export function createSetCityNoteCommand(cityId, body, {name = ""} = {}) {
   };
 }
 
+export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名称库重命名城市"} = {}) {
+  const targets = uniqueCityIds(cityIds);
+  let changes = null;
+
+  return {
+    label: `${label} ${targets.length} 个`,
+    effects: {
+      ...CITY_NAME_BATCH_EFFECTS,
+      affected: targets.map(id => ({kind: OBJECT_KIND.CITY, id}))
+    },
+    apply(context) {
+      changes ??= buildCityRenameChanges(context.map, targets);
+      if (!changes.length) throw new Error("没有可重命名的城市");
+      for (const change of changes) writeCityName(context.map, change.id, change.afterName);
+    },
+    revert(context) {
+      if (!changes) throw new Error("缺少可撤销的城市名称快照");
+      for (const change of changes) restoreCityName(context.map, change);
+    },
+    isNoop(context) {
+      return !targets.length || !buildCityRenameChanges(context.map, targets).length;
+    },
+    getResult() {
+      return {renamed: changes?.length || 0, total: targets.length};
+    }
+  };
+}
+
 function captureCitySnapshot(map, cityId) {
   const city = map?.settlements?.cities?.[cityId];
   if (!city) return null;
@@ -231,6 +268,65 @@ function captureCitySnapshot(map, cityId) {
       hasProvince: hasOwn(burg, "province")
     } : null
   };
+}
+
+function buildCityRenameChanges(map, cityIds) {
+  if (!map?.settlements?.cities?.length) return [];
+  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|explicit-city-rename|${map.metadata?.checksum || ""}`, {namebases: map.namebases});
+  const changes = [];
+  for (const id of cityIds) {
+    const city = map.settlements.cities[id];
+    if (!city) continue;
+    const burg = findBurgForCity(map, city);
+    const afterName = generator.makePlaceName(cityNameOptions(map, city, burg));
+    const beforeName = city.name || burg?.name || "";
+    if (!afterName || afterName === beforeName) continue;
+    changes.push({
+      id,
+      burgId: city.burgId,
+      beforeName,
+      beforeBurgName: burg?.name || "",
+      afterName
+    });
+  }
+  return changes;
+}
+
+function cityNameOptions(map, city, burg) {
+  return {
+    id: city.id,
+    culture: city.culture ?? burg?.culture,
+    cultureRoot: readCultureRoot(map, city.culture ?? burg?.culture),
+    port: Boolean(city.port || burg?.port),
+    capital: Boolean(city.capital || burg?.capital),
+    provincial: Boolean(city.provincial),
+    group: city.group || burg?.group || "",
+    population: Number(city.population ?? burg?.population ?? 0) || 0
+  };
+}
+
+function readCultureRoot(map, cultureId) {
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
+  return culture?.root || culture?.name || "";
+}
+
+function writeCityName(map, cityId, name) {
+  const city = map?.settlements?.cities?.[cityId];
+  if (!city) throw new Error(`找不到城市 #${cityId}`);
+  city.name = name;
+  const burg = findBurgForCity(map, city);
+  if (burg) burg.name = name;
+}
+
+function restoreCityName(map, change) {
+  const city = map?.settlements?.cities?.[change.id];
+  if (city) city.name = change.beforeName;
+  const burg = map?.pack?.burgs?.[change.burgId] || findBurgForCity(map, city);
+  if (burg) burg.name = change.beforeBurgName;
+}
+
+function uniqueCityIds(cityIds) {
+  return [...new Set((cityIds || []).map(id => Number(id)).filter(id => Number.isInteger(id) && id >= 0))];
 }
 
 function captureCityVisualSnapshot(map, cityId) {

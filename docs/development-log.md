@@ -17537,3 +17537,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：打开名称库面板，新建用户名称库后 `undo = 1`；点击面板“撤销上次”后用户库数量从 `1` 回到 `0` 且 `redo = 1`；点击“重做上次”后用户库恢复为 `1`。整个过程 `generationTiming.totalMs` 保持 `665.4ms` 不变，`glError = 0`，page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过。
+
+### 名称库城市显式重命名第一刀
+
+背景：
+
+- 名称库已经能影响后续生成，但导入、编辑或绑定名称库不应自动改写当前地图对象。
+- 下一步需要提供用户主动触发的“显式重命名”入口，并保证可撤销。
+- 本轮继续避开动态军事系统，只推进名称库和城市编辑面板的静态编辑能力。
+
+修正：
+
+- `city-edit-commands.js` 新增 `createRenameCitiesFromNamebaseCommand()`，接收城市 id 列表，按当前 `map.namebases` 的全局/文化 `place` 绑定生成新城市名。
+- 命令会同时更新 `settlements.cities[]` 和对应 `pack.burgs[]` 名称，进入 `EditHistory`，撤销/重做会恢复城市与 burg 名称。
+- 城市管理面板新增“按名称库重命名筛选”按钮，只作用于当前筛选结果，避免隐式全图改名。
+- README、当前计划、名称库专题计划、绑定专项和 source 功能积压已同步更新。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`CityPanel` 懒加载 chunk 约 `12.41KB / gzip 4.58KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入 `place = smoke-place` 测试名称库后，城市面板点击“按名称库重命名筛选”，821 个城市被显式重命名；点击城市面板“撤销上次”后前 5 个城市恢复原名，再重做后恢复新名。整个过程 `generationTiming.totalMs` 保持 `691.1ms` 不变，`glError = 0`，page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1713.8ms`，纯生成 `761ms`，WebGL 加载 `605.3ms`，最慢加载阶段为“构建线层顶点” `103.2ms`，结果仍在守门阈值内。

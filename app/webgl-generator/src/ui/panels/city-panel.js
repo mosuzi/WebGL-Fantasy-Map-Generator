@@ -32,6 +32,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     },
     onLocate: row => callbacks.onLocate?.(cityObject(row)),
     onRename: (cityId, name) => callbacks.onRename?.(cityId, name),
+    onRenameVisibleFromNamebase: cityIds => callbacks.onRenameVisibleFromNamebase?.(cityIds),
     onPopulationChange: (cityId, population) => callbacks.onPopulationChange?.(cityId, population),
     onSyncOwnerToCell: cityId => callbacks.onSyncOwnerToCell?.(cityId),
     onVisualChange: (cityId, patch) => callbacks.onVisualChange?.(cityId, patch),

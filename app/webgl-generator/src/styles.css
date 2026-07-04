@@ -4076,6 +4076,10 @@ input.ui-switch-native {
 }
 
 .city-panel-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
@@ -4087,6 +4091,12 @@ input.ui-switch-native {
   padding: 0 10px;
   background: #10171b;
   color: #edf4f6;
+}
+
+.city-panel-controls .secondary-action {
+  min-width: 142px;
+  height: 32px;
+  white-space: nowrap;
 }
 
 .city-panel-sort {
