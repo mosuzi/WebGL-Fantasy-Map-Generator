@@ -971,6 +971,8 @@ http://127.0.0.1:5410
 
 265. 贴路测量沿道路补中间节点已完成：新增路线测量显示点展开逻辑，贴路对象仍只保存用户控制点和 `cellStops`，但渲染、距离摘要、单个测量导出、测量对象面板长度和定位 bounds 会按同一路线停靠点之间的原始 route vertices 自动补点；跨路线或 route 数据缺失时退回直连。贴路测量现在强制保持 `polyline`，不会因为 3 个以上控制点误变成面积对象；面板调试详情新增“显示点”。完整导入回归已新增 `displayPointCount` 和 overlay 点数断言，`measurement-route-display-smoke / continents / 10000` 中贴路对象导出显示点 `3`、自由对象 `2`，导入后 overlay 点数 `3 / 2`，`glError = 0`。性能守门中同 seed 曾出现一次 `loadMap = 1992.2ms` 的 profiling 抖动，复跑同 seed 通过：点击到出图 `1850.1ms`，纯生成 `734.8ms`，WebGL 加载 `784ms`，UI/调度余量 `331.3ms`，最慢加载阶段为“上传静态 GPU buffer” `89.2ms`；对照 seed `measurement-cellstops-smoke` 同样通过，WebGL 加载 `550ms`。后续测量方向继续做曲线尺细化。
 
+266. 本地预览按钮网格错位已修复：根因是 Element Plus 默认 `.el-button + .el-button { margin-left: 12px; }` 在本地 dev 样式顺序中可能后加载，覆盖图层、管理和重新生成网格的按钮重置，导致每行第二个按钮开始偏右；线上构建刚好未暴露该顺序问题。现在相关网格按钮和通用主/次按钮的 `margin-left: 0` 提升为 `!important`，图层按钮 `margin: 0` 也同步加固。Vite dev 实测打开控制面板后，图层页每行 left 为 `365 / 657`，管理页除跨列“适配视图”外每行 left 为 `365 / 657`，重新生成页每行 left 为 `365 / 657`，三组按钮 computed `margin-left` 均为 `0px`。构建通过；正式 e2e 守门 `button-grid-margin-smoke / continents / 10000` 通过：点击到出图 `1449.5ms`，纯生成 `740.8ms`，WebGL 加载 `352.8ms`，UI/调度余量 `355.9ms`，最慢加载阶段为“构建视觉 cell mesh” `48.6ms`。
+
 ## 约束
 
 - 新项目代码仍然放在根目录下，不放进 `source/`。

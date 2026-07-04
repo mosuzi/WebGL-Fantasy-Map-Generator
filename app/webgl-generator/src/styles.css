@@ -311,7 +311,7 @@ select {
 
 .primary-action.el-button,
 .secondary-action.el-button {
-  margin-left: 0;
+  margin-left: 0 !important;
 }
 
 .primary-action.el-button {
@@ -3810,7 +3810,7 @@ select:disabled {
 .layer-toggle-grid .el-button {
   width: 100%;
   min-width: 0;
-  margin-left: 0;
+  margin-left: 0 !important;
 }
 
 .preference-toggle-grid {
@@ -3942,7 +3942,7 @@ select:disabled {
   font-weight: 700;
   text-align: left;
   white-space: normal;
-  margin: 0;
+  margin: 0 !important;
 }
 
 .layer-toggle-button.el-button > span {
@@ -4207,7 +4207,7 @@ input.ui-switch-native {
 .regeneration-action-grid .el-button {
   width: 100%;
   min-width: 0;
-  margin-left: 0;
+  margin-left: 0 !important;
 }
 
 .management-panel-actions #fit-view {

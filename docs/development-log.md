@@ -17915,3 +17915,22 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run regress:measurement -- --browser-channel chrome --cells 10000 --seed measurement-route-display-smoke --template continents --timeout 60000` 通过；初始测量对象 `2`，导出 routeFit `roads / none`，导出路线点 `2 / 0`，导出显示点 `3 / 2`，导入后 overlay 路径 `2`，overlay 点数 `3 / 2`，`glError = 0`。
 - 第一次 `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-route-display-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 出现 `loadMap = 1992.2ms` 超过 `1200ms`，但分阶段耗时没有单项异常，像浏览器调度抖动；随后用 `--port 5439` 同 seed 复跑通过：点击到出图 `1850.1ms`，纯生成 `734.8ms`，WebGL 加载 `784ms`，UI/调度余量 `331.3ms`，最慢加载阶段为“上传静态 GPU buffer” `89.2ms`。
 - 对照 seed `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-cellstops-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out docs/generated/reports/e2e-profile-control-results.json --markdown docs/generated/reports/e2e-profile-control-results.md` 通过；点击到出图 `1898.5ms`，WebGL 加载 `550ms`，证明本轮补点没有形成稳定加载/绘制卡顿。
+
+### 本地预览按钮网格错位修正
+
+背景：
+
+- 用户在本地预览发现控制面板的按钮网格从第二行开始整体偏右，但线上不复现。
+- 代码里已经有 `.management-panel-actions .el-button { margin-left: 0; }` 一类规则，说明问题不是缺少重置，而是本地 dev/preview 的 CSS 加载顺序可能让 Element Plus 默认 `.el-button + .el-button { margin-left: 12px; }` 后加载并覆盖了普通权重规则。
+
+修正：
+
+- 将 `.primary-action.el-button / .secondary-action.el-button`、`.layer-toggle-grid .el-button`、`.management-panel-actions .el-button`、`.regeneration-action-grid .el-button` 的 `margin-left: 0` 改为 `!important`。
+- 将 `.layer-toggle-button.el-button` 的 `margin: 0` 改为 `!important`。
+- 该修正只影响按钮默认外边距，不改变网格列宽、gap、按钮尺寸或运行时逻辑。
+
+验证：
+
+- Vite dev server 本地预览验证：打开控制面板后，图层页 `16` 个按钮每行 left 为 `365 / 657`，管理页 `19` 个按钮除跨列“适配视图”外每行 left 为 `365 / 657`，重新生成页每行 left 为 `365 / 657`；三组按钮 computed `margin-left` 均为 `0px`。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed button-grid-margin-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1449.5ms`，纯生成 `740.8ms`，WebGL 加载 `352.8ms`，UI/调度余量 `355.9ms`，最慢加载阶段为“构建视觉 cell mesh” `48.6ms`。
