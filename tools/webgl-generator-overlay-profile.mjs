@@ -25,6 +25,7 @@ const maxFrameP95Ms = Number(args["max-frame-p95-ms"] || 80);
 const maxOverlayP95Ms = Number(args["max-overlay-p95-ms"] || 35);
 const maxIdleCommitMs = Number(args["max-idle-commit-ms"] || 10000);
 const maxIdleFrameP95Ms = Number(args["max-idle-frame-p95-ms"] || maxFrameP95Ms);
+const measurementFixtureCount = Number(args["measurement-fixture-count"] || 180);
 const variants = parseVariants(args.variants || args.variant || "full");
 
 if (!existsSync(distDir)) fail(`构建产物不存在：${distDir}`);
@@ -77,7 +78,9 @@ try {
   const failures = [];
   const variantReports = [];
   for (const variant of variants) {
+    await resetProfileScenario(page);
     await applyVariant(page, variant);
+    const fixture = await prepareVariantFixture(page, variant);
     const initialStats = await readStats(page);
     const zoom = await profileZoom(page);
     zoom.idleCommit = await waitForOverlayIdle(page);
@@ -85,7 +88,7 @@ try {
     pan.idleCommit = await waitForOverlayIdle(page);
     const finalStats = await readStats(page);
     const interactions = [zoom, pan];
-    variantReports.push({id: variant.id, label: variant.label, initialStats, finalStats, interactions});
+    variantReports.push({id: variant.id, label: variant.label, fixture, initialStats, finalStats, interactions});
     for (const item of interactions) {
       if (item.frames.p95Ms > maxFrameP95Ms) failures.push(`${variant.label} / ${item.label} 帧 p95 ${item.frames.p95Ms}ms 超过 ${maxFrameP95Ms}ms`);
       if (item.overlay.totalP95Ms > maxOverlayP95Ms) failures.push(`${variant.label} / ${item.label} overlay p95 ${item.overlay.totalP95Ms}ms 超过 ${maxOverlayP95Ms}ms`);
@@ -220,6 +223,142 @@ async function applyVariant(page, variant) {
     }
   }, variant);
   await page.waitForTimeout(150);
+}
+
+async function resetProfileScenario(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    if (!app?.map || !app.renderer) return;
+    app.measurement.active = false;
+    app.measurement.points = [];
+    app.measurement.pointer = null;
+    app.measurement.drag = null;
+    app.measurement.editingMeasurementId = null;
+    app.map.measurements = {
+      version: 1,
+      items: [],
+      metadata: {measurements: 0, nextId: 1}
+    };
+    app.selectionStore?.clear?.();
+    app.renderer.setSelection?.(null);
+    app.renderer.setLayerVisible?.("measurements", true);
+    app.renderer.fitToView?.();
+  });
+  await page.waitForTimeout(120);
+}
+
+async function prepareVariantFixture(page, variant) {
+  if (variant.fixture === "measurement-heavy") return createMeasurementHeavyFixture(page, variant);
+  if (variant.fixture === "selection-heavy") return createSelectionHeavyFixture(page, variant);
+  return null;
+}
+
+async function createMeasurementHeavyFixture(page, variant) {
+  await page.evaluate(({count}) => {
+    const app = window.__webglGeneratorApp;
+    if (!app?.map || !app.renderer) return;
+    const width = Number(app.map.metadata?.graphWidth) || 1440;
+    const height = Number(app.map.metadata?.graphHeight) || 960;
+    const columns = Math.max(4, Math.ceil(Math.sqrt(count * (width / Math.max(1, height)))));
+    const rows = Math.max(3, Math.ceil(count / columns));
+    const now = new Date().toISOString();
+    const items = [];
+    for (let index = 0; index < count; index += 1) {
+      const col = index % columns;
+      const row = Math.floor(index / columns);
+      const cx = ((col + 0.5) / columns) * width;
+      const cy = ((row + 0.5) / rows) * height;
+      const radiusX = Math.max(14, width / columns * 0.18);
+      const radiusY = Math.max(10, height / rows * 0.18);
+      const pointCount = index % 3 === 0 ? 6 : 5;
+      const points = Array.from({length: pointCount}, (_, pointIndex) => {
+        const angle = (Math.PI * 2 * pointIndex) / pointCount + (index % 5) * 0.18;
+        const wave = 0.8 + ((index + pointIndex) % 4) * 0.08;
+        return {
+          x: roundBrowserMeasurement(Math.max(0, Math.min(width, cx + Math.cos(angle) * radiusX * wave))),
+          y: roundBrowserMeasurement(Math.max(0, Math.min(height, cy + Math.sin(angle) * radiusY * wave)))
+        };
+      });
+      const polygon = index % 3 === 0;
+      items.push({
+        id: `profile-measurement-${index + 1}`,
+        type: polygon ? "polygon" : "polyline",
+        name: `profile measurement ${index + 1}`,
+        points,
+        closed: polygon,
+        routeFit: "none",
+        cellStops: [],
+        createdAt: now,
+        updatedAt: now,
+        summary: {
+          pointCount: points.length,
+          displayPointCount: points.length,
+          routeStopCount: 0,
+          distanceMapUnits: 0,
+          areaMapUnits: 0
+        }
+      });
+    }
+    app.map.measurements = {
+      version: 1,
+      items,
+      metadata: {measurements: items.length, nextId: items.length + 1}
+    };
+    app.renderer.setLayerVisible?.("measurements", true);
+    app.renderer.fitToView?.();
+
+    function roundBrowserMeasurement(value) {
+      return Math.round(Number(value || 0) * 1000) / 1000;
+    }
+  }, {count: Math.max(1, Math.round(Number(variant.fixtureCount || measurementFixtureCount) || measurementFixtureCount))});
+  await page.waitForTimeout(160);
+  return page.evaluate(() => ({
+    type: "measurement-heavy",
+    measurementCount: window.__webglGeneratorApp?.map?.measurements?.items?.length || 0,
+    objectPathCount: document.querySelectorAll(".measurement-object-path").length,
+    objectAreaCount: document.querySelectorAll(".measurement-object-area").length,
+    overlayHidden: Boolean(document.getElementById("measurement-overlay")?.hidden)
+  }));
+}
+
+async function createSelectionHeavyFixture(page, variant) {
+  await page.evaluate(({kind}) => {
+    const app = window.__webglGeneratorApp;
+    if (!app?.map || !app.renderer) return;
+    const field = kind || "state";
+    const values = app.map.grid?.cells?.[field] || [];
+    const counts = new Map();
+    for (const value of values) {
+      const id = Number(value);
+      if (!Number.isInteger(id) || id <= 0) continue;
+      counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    const [id] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] || [];
+    if (!Number.isInteger(id)) return;
+    const object = {kind, id};
+    app.selection = {object};
+    app.editingObject = null;
+    app.renderer.setSelection?.(object);
+    app.renderer.fitToView?.();
+    app.renderer.draw?.();
+  }, {kind: variant.selectionKind || "state"});
+  await page.waitForTimeout(160);
+  return page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const stats = app?.renderer?.getStats?.() || {};
+    const selection = app?.selection?.object || null;
+    const field = selection?.kind || "";
+    const values = field ? app?.map?.grid?.cells?.[field] || [] : [];
+    const selectedCells = values.filter(value => Number(value) === Number(selection?.id)).length;
+    return {
+      type: "selection-heavy",
+      selection,
+      selectedCells,
+      selectionVertexCount: stats.selectionVertexCount || 0,
+      selectionBuildMs: stats.selectionBuildMs || 0,
+      selectionHighlightMode: stats.selectionHighlightMode || "none"
+    };
+  });
 }
 
 async function waitForOverlayIdle(page) {
@@ -376,6 +515,10 @@ async function readStats(page) {
       visibleMarkerIconCount: stats.visibleMarkerIconCount || 0,
       militaryIconCount: stats.militaryIconCount || 0,
       visibleMilitaryIconCount: stats.visibleMilitaryIconCount || 0,
+      measurementCount: window.__webglGeneratorApp?.map?.measurements?.items?.length || 0,
+      measurementPathCount: document.querySelectorAll(".measurement-object-path").length,
+      measurementAreaCount: document.querySelectorAll(".measurement-object-area").length,
+      measurementOverlayHidden: Boolean(document.getElementById("measurement-overlay")?.hidden),
       routeBuildMs: stats.routeBuildMs || 0,
       routeVertexCount: stats.routeVertexCount || 0,
       routeRenderStats: stats.routeRenderStats || {},
@@ -448,7 +591,13 @@ function summarizeCounts(samples) {
     labels: {total: last.labelCount || 0, visible: last.visibleLabelCount || 0},
     cityIcons: {total: last.cityIconCount || 0, visible: last.visibleCityIconCount || 0},
     markerIcons: {total: last.markerIconCount || 0, visible: last.visibleMarkerIconCount || 0},
-    militaryIcons: {total: last.militaryIconCount || 0, visible: last.visibleMilitaryIconCount || 0}
+    militaryIcons: {total: last.militaryIconCount || 0, visible: last.visibleMilitaryIconCount || 0},
+    measurements: {
+      total: last.measurementCount || 0,
+      paths: last.measurementPathCount || 0,
+      areas: last.measurementAreaCount || 0,
+      hidden: Boolean(last.measurementOverlayHidden)
+    }
   };
 }
 
@@ -498,8 +647,11 @@ function renderMarkdown(report) {
     lines.push(`- 城市图标：${variant.initialStats.visibleCityIconCount} / ${variant.initialStats.cityIconCount}`);
     lines.push(`- marker 图标：${variant.initialStats.visibleMarkerIconCount} / ${variant.initialStats.markerIconCount}`);
     lines.push(`- 军事图标：${variant.initialStats.visibleMilitaryIconCount} / ${variant.initialStats.militaryIconCount}`);
+    lines.push(`- 测量对象：${variant.initialStats.measurementCount}，SVG path ${variant.initialStats.measurementPathCount}，area ${variant.initialStats.measurementAreaCount}`);
+    lines.push(`- selection vertices：${variant.initialStats.selectionVertexCount}，selection build ${variant.initialStats.selectionBuildMs}ms`);
     lines.push(`- route vertices：${variant.initialStats.routeVertexCount}`);
     lines.push(`- river vertices：${variant.initialStats.riverVertexCount}`);
+    if (variant.fixture) lines.push(`- 夹具：\`${JSON.stringify(variant.fixture)}\``);
     lines.push("");
   }
   lines.push("");
@@ -639,6 +791,10 @@ function parseVariants(value) {
 function overlayVariant(id) {
   const variants = {
     full: {id, label: "完整图层", layers: {}},
+    "measurement-heavy": {id, label: "测量对象重场景", layers: {measurements: true}, fixture: "measurement-heavy", fixtureCount: measurementFixtureCount},
+    measurementHeavy: {id, label: "测量对象重场景", layers: {measurements: true}, fixture: "measurement-heavy", fixtureCount: measurementFixtureCount},
+    "selection-heavy": {id, label: "选中态重场景", layers: {}, fixture: "selection-heavy", selectionKind: "state"},
+    selectionHeavy: {id, label: "选中态重场景", layers: {}, fixture: "selection-heavy", selectionKind: "state"},
     noLabels: {id, label: "关闭文字标签", layers: {labels: false, stateLabels: false}},
     noCities: {id, label: "关闭城市图标", layers: {cities: false}},
     noMarkersResources: {id, label: "关闭资源和标记图标", layers: {markers: false, resources: false}},

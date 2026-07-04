@@ -18342,3 +18342,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - `$env:CI='true'; pnpm run audit:panels -- --browser-channel chrome --cells 10000 --seed control-panel-audit-final --template continents --scenario deep --timeout 180000 --fail-on-issues --out "$env:TEMP\fmg-control-panel-audit-final.json" --markdown "$env:TEMP\fmg-control-panel-audit-final.md"` 通过：未发现待复核项，点击到出图 `1250.4ms`，WebGL 加载 `336ms`；图层页 8 行、管理页 10 行、重新生成按钮网格 4 行均通过列对齐检查。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed control-panel-audit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-control-panel-audit-e2e.json" --markdown "$env:TEMP\fmg-control-panel-audit-e2e.md"` 通过：点击到出图 `1333.7ms`，纯生成 `731.2ms`，WebGL 加载 `370.7ms`，最慢加载阶段为“构建线层顶点” `78.3ms`。
+
+### 2026-07-04 overlay 重场景 profile 补齐
+
+背景：
+
+- 当前队列要求继续区分 pan/zoom 停止后的路线、河流、选中 mesh、DOM overlay、测量 SVG 和选中态成本，避免凭直觉把所有非 WebGL 标志迁到 canvas。
+- 既有 `profile:overlay` 已能测图层矩阵和 idle commit，但缺少保存测量对象很多、选中态很大的重场景夹具。
+
+实现：
+
+- `tools/webgl-generator-overlay-profile.mjs` 新增 `measurement-heavy / measurementHeavy` 变体，默认注入 `180` 条保存测量对象，可用 `--measurement-fixture-count` 调整数量；报告会记录 measurement SVG path / area 计数。
+- 新增 `selection-heavy / selectionHeavy` 变体，直接在 renderer 层选中当前地图覆盖 cells 最多的国家，避免打开对象面板遮挡 canvas；报告记录 selected cells、selection vertices、selection build 和 highlight mode。
+- 每个变体执行前都会重置测量对象、选中态和视图，避免前一个变体的 pan/zoom 状态污染后一个变体。
+- `readStats()` 和 Markdown 报告补充测量对象、measurement SVG 计数、selection 顶点和 selection 构建耗时。
+
+验证：
+
+- `node --check .\tools\webgl-generator-overlay-profile.mjs`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 10k smoke `overlay-fixture-smoke / continents / full,measurement-heavy,selection-heavy` 通过；测量夹具生成 `80` 条对象、`80` 条 path、`27` 个 area，选中态夹具生成 `9576` 个 selection vertices。
+- 修正 selection-heavy 夹具避免走 `selectionStore` 打开对象面板后，10k `overlay-selection-fixture-smoke` 中滚轮 / 拖动 overlay 暂停样本为 `18 / 24`，确认交互确实落在 canvas。
+- 100k 正式 profile `overlay-fixture-100k / continents / full,measurement-heavy,selection-heavy` 通过：完整图层滚轮 / 拖动 frame p95 为 `6ms / 17.7ms`；测量 `180` 条对象时为 `6ms / 17.7ms`；选中 `10385` 个 cells 的国家时 selection mesh 为 `186918` 顶点、初始构建约 `26.6ms`，滚轮 / 拖动 frame p95 仍为 `6ms / 17.7ms`。各变体 idle commit 均恢复 clean，路线 mesh 仍约 `42-51ms`，河流 mesh 约 `9-10.5ms`，因此下一刀性能优化应继续盯路线 / 河流 idle commit，而不是默认迁移 DOM 标志。
