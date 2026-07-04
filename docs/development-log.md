@@ -18428,3 +18428,22 @@ full 矩阵结果：
 - 构建产物浏览器烟测通过：经济面板“交易”tab 表头包含“国家”；按 `须句共和国` 筛选后显示 `19` 行，所有可见交易国家流向均包含该国家；详情显示“卖方国家 / 买方国家”；JSON 导出 `327` 行并带 `sellerStateName / buyerStateName`；`glError = 0`，console/page error 均为 `0`。
 - 面板 deep 布局审计 `economy-country-filter-layout / continents / 10000` 通过：未发现待复核项，经济总览面板宽 `820px`，body 无横向溢出，summary 最小项 `125.7px`，detail 最小项 `152.4px`，表格横向滚动正常。
 - e2e 守门 `economy-country-filter-e2e / continents / 10000` 通过：点击到出图 `1717.7ms`，纯生成 `941.4ms`，WebGL 加载 `388.3ms`，最慢加载阶段为“构建视觉 cell mesh” `56.4ms`。
+
+### 2026-07-04 经济面板控制栏空间第二刀
+
+背景：
+
+- 用户要求按当前代码实际情况继续整理面板空间问题，不要把内容硬塞进太小的显示区域。
+- 交易国家筛选第一刀后，deep 面板审计显示经济面板本体无横向溢出，但“交易 / 市场 / 商品”三段切换仍被控制栏第一列挤成 `3 项 / 2 行 / min 82px`；根因是 `.economy-panel-controls` 仍使用 `minmax(210px, 0.5fr) minmax(260px, 1fr) auto`，导出按钮占同一行后把三段切换列压得过窄。
+
+实现：
+
+- 经济面板控制栏改为两列主控：三段切换列 `minmax(270px, 0.85fr)`，筛选列 `minmax(280px, 1.15fr)`。
+- 经济面板的导出按钮组改为独占下一行并靠右显示，避免为了同一行展示按钮继续压缩主操作区。
+- 该改动只触及面板 CSS，不进入生成、WebGL buffer 或地图绘制路径。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 面板 deep 布局审计 `economy-control-space-smoke / continents / 10000` 通过：未发现待复核项；经济总览面板宽 `820px`、body 无横向溢出，segmented 变为 `3 项 / 1 行 / min 90px`，点击到出图 `1212.2ms`，WebGL 加载 `327.7ms`。
+- e2e 守门 `economy-control-space-e2e / continents / 10000` 通过：点击到出图 `1180.9ms`，纯生成 `607.9ms`，WebGL 加载 `316.6ms`，最慢加载阶段为“构建视觉 cell mesh” `48.6ms`。

@@ -5198,8 +5198,8 @@ input.ui-switch-native {
 
 .economy-panel-controls {
   display: grid;
-  grid-template-columns: minmax(210px, 0.5fr) minmax(260px, 1fr) auto;
-  --ui-segmented-min-width: 60px;
+  grid-template-columns: minmax(270px, 0.85fr) minmax(280px, 1.15fr);
+  --ui-segmented-min-width: 84px;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
@@ -5230,6 +5230,7 @@ input.ui-switch-native {
 
 .economy-panel-export-actions {
   display: flex;
+  grid-column: 1 / -1;
   gap: 6px;
   justify-content: flex-end;
 }
