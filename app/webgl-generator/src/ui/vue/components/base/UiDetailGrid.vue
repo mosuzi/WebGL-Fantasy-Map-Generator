@@ -1,5 +1,5 @@
 <template>
-  <div :class="className">
+  <div :class="['ui-detail-grid', className]">
     <template v-if="visibleRows.length">
       <div v-for="row in visibleRows" :key="row.label">
         <span>{{ row.label }}</span>

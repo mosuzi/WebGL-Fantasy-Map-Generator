@@ -1750,7 +1750,8 @@ select:disabled {
 
 .object-table-wrap {
   max-height: 300px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid rgba(189, 206, 213, 0.16);
   border-radius: 6px;
   background: #0f1519;
@@ -6967,6 +6968,50 @@ input.ui-switch-native {
 
 .state-capital-select {
   grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.ui-metric-grid {
+  --ui-metric-grid-min: 112px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-metric-grid-min)), 1fr));
+  gap: 8px;
+}
+
+.ui-detail-grid {
+  --ui-detail-grid-min: 150px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-detail-grid-min)), 1fr));
+  gap: 8px;
+}
+
+.ui-metric-grid > div,
+.ui-detail-grid > div {
+  min-width: 0;
+}
+
+.ui-metric-grid strong,
+.ui-detail-grid strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.ui-sort-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ui-sort-bar .el-button,
+.ui-sort-bar button {
+  flex: 1 1 92px;
+  min-width: min(100%, 92px);
+  min-height: 28px;
+  margin-left: 0;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 @media (max-width: 720px) {

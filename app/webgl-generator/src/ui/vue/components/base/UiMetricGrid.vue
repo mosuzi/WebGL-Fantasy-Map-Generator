@@ -1,5 +1,5 @@
 <template>
-  <div :class="className">
+  <div :class="['ui-metric-grid', className]">
     <div v-for="metric in metrics" :key="metric.label">
       <span>{{ metric.label }}</span>
       <strong>{{ metric.value }}</strong>

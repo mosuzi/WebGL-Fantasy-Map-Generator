@@ -17957,3 +17957,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物烟测通过：旧偏好强制写入 `tradeFlows: true` 后，图层面板没有“贸易流”按钮，手动调用 `renderer.setLayerVisible("tradeFlows", true)` 后 `layerVisibility.tradeFlows = false`，`tradeFlowVertexCount = 0`，`tradeFlowPickItemCount = 0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed trade-flow-layer-retired-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1503.2ms`，纯生成 `706.7ms`，WebGL 加载 `367.7ms`，UI/调度余量 `428.8ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `118.3ms`，最慢加载阶段为“构建线层顶点” `78.4ms`，`drawMs = 0.1ms`。
+
+### 面板共享布局宽松化第一刀
+
+背景：
+
+- 当前国家、省份、城市、文化、宗教、经济、军事、资源标记等面板大量复用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiObjectTable`。
+- 多个 summary / detail 仍用固定 `repeat(4/5/6/7, minmax(0, 1fr))`，文化和宗教 summary 在构建产物审计中曾被压到约 `86px / 89px` 一格。
+- 用户要求不要为了节省空间造成奇怪折行；横向不够时应优先换行或给表格横向滚动空间。
+
+修正：
+
+- `UiMetricGrid`、`UiDetailGrid` 和 `UiSortBar` 增加共享基础类：`ui-metric-grid / ui-detail-grid / ui-sort-bar`。
+- 共享 metric grid 改为 `repeat(auto-fit, minmax(112px, 1fr))`；detail grid 改为 `repeat(auto-fit, minmax(150px, 1fr))`。
+- sort bar 改为可换行 flex 布局，按钮最小宽度约 `92px`，避免固定小列硬挤。
+- detail / metric 的 `strong` 统一允许自然换行，释放军事面板单行省略导致的粗糙观感。
+- `UiObjectTable` 外层容器允许横向滚动，避免列总宽超过面板时被硬裁剪。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed panel-layout-first-pass-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1335.1ms`，纯生成 `666.4ms`，WebGL 加载 `370.7ms`，最慢加载阶段为“构建标签” `67.7ms`。
+- 构建产物 DOM 审计通过：国家 / 省份 / 城市 / 文化 / 宗教 / 经济 / 军事 / 资源标记面板 body 均无横向滚动；文化 summary 最小项宽约 `133px`，宗教 summary 最小项宽约 `138px`，军事 summary 最小项宽约 `132px`。
+- 单独首屏加载检查无 console error、无健康监测 error，canvas 可见；一次性打开多组懒加载管理面板时出现一次主线程长任务记录，归入后续 overlay / 面板 profile 阶段继续跟踪，不作为本轮加载或绘制回退。

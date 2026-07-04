@@ -1,5 +1,5 @@
 <template>
-  <div :class="className">
+  <div :class="['ui-sort-bar', className]">
     <UiButton
       v-for="option in options"
       :key="option.key"
