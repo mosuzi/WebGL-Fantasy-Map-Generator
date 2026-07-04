@@ -22,6 +22,7 @@
 - 贸易流地图图层已退役；贸易查看列表化第一刀已完成，经济面板“交易”tab 显示卖方 / 买方国家和国家流向，可按国家名筛选交易，CSV/JSON 导出带 `sellerStateName / buyerStateName`。后续不恢复同时铺满地图的交易连线；更细的地区、市场、商品、卖方和买方组合筛选只作为可选增强。
 - 军事方向已按用户校准收住：只保留静态管理、面板观感、导出可读性、军团展示、态势线边界视觉和既有记录查看 / 清理。除非用户重新要求，不再推进动态军事系统。
 - 测量对象已完成保存、图层化、节点编辑、贴路、`cellStops`、沿道路补中间显示点和完整导入回归；后续只保留曲线尺细化等可选增强。
+- 测量浮条默认展示和提示折行已修正：`measurement-readout` 初始带 `hidden`，并补 `.measurement-readout[hidden] { display: none; }`，未开启测量工具时不会默认露出；浮条改成按钮行 + 提示行两行布局，`点击地图添加起点` 等提示独占一行并 `nowrap`。构建产物烟测确认初始隐藏，开启测量后提示在按钮行下方且不折行；10k e2e `measurement-readout-layout-e2e` 通过，WebGL 加载 `369.7ms`。
 - 高度图导入已经完成色板量化、映射、应用链路、profile、直方图、色带预览、前后对比、待处理颜色和差值热力图等多轮功能。后续不再从“灰度预览第一刀”继续，应按当前实现继续做 profile 失配辅助、待处理审核队列或预览质量增强。
 - 面板布局宽松化第一刀已完成：共享 `UiMetricGrid / UiDetailGrid / UiSortBar` 增加基础类，summary/detail 改为按最小宽度自适应换行，表格容器允许横向滚动。构建产物审计中，文化 summary 最小项宽约 `133px`，宗教 summary 最小项宽约 `138px`，不再停留在 `80px` 级硬挤状态。
 - overlay pan/zoom profile 第一刀已完成：renderer stats 已能输出 overlay 节点数、labels / city icons / marker icons / military icons 分项耗时，`pnpm run profile:overlay` 已支持 10k / 50k / 100k 与 `full,noRoutesRivers` 变体。当前证据显示 DOM overlay 不是 100k 交互主瓶颈，路线 / 河流 screen-space 动态 mesh 才是主要耗时。

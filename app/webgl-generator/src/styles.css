@@ -815,14 +815,13 @@ select:disabled {
   position: absolute;
   left: 18px;
   top: 64px;
-  display: flex;
+  display: grid;
   max-width: min(640px, calc(100% - 36px));
-  min-height: 34px;
-  align-items: center;
-  gap: 10px;
+  min-height: 54px;
+  gap: 7px;
   border: 1px solid rgba(240, 197, 110, 0.42);
   border-radius: 8px;
-  padding: 7px 9px 7px 10px;
+  padding: 8px 10px;
   background: rgba(12, 18, 22, 0.82);
   box-shadow: 0 12px 34px rgba(2, 6, 23, 0.28);
   color: #dfe9ed;
@@ -830,8 +829,29 @@ select:disabled {
   pointer-events: auto;
 }
 
+.measurement-readout[hidden] {
+  display: none;
+}
+
+.measurement-readout-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
 .measurement-readout strong {
+  flex: 0 0 auto;
   color: #ffe0a1;
+  white-space: nowrap;
+}
+
+.measurement-readout-hint {
+  min-width: 0;
+  color: #dfe9ed;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .measurement-readout button {
@@ -846,6 +866,8 @@ select:disabled {
 }
 
 .measurement-readout .el-button {
+  flex: 0 0 auto;
+  width: auto;
   margin-left: 0;
   padding: 0 10px;
 }

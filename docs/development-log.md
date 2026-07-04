@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：测量浮条默认隐藏与提示行修正
+
+用户反馈测量面板默认会展示，并且“点击地图添加起点”提示在窄宽度下被挤成竖向折行。复查后确认这是测量浮条 `measurement-readout` 的布局问题：组件挂载后缺少初始隐藏兜底，且标题、提示和按钮共用一行 flex，提示文本会被按钮挤压。
+
+修正：
+
+- `index.html` 中 `#measurement-readout` 初始增加 `hidden`，避免应用初始化或测量 overlay 切换前短暂/默认露出。
+- CSS 增加 `.measurement-readout[hidden] { display: none; }`，确保组件自身 `display: grid` 不覆盖隐藏语义。
+- `MeasurementReadout.vue` 改为“按钮行 + 提示行”结构，提示从按钮行拆出。
+- 测量浮条从单行 flex 改为两行 grid；提示行设置 `white-space: nowrap`、`overflow: hidden` 和 `text-overflow: ellipsis`，不再竖向折行。
+- 测量浮条内 Element Plus 按钮宽度在局部恢复为 `auto`，避免继承全局 `.secondary-action { width: 100%; }` 后挤压按钮行。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：初始 `readoutHidden = true`、`overlayHidden = true`、`display = none`；点击“测量”后 readout 为 `display = grid`，提示文本为 `点击地图添加起点`，`white-space = nowrap`，提示 top 位于按钮行 bottom 下方，无 console/page error。
+- e2e 守门 `measurement-readout-layout-e2e / continents / 10000` 通过：点击到出图 `1528.8ms`，纯生成 `846.3ms`，WebGL 加载 `369.7ms`，最慢加载阶段为“构建线层顶点” `49.5ms`。
+
 ## 2026-07-04：GEO 导入入口控件修正
 
 用户反馈“导入 GEO 数据不好使”。复查发现 GeoJSON 解析、测量对象写入和 overlay 绘制链路本身可用，问题出在真实用户入口：简介页导入按钮使用 `UiButton @click -> document.getElementById(...).click()` 触发隐藏 file input，而回归脚本此前直接 `setInputFiles()` 到隐藏 input，绕过了可见按钮路径。
