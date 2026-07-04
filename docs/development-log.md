@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：取消视口交互时隐藏 overlay，改回同步刷新
+
+用户复核本地效果后指出，临时隐藏非 canvas 覆盖层仍没有解决移动视图时标签、军事单位和城镇名称与画布分离的观感问题，因此要求先取消这条逻辑，改回覆盖层与 canvas 同步移动 / 缩放。
+
+完成内容：
+
+- `drawViewportPreview()` 不再调用 `suspendOverlayForInteraction()`，也不再用 `updateOverlay: false` 跳过覆盖层刷新。
+- 视口预览绘制改为 `updateOverlay: true`，在拖动、滚轮缩放、适配视图和定位对象时同步刷新标签、城市剪影、marker 和军事图标位置。
+- 路线、河流和选中态等 screen-space 动态 mesh 仍保留 idle commit 分帧重建，避免把动态线层重建重新塞回每一帧交互。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Vite dev 浏览器烟测覆盖滚轮、左键拖拽、`fitToView()` 和 `locateObject({kind: "city"})`：无 console/page error，`glError = 0`；交互期间 `map-stage--interaction-hidden = false`、`map-overlay--interaction-hidden = false`、`#map-overlay` 保持 `visible`；左键拖拽后 city label / city icon 屏幕位移约 `158.8px`，定位对象后 city label 位移约 `162.6px`。
+- e2e 守门 `viewport-overlay-sync-e2e / continents / 10000` 通过：点击到出图 `1610.8ms`，纯生成 `886.8ms`，WebGL 加载 `405.3ms`，最慢加载阶段为“构建标签” `80.1ms`。
+- 100k overlay profile `viewport-overlay-sync-100k / continents / full` 通过：完整图层连续滚轮 frame p95 `70.6ms`、中键拖动画布 frame p95 `35.4ms`，overlay p95 `5.8ms / 2.4ms`，overlay 暂停样本为 `0`，idle commit dirty 均恢复 `clean`。同步刷新下滚轮出现 `4` 个 long task，作为后续性能专项风险记录。
+
 ## 2026-07-04：左键拖拽视口时 overlay 隐藏补洞
 
 用户指出本地启动后移动视图时，标签、军事单位、城镇名称等非 canvas 覆盖层仍会与画布分离。复查后确认此前只完整覆盖了滚轮、中键 / 右键拖拽、适配视图和定位对象；普通左键拖拽仍停留在“选择候选”路径，移动超过阈值后只标记 moved，没有切换到平移和 overlay 隐藏路径。

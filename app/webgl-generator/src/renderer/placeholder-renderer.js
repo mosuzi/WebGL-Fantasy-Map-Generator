@@ -886,9 +886,9 @@ export class PlaceholderMapRenderer {
   drawViewportPreview() {
     if (!this.map) return;
     this.viewportCommitVersion += 1;
-    this.suspendOverlayForInteraction();
+    this.resumeOverlayAfterInteraction();
     this.markViewportBuffersDirty();
-    this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+    this.draw({updateDynamicBuffers: false, updateOverlay: true, drawDirtyDynamicBuffers: false});
     this.onViewChange();
     this.scheduleViewportCommit();
   }
