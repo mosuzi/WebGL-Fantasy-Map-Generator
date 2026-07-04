@@ -17644,3 +17644,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：向生产包页面注入 `front-scan-63 / continents / 10000` 地图后，2 条 front 均合法，其中进攻线 `length = 12.47 / maxLength = 12.47`、`points = 4`、`borderCellPairs = 3`；开启战线图层只增加 `60` 个 line 顶点，`drawMs = 0`，`glError = 0`，health 非 info 事件为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed front-scan-63 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1689.7ms`，纯生成 `810.2ms`，WebGL 加载 `510.9ms`，最慢加载阶段为“构建视觉 cell mesh” `49.4ms`，`构建线层顶点 42.1ms`，结果仍在守门阈值内。
+
+### 湖泊对象名称库显式重命名
+
+背景：
+
+- 国家、城市、河流已经具备名称库显式重命名链路，湖泊名称生成也已接入 `hydro` 名称库，但运行时还不能把湖泊作为可选对象处理。
+- 用户已校准：无需做动态军事系统；本轮不再扩展战斗模拟、战役推进或自动军事行动，军事方向只保留静态面板和态势线收尾。
+
+修正：
+
+- 新增 `OBJECT_KIND.LAKE`，对象解析、通用重命名命令和对象详情面板都支持湖泊。
+- 渲染拾取层新增湖泊对象识别：当鼠标落在 `pack.features` 的 lake feature 上时返回 `lake` 对象，并为定位/聚焦提供湖泊 pack cell 质心与 bounds。
+- 湖泊拾取优先级放在标签、标记图标和军事图标之后，但高于附近城市/标记/军团半径，避免低缩放下点击湖泊水面却选中岸边城市。
+- 新增 `createRenameLakesFromNamebaseCommand()`，按当前 `map.namebases` 和湖泊自身水文信息生成新湖泊名，只写对应 `feature.name`，并接入 `EditHistory` 撤销/重做。
+- README、当前计划、名称库绑定专项和 source 功能积压已同步更新；后续名称库缺口改为质量参数和更多对象面板入口，不再把湖泊单对象重命名列为待办。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：Playwright 通过 HTTP 路由加载 `dist/webgl-generator`，湖泊 `#5` 从 `月湖` 改为 `月泊`，撤销恢复 `月湖`，重做恢复 `月泊`；拾取对象为 `lake`，`glError = 0`，无 console error/page error。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed lake-rename-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1718.7ms`，纯生成 `631.8ms`，WebGL 加载 `737.9ms`，最慢加载阶段为“构建视觉 cell mesh” `56.9ms`，控制台错误为空。

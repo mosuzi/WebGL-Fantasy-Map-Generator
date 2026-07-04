@@ -7,6 +7,7 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.ROUTE]: resolveRoute,
   [OBJECT_KIND.TRADE_FLOW]: resolveTradeFlow,
   [OBJECT_KIND.RIVER]: resolveRiver,
+  [OBJECT_KIND.LAKE]: resolveLake,
   [OBJECT_KIND.MILITARY]: resolveMilitary,
   [OBJECT_KIND.STATE]: resolveState,
   [OBJECT_KIND.PROVINCE]: resolveProvince,
@@ -195,6 +196,24 @@ function resolveRiver(map, object) {
   };
 }
 
+function resolveLake(map, object) {
+  const feature = findLakeFeature(map, object.id);
+  if (!feature) return null;
+  return {
+    ...object,
+    kind: OBJECT_KIND.LAKE,
+    id: feature.i ?? feature.id ?? object.id,
+    name: feature.name || `湖泊 #${feature.i ?? feature.id ?? object.id}`,
+    type: feature.group || feature.type || "lake",
+    cells: feature.cells || 0,
+    area: feature.area || 0,
+    height: feature.height,
+    flux: feature.flux,
+    evaporation: feature.evaporation,
+    firstCell: feature.firstCell
+  };
+}
+
 function tradePartyInfo(map, type, id) {
   if (type === "burg") {
     const burg = map?.pack?.burgs?.[id] || map?.settlements?.cities?.find(city => city?.burgId === id || city?.id === id);
@@ -211,6 +230,11 @@ function tradePartyInfo(map, type, id) {
     name: market?.name || `市场 #${id}`,
     point: Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null
   };
+}
+
+function findLakeFeature(map, featureId) {
+  const id = Number(featureId);
+  return (map?.pack?.features || []).find(feature => feature?.type === "lake" && Number(feature.i ?? feature.id) === id) || null;
 }
 
 function tradeSourceLabel(source) {

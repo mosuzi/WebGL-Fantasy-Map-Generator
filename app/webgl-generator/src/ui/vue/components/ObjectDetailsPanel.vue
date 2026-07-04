@@ -65,6 +65,7 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.ROUTE]: object => `路线 ${object.from} -> ${object.to}`,
   [OBJECT_KIND.TRADE_FLOW]: object => `贸易流 ${object.goodName || `#${object.id}`}`,
   [OBJECT_KIND.RIVER]: object => `河流 ${object.name || `#${object.id}`}`,
+  [OBJECT_KIND.LAKE]: object => `湖泊 ${object.name || `#${object.id}`}`,
   [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
   [OBJECT_KIND.REGION]: object => `区域 ${object.name}`
 });
@@ -131,6 +132,16 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
     {label: "对象 id", value: object.id, debug: true}
   ],
+  [OBJECT_KIND.LAKE]: object => [
+    {label: "名称", value: object.name || `#${object.id}`},
+    {label: "类型", value: lakeTypeLabel(object.type)},
+    {label: "面积", value: formatNumberValue(object.area)},
+    {label: "水位", value: formatNumberValue(object.height)},
+    {label: "补给", value: formatNumberValue(object.flux)},
+    {label: "蒸发", value: formatNumberValue(object.evaporation)},
+    {label: "cell", value: object.firstCell, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
   [OBJECT_KIND.PROVINCE]: object => [
     {label: "所属国家", value: object.state},
     {label: "国家 id", value: object.stateId},
@@ -158,11 +169,11 @@ function detailRows(object) {
 }
 
 function canRenameObject(object) {
-  return object?.kind === OBJECT_KIND.CITY || (object?.kind === OBJECT_KIND.LABEL && (object.targetKind === LABEL_TARGET_KIND.CITY || object.targetKind === LABEL_TARGET_KIND.STATE));
+  return object?.kind === OBJECT_KIND.CITY || object?.kind === OBJECT_KIND.LAKE || (object?.kind === OBJECT_KIND.LABEL && (object.targetKind === LABEL_TARGET_KIND.CITY || object.targetKind === LABEL_TARGET_KIND.STATE));
 }
 
 function canRenameObjectFromNamebase(object) {
-  if (object?.kind === OBJECT_KIND.CITY || object?.kind === OBJECT_KIND.RIVER) return Number(object.id) >= 0;
+  if (object?.kind === OBJECT_KIND.CITY || object?.kind === OBJECT_KIND.RIVER || object?.kind === OBJECT_KIND.LAKE) return Number(object.id) >= 0;
   if (object?.kind === OBJECT_KIND.STATE) return Number(object.id) > 0;
   if (object?.kind !== OBJECT_KIND.LABEL) return false;
   if (object.targetKind === LABEL_TARGET_KIND.CITY) return Number(object.targetId ?? object.id) >= 0;
@@ -181,6 +192,18 @@ function formatMarkerTitle(object) {
 
 function formatMarkerData(data = {}) {
   return Object.entries(data).map(([key, value]) => `${key}: ${value}`).join(" / ") || "none";
+}
+
+function lakeTypeLabel(type) {
+  return {
+    lake: "湖泊",
+    frozen: "冰湖",
+    lava: "熔岩湖",
+    dry: "干湖",
+    sinkhole: "落水洞",
+    salt: "盐湖",
+    fresh: "淡水湖"
+  }[type] || type || "湖泊";
 }
 
 function formatDistanceValue(value) {

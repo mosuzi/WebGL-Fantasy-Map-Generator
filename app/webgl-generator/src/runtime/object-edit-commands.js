@@ -40,6 +40,7 @@ const OBJECT_NAME_READERS = Object.freeze({
   [OBJECT_KIND.CULTURE]: readCultureName,
   [OBJECT_KIND.RELIGION]: readReligionName,
   [OBJECT_KIND.RIVER]: readRiverName,
+  [OBJECT_KIND.LAKE]: readLakeName,
   [OBJECT_KIND.CITY]: readCityName,
   [OBJECT_KIND.MARKER]: readMarkerName
 });
@@ -50,6 +51,7 @@ const OBJECT_NAME_WRITERS = Object.freeze({
   [OBJECT_KIND.CULTURE]: writeCultureName,
   [OBJECT_KIND.RELIGION]: writeReligionName,
   [OBJECT_KIND.RIVER]: writeRiverName,
+  [OBJECT_KIND.LAKE]: writeLakeName,
   [OBJECT_KIND.CITY]: writeCityName,
   [OBJECT_KIND.MARKER]: writeMarkerName
 });
@@ -60,6 +62,7 @@ const OBJECT_NAME_RESTORERS = Object.freeze({
   [OBJECT_KIND.CULTURE]: restoreCultureName,
   [OBJECT_KIND.RELIGION]: (map, target, previous) => writeReligionName(map, target.id, previous.name),
   [OBJECT_KIND.RIVER]: (map, target, previous) => writeRiverName(map, target.id, previous.name),
+  [OBJECT_KIND.LAKE]: (map, target, previous) => writeLakeName(map, target.id, previous.name),
   [OBJECT_KIND.CITY]: (map, target, previous) => writeCityName(map, target.id, previous.name, previous.burgName),
   [OBJECT_KIND.MARKER]: (map, target, previous) => writeMarkerName(map, target.id, previous.name)
 });
@@ -240,6 +243,11 @@ function readRiverName(map, riverId) {
   return river ? {name: river.name || ""} : null;
 }
 
+function readLakeName(map, lakeId) {
+  const lake = findLake(map, lakeId);
+  return lake ? {name: lake.name || ""} : null;
+}
+
 function readMarkerName(map, markerId) {
   const marker = map?.markers?.markers?.[markerId];
   return marker ? {name: marker.name || ""} : null;
@@ -315,6 +323,12 @@ function writeRiverName(map, riverId, name) {
   const river = findRiver(map, riverId);
   if (!river) throw new Error(`找不到河流 #${riverId}`);
   river.name = name;
+}
+
+function writeLakeName(map, lakeId, name) {
+  const lake = findLake(map, lakeId);
+  if (!lake) throw new Error(`找不到湖泊 #${lakeId}`);
+  lake.name = name;
 }
 
 function writeMarkerName(map, markerId, name) {
@@ -418,6 +432,11 @@ function restoreCityAndBurg(map, snapshot) {
 
 function findRiver(map, riverId) {
   return map?.rivers?.rivers?.find(river => river.id === riverId) || null;
+}
+
+function findLake(map, lakeId) {
+  const id = Number(lakeId);
+  return (map?.pack?.features || []).find(feature => feature?.type === "lake" && Number(feature.i ?? feature.id) === id) || null;
 }
 
 function findCityByBurg(map, burgId) {

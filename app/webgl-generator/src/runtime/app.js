@@ -46,6 +46,7 @@ import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEvents
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
+import {createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
@@ -2626,7 +2627,7 @@ function namebaseRenameTargetForObject(object) {
   if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.STATE) {
     return {kind: OBJECT_KIND.STATE, id: Number(object.targetId ?? object.id)};
   }
-  if (object.kind === OBJECT_KIND.CITY || object.kind === OBJECT_KIND.STATE || object.kind === OBJECT_KIND.RIVER) {
+  if (object.kind === OBJECT_KIND.CITY || object.kind === OBJECT_KIND.STATE || object.kind === OBJECT_KIND.RIVER || object.kind === OBJECT_KIND.LAKE) {
     return {kind: object.kind, id: Number(object.id)};
   }
   return null;
@@ -2646,6 +2647,10 @@ function createSelectedNamebaseRenameCommand(target) {
     if (target.id < 0) return null;
     return createRenameRiversFromNamebaseCommand([target.id], {label: "按名称库重命名选中河流"});
   }
+  if (target.kind === OBJECT_KIND.LAKE) {
+    if (target.id < 0) return null;
+    return createRenameLakesFromNamebaseCommand([target.id], {label: "按名称库重命名选中湖泊"});
+  }
   return null;
 }
 
@@ -2653,6 +2658,7 @@ function selectedNamebaseTargetLabel(target) {
   if (target.kind === OBJECT_KIND.STATE) return "国家";
   if (target.kind === OBJECT_KIND.CITY) return "城市";
   if (target.kind === OBJECT_KIND.RIVER) return "河流";
+  if (target.kind === OBJECT_KIND.LAKE) return "湖泊";
   return "对象";
 }
 

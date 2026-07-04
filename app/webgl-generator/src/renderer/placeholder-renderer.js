@@ -677,10 +677,11 @@ export class PlaceholderMapRenderer {
     const tradeFlow = this.layerVisibility.tradeFlows ? this.pickTradeFlow(world.x, world.y, this.pickThresholdWorld(9)) : null;
     const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
     const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
+    const lake = pickLakeObject(this.map, result);
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
-    const object = militaryIcon || markerIcon || label || cityObject || marker || military || tradeFlow || river || route || politicalObject;
-    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (politicalObject ? 1 : 0);
-    return result ? {...result, label, cityObject, marker, military, tradeFlow, route, river, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
+    const object = militaryIcon || markerIcon || label || lake || cityObject || marker || military || tradeFlow || river || route || politicalObject;
+    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
+    return result ? {...result, label, cityObject, marker, military, tradeFlow, route, river, lake, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
 
   screenToWorld(clientX, clientY) {
@@ -1292,6 +1293,9 @@ function selectionPoint(map, selection) {
     const regiment = findRegiment(map, selection);
     return regiment ? {x: regiment.x, y: regiment.y} : null;
   }
+  if (selection?.kind === OBJECT_KIND.LAKE) {
+    return lakeFeatureCenter(map, selection.id);
+  }
   return null;
 }
 
@@ -1328,10 +1332,73 @@ function getObjectBounds(map, object) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
     return river ? pointsBounds(river.points, 42) : null;
   }
+  if (object.kind === OBJECT_KIND.LAKE) {
+    return lakeFeatureBounds(map, object.id, 42);
+  }
   if (isPoliticalObjectKind(object.kind)) {
     return politicalBounds(map, object, 48);
   }
   return null;
+}
+
+function pickLakeObject(map, pickResult) {
+  const feature = lakeFeatureFromPickResult(map, pickResult);
+  if (!feature) return null;
+  const id = feature.i ?? feature.id;
+  return {
+    kind: OBJECT_KIND.LAKE,
+    id,
+    name: feature.name || `湖泊 #${id}`,
+    type: feature.group || feature.type || "lake",
+    area: feature.area || 0,
+    cells: feature.cells || 0,
+    height: feature.height,
+    flux: feature.flux,
+    evaporation: feature.evaporation,
+    firstCell: feature.firstCell,
+    packCell: pickResult.packCell,
+    gridCell: pickResult.gridCell
+  };
+}
+
+function lakeFeatureFromPickResult(map, pickResult) {
+  if (!pickResult || pickResult.packCell === null || pickResult.packCell === undefined) return null;
+  const featureId = map?.pack?.cells?.f?.[pickResult.packCell];
+  const feature = map?.pack?.features?.[featureId];
+  return feature?.type === "lake" ? feature : null;
+}
+
+function lakeFeature(map, featureId) {
+  const id = Number(featureId);
+  return (map?.pack?.features || []).find(feature => feature?.type === "lake" && Number(feature.i ?? feature.id) === id) || null;
+}
+
+function lakeFeaturePoints(map, featureId) {
+  const feature = lakeFeature(map, featureId);
+  if (!feature) return [];
+  const id = Number(feature.i ?? feature.id);
+  const cells = map?.pack?.cells;
+  const points = [];
+  for (let cell = 0; cell < (cells?.p?.length || 0); cell++) {
+    if (Number(cells.f?.[cell]) !== id) continue;
+    const point = cells.p[cell];
+    if (isWorldPoint(point)) points.push(point);
+  }
+  const fallback = cells?.p?.[feature.firstCell];
+  if (!points.length && isWorldPoint(fallback)) points.push(fallback);
+  return points;
+}
+
+function lakeFeatureCenter(map, featureId) {
+  const points = lakeFeaturePoints(map, featureId);
+  if (!points.length) return null;
+  const sum = points.reduce((total, point) => ({x: total.x + point[0], y: total.y + point[1]}), {x: 0, y: 0});
+  return {x: sum.x / points.length, y: sum.y / points.length};
+}
+
+function lakeFeatureBounds(map, featureId, padding) {
+  const points = lakeFeaturePoints(map, featureId);
+  return points.length ? pointsBounds(points, padding) : null;
 }
 
 function politicalBounds(map, object, padding) {
