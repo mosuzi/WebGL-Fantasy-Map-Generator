@@ -34,6 +34,7 @@
 - 面板深场景审计已完成：`pnpm run audit:panels -- --scenario deep` 会注入长国家 / 城市 / 文化 / 宗教 / 路线 / 河流 / 湖泊 / marker / 备注样本，等待异步面板预热完成后逐个打开主要面板、选中首个对象并展开可用二级编辑面板。`panel-layout-deep-smoke` 未发现布局待复核项；连续打开面板仍会产生 health 长任务事件，后续应作为面板打开性能单独诊断，不混入布局失败。
 - 面板打开长任务诊断与第一刀优化已完成：新增 `pnpm run profile:panels`，并把共享 `UiObjectTable` 从 Element Plus `ElTable` 换成轻量原生 table，保留列最小宽、选中、定位和横向滚动。全量 17 个面板 profile 中最慢为城市管理 `371.3ms`、标签管理 `368.8ms`，health 事件 `0`；deep 布局审计仍未发现待复核项。
 - 地图 DOM overlay 交互降级第一刀已完成：100k 当前代码复测中，完整图层滚轮 frame p95 曾为 `111.7ms`、拖动 p95 为 `41.2ms`；交互期间暂停 `#map-overlay` 的标签、城市剪影、marker 和军事图标更新并隐藏，idle 后恢复完整更新。复测同 seed 后完整图层滚轮 frame p95 为 `6ms`、拖动 p95 为 `17.7ms`，overlay 交互样本全部暂停，idle 后 `finalSuspended = false`。
+- 地图内容 overlay 统一隐藏已完成：拖动 / 缩放期间 `.map-stage` 会进入 `map-stage--interaction-hidden`，统一隐藏 `map-overlay`、测量 SVG、hover 浮层、图例和比例尺，避免非 canvas 标志按旧相机位置滞留导致与画布分离；idle 后统一恢复。浏览器断言确认五类覆盖层交互中 `visibility = hidden`、约 `180ms` idle 后恢复 `visible`。
 
 ### 当前执行队列
 
@@ -45,8 +46,8 @@
    - 第一优先级是军事管理面板、事件链摘要、导入导出工具条、单位 / 滑条字段、二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
    - 审计脚本也要跟进：除横向溢出外，增加按钮文字过窄、重要字段被省略号截断、异常多行折断和详情最小项宽检查。
 2. **overlay 与动态线层性能专项**：
-   - 下一刀先固定 `profile:overlay` 的 idle commit 指标，让报告能看到 pan/zoom 停止后的路线、河流、选中 mesh 和 DOM overlay 恢复成本。
-   - 用 100k 地图补测 `full / noDomOverlays / noRoutesRivers / measurement-heavy / selection-heavy` 这类变体，先确认卡顿来源，再决定优化对象。
+   - `profile:overlay` 已补 idle commit 指标；下一刀继续看 pan/zoom 停止后的路线、河流、选中 mesh 和 DOM overlay 恢复成本。
+   - 用 100k 地图继续补测 `measurement-heavy / selection-heavy` 这类变体，先确认卡顿来源，再决定优化对象。
    - 若瓶颈仍是路线 / 河流 screen-space 动态 mesh，优先做 idle commit 跨帧重建、河流异步 mesh、过期 commit 取消、视口分块或缓存。
    - 若证据指向测量 SVG、多对象选中态或极端标签数量，再单独治理对应 overlay；不默认把标签、城市剪影、marker 或军事图标迁到 WebGL。
 3. **贸易查看列表化设计**：

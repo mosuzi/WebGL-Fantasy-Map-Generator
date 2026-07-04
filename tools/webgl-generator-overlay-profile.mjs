@@ -23,6 +23,8 @@ const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated",
 const viewport = parseViewport(args.viewport || "1280x820");
 const maxFrameP95Ms = Number(args["max-frame-p95-ms"] || 80);
 const maxOverlayP95Ms = Number(args["max-overlay-p95-ms"] || 35);
+const maxIdleCommitMs = Number(args["max-idle-commit-ms"] || 10000);
+const maxIdleFrameP95Ms = Number(args["max-idle-frame-p95-ms"] || maxFrameP95Ms);
 const variants = parseVariants(args.variants || args.variant || "full");
 
 if (!existsSync(distDir)) fail(`构建产物不存在：${distDir}`);
@@ -78,15 +80,18 @@ try {
     await applyVariant(page, variant);
     const initialStats = await readStats(page);
     const zoom = await profileZoom(page);
-    await waitForOverlayIdle(page);
+    zoom.idleCommit = await waitForOverlayIdle(page);
     const pan = await profilePan(page);
-    await waitForOverlayIdle(page);
+    pan.idleCommit = await waitForOverlayIdle(page);
     const finalStats = await readStats(page);
     const interactions = [zoom, pan];
     variantReports.push({id: variant.id, label: variant.label, initialStats, finalStats, interactions});
     for (const item of interactions) {
       if (item.frames.p95Ms > maxFrameP95Ms) failures.push(`${variant.label} / ${item.label} 帧 p95 ${item.frames.p95Ms}ms 超过 ${maxFrameP95Ms}ms`);
       if (item.overlay.totalP95Ms > maxOverlayP95Ms) failures.push(`${variant.label} / ${item.label} overlay p95 ${item.overlay.totalP95Ms}ms 超过 ${maxOverlayP95Ms}ms`);
+      if (!item.idleCommit?.completed) failures.push(`${variant.label} / ${item.label} idle commit 未在 ${Math.min(timeoutMs, 10000)}ms 内完成`);
+      if ((item.idleCommit?.elapsedMs || 0) > maxIdleCommitMs) failures.push(`${variant.label} / ${item.label} idle commit 耗时 ${item.idleCommit.elapsedMs}ms 超过 ${maxIdleCommitMs}ms`);
+      if ((item.idleCommit?.frames?.p95Ms || 0) > maxIdleFrameP95Ms) failures.push(`${variant.label} / ${item.label} idle commit 帧 p95 ${item.idleCommit.frames.p95Ms}ms 超过 ${maxIdleFrameP95Ms}ms`);
       if (item.glErrors.some(value => value !== 0)) failures.push(`${variant.label} / ${item.label} WebGL error 不为 0`);
     }
   }
@@ -107,6 +112,8 @@ try {
       variants: variants.map(variant => variant.id),
       maxFrameP95Ms,
       maxOverlayP95Ms,
+      maxIdleCommitMs,
+      maxIdleFrameP95Ms,
       consoleErrors
     },
     initialStats: variantReports[0]?.initialStats || null,
@@ -216,14 +223,96 @@ async function applyVariant(page, variant) {
 }
 
 async function waitForOverlayIdle(page) {
-  await page.waitForFunction(() => {
+  await page.evaluate(() => {
+    const previous = window.__webglGeneratorOverlayIdleProfile;
+    if (previous) {
+      previous.running = false;
+      previous.observer?.disconnect?.();
+    }
+    const profile = {
+      startedAt: performance.now(),
+      frames: [],
+      longTasks: [],
+      running: true,
+      lastFrameAt: 0,
+      observer: null
+    };
+    if ("PerformanceObserver" in window) {
+      try {
+        profile.observer = new PerformanceObserver(list => {
+          for (const entry of list.getEntries()) profile.longTasks.push({startTime: entry.startTime, duration: entry.duration});
+        });
+        profile.observer.observe({entryTypes: ["longtask"]});
+      } catch {
+        profile.observer = null;
+      }
+    }
+    function tick(now) {
+      if (profile.lastFrameAt) profile.frames.push(now - profile.lastFrameAt);
+      profile.lastFrameAt = now;
+      if (profile.running) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    window.__webglGeneratorOverlayIdleProfile = profile;
+  });
+  const completed = await page.waitForFunction(() => {
     const stats = window.__webglGeneratorApp?.renderer?.getStats?.();
     if (!stats || stats.overlay?.interactionSuspended !== false) return false;
     const routesClean = stats.layerVisibility?.routes === false || stats.dynamicMeshCache?.routesDirty === false;
     const riversClean = stats.layerVisibility?.rivers === false || stats.dynamicMeshCache?.riversDirty === false;
     return routesClean && riversClean;
-  }, null, {timeout: Math.min(timeoutMs, 10000)}).catch(() => {});
+  }, null, {timeout: Math.min(timeoutMs, 10000)}).then(() => true).catch(() => false);
   await page.waitForTimeout(40);
+  return page.evaluate(completed => {
+    const profile = window.__webglGeneratorOverlayIdleProfile;
+    const stats = window.__webglGeneratorApp?.renderer?.getStats?.() || {};
+    if (!profile) return emptyOverlayIdleProfile(completed, stats);
+    profile.running = false;
+    profile.observer?.disconnect?.();
+    return {
+      completed,
+      elapsedMs: Math.round((performance.now() - profile.startedAt) * 100) / 100,
+      frames: summarizeIdleFrames(profile.frames),
+      longTasks: profile.longTasks.map(item => ({
+        startTime: Math.round(item.startTime * 10) / 10,
+        duration: Math.round(item.duration * 10) / 10
+      })),
+      overlaySuspended: Boolean(stats.overlay?.interactionSuspended),
+      routesDirty: Boolean(stats.dynamicMeshCache?.routesDirty),
+      riversDirty: Boolean(stats.dynamicMeshCache?.riversDirty),
+      routeBuildMs: stats.layerVisibility?.routes === false || stats.dynamicMeshCache?.routesDirty ? 0 : stats.routeBuildMs || 0,
+      riverBuildMs: stats.layerVisibility?.rivers === false || stats.dynamicMeshCache?.riversDirty ? 0 : stats.riverBuildMs || 0,
+      overlayMs: stats.overlay?.update?.totalMs || 0
+    };
+
+    function summarizeIdleFrames(values) {
+      if (!values.length) return {count: 0, averageMs: 0, p95Ms: 0, maxMs: 0};
+      const sorted = [...values].sort((a, b) => a - b);
+      const sum = values.reduce((total, value) => total + value, 0);
+      const p95Index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * 0.95) - 1));
+      return {
+        count: values.length,
+        averageMs: Math.round((sum / values.length) * 100) / 100,
+        p95Ms: Math.round(sorted[p95Index] * 100) / 100,
+        maxMs: Math.round(sorted[sorted.length - 1] * 100) / 100
+      };
+    }
+
+    function emptyOverlayIdleProfile(done, currentStats) {
+      return {
+        completed: done,
+        elapsedMs: 0,
+        frames: {count: 0, averageMs: 0, p95Ms: 0, maxMs: 0},
+        longTasks: [],
+        overlaySuspended: Boolean(currentStats.overlay?.interactionSuspended),
+        routesDirty: Boolean(currentStats.dynamicMeshCache?.routesDirty),
+        riversDirty: Boolean(currentStats.dynamicMeshCache?.riversDirty),
+        routeBuildMs: 0,
+        riverBuildMs: 0,
+        overlayMs: 0
+      };
+    }
+  }, completed);
 }
 
 async function startFrameRecorder(page) {
@@ -397,6 +486,8 @@ function renderMarkdown(report) {
   lines.push(`- cells：\`${report.metadata.cells}\``);
   lines.push(`- 帧 p95 上限：\`${report.metadata.maxFrameP95Ms}ms\``);
   lines.push(`- overlay p95 上限：\`${report.metadata.maxOverlayP95Ms}ms\``);
+  lines.push(`- idle commit 上限：\`${report.metadata.maxIdleCommitMs}ms\``);
+  lines.push(`- idle commit 帧 p95 上限：\`${report.metadata.maxIdleFrameP95Ms}ms\``);
   lines.push(`- 结论：${report.passed ? "通过" : "失败"}`);
   lines.push("");
   lines.push("## 初始 overlay", "");
@@ -431,6 +522,15 @@ function renderMarkdown(report) {
   lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|");
   for (const item of report.interactions) {
     lines.push(`| ${item.variantLabel} | ${item.label} | ${item.dynamic.routeBuildAverageMs}ms | ${item.dynamic.routeBuildP95Ms}ms | ${item.counts.routeRendered}/${item.counts.routeCull} | ${item.dynamic.riverBuildAverageMs}ms | ${item.dynamic.riverBuildP95Ms}ms | ${item.counts.riverRendered}/${item.counts.riverCull} | ${item.dynamic.selectionBuildAverageMs}ms | ${item.dynamic.selectionBuildP95Ms}ms |`);
+  }
+  lines.push("");
+  lines.push("## idle commit", "");
+  lines.push("| 变体 | 场景 | 完成 | 耗时 | 帧 p95 | 帧最大 | route build | river build | overlay | 长任务 | dirty |");
+  lines.push("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|");
+  for (const item of report.interactions) {
+    const idle = item.idleCommit || {};
+    const dirty = [idle.overlaySuspended ? "overlay" : "", idle.routesDirty ? "routes" : "", idle.riversDirty ? "rivers" : ""].filter(Boolean).join(",") || "clean";
+    lines.push(`| ${item.variantLabel} | ${item.label} | ${idle.completed ? "是" : "否"} | ${idle.elapsedMs || 0}ms | ${idle.frames?.p95Ms || 0}ms | ${idle.frames?.maxMs || 0}ms | ${roundMs(idle.routeBuildMs || 0)}ms | ${roundMs(idle.riverBuildMs || 0)}ms | ${roundMs(idle.overlayMs || 0)}ms | ${idle.longTasks?.length || 0} | ${dirty} |`);
   }
   if (report.failures.length) {
     lines.push("", "## 失败项", "");

@@ -18280,3 +18280,25 @@ full 矩阵结果：
 
 - 本轮只调整中文文档，不修改运行时代码。
 - `tools/webgl-generator-overlay-profile.mjs` 当前已有未提交的 idle commit 指标改动，`node --check .\tools\webgl-generator-overlay-profile.mjs` 通过；该改动未纳入本轮文档提交，留到下一刀性能专项处理。
+
+### 2026-07-04 地图内容 overlay 交互统一隐藏
+
+背景：
+
+- 用户反馈移动和缩放画布时，画布上的非 canvas 标志会与画布本体分离，视觉上很明显。
+- 当前实现已经会在交互中隐藏 `#map-overlay`，但测量 SVG、hover 浮层、图例和比例尺仍可能按旧相机状态滞留。
+
+实现：
+
+- `PlaceholderMapRenderer` 在 `drawViewportPreview()` 触发的交互态中，会给 `.map-stage` 增加 `map-stage--interaction-hidden`，idle commit 恢复后移除。
+- CSS 通过该状态类统一隐藏 `map-overlay`、`measurement-overlay`、`hover-overlay`、`map-legend` 和 `map-scale-bar`；控制面板、地图工具栏、toast 和生成 loading 不受影响。
+- `tools/webgl-generator-overlay-profile.mjs` 保留 idle commit 指标，报告 pan/zoom 停止后的恢复耗时、帧 p95、route / river build、overlay 耗时、长任务和 dirty 状态，并把 idle 未完成或超阈值纳入失败条件。
+- 本轮选择“交互中隐藏非 canvas 地图内容层”而不是把标志迁入 WebGL；迁入 WebGL 后续只在 profile 证明某类标志必须长期 GPU 化时再做。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js`、`node --check .\tools\webgl-generator-overlay-profile.mjs`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有大 chunk 警告。
+- 100k overlay profile `overlay-stage-hide-100k / continents / 100000` 通过：完整图层滚轮 frame p95 `6ms`，中键拖动画布 frame p95 `17.7ms`，交互样本 overlay 全部暂停；完整图层 idle commit 分别约 `197.6ms / 181.8ms`，dirty 均为 `clean`。
+- 构建产物浏览器断言中手动显示 `map-overlay / measurement-overlay / map-legend / map-scale-bar / hover-overlay` 后触发 `drawViewportPreview()`，五类覆盖层交互中 computed `visibility = hidden`，约 `180ms` 后均恢复 `visible`。
+- e2e 守门 `overlay-stage-hide-smoke / continents / 10000` 通过：点击到出图 `1370.7ms`，纯生成 `828.7ms`，WebGL 加载 `327.4ms`，最慢加载阶段为“构建线层顶点” `44.6ms`。

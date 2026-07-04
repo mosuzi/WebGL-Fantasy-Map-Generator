@@ -690,6 +690,14 @@ select:disabled {
   display: none;
 }
 
+.map-stage.map-stage--interaction-hidden .measurement-overlay,
+.map-stage.map-stage--interaction-hidden .hover-overlay,
+.map-stage.map-stage--interaction-hidden .map-legend,
+.map-stage.map-stage--interaction-hidden .map-scale-bar,
+.map-stage.map-stage--interaction-hidden .map-overlay {
+  visibility: hidden;
+}
+
 .measurement-svg {
   position: absolute;
   inset: 0;

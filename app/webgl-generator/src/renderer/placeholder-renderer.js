@@ -103,6 +103,7 @@ const MARKER_ICON_SYMBOLS = Object.freeze({
 export class PlaceholderMapRenderer {
   constructor(canvas, onViewChange = () => {}, onHover = () => {}, onSelect = () => {}) {
     this.canvas = canvas;
+    this.stage = canvas.closest?.(".map-stage") || canvas.parentElement || null;
     this.overlay = canvas.parentElement?.querySelector("#map-overlay") || null;
     this.onViewChange = onViewChange;
     this.onHover = onHover;
@@ -879,12 +880,14 @@ export class PlaceholderMapRenderer {
   suspendOverlayForInteraction() {
     if (this.overlayInteractionSuspended) return;
     this.overlayInteractionSuspended = true;
+    this.stage?.classList.add("map-stage--interaction-hidden");
     this.overlay?.classList.add("map-overlay--interaction-hidden");
   }
 
   resumeOverlayAfterInteraction() {
     if (!this.overlayInteractionSuspended) return;
     this.overlayInteractionSuspended = false;
+    this.stage?.classList.remove("map-stage--interaction-hidden");
     this.overlay?.classList.remove("map-overlay--interaction-hidden");
   }
 
