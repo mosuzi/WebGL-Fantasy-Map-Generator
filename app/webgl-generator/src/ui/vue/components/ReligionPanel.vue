@@ -437,7 +437,7 @@ function normalizeHexColor(color) {
 
 function fallbackReligionColor(religionId) {
   const hue = ((Number(religionId) || 0) * 0.61803398875 + 0.63) % 1;
-  const [r, g, b] = hslToRgb(hue, 0.28, 0.72);
+  const [r, g, b] = hslToRgb(hue, 0.34, 0.7);
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 

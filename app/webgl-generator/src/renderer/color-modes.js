@@ -121,7 +121,7 @@ function colorForPopulation(population, map) {
 
 function indexedColor(index, offset) {
   const hue = (index * 0.61803398875 + offset) % 1;
-  return hslToRgb(hue, 0.26, 0.74);
+  return hslToRgb(hue, 0.32, 0.72);
 }
 
 function indexedColorOrWater(index, offset, waterColor) {
