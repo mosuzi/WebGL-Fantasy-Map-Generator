@@ -23,6 +23,7 @@ const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated",
 const viewport = parseViewport(args.viewport || "1280x820");
 const maxFrameP95Ms = Number(args["max-frame-p95-ms"] || 80);
 const maxOverlayP95Ms = Number(args["max-overlay-p95-ms"] || 35);
+const variants = parseVariants(args.variants || args.variant || "full");
 
 if (!existsSync(distDir)) fail(`构建产物不存在：${distDir}`);
 mkdirSync(dirname(outPath), {recursive: true});
@@ -71,17 +72,23 @@ try {
   await page.waitForFunction(() => window.__webglGeneratorApp?.map?.metadata?.generationTiming?.totalMs, null, {timeout: timeoutMs});
   await generateCase(page, {cells, seed, template, graphWidth, graphHeight});
 
-  const initialStats = await readStats(page);
-  const zoom = await profileZoom(page);
-  const pan = await profilePan(page);
-  const finalStats = await readStats(page);
-  const cases = [zoom, pan];
   const failures = [];
-  for (const item of cases) {
-    if (item.frames.p95Ms > maxFrameP95Ms) failures.push(`${item.label} 帧 p95 ${item.frames.p95Ms}ms 超过 ${maxFrameP95Ms}ms`);
-    if (item.overlay.totalP95Ms > maxOverlayP95Ms) failures.push(`${item.label} overlay p95 ${item.overlay.totalP95Ms}ms 超过 ${maxOverlayP95Ms}ms`);
-    if (item.glErrors.some(value => value !== 0)) failures.push(`${item.label} WebGL error 不为 0`);
+  const variantReports = [];
+  for (const variant of variants) {
+    await applyVariant(page, variant);
+    const initialStats = await readStats(page);
+    const zoom = await profileZoom(page);
+    const pan = await profilePan(page);
+    const finalStats = await readStats(page);
+    const interactions = [zoom, pan];
+    variantReports.push({id: variant.id, label: variant.label, initialStats, finalStats, interactions});
+    for (const item of interactions) {
+      if (item.frames.p95Ms > maxFrameP95Ms) failures.push(`${variant.label} / ${item.label} 帧 p95 ${item.frames.p95Ms}ms 超过 ${maxFrameP95Ms}ms`);
+      if (item.overlay.totalP95Ms > maxOverlayP95Ms) failures.push(`${variant.label} / ${item.label} overlay p95 ${item.overlay.totalP95Ms}ms 超过 ${maxOverlayP95Ms}ms`);
+      if (item.glErrors.some(value => value !== 0)) failures.push(`${variant.label} / ${item.label} WebGL error 不为 0`);
+    }
   }
+  const interactions = variantReports.flatMap(variant => variant.interactions.map(item => ({...item, variant: variant.id, variantLabel: variant.label})));
 
   const report = {
     metadata: {
@@ -95,13 +102,15 @@ try {
       graphHeight,
       viewport,
       browserChannel,
+      variants: variants.map(variant => variant.id),
       maxFrameP95Ms,
       maxOverlayP95Ms,
       consoleErrors
     },
-    initialStats,
-    finalStats,
-    interactions: cases,
+    initialStats: variantReports[0]?.initialStats || null,
+    finalStats: variantReports.at(-1)?.finalStats || null,
+    variants: variantReports,
+    interactions,
     failures,
     passed: !consoleErrors.length && failures.length === 0
   };
@@ -183,6 +192,21 @@ async function profilePan(page) {
   return summarizeInteraction("pan", "中键拖动画布", samples, frames);
 }
 
+async function applyVariant(page, variant) {
+  await page.evaluate(id => {
+    const renderer = window.__webglGeneratorApp?.renderer;
+    if (!renderer) return;
+    if (id === "noRoutesRivers") {
+      renderer.setLayerVisible("routes", false);
+      renderer.setLayerVisible("rivers", false);
+      return;
+    }
+    renderer.setLayerVisible("routes", true);
+    renderer.setLayerVisible("rivers", true);
+  }, variant.id);
+  await page.waitForTimeout(150);
+}
+
 async function startFrameRecorder(page) {
   await page.evaluate(() => {
     const profile = {
@@ -241,7 +265,13 @@ async function readStats(page) {
       markerIconCount: stats.markerIconCount || 0,
       visibleMarkerIconCount: stats.visibleMarkerIconCount || 0,
       militaryIconCount: stats.militaryIconCount || 0,
-      visibleMilitaryIconCount: stats.visibleMilitaryIconCount || 0
+      visibleMilitaryIconCount: stats.visibleMilitaryIconCount || 0,
+      routeBuildMs: stats.routeBuildMs || 0,
+      routeVertexCount: stats.routeVertexCount || 0,
+      riverBuildMs: stats.riverBuildMs || 0,
+      riverVertexCount: stats.riverVertexCount || 0,
+      selectionBuildMs: stats.selectionBuildMs || 0,
+      selectionVertexCount: stats.selectionVertexCount || 0
     };
   });
 }
@@ -273,6 +303,14 @@ function summarizeInteraction(id, label, samples, frameData) {
       militaryIconsAverageMs: averageMs(samples.map(sample => sample.overlay?.militaryIconsMs || 0)),
       selectionAverageMs: averageMs(samples.map(sample => sample.overlay?.selectionMs || 0))
     },
+    dynamic: {
+      routeBuildAverageMs: averageMs(samples.map(sample => sample.routeBuildMs || 0)),
+      routeBuildP95Ms: percentileMs(samples.map(sample => sample.routeBuildMs || 0), 0.95),
+      riverBuildAverageMs: averageMs(samples.map(sample => sample.riverBuildMs || 0)),
+      riverBuildP95Ms: percentileMs(samples.map(sample => sample.riverBuildMs || 0), 0.95),
+      selectionBuildAverageMs: averageMs(samples.map(sample => sample.selectionBuildMs || 0)),
+      selectionBuildP95Ms: percentileMs(samples.map(sample => sample.selectionBuildMs || 0), 0.95)
+    },
     counts: summarizeCounts(samples),
     glErrors: [...new Set(samples.map(sample => sample.glError))]
   };
@@ -282,6 +320,9 @@ function summarizeCounts(samples) {
   const last = samples.at(-1) || {};
   return {
     overlayChildCount: last.overlayChildCount || 0,
+    routeVertices: last.routeVertexCount || 0,
+    riverVertices: last.riverVertexCount || 0,
+    selectionVertices: last.selectionVertexCount || 0,
     labels: {total: last.labelCount || 0, visible: last.visibleLabelCount || 0},
     cityIcons: {total: last.cityIconCount || 0, visible: last.visibleCityIconCount || 0},
     markerIcons: {total: last.markerIconCount || 0, visible: last.visibleMarkerIconCount || 0},
@@ -326,24 +367,37 @@ function renderMarkdown(report) {
   lines.push(`- 结论：${report.passed ? "通过" : "失败"}`);
   lines.push("");
   lines.push("## 初始 overlay", "");
-  lines.push(`- overlay 节点：${report.initialStats.overlayChildCount}`);
-  lines.push(`- 标签：${report.initialStats.visibleLabelCount} / ${report.initialStats.labelCount}`);
-  lines.push(`- 城市图标：${report.initialStats.visibleCityIconCount} / ${report.initialStats.cityIconCount}`);
-  lines.push(`- marker 图标：${report.initialStats.visibleMarkerIconCount} / ${report.initialStats.markerIconCount}`);
-  lines.push(`- 军事图标：${report.initialStats.visibleMilitaryIconCount} / ${report.initialStats.militaryIconCount}`);
+  for (const variant of report.variants) {
+    lines.push(`### ${variant.label}`, "");
+    lines.push(`- overlay 节点：${variant.initialStats.overlayChildCount}`);
+    lines.push(`- 标签：${variant.initialStats.visibleLabelCount} / ${variant.initialStats.labelCount}`);
+    lines.push(`- 城市图标：${variant.initialStats.visibleCityIconCount} / ${variant.initialStats.cityIconCount}`);
+    lines.push(`- marker 图标：${variant.initialStats.visibleMarkerIconCount} / ${variant.initialStats.markerIconCount}`);
+    lines.push(`- 军事图标：${variant.initialStats.visibleMilitaryIconCount} / ${variant.initialStats.militaryIconCount}`);
+    lines.push(`- route vertices：${variant.initialStats.routeVertexCount}`);
+    lines.push(`- river vertices：${variant.initialStats.riverVertexCount}`);
+    lines.push("");
+  }
   lines.push("");
   lines.push("## 交互摘要", "");
-  lines.push("| 场景 | 样本 | 帧均值 | 帧 p95 | 帧最大 | draw 均值 | overlay 均值 | overlay p95 | overlay 最大 | 长任务 |");
-  lines.push("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+  lines.push("| 变体 | 场景 | 样本 | 帧均值 | 帧 p95 | 帧最大 | draw 均值 | overlay 均值 | overlay p95 | overlay 最大 | 长任务 |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
   for (const item of report.interactions) {
-    lines.push(`| ${item.label} | ${item.sampleCount} | ${item.frames.averageMs}ms | ${item.frames.p95Ms}ms | ${item.frames.maxMs}ms | ${item.draw.averageMs}ms | ${item.overlay.averageMs}ms | ${item.overlay.totalP95Ms}ms | ${item.overlay.maxMs}ms | ${item.longTasks.length} |`);
+    lines.push(`| ${item.variantLabel} | ${item.label} | ${item.sampleCount} | ${item.frames.averageMs}ms | ${item.frames.p95Ms}ms | ${item.frames.maxMs}ms | ${item.draw.averageMs}ms | ${item.overlay.averageMs}ms | ${item.overlay.totalP95Ms}ms | ${item.overlay.maxMs}ms | ${item.longTasks.length} |`);
   }
   lines.push("");
   lines.push("## overlay 分项均值", "");
-  lines.push("| 场景 | labels | city icons | marker icons | military icons | selection |");
-  lines.push("|---|---:|---:|---:|---:|---:|");
+  lines.push("| 变体 | 场景 | labels | city icons | marker icons | military icons | selection |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|");
   for (const item of report.interactions) {
-    lines.push(`| ${item.label} | ${item.overlay.labelsAverageMs}ms | ${item.overlay.cityIconsAverageMs}ms | ${item.overlay.markerIconsAverageMs}ms | ${item.overlay.militaryIconsAverageMs}ms | ${item.overlay.selectionAverageMs}ms |`);
+    lines.push(`| ${item.variantLabel} | ${item.label} | ${item.overlay.labelsAverageMs}ms | ${item.overlay.cityIconsAverageMs}ms | ${item.overlay.markerIconsAverageMs}ms | ${item.overlay.militaryIconsAverageMs}ms | ${item.overlay.selectionAverageMs}ms |`);
+  }
+  lines.push("");
+  lines.push("## 动态线层分项", "");
+  lines.push("| 变体 | 场景 | route 均值 | route p95 | river 均值 | river p95 | selection 均值 | selection p95 |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|");
+  for (const item of report.interactions) {
+    lines.push(`| ${item.variantLabel} | ${item.label} | ${item.dynamic.routeBuildAverageMs}ms | ${item.dynamic.routeBuildP95Ms}ms | ${item.dynamic.riverBuildAverageMs}ms | ${item.dynamic.riverBuildP95Ms}ms | ${item.dynamic.selectionBuildAverageMs}ms | ${item.dynamic.selectionBuildP95Ms}ms |`);
   }
   if (report.failures.length) {
     lines.push("", "## 失败项", "");
@@ -438,6 +492,18 @@ function parseViewport(value) {
   const match = /^(\d+)x(\d+)$/i.exec(String(value || ""));
   if (!match) return {width: 1280, height: 820};
   return {width: Number(match[1]), height: Number(match[2])};
+}
+
+function parseVariants(value) {
+  return String(value || "full")
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map(id => {
+      if (id === "noRoutesRivers") return {id, label: "关闭路线和河流"};
+      if (id === "full") return {id, label: "完整图层"};
+      return {id, label: id};
+    });
 }
 
 function canvasCenter(box) {

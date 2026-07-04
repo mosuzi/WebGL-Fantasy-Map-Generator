@@ -214,10 +214,9 @@ export class PlaceholderMapRenderer {
     this.lastDraw = {drawMs: 0};
     this.lastLoad = emptyRendererLoadStats();
     this.lastOverlayUpdate = emptyOverlayUpdateStats();
+    this.viewportCommitTimer = 0;
     installCanvasInteractions(this.canvas, this.camera, () => {
-      this.markViewportBuffersDirty();
-      this.draw();
-      this.onViewChange();
+      this.drawViewportPreview();
     }, event => {
       this.onHover(this.pickClientPoint(event.clientX, event.clientY));
     }, event => {
@@ -513,7 +512,7 @@ export class PlaceholderMapRenderer {
     this.draw();
   }
 
-  draw({updateDynamicBuffers = true, updateOverlay = true} = {}) {
+  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true} = {}) {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
@@ -546,12 +545,12 @@ export class PlaceholderMapRenderer {
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
-    if (this.layerVisibility.routes) gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
+    if (this.layerVisibility.routes && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.routes)) gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.tradeFlowBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
-    if (this.layerVisibility.tradeFlows) gl.drawArrays(gl.TRIANGLES, 0, this.tradeFlowVertexCount);
+    if (this.layerVisibility.tradeFlows && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.tradeFlows)) gl.drawArrays(gl.TRIANGLES, 0, this.tradeFlowVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuffer);
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
@@ -564,14 +563,14 @@ export class PlaceholderMapRenderer {
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
-    if (this.layerVisibility.rivers) gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
+    if (this.layerVisibility.rivers && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.rivers)) gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.selectionBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.drawArrays(gl.TRIANGLES, 0, this.selectionVertexCount);
+    if (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.selection) gl.drawArrays(gl.TRIANGLES, 0, this.selectionVertexCount);
     gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.pointBuffer);
     gl.uniform1i(this.locations.pointMode, 1);
@@ -865,6 +864,24 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.tradeFlows = false;
     this.dynamicBuffersDirty.rivers = true;
     this.dynamicBuffersDirty.selection = true;
+  }
+
+  drawViewportPreview() {
+    this.markViewportBuffersDirty();
+    this.draw({updateDynamicBuffers: false, drawDirtyDynamicBuffers: false});
+    this.onViewChange();
+    this.scheduleViewportCommit();
+  }
+
+  scheduleViewportCommit() {
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    if (this.viewportCommitTimer && typeof view.clearTimeout === "function") view.clearTimeout(this.viewportCommitTimer);
+    const setTimer = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : setTimeout;
+    this.viewportCommitTimer = setTimer(() => {
+      this.viewportCommitTimer = 0;
+      this.draw();
+      this.onViewChange();
+    }, 120);
   }
 
   locateObject(object, options = {}) {

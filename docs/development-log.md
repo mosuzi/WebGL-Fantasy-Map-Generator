@@ -18003,3 +18003,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - `$env:CI='true'; pnpm run profile:overlay -- --browser-channel chrome --cells 10000 --seed overlay-profile-smoke --template continents --max-frame-p95-ms 80 --max-overlay-p95-ms 35` 通过；初始 overlay 节点 `1944`，标签 `24 / 901`，城市图标 `8 / 881`，marker 图标 `0 / 46`，军事图标 `21 / 115`。连续滚轮缩放 frame p95 `58.8ms`、overlay p95 `3.2ms`；中键拖动画布 frame p95 `35.3ms`、overlay p95 `1.6ms`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed overlay-profile-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1269.8ms`，纯生成 `688ms`，WebGL 加载 `351.4ms`，最慢加载阶段为“构建线层顶点” `49.2ms`。
+
+### 视口交互动态线层降级第一刀
+
+背景：
+
+- 10k overlay profile 显示 DOM overlay 更新本身很轻，但 100k 拖动和缩放仍有明显 frame 抖动。
+- 进一步对照 `full / noRoutesRivers` 后确认，100k 完整图层下主要耗时来自路线与河流的 screen-space 动态 mesh：路线构建约 `30-37ms`，河流构建约 `13-17ms`。关闭路线和河流后交互 draw 接近 `0.06ms`。
+- 临时尝试 `requestAnimationFrame` 合并重绘后，100k profile 变差，未保留该方案。
+
+修正：
+
+- `draw()` 新增 `drawDirtyDynamicBuffers` 选项；当该选项为 `false` 时，不绘制已经标记 dirty 的路线、贸易流、河流和选中 screen mesh，避免展示与当前相机不匹配的旧 screen-space buffer。
+- canvas 拖动 / 滚轮缩放改为调用 `drawViewportPreview()`：先标记 viewport 动态 buffer dirty，再执行不重建动态 screen mesh 的轻量预览绘制，并继续刷新运行面板和测量 overlay。
+- 新增 `scheduleViewportCommit()`：连续输入停止约 `120ms` 后执行一次完整 `draw()`，重建路线、河流和选中 screen mesh，使最终静止画面恢复完整。
+- `tools/webgl-generator-overlay-profile.mjs` 支持 `--variants full,noRoutesRivers`，并把 `routeBuildMs / riverBuildMs / selectionBuildMs` 写入报告，便于后续区分 overlay 与动态线层瓶颈。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js`、`node --check tools\webgl-generator-overlay-profile.mjs` 均通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run profile:overlay -- --browser-channel chrome --cells 100000 --seed overlay-profile-100k --template continents --variants full,noRoutesRivers --max-frame-p95-ms 180 --max-overlay-p95-ms 70 --out docs/generated/reports/overlay-profile-100000-variants-results.json --markdown docs/generated/reports/overlay-profile-100000-variants-results.md` 通过；完整图层中键拖动画布 frame p95 `35.3ms`、draw 均值 `0.04ms`，相对降级前约 `88.2ms / 43.77ms` 明显下降；连续滚轮缩放 frame p95 `129.4ms`、draw 均值 `0.04ms`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed viewport-preview-degrade-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1241.5ms`，纯生成 `679.3ms`，WebGL 加载 `327.7ms`，最慢加载阶段为“构建线层顶点” `58.8ms`。
+- 构建产物浏览器语义检查通过：拖动中 `routesDirty / riversDirty / selectionDirty` 为 `true`，松手等待 `220ms` 后三者均恢复 `false`，`glError = 0`，route vertices `32580`、river vertices `19494`。

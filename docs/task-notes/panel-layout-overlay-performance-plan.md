@@ -75,6 +75,8 @@
 - renderer `getStats()` 已补 `overlay.childCount / overlay.update`，其中 `overlay.update` 记录 `labels / cityIcons / markerIcons / militaryIcons / selection` 分项耗时、总耗时和总数 / 可见数。
 - 2026-07-04 以 `overlay-profile-smoke / continents / 10000` 跑出第一版基线：初始 overlay 节点 `1944`，标签 `24 / 901`，城市图标 `8 / 881`，marker 图标 `0 / 46`，军事图标 `21 / 115`。
 - 同一基线中，连续滚轮缩放 overlay p95 `3.2ms`、拖动画布 overlay p95 `1.6ms`；当前 10k 样本下 overlay DOM 更新不是主要瓶颈。帧 p95 仍有缩放 `58.8ms`、拖动 `35.3ms` 的浏览器调度 / draw 抖动，后续应优先扩大到 50k / 100k 与图层开关矩阵再判断是否做降负。
+- 50k / 100k 扩展 profile 已确认：overlay 本身仍不是主要瓶颈。100k 完整图层下，路线 screen mesh 构建约 `30-37ms`，河流 screen mesh 构建约 `13-17ms`，关闭路线和河流后交互 draw 接近 `0.06ms`。
+- 已执行交互降级第一刀：拖动 / 滚轮期间只绘制基础图层与 overlay，暂不绘制已标 dirty 的路线、河流和选中 screen mesh；停止输入约 `120ms` 后自动完整重建。100k 完整图层中键拖动 frame p95 从约 `88.2ms` 降到 `35.3ms`，draw 均值从约 `43.77ms` 降到 `0.04ms`。
 
 步骤：
 
@@ -113,6 +115,12 @@
 - 不直接把所有城市 / marker / 军事图标重写成 WebGL texture atlas。
 - 不删除现有近景图标表现。
 - 不把测量编辑点迁到 WebGL；可交互编辑点仍适合 DOM/SVG。
+
+当前决策：
+
+- `requestAnimationFrame` 合并曾做临时验证，但 100k profile 变差，未保留。
+- 第一刀采用“交互中降级”，因为证据显示连续交互时最重的是路线 / 河流 screen mesh 重建，而不是 overlay DOM 更新。
+- 后续如果继续优化，应优先让路线 / 河流 screen mesh 支持 viewport 粗筛或分块缓存，而不是先迁移标签、城市剪影、marker 图标或军事图标。
 
 ## 阶段 4：复测与提交规则
 
