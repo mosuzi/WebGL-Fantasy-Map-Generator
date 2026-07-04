@@ -17892,3 +17892,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run regress:measurement -- --browser-channel chrome --cells 10000 --seed measurement-cellstops-smoke --template continents --timeout 60000` 通过；初始测量对象 `2`，导出 routeFit `roads / none`，导出路线点 `2 / 0`，导入后 overlay 路径 `2`，`glError = 0`，生成阶段点击到出图 `2482.5ms`、WebGL 加载 `819.9ms`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-cellstops-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1952.2ms`，纯生成 `969.1ms`，WebGL 加载 `458.9ms`，UI/调度余量 `524.2ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `180.4ms`，最慢加载阶段为“构建线层顶点” `74.7ms`。
 - 构建产物浏览器 computed style 验证通过：数字输入上下按钮 `border*Color = rgb(39, 54, 64)`，`backgroundColor = rgb(20, 33, 41)`，不再出现默认浅色边框。
+
+### 贴路测量沿道路补中间节点
+
+背景：
+
+- 上一轮已经保存了 `cellStops`，但地图上的贴路测量线、长度摘要和导出仍按控制点直连，两个道路停靠点之间没有沿实际 route 折线延伸。
+- 测量专题计划阶段 3 的剩余目标是让路线尺“沿道路/城镇路线延伸”，但仍保持用户只编辑控制点，避免把自动补出的中间点暴露成一堆可拖拽节点。
+
+修正：
+
+- `measurement-route-fit` 新增 `expandRouteMeasurementPoints()`，按 `routeId` 找到同一路线，并根据两个停靠点的 `segmentIndex` 插入中间 route vertices；跨路线、route 缺失或停靠点不完整时退回控制点直连。
+- `measurement-objects` 新增 `measurementDisplayPoints()`，贴路对象的距离摘要、`summary.displayPointCount`、bounds 和面板长度都基于显示点计算；自由测量保持原点列。
+- runtime overlay 改为用显示点绘制临时贴路线和保存对象线，但控制点圆点仍只使用用户点列。
+- 单个测量 JSON 导出新增 `metadata.displayPointCount`，距离和面积摘要使用显示点；贴路对象强制保持 `polyline`，不会因 3 个以上控制点误变面积对象。
+- 测量对象面板调试详情新增“显示点”，完整导入回归新增显示点和 overlay 点数断言。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\measurement-route-fit.js`、`node --check app\webgl-generator\src\runtime\measurement-objects.js`、`node --check app\webgl-generator\src\runtime\measurement-edit-commands.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check tools\webgl-generator-measurement-import-regression.mjs` 均通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run regress:measurement -- --browser-channel chrome --cells 10000 --seed measurement-route-display-smoke --template continents --timeout 60000` 通过；初始测量对象 `2`，导出 routeFit `roads / none`，导出路线点 `2 / 0`，导出显示点 `3 / 2`，导入后 overlay 路径 `2`，overlay 点数 `3 / 2`，`glError = 0`。
+- 第一次 `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-route-display-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 出现 `loadMap = 1992.2ms` 超过 `1200ms`，但分阶段耗时没有单项异常，像浏览器调度抖动；随后用 `--port 5439` 同 seed 复跑通过：点击到出图 `1850.1ms`，纯生成 `734.8ms`，WebGL 加载 `784ms`，UI/调度余量 `331.3ms`，最慢加载阶段为“上传静态 GPU buffer” `89.2ms`。
+- 对照 seed `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-cellstops-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out docs/generated/reports/e2e-profile-control-results.json --markdown docs/generated/reports/e2e-profile-control-results.md` 通过；点击到出图 `1898.5ms`，WebGL 加载 `550ms`，证明本轮补点没有形成稳定加载/绘制卡顿。

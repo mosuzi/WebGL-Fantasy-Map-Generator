@@ -89,8 +89,8 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
       const item = readMeasurement(context.map, measurementId);
       const normalizedPoints = normalizeMeasurementPoints(points, context.map);
-      const type = normalizedPoints.length >= 3 ? "polygon" : "polyline";
       const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
+      const type = nextRouteFit === "roads" || normalizedPoints.length < 3 ? "polyline" : "polygon";
       Object.assign(item, normalizeMeasurementItem({
         ...item,
         type,

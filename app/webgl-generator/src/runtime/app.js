@@ -45,7 +45,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-e
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
-import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
+import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
@@ -3384,8 +3384,10 @@ function updateMeasurementOverlay(state, documentRef) {
   appendSavedMeasurementShapes(documentRef, svg, state, savedMeasurements, rect);
   if (!active) return;
 
-  const screenPoints = points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
-  if (screenPoints.length >= 3) {
+  const displayPoints = activeMeasurementDisplayPoints(state);
+  const screenPoints = displayPoints.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+  const controlScreenPoints = points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+  if (!measurementRouteFitActive(state) && screenPoints.length >= 3) {
     const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
     polygon.setAttribute("class", "measurement-area");
     polygon.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
@@ -3397,7 +3399,7 @@ function updateMeasurementOverlay(state, documentRef) {
     polyline.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
     svg.append(polyline);
   }
-  for (const [index, point] of screenPoints.entries()) {
+  for (const [index, point] of controlScreenPoints.entries()) {
     const circle = documentRef.createElementNS("http://www.w3.org/2000/svg", "circle");
     circle.setAttribute("class", measurementPointClass(state, index));
     circle.dataset.measurementPoint = String(index);
@@ -3418,8 +3420,8 @@ function updateMeasurementOverlay(state, documentRef) {
   }
 
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
-  const distance = measurementDistance(points);
-  const area = points.length >= 3 ? measurementArea(points) : 0;
+  const distance = measurementDistance(displayPoints);
+  const area = !measurementRouteFitActive(state) && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
   const notice = state.measurement.notice ? `${state.measurement.notice} / ` : "";
   summary.textContent = `${notice}${measurementSummary(points.length, distance, area, units, editingMeasurementLabel(state))}`;
 }
@@ -3434,8 +3436,9 @@ function visibleSavedMeasurements(state) {
 function appendSavedMeasurementShapes(documentRef, svg, state, measurements, rect) {
   if (!measurements.length || !state.renderer) return;
   for (const item of measurements) {
-    const screenPoints = item.points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
-    if (screenPoints.length >= 3 && (item.closed || item.type === "polygon")) {
+    const displayPoints = measurementDisplayPoints(item, state.map);
+    const screenPoints = displayPoints.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+    if (screenPoints.length >= 3 && normalizeMeasurementRouteFit(item.routeFit) !== MEASUREMENT_ROUTE_FIT_ROADS && (item.closed || item.type === "polygon")) {
       const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
       polygon.setAttribute("class", "measurement-object-area");
       polygon.dataset.measurementObject = String(item.id || "");
@@ -3565,6 +3568,13 @@ function measurementRouteFitActive(state) {
   return normalizeMeasurementRouteFit(state.measurement.routeFit) === MEASUREMENT_ROUTE_FIT_ROADS;
 }
 
+function activeMeasurementDisplayPoints(state) {
+  const points = state.measurement.points || [];
+  const routeFit = normalizeMeasurementRouteFit(state.measurement.routeFit);
+  const cellStops = routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? normalizeMeasurementCellStops([], points, points) : [];
+  return measurementDisplayPoints({points, routeFit, cellStops}, state.map);
+}
+
 function exportMeasurement(state, documentRef) {
   if (!state.map || !state.measurement.points?.length) return;
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
@@ -3575,8 +3585,9 @@ function exportMeasurement(state, documentRef) {
     x: roundMeasurementExport(point.x),
     y: roundMeasurementExport(point.y)
   }));
-  const distance = measurementDistance(state.measurement.points);
-  const area = state.measurement.points.length >= 3 ? measurementArea(state.measurement.points) : 0;
+  const displayPoints = measurementDisplayPoints({points: state.measurement.points, routeFit, cellStops}, state.map);
+  const distance = measurementDistance(displayPoints);
+  const area = routeFit !== MEASUREMENT_ROUTE_FIT_ROADS && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
   const payload = {
     type: "webgl-generator-measurement",
     version: 1,
@@ -3587,6 +3598,7 @@ function exportMeasurement(state, documentRef) {
       graphWidth: state.map.metadata?.graphWidth || 0,
       graphHeight: state.map.metadata?.graphHeight || 0,
       pointCount: points.length,
+      displayPointCount: displayPoints.length,
       routeFit,
       routeStopCount: cellStops.filter(Boolean).length
     },
@@ -3599,7 +3611,7 @@ function exportMeasurement(state, documentRef) {
       distanceMapUnits: roundMeasurementExport(distance),
       distanceLabel: formatDisplayDistance(distance, units),
       areaMapUnits: roundMeasurementExport(area),
-      areaLabel: points.length >= 3 ? formatDisplayArea(area, units) : ""
+      areaLabel: area ? formatDisplayArea(area, units) : ""
     },
     points,
     cellStops
@@ -3662,7 +3674,7 @@ function startMeasurementObjectEdit(state, row, documentRef) {
 }
 
 function locateMeasurement(state, row, documentRef) {
-  const bounds = measurementBounds(row, 48);
+  const bounds = measurementBounds(row, 48, state.map);
   const located = bounds ? state.renderer.locateBounds(bounds, {
     status: `measurement ${row.id}`,
     minScale: row.pointCount <= 2 ? 2.2 : 1.4,

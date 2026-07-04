@@ -1,4 +1,4 @@
-import {normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
+import {expandRouteMeasurementPoints, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 
 export const MEASUREMENTS_VERSION = 1;
 
@@ -32,14 +32,15 @@ export function createMeasurementFromPoints(map, points, {name = "", routeFit = 
   const idNumber = Math.max(1, Number(store.metadata.nextId) || 1);
   const now = new Date().toISOString();
   const normalizedPoints = normalizeMeasurementPoints(points, map);
-  const type = normalizedPoints.length >= 3 ? "polygon" : "polyline";
+  const measurementRouteFit = normalizeMeasurementRouteFit(routeFit);
+  const type = measurementRouteFit === "roads" || normalizedPoints.length < 3 ? "polyline" : "polygon";
   return normalizeMeasurementItem({
     id: `measurement-${idNumber}`,
     type,
     name: normalizeMeasurementName(name) || `测量 ${idNumber}`,
     points,
     closed: type === "polygon",
-    routeFit: normalizeMeasurementRouteFit(routeFit),
+    routeFit: measurementRouteFit,
     createdAt: now,
     updatedAt: now
   }, map);
@@ -48,8 +49,8 @@ export function createMeasurementFromPoints(map, points, {name = "", routeFit = 
 export function normalizeMeasurementItem(item, map) {
   const sourcePoints = Array.isArray(item?.points) ? item.points : [];
   const points = normalizeMeasurementPoints(sourcePoints, map);
-  const type = item?.type === "polygon" || item?.closed ? "polygon" : "polyline";
   const routeFit = normalizeMeasurementRouteFit(item?.routeFit);
+  const type = routeFit === "roads" ? "polyline" : item?.type === "polygon" || item?.closed ? "polygon" : "polyline";
   const now = new Date().toISOString();
   const normalized = {
     id: String(item?.id || ""),
@@ -62,15 +63,24 @@ export function normalizeMeasurementItem(item, map) {
     createdAt: item?.createdAt || now,
     updatedAt: item?.updatedAt || item?.createdAt || now
   };
-  const distance = measurementDistance(points);
-  const area = points.length >= 3 ? measurementArea(points) : 0;
+  const displayPoints = measurementDisplayPoints(normalized, map);
+  const distance = measurementDistance(displayPoints);
+  const area = normalized.closed && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
   normalized.summary = {
     pointCount: points.length,
+    displayPointCount: displayPoints.length,
     routeStopCount: normalized.cellStops.filter(Boolean).length,
     distanceMapUnits: roundMeasurementValue(distance),
     areaMapUnits: roundMeasurementValue(area)
   };
   return normalized;
+}
+
+export function measurementDisplayPoints(item, map = null) {
+  const points = normalizeMeasurementPoints(item?.points, map);
+  if (normalizeMeasurementRouteFit(item?.routeFit) !== "roads") return points;
+  const cellStops = Array.isArray(item?.cellStops) ? item.cellStops : normalizeMeasurementCellStops([], item?.points, points);
+  return expandRouteMeasurementPoints(map, points, cellStops);
 }
 
 export function normalizeMeasurementPoints(points, map = null) {
@@ -114,8 +124,8 @@ export function measurementArea(points) {
   return Math.abs(sum) / 2;
 }
 
-export function measurementBounds(item, padding = 48) {
-  const points = item?.points || [];
+export function measurementBounds(item, padding = 48, map = null) {
+  const points = measurementDisplayPoints(item, map);
   let bounds = null;
   for (const point of points) bounds = includePoint(bounds, point.x, point.y);
   return bounds ? {

@@ -88,7 +88,8 @@ try {
       bytes: exported.bytes,
       measurementCount: exported.documentMeasurementCount,
       routeFitValues: exported.documentRouteFitValues,
-      routeStopCounts: exported.documentRouteStopCounts
+      routeStopCounts: exported.documentRouteStopCounts,
+      documentRouteDisplayPointCounts: exported.documentRouteDisplayPointCounts
     },
     imported,
     passed: !consoleErrors.length && imported.passed && exported.documentMeasurementCount === before.items.length
@@ -176,6 +177,7 @@ async function createMeasurementFixtures(page) {
       routeFit: item.routeFit,
       cellStops: item.cellStops || [],
       routeStopCount: (item.cellStops || []).filter(Boolean).length,
+      displayPointCount: item.summary?.displayPointCount || item.points.length,
       pointCount: item.points.length,
       points: item.points.map(point => ({x: point.x, y: point.y})),
       summary: item.summary
@@ -253,7 +255,8 @@ async function exportFullMap(page) {
     bytes: Buffer.byteLength(text),
     documentMeasurementCount: document.map?.measurements?.items?.length || 0,
     documentRouteFitValues: (document.map?.measurements?.items || []).map(item => item.routeFit || "none"),
-    documentRouteStopCounts: (document.map?.measurements?.items || []).map(item => (item.cellStops || []).filter(Boolean).length)
+    documentRouteStopCounts: (document.map?.measurements?.items || []).map(item => (item.cellStops || []).filter(Boolean).length),
+    documentRouteDisplayPointCounts: (document.map?.measurements?.items || []).map(item => item.summary?.displayPointCount || item.points?.length || 0)
   };
 }
 
@@ -288,6 +291,7 @@ async function importFullMap(page, filePath, before) {
       routeFit: item.routeFit,
       cellStops: item.cellStops || [],
       routeStopCount: (item.cellStops || []).filter(Boolean).length,
+      displayPointCount: item.summary?.displayPointCount || item.points.length,
       pointCount: item.points.length,
       points: item.points.map(point => ({x: point.x, y: point.y})),
       summary: item.summary
@@ -305,10 +309,15 @@ async function importFullMap(page, filePath, before) {
     }
     const routeItem = items.find(item => item.routeFit === "roads");
     if (!routeItem || routeItem.routeStopCount !== routeItem.pointCount) failures.push(`贴路测量路线点数量异常：${routeItem?.routeStopCount ?? "none"} / ${routeItem?.pointCount ?? "none"}`);
+    if (routeItem && routeItem.type !== "polyline") failures.push(`贴路测量类型异常：${routeItem.type}`);
+    if (routeItem && routeItem.displayPointCount <= routeItem.pointCount) failures.push(`贴路测量未沿路线补点：${routeItem.displayPointCount} / ${routeItem.pointCount}`);
     const freeItem = items.find(item => item.routeFit === "none");
     if (!freeItem || freeItem.routeStopCount !== 0) failures.push(`自由测量不应包含路线点：${freeItem?.routeStopCount ?? "none"}`);
     const overlayPaths = document.querySelectorAll(".measurement-object-path").length;
     if (overlayPaths < before.items.length) failures.push(`测量 overlay 路径 ${overlayPaths} < ${before.items.length}`);
+    const overlayPathPointCounts = [...document.querySelectorAll(".measurement-object-path")]
+      .map(path => (path.getAttribute("points") || "").trim().split(/\s+/).filter(Boolean).length);
+    if (routeItem && !overlayPathPointCounts.some(count => count > routeItem.pointCount)) failures.push(`贴路 overlay 未显示补点路径：${overlayPathPointCounts.join(" / ")}`);
     const routeFitValues = new Set(items.map(item => item.routeFit));
     if (!routeFitValues.has("roads") || !routeFitValues.has("none")) failures.push(`导入后测量模式不完整：${[...routeFitValues].join(" / ")}`);
     const panelText = document.querySelector('[data-panel-id="measurement-panel"]')?.textContent || "";
@@ -319,6 +328,7 @@ async function importFullMap(page, filePath, before) {
       items,
       metadata: app.map.measurements.metadata,
       overlayPaths,
+      overlayPathPointCounts,
       glError,
       failures,
       passed: failures.length === 0
@@ -358,7 +368,9 @@ function renderMarkdown(report) {
   lines.push(`- 导出测量对象：${report.exported.measurementCount}`);
   lines.push(`- 导出 routeFit：${report.exported.routeFitValues.join(" / ") || "none"}`);
   lines.push(`- 导出路线点：${report.exported.routeStopCounts.join(" / ") || "none"}`);
+  lines.push(`- 导出显示点：${report.exported.documentRouteDisplayPointCounts.join(" / ") || "none"}`);
   lines.push(`- 导入后 overlay 路径：${report.imported.overlayPaths}`);
+  lines.push(`- 导入后 overlay 点数：${report.imported.overlayPathPointCounts.join(" / ") || "none"}`);
   lines.push(`- WebGL error：${report.imported.glError}`);
   lines.push("");
   lines.push("## 性能", "");

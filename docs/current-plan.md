@@ -969,6 +969,8 @@ http://127.0.0.1:5410
 
 264. 测量路线 `cellStops` 持久化第一刀已完成：贴路测量点现在会记录路线停靠元信息 `routeId / routeType / segmentIndex / packCell / x / y`，保存、编辑、完整地图导出和导入都会保留 `cellStops`；测量对象摘要新增 `routeStopCount`，面板调试详情可查看路线点数量。`pnpm run regress:measurement` 已升级为断言贴路对象导出路线点 `2`、自由对象为 `0`。同时修正 Element Plus 数字输入上下调节按钮的白色边线，改为在 `.el-input-number` 层覆盖 `--el-border` 等变量，并同步处理滑条数字输入。构建产物回归通过：`measurement-cellstops-smoke / continents / 10000` 初始测量对象 `2`，导出 routeFit `roads / none`，导出路线点 `2 / 0`，导入后 overlay 路径 `2`，`glError = 0`，导出回归生成阶段点击到出图 `2482.5ms`、WebGL 加载 `819.9ms`。正式 e2e 守门通过：点击到出图 `1952.2ms`，纯生成 `969.1ms`，WebGL 加载 `458.9ms`，UI/调度余量 `524.2ms`，最慢加载阶段为“构建线层顶点” `74.7ms`。浏览器 computed style 验证中数字输入按钮边框为暗色 `rgb(39, 54, 64)`，背景为 `rgb(20, 33, 41)`。后续测量方向继续做沿道路自动补中间节点和曲线尺细化。
 
+265. 贴路测量沿道路补中间节点已完成：新增路线测量显示点展开逻辑，贴路对象仍只保存用户控制点和 `cellStops`，但渲染、距离摘要、单个测量导出、测量对象面板长度和定位 bounds 会按同一路线停靠点之间的原始 route vertices 自动补点；跨路线或 route 数据缺失时退回直连。贴路测量现在强制保持 `polyline`，不会因为 3 个以上控制点误变成面积对象；面板调试详情新增“显示点”。完整导入回归已新增 `displayPointCount` 和 overlay 点数断言，`measurement-route-display-smoke / continents / 10000` 中贴路对象导出显示点 `3`、自由对象 `2`，导入后 overlay 点数 `3 / 2`，`glError = 0`。性能守门中同 seed 曾出现一次 `loadMap = 1992.2ms` 的 profiling 抖动，复跑同 seed 通过：点击到出图 `1850.1ms`，纯生成 `734.8ms`，WebGL 加载 `784ms`，UI/调度余量 `331.3ms`，最慢加载阶段为“上传静态 GPU buffer” `89.2ms`；对照 seed `measurement-cellstops-smoke` 同样通过，WebGL 加载 `550ms`。后续测量方向继续做曲线尺细化。
+
 ## 约束
 
 - 新项目代码仍然放在根目录下，不放进 `source/`。

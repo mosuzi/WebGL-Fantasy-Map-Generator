@@ -47,6 +47,7 @@ import {computed, ref, watch} from "vue";
 import {
   measurementArea,
   measurementBounds,
+  measurementDisplayPoints,
   measurementDistance
 } from "../../../runtime/measurement-objects.js";
 import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "../../../runtime/measurement-route-fit.js";
@@ -120,6 +121,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.typeLabel},
   {label: "模式", value: selected.value.routeFitLabel},
   {label: "点数", value: formatNumber(selected.value.pointCount)},
+  {label: "显示点", value: formatNumber(selected.value.displayPointCount), debug: true},
   {label: "路线点", value: formatNumber(selected.value.routeStopCount), debug: true},
   {label: "长度", value: formatDistanceValue(selected.value.distance)},
   {label: "面积", value: selected.value.area ? formatAreaValue(selected.value.area) : "-"},
@@ -137,10 +139,12 @@ function measurementRows(map) {
     .filter(item => item?.id)
     .map(item => {
       const points = Array.isArray(item.points) ? item.points : [];
-      const distance = Number(item.summary?.distanceMapUnits) || measurementDistance(points);
-      const area = Number(item.summary?.areaMapUnits) || (points.length >= 3 ? measurementArea(points) : 0);
       const routeFit = normalizeMeasurementRouteFit(item.routeFit);
+      const displayPoints = measurementDisplayPoints(item, map);
+      const distance = Number(item.summary?.distanceMapUnits) || measurementDistance(displayPoints);
+      const area = Number(item.summary?.areaMapUnits) || (routeFit !== MEASUREMENT_ROUTE_FIT_ROADS && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0);
       const cellStops = Array.isArray(item.cellStops) ? item.cellStops : [];
+      const bounds = measurementBounds(item, 0, map);
       return {
         id: String(item.id),
         name: item.name || item.id,
@@ -151,11 +155,12 @@ function measurementRows(map) {
         cellStops,
         routeStopCount: cellStops.filter(Boolean).length,
         pointCount: points.length,
+        displayPointCount: displayPoints.length,
         distance,
         area,
         points,
-        bounds: measurementBounds(item, 0),
-        boundsLabel: formatBounds(measurementBounds(item, 0)),
+        bounds,
+        boundsLabel: formatBounds(bounds),
         createdAt: item.createdAt || "",
         updatedAt: item.updatedAt || item.createdAt || ""
       };

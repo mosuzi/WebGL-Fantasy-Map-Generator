@@ -34,6 +34,34 @@ export function findNearestRouteMeasurementPoint(map, worldPoint, maxDistanceWor
   return best;
 }
 
+export function expandRouteMeasurementPoints(map, points = [], cellStops = []) {
+  const sourcePoints = Array.isArray(points) ? points : [];
+  if (sourcePoints.length < 2 || !Array.isArray(cellStops) || cellStops.length < 2) return sourcePoints;
+  const routes = routeLookup(map);
+  const expanded = [];
+
+  for (let index = 0; index < sourcePoints.length; index += 1) {
+    const current = sourcePoints[index];
+    if (!isFinitePoint(current)) continue;
+    if (!expanded.length) pushRoutePoint(expanded, current);
+    if (index >= sourcePoints.length - 1) continue;
+
+    const next = sourcePoints[index + 1];
+    const currentStop = normalizeRouteStop(cellStops[index]);
+    const nextStop = normalizeRouteStop(cellStops[index + 1]);
+    const route = currentStop && nextStop && currentStop.routeId === nextStop.routeId ? routes.get(currentStop.routeId) : null;
+    if (!route || !Array.isArray(route.points) || route.points.length < 2) {
+      pushRoutePoint(expanded, next);
+      continue;
+    }
+
+    appendRouteSegmentPoints(expanded, route.points, currentStop.segmentIndex, nextStop.segmentIndex);
+    pushRoutePoint(expanded, next);
+  }
+
+  return expanded.length >= sourcePoints.length ? expanded : sourcePoints;
+}
+
 function getRouteMeasurementIndex(map) {
   if (!map || typeof map !== "object") return {segments: []};
   const cached = ROUTE_INDEX_CACHE.get(map);
@@ -73,6 +101,45 @@ function routeIndexSignature(map) {
   const routes = map?.settlements?.routes || [];
   const routeSegments = Number(map?.settlements?.metadata?.routeSegments) || 0;
   return `${routes.length}:${routeSegments}:${routes.map(route => `${route?.id}:${route?.points?.length || 0}`).join("|")}`;
+}
+
+function routeLookup(map) {
+  const routes = new Map();
+  for (const route of map?.settlements?.routes || []) {
+    if (!route || route.id === undefined || route.id === null) continue;
+    routes.set(Number(route.id), route);
+  }
+  return routes;
+}
+
+function appendRouteSegmentPoints(target, routePoints, fromSegment, toSegment) {
+  if (!Number.isInteger(fromSegment) || !Number.isInteger(toSegment)) return;
+  const maxSegment = routePoints.length - 2;
+  const from = Math.max(0, Math.min(maxSegment, fromSegment));
+  const to = Math.max(0, Math.min(maxSegment, toSegment));
+  if (to > from) {
+    for (let index = from + 1; index <= to; index += 1) pushRoutePoint(target, normalizeRoutePoint(routePoints[index]));
+    return;
+  }
+  if (to < from) {
+    for (let index = from; index >= to + 1; index -= 1) pushRoutePoint(target, normalizeRoutePoint(routePoints[index]));
+  }
+}
+
+function pushRoutePoint(points, point) {
+  if (!isFinitePoint(point)) return;
+  const next = {x: roundRoutePoint(point.x), y: roundRoutePoint(point.y)};
+  const previous = points.at(-1);
+  if (previous && pointsNear(previous, next)) return;
+  points.push(next);
+}
+
+function normalizeRouteStop(stop) {
+  if (!stop || typeof stop !== "object") return null;
+  const routeId = Number(stop.routeId ?? stop.route);
+  const segmentIndex = Number(stop.segmentIndex ?? stop.segment);
+  if (!Number.isInteger(routeId) || !Number.isInteger(segmentIndex)) return null;
+  return {routeId, segmentIndex};
 }
 
 function segmentNearPoint(segment, point, padding) {
