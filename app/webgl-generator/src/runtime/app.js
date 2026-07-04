@@ -1345,7 +1345,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const renderer = new PlaceholderMapRenderer(canvas, () => {
     if (state.map) {
       updateRuntimePanel(documentRef, state);
-      updateMeasurementOverlay(state, documentRef);
+      if (!renderer.getStats?.()?.overlay?.interactionSuspended) updateMeasurementOverlay(state, documentRef);
     }
   }, pick => {
     state.pick = pick;

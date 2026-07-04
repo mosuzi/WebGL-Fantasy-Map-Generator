@@ -217,6 +217,7 @@ export class PlaceholderMapRenderer {
     this.lastOverlayUpdate = emptyOverlayUpdateStats();
     this.overlayInteractionSuspended = false;
     this.viewportCommitTimer = 0;
+    this.viewportCommitVersion = 0;
     installCanvasInteractions(this.canvas, this.camera, () => {
       this.drawViewportPreview();
     }, event => {
@@ -724,18 +725,21 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.routes = false;
   }
 
-  async updateRouteBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS} = {}) {
+  async updateRouteBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
     const startedAt = performance.now();
     const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, this.camera, this.canvas, this.selection, {
       yieldToBrowser,
-      sliceMs
+      sliceMs,
+      shouldContinue
     });
+    if (stats.aborted || !shouldContinue()) return false;
     this.routeVertexCount = routeVertices.length / 6;
     this.routeRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
     this.routeBuildMs = roundMs(performance.now() - startedAt);
     this.dynamicBuffersDirty.routes = false;
+    return true;
   }
 
   clearRouteBuffer() {
@@ -870,6 +874,7 @@ export class PlaceholderMapRenderer {
   }
 
   drawViewportPreview() {
+    this.viewportCommitVersion += 1;
     this.suspendOverlayForInteraction();
     this.markViewportBuffersDirty();
     this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
@@ -895,12 +900,54 @@ export class PlaceholderMapRenderer {
     const view = this.canvas.ownerDocument?.defaultView || globalThis;
     if (this.viewportCommitTimer && typeof view.clearTimeout === "function") view.clearTimeout(this.viewportCommitTimer);
     const setTimer = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : setTimeout;
+    const version = this.viewportCommitVersion;
     this.viewportCommitTimer = setTimer(() => {
       this.viewportCommitTimer = 0;
-      this.resumeOverlayAfterInteraction();
-      this.draw();
-      this.onViewChange();
+      void this.commitViewportAfterInteraction(version);
     }, 120);
+  }
+
+  async commitViewportAfterInteraction(version) {
+    const shouldContinue = () => this.viewportCommitVersion === version;
+    const rebuilt = await this.rebuildViewportDynamicBuffersAsync(shouldContinue);
+    if (!rebuilt || !shouldContinue()) return;
+    this.resumeOverlayAfterInteraction();
+    this.draw({updateDynamicBuffers: false});
+    this.onViewChange();
+  }
+
+  async rebuildViewportDynamicBuffersAsync(shouldContinue) {
+    if (!shouldContinue()) return false;
+    if (this.dynamicBuffersDirty.routes && this.layerVisibility.routes) {
+      const routesReady = await this.updateRouteBufferAsync({
+        yieldToBrowser: () => this.yieldViewportCommitFrame(),
+        sliceMs: ROUTE_BUILD_SLICE_MS,
+        shouldContinue
+      });
+      if (!routesReady || !shouldContinue()) return false;
+      await this.yieldViewportCommitFrame();
+    }
+    if (!shouldContinue()) return false;
+    if (this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) {
+      this.updateRiverBuffer();
+      if (!shouldContinue()) return false;
+      await this.yieldViewportCommitFrame();
+    }
+    if (!shouldContinue()) return false;
+    if (this.dynamicBuffersDirty.selection || this.locateFlash) {
+      this.updateSelectionBuffer();
+      if (!shouldContinue()) return false;
+    }
+    return true;
+  }
+
+  async yieldViewportCommitFrame() {
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    if (typeof view.requestAnimationFrame === "function") {
+      await new Promise(resolve => view.requestAnimationFrame(() => resolve()));
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 0));
   }
 
   locateObject(object, options = {}) {
@@ -2836,10 +2883,14 @@ function buildRouteMeshVertices(map, camera, canvas, selection) {
   return finalizeRouteMeshBuild(build);
 }
 
-async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS} = {}) {
+async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
   const build = createRouteMeshBuild(map, camera, canvas, selection);
   let sliceStartedAt = performance.now();
   for (const route of map.settlements.routes) {
+    if (!shouldContinue()) {
+      build.stats.aborted = true;
+      break;
+    }
     if (!pushRouteMesh(build, route)) break;
     if (performance.now() - sliceStartedAt < sliceMs) continue;
     await yieldToBrowser();
@@ -2970,7 +3021,8 @@ function emptyRouteRenderStats() {
     invalidPoints: 0,
     vertices: 0,
     pointBudgetExceeded: false,
-    vertexBudgetExceeded: false
+    vertexBudgetExceeded: false,
+    aborted: false
   };
 }
 

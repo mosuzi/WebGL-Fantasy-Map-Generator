@@ -38,6 +38,7 @@
 - 生成页气候滑条标签折行已修正：`.climate-slider-field` 标签列从 `42px` 放宽到 `68px` 并禁止首列标签换行，`画布纬度` 不再被拆成两行；控制面板生成页截图和浏览器断言确认标签高度 `15px`、`white-space = nowrap`。
 - 控制面板布局审计已接入 `pnpm run audit:panels`：审计会依次覆盖“简介 / 生成 / 视图 / 单位 / 图层 / 管理”tab，检查 tab/body 横向溢出、滑条标签、按钮网格列对齐、按钮文字空间和字段标签空间。`control-panel-audit-final / continents / 10000 / deep` 未发现待复核项，图层页 8 行、管理页 10 行、重新生成网格 4 行均通过列对齐检查。
 - overlay 重场景 profile 已补齐：`profile:overlay` 新增 `measurement-heavy / selection-heavy` 变体，每个变体从干净视图开始，可注入保存测量对象 SVG 或 renderer 级大范围选中态。100k `overlay-fixture-100k` 中，测量 180 条对象时滚轮 / 拖动 frame p95 为 `6ms / 17.7ms`；选中 `10385` 个 cells 的大国时 selection mesh 初始 `186918` 顶点、构建约 `26.6ms`，交互 frame p95 仍为 `6ms / 17.7ms`。当前证据仍指向 idle commit 的路线 mesh 约 `45-51ms`，不是测量 SVG 或 DOM 标志。
+- viewport idle commit 分帧第一刀已完成：pan/zoom 停止后继续隐藏地图内容 overlay，路线 mesh 使用已有 async 构建按时间片让出浏览器帧，旧 commit 会在新交互开始后作废；河流和选中态在路线后分帧恢复。交互隐藏期间不再重建测量 SVG，idle 恢复时再刷新。100k `overlay-idle-async-final-100k` 中完整图层 idle frame p95 为 `17.7ms / 17.6ms`，测量 180 条对象为 `35.3ms / 35.3ms`，选中大国为 `29.5ms / 11.9ms`，各变体 dirty 均恢复 `clean`。
 
 ### 当前执行队列
 
@@ -49,8 +50,8 @@
    - 第一优先级是军事管理面板、事件链摘要、导入导出工具条、单位 / 滑条字段、二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
    - 审计脚本已覆盖控制面板 tab 和主要浮动面板；后续若继续发现真实折行，再扩充重要字段省略号、异常多行折断和详情最小项宽规则。
 2. **overlay 与动态线层性能专项**：
-   - `profile:overlay` 已补 idle commit 指标和 `measurement-heavy / selection-heavy` 重场景；下一刀优先处理 pan/zoom 停止后的路线、河流和选中 mesh 恢复成本。
-   - 当前瓶颈仍是路线 / 河流 screen-space 动态 mesh，优先做 idle commit 跨帧重建、河流异步 mesh、过期 commit 取消、视口分块或缓存。
+   - `profile:overlay` 已补 idle commit 指标和 `measurement-heavy / selection-heavy` 重场景；viewport idle commit 分帧第一刀已完成。
+   - 后续如果继续性能专项，先复查 100k 下偶发 long task 和 overlay 恢复更新 `25-43ms` 的来源；只有证据继续指向河流、选中态或 overlay 更新时，再做河流异步 mesh、选中 mesh 分帧、过期 commit 取消增强、视口分块或缓存。
    - 若证据指向测量 SVG、多对象选中态或极端标签数量，再单独治理对应 overlay；不默认把标签、城市剪影、marker 或军事图标迁到 WebGL。
 3. **贸易查看列表化设计**：
    - 贸易流地图常驻连线已退役，不再作为图层恢复。

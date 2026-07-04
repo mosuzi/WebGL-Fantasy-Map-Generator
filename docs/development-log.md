@@ -18364,3 +18364,25 @@ full 矩阵结果：
 - 10k smoke `overlay-fixture-smoke / continents / full,measurement-heavy,selection-heavy` 通过；测量夹具生成 `80` 条对象、`80` 条 path、`27` 个 area，选中态夹具生成 `9576` 个 selection vertices。
 - 修正 selection-heavy 夹具避免走 `selectionStore` 打开对象面板后，10k `overlay-selection-fixture-smoke` 中滚轮 / 拖动 overlay 暂停样本为 `18 / 24`，确认交互确实落在 canvas。
 - 100k 正式 profile `overlay-fixture-100k / continents / full,measurement-heavy,selection-heavy` 通过：完整图层滚轮 / 拖动 frame p95 为 `6ms / 17.7ms`；测量 `180` 条对象时为 `6ms / 17.7ms`；选中 `10385` 个 cells 的国家时 selection mesh 为 `186918` 顶点、初始构建约 `26.6ms`，滚轮 / 拖动 frame p95 仍为 `6ms / 17.7ms`。各变体 idle commit 均恢复 clean，路线 mesh 仍约 `42-51ms`，河流 mesh 约 `9-10.5ms`，因此下一刀性能优化应继续盯路线 / 河流 idle commit，而不是默认迁移 DOM 标志。
+
+### 2026-07-04 viewport idle commit 分帧恢复
+
+背景：
+
+- overlay 重场景 profile 显示，交互过程已被隐藏策略压住，但 pan/zoom 停止后的 idle commit 仍会同步重建路线、河流和选中 mesh；100k 中路线 mesh 约 `42-51ms`，选中大国时 idle frame p95 可到 `100ms`。
+- 测量重场景还暴露出交互期间隐藏的测量 SVG 仍会随 `onViewChange` 重建，虽然不形成持续卡顿，但属于无意义工作。
+
+实现：
+
+- `PlaceholderMapRenderer.scheduleViewportCommit()` 不再在 timer 内同步 `draw()`；改为 `commitViewportAfterInteraction()`，按版本号执行可作废的异步恢复。
+- 路线 mesh 复用已有 `updateRouteBufferAsync()`，新增 `shouldContinue` 取消检查；底层 route 循环在用户再次交互后会停止构建，旧结果不会上传到 GPU。
+- viewport commit 在路线、河流、选中态之间让出浏览器帧；覆盖层会保持隐藏直到 dirty buffer 清理完成，再统一 `resumeOverlayAfterInteraction()`、绘制和刷新 overlay。
+- runtime 的 `onViewChange` 在 renderer 处于 `overlay.interactionSuspended` 时跳过 `updateMeasurementOverlay()`，避免隐藏中的测量 SVG 反复重建；idle 恢复后的最终 `onViewChange` 仍会刷新测量对象。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js`、`node --check .\app\webgl-generator\src\runtime\app.js`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 100k 对照 profile `overlay-idle-async-100k` 通过：完整图层 idle frame p95 为 `23.5ms / 17.7ms`，测量重场景为 `47.1ms / 29.3ms`，选中态为 `29.3ms / 11.9ms`，各变体 dirty 均恢复 clean。
+- 跳过隐藏中测量 SVG 更新后，100k 正式 profile `overlay-idle-async-final-100k / continents / full,measurement-heavy,selection-heavy` 通过：完整图层 idle frame p95 为 `17.7ms / 17.6ms`，测量 `180` 条对象为 `35.3ms / 35.3ms`，选中 `8897` 个 cells 的国家为 `29.5ms / 11.9ms`；测量重场景交互 long task 为 `0 / 0`，各变体 dirty 均为 `clean`。
+- e2e 守门 `viewport-idle-async-e2e / continents / 10000` 通过：点击到出图 `1293.2ms`，纯生成 `692ms`，WebGL 加载 `372.6ms`，最慢加载阶段为“构建线层顶点” `59.9ms`。
