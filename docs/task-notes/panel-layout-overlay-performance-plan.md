@@ -158,6 +158,7 @@
 - `requestAnimationFrame` 合并曾做临时验证，但 100k profile 变差，未保留。
 - 第一刀采用“交互中降级”，因为证据显示连续交互时最重的是路线 / 河流 screen mesh 重建，而不是 overlay DOM 更新。
 - 第二刀把地图 DOM overlay 也纳入“交互中降级”：拖动 / 滚轮期间隐藏 `#map-overlay` 并跳过标签、城市剪影、marker 图标和军事图标更新，停止输入约 `120ms` 后恢复完整 overlay。该方案不迁移 overlay 到 WebGL，也不影响测量 SVG。
+- 第三刀统一程序化视口变换：`fitToView()`、对象定位和测量定位改走同一套视口预览 / idle commit 路径，避免这些入口直接 `draw()` 时让 canvas 先移动、DOM/SVG 标志短暂停在旧屏幕位置。
 - 后续如果继续优化，应优先处理路线 / 河流 idle commit 的分块缓存、跨帧重建或轻量交互态线层，而不是迁移标签、城市剪影、marker 图标或军事图标。
 
 ## 阶段 4：复测与提交规则

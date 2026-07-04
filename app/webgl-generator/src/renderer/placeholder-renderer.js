@@ -349,9 +349,13 @@ export class PlaceholderMapRenderer {
     this.camera.scale = 1;
     this.camera.offsetX = 0;
     this.camera.offsetY = 0;
-    this.markViewportBuffersDirty();
-    this.draw({updateDynamicBuffers: !quick, updateOverlay: !quick});
-    this.onViewChange();
+    if (quick) {
+      this.markViewportBuffersDirty();
+      this.draw({updateDynamicBuffers: false, updateOverlay: false});
+      this.onViewChange();
+      return;
+    }
+    this.drawViewportPreview();
   }
 
   setColorMode(mode) {
@@ -841,12 +845,17 @@ export class PlaceholderMapRenderer {
     return Math.max(worldPerPixelX, worldPerPixelY) * pixels;
   }
 
-  setSelection(object) {
+  setSelection(object, {draw = true} = {}) {
     const previous = this.selection;
     this.selection = object || null;
     this.dynamicBuffersDirty.selection = true;
     if (previous?.kind === OBJECT_KIND.ROUTE || this.selection?.kind === OBJECT_KIND.ROUTE) {
       this.dynamicBuffersDirty.routes = true;
+    }
+    if (!draw) return;
+    if (this.overlayInteractionSuspended) {
+      this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+      return;
     }
     this.draw();
   }
@@ -914,6 +923,7 @@ export class PlaceholderMapRenderer {
     this.resumeOverlayAfterInteraction();
     this.draw({updateDynamicBuffers: false});
     this.onViewChange();
+    if (this.locateFlash && !this.locateFlashFrame) this.animateLocateFlash();
   }
 
   async rebuildViewportDynamicBuffersAsync(shouldContinue) {
@@ -973,11 +983,10 @@ export class PlaceholderMapRenderer {
     this.camera.scale = nextScale;
     this.camera.offsetX = -ndcX * nextScale;
     this.camera.offsetY = -ndcY * nextScale;
-    this.markViewportBuffersDirty();
     this.locateStatus = `${object.kind} #${object.id}`;
-    this.startLocateFlash(object);
-    this.setSelection(object);
-    this.onViewChange();
+    this.startLocateFlash(object, {deferAnimation: true});
+    this.setSelection(object, {draw: false});
+    this.drawViewportPreview();
     return true;
   }
 
@@ -1003,23 +1012,31 @@ export class PlaceholderMapRenderer {
     this.camera.scale = nextScale;
     this.camera.offsetX = -ndcX * nextScale;
     this.camera.offsetY = -ndcY * nextScale;
-    this.markViewportBuffersDirty();
     this.locateStatus = options.status || "bounds";
-    this.draw();
-    this.onViewChange();
+    this.drawViewportPreview();
     return true;
   }
 
-  startLocateFlash(object) {
+  startLocateFlash(object, {deferAnimation = false} = {}) {
     this.locateFlash = {
       kind: object.kind,
       id: object.id,
       until: performance.now() + 2600
     };
+    if (deferAnimation && this.locateFlashFrame) {
+      const view = this.canvas.ownerDocument?.defaultView || globalThis;
+      if (typeof view.cancelAnimationFrame === "function") view.cancelAnimationFrame(this.locateFlashFrame);
+      this.locateFlashFrame = 0;
+    }
+    if (deferAnimation) return;
     if (!this.locateFlashFrame) this.animateLocateFlash();
   }
 
   animateLocateFlash() {
+    if (this.overlayInteractionSuspended) {
+      this.locateFlashFrame = requestAnimationFrame(() => this.animateLocateFlash());
+      return;
+    }
     if (!this.locateFlash || performance.now() > this.locateFlash.until) {
       this.locateFlash = null;
       this.locateFlashFrame = 0;

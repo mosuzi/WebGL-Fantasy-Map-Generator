@@ -18386,3 +18386,24 @@ full 矩阵结果：
 - 100k 对照 profile `overlay-idle-async-100k` 通过：完整图层 idle frame p95 为 `23.5ms / 17.7ms`，测量重场景为 `47.1ms / 29.3ms`，选中态为 `29.3ms / 11.9ms`，各变体 dirty 均恢复 clean。
 - 跳过隐藏中测量 SVG 更新后，100k 正式 profile `overlay-idle-async-final-100k / continents / full,measurement-heavy,selection-heavy` 通过：完整图层 idle frame p95 为 `17.7ms / 17.6ms`，测量 `180` 条对象为 `35.3ms / 35.3ms`，选中 `8897` 个 cells 的国家为 `29.5ms / 11.9ms`；测量重场景交互 long task 为 `0 / 0`，各变体 dirty 均为 `clean`。
 - e2e 守门 `viewport-idle-async-e2e / continents / 10000` 通过：点击到出图 `1293.2ms`，纯生成 `692ms`，WebGL 加载 `372.6ms`，最慢加载阶段为“构建线层顶点” `59.9ms`。
+
+### 2026-07-04 程序化视口变换 overlay 隐藏补洞
+
+背景：
+
+- 用户指出移动 / 缩放画布时，画布上的标志会和 canvas 本身分离；当前代码已对手动拖拽 / 滚轮采用隐藏非 canvas 地图层的方案，但 `fitToView()`、对象定位和测量定位仍存在直接 `draw()` 的程序化相机变化路径。
+- 取舍上继续保留“交互中隐藏非 canvas 地图内容，idle 后恢复”：城市剪影、资源 / 标记图标、军事小牌和测量 SVG 都有 DOM/SVG 样式与编辑语义，默认迁入 WebGL 会扩大拾取、导出和交互重写范围；路线、河流、边界和态势箭头这类线面仍适合留在 canvas/WebGL。
+
+实现：
+
+- `fitToView()` 在非 quick 路径下改走 `drawViewportPreview()`，与手动拖拽 / 滚轮共用 overlay 隐藏、dirty 动态线层延后重建和 idle 恢复。
+- `locateObject()` 与 `locateBounds()` 改走同一套视口预览路径；定位闪烁动画延后到 viewport idle commit 完成后启动，避免定位第一帧直接刷新旧 overlay。
+- `setSelection()` 在 overlay 处于交互隐藏态时只做轻量预览绘制，不立即重建 dirty 动态 buffer 或刷新 overlay，避免对象定位后 selection store 回调打破隐藏策略。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测覆盖滚轮、拖拽、`renderer.fitToView()` 和 `renderer.locateObject({kind: "city"})`：四类路径触发后 `.map-stage--interaction-hidden = true`、`#map-overlay` visibility 为 `hidden`、`overlay.interactionSuspended = true`；idle 后全部恢复 visible / false，`glError = 0`，console/page error 均为 `0`。
+- 100k overlay profile `viewport-overlay-unified-100k / continents / full` 通过：完整图层连续滚轮 frame p95 `6ms`、中键拖动画布 frame p95 `17.7ms`，overlay 暂停样本 `18 / 24`，idle commit 帧 p95 `35.2ms / 17.6ms`，dirty 均恢复 `clean`。
+- e2e 守门 `viewport-overlay-unified-e2e / continents / 10000` 通过：点击到出图 `1540.7ms`，纯生成 `877.5ms`，WebGL 加载 `396ms`，最慢加载阶段为“构建视觉 cell mesh” `81.1ms`。
