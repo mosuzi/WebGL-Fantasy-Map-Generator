@@ -1050,8 +1050,15 @@ select:disabled {
   border: 1px solid rgba(238, 213, 145, 0.34);
   background: rgba(20, 27, 28, 0.74);
   color: #f8e8ba;
+  cursor: grab;
   font-weight: 700;
+  pointer-events: auto;
+  user-select: none;
   z-index: 4;
+}
+
+.custom-label.dragging {
+  cursor: grabbing;
 }
 
 .state-label {
@@ -5356,6 +5363,7 @@ input.ui-switch-native {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  margin-bottom: 12px;
 }
 
 .management-panel-divider {

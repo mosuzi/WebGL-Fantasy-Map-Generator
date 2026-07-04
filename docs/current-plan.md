@@ -56,6 +56,7 @@
 - overlay profile 交互采样口径已修正：`profile:overlay` 不再在每次滚轮 / 拖动采样时跨进页面执行完整 `readStats()`，而是在浏览器端 rAF 录制器里采集轻量快照，避免工具自身的 `getStats()` / DOM query / 序列化成本被算进用户交互帧；动态构建列也改为只统计采样期间发生变化的 build 值，不再把进入交互前的缓存 `routeBuildMs / riverBuildMs` 误记为交互期重建。`overlay-browser-sampled-100k-final / full / 100000` 通过，交互期 route / river 构建 p95 均为 `0`，滚轮 overlay p95 `7.6ms`，idle long task 为 `0`；10k e2e `overlay-profile-sampling-e2e` 通过，WebGL 加载 `397.8ms`、`drawMs = 0.1`、`glError = 0`。
 - GEO 数据导入第一刀已完成，并修正真实入口控件：简介页“导入 GEO 数据”支持 GeoJSON `FeatureCollection / Feature / Geometry` 的 `Point / MultiPoint / LineString / MultiLineString / Polygon / MultiPolygon / GeometryCollection`，按当前地图 `mapCoordinates` 反投影为保存的测量对象；导入结果可撤销，会自动显示测量图层并定位首个对象。该能力只作为外部 GEO 参考层，不重写生成地图本体、不改国家 / 城市 / 河流等核心数据。入口已从 `UiButton -> JS click hidden input` 改为按钮区域内原生 file input，避免用户真实点击无法打开文件选择器；`regress:geo` 已补导入控件结构检查并通过，点 / 线 / 面 overlay 均绘制，WebGL error 为 `0`；10k e2e `geo-import-control-fix-e2e` 通过。
 - 地图低饱和配色第一刀已完成：默认国家 / 省份色板从高饱和强色块改为较鲜明的粉彩色，海面和背景改为灰蓝，海底高度渐变、自然高度色、政体图例、文化 / 宗教 / 政区兜底色、海岸线、政治边界、道路和河流线条同步降饱和；用户复核后保留“线条已柔化但国家色未继续压灰”的版本。构建产物视觉 smoke 截图为 `docs/generated/screenshots/palette-soft-states.png`，国家色平均 HSL 饱和度为 `0.633`、最高 `1`、WebGL error 为 `0`；10k e2e `palette-restore-e2e` 通过，WebGL 加载 `427.6ms`。
+- 标签管理新增标签拖动放置已完成：点击“新增标签”后会创建并选中手工标签；若新标签被面板遮住，用户可直接在地图空白处按住拖动来放置该新标签，最终落点会回写到同一条“新增手工标签”历史记录。已有手工标签也可直接拖动，普通拖动会生成独立“移动手工标签”历史命令。标签管理按钮区和历史按钮区已增加 `12px` 间距，构建产物烟测确认新增放置、普通拖动、`glError = 0` 和 console/page error 为 `0`。
 
 ### 当前执行队列
 
@@ -84,6 +85,7 @@
 - 名称库：更多对象面板入口或原版多词率 `m` 行为；不得让导入或绑定变化自动改写已有地图对象名称。
 - 测量：曲线尺细化。
 - 高度图导入：profile 失配定位、待处理颜色审核队列和更细预览质量。
+- 编辑历史 UI：当前各面板的“重做”作用是复用全局 `EditHistory.redo()`，即撤销后重新应用刚撤销的命令；技术上可用，但在每个面板重复展示会占空间。后续可单独做“全局撤销入口”专项：保留底层命令栈，先统一露出全局撤销，面板内移除重复历史条；是否隐藏或保留全局重做按钮再按实际使用价值决定。
 
 ### 明确暂缓 / 不做
 

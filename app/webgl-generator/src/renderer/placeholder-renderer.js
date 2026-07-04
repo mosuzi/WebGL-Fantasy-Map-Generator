@@ -408,6 +408,17 @@ export class PlaceholderMapRenderer {
     this.updateLabels();
   }
 
+  updateCustomLabelPosition(labelId, point) {
+    if (!this.overlay || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return;
+    for (const item of this.labelItems) {
+      if (item.targetKind !== LABEL_TARGET_KIND.CUSTOM || item.targetId !== labelId) continue;
+      item.x = point.x;
+      item.y = point.y;
+      break;
+    }
+    this.updateLabels();
+  }
+
   refreshLineLayers({draw = true} = {}) {
     if (!this.map) return;
     const lineVertices = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions);
@@ -1104,6 +1115,8 @@ export class PlaceholderMapRenderer {
       const node = documentRef.createElement("span");
       node.className = labelClassName(item);
       node.textContent = item.text;
+      node.dataset.labelTargetKind = item.targetKind;
+      node.dataset.labelTargetId = String(item.targetId);
       fragment.append(node);
       return {...item, node, box: null, visible: false};
     });
@@ -1198,11 +1211,13 @@ export class PlaceholderMapRenderer {
 
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
-      item.node.classList.toggle("selected", isSelectedLabelItem(this.selection, item));
+      const selected = isSelectedLabelItem(this.selection, item);
+      const forceVisible = selected && item.targetKind === LABEL_TARGET_KIND.CUSTOM;
+      item.node.classList.toggle("selected", selected);
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
       const layerVisible = this.isLabelItemLayerVisible(item);
       const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
-      if (!layerVisible || !withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible)) {
+      if (!forceVisible && (!layerVisible || !withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible))) {
         item.node.classList.toggle("visible", false);
         item.visible = false;
         item.box = null;
@@ -1215,7 +1230,7 @@ export class PlaceholderMapRenderer {
       const blocked = canShow && (stateLabel
         ? boxesOverlapAny(occupiedStates, box, padding)
         : (stateLabelScale.blocksCities && boxesOverlapAny(occupiedStates, box, padding)) || boxesOverlapAny(occupied, box, padding));
-      const shouldShow = canShow && !blocked;
+      const shouldShow = canShow && (forceVisible || !blocked);
       item.node.classList.toggle("visible", shouldShow);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;

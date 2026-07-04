@@ -42,7 +42,7 @@ import {createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, cre
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
+import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
@@ -154,6 +154,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       markerId: null,
       lastPackCell: null
     },
+    customLabelDrag: null,
+    pendingCustomLabelPlacement: null,
     measurement: {
       active: false,
       points: [],
@@ -1089,6 +1091,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         const object = {kind: OBJECT_KIND.LABEL, id: created.id, targetKind: LABEL_TARGET_KIND.CUSTOM, targetId: created.id, text: created.text, targetName: created.text};
         selectionStore.setSelection({object});
         labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
+        state.pendingCustomLabelPlacement = {labelId: created.id, command};
       }
       updateLabelNamingPanel(state);
       updateEditingInteractionLock(state, documentRef);
@@ -1383,6 +1386,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindStateEditing(canvas, state, documentRef);
   bindProvinceEditing(canvas, state, documentRef);
   bindMarkerEditing(canvas, state, documentRef);
+  bindCustomLabelDrag(state, documentRef);
   bindEditingInteractionLock(canvas, state);
 
   bindRuntimePanel(documentRef, {
@@ -4051,6 +4055,129 @@ function bindMarkerEditing(canvas, state, documentRef) {
   }, true);
 }
 
+function bindCustomLabelDrag(state, documentRef) {
+  const overlay = state.renderer?.overlay;
+  const canvas = state.renderer?.canvas;
+  if (!overlay || !canvas) return;
+
+  canvas.addEventListener("pointerdown", event => {
+    const placement = state.pendingCustomLabelPlacement;
+    if (!placement || !state.map || !isPrimaryPointerDown(event)) return;
+    const label = findCustomLabel(state.map, placement.labelId);
+    if (!label) {
+      state.pendingCustomLabelPlacement = null;
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+    setCustomLabelLivePosition(state, label, point);
+    placement.command?.setCreatedPoint?.(point);
+    startCustomLabelDrag(state, documentRef, event, label, {
+      placementCommand: placement.command,
+      captureTarget: canvas
+    });
+  }, true);
+
+  overlay.addEventListener("pointerdown", event => {
+    if (!state.map || !isPrimaryPointerDown(event)) return;
+    const node = event.target?.closest?.(".custom-label");
+    const labelId = Number(node?.dataset?.labelTargetId);
+    if (!node || !Number.isInteger(labelId)) return;
+    const label = findCustomLabel(state.map, labelId);
+    if (!label) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const placement = state.pendingCustomLabelPlacement?.labelId === labelId ? state.pendingCustomLabelPlacement : null;
+    startCustomLabelDrag(state, documentRef, event, label, {
+      node,
+      placementCommand: placement?.command || null,
+      captureTarget: node
+    });
+  }, true);
+}
+
+function startCustomLabelDrag(state, documentRef, event, label, {node = null, placementCommand = null, captureTarget = null} = {}) {
+  const object = labelObjectFromCustomLabel(label);
+  state.selectionStore.setSelection({object});
+  state.panels.labelNaming?.setSelectedLabelKey?.(labelKeyForObject(object));
+  const labelNode = node || customLabelNode(state, label.id);
+  state.customLabelDrag = {
+    pointerId: event.pointerId,
+    labelId: label.id,
+    node: labelNode,
+    captureTarget: captureTarget || labelNode,
+    startedAt: {x: label.x, y: label.y},
+    placementCommand,
+    moved: false
+  };
+  labelNode?.classList.add("dragging");
+  capturePointer(state.customLabelDrag.captureTarget, event.pointerId);
+
+  const view = documentRef.defaultView || window;
+  const move = moveEvent => updateCustomLabelDrag(state, documentRef, moveEvent);
+  const end = endEvent => finishCustomLabelDrag(state, documentRef, endEvent);
+  state.customLabelDrag.move = move;
+  state.customLabelDrag.end = end;
+  view.addEventListener("pointermove", move, true);
+  view.addEventListener("pointerup", end, true);
+  view.addEventListener("pointercancel", end, true);
+}
+
+function updateCustomLabelDrag(state, documentRef, event) {
+  const drag = state.customLabelDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const label = findCustomLabel(state.map, drag.labelId);
+  if (!label || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+  setCustomLabelLivePosition(state, label, point);
+  drag.moved = true;
+  drag.placementCommand?.setCreatedPoint?.(point);
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+}
+
+function finishCustomLabelDrag(state, documentRef, event) {
+  const drag = state.customLabelDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const view = documentRef.defaultView || window;
+  view.removeEventListener("pointermove", drag.move, true);
+  view.removeEventListener("pointerup", drag.end, true);
+  view.removeEventListener("pointercancel", drag.end, true);
+  drag.node?.classList.remove("dragging");
+  releasePointer(drag.captureTarget, event.pointerId);
+  state.customLabelDrag = null;
+
+  const label = findCustomLabel(state.map, drag.labelId);
+  if (!label) {
+    updateLabelNamingPanel(state);
+    return;
+  }
+  const finalPoint = {x: label.x, y: label.y};
+  if (drag.placementCommand) {
+    drag.placementCommand.setCreatedPoint?.(finalPoint);
+    if (state.pendingCustomLabelPlacement?.labelId === drag.labelId) state.pendingCustomLabelPlacement = null;
+    refreshAfterEdit(state, drag.placementCommand);
+    updateLabelNamingPanel(state);
+    updateRuntimePanel(documentRef, state);
+    return;
+  }
+
+  const command = createMoveCustomLabelCommand(drag.labelId, finalPoint, {previousPoint: drag.startedAt});
+  if (!command.isNoop({map: state.map})) {
+    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+  } else {
+    state.renderer.refreshLabels?.();
+  }
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+}
+
 function bindEditingInteractionLock(canvas, state) {
   for (const eventName of ["pointerdown", "pointermove", "pointerup", "pointercancel", "wheel"]) {
     canvas.addEventListener(eventName, event => {
@@ -4147,6 +4274,32 @@ function nearestPackCell(map, point, maxDistance) {
     bestCell = packCell;
   }
   return bestCell;
+}
+
+function findCustomLabel(map, labelId) {
+  return (map?.labels?.custom || []).find(label => label?.id === labelId) || null;
+}
+
+function setCustomLabelLivePosition(state, label, point) {
+  if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return;
+  label.x = point.x;
+  label.y = point.y;
+  state.renderer.updateCustomLabelPosition?.(label.id, point);
+}
+
+function customLabelNode(state, labelId) {
+  return state.renderer?.overlay?.querySelector?.(`.custom-label[data-label-target-id="${labelId}"]`) || null;
+}
+
+function labelObjectFromCustomLabel(label) {
+  return {
+    kind: OBJECT_KIND.LABEL,
+    id: label.id,
+    targetKind: LABEL_TARGET_KIND.CUSTOM,
+    targetId: label.id,
+    text: label.text,
+    targetName: label.text
+  };
 }
 
 function applyHeightBrushAtEvent(state, event) {

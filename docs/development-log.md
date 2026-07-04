@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：标签管理新增标签拖动放置
+
+用户反馈标签管理新增标签时需要支持拖动标签，并指出“新增标签 / 删除标签”按钮与下方“撤销 / 重做”按钮之间没有间隔；同时询问各面板重复出现“重做”的实际作用，希望后续考虑全局统一撤销。
+
+修正：
+
+- 手工标签 DOM 增加 `data-label-target-kind / data-label-target-id`，并允许 `.custom-label` 接收指针事件，显示 grab / grabbing 光标。
+- 渲染层新增 `updateCustomLabelPosition()`，拖动过程中只更新标签 overlay，不重建底图 buffer。
+- 新增标签后保留 `pendingCustomLabelPlacement`：用户可在地图空白处按住拖动来放置刚创建的标签，即使新标签初始位置被标签管理面板盖住也能完成放置。
+- 新增标签第一次放置会同步更新“新增手工标签”命令内部快照，因此撤销一次仍删除该标签；已有手工标签普通拖动会生成独立“移动手工标签”命令。
+- 选中的手工标签不再被标签碰撞避让隐藏，避免刚创建的标签因为压在城市名附近而无法操作。
+- 标签管理按钮区增加 `12px` 下间距，拉开新增/删除按钮与历史按钮组。
+- 关于“重做”：当前各面板按钮都调用同一个全局 `EditHistory.redo()`，作用是撤销后重新应用刚撤销的命令；本轮不拆 UI，已把“全局撤销入口、面板内去重历史条、是否隐藏重做”记录到 current-plan 的后续可选增强。
+
+验证：
+
+- `git diff --check` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\label-edit-commands.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开标签管理后点击“新增标签”，直接在地图空白处拖动放置，新标签坐标从 `{x:720,y:480}` 变为 `{x:371.25,y:458.93}`，历史仍为 `undo 1 / redo 0 / 新增手工标签`，`pendingPlacement = null`，按钮区与历史区间距为 `12px`，`glError = 0`，console/page error 为 `0`。
+- 构建产物浏览器烟测通过：对已放置的手工标签再次直接拖动，坐标从 `{x:371.25,y:458.93}` 变为 `{x:450,y:475.46}`，历史变为 `undo 2 / redo 0 / 移动手工标签 #1`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-04：对象颜色编辑 HSL 取色组件
 
 用户指出当前颜色编辑仍有问题，希望支持 HSL 取色；如果 Element Plus 现有组件做不到，就另做专用颜色组件。复查后确认当前共享颜色入口是 `UiColorActionPanel -> UiColorField -> ElColorPicker`，更适合弹出式 HSV/HEX 选择，不适合直接给出 H/S/L 三通道数值控制。本轮改为项目内专用 HSL 字段，但对外仍输出 `#rrggbb`，不改变地图数据格式或颜色命令接口。

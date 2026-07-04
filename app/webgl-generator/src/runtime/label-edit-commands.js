@@ -52,6 +52,47 @@ export function createAddCustomLabelCommand({text, x, y}) {
     },
     getCreatedLabel() {
       return created ? {...created} : null;
+    },
+    setCreatedPoint(nextPoint) {
+      if (!created) return;
+      const normalized = normalizePoint(nextPoint?.x, nextPoint?.y);
+      if (!Number.isFinite(normalized.x) || !Number.isFinite(normalized.y)) return;
+      created.x = normalized.x;
+      created.y = normalized.y;
+    }
+  };
+}
+
+export function createMoveCustomLabelCommand(labelId, nextPoint, {previousPoint = null} = {}) {
+  const id = Number(labelId);
+  const next = normalizePoint(nextPoint?.x, nextPoint?.y);
+  let previous = previousPoint ? normalizePoint(previousPoint.x, previousPoint.y) : null;
+
+  return {
+    label: `移动手工标签 #${id}`,
+    effects: {
+      ...LABEL_EFFECTS,
+      affected: [{kind: OBJECT_KIND.LABEL, id}]
+    },
+    apply(context) {
+      const label = findCustomLabel(context.map, id);
+      if (!label) throw new Error(`找不到手工标签 #${id}`);
+      previous ??= {x: label.x, y: label.y};
+      label.x = next.x;
+      label.y = next.y;
+    },
+    revert(context) {
+      const label = findCustomLabel(context.map, id);
+      if (!label || !previous) throw new Error(`无法恢复手工标签 #${id}`);
+      label.x = previous.x;
+      label.y = previous.y;
+    },
+    isNoop(context) {
+      if (!Number.isInteger(id) || !Number.isFinite(next.x) || !Number.isFinite(next.y)) return true;
+      const label = findCustomLabel(context.map, id);
+      if (!label) return true;
+      const base = previous || label;
+      return samePoint(base, next);
     }
   };
 }
@@ -284,6 +325,10 @@ function normalizePoint(x, y) {
     x: Number(x),
     y: Number(y)
   };
+}
+
+function samePoint(a, b) {
+  return Math.abs(Number(a?.x) - Number(b?.x)) < 0.01 && Math.abs(Number(a?.y) - Number(b?.y)) < 0.01;
 }
 
 function removeId(list, id) {
