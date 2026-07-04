@@ -327,7 +327,7 @@ const CHARGES = ["mount", "river", "star", "gate", "wave", "tree", "tower", "sun
 const FIELD_TINCTURES = ["#b94b4b", "#3d6f9e", "#4f7f52", "#a47a35", "#6e579b", "#9a9a70", "#3e7b7d", "#704f38"];
 const METAL_TINCTURES = ["#f0d889", "#e8e4d6", "#d8b56d", "#f3efe1"];
 const HYDRO_NAME_SUFFIXES = [...new Set([...WATER_SUFFIXES, ...LAKE_SUFFIXES, "溪", "水", "河", "江", "川"])];
-const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null});
+const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null, minLength: 1, maxLength: 8, duplicateChars: ""});
 
 const BUILTIN_NAMEBASE_SOURCES = {
   "ancient-state-roots": ANCIENT_STATE_ROOTS,
@@ -575,7 +575,7 @@ function resolveNamebaseSources(namebases) {
   for (const base of namebases?.bases || []) {
     const id = String(base?.id || "").trim();
     if (!id) continue;
-    const source = createNamebaseSourceEntry(base.source);
+    const source = createNamebaseSourceEntry(base);
     if (source.records.length) rows.set(id, source);
   }
   const stateRootId = String(globalBindings.stateRoot || "").trim();
@@ -665,10 +665,29 @@ function formatNamebaseWeight(value) {
 }
 
 export function createNamebaseSourceEntry(source) {
-  const records = parseNamebaseWeightedSamples(source);
+  const sourceValues = namebaseSourceValues(source);
+  const records = parseNamebaseWeightedSamples(sourceValues);
+  const fallback = sampleLengthFallback(records);
+  const options = normalizeNamebaseGenerationOptions(source, fallback);
   return {
     records,
-    chain: calculateNamebaseChain(records)
+    chain: calculateNamebaseChain(records),
+    minLength: options.minLength,
+    maxLength: options.maxLength,
+    duplicateChars: options.duplicateChars
+  };
+}
+
+export function normalizeNamebaseGenerationOptions(options = {}, fallback = {}) {
+  const source = options && typeof options === "object" && !Array.isArray(options) ? options : {};
+  const fallbackMin = Number.isFinite(fallback.minLength) ? fallback.minLength : 1;
+  const fallbackMax = Number.isFinite(fallback.maxLength) ? fallback.maxLength : Math.max(fallbackMin, 8);
+  const minLength = clampInteger(source.minLength ?? source.min ?? fallbackMin, 1, 12);
+  const maxLength = clampInteger(source.maxLength ?? source.max ?? fallbackMax, minLength, 12);
+  return {
+    minLength,
+    maxLength,
+    duplicateChars: normalizeDuplicateChars(source.duplicateChars ?? source.d ?? "")
   };
 }
 
@@ -705,16 +724,19 @@ export function calculateNamebaseChain(records) {
   };
 }
 
-export function generateNamebaseMarkovName(chain, rng, {maxLength = 8} = {}) {
+export function generateNamebaseMarkovName(chain, rng, {minLength = 1, maxLength = 8, duplicateChars = ""} = {}) {
   if (!chain?.starts?.length) return "";
-  const targetLength = Math.max(1, Math.min(maxLength, pickNamebaseWeightedValue(rng, chain.lengths) || 1));
+  const min = Math.max(1, Math.min(Number(minLength) || 1, Number(maxLength) || 8));
+  const max = Math.max(min, Math.min(Number(maxLength) || 8, 12));
+  const candidateLengths = chain.lengths.filter(length => length >= min && length <= max);
+  const targetLength = Math.max(min, Math.min(max, pickNamebaseWeightedValue(rng, candidateLengths.length ? candidateLengths : chain.lengths) || min));
   const starts = chain.startsByLength.get(targetLength) || chain.starts;
   const chars = [pickNamebaseWeightedValue(rng, starts)];
   while (chars.length < targetLength) {
     const nextValues = chain.transitions.get(chars[chars.length - 1]) || chain.starts;
     chars.push(pickNamebaseWeightedValue(rng, nextValues));
   }
-  return chars.join("");
+  return normalizeNamebaseCandidate(chars.join(""), {minLength: min, maxLength: max, duplicateChars});
 }
 
 function pickNamebaseValue(rng, source) {
@@ -729,16 +751,22 @@ function pickNamebaseValue(rng, source) {
   return records[0]?.value || records[0] || "";
 }
 
-function generateNamebaseCandidate(rng, source, {maxLength = 8} = {}) {
+function generateNamebaseCandidate(rng, source, options = {}) {
   const records = Array.isArray(source) ? source : source?.records || [];
   if (!records.length) return "";
   const chain = Array.isArray(source) ? calculateNamebaseChain(records) : source?.chain;
   const canUseMarkov = records.length >= 3 && chain?.diversity >= 1.25;
-  if (canUseMarkov && namebaseRandom(rng) < 0.72) {
-    const generated = generateNamebaseMarkovName(chain, rng, {maxLength});
-    if (generated) return generated;
+  const settings = namebaseCandidateSettings(source, options);
+  const maxAttempts = canUseMarkov ? 12 : 6;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (canUseMarkov && namebaseRandom(rng) < 0.72) {
+      const generated = generateNamebaseMarkovName(chain, rng, settings);
+      if (generated) return generated;
+    }
+    const picked = normalizeNamebaseCandidate(pickNamebaseValue(rng, source), settings);
+    if (picked) return picked;
   }
-  return pickNamebaseValue(rng, source);
+  return normalizeNamebaseCandidate(records[0]?.value || "", settings);
 }
 
 function calculateNamebaseChainDiversity(transitions) {
@@ -780,6 +808,62 @@ function makeBoundStateRootCandidateAvoiding(rng, source, avoidedRoot = "") {
     if (candidate && !hasSameNameRoot(candidate, avoidedRoot)) return candidate;
   }
   return makeStateRootCandidateAvoiding(rng, {}, avoidedRoot);
+}
+
+function namebaseSourceValues(source) {
+  if (source && typeof source === "object" && !Array.isArray(source) && Object.prototype.hasOwnProperty.call(source, "source")) {
+    return source.source;
+  }
+  return source;
+}
+
+function sampleLengthFallback(records) {
+  const lengths = records.map(record => Array.from(record.value || "").length).filter(Boolean);
+  return {
+    minLength: lengths.length ? Math.min(...lengths) : 1,
+    maxLength: lengths.length ? Math.max(...lengths) : 8
+  };
+}
+
+function namebaseCandidateSettings(source, options = {}) {
+  const fallback = Array.isArray(source)
+    ? sampleLengthFallback(source)
+    : {minLength: source?.minLength, maxLength: source?.maxLength};
+  const sourceOptions = Array.isArray(source) ? {} : source || {};
+  const normalized = normalizeNamebaseGenerationOptions(sourceOptions, fallback);
+  const optionMax = Number.isFinite(Number(options.maxLength)) ? Math.max(1, Math.floor(Number(options.maxLength))) : normalized.maxLength;
+  const maxLength = Math.max(normalized.minLength, Math.min(normalized.maxLength, optionMax, 12));
+  const minLength = Math.max(1, Math.min(normalized.minLength, maxLength));
+  return {
+    minLength,
+    maxLength,
+    duplicateChars: options.duplicateChars ?? normalized.duplicateChars
+  };
+}
+
+function normalizeNamebaseCandidate(value, {minLength = 1, maxLength = 8, duplicateChars = ""} = {}) {
+  const chars = Array.from(String(value || "").replace(/\s+/gu, "")).slice(0, maxLength);
+  if (chars.length < minLength) return "";
+  if (hasDisallowedAdjacentRepeat(chars, duplicateChars)) return "";
+  return chars.join("");
+}
+
+function hasDisallowedAdjacentRepeat(chars, duplicateChars = "") {
+  const allowed = new Set(Array.from(String(duplicateChars || "")));
+  for (let index = 1; index < chars.length; index += 1) {
+    if (chars[index] === chars[index - 1] && !allowed.has(chars[index])) return true;
+  }
+  return false;
+}
+
+function normalizeDuplicateChars(value) {
+  return [...new Set(Array.from(String(value || "").replace(/\s+/gu, "")))].slice(0, 24).join("");
+}
+
+function clampInteger(value, min, max) {
+  const number = Math.floor(Number(value));
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, number));
 }
 
 function makeStateRootCandidate(rng, options = {}) {
@@ -981,7 +1065,7 @@ export function summarizeNamebaseSource(source, {includeSource = false} = {}) {
     source?.category || "用户名称库",
     sourceValues,
     source?.note || "",
-    {includeSource}
+    {includeSource, options: source}
   );
   if (source?.builtin !== undefined) summary.builtin = Boolean(source.builtin);
   if (source?.origin) summary.origin = source.origin;
@@ -989,7 +1073,7 @@ export function summarizeNamebaseSource(source, {includeSource = false} = {}) {
   return summary;
 }
 
-function analyzeNamebase(id, name, kind, category, values, note = "", {includeSource = false} = {}) {
+function analyzeNamebase(id, name, kind, category, values, note = "", {includeSource = false, options = null} = {}) {
   const records = parseNamebaseWeightedSamples(values, {dedupe: false});
   const normalizedValues = records.map(record => record.value);
   const counts = new Map();
@@ -997,6 +1081,12 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
   const uniqueValues = [...counts.keys()];
   const duplicateValues = [...counts.entries()].filter(([, count]) => count > 1).map(([value]) => value);
   const lengths = uniqueValues.map(value => Array.from(value).length);
+  const sampleMinLength = lengths.length ? Math.min(...lengths) : 0;
+  const sampleMaxLength = lengths.length ? Math.max(...lengths) : 0;
+  const generationOptions = normalizeNamebaseGenerationOptions(options || {}, {
+    minLength: sampleMinLength || 1,
+    maxLength: sampleMaxLength || 8
+  });
   const weightedSamples = Math.round(records.reduce((sum, record) => sum + record.weight, 0) * 10) / 10;
   const chainDiversity = calculateNamebaseChain(records).diversity;
   const summary = {
@@ -1010,8 +1100,11 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
     uniqueSamples: uniqueValues.length,
     duplicateSamples: normalizedValues.length - uniqueValues.length,
     duplicateNames: duplicateValues.slice(0, 12),
-    minLength: lengths.length ? Math.min(...lengths) : 0,
-    maxLength: lengths.length ? Math.max(...lengths) : 0,
+    minLength: generationOptions.minLength,
+    maxLength: generationOptions.maxLength,
+    sampleMinLength,
+    sampleMaxLength,
+    duplicateChars: generationOptions.duplicateChars,
     examples: uniqueValues.slice(0, 16),
     note
   };

@@ -17666,3 +17666,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：Playwright 通过 HTTP 路由加载 `dist/webgl-generator`，湖泊 `#5` 从 `月湖` 改为 `月泊`，撤销恢复 `月湖`，重做恢复 `月泊`；拾取对象为 `lake`，`glError = 0`，无 console error/page error。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed lake-rename-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1718.7ms`，纯生成 `631.8ms`，WebGL 加载 `737.9ms`，最慢加载阶段为“构建视觉 cell mesh” `56.9ms`，控制台错误为空。
+
+### 名称库生成质量参数第一刀
+
+背景：
+
+- 名称库导入、绑定、预览、显式重命名和撤销链路已经接入，但用户库还不能像原版一样控制生成长度和允许重复字符。
+- 本轮只做名称库数据和生成候选质量参数，不让名称库编辑自动批量改写当前地图名称。
+- 用户再次校准：无需做动态军事系统；军事方向只保留静态面板、态势线观感和导出可读性收尾。
+
+修正：
+
+- 用户名称库数据新增 `minLength / maxLength / duplicateChars`，复制内置库、导入、导出、本地偏好和完整地图 JSON 都会保留这些参数。
+- 名称库面板新增“生成参数”编辑区，用户库可设置最短/最长生成字数和允许相邻重复的字符；写入进入 `EditHistory` 快照命令，可撤销/重做。
+- 生成预览和绑定生成共用参数：Markov 候选与样本兜底都会按长度过滤，并拒绝非白名单字符相邻重复。
+- 名称库详情显示配置生成长度、样本长度和允许连写字符，便于检查用户库质量。
+- README、当前计划、名称库专题计划、绑定专项和 source 功能积压已同步更新；后续名称库缺口收窄为更多对象面板入口、原版文本兼容和更细质量诊断。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：新建用户名称库后设置 `minLength = 3`、`maxLength = 3`、`duplicateChars = 澜`，生成预览候选均为 3 字；撤销恢复默认 `2-4` 字和空允许连写，重做恢复 `3-3` 字与 `澜`，`glError = 0`，无 console error/page error。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed namebase-options-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1639ms`，纯生成 `820.6ms`，WebGL 加载 `488.8ms`，UI/调度余量 `329.6ms`，最慢加载阶段为“构建标签” `56.4ms`，控制台错误为空。

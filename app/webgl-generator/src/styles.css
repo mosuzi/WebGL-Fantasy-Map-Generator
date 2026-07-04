@@ -4722,6 +4722,63 @@ input.ui-switch-native {
   overflow-wrap: anywhere;
 }
 
+.namebase-options-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.13);
+  border-radius: 6px;
+  background: rgba(10, 20, 28, 0.34);
+}
+
+.namebase-options-editor-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.namebase-options-editor-header strong {
+  color: #e4edf2;
+  font-size: 12px;
+}
+
+.namebase-options-editor-header span {
+  color: #91a2ad;
+  font-size: 11px;
+}
+
+.namebase-options-fields {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.7fr) minmax(84px, 0.7fr) minmax(160px, 1.6fr);
+  gap: 8px;
+}
+
+.namebase-options-fields label {
+  display: grid;
+  gap: 5px;
+  color: #c5d1d8;
+  font-size: 11px;
+}
+
+.namebase-options-fields input {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(189, 206, 213, 0.18);
+  border-radius: 4px;
+  background: rgba(7, 14, 20, 0.78);
+  color: #e4edf2;
+  font: inherit;
+}
+
+.namebase-options-fields input:focus {
+  outline: 1px solid rgba(104, 166, 190, 0.65);
+  border-color: rgba(104, 166, 190, 0.85);
+}
+
 .city-panel-details {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

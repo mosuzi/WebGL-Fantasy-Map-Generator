@@ -70,6 +70,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onCopyBuiltin: row => callbacks.onCopyBuiltin?.(row),
     onRenameUser: (row, name) => callbacks.onRenameUser?.(row, name),
     onUpdateSource: (row, sourceText) => callbacks.onUpdateSource?.(row, sourceText),
+    onUpdateOptions: (row, options) => callbacks.onUpdateOptions?.(row, options),
     onDeleteUser: row => callbacks.onDeleteUser?.(row),
     onClearUser: () => callbacks.onClearUser?.(),
     onSetGlobalBinding: (target, value) => callbacks.onSetGlobalBinding?.(target, value),

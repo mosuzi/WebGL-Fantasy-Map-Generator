@@ -135,6 +135,29 @@
     <UiButton variant="secondary" @click="callbacks.onUpdateSource(selectedUserRow, sourceDraft)">应用样本</UiButton>
   </div>
 
+  <div v-if="selectedUserRow" class="namebase-options-editor">
+    <div class="namebase-options-editor-header">
+      <strong>生成参数</strong>
+      <span>只影响后续预览、生成和显式改名。</span>
+    </div>
+    <div class="namebase-options-fields">
+      <label>
+        <span>最短</span>
+        <input v-model.number="minLengthDraft" type="number" min="1" max="12" step="1" />
+      </label>
+      <label>
+        <span>最长</span>
+        <input v-model.number="maxLengthDraft" type="number" :min="minLengthDraft" max="12" step="1" />
+      </label>
+      <label>
+        <span>允许连写</span>
+        <input v-model.trim="duplicateCharsDraft" maxlength="24" placeholder="如：叠叠" />
+      </label>
+    </div>
+    <p class="namebase-source-editor-note">未列入“允许连写”的相邻重复字符会被过滤，例如“清清”默认不会进入候选。</p>
+    <UiButton variant="secondary" @click="applyOptions">应用参数</UiButton>
+  </div>
+
   <div class="namebase-panel-actions">
     <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
     <UiButton class="file-import-action namebase-import-action" variant="secondary" @click="triggerImportFile">导入名称库</UiButton>
@@ -179,6 +202,9 @@ const props = defineProps({
 
 const unitPreferences = useUnitPreferences();
 const sourceDraft = ref("");
+const minLengthDraft = ref(1);
+const maxLengthDraft = ref(4);
+const duplicateCharsDraft = ref("");
 const importFileInput = ref(null);
 const generatedExamples = ref([]);
 const previewNonce = ref(0);
@@ -277,8 +303,9 @@ const detailRows = computed(() => selected.value ? [
   {label: "重复样本", value: formatNumber(selected.value.duplicateSamples)},
   {label: "质量", value: selected.value.qualityLabel},
   {label: "绑定状态", value: selected.value.bindingUsageLabel},
-  {label: "最短", value: `${formatNumber(selected.value.minLength)}字`},
-  {label: "最长", value: `${formatNumber(selected.value.maxLength)}字`},
+  {label: "生成长度", value: `${formatNumber(selected.value.minLength)}-${formatNumber(selected.value.maxLength)}字`},
+  {label: "样本长度", value: `${formatNumber(selected.value.sampleMinLength)}-${formatNumber(selected.value.sampleMaxLength)}字`},
+  {label: "允许连写", value: selected.value.duplicateChars || "无"},
   {label: "说明", value: selected.value.note || "内置词池"}
 ] : []);
 
@@ -401,15 +428,27 @@ function triggerImportFile() {
 function generateExamples() {
   if (!selected.value) return;
   previewNonce.value += 1;
-  generatedExamples.value = createNamebaseGeneratedExamples(selected.value.source || [], {
+  generatedExamples.value = createNamebaseGeneratedExamples(selected.value, {
     count: 16,
     seed: selected.value.id,
     salt: previewNonce.value
   });
 }
 
-watch(() => [selected.value?.id, selectedSourceFingerprint.value], () => {
+function applyOptions() {
+  if (!selectedUserRow.value) return;
+  props.callbacks.onUpdateOptions?.(selectedUserRow.value, {
+    minLength: minLengthDraft.value,
+    maxLength: maxLengthDraft.value,
+    duplicateChars: duplicateCharsDraft.value
+  });
+}
+
+watch(() => [selected.value?.id, selectedSourceFingerprint.value, selected.value?.minLength, selected.value?.maxLength, selected.value?.duplicateChars], () => {
   sourceDraft.value = selectedUserRow.value?.source?.join("\n") || "";
+  minLengthDraft.value = selectedUserRow.value?.minLength || 1;
+  maxLengthDraft.value = selectedUserRow.value?.maxLength || Math.max(minLengthDraft.value, 4);
+  duplicateCharsDraft.value = selectedUserRow.value?.duplicateChars || "";
   generatedExamples.value = [];
 }, {immediate: true});
 

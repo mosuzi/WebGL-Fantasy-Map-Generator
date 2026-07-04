@@ -1,4 +1,4 @@
-import {createNamebaseSourceEntry, formatNamebaseWeightedSample, generateNamebaseMarkovName, getBuiltinNamebaseSummaries, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
+import {createNamebaseSourceEntry, formatNamebaseWeightedSample, generateNamebaseMarkovName, getBuiltinNamebaseSummaries, normalizeNamebaseGenerationOptions, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
 
 export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
 export const NAMEBASE_DOCUMENT_VERSION = 1;
@@ -22,6 +22,7 @@ export function createNamebaseDocument(map = null, {includeUser = true} = {}) {
     duplicateSamples: row.duplicateSamples,
     minLength: row.minLength,
     maxLength: row.maxLength,
+    duplicateChars: row.duplicateChars || "",
     note: row.note,
     source: row.source || []
   }));
@@ -151,7 +152,10 @@ export function copyBuiltinNamebaseToUser(map, id) {
     builtin: false,
     origin: "复制",
     importedAt: copiedAt,
-    importedFrom: "内置名称库"
+    importedFrom: "内置名称库",
+    minLength: sourceBase.minLength,
+    maxLength: sourceBase.maxLength,
+    duplicateChars: sourceBase.duplicateChars || ""
   };
   store.bases.push(copy);
   updateNamebaseMetadata(store);
@@ -179,7 +183,10 @@ export function createUserNamebase(map) {
     builtin: false,
     origin: "手动",
     importedAt: createdAt,
-    importedFrom: ""
+    importedFrom: "",
+    minLength: 2,
+    maxLength: 4,
+    duplicateChars: ""
   };
   store.bases.push(base);
   updateNamebaseMetadata(store);
@@ -246,6 +253,26 @@ export function updateUserNamebaseSource(map, id, sourceText) {
     total: map.namebases.bases.length,
     samples: values.length,
     name: base.name || base.id || ""
+  };
+}
+
+export function updateUserNamebaseOptions(map, id, options = {}) {
+  if (!map?.namebases || !Array.isArray(map.namebases.bases)) return {updated: false, total: 0, name: ""};
+  const base = map.namebases.bases.find(item => item?.id === id && item?.builtin !== true);
+  if (!base) return {updated: false, total: map.namebases.bases.length, name: ""};
+  const next = normalizeNamebaseGenerationOptions(options, summarizeNamebaseSource(base));
+  base.minLength = next.minLength;
+  base.maxLength = next.maxLength;
+  base.duplicateChars = next.duplicateChars;
+  base.updatedAt = new Date().toISOString();
+  updateNamebaseMetadata(map.namebases);
+  return {
+    updated: true,
+    total: map.namebases.bases.length,
+    name: base.name || base.id || "",
+    minLength: base.minLength,
+    maxLength: base.maxLength,
+    duplicateChars: base.duplicateChars
   };
 }
 
@@ -347,15 +374,14 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
   const records = entry.records;
   if (!records.length) return [];
   const rng = createPreviewRng(`${seed}|${salt}|${records.map(formatNamebaseWeightedSample).join("|")}`);
-  const maxLength = records.reduce((max, record) => Math.max(max, Math.min(12, Array.from(record.value).length)), 1);
   const result = [];
   const seen = new Set();
   const maxAttempts = Math.max(80, count * 24);
   for (let attempt = 0; result.length < count && attempt < maxAttempts; attempt += 1) {
     const candidate = attempt % 4 === 3
       ? recombinePreviewName(records, rng)
-      : generateNamebaseMarkovName(entry.chain, rng, {maxLength});
-    const normalized = normalizePreviewName(candidate, maxLength);
+      : generateNamebaseMarkovName(entry.chain, rng, entry);
+    const normalized = normalizePreviewName(candidate, entry);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     result.push(normalized);
@@ -363,7 +389,7 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
 
   for (const record of records) {
     if (result.length >= count) break;
-    const normalized = normalizePreviewName(record.value, maxLength);
+    const normalized = normalizePreviewName(record.value, entry);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     result.push(normalized);
@@ -429,7 +455,8 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
     builtin: false,
     origin: "导入",
     importedAt,
-    importedFrom: filename || ""
+    importedFrom: filename || "",
+    ...normalizeNamebaseGenerationOptions(base, summarizeNamebaseSource({source: values}))
   };
 }
 
@@ -449,15 +476,19 @@ function recombinePreviewName(records, rng) {
   return [...left.slice(0, leftCut), ...right.slice(rightStart)].join("");
 }
 
-function normalizePreviewName(value, maxLength = 12) {
+function normalizePreviewName(value, options = {}) {
+  const minLength = Math.max(1, Number(options.minLength) || 1);
+  const maxLength = Math.max(minLength, Number(options.maxLength) || 12);
   const chars = Array.from(String(value || "").replace(/\s+/gu, "")).slice(0, maxLength);
-  if (hasAdjacentRepeatedChar(chars)) return "";
+  if (chars.length < minLength) return "";
+  if (hasAdjacentRepeatedChar(chars, options.duplicateChars)) return "";
   return chars.join("");
 }
 
-function hasAdjacentRepeatedChar(chars) {
+function hasAdjacentRepeatedChar(chars, duplicateChars = "") {
+  const allowed = new Set(Array.from(String(duplicateChars || "")));
   for (let index = 1; index < chars.length; index += 1) {
-    if (chars[index] === chars[index - 1]) return true;
+    if (chars[index] === chars[index - 1] && !allowed.has(chars[index])) return true;
   }
   return false;
 }
@@ -508,6 +539,7 @@ function namebaseExportRecord(base) {
     duplicateSamples: summary.duplicateSamples,
     minLength: summary.minLength,
     maxLength: summary.maxLength,
+    duplicateChars: summary.duplicateChars || "",
     note: summary.note,
     importedAt: base.importedAt || "",
     importedFrom: base.importedFrom || "",

@@ -43,7 +43,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-e
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
-import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
+import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
@@ -1117,6 +1117,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onCopyBuiltin: row => copyBuiltinNamebase(state, documentRef, row),
     onRenameUser: (row, name) => renameImportedNamebase(state, documentRef, row, name),
     onUpdateSource: (row, sourceText) => updateImportedNamebaseSource(state, documentRef, row, sourceText),
+    onUpdateOptions: (row, options) => updateImportedNamebaseOptions(state, documentRef, row, options),
     onDeleteUser: row => deleteImportedNamebase(state, documentRef, row),
     onClearUser: () => clearImportedNamebases(state, documentRef),
     onSetGlobalBinding: (target, value) => setGlobalNamebaseBinding(state, documentRef, target, value),
@@ -2369,6 +2370,30 @@ function updateImportedNamebaseSource(state, documentRef, row, sourceText) {
     setFileOperationStatus(documentRef, `已更新用户名称库“${result.name}”，样本 ${result.samples} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "编辑名称库样本失败", error);
+  }
+}
+
+function updateImportedNamebaseOptions(state, documentRef, row, options) {
+  try {
+    assertMapAvailable(state);
+    if (!row?.id || row.builtin === true) {
+      setFileOperationStatus(documentRef, "请选择一个用户名称库编辑参数。");
+      return;
+    }
+    const command = createUpdateUserNamebaseOptionsCommand(row.id, options);
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, "名称库生成参数没有变化。");
+      return;
+    }
+    const result = executeNamebaseEdit(state, documentRef, command);
+    if (!result.updated) {
+      setFileOperationStatus(documentRef, "未找到可编辑参数的用户名称库。");
+      return;
+    }
+    const duplicateText = result.duplicateChars ? `，允许连写“${result.duplicateChars}”` : "";
+    setFileOperationStatus(documentRef, `已更新用户名称库“${result.name}”生成参数：${result.minLength}-${result.maxLength} 字${duplicateText}。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "编辑名称库参数失败", error);
   }
 }
 

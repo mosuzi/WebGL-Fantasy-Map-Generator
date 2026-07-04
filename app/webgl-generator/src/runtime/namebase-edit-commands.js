@@ -1,4 +1,4 @@
-import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseImportPreview, createUserNamebase, deleteUserNamebase, importNamebaseDocument, NAMEBASE_BINDING_TARGETS, renameUserNamebase, setNamebaseBinding, updateUserNamebaseSource} from "../generator/namebase-store.js";
+import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseImportPreview, createUserNamebase, deleteUserNamebase, importNamebaseDocument, NAMEBASE_BINDING_TARGETS, renameUserNamebase, setNamebaseBinding, updateUserNamebaseOptions, updateUserNamebaseSource} from "../generator/namebase-store.js";
 
 const NAMEBASE_EDIT_EFFECTS = Object.freeze({
   render: "none",
@@ -91,6 +91,21 @@ export function createUpdateUserNamebaseSourceCommand(id, sourceText, {label = "
   });
 }
 
+export function createUpdateUserNamebaseOptionsCommand(id, options, {label = "编辑名称库参数"} = {}) {
+  const normalizedOptions = normalizeOptionsSnapshot(options);
+  return createNamebaseStoreCommand({
+    label: `${label} ${id}`,
+    applyEdit(map) {
+      return updateUserNamebaseOptions(map, id, normalizedOptions);
+    },
+    isNoop(map) {
+      const base = findUserNamebase(map, id);
+      if (!base) return true;
+      return optionsSnapshotKey(normalizeOptionsSnapshot(base)) === optionsSnapshotKey(normalizedOptions);
+    }
+  });
+}
+
 export function createClearUserNamebasesCommand({label = "清空用户名称库"} = {}) {
   return createNamebaseStoreCommand({
     label,
@@ -171,4 +186,15 @@ function normalizeSourceText(source) {
   return Array.isArray(source)
     ? source.map(value => String(value || "").trim()).filter(Boolean)
     : String(source || "").split(/\r?\n/g).map(value => value.trim()).filter(Boolean);
+}
+
+function normalizeOptionsSnapshot(options = {}) {
+  const minLength = Math.max(1, Math.min(12, Math.floor(Number(options.minLength ?? options.min ?? 1) || 1)));
+  const maxLength = Math.max(minLength, Math.min(12, Math.floor(Number(options.maxLength ?? options.max ?? minLength) || minLength)));
+  const duplicateChars = [...new Set(Array.from(String(options.duplicateChars ?? options.d ?? "").replace(/\s+/gu, "")))].slice(0, 24).join("");
+  return {minLength, maxLength, duplicateChars};
+}
+
+function optionsSnapshotKey(options) {
+  return `${options.minLength}|${options.maxLength}|${options.duplicateChars}`;
 }
