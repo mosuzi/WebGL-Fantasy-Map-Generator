@@ -156,6 +156,7 @@ const dealColumns = Object.freeze([
   {key: "goodName", label: "商品"},
   {key: "sellerName", label: "卖方"},
   {key: "buyerName", label: "买方"},
+  {key: "stateRouteLabel", label: "国家"},
   {key: "routeLabel", label: "类型"},
   {key: "distance", label: "距离", align: "right", format: value => formatDistanceValue(value)},
   {key: "distanceCost", label: "运费", align: "right", format: value => formatNumber(value)},
@@ -238,6 +239,8 @@ const detailRows = computed(() => {
     {label: "商品", value: selectedDeal.value.goodName},
     {label: "卖方", value: selectedDeal.value.sellerName},
     {label: "买方", value: selectedDeal.value.buyerName},
+    {label: "卖方国家", value: selectedDeal.value.sellerStateName},
+    {label: "买方国家", value: selectedDeal.value.buyerStateName},
     {label: "类型", value: selectedDeal.value.routeLabel},
     {label: "来源", value: selectedDeal.value.sourceLabel},
     {label: "数量", value: formatNumber(selectedDeal.value.units)},
@@ -448,10 +451,15 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       sellerId: deal.seller,
       sellerValid: seller.valid,
       sellerName: seller.name,
+      sellerStateId: seller.stateId,
+      sellerStateName: seller.stateName,
       buyerType: deal.buyerType,
       buyerId: deal.buyer,
       buyerValid: buyer.valid,
       buyerName: buyer.name,
+      buyerStateId: buyer.stateId,
+      buyerStateName: buyer.stateName,
+      stateRouteLabel: stateRouteLabel(seller, buyer),
       routeLabel: routeLabel(deal),
       source: deal.source || "scheduled",
       sourceLabel: sourceLabel(deal.source),
@@ -646,6 +654,8 @@ function exportColumns() {
     {key: "goodName", label: "商品"},
     {key: "sellerName", label: "卖方"},
     {key: "buyerName", label: "买方"},
+    {key: "sellerStateName", label: "卖方国家"},
+    {key: "buyerStateName", label: "买方国家"},
     {key: "routeLabel", label: "类型"},
     {key: "sourceLabel", label: "来源"},
     {key: "units", label: "数量"},
@@ -810,23 +820,40 @@ function accumulateDeal(current = {count: 0, value: 0}, value) {
 function partyInfo(pack, type, id, marketsById) {
   if (type === "burg") {
     const burg = pack.burgs?.[id];
+    const stateId = Number(burg?.state || 0);
     return {
       name: burg?.name || `城镇 #${id}`,
       x: burg?.x,
       y: burg?.y,
+      stateId,
+      stateName: stateName(pack, stateId),
       valid: Boolean(burg),
       locateObject: cityLocateObject(id)
     };
   }
   const market = marketsById.get(id);
   const city = pack.burgs?.[market?.centerBurgId];
+  const stateId = Number(market?.state || city?.state || 0);
   return {
     name: market?.name || `市场 #${id}`,
     x: market?.x ?? city?.x,
     y: market?.y ?? city?.y,
+    stateId,
+    stateName: stateName(pack, stateId),
     valid: Boolean(market),
     locateObject: cityLocateObject(market?.centerBurgId)
   };
+}
+
+function stateName(pack, stateId) {
+  const state = pack.states?.[stateId];
+  if (state?.fullName || state?.name) return state.fullName || state.name;
+  return stateId > 0 ? `国家 #${stateId}` : "无国家";
+}
+
+function stateRouteLabel(seller, buyer) {
+  if (seller.stateId && buyer.stateId && seller.stateId === buyer.stateId) return `${seller.stateName} 内部`;
+  return `${seller.stateName} -> ${buyer.stateName}`;
 }
 
 function partyDistance(a, b) {

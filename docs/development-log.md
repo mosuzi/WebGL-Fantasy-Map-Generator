@@ -18407,3 +18407,24 @@ full 矩阵结果：
 - 构建产物浏览器烟测覆盖滚轮、拖拽、`renderer.fitToView()` 和 `renderer.locateObject({kind: "city"})`：四类路径触发后 `.map-stage--interaction-hidden = true`、`#map-overlay` visibility 为 `hidden`、`overlay.interactionSuspended = true`；idle 后全部恢复 visible / false，`glError = 0`，console/page error 均为 `0`。
 - 100k overlay profile `viewport-overlay-unified-100k / continents / full` 通过：完整图层连续滚轮 frame p95 `6ms`、中键拖动画布 frame p95 `17.7ms`，overlay 暂停样本 `18 / 24`，idle commit 帧 p95 `35.2ms / 17.6ms`，dirty 均恢复 `clean`。
 - e2e 守门 `viewport-overlay-unified-e2e / continents / 10000` 通过：点击到出图 `1540.7ms`，纯生成 `877.5ms`，WebGL 加载 `396ms`，最慢加载阶段为“构建视觉 cell mesh” `81.1ms`。
+
+### 2026-07-04 交易列表国家筛选第一刀
+
+背景：
+
+- 用户已校准贸易流地图连线太乱，不再恢复常驻地图图层；当前贸易查看应优先走经济面板或独立列表。
+- 经济面板已有商品 / 市场 / 交易 tab、筛选、排序、定位和导出，缺口是交易行只有卖方 / 买方名称，缺少双方国家字段，按国家查看交易不够直接。
+
+实现：
+
+- 经济面板交易表新增“国家”列，显示 `卖方国家 -> 买方国家`，同国交易显示 `国家 内部`。
+- 交易详情新增“卖方国家 / 买方国家”。
+- `partyInfo()` 为 burg 和 market 双方补 `stateId / stateName`；交易行写入 `sellerStateId / sellerStateName / buyerStateId / buyerStateName / stateRouteLabel`，这些字段自然进入现有 `searchText`，可用统一筛选框按国家名筛交易。
+- 交易 CSV/JSON 导出新增 `sellerStateName / buyerStateName`，且导出仍临时构建完整筛选结果，不受交易 tab 首屏 48 行渲染限制影响。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；`EconomyPanel` chunk 约 `24.20KB / gzip 7.36KB`。
+- 构建产物浏览器烟测通过：经济面板“交易”tab 表头包含“国家”；按 `须句共和国` 筛选后显示 `19` 行，所有可见交易国家流向均包含该国家；详情显示“卖方国家 / 买方国家”；JSON 导出 `327` 行并带 `sellerStateName / buyerStateName`；`glError = 0`，console/page error 均为 `0`。
+- 面板 deep 布局审计 `economy-country-filter-layout / continents / 10000` 通过：未发现待复核项，经济总览面板宽 `820px`，body 无横向溢出，summary 最小项 `125.7px`，detail 最小项 `152.4px`，表格横向滚动正常。
+- e2e 守门 `economy-country-filter-e2e / continents / 10000` 通过：点击到出图 `1717.7ms`，纯生成 `941.4ms`，WebGL 加载 `388.3ms`，最慢加载阶段为“构建视觉 cell mesh” `56.4ms`。
