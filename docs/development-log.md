@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：单位滑条标签空间放宽
+
+按当前面板空间策略继续推进，复查全量 deep 面板审计后，控制面板“单位”tab 未出现横向溢出，但三个滑条标签仍是 `82px / white-space: normal`，与生成页气候滑条已经修正过的 nowrap 策略不一致。该项属于当前执行队列中的“单位 / 滑条字段”空间治理。
+
+完成内容：
+
+- 单位页 `unit-config-row`、`unit-derived-row` 和 `unit-scale-field` 的标签列从 `82px` 放宽到 `92px`。
+- `比例尺 / 人口倍率 / 降水倍率`、面积单位派生行和单位下拉标签禁止折行，保持与控制面板其它稳定字段一致的单行标签。
+- 只调整 `styles.css` 中单位设置局部样式，不改显示单位偏好、换算逻辑、滑条组件或地图数据。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 面板 deep 布局审计 `unit-slider-label-space-smoke / continents / 10000` 通过：单位页三个滑条标签均为 `92px x 16px / nowrap`，控制面板无横向溢出，页面横向溢出为 `0`，WebGL 加载 `483.7ms`。
+- e2e 守门 `unit-slider-label-space-e2e / continents / 10000` 通过：点击到出图 `1699.5ms`，纯生成 `879.1ms`，WebGL 加载 `508ms`，`drawMs = 0.2`，`glError = 0`。
+
 ## 2026-07-04：资源标记工具条空间放宽
 
 按当前面板空间策略继续推进，复查 `marker-toolbar-baseline / continents / 10000 / deep` 审计后确认资源标记面板编辑工具条虽然未溢出，但仍把“新增资源”下拉、放置、移动、删除、重生成资源点和取消强塞在一行，工具按钮组最小按钮宽只有 `76px`，属于当前计划中明确标出的偏紧项。

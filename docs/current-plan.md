@@ -46,6 +46,7 @@
 - 下拉选项保留 hover 状态白底已修正：Element Plus Select 的 `.is-hovering` 状态已纳入暗色覆盖，`ui-select-popper` 和通用 `.el-select__popper` 现在设置局部暗色变量，并覆盖基础态、`.hover`、`.is-hovering`、`:hover`、`.is-selected` 及组合状态。构建产物复现“悬停选项后鼠标移出 popper”时，保留 `.is-hovering` 的选项背景为 `rgb(27, 43, 51)`，不再变白；e2e 守门 `select-hover-style-e2e` 通过，WebGL 加载 `416.6ms`。
 - 经济总览详情区样式已升级：列表下方不再直接复用通用 `UiDetailGrid` 裸排字段，改为经济对象专用详情卡，包含对象标题、标签徽章、4 个关键指标和分组详情；商品分为价格信号 / 供需 / 来源与流向，市场分为覆盖范围 / 库存与供需 / 交易与价格，交易分为交易双方 / 价格与金额 / 运输。构建产物烟测确认商品 / 市场 / 交易三类详情均无横向溢出；面板 deep 审计 `economy-detail-card-layout` 未发现待复核项，经济总览 body 溢出为 `none`；e2e 守门 `economy-detail-card-e2e` 通过，WebGL 加载 `408ms`。
 - 资源标记工具条空间已放宽：资源标记面板编辑工具条不再把“新增资源”下拉、放置、移动、删除、取消和“重生成资源点”强塞在一行；短操作保留一行，长操作独占下一行。deep 面板审计 `marker-toolbar-space-smoke / continents / 10000` 中工具条从 `1 行 / min 76px` 提升到 `2 行 / min 88px / overflow none`，无待复核项，WebGL 加载 `351.2ms`；e2e 守门 `marker-toolbar-space-e2e` 通过，WebGL 加载 `382.9ms`，`drawMs = 0`，`glError = 0`。
+- 控制面板单位滑条标签空间已放宽：单位页的 `比例尺 / 人口倍率 / 降水倍率` 标签列从 `82px` 放宽到 `92px`，并禁止标签折行；单位选择和面积单位派生行使用同一标签列宽。`unit-slider-label-space-smoke / continents / 10000 / deep` 审计确认单位页三个滑条标签均为 `92px x 16px / nowrap`，控制面板无横向溢出，WebGL 加载 `483.7ms`；e2e 守门 `unit-slider-label-space-e2e` 通过，WebGL 加载 `508ms`，`drawMs = 0.2`，`glError = 0`。
 
 ### 当前执行队列
 
@@ -54,7 +55,7 @@
 1. **面板空间策略专项**：
    - 目标不是继续把内容硬塞进既有窄列，而是让面板按信息量合理占空间：能放宽面板就放宽，需要换行就换行，详情长字段可跨整行，列表可横向滚动。
    - 已修经济面板控制栏三列硬挤导致的三段切换折行、经济总览详情裸字段、军事战报摘要固定 6 窄列、政体导出按钮过窄和资源标记工具条 `min 76px` 偏紧；工具按钮组审计已能量化各工具条。继续优先复查固定小列宽、过度 `white-space: nowrap`、`minmax(0, 1fr)` 强挤和备注 / 长名称区域。
-   - 第一优先级是军事管理面板、事件链摘要、导入导出工具条、单位 / 滑条字段、二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
+   - 第一优先级是军事管理面板、事件链摘要、导入导出工具条和二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
    - 审计脚本已覆盖控制面板 tab 和主要浮动面板；后续若继续发现真实折行，再扩充重要字段省略号、异常多行折断和详情最小项宽规则。
 2. **overlay 与动态线层性能专项**：
    - `profile:overlay` 已补 idle commit 指标和 `measurement-heavy / selection-heavy` 重场景；viewport idle commit 分帧第一刀仍保留，但“视口交互中隐藏 DOM overlay”的策略已取消，当前行为是同步刷新覆盖层。

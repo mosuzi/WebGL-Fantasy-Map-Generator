@@ -3996,13 +3996,13 @@ select:disabled {
 }
 
 .unit-config-row {
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
 }
 
 .unit-derived-row {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   min-height: 32px;
@@ -4016,6 +4016,7 @@ select:disabled {
 
 .unit-derived-row span {
   color: #9fb0ba;
+  white-space: nowrap;
 }
 
 .unit-derived-row strong {
@@ -4038,7 +4039,7 @@ select:disabled {
 
 .unit-scale-field {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) 88px 54px;
+  grid-template-columns: 92px minmax(0, 1fr) 88px 54px;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -4047,6 +4048,11 @@ select:disabled {
   background: #10171b;
   color: #cbd7dc;
   font-size: 12px;
+}
+
+.unit-scale-field > span:first-child,
+.unit-config-row .ui-select-label {
+  white-space: nowrap;
 }
 
 .unit-scale-field input {
