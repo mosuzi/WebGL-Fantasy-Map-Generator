@@ -689,6 +689,7 @@ export class PlaceholderMapRenderer {
   }
 
   pickClientPoint(clientX, clientY) {
+    if (!this.map) return null;
     const label = this.pickLabel(clientX, clientY);
     const markerIcon = this.pickMarkerIcon(clientX, clientY);
     const militaryIcon = this.pickMilitaryIcon(clientX, clientY);
@@ -883,6 +884,7 @@ export class PlaceholderMapRenderer {
   }
 
   drawViewportPreview() {
+    if (!this.map) return;
     this.viewportCommitVersion += 1;
     this.suspendOverlayForInteraction();
     this.markViewportBuffersDirty();
@@ -917,6 +919,10 @@ export class PlaceholderMapRenderer {
   }
 
   async commitViewportAfterInteraction(version) {
+    if (!this.map) {
+      this.resumeOverlayAfterInteraction();
+      return;
+    }
     const shouldContinue = () => this.viewportCommitVersion === version;
     const rebuilt = await this.rebuildViewportDynamicBuffersAsync(shouldContinue);
     if (!rebuilt || !shouldContinue()) return;
@@ -927,6 +933,7 @@ export class PlaceholderMapRenderer {
   }
 
   async rebuildViewportDynamicBuffersAsync(shouldContinue) {
+    if (!this.map) return false;
     if (!shouldContinue()) return false;
     if (this.dynamicBuffersDirty.routes && this.layerVisibility.routes) {
       const routesReady = await this.updateRouteBufferAsync({
@@ -2420,9 +2427,12 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
       return;
     }
     if (activePointer.mode === "select") {
-      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 3) activePointer.moved = true;
-      onHover(event);
-      return;
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) <= 3) {
+        onHover(event);
+        return;
+      }
+      activePointer.mode = "pan";
+      activePointer.moved = true;
     }
     event.preventDefault();
     const rect = canvas.getBoundingClientRect();

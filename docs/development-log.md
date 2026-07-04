@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：左键拖拽视口时 overlay 隐藏补洞
+
+用户指出本地启动后移动视图时，标签、军事单位、城镇名称等非 canvas 覆盖层仍会与画布分离。复查后确认此前只完整覆盖了滚轮、中键 / 右键拖拽、适配视图和定位对象；普通左键拖拽仍停留在“选择候选”路径，移动超过阈值后只标记 moved，没有切换到平移和 overlay 隐藏路径。
+
+完成内容：
+
+- 左键单击仍保留对象选择；左键按下后移动超过 `3px` 会切换为平移，更新 camera 并触发 `drawViewportPreview()`。
+- `pickClientPoint()`、`drawViewportPreview()`、viewport idle commit 增加 map 未就绪保护，避免页面加载完成前滚轮或 hover 抛错并卡住 overlay 状态。
+- 当前策略继续是“视口交互中临时隐藏非 canvas 覆盖层，idle 后恢复”，不把城市剪影、标签、marker、军事图标或测量 SVG 默认迁入 WebGL。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Vite dev 浏览器烟测覆盖加载前滚轮、加载后滚轮、中键拖拽、左键拖拽、`fitToView()` 和 `locateObject({kind: "city"})`：无 console/page error，`glError = 0`；左键拖拽期间 `#map-overlay` visibility 为 `hidden`，city/state label、city icon、military icon 的父链有效可见性均为 `false`，idle 后恢复。
+- 100k overlay profile `viewport-overlay-left-drag-100k / continents / full` 通过：完整图层连续滚轮 frame p95 `6ms`，中键拖动画布 frame p95 `17.6ms`，overlay 暂停样本 `18 / 18` 和 `24 / 24`，idle commit dirty 均恢复 `clean`。
+- e2e 守门 `viewport-overlay-left-drag-e2e / continents / 10000` 通过：点击到出图 `1282.2ms`，纯生成 `689.3ms`，WebGL 加载 `372.1ms`，最慢加载阶段为“构建线层顶点” `72.3ms`。
+
 ## 2026-07-03：控制面板简介 tab 布局整理
 
 用户指出简介 tab 中项目链接和导入导出操作占用空间、层级混乱，需要把项目链接横向排布，补充原版在线地址，并将具体导出操作收进二级面板。
