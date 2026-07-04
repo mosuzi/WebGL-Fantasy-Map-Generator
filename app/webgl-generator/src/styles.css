@@ -406,13 +406,31 @@ select {
 
 .el-input-number__decrease,
 .el-input-number__increase {
-  border-color: #33444f;
+  border-color: #33444f !important;
   background: #172127;
+  box-shadow: none;
   color: #cbd7dc;
+}
+
+.el-input-number.is-controls-right .el-input-number__increase,
+.el-input-number.is-controls-right .el-input-number__decrease {
+  border-color: #33444f !important;
+  border-left-color: #33444f !important;
+  background: #172127;
+  box-shadow: none;
+}
+
+.el-input-number.is-controls-right .el-input-number__increase {
+  border-bottom-color: #33444f !important;
+}
+
+.el-input-number.is-controls-right .el-input-number__decrease {
+  border-top-color: #33444f !important;
 }
 
 .el-input-number__decrease:hover,
 .el-input-number__increase:hover {
+  border-color: #5f7480 !important;
   color: #ffe0a1;
 }
 
@@ -4105,6 +4123,9 @@ input.ui-switch-native {
   min-width: 0;
   --el-color-primary: #d7a84f;
   --el-border-color: #33444f;
+  --el-border-color-light: #273640;
+  --el-border-color-lighter: #273640;
+  --el-border-color-extra-light: #273640;
   --el-border-color-hover: #d7a84f;
   --el-fill-color-blank: #10171b;
   --el-fill-color-light: #172127;
@@ -4127,7 +4148,11 @@ input.ui-switch-native {
 .ui-slider-number.el-input-number .el-input-number__increase {
   border: 0;
   border-left: 1px solid #273640;
-  border-color: #273640;
+  border-color: #273640 !important;
+  border-top-color: #273640 !important;
+  border-right-color: #273640 !important;
+  border-bottom-color: #273640 !important;
+  border-left-color: #273640 !important;
   background: #142129;
   box-shadow: none;
   color: #9fb0ba;
@@ -4140,12 +4165,12 @@ input.ui-switch-native {
 
 .ui-slider-number.el-input-number.is-controls-right .el-input-number__decrease {
   border-left: 1px solid #273640 !important;
-  border-top: 0 !important;
+  border-top: 0 solid #273640 !important;
 }
 
 .ui-slider-number.el-input-number .el-input-number__decrease:hover,
 .ui-slider-number.el-input-number .el-input-number__increase:hover {
-  border-color: #3e525f;
+  border-color: #3e525f !important;
   background: #1b2a32;
   color: #ffe0a1;
 }
