@@ -42,6 +42,11 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     top: 116,
     width: 560,
     maxWidth: 680,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

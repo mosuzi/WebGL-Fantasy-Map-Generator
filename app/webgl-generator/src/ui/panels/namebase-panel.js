@@ -86,6 +86,11 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     top: 148,
     width: 760,
     maxWidth: 920,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

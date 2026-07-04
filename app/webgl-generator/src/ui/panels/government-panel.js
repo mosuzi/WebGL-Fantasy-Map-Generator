@@ -42,7 +42,9 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     onLocateState: row => callbacks.onLocateState?.(stateObject(row)),
     onOpenState: row => callbacks.onOpenState?.(stateObject(row)),
     onOpenDiplomacy: row => callbacks.onOpenDiplomacy?.(stateObject(row)),
-    onBatchGovernmentChange: (stateIds, governmentKey) => callbacks.onBatchGovernmentChange?.(stateIds, governmentKey)
+    onBatchGovernmentChange: (stateIds, governmentKey) => callbacks.onBatchGovernmentChange?.(stateIds, governmentKey),
+    onUndo: () => callbacks.onUndo?.(),
+    onRedo: () => callbacks.onRedo?.()
   };
 
   const record = manager.registerPanel("government-panel", {
@@ -51,6 +53,11 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     top: 132,
     width: 720,
     maxWidth: 920,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

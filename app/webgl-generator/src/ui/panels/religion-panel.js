@@ -45,6 +45,11 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     top: 164,
     width: 600,
     maxWidth: 740,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

@@ -59,6 +59,11 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     top: 96,
     width: 620,
     maxWidth: 760,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

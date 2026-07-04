@@ -28,6 +28,11 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     top: 110,
     width: 360,
     maxWidth: 420,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.active = false;
       callbacks.onActiveChange?.(false);

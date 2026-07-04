@@ -68,6 +68,11 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     top: 128,
     width: 560,
     maxWidth: 680,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
       panelState.active = false;

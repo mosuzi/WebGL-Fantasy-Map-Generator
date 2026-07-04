@@ -24,21 +24,56 @@ export class PanelManager {
     header.className = "floating-panel-header";
     const title = this.documentRef.createElement("h2");
     title.textContent = options.title;
+    const headerActions = this.documentRef.createElement("div");
+    headerActions.className = "floating-panel-header-actions";
+    const undo = this.documentRef.createElement("button");
+    undo.type = "button";
+    undo.className = "floating-panel-history-button floating-panel-history-undo";
+    undo.setAttribute("aria-label", "撤销");
+    undo.textContent = "↶";
+    const redo = this.documentRef.createElement("button");
+    redo.type = "button";
+    redo.className = "floating-panel-history-button floating-panel-history-redo";
+    redo.setAttribute("aria-label", "重做");
+    redo.textContent = "↷";
     const close = this.documentRef.createElement("button");
     close.type = "button";
     close.className = "floating-panel-close";
     close.setAttribute("aria-label", "关闭面板");
     close.textContent = "x";
-    header.append(title, close);
+    headerActions.append(undo, redo, close);
+    header.append(title, headerActions);
 
     const body = this.documentRef.createElement("div");
     body.className = "floating-panel-body";
     panel.append(header, body);
     this.layer.append(panel);
 
-    const record = {panel, body, onClose: options.onClose || (() => {})};
+    const historyActions = normalizeHistoryActions(options.historyActions);
+    const record = {
+      panel,
+      body,
+      onClose: options.onClose || (() => {}),
+      historyActions,
+      headerButtons: {undo, redo},
+      headerRefreshTimer: 0,
+      refreshHeaderActions: () => refreshHeaderActions(record)
+    };
     this.panels.set(id, record);
     close.addEventListener("click", () => this.close(id));
+    undo.addEventListener("click", () => {
+      refreshHeaderActions(record);
+      if (undo.disabled) return;
+      record.historyActions?.onUndo?.();
+      refreshHeaderActions(record);
+    });
+    redo.addEventListener("click", () => {
+      refreshHeaderActions(record);
+      if (redo.disabled) return;
+      record.historyActions?.onRedo?.();
+      refreshHeaderActions(record);
+    });
+    refreshHeaderActions(record);
     installDrag(this, panel, header);
     panel.addEventListener("pointerdown", event => {
       event.stopPropagation();
@@ -62,12 +97,14 @@ export class PanelManager {
     record.panel.classList.remove("hidden");
     this.constrain(record.panel);
     this.activate(id);
+    this.startHeaderRefresh(record);
   }
 
   close(id) {
     const record = this.panels.get(id);
     if (!record) return;
     record.panel.classList.add("hidden");
+    this.stopHeaderRefresh(record);
     record.onClose();
   }
 
@@ -75,6 +112,25 @@ export class PanelManager {
     const record = this.panels.get(id);
     if (!record) return;
     record.panel.style.zIndex = String(this.nextZIndex++);
+    refreshHeaderActions(record);
+  }
+
+  startHeaderRefresh(record) {
+    if (!record.historyActions || record.headerRefreshTimer) return;
+    refreshHeaderActions(record);
+    record.headerRefreshTimer = this.documentRef.defaultView.setInterval(() => {
+      if (record.panel.classList.contains("hidden")) {
+        this.stopHeaderRefresh(record);
+        return;
+      }
+      refreshHeaderActions(record);
+    }, 250);
+  }
+
+  stopHeaderRefresh(record) {
+    if (!record.headerRefreshTimer) return;
+    this.documentRef.defaultView.clearInterval(record.headerRefreshTimer);
+    record.headerRefreshTimer = 0;
   }
 
   constrain(panel) {
@@ -115,6 +171,38 @@ export class PanelManager {
       return null;
     }
   }
+}
+
+function normalizeHistoryActions(actions) {
+  if (!actions || typeof actions !== "object") return null;
+  if (typeof actions.onUndo !== "function" && typeof actions.onRedo !== "function") return null;
+  const getHistory = typeof actions.getHistory === "function" ? actions.getHistory : () => null;
+  return {
+    getHistory,
+    onUndo: typeof actions.onUndo === "function" ? actions.onUndo : null,
+    onRedo: typeof actions.onRedo === "function" ? actions.onRedo : null
+  };
+}
+
+function refreshHeaderActions(record) {
+  const {undo, redo} = record.headerButtons || {};
+  if (!undo || !redo) return;
+  const actions = record.historyActions;
+  if (!actions) {
+    undo.hidden = true;
+    redo.hidden = true;
+    return;
+  }
+  undo.hidden = false;
+  redo.hidden = false;
+  const history = actions.getHistory?.() || null;
+  const undoCount = Math.max(0, Number(history?.undo) || 0);
+  const redoCount = Math.max(0, Number(history?.redo) || 0);
+  const label = history?.lastLabel ? `：${history.lastLabel}` : "";
+  undo.disabled = !actions.onUndo || undoCount <= 0;
+  redo.disabled = !actions.onRedo || redoCount <= 0;
+  undo.title = undo.disabled ? "没有可撤销操作" : `撤销${label}`;
+  redo.title = redo.disabled ? "没有可重做操作" : `重做${label}`;
 }
 
 function installDrag(manager, panel, handle) {

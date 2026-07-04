@@ -48,6 +48,11 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     top: 112,
     width: 600,
     maxWidth: 720,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

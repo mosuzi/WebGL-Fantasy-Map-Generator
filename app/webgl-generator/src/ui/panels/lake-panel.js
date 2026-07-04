@@ -38,6 +38,11 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     top: 88,
     width: 540,
     maxWidth: 660,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

@@ -63,6 +63,11 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     top: 116,
     width: 780,
     maxWidth: 980,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

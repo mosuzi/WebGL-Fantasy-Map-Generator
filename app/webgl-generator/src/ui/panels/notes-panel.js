@@ -45,6 +45,11 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     top: 128,
     width: 680,
     maxWidth: 820,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

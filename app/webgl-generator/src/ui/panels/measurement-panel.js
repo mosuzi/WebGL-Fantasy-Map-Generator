@@ -46,6 +46,11 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     top: 120,
     width: 640,
     maxWidth: 760,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

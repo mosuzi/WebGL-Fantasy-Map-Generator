@@ -425,6 +425,24 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateMilitaryPanel(state);
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterStateEdit(state, command);
+      updateStatePanel(state);
+      updateGovernmentPanel(state);
+      updateDiplomacyPanel(state);
+      updateMilitaryPanel(state);
+      updateRuntimePanel(documentRef, state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterStateEdit(state, command);
+      updateStatePanel(state);
+      updateGovernmentPanel(state);
+      updateDiplomacyPanel(state);
+      updateMilitaryPanel(state);
+      updateRuntimePanel(documentRef, state);
     }
   });
   state.panels.government = governmentPanel;

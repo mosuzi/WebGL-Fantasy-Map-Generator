@@ -36,6 +36,27 @@
 
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-05 可撤销面板 header 历史按钮
+
+背景：
+
+- 用户认可当前各面板撤销 / 重做共用底层 `EditHistory`，但指出每个面板底部都放撤销条不便操作，尤其长面板需要滚到底部。
+- 目标是把需要撤销能力的面板统一改为 header 操作：关闭按钮左侧放撤销、重做两个 icon 按钮，分别使用逆时针和顺时针箭头。
+
+实现：
+
+- `PanelManager.registerPanel()` 新增 `historyActions` 配置，统一在浮动面板 header 的关闭按钮左侧渲染撤销 `↶` 和重做 `↷` 按钮。
+- header 按钮通过 `getHistory()` 读取各面板现有 `panelState.history`，根据 `undo / redo` 计数自动禁用，并复用面板已有 `onUndo / onRedo` 回调。
+- 城市、国家、省份、文化、宗教、外交、军事、路线、河流、湖泊、测量、资源标记、标签、备注、名称库和高度编辑等已有历史入口的面板接入统一 header。
+- 政体管理此前已有批量政体调整命令但没有面板撤销入口，本轮补上同一套 `onUndo / onRedo`。
+- 底部旧历史条通过样式隐藏，避免同一面板出现两套撤销 / 重做入口。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panel-manager.js`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测打开城市管理面板，header 中 `↶ / ↷ / x` 三个按钮均为 `28 x 28px`，旧 `.city-history-actions` 计算样式为 `display: none` 且高度 `0`，`glError = 0`，console/page error 为空。
 - Playwright + 系统 Chrome 通过构建产物临时静态服务验证：打开军事管理并点击“兵种比例”后，弹框初始 `620 x 619px`、内容区 `scrollHeight = clientHeight = 583`、`scrollDebt = 0`；`5` 个兵种项为 `2` 列 `3` 行；拖动标题栏后位置变化 `23px / 70px`；无横向溢出，`glError = 0`。本轮只出现既有 `[FMG health] main-thread-long-task` 警告，无 console error / page error。
 
 ## 2026-07-05：编辑面板导入导出改为小图标菜单

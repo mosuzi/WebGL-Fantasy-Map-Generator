@@ -46,6 +46,11 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     top: 132,
     width: 580,
     maxWidth: 720,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }

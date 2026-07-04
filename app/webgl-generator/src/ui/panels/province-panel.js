@@ -66,6 +66,11 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     top: 92,
     width: 560,
     maxWidth: 680,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.active = false;
       panelState.open = false;

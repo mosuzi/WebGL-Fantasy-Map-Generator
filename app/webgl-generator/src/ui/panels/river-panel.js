@@ -42,6 +42,11 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     top: 56,
     width: 520,
     maxWidth: 620,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
       callbacks.onClose?.();

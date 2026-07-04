@@ -66,6 +66,11 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     top: 136,
     width: 720,
     maxWidth: 920,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }
