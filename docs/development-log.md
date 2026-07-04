@@ -17689,3 +17689,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：新建用户名称库后设置 `minLength = 3`、`maxLength = 3`、`duplicateChars = 澜`，生成预览候选均为 3 字；撤销恢复默认 `2-4` 字和空允许连写，重做恢复 `3-3` 字与 `澜`，`glError = 0`，无 console error/page error。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed namebase-options-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1639ms`，纯生成 `820.6ms`，WebGL 加载 `488.8ms`，UI/调度余量 `329.6ms`，最慢加载阶段为“构建标签” `56.4ms`，控制台错误为空。
+
+### 名称库原版文本兼容第一刀
+
+背景：
+
+- 原版 `Namesbase Editor` 下载格式是一行一个词池：`name|min|max|d|m|names`；WebGL 版此前只支持自己的 JSON 名称库格式。
+- 用户名称库已经有基础质量参数，本轮把这些参数映射到原版 `min / max / d` 字段，方便与原版文本交换。
+- 本轮只做导入导出兼容和快照字段修正，不自动批量改写当前地图名称，也不触碰动态军事系统。
+
+修正：
+
+- `parseNamebaseDocument()` 支持非 JSON 文本，按原版 `name|min|max|d|m|names` 行解析为当前 `webgl-generator-namebases v1` 文档。
+- 原版文本导入会追加或替换用户名称库，保留 `min/max/d` 为 `minLength/maxLength/duplicateChars`，保留 `m` 为 `legacyMultiwordRate`，但暂不参与本项目生成。
+- 名称库面板新增“导出原版文本”，把当前内置库和用户库导出为 `.namebases.txt`。
+- 名称库导入 input 接受 `.txt / text/plain`。
+- 修复整图生成继承和本地偏好快照没有携带用户库生成参数的问题，避免重新生成时丢失长度和允许连写设置。
+- README、当前计划、名称库专题计划、绑定专项和 source 功能积压已同步更新。
+
+验证：
+
+- Node 级解析/格式化验证通过：`古国|1|3|叠|0|齐,楚,秦` 可导入为用户库，保留 `1-3` 字和允许连写 `叠`，再次导出为原版文本。
+- `$env:CI='true'; pnpm run build:app` 通过；`NamebasePanel` 懒加载 chunk 约 `14.97KB / gzip 5.37KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开名称库面板后点击“导出原版文本”，下载 `fmg-stage-2-1-d6b438af.namebases.txt`，共 `61` 行且每行至少 6 个 `|` 字段；上传 `legacy-namebases.txt` 后预览显示可导入 `2` 个词池，确认后新增 `测试古国 / 测试水文`，`测试古国` 保留 `minLength = 1`、`maxLength = 3`、`duplicateChars = 叠`，历史栈为 `undo 1 / redo 0 / 导入名称库`，`glError = 0`，无 console error/page error。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed namebase-legacy-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1608.9ms`，纯生成 `744.6ms`，WebGL 加载 `422.2ms`，UI/调度余量 `442.1ms`，最慢加载阶段为“构建线层顶点” `56.8ms`，控制台错误为空。

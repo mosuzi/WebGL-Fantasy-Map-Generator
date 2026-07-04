@@ -36,6 +36,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
       panelState.selectedNamebaseId = row.id;
     },
     onExport: () => callbacks.onExport?.(),
+    onExportLegacy: () => callbacks.onExportLegacy?.(),
     onImportMode: mode => {
       panelState.importMode = mode;
       pendingImportFile = null;

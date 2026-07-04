@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {createNamebaseDocument, createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
+import {createLegacyNamebaseText, createNamebaseDocument, createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
@@ -1111,6 +1111,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.labelNaming = labelNamingPanel;
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
     onExport: () => exportNamebases(state, documentRef),
+    onExportLegacy: () => exportLegacyNamebases(state, documentRef),
     onImportPreview: (file, mode) => previewNamebaseImport(state, documentRef, file, mode),
     onImport: (file, mode) => importNamebases(state, documentRef, file, mode),
     onCreateUser: () => createManualNamebase(state, documentRef),
@@ -1673,7 +1674,10 @@ function createGenerationNamebaseSnapshot(map, metadata = {}) {
       builtin: false,
       origin: String(base?.origin || "继承"),
       importedAt: base?.importedAt || "",
-      importedFrom: base?.importedFrom || ""
+      importedFrom: base?.importedFrom || "",
+      minLength: Number(base?.minLength ?? base?.min) || 1,
+      maxLength: Number(base?.maxLength ?? base?.max) || 8,
+      duplicateChars: String(base?.duplicateChars ?? base?.d ?? "").trim()
     })).filter(base => base.id && base.source.length)
     : [];
   const bindings = {
@@ -2121,6 +2125,22 @@ function exportNamebases(state, documentRef) {
     setFileOperationStatus(documentRef, `名称库已导出，共 ${payload.metadata.bases} 个词池，用户库 ${payload.metadata.user} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导出失败", error);
+  }
+}
+
+function exportLegacyNamebases(state, documentRef) {
+  try {
+    const text = createLegacyNamebaseText(state.map);
+    if (!text) {
+      setFileOperationStatus(documentRef, "当前没有可导出的名称库。");
+      return;
+    }
+    const filename = state.map ? `${mapFileBaseName(state.map)}.namebases.txt` : "webgl-generator-namebases.txt";
+    downloadText(documentRef, text, filename, "text/plain;charset=utf-8");
+    const lines = text.split(/\r?\n/g).filter(Boolean).length;
+    setFileOperationStatus(documentRef, `原版文本名称库已导出，共 ${lines} 个词池。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "原版文本名称库导出失败", error);
   }
 }
 

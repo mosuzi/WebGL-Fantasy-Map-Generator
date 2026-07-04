@@ -48,8 +48,19 @@ export function createBuiltinNamebaseDocument(map = null) {
   return createNamebaseDocument(map, {includeUser: false});
 }
 
+export function createLegacyNamebaseText(map = null) {
+  return createNamebaseDocument(map).bases
+    .map(formatLegacyNamebaseLine)
+    .filter(Boolean)
+    .join("\r\n");
+}
+
 export function parseNamebaseDocument(text) {
-  const document = JSON.parse(text);
+  const rawText = String(text || "");
+  const trimmed = rawText.trim();
+  if (!trimmed) throw new Error("名称库文件为空");
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return parseLegacyNamebaseText(trimmed);
+  const document = JSON.parse(trimmed);
   if (document?.type !== NAMEBASE_DOCUMENT_TYPE) throw new Error("文件不是当前名称库格式");
   if (document.version !== NAMEBASE_DOCUMENT_VERSION) throw new Error(`暂不支持的名称库格式版本：${document.version}`);
   if (!Array.isArray(document.bases)) throw new Error("名称库文件缺少 bases 数据");
@@ -121,6 +132,8 @@ export function createNamebaseImportPreview(map, document, {filename = "", mode 
     samples: validCandidates.reduce((sum, item) => sum + item.samples, 0),
     duplicateSamples: validCandidates.reduce((sum, item) => sum + item.duplicateSamples, 0),
     builtinRecords: validCandidates.filter(item => item.builtin).length,
+    format: document.metadata?.format || "webgl-json",
+    legacyErrors: Number(document.metadata?.legacyErrors) || 0,
     existingUserBases: userBases.length,
     replaceCount: mode === "replace" ? userBases.length : 0,
     existingConflicts: validCandidates.filter(item => item.conflictsExistingName || item.conflictsExistingSource).length,
@@ -456,6 +469,7 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
     origin: "导入",
     importedAt,
     importedFrom: filename || "",
+    legacyMultiwordRate: Number(base?.legacyMultiwordRate ?? base?.m) || 0,
     ...normalizeNamebaseGenerationOptions(base, summarizeNamebaseSource({source: values}))
   };
 }
@@ -543,8 +557,78 @@ function namebaseExportRecord(base) {
     note: summary.note,
     importedAt: base.importedAt || "",
     importedFrom: base.importedFrom || "",
+    legacyMultiwordRate: Number(base.legacyMultiwordRate ?? base.m) || 0,
     source: summary.source
   };
+}
+
+function parseLegacyNamebaseText(text) {
+  const lines = text.replace(/\r\n|\r/g, "\n").split("\n").map(line => line.trim()).filter(Boolean);
+  const bases = [];
+  let legacyErrors = 0;
+  lines.forEach((line, index) => {
+    const parts = line.split("|");
+    if (parts.length < 6) {
+      legacyErrors += 1;
+      return;
+    }
+    const [rawName, rawMin, rawMax, rawDuplicateChars, rawMultiwordRate, ...rawNamesParts] = parts;
+    const name = sanitizeLegacyField(rawName);
+    const source = normalizeSourceValues(rawNamesParts.join("|"));
+    if (!name || !source.length) {
+      legacyErrors += 1;
+      return;
+    }
+    const minLength = Number(rawMin);
+    const maxLength = Number(rawMax);
+    bases.push({
+      id: `legacy-${sanitizeId(name || `namebase-${index + 1}`)}`,
+      name,
+      kind: "generic",
+      category: "原版名称库",
+      builtin: false,
+      minLength: Number.isFinite(minLength) ? minLength : 1,
+      maxLength: Number.isFinite(maxLength) ? maxLength : 8,
+      duplicateChars: sanitizeLegacyField(rawDuplicateChars),
+      legacyMultiwordRate: Number(rawMultiwordRate) || 0,
+      note: "从原版 name|min|max|d|m|names 文本导入",
+      source
+    });
+  });
+  if (!bases.length) throw new Error("未找到可导入的原版名称库行");
+  return {
+    type: NAMEBASE_DOCUMENT_TYPE,
+    version: NAMEBASE_DOCUMENT_VERSION,
+    importedAt: new Date().toISOString(),
+    metadata: {
+      format: "legacy-text",
+      bases: bases.length,
+      legacyLines: lines.length,
+      legacyErrors
+    },
+    bases
+  };
+}
+
+function formatLegacyNamebaseLine(base) {
+  if (!base?.source?.length) return "";
+  const records = parseNamebaseWeightedSamples(base.source, {dedupe: false});
+  const names = records.map(record => sanitizeLegacyName(record.value)).filter(Boolean).join(",");
+  if (!names) return "";
+  const name = sanitizeLegacyField(base.name || base.id || "Namebase");
+  const minLength = Math.max(1, Math.floor(Number(base.minLength ?? base.min ?? 1) || 1));
+  const maxLength = Math.max(minLength, Math.floor(Number(base.maxLength ?? base.max ?? minLength) || minLength));
+  const duplicateChars = sanitizeLegacyField(base.duplicateChars ?? base.d ?? "");
+  const multiwordRate = Number(base.legacyMultiwordRate ?? base.m) || 0;
+  return `${name}|${minLength}|${maxLength}|${duplicateChars}|${multiwordRate}|${names}`;
+}
+
+function sanitizeLegacyField(value) {
+  return String(value || "").replace(/[|,\r\n]/g, "").trim();
+}
+
+function sanitizeLegacyName(value) {
+  return String(value || "").replace(/[|,\r\n]/g, "").trim();
 }
 
 function uniqueId(id, existingIds) {
