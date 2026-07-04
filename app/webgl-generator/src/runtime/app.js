@@ -35,6 +35,7 @@ import {createStatePanel} from "../ui/panels/state-panel.js";
 import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
+import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
@@ -2623,7 +2624,19 @@ async function importGeoData(state, documentRef, file) {
   try {
     assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导入 GEO 数据...");
-    const payload = parseGeoJsonMeasurements(await file.text(), state.map, {limit: 600});
+    const text = await file.text();
+    const terrainCommand = createImportFmgCellsHeightCommand(text, state.map);
+    if (terrainCommand) {
+      if (terrainCommand.isNoop({map: state.map})) {
+        setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
+        return null;
+      }
+      refreshAfterEdit(state, state.editHistory.execute(terrainCommand, {map: state.map}));
+      const summary = terrainCommand.getSummary?.() || {};
+      setFileOperationStatus(documentRef, `已从原版 Cells GEO 导入地形：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells，可撤销。`);
+      return summary;
+    }
+    const payload = parseGeoJsonMeasurements(text, state.map, {limit: 600});
     const command = createImportMeasurementsCommand(payload.measurements, {label: "导入 GEO 测量对象"});
     if (command.isNoop({map: state.map})) {
       setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");

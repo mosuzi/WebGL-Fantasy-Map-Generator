@@ -2,6 +2,42 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：军事管理顶部筛选区拆行
+
+用户反馈军事管理面板列表上方的“国家 / 态势 / 筛选框”挤在同一行，搜索框空间不足。
+
+修正：
+
+- `.military-panel-controls` 从三列硬挤改为两列 grid。
+- `UiFilterInput` 在军事面板控制区内跨整行显示，形成“国家 / 态势”第一行、“筛选框”第二行。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 通过构建产物临时静态服务验证：军事管理控制区为 `2` 行，国家 / 态势在第一行，筛选框第二行跨满宽；控制区横向 overflow 为 `0`，`glError = 0`。本轮只出现既有 `[FMG health] main-thread-long-task` 警告，无 console error / page error。
+
+## 2026-07-05：原版 FMG Cells GeoJSON 地形导入
+
+用户反馈“导入 GEO 数据”对原版导出的 `Cells` GeoJSON 没有效果：测试文件 `k170 Cells 2026-07-04-22-00.geojson` 中包含 `id / height / biome / state / province / culture / religion / neighbors` 等 cell 字段，但此前导入入口只把所有 GeoJSON 当外部参考测量对象处理，不会改写地形高度。
+
+修正：
+
+- 新增 `fmg-cells-geojson-import.js`，识别原版 FMG `Cells` GeoJSON schema。
+- 对 `properties.height` 做原版海拔米数反算：陆地用 `sqrt(height) + 18` 转为当前 `0..100` 高度单位，海底负值按原高度公式反解到 `0..19` 水域高度。
+- 使用源 cell polygon 中心和源文件 bbox 建立空间索引，把源高度重采样到当前 `grid.cells.h`，并同步映射到对应 `pack.cells.h`。
+- “导入 GEO 数据”入口现在先尝试 FMG Cells 地形导入；识别失败才回落到普通 GeoJSON 测量对象导入。
+- renderer 新增 `refreshTerrainCaches()`，导入后刷新 terrain cache、cell colors 和线层，使水陆 / 高度颜色立即变化。
+- 本轮只导入地形高度；`state / province / culture / religion / population` 等语义字段暂不应用，避免半套语义层污染当前地图。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\fmg-cells-geojson-import.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\edit-refresh-scheduler.js` 通过。
+- `git diff --check` 通过。
+- Node 级真实文件验证通过：`k170 Cells 2026-07-04-22-00.geojson` 识别为 FMG Cells GeoJSON，源 cells `5561`，对当前 `10004` 个 grid cells 中 `9692` 个产生高度变化，高度总和 `185341 -> 146781`。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：通过真实 `#import-geo-file` 导入同一文件，状态栏显示“已从原版 Cells GEO 导入地形：源 cells 5561，陆地 3524，水域 2037，应用 9545 个当前 cells，可撤销。”；高度总和 `170576 -> 146521`，陆地 cell 数 `3412 -> 3326`，历史记录为 `导入 FMG Cells 地形 9545 cells`，`glError = 0`。烟测记录到一次约 `2s` health long-task，后续可分片优化。
+
 ## 2026-07-05：单位页军力比例与 tab 顺序调整
 
 用户要求单位 tab 支持全局调整军力比例，并把控制面板中的单位 tab 放到最后，其它 tab 相对顺序不变。

@@ -6249,8 +6249,12 @@ input.ui-switch-native {
 
 .military-panel-controls {
   display: grid;
-  grid-template-columns: minmax(150px, 0.75fr) minmax(130px, 0.65fr) minmax(0, 1.2fr);
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
   gap: 8px;
+}
+
+.military-panel-controls .ui-filter-input {
+  grid-column: 1 / -1;
 }
 
 .diplomacy-subject-select,

@@ -55,6 +55,10 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         state.renderer.refreshPoliticalVisualCaches();
       }
 
+      if (effects.derived.includes("terrain-caches") && typeof state.renderer.refreshTerrainCaches === "function") {
+        state.renderer.refreshTerrainCaches({draw: false});
+      }
+
       if ((effects.derived.includes("political-boundaries") || effects.derived.includes("line-layers")) && typeof state.renderer.refreshLineLayers === "function") {
         state.renderer.refreshLineLayers({draw: false});
       }

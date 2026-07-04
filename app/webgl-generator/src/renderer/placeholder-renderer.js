@@ -410,6 +410,18 @@ export class PlaceholderMapRenderer {
     this.updateLabels();
   }
 
+  refreshTerrainCaches({draw = true} = {}) {
+    if (!this.map) return;
+    this.rebuildCellVisualMesh();
+    this.rebuildShoreVisualCache();
+    this.rebuildStateVisualCache();
+    this.rebuildProvinceVisualCache();
+    this.rebuildPoliticalVisualMeshesIfNeeded();
+    this.refreshCellSurface({draw: false});
+    this.refreshLineLayers({draw: false});
+    if (draw) this.draw();
+  }
+
   setUnitPreferences(preferences = {}) {
     const next = normalizeUnitPreferences(preferences);
     if (JSON.stringify(next) === JSON.stringify(this.unitPreferences)) return;
