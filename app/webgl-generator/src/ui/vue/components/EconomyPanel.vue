@@ -4,10 +4,6 @@
   <div class="economy-panel-controls">
     <UiSegmented label="经济范围" :options="tabOptions" :model-value="state.tab" @select="callbacks.onTab" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选商品 / 市场 / 城镇 / 国家 / 来源" @update:model-value="callbacks.onFilter" />
-    <div class="economy-panel-export-actions" aria-label="经济导出">
-      <UiButton id="economy-export-csv" variant="secondary" :disabled="!activeTotalRows" @click="exportCsv">导出 CSV</UiButton>
-      <UiButton id="economy-export-json" variant="secondary" :disabled="!activeTotalRows" @click="exportJson">导出 JSON</UiButton>
-    </div>
   </div>
 
   <UiSortBar class-name="economy-panel-sort" :options="activeSortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -38,6 +34,13 @@
     empty-text="没有匹配的交易"
     @select="callbacks.onSelectDeal"
     @locate="callbacks.onLocate"
+  />
+
+  <UiPanelIoActions
+    class-name="economy-panel-export-actions"
+    label="经济导出"
+    :export-actions="economyExportActions"
+    @export="handleEconomyExport"
   />
 
   <p v-if="activeTotalRows > activeVisibleRows" class="economy-panel-limit">
@@ -91,11 +94,11 @@
 
 <script setup>
 import {computed, watch} from "vue";
-import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
@@ -226,6 +229,10 @@ const activeVisibleRows = computed(() => {
   if (props.state.tab === "deals") return visibleDealRows.value.length;
   return visibleGoodRows.value.length;
 });
+const economyExportActions = computed(() => [
+  {key: "csv", label: "导出 CSV", disabled: !activeTotalRows.value},
+  {key: "json", label: "导出 JSON", disabled: !activeTotalRows.value}
+]);
 const selectedGood = computed(() => findByObjectId(metrics.value.goods, props.state.selectedGoodId) || metrics.value.goods[0] || null);
 const selectedMarket = computed(() => findByObjectId(metrics.value.markets, props.state.selectedMarketId) || metrics.value.markets[0] || null);
 const selectedDeal = computed(() => findByObjectId(metrics.value.deals, props.state.selectedDealId) || metrics.value.deals[0] || null);
@@ -750,6 +757,11 @@ function exportJson() {
     }, {}))
   };
   downloadText(`fmg-economy-${props.state.tab}-${safeFilePart(props.state.map?.metadata?.seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function handleEconomyExport(key) {
+  if (key === "csv") exportCsv();
+  if (key === "json") exportJson();
 }
 
 function exportRows() {

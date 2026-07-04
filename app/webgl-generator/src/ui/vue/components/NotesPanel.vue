@@ -17,6 +17,13 @@
     @locate="callbacks.onLocate"
   />
 
+  <UiPanelIoActions
+    class-name="notes-panel-export-actions"
+    label="备注导出"
+    :export-actions="notesExportActions"
+    @export="handleNotesExport"
+  />
+
   <UiDetailGrid class-name="notes-panel-details" empty-text="未选中备注" :rows="detailRows" />
 
   <div v-if="selected" class="notes-panel-preview">
@@ -26,7 +33,6 @@
   <div class="notes-panel-actions">
     <UiButton v-if="selected" variant="secondary" :disabled="selected.orphan" @click="callbacks.onLocate(selected)">定位对象</UiButton>
     <UiButton v-if="selected" variant="secondary" @click="callbacks.onDelete(selected)">删除备注</UiButton>
-    <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onExport(visibleRows)">导出备注摘要</UiButton>
   </div>
 
   <UiHistoryActions class-name="notes-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -43,6 +49,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -82,6 +89,9 @@ const rows = computed(() => {
   return noteRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const notesExportActions = computed(() => [
+  {key: "notes", label: "导出备注摘要", disabled: !visibleRows.value.length}
+]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
 const summaryMetrics = computed(() => [
   {label: "备注", value: formatNumber(rows.value.length)},
@@ -191,6 +201,10 @@ function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("zh-CN", {hour12: false});
+}
+
+function handleNotesExport(key) {
+  if (key === "notes") callbacks.onExport?.(visibleRows.value);
 }
 
 function formatNumber(value) {

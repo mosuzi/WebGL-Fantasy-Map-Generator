@@ -17,6 +17,13 @@
     @locate="callbacks.onLocate"
   />
 
+  <UiPanelIoActions
+    class-name="measurement-panel-export-actions"
+    label="测量导出"
+    :export-actions="measurementExportActions"
+    @export="handleMeasurementExport"
+  />
+
   <UiDetailGrid class-name="measurement-panel-details" empty-text="未选中测量对象" :rows="detailRows" />
 
   <template v-if="selected">
@@ -36,7 +43,6 @@
     <UiButton v-if="selected" variant="secondary" @click="callbacks.onEdit(selected)">编辑形状</UiButton>
     <UiButton v-if="selected" variant="secondary" @click="callbacks.onLocate(selected)">定位测量</UiButton>
     <UiButton v-if="selected" variant="secondary" @click="callbacks.onDelete(selected)">删除测量</UiButton>
-    <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onExport(visibleRows)">导出测量</UiButton>
   </div>
 
   <UiHistoryActions class-name="measurement-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -59,6 +65,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -107,6 +114,9 @@ const rows = computed(() => {
   return measurementRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const measurementExportActions = computed(() => [
+  {key: "measurement", label: "导出测量", disabled: !visibleRows.value.length}
+]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
 const totalDistance = computed(() => rows.value.reduce((sum, row) => sum + row.distance, 0));
 const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area, 0));
@@ -208,6 +218,10 @@ function formatDistanceValue(value) {
 
 function formatAreaValue(value) {
   return formatArea(value, unitPreferences.value);
+}
+
+function handleMeasurementExport(key) {
+  if (key === "measurement") callbacks.onExport?.(visibleRows.value);
 }
 
 function formatNumber(value) {

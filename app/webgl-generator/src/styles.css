@@ -5687,16 +5687,7 @@ input.ui-switch-native {
 }
 
 .economy-panel-export-actions {
-  display: flex;
   grid-column: 1 / -1;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.economy-panel-export-actions .el-button {
-  min-height: 30px;
-  margin-left: 0;
-  padding-inline: 8px;
 }
 
 .economy-panel-limit {
@@ -5931,16 +5922,7 @@ input.ui-switch-native {
 }
 
 .government-panel-export-actions {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.government-panel-export-actions .el-button {
-  min-width: 112px;
-  min-height: 30px;
-  margin-left: 0;
-  padding-inline: 8px;
+  margin-bottom: 10px;
 }
 
 .government-family-filter {

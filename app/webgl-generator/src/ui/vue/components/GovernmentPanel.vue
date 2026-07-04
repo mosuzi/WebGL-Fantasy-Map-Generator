@@ -11,10 +11,6 @@
       :options="familyFilterOptions"
       @update:model-value="callbacks.onFamilyFilter"
     />
-    <div class="government-panel-export-actions" aria-label="政体导出">
-      <UiButton id="government-export-csv" variant="secondary" :disabled="!exportStateRows.length" @click="exportCsv">导出 CSV</UiButton>
-      <UiButton id="government-export-json" variant="secondary" :disabled="!visibleGovernmentRows.length" @click="exportJson">导出 JSON</UiButton>
-    </div>
   </div>
 
   <UiSortBar class-name="government-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -27,6 +23,13 @@
     empty-text="没有匹配的政体"
     :show-locate-action="false"
     @select="callbacks.onSelectGovernment"
+  />
+
+  <UiPanelIoActions
+    class-name="government-panel-export-actions"
+    label="政体导出"
+    :export-actions="governmentExportActions"
+    @export="handleGovernmentExport"
   />
 
   <UiDetailGrid class-name="government-panel-details" empty-text="未选中政体" :rows="detailRows" />
@@ -71,6 +74,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
@@ -151,6 +155,10 @@ const visibleGovernmentKeys = computed(() => new Set(visibleGovernmentRows.value
 const exportStateRows = computed(() => metrics.value.states
   .filter(row => visibleGovernmentKeys.value.has(row.governmentKey))
   .sort((a, b) => a.governmentLabel.localeCompare(b.governmentLabel, "zh-CN") || b.population - a.population || a.id - b.id));
+const governmentExportActions = computed(() => [
+  {key: "csv", label: "导出 CSV", disabled: !exportStateRows.value.length},
+  {key: "json", label: "导出 JSON", disabled: !visibleGovernmentRows.value.length}
+]);
 const selectedStateRows = computed(() => metrics.value.states
   .filter(row => row.governmentKey === selectedGovernmentKey.value)
   .sort((a, b) => b.population - a.population || b.economicPower - a.economicPower || a.id - b.id));
@@ -321,6 +329,11 @@ function exportJson() {
     states: exportStateRows.value.map(row => exportStateRow(row))
   };
   downloadText(`fmg-governments-${safeFilePart(props.state.map?.metadata?.seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function handleGovernmentExport(key) {
+  if (key === "csv") exportCsv();
+  if (key === "json") exportJson();
 }
 
 function ensureGovernmentGroup(groups, key) {

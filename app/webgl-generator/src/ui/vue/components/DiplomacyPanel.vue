@@ -15,8 +15,6 @@
 
   <div class="diplomacy-edit-toolbar">
     <UiButton id="diplomacy-show-theme" variant="secondary" @click="callbacks.onShowTheme?.(selectedSubjectId)">外交着色</UiButton>
-    <UiButton id="diplomacy-export-csv" variant="secondary" @click="exportCsv">导出 CSV</UiButton>
-    <UiButton id="diplomacy-export-json" variant="secondary" @click="exportJson">导出 JSON</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRegenerate?.()">重生成外交</UiButton>
   </div>
 
@@ -55,6 +53,13 @@
     empty-text="没有匹配的外交关系"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+  />
+
+  <UiPanelIoActions
+    class-name="diplomacy-panel-export-actions"
+    label="外交导出"
+    :export-actions="diplomacyExportActions"
+    @export="handleDiplomacyExport"
   />
 
   <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
@@ -141,6 +146,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
@@ -198,6 +204,10 @@ const metrics = computed(() => {
 const stateOptions = computed(() => metrics.value.states.map(state => ({value: state.id, label: state.name})));
 const selectedSubjectId = computed(() => toIntegerId(props.state.selectedStateId) ?? stateOptions.value[0]?.value ?? null);
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const diplomacyExportActions = computed(() => [
+  {key: "csv", label: "导出 CSV", disabled: !visibleRows.value.length},
+  {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length}
+]);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedObjectId) || visibleRows.value[0] || null);
 const matrix = computed(() => {
   props.state.version;
@@ -499,6 +509,11 @@ function exportJson() {
     chronicle: diplomacyChronicle(map)
   };
   downloadText(`fmg-diplomacy-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function handleDiplomacyExport(key) {
+  if (key === "csv") exportCsv();
+  if (key === "json") exportJson();
 }
 
 function diplomacyToCsv({seed, map, metrics, matrix}) {
