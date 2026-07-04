@@ -61,6 +61,7 @@ const MILITARY_ICON_BASE_HEIGHT = 24;
 const POPULATION_UNIT_PEOPLE = 1000;
 const MAX_OVERLAY_COLLISION_BOXES = 900;
 const ROUTE_BUILD_SLICE_MS = 10;
+const RIVER_BUILD_SLICE_MS = 10;
 const MAX_ROUTE_RENDER_POINTS_PER_ROUTE = 4096;
 const MAX_ROUTE_RENDER_POINTS_TOTAL = 90000;
 const MAX_ROUTE_RENDER_VERTICES = 900000;
@@ -829,6 +830,23 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.rivers = false;
   }
 
+  async updateRiverBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = RIVER_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
+    const startedAt = performance.now();
+    const {vertices, stats} = await buildRiverMeshVerticesAsync(this.map, this.camera, this.canvas, {
+      yieldToBrowser,
+      sliceMs,
+      shouldContinue
+    });
+    if (stats.aborted || !shouldContinue()) return false;
+    this.riverVertexCount = vertices.length / 6;
+    this.riverWidthStats = stats;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+    this.riverBuildMs = roundMs(performance.now() - startedAt);
+    this.dynamicBuffersDirty.rivers = false;
+    return true;
+  }
+
   updateSelectionBuffer() {
     const startedAt = performance.now();
     const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash);
@@ -946,8 +964,12 @@ export class PlaceholderMapRenderer {
     }
     if (!shouldContinue()) return false;
     if (this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) {
-      this.updateRiverBuffer();
-      if (!shouldContinue()) return false;
+      const riversReady = await this.updateRiverBufferAsync({
+        yieldToBrowser: () => this.yieldViewportCommitFrame(),
+        sliceMs: RIVER_BUILD_SLICE_MS,
+        shouldContinue
+      });
+      if (!riversReady || !shouldContinue()) return false;
       await this.yieldViewportCommitFrame();
     }
     if (!shouldContinue()) return false;
@@ -2603,39 +2625,74 @@ function worldPathIntersectsBounds(points, bounds) {
 }
 
 function buildRiverMeshVertices(map, camera, canvas) {
+  const build = createRiverMeshBuild(map, camera, canvas);
+  for (const river of map.rivers.rivers) {
+    pushRiverMesh(build, river);
+  }
+  return finalizeRiverMeshBuild(build);
+}
+
+async function buildRiverMeshVerticesAsync(map, camera, canvas, {yieldToBrowser = () => Promise.resolve(), sliceMs = RIVER_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
+  const build = createRiverMeshBuild(map, camera, canvas);
+  let sliceStartedAt = performance.now();
+  for (const river of map.rivers.rivers) {
+    if (!shouldContinue()) {
+      build.stats.aborted = true;
+      break;
+    }
+    pushRiverMesh(build, river);
+    if (performance.now() - sliceStartedAt < sliceMs) continue;
+    await yieldToBrowser();
+    sliceStartedAt = performance.now();
+  }
+  return finalizeRiverMeshBuild(build);
+}
+
+function createRiverMeshBuild(map, camera, canvas) {
   const context = createRenderContext(map, {camera, canvas});
-  const vertices = [];
-  const stats = {
+  return {
+    map,
+    context,
+    pixelRatio: canvas.width / Math.max(1, canvas.clientWidth),
+    viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
+    vertices: [],
+    stats: emptyRiverBuildStats()
+  };
+}
+
+function pushRiverMesh(build, river) {
+  const sourcePoints = Array.isArray(river.points) ? river.points.filter(isWorldPoint) : [];
+  if (sourcePoints.length < 2) return;
+  if (!worldPathIntersectsBounds(sourcePoints, build.viewportBounds)) {
+    build.stats.culledRivers++;
+    return;
+  }
+  const {points, widths} = getRiverRenderPath(river, build.map, build.pixelRatio, build.stats, sourcePoints);
+  if (points.length < 2) return;
+  const before = build.vertices.length;
+  pushVariableScreenPolyline(build.vertices, build.context, points, widths, riverRenderColor(river));
+  if (build.vertices.length === before) return;
+  build.stats.rivers++;
+  build.stats.segments += points.length - 1;
+}
+
+function finalizeRiverMeshBuild(build) {
+  return {
+    vertices: new Float32Array(build.vertices),
+    stats: normalizeRiverWidthStats(build.stats)
+  };
+}
+
+function emptyRiverBuildStats() {
+  return {
     rivers: 0,
     culledRivers: 0,
     segments: 0,
     minWidthPx: Infinity,
     maxWidthPx: 0,
     minFlux: Infinity,
-    maxFlux: 0
-  };
-  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
-  const viewportBounds = viewportWorldBounds(map, camera, canvas, 96);
-
-  for (const river of map.rivers.rivers) {
-    const sourcePoints = Array.isArray(river.points) ? river.points.filter(isWorldPoint) : [];
-    if (sourcePoints.length < 2) continue;
-    if (!worldPathIntersectsBounds(sourcePoints, viewportBounds)) {
-      stats.culledRivers++;
-      continue;
-    }
-    const {points, widths} = getRiverRenderPath(river, map, pixelRatio, stats, sourcePoints);
-    if (points.length < 2) continue;
-    const before = vertices.length;
-    pushVariableScreenPolyline(vertices, context, points, widths, riverRenderColor(river));
-    if (vertices.length === before) continue;
-    stats.rivers++;
-    stats.segments += points.length - 1;
-  }
-
-  return {
-    vertices: new Float32Array(vertices),
-    stats: normalizeRiverWidthStats(stats)
+    maxFlux: 0,
+    aborted: false
   };
 }
 

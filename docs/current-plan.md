@@ -50,6 +50,7 @@
 - 控制面板图层滑条标签折行已加固：图层页 `城市标签上限` 使用既有 `92px` 标签列并补充 nowrap，和生成页、单位页滑条标签策略保持一致。`layer-label-limit-nowrap-smoke / continents / 10000 / deep` 审计确认图层页滑条标签为 `92px x 16px / nowrap`，控制面板无横向溢出，WebGL 加载 `453.9ms`；e2e 守门 `layer-label-limit-nowrap-e2e` 通过，WebGL 加载 `411.4ms`，`drawMs = 0.2`，`glError = 0`。
 - 面板二级编辑区审计路径已修正：`audit:panels` 的 deep 场景会用 Playwright 真实点击对象行和可用 action dock 按钮，不再依赖 Vue 组件上可能失效的合成 click；后续审计二级编辑区应使用 `--scenario deep --template continents`，不能再把 `--variant deep` 当成有效参数。`secondary-panel-audit-fix-smoke / deep / continents / 10000` 已确认国家、城市、军事三类面板均打开到二级“重命名”面板，未发现待复核项，WebGL 加载 `375.5ms`、`drawMs = 0.1`、`glError = 0`；e2e 守门 `secondary-panel-audit-fix-e2e` 通过，WebGL 加载 `527.6ms`、`drawMs = 0`、`glError = 0`。
 - 军事管理工具条空间已放宽：顶部 `军团数据 / 战报档案` 工具组不再把组标题和按钮挤在同一行，按钮行最小列宽提升到 `112px`；战报记录筛选区的清理按钮不再被压进右侧 `190px` 窄栏，而是独占下一行按可用宽度排列。`military-toolbar-space-smoke / deep / continents / 10000` 中军事顶部工具条最小按钮宽从约 `103.6px` 提升到 `125.6px`，战报清理按钮最小宽从 `92px` 提升到 `333px`，无横向溢出；e2e 守门 `military-toolbar-space-e2e` 通过，WebGL 加载 `443.9ms`、`drawMs = 0`、`glError = 0`。
+- 河流 idle commit 分帧恢复已完成：100k 复查确认交互期间 route / river 构建仍为 `0ms`，同步 overlay p95 约 `7.2ms`，滚轮长任务不能继续归因于 DOM overlay 或动态线层即时重建；真正可控成本在停止输入后的 idle commit。河流 screen-space mesh 现在和路线一样走异步分片构建，`river-idle-async-100k-final / full / 100000` 通过，滚轮 idle frame p95 `35.7ms`、拖动 idle frame p95 `18.1ms`，idle long task 为 `0`，dirty 均恢复 clean；10k e2e `river-idle-async-e2e` 通过，WebGL 加载 `511.6ms`、`drawMs = 0.1`、`glError = 0`。
 
 ### 当前执行队列
 
@@ -62,7 +63,7 @@
    - 审计脚本已覆盖控制面板 tab、主要浮动面板和 deep 场景下的首个二级编辑区；后续若继续发现真实折行，再扩充重要字段省略号、异常多行折断和详情最小项宽规则。
 2. **overlay 与动态线层性能专项**：
    - `profile:overlay` 已补 idle commit 指标和 `measurement-heavy / selection-heavy` 重场景；viewport idle commit 分帧第一刀仍保留，但“视口交互中隐藏 DOM overlay”的策略已取消，当前行为是同步刷新覆盖层。
-   - 后续如果继续性能专项，先复查 100k 下同步 overlay 刷新导致的滚轮 long task，以及 idle commit 中路线 / 河流重建的来源；只有证据继续指向河流、选中态或 overlay 更新时，再做河流异步 mesh、选中 mesh 分帧、过期 commit 取消增强、视口分块或缓存。
+   - 100k 复查已确认滚轮长任务不由 route / river 即时构建、WebGL draw 或 renderer 记录到的 overlay 分项主导；河流 idle commit 已分帧。后续如果继续性能专项，优先复查滚轮事件本身、浏览器样式 / layout 成本或 profile 采样方式；若证据继续指向路线 idle commit、选中态或 overlay 更新，再做路线更细分片、选中 mesh 分帧、过期 commit 取消增强、视口分块或缓存。
    - 若证据指向测量 SVG、多对象选中态或极端标签数量，再单独治理对应 overlay；不默认把标签、城市剪影、marker 或军事图标迁到 WebGL。
 3. **source/candidate 剩余 warn 只读跟踪**：
    - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。

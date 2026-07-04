@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：河流 idle commit 分帧恢复
+
+按当前 overlay 与动态线层性能专项推进。先用 100k `full` 变体复查当前瓶颈：滚轮交互 frame p95 仍偏高，但交互期间 route / river 构建均为 `0ms`，WebGL draw p95 约 `0.2ms`，overlay p95 约 `7.2ms`；可直接治理的成本集中在停止输入后的 idle commit，其中路线构建约 `54.3ms`，河流构建约 `42.4ms`。
+
+完成内容：
+
+- 新增 `RIVER_BUILD_SLICE_MS`，让河流 screen-space mesh 构建也支持按时间片让出主线程。
+- 将 `buildRiverMeshVertices()` 拆为 `createRiverMeshBuild()`、`pushRiverMesh()`、`finalizeRiverMeshBuild()`，同步和异步路径复用同一套河流点过滤、视口粗筛、宽度计算和平滑逻辑。
+- 新增 `buildRiverMeshVerticesAsync()` 与 `updateRiverBufferAsync()`，支持 `yieldToBrowser / shouldContinue`，在视口再次变化时可中止旧版本重建。
+- `rebuildViewportDynamicBuffersAsync()` 在 idle commit 中改用异步河流重建，路线和河流之间继续让出一帧。
+- 本轮只改变视口停止后的 buffer 恢复调度，不改河流生成、河流样式、图层开关、picking 或交互期间 overlay 同步刷新。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 100k 基线复查 `overlay-current-100k / full / 100000` 显示：滚轮 idle frame p95 `53.2ms`，拖动 idle frame p95 `34.7ms`；交互期间 route / river 构建均为 `0ms`，overlay p95 `7.2ms`。
+- 100k profile `river-idle-async-100k-final / full / 100000` 通过：滚轮交互 frame p95 `180.2ms`，拖动 frame p95 `47ms`；滚轮 idle frame p95 `35.7ms`，拖动 idle frame p95 `18.1ms`；idle long task 为 `0`，`routesDirty / riversDirty` 均恢复 `false`，`glError = 0`。
+- e2e 守门 `river-idle-async-e2e / continents / 10000` 通过：点击到出图 `1652.5ms`，纯生成 `848.3ms`，WebGL 加载 `511.6ms`，`drawMs = 0.1`，`glError = 0`。
+
 ## 2026-07-04：军事管理工具条空间放宽
 
 继续按当前“面板空间策略专项”推进。全量 deep 面板审计未发现硬性布局失败，但按最小宽度排序后，军事管理仍有两处与当前优先级一致的偏紧项：顶部导入导出工具条最小按钮宽约 `103.6px`，战报清理按钮最小宽约 `92px`。
