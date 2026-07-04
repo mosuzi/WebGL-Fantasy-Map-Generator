@@ -21,12 +21,29 @@
 - 视口交互动态线层降级第一刀已完成：拖动 / 滚轮期间暂不重建和绘制 dirty 的路线、河流、选中 screen mesh，停止输入约 `120ms` 后完整重建。100k 完整图层中键拖动画布 frame p95 已从约 `88.2ms` 降至 `35.3ms`，最终 idle 后 dynamic buffers 会恢复 clean。
 - 面板布局第二轮已修正经济 / marker 的 segmented 控件：共享 `UiSegmented` 改为可换行 grid，选中态不再依赖额外内部指示层，经济三段控件窄列时自然换行，marker 三段控件保持一行三列。
 
-### 当前优先项
+### 当前执行队列
 
-1. **面板布局第二轮审计**：共享布局第一刀和经济 / marker segmented 修正已经完成。若继续 UI 修正，应做更窄的浏览器视觉审计，重点查仍有异常折行的单个面板控件、表格横向滚动体验，以及长字段是否需要在 `UiDetailGrid` 中显式跨整行；施工入口见 `docs/task-notes/panel-layout-overlay-performance-plan.md`。
-2. **路线 / 河流动态线层后续优化**：overlay profile 已证明 DOM overlay 不是当前主瓶颈。后续若继续处理拖动 / 缩放手感，应优先做路线 / 河流 screen mesh 的 viewport 粗筛、分块缓存或更轻的交互态线层，而不是先迁移标签、城市剪影、marker 图标或军事图标；施工入口见 `docs/task-notes/panel-layout-overlay-performance-plan.md`。
-3. **overlay profile 矩阵补全**：当前已有 10k / 50k / 100k 和 `full,noRoutesRivers` 的基础证据；若继续量化，应补图层开关矩阵和测量 SVG 对象较多时的 profile，再决定是否做测量 SVG 缓存。
-4. **source/candidate 剩余 warn 只读跟踪**：若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断，不做末端过滤。
+下面是继续推进时的真实顺序。每一刀完成后都要按改动类型做对应验证，确认没有加载或绘制卡顿回退，再单独提交。
+
+1. **面板布局第二轮审计与修正**：
+   - 先用浏览器审计脚本打开国家、省份、城市、文化、宗教、外交、政体、经济、军事、路线、河流、湖泊、资源标记、测量对象和名称库等主要面板，记录 body 横向滚动、按钮错位、按钮高度异常、表格列压缩和详情字段异常折行。
+   - 修正原则是不继续吝啬空间：横向不足时优先扩大面板宽度、让字段跨整行、按钮自然换行或表格横向滚动；不得把长文本硬塞成单字竖排式折行。
+   - 共享组件优先级为 `UiDetailGrid` 长字段显式跨整行、`UiMetricGrid` 面板级最小宽度、`UiSortBar / UiSegmented` 换行策略、`UiObjectTable` 列最小宽和滚动体验。
+   - 第一批只修浏览器审计能复现的具体折行和窄控件，不做单个面板的大重排。
+2. **路线 / 河流动态线层后续优化**：
+   - 当前证据显示 100k 交互主要瓶颈不是 DOM overlay，而是路线 / 河流 screen-space 动态 mesh。
+   - 若继续处理拖动 / 缩放手感，先做路线 / 河流 viewport 粗筛；粗筛不足再评估分块缓存或交互态轻量线层。
+   - 不把标签、城市剪影、marker 图标或军事图标迁移到 WebGL 作为默认方案；只有 profile 证明 DOM overlay 成为主瓶颈时再讨论。
+3. **overlay profile 矩阵补全**：
+   - 当前已有 10k / 50k / 100k 和 `full,noRoutesRivers` 的基础证据。
+   - 后续补图层开关矩阵，尤其是标签、城市剪影、资源 / marker、军事图标、测量 SVG、路线和河流的组合。
+   - 测量 SVG 对象很多时再做 dirty/cache 验证，不提前重写测量编辑层。
+4. **贸易查看列表化设计**：
+   - 贸易流地图常驻连线已退役，不再作为图层恢复。
+   - 若继续贸易查看，应做经济面板子视图或独立列表面板，按国家、地区、市场、商品、卖方和买方筛选；默认不画连线，只提供定位相关城市、市场或国家的动作。
+5. **source/candidate 剩余 warn 只读跟踪**：
+   - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。
+   - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 
 ### 可选增强
 

@@ -18048,3 +18048,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物面板审计通过：经济、marker、国家、文化、宗教面板均无 body 横向溢出；经济 segmented 变为 grid 且文字无溢出，marker segmented 保持三列且文字无溢出；相关表格均无非预期横向溢出。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed segmented-layout-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1075ms`，纯生成 `547.4ms`，WebGL 加载 `342.9ms`，最慢加载阶段为“构建标签” `46.8ms`。
+
+### 当前计划执行队列清理
+
+背景：
+
+- 用户指出 `docs/current-plan.md` 仍有一些已经实现的内容看起来像待办，例如单位系统。
+- 用户同时要求把面板异常折行、空间过窄，以及非 WebGL overlay 越来越多导致拖动 / 缩放卡顿的后续方向整理成计划。
+- 本轮只整理计划，不改业务代码。
+
+调整：
+
+- `docs/current-plan.md` 的当前队列改为明确的五项：面板布局第二轮审计与修正、路线 / 河流动态线层后续优化、overlay profile 矩阵补全、贸易查看列表化设计、source/candidate 剩余 warn 只读跟踪。
+- 单位系统、国名方位语义、README 刷新、贸易流地图图层、动态军事系统和测量对象主链路都保持在已完成 / 可选增强 / 明确不做区域，不再作为当前执行队列。
+- 面板布局计划明确“不吝啬空间”：横向不足时优先扩大面板宽度、长字段跨整行、按钮自然换行或表格横向滚动，避免把长文本压成异常折行。
+- overlay 性能计划按现有证据收束到路线 / 河流 screen-space 动态 mesh，暂不默认迁移标签、城市剪影、marker 图标或军事图标到 WebGL。
+
+验证：
+
+- 本轮只修改中文文档，不涉及运行时代码。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed plan-doc-cleanup-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-plan-doc-cleanup-e2e.json" --markdown "$env:TEMP\fmg-plan-doc-cleanup-e2e.md"` 通过；点击到出图 `1243.3ms`，纯生成 `652.6ms`，WebGL 加载 `326ms`，最慢加载阶段为“构建视觉 cell mesh” `53.1ms`。
