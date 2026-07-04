@@ -18302,3 +18302,22 @@ full 矩阵结果：
 - 100k overlay profile `overlay-stage-hide-100k / continents / 100000` 通过：完整图层滚轮 frame p95 `6ms`，中键拖动画布 frame p95 `17.7ms`，交互样本 overlay 全部暂停；完整图层 idle commit 分别约 `197.6ms / 181.8ms`，dirty 均为 `clean`。
 - 构建产物浏览器断言中手动显示 `map-overlay / measurement-overlay / map-legend / map-scale-bar / hover-overlay` 后触发 `drawViewportPreview()`，五类覆盖层交互中 computed `visibility = hidden`，约 `180ms` 后均恢复 `visible`。
 - e2e 守门 `overlay-stage-hide-smoke / continents / 10000` 通过：点击到出图 `1370.7ms`，纯生成 `828.7ms`，WebGL 加载 `327.4ms`，最慢加载阶段为“构建线层顶点” `44.6ms`。
+
+### 2026-07-04 生成页气候滑条标签放宽
+
+背景：
+
+- 面板空间专项复查时，浮动管理面板 deep 审计未发现待复核项，但控制面板“生成”页气候区域存在明确折行：`画布纬度` 被 `42px` 标签列压成两行。
+
+实现：
+
+- `.climate-slider-field` 标签列从 `42px` 放宽到 `68px`，并对第一列标签设置 `white-space: nowrap`。
+- 不改滑条数据契约和旧 runtime DOM id，只调整显示空间。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有大 chunk 警告。
+- 构建产物浏览器截图确认“画布纬度”单行显示；浏览器断言中该标签宽度 `68px`、高度 `15px`、`white-space = nowrap`。
+- 浮动面板 deep 审计 `panel-space-deep-current / continents / 10000` 未发现待复核项，点击到出图 `1243ms`，WebGL 加载 `316.5ms`。
+- e2e 守门 `climate-label-layout-smoke / continents / 10000` 通过：点击到出图 `1329.6ms`，纯生成 `664.6ms`，WebGL 加载 `376.1ms`，最慢加载阶段为“构建标签” `63.1ms`。

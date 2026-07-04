@@ -3799,11 +3799,15 @@ select:disabled {
 
 .climate-slider-field {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 78px 32px;
+  grid-template-columns: 68px minmax(0, 1fr) 78px 32px;
   align-items: center;
   gap: 7px;
   color: #cbd7dc;
   font-size: 11px;
+}
+
+.climate-slider-field > span:first-child {
+  white-space: nowrap;
 }
 
 .climate-slider-field input {

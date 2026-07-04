@@ -35,6 +35,7 @@
 - 面板打开长任务诊断与第一刀优化已完成：新增 `pnpm run profile:panels`，并把共享 `UiObjectTable` 从 Element Plus `ElTable` 换成轻量原生 table，保留列最小宽、选中、定位和横向滚动。全量 17 个面板 profile 中最慢为城市管理 `371.3ms`、标签管理 `368.8ms`，health 事件 `0`；deep 布局审计仍未发现待复核项。
 - 地图 DOM overlay 交互降级第一刀已完成：100k 当前代码复测中，完整图层滚轮 frame p95 曾为 `111.7ms`、拖动 p95 为 `41.2ms`；交互期间暂停 `#map-overlay` 的标签、城市剪影、marker 和军事图标更新并隐藏，idle 后恢复完整更新。复测同 seed 后完整图层滚轮 frame p95 为 `6ms`、拖动 p95 为 `17.7ms`，overlay 交互样本全部暂停，idle 后 `finalSuspended = false`。
 - 地图内容 overlay 统一隐藏已完成：拖动 / 缩放期间 `.map-stage` 会进入 `map-stage--interaction-hidden`，统一隐藏 `map-overlay`、测量 SVG、hover 浮层、图例和比例尺，避免非 canvas 标志按旧相机位置滞留导致与画布分离；idle 后统一恢复。浏览器断言确认五类覆盖层交互中 `visibility = hidden`、约 `180ms` idle 后恢复 `visible`。
+- 生成页气候滑条标签折行已修正：`.climate-slider-field` 标签列从 `42px` 放宽到 `68px` 并禁止首列标签换行，`画布纬度` 不再被拆成两行；控制面板生成页截图和浏览器断言确认标签高度 `15px`、`white-space = nowrap`。
 
 ### 当前执行队列
 
