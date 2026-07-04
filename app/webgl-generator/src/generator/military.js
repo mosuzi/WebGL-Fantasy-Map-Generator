@@ -1102,7 +1102,6 @@ function bestFrontBoundaryExtension(edges, selected, path, remainingLength) {
   for (let index = 0; index < edges.length; index++) {
     if (selected.has(index)) continue;
     const edge = edges[index];
-    if (edge.length > remainingLength) continue;
     const [a, b] = edge.vertices;
     const match =
       a === startVertex ? {side: "start", nextVertex: b} :

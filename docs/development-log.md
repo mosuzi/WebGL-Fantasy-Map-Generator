@@ -17624,3 +17624,23 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：选中国家标签后对象详情显示“名称库改名”，点击后目标国家从 `赤原` 改为 `苴`，撤销恢复 `赤原`，重做恢复 `苴`；状态提示为“已按当前名称库重命名选中国家 1 个”，`glError = 0`，page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1682.8ms`，纯生成 `710.5ms`，WebGL 加载 `499.4ms`，最慢加载阶段为“构建视觉 cell mesh” `70.8ms`，结果仍在守门阈值内。
+
+### 军事态势线边界裁切分支修正
+
+背景：
+
+- 用户已明确无需做动态军事系统；军事方向只保留静态面板、态势线观感和导出可读性收尾。
+- 现有态势线设计要求：不能太长，只在共享陆地边界上存在，不跨海，并以宽体渐变方向箭头呈现。
+- 代码中 `bestFrontBoundaryExtension()` 在下一条共享边超过剩余长度预算时会提前 `continue`，导致后续 partial 裁切分支不可达；这与已记录的边界裁切能力不一致。
+
+修正：
+
+- 移除超长共享边的提前跳过，让已有 partial 分支在剩余预算足够时裁取下一条真实共享边的一小段。
+- 裁切仍只发生在已经通过双方陆地相邻校验的 pack 共享边上，不回退到 `from -> to` 长线，不改变战役、战报、外交或军事结算语义。
+
+验证：
+
+- Node 数据探针通过：`stage-2-2 / front-audit-1 / front-scan-35 / front-scan-59 / front-scan-63 / front-scan-83` 等样本中的 front 均有 `borderCellPairs`，双方 cell 都是陆地且国家归属匹配，长度不超过 `maxLength`；`front-scan-63` 覆盖 3 段边界、4 个点的 front。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：向生产包页面注入 `front-scan-63 / continents / 10000` 地图后，2 条 front 均合法，其中进攻线 `length = 12.47 / maxLength = 12.47`、`points = 4`、`borderCellPairs = 3`；开启战线图层只增加 `60` 个 line 顶点，`drawMs = 0`，`glError = 0`，health 非 info 事件为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed front-scan-63 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1689.7ms`，纯生成 `810.2ms`，WebGL 加载 `510.9ms`，最慢加载阶段为“构建视觉 cell mesh” `49.4ms`，`构建线层顶点 42.1ms`，结果仍在守门阈值内。
