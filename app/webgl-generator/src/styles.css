@@ -4061,9 +4061,14 @@ select:disabled {
   background: rgba(13, 19, 23, 0.98);
 }
 
-.heightmap-workbench-actions .el-button {
+.heightmap-workbench-actions > .el-button {
   width: 100%;
   min-height: 34px;
+}
+
+.heightmap-workbench-io-actions {
+  justify-content: flex-start;
+  margin: 0;
 }
 
 .heightmap-pending-warning {
@@ -6331,8 +6336,7 @@ input.ui-switch-native {
   padding-inline: 6px;
 }
 
-.diplomacy-edit-toolbar,
-.military-edit-toolbar {
+.diplomacy-edit-toolbar {
   display: grid;
   gap: 8px;
   margin-bottom: 8px;
@@ -6342,51 +6346,18 @@ input.ui-switch-native {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.military-edit-toolbar {
-  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-  align-items: stretch;
-}
-
-.military-toolbar-group {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  align-items: stretch;
-  box-sizing: border-box;
-  min-width: 0;
-  border: 1px solid rgba(189, 206, 213, 0.12);
-  border-radius: 7px;
-  padding: 7px;
-  background: rgba(9, 15, 18, 0.28);
-}
-
-.military-toolbar-group > span {
-  color: #8ca0aa;
-  font-size: 11px;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.military-toolbar-group > div {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-  gap: 6px;
-  min-width: 0;
-}
-
-.military-toolbar-group .el-button,
 .military-event-actions .el-button {
   min-width: 0;
   padding-inline: 8px;
 }
 
-.military-toolbar-group .el-button + .el-button,
 .military-event-actions .el-button + .el-button {
   margin-left: 0;
 }
 
-.military-import-input {
-  display: none;
+.military-panel-export-actions,
+.military-event-archive-actions {
+  margin-bottom: 10px;
 }
 
 .military-import-status {

@@ -21,24 +21,6 @@
     <UiFilterInput :model-value="state.filter" placeholder="筛选军团 / 国家 / 兵种" @update:model-value="callbacks.onFilter" />
   </div>
 
-  <div class="military-edit-toolbar" aria-label="军事数据工具">
-    <div class="military-toolbar-group">
-      <span>军团数据</span>
-      <div>
-        <UiButton variant="secondary" @click="exportCsv">导出 CSV</UiButton>
-        <UiButton variant="secondary" @click="exportJson">导出 JSON</UiButton>
-      </div>
-    </div>
-    <div class="military-toolbar-group">
-      <span>战报档案</span>
-      <div>
-        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEvents">档案 JSON</UiButton>
-        <UiButton variant="secondary" :disabled="!exportBattleEventRows.length" @click="exportBattleEventsCsv">档案 CSV</UiButton>
-        <UiButton variant="secondary" @click="openBattleEventsImport">导入</UiButton>
-      </div>
-    </div>
-  </div>
-  <input ref="battleEventsImportInput" class="military-import-input" type="file" accept="application/json,.json" @change="importBattleEventsFile" />
   <p v-if="battleEventsImportStatus" class="military-import-status">{{ battleEventsImportStatus }}</p>
 
   <section v-if="selected" class="military-overview" aria-label="选中军团概要">
@@ -100,6 +82,13 @@
     empty-text="没有匹配的军团"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+  />
+
+  <UiPanelIoActions
+    class-name="military-panel-export-actions"
+    label="军事导出"
+    :export-actions="militaryExportActions"
+    @export="handleMilitaryExport"
   />
 
   <section v-if="selected" class="military-event-list" aria-label="选中军团战报记录">
@@ -220,6 +209,14 @@
         <small v-if="event.resultApplied" class="military-event-result">{{ battleResultSummary(event) }}</small>
       </li>
     </ol>
+    <UiPanelIoActions
+      class-name="military-event-archive-actions"
+      label="战报档案导入导出"
+      :export-actions="battleEventExportActions"
+      :import-actions="battleEventImportActions"
+      @export="handleBattleEventExport"
+      @import="handleBattleEventImport"
+    />
   </section>
 
   <UiActionDock v-if="selectedState" v-model:active="activeAction" :actions="militaryActions">
@@ -437,6 +434,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
@@ -498,7 +496,6 @@ const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
 const stationDestinationDraft = ref("capital");
-const battleEventsImportInput = ref(null);
 const battleEventsImportStatus = ref("");
 const eventChainFilter = ref("all");
 const eventTypeFilter = ref("all");
@@ -591,6 +588,17 @@ const selectedBattleEventsCanExpand = computed(() => selectedFilteredBattleEvent
 const selectedBattleEvents = computed(() => showAllSelectedBattleEvents.value ? newestFirstBattleEvents(selectedFilteredBattleEvents.value) : latestBattleEvents(selectedFilteredBattleEvents.value, 5));
 const battleEventChainSummary = computed(() => buildBattleEventChainSummary(selectedBattleEventRows.value));
 const exportBattleEventRows = computed(() => battleEventRowsForExport(eventExportScope.value));
+const militaryExportActions = computed(() => [
+  {key: "csv", label: "导出 CSV", disabled: !visibleRows.value.length},
+  {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length}
+]);
+const battleEventExportActions = computed(() => [
+  {key: "json", label: "档案 JSON", disabled: !exportBattleEventRows.value.length},
+  {key: "csv", label: "档案 CSV", disabled: !exportBattleEventRows.value.length}
+]);
+const battleEventImportActions = Object.freeze([
+  {key: "json", label: "导入战报档案", accept: "application/json,.json"}
+]);
 const battleEventDisplayToggleLabel = computed(() => showAllSelectedBattleEvents.value ? "收起最近" : `展开全部 ${formatNumber(selectedFilteredBattleEvents.value.length)}`);
 const battleEventCountLabel = computed(() => {
   if (!selectedBattleEventTotal.value) return "暂无";
@@ -1876,19 +1884,23 @@ function exportBattleEventsCsv() {
   downloadText(`fmg-military-events-${safeFilePart(seed)}-${battleEventExportScopeSuffix(scope)}.csv`, [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
 }
 
-function openBattleEventsImport() {
-  battleEventsImportInput.value?.click();
+function handleMilitaryExport(key) {
+  if (key === "csv") exportCsv();
+  if (key === "json") exportJson();
 }
 
-async function importBattleEventsFile(event) {
-  const file = event.target?.files?.[0];
+function handleBattleEventExport(key) {
+  if (key === "json") exportBattleEvents();
+  if (key === "csv") exportBattleEventsCsv();
+}
+
+async function handleBattleEventImport({file}) {
   if (!file) return;
   battleEventsImportStatus.value = "正在导入战报记录...";
   const result = await props.callbacks.onBattleEventsImport?.(file);
   battleEventsImportStatus.value = result
     ? `已导入 ${formatNumber(result.imported)} 条，跳过 ${formatNumber(result.skipped)} 条`
     : "战报记录导入失败";
-  event.target.value = "";
 }
 
 function downloadText(filename, text, type) {

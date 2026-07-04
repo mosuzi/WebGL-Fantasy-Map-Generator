@@ -331,13 +331,16 @@
         </section>
 
         <div class="heightmap-workbench-actions">
-          <UiButton class="file-import-action heightmap-import-action" variant="secondary" @click="triggerHeightmapFileInput">选择图片</UiButton>
-          <UiButton variant="secondary" :disabled="!previewPalette.length" @click="exportHeightmapProfile">导出配置</UiButton>
-          <UiButton class="file-import-action" variant="secondary" @click="triggerProfileFileInput">导入配置</UiButton>
+          <UiPanelIoActions
+            class-name="heightmap-workbench-io-actions"
+            label="高度图导入导出"
+            :export-actions="heightmapWorkbenchExportActions"
+            :import-actions="heightmapWorkbenchImportActions"
+            @export="handleHeightmapWorkbenchExport"
+            @import="handleHeightmapWorkbenchImport"
+          />
           <UiButton class="heightmap-apply-action" variant="primary" :disabled="!canApplyHeightmap" @click="applyHeightmapImport">应用到地图</UiButton>
           <UiButton variant="secondary" @click="closeImportWorkbench">取消</UiButton>
-          <input id="heightmap-image-file" ref="fileInput" type="file" accept="image/*" hidden @change="onHeightmapFileChange" />
-          <input ref="profileFileInput" type="file" accept=".heightmap-import-profile.json,.json,application/json" hidden @change="onHeightmapProfileFileChange" />
         </div>
 
         <p v-if="pendingUnassignedWarning" class="heightmap-pending-warning">{{ pendingUnassignedWarning }}</p>
@@ -351,6 +354,7 @@
 import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
@@ -438,8 +442,6 @@ const heightmapMappingMode = ref("grayscale");
 const heightmapUnassignedHeight = ref(0);
 const heightmapUnassignedStrategy = ref("fixed-height");
 const workbenchOpen = ref(false);
-const fileInput = ref(null);
-const profileFileInput = ref(null);
 const previewCanvas = ref(null);
 const heightBandCanvas = ref(null);
 const heightDifferenceCanvas = ref(null);
@@ -503,6 +505,13 @@ const selectedPaletteInProfile = computed(() => (
   selectedPaletteKey.value !== null && importedProfileKeys.value.includes(String(selectedPaletteKey.value))
 ));
 const usesPaletteImport = computed(() => heightmapMappingMode.value !== "grayscale" || previewPalette.value.some(entry => entry.manual));
+const heightmapWorkbenchExportActions = computed(() => [
+  {key: "profile", label: "导出配置", disabled: !previewPalette.value.length}
+]);
+const heightmapWorkbenchImportActions = Object.freeze([
+  {key: "image", label: "选择图片", accept: "image/*"},
+  {key: "profile", label: "导入配置", accept: ".heightmap-import-profile.json,.json,application/json"}
+]);
 const pendingUnassignedBlocked = computed(() => (
   usesPaletteImport.value &&
   heightmapUnassignedStrategy.value === "mark-pending" &&
@@ -708,21 +717,16 @@ function closeImportWorkbench() {
   removeDragListeners();
 }
 
-function triggerHeightmapFileInput() {
-  if (!fileInput.value) return;
-  fileInput.value.value = "";
-  fileInput.value.click();
+function handleHeightmapWorkbenchExport(key) {
+  if (key === "profile") exportHeightmapProfile();
 }
 
-function triggerProfileFileInput() {
-  if (!profileFileInput.value) return;
-  profileFileInput.value.value = "";
-  profileFileInput.value.click();
+async function handleHeightmapWorkbenchImport({key, file}) {
+  if (key === "image") await onHeightmapFileChange(file);
+  if (key === "profile") await onHeightmapProfileFileChange(file);
 }
 
-async function onHeightmapFileChange(event) {
-  const file = event.target.files?.[0];
-  event.target.value = "";
+async function onHeightmapFileChange(file) {
   if (!file) return;
   try {
     previewStatus.value = "正在读取图片...";
@@ -778,9 +782,7 @@ function applyHeightmapImport() {
   closeImportWorkbench();
 }
 
-async function onHeightmapProfileFileChange(event) {
-  const file = event.target.files?.[0];
-  event.target.value = "";
+async function onHeightmapProfileFileChange(file) {
   if (!file) return;
   try {
     const profile = parseHeightmapProfile(await file.text());

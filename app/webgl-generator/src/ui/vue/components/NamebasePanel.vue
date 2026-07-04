@@ -102,6 +102,15 @@
     @select="callbacks.onSelect"
   />
 
+  <UiPanelIoActions
+    class-name="namebase-panel-io-actions"
+    label="名称库导入导出"
+    :export-actions="namebaseExportActions"
+    :import-actions="namebaseImportActions"
+    @export="handleNamebaseExport"
+    @import="handleNamebaseImport"
+  />
+
   <UiDetailGrid class-name="namebase-panel-details" empty-text="未选中名称库" :rows="detailRows" />
 
   <div v-if="selected" class="namebase-panel-preview">
@@ -159,10 +168,6 @@
   </div>
 
   <div class="namebase-panel-actions">
-    <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExport()">导出名称库</UiButton>
-    <UiButton variant="secondary" :disabled="!rows.length" @click="callbacks.onExportLegacy()">导出原版文本</UiButton>
-    <UiButton class="file-import-action namebase-import-action" variant="secondary" @click="triggerImportFile">导入名称库</UiButton>
-    <input ref="importFileInput" id="namebase-import-file" type="file" accept=".json,.txt,application/json,text/plain" hidden @change="handleImportFile" />
     <UiButton variant="secondary" @click="callbacks.onCreateUser()">新建用户库</UiButton>
     <UiButton variant="secondary" :disabled="!selectedBuiltinRow" @click="callbacks.onCopyBuiltin(selectedBuiltinRow)">复制内置</UiButton>
     <UiButton variant="secondary" :disabled="!selectedUserRow" @click="callbacks.onDeleteUser(selectedUserRow)">删除选中</UiButton>
@@ -181,6 +186,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -206,7 +212,6 @@ const sourceDraft = ref("");
 const minLengthDraft = ref(1);
 const maxLengthDraft = ref(4);
 const duplicateCharsDraft = ref("");
-const importFileInput = ref(null);
 const generatedExamples = ref([]);
 const previewNonce = ref(0);
 
@@ -247,6 +252,13 @@ const rows = computed(() => {
   return (props.state.summaries || []).map(toRow);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const namebaseExportActions = computed(() => [
+  {key: "json", label: "导出名称库", disabled: !rows.value.length},
+  {key: "legacy", label: "导出原版文本", disabled: !rows.value.length}
+]);
+const namebaseImportActions = Object.freeze([
+  {key: "namebase", label: "导入名称库", accept: ".json,.txt,application/json,text/plain"}
+]);
 const userRows = computed(() => rows.value.filter(row => row.origin !== "内置"));
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedNamebaseId));
 const selectedBuiltinRow = computed(() => selected.value?.builtin === true ? selected.value : null);
@@ -452,17 +464,16 @@ function collectCultures(map) {
     });
 }
 
-function handleImportFile(event) {
-  const file = event.target.files?.[0];
+function handleNamebaseExport(key) {
+  if (key === "json") props.callbacks.onExport?.();
+  if (key === "legacy") props.callbacks.onExportLegacy?.();
+}
+
+function handleNamebaseImport({file}) {
   if (file) {
     if (props.callbacks.onImportPreview) props.callbacks.onImportPreview(file);
     else props.callbacks.onImport?.(file);
   }
-  event.target.value = "";
-}
-
-function triggerImportFile() {
-  importFileInput.value?.click();
 }
 
 function generateExamples() {
