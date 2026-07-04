@@ -18160,3 +18160,22 @@ full 矩阵结果：
 
 - 当前仍没有证据支持把标签、城市剪影、marker 或军事图标默认迁到 WebGL。
 - 后续 overlay 性能工作应只在具体复现场景下补测量 SVG 多对象、选中态高频变化或极端标签数量；路线 / 河流动态线层若继续优化，优先评估分块缓存、跨帧重建或轻量交互态线层。
+
+### current-plan 当前队列再整理
+
+背景：
+
+- 用户指出 `docs/current-plan.md` 中仍容易把已经实现的内容误读为计划项，例如单位系统。
+- 当前后续重点应收束到面板空间 / 折行问题，以及非 WebGL overlay 与动态线层的性能证据化治理。
+
+调整：
+
+- `docs/current-plan.md` 明确当前执行计划以当前代码和最新验证结果为准，历史推进记录不再自动转化为授权任务。
+- 当前执行队列拆成六项：面板布局深场景审计补齐、面板空间策略修正、路线 / 河流动态线层后续优化、overlay profile 后续深场景、贸易查看列表化设计、source/candidate 剩余 warn 只读跟踪。
+- “可选增强”标题改为“非当前执行队列”，单位系统只保留导出、编辑器输入和正式读数口径接入偏好的可选增强，不再作为当前计划项。
+
+验证：
+
+- 本轮只整理中文文档，不改运行时代码。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed current-plan-cleanup-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-current-plan-cleanup-e2e.json" --markdown "$env:TEMP\fmg-current-plan-cleanup-e2e.md"` 通过；点击到出图 `1448.1ms`，纯生成 `738.9ms`，WebGL 加载 `394.7ms`，最慢加载阶段为“构建线层顶点” `69.9ms`。
