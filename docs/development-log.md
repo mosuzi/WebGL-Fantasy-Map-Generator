@@ -17713,3 +17713,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`NamebasePanel` 懒加载 chunk 约 `14.97KB / gzip 5.37KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：打开名称库面板后点击“导出原版文本”，下载 `fmg-stage-2-1-d6b438af.namebases.txt`，共 `61` 行且每行至少 6 个 `|` 字段；上传 `legacy-namebases.txt` 后预览显示可导入 `2` 个词池，确认后新增 `测试古国 / 测试水文`，`测试古国` 保留 `minLength = 1`、`maxLength = 3`、`duplicateChars = 叠`，历史栈为 `undo 1 / redo 0 / 导入名称库`，`glError = 0`，无 console error/page error。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed namebase-legacy-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1608.9ms`，纯生成 `744.6ms`，WebGL 加载 `422.2ms`，UI/调度余量 `442.1ms`，最慢加载阶段为“构建线层顶点” `56.8ms`，控制台错误为空。
+
+### 名称库更细质量诊断第一刀
+
+背景：
+
+- 原版 `Namesbase Editor` 会分析样本长度、重复项、非基础字符和重复字符等质量信息；WebGL 版此前只有样本数、重复样本、链路多样性和基础生成参数。
+- 用户已再次校准：无需做动态军事系统；本轮继续只推进名称库静态编辑能力，不触碰军事战役、战报自动推进或战争行动链路。
+
+修正：
+
+- `summarizeNamebaseSource()` / `analyzeNamebase()` 新增平均样本长度、中位样本长度、长度越界样本、相邻连写风险、重复字符、特殊字符、加权样本数量和最高权重诊断。
+- 名称库面板详情新增“加权样本 / 平均长度 / 中位长度 / 长度越界 / 连写风险 / 特殊字符”，筛选也可命中这些诊断文本。
+- 质量标签会在样本数基础上提示“长度需校准 / 连写需校准 / 含特殊字符”，方便用户先处理明显风险。
+- 名称库 JSON 导出同步带出这些只读诊断字段；导入、绑定、预览和显式改名语义不变，不自动改写当前地图对象名称。
+- 名称库列表列宽收紧，避免 Element Plus 表格在 760px 浮层中横向溢出。
+- README、当前计划、名称库专题计划、绑定专项和 source 功能积压已同步更新；名称库待办收窄为更多对象面板入口和原版多词率 `m` 行为。
+
+验证：
+
+- Node 级摘要探针通过：`清河 / 清河 / 清清 / 星-港 / 白川|3` 识别出 `lengthOutlierSamples = 1`、`disallowedRepeatSamples = 1`、特殊字符 `-`、`weightedNameSamples = 1`、最高权重 `3`。
+- `$env:CI='true'; pnpm run build:app` 通过；`NamebasePanel` 懒加载 chunk 约 `16.32KB / gzip 5.76KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：向当前地图注入“质量烟测”用户库后，名称库详情显示“长度越界 1 个：星-港 / 连写风险 1 个：清清 / 特殊字符 - / 加权样本 1 个，最高 3x”；`glError = 0`，health 非 info 事件、console error、page error 均为 `0`，名称库面板横向溢出为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed namebase-quality-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1779.5ms`，纯生成 `805.5ms`，WebGL 加载 `592.7ms`，UI/调度余量 `381.3ms`，最慢加载阶段为“构建视觉 cell mesh” `64.6ms`，控制台错误为空。

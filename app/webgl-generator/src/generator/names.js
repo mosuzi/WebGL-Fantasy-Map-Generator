@@ -1083,11 +1083,22 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
   const lengths = uniqueValues.map(value => Array.from(value).length);
   const sampleMinLength = lengths.length ? Math.min(...lengths) : 0;
   const sampleMaxLength = lengths.length ? Math.max(...lengths) : 0;
+  const sampleMeanLength = roundNamebaseMetric(lengths.length ? lengths.reduce((sum, length) => sum + length, 0) / lengths.length : 0);
+  const sampleMedianLength = roundNamebaseMetric(medianNamebaseMetric(lengths));
   const generationOptions = normalizeNamebaseGenerationOptions(options || {}, {
     minLength: sampleMinLength || 1,
     maxLength: sampleMaxLength || 8
   });
+  const lengthOutlierNames = uniqueValues.filter(value => {
+    const length = Array.from(value).length;
+    return length < generationOptions.minLength || length > generationOptions.maxLength;
+  });
+  const disallowedRepeatNames = uniqueValues.filter(value => hasDisallowedAdjacentRepeat(Array.from(value), generationOptions.duplicateChars));
+  const doubledChars = collectNamebaseDoubledChars(uniqueValues);
+  const unusualChars = collectNamebaseUnusualChars(uniqueValues);
   const weightedSamples = Math.round(records.reduce((sum, record) => sum + record.weight, 0) * 10) / 10;
+  const weightedNameSamples = records.filter(record => record.weight !== 1).length;
+  const maxSampleWeight = records.length ? Math.max(...records.map(record => record.weight)) : 0;
   const chainDiversity = calculateNamebaseChain(records).diversity;
   const summary = {
     id,
@@ -1096,6 +1107,8 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
     category,
     samples: normalizedValues.length,
     weightedSamples,
+    weightedNameSamples,
+    maxSampleWeight,
     chainDiversity,
     uniqueSamples: uniqueValues.length,
     duplicateSamples: normalizedValues.length - uniqueValues.length,
@@ -1104,12 +1117,54 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
     maxLength: generationOptions.maxLength,
     sampleMinLength,
     sampleMaxLength,
+    sampleMeanLength,
+    sampleMedianLength,
+    lengthOutlierSamples: lengthOutlierNames.length,
+    lengthOutlierNames: lengthOutlierNames.slice(0, 12),
+    disallowedRepeatSamples: disallowedRepeatNames.length,
+    disallowedRepeatNames: disallowedRepeatNames.slice(0, 12),
+    doubledChars: doubledChars.slice(0, 12),
+    unusualChars: unusualChars.slice(0, 12),
     duplicateChars: generationOptions.duplicateChars,
     examples: uniqueValues.slice(0, 16),
     note
   };
   if (includeSource) summary.source = records.map(formatNamebaseWeightedSample).filter(Boolean);
   return summary;
+}
+
+function roundNamebaseMetric(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.round(number * 10) / 10;
+}
+
+function medianNamebaseMetric(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function collectNamebaseDoubledChars(values) {
+  const chars = new Set();
+  for (const value of values) {
+    const nameChars = Array.from(value);
+    for (let index = 1; index < nameChars.length; index += 1) {
+      if (nameChars[index] === nameChars[index - 1]) chars.add(nameChars[index]);
+    }
+  }
+  return [...chars];
+}
+
+function collectNamebaseUnusualChars(values) {
+  const chars = new Set();
+  for (const value of values) {
+    for (const char of Array.from(value)) {
+      if (!/[\p{Letter}\p{Number}]/u.test(char)) chars.add(char);
+    }
+  }
+  return [...chars];
 }
 
 function cultureStyleLabel(style) {

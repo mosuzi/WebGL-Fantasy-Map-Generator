@@ -232,14 +232,14 @@ const bindingCompatibleKinds = Object.freeze({
 });
 
 const columns = Object.freeze([
-  {key: "category", label: "分类"},
-  {key: "origin", label: "来源"},
-  {key: "name", label: "名称"},
-  {key: "kind", label: "类型"},
-  {key: "samples", label: "样本", align: "right", format: value => formatNumber(value)},
-  {key: "duplicateSamples", label: "重复", align: "right", format: value => formatNumber(value)},
-  {key: "lengthRange", label: "长度"},
-  {key: "bindingUsageLabel", label: "绑定"}
+  {key: "category", label: "分类", width: 76},
+  {key: "origin", label: "来源", width: 60},
+  {key: "name", label: "名称", width: 112},
+  {key: "kind", label: "类型", width: 76},
+  {key: "samples", label: "样本", width: 60, align: "right", format: value => formatNumber(value)},
+  {key: "duplicateSamples", label: "重复", width: 60, align: "right", format: value => formatNumber(value)},
+  {key: "lengthRange", label: "长度", width: 60},
+  {key: "bindingUsageLabel", label: "绑定", width: 108}
 ]);
 
 const rows = computed(() => {
@@ -299,6 +299,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.kind},
   {label: "样本数", value: formatNumber(selected.value.samples)},
   {label: "样本权重", value: formatWeight(selected.value.weightedSamples)},
+  {label: "加权样本", value: selected.value.weightedNameSamplesLabel},
   {label: "链路多样性", value: formatWeight(selected.value.chainDiversity)},
   {label: "唯一样本", value: formatNumber(selected.value.uniqueSamples)},
   {label: "重复样本", value: formatNumber(selected.value.duplicateSamples)},
@@ -306,6 +307,11 @@ const detailRows = computed(() => selected.value ? [
   {label: "绑定状态", value: selected.value.bindingUsageLabel},
   {label: "生成长度", value: `${formatNumber(selected.value.minLength)}-${formatNumber(selected.value.maxLength)}字`},
   {label: "样本长度", value: `${formatNumber(selected.value.sampleMinLength)}-${formatNumber(selected.value.sampleMaxLength)}字`},
+  {label: "平均长度", value: `${formatWeight(selected.value.sampleMeanLength)}字`},
+  {label: "中位长度", value: `${formatWeight(selected.value.sampleMedianLength)}字`},
+  {label: "长度越界", value: selected.value.lengthOutlierLabel},
+  {label: "连写风险", value: selected.value.repeatRiskLabel},
+  {label: "特殊字符", value: selected.value.unusualCharsLabel},
   {label: "允许连写", value: selected.value.duplicateChars || "无"},
   {label: "说明", value: selected.value.note || "内置词池"}
 ] : []);
@@ -318,6 +324,11 @@ function toRow(summary) {
     lengthRange: `${summary.minLength}-${summary.maxLength}`,
     examplesLabel: examples.length ? examples.join("、") : "无样例",
     duplicateLabel: duplicateNames.length ? duplicateNames.join("、") : "",
+    weightedNameSamplesLabel: weightedNameSamplesLabel(summary),
+    lengthOutlierLabel: listDiagnosticLabel(summary.lengthOutlierSamples, summary.lengthOutlierNames),
+    repeatRiskLabel: repeatRiskLabel(summary),
+    unusualCharsLabel: (summary.unusualChars || []).length ? summary.unusualChars.join("、") : "无",
+    doubledCharsLabel: (summary.doubledChars || []).length ? summary.doubledChars.join("、") : "无",
     qualityLabel: qualityLabel(summary)
   };
 }
@@ -325,11 +336,34 @@ function toRow(summary) {
 function qualityLabel(summary) {
   const samples = summary.samples || 0;
   if (samples < 30) return "样本偏少";
+  if ((summary.lengthOutlierSamples || 0) > 0) return "长度需校准";
+  if ((summary.disallowedRepeatSamples || 0) > 0) return "连写需校准";
+  if ((summary.unusualChars || []).length) return "含特殊字符";
   if (samples < 100) return "样本可用";
   if (samples > 400) return "样本过多";
   if ((summary.chainDiversity || 0) < 1.35) return "链路偏窄";
   if ((summary.duplicateSamples || 0) > 0) return "有重复样本";
   return "样本充足";
+}
+
+function weightedNameSamplesLabel(summary) {
+  const count = summary.weightedNameSamples || 0;
+  if (!count) return "无";
+  return `${formatNumber(count)}个，最高 ${formatWeight(summary.maxSampleWeight || 1)}x`;
+}
+
+function listDiagnosticLabel(count, examples = []) {
+  if (!count) return "无";
+  const suffix = examples.length ? `：${examples.join("、")}` : "";
+  return `${formatNumber(count)}个${suffix}`;
+}
+
+function repeatRiskLabel(summary) {
+  const disallowed = summary.disallowedRepeatSamples || 0;
+  if (disallowed) return listDiagnosticLabel(disallowed, summary.disallowedRepeatNames || []);
+  const doubledChars = summary.doubledChars || [];
+  if (doubledChars.length) return `已允许：${doubledChars.join("、")}`;
+  return "无";
 }
 
 function isUserNamebaseRow(row) {
@@ -349,7 +383,12 @@ function filterRows(sourceRows, filter) {
     row.qualityLabel,
     row.bindingUsageLabel,
     row.examplesLabel,
-    row.duplicateLabel
+    row.duplicateLabel,
+    row.lengthOutlierLabel,
+    row.repeatRiskLabel,
+    row.unusualCharsLabel,
+    row.doubledCharsLabel,
+    row.weightedNameSamplesLabel
   ].some(value => String(value || "").toLowerCase().includes(query)));
 }
 
