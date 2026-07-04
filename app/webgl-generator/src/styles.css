@@ -789,6 +789,14 @@ select:disabled {
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.42));
 }
 
+.measurement-object-point {
+  fill: rgba(139, 199, 224, 0.86);
+  pointer-events: none;
+  stroke: rgba(237, 246, 249, 0.88);
+  stroke-width: 1.8;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.48));
+}
+
 .measurement-point {
   fill: #111a20;
   cursor: grab;
@@ -2842,7 +2850,7 @@ select:disabled {
 
 .project-file-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 8px;
   padding-top: 10px;
   border-top: 1px solid rgba(189, 206, 213, 0.12);

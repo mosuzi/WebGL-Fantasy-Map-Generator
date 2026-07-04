@@ -109,6 +109,11 @@ export function bindRuntimePanel(documentRef, handlers) {
     if (file) handlers.onImportMapData?.(file);
     event.target.value = "";
   });
+  documentRef.getElementById("import-geo-file")?.addEventListener("change", event => {
+    const file = event.target.files?.[0];
+    if (file) handlers.onImportGeoData?.(file);
+    event.target.value = "";
+  });
   documentRef.addEventListener("heightmap-import-apply", event => {
     const file = event.detail?.file;
     if (file) handlers.onImportHeightmapImage?.(event.detail);

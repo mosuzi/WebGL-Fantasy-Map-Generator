@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：GEO 数据导入第一刀
+
+用户临时要求新增从 GEO 数据导入的能力。本轮收敛为最小可用的外部参考层导入：读取 GeoJSON 后按当前地图 `mapCoordinates` 反投影到世界坐标，并保存为可撤销的测量对象，而不是重写生成地图本体。
+
+完成内容：
+
+- 简介页本地文件操作新增“导入 GEO 数据”，支持 `.geojson / .json`。
+- `parseGeoJsonMeasurements()` 支持 `FeatureCollection / Feature / Geometry` 以及 `Point / MultiPoint / LineString / MultiLineString / Polygon / MultiPolygon / GeometryCollection`。
+- 导入结果写入 `map.measurements.items`，点、线、面分别保持为 `point / polyline / polygon`，并接入 `EditHistory`，可撤销。
+- 保存测量对象 overlay 补充点对象绘制，导入后自动显示测量图层、刷新测量面板并定位首个导入对象。
+- 新增 `pnpm run regress:geo`，用生产构建导入点 / 线 / 面 fixture，验证反投影、测量图层显示、overlay 绘制和 WebGL error。
+
+验证：
+
+- `node --check` 覆盖 `map-file-io.js`、`measurement-objects.js`、`measurement-edit-commands.js`、`app.js`、`panel.js` 和 `webgl-generator-geo-import-regression.mjs`，均通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `pnpm run regress:geo -- --port 5440` 通过：fixture `3` 个 Feature，导入 `3` 个测量对象，overlay 为点 `1`、线 `2`、面 `1`，WebGL error 为 `0`。
+- `pnpm run regress:measurement -- --port 5438` 通过：既有测量保存 / 导出 / 导入仍保持 `roads / none` 两类 routeFit 和显示点补全。
+- `node .\tools\webgl-generator-e2e-profile.mjs --label geo-import-e2e --scenario continents --cells 10000 --port 5441 --out .\docs\generated\reports\e2e-profile-geo-import-results.json --markdown .\docs\generated\reports\e2e-profile-geo-import-results.md` 通过：点击到出图 `1503.8ms`，纯生成 `790.3ms`，WebGL 加载 `377.1ms`，`glError = 0`。
+
 ## 2026-07-04：overlay profile 交互采样口径修正
 
 继续按 overlay 与动态线层性能专项推进。河流 idle commit 分帧后，100k profile 仍显示滚轮 frame p95 偏高；复查脚本发现 `profileZoom()` / `profilePan()` 在帧记录器运行期间，每个滚轮或拖动采样点都会跨进页面执行完整 `readStats()`，其中包含 renderer `getStats()`、DOM query 和跨进程序列化，可能把工具自身成本计入用户交互帧。同时动态构建统计会把进入交互前已经存在的缓存 `routeBuildMs / riverBuildMs` 误算成交互期间构建。

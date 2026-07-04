@@ -37,14 +37,14 @@ import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
+import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
 import {createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
-import {createDeleteMeasurementCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
+import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
@@ -1532,6 +1532,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onExportGeoJson: () => exportGeoJson(state, documentRef),
     onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef),
     onImportMapData: file => importMapData(state, documentRef, file),
+    onImportGeoData: file => importGeoData(state, documentRef, file),
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload),
     onRegenerate: kind => {
       updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
@@ -2611,6 +2612,53 @@ async function importMapData(state, documentRef, file) {
   }
 }
 
+async function importGeoData(state, documentRef, file) {
+  if (!file) return;
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导入 GEO 数据...");
+    const payload = parseGeoJsonMeasurements(await file.text(), state.map, {limit: 600});
+    const command = createImportMeasurementsCommand(payload.measurements, {label: "导入 GEO 测量对象"});
+    if (command.isNoop({map: state.map})) {
+      setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
+      return null;
+    }
+    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+    const imported = command.getImported?.() || [];
+    state.measurement.points = [];
+    state.measurement.editingMeasurementId = null;
+    state.measurement.active = false;
+    if (state.renderer?.layerVisibility?.measurements === false) {
+      state.renderer.setLayerVisible("measurements", true);
+      syncMeasurementLayerControl(documentRef, true);
+    }
+    updateMeasurementOverlay(state, documentRef);
+    updateMeasurementPanel(state);
+    const selected = imported[0];
+    if (selected) {
+      state.panels.measurement?.setSelectedMeasurementId?.(selected.id);
+      state.panels.measurement?.open(state.map, state.editHistory.getStats());
+      locateMeasurement(state, {...selected, pointCount: selected.points?.length || 0}, documentRef);
+    }
+    setFileOperationStatus(documentRef, `GEO 数据已导入为 ${imported.length} 个测量对象，可撤销；来源 Feature ${payload.featureCount} 个。`);
+    return imported;
+  } catch (error) {
+    reportFileOperationError(documentRef, "GEO 数据导入失败", error);
+    return null;
+  }
+}
+
+function syncMeasurementLayerControl(documentRef, visible) {
+  const control = documentRef.querySelector('[data-layer="measurements"]');
+  if (!control) return;
+  if (control.tagName === "BUTTON") {
+    control.setAttribute("aria-pressed", visible ? "true" : "false");
+    control.classList.toggle("active", visible);
+    return;
+  }
+  if ("checked" in control) control.checked = visible;
+}
+
 async function importHeightmapImage(state, documentRef, payload) {
   const {file, settings} = normalizeHeightmapImportPayload(payload, documentRef);
   if (!file) return;
@@ -3453,7 +3501,7 @@ function visibleSavedMeasurements(state) {
   if (state.renderer?.layerVisibility?.measurements === false) return [];
   const editingId = state.measurement.active ? state.measurement.editingMeasurementId : null;
   return (state.map?.measurements?.items || [])
-    .filter(item => item?.id !== editingId && Array.isArray(item?.points) && item.points.length >= 2);
+    .filter(item => item?.id !== editingId && Array.isArray(item?.points) && item.points.length >= 1);
 }
 
 function appendSavedMeasurementShapes(documentRef, svg, state, measurements, rect) {
@@ -3461,6 +3509,18 @@ function appendSavedMeasurementShapes(documentRef, svg, state, measurements, rec
   for (const item of measurements) {
     const displayPoints = measurementDisplayPoints(item, state.map);
     const screenPoints = displayPoints.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+    if (screenPoints.length === 1 || item.type === "point") {
+      const point = screenPoints[0];
+      if (!point) continue;
+      const circle = documentRef.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("class", "measurement-object-point");
+      circle.dataset.measurementObject = String(item.id || "");
+      circle.setAttribute("cx", roundMeasurementDisplay(point.x));
+      circle.setAttribute("cy", roundMeasurementDisplay(point.y));
+      circle.setAttribute("r", "4.8");
+      svg.append(circle);
+      continue;
+    }
     if (screenPoints.length >= 3 && normalizeMeasurementRouteFit(item.routeFit) !== MEASUREMENT_ROUTE_FIT_ROADS && (item.closed || item.type === "polygon")) {
       const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
       polygon.setAttribute("class", "measurement-object-area");
@@ -3680,7 +3740,7 @@ function saveCurrentMeasurement(state, documentRef) {
 
 function startMeasurementObjectEdit(state, row, documentRef) {
   const item = findMeasurement(state.map, row.id);
-  if (!item || !Array.isArray(item.points) || item.points.length < 2) return;
+  if (!item || !Array.isArray(item.points) || item.points.length < 1) return;
   cancelMeasurementDrag(state, documentRef);
   state.measurement.editingMeasurementId = item.id;
   state.measurement.points = item.points.map((point, index) => ({

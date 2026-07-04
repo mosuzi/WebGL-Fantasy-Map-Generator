@@ -32,6 +32,8 @@
           </div>
           <UiButton class="file-import-action" variant="secondary" @click="triggerFileInput('import-map-file')">导入地图数据</UiButton>
           <input id="import-map-file" type="file" accept=".json,application/json" hidden />
+          <UiButton class="file-import-action" variant="secondary" @click="triggerFileInput('import-geo-file')">导入 GEO 数据</UiButton>
+          <input id="import-geo-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden />
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
       </section>

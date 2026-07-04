@@ -33,7 +33,7 @@ export function createMeasurementFromPoints(map, points, {name = "", routeFit = 
   const now = new Date().toISOString();
   const normalizedPoints = normalizeMeasurementPoints(points, map);
   const measurementRouteFit = normalizeMeasurementRouteFit(routeFit);
-  const type = measurementRouteFit === "roads" || normalizedPoints.length < 3 ? "polyline" : "polygon";
+  const type = measurementTypeForPoints(normalizedPoints, {routeFit: measurementRouteFit});
   return normalizeMeasurementItem({
     id: `measurement-${idNumber}`,
     type,
@@ -50,7 +50,7 @@ export function normalizeMeasurementItem(item, map) {
   const sourcePoints = Array.isArray(item?.points) ? item.points : [];
   const points = normalizeMeasurementPoints(sourcePoints, map);
   const routeFit = normalizeMeasurementRouteFit(item?.routeFit);
-  const type = routeFit === "roads" ? "polyline" : item?.type === "polygon" || item?.closed ? "polygon" : "polyline";
+  const type = measurementTypeForPoints(points, item, routeFit);
   const now = new Date().toISOString();
   const normalized = {
     id: String(item?.id || ""),
@@ -74,6 +74,15 @@ export function normalizeMeasurementItem(item, map) {
     areaMapUnits: roundMeasurementValue(area)
   };
   return normalized;
+}
+
+function measurementTypeForPoints(points, item = {}, routeFit = item.routeFit) {
+  const normalizedRouteFit = normalizeMeasurementRouteFit(routeFit);
+  if (normalizedRouteFit === "roads") return "polyline";
+  if (item?.type === "point" || points.length === 1) return "point";
+  if (item?.type === "polyline") return "polyline";
+  if (item?.type === "polygon" || item?.closed) return "polygon";
+  return points.length >= 3 ? "polygon" : "polyline";
 }
 
 export function measurementDisplayPoints(item, map = null) {

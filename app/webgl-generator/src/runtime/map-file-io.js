@@ -46,6 +46,30 @@ export function parseMapDocument(text) {
   return document;
 }
 
+export function parseGeoJsonMeasurements(text, map, options = {}) {
+  const document = JSON.parse(text);
+  const features = geoJsonFeatures(document);
+  if (!features.length) throw new Error("GEO 数据中没有可导入的 GeoJSON Feature");
+  const measurements = [];
+  const limit = Math.max(1, Number(options.limit) || 500);
+  let convertedFeatureCount = 0;
+  for (const feature of features) {
+    if (measurements.length >= limit) break;
+    const featureMeasurements = measurementsFromFeature(feature, map, limit - measurements.length);
+    if (featureMeasurements.length) convertedFeatureCount += 1;
+    measurements.push(...featureMeasurements);
+  }
+  if (!measurements.length) throw new Error("GEO 数据中没有可转换为测量对象的几何");
+  return {
+    type: "webgl-generator-geo-measurements-import",
+    sourceType: document?.type || "FeatureCollection",
+    featureCount: features.length,
+    importedCount: measurements.length,
+    skippedCount: Math.max(0, features.length - convertedFeatureCount),
+    measurements
+  };
+}
+
 export function createMapGeoJson(map) {
   if (!map) throw new Error("当前没有可导出的地图");
   const cells = map.pack?.cells;
@@ -196,6 +220,122 @@ function projectWorldPoint(point, map) {
   const lon = lonW + (x / width) * (lonE - lonW);
   const lat = latN + (y / height) * (latS - latN);
   return [roundCoordinate(lon), roundCoordinate(lat)];
+}
+
+function unprojectGeoPoint(coordinate, map) {
+  if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+  const lon = Number(coordinate[0]);
+  const lat = Number(coordinate[1]);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  const width = Math.max(1, Number(map.metadata?.graphWidth) || Number(map.options?.graphWidth) || 1);
+  const height = Math.max(1, Number(map.metadata?.graphHeight) || Number(map.options?.graphHeight) || 1);
+  const coordinates = map.mapCoordinates || {};
+  const lonW = Number.isFinite(Number(coordinates.lonW)) ? Number(coordinates.lonW) : 0;
+  const lonE = Number.isFinite(Number(coordinates.lonE)) ? Number(coordinates.lonE) : width;
+  const latN = Number.isFinite(Number(coordinates.latN)) ? Number(coordinates.latN) : 0;
+  const latS = Number.isFinite(Number(coordinates.latS)) ? Number(coordinates.latS) : height;
+  const xRatio = lonE === lonW ? 0 : (lon - lonW) / (lonE - lonW);
+  const yRatio = latS === latN ? 0 : (lat - latN) / (latS - latN);
+  const x = clampWorldCoordinate(xRatio * width, width);
+  const y = clampWorldCoordinate(yRatio * height, height);
+  return {x: roundMeasurementImportValue(x), y: roundMeasurementImportValue(y)};
+}
+
+function geoJsonFeatures(document) {
+  if (document?.type === "FeatureCollection") return Array.isArray(document.features) ? document.features : [];
+  if (document?.type === "Feature") return [document];
+  if (document?.type && document?.coordinates) return [{type: "Feature", properties: {}, geometry: document}];
+  return [];
+}
+
+function measurementsFromFeature(feature, map, limit) {
+  const geometry = feature?.geometry;
+  if (!geometry || limit <= 0) return [];
+  const properties = feature.properties && typeof feature.properties === "object" ? feature.properties : {};
+  const baseName = geoFeatureName(feature, properties);
+  return measurementsFromGeometry(geometry, map, baseName, limit);
+}
+
+function measurementsFromGeometry(geometry, map, baseName, limit) {
+  if (!geometry || limit <= 0) return [];
+  const type = geometry.type;
+  const coordinates = geometry.coordinates;
+  if (type === "GeometryCollection") {
+    const geometries = Array.isArray(geometry.geometries) ? geometry.geometries : [];
+    return geometries.flatMap((item, index) => measurementsFromGeometry(item, map, `${baseName} ${index + 1}`, limit)).slice(0, limit);
+  }
+  if (type === "Point") return pointMeasurement(coordinates, map, baseName);
+  if (type === "MultiPoint") return (Array.isArray(coordinates) ? coordinates : []).flatMap((point, index) => pointMeasurement(point, map, `${baseName} 点 ${index + 1}`)).slice(0, limit);
+  if (type === "LineString") return lineMeasurement(coordinates, map, baseName);
+  if (type === "MultiLineString") return (Array.isArray(coordinates) ? coordinates : []).flatMap((line, index) => lineMeasurement(line, map, `${baseName} 线 ${index + 1}`)).slice(0, limit);
+  if (type === "Polygon") return polygonMeasurement(coordinates, map, baseName);
+  if (type === "MultiPolygon") return (Array.isArray(coordinates) ? coordinates : []).flatMap((polygon, index) => polygonMeasurement(polygon, map, `${baseName} 面 ${index + 1}`)).slice(0, limit);
+  return [];
+}
+
+function pointMeasurement(coordinates, map, name) {
+  const point = unprojectGeoPoint(coordinates, map);
+  if (!point) return [];
+  return [{
+    type: "point",
+    name,
+    points: [point],
+    closed: false,
+    routeFit: "none"
+  }];
+}
+
+function lineMeasurement(coordinates, map, name) {
+  const points = coordinatesToMeasurementPoints(coordinates, map);
+  if (points.length < 2) return [];
+  return [{
+    type: "polyline",
+    name,
+    points,
+    closed: false,
+    routeFit: "none"
+  }];
+}
+
+function polygonMeasurement(rings, map, name) {
+  const outerRing = Array.isArray(rings) ? rings[0] : [];
+  const points = coordinatesToMeasurementPoints(outerRing, map);
+  if (points.length < 3) return [];
+  return [{
+    type: "polygon",
+    name,
+    points: dropClosingPoint(points),
+    closed: true,
+    routeFit: "none"
+  }];
+}
+
+function coordinatesToMeasurementPoints(coordinates, map) {
+  return (Array.isArray(coordinates) ? coordinates : [])
+    .map(point => unprojectGeoPoint(point, map))
+    .filter(Boolean);
+}
+
+function dropClosingPoint(points) {
+  if (points.length < 2) return points;
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (first.x !== last.x || first.y !== last.y) return points;
+  return points.slice(0, -1);
+}
+
+function geoFeatureName(feature, properties) {
+  return String(properties.name || properties.NAME || properties.title || feature.id || "GEO 要素").trim().slice(0, 60) || "GEO 要素";
+}
+
+function clampWorldCoordinate(value, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(max, number));
+}
+
+function roundMeasurementImportValue(value) {
+  return Math.round(Number(value || 0) * 1000) / 1000;
 }
 
 function normalizeFeatureLayerOptions(layers = {}) {

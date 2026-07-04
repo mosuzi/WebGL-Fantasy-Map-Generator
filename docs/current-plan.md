@@ -52,21 +52,26 @@
 - 军事管理工具条空间已放宽：顶部 `军团数据 / 战报档案` 工具组不再把组标题和按钮挤在同一行，按钮行最小列宽提升到 `112px`；战报记录筛选区的清理按钮不再被压进右侧 `190px` 窄栏，而是独占下一行按可用宽度排列。`military-toolbar-space-smoke / deep / continents / 10000` 中军事顶部工具条最小按钮宽从约 `103.6px` 提升到 `125.6px`，战报清理按钮最小宽从 `92px` 提升到 `333px`，无横向溢出；e2e 守门 `military-toolbar-space-e2e` 通过，WebGL 加载 `443.9ms`、`drawMs = 0`、`glError = 0`。
 - 河流 idle commit 分帧恢复已完成：100k 复查确认交互期间 route / river 构建仍为 `0ms`，同步 overlay p95 约 `7.2ms`，滚轮长任务不能继续归因于 DOM overlay 或动态线层即时重建；真正可控成本在停止输入后的 idle commit。河流 screen-space mesh 现在和路线一样走异步分片构建，`river-idle-async-100k-final / full / 100000` 通过，滚轮 idle frame p95 `35.7ms`、拖动 idle frame p95 `18.1ms`，idle long task 为 `0`，dirty 均恢复 clean；10k e2e `river-idle-async-e2e` 通过，WebGL 加载 `511.6ms`、`drawMs = 0.1`、`glError = 0`。
 - overlay profile 交互采样口径已修正：`profile:overlay` 不再在每次滚轮 / 拖动采样时跨进页面执行完整 `readStats()`，而是在浏览器端 rAF 录制器里采集轻量快照，避免工具自身的 `getStats()` / DOM query / 序列化成本被算进用户交互帧；动态构建列也改为只统计采样期间发生变化的 build 值，不再把进入交互前的缓存 `routeBuildMs / riverBuildMs` 误记为交互期重建。`overlay-browser-sampled-100k-final / full / 100000` 通过，交互期 route / river 构建 p95 均为 `0`，滚轮 overlay p95 `7.6ms`，idle long task 为 `0`；10k e2e `overlay-profile-sampling-e2e` 通过，WebGL 加载 `397.8ms`、`drawMs = 0.1`、`glError = 0`。
+- GEO 数据导入第一刀已完成：简介页新增“导入 GEO 数据”，支持 GeoJSON `FeatureCollection / Feature / Geometry` 的 `Point / MultiPoint / LineString / MultiLineString / Polygon / MultiPolygon / GeometryCollection`，按当前地图 `mapCoordinates` 反投影为保存的测量对象；导入结果可撤销，会自动显示测量图层并定位首个对象。该能力只作为外部 GEO 参考层，不重写生成地图本体、不改国家 / 城市 / 河流等核心数据。`regress:geo` 通过，点 / 线 / 面 overlay 均绘制，WebGL error 为 `0`；测量导入回归和 10k e2e 守门均通过。
 
 ### 当前执行队列
 
 下面是继续推进时的真实顺序。每一刀完成后都要按改动类型做对应验证，确认没有加载或绘制卡顿回退，再单独提交。
 
-1. **面板空间策略专项**：
+1. **地图低饱和配色校准**：
+   - 按用户提供截图，把默认地图视觉从高饱和强色块向柔和、低饱和、浅粉 / 浅青 / 浅黄 / 浅绿 / 浅紫国家色和灰蓝海面靠拢。
+   - 优先调整生成色板、海洋 / 海岸 / 政治色混合和相关渲染默认值；不改变地图生成语义、国家归属、图层结构或导出数据格式。
+   - 完成后需要至少跑构建和 10k e2e 守门，必要时补截图或视觉 smoke，确认加载 / 绘制没有回退。
+2. **面板空间策略专项**：
    - 目标不是继续把内容硬塞进既有窄列，而是让面板按信息量合理占空间：能放宽面板就放宽，需要换行就换行，详情长字段可跨整行，列表可横向滚动。
    - 已修经济面板控制栏三列硬挤导致的三段切换折行、经济总览详情裸字段、军事战报摘要固定 6 窄列、军事导入导出 / 战报清理工具条偏紧、政体导出按钮过窄和资源标记工具条 `min 76px` 偏紧；工具按钮组审计已能量化各工具条。继续优先复查固定小列宽、过度 `white-space: nowrap`、`minmax(0, 1fr)` 强挤和备注 / 长名称区域。
    - 第一优先级是军事管理面板、事件链摘要、导入导出工具条和二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
    - 审计脚本已覆盖控制面板 tab、主要浮动面板和 deep 场景下的首个二级编辑区；后续若继续发现真实折行，再扩充重要字段省略号、异常多行折断和详情最小项宽规则。
-2. **overlay 与动态线层性能专项**：
+3. **overlay 与动态线层性能专项**：
    - `profile:overlay` 已补 idle commit 指标和 `measurement-heavy / selection-heavy` 重场景；viewport idle commit 分帧第一刀仍保留，但“视口交互中隐藏 DOM overlay”的策略已取消，当前行为是同步刷新覆盖层。
    - 100k 复查已确认滚轮长任务不由 route / river 即时构建、WebGL draw、renderer 记录到的 overlay 分项或旧 profile 跨进程采样主导；河流 idle commit 已分帧，profile 采样口径已修正。后续如果继续性能专项，优先复查滚轮事件处理链、浏览器样式 / layout 成本、CSS 触发的重排，或补更细的事件处理耗时探针；若证据继续指向路线 idle commit、选中态或 overlay 更新，再做路线更细分片、选中 mesh 分帧、过期 commit 取消增强、视口分块或缓存。
    - 若证据指向测量 SVG、多对象选中态或极端标签数量，再单独治理对应 overlay；不默认把标签、城市剪影、marker 或军事图标迁到 WebGL。
-3. **source/candidate 剩余 warn 只读跟踪**：
+4. **source/candidate 剩余 warn 只读跟踪**：
    - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。
    - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 

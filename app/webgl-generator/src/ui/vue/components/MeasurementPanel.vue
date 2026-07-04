@@ -149,7 +149,7 @@ function measurementRows(map) {
         id: String(item.id),
         name: item.name || item.id,
         type: item.type || (item.closed ? "polygon" : "polyline"),
-        typeLabel: item.closed || item.type === "polygon" ? "面积" : "折线",
+        typeLabel: item.type === "point" ? "点" : item.closed || item.type === "polygon" ? "面积" : "折线",
         routeFit,
         routeFitLabel: routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? "贴路" : "自由",
         cellStops,

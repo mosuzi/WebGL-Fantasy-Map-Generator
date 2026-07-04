@@ -90,7 +90,7 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
       const item = readMeasurement(context.map, measurementId);
       const normalizedPoints = normalizeMeasurementPoints(points, context.map);
       const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
-      const type = nextRouteFit === "roads" || normalizedPoints.length < 3 ? "polyline" : "polygon";
+      const type = measurementTypeForPoints(normalizedPoints, item, nextRouteFit);
       Object.assign(item, normalizeMeasurementItem({
         ...item,
         type,
@@ -110,7 +110,7 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
       const normalizedPoints = normalizeMeasurementPoints(points, context.map);
       const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
       const normalizedCellStops = nextRouteFit === "roads" ? normalizeMeasurementCellStops([], points, normalizedPoints) : [];
-      return normalizedPoints.length < 2
+      return normalizedPoints.length < 1
         || (sameMeasurementPoints(item.points, normalizedPoints) && item.routeFit === nextRouteFit && sameMeasurementCellStops(item.cellStops, normalizedCellStops));
     }
   };
@@ -140,6 +140,46 @@ export function createDeleteMeasurementCommand(measurementId, {label = "删除�
   };
 }
 
+export function createImportMeasurementsCommand(measurements, {label = "导入测量对象"} = {}) {
+  let previous = null;
+  let imported = [];
+
+  return {
+    label,
+    effects: {
+      ...MEASUREMENT_EFFECTS,
+      affected: []
+    },
+    apply(context) {
+      previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
+      const store = ensureMeasurementStore(context.map);
+      imported = [];
+      for (const source of measurements || []) {
+        const item = normalizeMeasurementItem({
+          ...source,
+          id: nextImportedMeasurementId(store),
+          createdAt: source.createdAt || new Date().toISOString(),
+          updatedAt: source.updatedAt || source.createdAt || new Date().toISOString()
+        }, context.map);
+        if (!item.points.length) continue;
+        store.items.push(JSON.parse(JSON.stringify(item)));
+        imported.push(item);
+      }
+      refreshMeasurementsMetadata(store);
+      this.effects.affected = imported.map(item => ({kind: "measurement", id: item.id}));
+    },
+    revert(context) {
+      restoreMeasurementStore(context.map, previous);
+    },
+    isNoop(context) {
+      return !context.map || !Array.isArray(measurements) || !measurements.some(item => Array.isArray(item?.points) && item.points.length);
+    },
+    getImported() {
+      return imported.map(item => JSON.parse(JSON.stringify(item)));
+    }
+  };
+}
+
 function readMeasurement(map, measurementId) {
   const item = findMeasurement(map, measurementId);
   if (!item) throw new Error(`找不到测量对象 ${measurementId}`);
@@ -158,4 +198,20 @@ function sameMeasurementPoints(a = [], b = []) {
 function sameMeasurementCellStops(a = [], b = []) {
   if ((a || []).length !== (b || []).length) return false;
   return (a || []).every((stop, index) => JSON.stringify(stop || null) === JSON.stringify(b[index] || null));
+}
+
+function measurementTypeForPoints(points, item = {}, routeFit = item.routeFit) {
+  const normalizedRouteFit = normalizeMeasurementRouteFit(routeFit);
+  if (normalizedRouteFit === "roads") return "polyline";
+  if (item?.type === "point" || points.length === 1) return "point";
+  if (item?.type === "polyline") return "polyline";
+  if (item?.type === "polygon" || item?.closed) return "polygon";
+  return points.length >= 3 ? "polygon" : "polyline";
+}
+
+function nextImportedMeasurementId(store) {
+  refreshMeasurementsMetadata(store);
+  const nextId = Math.max(1, Number(store.metadata?.nextId) || 1);
+  store.metadata.nextId = nextId + 1;
+  return `measurement-${nextId}`;
 }
