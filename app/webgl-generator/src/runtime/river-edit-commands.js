@@ -1,6 +1,7 @@
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
+import {createChineseNameGenerator} from "../generator/names.js";
 
 const RIVER_NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -8,6 +9,14 @@ const RIVER_NOTE_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["object-panels"])
+});
+
+const RIVER_NAME_BATCH_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-name", "labels", "object-panels"])
 });
 
 export function createSetRiverWidthFactorCommand(riverId, nextValue) {
@@ -88,8 +97,76 @@ export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {
   };
 }
 
+export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名称库重命名河流"} = {}) {
+  const targets = uniqueRiverIds(riverIds);
+  let changes = null;
+
+  return {
+    label: `${label} ${targets.length} 条`,
+    effects: {
+      ...RIVER_NAME_BATCH_EFFECTS,
+      affected: targets.map(id => ({kind: OBJECT_KIND.RIVER, id}))
+    },
+    apply(context) {
+      changes ??= buildRiverRenameChanges(context.map, targets);
+      if (!changes.length) throw new Error("没有可重命名的河流");
+      for (const change of changes) writeRiverName(context.map, change.id, change.afterName);
+    },
+    revert(context) {
+      if (!changes) throw new Error("缺少可撤销的河流名称快照");
+      for (const change of changes) writeRiverName(context.map, change.id, change.beforeName);
+    },
+    isNoop(context) {
+      return !targets.length || !buildRiverRenameChanges(context.map, targets).length;
+    },
+    getResult() {
+      return {renamed: changes?.length || 0, total: targets.length};
+    }
+  };
+}
+
 function findRiver(map, riverId) {
   return map?.rivers?.rivers?.find(river => river.id === riverId) || null;
+}
+
+function buildRiverRenameChanges(map, riverIds) {
+  const rivers = map?.rivers?.rivers || [];
+  if (!rivers.length) return [];
+  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|explicit-river-rename|${map.metadata?.checksum || ""}`, {namebases: map.namebases});
+  const changes = [];
+  for (const id of riverIds) {
+    const river = findRiver(map, id);
+    if (!river) continue;
+    const afterName = generator.makeRiverName(riverNameOptions(map, river));
+    const beforeName = river.name || "";
+    if (!afterName || afterName === beforeName) continue;
+    changes.push({id, beforeName, afterName});
+  }
+  return changes;
+}
+
+function riverNameOptions(map, river) {
+  const source = Number.isInteger(river.source) ? river.source : river.cells?.[0];
+  const cultureId = Number.isInteger(source) ? map?.pack?.cells?.culture?.[source] || 0 : 0;
+  const culture = map?.pack?.cultures?.[cultureId] || map?.society?.cultures?.[cultureId];
+  return {
+    id: river.id,
+    cell: source,
+    culture: cultureId,
+    cultureType: culture?.nameStyle || culture?.type,
+    flux: river.discharge || river.flux,
+    type: river.parent ? "branch" : "river"
+  };
+}
+
+function writeRiverName(map, riverId, name) {
+  const river = findRiver(map, riverId);
+  if (!river) throw new Error(`找不到河流 #${riverId}`);
+  river.name = name;
+}
+
+function uniqueRiverIds(riverIds) {
+  return [...new Set((riverIds || []).map(id => Number(id)).filter(id => Number.isInteger(id) && id >= 0))];
 }
 
 function normalizeWidthFactor(value) {

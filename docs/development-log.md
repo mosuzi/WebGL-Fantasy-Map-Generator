@@ -17559,3 +17559,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`CityPanel` 懒加载 chunk 约 `12.41KB / gzip 4.58KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入 `place = smoke-place` 测试名称库后，城市面板点击“按名称库重命名筛选”，821 个城市被显式重命名；点击城市面板“撤销上次”后前 5 个城市恢复原名，再重做后恢复新名。整个过程 `generationTiming.totalMs` 保持 `691.1ms` 不变，`glError = 0`，page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1713.8ms`，纯生成 `761ms`，WebGL 加载 `605.3ms`，最慢加载阶段为“构建线层顶点” `103.2ms`，结果仍在守门阈值内。
+
+### 名称库河流显式重命名第一刀
+
+背景：
+
+- 名称库显式重命名已经覆盖城市筛选结果，下一步需要把同一套“用户主动触发、可撤销、不自动批量改名”的语义扩展到水文对象。
+- 用户再次校准：无需做动态军事系统；本轮继续只推进名称库静态编辑能力，不触碰军事战役、战报自动推进或战争行动链路。
+
+修正：
+
+- `river-edit-commands.js` 新增 `createRenameRiversFromNamebaseCommand()`，接收河流 id 列表，按当前 `map.namebases` 的全局/文化 `hydro` 绑定生成新河流名。
+- 命令进入 `EditHistory`，撤销/重做只恢复 `river.name`；不重建水文、河网、路线或军事相关数据。
+- 河流管理面板新增“按名称库重命名筛选”按钮，只作用于当前筛选结果。
+- README、当前计划、名称库专题计划、绑定专项和 source 功能积压已同步更新，并继续明确军事方向只保留静态收尾。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`RiverPanel` 懒加载 chunk 约 `5.66KB / gzip 2.47KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入 `hydro = smoke-hydro` 测试名称库后，河流面板点击“按名称库重命名筛选”，204 条河流被显式重命名；撤销后前 8 条河流恢复原名，再重做后恢复新名。整个过程 `generationTiming.totalMs` 保持 `745ms` 不变，`glError = 0`，page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1452.6ms`，纯生成 `712.1ms`，WebGL 加载 `513.4ms`，最慢加载阶段为“构建道路屏幕 mesh” `57.3ms`，结果仍在守门阈值内。

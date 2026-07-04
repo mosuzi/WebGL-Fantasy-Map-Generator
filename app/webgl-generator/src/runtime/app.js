@@ -49,7 +49,7 @@ import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvince
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
-import {createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
+import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
@@ -1159,6 +1159,19 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createRenameObjectCommand(object, name);
       if (!command.isNoop(context)) {
         refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onRenameVisibleFromNamebase: riverIds => {
+      const context = {map: state.map};
+      const command = createRenameRiversFromNamebaseCommand(riverIds);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+        const result = command.getResult?.();
+        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 条河流。`);
+      } else {
+        setFileOperationStatus(documentRef, "当前筛选河流没有可按名称库更新的名称。");
       }
       state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
       updateEditingInteractionLock(state, documentRef);
