@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：下拉选项 is-hovering 白底修正
+
+用户指出 Element Plus 下拉框中鼠标从选项移出下拉框时，保留高亮状态的选项会变成白色。复查 Element Plus 本地 theme-chalk CSS 后确认 Select 选项状态不仅有 `:hover` / `.hover`，还会保留 `.is-hovering`；此前只覆盖了部分状态，导致鼠标离开后 `.is-hovering` 继续读取默认 `--el-fill-color-light`，在截图中的选项上露出浅色背景。
+
+完成内容：
+
+- `ui-select-popper` 和通用 `.el-select__popper` 增加局部 Element Plus CSS 变量：`--el-fill-color-light`、`--el-fill-color-blank`、`--el-bg-color-overlay`、`--el-color-primary` 等统一改为暗色 / 暗金。
+- 下拉选项基础态强制透明背景；`.hover`、`.is-hovering`、`:hover` 统一为暗色 hover 背景。
+- `.is-selected` 以及 selected + hover / is-hovering / :hover 组合统一为暗金渐变，避免选中项或保留 hover 项回落到默认浅色。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测打开下拉后悬停第二项，再把鼠标移出 popper：离开后该项仍保留 `.is-hovering`，但背景为 `rgb(27, 43, 51)`，未出现亮色背景；选中项背景为暗金渐变，popper 背景为 `rgba(12, 18, 22, 0.98)`。
+- e2e 守门 `select-hover-style-e2e / continents / 10000` 通过：点击到出图 `1547ms`，纯生成 `851.1ms`，WebGL 加载 `416.6ms`，最慢加载阶段为“构建标签” `65.7ms`。
+
 ## 2026-07-04：输入框双层和下拉面板暗色修正
 
 用户指出输入框看起来像两层：Element Plus 自身已有清除图标，但内层输入又露出浏览器原生清除按钮 / 内层边框，外层 focus 后也有白色边框；同时下拉框弹出面板颜色不符合暗色界面。
