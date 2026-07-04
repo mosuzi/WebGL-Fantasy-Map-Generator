@@ -17782,3 +17782,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：图层页 8 行首列 left 均为 `365`，管理页 10 行首列 left 均为 `365`；三点测量保存为 `测量 1` 后，测量对象面板可打开、导出、删除并撤销恢复，临时点清空为 `0`；数字调节按钮可见边线为深色，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-object-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1544.4ms`，纯生成 `684.4ms`，WebGL 加载 `498.4ms`，UI/调度余量 `361.6ms`，最慢加载阶段为“构建视觉 cell mesh” `63.9ms`，`line-vertices = 47.8ms`，`drawMs = 0.1ms`，`glError = 0`。
+
+### 保存测量对象图层化第一刀
+
+背景：
+
+- 保存测量对象已经进入 `map.measurements.items`，但退出测量工具后无法在地图上看到保存对象。
+- 测量专项计划的阶段 2 要求先做“测量”图层显隐，再进入已保存对象节点编辑。
+- 本轮只做保存对象只读显示，不把测量对象加入 WebGL line buffer，避免增加加载阶段和线层顶点成本。
+
+修正：
+
+- 控制面板图层页新增“测量”开关，renderer 默认 `layerVisibility.measurements = true`，并复用现有图层偏好保存链路。
+- `updateMeasurementOverlay()` 改为在“临时测量激活”或“测量图层开启且存在保存对象”时显示 overlay。
+- 保存对象使用蓝色虚线和淡色面片绘制到原测量 SVG；临时测量仍使用金色路径和可拖拽控制点。
+- 退出测量工具后 readout 会隐藏，只保留保存对象图形；关闭“测量”图层时图形消失，但 `map.measurements.items` 保持不变。
+- 删除、重命名、撤销和重做测量对象后同步刷新测量 overlay，避免 SVG 旧对象残留。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：保存三点测量并退出工具后，`.measurement-object-path = 1`、`.measurement-object-area = 1`、readout hidden；关闭“测量”图层后 `stored = 1`、`overlayHidden = true`，重新开启后对象图形恢复，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-layer-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1312.3ms`，纯生成 `714.4ms`，WebGL 加载 `373ms`，UI/调度余量 `224.9ms`，最慢加载阶段为“构建线层顶点” `75.4ms`，`drawMs = 0.1ms`，`glError = 0`。

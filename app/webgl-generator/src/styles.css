@@ -690,6 +690,23 @@ select:disabled {
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
 }
 
+.measurement-object-area {
+  fill: rgba(98, 171, 216, 0.12);
+  stroke: rgba(139, 199, 224, 0.34);
+  stroke-width: 1.4;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.34));
+}
+
+.measurement-object-path {
+  fill: none;
+  stroke: rgba(139, 199, 224, 0.82);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+  stroke-dasharray: 7 5;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.42));
+}
+
 .measurement-point {
   fill: #111a20;
   cursor: grab;

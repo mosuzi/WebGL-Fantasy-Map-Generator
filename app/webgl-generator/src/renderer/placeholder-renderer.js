@@ -196,6 +196,7 @@ export class PlaceholderMapRenderer {
       resources: true,
       military: true,
       warFronts: true,
+      measurements: true,
       scaleBar: true,
       coastline: true,
       lakeShore: true,

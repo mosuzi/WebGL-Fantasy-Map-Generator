@@ -1176,12 +1176,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createRenameMeasurementCommand(measurementId, name);
       if (!command.isNoop(context)) refreshAfterEdit(state, state.editHistory.execute(command, context));
       updateMeasurementPanel(state);
+      updateMeasurementOverlay(state, documentRef);
     },
     onDelete: row => {
       const context = {map: state.map};
       const command = createDeleteMeasurementCommand(row.id);
       if (!command.isNoop(context)) refreshAfterEdit(state, state.editHistory.execute(command, context));
       updateMeasurementPanel(state);
+      updateMeasurementOverlay(state, documentRef);
       setFileOperationStatus(documentRef, `已删除测量对象 ${row.name || row.id}。`);
     },
     onExport: rows => {
@@ -1191,11 +1193,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterEdit(state, command);
       updateMeasurementPanel(state);
+      updateMeasurementOverlay(state, documentRef);
     },
     onRedo: () => {
       const command = state.editHistory.redo({map: state.map});
       if (command) refreshAfterEdit(state, command);
       updateMeasurementPanel(state);
+      updateMeasurementOverlay(state, documentRef);
     }
   });
   state.panels.measurement = measurementPanel;
@@ -1416,6 +1420,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       measureHealthOperation(state, "set-layer-visible", {layer, visible}, () => {
         renderer.setLayerVisible(layer, visible);
         updateRuntimePanel(documentRef, state);
+        if (layer === "measurements") updateMeasurementOverlay(state, documentRef);
       });
     },
     onOpenGenerationPanel: () => {
@@ -3319,6 +3324,7 @@ function bindMeasurementTool(canvas, state, documentRef) {
 function updateMeasurementOverlay(state, documentRef) {
   const overlay = documentRef.getElementById("measurement-overlay");
   const svg = documentRef.getElementById("measurement-svg");
+  const readout = documentRef.getElementById("measurement-readout");
   const summary = documentRef.getElementById("measurement-summary");
   const clear = documentRef.getElementById("measurement-clear");
   const undo = documentRef.getElementById("measurement-undo");
@@ -3326,24 +3332,30 @@ function updateMeasurementOverlay(state, documentRef) {
   const saveButton = documentRef.getElementById("measurement-save");
   const toggle = documentRef.getElementById("toggle-measurement");
   const canvas = documentRef.getElementById("map-canvas");
-  if (!overlay || !svg || !summary || !clear || !undo || !exportButton || !saveButton || !toggle || !canvas) return;
+  if (!overlay || !svg || !readout || !summary || !clear || !undo || !exportButton || !saveButton || !toggle || !canvas) return;
 
   const active = Boolean(state.measurement.active);
   const points = state.measurement.points || [];
+  const savedMeasurements = visibleSavedMeasurements(state);
+  const showOverlay = active || savedMeasurements.length > 0;
   documentRef.body.classList.toggle("measurement-active", active);
   toggle.classList.toggle("active", active);
   toggle.setAttribute("aria-pressed", active ? "true" : "false");
   toggle.textContent = active ? "退出测量" : "测量";
-  overlay.hidden = !active;
+  overlay.hidden = !showOverlay;
+  readout.hidden = !active;
   clear.disabled = points.length === 0;
   undo.disabled = points.length === 0;
   exportButton.disabled = points.length === 0;
   saveButton.disabled = points.length < 2 || !state.map;
   svg.replaceChildren();
-  if (!active) return;
+  if (!showOverlay) return;
 
   const rect = canvas.getBoundingClientRect();
   svg.setAttribute("viewBox", `0 0 ${Math.max(1, rect.width)} ${Math.max(1, rect.height)}`);
+  appendSavedMeasurementShapes(documentRef, svg, state, savedMeasurements, rect);
+  if (!active) return;
+
   const screenPoints = points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
   if (screenPoints.length >= 3) {
     const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
@@ -3381,6 +3393,30 @@ function updateMeasurementOverlay(state, documentRef) {
   const distance = measurementDistance(points);
   const area = points.length >= 3 ? measurementArea(points) : 0;
   summary.textContent = measurementSummary(points.length, distance, area, units);
+}
+
+function visibleSavedMeasurements(state) {
+  if (state.renderer?.layerVisibility?.measurements === false) return [];
+  return (state.map?.measurements?.items || []).filter(item => Array.isArray(item?.points) && item.points.length >= 2);
+}
+
+function appendSavedMeasurementShapes(documentRef, svg, state, measurements, rect) {
+  if (!measurements.length || !state.renderer) return;
+  for (const item of measurements) {
+    const screenPoints = item.points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
+    if (screenPoints.length >= 3 && (item.closed || item.type === "polygon")) {
+      const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      polygon.setAttribute("class", "measurement-object-area");
+      polygon.dataset.measurementObject = String(item.id || "");
+      polygon.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
+      svg.append(polygon);
+    }
+    const polyline = documentRef.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    polyline.setAttribute("class", "measurement-object-path");
+    polyline.dataset.measurementObject = String(item.id || "");
+    polyline.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
+    svg.append(polyline);
+  }
 }
 
 function undoMeasurementPoint(state, documentRef) {

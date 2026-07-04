@@ -479,6 +479,7 @@ const layers = Object.freeze([
   {id: "markers", label: "标记"},
   {id: "military", label: "军事"},
   {id: "warFronts", label: "战线"},
+  {id: "measurements", label: "测量"},
   {id: "scaleBar", label: "比例尺"},
   {id: "labels", label: "城市标签"},
   {id: "stateLabels", label: "国家名称"},
