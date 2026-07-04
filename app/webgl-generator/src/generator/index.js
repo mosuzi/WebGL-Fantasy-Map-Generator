@@ -216,13 +216,13 @@ export function createGenerationSummary(options, grid, features, climate, societ
 }
 
 function createPalette(random) {
-  const oceanShift = random.range(-0.03, 0.04);
-  const landShift = random.range(-0.04, 0.05);
+  const oceanShift = random.range(-0.025, 0.035);
+  const landShift = random.range(-0.025, 0.035);
   return {
-    background: [0.07, 0.13, 0.18, 1],
-    ocean: [round(0.12 + oceanShift, 4), round(0.33 + oceanShift, 4), round(0.52 + oceanShift, 4), 1],
-    land: [round(0.46 + landShift, 4), round(0.55 + landShift, 4), round(0.35 + landShift, 4), 1],
-    highland: [round(0.7 + landShift, 4), round(0.66 + landShift, 4), round(0.52 + landShift, 4), 1]
+    background: [0.36, 0.49, 0.64, 1],
+    ocean: [round(0.42 + oceanShift, 4), round(0.55 + oceanShift, 4), round(0.7 + oceanShift, 4), 1],
+    land: [round(0.58 + landShift, 4), round(0.64 + landShift, 4), round(0.48 + landShift, 4), 1],
+    highland: [round(0.72 + landShift, 4), round(0.7 + landShift, 4), round(0.6 + landShift, 4), 1]
   };
 }
 

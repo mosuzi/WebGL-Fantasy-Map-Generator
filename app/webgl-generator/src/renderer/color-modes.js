@@ -26,17 +26,17 @@ export function isLandCell(cellIndex, map) {
 
 export function colorForHeight(height, layers, viewOptions = {}) {
   if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, layers) : layers.ocean;
-  if (height < 36) return mix([0.33, 0.52, 0.32, 1], [0.52, 0.61, 0.38, 1], (height - 20) / 16);
-  if (height < 56) return mix([0.52, 0.61, 0.38, 1], [0.64, 0.6, 0.43, 1], (height - 36) / 20);
-  if (height < 76) return mix([0.64, 0.6, 0.43, 1], [0.7, 0.66, 0.54, 1], (height - 56) / 20);
-  if (height < 92) return mix([0.7, 0.66, 0.54, 1], [0.77, 0.75, 0.68, 1], (height - 76) / 16);
-  return mix([0.77, 0.75, 0.68, 1], [0.83, 0.82, 0.78, 1], Math.min(1, (height - 92) / 8));
+  if (height < 36) return mix([0.5, 0.63, 0.46, 1], [0.62, 0.68, 0.5, 1], (height - 20) / 16);
+  if (height < 56) return mix([0.62, 0.68, 0.5, 1], [0.7, 0.67, 0.54, 1], (height - 36) / 20);
+  if (height < 76) return mix([0.7, 0.67, 0.54, 1], [0.75, 0.71, 0.62, 1], (height - 56) / 20);
+  if (height < 92) return mix([0.75, 0.71, 0.62, 1], [0.81, 0.79, 0.72, 1], (height - 76) / 16);
+  return mix([0.81, 0.79, 0.72, 1], [0.87, 0.86, 0.82, 1], Math.min(1, (height - 92) / 8));
 }
 
 function colorForOceanHeight(height, layers) {
   const t = Math.max(0, Math.min(1, height / 20));
-  const deep = mix(layers.ocean, [0.01, 0.04, 0.14, 1], 0.72);
-  const shelf = mix(layers.ocean, [0.38, 0.68, 0.82, 1], 0.42);
+  const deep = mix(layers.ocean, [0.25, 0.37, 0.54, 1], 0.58);
+  const shelf = mix(layers.ocean, [0.62, 0.75, 0.84, 1], 0.46);
   return mix(deep, shelf, t ** 0.75);
 }
 
@@ -56,7 +56,7 @@ function colorForBiome(biomeId, map) {
 
 export function colorForState(stateId, map) {
   if (stateId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!stateId) return [0.58, 0.6, 0.58, 1];
+  if (!stateId) return [0.7, 0.72, 0.68, 1];
   return hexToRgba(map.politics.states[stateId]?.color) || indexedColor(stateId, 0.12);
 }
 
@@ -87,14 +87,14 @@ function diplomacySubjectId(map, preferredId) {
 }
 
 export const GOVERNMENT_FAMILY_LEGEND = Object.freeze({
-  autocracy: {label: "专制集权", color: "#c24238"},
-  monarchy: {label: "君主系", color: "#d18c38"},
-  republic: {label: "共和系", color: "#4094a8"},
-  league: {label: "联盟系", color: "#75ad57"},
-  theocracy: {label: "神权系", color: "#9475c7"},
-  oligarchy: {label: "寡头系", color: "#9e8570"},
-  military: {label: "军政系", color: "#6b757f"},
-  unknown: {label: "未归类", color: "#949994"}
+  autocracy: {label: "专制集权", color: "#d98f86"},
+  monarchy: {label: "君主系", color: "#e5bf82"},
+  republic: {label: "共和系", color: "#91c9d2"},
+  league: {label: "联盟系", color: "#acd38e"},
+  theocracy: {label: "神权系", color: "#bda8db"},
+  oligarchy: {label: "寡头系", color: "#c4ad99"},
+  military: {label: "军政系", color: "#a3abb1"},
+  unknown: {label: "未归类", color: "#b4b9b4"}
 });
 
 function colorForCulture(cultureId, map) {
@@ -109,7 +109,7 @@ function colorForReligion(religionId, map) {
 
 export function colorForProvince(provinceId, map) {
   if (provinceId < 0) return mix(map.layers.ocean, [0.05, 0.08, 0.1, 1], 0.3);
-  if (!provinceId) return [0.58, 0.6, 0.58, 1];
+  if (!provinceId) return [0.7, 0.72, 0.68, 1];
   return hexToRgba(map.politics.provinces[provinceId]?.color) || indexedColor(provinceId, 0.46);
 }
 
@@ -121,7 +121,7 @@ function colorForPopulation(population, map) {
 
 function indexedColor(index, offset) {
   const hue = (index * 0.61803398875 + offset) % 1;
-  return hslToRgb(hue, 0.42, 0.56);
+  return hslToRgb(hue, 0.26, 0.74);
 }
 
 function indexedColorOrWater(index, offset, waterColor) {

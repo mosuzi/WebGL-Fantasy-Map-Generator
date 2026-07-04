@@ -11,11 +11,11 @@ const STATE_CARDINAL_PREFIXES = ["东", "西", "南", "北"];
 const STATE_NEUTRAL_VARIANT_PREFIXES = ["新", "古", "上", "中"];
 const BIOME_COST = [10, 200, 150, 60, 50, 70, 70, 80, 90, 200, 1000, 5000, 150];
 const STATE_COLOR_PALETTE = [
-  "#5b8ff9", "#f4664a", "#5ad8a6", "#ff99c3", "#f6bd16", "#6dc8ec",
-  "#945fb9", "#ff8f3d", "#269a99", "#d64d8b", "#7ac943", "#6b6ecf",
-  "#c76f32", "#3d9970", "#bc5090", "#9c755f", "#2f6f9f", "#e07b91",
-  "#8e9a21", "#855c75", "#4c78a8", "#f58518", "#54a24b", "#b279a2",
-  "#e45756", "#72b7b2", "#ffb000", "#7f7f7f", "#a0cbe8", "#ff9da6"
+  "#c7d1e8", "#e8bdc9", "#bdddc8", "#ead6b2", "#d0c8e3", "#c9e0e4",
+  "#e8c0b8", "#d3dfb8", "#dfc1d5", "#c5d8bc", "#cbd8e9", "#efd1b5",
+  "#c4ddd5", "#dfd0b5", "#d5c9de", "#e3c2bd", "#d3dfb8", "#c5d6dc",
+  "#dcc8b7", "#cac5d6", "#ebc8d8", "#c9dde2", "#dfe0b9", "#d0dbc3",
+  "#d6c6b2", "#cad5e7", "#e2c5b8", "#c6dacb", "#dac6d5", "#d0d4bf"
 ];
 
 export function buildPolitics(grid, features, society, rivers, random, options, pack) {

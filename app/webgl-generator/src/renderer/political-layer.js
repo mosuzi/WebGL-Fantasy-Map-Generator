@@ -10,7 +10,7 @@ export const STATE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 7,
   smoothing: Object.freeze({iterations: 1, factor: 0.18}),
   borderWidthWorld: 0.36,
-  borderStroke: Object.freeze([0.03, 0.035, 0.04, 0.5]),
+  borderStroke: Object.freeze([0.36, 0.34, 0.3, 0.34]),
   meshAlpha: 0.72,
   colorForValue: colorForState
 });
@@ -19,7 +19,7 @@ export const PROVINCE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 4,
   smoothing: Object.freeze({iterations: 1, factor: 0.14}),
   borderWidthWorld: 0.24,
-  borderStroke: Object.freeze([0.08, 0.09, 0.1, 0.32]),
+  borderStroke: Object.freeze([0.45, 0.43, 0.38, 0.22]),
   meshAlpha: 0.68,
   colorForValue: colorForProvince
 });

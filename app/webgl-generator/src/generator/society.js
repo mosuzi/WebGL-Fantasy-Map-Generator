@@ -637,8 +637,8 @@ function createPackReligionName({root, culture, form, type, stateId}) {
 
 function createReligionColor(cultureId, type) {
   const hue = (cultureId * 47 + (type === "Heresy" ? 25 : type === "Cult" ? 320 : type === "Organized" ? 12 : 0)) % 360;
-  const saturation = type === "Folk" ? 48 : type === "Cult" ? 54 : type === "Heresy" ? 50 : 58;
-  const lightness = type === "Folk" ? 48 : type === "Cult" ? 38 : type === "Heresy" ? 43 : 45;
+  const saturation = type === "Folk" ? 34 : type === "Cult" ? 38 : type === "Heresy" ? 36 : 40;
+  const lightness = type === "Folk" ? 66 : type === "Cult" ? 58 : type === "Heresy" ? 61 : 63;
   return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
 

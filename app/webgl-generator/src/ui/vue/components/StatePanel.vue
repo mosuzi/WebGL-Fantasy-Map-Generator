@@ -422,7 +422,7 @@ function normalizeHexColor(color) {
 
 function fallbackStateColor(stateId) {
   const hue = ((Number(stateId) || 0) * 0.61803398875 + 0.12) % 1;
-  const [r, g, b] = hslToRgb(hue, 0.42, 0.56);
+  const [r, g, b] = hslToRgb(hue, 0.26, 0.74);
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 

@@ -2777,7 +2777,7 @@ function emptyRiverWidthStats() {
 
 function riverRenderColor(river) {
   const width = Math.min(1, Math.max(0, (river.width || 0) / 8));
-  return mix([0.18, 0.45, 0.78, 0.95], [0.34, 0.68, 0.96, 1], width);
+  return mix([0.36, 0.58, 0.72, 0.82], [0.56, 0.74, 0.82, 0.9], width);
 }
 
 function buildTradeFlowMeshVertices(map, camera, canvas) {
@@ -3111,9 +3111,9 @@ function emptyRouteRenderStats() {
 }
 
 function routeStyle(route) {
-  if (route.level === "primary") return {color: [0.68, 0.49, 0.24, 1], width: 3.8};
-  if (route.level === "secondary") return {color: [0.58, 0.42, 0.24, 0.98], width: 2.8};
-  return {color: [0.45, 0.35, 0.22, 0.94], width: 2.1, dash: [9, 6]};
+  if (route.level === "primary") return {color: [0.56, 0.47, 0.34, 0.88], width: 3.6};
+  if (route.level === "secondary") return {color: [0.5, 0.43, 0.33, 0.8], width: 2.6};
+  return {color: [0.43, 0.38, 0.31, 0.72], width: 2, dash: [9, 6]};
 }
 
 function buildPointVertices(map, visibility = {}) {

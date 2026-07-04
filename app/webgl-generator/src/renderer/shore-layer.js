@@ -26,8 +26,8 @@ export const SHORE_VISUAL_STYLE = Object.freeze({
   smoothing: Object.freeze({iterations: 2, factor: 0.22}),
   coastlineWidthWorld: 0.42,
   lakeShoreWidthWorld: 0.34,
-  coastlineStroke: Object.freeze([0.88, 0.84, 0.63, 0.68]),
-  lakeShoreStroke: Object.freeze([0.58, 0.78, 0.84, 0.64])
+  coastlineStroke: Object.freeze([0.7, 0.76, 0.78, 0.58]),
+  lakeShoreStroke: Object.freeze([0.62, 0.76, 0.8, 0.54])
 });
 
 export function boundaryLineModeForOptions(viewOptions, cellVisualMesh) {

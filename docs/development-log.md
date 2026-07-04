@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：地图低饱和配色第一刀
+
+用户提供参考截图，指出当前地图颜色饱和度过高。本轮只调整默认视觉配色，目标是让国家面、海面、海岸、边界、道路和河流更接近柔和的低饱和纸面地图；不改变生成语义、国家归属、图层结构或导出数据。
+
+完成内容：
+
+- `STATE_COLOR_PALETTE` 从高饱和蓝 / 红 / 绿 / 紫色板改为灰粉彩色板，保留相邻国家避色逻辑。
+- `createPalette()` 的背景和海面改为灰蓝，降低随机偏移幅度；自然高度色和海底高度渐变同步降饱和、提亮。
+- 政体图例、文化 / 宗教 / 国家 / 省份 fallback 色改为更浅、更灰的 HSL 参数。
+- 海岸线、湖岸线、国家边界、省份边界、道路和河流线条同步降低饱和度和对比度，减少强橙、亮蓝和黑硬边。
+- 构建产物视觉 smoke 保存截图：`docs/generated/screenshots/palette-soft-states.png`。
+
+验证：
+
+- `node --check` 覆盖 `politics.js`、`index.js`、`society.js`、`color-modes.js`、`placeholder-renderer.js`、`political-layer.js`、`shore-layer.js`，均通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物视觉 smoke：国家视图 `colorMode = states`，国家色平均 HSL 饱和度 `0.394`，最高 `0.644`，海面色约 `[0.4053, 0.5353, 0.6853, 1]`，WebGL error 为 `0`，无 console error。
+- e2e 守门 `soft-palette-e2e / continents / 10000` 通过：点击到出图 `1506.3ms`，纯生成 `817.9ms`，WebGL 加载 `384ms`，`glError = 0`。
+
 ## 2026-07-04：GEO 数据导入第一刀
 
 用户临时要求新增从 GEO 数据导入的能力。本轮收敛为最小可用的外部参考层导入：读取 GeoJSON 后按当前地图 `mapCoordinates` 反投影到世界坐标，并保存为可撤销的测量对象，而不是重写生成地图本体。

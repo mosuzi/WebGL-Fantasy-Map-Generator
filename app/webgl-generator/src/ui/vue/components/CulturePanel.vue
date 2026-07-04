@@ -414,7 +414,7 @@ function normalizeHexColor(color) {
 
 function fallbackCultureColor(cultureId) {
   const hue = ((Number(cultureId) || 0) * 0.61803398875 + 0.31) % 1;
-  const [r, g, b] = hslToRgb(hue, 0.42, 0.56);
+  const [r, g, b] = hslToRgb(hue, 0.26, 0.74);
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 

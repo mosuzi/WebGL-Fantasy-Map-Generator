@@ -342,7 +342,7 @@ function normalizeHexColor(color) {
 
 function fallbackProvinceColor(provinceId) {
   const hue = ((Number(provinceId) || 0) * 0.61803398875 + 0.3) % 1;
-  const [r, g, b] = hslToRgb(hue, 0.38, 0.58);
+  const [r, g, b] = hslToRgb(hue, 0.24, 0.75);
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
