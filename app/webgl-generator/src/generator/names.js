@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {K170_BURG_NAMES} from "./namebase-k170-burgs.js";
 
 // 词素策略参考 zoningjs@3.2024.0 的县级以上中文地名韵脚，并保留项目内可 seed 的轻量词池。
 const PLACE_STEMS = [
@@ -328,6 +329,7 @@ const FIELD_TINCTURES = ["#b94b4b", "#3d6f9e", "#4f7f52", "#a47a35", "#6e579b", 
 const METAL_TINCTURES = ["#f0d889", "#e8e4d6", "#d8b56d", "#f3efe1"];
 const HYDRO_NAME_SUFFIXES = [...new Set([...WATER_SUFFIXES, ...LAKE_SUFFIXES, "溪", "水", "河", "江", "川"])];
 const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null, minLength: 1, maxLength: 8, duplicateChars: ""});
+const K170_BURG_NAMEBASE = Object.freeze({source: K170_BURG_NAMES, minLength: 1, maxLength: 6});
 
 const BUILTIN_NAMEBASE_SOURCES = {
   "ancient-state-roots": ANCIENT_STATE_ROOTS,
@@ -341,6 +343,7 @@ const BUILTIN_NAMEBASE_SOURCES = {
   "state-forms-hunting": STATE_FORMS.Hunting,
   "state-forms-desert": STATE_FORMS.Desert,
   "place-stems": PLACE_STEMS,
+  "k170-burg-names": K170_BURG_NAMEBASE,
   "chinese-first-chars": CHINESE_FIRST_CHARS,
   "chinese-second-chars": CHINESE_SECOND_CHARS,
   "port-stems": CHINESE_PORT_STEMS,
@@ -490,6 +493,7 @@ export function getBuiltinNamebaseSummaries({includeSource = false} = {}) {
     analyzeNamebase("state-forms-hunting", "林猎国家形制", "state-form", "国家形制", STATE_FORMS.Hunting, "林猎文化国家形制", {includeSource}),
     analyzeNamebase("province-forms", "省份形制", "province-form", "政区形制", PROVINCE_FORMS, "省份、州郡和地方行政名称后缀", {includeSource}),
     analyzeNamebase("place-stems", "中文地名词干", "place", "城镇地名", PLACE_STEMS, "主要城镇、地域和标签命名来源", {includeSource}),
+    analyzeNamebase("k170-burg-names", "K170 原版城镇名", "place", "城镇地名", K170_BURG_NAMES, "从用户原版 FMG Burgs CSV 提取的城镇名备选库，保留重复样本权重", {includeSource, options: K170_BURG_NAMEBASE}),
     analyzeNamebase("chinese-first-chars", "中文首字词素", "place-part", "城镇地名", CHINESE_FIRST_CHARS, "二字地名组合首字池", {includeSource}),
     analyzeNamebase("chinese-second-chars", "中文尾字词素", "place-part", "城镇地名", CHINESE_SECOND_CHARS, "二字地名组合尾字池", {includeSource}),
     analyzeNamebase("port-stems", "港口地名", "place", "城镇地名", CHINESE_PORT_STEMS, "港镇和近海城市优先词池", {includeSource}),

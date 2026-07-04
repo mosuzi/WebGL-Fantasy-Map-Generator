@@ -19052,3 +19052,24 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 构建产物样式烟测在 `620px` 宽的 `.military-event-filters` 容器中插入同结构五项，结果为 `2` 行：第一行三项各约 `202px`，第二行两项各约 `306.5px`，无横向溢出；`glError = 0`，console/page error 为空。
+
+### 2026-07-05 K170 原版城镇名称库
+
+背景：
+
+- 用户提供从原版 FMG 已绘制地图中导出的城镇数据：`C:\Users\mosuzi\Downloads\k170 Burgs 2026-07-05-01-23.csv`。
+- 需求是把这批城镇命名数据加入生成时备选库，而不是立即导入或覆盖当前地图已有城镇名称。
+
+实现：
+
+- 从 CSV 的 `Burg` 列提取城镇名，去空、去空白并检查名称库格式风险。
+- 新增 `app/webgl-generator/src/generator/namebase-k170-burgs.js`，存放 `1086` 条去重样本；重复出现的名称保留为 `名称|权重`。
+- 在 `names.js` 注册内置名称库 `k170-burg-names / K170 原版城镇名`，类型为 `place`，最小长度 `1`、最大长度 `6`。
+- 该库可通过名称库全局或文化级 `地名` 绑定参与后续生成 / 显式重命名，不自动改写当前地图对象名称。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/namebase-k170-burgs.js`、`node --check app/webgl-generator/src/generator/names.js`、`git diff --check` 通过。
+- 名称库小脚本确认内置摘要存在：`samples = 1086`，`weightedSamples = 1129`，`weightedNameSamples = 42`，`maxSampleWeight = 3`。
+- 同一脚本确认内置名称库导出包含该库，并且 `createChineseNameGenerator(seed, {bindings:{global:{place:"k170-burg-names"}}})` 会记录 `usage.place = "k170-burg-names"` 并生成地名候选。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
