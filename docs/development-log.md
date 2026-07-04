@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：二级编辑区布局审计路径修正
+
+继续推进面板空间策略专项时，复查发现 `webgl-generator-panel-layout-audit.mjs` 的二级编辑区审计实际没有打开 `UiActionDock`：一方面原脚本依赖合成 click，另一方面临时验证命令把 `--variant deep` 当作有效参数使用，但脚本真正读取的是 `--scenario deep`。
+
+完成内容：
+
+- `preparePanelDeepState()` 改为使用 Playwright locator 真实点击对象行，并等待可用 `.ui-action-dock .ui-icon-action` 出现。
+- 打开首个可用二级操作时使用真实按钮点击，并短暂等待 `.ui-secondary-action-panel` 可见。
+- 明确后续 deep 布局审计应使用 `--scenario deep --template continents`，避免无效的 `--variant deep` 让报告误判二级面板为 `none`。
+- 只修改审计工具，不改应用 UI、组件样式、地图数据或渲染逻辑。
+
+验证：
+
+- `node --check .\tools\webgl-generator-panel-layout-audit.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 面板 deep 布局审计 `secondary-panel-audit-fix-smoke / deep / continents / 10000` 通过：国家编辑、城市管理、军事管理均打开到二级“重命名”面板，未发现待复核项；点击到出图 `1633.1ms`，WebGL 加载 `375.5ms`，`drawMs = 0.1`，`glError = 0`。
+- e2e 守门 `secondary-panel-audit-fix-e2e / continents / 10000` 通过：点击到出图 `1751.4ms`，纯生成 `898.1ms`，WebGL 加载 `527.6ms`，`drawMs = 0`，`glError = 0`。
+
 ## 2026-07-04：图层滑条标签 nowrap 加固
 
 按当前面板空间策略继续推进，复查控制面板布局后发现“图层”tab 的 `城市标签上限` 滑条虽然已有 `92px` 标签列且没有溢出，但首列仍是默认 `white-space: normal`，与生成页、单位页滑条标签已经收敛到 nowrap 的策略不一致。

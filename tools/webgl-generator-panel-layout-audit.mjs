@@ -805,20 +805,30 @@ async function closeSecondaryPanels(page) {
 }
 
 async function preparePanelDeepState(page, panelId) {
-  await page.evaluate(panelId => {
-    const panel = document.querySelector(`.floating-panel[data-panel-id="${panelId}"]`);
-    const rows = [...(panel?.querySelectorAll(".object-table-row, .el-table__body-wrapper tbody tr") || [])]
-      .filter(row => row.getBoundingClientRect().width > 0 && row.getBoundingClientRect().height > 0);
-    const row = panelId === "state-panel" ? rows[1] || rows[0] : rows[0];
-    row?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
-  }, panelId);
-  await page.waitForTimeout(80);
-  await page.evaluate(panelId => {
-    const panel = document.querySelector(`.floating-panel[data-panel-id="${panelId}"]`);
-    const actions = [...(panel?.querySelectorAll(".ui-action-dock .ui-icon-action") || [])]
-      .filter(button => !button.disabled && button.getBoundingClientRect().width > 0);
-    actions[0]?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
-  }, panelId);
+  const panelSelector = `.floating-panel[data-panel-id="${panelId}"]`;
+  const rowLocator = page.locator(`${panelSelector} .object-table-row, ${panelSelector} .el-table__body-wrapper tbody tr`);
+  const actionSelector = `${panelSelector} .ui-action-dock .ui-icon-action:not([disabled]):not(.is-disabled)`;
+  const rowCount = await rowLocator.count();
+  const preferredRows = panelId === "state-panel" ? [1, 0, 2, 3, 4, 5] : [0, 1, 2];
+
+  if (rowCount) {
+    for (const rowIndex of preferredRows) {
+      if (rowIndex >= rowCount) continue;
+      const row = rowLocator.nth(rowIndex);
+      if (!(await row.isVisible().catch(() => false))) continue;
+      await row.click({timeout: 800}).catch(() => {});
+      await page.waitForTimeout(80);
+      if (await page.locator(actionSelector).first().isVisible().catch(() => false)) break;
+    }
+  } else {
+    await page.waitForTimeout(80);
+  }
+
+  const firstAction = page.locator(actionSelector).first();
+  if (await firstAction.isVisible().catch(() => false)) {
+    await firstAction.click({timeout: 800}).catch(() => {});
+    await page.waitForSelector(".ui-secondary-action-panel", {state: "visible", timeout: 800}).catch(() => {});
+  }
   await page.waitForTimeout(120);
 }
 
