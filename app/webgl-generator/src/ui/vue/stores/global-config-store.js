@@ -77,6 +77,7 @@ function layerVisibilityPatch(layer, visible) {
 
 function normalizeLayerPreferences(layers) {
   const normalized = layers && typeof layers === "object" ? {...layers} : {};
+  delete normalized.tradeFlows;
   if (Object.prototype.hasOwnProperty.call(normalized, "coastline")) normalized.lakeShore = normalized.coastline;
   return normalized;
 }

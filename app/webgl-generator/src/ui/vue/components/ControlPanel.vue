@@ -472,7 +472,6 @@ const themes = Object.freeze([
 
 const layers = Object.freeze([
   {id: "routes", label: "道路"},
-  {id: "tradeFlows", label: "贸易流", defaultVisible: false},
   {id: "rivers", label: "河流"},
   {id: "cities", label: "城市"},
   {id: "resources", label: "资源点"},

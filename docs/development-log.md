@@ -17934,3 +17934,26 @@ full 矩阵结果：
 - Vite dev server 本地预览验证：打开控制面板后，图层页 `16` 个按钮每行 left 为 `365 / 657`，管理页 `19` 个按钮除跨列“适配视图”外每行 left 为 `365 / 657`，重新生成页每行 left 为 `365 / 657`；三组按钮 computed `margin-left` 均为 `0px`。
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed button-grid-margin-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1449.5ms`，纯生成 `740.8ms`，WebGL 加载 `352.8ms`，UI/调度余量 `355.9ms`，最慢加载阶段为“构建视觉 cell mesh” `48.6ms`。
+
+### 贸易流地图图层退役
+
+背景：
+
+- 用户反馈贸易流图层同时显示大量连线会让地图过乱，不需要继续保留地图连线形态。
+- 后续贸易信息更适合独立列表面板或经济面板子视图，按国家、地区、市场、商品等条件查看，甚至可以完全不显示连线。
+- 本轮目标是收住既有地图图层，不改经济交易数据，不新做动态贸易系统。
+
+修正：
+
+- 控制面板“图层”tab 移除“贸易流”按钮。
+- Vue 全局配置 store 和 runtime 偏好应用会清除旧 `tradeFlows` 图层偏好，避免本地旧 `localStorage` 把图层重新打开。
+- renderer 新增退役地图图层兜底：外部即使调用 `setLayerVisible("tradeFlows", true)`，也会强制保持 `layerVisibility.tradeFlows = false`，并清空贸易流 WebGL buffer、构建统计和拾取项。
+- 保留经济交易数据、经济总览、`trade-flow` 对象详情和解析代码，作为后续列表/按需查询的复用基础。
+- `docs/task-notes/economy-market-trade-plan.md` 已把阶段 4 从地图可视化改为“贸易流查询与可视化”，明确不恢复全量或 top N 交易线常驻地图。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物烟测通过：旧偏好强制写入 `tradeFlows: true` 后，图层面板没有“贸易流”按钮，手动调用 `renderer.setLayerVisible("tradeFlows", true)` 后 `layerVisibility.tradeFlows = false`，`tradeFlowVertexCount = 0`，`tradeFlowPickItemCount = 0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed trade-flow-layer-retired-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1503.2ms`，纯生成 `706.7ms`，WebGL 加载 `367.7ms`，UI/调度余量 `428.8ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `118.3ms`，最慢加载阶段为“构建线层顶点” `78.4ms`，`drawMs = 0.1ms`。

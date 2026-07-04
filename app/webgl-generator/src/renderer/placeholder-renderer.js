@@ -67,6 +67,7 @@ const MAX_ROUTE_RENDER_VERTICES = 900000;
 const MAX_ROUTE_DASH_PIECES = 20000;
 const MAX_TRADE_FLOW_LINES = 180;
 const MAX_TRADE_FLOW_VERTICES = 18000;
+const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -206,7 +207,7 @@ export class PlaceholderMapRenderer {
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
     this.dynamicBuffersDirty = {
       routes: true,
-      tradeFlows: true,
+      tradeFlows: false,
       rivers: true,
       selection: true
     };
@@ -239,6 +240,8 @@ export class PlaceholderMapRenderer {
     this.routeVertexCount = 0;
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
+    this.tradeFlowBuildMs = 0;
+    this.tradeFlowRenderStats = emptyTradeFlowRenderStats();
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
@@ -303,6 +306,8 @@ export class PlaceholderMapRenderer {
     this.routeVertexCount = 0;
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
+    this.tradeFlowBuildMs = 0;
+    this.tradeFlowRenderStats = emptyTradeFlowRenderStats();
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     await stage("gpu-upload", "上传静态 GPU buffer", () => {
@@ -487,6 +492,11 @@ export class PlaceholderMapRenderer {
 
   setLayerVisible(layer, visible) {
     if (!(layer in this.layerVisibility)) return;
+    if (RETIRED_MAP_LAYERS.has(layer)) {
+      this.layerVisibility[layer] = false;
+      this.clearTradeFlowBuffer();
+      return;
+    }
     const nextVisible = Boolean(visible);
     const layers = layer === "coastline" ? ["coastline", "lakeShore"] : [layer];
     let changed = false;
@@ -728,6 +738,16 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.routes = false;
   }
 
+  clearTradeFlowBuffer() {
+    this.tradeFlowVertexCount = 0;
+    this.tradeFlowPickItems = [];
+    this.tradeFlowRenderStats = emptyTradeFlowRenderStats();
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    this.tradeFlowBuildMs = 0;
+    this.dynamicBuffersDirty.tradeFlows = false;
+  }
+
   updateTradeFlowBuffer() {
     const startedAt = performance.now();
     const {vertices, stats, pickItems} = buildTradeFlowMeshVertices(this.map, this.camera, this.canvas);
@@ -821,21 +841,21 @@ export class PlaceholderMapRenderer {
   invalidateDynamicBuffers(parts = {}) {
     if (parts.viewport) this.markViewportBuffersDirty();
     if (parts.routes) this.dynamicBuffersDirty.routes = true;
-    if (parts.tradeFlows) this.dynamicBuffersDirty.tradeFlows = true;
+    if (parts.tradeFlows) this.clearTradeFlowBuffer();
     if (parts.rivers) this.dynamicBuffersDirty.rivers = true;
     if (parts.selection) this.dynamicBuffersDirty.selection = true;
   }
 
   markViewportBuffersDirty() {
     this.dynamicBuffersDirty.routes = true;
-    this.dynamicBuffersDirty.tradeFlows = true;
+    this.dynamicBuffersDirty.tradeFlows = false;
     this.dynamicBuffersDirty.rivers = true;
     this.dynamicBuffersDirty.selection = true;
   }
 
   markAllDynamicBuffersDirty() {
     this.dynamicBuffersDirty.routes = true;
-    this.dynamicBuffersDirty.tradeFlows = true;
+    this.dynamicBuffersDirty.tradeFlows = false;
     this.dynamicBuffersDirty.rivers = true;
     this.dynamicBuffersDirty.selection = true;
   }

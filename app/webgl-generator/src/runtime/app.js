@@ -1606,6 +1606,7 @@ function firstDiplomacyStateId(map) {
 
 function normalizeLayerVisibilityPreferences(layers = {}) {
   const normalized = {...layers};
+  delete normalized.tradeFlows;
   if (Object.prototype.hasOwnProperty.call(normalized, "coastline")) normalized.lakeShore = normalized.coastline;
   return normalized;
 }
