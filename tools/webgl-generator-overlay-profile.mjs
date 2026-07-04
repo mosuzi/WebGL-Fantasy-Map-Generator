@@ -268,8 +268,10 @@ async function readStats(page) {
       visibleMilitaryIconCount: stats.visibleMilitaryIconCount || 0,
       routeBuildMs: stats.routeBuildMs || 0,
       routeVertexCount: stats.routeVertexCount || 0,
+      routeRenderStats: stats.routeRenderStats || {},
       riverBuildMs: stats.riverBuildMs || 0,
       riverVertexCount: stats.riverVertexCount || 0,
+      riverWidthStats: stats.riverWidthStats || {},
       selectionBuildMs: stats.selectionBuildMs || 0,
       selectionVertexCount: stats.selectionVertexCount || 0
     };
@@ -321,7 +323,11 @@ function summarizeCounts(samples) {
   return {
     overlayChildCount: last.overlayChildCount || 0,
     routeVertices: last.routeVertexCount || 0,
+    routeCull: last.routeRenderStats?.culledRoutes || 0,
+    routeRendered: last.routeRenderStats?.renderedRoutes || 0,
     riverVertices: last.riverVertexCount || 0,
+    riverCull: last.riverWidthStats?.culledRivers || 0,
+    riverRendered: last.riverWidthStats?.rivers || 0,
     selectionVertices: last.selectionVertexCount || 0,
     labels: {total: last.labelCount || 0, visible: last.visibleLabelCount || 0},
     cityIcons: {total: last.cityIconCount || 0, visible: last.visibleCityIconCount || 0},
@@ -394,10 +400,10 @@ function renderMarkdown(report) {
   }
   lines.push("");
   lines.push("## 动态线层分项", "");
-  lines.push("| 变体 | 场景 | route 均值 | route p95 | river 均值 | river p95 | selection 均值 | selection p95 |");
-  lines.push("|---|---|---:|---:|---:|---:|---:|---:|");
+  lines.push("| 变体 | 场景 | route 均值 | route p95 | route 渲染/筛掉 | river 均值 | river p95 | river 渲染/筛掉 | selection 均值 | selection p95 |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|");
   for (const item of report.interactions) {
-    lines.push(`| ${item.variantLabel} | ${item.label} | ${item.dynamic.routeBuildAverageMs}ms | ${item.dynamic.routeBuildP95Ms}ms | ${item.dynamic.riverBuildAverageMs}ms | ${item.dynamic.riverBuildP95Ms}ms | ${item.dynamic.selectionBuildAverageMs}ms | ${item.dynamic.selectionBuildP95Ms}ms |`);
+    lines.push(`| ${item.variantLabel} | ${item.label} | ${item.dynamic.routeBuildAverageMs}ms | ${item.dynamic.routeBuildP95Ms}ms | ${item.counts.routeRendered}/${item.counts.routeCull} | ${item.dynamic.riverBuildAverageMs}ms | ${item.dynamic.riverBuildP95Ms}ms | ${item.counts.riverRendered}/${item.counts.riverCull} | ${item.dynamic.selectionBuildAverageMs}ms | ${item.dynamic.selectionBuildP95Ms}ms |`);
   }
   if (report.failures.length) {
     lines.push("", "## 失败项", "");

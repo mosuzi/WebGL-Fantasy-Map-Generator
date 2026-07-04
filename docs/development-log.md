@@ -18092,3 +18092,30 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - `$env:CI='true'; pnpm run audit:panels -- --browser-channel chrome --cells 10000 --seed panel-layout-audit-smoke --template continents --timeout 120000 --out "$env:TEMP\fmg-panel-layout-audit-final3.json" --markdown "$env:TEMP\fmg-panel-layout-audit-final3.md"` 通过；主要面板 body 均无横向溢出，审计待复核项为 `0`，资源标记 segmented 宽 `300px`、最小项宽 `78.7px`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed panel-layout-audit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-panel-layout-audit-e2e.json" --markdown "$env:TEMP\fmg-panel-layout-audit-e2e.md"` 通过；点击到出图 `1274.3ms`，纯生成 `676.3ms`，WebGL 加载 `312.2ms`，最慢加载阶段为“构建视觉 cell mesh” `43ms`。
+
+### 路线 / 河流 viewport 粗筛第一刀
+
+背景：
+
+- overlay profile 已证明 DOM overlay 不是 100k 交互主瓶颈，路线 / 河流 screen-space 动态 mesh 才是主要耗时。
+- 已有交互降级会在拖动 / 滚轮期间暂不重建 dirty 动态线层，但静止补全时仍需要重建整张地图的路线和河流 screen mesh。
+
+修正：
+
+- 新增当前相机视口的世界范围计算，并额外加 `96px` 屏幕 margin。
+- `buildRouteMeshVertices()` / `buildRouteMeshVerticesAsync()` 在 normalize route points 后，如果整条路线 bbox 与视口范围无交集，则跳过 screen mesh 生成，并计入 `culledRoutes`。
+- `buildRiverMeshVertices()` 在计算河流宽度前先用河流 points bbox 做同样粗筛，跳过屏幕外河流，并计入 `culledRivers`。
+- `tools/webgl-generator-overlay-profile.mjs` 会把 route / river 的渲染数量与筛掉数量写入采样和 Markdown 报告，便于后续判断粗筛收益。
+
+验证：
+
+- `node --check .\app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check .\tools\webgl-generator-overlay-profile.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run profile:overlay -- --browser-channel chrome --cells 100000 --seed overlay-profile-100k --template continents --variants full,noRoutesRivers --max-frame-p95-ms 180 --max-overlay-p95-ms 70 --out "$env:TEMP\fmg-route-river-cull-overlay-final.json" --markdown "$env:TEMP\fmg-route-river-cull-overlay-final.md"` 通过；完整图层连续滚轮缩放 frame p95 `135.2ms`，路线 `742 / 434` 渲染 / 筛掉、route p95 `37.3ms`，河流 `466 / 279` 渲染 / 筛掉、river p95 `13ms`；完整图层中键拖动画布 frame p95 `41.2ms`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed route-river-cull-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-route-river-cull-e2e.json" --markdown "$env:TEMP\fmg-route-river-cull-e2e.md"` 通过；点击到出图 `1380.4ms`，纯生成 `739.6ms`，WebGL 加载 `349.5ms`，最慢加载阶段为“构建线层顶点” `59ms`。
+
+后续：
+
+- 粗筛对缩放场景有效，但拖动补全时仍会接近全量重建；若继续处理 100k 交互手感，应评估分块缓存、跨帧重建或轻量交互态线层。

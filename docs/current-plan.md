@@ -19,6 +19,7 @@
 - 面板布局宽松化第一刀已完成：共享 `UiMetricGrid / UiDetailGrid / UiSortBar` 增加基础类，summary/detail 改为按最小宽度自适应换行，表格容器允许横向滚动。构建产物审计中，文化 summary 最小项宽约 `133px`，宗教 summary 最小项宽约 `138px`，不再停留在 `80px` 级硬挤状态。
 - overlay pan/zoom profile 第一刀已完成：renderer stats 已能输出 overlay 节点数、labels / city icons / marker icons / military icons 分项耗时，`pnpm run profile:overlay` 已支持 10k / 50k / 100k 与 `full,noRoutesRivers` 变体。当前证据显示 DOM overlay 不是 100k 交互主瓶颈，路线 / 河流 screen-space 动态 mesh 才是主要耗时。
 - 视口交互动态线层降级第一刀已完成：拖动 / 滚轮期间暂不重建和绘制 dirty 的路线、河流、选中 screen mesh，停止输入约 `120ms` 后完整重建。100k 完整图层中键拖动画布 frame p95 已从约 `88.2ms` 降至 `35.3ms`，最终 idle 后 dynamic buffers 会恢复 clean。
+- 路线 / 河流 viewport 粗筛第一刀已完成：screen-space 动态 mesh 构建会按当前相机视口世界范围加 `96px` margin 跳过完全屏幕外的路线和河流，并把 `culledRoutes / culledRivers` 写入 stats 与 overlay profile 报告。100k 完整图层缩放 profile 中路线渲染 / 筛掉为 `742 / 434`，河流渲染 / 筛掉为 `466 / 279`。
 - 面板布局第二轮已修正经济 / marker 的 segmented 控件：共享 `UiSegmented` 改为可换行 grid，选中态不再依赖额外内部指示层，经济三段控件窄列时自然换行，marker 三段控件保持一行三列。
 - 面板布局自动审计第一刀已完成：新增 `pnpm run audit:panels`，可打开主要浮动面板并报告 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横滚和疑似文字溢出；当前 1280 x 820 构建产物审计未发现待复核项。资源标记面板的三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。
 
@@ -34,7 +35,7 @@
    - 第一批只修浏览器审计能复现的具体折行和窄控件，不做单个面板的大重排。
 2. **路线 / 河流动态线层后续优化**：
    - 当前证据显示 100k 交互主要瓶颈不是 DOM overlay，而是路线 / 河流 screen-space 动态 mesh。
-   - 若继续处理拖动 / 缩放手感，先做路线 / 河流 viewport 粗筛；粗筛不足再评估分块缓存或交互态轻量线层。
+   - viewport 粗筛第一刀已经完成；若继续处理拖动 / 缩放手感，应优先评估分块缓存、跨帧重建或更轻的交互态线层。
    - 不把标签、城市剪影、marker 图标或军事图标迁移到 WebGL 作为默认方案；只有 profile 证明 DOM overlay 成为主瓶颈时再讨论。
 3. **overlay profile 矩阵补全**：
    - 当前已有 10k / 50k / 100k 和 `full,noRoutesRivers` 的基础证据。

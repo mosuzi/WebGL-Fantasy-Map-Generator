@@ -2461,11 +2461,60 @@ const LINE_SMOOTHING = Object.freeze({
   riverSelection: Object.freeze({iterations: 1, factor: 0.18})
 });
 
+function viewportWorldBounds(map, camera, canvas, marginPx = 0) {
+  if (!map?.metadata || !camera || !canvas) return null;
+  const width = Math.max(1, canvas.width || canvas.clientWidth || 1);
+  const height = Math.max(1, canvas.height || canvas.clientHeight || 1);
+  const points = [
+    screenPixelToWorldPoint(map, camera, width, height, 0, 0),
+    screenPixelToWorldPoint(map, camera, width, height, width, 0),
+    screenPixelToWorldPoint(map, camera, width, height, width, height),
+    screenPixelToWorldPoint(map, camera, width, height, 0, height)
+  ];
+  const marginWorldX = (map.metadata.graphWidth / Math.max(1, width * Math.max(0.0001, camera.scale))) * marginPx;
+  const marginWorldY = (map.metadata.graphHeight / Math.max(1, height * Math.max(0.0001, camera.scale))) * marginPx;
+  return {
+    minX: Math.min(...points.map(point => point[0])) - marginWorldX,
+    maxX: Math.max(...points.map(point => point[0])) + marginWorldX,
+    minY: Math.min(...points.map(point => point[1])) - marginWorldY,
+    maxY: Math.max(...points.map(point => point[1])) + marginWorldY
+  };
+}
+
+function screenPixelToWorldPoint(map, camera, width, height, x, y) {
+  const clipX = (x / width) * 2 - 1;
+  const clipY = 1 - (y / height) * 2;
+  const ndcX = (clipX - camera.offsetX) / Math.max(0.0001, camera.scale);
+  const ndcY = (clipY - camera.offsetY) / Math.max(0.0001, camera.scale);
+  return [
+    ((ndcX + 1) / 2) * map.metadata.graphWidth,
+    ((1 - ndcY) / 2) * map.metadata.graphHeight
+  ];
+}
+
+function worldPathIntersectsBounds(points, bounds) {
+  if (!bounds || !Array.isArray(points) || points.length < 2) return true;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    if (!isWorldPoint(point)) continue;
+    minX = Math.min(minX, point[0]);
+    maxX = Math.max(maxX, point[0]);
+    minY = Math.min(minY, point[1]);
+    maxY = Math.max(maxY, point[1]);
+  }
+  if (minX === Infinity) return false;
+  return maxX >= bounds.minX && minX <= bounds.maxX && maxY >= bounds.minY && minY <= bounds.maxY;
+}
+
 function buildRiverMeshVertices(map, camera, canvas) {
   const context = createRenderContext(map, {camera, canvas});
   const vertices = [];
   const stats = {
     rivers: 0,
+    culledRivers: 0,
     segments: 0,
     minWidthPx: Infinity,
     maxWidthPx: 0,
@@ -2473,10 +2522,16 @@ function buildRiverMeshVertices(map, camera, canvas) {
     maxFlux: 0
   };
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
+  const viewportBounds = viewportWorldBounds(map, camera, canvas, 96);
 
   for (const river of map.rivers.rivers) {
-    if (!Array.isArray(river.points) || river.points.length < 2) continue;
-    const {points, widths} = getRiverRenderPath(river, map, pixelRatio, stats);
+    const sourcePoints = Array.isArray(river.points) ? river.points.filter(isWorldPoint) : [];
+    if (sourcePoints.length < 2) continue;
+    if (!worldPathIntersectsBounds(sourcePoints, viewportBounds)) {
+      stats.culledRivers++;
+      continue;
+    }
+    const {points, widths} = getRiverRenderPath(river, map, pixelRatio, stats, sourcePoints);
     if (points.length < 2) continue;
     const before = vertices.length;
     pushVariableScreenPolyline(vertices, context, points, widths, riverRenderColor(river));
@@ -2491,8 +2546,8 @@ function buildRiverMeshVertices(map, camera, canvas) {
   };
 }
 
-function getRiverRenderPath(river, map, pixelRatio, stats) {
-  const points = river.points.filter(isWorldPoint);
+function getRiverRenderPath(river, map, pixelRatio, stats, sourcePoints = null) {
+  const points = sourcePoints || river.points.filter(isWorldPoint);
   const cells = Array.isArray(river.cells) ? river.cells : [];
   const widths = [];
   let runningFlux = 0;
@@ -2550,6 +2605,7 @@ function getRiverRenderWidth(offset) {
 function normalizeRiverWidthStats(stats) {
   return {
     rivers: stats.rivers,
+    culledRivers: stats.culledRivers || 0,
     segments: stats.segments,
     minWidthPx: stats.minWidthPx === Infinity ? 0 : roundValue(stats.minWidthPx),
     maxWidthPx: roundValue(stats.maxWidthPx),
@@ -2779,6 +2835,7 @@ function createRouteMeshBuild(map, camera, canvas, selection) {
   return {
     context,
     pixelRatio,
+    viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
     selection,
     vertices: [],
     stats: emptyRouteRenderStats()
@@ -2791,6 +2848,10 @@ function pushRouteMesh(build, route) {
   const points = normalizeRouteRenderPath(route.points, build.stats);
   if (points.length < 2) {
     build.stats.skippedRoutes++;
+    return true;
+  }
+  if (!worldPathIntersectsBounds(points, build.viewportBounds)) {
+    build.stats.culledRoutes++;
     return true;
   }
   const selected = build.selection?.kind === OBJECT_KIND.ROUTE && build.selection.id === route.id;
@@ -2878,6 +2939,7 @@ function emptyRouteRenderStats() {
   return {
     routes: 0,
     renderedRoutes: 0,
+    culledRoutes: 0,
     skippedRoutes: 0,
     truncatedRoutes: 0,
     decimatedRoutes: 0,
