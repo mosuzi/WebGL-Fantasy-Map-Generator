@@ -783,6 +783,13 @@ select:disabled {
   color: #ffe0a1;
 }
 
+.measurement-readout button.active,
+.measurement-readout .el-button.active {
+  border-color: #d7a84f;
+  background: #2a2113;
+  color: #ffe0a1;
+}
+
 .measurement-readout button:disabled {
   cursor: not-allowed;
   opacity: 0.55;

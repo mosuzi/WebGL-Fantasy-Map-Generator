@@ -46,6 +46,7 @@ import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCusto
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDistance} from "./measurement-objects.js";
+import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
@@ -158,6 +159,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       points: [],
       pointer: null,
       drag: null,
+      routeFit: MEASUREMENT_ROUTE_FIT_NONE,
+      notice: "",
       editingMeasurementId: null
     },
     lastEditRefresh: null,
@@ -3265,6 +3268,7 @@ function bindMeasurementTool(canvas, state, documentRef) {
   const exportButton = documentRef.getElementById("measurement-export");
   const saveButton = documentRef.getElementById("measurement-save");
   const objectsButton = documentRef.getElementById("measurement-objects");
+  const routeFitButton = documentRef.getElementById("measurement-route-fit");
   toggle?.addEventListener("click", () => {
     state.measurement.active = !state.measurement.active;
     if (!state.measurement.active) {
@@ -3277,12 +3281,18 @@ function bindMeasurementTool(canvas, state, documentRef) {
     cancelMeasurementDrag(state, documentRef);
     state.measurement.points = [];
     state.measurement.editingMeasurementId = null;
+    state.measurement.notice = "";
     updateMeasurementOverlay(state, documentRef);
   });
   undo?.addEventListener("click", () => undoMeasurementPoint(state, documentRef));
   exportButton?.addEventListener("click", () => exportMeasurement(state, documentRef));
   saveButton?.addEventListener("click", () => saveCurrentMeasurement(state, documentRef));
   objectsButton?.addEventListener("click", () => state.panels.measurement?.open(state.map, state.editHistory.getStats()));
+  routeFitButton?.addEventListener("click", () => {
+    state.measurement.routeFit = measurementRouteFitActive(state) ? MEASUREMENT_ROUTE_FIT_NONE : MEASUREMENT_ROUTE_FIT_ROADS;
+    state.measurement.notice = "";
+    updateMeasurementOverlay(state, documentRef);
+  });
 
   canvas.addEventListener("pointerdown", event => {
     if (!state.measurement.active || event.button !== 0) return;
@@ -3313,14 +3323,15 @@ function bindMeasurementTool(canvas, state, documentRef) {
     state.measurement.pointer = null;
     releasePointer(canvas, event.pointerId);
     if (pointer.moved || !state.map || !state.renderer) return;
-    const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-    const measurementPoint = {
-      x: clampMeasurementValue(point.x, 0, state.map.metadata.graphWidth),
-      y: clampMeasurementValue(point.y, 0, state.map.metadata.graphHeight)
-    };
+    const measurementPoint = measurementPointFromPointer(state, documentRef, event);
+    if (!measurementPoint) {
+      updateMeasurementOverlay(state, documentRef);
+      return;
+    }
     const insertIndex = shouldInsertMeasurementPoint(event) ? findMeasurementInsertIndex(state, canvas, event) : -1;
     if (insertIndex >= 0) state.measurement.points.splice(insertIndex + 1, 0, measurementPoint);
     else state.measurement.points.push(measurementPoint);
+    state.measurement.notice = "";
     updateMeasurementOverlay(state, documentRef);
   }, true);
 
@@ -3341,9 +3352,10 @@ function updateMeasurementOverlay(state, documentRef) {
   const undo = documentRef.getElementById("measurement-undo");
   const exportButton = documentRef.getElementById("measurement-export");
   const saveButton = documentRef.getElementById("measurement-save");
+  const routeFitButton = documentRef.getElementById("measurement-route-fit");
   const toggle = documentRef.getElementById("toggle-measurement");
   const canvas = documentRef.getElementById("map-canvas");
-  if (!overlay || !svg || !readout || !summary || !clear || !undo || !exportButton || !saveButton || !toggle || !canvas) return;
+  if (!overlay || !svg || !readout || !summary || !clear || !undo || !exportButton || !saveButton || !routeFitButton || !toggle || !canvas) return;
 
   const active = Boolean(state.measurement.active);
   const points = state.measurement.points || [];
@@ -3354,6 +3366,10 @@ function updateMeasurementOverlay(state, documentRef) {
   toggle.setAttribute("aria-pressed", active ? "true" : "false");
   toggle.textContent = active ? "退出测量" : "测量";
   saveButton.textContent = state.measurement.editingMeasurementId ? "保存修改" : "保存";
+  routeFitButton.classList.toggle("active", measurementRouteFitActive(state));
+  routeFitButton.setAttribute("aria-pressed", measurementRouteFitActive(state) ? "true" : "false");
+  routeFitButton.textContent = measurementRouteFitActive(state) ? "贴路" : "自由";
+  routeFitButton.title = measurementRouteFitActive(state) ? "点击道路附近添加测量点" : "自由折线测量";
   overlay.hidden = !showOverlay;
   readout.hidden = !active;
   clear.disabled = points.length === 0;
@@ -3404,7 +3420,8 @@ function updateMeasurementOverlay(state, documentRef) {
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
   const distance = measurementDistance(points);
   const area = points.length >= 3 ? measurementArea(points) : 0;
-  summary.textContent = measurementSummary(points.length, distance, area, units, editingMeasurementLabel(state));
+  const notice = state.measurement.notice ? `${state.measurement.notice} / ` : "";
+  summary.textContent = `${notice}${measurementSummary(points.length, distance, area, units, editingMeasurementLabel(state))}`;
 }
 
 function visibleSavedMeasurements(state) {
@@ -3497,6 +3514,49 @@ function deleteMeasurementPoint(state, documentRef, index) {
   updateMeasurementOverlay(state, documentRef);
 }
 
+function measurementPointFromPointer(state, documentRef, event) {
+  if (measurementRouteFitActive(state)) {
+    const snap = routeMeasurementSnapFromPointer(state, event);
+    if (!snap) {
+      state.measurement.notice = "贴路测量需要点击道路附近";
+      setFileOperationStatus(documentRef, "贴路测量需要点击道路附近；切到“自由”可离开道路。");
+      return null;
+    }
+    return snap.point;
+  }
+  const world = state.renderer.screenToWorld(event.clientX, event.clientY);
+  return {
+    x: clampMeasurementValue(world.x, 0, state.map.metadata.graphWidth),
+    y: clampMeasurementValue(world.y, 0, state.map.metadata.graphHeight)
+  };
+}
+
+function routeMeasurementSnapFromPointer(state, event) {
+  if (!state.map || !state.renderer) return null;
+  const world = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const maxDistanceWorld = measurementRouteFitThresholdWorld(state, event);
+  const snap = findNearestRouteMeasurementPoint(state.map, world, maxDistanceWorld);
+  if (!snap?.point) return null;
+  return {
+    ...snap,
+    point: {
+      x: clampMeasurementValue(snap.point.x, 0, state.map.metadata.graphWidth),
+      y: clampMeasurementValue(snap.point.y, 0, state.map.metadata.graphHeight)
+    }
+  };
+}
+
+function measurementRouteFitThresholdWorld(state, event, thresholdPx = 18) {
+  const world = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const shifted = state.renderer.screenToWorld(event.clientX + thresholdPx, event.clientY);
+  const distance = Math.hypot(shifted.x - world.x, shifted.y - world.y);
+  return Number.isFinite(distance) && distance > 0 ? distance : thresholdPx;
+}
+
+function measurementRouteFitActive(state) {
+  return normalizeMeasurementRouteFit(state.measurement.routeFit) === MEASUREMENT_ROUTE_FIT_ROADS;
+}
+
 function exportMeasurement(state, documentRef) {
   if (!state.map || !state.measurement.points?.length) return;
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
@@ -3516,7 +3576,8 @@ function exportMeasurement(state, documentRef) {
       checksum: state.map.metadata?.checksum || "",
       graphWidth: state.map.metadata?.graphWidth || 0,
       graphHeight: state.map.metadata?.graphHeight || 0,
-      pointCount: points.length
+      pointCount: points.length,
+      routeFit: normalizeMeasurementRouteFit(state.measurement.routeFit)
     },
     units: {
       distanceUnit: units.distanceUnit,
@@ -3539,7 +3600,7 @@ function saveCurrentMeasurement(state, documentRef) {
   const context = {map: state.map};
   if (state.measurement.editingMeasurementId) {
     const measurementId = state.measurement.editingMeasurementId;
-    const command = createUpdateMeasurementPointsCommand(measurementId, state.measurement.points);
+    const command = createUpdateMeasurementPointsCommand(measurementId, state.measurement.points, {routeFit: state.measurement.routeFit});
     if (command.isNoop(context)) {
       setFileOperationStatus(documentRef, "测量对象没有可保存的形状变化，或点数不足。");
       return;
@@ -3555,7 +3616,7 @@ function saveCurrentMeasurement(state, documentRef) {
     return;
   }
 
-  const command = createSaveMeasurementCommand(state.measurement.points);
+  const command = createSaveMeasurementCommand(state.measurement.points, {routeFit: state.measurement.routeFit});
   if (command.isNoop(context)) {
     setFileOperationStatus(documentRef, "至少需要 2 个测量点才能保存。");
     return;
@@ -3576,6 +3637,7 @@ function startMeasurementObjectEdit(state, row, documentRef) {
   cancelMeasurementDrag(state, documentRef);
   state.measurement.editingMeasurementId = item.id;
   state.measurement.points = item.points.map(point => ({x: point.x, y: point.y}));
+  state.measurement.routeFit = normalizeMeasurementRouteFit(item.routeFit);
   state.measurement.active = true;
   state.panels.measurement?.setSelectedMeasurementId?.(item.id);
   locateMeasurement(state, {...row, points: item.points}, documentRef);
@@ -3603,6 +3665,7 @@ function exportMeasurementObjects(state, documentRef, rows) {
     id: row.id,
     name: row.name,
     type: row.type,
+    routeFit: normalizeMeasurementRouteFit(row.routeFit),
     pointCount: row.pointCount,
     distanceMapUnits: roundMeasurementExport(row.distance),
     distanceLabel: formatDisplayDistance(row.distance, units),
@@ -3671,6 +3734,13 @@ function moveMeasurementPoint(state, event) {
   const drag = state.measurement.drag;
   const point = state.measurement.points?.[drag?.index];
   if (!point || !state.map || !state.renderer) return;
+  if (measurementRouteFitActive(state)) {
+    const snap = routeMeasurementSnapFromPointer(state, event);
+    if (!snap) return;
+    point.x = snap.point.x;
+    point.y = snap.point.y;
+    return;
+  }
   const world = state.renderer.screenToWorld(event.clientX, event.clientY);
   point.x = clampMeasurementValue(world.x, 0, state.map.metadata.graphWidth);
   point.y = clampMeasurementValue(world.y, 0, state.map.metadata.graphHeight);

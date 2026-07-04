@@ -17827,3 +17827,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：保存三点测量对象后点击“编辑形状”，首点从 `{x:489.6,y:336}` 拖到 `{x:505.973,y:342.466}`；点击“保存修改”后对象点列和 `updatedAt` 更新，面板撤销后首点恢复到 `{x:489.6,y:336}`，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-edit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1552.3ms`，纯生成 `765.8ms`，WebGL 加载 `500ms`，UI/调度余量 `286.5ms`，最慢加载阶段为“构建视觉 cell mesh” `76ms`，`line-vertices = 69.9ms`，`drawMs = 0ms`，`glError = 0`。
+
+### 测量路线贴合第一刀
+
+背景：
+
+- 测量专项计划阶段 3 要求路线尺能贴合现有道路/路线，且自由测量模式不受路线约束。
+- 当前路线对象已经有 `settlements.routes[].points / packCells`，渲染和 picking 也按路线折线工作，因此第一刀可以在测量输入层吸附，不需要引入动态路线系统或重建道路。
+
+修正：
+
+- 新增 `measurement-route-fit` helper，从现有 `settlements.routes` 懒加载缓存路线线段索引，并按世界坐标最近线段投影返回吸附点。
+- 测量 readout 新增“自由 / 贴路”切换；贴路模式下点击必须落在路线附近，离路线过远不会新增点，并在测量浮条提示“贴路测量需要点击道路附近”。
+- 贴路模式同时作用于新增点和拖拽已有点；拖拽离开路线时点位保持在原路线吸附位置。
+- 保存和更新测量对象时会写入/保留 `routeFit: "roads"`；测量对象面板新增“模式”列和详情字段，批量导出同步带出 `routeFit`。
+- 自由模式保持原折线测量行为；route 数据缺失或路线过远时可切回自由测量继续使用。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：贴路模式点击同一路线两个线段中点后得到 2 个贴路线点，远离路线点击不增加点且测量浮条提示命中约束；保存对象 `routeFit = roads`；切回自由模式后远离路线点可正常加入，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-route-fit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1496.8ms`，纯生成 `732.3ms`，WebGL 加载 `377.2ms`，UI/调度余量 `387.3ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `121.5ms`，最慢加载阶段为“构建线层顶点” `67.9ms`，`route-screen-mesh = 8.3ms`。

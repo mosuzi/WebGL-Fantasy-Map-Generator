@@ -49,6 +49,7 @@ import {
   measurementBounds,
   measurementDistance
 } from "../../../runtime/measurement-objects.js";
+import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "../../../runtime/measurement-route-fit.js";
 import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -90,6 +91,7 @@ const sortOptions = Object.freeze([
 const columns = Object.freeze([
   {key: "name", label: "名称", width: 132},
   {key: "typeLabel", label: "类型", width: 76},
+  {key: "routeFitLabel", label: "模式", width: 70},
   {key: "pointCount", label: "点数", width: 70, align: "right", format: value => formatNumber(value)},
   {key: "distance", label: "长度", width: 102, align: "right", format: value => formatDistanceValue(value)},
   {key: "area", label: "面积", width: 102, align: "right", format: value => value ? formatAreaValue(value) : "-"}
@@ -116,6 +118,7 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "名称", value: selected.value.name},
   {label: "类型", value: selected.value.typeLabel},
+  {label: "模式", value: selected.value.routeFitLabel},
   {label: "点数", value: formatNumber(selected.value.pointCount)},
   {label: "长度", value: formatDistanceValue(selected.value.distance)},
   {label: "面积", value: selected.value.area ? formatAreaValue(selected.value.area) : "-"},
@@ -135,11 +138,14 @@ function measurementRows(map) {
       const points = Array.isArray(item.points) ? item.points : [];
       const distance = Number(item.summary?.distanceMapUnits) || measurementDistance(points);
       const area = Number(item.summary?.areaMapUnits) || (points.length >= 3 ? measurementArea(points) : 0);
+      const routeFit = normalizeMeasurementRouteFit(item.routeFit);
       return {
         id: String(item.id),
         name: item.name || item.id,
         type: item.type || (item.closed ? "polygon" : "polyline"),
         typeLabel: item.closed || item.type === "polygon" ? "面积" : "折线",
+        routeFit,
+        routeFitLabel: routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? "贴路" : "自由",
         pointCount: points.length,
         distance,
         area,
@@ -158,7 +164,8 @@ function filterRows(sourceRows, filter) {
   return sourceRows.filter(row => [
     row.id,
     row.name,
-    row.typeLabel
+    row.typeLabel,
+    row.routeFitLabel
   ].some(value => String(value || "").toLowerCase().includes(query)));
 }
 

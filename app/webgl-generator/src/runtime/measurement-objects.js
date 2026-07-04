@@ -1,3 +1,5 @@
+import {normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
+
 export const MEASUREMENTS_VERSION = 1;
 
 export function ensureMeasurementStore(map) {
@@ -25,7 +27,7 @@ export function refreshMeasurementsMetadata(store) {
   };
 }
 
-export function createMeasurementFromPoints(map, points, {name = ""} = {}) {
+export function createMeasurementFromPoints(map, points, {name = "", routeFit = "none"} = {}) {
   const store = ensureMeasurementStore(map);
   const idNumber = Math.max(1, Number(store.metadata.nextId) || 1);
   const now = new Date().toISOString();
@@ -37,7 +39,7 @@ export function createMeasurementFromPoints(map, points, {name = ""} = {}) {
     name: normalizeMeasurementName(name) || `测量 ${idNumber}`,
     points: normalizedPoints,
     closed: type === "polygon",
-    routeFit: "none",
+    routeFit: normalizeMeasurementRouteFit(routeFit),
     createdAt: now,
     updatedAt: now
   }, map);
@@ -53,7 +55,7 @@ export function normalizeMeasurementItem(item, map) {
     name: normalizeMeasurementName(item?.name) || "未命名测量",
     points,
     closed: type === "polygon",
-    routeFit: item?.routeFit || "none",
+    routeFit: normalizeMeasurementRouteFit(item?.routeFit),
     createdAt: item?.createdAt || now,
     updatedAt: item?.updatedAt || item?.createdAt || now
   };

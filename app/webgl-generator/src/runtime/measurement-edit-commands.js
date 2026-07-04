@@ -8,6 +8,7 @@ import {
   refreshMeasurementsMetadata,
   restoreMeasurementStore
 } from "./measurement-objects.js";
+import {normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 
 const MEASUREMENT_EFFECTS = Object.freeze({
   render: "none",
@@ -17,7 +18,7 @@ const MEASUREMENT_EFFECTS = Object.freeze({
   derived: Object.freeze(["object-panels"])
 });
 
-export function createSaveMeasurementCommand(points, {name = "", label = "保存测量对象"} = {}) {
+export function createSaveMeasurementCommand(points, {name = "", routeFit = "none", label = "保存测量对象"} = {}) {
   let previous = null;
   let created = null;
 
@@ -26,7 +27,7 @@ export function createSaveMeasurementCommand(points, {name = "", label = "保存
     effects: {...MEASUREMENT_EFFECTS},
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
-      created ??= createMeasurementFromPoints(context.map, points, {name});
+      created ??= createMeasurementFromPoints(context.map, points, {name, routeFit});
       const store = ensureMeasurementStore(context.map);
       store.items.push(JSON.parse(JSON.stringify(created)));
       refreshMeasurementsMetadata(store);
@@ -74,7 +75,7 @@ export function createRenameMeasurementCommand(measurementId, name, {label = "�
   };
 }
 
-export function createUpdateMeasurementPointsCommand(measurementId, points, {label = "更新测量对象"} = {}) {
+export function createUpdateMeasurementPointsCommand(measurementId, points, {routeFit = null, label = "更新测量对象"} = {}) {
   let previous = null;
 
   return {
@@ -92,6 +93,7 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {lab
         ...item,
         type,
         closed: type === "polygon",
+        routeFit: routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit),
         points: normalizedPoints,
         updatedAt: new Date().toISOString()
       }, context.map));
