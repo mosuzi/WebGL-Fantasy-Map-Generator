@@ -44,6 +44,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance, formatNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -169,12 +170,7 @@ function filterRows(sourceRows, filter) {
 }
 
 function sortRows(sourceRows, key, direction) {
-  const factor = direction === "asc" ? 1 : -1;
-  return [...sourceRows].sort((a, b) => {
-    if (a[key] === b[key]) return a.id - b.id;
-    if (typeof a[key] === "string") return a[key].localeCompare(b[key], "zh-CN") * factor;
-    return a[key] > b[key] ? factor : -factor;
-  });
+  return [...sourceRows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
 function routeLength(route) {

@@ -103,6 +103,7 @@ import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -671,9 +672,7 @@ function compareRawDeals(a, b, key, direction) {
   const factor = direction === "asc" ? 1 : -1;
   const aValue = rawDealSortValue(a, key);
   const bValue = rawDealSortValue(b, key);
-  if (aValue === bValue) return Number(a?.i || 0) - Number(b?.i || 0);
-  if (typeof aValue === "string" || typeof bValue === "string") return String(aValue || "").localeCompare(String(bValue || ""), "zh-CN") * factor;
-  return (Number(aValue || 0) > Number(bValue || 0) ? 1 : -1) * factor;
+  return compareListValues(aValue, bValue) * factor || compareListValues(a?.i, b?.i);
 }
 
 function rawDealSortValue(deal, key) {
@@ -848,14 +847,7 @@ function exportValue(row, key) {
 }
 
 function sortRows(rows, key, direction) {
-  const factor = direction === "asc" ? 1 : -1;
-  return [...rows].sort((a, b) => {
-    const aValue = a[key];
-    const bValue = b[key];
-    if (aValue === bValue) return Number(a.id || 0) - Number(b.id || 0);
-    if (typeof aValue === "string" || typeof bValue === "string") return String(aValue || "").localeCompare(String(bValue || ""), "zh-CN") * factor;
-    return (Number(aValue || 0) > Number(bValue || 0) ? 1 : -1) * factor;
-  });
+  return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
 function filterRows(rows, filter) {

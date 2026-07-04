@@ -79,6 +79,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {compareListValues} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -412,9 +413,7 @@ function filterGovernmentRows(governments, states, filter, familyFilter = "all")
 function sortRows(rows, key, direction) {
   const factor = direction === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
-    if (a[key] === b[key]) return a.label.localeCompare(b.label, "zh-CN");
-    if (typeof a[key] === "string") return a[key].localeCompare(b[key], "zh-CN") * factor;
-    return a[key] > b[key] ? factor : -factor;
+    return compareListValues(a[key], b[key]) * factor || compareListValues(a.label, b.label);
   });
 }
 

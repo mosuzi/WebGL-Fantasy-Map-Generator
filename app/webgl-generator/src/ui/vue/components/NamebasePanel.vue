@@ -191,6 +191,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {compareListValues} from "../../sort-utils.js";
 
 defineOptions({
   name: "NamebasePanel"
@@ -410,8 +411,7 @@ function sortRows(sourceRows, key, dir) {
 }
 
 function compareValue(a, b) {
-  if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a ?? "").localeCompare(String(b ?? ""), "zh-Hans-CN", {numeric: true});
+  return compareListValues(a, b, "zh-Hans-CN");
 }
 
 function formatNumber(value) {

@@ -64,6 +64,7 @@ import UiButton from "./base/UiButton.vue";
 import {LABEL_TARGET_KIND} from "../../../runtime/object-kinds.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -245,12 +246,11 @@ function filterRows(sourceRows, filter) {
 }
 
 function sortRows(sourceRows, key, direction) {
-  const factor = direction === "asc" ? 1 : -1;
-  return [...sourceRows].sort((a, b) => {
-    if (a[key] === b[key]) return a.targetKind.localeCompare(b.targetKind, "zh-CN") || a.id - b.id;
-    if (typeof a[key] === "string") return a[key].localeCompare(b[key], "zh-CN") * factor;
-    return a[key] > b[key] ? factor : -factor;
-  });
+  return [...sourceRows].sort((a, b) => (
+    compareRowsByKey(a, b, key, direction, {fallbackKey: null})
+    || compareListValues(a.targetKind, b.targetKind)
+    || compareListValues(a.id, b.id)
+  ));
 }
 
 function formatPoint(x, y) {

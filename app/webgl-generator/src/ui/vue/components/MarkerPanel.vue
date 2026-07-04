@@ -78,6 +78,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -278,12 +279,7 @@ function filterRows(rows, filter) {
 }
 
 function sortRows(rows, key, direction) {
-  const factor = direction === "asc" ? 1 : -1;
-  return [...rows].sort((a, b) => {
-    if (a[key] === b[key]) return a.id - b.id;
-    if (typeof a[key] === "string") return a[key].localeCompare(b[key], "zh-CN") * factor;
-    return a[key] > b[key] ? factor : -factor;
-  });
+  return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
 function applyVisual() {

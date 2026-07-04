@@ -48,6 +48,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -154,11 +155,7 @@ function filterRows(sourceRows, filter) {
 }
 
 function sortRows(sourceRows, key, direction) {
-  const factor = direction === "asc" ? 1 : -1;
-  return [...sourceRows].sort((a, b) => {
-    if (a[key] === b[key]) return a.id - b.id;
-    return a[key] > b[key] ? factor : -factor;
-  });
+  return [...sourceRows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
 function lakeTypeLabel(type) {
