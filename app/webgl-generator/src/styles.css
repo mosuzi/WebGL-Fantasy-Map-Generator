@@ -381,28 +381,38 @@ select {
 
 .el-input__wrapper {
   min-height: 32px;
+  border: 0 !important;
+  border-color: transparent !important;
   border-radius: 6px;
   background: #10171b !important;
-  box-shadow: 0 0 0 1px #33444f inset;
+  box-shadow: 0 0 0 1px #33444f inset !important;
+  outline: 0 solid transparent !important;
 }
 
 .el-input__wrapper:hover {
-  box-shadow: 0 0 0 1px #5f7480 inset;
+  box-shadow: 0 0 0 1px #5f7480 inset !important;
 }
 
+.el-input.is-focus .el-input__wrapper,
+.el-input__wrapper:focus-within,
 .el-input__wrapper.is-focus {
-  box-shadow: 0 0 0 1px #d7a84f inset;
+  box-shadow: 0 0 0 1px #d7a84f inset !important;
 }
 
 .el-input__inner {
   width: 100%;
   height: auto;
   min-width: 0;
-  border: 0;
+  border: 0 !important;
+  border-color: transparent !important;
   padding: 0;
   background: transparent !important;
+  box-shadow: none !important;
   color: #edf4f6 !important;
   font: inherit;
+  outline: 0 solid transparent !important;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .el-textarea__inner {
@@ -426,15 +436,22 @@ select {
   color: #758892 !important;
 }
 
-input:not([type]),
-input[type="text"],
-input[type="number"],
-input[type="search"],
-input[type="password"],
-textarea {
+input:not([type]):not(.el-input__inner),
+input[type="text"]:not(.el-input__inner),
+input[type="number"]:not(.el-input__inner),
+input[type="search"]:not(.el-input__inner),
+input[type="password"]:not(.el-input__inner),
+textarea:not(.el-textarea__inner) {
   border-color: #33444f;
   background-color: #10171b;
   color: #edf4f6;
+}
+
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-decoration {
+  display: none;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .el-input-number__decrease,
@@ -6977,7 +6994,7 @@ input.ui-switch-native {
 
 .ui-select-el {
   width: 100%;
-  --el-color-primary: #62abd8;
+  --el-color-primary: #d7a84f;
   --el-border-color: #33444f;
   --el-border-color-hover: #4d6574;
   --el-fill-color-blank: #10171b;
@@ -7002,8 +7019,8 @@ input.ui-switch-native {
 }
 
 .ui-select-el .el-select__wrapper.is-focused {
-  border-color: #62abd8;
-  box-shadow: 0 0 0 2px rgba(98, 171, 216, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-color: #d7a84f;
+  box-shadow: 0 0 0 1px rgba(215, 168, 79, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .ui-select-el .el-select__selected-item,
@@ -7024,7 +7041,7 @@ input.ui-switch-native {
 .ui-select-popper.el-popper {
   min-width: 260px !important;
   max-width: calc(100vw - 16px);
-  border: 1px solid rgba(98, 171, 216, 0.34);
+  border: 1px solid rgba(215, 168, 79, 0.34);
   border-radius: 7px;
   background: rgba(12, 18, 22, 0.98);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -7061,13 +7078,44 @@ input.ui-switch-native {
 }
 
 .ui-select-popper .el-select-dropdown__item.is-selected {
-  background: linear-gradient(180deg, rgba(98, 171, 216, 0.32), rgba(77, 119, 145, 0.22));
-  color: #ffffff;
+  background: linear-gradient(180deg, rgba(215, 168, 79, 0.28), rgba(89, 68, 31, 0.28));
+  color: #ffe0a1;
 }
 
 .ui-select-popper .el-popper__arrow::before {
   background: rgba(12, 18, 22, 0.98);
-  border-color: rgba(98, 171, 216, 0.34);
+  border-color: rgba(215, 168, 79, 0.34);
+}
+
+.el-select__popper.el-popper,
+.el-popper.ui-select-popper {
+  border-color: rgba(215, 168, 79, 0.34) !important;
+  background: rgba(12, 18, 22, 0.98) !important;
+  color: #dce8ed;
+}
+
+.el-select__popper .el-select-dropdown {
+  background: transparent !important;
+}
+
+.el-select__popper .el-select-dropdown__item {
+  color: #dce8ed;
+}
+
+.el-select__popper .el-select-dropdown__item.hover,
+.el-select__popper .el-select-dropdown__item:hover {
+  background: #1b2b33 !important;
+  color: #f3fbff;
+}
+
+.el-select__popper .el-select-dropdown__item.is-selected {
+  background: linear-gradient(180deg, rgba(215, 168, 79, 0.28), rgba(89, 68, 31, 0.28)) !important;
+  color: #ffe0a1;
+}
+
+.el-select__popper .el-popper__arrow::before {
+  border-color: rgba(215, 168, 79, 0.34) !important;
+  background: rgba(12, 18, 22, 0.98) !important;
 }
 
 .marker-resource-select,

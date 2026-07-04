@@ -42,7 +42,7 @@
 - 军事战报摘要空间第二刀已完成：`.military-event-chain` 从固定 6 窄列改为 `minmax(124px, 1fr)` 的自适应卡片，允许摘要占两行而不是压缩“累计损耗 / 最近”等字段；deep 面板审计会为军团注入两条战报并报告战报摘要项数、行数、最小项宽和横向溢出。`military-event-chain-space-smoke / continents / 10000 / deep` 中战报摘要为 `6 项 / 2 行 / min 126.8px / overflow none`，无待复核项；e2e 守门 `military-event-chain-space-e2e` 通过，点击到出图 `1280.1ms`、WebGL 加载 `339.7ms`。
 - 面板工具按钮组审计已补齐：`pnpm run audit:panels` 会报告各 actions / toolbar 容器的按钮数、行数、最小按钮宽和横向溢出，低于 `72px` 或横向溢出会进入待复核项。`action-group-audit-smoke / continents / 10000 / deep` 未发现待复核项，点击到出图 `1289.2ms`、WebGL 加载 `307ms`；新指标显示后续可优先复查政体导出按钮组 `min 75.8px` 和资源标记工具条 `min 76px`，两者当前未溢出但偏紧。
 - 政体导出按钮组空间已放宽：`.government-panel-export-actions .el-button` 增加 `112px` 最小宽，`government-export-space-smoke / continents / 10000 / deep` 中政体导出按钮组从 `min 75.8px` 提升到 `min 112px / overflow none`，无待复核项；e2e 守门 `government-export-space-e2e` 通过，点击到出图 `1408ms`、WebGL 加载 `386.5ms`。
-- 输入框暗色样式已补齐：`.el-textarea`、`.el-input__inner`、`.el-textarea__inner` 和常见原生文本输入类型增加暗色背景兜底，避免 Element Plus 或原生输入框在局部组件里露出白底。构建产物浏览器烟测打开城市管理、国家编辑、军事管理、名称库和备注总览后，`24` 个可见输入相关节点未发现接近白色背景；e2e 守门 `input-dark-style-e2e` 通过，WebGL 加载 `393.2ms`。
+- 输入框与下拉框暗色样式已补齐：`.el-input__inner` 不再绘制内层背景 / 边框 / outline，搜索输入隐藏浏览器原生清除按钮，只保留 Element Plus 自带 clear icon；`.el-input__wrapper` 用单层暗色背景和暗金 focus 线；`UiSelectField` 与通用 `.el-select__popper` 下拉面板改为暗色背景、暗金边框和暗金选中态。构建产物浏览器烟测确认 `18` 个可见输入相关节点无亮色背景或亮色可见边框，下拉 popper 背景为 `rgba(12, 18, 22, 0.98)`；e2e 守门 `input-select-style-e2e` 通过，WebGL 加载 `497.1ms`。
 
 ### 当前执行队列
 

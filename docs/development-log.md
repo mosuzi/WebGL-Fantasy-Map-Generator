@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：输入框双层和下拉面板暗色修正
+
+用户指出输入框看起来像两层：Element Plus 自身已有清除图标，但内层输入又露出浏览器原生清除按钮 / 内层边框，外层 focus 后也有白色边框；同时下拉框弹出面板颜色不符合暗色界面。
+
+完成内容：
+
+- Element Plus `.el-input__inner` 改为透明、无边框、无阴影和无 outline，只由 `.el-input__wrapper` 画一层暗色背景与边框。
+- `.el-input__wrapper` 增加透明实际边框和 `:focus-within` 暗金 focus 线，避免真实焦点落到 inner 时出现白色边框。
+- 隐藏 `input[type="search"]` 的浏览器原生清除按钮，保留 Element Plus 自带 clear icon，避免双重删除图标。
+- `UiSelectField` 下拉从蓝色主题改回暗金主题，teleport 到 body 的 `.el-select__popper` 增加暗色面板、暗金边框、暗色 hover 和暗金选中态兜底。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测打开城市管理、军事管理和名称库后，聚焦筛选输入并打开一个下拉框：搜索 input 背景透明、边框 `0px` 且 outline 透明；wrapper 背景 `rgb(16, 23, 27)`，无可见白边；select popper 背景 `rgba(12, 18, 22, 0.98)`，边框 `rgba(215, 168, 79, 0.34)`，选中项为暗金渐变。`18` 个可见输入相关节点未发现亮色背景或亮色可见边框。
+- e2e 守门 `input-select-style-e2e / continents / 10000` 通过：点击到出图 `1762.2ms`，纯生成 `936.3ms`，WebGL 加载 `497.1ms`，最慢加载阶段为“构建线层顶点” `69.3ms`。
+
 ## 2026-07-04：输入框暗色样式补齐
 
 用户指出输入框背景仍为白色，与当前暗色界面不一致。复查后发现全局样式已覆盖 `.el-input` 和 `.el-input-number`，但 textarea、部分 Element Plus inner 层和原生文本输入仍可能在不同组件或样式顺序下露出默认浅色背景。
