@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：军事管理工具条空间放宽
+
+继续按当前“面板空间策略专项”推进。全量 deep 面板审计未发现硬性布局失败，但按最小宽度排序后，军事管理仍有两处与当前优先级一致的偏紧项：顶部导入导出工具条最小按钮宽约 `103.6px`，战报清理按钮最小宽约 `92px`。
+
+完成内容：
+
+- `.military-toolbar-group` 改为标题独占一行、按钮行独立布局，避免“军团数据 / 战报档案”标题挤占按钮横向空间。
+- 军事顶部工具组按钮列从 `minmax(54px, 1fr)` 放宽到 `minmax(112px, 1fr)`。
+- `.military-event-tools` 从“筛选器 + 190px 操作窄栏”改为单列上下布局，让战报清理按钮占用完整行宽。
+- `.military-event-actions` 的按钮列从 `minmax(72px, 1fr)` 放宽到 `minmax(132px, 1fr)`。
+- 只调整军事管理局部 CSS，不改 `MilitaryPanel.vue` 模板、不改导出、导入、战报筛选、清理或军事数据语义。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 面板 deep 布局审计 `military-toolbar-space-smoke / deep / continents / 10000` 通过：军事顶部工具条最小按钮宽从约 `103.6px` 提升到 `125.6px`，两个子工具组分别为 `129.6px` 与 `125.6px`；战报清理按钮最小宽从 `92px` 提升到 `333px`；军事面板无横向溢出，WebGL 加载 `430.6ms`，`drawMs = 0`，`glError = 0`。
+- e2e 守门 `military-toolbar-space-e2e / continents / 10000` 通过：点击到出图 `1524ms`，纯生成 `815.7ms`，WebGL 加载 `443.9ms`，`drawMs = 0`，`glError = 0`。
+
 ## 2026-07-04：二级编辑区布局审计路径修正
 
 继续推进面板空间策略专项时，复查发现 `webgl-generator-panel-layout-audit.mjs` 的二级编辑区审计实际没有打开 `UiActionDock`：一方面原脚本依赖合成 click，另一方面临时验证命令把 `--variant deep` 当作有效参数使用，但脚本真正读取的是 `--scenario deep`。
