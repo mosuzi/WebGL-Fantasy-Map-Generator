@@ -17758,3 +17758,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`LakePanel` 懒加载 chunk 约 `4.56KB / gzip 2.05KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：注入 `hydro = lake-smoke-hydro` 测试库后，湖泊面板打开正常，5 个湖泊按筛选结果显式重命名；撤销恢复原名、重做恢复新名，选中对象仍为 `lake`，详情包含面积、补给和水域 cells，面板横向溢出为 `0`，`glError = 0`，health 非 info、console error、page error 均为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed lake-panel-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1652.4ms`，纯生成 `844.4ms`，WebGL 加载 `423.6ms`，UI/调度余量 `384.4ms`，最慢加载阶段为“构建视觉 cell mesh” `61.4ms`，结果仍在守门阈值内。
+
+### 测量对象保存第一刀与控制面板布局修正
+
+背景：
+
+- 测量工具已经有临时折线、面积、导出、节点拖拽、撤销点、删除点和线段插入能力，但临时测量还不能保存为随地图 JSON 持久化的对象。
+- 用户指出控制面板“图层”和“管理”里的按钮从第二行开始错位；根因是 Element Plus `.el-button + .el-button` 默认 margin 在 CSS grid 中残留。
+- 用户补充指出 `UiSliderField` 的数字输入上下调节按钮有白色边线；本轮一并在控件范围内收束 Element Plus 默认边框。
+
+修正：
+
+- 新增 `map.measurements` 数据契约和测量对象 helper，保存时生成 `measurement-N` id、名称、点列、折线/面积类型、长度/面积摘要、创建和更新时间。
+- 新增测量对象 EditHistory 命令：保存临时测量、重命名测量对象、删除测量对象，撤销/重做恢复对象集合。
+- 测量 readout 新增“保存 / 对象”按钮；保存后清空临时点并选中新对象。
+- 新增懒加载“测量对象”浮层，支持总览、筛选、排序、定位、重命名、删除、导出和历史操作。
+- 渲染器新增 `locateBounds()`，用于按保存测量对象 bounds 定位视图，不触发无关重建。
+- 控制面板图层、管理和重新生成按钮网格统一清除 Element Plus 相邻按钮 margin，并设置 `width: 100% / min-width: 0`，修正第二行错位。
+- `UiSliderField` 的右侧数字调节按钮覆盖为暗色边框和背景，避免上下按钮出现白色边线。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：图层页 8 行首列 left 均为 `365`，管理页 10 行首列 left 均为 `365`；三点测量保存为 `测量 1` 后，测量对象面板可打开、导出、删除并撤销恢复，临时点清空为 `0`；数字调节按钮可见边线为深色，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-object-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1544.4ms`，纯生成 `684.4ms`，WebGL 加载 `498.4ms`，UI/调度余量 `361.6ms`，最慢加载阶段为“构建视觉 cell mesh” `63.9ms`，`line-vertices = 47.8ms`，`drawMs = 0.1ms`，`glError = 0`。

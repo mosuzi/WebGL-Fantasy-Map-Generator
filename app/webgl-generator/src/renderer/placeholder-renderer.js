@@ -870,6 +870,35 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
+  locateBounds(bounds, options = {}) {
+    if (!this.map || !bounds) {
+      this.locateStatus = "not found";
+      return false;
+    }
+
+    const padding = options.padding ?? 0.22;
+    const minScale = options.minScale ?? 1.4;
+    const maxScale = options.maxScale ?? 18;
+    const boundsWidth = Math.max(1, Number(bounds.maxX) - Number(bounds.minX));
+    const boundsHeight = Math.max(1, Number(bounds.maxY) - Number(bounds.minY));
+    const ndcWidth = (boundsWidth / this.map.metadata.graphWidth) * 2;
+    const ndcHeight = (boundsHeight / this.map.metadata.graphHeight) * 2;
+    const available = 2 * (1 - padding);
+    const nextScale = clamp(Math.min(available / ndcWidth, available / ndcHeight), minScale, maxScale);
+    const centerX = (Number(bounds.minX) + Number(bounds.maxX)) / 2;
+    const centerY = (Number(bounds.minY) + Number(bounds.maxY)) / 2;
+    const [ndcX, ndcY] = worldToNdcPoint(createRenderContext(this.map), [centerX, centerY]);
+
+    this.camera.scale = nextScale;
+    this.camera.offsetX = -ndcX * nextScale;
+    this.camera.offsetY = -ndcY * nextScale;
+    this.markViewportBuffersDirty();
+    this.locateStatus = options.status || "bounds";
+    this.draw();
+    this.onViewChange();
+    return true;
+  }
+
   startLocateFlash(object) {
     this.locateFlash = {
       kind: object.kind,

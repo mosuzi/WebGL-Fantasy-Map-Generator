@@ -1449,7 +1449,8 @@ select:disabled {
   margin-bottom: 10px;
 }
 
-.lake-panel-summary {
+.lake-panel-summary,
+.measurement-panel-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
@@ -1459,7 +1460,9 @@ select:disabled {
 .river-panel-summary div,
 .river-panel-details div,
 .lake-panel-summary div,
-.lake-panel-details div {
+.lake-panel-details div,
+.measurement-panel-summary div,
+.measurement-panel-details div {
   display: grid;
   gap: 3px;
 }
@@ -1467,7 +1470,9 @@ select:disabled {
 .river-panel-summary span,
 .river-panel-details span,
 .lake-panel-summary span,
-.lake-panel-details span {
+.lake-panel-details span,
+.measurement-panel-summary span,
+.measurement-panel-details span {
   color: #80919c;
   font-size: 11px;
 }
@@ -1475,14 +1480,17 @@ select:disabled {
 .river-panel-summary strong,
 .river-panel-details strong,
 .lake-panel-summary strong,
-.lake-panel-details strong {
+.lake-panel-details strong,
+.measurement-panel-summary strong,
+.measurement-panel-details strong {
   color: #edf4f6;
   font-size: 13px;
   overflow-wrap: anywhere;
 }
 
 .river-panel-controls,
-.lake-panel-controls {
+.lake-panel-controls,
+.measurement-panel-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
@@ -1491,7 +1499,8 @@ select:disabled {
 }
 
 .river-panel-controls input,
-.lake-panel-controls input {
+.lake-panel-controls input,
+.measurement-panel-controls input {
   width: 100%;
   height: 32px;
   border: 1px solid #33444f;
@@ -1509,7 +1518,8 @@ select:disabled {
 }
 
 .river-panel-sort,
-.lake-panel-sort {
+.lake-panel-sort,
+.measurement-panel-sort {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 6px;
@@ -1517,7 +1527,8 @@ select:disabled {
 }
 
 .river-panel-sort button,
-.lake-panel-sort button {
+.lake-panel-sort button,
+.measurement-panel-sort button {
   height: 28px;
   border: 1px solid #33444f;
   border-radius: 6px;
@@ -1527,7 +1538,8 @@ select:disabled {
 }
 
 .river-panel-sort button.active,
-.lake-panel-sort button.active {
+.lake-panel-sort button.active,
+.measurement-panel-sort button.active {
   border-color: #d7a84f;
   background: #3a2f18;
   color: #ffe0a1;
@@ -1800,7 +1812,8 @@ select:disabled {
 }
 
 .river-panel-details,
-.lake-panel-details {
+.lake-panel-details,
+.measurement-panel-details {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
@@ -1877,11 +1890,29 @@ select:disabled {
 }
 
 .river-history-note,
-.lake-history-actions {
+.lake-history-actions,
+.measurement-history-actions {
   color: #9fb0ba;
   font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.measurement-panel-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.measurement-panel-actions .el-button,
+.measurement-history-actions .el-button,
+.measurement-panel-sort .el-button {
+  margin-left: 0;
+}
+
+.measurement-name-editor {
+  margin-top: 8px;
 }
 
 .height-panel-summary {
@@ -3725,6 +3756,12 @@ select:disabled {
   gap: 10px;
 }
 
+.layer-toggle-grid .el-button {
+  width: 100%;
+  min-width: 0;
+  margin-left: 0;
+}
+
 .preference-toggle-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4071,13 +4108,28 @@ input.ui-switch-native {
 
 .ui-slider-number.el-input-number .el-input-number__decrease,
 .ui-slider-number.el-input-number .el-input-number__increase {
+  border: 0;
+  border-left: 1px solid #273640;
   border-color: #273640;
   background: #142129;
+  box-shadow: none;
   color: #9fb0ba;
+}
+
+.ui-slider-number.el-input-number.is-controls-right .el-input-number__increase {
+  border-left: 1px solid #273640 !important;
+  border-bottom: 1px solid #273640 !important;
+}
+
+.ui-slider-number.el-input-number.is-controls-right .el-input-number__decrease {
+  border-left: 1px solid #273640 !important;
+  border-top: 0 !important;
 }
 
 .ui-slider-number.el-input-number .el-input-number__decrease:hover,
 .ui-slider-number.el-input-number .el-input-number__increase:hover {
+  border-color: #3e525f;
+  background: #1b2a32;
   color: #ffe0a1;
 }
 
@@ -4090,6 +4142,13 @@ input.ui-switch-native {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.management-panel-actions .el-button,
+.regeneration-action-grid .el-button {
+  width: 100%;
+  min-width: 0;
+  margin-left: 0;
 }
 
 .management-panel-actions #fit-view {

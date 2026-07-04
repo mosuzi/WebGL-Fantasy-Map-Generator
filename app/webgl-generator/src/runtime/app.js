@@ -22,6 +22,7 @@ import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
 import {createLakePanel} from "../ui/panels/lake-panel.js";
 import {createMarkerPanel} from "../ui/panels/marker-panel.js";
+import {createMeasurementPanel} from "../ui/panels/measurement-panel.js";
 import {createMilitaryPanel} from "../ui/panels/military-panel.js";
 import {createNamebasePanel} from "../ui/panels/namebase-panel.js";
 import {createNotesPanel} from "../ui/panels/notes-panel.js";
@@ -43,6 +44,8 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
+import {createDeleteMeasurementCommand, createRenameMeasurementCommand, createSaveMeasurementCommand} from "./measurement-edit-commands.js";
+import {ensureMeasurementStore, measurementArea, measurementBounds, measurementDistance} from "./measurement-objects.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
@@ -186,6 +189,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let labelNamingPanel = null;
   let namebasePanel = null;
   let notesPanel = null;
+  let measurementPanel = null;
   let suppressNextRiverPanelOpen = false;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
@@ -1163,6 +1167,38 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.notes = notesPanel;
+  measurementPanel = createMeasurementPanel(documentRef, panelManager, {
+    onLocate: row => {
+      locateMeasurement(state, row, documentRef);
+    },
+    onRename: (measurementId, name) => {
+      const context = {map: state.map};
+      const command = createRenameMeasurementCommand(measurementId, name);
+      if (!command.isNoop(context)) refreshAfterEdit(state, state.editHistory.execute(command, context));
+      updateMeasurementPanel(state);
+    },
+    onDelete: row => {
+      const context = {map: state.map};
+      const command = createDeleteMeasurementCommand(row.id);
+      if (!command.isNoop(context)) refreshAfterEdit(state, state.editHistory.execute(command, context));
+      updateMeasurementPanel(state);
+      setFileOperationStatus(documentRef, `已删除测量对象 ${row.name || row.id}。`);
+    },
+    onExport: rows => {
+      exportMeasurementObjects(state, documentRef, rows);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateMeasurementPanel(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateMeasurementPanel(state);
+    }
+  });
+  state.panels.measurement = measurementPanel;
   riverPanel = createRiverPanel(documentRef, panelManager, {
     onSelect: object => {
       selectionStore.setSelection({object});
@@ -1313,6 +1349,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     state.panels.marker.update(state.map, selection, state.editHistory.getStats());
     state.panels.labelNaming.update(state.map, selection, state.editHistory.getStats());
     state.panels.notes.update(state.map, selection, state.editHistory.getStats());
+    updateMeasurementPanel(state);
     updateStatePanel(state);
     updateProvincePanel(state);
     updateCityPanel(state);
@@ -1467,6 +1504,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onOpenNotesPanel: () => {
       state.panels.notes.open(state.map, state.selection, state.editHistory.getStats());
+    },
+    onOpenMeasurementPanel: () => {
+      state.panels.measurement.open(state.map, state.editHistory.getStats());
     },
     onOpenNamebasePanel: () => {
       state.panels.namebase.open(state.map, {history: state.editHistory.getStats()});
@@ -1820,6 +1860,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.markerEdit.lastPackCell = null;
   state.measurement.points = [];
   state.measurement.pointer = null;
+  state.measurement.drag = null;
+  ensureMeasurementStore(state.map);
   state.lastEditRefresh = null;
   if (loadingMessages[0]) {
     updateGenerationLoading(documentRef, true, loadingMessages[0]);
@@ -1872,6 +1914,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateLakePanel(state);
+  updateMeasurementPanel(state);
   updateEditingInteractionLock(state, documentRef);
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
@@ -3075,6 +3118,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateLakePanel(state);
   state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+  updateMeasurementPanel(state);
   updateRuntimePanel(documentRef, state);
 }
 
@@ -3204,6 +3248,8 @@ function bindMeasurementTool(canvas, state, documentRef) {
   const clear = documentRef.getElementById("measurement-clear");
   const undo = documentRef.getElementById("measurement-undo");
   const exportButton = documentRef.getElementById("measurement-export");
+  const saveButton = documentRef.getElementById("measurement-save");
+  const objectsButton = documentRef.getElementById("measurement-objects");
   toggle?.addEventListener("click", () => {
     state.measurement.active = !state.measurement.active;
     if (!state.measurement.active) {
@@ -3219,6 +3265,8 @@ function bindMeasurementTool(canvas, state, documentRef) {
   });
   undo?.addEventListener("click", () => undoMeasurementPoint(state, documentRef));
   exportButton?.addEventListener("click", () => exportMeasurement(state, documentRef));
+  saveButton?.addEventListener("click", () => saveCurrentMeasurement(state, documentRef));
+  objectsButton?.addEventListener("click", () => state.panels.measurement?.open(state.map, state.editHistory.getStats()));
 
   canvas.addEventListener("pointerdown", event => {
     if (!state.measurement.active || event.button !== 0) return;
@@ -3275,9 +3323,10 @@ function updateMeasurementOverlay(state, documentRef) {
   const clear = documentRef.getElementById("measurement-clear");
   const undo = documentRef.getElementById("measurement-undo");
   const exportButton = documentRef.getElementById("measurement-export");
+  const saveButton = documentRef.getElementById("measurement-save");
   const toggle = documentRef.getElementById("toggle-measurement");
   const canvas = documentRef.getElementById("map-canvas");
-  if (!overlay || !svg || !summary || !clear || !undo || !exportButton || !toggle || !canvas) return;
+  if (!overlay || !svg || !summary || !clear || !undo || !exportButton || !saveButton || !toggle || !canvas) return;
 
   const active = Boolean(state.measurement.active);
   const points = state.measurement.points || [];
@@ -3289,6 +3338,7 @@ function updateMeasurementOverlay(state, documentRef) {
   clear.disabled = points.length === 0;
   undo.disabled = points.length === 0;
   exportButton.disabled = points.length === 0;
+  saveButton.disabled = points.length < 2 || !state.map;
   svg.replaceChildren();
   if (!active) return;
 
@@ -3434,6 +3484,77 @@ function exportMeasurement(state, documentRef) {
   downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.measurement.json`, "application/json;charset=utf-8");
 }
 
+function saveCurrentMeasurement(state, documentRef) {
+  if (!state.map || !state.measurement.points?.length) return;
+  const context = {map: state.map};
+  const command = createSaveMeasurementCommand(state.measurement.points);
+  if (command.isNoop(context)) {
+    setFileOperationStatus(documentRef, "至少需要 2 个测量点才能保存。");
+    return;
+  }
+  refreshAfterEdit(state, state.editHistory.execute(command, context));
+  const created = command.getMeasurement?.();
+  state.measurement.points = [];
+  cancelMeasurementDrag(state, documentRef);
+  updateMeasurementOverlay(state, documentRef);
+  updateMeasurementPanel(state);
+  state.panels.measurement?.setSelectedMeasurementId?.(created?.id);
+  setFileOperationStatus(documentRef, `已保存测量对象 ${created?.name || created?.id || ""}。`);
+}
+
+function locateMeasurement(state, row, documentRef) {
+  const bounds = measurementBounds(row, 48);
+  const located = bounds ? state.renderer.locateBounds(bounds, {
+    status: `measurement ${row.id}`,
+    minScale: row.pointCount <= 2 ? 2.2 : 1.4,
+    maxScale: 18
+  }) : false;
+  if (located) {
+    state.panels.measurement?.setSelectedMeasurementId?.(row.id);
+  }
+  updateRuntimePanel(documentRef, state);
+  updatePickPanel(documentRef, state);
+}
+
+function exportMeasurementObjects(state, documentRef, rows) {
+  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const measurements = (rows || []).map(row => ({
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    pointCount: row.pointCount,
+    distanceMapUnits: roundMeasurementExport(row.distance),
+    distanceLabel: formatDisplayDistance(row.distance, units),
+    areaMapUnits: roundMeasurementExport(row.area),
+    areaLabel: row.area ? formatDisplayArea(row.area, units) : "",
+    points: (row.points || []).map((point, index) => ({
+      index,
+      x: roundMeasurementExport(point.x),
+      y: roundMeasurementExport(point.y)
+    })),
+    createdAt: row.createdAt || "",
+    updatedAt: row.updatedAt || ""
+  }));
+  const payload = {
+    type: "webgl-generator-measurements",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    metadata: {
+      seed: state.map?.metadata?.seed || "",
+      checksum: state.map?.metadata?.checksum || "",
+      measurements: measurements.length
+    },
+    units: {
+      distanceUnit: units.distanceUnit,
+      areaUnit: units.areaUnit,
+      mapScaleKmPerCm: units.mapScaleKmPerCm
+    },
+    measurements
+  };
+  downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.measurements.json`, "application/json;charset=utf-8");
+  setFileOperationStatus(documentRef, `测量对象已导出，共 ${measurements.length} 条。`);
+}
+
 function startMeasurementPointDrag(event, state, documentRef, index) {
   if (!state.measurement.active || !state.map || !state.renderer) return;
   event.preventDefault();
@@ -3486,26 +3607,6 @@ function cancelMeasurementDrag(state, documentRef) {
 
 function measurementPointClass(state, index) {
   return state.measurement.drag?.index === index ? "measurement-point dragging" : "measurement-point";
-}
-
-function measurementDistance(points) {
-  let total = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const previous = points[index - 1];
-    const current = points[index];
-    total += Math.hypot(current.x - previous.x, current.y - previous.y);
-  }
-  return total;
-}
-
-function measurementArea(points) {
-  let sum = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    const next = points[(index + 1) % points.length];
-    sum += current.x * next.y - next.x * current.y;
-  }
-  return Math.abs(sum) / 2;
 }
 
 function measurementSummary(pointCount, distance, area, units) {
@@ -4118,10 +4219,15 @@ function updateAllObjectPanels(state) {
   state.panels.river?.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateLakePanel(state);
   updateNotesPanel(state);
+  updateMeasurementPanel(state);
 }
 
 function updateLakePanel(state) {
   state.panels.lake?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function updateMeasurementPanel(state) {
+  state.panels.measurement?.update(state.map, state.editHistory.getStats());
 }
 
 function labelKeyForObject(object) {

@@ -98,6 +98,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
   documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
   documentRef.getElementById("open-notes-panel")?.addEventListener("click", handlers.onOpenNotesPanel);
+  documentRef.getElementById("open-measurement-panel")?.addEventListener("click", handlers.onOpenMeasurementPanel);
   documentRef.getElementById("open-namebase-panel")?.addEventListener("click", handlers.onOpenNamebasePanel);
   documentRef.getElementById("export-map-image")?.addEventListener("click", () => handlers.onExportImage?.());
   documentRef.getElementById("export-map-data")?.addEventListener("click", () => handlers.onExportMapData?.());
@@ -180,6 +181,8 @@ function editLockControls(documentRef) {
     "#open-generation-panel",
     "#open-development-panel",
     "#toggle-measurement",
+    "#measurement-save",
+    "#measurement-objects",
     "#fit-view",
     "#open-height-panel",
     "#open-state-panel",
@@ -196,6 +199,7 @@ function editLockControls(documentRef) {
     "#open-marker-panel",
     "#open-label-naming-panel",
     "#open-notes-panel",
+    "#open-measurement-panel",
     "#open-namebase-panel",
     "#open-export-panel",
     "#export-map-image",

@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前 WebGL 版测量工具已经支持临时折线测距、闭合面积、测量 JSON 导出、节点拖拽、撤销、删除和线段插入。它仍然只是 `state.measurement.points` 中的一组临时点，不会随完整地图数据保存，也没有多条测量对象、路线贴合或图层级显隐。
+当前 WebGL 版测量工具已经支持临时折线测距、闭合面积、测量 JSON 导出、节点拖拽、撤销、删除、线段插入，以及把临时测量保存为 `map.measurements.items` 中的持久测量对象。测量对象会随完整地图 JSON 保存，已有独立浮层支持总览、筛选、排序、定位、重命名、删除、导出和撤销/重做；尚未做保存对象的图层显隐、对象节点编辑和路线贴合。
 
 原版 FMG 的测量系统位于 `source/Fantasy-Map-Generator/public/modules/ui/measurers.js` 和 `source/Fantasy-Map-Generator/public/modules/ui/units-editor.js`。原版不是单一临时折线，而是 `Rulers.data` 集合，包含 `Ruler`、`Opisometer`、`RouteOpisometer` 和 `Planimeter` 四类对象，并通过 `toString()` / `fromString()` 序列化到存档字段。
 
@@ -48,15 +48,17 @@
 
 ### 阶段 1：保存临时测量为对象
 
-- 控制面板或测量 readout 增加“保存测量”入口。
-- 保存时把当前临时点复制进 `map.measurements.items`，并生成名称、id、摘要。
-- 新增“测量对象”浮层，列出已保存测量，支持定位、删除、重命名和导出。
-- 完整地图 JSON 保存 `map.measurements`；导入完整地图后恢复对象。
+状态：已完成第一刀。
+
+- 测量 readout 已增加“保存 / 对象”入口。
+- 保存时会把当前临时点复制进 `map.measurements.items`，并生成名称、id、长度/面积摘要和时间戳。
+- 已新增“测量对象”浮层，列出已保存测量，支持定位、删除、重命名、导出和撤销/重做。
+- 完整地图 JSON 会保存 `map.measurements`；后续仍需补专门的完整导入回归烟测和旧地图兼容样本。
 
 验收：
 
 - 保存对象后清空临时测量，不影响已保存对象。
-- 完整地图导出再导入后，测量对象数量、点列、名称和面积/长度摘要一致。
+- 完整地图导出再导入后，测量对象数量、点列、名称和面积/长度摘要一致；该项需要在后续补成固定烟测。
 - 普通模式下只显示用户可理解的长度/面积；开发模式下可显示 id、点数、cellStops 等内部信息。
 
 ### 阶段 2：图层化与对象编辑
