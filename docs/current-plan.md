@@ -19,8 +19,8 @@
 
 ### 当前优先项
 
-1. **面板布局宽松化计划**：当前若继续进入 UI 修正，应先浏览器审计各面板奇怪折行、空间过窄、按钮硬挤和表格列压缩问题，再改共享布局规则。优先处理共享 `UiMetricGrid / UiDetailGrid / UiSortBar / UiObjectTable`、浮动面板默认宽度、summary/detail 自适应列和长字段跨行。
-2. **非 WebGL overlay 性能治理计划**：标签、城市剪影、marker 图标、军事图标和测量 SVG 都属于 DOM/SVG overlay，拖动和缩放时可能带来额外卡顿。下一步应先增加 pan/zoom profile，记录 WebGL draw、DOM overlay 更新和 overlay 节点数量，再按证据做降负。
+1. **面板布局宽松化计划**：当前若继续进入 UI 修正，应先浏览器审计各面板奇怪折行、空间过窄、按钮硬挤和表格列压缩问题，再改共享布局规则。优先处理共享 `UiMetricGrid / UiDetailGrid / UiSortBar / UiObjectTable`、浮动面板默认宽度、summary/detail 自适应列和长字段跨行；施工入口见 `docs/task-notes/panel-layout-overlay-performance-plan.md`。
+2. **非 WebGL overlay 性能治理计划**：标签、城市剪影、marker 图标、军事图标和测量 SVG 都属于 DOM/SVG overlay，拖动和缩放时可能带来额外卡顿。下一步应先增加 pan/zoom profile，记录 WebGL draw、DOM overlay 更新和 overlay 节点数量，再按证据做降负；施工入口见 `docs/task-notes/panel-layout-overlay-performance-plan.md`。
 3. **source/candidate 剩余 warn 只读跟踪**：若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断，不做末端过滤。
 
 ### 可选增强

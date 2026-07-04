@@ -18,6 +18,7 @@
 - `render-health-monitoring.md`：渲染健康监测说明，记录本地卡顿日志、阈值、查询方式和限制。
 - `object-notes-implementation-plan.md`：对象备注实现计划。
 - `measurement-rulers-plan.md`：测量对象与路线贴合计划。
+- `panel-layout-overlay-performance-plan.md`：面板布局宽松化与非 WebGL overlay 性能治理计划。
 - `visual-theme-preset-plan.md`：视觉主题与样式预设计划。
 
 ## 导入导出与 GIS
