@@ -80,6 +80,7 @@
 - 已执行路线 / 河流 viewport 粗筛第一刀：动态 screen-space mesh 会按当前相机视口世界范围加 `96px` margin 跳过完全屏幕外的路线和河流，并把 `culledRoutes / culledRivers` 写入 stats 与 overlay profile 报告。`overlay-profile-100k / continents / 100000` 完整图层缩放 profile 中路线渲染 / 筛掉为 `742 / 434`，河流渲染 / 筛掉为 `466 / 279`；缩放 frame p95 `135.2ms`、拖动 frame p95 `41.2ms`，仍在守门阈值内。后续若继续优化，应评估分块缓存、跨帧重建或轻量交互态线层。
 - 面板布局第二轮已修正 `UiSegmented`：不再依赖 Element Plus 的额外选中指示层和横向滚动条，默认改为可换行 grid；经济面板三段控件在窄列中会自然换成两行，marker 三段控件保持一行三列，面板 body 无横向溢出。
 - 面板布局自动审计第一刀已完成：新增 `tools/webgl-generator-panel-layout-audit.mjs` 和 `pnpm run audit:panels`，可服务构建产物、生成固定地图、打开主要浮动面板并记录 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横向滚动和疑似文字溢出。`panel-layout-audit-smoke / continents / 10000 / 1280x820` 最终审计未发现待复核项；资源标记面板三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。审计已排除隐藏的 `UiSegmented` bridge button，避免把兼容按钮误判成可见溢出。
+- 窄视口审计已完成：`panel-layout-narrow-smoke / continents / 10000 / 1024x720` 构建产物审计未发现待复核项，页面横向溢出为 `0`，同 seed e2e 守门 WebGL 加载 `323.7ms`。面板后续若继续，应优先转向长字段、表格列较多和二级编辑展开态，而不是重复默认 / 窄视口样本。
 
 步骤：
 

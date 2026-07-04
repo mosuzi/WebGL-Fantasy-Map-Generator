@@ -18119,3 +18119,19 @@ full 矩阵结果：
 后续：
 
 - 粗筛对缩放场景有效，但拖动补全时仍会接近全量重建；若继续处理 100k 交互手感，应评估分块缓存、跨帧重建或轻量交互态线层。
+
+### 面板窄视口审计
+
+背景：
+
+- 面板默认样本已通过 `1280 x 820` 自动审计，但 current plan 仍要求复核更窄视口。
+- 本轮只做窄视口证据收集和文档收束，不改运行时代码。
+
+验证：
+
+- `$env:CI='true'; pnpm run audit:panels -- --browser-channel chrome --cells 10000 --seed panel-layout-narrow-smoke --template continents --viewport 1024x720 --timeout 120000 --out "$env:TEMP\fmg-panel-layout-narrow.json" --markdown "$env:TEMP\fmg-panel-layout-narrow.md"` 通过；主要浮动面板待复核项 `0`，页面横向溢出 `0`，点击到出图 `1023.3ms`，WebGL 加载 `297.9ms`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed panel-layout-narrow-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-panel-layout-narrow-e2e.json" --markdown "$env:TEMP\fmg-panel-layout-narrow-e2e.md"` 通过；点击到出图 `1317.5ms`，纯生成 `699.5ms`，WebGL 加载 `323.7ms`，最慢加载阶段为“构建视觉 cell mesh” `51.8ms`。
+
+后续：
+
+- 面板布局后续不再重复默认 / 窄视口样本，应转向长字段选中样本、表格列较多样本和二级编辑区展开态。
