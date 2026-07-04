@@ -193,17 +193,23 @@ async function profilePan(page) {
 }
 
 async function applyVariant(page, variant) {
-  await page.evaluate(id => {
+  await page.evaluate(variant => {
     const renderer = window.__webglGeneratorApp?.renderer;
     if (!renderer) return;
-    if (id === "noRoutesRivers") {
-      renderer.setLayerVisible("routes", false);
-      renderer.setLayerVisible("rivers", false);
-      return;
+    const baseLayers = {
+      routes: true,
+      rivers: true,
+      cities: true,
+      labels: true,
+      stateLabels: true,
+      markers: true,
+      resources: true,
+      military: true
+    };
+    for (const [layer, visible] of Object.entries({...baseLayers, ...(variant.layers || {})})) {
+      renderer.setLayerVisible(layer, visible);
     }
-    renderer.setLayerVisible("routes", true);
-    renderer.setLayerVisible("rivers", true);
-  }, variant.id);
+  }, variant);
   await page.waitForTimeout(150);
 }
 
@@ -256,6 +262,7 @@ async function readStats(page) {
       drawMs: stats.draw?.drawMs || 0,
       glError: stats.draw?.glError ?? null,
       camera: stats.camera || null,
+      layerVisibility: stats.layerVisibility || {},
       overlay: stats.overlay?.update || {},
       overlayChildCount: stats.overlay?.childCount || 0,
       labelCount: stats.labelCount || 0,
@@ -281,6 +288,8 @@ async function readStats(page) {
 function summarizeInteraction(id, label, samples, frameData) {
   const overlayTotals = samples.map(sample => sample.overlay?.totalMs || 0);
   const draws = samples.map(sample => sample.drawMs || 0);
+  const routeBuilds = samples.map(sample => sample.layerVisibility?.routes === false ? 0 : sample.routeBuildMs || 0);
+  const riverBuilds = samples.map(sample => sample.layerVisibility?.rivers === false ? 0 : sample.riverBuildMs || 0);
   return {
     id,
     label,
@@ -306,10 +315,10 @@ function summarizeInteraction(id, label, samples, frameData) {
       selectionAverageMs: averageMs(samples.map(sample => sample.overlay?.selectionMs || 0))
     },
     dynamic: {
-      routeBuildAverageMs: averageMs(samples.map(sample => sample.routeBuildMs || 0)),
-      routeBuildP95Ms: percentileMs(samples.map(sample => sample.routeBuildMs || 0), 0.95),
-      riverBuildAverageMs: averageMs(samples.map(sample => sample.riverBuildMs || 0)),
-      riverBuildP95Ms: percentileMs(samples.map(sample => sample.riverBuildMs || 0), 0.95),
+      routeBuildAverageMs: averageMs(routeBuilds),
+      routeBuildP95Ms: percentileMs(routeBuilds, 0.95),
+      riverBuildAverageMs: averageMs(riverBuilds),
+      riverBuildP95Ms: percentileMs(riverBuilds, 0.95),
       selectionBuildAverageMs: averageMs(samples.map(sample => sample.selectionBuildMs || 0)),
       selectionBuildP95Ms: percentileMs(samples.map(sample => sample.selectionBuildMs || 0), 0.95)
     },
@@ -320,14 +329,16 @@ function summarizeInteraction(id, label, samples, frameData) {
 
 function summarizeCounts(samples) {
   const last = samples.at(-1) || {};
+  const routesVisible = last.layerVisibility?.routes !== false;
+  const riversVisible = last.layerVisibility?.rivers !== false;
   return {
     overlayChildCount: last.overlayChildCount || 0,
-    routeVertices: last.routeVertexCount || 0,
-    routeCull: last.routeRenderStats?.culledRoutes || 0,
-    routeRendered: last.routeRenderStats?.renderedRoutes || 0,
-    riverVertices: last.riverVertexCount || 0,
-    riverCull: last.riverWidthStats?.culledRivers || 0,
-    riverRendered: last.riverWidthStats?.rivers || 0,
+    routeVertices: routesVisible ? last.routeVertexCount || 0 : 0,
+    routeCull: routesVisible ? last.routeRenderStats?.culledRoutes || 0 : 0,
+    routeRendered: routesVisible ? last.routeRenderStats?.renderedRoutes || 0 : 0,
+    riverVertices: riversVisible ? last.riverVertexCount || 0 : 0,
+    riverCull: riversVisible ? last.riverWidthStats?.culledRivers || 0 : 0,
+    riverRendered: riversVisible ? last.riverWidthStats?.rivers || 0 : 0,
     selectionVertices: last.selectionVertexCount || 0,
     labels: {total: last.labelCount || 0, visible: last.visibleLabelCount || 0},
     cityIcons: {total: last.cityIconCount || 0, visible: last.visibleCityIconCount || 0},
@@ -501,15 +512,29 @@ function parseViewport(value) {
 }
 
 function parseVariants(value) {
-  return String(value || "full")
+  const ids = String(value || "full")
     .split(",")
     .map(item => item.trim())
-    .filter(Boolean)
-    .map(id => {
-      if (id === "noRoutesRivers") return {id, label: "关闭路线和河流"};
-      if (id === "full") return {id, label: "完整图层"};
-      return {id, label: id};
-    });
+    .filter(Boolean);
+  const expanded = ids.flatMap(id => id === "overlayMatrix" ? ["full", "noLabels", "noCities", "noMarkersResources", "noMilitary", "noRoutesRivers"] : [id]);
+  return expanded.map(overlayVariant);
+}
+
+function overlayVariant(id) {
+  const variants = {
+    full: {id, label: "完整图层", layers: {}},
+    noLabels: {id, label: "关闭文字标签", layers: {labels: false, stateLabels: false}},
+    noCities: {id, label: "关闭城市图标", layers: {cities: false}},
+    noMarkersResources: {id, label: "关闭资源和标记图标", layers: {markers: false, resources: false}},
+    noMilitary: {id, label: "关闭军事图标", layers: {military: false}},
+    noDomOverlays: {
+      id,
+      label: "关闭地图 DOM 图标和标签",
+      layers: {cities: false, labels: false, stateLabels: false, markers: false, resources: false, military: false}
+    },
+    noRoutesRivers: {id, label: "关闭路线和河流", layers: {routes: false, rivers: false}}
+  };
+  return variants[id] || {id, label: id, layers: {}};
 }
 
 function canvasCenter(box) {

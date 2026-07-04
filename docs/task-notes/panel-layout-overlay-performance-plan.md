@@ -81,6 +81,7 @@
 - 面板布局第二轮已修正 `UiSegmented`：不再依赖 Element Plus 的额外选中指示层和横向滚动条，默认改为可换行 grid；经济面板三段控件在窄列中会自然换成两行，marker 三段控件保持一行三列，面板 body 无横向溢出。
 - 面板布局自动审计第一刀已完成：新增 `tools/webgl-generator-panel-layout-audit.mjs` 和 `pnpm run audit:panels`，可服务构建产物、生成固定地图、打开主要浮动面板并记录 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横向滚动和疑似文字溢出。`panel-layout-audit-smoke / continents / 10000 / 1280x820` 最终审计未发现待复核项；资源标记面板三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。审计已排除隐藏的 `UiSegmented` bridge button，避免把兼容按钮误判成可见溢出。
 - 窄视口审计已完成：`panel-layout-narrow-smoke / continents / 10000 / 1024x720` 构建产物审计未发现待复核项，页面横向溢出为 `0`，同 seed e2e 守门 WebGL 加载 `323.7ms`。面板后续若继续，应优先转向长字段、表格列较多和二级编辑展开态，而不是重复默认 / 窄视口样本。
+- overlay 图层矩阵已完成：`tools/webgl-generator-overlay-profile.mjs` 支持 `overlayMatrix`，依次采集完整图层、关闭文字标签、关闭城市图标、关闭资源 / 标记图标、关闭军事图标、关闭路线 / 河流。`overlay-matrix-100k / continents / 100000` 通过守门；完整图层缩放 frame p95 `88.3ms`、拖动 frame p95 `35.3ms`，overlay p95 最高约 `5.1ms`；关闭路线 / 河流时 route / river 构建耗时和渲染数量在报告中归零，避免缓存统计误导。该矩阵仍不支持把标签、城市剪影、marker 或军事图标默认迁到 WebGL，后续只在测量 SVG 多对象、选中态高频变化或极端标签数量能复现问题时继续降负。
 
 步骤：
 
@@ -102,7 +103,7 @@
 - 能复现拖动 / 缩放时的帧耗时分布。
 - 能区分 WebGL 绘制慢、overlay 更新慢、面板 / 其它 DOM 慢。
 - 没有证据前不做大迁移。
-- 10k 基线已满足前三项；更高 cells 与图层矩阵尚未完成。
+- 10k / 50k / 100k 基线和 100k 图层矩阵已满足前三项；测量 SVG 多对象和选中态高频变化尚未单独压测。
 
 ## 阶段 3：overlay 降负第一刀
 

@@ -18135,3 +18135,28 @@ full 矩阵结果：
 后续：
 
 - 面板布局后续不再重复默认 / 窄视口样本，应转向长字段选中样本、表格列较多样本和二级编辑区展开态。
+
+### overlay 图层矩阵 profile
+
+背景：
+
+- 已有 overlay profile 能证明 100k 交互瓶颈不主要来自 DOM overlay，但仍缺少按图层开关拆分的矩阵证据。
+- 上一版 `noRoutesRivers` 只覆盖路线 / 河流，无法单独观察标签、城市剪影、marker / 资源和军事图标。
+
+修正：
+
+- `tools/webgl-generator-overlay-profile.mjs` 新增 `overlayMatrix` 变体组，依次采集完整图层、关闭文字标签、关闭城市图标、关闭资源 / 标记图标、关闭军事图标、关闭路线 / 河流。
+- 每个变体应用前会先恢复路线、河流、城市、标签、国家标签、marker、资源和军事图层基线，再叠加当前变体开关，避免上一轮图层状态污染下一轮。
+- 采样结果新增 `layerVisibility` 判断；当路线或河流图层关闭时，报告中的 route / river 构建耗时、顶点数、渲染数和筛掉数归零，避免沿用上一轮缓存统计。
+
+验证：
+
+- `node --check .\tools\webgl-generator-overlay-profile.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run profile:overlay -- --browser-channel chrome --cells 100000 --seed overlay-matrix-100k --template continents --variants overlayMatrix --max-frame-p95-ms 180 --max-overlay-p95-ms 70 --out "$env:TEMP\fmg-overlay-matrix-100k.json" --markdown "$env:TEMP\fmg-overlay-matrix-100k.md"` 通过；完整图层连续滚轮缩放 frame p95 `88.3ms`，中键拖动画布 frame p95 `35.3ms`，overlay p95 最高约 `5.1ms`；关闭路线 / 河流时 route / river 构建耗时和渲染数量均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed overlay-matrix-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-overlay-matrix-e2e.json" --markdown "$env:TEMP\fmg-overlay-matrix-e2e.md"` 通过；点击到出图 `1233.3ms`，纯生成 `682.3ms`，WebGL 加载 `343.9ms`，最慢加载阶段为“构建线层顶点” `51.3ms`。
+
+结论：
+
+- 当前仍没有证据支持把标签、城市剪影、marker 或军事图标默认迁到 WebGL。
+- 后续 overlay 性能工作应只在具体复现场景下补测量 SVG 多对象、选中态高频变化或极端标签数量；路线 / 河流动态线层若继续优化，优先评估分块缓存、跨帧重建或轻量交互态线层。

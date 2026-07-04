@@ -20,6 +20,7 @@
 - overlay pan/zoom profile 第一刀已完成：renderer stats 已能输出 overlay 节点数、labels / city icons / marker icons / military icons 分项耗时，`pnpm run profile:overlay` 已支持 10k / 50k / 100k 与 `full,noRoutesRivers` 变体。当前证据显示 DOM overlay 不是 100k 交互主瓶颈，路线 / 河流 screen-space 动态 mesh 才是主要耗时。
 - 视口交互动态线层降级第一刀已完成：拖动 / 滚轮期间暂不重建和绘制 dirty 的路线、河流、选中 screen mesh，停止输入约 `120ms` 后完整重建。100k 完整图层中键拖动画布 frame p95 已从约 `88.2ms` 降至 `35.3ms`，最终 idle 后 dynamic buffers 会恢复 clean。
 - 路线 / 河流 viewport 粗筛第一刀已完成：screen-space 动态 mesh 构建会按当前相机视口世界范围加 `96px` margin 跳过完全屏幕外的路线和河流，并把 `culledRoutes / culledRivers` 写入 stats 与 overlay profile 报告。100k 完整图层缩放 profile 中路线渲染 / 筛掉为 `742 / 434`，河流渲染 / 筛掉为 `466 / 279`。
+- overlay profile 矩阵补全已完成：`pnpm run profile:overlay` 支持 `overlayMatrix`，会分别采集完整图层、关闭文字标签、关闭城市图标、关闭资源 / 标记图标、关闭军事图标、关闭路线 / 河流。100k 矩阵中 overlay p95 最高约 `5.1ms`，关闭路线 / 河流时动态线层构建为 `0ms`；当前仍没有证据支持把标签、城市剪影、marker 或军事图标默认迁移到 WebGL。
 - 面板布局第二轮已修正经济 / marker 的 segmented 控件：共享 `UiSegmented` 改为可换行 grid，选中态不再依赖额外内部指示层，经济三段控件窄列时自然换行，marker 三段控件保持一行三列。
 - 面板布局自动审计第一刀已完成：新增 `pnpm run audit:panels`，可打开主要浮动面板并报告 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横滚和疑似文字溢出；当前 1280 x 820 构建产物审计未发现待复核项。资源标记面板的三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。
 - 面板窄视口审计已完成：`1024 x 720` 构建产物审计未发现待复核项，页面横向溢出为 `0`；同 seed e2e 守门通过，WebGL 加载 `323.7ms`。
@@ -38,10 +39,10 @@
    - 当前证据显示 100k 交互主要瓶颈不是 DOM overlay，而是路线 / 河流 screen-space 动态 mesh。
    - viewport 粗筛第一刀已经完成；若继续处理拖动 / 缩放手感，应优先评估分块缓存、跨帧重建或更轻的交互态线层。
    - 不把标签、城市剪影、marker 图标或军事图标迁移到 WebGL 作为默认方案；只有 profile 证明 DOM overlay 成为主瓶颈时再讨论。
-3. **overlay profile 矩阵补全**：
-   - 当前已有 10k / 50k / 100k 和 `full,noRoutesRivers` 的基础证据。
-   - 后续补图层开关矩阵，尤其是标签、城市剪影、资源 / marker、军事图标、测量 SVG、路线和河流的组合。
-   - 测量 SVG 对象很多时再做 dirty/cache 验证，不提前重写测量编辑层。
+3. **overlay profile 后续深场景**：
+   - 100k `overlayMatrix` 已覆盖标签、城市剪影、资源 / marker、军事图标、路线和河流的单项开关；当前结论仍是 DOM overlay 不是主要瓶颈。
+   - 后续只在具体复现场景下补测量 SVG 多对象、选中态高频变化和极端标签数量，不提前重写测量编辑层。
+   - profile 报告中关闭路线 / 河流时会把动态线层耗时和数量置零，避免沿用上一轮缓存统计误导判断。
 4. **贸易查看列表化设计**：
    - 贸易流地图常驻连线已退役，不再作为图层恢复。
    - 若继续贸易查看，应做经济面板子视图或独立列表面板，按国家、地区、市场、商品、卖方和买方筛选；默认不画连线，只提供定位相关城市、市场或国家的动作。
