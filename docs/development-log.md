@@ -17603,3 +17603,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`StatePanel` 懒加载 chunk 约 `12.44KB / gzip 4.76KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入 `stateRoot = smoke-state-root` 测试名称库后，国家面板点击“按名称库重命名筛选”，20 个国家被显式重命名；撤销后前 8 个国家恢复原名，再重做后恢复新名。整个过程 `generationTiming.totalMs` 保持 `707.2ms` 不变，`glError = 0`，page error 为 `0`，且未出现未校正的东南西北同根方向变体。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1708.7ms`，纯生成 `694.4ms`，WebGL 加载 `732.1ms`，最慢加载阶段为“构建视觉 cell mesh” `52.4ms`，结果仍在守门阈值内。
+
+### 名称库选中对象显式重命名第一刀
+
+背景：
+
+- 名称库显式重命名已覆盖国家、城市和河流管理面板的筛选结果，下一步需要补一个更窄的“当前选中对象”入口。
+- 当前湖泊尚未建立独立对象类型、拾取和管理面板链路，直接做湖泊会扩大范围；本轮先覆盖已有对象详情路径里的国家/城市标签目标。
+- 用户已再次明确无需做动态军事系统，本轮不触碰军事行动、战役推进、战斗模拟或自动结算。
+
+修正：
+
+- 对象详情面板新增“名称库改名”按钮，仅在选中对象能映射到国家、城市或河流名称库命名目标时显示。
+- 当前通用对象详情主要覆盖标签、路线、标记等对象；本轮对国家/城市标签执行目标归一化，点击后只重命名标签对应的国家或城市。
+- runtime 新增选中对象名称库重命名分派 helper，复用已有 `createRenameStatesFromNamebaseCommand()`、`createRenameCitiesFromNamebaseCommand()` 和 `createRenameRiversFromNamebaseCommand()`，继续进入 `EditHistory` 并走同一套刷新调度。
+- README、当前计划、名称库绑定专项和 source 功能积压已同步更新；后续名称库待办缩小为湖泊显式重命名和质量参数，不再把选中标签目标列为缺口。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：选中国家标签后对象详情显示“名称库改名”，点击后目标国家从 `赤原` 改为 `苴`，撤销恢复 `赤原`，重做恢复 `苴`；状态提示为“已按当前名称库重命名选中国家 1 个”，`glError = 0`，page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1682.8ms`，纯生成 `710.5ms`，WebGL 加载 `499.4ms`，最慢加载阶段为“构建视觉 cell mesh” `70.8ms`，结果仍在守门阈值内。

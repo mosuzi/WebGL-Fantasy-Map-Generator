@@ -32,7 +32,8 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
       onEdit: () => callbacks.onEdit?.(panelState.object),
       onCancelEdit: () => callbacks.onCancelEdit?.(),
       onLocate: () => callbacks.onLocate?.(panelState.object),
-      onRename: name => callbacks.onRename?.(panelState.object, name)
+      onRename: name => callbacks.onRename?.(panelState.object, name),
+      onRenameFromNamebase: () => callbacks.onRenameFromNamebase?.(panelState.object)
     }
   });
   app.use(pinia);

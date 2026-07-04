@@ -207,6 +207,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateReligionPanel(state);
       state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
       updateEditingInteractionLock(state, documentRef);
+    },
+    onRenameFromNamebase: object => {
+      renameSelectedObjectFromNamebase(state, documentRef, object);
     }
   });
   state.panels.objectDetails = objectDetailsPanel;
@@ -2594,6 +2597,63 @@ function locateObject(state, object, documentRef) {
   }
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
+}
+
+function renameSelectedObjectFromNamebase(state, documentRef, object) {
+  const target = namebaseRenameTargetForObject(object);
+  if (!target) {
+    setFileOperationStatus(documentRef, "当前选中对象不支持按名称库重命名。");
+    return;
+  }
+  const command = createSelectedNamebaseRenameCommand(target);
+  const context = {map: state.map};
+  if (!command || command.isNoop(context)) {
+    setFileOperationStatus(documentRef, `当前选中${selectedNamebaseTargetLabel(target)}没有可按名称库更新的名称。`);
+    return;
+  }
+  refreshAfterEdit(state, state.editHistory.execute(command, context));
+  const result = command.getResult?.();
+  setFileOperationStatus(documentRef, `已按当前名称库重命名选中${selectedNamebaseTargetLabel(target)} ${result?.renamed || 0} 个。`);
+  updateAllObjectPanels(state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
+function namebaseRenameTargetForObject(object) {
+  if (!object?.kind) return null;
+  if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.CITY) {
+    return {kind: OBJECT_KIND.CITY, id: Number(object.targetId ?? object.id)};
+  }
+  if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.STATE) {
+    return {kind: OBJECT_KIND.STATE, id: Number(object.targetId ?? object.id)};
+  }
+  if (object.kind === OBJECT_KIND.CITY || object.kind === OBJECT_KIND.STATE || object.kind === OBJECT_KIND.RIVER) {
+    return {kind: object.kind, id: Number(object.id)};
+  }
+  return null;
+}
+
+function createSelectedNamebaseRenameCommand(target) {
+  if (!Number.isInteger(target.id)) return null;
+  if (target.kind === OBJECT_KIND.STATE) {
+    if (target.id <= 0) return null;
+    return createRenameStatesFromNamebaseCommand([target.id], {label: "按名称库重命名选中国家"});
+  }
+  if (target.kind === OBJECT_KIND.CITY) {
+    if (target.id < 0) return null;
+    return createRenameCitiesFromNamebaseCommand([target.id], {label: "按名称库重命名选中城市"});
+  }
+  if (target.kind === OBJECT_KIND.RIVER) {
+    if (target.id < 0) return null;
+    return createRenameRiversFromNamebaseCommand([target.id], {label: "按名称库重命名选中河流"});
+  }
+  return null;
+}
+
+function selectedNamebaseTargetLabel(target) {
+  if (target.kind === OBJECT_KIND.STATE) return "国家";
+  if (target.kind === OBJECT_KIND.CITY) return "城市";
+  if (target.kind === OBJECT_KIND.RIVER) return "河流";
+  return "对象";
 }
 
 const SELECTION_PANEL_HANDLERS = Object.freeze({

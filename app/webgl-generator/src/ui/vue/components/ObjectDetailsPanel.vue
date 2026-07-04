@@ -10,6 +10,14 @@
     />
     <div class="object-details-actions">
       <UiButton variant="secondary" @click="callbacks.onLocate">定位</UiButton>
+      <UiButton
+        v-if="canRenameFromNamebase"
+        variant="secondary"
+        title="按当前名称库重命名这个对象"
+        @click="callbacks.onRenameFromNamebase?.()"
+      >
+        名称库改名
+      </UiButton>
       <UiButton v-if="canEdit" variant="secondary" @click="editing ? callbacks.onCancelEdit?.() : callbacks.onEdit?.()">
         {{ editing ? "退出编辑" : "编辑" }}
       </UiButton>
@@ -45,6 +53,7 @@ const editing = computed(() => isSameObject(props.state.object, props.state.edit
 const title = computed(() => formatObjectTitle(props.state.object));
 const canEdit = computed(() => canEditObject(props.state.object));
 const canRename = computed(() => canRenameObject(props.state.object));
+const canRenameFromNamebase = computed(() => canRenameObjectFromNamebase(props.state.object));
 const editableName = computed(() => props.state.object?.name || props.state.object?.text || props.state.object?.targetName || "");
 const detailRowsWithState = computed(() => [...detailRows(props.state.object), {label: "状态", value: editing.value ? "编辑" : "查看"}]);
 const unitPreferences = useUnitPreferences();
@@ -150,6 +159,15 @@ function detailRows(object) {
 
 function canRenameObject(object) {
   return object?.kind === OBJECT_KIND.CITY || (object?.kind === OBJECT_KIND.LABEL && (object.targetKind === LABEL_TARGET_KIND.CITY || object.targetKind === LABEL_TARGET_KIND.STATE));
+}
+
+function canRenameObjectFromNamebase(object) {
+  if (object?.kind === OBJECT_KIND.CITY || object?.kind === OBJECT_KIND.RIVER) return Number(object.id) >= 0;
+  if (object?.kind === OBJECT_KIND.STATE) return Number(object.id) > 0;
+  if (object?.kind !== OBJECT_KIND.LABEL) return false;
+  if (object.targetKind === LABEL_TARGET_KIND.CITY) return Number(object.targetId ?? object.id) >= 0;
+  if (object.targetKind === LABEL_TARGET_KIND.STATE) return Number(object.targetId ?? object.id) > 0;
+  return false;
 }
 
 function canEditObject(object) {
