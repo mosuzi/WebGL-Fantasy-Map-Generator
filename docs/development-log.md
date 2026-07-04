@@ -18027,3 +18027,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run profile:overlay -- --browser-channel chrome --cells 100000 --seed overlay-profile-100k --template continents --variants full,noRoutesRivers --max-frame-p95-ms 180 --max-overlay-p95-ms 70 --out docs/generated/reports/overlay-profile-100000-variants-results.json --markdown docs/generated/reports/overlay-profile-100000-variants-results.md` 通过；完整图层中键拖动画布 frame p95 `35.3ms`、draw 均值 `0.04ms`，相对降级前约 `88.2ms / 43.77ms` 明显下降；连续滚轮缩放 frame p95 `129.4ms`、draw 均值 `0.04ms`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed viewport-preview-degrade-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1241.5ms`，纯生成 `679.3ms`，WebGL 加载 `327.7ms`，最慢加载阶段为“构建线层顶点” `58.8ms`。
 - 构建产物浏览器语义检查通过：拖动中 `routesDirty / riversDirty / selectionDirty` 为 `true`，松手等待 `220ms` 后三者均恢复 `false`，`glError = 0`，route vertices `32580`、river vertices `19494`。
+
+### 面板 segmented 控件换行修正
+
+背景：
+
+- 面板布局第二轮审计发现，国家、文化、宗教、军事、名称库等面板 body、表格和 summary/detail 均无横向溢出。
+- 残留问题集中在经济面板和 marker 面板的 `UiSegmented`：控件宽度分别约 `210px / 220px`，但 Element Plus segmented group 仍使用横向滚动模型，导致三段选项区域产生多余 `scrollWidth` 和潜在滚动条。
+- 本轮目标只修控件布局，不改变选项、筛选逻辑或面板数据。
+
+修正：
+
+- `.ui-segmented-el .el-segmented__group` 从不换行 flex 横向滚动改为自适应 CSS grid，横向不足时自然换行。
+- 隐藏 Element Plus 的额外 `.el-segmented__item-selected` 指示层，选中/hover 视觉转移到真实 `.el-segmented__item-label`，避免额外内部元素参与布局计算。
+- 经济面板和 marker 面板将 `--ui-segmented-min-width` 调整为 `60px`，三段短选项不再为了默认宽度挤出滚动条。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物面板审计通过：经济、marker、国家、文化、宗教面板均无 body 横向溢出；经济 segmented 变为 grid 且文字无溢出，marker segmented 保持三列且文字无溢出；相关表格均无非预期横向溢出。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed segmented-layout-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1075ms`，纯生成 `547.4ms`，WebGL 加载 `342.9ms`，最慢加载阶段为“构建标签” `46.8ms`。

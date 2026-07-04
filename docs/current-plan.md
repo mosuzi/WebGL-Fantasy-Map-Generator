@@ -19,10 +19,11 @@
 - 面板布局宽松化第一刀已完成：共享 `UiMetricGrid / UiDetailGrid / UiSortBar` 增加基础类，summary/detail 改为按最小宽度自适应换行，表格容器允许横向滚动。构建产物审计中，文化 summary 最小项宽约 `133px`，宗教 summary 最小项宽约 `138px`，不再停留在 `80px` 级硬挤状态。
 - overlay pan/zoom profile 第一刀已完成：renderer stats 已能输出 overlay 节点数、labels / city icons / marker icons / military icons 分项耗时，`pnpm run profile:overlay` 已支持 10k / 50k / 100k 与 `full,noRoutesRivers` 变体。当前证据显示 DOM overlay 不是 100k 交互主瓶颈，路线 / 河流 screen-space 动态 mesh 才是主要耗时。
 - 视口交互动态线层降级第一刀已完成：拖动 / 滚轮期间暂不重建和绘制 dirty 的路线、河流、选中 screen mesh，停止输入约 `120ms` 后完整重建。100k 完整图层中键拖动画布 frame p95 已从约 `88.2ms` 降至 `35.3ms`，最终 idle 后 dynamic buffers 会恢复 clean。
+- 面板布局第二轮已修正经济 / marker 的 segmented 控件：共享 `UiSegmented` 改为可换行 grid，选中态不再依赖额外内部指示层，经济三段控件窄列时自然换行，marker 三段控件保持一行三列。
 
 ### 当前优先项
 
-1. **面板布局第二轮审计**：共享布局第一刀已经完成。若继续 UI 修正，应做更窄的浏览器视觉审计，重点查仍有异常折行的单个面板控件、经济 / marker segmented 控件、表格横向滚动体验，以及长字段是否需要在 `UiDetailGrid` 中显式跨整行；施工入口见 `docs/task-notes/panel-layout-overlay-performance-plan.md`。
+1. **面板布局第二轮审计**：共享布局第一刀和经济 / marker segmented 修正已经完成。若继续 UI 修正，应做更窄的浏览器视觉审计，重点查仍有异常折行的单个面板控件、表格横向滚动体验，以及长字段是否需要在 `UiDetailGrid` 中显式跨整行；施工入口见 `docs/task-notes/panel-layout-overlay-performance-plan.md`。
 2. **路线 / 河流动态线层后续优化**：overlay profile 已证明 DOM overlay 不是当前主瓶颈。后续若继续处理拖动 / 缩放手感，应优先做路线 / 河流 screen mesh 的 viewport 粗筛、分块缓存或更轻的交互态线层，而不是先迁移标签、城市剪影、marker 图标或军事图标；施工入口见 `docs/task-notes/panel-layout-overlay-performance-plan.md`。
 3. **overlay profile 矩阵补全**：当前已有 10k / 50k / 100k 和 `full,noRoutesRivers` 的基础证据；若继续量化，应补图层开关矩阵和测量 SVG 对象较多时的 profile，再决定是否做测量 SVG 缓存。
 4. **source/candidate 剩余 warn 只读跟踪**：若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断，不做末端过滤。
