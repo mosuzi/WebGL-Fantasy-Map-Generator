@@ -361,7 +361,8 @@ select {
 }
 
 .el-input,
-.el-input-number {
+.el-input-number,
+.el-textarea {
   width: 100%;
   --el-border: 1px solid #33444f;
   --el-input-bg-color: #10171b;
@@ -381,7 +382,7 @@ select {
 .el-input__wrapper {
   min-height: 32px;
   border-radius: 6px;
-  background: #10171b;
+  background: #10171b !important;
   box-shadow: 0 0 0 1px #33444f inset;
 }
 
@@ -393,15 +394,47 @@ select {
   box-shadow: 0 0 0 1px #d7a84f inset;
 }
 
-.floating-panel .el-input__inner {
+.el-input__inner {
   width: 100%;
   height: auto;
   min-width: 0;
   border: 0;
   padding: 0;
-  background: transparent;
-  color: #edf4f6;
+  background: transparent !important;
+  color: #edf4f6 !important;
   font: inherit;
+}
+
+.el-textarea__inner {
+  border-color: #33444f !important;
+  background: #10171b !important;
+  box-shadow: 0 0 0 1px #33444f inset;
+  color: #edf4f6 !important;
+  font: inherit;
+}
+
+.el-textarea__inner:hover {
+  box-shadow: 0 0 0 1px #5f7480 inset;
+}
+
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px #d7a84f inset;
+}
+
+.el-input__inner::placeholder,
+.el-textarea__inner::placeholder {
+  color: #758892 !important;
+}
+
+input:not([type]),
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input[type="password"],
+textarea {
+  border-color: #33444f;
+  background-color: #10171b;
+  color: #edf4f6;
 }
 
 .el-input-number__decrease,

@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：输入框暗色样式补齐
+
+用户指出输入框背景仍为白色，与当前暗色界面不一致。复查后发现全局样式已覆盖 `.el-input` 和 `.el-input-number`，但 textarea、部分 Element Plus inner 层和原生文本输入仍可能在不同组件或样式顺序下露出默认浅色背景。
+
+完成内容：
+
+- 将 `.el-textarea` 纳入全局 Element Plus 输入变量覆盖。
+- `.el-input__wrapper`、`.el-input__inner` 和 `.el-textarea__inner` 统一使用暗色背景、浅色文字和暗色边框 / focus 边框。
+- 常见原生文本输入类型 `text / number / search / password` 以及 `textarea` 增加暗色兜底，避免未封装输入框露出白底。
+
+验证：
+
+- `git diff --check`、`node --check .\app\webgl-generator\src\runtime\app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测打开城市管理、国家编辑、军事管理、名称库和备注总览后，扫描 `24` 个可见 `input / textarea / el-input__wrapper / el-textarea__inner`，未发现接近白色背景；样本中的文本 / 数字 / 搜索输入背景为 `rgb(16, 23, 27)` 或透明继承，文字为浅色。
+- e2e 守门 `input-dark-style-e2e / continents / 10000` 通过：点击到出图 `1536.1ms`，纯生成 `815.1ms`，WebGL 加载 `393.2ms`，最慢加载阶段为“构建线层顶点” `61.7ms`。
+
 ## 2026-07-04：取消视口交互时隐藏 overlay，改回同步刷新
 
 用户复核本地效果后指出，临时隐藏非 canvas 覆盖层仍没有解决移动视图时标签、军事单位和城镇名称与画布分离的观感问题，因此要求先取消这条逻辑，改回覆盖层与 canvas 同步移动 / 缩放。
