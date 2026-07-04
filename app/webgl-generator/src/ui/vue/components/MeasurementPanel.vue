@@ -33,6 +33,7 @@
   </template>
 
   <div class="measurement-panel-actions">
+    <UiButton v-if="selected" variant="secondary" @click="callbacks.onEdit(selected)">编辑形状</UiButton>
     <UiButton v-if="selected" variant="secondary" @click="callbacks.onLocate(selected)">定位测量</UiButton>
     <UiButton v-if="selected" variant="secondary" @click="callbacks.onDelete(selected)">删除测量</UiButton>
     <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onExport(visibleRows)">导出测量</UiButton>

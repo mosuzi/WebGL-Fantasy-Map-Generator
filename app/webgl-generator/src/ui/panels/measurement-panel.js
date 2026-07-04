@@ -32,6 +32,7 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedMeasurementId = row.id;
       callbacks.onLocate?.(row);
     },
+    onEdit: row => callbacks.onEdit?.(row),
     onRename: (measurementId, name) => callbacks.onRename?.(measurementId, name),
     onDelete: row => callbacks.onDelete?.(row),
     onExport: rows => callbacks.onExport?.(rows),

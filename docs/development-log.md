@@ -17804,3 +17804,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：保存三点测量并退出工具后，`.measurement-object-path = 1`、`.measurement-object-area = 1`、readout hidden；关闭“测量”图层后 `stored = 1`、`overlayHidden = true`，重新开启后对象图形恢复，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-layer-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1312.3ms`，纯生成 `714.4ms`，WebGL 加载 `373ms`，UI/调度余量 `224.9ms`，最慢加载阶段为“构建线层顶点” `75.4ms`，`drawMs = 0.1ms`，`glError = 0`。
+
+### 已保存测量对象节点编辑第一刀
+
+背景：
+
+- 保存测量对象已经能显示和图层显隐，但仍不能复用临时测量的节点拖拽、删除和插入能力。
+- 测量专项计划阶段 2 的剩余验收是“编辑已保存对象会更新 `updatedAt` 和摘要，并可撤销/重做”。
+- 本轮仍不做路线贴合，也不新建第二套 SVG 编辑器，而是复用当前临时测量工具作为编辑缓冲。
+
+修正：
+
+- 测量对象面板新增“编辑形状”操作。
+- 进入编辑时把选中对象点列复制到 `state.measurement.points`，记录 `editingMeasurementId`，开启测量模式并定位到对象 bounds。
+- 编辑中的对象不会再同时绘制只读蓝色旧形状，避免旧形状和金色可编辑点列叠在一起。
+- 保存按钮在编辑模式显示为“保存修改”，执行 `createUpdateMeasurementPointsCommand()` 写回原对象点列、类型、闭合状态、摘要和 `updatedAt`。
+- 更新命令接入 `EditHistory`；撤销/重做恢复测量对象集合快照。
+- 清除测量或删除正在编辑的对象时会取消编辑缓冲，避免保存到不存在的 id。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：保存三点测量对象后点击“编辑形状”，首点从 `{x:489.6,y:336}` 拖到 `{x:505.973,y:342.466}`；点击“保存修改”后对象点列和 `updatedAt` 更新，面板撤销后首点恢复到 `{x:489.6,y:336}`，`glError = 0`，console/page error 为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-edit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1552.3ms`，纯生成 `765.8ms`，WebGL 加载 `500ms`，UI/调度余量 `286.5ms`，最慢加载阶段为“构建视觉 cell mesh” `76ms`，`line-vertices = 69.9ms`，`drawMs = 0ms`，`glError = 0`。

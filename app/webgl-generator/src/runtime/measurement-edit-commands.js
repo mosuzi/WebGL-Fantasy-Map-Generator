@@ -3,6 +3,8 @@ import {
   createMeasurementFromPoints,
   ensureMeasurementStore,
   findMeasurement,
+  normalizeMeasurementItem,
+  normalizeMeasurementPoints,
   refreshMeasurementsMetadata,
   restoreMeasurementStore
 } from "./measurement-objects.js";
@@ -72,6 +74,41 @@ export function createRenameMeasurementCommand(measurementId, name, {label = "�
   };
 }
 
+export function createUpdateMeasurementPointsCommand(measurementId, points, {label = "更新测量对象"} = {}) {
+  let previous = null;
+
+  return {
+    label,
+    effects: {
+      ...MEASUREMENT_EFFECTS,
+      affected: [{kind: "measurement", id: measurementId}]
+    },
+    apply(context) {
+      previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
+      const item = readMeasurement(context.map, measurementId);
+      const normalizedPoints = normalizeMeasurementPoints(points, context.map);
+      const type = normalizedPoints.length >= 3 ? "polygon" : "polyline";
+      Object.assign(item, normalizeMeasurementItem({
+        ...item,
+        type,
+        closed: type === "polygon",
+        points: normalizedPoints,
+        updatedAt: new Date().toISOString()
+      }, context.map));
+      refreshMeasurementsMetadata(ensureMeasurementStore(context.map));
+    },
+    revert(context) {
+      restoreMeasurementStore(context.map, previous);
+    },
+    isNoop(context) {
+      const item = findMeasurement(context.map, measurementId);
+      if (!item) return true;
+      const normalizedPoints = normalizeMeasurementPoints(points, context.map);
+      return normalizedPoints.length < 2 || sameMeasurementPoints(item.points, normalizedPoints);
+    }
+  };
+}
+
 export function createDeleteMeasurementCommand(measurementId, {label = "删除测量对象"} = {}) {
   let previous = null;
 
@@ -104,4 +141,9 @@ function readMeasurement(map, measurementId) {
 
 function normalizeMeasurementName(value) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function sameMeasurementPoints(a = [], b = []) {
+  if (a.length !== b.length) return false;
+  return a.every((point, index) => point.x === b[index]?.x && point.y === b[index]?.y);
 }

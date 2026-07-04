@@ -44,8 +44,8 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
-import {createDeleteMeasurementCommand, createRenameMeasurementCommand, createSaveMeasurementCommand} from "./measurement-edit-commands.js";
-import {ensureMeasurementStore, measurementArea, measurementBounds, measurementDistance} from "./measurement-objects.js";
+import {createDeleteMeasurementCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
+import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDistance} from "./measurement-objects.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
@@ -157,7 +157,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       active: false,
       points: [],
       pointer: null,
-      drag: null
+      drag: null,
+      editingMeasurementId: null
     },
     lastEditRefresh: null,
     selectionStore: null,
@@ -1171,6 +1172,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onLocate: row => {
       locateMeasurement(state, row, documentRef);
     },
+    onEdit: row => {
+      startMeasurementObjectEdit(state, row, documentRef);
+    },
     onRename: (measurementId, name) => {
       const context = {map: state.map};
       const command = createRenameMeasurementCommand(measurementId, name);
@@ -1182,6 +1186,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const context = {map: state.map};
       const command = createDeleteMeasurementCommand(row.id);
       if (!command.isNoop(context)) refreshAfterEdit(state, state.editHistory.execute(command, context));
+      if (state.measurement.editingMeasurementId === row.id) {
+        state.measurement.editingMeasurementId = null;
+        state.measurement.points = [];
+        cancelMeasurementDrag(state, documentRef);
+      }
       updateMeasurementPanel(state);
       updateMeasurementOverlay(state, documentRef);
       setFileOperationStatus(documentRef, `已删除测量对象 ${row.name || row.id}。`);
@@ -1866,6 +1875,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.measurement.points = [];
   state.measurement.pointer = null;
   state.measurement.drag = null;
+  state.measurement.editingMeasurementId = null;
   ensureMeasurementStore(state.map);
   state.lastEditRefresh = null;
   if (loadingMessages[0]) {
@@ -3266,6 +3276,7 @@ function bindMeasurementTool(canvas, state, documentRef) {
   clear?.addEventListener("click", () => {
     cancelMeasurementDrag(state, documentRef);
     state.measurement.points = [];
+    state.measurement.editingMeasurementId = null;
     updateMeasurementOverlay(state, documentRef);
   });
   undo?.addEventListener("click", () => undoMeasurementPoint(state, documentRef));
@@ -3342,6 +3353,7 @@ function updateMeasurementOverlay(state, documentRef) {
   toggle.classList.toggle("active", active);
   toggle.setAttribute("aria-pressed", active ? "true" : "false");
   toggle.textContent = active ? "退出测量" : "测量";
+  saveButton.textContent = state.measurement.editingMeasurementId ? "保存修改" : "保存";
   overlay.hidden = !showOverlay;
   readout.hidden = !active;
   clear.disabled = points.length === 0;
@@ -3392,12 +3404,14 @@ function updateMeasurementOverlay(state, documentRef) {
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
   const distance = measurementDistance(points);
   const area = points.length >= 3 ? measurementArea(points) : 0;
-  summary.textContent = measurementSummary(points.length, distance, area, units);
+  summary.textContent = measurementSummary(points.length, distance, area, units, editingMeasurementLabel(state));
 }
 
 function visibleSavedMeasurements(state) {
   if (state.renderer?.layerVisibility?.measurements === false) return [];
-  return (state.map?.measurements?.items || []).filter(item => Array.isArray(item?.points) && item.points.length >= 2);
+  const editingId = state.measurement.active ? state.measurement.editingMeasurementId : null;
+  return (state.map?.measurements?.items || [])
+    .filter(item => item?.id !== editingId && Array.isArray(item?.points) && item.points.length >= 2);
 }
 
 function appendSavedMeasurementShapes(documentRef, svg, state, measurements, rect) {
@@ -3523,6 +3537,24 @@ function exportMeasurement(state, documentRef) {
 function saveCurrentMeasurement(state, documentRef) {
   if (!state.map || !state.measurement.points?.length) return;
   const context = {map: state.map};
+  if (state.measurement.editingMeasurementId) {
+    const measurementId = state.measurement.editingMeasurementId;
+    const command = createUpdateMeasurementPointsCommand(measurementId, state.measurement.points);
+    if (command.isNoop(context)) {
+      setFileOperationStatus(documentRef, "测量对象没有可保存的形状变化，或点数不足。");
+      return;
+    }
+    refreshAfterEdit(state, state.editHistory.execute(command, context));
+    state.measurement.editingMeasurementId = null;
+    state.measurement.points = [];
+    cancelMeasurementDrag(state, documentRef);
+    updateMeasurementOverlay(state, documentRef);
+    updateMeasurementPanel(state);
+    state.panels.measurement?.setSelectedMeasurementId?.(measurementId);
+    setFileOperationStatus(documentRef, `已更新测量对象 ${measurementId}。`);
+    return;
+  }
+
   const command = createSaveMeasurementCommand(state.measurement.points);
   if (command.isNoop(context)) {
     setFileOperationStatus(documentRef, "至少需要 2 个测量点才能保存。");
@@ -3536,6 +3568,19 @@ function saveCurrentMeasurement(state, documentRef) {
   updateMeasurementPanel(state);
   state.panels.measurement?.setSelectedMeasurementId?.(created?.id);
   setFileOperationStatus(documentRef, `已保存测量对象 ${created?.name || created?.id || ""}。`);
+}
+
+function startMeasurementObjectEdit(state, row, documentRef) {
+  const item = findMeasurement(state.map, row.id);
+  if (!item || !Array.isArray(item.points) || item.points.length < 2) return;
+  cancelMeasurementDrag(state, documentRef);
+  state.measurement.editingMeasurementId = item.id;
+  state.measurement.points = item.points.map(point => ({x: point.x, y: point.y}));
+  state.measurement.active = true;
+  state.panels.measurement?.setSelectedMeasurementId?.(item.id);
+  locateMeasurement(state, {...row, points: item.points}, documentRef);
+  updateMeasurementOverlay(state, documentRef);
+  setFileOperationStatus(documentRef, `正在编辑测量对象 ${item.name || item.id}，拖动、插入或删除节点后可保存修改。`);
 }
 
 function locateMeasurement(state, row, documentRef) {
@@ -3645,12 +3690,18 @@ function measurementPointClass(state, index) {
   return state.measurement.drag?.index === index ? "measurement-point dragging" : "measurement-point";
 }
 
-function measurementSummary(pointCount, distance, area, units) {
-  if (pointCount === 0) return "点击地图添加起点";
-  if (pointCount === 1) return "继续点击添加测量点";
+function measurementSummary(pointCount, distance, area, units, editingLabel = "") {
+  const prefix = editingLabel ? `编辑 ${editingLabel} / ` : "";
+  if (pointCount === 0) return `${prefix}点击地图添加起点`;
+  if (pointCount === 1) return `${prefix}继续点击添加测量点`;
   const distanceText = `${pointCount} 点 / 总长 ${formatDisplayDistance(distance, units)}`;
-  if (pointCount < 3) return distanceText;
-  return `${distanceText} / 面积 ${formatDisplayArea(area, units)}`;
+  if (pointCount < 3) return `${prefix}${distanceText}`;
+  return `${prefix}${distanceText} / 面积 ${formatDisplayArea(area, units)}`;
+}
+
+function editingMeasurementLabel(state) {
+  const item = findMeasurement(state.map, state.measurement.editingMeasurementId);
+  return item?.name || item?.id || "";
 }
 
 function clampMeasurementValue(value, min, max) {
