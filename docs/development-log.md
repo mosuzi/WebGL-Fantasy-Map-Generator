@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：GEO 导入入口控件修正
+
+用户反馈“导入 GEO 数据不好使”。复查发现 GeoJSON 解析、测量对象写入和 overlay 绘制链路本身可用，问题出在真实用户入口：简介页导入按钮使用 `UiButton @click -> document.getElementById(...).click()` 触发隐藏 file input，而回归脚本此前直接 `setInputFiles()` 到隐藏 input，绕过了可见按钮路径。
+
+修正：
+
+- `UiButton` 显式转发 `click` 事件，避免后续其他基于组件点击的控制继续踩 Vue / Element Plus 事件透传差异。
+- 简介页“导入地图数据”和“导入 GEO 数据”改为按钮区域内原生 `input[type=file]` 覆盖，视觉仍沿用 `secondary-action`，用户点击按钮区域时由浏览器直接处理文件选择，不再依赖 JS 触发隐藏 input。
+- 文件导入控件补充 `focus-within` 暗金焦点态，透明 input 覆盖完整按钮区域。
+- `regress:geo` 不再只验证隐藏 input 注入文件；新增导入控件结构检查，要求“导入 GEO 数据”控件内存在原生 file input、没有 `hidden` 属性，并保留 `.geojson` accept。
+
+验证：
+
+- `node --check tools\webgl-generator-geo-import-regression.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `pnpm run regress:geo -- --port 5440 --timeout 120000` 通过：导入控件为原生 file input，fixture `3` 个 Feature，导入 `3` 个测量对象，overlay 为点 `1`、线 `2`、面 `1`，WebGL error 为 `0`。
+- e2e 守门 `geo-import-control-fix-e2e / continents / 10000` 通过：点击到出图 `1653.6ms`，纯生成 `927.9ms`，WebGL 加载 `385.9ms`，最慢加载阶段为“构建线层顶点” `62.1ms`。
+
 ## 2026-07-04：地图低饱和配色第一刀
 
 用户提供参考截图，指出当前地图颜色饱和度过高。本轮只调整默认视觉配色，目标是让国家面、海面、海岸、边界、道路和河流更接近柔和的低饱和纸面地图；不改变生成语义、国家归属、图层结构或导出数据。

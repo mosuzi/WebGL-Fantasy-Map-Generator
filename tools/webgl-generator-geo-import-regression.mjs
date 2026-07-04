@@ -66,6 +66,7 @@ try {
   const generation = await generateMap(page, {cells, seed, template, graphWidth, graphHeight});
   const fixture = await createGeoJsonFixture(page);
   writeFileSync(fixturePath, `${JSON.stringify(fixture.geoJson, null, 2)}\n`, "utf8");
+  const importControl = await inspectGeoImportControl(page);
   const imported = await importGeoFixture(page, fixturePath, fixture.expected);
 
   const report = {
@@ -88,8 +89,9 @@ try {
       featureCount: fixture.geoJson.features.length,
       expectedTypes: fixture.expected.map(item => item.type)
     },
+    importControl,
     imported,
-    passed: !consoleErrors.length && imported.passed
+    passed: !consoleErrors.length && importControl.passed && imported.passed
   };
 
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -280,6 +282,29 @@ async function importGeoFixture(page, filePath, expected) {
   }, expected);
 }
 
+async function inspectGeoImportControl(page) {
+  return page.evaluate(() => {
+    const label = Array.from(document.querySelectorAll(".file-import-action"))
+      .find(element => element.textContent?.includes("导入 GEO 数据"));
+    const input = label?.querySelector('input[type="file"]') || null;
+    const failures = [];
+    if (!label) failures.push("缺少导入 GEO 数据控件");
+    if (!input) failures.push("导入 GEO 数据控件内没有原生 file input");
+    if (input?.hidden || input?.hasAttribute("hidden")) failures.push("GEO file input 不应使用 hidden 属性");
+    if (input?.id !== "import-geo-file") failures.push(`GEO file input id 异常：${input?.id || "none"}`);
+    if (input && !String(input.accept || "").includes(".geojson")) failures.push(`GEO file input accept 异常：${input.accept || "none"}`);
+    return {
+      text: label?.textContent?.trim() || "",
+      hasNativeInput: Boolean(input),
+      inputId: input?.id || "",
+      accept: input?.accept || "",
+      hiddenAttribute: Boolean(input?.hidden || input?.hasAttribute("hidden")),
+      failures,
+      passed: failures.length === 0
+    };
+  });
+}
+
 function renderMarkdown(report) {
   const lines = [];
   lines.push("# GEO 数据导入回归报告", "");
@@ -292,6 +317,7 @@ function renderMarkdown(report) {
   lines.push("## 摘要", "");
   lines.push(`- fixture Feature：${report.fixture.featureCount}`);
   lines.push(`- 期望类型：${report.fixture.expectedTypes.join(" / ")}`);
+  lines.push(`- 导入控件：${report.importControl.passed ? "原生 file input" : "异常"}`);
   lines.push(`- 导入对象：${report.imported.items.length}`);
   lines.push(`- overlay：点 ${report.imported.pointCount}，线 ${report.imported.pathCount}，面 ${report.imported.areaCount}`);
   lines.push(`- 测量图层：${report.imported.measurementLayerVisible ? "已显示" : "未显示"}`);
@@ -302,9 +328,10 @@ function renderMarkdown(report) {
   lines.push(`- 点击到出图：${report.generation.elapsedMs}ms`);
   lines.push(`- 纯生成：${report.generation.generationMs}ms`);
   lines.push(`- WebGL 加载：${report.generation.loadMapMs}ms`);
-  if (report.imported.failures.length) {
+  const failures = [...report.importControl.failures, ...report.imported.failures];
+  if (failures.length) {
     lines.push("", "## 失败项", "");
-    for (const failure of report.imported.failures) lines.push(`- ${failure}`);
+    for (const failure of failures) lines.push(`- ${failure}`);
   }
   if (report.metadata.consoleErrors.length) {
     lines.push("", "## Console Errors", "");
@@ -316,6 +343,7 @@ function renderMarkdown(report) {
 
 function renderFailureSummary(report) {
   const lines = ["GEO 数据导入回归失败："];
+  for (const failure of report.importControl.failures) lines.push(`- ${failure}`);
   for (const failure of report.imported.failures) lines.push(`- ${failure}`);
   for (const error of report.metadata.consoleErrors) lines.push(`- console error: ${error}`);
   return lines.join("\n");

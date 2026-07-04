@@ -1,5 +1,5 @@
 <template>
-  <ElButton :native-type="buttonType" :class="[variantClass, {active}]">
+  <ElButton :native-type="buttonType" :class="[variantClass, {active}]" @click="event => emit('click', event)">
     <slot />
   </ElButton>
 </template>
@@ -25,6 +25,8 @@ const props = defineProps({
     default: "button"
   }
 });
+
+const emit = defineEmits(["click"]);
 
 const variantClass = computed(() => {
   if (props.variant === "primary") return "primary-action";

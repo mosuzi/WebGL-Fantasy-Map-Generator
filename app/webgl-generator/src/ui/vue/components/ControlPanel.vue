@@ -30,10 +30,14 @@
               导出
             </UiButton>
           </div>
-          <UiButton class="file-import-action" variant="secondary" @click="triggerFileInput('import-map-file')">导入地图数据</UiButton>
-          <input id="import-map-file" type="file" accept=".json,application/json" hidden />
-          <UiButton class="file-import-action" variant="secondary" @click="triggerFileInput('import-geo-file')">导入 GEO 数据</UiButton>
-          <input id="import-geo-file" type="file" accept=".geojson,.json,application/geo+json,application/json" hidden />
+          <label class="file-import-action secondary-action">
+            <span>导入地图数据</span>
+            <input id="import-map-file" type="file" accept=".json,application/json" />
+          </label>
+          <label class="file-import-action secondary-action">
+            <span>导入 GEO 数据</span>
+            <input id="import-geo-file" type="file" accept=".geojson,.json,application/geo+json,application/json" />
+          </label>
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
       </section>
@@ -550,13 +554,6 @@ function cycleWindBand(index) {
   windBands.value = windBands.value.map((angle, bandIndex) => bandIndex === index ? next.angle : angle);
   atmosphereDirection.value = "customBands";
   emitClimateControlsChange();
-}
-
-function triggerFileInput(inputId) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-  input.value = "";
-  input.click();
 }
 
 function toggleExportPanel() {
