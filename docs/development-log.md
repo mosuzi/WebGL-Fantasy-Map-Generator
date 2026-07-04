@@ -18489,3 +18489,22 @@ full 矩阵结果：
 - 全量 deep 面板审计 `action-group-audit-smoke / continents / 10000` 通过：未发现待复核项，点击到出图 `1289.2ms`，WebGL 加载 `307ms`；名称库工具按钮组为 `7 项 / 2 行 / min 140.4px / overflow none`，军事编辑工具条为 `5 项 / 1 行 / min 103.6px / overflow none`。
 - 新指标暴露两个后续可优先复查的偏紧工具条：政体导出按钮组 `2 项 / 1 行 / min 75.8px / overflow none`，资源标记工具条 `5 项 / 1 行 / min 76px / overflow none`。
 - e2e 守门 `action-group-audit-e2e / continents / 10000` 通过：点击到出图 `1389.4ms`，纯生成 `722ms`，WebGL 加载 `411.3ms`，最慢加载阶段为“构建视觉 cell mesh” `68.7ms`。
+
+### 2026-07-04 政体导出按钮组空间修正
+
+背景：
+
+- 工具按钮组审计新增后，`action-group-audit-smoke` 显示政体面板导出按钮组为 `2 项 / 1 行 / min 75.8px / overflow none`，没有破版但按钮有效宽度偏紧。
+- 该区域只有“导出 CSV / 导出 JSON”两个按钮，适合用最小按钮宽放宽，不需要改变政体面板整体结构。
+
+实现：
+
+- `.government-panel-export-actions .el-button` 增加 `min-width: 112px`。
+- 改动只影响政体面板导出按钮宽度，不进入生成、数据、WebGL buffer 或绘制路径。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 政体面板 deep 布局审计 `government-export-space-smoke / continents / 10000` 通过：未发现待复核项；政体导出按钮组为 `2 项 / 1 行 / min 112px / overflow none`，点击到出图 `1513.9ms`，WebGL 加载 `362.8ms`。
+- e2e 守门 `government-export-space-e2e / continents / 10000` 通过：点击到出图 `1408ms`，纯生成 `696ms`，WebGL 加载 `386.5ms`，最慢加载阶段为“构建标签” `67.8ms`。
