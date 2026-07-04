@@ -17736,3 +17736,25 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`NamebasePanel` 懒加载 chunk 约 `16.32KB / gzip 5.76KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：向当前地图注入“质量烟测”用户库后，名称库详情显示“长度越界 1 个：星-港 / 连写风险 1 个：清清 / 特殊字符 - / 加权样本 1 个，最高 3x”；`glError = 0`，health 非 info 事件、console error、page error 均为 `0`，名称库面板横向溢出为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed namebase-quality-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1779.5ms`，纯生成 `805.5ms`，WebGL 加载 `592.7ms`，UI/调度余量 `381.3ms`，最慢加载阶段为“构建视觉 cell mesh” `64.6ms`，控制台错误为空。
+
+### 湖泊管理面板第一刀
+
+背景：
+
+- 湖泊已经支持对象拾取、对象详情和单个名称库重命名，但还没有独立管理面板，无法像国家、城市、河流那样对筛选结果执行显式批量重命名。
+- 用户再次校准：无需做动态军事系统；本轮继续收束为静态对象管理能力，不触碰战斗模拟、战役推进、自动军事行动或外交战争状态。
+
+修正：
+
+- 管理 tab 新增“湖泊管理”入口，运行时懒加载 `LakePanel`，避免增加首屏同步面板成本。
+- 湖泊管理面板支持湖泊总览、筛选、排序、选中、定位、详情、单湖泊重命名、撤销/重做和“按名称库重命名筛选”。
+- 批量名称库命令读取当前 `hydro` 绑定，只写 `pack.features` 中对应湖泊的 `name`，不重建水文、河流、路线、政治或军事数据。
+- 通用对象详情补齐湖泊详情格式化，避免选中湖泊后侧栏 formatter 缺失导致运行时报错。
+- 湖泊表格列宽收紧，保证 540px 浮动面板内没有横向溢出。
+- README、当前计划、名称库专题计划、绑定专项和 source 功能积压已同步更新；湖泊管理面板级批量入口不再列为待办。军事方向继续明确为静态收尾，不做动态军事系统。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；`LakePanel` 懒加载 chunk 约 `4.56KB / gzip 2.05KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：注入 `hydro = lake-smoke-hydro` 测试库后，湖泊面板打开正常，5 个湖泊按筛选结果显式重命名；撤销恢复原名、重做恢复新名，选中对象仍为 `lake`，详情包含面积、补给和水域 cells，面板横向溢出为 `0`，`glError = 0`，health 非 info、console error、page error 均为 `0`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed lake-panel-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1652.4ms`，纯生成 `844.4ms`，WebGL 加载 `423.6ms`，UI/调度余量 `384.4ms`，最慢加载阶段为“构建视觉 cell mesh” `61.4ms`，结果仍在守门阈值内。

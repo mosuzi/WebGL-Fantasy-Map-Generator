@@ -20,6 +20,7 @@ import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createGovernmentPanel} from "../ui/panels/government-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
 import {createLabelNamingPanel} from "../ui/panels/label-naming-panel.js";
+import {createLakePanel} from "../ui/panels/lake-panel.js";
 import {createMarkerPanel} from "../ui/panels/marker-panel.js";
 import {createMilitaryPanel} from "../ui/panels/military-panel.js";
 import {createNamebasePanel} from "../ui/panels/namebase-panel.js";
@@ -179,6 +180,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let economyPanel = null;
   let militaryPanel = null;
   let riverPanel = null;
+  let lakePanel = null;
   let routePanel = null;
   let markerPanel = null;
   let labelNamingPanel = null;
@@ -207,6 +209,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateCulturePanel(state);
       updateReligionPanel(state);
       state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      updateLakePanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameFromNamebase: object => {
@@ -1234,6 +1237,48 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.river = riverPanel;
+  lakePanel = createLakePanel(documentRef, panelManager, {
+    onSelect: object => {
+      selectionStore.setSelection({object});
+    },
+    onLocate: object => {
+      locateObject(state, object, documentRef);
+    },
+    onRename: (lakeId, name) => {
+      const object = {kind: OBJECT_KIND.LAKE, id: lakeId};
+      const context = {map: state.map};
+      const command = createRenameObjectCommand(object, name);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateLakePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onRenameVisibleFromNamebase: lakeIds => {
+      const context = {map: state.map};
+      const command = createRenameLakesFromNamebaseCommand(lakeIds);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+        const result = command.getResult?.();
+        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 个湖泊。`);
+      } else {
+        setFileOperationStatus(documentRef, "当前筛选湖泊没有可按名称库更新的名称。");
+      }
+      updateLakePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateLakePanel(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateLakePanel(state);
+    }
+  });
+  state.panels.lake = lakePanel;
   const renderer = new PlaceholderMapRenderer(canvas, () => {
     if (state.map) {
       updateRuntimePanel(documentRef, state);
@@ -1263,6 +1308,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.objectDetails.show(selection, editingObject);
     }
     state.panels.river.update(state.map, selection, state.editHistory.getStats(), editingObject);
+    updateLakePanel(state);
     state.panels.route.update(state.map, selection, state.editHistory.getStats());
     state.panels.marker.update(state.map, selection, state.editHistory.getStats());
     state.panels.labelNaming.update(state.map, selection, state.editHistory.getStats());
@@ -1397,6 +1443,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onOpenRiverPanel: () => {
       state.panels.river.open(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+    },
+    onOpenLakePanel: () => {
+      state.panels.lake.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenRoutePanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.ROUTE) {
@@ -1822,6 +1871,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.panels.namebase.update(state.map, state.editHistory.getStats());
   state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  updateLakePanel(state);
   updateEditingInteractionLock(state, documentRef);
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
@@ -2750,6 +2800,11 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     state.panels.river.open(state.map, selection, state.editHistory.getStats(), editingObject);
     return true;
   },
+  [OBJECT_KIND.LAKE]: (state, selection) => {
+    state.panels.objectDetails.clear();
+    state.panels.lake.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
   [OBJECT_KIND.ROUTE]: (state, selection) => {
     state.panels.objectDetails.clear();
     state.panels.route.setSelectedRouteId(selection.object.id);
@@ -3018,6 +3073,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  updateLakePanel(state);
   state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   updateRuntimePanel(documentRef, state);
 }
@@ -4060,7 +4116,12 @@ function updateAllObjectPanels(state) {
   updateLabelNamingPanel(state);
   state.panels.route?.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.river?.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  updateLakePanel(state);
   updateNotesPanel(state);
+}
+
+function updateLakePanel(state) {
+  state.panels.lake?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function labelKeyForObject(object) {

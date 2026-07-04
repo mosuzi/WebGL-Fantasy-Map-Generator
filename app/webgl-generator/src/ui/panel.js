@@ -38,6 +38,7 @@ const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.ROUTE]: (object, units) => `${object.type} / ${object.level} / distance ${formatDisplayDistance(object.distance, units)}`,
   [OBJECT_KIND.TRADE_FLOW]: (object, units) => `${object.sellerName || "卖方"} -> ${object.buyerName || "买方"} / 金额 ${formatDisplayNumber(object.value, units)} / 价差 ${formatSignedDisplayNumber(object.priceDelta, units)}`,
   [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${formatDisplayNumber(object.flux, units)} / length ${formatDisplayDistance(object.length, units)}`,
+  [OBJECT_KIND.LAKE]: (object, units) => `${object.type || "湖泊"} / 面积 ${formatDisplayNumber(object.area, units)} / cells ${formatDisplayNumber(object.cells, units)}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
   [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
   [OBJECT_KIND.CULTURE]: (object, units) => `${object.type} / cells ${formatDisplayNumber(object.cells, units)} / pop ${formatDisplayPopulation(object.population, units)}`,
@@ -93,6 +94,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-military-panel")?.addEventListener("click", handlers.onOpenMilitaryPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
+  documentRef.getElementById("open-lake-panel")?.addEventListener("click", handlers.onOpenLakePanel);
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
   documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
   documentRef.getElementById("open-notes-panel")?.addEventListener("click", handlers.onOpenNotesPanel);
@@ -190,6 +192,7 @@ function editLockControls(documentRef) {
     "#open-military-panel",
     "#open-route-panel",
     "#open-river-panel",
+    "#open-lake-panel",
     "#open-marker-panel",
     "#open-label-naming-panel",
     "#open-notes-panel",
