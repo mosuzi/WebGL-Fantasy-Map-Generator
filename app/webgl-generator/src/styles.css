@@ -4307,8 +4307,8 @@ input.ui-switch-native {
 
 .marker-panel-controls {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  --ui-segmented-min-width: 60px;
+  grid-template-columns: 300px minmax(0, 1fr);
+  --ui-segmented-min-width: 90px;
   gap: 8px;
   margin-bottom: 8px;
 }

@@ -18069,3 +18069,26 @@ full 矩阵结果：
 - 本轮只修改中文文档，不涉及运行时代码。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed plan-doc-cleanup-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-plan-doc-cleanup-e2e.json" --markdown "$env:TEMP\fmg-plan-doc-cleanup-e2e.md"` 通过；点击到出图 `1243.3ms`，纯生成 `652.6ms`，WebGL 加载 `326ms`，最慢加载阶段为“构建视觉 cell mesh” `53.1ms`。
+
+### 面板布局自动审计第一刀
+
+背景：
+
+- 当前面板数量较多，用户指出仍可能有奇怪折行和局部空间过窄。
+- 继续凭肉眼逐个打开面板容易遗漏，也容易把隐藏 bridge 控件误判为可见溢出。
+
+修正：
+
+- 新增 `tools/webgl-generator-panel-layout-audit.mjs` 和 `pnpm run audit:panels`。
+- 脚本复用构建产物、静态服务器、Playwright 和固定 seed 流程，生成地图后逐个打开主要浮动面板。
+- 审计项包括 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横向滚动、普通按钮文字溢出和疑似异常折行。
+- 审计会排除 `aria-hidden`、`opacity: 0` 的隐藏兼容控件，避免把 `UiSegmented` 的 1px bridge button 当成可见问题。
+- 资源标记面板三段切换左列从 `220px` 放宽到 `300px`，`--ui-segmented-min-width` 从 `60px` 放宽到 `90px`，避免“资源点”有效文字区过窄。
+
+验证：
+
+- `node --check .\tools\webgl-generator-panel-layout-audit.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run audit:panels -- --browser-channel chrome --cells 10000 --seed panel-layout-audit-smoke --template continents --timeout 120000 --out "$env:TEMP\fmg-panel-layout-audit-final3.json" --markdown "$env:TEMP\fmg-panel-layout-audit-final3.md"` 通过；主要面板 body 均无横向溢出，审计待复核项为 `0`，资源标记 segmented 宽 `300px`、最小项宽 `78.7px`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed panel-layout-audit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200 --out "$env:TEMP\fmg-panel-layout-audit-e2e.json" --markdown "$env:TEMP\fmg-panel-layout-audit-e2e.md"` 通过；点击到出图 `1274.3ms`，纯生成 `676.3ms`，WebGL 加载 `312.2ms`，最慢加载阶段为“构建视觉 cell mesh” `43ms`。

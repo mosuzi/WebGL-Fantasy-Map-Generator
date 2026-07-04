@@ -78,6 +78,7 @@
 - 50k / 100k 扩展 profile 已确认：overlay 本身仍不是主要瓶颈。100k 完整图层下，路线 screen mesh 构建约 `30-37ms`，河流 screen mesh 构建约 `13-17ms`，关闭路线和河流后交互 draw 接近 `0.06ms`。
 - 已执行交互降级第一刀：拖动 / 滚轮期间只绘制基础图层与 overlay，暂不绘制已标 dirty 的路线、河流和选中 screen mesh；停止输入约 `120ms` 后自动完整重建。100k 完整图层中键拖动 frame p95 从约 `88.2ms` 降到 `35.3ms`，draw 均值从约 `43.77ms` 降到 `0.04ms`。
 - 面板布局第二轮已修正 `UiSegmented`：不再依赖 Element Plus 的额外选中指示层和横向滚动条，默认改为可换行 grid；经济面板三段控件在窄列中会自然换成两行，marker 三段控件保持一行三列，面板 body 无横向溢出。
+- 面板布局自动审计第一刀已完成：新增 `tools/webgl-generator-panel-layout-audit.mjs` 和 `pnpm run audit:panels`，可服务构建产物、生成固定地图、打开主要浮动面板并记录 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横向滚动和疑似文字溢出。`panel-layout-audit-smoke / continents / 10000 / 1280x820` 最终审计未发现待复核项；资源标记面板三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。审计已排除隐藏的 `UiSegmented` bridge button，避免把兼容按钮误判成可见溢出。
 
 步骤：
 
