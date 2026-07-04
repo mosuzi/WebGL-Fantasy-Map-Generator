@@ -25,19 +25,19 @@
 - 面板布局自动审计第一刀已完成：新增 `pnpm run audit:panels`，可打开主要浮动面板并报告 body 横向滚动、summary/detail 最小项宽、segmented 行数、表格横滚和疑似文字溢出；当前 1280 x 820 构建产物审计未发现待复核项。资源标记面板的三段切换左列已放宽到 `300px`，避免“资源点”有效文字区过窄。
 - 面板窄视口审计已完成：`1024 x 720` 构建产物审计未发现待复核项，页面横向溢出为 `0`；同 seed e2e 守门通过，WebGL 加载 `323.7ms`。
 - 面板深场景审计已完成：`pnpm run audit:panels -- --scenario deep` 会注入长国家 / 城市 / 文化 / 宗教 / 路线 / 河流 / 湖泊 / marker / 备注样本，等待异步面板预热完成后逐个打开主要面板、选中首个对象并展开可用二级编辑面板。`panel-layout-deep-smoke` 未发现布局待复核项；连续打开面板仍会产生 health 长任务事件，后续应作为面板打开性能单独诊断，不混入布局失败。
+- 面板打开长任务诊断与第一刀优化已完成：新增 `pnpm run profile:panels`，并把共享 `UiObjectTable` 从 Element Plus `ElTable` 换成轻量原生 table，保留列最小宽、选中、定位和横向滚动。全量 17 个面板 profile 中最慢为城市管理 `371.3ms`、标签管理 `368.8ms`，health 事件 `0`；deep 布局审计仍未发现待复核项。
 
 ### 当前执行队列
 
 下面是继续推进时的真实顺序。每一刀完成后都要按改动类型做对应验证，确认没有加载或绘制卡顿回退，再单独提交。
 
-1. **面板打开长任务诊断**：
-   - 深场景审计在布局通过的同时仍记录到 health `input-handler-stall / main-thread-long-task`，说明连续打开或挂载面板时还有交互长任务风险。
-   - 下一步若继续 UI 性能，应新增聚焦的 panel-open profile，区分异步 chunk、Vue/Element mount、表格渲染、二级编辑面板定位和审计脚本连续点击造成的压力。
-   - 不把这些 health 事件混成布局失败；加载 / 绘制仍以 e2e、overlay profile 和后续 panel-open profile 判断。
-2. **面板空间策略修正（等待具体复现）**：
+1. **面板空间策略修正（等待具体复现）**：
    - 当前默认、窄视口和 deep 场景审计均未发现布局待复核项；后续只修审计或本地预览能复现的具体折行、错位和窄控件，不做单个面板的大重排。
    - 修正原则是不继续吝啬空间：横向不足时优先扩大面板宽度、让字段跨整行、按钮自然换行或表格横向滚动；不得把长文本硬塞成单字竖排式折行。
-   - 共享组件优先级为 `UiDetailGrid` 长字段显式跨整行、`UiMetricGrid` 面板级最小宽度、`UiSortBar / UiSegmented` 换行策略、`UiObjectTable` 列最小宽和滚动体验。
+   - 共享组件优先级为 `UiDetailGrid` 长字段显式跨整行、`UiMetricGrid` 面板级最小宽度、`UiSortBar / UiSegmented` 换行策略，以及原生 `UiObjectTable` 列最小宽和滚动体验。
+2. **当前覆盖层与 pan/zoom 卡顿复测**：
+   - 用户反馈非 WebGL 内容越来越多、移动和缩放画布会有卡顿；虽然 100k `overlayMatrix` 暂未证明 DOM overlay 是主瓶颈，但后续应以当前代码重新复测 pan/zoom，并把测量 SVG、多对象选中态和极端标签数量作为补充场景。
+   - 先判断是 DOM overlay、路线 / 河流动态 mesh，还是面板 / selection 联动造成；不得在没有证据时把所有 overlay 默认迁到 WebGL。
 3. **路线 / 河流动态线层后续优化**：
    - 当前证据显示 100k 交互主要瓶颈不是 DOM overlay，而是路线 / 河流 screen-space 动态 mesh。
    - viewport 粗筛第一刀已经完成；若继续处理拖动 / 缩放手感，应优先评估分块缓存、跨帧重建或更轻的交互态线层。

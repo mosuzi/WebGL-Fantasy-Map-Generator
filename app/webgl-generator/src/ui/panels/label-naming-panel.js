@@ -88,7 +88,6 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
     setSelectedLabelKey(key) {
       if (labelExists(panelState.map, key)) {
         panelState.selectedLabelKey = key;
-        panelState.version++;
       }
     },
     isOpen() {

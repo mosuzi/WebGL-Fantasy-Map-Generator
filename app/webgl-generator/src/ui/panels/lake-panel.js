@@ -73,6 +73,9 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       panelState.version++;
     },
+    setSelection(selection) {
+      panelState.selection = selection;
+    },
     isOpen() {
       return panelState.open;
     },

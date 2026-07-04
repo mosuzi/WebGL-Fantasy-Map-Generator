@@ -80,6 +80,10 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       panelState.version++;
     },
+    setSelection(selection, editingObject = panelState.editingObject) {
+      panelState.selection = selection;
+      panelState.editingObject = editingObject;
+    },
     isOpen() {
       return panelState.open;
     },

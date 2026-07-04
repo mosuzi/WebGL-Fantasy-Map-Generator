@@ -346,7 +346,7 @@ async function auditPanel(page, panel) {
 
     function findTextIssues(root) {
       const candidates = [
-        ...root.querySelectorAll(".ui-detail-grid strong, .ui-metric-grid strong, .object-table-el .cell, .ui-segmented-el .el-segmented__item-label")
+        ...root.querySelectorAll(".ui-detail-grid strong, .ui-metric-grid strong, .object-table-cell, .object-table-el .cell, .ui-segmented-el .el-segmented__item-label")
       ].filter(isVisibleElement);
       const issues = [];
       for (const element of candidates) {
@@ -531,7 +531,7 @@ async function closeSecondaryPanels(page) {
 async function preparePanelDeepState(page, panelId) {
   await page.evaluate(panelId => {
     const panel = document.querySelector(`.floating-panel[data-panel-id="${panelId}"]`);
-    const rows = [...(panel?.querySelectorAll(".el-table__body-wrapper tbody tr") || [])]
+    const rows = [...(panel?.querySelectorAll(".object-table-row, .el-table__body-wrapper tbody tr") || [])]
       .filter(row => row.getBoundingClientRect().width > 0 && row.getBoundingClientRect().height > 0);
     const row = panelId === "state-panel" ? rows[1] || rows[0] : rows[0];
     row?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));

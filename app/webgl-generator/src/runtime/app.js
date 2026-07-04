@@ -195,6 +195,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let notesPanel = null;
   let measurementPanel = null;
   let suppressNextRiverPanelOpen = false;
+  let selectionSourcePanelId = null;
+  const selectFromPanel = (panelId, object) => {
+    selectionSourcePanelId = panelId;
+    try {
+      selectionStore.setSelection({object});
+    } finally {
+      selectionSourcePanelId = null;
+    }
+  };
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
       selectionStore.startEditing(object);
@@ -280,7 +289,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       setStatePanelTarget(state, getStateIdFromPick(state));
     },
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("state-panel", object);
       setStatePanelTarget(state, object.id);
     },
     onLocate: object => {
@@ -382,7 +391,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.state = statePanel;
   governmentPanel = createGovernmentPanel(documentRef, panelManager, {
     onSelectState: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("government-panel", object);
       setStatePanelTarget(state, object.id);
     },
     onLocateState: object => {
@@ -441,7 +450,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       setProvincePanelTarget(state, getProvinceIdFromPick(state));
     },
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("province-panel", object);
       provincePanel.setSelectedProvinceId(object.id);
     },
     onLocate: object => {
@@ -504,7 +513,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.province = provincePanel;
   cityPanel = createCityPanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("city-panel", object);
       cityPanel.setSelectedCityId(object.id);
     },
     onLocate: object => {
@@ -602,7 +611,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.city = cityPanel;
   culturePanel = createCulturePanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("culture-panel", object);
       culturePanel.setSelectedCultureId(object.id);
     },
     onLocate: object => {
@@ -665,7 +674,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.culture = culturePanel;
   religionPanel = createReligionPanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("religion-panel", object);
       religionPanel.setSelectedReligionId(object.id);
     },
     onLocate: object => {
@@ -730,7 +739,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
     },
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("diplomacy-panel", object);
     },
     onLocate: object => {
       locateObject(state, object, documentRef);
@@ -797,7 +806,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.economy = economyPanel;
   militaryPanel = createMilitaryPanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("military-panel", object);
       militaryPanel.setSelectedRegimentId(object.id);
     },
     onLocate: object => {
@@ -934,7 +943,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.military = militaryPanel;
   routePanel = createRoutePanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("route-panel", object);
       routePanel.setSelectedRouteId(object.id);
     },
     onLocate: object => {
@@ -965,7 +974,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.route = routePanel;
   markerPanel = createMarkerPanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("marker-panel", object);
       markerPanel.setSelectedMarkerId(object.id);
     },
     onLocate: object => {
@@ -1041,7 +1050,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.marker = markerPanel;
   labelNamingPanel = createLabelNamingPanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      selectFromPanel("label-naming-panel", object);
       labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
     },
     onLocate: object => {
@@ -1141,7 +1150,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   notesPanel = createNotesPanel(documentRef, panelManager, {
     onSelect: row => {
       if (!row?.object || row.orphan) return;
-      selectionStore.setSelection({object: row.object});
+      selectFromPanel("notes-panel", row.object);
       notesPanel.setSelectedNoteId(row.id);
     },
     onLocate: row => {
@@ -1217,7 +1226,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.measurement = measurementPanel;
   riverPanel = createRiverPanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      riverPanel.setSelection({object}, state.editingObject);
+      selectFromPanel("river-panel", object);
     },
     onLocate: object => {
       locateObject(state, object, documentRef);
@@ -1291,7 +1301,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.river = riverPanel;
   lakePanel = createLakePanel(documentRef, panelManager, {
     onSelect: object => {
-      selectionStore.setSelection({object});
+      lakePanel.setSelection({object});
+      selectFromPanel("lake-panel", object);
     },
     onLocate: object => {
       locateObject(state, object, documentRef);
@@ -1352,6 +1363,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     const handled = handleSelectionPanel(state, selection, editingObject, {
       documentRef,
       suppressNextRiverPanelOpen,
+      sourcePanelId: selectionSourcePanelId,
       clearRiverSuppressor: () => {
         suppressNextRiverPanelOpen = false;
       }
@@ -1359,19 +1371,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     if (!handled) {
       state.panels.objectDetails.show(selection, editingObject);
     }
-    state.panels.river.update(state.map, selection, state.editHistory.getStats(), editingObject);
-    updateLakePanel(state);
-    state.panels.route.update(state.map, selection, state.editHistory.getStats());
-    state.panels.marker.update(state.map, selection, state.editHistory.getStats());
-    state.panels.labelNaming.update(state.map, selection, state.editHistory.getStats());
-    state.panels.notes.update(state.map, selection, state.editHistory.getStats());
-    updateMeasurementPanel(state);
-    updateStatePanel(state);
-    updateProvincePanel(state);
-    updateCityPanel(state);
-    updateCulturePanel(state);
-    updateReligionPanel(state);
-    updateDiplomacyPanel(state);
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
     updatePickPanel(documentRef, state);
@@ -2820,37 +2819,47 @@ function selectedNamebaseTargetLabel(target) {
 }
 
 const SELECTION_PANEL_HANDLERS = Object.freeze({
-  [OBJECT_KIND.STATE]: (state, selection) => {
+  [OBJECT_KIND.STATE]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.state.setTargetStateId(selection.object.id);
-    state.panels.state.open(state.map, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "state-panel") || isSelectionFromPanel(context, "government-panel")) return true;
+    if (state.panels.state.isOpen?.()) updateStatePanel(state);
+    else state.panels.state.open(state.map, state.editHistory.getStats());
     return true;
   },
-  [OBJECT_KIND.CITY]: (state, selection) => {
+  [OBJECT_KIND.CITY]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.city.setSelectedCityId(selection.object.id);
-    state.panels.city.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "city-panel")) return true;
+    if (state.panels.city.isOpen?.()) updateCityPanel(state);
+    else state.panels.city.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
-  [OBJECT_KIND.PROVINCE]: (state, selection) => {
+  [OBJECT_KIND.PROVINCE]: (state, selection, editingObject, context) => {
     if (!shouldOpenProvincePanelForSelection(state)) return false;
     state.panels.objectDetails.clear();
     state.panels.province.setSelectedProvinceId(selection.object.id);
-    state.panels.province.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "province-panel")) return true;
+    if (state.panels.province.isOpen?.()) updateProvincePanel(state);
+    else state.panels.province.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
-  [OBJECT_KIND.CULTURE]: (state, selection) => {
+  [OBJECT_KIND.CULTURE]: (state, selection, editingObject, context) => {
     if (!shouldOpenCulturePanelForSelection(state)) return false;
     state.panels.objectDetails.clear();
     state.panels.culture.setSelectedCultureId(selection.object.id);
-    state.panels.culture.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "culture-panel")) return true;
+    if (state.panels.culture.isOpen?.()) updateCulturePanel(state);
+    else state.panels.culture.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
-  [OBJECT_KIND.RELIGION]: (state, selection) => {
+  [OBJECT_KIND.RELIGION]: (state, selection, editingObject, context) => {
     if (!shouldOpenReligionPanelForSelection(state)) return false;
     state.panels.objectDetails.clear();
     state.panels.religion.setSelectedReligionId(selection.object.id);
-    state.panels.religion.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "religion-panel")) return true;
+    if (state.panels.religion.isOpen?.()) updateReligionPanel(state);
+    else state.panels.religion.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
   [OBJECT_KIND.RIVER]: (state, selection, editingObject, context) => {
@@ -2859,41 +2868,54 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
       context.clearRiverSuppressor();
       return true;
     }
-    state.panels.river.open(state.map, selection, state.editHistory.getStats(), editingObject);
+    if (isSelectionFromPanel(context, "river-panel")) return true;
+    if (state.panels.river.isOpen?.()) updateRiverPanel(state);
+    else state.panels.river.open(state.map, selection, state.editHistory.getStats(), editingObject);
     return true;
   },
-  [OBJECT_KIND.LAKE]: (state, selection) => {
+  [OBJECT_KIND.LAKE]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
-    state.panels.lake.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "lake-panel")) return true;
+    if (state.panels.lake.isOpen?.()) updateLakePanel(state);
+    else state.panels.lake.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
-  [OBJECT_KIND.ROUTE]: (state, selection) => {
+  [OBJECT_KIND.ROUTE]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.route.setSelectedRouteId(selection.object.id);
-    state.panels.route.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "route-panel")) return true;
+    if (state.panels.route.isOpen?.()) updateRoutePanel(state);
+    else state.panels.route.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
   [OBJECT_KIND.TRADE_FLOW]: (state, selection) => {
     if (!state.panels.economy?.isOpen?.()) return false;
     state.panels.objectDetails.clear();
-    state.panels.economy.open(state.map, selection, state.editHistory.getStats());
     state.panels.economy.setSelectedDealId?.(selection.object.id);
+    updateEconomyPanel(state);
     return true;
   },
-  [OBJECT_KIND.MARKER]: (state, selection) => {
+  [OBJECT_KIND.MARKER]: (state, selection, editingObject, context) => {
     if (!state.panels.marker?.isOpen?.()) return false;
     state.panels.objectDetails.clear();
     state.panels.marker.setSelectedMarkerId(selection.object.id);
-    state.panels.marker.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "marker-panel")) return true;
+    updateMarkerPanel(state);
     return true;
   },
-  [OBJECT_KIND.MILITARY]: (state, selection) => {
+  [OBJECT_KIND.MILITARY]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.military.setSelectedRegimentId(selection.object.id);
-    state.panels.military.open(state.map, selection, state.editHistory.getStats());
+    if (isSelectionFromPanel(context, "military-panel")) return true;
+    if (state.panels.military.isOpen?.()) updateMilitaryPanel(state);
+    else state.panels.military.open(state.map, selection, state.editHistory.getStats());
     return true;
   }
 });
+
+function isSelectionFromPanel(context, panelId) {
+  return context?.sourcePanelId === panelId;
+}
 
 function handleSelectionPanel(state, selection, editingObject, context) {
   const object = selection?.object;
@@ -4337,6 +4359,7 @@ function clampInteger(value, min, max) {
 }
 
 function updateStatePanel(state) {
+  if (!isPanelOpen(state.panels.state)) return;
   state.panels.state?.update({
     map: state.map,
     lastAffected: state.stateEdit.lastAffected,
@@ -4346,10 +4369,12 @@ function updateStatePanel(state) {
 }
 
 function updateGovernmentPanel(state) {
+  if (!isPanelOpen(state.panels.government)) return;
   state.panels.government?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateProvincePanel(state) {
+  if (!isPanelOpen(state.panels.province)) return;
   state.panels.province?.update(state.map, state.selection, state.editHistory.getStats(), {
     lastAffected: state.provinceEdit.lastAffected,
     sourceProvinceId: state.provinceEdit.sourceProvinceId
@@ -4357,40 +4382,48 @@ function updateProvincePanel(state) {
 }
 
 function updateCityPanel(state) {
+  if (!isPanelOpen(state.panels.city)) return;
   state.panels.city?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateCulturePanel(state) {
+  if (!isPanelOpen(state.panels.culture)) return;
   state.panels.culture?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateReligionPanel(state) {
+  if (!isPanelOpen(state.panels.religion)) return;
   state.panels.religion?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateDiplomacyPanel(state) {
+  if (!isPanelOpen(state.panels.diplomacy)) return;
   state.panels.diplomacy?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateEconomyPanel(state) {
+  if (!isPanelOpen(state.panels.economy)) return;
   state.panels.economy?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateMilitaryPanel(state) {
+  if (!isPanelOpen(state.panels.military)) return;
   state.panels.military?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateMarkerPanel(state) {
+  if (!isPanelOpen(state.panels.marker)) return;
   state.panels.marker?.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.marker?.updateEditMode?.(state.markerEdit);
 }
 
 function updateLabelNamingPanel(state) {
+  if (!isPanelOpen(state.panels.labelNaming)) return;
   state.panels.labelNaming?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateNotesPanel(state) {
-  state.panels.notes?.update(state.map, state.selection, state.editHistory.getStats());
+  if (isPanelOpen(state.panels.notes)) state.panels.notes?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateAllObjectPanels(state) {
@@ -4404,19 +4437,31 @@ function updateAllObjectPanels(state) {
   updateMilitaryPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
-  state.panels.route?.update(state.map, state.selection, state.editHistory.getStats());
-  state.panels.river?.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  updateRoutePanel(state);
+  updateRiverPanel(state);
   updateLakePanel(state);
   updateNotesPanel(state);
   updateMeasurementPanel(state);
 }
 
 function updateLakePanel(state) {
-  state.panels.lake?.update(state.map, state.selection, state.editHistory.getStats());
+  if (isPanelOpen(state.panels.lake)) state.panels.lake?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateMeasurementPanel(state) {
-  state.panels.measurement?.update(state.map, state.editHistory.getStats());
+  if (isPanelOpen(state.panels.measurement)) state.panels.measurement?.update(state.map, state.editHistory.getStats());
+}
+
+function updateRoutePanel(state) {
+  if (isPanelOpen(state.panels.route)) state.panels.route?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function updateRiverPanel(state) {
+  if (isPanelOpen(state.panels.river)) state.panels.river?.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+}
+
+function isPanelOpen(panel) {
+  return Boolean(panel?.isOpen?.());
 }
 
 function labelKeyForObject(object) {

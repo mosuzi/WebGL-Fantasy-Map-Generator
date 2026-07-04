@@ -18207,3 +18207,30 @@ full 矩阵结果：
 
 - default、narrow 和 deep 三类面板布局审计当前都没有发现实际折行或横向溢出问题。
 - 下一步若继续 UI 方向，应优先诊断连续打开 / 挂载面板的 health 长任务，而不是继续扩大普通布局样本。
+
+### 2026-07-04 面板打开长任务与对象表格性能
+
+背景：
+
+- `panel-layout-deep-smoke` 已证明主要面板没有布局待复核项，但连续打开 / 选中面板仍出现 `input-handler-stall / main-thread-long-task`。
+- 新增聚焦 profile 后确认慢点集中在对象表格选中阶段：Element Plus `ElTable` 在城市、路线、标签这类几百行表格中，点选一行会触发明显主线程长任务。
+
+实现：
+
+- 新增 `tools/webgl-generator-panel-open-profile.mjs` 和 `pnpm run profile:panels`，拆分面板打开、选中、二级操作、longtask、health 和行数。
+- selection 回调不再刷新所有隐藏对象面板；面板自身发起的表格选择带 source panel 标记，避免反向重刷同一个大表格。
+- 河流 / 湖泊面板新增轻量 `setSelection()`，标签面板点选不再递增 `version`。
+- 共享 `UiObjectTable` 改为轻量原生 table，保留列最小宽、选中态、定位按钮、sticky 表头、sticky 定位列和横向滚动；审计脚本和 profile 脚本同步识别新表格行。
+
+验证：
+
+- `node --check .\tools\webgl-generator-panel-open-profile.mjs`、`node --check .\tools\webgl-generator-panel-layout-audit.mjs`、`node --check .\app\webgl-generator\src\runtime\app.js`、`git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- focused profile 通过：城市管理 `369ms`、路线管理 `288.9ms`、河流管理 `220.7ms`、标签管理 `344.8ms`，health 事件均为 `0`。
+- 全量 profile 通过：17 个面板 health 事件 `0`；最慢城市管理 `371.3ms`、标签管理 `368.8ms`、路线管理 `294.6ms`。
+- deep 布局审计 `panel-table-native-deep / continents / 10000` 通过，布局待复核项 `0`，表格按需要横向滚动。
+- e2e 守门 `panel-table-native-smoke / continents / 10000` 通过：点击到出图 `1790.1ms`，纯生成 `994.5ms`，WebGL 加载 `426.2ms`，最慢加载阶段为“构建视觉 cell mesh” `67.6ms`。
+
+结论：
+
+- 面板打开长任务第一刀已完成，当前执行队列后续转向具体折行 / 空间不足复现、当前 pan/zoom 卡顿复测和路线 / 河流动态线层后续优化。

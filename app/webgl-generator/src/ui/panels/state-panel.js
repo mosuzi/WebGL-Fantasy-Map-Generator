@@ -4,6 +4,7 @@ import {toIntegerId} from "../object-id.js";
 
 export function createStatePanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
+    open: false,
     active: false,
     map: null,
     targetStateId: null,
@@ -68,6 +69,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     width: 560,
     maxWidth: 680,
     onClose: () => {
+      panelState.open = false;
       panelState.active = false;
       callbacks.onActiveChange?.(false);
     }
@@ -92,6 +94,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       if (panelState.targetStateId === null) panelState.targetStateId = firstStateId(map);
+      panelState.open = true;
       panelState.version++;
       manager.open("state-panel");
       lazyPanel.load();
@@ -117,6 +120,9 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     setActive(active) {
       panelState.active = active;
+    },
+    isOpen() {
+      return panelState.open;
     },
     unmount() {
       lazyPanel.unmount();

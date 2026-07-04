@@ -1,41 +1,47 @@
 <template>
   <div ref="tableWrap" class="object-table-wrap">
-    <ElTable
-      class="object-table object-table-el"
-      :data="rows"
-      :row-key="rowKey"
-      :tree-props="flatTreeProps"
-      :max-height="300"
-      :row-class-name="rowClassName"
-      :empty-text="emptyText"
-      table-layout="auto"
-      @row-click="handleRowClick"
-      @row-dblclick="handleRowDoubleClick"
-    >
-      <ElTableColumn
-        v-for="column in columns"
-        :key="column.key"
-        :prop="column.key"
-        :label="column.label"
-        :align="column.align || 'left'"
-        :min-width="columnWidth(column)"
-      >
-        <template #default="{ row }">
-          {{ formatCell(column, row) }}
-        </template>
-      </ElTableColumn>
-      <ElTableColumn v-if="showLocateAction" width="48" fixed="right" align="right">
-        <template #default="{ row }">
-          <ElButton class="table-icon-action" circle size="small" :icon="Aim" title="定位" aria-label="定位" @click.stop="emit('locate', row)" />
-        </template>
-      </ElTableColumn>
-    </ElTable>
+    <table v-if="rows.length" class="object-table object-table-native">
+      <thead>
+        <tr>
+          <th
+            v-for="column in columns"
+            :key="column.key"
+            :style="columnStyle(column)"
+          >
+            {{ column.label }}
+          </th>
+          <th v-if="showLocateAction" class="object-table-action-column">定位</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="row in rows"
+          :key="rowKey(row)"
+          v-memo="[rowKey(row), isSelected(row)]"
+          class="object-table-row"
+          :class="{'selected-row': isSelected(row)}"
+          @click="handleRowClick(row)"
+          @dblclick="handleRowDoubleClick(row)"
+        >
+          <td
+            v-for="column in columns"
+            :key="column.key"
+            :style="columnStyle(column)"
+          >
+            <span class="object-table-cell">{{ formatCell(column, row) }}</span>
+          </td>
+          <td v-if="showLocateAction" class="object-table-action-cell">
+            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)">⌖</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div v-else class="object-table-empty">{{ emptyText }}</div>
   </div>
 </template>
 
 <script setup>
 import {nextTick, onBeforeUnmount, ref, watch} from "vue";
-import {Aim} from "@element-plus/icons-vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 
 defineOptions({
@@ -74,10 +80,6 @@ const emit = defineEmits(["select", "locate"]);
 const tableWrap = ref(null);
 let scrollFrame = 0;
 let scrollAttempt = 0;
-const flatTreeProps = Object.freeze({
-  children: "__tableChildren",
-  hasChildren: "__tableHasChildren"
-});
 
 watch(
   () => [props.selectedId, props.rows, props.rows.length],
@@ -99,10 +101,6 @@ function isSelected(row) {
 
 function rowKey(row) {
   return stringRowId(getRowId(row));
-}
-
-function rowClassName({row}) {
-  return isSelected(row) ? "selected-row" : "";
 }
 
 function handleRowClick(row) {
@@ -143,7 +141,7 @@ function cancelScrollFrame() {
 
 function scrollSelectedRowNow() {
   const wrap = tableWrap.value;
-  const row = wrap?.querySelector(".el-table__body-wrapper .selected-row");
+  const row = wrap?.querySelector(".object-table-row.selected-row");
   const scroller = tableScroller(wrap);
   if (!row || !scroller) return false;
   const rowRect = row.getBoundingClientRect();
@@ -160,10 +158,7 @@ function scrollSelectedRowNow() {
 }
 
 function tableScroller(wrap) {
-  return wrap?.querySelector(".el-table__body-wrapper .el-scrollbar__wrap")
-    || wrap?.querySelector(".el-scrollbar__wrap")
-    || wrap?.querySelector(".el-table__body-wrapper")
-    || wrap;
+  return wrap;
 }
 
 function stringRowId(value) {
@@ -180,5 +175,13 @@ function columnWidth(column) {
   if (column.key === "id") return 64;
   if (column.align === "right") return 88;
   return Math.max(96, String(column.label || column.key || "").length * 16 + 48);
+}
+
+function columnStyle(column) {
+  const align = column.align || "left";
+  return {
+    minWidth: `${columnWidth(column)}px`,
+    textAlign: align
+  };
 }
 </script>

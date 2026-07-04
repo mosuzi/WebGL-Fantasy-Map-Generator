@@ -1747,11 +1747,78 @@ select:disabled {
 
 .object-table-wrap {
   max-height: 300px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
   border: 1px solid rgba(189, 206, 213, 0.16);
   border-radius: 6px;
   background: #0f1519;
+}
+
+.object-table-native {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #0f1519;
+  color: #dfe8eb;
+  font-size: 12px;
+}
+
+.object-table-native th,
+.object-table-native td {
+  border-bottom: 1px solid rgba(189, 206, 213, 0.1);
+  padding: 6px 8px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.object-table-native th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #111a20;
+  color: #ffe0a1;
+  font-weight: 700;
+}
+
+.object-table-row {
+  background: #0f1519;
+  color: #dfe8eb;
+  cursor: pointer;
+}
+
+.object-table-row:hover,
+.object-table-row.selected-row {
+  background: rgba(215, 168, 79, 0.16);
+  color: #fff2c9;
+}
+
+.object-table-cell {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.object-table-action-column,
+.object-table-action-cell {
+  width: 48px;
+  min-width: 48px;
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: inherit;
+  text-align: right;
+}
+
+.object-table-action-column {
+  z-index: 3;
+  background: #111a20;
+}
+
+.object-table-empty {
+  padding: 18px 12px;
+  color: #9fb0ba;
+  font-size: 12px;
+  text-align: center;
 }
 
 .object-table-el {
@@ -1844,17 +1911,23 @@ select:disabled {
   background: rgba(215, 168, 79, 0.12) !important;
 }
 
-.table-icon-action.el-button {
+.table-icon-action {
   width: 28px;
   height: 28px;
   min-width: 28px;
+  border: 1px solid #33444f;
+  border-radius: 50%;
   border-color: #33444f;
   background: #10171b;
   color: #cbd7dc;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
 }
 
-.table-icon-action.el-button:hover,
-.table-icon-action.el-button:focus {
+.table-icon-action:hover,
+.table-icon-action:focus {
   border-color: #d7a84f;
   background: #3a2f18;
   color: #ffe0a1;
