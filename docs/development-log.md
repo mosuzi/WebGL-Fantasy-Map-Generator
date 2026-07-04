@@ -18260,3 +18260,23 @@ full 矩阵结果：
 
 - 地图 DOM overlay 已纳入交互降级，pan/zoom 卡顿在 100k 样本中明显收敛。
 - 下一步性能方向应转向路线 / 河流 idle commit 的分块缓存、跨帧重建或更轻交互态线层；只有具体复现证明测量 SVG 或选中态仍卡顿时，再单独治理。
+
+### 2026-07-04 current-plan 状态清账
+
+背景：
+
+- 用户指出 `docs/current-plan.md` 中仍有已实现内容容易被误读为计划项，例如单位系统。
+- 用户同时指出当前面板仍可能存在奇怪折行、空间过窄，以及非 WebGL overlay 越来越多导致 pan/zoom 卡顿的风险。
+
+调整：
+
+- `docs/current-plan.md` 新增阅读规则：当前真实状态、当前执行队列、可选增强和历史记录的含义分开，历史内容不再自动转化为授权任务。
+- 当前执行队列收束为四项：面板空间策略专项、overlay 与动态线层性能专项、贸易查看列表化设计、source/candidate 剩余 warn 只读跟踪。
+- 单位系统、国名方位语义、README、贸易流地图图层、动态军事系统、测量对象基础、高度图导入基础等已完成或已暂缓内容不再作为当前计划项。
+- 面板方向明确改为“不吝啬空间”：优先扩大面板、字段跨整行、按钮换行和表格横向滚动，并把军事管理面板、事件链、工具条、单位 / 滑条字段和二级编辑区列为第一批审计对象。
+- 性能方向明确先补 `profile:overlay` 的 idle commit 指标，再用 100k 地图区分路线 / 河流动态 mesh、DOM overlay、测量 SVG 和选中态成本，不默认把所有 DOM overlay 迁移到 WebGL。
+
+验证：
+
+- 本轮只调整中文文档，不修改运行时代码。
+- `tools/webgl-generator-overlay-profile.mjs` 当前已有未提交的 idle commit 指标改动，`node --check .\tools\webgl-generator-overlay-profile.mjs` 通过；该改动未纳入本轮文档提交，留到下一刀性能专项处理。
