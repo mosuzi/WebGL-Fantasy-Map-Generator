@@ -3,6 +3,7 @@
 
   <div class="state-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 首都" @update:model-value="callbacks.onFilter" />
+    <UiButton variant="secondary" :disabled="!renamableVisibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(renamableVisibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
   </div>
 
   <UiSortBar class-name="state-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -183,6 +184,7 @@ const metrics = computed(() => {
 });
 const stateOptions = computed(() => stateRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const renamableVisibleRows = computed(() => visibleRows.value.filter(row => !row.neutral));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
 const capitalOptions = computed(() => stateCities(props.state.map, selected.value?.id));
 const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({

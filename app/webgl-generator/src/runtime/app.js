@@ -52,7 +52,7 @@ import {resolveObject} from "./object-resolver.js";
 import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
-import {applyStateBrushPreview, createApplyStateBrushCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createApplyStateBrushCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
@@ -289,6 +289,22 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       updateStatePanel(state);
       updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onRenameVisibleFromNamebase: stateIds => {
+      const context = {map: state.map};
+      const command = createRenameStatesFromNamebaseCommand(stateIds);
+      if (!command.isNoop(context)) {
+        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
+        const result = command.getResult?.();
+        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 个国家。`);
+      } else {
+        setFileOperationStatus(documentRef, "当前筛选国家没有可按名称库更新的名称。");
+      }
+      updateStatePanel(state);
+      updateCityPanel(state);
+      updateGovernmentPanel(state);
+      updateDiplomacyPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onColorChange: (stateId, color) => {

@@ -1,4 +1,5 @@
 import {GOVERNMENT_BY_KEY, setStateGovernment} from "../generator/governments.js";
+import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -47,6 +48,14 @@ const STATE_GOVERNMENT_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["state-government", "object-name", "labels", "object-panels", "defer:economy", "defer:diplomacy", "defer:military"])
+});
+
+const STATE_NAME_BATCH_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-name", "labels", "object-panels"])
 });
 
 export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} = {}) {
@@ -167,8 +176,163 @@ export function createSetStatesGovernmentBatchCommand(stateIds, governmentKey, {
   };
 }
 
+export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名称库重命名国家"} = {}) {
+  const normalizedStateIds = uniqueStateIds(stateIds);
+  let changes = null;
+
+  return {
+    label: `${label} ${normalizedStateIds.length}国`,
+    effects: {
+      ...STATE_NAME_BATCH_EFFECTS,
+      affected: normalizedStateIds.map(id => ({kind: "state", id}))
+    },
+    apply(context) {
+      changes ??= buildStateRenameChanges(context.map, normalizedStateIds);
+      if (!changes.length) throw new Error("没有可重命名的国家");
+      for (const change of changes) writeStateNameSnapshot(context.map, change.stateId, change.after);
+    },
+    revert(context) {
+      if (!changes) throw new Error("缺少可撤销的国家名称快照");
+      for (const change of changes) writeStateNameSnapshot(context.map, change.stateId, change.before);
+    },
+    isNoop(context) {
+      return !normalizedStateIds.length || !buildStateRenameChanges(context.map, normalizedStateIds).length;
+    },
+    getResult() {
+      return {renamed: changes?.length || 0, total: normalizedStateIds.length};
+    }
+  };
+}
+
 export function applyStateBrushPreview(map, changes) {
   applyStateChanges(map, normalizeChanges(changes), "after");
+}
+
+function buildStateRenameChanges(map, stateIds) {
+  const states = map?.politics?.states || [];
+  if (!states.length) return [];
+  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|explicit-state-rename|${map.metadata?.checksum || ""}`, {namebases: map.namebases});
+  const targets = new Set(stateIds);
+  const occupied = new Set(states
+    .filter(state => state && !state.removed && !targets.has(normalizeStateId(state.id ?? state.i)))
+    .map(state => normalizeStateRoot(state.name))
+    .filter(Boolean));
+  const changes = [];
+
+  for (const stateId of stateIds) {
+    const state = states[stateId];
+    if (!state || state.removed || stateId <= 0) continue;
+    const before = snapshotStateName(map, stateId);
+    const afterRoot = nextStateRootFromNamebase(map, state, generator, occupied);
+    if (!afterRoot || afterRoot === before.name) continue;
+    const after = {
+      name: afterRoot,
+      fullName: getStateFullName(afterRoot, state.formName),
+      nameOrientation: undefined
+    };
+    occupied.add(normalizeStateRoot(afterRoot));
+    changes.push({stateId, before, after});
+  }
+
+  return changes;
+}
+
+function nextStateRootFromNamebase(map, state, generator, occupied) {
+  const baseOptions = stateNameOptions(map, state);
+  let fallbackRoot = "";
+  for (let attempt = 0; attempt < 96; attempt++) {
+    const root = normalizeStateRoot(generator.makeStateRoot({...baseOptions, id: `${state.id ?? state.i}:${attempt}`}));
+    fallbackRoot ||= nonDirectionalBase(root, occupied) || root;
+    if (!root || occupied.has(root)) continue;
+    if (isDirectionalVariantCollision(root, occupied)) continue;
+    return root;
+  }
+  return makeOrdinalStateRoot(fallbackRoot || normalizeStateRoot(generator.makeStateRoot(baseOptions)), occupied);
+}
+
+function stateNameOptions(map, state) {
+  const cultureId = Number(state.culture || 0);
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
+  const capital = findCityByBurgId(map, state.capital);
+  return {
+    id: state.id ?? state.i,
+    cell: state.center ?? state.gridCenter,
+    culture: cultureId,
+    cultureRoot: culture?.root || culture?.name,
+    cultureType: culture?.nameStyle || culture?.type,
+    capitalName: capital?.name || "",
+    allowCapitalName: false,
+    type: state.type || culture?.type || "Generic"
+  };
+}
+
+function snapshotStateName(map, stateId) {
+  const state = map?.politics?.states?.[stateId];
+  return {
+    name: state?.name || "",
+    fullName: state?.fullName || state?.name || "",
+    nameOrientation: clonePlain(state?.nameOrientation)
+  };
+}
+
+function writeStateNameSnapshot(map, stateId, snapshot) {
+  const state = map?.politics?.states?.[stateId];
+  if (!state) throw new Error(`找不到国家 #${stateId}`);
+  applyStateNameSnapshot(state, snapshot);
+  const packState = map?.pack?.states?.[stateId];
+  if (packState && packState !== state) applyStateNameSnapshot(packState, snapshot);
+}
+
+function applyStateNameSnapshot(state, snapshot) {
+  state.name = snapshot.name;
+  state.fullName = snapshot.fullName || getStateFullName(snapshot.name, state.formName);
+  if (snapshot.nameOrientation === undefined) delete state.nameOrientation;
+  else state.nameOrientation = clonePlain(snapshot.nameOrientation);
+}
+
+function findCityByBurgId(map, burgId) {
+  const target = Number(burgId);
+  if (!Number.isInteger(target)) return null;
+  return (map?.settlements?.cities || []).find(city => city?.burgId === target) || null;
+}
+
+function normalizeStateRoot(value) {
+  return String(value || "").trim().replace(/\s+/gu, "");
+}
+
+function isDirectionalVariantCollision(root, occupied) {
+  return Boolean(nonDirectionalBase(root, occupied));
+}
+
+function nonDirectionalBase(root, occupied) {
+  const normalized = normalizeStateRoot(root);
+  if (!/^[东南西北]/u.test(normalized)) return "";
+  const base = normalized.slice(1);
+  return base && occupied.has(base) ? base : "";
+}
+
+function makeOrdinalStateRoot(root, occupied) {
+  const base = nonDirectionalBase(root, occupied) || normalizeStateRoot(root) || "新国";
+  if (!occupied.has(base)) return base;
+  for (let ordinal = 2; ordinal < 100; ordinal += 1) {
+    const candidate = `${base}${toChineseOrdinal(ordinal)}`;
+    if (!occupied.has(candidate)) return candidate;
+  }
+  return `${base}${occupied.size + 1}`;
+}
+
+function toChineseOrdinal(value) {
+  const digits = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+  const numeric = Math.max(1, Math.floor(Number(value) || 1));
+  if (numeric < 10) return digits[numeric];
+  if (numeric === 10) return "十";
+  if (numeric < 20) return `十${digits[numeric - 10]}`;
+  if (numeric < 100) {
+    const tens = Math.floor(numeric / 10);
+    const ones = numeric % 10;
+    return `${digits[tens]}十${ones ? digits[ones] : ""}`;
+  }
+  return String(numeric);
 }
 
 function normalizeChanges(changes) {

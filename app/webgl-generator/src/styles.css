@@ -2003,6 +2003,10 @@ select:disabled {
 }
 
 .state-panel-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
@@ -2014,6 +2018,12 @@ select:disabled {
   padding: 0 10px;
   background: #10171b;
   color: #edf4f6;
+}
+
+.state-panel-controls .secondary-action {
+  min-width: 142px;
+  height: 32px;
+  white-space: nowrap;
 }
 
 .state-panel-sort {

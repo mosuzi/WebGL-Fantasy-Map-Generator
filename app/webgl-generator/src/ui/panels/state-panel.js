@@ -47,6 +47,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       callbacks.onEdit?.(stateObject(row));
     },
     onRename: (stateId, name) => callbacks.onRename?.(stateId, name),
+    onRenameVisibleFromNamebase: stateIds => callbacks.onRenameVisibleFromNamebase?.(stateIds),
     onRadius: radius => {
       panelState.radius = radius;
     },

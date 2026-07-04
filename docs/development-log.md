@@ -17580,3 +17580,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；`RiverPanel` 懒加载 chunk 约 `5.66KB / gzip 2.47KB`，仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：给当前地图注入 `hydro = smoke-hydro` 测试名称库后，河流面板点击“按名称库重命名筛选”，204 条河流被显式重命名；撤销后前 8 条河流恢复原名，再重做后恢复新名。整个过程 `generationTiming.totalMs` 保持 `745ms` 不变，`glError = 0`，page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1452.6ms`，纯生成 `712.1ms`，WebGL 加载 `513.4ms`，最慢加载阶段为“构建道路屏幕 mesh” `57.3ms`，结果仍在守门阈值内。
+
+### 名称库国家显式重命名第一刀
+
+背景：
+
+- 名称库显式重命名已经覆盖城市和河流筛选结果，下一步把同一套“用户主动触发、可撤销、不自动批量改名”的语义扩展到国家对象。
+- 国家命名已有方位语义约束；显式重命名不能因为样本不足而重新引入未校正的“东/西/南/北 + 同根”变体。
+- 本轮继续避开动态军事系统，不触碰战役、战报自动推进或战争行动链路。
+
+修正：
+
+- `state-edit-commands.js` 新增 `createRenameStatesFromNamebaseCommand()`，接收国家 id 列表，按当前 `map.namebases` 的全局/文化 `stateRoot` 绑定生成新国家根名。
+- 命令进入 `EditHistory`，撤销/重做恢复国家 `name/fullName/nameOrientation`；应用时只写国家名称，保留现有 `formName` 和政体国号后缀，不重建政区、外交、经济或军事。
+- 生成候选遇到同根重复时，不再接受命名器为了去重产生的东南西北方向前缀；无法取得唯一根名时使用非方位变体，避免再次出现未按位置校正的“南某 / 北某”。
+- 国家管理面板新增“按名称库重命名筛选”按钮，只作用于当前筛选结果中的非中立国家。
+- README、当前计划、名称库专题计划、绑定专项和 source 功能积压已同步更新。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；`StatePanel` 懒加载 chunk 约 `12.44KB / gzip 4.76KB`，仅保留既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：给当前地图注入 `stateRoot = smoke-state-root` 测试名称库后，国家面板点击“按名称库重命名筛选”，20 个国家被显式重命名；撤销后前 8 个国家恢复原名，再重做后恢复新名。整个过程 `generationTiming.totalMs` 保持 `707.2ms` 不变，`glError = 0`，page error 为 `0`，且未出现未校正的东南西北同根方向变体。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed stage-2-1231411414 --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1708.7ms`，纯生成 `694.4ms`，WebGL 加载 `732.1ms`，最慢加载阶段为“构建视觉 cell mesh” `52.4ms`，结果仍在守门阈值内。
