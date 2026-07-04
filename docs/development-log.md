@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：overlay profile 交互采样口径修正
+
+继续按 overlay 与动态线层性能专项推进。河流 idle commit 分帧后，100k profile 仍显示滚轮 frame p95 偏高；复查脚本发现 `profileZoom()` / `profilePan()` 在帧记录器运行期间，每个滚轮或拖动采样点都会跨进页面执行完整 `readStats()`，其中包含 renderer `getStats()`、DOM query 和跨进程序列化，可能把工具自身成本计入用户交互帧。同时动态构建统计会把进入交互前已经存在的缓存 `routeBuildMs / riverBuildMs` 误算成交互期间构建。
+
+完成内容：
+
+- `startFrameRecorder()` 在浏览器端 rAF tick 中采集轻量快照，直接读取 renderer 的 draw、overlay、图层可见性、dirty 标记、顶点数和 build 统计。
+- `profileZoom()` / `profilePan()` 的交互循环不再每步调用 `readStats(page)`，避免跨进程采样污染 frame p95 和 long task。
+- 动态构建统计改为“采样期间 build 值发生变化才计入”，首帧旧缓存值和 dirty 状态下的旧值都记为 `0`。
+- 保留 idle commit 独立统计；停止输入后的路线 / 河流恢复耗时仍按最终 renderer stats 报告。
+- 本轮只改 profile 工具，不改应用运行时代码、地图渲染、overlay 同步策略或用户交互行为。
+
+验证：
+
+- `node --check .\tools\webgl-generator-overlay-profile.mjs` 通过。
+- `git diff --check` 通过。
+- 100k profile `overlay-browser-sampled-100k-final / full / 100000` 通过：滚轮交互期 route / river 构建 p95 均为 `0`，overlay p95 `7.6ms`，idle frame p95 `23.6ms`，idle long task 为 `0`；中键拖动 route / river 构建 p95 均为 `0`，overlay p95 `2.7ms`，idle frame p95 `17.6ms`。
+- e2e 守门 `overlay-profile-sampling-e2e / continents / 10000` 通过：点击到出图 `1559.5ms`，纯生成 `789.7ms`，WebGL 加载 `397.8ms`，`drawMs = 0.1`，`glError = 0`。
+
 ## 2026-07-04：河流 idle commit 分帧恢复
 
 按当前 overlay 与动态线层性能专项推进。先用 100k `full` 变体复查当前瓶颈：滚轮交互 frame p95 仍偏高，但交互期间 route / river 构建均为 `0ms`，WebGL draw p95 约 `0.2ms`，overlay p95 约 `7.2ms`；可直接治理的成本集中在停止输入后的 idle commit，其中路线构建约 `54.3ms`，河流构建约 `42.4ms`。

@@ -174,13 +174,12 @@ async function profileZoom(page) {
   const center = canvasCenter(canvasBox);
   await page.mouse.move(center.x, center.y);
   await startFrameRecorder(page);
-  const samples = [];
   for (let index = 0; index < 18; index++) {
     await page.mouse.wheel(0, index < 9 ? -220 : 170);
     await delay(34);
-    samples.push(await readStats(page));
   }
   const frames = await stopFrameRecorder(page);
+  const samples = frames.samples?.length ? frames.samples : [await readStats(page)];
   return summarizeInteraction("zoom", "连续滚轮缩放", samples, frames);
 }
 
@@ -190,17 +189,16 @@ async function profilePan(page) {
   await page.mouse.move(center.x - 150, center.y - 60);
   await startFrameRecorder(page);
   await page.mouse.down({button: "middle"});
-  const samples = [];
   for (let index = 0; index < 24; index++) {
     const t = index / 23;
     const x = center.x - 150 + Math.sin(t * Math.PI * 2) * 180;
     const y = center.y - 60 + Math.cos(t * Math.PI * 2) * 90;
     await page.mouse.move(x, y, {steps: 2});
     await delay(24);
-    samples.push(await readStats(page));
   }
   await page.mouse.up({button: "middle"});
   const frames = await stopFrameRecorder(page);
+  const samples = frames.samples?.length ? frames.samples : [await readStats(page)];
   return summarizeInteraction("pan", "中键拖动画布", samples, frames);
 }
 
@@ -456,9 +454,52 @@ async function waitForOverlayIdle(page) {
 
 async function startFrameRecorder(page) {
   await page.evaluate(() => {
+    function snapshotInteractionStats() {
+      const app = window.__webglGeneratorApp;
+      const renderer = app?.renderer;
+      if (!renderer) return {};
+      const dirty = renderer.dynamicBuffersDirty || {};
+      return {
+        drawMs: renderer.lastDraw?.drawMs || 0,
+        glError: renderer.lastDraw?.glError ?? null,
+        camera: renderer.camera ? {...renderer.camera} : null,
+        layerVisibility: renderer.layerVisibility ? {...renderer.layerVisibility} : {},
+        overlay: renderer.lastOverlayUpdate ? {...renderer.lastOverlayUpdate} : {},
+        overlayInteractionSuspended: Boolean(renderer.overlayInteractionSuspended),
+        overlayChildCount: renderer.overlay?.childElementCount || 0,
+        labelCount: renderer.labelCount || 0,
+        visibleLabelCount: renderer.visibleLabelCount || 0,
+        cityIconCount: renderer.cityIconCount || 0,
+        visibleCityIconCount: renderer.visibleCityIconCount || 0,
+        markerIconCount: renderer.markerIconCount || 0,
+        visibleMarkerIconCount: renderer.visibleMarkerIconCount || 0,
+        militaryIconCount: renderer.militaryIconCount || 0,
+        visibleMilitaryIconCount: renderer.visibleMilitaryIconCount || 0,
+        measurementCount: app?.map?.measurements?.items?.length || 0,
+        measurementPathCount: renderer.measurementOverlay?.querySelectorAll?.(".measurement-object-path").length || 0,
+        measurementAreaCount: renderer.measurementOverlay?.querySelectorAll?.(".measurement-object-area").length || 0,
+        measurementOverlayHidden: Boolean(renderer.measurementOverlay?.hidden),
+        routeBuildMs: renderer.routeBuildMs || 0,
+        routeVertexCount: renderer.routeVertexCount || 0,
+        routeRenderStats: renderer.routeRenderStats ? {...renderer.routeRenderStats} : {},
+        riverBuildMs: renderer.riverBuildMs || 0,
+        riverVertexCount: renderer.riverVertexCount || 0,
+        riverWidthStats: renderer.riverWidthStats ? {...renderer.riverWidthStats} : {},
+        selectionBuildMs: renderer.selectionBuildMs || 0,
+        selectionVertexCount: renderer.selectionVertexCount || 0,
+        dynamicMeshCache: {
+          routesDirty: Boolean(dirty.routes),
+          tradeFlowsDirty: Boolean(dirty.tradeFlows),
+          riversDirty: Boolean(dirty.rivers),
+          selectionDirty: Boolean(dirty.selection)
+        }
+      };
+    }
+
     const profile = {
       frames: [],
       longTasks: [],
+      samples: [],
       running: true,
       lastFrameAt: 0,
       observer: null
@@ -476,6 +517,7 @@ async function startFrameRecorder(page) {
     function tick(now) {
       if (profile.lastFrameAt) profile.frames.push(now - profile.lastFrameAt);
       profile.lastFrameAt = now;
+      profile.samples.push(snapshotInteractionStats());
       if (profile.running) requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
@@ -491,7 +533,8 @@ async function stopFrameRecorder(page) {
     profile.observer?.disconnect?.();
     return {
       frames: profile.frames,
-      longTasks: profile.longTasks
+      longTasks: profile.longTasks,
+      samples: profile.samples
     };
   });
 }
@@ -535,8 +578,9 @@ async function readStats(page) {
 function summarizeInteraction(id, label, samples, frameData) {
   const overlayTotals = samples.map(sample => sample.overlayInteractionSuspended ? 0 : sample.overlay?.totalMs || 0);
   const draws = samples.map(sample => sample.drawMs || 0);
-  const routeBuilds = samples.map(sample => sample.layerVisibility?.routes === false || sample.dynamicMeshCache?.routesDirty ? 0 : sample.routeBuildMs || 0);
-  const riverBuilds = samples.map(sample => sample.layerVisibility?.rivers === false || sample.dynamicMeshCache?.riversDirty ? 0 : sample.riverBuildMs || 0);
+  const routeBuilds = changedBuildSamples(samples, {layer: "routes", dirty: "routesDirty", value: "routeBuildMs"});
+  const riverBuilds = changedBuildSamples(samples, {layer: "rivers", dirty: "riversDirty", value: "riverBuildMs"});
+  const selectionBuilds = changedBuildSamples(samples, {dirty: "selectionDirty", value: "selectionBuildMs"});
   return {
     id,
     label,
@@ -567,12 +611,30 @@ function summarizeInteraction(id, label, samples, frameData) {
       routeBuildP95Ms: percentileMs(routeBuilds, 0.95),
       riverBuildAverageMs: averageMs(riverBuilds),
       riverBuildP95Ms: percentileMs(riverBuilds, 0.95),
-      selectionBuildAverageMs: averageMs(samples.map(sample => sample.selectionBuildMs || 0)),
-      selectionBuildP95Ms: percentileMs(samples.map(sample => sample.selectionBuildMs || 0), 0.95)
+      selectionBuildAverageMs: averageMs(selectionBuilds),
+      selectionBuildP95Ms: percentileMs(selectionBuilds, 0.95)
     },
     counts: summarizeCounts(samples),
     glErrors: [...new Set(samples.map(sample => sample.glError))]
   };
+}
+
+function changedBuildSamples(samples, {layer = null, dirty, value}) {
+  let previous = null;
+  let initialized = false;
+  return samples.map(sample => {
+    if (layer && sample.layerVisibility?.[layer] === false) return 0;
+    if (sample.dynamicMeshCache?.[dirty]) return 0;
+    const current = Number(sample[value] || 0);
+    if (!initialized) {
+      previous = current;
+      initialized = true;
+      return 0;
+    }
+    if (current === previous) return 0;
+    previous = current;
+    return current;
+  });
 }
 
 function summarizeCounts(samples) {
