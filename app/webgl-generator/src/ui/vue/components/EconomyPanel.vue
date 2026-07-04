@@ -44,7 +44,38 @@
     已显示 {{ formatNumber(activeVisibleRows) }} / {{ formatNumber(activeTotalRows) }}
   </p>
 
-  <UiDetailGrid class-name="economy-panel-details" empty-text="未选中经济对象" :rows="detailRows" />
+  <section v-if="economyDetail" class="economy-detail-card" aria-label="经济对象详情">
+    <header class="economy-detail-header">
+      <div>
+        <span class="economy-detail-kicker">{{ economyDetail.kicker }}</span>
+        <h3>{{ economyDetail.title }}</h3>
+        <p>{{ economyDetail.subtitle }}</p>
+      </div>
+      <div class="economy-detail-badges">
+        <span v-for="badge in economyDetail.badges" :key="badge">{{ badge }}</span>
+      </div>
+    </header>
+
+    <div class="economy-detail-highlights">
+      <div v-for="item in economyDetail.highlights" :key="item.label">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </div>
+    </div>
+
+    <div class="economy-detail-sections">
+      <section v-for="section in economyDetail.sections" :key="section.title" class="economy-detail-section">
+        <h4>{{ section.title }}</h4>
+        <dl>
+          <div v-for="row in section.rows" :key="row.label">
+            <dt>{{ row.label }}</dt>
+            <dd>{{ row.value }}</dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+  </section>
+  <p v-else class="economy-detail-empty">未选中经济对象</p>
 
   <section v-if="debugEnabled" class="economy-panel-diagnostics" aria-label="经济开发诊断">
     <div class="economy-panel-diagnostics-header">
@@ -210,70 +241,10 @@ const summaryMetrics = computed(() => [
   {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)}
 ]);
 
-const detailRows = computed(() => {
-  if (props.state.tab === "markets") return selectedMarket.value ? [
-    {label: "市场", value: selectedMarket.value.name},
-    {label: "国家", value: selectedMarket.value.stateName},
-    {label: "中心城镇", value: selectedMarket.value.cityName},
-    {label: "覆盖 cells", value: formatNumber(selectedMarket.value.cells)},
-    {label: "陆地覆盖", value: formatNumber(selectedMarket.value.landCells)},
-    {label: "本国覆盖", value: formatNumber(selectedMarket.value.homeCells)},
-    {label: "跨国覆盖", value: formatNumber(selectedMarket.value.foreignCells)},
-    {label: "无国家覆盖", value: formatNumber(selectedMarket.value.unassignedStateCells)},
-    {label: "覆盖城镇", value: formatNumber(selectedMarket.value.burgs)},
-    {label: "库存", value: formatNumber(selectedMarket.value.stock)},
-    {label: "需求", value: formatNumber(selectedMarket.value.demand)},
-    {label: "供给", value: formatNumber(selectedMarket.value.supply)},
-    {label: "缺口", value: formatNumber(selectedMarket.value.shortage)},
-    {label: "过剩", value: formatNumber(selectedMarket.value.surplus)},
-    {label: "平均价差", value: formatSignedNumber(selectedMarket.value.priceDelta)},
-    {label: "价格信号商品", value: formatNumber(selectedMarket.value.priceSignals)},
-    {label: "流入/流出", value: `${formatNumber(selectedMarket.value.tradeInValue)} / ${formatNumber(selectedMarket.value.tradeOutValue)}`},
-    {label: "资源供给", value: formatNumber(selectedMarket.value.resourceSupply)},
-    {label: "交易额", value: formatNumber(selectedMarket.value.tradeValue)},
-    {label: "market id", value: selectedMarket.value.id, debug: true},
-    {label: "center burg", value: selectedMarket.value.centerBurgId || "none", debug: true},
-    {label: "cell", value: selectedMarket.value.cell ?? "none", debug: true}
-  ] : [];
-  if (props.state.tab === "deals") return selectedDeal.value ? [
-    {label: "商品", value: selectedDeal.value.goodName},
-    {label: "卖方", value: selectedDeal.value.sellerName},
-    {label: "买方", value: selectedDeal.value.buyerName},
-    {label: "卖方国家", value: selectedDeal.value.sellerStateName},
-    {label: "买方国家", value: selectedDeal.value.buyerStateName},
-    {label: "类型", value: selectedDeal.value.routeLabel},
-    {label: "来源", value: selectedDeal.value.sourceLabel},
-    {label: "数量", value: formatNumber(selectedDeal.value.units)},
-    {label: "基础单价", value: formatNumber(selectedDeal.value.basePrice)},
-    {label: "单价", value: formatNumber(selectedDeal.value.price)},
-    {label: "距离", value: selectedDeal.value.distanceLabel},
-    {label: "运距成本", value: formatNumber(selectedDeal.value.distanceCost)},
-    {label: "距离倍率", value: `${formatNumber(selectedDeal.value.distanceMultiplier)}x`},
-    {label: "税额", value: formatNumber(selectedDeal.value.tax)},
-    {label: "deal id", value: selectedDeal.value.id, debug: true},
-    {label: "seller", value: `${selectedDeal.value.sellerType} #${selectedDeal.value.sellerId}`, debug: true},
-    {label: "buyer", value: `${selectedDeal.value.buyerType} #${selectedDeal.value.buyerId}`, debug: true},
-    {label: "source", value: selectedDeal.value.source || "scheduled", debug: true}
-  ] : [];
-  return selectedGood.value ? [
-    {label: "商品", value: selectedGood.value.name},
-    {label: "类型", value: selectedGood.value.typeLabel},
-    {label: "基价", value: formatNumber(selectedGood.value.value)},
-    {label: "平均有效价", value: formatNumber(selectedGood.value.effectivePrice)},
-    {label: "平均价差", value: formatSignedNumber(selectedGood.value.priceDelta)},
-    {label: "价格压力", value: formatSignedNumber(selectedGood.value.pricePressure)},
-    {label: "市场库存", value: formatNumber(selectedGood.value.stock)},
-    {label: "市场需求", value: formatNumber(selectedGood.value.demand)},
-    {label: "供需缺口", value: formatNumber(selectedGood.value.shortage)},
-    {label: "过剩供给", value: formatNumber(selectedGood.value.surplus)},
-    {label: "资源 cells", value: formatNumber(selectedGood.value.sourceCells)},
-    {label: "生产记录", value: formatNumber(selectedGood.value.production)},
-    {label: "交易记录", value: formatNumber(selectedGood.value.deals)},
-    {label: "流入/流出", value: `${formatNumber(selectedGood.value.tradeInUnits)} / ${formatNumber(selectedGood.value.tradeOutUnits)}`},
-    {label: "交易额", value: formatNumber(selectedGood.value.tradeValue)},
-    {label: "good id", value: selectedGood.value.id, debug: true},
-    {label: "visible", value: selectedGood.value.visibleLabel, debug: true}
-  ] : [];
+const economyDetail = computed(() => {
+  if (props.state.tab === "markets") return selectedMarket.value ? buildMarketDetail(selectedMarket.value) : null;
+  if (props.state.tab === "deals") return selectedDeal.value ? buildDealDetail(selectedDeal.value) : null;
+  return selectedGood.value ? buildGoodDetail(selectedGood.value) : null;
 });
 
 const diagnosticRows = computed(() => [
@@ -291,6 +262,175 @@ const diagnosticsSummary = computed(() => {
   const total = metrics.value.diagnostics.totalIssues;
   return total ? `${formatNumber(total)} 项需复查` : "未发现明显异常";
 });
+
+function buildGoodDetail(good) {
+  return {
+    kicker: "商品档案",
+    title: good.name,
+    subtitle: `${good.typeLabel} · good #${good.id}`,
+    badges: [good.visibleLabel, `${formatNumber(good.deals)} 笔交易`],
+    highlights: [
+      {label: "有效价", value: formatNumber(good.effectivePrice)},
+      {label: "价差", value: formatSignedNumber(good.priceDelta)},
+      {label: "库存", value: formatNumber(good.stock)},
+      {label: "交易额", value: formatNumber(good.tradeValue)}
+    ],
+    sections: filterDetailSections([
+      {
+        title: "价格信号",
+        rows: [
+          {label: "基价", value: formatNumber(good.value)},
+          {label: "平均有效价", value: formatNumber(good.effectivePrice)},
+          {label: "平均价差", value: formatSignedNumber(good.priceDelta)},
+          {label: "价格压力", value: formatSignedNumber(good.pricePressure)}
+        ]
+      },
+      {
+        title: "供需",
+        rows: [
+          {label: "市场库存", value: formatNumber(good.stock)},
+          {label: "市场需求", value: formatNumber(good.demand)},
+          {label: "供需缺口", value: formatNumber(good.shortage)},
+          {label: "过剩供给", value: formatNumber(good.surplus)}
+        ]
+      },
+      {
+        title: "来源与流向",
+        rows: [
+          {label: "资源 cells", value: formatNumber(good.sourceCells)},
+          {label: "生产记录", value: formatNumber(good.production)},
+          {label: "流入 / 流出", value: `${formatNumber(good.tradeInUnits)} / ${formatNumber(good.tradeOutUnits)}`},
+          {label: "交易记录", value: formatNumber(good.deals)}
+        ]
+      },
+      {
+        title: "调试",
+        rows: [
+          {label: "good id", value: good.id, debug: true},
+          {label: "visible", value: good.visibleLabel, debug: true}
+        ]
+      }
+    ])
+  };
+}
+
+function buildMarketDetail(market) {
+  return {
+    kicker: "市场档案",
+    title: market.name,
+    subtitle: `${market.stateName} · ${market.cityName}`,
+    badges: [`market #${market.id}`, `${formatNumber(market.burgs)} 城镇`],
+    highlights: [
+      {label: "覆盖", value: formatNumber(market.cells)},
+      {label: "库存", value: formatNumber(market.stock)},
+      {label: "缺口", value: formatNumber(market.shortage)},
+      {label: "交易额", value: formatNumber(market.tradeValue)}
+    ],
+    sections: filterDetailSections([
+      {
+        title: "覆盖范围",
+        rows: [
+          {label: "覆盖 cells", value: formatNumber(market.cells)},
+          {label: "陆地覆盖", value: formatNumber(market.landCells)},
+          {label: "本国覆盖", value: formatNumber(market.homeCells)},
+          {label: "跨国覆盖", value: formatNumber(market.foreignCells)},
+          {label: "无国家覆盖", value: formatNumber(market.unassignedStateCells)},
+          {label: "覆盖城镇", value: formatNumber(market.burgs)}
+        ]
+      },
+      {
+        title: "库存与供需",
+        rows: [
+          {label: "库存", value: formatNumber(market.stock)},
+          {label: "需求", value: formatNumber(market.demand)},
+          {label: "供给", value: formatNumber(market.supply)},
+          {label: "缺口", value: formatNumber(market.shortage)},
+          {label: "过剩", value: formatNumber(market.surplus)},
+          {label: "资源供给", value: formatNumber(market.resourceSupply)}
+        ]
+      },
+      {
+        title: "交易与价格",
+        rows: [
+          {label: "平均价差", value: formatSignedNumber(market.priceDelta)},
+          {label: "价格信号商品", value: formatNumber(market.priceSignals)},
+          {label: "流入 / 流出", value: `${formatNumber(market.tradeInValue)} / ${formatNumber(market.tradeOutValue)}`},
+          {label: "交易额", value: formatNumber(market.tradeValue)}
+        ]
+      },
+      {
+        title: "调试",
+        rows: [
+          {label: "market id", value: market.id, debug: true},
+          {label: "center burg", value: market.centerBurgId || "none", debug: true},
+          {label: "cell", value: market.cell ?? "none", debug: true}
+        ]
+      }
+    ])
+  };
+}
+
+function buildDealDetail(deal) {
+  return {
+    kicker: "交易档案",
+    title: deal.goodName,
+    subtitle: `${deal.sellerName} -> ${deal.buyerName}`,
+    badges: [`deal #${deal.id}`, deal.sourceLabel],
+    highlights: [
+      {label: "金额", value: formatNumber(deal.value)},
+      {label: "数量", value: formatNumber(deal.units)},
+      {label: "单价", value: formatNumber(deal.price)},
+      {label: "距离", value: deal.distanceLabel}
+    ],
+    sections: filterDetailSections([
+      {
+        title: "交易双方",
+        rows: [
+          {label: "卖方", value: deal.sellerName},
+          {label: "买方", value: deal.buyerName},
+          {label: "卖方国家", value: deal.sellerStateName},
+          {label: "买方国家", value: deal.buyerStateName},
+          {label: "国家流向", value: deal.stateRouteLabel}
+        ]
+      },
+      {
+        title: "价格与金额",
+        rows: [
+          {label: "数量", value: formatNumber(deal.units)},
+          {label: "基础单价", value: formatNumber(deal.basePrice)},
+          {label: "单价", value: formatNumber(deal.price)},
+          {label: "金额", value: formatNumber(deal.value)},
+          {label: "税额", value: formatNumber(deal.tax)}
+        ]
+      },
+      {
+        title: "运输",
+        rows: [
+          {label: "类型", value: deal.routeLabel},
+          {label: "来源", value: deal.sourceLabel},
+          {label: "距离", value: deal.distanceLabel},
+          {label: "运距成本", value: formatNumber(deal.distanceCost)},
+          {label: "距离倍率", value: `${formatNumber(deal.distanceMultiplier)}x`}
+        ]
+      },
+      {
+        title: "调试",
+        rows: [
+          {label: "deal id", value: deal.id, debug: true},
+          {label: "seller", value: `${deal.sellerType} #${deal.sellerId}`, debug: true},
+          {label: "buyer", value: `${deal.buyerType} #${deal.buyerId}`, debug: true},
+          {label: "source", value: deal.source || "scheduled", debug: true}
+        ]
+      }
+    ])
+  };
+}
+
+function filterDetailSections(sections) {
+  return sections
+    .map(section => ({...section, rows: section.rows.filter(row => !row?.debug || debugEnabled.value)}))
+    .filter(section => section.rows.length);
+}
 
 watch(activeSortOptions, options => {
   if (options.some(option => option.key === props.state.sortKey)) return;
