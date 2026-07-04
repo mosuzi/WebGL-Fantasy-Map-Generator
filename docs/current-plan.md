@@ -2,7 +2,48 @@
 
 本文档用于追踪当前阶段计划。后续每次推进里程碑或改变路线，都应同步更新这里。
 
-## 2026-07-01 最新推进队列
+## 2026-07-04 当前执行计划
+
+本节是当前唯一有效的执行队列。下面的历史推进记录只作为背景，不再自动转化为授权任务；后续继续推进时，必须以用户明确点名的问题或本节列出的当前优先项为准。
+
+### 当前真实状态
+
+- source/candidate full 矩阵目前剩余 `2` 个 warn：`continents-10000-audit-continents-001` 的 `features.total`，以及 `continents-10000-audit-continents-003` 的 `lateStages.names.lakeNames`。两者已被复查为地形拓扑 / 湖泊命名数量差异，不能用删除小岛、删除 1-cell 湖或过滤湖名这类末端修正硬压。
+- 单位系统已经完成“单位”tab、数字缩写、距离 / 面积单位、比例尺、人口倍率和降水倍率的显示层接入。它不再是当前计划项；仅剩导出字段、编辑器输入字段和正式数据口径是否跟随单位偏好的可选增强。
+- 国名方位语义第二刀已完成；孤立 `东/西/南/北 + 根名` 会改成无方位或中性变体，不再作为待办。
+- README 当前状态刷新已完成，不再作为待办。
+- 贸易流地图图层已退役；后续贸易查看优先走经济面板或独立列表面板按国家、地区、市场、商品筛选，不再恢复同时铺满地图的交易连线。
+- 军事方向已按用户校准收住：只保留静态管理、面板观感、导出可读性、军团展示、态势线边界视觉和既有记录查看 / 清理。除非用户重新要求，不再推进动态军事系统。
+- 测量对象已完成保存、图层化、节点编辑、贴路、`cellStops`、沿道路补中间显示点和完整导入回归；后续只保留曲线尺细化等可选增强。
+- 高度图导入已经完成色板量化、映射、应用链路、profile、直方图、色带预览、前后对比、待处理颜色和差值热力图等多轮功能。后续不再从“灰度预览第一刀”继续，应按当前实现继续做 profile 失配辅助、待处理审核队列或预览质量增强。
+
+### 当前优先项
+
+1. **面板布局宽松化计划**：当前若继续进入 UI 修正，应先浏览器审计各面板奇怪折行、空间过窄、按钮硬挤和表格列压缩问题，再改共享布局规则。优先处理共享 `UiMetricGrid / UiDetailGrid / UiSortBar / UiObjectTable`、浮动面板默认宽度、summary/detail 自适应列和长字段跨行。
+2. **非 WebGL overlay 性能治理计划**：标签、城市剪影、marker 图标、军事图标和测量 SVG 都属于 DOM/SVG overlay，拖动和缩放时可能带来额外卡顿。下一步应先增加 pan/zoom profile，记录 WebGL draw、DOM overlay 更新和 overlay 节点数量，再按证据做降负。
+3. **source/candidate 剩余 warn 只读跟踪**：若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断，不做末端过滤。
+
+### 可选增强
+
+- 贸易查看：做独立列表面板或经济面板子视图，支持按国家、地区、市场、商品、卖方和买方筛选；一次只展示用户正在查看的结果，必要时定位相关城市、市场或国家。
+- 单位系统：将导出、编辑器输入字段和部分正式读数口径接入单位偏好，但必须避免把显示倍率误写回生成数据。
+- 气候系统：海流、季风、局部雨影、温度 / 降水刷子，以及下游派生系统的受约束重算。
+- 文化 / 宗教继承：名称变体、图标预制、宗教改革事件、文化同化速度、国家合法性和国力计算。
+- 政体系统：编辑可读性和跨面板定位；不做政体事件。
+- 名称库：更多对象面板入口或原版多词率 `m` 行为；不得让导入或绑定变化自动改写已有地图对象名称。
+- 测量：曲线尺细化。
+- 高度图导入：profile 失配定位、待处理颜色审核队列和更细预览质量。
+
+### 明确暂缓 / 不做
+
+- 不自动推进动态军事系统、战争行动链路、战斗模拟、自动战役阶段、战役自动结束，或经济 / 外交驱动的军事自动化。
+- 不恢复贸易流地图常驻连线，不做默认铺满地图的 top N 交易线或贸易动画。
+- 不为了压 `features.total / lakeNames` warn 删除小岛、删除 1-cell 湖、只命名 outlet 湖，或做其它末端过滤。
+- 不把 `docs/current-plan.md` 的历史记录、旧编号条目或专题 backlog 当成自动授权；每一步仍需按用户明确问题推进，完成后验证加载 / 绘制不回退并单独提交。
+
+## 历史记录：2026-07-01 推进队列（已归档）
+
+以下内容保留为阶段背景和决策依据，不再作为当前执行队列。
 
 当前 focus 仍是 source/candidate full 矩阵 warn 收敛，同时穿插修用户验收中明确指出的纯生成观感问题。最新 full candidate 矩阵为 `61 pass / 2 warn / 0 fail`，warn 总项已降至 `2`。已清除 `routes.roads`、`routes.searoutes`、`economy.deals.marketToMarket`、两个 10k 岛屿 marker 热点、50k 群岛 `tradedGoods` 单项、10k 稀疏群岛的市场类告警、`archipelago-10000-audit-archipelago-001` 的城镇数量派生告警、`peninsula-50000-audit-peninsula-003` 的库存均值/港口/税基告警，以及 `highIsland-100000-audit-highIsland-003` 的军事团数告警。
 
@@ -118,12 +159,12 @@
 - source/candidate baseline 的 `lateStages.military` 已补充 per-state 军事摘要，candidate 额外输出 `rawTarget / burgBackedTarget / finalTarget / landTarget / navalTarget / nodes / spatialMerge` 等 funnel 诊断。`highIsland-100000-audit-highIsland-003` 确认为候选每州 target 被严格兑现导致团数偏高；现在仅对 `highIsland >= 100000` 启用 source-like platoon 空间合并，原 case candidate 团数从 `223` 降到 `183`，source 为 `137`，该项通过。
 - `peninsula-50000-audit-peninsula-003` 的港口和税基已收敛：低水文 50k 半岛会跳过 `<25` cells 小湖港候选，港口从 `151` 降到 `136`，source 为 `95`；经济阶段给 raw goods 补 `value` 并按 source 资源邻域 bonus 更新 `cells.s/pop` 和 state/province 人口税基，`pollTaxExpected` 从 `4321.552` 升到 `7966.929`，进入阈值。
 
-剩余 warn case：
+当时剩余 warn case：
 
 - `continents-10000-audit-continents-001`：`features.total`。
 - `continents-10000-audit-continents-003`：`lateStages.names.lakeNames`。
 
-下一步优先级：
+当时优先级（已过期，保留历史）：
 
 1. `features.total / lakeNames` 暂归类为地形拓扑 parity 差异，先保留诊断，不做末端业务修正；若继续收敛，应回到高度洼地、lake outlet、feature 拓扑，而不是删除小岛或过滤湖名。
 2. marker 后续不要为了单个类型继续扩大总量；资源点类型已完成第二刀细分，下一步更适合把 marker/city 图标扩展成文化预制图标包和批量应用入口，或把资源点正式接入 goods/market/deals 贸易链路。
