@@ -645,7 +645,7 @@ const militaryActions = computed(() => [
   {key: "batchStatus", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
   {key: "station", label: "驻地基地", icon: "⌖", disabled: !selected.value},
   {key: "battle", label: "记录战报", icon: "⚔", disabled: !selected.value},
-  {key: "ratios", label: "兵种比例", icon: "⚖"}
+  {key: "ratios", label: "兵种比例", icon: "⚖", panelWidth: 620, panelHeight: 620}
 ]);
 
 const summaryMetrics = computed(() => [

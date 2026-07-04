@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：军事兵种比例弹框拖动与紧凑化
+
+用户反馈军事管理面板的兵种比例弹框无法拖动，而且虽然兵种要素齐全，但需要大量滚动才能看全。
+
+修正：
+
+- `UiActionDock` 二级浮层新增标题栏拖动能力；拖动后位置会被限制在视口内，关闭或切换动作后恢复自动定位。
+- `UiActionDock` 动作支持 `panelWidth / panelHeight`，用于大内容弹框声明更合适的初始宽度和预估高度。
+- 军事“兵种比例”动作声明为 `620px` 宽、`620px` 预估高，让弹框在下方空间不足时优先向上打开。
+- `.military-ratio-list` 改为 `repeat(auto-fit, minmax(230px, 1fr))` 紧凑网格，比例项在宽弹框中两列显示，减少内部滚动。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 通过构建产物临时静态服务验证：打开军事管理并点击“兵种比例”后，弹框初始 `620 x 619px`、内容区 `scrollHeight = clientHeight = 583`、`scrollDebt = 0`；`5` 个兵种项为 `2` 列 `3` 行；拖动标题栏后位置变化 `23px / 70px`；无横向溢出，`glError = 0`。本轮只出现既有 `[FMG health] main-thread-long-task` 警告，无 console error / page error。
+
 ## 2026-07-05：编辑面板导入导出改为小图标菜单
 
 用户要求所有编辑面板的导出 / 导入功能不要继续做成大按钮，而是改成列表下方的小 icon 按钮；导出存在多格式时，用 dropdown 菜单选择具体格式，并且每一项任务完成后及时提交。
