@@ -11,8 +11,8 @@
     <UiButton variant="secondary" :active="state.editMode === 'add'" @click="startAddResource">放置</UiButton>
     <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
     <UiButton variant="secondary" :disabled="!selected" @click="deleteSelected">删除</UiButton>
-    <UiButton variant="secondary" @click="callbacks.onRegenerateResources?.()">重生成资源点</UiButton>
     <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
+    <UiButton class="marker-regenerate-button" variant="secondary" @click="callbacks.onRegenerateResources?.()">重生成资源点</UiButton>
   </div>
 
   <div v-if="editStatus" class="marker-edit-status">{{ editStatus }}</div>

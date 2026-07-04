@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：资源标记工具条空间放宽
+
+按当前面板空间策略继续推进，复查 `marker-toolbar-baseline / continents / 10000 / deep` 审计后确认资源标记面板编辑工具条虽然未溢出，但仍把“新增资源”下拉、放置、移动、删除、重生成资源点和取消强塞在一行，工具按钮组最小按钮宽只有 `76px`，属于当前计划中明确标出的偏紧项。
+
+完成内容：
+
+- 资源标记面板工具条从单行六控件改为两行布局：资源类型下拉和放置 / 移动 / 删除 / 取消保留第一行，“重生成资源点”独占第二行。
+- `.marker-edit-toolbar` 的按钮列从 `minmax(76px, auto)` 改为 `minmax(82px, 0.5fr)`，并通过 `.marker-regenerate-button` 给长操作完整宽度。
+- 只调整 `MarkerPanel.vue` 和局部 CSS，不改 marker 数据、编辑命令、地图生成或渲染器逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；`MarkerPanel` chunk 约 `9.46KB / gzip 3.46KB`。
+- 面板 deep 布局审计 `marker-toolbar-space-smoke / continents / 10000` 通过：资源标记工具条从 `1 行 / min 76px` 提升到 `2 行 / min 88px / overflow none`，资源标记面板 body 溢出为 `none`，点击到出图 `1494.1ms`，WebGL 加载 `351.2ms`。
+- e2e 守门 `marker-toolbar-space-e2e / continents / 10000` 通过：点击到出图 `1496.7ms`，纯生成 `784.2ms`，WebGL 加载 `382.9ms`，`drawMs = 0`，`glError = 0`。
+
 ## 2026-07-04：经济总览详情区样式升级
 
 用户指出经济总览列表下方的详情数据样式比较原始。复查后确认经济面板底部直接复用通用 `UiDetailGrid`，商品、市场和交易详情都是等权裸字段，缺少经济对象标题、关键指标和分组层次。
