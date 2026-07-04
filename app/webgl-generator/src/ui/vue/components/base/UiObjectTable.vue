@@ -146,15 +146,14 @@ function scrollSelectedRowNow() {
   if (!row || !scroller) return false;
   const rowRect = row.getBoundingClientRect();
   const scrollerRect = scroller.getBoundingClientRect();
-  const padding = 8;
-  if (rowRect.top < scrollerRect.top + padding) {
-    scroller.scrollTop -= scrollerRect.top + padding - rowRect.top;
-    return false;
-  } else if (rowRect.bottom > scrollerRect.bottom - padding) {
-    scroller.scrollTop += rowRect.bottom - scrollerRect.bottom + padding;
-    return false;
-  }
-  return true;
+  const rowCenter = rowRect.top + rowRect.height / 2;
+  const scrollerCenter = scrollerRect.top + scrollerRect.height / 2;
+  const delta = rowCenter - scrollerCenter;
+  if (Math.abs(delta) <= 1) return true;
+  scroller.scrollTop += delta;
+  const atStart = scroller.scrollTop <= 0;
+  const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+  return atStart || atEnd;
 }
 
 function tableScroller(wrap) {

@@ -18896,3 +18896,22 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 构建产物样式烟测确认 `--el-color-primary = #d7a84f`，`--el-bg-color-overlay / --el-popper-bg-color = #0f1519`；输入框 wrapper 背景为 `rgb(16, 23, 27)`，内层输入透明且文字为浅色；二级浮层关闭按钮 hover 为 `26px x 26px / rgb(27, 37, 43) / 6px`，不再出现白色椭圆；`glError = 0`，console/page error 为空。
+
+### 2026-07-05 列表选中滚动居中
+
+背景：
+
+- 用户要求任意点击激活列表型面板并触发选中滚动时，选中项应滚动到视口中央，而不是只滚到刚好可见。
+- 共享列表型面板当前都使用 `UiObjectTable`，已有 `scrollSelectedRowIntoView()` 机制，但旧算法只检查上下边界和 `8px` padding。
+
+实现：
+
+- `UiObjectTable` 的滚动算法改为计算选中行中心点和滚动容器中心点，把 `scrollTop` 调整到两者对齐。
+- 保留原有 `requestAnimationFrame` 重试机制，适配懒加载面板、列表行渲染和滚动容器尺寸尚未稳定的情况。
+- 靠近顶部或底部无法真正居中时，滚动会停在容器边界，避免无限重试。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物烟测打开城市管理列表，共 `821` 行；把列表滚到顶部后触发第 `87` 行选中，选中行中心与滚动容器中心差值约 `-0.31px`，`glError = 0`，console/page error 为空。
