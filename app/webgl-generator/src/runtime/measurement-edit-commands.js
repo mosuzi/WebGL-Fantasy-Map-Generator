@@ -3,6 +3,7 @@ import {
   createMeasurementFromPoints,
   ensureMeasurementStore,
   findMeasurement,
+  normalizeMeasurementCellStops,
   normalizeMeasurementItem,
   normalizeMeasurementPoints,
   refreshMeasurementsMetadata,
@@ -89,12 +90,13 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
       const item = readMeasurement(context.map, measurementId);
       const normalizedPoints = normalizeMeasurementPoints(points, context.map);
       const type = normalizedPoints.length >= 3 ? "polygon" : "polyline";
+      const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
       Object.assign(item, normalizeMeasurementItem({
         ...item,
         type,
         closed: type === "polygon",
-        routeFit: routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit),
-        points: normalizedPoints,
+        routeFit: nextRouteFit,
+        points,
         updatedAt: new Date().toISOString()
       }, context.map));
       refreshMeasurementsMetadata(ensureMeasurementStore(context.map));
@@ -106,7 +108,10 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
       const item = findMeasurement(context.map, measurementId);
       if (!item) return true;
       const normalizedPoints = normalizeMeasurementPoints(points, context.map);
-      return normalizedPoints.length < 2 || sameMeasurementPoints(item.points, normalizedPoints);
+      const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
+      const normalizedCellStops = nextRouteFit === "roads" ? normalizeMeasurementCellStops([], points, normalizedPoints) : [];
+      return normalizedPoints.length < 2
+        || (sameMeasurementPoints(item.points, normalizedPoints) && item.routeFit === nextRouteFit && sameMeasurementCellStops(item.cellStops, normalizedCellStops));
     }
   };
 }
@@ -148,4 +153,9 @@ function normalizeMeasurementName(value) {
 function sameMeasurementPoints(a = [], b = []) {
   if (a.length !== b.length) return false;
   return a.every((point, index) => point.x === b[index]?.x && point.y === b[index]?.y);
+}
+
+function sameMeasurementCellStops(a = [], b = []) {
+  if ((a || []).length !== (b || []).length) return false;
+  return (a || []).every((stop, index) => JSON.stringify(stop || null) === JSON.stringify(b[index] || null));
 }

@@ -45,7 +45,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-e
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
-import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDistance} from "./measurement-objects.js";
+import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
@@ -3541,7 +3541,15 @@ function routeMeasurementSnapFromPointer(state, event) {
     ...snap,
     point: {
       x: clampMeasurementValue(snap.point.x, 0, state.map.metadata.graphWidth),
-      y: clampMeasurementValue(snap.point.y, 0, state.map.metadata.graphHeight)
+      y: clampMeasurementValue(snap.point.y, 0, state.map.metadata.graphHeight),
+      cellStop: {
+        routeId: snap.routeId,
+        routeType: snap.routeType,
+        segmentIndex: snap.segmentIndex,
+        packCell: snap.packCell,
+        x: snap.point.x,
+        y: snap.point.y
+      }
     }
   };
 }
@@ -3560,6 +3568,8 @@ function measurementRouteFitActive(state) {
 function exportMeasurement(state, documentRef) {
   if (!state.map || !state.measurement.points?.length) return;
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const routeFit = normalizeMeasurementRouteFit(state.measurement.routeFit);
+  const cellStops = routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? normalizeMeasurementCellStops([], state.measurement.points, state.measurement.points) : [];
   const points = state.measurement.points.map((point, index) => ({
     index,
     x: roundMeasurementExport(point.x),
@@ -3577,7 +3587,8 @@ function exportMeasurement(state, documentRef) {
       graphWidth: state.map.metadata?.graphWidth || 0,
       graphHeight: state.map.metadata?.graphHeight || 0,
       pointCount: points.length,
-      routeFit: normalizeMeasurementRouteFit(state.measurement.routeFit)
+      routeFit,
+      routeStopCount: cellStops.filter(Boolean).length
     },
     units: {
       distanceUnit: units.distanceUnit,
@@ -3590,7 +3601,8 @@ function exportMeasurement(state, documentRef) {
       areaMapUnits: roundMeasurementExport(area),
       areaLabel: points.length >= 3 ? formatDisplayArea(area, units) : ""
     },
-    points
+    points,
+    cellStops
   };
   downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.measurement.json`, "application/json;charset=utf-8");
 }
@@ -3636,7 +3648,11 @@ function startMeasurementObjectEdit(state, row, documentRef) {
   if (!item || !Array.isArray(item.points) || item.points.length < 2) return;
   cancelMeasurementDrag(state, documentRef);
   state.measurement.editingMeasurementId = item.id;
-  state.measurement.points = item.points.map(point => ({x: point.x, y: point.y}));
+  state.measurement.points = item.points.map((point, index) => ({
+    x: point.x,
+    y: point.y,
+    ...(item.cellStops?.[index] ? {cellStop: item.cellStops[index]} : {})
+  }));
   state.measurement.routeFit = normalizeMeasurementRouteFit(item.routeFit);
   state.measurement.active = true;
   state.panels.measurement?.setSelectedMeasurementId?.(item.id);
@@ -3671,6 +3687,7 @@ function exportMeasurementObjects(state, documentRef, rows) {
     distanceLabel: formatDisplayDistance(row.distance, units),
     areaMapUnits: roundMeasurementExport(row.area),
     areaLabel: row.area ? formatDisplayArea(row.area, units) : "",
+    cellStops: row.cellStops || [],
     points: (row.points || []).map((point, index) => ({
       index,
       x: roundMeasurementExport(point.x),
@@ -3739,11 +3756,13 @@ function moveMeasurementPoint(state, event) {
     if (!snap) return;
     point.x = snap.point.x;
     point.y = snap.point.y;
+    point.cellStop = snap.point.cellStop;
     return;
   }
   const world = state.renderer.screenToWorld(event.clientX, event.clientY);
   point.x = clampMeasurementValue(world.x, 0, state.map.metadata.graphWidth);
   point.y = clampMeasurementValue(world.y, 0, state.map.metadata.graphHeight);
+  delete point.cellStop;
 }
 
 function cancelMeasurementDrag(state, documentRef) {

@@ -366,6 +366,7 @@ select {
 .el-input,
 .el-input-number {
   width: 100%;
+  --el-border: 1px solid #33444f;
   --el-input-bg-color: #10171b;
   --el-input-border-color: #33444f;
   --el-input-hover-border-color: #5f7480;
@@ -374,8 +375,10 @@ select {
   --el-input-placeholder-color: #758892;
   --el-input-icon-color: #9fb0ba;
   --el-disabled-bg-color: #12191e;
+  --el-disabled-border-color: #2a3942;
   --el-disabled-text-color: #72838c;
   --el-fill-color-light: #172127;
+  --el-border-radius-base: 6px;
 }
 
 .el-input__wrapper {
@@ -406,7 +409,7 @@ select {
 
 .el-input-number__decrease,
 .el-input-number__increase {
-  border-color: #33444f !important;
+  border: 1px solid #33444f !important;
   background: #172127;
   box-shadow: none;
   color: #cbd7dc;
@@ -414,7 +417,7 @@ select {
 
 .el-input-number.is-controls-right .el-input-number__increase,
 .el-input-number.is-controls-right .el-input-number__decrease {
-  border-color: #33444f !important;
+  border: 1px solid #33444f !important;
   border-left-color: #33444f !important;
   background: #172127;
   box-shadow: none;
@@ -426,6 +429,12 @@ select {
 
 .el-input-number.is-controls-right .el-input-number__decrease {
   border-top-color: #33444f !important;
+}
+
+.el-input-number .el-icon,
+.el-input-number .el-icon svg {
+  color: inherit;
+  fill: currentColor;
 }
 
 .el-input-number__decrease:hover,
@@ -4129,6 +4138,7 @@ input.ui-switch-native {
   width: 100%;
   min-width: 0;
   --el-color-primary: #d7a84f;
+  --el-border: 1px solid #273640;
   --el-border-color: #33444f;
   --el-border-color-light: #273640;
   --el-border-color-lighter: #273640;

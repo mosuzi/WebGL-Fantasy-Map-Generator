@@ -37,7 +37,7 @@ export function createMeasurementFromPoints(map, points, {name = "", routeFit = 
     id: `measurement-${idNumber}`,
     type,
     name: normalizeMeasurementName(name) || `测量 ${idNumber}`,
-    points: normalizedPoints,
+    points,
     closed: type === "polygon",
     routeFit: normalizeMeasurementRouteFit(routeFit),
     createdAt: now,
@@ -46,8 +46,10 @@ export function createMeasurementFromPoints(map, points, {name = "", routeFit = 
 }
 
 export function normalizeMeasurementItem(item, map) {
-  const points = normalizeMeasurementPoints(item?.points, map);
+  const sourcePoints = Array.isArray(item?.points) ? item.points : [];
+  const points = normalizeMeasurementPoints(sourcePoints, map);
   const type = item?.type === "polygon" || item?.closed ? "polygon" : "polyline";
+  const routeFit = normalizeMeasurementRouteFit(item?.routeFit);
   const now = new Date().toISOString();
   const normalized = {
     id: String(item?.id || ""),
@@ -55,7 +57,8 @@ export function normalizeMeasurementItem(item, map) {
     name: normalizeMeasurementName(item?.name) || "未命名测量",
     points,
     closed: type === "polygon",
-    routeFit: normalizeMeasurementRouteFit(item?.routeFit),
+    routeFit,
+    cellStops: routeFit === "roads" ? normalizeMeasurementCellStops(item?.cellStops, sourcePoints, points) : [],
     createdAt: item?.createdAt || now,
     updatedAt: item?.updatedAt || item?.createdAt || now
   };
@@ -63,6 +66,7 @@ export function normalizeMeasurementItem(item, map) {
   const area = points.length >= 3 ? measurementArea(points) : 0;
   normalized.summary = {
     pointCount: points.length,
+    routeStopCount: normalized.cellStops.filter(Boolean).length,
     distanceMapUnits: roundMeasurementValue(distance),
     areaMapUnits: roundMeasurementValue(area)
   };
@@ -80,6 +84,14 @@ export function normalizeMeasurementPoints(points, map = null) {
       return Number.isFinite(x) && Number.isFinite(y) ? {x: roundMeasurementValue(x), y: roundMeasurementValue(y)} : null;
     })
     .filter(Boolean);
+}
+
+export function normalizeMeasurementCellStops(cellStops = [], sourcePoints = [], normalizedPoints = []) {
+  return normalizedPoints.map((point, index) => {
+    const source = Array.isArray(cellStops) ? cellStops[index] : null;
+    const pointStop = sourcePoints[index]?.cellStop || sourcePoints[index]?.routeStop || sourcePoints[index];
+    return normalizeMeasurementCellStop(source || pointStop, point);
+  });
 }
 
 export function measurementDistance(points) {
@@ -133,6 +145,27 @@ export function findMeasurement(map, measurementId) {
 
 function normalizeMeasurementName(value) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+}
+
+function normalizeMeasurementCellStop(value, point) {
+  if (!value || typeof value !== "object") return null;
+  const routeId = integerOrNull(value.routeId ?? value.route);
+  const segmentIndex = integerOrNull(value.segmentIndex ?? value.segment);
+  const packCell = integerOrNull(value.packCell ?? value.cell);
+  if (routeId === null && segmentIndex === null && packCell === null) return null;
+  return {
+    routeId,
+    routeType: typeof value.routeType === "string" && value.routeType.trim() ? value.routeType.trim() : "route",
+    segmentIndex,
+    packCell,
+    x: roundMeasurementValue(Number(value.x ?? point?.x ?? 0)),
+    y: roundMeasurementValue(Number(value.y ?? point?.y ?? 0))
+  };
+}
+
+function integerOrNull(value) {
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
 }
 
 function measurementNumericId(id) {

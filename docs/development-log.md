@@ -17868,3 +17868,27 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - `$env:CI='true'; pnpm run regress:measurement -- --browser-channel chrome --cells 10000 --seed measurement-import-smoke --template continents --timeout 60000` 通过；初始测量对象 `2`，导出文件 `fmg-measurement-import-smoke-f70e6d2a.webgl-map.json` 为 `13007089 bytes`，导出测量对象 `2`，导出 `routeFit` 为 `roads / none`，导入后 overlay 路径 `2`，`glError = 0`。报告生成到 `docs/generated/reports/measurement-import-regression-results.md/json`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-import-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1185.5ms`，纯生成 `658.9ms`，WebGL 加载 `330.8ms`，UI/调度余量 `195.8ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `112.1ms`，最慢加载阶段为“构建视觉 cell mesh” `49.8ms`。
+
+### 测量路线 cellStops 持久化与数字输入边框修正
+
+背景：
+
+- 贴路测量第一刀只保存了 `routeFit: "roads"` 和吸附后的坐标，没有把每个点吸附到哪条路线、哪段路线和哪个 pack cell 一起持久化。
+- 完整地图导出再导入回归需要进一步覆盖 `cellStops`，否则后续沿道路补中间节点和路线尺细化缺少稳定锚点。
+- 用户截图指出 Element Plus 数字输入的上下调节按钮仍有白色边线，之前只覆盖了部分按钮边框颜色，组件默认的 `--el-border` 变量仍可能漏出浅色。
+
+修正：
+
+- `measurement-objects` 新增 `normalizeMeasurementCellStops()`，贴路测量对象会按点列保存 `routeId / routeType / segmentIndex / packCell / x / y`，自由测量对象保持空数组。
+- 路线吸附点击和拖拽会把 `cellStop` 写到临时点；保存新对象、编辑旧对象、单个测量 JSON 导出、完整地图导出和导入都会保留 `cellStops`。
+- 测量对象摘要新增 `routeStopCount`，测量面板调试详情显示“路线点”。
+- 完整导入回归脚本新增 `cellStops` 对比和 `routeStopCount` 断言，要求贴路对象路线点数量等于点数，自由对象路线点为 `0`。
+- 数字输入样式改为在 `.el-input-number` 层覆盖 `--el-border / --el-disabled-border-color / --el-border-radius-base`，同时对通用数字输入和滑条数字输入的上下按钮保留显式暗色边框兜底，避免后加载的 Element Plus 组件 CSS 漏出白色边线。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\measurement-objects.js`、`node --check app\webgl-generator\src\runtime\measurement-edit-commands.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check tools\webgl-generator-measurement-import-regression.mjs` 均通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run regress:measurement -- --browser-channel chrome --cells 10000 --seed measurement-cellstops-smoke --template continents --timeout 60000` 通过；初始测量对象 `2`，导出 routeFit `roads / none`，导出路线点 `2 / 0`，导入后 overlay 路径 `2`，`glError = 0`，生成阶段点击到出图 `2482.5ms`、WebGL 加载 `819.9ms`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-cellstops-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1952.2ms`，纯生成 `969.1ms`，WebGL 加载 `458.9ms`，UI/调度余量 `524.2ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `180.4ms`，最慢加载阶段为“构建线层顶点” `74.7ms`。
+- 构建产物浏览器 computed style 验证通过：数字输入上下按钮 `border*Color = rgb(39, 54, 64)`，`backgroundColor = rgb(20, 33, 41)`，不再出现默认浅色边框。

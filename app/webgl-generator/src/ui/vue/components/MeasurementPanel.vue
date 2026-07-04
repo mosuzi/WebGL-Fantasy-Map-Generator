@@ -120,6 +120,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.typeLabel},
   {label: "模式", value: selected.value.routeFitLabel},
   {label: "点数", value: formatNumber(selected.value.pointCount)},
+  {label: "路线点", value: formatNumber(selected.value.routeStopCount), debug: true},
   {label: "长度", value: formatDistanceValue(selected.value.distance)},
   {label: "面积", value: selected.value.area ? formatAreaValue(selected.value.area) : "-"},
   {label: "范围", value: selected.value.boundsLabel},
@@ -139,6 +140,7 @@ function measurementRows(map) {
       const distance = Number(item.summary?.distanceMapUnits) || measurementDistance(points);
       const area = Number(item.summary?.areaMapUnits) || (points.length >= 3 ? measurementArea(points) : 0);
       const routeFit = normalizeMeasurementRouteFit(item.routeFit);
+      const cellStops = Array.isArray(item.cellStops) ? item.cellStops : [];
       return {
         id: String(item.id),
         name: item.name || item.id,
@@ -146,6 +148,8 @@ function measurementRows(map) {
         typeLabel: item.closed || item.type === "polygon" ? "面积" : "折线",
         routeFit,
         routeFitLabel: routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? "贴路" : "自由",
+        cellStops,
+        routeStopCount: cellStops.filter(Boolean).length,
         pointCount: points.length,
         distance,
         area,

@@ -87,7 +87,8 @@ try {
       suggestedFilename: exported.suggestedFilename,
       bytes: exported.bytes,
       measurementCount: exported.documentMeasurementCount,
-      routeFitValues: exported.documentRouteFitValues
+      routeFitValues: exported.documentRouteFitValues,
+      routeStopCounts: exported.documentRouteStopCounts
     },
     imported,
     passed: !consoleErrors.length && imported.passed && exported.documentMeasurementCount === before.items.length
@@ -173,6 +174,8 @@ async function createMeasurementFixtures(page) {
       name: item.name,
       type: item.type,
       routeFit: item.routeFit,
+      cellStops: item.cellStops || [],
+      routeStopCount: (item.cellStops || []).filter(Boolean).length,
       pointCount: item.points.length,
       points: item.points.map(point => ({x: point.x, y: point.y})),
       summary: item.summary
@@ -249,7 +252,8 @@ async function exportFullMap(page) {
     suggestedFilename: download.suggestedFilename(),
     bytes: Buffer.byteLength(text),
     documentMeasurementCount: document.map?.measurements?.items?.length || 0,
-    documentRouteFitValues: (document.map?.measurements?.items || []).map(item => item.routeFit || "none")
+    documentRouteFitValues: (document.map?.measurements?.items || []).map(item => item.routeFit || "none"),
+    documentRouteStopCounts: (document.map?.measurements?.items || []).map(item => (item.cellStops || []).filter(Boolean).length)
   };
 }
 
@@ -282,6 +286,8 @@ async function importFullMap(page, filePath, before) {
       name: item.name,
       type: item.type,
       routeFit: item.routeFit,
+      cellStops: item.cellStops || [],
+      routeStopCount: (item.cellStops || []).filter(Boolean).length,
       pointCount: item.points.length,
       points: item.points.map(point => ({x: point.x, y: point.y})),
       summary: item.summary
@@ -295,7 +301,12 @@ async function importFullMap(page, filePath, before) {
       if (actual.routeFit !== expected.routeFit) failures.push(`${actual.id} routeFit ${actual.routeFit} != ${expected.routeFit}`);
       if (actual.pointCount !== expected.pointCount) failures.push(`${actual.id} pointCount ${actual.pointCount} != ${expected.pointCount}`);
       if (!samePoints(actual.points, expected.points)) failures.push(`${actual.id} 点列不一致`);
+      if (!sameStops(actual.cellStops, expected.cellStops)) failures.push(`${actual.id} cellStops 不一致`);
     }
+    const routeItem = items.find(item => item.routeFit === "roads");
+    if (!routeItem || routeItem.routeStopCount !== routeItem.pointCount) failures.push(`贴路测量路线点数量异常：${routeItem?.routeStopCount ?? "none"} / ${routeItem?.pointCount ?? "none"}`);
+    const freeItem = items.find(item => item.routeFit === "none");
+    if (!freeItem || freeItem.routeStopCount !== 0) failures.push(`自由测量不应包含路线点：${freeItem?.routeStopCount ?? "none"}`);
     const overlayPaths = document.querySelectorAll(".measurement-object-path").length;
     if (overlayPaths < before.items.length) failures.push(`测量 overlay 路径 ${overlayPaths} < ${before.items.length}`);
     const routeFitValues = new Set(items.map(item => item.routeFit));
@@ -316,6 +327,11 @@ async function importFullMap(page, filePath, before) {
     function samePoints(a, b) {
       if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
       return a.every((point, index) => Math.abs(point.x - b[index].x) < 0.001 && Math.abs(point.y - b[index].y) < 0.001);
+    }
+
+    function sameStops(a, b) {
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+      return a.every((stop, index) => JSON.stringify(stop || null) === JSON.stringify(b[index] || null));
     }
   }, before);
 }
@@ -341,6 +357,7 @@ function renderMarkdown(report) {
   lines.push(`- 导出文件：${report.exported.suggestedFilename}，${report.exported.bytes} bytes`);
   lines.push(`- 导出测量对象：${report.exported.measurementCount}`);
   lines.push(`- 导出 routeFit：${report.exported.routeFitValues.join(" / ") || "none"}`);
+  lines.push(`- 导出路线点：${report.exported.routeStopCounts.join(" / ") || "none"}`);
   lines.push(`- 导入后 overlay 路径：${report.imported.overlayPaths}`);
   lines.push(`- WebGL error：${report.imported.glError}`);
   lines.push("");

@@ -967,6 +967,8 @@ http://127.0.0.1:5410
 
 263. 测量对象完整导入回归已固定化：新增 `tools/webgl-generator-measurement-import-regression.mjs` 和 `pnpm run regress:measurement`，会在构建产物中生成固定地图，创建一个贴路测量对象和一个自由测量对象，通过真实“地图数据”导出下载完整 `.webgl-map.json`，再通过文件输入导入回来，断言测量对象数量、点列、`routeFit = roads / none`、overlay 路径和测量面板模式字段都保留。回归报告写入 `docs/generated/reports/measurement-import-regression-results.json/md`。本轮回归通过：导出文件 `13007089 bytes`，导出测量对象 `2`，导入后 overlay 路径 `2`，`glError = 0`，生成阶段点击到出图 `1423.5ms`、WebGL 加载 `379.9ms`。正式 e2e 守门通过：`measurement-import-smoke / continents / 10000` 点击到出图 `1185.5ms`，纯生成 `658.9ms`，WebGL 加载 `330.8ms`，UI/调度余量 `195.8ms`，最慢加载阶段为“构建视觉 cell mesh” `49.8ms`。后续测量方向继续做 `cellStops`、沿道路补中间节点和曲线尺细化。
 
+264. 测量路线 `cellStops` 持久化第一刀已完成：贴路测量点现在会记录路线停靠元信息 `routeId / routeType / segmentIndex / packCell / x / y`，保存、编辑、完整地图导出和导入都会保留 `cellStops`；测量对象摘要新增 `routeStopCount`，面板调试详情可查看路线点数量。`pnpm run regress:measurement` 已升级为断言贴路对象导出路线点 `2`、自由对象为 `0`。同时修正 Element Plus 数字输入上下调节按钮的白色边线，改为在 `.el-input-number` 层覆盖 `--el-border` 等变量，并同步处理滑条数字输入。构建产物回归通过：`measurement-cellstops-smoke / continents / 10000` 初始测量对象 `2`，导出 routeFit `roads / none`，导出路线点 `2 / 0`，导入后 overlay 路径 `2`，`glError = 0`，导出回归生成阶段点击到出图 `2482.5ms`、WebGL 加载 `819.9ms`。正式 e2e 守门通过：点击到出图 `1952.2ms`，纯生成 `969.1ms`，WebGL 加载 `458.9ms`，UI/调度余量 `524.2ms`，最慢加载阶段为“构建线层顶点” `74.7ms`。浏览器 computed style 验证中数字输入按钮边框为暗色 `rgb(39, 54, 64)`，背景为 `rgb(20, 33, 41)`。后续测量方向继续做沿道路自动补中间节点和曲线尺细化。
+
 ## 约束
 
 - 新项目代码仍然放在根目录下，不放进 `source/`。
