@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：对象颜色编辑 HSL 取色组件
+
+用户指出当前颜色编辑仍有问题，希望支持 HSL 取色；如果 Element Plus 现有组件做不到，就另做专用颜色组件。复查后确认当前共享颜色入口是 `UiColorActionPanel -> UiColorField -> ElColorPicker`，更适合弹出式 HSV/HEX 选择，不适合直接给出 H/S/L 三通道数值控制。本轮改为项目内专用 HSL 字段，但对外仍输出 `#rrggbb`，不改变地图数据格式或颜色命令接口。
+
+修正：
+
+- `UiColorField` 去掉 `ElColorPicker`，改为内置 HSL 取色器，包含当前色块、H/S/L 三条滑杆、H/S/L 数字输入、HEX 输入和预设色块。
+- 新增 hex / HSL 双向转换：外部传入 `#rgb` / `#rrggbb` 会归一为 `#rrggbb` 并换算为 HSL；修改 H/S/L 会立即更新 HEX 草稿；提交仍通过原 `apply` 事件输出 `#rrggbb`。
+- 国家、省份、文化、宗教继续共用 `UiColorActionPanel`，因此四类对象自动获得 HSL 取色能力；`createSetStateColorCommand` 等命令和渲染层仍消费 hex，不需要数据迁移。
+- CSS 新增 `ui-hsl-color-field` 系列暗色样式，并覆盖旧 `state/province/culture/religion-color-field` 的 Element ColorPicker 三列布局，避免新字段被压扁。
+- 去掉 Element ColorPicker 依赖后，颜色面板独立 chunk 从约 `20KB` 降到约 `5KB`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：打开国家编辑的“调整颜色”二级面板，存在 `3` 条 HSL 通道、`3` 个 range、`3` 个数字输入和 HEX 输入；将 H/S/L 设置为 `210/45/62` 后得到 `#729eca`，应用后国家颜色写入 `#729eca`，历史记录为 `undo 1 / redo 0 / 国家颜色 #1`，面板无横向溢出，WebGL error 为 `0`。
+- e2e 守门 `hsl-color-field-e2e / continents / 10000` 通过：点击到出图 `1593.7ms`，纯生成 `845.9ms`，WebGL 加载 `396.6ms`，最慢加载阶段为“构建标签” `76.2ms`。
+
 ## 2026-07-04：测量浮条默认隐藏与提示行修正
 
 用户反馈测量面板默认会展示，并且“点击地图添加起点”提示在窄宽度下被挤成竖向折行。复查后确认这是测量浮条 `measurement-readout` 的布局问题：组件挂载后缺少初始隐藏兜底，且标题、提示和按钮共用一行 flex，提示文本会被按钮挤压。

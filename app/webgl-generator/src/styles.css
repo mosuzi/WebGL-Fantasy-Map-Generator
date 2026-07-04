@@ -1796,15 +1796,156 @@ select:disabled {
   min-width: 0;
 }
 
-.ui-color-picker {
-  --el-color-primary: #d7a84f;
+.ui-hsl-color-field {
+  display: grid;
+  gap: 10px;
 }
 
-.ui-color-picker .el-color-picker__trigger {
-  width: 44px;
+.state-color-field.ui-hsl-color-field,
+.province-color-field.ui-hsl-color-field,
+.culture-color-field.ui-hsl-color-field,
+.religion-color-field.ui-hsl-color-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+  margin: 9px 0;
+}
+
+.ui-hsl-color-header {
+  display: grid;
+  grid-template-columns: minmax(40px, auto) 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
+.ui-hsl-color-header strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #edf4f6;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.ui-hsl-color-swatch {
+  width: 38px;
+  height: 28px;
+  border: 1px solid rgba(237, 246, 249, 0.32);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(4, 7, 10, 0.32);
+}
+
+.ui-hsl-channel {
+  display: grid;
+  grid-template-columns: 18px minmax(120px, 1fr) 58px;
+  align-items: center;
+  gap: 8px;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
+.ui-hsl-channel span,
+.ui-hsl-hex-field span {
+  color: #9fb0ba;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ui-hsl-channel input[type="range"] {
+  width: 100%;
+  height: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.18);
+  border-radius: 999px;
+  appearance: none;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  cursor: pointer;
+}
+
+.ui-hsl-channel input[type="range"]::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #10171b;
+  border-radius: 50%;
+  appearance: none;
+  background: #ffe0a1;
+  box-shadow: 0 0 0 1px rgba(215, 168, 79, 0.82);
+}
+
+.ui-hsl-channel input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #10171b;
+  border-radius: 50%;
+  background: #ffe0a1;
+  box-shadow: 0 0 0 1px rgba(215, 168, 79, 0.82);
+}
+
+.ui-hsl-channel input[type="number"],
+.ui-hsl-hex-field input {
+  width: 100%;
   height: 30px;
-  border-color: #33444f;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  padding: 0 8px;
   background: #10171b;
+  color: #edf4f6;
+  font: inherit;
+}
+
+.ui-hsl-channel input[type="number"] {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  text-align: right;
+}
+
+.ui-hsl-channel input[type="number"]:focus,
+.ui-hsl-hex-field input:focus {
+  border-color: #d7a84f;
+  outline: none;
+}
+
+.ui-hsl-hex-field {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ui-hsl-hex-field input {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  text-transform: lowercase;
+}
+
+.ui-hsl-hex-field input.invalid {
+  border-color: #b85c52;
+  color: #ffb3a9;
+}
+
+.ui-hsl-predefined {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ui-hsl-predefined button {
+  width: 100%;
+  height: 24px;
+  border: 1px solid rgba(237, 246, 249, 0.28);
+  border-radius: 5px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(4, 7, 10, 0.26);
+}
+
+.ui-hsl-predefined button:hover,
+.ui-hsl-predefined button.active {
+  border-color: #ffe0a1;
+  box-shadow: 0 0 0 1px rgba(215, 168, 79, 0.52), inset 0 0 0 1px rgba(4, 7, 10, 0.32);
 }
 
 .ui-note-field {
