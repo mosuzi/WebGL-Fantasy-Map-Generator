@@ -18876,3 +18876,23 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 政体面板 deep 布局审计 `government-export-space-smoke / continents / 10000` 通过：未发现待复核项；政体导出按钮组为 `2 项 / 1 行 / min 112px / overflow none`，点击到出图 `1513.9ms`，WebGL 加载 `362.8ms`。
 - e2e 守门 `government-export-space-e2e / continents / 10000` 通过：点击到出图 `1408ms`，纯生成 `696ms`，WebGL 加载 `386.5ms`，最慢加载阶段为“构建标签” `67.8ms`。
+
+### 2026-07-05 Element Plus 暗色主题变量第一刀
+
+背景：
+
+- 用户要求对照 Element Plus 官方主题文档，考虑用完整主题定义替代继续被 Element 默认样式局部反打。
+- 官方推荐的大规模主题替换路线是 SCSS 变量和 source style；当前项目已按需导入 Element 样式，但尚未安装 `sass`，直接切 SCSS source theme 会引入依赖和构建链变化。
+
+实现：
+
+- `:root` 集中补齐 Element Plus 暗色 CSS 变量，覆盖颜色、背景、填充、边框、文字、按钮、输入框、下拉、滑条、分段控件、表格、消息、通知和弹层等基础 token。
+- `styles.css` 从 `index.html` 直链改为 `main.js` 入口导入，让项目样式进入 Vite 依赖图，降低本地 dev 与构建产物中 Element 按需样式顺序不一致的概率。
+- `UiActionDock` 二级浮层关闭按钮从 Element `text circle` 按钮改为项目原生按钮，避免 Element text button 的 hover 背景泄漏成白色椭圆。
+- 本轮保留 Element 基础组件 CSS；完整 SCSS source theme 后续需要单独安装 `sass`，再按官方文档切换 `ElementPlusResolver({importStyle: "sass"})` 或 `unplugin-element-plus useSource`。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物样式烟测确认 `--el-color-primary = #d7a84f`，`--el-bg-color-overlay / --el-popper-bg-color = #0f1519`；输入框 wrapper 背景为 `rgb(16, 23, 27)`，内层输入透明且文字为浅色；二级浮层关闭按钮 hover 为 `26px x 26px / rgb(27, 37, 43) / 6px`，不再出现白色椭圆；`glError = 0`，console/page error 为空。

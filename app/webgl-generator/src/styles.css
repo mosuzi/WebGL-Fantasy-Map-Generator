@@ -3,31 +3,141 @@
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
   background: #0d1116;
   color: #eef3f5;
+  /* Element Plus 全局暗色主题变量。优先用变量约束组件默认状态，局部 CSS 只处理布局和特殊交互。 */
   --el-color-primary: #d7a84f;
+  --el-color-primary-light-1: #ddb15a;
+  --el-color-primary-light-2: #e1b85f;
   --el-color-primary-light-3: #e4bd67;
+  --el-color-primary-light-4: #92733a;
   --el-color-primary-light-5: #6a552b;
+  --el-color-primary-light-6: #4f4022;
   --el-color-primary-light-7: #3a2f18;
+  --el-color-primary-light-8: #2b2415;
   --el-color-primary-light-9: #201b11;
   --el-color-primary-dark-2: #b88933;
+  --el-color-success: #7fbf8d;
+  --el-color-success-light-3: #5f8e6a;
+  --el-color-success-light-5: #33533a;
+  --el-color-success-light-7: #223a28;
+  --el-color-success-light-9: #16231a;
+  --el-color-warning: #d7a84f;
+  --el-color-warning-light-3: #a98448;
+  --el-color-warning-light-5: #5c4828;
+  --el-color-warning-light-7: #3b301d;
+  --el-color-warning-light-9: #211b12;
+  --el-color-danger: #d7796f;
+  --el-color-danger-light-3: #9b5a55;
+  --el-color-danger-light-5: #583334;
+  --el-color-danger-light-7: #3c2527;
+  --el-color-danger-light-9: #241719;
+  --el-color-error: #d7796f;
+  --el-color-info: #8aa0aa;
+  --el-color-info-light-3: #657a84;
+  --el-color-info-light-5: #3b4b53;
+  --el-color-info-light-7: #28363d;
+  --el-color-info-light-9: #172127;
   --el-bg-color: #0d1116;
   --el-bg-color-page: #0d1116;
   --el-bg-color-overlay: #0f1519;
   --el-fill-color: #172127;
+  --el-fill-color-dark: #0a0f12;
+  --el-fill-color-darker: #06090b;
   --el-fill-color-light: #10171b;
   --el-fill-color-lighter: #111a20;
   --el-fill-color-extra-light: #0f1519;
   --el-fill-color-blank: #0f1519;
+  --el-box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  --el-box-shadow-light: 0 10px 24px rgba(0, 0, 0, 0.32);
+  --el-box-shadow-lighter: 0 8px 18px rgba(0, 0, 0, 0.26);
   --el-border-color: #33444f;
+  --el-border-color-dark: #4d6574;
+  --el-border-color-darker: #5f7480;
   --el-border-color-light: #273640;
   --el-border-color-lighter: rgba(189, 206, 213, 0.14);
   --el-border-color-extra-light: rgba(189, 206, 213, 0.1);
+  --el-border-color-hover: #5f7480;
+  --el-border: 1px solid var(--el-border-color);
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 5px;
+  --el-border-radius-round: 999px;
+  --el-border-radius-circle: 100%;
   --el-text-color-primary: #edf4f6;
   --el-text-color-regular: #d8e4e8;
   --el-text-color-secondary: #9fb0ba;
   --el-text-color-placeholder: #758892;
+  --el-text-color-disabled: #657782;
   --el-disabled-bg-color: #12191e;
   --el-disabled-text-color: #72838c;
+  --el-disabled-border-color: #2a3942;
   --el-mask-color: rgba(4, 7, 10, 0.58);
+  --el-overlay-color: rgba(4, 7, 10, 0.72);
+  --el-overlay-color-light: rgba(4, 7, 10, 0.54);
+  --el-overlay-color-lighter: rgba(4, 7, 10, 0.36);
+  --el-font-size-extra-large: 20px;
+  --el-font-size-large: 18px;
+  --el-font-size-medium: 15px;
+  --el-font-size-base: 13px;
+  --el-font-size-small: 12px;
+  --el-font-size-extra-small: 11px;
+  --el-font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --el-component-size-large: 38px;
+  --el-component-size: 32px;
+  --el-component-size-small: 28px;
+  --el-transition-duration: 0.16s;
+  --el-transition-duration-fast: 0.12s;
+  --el-button-bg-color: #1b252b;
+  --el-button-border-color: #3e525f;
+  --el-button-text-color: #d8e4e8;
+  --el-button-hover-bg-color: #24313a;
+  --el-button-hover-border-color: #5f7480;
+  --el-button-hover-text-color: #f2f7f8;
+  --el-button-active-bg-color: #10171b;
+  --el-button-active-border-color: #d7a84f;
+  --el-button-active-text-color: #ffe0a1;
+  --el-button-disabled-bg-color: #12191e;
+  --el-button-disabled-border-color: #2a3942;
+  --el-button-disabled-text-color: #72838c;
+  --el-input-bg-color: #10171b;
+  --el-input-border-color: #33444f;
+  --el-input-hover-border-color: #5f7480;
+  --el-input-focus-border-color: #d7a84f;
+  --el-input-text-color: #edf4f6;
+  --el-input-placeholder-color: #758892;
+  --el-input-icon-color: #9fb0ba;
+  --el-select-input-focus-border-color: #d7a84f;
+  --el-popper-bg-color: #0f1519;
+  --el-popper-border-radius: 7px;
+  --el-popper-border-color: rgba(215, 168, 79, 0.34);
+  --el-slider-main-bg-color: #d7a84f;
+  --el-slider-runway-bg-color: #26343d;
+  --el-slider-stop-bg-color: #26343d;
+  --el-slider-disabled-color: #53616a;
+  --el-slider-border-radius: 999px;
+  --el-switch-on-color: #d7a84f;
+  --el-switch-off-color: #26343d;
+  --el-segmented-bg-color: #10171b;
+  --el-segmented-color: #cbd7dc;
+  --el-segmented-item-selected-bg-color: #3a2f18;
+  --el-segmented-item-selected-color: #ffe0a1;
+  --el-segmented-item-hover-bg-color: #172127;
+  --el-segmented-item-hover-color: #ffe0a1;
+  --el-table-bg-color: #0f1519;
+  --el-table-tr-bg-color: #0f1519;
+  --el-table-header-bg-color: #111a20;
+  --el-table-border-color: rgba(189, 206, 213, 0.1);
+  --el-table-border: 1px solid rgba(189, 206, 213, 0.1);
+  --el-table-text-color: #dfe8eb;
+  --el-table-header-text-color: #ffe0a1;
+  --el-table-row-hover-bg-color: rgba(215, 168, 79, 0.12);
+  --el-table-current-row-bg-color: rgba(215, 168, 79, 0.16);
+  --el-message-bg-color: #10171b;
+  --el-message-border-color: #33444f;
+  --el-notification-bg-color: #10171b;
+  --el-notification-border-color: #33444f;
+  --el-popover-bg-color: #0f1519;
+  --el-popover-border-color: rgba(215, 168, 79, 0.34);
+  --el-dropdown-menuItem-hover-fill: #1b2b33;
+  --el-dropdown-menuItem-hover-color: #ffe0a1;
 }
 
 * {
@@ -1772,16 +1882,10 @@ select:disabled {
   white-space: nowrap;
 }
 
-.ui-secondary-action-close.el-button {
-  --el-button-bg-color: transparent;
-  --el-button-border-color: transparent;
-  --el-button-text-color: #9fb0ba;
-  --el-button-hover-bg-color: #1b252b;
-  --el-button-hover-border-color: #3e525f;
-  --el-button-hover-text-color: #edf4f6;
-  --el-button-active-bg-color: #10171b;
-  --el-button-active-border-color: #d7a84f;
-  --el-button-active-text-color: #ffe0a1;
+.ui-secondary-action-close {
+  appearance: none;
+  display: grid;
+  place-items: center;
   width: 26px;
   flex: 0 0 26px;
   height: 26px;
@@ -1791,24 +1895,23 @@ select:disabled {
   background: transparent;
   color: #9fb0ba;
   cursor: pointer;
+  font: inherit;
   font-size: 17px;
   line-height: 1;
   margin: 0;
   padding: 0;
 }
 
-.ui-secondary-action-close.el-button.is-text:not(.is-disabled):hover,
-.ui-secondary-action-close.el-button.is-text:not(.is-disabled):focus,
-.ui-secondary-action-close.el-button.is-text:not(.is-disabled):focus-visible,
-.ui-secondary-action-close.el-button.is-text:not(.is-disabled):active,
-.ui-secondary-action-close.el-button:hover {
+.ui-secondary-action-close:hover,
+.ui-secondary-action-close:focus-visible {
   border-color: #3e525f;
   background: #1b252b;
   color: #edf4f6;
   box-shadow: none;
+  outline: none;
 }
 
-.ui-secondary-action-close.el-button.is-text:not(.is-disabled):active {
+.ui-secondary-action-close:active {
   border-color: #d7a84f;
   background: #10171b;
   color: #ffe0a1;

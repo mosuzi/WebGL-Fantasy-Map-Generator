@@ -27,7 +27,7 @@
       >
         <header class="ui-secondary-action-header">
           <strong>{{ activeActionLabel }}</strong>
-          <ElButton class="ui-secondary-action-close" text circle :icon="Close" aria-label="关闭二级编辑面板" @click="closePanel" />
+          <button type="button" class="ui-secondary-action-close" aria-label="关闭二级编辑面板" @click="closePanel">x</button>
         </header>
         <div class="ui-secondary-action-body">
           <slot :name="active" />
@@ -39,7 +39,6 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
-import {Close} from "@element-plus/icons-vue";
 
 defineOptions({
   name: "UiActionDock"

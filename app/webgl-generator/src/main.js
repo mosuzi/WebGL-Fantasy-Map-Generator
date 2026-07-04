@@ -1,6 +1,7 @@
 import {createGeneratorApp} from "./runtime/app.js";
 import {installWebglGeneratorHealthMonitor, recordStartupFailure} from "./runtime/health-monitor.js";
 import {initializeVueStateBridge} from "./ui/vue/state-bridge.js";
+import "./styles.css";
 
 const healthMonitor = installWebglGeneratorHealthMonitor(document);
 
