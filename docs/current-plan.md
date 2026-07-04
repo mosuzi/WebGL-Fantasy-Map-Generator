@@ -965,6 +965,8 @@ http://127.0.0.1:5410
 
 262. 测量路线贴合第一刀已完成：测量 readout 新增“自由 / 贴路”切换，贴路模式会基于现有 `settlements.routes` 的 `points / packCells` 建立懒加载路线线段索引；点击或拖拽节点时必须命中路线附近，并吸附到最近路线折线投影点，离路线过远不会新增点且会在测量浮条提示“贴路测量需要点击道路附近”。保存对象和更新对象会写入并保留 `routeFit: "roads"`，测量对象面板新增“模式”列和详情字段，批量导出也带出 `routeFit`；自由模式仍保持原折线测量行为。构建产物浏览器烟测中路线中点点击生成 2 个贴路线点，远离路线点击不增加点，保存对象 `routeFit = roads`，切回自由模式后可在远离路线处新增点，`glError = 0`。正式 e2e 守门通过：`measurement-route-fit-smoke / continents / 10000` 点击到出图 `1496.8ms`，纯生成 `732.3ms`，WebGL 加载 `377.2ms`，UI/调度余量 `387.3ms`，最慢加载阶段为“构建线层顶点” `67.9ms`，`route-screen-mesh = 8.3ms`，`glError = 0`。后续测量方向继续做完整导入回归烟测、`cellStops` 与曲线尺细化。
 
+263. 测量对象完整导入回归已固定化：新增 `tools/webgl-generator-measurement-import-regression.mjs` 和 `pnpm run regress:measurement`，会在构建产物中生成固定地图，创建一个贴路测量对象和一个自由测量对象，通过真实“地图数据”导出下载完整 `.webgl-map.json`，再通过文件输入导入回来，断言测量对象数量、点列、`routeFit = roads / none`、overlay 路径和测量面板模式字段都保留。回归报告写入 `docs/generated/reports/measurement-import-regression-results.json/md`。本轮回归通过：导出文件 `13007089 bytes`，导出测量对象 `2`，导入后 overlay 路径 `2`，`glError = 0`，生成阶段点击到出图 `1423.5ms`、WebGL 加载 `379.9ms`。正式 e2e 守门通过：`measurement-import-smoke / continents / 10000` 点击到出图 `1185.5ms`，纯生成 `658.9ms`，WebGL 加载 `330.8ms`，UI/调度余量 `195.8ms`，最慢加载阶段为“构建视觉 cell mesh” `49.8ms`。后续测量方向继续做 `cellStops`、沿道路补中间节点和曲线尺细化。
+
 ## 约束
 
 - 新项目代码仍然放在根目录下，不放进 `source/`。

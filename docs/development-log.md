@@ -17848,3 +17848,23 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测通过：贴路模式点击同一路线两个线段中点后得到 2 个贴路线点，远离路线点击不增加点且测量浮条提示命中约束；保存对象 `routeFit = roads`；切回自由模式后远离路线点可正常加入，`glError = 0`，console/page error 为 `0`。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-route-fit-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1496.8ms`，纯生成 `732.3ms`，WebGL 加载 `377.2ms`，UI/调度余量 `387.3ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `121.5ms`，最慢加载阶段为“构建线层顶点” `67.9ms`，`route-screen-mesh = 8.3ms`。
+
+### 测量对象完整导入回归
+
+背景：
+
+- 测量对象已经随 `map.measurements` 写入完整地图 JSON，但此前只靠代码路径推断，没有固定回归证明“完整地图导出再导入”会保留点列、摘要、图层显示和 `routeFit`。
+- 测量专项计划阶段 1 的剩余验收要求导出再导入后测量对象数量、点列、名称和摘要一致。
+
+修正：
+
+- 新增 `tools/webgl-generator-measurement-import-regression.mjs`，在构建产物上执行真实浏览器回归：生成固定地图、用测量 UI 创建贴路对象和自由对象、触发“地图数据”导出下载完整 `.webgl-map.json`、再通过文件输入导入。
+- 新增 `pnpm run regress:measurement` 脚本入口。
+- 回归脚本会断言导出文档中的测量对象数量、`routeFit` 列表、导入后的点列、`routeFit = roads / none`、测量 overlay 路径和测量面板模式字段，并记录 JSON/Markdown 报告到 `docs/generated/reports/measurement-import-regression-results.*`。
+
+验证：
+
+- `node --check tools/webgl-generator-measurement-import-regression.mjs` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run regress:measurement -- --browser-channel chrome --cells 10000 --seed measurement-import-smoke --template continents --timeout 60000` 通过；初始测量对象 `2`，导出文件 `fmg-measurement-import-smoke-f70e6d2a.webgl-map.json` 为 `13007089 bytes`，导出测量对象 `2`，导出 `routeFit` 为 `roads / none`，导入后 overlay 路径 `2`，`glError = 0`。报告生成到 `docs/generated/reports/measurement-import-regression-results.md/json`。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --seed measurement-import-smoke --template continents --max-ready-ms 2500 --max-load-ms 1200` 通过；点击到出图 `1185.5ms`，纯生成 `658.9ms`，WebGL 加载 `330.8ms`，UI/调度余量 `195.8ms`，最慢生成阶段为“生成国家 / 省份 / 区域” `112.1ms`，最慢加载阶段为“构建视觉 cell mesh” `49.8ms`。
