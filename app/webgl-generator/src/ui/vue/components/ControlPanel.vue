@@ -262,6 +262,19 @@
             @change="value => patchUnitPreference({populationScale: value})"
           />
           <UiSliderField
+            label="军力比例"
+            input-id="military-scale"
+            output-id="military-scale-value"
+            field-class="unit-scale-field"
+            value-tag="output"
+            :model-value="unitPreferences.militaryScale"
+            unit-label="x"
+            :min="unitScaleLimits.militaryScale.min"
+            :max="unitScaleLimits.militaryScale.max"
+            :step="unitScaleLimits.militaryScale.step"
+            @change="value => patchUnitPreference({militaryScale: value})"
+          />
+          <UiSliderField
             label="降水倍率"
             input-id="precipitation-scale"
             output-id="precipitation-scale-value"
@@ -446,9 +459,9 @@ const tabs = Object.freeze([
   {id: "about", label: "简介"},
   {id: "generation", label: "生成"},
   {id: "themes", label: "视图"},
-  {id: "units", label: "单位"},
   {id: "layers", label: "图层"},
-  {id: "management", label: "管理"}
+  {id: "management", label: "管理"},
+  {id: "units", label: "单位"}
 ]);
 
 const terrainTemplates = Object.freeze([

@@ -1424,6 +1424,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
     },
     onUnitPreferences: () => {
+      renderer.setUnitPreferences(readControlPreferences(documentRef).units);
       updateRuntimePanel(documentRef, state);
       updatePickPanel(documentRef, state);
       updateMeasurementOverlay(state, documentRef);
@@ -1578,6 +1579,7 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
     if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
     if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
     if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
+    renderer.setUnitPreferences(preferences.units);
     const layers = normalizeLayerVisibilityPreferences(preferences.layers || {});
     for (const [layer, visible] of Object.entries(layers)) {
       renderer.setLayerVisible(layer, visible);

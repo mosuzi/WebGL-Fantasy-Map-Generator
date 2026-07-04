@@ -7,12 +7,14 @@ export const DEFAULT_UNIT_PREFERENCES = Object.freeze({
   numberAbbreviation: "wan",
   mapScaleKmPerCm: 100,
   populationScale: 1,
+  militaryScale: 1,
   precipitationScale: 1
 });
 
 export const UNIT_SCALE_LIMITS = Object.freeze({
   mapScaleKmPerCm: Object.freeze({min: 1, max: 1000, step: 1}),
   populationScale: Object.freeze({min: 0.1, max: 10, step: 0.1}),
+  militaryScale: Object.freeze({min: 0.1, max: 10, step: 0.1}),
   precipitationScale: Object.freeze({min: 0.1, max: 5, step: 0.1})
 });
 
@@ -50,6 +52,7 @@ export function normalizeUnitPreferences(input = {}) {
     numberAbbreviation: NUMBER_ABBREVIATIONS.has(source.numberAbbreviation) ? source.numberAbbreviation : fallback.numberAbbreviation,
     mapScaleKmPerCm: clampNumber(source.mapScaleKmPerCm, UNIT_SCALE_LIMITS.mapScaleKmPerCm, fallback.mapScaleKmPerCm),
     populationScale: clampNumber(source.populationScale, UNIT_SCALE_LIMITS.populationScale, fallback.populationScale),
+    militaryScale: clampNumber(source.militaryScale, UNIT_SCALE_LIMITS.militaryScale, fallback.militaryScale),
     precipitationScale: clampNumber(source.precipitationScale, UNIT_SCALE_LIMITS.precipitationScale, fallback.precipitationScale)
   };
 }
@@ -104,6 +107,16 @@ export function formatPopulation(value, preferences = {}) {
 export function populationUnitsToPeople(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   return numberOrZero(value) * INTERNAL_POPULATION_UNIT_PEOPLE * units.populationScale;
+}
+
+export function formatMilitary(value, preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  return formatNumber(militaryUnitsToPower(value, units), units, {maximumFractionDigits: 1});
+}
+
+export function militaryUnitsToPower(value, preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  return numberOrZero(value) * units.militaryScale;
 }
 
 export function formatPrecipitation(value, preferences = {}) {

@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：单位页军力比例与 tab 顺序调整
+
+用户要求单位 tab 支持全局调整军力比例，并把控制面板中的单位 tab 放到最后，其它 tab 相对顺序不变。
+
+修正：
+
+- 控制面板 tab 顺序改为“简介 / 生成 / 视图 / 图层 / 管理 / 单位”。
+- 单位页新增“军力比例”滑条，范围 `0.1x - 10x`，接入全局单位偏好和旧 runtime 控件绑定。
+- `display-units` 增加 `militaryScale`、`formatMilitary()` 和 `militaryUnitsToPower()`，把军力倍率作为显示层口径处理。
+- 军事面板中的总兵力、军团兵力、兵种构成、战报损耗和结算预览改为使用军力比例；国家详情和政体统计中的军力也同步使用该口径。
+- 地图军事图标文字、军事 tooltip、悬停 / 对象详情中的军团兵力也跟随军力比例刷新，比例变化不需要重新生成地图。
+- 本轮不改变原始军事数据，也不把导出 CSV / JSON 的原始兵力字段改成倍率后的值，避免显示设置污染数据文件。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器烟测通过：控制面板 tab 顺序为“简介 / 生成 / 视图 / 图层 / 管理 / 单位”；单位页存在“军力比例”滑条；将军力比例设为 `2x` 后，localStorage 和 renderer 内部单位偏好均为 `2`，军事图标文字刷新为 `2.9万`，军事面板总兵力显示为 `129万`，`glError = 0`。烟测中仅出现既有 health long-task warn，无 console error / page error。
+
 ## 2026-07-05：颜色编辑二级面板关闭按钮 hover 修正
 
 用户反馈颜色编辑面板右上角关闭按钮在悬停时会变成白色椭圆。复查后确认该按钮来自共享 `UiActionDock` 二级编辑浮层，使用 Element Plus `text circle` 按钮；虽然项目 CSS 已写暗色 hover，但未覆盖 Element 按钮变量和 `.is-text` 状态，导致特定状态下仍可能回到默认浅色背景。
@@ -18915,3 +18934,22 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 构建产物烟测打开城市管理列表，共 `821` 行；把列表滚到顶部后触发第 `87` 行选中，选中行中心与滚动容器中心差值约 `-0.31px`，`glError = 0`，console/page error 为空。
+
+### 2026-07-05 战报记录筛选区拆行
+
+背景：
+
+- 用户指出军事面板“战报记录”下方五个筛选项挤在同一行，导致每一项都无法完整展示。
+- 现有 `.military-event-filters` 使用 `repeat(auto-fit, minmax(108px, 1fr))`，在宽面板下会把 `链路 / 类型 / 结果 / 结算 / 导出` 全部塞进一行。
+
+实现：
+
+- `.military-event-filters` 改为 6 栅格布局。
+- 前三个筛选项各占 `span 2`，形成第一行三列；后两个筛选项各占 `span 3`，形成第二行两列。
+- 只调整战报记录筛选区，不改筛选状态、导出范围、战报数据或动态军事逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物样式烟测在 `620px` 宽的 `.military-event-filters` 容器中插入同结构五项，结果为 `2` 行：第一行三项各约 `202px`，第二行两项各约 `306.5px`，无横向溢出；`glError = 0`，console/page error 为空。

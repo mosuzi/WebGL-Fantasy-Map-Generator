@@ -30,7 +30,7 @@ import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatDistance, formatNumber, formatPopulation} from "../../display-units.js";
+import {formatDistance, formatMilitary, formatNumber, formatPopulation} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../../runtime/object-kinds.js";
 
@@ -66,6 +66,7 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.TRADE_FLOW]: object => `贸易流 ${object.goodName || `#${object.id}`}`,
   [OBJECT_KIND.RIVER]: object => `河流 ${object.name || `#${object.id}`}`,
   [OBJECT_KIND.LAKE]: object => `湖泊 ${object.name || `#${object.id}`}`,
+  [OBJECT_KIND.MILITARY]: object => `军团 ${object.name || `#${object.id}`}`,
   [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
   [OBJECT_KIND.REGION]: object => `区域 ${object.name}`
 });
@@ -142,6 +143,14 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "cell", value: object.firstCell, debug: true},
     {label: "对象 id", value: object.id, debug: true}
   ],
+  [OBJECT_KIND.MILITARY]: object => [
+    {label: "国家", value: object.state || object.stateId || "none"},
+    {label: "态势", value: object.statusLabel || object.status || "未知"},
+    {label: "主兵种", value: object.dominantUnitLabel || object.dominantUnit || "未知"},
+    {label: "兵力", value: formatMilitaryValue(object.troops)},
+    {label: "cell", value: object.cell ?? "none", debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
   [OBJECT_KIND.PROVINCE]: object => [
     {label: "所属国家", value: object.state},
     {label: "国家 id", value: object.stateId},
@@ -216,6 +225,10 @@ function formatOptionalDistanceValue(value) {
 
 function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
+}
+
+function formatMilitaryValue(value) {
+  return formatMilitary(value, unitPreferences.value);
 }
 
 function formatNumberValue(value) {

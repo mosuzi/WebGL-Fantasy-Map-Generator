@@ -44,6 +44,7 @@ import {
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
+import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 
 const MARKER_ICON_MIN_SCALE = 2.15;
@@ -187,6 +188,7 @@ export class PlaceholderMapRenderer {
     this.colorMode = "height";
     this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, diplomacySubjectId: null};
     this.labelOptions = {maxCityLabels: 5000};
+    this.unitPreferences = normalizeUnitPreferences();
     this.layerVisibility = {
       routes: true,
       tradeFlows: false,
@@ -405,6 +407,30 @@ export class PlaceholderMapRenderer {
   refreshLabels() {
     if (!this.map) return;
     this.buildLabels(this.map);
+    this.updateLabels();
+  }
+
+  setUnitPreferences(preferences = {}) {
+    const next = normalizeUnitPreferences(preferences);
+    if (JSON.stringify(next) === JSON.stringify(this.unitPreferences)) return;
+    this.unitPreferences = next;
+    this.refreshMilitaryIconLabels();
+  }
+
+  refreshMilitaryIconLabels() {
+    if (!this.overlay || !this.map) return;
+    for (const item of this.militaryIconItems) {
+      const troopLabel = formatMilitaryTroops(item.troops, this.unitPreferences);
+      const tooltip = militaryIconTooltip(item.regiment || item, this.map, this.unitPreferences);
+      item.rendererUnitPreferences = this.unitPreferences;
+      const count = item.node?.querySelector?.(".military-map-icon-count");
+      if (count) count.textContent = troopLabel;
+      if (item.node) {
+        item.node.title = tooltip;
+        item.node.setAttribute("aria-label", tooltip);
+      }
+      item.tooltip = tooltip;
+    }
     this.updateLabels();
   }
 
@@ -1144,7 +1170,7 @@ export class PlaceholderMapRenderer {
       fragment.append(node);
       return {...item, node, box: null, visible: false};
     });
-    this.militaryIconItems = getMilitaryIconItems(map).map(item => {
+    this.militaryIconItems = getMilitaryIconItems(map, this.unitPreferences).map(item => {
       const node = documentRef.createElement("span");
       node.className = militaryIconClassName(item);
       node.title = item.tooltip;
@@ -1162,7 +1188,7 @@ export class PlaceholderMapRenderer {
       symbol.append(icon);
       const count = documentRef.createElement("span");
       count.className = "military-map-icon-count";
-      count.textContent = formatMilitaryTroops(item.troops);
+      count.textContent = formatMilitaryTroops(item.troops, this.unitPreferences);
       node.append(symbol, count);
       fragment.append(node);
       return {...item, node, box: null, visible: false};
@@ -1977,7 +2003,7 @@ function markerIconClassName(item) {
   return classes.join(" ");
 }
 
-function getMilitaryIconItems(map) {
+function getMilitaryIconItems(map, unitPreferences = {}) {
   return militaryRegiments(map)
     .sort((a, b) => Number(b.a || 0) - Number(a.a || 0))
     .map(regiment => {
@@ -1999,7 +2025,8 @@ function getMilitaryIconItems(map) {
         statusLabel: regiment.statusLabel,
         dominantUnit: regiment.dominantUnit,
         dominantUnitLabel: regiment.dominantUnitLabel,
-        tooltip: militaryIconTooltip(regiment, map),
+        tooltip: militaryIconTooltip(regiment, map, unitPreferences),
+        rendererUnitPreferences: unitPreferences,
         minScale: regiment.a >= 8000 ? MILITARY_ICON_MIN_SCALE * 0.82 : MILITARY_ICON_MIN_SCALE,
         x: regiment.x,
         y: regiment.y
@@ -2018,9 +2045,9 @@ function militaryRegiments(map) {
     .filter(regiment => Number.isFinite(regiment.x) && Number.isFinite(regiment.y));
 }
 
-function militaryIconTooltip(regiment, map) {
+function militaryIconTooltip(regiment, map, unitPreferences = {}) {
   const state = map?.politics?.states?.[regiment.state] || map?.pack?.states?.[regiment.state];
-  return `${state?.name || "国家"} / ${regiment.name || "军团"} / ${regiment.statusLabel || "待命"} / ${formatMilitaryTroops(regiment.a)}`;
+  return `${state?.name || "国家"} / ${regiment.name || "军团"} / ${regiment.statusLabel || "待命"} / ${formatMilitaryTroops(regiment.a, unitPreferences)}`;
 }
 
 function militaryIconClassName(item) {
@@ -2059,7 +2086,7 @@ function militaryObjectFromIconItem(item) {
 }
 
 function militaryIconBoxForItem(item, screen, sizeScale) {
-  const width = (MILITARY_ICON_BASE_WIDTH + Math.min(18, String(formatMilitaryTroops(item.troops)).length * 3)) * sizeScale;
+  const width = (MILITARY_ICON_BASE_WIDTH + Math.min(18, String(formatMilitaryTroops(item.troops, item.rendererUnitPreferences)).length * 3)) * sizeScale;
   const height = MILITARY_ICON_BASE_HEIGHT * sizeScale;
   return {
     left: screen.x - width / 2,
@@ -2092,11 +2119,8 @@ function militaryIconVariantForUnit(unit) {
   return "infantry";
 }
 
-function formatMilitaryTroops(value) {
-  const troops = Math.max(0, Number(value || 0));
-  if (troops >= 10000) return `${roundValue(troops / 10000)}万`;
-  if (troops >= 1000) return `${roundValue(troops / 1000)}千`;
-  return String(Math.round(troops));
+function formatMilitaryTroops(value, unitPreferences = {}) {
+  return formatMilitary(value, unitPreferences);
 }
 
 function colorForRegiment(regiment) {

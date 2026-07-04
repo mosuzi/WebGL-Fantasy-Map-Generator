@@ -55,7 +55,7 @@
     <div class="military-overview-stats">
       <span>
         <small>兵力</small>
-        <b>{{ formatNumber(selected.troops) }}</b>
+        <b>{{ formatMilitaryValue(selected.troops) }}</b>
       </span>
       <span>
         <small>主兵种</small>
@@ -442,7 +442,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatMilitary, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -475,7 +475,7 @@ const columns = Object.freeze([
   {key: "name", label: "军团"},
   {key: "statusLabel", label: "态势"},
   {key: "dominantUnitLabel", label: "主兵种"},
-  {key: "troops", label: "兵力", align: "right", format: value => formatNumber(value)},
+  {key: "troops", label: "兵力", align: "right", format: value => formatMilitaryValue(value)},
   {key: "suitabilityScore", label: "适宜", align: "right", format: value => `${Math.round(Number(value || 0) * 100)}%`}
 ]);
 
@@ -611,7 +611,7 @@ const battleResultPreview = computed(() => {
   if (!troops) return `${rule.label}：兵力约 -${Math.round(rule.lossRate * 100)}%，态势改为${rule.statusLabel}`;
   const casualties = battlePreviewCasualties(troops, rule.lossRate);
   const afterTroops = Math.max(troops > 0 ? 1 : 0, troops - casualties);
-  return `${rule.label}：${formatNumber(troops)} -> ${formatNumber(afterTroops)}，预计损耗 ${formatNumber(casualties)}，态势改为${rule.statusLabel}`;
+  return `${rule.label}：${formatMilitaryValue(troops)} -> ${formatMilitaryValue(afterTroops)}，预计损耗 ${formatMilitaryValue(casualties)}，态势改为${rule.statusLabel}`;
 });
 const selectedState = computed(() => selected.value ? metrics.value.states.find(state => state.id === selected.value.stateId) : metrics.value.states.find(state => state.id === Number(props.state.selectedStateId)) || null);
 const ratioTotalLabel = computed(() => `${Math.round(Object.values(ratioDraft).reduce((sum, value) => sum + Number(value || 0), 0))}%`);
@@ -643,7 +643,7 @@ const militaryActions = computed(() => [
 const summaryMetrics = computed(() => [
   {label: "国家", value: formatNumber(metrics.value.states.length)},
   {label: "军团", value: formatNumber(metrics.value.rows.length)},
-  {label: "总兵力", value: formatNumber(metrics.value.troops)},
+  {label: "总兵力", value: formatMilitaryValue(metrics.value.troops)},
   {label: "舰队", value: formatNumber(metrics.value.fleets)},
   {label: "战报链", value: formatNumber(metrics.value.campaigns)},
   {label: "战线", value: formatNumber(metrics.value.fronts)},
@@ -664,7 +664,7 @@ const militaryDossierGroups = computed(() => selected.value ? [
   {
     title: "兵力",
     items: [
-      dossierItem("总兵力", formatNumber(selected.value.troops)),
+      dossierItem("总兵力", formatMilitaryValue(selected.value.troops)),
       dossierItem("主兵种", selected.value.dominantUnitLabel),
       dossierItem("驻扎适宜", `${Math.round(selected.value.suitabilityScore * 100)}%`),
       dossierItem("移动速度", formatNumber(selected.value.movementSpeed))
@@ -695,7 +695,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "军团", value: selected.value.name},
   {label: "态势", value: selected.value.statusLabel},
   {label: "命令", value: selected.value.orderLabel},
-  {label: "兵力", value: formatNumber(selected.value.troops)},
+  {label: "兵力", value: formatMilitaryValue(selected.value.troops)},
   {label: "兵种", value: selected.value.unitSummary},
   {label: "主兵种", value: selected.value.dominantUnitLabel},
   {label: "驻地", value: selected.value.stationLabel},
@@ -816,9 +816,9 @@ function campaignSummaryLabelForState(campaigns = []) {
   const defenderCasualties = campaigns.reduce((sum, campaign) => sum + Number(campaign.defenderCasualties || 0), 0);
   const momentum = campaignMomentumLabelForState(campaigns);
   const parts = [phaseLabel, progressLabel, momentum, `记录 ${formatNumber(events)}`, `已结算 ${formatNumber(applied)}`];
-  if (attackerCasualties) parts.push(`攻方损耗 ${formatNumber(attackerCasualties)}`);
-  if (defenderCasualties) parts.push(`守方损耗 ${formatNumber(defenderCasualties)}`);
-  if (!attackerCasualties && !defenderCasualties && casualties) parts.push(`损耗 ${formatNumber(casualties)}`);
+  if (attackerCasualties) parts.push(`攻方损耗 ${formatMilitaryValue(attackerCasualties)}`);
+  if (defenderCasualties) parts.push(`守方损耗 ${formatMilitaryValue(defenderCasualties)}`);
+  if (!attackerCasualties && !defenderCasualties && casualties) parts.push(`损耗 ${formatMilitaryValue(casualties)}`);
   return parts.join(" / ");
 }
 
@@ -1018,7 +1018,7 @@ function unitSummary(units = {}) {
   return unitDefinitions
     .map(unit => {
       const value = Number(units[unit.name] || 0);
-      return value > 0 ? `${unit.label}${formatNumber(value)}` : "";
+      return value > 0 ? `${unit.label}${formatMilitaryValue(value)}` : "";
     })
     .filter(Boolean)
     .join(" / ") || "无";
@@ -1284,7 +1284,7 @@ function buildBattleEventChainSummary(events = []) {
     totalLabel: `${formatNumber(events.length)} 条`,
     appliedLabel: appliedEvents.length ? `${formatNumber(appliedEvents.length)} 条` : "无",
     pendingLabel: pendingEvents.length ? `${formatNumber(pendingEvents.length)} 条` : "无",
-    casualtyLabel: casualties ? formatNumber(casualties) : "无",
+    casualtyLabel: casualties ? formatMilitaryValue(casualties) : "无",
     latestLabel: latest ? `${latest.typeLabel || latest.type || "事件"} / ${latest.outcomeLabel || latest.outcome || "结果"}` : "无"
   };
 }
@@ -1453,17 +1453,17 @@ function battleChainCountSummary(chain = {}) {
   if (chain.pending) parts.push(`未结算 ${formatNumber(chain.pending)}`);
   const sideLossParts = battleChainSideLossParts(chain);
   parts.push(...sideLossParts);
-  if (chain.casualties && !sideLossParts.length) parts.push(`损耗 ${formatNumber(chain.casualties)}`);
+  if (chain.casualties && !sideLossParts.length) parts.push(`损耗 ${formatMilitaryValue(chain.casualties)}`);
   return parts.join(" / ");
 }
 
 function battleChainSideLossParts(chain = {}) {
   const parts = [];
-  if (chain.attackerCasualties) parts.push(`攻方损耗 ${formatNumber(chain.attackerCasualties)}`);
-  if (chain.defenderCasualties) parts.push(`守方损耗 ${formatNumber(chain.defenderCasualties)}`);
-  if (chain.participantCasualties) parts.push(`参战损耗 ${formatNumber(chain.participantCasualties)}`);
-  if (chain.localCasualties) parts.push(`本地损耗 ${formatNumber(chain.localCasualties)}`);
-  if (chain.manualCasualties) parts.push(`手动损耗 ${formatNumber(chain.manualCasualties)}`);
+  if (chain.attackerCasualties) parts.push(`攻方损耗 ${formatMilitaryValue(chain.attackerCasualties)}`);
+  if (chain.defenderCasualties) parts.push(`守方损耗 ${formatMilitaryValue(chain.defenderCasualties)}`);
+  if (chain.participantCasualties) parts.push(`参战损耗 ${formatMilitaryValue(chain.participantCasualties)}`);
+  if (chain.localCasualties) parts.push(`本地损耗 ${formatMilitaryValue(chain.localCasualties)}`);
+  if (chain.manualCasualties) parts.push(`手动损耗 ${formatMilitaryValue(chain.manualCasualties)}`);
   return parts;
 }
 
@@ -1491,7 +1491,7 @@ function battleEventAppliedClass(event) {
 function battleEventLossLabel(event) {
   if (!event?.resultApplied) return "损耗未计入";
   const casualties = battleEventCasualties(event);
-  return casualties ? `损耗 ${formatNumber(casualties)}` : "无兵力损耗";
+  return casualties ? `损耗 ${formatMilitaryValue(casualties)}` : "无兵力损耗";
 }
 
 function battleResultSummary(event) {
@@ -1500,9 +1500,9 @@ function battleResultSummary(event) {
     const unitLoss = result.unitLossSummary && result.unitLossSummary !== "无兵种损耗" ? `；${result.unitLossSummary}` : "";
     return `${result.summary}${unitLoss}`;
   }
-  const before = formatNumber(result.troopBefore || 0);
-  const after = formatNumber(result.troopAfter || 0);
-  const casualties = formatNumber(result.casualties || Math.abs(result.troopDelta || 0));
+  const before = formatMilitaryValue(result.troopBefore || 0);
+  const after = formatMilitaryValue(result.troopAfter || 0);
+  const casualties = formatMilitaryValue(result.casualties || Math.abs(result.troopDelta || 0));
   const status = result.statusAfterLabel || result.statusAfter || "未知态势";
   return `已结算：${before} -> ${after}，损耗 ${casualties}，${status}`;
 }
@@ -1555,7 +1555,7 @@ function unitBreakdown(regiment) {
         name: unit.name,
         label: unit.label,
         value,
-        valueLabel: formatNumber(value),
+        valueLabel: formatMilitaryValue(value),
         percent: Math.min(100, percent)
       } : null;
     })
@@ -1578,6 +1578,10 @@ function firstWarCause(state) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function formatMilitaryValue(value) {
+  return formatMilitary(value, unitPreferences.value);
 }
 
 function militaryExportSummary(seed, map, rows, events) {

@@ -6,6 +6,7 @@ import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {
   formatDistance as formatDisplayDistance,
   formatHeight as formatDisplayHeight,
+  formatMilitary as formatDisplayMilitary,
   mapUnitsToKm,
   formatNumber as formatDisplayNumber,
   formatPopulation as formatDisplayPopulation,
@@ -40,6 +41,7 @@ const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${formatDisplayNumber(object.flux, units)} / length ${formatDisplayDistance(object.length, units)}`,
   [OBJECT_KIND.LAKE]: (object, units) => `${object.type || "湖泊"} / 面积 ${formatDisplayNumber(object.area, units)} / cells ${formatDisplayNumber(object.cells, units)}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
+  [OBJECT_KIND.MILITARY]: (object, units) => `${object.state || "国家"} / ${object.name || "军团"} / ${object.statusLabel || object.status || "待命"} / ${formatDisplayMilitary(object.troops, units)}`,
   [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
   [OBJECT_KIND.CULTURE]: (object, units) => `${object.type} / cells ${formatDisplayNumber(object.cells, units)} / pop ${formatDisplayPopulation(object.population, units)}`,
   [OBJECT_KIND.RELIGION]: (object, units) => `${object.type} / ${object.form} / cells ${formatDisplayNumber(object.cells, units)}`,
@@ -240,6 +242,7 @@ function editLockControls(documentRef) {
     "#number-abbreviation",
     "#map-scale-km-per-cm",
     "#population-scale",
+    "#military-scale",
     "#precipitation-scale",
     "[data-layer]",
     "[data-mode]"
@@ -308,7 +311,7 @@ function setLabelLimitControlValue(documentRef, value) {
 }
 
 function bindUnitPreferenceControls(documentRef, handler) {
-  const controls = ["number-abbreviation", "distance-unit", "area-unit", "map-scale-km-per-cm", "population-scale", "precipitation-scale"]
+  const controls = ["number-abbreviation", "distance-unit", "area-unit", "map-scale-km-per-cm", "population-scale", "military-scale", "precipitation-scale"]
     .map(id => documentRef.getElementById(id))
     .filter(Boolean);
   const commit = () => {
@@ -332,6 +335,7 @@ function readUnitPreferencesFromControls(documentRef) {
     areaUnit: documentRef.getElementById("area-unit")?.value ?? current.areaUnit,
     mapScaleKmPerCm: documentRef.getElementById("map-scale-km-per-cm")?.value ?? current.mapScaleKmPerCm,
     populationScale: documentRef.getElementById("population-scale")?.value ?? current.populationScale,
+    militaryScale: documentRef.getElementById("military-scale")?.value ?? current.militaryScale,
     precipitationScale: documentRef.getElementById("precipitation-scale")?.value ?? current.precipitationScale
   });
 }
@@ -343,9 +347,11 @@ function applyUnitPreferences(documentRef, preferences = {}) {
   setControlValue(documentRef, "number-abbreviation", units.numberAbbreviation);
   setControlValue(documentRef, "map-scale-km-per-cm", units.mapScaleKmPerCm);
   setControlValue(documentRef, "population-scale", units.populationScale);
+  setControlValue(documentRef, "military-scale", units.militaryScale);
   setControlValue(documentRef, "precipitation-scale", units.precipitationScale);
   setOutputText(documentRef, "map-scale-km-per-cm-value", "km/cm");
   setOutputText(documentRef, "population-scale-value", "x");
+  setOutputText(documentRef, "military-scale-value", "x");
   setOutputText(documentRef, "precipitation-scale-value", "x");
 }
 

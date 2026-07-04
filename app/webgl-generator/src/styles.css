@@ -6670,9 +6670,17 @@ input.ui-switch-native {
 
 .military-event-filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 7px;
   align-items: end;
+}
+
+.military-event-filters > * {
+  grid-column: span 2;
+}
+
+.military-event-filters > :nth-child(n + 4) {
+  grid-column: span 3;
 }
 
 .military-event-tools {

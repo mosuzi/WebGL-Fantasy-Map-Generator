@@ -73,7 +73,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
-import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -112,7 +112,7 @@ const governmentColumns = Object.freeze([
   {key: "count", label: "国家", align: "right", format: value => formatNumber(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)},
   {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
-  {key: "militaryPower", label: "军力", align: "right", format: value => formatNumber(value)}
+  {key: "militaryPower", label: "军力", align: "right", format: value => formatMilitaryValue(value)}
 ]);
 
 const stateColumns = Object.freeze([
@@ -120,7 +120,7 @@ const stateColumns = Object.freeze([
   {key: "name", label: "国家"},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)},
   {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
-  {key: "militaryPower", label: "军力", align: "right", format: value => formatNumber(value)},
+  {key: "militaryPower", label: "军力", align: "right", format: value => formatMilitaryValue(value)},
   {key: "capitalName", label: "首都"}
 ]);
 
@@ -188,7 +188,7 @@ const detailRows = computed(() => selectedGovernment.value ? [
   {label: "经济力", value: formatNumber(selectedGovernment.value.economicPower)},
   {label: "资源潜力", value: formatNumber(selectedGovernment.value.resourcePotential)},
   {label: "贸易修正", value: formatTradeModifier(selectedGovernment.value.tradeModifierAverage)},
-  {label: "军力", value: formatNumber(selectedGovernment.value.militaryPower)},
+  {label: "军力", value: formatMilitaryValue(selectedGovernment.value.militaryPower)},
   {label: "战争 / 宿敌", value: `${formatNumber(selectedGovernment.value.diplomacy.Enemy || 0)} / ${formatNumber(selectedGovernment.value.diplomacy.Rival || 0)}`},
   {label: "盟友 / 附庸", value: `${formatNumber(selectedGovernment.value.diplomacy.Ally || 0)} / ${formatNumber(selectedGovernment.value.diplomacy.Vassal || 0)}`},
   {label: "效果", value: selectedGovernment.value.effectSummary},
@@ -448,6 +448,10 @@ function formatPopulationValue(value) {
 
 function formatAreaValue(value) {
   return formatArea(value, unitPreferences.value);
+}
+
+function formatMilitaryValue(value) {
+  return formatMilitary(value, unitPreferences.value);
 }
 
 function familyLabel(family) {

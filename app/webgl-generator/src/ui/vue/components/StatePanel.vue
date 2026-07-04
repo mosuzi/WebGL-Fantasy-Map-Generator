@@ -124,7 +124,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {GOVERNMENT_OPTIONS} from "../../../generator/governments.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -227,7 +227,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "经济力", value: formatNumber(selected.value.economicPower)},
   {label: "资源潜力", value: formatNumber(selected.value.resourcePotential)},
   {label: "资源类型", value: selected.value.resourceSummary},
-  {label: "军力", value: formatNumber(selected.value.militaryPower)},
+  {label: "军力", value: formatMilitaryValue(selected.value.militaryPower)},
   {label: "外交", value: selected.value.diplomacySummary},
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"},
   {label: "邻国", value: formatNumber(selected.value.neighborCount)}
@@ -456,6 +456,10 @@ function formatAreaValue(value) {
 
 function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
+}
+
+function formatMilitaryValue(value) {
+  return formatMilitary(value, unitPreferences.value);
 }
 
 </script>
