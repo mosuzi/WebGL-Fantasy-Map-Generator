@@ -47,6 +47,7 @@
 - 经济总览详情区样式已升级：列表下方不再直接复用通用 `UiDetailGrid` 裸排字段，改为经济对象专用详情卡，包含对象标题、标签徽章、4 个关键指标和分组详情；商品分为价格信号 / 供需 / 来源与流向，市场分为覆盖范围 / 库存与供需 / 交易与价格，交易分为交易双方 / 价格与金额 / 运输。构建产物烟测确认商品 / 市场 / 交易三类详情均无横向溢出；面板 deep 审计 `economy-detail-card-layout` 未发现待复核项，经济总览 body 溢出为 `none`；e2e 守门 `economy-detail-card-e2e` 通过，WebGL 加载 `408ms`。
 - 资源标记工具条空间已放宽：资源标记面板编辑工具条不再把“新增资源”下拉、放置、移动、删除、取消和“重生成资源点”强塞在一行；短操作保留一行，长操作独占下一行。deep 面板审计 `marker-toolbar-space-smoke / continents / 10000` 中工具条从 `1 行 / min 76px` 提升到 `2 行 / min 88px / overflow none`，无待复核项，WebGL 加载 `351.2ms`；e2e 守门 `marker-toolbar-space-e2e` 通过，WebGL 加载 `382.9ms`，`drawMs = 0`，`glError = 0`。
 - 控制面板单位滑条标签空间已放宽：单位页的 `比例尺 / 人口倍率 / 降水倍率` 标签列从 `82px` 放宽到 `92px`，并禁止标签折行；单位选择和面积单位派生行使用同一标签列宽。`unit-slider-label-space-smoke / continents / 10000 / deep` 审计确认单位页三个滑条标签均为 `92px x 16px / nowrap`，控制面板无横向溢出，WebGL 加载 `483.7ms`；e2e 守门 `unit-slider-label-space-e2e` 通过，WebGL 加载 `508ms`，`drawMs = 0.2`，`glError = 0`。
+- 控制面板图层滑条标签折行已加固：图层页 `城市标签上限` 使用既有 `92px` 标签列并补充 nowrap，和生成页、单位页滑条标签策略保持一致。`layer-label-limit-nowrap-smoke / continents / 10000 / deep` 审计确认图层页滑条标签为 `92px x 16px / nowrap`，控制面板无横向溢出，WebGL 加载 `453.9ms`；e2e 守门 `layer-label-limit-nowrap-e2e` 通过，WebGL 加载 `411.4ms`，`drawMs = 0.2`，`glError = 0`。
 
 ### 当前执行队列
 

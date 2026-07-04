@@ -2,6 +2,22 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-04：图层滑条标签 nowrap 加固
+
+按当前面板空间策略继续推进，复查控制面板布局后发现“图层”tab 的 `城市标签上限` 滑条虽然已有 `92px` 标签列且没有溢出，但首列仍是默认 `white-space: normal`，与生成页、单位页滑条标签已经收敛到 nowrap 的策略不一致。
+
+完成内容：
+
+- 为 `.label-limit-field > span:first-child` 增加 `white-space: nowrap`，固定“城市标签上限”标签单行显示。
+- 不改图层按钮网格、标签上限偏好值、滑条组件或 renderer 图层逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 面板 deep 布局审计 `layer-label-limit-nowrap-smoke / continents / 10000` 通过：图层页 `城市标签上限` 为 `92px x 16px / nowrap`，控制面板无横向溢出，WebGL 加载 `453.9ms`。
+- e2e 守门 `layer-label-limit-nowrap-e2e / continents / 10000` 通过：点击到出图 `1604.3ms`，纯生成 `888.4ms`，WebGL 加载 `411.4ms`，`drawMs = 0.2`，`glError = 0`。
+
 ## 2026-07-04：单位滑条标签空间放宽
 
 按当前面板空间策略继续推进，复查全量 deep 面板审计后，控制面板“单位”tab 未出现横向溢出，但三个滑条标签仍是 `82px / white-space: normal`，与生成页气候滑条已经修正过的 nowrap 策略不一致。该项属于当前执行队列中的“单位 / 滑条字段”空间治理。
