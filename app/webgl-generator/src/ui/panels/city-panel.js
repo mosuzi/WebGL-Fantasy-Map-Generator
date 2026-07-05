@@ -13,6 +13,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     sortDir: "desc",
     selectedCityId: null,
     addMode: false,
+    deleteMode: false,
     version: 0
   });
   const panelCallbacks = {
@@ -36,7 +37,13 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     onRenameVisibleFromNamebase: cityIds => callbacks.onRenameVisibleFromNamebase?.(cityIds),
     onAddMode: active => {
       panelState.addMode = Boolean(active);
+      if (active) panelState.deleteMode = false;
       callbacks.onAddMode?.(panelState.addMode);
+    },
+    onDeleteMode: active => {
+      panelState.deleteMode = Boolean(active);
+      if (active) panelState.addMode = false;
+      callbacks.onDeleteMode?.(panelState.deleteMode);
     },
     onDeleteCity: cityId => callbacks.onDeleteCity?.(cityId),
     onPopulationChange: (cityId, population) => callbacks.onPopulationChange?.(cityId, population),
@@ -61,8 +68,10 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.addMode = false;
+      panelState.deleteMode = false;
       panelState.open = false;
       callbacks.onAddMode?.(false);
+      callbacks.onDeleteMode?.(false);
     }
   });
   const root = documentRef.createElement("div");
@@ -106,6 +115,10 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     },
     updateAddMode(active) {
       panelState.addMode = Boolean(active);
+      panelState.version++;
+    },
+    updateDeleteMode(active) {
+      panelState.deleteMode = Boolean(active);
       panelState.version++;
     },
     isOpen() {

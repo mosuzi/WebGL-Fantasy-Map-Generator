@@ -15,6 +15,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     selectedProvinceId: null,
     radius: 28,
     addMode: false,
+    deleteMode: false,
     lastAffected: 0,
     sourceProvinceId: null,
     version: 0
@@ -41,18 +42,33 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.selectedProvinceId = row.id;
       panelState.active = nextActive;
       panelState.addMode = false;
+      panelState.deleteMode = false;
       callbacks.onActiveChange?.(nextActive);
       if (nextActive) callbacks.onEdit?.(provinceObject(row));
     },
     onActiveChange: active => {
       panelState.active = active;
-      if (active) panelState.addMode = false;
+      if (active) {
+        panelState.addMode = false;
+        panelState.deleteMode = false;
+      }
       callbacks.onActiveChange?.(active);
     },
     onAddMode: active => {
       panelState.addMode = Boolean(active);
-      if (active) panelState.active = false;
+      if (active) {
+        panelState.active = false;
+        panelState.deleteMode = false;
+      }
       callbacks.onAddMode?.(panelState.addMode);
+    },
+    onDeleteMode: active => {
+      panelState.deleteMode = Boolean(active);
+      if (active) {
+        panelState.active = false;
+        panelState.addMode = false;
+      }
+      callbacks.onDeleteMode?.(panelState.deleteMode);
     },
     onDeleteProvince: provinceId => callbacks.onDeleteProvince?.(provinceId),
     onTargetProvinceId: provinceId => {
@@ -84,9 +100,11 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     onClose: () => {
       panelState.active = false;
       panelState.addMode = false;
+      panelState.deleteMode = false;
       panelState.open = false;
       callbacks.onActiveChange?.(false);
       callbacks.onAddMode?.(false);
+      callbacks.onDeleteMode?.(false);
     }
   });
   const root = documentRef.createElement("div");
@@ -134,6 +152,10 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.addMode = Boolean(active);
       panelState.version++;
     },
+    updateDeleteMode(active) {
+      panelState.deleteMode = Boolean(active);
+      panelState.version++;
+    },
     getBrush() {
       return {
         active: panelState.active,
@@ -145,7 +167,10 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       const nextActive = Boolean(active);
       const changed = panelState.active !== nextActive;
       panelState.active = nextActive;
-      if (nextActive) panelState.addMode = false;
+      if (nextActive) {
+        panelState.addMode = false;
+        panelState.deleteMode = false;
+      }
       if (changed) callbacks.onActiveChange?.(nextActive);
     },
     isOpen() {

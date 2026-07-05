@@ -143,22 +143,24 @@ const metrics = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
+const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
 const visualDraft = reactive({
   silhouette: "town",
   palette: "town"
 });
 const cityActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode},
-  {key: "delete", label: "删除选中城市", icon: "×", panel: false, disabled: !selected.value},
-  {key: "rename", label: "重命名", icon: "✎", disabled: !selected.value},
-  {key: "population", label: "调整人口", icon: "#", disabled: !selected.value},
-  {key: "owner", label: "同步归属", icon: "⇄", disabled: !selected.value?.canSyncOwner},
-  {key: "visual", label: "调整剪影", icon: "▣", disabled: !selected.value},
-  {key: "note", label: "编辑备注", icon: "☰", disabled: !selected.value}
+  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode},
+  {key: "delete", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode},
+  {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
+  {key: "population", label: "调整人口", icon: "#", disabled: modalActionActive.value || !selected.value},
+  {key: "owner", label: "同步归属", icon: "⇄", disabled: modalActionActive.value || !selected.value?.canSyncOwner},
+  {key: "visual", label: "调整剪影", icon: "▣", disabled: modalActionActive.value || !selected.value},
+  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [
   {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
+  {label: "删除", value: props.state.deleteMode ? "等待点击" : "关闭"},
   {label: "城市", value: formatNumberValue(metrics.value.total)},
   {label: "首都", value: formatNumberValue(metrics.value.capitals)},
   {label: "港口", value: formatNumberValue(metrics.value.ports)},
@@ -297,7 +299,10 @@ function handleActionSelect(key) {
     props.callbacks.onAddMode?.(!props.state.addMode);
     return;
   }
-  if (key === "delete" && selected.value) props.callbacks.onDeleteCity?.(selected.value.id);
+  if (key === "delete") {
+    props.callbacks.onDeleteMode?.(!props.state.deleteMode);
+    return;
+  }
   if (!key) activeAction.value = null;
 }
 

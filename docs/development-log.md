@@ -19907,3 +19907,24 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
 - 构建产物下用 Playwright 直接打开国家面板验证：点击“新增国家”后 `activeEditor = state:add` 且交互锁开启；取消新增后点击“进入国家编辑”，`state` brush active 为 `true`，全局 `editingObject.kind = state`，无 page error / console error。
+
+### 2026-07-05 新增删除临时态互斥与关闭清理
+
+背景：
+
+- 用户要求处于新建或删除态时，对应按钮必须常亮标识当前状态，同区域其他按钮置灰，并且再次点击同一按钮可以退出。
+- 用户同时要求退出整个编辑面板时清除所有暂时状态，避免新增、删除、编辑等状态残留到下次打开。
+
+实现：
+
+- 国家、省份、城市面板都新增 `deleteMode`，删除从“直接删除选中项”改为“下一次点击地图目标对象”。
+- 新增态、删除态和编辑态互斥：进入新增/删除会退出同面板编辑态，并关闭其他互斥编辑器；同区域非当前模式按钮会禁用。
+- runtime 新增国家、省份、城市删除态点击处理，国家/省份按点击 cell 的归属删除，城市优先按城市拾取对象删除，并以 pack cell 的 burg 作为兜底。
+- 全局 editor snapshot 增加 `state:delete / province:delete / city:delete`，并把城市临时态同步到 Vue editor store。
+- 面板关闭时统一回调关闭新增/删除/编辑态，保证关闭后 `activeEditor` 为空。
+
+验证：
+
+- `node --check` 覆盖 `app.js`、国家/省份/城市 panel。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+- 构建产物 Playwright 定向验证覆盖国家、省份、城市三类面板：新增态按钮常亮且删除/编辑置灰；删除态按钮常亮且新增/编辑置灰；再次点击可退出；关闭面板后 `activeEditor` 清空。

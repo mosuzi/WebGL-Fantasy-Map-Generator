@@ -7,8 +7,9 @@ export const useEditorStore = defineStore("editor", {
     allowedPanelIds: [],
     editingObject: null,
     height: {active: false, lastAffected: 0, lastHeight: "none"},
-    stateBrush: {active: false, targetStateId: null, lastAffected: 0, sourceStateId: null},
-    provinceBrush: {active: false, targetProvinceId: null, lastAffected: 0, sourceProvinceId: null},
+    stateBrush: {active: false, addMode: false, deleteMode: false, targetStateId: null, lastAffected: 0, sourceStateId: null},
+    provinceBrush: {active: false, addMode: false, deleteMode: false, targetProvinceId: null, lastAffected: 0, sourceProvinceId: null},
+    city: {addMode: false, deleteMode: false, lastCreatedCityId: null},
     history: {undo: 0, redo: 0, lastLabel: "none"},
     lastEditRefresh: null
   }),
@@ -21,6 +22,7 @@ export const useEditorStore = defineStore("editor", {
       this.height = {...this.height, ...(snapshot.height || {})};
       this.stateBrush = {...this.stateBrush, ...(snapshot.stateBrush || {})};
       this.provinceBrush = {...this.provinceBrush, ...(snapshot.provinceBrush || {})};
+      this.city = {...this.city, ...(snapshot.city || {})};
       this.history = {...this.history, ...(snapshot.history || {})};
       this.lastEditRefresh = snapshot.lastEditRefresh || null;
     }

@@ -153,6 +153,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     stateEdit: {
       activeStroke: null,
       addMode: false,
+      deleteMode: false,
       lastAffected: 0,
       sourceStateId: null,
       lastPointer: null
@@ -160,12 +161,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     provinceEdit: {
       activeStroke: null,
       addMode: false,
+      deleteMode: false,
       lastAffected: 0,
       sourceProvinceId: null,
       lastPointer: null
     },
     cityEdit: {
       addMode: false,
+      deleteMode: false,
       lastCreatedCityId: null
     },
     markerEdit: {
@@ -331,6 +334,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAddMode: active => {
       state.stateEdit.addMode = Boolean(active);
       if (active) {
+        state.stateEdit.deleteMode = false;
         if (state.editingObject?.kind === OBJECT_KIND.STATE) selectionStore.stopEditing();
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
@@ -340,6 +344,27 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         setActiveModeButton(documentRef, "states");
       }
       state.panels.state.updateAddMode?.(state.stateEdit.addMode);
+      state.panels.state.updateDeleteMode?.(state.stateEdit.deleteMode);
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+    },
+    onDeleteMode: active => {
+      state.stateEdit.deleteMode = Boolean(active);
+      if (active) {
+        state.stateEdit.addMode = false;
+        if (state.editingObject?.kind === OBJECT_KIND.STATE) selectionStore.stopEditing();
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        state.heightEdit.activeStroke = null;
+        state.provinceEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
+        renderer.setColorMode("states");
+        setActiveModeButton(documentRef, "states");
+      }
+      state.panels.state.updateAddMode?.(state.stateEdit.addMode);
+      state.panels.state.updateDeleteMode?.(state.stateEdit.deleteMode);
       updateEditingInteractionLock(state, documentRef);
       updateRuntimePanel(documentRef, state);
     },
@@ -494,7 +519,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   provincePanel = createProvincePanel(documentRef, panelManager, {
     onActiveChange: active => {
       state.provinceEdit.addMode = false;
+      state.provinceEdit.deleteMode = false;
       provincePanel?.updateAddMode?.(false);
+      provincePanel?.updateDeleteMode?.(false);
       if (active) {
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
@@ -515,6 +542,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAddMode: active => {
       state.provinceEdit.addMode = Boolean(active);
       if (active) {
+        state.provinceEdit.deleteMode = false;
         if (state.editingObject?.kind === OBJECT_KIND.PROVINCE) selectionStore.stopEditing();
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
@@ -527,6 +555,27 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         setActiveModeButton(documentRef, "provinces");
       }
       provincePanel?.updateAddMode?.(state.provinceEdit.addMode);
+      provincePanel?.updateDeleteMode?.(state.provinceEdit.deleteMode);
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+    },
+    onDeleteMode: active => {
+      state.provinceEdit.deleteMode = Boolean(active);
+      if (active) {
+        state.provinceEdit.addMode = false;
+        if (state.editingObject?.kind === OBJECT_KIND.PROVINCE) selectionStore.stopEditing();
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        state.heightEdit.activeStroke = null;
+        state.stateEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
+        renderer.setColorMode("provinces");
+        setActiveModeButton(documentRef, "provinces");
+      }
+      provincePanel?.updateAddMode?.(state.provinceEdit.addMode);
+      provincePanel?.updateDeleteMode?.(state.provinceEdit.deleteMode);
       updateEditingInteractionLock(state, documentRef);
       updateRuntimePanel(documentRef, state);
     },
@@ -643,6 +692,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAddMode: active => {
       state.cityEdit.addMode = Boolean(active);
       if (active) {
+        state.cityEdit.deleteMode = false;
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
@@ -655,6 +705,27 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         setActiveModeButton(documentRef, "states");
       }
       cityPanel.updateAddMode?.(state.cityEdit.addMode);
+      cityPanel.updateDeleteMode?.(state.cityEdit.deleteMode);
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+    },
+    onDeleteMode: active => {
+      state.cityEdit.deleteMode = Boolean(active);
+      if (active) {
+        state.cityEdit.addMode = false;
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        state.heightEdit.activeStroke = null;
+        state.stateEdit.activeStroke = null;
+        state.provinceEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
+        renderer.setColorMode("states");
+        setActiveModeButton(documentRef, "states");
+      }
+      cityPanel.updateAddMode?.(state.cityEdit.addMode);
+      cityPanel.updateDeleteMode?.(state.cityEdit.deleteMode);
       updateEditingInteractionLock(state, documentRef);
       updateRuntimePanel(documentRef, state);
     },
@@ -2036,15 +2107,19 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.heightEdit.lastAffected = 0;
   state.heightEdit.lastHeight = "none";
   state.stateEdit.activeStroke = null;
+  state.stateEdit.addMode = false;
+  state.stateEdit.deleteMode = false;
   state.stateEdit.lastAffected = 0;
   state.stateEdit.sourceStateId = null;
   state.stateEdit.lastPointer = null;
   state.provinceEdit.activeStroke = null;
   state.provinceEdit.addMode = false;
+  state.provinceEdit.deleteMode = false;
   state.provinceEdit.lastAffected = 0;
   state.provinceEdit.sourceProvinceId = null;
   state.provinceEdit.lastPointer = null;
   state.cityEdit.addMode = false;
+  state.cityEdit.deleteMode = false;
   state.cityEdit.lastCreatedCityId = null;
   state.markerEdit.mode = null;
   state.markerEdit.type = "mines";
@@ -4312,6 +4387,25 @@ function bindHeightEditing(canvas, state, documentRef) {
 
 function bindStateEditing(canvas, state) {
   canvas.addEventListener("pointerdown", event => {
+    if (state.stateEdit.deleteMode && state.map) {
+      if (!isPrimaryPointerDown(event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const stateId = getStateIdAtEvent(state, event);
+      if (!Number.isInteger(stateId) || stateId <= 0) return;
+      const command = createDeleteStateCommand(stateId);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
+      state.stateEdit.deleteMode = false;
+      state.stateEdit.lastAffected = 0;
+      state.selectionStore.clear();
+      state.panels.state?.setTargetStateId(0);
+      state.panels.state?.updateDeleteMode?.(false);
+      updateAllObjectPanels(state);
+      updateEditingInteractionLock(state, canvas.ownerDocument || document);
+      updateRuntimePanel(canvas.ownerDocument || document, state);
+      return;
+    }
     if (state.stateEdit.addMode && state.map) {
       if (!isPrimaryPointerDown(event)) return;
       event.preventDefault();
@@ -4379,6 +4473,25 @@ function bindStateEditing(canvas, state) {
 
 function bindProvinceEditing(canvas, state) {
   canvas.addEventListener("pointerdown", event => {
+    if (state.provinceEdit.deleteMode && state.map) {
+      if (!isPrimaryPointerDown(event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const provinceId = getProvinceIdAtEvent(state, event);
+      if (!Number.isInteger(provinceId) || provinceId <= 0) return;
+      const command = createDeleteProvinceCommand(provinceId);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterProvinceEdit(state, state.editHistory.execute(command, {map: state.map}));
+      state.provinceEdit.deleteMode = false;
+      state.provinceEdit.lastAffected = 0;
+      state.selectionStore.clear();
+      state.panels.province?.setSelectedProvinceId(0);
+      state.panels.province?.updateDeleteMode?.(false);
+      updateAllObjectPanels(state);
+      updateEditingInteractionLock(state, canvas.ownerDocument || document);
+      updateRuntimePanel(canvas.ownerDocument || document, state);
+      return;
+    }
     if (state.provinceEdit.addMode && state.map) {
       if (!isPrimaryPointerDown(event)) return;
       event.preventDefault();
@@ -4446,6 +4559,26 @@ function bindProvinceEditing(canvas, state) {
 
 function bindCityEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
+    if (state.cityEdit.deleteMode && state.map) {
+      if (!isPrimaryPointerDown(event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const cityId = getCityIdAtEvent(state, event);
+      if (!Number.isInteger(cityId) || cityId < 0) return;
+      const command = createDeleteCityCommand(cityId);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      state.cityEdit.deleteMode = false;
+      state.selectionStore.clear();
+      state.panels.city?.setSelectedCityId(null);
+      state.panels.city?.updateDeleteMode?.(false);
+      updateStatePanel(state);
+      updateProvincePanel(state);
+      updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+      return;
+    }
     if (!state.cityEdit.addMode || !state.map) return;
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
@@ -5203,6 +5336,20 @@ function getProvinceIdAtEvent(state, event) {
   return null;
 }
 
+function getCityIdAtEvent(state, event) {
+  const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  const object = pick?.cityObject || pick?.object;
+  if (object?.kind === OBJECT_KIND.CITY || object?.kind === "city") {
+    const id = Number(object.id);
+    return Number.isInteger(id) ? id : null;
+  }
+  const packCell = Number.isInteger(pick?.packCell) ? pick.packCell : null;
+  const burgId = Number.isInteger(packCell) ? state.map?.pack?.cells?.burg?.[packCell] : null;
+  if (!Number.isInteger(burgId) || burgId <= 0) return null;
+  const city = (state.map?.settlements?.cities || []).find(item => item && (item.burgId === burgId || item.id === burgId));
+  return Number.isInteger(city?.id) ? city.id : null;
+}
+
 function updateProvincePickAtLastPointer(state) {
   const pointer = state.provinceEdit.lastPointer;
   if (!pointer) return;
@@ -5223,16 +5370,19 @@ function updateEditingInteractionLock(state, documentRef) {
 }
 
 function isEditingInteractionLocked(state) {
-  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.cityEdit.addMode || state.markerEdit.mode || state.editingObject);
+  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.stateEdit.deleteMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.provinceEdit.deleteMode || state.cityEdit.addMode || state.cityEdit.deleteMode || state.markerEdit.mode || state.editingObject);
 }
 
 function getAllowedEditingPanelIds(state) {
   if (state.panels.height?.getBrush().active) return ["height-panel"];
   if (state.panels.state?.getBrush().active) return ["state-panel"];
   if (state.stateEdit.addMode) return ["state-panel"];
+  if (state.stateEdit.deleteMode) return ["state-panel"];
   if (state.panels.province?.getBrush().active) return ["province-panel"];
   if (state.provinceEdit.addMode) return ["province-panel"];
+  if (state.provinceEdit.deleteMode) return ["province-panel"];
   if (state.cityEdit.addMode) return ["city-panel"];
+  if (state.cityEdit.deleteMode) return ["city-panel"];
   if (state.markerEdit.mode) return ["marker-panel"];
   if (state.editingObject?.kind === OBJECT_KIND.RIVER) return ["river-panel"];
   if (state.editingObject) return ["object-details"];
@@ -5256,6 +5406,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     stateBrush: {
       active: Boolean(stateBrush.active),
       addMode: Boolean(state.stateEdit.addMode),
+      deleteMode: Boolean(state.stateEdit.deleteMode),
       targetStateId: stateBrush.targetStateId ?? null,
       lastAffected: state.stateEdit.lastAffected,
       sourceStateId: state.stateEdit.sourceStateId
@@ -5263,12 +5414,14 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     provinceBrush: {
       active: Boolean(provinceBrush.active),
       addMode: Boolean(state.provinceEdit.addMode),
+      deleteMode: Boolean(state.provinceEdit.deleteMode),
       targetProvinceId: provinceBrush.targetProvinceId ?? null,
       lastAffected: state.provinceEdit.lastAffected,
       sourceProvinceId: state.provinceEdit.sourceProvinceId
     },
     city: {
       addMode: Boolean(state.cityEdit.addMode),
+      deleteMode: Boolean(state.cityEdit.deleteMode),
       lastCreatedCityId: state.cityEdit.lastCreatedCityId
     },
     marker: {
@@ -5285,10 +5438,13 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
 function getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush) {
   if (heightBrush.active) return "height";
   if (state.stateEdit.addMode) return "state:add";
+  if (state.stateEdit.deleteMode) return "state:delete";
   if (stateBrush.active) return "state";
   if (state.provinceEdit.addMode) return "province:add";
+  if (state.provinceEdit.deleteMode) return "province:delete";
   if (provinceBrush.active) return "province";
   if (state.cityEdit.addMode) return "city:add";
+  if (state.cityEdit.deleteMode) return "city:delete";
   if (state.markerEdit.mode) return `marker:${state.markerEdit.mode}`;
   if (state.editingObject?.kind) return state.editingObject.kind;
   return null;

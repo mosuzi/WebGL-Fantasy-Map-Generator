@@ -147,18 +147,20 @@ const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedProvinceId));
 const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.selectedProvinceId));
+const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
 const provinceActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", panel: false, active: props.state.addMode},
-  {key: "delete", label: "删除选中省份", icon: "×", panel: false, disabled: !canDeleteSelected.value},
-  {key: "edit", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", panel: false, disabled: !canDeleteSelected.value, active: editActive.value},
-  {key: "rename", label: "重命名", icon: "✎", disabled: !canDeleteSelected.value},
-  {key: "color", label: "调整颜色", icon: "◐", disabled: !canDeleteSelected.value},
-  {key: "note", label: "编辑备注", icon: "☰", disabled: !canDeleteSelected.value}
+  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
+  {key: "delete", label: props.state.deleteMode ? "取消删除省份" : "删除省份：下一次点击地图省份", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
+  {key: "edit", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
+  {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
   {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
+  {label: "删除", value: props.state.deleteMode ? "等待点击" : "关闭"},
   {label: "省份", value: formatNumber(metrics.value.total)},
   {label: "实力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
@@ -270,8 +272,8 @@ function handleActionSelect(key) {
     props.callbacks.onAddMode?.(!props.state.addMode);
     return;
   }
-  if (key === "delete" && selected.value) {
-    props.callbacks.onDeleteProvince?.(selected.value.id);
+  if (key === "delete") {
+    props.callbacks.onDeleteMode?.(!props.state.deleteMode);
     return;
   }
   if (key === "edit" && selected.value) {

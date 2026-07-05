@@ -181,6 +181,7 @@ const renamableVisibleRows = computed(() => visibleRows.value.filter(row => !row
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
 const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.targetStateId));
+const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
 const capitalOptions = computed(() => stateCities(props.state.map, selected.value?.id));
 const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
   value: option.value,
@@ -188,19 +189,20 @@ const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
 })));
 const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体会影响国号后缀、税收、外交倾向和军事动员。");
 const stateActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", panel: false, active: props.state.addMode},
-  {key: "delete", label: "删除选中国家", icon: "×", panel: false, disabled: !canDeleteSelected.value},
-  {key: "edit", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: !canDeleteSelected.value, active: editActive.value},
-  {key: "rename", label: "重命名", icon: "✎", disabled: !canDeleteSelected.value},
-  {key: "color", label: "调整颜色", icon: "◐", disabled: !canDeleteSelected.value},
-  {key: "government", label: "调整政体", icon: "⚖", disabled: !canDeleteSelected.value},
-  {key: "capital", label: "设置首都", icon: "♛", disabled: !canDeleteSelected.value || !capitalOptions.value.length},
-  {key: "note", label: "编辑备注", icon: "☰", disabled: !canDeleteSelected.value}
+  {key: "add", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
+  {key: "delete", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
+  {key: "edit", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
+  {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "government", label: "调整政体", icon: "⚖", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "capital", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
+  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
   {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
+  {label: "删除", value: props.state.deleteMode ? "等待点击" : "关闭"},
   {label: "国家", value: formatNumber(metrics.value.total)},
   {label: "国力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
@@ -317,8 +319,8 @@ function handleActionSelect(key) {
     props.callbacks.onAddMode?.(!props.state.addMode);
     return;
   }
-  if (key === "delete" && selected.value) {
-    props.callbacks.onDeleteState?.(selected.value.id);
+  if (key === "delete") {
+    props.callbacks.onDeleteMode?.(!props.state.deleteMode);
     return;
   }
   if (key === "edit" && selected.value) {
