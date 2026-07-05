@@ -2191,7 +2191,7 @@ function setGenerationStatus(documentRef, options, status) {
   if (appStatus) appStatus.textContent = `${status}，seed ${options.seed}`;
 }
 
-function showMapToast(documentRef, message, durationMs = 2200) {
+function showMapToast(documentRef, message, durationMs = 2200, options = {}) {
   const text = String(message || "").trim();
   if (!text) return;
   const toast = documentRef.getElementById("map-toast");
@@ -2199,10 +2199,12 @@ function showMapToast(documentRef, message, durationMs = 2200) {
   const view = documentRef.defaultView || window;
   if (view.__webglGeneratorToastTimer) view.clearTimeout(view.__webglGeneratorToastTimer);
   toast.textContent = text;
+  toast.dataset.tone = options.tone || "success";
   toast.hidden = false;
   view.__webglGeneratorToastTimer = view.setTimeout(() => {
     toast.hidden = true;
     toast.textContent = "";
+    delete toast.dataset.tone;
     view.__webglGeneratorToastTimer = null;
   }, durationMs);
 }
@@ -2232,8 +2234,10 @@ function saveMapToLocalFile(state, documentRef) {
     const document = createMapDocument(state.map, state.options);
     downloadText(documentRef, stringifyMapDocument(document), `${mapFileBaseName(state.map)}.webgl-map.json`, "application/json;charset=utf-8");
     setFileOperationStatus(documentRef, "地图已保存到本地文件。");
+    showMapToast(documentRef, "保存成功");
   } catch (error) {
     reportFileOperationError(documentRef, "保存到本地失败", error);
+    showMapToast(documentRef, "保存失败", 2600, {tone: "error"});
   }
 }
 
@@ -2247,8 +2251,10 @@ async function saveMapToBrowserStorage(state, documentRef) {
     const payload = await encodeBrowserMapStoragePayload(documentRef, text, state.map);
     storage.setItem(BROWSER_MAP_STORAGE_KEY, JSON.stringify(payload));
     setFileOperationStatus(documentRef, browserStorageSaveMessage(payload));
+    showMapToast(documentRef, "保存成功");
   } catch (error) {
     reportFileOperationError(documentRef, "保存到浏览器失败", error);
+    showMapToast(documentRef, "保存失败", 2600, {tone: "error"});
   }
 }
 

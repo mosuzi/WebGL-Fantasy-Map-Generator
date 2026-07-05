@@ -763,22 +763,27 @@ select:disabled {
 
 .map-toast {
   position: absolute;
-  top: 64px;
+  bottom: 22px;
   left: 50%;
   max-width: min(420px, calc(100% - 36px));
   transform: translateX(-50%);
-  border: 1px solid rgba(127, 179, 164, 0.36);
+  border: 1px solid rgba(183, 218, 202, 0.32);
   border-radius: 999px;
   padding: 8px 14px;
-  background: rgba(13, 25, 22, 0.9);
+  background: rgba(42, 96, 72, 0.78);
   box-shadow: 0 12px 30px rgba(2, 6, 23, 0.28);
-  color: #dff5ee;
+  color: #ffffff;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.3;
   pointer-events: none;
   text-align: center;
   z-index: 4;
+}
+
+.map-toast[data-tone="error"] {
+  border-color: rgba(236, 188, 188, 0.32);
+  background: rgba(126, 55, 55, 0.78);
 }
 
 .map-toast[hidden] {
