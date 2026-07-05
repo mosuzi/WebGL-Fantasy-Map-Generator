@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：再次禁用左键拖动画布
+
+用户反馈当前左键又可以移动画布，而该行为此前已经明确应禁用。
+
+根因：
+
+- `installCanvasInteractions()` 中鼠标左键 `pointerdown` 会先进入 `select` 模式。
+- `pointermove` 时如果移动距离超过 `3px`，旧逻辑会把 `select` 切换为 `pan`，于是左键拖拽又会改变相机 offset。
+
+修正：
+
+- 左键 `select` 模式下移动超过阈值时，只标记 `moved = true`，用于取消本次点击选择。
+- 左键移动不再切换到 `pan`，不会改变相机 offset。
+- 中键和右键仍保留 `pan` 导航能力。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器验证：左键从画布中心附近拖动 `140px / 80px` 后 camera 仍为 `scale=1, offsetX=0, offsetY=0`；随后中键同样拖动后 camera 变为 `offsetX=0.21875, offsetY=-0.1951`，证明左键不可平移、中键仍可平移，`glError = 0`。
+- 10k e2e 守门 `left-drag-disabled-e2e / continents / 10000` 通过，点击到出图 `1562.8ms`，纯生成 `666.7ms`，WebGL 加载 `596.3ms`。
+
 ## 2026-07-05：保存结果悬浮提示
 
 用户要求保存时增加画布正下方的悬浮提示：保存成功使用绿色半透明背景白字，保存失败使用红色半透明背景白字，并且背景色不要太饱和。

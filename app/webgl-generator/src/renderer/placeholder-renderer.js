@@ -2525,12 +2525,9 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
       return;
     }
     if (activePointer.mode === "select") {
-      if (Math.hypot(event.clientX - startX, event.clientY - startY) <= 3) {
-        onHover(event);
-        return;
-      }
-      activePointer.mode = "pan";
-      activePointer.moved = true;
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 3) activePointer.moved = true;
+      onHover(event);
+      return;
     }
     event.preventDefault();
     const rect = canvas.getBoundingClientRect();
