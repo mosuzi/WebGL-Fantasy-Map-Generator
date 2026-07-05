@@ -86,6 +86,7 @@
    - 若证据指向测量 SVG、多对象选中态或极端标签数量，再单独治理对应 overlay；不默认把标签、城市剪影、marker 或军事图标迁到 WebGL。
 3. **source/candidate 剩余 warn 只读跟踪**：
    - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。
+   - 已新增 `pnpm run diagnose:source-warns` 只读诊断入口，用现有 source/candidate baseline 汇总剩余 warn 的 feature / lake 差异。当前复查结果：`continents-10000-audit-continents-001` 的 `features.total` 来自候选陆地 feature `16` 对 source `10`，尤其 `cells < 3` 小陆块 `9` 对 `4`；`continents-10000-audit-continents-003` 的 `lateStages.names.lakeNames` 来自候选真实湖泊 `7` 对 source `5`，命名数跟随湖泊数，不是命名过滤不足。
    - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 
 ### 可选增强（非当前执行队列）

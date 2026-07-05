@@ -19238,3 +19238,30 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 100k 同 seed profile `overlay-event-probe-100k / continents / full` 通过：滚轮 / 拖拽 frame p95 为 `41.3ms / 35.3ms`，overlay p95 为 `4.5ms / 3.1ms`，军事图标均值为 `0.36ms / 0.27ms`，长任务为 `0 / 0`，idle dirty 均恢复 clean。
+
+### 2026-07-05 source/candidate 剩余 warn 诊断入口
+
+背景：
+
+- 当前执行队列的最后一项是只读跟踪 `features.total / lakeNames` 两个剩余 warn。
+- 这两个 warn 之前已判断不能用删除小岛、删除 1-cell 湖或只命名 outlet 湖处理；继续推进需要把诊断结果稳定成可复跑报告，避免每次手工翻阅大 diff。
+
+实现：
+
+- 新增 `tools/source-candidate-warn-diagnostics.mjs`，默认读取 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 `source-summary.json / candidate-summary.json / diff.json`。
+- 新增 `pnpm run diagnose:source-warns` 脚本，输出 JSON 和 Markdown 诊断报告；默认写入 `docs/generated/reports/`，也可用 `--out / --markdown` 输出到临时路径。
+- 报告聚合 feature 总数、陆地 / 水体 feature、岛屿、湖泊、命名湖泊、outlet 湖泊、小陆块和小湖泊数量，并为 `features.total` 与 `lateStages.names.lakeNames` 给出专门诊断。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001` 仍为 `warn 1 / fail 0`，唯一 warn 是 `features.total`：source `13`，candidate `19`。差异主要来自陆地 feature：source `10`，candidate `16`；`cells < 3` 小陆块 source `4`，candidate `9`。湖泊数量和命名数均为 `2 / 2`，不能用湖泊命名过滤处理。
+- `continents-10000-audit-continents-003` 仍为 `warn 1 / fail 0`，唯一 warn 是 `lateStages.names.lakeNames`：source `5`，candidate `7`。湖泊命名数跟随真实湖泊数，source 湖泊 / 命名为 `5 / 5`，candidate 为 `7 / 7`；candidate 有 outlet 湖泊为 `4`，说明该 warn 不是 `defineLakeNames()` 过滤不足，而是湖泊 feature 形成、洼地和 outlet 拓扑差异。
+
+验证：
+
+- 重新刷新两个 10k continents case 的 candidate baseline，并重新生成 diff，二者均为 `warn 1 / fail 0`。
+- `node --check tools/source-candidate-warn-diagnostics.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-diagnostics.md"` 通过。
+- `node .\tools\source-candidate-warn-diagnostics.mjs --out "$env:TEMP\fmg-source-warn-diagnostics-node.json" --markdown "$env:TEMP\fmg-source-warn-diagnostics-node.md"` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
