@@ -88,6 +88,7 @@
    - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。
    - 已新增 `pnpm run diagnose:source-warns` 只读诊断入口，用现有 source/candidate baseline 汇总剩余 warn 的 feature / lake 差异。当前复查结果：`continents-10000-audit-continents-001` 的 `features.total` 来自候选陆地 feature `16` 对 source `10`，尤其 `cells < 3` 小陆块 `9` 对 `4`；`continents-10000-audit-continents-003` 的 `lateStages.names.lakeNames` 来自候选真实湖泊 `7` 对 source `5`，命名数跟随湖泊数，不是命名过滤不足。
    - 湖泊分组 source parity 第一刀已完成：`defineLakeGroup()` 已补回 source 的 `inlets/outlet` 约束，`dry / sinkhole / salt` 不再无视出流状态；诊断报告已补 `lakeGroups` 分布。该修正不删除湖泊、不改变命名，当前两个剩余 topology warn 仍保留。
+   - pack 层诊断已补：`diagnose:source-warns` 现在输出 `packSummary` 和 feature cell 桶。当前复查显示 pack cells 差异很小，但 candidate 的海岸陆地 / haven 偏高：001 为 `903` 对 source `875`，003 为 `1135` 对 source `1011`；下一步应优先查高度阈值附近的岸线距离场与 pack feature 泛洪，而不是改 pack 抽点条件。
    - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 
 ### 可选增强（非当前执行队列）

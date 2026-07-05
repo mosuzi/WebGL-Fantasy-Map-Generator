@@ -51,6 +51,7 @@ function readCaseDiagnostics(caseName) {
     failCount: diff.metadata?.failCount || 0,
     warnCount: diff.metadata?.warnCount || 0,
     warnings,
+    packSummary: comparePackSummary(source.pack, candidate.pack),
     featureSummary: compareFeatureSummary(source.features, candidate.features)
   };
 }
@@ -98,7 +99,30 @@ function compareFeatureSummary(sourceFeatures = {}, candidateFeatures = {}) {
     tinyLandCellsLt3: pair(tinyLand(sourceFeatures, "cellsLt3"), tinyLand(candidateFeatures, "cellsLt3")),
     tinyLandCellsLt10: pair(tinyLand(sourceFeatures, "cellsLt10"), tinyLand(candidateFeatures, "cellsLt10")),
     tinyLakesCellsLt3: pair(sourceFeatures.diagnostics?.lakes?.cellsLt3, candidateFeatures.diagnostics?.lakes?.cellsLt3),
-    tinyLakesCellsLt10: pair(sourceFeatures.diagnostics?.lakes?.cellsLt10, candidateFeatures.diagnostics?.lakes?.cellsLt10)
+    tinyLakesCellsLt10: pair(sourceFeatures.diagnostics?.lakes?.cellsLt10, candidateFeatures.diagnostics?.lakes?.cellsLt10),
+    landFeatureBuckets: {
+      source: featureCellBuckets(sourceFeatures, "island"),
+      candidate: featureCellBuckets(candidateFeatures, "island")
+    },
+    lakeFeatureBuckets: {
+      source: featureCellBuckets(sourceFeatures, "lake"),
+      candidate: featureCellBuckets(candidateFeatures, "lake")
+    }
+  };
+}
+
+function comparePackSummary(sourcePack = {}, candidatePack = {}) {
+  return {
+    cells: pair(sourcePack.cells, candidatePack.cells),
+    vertices: pair(sourcePack.vertices, candidatePack.vertices),
+    packGridRatio: pair(sourcePack.packGridRatio, candidatePack.packGridRatio),
+    havenCells: pair(sourcePack.havenCells, candidatePack.havenCells),
+    borderCells: pair(sourcePack.borderCells, candidatePack.borderCells),
+    avgDegree: pair(sourcePack.avgDegree, candidatePack.avgDegree),
+    tCoastLand: pair(sourcePack.tDistribution?.["1"], candidatePack.tDistribution?.["1"]),
+    tCoastWater: pair(sourcePack.tDistribution?.["-1"], candidatePack.tDistribution?.["-1"]),
+    tDeepWater: pair(sourcePack.tDistribution?.["-2"], candidatePack.tDistribution?.["-2"]),
+    tDeeperLand: pair(sourcePack.tDistribution?.["3"], candidatePack.tDistribution?.["3"])
   };
 }
 
@@ -113,10 +137,22 @@ function renderMarkdown(report) {
   for (const item of report.cases) {
     lines.push(`## ${item.caseName}`, "");
     lines.push(`状态：${item.status}（fail ${item.failCount}，warn ${item.warnCount}）`, "");
+    lines.push("### Pack 摘要", "");
+    lines.push("| 指标 | source | candidate | delta |");
+    lines.push("|---|---:|---:|---:|");
+    for (const [key, value] of Object.entries(item.packSummary)) {
+      lines.push(`| ${key} | ${format(value.source)} | ${format(value.candidate)} | ${format(value.delta)} |`);
+    }
+    lines.push("");
+    lines.push("### Feature 摘要", "");
     lines.push("| 指标 | source | candidate | delta |");
     lines.push("|---|---:|---:|---:|");
     for (const [key, value] of Object.entries(item.featureSummary)) {
       if (key === "lakeGroups") {
+        lines.push(`| ${key} | ${formatGroupMap(value.source)} | ${formatGroupMap(value.candidate)} |  |`);
+        continue;
+      }
+      if (key.endsWith("FeatureBuckets")) {
         lines.push(`| ${key} | ${formatGroupMap(value.source)} | ${formatGroupMap(value.candidate)} |  |`);
         continue;
       }
@@ -146,6 +182,22 @@ function lakeGroups(features = {}) {
     groups[group] = (groups[group] || 0) + 1;
   }
   return groups;
+}
+
+function featureCellBuckets(features = {}, type) {
+  const buckets = {"1": 0, "2": 0, "3-9": 0, "10-24": 0, "25-99": 0, "100+": 0};
+  const details = features?.diagnostics?.details || [];
+  for (const feature of details) {
+    if (feature?.type !== type) continue;
+    const cells = Number(feature.cells || 0);
+    if (cells <= 1) buckets["1"]++;
+    else if (cells === 2) buckets["2"]++;
+    else if (cells < 10) buckets["3-9"]++;
+    else if (cells < 25) buckets["10-24"]++;
+    else if (cells < 100) buckets["25-99"]++;
+    else buckets["100+"]++;
+  }
+  return Object.fromEntries(Object.entries(buckets).filter(([, count]) => count > 0));
 }
 
 function pair(source, candidate) {

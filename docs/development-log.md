@@ -19290,3 +19290,30 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-diagnostics-lake-groups.json" --markdown "$env:TEMP\fmg-source-warn-diagnostics-lake-groups.md"` 通过；两个 case 的 lakeGroups 均显示为 `freshwater` 分布。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 端到端守门 `audit-continents-003 / continents / 10000` 通过：点击到出图 `1416.2ms`，纯生成 `750.4ms`，WebGL 加载 `365.1ms`，最慢加载阶段为“构建视觉 cell mesh” `58.5ms`。
+
+### 2026-07-05 pack 层拓扑 warn 诊断增强
+
+背景：
+
+- `features.total / lakeNames` baseline 指标读取的是 `pack.features`，不是早期 `grid.features`。
+- 对照 source `reGraph()` 与候选 `collectPackPoints()` 后，pack 抽点条件本身基本一致：深海排除、非岸湖点抽样、海岸 midpoint 补点条件都与 source 保持同一结构。
+- 需要把诊断继续下钻到 pack distance field 和 feature cell 分布，判断分叉更像来自高度 / 岸线距离场，还是 pack 抽点或 feature 泛洪。
+
+实现：
+
+- `tools/source-candidate-warn-diagnostics.mjs` 新增 `packSummary`，对照 pack cells、vertices、pack/grid 比例、haven cells、边界 cells、平均邻接度，以及 `t = 1 / -1 / -2 / 3` 的距离场分布。
+- 诊断报告新增 `landFeatureBuckets` 和 `lakeFeatureBuckets`，按 `1 / 2 / 3-9 / 10-24 / 25-99 / 100+` 分桶展示小陆块和小湖泊数量。
+- 本轮只增强诊断工具，不修改正式生成器运行时代码。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001`：pack cells source `5183`、candidate `5234`，差异仅 `51`；candidate `tCoastLand / havenCells` 为 `903`，source 为 `875`；陆地 feature bucket 显示 candidate `1-cell` 陆块 `8` 个，source 为 `3` 个。
+- `continents-10000-audit-continents-003`：pack cells source `5528`、candidate `5649`，差异 `121`；candidate `tCoastLand / havenCells` 为 `1135`，source 为 `1011`；candidate 湖泊 bucket 为 `1-cell` 湖 `3` 个，source 为 `1` 个。
+- 该证据说明剩余 warn 更像高度阈值附近的岸线距离场 / 洼地拓扑差异，或 pack feature 泛洪后的小 feature 分裂；下一步不应改 pack 抽点条件，也不应做末端过滤。
+
+验证：
+
+- `node --check tools/source-candidate-warn-diagnostics.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-pack-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-pack-diagnostics.md"` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
