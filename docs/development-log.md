@@ -19928,3 +19928,23 @@ full 矩阵结果：
 - `node --check` 覆盖 `app.js`、国家/省份/城市 panel。
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
 - 构建产物 Playwright 定向验证覆盖国家、省份、城市三类面板：新增态按钮常亮且删除/编辑置灰；删除态按钮常亮且新增/编辑置灰；再次点击可退出；关闭面板后 `activeEditor` 清空。
+
+### 2026-07-05 中立地区新增国家语义修正
+
+背景：
+
+- 用户要求新增国家必须支持从中立地区创建，即使该位置按生成公式没有人口，也不能阻挡用户的直接输入。
+- 排查发现 0 人口中立陆地本身没有被 `isNoop` 拦截，但旧的新增范围逻辑在中立 cell 上会把所有陆地邻居加入新国家，可能错误吞并旁边已有国家的 cell。
+
+实现：
+
+- 新增国家的有效性改为同时检查 grid 陆地和可用 pack 陆地锚点；不检查人口、适居度或文化人口分布。
+- pack 锚点选择优先使用 `grid.cells.pack` 和同 grid cell 映射的 pack cell，并按原归属匹配优先；缺少直接映射时才找最近陆地 pack cell 兜底。
+- 中立 cell 建国时，初始范围只包含中立的相邻陆地 cell；非中立 cell 建国仍只包含同原归属相邻 cell，避免跨归属误吞并。
+- 首都创建继续使用最少人口兜底，因此 0 人口中立地区也会生成可用首都。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\state-edit-commands.js` 通过。
+- Node 断言 `neutral-add-check / continents / 10000` 中 0 人口中立陆地 cell `3130`：`isNoop = false`，新增结果 `stateId = 18`，新增 cells 从旧行为的 `7` 收敛为中立自身和中立邻居共 `3`，`foreignChanged = []`。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。

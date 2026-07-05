@@ -1314,7 +1314,7 @@ function restoreStateCollectionSnapshot(map, snapshot) {
 }
 
 function isValidStateSeedCell(map, gridCell) {
-  return Number.isInteger(gridCell) && gridCell >= 0 && isGridLandCell(map, gridCell);
+  return Number.isInteger(gridCell) && gridCell >= 0 && isGridLandCell(map, gridCell) && Number.isInteger(choosePackCellForGridCell(map, gridCell));
 }
 
 function normalizeGridCell(value) {
@@ -1323,15 +1323,57 @@ function normalizeGridCell(value) {
 }
 
 function choosePackCellForGridCell(map, gridCell) {
-  const candidates = getPackCellsForGrid(map, gridCell).filter(cell => map?.pack?.cells?.h?.[cell] >= 20);
+  const directPackCell = map?.grid?.cells?.pack?.[gridCell];
+  const candidates = [
+    ...(Number.isInteger(directPackCell) ? [directPackCell] : []),
+    ...getPackCellsForGrid(map, gridCell)
+  ].filter((cell, index, list) => list.indexOf(cell) === index && isPackLandCell(map, cell));
   if (candidates.length) {
-    return candidates.sort((a, b) => (map.pack.cells.burg?.[b] ? 1 : 0) - (map.pack.cells.burg?.[a] ? 1 : 0) || a - b)[0];
+    return candidates.sort((a, b) => rankPackCellForStateSeed(map, gridCell, b) - rankPackCellForStateSeed(map, gridCell, a) || a - b)[0];
   }
-  const byGrid = map?.pack?.cells?.g || [];
-  for (let cell = 0; cell < byGrid.length; cell += 1) {
-    if (byGrid[cell] === gridCell && map?.pack?.cells?.h?.[cell] >= 20) return cell;
+  return findNearestPackLandCellForGridCell(map, gridCell);
+}
+
+function rankPackCellForStateSeed(map, gridCell, packCell) {
+  const sourceState = normalizeStateId(map?.grid?.cells?.state?.[gridCell]);
+  const packState = normalizeStateId(map?.pack?.cells?.state?.[packCell]);
+  const ownerMatch = packState === sourceState ? 4 : 0;
+  const burgBonus = normalizePoliticalId(map?.pack?.cells?.burg?.[packCell]) ? 1 : 0;
+  return ownerMatch + burgBonus;
+}
+
+function findNearestPackLandCellForGridCell(map, gridCell) {
+  const point = getGridPoint(map, gridCell);
+  if (!point) return null;
+  const sourceState = normalizeStateId(map?.grid?.cells?.state?.[gridCell]);
+  const sourceFeature = map?.grid?.cells?.f?.[gridCell];
+  let bestCell = null;
+  let bestScore = Infinity;
+
+  for (const packCell of map?.pack?.cells?.i || []) {
+    if (!isPackLandCell(map, packCell)) continue;
+    const packPoint = map.pack.cells.p?.[packCell];
+    if (!packPoint) continue;
+    const packState = normalizeStateId(map.pack.cells.state?.[packCell]);
+    const ownerPenalty = packState === sourceState ? 0 : 1e8;
+    const featurePenalty = map.pack.cells.f?.[packCell] === sourceFeature ? 0 : 1e7;
+    const occupiedPenalty = packState !== sourceState && normalizePoliticalId(map.pack.cells.burg?.[packCell]) ? 1e6 : 0;
+    const distance = (point[0] - packPoint[0]) ** 2 + (point[1] - packPoint[1]) ** 2;
+    const score = ownerPenalty + featurePenalty + occupiedPenalty + distance;
+    if (score >= bestScore) continue;
+    bestCell = packCell;
+    bestScore = score;
   }
-  return null;
+
+  return bestCell;
+}
+
+function getGridPoint(map, gridCell) {
+  return map?.grid?.points?.[map.grid.cells.p?.[gridCell]] || map?.grid?.points?.[gridCell] || null;
+}
+
+function isPackLandCell(map, packCell) {
+  return Number.isInteger(packCell) && packCell >= 0 && map?.pack?.cells?.h?.[packCell] >= 20;
 }
 
 function initialStateCells(map, centerGridCell) {
@@ -1340,7 +1382,7 @@ function initialStateCells(map, centerGridCell) {
   const result = new Set([centerGridCell]);
   for (const neighbor of cells?.c?.[centerGridCell] || []) {
     if (!isGridLandCell(map, neighbor)) continue;
-    if (sourceState && normalizeStateId(cells.state?.[neighbor]) !== sourceState) continue;
+    if (normalizeStateId(cells.state?.[neighbor]) !== sourceState) continue;
     result.add(neighbor);
   }
   return [...result];
