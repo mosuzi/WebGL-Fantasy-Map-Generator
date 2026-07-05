@@ -1602,10 +1602,19 @@ function getObjectBounds(map, object) {
   if (object.kind === OBJECT_KIND.LAKE) {
     return lakeFeatureBounds(map, object.id, 42);
   }
+  if (object.kind === OBJECT_KIND.ZONE) {
+    return zoneBounds(map, object.id, 48);
+  }
   if (isPoliticalObjectKind(object.kind)) {
     return politicalBounds(map, object, 48);
   }
   return null;
+}
+
+function zoneBounds(map, zoneId, padding = 0) {
+  const zone = (map?.zones?.zones || map?.pack?.zones || []).find(item => Number(item?.i ?? item?.id) === Number(zoneId));
+  const points = (zone?.cells || []).map(cell => map?.pack?.cells?.p?.[cell]).filter(isWorldPoint);
+  return points.length ? pointsBounds(points, padding) : null;
 }
 
 function pickLakeObject(map, pickResult) {

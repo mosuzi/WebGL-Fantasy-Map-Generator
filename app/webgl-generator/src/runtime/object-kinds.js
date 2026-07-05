@@ -11,7 +11,8 @@ export const OBJECT_KIND = Object.freeze({
   PROVINCE: "province",
   CULTURE: "culture",
   RELIGION: "religion",
-  REGION: "region"
+  REGION: "region",
+  ZONE: "zone"
 });
 
 export const LABEL_TARGET_KIND = Object.freeze({
@@ -33,7 +34,8 @@ export const OBJECT_KIND_LABEL = Object.freeze({
   [OBJECT_KIND.PROVINCE]: "省份",
   [OBJECT_KIND.CULTURE]: "文化",
   [OBJECT_KIND.RELIGION]: "宗教",
-  [OBJECT_KIND.REGION]: "区域"
+  [OBJECT_KIND.REGION]: "区域",
+  [OBJECT_KIND.ZONE]: "地区"
 });
 
 export const POLITICAL_OBJECT_KINDS = Object.freeze([

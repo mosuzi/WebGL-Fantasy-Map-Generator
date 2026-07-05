@@ -8,7 +8,8 @@ const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
   [OBJECT_KIND.PROVINCE]: [0.9, 0.7, 0.28, 0.34],
   [OBJECT_KIND.CULTURE]: [0.72, 0.95, 0.62, 0.3],
   [OBJECT_KIND.RELIGION]: [0.96, 0.68, 0.95, 0.3],
-  [OBJECT_KIND.REGION]: [0.65, 0.9, 1, 0.28]
+  [OBJECT_KIND.REGION]: [0.65, 0.9, 1, 0.28],
+  [OBJECT_KIND.ZONE]: [1, 0.78, 0.34, 0.34]
 });
 
 const SELECTION_HIGHLIGHT_MODES = Object.freeze({
@@ -17,7 +18,8 @@ const SELECTION_HIGHLIGHT_MODES = Object.freeze({
   [OBJECT_KIND.PROVINCE]: "province translucent cells",
   [OBJECT_KIND.CULTURE]: "culture translucent cells",
   [OBJECT_KIND.RELIGION]: "religion translucent cells",
-  [OBJECT_KIND.REGION]: "region translucent cells"
+  [OBJECT_KIND.REGION]: "region translucent cells",
+  [OBJECT_KIND.ZONE]: "zone translucent cells"
 });
 
 const SELECTION_SMOOTHING = Object.freeze({
@@ -32,6 +34,10 @@ export function buildSelectionMeshVertices(map, camera, canvas, selection, locat
     pushPoliticalSelectionMesh(vertices, context, selection, locateFlash);
     return new Float32Array(vertices);
   }
+  if (selection?.kind === OBJECT_KIND.ZONE) {
+    pushZoneSelectionMesh(vertices, context, selection, locateFlash);
+    return new Float32Array(vertices);
+  }
   if (selection?.kind !== OBJECT_KIND.RIVER) return new Float32Array(vertices);
   const river = map.rivers.rivers.find(item => item.id === selection.id);
   if (!river || river.points.length < 2) return new Float32Array(vertices);
@@ -42,6 +48,26 @@ export function buildSelectionMeshVertices(map, camera, canvas, selection, locat
   const color = locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
   pushScreenPolyline(vertices, context, smoothWorldPath(river.points, SELECTION_SMOOTHING.river), color, widthPx);
   return new Float32Array(vertices);
+}
+
+function pushZoneSelectionMesh(vertices, context, selection, locateFlash) {
+  const {map} = context;
+  const zone = (map?.zones?.zones || map?.pack?.zones || []).find(item => Number(item?.i ?? item?.id) === Number(selection.id));
+  if (!zone?.cells?.length) return;
+  const color = locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.ZONE];
+  for (const cell of zone.cells) {
+    const vertexIds = map?.pack?.cells?.v?.[cell];
+    const centerPoint = map?.pack?.cells?.p?.[cell];
+    if (!Array.isArray(vertexIds) || vertexIds.length < 3 || !centerPoint) continue;
+    const center = worldToScreenPixel(context, centerPoint);
+    for (let index = 0; index < vertexIds.length; index++) {
+      const nextIndex = (index + 1) % vertexIds.length;
+      const a = map.pack.vertices.p?.[vertexIds[index]];
+      const b = map.pack.vertices.p?.[vertexIds[nextIndex]];
+      if (!a || !b) continue;
+      pushScreenTriangle(vertices, context, center, worldToScreenPixel(context, a), worldToScreenPixel(context, b), color);
+    }
+  }
 }
 
 export function selectionHighlightMode(selection, locateFlash = null) {

@@ -13,7 +13,8 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.PROVINCE]: resolveProvince,
   [OBJECT_KIND.CULTURE]: resolveCulture,
   [OBJECT_KIND.RELIGION]: resolveReligion,
-  [OBJECT_KIND.REGION]: resolveRegion
+  [OBJECT_KIND.REGION]: resolveRegion,
+  [OBJECT_KIND.ZONE]: resolveZone
 });
 
 export function resolveObject(map, object) {
@@ -165,6 +166,21 @@ function resolveTradeFlow(map, object) {
     sourceLabel: tradeSourceLabel(deal.source),
     from: seller.point,
     to: buyer.point
+  };
+}
+
+function resolveZone(map, object) {
+  const zone = (map?.zones?.zones || map?.pack?.zones || []).find(item => Number(item?.i ?? item?.id) === Number(object.id));
+  if (!zone) return null;
+  return {
+    ...object,
+    kind: OBJECT_KIND.ZONE,
+    id: Number(zone.i ?? zone.id),
+    name: zone.name || object.name || `地区 #${object.id}`,
+    type: zone.type || object.type || "zone",
+    pattern: zone.pattern || object.pattern || "",
+    color: zone.hexColor || zone.fill || zone.color || object.color || "",
+    cells: zone.cells?.length || object.cells || 0
   };
 }
 

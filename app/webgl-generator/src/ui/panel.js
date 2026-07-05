@@ -29,7 +29,8 @@ const OBJECT_TITLE_FORMATTERS = Object.freeze({
   [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
   [OBJECT_KIND.CULTURE]: object => `文化 ${object.name}`,
   [OBJECT_KIND.RELIGION]: object => `宗教 ${object.name}`,
-  [OBJECT_KIND.REGION]: object => `区域 ${object.name}`
+  [OBJECT_KIND.REGION]: object => `区域 ${object.name}`,
+  [OBJECT_KIND.ZONE]: object => `地区 ${object.name}`
 });
 
 const OBJECT_DETAIL_FORMATTERS = Object.freeze({
@@ -45,7 +46,8 @@ const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.PROVINCE]: object => `${object.state}`,
   [OBJECT_KIND.CULTURE]: (object, units) => `${object.type} / cells ${formatDisplayNumber(object.cells, units)} / pop ${formatDisplayPopulation(object.population, units)}`,
   [OBJECT_KIND.RELIGION]: (object, units) => `${object.type} / ${object.form} / cells ${formatDisplayNumber(object.cells, units)}`,
-  [OBJECT_KIND.REGION]: object => `region #${object.id}`
+  [OBJECT_KIND.REGION]: object => `region #${object.id}`,
+  [OBJECT_KIND.ZONE]: (object, units) => `${object.typeLabel || object.type || "地区"} / ${object.pattern || "纹理"} / cells ${formatDisplayNumber(object.cells, units)}`
 });
 
 const DERIVED_STALE_LABELS = Object.freeze({
@@ -97,6 +99,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
   documentRef.getElementById("open-lake-panel")?.addEventListener("click", handlers.onOpenLakePanel);
+  documentRef.getElementById("open-zone-panel")?.addEventListener("click", handlers.onOpenZonePanel);
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
   documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
   documentRef.getElementById("open-notes-panel")?.addEventListener("click", handlers.onOpenNotesPanel);

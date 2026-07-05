@@ -19948,3 +19948,23 @@ full 矩阵结果：
 - `node --check app\webgl-generator\src\runtime\state-edit-commands.js` 通过。
 - Node 断言 `neutral-add-check / continents / 10000` 中 0 人口中立陆地 cell `3130`：`isNoop = false`，新增结果 `stateId = 18`，新增 cells 从旧行为的 `7` 收敛为中立自身和中立邻居共 `3`，`foreignChanged = []`。
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+
+### 2026-07-05 地区管理面板第一刀
+
+背景：
+
+- 用户指出已有地区纹理图层，但没有地区管理入口，看不出图上的纹理线分别代表什么。
+- 当前需求优先是可读性和识别，不是立即扩展成完整地区编辑器。
+
+实现：
+
+- 管理 tab 新增“地区管理”入口，新增 `zone-panel.js` 和 `ZonePanel.vue`。
+- 地区面板顶部展示当前地图实际出现的纹理图例，说明战区、入侵、叛乱、传教、圣战、疫病、灾害、洪水等类型对应的颜色和纹理。
+- 地区列表展示名称、类型中文名、纹理、涉及国家、规模和面积；详情区展示类型含义、颜色、面积和显示状态。
+- 新增 `zone` 对象类型，选中地区后接入 selection store；renderer 支持按 zone cells 计算定位范围，并在地图上用半透明 mesh 高亮选中地区。
+
+验证：
+
+- `node --check` 覆盖 `app.js`、`zone-panel.js`、`object-kinds.js`、`object-resolver.js`、`placeholder-renderer.js`、`selection-layer.js`。
+- `$env:CI='true'; pnpm run build:app` 通过；新增 `ZonePanel` 懒加载 chunk，仅保留既有的大 chunk 警告。
+- 构建产物 Playwright 定向验证：管理按钮存在，地区面板可打开，图例 `3` 项、列表 `3` 行，点击定位后 `selection.object.kind = zone`、`locateStatus = zone #0`，控制台错误为空。

@@ -32,6 +32,7 @@ import {createReligionPanel} from "../ui/panels/religion-panel.js";
 import {createRiverPanel} from "../ui/panels/river-panel.js";
 import {createRoutePanel} from "../ui/panels/route-panel.js";
 import {createStatePanel} from "../ui/panels/state-panel.js";
+import {createZonePanel} from "../ui/panels/zone-panel.js";
 import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
@@ -214,6 +215,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let riverPanel = null;
   let lakePanel = null;
   let routePanel = null;
+  let zonePanel = null;
   let markerPanel = null;
   let labelNamingPanel = null;
   let namebasePanel = null;
@@ -1540,6 +1542,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.lake = lakePanel;
+  zonePanel = createZonePanel(documentRef, panelManager, {
+    onSelect: object => {
+      zonePanel.setSelection({object});
+      selectFromPanel("zone-panel", object);
+    },
+    onLocate: object => {
+      locateObject(state, object, documentRef);
+      zonePanel.setSelection({object});
+    }
+  });
+  state.panels.zone = zonePanel;
   const renderer = new PlaceholderMapRenderer(canvas, () => {
     if (state.map) {
       updateRuntimePanel(documentRef, state);
@@ -1699,6 +1712,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onOpenLakePanel: () => {
       state.panels.lake.open(state.map, state.selection, state.editHistory.getStats());
+    },
+    onOpenZonePanel: () => {
+      if (state.selection?.object?.kind === OBJECT_KIND.ZONE) {
+        state.panels.zone.setSelection(state.selection);
+      }
+      state.panels.zone.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenRoutePanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.ROUTE) {
@@ -3369,6 +3388,14 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     if (isSelectionFromPanel(context, "lake-panel")) return true;
     if (state.panels.lake.isOpen?.()) updateLakePanel(state);
     else state.panels.lake.open(state.map, selection, state.editHistory.getStats());
+    return true;
+  },
+  [OBJECT_KIND.ZONE]: (state, selection, editingObject, context) => {
+    state.panels.objectDetails.clear();
+    state.panels.zone.setSelection(selection);
+    if (isSelectionFromPanel(context, "zone-panel")) return true;
+    if (state.panels.zone.isOpen?.()) updateZonePanel(state);
+    else state.panels.zone.open(state.map, selection, state.editHistory.getStats());
     return true;
   },
   [OBJECT_KIND.ROUTE]: (state, selection, editingObject, context) => {
@@ -5223,12 +5250,17 @@ function updateAllObjectPanels(state) {
   updateRoutePanel(state);
   updateRiverPanel(state);
   updateLakePanel(state);
+  updateZonePanel(state);
   updateNotesPanel(state);
   updateMeasurementPanel(state);
 }
 
 function updateLakePanel(state) {
   if (isPanelOpen(state.panels.lake)) state.panels.lake?.update(state.map, state.selection, state.editHistory.getStats());
+}
+
+function updateZonePanel(state) {
+  if (isPanelOpen(state.panels.zone)) state.panels.zone?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
 function updateMeasurementPanel(state) {
