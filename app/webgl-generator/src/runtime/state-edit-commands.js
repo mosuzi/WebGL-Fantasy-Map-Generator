@@ -1,5 +1,7 @@
-import {GOVERNMENT_BY_KEY, setStateGovernment} from "../generator/governments.js";
+import {GOVERNMENT_BY_KEY, applyStateGovernment, setStateGovernment} from "../generator/governments.js";
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
+import {createRandom} from "../generator/random.js";
+import {defaultCityVisual} from "./city-visuals.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -56,6 +58,36 @@ const STATE_NAME_BATCH_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["object-name", "labels", "object-panels"])
+});
+
+const STATE_COLLECTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze([
+    "state-cells",
+    "pack-state-cells",
+    "settlement-states",
+    "state-statistics",
+    "province-cells",
+    "province-statistics",
+    "cell-colors",
+    "political-boundaries",
+    "political-selection",
+    "point-layers",
+    "labels",
+    "route-mesh",
+    "object-panels",
+    "object-index",
+    "derived-stale",
+    "province-poles",
+    "defer:military",
+    "defer:zones",
+    "defer:state-markers",
+    "defer:economy",
+    "defer:diplomacy"
+  ])
 });
 
 export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} = {}) {
@@ -204,6 +236,61 @@ export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名
   };
 }
 
+export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} = {}) {
+  const targetGridCell = normalizeGridCell(gridCell);
+  let snapshot = null;
+  let result = null;
+  return {
+    label,
+    effects: {
+      ...STATE_COLLECTION_EFFECTS,
+      affected: [{kind: "state", id: "new"}]
+    },
+    apply(context) {
+      snapshot ??= captureStateCollectionSnapshot(context.map);
+      result = addStateAtGridCell(context.map, targetGridCell);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的国家新增快照");
+      restoreStateCollectionSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      return !isValidStateSeedCell(context.map, targetGridCell);
+    },
+    getResult() {
+      return result;
+    }
+  };
+}
+
+export function createDeleteStateCommand(stateId, {label = "删除国家"} = {}) {
+  const normalizedStateId = normalizeStateId(stateId);
+  let snapshot = null;
+  let result = null;
+  return {
+    label: `${label} #${normalizedStateId}`,
+    effects: {
+      ...STATE_COLLECTION_EFFECTS,
+      affected: [{kind: "state", id: normalizedStateId}]
+    },
+    apply(context) {
+      snapshot ??= captureStateCollectionSnapshot(context.map);
+      result = deleteState(context.map, normalizedStateId);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的国家删除快照");
+      restoreStateCollectionSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const state = context.map?.politics?.states?.[normalizedStateId];
+      return normalizedStateId <= 0 || !state || state.removed;
+    },
+    getResult() {
+      return result;
+    }
+  };
+}
+
 export function applyStateBrushPreview(map, changes) {
   applyStateChanges(map, normalizeChanges(changes), "after");
 }
@@ -281,6 +368,170 @@ function writeStateNameSnapshot(map, stateId, snapshot) {
   applyStateNameSnapshot(state, snapshot);
   const packState = map?.pack?.states?.[stateId];
   if (packState && packState !== state) applyStateNameSnapshot(packState, snapshot);
+}
+
+function addStateAtGridCell(map, gridCell) {
+  const packCell = choosePackCellForGridCell(map, gridCell);
+  if (!Number.isInteger(packCell)) throw new Error("无法在当前 cell 创建国家");
+  const stateId = nextPoliticalId(map?.politics?.states || map?.pack?.states || []);
+  const provinceId = nextPoliticalId(map?.politics?.provinces || map?.pack?.provinces || []);
+  const point = map.pack?.cells?.p?.[packCell] || map.grid?.points?.[map.grid.cells.p?.[gridCell]] || [0, 0];
+  const cultureId = normalizeCultureId(map.pack?.cells?.culture?.[packCell] ?? map.grid?.cells?.culture?.[gridCell]);
+  const religionId = normalizeCultureId(map.pack?.cells?.religion?.[packCell] ?? map.grid?.cells?.religion?.[gridCell]);
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
+  const random = createRandom(`${map.metadata?.seed || map.options?.seed || "map"}|add-state|${stateId}|${gridCell}`);
+  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|add-state-name|${stateId}`, {namebases: map.namebases});
+  const occupied = new Set((map?.politics?.states || [])
+    .filter(state => state && !state.removed)
+    .map(state => normalizeStateRoot(state.name))
+    .filter(Boolean));
+  const root = nextStateRootFromNamebase(map, {
+    id: stateId,
+    i: stateId,
+    center: packCell,
+    gridCenter: gridCell,
+    culture: cultureId,
+    type: culture?.type || "Generic"
+  }, generator, occupied);
+  const capital = ensureCapitalCityForNewState(map, {
+    stateId,
+    provinceId,
+    packCell,
+    gridCell,
+    cultureId,
+    religionId,
+    nameGenerator: generator
+  });
+  const state = {
+    id: stateId,
+    i: stateId,
+    name: root,
+    center: packCell,
+    gridCenter: gridCell,
+    capital: capital.burgId,
+    capitalName: capital.name,
+    culture: cultureId,
+    religion: religionId,
+    type: culture?.type || "Generic",
+    nameStyle: culture?.nameStyle || null,
+    expansionism: roundValue(random.range(1, 2), 1),
+    cells: 0,
+    area: 0,
+    burgs: 0,
+    rural: 0,
+    urban: 0,
+    neighbors: [],
+    provinces: [provinceId],
+    color: fallbackStateColor(stateId),
+    coa: generator.makeEmblem({
+      id: stateId,
+      kind: "state",
+      cell: packCell,
+      culture: cultureId,
+      type: culture?.type || "Generic",
+      x: point[0],
+      y: point[1]
+    })
+  };
+  applyStateGovernment(state, "monarchy", {states: map?.politics?.states || []});
+  writePoliticalItem(map, "states", stateId, state);
+  const provinceName = generator.makeProvinceName({
+    id: provinceId,
+    cell: packCell,
+    culture: cultureId,
+    cultureType: culture?.nameStyle || culture?.type,
+    state: stateId,
+    baseName: root
+  });
+  const province = {
+    id: provinceId,
+    i: provinceId,
+    state: stateId,
+    center: packCell,
+    gridCenter: gridCell,
+    burg: capital.burgId,
+    name: provinceName.name,
+    formName: provinceName.formName,
+    fullName: provinceName.fullName,
+    color: state.color,
+    cells: 0,
+    area: 0,
+    neighbors: [],
+    pole: point.map(value => roundValue(value, 2))
+  };
+  writePoliticalItem(map, "provinces", provinceId, province);
+  const changes = initialStateCells(map, gridCell).map(cell => ({
+    gridCell: cell,
+    before: normalizeStateId(map.grid.cells.state?.[cell]),
+    after: stateId
+  }));
+  applyStateChanges(map, changes, "after");
+  for (const change of changes) {
+    if (map.grid?.cells?.province) map.grid.cells.province[change.gridCell] = provinceId;
+    for (const cell of getPackCellsForGrid(map, change.gridCell)) {
+      if (map.pack?.cells?.h?.[cell] >= 20) map.pack.cells.province[cell] = provinceId;
+    }
+  }
+  writeCityOwnerForNewState(map, capital.cityId, stateId, provinceId);
+  refreshProvinceSummaries(map);
+  refreshProvincePoles(map, new Set([provinceId]));
+  refreshStateSummaries(map);
+  refreshSettlementMetadata(map);
+  refreshPoliticsMetadata(map);
+  markDerivedStale(map, ["military", "zones", "state-markers", "economy", "diplomacy"]);
+  return {stateId, provinceId, cityId: capital.cityId, burgId: capital.burgId, cells: changes.length};
+}
+
+function deleteState(map, stateId) {
+  const state = map?.politics?.states?.[stateId];
+  if (!state || state.removed) throw new Error(`找不到国家 #${stateId}`);
+  const changes = [];
+  for (const gridCell of map?.grid?.cells?.i || []) {
+    if (normalizeStateId(map.grid.cells.state?.[gridCell]) !== stateId) continue;
+    changes.push({gridCell, before: stateId, after: 0});
+  }
+  applyStateChanges(map, changes, "after");
+  for (const change of changes) {
+    if (map.grid?.cells?.province) map.grid.cells.province[change.gridCell] = 0;
+    for (const cell of getPackCellsForGrid(map, change.gridCell)) {
+      if (map.pack?.cells?.h?.[cell] >= 20) map.pack.cells.province[cell] = 0;
+    }
+  }
+  for (const province of map?.politics?.provinces || []) {
+    if (province && normalizeStateId(province.state) === stateId) province.removed = true;
+  }
+  for (const province of map?.pack?.provinces || []) {
+    if (province && normalizeStateId(province.state) === stateId) province.removed = true;
+  }
+  for (const city of map?.settlements?.cities || []) {
+    if (!city || normalizeStateId(city.state) !== stateId) continue;
+    const burg = findBurgForCity(map, city);
+    city.state = 0;
+    city.province = 0;
+    city.capital = false;
+    city.provincial = false;
+    city.group = city.port ? "city" : "town";
+    if (burg) {
+      burg.state = 0;
+      burg.province = 0;
+      burg.capital = 0;
+      burg.group = burg.port ? "city" : "town";
+    }
+  }
+  state.removed = true;
+  state.provinces = [];
+  const packState = map?.pack?.states?.[stateId];
+  if (packState && packState !== state) {
+    packState.removed = true;
+    packState.provinces = [];
+  }
+  refreshProvinceSummaries(map);
+  refreshProvincePoles(map);
+  refreshStateSummaries(map);
+  refreshSettlementMetadata(map);
+  refreshPoliticsMetadata(map);
+  markDerivedStale(map, ["military", "zones", "state-markers", "economy", "diplomacy"]);
+  return {stateId, cells: changes.length};
 }
 
 function applyStateNameSnapshot(state, snapshot) {
@@ -1016,6 +1267,260 @@ function snapshotState(map, stateId) {
 function restoreState(map, snapshot) {
   const state = map?.politics?.states?.[snapshot.stateId];
   if (state) Object.assign(state, snapshot.state, {neighbors: [...(snapshot.state.neighbors || [])]});
+}
+
+function captureStateCollectionSnapshot(map) {
+  return {
+    states: clonePlain(map?.politics?.states || []),
+    packStates: map?.pack?.states === map?.politics?.states ? null : clonePlain(map?.pack?.states || []),
+    provinces: clonePlain(map?.politics?.provinces || []),
+    packProvinces: map?.pack?.provinces === map?.politics?.provinces ? null : clonePlain(map?.pack?.provinces || []),
+    gridState: cloneArrayLike(map?.grid?.cells?.state),
+    gridProvince: cloneArrayLike(map?.grid?.cells?.province),
+    packState: cloneArrayLike(map?.pack?.cells?.state),
+    packProvince: cloneArrayLike(map?.pack?.cells?.province),
+    packBurg: cloneArrayLike(map?.pack?.cells?.burg),
+    burgs: clonePlain(map?.pack?.burgs || []),
+    cities: clonePlain(map?.settlements?.cities || []),
+    settlementsMetadata: clonePlain(map?.settlements?.metadata || null),
+    politicsMetadata: clonePlain(map?.politics?.metadata || null),
+    stale: snapshotDerivedStale(map)
+  };
+}
+
+function restoreStateCollectionSnapshot(map, snapshot) {
+  if (!map || !snapshot) return;
+  if (map.politics) {
+    map.politics.states = clonePlain(snapshot.states);
+    map.politics.provinces = clonePlain(snapshot.provinces);
+    map.politics.metadata = clonePlain(snapshot.politicsMetadata);
+  }
+  if (map.pack) {
+    map.pack.states = snapshot.packStates ? clonePlain(snapshot.packStates) : map.politics?.states;
+    map.pack.provinces = snapshot.packProvinces ? clonePlain(snapshot.packProvinces) : map.politics?.provinces;
+    map.pack.burgs = clonePlain(snapshot.burgs);
+  }
+  restoreArrayLike(map?.grid?.cells, "state", snapshot.gridState);
+  restoreArrayLike(map?.grid?.cells, "province", snapshot.gridProvince);
+  restoreArrayLike(map?.pack?.cells, "state", snapshot.packState);
+  restoreArrayLike(map?.pack?.cells, "province", snapshot.packProvince);
+  restoreArrayLike(map?.pack?.cells, "burg", snapshot.packBurg);
+  if (map.settlements) {
+    map.settlements.cities = clonePlain(snapshot.cities);
+    map.settlements.metadata = clonePlain(snapshot.settlementsMetadata);
+  }
+  delete map.__stateEditorPackCellsByGrid;
+  restoreDerivedStale(map, snapshot.stale);
+}
+
+function isValidStateSeedCell(map, gridCell) {
+  return Number.isInteger(gridCell) && gridCell >= 0 && isGridLandCell(map, gridCell);
+}
+
+function normalizeGridCell(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) ? numeric : -1;
+}
+
+function choosePackCellForGridCell(map, gridCell) {
+  const candidates = getPackCellsForGrid(map, gridCell).filter(cell => map?.pack?.cells?.h?.[cell] >= 20);
+  if (candidates.length) {
+    return candidates.sort((a, b) => (map.pack.cells.burg?.[b] ? 1 : 0) - (map.pack.cells.burg?.[a] ? 1 : 0) || a - b)[0];
+  }
+  const byGrid = map?.pack?.cells?.g || [];
+  for (let cell = 0; cell < byGrid.length; cell += 1) {
+    if (byGrid[cell] === gridCell && map?.pack?.cells?.h?.[cell] >= 20) return cell;
+  }
+  return null;
+}
+
+function initialStateCells(map, centerGridCell) {
+  const cells = map?.grid?.cells;
+  const sourceState = normalizeStateId(cells?.state?.[centerGridCell]);
+  const result = new Set([centerGridCell]);
+  for (const neighbor of cells?.c?.[centerGridCell] || []) {
+    if (!isGridLandCell(map, neighbor)) continue;
+    if (sourceState && normalizeStateId(cells.state?.[neighbor]) !== sourceState) continue;
+    result.add(neighbor);
+  }
+  return [...result];
+}
+
+function writePoliticalItem(map, collection, id, item) {
+  if (map?.politics?.[collection]) map.politics[collection][id] = item;
+  if (map?.pack?.[collection]) map.pack[collection][id] = map?.politics?.[collection]?.[id] || clonePlain(item);
+}
+
+function ensureCapitalCityForNewState(map, context) {
+  const existingBurgId = normalizePoliticalId(map?.pack?.cells?.burg?.[context.packCell]);
+  if (existingBurgId) {
+    const burg = map.pack.burgs?.[existingBurgId];
+    const city = (map?.settlements?.cities || []).find(item => item?.burgId === existingBurgId) || null;
+    if (burg) {
+      burg.state = context.stateId;
+      burg.province = context.provinceId;
+      burg.capital = 1;
+      burg.group = "capital";
+    }
+    if (city) {
+      city.state = context.stateId;
+      city.province = context.provinceId;
+      city.capital = true;
+      city.group = "capital";
+      return {cityId: city.id, burgId: existingBurgId, name: city.name || burg?.name || `都城 #${existingBurgId}`};
+    }
+  }
+  return createCapitalCity(map, context);
+}
+
+function createCapitalCity(map, {stateId, provinceId, packCell, gridCell, cultureId, religionId, nameGenerator}) {
+  if (!map?.pack?.burgs || !map?.settlements?.cities || !map?.pack?.cells?.p?.[packCell]) {
+    throw new Error("当前地图缺少可创建首都的城市数据");
+  }
+  const burgId = map.pack.burgs.length;
+  const cityId = map.settlements.cities.length;
+  const [x, y] = map.pack.cells.p[packCell];
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
+  const population = Math.max(8, roundValue((map.pack.cells.pop?.[packCell] || map.grid?.cells?.pop?.[gridCell] || 8) + 18, 2));
+  const name = nameGenerator.makePlaceName({
+    id: cityId,
+    cell: packCell,
+    culture: cultureId,
+    cultureType: culture?.nameStyle || culture?.type,
+    state: stateId,
+    capital: true,
+    group: "capital",
+    population
+  }) || `新都${burgId}`;
+  const visual = defaultCityVisual({capital: true, provincial: false, port: 0, population, type: "Generic", group: "capital"}, culture);
+  const burg = {
+    i: burgId,
+    id: burgId,
+    cityId,
+    cell: packCell,
+    x,
+    y,
+    state: stateId,
+    province: provinceId,
+    culture: cultureId,
+    religion: religionId,
+    name,
+    feature: map.pack.cells.f?.[packCell],
+    capital: 1,
+    port: 0,
+    population,
+    group: "capital",
+    type: "Generic",
+    civilizationType: "agrarian",
+    civilizationLabel: "农耕",
+    visual: clonePlain(visual)
+  };
+  const city = {
+    id: cityId,
+    burgId,
+    name,
+    cell: gridCell,
+    packCell,
+    x,
+    y,
+    population,
+    state: stateId,
+    province: provinceId,
+    culture: cultureId,
+    religion: religionId,
+    capital: true,
+    provincial: false,
+    port: 0,
+    type: "Generic",
+    civilizationType: "agrarian",
+    civilizationLabel: "农耕",
+    group: "capital",
+    visual: clonePlain(visual)
+  };
+  map.pack.burgs[burgId] = burg;
+  map.settlements.cities.push(city);
+  if (map.pack.cells.burg) map.pack.cells.burg[packCell] = burgId;
+  return {cityId, burgId, name};
+}
+
+function writeCityOwnerForNewState(map, cityId, stateId, provinceId) {
+  const city = map?.settlements?.cities?.[cityId];
+  if (!city) return;
+  city.state = stateId;
+  city.province = provinceId;
+  const burg = findBurgForCity(map, city);
+  if (burg) {
+    burg.state = stateId;
+    burg.province = provinceId;
+  }
+}
+
+function refreshSettlementMetadata(map) {
+  const metadata = map?.settlements?.metadata;
+  if (!metadata) return;
+  const cities = map?.settlements?.cities || [];
+  metadata.cities = cities.length;
+  metadata.capitals = cities.filter(city => city?.capital).length;
+  metadata.ports = cities.filter(city => city?.port).length;
+  metadata.maxPopulation = cities.reduce((max, city) => Math.max(max, Number(city?.population || 0)), 0);
+  metadata.packBurgs = map?.pack?.burgs ? Math.max(0, map.pack.burgs.length - 1) : metadata.packBurgs;
+}
+
+function refreshPoliticsMetadata(map) {
+  const metadata = map?.politics?.metadata;
+  if (!metadata) return;
+  const states = map?.politics?.states || [];
+  const provinces = map?.politics?.provinces || [];
+  metadata.states = states.filter(item => item && !item.removed && normalizeStateId(item.i ?? item.id) > 0).length;
+  metadata.provinces = provinces.filter(item => item && !item.removed && normalizeProvinceId(item.i ?? item.id) > 0).length;
+  metadata.stateNames = states.filter(item => item && !item.removed && normalizeStateId(item.i ?? item.id) > 0).map(item => item.fullName || item.name);
+  metadata.provinceNames = provinces.filter(item => item && !item.removed && normalizeProvinceId(item.i ?? item.id) > 0).map(item => item.fullName || item.name);
+}
+
+function fallbackStateColor(id) {
+  const palette = ["#b7c8f3", "#f6b6c8", "#abe7c1", "#f8dda1", "#cbbdf1", "#aee3e8", "#f3b7a8", "#d5eda2"];
+  return palette[Math.abs(Number(id) || 0) % palette.length];
+}
+
+function nextPoliticalId(items = []) {
+  let max = 0;
+  for (const item of items) {
+    const id = normalizePoliticalId(item?.i ?? item?.id);
+    if (id > max) max = id;
+  }
+  return max + 1;
+}
+
+function normalizePoliticalId(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) ? Math.max(0, numeric) : 0;
+}
+
+function normalizeCultureId(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) ? Math.max(0, numeric) : 0;
+}
+
+function cloneArrayLike(value) {
+  if (!value) return null;
+  if (ArrayBuffer.isView(value)) return new value.constructor(value);
+  return Array.isArray(value) ? [...value] : null;
+}
+
+function restoreArrayLike(target, key, snapshot) {
+  if (!target || !snapshot) return;
+  if (ArrayBuffer.isView(target[key]) && ArrayBuffer.isView(snapshot) && target[key].length === snapshot.length) {
+    target[key].set(snapshot);
+    return;
+  }
+  target[key] = cloneArrayLike(snapshot);
+}
+
+function isGridLandCell(map, gridCell) {
+  if (map?.grid?.cells?.h?.[gridCell] < 20) return false;
+  const featureId = map?.grid?.cells?.f?.[gridCell];
+  const feature = map?.features?.features?.[featureId];
+  return feature ? Boolean(feature.land) : true;
 }
 
 function roundValue(value, digits = 1) {

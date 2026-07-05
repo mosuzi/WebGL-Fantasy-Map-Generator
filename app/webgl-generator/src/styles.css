@@ -5643,11 +5643,10 @@ input.ui-switch-native {
   gap: 8px;
 }
 
+.state-collection-actions,
 .label-management-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+  justify-content: flex-end;
+  margin: 8px 0 12px;
 }
 
 .management-panel-divider {

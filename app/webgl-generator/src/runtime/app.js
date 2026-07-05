@@ -59,7 +59,7 @@ import {resolveObject} from "./object-resolver.js";
 import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
-import {applyStateBrushPreview, createApplyStateBrushCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
@@ -151,6 +151,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     stateEdit: {
       activeStroke: null,
+      addMode: false,
       lastAffected: 0,
       sourceStateId: null,
       lastPointer: null
@@ -318,6 +319,29 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       setActiveModeButton(documentRef, "states");
       updateEditingInteractionLock(state, documentRef);
       updateRuntimePanel(documentRef, state);
+    },
+    onAddMode: active => {
+      state.stateEdit.addMode = Boolean(active);
+      if (active) {
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        clearMarkerEditMode(state);
+        renderer.setColorMode("states");
+        setActiveModeButton(documentRef, "states");
+      }
+      state.panels.state.updateAddMode?.(state.stateEdit.addMode);
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+    },
+    onDeleteState: stateId => {
+      const command = createDeleteStateCommand(stateId);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
+      state.selectionStore.clear();
+      state.panels.state.setTargetStateId(0);
+      updateAllObjectPanels(state);
+      updateEditingInteractionLock(state, documentRef);
     },
     onRename: (stateId, name) => {
       const object = {kind: "state", id: stateId};
@@ -4214,6 +4238,29 @@ function bindHeightEditing(canvas, state, documentRef) {
 
 function bindStateEditing(canvas, state) {
   canvas.addEventListener("pointerdown", event => {
+    if (state.stateEdit.addMode && state.map) {
+      if (!isPrimaryPointerDown(event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+      if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
+      const command = createAddStateAtCellCommand(pick.gridCell);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = command.getResult?.();
+      state.stateEdit.addMode = false;
+      state.stateEdit.lastAffected = result?.cells || 0;
+      state.stateEdit.sourceStateId = result?.stateId || null;
+      if (Number.isInteger(result?.stateId)) {
+        state.panels.state?.setTargetStateId(result.stateId);
+        state.selectionStore.setSelection({object: {kind: OBJECT_KIND.STATE, id: result.stateId}});
+      }
+      state.panels.state?.updateAddMode?.(false);
+      updateAllObjectPanels(state);
+      updateEditingInteractionLock(state, canvas.ownerDocument || document);
+      updateRuntimePanel(canvas.ownerDocument || document, state);
+      return;
+    }
     if (!state.panels.state?.getBrush().active || !state.map) return;
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
@@ -5052,12 +5099,13 @@ function updateEditingInteractionLock(state, documentRef) {
 }
 
 function isEditingInteractionLocked(state) {
-  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.panels.province?.getBrush().active || state.markerEdit.mode || state.editingObject);
+  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.panels.province?.getBrush().active || state.markerEdit.mode || state.editingObject);
 }
 
 function getAllowedEditingPanelIds(state) {
   if (state.panels.height?.getBrush().active) return ["height-panel"];
   if (state.panels.state?.getBrush().active) return ["state-panel"];
+  if (state.stateEdit.addMode) return ["state-panel"];
   if (state.panels.province?.getBrush().active) return ["province-panel"];
   if (state.markerEdit.mode) return ["marker-panel"];
   if (state.editingObject?.kind === OBJECT_KIND.RIVER) return ["river-panel"];
@@ -5081,6 +5129,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     },
     stateBrush: {
       active: Boolean(stateBrush.active),
+      addMode: Boolean(state.stateEdit.addMode),
       targetStateId: stateBrush.targetStateId ?? null,
       lastAffected: state.stateEdit.lastAffected,
       sourceStateId: state.stateEdit.sourceStateId
@@ -5104,6 +5153,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
 
 function getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush) {
   if (heightBrush.active) return "height";
+  if (state.stateEdit.addMode) return "state:add";
   if (stateBrush.active) return "state";
   if (provinceBrush.active) return "province";
   if (state.markerEdit.mode) return `marker:${state.markerEdit.mode}`;

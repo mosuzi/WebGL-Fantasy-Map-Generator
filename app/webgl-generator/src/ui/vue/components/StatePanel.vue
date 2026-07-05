@@ -17,6 +17,13 @@
     @locate="callbacks.onLocate"
   />
 
+  <UiPanelIoActions
+    class-name="state-collection-actions"
+    label="国家新增删除"
+    :actions="collectionActions"
+    @action="handleCollectionAction"
+  />
+
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
   <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="stateActions">
@@ -120,6 +127,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
@@ -187,6 +195,11 @@ const stateOptions = computed(() => stateRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const renamableVisibleRows = computed(() => visibleRows.value.filter(row => !row.neutral));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
+const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
+const collectionActions = computed(() => [
+  {key: "add", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", disabled: false},
+  {key: "delete", label: "删除选中国家", icon: "×", disabled: !canDeleteSelected.value}
+]);
 const capitalOptions = computed(() => stateCities(props.state.map, selected.value?.id));
 const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
   value: option.value,
@@ -204,6 +217,7 @@ const stateActions = computed(() => [
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
+  {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
   {label: "国家", value: formatNumber(metrics.value.total)},
   {label: "国力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
@@ -313,6 +327,14 @@ function filterRows(rows, filter) {
 
 function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleCollectionAction(key) {
+  if (key === "add") {
+    callbacks.onAddMode?.(!props.state.addMode);
+    return;
+  }
+  if (key === "delete" && selected.value) callbacks.onDeleteState?.(selected.value.id);
 }
 
 function stateRows(map) {

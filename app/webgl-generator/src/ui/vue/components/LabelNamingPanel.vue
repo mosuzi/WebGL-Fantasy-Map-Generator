@@ -19,6 +19,13 @@
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />
 
+  <UiPanelIoActions
+    class-name="label-management-actions"
+    label="标签新增删除"
+    :actions="labelManagementActions"
+    @action="handleLabelManagementAction"
+  />
+
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="labelActions">
     <template #rename>
       <UiTextEditField
@@ -40,12 +47,6 @@
     </template>
   </UiActionDock>
 
-  <div class="label-management-actions">
-    <UiButton variant="secondary" @click="callbacks.onAdd">新增标签</UiButton>
-    <UiButton v-if="selected && selected.hidden" variant="secondary" @click="callbacks.onRestore(selected)">恢复标签</UiButton>
-    <UiButton v-else variant="secondary" :disabled="!selected" @click="callbacks.onDelete(selected)">删除标签</UiButton>
-  </div>
-
   <UiHistoryActions class-name="city-history-actions" :history="state.history" label="最近命名" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
@@ -58,9 +59,9 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import UiButton from "./base/UiButton.vue";
 import {LABEL_TARGET_KIND} from "../../../runtime/object-kinds.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
@@ -110,6 +111,10 @@ const labelActions = Object.freeze([
 ]);
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
+const labelManagementActions = computed(() => [
+  {key: "add", label: "新增标签", icon: "+"},
+  {key: selected.value?.hidden ? "restore" : "delete", label: selected.value?.hidden ? "恢复标签" : "删除标签", icon: selected.value?.hidden ? "↺" : "×", disabled: !selected.value}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "标签", value: formatNumber(rows.value.length)},
@@ -133,6 +138,16 @@ const detailRows = computed(() => selected.value ? [
 watch(() => selected.value?.key, () => {
   activeAction.value = null;
 });
+
+function handleLabelManagementAction(key) {
+  if (key === "add") {
+    callbacks.onAdd?.();
+    return;
+  }
+  if (!selected.value) return;
+  if (key === "restore") callbacks.onRestore?.(selected.value);
+  if (key === "delete") callbacks.onDelete?.(selected.value);
+}
 
 function labelRows(map) {
   return [...customLabelRows(map), ...cityLabelRows(map), ...stateLabelRows(map)];

@@ -13,6 +13,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     sortKey: "population",
     sortDir: "desc",
     radius: 28,
+    addMode: false,
     lastAffected: 0,
     history: null,
     version: 0
@@ -44,9 +45,16 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     onEdit: row => {
       panelState.targetStateId = row.id;
       panelState.active = true;
+      panelState.addMode = false;
       callbacks.onActiveChange?.(true);
       callbacks.onEdit?.(stateObject(row));
     },
+    onAddMode: active => {
+      panelState.addMode = Boolean(active);
+      if (active) panelState.active = false;
+      callbacks.onAddMode?.(panelState.addMode);
+    },
+    onDeleteState: stateId => callbacks.onDeleteState?.(stateId),
     onRename: (stateId, name) => callbacks.onRename?.(stateId, name),
     onRenameVisibleFromNamebase: stateIds => callbacks.onRenameVisibleFromNamebase?.(stateIds),
     onRadius: radius => {
@@ -76,7 +84,9 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     onClose: () => {
       panelState.open = false;
       panelState.active = false;
+      panelState.addMode = false;
       callbacks.onActiveChange?.(false);
+      callbacks.onAddMode?.(false);
     }
   });
   const root = documentRef.createElement("div");
@@ -112,6 +122,10 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       if (!stateExists(map, panelState.targetStateId)) panelState.targetStateId = firstStateId(map);
       panelState.version++;
     },
+    updateAddMode(active) {
+      panelState.addMode = Boolean(active);
+      panelState.version++;
+    },
     getBrush() {
       return {
         active: panelState.active,
@@ -125,6 +139,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     setActive(active) {
       panelState.active = active;
+      if (active) panelState.addMode = false;
     },
     isOpen() {
       return panelState.open;
