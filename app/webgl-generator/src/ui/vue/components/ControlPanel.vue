@@ -393,6 +393,9 @@ import {
   WIND_BAND_OPTIONS,
   WIND_DIRECTION_OPTIONS,
   defaultWindProfile,
+  normalizeAtmosphereDirection,
+  normalizeClimateLatitudeMode,
+  normalizeWindProfile,
   windDirectionLabelFromAngle,
   windDirectionValueFromAngle
 } from "../../../generator/climate-options.js";
@@ -668,14 +671,34 @@ function handleSaveCommand(target) {
   document.dispatchEvent(new CustomEvent("project-map-save", {detail: {target}}));
 }
 
+function handleClimateOptionsSync(event) {
+  const detail = event.detail || {};
+  climateLatitudeMode.value = normalizeClimateLatitudeMode(detail.climateLatitudeMode);
+  climateLatitudeCenter.value = clampNumber(detail.climateLatitudeCenter, -75, 75, climateLatitudeCenter.value);
+  climateLatitudeSpan.value = clampNumber(detail.climateLatitudeSpan, 20, 80, climateLatitudeSpan.value);
+  atmosphereDirection.value = normalizeAtmosphereDirection(detail.atmosphereDirection);
+  windBands.value = normalizeWindProfile(detail.winds);
+  temperatureEquator.value = clampNumber(detail.temperatureEquator, temperatureRange.min, temperatureRange.max, temperatureEquator.value);
+  temperatureNorthPole.value = clampNumber(detail.temperatureNorthPole, temperatureRange.min, temperatureRange.max, temperatureNorthPole.value);
+  temperatureSouthPole.value = clampNumber(detail.temperatureSouthPole, temperatureRange.min, temperatureRange.max, temperatureSouthPole.value);
+}
+
+function clampNumber(value, min, max, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(min, Math.min(max, numeric));
+}
+
 onMounted(() => {
   document.addEventListener("click", handleExportPanelOutsideClick, true);
+  document.addEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   window.addEventListener("resize", handleExportPanelReposition);
   window.addEventListener("scroll", handleExportPanelReposition, true);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleExportPanelOutsideClick, true);
+  document.removeEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   window.removeEventListener("resize", handleExportPanelReposition);
   window.removeEventListener("scroll", handleExportPanelReposition, true);
 });

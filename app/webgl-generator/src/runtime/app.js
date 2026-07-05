@@ -122,6 +122,16 @@ const MAX_DEBUG_LOAD_DELAY_MS = 2000;
 const NAMEBASE_PREFERENCES_STORAGE_KEY = "webgl-generator-namebase-preferences-v1";
 const BROWSER_MAP_STORAGE_KEY = "webgl-generator-current-map-v1";
 const BROWSER_MAP_STORAGE_TYPE = "webgl-generator-local-map-storage";
+const CLIMATE_OPTION_KEYS = Object.freeze([
+  "climateLatitudeMode",
+  "climateLatitudeCenter",
+  "climateLatitudeSpan",
+  "atmosphereDirection",
+  "winds",
+  "temperatureEquator",
+  "temperatureNorthPole",
+  "temperatureSouthPole"
+]);
 
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -2231,7 +2241,7 @@ function saveMapToLocalFile(state, documentRef) {
   try {
     assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在保存地图到本地...");
-    const document = createMapDocument(state.map, state.options);
+    const document = createPersistableMapDocument(state, documentRef);
     downloadText(documentRef, stringifyMapDocument(document), `${mapFileBaseName(state.map)}.webgl-map.json`, "application/json;charset=utf-8");
     setFileOperationStatus(documentRef, "地图已保存到本地文件。");
     showMapToast(documentRef, "保存成功");
@@ -2247,7 +2257,7 @@ async function saveMapToBrowserStorage(state, documentRef) {
     const storage = browserStorage(documentRef);
     if (!storage) throw new Error("当前浏览器不支持 LocalStorage");
     setFileOperationStatus(documentRef, "正在保存地图到浏览器...");
-    const text = stringifyMapDocument(createMapDocument(state.map, state.options));
+    const text = stringifyMapDocument(createPersistableMapDocument(state, documentRef));
     const payload = await encodeBrowserMapStoragePayload(documentRef, text, state.map);
     storage.setItem(BROWSER_MAP_STORAGE_KEY, JSON.stringify(payload));
     setFileOperationStatus(documentRef, browserStorageSaveMessage(payload));
@@ -2262,7 +2272,7 @@ function exportMapData(state, documentRef) {
   try {
     assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导出地图数据...");
-    const document = createMapDocument(state.map, state.options);
+    const document = createPersistableMapDocument(state, documentRef);
     downloadText(documentRef, stringifyMapDocument(document), `${mapFileBaseName(state.map)}.webgl-map.json`, "application/json;charset=utf-8");
     setFileOperationStatus(documentRef, "地图数据已导出。");
   } catch (error) {
@@ -2956,6 +2966,25 @@ function syncGenerationInputs(documentRef, options) {
   setInputValue(documentRef, "width-input", options.graphWidth);
   setInputValue(documentRef, "height-input", options.graphHeight);
   setInputValue(documentRef, "heightmap-template", options.heightmapTemplate);
+  syncClimateInputs(documentRef, options);
+}
+
+function syncClimateInputs(documentRef, options) {
+  const detail = climateOptionSnapshot(options);
+  documentRef.dispatchEvent(new CustomEvent("webgl-generator-sync-climate-options", {detail}));
+  for (const [key, id] of Object.entries({
+    climateLatitudeMode: "climate-latitude-mode",
+    climateLatitudeCenter: "climate-latitude-center",
+    climateLatitudeSpan: "climate-latitude-span",
+    atmosphereDirection: "atmosphere-direction",
+    winds: "atmosphere-winds",
+    temperatureEquator: "temperature-equator",
+    temperatureNorthPole: "temperature-north-pole",
+    temperatureSouthPole: "temperature-south-pole"
+  })) {
+    const value = key === "winds" ? detail.winds.join(",") : detail[key];
+    setInputValue(documentRef, id, value);
+  }
 }
 
 function setInputValue(documentRef, id, value) {
@@ -2964,6 +2993,45 @@ function setInputValue(documentRef, id, value) {
   if (input.tagName === "SELECT" && !Array.from(input.options).some(option => option.value === String(value))) return;
   input.value = String(value);
   input.dispatchEvent(new Event("change", {bubbles: true}));
+}
+
+function createPersistableMapDocument(state, documentRef) {
+  syncClimateOptionsForPersistence(state, documentRef);
+  return createMapDocument(state.map, state.options);
+}
+
+function syncClimateOptionsForPersistence(state, documentRef) {
+  if (!state.map) return;
+  const nextOptions = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+  const currentClimate = climateOptionSnapshot(state.options);
+  const nextClimate = climateOptionSnapshot(nextOptions);
+  if (sameClimateOptions(currentClimate, nextClimate)) return;
+  applyClimateControls(state, documentRef);
+}
+
+function climateOptionSnapshot(options = {}) {
+  const normalized = normalizeOptions(options);
+  const snapshot = {};
+  for (const key of CLIMATE_OPTION_KEYS) snapshot[key] = Array.isArray(normalized[key]) ? [...normalized[key]] : normalized[key];
+  return snapshot;
+}
+
+function sameClimateOptions(left, right) {
+  for (const key of CLIMATE_OPTION_KEYS) {
+    const leftValue = left[key];
+    const rightValue = right[key];
+    if (Array.isArray(leftValue) || Array.isArray(rightValue)) {
+      if (!sameNumberArray(leftValue, rightValue)) return false;
+      continue;
+    }
+    if (leftValue !== rightValue) return false;
+  }
+  return true;
+}
+
+function sameNumberArray(left = [], right = []) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((value, index) => Number(value) === Number(right[index]));
 }
 
 function applyClimateControls(state, documentRef) {

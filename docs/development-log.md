@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：保存数据纳入气候配置
+
+用户要求保存数据时也保存当前气候配置，避免浏览器恢复或本地导入后丢失温度、纬度和风带设置。
+
+修正：
+
+- 保存到本地、保存到浏览器 LocalStorage 和导出地图数据前，统一创建可持久化地图文档。
+- 创建文档前会读取当前气候控件；如果控件值比运行时 `state.options` 更新，会先执行一次气候重算，再保存地图文档。
+- 地图文档中的 `document.options`、`map.options` 和 `map.climate.metadata` 会保持一致，避免只保存配置但地图气候派生数据仍是旧值。
+- 导入地图文件或从浏览器 LocalStorage 恢复时，会同步气候控件的 Vue 状态，恢复温度、画布纬度、纬度模式和六段风带。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器保存验证：把气候改为自定义纬度 `37`、跨度 `52`、赤道 `31°C`、北极 `-44°C`、南极 `-33°C`、风带 `315,315,225,45,135,45` 后立即保存到 LocalStorage；解压存档确认 `document.options`、`map.options`、`map.climate.metadata` 均为新配置，`glError = 0`。
+- 构建产物浏览器恢复验证：保存自定义气候后刷新页面，页面从 LocalStorage 恢复地图，控制面板气候控件、运行时 options 和地图 climate metadata 均恢复为存档值，`glError = 0`。
+- 10k e2e 守门 `climate-save-e2e / continents / 10000` 通过，点击到出图 `1696.3ms`，纯生成 `856.9ms`，WebGL 加载 `529ms`。
+
 ## 2026-07-05：再次禁用左键拖动画布
 
 用户反馈当前左键又可以移动画布，而该行为此前已经明确应禁用。
