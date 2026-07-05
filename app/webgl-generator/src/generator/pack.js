@@ -331,9 +331,11 @@ export function defineFeatureGroups(pack, grid) {
 function defineLakeGroup(feature) {
   if (feature.temp < -3) return "frozen";
   if (feature.height > 60 && feature.cells < 10 && feature.firstCell % 10 === 0) return "lava";
-  if (feature.evaporation > feature.flux * 4) return "dry";
-  if (feature.cells < 3 && feature.firstCell % 10 === 0) return "sinkhole";
-  if (feature.evaporation > feature.flux) return "salt";
+  if (!feature.inlets?.length && !feature.outlet) {
+    if (feature.evaporation > feature.flux * 4) return "dry";
+    if (feature.cells < 3 && feature.firstCell % 10 === 0) return "sinkhole";
+  }
+  if (!feature.outlet && feature.evaporation > feature.flux) return "salt";
   return "freshwater";
 }
 

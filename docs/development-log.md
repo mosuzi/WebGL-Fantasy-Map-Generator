@@ -19265,3 +19265,28 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-diagnostics.md"` 通过。
 - `node .\tools\source-candidate-warn-diagnostics.mjs --out "$env:TEMP\fmg-source-warn-diagnostics-node.json" --markdown "$env:TEMP\fmg-source-warn-diagnostics-node.md"` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-05 湖泊分组 source parity 第一刀
+
+背景：
+
+- 继续追查剩余 `features.total / lakeNames` warn 时，对照 source `Features.defineGroups()` 发现候选 `defineLakeGroup()` 少了 source 对 `inlets / outlet` 的约束。
+- 原版只会在湖泊没有入流和出流时把高蒸发小湖标为 `dry / sinkhole`，并且 `salt` 也要求没有 outlet；候选此前会无视出流状态直接按蒸发和 cell 数分组。
+- 该偏差不直接解释两个剩余 warn 的 feature 数量差异，但属于湖泊水文拓扑链路上的真实 source 规则缺口，适合先做小范围修正。
+
+实现：
+
+- `app/webgl-generator/src/generator/pack.js` 的 `defineLakeGroup()` 补回 `!feature.inlets?.length && !feature.outlet` 判断。
+- `salt` 判断补回 `!feature.outlet` 条件。
+- `tools/source-candidate-warn-diagnostics.mjs` 增加 `lakeGroups` 分布输出，方便后续检查湖泊分组是否仍偏离 source。
+- 本轮不删除湖泊、不过滤湖名、不改变 feature 泛洪、洼地成湖或 outlet 生成逻辑。
+
+验证：
+
+- `node --check app/webgl-generator/src/generator/pack.js` 通过。
+- `node --check tools/source-candidate-warn-diagnostics.mjs` 通过。
+- `git diff --check` 通过。
+- 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 candidate baseline，并重新生成 diff；两者仍为 `warn 1 / fail 0`，说明剩余 warn 仍是 topology 数量问题，不是湖泊分组问题。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-diagnostics-lake-groups.json" --markdown "$env:TEMP\fmg-source-warn-diagnostics-lake-groups.md"` 通过；两个 case 的 lakeGroups 均显示为 `freshwater` 分布。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 端到端守门 `audit-continents-003 / continents / 10000` 通过：点击到出图 `1416.2ms`，纯生成 `750.4ms`，WebGL 加载 `365.1ms`，最慢加载阶段为“构建视觉 cell mesh” `58.5ms`。

@@ -91,6 +91,10 @@ function compareFeatureSummary(sourceFeatures = {}, candidateFeatures = {}) {
     lakes: pair(sourceFeatures.lakes, candidateFeatures.lakes),
     namedLakes: pair(sourceFeatures.diagnostics?.lakes?.named, candidateFeatures.diagnostics?.lakes?.named),
     lakesWithOutlet: pair(sourceFeatures.diagnostics?.lakes?.withOutlet, candidateFeatures.diagnostics?.lakes?.withOutlet),
+    lakeGroups: {
+      source: lakeGroups(sourceFeatures),
+      candidate: lakeGroups(candidateFeatures)
+    },
     tinyLandCellsLt3: pair(tinyLand(sourceFeatures, "cellsLt3"), tinyLand(candidateFeatures, "cellsLt3")),
     tinyLandCellsLt10: pair(tinyLand(sourceFeatures, "cellsLt10"), tinyLand(candidateFeatures, "cellsLt10")),
     tinyLakesCellsLt3: pair(sourceFeatures.diagnostics?.lakes?.cellsLt3, candidateFeatures.diagnostics?.lakes?.cellsLt3),
@@ -112,6 +116,10 @@ function renderMarkdown(report) {
     lines.push("| 指标 | source | candidate | delta |");
     lines.push("|---|---:|---:|---:|");
     for (const [key, value] of Object.entries(item.featureSummary)) {
+      if (key === "lakeGroups") {
+        lines.push(`| ${key} | ${formatGroupMap(value.source)} | ${formatGroupMap(value.candidate)} |  |`);
+        continue;
+      }
       lines.push(`| ${key} | ${format(value.source)} | ${format(value.candidate)} | ${format(value.delta)} |`);
     }
     lines.push("");
@@ -129,6 +137,17 @@ function tinyLand(features, key) {
   return Number(features?.diagnostics?.tinyLand?.[key] ?? 0);
 }
 
+function lakeGroups(features = {}) {
+  const details = features?.diagnostics?.details || [];
+  const groups = {};
+  for (const feature of details) {
+    if (feature?.type !== "lake") continue;
+    const group = feature.group || "none";
+    groups[group] = (groups[group] || 0) + 1;
+  }
+  return groups;
+}
+
 function pair(source, candidate) {
   const sourceValue = source ?? 0;
   const candidateValue = candidate ?? 0;
@@ -142,6 +161,12 @@ function pair(source, candidate) {
 function format(value) {
   if (value === undefined || value === null || Number.isNaN(value)) return "";
   return typeof value === "number" ? String(Math.round(value * 1000) / 1000) : String(value);
+}
+
+function formatGroupMap(value = {}) {
+  const entries = Object.entries(value);
+  if (!entries.length) return "";
+  return entries.map(([key, count]) => `${key}:${count}`).join(", ");
 }
 
 function readJson(path) {
