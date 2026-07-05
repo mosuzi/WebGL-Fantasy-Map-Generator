@@ -142,8 +142,11 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       };
     },
     setActive(active) {
-      panelState.active = active;
-      if (active) panelState.addMode = false;
+      const nextActive = Boolean(active);
+      const changed = panelState.active !== nextActive;
+      panelState.active = nextActive;
+      if (nextActive) panelState.addMode = false;
+      if (changed) callbacks.onActiveChange?.(nextActive);
     },
     isOpen() {
       return panelState.open;

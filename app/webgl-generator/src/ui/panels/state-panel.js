@@ -139,8 +139,11 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.targetStateId = stateExists(panelState.map, normalized) ? normalized : panelState.targetStateId;
     },
     setActive(active) {
-      panelState.active = active;
-      if (active) panelState.addMode = false;
+      const nextActive = Boolean(active);
+      const changed = panelState.active !== nextActive;
+      panelState.active = nextActive;
+      if (nextActive) panelState.addMode = false;
+      if (changed) callbacks.onActiveChange?.(nextActive);
     },
     isOpen() {
       return panelState.open;

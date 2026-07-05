@@ -301,6 +301,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateRuntimePanel(documentRef, state);
       } else {
         state.stateEdit.activeStroke = null;
+        if (state.editingObject?.kind === OBJECT_KIND.STATE) selectionStore.stopEditing();
         updateEditingInteractionLock(state, documentRef);
       }
     },
@@ -320,6 +321,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onEdit: object => {
       selectionStore.setSelection({object});
+      selectionStore.startEditing(object);
       setStatePanelTarget(state, object.id);
       renderer.setColorMode("states");
       setActiveModeButton(documentRef, "states");
@@ -329,6 +331,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAddMode: active => {
       state.stateEdit.addMode = Boolean(active);
       if (active) {
+        if (state.editingObject?.kind === OBJECT_KIND.STATE) selectionStore.stopEditing();
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
@@ -505,12 +508,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateRuntimePanel(documentRef, state);
       } else {
         state.provinceEdit.activeStroke = null;
+        if (state.editingObject?.kind === OBJECT_KIND.PROVINCE) selectionStore.stopEditing();
         updateEditingInteractionLock(state, documentRef);
       }
     },
     onAddMode: active => {
       state.provinceEdit.addMode = Boolean(active);
       if (active) {
+        if (state.editingObject?.kind === OBJECT_KIND.PROVINCE) selectionStore.stopEditing();
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
@@ -550,6 +555,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onEdit: object => {
       selectionStore.setSelection({object});
+      selectionStore.startEditing(object);
       provincePanel.setSelectedProvinceId(object.id);
       renderer.setColorMode("provinces");
       setActiveModeButton(documentRef, "provinces");

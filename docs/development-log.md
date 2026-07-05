@@ -19870,3 +19870,22 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
 - 本轮未额外跑浏览器性能烟测。
+
+### 2026-07-05 国家省份编辑按钮状态链路修复
+
+背景：
+
+- 用户反馈国家编辑按钮点击后仍然没有反应。
+- 代码排查发现国家/省份编辑只切换面板 brush active，没有像对象详情和河流编辑一样同步 `selectionStore.startEditing()`，运行时“编辑对象”状态不会变化；同时外部调用 `setActive(false)` 时也不会触发退出编辑清理。
+
+实现：
+
+- 国家和省份 panel 的外部 `setActive(active)` 在状态变化时会触发对应 `onActiveChange`，保证被其他编辑器关闭时走同一套退出逻辑。
+- runtime 的国家/省份 `onEdit` 现在会先 `setSelection`，再 `startEditing(object)`，让全局 editor store、运行时面板和交互锁都能看到当前编辑对象。
+- 退出国家/省份编辑、切到新增模式时，如果当前全局编辑对象是对应类型，会调用 `selectionStore.stopEditing()` 清理。
+
+验证：
+
+- `node --check` 覆盖 `app.js`、`state-panel.js`、`province-panel.js`。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
