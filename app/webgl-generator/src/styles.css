@@ -3344,7 +3344,17 @@ select:disabled {
   justify-content: center;
   width: 100%;
   min-height: 32px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
   text-align: center;
+}
+
+.project-file-actions .el-button > span,
+.project-file-actions .file-import-action > span {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 .project-action-anchor {
