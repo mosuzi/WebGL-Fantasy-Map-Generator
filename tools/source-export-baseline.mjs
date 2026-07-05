@@ -183,6 +183,7 @@ try {
           borderCells: countTruthy(packCells.b),
           area: describeNumbers(packCells.area || []),
           tDistribution: countValues(packCells.t),
+          topology: describePackTopology(packCells),
           featureCount: Math.max((pack.features || []).filter(Boolean).length, 0),
           havenCells: countDefinedPositive(packCells.haven),
           harborDistribution: countValues(packCells.harbor),
@@ -382,6 +383,39 @@ try {
           counts[key] = (counts[key] || 0) + 1;
         }
         return counts;
+      }
+
+      function describePackTopology(cells = {}) {
+        const heights = cells.h || [];
+        const types = cells.t || [];
+        const coastLand = [];
+        const coastWater = [];
+        const nearThreshold = [];
+        const landNearThreshold = [];
+        const waterNearThreshold = [];
+
+        for (let cell = 0; cell < heights.length; cell++) {
+          const height = Number(heights[cell] || 0);
+          const type = Number(types[cell] || 0);
+          if (type === 1) coastLand.push(height);
+          if (type === -1) coastWater.push(height);
+          if (height >= 18 && height <= 22) {
+            nearThreshold.push(height);
+            if (height >= 20) landNearThreshold.push(height);
+            else waterNearThreshold.push(height);
+          }
+        }
+
+        return {
+          coastLandHeight: describeNumbers(coastLand),
+          coastWaterHeight: describeNumbers(coastWater),
+          nearThreshold: {
+            total: nearThreshold.length,
+            land: landNearThreshold.length,
+            water: waterNearThreshold.length,
+            heights: countValues(nearThreshold)
+          }
+        };
       }
 
       function countByKey(items = [], keyFn) {

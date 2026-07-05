@@ -122,7 +122,13 @@ function comparePackSummary(sourcePack = {}, candidatePack = {}) {
     tCoastLand: pair(sourcePack.tDistribution?.["1"], candidatePack.tDistribution?.["1"]),
     tCoastWater: pair(sourcePack.tDistribution?.["-1"], candidatePack.tDistribution?.["-1"]),
     tDeepWater: pair(sourcePack.tDistribution?.["-2"], candidatePack.tDistribution?.["-2"]),
-    tDeeperLand: pair(sourcePack.tDistribution?.["3"], candidatePack.tDistribution?.["3"])
+    tDeeperLand: pair(sourcePack.tDistribution?.["3"], candidatePack.tDistribution?.["3"]),
+    coastLandHeightP50: pair(sourcePack.topology?.coastLandHeight?.p50, candidatePack.topology?.coastLandHeight?.p50),
+    coastLandHeightP95: pair(sourcePack.topology?.coastLandHeight?.p95, candidatePack.topology?.coastLandHeight?.p95),
+    coastWaterHeightP50: pair(sourcePack.topology?.coastWaterHeight?.p50, candidatePack.topology?.coastWaterHeight?.p50),
+    nearThresholdTotal: pair(sourcePack.topology?.nearThreshold?.total, candidatePack.topology?.nearThreshold?.total),
+    nearThresholdLand: pair(sourcePack.topology?.nearThreshold?.land, candidatePack.topology?.nearThreshold?.land),
+    nearThresholdWater: pair(sourcePack.topology?.nearThreshold?.water, candidatePack.topology?.nearThreshold?.water)
   };
 }
 

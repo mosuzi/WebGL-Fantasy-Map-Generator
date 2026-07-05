@@ -19317,3 +19317,31 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-pack-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-pack-diagnostics.md"` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-05 pack 海岸高度诊断字段
+
+背景：
+
+- pack 层拓扑诊断已确认 candidate 的海岸陆地 / haven 偏高，但仅有 `t` 距离场数量还不足以判断分叉来自高度阈值附近，还是 feature 泛洪后的碎片化。
+- 继续推进剩余 `features.total / lakeNames` warn 前，需要 source 与 candidate 都能输出相同的海岸高度统计，避免只看 candidate 单侧数据。
+
+实现：
+
+- `tools/source-export-baseline.mjs` 与 `tools/webgl-generator-export-baseline.mjs` 的 `pack` summary 新增 `topology` 字段。
+- `topology` 记录海岸陆地高度、水侧海岸高度，以及 `18-22` 高度阈值附近的 pack cell 总数、陆地数、水域数和高度分布。
+- `tools/source-candidate-warn-diagnostics.mjs` 把 `coastLandHeightP50 / coastLandHeightP95 / coastWaterHeightP50 / nearThresholdTotal / nearThresholdLand / nearThresholdWater` 汇入 Pack 摘要。
+- 本轮只增强只读诊断工具，不修改正式生成器运行时代码。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001`：阈值附近总数 source `1194`、candidate `1193`，陆地阈值 cell 只多 `1`。该 case 更像 feature 泛洪 / 小陆块分裂问题，而不是单纯高度阈值偏移。
+- `continents-10000-audit-continents-003`：阈值附近总数 source `1570`、candidate `1682`，candidate 多 `112`；其中陆地阈值 cell source `865`、candidate `966`，candidate 多 `101`。该 case 更适合作为高度阈值 / 海岸距离场优先样本。
+
+验证：
+
+- `node --check tools\webgl-generator-export-baseline.mjs` 通过。
+- `node --check tools\source-export-baseline.mjs` 通过。
+- `node --check tools\source-candidate-warn-diagnostics.mjs` 通过。
+- `git diff --check` 通过。
+- 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 source / candidate baseline summary，并重新生成 diff。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-topology-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-topology-diagnostics.md"` 通过。
