@@ -1444,9 +1444,9 @@ export class PlaceholderMapRenderer {
     for (const item of this.militaryIconItems) {
       const selected = this.selection?.kind === OBJECT_KIND.MILITARY && this.selection.id === item.id;
       if (this.layerVisibility.military === false || scale < item.minScale) {
-        item.node.classList.toggle("visible", false);
-        item.node.classList.toggle("selected", selected);
-        item.node.classList.toggle("military-map-icon--fleet", item.type === "fleet");
+        if (item.visible !== false) item.node.classList.toggle("visible", false);
+        setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
+        setOverlayItemClassFlag(item, "fleetClass", "military-map-icon--fleet", item.type === "fleet");
         item.visible = false;
         item.box = null;
         continue;
@@ -1461,14 +1461,14 @@ export class PlaceholderMapRenderer {
         boxesOverlapAny(occupiedIcons, box, iconPadding)
       );
       const shouldShow = canShow && !blocked;
-      item.node.classList.toggle("visible", shouldShow);
-      item.node.classList.toggle("selected", selected);
-      item.node.classList.toggle("military-map-icon--fleet", item.type === "fleet");
+      if (item.visible !== shouldShow) item.node.classList.toggle("visible", shouldShow);
+      setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
+      setOverlayItemClassFlag(item, "fleetClass", "military-map-icon--fleet", item.type === "fleet");
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
       setOverlayNodePosition(item.node, screen.x, screen.y);
-      item.node.style.setProperty("--military-icon-scale", String(sizeScale));
+      setOverlayItemStyleValue(item, "scaleValue", "--military-icon-scale", String(sizeScale));
       occupiedIcons.push(box);
       visible++;
     }
@@ -1700,8 +1700,30 @@ function pointBounds(x, y, padding) {
 }
 
 function setOverlayNodePosition(node, x, y) {
-  node.style.setProperty("--overlay-x", `${x}px`);
-  node.style.setProperty("--overlay-y", `${y}px`);
+  setStylePropertyIfChanged(node, "--overlay-x", overlayCoordinateValue(x));
+  setStylePropertyIfChanged(node, "--overlay-y", overlayCoordinateValue(y));
+}
+
+function setOverlayItemClassFlag(item, cacheKey, className, enabled) {
+  if (item[cacheKey] === enabled) return;
+  item.node.classList.toggle(className, enabled);
+  item[cacheKey] = enabled;
+}
+
+function setOverlayItemStyleValue(item, cacheKey, name, value) {
+  if (item[cacheKey] === value) return;
+  item.node.style.setProperty(name, value);
+  item[cacheKey] = value;
+}
+
+function setStylePropertyIfChanged(node, name, value) {
+  if (node.style.getPropertyValue(name) === value) return;
+  node.style.setProperty(name, value);
+}
+
+function overlayCoordinateValue(value) {
+  const rounded = Math.round(Number(value || 0) * 10) / 10;
+  return `${Object.is(rounded, -0) ? 0 : rounded}px`;
 }
 
 function includePoint(bounds, x, y) {
@@ -2020,6 +2042,8 @@ function getMilitaryIconItems(map, unitPreferences = {}) {
     .sort((a, b) => Number(b.a || 0) - Number(a.a || 0))
     .map(regiment => {
       const iconVariant = militaryIconForRegiment(regiment);
+      const troops = Number(regiment.a || 0);
+      const troopTextWidth = Math.min(18, String(formatMilitaryTroops(troops, unitPreferences)).length * 3);
       return {
         id: regiment.id ?? `${regiment.state}:${regiment.i}`,
         regiment,
@@ -2032,7 +2056,8 @@ function getMilitaryIconItems(map, unitPreferences = {}) {
         iconVariant,
         iconUrl: militaryIconUrlForVariant(iconVariant),
         iconLabel: regiment.iconLabel || militaryIconLabelForVariant(iconVariant),
-        troops: Number(regiment.a || 0),
+        troops,
+        boxBaseWidth: MILITARY_ICON_BASE_WIDTH + troopTextWidth,
         status: regiment.status,
         statusLabel: regiment.statusLabel,
         dominantUnit: regiment.dominantUnit,
@@ -2098,7 +2123,7 @@ function militaryObjectFromIconItem(item) {
 }
 
 function militaryIconBoxForItem(item, screen, sizeScale) {
-  const width = (MILITARY_ICON_BASE_WIDTH + Math.min(18, String(formatMilitaryTroops(item.troops, item.rendererUnitPreferences)).length * 3)) * sizeScale;
+  const width = (item.boxBaseWidth || MILITARY_ICON_BASE_WIDTH) * sizeScale;
   const height = MILITARY_ICON_BASE_HEIGHT * sizeScale;
   return {
     left: screen.x - width / 2,

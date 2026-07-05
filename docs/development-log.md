@@ -19217,3 +19217,24 @@ full 矩阵结果：
 - 构建产物浏览器 smoke 生成 `overlay-transform-smoke / continents / 10000` 后，可见 city/state/city icon/military icon 的 computed `left/top` 均为 `0px`，`--overlay-x / --overlay-y` 存在，bounding box 正常分布在画布上，`glError = 0`，console/page error 为 `0`。
 - 100k 新 seed profile `overlay-transform-100k / full` 通过：滚轮 / 拖拽 frame p95 为 `52.9ms / 35.3ms`，overlay p95 为 `9.9ms / 8.3ms`，long task 为 `3 / 0`，idle dirty 均恢复 clean。
 - 100k 同 seed 对照 `overlay-event-probe-100k / full` 通过：滚轮 / 拖拽 frame p95 为 `47.2ms / 35.4ms`，低于前一刀同 seed `100ms / 52.8ms`；长任务从 `10 / 4` 降到 `2 / 0`，事件 dispatch p95 仍为 `0.2ms / 0.1ms`。
+
+### 2026-07-05 军事图标 overlay 写入去重
+
+背景：
+
+- 地图 overlay 改用 transform 定位后，同 seed 100k profile 仍显示军事图标分项均值约 `6ms`，是 overlay 分项中最突出的单项成本。
+- 继续检查发现军事图标帧更新仍会重复写 `visible / selected / fleet` class、`--military-icon-scale`，并且每帧为了计算碰撞盒重新格式化兵力文本宽度。
+
+实现：
+
+- `setOverlayNodePosition()` 改为只在 `--overlay-x / --overlay-y` 变化时写入，并把坐标收敛到 `0.1px`，减少无意义 style 写入。
+- 军事图标 item 缓存 `selected / fleet / scale` 写入状态；`visible` class 只在显隐变化时写入。
+- `getMilitaryIconItems()` 在构建 item 时预计算兵力文本对应的 `boxBaseWidth`；`militaryIconBoxForItem()` 帧更新时直接使用缓存宽度，不再每帧调用兵力格式化。
+- 本轮不改变军事图标显示规则、碰撞规则、缩放公式或图层显隐策略。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 100k 同 seed profile `overlay-event-probe-100k / continents / full` 通过：滚轮 / 拖拽 frame p95 为 `41.3ms / 35.3ms`，overlay p95 为 `4.5ms / 3.1ms`，军事图标均值为 `0.36ms / 0.27ms`，长任务为 `0 / 0`，idle dirty 均恢复 clean。

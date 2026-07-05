@@ -82,6 +82,7 @@
 2. **overlay 与动态线层性能专项**：
    - `profile:overlay` 已补 idle commit 指标和 `measurement-heavy / selection-heavy` 重场景；viewport idle commit 分帧第一刀仍保留，但“视口交互中隐藏 DOM overlay”的策略已取消，当前行为是同步刷新覆盖层。
    - 100k 复查已确认滚轮长任务不由 route / river 即时构建、WebGL draw、renderer 记录到的 overlay 分项、旧 profile 跨进程采样或同步事件 dispatch 主导；河流 idle commit 已分帧，profile 采样口径和事件处理探针已修正。后续如果继续性能专项，优先拆路线 / 河流 idle commit、过期 commit 取消增强、视口分块 / 缓存，或继续补浏览器样式 / layout 成本证据。
+   - 军事图标 overlay 写入去重已完成：`--overlay-x / --overlay-y` 会跳过未变化写入并收敛到 `0.1px`，军事图标的 `visible / selected / fleet / scale` 状态和兵力文本宽度已缓存。100k 同 seed profile 中，滚轮 / 拖拽 overlay p95 为 `4.5ms / 3.1ms`，军事图标均值为 `0.36ms / 0.27ms`，长任务为 `0 / 0`。
    - 若证据指向测量 SVG、多对象选中态或极端标签数量，再单独治理对应 overlay；不默认把标签、城市剪影、marker 或军事图标迁到 WebGL。
 3. **source/candidate 剩余 warn 只读跟踪**：
    - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。
