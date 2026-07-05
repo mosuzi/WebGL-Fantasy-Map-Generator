@@ -37,11 +37,12 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     },
     onLocate: row => callbacks.onLocate?.(provinceObject(row)),
     onEdit: row => {
+      const nextActive = !(panelState.active && panelState.selectedProvinceId === row.id);
       panelState.selectedProvinceId = row.id;
-      panelState.active = true;
+      panelState.active = nextActive;
       panelState.addMode = false;
-      callbacks.onActiveChange?.(true);
-      callbacks.onEdit?.(provinceObject(row));
+      callbacks.onActiveChange?.(nextActive);
+      if (nextActive) callbacks.onEdit?.(provinceObject(row));
     },
     onActiveChange: active => {
       panelState.active = active;

@@ -26,7 +26,7 @@
 
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
-  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="stateActions">
+  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="stateActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="state-name-editor"
@@ -34,10 +34,6 @@
         :max-length="48"
         @apply="name => callbacks.onRename(selected.id, name)"
       />
-    </template>
-
-    <template #edit>
-      <UiButton variant="secondary" @click="callbacks.onEdit(selected)">编辑此国家</UiButton>
     </template>
 
     <template #color>
@@ -85,10 +81,6 @@
       />
     </template>
   </UiActionDock>
-
-  <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="callbacks.onActiveChange(!state.active)">
-    {{ state.active ? "停止国家编辑" : "启用国家编辑" }}
-  </UiButton>
 
   <UiSelectField
     label="目标"
@@ -208,7 +200,7 @@ const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
 const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体会影响国号后缀、税收、外交倾向和军事动员。");
 const stateActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
-  {key: "edit", label: "进入编辑", icon: "◎"},
+  {key: "edit", label: props.state.active ? "退出编辑" : "进入编辑", icon: "◎", panel: false, active: props.state.active},
   {key: "color", label: "调整颜色", icon: "◐"},
   {key: "government", label: "调整政体", icon: "⚖"},
   {key: "capital", label: "设置首都", icon: "♛", disabled: !capitalOptions.value.length},
@@ -335,6 +327,10 @@ function handleCollectionAction(key) {
     return;
   }
   if (key === "delete" && selected.value) callbacks.onDeleteState?.(selected.value.id);
+}
+
+function handleActionSelect(key) {
+  if (key === "edit" && selected.value) callbacks.onEdit?.(selected.value);
 }
 
 function stateRows(map) {

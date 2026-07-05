@@ -5,7 +5,7 @@
         v-for="action in actions"
         :key="action.key"
         class="ui-icon-action"
-        :class="{active: action.key === active}"
+        :class="{active: action.key === active || action.active}"
         :disabled="action.disabled"
         :title="action.label"
         :aria-label="action.label"
@@ -89,6 +89,10 @@ onBeforeUnmount(() => {
 
 function toggleAction(action) {
   if (action.disabled) return;
+  if (action.panel === false) {
+    emit("select", action.key);
+    return;
+  }
   const next = action.key === props.active ? null : action.key;
   emit("update:active", next);
   emit("select", next);

@@ -25,7 +25,7 @@
 
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
 
-  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="provinceActions">
+  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="provinceActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="province-name-editor"
@@ -43,10 +43,6 @@
       />
     </template>
 
-    <template #edit>
-      <UiButton variant="secondary" @click="callbacks.onEdit(selected)">编辑此省份</UiButton>
-    </template>
-
     <template #note>
       <UiNoteField
         class-name="province-note-editor"
@@ -56,10 +52,6 @@
       />
     </template>
   </UiActionDock>
-
-  <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="callbacks.onActiveChange(!state.active)">
-    {{ state.active ? "停止省份编辑" : "启用省份编辑" }}
-  </UiButton>
 
   <UiSelectField
     label="目标"
@@ -166,10 +158,10 @@ const collectionActions = computed(() => [
   {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", disabled: false},
   {key: "delete", label: "删除选中省份", icon: "×", disabled: !canDeleteSelected.value}
 ]);
-const provinceActions = Object.freeze([
+const provinceActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "edit", label: "进入编辑", icon: "◎"},
+  {key: "edit", label: props.state.active ? "退出编辑" : "进入编辑", icon: "◎", panel: false, active: props.state.active},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
@@ -288,6 +280,10 @@ function handleCollectionAction(key) {
     return;
   }
   if (key === "delete" && selected.value) callbacks.onDeleteProvince?.(selected.value.id);
+}
+
+function handleActionSelect(key) {
+  if (key === "edit" && selected.value) callbacks.onEdit?.(selected.value);
 }
 
 function provinceRows(map) {

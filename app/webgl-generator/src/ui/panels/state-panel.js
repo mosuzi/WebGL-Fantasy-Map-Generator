@@ -43,11 +43,12 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     onLocate: row => callbacks.onLocate?.(stateObject(row)),
     onEdit: row => {
+      const nextActive = !(panelState.active && panelState.targetStateId === row.id);
       panelState.targetStateId = row.id;
-      panelState.active = true;
+      panelState.active = nextActive;
       panelState.addMode = false;
-      callbacks.onActiveChange?.(true);
-      callbacks.onEdit?.(stateObject(row));
+      callbacks.onActiveChange?.(nextActive);
+      if (nextActive) callbacks.onEdit?.(stateObject(row));
     },
     onAddMode: active => {
       panelState.addMode = Boolean(active);
