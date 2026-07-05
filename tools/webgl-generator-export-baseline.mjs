@@ -24,6 +24,7 @@ const includeScreenshot = args.screenshot === true || args.screenshot === "true"
 const viewport = parseViewport(args.viewport || "1440x960");
 const caseName = sanitizeFileName(args.name || `${template}-${cells}-${seed}`);
 const outDir = resolve(args.outDir || args["out-dir"] || join(rootDir, "docs", "generated", "source-baselines", caseName));
+const riverDepressionMode = args["river-depression-mode"] || args.riverDepressionMode || null;
 
 if (!existsSync(appDir)) fail(`App directory does not exist: ${appDir}`);
 mkdirSync(outDir, {recursive: true});
@@ -34,7 +35,8 @@ const map = generatePlaceholderMap({
   cellsTarget: cells,
   graphWidth,
   graphHeight,
-  randomSeed: false
+  randomSeed: false,
+  ...(riverDepressionMode ? {riverDepressionMode} : {})
 });
 const summary = createCandidateSummary(map, {appDir});
 const summaryPath = join(outDir, "candidate-summary.json");

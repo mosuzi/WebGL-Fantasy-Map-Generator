@@ -22,7 +22,8 @@ export function buildRivers(grid, features, pack, options = {}) {
   const variation = profile.stage("variation", "生成河流扰动", () => createRiverVariation(cells, options));
   let effectiveHeights = profile.stage("alter-heights", "构建河流有效高度", () => alterHeights(cells, variation));
   profile.stage("detect-closed-lakes", "识别闭合湖泊", () => detectCloseLakes(pack, effectiveHeights));
-  effectiveHeights = profile.stage("resolve-depressions", "消解洼地", () => resolveDepressions(pack, effectiveHeights, variation));
+  const depressionMode = normalizeDepressionMode(options.riverDepressionMode);
+  effectiveHeights = profile.stage("resolve-depressions", "消解洼地", () => resolveDepressions(pack, effectiveHeights, variation, {mode: depressionMode}));
 
   profile.stage("init-buffers", "初始化河流 buffer", () => {
     cells.fl = new Uint16Array(cells.i.length);
@@ -122,6 +123,7 @@ export function buildRivers(grid, features, pack, options = {}) {
       confluences: countPositive(cells.conf),
       cellsWithRiver: countPositive(cells.r),
       flowModel: variation ? "source-pack-flux-regenerated-variation" : "source-pack-flux-first-pass",
+      depressionMode,
       variationSalt: variation?.salt || null,
       buildMs: timing.totalMs
     }
@@ -242,7 +244,13 @@ function detectCloseLakes(pack, heights) {
   }
 }
 
-function resolveDepressions(pack, heights, variation = null) {
+function normalizeDepressionMode(mode) {
+  return mode === "source-like" ? "source-like" : "optimized";
+}
+
+function resolveDepressions(pack, heights, variation = null, options = {}) {
+  if (options.mode === "source-like") return resolveDepressionsSourceLike(pack, heights, variation);
+
   const {cells, features} = pack;
   const checkLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.85;
   const elevateLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.75;
@@ -290,6 +298,60 @@ function resolveDepressions(pack, heights, variation = null) {
     activeLand = collectActiveLandAroundCells(pack, lakeChangedCells, landMask);
 
     if (!depressions) break;
+    if (previousDepressions !== null) progress.push(depressions - previousDepressions);
+    previousDepressions = depressions;
+  }
+
+  return heights;
+}
+
+function resolveDepressionsSourceLike(pack, heights, variation = null) {
+  const {cells, features} = pack;
+  const checkLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.85;
+  const elevateLakeMaxIteration = MAX_DEPRESSION_ITERATIONS * 0.75;
+  const land = Array.from(cells.i)
+    .filter(cell => cells.h[cell] >= WATER_LEVEL && !cells.b[cell])
+    .sort((a, b) => heights[a] - heights[b]);
+
+  const progress = [];
+  let depressions = Infinity;
+  let previousDepressions = null;
+
+  for (let iteration = 0; depressions && iteration < MAX_DEPRESSION_ITERATIONS; iteration++) {
+    if (progress.length > 5 && progress.reduce((sum, value) => sum + value, 0) > 0) {
+      heights = alterHeights(cells, variation);
+      depressions = progress[0];
+      break;
+    }
+
+    depressions = 0;
+
+    if (iteration < checkLakeMaxIteration) {
+      for (const lake of features || []) {
+        if (!lake || lake.type !== "lake" || lake.closed || !lake.shoreline?.length) continue;
+        const minHeight = minHeightValue(lake.shoreline, heights);
+        if (minHeight >= 100 || lake.height > minHeight) continue;
+
+        if (iteration > elevateLakeMaxIteration) {
+          for (const cell of lake.shoreline) heights[cell] = cells.h[cell];
+          lake.height = minHeightValue(lake.shoreline, heights) - 1;
+          lake.closed = true;
+          continue;
+        }
+
+        lake.height = minHeight + 0.2;
+        depressions++;
+      }
+    }
+
+    for (const cell of land) {
+      const minHeight = minEffectiveNeighborHeight(pack, heights, cell);
+      if (minHeight >= 100 || heights[cell] > minHeight) continue;
+
+      heights[cell] = minHeight + 0.1;
+      depressions++;
+    }
+
     if (previousDepressions !== null) progress.push(depressions - previousDepressions);
     previousDepressions = depressions;
   }

@@ -19400,3 +19400,34 @@ full 矩阵结果：
 - 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 candidate summary，并重新生成 diff；两个目标 case 均为 `warn 1 / fail 0`，未新增 fail。
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-feature-parity-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-feature-parity-diagnostics.md"` 通过。
 - `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --timeout 180000` 通过；quick 矩阵为 `2 pass / 1 warn / 0 fail`。
+
+### 2026-07-05 洼地消解 source-like 对照诊断
+
+背景：
+
+- 003 的剩余 `lateStages.names.lakeNames` warn 来自候选真实湖泊 `7` 对 source `5`，且额外小湖中包含无 outlet 湖。
+- 对照 source `resolveDepressions()` 后，候选此前的 optimized 路径会在首轮后只围绕湖泊变更区域局部处理 land，而 source 每轮都会按高度顺序扫描全部内陆 land。
+- 需要先判断这个优化是否导致 lake outlet / 洼地拓扑偏差，再决定是否值得改默认生成逻辑。
+
+实现：
+
+- `app/webgl-generator/src/generator/rivers.js` 新增 `riverDepressionMode` 诊断参数；默认仍为 `optimized`。
+- 当 `riverDepressionMode = source-like` 时，洼地消解走全量 land 循环，并保留 source 的 lake 检查、抬湖、闭湖和 progress 回退结构。
+- `tools/webgl-generator-export-baseline.mjs` 新增 `--river-depression-mode source-like`，用于临时 baseline 导出诊断。
+- `generatePlaceholderMap()` 允许该诊断参数穿过 `normalizeOptions()` 后进入河流阶段，但不会写入普通应用默认 options。
+
+当前诊断：
+
+- 直接生成 `audit-continents-003 / continents / 10000` 时，默认 optimized 的河流 metadata 为 `depressionMode = optimized`，source-like 为 `depressionMode = source-like`，开关已确认生效。
+- source-like 结果仍为湖泊 `7`、pack cells `5649`；临时导出 summary 中命名湖泊仍为 `7`、outlet 湖泊仍为 `4`。
+- 该证据说明 003 的剩余 lakeNames warn 不能靠把洼地消解改回全量 land 扫描解决，下一步应继续查湖泊形成、outlet 续流或开湖链路。
+- 因 source-like 对当前目标无收敛收益，本轮不切默认算法，避免扩大 50k / 100k 生成性能风险。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\index.js` 通过。
+- `node --check app\webgl-generator\src\generator\rivers.js` 通过。
+- `node --check tools\webgl-generator-export-baseline.mjs` 通过。
+- `git diff --check` 通过。
+- 临时导出 `node .\tools\webgl-generator-export-baseline.mjs --template continents --cells 10000 --seed audit-continents-003 --out-dir $env:TEMP\... --screenshot false --river-depression-mode source-like` 通过。
+- 直接生成 optimized / source-like 对照通过，确认 `depressionMode` 分别为 `optimized / source-like`，003 指标未因该诊断路径改变。

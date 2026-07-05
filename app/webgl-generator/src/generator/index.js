@@ -28,7 +28,8 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   const random = profile.stage("random-main", "初始化主随机源", () => createRandom(options.seed));
   const heightmap = profile.stage("heightmap", "生成高度模板", () => overrides.heightmap || createHeightmap(options, random));
   const generationOptions = heightmap.template === options.heightmapTemplate ? options : {...options, heightmapTemplate: heightmap.template};
-  const stageOptions = namebases ? {...generationOptions, namebases} : generationOptions;
+  const diagnostics = normalizeGenerationDiagnostics(inputOptions);
+  const stageOptions = {...generationOptions, ...diagnostics, ...(namebases ? {namebases} : {})};
   const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(generationOptions, gridRandom, heightmap, random));
   const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
   const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(generationOptions.seed));
@@ -245,6 +246,10 @@ function normalizeGenerationNamebases(namebases) {
       inheritedAt: new Date().toISOString()
     }
   };
+}
+
+function normalizeGenerationDiagnostics(inputOptions = {}) {
+  return inputOptions.riverDepressionMode === "source-like" ? {riverDepressionMode: "source-like"} : {};
 }
 
 function normalizeGenerationNamebase(base) {
