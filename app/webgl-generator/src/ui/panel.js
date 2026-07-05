@@ -849,12 +849,27 @@ function compactHoverRows(documentRef, pick, unitPreferences) {
     hoverRow(documentRef, "气候", `${pick.temperature}°C / 降水 ${formatDisplayPrecipitation(pick.precipitation, unitPreferences)}`),
     hoverRow(documentRef, "政区", `${pick.state} / ${pick.province}`),
     hoverRow(documentRef, "社会", `${pick.culture} / ${pick.religion}`),
-    hoverRow(documentRef, "人口", formatDisplayPopulation(pick.population, unitPreferences))
+    hoverRow(documentRef, "人口", formatDisplayPopulation(pick.population, unitPreferences)),
+    hoverRow(documentRef, "调试", formatHoverDebugLine(pick, unitPreferences))
   ];
 
   const objectText = formatHoverObjectLine(pick, unitPreferences);
   if (objectText) rows.unshift(hoverRow(documentRef, "对象", objectText));
   return rows;
+}
+
+function formatHoverDebugLine(pick, unitPreferences = {}) {
+  const resource = pick.resource
+    ? `${pick.resource.name} v${formatDisplayNumber(pick.resource.value, unitPreferences)} x${formatDisplayNumber(pick.resource.supply, unitPreferences)}`
+    : "none";
+  return [
+    `biome ${pick.packBiome || pick.biome || "unknown"}`,
+    `h ${formatDisplayHeight(pick.packHeight ?? pick.height, unitPreferences)}`,
+    `s ${formatDisplayNumber(pick.suitability, unitPreferences)}`,
+    `pack ${pick.packCell ?? "none"}`,
+    `flux ${formatDisplayNumber(pick.flux, unitPreferences)}`,
+    `resource ${resource}`
+  ].join(" / ");
 }
 
 function formatHoverObjectLine(pick, unitPreferences = {}) {

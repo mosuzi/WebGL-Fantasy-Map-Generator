@@ -19831,3 +19831,21 @@ full 矩阵结果：
 - 生成断言 `zone-texture-check / 3000 cells`：地区数量 `2`，纹理层顶点 `3318`，关闭地区图层时顶点为 `0`。
 - 多 seed 检查中 `zone-war-0` 生成 `Warzone / Invasion`，军事 fronts `2`，campaigns `2`。
 - `$env:CI='true'; pnpm run build:app` 通过后再提交。
+
+### 2026-07-05 hover 人口调试行
+
+背景：
+
+- 用户发现西北角大陆上部分 cell 显示 `13°C / 75mm` 但人口为 `0`，需要直接看到人口评分相关中间量。
+
+实现：
+
+- `pickGridCell()` 结果补充 pack 侧 `packBiome / packHeight / suitability / flux / resource`。
+- hover 信息新增“调试”行，展示 `biome / height / suitability / packCell / flux / resource`。
+- 该调试行只读展示，不改变生物群系、适宜度或人口计算。
+
+验证：
+
+- `node --check` 覆盖 `picking.js` 和 `panel.js`。
+- 生成断言 `hover-debug-check / 3000 cells` 成功拾取陆地 cell，并输出 `packBiome / packHeight / suitability / flux / resource`。
+- `$env:CI='true'; pnpm run build:app` 通过后提交推送。

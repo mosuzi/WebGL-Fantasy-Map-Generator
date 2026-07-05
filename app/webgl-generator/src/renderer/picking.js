@@ -441,6 +441,11 @@ function pointInCell(map, cell, x, y) {
 function buildPickResult(map, gridCell, worldX, worldY, candidates) {
   const mappedPackCell = map.grid.cells.pack?.[gridCell];
   const packCell = Number.isInteger(mappedPackCell) && mappedPackCell >= 0 ? mappedPackCell : null;
+  const packCells = map.pack?.cells;
+  const packBiomeId = packCell === null ? null : packCells?.biome?.[packCell];
+  const goodId = packCell === null ? 0 : packCells?.good?.[packCell] || 0;
+  const good = goodId ? map.pack?.goods?.[goodId] : null;
+  const flux = packCell === null ? 0 : (packCells?.fl?.[packCell] || 0) + (packCells?.conf?.[packCell] || 0);
   const featureId = packCell === null ? map.grid.cells.f?.[gridCell] : map.pack.cells.f?.[packCell] ?? map.grid.cells.f?.[gridCell];
   const feature = packCell === null
     ? map.features.features[featureId]
@@ -455,6 +460,16 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
     temperature: map.grid.cells.temp[gridCell],
     precipitation: map.grid.cells.prec[gridCell],
     biome: map.climate.biomes[map.grid.cells.biome[gridCell]]?.name || "unknown",
+    packBiome: packBiomeId === null ? "none" : map.climate.biomes[packBiomeId]?.name || `#${packBiomeId}`,
+    packHeight: packCell === null ? null : packCells?.h?.[packCell] ?? null,
+    suitability: packCell === null ? 0 : packCells?.s?.[packCell] || 0,
+    flux,
+    resource: good ? {
+      id: goodId,
+      name: good.name || `good-${goodId}`,
+      value: Number(good.value || 0),
+      supply: Number(packCells?.goodSupply?.[packCell] || 1)
+    } : null,
     culture: map.society.cultures[map.grid.cells.culture[gridCell]]?.name || "unknown",
     religion: map.society.religions[map.grid.cells.religion[gridCell]]?.name || "unknown",
     state: map.politics.states[map.grid.cells.state[gridCell]]?.name || "none",
