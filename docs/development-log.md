@@ -19173,3 +19173,24 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 100k 构建产物 profile 通过：`pnpm run profile:overlay -- --browser-channel chrome --cells 100000 --seed overlay-event-probe-100k --template continents --variants full --max-frame-p95-ms 180 --max-overlay-p95-ms 70 --max-idle-frame-p95-ms 180`。
 - profile 结果中，连续滚轮缩放 frame p95 `94.1ms`、overlay p95 `10.7ms`、事件 dispatch p95 `0.1ms`、到下一帧 p95 `127.5ms`，idle commit 完成且 route / river build 为 `93.6ms / 67.9ms`；中键拖拽 frame p95 `47ms`、overlay p95 `8.8ms`、事件 dispatch p95 `0.1ms`。该证据说明同步事件回调本身不是主要瓶颈，后续应继续拆 idle commit 和帧调度压力。
+
+### 2026-07-05 viewport idle commit 切片收细
+
+背景：
+
+- 事件处理探针确认 100k 下 wheel / pointer 同步 dispatch p95 约 `0.1ms`，不是当前交互卡顿主因。
+- 同一 profile 显示停止输入后的 idle commit 仍会重建路线 / 河流 screen-space mesh，滚轮 idle frame p95 可到 `47.1ms`，route / river build 可到 `93.6ms / 67.9ms`。
+
+实现：
+
+- `ROUTE_BUILD_SLICE_MS` 从 `10ms` 收细为 `5ms`。
+- `RIVER_BUILD_SLICE_MS` 从 `10ms` 收细为 `5ms`。
+- 只调整 viewport idle commit 中异步重建的让帧频率，不改变路线 / 河流数据、culling、平滑、绘制样式或 buffer 内容。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 100k 新 seed profile `overlay-slice-5ms-100k / full` 通过：滚轮 / 拖拽 idle frame p95 为 `11.9ms / 11.8ms`，idle long task 为 `0`，dirty 均恢复 clean，`glError = 0`。
+- 100k 同 seed 对照 `overlay-event-probe-100k / full` 通过：滚轮 / 拖拽 idle frame p95 为 `17.7ms / 11.9ms`，低于上一刀记录的 `47.1ms / 23.6ms`；滚轮 / 拖拽事件 dispatch p95 仍为 `0.1ms`，overlay p95 为 `12.4ms / 10.9ms`，console error 为 `0`。
