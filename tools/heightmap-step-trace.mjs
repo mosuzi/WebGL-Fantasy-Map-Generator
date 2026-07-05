@@ -72,6 +72,7 @@ try {
         tracedSteps.push({
           raw: step.join(" "),
           stats: describeHeights(heights),
+          featurePreview: describeFeaturePreview(heights, grid),
           sample: heights.slice(0, 20),
           random: randomLog,
           start: estimateStepStart(step, randomLog.first, grid)
@@ -87,6 +88,7 @@ try {
         gridInfo,
         steps: tracedSteps,
         finalAfterTemplate: describeHeights(templateHeights),
+        finalAfterTemplateFeaturePreview: describeFeaturePreview(templateHeights, grid),
         finalAfterGeneration: describeHeights(finalHeights),
         finalSample: finalHeights.slice(0, 20)
       };
@@ -166,6 +168,95 @@ try {
           mean: round(list.reduce((sum, value) => sum + value, 0) / Math.max(1, list.length), 3),
           landRatio: round(landCells / Math.max(1, list.length), 3),
           landCells
+        };
+      }
+
+      function describeFeaturePreview(heights, grid) {
+        const values = Array.from(heights || []);
+        const neighbors = grid.cells?.c || [];
+        const borders = grid.cells?.b || [];
+        const visited = new Uint8Array(values.length);
+        const queue = [];
+        const features = [];
+
+        for (let start = 0; start < values.length; start++) {
+          if (visited[start]) continue;
+          const land = values[start] >= 20;
+          let border = false;
+          let cells = 0;
+          let coastEdges = 0;
+          let min = Infinity;
+          let max = -Infinity;
+          let sum = 0;
+          const sample = [];
+          visited[start] = 1;
+          queue.length = 0;
+          queue.push(start);
+
+          for (let cursor = 0; cursor < queue.length; cursor++) {
+            const cell = queue[cursor];
+            const height = Number(values[cell] || 0);
+            cells++;
+            sum += height;
+            if (height < min) min = height;
+            if (height > max) max = height;
+            if (sample.length < 8) sample.push(cell);
+            if (borders[cell]) border = true;
+
+            for (const neighbor of neighbors[cell] || []) {
+              const neighborLand = values[neighbor] >= 20;
+              if (neighborLand !== land) {
+                coastEdges++;
+                continue;
+              }
+              if (visited[neighbor]) continue;
+              visited[neighbor] = 1;
+              queue.push(neighbor);
+            }
+          }
+
+          features.push({
+            id: features.length + 1,
+            land,
+            type: land ? "island" : border ? "ocean" : "lake",
+            border,
+            cells,
+            coastEdges,
+            min,
+            max,
+            mean: round(sum / Math.max(1, cells), 3),
+            sample
+          });
+        }
+
+        const lands = features.filter(feature => feature.land);
+        const lakes = features.filter(feature => feature.type === "lake");
+        const oceans = features.filter(feature => feature.type === "ocean");
+        const nearSea = values.reduce(
+          (summary, height) => {
+            if (height >= 18 && height < 20) summary.water++;
+            if (height >= 20 && height <= 22) summary.land++;
+            return summary;
+          },
+          {water: 0, land: 0}
+        );
+
+        return {
+          total: features.length,
+          land: lands.length,
+          oceans: oceans.length,
+          lakes: lakes.length,
+          landCells: lands.reduce((sum, feature) => sum + feature.cells, 0),
+          waterCells: values.length - lands.reduce((sum, feature) => sum + feature.cells, 0),
+          smallLandLt3: lands.filter(feature => feature.cells < 3).length,
+          smallLandLt10: lands.filter(feature => feature.cells < 10).length,
+          smallLakesLt3: lakes.filter(feature => feature.cells < 3).length,
+          smallLakesLt10: lakes.filter(feature => feature.cells < 10).length,
+          largestLand: lands.reduce((max, feature) => Math.max(max, feature.cells), 0),
+          largestLake: lakes.reduce((max, feature) => Math.max(max, feature.cells), 0),
+          nearSea,
+          smallLandSamples: lands.filter(feature => feature.cells < 10).slice(0, 8),
+          smallLakeSamples: lakes.filter(feature => feature.cells < 10).slice(0, 8)
         };
       }
 
@@ -301,7 +392,9 @@ function createCandidateTrace() {
   const heightmap = createHeightmap(options);
   const grid = buildGrid(options, createRandom(options.seed), heightmap, createRandom(options.seed));
   const layout = {spacing: grid.metadata.spacing, columns: grid.metadata.columns, rows: grid.metadata.rows};
-  const trace = traceHeightmapSteps(heightmap, grid, layout, createRandom(options.seed));
+  const trace = traceHeightmapSteps(heightmap, grid, layout, createRandom(options.seed), ({heights}) => ({
+    featurePreview: describeFeaturePreview(heights, grid)
+  }));
   const gridInfo = createCandidateGridInfo(grid);
   return {
     gridInfo,
@@ -332,6 +425,13 @@ function compareSteps(sourceSteps, candidateSteps) {
         p90: candidateStep.stats.p90 - sourceStep.stats.p90,
         p95: candidateStep.stats.p95 - sourceStep.stats.p95,
         max: candidateStep.stats.max - sourceStep.stats.max
+      } : null,
+      featureDelta: candidateStep ? {
+        total: (candidateStep.featurePreview?.total ?? 0) - (sourceStep.featurePreview?.total ?? 0),
+        land: (candidateStep.featurePreview?.land ?? 0) - (sourceStep.featurePreview?.land ?? 0),
+        lakes: (candidateStep.featurePreview?.lakes ?? 0) - (sourceStep.featurePreview?.lakes ?? 0),
+        smallLandLt3: (candidateStep.featurePreview?.smallLandLt3 ?? 0) - (sourceStep.featurePreview?.smallLandLt3 ?? 0),
+        smallLakesLt3: (candidateStep.featurePreview?.smallLakesLt3 ?? 0) - (sourceStep.featurePreview?.smallLakesLt3 ?? 0)
       } : null
     };
   });
@@ -377,6 +477,18 @@ function renderMarkdown(report) {
     lines.push(`| ${item.index} | ${item.raw} | ${item.sourceRandomCount} / ${item.candidateRandomCount ?? "-"} | ${source.landRatio} / ${candidate?.landRatio ?? "-"} | ${source.p50} / ${candidate?.p50 ?? "-"} | ${source.p90} / ${candidate?.p90 ?? "-"} | ${source.p95} / ${candidate?.p95 ?? "-"} | ${source.max} / ${candidate?.max ?? "-"} |`);
   }
   lines.push("");
+  lines.push("## Step feature 预览对照");
+  lines.push("");
+  lines.push("| step | 操作 | 总 feature S/C | 陆地 S/C | 湖泊 S/C | <3c 陆块 S/C | <3c 湖 S/C | 近海水格 S/C | 近海陆格 S/C |");
+  lines.push("|---:|---|---:|---:|---:|---:|---:|---:|---:|");
+  for (const item of report.comparison) {
+    const source = item.sourceStepFeature || item.sourceFeature || report.source.steps[item.index - 1]?.featurePreview;
+    const candidate = item.candidateStepFeature || item.candidateFeature || report.candidate.steps[item.index - 1]?.featurePreview;
+    lines.push(
+      `| ${item.index} | ${item.raw} | ${formatPair(source?.total, candidate?.total)} | ${formatPair(source?.land, candidate?.land)} | ${formatPair(source?.lakes, candidate?.lakes)} | ${formatPair(source?.smallLandLt3, candidate?.smallLandLt3)} | ${formatPair(source?.smallLakesLt3, candidate?.smallLakesLt3)} | ${formatPair(source?.nearSea?.water, candidate?.nearSea?.water)} | ${formatPair(source?.nearSea?.land, candidate?.nearSea?.land)} |`
+    );
+  }
+  lines.push("");
   lines.push("## 生成后 source 高度");
   lines.push("");
   lines.push(`source 完整生成后陆地比：${report.source.finalAfterGeneration.landRatio}，p95：${report.source.finalAfterGeneration.p95}，max：${report.source.finalAfterGeneration.max}`);
@@ -412,6 +524,100 @@ function createCandidateGridInfo(grid) {
       neighbors: Array.from(neighbors[cell] || []).slice(0, 16)
     }))
   };
+}
+
+function describeFeaturePreview(heights, grid) {
+  const values = Array.from(heights || []);
+  const neighbors = grid.cells?.c || [];
+  const borders = grid.cells?.b || [];
+  const visited = new Uint8Array(values.length);
+  const queue = [];
+  const features = [];
+
+  for (let start = 0; start < values.length; start++) {
+    if (visited[start]) continue;
+    const land = values[start] >= 20;
+    let border = false;
+    let cells = 0;
+    let coastEdges = 0;
+    let min = Infinity;
+    let max = -Infinity;
+    let sum = 0;
+    const sample = [];
+    visited[start] = 1;
+    queue.length = 0;
+    queue.push(start);
+
+    for (let cursor = 0; cursor < queue.length; cursor++) {
+      const cell = queue[cursor];
+      const height = Number(values[cell] || 0);
+      cells++;
+      sum += height;
+      if (height < min) min = height;
+      if (height > max) max = height;
+      if (sample.length < 8) sample.push(cell);
+      if (borders[cell]) border = true;
+
+      for (const neighbor of neighbors[cell] || []) {
+        const neighborLand = values[neighbor] >= 20;
+        if (neighborLand !== land) {
+          coastEdges++;
+          continue;
+        }
+        if (visited[neighbor]) continue;
+        visited[neighbor] = 1;
+        queue.push(neighbor);
+      }
+    }
+
+    features.push({
+      id: features.length + 1,
+      land,
+      type: land ? "island" : border ? "ocean" : "lake",
+      border,
+      cells,
+      coastEdges,
+      min,
+      max,
+      mean: round(sum / Math.max(1, cells), 3),
+      sample
+    });
+  }
+
+  const lands = features.filter(feature => feature.land);
+  const lakes = features.filter(feature => feature.type === "lake");
+  const oceans = features.filter(feature => feature.type === "ocean");
+  const landCells = lands.reduce((sum, feature) => sum + feature.cells, 0);
+  const nearSea = values.reduce(
+    (summary, height) => {
+      if (height >= 18 && height < 20) summary.water++;
+      if (height >= 20 && height <= 22) summary.land++;
+      return summary;
+    },
+    {water: 0, land: 0}
+  );
+
+  return {
+    total: features.length,
+    land: lands.length,
+    oceans: oceans.length,
+    lakes: lakes.length,
+    landCells,
+    waterCells: values.length - landCells,
+    smallLandLt3: lands.filter(feature => feature.cells < 3).length,
+    smallLandLt10: lands.filter(feature => feature.cells < 10).length,
+    smallLakesLt3: lakes.filter(feature => feature.cells < 3).length,
+    smallLakesLt10: lakes.filter(feature => feature.cells < 10).length,
+    largestLand: lands.reduce((max, feature) => Math.max(max, feature.cells), 0),
+    largestLake: lakes.reduce((max, feature) => Math.max(max, feature.cells), 0),
+    nearSea,
+    smallLandSamples: lands.filter(feature => feature.cells < 10).slice(0, 8),
+    smallLakeSamples: lakes.filter(feature => feature.cells < 10).slice(0, 8)
+  };
+}
+
+function formatPair(source, candidate) {
+  return `${source ?? "-"} / ${candidate ?? "-"}`;
 }
 
 function estimateCandidateStepStart(step, randomFirst, grid) {
@@ -523,9 +729,13 @@ function stopDevServer(child) {
   if (!child.pid) return;
   if (process.platform === "win32") {
     spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {stdio: "ignore"});
-    return;
+  } else {
+    child.kill();
   }
-  child.kill();
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+  child.stdin?.destroy();
+  child.unref?.();
 }
 
 async function waitForHttp(url, timeoutMs) {

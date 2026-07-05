@@ -94,6 +94,7 @@
    - 深洼湖泊岸线标记 source parity 第一刀已完成：原版 `addLakesInDeepDepressions()` 新增湖泊时并不会正确把每个相邻陆格写成 coast，候选此前额外标记了这些邻居，导致 pack 抽点略偏多。当前已取消这处候选额外标记；001 的 candidate pack cells 从 `5234` 降到 `5226`、haven / coast land 从 `903` 降到 `901`，两个目标 case 均仍为 `warn 1 / fail 0`。003 不受这刀影响，下一步仍应查 lake outlet / 洼地消解。
    - 洼地消解 source-like 对照开关已补：`webgl-generator-export-baseline.mjs` 可用 `--river-depression-mode source-like` 让河流阶段改走接近 source 的全量 land 循环诊断路径。临时复查 `continents-10000-audit-continents-003` 时开关已生效，但湖泊数、命名湖泊数和 pack cells 仍为 `7 / 7 / 5649`，与默认 optimized 一致；因此暂不切默认算法，003 下一步继续查湖泊形成 / outlet 链路，而不是洼地消解循环范围。
    - grid feature 级拓扑诊断已补：source/candidate baseline 的 `grid.featureDiagnostics` 现在也输出 feature 分桶与小 feature 明细，`diagnose:source-warns` 会同时展示 grid 与 pack 两层。复查结果显示 001 在 grid 阶段已是 source 陆地 feature `10` / candidate `16`，003 在 grid 阶段已是 source 湖泊 `5` / candidate `7`；因此剩余 warn 分叉早于 pack/rivers/lakeNames，下一步应查高度模板落点、海平面阈值附近微地形、`addLakesInDeepDepressions()` 与 `openNearSeaLakes()` 的 grid 阶段输入，而不是继续调 pack 或命名。
+   - 高度模板 step feature 预览已补：`heightmap-step-trace` 现在会在每个 template step 后按海平面和 grid 邻接做 raw feature 预览，并输出 feature 总数、陆地、湖泊、小陆块、小湖泊和海平面附近格子。复查显示两个剩余 case 都在 `Trough 3-4 5-10 45-55 45-55` 附近开始分叉，随后 `Pit 3-4 10-20 15-85 20-80` 起点也随随机流跑偏；001 最终 raw 预览为 source 陆地 `10` / candidate `16`，003 最终 raw 预览为 source 湖泊 `9` / candidate `12`，正式 grid feature 再收敛为 `5` / `7`。下一步应对照 source `HeightmapGenerator.addTrough()` 的路径选择、传播层数和随机数消耗，而不是继续查命名、pack 或河流洼地循环。
    - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 
 ### 可选增强（非当前执行队列）

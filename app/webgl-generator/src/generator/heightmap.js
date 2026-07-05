@@ -213,7 +213,7 @@ function applySampledHeightmap(heightmap, grid) {
   grid.cells.h = grid.points.map((point, cell) => clamp(Math.round(heightmap.sampleHeight(point, cell, grid)), 0, 100));
 }
 
-export function traceHeightmapSteps(heightmap, grid, layout, random) {
+export function traceHeightmapSteps(heightmap, grid, layout, random, inspectStep) {
   const context = createHeightmapContext(heightmap, grid, layout, random);
   const steps = [];
 
@@ -229,11 +229,13 @@ export function traceHeightmapSteps(heightmap, grid, layout, random) {
 
     addStep(context, step);
     context.random.next = originalNext;
+    const inspection = typeof inspectStep === "function" ? inspectStep({step, context, heights: context.heights}) : {};
     steps.push({
       raw: step.join(" "),
       stats: describeHeights(context.heights),
       sample: Array.from(context.heights.slice(0, 20)),
-      random: randomLog
+      random: randomLog,
+      ...inspection
     });
   }
 

@@ -19462,3 +19462,32 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 source / candidate summary，并重新生成 diff。
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-grid-feature-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-grid-feature-diagnostics.md"` 通过，报告已包含 Grid Feature 摘要。
+
+### 2026-07-05 高度模板 step feature 预览诊断
+
+背景：
+
+- grid feature 级拓扑诊断已证明 001 / 003 的剩余 warn 在 grid feature 阶段已经分叉，早于 pack、河流 outlet 和湖泊命名。
+- 继续追踪时需要知道分叉发生在高度模板的哪一步，而不是只看最终 grid feature 数。
+
+实现：
+
+- `traceHeightmapSteps()` 新增可选 `inspectStep` 回调，默认不传时正式生成行为不变。
+- `tools/heightmap-step-trace.mjs` 在 source 和 candidate 每个高度模板 step 后按海平面 `20` 与 grid 邻接做 raw feature 预览，输出 feature 总数、陆地、湖泊、小陆块、小湖泊、最大陆块 / 湖泊和 `18-22` 海平面附近格子。
+- trace 工具的 source dev server 清理补充销毁 stdio pipe，避免报告已写出后进程在非交互环境里拖到外层超时。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001`：step 1-12 的 raw feature 预览大体一致；step 13 `Trough 3-4 5-10 45-55 45-55` 开始分叉，step 13 feature 为 source `19` / candidate `17`，step 14 为 `18` / `16`，step 15 `Mask` 后变为 `17` / `21`，其中陆地 feature 为 source `10` / candidate `16`，与正式 grid feature 差异方向一致。
+- `continents-10000-audit-continents-003`：step 9 起已有轻微水陆数量差，step 13 / 14 明显扩大；step 15 后 raw 预览湖泊为 source `9` / candidate `12`，正式 grid feature 阶段再变为 source `5` / candidate `7`。
+- 两个 case 的 `Trough` step 13 随机数消耗均已不一致：001 为 source `1135` / candidate `1034`，003 为 source `1310` / candidate `1281`；随后的 `Pit` step 14 首候选点也跑偏。下一步应对照 source `HeightmapGenerator.addTrough()` 的路径选择、传播层数和随机消耗，而不是改命名、pack 或河流洼地循环。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- `node --check tools\heightmap-step-trace.mjs` 通过。
+- `git diff --check` 通过。
+- `node .\tools\heightmap-step-trace.mjs --template continents --cells 10000 --seed audit-continents-001 --port 5319 --browser-channel chrome --timeout 180000 --out-dir "$env:TEMP\fmg-heightmap-step-continents-001-rerun"` 通过。
+- `node .\tools\heightmap-step-trace.mjs --template continents --cells 10000 --seed audit-continents-003 --port 5318 --browser-channel chrome --timeout 180000 --out-dir "$env:TEMP\fmg-heightmap-step-continents-003"` 通过。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-heightmap-feature-trace.json" --markdown "$env:TEMP\fmg-source-warn-heightmap-feature-trace.md"` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；构建仅保留既有 Vite 大 chunk 警告。
