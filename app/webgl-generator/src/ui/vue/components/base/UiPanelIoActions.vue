@@ -54,6 +54,7 @@
       v-for="action in actions"
       :key="action.key"
       class="ui-icon-action ui-panel-io-button"
+      :class="{active: action.active}"
       :disabled="action.disabled"
       circle
       :title="action.label"

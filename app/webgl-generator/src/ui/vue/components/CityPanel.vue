@@ -152,7 +152,7 @@ const metrics = computed(() => {
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
 const collectionActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", disabled: false},
+  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", active: props.state.addMode},
   {key: "delete", label: "删除选中城市", icon: "×", disabled: !selected.value}
 ]);
 const visualDraft = reactive({

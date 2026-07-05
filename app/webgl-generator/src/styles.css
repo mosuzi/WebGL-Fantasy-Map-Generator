@@ -2529,14 +2529,6 @@ select:disabled {
   overflow-wrap: anywhere;
 }
 
-.measurement-panel-actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.measurement-panel-actions .el-button,
 .measurement-history-actions .el-button,
 .measurement-panel-sort .el-button {
   margin-left: 0;
@@ -5646,6 +5638,7 @@ input.ui-switch-native {
 .state-collection-actions,
 .province-collection-actions,
 .city-collection-actions,
+.measurement-panel-list-actions,
 .label-management-actions {
   justify-content: flex-end;
   margin: 8px 0 12px;

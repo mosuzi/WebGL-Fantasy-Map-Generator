@@ -18,7 +18,7 @@
 
   <UiPanelIoActions
     class-name="province-collection-actions"
-    label="省份新增删除"
+    label="省份列表操作"
     :actions="collectionActions"
     @action="handleCollectionAction"
   />
@@ -154,14 +154,15 @@ const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedProvinceId));
 const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
+const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.selectedProvinceId));
 const collectionActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", disabled: false},
+  {key: "edit", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", disabled: !canDeleteSelected.value, active: editActive.value},
+  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", active: props.state.addMode},
   {key: "delete", label: "删除选中省份", icon: "×", disabled: !canDeleteSelected.value}
 ]);
 const provinceActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "edit", label: props.state.active ? "退出编辑" : "进入编辑", icon: "◎", panel: false, active: props.state.active},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
@@ -275,6 +276,10 @@ function sortRows(rows, key, direction) {
 }
 
 function handleCollectionAction(key) {
+  if (key === "edit" && selected.value) {
+    callbacks.onEdit?.(selected.value);
+    return;
+  }
   if (key === "add") {
     callbacks.onAddMode?.(!props.state.addMode);
     return;
@@ -283,7 +288,7 @@ function handleCollectionAction(key) {
 }
 
 function handleActionSelect(key) {
-  if (key === "edit" && selected.value) callbacks.onEdit?.(selected.value);
+  if (!key) activeAction.value = null;
 }
 
 function provinceRows(map) {

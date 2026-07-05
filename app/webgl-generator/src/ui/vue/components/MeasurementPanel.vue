@@ -18,10 +18,12 @@
   />
 
   <UiPanelIoActions
-    class-name="measurement-panel-export-actions"
-    label="测量导出"
+    class-name="measurement-panel-list-actions"
+    label="测量列表操作"
     :export-actions="measurementExportActions"
+    :actions="measurementListActions"
     @export="handleMeasurementExport"
+    @action="handleMeasurementAction"
   />
 
   <UiDetailGrid class-name="measurement-panel-details" empty-text="未选中测量对象" :rows="detailRows" />
@@ -39,12 +41,6 @@
     </UiActionDock>
   </template>
 
-  <div class="measurement-panel-actions">
-    <UiButton v-if="selected" variant="secondary" @click="callbacks.onEdit(selected)">编辑形状</UiButton>
-    <UiButton v-if="selected" variant="secondary" @click="callbacks.onLocate(selected)">定位测量</UiButton>
-    <UiButton v-if="selected" variant="secondary" @click="callbacks.onDelete(selected)">删除测量</UiButton>
-  </div>
-
   <UiHistoryActions class-name="measurement-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
@@ -59,7 +55,6 @@ import {
 import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "../../../runtime/measurement-route-fit.js";
 import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiActionDock from "./base/UiActionDock.vue";
-import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
@@ -119,6 +114,11 @@ const measurementExportActions = computed(() => [
   {key: "measurement", label: "导出测量", disabled: !visibleRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
+const measurementListActions = computed(() => [
+  {key: "edit", label: "编辑测量形状", icon: "◎", disabled: !selected.value},
+  {key: "locate", label: "定位测量", icon: "⌖", disabled: !selected.value},
+  {key: "delete", label: "删除测量", icon: "×", disabled: !selected.value}
+]);
 const totalDistance = computed(() => rows.value.reduce((sum, row) => sum + row.distance, 0));
 const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area, 0));
 const summaryMetrics = computed(() => [
@@ -222,6 +222,13 @@ function formatAreaValue(value) {
 
 function handleMeasurementExport(key) {
   if (key === "measurement") callbacks.onExport?.(visibleRows.value);
+}
+
+function handleMeasurementAction(key) {
+  if (!selected.value) return;
+  if (key === "edit") callbacks.onEdit?.(selected.value);
+  if (key === "locate") callbacks.onLocate?.(selected.value);
+  if (key === "delete") callbacks.onDelete?.(selected.value);
 }
 
 function formatNumber(value) {

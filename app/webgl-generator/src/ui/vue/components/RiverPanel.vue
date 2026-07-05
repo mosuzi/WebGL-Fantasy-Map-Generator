@@ -20,7 +20,7 @@
   <UiDetailGrid class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
 
   <template v-if="selected">
-    <UiActionDock v-model:active="activeAction" :actions="riverActions">
+    <UiActionDock v-model:active="activeAction" :actions="riverActions" @select="handleRiverActionSelect">
       <template #rename>
         <UiTextEditField
           class-name="river-name-editor"
@@ -46,10 +46,6 @@
             <UiButton variant="secondary" @click="callbacks.onSetWidthFactor(selected.id, widthDraft)">应用宽度</UiButton>
           </div>
         </div>
-      </template>
-
-      <template #edit>
-        <UiButton variant="secondary" @click="callbacks.onEdit(selected)">{{ editing ? "退出河流编辑" : "进入河流编辑" }}</UiButton>
       </template>
 
       <template #note>
@@ -128,9 +124,9 @@ const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.f
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const riverActions = computed(() => [
+  {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", panel: false, active: editing.value},
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "width", label: "调整宽度", icon: "↔"},
-  {key: "edit", label: editing.value ? "退出编辑" : "进入编辑", icon: "◎"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 
@@ -186,6 +182,10 @@ function filterRows(sourceRows, filter) {
 
 function sortRows(sourceRows, key, direction) {
   return [...sourceRows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleRiverActionSelect(key) {
+  if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
 }
 
 function riverLength(river) {
