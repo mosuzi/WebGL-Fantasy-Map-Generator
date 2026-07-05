@@ -19345,3 +19345,31 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 source / candidate baseline summary，并重新生成 diff。
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-topology-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-topology-diagnostics.md"` 通过。
+
+### 2026-07-05 feature 级拓扑 warn 诊断
+
+背景：
+
+- pack 海岸高度诊断已经指出 001 与 003 的分叉形态不同，但仍停在总量层面。
+- 继续推进前需要知道多出来的小陆块 / 小湖泊具体贴着什么高度、什么 feature，避免把小 feature 直接删除当成修复。
+
+实现：
+
+- `tools/source-export-baseline.mjs` 与 `tools/webgl-generator-export-baseline.mjs` 的 feature detail 新增 `topology`，从 `pack.cells.f/h/t/c` 反查每个 feature 的成员 cell、高度范围、距离场类型、`18-22` 阈值 cell、边界邻接 feature 类型 / 分组和邻接高度范围。
+- `tools/source-candidate-warn-diagnostics.mjs` 新增 `tinyLandDetails` 与 `tinyLakeDetails`，分别列出 `10` cell 以下小陆块和小湖泊的紧凑诊断。
+- 本轮仍只增强诊断工具，不修改正式生成器运行时代码。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001`：candidate 多出的 `1-2` cell 小陆块大多为 `h=20-22`，边界邻接高度多为 `<20`，属于海平面阈值附近孤点；source 也有同类孤点，但 candidate 数量更多。
+- `continents-10000-audit-continents-003`：candidate 的小湖中出现 `h=17` 的命名湖和无 outlet 的小湖，而 source 的小湖多为 `h=18-19` 且均有 outlet。该 case 更适合继续查洼地消解、lake outlet 和高度海平面校准。
+- 两个 case 的小陆块 / 小湖泊边界邻居类型均主要是 `island`，说明这些 warn 不是海岸线跨海连接或 pack 抽点条件直接造成的对象类型错误。
+
+验证：
+
+- `node --check tools\webgl-generator-export-baseline.mjs` 通过。
+- `node --check tools\source-export-baseline.mjs` 通过。
+- `node --check tools\source-candidate-warn-diagnostics.mjs` 通过。
+- `git diff --check` 通过。
+- 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 source / candidate baseline summary，并重新生成 diff。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-feature-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-feature-diagnostics.md"` 通过。

@@ -90,6 +90,7 @@
    - 湖泊分组 source parity 第一刀已完成：`defineLakeGroup()` 已补回 source 的 `inlets/outlet` 约束，`dry / sinkhole / salt` 不再无视出流状态；诊断报告已补 `lakeGroups` 分布。该修正不删除湖泊、不改变命名，当前两个剩余 topology warn 仍保留。
    - pack 层诊断已补：`diagnose:source-warns` 现在输出 `packSummary` 和 feature cell 桶。当前复查显示 pack cells 差异很小，但 candidate 的海岸陆地 / haven 偏高：001 为 `903` 对 source `875`，003 为 `1135` 对 source `1011`；下一步应优先查高度阈值附近的岸线距离场与 pack feature 泛洪，而不是改 pack 抽点条件。
    - pack 海岸高度诊断已补：source/candidate baseline summary 现在记录海岸陆地、水侧海岸和 `18-22` 高度阈值附近的 pack cell 统计。001 的阈值附近总数几乎持平（source `1194`，candidate `1193`），但 003 的阈值附近 candidate 多 `112`，其中陆地阈值 cell 多 `101`；下一步应把 003 作为高度阈值 / 海岸距离场优先样本，把 001 作为 feature 泛洪 / 小陆块分裂样本。
+   - feature 级拓扑诊断已补：source/candidate 的 feature detail 现在记录每个 feature 的成员高度范围、阈值 cell、距离场类型、边界邻接对象和邻接高度。001 显示 candidate 多出的 `1-2` cell 小陆块多为 `h=20-22`、外邻高度 `<20` 的海平面边缘孤点；003 显示 candidate 额外小湖中有 `h=17` 小湖和无 outlet 湖。下一步应优先查海平面校准、洼地消解与湖泊 outlet 生成，不应从名称或末端 feature 删除入手。
    - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 
 ### 可选增强（非当前执行队列）

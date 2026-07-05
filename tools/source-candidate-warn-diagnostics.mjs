@@ -107,6 +107,14 @@ function compareFeatureSummary(sourceFeatures = {}, candidateFeatures = {}) {
     lakeFeatureBuckets: {
       source: featureCellBuckets(sourceFeatures, "lake"),
       candidate: featureCellBuckets(candidateFeatures, "lake")
+    },
+    tinyLandDetails: {
+      source: compactFeatureDetails(sourceFeatures, "island", 10),
+      candidate: compactFeatureDetails(candidateFeatures, "island", 10)
+    },
+    tinyLakeDetails: {
+      source: compactFeatureDetails(sourceFeatures, "lake", 10),
+      candidate: compactFeatureDetails(candidateFeatures, "lake", 10)
     }
   };
 }
@@ -162,6 +170,10 @@ function renderMarkdown(report) {
         lines.push(`| ${key} | ${formatGroupMap(value.source)} | ${formatGroupMap(value.candidate)} |  |`);
         continue;
       }
+      if (key.endsWith("Details")) {
+        lines.push(`| ${key} | ${formatFeatureList(value.source)} | ${formatFeatureList(value.candidate)} |  |`);
+        continue;
+      }
       lines.push(`| ${key} | ${format(value.source)} | ${format(value.candidate)} | ${format(value.delta)} |`);
     }
     lines.push("");
@@ -206,6 +218,26 @@ function featureCellBuckets(features = {}, type) {
   return Object.fromEntries(Object.entries(buckets).filter(([, count]) => count > 0));
 }
 
+function compactFeatureDetails(features = {}, type, maxCells) {
+  const details = features?.diagnostics?.details || [];
+  return details
+    .filter(feature => feature?.type === type && Number(feature.cells || 0) < maxCells)
+    .map(feature => ({
+      i: feature.i,
+      cells: Number(feature.cells || 0),
+      group: feature.group || "none",
+      height: feature.topology?.height ? formatRange(feature.topology.height) : "",
+      t: feature.topology?.distanceTypes || {},
+      threshold: `${feature.topology?.thresholdLand || 0}/${feature.topology?.thresholdWater || 0}`,
+      boundary: feature.topology?.boundaryEdges || 0,
+      neighbors: feature.topology?.boundaryNeighborTypes || {},
+      neighborHeight: feature.topology?.boundaryNeighborHeight ? formatRange(feature.topology.boundaryNeighborHeight) : "",
+      outlet: feature.outlet ?? null,
+      named: Boolean(feature.named)
+    }))
+    .sort((left, right) => Number(left.cells) - Number(right.cells) || Number(left.i) - Number(right.i));
+}
+
 function pair(source, candidate) {
   const sourceValue = source ?? 0;
   const candidateValue = candidate ?? 0;
@@ -225,6 +257,26 @@ function formatGroupMap(value = {}) {
   const entries = Object.entries(value);
   if (!entries.length) return "";
   return entries.map(([key, count]) => `${key}:${count}`).join(", ");
+}
+
+function formatFeatureList(value = []) {
+  if (!value.length) return "";
+  return value
+    .map(
+      feature =>
+        `#${feature.i} ${feature.cells}c g=${feature.group} h=${feature.height} th=${feature.threshold} t=${formatGroupMap(feature.t)} edge=${feature.boundary} n=${formatGroupMap(feature.neighbors)} nh=${feature.neighborHeight}${
+          feature.outlet ? ` outlet=${feature.outlet}` : ""
+        }${feature.named ? " named" : ""}`
+    )
+    .join("<br>");
+}
+
+function formatRange(summary = {}) {
+  if (summary.min === undefined || summary.max === undefined) return "";
+  const min = format(summary.min);
+  const max = format(summary.max);
+  if (min === max) return min;
+  return `${min}-${max}`;
 }
 
 function readJson(path) {

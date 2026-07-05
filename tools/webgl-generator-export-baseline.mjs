@@ -175,7 +175,7 @@ function createCandidateSummary(candidateMap, {appDir}) {
       mapping: pack.metadata.mapping,
       missingRequiredPackFields
     },
-    features: describeCandidateFeatures(packFeatures),
+    features: describeCandidateFeatures(packFeatures, pack.cells),
     rivers: {
       count: rivers.rivers.length,
       cellsWithRiver: countByPredicate(pack.cells.r || [], value => value > 0),
@@ -841,7 +841,7 @@ function validateCandidateGraph({grid, pack, features, routes, cities, routeSumm
   }
 }
 
-function describeCandidateFeatures(featureList) {
+function describeCandidateFeatures(featureList, cells) {
   const alive = featureList.filter(Boolean);
   return {
     total: alive.length,
@@ -858,11 +858,11 @@ function describeCandidateFeatures(featureList) {
       withOutlet: alive.filter(feature => feature.type === "lake" && feature.outlet).length,
       closed: alive.filter(feature => feature.type === "lake" && feature.closed).length
     },
-    diagnostics: describeFeatureDiagnostics(alive)
+    diagnostics: describeFeatureDiagnostics(alive, cells)
   };
 }
 
-function describeFeatureDiagnostics(features = []) {
+function describeFeatureDiagnostics(features = [], cells) {
   const typed = type => features.filter(feature => normalizeFeatureType(feature.type) === type);
   const islands = typed("island");
   const lakes = typed("lake");
@@ -880,7 +880,7 @@ function describeFeatureDiagnostics(features = []) {
       cellsLt3: lakes.filter(feature => Number(feature.cells || 0) < 3).length,
       cellsLt10: lakes.filter(feature => Number(feature.cells || 0) < 10).length
     },
-    details: features.map(describeFeatureDetail)
+    details: features.map(feature => describeFeatureDetail(feature, cells, features))
   };
 }
 
@@ -893,7 +893,7 @@ function describeFeatureGroup(features = []) {
   };
 }
 
-function describeFeatureDetail(feature) {
+function describeFeatureDetail(feature, cells, features) {
   return {
     i: feature.i ?? feature.id ?? null,
     type: normalizeFeatureType(feature.type),
@@ -903,8 +903,60 @@ function describeFeatureDetail(feature) {
     firstCell: Number.isInteger(feature.firstCell) ? feature.firstCell : null,
     height: Number.isFinite(feature.height) ? round(feature.height) : null,
     outlet: Number.isInteger(feature.outlet) ? feature.outlet : null,
+    topology: describeFeatureCellTopology(feature, cells, features),
     supplemental: Boolean(feature.supplemental),
     named: Boolean(feature.name)
+  };
+}
+
+function describeFeatureCellTopology(feature, cells = {}, features = []) {
+  const featureId = Number(feature.i ?? feature.id);
+  const featureIds = cells.f || [];
+  const heights = cells.h || [];
+  const types = cells.t || [];
+  const neighbors = cells.c || [];
+  const featureCells = [];
+  const boundaryNeighborTypes = {};
+  const boundaryNeighborGroups = {};
+  const boundaryNeighborHeights = [];
+  let boundaryEdges = 0;
+  let nearThreshold = 0;
+  let thresholdLand = 0;
+  let thresholdWater = 0;
+
+  for (let cell = 0; cell < featureIds.length; cell++) {
+    if (Number(featureIds[cell]) !== featureId) continue;
+    featureCells.push(cell);
+    const height = Number(heights[cell] || 0);
+    if (height >= 18 && height <= 22) {
+      nearThreshold++;
+      if (height >= 20) thresholdLand++;
+      else thresholdWater++;
+    }
+
+    for (const neighbor of neighbors[cell] || []) {
+      if (Number(featureIds[neighbor]) === featureId) continue;
+      boundaryEdges++;
+      const neighborFeature = features[featureIds[neighbor]];
+      const neighborType = normalizeFeatureType(neighborFeature?.type);
+      const neighborGroup = neighborFeature?.group || "none";
+      boundaryNeighborTypes[neighborType] = (boundaryNeighborTypes[neighborType] || 0) + 1;
+      boundaryNeighborGroups[neighborGroup] = (boundaryNeighborGroups[neighborGroup] || 0) + 1;
+      boundaryNeighborHeights.push(Number(heights[neighbor] || 0));
+    }
+  }
+
+  return {
+    cellCount: featureCells.length,
+    height: describeNumbers(featureCells.map(cell => heights[cell] || 0)),
+    distanceTypes: countValues(featureCells.map(cell => types[cell] ?? null)),
+    nearThreshold,
+    thresholdLand,
+    thresholdWater,
+    boundaryEdges,
+    boundaryNeighborTypes,
+    boundaryNeighborGroups,
+    boundaryNeighborHeight: describeNumbers(boundaryNeighborHeights)
   };
 }
 
