@@ -25,8 +25,9 @@ const SELECTION_SMOOTHING = Object.freeze({
 });
 
 export function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash) {
-  const context = createRenderContext(map, {camera, canvas});
   const vertices = [];
+  if (isNeutralStateSelection(selection)) return new Float32Array(vertices);
+  const context = createRenderContext(map, {camera, canvas});
   if (isPoliticalObjectKind(selection?.kind)) {
     pushPoliticalSelectionMesh(vertices, context, selection, locateFlash);
     return new Float32Array(vertices);
@@ -45,8 +46,13 @@ export function buildSelectionMeshVertices(map, camera, canvas, selection, locat
 
 export function selectionHighlightMode(selection, locateFlash = null) {
   if (!selection) return "none";
+  if (isNeutralStateSelection(selection)) return "none";
   if (isLocateFlashActive(selection, locateFlash)) return `${selection.kind} red flash`;
   return SELECTION_HIGHLIGHT_MODES[selection.kind] || selection.kind;
+}
+
+function isNeutralStateSelection(selection) {
+  return selection?.kind === OBJECT_KIND.STATE && Number(selection.id) === 0;
 }
 
 function pushPoliticalSelectionMesh(vertices, context, selection, locateFlash) {
