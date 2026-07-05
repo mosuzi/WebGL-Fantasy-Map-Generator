@@ -69,22 +69,18 @@
 - GEO 数据导入已分流：普通 GeoJSON `FeatureCollection / Feature / Geometry` 仍按当前地图 `mapCoordinates` 反投影为可撤销测量对象；原版 FMG `Cells` GeoJSON 会按 `properties.height` 识别为地形来源，反算原版海拔米数到当前 `0..100` 高度单位，并按源 cell polygon 中心重采样到当前 grid / pack 高度。该路径会刷新 terrain cache、cell colors 和线层，可撤销；当前只导入地形高度，不导入国家 / 城市 / 文化 / 宗教等语义层。真实文件 `k170 Cells 2026-07-04-22-00.geojson` 浏览器烟测确认源 cells `5561`、应用当前 cells `9545`、高度总和 `170576 -> 146521`、WebGL error 为 `0`；导入时仍会触发一次约 `2s` health long-task，后续可做分片优化。
 - 地图低饱和配色第一刀已完成：默认国家 / 省份色板从高饱和强色块改为较鲜明的粉彩色，海面和背景改为灰蓝，海底高度渐变、自然高度色、政体图例、文化 / 宗教 / 政区兜底色、海岸线、政治边界、道路和河流线条同步降饱和；用户复核后保留“线条已柔化但国家色未继续压灰”的版本。构建产物视觉 smoke 截图为 `docs/generated/screenshots/palette-soft-states.png`，国家色平均 HSL 饱和度为 `0.633`、最高 `1`、WebGL error 为 `0`；10k e2e `palette-restore-e2e` 通过，WebGL 加载 `427.6ms`。
 - 标签管理新增标签拖动放置已完成：点击“新增标签”后会创建并选中手工标签；若新标签被面板遮住，用户可直接在地图空白处按住拖动来放置该新标签，最终落点会回写到同一条“新增手工标签”历史记录。已有手工标签也可直接拖动，普通拖动会生成独立“移动手工标签”历史命令。标签管理按钮区和历史按钮区已增加 `12px` 间距，构建产物烟测确认新增放置、普通拖动、`glError = 0` 和 console/page error 为 `0`。
+- 面板空间策略专项已完成收束复查：`panel-space-continuation-20260705 / continents / 10000 / deep` 审计中控制面板与主要浮动面板预热 `18 / 18`，待复核项 `0`，点击到出图 `1429.1ms`，WebGL 加载 `317.5ms`。当前不再主动扩大面板空间改造范围；后续只在用户指出新折行、审计出现失败或真实字段被挤压时，按具体面板补局部规则。
 
 ### 当前执行队列
 
 下面是继续推进时的真实顺序。每一刀完成后都要按改动类型做对应验证，确认没有加载或绘制卡顿回退，再单独提交。
 
-1. **面板空间策略专项**：
-   - 目标不是继续把内容硬塞进既有窄列，而是让面板按信息量合理占空间：能放宽面板就放宽，需要换行就换行，详情长字段可跨整行，列表可横向滚动。
-   - 已修经济面板控制栏三列硬挤导致的三段切换折行、经济总览详情裸字段、军事战报摘要固定 6 窄列、军事导入导出 / 战报清理工具条偏紧、政体导出按钮过窄和资源标记工具条 `min 76px` 偏紧；工具按钮组审计已能量化各工具条。继续优先复查固定小列宽、过度 `white-space: nowrap`、`minmax(0, 1fr)` 强挤和备注 / 长名称区域。
-   - 第一优先级是军事管理面板、事件链摘要、导入导出工具条和二级编辑区；第二优先级才是通用 `UiMetricGrid / UiDetailGrid / UiSortBar / UiSegmented / UiObjectTable` 策略。
-   - 审计脚本已覆盖控制面板 tab、主要浮动面板和 deep 场景下的首个二级编辑区；后续若继续发现真实折行，再扩充重要字段省略号、异常多行折断和详情最小项宽规则。
-2. **overlay 与动态线层性能专项**：
+1. **overlay 与动态线层性能专项**：
    - `profile:overlay` 已补 idle commit 指标和 `measurement-heavy / selection-heavy` 重场景；viewport idle commit 分帧第一刀仍保留，但“视口交互中隐藏 DOM overlay”的策略已取消，当前行为是同步刷新覆盖层。
    - 100k 复查已确认滚轮长任务不由 route / river 即时构建、WebGL draw、renderer 记录到的 overlay 分项、旧 profile 跨进程采样或同步事件 dispatch 主导；河流 idle commit 已分帧，profile 采样口径和事件处理探针已修正。后续如果继续性能专项，优先拆路线 / 河流 idle commit、过期 commit 取消增强、视口分块 / 缓存，或继续补浏览器样式 / layout 成本证据。
    - 军事图标 overlay 写入去重已完成：`--overlay-x / --overlay-y` 会跳过未变化写入并收敛到 `0.1px`，军事图标的 `visible / selected / fleet / scale` 状态和兵力文本宽度已缓存。100k 同 seed profile 中，滚轮 / 拖拽 overlay p95 为 `4.5ms / 3.1ms`，军事图标均值为 `0.36ms / 0.27ms`，长任务为 `0 / 0`。
    - 若证据指向测量 SVG、多对象选中态或极端标签数量，再单独治理对应 overlay；不默认把标签、城市剪影、marker 或军事图标迁到 WebGL。
-3. **source/candidate 剩余 warn 只读跟踪**：
+2. **source/candidate 剩余 warn 只读跟踪**：
    - 若继续处理 `features.total / lakeNames`，应从高度洼地、lake outlet、feature 拓扑和湖泊形成逻辑进入，先做诊断。
    - 已新增 `pnpm run diagnose:source-warns` 只读诊断入口，用现有 source/candidate baseline 汇总剩余 warn 的 feature / lake 差异。当前复查结果：`continents-10000-audit-continents-001` 的 `features.total` 来自候选陆地 feature `16` 对 source `10`，尤其 `cells < 3` 小陆块 `9` 对 `4`；`continents-10000-audit-continents-003` 的 `lateStages.names.lakeNames` 来自候选真实湖泊 `7` 对 source `5`，命名数跟随湖泊数，不是命名过滤不足。
    - 湖泊分组 source parity 第一刀已完成：`defineLakeGroup()` 已补回 source 的 `inlets/outlet` 约束，`dry / sinkhole / salt` 不再无视出流状态；诊断报告已补 `lakeGroups` 分布。该修正不删除湖泊、不改变命名，当前两个剩余 topology warn 仍保留。
