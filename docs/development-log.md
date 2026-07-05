@@ -19491,3 +19491,33 @@ full 矩阵结果：
 - `node .\tools\heightmap-step-trace.mjs --template continents --cells 10000 --seed audit-continents-003 --port 5318 --browser-channel chrome --timeout 180000 --out-dir "$env:TEMP\fmg-heightmap-step-continents-003"` 通过。
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-heightmap-feature-trace.json" --markdown "$env:TEMP\fmg-source-warn-heightmap-feature-trace.md"` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；构建仅保留既有 Vite 大 chunk 警告。
+
+### 2026-07-05 Strait 宽度传播 source parity
+
+背景：
+
+- 高度 step trace 显示 001 / 003 的 `Trough` 随机流分叉之前，step 9 / 10 的 `Strait` 已经让候选高度、陆地比和 raw feature 预览轻微偏离 source。
+- 对照 source `HeightmapGenerator.addStrait()` 后发现，source 每一圈传播使用 `remainingWidth = desiredWidth - i` 来计算指数；候选此前固定使用 `desiredWidth`，导致多圈海峡的后续层被过度压低。
+
+实现：
+
+- `app/webgl-generator/src/generator/heightmap.js` 的 `addStrait()` 改为按 `remainingWidth` 逐层计算 `exponent = 0.9 - step * remainingWidth`。
+- 本轮只修 source parity，不改高度模板内容、不改 feature 过滤、不改湖泊命名或 pack 抽点条件。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001`：修正后 step 9-15 的高度统计、随机数消耗和 feature 预览全部对齐；`features.total` 从 warn 回到 `pass`，最终 diff 为 `pass（fail 0，warn 0）`。
+- `continents-10000-audit-continents-003`：修正后 step 9-15 的高度统计、随机数消耗、`Pit` 首候选点和 feature 预览全部对齐；`lateStages.names.lakeNames` 从 warn 回到 `pass`，最终 diff 为 `pass（fail 0，warn 0）`。
+- `diagnose:source-warns` 对两个此前剩余 warn case 均输出 `pass（fail 0，warn 0）`。
+- quick candidate 矩阵无 fail；`mediterranean-100000-audit-mediterranean-001` 和 `continents-100000-audit-continents-001` 为 pass，`archipelago-100000-audit-archipelago-001` 仍有一个 `economy.markets.stock.mean` warn，后续应作为经济口径专项处理，不属于地形拓扑 warn。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\heightmap.js` 通过。
+- `node .\tools\heightmap-step-trace.mjs --template continents --cells 10000 --seed audit-continents-001 --port 5320 --browser-channel chrome --timeout 180000 --out-dir "$env:TEMP\fmg-heightmap-step-continents-001-strait-parity"` 通过。
+- `node .\tools\heightmap-step-trace.mjs --template continents --cells 10000 --seed audit-continents-003 --port 5321 --browser-channel chrome --timeout 180000 --out-dir "$env:TEMP\fmg-heightmap-step-continents-003-strait-parity"` 通过。
+- 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 candidate summary 与 diff，两个 case 均为 `pass（fail 0，warn 0）`。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-strait-parity.json" --markdown "$env:TEMP\fmg-source-warn-strait-parity.md"` 通过。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --timeout 180000` 通过，无 fail。
+- `$env:CI='true'; pnpm run build:app` 通过；构建仅保留既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --template continents --seed audit-continents-001 --out "$env:TEMP\fmg-strait-parity-e2e.json" --markdown "$env:TEMP\fmg-strait-parity-e2e.md" --max-ready-ms 2500 --max-load-ms 1200` 通过，点击到出图 `1462.7ms`，纯生成 `784.5ms`，WebGL 加载 `380.3ms`。

@@ -15,7 +15,7 @@
 
 ### 当前真实状态
 
-- source/candidate full 矩阵目前剩余 `2` 个 warn：`continents-10000-audit-continents-001` 的 `features.total`，以及 `continents-10000-audit-continents-003` 的 `lateStages.names.lakeNames`。两者已被复查为地形拓扑 / 湖泊命名数量差异，不能用删除小岛、删除 1-cell 湖或过滤湖名这类末端修正硬压。
+- source/candidate 此前剩余的两个地形拓扑 warn 已完成收敛：`continents-10000-audit-continents-001` 的 `features.total` 与 `continents-10000-audit-continents-003` 的 `lateStages.names.lakeNames` 当前均为 `pass（fail 0，warn 0）`。根因是高度模板 `Strait` 宽度传播指数没有按 source 的剩余宽度逐层变化，导致后续 `Trough / Pit` 随机流分叉；已按 source 语义修正。quick 矩阵复查无 fail，但 `archipelago-100000-audit-archipelago-001` 仍有一个 `economy.markets.stock.mean` warn，属于后续经济口径项，不再归到地形拓扑 warn。
 - 单位系统已经完成“单位”tab、数字缩写、距离 / 面积单位、比例尺、人口倍率、军力比例和降水倍率的显示层接入；控制面板 tab 顺序调整为“简介 / 生成 / 视图 / 图层 / 管理 / 单位”。军力比例会影响军事图标、悬停 / 对象详情、军事面板、国家详情和政体统计中的兵力 / 军力 / 损耗显示，但不改写地图原始军事数据。它不再是当前计划项；仅剩导出字段、编辑器输入字段和正式数据口径是否跟随单位偏好的可选增强。
 - 国名方位语义第二刀已完成；孤立 `东/西/南/北 + 根名` 会改成无方位或中性变体，不再作为待办。
 - README 当前状态刷新已完成，不再作为待办。
@@ -95,7 +95,8 @@
    - 洼地消解 source-like 对照开关已补：`webgl-generator-export-baseline.mjs` 可用 `--river-depression-mode source-like` 让河流阶段改走接近 source 的全量 land 循环诊断路径。临时复查 `continents-10000-audit-continents-003` 时开关已生效，但湖泊数、命名湖泊数和 pack cells 仍为 `7 / 7 / 5649`，与默认 optimized 一致；因此暂不切默认算法，003 下一步继续查湖泊形成 / outlet 链路，而不是洼地消解循环范围。
    - grid feature 级拓扑诊断已补：source/candidate baseline 的 `grid.featureDiagnostics` 现在也输出 feature 分桶与小 feature 明细，`diagnose:source-warns` 会同时展示 grid 与 pack 两层。复查结果显示 001 在 grid 阶段已是 source 陆地 feature `10` / candidate `16`，003 在 grid 阶段已是 source 湖泊 `5` / candidate `7`；因此剩余 warn 分叉早于 pack/rivers/lakeNames，下一步应查高度模板落点、海平面阈值附近微地形、`addLakesInDeepDepressions()` 与 `openNearSeaLakes()` 的 grid 阶段输入，而不是继续调 pack 或命名。
    - 高度模板 step feature 预览已补：`heightmap-step-trace` 现在会在每个 template step 后按海平面和 grid 邻接做 raw feature 预览，并输出 feature 总数、陆地、湖泊、小陆块、小湖泊和海平面附近格子。复查显示两个剩余 case 都在 `Trough 3-4 5-10 45-55 45-55` 附近开始分叉，随后 `Pit 3-4 10-20 15-85 20-80` 起点也随随机流跑偏；001 最终 raw 预览为 source 陆地 `10` / candidate `16`，003 最终 raw 预览为 source 湖泊 `9` / candidate `12`，正式 grid feature 再收敛为 `5` / `7`。下一步应对照 source `HeightmapGenerator.addTrough()` 的路径选择、传播层数和随机数消耗，而不是继续查命名、pack 或河流洼地循环。
-   - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
+   - 高度模板 `Strait` source parity 已完成：候选此前在 `addStrait()` 的宽度传播循环里一直使用 `0.9 - step * desiredWidth`，而 source 使用 `remainingWidth = desiredWidth - i` 逐层改变指数。修正后 001 / 003 的 step 9-15 高度统计、随机数消耗、`Pit` 首候选点和 raw feature 预览全部对齐，两个目标 diff 均为 `pass（fail 0，warn 0）`。
+   - 地形拓扑 warn 暂无继续硬压项；后续若继续 source/candidate parity，应先跑 full candidate matrix 刷新全局状态，再按新的 fail/warn 热点选择专项。当前 quick 矩阵仅剩 `archipelago-100000-audit-archipelago-001` 的 `economy.markets.stock.mean` warn，不应从高度 / feature 末端过滤处理。
 
 ### 可选增强（非当前执行队列）
 

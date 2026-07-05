@@ -470,7 +470,8 @@ function addStrait(context, width, direction = "vertical") {
 
   for (let widthStep = 0; widthStep < desiredWidth; widthStep++) {
     const currentFrontier = frontier;
-    const exponent = 0.9 - step * desiredWidth;
+    const remainingWidth = desiredWidth - widthStep;
+    const exponent = 0.9 - step * remainingWidth;
 
     for (const cell of currentFrontier) {
       for (const neighbor of context.neighbors[cell]) {
