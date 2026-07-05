@@ -1098,6 +1098,8 @@ http://127.0.0.1:5410
 
 267. 贸易流地图图层已退役：控制面板“图层”tab 不再显示“贸易流”，旧 `localStorage` 图层偏好中的 `tradeFlows` 会在 Vue store 和 runtime 读取时清除；renderer 端同时硬兜底，外部即使强行调用 `setLayerVisible("tradeFlows", true)` 也会保持 `layerVisibility.tradeFlows = false`，清空贸易流 WebGL buffer 和拾取项。经济交易数据、经济总览和 `trade-flow` 对象详情代码先保留，供后续独立列表面板按国家、地区、商品等条件查看，不再把交易线同时铺到地图上。构建产物烟测确认旧偏好 `tradeFlows: true` 下没有“贸易流”按钮，`tradeFlowVertexCount = 0`、`tradeFlowPickItemCount = 0`；正式 e2e 守门 `trade-flow-layer-retired-smoke / continents / 10000` 通过：点击到出图 `1503.2ms`，纯生成 `706.7ms`，WebGL 加载 `367.7ms`，UI/调度余量 `428.8ms`，最慢加载阶段为“构建线层顶点” `78.4ms`，`drawMs = 0.1ms`。
 
+268. 气候地图范围参数已补充：生成 tab 的气候区新增“地图范围”百分比滑条，默认 `25%`，对应旧预览的 `45°` 纬度跨度；设置为 `100%` 时气候坐标覆盖 `180°` 纬度和 `360°` 经度，作为全球图处理。该参数写入 `climateMapSizePercent`，参与实时气候刷新、保存恢复、摘要和旧 `climateLatitudeSpan` 兼容换算。验证采用语法检查、字段断言和应用构建，不单独跑浏览器烟测。
+
 ## 约束
 
 - 新项目代码仍然放在根目录下，不放进 `source/`。

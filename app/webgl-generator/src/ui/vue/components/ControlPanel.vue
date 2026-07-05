@@ -99,7 +99,8 @@
         <h2 id="generation-climate-title">气候</h2>
         <input id="climate-latitude-mode" type="hidden" :value="climateLatitudeMode" />
         <input id="climate-latitude-center" type="hidden" :value="climateLatitudeCenter" />
-        <input id="climate-latitude-span" type="hidden" :value="climateLatitudeSpan" />
+        <input id="climate-latitude-span" type="hidden" :value="climateLatitudeSpanDegrees" />
+        <input id="climate-map-size-percent" type="hidden" :value="climateMapSizePercent" />
         <input id="atmosphere-direction" type="hidden" :value="atmosphereDirection" />
         <input id="atmosphere-winds" type="hidden" :value="windProfileValue" />
 
@@ -187,6 +188,19 @@
               :max="temperatureRange.max"
               :step="1"
               @input="value => temperatureSouthPole = value"
+            />
+            <UiSliderField
+              label="地图范围"
+              input-id="climate-map-size-percent-slider"
+              output-id="climate-map-size-percent-value"
+              field-class="climate-slider-field"
+              value-tag="output"
+              :model-value="climateMapSizePercent"
+              unit-label="%"
+              :min="climateMapSizeRange.min"
+              :max="climateMapSizeRange.max"
+              :step="1"
+              @input="value => climateMapSizePercent = value"
             />
             <UiSliderField
               label="画布纬度"
@@ -399,7 +413,7 @@ import {
   windDirectionLabelFromAngle,
   windDirectionValueFromAngle
 } from "../../../generator/climate-options.js";
-import {TEMPERATURE_RANGE} from "../../../generator/options.js";
+import {CLIMATE_MAP_SIZE_RANGE, TEMPERATURE_RANGE} from "../../../generator/options.js";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
 defineOptions({
@@ -428,12 +442,14 @@ const {
 const climateLatitudeMode = ref("auto");
 const climateLatitudeCenter = ref(0);
 const climateLatitudeSpan = ref(45);
+const climateMapSizePercent = ref(25);
 const atmosphereDirection = ref("customBands");
 const windBands = ref(defaultWindProfile());
 const temperatureEquator = ref(25);
 const temperatureNorthPole = ref(-25);
 const temperatureSouthPole = ref(-15);
 const temperatureRange = TEMPERATURE_RANGE;
+const climateMapSizeRange = CLIMATE_MAP_SIZE_RANGE;
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
 const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
 const areaUnitLabel = computed(() => areaUnitLabelForDistanceUnit(unitPreferences.value.distanceUnit));
@@ -443,12 +459,12 @@ const unitScaleLimits = UNIT_SCALE_LIMITS;
 const windBandOptions = WIND_BAND_OPTIONS;
 const windProfileValue = computed(() => windBands.value.join(","));
 const canvasFootprintPoints = computed(() => {
-  const span = Number(climateLatitudeSpan.value) || 45;
+  const span = climateLatitudeSpanDegrees.value;
   const center = Number(climateLatitudeCenter.value) || 0;
   const north = Math.min(90, center + span / 2);
   const south = Math.max(-90, center - span / 2);
-  const northPair = latitudeCanvasPair(north);
-  const southPair = latitudeCanvasPair(south);
+  const northPair = latitudeCanvasPair(north, climateMapSizeFraction.value);
+  const southPair = latitudeCanvasPair(south, climateMapSizeFraction.value);
   return [
     northPair.left,
     northPair.right,
@@ -456,19 +472,24 @@ const canvasFootprintPoints = computed(() => {
     southPair.left
   ].map(point => point.map(roundSvg).join(",")).join(" ");
 });
+const climateLatitudeSpanDegrees = computed(() => {
+  const percent = clampNumber(climateMapSizePercent.value, climateMapSizeRange.min, climateMapSizeRange.max, 25);
+  return Math.round(percent * 1.8 * 10) / 10;
+});
+const climateMapSizeFraction = computed(() => clampNumber(climateMapSizePercent.value, climateMapSizeRange.min, climateMapSizeRange.max, 25) / 100);
 const latitudeGuideLines = computed(() => [-60, -30, 0, 30, 60].map(lat => ({
   key: `lat-${lat}`,
   lat,
   ...latitudeLine(lat)
 })));
 const latitudeBandLabel = computed(() => {
-  const span = Number(climateLatitudeSpan.value) || 45;
+  const span = climateLatitudeSpanDegrees.value;
   const center = Number(climateLatitudeCenter.value) || 0;
   const north = Math.min(90, center + span / 2);
   const south = Math.max(-90, center - span / 2);
   return climateLatitudeMode.value === "custom"
-    ? `${formatLatitudeCenter(center)} / ${formatLatitudeCenter(south)} 至 ${formatLatitudeCenter(north)}`
-    : "自动按地形选择纬度";
+    ? `范围 ${climateMapSizePercent.value}% / ${formatLatitudeCenter(center)} / ${formatLatitudeCenter(south)} 至 ${formatLatitudeCenter(north)}`
+    : `范围 ${climateMapSizePercent.value}% / 自动按地形选择纬度`;
 });
 
 const tabs = Object.freeze([
@@ -633,9 +654,9 @@ function formatLatitudeCenter(value) {
   return "赤道 0°";
 }
 
-function latitudeCanvasPair(latitude) {
+function latitudeCanvasPair(latitude, longitudeFraction = 1) {
   const line = latitudeLine(latitude);
-  const halfWidth = Math.max(3, line.halfWidth * 0.82);
+  const halfWidth = Math.max(3, line.halfWidth * Math.min(1, Math.max(0.01, longitudeFraction)));
   return {
     left: [60 - halfWidth, line.y],
     right: [60 + halfWidth, line.y]
@@ -676,6 +697,7 @@ function handleClimateOptionsSync(event) {
   climateLatitudeMode.value = normalizeClimateLatitudeMode(detail.climateLatitudeMode);
   climateLatitudeCenter.value = clampNumber(detail.climateLatitudeCenter, -75, 75, climateLatitudeCenter.value);
   climateLatitudeSpan.value = clampNumber(detail.climateLatitudeSpan, 20, 80, climateLatitudeSpan.value);
+  climateMapSizePercent.value = clampNumber(detail.climateMapSizePercent, climateMapSizeRange.min, climateMapSizeRange.max, climateMapSizePercent.value);
   atmosphereDirection.value = normalizeAtmosphereDirection(detail.atmosphereDirection);
   windBands.value = normalizeWindProfile(detail.winds);
   temperatureEquator.value = clampNumber(detail.temperatureEquator, temperatureRange.min, temperatureRange.max, temperatureEquator.value);

@@ -19787,3 +19787,23 @@ full 矩阵结果：
 - `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --timeout 180000` 通过，无 fail。
 - `$env:CI='true'; pnpm run build:app` 通过；构建仅保留既有 Vite 大 chunk 警告。
 - `$env:CI='true'; pnpm run profile:e2e -- --browser-channel chrome --cells 10000 --template continents --seed audit-continents-001 --out "$env:TEMP\fmg-strait-parity-e2e.json" --markdown "$env:TEMP\fmg-strait-parity-e2e.md" --max-ready-ms 2500 --max-load-ms 1200` 通过，点击到出图 `1462.7ms`，纯生成 `784.5ms`，WebGL 加载 `380.3ms`。
+
+### 2026-07-05 气候地图范围百分比
+
+背景：
+
+- 用户要求气候配置支持地图在整个球面上的相对大小，让地图可以作为局部图，也可以拉到 `100%` 作为全球图。
+- 旧实现已经有内部 `size` 和 `climateLatitudeSpan`，但 UI 没有明确暴露“球面占比”，且经度覆盖仍按画布宽高比推导，不满足 `100% = 全球图` 的语义。
+
+实现：
+
+- 新增 `climateMapSizePercent` 选项，默认 `25%`，对应旧预览的 `45° / 180°` 比例；旧 `climateLatitudeSpan` 会按 `span / 180 * 100` 兼容换算。
+- 气候坐标改为按百分比计算覆盖范围：`latT = percent * 180°`，`lonT = percent * 360°`，因此 `100%` 覆盖完整纬度和经度。
+- 控制面板气候区新增“地图范围”滑条，地球预览 footprint 的南北跨度和东西宽度都随百分比变化；“画布纬度”继续只控制中心纬度。
+- 运行时读写、实时气候刷新、保存前气候同步、摘要和 hover 统计展示均接入 `climateMapSizePercent`。
+
+验证：
+
+- `node --check` 覆盖 `climate.js`、`options.js`、`app.js`、`panel.js`。
+- 字段断言确认默认 `25%` 生成 `45° / 90°`，`100%` 生成 `180° / 360°`。
+- `$env:CI='true'; pnpm run build:app` 通过；本轮未跑浏览器烟测。

@@ -28,6 +28,7 @@ export const DEFAULT_OPTIONS = {
   climateLatitudeMode: DEFAULT_CLIMATE_LATITUDE_MODE,
   climateLatitudeCenter: 0,
   climateLatitudeSpan: 45,
+  climateMapSizePercent: 25,
   atmosphereDirection: DEFAULT_ATMOSPHERE_DIRECTION,
   winds: Object.freeze(defaultWindProfile()),
   temperatureEquator: 25,
@@ -39,6 +40,7 @@ export const DEFAULT_OPTIONS = {
 
 const HEIGHTMAP_TEMPLATES = new Set(["continents", "mediterranean", "highIsland", "lowIsland", "peninsula", "pangea", "archipelago"]);
 export const TEMPERATURE_RANGE = Object.freeze({min: -80, max: 50});
+export const CLIMATE_MAP_SIZE_RANGE = Object.freeze({min: 1, max: 100});
 
 export function normalizeOptions(input = {}) {
   const seed = String(input.seed || DEFAULT_OPTIONS.seed).trim() || DEFAULT_OPTIONS.seed;
@@ -64,6 +66,7 @@ export function normalizeOptions(input = {}) {
     climateLatitudeMode: normalizeClimateLatitudeMode(input.climateLatitudeMode),
     climateLatitudeCenter: clampNumber(input.climateLatitudeCenter, -75, 75, DEFAULT_OPTIONS.climateLatitudeCenter),
     climateLatitudeSpan: clampNumber(input.climateLatitudeSpan, 20, 80, DEFAULT_OPTIONS.climateLatitudeSpan),
+    climateMapSizePercent: clampNumber(input.climateMapSizePercent ?? legacyLatitudeSpanToMapSize(input.climateLatitudeSpan), 1, 100, DEFAULT_OPTIONS.climateMapSizePercent),
     atmosphereDirection: normalizeAtmosphereDirection(input.atmosphereDirection),
     winds: normalizeWindProfile(input.winds || DEFAULT_OPTIONS.winds),
     temperatureEquator: clampInteger(input.temperatureEquator, TEMPERATURE_RANGE.min, TEMPERATURE_RANGE.max, randomized.temperatureEquator),
@@ -72,6 +75,12 @@ export function normalizeOptions(input = {}) {
     heightExponent: clampNumber(input.heightExponent, 1.5, 2.2, DEFAULT_OPTIONS.heightExponent),
     precipitation: clampInteger(input.precipitation, 5, 500, randomized.precipitation)
   };
+}
+
+function legacyLatitudeSpanToMapSize(value) {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return (parsed / 180) * 100;
 }
 
 function clampInteger(value, min, max, fallback) {

@@ -48,6 +48,7 @@ export function buildClimate(grid, features, options, random) {
       latitudeMode: mapCoordinates.latitudeMode,
       latitudeLabel: mapCoordinates.latitudeLabel,
       latitudeCenter: mapCoordinates.latCenter,
+      mapSizePercent: mapCoordinates.mapSizePercent,
       atmosphereDirection: windProfile.direction,
       atmosphereLabel: windProfile.label,
       windAngle: windProfile.angle,
@@ -71,6 +72,7 @@ function valueRange(values) {
 }
 
 function defineMapSize(options, grid, features, random) {
+  const requestedMapSize = Number.isFinite(Number(options.climateMapSizePercent)) ? Number(options.climateMapSizePercent) : null;
   const latitudePreset = resolveClimateLatitudePreset(options.climateLatitudeMode);
   const customLatitudePreset = options.climateLatitudeMode === "custom"
     ? {
@@ -87,13 +89,14 @@ function defineMapSize(options, grid, features, random) {
   const withLatitudePreset = base => customLatitudePreset
     ? {
         ...base,
-        size: customLatitudePreset.span,
+        size: requestedMapSize ?? customLatitudePreset.span,
         latitudeCenter: customLatitudePreset.center,
         latitudeMode: customLatitudePreset.value,
         latitudeLabel: customLatitudePreset.label
       }
     : {
         ...base,
+        size: requestedMapSize ?? base.size,
         latitudeMode: "auto",
         latitudeLabel: climateLatitudeLabel("auto")
       };
@@ -114,13 +117,13 @@ function defineMapSize(options, grid, features, random) {
 }
 
 function calculateMapCoordinates({size, latitude, latitudeCenter, longitude, latitudeMode, latitudeLabel}, options) {
-  const sizeFraction = size / 100;
+  const sizeFraction = clamp((Number.isFinite(Number(size)) ? Number(size) : 25) / 100, 0.01, 1);
   const lonShift = longitude / 100;
   const latT = round(sizeFraction * 180, 1);
+  const lonT = round(sizeFraction * 360, 1);
   const {latN, latS} = Number.isFinite(latitudeCenter)
     ? centerLatitudeBand(latitudeCenter, latT)
     : shiftedLatitudeBand(latitude, latT);
-  const lonT = round(Math.min((options.graphWidth / options.graphHeight) * latT, 360), 1);
   const lonE = round(180 - (360 - lonT) * lonShift, 1);
   const lonW = round(lonE - lonT, 1);
   return {
@@ -133,6 +136,7 @@ function calculateMapCoordinates({size, latitude, latitudeCenter, longitude, lat
     lonT,
     lonW,
     lonE,
+    mapSizePercent: round(sizeFraction * 100, 1),
     atmosphereLabel: atmosphereDirectionLabel(options.atmosphereDirection)
   };
 }
