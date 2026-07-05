@@ -53,7 +53,7 @@ import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, creat
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
-import {applyProvinceBrushPreview, createApplyProvinceBrushCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
+import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
@@ -158,6 +158,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     provinceEdit: {
       activeStroke: null,
+      addMode: false,
       lastAffected: 0,
       sourceProvinceId: null,
       lastPointer: null
@@ -484,6 +485,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.government = governmentPanel;
   provincePanel = createProvincePanel(documentRef, panelManager, {
     onActiveChange: active => {
+      state.provinceEdit.addMode = false;
+      provincePanel?.updateAddMode?.(false);
       if (active) {
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
@@ -499,6 +502,32 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         state.provinceEdit.activeStroke = null;
         updateEditingInteractionLock(state, documentRef);
       }
+    },
+    onAddMode: active => {
+      state.provinceEdit.addMode = Boolean(active);
+      if (active) {
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        state.heightEdit.activeStroke = null;
+        state.stateEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
+        renderer.setColorMode("provinces");
+        setActiveModeButton(documentRef, "provinces");
+      }
+      provincePanel?.updateAddMode?.(state.provinceEdit.addMode);
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+    },
+    onDeleteProvince: provinceId => {
+      const command = createDeleteProvinceCommand(provinceId);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterProvinceEdit(state, state.editHistory.execute(command, {map: state.map}));
+      state.selectionStore.clear();
+      provincePanel.setSelectedProvinceId(0);
+      updateAllObjectPanels(state);
+      updateEditingInteractionLock(state, documentRef);
     },
     onSampleSelection: () => {
       setProvincePanelTarget(state, getProvinceIdFromSelection(state));
@@ -1970,6 +1999,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.stateEdit.sourceStateId = null;
   state.stateEdit.lastPointer = null;
   state.provinceEdit.activeStroke = null;
+  state.provinceEdit.addMode = false;
   state.provinceEdit.lastAffected = 0;
   state.provinceEdit.sourceProvinceId = null;
   state.provinceEdit.lastPointer = null;
@@ -4305,6 +4335,29 @@ function bindStateEditing(canvas, state) {
 
 function bindProvinceEditing(canvas, state) {
   canvas.addEventListener("pointerdown", event => {
+    if (state.provinceEdit.addMode && state.map) {
+      if (!isPrimaryPointerDown(event)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+      if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
+      const command = createAddProvinceAtCellCommand(pick.gridCell);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterProvinceEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = command.getResult?.();
+      state.provinceEdit.addMode = false;
+      state.provinceEdit.lastAffected = result?.cells || 0;
+      state.provinceEdit.sourceProvinceId = result?.provinceId || null;
+      if (Number.isInteger(result?.provinceId)) {
+        state.panels.province?.setSelectedProvinceId(result.provinceId);
+        state.selectionStore.setSelection({object: {kind: OBJECT_KIND.PROVINCE, id: result.provinceId}});
+      }
+      state.panels.province?.updateAddMode?.(false);
+      updateAllObjectPanels(state);
+      updateEditingInteractionLock(state, canvas.ownerDocument || document);
+      updateRuntimePanel(canvas.ownerDocument || document, state);
+      return;
+    }
     if (!state.panels.province?.getBrush().active || !state.map) return;
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
@@ -5099,7 +5152,7 @@ function updateEditingInteractionLock(state, documentRef) {
 }
 
 function isEditingInteractionLocked(state) {
-  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.panels.province?.getBrush().active || state.markerEdit.mode || state.editingObject);
+  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.markerEdit.mode || state.editingObject);
 }
 
 function getAllowedEditingPanelIds(state) {
@@ -5107,6 +5160,7 @@ function getAllowedEditingPanelIds(state) {
   if (state.panels.state?.getBrush().active) return ["state-panel"];
   if (state.stateEdit.addMode) return ["state-panel"];
   if (state.panels.province?.getBrush().active) return ["province-panel"];
+  if (state.provinceEdit.addMode) return ["province-panel"];
   if (state.markerEdit.mode) return ["marker-panel"];
   if (state.editingObject?.kind === OBJECT_KIND.RIVER) return ["river-panel"];
   if (state.editingObject) return ["object-details"];
@@ -5136,6 +5190,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     },
     provinceBrush: {
       active: Boolean(provinceBrush.active),
+      addMode: Boolean(state.provinceEdit.addMode),
       targetProvinceId: provinceBrush.targetProvinceId ?? null,
       lastAffected: state.provinceEdit.lastAffected,
       sourceProvinceId: state.provinceEdit.sourceProvinceId
@@ -5155,6 +5210,7 @@ function getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush) {
   if (heightBrush.active) return "height";
   if (state.stateEdit.addMode) return "state:add";
   if (stateBrush.active) return "state";
+  if (state.provinceEdit.addMode) return "province:add";
   if (provinceBrush.active) return "province";
   if (state.markerEdit.mode) return `marker:${state.markerEdit.mode}`;
   if (state.editingObject?.kind) return state.editingObject.kind;

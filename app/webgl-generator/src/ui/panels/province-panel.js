@@ -14,6 +14,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     sortDir: "desc",
     selectedProvinceId: null,
     radius: 28,
+    addMode: false,
     lastAffected: 0,
     sourceProvinceId: null,
     version: 0
@@ -38,13 +39,21 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     onEdit: row => {
       panelState.selectedProvinceId = row.id;
       panelState.active = true;
+      panelState.addMode = false;
       callbacks.onActiveChange?.(true);
       callbacks.onEdit?.(provinceObject(row));
     },
     onActiveChange: active => {
       panelState.active = active;
+      if (active) panelState.addMode = false;
       callbacks.onActiveChange?.(active);
     },
+    onAddMode: active => {
+      panelState.addMode = Boolean(active);
+      if (active) panelState.active = false;
+      callbacks.onAddMode?.(panelState.addMode);
+    },
+    onDeleteProvince: provinceId => callbacks.onDeleteProvince?.(provinceId),
     onTargetProvinceId: provinceId => {
       panelState.selectedProvinceId = normalizeProvinceId(provinceId);
     },
@@ -73,8 +82,10 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.active = false;
+      panelState.addMode = false;
       panelState.open = false;
       callbacks.onActiveChange?.(false);
+      callbacks.onAddMode?.(false);
     }
   });
   const root = documentRef.createElement("div");
@@ -118,6 +129,10 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       const normalized = normalizeProvinceId(provinceId);
       if (provinceExists(panelState.map, normalized)) panelState.selectedProvinceId = normalized;
     },
+    updateAddMode(active) {
+      panelState.addMode = Boolean(active);
+      panelState.version++;
+    },
     getBrush() {
       return {
         active: panelState.active,
@@ -127,6 +142,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     },
     setActive(active) {
       panelState.active = active;
+      if (active) panelState.addMode = false;
     },
     isOpen() {
       return panelState.open;

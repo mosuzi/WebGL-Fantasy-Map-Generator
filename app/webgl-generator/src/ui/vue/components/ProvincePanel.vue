@@ -16,6 +16,13 @@
     @locate="callbacks.onLocate"
   />
 
+  <UiPanelIoActions
+    class-name="province-collection-actions"
+    label="省份新增删除"
+    :actions="collectionActions"
+    @action="handleCollectionAction"
+  />
+
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
 
   <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="provinceActions">
@@ -91,6 +98,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
@@ -153,6 +161,11 @@ const metrics = computed(() => {
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedProvinceId));
+const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
+const collectionActions = computed(() => [
+  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", disabled: false},
+  {key: "delete", label: "删除选中省份", icon: "×", disabled: !canDeleteSelected.value}
+]);
 const provinceActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
@@ -162,6 +175,7 @@ const provinceActions = Object.freeze([
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
+  {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
   {label: "省份", value: formatNumber(metrics.value.total)},
   {label: "实力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
@@ -266,6 +280,14 @@ function filterRows(rows, filter) {
 
 function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleCollectionAction(key) {
+  if (key === "add") {
+    callbacks.onAddMode?.(!props.state.addMode);
+    return;
+  }
+  if (key === "delete" && selected.value) callbacks.onDeleteProvince?.(selected.value.id);
 }
 
 function provinceRows(map) {

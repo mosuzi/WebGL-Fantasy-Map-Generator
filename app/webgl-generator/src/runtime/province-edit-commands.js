@@ -1,3 +1,5 @@
+import {createChineseNameGenerator} from "../generator/names.js";
+
 const PROVINCE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
@@ -20,6 +22,25 @@ export const PROVINCE_BRUSH_PREVIEW_EFFECTS = Object.freeze({
   runtimeStats: false,
   pickPanel: false,
   derived: Object.freeze(["province-cells", "cell-colors"])
+});
+
+const PROVINCE_COLLECTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze([
+    "province-cells",
+    "province-statistics",
+    "city-provinces",
+    "state-statistics",
+    "cell-colors",
+    "political-boundaries",
+    "political-selection",
+    "object-panels",
+    "object-index",
+    "province-poles"
+  ])
 });
 
 export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷"} = {}) {
@@ -50,8 +71,144 @@ export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷"
   };
 }
 
+export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份"} = {}) {
+  const targetGridCell = normalizeGridCell(gridCell);
+  let snapshot = null;
+  let result = null;
+  return {
+    label,
+    effects: {
+      ...PROVINCE_COLLECTION_EFFECTS,
+      affected: [{kind: "province", id: "new"}]
+    },
+    apply(context) {
+      snapshot ??= captureProvinceCollectionSnapshot(context.map);
+      result = addProvinceAtGridCell(context.map, targetGridCell);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的省份新增快照");
+      restoreProvinceCollectionSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      return !isValidProvinceSeedCell(context.map, targetGridCell);
+    },
+    getResult() {
+      return result;
+    }
+  };
+}
+
+export function createDeleteProvinceCommand(provinceId, {label = "删除省份"} = {}) {
+  const normalizedProvinceId = normalizeProvinceId(provinceId);
+  let snapshot = null;
+  let result = null;
+  return {
+    label: `${label} #${normalizedProvinceId}`,
+    effects: {
+      ...PROVINCE_COLLECTION_EFFECTS,
+      affected: [{kind: "province", id: normalizedProvinceId}]
+    },
+    apply(context) {
+      snapshot ??= captureProvinceCollectionSnapshot(context.map);
+      result = deleteProvince(context.map, normalizedProvinceId);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的省份删除快照");
+      restoreProvinceCollectionSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const province = getProvince(context.map, normalizedProvinceId);
+      return normalizedProvinceId <= 0 || !province || province.removed;
+    },
+    getResult() {
+      return result;
+    }
+  };
+}
+
 export function applyProvinceBrushPreview(map, changes) {
   applyProvinceChanges(map, normalizeChanges(changes), "after");
+}
+
+function addProvinceAtGridCell(map, gridCell) {
+  const packCell = choosePackCellForGridCell(map, gridCell);
+  if (!Number.isInteger(packCell)) throw new Error("无法在当前 cell 创建省份");
+  const stateId = normalizeStateId(map?.grid?.cells?.state?.[gridCell] || map?.pack?.cells?.state?.[packCell]);
+  if (!stateId) throw new Error("新增省份必须位于已有国家内");
+  const state = map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId] || null;
+  const provinceId = nextProvinceId(map);
+  const point = map?.pack?.cells?.p?.[packCell] || [0, 0];
+  const cultureId = normalizeProvinceId(map?.pack?.cells?.culture?.[packCell] ?? map?.grid?.cells?.culture?.[gridCell]);
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
+  const generator = createChineseNameGenerator(`${map?.metadata?.seed || map?.options?.seed || "map"}|add-province|${provinceId}`, {namebases: map?.namebases});
+  const provinceName = generator.makeProvinceName({
+    id: provinceId,
+    cell: packCell,
+    culture: cultureId,
+    cultureType: culture?.nameStyle || culture?.type,
+    state: stateId,
+    baseName: state?.name || state?.fullName || `国家 #${stateId}`
+  });
+  const province = {
+    id: provinceId,
+    i: provinceId,
+    state: stateId,
+    center: packCell,
+    gridCenter: gridCell,
+    burg: normalizeProvinceId(map?.pack?.cells?.burg?.[packCell]),
+    name: provinceName.name,
+    formName: provinceName.formName,
+    fullName: provinceName.fullName,
+    color: state?.color || fallbackProvinceColor(provinceId),
+    religion: map?.pack?.cells?.religion?.[packCell] ?? map?.grid?.cells?.religion?.[gridCell] ?? 0,
+    cells: 0,
+    area: 0,
+    neighbors: [],
+    pole: point.map(value => roundValue(value, 2))
+  };
+  writeProvince(map, provinceId, province);
+  attachProvinceToState(map, stateId, provinceId);
+  const changes = initialProvinceCells(map, gridCell, stateId).map(cell => ({
+    gridCell: cell,
+    before: normalizeProvinceId(map?.grid?.cells?.province?.[cell]),
+    after: provinceId
+  }));
+  applyProvinceChanges(map, changes, "after");
+  repairProvinceDerivatives(map, changes);
+  syncBurgProvincesForChanges(map, changes);
+  markProvinceCapitalCity(map, provinceId, packCell, gridCell);
+  refreshStateProvinceLists(map);
+  refreshPoliticsMetadata(map);
+  delete map.__provinceEditorPackCellsByGrid;
+  return {provinceId, stateId, cells: changes.length};
+}
+
+function deleteProvince(map, provinceId) {
+  const province = getProvince(map, provinceId);
+  if (!province || province.removed) throw new Error(`找不到省份 #${provinceId}`);
+  const changes = [];
+  for (const gridCell of map?.grid?.cells?.i || []) {
+    if (normalizeProvinceId(map.grid.cells.province?.[gridCell]) !== provinceId) continue;
+    changes.push({gridCell, before: provinceId, after: 0});
+  }
+  applyProvinceChanges(map, changes, "after");
+  repairProvinceDerivatives(map, changes);
+  syncBurgProvincesForChanges(map, changes);
+  for (const city of map?.settlements?.cities || []) {
+    if (!city || normalizeProvinceId(city.province) !== provinceId) continue;
+    city.province = 0;
+    city.provincial = false;
+  }
+  for (const burg of map?.pack?.burgs || []) {
+    if (!burg || normalizeProvinceId(burg.province) !== provinceId) continue;
+    burg.province = 0;
+  }
+  markProvinceRemoved(map, provinceId);
+  detachProvinceFromStates(map, provinceId);
+  refreshStateProvinceLists(map);
+  refreshPoliticsMetadata(map);
+  delete map.__provinceEditorPackCellsByGrid;
+  return {provinceId, cells: changes.length};
 }
 
 function normalizeChanges(changes) {
@@ -325,7 +482,172 @@ function restoreProvinces(map, snapshots = []) {
   }
 }
 
+function captureProvinceCollectionSnapshot(map) {
+  return {
+    provinces: clonePlain(map?.politics?.provinces || []),
+    packProvinces: map?.pack?.provinces === map?.politics?.provinces ? null : clonePlain(map?.pack?.provinces || []),
+    states: clonePlain(map?.politics?.states || []),
+    packStates: map?.pack?.states === map?.politics?.states ? null : clonePlain(map?.pack?.states || []),
+    gridProvince: cloneArrayLike(map?.grid?.cells?.province),
+    packProvince: cloneArrayLike(map?.pack?.cells?.province),
+    cities: clonePlain(map?.settlements?.cities || []),
+    burgs: clonePlain(map?.pack?.burgs || []),
+    politicsMetadata: clonePlain(map?.politics?.metadata || null)
+  };
+}
+
+function restoreProvinceCollectionSnapshot(map, snapshot) {
+  if (!map || !snapshot) return;
+  if (map.politics) {
+    map.politics.provinces = clonePlain(snapshot.provinces);
+    map.politics.states = clonePlain(snapshot.states);
+    map.politics.metadata = clonePlain(snapshot.politicsMetadata);
+  }
+  if (map.pack) {
+    map.pack.provinces = snapshot.packProvinces ? clonePlain(snapshot.packProvinces) : map.politics?.provinces;
+    map.pack.states = snapshot.packStates ? clonePlain(snapshot.packStates) : map.politics?.states;
+    map.pack.burgs = clonePlain(snapshot.burgs);
+  }
+  if (map.settlements) map.settlements.cities = clonePlain(snapshot.cities);
+  restoreArrayLike(map?.grid?.cells, "province", snapshot.gridProvince);
+  restoreArrayLike(map?.pack?.cells, "province", snapshot.packProvince);
+  delete map.__provinceEditorPackCellsByGrid;
+}
+
+function isValidProvinceSeedCell(map, gridCell) {
+  if (!Number.isInteger(gridCell) || gridCell < 0 || !isGridLandCell(map, gridCell)) return false;
+  return normalizeStateId(map?.grid?.cells?.state?.[gridCell]) > 0;
+}
+
+function normalizeGridCell(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) ? numeric : -1;
+}
+
+function choosePackCellForGridCell(map, gridCell) {
+  const candidates = getPackCellsForGrid(map, gridCell).filter(cell => map?.pack?.cells?.h?.[cell] >= 20);
+  if (candidates.length) return candidates.sort((a, b) => a - b)[0];
+  const byGrid = map?.pack?.cells?.g || [];
+  for (let cell = 0; cell < byGrid.length; cell += 1) {
+    if (byGrid[cell] === gridCell && map?.pack?.cells?.h?.[cell] >= 20) return cell;
+  }
+  return null;
+}
+
+function initialProvinceCells(map, centerGridCell, stateId) {
+  const cells = map?.grid?.cells;
+  const result = new Set([centerGridCell]);
+  for (const neighbor of cells?.c?.[centerGridCell] || []) {
+    if (!isGridLandCell(map, neighbor)) continue;
+    if (normalizeStateId(cells?.state?.[neighbor]) !== stateId) continue;
+    result.add(neighbor);
+  }
+  return [...result];
+}
+
+function writeProvince(map, provinceId, province) {
+  if (map?.politics?.provinces) map.politics.provinces[provinceId] = province;
+  if (map?.pack?.provinces) map.pack.provinces[provinceId] = map?.politics?.provinces?.[provinceId] || clonePlain(province);
+}
+
+function attachProvinceToState(map, stateId, provinceId) {
+  for (const state of [map?.politics?.states?.[stateId], map?.pack?.states?.[stateId]]) {
+    if (!state) continue;
+    if (!Array.isArray(state.provinces)) state.provinces = [];
+    if (!state.provinces.includes(provinceId)) state.provinces.push(provinceId);
+  }
+}
+
+function detachProvinceFromStates(map, provinceId) {
+  for (const states of [map?.politics?.states, map?.pack?.states]) {
+    for (const state of states || []) {
+      if (!state || !Array.isArray(state.provinces)) continue;
+      state.provinces = state.provinces.filter(id => normalizeProvinceId(id) !== provinceId);
+    }
+  }
+}
+
+function refreshStateProvinceLists(map) {
+  const provinces = map?.politics?.provinces || map?.pack?.provinces || [];
+  for (const states of [map?.politics?.states, map?.pack?.states]) {
+    for (const state of states || []) {
+      if (!state) continue;
+      state.provinces = provinces
+        .filter(province => province && !province.removed && normalizeStateId(province.state) === normalizeStateId(state.i ?? state.id))
+        .map(province => province.i ?? province.id);
+    }
+  }
+}
+
+function markProvinceRemoved(map, provinceId) {
+  for (const province of [map?.politics?.provinces?.[provinceId], map?.pack?.provinces?.[provinceId]]) {
+    if (!province) continue;
+    province.removed = true;
+    province.cells = 0;
+    province.area = 0;
+    province.neighbors = [];
+    province.pole = null;
+  }
+}
+
+function syncBurgProvincesForChanges(map, changes) {
+  const changedPackCells = new Set(uniquePackCellsForChanges(map, changes));
+  for (const burg of map?.pack?.burgs || []) {
+    if (!burg || !changedPackCells.has(burg.cell)) continue;
+    burg.province = normalizeProvinceId(map?.pack?.cells?.province?.[burg.cell]);
+  }
+}
+
+function markProvinceCapitalCity(map, provinceId, packCell, gridCell) {
+  const city = (map?.settlements?.cities || []).find(item => item && (item.packCell === packCell || item.cell === gridCell));
+  if (!city) return;
+  city.province = provinceId;
+  city.provincial = true;
+  const province = getProvince(map, provinceId);
+  if (province) province.burg = city.burgId || province.burg || 0;
+  const burg = map?.pack?.burgs?.[city.burgId];
+  if (burg) burg.province = provinceId;
+}
+
+function refreshPoliticsMetadata(map) {
+  const metadata = map?.politics?.metadata;
+  if (!metadata) return;
+  const provinces = map?.politics?.provinces || [];
+  metadata.provinces = provinces.filter(item => item && !item.removed && normalizeProvinceId(item.i ?? item.id) > 0).length;
+  metadata.provinceNames = provinces.filter(item => item && !item.removed && normalizeProvinceId(item.i ?? item.id) > 0).map(item => item.fullName || item.name);
+}
+
+function getProvince(map, provinceId) {
+  return map?.politics?.provinces?.[provinceId] || map?.pack?.provinces?.[provinceId] || null;
+}
+
+function nextProvinceId(map) {
+  let max = 0;
+  for (const province of map?.politics?.provinces || map?.pack?.provinces || []) {
+    const id = normalizeProvinceId(province?.i ?? province?.id);
+    if (id > max) max = id;
+  }
+  return max + 1;
+}
+
+function fallbackProvinceColor(provinceId) {
+  const palette = ["#b7c8f3", "#f6b6c8", "#abe7c1", "#f8dda1", "#cbbdf1", "#aee3e8", "#f3b7a8", "#d5eda2"];
+  return palette[Math.abs(Number(provinceId) || 0) % palette.length];
+}
+
+function isGridLandCell(map, gridCell) {
+  if (map?.grid?.cells?.h?.[gridCell] < 20) return false;
+  const featureId = map?.grid?.cells?.f?.[gridCell];
+  const feature = map?.features?.features?.[featureId];
+  return feature ? Boolean(feature.land) : true;
+}
+
 function normalizeProvinceId(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) ? Math.max(0, numeric) : 0;
+}
+
+function normalizeStateId(value) {
   const numeric = Number(value);
   return Number.isInteger(numeric) ? Math.max(0, numeric) : 0;
 }
@@ -338,4 +660,24 @@ function normalizePackCell(value) {
 function roundValue(value, digits = 1) {
   const factor = 10 ** digits;
   return Math.round((Number(value) || 0) * factor) / factor;
+}
+
+function clonePlain(value) {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function cloneArrayLike(value) {
+  if (!value) return null;
+  if (ArrayBuffer.isView(value)) return new value.constructor(value);
+  return Array.isArray(value) ? [...value] : null;
+}
+
+function restoreArrayLike(target, key, snapshot) {
+  if (!target || !snapshot) return;
+  if (ArrayBuffer.isView(target[key]) && ArrayBuffer.isView(snapshot) && target[key].length === snapshot.length) {
+    target[key].set(snapshot);
+    return;
+  }
+  target[key] = cloneArrayLike(snapshot);
 }

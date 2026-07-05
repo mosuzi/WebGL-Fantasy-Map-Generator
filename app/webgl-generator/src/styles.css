@@ -5644,6 +5644,7 @@ input.ui-switch-native {
 }
 
 .state-collection-actions,
+.province-collection-actions,
 .label-management-actions {
   justify-content: flex-end;
   margin: 8px 0 12px;
