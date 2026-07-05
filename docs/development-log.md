@@ -19373,3 +19373,30 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 source / candidate baseline summary，并重新生成 diff。
 - `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-feature-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-feature-diagnostics.md"` 通过。
+
+### 2026-07-05 深洼湖泊岸线标记 source parity
+
+背景：
+
+- feature 级拓扑诊断显示 001 的差异主要是海平面边缘小陆块和 pack 海岸 / haven 数略高。
+- 对照 source `public/main.js` 的 `addLakesInDeepDepressions()` 后发现，原版新增深洼湖泊时只把湖 cell 自身设为 `t = -1`，相邻陆格标 coast 的语句实际写成 `cells.t[c] = 1`，其中 `c` 是邻接数组，不会正确写到每个邻居。
+- 候选此前把每个相邻陆格都写成 `LAND_COAST`，会让后续 pack 抽点阶段比 source 多保留湖岸 coast midpoint。
+
+实现：
+
+- `app/webgl-generator/src/generator/features.js` 的 `addLake()` 取消对新增深洼湖泊相邻陆格的额外 `LAND_COAST` 标记。
+- `openNearSeaLakes()` 的开湖阈值格和相邻 coast 标记不变，已存在海岸 / 海湖连接逻辑不变。
+- 本轮是 source parity 修正，不删除湖泊、不删除小岛、不过滤湖名。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001`：candidate pack cells 从 `5234` 降到 `5226`，source 为 `5183`；candidate `havenCells / tCoastLand` 从 `903` 降到 `901`，source 为 `875`。剩余 `features.total` 仍为 warn。
+- `continents-10000-audit-continents-003`：candidate pack cells、湖泊数和 lakeNames 未变化，仍为 `lateStages.names.lakeNames` warn；该 case 根因不在深洼湖泊 shore coast 标记，仍应继续查 lake outlet / 洼地消解。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\features.js` 通过。
+- `git diff --check` 通过。
+- 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 candidate summary，并重新生成 diff；两个目标 case 均为 `warn 1 / fail 0`，未新增 fail。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-feature-parity-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-feature-parity-diagnostics.md"` 通过。
+- `node .\tools\candidate-baseline-matrix.mjs --mode quick --refresh true --browser-channel chrome --timeout 180000` 通过；quick 矩阵为 `2 pass / 1 warn / 0 fail`。

@@ -261,7 +261,6 @@ function addLake({lakeCells, grid, distanceField, featureIds, features, suppleme
     grid.cells.h[cell] = 19;
     distanceField[cell] = WATER_COAST;
     featureIds[cell] = featureId;
-    for (const neighbor of grid.cells.c[cell] || []) if (grid.cells.h[neighbor] >= WATER_LEVEL) distanceField[neighbor] = LAND_COAST;
   }
   features.push({id: featureId, i: featureId, land: false, border: false, type: "lake", cells: [], supplemental});
 }
