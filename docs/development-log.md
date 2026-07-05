@@ -19194,3 +19194,26 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 100k 新 seed profile `overlay-slice-5ms-100k / full` 通过：滚轮 / 拖拽 idle frame p95 为 `11.9ms / 11.8ms`，idle long task 为 `0`，dirty 均恢复 clean，`glError = 0`。
 - 100k 同 seed 对照 `overlay-event-probe-100k / full` 通过：滚轮 / 拖拽 idle frame p95 为 `17.7ms / 11.9ms`，低于上一刀记录的 `47.1ms / 23.6ms`；滚轮 / 拖拽事件 dispatch p95 仍为 `0.1ms`，overlay p95 为 `12.4ms / 10.9ms`，console error 为 `0`。
+
+### 2026-07-05 地图 overlay transform 定位
+
+背景：
+
+- 事件探针与 overlay profile 显示同步事件回调并不慢，交互期仍有滚轮 frame p95 和 long task 抖动。
+- 地图 DOM overlay 节点每帧用 `style.left / style.top` 改位置，容易让浏览器把移动当作布局更新处理；这些节点已有 transform 锚点和缩放，可以把位置也合入 transform。
+
+实现：
+
+- 新增 `setOverlayNodePosition()`，统一写入 `--overlay-x / --overlay-y`。
+- 城市 / 国家 / 手工标签、城市图标、marker 图标、军事图标和选中 marker 改为通过 CSS transform 定位，不再每帧写节点 `left/top`。
+- CSS 中相关 overlay 节点固定 `left: 0; top: 0`，transform 组合为“屏幕位置 translate + 原有锚点 / 旋转 / 缩放”。
+- 移除城市、marker、军事图标的 transform transition，只保留 opacity / visibility 过渡，避免视口移动时图标位置产生动画尾随。
+
+验证：
+
+- `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器 smoke 生成 `overlay-transform-smoke / continents / 10000` 后，可见 city/state/city icon/military icon 的 computed `left/top` 均为 `0px`，`--overlay-x / --overlay-y` 存在，bounding box 正常分布在画布上，`glError = 0`，console/page error 为 `0`。
+- 100k 新 seed profile `overlay-transform-100k / full` 通过：滚轮 / 拖拽 frame p95 为 `52.9ms / 35.3ms`，overlay p95 为 `9.9ms / 8.3ms`，long task 为 `3 / 0`，idle dirty 均恢复 clean。
+- 100k 同 seed 对照 `overlay-event-probe-100k / full` 通过：滚轮 / 拖拽 frame p95 为 `47.2ms / 35.4ms`，低于前一刀同 seed `100ms / 52.8ms`；长任务从 `10 / 4` 降到 `2 / 0`，事件 dispatch p95 仍为 `0.2ms / 0.1ms`。

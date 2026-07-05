@@ -1273,8 +1273,7 @@ export class PlaceholderMapRenderer {
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      item.node.style.left = `${screen.x}px`;
-      item.node.style.top = `${stateLabel ? screen.y : screen.y - 6}px`;
+      setOverlayNodePosition(item.node, screen.x, stateLabel ? screen.y : screen.y - 6);
       item.node.style.setProperty("--label-rotation", `${item.rotation || 0}deg`);
       if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
       if (stateLabel) occupiedStates.push(box);
@@ -1337,8 +1336,7 @@ export class PlaceholderMapRenderer {
     }
     const screen = this.worldToScreen(point.x, point.y, rect);
     this.selectionMarker.style.display = "block";
-    this.selectionMarker.style.left = `${screen.x}px`;
-    this.selectionMarker.style.top = `${screen.y}px`;
+    setOverlayNodePosition(this.selectionMarker, screen.x, screen.y);
   }
 
   updateCityIcons(rect, occupiedLabels = []) {
@@ -1375,8 +1373,7 @@ export class PlaceholderMapRenderer {
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      item.node.style.left = `${screen.x}px`;
-      item.node.style.top = `${screen.y}px`;
+      setOverlayNodePosition(item.node, screen.x, screen.y);
       item.node.style.setProperty("--city-icon-scale", String(sizeScale));
       occupiedIcons.push(box);
       visible++;
@@ -1424,8 +1421,7 @@ export class PlaceholderMapRenderer {
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      item.node.style.left = `${screen.x}px`;
-      item.node.style.top = `${screen.y}px`;
+      setOverlayNodePosition(item.node, screen.x, screen.y);
       item.node.style.setProperty("--marker-icon-scale", String(markerIconScale(scale)));
       occupiedIcons.push(box);
       visible++;
@@ -1471,8 +1467,7 @@ export class PlaceholderMapRenderer {
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      item.node.style.left = `${screen.x}px`;
-      item.node.style.top = `${screen.y}px`;
+      setOverlayNodePosition(item.node, screen.x, screen.y);
       item.node.style.setProperty("--military-icon-scale", String(sizeScale));
       occupiedIcons.push(box);
       visible++;
@@ -1702,6 +1697,11 @@ function tradeFlowBoundsPoints(map, object) {
 
 function pointBounds(x, y, padding) {
   return expandBounds({minX: x, minY: y, maxX: x, maxY: y}, padding);
+}
+
+function setOverlayNodePosition(node, x, y) {
+  node.style.setProperty("--overlay-x", `${x}px`);
+  node.style.setProperty("--overlay-y", `${y}px`);
 }
 
 function includePoint(bounds, x, y) {
