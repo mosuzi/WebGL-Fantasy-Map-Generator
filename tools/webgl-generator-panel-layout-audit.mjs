@@ -630,6 +630,17 @@ async function auditPanel(page, panel) {
       return tops.size;
     }
 
+    function isCompactIconActionGroup(element, buttons) {
+      const className = String(element.className || "");
+      if (className.includes("floating-panel-header-actions") || className.includes("ui-panel-io-actions")) return true;
+      if (!buttons.length) return false;
+      return buttons.every(button => {
+        const text = normalizedText(button);
+        const hasAccessibleIconName = button.getAttribute("aria-label") || button.getAttribute("title");
+        return text.length <= 2 && hasAccessibleIconName;
+      });
+    }
+
     function normalizedText(element) {
       return (element.textContent || "").replace(/\s+/g, " ").trim();
     }
@@ -687,6 +698,7 @@ async function auditPanel(page, panel) {
       .map(element => {
         const buttons = [...element.querySelectorAll("button, .el-button")].filter(isVisibleElement);
         if (buttons.length < 2) return null;
+        const compactIconGroup = isCompactIconActionGroup(element, buttons);
         return {
           className: element.className,
           rect: rectOf(element),
@@ -695,7 +707,9 @@ async function auditPanel(page, panel) {
           buttonCount: buttons.length,
           lineCount: buttonLineCount(buttons),
           minButtonWidth: minRectValue(buttons, "width"),
-          maxButtonHeight: maxRectValue(buttons, "height")
+          maxButtonHeight: maxRectValue(buttons, "height"),
+          compactIconGroup,
+          minButtonThreshold: compactIconGroup ? 28 : 72
         };
       })
       .filter(Boolean);
@@ -723,7 +737,7 @@ async function auditPanel(page, panel) {
     }
     for (const group of actionGroups) {
       if (group.scrollWidth > group.clientWidth + 2) issues.push(`工具按钮组横向溢出 ${group.scrollWidth - group.clientWidth}px`);
-      if (group.minButtonWidth && group.minButtonWidth < 72) issues.push(`工具按钮组最小按钮宽 ${group.minButtonWidth}px 低于 72px`);
+      if (group.minButtonWidth && group.minButtonWidth < group.minButtonThreshold) issues.push(`工具按钮组最小按钮宽 ${group.minButtonWidth}px 低于 ${group.minButtonThreshold}px`);
     }
     for (const chain of militaryEventChains) {
       if (chain.scrollWidth > chain.clientWidth + 2) issues.push(`战报摘要横向溢出 ${chain.scrollWidth - chain.clientWidth}px`);

@@ -19132,3 +19132,22 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 构建产物浏览器烟测读取运行时统计：`routeStyleMode = primary/secondary road + solid trail`，默认图 `trailCount = 424`，路线 `580 / 580` 条渲染，`routeVertexCount = 34860`，`pointBudgetExceeded = false`，`vertexBudgetExceeded = false`，`glError = 0`，console/page error 为 `0`。
+
+### 2026-07-05 面板工具按钮审计阈值修正
+
+背景：
+
+- 继续推进“面板空间策略专项”时，`pnpm run audit:panels -- --scenario deep` 报出 `18` 个待复核项。
+- 复核发现这些项主要来自 `floating-panel-header-actions` 的 `28px` header 图标按钮和 `UiPanelIoActions` 的 `32px` 导入 / 导出图标按钮；它们是预期的小 icon 操作，不应套用文字按钮 `72px` 最小宽规则。
+
+实现：
+
+- `tools/webgl-generator-panel-layout-audit.mjs` 新增紧凑图标按钮组识别：浮动面板 header、面板导入导出动作条，以及短文本且具备 `aria-label / title` 的按钮组会使用图标按钮阈值。
+- 审计仍保留横向溢出检查；文字按钮组继续使用 `72px` 阈值，避免真正的文字按钮被压窄后漏报。
+- 本轮只修审计规则，不改产品 UI、面板布局或渲染路径。
+
+验证：
+
+- `node --check tools/webgl-generator-panel-layout-audit.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run audit:panels -- --scenario deep --template continents --cells 10000 --seed panel-space-next --port 5442 --browser-channel chrome` 通过并生成报告：`结论：未发现待复核项`，面板预热 `18 / 18`，点击到出图 `1358.4ms`，WebGL 加载 `341.7ms`，`glError = 0`，console/page error 和 health event 均为空。
