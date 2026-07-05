@@ -314,11 +314,17 @@ function sortRows(rows, key, direction) {
 
 function handleActionSelect(key) {
   if (key === "add") {
-    callbacks.onAddMode?.(!props.state.addMode);
+    props.callbacks.onAddMode?.(!props.state.addMode);
     return;
   }
-  if (key === "delete" && selected.value) callbacks.onDeleteState?.(selected.value.id);
-  if (key === "edit" && selected.value) callbacks.onEdit?.(selected.value);
+  if (key === "delete" && selected.value) {
+    props.callbacks.onDeleteState?.(selected.value.id);
+    return;
+  }
+  if (key === "edit" && selected.value) {
+    props.callbacks.onEdit?.(selected.value);
+    return;
+  }
   if (!key) activeAction.value = null;
 }
 

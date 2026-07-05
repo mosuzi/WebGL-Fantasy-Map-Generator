@@ -19889,3 +19889,21 @@ full 矩阵结果：
 - `node --check` 覆盖 `app.js`、`state-panel.js`、`province-panel.js`。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+
+### 2026-07-05 国家省份动作按钮运行时异常修复
+
+背景：
+
+- 用户反馈“新建国家、删除国家、编辑国家都没有反应”。
+- 排查发现国家/省份面板把新增、删除、编辑并入 `UiActionDock` 后，`handleActionSelect()` 仍引用裸 `callbacks`；在 `<script setup>` 的函数作用域里这里没有该变量，点击会抛 `ReferenceError`，因此所有对象动作按钮都不会继续执行。
+
+实现：
+
+- 国家面板和省份面板的对象动作 handler 统一改为 `props.callbacks`。
+- 删除和编辑分支补 `return`，避免一个动作处理完继续落到后续分支。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+- 构建产物下用 Playwright 直接打开国家面板验证：点击“新增国家”后 `activeEditor = state:add` 且交互锁开启；取消新增后点击“进入国家编辑”，`state` brush active 为 `true`，全局 `editingObject.kind = state`，无 page error / console error。
