@@ -1,6 +1,7 @@
 import {createRandom} from "./random.js";
 
 const ZONE_TYPES = [
+  "Warzone",
   "Invasion",
   "Rebels",
   "Proselytism",
@@ -17,6 +18,7 @@ const ZONE_TYPES = [
 const EXTRA_TYPES = ["Disease", "Flood", "Proselytism", "Disaster", "Invasion"];
 
 const ZONE_COLORS = {
+  Warzone: "url(#hatch3)",
   Invasion: "url(#hatch1)",
   Rebels: "url(#hatch3)",
   Proselytism: "url(#hatch6)",
@@ -55,6 +57,7 @@ export function buildZones(pack, options = {}) {
 
 function createZone(type, pack, random, occupied, id) {
   const factory = {
+    Warzone: createWarzoneZone,
     Invasion: createInvasionZone,
     Rebels: createRebelsZone,
     Proselytism: createProselytismZone,
@@ -76,8 +79,41 @@ function createZone(type, pack, random, occupied, id) {
     type,
     cells: result.cells.filter(cell => isValidCell(pack.cells, cell)),
     color: ZONE_COLORS[type] || "url(#hatch5)",
+    pattern: result.pattern || patternForZoneType(type),
+    hexColor: result.hexColor || colorForZoneType(type),
     hidden: false
   };
+}
+
+function createWarzoneZone(pack, random, occupied) {
+  const front = pick((pack.military?.fronts || []).filter(item => item?.borderCellPairs?.length), random);
+  if (front) {
+    const pair = pick(front.borderCellPairs || [], random);
+    const start = pair ? pick(pair.filter(Number.isInteger), random) : null;
+    if (Number.isInteger(start)) {
+      const attacker = pack.states?.[front.attacker];
+      const defender = pack.states?.[front.defender];
+      const allowedStates = new Set([front.attacker, front.defender].map(Number).filter(Boolean));
+      const cells = collectRegion(pack, start, random, {
+        maxCells: random.integer(8, 26),
+        occupied,
+        allow: cell => isLand(pack.cells, cell) && allowedStates.has(Number(pack.cells.state?.[cell] || 0))
+      });
+      return {name: `${stateName(attacker)}-${stateName(defender)}战区`, cells, pattern: "cross", hexColor: "#d65a42"};
+    }
+  }
+
+  const border = enemyBorderCells(pack).filter(cell => !occupied.has(cell));
+  const start = pick(border, random);
+  if (!Number.isInteger(start)) return null;
+  const stateId = pack.cells.state[start];
+  const enemyId = (pack.cells.c[start] || []).map(cell => pack.cells.state[cell]).find(id => id && id !== stateId && pack.states?.[stateId]?.diplomacy?.[id] === "Enemy");
+  const cells = collectRegion(pack, start, random, {
+    maxCells: random.integer(8, 24),
+    occupied,
+    allow: cell => isLand(pack.cells, cell) && (pack.cells.state[cell] === stateId || pack.cells.state[cell] === enemyId)
+  });
+  return {name: `${stateName(pack.states?.[stateId])}-${stateName(pack.states?.[enemyId])}战区`, cells, pattern: "cross", hexColor: "#d65a42"};
 }
 
 function createInvasionZone(pack, random, occupied) {
@@ -140,7 +176,7 @@ function createCrusadeZone(pack, random, occupied) {
   const religion = pick(heresies, random) || pick((pack.religions || []).filter(item => item?.i && !item.removed && item.type !== "Folk"), random);
   if (!religion) return null;
   const religionCells = pack.cells.i.filter(cell => !occupied.has(cell) && isPopulatedLand(pack.cells, cell) && pack.cells.religion?.[cell] === religion.i);
-  const maxCells = religion.type === "Heresy" ? Math.max(20, Math.min(religionCells.length, random.integer(200, 3600))) : random.integer(15, 45);
+  const maxCells = religion.type === "Heresy" ? Math.max(20, Math.min(religionCells.length, random.integer(24, 72))) : random.integer(15, 45);
   const start = pick(religionCells, random);
   if (!Number.isInteger(start)) return null;
   const cells = collectRegion(pack, start, random, {
@@ -275,7 +311,7 @@ function getZoneTypePlan(target) {
 }
 
 function getTargetZoneCount(pack) {
-  return clamp(Math.round(8 + Math.sqrt(pack.cells.i.length) / 55), 7, 16);
+  return clamp(Math.round(2 + Math.sqrt(pack.cells.i.length) / 95), 2, 6);
 }
 
 function createZonesResult(pack, zones, startedAt, target) {
@@ -316,6 +352,17 @@ function stateBorderCells(pack) {
   });
 }
 
+function enemyBorderCells(pack) {
+  return stateBorderCells(pack).filter(cell => {
+    const stateId = pack.cells.state?.[cell];
+    const state = pack.states?.[stateId];
+    return (pack.cells.c[cell] || []).some(neighbor => {
+      const neighborState = pack.cells.state?.[neighbor];
+      return neighborState && neighborState !== stateId && state?.diplomacy?.[neighborState] === "Enemy";
+    });
+  });
+}
+
 function validBurgs(pack) {
   return (pack.burgs || []).filter(burg => burg?.i && !burg.removed && isValidCell(pack.cells, burg.cell) && isLand(pack.cells, burg.cell));
 }
@@ -334,6 +381,29 @@ function isValidCell(cells, cell) {
 
 function stateName(state) {
   return state?.name || state?.fullName || "Foreign";
+}
+
+function patternForZoneType(type) {
+  if (type === "Warzone" || type === "Rebels" || type === "Crusade" || type === "Eruption" || type === "Tsunami") return "cross";
+  if (type === "Disease" || type === "Flood" || type === "Proselytism") return "dots";
+  return "diagonal";
+}
+
+function colorForZoneType(type) {
+  return {
+    Warzone: "#d65a42",
+    Invasion: "#d98238",
+    Rebels: "#c79735",
+    Proselytism: "#9b76d6",
+    Crusade: "#b48be2",
+    Disease: "#668f5a",
+    Disaster: "#b26852",
+    Eruption: "#c85b38",
+    Avalanche: "#c4ced2",
+    Fault: "#8d7d70",
+    Flood: "#4e9ac9",
+    Tsunami: "#4a9dbe"
+  }[type] || "#b26852";
 }
 
 function religionName(religion) {

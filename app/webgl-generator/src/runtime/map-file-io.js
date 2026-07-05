@@ -647,7 +647,9 @@ function zoneFeatures(map) {
         type: zone.type || "",
         hidden: Boolean(zone.hidden),
         cells: zone.cells?.length || 0,
-        color: zone.color || ""
+        color: zone.color || "",
+        pattern: zone.pattern || "",
+        hexColor: zone.hexColor || ""
       },
       geometry: {
         type: "MultiPolygon",

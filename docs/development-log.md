@@ -19807,3 +19807,27 @@ full 矩阵结果：
 - `node --check` 覆盖 `climate.js`、`options.js`、`app.js`、`panel.js`。
 - 字段断言确认默认 `25%` 生成 `45° / 90°`，`100%` 生成 `180° / 360°`。
 - `$env:CI='true'; pnpm run build:app` 通过；本轮未跑浏览器烟测。
+
+### 2026-07-05 地区纹理图层第一刀
+
+背景：
+
+- 用户要求颜色选择后续支持纹理，并引入一个主要用于战区、无人区、管控区等态势表达的地区图层。
+- 用户同时明确国家和省份默认生成时不要使用纹理，随机地区显示比例也不要过高，避免满图都是纹理。
+
+实现：
+
+- 新增 `app/webgl-generator/src/renderer/zone-layer.js`，以 WebGL 顶点方式绘制地区纹理，不增加 DOM overlay 负担。
+- 纹理预设第一刀支持 `diagonal / cross / dots`，并兼容原版 `url(#hatch*)` 风格字段到本地纹理的映射。
+- 控制面板图层页新增“地区”开关；默认可见，但数据生成数量已压低。
+- 生成端 `zones` 目标数量从约 `7-16` 收敛为 `2-6`，并给每个 zone 写入 `pattern / hexColor`。
+- 新增 `Warzone` 地区类型，优先从实际军事 front 的共享边界生成少量战区；无 front 时才尝试 Enemy 边界。该逻辑只生成静态态势地区，不引入动态军事系统。
+- 大型 `Crusade` 区域范围收窄，避免个别随机结果覆盖过多 cell。
+- GeoJSON 导出为 zone properties 补充 `pattern / hexColor`。
+
+验证：
+
+- `node --check` 覆盖 `zone-layer.js`、`placeholder-renderer.js`、`zones.js`、`map-file-io.js`。
+- 生成断言 `zone-texture-check / 3000 cells`：地区数量 `2`，纹理层顶点 `3318`，关闭地区图层时顶点为 `0`。
+- 多 seed 检查中 `zone-war-0` 生成 `Warzone / Invasion`，军事 fronts `2`，campaigns `2`。
+- `$env:CI='true'; pnpm run build:app` 通过后再提交。

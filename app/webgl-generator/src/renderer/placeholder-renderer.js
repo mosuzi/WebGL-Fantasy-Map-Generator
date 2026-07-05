@@ -5,6 +5,7 @@ import {isLandCell} from "./color-modes.js";
 import {politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshVertices, selectionHighlightMode} from "./selection-layer.js";
+import {pushZoneTextureLayer} from "./zone-layer.js";
 import {
   pushScreenPolyline,
   pushVariableScreenPolyline,
@@ -201,6 +202,7 @@ export class PlaceholderMapRenderer {
       resources: true,
       military: true,
       warFronts: true,
+      zones: true,
       measurements: true,
       scaleBar: true,
       coastline: true,
@@ -565,7 +567,7 @@ export class PlaceholderMapRenderer {
     if (!changed) return;
     if (layer === "tradeFlows") this.dynamicBuffersDirty.tradeFlows = true;
     if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") this.refreshPointLayers({draw: false});
-    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts")) this.refreshLineLayers({draw: false});
+    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts" || item === "zones")) this.refreshLineLayers({draw: false});
     this.draw();
   }
 
@@ -2637,6 +2639,7 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
+  pushZoneTextureLayer(vertices, context, map, visibility);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLines(vertices, context, map, visibility);
