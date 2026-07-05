@@ -21,6 +21,7 @@ const distDir = resolve(args.dir || join(rootDir, "dist", "webgl-generator"));
 const outPath = resolve(args.out || join(rootDir, "docs", "generated", "reports", "geo-import-regression-results.json"));
 const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated", "reports", "geo-import-regression-results.md"));
 const fixturePath = resolve(args.fixture || join(rootDir, "docs", "generated", "reports", "geo-import-fixture.geojson"));
+const fmgCellsFixturePath = args["fmg-cells-fixture"] ? resolve(args["fmg-cells-fixture"]) : null;
 const viewport = parseViewport(args.viewport || "1280x820");
 
 if (!existsSync(distDir)) fail(`构建产物不存在：${distDir}`);
@@ -68,6 +69,7 @@ try {
   writeFileSync(fixturePath, `${JSON.stringify(fixture.geoJson, null, 2)}\n`, "utf8");
   const importControl = await inspectGeoImportControl(page);
   const imported = await importGeoFixture(page, fixturePath, fixture.expected);
+  const importedFmgCells = fmgCellsFixturePath ? await importFmgCellsFixture(page, fmgCellsFixturePath) : null;
 
   const report = {
     metadata: {
@@ -75,6 +77,7 @@ try {
       url: baseUrl,
       distDir,
       fixturePath,
+      fmgCellsFixturePath,
       seed,
       cells,
       template,
@@ -91,7 +94,8 @@ try {
     },
     importControl,
     imported,
-    passed: !consoleErrors.length && importControl.passed && imported.passed
+    importedFmgCells,
+    passed: !consoleErrors.length && importControl.passed && imported.passed && (importedFmgCells?.passed ?? true)
   };
 
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -282,6 +286,92 @@ async function importGeoFixture(page, filePath, expected) {
   }, expected);
 }
 
+async function importFmgCellsFixture(page, filePath) {
+  await page.locator("#import-geo-file").setInputFiles(filePath);
+  await page.waitForFunction(
+    () => {
+      const app = window.__webglGeneratorApp;
+      const status = document.getElementById("file-operation-status")?.textContent || "";
+      return app?.map?.metadata?.geoImportDerivedRefresh &&
+        status.includes("已从原版 Cells GEO 导入地形") &&
+        app.renderer?.getStats?.()?.draw?.glError === 0;
+    },
+    null,
+    {timeout: timeoutMs}
+  );
+
+  return page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const map = app.map;
+    const failures = [];
+    let gridMismatch = 0;
+    let packMismatch = 0;
+    let gridLand = 0;
+    let gridFeatureLand = 0;
+    let packLand = 0;
+    let packFeatureLand = 0;
+
+    for (const cell of map.grid.cells.i) {
+      const heightLand = map.grid.cells.h[cell] >= 20;
+      const featureLand = Boolean(map.features.features?.[map.grid.cells.f?.[cell]]?.land);
+      if (heightLand) gridLand++;
+      if (featureLand) gridFeatureLand++;
+      if (heightLand !== featureLand) gridMismatch++;
+    }
+
+    for (let cell = 0; cell < map.pack.cells.h.length; cell += 1) {
+      const heightLand = map.pack.cells.h[cell] >= 20;
+      const featureLand = Boolean(map.pack.features?.[map.pack.cells.f?.[cell]]?.land);
+      if (heightLand) packLand++;
+      if (featureLand) packFeatureLand++;
+      if (heightLand !== featureLand) packMismatch++;
+    }
+
+    const hover = sampleHoverConsistency(app);
+    const status = document.getElementById("file-operation-status")?.textContent || "";
+    const glError = app.renderer.getStats().draw?.glError || 0;
+    if (gridMismatch) failures.push(`grid 高度水陆与 feature 水陆不一致：${gridMismatch}`);
+    if (packMismatch) failures.push(`pack 高度水陆与 feature 水陆不一致：${packMismatch}`);
+    if (hover.mismatch) failures.push(`悬停水陆与高度水陆不一致：${hover.mismatch}`);
+    if (hover.checked < 20) failures.push(`悬停抽样不足：${hover.checked}`);
+    if (!status.includes("已从原版 Cells GEO 导入地形")) failures.push(`状态栏文本异常：${status}`);
+    if (glError) failures.push(`WebGL error ${glError}`);
+    return {
+      status,
+      glError,
+      gridLand,
+      gridFeatureLand,
+      gridMismatch,
+      packLand,
+      packFeatureLand,
+      packMismatch,
+      hover,
+      derivedRefresh: map.metadata?.geoImportDerivedRefresh || null,
+      failures,
+      passed: failures.length === 0
+    };
+
+    function sampleHoverConsistency(app) {
+      const {map, renderer} = app;
+      const rect = renderer.canvas.getBoundingClientRect();
+      const samples = [];
+      const step = Math.max(1, Math.floor(map.grid.cells.i.length / 180));
+      for (let index = 0; index < map.grid.cells.i.length && samples.length < 80; index += step) {
+        const cell = map.grid.cells.i[index];
+        const point = map.grid.points[cell];
+        if (!point) continue;
+        const screen = renderer.worldToScreen(point[0], point[1], rect);
+        const pick = renderer.pickClientPoint(rect.left + screen.x, rect.top + screen.y);
+        if (!pick || !Number.isInteger(pick.gridCell)) continue;
+        const heightLand = pick.height >= 20;
+        samples.push({cell: pick.gridCell, heightLand, featureLand: Boolean(pick.featureLand), featureType: pick.featureType});
+      }
+      const mismatch = samples.filter(item => item.heightLand !== item.featureLand).length;
+      return {checked: samples.length, mismatch, samples: samples.slice(0, 8)};
+    }
+  });
+}
+
 async function inspectGeoImportControl(page) {
   return page.evaluate(() => {
     const label = Array.from(document.querySelectorAll(".file-import-action"))
@@ -322,13 +412,16 @@ function renderMarkdown(report) {
   lines.push(`- overlay：点 ${report.imported.pointCount}，线 ${report.imported.pathCount}，面 ${report.imported.areaCount}`);
   lines.push(`- 测量图层：${report.imported.measurementLayerVisible ? "已显示" : "未显示"}`);
   lines.push(`- 状态栏：${report.imported.status}`);
+  if (report.importedFmgCells) {
+    lines.push(`- FMG Cells 地形导入：grid mismatch ${report.importedFmgCells.gridMismatch}，pack mismatch ${report.importedFmgCells.packMismatch}，hover mismatch ${report.importedFmgCells.hover.mismatch} / ${report.importedFmgCells.hover.checked}`);
+  }
   lines.push(`- WebGL error：${report.imported.glError}`);
   lines.push("");
   lines.push("## 性能", "");
   lines.push(`- 点击到出图：${report.generation.elapsedMs}ms`);
   lines.push(`- 纯生成：${report.generation.generationMs}ms`);
   lines.push(`- WebGL 加载：${report.generation.loadMapMs}ms`);
-  const failures = [...report.importControl.failures, ...report.imported.failures];
+  const failures = [...report.importControl.failures, ...report.imported.failures, ...(report.importedFmgCells?.failures || [])];
   if (failures.length) {
     lines.push("", "## 失败项", "");
     for (const failure of failures) lines.push(`- ${failure}`);
@@ -345,6 +438,7 @@ function renderFailureSummary(report) {
   const lines = ["GEO 数据导入回归失败："];
   for (const failure of report.importControl.failures) lines.push(`- ${failure}`);
   for (const failure of report.imported.failures) lines.push(`- ${failure}`);
+  for (const failure of report.importedFmgCells?.failures || []) lines.push(`- ${failure}`);
   for (const error of report.metadata.consoleErrors) lines.push(`- console error: ${error}`);
   return lines.join("\n");
 }

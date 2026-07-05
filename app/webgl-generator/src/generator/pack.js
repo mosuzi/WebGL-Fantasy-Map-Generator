@@ -49,16 +49,21 @@ export function buildPack(grid, features) {
   };
 
   profile.stage("copy-grid-semantics", "复制 grid 语义字段", () => copyGridSemantics(cells, grid, features));
-  const featureTiming = profile.stage("markup-pack-features", "标注 pack feature", () => markupPackFeatures(pack, grid));
-  profile.stage("metadata-counts", "统计 pack 指标", () => {
-    pack.metadata.packFeatureCount = pack.features.filter(Boolean).length;
-    pack.metadata.havenCells = countPositive(cells.haven);
-    pack.metadata.harborCells = countPositive(cells.harbor);
-    pack.metadata.featureGroups = countByKey(pack.features.filter(Boolean), feature => feature.group || "none");
-  });
-  pack.metadata.featureTiming = featureTiming;
+  profile.stage("refresh-pack-features", "标注 pack feature", () => refreshPackFeatures(pack, grid));
   pack.metadata.timing = profile.finish();
 
+  return pack;
+}
+
+export function refreshPackFeatures(pack, grid) {
+  if (!pack?.cells || !grid?.cells) return pack;
+  const featureTiming = markupPackFeatures(pack, grid);
+  pack.metadata = pack.metadata || {};
+  pack.metadata.packFeatureCount = pack.features.filter(Boolean).length;
+  pack.metadata.havenCells = countPositive(pack.cells.haven);
+  pack.metadata.harborCells = countPositive(pack.cells.harbor);
+  pack.metadata.featureGroups = countByKey(pack.features.filter(Boolean), feature => feature.group || "none");
+  pack.metadata.featureTiming = featureTiming;
   return pack;
 }
 

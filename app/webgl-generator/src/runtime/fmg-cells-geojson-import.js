@@ -1,3 +1,8 @@
+import {defineBiomesAndPopulation} from "../generator/biomes.js";
+import {buildClimate} from "../generator/climate.js";
+import {extractFeatures} from "../generator/features.js";
+import {refreshPackFeatures} from "../generator/pack.js";
+import {createRandom} from "../generator/random.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 
 const SPATIAL_BUCKETS = 64;
@@ -15,9 +20,11 @@ export function createImportFmgCellsHeightCommand(text, map, {label = "导入 FM
     },
     apply(context) {
       applyHeightChanges(context.map, changes, "after");
+      refreshImportedTerrainDerivatives(context.map);
     },
     revert(context) {
       applyHeightChanges(context.map, changes, "before");
+      refreshImportedTerrainDerivatives(context.map);
     },
     isNoop() {
       return changes.length === 0;
@@ -214,6 +221,69 @@ function applyHeightChanges(map, changes, key) {
       map.pack.cells.h[packCell] = value;
     }
   }
+}
+
+function refreshImportedTerrainDerivatives(map) {
+  if (!map?.grid?.cells?.h) return;
+  map.features = extractFeatures(map.grid);
+
+  if (map.pack?.cells) {
+    syncPackHeightsFromGrid(map);
+    refreshPackFeatures(map.pack, map.grid);
+  }
+
+  const options = map.options || {};
+  map.climate = buildClimate(map.grid, map.features, options, createRandom(options.seed || map.metadata?.seed || "geo-import"));
+  if (map.pack?.cells) {
+    const biomes = defineBiomesAndPopulation(map.grid, map.pack, options);
+    map.climate.biomes = biomes.biomes;
+    map.climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
+  }
+
+  if (map.metadata) {
+    map.metadata.featureCount = map.features.metadata?.featureCount ?? map.metadata.featureCount;
+    map.metadata.packCells = map.pack?.metadata?.cells ?? map.metadata.packCells;
+    map.metadata.geoImportDerivedRefresh = {
+      featureCount: map.features.metadata?.featureCount || 0,
+      packFeatureCount: map.pack?.metadata?.packFeatureCount || 0,
+      refreshedAt: new Date().toISOString()
+    };
+  }
+  if (map.summary) {
+    map.summary.featureCount = map.features.metadata?.featureCount ?? map.summary.featureCount;
+    map.summary.oceanFeatures = map.features.metadata?.oceanFeatures ?? map.summary.oceanFeatures;
+    map.summary.landFeatures = map.features.metadata?.landFeatures ?? map.summary.landFeatures;
+    map.summary.lakeFeatures = map.features.metadata?.lakeFeatures ?? map.summary.lakeFeatures;
+    map.summary.packCells = map.pack?.metadata?.cells ?? map.summary.packCells;
+  }
+  markDerivedSystemsStale(map);
+  delete map.__heightEditorPackCellsByGrid;
+}
+
+function syncPackHeightsFromGrid(map) {
+  const cells = map.pack?.cells;
+  if (!cells?.g || !cells?.h || !map.grid?.cells?.h) return;
+  for (let packCell = 0; packCell < cells.g.length; packCell += 1) {
+    const gridCell = cells.g[packCell];
+    if (!Number.isInteger(gridCell) || gridCell < 0) continue;
+    cells.h[packCell] = clampHeight(map.grid.cells.h[gridCell]);
+    if (cells.temp) cells.temp[packCell] = map.grid.cells.temp?.[gridCell] ?? cells.temp[packCell] ?? 0;
+    if (cells.prec) cells.prec[packCell] = map.grid.cells.prec?.[gridCell] ?? cells.prec[packCell] ?? 0;
+  }
+}
+
+function markDerivedSystemsStale(map) {
+  const current = Array.isArray(map.metadata?.derivedStale?.systems) ? map.metadata.derivedStale.systems : [];
+  const systems = new Set(current);
+  for (const system of ["rivers", "routes", "cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]) {
+    systems.add(system);
+  }
+  map.metadata = map.metadata || {};
+  map.metadata.derivedStale = {
+    ...(map.metadata.derivedStale || {}),
+    systems: [...systems],
+    reason: "fmg-cells-geojson-terrain-import"
+  };
 }
 
 function getPackCellsForGrid(map, gridCell) {

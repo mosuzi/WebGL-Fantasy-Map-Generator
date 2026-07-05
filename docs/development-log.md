@@ -2,6 +2,38 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：FMG Cells GEO 导入水陆语义同步
+
+用户反馈原版 FMG Cells GEO 导入后，部分区域颜色看起来是陆地但悬停信息显示海洋，或颜色看起来是海洋但悬停信息显示陆地。
+
+根因：
+
+- FMG Cells GEO 导入此前只改 `grid.cells.h` 和对应 `pack.cells.h`，renderer 颜色会按新高度刷新。
+- 但 `grid.cells.f / grid.cells.t / map.features`、`pack.cells.f / pack.cells.t / pack.features`、biome / population 等水陆派生字段仍是旧地图结果。
+- 悬停 picking 命中 pack cell 时还存在一个来源错误：读取了 `pack.cells.f`，却去 `map.features.features` 查 feature；正确来源应优先使用 `map.pack.features`。
+
+修正：
+
+- `pack.js` 新增 `refreshPackFeatures(pack, grid)`，可在不重建 pack 点位和对象 ID 的情况下，重算 pack feature、距离场、haven / harbor 和 feature 分组统计。
+- FMG Cells GEO 导入 apply / revert 后会执行地形派生同步：
+  - 重新 `extractFeatures(grid)`，同步 grid 水陆 feature。
+  - 按当前 grid 高度同步 pack 高度，并在既有 pack 图上刷新 pack feature。
+  - 重建 climate、biome 和 population，更新相关 metadata / summary。
+  - 将河流、路线、城市、国家、省份、宗教、标记、区域、军事、经济和外交标记为待派生，避免误以为这些下游语义已经完全适配新地形。
+- `picking.js` 修正 pack 命中时的 feature 来源，优先从 `map.pack.features[pack.cells.f[packCell]]` 取水陆类型。
+- `regress:geo` 增加可选 `--fmg-cells-fixture`，能用真实 FMG Cells GeoJSON 校验导入后的 grid / pack / hover 水陆一致性。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\fmg-cells-geojson-import.js` 通过。
+- `node --check app\webgl-generator\src\generator\pack.js` 通过。
+- `node --check app\webgl-generator\src\renderer\picking.js` 通过。
+- `node --check tools\webgl-generator-geo-import-regression.mjs` 通过。
+- `git diff --check` 通过。
+- Node 级真实文件探针使用 `C:\Users\mosuzi\Downloads\k170 Cells 2026-07-04-22-00.geojson`，导入后 `gridMismatch = 0`、`packMismatch = 0`。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 浏览器回归 `pnpm run regress:geo -- --fmg-cells-fixture "C:\Users\mosuzi\Downloads\k170 Cells 2026-07-04-22-00.geojson"` 通过：普通 GeoJSON 测量导入仍可用，FMG Cells 地形导入后 `grid mismatch 0`、`pack mismatch 0`、`hover mismatch 0 / 80`，点击到出图 `1679.1ms`，WebGL 加载 `427ms`，`glError = 0`。
+
 ## 2026-07-05：面板空间深场景收束复查
 
 背景：

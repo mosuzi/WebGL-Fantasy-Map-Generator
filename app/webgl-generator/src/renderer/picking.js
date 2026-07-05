@@ -442,7 +442,9 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
   const mappedPackCell = map.grid.cells.pack?.[gridCell];
   const packCell = Number.isInteger(mappedPackCell) && mappedPackCell >= 0 ? mappedPackCell : null;
   const featureId = packCell === null ? map.grid.cells.f?.[gridCell] : map.pack.cells.f?.[packCell] ?? map.grid.cells.f?.[gridCell];
-  const feature = map.features.features[featureId];
+  const feature = packCell === null
+    ? map.features.features[featureId]
+    : map.pack.features?.[featureId] || map.features.features[map.grid.cells.f?.[gridCell]];
   return {
     gridCell,
     packCell,
