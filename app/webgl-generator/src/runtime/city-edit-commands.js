@@ -43,6 +43,69 @@ const CITY_NAME_BATCH_EFFECTS = Object.freeze({
   derived: Object.freeze(["object-name", "labels", "object-panels"])
 });
 
+const CITY_COLLECTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["settlement-states", "city-provinces", "city-population", "point-layers", "labels", "object-panels", "object-index", "state-statistics"])
+});
+
+export function createAddCityAtCellCommand(gridCell, {label = "新增城市"} = {}) {
+  const targetGridCell = normalizeGridCell(gridCell);
+  let snapshot = null;
+  let result = null;
+  return {
+    label,
+    effects: {
+      ...CITY_COLLECTION_EFFECTS,
+      affected: [{kind: OBJECT_KIND.CITY, id: "new"}]
+    },
+    apply(context) {
+      snapshot ??= captureCityCollectionSnapshot(context.map);
+      result = addCityAtGridCell(context.map, targetGridCell);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的城市新增快照");
+      restoreCityCollectionSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      return !isValidCitySeedCell(context.map, targetGridCell);
+    },
+    getResult() {
+      return result;
+    }
+  };
+}
+
+export function createDeleteCityCommand(cityId, {label = "删除城市"} = {}) {
+  const normalizedCityId = normalizeCityId(cityId);
+  let snapshot = null;
+  let result = null;
+  return {
+    label: `${label} #${normalizedCityId}`,
+    effects: {
+      ...CITY_COLLECTION_EFFECTS,
+      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+    },
+    apply(context) {
+      snapshot ??= captureCityCollectionSnapshot(context.map);
+      result = deleteCity(context.map, normalizedCityId);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的城市删除快照");
+      restoreCityCollectionSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const city = context.map?.settlements?.cities?.[normalizedCityId];
+      return !city || city.removed;
+    },
+    getResult() {
+      return result;
+    }
+  };
+}
+
 export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口"} = {}) {
   const normalizedCityId = normalizeCityId(cityId);
   const after = normalizePopulation(nextPopulation);
@@ -249,6 +312,93 @@ export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名�
   };
 }
 
+function addCityAtGridCell(map, gridCell) {
+  const packCell = choosePackCellForGridCell(map, gridCell);
+  if (!Number.isInteger(packCell)) throw new Error("无法在当前 cell 创建城市");
+  const state = normalizeOwnerId(map?.pack?.cells?.state?.[packCell] ?? map?.grid?.cells?.state?.[gridCell]);
+  const province = normalizeOwnerId(map?.pack?.cells?.province?.[packCell] ?? map?.grid?.cells?.province?.[gridCell]);
+  const culture = normalizeOwnerId(map?.pack?.cells?.culture?.[packCell] ?? map?.grid?.cells?.culture?.[gridCell]);
+  const religion = normalizeOwnerId(map?.pack?.cells?.religion?.[packCell] ?? map?.grid?.cells?.religion?.[gridCell]);
+  const [x, y] = map?.pack?.cells?.p?.[packCell] || [0, 0];
+  const cityId = nextCityId(map);
+  const burgId = nextBurgId(map);
+  const population = Math.max(1, roundValue((map?.pack?.cells?.pop?.[packCell] || map?.grid?.cells?.pop?.[gridCell] || 1) + 2, 3));
+  const generator = createChineseNameGenerator(`${map?.metadata?.seed || map?.options?.seed || "map"}|add-city|${cityId}`, {namebases: map?.namebases});
+  const name = generator.makePlaceName({
+    id: cityId,
+    cell: packCell,
+    culture,
+    cultureRoot: readCultureRoot(map, culture),
+    state,
+    province,
+    population,
+    group: "town"
+  }) || `新城${cityId}`;
+  const cultureItem = readCityCulture(map, {culture}, null);
+  const visual = defaultCityVisual({capital: false, provincial: false, port: 0, population, group: "town", type: "Generic"}, cultureItem);
+  const city = {
+    id: cityId,
+    burgId,
+    name,
+    cell: gridCell,
+    packCell,
+    x,
+    y,
+    population,
+    state,
+    province,
+    culture,
+    religion,
+    capital: false,
+    provincial: false,
+    port: 0,
+    type: "Generic",
+    group: "town",
+    visual: clonePlain(visual)
+  };
+  const burg = {
+    i: burgId,
+    id: burgId,
+    cityId,
+    cell: packCell,
+    x,
+    y,
+    state,
+    province,
+    culture,
+    religion,
+    name,
+    feature: map?.pack?.cells?.f?.[packCell],
+    capital: 0,
+    port: 0,
+    population,
+    group: "town",
+    type: "Generic",
+    visual: clonePlain(visual)
+  };
+  map.settlements.cities[cityId] = city;
+  map.pack.burgs[burgId] = burg;
+  if (map.pack.cells.burg) map.pack.cells.burg[packCell] = burgId;
+  refreshSettlementDerivedStats(map);
+  return {cityId, burgId, packCell, gridCell};
+}
+
+function deleteCity(map, cityId) {
+  const city = map?.settlements?.cities?.[cityId];
+  if (!city || city.removed) throw new Error(`找不到城市 #${cityId}`);
+  const burg = findBurgForCity(map, city);
+  const burgId = burg?.i ?? burg?.id ?? city.burgId;
+  const packCell = normalizePackCell(city.packCell ?? burg?.cell);
+  city.removed = true;
+  if (burg) burg.removed = true;
+  if (Number.isInteger(packCell) && normalizeOwnerId(map?.pack?.cells?.burg?.[packCell]) === normalizeOwnerId(burgId)) {
+    map.pack.cells.burg[packCell] = 0;
+  }
+  repairDeletedCityRoles(map, city, burg);
+  refreshSettlementDerivedStats(map);
+  return {cityId, burgId, packCell};
+}
+
 function captureCitySnapshot(map, cityId) {
   const city = map?.settlements?.cities?.[cityId];
   if (!city) return null;
@@ -433,6 +583,70 @@ function restoreCityOwner(map, snapshot) {
   }
 }
 
+function captureCityCollectionSnapshot(map) {
+  return {
+    cities: clonePlain(map?.settlements?.cities || []),
+    burgs: clonePlain(map?.pack?.burgs || []),
+    packBurg: cloneArrayLike(map?.pack?.cells?.burg),
+    states: clonePlain(map?.politics?.states || []),
+    packStates: map?.pack?.states === map?.politics?.states ? null : clonePlain(map?.pack?.states || []),
+    provinces: clonePlain(map?.politics?.provinces || []),
+    packProvinces: map?.pack?.provinces === map?.politics?.provinces ? null : clonePlain(map?.pack?.provinces || []),
+    metadata: clonePlain(map?.settlements?.metadata || null)
+  };
+}
+
+function restoreCityCollectionSnapshot(map, snapshot) {
+  if (!map || !snapshot) return;
+  if (map.settlements) {
+    map.settlements.cities = clonePlain(snapshot.cities);
+    map.settlements.metadata = clonePlain(snapshot.metadata);
+  }
+  if (map.politics) {
+    map.politics.states = clonePlain(snapshot.states);
+    map.politics.provinces = clonePlain(snapshot.provinces);
+  }
+  if (map.pack) {
+    map.pack.burgs = clonePlain(snapshot.burgs);
+    map.pack.states = snapshot.packStates ? clonePlain(snapshot.packStates) : map.politics?.states;
+    map.pack.provinces = snapshot.packProvinces ? clonePlain(snapshot.packProvinces) : map.politics?.provinces;
+  }
+  restoreArrayLike(map?.pack?.cells, "burg", snapshot.packBurg);
+}
+
+function repairDeletedCityRoles(map, city, burg) {
+  const stateId = normalizeOwnerId(city?.state ?? burg?.state);
+  const provinceId = normalizeOwnerId(city?.province ?? burg?.province);
+  if (city?.capital || burg?.capital) {
+    const state = map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId];
+    const replacement = findReplacementCity(map, item => normalizeOwnerId(item.state) === stateId);
+    if (state) {
+      state.capital = replacement?.burgId || 0;
+      state.capitalName = replacement?.name || "";
+    }
+    if (replacement) {
+      replacement.capital = true;
+      const replacementBurg = findBurgForCity(map, replacement);
+      if (replacementBurg) {
+        replacementBurg.capital = 1;
+        replacementBurg.group = "capital";
+      }
+    }
+  }
+  if (city?.provincial) {
+    const province = map?.politics?.provinces?.[provinceId] || map?.pack?.provinces?.[provinceId];
+    const replacement = findReplacementCity(map, item => normalizeOwnerId(item.province) === provinceId);
+    if (province) province.burg = replacement?.burgId || 0;
+    if (replacement) replacement.provincial = true;
+  }
+}
+
+function findReplacementCity(map, predicate) {
+  return (map?.settlements?.cities || [])
+    .filter(city => city && !city.removed && predicate(city))
+    .sort((a, b) => Number(b.capital) - Number(a.capital) || Number(b.provincial) - Number(a.provincial) || (b.population || 0) - (a.population || 0) || a.id - b.id)[0] || null;
+}
+
 function refreshSettlementDerivedStats(map) {
   refreshSettlementMetadata(map);
   refreshStateUrbanStats(map);
@@ -441,7 +655,7 @@ function refreshSettlementDerivedStats(map) {
 function refreshSettlementMetadata(map) {
   const settlements = map?.settlements;
   if (!settlements?.metadata) return;
-  const cities = settlements.cities || [];
+  const cities = (settlements.cities || []).filter(city => city && !city.removed);
   settlements.metadata.cities = cities.length;
   settlements.metadata.capitals = cities.filter(city => city?.capital).length;
   settlements.metadata.ports = cities.filter(city => city?.port).length;
@@ -469,6 +683,37 @@ function refreshStateUrbanStats(map) {
 function findBurgForCity(map, city) {
   if (!city) return null;
   return map?.pack?.burgs?.[city.burgId] || (map?.pack?.burgs || []).find(burg => burg?.cityId === city.id) || null;
+}
+
+function isValidCitySeedCell(map, gridCell) {
+  if (!Number.isInteger(gridCell) || gridCell < 0 || !isGridLandCell(map, gridCell)) return false;
+  const packCell = choosePackCellForGridCell(map, gridCell);
+  if (!Number.isInteger(packCell)) return false;
+  return !normalizeOwnerId(map?.pack?.cells?.burg?.[packCell]);
+}
+
+function choosePackCellForGridCell(map, gridCell) {
+  const candidates = [];
+  const byGrid = map?.pack?.cells?.g || [];
+  for (let packCell = 0; packCell < byGrid.length; packCell += 1) {
+    if (byGrid[packCell] === gridCell && map?.pack?.cells?.h?.[packCell] >= 20) candidates.push(packCell);
+  }
+  return candidates.sort((a, b) => a - b)[0] ?? null;
+}
+
+function isGridLandCell(map, gridCell) {
+  if (map?.grid?.cells?.h?.[gridCell] < 20) return false;
+  const featureId = map?.grid?.cells?.f?.[gridCell];
+  const feature = map?.features?.features?.[featureId];
+  return feature ? Boolean(feature.land) : true;
+}
+
+function nextCityId(map) {
+  return map?.settlements?.cities?.length || 0;
+}
+
+function nextBurgId(map) {
+  return map?.pack?.burgs?.length || 0;
 }
 
 function normalizeCityId(value) {
@@ -532,4 +777,24 @@ function normalizeNoteBody(body) {
 
 function hasOwn(object, key) {
   return Boolean(object && Object.prototype.hasOwnProperty.call(object, key));
+}
+
+function clonePlain(value) {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
+function cloneArrayLike(value) {
+  if (!value) return null;
+  if (ArrayBuffer.isView(value)) return new value.constructor(value);
+  return Array.isArray(value) ? [...value] : null;
+}
+
+function restoreArrayLike(target, key, snapshot) {
+  if (!target || !snapshot) return;
+  if (ArrayBuffer.isView(target[key]) && ArrayBuffer.isView(snapshot) && target[key].length === snapshot.length) {
+    target[key].set(snapshot);
+    return;
+  }
+  target[key] = cloneArrayLike(snapshot);
 }

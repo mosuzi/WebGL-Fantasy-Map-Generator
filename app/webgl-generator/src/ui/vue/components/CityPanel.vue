@@ -17,6 +17,13 @@
     @locate="callbacks.onLocate"
   />
 
+  <UiPanelIoActions
+    class-name="city-collection-actions"
+    label="城市新增删除"
+    :actions="collectionActions"
+    @action="handleCollectionAction"
+  />
+
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cityActions">
@@ -81,6 +88,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -143,6 +151,10 @@ const metrics = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
+const collectionActions = computed(() => [
+  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", disabled: false},
+  {key: "delete", label: "删除选中城市", icon: "×", disabled: !selected.value}
+]);
 const visualDraft = reactive({
   silhouette: "town",
   palette: "town"
@@ -156,6 +168,7 @@ const cityActions = computed(() => [
 ]);
 
 const summaryMetrics = computed(() => [
+  {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
   {label: "城市", value: formatNumberValue(metrics.value.total)},
   {label: "首都", value: formatNumberValue(metrics.value.capitals)},
   {label: "港口", value: formatNumberValue(metrics.value.ports)},
@@ -269,7 +282,7 @@ function cityResourceGoodNames(map, ids) {
 }
 
 function cityRows(map) {
-  return (map?.settlements?.cities || []).filter(city => city && Number.isInteger(city.id));
+  return (map?.settlements?.cities || []).filter(city => city && !city.removed && Number.isInteger(city.id));
 }
 
 function filterRows(rows, filter) {
@@ -287,6 +300,14 @@ function filterRows(rows, filter) {
 
 function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleCollectionAction(key) {
+  if (key === "add") {
+    props.callbacks.onAddMode?.(!props.state.addMode);
+    return;
+  }
+  if (key === "delete" && selected.value) props.callbacks.onDeleteCity?.(selected.value.id);
 }
 
 function formatCityType(city, burg, population) {

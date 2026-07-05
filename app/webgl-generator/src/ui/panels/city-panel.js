@@ -12,6 +12,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     sortKey: "population",
     sortDir: "desc",
     selectedCityId: null,
+    addMode: false,
     version: 0
   });
   const panelCallbacks = {
@@ -33,6 +34,11 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     onLocate: row => callbacks.onLocate?.(cityObject(row)),
     onRename: (cityId, name) => callbacks.onRename?.(cityId, name),
     onRenameVisibleFromNamebase: cityIds => callbacks.onRenameVisibleFromNamebase?.(cityIds),
+    onAddMode: active => {
+      panelState.addMode = Boolean(active);
+      callbacks.onAddMode?.(panelState.addMode);
+    },
+    onDeleteCity: cityId => callbacks.onDeleteCity?.(cityId),
     onPopulationChange: (cityId, population) => callbacks.onPopulationChange?.(cityId, population),
     onSyncOwnerToCell: cityId => callbacks.onSyncOwnerToCell?.(cityId),
     onVisualChange: (cityId, patch) => callbacks.onVisualChange?.(cityId, patch),
@@ -54,7 +60,9 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       onRedo: panelCallbacks.onRedo
     },
     onClose: () => {
+      panelState.addMode = false;
       panelState.open = false;
+      callbacks.onAddMode?.(false);
     }
   });
   const root = documentRef.createElement("div");
@@ -95,6 +103,10 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     setSelectedCityId(cityId) {
       const normalized = normalizeCityId(cityId);
       if (cityExists(panelState.map, normalized)) panelState.selectedCityId = normalized;
+    },
+    updateAddMode(active) {
+      panelState.addMode = Boolean(active);
+      panelState.version++;
     },
     isOpen() {
       return panelState.open;

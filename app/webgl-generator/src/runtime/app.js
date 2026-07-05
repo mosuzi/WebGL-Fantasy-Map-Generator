@@ -39,7 +39,7 @@ import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
-import {createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
+import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
@@ -162,6 +162,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       lastAffected: 0,
       sourceProvinceId: null,
       lastPointer: null
+    },
+    cityEdit: {
+      addMode: false,
+      lastCreatedCityId: null
     },
     markerEdit: {
       mode: null,
@@ -626,6 +630,35 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       } else {
         setFileOperationStatus(documentRef, "当前筛选城市没有可按名称库更新的名称。");
       }
+      updateCityPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onAddMode: active => {
+      state.cityEdit.addMode = Boolean(active);
+      if (active) {
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        state.heightEdit.activeStroke = null;
+        state.stateEdit.activeStroke = null;
+        state.provinceEdit.activeStroke = null;
+        clearMarkerEditMode(state);
+        updateMarkerPanel(state);
+        renderer.setColorMode("states");
+        setActiveModeButton(documentRef, "states");
+      }
+      cityPanel.updateAddMode?.(state.cityEdit.addMode);
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+    },
+    onDeleteCity: cityId => {
+      const command = createDeleteCityCommand(cityId);
+      if (command.isNoop({map: state.map})) return;
+      refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      state.selectionStore.clear();
+      cityPanel.setSelectedCityId(null);
+      updateStatePanel(state);
+      updateProvincePanel(state);
       updateCityPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
@@ -1468,6 +1501,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindHeightEditing(canvas, state, documentRef);
   bindStateEditing(canvas, state, documentRef);
   bindProvinceEditing(canvas, state, documentRef);
+  bindCityEditing(canvas, state, documentRef);
   bindMarkerEditing(canvas, state, documentRef);
   bindCustomLabelDrag(state, documentRef);
   bindEditingInteractionLock(canvas, state);
@@ -2003,6 +2037,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.provinceEdit.lastAffected = 0;
   state.provinceEdit.sourceProvinceId = null;
   state.provinceEdit.lastPointer = null;
+  state.cityEdit.addMode = false;
+  state.cityEdit.lastCreatedCityId = null;
   state.markerEdit.mode = null;
   state.markerEdit.type = "mines";
   state.markerEdit.markerId = null;
@@ -4400,6 +4436,33 @@ function bindProvinceEditing(canvas, state) {
   }, true);
 }
 
+function bindCityEditing(canvas, state, documentRef) {
+  canvas.addEventListener("pointerdown", event => {
+    if (!state.cityEdit.addMode || !state.map) return;
+    if (!isPrimaryPointerDown(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+    if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
+    const command = createAddCityAtCellCommand(pick.gridCell);
+    if (command.isNoop({map: state.map})) return;
+    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+    const result = command.getResult?.();
+    state.cityEdit.addMode = false;
+    state.cityEdit.lastCreatedCityId = result?.cityId ?? null;
+    if (Number.isInteger(result?.cityId)) {
+      state.panels.city?.setSelectedCityId(result.cityId);
+      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: result.cityId}});
+    }
+    state.panels.city?.updateAddMode?.(false);
+    updateStatePanel(state);
+    updateProvincePanel(state);
+    updateCityPanel(state);
+    updateEditingInteractionLock(state, documentRef);
+    updateRuntimePanel(documentRef, state);
+  }, true);
+}
+
 function bindMarkerEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (!state.markerEdit.mode || !state.map) return;
@@ -5152,7 +5215,7 @@ function updateEditingInteractionLock(state, documentRef) {
 }
 
 function isEditingInteractionLocked(state) {
-  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.markerEdit.mode || state.editingObject);
+  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.cityEdit.addMode || state.markerEdit.mode || state.editingObject);
 }
 
 function getAllowedEditingPanelIds(state) {
@@ -5161,6 +5224,7 @@ function getAllowedEditingPanelIds(state) {
   if (state.stateEdit.addMode) return ["state-panel"];
   if (state.panels.province?.getBrush().active) return ["province-panel"];
   if (state.provinceEdit.addMode) return ["province-panel"];
+  if (state.cityEdit.addMode) return ["city-panel"];
   if (state.markerEdit.mode) return ["marker-panel"];
   if (state.editingObject?.kind === OBJECT_KIND.RIVER) return ["river-panel"];
   if (state.editingObject) return ["object-details"];
@@ -5195,6 +5259,10 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       lastAffected: state.provinceEdit.lastAffected,
       sourceProvinceId: state.provinceEdit.sourceProvinceId
     },
+    city: {
+      addMode: Boolean(state.cityEdit.addMode),
+      lastCreatedCityId: state.cityEdit.lastCreatedCityId
+    },
     marker: {
       mode: state.markerEdit.mode,
       type: state.markerEdit.type,
@@ -5212,6 +5280,7 @@ function getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush) {
   if (stateBrush.active) return "state";
   if (state.provinceEdit.addMode) return "province:add";
   if (provinceBrush.active) return "province";
+  if (state.cityEdit.addMode) return "city:add";
   if (state.markerEdit.mode) return `marker:${state.markerEdit.mode}`;
   if (state.editingObject?.kind) return state.editingObject.kind;
   return null;

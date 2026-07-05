@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：城市新增删除小按钮
+
+用户要求所有编辑面板逐步补齐新增 / 删除操作，并把新增、删除入口统一收敛为列表下方的小图标按钮。
+
+修正：
+
+- 城市管理面板新增列表下方 `UiPanelIoActions` 小图标动作条，提供“新增城市”和“删除选中城市”。
+- “新增城市”进入等待点击模式后，会关闭其它地图编辑刷子并切到国家视图；用户下一次点击没有既有 burg 的陆地 cell 时，会创建新的 city / burg，并写入 `pack.cells.burg`。
+- 新城市会继承点击 cell 的国家、省份、文化和宗教归属，按名称库生成名称，写入默认人口和自动剪影，并接入统一 `EditHistory`。
+- “删除选中城市”不会 `splice` 城市数组，避免破坏城市 ID；它会使用 `removed` 标记隐藏城市 / burg，清空对应 pack cell 的 burg 索引，并修复首都 / 省会引用。
+- 城市列表会过滤 `removed` 城市；城市新增模式已接入运行时编辑锁和编辑状态快照。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\city-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\city-panel.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 浏览器烟测按用户新要求暂不逐步执行，后续攒几步统一验证。
+
 ## 2026-07-05：省份新增删除小按钮
 
 用户要求所有编辑面板逐步补齐新增 / 删除操作，并且新增、删除入口统一收敛为列表下方的小图标按钮。
