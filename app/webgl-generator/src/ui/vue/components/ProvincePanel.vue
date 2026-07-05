@@ -16,16 +16,9 @@
     @locate="callbacks.onLocate"
   />
 
-  <UiPanelIoActions
-    class-name="province-collection-actions"
-    label="省份列表操作"
-    :actions="collectionActions"
-    @action="handleCollectionAction"
-  />
-
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
 
-  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="provinceActions" @select="handleActionSelect">
+  <UiActionDock v-model:active="activeAction" :actions="provinceActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="province-name-editor"
@@ -90,7 +83,6 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
@@ -155,15 +147,13 @@ const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedProvinceId));
 const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.selectedProvinceId));
-const collectionActions = computed(() => [
-  {key: "edit", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", disabled: !canDeleteSelected.value, active: editActive.value},
-  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", active: props.state.addMode},
-  {key: "delete", label: "删除选中省份", icon: "×", disabled: !canDeleteSelected.value}
-]);
 const provinceActions = computed(() => [
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", panel: false, active: props.state.addMode},
+  {key: "delete", label: "删除选中省份", icon: "×", panel: false, disabled: !canDeleteSelected.value},
+  {key: "edit", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", panel: false, disabled: !canDeleteSelected.value, active: editActive.value},
+  {key: "rename", label: "重命名", icon: "✎", disabled: !canDeleteSelected.value},
+  {key: "color", label: "调整颜色", icon: "◐", disabled: !canDeleteSelected.value},
+  {key: "note", label: "编辑备注", icon: "☰", disabled: !canDeleteSelected.value}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -275,19 +265,13 @@ function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
-function handleCollectionAction(key) {
-  if (key === "edit" && selected.value) {
-    callbacks.onEdit?.(selected.value);
-    return;
-  }
+function handleActionSelect(key) {
   if (key === "add") {
     callbacks.onAddMode?.(!props.state.addMode);
     return;
   }
   if (key === "delete" && selected.value) callbacks.onDeleteProvince?.(selected.value.id);
-}
-
-function handleActionSelect(key) {
+  if (key === "edit" && selected.value) callbacks.onEdit?.(selected.value);
   if (!key) activeAction.value = null;
 }
 

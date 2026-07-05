@@ -5635,9 +5635,6 @@ input.ui-switch-native {
   gap: 8px;
 }
 
-.state-collection-actions,
-.province-collection-actions,
-.city-collection-actions,
 .measurement-panel-list-actions,
 .label-management-actions {
   justify-content: flex-end;

@@ -17,16 +17,9 @@
     @locate="callbacks.onLocate"
   />
 
-  <UiPanelIoActions
-    class-name="state-collection-actions"
-    label="国家列表操作"
-    :actions="collectionActions"
-    @action="handleCollectionAction"
-  />
-
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
-  <UiActionDock v-if="selected && !selected.neutral" v-model:active="activeAction" :actions="stateActions" @select="handleActionSelect">
+  <UiActionDock v-model:active="activeAction" :actions="stateActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="state-name-editor"
@@ -119,7 +112,6 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
@@ -189,11 +181,6 @@ const renamableVisibleRows = computed(() => visibleRows.value.filter(row => !row
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
 const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.targetStateId));
-const collectionActions = computed(() => [
-  {key: "edit", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", disabled: !canDeleteSelected.value, active: editActive.value},
-  {key: "add", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", active: props.state.addMode},
-  {key: "delete", label: "删除选中国家", icon: "×", disabled: !canDeleteSelected.value}
-]);
 const capitalOptions = computed(() => stateCities(props.state.map, selected.value?.id));
 const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
   value: option.value,
@@ -201,11 +188,14 @@ const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
 })));
 const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体会影响国号后缀、税收、外交倾向和军事动员。");
 const stateActions = computed(() => [
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "government", label: "调整政体", icon: "⚖"},
-  {key: "capital", label: "设置首都", icon: "♛", disabled: !capitalOptions.value.length},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "add", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", panel: false, active: props.state.addMode},
+  {key: "delete", label: "删除选中国家", icon: "×", panel: false, disabled: !canDeleteSelected.value},
+  {key: "edit", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: !canDeleteSelected.value, active: editActive.value},
+  {key: "rename", label: "重命名", icon: "✎", disabled: !canDeleteSelected.value},
+  {key: "color", label: "调整颜色", icon: "◐", disabled: !canDeleteSelected.value},
+  {key: "government", label: "调整政体", icon: "⚖", disabled: !canDeleteSelected.value},
+  {key: "capital", label: "设置首都", icon: "♛", disabled: !canDeleteSelected.value || !capitalOptions.value.length},
+  {key: "note", label: "编辑备注", icon: "☰", disabled: !canDeleteSelected.value}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -322,19 +312,13 @@ function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
-function handleCollectionAction(key) {
-  if (key === "edit" && selected.value) {
-    callbacks.onEdit?.(selected.value);
-    return;
-  }
+function handleActionSelect(key) {
   if (key === "add") {
     callbacks.onAddMode?.(!props.state.addMode);
     return;
   }
   if (key === "delete" && selected.value) callbacks.onDeleteState?.(selected.value.id);
-}
-
-function handleActionSelect(key) {
+  if (key === "edit" && selected.value) callbacks.onEdit?.(selected.value);
   if (!key) activeAction.value = null;
 }
 

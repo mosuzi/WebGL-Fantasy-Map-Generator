@@ -17,16 +17,9 @@
     @locate="callbacks.onLocate"
   />
 
-  <UiPanelIoActions
-    class-name="city-collection-actions"
-    label="城市新增删除"
-    :actions="collectionActions"
-    @action="handleCollectionAction"
-  />
-
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cityActions">
+  <UiActionDock v-model:active="activeAction" :actions="cityActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="city-name-editor"
@@ -88,7 +81,6 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -151,20 +143,18 @@ const metrics = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
-const collectionActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", active: props.state.addMode},
-  {key: "delete", label: "删除选中城市", icon: "×", disabled: !selected.value}
-]);
 const visualDraft = reactive({
   silhouette: "town",
   palette: "town"
 });
 const cityActions = computed(() => [
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "population", label: "调整人口", icon: "#"},
+  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode},
+  {key: "delete", label: "删除选中城市", icon: "×", panel: false, disabled: !selected.value},
+  {key: "rename", label: "重命名", icon: "✎", disabled: !selected.value},
+  {key: "population", label: "调整人口", icon: "#", disabled: !selected.value},
   {key: "owner", label: "同步归属", icon: "⇄", disabled: !selected.value?.canSyncOwner},
-  {key: "visual", label: "调整剪影", icon: "▣"},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "visual", label: "调整剪影", icon: "▣", disabled: !selected.value},
+  {key: "note", label: "编辑备注", icon: "☰", disabled: !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -302,12 +292,13 @@ function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
 }
 
-function handleCollectionAction(key) {
+function handleActionSelect(key) {
   if (key === "add") {
     props.callbacks.onAddMode?.(!props.state.addMode);
     return;
   }
   if (key === "delete" && selected.value) props.callbacks.onDeleteCity?.(selected.value.id);
+  if (!key) activeAction.value = null;
 }
 
 function formatCityType(city, burg, population) {
