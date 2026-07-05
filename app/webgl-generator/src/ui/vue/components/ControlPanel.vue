@@ -146,8 +146,8 @@
               value-tag="output"
               :model-value="temperatureEquator"
               unit-label="°C"
-              :min="20"
-              :max="35"
+              :min="temperatureRange.min"
+              :max="temperatureRange.max"
               :step="1"
               @input="value => temperatureEquator = value"
             />
@@ -159,8 +159,8 @@
               value-tag="output"
               :model-value="temperatureNorthPole"
               unit-label="°C"
-              :min="-40"
-              :max="10"
+              :min="temperatureRange.min"
+              :max="temperatureRange.max"
               :step="1"
               @input="value => temperatureNorthPole = value"
             />
@@ -172,8 +172,8 @@
               value-tag="output"
               :model-value="temperatureSouthPole"
               unit-label="°C"
-              :min="-40"
-              :max="10"
+              :min="temperatureRange.min"
+              :max="temperatureRange.max"
               :step="1"
               @input="value => temperatureSouthPole = value"
             />
@@ -385,6 +385,7 @@ import {
   windDirectionLabelFromAngle,
   windDirectionValueFromAngle
 } from "../../../generator/climate-options.js";
+import {TEMPERATURE_RANGE} from "../../../generator/options.js";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
 defineOptions({
@@ -418,6 +419,7 @@ const windBands = ref(defaultWindProfile());
 const temperatureEquator = ref(25);
 const temperatureNorthPole = ref(-25);
 const temperatureSouthPole = ref(-15);
+const temperatureRange = TEMPERATURE_RANGE;
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
 const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
 const areaUnitLabel = computed(() => areaUnitLabelForDistanceUnit(unitPreferences.value.distanceUnit));

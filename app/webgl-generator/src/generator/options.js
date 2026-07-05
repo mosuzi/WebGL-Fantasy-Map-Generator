@@ -38,6 +38,7 @@ export const DEFAULT_OPTIONS = {
 };
 
 const HEIGHTMAP_TEMPLATES = new Set(["continents", "mediterranean", "highIsland", "lowIsland", "peninsula", "pangea", "archipelago"]);
+export const TEMPERATURE_RANGE = Object.freeze({min: -80, max: 50});
 
 export function normalizeOptions(input = {}) {
   const seed = String(input.seed || DEFAULT_OPTIONS.seed).trim() || DEFAULT_OPTIONS.seed;
@@ -65,9 +66,9 @@ export function normalizeOptions(input = {}) {
     climateLatitudeSpan: clampNumber(input.climateLatitudeSpan, 20, 80, DEFAULT_OPTIONS.climateLatitudeSpan),
     atmosphereDirection: normalizeAtmosphereDirection(input.atmosphereDirection),
     winds: normalizeWindProfile(input.winds || DEFAULT_OPTIONS.winds),
-    temperatureEquator: clampInteger(input.temperatureEquator, 20, 35, randomized.temperatureEquator),
-    temperatureNorthPole: clampInteger(input.temperatureNorthPole, -40, 10, randomized.temperatureNorthPole),
-    temperatureSouthPole: clampInteger(input.temperatureSouthPole, -40, 10, randomized.temperatureSouthPole),
+    temperatureEquator: clampInteger(input.temperatureEquator, TEMPERATURE_RANGE.min, TEMPERATURE_RANGE.max, randomized.temperatureEquator),
+    temperatureNorthPole: clampInteger(input.temperatureNorthPole, TEMPERATURE_RANGE.min, TEMPERATURE_RANGE.max, randomized.temperatureNorthPole),
+    temperatureSouthPole: clampInteger(input.temperatureSouthPole, TEMPERATURE_RANGE.min, TEMPERATURE_RANGE.max, randomized.temperatureSouthPole),
     heightExponent: clampNumber(input.heightExponent, 1.5, 2.2, DEFAULT_OPTIONS.heightExponent),
     precipitation: clampInteger(input.precipitation, 5, 500, randomized.precipitation)
   };
