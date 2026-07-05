@@ -120,6 +120,8 @@ const LOAD_TRACE_EVENT_NAME = "webgl-generator-load-stage";
 const LOAD_TRACE_DELAY_PARAMS = Object.freeze(["loadStepDelay", "debugLoadDelay", "loadTraceDelay"]);
 const MAX_DEBUG_LOAD_DELAY_MS = 2000;
 const NAMEBASE_PREFERENCES_STORAGE_KEY = "webgl-generator-namebase-preferences-v1";
+const BROWSER_MAP_STORAGE_KEY = "webgl-generator-current-map-v1";
+const BROWSER_MAP_STORAGE_TYPE = "webgl-generator-local-map-storage";
 
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -1550,6 +1552,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onOpenNamebasePanel: () => {
       state.panels.namebase.open(state.map, {history: state.editHistory.getStats()});
     },
+    onSaveLocalFile: () => saveMapToLocalFile(state, documentRef),
+    onSaveBrowserStorage: () => {
+      void saveMapToBrowserStorage(state, documentRef);
+    },
     onExportImage: () => exportMapImage(state, documentRef),
     onExportMapData: () => exportMapData(state, documentRef),
     onExportGeoJson: () => exportGeoJson(state, documentRef),
@@ -1575,7 +1581,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 
   window.__webglGeneratorApp = state;
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
-  requestGenerate(state, documentRef);
+  void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;
 }
 
@@ -1779,6 +1785,43 @@ async function runGenerateNow(state, documentRef, generateId, namebaseSnapshot =
   } catch (error) {
     updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
+  }
+}
+
+async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
+  if (await restoreMapFromBrowserStorage(state, documentRef, {startup: true})) return;
+  requestGenerate(state, documentRef);
+}
+
+async function restoreMapFromBrowserStorage(state, documentRef, {startup = false} = {}) {
+  const storage = browserStorage(documentRef);
+  if (!storage) return false;
+  const raw = storage.getItem(BROWSER_MAP_STORAGE_KEY);
+  if (!raw) return false;
+
+  try {
+    resetLoadTrace(documentRef);
+    emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
+    setFileOperationStatus(documentRef, "正在读取浏览器保存的地图...");
+    setMythicGenerationLoading(documentRef, true, "map-import-read");
+    const document = parseMapDocument(await decodeBrowserMapStoragePayload(documentRef, raw));
+    const options = normalizeOptions(document.map.options || document.options || state.options);
+    document.map.options = options;
+    state.options = options;
+    syncGenerationInputs(documentRef, options);
+    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
+    await loadMapIntoRuntime(state, documentRef, document.map, {
+      loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
+      completionToast: startup ? "已恢复浏览器保存的地图" : "地图已从浏览器恢复"
+    });
+    updateGenerationLoading(documentRef, false);
+    setFileOperationStatus(documentRef, `已恢复浏览器保存的地图：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
+    return true;
+  } catch (error) {
+    updateGenerationLoading(documentRef, false);
+    storage.removeItem(BROWSER_MAP_STORAGE_KEY);
+    reportFileOperationError(documentRef, "浏览器地图恢复失败，已清除损坏存档", error);
+    return false;
   }
 }
 
@@ -2179,6 +2222,33 @@ async function exportMapImage(state, documentRef) {
     setFileOperationStatus(documentRef, "图片已导出。");
   } catch (error) {
     reportFileOperationError(documentRef, "图片导出失败", error);
+  }
+}
+
+function saveMapToLocalFile(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在保存地图到本地...");
+    const document = createMapDocument(state.map, state.options);
+    downloadText(documentRef, stringifyMapDocument(document), `${mapFileBaseName(state.map)}.webgl-map.json`, "application/json;charset=utf-8");
+    setFileOperationStatus(documentRef, "地图已保存到本地文件。");
+  } catch (error) {
+    reportFileOperationError(documentRef, "保存到本地失败", error);
+  }
+}
+
+async function saveMapToBrowserStorage(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    const storage = browserStorage(documentRef);
+    if (!storage) throw new Error("当前浏览器不支持 LocalStorage");
+    setFileOperationStatus(documentRef, "正在保存地图到浏览器...");
+    const text = stringifyMapDocument(createMapDocument(state.map, state.options));
+    const payload = await encodeBrowserMapStoragePayload(documentRef, text, state.map);
+    storage.setItem(BROWSER_MAP_STORAGE_KEY, JSON.stringify(payload));
+    setFileOperationStatus(documentRef, browserStorageSaveMessage(payload));
+  } catch (error) {
+    reportFileOperationError(documentRef, "保存到浏览器失败", error);
   }
 }
 
@@ -2610,6 +2680,96 @@ function readFeatureGeoJsonLayerOptions(documentRef) {
   };
 }
 
+async function encodeBrowserMapStoragePayload(documentRef, text, map) {
+  const compressed = await compressTextToBase64(documentRef, text);
+  const encoded = compressed
+    ? {encoding: "gzip-base64", data: compressed.base64, bytes: compressed.bytes}
+    : {encoding: "plain", data: text, bytes: text.length};
+  return {
+    type: BROWSER_MAP_STORAGE_TYPE,
+    version: 1,
+    savedAt: new Date().toISOString(),
+    originalBytes: text.length,
+    metadata: {
+      seed: map?.metadata?.seed || map?.options?.seed || "",
+      checksum: map?.metadata?.checksum || map?.summary?.checksum || "",
+      gridCells: map?.metadata?.gridCells || map?.grid?.metadata?.actualCells || 0,
+      packCells: map?.metadata?.packCells || map?.pack?.metadata?.cells || 0
+    },
+    ...encoded
+  };
+}
+
+async function decodeBrowserMapStoragePayload(documentRef, raw) {
+  const payload = JSON.parse(raw);
+  if (payload?.type === BROWSER_MAP_STORAGE_TYPE) {
+    if (payload.version !== 1) throw new Error(`暂不支持的浏览器存档版本：${payload.version}`);
+    if (payload.encoding === "gzip-base64") return decompressBase64Text(documentRef, payload.data);
+    if (payload.encoding === "plain") return String(payload.data || "");
+    throw new Error(`暂不支持的浏览器存档编码：${payload.encoding || "未知"}`);
+  }
+  return raw;
+}
+
+async function compressTextToBase64(documentRef, text) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.CompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") return null;
+  const stream = new view.Blob([text], {type: "application/json;charset=utf-8"}).stream().pipeThrough(new view.CompressionStream("gzip"));
+  const buffer = await new view.Response(stream).arrayBuffer();
+  return {base64: arrayBufferToBase64(view, buffer), bytes: buffer.byteLength};
+}
+
+async function decompressBase64Text(documentRef, data) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.DecompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
+    throw new Error("当前浏览器不支持读取压缩的 LocalStorage 地图存档");
+  }
+  const bytes = base64ToUint8Array(view, data);
+  const stream = new view.Blob([bytes], {type: "application/gzip"}).stream().pipeThrough(new view.DecompressionStream("gzip"));
+  return new view.Response(stream).text();
+}
+
+function arrayBufferToBase64(view, buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return view.btoa(binary);
+}
+
+function base64ToUint8Array(view, base64) {
+  const binary = view.atob(String(base64 || ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function browserStorage(documentRef) {
+  try {
+    return documentRef.defaultView?.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function browserStorageSaveMessage(payload) {
+  const original = formatStorageBytes(payload.originalBytes);
+  const stored = formatStorageBytes(payload.bytes || String(payload.data || "").length);
+  const compression = payload.encoding === "gzip-base64" ? `，压缩后 ${stored}` : "";
+  return `地图已保存到浏览器 LocalStorage：原始 ${original}${compression}。下次打开会优先恢复此地图。`;
+}
+
+function formatStorageBytes(bytes) {
+  const value = Math.max(0, Number(bytes) || 0);
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)}MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)}KB`;
+  return `${Math.round(value)}B`;
+}
+
 async function importMapData(state, documentRef, file) {
   if (!file) return;
   try {
@@ -2786,7 +2946,7 @@ function reportFileOperationError(documentRef, prefix, error, targetIds) {
 
 function syncGenerationInputs(documentRef, options) {
   setInputValue(documentRef, "seed-input", options.seed);
-  setInputValue(documentRef, "cells-input", options.cells);
+  setInputValue(documentRef, "cells-input", options.cellsTarget ?? options.cells);
   setInputValue(documentRef, "width-input", options.graphWidth);
   setInputValue(documentRef, "height-input", options.graphHeight);
   setInputValue(documentRef, "heightmap-template", options.heightmapTemplate);

@@ -102,6 +102,10 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-notes-panel")?.addEventListener("click", handlers.onOpenNotesPanel);
   documentRef.getElementById("open-measurement-panel")?.addEventListener("click", handlers.onOpenMeasurementPanel);
   documentRef.getElementById("open-namebase-panel")?.addEventListener("click", handlers.onOpenNamebasePanel);
+  documentRef.addEventListener("project-map-save", event => {
+    if (event.detail?.target === "local-file") handlers.onSaveLocalFile?.();
+    if (event.detail?.target === "browser-storage") handlers.onSaveBrowserStorage?.();
+  });
   documentRef.getElementById("export-map-image")?.addEventListener("click", () => handlers.onExportImage?.());
   documentRef.getElementById("export-map-data")?.addEventListener("click", () => handlers.onExportMapData?.());
   documentRef.getElementById("export-map-geojson")?.addEventListener("click", () => handlers.onExportGeoJson?.());

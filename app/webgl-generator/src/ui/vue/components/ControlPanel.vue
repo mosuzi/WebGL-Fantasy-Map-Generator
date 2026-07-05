@@ -18,6 +18,17 @@
           <a href="https://azgaar.github.io/Fantasy-Map-Generator/" target="_blank" rel="noreferrer">体验原作</a>
         </div>
         <div class="project-file-actions" aria-label="本地文件操作">
+          <ElDropdown class="project-save-dropdown" trigger="click" popper-class="ui-panel-io-dropdown" @command="handleSaveCommand">
+            <UiButton variant="secondary" aria-haspopup="menu">
+              保存
+            </UiButton>
+            <template #dropdown>
+              <ElDropdownMenu>
+                <ElDropdownItem command="local-file">保存到本地</ElDropdownItem>
+                <ElDropdownItem command="browser-storage">保存到浏览器</ElDropdownItem>
+              </ElDropdownMenu>
+            </template>
+          </ElDropdown>
           <div ref="exportAnchorRef" class="project-action-anchor">
             <UiButton
               id="open-export-panel"
@@ -651,6 +662,10 @@ function emitClimateControlsChange() {
     target?.dispatchEvent(new CustomEvent("climate-controls-change", {bubbles: true}));
     target?.dispatchEvent(new Event("change", {bubbles: true}));
   });
+}
+
+function handleSaveCommand(target) {
+  document.dispatchEvent(new CustomEvent("project-map-save", {detail: {target}}));
 }
 
 onMounted(() => {

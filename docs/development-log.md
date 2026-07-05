@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：简介页保存与浏览器自动恢复
+
+用户要求简介 tab 增加最简单的保存按钮，可通过 dropdown 选择保存到本地或浏览器 LocalStorage；保存时必须保存图中全部数据，加载时能精准还原；如果浏览器已有保存数据，下次打开页面要放弃随机生成并直接恢复。
+
+修正：
+
+- 简介 tab 新增“保存”dropdown，包含“保存到本地”和“保存到浏览器”。
+- “保存到本地”复用完整 `webgl-generator-map` 文档格式，与既有“导出地图数据”同源，包含当前 `map`、typed arrays 和 options。
+- “保存到浏览器”同样保存完整地图文档，并优先使用浏览器原生 `CompressionStream` 压缩为 gzip+base64 后写入 `localStorage["webgl-generator-current-map-v1"]`；不支持压缩时退回明文。
+- 启动流程从无条件 `requestGenerate()` 改为先检查浏览器存档；若存在有效存档，则解析、解压、同步生成输入并调用 `loadMapIntoRuntime()` 恢复地图；恢复失败会清除损坏存档并回退到正常随机生成。
+- 恢复 / 导入地图时同步修正 `cells-input` 读取 `options.cellsTarget`，避免恢复后目标 cells 输入框不同步。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 构建产物浏览器验证：清空当前 origin 存档后生成 `stage-2-1`，点击“简介 / 保存 / 保存到浏览器”，LocalStorage 写入 `webgl-generator-local-map-storage` v1，编码为 `gzip-base64`；原始地图文档约 `14.50MB`，压缩后约 `2.31MB`，LocalStorage 字符串约 `3.23MB`。刷新后 checksum 仍为 `c6f10185`，load trace 无 `generate` 阶段，状态显示已恢复浏览器保存的地图。
+- 10k e2e 守门 `browser-save-restore-e2e / continents / 10000` 通过，点击到出图 `1507.6ms`，纯生成 `745.3ms`，WebGL 加载 `451.8ms`。
+
 ## 2026-07-05：温度滑动条范围扩大
 
 用户要求温度滑动条范围调整为 `-80` 到 `50`。
