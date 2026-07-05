@@ -2,6 +2,33 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-05：撤销重做按钮闪烁修正
+
+用户反馈鼠标移动时，面板 header 上的撤销 / 重做按钮会频繁亮起和熄灭。
+
+根因：
+
+- `setEditingInteractionLock()` 会在每次编辑锁同步时遍历浮动面板内的 `button / input / select / textarea`，并按当前锁状态改写 `disabled`。
+- 该逻辑此前只跳过关闭按钮，没有跳过 header 的撤销 / 重做按钮。
+- 鼠标移动时 hover 会触发 `updateEditingInteractionLock()`，编辑锁把撤销 / 重做按钮的 `disabled` 拿掉，随后 `PanelManager` 的历史按钮刷新又把 `disabled` 加回，于是形成可见闪烁。
+- 国家面板还在 hover 回调里被每次 `updateStatePanel()`，造成不必要的面板 reactive 更新。
+
+修正：
+
+- `setEditingInteractionLock()` 跳过 `.floating-panel-header-actions` 内的按钮，header 的撤销 / 重做 / 关闭按钮不再被编辑锁接管。
+- `PanelManager.refreshHeaderActions()` 改为幂等刷新：只有 DOM 实际状态或目标状态变化时才写入 `hidden / disabled / title`。
+- renderer hover 回调不再刷新国家面板，只更新悬停信息和编辑锁；“取悬停”仍读取最新 `state.pick`。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel-manager.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 浏览器 mutation 验证：打开国家面板后监听 header 撤销 / 重做按钮，模拟鼠标移动 `80` 次，按钮属性 mutation 为 `0`，`glError = 0`。
+- 10k e2e 守门 `history-button-stability-e2e / continents / 10000` 通过，点击到出图 `1021.4ms`，纯生成 `519.4ms`，WebGL 加载 `322.6ms`。
+
 ## 2026-07-05：FMG Cells GEO 导入水陆语义同步
 
 用户反馈原版 FMG Cells GEO 导入后，部分区域颜色看起来是陆地但悬停信息显示海洋，或颜色看起来是海洋但悬停信息显示陆地。

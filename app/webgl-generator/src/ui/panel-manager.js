@@ -57,6 +57,7 @@ export class PanelManager {
       historyActions,
       headerButtons: {undo, redo},
       headerRefreshTimer: 0,
+      headerStateKey: "",
       refreshHeaderActions: () => refreshHeaderActions(record)
     };
     this.panels.set(id, record);
@@ -189,20 +190,40 @@ function refreshHeaderActions(record) {
   if (!undo || !redo) return;
   const actions = record.historyActions;
   if (!actions) {
+    const stateKey = "hidden";
+    if (record.headerStateKey === stateKey) return;
+    record.headerStateKey = stateKey;
     undo.hidden = true;
     redo.hidden = true;
     return;
   }
-  undo.hidden = false;
-  redo.hidden = false;
   const history = actions.getHistory?.() || null;
   const undoCount = Math.max(0, Number(history?.undo) || 0);
   const redoCount = Math.max(0, Number(history?.redo) || 0);
   const label = history?.lastLabel ? `：${history.lastLabel}` : "";
-  undo.disabled = !actions.onUndo || undoCount <= 0;
-  redo.disabled = !actions.onRedo || redoCount <= 0;
-  undo.title = undo.disabled ? "没有可撤销操作" : `撤销${label}`;
-  redo.title = redo.disabled ? "没有可重做操作" : `重做${label}`;
+  const undoDisabled = !actions.onUndo || undoCount <= 0;
+  const redoDisabled = !actions.onRedo || redoCount <= 0;
+  const undoTitle = undoDisabled ? "没有可撤销操作" : `撤销${label}`;
+  const redoTitle = redoDisabled ? "没有可重做操作" : `重做${label}`;
+  const stateKey = `visible|${undoDisabled}|${redoDisabled}|${undoTitle}|${redoTitle}`;
+  if (
+    record.headerStateKey === stateKey &&
+    undo.hidden === false &&
+    redo.hidden === false &&
+    undo.disabled === undoDisabled &&
+    redo.disabled === redoDisabled &&
+    undo.title === undoTitle &&
+    redo.title === redoTitle
+  ) {
+    return;
+  }
+  record.headerStateKey = stateKey;
+  undo.hidden = false;
+  redo.hidden = false;
+  undo.disabled = undoDisabled;
+  redo.disabled = redoDisabled;
+  undo.title = undoTitle;
+  redo.title = redoTitle;
 }
 
 function installDrag(manager, panel, handle) {

@@ -1372,7 +1372,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   }, pick => {
     state.pick = pick;
     updatePickPanel(documentRef, state);
-    updateStatePanel(state);
     updateEditingInteractionLock(state, documentRef);
   }, selection => {
     selectionStore.setSelection(selection);

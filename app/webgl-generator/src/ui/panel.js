@@ -174,7 +174,7 @@ export function setEditingInteractionLock(documentRef, locked, {allowedPanelIds 
     const allowed = !locked || allowedPanelIds.includes(panel.dataset.panelId);
     panel.classList.toggle("editing-panel-disabled", !allowed);
     for (const control of panel.querySelectorAll("button, input, select, textarea")) {
-      if (control.classList.contains("floating-panel-close")) continue;
+      if (control.closest(".floating-panel-header-actions")) continue;
       control.disabled = !allowed;
       control.dataset.editLockDisabled = !allowed ? "true" : "false";
     }
