@@ -19151,3 +19151,25 @@ full 矩阵结果：
 - `node --check tools/webgl-generator-panel-layout-audit.mjs` 通过。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run audit:panels -- --scenario deep --template continents --cells 10000 --seed panel-space-next --port 5442 --browser-channel chrome` 通过并生成报告：`结论：未发现待复核项`，面板预热 `18 / 18`，点击到出图 `1358.4ms`，WebGL 加载 `341.7ms`，`glError = 0`，console/page error 和 health event 均为空。
+
+### 2026-07-05 overlay profile 事件处理探针
+
+背景：
+
+- 当前执行队列的性能专项要求继续区分滚轮 / 拖拽卡顿来源，不能再把问题笼统归因到 DOM overlay 或动态线层。
+- 既有 `profile:overlay` 已能记录 rAF 帧、overlay 分项、动态线层和 idle commit，但还不能直接回答同步 wheel / pointer 事件处理链是否很慢。
+
+实现：
+
+- `tools/webgl-generator-overlay-profile.mjs` 在 `startFrameRecorder()` 时安装临时浏览器内事件探针，覆盖 `wheel / pointerdown / pointermove / pointerup / mouse*`。
+- 探针记录每个事件的同步 dispatch 耗时、到下一帧延迟、默认阻止数量和完成阶段；录制结束时随交互样本写入 JSON。
+- Markdown 报告新增“事件处理探针”和“事件类型分项”两张表，便于直接判断事件链是否是主瓶颈。
+- 本轮只改 profiling 工具，不改应用运行时代码、渲染路径或 UI 行为。
+
+验证：
+
+- `node --check tools/webgl-generator-overlay-profile.mjs` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 100k 构建产物 profile 通过：`pnpm run profile:overlay -- --browser-channel chrome --cells 100000 --seed overlay-event-probe-100k --template continents --variants full --max-frame-p95-ms 180 --max-overlay-p95-ms 70 --max-idle-frame-p95-ms 180`。
+- profile 结果中，连续滚轮缩放 frame p95 `94.1ms`、overlay p95 `10.7ms`、事件 dispatch p95 `0.1ms`、到下一帧 p95 `127.5ms`，idle commit 完成且 route / river build 为 `93.6ms / 67.9ms`；中键拖拽 frame p95 `47ms`、overlay p95 `8.8ms`、事件 dispatch p95 `0.1ms`。该证据说明同步事件回调本身不是主要瓶颈，后续应继续拆 idle commit 和帧调度压力。

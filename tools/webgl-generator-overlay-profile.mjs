@@ -454,6 +454,8 @@ async function waitForOverlayIdle(page) {
 
 async function startFrameRecorder(page) {
   await page.evaluate(() => {
+    window.__webglGeneratorOverlayEventProbe?.stop?.();
+
     function snapshotInteractionStats() {
       const app = window.__webglGeneratorApp;
       const renderer = app?.renderer;
@@ -496,10 +498,77 @@ async function startFrameRecorder(page) {
       };
     }
 
+    function installEventProbe() {
+      const eventTypes = ["wheel", "mousedown", "mousemove", "mouseup", "pointerdown", "pointermove", "pointerup"];
+      const eventStartedAt = new WeakMap();
+      const finishedEvents = new WeakSet();
+      const items = [];
+      const captureListeners = [];
+      const bubbleListeners = [];
+
+      function capture(event) {
+        const startedAt = performance.now();
+        const item = {
+          type: event.type,
+          button: Number.isFinite(event.button) ? event.button : null,
+          defaultPrevented: Boolean(event.defaultPrevented),
+          timestampLagMs: roundProbeMs(startedAt - event.timeStamp),
+          dispatchMs: 0,
+          nextFrameMs: 0,
+          completion: "pending"
+        };
+        eventStartedAt.set(event, {startedAt, item});
+        items.push(item);
+        queueMicrotask(() => finish(event, "microtask"));
+        requestAnimationFrame(() => {
+          item.nextFrameMs = roundProbeMs(performance.now() - startedAt);
+        });
+      }
+
+      function bubble(event) {
+        finish(event, "bubble");
+      }
+
+      function finish(event, completion) {
+        if (finishedEvents.has(event)) return;
+        const entry = eventStartedAt.get(event);
+        if (!entry) return;
+        finishedEvents.add(event);
+        entry.item.dispatchMs = roundProbeMs(performance.now() - entry.startedAt);
+        entry.item.defaultPrevented = Boolean(event.defaultPrevented);
+        entry.item.completion = completion;
+      }
+
+      function roundProbeMs(value) {
+        return Math.round((Number(value) || 0) * 100) / 100;
+      }
+
+      for (const type of eventTypes) {
+        const captureListener = event => capture(event);
+        const bubbleListener = event => bubble(event);
+        window.addEventListener(type, captureListener, {capture: true, passive: true});
+        window.addEventListener(type, bubbleListener, {capture: false, passive: true});
+        captureListeners.push([type, captureListener]);
+        bubbleListeners.push([type, bubbleListener]);
+      }
+
+      return {
+        items,
+        stop() {
+          for (const [type, listener] of captureListeners) window.removeEventListener(type, listener, {capture: true});
+          for (const [type, listener] of bubbleListeners) window.removeEventListener(type, listener, {capture: false});
+        }
+      };
+    }
+
+    const eventProbe = installEventProbe();
+    window.__webglGeneratorOverlayEventProbe = eventProbe;
+
     const profile = {
       frames: [],
       longTasks: [],
       samples: [],
+      eventProbe,
       running: true,
       lastFrameAt: 0,
       observer: null
@@ -531,10 +600,13 @@ async function stopFrameRecorder(page) {
     if (!profile) return {frames: [], longTasks: []};
     profile.running = false;
     profile.observer?.disconnect?.();
+    profile.eventProbe?.stop?.();
+    if (window.__webglGeneratorOverlayEventProbe === profile.eventProbe) window.__webglGeneratorOverlayEventProbe = null;
     return {
       frames: profile.frames,
       longTasks: profile.longTasks,
-      samples: profile.samples
+      samples: profile.samples,
+      eventTimings: profile.eventProbe?.items || []
     };
   });
 }
@@ -614,8 +686,40 @@ function summarizeInteraction(id, label, samples, frameData) {
       selectionBuildAverageMs: averageMs(selectionBuilds),
       selectionBuildP95Ms: percentileMs(selectionBuilds, 0.95)
     },
+    events: summarizeEventTimings(frameData.eventTimings || []),
     counts: summarizeCounts(samples),
     glErrors: [...new Set(samples.map(sample => sample.glError))]
+  };
+}
+
+function summarizeEventTimings(items) {
+  const byType = {};
+  for (const item of items) {
+    if (!byType[item.type]) byType[item.type] = [];
+    byType[item.type].push(item);
+  }
+  return {
+    total: summarizeEventTimingBucket(items),
+    byType: Object.fromEntries(Object.entries(byType).map(([type, values]) => [type, summarizeEventTimingBucket(values)]))
+  };
+}
+
+function summarizeEventTimingBucket(items) {
+  const dispatch = items.map(item => item.dispatchMs || 0);
+  const nextFrame = items.map(item => item.nextFrameMs || 0);
+  const timestampLag = items.map(item => item.timestampLagMs || 0);
+  return {
+    count: items.length,
+    dispatchAverageMs: averageMs(dispatch),
+    dispatchP95Ms: percentileMs(dispatch, 0.95),
+    dispatchMaxMs: maxMs(dispatch),
+    nextFrameAverageMs: averageMs(nextFrame),
+    nextFrameP95Ms: percentileMs(nextFrame, 0.95),
+    nextFrameMaxMs: maxMs(nextFrame),
+    timestampLagP95Ms: percentileMs(timestampLag, 0.95),
+    defaultPrevented: items.filter(item => item.defaultPrevented).length,
+    completedInBubble: items.filter(item => item.completion === "bubble").length,
+    completedInMicrotask: items.filter(item => item.completion === "microtask").length
   };
 }
 
@@ -722,6 +826,23 @@ function renderMarkdown(report) {
   lines.push("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
   for (const item of report.interactions) {
     lines.push(`| ${item.variantLabel} | ${item.label} | ${item.sampleCount} | ${item.frames.averageMs}ms | ${item.frames.p95Ms}ms | ${item.frames.maxMs}ms | ${item.draw.averageMs}ms | ${item.overlay.averageMs}ms | ${item.overlay.totalP95Ms}ms | ${item.overlay.maxMs}ms | ${item.overlay.suspendedSamples} | ${item.longTasks.length} |`);
+  }
+  lines.push("");
+  lines.push("## 事件处理探针", "");
+  lines.push("| 变体 | 场景 | 事件 | dispatch 均值 | dispatch p95 | dispatch 最大 | 到下一帧 p95 | 默认阻止 | bubble/microtask |");
+  lines.push("|---|---|---:|---:|---:|---:|---:|---:|---|");
+  for (const item of report.interactions) {
+    const total = item.events?.total || {};
+    lines.push(`| ${item.variantLabel} | ${item.label} | ${total.count || 0} | ${total.dispatchAverageMs || 0}ms | ${total.dispatchP95Ms || 0}ms | ${total.dispatchMaxMs || 0}ms | ${total.nextFrameP95Ms || 0}ms | ${total.defaultPrevented || 0} | ${total.completedInBubble || 0}/${total.completedInMicrotask || 0} |`);
+  }
+  lines.push("");
+  lines.push("### 事件类型分项", "");
+  lines.push("| 变体 | 场景 | 类型 | 事件 | dispatch p95 | 到下一帧 p95 |");
+  lines.push("|---|---|---|---:|---:|---:|");
+  for (const item of report.interactions) {
+    for (const [type, summary] of Object.entries(item.events?.byType || {})) {
+      lines.push(`| ${item.variantLabel} | ${item.label} | ${type} | ${summary.count || 0} | ${summary.dispatchP95Ms || 0}ms | ${summary.nextFrameP95Ms || 0}ms |`);
+    }
   }
   lines.push("");
   lines.push("## overlay 分项均值", "");
