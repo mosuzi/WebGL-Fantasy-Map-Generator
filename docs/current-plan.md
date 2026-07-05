@@ -93,6 +93,7 @@
    - feature 级拓扑诊断已补：source/candidate 的 feature detail 现在记录每个 feature 的成员高度范围、阈值 cell、距离场类型、边界邻接对象和邻接高度。001 显示 candidate 多出的 `1-2` cell 小陆块多为 `h=20-22`、外邻高度 `<20` 的海平面边缘孤点；003 显示 candidate 额外小湖中有 `h=17` 小湖和无 outlet 湖。下一步应优先查海平面校准、洼地消解与湖泊 outlet 生成，不应从名称或末端 feature 删除入手。
    - 深洼湖泊岸线标记 source parity 第一刀已完成：原版 `addLakesInDeepDepressions()` 新增湖泊时并不会正确把每个相邻陆格写成 coast，候选此前额外标记了这些邻居，导致 pack 抽点略偏多。当前已取消这处候选额外标记；001 的 candidate pack cells 从 `5234` 降到 `5226`、haven / coast land 从 `903` 降到 `901`，两个目标 case 均仍为 `warn 1 / fail 0`。003 不受这刀影响，下一步仍应查 lake outlet / 洼地消解。
    - 洼地消解 source-like 对照开关已补：`webgl-generator-export-baseline.mjs` 可用 `--river-depression-mode source-like` 让河流阶段改走接近 source 的全量 land 循环诊断路径。临时复查 `continents-10000-audit-continents-003` 时开关已生效，但湖泊数、命名湖泊数和 pack cells 仍为 `7 / 7 / 5649`，与默认 optimized 一致；因此暂不切默认算法，003 下一步继续查湖泊形成 / outlet 链路，而不是洼地消解循环范围。
+   - grid feature 级拓扑诊断已补：source/candidate baseline 的 `grid.featureDiagnostics` 现在也输出 feature 分桶与小 feature 明细，`diagnose:source-warns` 会同时展示 grid 与 pack 两层。复查结果显示 001 在 grid 阶段已是 source 陆地 feature `10` / candidate `16`，003 在 grid 阶段已是 source 湖泊 `5` / candidate `7`；因此剩余 warn 分叉早于 pack/rivers/lakeNames，下一步应查高度模板落点、海平面阈值附近微地形、`addLakesInDeepDepressions()` 与 `openNearSeaLakes()` 的 grid 阶段输入，而不是继续调 pack 或命名。
    - 不做删除小岛、删除 1-cell 湖、只命名 outlet 湖或其它末端过滤。
 
 ### 可选增强（非当前执行队列）

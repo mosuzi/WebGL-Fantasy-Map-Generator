@@ -52,32 +52,39 @@ function readCaseDiagnostics(caseName) {
     warnCount: diff.metadata?.warnCount || 0,
     warnings,
     packSummary: comparePackSummary(source.pack, candidate.pack),
+    gridFeatureSummary: compareFeatureSummary(source.grid?.featureDiagnostics, candidate.grid?.featureDiagnostics),
     featureSummary: compareFeatureSummary(source.features, candidate.features)
   };
 }
 
 function diagnoseWarning(warning, source, candidate) {
   if (warning.id === "features.total") {
+    const sourceGridLand = Number(source.grid?.featureDiagnostics?.land || 0);
+    const candidateGridLand = Number(candidate.grid?.featureDiagnostics?.land || 0);
     const sourceLand = Number(source.features?.land || 0);
     const candidateLand = Number(candidate.features?.land || 0);
     const sourceTiny = tinyLand(source.features, "cellsLt3");
     const candidateTiny = tinyLand(candidate.features, "cellsLt3");
     return [
+      `grid 陆地 feature：source ${sourceGridLand}，candidate ${candidateGridLand}`,
       `feature 总数差异主要来自陆地 feature：source ${sourceLand}，candidate ${candidateLand}`,
       `小陆块 cells < 3：source ${sourceTiny}，candidate ${candidateTiny}`,
       "湖泊数量与命名数在该 case 中已对齐，不能用湖泊命名过滤处理"
     ];
   }
   if (warning.id === "lateStages.names.lakeNames") {
+    const sourceGridLakes = Number(source.grid?.featureDiagnostics?.lakes || 0);
+    const candidateGridLakes = Number(candidate.grid?.featureDiagnostics?.lakes || 0);
     const sourceLakes = Number(source.features?.lakes || 0);
     const candidateLakes = Number(candidate.features?.lakes || 0);
     const sourceNamed = Number(source.features?.diagnostics?.lakes?.named ?? source.lateStages?.names?.lakeNames ?? 0);
     const candidateNamed = Number(candidate.features?.diagnostics?.lakes?.named ?? candidate.lateStages?.names?.lakeNames ?? 0);
     const candidateOutlet = Number(candidate.features?.diagnostics?.lakes?.withOutlet ?? candidate.features?.lakeFields?.withOutlet ?? 0);
     return [
+      `grid 阶段湖泊数已分叉：source ${sourceGridLakes}，candidate ${candidateGridLakes}`,
       `湖泊命名数跟随真实湖泊数：source 湖泊 ${sourceLakes} / 命名 ${sourceNamed}，candidate 湖泊 ${candidateLakes} / 命名 ${candidateNamed}`,
       `candidate 有 outlet 的湖泊 ${candidateOutlet}，但命名数仍等于湖泊数，说明 warn 不是 defineLakeNames 过滤不足`,
-      "应回到湖泊 feature 形成、洼地和 outlet 拓扑，不应只过滤 lakeNames"
+      "应回到 grid 高度阈值、深洼成湖和近海开湖阶段，不应只过滤 lakeNames"
     ];
   }
   return ["该 warn 暂无专门诊断规则，请查看 diff.md 和 feature diagnostics 明细"];
@@ -158,10 +165,28 @@ function renderMarkdown(report) {
       lines.push(`| ${key} | ${format(value.source)} | ${format(value.candidate)} | ${format(value.delta)} |`);
     }
     lines.push("");
+    lines.push("### Grid Feature 摘要", "");
+    lines.push("| 指标 | source | candidate | delta |");
+    lines.push("|---|---:|---:|---:|");
+    renderFeatureSummaryRows(lines, item.gridFeatureSummary);
+    lines.push("");
     lines.push("### Feature 摘要", "");
     lines.push("| 指标 | source | candidate | delta |");
     lines.push("|---|---:|---:|---:|");
-    for (const [key, value] of Object.entries(item.featureSummary)) {
+    renderFeatureSummaryRows(lines, item.featureSummary);
+    lines.push("");
+    lines.push("| warn | source | candidate | delta | ratio | 诊断 |");
+    lines.push("|---|---:|---:|---:|---:|---|");
+    for (const warning of item.warnings) {
+      lines.push(`| ${warning.id} | ${format(warning.source)} | ${format(warning.candidate)} | ${format(warning.delta)} | ${format(warning.ratio)} | ${warning.diagnosis.join("<br>")} |`);
+    }
+    lines.push("");
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function renderFeatureSummaryRows(lines, summary = {}) {
+  for (const [key, value] of Object.entries(summary)) {
       if (key === "lakeGroups") {
         lines.push(`| ${key} | ${formatGroupMap(value.source)} | ${formatGroupMap(value.candidate)} |  |`);
         continue;
@@ -176,15 +201,6 @@ function renderMarkdown(report) {
       }
       lines.push(`| ${key} | ${format(value.source)} | ${format(value.candidate)} | ${format(value.delta)} |`);
     }
-    lines.push("");
-    lines.push("| warn | source | candidate | delta | ratio | 诊断 |");
-    lines.push("|---|---:|---:|---:|---:|---|");
-    for (const warning of item.warnings) {
-      lines.push(`| ${warning.id} | ${format(warning.source)} | ${format(warning.candidate)} | ${format(warning.delta)} | ${format(warning.ratio)} | ${warning.diagnosis.join("<br>")} |`);
-    }
-    lines.push("");
-  }
-  return `${lines.join("\n")}\n`;
 }
 
 function tinyLand(features, key) {

@@ -171,6 +171,7 @@ try {
           tDistribution: countValues(gridCells.t),
           featureCount: Math.max((grid.features || []).filter(Boolean).length, 0),
           featureTypes: countByKey(grid.features || [], feature => feature?.type || "unknown"),
+          featureDiagnostics: describeFeatures(grid.features || [], gridCells),
           temperature: describeNumbers(gridCells.temp || []),
           precipitation: describeNumbers(gridCells.prec || [])
         },
@@ -189,7 +190,7 @@ try {
           harborDistribution: countValues(packCells.harbor),
           packGridRefsInvalid: countInvalidRefs(packCells.g, gridCells.i.length)
         },
-        features: describeFeatures(pack.features || []),
+        features: describeFeatures(pack.features || [], packCells),
         rivers: describeRivers(pack.rivers || [], packCells),
         biomes: {
           distribution: countValues(packCells.biome)
@@ -491,7 +492,7 @@ try {
         return next === undefined ? list[base] : list[base] + rest * (next - list[base]);
       }
 
-      function describeFeatures(features = []) {
+      function describeFeatures(features = [], cells = packCells) {
         const alive = features.filter(Boolean);
         return {
           total: alive.length,
@@ -508,7 +509,7 @@ try {
             withOutlet: alive.filter(feature => feature.type === "lake" && feature.outlet).length,
             closed: alive.filter(feature => feature.type === "lake" && feature.closed).length
           },
-          diagnostics: describeFeatureDiagnostics(alive, packCells)
+          diagnostics: describeFeatureDiagnostics(alive, cells)
         };
       }
 
@@ -517,7 +518,7 @@ try {
         const islands = typed("island");
         const lakes = typed("lake");
         return {
-          byType: Object.fromEntries(["island", "lake", "ocean"].map(type => [type, describeFeatureGroup(typed(type))])),
+          byType: Object.fromEntries(["island", "lake", "ocean"].map(type => [type, describeFeatureGroup(typed(type), cells)])),
           tinyLand: {
             cellsLt3: islands.filter(feature => Number(feature.cells || 0) < 3).length,
             cellsLt10: islands.filter(feature => Number(feature.cells || 0) < 10).length,
@@ -533,28 +534,40 @@ try {
         };
       }
 
-      function describeFeatureGroup(features = []) {
+      function describeFeatureGroup(features = [], cells = packCells) {
         return {
           count: features.length,
-          cells: describeNumbers(features.map(feature => feature.cells)),
+          cells: describeNumbers(features.map(feature => featureCellCount(feature, cells))),
           area: describeNumbers(features.map(feature => feature.area)),
           groups: countByKey(features, feature => feature.group || "none")
         };
       }
 
       function describeFeatureDetail(feature, cells, features) {
+        const topology = describeFeatureCellTopology(feature, cells, features);
         return {
           i: feature.i ?? feature.id ?? null,
           type: feature.type || "unknown",
           group: feature.group || "none",
-          cells: Number(feature.cells || 0),
+          cells: featureCellCount(feature, cells, topology),
           area: round(Number(feature.area || 0)),
           firstCell: Number.isInteger(feature.firstCell) ? feature.firstCell : null,
           height: Number.isFinite(feature.height) ? round(feature.height) : null,
           outlet: Number.isInteger(feature.outlet) ? feature.outlet : null,
-          topology: describeFeatureCellTopology(feature, cells, features),
+          topology,
           named: Boolean(feature.name)
         };
+      }
+
+      function featureCellCount(feature, cells, topology = null) {
+        if (Array.isArray(feature?.cells)) return feature.cells.length;
+        if (Number.isFinite(Number(feature?.cells)) && Number(feature.cells) > 0) return Number(feature.cells);
+        return Number(topology?.cellCount ?? countFeatureCells(feature, cells) ?? 0);
+      }
+
+      function countFeatureCells(feature, cells = {}) {
+        const featureId = Number(feature?.i ?? feature?.id);
+        return Array.from(cells.f || []).filter(value => Number(value) === featureId).length;
       }
 
       function describeFeatureCellTopology(feature, cells = {}, features = []) {

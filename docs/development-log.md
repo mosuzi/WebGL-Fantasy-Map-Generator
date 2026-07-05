@@ -19431,3 +19431,34 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 临时导出 `node .\tools\webgl-generator-export-baseline.mjs --template continents --cells 10000 --seed audit-continents-003 --out-dir $env:TEMP\... --screenshot false --river-depression-mode source-like` 通过。
 - 直接生成 optimized / source-like 对照通过，确认 `depressionMode` 分别为 `optimized / source-like`，003 指标未因该诊断路径改变。
+
+### 2026-07-05 grid feature 级拓扑诊断
+
+背景：
+
+- source-like 洼地消解已经证明 003 的 `lakeNames` warn 不是 pack 河流阶段的全量 / 局部洼地扫描差异。
+- 继续查 003 时需要判断湖泊数量是在 grid feature 阶段已经分叉，还是 pack 重图、河流 outlet 或命名阶段才分叉。
+- 同时 001 的 `features.total` 也需要确认小陆块差异是否早于 pack。
+
+实现：
+
+- `tools/source-export-baseline.mjs` 和 `tools/webgl-generator-export-baseline.mjs` 在 `grid` 摘要下新增 `featureDiagnostics`，复用现有 feature 分桶、拓扑、边界邻接和小 feature 明细结构。
+- 修正 candidate grid 摘要的 `featureCount`，不再误用 pack feature 数。
+- feature cell 数统一为“数组取 length，数字直接取值，否则按 `cells.f` 反查”，避免 grid feature 没有 `cells` 数值字段时显示为 `0c`。
+- `tools/source-candidate-warn-diagnostics.mjs` 新增 Grid Feature 摘要，并在 `features.total` / `lakeNames` 诊断中说明 grid 阶段是否已分叉。
+
+当前诊断：
+
+- `continents-10000-audit-continents-001`：grid 阶段 source 陆地 feature `10`、candidate `16`；pack 阶段仍是 source `10`、candidate `16`。该 case 的小陆块差异早于 pack 抽点。
+- `continents-10000-audit-continents-003`：grid 阶段 source 湖泊 `5`、candidate `7`；pack 阶段仍是 source `5`、candidate `7`。该 case 的 lakeNames warn 早于 pack、rivers 和 lakeNames。
+- 一次临时实验把高度模板随机坐标落点从行列估算改成扫描实际最近 grid point，003 湖泊从 `7` 变成 `1`，比 source `5` 更远；该改法已撤回，不作为修正路线。
+- 下一步应回到高度模板落点与 source 随机流 / grid 点关系、海平面阈值附近微地形、`addLakesInDeepDepressions()` 和 `openNearSeaLakes()` 的 grid 阶段输入。
+
+验证：
+
+- `node --check tools\source-export-baseline.mjs` 通过。
+- `node --check tools\webgl-generator-export-baseline.mjs` 通过。
+- `node --check tools\source-candidate-warn-diagnostics.mjs` 通过。
+- `git diff --check` 通过。
+- 重新刷新 `continents-10000-audit-continents-001` 和 `continents-10000-audit-continents-003` 的 source / candidate summary，并重新生成 diff。
+- `$env:CI='true'; pnpm run diagnose:source-warns -- --out "$env:TEMP\fmg-source-warn-grid-feature-diagnostics.json" --markdown "$env:TEMP\fmg-source-warn-grid-feature-diagnostics.md"` 通过，报告已包含 Grid Feature 摘要。
