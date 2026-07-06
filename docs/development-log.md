@@ -20006,3 +20006,21 @@ full 矩阵结果：
 
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
 - Node 轻量断言：`climateLatitudeRangePercent=20 / climateLongitudeRangePercent=60` 生成 `latT=36 / lonT=216`；旧 `climateMapSizePercent=30` 仍兼容生成 `latT=54 / lonT=108`。
+
+### 2026-07-06 地图外缘与气候范围锁定回修
+
+背景：
+
+- 用户复核后指出 issue #1 并未真正解决：画布外颜色和画布边缘仍有锯齿状分割，不能算自然过渡。
+- 用户同时指出经纬度范围控制能力可用，但锁定按钮位置不对；需要放在两条范围滑杆右侧，垂直居中，并用两条线表示关联。默认应为锁定状态，除非用户已经更改并保存到 LocalStorage。
+
+实现：
+
+- 地图边缘遮罩从“仅地图内部弱渐变”改为跨世界边界的内外双向 feather：四边各绘制外侧实底色和内侧渐隐带，覆盖 Voronoi 外缘与未开发底色的硬切割。
+- renderer `loadMap / loadMapAsync` 会把 `.map-stage` 背景色同步到当前地图 `layers.background`，避免 DOM 舞台背景和 WebGL 清屏色不一致。
+- 气候范围控件新增 `.climate-range-control-group`，锁按钮跨“纬度范围 / 经度范围”两行，右侧垂直居中；两条伪元素线连接滑杆与锁按钮，锁定时改为暗金色。
+- `global-config-store` 新增 `climateRangeRatioLocked`，默认 `true`；用户点击锁按钮时写入偏好，下一次打开沿用用户选择。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。

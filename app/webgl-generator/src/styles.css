@@ -4345,8 +4345,49 @@ select:disabled {
   text-align: right;
 }
 
+.climate-range-control-group {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-rows: repeat(2, auto);
+  column-gap: 8px;
+  row-gap: 7px;
+  align-items: center;
+  min-width: 0;
+}
+
+.climate-range-control-group::before,
+.climate-range-control-group::after {
+  content: "";
+  position: absolute;
+  right: 32px;
+  width: 11px;
+  border-top: 1px solid rgba(126, 171, 184, 0.34);
+  pointer-events: none;
+}
+
+.climate-range-control-group::before {
+  top: 16px;
+}
+
+.climate-range-control-group::after {
+  bottom: 16px;
+}
+
+.climate-range-control-group.locked::before,
+.climate-range-control-group.locked::after {
+  border-color: rgba(215, 168, 79, 0.72);
+}
+
+.climate-range-control-group .climate-slider-field {
+  grid-column: 1;
+}
+
 .climate-range-lock-button.el-button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   justify-self: end;
+  align-self: center;
   width: 32px;
   height: 32px;
   min-width: 32px;

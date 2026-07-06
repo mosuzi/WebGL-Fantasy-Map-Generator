@@ -71,10 +71,10 @@ const MAX_ROUTE_DASH_PIECES = 20000;
 const MAX_TRADE_FLOW_LINES = 180;
 const MAX_TRADE_FLOW_VERTICES = 18000;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
-const MAP_EDGE_FADE_RATIO = 0.035;
-const MAP_EDGE_FADE_MIN_WORLD = 18;
-const MAP_EDGE_FADE_MAX_WORLD = 56;
-const MAP_EDGE_FADE_ALPHA = 0.48;
+const MAP_EDGE_FADE_RATIO = 0.055;
+const MAP_EDGE_FADE_MIN_WORLD = 28;
+const MAP_EDGE_FADE_MAX_WORLD = 96;
+const MAP_EDGE_FADE_ALPHA = 0.9;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -239,6 +239,7 @@ export class PlaceholderMapRenderer {
   loadMap(map) {
     const profile = createRendererLoadProfile();
     this.map = map;
+    applyMapStageBackground(this.stage, map);
     this.objectPickingIndex = profile.stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     profile.stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
     profile.stage("shore-cache", "构建水陆线缓存", () => this.rebuildShoreVisualCache());
@@ -305,6 +306,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
+    applyMapStageBackground(this.stage, map);
     this.objectPickingIndex = await stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     await stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
     await stage("shore-cache", "构建水陆线缓存", () => this.rebuildShoreVisualCache());
@@ -1571,6 +1573,17 @@ function buildUndevelopedPickResult(map, world, reason, candidates = 0) {
   };
 }
 
+function applyMapStageBackground(stage, map) {
+  if (!stage || !map?.layers?.background) return;
+  stage.style.backgroundColor = rgbaCss(map.layers.background);
+}
+
+function rgbaCss(color) {
+  const channel = value => Math.max(0, Math.min(255, Math.round((Number(value) || 0) * 255)));
+  const alpha = Math.max(0, Math.min(1, Number(color?.[3] ?? 1)));
+  return `rgba(${channel(color?.[0])}, ${channel(color?.[1])}, ${channel(color?.[2])}, ${alpha})`;
+}
+
 function defaultLocateMinScale(object) {
   return isPointObjectKind(object?.kind) ? 1.25 : 0.35;
 }
@@ -2698,12 +2711,17 @@ function pushMapEdgeFade(vertices, context, map) {
   const height = Number(map?.metadata?.graphHeight) || 0;
   if (width <= 0 || height <= 0) return;
   const fade = clamp(Math.min(width, height) * MAP_EDGE_FADE_RATIO, MAP_EDGE_FADE_MIN_WORLD, MAP_EDGE_FADE_MAX_WORLD);
-  const outer = withMapEdgeAlpha(map.layers?.background || [0.36, 0.49, 0.64, 1], MAP_EDGE_FADE_ALPHA);
-  const inner = withMapEdgeAlpha(outer, 0);
-  pushGradientQuad(vertices, context, [0, 0], [fade, 0], [fade, height], [0, height], outer, inner, inner, outer);
-  pushGradientQuad(vertices, context, [width - fade, 0], [width, 0], [width, height], [width - fade, height], inner, outer, outer, inner);
-  pushGradientQuad(vertices, context, [0, 0], [width, 0], [width, fade], [0, fade], outer, outer, inner, inner);
-  pushGradientQuad(vertices, context, [0, height - fade], [width, height - fade], [width, height], [0, height], inner, inner, outer, outer);
+  const outer = withAlpha(map.layers?.background || [0.36, 0.49, 0.64, 1], 1);
+  const edge = withAlpha(outer, MAP_EDGE_FADE_ALPHA);
+  const inner = withAlpha(outer, 0);
+  pushGradientQuad(vertices, context, [-fade, -fade], [0, -fade], [0, height + fade], [-fade, height + fade], outer, edge, edge, outer);
+  pushGradientQuad(vertices, context, [0, -fade], [fade, -fade], [fade, height + fade], [0, height + fade], edge, inner, inner, edge);
+  pushGradientQuad(vertices, context, [width, -fade], [width + fade, -fade], [width + fade, height + fade], [width, height + fade], edge, outer, outer, edge);
+  pushGradientQuad(vertices, context, [width - fade, -fade], [width, -fade], [width, height + fade], [width - fade, height + fade], inner, edge, edge, inner);
+  pushGradientQuad(vertices, context, [-fade, -fade], [width + fade, -fade], [width + fade, 0], [-fade, 0], outer, outer, edge, edge);
+  pushGradientQuad(vertices, context, [-fade, 0], [width + fade, 0], [width + fade, fade], [-fade, fade], edge, edge, inner, inner);
+  pushGradientQuad(vertices, context, [-fade, height], [width + fade, height], [width + fade, height + fade], [-fade, height + fade], edge, edge, outer, outer);
+  pushGradientQuad(vertices, context, [-fade, height - fade], [width + fade, height - fade], [width + fade, height], [-fade, height], inner, inner, edge, edge);
 }
 
 function pushGradientQuad(vertices, context, a, b, c, d, colorA, colorB, colorC, colorD) {
@@ -2715,10 +2733,6 @@ function pushGradientTriangle(vertices, context, a, b, c, colorA, colorB, colorC
   pushWorldVertex(vertices, context, a, colorA);
   pushWorldVertex(vertices, context, b, colorB);
   pushWorldVertex(vertices, context, c, colorC);
-}
-
-function withMapEdgeAlpha(color, alpha) {
-  return [color[0] ?? 0, color[1] ?? 0, color[2] ?? 0, alpha];
 }
 
 const LINE_SMOOTHING = Object.freeze({

@@ -191,42 +191,44 @@
               :step="1"
               @input="value => temperatureSouthPole = value"
             />
-            <UiSliderField
-              label="纬度范围"
-              input-id="climate-latitude-range-percent-slider"
-              output-id="climate-latitude-range-percent-value"
-              field-class="climate-slider-field"
-              value-tag="output"
-              :model-value="climateLatitudeRangePercent"
-              unit-label="%"
-              :min="climateMapSizeRange.min"
-              :max="climateMapSizeRange.max"
-              :step="1"
-              @input="setLatitudeRangePercent"
-            />
-            <UiSliderField
-              label="经度范围"
-              input-id="climate-longitude-range-percent-slider"
-              output-id="climate-longitude-range-percent-value"
-              field-class="climate-slider-field"
-              value-tag="output"
-              :model-value="climateLongitudeRangePercent"
-              unit-label="%"
-              :min="climateMapSizeRange.min"
-              :max="climateMapSizeRange.max"
-              :step="1"
-              @input="setLongitudeRangePercent"
-            />
-            <ElButton
-              class="climate-range-lock-button"
-              :class="{active: climateRangeRatioLocked}"
-              :icon="climateRangeRatioLocked ? Lock : Unlock"
-              circle
-              :aria-pressed="climateRangeRatioLocked ? 'true' : 'false'"
-              :aria-label="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"
-              :title="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"
-              @click="toggleClimateRangeRatioLock"
-            />
+            <div class="climate-range-control-group" :class="{locked: climateRangeRatioLocked}">
+              <UiSliderField
+                label="纬度范围"
+                input-id="climate-latitude-range-percent-slider"
+                output-id="climate-latitude-range-percent-value"
+                field-class="climate-slider-field"
+                value-tag="output"
+                :model-value="climateLatitudeRangePercent"
+                unit-label="%"
+                :min="climateMapSizeRange.min"
+                :max="climateMapSizeRange.max"
+                :step="1"
+                @input="setLatitudeRangePercent"
+              />
+              <UiSliderField
+                label="经度范围"
+                input-id="climate-longitude-range-percent-slider"
+                output-id="climate-longitude-range-percent-value"
+                field-class="climate-slider-field"
+                value-tag="output"
+                :model-value="climateLongitudeRangePercent"
+                unit-label="%"
+                :min="climateMapSizeRange.min"
+                :max="climateMapSizeRange.max"
+                :step="1"
+                @input="setLongitudeRangePercent"
+              />
+              <ElButton
+                class="climate-range-lock-button"
+                :class="{active: climateRangeRatioLocked}"
+                :icon="climateRangeRatioLocked ? Lock : Unlock"
+                circle
+                :aria-pressed="climateRangeRatioLocked ? 'true' : 'false'"
+                :aria-label="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"
+                :title="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"
+                @click="toggleClimateRangeRatioLock"
+              />
+            </div>
             <UiSliderField
               label="画布纬度"
               input-id="climate-latitude-center-slider"
@@ -470,7 +472,7 @@ const climateLatitudeCenter = ref(0);
 const climateLatitudeSpan = ref(45);
 const climateLatitudeRangePercent = ref(25);
 const climateLongitudeRangePercent = ref(25);
-const climateRangeRatioLocked = ref(false);
+const climateRangeRatioLocked = ref(preferences.value.climateRangeRatioLocked !== false);
 const climateRangeLockRatio = ref(1);
 const atmosphereDirection = ref("customBands");
 const windBands = ref(defaultWindProfile());
@@ -649,6 +651,7 @@ function toggleClimateRangeRatioLock() {
   if (climateRangeRatioLocked.value) {
     climateRangeLockRatio.value = Math.max(0.01, climateLongitudeRangePercent.value / Math.max(1, climateLatitudeRangePercent.value));
   }
+  config.patchPreferences({climateRangeRatioLocked: climateRangeRatioLocked.value});
 }
 
 function cycleWindBand(index) {
@@ -753,6 +756,9 @@ function handleClimateOptionsSync(event) {
   climateLatitudeSpan.value = clampNumber(detail.climateLatitudeSpan, 20, 80, climateLatitudeSpan.value);
   climateLatitudeRangePercent.value = normalizeClimateRangePercent(detail.climateLatitudeRangePercent ?? detail.climateMapSizePercent, climateLatitudeRangePercent.value);
   climateLongitudeRangePercent.value = normalizeClimateRangePercent(detail.climateLongitudeRangePercent ?? detail.climateMapSizePercent ?? detail.climateLatitudeRangePercent, climateLongitudeRangePercent.value);
+  if (climateRangeRatioLocked.value) {
+    climateRangeLockRatio.value = Math.max(0.01, climateLongitudeRangePercent.value / Math.max(1, climateLatitudeRangePercent.value));
+  }
   atmosphereDirection.value = normalizeAtmosphereDirection(detail.atmosphereDirection);
   windBands.value = normalizeWindProfile(detail.winds);
   temperatureEquator.value = clampNumber(detail.temperatureEquator, temperatureRange.min, temperatureRange.max, temperatureEquator.value);

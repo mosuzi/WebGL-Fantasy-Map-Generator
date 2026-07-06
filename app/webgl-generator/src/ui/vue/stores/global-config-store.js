@@ -9,6 +9,7 @@ const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   showOceanHeight: false,
   smoothCellBorders: true,
   showHoverInfo: true,
+  climateRangeRatioLocked: true,
   maxCityLabels: 5000,
   units: Object.freeze({...DEFAULT_UNIT_PREFERENCES}),
   layers: Object.freeze({})
@@ -64,6 +65,7 @@ function normalizePreferences(input = {}) {
       : typeof input.showHoverOverlay === "boolean"
         ? input.showHoverOverlay
         : DEFAULT_CONTROL_PREFERENCES.showHoverInfo,
+    climateRangeRatioLocked: typeof input.climateRangeRatioLocked === "boolean" ? input.climateRangeRatioLocked : DEFAULT_CONTROL_PREFERENCES.climateRangeRatioLocked,
     maxCityLabels: normalizeMaxCityLabels(input.maxCityLabels),
     units: normalizeUnitPreferences(input.units),
     layers: normalizeLayerPreferences(input.layers)
