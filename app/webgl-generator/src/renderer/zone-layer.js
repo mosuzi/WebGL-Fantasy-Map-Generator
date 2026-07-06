@@ -49,14 +49,12 @@ export function pushZoneTextureLayer(vertices, context, map, visibility = {}) {
 function pushZoneTexture(vertices, context, map, zone) {
   const style = resolveZoneStyle(zone);
   const cells = zonePatternCells(zone.cells || []);
-  const fillColor = [...style.color.slice(0, 3), Math.min(0.05, style.alpha * 0.08)];
-  const strokeColor = style.color;
+  const strokeColor = [...style.color.slice(0, 3), Math.min(0.86, Math.max(0.72, style.color[3] + 0.22))];
   const pattern = normalizeZonePattern(zone.pattern || style.pattern);
 
   for (const cell of cells) {
     const polygon = packCellPolygon(map, cell);
     if (polygon.length < 3) continue;
-    pushZoneCellFill(vertices, context, polygon, fillColor);
     pushZoneCellPattern(vertices, context, polygon, pattern, strokeColor);
   }
 }
@@ -68,16 +66,6 @@ function zonePatternCells(cells) {
   const sampled = [];
   for (let index = 0; sampled.length < MAX_ZONE_PATTERN_CELLS && index < valid.length; index += stride) sampled.push(valid[Math.floor(index)]);
   return sampled;
-}
-
-function pushZoneCellFill(vertices, context, polygon, color) {
-  const center = polygonCentroid(polygon);
-  for (let index = 0; index < polygon.length; index++) {
-    const next = polygon[(index + 1) % polygon.length];
-    pushWorldVertex(vertices, context, center, color);
-    pushWorldVertex(vertices, context, polygon[index], color);
-    pushWorldVertex(vertices, context, next, color);
-  }
 }
 
 function pushZoneCellPattern(vertices, context, polygon, pattern, color) {
