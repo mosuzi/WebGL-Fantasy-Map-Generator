@@ -7920,18 +7920,18 @@ input.ui-switch-native {
 }
 
 .zone-pattern-swatch.pattern-diagonal {
-  background-image: repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 7px);
+  background-image: repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 5px);
 }
 
 .zone-pattern-swatch.pattern-cross {
   background-image:
-    repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 7px),
-    repeating-linear-gradient(45deg, currentColor 0 2px, transparent 2px 7px);
+    repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(45deg, currentColor 0 2px, transparent 2px 5px);
 }
 
 .zone-pattern-swatch.pattern-dots {
   background-image: radial-gradient(currentColor 28%, transparent 30%);
-  background-size: 7px 7px;
+  background-size: 5px 5px;
 }
 
 .zone-pattern-label {

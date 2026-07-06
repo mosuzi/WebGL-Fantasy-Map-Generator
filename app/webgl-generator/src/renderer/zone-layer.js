@@ -1,7 +1,7 @@
 import {isWorldPoint} from "./geometry.js";
 import {pushWorldPolylineMesh, pushWorldVertex} from "./mesh-writer.js";
 
-const MAX_ZONE_PATTERN_CELLS = 220;
+const MAX_ZONE_PATTERN_CELLS = 720;
 
 const ZONE_STYLE_BY_TYPE = Object.freeze({
   Warzone: Object.freeze({pattern: "cross", color: "#d65a42", alpha: 0.62}),
@@ -49,7 +49,7 @@ export function pushZoneTextureLayer(vertices, context, map, visibility = {}) {
 function pushZoneTexture(vertices, context, map, zone) {
   const style = resolveZoneStyle(zone);
   const cells = zonePatternCells(zone.cells || []);
-  const fillColor = [...style.color.slice(0, 3), Math.min(0.16, style.alpha * 0.22)];
+  const fillColor = [...style.color.slice(0, 3), Math.min(0.05, style.alpha * 0.08)];
   const strokeColor = style.color;
   const pattern = normalizeZonePattern(zone.pattern || style.pattern);
 
@@ -85,23 +85,41 @@ function pushZoneCellPattern(vertices, context, polygon, pattern, color) {
   const center = polygonCentroid(polygon);
   const width = Math.max(1, bounds.maxX - bounds.minX);
   const height = Math.max(1, bounds.maxY - bounds.minY);
-  const length = Math.min(Math.max(width, height) * 0.82, Math.min(width + height, 22));
-  const stroke = Math.max(0.28, Math.min(0.85, Math.min(width, height) * 0.08));
+  const minor = Math.min(width, height);
+  const length = Math.min(Math.max(width, height) * 0.68, Math.min(width + height, 18));
+  const stroke = Math.max(0.32, Math.min(0.82, minor * 0.09));
 
   if (pattern === "dots") {
-    pushZoneDot(vertices, context, center, Math.max(0.75, Math.min(width, height) * 0.16), color);
+    pushDotPattern(vertices, context, center, minor, color);
     return;
   }
 
-  pushPatternSegment(vertices, context, center, length, stroke, color, 1, 1);
-  if (pattern === "cross") pushPatternSegment(vertices, context, center, length, stroke, color, 1, -1);
+  pushDiagonalPattern(vertices, context, center, length, stroke, minor, color, 1, 1);
+  if (pattern === "cross") pushDiagonalPattern(vertices, context, center, length, stroke, minor, color, 1, -1);
 }
 
-function pushPatternSegment(vertices, context, center, length, stroke, color, dx, dy) {
+function pushDiagonalPattern(vertices, context, center, length, stroke, minor, color, dx, dy) {
+  const spacing = Math.max(2.1, Math.min(4.2, minor * 0.32));
+  const offsets = [-spacing, 0, spacing];
+  for (const offset of offsets) pushPatternSegment(vertices, context, center, length, stroke, color, dx, dy, offset);
+}
+
+function pushPatternSegment(vertices, context, center, length, stroke, color, dx, dy, offset = 0) {
+  const normalLength = Math.hypot(dx, dy) || 1;
+  const normal = [-dy / normalLength, dx / normalLength];
+  const shiftedCenter = [center[0] + normal[0] * offset, center[1] + normal[1] * offset];
   const scale = length / Math.hypot(dx, dy) / 2;
-  const a = [center[0] - dx * scale, center[1] - dy * scale];
-  const b = [center[0] + dx * scale, center[1] + dy * scale];
+  const a = [shiftedCenter[0] - dx * scale, shiftedCenter[1] - dy * scale];
+  const b = [shiftedCenter[0] + dx * scale, shiftedCenter[1] + dy * scale];
   pushWorldPolylineMesh(vertices, context, [a, b], color, stroke, {joinMode: "caps", joinSegments: 6});
+}
+
+function pushDotPattern(vertices, context, center, minor, color) {
+  const spacing = Math.max(2.2, Math.min(4, minor * 0.34));
+  const radius = Math.max(0.48, Math.min(0.92, minor * 0.105));
+  pushZoneDot(vertices, context, center, radius, color);
+  pushZoneDot(vertices, context, [center[0] - spacing, center[1] - spacing * 0.55], radius, color);
+  pushZoneDot(vertices, context, [center[0] + spacing, center[1] + spacing * 0.55], radius, color);
 }
 
 function pushZoneDot(vertices, context, center, radius, color) {
