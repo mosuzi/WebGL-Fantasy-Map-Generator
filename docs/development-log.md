@@ -19968,3 +19968,21 @@ full 矩阵结果：
 - `node --check` 覆盖 `app.js`、`zone-panel.js`、`object-kinds.js`、`object-resolver.js`、`placeholder-renderer.js`、`selection-layer.js`。
 - `$env:CI='true'; pnpm run build:app` 通过；新增 `ZonePanel` 懒加载 chunk，仅保留既有的大 chunk 警告。
 - 构建产物 Playwright 定向验证：管理按钮存在，地区面板可打开，图例 `3` 项、列表 `3` 行，点击定位后 `selection.object.kind = zone`、`locateStatus = zone #0`，控制台错误为空。
+
+### 2026-07-06 GitHub issue #1：地图外区域提示与边缘柔化
+
+背景：
+
+- 当前仓库 open issue 只有 #1，内容是有效地图区域与无效区域交界处折线割裂，并希望鼠标指向无效区域时右下角提示“未开发”。
+- 现有 `climateMapSizePercent` 只控制气候坐标映射，不是真正的数据 mask；直接把它改成硬裁剪会影响国家、城市、路线、河流和编辑链路，风险过大。
+
+实现：
+
+- renderer 静态线层新增地图四周半透明渐变带，使用背景色向地图内侧渐隐，降低 Voronoi 边缘与画布背景的硬切割感。
+- `pickClientPoint()` 在世界坐标超出地图范围，或 `pickGridCell()` 未命中有效 cell 时，返回 `invalidMapArea` 结果。
+- hover 面板支持 `invalidMapArea`，标题显示“未开发区域”，状态行显示“未开发”，并区分“地图有效范围外”和“未命中有效 cell”。
+- 本轮不改变生成数据、不调整 cell 高度/feature/政治归属。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。

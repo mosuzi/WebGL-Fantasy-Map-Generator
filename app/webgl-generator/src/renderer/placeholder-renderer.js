@@ -71,6 +71,10 @@ const MAX_ROUTE_DASH_PIECES = 20000;
 const MAX_TRADE_FLOW_LINES = 180;
 const MAX_TRADE_FLOW_VERTICES = 18000;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
+const MAP_EDGE_FADE_RATIO = 0.035;
+const MAP_EDGE_FADE_MIN_WORLD = 18;
+const MAP_EDGE_FADE_MAX_WORLD = 56;
+const MAP_EDGE_FADE_ALPHA = 0.48;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -746,7 +750,15 @@ export class PlaceholderMapRenderer {
     const markerIcon = this.pickMarkerIcon(clientX, clientY);
     const militaryIcon = this.pickMilitaryIcon(clientX, clientY);
     const world = this.screenToWorld(clientX, clientY);
+    if (isUndevelopedWorldPoint(this.map, world)) {
+      this.lastObjectCandidateCount = 0;
+      return buildUndevelopedPickResult(this.map, world, "outside-map");
+    }
     const result = pickGridCell(this.map, world.x, world.y);
+    if (!result || result.gridCell === null) {
+      this.lastObjectCandidateCount = 0;
+      return buildUndevelopedPickResult(this.map, world, "no-cell", result?.candidates || 0);
+    }
     const cityObject = this.layerVisibility.cities || this.layerVisibility.population
       ? pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9))
       : null;
@@ -1532,6 +1544,31 @@ export class PlaceholderMapRenderer {
       y: ((1 - ndcY) / 2) * rect.height
     };
   }
+}
+
+function isUndevelopedWorldPoint(map, world) {
+  const width = Number(map?.metadata?.graphWidth) || 0;
+  const height = Number(map?.metadata?.graphHeight) || 0;
+  return !Number.isFinite(world?.x)
+    || !Number.isFinite(world?.y)
+    || world.x < 0
+    || world.y < 0
+    || world.x > width
+    || world.y > height;
+}
+
+function buildUndevelopedPickResult(map, world, reason, candidates = 0) {
+  return {
+    invalidMapArea: true,
+    invalidReason: reason,
+    gridCell: null,
+    packCell: null,
+    worldX: roundValue(world?.x ?? 0),
+    worldY: roundValue(world?.y ?? 0),
+    graphWidth: map?.metadata?.graphWidth || 0,
+    graphHeight: map?.metadata?.graphHeight || 0,
+    candidates
+  };
 }
 
 function defaultLocateMinScale(object) {
@@ -2647,12 +2684,41 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   const vertices = [];
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
+  pushMapEdgeFade(vertices, context, map);
   pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
   pushZoneTextureLayer(vertices, context, map, visibility);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLines(vertices, context, map, visibility);
   return new Float32Array(vertices);
+}
+
+function pushMapEdgeFade(vertices, context, map) {
+  const width = Number(map?.metadata?.graphWidth) || 0;
+  const height = Number(map?.metadata?.graphHeight) || 0;
+  if (width <= 0 || height <= 0) return;
+  const fade = clamp(Math.min(width, height) * MAP_EDGE_FADE_RATIO, MAP_EDGE_FADE_MIN_WORLD, MAP_EDGE_FADE_MAX_WORLD);
+  const outer = withMapEdgeAlpha(map.layers?.background || [0.36, 0.49, 0.64, 1], MAP_EDGE_FADE_ALPHA);
+  const inner = withMapEdgeAlpha(outer, 0);
+  pushGradientQuad(vertices, context, [0, 0], [fade, 0], [fade, height], [0, height], outer, inner, inner, outer);
+  pushGradientQuad(vertices, context, [width - fade, 0], [width, 0], [width, height], [width - fade, height], inner, outer, outer, inner);
+  pushGradientQuad(vertices, context, [0, 0], [width, 0], [width, fade], [0, fade], outer, outer, inner, inner);
+  pushGradientQuad(vertices, context, [0, height - fade], [width, height - fade], [width, height], [0, height], inner, inner, outer, outer);
+}
+
+function pushGradientQuad(vertices, context, a, b, c, d, colorA, colorB, colorC, colorD) {
+  pushGradientTriangle(vertices, context, a, b, c, colorA, colorB, colorC);
+  pushGradientTriangle(vertices, context, a, c, d, colorA, colorC, colorD);
+}
+
+function pushGradientTriangle(vertices, context, a, b, c, colorA, colorB, colorC) {
+  pushWorldVertex(vertices, context, a, colorA);
+  pushWorldVertex(vertices, context, b, colorB);
+  pushWorldVertex(vertices, context, c, colorC);
+}
+
+function withMapEdgeAlpha(color, alpha) {
+  return [color[0] ?? 0, color[1] ?? 0, color[2] ?? 0, alpha];
 }
 
 const LINE_SMOOTHING = Object.freeze({

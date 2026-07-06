@@ -820,7 +820,7 @@ function updateHoverOverlay(documentRef, pick) {
   const overlay = documentRef.getElementById("hover-overlay");
   if (!overlay) return;
   const preferences = readControlPreferences(documentRef);
-  const visible = preferences.showHoverInfo !== false && pick && pick.gridCell !== null;
+  const visible = preferences.showHoverInfo !== false && pick && (pick.invalidMapArea || pick.gridCell !== null);
   overlay.hidden = !visible;
   overlay.replaceChildren();
   if (!visible) return;
@@ -835,6 +835,7 @@ function updateHoverOverlay(documentRef, pick) {
 }
 
 function formatHoverTitle(pick, unitPreferences = {}) {
+  if (pick.invalidMapArea) return "未开发区域";
   if (pick.label) return `标签 ${pick.label.text}`;
   if (pick.city && pick.city !== "none") return `城市 ${pick.city}`;
   if (pick.marker) return `标记 ${formatMarkerObjectSummary(pick.marker, unitPreferences)}`;
@@ -846,6 +847,15 @@ function formatHoverTitle(pick, unitPreferences = {}) {
 }
 
 function compactHoverRows(documentRef, pick, unitPreferences) {
+  if (pick.invalidMapArea) {
+    return [
+      hoverRow(documentRef, "状态", "未开发"),
+      hoverRow(documentRef, "位置", `x ${formatDisplayNumber(pick.worldX, unitPreferences)} / y ${formatDisplayNumber(pick.worldY, unitPreferences)}`),
+      hoverRow(documentRef, "范围", `${formatDisplayNumber(pick.graphWidth, unitPreferences)} x ${formatDisplayNumber(pick.graphHeight, unitPreferences)}`),
+      hoverRow(documentRef, "说明", pick.invalidReason === "outside-map" ? "地图有效范围外" : "未命中有效 cell")
+    ];
+  }
+
   const rows = [
     hoverRow(documentRef, "位置", `grid ${pick.gridCell} / pack ${pick.packCell ?? "none"}`),
     hoverRow(documentRef, "地形", `${pick.featureType} #${pick.featureId} / 高度 ${formatDisplayHeight(pick.height, unitPreferences)}`),
