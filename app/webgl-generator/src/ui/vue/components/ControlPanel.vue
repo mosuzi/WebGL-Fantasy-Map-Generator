@@ -222,7 +222,6 @@
                 class="climate-range-lock-button"
                 :class="{active: climateRangeRatioLocked}"
                 :icon="climateRangeRatioLocked ? Lock : Unlock"
-                circle
                 :aria-pressed="climateRangeRatioLocked ? 'true' : 'false'"
                 :aria-label="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"
                 :title="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"

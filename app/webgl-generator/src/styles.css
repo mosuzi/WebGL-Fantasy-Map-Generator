@@ -4323,9 +4323,10 @@ select:disabled {
 
 .climate-slider-field {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr) 78px 32px;
+  grid-template-columns: 68px minmax(0, 1fr) 78px max-content;
   align-items: center;
-  gap: 7px;
+  column-gap: 5px;
+  row-gap: 7px;
   color: #cbd7dc;
   font-size: 11px;
 }
@@ -4348,9 +4349,9 @@ select:disabled {
 .climate-range-control-group {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 34px;
   grid-template-rows: repeat(2, auto);
-  column-gap: 8px;
+  column-gap: 16px;
   row-gap: 7px;
   align-items: center;
   min-width: 0;
@@ -4360,23 +4361,32 @@ select:disabled {
 .climate-range-control-group::after {
   content: "";
   position: absolute;
-  right: 32px;
-  width: 11px;
-  border-top: 1px solid rgba(126, 171, 184, 0.34);
+  right: 34px;
+  width: 14px;
+  height: 19px;
+  border-color: rgba(126, 171, 184, 0.46);
+  border-style: solid;
+  border-width: 0;
   pointer-events: none;
 }
 
 .climate-range-control-group::before {
-  top: 16px;
+  top: 14px;
+  border-top-width: 1px;
+  border-right-width: 1px;
+  border-top-right-radius: 6px;
 }
 
 .climate-range-control-group::after {
-  bottom: 16px;
+  bottom: 14px;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+  border-bottom-right-radius: 6px;
 }
 
 .climate-range-control-group.locked::before,
 .climate-range-control-group.locked::after {
-  border-color: rgba(215, 168, 79, 0.72);
+  border-color: rgba(215, 168, 79, 0.82);
 }
 
 .climate-range-control-group .climate-slider-field {
@@ -4386,21 +4396,23 @@ select:disabled {
 .climate-range-lock-button.el-button {
   grid-column: 2;
   grid-row: 1 / span 2;
-  justify-self: end;
+  justify-self: center;
   align-self: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
   margin-left: 0 !important;
-  border-color: rgba(126, 171, 184, 0.42);
-  background: rgba(14, 25, 31, 0.88);
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
   color: #cbd7dc;
 }
 
 .climate-range-lock-button.el-button.active,
 .climate-range-lock-button.el-button:hover {
-  border-color: rgba(215, 168, 79, 0.74);
-  background: rgba(46, 37, 20, 0.9);
+  border-color: transparent !important;
+  background: transparent !important;
   color: #ffe0a1;
 }
 
@@ -4572,9 +4584,10 @@ select:disabled {
 
 .unit-scale-field {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) 88px 54px;
+  grid-template-columns: 92px minmax(0, 1fr) 88px max-content;
   align-items: center;
-  gap: 8px;
+  column-gap: 5px;
+  row-gap: 8px;
   padding: 8px 10px;
   border: 1px solid #273640;
   border-radius: 6px;
@@ -4754,6 +4767,7 @@ input.ui-switch-native {
 
 .ui-slider-unit {
   min-width: 0;
+  margin-left: 3px;
   color: #ffe0a1;
   font-weight: 700;
   text-align: right;
