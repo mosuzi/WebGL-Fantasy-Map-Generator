@@ -262,7 +262,7 @@ function bindClimateControls(documentRef, handler) {
     handler(readOptionsFromPanel(documentRef, {}));
   });
 
-  for (const id of ["temperature-equator", "temperature-north-pole", "temperature-south-pole", "climate-map-size-percent-slider", "climate-latitude-center-slider"]) {
+  for (const id of ["temperature-equator", "temperature-north-pole", "temperature-south-pole", "climate-latitude-range-percent-slider", "climate-longitude-range-percent-slider", "climate-map-size-percent-slider", "climate-latitude-center-slider"]) {
     documentRef.getElementById(id)?.addEventListener("change", schedule);
   }
   documentRef.addEventListener("climate-controls-change", schedule);
@@ -495,7 +495,9 @@ export function readOptionsFromPanel(documentRef, previousOptions) {
     climateLatitudeMode: documentRef.getElementById("climate-latitude-mode")?.value || previousOptions?.climateLatitudeMode,
     climateLatitudeCenter: documentRef.getElementById("climate-latitude-center-slider")?.value || documentRef.getElementById("climate-latitude-center")?.value || previousOptions?.climateLatitudeCenter,
     climateLatitudeSpan: documentRef.getElementById("climate-latitude-span")?.value || previousOptions?.climateLatitudeSpan,
-    climateMapSizePercent: documentRef.getElementById("climate-map-size-percent-slider")?.value || documentRef.getElementById("climate-map-size-percent")?.value || previousOptions?.climateMapSizePercent,
+    climateLatitudeRangePercent: documentRef.getElementById("climate-latitude-range-percent-slider")?.value || documentRef.getElementById("climate-latitude-range-percent")?.value || documentRef.getElementById("climate-map-size-percent-slider")?.value || documentRef.getElementById("climate-map-size-percent")?.value || previousOptions?.climateLatitudeRangePercent || previousOptions?.climateMapSizePercent,
+    climateLongitudeRangePercent: documentRef.getElementById("climate-longitude-range-percent-slider")?.value || documentRef.getElementById("climate-longitude-range-percent")?.value || previousOptions?.climateLongitudeRangePercent || previousOptions?.climateMapSizePercent,
+    climateMapSizePercent: documentRef.getElementById("climate-latitude-range-percent-slider")?.value || documentRef.getElementById("climate-latitude-range-percent")?.value || documentRef.getElementById("climate-map-size-percent-slider")?.value || documentRef.getElementById("climate-map-size-percent")?.value || previousOptions?.climateMapSizePercent,
     atmosphereDirection: documentRef.getElementById("atmosphere-direction")?.value || previousOptions?.atmosphereDirection,
     winds: parseWindProfileInput(documentRef.getElementById("atmosphere-winds")?.value, previousOptions?.winds),
     temperatureEquator: documentRef.getElementById("temperature-equator")?.value || previousOptions?.temperatureEquator,
@@ -972,8 +974,10 @@ function formatClimateLatitude(climate = {}) {
   const metadata = climate.metadata || {};
   const label = metadata.latitudeLabel || coordinates.latitudeLabel || "自动纬度";
   if (!Number.isFinite(coordinates.latS) || !Number.isFinite(coordinates.latN)) return label;
-  const size = Number.isFinite(metadata.mapSizePercent) || Number.isFinite(coordinates.mapSizePercent)
-    ? ` / 范围 ${metadata.mapSizePercent ?? coordinates.mapSizePercent}%`
+  const latitudeRange = metadata.latitudeRangePercent ?? coordinates.latitudeRangePercent ?? metadata.mapSizePercent ?? coordinates.mapSizePercent;
+  const longitudeRange = metadata.longitudeRangePercent ?? coordinates.longitudeRangePercent ?? latitudeRange;
+  const size = Number.isFinite(latitudeRange) || Number.isFinite(longitudeRange)
+    ? ` / 纬 ${latitudeRange ?? "?"}% / 经 ${longitudeRange ?? "?"}%`
     : "";
   return `${label}${size} / ${formatLatitude(coordinates.latS)} .. ${formatLatitude(coordinates.latN)}`;
 }

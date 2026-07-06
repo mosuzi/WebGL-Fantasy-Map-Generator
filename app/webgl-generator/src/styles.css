@@ -4345,6 +4345,24 @@ select:disabled {
   text-align: right;
 }
 
+.climate-range-lock-button.el-button {
+  justify-self: end;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  margin-left: 0 !important;
+  border-color: rgba(126, 171, 184, 0.42);
+  background: rgba(14, 25, 31, 0.88);
+  color: #cbd7dc;
+}
+
+.climate-range-lock-button.el-button.active,
+.climate-range-lock-button.el-button:hover {
+  border-color: rgba(215, 168, 79, 0.74);
+  background: rgba(46, 37, 20, 0.9);
+  color: #ffe0a1;
+}
+
 .wind-band-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

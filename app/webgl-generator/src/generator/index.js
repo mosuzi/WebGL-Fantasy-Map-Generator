@@ -151,6 +151,8 @@ export function createGenerationSummary(options, grid, features, climate, societ
       latitudeLabel: climate.metadata.latitudeLabel,
       latitudeCenter: climate.metadata.latitudeCenter,
       mapSizePercent: climate.metadata.mapSizePercent,
+      latitudeRangePercent: climate.metadata.latitudeRangePercent,
+      longitudeRangePercent: climate.metadata.longitudeRangePercent,
       atmosphereDirection: climate.metadata.atmosphereDirection,
       atmosphereLabel: climate.metadata.atmosphereLabel,
       windAngle: climate.metadata.windAngle,

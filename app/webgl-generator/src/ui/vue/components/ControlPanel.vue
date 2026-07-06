@@ -100,7 +100,9 @@
         <input id="climate-latitude-mode" type="hidden" :value="climateLatitudeMode" />
         <input id="climate-latitude-center" type="hidden" :value="climateLatitudeCenter" />
         <input id="climate-latitude-span" type="hidden" :value="climateLatitudeSpanDegrees" />
-        <input id="climate-map-size-percent" type="hidden" :value="climateMapSizePercent" />
+        <input id="climate-map-size-percent" type="hidden" :value="climateLatitudeRangePercent" />
+        <input id="climate-latitude-range-percent" type="hidden" :value="climateLatitudeRangePercent" />
+        <input id="climate-longitude-range-percent" type="hidden" :value="climateLongitudeRangePercent" />
         <input id="atmosphere-direction" type="hidden" :value="atmosphereDirection" />
         <input id="atmosphere-winds" type="hidden" :value="windProfileValue" />
 
@@ -190,17 +192,40 @@
               @input="value => temperatureSouthPole = value"
             />
             <UiSliderField
-              label="地图范围"
-              input-id="climate-map-size-percent-slider"
-              output-id="climate-map-size-percent-value"
+              label="纬度范围"
+              input-id="climate-latitude-range-percent-slider"
+              output-id="climate-latitude-range-percent-value"
               field-class="climate-slider-field"
               value-tag="output"
-              :model-value="climateMapSizePercent"
+              :model-value="climateLatitudeRangePercent"
               unit-label="%"
               :min="climateMapSizeRange.min"
               :max="climateMapSizeRange.max"
               :step="1"
-              @input="value => climateMapSizePercent = value"
+              @input="setLatitudeRangePercent"
+            />
+            <UiSliderField
+              label="经度范围"
+              input-id="climate-longitude-range-percent-slider"
+              output-id="climate-longitude-range-percent-value"
+              field-class="climate-slider-field"
+              value-tag="output"
+              :model-value="climateLongitudeRangePercent"
+              unit-label="%"
+              :min="climateMapSizeRange.min"
+              :max="climateMapSizeRange.max"
+              :step="1"
+              @input="setLongitudeRangePercent"
+            />
+            <ElButton
+              class="climate-range-lock-button"
+              :class="{active: climateRangeRatioLocked}"
+              :icon="climateRangeRatioLocked ? Lock : Unlock"
+              circle
+              :aria-pressed="climateRangeRatioLocked ? 'true' : 'false'"
+              :aria-label="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"
+              :title="climateRangeRatioLocked ? '解除经纬范围比例锁定' : '按当前经纬范围比例锁定'"
+              @click="toggleClimateRangeRatioLock"
             />
             <UiSliderField
               label="画布纬度"
@@ -393,6 +418,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTabs from "./base/UiTabs.vue";
+import {Lock, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {
   DISTANCE_UNIT_OPTIONS,
@@ -442,7 +468,10 @@ const {
 const climateLatitudeMode = ref("auto");
 const climateLatitudeCenter = ref(0);
 const climateLatitudeSpan = ref(45);
-const climateMapSizePercent = ref(25);
+const climateLatitudeRangePercent = ref(25);
+const climateLongitudeRangePercent = ref(25);
+const climateRangeRatioLocked = ref(false);
+const climateRangeLockRatio = ref(1);
 const atmosphereDirection = ref("customBands");
 const windBands = ref(defaultWindProfile());
 const temperatureEquator = ref(25);
@@ -463,8 +492,8 @@ const canvasFootprintPoints = computed(() => {
   const center = Number(climateLatitudeCenter.value) || 0;
   const north = Math.min(90, center + span / 2);
   const south = Math.max(-90, center - span / 2);
-  const northPair = latitudeCanvasPair(north, climateMapSizeFraction.value);
-  const southPair = latitudeCanvasPair(south, climateMapSizeFraction.value);
+  const northPair = latitudeCanvasPair(north, climateLongitudeRangeFraction.value);
+  const southPair = latitudeCanvasPair(south, climateLongitudeRangeFraction.value);
   return [
     northPair.left,
     northPair.right,
@@ -473,10 +502,10 @@ const canvasFootprintPoints = computed(() => {
   ].map(point => point.map(roundSvg).join(",")).join(" ");
 });
 const climateLatitudeSpanDegrees = computed(() => {
-  const percent = clampNumber(climateMapSizePercent.value, climateMapSizeRange.min, climateMapSizeRange.max, 25);
+  const percent = clampNumber(climateLatitudeRangePercent.value, climateMapSizeRange.min, climateMapSizeRange.max, 25);
   return Math.round(percent * 1.8 * 10) / 10;
 });
-const climateMapSizeFraction = computed(() => clampNumber(climateMapSizePercent.value, climateMapSizeRange.min, climateMapSizeRange.max, 25) / 100);
+const climateLongitudeRangeFraction = computed(() => clampNumber(climateLongitudeRangePercent.value, climateMapSizeRange.min, climateMapSizeRange.max, 25) / 100);
 const latitudeGuideLines = computed(() => [-60, -30, 0, 30, 60].map(lat => ({
   key: `lat-${lat}`,
   lat,
@@ -488,8 +517,8 @@ const latitudeBandLabel = computed(() => {
   const north = Math.min(90, center + span / 2);
   const south = Math.max(-90, center - span / 2);
   return climateLatitudeMode.value === "custom"
-    ? `范围 ${climateMapSizePercent.value}% / ${formatLatitudeCenter(center)} / ${formatLatitudeCenter(south)} 至 ${formatLatitudeCenter(north)}`
-    : `范围 ${climateMapSizePercent.value}% / 自动按地形选择纬度`;
+    ? `纬 ${climateLatitudeRangePercent.value}% / 经 ${climateLongitudeRangePercent.value}% / ${formatLatitudeCenter(center)} / ${formatLatitudeCenter(south)} 至 ${formatLatitudeCenter(north)}`
+    : `纬 ${climateLatitudeRangePercent.value}% / 经 ${climateLongitudeRangePercent.value}% / 自动按地形选择纬度`;
 });
 
 const tabs = Object.freeze([
@@ -599,6 +628,29 @@ function setLatitudeCenter(value) {
   climateLatitudeCenter.value = value;
 }
 
+function setLatitudeRangePercent(value) {
+  const next = normalizeClimateRangePercent(value, climateLatitudeRangePercent.value);
+  climateLatitudeRangePercent.value = next;
+  if (climateRangeRatioLocked.value) {
+    climateLongitudeRangePercent.value = normalizeClimateRangePercent(next * climateRangeLockRatio.value, climateLongitudeRangePercent.value);
+  }
+}
+
+function setLongitudeRangePercent(value) {
+  const next = normalizeClimateRangePercent(value, climateLongitudeRangePercent.value);
+  climateLongitudeRangePercent.value = next;
+  if (climateRangeRatioLocked.value) {
+    climateLatitudeRangePercent.value = normalizeClimateRangePercent(next / Math.max(0.01, climateRangeLockRatio.value), climateLatitudeRangePercent.value);
+  }
+}
+
+function toggleClimateRangeRatioLock() {
+  climateRangeRatioLocked.value = !climateRangeRatioLocked.value;
+  if (climateRangeRatioLocked.value) {
+    climateRangeLockRatio.value = Math.max(0.01, climateLongitudeRangePercent.value / Math.max(1, climateLatitudeRangePercent.value));
+  }
+}
+
 function cycleWindBand(index) {
   const currentValue = windDirectionValueFromAngle(windBands.value[index]);
   const currentIndex = Math.max(0, WIND_DIRECTION_OPTIONS.findIndex(option => option.value === currentValue));
@@ -699,12 +751,17 @@ function handleClimateOptionsSync(event) {
   climateLatitudeMode.value = normalizeClimateLatitudeMode(detail.climateLatitudeMode);
   climateLatitudeCenter.value = clampNumber(detail.climateLatitudeCenter, -75, 75, climateLatitudeCenter.value);
   climateLatitudeSpan.value = clampNumber(detail.climateLatitudeSpan, 20, 80, climateLatitudeSpan.value);
-  climateMapSizePercent.value = clampNumber(detail.climateMapSizePercent, climateMapSizeRange.min, climateMapSizeRange.max, climateMapSizePercent.value);
+  climateLatitudeRangePercent.value = normalizeClimateRangePercent(detail.climateLatitudeRangePercent ?? detail.climateMapSizePercent, climateLatitudeRangePercent.value);
+  climateLongitudeRangePercent.value = normalizeClimateRangePercent(detail.climateLongitudeRangePercent ?? detail.climateMapSizePercent ?? detail.climateLatitudeRangePercent, climateLongitudeRangePercent.value);
   atmosphereDirection.value = normalizeAtmosphereDirection(detail.atmosphereDirection);
   windBands.value = normalizeWindProfile(detail.winds);
   temperatureEquator.value = clampNumber(detail.temperatureEquator, temperatureRange.min, temperatureRange.max, temperatureEquator.value);
   temperatureNorthPole.value = clampNumber(detail.temperatureNorthPole, temperatureRange.min, temperatureRange.max, temperatureNorthPole.value);
   temperatureSouthPole.value = clampNumber(detail.temperatureSouthPole, temperatureRange.min, temperatureRange.max, temperatureSouthPole.value);
+}
+
+function normalizeClimateRangePercent(value, fallback = 25) {
+  return clampNumber(value, climateMapSizeRange.min, climateMapSizeRange.max, fallback);
 }
 
 function clampNumber(value, min, max, fallback) {

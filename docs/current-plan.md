@@ -1118,6 +1118,8 @@ http://127.0.0.1:5410
 
 277. GitHub issue #1 第一刀已完成：读取当前仓库 open issue 后，针对“有效地图外区域提示与交界样式”补充 renderer 级边缘柔化和未开发 hover 语义。WebGL 线层会在地图四周绘制半透明背景色渐变带，弱化边缘 Voronoi 折线与画布背景的割裂；鼠标指向图外或未命中有效 cell 的位置时，picking 返回 `invalidMapArea`，右下 hover 显示“未开发区域 / 未开发”，并说明是“地图有效范围外”或“未命中有效 cell”。本刀不改变生成数据、不把 `climateMapSizePercent` 扩展为硬裁剪掩码，避免误删既有 cell 语义；后续若需要真正的局部地图有效区，应单独设计数据层 mask。
 
+278. 气候范围控制已拆成纬度 / 经度两轴：原“地图范围”收缩为“纬度范围”，只控制 `latT`；新增“经度范围”，单独控制 `lonT` 和地球预览中画布 footprint 的横向投影。旧 `climateMapSizePercent` 保留为兼容字段并映射到纬度范围，新存档和运行时选项会同时保存 `climateLatitudeRangePercent / climateLongitudeRangePercent`；没有经度字段的旧数据会默认沿用旧比例。生成 tab 新增经纬范围比例锁定 icon 按钮，开启时按当前经度 / 纬度百分比锁定后续调节，默认等比例时可恢复此前宽高一起缩放的操作体验。
+
 ## 约束
 
 - 新项目代码仍然放在根目录下，不放进 `source/`。

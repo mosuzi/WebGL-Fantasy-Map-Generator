@@ -49,6 +49,8 @@ export function buildClimate(grid, features, options, random) {
       latitudeLabel: mapCoordinates.latitudeLabel,
       latitudeCenter: mapCoordinates.latCenter,
       mapSizePercent: mapCoordinates.mapSizePercent,
+      latitudeRangePercent: mapCoordinates.latitudeRangePercent,
+      longitudeRangePercent: mapCoordinates.longitudeRangePercent,
       atmosphereDirection: windProfile.direction,
       atmosphereLabel: windProfile.label,
       windAngle: windProfile.angle,
@@ -72,7 +74,8 @@ function valueRange(values) {
 }
 
 function defineMapSize(options, grid, features, random) {
-  const requestedMapSize = Number.isFinite(Number(options.climateMapSizePercent)) ? Number(options.climateMapSizePercent) : null;
+  const requestedLatitudeRange = Number.isFinite(Number(options.climateLatitudeRangePercent ?? options.climateMapSizePercent)) ? Number(options.climateLatitudeRangePercent ?? options.climateMapSizePercent) : null;
+  const requestedLongitudeRange = Number.isFinite(Number(options.climateLongitudeRangePercent ?? options.climateMapSizePercent ?? options.climateLatitudeRangePercent)) ? Number(options.climateLongitudeRangePercent ?? options.climateMapSizePercent ?? options.climateLatitudeRangePercent) : null;
   const latitudePreset = resolveClimateLatitudePreset(options.climateLatitudeMode);
   const customLatitudePreset = options.climateLatitudeMode === "custom"
     ? {
@@ -89,14 +92,16 @@ function defineMapSize(options, grid, features, random) {
   const withLatitudePreset = base => customLatitudePreset
     ? {
         ...base,
-        size: requestedMapSize ?? customLatitudePreset.span,
+        size: requestedLatitudeRange ?? customLatitudePreset.span,
+        longitudeSize: requestedLongitudeRange ?? requestedLatitudeRange ?? customLatitudePreset.span,
         latitudeCenter: customLatitudePreset.center,
         latitudeMode: customLatitudePreset.value,
         latitudeLabel: customLatitudePreset.label
       }
     : {
         ...base,
-        size: requestedMapSize ?? base.size,
+        size: requestedLatitudeRange ?? base.size,
+        longitudeSize: requestedLongitudeRange ?? requestedLatitudeRange ?? base.size,
         latitudeMode: "auto",
         latitudeLabel: climateLatitudeLabel("auto")
       };
@@ -116,11 +121,12 @@ function defineMapSize(options, grid, features, random) {
   return withLatitudePreset({size: gauss(random, 30, 20, 15, maxSize), latitude: latitude(), longitude: 50});
 }
 
-function calculateMapCoordinates({size, latitude, latitudeCenter, longitude, latitudeMode, latitudeLabel}, options) {
-  const sizeFraction = clamp((Number.isFinite(Number(size)) ? Number(size) : 25) / 100, 0.01, 1);
+function calculateMapCoordinates({size, longitudeSize, latitude, latitudeCenter, longitude, latitudeMode, latitudeLabel}, options) {
+  const latitudeFraction = clamp((Number.isFinite(Number(size)) ? Number(size) : 25) / 100, 0.01, 1);
+  const longitudeFraction = clamp((Number.isFinite(Number(longitudeSize)) ? Number(longitudeSize) : Number(size)) / 100, 0.01, 1);
   const lonShift = longitude / 100;
-  const latT = round(sizeFraction * 180, 1);
-  const lonT = round(sizeFraction * 360, 1);
+  const latT = round(latitudeFraction * 180, 1);
+  const lonT = round(longitudeFraction * 360, 1);
   const {latN, latS} = Number.isFinite(latitudeCenter)
     ? centerLatitudeBand(latitudeCenter, latT)
     : shiftedLatitudeBand(latitude, latT);
@@ -136,7 +142,9 @@ function calculateMapCoordinates({size, latitude, latitudeCenter, longitude, lat
     lonT,
     lonW,
     lonE,
-    mapSizePercent: round(sizeFraction * 100, 1),
+    mapSizePercent: round(latitudeFraction * 100, 1),
+    latitudeRangePercent: round(latitudeFraction * 100, 1),
+    longitudeRangePercent: round(longitudeFraction * 100, 1),
     atmosphereLabel: atmosphereDirectionLabel(options.atmosphereDirection)
   };
 }

@@ -19986,3 +19986,23 @@ full 矩阵结果：
 验证：
 
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+
+### 2026-07-06 气候经纬范围拆分
+
+背景：
+
+- 用户指出当前气候“地图范围”同时控制纬度和经度，不利于单独调整画布在地球东西方向上的投影宽度。
+- 新目标是把旧比例收缩为“纬度范围”，新增“经度范围”，并提供按当前经纬比例锁定调节的 icon 按钮，保留此前宽高一起调节的能力。
+
+实现：
+
+- 生成选项新增 `climateLatitudeRangePercent / climateLongitudeRangePercent`，旧 `climateMapSizePercent` 继续作为兼容字段并映射到纬度范围。
+- `calculateMapCoordinates()` 改为分别用纬度百分比计算 `latT`，用经度百分比计算 `lonT`。
+- 控制面板把“地图范围”改为“纬度范围”，新增“经度范围”滑条，地球预览 footprint 的横向宽度改由经度范围控制。
+- 新增经纬范围比例锁定 icon 按钮；开启时记录当前 `经度范围 / 纬度范围`，之后调节任一范围会按该比例同步另一个范围。
+- 运行时气候同步、保存恢复和气候变更检测都纳入新字段。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+- Node 轻量断言：`climateLatitudeRangePercent=20 / climateLongitudeRangePercent=60` 生成 `latT=36 / lonT=216`；旧 `climateMapSizePercent=30` 仍兼容生成 `latT=54 / lonT=108`。
