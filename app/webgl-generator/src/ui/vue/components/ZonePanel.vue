@@ -28,14 +28,43 @@
   />
 
   <UiDetailGrid class-name="zone-panel-details" empty-text="未选中地区" :rows="detailRows" />
+
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="zoneActions">
+    <template #style>
+      <div class="zone-style-editor">
+        <UiColorActionPanel
+          class-name="zone-color-field"
+          :model-value="selected.color"
+          @apply="color => callbacks.onStyleChange?.(selected.id, {hexColor: color})"
+        />
+        <div class="zone-pattern-editor">
+          <UiSelectField
+            class-name="zone-pattern-select"
+            label="纹理"
+            :model-value="styleDraft.pattern"
+            :options="patternOptions"
+            @update:model-value="styleDraft.pattern = $event"
+          />
+          <UiButton variant="secondary" @click="applyPattern">应用纹理</UiButton>
+        </div>
+      </div>
+    </template>
+  </UiActionDock>
+
+  <UiHistoryActions class-name="zone-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, reactive, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
+import UiButton from "./base/UiButton.vue";
+import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
+import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
@@ -78,6 +107,16 @@ const PATTERN_LABELS = Object.freeze({
   dots: "圆点阵列"
 });
 
+const patternOptions = Object.freeze([
+  {value: "diagonal", label: "斜线"},
+  {value: "cross", label: "交叉线"},
+  {value: "dots", label: "圆点阵列"}
+]);
+
+const zoneActions = Object.freeze([
+  {key: "style", label: "调整样式", icon: "▧", panelWidth: 360, panelHeight: 420}
+]);
+
 const sortOptions = Object.freeze([
   {key: "id", label: "ID"},
   {key: "type", label: "类型"},
@@ -96,6 +135,10 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
+const styleDraft = reactive({
+  pattern: "diagonal"
+});
 const rows = computed(() => {
   props.state.version;
   return zoneRows(props.state.map);
@@ -134,6 +177,22 @@ const detailRows = computed(() => selected.value ? [
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "状态", value: selected.value.hidden ? "隐藏" : "显示"}
 ] : []);
+
+watch(() => selected.value?.id, () => {
+  activeAction.value = null;
+  syncStyleDraft();
+}, {immediate: true});
+
+watch(() => selected.value?.pattern, syncStyleDraft);
+
+function syncStyleDraft() {
+  styleDraft.pattern = selected.value?.pattern || "diagonal";
+}
+
+function applyPattern() {
+  if (!selected.value) return;
+  props.callbacks.onStyleChange?.(selected.value.id, {pattern: styleDraft.pattern});
+}
 
 function zoneRows(map) {
   const zones = map?.zones?.zones || map?.pack?.zones || [];

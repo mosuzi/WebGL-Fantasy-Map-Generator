@@ -61,6 +61,7 @@ import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, create
 import {createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
@@ -1552,6 +1553,25 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onLocate: object => {
       locateObject(state, object, documentRef);
       zonePanel.setSelection({object});
+    },
+    onStyleChange: (zoneId, patch) => {
+      const context = {map: state.map};
+      const command = createSetZoneStyleCommand(zoneId, patch);
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      updateZonePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onUndo: () => {
+      const command = state.editHistory.undo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateZonePanel(state);
+    },
+    onRedo: () => {
+      const command = state.editHistory.redo({map: state.map});
+      if (command) refreshAfterEdit(state, command);
+      updateZonePanel(state);
     }
   });
   state.panels.zone = zonePanel;

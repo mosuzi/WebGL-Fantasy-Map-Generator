@@ -7954,6 +7954,21 @@ input.ui-switch-native {
   margin-bottom: 8px;
 }
 
+.zone-style-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.zone-pattern-editor {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.zone-pattern-editor .ui-button {
+  width: 100%;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     grid-template-columns: 1fr;

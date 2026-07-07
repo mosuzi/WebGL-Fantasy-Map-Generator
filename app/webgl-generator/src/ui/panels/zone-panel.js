@@ -26,7 +26,10 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
       }
     },
     onSelect: row => callbacks.onSelect?.(zoneObject(row)),
-    onLocate: row => callbacks.onLocate?.(zoneObject(row))
+    onLocate: row => callbacks.onLocate?.(zoneObject(row)),
+    onStyleChange: (zoneId, patch) => callbacks.onStyleChange?.(zoneId, patch),
+    onUndo: () => callbacks.onUndo?.(),
+    onRedo: () => callbacks.onRedo?.()
   };
 
   const record = manager.registerPanel("zone-panel", {

@@ -20062,3 +20062,26 @@ full 矩阵结果：
 
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
 - 本刀未跑重 profile，留到后续动态线层性能专项合并验证。
+
+### 2026-07-07 地区样式编辑入口
+
+背景：
+
+- 地区纹理图层和地区管理面板已经完成，但地区仍只能查看，不能在面板内调整纹理或颜色。
+- 当前计划中“颜色选择器中的纹理选择入口”适合作为低风险第一刀；手动创建地区仍留到后续单独做。
+
+实现：
+
+- 新增 `zone-edit-commands.js`，提供 `createSetZoneStyleCommand()`，可撤销地修改地区 `hexColor / pattern`。
+- 命令刷新范围收窄为地区线层、选中态和对象面板，不触发政治、军事、经济等派生重算。
+- 地区管理面板新增 `UiActionDock` 小图标动作“调整样式”，二级浮层内复用共享 HSL 取色面板，并提供斜线 / 交叉线 / 圆点阵列纹理下拉。
+- `zone-panel.js` 补齐 `onStyleChange / onUndo / onRedo` 桥接，地区面板新增历史按钮。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\zone-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\zone-panel.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+- 构建产物 Playwright 烟测通过：打开地区管理，选中地区 `#0`，颜色从 `#d98238` 改为 `#7f6cc7`，纹理从 `diagonal` 改为 `dots`；撤销恢复纹理为 `diagonal`，重做恢复 `dots`，`glError = 0`，console/page error 为 `0`。
