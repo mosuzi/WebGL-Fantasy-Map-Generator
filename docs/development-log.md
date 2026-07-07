@@ -20044,3 +20044,21 @@ full 矩阵结果：
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
 - 构建产物截图确认地区管理图例显示更密纹理；无选中高亮的画布截图中，入侵区显示为斜线纹理，不再表现为实心色块。
 - 线上复核仍像实心后，追加移除地图地区底色并提升纹理本身 alpha；再次用构建产物截图确认罗联邦附近只显示斜线纹理。
+
+### 2026-07-07 viewport idle commit 过期取消加固
+
+背景：
+
+- 当前动态线层已经改为停止交互后的 idle commit 分片重建，但连续滚轮 / 拖拽时仍需要确保旧任务不会用过期相机状态上传 buffer。
+- 本刀只加固路线 / 河流 screen-space mesh 的任务边界，不改变地区纹理、DOM overlay 或地图数据。
+
+实现：
+
+- route / river 同步和异步 mesh 构建都使用 `snapshotCamera()` 捕获稳定相机参数，避免构建过程中读取到后续视口变化。
+- route 异步构建同时复制 selection 快照，避免选中态变化影响旧任务。
+- route / river async builder 在每次 `yieldToBrowser()` 返回后立即检查 `shouldContinue()`；过期时标记 `stats.aborted` 并退出，让外层跳过 buffer 上传和最终 draw。
+
+验证：
+
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
+- 本刀未跑重 profile，留到后续动态线层性能专项合并验证。

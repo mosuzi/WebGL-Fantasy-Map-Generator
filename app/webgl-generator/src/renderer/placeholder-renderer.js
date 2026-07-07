@@ -787,7 +787,7 @@ export class PlaceholderMapRenderer {
 
   updateRouteBuffer() {
     const startedAt = performance.now();
-    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, this.camera, this.canvas, this.selection);
+    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, snapshotCamera(this.camera), this.canvas, this.selection);
     this.routeVertexCount = routeVertices.length / 6;
     this.routeRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
@@ -798,7 +798,9 @@ export class PlaceholderMapRenderer {
 
   async updateRouteBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
     const startedAt = performance.now();
-    const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, this.camera, this.canvas, this.selection, {
+    const camera = snapshotCamera(this.camera);
+    const selection = this.selection ? {...this.selection} : null;
+    const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, {
       yieldToBrowser,
       sliceMs,
       shouldContinue
@@ -886,7 +888,7 @@ export class PlaceholderMapRenderer {
 
   updateRiverBuffer() {
     const startedAt = performance.now();
-    const {vertices, stats} = buildRiverMeshVertices(this.map, this.camera, this.canvas);
+    const {vertices, stats} = buildRiverMeshVertices(this.map, snapshotCamera(this.camera), this.canvas);
     this.riverVertexCount = vertices.length / 6;
     this.riverWidthStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
@@ -897,7 +899,8 @@ export class PlaceholderMapRenderer {
 
   async updateRiverBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = RIVER_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
     const startedAt = performance.now();
-    const {vertices, stats} = await buildRiverMeshVerticesAsync(this.map, this.camera, this.canvas, {
+    const camera = snapshotCamera(this.camera);
+    const {vertices, stats} = await buildRiverMeshVerticesAsync(this.map, camera, this.canvas, {
       yieldToBrowser,
       sliceMs,
       shouldContinue
@@ -2808,6 +2811,10 @@ async function buildRiverMeshVerticesAsync(map, camera, canvas, {yieldToBrowser 
     pushRiverMesh(build, river);
     if (performance.now() - sliceStartedAt < sliceMs) continue;
     await yieldToBrowser();
+    if (!shouldContinue()) {
+      build.stats.aborted = true;
+      break;
+    }
     sliceStartedAt = performance.now();
   }
   return finalizeRiverMeshBuild(build);
@@ -3143,6 +3150,10 @@ async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yiel
     if (!pushRouteMesh(build, route)) break;
     if (performance.now() - sliceStartedAt < sliceMs) continue;
     await yieldToBrowser();
+    if (!shouldContinue()) {
+      build.stats.aborted = true;
+      break;
+    }
     sliceStartedAt = performance.now();
   }
   return finalizeRouteMeshBuild(build);
@@ -3429,6 +3440,14 @@ function boxesOverlapAny(boxes, box, padding) {
 
 function withAlpha(color, alpha) {
   return [color?.[0] ?? 0, color?.[1] ?? 0, color?.[2] ?? 0, alpha];
+}
+
+function snapshotCamera(camera) {
+  return {
+    scale: Number(camera?.scale) || 1,
+    offsetX: Number(camera?.offsetX) || 0,
+    offsetY: Number(camera?.offsetY) || 0
+  };
 }
 
 function lockCanvasToInitialDisplaySize(canvas, overlay = null) {
