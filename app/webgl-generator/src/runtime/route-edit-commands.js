@@ -9,6 +9,14 @@ const ROUTE_NOTE_EFFECTS = Object.freeze({
   derived: Object.freeze(["object-panels"])
 });
 
+const ROUTE_COLLECTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["routes", "object-panels"])
+});
+
 export function createSetRouteNoteCommand(routeId, body, {name = ""} = {}) {
   const normalizedRouteId = Number(routeId);
   const target = {kind: OBJECT_KIND.ROUTE, id: normalizedRouteId};
@@ -49,6 +57,42 @@ export function createSetRouteNoteCommand(routeId, body, {name = ""} = {}) {
   };
 }
 
+export function createDeleteRouteCommand(routeId, {label = "删除路线"} = {}) {
+  const normalizedRouteId = Number(routeId);
+  const target = {kind: OBJECT_KIND.ROUTE, id: normalizedRouteId};
+  let previous = null;
+  let previousNote = null;
+
+  return {
+    label: `${label} #${normalizedRouteId}`,
+    effects: {
+      ...ROUTE_COLLECTION_EFFECTS,
+      affected: [target]
+    },
+    apply(context) {
+      const routes = context.map?.settlements?.routes;
+      if (!Array.isArray(routes)) throw new Error("当前地图没有路线数据");
+      const index = routes.findIndex(route => route?.id === normalizedRouteId);
+      if (index < 0) throw new Error(`找不到路线 #${normalizedRouteId}`);
+      previous ??= {index, route: cloneRoute(routes[index])};
+      previousNote ??= cloneObjectNote(readObjectNote(context.map, target));
+      routes.splice(index, 1);
+      deleteObjectNote(context.map, target);
+    },
+    revert(context) {
+      const routes = context.map?.settlements?.routes;
+      if (!Array.isArray(routes) || !previous?.route) throw new Error(`缺少路线 #${normalizedRouteId} 快照`);
+      const existingIndex = routes.findIndex(route => route?.id === normalizedRouteId);
+      if (existingIndex >= 0) routes.splice(existingIndex, 1);
+      routes.splice(Math.min(previous.index, routes.length), 0, cloneRoute(previous.route));
+      if (previousNote) restoreObjectNote(context.map, previousNote);
+    },
+    isNoop(context) {
+      return !Number.isInteger(normalizedRouteId) || !(context.map?.settlements?.routes || []).some(route => route?.id === normalizedRouteId);
+    }
+  };
+}
+
 function findRoute(map, routeId) {
   return (map?.settlements?.routes || []).find(route => route.id === routeId) || null;
 }
@@ -77,4 +121,8 @@ function createRouteNoteSnapshot(target, body, {name, previous = null} = {}) {
 
 function normalizeNoteBody(body) {
   return typeof body === "string" ? body.trim() : "";
+}
+
+function cloneRoute(route) {
+  return JSON.parse(JSON.stringify(route));
 }

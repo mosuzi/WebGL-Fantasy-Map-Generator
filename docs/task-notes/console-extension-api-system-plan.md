@@ -1,0 +1,451 @@
+# 控制台与扩展 API 系统计划
+
+本文档记录“把不依赖 UI 的操作收束为统一 API 系统”的详细方案。目标是让运行时能力可以通过浏览器控制台、自动化脚本、未来 AI 助手或扩展插件稳定调用，而不是只能从 Vue 面板和 DOM 事件进入。
+
+## 背景
+
+当前应用已经有大量不依赖 UI 的能力：
+
+- 生成地图、换 seed、受约束重算。
+- 设置气候、单位、图层和视图偏好。
+- 导出完整地图数据、GeoJSON、要素 GeoJSON、PNG、名称库、备注和测量结果。
+- 执行编辑命令，例如国家、省份、城市、路线、河流、marker、标签、备注、测量、名称库和军事静态记录等。
+- 选择、定位、高亮对象。
+- 查询 runtime stats、health events、当前地图摘要和派生状态。
+
+这些能力现在大多散落在 `runtime/app.js`、各 edit command、panel callback、导出 helper 和 Vue store 中。面板按钮能调用它们，但外部脚本和开发者控制台缺少统一入口。后续如果要接 AI、插件、自动化验收或批量操作，需要先把能力收束成清晰 API。
+
+## 目标
+
+新增运行时 API 根对象，建议暴露为：
+
+```js
+window.webglGeneratorApi
+window.api // 开发便利别名，可配置是否开启
+```
+
+API 目标：
+
+1. 把非 UI 操作从面板回调中抽出来，形成稳定命名空间。
+2. 让控制台可以直接调用常见能力，例如：
+   - `api.climate.setLatitude(37)`
+   - `api.data.exportAll()`
+   - `api.data.exportGEO()`
+   - `api.selection.locate({kind: "state", id: 3})`
+   - `api.edit.route.delete(12)`
+3. 为 AI / 插件预留一个可枚举、可校验、可测试的能力表。
+4. 通过 API 梳理副作用边界：哪些会写地图、哪些只读、哪些进入撤销栈、哪些触发派生重建、哪些只刷新渲染。
+5. 保持 UI 面板可继续使用，但逐步改为调用 API 或与 API 共用同一 command 层，避免重复业务逻辑。
+
+## 非目标
+
+- 第一阶段不做远程 HTTP 服务。
+- 第一阶段不做权限沙箱或第三方插件加载器。
+- 第一阶段不承诺 API 永久稳定；稳定性等级应在接口元数据里标注。
+- 不把 UI 组件实例直接暴露给外部调用。
+- 不允许 API 绕过 `EditHistory` 直接改写可撤销编辑数据。
+- 不把内部 typed array 或大型 map 对象裸暴露为可随意写入的公共数据源；读取可以提供快照或只读摘要。
+
+## 命名空间草案
+
+### `api.info`
+
+只读查询：
+
+- `api.info.version()`
+- `api.info.mapSummary()`
+- `api.info.runtimeStats()`
+- `api.info.healthEvents(options)`
+- `api.info.capabilities()`
+
+用途：
+
+- 控制台快速诊断当前地图状态。
+- AI / 自动化先读取能力表和地图摘要，再决定下一步。
+
+### `api.generate`
+
+生成与受约束重算：
+
+- `api.generate.newMap(options)`
+- `api.generate.rerollSeed()`
+- `api.generate.regenerate(kind, options)`
+- `api.generate.getOptions()`
+- `api.generate.setOptions(patch)`
+
+约束：
+
+- `newMap()` 和 `rerollSeed()` 是异步 API，返回 `{ok, mapSummary, timings}`。
+- `regenerate(kind)` 只接受已存在的受约束重算类型，例如 `routes / rivers / cities / states / provinces / markers / diplomacy`。
+- 修改生成 options 后不应立即隐式重生成，除非方法名明确表达生成行为。
+
+### `api.climate`
+
+气候配置：
+
+- `api.climate.get()`
+- `api.climate.setLatitude(value)`
+- `api.climate.setLatitudeRange(percent)`
+- `api.climate.setLongitudeRange(percent)`
+- `api.climate.setTemperature({equator, northPole, southPole})`
+- `api.climate.setWind(index, direction)`
+- `api.climate.apply(patch, options)`
+
+约束：
+
+- 单项 setter 只改配置并触发当前已有的气候更新路径。
+- 如果某项变更需要重算下游派生，应在返回值里标明 `derivedStale` 或由调用者显式调用重算。
+- 参数使用用户可理解单位，不直接要求调用方写内部 `latT / lonT`。
+
+### `api.units`
+
+单位偏好：
+
+- `api.units.get()`
+- `api.units.setDistanceUnit(unit)`
+- `api.units.setAreaUnit(unit)`
+- `api.units.setPopulationScale(scale)`
+- `api.units.setMilitaryScale(scale)`
+- `api.units.apply(patch)`
+
+约束：
+
+- 只改变显示偏好，不改写地图内部原始数据。
+- 返回当前 normalized preferences。
+
+### `api.layers`
+
+视图、图层和专题：
+
+- `api.layers.get()`
+- `api.layers.setVisible(layer, visible)`
+- `api.layers.setViewMode(mode)`
+- `api.layers.setTheme(themeId)`
+- `api.layers.fitView()`
+
+约束：
+
+- 图层 API 只改显示状态和渲染，不改生成数据。
+- 已退役图层例如 `tradeFlows` 应返回明确错误或 `ok: false`，不能被 API 恢复。
+
+### `api.selection`
+
+选择、定位和高亮：
+
+- `api.selection.get()`
+- `api.selection.select(object)`
+- `api.selection.clear()`
+- `api.selection.locate(object, options)`
+- `api.selection.highlight(objects, options)`
+- `api.selection.resolve(object)`
+
+约束：
+
+- `object` 使用统一对象标识：`{kind, id}`，必要时带 `targetKind / targetId`。
+- `resolve()` 返回对象快照，不返回可直接改写的内部引用。
+- 高亮可以是临时态，默认不进入撤销栈。
+
+### `api.edit`
+
+编辑命令统一入口。建议按对象分组：
+
+```js
+api.edit.state.rename(id, name)
+api.edit.state.delete(id)
+api.edit.province.addAtCell(gridCell)
+api.edit.city.delete(id)
+api.edit.route.delete(id)
+api.edit.marker.addResource(type, point)
+api.edit.note.set(object, body)
+api.edit.measurement.delete(id)
+```
+
+通用约束：
+
+- 所有会修改地图的 API 必须走 edit command 或等价命令对象。
+- 默认进入 `EditHistory`。
+- 返回统一 `ApiResult`，包含命令 label、受影响对象、是否 noop、是否触发派生刷新。
+- 禁止直接在 API 中复制 UI callback 的零散逻辑；应把公共执行流程提取为 runtime helper。
+
+建议第一批接入：
+
+1. 已有命令且边界清晰的对象：备注、测量、标签、路线删除、marker、国家 / 省份 / 城市新增删除。
+2. 再接颜色、命名、政体、继承关系、名称库绑定。
+3. 最后接复杂刷子、导入和批量重算。
+
+### `api.history`
+
+撤销 / 重做：
+
+- `api.history.stats()`
+- `api.history.undo()`
+- `api.history.redo()`
+- `api.history.peek()`
+
+约束：
+
+- 与 UI 使用同一 `EditHistory`。
+- 返回命令摘要和刷新结果。
+- 后续全局撤销入口可直接复用这个命名空间。
+
+### `api.data`
+
+导入导出：
+
+- `api.data.exportAll(options)`
+- `api.data.exportMap(options)`
+- `api.data.exportGEO(options)`
+- `api.data.exportFeatureGEO(options)`
+- `api.data.exportPNG(options)`
+- `api.data.exportNotes(options)`
+- `api.data.exportMeasurements(options)`
+- `api.data.importMap(fileOrText, options)`
+- `api.data.importGEO(fileOrText, options)`
+
+命名说明：
+
+- `exportAll()` 可以作为用户口中的“导出地图数据”别名，内部建议等价于完整 `.webgl-map.json` 导出。
+- `exportMap()` 是更明确的完整地图 JSON 名称。
+- `exportGEO()` 对应 pack cell GeoJSON。
+- `exportFeatureGEO()` 对应 city / route / river / marker / zone / state / province 等要素 GeoJSON。
+
+约束：
+
+- 浏览器控制台调用默认触发下载，测试模式可传 `{download: false}` 返回字符串或 Blob。
+- 导入 API 必须返回结构化错误详情，不能只写状态栏文本。
+- 完整地图导入应明确是否替换当前地图、是否保留本地偏好、是否进入撤销栈。
+
+### `api.namebases`
+
+名称库：
+
+- `api.namebases.list()`
+- `api.namebases.import(document, options)`
+- `api.namebases.export(options)`
+- `api.namebases.create(payload)`
+- `api.namebases.update(id, patch)`
+- `api.namebases.delete(id)`
+- `api.namebases.bind(scope, target, baseId)`
+- `api.namebases.renameObjects(kind, ids, options)`
+
+约束：
+
+- 导入、编辑和绑定名称库不自动批量改写当前地图对象名称。
+- 显式重命名必须进入 `EditHistory`。
+
+### `api.debug`
+
+开发辅助：
+
+- `api.debug.enable()`
+- `api.debug.disable()`
+- `api.debug.dumpState(options)`
+- `api.debug.profileNextRender()`
+
+约束：
+
+- 只在 debug 模式或本地环境暴露高风险内部信息。
+- 不提供可绕过数据契约的写入口。
+
+## 统一返回格式
+
+建议所有 API 返回 `ApiResult`：
+
+```js
+{
+  ok: true,
+  action: "edit.route.delete",
+  message: "已删除路线 #12",
+  data: {},
+  affected: [{kind: "route", id: 12}],
+  noop: false,
+  warnings: [],
+  errors: []
+}
+```
+
+异步 API 返回 `Promise<ApiResult>`。
+
+失败示例：
+
+```js
+{
+  ok: false,
+  action: "data.importMap",
+  message: "地图文件版本不受支持",
+  data: null,
+  affected: [],
+  noop: true,
+  warnings: [],
+  errors: [{code: "unsupported-version", detail: "version=3"}]
+}
+```
+
+## 能力元数据
+
+`api.info.capabilities()` 应返回可供 AI / 插件读取的描述：
+
+```js
+{
+  version: 1,
+  namespaces: {
+    climate: {
+      setLatitude: {
+        stable: "draft",
+        mutates: true,
+        undoable: false,
+        async: false,
+        params: [{name: "value", type: "number", min: -90, max: 90}]
+      }
+    },
+    data: {
+      exportAll: {
+        stable: "draft",
+        mutates: false,
+        undoable: false,
+        async: true
+      }
+    }
+  }
+}
+```
+
+稳定性等级：
+
+- `internal`：内部临时接口，不给 AI / 插件自动使用。
+- `draft`：已命名但仍可能调整。
+- `stable`：可作为脚本和扩展依赖。
+- `deprecated`：保留兼容，但不建议新调用。
+
+## 安全与副作用边界
+
+- 默认只在浏览器本地页面暴露，不做跨来源远程调用。
+- 后续如果有插件系统，应按能力申请权限，例如 `data:export`、`edit:write`、`debug:read`。
+- 会写地图的 API 必须：
+  1. 走命令或专用事务 helper。
+  2. 返回受影响对象。
+  3. 触发统一刷新调度。
+  4. 在需要时更新 `docs/development-log.md` 对应功能计划，而不是静默改变产品语义。
+- 只读 API 不应返回可被外部直接修改的内部数组引用；如确需高性能读取，应明确标注 `internal`。
+
+## 与 UI 的关系
+
+目标不是让 API 替代 UI，而是让 UI 和 API 共享业务入口：
+
+1. 第一阶段：API 包装现有 runtime helper 和 edit command，UI 继续走原 callback。
+2. 第二阶段：把重复 callback 逻辑抽成 `executeApiCommand()` / `executeRuntimeAction()` 之类公共 helper。
+3. 第三阶段：面板按钮可直接调用 API 层或 API 底下的同一 action 层。
+
+这样可以避免“控制台能做一套、UI 又做一套”的分叉。
+
+## 分阶段实施
+
+### 阶段 0：API 方案和能力盘点
+
+- 完成本文档。
+- 列出第一批应接 API 的现有 helper / command。
+- 确认哪些功能只读、哪些写数据、哪些异步、哪些需要撤销。
+
+验收：
+
+- 文档列清命名空间、返回格式、副作用约束和阶段计划。
+- `docs/current-plan.md` 和 `docs/development-log.md` 同步记录。
+
+### 阶段 1：API 根对象与只读能力
+
+- 新增 `runtime/api/` 或 `runtime/console-api.js`。
+- 暴露 `window.webglGeneratorApi`，debug 或开发环境下暴露 `window.api` 别名。
+- 接入：
+  - `api.info.mapSummary()`
+  - `api.info.runtimeStats()`
+  - `api.info.capabilities()`
+  - `api.selection.get()`
+  - `api.layers.get()`
+
+验收：
+
+- 控制台可读取 API。
+- 只读 API 不改变 checksum。
+- 生产构建可用，且没有 console error。
+
+当前状态：
+
+- 尚未开始运行时代码实现。
+- 本文档只完成阶段 0 的方案和能力边界梳理；阶段 1 需要在前置高优任务继续推进后，再按用户明确指令进入。
+
+### 阶段 2：导出 API 第一刀
+
+- 接入：
+  - `api.data.exportAll({download})`
+  - `api.data.exportGEO({download})`
+  - `api.data.exportFeatureGEO({download})`
+  - `api.data.exportPNG(options)`
+
+验收：
+
+- `{download: false}` 返回文本 / Blob，可被脚本断言。
+- `{download: true}` 复用现有下载能力。
+- GeoJSON 结构与 UI 导出一致。
+
+### 阶段 3：气候、单位和图层 API
+
+- 接入：
+  - `api.climate.get() / apply() / setLatitude()`
+  - `api.units.get() / apply()`
+  - `api.layers.setVisible() / setViewMode()`
+
+验收：
+
+- 控制台修改后 UI 控件同步。
+- 显示偏好不写回地图生成数据。
+- 气候修改的派生 stale 语义明确。
+
+### 阶段 4：编辑命令 API 第一刀
+
+- 先接最稳定的命令：
+  - 备注 set/delete。
+  - 测量 rename/delete。
+  - 标签 add/delete/restore。
+  - 路线 delete。
+  - marker add/delete/move。
+
+验收：
+
+- 每个命令都进入 `EditHistory`。
+- `api.history.undo()` / `redo()` 可恢复。
+- 面板打开时能同步刷新。
+
+### 阶段 5：生成、导入和批量能力
+
+- 接入地图生成、换 seed、受约束重算、完整地图导入、GEO 导入。
+- 统一异步状态、错误详情和 health 记录。
+
+验收：
+
+- 自动化脚本可用 API 完成“生成地图 -> 导出 -> 导入 -> 校验”的闭环。
+- 长任务和错误能进入 health monitor 或结构化返回。
+
+## 第一批代码落点建议
+
+- `app/webgl-generator/src/runtime/console-api.js`：创建 API 根对象。
+- `app/webgl-generator/src/runtime/api-result.js`：统一返回格式 helper。
+- `app/webgl-generator/src/runtime/app.js`：在 app 创建完成后安装 API，并传入 state、renderer、documentRef 和现有 action helper。
+- `tools/`：后续可补浏览器脚本验证 API 是否存在并执行只读 / 导出断言。
+
+## 风险
+
+- API 太早承诺稳定，会限制内部重构；需要稳定性等级。
+- 直接暴露 `state.map` 会导致外部脚本绕过命令系统乱改数据；必须优先提供只读快照。
+- UI 和 API 两套逻辑分叉会产生不一致；应逐步抽公共 action 层。
+- 导入 / 生成类异步 API 如果不统一状态，会和当前 loading bubble、panel refresh、health monitor 互相打架。
+- AI 调用 API 时可能误触破坏性操作；后续需要 dry-run、confirm 或权限模型。
+
+## 建议下一步
+
+下一步可以先做 **阶段 1：API 根对象与只读能力**，这是低风险入口：
+
+1. 新增 API 根对象。
+2. 暴露 `info.capabilities()` 和 `info.mapSummary()`。
+3. 增加最小浏览器断言，确认控制台能读到 API 且不改变地图 checksum。
+
+完成阶段 1 后，再进入导出 API，因为导出 API 对后续 AI / 自动化最有直接价值。

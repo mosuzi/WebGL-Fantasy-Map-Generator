@@ -2,6 +2,189 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：编辑器基础设施现状盘点
+
+继续按 API 之前的高优先级顺序推进。本轮从第 1 项列表动作收束转入第 2 项“编辑器基础设施和统计面板清单重新入队”，先做文档盘点，不改运行时代码。
+
+处理：
+
+- 在 `docs/task-notes/editor-and-stat-panel-inventory.md` 的“跨领域基础设施”中新增“2026-07-08 基础设施现状盘点”。
+- 梳理已有基础设施：`EditHistory`、`edit-refresh-scheduler`、`SelectionStore`、`SELECTION_PANEL_HANDLERS`、`updateAllObjectPanels()` / 各 `update*Panel()` 和公共面板组件。
+- 明确主要缺口：命令字段缺少统一校验、`refreshAfterEdit()` 与手动面板刷新混用、定位 / 高亮 / 打开面板语义分散、`UiObjectTable` 缺虚拟滚动和批量能力、面板状态未持久化、复杂派生链缺少统一标脏 / 重建策略。
+- 列出下一批施工小步：`executeEditCommand()`、edit command 字段规范、`refreshPanelsForEdit()`、`locateAndSelectObject()`、`UiObjectTable` 动作扩展和面板状态持久化第一刀。
+- 更新 `docs/current-plan.md`，记录第 2 项已完成现状盘点和可施工小清单。
+
+验证：
+
+- `git diff --check` 通过。
+- 本轮只更新文档，未修改应用代码。
+
+## 2026-07-08：湖泊管理列表动作条收束
+
+继续按 API 之前的高优先级顺序推进“编辑面板新增 / 删除统一化”。本轮选择湖泊管理面板，只收束已有列表级入口，不新增湖泊删除命令。
+
+处理：
+
+- `LakePanel.vue` 将“按名称库重命名筛选”从顶部筛选区移入表格下方 `UiPanelIoActions`。
+- 湖泊列表动作条新增“定位选中湖泊”，复用现有定位回调。
+- 本轮刻意不新增湖泊删除：湖泊 feature、pack cells、水体类型、湖岸线和水文派生约束较复杂，需要后续先单独梳理删除语义。
+- 更新 `docs/current-plan.md`，记录湖泊管理在列表动作统一化中的小步进展和暂不删除的原因。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/lake-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/lake-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+## 2026-07-08：河流管理列表动作条收束
+
+继续按 API 之前的高优先级顺序推进“编辑面板新增 / 删除统一化”。本轮选择河流管理面板，只收束已有列表级入口，不新增河流删除命令。
+
+处理：
+
+- `RiverPanel.vue` 将“按名称库重命名筛选”从顶部筛选区移入表格下方 `UiPanelIoActions`。
+- 河流列表动作条新增“定位选中河流”和“进入 / 退出河流编辑”，复用现有选择、定位和编辑回调。
+- 本轮刻意不新增河流删除：河段、支流、流域、河口、地形和渲染派生约束比路线 / 备注 / 名称库更复杂，需要后续先单独梳理删除语义。
+- 更新 `docs/current-plan.md`，记录河流管理在列表动作统一化中的小步进展和暂不删除的原因。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/river-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/river-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+## 2026-07-08：名称库总览列表动作条收束
+
+继续按 API 之前的高优先级顺序推进“编辑面板新增 / 删除统一化”。本轮选择名称库总览面板，把用户库新增 / 删除及相关批量入口收束到表格下方动作条。
+
+处理：
+
+- `NamebasePanel.vue` 将原先底部独立的“新建用户库 / 复制内置 / 删除选中 / 清空用户库”按钮移入表格下方 `UiPanelIoActions`。
+- 名称库列表动作条现在同时承载导入、导出和用户库编辑动作，便于把列表级操作集中到同一视觉位置。
+- 新建、复制、删除和清空仍调用既有面板回调；运行时继续使用 `createCreateUserNamebaseCommand()`、`createCopyBuiltinNamebaseCommand()`、`createDeleteUserNamebaseCommand()` 和 `createClearUserNamebasesCommand()` 的名称库快照撤销逻辑。
+- 更新 `docs/current-plan.md`，记录名称库总览在编辑面板列表动作统一化中的小步进展。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/namebase-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/namebase-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+## 2026-07-08：备注总览列表动作条收束
+
+继续按 API 之前的高优先级顺序推进“编辑面板新增 / 删除统一化”。本轮选择备注总览面板，把已有定位 / 删除入口从独立文字按钮收束到列表下方动作条。
+
+处理：
+
+- `NotesPanel.vue` 将原先单独的“定位对象 / 删除备注”按钮移入表格下方 `UiPanelIoActions`。
+- 同一动作条保留备注摘要导出，并新增“定位备注对象”和“删除选中备注”两个小图标动作。
+- 定位会继续避开孤儿备注；删除仍调用既有 `callbacks.onDelete`，运行时继续使用 `createDeleteNoteCommand()` 进入 `EditHistory`。
+- 更新 `docs/current-plan.md`，记录备注总览在编辑面板列表动作统一化中的小步进展。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/notes-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/note-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+## 2026-07-08：资源标记列表动作条收束
+
+用户要求按 API 之前的高优先级顺序继续推进。本轮回到“编辑面板新增 / 删除统一化”，选择资源标记面板做一个小步：不改变资源生成和标记数据结构，只把已有移动 / 删除能力向列表下方小图标动作条收束。
+
+处理：
+
+- `MarkerPanel.vue` 移除顶部编辑工具条中的“删除”文字按钮，避免和列表选择操作混在一起。
+- 在资源标记表格下方新增 `UiPanelIoActions` 动作条，提供“移动选中资源标记”和“删除选中资源标记”两个小图标动作。
+- 删除仍调用既有 `callbacks.onDelete`，运行时继续使用 `createDeleteMarkerCommand()` 进入 `EditHistory`；本轮不改变资源重生成、资源经济派生或 marker collection 命令语义。
+- 更新 `docs/current-plan.md`，把资源标记面板的小步进展记录到当前高优先级第 1 项。
+
+验证：
+
+- `node --check app/webgl-generator/src/ui/panels/marker-panel.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `pnpm run audit:panels -- --browser-channel chrome --seed marker-list-actions-smoke` 未执行成功：当前依赖环境缺少 `playwright` 模块，无法启动浏览器面板审计。
+
+## 2026-07-08：撤回控制台 API 运行时代码
+
+用户指出当前不应直接开始 API 实现：API 大项应先写详细方案，并且 API 之前的高优先级任务尚未完成。
+
+修正：
+
+- 撤回 `app/webgl-generator/src/runtime/console-api.js` 运行时代码。
+- 移除 `runtime/app.js` 中安装 `window.webglGeneratorApi` / `window.api` 的接线。
+- 保留 `docs/task-notes/console-extension-api-system-plan.md` 作为详细方案文档。
+- 修正 `docs/current-plan.md` 和 API 专题计划中的进展描述，明确 API 运行时代码尚未开始；在前置高优任务继续推进前，不应直接进入 API 实现。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `node --check app/webgl-generator/src/runtime/route-edit-commands.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/route-panel.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+## 2026-07-08：控制台与扩展 API 系统详细方案
+
+用户要求使用 goal 模式继续推进。本轮选择当前高优先级中的“控制台 / 扩展 API 系统规划”，先按计划补详细方案，不直接动运行时代码。
+
+处理：
+
+- 新增 `docs/task-notes/console-extension-api-system-plan.md`，作为控制台与扩展 API 系统的专题计划。
+- 明确 API 根对象建议为 `window.webglGeneratorApi`，开发便利别名为 `window.api`。
+- 初步划分 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间。
+- 定义统一 `ApiResult` 返回格式、能力元数据、稳定性等级、安全与副作用边界。
+- 明确 UI 与 API 的关系：先包装现有 helper 和 edit command，再逐步抽公共 action 层，避免 UI 和控制台两套业务逻辑分叉。
+- 制定阶段 0-5：方案与能力盘点、API 根对象与只读能力、导出 API、气候 / 单位 / 图层 API、编辑命令 API、生成 / 导入 / 批量能力。
+- 更新 `docs/task-notes/README.md` 和 `docs/current-plan.md`，把该专题纳入索引并记录当前进展。
+
+验证：
+
+- `git diff --check` 通过。
+- 本轮只新增和更新文档，未修改应用代码。
+
+## 2026-07-08：路线管理删除小图标第一刀
+
+按当前高优先级“编辑面板新增 / 删除统一化”推进第一步，先补路线管理的删除入口。
+
+修正：
+
+- 路线管理面板新增列表下方 `UiPanelIoActions` 小图标动作条，提供“删除选中路线”。
+- 新增 `createDeleteRouteCommand()`，会从 `map.settlements.routes` 中移除目标路线，清理对应路线备注，并接入 `EditHistory`。
+- 撤销会把路线按原索引插回，并恢复删除前的路线备注；重做会再次删除路线。
+- 本刀只处理路线对象删除，不新增路线绘制入口，也不重算经济 / 贸易派生，避免把路线编辑第一刀扩大为路线生成或市场重算专项。
+
+验证：
+
+- `node --check app/webgl-generator/src/runtime/route-edit-commands.js` 通过。
+- `node --check app/webgl-generator/src/ui/panels/route-panel.js` 通过。
+- `node --check app/webgl-generator/src/runtime/app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮是小步 UI / 命令接线，浏览器烟测按用户要求隔几步合并执行。
+
+## 2026-07-08：从旧计划备份中恢复高优先级队列并新增 API 系统大项
+
+用户要求从此前备份的旧计划中挑选第 12、17、18、19、34 项列为高优先级并进入当前计划，其它旧专题保持在备选计划中；同时新增一个“控制台 / 扩展 API 系统”大项，先写入计划，真正执行时再出详细方案。
+
+处理：
+
+- 将“编辑面板新增 / 删除统一化”列为当前高优先级，用于继续按对象类型补齐新增 / 删除命令，并统一收敛到列表下方小图标动作条。
+- 将“编辑器基础设施和统计面板清单”列为当前高优先级，用于重新梳理 edit command / undo command、selection store、highlight / locate API、对象表格组件、派生重建调度和全局撤销入口等基础能力。
+- 将“导出能力矩阵收尾”列为当前高优先级，优先关注完整 JSON 压缩、跨版本迁移器、导入错误详情、PNG 导出选项和 GIS 导出质量。
+- 将“政治面 GeoJSON dissolve”列为当前高优先级，目标是把 state / province / zone 的 cell polygon 集合型 MultiPolygon 升级为可选的真正 dissolve 外轮廓。
+- 将“视觉主题与样式预设第一阶段”列为当前高优先级，先做 WebGL 版轻量只读主题 token，不做原版 SVG selector 样式兼容。
+- 新增“控制台 / 扩展 API 系统规划”大项，目标是把不依赖 UI 的操作收束为统一 API，例如 `api.climate.setLatitude(...)`、`api.data.exportAll()`、`api.data.exportGEO()`，为后续 AI 接入、脚本化操作、开发扩展和自动化测试打基础。
+- 当前计划的“当前不再自动推进”改为“当前备选计划”，明确 overlay 性能、source/candidate parity、贸易查看、Element Plus source theme、单位、气候、文化 / 宗教、政体、名称库、测量、高度图导入、对象注记、经济、军事和纹章等其它专题保持备选，不自动推进。
+
+验证：
+
+- 本轮只更新文档计划，未修改应用代码。
+
 ## 2026-07-08：统一详情空态样式并优化地区未选中提示
 
 用户指出：地区管理“未选中地区”处的文字过大，上下也没有间隙，需要优化。

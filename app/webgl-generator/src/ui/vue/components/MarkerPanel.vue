@@ -10,7 +10,6 @@
     <UiSelectField class-name="marker-resource-select" label="新增资源" :model-value="resourceDraft.type" :options="resourceTypeOptions" @update:model-value="resourceDraft.type = $event" />
     <UiButton variant="secondary" :active="state.editMode === 'add'" @click="startAddResource">放置</UiButton>
     <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
-    <UiButton variant="secondary" :disabled="!selected" @click="deleteSelected">删除</UiButton>
     <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
     <UiButton class="marker-regenerate-button" variant="secondary" @click="callbacks.onRegenerateResources?.()">重生成资源点</UiButton>
   </div>
@@ -26,6 +25,13 @@
     empty-text="没有匹配的资源点或标记"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+  />
+
+  <UiPanelIoActions
+    class-name="marker-panel-list-actions"
+    label="资源标记列表操作"
+    :actions="markerListActions"
+    @action="handleMarkerListAction"
   />
 
   <UiDetailGrid class-name="marker-panel-details" empty-text="未选中资源点或标记" :rows="detailRows" />
@@ -72,6 +78,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
@@ -178,6 +185,10 @@ const markerActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "visual", label: "调整图标", icon: "▣"},
   {key: "note", label: "编辑备注", icon: "☰"}
+]);
+const markerListActions = computed(() => [
+  {key: "move", label: "移动选中资源标记", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
+  {key: "delete", label: "删除选中资源标记", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -299,9 +310,12 @@ function startMoveSelected() {
   props.callbacks.onMoveMode?.(selected.value.id);
 }
 
-function deleteSelected() {
-  if (!selected.value) return;
-  props.callbacks.onDelete?.(selected.value.id);
+function handleMarkerListAction(key) {
+  if (key === "move") {
+    startMoveSelected();
+    return;
+  }
+  if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
 }
 
 function syncVisualDraft() {

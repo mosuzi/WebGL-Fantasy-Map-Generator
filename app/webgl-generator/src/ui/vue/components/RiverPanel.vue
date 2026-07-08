@@ -3,7 +3,6 @@
 
   <div class="river-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型" @update:model-value="callbacks.onFilter" />
-    <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
   </div>
 
   <UiSortBar class-name="river-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -15,6 +14,13 @@
     empty-text="没有匹配的河流"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+  />
+
+  <UiPanelIoActions
+    class-name="river-panel-list-actions"
+    label="河流列表操作"
+    :actions="riverListActions"
+    @action="handleRiverListAction"
   />
 
   <UiDetailGrid class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
@@ -72,6 +78,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -129,6 +136,11 @@ const riverActions = computed(() => [
   {key: "width", label: "调整宽度", icon: "↔"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
+const riverListActions = computed(() => [
+  {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
+  {key: "locate", label: "定位选中河流", icon: "⌖", disabled: !selected.value},
+  {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", active: editing.value, disabled: !selected.value}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "河流", value: formatNumber(rows.value.length)},
@@ -185,6 +197,12 @@ function sortRows(sourceRows, key, direction) {
 }
 
 function handleRiverActionSelect(key) {
+  if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
+}
+
+function handleRiverListAction(key) {
+  if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
+  if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
   if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
 }
 

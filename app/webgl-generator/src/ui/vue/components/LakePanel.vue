@@ -3,7 +3,6 @@
 
   <div class="lake-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型" @update:model-value="callbacks.onFilter" />
-    <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
   </div>
 
   <UiSortBar class-name="lake-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
@@ -15,6 +14,13 @@
     empty-text="没有匹配的湖泊"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+  />
+
+  <UiPanelIoActions
+    class-name="lake-panel-list-actions"
+    label="湖泊列表操作"
+    :actions="lakeListActions"
+    @action="handleLakeListAction"
   />
 
   <UiDetailGrid class-name="lake-panel-details" empty-text="未选中湖泊" :rows="detailRows" />
@@ -38,12 +44,12 @@
 <script setup>
 import {computed, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
-import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
@@ -97,6 +103,10 @@ const totalCells = computed(() => rows.value.reduce((sum, row) => sum + row.cell
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const lakeActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"}
+]);
+const lakeListActions = computed(() => [
+  {key: "rename-visible", label: "按名称库重命名筛选湖泊", icon: "名", disabled: !visibleRows.value.length},
+  {key: "locate", label: "定位选中湖泊", icon: "⌖", disabled: !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -167,6 +177,11 @@ function lakeTypeLabel(type) {
     dry: "干湖",
     sinkhole: "陷穴湖"
   }[type] || type || "湖泊";
+}
+
+function handleLakeListAction(key) {
+  if (key === "rename-visible") callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
+  if (key === "locate" && selected.value) callbacks.onLocate?.(selected.value);
 }
 
 function formatAreaValue(value) {
