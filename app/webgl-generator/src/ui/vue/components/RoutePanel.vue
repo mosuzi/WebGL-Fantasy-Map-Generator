@@ -25,6 +25,13 @@
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中路线" :rows="detailRows" />
 
+  <UiPanelIoActions
+    class-name="route-management-actions"
+    label="路线新增删除"
+    :actions="routeManagementActions"
+    @action="handleRouteManagementAction"
+  />
+
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="routeActions">
     <template #note>
       <UiNoteField
@@ -93,6 +100,9 @@ const activeAction = ref(null);
 const routeActions = Object.freeze([
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
+const routeManagementActions = computed(() => [
+  {key: "delete", label: "删除选中路线", icon: "×", disabled: !selected.value}
+]);
 const rows = computed(() => {
   props.state.version;
   return routeRows(props.state.map);
@@ -132,6 +142,10 @@ const detailRows = computed(() => selected.value ? [
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
 });
+
+function handleRouteManagementAction(key) {
+  if (key === "delete" && selected.value) callbacks.onDelete?.(selected.value);
+}
 
 function routeRows(map) {
   return (map?.settlements?.routes || []).map(route => {

@@ -235,6 +235,37 @@
 - `UiObjectTable` 已完成固定行高虚拟滚动第一刀，并在城市大表浏览器烟测中确认只渲染可视窗口、滚动换页和点击选中正常。
 - 对象表格双击进入编辑已覆盖城市、河流、湖泊、国家、省份、文化、宗教、标签、标记、测量和军事管理面板；未显式接入 `edit` 的面板继续保留原双击定位行为。
 
+### 2026-07-08 基础设施现状盘点
+
+本节对应当前高优先级第 17 项，先梳理已有基础设施和下一批可施工小步，避免在各面板里继续重复实现命令、选择、定位和刷新逻辑。
+
+已存在：
+
+1. `EditHistory` 已提供 `execute / undo / redo / clear / getStats`，各命令只要实现 `apply / revert / label` 即可进入撤销栈；多数对象编辑命令还带有 `effects` 元数据，用于后续刷新调度。
+2. `edit-refresh-scheduler` 已能按命令 `effects` 刷新 renderer 动态 buffer、专题 surface、标签、对象 picking、selection、运行时统计和 pick 面板；国家、省份、高度、河流、路线、marker、标签、备注、测量和名称库命令已开始使用不同刷新范围。
+3. `SelectionStore` 已集中维护 `selection` 和 `editingObject`，并在选择对象变化时清理不匹配的编辑对象；国家、省份、城市、河流、湖泊、路线、marker、标签、zone、文化和宗教等面板已通过 selection 刷新当前行。
+4. `SELECTION_PANEL_HANDLERS` 已把对象种类映射到领域面板打开 / 更新逻辑，`selectFromPanel()` 可避免从面板选择对象时反复重开同一面板。
+5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口，编辑完成后可按领域手动补刷，也可逐步收敛到命令 effects 驱动。
+6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`。
+
+主要缺口：
+
+1. `EditHistory` 只校验 `apply / revert`，没有统一校验 `effects / domain / affected / isNoop / getResult`，不同命令的返回值和 no-op 判断仍靠调用方约定。
+2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，但还没有统一“命令执行后按 affected 自动刷新相关面板”的调度层。
+3. selection 已集中，但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义仍分散在 `app.js` 和各面板回调中，还没有单独的 highlight / locate action 层。
+4. `UiObjectTable` 尚未支持虚拟滚动、统一空态动作、批量选择和列宽持久化；大列表面板后续仍可能受 DOM 行数影响。
+5. 面板状态只存在内存中，筛选词、排序字段、打开状态、位置和大小尚未按 workspace/session 持久化。
+6. 派生重建只覆盖已明确 effects 的对象；文化 / 宗教 cell 归属、河流 / 湖泊删除、政治面 dissolve、导出校验等更复杂链路还缺“先标脏、后重建、可解释”的统一策略。
+
+下一批施工小步：
+
+1. 新增 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit`、toast / status 文案、`getResult()` 返回和异常处理；先从路线、备注、名称库或测量中选一个低风险调用点试迁移。
+2. 为 edit command 补一个轻量规范文档或类型注释：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，并定义 `affected` 的对象格式。
+3. 新增 `refreshPanelsForEdit(state, command)` 小函数：先只根据 `effects.derived` 和 `affected.kind` 刷新对象面板，逐步减少调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
+4. 抽出 `locateAndSelectObject(state, object, documentRef, options)`：统一“设置 selection、打开 / 更新面板、定位、闪烁高亮”的入口，为后续 API 和 AI 操作复用。
+5. 给 `UiObjectTable` 增加可选 `actionsSlot` 或标准空态动作，避免各面板为了同一类列表级操作反复决定放置位置。
+6. 建立面板状态持久化第一刀：先保存筛选词、排序字段和窗口位置，不保存编辑草稿，避免刷新页面后丢失基本工作区上下文。
+
 ## 优先级建议
 
 ### 第一批

@@ -2,6 +2,20 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：编辑器基础设施现状盘点
+
+远端主线合入了编辑器基础设施盘点和控制台 / 扩展 API 系统规划文档。本地后续执行队列仍以当前 `docs/current-plan.md` 的已验证步骤为准。
+
+处理：
+
+- `docs/task-notes/editor-and-stat-panel-inventory.md` 记录了 `EditHistory`、`edit-refresh-scheduler`、`SelectionStore`、面板刷新和公共面板组件的现状盘点。
+- 新增 `docs/task-notes/console-extension-api-system-plan.md`，记录 API 命名空间、统一返回格式、副作用边界和分阶段实施路径。
+- 更新 `docs/task-notes/README.md` 索引。
+
+验证：
+
+- 远端原提交记录 `git diff --check` 通过；本次合并后重新运行项目级检查。
+
 ## 2026-07-09：河流重算清理已刷新派生状态
 
 本步修正高度编辑后执行河流重算仍把河流、路线、生物群系留在待派生摘要里的状态误导。

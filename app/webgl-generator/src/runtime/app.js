@@ -1843,7 +1843,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
 
-  window.__webglGeneratorApp = state;
+  const view = documentRef.defaultView || window;
+  view.__webglGeneratorApp = state;
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;
