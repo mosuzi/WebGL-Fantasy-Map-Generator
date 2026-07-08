@@ -17,7 +17,8 @@
 
 - `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\height-panel.js` 通过。
 - `git diff --check` 通过。
-- `HeightPanel.vue` 随后续本批综合构建一起验证。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：高度面板初始显示“待派生无”，高度笔刷后显示“待派生12 项”，过期系统清单包含河流、路线、生物群系、聚落、政治和下游系统，撤销历史为 `1`，`glError = 0`，console/page error 为 `0`。
 
 ## 2026-07-09：高度笔刷标记派生过期第一刀
 
@@ -35,6 +36,7 @@
 - `node --check app\webgl-generator\src\runtime\height-edit-commands.js` 通过。
 - 命令级 Node 验证确认高度笔刷应用 / 撤销都会写入高度依赖派生过期系统，并同步军事、经济等 metadata stale 标志。
 - `git diff --check` 通过。
+- Playwright + 系统 Chrome 构建产物烟测确认高度笔刷后过期系统包含 12 项，并在高度面板显示为“待派生12 项”。
 
 ## 2026-07-09：高度面板最近笔刷均变反馈
 
