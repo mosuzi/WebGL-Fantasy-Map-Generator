@@ -1618,7 +1618,6 @@ select:disabled {
 .city-history-actions,
 .culture-history-actions,
 .diplomacy-history-actions,
-.height-history-actions,
 .lake-history-actions,
 .marker-history-actions,
 .measurement-history-actions,
@@ -2647,7 +2646,7 @@ select:disabled {
 
 .height-history-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
