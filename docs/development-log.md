@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：人口统计面板第一刀
+
+本步补齐第三批中的人口统计入口，先做只读汇总，不进入人口刷子或迁移模拟。
+
+修正：
+
+- 新增 `population-panel.js` 和 `PopulationPanel.vue`，汇总总人口、乡村/城市人口、人口 cells、最高 cell 人口和城镇数。
+- 控制面板“管理”tab 新增“人口统计”入口，并在运行时注册 `population-panel` 的打开、持久化恢复和面板刷新。
+- 人口统计表按国家、省份、文化、宗教四类列出人口、乡村人口、城市人口、面积、密度和城镇数，并支持筛选、排序和选中详情。
+- 同步当前计划和专题清单状态，标记人口统计面板第一刀完成。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\population-panel.js`、`node --check app\webgl-generator\src\ui\panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 综合构建和浏览器烟测按本轮“累积几步后统一执行”节奏，待后续小步完成后一起执行。
+
 ## 2026-07-08：生物群系统计面板第一刀
 
 本步补齐第三批中的生物群系统计入口，先建立只读统计面板，不进入局部编辑。
