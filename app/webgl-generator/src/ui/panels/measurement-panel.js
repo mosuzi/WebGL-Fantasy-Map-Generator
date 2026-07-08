@@ -1,20 +1,30 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const MEASUREMENT_PANEL_ID = "measurement-panel";
+const MEASUREMENT_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "updatedAt",
+  sortDir: "desc"
+});
 
 export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, MEASUREMENT_PANEL_ID, MEASUREMENT_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     history: null,
-    filter: "",
-    sortKey: "updatedAt",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedMeasurementId: null,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, MEASUREMENT_PANEL_ID, {filter: value}, MEASUREMENT_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -23,6 +33,10 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "name" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, MEASUREMENT_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, MEASUREMENT_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedMeasurementId = row.id;
@@ -40,7 +54,7 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("measurement-panel", {
+  const record = manager.registerPanel(MEASUREMENT_PANEL_ID, {
     title: "测量对象",
     left: 520,
     top: 120,

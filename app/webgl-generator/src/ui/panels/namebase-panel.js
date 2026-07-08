@@ -1,20 +1,29 @@
 import {shallowReactive} from "vue";
 import {getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../../generator/namebase-store.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const NAMEBASE_PANEL_ID = "namebase-panel";
+const NAMEBASE_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "category",
+  sortDir: "asc"
+});
 
 export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   let pendingImportFile = null;
+  const listPreferences = readPanelListPreferences(documentRef, NAMEBASE_PANEL_ID, NAMEBASE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     history: null,
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     bindingStatus: getNamebaseBindingStatus(null),
-    filter: "",
+    filter: listPreferences.filter,
     importMode: "append",
     importPreview: null,
-    sortKey: "category",
-    sortDir: "asc",
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedNamebaseId: null,
     focusCultureId: "",
     focusCultureNonce: 0,
@@ -23,6 +32,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, NAMEBASE_PANEL_ID, {filter: value}, NAMEBASE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -31,6 +41,10 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "category" || key === "name" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, NAMEBASE_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, NAMEBASE_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedNamebaseId = row.id;
@@ -80,7 +94,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("namebase-panel", {
+  const record = manager.registerPanel(NAMEBASE_PANEL_ID, {
     title: "名称库总览",
     left: 548,
     top: 148,
