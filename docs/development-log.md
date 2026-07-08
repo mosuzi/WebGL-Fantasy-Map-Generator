@@ -16,7 +16,9 @@
 
 - `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
 - `node --check app\webgl-generator\src\ui\panels\river-panel.js` 通过。
-- `git diff --check`、`pnpm run build:app` 和浏览器烟测将在本轮几步完成后统一执行。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开后保存 `open: true`，筛选词保存为 `river-smoke`，排序保存为 `id / asc`；刷新后河流面板恢复打开，筛选词和 `ID ↑` 排序恢复；关闭面板后保存 `open: false`，再次刷新不恢复；`glError = 0`。
 
 ## 2026-07-08：恢复浮动面板打开状态
 
@@ -33,7 +35,9 @@
 - `node --check app\webgl-generator\src\ui\panel-manager.js` 通过。
 - `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
-- `git diff --check`、`pnpm run build:app` 和浏览器烟测将在本轮几步完成后统一执行。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 浏览器烟测通过：河流管理面板打开状态可跨刷新恢复，关闭后再次刷新不恢复；手动写入 `object-details` 的 `open: true` 后刷新，对象详情面板仍不会自动打开。
 
 ## 2026-07-08：统一详情空态样式并优化地区未选中提示
 
