@@ -32,9 +32,11 @@
     :columns="columns"
     :rows="visibleRows"
     :selected-id="state.selectedReligionId"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的宗教"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiDetailGrid class-name="religion-panel-details" empty-text="未选中宗教" :rows="detailRows" />
@@ -82,7 +84,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -96,7 +98,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
-import {findByObjectId} from "../../object-id.js";
+import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -139,6 +141,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const renameRequestId = ref(null);
 const treePanelOpen = ref(false);
 const metrics = computed(() => {
   props.state.version;
@@ -186,12 +189,27 @@ const detailRows = computed(() => selected.value ? [
   {label: "主要文化", value: selected.value.cultureSummary}
 ] : []);
 
-watch(() => selected.value?.id, () => {
+watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  if (!sameObjectId(renameRequestId.value, id)) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 });
 
 function selectTreeNode(node) {
   props.callbacks.onSelect?.(node);
+}
+
+function openRenameEditor(row) {
+  renameRequestId.value = row?.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (!sameObjectId(selected.value?.id, row?.id)) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
+  });
 }
 
 function buildReligionMetrics(map) {
