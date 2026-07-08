@@ -16,7 +16,8 @@
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
-- 构建和浏览器烟测随本批收尾统一执行。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：高度笔刷后待派生为 12 项，点击“重算河流”后降为 9 项，且 `rivers / routes / biomes` 不再留在过期清单中。
 
 ## 2026-07-09：高度面板接入河流重算入口
 
@@ -26,14 +27,15 @@
 
 - 高度面板操作区新增“重算河流”按钮。
 - 运行时回调复用既有 `regenerateMapAttribute(state, "rivers")`。
-- 点击后同步刷新控制面板重生成状态和高度面板摘要。
+- 点击后同步刷新重生成状态记录和高度面板摘要。
 - 本步不做一键全量重算，不新增河流算法，也不改变高度笔刷命令。
 
 验证：
 
 - `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\height-panel.js` 通过。
 - `git diff --check` 通过。
-- `HeightPanel.vue` 随后续本批综合构建一起验证。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：高度面板存在“重算河流”按钮，点击后完成河流重算，`glError = 0`，console/page error 为 `0`。
 
 ## 2026-07-09：高度面板待派生明细摘要
 
@@ -48,7 +50,8 @@
 验证：
 
 - `git diff --check` 通过。
-- `HeightPanel.vue` 随后续本批综合构建一起验证。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测确认高度笔刷后面板显示“待派生12 项：河流、路线、生物群系等”。
 
 ## 2026-07-09：高度面板显示待派生摘要
 
