@@ -468,12 +468,20 @@ const workbenchPosition = ref({left: 760, top: 110});
 let dragState = null;
 let latestHeightBandSamples = null;
 
-const summaryMetrics = computed(() => [
-  {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
-  {label: "影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
-  {label: "高度", value: formatHeightRange(props.state.lastHeight)},
-  {label: "历史", value: props.state.history ? `undo ${props.state.history.undo} / redo ${props.state.history.redo}` : "none"}
-]);
+const summaryMetrics = computed(() => {
+  const current = props.state.currentHeightStats;
+  return [
+    {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
+    {label: "影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
+    {label: "高度", value: formatHeightRange(props.state.lastHeight)},
+    {label: "历史", value: props.state.history ? `undo ${props.state.history.undo} / redo ${props.state.history.redo}` : "none"},
+    {label: "当前均高", value: current ? formatHeight(current.average, unitPreferences.value) : "-"},
+    {label: "陆地", value: current ? formatPercent(current.land / current.total) : "-"},
+    {label: "低地", value: current ? formatPercent(current.lowland / current.total) : "-"},
+    {label: "山地", value: current ? formatPercent(current.mountain / current.total) : "-"},
+    {label: "海平面带", value: current ? formatPercent(current.seaLevelBand / current.total) : "-"}
+  ];
+});
 
 const targetSizeLabel = computed(() => `${Number(props.state.graphWidth) || 1440} x ${Number(props.state.graphHeight) || 960}`);
 const workbenchStyle = computed(() => ({

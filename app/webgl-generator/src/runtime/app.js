@@ -5231,12 +5231,24 @@ function summarizeCurrentHeightStats(map) {
   let min = Infinity;
   let max = -Infinity;
   let water = 0;
+  let land = 0;
+  let lowland = 0;
+  let hill = 0;
+  let mountain = 0;
+  let seaLevelBand = 0;
   let sum = 0;
   for (const height of heights) {
     const value = Number(height) || 0;
     if (value < min) min = value;
     if (value > max) max = value;
     if (value < 20) water += 1;
+    else {
+      land += 1;
+      if (value < 45) lowland += 1;
+      else if (value < 65) hill += 1;
+      else mountain += 1;
+    }
+    if (value >= 18 && value <= 22) seaLevelBand += 1;
     sum += value;
   }
   const total = heights.length;
@@ -5244,6 +5256,11 @@ function summarizeCurrentHeightStats(map) {
     min: Math.round(min),
     max: Math.round(max),
     water,
+    land,
+    lowland,
+    hill,
+    mountain,
+    seaLevelBand,
     total,
     average: Math.round((sum / Math.max(1, total)) * 10) / 10
   };
