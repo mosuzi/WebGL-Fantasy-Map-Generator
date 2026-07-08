@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：文化、宗教和外交面板记住筛选与排序
+
+本步继续覆盖社会与关系类管理面板的列表偏好持久化。
+
+修正：
+
+- 文化面板启动时读取 `culture-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态。
+- 宗教面板启动时读取 `religion-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态。
+- 外交面板启动时读取 `diplomacy-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态。
+- 外交面板本步只持久化列表筛选和排序，不持久化外交主体选择，也不改变外交专题切换逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\culture-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\religion-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\diplomacy-panel.js` 通过。
+- 综合构建和浏览器烟测待本批次收尾统一执行。
+
 ## 2026-07-08：国家、省份和城市面板记住筛选与排序
 
 本步继续复用列表偏好持久化能力，覆盖常用的区域 / 点对象管理面板。

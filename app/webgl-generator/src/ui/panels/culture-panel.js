@@ -1,22 +1,32 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const CULTURE_PANEL_ID = "culture-panel";
+const CULTURE_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "cells",
+  sortDir: "desc"
+});
 
 export function createCulturePanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, CULTURE_PANEL_ID, CULTURE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "cells",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedCultureId: null,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, CULTURE_PANEL_ID, {filter: value}, CULTURE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -25,6 +35,10 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
         panelState.sortDir = key === "id" || key === "name" || key === "type" ? "asc" : "desc";
         panelState.sortKey = key;
       }
+      updatePanelListPreferences(documentRef, CULTURE_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, CULTURE_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedCultureId = row.id;
@@ -40,7 +54,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("culture-panel", {
+  const record = manager.registerPanel(CULTURE_PANEL_ID, {
     title: "文化管理",
     left: 492,
     top: 132,

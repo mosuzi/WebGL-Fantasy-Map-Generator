@@ -1,16 +1,25 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {sameObjectId, toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const DIPLOMACY_PANEL_ID = "diplomacy-panel";
+const DIPLOMACY_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "relation",
+  sortDir: "asc"
+});
 
 export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, DIPLOMACY_PANEL_ID, DIPLOMACY_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "relation",
-    sortDir: "asc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedStateId: null,
     selectedObjectId: null,
     version: 0
@@ -24,6 +33,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     },
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, DIPLOMACY_PANEL_ID, {filter: value}, DIPLOMACY_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -32,6 +42,10 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "id" || key === "name" || key === "relation" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, DIPLOMACY_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, DIPLOMACY_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedObjectId = row.id;
@@ -57,7 +71,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("diplomacy-panel", {
+  const record = manager.registerPanel(DIPLOMACY_PANEL_ID, {
     title: "外交管理",
     left: 548,
     top: 116,

@@ -1,22 +1,32 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const RELIGION_PANEL_ID = "religion-panel";
+const RELIGION_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "cells",
+  sortDir: "desc"
+});
 
 export function createReligionPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, RELIGION_PANEL_ID, RELIGION_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "cells",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedReligionId: null,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, RELIGION_PANEL_ID, {filter: value}, RELIGION_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -25,6 +35,10 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
         panelState.sortDir = key === "id" || key === "name" || key === "type" || key === "form" ? "asc" : "desc";
         panelState.sortKey = key;
       }
+      updatePanelListPreferences(documentRef, RELIGION_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, RELIGION_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedReligionId = row.id;
@@ -39,7 +53,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("religion-panel", {
+  const record = manager.registerPanel(RELIGION_PANEL_ID, {
     title: "宗教管理",
     left: 524,
     top: 164,
