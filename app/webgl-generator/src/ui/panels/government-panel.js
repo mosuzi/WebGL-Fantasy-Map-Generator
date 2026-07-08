@@ -1,17 +1,26 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const GOVERNMENT_PANEL_ID = "government-panel";
+const GOVERNMENT_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "count",
+  sortDir: "desc"
+});
 
 export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, GOVERNMENT_PANEL_ID, GOVERNMENT_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
+    filter: listPreferences.filter,
     familyFilter: "all",
-    sortKey: "count",
-    sortDir: "desc",
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedGovernmentKey: null,
     selectedStateId: null,
     version: 0
@@ -19,6 +28,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, GOVERNMENT_PANEL_ID, {filter: value}, GOVERNMENT_LIST_DEFAULTS);
     },
     onFamilyFilter: value => {
       panelState.familyFilter = String(value || "all");
@@ -30,6 +40,10 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "label" || key === "category" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, GOVERNMENT_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, GOVERNMENT_LIST_DEFAULTS);
     },
     onSelectGovernment: row => {
       panelState.selectedGovernmentKey = row.key;
@@ -47,7 +61,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("government-panel", {
+  const record = manager.registerPanel(GOVERNMENT_PANEL_ID, {
     title: "政体管理",
     left: 520,
     top: 132,

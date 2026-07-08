@@ -1,15 +1,24 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const MILITARY_PANEL_ID = "military-panel";
+const MILITARY_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "troops",
+  sortDir: "desc"
+});
 
 export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, MILITARY_PANEL_ID, MILITARY_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "troops",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedStateId: "all",
     selectedStatus: "all",
     selectedRegimentId: null,
@@ -18,6 +27,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {filter: value}, MILITARY_LIST_DEFAULTS);
     },
     onStateChange: stateId => {
       panelState.selectedStateId = stateId === "all" ? "all" : Number(stateId);
@@ -38,6 +48,10 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "stateName" || key === "name" || key === "statusLabel" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, MILITARY_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedRegimentId = row.id;
@@ -60,7 +74,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("military-panel", {
+  const record = manager.registerPanel(MILITARY_PANEL_ID, {
     title: "军事管理",
     left: 584,
     top: 136,

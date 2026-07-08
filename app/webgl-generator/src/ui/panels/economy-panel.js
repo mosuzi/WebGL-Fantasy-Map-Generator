@@ -1,17 +1,26 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const ECONOMY_PANEL_ID = "economy-panel";
+const ECONOMY_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "stock",
+  sortDir: "desc"
+});
 
 export function createEconomyPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, ECONOMY_PANEL_ID, ECONOMY_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
     tab: "goods",
-    filter: "",
-    sortKey: "stock",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedGoodId: null,
     selectedMarketId: null,
     selectedDealId: null,
@@ -25,6 +34,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     },
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, ECONOMY_PANEL_ID, {filter: value}, ECONOMY_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -33,6 +43,10 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "name" || key === "typeLabel" || key === "routeLabel" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, ECONOMY_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, ECONOMY_LIST_DEFAULTS);
     },
     onSelectGood: row => {
       panelState.selectedGoodId = normalizeId(row.id);
@@ -48,7 +62,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     }
   };
 
-  const record = manager.registerPanel("economy-panel", {
+  const record = manager.registerPanel(ECONOMY_PANEL_ID, {
     title: "经济总览",
     left: 548,
     top: 124,

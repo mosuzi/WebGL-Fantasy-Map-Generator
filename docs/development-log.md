@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：政体、经济和军事面板记住筛选与排序
+
+本步继续覆盖剩余较复杂管理面板的主列表偏好持久化。
+
+修正：
+
+- 政体面板启动时读取 `government-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态；本步不持久化政体家族筛选。
+- 经济面板启动时读取 `economy-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态；本步不持久化经济 tab。
+- 军事面板启动时读取 `military-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态；本步不持久化国家 / 状态筛选。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\government-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\economy-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\military-panel.js` 通过。
+- 综合构建和浏览器烟测待本批次收尾统一执行。
+
 ## 2026-07-08：测量和名称库面板记住筛选与排序
 
 本步继续覆盖测量对象和名称库总览面板的列表偏好持久化。
