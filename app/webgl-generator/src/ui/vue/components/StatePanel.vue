@@ -12,9 +12,11 @@
     :columns="columns"
     :rows="visibleRows"
     :selected-id="state.targetStateId"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的国家"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
@@ -102,7 +104,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiColorActionPanel from "./base/UiColorActionPanel.vue";
@@ -117,7 +119,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
-import {findByObjectId} from "../../object-id.js";
+import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {GOVERNMENT_OPTIONS} from "../../../generator/governments.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -169,6 +171,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const renameRequestId = ref(null);
 const capitalDraft = ref(0);
 const governmentDraft = ref("monarchy");
 const metrics = computed(() => {
@@ -250,8 +253,13 @@ watch(() => selected.value?.governmentKey, next => {
   governmentDraft.value = next || "monarchy";
 }, {immediate: true});
 
-watch(() => selected.value?.id, () => {
+watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  if (!sameObjectId(renameRequestId.value, id) || selected.value?.neutral) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 });
 
 function buildStateMetrics(map) {
@@ -331,6 +339,17 @@ function handleActionSelect(key) {
     return;
   }
   if (!key) activeAction.value = null;
+}
+
+function openRenameEditor(row) {
+  if (!row || row.neutral) return;
+  renameRequestId.value = row.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (!sameObjectId(selected.value?.id, row.id) || selected.value?.neutral) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
+  });
 }
 
 function stateRows(map) {
