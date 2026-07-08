@@ -411,6 +411,20 @@ const heightAssignmentPresets = Object.freeze([
   {value: 68, label: "山地"},
   {value: 92, label: "峰值"}
 ]);
+const derivedSystemLabels = Object.freeze({
+  rivers: "河流",
+  routes: "路线",
+  biomes: "生物群系",
+  cities: "聚落",
+  states: "国家",
+  provinces: "省份",
+  religions: "宗教",
+  markers: "标记",
+  zones: "地区",
+  military: "军事",
+  economy: "经济",
+  diplomacy: "外交"
+});
 const heightmapProfileDocumentType = "webgl-generator-heightmap-import-profile";
 const heightmapProfileDocumentVersion = 1;
 const pendingPalettePageSize = 12;
@@ -1748,6 +1762,7 @@ function formatSignedHeightDelta(value) {
 
 function formatDerivedStaleSystems(systems) {
   if (!Array.isArray(systems) || !systems.length) return "无";
-  return `${systems.length} 项`;
+  const preview = systems.slice(0, 3).map(system => derivedSystemLabels[system] || system).join("、");
+  return `${systems.length} 项：${preview}${systems.length > 3 ? "等" : ""}`;
 }
 </script>
