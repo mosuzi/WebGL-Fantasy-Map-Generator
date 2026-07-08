@@ -2,6 +2,22 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：高度编辑器命令化状态校准
+
+本步复核专题清单中“高度编辑器正式版下一步需要把操作变成命令”的旧状态，避免后续重复实现已完成的命令链路。
+
+结论：
+
+- 当前代码已有 `height-edit-commands.js`，高度笔刷变化会通过 `createApplyHeightBrushCommand` 记录 `before / after`。
+- 运行时 `finishHeightStroke` 会把高度笔刷命令提交到 `EditHistory`，并通过 `refreshAfterEdit` 刷新画布和统计。
+- 高度面板注册了 `historyActions`，面板头部撤销 / 重做和面板内“撤销上次 / 重做上次”均调用同一历史栈。
+- 后续高度方向应继续推进高度统计增强、派生重建范围或更复杂地形工具，而不是再补“命令骨架”。
+
+验证：
+
+- 已复核 `app\webgl-generator\src\runtime\height-edit-commands.js` 和 `app\webgl-generator\src\runtime\app.js` 中的 `finishHeightStroke` / 高度面板撤销重做接入。
+- `git diff --check` 通过。
+
 ## 2026-07-08：水体统计面板补齐岸线长度
 
 本步补齐专题清单中明确列出的岸线长度指标，区分海岸线和湖岸线。
