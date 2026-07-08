@@ -12,9 +12,11 @@
     :rows="visibleRows"
     :selected-id="state.selectedMeasurementId"
     row-id-key="id"
+    :doubleClickAction="'edit'"
     empty-text="暂无保存的测量对象"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiPanelIoActions
@@ -45,7 +47,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import {
   measurementArea,
   measurementBounds,
@@ -83,6 +85,7 @@ const props = defineProps({
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const renameRequestId = ref(null);
 
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
@@ -141,8 +144,13 @@ const detailRows = computed(() => selected.value ? [
   {label: "更新时间", value: formatDateTime(selected.value.updatedAt)}
 ] : []);
 
-watch(() => selected.value?.id, () => {
+watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  if (renameRequestId.value !== id) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 });
 
 function measurementRows(map) {
@@ -222,6 +230,16 @@ function formatAreaValue(value) {
 
 function handleMeasurementExport(key) {
   if (key === "measurement") callbacks.onExport?.(visibleRows.value);
+}
+
+function openRenameEditor(row) {
+  renameRequestId.value = row?.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (selected.value?.id !== row?.id) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
+  });
 }
 
 function handleMeasurementAction(key) {
