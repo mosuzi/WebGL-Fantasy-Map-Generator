@@ -1,21 +1,31 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const RIVER_PANEL_ID = "river-panel";
+const RIVER_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "flux",
+  sortDir: "desc"
+});
 
 export function createRiverPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, RIVER_PANEL_ID, RIVER_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     editingObject: null,
     history: null,
-    filter: "",
-    sortKey: "flux",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, RIVER_PANEL_ID, {filter: value}, RIVER_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -24,6 +34,10 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "id" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, RIVER_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, RIVER_LIST_DEFAULTS);
     },
     onSelect: row => callbacks.onSelect?.(riverObject(row)),
     onLocate: row => callbacks.onLocate?.(riverObject(row)),
@@ -36,7 +50,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("river-panel", {
+  const record = manager.registerPanel(RIVER_PANEL_ID, {
     title: "河流管理",
     left: 380,
     top: 56,
