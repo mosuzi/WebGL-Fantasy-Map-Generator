@@ -16,6 +16,13 @@
     @locate="callbacks.onLocate"
   />
 
+  <UiPanelIoActions
+    class-name="route-panel-list-actions"
+    label="路线列表操作"
+    :actions="routeListActions"
+    @action="handleRouteAction"
+  />
+
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中路线" :rows="detailRows" />
 
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="routeActions">
@@ -41,6 +48,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance, formatNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
@@ -91,6 +99,10 @@ const rows = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
+const routeListActions = computed(() => [
+  {key: "locate", label: "定位路线", icon: "⌖", disabled: !selected.value},
+  {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value}
+]);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 
 const summaryMetrics = computed(() => [
@@ -171,6 +183,12 @@ function filterRows(sourceRows, filter) {
 
 function sortRows(sourceRows, key, direction) {
   return [...sourceRows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleRouteAction(key) {
+  if (!selected.value) return;
+  if (key === "locate") props.callbacks.onLocate?.(selected.value);
+  if (key === "delete") props.callbacks.onDelete?.(selected.value);
 }
 
 function routeLength(route) {

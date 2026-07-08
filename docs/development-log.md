@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：路线面板删除路线第一刀
+
+本步补齐路线管理面板的第一处删除编辑能力。
+
+修正：
+
+- 新增 `createDeleteRouteCommand()`，删除选中路线时同步删除该路线备注，刷新路线统计、pack 路线链接、路线 mesh 和对象 picking 索引，并支持撤销 / 重做恢复。
+- 路线管理面板新增列表操作区，提供定位和删除选中路线。
+- 运行时将路线删除操作接入 `EditHistory` 和既有刷新链路。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\route-edit-commands.js`、`node --check app\webgl-generator\src\ui\panels\route-panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- 命令级 Node 验证通过：删除路线后路线数、metadata、pack 路线链接和备注同步变化；撤销后恢复；重做后再次删除。
+- `$env:CI='true'; pnpm run build:app` 通过；仅保留既有 Vite 大 chunk 警告。
+- 构建产物 Playwright + 系统 Chrome 烟测通过：路线管理中删除路线 `#452` 后路线数 `589 -> 588`、metadata `589 -> 588`、线段 `2776 -> 2593`，头部撤销显示“撤销：删除路线 #452”；撤销后恢复到 `589 / 2776`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-08：地区面板接入头部撤销重做
 
 本步补齐地区管理面板与已有 `EditHistory` 的浮动面板头部按钮连接。

@@ -58,7 +58,7 @@ import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyPr
 import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
-import {createSetRouteNoteCommand} from "./route-edit-commands.js";
+import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {createSetZoneStyleCommand} from "./zone-edit-commands.js";
@@ -1157,6 +1157,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const route = state.map?.settlements?.routes?.find(item => item.id === routeId);
       const context = {map: state.map};
       const command = createSetRouteNoteCommand(routeId, body, {name: routeDisplayName(state.map, route, routeId)});
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      }
+      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onDelete: object => {
+      const context = {map: state.map};
+      const command = createDeleteRouteCommand(object.id);
       if (!command.isNoop(context)) {
         refreshAfterEdit(state, state.editHistory.execute(command, context));
       }
