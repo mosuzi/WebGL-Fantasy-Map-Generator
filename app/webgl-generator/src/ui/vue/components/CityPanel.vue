@@ -12,9 +12,11 @@
     :columns="columns"
     :rows="visibleRows"
     :selected-id="state.selectedCityId"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的城市"
-    @select="callbacks.onSelect"
+    @select="handleCitySelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
@@ -71,7 +73,7 @@
 </template>
 
 <script setup>
-import {computed, reactive, ref, watch} from "vue";
+import {computed, nextTick, reactive, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -93,7 +95,7 @@ import {
   resolveCityVisual
 } from "../../../runtime/city-visuals.js";
 import {formatHeight, formatNumber, formatPopulation} from "../../display-units.js";
-import {findByObjectId} from "../../object-id.js";
+import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -137,6 +139,11 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const renameRequestId = ref(null);
+const lastCitySelect = {
+  id: null,
+  at: 0
+};
 const metrics = computed(() => {
   props.state.version;
   return buildCityMetrics(props.state.map);
@@ -193,8 +200,13 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
-watch(() => selected.value?.id, () => {
+watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  if (!sameObjectId(renameRequestId.value, id)) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 });
 watch(() => selected.value?.silhouette, syncVisualDraft);
 watch(() => selected.value?.palette, syncVisualDraft);
@@ -321,6 +333,32 @@ function applyVisual() {
     silhouette: visualDraft.silhouette,
     palette: visualDraft.palette
   });
+}
+
+function handleCitySelect(row) {
+  const now = currentTime();
+  const repeated = sameObjectId(lastCitySelect.id, row?.id) && now - lastCitySelect.at <= 900;
+  lastCitySelect.id = row?.id ?? null;
+  lastCitySelect.at = now;
+  if (repeated) {
+    openRenameEditor(row);
+    return;
+  }
+  props.callbacks.onSelect?.(row);
+}
+
+function openRenameEditor(row) {
+  renameRequestId.value = row?.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (!sameObjectId(selected.value?.id, row?.id)) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
+  });
+}
+
+function currentTime() {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function syncVisualDraft() {

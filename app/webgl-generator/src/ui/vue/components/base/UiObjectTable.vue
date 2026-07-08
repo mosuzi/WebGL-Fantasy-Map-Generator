@@ -78,6 +78,11 @@ const props = defineProps({
   showLocateAction: {
     type: Boolean,
     default: true
+  },
+  doubleClickAction: {
+    type: String,
+    default: "locate",
+    validator: value => ["locate", "edit"].includes(value)
   }
 });
 
@@ -85,7 +90,7 @@ const VIRTUAL_ROW_HEIGHT = 32;
 const VIRTUAL_THRESHOLD = 120;
 const VIRTUAL_OVERSCAN_ROWS = 8;
 
-const emit = defineEmits(["select", "locate"]);
+const emit = defineEmits(["select", "locate", "edit"]);
 
 const tableWrap = ref(null);
 const scrollTop = ref(0);
@@ -139,6 +144,11 @@ function handleRowClick(row) {
 }
 
 function handleRowDoubleClick(row) {
+  emit("select", row);
+  if (props.doubleClickAction === "edit") {
+    emit("edit", row);
+    return;
+  }
   if (props.showLocateAction) emit("locate", row);
 }
 
