@@ -12,9 +12,11 @@
     :columns="columns"
     :rows="visibleRows"
     :selected-id="selectedId"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的湖泊"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiDetailGrid class-name="lake-panel-details" empty-text="未选中湖泊" :rows="detailRows" />
@@ -36,7 +38,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -47,7 +49,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
-import {findByObjectId} from "../../object-id.js";
+import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -85,6 +87,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const renameRequestId = ref(null);
 const rows = computed(() => {
   props.state.version;
   return lakeRows(props.state.map);
@@ -117,8 +120,13 @@ const detailRows = computed(() => selected.value ? [
   {label: "最大补给", value: formatNumber(maxFlux.value)}
 ] : []);
 
-watch(() => selected.value?.id, () => {
+watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  if (!sameObjectId(renameRequestId.value, id)) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 });
 
 function lakeRows(map) {
@@ -156,6 +164,16 @@ function filterRows(sourceRows, filter) {
 
 function sortRows(sourceRows, key, direction) {
   return [...sourceRows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function openRenameEditor(row) {
+  renameRequestId.value = row?.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (!sameObjectId(selected.value?.id, row?.id)) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
+  });
 }
 
 function lakeTypeLabel(type) {
