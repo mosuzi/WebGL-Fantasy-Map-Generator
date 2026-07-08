@@ -303,6 +303,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = state.editHistory.redo({map: state.map});
       if (command) refreshAfterEdit(state, command);
       updateHeightPanel(state);
+    },
+    onRegenerateRivers: () => {
+      const result = regenerateMapAttribute(state, "rivers", documentRef);
+      updateRegenerationSection(documentRef, result);
+      updateHeightPanel(state);
     }
   });
   state.panels.height = heightPanel;

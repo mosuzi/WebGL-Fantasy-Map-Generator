@@ -21,7 +21,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onActiveChange: active => callbacks.onActiveChange?.(active),
     onUndo: () => callbacks.onUndo?.(),
-    onRedo: () => callbacks.onRedo?.()
+    onRedo: () => callbacks.onRedo?.(),
+    onRegenerateRivers: () => callbacks.onRegenerateRivers?.()
   };
 
   const record = manager.registerPanel("height-panel", {
