@@ -1,20 +1,30 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const LAKE_PANEL_ID = "lake-panel";
+const LAKE_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "area",
+  sortDir: "desc"
+});
 
 export function createLakePanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, LAKE_PANEL_ID, LAKE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "area",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, LAKE_PANEL_ID, {filter: value}, LAKE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -23,6 +33,10 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "id" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, LAKE_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, LAKE_LIST_DEFAULTS);
     },
     onSelect: row => callbacks.onSelect?.(lakeObject(row)),
     onLocate: row => callbacks.onLocate?.(lakeObject(row)),
@@ -32,7 +46,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("lake-panel", {
+  const record = manager.registerPanel(LAKE_PANEL_ID, {
     title: "湖泊管理",
     left: 440,
     top: 88,

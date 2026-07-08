@@ -1,21 +1,31 @@
 import {markRaw, shallowReactive} from "vue";
 import {OBJECT_KIND} from "../../runtime/object-kinds.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const ZONE_PANEL_ID = "zone-panel";
+const ZONE_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "id",
+  sortDir: "asc"
+});
 
 export function createZonePanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, ZONE_PANEL_ID, ZONE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "id",
-    sortDir: "asc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, ZONE_PANEL_ID, {filter: value}, ZONE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -24,6 +34,10 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "id" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, ZONE_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, ZONE_LIST_DEFAULTS);
     },
     onSelect: row => callbacks.onSelect?.(zoneObject(row)),
     onLocate: row => callbacks.onLocate?.(zoneObject(row)),
@@ -32,7 +46,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("zone-panel", {
+  const record = manager.registerPanel(ZONE_PANEL_ID, {
     title: "地区管理",
     left: 520,
     top: 96,

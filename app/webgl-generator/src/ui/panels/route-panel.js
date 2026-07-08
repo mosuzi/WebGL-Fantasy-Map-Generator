@@ -1,22 +1,32 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const ROUTE_PANEL_ID = "route-panel";
+const ROUTE_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "length",
+  sortDir: "desc"
+});
 
 export function createRoutePanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, ROUTE_PANEL_ID, ROUTE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "length",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedRouteId: null,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, ROUTE_PANEL_ID, {filter: value}, ROUTE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -25,6 +35,10 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "id" || key === "type" || key === "fromName" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, ROUTE_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, ROUTE_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedRouteId = row.id;
@@ -36,7 +50,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("route-panel", {
+  const record = manager.registerPanel(ROUTE_PANEL_ID, {
     title: "路线管理",
     left: 460,
     top: 116,
