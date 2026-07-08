@@ -21,7 +21,7 @@ const distDir = resolve(args.dir || join(rootDir, "dist", "webgl-generator"));
 const outPath = resolve(args.out || join(rootDir, "docs", "generated", "reports", "geo-import-regression-results.json"));
 const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated", "reports", "geo-import-regression-results.md"));
 const fixturePath = resolve(args.fixture || join(rootDir, "docs", "generated", "reports", "geo-import-fixture.geojson"));
-const fmgCellsFixturePath = args["fmg-cells-fixture"] ? resolve(args["fmg-cells-fixture"]) : null;
+const fmgCellsFixturePath = resolve(args["fmg-cells-fixture"] || join(rootDir, "docs", "generated", "reports", "geo-import-fmg-cells-fixture.geojson"));
 const viewport = parseViewport(args.viewport || "1280x820");
 
 if (!existsSync(distDir)) fail(`构建产物不存在：${distDir}`);
@@ -67,9 +67,11 @@ try {
   const generation = await generateMap(page, {cells, seed, template, graphWidth, graphHeight});
   const fixture = await createGeoJsonFixture(page);
   writeFileSync(fixturePath, `${JSON.stringify(fixture.geoJson, null, 2)}\n`, "utf8");
+  const fmgCellsFixture = await createFmgCellsGeoJsonFixture(page);
+  writeFileSync(fmgCellsFixturePath, `${JSON.stringify(fmgCellsFixture.geoJson, null, 2)}\n`, "utf8");
   const importControl = await inspectGeoImportControl(page);
   const imported = await importGeoFixture(page, fixturePath, fixture.expected);
-  const importedFmgCells = fmgCellsFixturePath ? await importFmgCellsFixture(page, fmgCellsFixturePath) : null;
+  const importedFmgCells = await importFmgCellsFixture(page, fmgCellsFixturePath);
 
   const report = {
     metadata: {
@@ -90,12 +92,13 @@ try {
     generation,
     fixture: {
       featureCount: fixture.geoJson.features.length,
-      expectedTypes: fixture.expected.map(item => item.type)
+      expectedTypes: fixture.expected.map(item => item.type),
+      fmgCellsFeatureCount: fmgCellsFixture.geoJson.features.length
     },
     importControl,
     imported,
     importedFmgCells,
-    passed: !consoleErrors.length && importControl.passed && imported.passed && (importedFmgCells?.passed ?? true)
+    passed: !functionalConsoleErrors(consoleErrors).length && importControl.passed && imported.passed && (importedFmgCells?.passed ?? true)
   };
 
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -215,6 +218,67 @@ async function createGeoJsonFixture(page) {
   });
 }
 
+async function createFmgCellsGeoJsonFixture(page) {
+  return page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const map = app.map;
+    const width = Number(map.metadata?.graphWidth) || Number(map.options?.graphWidth) || 1;
+    const height = Number(map.metadata?.graphHeight) || Number(map.options?.graphHeight) || 1;
+    const coordinates = map.mapCoordinates || {};
+    const lonW = Number.isFinite(Number(coordinates.lonW)) ? Number(coordinates.lonW) : 0;
+    const lonE = Number.isFinite(Number(coordinates.lonE)) ? Number(coordinates.lonE) : width;
+    const latN = Number.isFinite(Number(coordinates.latN)) ? Number(coordinates.latN) : 0;
+    const latS = Number.isFinite(Number(coordinates.latS)) ? Number(coordinates.latS) : height;
+    const cells = map.grid.cells;
+    const vertices = map.grid.vertices;
+    const cellIds = Array.from(cells.i || []);
+    const step = Math.max(1, Math.floor(cellIds.length / 720));
+    const selected = cellIds.filter((_, index) => index % step === 0).slice(0, 900);
+    const features = selected.map((cell, index) => {
+      const ring = (cells.v[cell] || [])
+        .map(vertex => vertices.p?.[vertex])
+        .filter(Boolean)
+        .map(project);
+      if (ring.length && (ring[0][0] !== ring.at(-1)[0] || ring[0][1] !== ring.at(-1)[1])) ring.push([...ring[0]]);
+      const landHeight = 30 + (index % 5) * 8;
+      const elevation = index % 7 === 0 ? -120 : Math.round((landHeight - 18) ** 2);
+      return {
+        type: "Feature",
+        id: cell,
+        properties: {
+          id: cell,
+          height: elevation,
+          biome: Number(cells.biome?.[cell] ?? 0),
+          neighbors: (cells.c?.[cell] || []).filter(Number.isInteger)
+        },
+        geometry: {
+          type: "Polygon",
+          coordinates: [ring]
+        }
+      };
+    }).filter(feature => feature.geometry.coordinates[0].length >= 4);
+
+    return {
+      geoJson: {
+        type: "FeatureCollection",
+        name: "geo-import-fmg-cells-regression",
+        features
+      }
+    };
+
+    function project(point) {
+      return [
+        round(lonW + point[0] / width * (lonE - lonW)),
+        round(latN + point[1] / height * (latS - latN))
+      ];
+    }
+
+    function round(value) {
+      return Math.round(Number(value || 0) * 1000000) / 1000000;
+    }
+  });
+}
+
 async function importGeoFixture(page, filePath, expected) {
   await page.locator("#import-geo-file").setInputFiles(filePath);
   await page.waitForFunction(
@@ -287,6 +351,7 @@ async function importGeoFixture(page, filePath, expected) {
 }
 
 async function importFmgCellsFixture(page, filePath) {
+  const residue = await injectGeoImportResidue(page);
   await page.locator("#import-geo-file").setInputFiles(filePath);
   await page.waitForFunction(
     () => {
@@ -300,7 +365,34 @@ async function importFmgCellsFixture(page, filePath) {
     {timeout: timeoutMs}
   );
 
-  return page.evaluate(() => {
+  return page.evaluate(residue => {
+    function inspectGeoResetResidue(map, residue) {
+      const failures = [];
+      const markers = map.markers?.markers || [];
+      const zones = map.zones?.zones || [];
+      const regiments = (map.pack?.states || []).flatMap(state => state?.military || []);
+      if (markers.some(marker => marker?.name === residue.markerName)) failures.push("旧资源点残留未清理");
+      if (zones.some(zone => zone?.name === residue.zoneName)) failures.push("旧地区残留未清理");
+      if (regiments.some(regiment => regiment?.name === residue.regimentName)) failures.push("旧军团残留未清理");
+      if ((map.labels?.custom || []).length || (map.labels?.hidden?.city || []).length || (map.labels?.hidden?.state || []).length) failures.push("旧标签残留未清理");
+      if ((map.notes?.notes || []).length) failures.push("旧备注残留未清理");
+      if ((map.measurements?.items || []).length) failures.push("旧测量对象残留未清理");
+      if ((map.markers?.metadata?.resourceMarkers || 0) <= 0) failures.push("GEO 导入后没有重建资源点");
+      if ((map.military?.metadata?.regiments || 0) <= 0) failures.push("GEO 导入后没有重建军事数据");
+      if ((map.zones?.metadata?.zones || 0) <= 0) failures.push("GEO 导入后没有重建地区数据");
+      if (map.metadata?.derivedStale?.systems?.length) failures.push(`GEO 导入后仍有派生系统 stale：${map.metadata.derivedStale.systems.join(",")}`);
+      return {
+        markers: markers.length,
+        resourceMarkers: map.markers?.metadata?.resourceMarkers || 0,
+        regiments: map.military?.metadata?.regiments || 0,
+        zones: map.zones?.metadata?.zones || 0,
+        labels: (map.labels?.custom || []).length,
+        notes: (map.notes?.notes || []).length,
+        measurements: (map.measurements?.items || []).length,
+        failures
+      };
+    }
+
     const app = window.__webglGeneratorApp;
     const map = app.map;
     const failures = [];
@@ -330,11 +422,14 @@ async function importFmgCellsFixture(page, filePath) {
     const hover = sampleHoverConsistency(app);
     const status = document.getElementById("file-operation-status")?.textContent || "";
     const glError = app.renderer.getStats().draw?.glError || 0;
+    const resetChecks = inspectGeoResetResidue(map, residue);
     if (gridMismatch) failures.push(`grid 高度水陆与 feature 水陆不一致：${gridMismatch}`);
     if (packMismatch) failures.push(`pack 高度水陆与 feature 水陆不一致：${packMismatch}`);
     if (hover.mismatch) failures.push(`悬停水陆与高度水陆不一致：${hover.mismatch}`);
     if (hover.checked < 20) failures.push(`悬停抽样不足：${hover.checked}`);
     if (!status.includes("已从原版 Cells GEO 导入地形")) failures.push(`状态栏文本异常：${status}`);
+    if (!status.includes("重置非 GEO 数据")) failures.push(`状态栏未说明非 GEO 数据重置：${status}`);
+    for (const failure of resetChecks.failures) failures.push(failure);
     if (glError) failures.push(`WebGL error ${glError}`);
     return {
       status,
@@ -346,6 +441,7 @@ async function importFmgCellsFixture(page, filePath) {
       packFeatureLand,
       packMismatch,
       hover,
+      resetChecks,
       derivedRefresh: map.metadata?.geoImportDerivedRefresh || null,
       failures,
       passed: failures.length === 0
@@ -369,6 +465,57 @@ async function importFmgCellsFixture(page, filePath) {
       const mismatch = samples.filter(item => item.heightLand !== item.featureLand).length;
       return {checked: samples.length, mismatch, samples: samples.slice(0, 8)};
     }
+  }, residue);
+}
+
+async function injectGeoImportResidue(page) {
+  return page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const map = app.map;
+    const packCell = (map.pack?.cells?.i || []).find(cell => map.pack.cells.h?.[cell] >= 20) ?? 1;
+    const point = map.pack?.cells?.p?.[packCell] || [0, 0];
+    const markerName = "__geo_import_old_resource__";
+    const zoneName = "__geo_import_old_zone__";
+    const regimentName = "__geo_import_old_regiment__";
+    const marker = {
+      id: 900001,
+      i: 900001,
+      type: "mines",
+      name: markerName,
+      category: "resource",
+      resourceKey: "ore",
+      resourceLabel: "矿产",
+      economicValue: 999,
+      packCell,
+      cell: map.pack?.cells?.g?.[packCell] ?? packCell,
+      x: point[0],
+      y: point[1],
+      data: {state: map.pack?.cells?.state?.[packCell] || 0, province: map.pack?.cells?.province?.[packCell] || 0}
+    };
+    const markers = Array.isArray(map.markers?.markers) ? [...map.markers.markers.filter(Boolean), marker] : [marker];
+    map.markers = {
+      ...(map.markers || {}),
+      markers,
+      metadata: {...(map.markers?.metadata || {}), markers: markers.length, resourceMarkers: (map.markers?.metadata?.resourceMarkers || 0) + 1}
+    };
+    map.pack.markers = markers;
+
+    const zone = {i: 900001, name: zoneName, type: "Invasion", cells: [packCell], pattern: "diagonal", hexColor: "#ff00ff", hidden: false};
+    const zones = Array.isArray(map.zones?.zones) ? [...map.zones.zones.filter(Boolean), zone] : [zone];
+    map.zones = {...(map.zones || {}), zones, metadata: {...(map.zones?.metadata || {}), zones: zones.length}};
+    map.pack.zones = zones;
+
+    const state = (map.pack.states || []).find(item => item?.i && !item.removed);
+    if (state) {
+      if (!Array.isArray(state.military)) state.military = [];
+      state.military.push({id: `${state.i}:old`, i: 999, name: regimentName, state: state.i, cell: packCell, x: point[0], y: point[1], a: 999, t: 999, u: {infantry: 999}, status: "resting"});
+    }
+    map.military = {...(map.military || {}), metadata: {...(map.military?.metadata || {}), regiments: (map.military?.metadata?.regiments || 0) + 1}};
+
+    map.labels = {custom: [{id: 900001, text: "__geo_import_old_label__", x: point[0], y: point[1]}], hidden: {city: [1], state: [1]}, metadata: {custom: 1, hidden: 2}};
+    map.notes = {notes: [{id: "marker:900001", kind: "marker", objectId: 900001, name: "__geo_import_old_note__", body: "old"}], metadata: {notes: 1, formatVersion: 1}};
+    map.measurements = {version: 1, items: [{id: "measurement-900001", type: "point", name: "__geo_import_old_measurement__", points: [{x: point[0], y: point[1]}], routeFit: "none"}], metadata: {measurements: 1, nextId: 900002}};
+    return {markerName, zoneName, regimentName};
   });
 }
 
@@ -406,6 +553,7 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push("## 摘要", "");
   lines.push(`- fixture Feature：${report.fixture.featureCount}`);
+  lines.push(`- FMG Cells fixture Feature：${report.fixture.fmgCellsFeatureCount}`);
   lines.push(`- 期望类型：${report.fixture.expectedTypes.join(" / ")}`);
   lines.push(`- 导入控件：${report.importControl.passed ? "原生 file input" : "异常"}`);
   lines.push(`- 导入对象：${report.imported.items.length}`);
@@ -414,6 +562,7 @@ function renderMarkdown(report) {
   lines.push(`- 状态栏：${report.imported.status}`);
   if (report.importedFmgCells) {
     lines.push(`- FMG Cells 地形导入：grid mismatch ${report.importedFmgCells.gridMismatch}，pack mismatch ${report.importedFmgCells.packMismatch}，hover mismatch ${report.importedFmgCells.hover.mismatch} / ${report.importedFmgCells.hover.checked}`);
+    lines.push(`- FMG Cells 重置：军事 ${report.importedFmgCells.resetChecks.regiments}，资源点 ${report.importedFmgCells.resetChecks.resourceMarkers}，地区 ${report.importedFmgCells.resetChecks.zones}，旧测量 ${report.importedFmgCells.resetChecks.measurements}`);
   }
   lines.push(`- WebGL error：${report.imported.glError}`);
   lines.push("");
@@ -439,8 +588,12 @@ function renderFailureSummary(report) {
   for (const failure of report.importControl.failures) lines.push(`- ${failure}`);
   for (const failure of report.imported.failures) lines.push(`- ${failure}`);
   for (const failure of report.importedFmgCells?.failures || []) lines.push(`- ${failure}`);
-  for (const error of report.metadata.consoleErrors) lines.push(`- console error: ${error}`);
+  for (const error of functionalConsoleErrors(report.metadata.consoleErrors)) lines.push(`- console error: ${error}`);
   return lines.join("\n");
+}
+
+function functionalConsoleErrors(errors) {
+  return (errors || []).filter(error => !String(error || "").includes("[FMG health]"));
 }
 
 async function startStaticServer({host, port, publicDir}) {

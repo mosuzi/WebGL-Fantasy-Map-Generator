@@ -3039,7 +3039,8 @@ async function importGeoData(state, documentRef, file) {
       }
       refreshAfterEdit(state, state.editHistory.execute(terrainCommand, {map: state.map}));
       const summary = terrainCommand.getSummary?.() || {};
-      setFileOperationStatus(documentRef, `已从原版 Cells GEO 导入地形：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells，可撤销。`);
+      const reset = state.map.metadata?.geoImportDerivedRefresh || {};
+      setFileOperationStatus(documentRef, `已从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}，可撤销。`);
       return summary;
     }
     const payload = parseGeoJsonMeasurements(text, state.map, {limit: 600});

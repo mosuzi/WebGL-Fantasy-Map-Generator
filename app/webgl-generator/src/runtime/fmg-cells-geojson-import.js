@@ -1,8 +1,18 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
+import {buildDiplomacy} from "../generator/diplomacy.js";
+import {buildEconomy} from "../generator/economy.js";
 import {extractFeatures} from "../generator/features.js";
-import {refreshPackFeatures} from "../generator/pack.js";
+import {createGenerationSummary} from "../generator/index.js";
+import {buildMarkers} from "../generator/markers.js";
+import {buildMilitary} from "../generator/military.js";
+import {buildPack} from "../generator/pack.js";
+import {buildPolitics} from "../generator/politics.js";
 import {createRandom} from "../generator/random.js";
+import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
+import {buildSettlements, finalizeSettlements} from "../generator/settlements.js";
+import {buildSociety, finalizeSocietyReligions} from "../generator/society.js";
+import {buildZones} from "../generator/zones.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 
 const SPATIAL_BUCKETS = 64;
@@ -11,23 +21,25 @@ export function createImportFmgCellsHeightCommand(text, map, {label = "导入 FM
   const source = parseFmgCellsGeoJson(text, map);
   if (!source) return null;
   const changes = sampleSourceHeightsToGrid(source.samples, map);
+  let previousDerived = null;
   return {
     label: `${label} ${changes.length} cells`,
     effects: {
       ...EDIT_REFRESH_PRESETS.HEIGHT_SURFACE_ONLY,
-      derived: ["terrain-caches", "height-field", "cell-colors", "line-layers", "height-stats", "panels"],
-      affected: [{kind: "grid-cells", id: changes.length}]
+      derived: ["terrain-caches", "height-field", "cell-colors", "line-layers", "height-stats", "river-mesh", "route-mesh", "point-layers", "labels", "political-boundaries", "object-panels", "object-index", "panels"],
+      affected: [{kind: "grid-cells", id: changes.length}, {kind: "derived-map-data", id: "geo-import-reset"}]
     },
     apply(context) {
+      previousDerived ??= captureGeoImportDerivedSnapshot(context.map);
       applyHeightChanges(context.map, changes, "after");
-      refreshImportedTerrainDerivatives(context.map);
+      refreshImportedTerrainDerivatives(context.map, source);
     },
     revert(context) {
       applyHeightChanges(context.map, changes, "before");
-      refreshImportedTerrainDerivatives(context.map);
+      restoreGeoImportDerivedSnapshot(context.map, previousDerived);
     },
     isNoop() {
-      return changes.length === 0;
+      return false;
     },
     getSummary() {
       return {
@@ -223,41 +235,112 @@ function applyHeightChanges(map, changes, key) {
   }
 }
 
-function refreshImportedTerrainDerivatives(map) {
+function refreshImportedTerrainDerivatives(map, source) {
   if (!map?.grid?.cells?.h) return;
-  map.features = extractFeatures(map.grid);
-
-  if (map.pack?.cells) {
-    syncPackHeightsFromGrid(map);
-    refreshPackFeatures(map.pack, map.grid);
-  }
-
   const options = map.options || {};
-  map.climate = buildClimate(map.grid, map.features, options, createRandom(options.seed || map.metadata?.seed || "geo-import"));
+  const seed = options.seed || map.metadata?.seed || "geo-import";
+  const stageOptions = {...options, ...(map.namebases ? {namebases: map.namebases} : {})};
+  const random = createRandom(seed);
+
+  map.features = extractFeatures(map.grid);
+  map.climate = buildClimate(map.grid, map.features, options, createRandom(seed));
+  map.mapCoordinates = map.climate.mapCoordinates;
+  map.pack = buildPack(map.grid, map.features);
+  map.rivers = buildRivers(map.grid, map.features, map.pack, stageOptions);
+
   if (map.pack?.cells) {
     const biomes = defineBiomesAndPopulation(map.grid, map.pack, options);
     map.climate.biomes = biomes.biomes;
     map.climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
   }
 
+  map.society = buildSociety(map.grid, map.features, map.climate, map.rivers, random, map.pack, stageOptions);
+  renameHydronymsByCulture(map.rivers, map.pack, stageOptions);
+  map.settlements = buildSettlements(map.grid, map.features, null, map.rivers, random, map.pack, stageOptions);
+  map.politics = buildPolitics(map.grid, map.features, map.society, map.rivers, random, stageOptions, map.pack);
+  finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...stageOptions, pruneNeutralSettlements: true});
+  map.markers = buildMarkers(map.grid, map.features, map.politics, map.rivers, map.pack, options);
+  map.pack.markers = map.markers.markers;
+  map.economy = buildEconomy(map.pack, options);
+  finalizeSocietyReligions(map.grid, map.society, map.pack, random, map.settlements, options);
+  map.diplomacy = buildDiplomacy(map.pack, map.society, options);
+  map.military = buildMilitary(map.pack, options);
+  map.zones = buildZones(map.pack, options);
+  resetMapUserObjectStores(map);
+  refreshImportedMapSummary(map);
+  markImportedDerivedSystemsFresh(map);
+
   if (map.metadata) {
     map.metadata.featureCount = map.features.metadata?.featureCount ?? map.metadata.featureCount;
     map.metadata.packCells = map.pack?.metadata?.cells ?? map.metadata.packCells;
     map.metadata.geoImportDerivedRefresh = {
+      sourceCells: source?.sourceCells || 0,
+      sourceLandCells: source?.sourceLandCells || 0,
+      sourceWaterCells: source?.sourceWaterCells || 0,
       featureCount: map.features.metadata?.featureCount || 0,
       packFeatureCount: map.pack?.metadata?.packFeatureCount || 0,
+      markers: map.markers?.metadata?.markers || 0,
+      resourceMarkers: map.markers?.metadata?.resourceMarkers || 0,
+      militaryRegiments: map.military?.metadata?.regiments || 0,
+      zones: map.zones?.metadata?.zones || 0,
+      reset: ["pack", "rivers", "society", "settlements", "politics", "markers", "economy", "diplomacy", "military", "zones", "labels", "notes", "measurements"],
       refreshedAt: new Date().toISOString()
     };
   }
-  if (map.summary) {
-    map.summary.featureCount = map.features.metadata?.featureCount ?? map.summary.featureCount;
-    map.summary.oceanFeatures = map.features.metadata?.oceanFeatures ?? map.summary.oceanFeatures;
-    map.summary.landFeatures = map.features.metadata?.landFeatures ?? map.summary.landFeatures;
-    map.summary.lakeFeatures = map.features.metadata?.lakeFeatures ?? map.summary.lakeFeatures;
-    map.summary.packCells = map.pack?.metadata?.cells ?? map.summary.packCells;
-  }
-  markDerivedSystemsStale(map);
   delete map.__heightEditorPackCellsByGrid;
+}
+
+function refreshImportedMapSummary(map) {
+  map.summary = createGenerationSummary(map.options, map.grid, map.features, map.climate, map.society, map.politics, map.settlements, map.markers, map.pack, map.rivers, map.layers, map.military, map.zones, map.economy, map.diplomacy);
+  if (map.metadata) map.metadata.checksum = map.summary.checksum;
+}
+
+function resetMapUserObjectStores(map) {
+  map.labels = {
+    custom: [],
+    hidden: {city: [], state: []},
+    metadata: {custom: 0, hidden: 0}
+  };
+  map.notes = {
+    notes: [],
+    metadata: {notes: 0, formatVersion: 1}
+  };
+  map.measurements = {
+    version: 1,
+    items: [],
+    metadata: {measurements: 0, nextId: 1}
+  };
+}
+
+function markImportedDerivedSystemsFresh(map) {
+  if (map?.metadata?.derivedStale) delete map.metadata.derivedStale;
+  for (const section of [map?.military, map?.zones, map?.markers, map?.economy, map?.diplomacy]) {
+    if (section?.metadata) section.metadata.stale = false;
+  }
+}
+
+function captureGeoImportDerivedSnapshot(map) {
+  const keys = ["features", "pack", "climate", "mapCoordinates", "society", "politics", "settlements", "economy", "diplomacy", "military", "markers", "zones", "rivers", "labels", "notes", "measurements", "summary", "generationLog", "status"];
+  const snapshot = {metadata: cloneMapValue(map?.metadata)};
+  for (const key of keys) snapshot[key] = cloneMapValue(map?.[key]);
+  return snapshot;
+}
+
+function restoreGeoImportDerivedSnapshot(map, snapshot) {
+  if (!map || !snapshot) return;
+  const keys = ["features", "pack", "climate", "mapCoordinates", "society", "politics", "settlements", "economy", "diplomacy", "military", "markers", "zones", "rivers", "labels", "notes", "measurements", "summary", "generationLog", "status"];
+  map.metadata = cloneMapValue(snapshot.metadata);
+  for (const key of keys) {
+    if (snapshot[key] === undefined) delete map[key];
+    else map[key] = cloneMapValue(snapshot[key]);
+  }
+  delete map.__heightEditorPackCellsByGrid;
+}
+
+function cloneMapValue(value) {
+  if (value === undefined) return undefined;
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
 }
 
 function syncPackHeightsFromGrid(map) {

@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：GEO Cells 导入后重置并重建非 GEO 数据
+
+用户要求明确 GEO / GeoJSON 导入后，除了 GEO 文件中明确包含并映射进来的数据外，地图上的其它旧数据都必须重置；已知问题包括军事无法生成、资源点和部分标记没有重置。
+
+修正：
+
+- FMG Cells GEO 导入不再只写入高度并标记派生系统 stale，而是把导入视为新底图来源。
+- 导入高度后会重建 `features / pack / rivers / society / settlements / politics / markers / economy / diplomacy / military / zones`。
+- 导入后清空旧 `labels / notes / measurements`，避免旧标签、备注和测量对象挂在新底图上。
+- 撤销仍可恢复导入前的旧派生对象和旧用户对象。
+- 导入状态栏补充“重置非 GEO 数据”，并显示新军事、资源点和地区数量。
+- `tools/webgl-generator-geo-import-regression.mjs` 默认生成 FMG Cells GEO fixture，并在导入前注入旧资源点、旧地区、旧军团、旧标签、旧备注和旧测量对象，导入后断言这些残留已清理，同时确认新军事、资源点和地区已重建。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\fmg-cells-geojson-import.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check tools\webgl-generator-geo-import-regression.mjs` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `pnpm run regress:geo -- --browser-channel chrome` 通过：普通 GEO 测量导入 3 个对象；FMG Cells GEO 导入后 `grid mismatch = 0`、`pack mismatch = 0`、`hover mismatch = 0 / 80`、军事 `206`、资源点 `14`、地区 `3`、旧测量 `0`、`glError = 0`。
+- 回归报告仍记录一次 GEO 重建期间的 health `main-thread-long-task`，本轮作为性能风险记录，不作为功能失败；后续若要优化导入性能，应单独拆成导入重建分帧任务。
+
 ## 2026-07-08：备份旧计划并重置当前执行队列
 
 用户要求把既有计划全部备份，并把当前计划重置为三个最新问题：
