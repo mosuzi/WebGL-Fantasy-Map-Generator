@@ -12,9 +12,11 @@
     :rows="visibleRows"
     :selected-id="state.selectedLabelKey"
     row-id-key="key"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的标签"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />
@@ -51,7 +53,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -105,6 +107,7 @@ const rows = computed(() => {
 });
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const renameRequestKey = ref(null);
 const labelActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "note", label: "编辑备注", icon: "☰"}
@@ -135,8 +138,13 @@ const detailRows = computed(() => selected.value ? [
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
 
-watch(() => selected.value?.key, () => {
+watch(() => selected.value?.key, key => {
   activeAction.value = null;
+  if (renameRequestKey.value !== key) return;
+  renameRequestKey.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 });
 
 function handleLabelManagementAction(key) {
@@ -147,6 +155,16 @@ function handleLabelManagementAction(key) {
   if (!selected.value) return;
   if (key === "restore") callbacks.onRestore?.(selected.value);
   if (key === "delete") callbacks.onDelete?.(selected.value);
+}
+
+function openRenameEditor(row) {
+  renameRequestKey.value = row?.key ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (selected.value?.key !== row?.key) return;
+    renameRequestKey.value = null;
+    activeAction.value = "rename";
+  });
 }
 
 function labelRows(map) {
