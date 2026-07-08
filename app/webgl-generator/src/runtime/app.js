@@ -11,6 +11,7 @@ import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
+import {createBiomePanel} from "../ui/panels/biome-panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
@@ -206,6 +207,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
+  state.panels.biome = createBiomePanel(documentRef, panelManager);
   let heightPanel = null;
   let statePanel = null;
   let governmentPanel = null;
@@ -1716,6 +1718,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       state.panels.city.open(state.map, state.selection, state.editHistory.getStats());
     },
+    onOpenBiomePanel: () => {
+      state.panels.biome.open(state.map, state.editHistory.getStats());
+    },
     onOpenCulturePanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.CULTURE) {
         state.panels.culture.setSelectedCultureId(state.selection.object.id);
@@ -2230,6 +2235,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateGovernmentPanel(state);
   updateProvincePanel(state);
   updateCityPanel(state);
+  updateBiomePanel(state);
   updateCulturePanel(state);
   updateReligionPanel(state);
   updateDiplomacyPanel(state);
@@ -2280,6 +2286,7 @@ function openPersistedPanel(state, panelId) {
     "government-panel": () => state.panels.government?.open(map, selection, history),
     "province-panel": () => state.panels.province?.open(map, selection, history),
     "city-panel": () => state.panels.city?.open(map, selection, history),
+    "biome-panel": () => state.panels.biome?.open(map, history),
     "culture-panel": () => state.panels.culture?.open(map, selection, history),
     "religion-panel": () => state.panels.religion?.open(map, selection, history),
     "diplomacy-panel": () => state.panels.diplomacy?.open(map, selection, history),
@@ -5278,6 +5285,11 @@ function updateCityPanel(state) {
   state.panels.city?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
+function updateBiomePanel(state) {
+  if (!isPanelOpen(state.panels.biome)) return;
+  state.panels.biome?.update(state.map, state.editHistory.getStats());
+}
+
 function updateCulturePanel(state) {
   if (!isPanelOpen(state.panels.culture)) return;
   state.panels.culture?.update(state.map, state.selection, state.editHistory.getStats());
@@ -5322,6 +5334,7 @@ function updateAllObjectPanels(state) {
   updateStatePanel(state);
   updateProvincePanel(state);
   updateCityPanel(state);
+  updateBiomePanel(state);
   updateCulturePanel(state);
   updateReligionPanel(state);
   updateDiplomacyPanel(state);

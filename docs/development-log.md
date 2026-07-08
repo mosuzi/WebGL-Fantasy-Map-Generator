@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：生物群系统计面板第一刀
+
+本步补齐第三批中的生物群系统计入口，先建立只读统计面板，不进入局部编辑。
+
+修正：
+
+- 新增 `biome-panel.js` 和 `BiomePanel.vue`，按 `map.pack.cells.biome / s / pop` 汇总各生物群系的 cells、面积、适居度、人口和城市覆盖。
+- 控制面板“管理”tab 新增“生物群系”入口，并在运行时注册 `biome-panel` 的打开、持久化恢复和面板刷新。
+- 生物群系统计支持筛选、排序和选中详情；本步不提供定位、高亮或刷子编辑，避免把统计面板误作对象编辑器。
+- 同步当前计划和专题清单状态，标记生物群系面板第一刀完成，人口统计面板仍待做。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\biome-panel.js`、`node --check app\webgl-generator\src\ui\panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：管理页存在“生物群系”入口，面板可打开，表格 13 行，详情包含 `pack cells`；路线面板存在“重算道路”操作，点击后状态显示“道路已按当前国家、城镇、港口和陆海约束重算（扰动 #1）：589 -> 589”，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-08：路线面板接入道路重算
 
 本步把已有受约束道路重算能力暴露到路线管理面板，减少用户在路线清单和控制面板之间切换。
@@ -16,9 +34,9 @@
 验证：
 
 - `node --check app\webgl-generator\src\ui\panels\route-panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
-- `RoutePanel.vue` 随后续本批综合构建一起验证。
 - `git diff --check` 通过。
-- 综合构建和浏览器烟测按本轮“累积几步后统一执行”节奏，待后续小步完成后一起执行。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：路线面板存在“重算道路”操作，点击后状态显示“道路已按当前国家、城镇、港口和陆海约束重算（扰动 #1）：589 -> 589”，`glError = 0`，console/page error 为 `0`。
 
 ## 2026-07-08：路线面板删除路线第一刀
 

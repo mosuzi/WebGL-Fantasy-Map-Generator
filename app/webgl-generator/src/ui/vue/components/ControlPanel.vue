@@ -582,6 +582,7 @@ const actions = Object.freeze([
   {id: "open-government-panel", label: "政体管理"},
   {id: "open-province-panel", label: "省份管理"},
   {id: "open-city-panel", label: "城市管理"},
+  {id: "open-biome-panel", label: "生物群系"},
   {id: "open-culture-panel", label: "文化管理"},
   {id: "open-religion-panel", label: "宗教管理"},
   {id: "open-diplomacy-panel", label: "外交管理"},

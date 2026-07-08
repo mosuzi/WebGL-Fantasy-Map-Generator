@@ -1,0 +1,196 @@
+<template>
+  <UiMetricGrid :metrics="summaryMetrics" class-name="biome-panel-summary" />
+
+  <div class="biome-panel-controls">
+    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id" @update:model-value="callbacks.onFilter" />
+  </div>
+
+  <UiSortBar class-name="biome-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
+
+  <UiObjectTable
+    :columns="columns"
+    :rows="visibleRows"
+    :selected-id="state.selectedBiomeId"
+    :show-locate-action="false"
+    empty-text="没有匹配的生物群系"
+    @select="callbacks.onSelect"
+  />
+
+  <UiDetailGrid class-name="biome-panel-details" empty-text="未选中生物群系" :rows="detailRows" />
+</template>
+
+<script setup>
+import {computed} from "vue";
+import UiDetailGrid from "./base/UiDetailGrid.vue";
+import UiFilterInput from "./base/UiFilterInput.vue";
+import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSortBar from "./base/UiSortBar.vue";
+import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
+import {findByObjectId} from "../../object-id.js";
+import {compareRowsByKey} from "../../sort-utils.js";
+import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+
+defineOptions({
+  name: "BiomePanel"
+});
+
+const props = defineProps({
+  state: {
+    type: Object,
+    required: true
+  },
+  callbacks: {
+    type: Object,
+    default: () => ({})
+  }
+});
+
+const sortOptions = Object.freeze([
+  {key: "cells", label: "cells"},
+  {key: "area", label: "面积"},
+  {key: "population", label: "人口"},
+  {key: "suitabilityAvg", label: "适居"},
+  {key: "cities", label: "城市"},
+  {key: "habitability", label: "基准"},
+  {key: "id", label: "ID"}
+]);
+
+const columns = Object.freeze([
+  {key: "id", label: "ID", align: "right"},
+  {key: "name", label: "名称"},
+  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
+  {key: "area", label: "面积", align: "right", format: value => formatAreaValue(value)},
+  {key: "suitabilityAvg", label: "适居", align: "right", format: value => formatNumber(value)},
+  {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
+]);
+
+const unitPreferences = useUnitPreferences();
+const metrics = computed(() => {
+  props.state.version;
+  return buildBiomeMetrics(props.state.map);
+});
+const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBiomeId));
+
+const summaryMetrics = computed(() => [
+  {label: "群系", value: formatNumber(metrics.value.total)},
+  {label: "陆地 cells", value: formatNumber(metrics.value.landCells)},
+  {label: "适居 cells", value: formatNumber(metrics.value.positiveSuitabilityCells)},
+  {label: "人口 cells", value: formatNumber(metrics.value.positivePopulationCells)},
+  {label: "总人口", value: formatPopulationValue(metrics.value.population)},
+  {label: "最高适居", value: formatNumber(metrics.value.maxSuitability)}
+]);
+
+const detailRows = computed(() => selected.value ? [
+  {label: "名称", value: selected.value.name},
+  {label: "颜色", value: selected.value.colorText},
+  {label: "基准适居", value: formatNumber(selected.value.habitability)},
+  {label: "pack cells", value: formatNumber(selected.value.cells)},
+  {label: "陆地 cells", value: formatNumber(selected.value.landCells)},
+  {label: "面积", value: formatAreaValue(selected.value.area)},
+  {label: "平均适居", value: formatNumber(selected.value.suitabilityAvg)},
+  {label: "最高适居", value: formatNumber(selected.value.suitabilityMax)},
+  {label: "人口", value: formatPopulationValue(selected.value.population)},
+  {label: "最高人口", value: formatPopulationValue(selected.value.populationMax)},
+  {label: "城市", value: formatNumber(selected.value.cities)}
+] : []);
+
+function buildBiomeMetrics(map) {
+  const biomes = map?.climate?.biomes || [];
+  const rows = biomes.map(biome => createBiomeRow(map, biome));
+  const metadata = map?.climate?.metadata || {};
+  return {
+    rows,
+    total: rows.length,
+    landCells: rows.reduce((sum, row) => sum + row.landCells, 0),
+    positiveSuitabilityCells: metadata.positiveSuitabilityCells ?? rows.reduce((sum, row) => sum + row.positiveSuitabilityCells, 0),
+    positivePopulationCells: metadata.positivePopulationCells ?? rows.reduce((sum, row) => sum + row.positivePopulationCells, 0),
+    population: rows.reduce((sum, row) => sum + row.population, 0),
+    maxSuitability: metadata.maxSuitability ?? rows.reduce((max, row) => Math.max(max, row.suitabilityMax), 0)
+  };
+}
+
+function createBiomeRow(map, biome) {
+  const id = biome.id;
+  const packCells = map?.pack?.cells;
+  const cellIds = packCells?.i || [];
+  let cells = 0;
+  let landCells = 0;
+  let area = 0;
+  let suitability = 0;
+  let suitabilityMax = 0;
+  let positiveSuitabilityCells = 0;
+  let population = 0;
+  let populationMax = 0;
+  let positivePopulationCells = 0;
+
+  for (const cell of cellIds) {
+    if (packCells.biome?.[cell] !== id) continue;
+    const cellSuitability = Number(packCells.s?.[cell] || 0);
+    const cellPopulation = Number(packCells.pop?.[cell] || 0);
+    cells++;
+    area += Number(packCells.area?.[cell] || 0);
+    suitability += cellSuitability;
+    suitabilityMax = Math.max(suitabilityMax, cellSuitability);
+    population += cellPopulation;
+    populationMax = Math.max(populationMax, cellPopulation);
+    if ((packCells.h?.[cell] || 0) >= 20) landCells++;
+    if (cellSuitability > 0) positiveSuitabilityCells++;
+    if (cellPopulation > 0) positivePopulationCells++;
+  }
+
+  return {
+    id,
+    name: biome.name || `Biome #${id}`,
+    colorText: formatBiomeColor(biome.color),
+    habitability: Number(biome.habitability || 0),
+    cells,
+    landCells,
+    area,
+    suitabilityAvg: cells ? Math.round((suitability / cells) * 10) / 10 : 0,
+    suitabilityMax,
+    positiveSuitabilityCells,
+    population,
+    populationMax,
+    positivePopulationCells,
+    cities: countCitiesInBiome(map, id)
+  };
+}
+
+function countCitiesInBiome(map, biomeId) {
+  const packCells = map?.pack?.cells;
+  if (!packCells?.biome) return 0;
+  return (map?.settlements?.cities || []).filter(city => packCells.biome?.[city.cell] === biomeId).length;
+}
+
+function filterRows(sourceRows, filter) {
+  const query = filter.trim().toLowerCase();
+  if (!query) return sourceRows;
+  return sourceRows.filter(row =>
+    String(row.id).includes(query)
+    || row.name.toLowerCase().includes(query)
+  );
+}
+
+function sortRows(sourceRows, key, direction) {
+  return [...sourceRows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function formatBiomeColor(color) {
+  if (!Array.isArray(color)) return "未定义";
+  return color.slice(0, 4).map(value => Number(value).toFixed(2)).join(", ");
+}
+
+function formatAreaValue(value) {
+  return formatArea(value, unitPreferences.value);
+}
+
+function formatPopulationValue(value) {
+  return formatPopulation(value, unitPreferences.value);
+}
+
+function formatNumber(value) {
+  return formatDisplayNumber(value, unitPreferences.value);
+}
+</script>
