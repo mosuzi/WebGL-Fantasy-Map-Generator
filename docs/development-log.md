@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：恢复浮动面板打开状态
+
+用户要求审视项目内计划后继续执行，并要求每执行一步提交一次、执行几步后统一烟测和浏览器验证。当前三项最新问题已经完成，因此本步按接手说明和编辑器清单，进入正式版编辑器基础设施的小步推进。
+
+修正：
+
+- `PanelManager` 在原有位置和宽度持久化基础上新增 `open` 字段，面板打开和关闭时同步写入浏览器本地状态。
+- 运行时在地图接入、renderer 加载和各面板数据刷新之后，读取保存为打开的面板 id，并通过各面板已有 `open()` 方法恢复，避免绕过 `map / selection / history` 刷新路径。
+- 对象详情面板设置 `persistOpen: false`，避免刷新后在没有当前 selection 的情况下恢复空详情面板。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-manager.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\object-details-panel.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check`、`pnpm run build:app` 和浏览器烟测将在本轮几步完成后统一执行。
+
 ## 2026-07-08：统一详情空态样式并优化地区未选中提示
 
 用户指出：地区管理“未选中地区”处的文字过大，上下也没有间隙，需要优化。

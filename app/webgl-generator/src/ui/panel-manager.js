@@ -54,6 +54,7 @@ export class PanelManager {
       panel,
       body,
       onClose: options.onClose || (() => {}),
+      persistOpen: options.persistOpen !== false,
       historyActions,
       headerButtons: {undo, redo},
       headerRefreshTimer: 0,
@@ -99,6 +100,7 @@ export class PanelManager {
     this.constrain(record.panel);
     this.activate(id);
     this.startHeaderRefresh(record);
+    this.savePanelState(id);
   }
 
   close(id) {
@@ -106,6 +108,7 @@ export class PanelManager {
     if (!record) return;
     record.panel.classList.add("hidden");
     this.stopHeaderRefresh(record);
+    this.savePanelState(id);
     record.onClose();
   }
 
@@ -154,6 +157,7 @@ export class PanelManager {
       top: Math.round(Number.parseFloat(record.panel.style.top) || 0),
       width: Math.round(record.panel.offsetWidth || Number.parseFloat(record.panel.style.width) || 320)
     };
+    if (record.persistOpen) state.open = !record.panel.classList.contains("hidden");
     try {
       this.host.ownerDocument.defaultView.localStorage.setItem(this.storagePrefix + id, JSON.stringify(state));
     } catch {
@@ -171,6 +175,15 @@ export class PanelManager {
     } catch {
       return null;
     }
+  }
+
+  getSavedOpenPanelIds() {
+    const panelIds = [];
+    for (const [id, record] of this.panels) {
+      if (!record.persistOpen) continue;
+      if (this.readPanelState(id)?.open === true) panelIds.push(id);
+    }
+    return panelIds;
   }
 }
 

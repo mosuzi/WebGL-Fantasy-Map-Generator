@@ -195,6 +195,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     lastEditRefresh: null,
     selectionStore: null,
     renderer: null,
+    panelManager,
     pendingGenerateId: 0,
     heightmapImportId: 0,
     healthMonitor,
@@ -2224,6 +2225,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateLakePanel(state);
   updateMeasurementPanel(state);
+  restorePersistedPanels(state);
   updateEditingInteractionLock(state, documentRef);
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
@@ -2240,6 +2242,44 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateGenerationLoading(documentRef, false);
   showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);
+}
+
+function restorePersistedPanels(state) {
+  const panelManager = state.panelManager;
+  if (!panelManager || typeof panelManager.getSavedOpenPanelIds !== "function") return;
+  for (const panelId of panelManager.getSavedOpenPanelIds()) {
+    openPersistedPanel(state, panelId);
+  }
+}
+
+function openPersistedPanel(state, panelId) {
+  const history = state.editHistory.getStats();
+  const selection = state.selection;
+  const map = state.map;
+  const openers = {
+    "generation-panel": () => state.panels.generation?.open(),
+    "development-panel": () => state.panels.development?.open(),
+    "height-panel": () => state.panels.height?.open(history),
+    "state-panel": () => state.panels.state?.open(map, history),
+    "government-panel": () => state.panels.government?.open(map, selection, history),
+    "province-panel": () => state.panels.province?.open(map, selection, history),
+    "city-panel": () => state.panels.city?.open(map, selection, history),
+    "culture-panel": () => state.panels.culture?.open(map, selection, history),
+    "religion-panel": () => state.panels.religion?.open(map, selection, history),
+    "diplomacy-panel": () => state.panels.diplomacy?.open(map, selection, history),
+    "economy-panel": () => state.panels.economy?.open(map, selection, history),
+    "military-panel": () => state.panels.military?.open(map, selection, history),
+    "route-panel": () => state.panels.route?.open(map, selection, history),
+    "river-panel": () => state.panels.river?.open(map, selection, history, state.editingObject),
+    "lake-panel": () => state.panels.lake?.open(map, selection, history),
+    "zone-panel": () => state.panels.zone?.open(map, selection, history),
+    "marker-panel": () => state.panels.marker?.open(map, selection, history),
+    "label-naming-panel": () => state.panels.labelNaming?.open(map, selection, history),
+    "notes-panel": () => state.panels.notes?.open(map, selection, history),
+    "measurement-panel": () => state.panels.measurement?.open(map, history),
+    "namebase-panel": () => state.panels.namebase?.open(map, {history})
+  };
+  openers[panelId]?.();
 }
 
 function scheduleLazyPanelsAfterMapReady(state, documentRef) {
