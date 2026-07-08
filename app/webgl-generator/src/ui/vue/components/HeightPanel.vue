@@ -475,6 +475,7 @@ const summaryMetrics = computed(() => {
     {label: "影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
     {label: "高度", value: formatHeightRange(props.state.lastHeight)},
     {label: "均变", value: formatSignedHeightDelta(props.state.lastDelta)},
+    {label: "待派生", value: formatDerivedStaleSystems(props.state.derivedStaleSystems)},
     {label: "历史", value: props.state.history ? `undo ${props.state.history.undo} / redo ${props.state.history.redo}` : "none"},
     {label: "当前均高", value: current ? formatHeight(current.average, unitPreferences.value) : "-"},
     {label: "陆地", value: current ? formatPercent(current.land / current.total) : "-"},
@@ -1743,5 +1744,10 @@ function formatSignedHeightDelta(value) {
   if (!Number.isFinite(numeric)) return value;
   const formatted = formatHeight(Math.abs(numeric), unitPreferences.value, {abs: true});
   return numeric > 0 ? `+${formatted}` : numeric < 0 ? `-${formatted}` : formatted;
+}
+
+function formatDerivedStaleSystems(systems) {
+  if (!Array.isArray(systems) || !systems.length) return "无";
+  return `${systems.length} 项`;
 }
 </script>

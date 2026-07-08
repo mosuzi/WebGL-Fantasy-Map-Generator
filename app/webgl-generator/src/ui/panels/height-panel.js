@@ -15,6 +15,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     graphHeight: 960,
     currentHeightStats: null,
     currentHeightPreview: null,
+    derivedStaleSystems: [],
     history: null
   });
   const panelCallbacks = {
@@ -68,6 +69,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       graphHeight = panelState.graphHeight,
       currentHeightStats = panelState.currentHeightStats,
       currentHeightPreview = panelState.currentHeightPreview,
+      derivedStaleSystems = panelState.derivedStaleSystems,
       history = panelState.history
     } = {}) {
       panelState.lastAffected = lastAffected;
@@ -77,6 +79,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.graphHeight = graphHeight;
       panelState.currentHeightStats = currentHeightStats;
       panelState.currentHeightPreview = currentHeightPreview;
+      panelState.derivedStaleSystems = Array.isArray(derivedStaleSystems) ? [...derivedStaleSystems] : [];
       panelState.history = history;
     },
     getBrush() {

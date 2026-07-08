@@ -5226,8 +5226,13 @@ function updateHeightPanel(state) {
     graphHeight: state.options?.graphHeight,
     currentHeightStats: summarizeCurrentHeightStats(state.map),
     currentHeightPreview: buildCurrentHeightPreview(state.map),
+    derivedStaleSystems: heightDerivedStaleSystems(state.map),
     history: state.editHistory.getStats()
   });
+}
+
+function heightDerivedStaleSystems(map) {
+  return [...(map?.metadata?.derivedStale?.systems || [])];
 }
 
 function summarizeCurrentHeightStats(map) {
