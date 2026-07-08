@@ -157,7 +157,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     heightEdit: {
       activeStroke: null,
       lastAffected: 0,
-      lastHeight: "none"
+      lastHeight: "none",
+      lastDelta: "none"
     },
     stateEdit: {
       activeStroke: null,
@@ -2189,6 +2190,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.heightEdit.activeStroke = null;
   state.heightEdit.lastAffected = 0;
   state.heightEdit.lastHeight = "none";
+  state.heightEdit.lastDelta = "none";
   state.stateEdit.activeStroke = null;
   state.stateEdit.addMode = false;
   state.stateEdit.deleteMode = false;
@@ -5028,6 +5030,7 @@ function applyHeightBrushAtEvent(state, event) {
   applyHeightBrushPreview(state.map, changes);
   state.heightEdit.lastAffected = changes.length;
   state.heightEdit.lastHeight = summarizeChangedHeights(changes);
+  state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
   state.editRefreshScheduler.run(EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW);
   updateHeightPanel(state);
 }
@@ -5080,6 +5083,7 @@ function finishHeightStroke(state) {
   if (command.isNoop({map: state.map})) return;
   state.heightEdit.lastAffected = changes.length;
   state.heightEdit.lastHeight = summarizeChangedHeights(changes);
+  state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
   refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
 }
 
@@ -5217,6 +5221,7 @@ function updateHeightPanel(state) {
   state.panels.height?.update({
     lastAffected: state.heightEdit.lastAffected,
     lastHeight: state.heightEdit.lastHeight,
+    lastDelta: state.heightEdit.lastDelta,
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,
     currentHeightStats: summarizeCurrentHeightStats(state.map),
@@ -5597,7 +5602,8 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     height: {
       active: Boolean(heightBrush.active),
       lastAffected: state.heightEdit.lastAffected,
-      lastHeight: state.heightEdit.lastHeight
+      lastHeight: state.heightEdit.lastHeight,
+      lastDelta: state.heightEdit.lastDelta
     },
     stateBrush: {
       active: Boolean(stateBrush.active),
@@ -5662,6 +5668,13 @@ function summarizeChangedHeights(changes) {
   if (!changes.length) return "none";
   const values = changes.map(change => change.after);
   return `${Math.min(...values)}..${Math.max(...values)}`;
+}
+
+function summarizeChangedHeightDelta(changes) {
+  if (!changes.length) return "none";
+  const average = changes.reduce((sum, change) => sum + change.after - change.before, 0) / changes.length;
+  const rounded = Math.round(average * 10) / 10;
+  return rounded > 0 ? `+${rounded}` : String(rounded);
 }
 
 function brushFalloff(distance, radius) {

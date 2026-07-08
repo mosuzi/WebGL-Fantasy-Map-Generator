@@ -474,6 +474,7 @@ const summaryMetrics = computed(() => {
     {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
     {label: "影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
     {label: "高度", value: formatHeightRange(props.state.lastHeight)},
+    {label: "均变", value: formatSignedHeightDelta(props.state.lastDelta)},
     {label: "历史", value: props.state.history ? `undo ${props.state.history.undo} / redo ${props.state.history.redo}` : "none"},
     {label: "当前均高", value: current ? formatHeight(current.average, unitPreferences.value) : "-"},
     {label: "陆地", value: current ? formatPercent(current.land / current.total) : "-"},
@@ -1734,5 +1735,13 @@ function formatHeightRange(value) {
   const parts = value.split("..").map(part => Number(part));
   if (parts.length !== 2 || parts.some(part => !Number.isFinite(part))) return value;
   return `${formatHeight(parts[0], unitPreferences.value)} .. ${formatHeight(parts[1], unitPreferences.value)}`;
+}
+
+function formatSignedHeightDelta(value) {
+  if (typeof value !== "string" || value === "none") return value || "none";
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+  const formatted = formatHeight(Math.abs(numeric), unitPreferences.value, {abs: true});
+  return numeric > 0 ? `+${formatted}` : numeric < 0 ? `-${formatted}` : formatted;
 }
 </script>

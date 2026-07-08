@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：高度面板最近笔刷均变反馈
+
+本步补齐最近一次高度编辑的强度反馈，让用户除了影响 cells 和高度范围外，也能看到平均抬升 / 降低幅度。
+
+修正：
+
+- 高度编辑运行时新增 `lastDelta`，预览和最终提交时都会按 `after - before` 计算平均高度变化。
+- 高度面板状态新增 `lastDelta`，摘要区新增“均变”指标，并按当前高度单位显示。
+- 本步只新增统计字段和面板显示，不改变笔刷算法、命令内容、撤销 / 重做或地图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\height-panel.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：高度面板打开后包含“均变”，高度笔刷后“均变”显示带符号数值，撤销历史为 `1`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-09：高度面板统计增强第一刀
 
 本步补齐专题清单中“高度分布、陆地比例、海平面、山地/低地占比”的只读统计入口。
