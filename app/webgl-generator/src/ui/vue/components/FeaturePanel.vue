@@ -26,7 +26,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSortBar from "./base/UiSortBar.vue";
-import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -80,6 +80,8 @@ const summaryMetrics = computed(() => [
   {label: "水域", value: formatNumber(metrics.value.water)},
   {label: "湖泊", value: formatNumber(metrics.value.lakes)},
   {label: "海岸线段", value: formatNumber(metrics.value.coastlineSegments)},
+  {label: "海岸长度", value: formatDistanceValue(metrics.value.coastlineLength)},
+  {label: "湖岸长度", value: formatDistanceValue(metrics.value.lakeShoreLength)},
   {label: "港湾 cells", value: formatNumber(metrics.value.havenCells)},
   {label: "泊位强度", value: formatNumber(metrics.value.harborScore)},
   {label: "异常引用", value: formatNumber(metrics.value.invalidReferences)}
@@ -117,6 +119,8 @@ function buildFeatureMetrics(map) {
     islands: rows.filter(row => row.type === "island").length,
     coastlineSegments: shoreline.coastline?.length || 0,
     lakeShoreSegments: shoreline.lakeShore?.length || 0,
+    coastlineLength: totalSegmentLength(shoreline.coastline),
+    lakeShoreLength: totalSegmentLength(shoreline.lakeShore),
     havenCells: rows.reduce((sum, row) => sum + row.havenCells, 0),
     harborScore: rows.reduce((sum, row) => sum + row.harborScore, 0),
     invalidReferences
@@ -171,6 +175,16 @@ function countInvalidReferences(map) {
   return invalid;
 }
 
+function totalSegmentLength(segments) {
+  return (segments || []).reduce((sum, segment) => sum + segmentLength(segment), 0);
+}
+
+function segmentLength(segment) {
+  const [from, to] = segment || [];
+  if (!Array.isArray(from) || !Array.isArray(to)) return 0;
+  return Math.hypot(Number(to[0] || 0) - Number(from[0] || 0), Number(to[1] || 0) - Number(from[1] || 0));
+}
+
 function filterRows(sourceRows, filter) {
   const query = String(filter || "").trim().toLowerCase();
   if (!query) return sourceRows;
@@ -216,6 +230,10 @@ function groupLabel(group) {
 
 function formatAreaValue(value) {
   return formatArea(value, unitPreferences.value);
+}
+
+function formatDistanceValue(value) {
+  return formatDistance(value, unitPreferences.value);
 }
 
 function formatNumber(value) {
