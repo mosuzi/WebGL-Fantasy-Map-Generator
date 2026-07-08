@@ -17,6 +17,7 @@ import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
 import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
 import {createEconomyPanel} from "../ui/panels/economy-panel.js";
+import {createEmblemPanel} from "../ui/panels/emblem-panel.js";
 import {createGenerationPanel} from "../ui/panels/generation-panel.js";
 import {createGovernmentPanel} from "../ui/panels/government-panel.js";
 import {createHeightPanel} from "../ui/panels/height-panel.js";
@@ -210,6 +211,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
   state.panels.biome = createBiomePanel(documentRef, panelManager);
   state.panels.population = createPopulationPanel(documentRef, panelManager);
+  state.panels.emblem = createEmblemPanel(documentRef, panelManager);
   let heightPanel = null;
   let statePanel = null;
   let governmentPanel = null;
@@ -1726,6 +1728,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onOpenPopulationPanel: () => {
       state.panels.population.open(state.map, state.editHistory.getStats());
     },
+    onOpenEmblemPanel: () => {
+      state.panels.emblem.open(state.map, state.editHistory.getStats());
+    },
     onOpenCulturePanel: () => {
       if (state.selection?.object?.kind === OBJECT_KIND.CULTURE) {
         state.panels.culture.setSelectedCultureId(state.selection.object.id);
@@ -2242,6 +2247,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateCityPanel(state);
   updateBiomePanel(state);
   updatePopulationPanel(state);
+  updateEmblemPanel(state);
   updateCulturePanel(state);
   updateReligionPanel(state);
   updateDiplomacyPanel(state);
@@ -2294,6 +2300,7 @@ function openPersistedPanel(state, panelId) {
     "city-panel": () => state.panels.city?.open(map, selection, history),
     "biome-panel": () => state.panels.biome?.open(map, history),
     "population-panel": () => state.panels.population?.open(map, history),
+    "emblem-panel": () => state.panels.emblem?.open(map, history),
     "culture-panel": () => state.panels.culture?.open(map, selection, history),
     "religion-panel": () => state.panels.religion?.open(map, selection, history),
     "diplomacy-panel": () => state.panels.diplomacy?.open(map, selection, history),
@@ -5302,6 +5309,11 @@ function updatePopulationPanel(state) {
   state.panels.population?.update(state.map, state.editHistory.getStats());
 }
 
+function updateEmblemPanel(state) {
+  if (!isPanelOpen(state.panels.emblem)) return;
+  state.panels.emblem?.update(state.map, state.editHistory.getStats());
+}
+
 function updateCulturePanel(state) {
   if (!isPanelOpen(state.panels.culture)) return;
   state.panels.culture?.update(state.map, state.selection, state.editHistory.getStats());
@@ -5348,6 +5360,7 @@ function updateAllObjectPanels(state) {
   updateCityPanel(state);
   updateBiomePanel(state);
   updatePopulationPanel(state);
+  updateEmblemPanel(state);
   updateCulturePanel(state);
   updateReligionPanel(state);
   updateDiplomacyPanel(state);

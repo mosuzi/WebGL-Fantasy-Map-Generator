@@ -93,6 +93,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-city-panel")?.addEventListener("click", handlers.onOpenCityPanel);
   documentRef.getElementById("open-biome-panel")?.addEventListener("click", handlers.onOpenBiomePanel);
   documentRef.getElementById("open-population-panel")?.addEventListener("click", handlers.onOpenPopulationPanel);
+  documentRef.getElementById("open-emblem-panel")?.addEventListener("click", handlers.onOpenEmblemPanel);
   documentRef.getElementById("open-culture-panel")?.addEventListener("click", handlers.onOpenCulturePanel);
   documentRef.getElementById("open-religion-panel")?.addEventListener("click", handlers.onOpenReligionPanel);
   documentRef.getElementById("open-diplomacy-panel")?.addEventListener("click", handlers.onOpenDiplomacyPanel);
@@ -207,6 +208,7 @@ function editLockControls(documentRef) {
     "#open-city-panel",
     "#open-biome-panel",
     "#open-population-panel",
+    "#open-emblem-panel",
     "#open-culture-panel",
     "#open-religion-panel",
     "#open-diplomacy-panel",

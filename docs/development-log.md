@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：纹章统计面板第一刀
+
+本步补齐第三批中的纹章轻量统计入口，先查看国家和城市已有 `coa` 字段覆盖情况。
+
+修正：
+
+- 新增 `emblem-panel.js` 和 `EmblemPanel.vue`，汇总国家 / 城市纹章对象、有纹章 / 缺失数量和盾形种类。
+- 控制面板“管理”tab 新增“纹章统计”入口，并在运行时注册 `emblem-panel` 的打开、持久化恢复和面板刷新。
+- 纹章统计表列出对象范围、名称、盾形、底色、图案、图案色、尺寸和状态，并支持筛选、排序和选中详情。
+- 同步当前计划和专题清单状态，标记纹章统计面板第一刀完成；纹章编辑、锁定、重新生成和可视化预览仍待做。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\emblem-panel.js`、`node --check app\webgl-generator\src\ui\panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：人口统计面板可打开，表格 26 行，详情包含国家人口字段；纹章统计面板可打开，表格 26 行，详情包含国家纹章字段；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-08：人口统计面板第一刀
 
 本步补齐第三批中的人口统计入口，先做只读汇总，不进入人口刷子或迁移模拟。
