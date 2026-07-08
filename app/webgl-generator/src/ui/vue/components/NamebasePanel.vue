@@ -104,11 +104,13 @@
 
   <UiPanelIoActions
     class-name="namebase-panel-io-actions"
-    label="名称库导入导出"
+    label="名称库列表操作"
     :export-actions="namebaseExportActions"
     :import-actions="namebaseImportActions"
+    :actions="namebaseListActions"
     @export="handleNamebaseExport"
     @import="handleNamebaseImport"
+    @action="handleNamebaseAction"
   />
 
   <UiDetailGrid class-name="namebase-panel-details" empty-text="未选中名称库" :rows="detailRows" />
@@ -167,12 +169,6 @@
     <UiButton variant="secondary" @click="applyOptions">应用参数</UiButton>
   </div>
 
-  <div class="namebase-panel-actions">
-    <UiButton variant="secondary" @click="callbacks.onCreateUser()">新建用户库</UiButton>
-    <UiButton variant="secondary" :disabled="!selectedBuiltinRow" @click="callbacks.onCopyBuiltin(selectedBuiltinRow)">复制内置</UiButton>
-    <UiButton variant="secondary" :disabled="!selectedUserRow" @click="callbacks.onDeleteUser(selectedUserRow)">删除选中</UiButton>
-    <UiButton variant="secondary" :disabled="!userRows.length" @click="callbacks.onClearUser()">清空用户库</UiButton>
-  </div>
 </template>
 
 <script setup>
@@ -264,6 +260,12 @@ const userRows = computed(() => rows.value.filter(row => row.origin !== "内置"
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedNamebaseId));
 const selectedBuiltinRow = computed(() => selected.value?.builtin === true ? selected.value : null);
 const selectedUserRow = computed(() => isUserNamebaseRow(selected.value) ? selected.value : null);
+const namebaseListActions = computed(() => [
+  {key: "create", label: "新建用户库", icon: "+"},
+  {key: "copy", label: "复制选中内置库", icon: "⧉", disabled: !selectedBuiltinRow.value},
+  {key: "delete", label: "删除选中用户库", icon: "×", disabled: !selectedUserRow.value},
+  {key: "clear", label: "清空用户库", icon: "⌫", disabled: !userRows.value.length}
+]);
 const selectedSourceFingerprint = computed(() => (selected.value?.source || []).join("\u0000"));
 const previewExamplesLabel = computed(() => generatedExamples.value.length ? generatedExamples.value.join("、") : selected.value?.examplesLabel || "无样例");
 const summaryMetrics = computed(() => [
@@ -474,6 +476,13 @@ function handleNamebaseImport({file}) {
     if (props.callbacks.onImportPreview) props.callbacks.onImportPreview(file);
     else props.callbacks.onImport?.(file);
   }
+}
+
+function handleNamebaseAction(key) {
+  if (key === "create") props.callbacks.onCreateUser?.();
+  if (key === "copy" && selectedBuiltinRow.value) props.callbacks.onCopyBuiltin?.(selectedBuiltinRow.value);
+  if (key === "delete" && selectedUserRow.value) props.callbacks.onDeleteUser?.(selectedUserRow.value);
+  if (key === "clear" && userRows.value.length) props.callbacks.onClearUser?.();
 }
 
 function generateExamples() {

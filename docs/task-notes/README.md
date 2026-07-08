@@ -20,6 +20,7 @@
 - `measurement-rulers-plan.md`：测量对象与路线贴合计划。
 - `panel-layout-overlay-performance-plan.md`：面板布局宽松化与非 WebGL overlay 性能治理计划。
 - `visual-theme-preset-plan.md`：视觉主题与样式预设计划。
+- `console-extension-api-system-plan.md`：控制台与扩展 API 系统计划，记录 API 命名空间、返回格式、副作用边界和分阶段实施。
 
 ## 导入导出与 GIS
 

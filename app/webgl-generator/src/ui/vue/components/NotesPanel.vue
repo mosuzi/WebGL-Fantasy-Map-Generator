@@ -18,21 +18,18 @@
   />
 
   <UiPanelIoActions
-    class-name="notes-panel-export-actions"
-    label="备注导出"
+    class-name="notes-panel-list-actions"
+    label="备注列表操作"
     :export-actions="notesExportActions"
+    :actions="notesListActions"
     @export="handleNotesExport"
+    @action="handleNotesAction"
   />
 
   <UiDetailGrid class-name="notes-panel-details" empty-text="未选中备注" :rows="detailRows" />
 
   <div v-if="selected" class="notes-panel-preview">
     {{ selected.body || "空备注" }}
-  </div>
-
-  <div class="notes-panel-actions">
-    <UiButton v-if="selected" variant="secondary" :disabled="selected.orphan" @click="callbacks.onLocate(selected)">定位对象</UiButton>
-    <UiButton v-if="selected" variant="secondary" @click="callbacks.onDelete(selected)">删除备注</UiButton>
   </div>
 
   <UiHistoryActions class-name="notes-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
@@ -43,7 +40,6 @@ import {computed} from "vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
-import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiHistoryActions from "./base/UiHistoryActions.vue";
@@ -94,6 +90,10 @@ const notesExportActions = computed(() => [
   {key: "notes", label: "导出备注摘要", disabled: !visibleRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
+const notesListActions = computed(() => [
+  {key: "locate", label: "定位备注对象", icon: "⌖", disabled: !selected.value || selected.value.orphan},
+  {key: "delete", label: "删除选中备注", icon: "×", disabled: !selected.value}
+]);
 const summaryMetrics = computed(() => [
   {label: "备注", value: formatNumber(rows.value.length)},
   {label: "可定位", value: formatNumber(rows.value.filter(row => !row.orphan).length)},
@@ -205,6 +205,12 @@ function formatDateTime(value) {
 
 function handleNotesExport(key) {
   if (key === "notes") callbacks.onExport?.(visibleRows.value);
+}
+
+function handleNotesAction(key) {
+  if (!selected.value) return;
+  if (key === "locate" && !selected.value.orphan) callbacks.onLocate?.(selected.value);
+  if (key === "delete") callbacks.onDelete?.(selected.value);
 }
 
 function formatNumber(value) {

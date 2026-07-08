@@ -32,6 +32,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     },
     onLocate: row => callbacks.onLocate?.(routeObject(row)),
     onNoteChange: (routeId, body) => callbacks.onNoteChange?.(routeId, body),
+    onDelete: row => callbacks.onDelete?.(routeObject(row)),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
