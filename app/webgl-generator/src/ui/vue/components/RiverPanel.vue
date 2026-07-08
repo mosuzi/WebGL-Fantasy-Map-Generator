@@ -12,9 +12,11 @@
     :columns="columns"
     :rows="visibleRows"
     :selected-id="selectedId"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的河流"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiDetailGrid class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
@@ -63,7 +65,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -112,6 +114,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const renameRequestId = ref(null);
 const widthDraft = ref(1);
 const rows = computed(() => {
   props.state.version;
@@ -146,9 +149,14 @@ const detailRows = computed(() => selected.value ? [
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
 
-watch(() => selected.value?.id, () => {
+watch(() => selected.value?.id, id => {
   widthDraft.value = normalizeWidth(selected.value?.widthFactor ?? 1);
   activeAction.value = null;
+  if (!sameObjectId(renameRequestId.value, id)) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 }, {immediate: true});
 
 watch(() => selected.value?.widthFactor, next => {
@@ -186,6 +194,16 @@ function sortRows(sourceRows, key, direction) {
 
 function handleRiverActionSelect(key) {
   if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
+}
+
+function openRenameEditor(row) {
+  renameRequestId.value = row?.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (!sameObjectId(selected.value?.id, row?.id)) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
+  });
 }
 
 function riverLength(river) {
