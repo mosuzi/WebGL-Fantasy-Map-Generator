@@ -1,5 +1,5 @@
 <template>
-  <div ref="tableWrap" class="object-table-wrap">
+  <div ref="tableWrap" class="object-table-wrap" @scroll.passive="handleScroll">
     <table v-if="rows.length" class="object-table object-table-native">
       <thead>
         <tr>
@@ -14,8 +14,11 @@
         </tr>
       </thead>
       <tbody>
+        <tr v-if="virtualTopPadding" class="object-table-spacer-row" aria-hidden="true">
+          <td :colspan="columnSpan" :style="spacerStyle(virtualTopPadding)"></td>
+        </tr>
         <tr
-          v-for="row in rows"
+          v-for="row in visibleRows"
           :key="rowKey(row)"
           v-memo="[rowKey(row), isSelected(row)]"
           class="object-table-row"
@@ -34,6 +37,9 @@
             <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)">⌖</button>
           </td>
         </tr>
+        <tr v-if="virtualBottomPadding" class="object-table-spacer-row" aria-hidden="true">
+          <td :colspan="columnSpan" :style="spacerStyle(virtualBottomPadding)"></td>
+        </tr>
       </tbody>
     </table>
     <div v-else class="object-table-empty">{{ emptyText }}</div>
@@ -41,7 +47,7 @@
 </template>
 
 <script setup>
-import {nextTick, onBeforeUnmount, ref, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 
 defineOptions({
@@ -75,11 +81,31 @@ const props = defineProps({
   }
 });
 
+const VIRTUAL_ROW_HEIGHT = 32;
+const VIRTUAL_THRESHOLD = 120;
+const VIRTUAL_OVERSCAN_ROWS = 8;
+
 const emit = defineEmits(["select", "locate"]);
 
 const tableWrap = ref(null);
+const scrollTop = ref(0);
+const viewportHeight = ref(300);
 let scrollFrame = 0;
 let scrollAttempt = 0;
+let scrollMetricsFrame = 0;
+
+const columnSpan = computed(() => props.columns.length + (props.showLocateAction ? 1 : 0));
+const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
+const virtualWindow = computed(() => {
+  if (!virtualEnabled.value) return {start: 0, end: props.rows.length};
+  const visibleCount = Math.max(1, Math.ceil(viewportHeight.value / VIRTUAL_ROW_HEIGHT));
+  const start = Math.max(0, Math.floor(scrollTop.value / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
+  const end = Math.min(props.rows.length, start + visibleCount + VIRTUAL_OVERSCAN_ROWS * 2);
+  return {start, end};
+});
+const visibleRows = computed(() => props.rows.slice(virtualWindow.value.start, virtualWindow.value.end));
+const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.value.start * VIRTUAL_ROW_HEIGHT : 0);
+const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * VIRTUAL_ROW_HEIGHT : 0);
 
 watch(
   () => [props.selectedId, props.rows, props.rows.length],
@@ -87,8 +113,13 @@ watch(
   {flush: "post", immediate: true}
 );
 
+onMounted(() => {
+  refreshScrollMetrics();
+});
+
 onBeforeUnmount(() => {
   cancelScrollFrame();
+  cancelScrollMetricsFrame();
 });
 
 function getRowId(row) {
@@ -109,6 +140,19 @@ function handleRowClick(row) {
 
 function handleRowDoubleClick(row) {
   if (props.showLocateAction) emit("locate", row);
+}
+
+function handleScroll() {
+  const view = tableWrap.value?.ownerDocument?.defaultView;
+  if (!view?.requestAnimationFrame) {
+    refreshScrollMetrics();
+    return;
+  }
+  if (scrollMetricsFrame) return;
+  scrollMetricsFrame = view.requestAnimationFrame(() => {
+    scrollMetricsFrame = 0;
+    refreshScrollMetrics();
+  });
 }
 
 function scrollSelectedRowIntoView() {
@@ -139,11 +183,27 @@ function cancelScrollFrame() {
   scrollFrame = 0;
 }
 
+function cancelScrollMetricsFrame() {
+  if (!scrollMetricsFrame) return;
+  const view = tableWrap.value?.ownerDocument?.defaultView;
+  view?.cancelAnimationFrame?.(scrollMetricsFrame);
+  scrollMetricsFrame = 0;
+}
+
 function scrollSelectedRowNow() {
   const wrap = tableWrap.value;
-  const row = wrap?.querySelector(".object-table-row.selected-row");
   const scroller = tableScroller(wrap);
-  if (!row || !scroller) return false;
+  if (!scroller) return false;
+  if (virtualEnabled.value) {
+    const index = selectedRowIndex();
+    if (index < 0) return false;
+    const nextScrollTop = Math.max(0, index * VIRTUAL_ROW_HEIGHT - (scroller.clientHeight - VIRTUAL_ROW_HEIGHT) / 2);
+    if (Math.abs(scroller.scrollTop - nextScrollTop) > 1) scroller.scrollTop = nextScrollTop;
+    refreshScrollMetrics();
+    return true;
+  }
+  const row = wrap?.querySelector(".object-table-row.selected-row");
+  if (!row) return false;
   const rowRect = row.getBoundingClientRect();
   const scrollerRect = scroller.getBoundingClientRect();
   const rowCenter = rowRect.top + rowRect.height / 2;
@@ -158,6 +218,25 @@ function scrollSelectedRowNow() {
 
 function tableScroller(wrap) {
   return wrap;
+}
+
+function refreshScrollMetrics() {
+  const wrap = tableWrap.value;
+  if (!wrap) return;
+  scrollTop.value = wrap.scrollTop || 0;
+  viewportHeight.value = wrap.clientHeight || 300;
+}
+
+function selectedRowIndex() {
+  return props.rows.findIndex(row => isSelected(row));
+}
+
+function spacerStyle(height) {
+  return {
+    height: `${height}px`,
+    padding: 0,
+    borderBottom: 0
+  };
 }
 
 function stringRowId(value) {

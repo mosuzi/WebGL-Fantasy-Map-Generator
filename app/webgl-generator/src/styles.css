@@ -2301,6 +2301,11 @@ select:disabled {
   color: #fff2c9;
 }
 
+.object-table-spacer-row td {
+  background: #0f1519;
+  pointer-events: none;
+}
+
 .object-table-cell {
   display: block;
   overflow: hidden;
