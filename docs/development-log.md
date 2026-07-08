@@ -2,6 +2,20 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：地区面板接入头部撤销重做
+
+本步补齐地区管理面板与已有 `EditHistory` 的浮动面板头部按钮连接。
+
+修正：
+
+- `zone-panel.js` 注册浮动面板时补充 `historyActions`，复用现有 `panelState.history`、`onUndo` 和 `onRedo`。
+- 地区样式命令、撤销 / 重做回调和地图刷新链路保持原实现。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\zone-panel.js` 通过。
+- `git diff --check` 通过。
+
 ## 2026-07-08：校准编辑器专题清单状态
 
 本步修正 `docs/task-notes/editor-and-stat-panel-inventory.md` 中已过期的当前状态描述，避免后续接手继续按旧状态判断。

@@ -52,6 +52,11 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     top: 96,
     width: 560,
     maxWidth: 700,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }
