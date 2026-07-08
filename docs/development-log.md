@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：路线面板接入道路重算
+
+本步把已有受约束道路重算能力暴露到路线管理面板，减少用户在路线清单和控制面板之间切换。
+
+修正：
+
+- 路线管理列表操作区新增“重算道路”动作。
+- `route-panel.js` 增加 `onRegenerateRoutes` 回调桥接。
+- 运行时复用 `regenerateMapAttribute(state, "routes")`，重算后刷新生成结果提示、路线面板、对象索引、路线 mesh 和运行状态。
+- 同步校准路线专题清单状态：删除和道路重算入口已完成，改线、端点重连和等级/样式调整仍未实现。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\route-panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `RoutePanel.vue` 随后续本批综合构建一起验证。
+- `git diff --check` 通过。
+- 综合构建和浏览器烟测按本轮“累积几步后统一执行”节奏，待后续小步完成后一起执行。
+
 ## 2026-07-08：路线面板删除路线第一刀
 
 本步补齐路线管理面板的第一处删除编辑能力。

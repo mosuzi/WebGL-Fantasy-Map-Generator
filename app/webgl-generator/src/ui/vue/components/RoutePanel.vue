@@ -101,7 +101,8 @@ const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.f
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
 const routeListActions = computed(() => [
   {key: "locate", label: "定位路线", icon: "⌖", disabled: !selected.value},
-  {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value}
+  {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
+  {key: "regenerate", label: "重算道路", icon: "↻"}
 ]);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 
@@ -186,6 +187,7 @@ function sortRows(sourceRows, key, direction) {
 }
 
 function handleRouteAction(key) {
+  if (key === "regenerate") props.callbacks.onRegenerateRoutes?.();
   if (!selected.value) return;
   if (key === "locate") props.callbacks.onLocate?.(selected.value);
   if (key === "delete") props.callbacks.onDelete?.(selected.value);

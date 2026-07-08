@@ -1172,6 +1172,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
       updateEditingInteractionLock(state, documentRef);
     },
+    onRegenerateRoutes: () => {
+      const result = regenerateMapAttribute(state, "routes", documentRef);
+      updateRegenerationSection(documentRef, result);
+      if (result?.status) setFileOperationStatus(documentRef, result.status);
+      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+      updateEditingInteractionLock(state, documentRef);
+    },
     onUndo: () => {
       const command = state.editHistory.undo({map: state.map});
       if (command) refreshAfterEdit(state, command);
