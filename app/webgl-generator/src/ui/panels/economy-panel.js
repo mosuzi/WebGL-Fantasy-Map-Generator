@@ -5,6 +5,8 @@ import {readPanelListPreferences, updatePanelListPreferences} from "../panel-lis
 
 const ECONOMY_PANEL_ID = "economy-panel";
 const ECONOMY_LIST_DEFAULTS = Object.freeze({
+  tab: "goods",
+  tabs: Object.freeze(["goods", "markets", "deals"]),
   filter: "",
   sortKey: "stock",
   sortDir: "desc"
@@ -17,7 +19,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     map: null,
     selection: null,
     history: null,
-    tab: "goods",
+    tab: listPreferences.tab,
     filter: listPreferences.filter,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -31,6 +33,11 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.tab = String(tab || "goods");
       panelState.sortKey = defaultSortKey(panelState.tab);
       panelState.sortDir = "desc";
+      updatePanelListPreferences(documentRef, ECONOMY_PANEL_ID, {
+        tab: panelState.tab,
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, ECONOMY_LIST_DEFAULTS);
     },
     onFilter: value => {
       panelState.filter = value;
@@ -107,6 +114,11 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.sortDir = "desc";
       panelState.selectedDealId = id;
       panelState.version++;
+      updatePanelListPreferences(documentRef, ECONOMY_PANEL_ID, {
+        tab: panelState.tab,
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, ECONOMY_LIST_DEFAULTS);
       return true;
     },
     update(map, selection, history) {

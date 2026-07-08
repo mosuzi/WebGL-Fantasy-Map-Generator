@@ -5,6 +5,7 @@ import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../../display-
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 
 const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
+  controlPanelTab: "generation",
   colorMode: "height",
   showOceanHeight: false,
   smoothCellBorders: true,
@@ -57,6 +58,7 @@ function mergePreferences(current = {}, patch = {}) {
 
 function normalizePreferences(input = {}) {
   return {
+    controlPanelTab: normalizeControlPanelTab(input.controlPanelTab),
     colorMode: typeof input.colorMode === "string" ? input.colorMode : DEFAULT_CONTROL_PREFERENCES.colorMode,
     showOceanHeight: typeof input.showOceanHeight === "boolean" ? input.showOceanHeight : DEFAULT_CONTROL_PREFERENCES.showOceanHeight,
     smoothCellBorders: typeof input.smoothCellBorders === "boolean" ? input.smoothCellBorders : DEFAULT_CONTROL_PREFERENCES.smoothCellBorders,
@@ -88,4 +90,9 @@ function normalizeMaxCityLabels(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return DEFAULT_CONTROL_PREFERENCES.maxCityLabels;
   return Math.max(8, Math.min(5000, Math.round(number)));
+}
+
+function normalizeControlPanelTab(value) {
+  const tabs = ["about", "generation", "themes", "layers", "management", "units"];
+  return tabs.includes(value) ? value : DEFAULT_CONTROL_PREFERENCES.controlPanelTab;
 }

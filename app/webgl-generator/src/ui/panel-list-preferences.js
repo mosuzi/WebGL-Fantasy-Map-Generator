@@ -25,13 +25,21 @@ export function updatePanelListPreferences(documentRef, panelId, patch, defaults
 
 function normalizePanelListPreferences(value = {}, defaults = {}) {
   const sortDir = value.sortDir === "asc" || value.sortDir === "desc" ? value.sortDir : defaults.sortDir;
-  return {
+  const normalized = {
     filter: typeof value.filter === "string" ? value.filter : defaults.filter || "",
     sortKey: typeof value.sortKey === "string" && value.sortKey ? value.sortKey : defaults.sortKey || "id",
     sortDir: sortDir === "asc" || sortDir === "desc" ? sortDir : "asc"
   };
+  if (typeof defaults.tab === "string") normalized.tab = normalizePanelTab(value.tab, defaults);
+  return normalized;
 }
 
 function storageKey(panelId) {
   return `${PANEL_LIST_PREFERENCES_PREFIX}${panelId}`;
+}
+
+function normalizePanelTab(value, defaults) {
+  const tab = typeof value === "string" && value ? value : defaults.tab;
+  const allowed = Array.isArray(defaults.tabs) ? defaults.tabs : null;
+  return !allowed || allowed.includes(tab) ? tab : defaults.tab;
 }

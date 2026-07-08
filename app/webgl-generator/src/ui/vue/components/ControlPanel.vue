@@ -409,7 +409,7 @@
 </template>
 
 <script setup>
-import {computed, nextTick, onBeforeUnmount, onMounted, ref} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {storeToRefs} from "pinia";
 import UiButton from "./base/UiButton.vue";
 import UiField from "./base/UiField.vue";
@@ -449,7 +449,8 @@ defineOptions({
 
 const config = useGlobalConfigStore();
 const {preferences} = storeToRefs(config);
-const activeTab = ref("generation");
+const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "layers", "management", "units"]);
+const activeTab = ref(normalizeControlPanelTab(preferences.value.controlPanelTab));
 const exportPanelOpen = ref(false);
 const exportAnchorRef = ref(null);
 const exportPanelRef = ref(null);
@@ -774,6 +775,19 @@ function clampNumber(value, min, max, fallback) {
   if (!Number.isFinite(numeric)) return fallback;
   return Math.max(min, Math.min(max, numeric));
 }
+
+function normalizeControlPanelTab(value) {
+  return CONTROL_PANEL_TAB_IDS.includes(value) ? value : "generation";
+}
+
+watch(activeTab, tab => {
+  const normalized = normalizeControlPanelTab(tab);
+  if (normalized !== tab) {
+    activeTab.value = normalized;
+    return;
+  }
+  if (preferences.value.controlPanelTab !== normalized) config.patchPreferences({controlPanelTab: normalized});
+});
 
 onMounted(() => {
   document.addEventListener("click", handleExportPanelOutsideClick, true);

@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：控制面板和经济面板当前 tab 持久化
+
+本步继续执行编辑器基础设施中的“当前 tab”持久化，先覆盖主控制面板和经济总览内部 tab。
+
+修正：
+
+- 控制面板全局偏好增加 `controlPanelTab`，刷新页面后恢复上次停留的简介、生成、视图、图层、管理或单位页。
+- 经济总览的列表偏好增加受限 `tab` 字段，支持恢复商品、市场或交易页；切换经济 tab 时同步保存对应默认排序字段和方向。
+- 本步不改变经济面板的选中对象、筛选词、导入导出或地图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\economy-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\vue\stores\global-config-store.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：预写 `webgl-generator-control-preferences.controlPanelTab = management` 后刷新，控制面板恢复到“管理”；预写 `webgl-generator-panel-list:economy-panel.tab = deals` 后打开经济总览，面板恢复到交易表，表头包含“卖方 / 买方 / 金额”，`glError = 0`。
+
 ## 2026-07-08：列表偏好第三批综合烟测
 
 本步收尾第三批列表偏好持久化验证，覆盖附属对象、测量、名称库和剩余复杂管理面板。
