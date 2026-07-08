@@ -16,6 +16,7 @@
 
 - `git diff --check` 通过。
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：水体统计面板可打开，表格 11 行，摘要包含“海岸长度 / 湖岸长度”，详情仍正常显示选中 feature，`glError = 0`，console/page error 为 `0`。
 
 ## 2026-07-08：水体统计面板补齐港湾指标
 
@@ -31,6 +32,7 @@
 
 - `git diff --check` 通过。
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：水体统计面板可打开，表格 11 行，摘要和详情包含“港湾 cells / 泊位强度”，`glError = 0`，console/page error 为 `0`。
 
 ## 2026-07-08：气候统计面板第一刀
 
