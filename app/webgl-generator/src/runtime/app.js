@@ -3696,6 +3696,7 @@ function regenerateRivers(state, documentRef) {
   map.climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
 
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack);
+  markDerivedFresh(map, ["rivers", "routes", "biomes"]);
   markDerivedStale(map, ["cities", "provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate rivers: salt=${riverOptions.riverRegenerationSalt}, rivers=${map.rivers.metadata.rivers}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale.systems.join(",")}`);
