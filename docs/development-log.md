@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：水体与地貌统计面板第一刀
+
+本步补齐专题清单中 `Feature / 水体 / 海岸面板` 的只读统计入口，先查看 pack 语义层 feature 分布和引用异常。
+
+修正：
+
+- 新增 `feature-panel.js` 和 `FeaturePanel.vue`，汇总 feature、陆地、水域、湖泊、海岸线段和异常引用。
+- 控制面板“管理”tab 新增“水体统计”入口，并在运行时注册 `feature-panel` 的打开、持久化恢复和面板刷新。
+- 水体与地貌统计表按 feature 列出类型、分组、cells、面积、岸线、水位、补给和蒸发，并支持筛选、排序和选中详情。
+- 同步当前计划和专题清单状态；湖泊出口、海岸线修补和 feature 类型编辑仍待做。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\feature-panel.js`、`node --check app\webgl-generator\src\ui\panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 浏览器烟测按本轮“累积几步后统一执行”节奏，待后续小步完成后一起执行。
+
 ## 2026-07-08：纹章统计面板第一刀
 
 本步补齐第三批中的纹章轻量统计入口，先查看国家和城市已有 `coa` 字段覆盖情况。

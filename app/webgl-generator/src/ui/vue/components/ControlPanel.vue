@@ -585,6 +585,7 @@ const actions = Object.freeze([
   {id: "open-biome-panel", label: "生物群系"},
   {id: "open-population-panel", label: "人口统计"},
   {id: "open-emblem-panel", label: "纹章统计"},
+  {id: "open-feature-panel", label: "水体统计"},
   {id: "open-culture-panel", label: "文化管理"},
   {id: "open-religion-panel", label: "宗教管理"},
   {id: "open-diplomacy-panel", label: "外交管理"},
