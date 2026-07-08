@@ -4472,8 +4472,9 @@ function bindStateEditing(canvas, state) {
       state.stateEdit.lastAffected = result?.cells || 0;
       state.stateEdit.sourceStateId = result?.stateId || null;
       if (Number.isInteger(result?.stateId)) {
+        const stateObject = resolveObject(state.map, {kind: OBJECT_KIND.STATE, id: result.stateId}) || {kind: OBJECT_KIND.STATE, id: result.stateId};
         state.panels.state?.setTargetStateId(result.stateId);
-        state.selectionStore.setSelection({object: {kind: OBJECT_KIND.STATE, id: result.stateId}});
+        state.selectionStore.setSelection({object: stateObject});
       }
       state.panels.state?.updateAddMode?.(false);
       updateAllObjectPanels(state);

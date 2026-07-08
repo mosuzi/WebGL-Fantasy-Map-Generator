@@ -197,9 +197,14 @@ function stateObject(row) {
 function stateRows(map) {
   const rows = (map?.politics?.states || []).filter(state => state?.i || state?.id).map(state => ({
     id: state.id ?? state.i,
-    name: state.fullName || state.name || `国家 #${state.id ?? state.i}`
+    name: state.fullName || state.name || `国家 #${state.id ?? state.i}`,
+    rawName: state.name || state.fullName || `国家 #${state.id ?? state.i}`,
+    fullName: state.fullName || state.name || `国家 #${state.id ?? state.i}`,
+    governmentLabel: state.governmentLabel || state.governmentKey || "",
+    governmentKey: state.governmentKey || "",
+    capitalName: state.capitalName || ""
   }));
-  return map?.politics?.states?.[0] ? [{id: 0, name: "中立"}, ...rows] : rows;
+  return map?.politics?.states?.[0] ? [{id: 0, name: "中立", rawName: "中立", fullName: "中立"}, ...rows] : rows;
 }
 
 function firstStateId(map) {

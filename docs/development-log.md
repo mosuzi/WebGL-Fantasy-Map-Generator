@@ -2,6 +2,23 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：新增国家后目标显示国名
+
+用户指出：地图上新建的国家，在国家编辑面板中的目标显示的是 ID 而不是国名。
+
+修正：
+
+- 新增国家完成后，运行时不再只向 selection store 写入 `{kind: "state", id}`，而是通过 `resolveObject()` 组装带 `name / fullName` 的国家对象后再设置选中。
+- 国家面板桥接层的 `stateRows()` 补齐 `rawName / fullName / governmentLabel / governmentKey / capitalName`，避免 `stateObject(row)` 在列表选择、定位或进入编辑路径中拿不到可读名称。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\state-panel.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 浏览器真实新增国家和目标显示验证放入最终综合烟测。
+
 ## 2026-07-08：GEO Cells 导入后重置并重建非 GEO 数据
 
 用户要求明确 GEO / GeoJSON 导入后，除了 GEO 文件中明确包含并映射进来的数据外，地图上的其它旧数据都必须重置；已知问题包括军事无法生成、资源点和部分标记没有重置。
