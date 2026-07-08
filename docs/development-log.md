@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：气候统计面板第一刀
+
+本步补齐气候专题的只读统计入口，先查看当前温度、降水、纬度和风带结果。
+
+修正：
+
+- 新增 `climate-panel.js` 和 `ClimatePanel.vue`，汇总温度范围、平均温度、降水范围、平均降水、干旱 / 湿润陆地 cells。
+- 控制面板“管理”tab 新增“气候统计”入口，并在运行时注册 `climate-panel` 的打开、持久化恢复和面板刷新。
+- 气候统计表按温度带列出 cells、陆地 / 水域、均温、降水、干旱 / 湿润陆地 cells 和平均适居度，并支持筛选、排序和选中详情。
+- 同步当前计划和专题清单状态；本步不改变气候控制、biome 重算或下游派生重建。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\climate-panel.js`、`node --check app\webgl-generator\src\ui\panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：水体统计面板可打开，表格 11 行，详情包含 feature 类型和分组字段；气候统计面板可打开，表格 5 行，详情包含纬度和大气方向字段；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-08：水体与地貌统计面板第一刀
 
 本步补齐专题清单中 `Feature / 水体 / 海岸面板` 的只读统计入口，先查看 pack 语义层 feature 分布和引用异常。
@@ -18,7 +36,7 @@
 - `node --check app\webgl-generator\src\ui\panels\feature-panel.js`、`node --check app\webgl-generator\src\ui\panel.js`、`node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
-- 浏览器烟测按本轮“累积几步后统一执行”节奏，待后续小步完成后一起执行。
+- Playwright + 系统 Chrome 构建产物烟测通过：水体统计面板可打开，表格 11 行，详情包含 feature 类型和分组字段；气候统计面板可打开，表格 5 行，详情包含纬度和大气方向字段；`glError = 0`，console/page error 为 `0`。
 
 ## 2026-07-08：纹章统计面板第一刀
 

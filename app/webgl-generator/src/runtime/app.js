@@ -13,6 +13,7 @@ import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiv
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
+import {createClimatePanel} from "../ui/panels/climate-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
 import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
@@ -210,6 +211,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
+  state.panels.climate = createClimatePanel(documentRef, panelManager);
   state.panels.biome = createBiomePanel(documentRef, panelManager);
   state.panels.population = createPopulationPanel(documentRef, panelManager);
   state.panels.emblem = createEmblemPanel(documentRef, panelManager);
@@ -1727,6 +1729,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onOpenBiomePanel: () => {
       state.panels.biome.open(state.map, state.editHistory.getStats());
     },
+    onOpenClimatePanel: () => {
+      state.panels.climate.open(state.map, state.editHistory.getStats());
+    },
     onOpenPopulationPanel: () => {
       state.panels.population.open(state.map, state.editHistory.getStats());
     },
@@ -2250,6 +2255,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateGovernmentPanel(state);
   updateProvincePanel(state);
   updateCityPanel(state);
+  updateClimatePanel(state);
   updateBiomePanel(state);
   updatePopulationPanel(state);
   updateEmblemPanel(state);
@@ -2304,6 +2310,7 @@ function openPersistedPanel(state, panelId) {
     "government-panel": () => state.panels.government?.open(map, selection, history),
     "province-panel": () => state.panels.province?.open(map, selection, history),
     "city-panel": () => state.panels.city?.open(map, selection, history),
+    "climate-panel": () => state.panels.climate?.open(map, history),
     "biome-panel": () => state.panels.biome?.open(map, history),
     "population-panel": () => state.panels.population?.open(map, history),
     "emblem-panel": () => state.panels.emblem?.open(map, history),
@@ -5306,6 +5313,11 @@ function updateCityPanel(state) {
   state.panels.city?.update(state.map, state.selection, state.editHistory.getStats());
 }
 
+function updateClimatePanel(state) {
+  if (!isPanelOpen(state.panels.climate)) return;
+  state.panels.climate?.update(state.map, state.editHistory.getStats());
+}
+
 function updateBiomePanel(state) {
   if (!isPanelOpen(state.panels.biome)) return;
   state.panels.biome?.update(state.map, state.editHistory.getStats());
@@ -5370,6 +5382,7 @@ function updateAllObjectPanels(state) {
   updateStatePanel(state);
   updateProvincePanel(state);
   updateCityPanel(state);
+  updateClimatePanel(state);
   updateBiomePanel(state);
   updatePopulationPanel(state);
   updateEmblemPanel(state);
