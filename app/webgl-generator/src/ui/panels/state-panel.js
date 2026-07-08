@@ -1,17 +1,26 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const STATE_PANEL_ID = "state-panel";
+const STATE_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "population",
+  sortDir: "desc"
+});
 
 export function createStatePanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, STATE_PANEL_ID, STATE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     active: false,
     map: null,
     targetStateId: null,
     sourceStateId: null,
-    filter: "",
-    sortKey: "population",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     radius: 28,
     addMode: false,
     deleteMode: false,
@@ -29,6 +38,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, STATE_PANEL_ID, {filter: value}, STATE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -37,6 +47,10 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "id" || key === "name" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, STATE_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, STATE_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.targetStateId = row.id;
@@ -84,7 +98,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("state-panel", {
+  const record = manager.registerPanel(STATE_PANEL_ID, {
     title: "国家编辑",
     left: 400,
     top: 128,

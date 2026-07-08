@@ -1,17 +1,26 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const PROVINCE_PANEL_ID = "province-panel";
+const PROVINCE_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "area",
+  sortDir: "desc"
+});
 
 export function createProvincePanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, PROVINCE_PANEL_ID, PROVINCE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     active: false,
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "area",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedProvinceId: null,
     radius: 28,
     addMode: false,
@@ -23,6 +32,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, PROVINCE_PANEL_ID, {filter: value}, PROVINCE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -31,6 +41,10 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
         panelState.sortDir = key === "id" || key === "name" || key === "stateName" ? "asc" : "desc";
         panelState.sortKey = key;
       }
+      updatePanelListPreferences(documentRef, PROVINCE_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, PROVINCE_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedProvinceId = row.id;
@@ -86,7 +100,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("province-panel", {
+  const record = manager.registerPanel(PROVINCE_PANEL_ID, {
     title: "省份管理",
     left: 420,
     top: 92,

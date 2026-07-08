@@ -1,16 +1,25 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const CITY_PANEL_ID = "city-panel";
+const CITY_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "population",
+  sortDir: "desc"
+});
 
 export function createCityPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, CITY_PANEL_ID, CITY_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "population",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedCityId: null,
     addMode: false,
     deleteMode: false,
@@ -19,6 +28,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, CITY_PANEL_ID, {filter: value}, CITY_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -27,6 +37,10 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
         panelState.sortDir = key === "id" || key === "name" || key === "stateName" || key === "provinceName" || key === "type" ? "asc" : "desc";
         panelState.sortKey = key;
       }
+      updatePanelListPreferences(documentRef, CITY_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, CITY_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedCityId = row.id;
@@ -55,7 +69,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("city-panel", {
+  const record = manager.registerPanel(CITY_PANEL_ID, {
     title: "城市管理",
     left: 456,
     top: 112,
