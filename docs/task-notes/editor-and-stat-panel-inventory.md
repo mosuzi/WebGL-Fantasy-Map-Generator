@@ -69,7 +69,7 @@
 - 需要统计面板：是。
 - 统计范围：ocean/lake/island feature 数、湖泊面积、岸线长度、haven/harbor 数、异常引用。
 - 优先级：中高。
-- 当前状态：水体与地貌统计面板第一刀已完成，支持管理页入口、筛选、排序、选中详情，以及 pack feature 类型 / 分组、cells、面积、岸线、水位、补给、蒸发和 grid/pack feature 引用异常汇总；湖泊出口、海岸线修补和 feature 类型编辑仍未实现。
+- 当前状态：水体与地貌统计面板第一刀已完成，支持管理页入口、筛选、排序、选中详情，以及 pack feature 类型 / 分组、cells、面积、岸线、水位、补给、蒸发、haven / harbor 和 grid/pack feature 引用异常汇总；湖泊出口、海岸线修补和 feature 类型编辑仍未实现。
 
 ### 生物群系与适居度面板
 

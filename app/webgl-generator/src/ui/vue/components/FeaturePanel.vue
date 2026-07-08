@@ -62,7 +62,8 @@ const columns = Object.freeze([
   {key: "groupLabel", label: "分组", width: 96},
   {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
   {key: "area", label: "面积", align: "right", format: value => formatAreaValue(value)},
-  {key: "shorelineCells", label: "岸线", align: "right", format: value => formatNumber(value)}
+  {key: "shorelineCells", label: "岸线", align: "right", format: value => formatNumber(value)},
+  {key: "havenCells", label: "港湾", align: "right", format: value => formatNumber(value)}
 ]);
 
 const unitPreferences = useUnitPreferences();
@@ -79,6 +80,8 @@ const summaryMetrics = computed(() => [
   {label: "水域", value: formatNumber(metrics.value.water)},
   {label: "湖泊", value: formatNumber(metrics.value.lakes)},
   {label: "海岸线段", value: formatNumber(metrics.value.coastlineSegments)},
+  {label: "港湾 cells", value: formatNumber(metrics.value.havenCells)},
+  {label: "泊位强度", value: formatNumber(metrics.value.harborScore)},
   {label: "异常引用", value: formatNumber(metrics.value.invalidReferences)}
 ]);
 
@@ -91,6 +94,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "cells", value: formatNumber(selected.value.cells)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "岸线 cells", value: formatNumber(selected.value.shorelineCells)},
+  {label: "港湾 cells", value: formatNumber(selected.value.havenCells)},
+  {label: "泊位强度", value: formatNumber(selected.value.harborScore)},
   {label: "高度 / 水位", value: formatNumber(selected.value.height)},
   {label: "补给", value: formatNumber(selected.value.flux)},
   {label: "蒸发", value: formatNumber(selected.value.evaporation)},
@@ -99,6 +104,7 @@ const detailRows = computed(() => selected.value ? [
 
 function buildFeatureMetrics(map) {
   const rows = (map?.pack?.features || []).filter(Boolean).map(featureRow);
+  attachHavenHarborMetrics(rows, map);
   const shoreline = map?.features?.shore || {};
   const invalidReferences = countInvalidReferences(map);
   return {
@@ -111,6 +117,8 @@ function buildFeatureMetrics(map) {
     islands: rows.filter(row => row.type === "island").length,
     coastlineSegments: shoreline.coastline?.length || 0,
     lakeShoreSegments: shoreline.lakeShore?.length || 0,
+    havenCells: rows.reduce((sum, row) => sum + row.havenCells, 0),
+    harborScore: rows.reduce((sum, row) => sum + row.harborScore, 0),
     invalidReferences
   };
 }
@@ -130,11 +138,28 @@ function featureRow(feature) {
     cells: Number(feature.cells || 0),
     area: Number(feature.area || 0),
     shorelineCells: Array.isArray(feature.shoreline) ? feature.shoreline.length : 0,
+    havenCells: 0,
+    harborScore: 0,
     height: Number(feature.height || 0),
     flux: Number(feature.flux || 0),
     evaporation: Number(feature.evaporation || 0),
     firstCell: Number(feature.firstCell || 0)
   };
+}
+
+function attachHavenHarborMetrics(rows, map) {
+  const byId = new Map(rows.map(row => [row.id, row]));
+  const cells = map?.pack?.cells;
+  if (!cells?.haven || !cells?.f) return;
+  for (const cell of cells.i || []) {
+    const havenCell = cells.haven[cell];
+    if (!Number.isInteger(havenCell) || havenCell <= 0) continue;
+    const waterFeatureId = cells.f[havenCell];
+    const row = byId.get(waterFeatureId);
+    if (!row) continue;
+    row.havenCells++;
+    row.harborScore += Number(cells.harbor?.[cell] || 0);
+  }
 }
 
 function countInvalidReferences(map) {
