@@ -79,9 +79,11 @@
     :columns="columns"
     :rows="visibleRows"
     :selected-id="state.selectedRegimentId"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的军团"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiPanelIoActions
@@ -424,7 +426,7 @@
 </template>
 
 <script setup>
-import {computed, reactive, ref, watch} from "vue";
+import {computed, nextTick, reactive, ref, watch} from "vue";
 import {MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../../../generator/military.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -441,7 +443,7 @@ import UiSortBar from "./base/UiSortBar.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatMilitary, formatNumber as formatDisplayNumber} from "../../display-units.js";
-import {findByObjectId} from "../../object-id.js";
+import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
@@ -493,6 +495,7 @@ const militaryOverviewIcons = Object.freeze({
   artillery: "✦"
 });
 const activeAction = ref(null);
+const renameRequestId = ref(null);
 const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
@@ -725,6 +728,14 @@ const selectedStationDestination = computed(() => stationDestinationOptions.valu
 watch(() => selectedState.value?.id, syncRatioDraft, {immediate: true});
 watch(() => props.state.version, syncRatioDraft);
 watch(() => selected.value?.id, syncStatusDraft, {immediate: true});
+watch(() => selected.value?.id, id => {
+  activeAction.value = null;
+  if (!sameObjectId(renameRequestId.value, id)) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
+});
 watch(() => selected.value?.status, syncStatusDraft);
 watch(() => selected.value?.id, syncStationDestinationDraft, {immediate: true});
 watch(() => stationDestinationOptions.value.map(option => option.value).join("|"), syncStationDestinationDraft);
@@ -1008,6 +1019,16 @@ function applyRename(name) {
   if (!selected.value) return;
   props.callbacks.onRename?.(militaryTarget(selected.value), name);
   activeAction.value = null;
+}
+
+function openRenameEditor(row) {
+  renameRequestId.value = row?.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (!sameObjectId(selected.value?.id, row?.id)) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
+  });
 }
 
 function militaryTarget(row) {
