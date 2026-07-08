@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-08：marker、标签和备注面板记住筛选与排序
+
+本步继续覆盖附属对象管理面板的列表偏好持久化。
+
+修正：
+
+- marker 面板启动时读取 `marker-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态；本步不持久化 marker 的分类 scope。
+- 标签 / 命名面板启动时读取 `label-naming-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态。
+- 备注总览面板启动时读取 `notes-panel` 的列表偏好，并在筛选词、排序字段或排序方向变化时写回本地状态。
+- 本步不改变标记新增 / 移动 / 删除、标签新增 / 恢复、备注删除 / 导出等编辑命令。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\marker-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\label-naming-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\notes-panel.js` 通过。
+- 综合构建和浏览器烟测待后续再累积几步后统一执行。
+
 ## 2026-07-08：列表偏好第二批综合烟测
 
 本次综合验证覆盖路线、湖泊、地区、国家、省份、城市、文化、宗教和外交面板的筛选词与排序字段持久化。

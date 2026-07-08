@@ -1,21 +1,31 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const NOTES_PANEL_ID = "notes-panel";
+const NOTES_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "updatedAt",
+  sortDir: "desc"
+});
 
 export function createNotesPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, NOTES_PANEL_ID, NOTES_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "updatedAt",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedNoteId: null,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, NOTES_PANEL_ID, {filter: value}, NOTES_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -24,6 +34,10 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "kindLabel" || key === "name" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, NOTES_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, NOTES_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedNoteId = row.id;
@@ -39,7 +53,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("notes-panel", {
+  const record = manager.registerPanel(NOTES_PANEL_ID, {
     title: "备注总览",
     left: 528,
     top: 128,

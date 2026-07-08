@@ -1,17 +1,26 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const MARKER_PANEL_ID = "marker-panel";
+const MARKER_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "economicValue",
+  sortDir: "desc"
+});
 
 export function createMarkerPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, MARKER_PANEL_ID, MARKER_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
+    filter: listPreferences.filter,
     scope: "all",
-    sortKey: "economicValue",
-    sortDir: "desc",
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedMarkerId: null,
     editMode: null,
     editType: null,
@@ -21,6 +30,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, MARKER_PANEL_ID, {filter: value}, MARKER_LIST_DEFAULTS);
     },
     onScope: value => {
       panelState.scope = value;
@@ -32,6 +42,10 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "id" || key === "name" || key === "categoryLabel" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, MARKER_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, MARKER_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedMarkerId = row.id;
@@ -53,7 +67,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("marker-panel", {
+  const record = manager.registerPanel(MARKER_PANEL_ID, {
     title: "资源与标记管理",
     left: 504,
     top: 96,

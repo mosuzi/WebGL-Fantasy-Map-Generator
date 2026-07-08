@@ -1,22 +1,32 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../runtime/object-kinds.js";
+import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+
+const LABEL_NAMING_PANEL_ID = "label-naming-panel";
+const LABEL_NAMING_LIST_DEFAULTS = Object.freeze({
+  filter: "",
+  sortKey: "priority",
+  sortDir: "desc"
+});
 
 export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
+  const listPreferences = readPanelListPreferences(documentRef, LABEL_NAMING_PANEL_ID, LABEL_NAMING_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
     map: null,
     selection: null,
     history: null,
-    filter: "",
-    sortKey: "priority",
-    sortDir: "desc",
+    filter: listPreferences.filter,
+    sortKey: listPreferences.sortKey,
+    sortDir: listPreferences.sortDir,
     selectedLabelKey: null,
     version: 0
   });
   const panelCallbacks = {
     onFilter: value => {
       panelState.filter = value;
+      updatePanelListPreferences(documentRef, LABEL_NAMING_PANEL_ID, {filter: value}, LABEL_NAMING_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
@@ -25,6 +35,10 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
         panelState.sortKey = key;
         panelState.sortDir = key === "type" || key === "name" || key === "id" ? "asc" : "desc";
       }
+      updatePanelListPreferences(documentRef, LABEL_NAMING_PANEL_ID, {
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, LABEL_NAMING_LIST_DEFAULTS);
     },
     onSelect: row => {
       panelState.selectedLabelKey = row.key;
@@ -40,7 +54,7 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.()
   };
 
-  const record = manager.registerPanel("label-naming-panel", {
+  const record = manager.registerPanel(LABEL_NAMING_PANEL_ID, {
     title: "标签管理",
     left: 496,
     top: 132,
