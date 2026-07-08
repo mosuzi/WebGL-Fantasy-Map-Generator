@@ -23,9 +23,11 @@
     :columns="columns"
     :rows="visibleRows"
     :selected-id="activeSelectedMarkerId"
+    :doubleClickAction="'edit'"
     empty-text="没有匹配的资源点或标记"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @edit="openRenameEditor"
   />
 
   <UiDetailGrid class-name="marker-panel-details" empty-text="未选中资源点或标记" :rows="detailRows" />
@@ -62,7 +64,7 @@
 </template>
 
 <script setup>
-import {computed, reactive, ref, watch} from "vue";
+import {computed, nextTick, reactive, ref, watch} from "vue";
 import {MARKER_RESOURCE_TYPE_OPTIONS} from "../../../generator/markers.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -77,7 +79,7 @@ import UiSegmented from "./base/UiSegmented.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
-import {findByObjectId} from "../../object-id.js";
+import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -163,6 +165,7 @@ const resourceDraft = reactive({
 });
 
 const activeAction = ref(null);
+const renameRequestId = ref(null);
 const metrics = computed(() => {
   props.state.version;
   return buildMarkerMetrics(props.state.map);
@@ -208,8 +211,13 @@ const editStatus = computed(() => {
 });
 
 watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
-watch(() => selected.value?.id, () => {
+watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  if (!sameObjectId(renameRequestId.value, id)) return;
+  renameRequestId.value = null;
+  nextTick(() => {
+    activeAction.value = "rename";
+  });
 });
 watch(() => selected.value?.symbol, syncVisualDraft);
 watch(() => selected.value?.palette, syncVisualDraft);
@@ -287,6 +295,16 @@ function applyVisual() {
   props.callbacks.onVisualChange?.(selected.value.id, {
     symbol: visualDraft.symbol,
     palette: visualDraft.palette
+  });
+}
+
+function openRenameEditor(row) {
+  renameRequestId.value = row?.id ?? null;
+  props.callbacks.onSelect?.(row);
+  nextTick(() => {
+    if (!sameObjectId(selected.value?.id, row?.id)) return;
+    renameRequestId.value = null;
+    activeAction.value = "rename";
   });
 }
 
