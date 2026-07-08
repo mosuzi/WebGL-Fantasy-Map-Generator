@@ -7855,6 +7855,15 @@ input.ui-switch-native {
   min-width: 0;
 }
 
+.ui-detail-grid-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 8px 0;
+  color: rgba(224, 216, 196, 0.68);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .ui-metric-grid strong,
 .ui-detail-grid strong {
   overflow: visible;

@@ -6,7 +6,7 @@
         <strong>{{ row.value }}</strong>
       </div>
     </template>
-    <template v-else>{{ emptyText }}</template>
+    <p v-else class="ui-detail-grid-empty">{{ emptyText }}</p>
   </div>
 </template>
 
