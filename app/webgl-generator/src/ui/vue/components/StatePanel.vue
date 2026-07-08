@@ -175,7 +175,10 @@ const metrics = computed(() => {
   props.state.version;
   return buildStateMetrics(props.state.map);
 });
-const stateOptions = computed(() => stateRows(props.state.map));
+const stateOptions = computed(() => {
+  props.state.version;
+  return stateRows(props.state.map);
+});
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const renamableVisibleRows = computed(() => visibleRows.value.filter(row => !row.neutral));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.targetStateId));
