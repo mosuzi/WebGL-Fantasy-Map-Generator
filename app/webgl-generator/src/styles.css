@@ -8044,6 +8044,82 @@ input.ui-switch-native {
 .population-panel-summary,
 .zone-panel-summary {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
+  margin-bottom: 10px;
+}
+
+.state-panel-controls,
+.province-panel-controls,
+.route-panel-controls,
+.city-panel-controls,
+.marker-panel-controls,
+.notes-panel-controls,
+.namebase-panel-controls,
+.culture-panel-controls,
+.religion-panel-controls,
+.economy-panel-controls,
+.government-panel-controls,
+.diplomacy-panel-controls,
+.military-panel-controls,
+.river-panel-controls,
+.lake-panel-controls,
+.measurement-panel-controls,
+.biome-panel-controls,
+.climate-panel-controls,
+.emblem-panel-controls,
+.feature-panel-controls,
+.population-panel-controls,
+.zone-panel-controls {
+  margin: 10px 0 8px;
+}
+
+.state-panel-controls .ui-filter-input,
+.province-panel-controls .ui-filter-input,
+.route-panel-controls .ui-filter-input,
+.city-panel-controls .ui-filter-input,
+.marker-panel-controls .ui-filter-input,
+.notes-panel-controls .ui-filter-input,
+.namebase-panel-controls .ui-filter-input,
+.culture-panel-controls .ui-filter-input,
+.religion-panel-controls .ui-filter-input,
+.economy-panel-controls .ui-filter-input,
+.government-panel-controls .ui-filter-input,
+.diplomacy-panel-controls .ui-filter-input,
+.military-panel-controls .ui-filter-input,
+.river-panel-controls .ui-filter-input,
+.lake-panel-controls .ui-filter-input,
+.measurement-panel-controls .ui-filter-input,
+.biome-panel-controls .ui-filter-input,
+.climate-panel-controls .ui-filter-input,
+.emblem-panel-controls .ui-filter-input,
+.feature-panel-controls .ui-filter-input,
+.population-panel-controls .ui-filter-input,
+.zone-panel-controls .ui-filter-input {
+  width: 100%;
+}
+
+.state-panel-sort,
+.province-panel-sort,
+.route-panel-sort,
+.city-panel-sort,
+.marker-panel-sort,
+.notes-panel-sort,
+.namebase-panel-sort,
+.culture-panel-sort,
+.religion-panel-sort,
+.economy-panel-sort,
+.government-panel-sort,
+.diplomacy-panel-sort,
+.military-panel-sort,
+.river-panel-sort,
+.lake-panel-sort,
+.measurement-panel-sort,
+.biome-panel-sort,
+.climate-panel-sort,
+.emblem-panel-sort,
+.feature-panel-sort,
+.population-panel-sort,
+.zone-panel-sort {
+  margin: 8px 0 10px;
 }
 
 .state-panel-details,
