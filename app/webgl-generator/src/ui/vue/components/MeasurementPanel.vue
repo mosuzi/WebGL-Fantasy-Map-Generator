@@ -14,9 +14,11 @@
     row-id-key="id"
     :doubleClickAction="'edit'"
     empty-text="暂无保存的测量对象"
+    :empty-action="measurementEmptyAction"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleEmptyAction"
   />
 
   <UiPanelIoActions
@@ -107,6 +109,7 @@ const columns = Object.freeze([
 const measurementActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"}
 ]);
+const measurementEmptyAction = Object.freeze({key: "start", label: "开始测量", icon: "+"});
 
 const rows = computed(() => {
   props.state.version;
@@ -247,6 +250,10 @@ function handleMeasurementAction(key) {
   if (key === "edit") props.callbacks.onEdit?.(selected.value);
   if (key === "locate") props.callbacks.onLocate?.(selected.value);
   if (key === "delete") props.callbacks.onDelete?.(selected.value);
+}
+
+function handleEmptyAction(key) {
+  if (key === "start") props.callbacks.onStart?.();
 }
 
 function formatNumber(value) {

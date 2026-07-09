@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：`UiObjectTable` 标准空态动作第一刀
+
+本步推进编辑器基础设施清单中的公共对象表格扩展，先让空列表可以承载标准主动作。
+
+修正：
+
+- `UiObjectTable` 新增可选 `emptyAction` prop 和 `empty-action` 事件，空态下可显示统一小按钮。
+- 测量对象面板在空列表中显示“开始测量”，点击后通过面板桥接触发运行时回调。
+- 运行时新增 `startMeasurementMode()` / `stopMeasurementMode()` helper，测量工具栏开关和测量面板空态入口复用同一套测量模式切换逻辑。
+
+边界：
+
+- 本步只覆盖测量对象面板的空态主动作。
+- 本步不做 `UiObjectTable` 批量选择、列宽持久化或面板级 actions slot。
+- 本步不改变测量对象保存、编辑、删除、导出和撤销链路。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\measurement-panel.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：测量对象列表为空时显示“开始测量”，点击后进入测量模式，状态显示“已进入测量模式。”，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：`locateAndSelectObject()` helper 第一刀
 
 本步推进编辑器基础设施清单中的统一定位 / 选择入口，先迁移 marker 面板定位路径。

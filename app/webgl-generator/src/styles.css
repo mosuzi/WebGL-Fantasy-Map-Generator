@@ -2337,6 +2337,30 @@ select:disabled {
   color: #9fb0ba;
   font-size: 12px;
   text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.object-table-empty-action {
+  border: 1px solid rgba(215, 168, 79, 0.32);
+  border-radius: 6px;
+  background: rgba(215, 168, 79, 0.12);
+  color: #ffe0a1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.object-table-empty-action:hover,
+.object-table-empty-action:focus-visible {
+  border-color: rgba(255, 224, 161, 0.58);
+  background: rgba(215, 168, 79, 0.2);
+  outline: none;
 }
 
 .object-table-el {

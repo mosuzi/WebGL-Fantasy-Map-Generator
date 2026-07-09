@@ -1494,6 +1494,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onEdit: row => {
       startMeasurementObjectEdit(state, row, documentRef);
     },
+    onStart: () => {
+      startMeasurementMode(state, documentRef);
+    },
     onRename: (measurementId, name) => {
       const command = createRenameMeasurementCommand(measurementId, name);
       const result = executeEditCommand(state, documentRef, command);
@@ -4182,6 +4185,21 @@ function shouldSwitchDiplomacySubjectForSelection(state) {
   return state.renderer?.getStats?.().colorMode === "diplomacy";
 }
 
+function startMeasurementMode(state, documentRef, {status = "已进入测量模式。"} = {}) {
+  state.measurement.active = true;
+  state.measurement.pointer = null;
+  state.measurement.notice = "";
+  updateMeasurementOverlay(state, documentRef);
+  if (status) setFileOperationStatus(documentRef, status);
+}
+
+function stopMeasurementMode(state, documentRef) {
+  state.measurement.active = false;
+  state.measurement.pointer = null;
+  cancelMeasurementDrag(state, documentRef);
+  updateMeasurementOverlay(state, documentRef);
+}
+
 function bindMeasurementTool(canvas, state, documentRef) {
   const toggle = documentRef.getElementById("toggle-measurement");
   const clear = documentRef.getElementById("measurement-clear");
@@ -4191,12 +4209,8 @@ function bindMeasurementTool(canvas, state, documentRef) {
   const objectsButton = documentRef.getElementById("measurement-objects");
   const routeFitButton = documentRef.getElementById("measurement-route-fit");
   toggle?.addEventListener("click", () => {
-    state.measurement.active = !state.measurement.active;
-    if (!state.measurement.active) {
-      state.measurement.pointer = null;
-      cancelMeasurementDrag(state, documentRef);
-    }
-    updateMeasurementOverlay(state, documentRef);
+    if (state.measurement.active) stopMeasurementMode(state, documentRef);
+    else startMeasurementMode(state, documentRef, {status: ""});
   });
   clear?.addEventListener("click", () => {
     cancelMeasurementDrag(state, documentRef);

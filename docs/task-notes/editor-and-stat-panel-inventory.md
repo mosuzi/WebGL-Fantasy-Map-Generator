@@ -232,7 +232,7 @@
 - 浮动面板位置、宽度和打开状态已通过 `PanelManager` 持久化；对象详情面板因依赖当前 selection，不恢复打开状态。
 - 河流、路线、湖泊、地区、国家、省份、城市、文化、宗教、外交、marker、标签 / 命名、备注总览、测量对象、名称库总览、政体、经济和军事面板已通过 `panel-list-preferences.js` 持久化筛选词和排序字段。
 - 控制面板当前 tab 和经济面板内部 tab 已持久化；其它有内部 tab 或二级筛选的面板仍按各自运行时状态处理，后续若要扩大需要单独拆项。
-- `UiObjectTable` 已完成固定行高虚拟滚动第一刀，并在城市大表浏览器烟测中确认只渲染可视窗口、滚动换页和点击选中正常。
+- `UiObjectTable` 已完成固定行高虚拟滚动第一刀，并在城市大表浏览器烟测中确认只渲染可视窗口、滚动换页和点击选中正常；空态动作第一刀已落地，测量对象面板空列表可通过标准按钮进入测量模式。
 - 对象表格双击进入编辑已覆盖城市、河流、湖泊、国家、省份、文化、宗教、标签、标记、测量和军事管理面板；未显式接入 `edit` 的面板继续保留原双击定位行为。
 
 ### 2026-07-08 基础设施现状盘点
@@ -246,7 +246,7 @@
 3. `SelectionStore` 已集中维护 `selection` 和 `editingObject`，并在选择对象变化时清理不匹配的编辑对象；国家、省份、城市、河流、湖泊、路线、marker、标签、zone、文化和宗教等面板已通过 selection 刷新当前行。
 4. `SELECTION_PANEL_HANDLERS` 已把对象种类映射到领域面板打开 / 更新逻辑，`selectFromPanel()` 可避免从面板选择对象时反复重开同一面板。
 5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口；`refreshPanelsForEdit()` 已落地第一刀，可按 `effects.affected.kind` 刷新对象面板，当前先接入测量对象重命名 / 删除。
-6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`。
+6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`，空列表主动作可优先走 `UiObjectTable.emptyAction`。
 7. `executeEditCommand()` 已在 `app.js` 内部落地第一刀，先迁移测量对象重命名 / 删除调用点，统一 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案。
 
 主要缺口：
@@ -254,7 +254,7 @@
 1. `EditHistory` 只校验 `apply / revert`，没有统一校验 `effects / domain / affected / isNoop / getResult`，不同命令的返回值和 no-op 判断仍靠调用方约定。
 2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，但还没有统一“命令执行后按 affected 自动刷新相关面板”的调度层。
 3. selection 已集中，`locateAndSelectObject()` 已在 marker 面板定位路径落地第一刀；但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义大多仍分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
-4. `UiObjectTable` 尚未支持虚拟滚动、统一空态动作、批量选择和列宽持久化；大列表面板后续仍可能受 DOM 行数影响。
+4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀；批量选择、列宽持久化和更多空态动作接入仍未完成。
 5. 面板状态只存在内存中，筛选词、排序字段、打开状态、位置和大小尚未按 workspace/session 持久化。
 6. 派生重建只覆盖已明确 effects 的对象；文化 / 宗教 cell 归属、河流 / 湖泊删除、政治面 dissolve、导出校验等更复杂链路还缺“先标脏、后重建、可解释”的统一策略。
 
@@ -264,7 +264,7 @@
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
 3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，后续要覆盖撤销 / 重做路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 继续扩展 `locateAndSelectObject()`：当前先覆盖 marker 面板定位路径，后续逐步迁移路线、河流、湖泊、城市和国家等对象，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。
-5. 给 `UiObjectTable` 增加可选 `actionsSlot` 或标准空态动作，避免各面板为了同一类列表级操作反复决定放置位置。
+5. 继续扩展 `UiObjectTable.emptyAction`：当前先覆盖测量对象“开始测量”，后续可按面板语义迁移空态新增、导入或创建动作；批量选择和列宽持久化另行拆小步。
 6. 建立面板状态持久化第一刀：先保存筛选词、排序字段和窗口位置，不保存编辑草稿，避免刷新页面后丢失基本工作区上下文。
 
 ## 优先级建议

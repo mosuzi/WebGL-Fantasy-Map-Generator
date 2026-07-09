@@ -42,7 +42,20 @@
         </tr>
       </tbody>
     </table>
-    <div v-else class="object-table-empty">{{ emptyText }}</div>
+    <div v-else class="object-table-empty">
+      <span>{{ emptyText }}</span>
+      <button
+        v-if="emptyAction"
+        class="object-table-empty-action"
+        type="button"
+        :title="emptyAction.label"
+        :aria-label="emptyAction.label"
+        @click="emit('empty-action', emptyAction.key)"
+      >
+        <span aria-hidden="true">{{ emptyAction.icon || "+" }}</span>
+        <span>{{ emptyAction.label }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -71,6 +84,10 @@ const props = defineProps({
     type: String,
     default: "无数据"
   },
+  emptyAction: {
+    type: Object,
+    default: null
+  },
   rowIdKey: {
     type: String,
     default: "id"
@@ -90,7 +107,7 @@ const VIRTUAL_ROW_HEIGHT = 32;
 const VIRTUAL_THRESHOLD = 120;
 const VIRTUAL_OVERSCAN_ROWS = 8;
 
-const emit = defineEmits(["select", "locate", "edit"]);
+const emit = defineEmits(["select", "locate", "edit", "empty-action"]);
 
 const tableWrap = ref(null);
 const scrollTop = ref(0);
