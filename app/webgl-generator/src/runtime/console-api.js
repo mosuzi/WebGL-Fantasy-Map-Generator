@@ -57,6 +57,10 @@ function createConsoleApi(documentRef, state, actions = {}) {
       labels: Object.freeze({
         delete: label => apiCall(() => requireApiAction(actions.edit?.labels?.delete, "edit.labels.delete")(label)),
         restore: label => apiCall(() => requireApiAction(actions.edit?.labels?.restore, "edit.labels.restore")(label))
+      }),
+      markers: Object.freeze({
+        delete: markerId => apiCall(() => requireApiAction(actions.edit?.markers?.delete, "edit.markers.delete")(markerId)),
+        move: (markerId, packCell) => apiCall(() => requireApiAction(actions.edit?.markers?.move, "edit.markers.move")(markerId, packCell))
       })
     }),
     data: Object.freeze({
@@ -82,7 +86,7 @@ function buildCapabilities() {
       units: ["get", "apply"],
       climate: ["get"],
       history: ["get", "undo", "redo"],
-      edit: ["notes.delete", "measurements.rename", "measurements.delete", "routes.delete", "labels.delete", "labels.restore"],
+      edit: ["notes.delete", "measurements.rename", "measurements.delete", "routes.delete", "labels.delete", "labels.restore", "markers.delete", "markers.move"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {

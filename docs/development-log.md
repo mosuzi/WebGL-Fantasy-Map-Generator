@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台 marker 删除 / 移动 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，把资源标记删除和移动接入 API。
+
+修正：
+
+- app action 增加 `edit.markers.delete(markerId)` 和 `edit.markers.move(markerId, packCell)`。
+- `api.edit.markers.delete()` 复用 `createDeleteMarkerCommand()`。
+- `api.edit.markers.move()` 复用 `createMoveMarkerCommand()`，参数使用已有命令层的 pack cell。
+- API 执行 marker collection 命令后同步标记 `markers / economy` 为 fresh、`military / diplomacy` 为 stale，并刷新 summary、marker / economy / state / province / runtime 面板。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `markers.delete` 和 `markers.move`。
+
+边界：
+
+- 本步不接新增 marker、图标编辑、备注编辑、资源重生成或屏幕坐标拾取。
+- API 编辑会改变标记集合和经济资源派生，但不重算地图 checksum；这与当前 marker 面板编辑路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `markers.delete/move`；真实标记 `#0` 从 pack cell `1068` 移动到 `0` 后可撤销恢复，派生过期包含 `military / diplomacy`；真实标记 `#43` 删除后数量 `44 -> 43` 且 metadata 为 `43`，撤销恢复为 `44`，重做再次删除为 `43`；checksum 保持 `003593d4`，校验值 `2d18884b`。
+
 ## 2026-07-09：控制台标签编辑 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，把标签删除和生成标签恢复接入 API。

@@ -1970,6 +1970,10 @@ function createConsoleApiActions(state, documentRef) {
       labels: {
         delete: label => deleteLabelViaApi(state, documentRef, label),
         restore: label => restoreGeneratedLabelViaApi(state, documentRef, label)
+      },
+      markers: {
+        delete: markerId => deleteMarkerViaApi(state, documentRef, markerId),
+        move: (markerId, packCell) => moveMarkerViaApi(state, documentRef, markerId, packCell)
       }
     }
   };
@@ -3944,6 +3948,65 @@ function normalizeApiLabelTarget(label) {
 
 function formatApiLabelTarget(target) {
   return `${target.targetKind} #${target.id}`;
+}
+
+function deleteMarkerViaApi(state, documentRef, markerId) {
+  const id = normalizeApiInteger(markerId, "标记 ID");
+  const command = createDeleteMarkerCommand(id);
+  const result = executeMarkerCollectionApiCommand(state, documentRef, command, {
+    noopStatus: "标记不存在或已被删除。",
+    status: `已删除标记 #${id}。`
+  });
+  if (state.markerEdit.markerId === id) stopMarkerEditMode(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function moveMarkerViaApi(state, documentRef, markerId, packCell) {
+  const id = normalizeApiInteger(markerId, "标记 ID");
+  const targetPackCell = normalizeApiInteger(packCell, "pack cell");
+  const command = createMoveMarkerCommand(id, targetPackCell);
+  const result = executeMarkerCollectionApiCommand(state, documentRef, command, {
+    noopStatus: "标记不存在、目标 pack cell 无效或位置未变化。",
+    status: `已移动标记 #${id} 到 pack cell ${targetPackCell}。`,
+    selectMarkerId: id
+  });
+  return editApiResult(state, result);
+}
+
+function executeMarkerCollectionApiCommand(state, documentRef, command, options = {}) {
+  const context = {map: state.map};
+  if (!state.map || !command) return {executed: false, command, result: null, error: null};
+  try {
+    if (command.isNoop?.(context)) {
+      if (options.noopStatus) setFileOperationStatus(documentRef, messageFromOption(options.noopStatus, command));
+      return {executed: false, command, result: null, error: null};
+    }
+    const executedCommand = state.editHistory.execute(command, context);
+    markDerivedFresh(state.map, ["markers", "economy"]);
+    markDerivedStale(state.map, ["military", "diplomacy"]);
+    refreshGenerationSummary(state.map);
+    refreshAfterEdit(state, executedCommand);
+    if (Number.isInteger(options.selectMarkerId) && state.map.markers?.markers?.[options.selectMarkerId]) {
+      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: options.selectMarkerId}});
+      state.panels.marker?.setSelectedMarkerId(options.selectMarkerId);
+    }
+    updateMarkerPanel(state);
+    updateEconomyPanel(state);
+    updateStatePanel(state);
+    updateProvincePanel(state);
+    updateRuntimePanel(documentRef, state);
+    updateEditingInteractionLock(state, documentRef);
+    if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
+    return {executed: true, command: executedCommand, result: readEditCommandResult(executedCommand), error: null};
+  } catch (error) {
+    return {executed: false, command, result: null, error};
+  }
+}
+
+function normalizeApiInteger(value, name) {
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric)) throw new Error(`${name} 必须是整数`);
+  return numeric;
 }
 
 function editApiResult(state, result) {
