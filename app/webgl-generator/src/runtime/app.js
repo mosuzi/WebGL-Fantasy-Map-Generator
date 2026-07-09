@@ -1968,6 +1968,10 @@ function createConsoleApiActions(state, documentRef) {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
         delete: cityId => deleteCityViaApi(state, documentRef, cityId)
       },
+      provinces: {
+        add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
+        delete: provinceId => deleteProvinceViaApi(state, documentRef, provinceId)
+      },
       routes: {
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId)
       },
@@ -3955,6 +3959,59 @@ function deleteCityViaApi(state, documentRef, cityId) {
   updateStatePanel(state);
   updateProvincePanel(state);
   updateCityPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function addProvinceViaApi(state, documentRef, gridCell) {
+  const targetGridCell = normalizeApiInteger(gridCell, "grid cell");
+  const command = createAddProvinceAtCellCommand(targetGridCell);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "目标 grid cell 无效、不是陆地或不在已有国家内。",
+    status: command => {
+      const created = command.getResult?.();
+      return Number.isInteger(created?.provinceId)
+        ? `已新增省份 #${created.provinceId}。`
+        : "已新增省份。";
+    },
+    refresh: refreshAfterProvinceEdit,
+    throwOnError: false
+  });
+  const created = result.command?.getResult?.();
+  if (result.executed) {
+    state.provinceEdit.addMode = false;
+    state.provinceEdit.lastAffected = created?.cells || 0;
+    state.provinceEdit.sourceProvinceId = created?.provinceId || null;
+    if (Number.isInteger(created?.provinceId)) {
+      state.panels.province?.setSelectedProvinceId(created.provinceId);
+      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.PROVINCE, id: created.provinceId}});
+    }
+  }
+  state.panels.province?.updateAddMode?.(false);
+  updateAllObjectPanels(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteProvinceViaApi(state, documentRef, provinceId) {
+  const id = normalizeApiInteger(provinceId, "省份 ID");
+  const command = createDeleteProvinceCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "省份不存在、为中立省份或已被删除。",
+    status: `已删除省份 #${id}。`,
+    refresh: refreshAfterProvinceEdit,
+    throwOnError: false
+  });
+  if (result.executed) {
+    state.provinceEdit.deleteMode = false;
+    state.provinceEdit.lastAffected = 0;
+    state.selectionStore.clear();
+    state.panels.province?.setSelectedProvinceId(0);
+  }
+  state.panels.province?.updateDeleteMode?.(false);
+  updateAllObjectPanels(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);

@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台省份新增 / 删除 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，把省份新增和删除接入 API。
+
+修正：
+
+- app action 增加 `edit.provinces.add(gridCell)` 和 `edit.provinces.delete(provinceId)`。
+- `api.edit.provinces.add()` 复用 `createAddProvinceAtCellCommand()` 和 `executeEditCommand()`，新增成功后选中新省份。
+- `api.edit.provinces.delete()` 复用 `createDeleteProvinceCommand()` 和 `executeEditCommand()`，删除成功后清空选择。
+- API 执行后刷新对象面板、runtime 和编辑锁，保持和现有省份面板路径一致。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `provinces.add` 和 `provinces.delete`。
+
+边界：
+
+- 本步不接屏幕坐标拾取、省份笔刷、重命名、备注或省份重算。
+- API 省份 collection 编辑会改变政治面、城市省份归属和相关派生统计，但不重算地图 checksum；这与当前省份面板编辑路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `provinces.add/delete`；`edit.provinces.add(934)` 新增省份 `#239`、归属国家 `#17`、影响 `3` cells、数量 `238 -> 239`、selection 指向新省份，撤销后回到 `238`，重做恢复同一省份；`edit.provinces.delete(239)` 后数量回到 `238` 且省份 `removed=true`，撤销删除恢复为 `239`；metadata 为 `239`，checksum 保持 `8b6a2c2d`，校验值 `f1009eec`。
+- 本次浏览器烟测记录一次 health `main-thread-long-task` 约 `3558ms`；功能断言通过，但省份 collection 编辑性能仍需后续观察。
+
 ## 2026-07-09：控制台城市新增 / 删除 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，把城市新增和删除接入 API。
