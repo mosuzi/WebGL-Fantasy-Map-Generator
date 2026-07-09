@@ -365,6 +365,11 @@
    - 边界：本步不改变温度 / 降水渐变条本身的数值色带，也不改政体 / 外交 swatch 的语义颜色。
    - 完成记录：六个内置主题新增 `legend` token；renderer 写入 `--theme-legend-*` CSS 变量；图例面板、标题、刻度、条目文字和 swatch 边框读取主题变量。
 
+53. PNG 导出合成固定地图 overlay 第一刀。`已完成`
+   - 目标：补齐主题下 PNG 导出对比例尺和图例 overlay 的文件级验证，让导出的图片包含当前主题下的固定地图 UI。
+   - 边界：本步只合成比例尺和地图图例，不合成浮动面板、控制面板、toast、测量工具条或 hover 浮层。
+   - 完成记录：PNG 合成在地图内容 overlay 后继续绘制可见的 `#map-scale-bar` 和 `#map-legend`；绘制读取 computed style，因此夜间主题下比例尺线、比例尺面板、图例背景和图例文字会进入导出文件。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -407,6 +412,7 @@
 - 视觉主题线层 token 第一刀已完成：`node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\shore-layer.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认切换 `night` 后海岸线、湖岸线、国界、省界、主路、次路和小路 token 全部变化，路线 buffer `34488` 顶点、线层 buffer `124194` 顶点、渲染路线 `589`，`glError = 0`，checksum 不变，非 health console/page error 为 `0`。
 - 视觉主题标签和比例尺 token 第一刀已完成：`node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认切换 `night` 后 `.map-stage` 写入比例尺、城市标签、国家标签和手工标签主题变量，比例尺背景为 `rgba(3, 8, 13, 0.82)`、比例尺线为 `rgb(209, 230, 230)`，城市标签为 `rgb(219, 230, 194)`，国家标签为 `rgba(242, 199, 115, 0.94)`，渲染数据签名保持不变，`glError = 0`，非 health console/page error 为 `0`。
 - 视觉主题图例 token 第一刀已完成：`node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认切换 `night` 并切到温度视图后图例可见，背景为 `rgba(3, 8, 13, 0.84)`、标题为 `rgb(214, 235, 235)`、刻度为 `rgba(194, 219, 224, 0.88)`，`glError = 0`，非 health console/page error 为 `0`。
+- PNG 导出合成固定地图 overlay 第一刀已完成：`node --check app\webgl-generator\src\runtime\map-file-io.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物文件级烟测确认夜间主题温度图例下导出 `1280 x 800` PNG，比例尺线像素为 `[209, 230, 230, 255]`，比例尺背景像素为 `[28, 23, 30, 255]`，图例背景像素为 `[27, 21, 27, 255]`，状态显示“图片已导出”，`glError = 0`，非 health console/page error 为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

@@ -1034,6 +1034,7 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
   };
 
   await drawMapOverlayElements(documentRef, context, canvasRect, scale, options);
+  drawFixedMapUiElements(documentRef, context, canvasRect, scale);
   return output;
 }
 
@@ -1112,6 +1113,137 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
       drawTextOverlayElement(context, element, canvasRect, scale);
     }
   }
+}
+
+function drawFixedMapUiElements(documentRef, context, canvasRect, scale) {
+  for (const element of fixedMapUiElements(documentRef)) {
+    if (element.id === "map-scale-bar") {
+      drawScaleBarElement(context, element, canvasRect, scale);
+    } else if (element.id === "map-legend") {
+      drawLegendElement(context, element, canvasRect, scale);
+    }
+  }
+}
+
+function fixedMapUiElements(documentRef) {
+  return ["map-legend", "map-scale-bar"]
+    .map(id => documentRef.getElementById(id))
+    .filter(isVisibleElement);
+}
+
+function drawScaleBarElement(context, element, canvasRect, scale) {
+  const box = elementBox(element, canvasRect, scale);
+  if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  drawStyledPanel(context, box, style, scale);
+
+  const line = element.querySelector(".map-scale-line");
+  const lineBox = elementBox(line, canvasRect, scale);
+  if (lineBox) {
+    const lineStyle = element.ownerDocument.defaultView.getComputedStyle(line);
+    const stroke = lineStyle.borderBottomColor || lineStyle.borderLeftColor || style.color;
+    context.save();
+    context.strokeStyle = stroke;
+    context.lineWidth = Math.max(1, cssPixelValue(lineStyle.borderBottomWidth || "2px", scale.y));
+    context.beginPath();
+    context.moveTo(lineBox.x, lineBox.y);
+    context.lineTo(lineBox.x, lineBox.y + lineBox.height);
+    context.lineTo(lineBox.x + lineBox.width, lineBox.y + lineBox.height);
+    context.lineTo(lineBox.x + lineBox.width, lineBox.y);
+    context.stroke();
+    context.restore();
+  }
+
+  const label = element.querySelector(".map-scale-label");
+  drawSimpleTextElement(context, label, canvasRect, scale, {align: "left"});
+}
+
+function drawLegendElement(context, element, canvasRect, scale) {
+  const box = elementBox(element, canvasRect, scale);
+  if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  drawStyledPanel(context, box, style, scale);
+
+  drawSimpleTextElement(context, element.querySelector(".legend-title"), canvasRect, scale, {align: "left"});
+  drawLegendBarElement(context, element.querySelector(".legend-bar"), canvasRect, scale);
+  for (const tick of element.querySelectorAll(".legend-ticks span")) {
+    drawSimpleTextElement(context, tick, canvasRect, scale, {align: "center"});
+  }
+  for (const item of element.querySelectorAll(".legend-swatch-item")) {
+    drawLegendSwatchItem(context, item, canvasRect, scale);
+  }
+}
+
+function drawStyledPanel(context, box, style, scale) {
+  const background = style.backgroundColor;
+  const borderColor = style.borderColor;
+  if (!isPaintedColor(background)) return;
+  drawPanel(
+    context,
+    box,
+    cssPixelValue(style.borderRadius, Math.min(scale.x, scale.y)),
+    background,
+    isPaintedColor(borderColor) ? borderColor : "transparent"
+  );
+}
+
+function drawLegendBarElement(context, element, canvasRect, scale) {
+  const box = elementBox(element, canvasRect, scale);
+  if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const gradient = context.createLinearGradient(box.x, box.y, box.x + box.width, box.y);
+  if (element.classList.contains("precipitation")) {
+    gradient.addColorStop(0, "#d8c179");
+    gradient.addColorStop(0.52, "#75a663");
+    gradient.addColorStop(1, "#1f7c8f");
+  } else {
+    gradient.addColorStop(0, "#b9d8f0");
+    gradient.addColorStop(0.46, "#f4f1cf");
+    gradient.addColorStop(1, "#d27a56");
+  }
+  context.save();
+  context.fillStyle = gradient;
+  roundedRectPath(context, box.x, box.y, box.width, box.height, cssPixelValue(element.ownerDocument.defaultView.getComputedStyle(element).borderRadius, scale.x));
+  context.fill();
+  context.restore();
+}
+
+function drawLegendSwatchItem(context, item, canvasRect, scale) {
+  const swatch = item.querySelector("i");
+  const swatchBox = elementBox(swatch, canvasRect, scale);
+  if (swatchBox) {
+    const style = item.ownerDocument.defaultView.getComputedStyle(swatch);
+    drawPanel(context, swatchBox, cssPixelValue(style.borderRadius, scale.x), style.backgroundColor, style.borderColor);
+  }
+  const textNodeType = item.ownerDocument.defaultView.Node.TEXT_NODE;
+  const text = Array.from(item.childNodes).find(node => node.nodeType === textNodeType)?.textContent?.trim();
+  if (!text) return;
+  const itemBox = elementBox(item, canvasRect, scale);
+  if (!itemBox) return;
+  const itemStyle = item.ownerDocument.defaultView.getComputedStyle(item);
+  context.save();
+  context.fillStyle = itemStyle.color || "#cbd7dc";
+  context.font = cssCanvasFont(itemStyle, scale.y);
+  context.textBaseline = "middle";
+  context.textAlign = "left";
+  const x = swatchBox ? swatchBox.x + swatchBox.width + 6 * scale.x : itemBox.x;
+  context.fillText(text, x, itemBox.y + itemBox.height / 2, Math.max(20, itemBox.x + itemBox.width - x));
+  context.restore();
+}
+
+function drawSimpleTextElement(context, element, canvasRect, scale, options = {}) {
+  if (!element) return;
+  const text = element.textContent?.trim();
+  const box = elementBox(element, canvasRect, scale);
+  if (!text || !box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  context.save();
+  context.fillStyle = style.color || "#dfe9ed";
+  context.font = cssCanvasFont(style, scale.y);
+  context.textBaseline = "middle";
+  context.textAlign = options.align || "left";
+  const x = context.textAlign === "center" ? box.x + box.width / 2 : box.x;
+  context.fillText(text, x, box.y + box.height / 2, box.width);
+  context.restore();
 }
 
 function overlayZIndex(element) {

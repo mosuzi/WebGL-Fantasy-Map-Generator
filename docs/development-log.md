@@ -2,6 +2,24 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：PNG 导出合成固定地图 overlay
+
+本步收尾视觉主题第一阶段的导出验证，把比例尺和地图图例纳入 PNG 合成。
+
+修正：
+
+- `composeMapExportCanvas()` 在地图内容 overlay 后继续绘制固定地图 UI overlay。
+- 新增比例尺绘制逻辑，读取 `#map-scale-bar`、`.map-scale-line` 和 `.map-scale-label` 的 computed style，合成当前主题下的面板、线段和文字。
+- 新增地图图例绘制逻辑，读取 `#map-legend` 的 computed style，合成图例面板、标题、温度 / 降水渐变条、刻度和 swatch 条目。
+- PNG 导出仍不合成浮动面板、控制面板、toast、测量工具条或 hover 浮层。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\map-file-io.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物文件级烟测通过：切换 `night`、进入温度视图并导出 PNG 后，文件尺寸为 `1280 x 800`；比例尺线像素为 `[209, 230, 230, 255]`，比例尺背景像素为 `[28, 23, 30, 255]`，图例背景像素为 `[27, 21, 27, 255]`，状态显示“图片已导出”，`glError = 0`，非 health console/page error 为 `0`。
+
 ## 2026-07-09：视觉主题图例 token 第一刀
 
 本步继续推进视觉主题第一阶段，把地图图例面板接入主题 token。
