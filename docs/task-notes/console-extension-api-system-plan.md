@@ -416,6 +416,14 @@ api.edit.measurement.delete(id)
 - 显示偏好不写回地图生成数据。
 - 气候修改的派生 stale 语义明确。
 
+当前状态：
+
+- 图层 API 已完成第一刀。
+- `api.layers.setViewMode(mode)` 会校验页面已有 `data-mode`，同步 active 按钮、本地显示偏好和 renderer color mode。
+- `api.layers.setVisible(layer, visible)` 会校验 renderer 已知图层，同步 UI 控件、本地显示偏好和 renderer layer visibility。
+- 本步只改显示偏好，不改变地图数据或 checksum。
+- 单位 API 和气候 API 尚未接入。
+
 ### 阶段 4：编辑命令 API 第一刀
 
 - 先接最稳定的命令：
@@ -460,7 +468,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步有两条可选路线：
 
-1. 若先扩大非 UI 控制面，进入阶段 3，接 `api.layers.setVisible()`、`api.layers.setViewMode()`、`api.units.get()/apply()` 和 `api.climate.get()`。
-2. 若继续增强导出，补导出结果的结构比较脚本，确认 UI 导出和 API 导出在同一选项下完全一致。
+1. 继续阶段 3，接 `api.units.get()/apply()`，让脚本能读写距离、面积、缩写、比例尺、人口、军事和降水单位偏好。
+2. 再接 `api.climate.get()` 只读摘要；`apply()` 和 `setLatitude()` 涉及生成参数与派生 stale，应单独拆小步。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。

@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台图层 API 第一刀
+
+本步进入控制台 / 扩展 API 系统阶段 3，先开放视图模式和图层显隐两类显示偏好操作。
+
+修正：
+
+- `api.layers.get()` 保持读取当前 renderer color mode、视觉主题、图层偏好和单位偏好。
+- `api.layers.setViewMode(mode)` 校验页面已有 `data-mode` 后，复用 `setActiveModeButton()` 同步按钮 active 状态和显示偏好，并调用 renderer `setColorMode()`。
+- `api.layers.setVisible(layer, visible)` 校验 renderer 已知图层后，同步本地偏好、UI 控件状态和 renderer `setLayerVisible()`。
+- `ui/panel.js` 导出 `updateLayerPreference()`，供 API 复用现有图层偏好写入逻辑。
+
+边界：
+
+- 本步只改变显示偏好和 renderer 视图，不修改地图生成数据、selection、编辑历史或 checksum。
+- 本步不接单位、气候、视觉主题、生成或编辑 API。
+- 未知视图模式或未知图层会返回结构化 API error，不写入偏好。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js`、`node --check app\webgl-generator\src\ui\panel.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`layers.setViewMode("temperature")` 后 renderer 和按钮均为温度视图；`layers.setVisible("routes", false)` / `true` 可关闭并恢复路线图层，最终 renderer `routes=true`、路线按钮 `aria-pressed=true` 且 active；调用前后 checksum 保持 `cbedb91c`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台压缩地图导出 API 第一刀
 
 本步补齐控制台 / 扩展 API 系统阶段 2 的压缩完整地图导出能力，让脚本可以拿到 `.webgl-map.json.gz` 的 gzip base64 或触发浏览器下载。

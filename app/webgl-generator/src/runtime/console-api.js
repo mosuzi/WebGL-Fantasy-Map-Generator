@@ -1,4 +1,4 @@
-import {readControlPreferences} from "../ui/panel.js";
+import {readControlPreferences, setActiveModeButton, updateLayerPreference} from "../ui/panel.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 
@@ -26,7 +26,9 @@ function createConsoleApi(documentRef, state) {
       get: () => apiCall(() => buildSelectionSnapshot(state))
     }),
     layers: Object.freeze({
-      get: () => apiCall(() => buildLayerSnapshot(state, documentRef))
+      get: () => apiCall(() => buildLayerSnapshot(state, documentRef)),
+      setViewMode: mode => apiCall(() => setLayerViewMode(state, documentRef, mode)),
+      setVisible: (layer, visible) => apiCall(() => setLayerVisible(state, documentRef, layer, visible))
     }),
     data: Object.freeze({
       exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
@@ -47,13 +49,13 @@ function buildCapabilities() {
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get"],
-      layers: ["get"],
+      layers: ["get", "setViewMode", "setVisible"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {
       info: "readonly",
       selection: "readonly",
-      layers: "readonly",
+      layers: "display-preference",
       data: "readonly-download"
     }
   };
@@ -131,6 +133,28 @@ function buildLayerSnapshot(state, documentRef) {
     layers: {...(preferences.layers || {})},
     units: {...(preferences.units || {})}
   };
+}
+
+function setLayerViewMode(state, documentRef, mode) {
+  const nextMode = String(mode || "").trim();
+  if (!nextMode) throw new Error("缺少视图模式");
+  const availableModes = [...documentRef.querySelectorAll("[data-mode]")].map(item => item.dataset.mode).filter(Boolean);
+  if (availableModes.length && !availableModes.includes(nextMode)) throw new Error(`未知视图模式：${nextMode}`);
+  setActiveModeButton(documentRef, nextMode);
+  state?.renderer?.setColorMode?.(nextMode);
+  return buildLayerSnapshot(state, documentRef);
+}
+
+function setLayerVisible(state, documentRef, layer, visible) {
+  const nextLayer = String(layer || "").trim();
+  if (!nextLayer) throw new Error("缺少图层名称");
+  const rendererLayers = state?.renderer?.getStats?.()?.layerVisibility || {};
+  if (!Object.prototype.hasOwnProperty.call(rendererLayers, nextLayer)) throw new Error(`未知图层：${nextLayer}`);
+  const nextVisible = Boolean(visible);
+  updateLayerPreference(documentRef, nextLayer, nextVisible);
+  updateLayerControlState(documentRef, nextLayer, nextVisible);
+  state?.renderer?.setLayerVisible?.(nextLayer, nextVisible);
+  return buildLayerSnapshot(state, documentRef);
 }
 
 function exportAllMapData(state, documentRef, options = {}) {
@@ -297,6 +321,20 @@ function currentVisualThemeId(state, documentRef) {
   return preferences.visualTheme || state?.map?.visualTheme?.preset || state?.options?.visualTheme || "default";
 }
 
+function updateLayerControlState(documentRef, layer, visible) {
+  const patch = layer === "coastline" ? {coastline: visible, lakeShore: visible} : {[layer]: visible};
+  for (const [item, enabled] of Object.entries(patch)) {
+    const control = documentRef.querySelector(`[data-layer="${cssEscape(item)}"]`);
+    if (!control) continue;
+    if (control.tagName === "BUTTON") {
+      control.classList.toggle("active", enabled);
+      control.setAttribute("aria-pressed", enabled ? "true" : "false");
+    } else {
+      control.checked = enabled;
+    }
+  }
+}
+
 function readFeatureGeoJsonLayerOptions(documentRef) {
   return {
     state: documentRef.getElementById("feature-export-layer-state")?.checked === true,
@@ -344,6 +382,11 @@ async function blobToBase64(documentRef, blob) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
   return view.btoa(binary);
+}
+
+function cssEscape(value) {
+  if (globalThis.CSS?.escape) return CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
 }
 
 function summarizeSelection(selection) {

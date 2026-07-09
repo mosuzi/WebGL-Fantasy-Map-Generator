@@ -436,7 +436,7 @@ function bindBooleanPreferenceButton(documentRef, id, preferenceKey, handler) {
   });
 }
 
-function updateLayerPreference(documentRef, layer, visible) {
+export function updateLayerPreference(documentRef, layer, visible) {
   if (!layer) return;
   const patch = layerVisibilityPreferencePatch(layer, visible);
   if (setGlobalConfigLayerVisible(layer, visible)) return;
