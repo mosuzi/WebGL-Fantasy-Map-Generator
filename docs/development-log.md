@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台城市新增 / 删除 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，把城市新增和删除接入 API。
+
+修正：
+
+- app action 增加 `edit.cities.add(gridCell)` 和 `edit.cities.delete(cityId)`。
+- `api.edit.cities.add()` 复用 `createAddCityAtCellCommand()` 和 `executeEditCommand()`，新增成功后选中新城市。
+- `api.edit.cities.delete()` 复用 `createDeleteCityCommand()` 和 `executeEditCommand()`，删除成功后清空选择。
+- API 执行后刷新 state / province / city / runtime 面板，保持和现有城市面板路径一致。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `cities.add` 和 `cities.delete`。
+
+边界：
+
+- 本步不接屏幕坐标拾取、城市重命名、人口、视觉、备注或城镇批量重算。
+- API 城市 collection 编辑会改变城镇数据和相关派生统计，但不重算地图 checksum；这与当前城市面板编辑路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `cities.add/delete`；`edit.cities.add(934)` 新增城市 `#828`、数量 `828 -> 829`、selection 指向新城市，撤销后回到 `828` 且新城市不存在，重做恢复同一城市；`edit.cities.delete(828)` 后数量回到 `828` 且城市 `removed=true`，撤销删除恢复为 `829`；metadata 为 `829`，checksum 保持 `1c0f54d0`，校验值 `ad94e835`。
+
 ## 2026-07-09：控制台 marker 新增 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，补齐资源标记新增 API。

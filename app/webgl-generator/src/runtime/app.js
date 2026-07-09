@@ -1964,6 +1964,10 @@ function createConsoleApiActions(state, documentRef) {
         rename: (measurementId, name) => renameMeasurementViaApi(state, documentRef, measurementId, name),
         delete: measurementId => deleteMeasurementViaApi(state, documentRef, measurementId)
       },
+      cities: {
+        add: gridCell => addCityViaApi(state, documentRef, gridCell),
+        delete: cityId => deleteCityViaApi(state, documentRef, cityId)
+      },
       routes: {
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId)
       },
@@ -3905,6 +3909,53 @@ function deleteRouteViaApi(state, documentRef, routeId) {
     throwOnError: false
   });
   if (result.executed) refreshPanelsForEdit(state, result.command);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function addCityViaApi(state, documentRef, gridCell) {
+  const targetGridCell = normalizeApiInteger(gridCell, "grid cell");
+  const command = createAddCityAtCellCommand(targetGridCell);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "目标 grid cell 无效、不是陆地或已存在城市。",
+    status: command => {
+      const created = command.getResult?.();
+      return Number.isInteger(created?.cityId)
+        ? `已新增城市 #${created.cityId}。`
+        : "已新增城市。";
+    },
+    throwOnError: false
+  });
+  const created = result.command?.getResult?.();
+  if (result.executed && Number.isInteger(created?.cityId)) {
+    state.cityEdit.lastCreatedCityId = created.cityId;
+    state.panels.city?.setSelectedCityId(created.cityId);
+    state.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: created.cityId}});
+  }
+  updateStatePanel(state);
+  updateProvincePanel(state);
+  updateCityPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteCityViaApi(state, documentRef, cityId) {
+  const id = normalizeApiInteger(cityId, "城市 ID");
+  const command = createDeleteCityCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "城市不存在或已被删除。",
+    status: `已删除城市 #${id}。`,
+    throwOnError: false
+  });
+  if (result.executed) {
+    state.selectionStore.clear();
+    state.panels.city?.setSelectedCityId(null);
+  }
+  updateStatePanel(state);
+  updateProvincePanel(state);
+  updateCityPanel(state);
+  updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
