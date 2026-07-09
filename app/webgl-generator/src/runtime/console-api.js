@@ -46,6 +46,10 @@ function createConsoleApi(documentRef, state, actions = {}) {
     edit: Object.freeze({
       notes: Object.freeze({
         delete: (noteId, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.delete, "edit.notes.delete")(noteId, options))
+      }),
+      measurements: Object.freeze({
+        rename: (measurementId, name) => apiCall(() => requireApiAction(actions.edit?.measurements?.rename, "edit.measurements.rename")(measurementId, name)),
+        delete: measurementId => apiCall(() => requireApiAction(actions.edit?.measurements?.delete, "edit.measurements.delete")(measurementId))
       })
     }),
     data: Object.freeze({
@@ -71,7 +75,7 @@ function buildCapabilities() {
       units: ["get", "apply"],
       climate: ["get"],
       history: ["get", "undo", "redo"],
-      edit: ["notes.delete"],
+      edit: ["notes.delete", "measurements.rename", "measurements.delete"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {

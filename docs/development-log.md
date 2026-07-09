@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台测量对象编辑 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，把测量对象重命名和删除接入 API。
+
+修正：
+
+- app action 增加 `edit.measurements.rename(id, name)` 和 `edit.measurements.delete(id)`。
+- `api.edit.measurements.rename()` 复用 `createRenameMeasurementCommand()`、`executeEditCommand()` 和 measurement effects。
+- `api.edit.measurements.delete()` 复用 `createDeleteMeasurementCommand()`、`executeEditCommand()` 和 measurement effects。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `measurements.rename` 和 `measurements.delete`。
+
+边界：
+
+- 本步不接保存当前测量、导入测量、改点列、路线贴合或测量图层渲染。
+- API 编辑会改变测量对象数据，但不重算地图 checksum；这与当前面板编辑路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：注入 `api-smoke-measurement` 后，`edit.measurements.rename(..., "新测量")` 成功改名，`edit.measurements.delete()` 使数量变为 `0`，`history.undo()` 恢复名为“新测量”的对象，`history.redo()` 再次删除，最终 history 为 `undo=2 / redo=0 / lastLabel=重做 删除测量对象 api-smoke-measurement`，状态显示“已删除测量对象 api-smoke-measurement。”；调用前后 checksum 保持 `fc9c967b`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台编辑 API 第一刀
 
 本步进入控制台 / 扩展 API 系统阶段 4，先接入 history 和备注删除这组最稳定的编辑能力。

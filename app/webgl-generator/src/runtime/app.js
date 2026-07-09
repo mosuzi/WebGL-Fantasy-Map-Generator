@@ -1959,6 +1959,10 @@ function createConsoleApiActions(state, documentRef) {
     edit: {
       notes: {
         delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
+      },
+      measurements: {
+        rename: (measurementId, name) => renameMeasurementViaApi(state, documentRef, measurementId, name),
+        delete: measurementId => deleteMeasurementViaApi(state, documentRef, measurementId)
       }
     }
   };
@@ -3841,6 +3845,46 @@ function deleteNoteViaApi(state, documentRef, noteId, options = {}) {
   });
   if (result.executed) refreshPanelsForEdit(state, result.command);
   updateEditingInteractionLock(state, documentRef);
+  return {
+    executed: result.executed,
+    label: result.command?.label || "",
+    result: result.result,
+    error: result.error ? {
+      name: result.error.name || "Error",
+      message: result.error.message || String(result.error)
+    } : null,
+    history: state.editHistory.getStats()
+  };
+}
+
+function renameMeasurementViaApi(state, documentRef, measurementId, name) {
+  const id = String(measurementId || "").trim();
+  const nextName = String(name || "").trim();
+  const command = createRenameMeasurementCommand(id, nextName, {label: `重命名测量对象 ${id}`});
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "测量对象不存在或名称未变化。",
+    status: `已重命名测量对象 ${nextName || id}。`,
+    throwOnError: false
+  });
+  if (result.executed) refreshPanelsForEdit(state, result.command);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteMeasurementViaApi(state, documentRef, measurementId) {
+  const id = String(measurementId || "").trim();
+  const command = createDeleteMeasurementCommand(id, {label: `删除测量对象 ${id}`});
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "测量对象不存在或已被删除。",
+    status: `已删除测量对象 ${id}。`,
+    throwOnError: false
+  });
+  if (result.executed) refreshPanelsForEdit(state, result.command);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function editApiResult(state, result) {
   return {
     executed: result.executed,
     label: result.command?.label || "",

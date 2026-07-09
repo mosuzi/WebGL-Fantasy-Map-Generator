@@ -450,8 +450,10 @@ api.edit.measurement.delete(id)
 - 已完成第一刀。
 - `api.history.get()`、`api.history.undo()` 和 `api.history.redo()` 已接入 app action，复用当前 `EditHistory` 和刷新路径。
 - `api.edit.notes.delete(noteId, {name})` 已接入 `createDeleteNoteCommand()`、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
+- `api.edit.measurements.rename(id, name)` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - 浏览器烟测已覆盖备注删除、撤销和重做。
-- 测量、标签、路线和 marker 编辑 API 尚未接入。
+- 浏览器烟测已覆盖测量对象重命名、删除、撤销删除和重做删除。
+- 标签、路线和 marker 编辑 API 尚未接入。
 
 ### 阶段 5：生成、导入和批量能力
 
@@ -482,7 +484,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步有两条可选路线：
 
-1. 继续阶段 4，接测量对象 `rename/delete`，复用现有测量 edit commands 和 history。
-2. 再接路线 `delete` 或标签 `delete/restore`；这些都已有命令，但需要逐一补浏览器撤销 / 重做断言。
+1. 继续阶段 4，接路线 `delete` 或标签 `delete/restore`；这些都已有命令，但需要逐一补浏览器撤销 / 重做断言。
+2. marker `add/delete/move` API 涉及坐标、图标和资源标记语义，建议在路线 / 标签之后单独拆分。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。
