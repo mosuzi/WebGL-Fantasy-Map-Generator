@@ -87,7 +87,7 @@
 
 1. 先做 dissolve 算法原型，先在工具脚本中用固定 seed 验证 ring 拼接。`已完成第一刀`
 2. 补导出验证和文件体积记录。`已完成第一刀`
-3. 稳定后接入 UI，提供“合并政治面边界”开关。
+3. 稳定后接入 UI，提供“合并政治面边界”开关。`已完成第一刀`
 4. 若导出耗时影响主线程，再评估 Worker 或懒加载几何库。
 
 ## 2026-07-09 原型验证记录
@@ -129,5 +129,20 @@
 
 后续接入前仍需：
 
-- 增加导出 UI 开关，并保留非 dissolve 输出作为回退。
-- 用浏览器下载烟测确认实际 `.features.geojson` 文件中的 `dissolved` 标记和点数缩减。
+## 2026-07-09 UI 接入验证记录
+
+导出浮层已新增“合并政治面边界”开关；启用后，state / province / zone 会走 dissolve 输出，未启用时仍保持原有非 dissolve MultiPolygon 回退。
+
+构建产物浏览器烟测：
+
+- 勾选国家面、省份面、区域，关闭 city / route / river / marker，并启用“合并政治面边界”。
+- 下载 `docs/generated/smoke/features-dissolve-smoke.geojson`。
+- 文件 `properties.layerSet = states-provinces-zones`。
+- 文件 `properties.dissolvedPolitical = true`。
+- feature 数 `261`，bad feature `0`，所有 feature 均为 `state / province / zone` 的 `MultiPolygon` 且 `properties.dissolved = true`。
+- 坐标点 `12030`，`glError = 0`，非 health console/page error 为 `0`。
+
+后续仍可优化：
+
+- 100k cells 大图的浏览器导出耗时和主线程占用。
+- 若耗时过高，再评估 Worker 或懒加载几何库。

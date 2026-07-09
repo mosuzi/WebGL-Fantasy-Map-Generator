@@ -2631,10 +2631,12 @@ function exportFeatureGeoJson(state, documentRef) {
   try {
     assertMapAvailable(state);
     const layers = readFeatureGeoJsonLayerOptions(documentRef);
+    const dissolvePolitical = readFeatureGeoJsonDissolveOption(documentRef);
     setFileOperationStatus(documentRef, "正在导出要素 GeoJSON...");
-    const geoJson = createMapFeatureGeoJson(state.map, {layers});
+    const geoJson = createMapFeatureGeoJson(state.map, {layers, dissolvePolitical});
     downloadText(documentRef, JSON.stringify(geoJson), `${mapFileBaseName(state.map)}.features.geojson`, "application/geo+json;charset=utf-8");
-    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个要素，图层：${geoJson.properties.layerSet}。`);
+    const dissolveStatus = geoJson.properties.dissolvedPolitical ? "，已合并政治面边界" : "";
+    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个要素，图层：${geoJson.properties.layerSet}${dissolveStatus}。`);
   } catch (error) {
     reportFileOperationError(documentRef, "要素 GeoJSON 导出失败", error);
   }
@@ -3029,6 +3031,10 @@ function readFeatureGeoJsonLayerOptions(documentRef) {
     marker: documentRef.getElementById("feature-export-layer-marker")?.checked !== false,
     zone: documentRef.getElementById("feature-export-layer-zone")?.checked !== false
   };
+}
+
+function readFeatureGeoJsonDissolveOption(documentRef) {
+  return documentRef.getElementById("feature-export-dissolve-political")?.checked === true;
 }
 
 async function encodeBrowserMapStoragePayload(documentRef, text, map) {

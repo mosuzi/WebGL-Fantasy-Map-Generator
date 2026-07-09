@@ -240,6 +240,7 @@ function editLockControls(documentRef) {
     "#feature-export-layer-river",
     "#feature-export-layer-marker",
     "#feature-export-layer-zone",
+    "#feature-export-dissolve-political",
     "#import-map-file",
     "#heightmap-image-file",
     "#heightmap-import-min",

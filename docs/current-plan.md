@@ -340,6 +340,11 @@
    - 边界：本步不接 UI 开关，默认要素 GeoJSON 仍输出 `dissolved=false` 的非 dissolve 政治面。
    - 完成记录：`createMapFeatureGeoJson(map, {dissolvePolitical: true})` 可对 state / province / zone 输出 `dissolved=true` 的 MultiPolygon；固定 `dissolve-smoke` 10k 图验证中 feature 数保持 `206`，坐标点 `53180 -> 10383`，减少约 `80.48%`。
 
+48. 政治面 dissolve 导出 UI 开关第一刀。`已完成`
+   - 目标：把已验证的 state / province / zone dissolve 接入要素 GeoJSON 导出浮层，用户可按需输出真正合并外轮廓。
+   - 边界：默认仍关闭 dissolve；本步不做 100k cells 大图耗时优化，不改 pack cell GeoJSON。
+   - 完成记录：要素 GeoJSON 图层区新增“合并政治面边界”开关；启用后文件写入 `dissolvedPolitical=true`，state / province / zone feature 写入 `dissolved=true`，状态文案显示“已合并政治面边界”。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -377,6 +382,7 @@
 - PNG 导出倍率第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\map-file-io.js`、`node --check app\webgl-generator\src\ui\panel.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `PNG 倍率` 控件包含 `1/2/3/4x`，设置 `2x` 后下载 PNG 文件头尺寸为 `2560 x 1600`，源 canvas 为 `1280 x 800`，状态显示“倍率 2x”，`glError = 0`，非 health console/page error 为 `0`。
 - 政治面 dissolve 拓扑原型第一刀已完成：`node --check app\webgl-generator\src\runtime\map-file-io.js` 和 `git diff --check` 通过；命令级 Node 断言确认两个相邻方形 cell dissolve 后输出一个闭合 MultiPolygon、点数从非合并 `10` 点降为 `7` 点，并确认 `3x3` 缺中心对象输出一个 polygon、两个 rings（外环 `13` 点、hole `5` 点）；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 政治面 dissolve 内部导出验证第一刀已完成：`node --check app\webgl-generator\src\runtime\map-file-io.js` 和 `git diff --check` 通过；命令级 Node 真实生成图验证确认 `dissolve-smoke` 10k 图的 state / province / zone 非 dissolve 与 dissolve feature 数均为 `206`，dissolve 输出 `properties.dissolvedPolitical = true` 且所有 feature `dissolved = true`，坐标点 `53180 -> 10383`，减少 `80.48%`，非 dissolve 导出 `21.74ms`、dissolve 导出 `44.43ms`；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 政治面 dissolve 导出 UI 开关第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认启用“合并政治面边界”后下载的 `features-dissolve-smoke.geojson` 为 `states-provinces-zones`，`dissolvedPolitical = true`，feature 数 `261`，bad feature `0`，坐标点 `12030`，状态显示“已合并政治面边界”，`glError = 0`，非 health console/page error 为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

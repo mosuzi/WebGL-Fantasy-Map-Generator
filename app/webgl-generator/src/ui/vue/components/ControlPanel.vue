@@ -95,6 +95,7 @@
               <UiSwitchField label="标记" input-id="feature-export-layer-marker" field-class="feature-export-layer-switch" :checked="true" />
               <UiSwitchField label="区域" input-id="feature-export-layer-zone" field-class="feature-export-layer-switch" :checked="true" />
             </div>
+            <UiSwitchField label="合并政治面边界" input-id="feature-export-dissolve-political" field-class="feature-export-dissolve-switch" />
           </section>
         </section>
       </Teleport>

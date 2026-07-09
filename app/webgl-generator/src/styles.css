@@ -3331,6 +3331,26 @@ select:disabled {
   color: #ffe0a1;
 }
 
+.feature-export-dissolve-switch {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: #10171b;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.feature-export-dissolve-switch.is-checked {
+  border-color: rgba(215, 168, 79, 0.75);
+  background: #2b2415;
+  color: #ffe0a1;
+}
+
 .feature-export-layer-switch span {
   min-width: 0;
   overflow: hidden;

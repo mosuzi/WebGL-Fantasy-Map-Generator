@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：政治面 dissolve 导出 UI 开关第一刀
+
+本步把已验证的政治面 dissolve 内部选项接入要素 GeoJSON 导出浮层，用户可以按需输出真正合并外轮廓。
+
+修正：
+
+- 要素 GeoJSON 图层区新增“合并政治面边界”开关，默认关闭。
+- `exportFeatureGeoJson()` 读取该开关，并把 `dissolvePolitical` 传给 `createMapFeatureGeoJson()`。
+- 启用后导出状态文案追加“已合并政治面边界”。
+- 地图未就绪时禁用列表补上 dissolve 开关。
+
+边界：
+
+- 默认导出仍保持非 dissolve，避免大图导出成本突然变化。
+- 本步不改变 pack cell GeoJSON，不做 100k cells 大图耗时优化。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：勾选国家面、省份面、区域，关闭 city / route / river / marker，并启用“合并政治面边界”后，下载的 `docs/generated/smoke/features-dissolve-smoke.geojson` 中 `properties.layerSet = states-provinces-zones`、`properties.dissolvedPolitical = true`；feature 数 `261`、bad feature `0`、坐标点 `12030`；状态显示“已合并政治面边界”，`glError = 0`，非 health console/page error 为 `0`。
+
 ## 2026-07-09：政治面 dissolve 内部导出验证第一刀
 
 本步把上一刀的 dissolve 拓扑原型接入 `createMapFeatureGeoJson()` 内部选项，完成真实生成图验证，但暂不暴露 UI 开关。

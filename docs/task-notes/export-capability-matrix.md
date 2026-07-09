@@ -102,11 +102,11 @@
 - 写入 city、marker 或 route 备注后，对应 feature 会带 `hasNote = true` 和 `note` 正文；river 走同一备注字段导出路径。
 - 简介 tab 的“要素 GeoJSON 图层”开关可限制导出图层，导出元数据 `layerSet` 会同步反映选择。
 - 国家面和省份面默认关闭，手动开启后输出非 dissolve MultiPolygon，并明确 `dissolved=false`。
-- 内部导出选项 `dissolvePolitical=true` 已可对 state / province / zone 输出真正 dissolve MultiPolygon，并在生成图验证中将坐标点从 `53180` 降到 `10383`；UI 开关仍待接入。
+- “合并政治面边界”开关可对 state / province / zone 输出真正 dissolve MultiPolygon，并在生成图验证中将坐标点从 `53180` 降到 `10383`；构建产物下载烟测确认实际 `.features.geojson` 带 `dissolvedPolitical=true`。
 
 缺口：
 
-- zone、state 和 province 的真正 dissolve 外轮廓已有内部选项和命令级验证，尚未接入导出 UI。
+- zone、state 和 province 已支持真正 dissolve 外轮廓；后续可继续补范围导出、CRS 元数据和大图耗时优化。
 - route / river 可继续补名称、等级中文标签和更完整统计。
 - 尚未支持范围导出或 CRS 元数据配置。
 
