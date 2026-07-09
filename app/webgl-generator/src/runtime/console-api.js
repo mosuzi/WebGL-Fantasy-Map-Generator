@@ -53,6 +53,10 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       routes: Object.freeze({
         delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId))
+      }),
+      labels: Object.freeze({
+        delete: label => apiCall(() => requireApiAction(actions.edit?.labels?.delete, "edit.labels.delete")(label)),
+        restore: label => apiCall(() => requireApiAction(actions.edit?.labels?.restore, "edit.labels.restore")(label))
       })
     }),
     data: Object.freeze({
@@ -78,7 +82,7 @@ function buildCapabilities() {
       units: ["get", "apply"],
       climate: ["get"],
       history: ["get", "undo", "redo"],
-      edit: ["notes.delete", "measurements.rename", "measurements.delete", "routes.delete"],
+      edit: ["notes.delete", "measurements.rename", "measurements.delete", "routes.delete", "labels.delete", "labels.restore"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {

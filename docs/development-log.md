@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台标签编辑 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，把标签删除和生成标签恢复接入 API。
+
+修正：
+
+- app action 增加 `edit.labels.delete(label)` 和 `edit.labels.restore(label)`。
+- `api.edit.labels.delete()` 复用 `createDeleteLabelCommand()`、`executeEditCommand()` 和 label effects，支持手工标签删除和生成标签隐藏。
+- `api.edit.labels.restore()` 复用 `createRestoreGeneratedLabelCommand()`、`executeEditCommand()` 和 label effects，支持恢复已隐藏的生成城市 / 国家标签。
+- API wrapper 会校验标签 `id / targetId` 和 `targetKind`，避免无效 ID 写入标签 hidden 列表。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `labels.delete` 和 `labels.restore`。
+
+边界：
+
+- 本步不接新增手工标签、移动标签、重命名标签、标签备注或批量标签规则。
+- API 编辑会改变标签数据，但不重算地图 checksum；这与当前标签管理面板编辑路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `labels.delete/restore`；注入手工标签 `900001` 后，`edit.labels.delete({targetKind:"custom", targetId:900001})` 成功删除，`history.undo()` 恢复，`history.redo()` 再次删除；对真实城市标签 `#1` 预置 hidden 后，`edit.labels.restore({targetKind:"city", targetId:1})` 成功恢复，`history.undo()` 重新隐藏；校验值 `63ee1433`。
+
 ## 2026-07-09：控制台路线删除 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，把路线删除接入 API。

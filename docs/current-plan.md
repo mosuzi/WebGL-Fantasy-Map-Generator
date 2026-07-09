@@ -490,6 +490,11 @@
    - 边界：本步只接 `edit.routes.delete(routeId)`；不接路线新增、改线、重算道路或路线备注编辑。
    - 完成记录：app action 复用 `createDeleteRouteCommand()`、`executeEditCommand()` 和 route effects；API 删除进入统一 `EditHistory`，并通过 route effects 刷新路线 mesh、对象面板和对象索引。`api.info.capabilities()` 已声明 `edit.routes.delete`。
 
+78. 控制台标签编辑 API 第一刀。`已完成`
+   - 目标：继续阶段 4，把标签删除 / 恢复接入控制台 API，覆盖手工标签删除和生成标签恢复。
+   - 边界：本步只接 `edit.labels.delete(label)` 和 `edit.labels.restore(label)`；不接新增手工标签、移动标签、重命名、标签备注或批量标签规则。
+   - 完成记录：app action 复用 `createDeleteLabelCommand()`、`createRestoreGeneratedLabelCommand()` 和 `executeEditCommand()`；API 参数会校验 `targetId / id` 与 `targetKind`，避免无效 ID 写入 hidden 列表。`api.info.capabilities()` 已声明 `edit.labels.delete/restore`。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -557,6 +562,7 @@
 - 控制台编辑 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测注入 `API 烟测备注` 后，`edit.notes.delete("api-smoke-note")` 使备注数 `1 -> 0`，`history.undo()` 恢复为 `1`，`history.redo()` 再次删除为 `0`，最终 history 为 `undo=1 / redo=0 / lastLabel=重做 删除备注 API 烟测备注`，状态显示“已删除备注 API 烟测备注。”，调用前后 checksum 保持 `f1bd14c3`，`glError = 0`，health / console / page error 均为 `0`。
 - 控制台测量对象编辑 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测注入 `api-smoke-measurement` 后，`edit.measurements.rename(..., "新测量")` 成功改名，`edit.measurements.delete()` 使数量变为 `0`，`history.undo()` 恢复名为“新测量”的对象，`history.redo()` 再次删除，最终 history 为 `undo=2 / redo=0 / lastLabel=重做 删除测量对象 api-smoke-measurement`，状态显示“已删除测量对象 api-smoke-measurement。”，调用前后 checksum 保持 `fc9c967b`，`glError = 0`，health / console / page error 均为 `0`。
 - 控制台路线删除 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测对真实路线 `#0` 调用 `edit.routes.delete(0)` 后路线数和 metadata `589 -> 588`，`history.undo()` 恢复为 `589`，`history.redo()` 再次删除为 `588`，最终 history 为 `undo=1 / redo=0 / lastLabel=重做 删除路线 #0 #0`，状态显示“已删除路线 #0。”，调用前后 checksum 保持 `8fe1d6f8`，`glError = 0`，health / console / page error 均为 `0`。
+- 控制台标签编辑 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `api.info.capabilities()` 包含 `labels.delete/restore`，注入手工标签 `900001` 后 `edit.labels.delete({targetKind:"custom", targetId:900001})` 可删除、`history.undo()` 恢复、`history.redo()` 再删；对真实城市标签 `#1` 预置 hidden 后 `edit.labels.restore({targetKind:"city", targetId:1})` 可恢复，`history.undo()` 可重新隐藏，校验值 `63ee1433`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

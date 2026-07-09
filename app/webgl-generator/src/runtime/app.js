@@ -1966,6 +1966,10 @@ function createConsoleApiActions(state, documentRef) {
       },
       routes: {
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId)
+      },
+      labels: {
+        delete: label => deleteLabelViaApi(state, documentRef, label),
+        restore: label => restoreGeneratedLabelViaApi(state, documentRef, label)
       }
     }
   };
@@ -3898,6 +3902,48 @@ function deleteRouteViaApi(state, documentRef, routeId) {
   if (result.executed) refreshPanelsForEdit(state, result.command);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function deleteLabelViaApi(state, documentRef, label) {
+  const target = normalizeApiLabelTarget(label);
+  const command = createDeleteLabelCommand(target);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "标签不存在或已被隐藏。",
+    status: `已删除或隐藏标签 ${formatApiLabelTarget(target)}。`,
+    throwOnError: false
+  });
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function restoreGeneratedLabelViaApi(state, documentRef, label) {
+  const target = normalizeApiLabelTarget(label);
+  const command = createRestoreGeneratedLabelCommand(target);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "生成标签不存在或未隐藏。",
+    status: `已恢复生成标签 ${formatApiLabelTarget(target)}。`,
+    throwOnError: false
+  });
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function normalizeApiLabelTarget(label) {
+  const id = Number(label?.targetId ?? label?.id);
+  if (!Number.isFinite(id)) throw new Error("缺少标签 ID");
+  const targetKind = label?.targetKind || LABEL_TARGET_KIND.CITY;
+  if (![LABEL_TARGET_KIND.CITY, LABEL_TARGET_KIND.STATE, LABEL_TARGET_KIND.CUSTOM].includes(targetKind)) {
+    throw new Error(`未知标签类型：${targetKind}`);
+  }
+  return {id, targetId: id, targetKind};
+}
+
+function formatApiLabelTarget(target) {
+  return `${target.targetKind} #${target.id}`;
 }
 
 function editApiResult(state, result) {
