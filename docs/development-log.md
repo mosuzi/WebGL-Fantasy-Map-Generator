@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台编辑 API 第一刀
+
+本步进入控制台 / 扩展 API 系统阶段 4，先接入 history 和备注删除这组最稳定的编辑能力。
+
+修正：
+
+- `installConsoleApi()` 支持接收 app action 注入，避免 API 模块直接反向依赖 app 内部 helper。
+- app action 暴露 `history.get()`、`history.undo()`、`history.redo()` 和 `edit.notes.delete(noteId, options)`。
+- `api.history.get()`、`api.history.undo()` 和 `api.history.redo()` 复用当前 `EditHistory`，撤销 / 重做后走 `refreshAfterEdit()`、`updateAllObjectPanels()` 和编辑锁刷新。
+- `api.edit.notes.delete(noteId, {name})` 复用 `createDeleteNoteCommand()`、`executeEditCommand()` 和 `refreshPanelsForEdit()`，进入统一撤销栈和面板刷新路径。
+
+边界：
+
+- 本步只接备注删除，不接备注正文编辑、新增备注、测量、标签、路线或 marker 编辑 API。
+- API 编辑会改变地图对象数据，但不重算地图 checksum；这与当前面板编辑路径一致。
+- action 未安装时返回结构化 API error。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：注入 `API 烟测备注` 后，`edit.notes.delete("api-smoke-note")` 使备注数 `1 -> 0`，`history.undo()` 恢复为 `1`，`history.redo()` 再次删除为 `0`，最终 history 为 `undo=1 / redo=0 / lastLabel=重做 删除备注 API 烟测备注`，状态显示“已删除备注 API 烟测备注。”；调用前后 checksum 保持 `f1bd14c3`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台气候只读 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 3，先开放气候只读摘要，给脚本提供温度、降水、纬度、风带和生物群系统计。

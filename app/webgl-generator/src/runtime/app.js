@@ -1943,10 +1943,25 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 
   const view = documentRef.defaultView || window;
   view.__webglGeneratorApp = state;
-  installConsoleApi(documentRef, state);
+  installConsoleApi(documentRef, state, {actions: createConsoleApiActions(state, documentRef)});
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;
+}
+
+function createConsoleApiActions(state, documentRef) {
+  return {
+    history: {
+      get: () => state.editHistory.getStats(),
+      undo: () => executeHistoryCommand(state, documentRef, "undo"),
+      redo: () => executeHistoryCommand(state, documentRef, "redo")
+    },
+    edit: {
+      notes: {
+        delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
+      }
+    }
+  };
 }
 
 function measureHealthOperation(state, name, detail, task) {
@@ -3790,6 +3805,52 @@ function executeEditCommand(state, documentRef, command, options = {}) {
     if (options.throwOnError === false) return {executed: false, command, result: null, error};
     throw error;
   }
+}
+
+function executeHistoryCommand(state, documentRef, action) {
+  const command = action === "redo"
+    ? state.editHistory.redo({map: state.map})
+    : state.editHistory.undo({map: state.map});
+  if (!command) {
+    return {
+      executed: false,
+      action,
+      label: "",
+      history: state.editHistory.getStats()
+    };
+  }
+  refreshAfterEdit(state, command);
+  updateAllObjectPanels(state);
+  updateEditingInteractionLock(state, documentRef);
+  return {
+    executed: true,
+    action,
+    label: command.label || "",
+    history: state.editHistory.getStats()
+  };
+}
+
+function deleteNoteViaApi(state, documentRef, noteId, options = {}) {
+  const id = String(noteId || "").trim();
+  const name = String(options.name || id);
+  const command = createDeleteNoteCommand(id, {name});
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "备注不存在或已被删除。",
+    status: `已删除备注 ${name || id}。`,
+    throwOnError: false
+  });
+  if (result.executed) refreshPanelsForEdit(state, result.command);
+  updateEditingInteractionLock(state, documentRef);
+  return {
+    executed: result.executed,
+    label: result.command?.label || "",
+    result: result.result,
+    error: result.error ? {
+      name: result.error.name || "Error",
+      message: result.error.message || String(result.error)
+    } : null,
+    history: state.editHistory.getStats()
+  };
 }
 
 function readEditCommandResult(command) {

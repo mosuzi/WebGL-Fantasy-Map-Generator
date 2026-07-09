@@ -6,15 +6,15 @@ import {apiCall} from "./api-result.js";
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
 
-export function installConsoleApi(documentRef, state) {
+export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
-  const api = createConsoleApi(documentRef, state);
+  const api = createConsoleApi(documentRef, state, options.actions || {});
   view.webglGeneratorApi = api;
   if (!view.api) view.api = api;
   return api;
 }
 
-function createConsoleApi(documentRef, state) {
+function createConsoleApi(documentRef, state, actions = {}) {
   const api = {
     version: API_VERSION,
     stability: API_STABILITY,
@@ -38,6 +38,16 @@ function createConsoleApi(documentRef, state) {
     climate: Object.freeze({
       get: () => apiCall(() => buildClimateSnapshot(state))
     }),
+    history: Object.freeze({
+      get: () => apiCall(() => actions.history?.get?.() || state?.editHistory?.getStats?.() || null),
+      undo: () => apiCall(() => requireApiAction(actions.history?.undo, "history.undo")()),
+      redo: () => apiCall(() => requireApiAction(actions.history?.redo, "history.redo")())
+    }),
+    edit: Object.freeze({
+      notes: Object.freeze({
+        delete: (noteId, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.delete, "edit.notes.delete")(noteId, options))
+      })
+    }),
     data: Object.freeze({
       exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
       exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
@@ -53,13 +63,15 @@ function buildCapabilities() {
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "selection", "layers", "units", "climate", "data"],
+    namespaces: ["info", "selection", "layers", "units", "climate", "history", "edit", "data"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get"],
       layers: ["get", "setViewMode", "setVisible"],
       units: ["get", "apply"],
       climate: ["get"],
+      history: ["get", "undo", "redo"],
+      edit: ["notes.delete"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {
@@ -68,9 +80,16 @@ function buildCapabilities() {
       layers: "display-preference",
       units: "display-preference",
       climate: "readonly",
+      history: "edit-history",
+      edit: "edit-command",
       data: "readonly-download"
     }
   };
+}
+
+function requireApiAction(action, name) {
+  if (typeof action !== "function") throw new Error(`API action 未安装：${name}`);
+  return action;
 }
 
 function buildMapSummary(state) {

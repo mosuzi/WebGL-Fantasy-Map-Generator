@@ -445,6 +445,14 @@ api.edit.measurement.delete(id)
 - `api.history.undo()` / `redo()` 可恢复。
 - 面板打开时能同步刷新。
 
+当前状态：
+
+- 已完成第一刀。
+- `api.history.get()`、`api.history.undo()` 和 `api.history.redo()` 已接入 app action，复用当前 `EditHistory` 和刷新路径。
+- `api.edit.notes.delete(noteId, {name})` 已接入 `createDeleteNoteCommand()`、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
+- 浏览器烟测已覆盖备注删除、撤销和重做。
+- 测量、标签、路线和 marker 编辑 API 尚未接入。
+
 ### 阶段 5：生成、导入和批量能力
 
 - 接入地图生成、换 seed、受约束重算、完整地图导入、GEO 导入。
@@ -474,7 +482,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步有两条可选路线：
 
-1. 若继续阶段 3，评估是否接 `api.climate.apply()` 的显示控件同步，但要先明确它是否立即重算气候、是否进入撤销，以及如何标记派生 stale。
-2. 也可以先进入阶段 4，接最稳定的编辑命令 API：备注删除 / 测量重命名删除 / 标签新增删除 / 路线删除。
+1. 继续阶段 4，接测量对象 `rename/delete`，复用现有测量 edit commands 和 history。
+2. 再接路线 `delete` 或标签 `delete/restore`；这些都已有命令，但需要逐一补浏览器撤销 / 重做断言。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。
