@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：`locateAndSelectObject()` helper 第一刀
+
+本步推进编辑器基础设施清单中的统一定位 / 选择入口，先迁移 marker 面板定位路径。
+
+修正：
+
+- 运行时初始化闭包新增 `locateAndSelectObject(panelId, object, options)`。
+- helper 内部复用 `renderer.locateObject()`、`selectFromPanel()`、runtime / pick panel 刷新和可选 `afterSelect` 回调。
+- marker 面板 `onLocate` 改走该 helper，定位时保留 source panel 语义，避免从面板内定位时反复重开面板。
+
+边界：
+
+- 本步不改全局 `locateObject()`，不迁移其它面板定位路径。
+- 本步不新增闪烁高亮或 API 暴露。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：marker 面板选中 `丹江矿山` 后点击行内定位，selection 保持 marker `#2`，面板选中行未丢，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-09：`refreshPanelsForEdit()` helper 第一刀
 
 本步推进编辑器基础设施清单中的对象面板刷新 helper，先按命令 `effects.affected.kind` 做保守刷新。

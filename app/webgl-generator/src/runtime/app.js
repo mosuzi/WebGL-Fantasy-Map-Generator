@@ -252,6 +252,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectionSourcePanelId = null;
     }
   };
+  const locateAndSelectObject = (panelId, object, {afterSelect = null} = {}) => {
+    const located = object ? state.renderer.locateObject(object) : false;
+    if (located) {
+      selectFromPanel(panelId, object);
+      afterSelect?.(object);
+    }
+    updateRuntimePanel(documentRef, state);
+    updatePickPanel(documentRef, state);
+    return located;
+  };
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
       selectionStore.startEditing(object);
@@ -1273,8 +1283,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       markerPanel.setSelectedMarkerId(object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      markerPanel.setSelectedMarkerId(object.id);
+      locateAndSelectObject("marker-panel", object, {
+        afterSelect: selected => markerPanel.setSelectedMarkerId(selected.id)
+      });
     },
     onRename: (markerId, name) => {
       const object = {kind: OBJECT_KIND.MARKER, id: markerId};

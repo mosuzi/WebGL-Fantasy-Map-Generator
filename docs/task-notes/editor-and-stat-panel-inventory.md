@@ -253,7 +253,7 @@
 
 1. `EditHistory` 只校验 `apply / revert`，没有统一校验 `effects / domain / affected / isNoop / getResult`，不同命令的返回值和 no-op 判断仍靠调用方约定。
 2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，但还没有统一“命令执行后按 affected 自动刷新相关面板”的调度层。
-3. selection 已集中，但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义仍分散在 `app.js` 和各面板回调中，还没有单独的 highlight / locate action 层。
+3. selection 已集中，`locateAndSelectObject()` 已在 marker 面板定位路径落地第一刀；但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义大多仍分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
 4. `UiObjectTable` 尚未支持虚拟滚动、统一空态动作、批量选择和列宽持久化；大列表面板后续仍可能受 DOM 行数影响。
 5. 面板状态只存在内存中，筛选词、排序字段、打开状态、位置和大小尚未按 workspace/session 持久化。
 6. 派生重建只覆盖已明确 effects 的对象；文化 / 宗教 cell 归属、河流 / 湖泊删除、政治面 dissolve、导出校验等更复杂链路还缺“先标脏、后重建、可解释”的统一策略。
@@ -263,7 +263,7 @@
 1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案，先覆盖测量对象重命名 / 删除；后续再补 `getResult()` 返回、异常处理策略，并迁移路线、备注或名称库等低风险调用点。
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
 3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，后续要覆盖撤销 / 重做路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
-4. 抽出 `locateAndSelectObject(state, object, documentRef, options)`：统一“设置 selection、打开 / 更新面板、定位、闪烁高亮”的入口，为后续 API 和 AI 操作复用。
+4. 继续扩展 `locateAndSelectObject()`：当前先覆盖 marker 面板定位路径，后续逐步迁移路线、河流、湖泊、城市和国家等对象，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。
 5. 给 `UiObjectTable` 增加可选 `actionsSlot` 或标准空态动作，避免各面板为了同一类列表级操作反复决定放置位置。
 6. 建立面板状态持久化第一刀：先保存筛选词、排序字段和窗口位置，不保存编辑草稿，避免刷新页面后丢失基本工作区上下文。
 
