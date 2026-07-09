@@ -1,5 +1,6 @@
 const CSS_PX_PER_CM = 96 / 2.54;
 const INTERNAL_POPULATION_UNIT_PEOPLE = 1000;
+const INTERNAL_PRECIPITATION_UNIT_MILLIMETERS = 100;
 const INTERNAL_RIVER_FLOW_TO_CUBIC_METERS_PER_SECOND = 6;
 
 export const DEFAULT_UNIT_PREFERENCES = Object.freeze({
@@ -121,8 +122,13 @@ export function militaryUnitsToPower(value, preferences = {}) {
 }
 
 export function formatPrecipitation(value, preferences = {}) {
+  const millimeters = precipitationUnitsToMillimeters(value, preferences);
+  return `${formatPlainNumber(millimeters, {maximumFractionDigits: millimeters >= 100 ? 0 : 1})} mm`;
+}
+
+export function precipitationUnitsToMillimeters(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
-  return `${formatNumber(numberOrZero(value) * units.precipitationScale, units, {maximumFractionDigits: 1})} mm`;
+  return numberOrZero(value) * INTERNAL_PRECIPITATION_UNIT_MILLIMETERS * units.precipitationScale;
 }
 
 export function formatRiverFlow(value, preferences = {}) {

@@ -1,5 +1,5 @@
 import {readControlPreferences, setActiveModeButton, updateControlPreferences, updateLayerPreference} from "../ui/panel.js";
-import {normalizeUnitPreferences} from "../ui/display-units.js";
+import {normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 
@@ -327,9 +327,15 @@ function buildClimateTemperatureSnapshot(state) {
 
 function buildClimatePrecipitationSnapshot(state) {
   const {metadata, options} = buildClimateContext(state);
+  const min = numberOrNull(metadata.precipitationMin);
+  const max = numberOrNull(metadata.precipitationMax);
   return {
-    min: numberOrNull(metadata.precipitationMin),
-    max: numberOrNull(metadata.precipitationMax),
+    min,
+    max,
+    unit: "internal-precipitation-index",
+    millimetersPerUnit: 100,
+    minMillimeters: min === null ? null : precipitationUnitsToMillimeters(min),
+    maxMillimeters: max === null ? null : precipitationUnitsToMillimeters(max),
     scale: numberOrNull(options.precipitation)
   };
 }

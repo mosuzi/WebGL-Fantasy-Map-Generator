@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：降水显示按原版毫米口径换算
+
+用户指出当前页面中 30 度地区、降水倍率调为 `1` 后只有 `6 mm` 降水，并据此质疑河流流量与气候数据计算不合理。复查原版 FMG 后确认，原版 UI 的降水显示为内部降水指数 `prec * 100 + " mm"`；WebGL 版此前直接把内部指数标为 `mm`，导致显示少了 100 倍。
+
+修正：
+
+- `display-units.js` 新增 `precipitationUnitsToMillimeters()`，默认按 `1` 个内部降水单位等于 `100 mm` 展示。
+- `formatPrecipitation()` 改为显示换算后的毫米值，并使用完整数字格式，不再受全局 `万 / 千` 缩写影响。
+- `api.climate.getPrecipitation()` 保留兼容字段 `min / max`，同时新增 `unit: "internal-precipitation-index"`、`millimetersPerUnit: 100`、`minMillimeters` 和 `maxMillimeters`，明确 API 读数中的内部指数和物理毫米口径。
+
+边界：
+
+- 本步只修降水展示和 API 单位说明，不改变气候生成算法、生物群系判定、降水图层原始数据、河流生成或河流流量标定。
+- 用户示例中的 `6 mm` 修正后应显示为 `600 mm`；河流流量是否仍偏低，需要在这个显示 bug 修正后重新对照当前地图。
+
+验证：
+
+- `node --input-type=module` 直接断言通过：`6 -> 600 mm`、`63 -> 6,300 mm`、`precipitationScale = 0.5` 时 `6 -> 300 mm`。
+- `node --check app\webgl-generator\src\ui\display-units.js` 和 `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：`api.climate.getPrecipitation()` 返回 `max = 63`、`maxMillimeters = 6300`、`millimetersPerUnit = 100`，气候面板文本包含 `6,300 mm`，`glError = 0`，console / page error 为空。
+
 ## 2026-07-09：列表排序入口改为表头排序，河流流量做展示标定
 
 用户要求把所有列表上的独立排序按钮改为表格自带的列排序功能，并质疑长达 1800+ 千米的河流只显示 `56 m³/s` 是否合理。
