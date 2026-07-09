@@ -3461,6 +3461,26 @@ select:disabled {
   line-height: 1.45;
 }
 
+.file-operation-error-details[hidden] {
+  display: none;
+}
+
+.file-operation-error-details {
+  max-height: 140px;
+  margin: 0;
+  border: 1px solid rgba(215, 92, 92, 0.32);
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow: auto;
+  background: rgba(57, 22, 22, 0.42);
+  color: #ffc7bd;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .generation-field-row {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);

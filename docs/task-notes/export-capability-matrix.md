@@ -43,7 +43,7 @@
 缺口：
 
 - 迁移器已预留 `migrateMapDocument()` 管线，但当前仍只有 v1，无实际跨版本迁移步骤。
-- 尚未做导入错误详情面板。
+- 导入失败时已在控制面板显示文件名、大小、MIME、推断格式、错误类型、错误信息和中文处理建议；后续若要继续增强，可把最近错误记录导出为诊断包。
 
 ## pack cell GeoJSON
 
@@ -162,4 +162,4 @@
 
 1. 国家、省份和 zone dissolve：补真正适合 GIS 的外轮廓，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑原型验证。
 2. PNG 导出倍率和是否包含 overlay 的选项。
-3. 完整 JSON 版本迁移器和导入错误详情面板。
+3. 完整 JSON 版本迁移器和导入诊断包。

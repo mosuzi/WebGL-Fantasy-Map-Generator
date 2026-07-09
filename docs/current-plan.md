@@ -320,6 +320,11 @@
    - 边界：本步不改变默认纯 JSON 导出，不改地图文档 v1 字段，不实现真实 v2 迁移；只预留 `migrateMapDocument()` 管线，供后续跨版本迁移接入。
    - 完成记录：导出面板新增“压缩地图数据”，使用浏览器 `CompressionStream` 生成 gzip 文件；导入地图数据入口接受 `.webgl-map.json.gz`，并用 `DecompressionStream` 读取后走同一 `parseMapDocument()` 与运行时加载链路。
 
+44. 地图数据导入错误详情第一刀。`已完成`
+   - 目标：补齐“导出能力矩阵收尾”中的导入错误诊断，让坏 JSON、错误格式和未来版本文件能在控制面板显示可读详情。
+   - 边界：本步只覆盖完整地图数据导入入口，不改变 GEO / 高度图导入错误 UI，不新增诊断包导出，也不改变地图文档 v1。
+   - 完成记录：控制面板新增导入错误详情块；地图数据导入失败时显示文件名、大小、MIME、推断格式、错误类型、错误信息和中文建议，成功导入或重新开始导入时会清空旧详情。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -353,6 +358,7 @@
 - 高度面板接入河流重算入口已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\height-panel.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认高度面板存在“重算河流”按钮，点击后完成河流重算，`glError = 0`，console/page error 为 `0`。
 - 河流重算清理已刷新派生状态已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认高度笔刷后待派生为 12 项，点击“重算河流”后降为 9 项，且 `rivers / routes / biomes` 不再留在过期清单中。
 - 完整地图压缩文件导出 / 导入第一刀已完成：`node --check app\webgl-generator\src\runtime\map-file-io.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel.js` 和 `git diff --check` 通过；命令级 Node 断言确认 v1 文档、typed array 恢复和未来版本拒绝逻辑正常；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `.webgl-map.json.gz` 可导出并重新导入，导入后 seed `stage-2-1`、grid cells `10004`、pack cells `5968`、`glError = 0`，非 health console/page error 为 `0`；health monitor 记录 `3` 次 `main-thread-long-task`，作为后续性能观察信号保留。
+- 地图数据导入错误详情第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认坏 JSON 导入会显示文件名、大小、MIME、推断格式、`SyntaxError`、错误信息和中文建议，详情块保持展开，`glError = 0`，非 health console/page error 为 `0`，warning 通道记录预期导入失败诊断。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

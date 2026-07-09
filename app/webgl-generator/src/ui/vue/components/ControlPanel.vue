@@ -51,6 +51,7 @@
           </label>
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
+        <pre id="file-operation-error-details" class="file-operation-error-details" hidden></pre>
       </section>
 
       <Teleport to="body">

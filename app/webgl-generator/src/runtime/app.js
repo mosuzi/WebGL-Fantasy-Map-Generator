@@ -3117,6 +3117,7 @@ async function importMapData(state, documentRef, file) {
   if (!file) return;
   try {
     resetLoadTrace(documentRef);
+    clearFileOperationDetails(documentRef);
     emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
     setFileOperationStatus(documentRef, "正在读取地图数据...");
     setMythicGenerationLoading(documentRef, true, "map-import-read");
@@ -3132,10 +3133,11 @@ async function importMapData(state, documentRef, file) {
     });
     if (createGenerationNamebaseSnapshot(state.map)) persistNamebasePreferences(state, documentRef);
     updateGenerationLoading(documentRef, false);
+    clearFileOperationDetails(documentRef);
     setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    reportFileOperationError(documentRef, "地图数据导入失败", error);
+    reportMapImportError(documentRef, error, file);
   }
 }
 
@@ -3282,10 +3284,60 @@ function setFileOperationStatus(documentRef, message, targetIds = ["file-operati
   }
 }
 
+function reportMapImportError(documentRef, error, file) {
+  const message = error instanceof Error ? error.message : String(error);
+  setFileOperationStatus(documentRef, `地图数据导入失败：${message}`);
+  setFileOperationDetails(documentRef, mapImportErrorDetails(error, file));
+  console.warn(error);
+}
+
 function reportFileOperationError(documentRef, prefix, error, targetIds) {
   const message = error instanceof Error ? error.message : String(error);
   setFileOperationStatus(documentRef, `${prefix}：${message}`, targetIds);
   console.error(error);
+}
+
+function setFileOperationDetails(documentRef, lines, targetId = "file-operation-error-details") {
+  const details = documentRef.getElementById(targetId);
+  if (!details) return;
+  const text = lines.filter(Boolean).join("\n");
+  details.textContent = text;
+  details.hidden = !text;
+}
+
+function clearFileOperationDetails(documentRef, targetId = "file-operation-error-details") {
+  const details = documentRef.getElementById(targetId);
+  if (!details) return;
+  details.textContent = "";
+  details.hidden = true;
+}
+
+function mapImportErrorDetails(error, file) {
+  const message = error instanceof Error ? error.message : String(error);
+  return [
+    `文件：${file?.name || "未命名文件"}`,
+    `大小：${formatStorageBytes(file?.size || 0)}`,
+    `MIME：${file?.type || "未提供"}`,
+    `推断格式：${mapImportFileKindLabel(file)}`,
+    `错误类型：${error?.name || typeof error}`,
+    `错误信息：${message}`,
+    mapImportErrorSuggestion(message)
+  ];
+}
+
+function mapImportFileKindLabel(file) {
+  const name = String(file?.name || "").toLowerCase();
+  const type = String(file?.type || "").toLowerCase();
+  if (name.endsWith(".gz") || type.includes("gzip") || type === "application/x-gzip") return "gzip 压缩地图 JSON";
+  return "地图 JSON";
+}
+
+function mapImportErrorSuggestion(message) {
+  if (/不是当前地图保存格式/.test(message)) return "建议：请确认文件来自“导出 / 地图数据”或“导出 / 压缩地图数据”。";
+  if (/暂不支持的地图格式版本/.test(message)) return "建议：请使用当前版本导出的地图文件，或等待后续版本迁移器支持。";
+  if (/Unexpected|JSON|position|token/i.test(message)) return "建议：文件内容不是有效 JSON；若文件以 .gz 结尾，请确认它确实为 gzip 压缩文件。";
+  if (/压缩|Decompression|gzip/i.test(message)) return "建议：请确认压缩文件未损坏，并且浏览器支持 DecompressionStream。";
+  return "建议：保留此详情并重新导入原始 .webgl-map.json 或 .webgl-map.json.gz 文件。";
 }
 
 function syncGenerationInputs(documentRef, options) {
