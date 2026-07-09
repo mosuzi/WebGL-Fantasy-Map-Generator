@@ -1,4 +1,5 @@
 import {readControlPreferences} from "../ui/panel.js";
+import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 
 const API_VERSION = "0.1.0";
@@ -26,6 +27,11 @@ function createConsoleApi(documentRef, state) {
     }),
     layers: Object.freeze({
       get: () => apiCall(() => buildLayerSnapshot(state, documentRef))
+    }),
+    data: Object.freeze({
+      exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
+      exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
+      exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options))
     })
   };
   return Object.freeze(api);
@@ -35,16 +41,18 @@ function buildCapabilities() {
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "selection", "layers"],
+    namespaces: ["info", "selection", "layers", "data"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get"],
-      layers: ["get"]
+      layers: ["get"],
+      data: ["exportAll", "exportGEO", "exportFeatureGEO"]
     },
     sideEffects: {
       info: "readonly",
       selection: "readonly",
-      layers: "readonly"
+      layers: "readonly",
+      data: "readonly-download"
     }
   };
 }
@@ -121,6 +129,116 @@ function buildLayerSnapshot(state, documentRef) {
     layers: {...(preferences.layers || {})},
     units: {...(preferences.units || {})}
   };
+}
+
+function exportAllMapData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const document = createMapDocument(map, {
+    ...(state.options || {}),
+    visualTheme: currentVisualThemeId(state, documentRef)
+  });
+  const text = stringifyMapDocument(document);
+  const filename = `${mapFileBaseName(map)}.webgl-map.json`;
+  if (options.download === true) {
+    downloadText(documentRef, text, filename, "application/json;charset=utf-8");
+  }
+  return withOptionalText(options, {
+    filename,
+    mimeType: "application/json;charset=utf-8",
+    text,
+    bytes: text.length,
+    metadata: {
+      type: document.type,
+      version: document.version,
+      seed: document.metadata.seed || "",
+      checksum: document.metadata.checksum || ""
+    }
+  });
+}
+
+function exportPackGeoJson(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const geoJson = createMapGeoJson(map);
+  const text = JSON.stringify(geoJson);
+  const filename = `${mapFileBaseName(map)}.geojson`;
+  if (options.download === true) {
+    downloadText(documentRef, text, filename, "application/geo+json;charset=utf-8");
+  }
+  return withOptionalText(options, {
+    filename,
+    mimeType: "application/geo+json;charset=utf-8",
+    text,
+    bytes: text.length,
+    metadata: {
+      type: geoJson.type,
+      name: geoJson.name || "",
+      seed: geoJson.properties?.seed || "",
+      checksum: geoJson.properties?.checksum || "",
+      features: geoJson.features?.length || 0,
+      coordinateReference: geoJson.properties?.coordinateReference || ""
+    }
+  });
+}
+
+function exportFeatureGeoJsonData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const layers = options.layers && typeof options.layers === "object" ? {...options.layers} : readFeatureGeoJsonLayerOptions(documentRef);
+  const dissolvePolitical = typeof options.dissolvePolitical === "boolean" ? options.dissolvePolitical : readFeatureGeoJsonDissolveOption(documentRef);
+  const geoJson = createMapFeatureGeoJson(map, {layers, dissolvePolitical});
+  const text = JSON.stringify(geoJson);
+  const filename = `${mapFileBaseName(map)}.features.geojson`;
+  if (options.download === true) {
+    downloadText(documentRef, text, filename, "application/geo+json;charset=utf-8");
+  }
+  return withOptionalText(options, {
+    filename,
+    mimeType: "application/geo+json;charset=utf-8",
+    text,
+    bytes: text.length,
+    metadata: {
+      type: geoJson.type,
+      name: geoJson.name || "",
+      seed: geoJson.properties?.seed || "",
+      checksum: geoJson.properties?.checksum || "",
+      features: geoJson.features?.length || 0,
+      layerSet: geoJson.properties?.layerSet || "",
+      dissolvedPolitical: Boolean(geoJson.properties?.dissolvedPolitical)
+    }
+  });
+}
+
+function assertApiMap(state) {
+  if (!state?.map) throw new Error("当前没有可导出的地图");
+  return state.map;
+}
+
+function withOptionalText(options, payload) {
+  if (options.includeText === false || options.download === true && options.includeText !== true) {
+    const {text: _text, ...summary} = payload;
+    return summary;
+  }
+  return payload;
+}
+
+function currentVisualThemeId(state, documentRef) {
+  const preferences = readControlPreferences(documentRef);
+  return preferences.visualTheme || state?.map?.visualTheme?.preset || state?.options?.visualTheme || "default";
+}
+
+function readFeatureGeoJsonLayerOptions(documentRef) {
+  return {
+    state: documentRef.getElementById("feature-export-layer-state")?.checked === true,
+    province: documentRef.getElementById("feature-export-layer-province")?.checked === true,
+    city: documentRef.getElementById("feature-export-layer-city")?.checked !== false,
+    route: documentRef.getElementById("feature-export-layer-route")?.checked !== false,
+    river: documentRef.getElementById("feature-export-layer-river")?.checked !== false,
+    marker: documentRef.getElementById("feature-export-layer-marker")?.checked !== false,
+    zone: documentRef.getElementById("feature-export-layer-zone")?.checked !== false
+  };
+}
+
+function readFeatureGeoJsonDissolveOption(documentRef) {
+  return documentRef.getElementById("feature-export-dissolve-political")?.checked === true;
 }
 
 function summarizeSelection(selection) {

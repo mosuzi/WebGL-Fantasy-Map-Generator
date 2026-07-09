@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台导出 API 第一刀
+
+本步继续推进控制台 / 扩展 API 系统阶段 2，把已有导出能力先开放为脚本可调用的只读 API。
+
+修正：
+
+- `api.info.capabilities()` 增加 `data` 命名空间，声明 `exportAll`、`exportGEO` 和 `exportFeatureGEO` 三个方法。
+- `api.data.exportAll({download})` 复用 `createMapDocument()` 和 `stringifyMapDocument()`，返回完整地图 JSON 文本、文件名、MIME、字节数和文档元数据。
+- `api.data.exportGEO({download})` 复用 `createMapGeoJson()`，返回 pack cell GeoJSON 文本和 feature 摘要。
+- `api.data.exportFeatureGEO({download, layers, dissolvePolitical})` 复用 `createMapFeatureGeoJson()`，支持调用方传入图层集合和政治面 dissolve 选项。
+- `download:true` 复用现有 `downloadText()` 浏览器下载能力；下载模式默认不回传大文本，可用 `includeText:true` 显式要求回传。
+
+边界：
+
+- 本步不接 PNG、压缩地图 JSON、导入、生成、编辑、气候或图层写 API。
+- 导出 API 只读，不写状态文案，不修改地图数据，也不改变 checksum。
+- API 返回文本便于脚本断言；后续若接 PNG / Blob 类能力，需要单独处理异步和二进制返回。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`data.exportAll({download:false})` 返回 `webgl-generator-map` 文档文本 `15,376,660` 字节；`data.exportGEO({download:false})` 返回 `5,968` 个 cell 面；`data.exportFeatureGEO({download:false, dissolvePolitical:true})` 返回 `1,947` 个要素且 `dissolvedPolitical=true`；`data.exportFeatureGEO({download:true, includeText:false})` 触发 `fmg-stage-2-1-1754ddd6.features.geojson` 下载；调用前后 checksum 保持 `1754ddd6`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台 API 根对象与只读能力第一刀
 
 本步进入控制台 / 扩展 API 系统阶段 1，先建立浏览器控制台可读取的 API 根对象，并只开放不会改变地图数据的快照能力。
