@@ -44,7 +44,7 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
+import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentFile, stringifyMapDocument} from "./map-file-io.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
@@ -1822,6 +1822,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onExportImage: () => exportMapImage(state, documentRef),
     onExportMapData: () => exportMapData(state, documentRef),
+    onExportCompressedMapData: () => {
+      void exportCompressedMapData(state, documentRef);
+    },
     onExportGeoJson: () => exportGeoJson(state, documentRef),
     onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef),
     onImportMapData: file => importMapData(state, documentRef, file),
@@ -2592,6 +2595,18 @@ function exportMapData(state, documentRef) {
   }
 }
 
+async function exportCompressedMapData(state, documentRef) {
+  try {
+    assertMapAvailable(state);
+    setFileOperationStatus(documentRef, "正在导出压缩地图数据...");
+    const document = createPersistableMapDocument(state, documentRef);
+    const result = await downloadCompressedMapDocument(documentRef, document, `${mapFileBaseName(state.map)}.webgl-map.json.gz`);
+    setFileOperationStatus(documentRef, `压缩地图数据已导出：原始 ${formatStorageBytes(result.originalBytes)}，压缩后 ${formatStorageBytes(result.compressedBytes)}。`);
+  } catch (error) {
+    reportFileOperationError(documentRef, "压缩地图数据导出失败", error);
+  }
+}
+
 function exportGeoJson(state, documentRef) {
   try {
     assertMapAvailable(state);
@@ -3105,7 +3120,7 @@ async function importMapData(state, documentRef, file) {
     emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
     setFileOperationStatus(documentRef, "正在读取地图数据...");
     setMythicGenerationLoading(documentRef, true, "map-import-read");
-    const document = parseMapDocument(await file.text());
+    const document = await parseMapDocumentFile(documentRef, file);
     const options = normalizeOptions(document.map.options || document.options || state.options);
     document.map.options = options;
     state.options = options;

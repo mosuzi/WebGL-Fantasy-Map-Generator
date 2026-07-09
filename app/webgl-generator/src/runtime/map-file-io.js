@@ -40,10 +40,39 @@ export function stringifyMapDocument(document) {
 
 export function parseMapDocument(text) {
   const document = JSON.parse(text, typedArrayReviver);
+  return migrateMapDocument(document);
+}
+
+export async function parseMapDocumentFile(documentRef, file) {
+  if (!file) throw new Error("未选择地图文件");
+  const text = isCompressedMapDocumentFile(file)
+    ? await decompressMapDocumentFile(documentRef, file)
+    : await file.text();
+  return parseMapDocument(text);
+}
+
+export async function downloadCompressedMapDocument(documentRef, document, filename) {
+  const text = stringifyMapDocument(document);
+  const originalBytes = textByteLength(documentRef, text);
+  const blob = await createGzipTextBlob(documentRef, text);
+  downloadBlob(documentRef, blob, filename);
+  return {
+    originalBytes,
+    compressedBytes: blob.size
+  };
+}
+
+export function migrateMapDocument(document) {
   if (document?.type !== MAP_DOCUMENT_TYPE) throw new Error("文件不是当前地图保存格式");
-  if (document.version !== MAP_DOCUMENT_VERSION) throw new Error(`暂不支持的地图格式版本：${document.version}`);
-  if (!document.map || typeof document.map !== "object") throw new Error("地图文件缺少 map 数据");
-  return document;
+  const sourceVersion = Number(document.version);
+  if (!Number.isInteger(sourceVersion) || sourceVersion < 1) throw new Error(`暂不支持的地图格式版本：${document.version ?? "未知"}`);
+  if (sourceVersion > MAP_DOCUMENT_VERSION) throw new Error(`暂不支持的地图格式版本：${document.version}`);
+  let migrated = document;
+  for (let version = sourceVersion; version < MAP_DOCUMENT_VERSION; version += 1) {
+    migrated = migrateMapDocumentStep(migrated, version);
+  }
+  if (!migrated.map || typeof migrated.map !== "object") throw new Error("地图文件缺少 map 数据");
+  return migrated;
 }
 
 export function parseGeoJsonMeasurements(text, map, options = {}) {
@@ -203,6 +232,46 @@ function typedArrayReviver(_key, value) {
   const Constructor = TYPED_ARRAYS[type];
   if (typeof Constructor !== "function") throw new Error(`无法读取 typed array：${type}`);
   return new Constructor(value.data || []);
+}
+
+function migrateMapDocumentStep(document, version) {
+  const migrator = MAP_DOCUMENT_MIGRATORS[version];
+  if (typeof migrator !== "function") throw new Error(`缺少地图格式 v${version} 迁移器`);
+  return migrator(document);
+}
+
+const MAP_DOCUMENT_MIGRATORS = Object.freeze({});
+
+function isCompressedMapDocumentFile(file) {
+  const name = String(file?.name || "").toLowerCase();
+  const type = String(file?.type || "").toLowerCase();
+  return name.endsWith(".gz") || type.includes("gzip") || type === "application/x-gzip";
+}
+
+function textByteLength(documentRef, text) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.Blob === "function") return new view.Blob([text], {type: "application/json;charset=utf-8"}).size;
+  if (typeof TextEncoder === "function") return new TextEncoder().encode(text).byteLength;
+  return text.length;
+}
+
+async function decompressMapDocumentFile(documentRef, file) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.DecompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
+    throw new Error("当前浏览器不支持读取压缩地图文件");
+  }
+  const stream = file.stream().pipeThrough(new view.DecompressionStream("gzip"));
+  return new view.Response(stream).text();
+}
+
+async function createGzipTextBlob(documentRef, text) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.CompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
+    throw new Error("当前浏览器不支持导出压缩地图文件");
+  }
+  const stream = new view.Blob([text], {type: "application/json;charset=utf-8"}).stream().pipeThrough(new view.CompressionStream("gzip"));
+  const buffer = await new view.Response(stream).arrayBuffer();
+  return new view.Blob([buffer], {type: "application/gzip"});
 }
 
 function projectWorldPoint(point, map) {

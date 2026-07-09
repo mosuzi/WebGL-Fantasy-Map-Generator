@@ -43,7 +43,7 @@
           </div>
           <label class="file-import-action secondary-action">
             <span>导入地图数据</span>
-            <input id="import-map-file" type="file" accept=".json,application/json" />
+            <input id="import-map-file" type="file" accept=".json,.gz,.webgl-map.json,.webgl-map.json.gz,application/json,application/gzip,application/x-gzip" />
           </label>
           <label class="file-import-action secondary-action">
             <span>导入 GEO 数据</span>
@@ -70,6 +70,7 @@
           <div class="project-export-action-grid">
             <UiButton id="export-map-image" variant="secondary" @click="closeExportPanel">图片</UiButton>
             <UiButton id="export-map-data" variant="secondary" @click="closeExportPanel">地图数据</UiButton>
+            <UiButton id="export-map-data-compressed" variant="secondary" @click="closeExportPanel">压缩地图数据</UiButton>
             <UiButton id="export-map-geojson" variant="secondary" @click="closeExportPanel">GeoJSON</UiButton>
             <UiButton id="export-map-features-geojson" variant="secondary" @click="closeExportPanel">要素 GeoJSON</UiButton>
           </div>

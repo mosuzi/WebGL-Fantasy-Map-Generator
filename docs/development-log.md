@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：完整地图压缩文件导出 / 导入第一刀
+
+本步推进“导出能力矩阵收尾”中的完整 JSON 压缩方向，让本地文件除了默认 `.webgl-map.json` 外，也能导出可重新导入的 `.webgl-map.json.gz`。
+
+修正：
+
+- `map-file-io.js` 新增压缩地图文档下载、压缩文件读取和 `migrateMapDocument()` 迁移管线。
+- 控制面板导出浮层新增“压缩地图数据”入口，默认“地图数据”仍保持纯 JSON。
+- 导入地图数据入口接受 `.webgl-map.json.gz`，压缩文件解压后继续走同一地图文档解析和运行时加载链路。
+- `docs/task-notes/export-capability-matrix.md` 同步记录压缩格式现状，并把后续缺口收窄到真实跨版本迁移器和导入错误详情面板。
+
+边界：
+
+- 本步不改变 `webgl-generator-map v1` 字段，不新增 v2 文档格式。
+- 压缩文件依赖浏览器 `CompressionStream / DecompressionStream`；不支持的浏览器会显示明确错误。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\map-file-io.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- 命令级 Node 断言确认 v1 文档、typed array 恢复和未来版本拒绝逻辑正常。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`.webgl-map.json.gz` 成功下载到 `docs/generated/smoke/compressed-map-export-smoke.webgl-map.json.gz`，压缩文件大小 `2453306` 字节；重新导入后 seed `stage-2-1`、grid cells `10004`、pack cells `5968`、`glError = 0`，非健康监控 console/page error 为 `0`，健康监控记录 `3` 次 `main-thread-long-task`。
+
 ## 2026-07-09：修复高度面板重算入口可见性
 
 子智能体复核发现高度面板的 `.height-history-actions` 被早期通用隐藏规则 `display: none !important` 压住，导致“撤销上次 / 重做上次 / 重算河流”在 DOM 中存在但用户不可见、不可点击。

@@ -8,6 +8,7 @@
 |---|---|---|---|---|---|
 | 导出图片 | `.png` | PNG | WebGL 画布、地图尺寸摘要、比例尺 overlay | 否 | 已完成第一刀 |
 | 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v1` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成第一刀 |
+| 导出压缩地图数据 | `.webgl-map.json.gz` | gzip JSON | 与完整地图 JSON 相同，使用浏览器 `CompressionStream` 压缩 | 是 | 已完成第一刀 |
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
 | 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon、state/province 非 dissolve MultiPolygon；简介 tab 可选择导出图层 | 否 | 已完成第二刀 |
 | 导出备注摘要 | `.notes.json` | JSON | `webgl-generator-notes-summary v1`：当前筛选备注、正文、对象 id、孤儿状态和时间戳 | 否 | 已完成第一刀 |
@@ -34,10 +35,14 @@
 - typed arrays 显式序列化并恢复构造器。
 - marker、city、river、route、state、province、culture、religion 与 label 的 `map.notes` 会随完整 JSON 导出。
 
+已验证：
+
+- 本地文件导出可额外输出 `.webgl-map.json.gz`，导入地图数据入口可读取 `.webgl-map.json` 和 `.webgl-map.json.gz`。
+- LocalStorage 继续使用既有 gzip-base64 存档；本地文件压缩格式不改变默认纯 JSON 导出。
+
 缺口：
 
-- 尚未做压缩格式。
-- 尚未做跨版本迁移器。
+- 迁移器已预留 `migrateMapDocument()` 管线，但当前仍只有 v1，无实际跨版本迁移步骤。
 - 尚未做导入错误详情面板。
 
 ## pack cell GeoJSON
@@ -157,4 +162,4 @@
 
 1. 国家、省份和 zone dissolve：补真正适合 GIS 的外轮廓，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑原型验证。
 2. PNG 导出倍率和是否包含 overlay 的选项。
-3. 完整 JSON 压缩和版本迁移器。
+3. 完整 JSON 版本迁移器和导入错误详情面板。
