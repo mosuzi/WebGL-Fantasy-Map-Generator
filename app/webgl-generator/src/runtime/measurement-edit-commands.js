@@ -40,8 +40,11 @@ export function createSaveMeasurementCommand(points, {name = "", routeFit = "non
     isNoop(context) {
       return !context.map || !Array.isArray(points) || points.length < 2;
     },
-    getMeasurement() {
+    getResult() {
       return created ? JSON.parse(JSON.stringify(created)) : null;
+    },
+    getMeasurement() {
+      return this.getResult();
     }
   };
 }
@@ -174,8 +177,11 @@ export function createImportMeasurementsCommand(measurements, {label = "导入�
     isNoop(context) {
       return !context.map || !Array.isArray(measurements) || !measurements.some(item => Array.isArray(item?.points) && item.points.length);
     },
-    getImported() {
+    getResult() {
       return imported.map(item => JSON.parse(JSON.stringify(item)));
+    },
+    getImported() {
+      return this.getResult();
     }
   };
 }

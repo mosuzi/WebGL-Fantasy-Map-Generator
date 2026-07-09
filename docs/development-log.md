@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：`executeEditCommand()` 返回结果第一刀
+
+本步继续推进编辑器基础设施清单中的统一命令执行入口，让调用点可以从 helper 读取命令执行后的标准结果。
+
+修正：
+
+- `executeEditCommand()` 返回结构扩展为 `{executed, command, result, error}`。
+- helper 执行成功后读取命令的标准 `getResult()`，并保留默认抛错行为；调用方显式设置 `throwOnError: false` 时可拿到 `error`。
+- 测量保存命令和 GEO 测量导入命令新增标准 `getResult()`，旧 `getMeasurement()` / `getImported()` 作为兼容别名保留。
+- 保存当前测量对象和 GEO 测量导入路径改为通过 `executeEditCommand().result` 读取新增 / 导入对象。
+
+边界：
+
+- 本步只迁移测量保存与 GEO 测量导入，不批量改写其它面板命令。
+- 本步不新增运行时命令 schema 校验；错误展示策略仍以后续小步扩展。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\measurement-edit-commands.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：通过真实“保存”按钮保存两点测量后新增 `measurement-1`，状态显示“已保存测量对象 测量 1。”，撤销栈 `undo=1`，面板保持打开并选中新测量对象，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：`UiObjectTable` 标准空态动作第一刀
 
 本步推进编辑器基础设施清单中的公共对象表格扩展，先让空列表可以承载标准主动作。

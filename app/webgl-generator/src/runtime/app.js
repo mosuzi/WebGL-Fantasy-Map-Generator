@@ -3261,8 +3261,12 @@ async function importGeoData(state, documentRef, file) {
       setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
       return null;
     }
-    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-    const imported = command.getImported?.() || [];
+    const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+    if (!result.executed) {
+      setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
+      return null;
+    }
+    const imported = Array.isArray(result.result) ? result.result : [];
     state.measurement.points = [];
     state.measurement.editingMeasurementId = null;
     state.measurement.active = false;
@@ -3752,16 +3756,27 @@ function refreshAfterEdit(state, commandOrEffects) {
 
 function executeEditCommand(state, documentRef, command, options = {}) {
   const context = options.context || {map: state.map};
-  if (!command) return {executed: false, command: null};
-  if (command.isNoop?.(context)) {
-    if (options.noopStatus) setFileOperationStatus(documentRef, messageFromOption(options.noopStatus, command));
-    return {executed: false, command};
+  if (!command) return {executed: false, command: null, result: null, error: null};
+  try {
+    if (command.isNoop?.(context)) {
+      if (options.noopStatus) setFileOperationStatus(documentRef, messageFromOption(options.noopStatus, command));
+      return {executed: false, command, result: null, error: null};
+    }
+    const executedCommand = state.editHistory.execute(command, context);
+    const refresh = options.refresh || refreshAfterEdit;
+    refresh(state, executedCommand);
+    const result = readEditCommandResult(executedCommand);
+    if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
+    return {executed: true, command: executedCommand, result, error: null};
+  } catch (error) {
+    if (options.errorStatus) setFileOperationStatus(documentRef, messageFromOption(options.errorStatus, command));
+    if (options.throwOnError === false) return {executed: false, command, result: null, error};
+    throw error;
   }
-  const executedCommand = state.editHistory.execute(command, context);
-  const refresh = options.refresh || refreshAfterEdit;
-  refresh(state, executedCommand);
-  if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
-  return {executed: true, command: executedCommand};
+}
+
+function readEditCommandResult(command) {
+  return typeof command?.getResult === "function" ? command.getResult() : null;
 }
 
 function refreshPanelsForEdit(state, commandOrEffects) {
@@ -4572,11 +4587,11 @@ function saveCurrentMeasurement(state, documentRef) {
   if (state.measurement.editingMeasurementId) {
     const measurementId = state.measurement.editingMeasurementId;
     const command = createUpdateMeasurementPointsCommand(measurementId, state.measurement.points, {routeFit: state.measurement.routeFit});
-    if (command.isNoop(context)) {
-      setFileOperationStatus(documentRef, "测量对象没有可保存的形状变化，或点数不足。");
-      return;
-    }
-    refreshAfterEdit(state, state.editHistory.execute(command, context));
+    const result = executeEditCommand(state, documentRef, command, {
+      context,
+      noopStatus: "测量对象没有可保存的形状变化，或点数不足。"
+    });
+    if (!result.executed) return;
     state.measurement.editingMeasurementId = null;
     state.measurement.points = [];
     cancelMeasurementDrag(state, documentRef);
@@ -4588,12 +4603,12 @@ function saveCurrentMeasurement(state, documentRef) {
   }
 
   const command = createSaveMeasurementCommand(state.measurement.points, {routeFit: state.measurement.routeFit});
-  if (command.isNoop(context)) {
-    setFileOperationStatus(documentRef, "至少需要 2 个测量点才能保存。");
-    return;
-  }
-  refreshAfterEdit(state, state.editHistory.execute(command, context));
-  const created = command.getMeasurement?.();
+  const result = executeEditCommand(state, documentRef, command, {
+    context,
+    noopStatus: "至少需要 2 个测量点才能保存。"
+  });
+  if (!result.executed) return;
+  const created = result.result;
   state.measurement.points = [];
   cancelMeasurementDrag(state, documentRef);
   updateMeasurementOverlay(state, documentRef);

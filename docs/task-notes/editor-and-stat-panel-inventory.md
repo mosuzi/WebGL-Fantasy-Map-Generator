@@ -247,7 +247,7 @@
 4. `SELECTION_PANEL_HANDLERS` 已把对象种类映射到领域面板打开 / 更新逻辑，`selectFromPanel()` 可避免从面板选择对象时反复重开同一面板。
 5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口；`refreshPanelsForEdit()` 已落地第一刀，可按 `effects.affected.kind` 刷新对象面板，当前先接入测量对象重命名 / 删除。
 6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`，空列表主动作可优先走 `UiObjectTable.emptyAction`。
-7. `executeEditCommand()` 已在 `app.js` 内部落地第一刀，先迁移测量对象重命名 / 删除调用点，统一 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案。
+7. `executeEditCommand()` 已在 `app.js` 内部落地，先迁移测量对象重命名 / 删除调用点，统一 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案；返回结果第一刀已补 `{executed, command, result, error}`，测量保存和 GEO 测量导入已改用标准 `getResult()`。
 
 主要缺口：
 
@@ -260,7 +260,7 @@
 
 下一批施工小步：
 
-1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案，先覆盖测量对象重命名 / 删除；后续再补 `getResult()` 返回、异常处理策略，并迁移路线、备注或名称库等低风险调用点。
+1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit`、status 文案、标准 `getResult()` 返回和保守异常通道；后续再迁移路线、备注或名称库等低风险调用点，并补更明确的错误展示策略。
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
 3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，后续要覆盖撤销 / 重做路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 继续扩展 `locateAndSelectObject()`：当前先覆盖 marker 面板定位路径，后续逐步迁移路线、河流、湖泊、城市和国家等对象，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。
