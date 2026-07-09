@@ -117,6 +117,12 @@
 - Playwright + 系统 Chrome 构建产物 smoke 通过：国家、河流和经济面板旧 `.ui-sort-bar` 数量均为 `0`；国家“人口”、河流“长度”、经济“库存”表头点击后箭头和 `aria-sort` 均正确切换；河流原始最大 `flux = 1474` 展示为约 `3万 m³/s`，不再显示裸原始值；`glError = 0`，console / page error 为空。
 - `$env:CI='true'; pnpm run audit:panels -- --scenario deep --template continents --browser-channel chrome --out <临时文件> --markdown <临时文件>` 通过；17 个管理面板、0 待复核项、0 console error、0 health event。
 
+补充修正：
+
+- 用户复查现实河流数据后指出万级流量过多，标定系数从默认比例尺下 `1 flux ≈ 20 m³/s` 下调为 `1 flux ≈ 6 m³/s`。
+- 河流流量显示禁用数字缩写，始终显示完整数字加 `m³/s`；例如内部 `flux = 1474` 显示为 `8,844 m³/s`，内部 `flux = 56` 显示为 `336 m³/s`。
+- 验证：`node --input-type=module` 直接断言 `56 -> 336 m³/s`、`1474 -> 8,844 m³/s` 且不含 `万 / 千`；`node --check app\webgl-generator\src\ui\display-units.js`、`git diff --check` 和 `$env:CI='true'; pnpm run build:app` 均通过；Playwright + 系统 Chrome 构建产物 smoke 确认河流面板最大流量为 `8,844 m³/s`，列表流量无 `万 m³/s / 千 m³/s`。
+
 ## 2026-07-09 追加修复：编辑面板筛选和排序区间距统一
 
 用户指出最近新增的编辑面板中，各模块之间仍然缺少间距；参考国家编辑面板，筛选输入框与上方信息区、下方排序按钮行之间都应有稳定间距。

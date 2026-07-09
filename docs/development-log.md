@@ -26,6 +26,28 @@
 - Playwright + 系统 Chrome 构建产物 smoke 通过：国家、河流和经济面板旧 `.ui-sort-bar` 数量均为 `0`；国家“人口”、河流“长度”、经济“库存”表头点击后箭头和 `aria-sort` 均正确切换；河流原始最大 `flux = 1474` 展示为约 `3万 m³/s`，不再显示裸原始值；`glError = 0`，console / page error 为空。
 - `$env:CI='true'; pnpm run audit:panels -- --scenario deep --template continents --browser-channel chrome --out <临时文件> --markdown <临时文件>` 通过；17 个管理面板、0 待复核项、0 console error、0 health event。
 
+### 补充：河流流量标定下调和禁用缩写
+
+用户进一步对照现实河流数据后指出，当前展示会产生过多万级流量；同时流量数值总量不大，不需要 `万 / 千` 这类单位缩写。
+
+修正：
+
+- `INTERNAL_RIVER_FLOW_TO_CUBIC_METERS_PER_SECOND` 从 `20` 下调为 `6`。
+- `formatRiverFlow()` 改用完整数字格式，不再使用全局 `numberAbbreviation` 偏好；河流流量仍保留千分位和 `m³/s` 单位。
+- 默认比例尺下，内部 `flux = 1474` 会显示为 `8,844 m³/s`，内部 `flux = 56` 会显示为 `336 m³/s`。
+
+边界：
+
+- 本步仍只改变展示标定，不改变河流生成、河宽、排序、导出或内部 `flux / discharge` 数据。
+
+验证：
+
+- `node --input-type=module` 直接断言通过：`56 -> 336 m³/s`、`1474 -> 8,844 m³/s`，且格式不包含 `万 / 千`。
+- `node --check app\webgl-generator\src\ui\display-units.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：河流面板最大流量显示为 `8,844 m³/s`，列表流量无 `万 m³/s / 千 m³/s`，console / page error 为空。
+
 ## 2026-07-09：统一编辑面板筛选和排序区间距
 
 用户指出最近新增的编辑面板中，列表上下各模块之间仍然缺少间距；参考国家编辑面板，筛选输入框应与上方信息区有间距，也应与下方排序按钮行有间距。

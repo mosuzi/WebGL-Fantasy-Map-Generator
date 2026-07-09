@@ -1,6 +1,6 @@
 const CSS_PX_PER_CM = 96 / 2.54;
 const INTERNAL_POPULATION_UNIT_PEOPLE = 1000;
-const INTERNAL_RIVER_FLOW_TO_CUBIC_METERS_PER_SECOND = 20;
+const INTERNAL_RIVER_FLOW_TO_CUBIC_METERS_PER_SECOND = 6;
 
 export const DEFAULT_UNIT_PREFERENCES = Object.freeze({
   distanceUnit: "km-cn",
@@ -128,7 +128,7 @@ export function formatPrecipitation(value, preferences = {}) {
 export function formatRiverFlow(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   const flow = riverFluxToCubicMetersPerSecond(value, units);
-  return `${formatNumber(flow, units, {maximumFractionDigits: flow >= 100 ? 0 : 1})} m³/s`;
+  return `${formatPlainNumber(flow, {maximumFractionDigits: flow >= 100 ? 0 : 1})} m³/s`;
 }
 
 export function riverFluxToCubicMetersPerSecond(value, preferences = {}) {
