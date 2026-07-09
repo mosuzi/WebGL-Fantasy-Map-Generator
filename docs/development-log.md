@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：`refreshPanelsForEdit()` helper 第一刀
+
+本步推进编辑器基础设施清单中的对象面板刷新 helper，先按命令 `effects.affected.kind` 做保守刷新。
+
+修正：
+
+- `app.js` 新增 `refreshPanelsForEdit()` 和 `updatePanelForAffectedKind()`。
+- helper 覆盖 state、province、city、culture、religion、river、lake、route、marker、label、zone、note、measurement 等对象 kind。
+- 测量对象重命名 / 删除调用点改为在命令执行后通过 `refreshPanelsForEdit()` 刷新测量面板。
+
+边界：
+
+- 本步 helper 仍保留在 `app.js` 内部，不抽成跨模块 API。
+- 本步不改撤销 / 重做路径，也不一次性迁移其它面板。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：删除注入的 `烟测测量` 后，测量数 `1 -> 0`，面板摘要刷新为 `测量 0`，状态显示“已删除测量对象 烟测测量。”；头部撤销后测量对象恢复，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-09：Edit Command 轻量契约第一刀
 
 本步推进编辑器基础设施清单中的命令字段规范，先写入中文契约文档，不强制批量改造既有命令。

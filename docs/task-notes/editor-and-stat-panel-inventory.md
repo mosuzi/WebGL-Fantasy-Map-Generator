@@ -245,7 +245,7 @@
 2. `edit-refresh-scheduler` 已能按命令 `effects` 刷新 renderer 动态 buffer、专题 surface、标签、对象 picking、selection、运行时统计和 pick 面板；国家、省份、高度、河流、路线、marker、标签、备注、测量和名称库命令已开始使用不同刷新范围。
 3. `SelectionStore` 已集中维护 `selection` 和 `editingObject`，并在选择对象变化时清理不匹配的编辑对象；国家、省份、城市、河流、湖泊、路线、marker、标签、zone、文化和宗教等面板已通过 selection 刷新当前行。
 4. `SELECTION_PANEL_HANDLERS` 已把对象种类映射到领域面板打开 / 更新逻辑，`selectFromPanel()` 可避免从面板选择对象时反复重开同一面板。
-5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口，编辑完成后可按领域手动补刷，也可逐步收敛到命令 effects 驱动。
+5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口；`refreshPanelsForEdit()` 已落地第一刀，可按 `effects.affected.kind` 刷新对象面板，当前先接入测量对象重命名 / 删除。
 6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`。
 7. `executeEditCommand()` 已在 `app.js` 内部落地第一刀，先迁移测量对象重命名 / 删除调用点，统一 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案。
 
@@ -262,7 +262,7 @@
 
 1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案，先覆盖测量对象重命名 / 删除；后续再补 `getResult()` 返回、异常处理策略，并迁移路线、备注或名称库等低风险调用点。
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
-3. 新增 `refreshPanelsForEdit(state, command)` 小函数：先只根据 `effects.derived` 和 `affected.kind` 刷新对象面板，逐步减少调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
+3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，后续要覆盖撤销 / 重做路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 抽出 `locateAndSelectObject(state, object, documentRef, options)`：统一“设置 selection、打开 / 更新面板、定位、闪烁高亮”的入口，为后续 API 和 AI 操作复用。
 5. 给 `UiObjectTable` 增加可选 `actionsSlot` 或标准空态动作，避免各面板为了同一类列表级操作反复决定放置位置。
 6. 建立面板状态持久化第一刀：先保存筛选词、排序字段和窗口位置，不保存编辑草稿，避免刷新页面后丢失基本工作区上下文。

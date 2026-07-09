@@ -390,6 +390,11 @@
    - 边界：本步只写入契约文档和索引，不强制改造已有全部命令，不新增运行时校验。
    - 完成记录：新增 `docs/task-notes/edit-command-contract.md`，约定 `label / apply / revert / domain / effects / isNoop / getResult / affected`、`context`、`effects.derived`、helper 调用层、撤销快照和删除命令边界；`docs/task-notes/README.md`、编辑器清单和开发历史已同步。
 
+58. `refreshPanelsForEdit()` helper 第一刀。`已完成`
+   - 目标：推进编辑器基础设施清单中的“按命令 effects / affected 刷新对象面板”小步，减少调用点手写 `updateXPanel()`。
+   - 边界：本步先作为 `app.js` 内部 helper 落地，只根据 `effects.affected.kind` 和 `object-panels` 做保守面板刷新；先接测量对象重命名 / 删除调用点，不改变撤销 / 重做路径。
+   - 完成记录：新增 `refreshPanelsForEdit()` 和 `updatePanelForAffectedKind()`；支持 state、province、city、culture、religion、river、lake、route、marker、label、zone、note、measurement 等对象 kind；测量对象删除后面板摘要由 helper 刷新。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -437,6 +442,7 @@
 - 宗教面板新增 / 删除空宗教第一刀已完成：`node --check app\webgl-generator\src\runtime\religion-edit-commands.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\religion-panel.js` 和 `git diff --check` 通过；命令级 Node 断言确认新增宗教、撤销新增、重做新增、删除空宗教、撤销删除和非空宗教删除阻止逻辑正常；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认新增 `新宗教 19` 后宗教数 `19 -> 20`、删除后可见数回到 `19` 且 `removed=true`、头部撤销后恢复为 `20`，`glError = 0`，console/page error 为 `0`。
 - `executeEditCommand()` helper 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测向测量面板注入 `烟测测量` 后，通过列表动作条删除，测量数 `1 -> 0`、历史 `undo=1`、状态显示“已删除测量对象 烟测测量。”，头部撤销后恢复为 `1` 且 `redo=1`，`glError = 0`，console/page error 为 `0`。
 - Edit Command 轻量契约第一刀已完成：`git diff --check` 通过；新增 `docs/task-notes/edit-command-contract.md` 并同步 `docs/task-notes/README.md` 和编辑器清单，明确命令字段、`context.map`、`effects.affected`、helper 调用层、撤销快照和删除命令边界。
+- `refreshPanelsForEdit()` helper 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象删除后面板摘要刷新为 `测量 0`、历史 `undo=1`、状态显示“已删除测量对象 烟测测量。”，头部撤销后测量对象恢复，`glError = 0`，console/page error 为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

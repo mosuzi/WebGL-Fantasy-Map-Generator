@@ -1485,8 +1485,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRename: (measurementId, name) => {
       const command = createRenameMeasurementCommand(measurementId, name);
-      executeEditCommand(state, documentRef, command);
-      updateMeasurementPanel(state);
+      const result = executeEditCommand(state, documentRef, command);
+      if (result.executed) refreshPanelsForEdit(state, result.command);
       updateMeasurementOverlay(state, documentRef);
     },
     onDelete: row => {
@@ -1494,12 +1494,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const result = executeEditCommand(state, documentRef, command, {
         status: `已删除测量对象 ${row.name || row.id}。`
       });
+      if (result.executed) refreshPanelsForEdit(state, result.command);
       if (result.executed && state.measurement.editingMeasurementId === row.id) {
         state.measurement.editingMeasurementId = null;
         state.measurement.points = [];
         cancelMeasurementDrag(state, documentRef);
       }
-      updateMeasurementPanel(state);
       updateMeasurementOverlay(state, documentRef);
     },
     onExport: rows => {
@@ -3748,6 +3748,70 @@ function executeEditCommand(state, documentRef, command, options = {}) {
   refresh(state, executedCommand);
   if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
   return {executed: true, command: executedCommand};
+}
+
+function refreshPanelsForEdit(state, commandOrEffects) {
+  const effects = commandOrEffects?.effects || commandOrEffects || {};
+  const affected = Array.isArray(effects.affected) ? effects.affected : [];
+  const kinds = new Set(affected.map(item => item?.kind).filter(Boolean));
+  const derived = Array.isArray(effects.derived) ? effects.derived : [];
+  if (!kinds.size && derived.includes("object-panels")) {
+    updateAllObjectPanels(state);
+    return;
+  }
+  for (const kind of kinds) {
+    updatePanelForAffectedKind(state, kind);
+  }
+}
+
+function updatePanelForAffectedKind(state, kind) {
+  switch (kind) {
+    case OBJECT_KIND.STATE:
+      updateStatePanel(state);
+      updateGovernmentPanel(state);
+      updateDiplomacyPanel(state);
+      updateEconomyPanel(state);
+      updateMilitaryPanel(state);
+      break;
+    case OBJECT_KIND.PROVINCE:
+      updateProvincePanel(state);
+      break;
+    case OBJECT_KIND.CITY:
+      updateCityPanel(state);
+      break;
+    case OBJECT_KIND.CULTURE:
+      updateCulturePanel(state);
+      break;
+    case OBJECT_KIND.RELIGION:
+      updateReligionPanel(state);
+      break;
+    case OBJECT_KIND.RIVER:
+      updateRiverPanel(state);
+      break;
+    case OBJECT_KIND.LAKE:
+      updateLakePanel(state);
+      break;
+    case OBJECT_KIND.ROUTE:
+      updateRoutePanel(state);
+      break;
+    case OBJECT_KIND.MARKER:
+      updateMarkerPanel(state);
+      break;
+    case OBJECT_KIND.LABEL:
+      updateLabelNamingPanel(state);
+      break;
+    case OBJECT_KIND.ZONE:
+      updateZonePanel(state);
+      break;
+    case "note":
+      updateNotesPanel(state);
+      break;
+    case "measurement":
+      updateMeasurementPanel(state);
+      break;
+    default:
+      break;
+  }
 }
 
 function messageFromOption(message, command) {
