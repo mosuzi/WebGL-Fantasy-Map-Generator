@@ -1236,8 +1236,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       routePanel.setSelectedRouteId(object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      routePanel.setSelectedRouteId(object.id);
+      locateAndSelectObject("route-panel", object, {
+        afterSelect: target => routePanel.setSelectedRouteId(target.id)
+      });
     },
     onNoteChange: (routeId, body) => {
       const route = state.map?.settlements?.routes?.find(item => item.id === routeId);
@@ -1540,7 +1541,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectFromPanel("river-panel", object);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
+      locateAndSelectObject("river-panel", object, {
+        afterSelect: target => riverPanel.setSelection({object: target}, state.editingObject)
+      });
     },
     onEdit: object => {
       selectionStore.setSelection({object});
@@ -1615,7 +1618,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectFromPanel("lake-panel", object);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
+      locateAndSelectObject("lake-panel", object, {
+        afterSelect: target => lakePanel.setSelection({object: target})
+      });
     },
     onRename: (lakeId, name) => {
       const object = {kind: OBJECT_KIND.LAKE, id: lakeId};

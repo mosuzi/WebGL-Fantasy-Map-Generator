@@ -415,6 +415,11 @@
    - 边界：本步只迁移备注删除；不改变备注创建、备注正文编辑、导出摘要或撤销 / 重做路径。
    - 完成记录：备注删除改走 `executeEditCommand()`；`refreshPanelsForEdit()` 对 `derived: ["object-panels"]` 统一刷新所有对象面板，保留备注删除原有刷新语义；同步修正 `NotesPanel.vue` 动作条回调中未定义的 `callbacks` 引用。
 
+63. `locateAndSelectObject()` 线性对象扩展。`已完成`
+   - 目标：继续推进统一定位 / 选择入口，把低风险线性和水体对象面板的定位路径收束到同一个 helper。
+   - 边界：本步只迁移路线、河流和湖泊面板的“定位”回调；不改标签面板、城市 / 国家定位、闪烁高亮或进入编辑语义。
+   - 完成记录：路线、河流和湖泊面板定位改走 `locateAndSelectObject()`；定位后会通过 source panel 语义同步 selection，并保留各自面板的选中行状态。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -467,6 +472,7 @@
 - `UiObjectTable` 标准空态动作第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\measurement-panel.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象列表为空时显示“开始测量”，点击后进入测量模式，状态显示“已进入测量模式。”，`glError = 0`，health / console / page error 均为 `0`。
 - `executeEditCommand()` 返回结果第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\measurement-edit-commands.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认通过真实“保存”按钮保存两点测量后新增 `measurement-1`，状态显示“已保存测量对象 测量 1。”，撤销栈 `undo=1`，面板保持打开并选中新测量对象，`glError = 0`，health / console / page error 均为 `0`。
 - 备注删除接入编辑 helper 和面板刷新调度已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认注入 `烟测备注` 后点击真实“删除选中备注”按钮，备注数和 metadata `1 -> 0`，摘要刷新为 `备注0`，状态显示“已删除备注 烟测备注。”，撤销栈 `undo=1`，`glError = 0`，health / console / page error 均为 `0`。
+- `locateAndSelectObject()` 线性对象扩展已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测依次打开路线、河流和湖泊面板并点击表格定位按钮，selection 分别保持 `route / river / lake`，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

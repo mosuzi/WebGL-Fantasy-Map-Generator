@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：`locateAndSelectObject()` 线性对象扩展
+
+本步继续推进统一定位 / 选择入口，把路线、河流和湖泊面板的定位回调迁移到 `locateAndSelectObject()`。
+
+修正：
+
+- 路线面板 `onLocate` 改走 `locateAndSelectObject("route-panel", object, ...)`，定位后保留路线面板选中行。
+- 河流面板 `onLocate` 改走 `locateAndSelectObject("river-panel", object, ...)`，定位后保留河流 selection 和编辑对象状态。
+- 湖泊面板 `onLocate` 改走 `locateAndSelectObject("lake-panel", object, ...)`，定位后保留湖泊面板选中行。
+
+边界：
+
+- 本步不迁移标签、城市、国家、省份、文化或宗教面板定位路径。
+- 本步不新增闪烁高亮，不改变进入编辑模式的语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：依次打开路线、河流和湖泊面板并点击表格定位按钮，selection 分别保持 `route / river / lake`，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：备注删除接入编辑 helper 和面板刷新调度
 
 本步继续推进编辑器基础设施清单中的低风险调用点迁移，并补上 `refreshPanelsForEdit()` 对全对象面板刷新的第一层支持。
