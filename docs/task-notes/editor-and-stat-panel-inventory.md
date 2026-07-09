@@ -247,6 +247,7 @@
 4. `SELECTION_PANEL_HANDLERS` 已把对象种类映射到领域面板打开 / 更新逻辑，`selectFromPanel()` 可避免从面板选择对象时反复重开同一面板。
 5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口，编辑完成后可按领域手动补刷，也可逐步收敛到命令 effects 驱动。
 6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`。
+7. `executeEditCommand()` 已在 `app.js` 内部落地第一刀，先迁移测量对象重命名 / 删除调用点，统一 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案。
 
 主要缺口：
 
@@ -259,7 +260,7 @@
 
 下一批施工小步：
 
-1. 新增 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit`、toast / status 文案、`getResult()` 返回和异常处理；先从路线、备注、名称库或测量中选一个低风险调用点试迁移。
+1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案，先覆盖测量对象重命名 / 删除；后续再补 `getResult()` 返回、异常处理策略，并迁移路线、备注或名称库等低风险调用点。
 2. 为 edit command 补一个轻量规范文档或类型注释：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，并定义 `affected` 的对象格式。
 3. 新增 `refreshPanelsForEdit(state, command)` 小函数：先只根据 `effects.derived` 和 `affected.kind` 刷新对象面板，逐步减少调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 抽出 `locateAndSelectObject(state, object, documentRef, options)`：统一“设置 selection、打开 / 更新面板、定位、闪烁高亮”的入口，为后续 API 和 AI 操作复用。

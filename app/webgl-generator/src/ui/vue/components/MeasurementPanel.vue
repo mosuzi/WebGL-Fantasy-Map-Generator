@@ -229,7 +229,7 @@ function formatAreaValue(value) {
 }
 
 function handleMeasurementExport(key) {
-  if (key === "measurement") callbacks.onExport?.(visibleRows.value);
+  if (key === "measurement") props.callbacks.onExport?.(visibleRows.value);
 }
 
 function openRenameEditor(row) {
@@ -244,9 +244,9 @@ function openRenameEditor(row) {
 
 function handleMeasurementAction(key) {
   if (!selected.value) return;
-  if (key === "edit") callbacks.onEdit?.(selected.value);
-  if (key === "locate") callbacks.onLocate?.(selected.value);
-  if (key === "delete") callbacks.onDelete?.(selected.value);
+  if (key === "edit") props.callbacks.onEdit?.(selected.value);
+  if (key === "locate") props.callbacks.onLocate?.(selected.value);
+  if (key === "delete") props.callbacks.onDelete?.(selected.value);
 }
 
 function formatNumber(value) {

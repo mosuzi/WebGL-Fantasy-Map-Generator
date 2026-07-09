@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：`executeEditCommand()` helper 第一刀
+
+本步推进编辑器基础设施清单中的统一命令执行入口，先选测量面板作为低风险调用点试迁移。
+
+修正：
+
+- `app.js` 新增 `executeEditCommand(state, documentRef, command, options)`，统一处理 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和可选状态文案。
+- 测量对象重命名和删除改走 `executeEditCommand()`，保留测量面板刷新和 overlay 刷新的专属后处理。
+- 修正 `MeasurementPanel.vue` 动作条脚本中未定义的 `callbacks` 引用，改为 `props.callbacks`，确保编辑形状、定位、删除和导出动作能触发真实回调。
+
+边界：
+
+- 本步 helper 仍保留在 `app.js` 内部，不抽成跨模块 API。
+- 本步只迁移测量对象重命名 / 删除，不一次性改写路线、备注、名称库或其它面板。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：向测量面板注入 `烟测测量` 后，通过列表动作条删除，测量数 `1 -> 0`、历史 `undo=1`、状态显示“已删除测量对象 烟测测量。”；头部撤销后恢复为 `1` 且 `redo=1`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-09：宗教面板新增 / 删除空宗教第一刀
 
 本步继续推进编辑面板新增 / 删除统一化，为宗教管理补齐低风险的空宗教新增和删除入口。

@@ -1484,24 +1484,23 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       startMeasurementObjectEdit(state, row, documentRef);
     },
     onRename: (measurementId, name) => {
-      const context = {map: state.map};
       const command = createRenameMeasurementCommand(measurementId, name);
-      if (!command.isNoop(context)) refreshAfterEdit(state, state.editHistory.execute(command, context));
+      executeEditCommand(state, documentRef, command);
       updateMeasurementPanel(state);
       updateMeasurementOverlay(state, documentRef);
     },
     onDelete: row => {
-      const context = {map: state.map};
       const command = createDeleteMeasurementCommand(row.id);
-      if (!command.isNoop(context)) refreshAfterEdit(state, state.editHistory.execute(command, context));
-      if (state.measurement.editingMeasurementId === row.id) {
+      const result = executeEditCommand(state, documentRef, command, {
+        status: `已删除测量对象 ${row.name || row.id}。`
+      });
+      if (result.executed && state.measurement.editingMeasurementId === row.id) {
         state.measurement.editingMeasurementId = null;
         state.measurement.points = [];
         cancelMeasurementDrag(state, documentRef);
       }
       updateMeasurementPanel(state);
       updateMeasurementOverlay(state, documentRef);
-      setFileOperationStatus(documentRef, `已删除测量对象 ${row.name || row.id}。`);
     },
     onExport: rows => {
       exportMeasurementObjects(state, documentRef, rows);
@@ -3735,6 +3734,24 @@ function handleSelectionPanel(state, selection, editingObject, context) {
 
 function refreshAfterEdit(state, commandOrEffects) {
   state.editRefreshScheduler.run(commandOrEffects);
+}
+
+function executeEditCommand(state, documentRef, command, options = {}) {
+  const context = options.context || {map: state.map};
+  if (!command) return {executed: false, command: null};
+  if (command.isNoop?.(context)) {
+    if (options.noopStatus) setFileOperationStatus(documentRef, messageFromOption(options.noopStatus, command));
+    return {executed: false, command};
+  }
+  const executedCommand = state.editHistory.execute(command, context);
+  const refresh = options.refresh || refreshAfterEdit;
+  refresh(state, executedCommand);
+  if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
+  return {executed: true, command: executedCommand};
+}
+
+function messageFromOption(message, command) {
+  return typeof message === "function" ? message(command) : message;
 }
 
 function refreshAfterStateEdit(state, commandOrEffects) {
