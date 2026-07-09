@@ -22,7 +22,11 @@ export function apiFailure(error, metadata = {}) {
 
 export function apiCall(task, metadata = {}) {
   try {
-    return apiSuccess(task(), metadata);
+    const result = task();
+    if (result && typeof result.then === "function") {
+      return result.then(data => apiSuccess(data, metadata), error => apiFailure(error, metadata));
+    }
+    return apiSuccess(result, metadata);
   } catch (error) {
     return apiFailure(error, metadata);
   }

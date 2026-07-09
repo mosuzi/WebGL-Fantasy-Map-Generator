@@ -206,14 +206,24 @@ export function downloadText(documentRef, text, filename, type = "text/plain;cha
 }
 
 export async function downloadCanvasPng(documentRef, canvas, filename, options = {}) {
+  const result = await createCanvasPngBlob(documentRef, canvas, options);
+  downloadBlob(documentRef, result.blob, filename);
+  return {
+    bytes: result.blob.size,
+    width: result.width,
+    height: result.height,
+    pixelScale: result.pixelScale
+  };
+}
+
+export async function createCanvasPngBlob(documentRef, canvas, options = {}) {
   if (!canvas?.toBlob) throw new Error("当前浏览器不支持 canvas 图片导出");
   const exportCanvas = options.includeMapOverlays || options.renderer
     ? await composeMapExportCanvas(documentRef, canvas, options)
     : canvas;
   const blob = await canvasToBlob(exportCanvas);
-  downloadBlob(documentRef, blob, filename);
   return {
-    bytes: blob.size,
+    blob,
     width: exportCanvas.width || canvas.width || 0,
     height: exportCanvas.height || canvas.height || 0,
     pixelScale: normalizePngPixelScale(options.pixelScale)

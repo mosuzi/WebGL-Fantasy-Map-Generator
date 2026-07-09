@@ -1,5 +1,5 @@
 import {readControlPreferences} from "../ui/panel.js";
-import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
+import {createCanvasPngBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 
 const API_VERSION = "0.1.0";
@@ -31,7 +31,8 @@ function createConsoleApi(documentRef, state) {
     data: Object.freeze({
       exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
       exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
-      exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options))
+      exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options)),
+      exportPNG: (options = {}) => apiCall(() => exportPngData(state, documentRef, options))
     })
   };
   return Object.freeze(api);
@@ -46,7 +47,7 @@ function buildCapabilities() {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get"],
       layers: ["get"],
-      data: ["exportAll", "exportGEO", "exportFeatureGEO"]
+      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportPNG"]
     },
     sideEffects: {
       info: "readonly",
@@ -207,6 +208,40 @@ function exportFeatureGeoJsonData(state, documentRef, options = {}) {
   });
 }
 
+async function exportPngData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const canvas = documentRef.getElementById("map-canvas");
+  const filename = `${mapFileBaseName(map)}.png`;
+  const pixelScale = normalizePngApiScale(options.pixelScale ?? options.scale ?? readPngExportScale(documentRef));
+  const includeMapOverlays = options.includeMapOverlays !== false;
+  const pngOptions = {includeMapOverlays, pixelScale, renderer: state.renderer};
+  if (options.download === true) {
+    const result = await downloadCanvasPng(documentRef, canvas, filename, pngOptions);
+    return {
+      filename,
+      mimeType: "image/png",
+      bytes: result.bytes,
+      width: result.width,
+      height: result.height,
+      pixelScale: result.pixelScale,
+      includeMapOverlays
+    };
+  }
+
+  const result = await createCanvasPngBlob(documentRef, canvas, pngOptions);
+  const data = {
+    filename,
+    mimeType: "image/png",
+    bytes: result.blob.size,
+    width: result.width,
+    height: result.height,
+    pixelScale: result.pixelScale,
+    includeMapOverlays
+  };
+  if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
+  return data;
+}
+
 function assertApiMap(state) {
   if (!state?.map) throw new Error("当前没有可导出的地图");
   return state.map;
@@ -239,6 +274,27 @@ function readFeatureGeoJsonLayerOptions(documentRef) {
 
 function readFeatureGeoJsonDissolveOption(documentRef) {
   return documentRef.getElementById("feature-export-dissolve-political")?.checked === true;
+}
+
+function readPngExportScale(documentRef) {
+  const value = Number(documentRef.getElementById("export-png-scale")?.value);
+  return Number.isFinite(value) ? value : 1;
+}
+
+function normalizePngApiScale(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Math.max(1, Math.min(4, Math.round(number)));
+}
+
+function blobToDataUrl(documentRef, blob) {
+  const view = documentRef.defaultView || window;
+  return new Promise((resolve, reject) => {
+    const reader = new view.FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")), {once: true});
+    reader.addEventListener("error", () => reject(reader.error || new Error("PNG data URL 读取失败")), {once: true});
+    reader.readAsDataURL(blob);
+  });
 }
 
 function summarizeSelection(selection) {

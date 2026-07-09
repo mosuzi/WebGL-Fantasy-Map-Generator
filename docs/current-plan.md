@@ -80,7 +80,7 @@
    - 要做什么：考虑把所有不依赖 UI 的操作收束为统一 API 系统，挂到可在控制台调用的入口上，例如 `api.climate.setLatitude(...)`、`api.data.exportAll()`、`api.data.exportGEO()` 等；后续还应覆盖生成、导入导出、气候、单位、图层、对象选择 / 定位、编辑命令、名称库、测量、备注和派生重建等非 UI 能力。
    - 为什么做：API 化能方便后续接入 AI、脚本化操作、开发扩展、自动化测试和批量处理；同时把功能收束成 API 也是对现有 runtime 能力、数据边界、命令副作用和权限语义的间接梳理。
    - 执行方式：本轮只写入计划，不立即实现；真正开始时必须先出详细方案，明确 API 命名空间、同步 / 异步返回、错误格式、撤销语义、权限边界、与 UI store 的关系、浏览器控制台暴露方式、测试策略和稳定性承诺。
-   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一刀：`data.exportAll()`、`data.exportGEO()` 和 `data.exportFeatureGEO()` 支持 `download:false` 返回文本摘要，`download:true` 复用浏览器下载。
+   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一批：`data.exportAll()`、`data.exportGEO()`、`data.exportFeatureGEO()` 和 `data.exportPNG()` 支持脚本调用，其中 PNG API 返回 Promise，可返回 data URL 或触发浏览器下载。
 
 ### 验证要求
 
@@ -450,6 +450,11 @@
    - 边界：本步只接只读导出，不接 PNG、压缩 JSON、导入、生成或编辑 API；`download:false` 返回文本和元数据，`download:true` 仅触发下载，不改变地图数据或 checksum。
    - 完成记录：`api.data.exportAll()` 复用 `createMapDocument()` / `stringifyMapDocument()`；`api.data.exportGEO()` 复用 `createMapGeoJson()`；`api.data.exportFeatureGEO()` 复用 `createMapFeatureGeoJson()`，并支持传入 `layers` 和 `dissolvePolitical`。三类导出均返回文件名、MIME、字节数、文本和元数据；下载模式默认不回传文本以避免控制台误拿超大字符串。
 
+70. 控制台 PNG 导出 API 第一刀。`已完成`
+   - 目标：继续推进控制台 / 扩展 API 系统阶段 2，把 PNG 导出开放给脚本调用，并支持倍率和 overlay 合成。
+   - 边界：本步只做 PNG，只读当前 canvas / overlay；不接压缩地图 JSON、导入、生成、编辑或 PNG 文件写入本地磁盘。`download:false` 返回 data URL，`download:true` 触发浏览器下载并默认不回传 data URL。
+   - 完成记录：`apiCall()` 支持 Promise；`map-file-io.js` 拆出 `createCanvasPngBlob()` 供 API 和 UI 复用；`api.data.exportPNG()` 支持 `pixelScale / scale`、`includeMapOverlays`、`includeDataUrl` 和 `download`，返回文件名、MIME、字节数、尺寸、倍率和 overlay 标志。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -509,6 +514,7 @@
 - 路线删除接入编辑 helper 已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认点击真实“删除路线”按钮后路线数 `589 -> 588`、metadata routes `588`、路线段数 `2776 -> 2593`、状态显示“已删除路线 #452。”、撤销栈 `undo=1`；点击面板头部撤销后路线数和 metadata 恢复到 `589`，`redo=1`，`glError = 0`，health / console / page error 均为 `0`。
 - 控制台 API 根对象与只读能力第一刀已完成：`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `window.webglGeneratorApi` 和 `window.api` 可读，`info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()`、`layers.get()` 均返回 `ok=true`，调用前后 checksum 保持 `989744d0`，`glError = 0`，health / console / page error 均为 `0`。
 - 控制台导出 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `data.exportAll({download:false})` 返回 `webgl-generator-map` 文档文本 `15,376,660` 字节，`data.exportGEO({download:false})` 返回 `5,968` 个 cell 面，`data.exportFeatureGEO({download:false, dissolvePolitical:true})` 返回 `1,947` 个要素且 `dissolvedPolitical=true`；`data.exportFeatureGEO({download:true, includeText:false})` 触发 `fmg-stage-2-1-1754ddd6.features.geojson` 下载，调用前后 checksum 保持 `1754ddd6`，`glError = 0`，health / console / page error 均为 `0`。
+- 控制台 PNG 导出 API 第一刀已完成：`node --check` 覆盖 `api-result.js`、`console-api.js` 和 `map-file-io.js`，`git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `data.exportPNG({download:false, pixelScale:2})` 返回 `image/png` data URL，API 尺寸和 PNG 文件头均为 `2560 x 1600`，字节数 `84,510`；`data.exportPNG({download:true, pixelScale:1})` 触发 `fmg-stage-2-1-549ebe1f.png` 下载，调用前后 checksum 保持 `549ebe1f`，`glError = 0`，health / console / page error 均为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

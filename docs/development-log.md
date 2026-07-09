@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台 PNG 导出 API 第一刀
+
+本步继续推进控制台 / 扩展 API 系统阶段 2，把 PNG 导出开放为异步 API，同时复用现有 overlay 合成和倍率逻辑。
+
+修正：
+
+- `apiCall()` 支持 Promise，异步 API 会 resolve 为统一 `ApiResult`，异常仍转为统一错误结构。
+- `map-file-io.js` 拆出 `createCanvasPngBlob()`，UI 的 `downloadCanvasPng()` 继续复用该 helper 并保持现有下载行为。
+- `api.data.exportPNG({download, pixelScale, includeMapOverlays, includeDataUrl})` 返回文件名、MIME、字节数、尺寸、倍率和 overlay 标志；`download:false` 默认返回 data URL，`download:true` 默认只触发浏览器下载并返回摘要。
+- `api.info.capabilities()` 的 `data` 命名空间补充 `exportPNG`。
+
+边界：
+
+- 本步只读当前 canvas / overlay，不修改地图数据、视图偏好或状态文案。
+- 本步不接压缩地图 JSON、导入、生成、编辑或文件系统写入。
+- PNG API 是异步能力，调用方需要 `await api.data.exportPNG(...)`。
+
+验证：
+
+- `node --check` 覆盖 `api-result.js`、`console-api.js` 和 `map-file-io.js`，`git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`data.exportPNG({download:false, pixelScale:2})` 返回 `image/png` data URL，API 尺寸和 PNG 文件头均为 `2560 x 1600`，字节数 `84,510`；`data.exportPNG({download:true, pixelScale:1})` 触发 `fmg-stage-2-1-549ebe1f.png` 下载；调用前后 checksum 保持 `549ebe1f`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台导出 API 第一刀
 
 本步继续推进控制台 / 扩展 API 系统阶段 2，把已有导出能力先开放为脚本可调用的只读 API。

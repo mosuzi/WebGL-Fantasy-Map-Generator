@@ -396,8 +396,10 @@ api.edit.measurement.delete(id)
 - `api.data.exportAll({download: false})` 返回完整地图 JSON 文本、文件名、MIME、字节数和文档元数据。
 - `api.data.exportGEO({download: false})` 返回 pack cell GeoJSON 文本、文件名、MIME、字节数和 feature 摘要。
 - `api.data.exportFeatureGEO({download: false, layers, dissolvePolitical})` 返回要素 GeoJSON 文本，支持调用方覆盖图层集合和政治面 dissolve 选项。
-- 三个方法都支持 `download: true` 复用现有浏览器下载；下载模式默认不返回大文本，调用方可显式传 `includeText: true`。
-- 浏览器烟测已确认三类返回文本可解析、checksum 不变，且 `download:true` 能触发 `.features.geojson` 下载。
+- `api.data.exportPNG({download: false, pixelScale, includeMapOverlays})` 返回 PNG data URL、尺寸、字节数和文件元数据；该方法返回 Promise。
+- GeoJSON / JSON 方法支持 `download: true` 复用现有浏览器下载；下载模式默认不返回大文本，调用方可显式传 `includeText: true`。
+- PNG 方法支持 `download: true` 复用现有浏览器下载；下载模式默认不返回 data URL，调用方可显式传 `includeDataUrl: true`。
+- 浏览器烟测已确认三类文本导出可解析、PNG data URL 文件头尺寸正确、checksum 不变，且 `download:true` 能触发 `.features.geojson` 和 `.png` 下载。
 
 ### 阶段 3：气候、单位和图层 API
 
@@ -456,7 +458,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步有两条可选路线：
 
-1. 若继续补导出闭环，优先接 `api.data.exportPNG(options)` 和压缩地图 JSON；PNG 需要异步返回 Blob / ArrayBuffer 或下载摘要，压缩 JSON 需要处理 `CompressionStream` 可用性。
+1. 若继续补导出闭环，优先接压缩地图 JSON；压缩 JSON 需要处理 `CompressionStream` 可用性，并返回压缩前后字节数。
 2. 若先扩大非 UI 控制面，进入阶段 3，接 `api.layers.setVisible()`、`api.layers.setViewMode()`、`api.units.get()/apply()` 和 `api.climate.get()`。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。
