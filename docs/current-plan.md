@@ -80,7 +80,7 @@
    - 要做什么：考虑把所有不依赖 UI 的操作收束为统一 API 系统，挂到可在控制台调用的入口上，例如 `api.climate.setLatitude(...)`、`api.data.exportAll()`、`api.data.exportGEO()` 等；后续还应覆盖生成、导入导出、气候、单位、图层、对象选择 / 定位、编辑命令、名称库、测量、备注和派生重建等非 UI 能力。
    - 为什么做：API 化能方便后续接入 AI、脚本化操作、开发扩展、自动化测试和批量处理；同时把功能收束成 API 也是对现有 runtime 能力、数据边界、命令副作用和权限语义的间接梳理。
    - 执行方式：本轮只写入计划，不立即实现；真正开始时必须先出详细方案，明确 API 命名空间、同步 / 异步返回、错误格式、撤销语义、权限边界、与 UI store 的关系、浏览器控制台暴露方式、测试策略和稳定性承诺。
-   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一批：`data.exportAll()`、`data.exportCompressedAll()`、`data.exportGEO()`、`data.exportFeatureGEO()` 和 `data.exportPNG()` 支持脚本调用，其中 PNG / 压缩 JSON API 返回 Promise，可返回 data URL / gzip base64 或触发浏览器下载。阶段 3 已完成图层控制和单位偏好第一批：`layers.setViewMode()`、`layers.setVisible()`、`units.get()` 和 `units.apply()` 可同步 renderer、UI 控件和显示偏好，不改变地图 checksum。
+   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一批：`data.exportAll()`、`data.exportCompressedAll()`、`data.exportGEO()`、`data.exportFeatureGEO()` 和 `data.exportPNG()` 支持脚本调用，其中 PNG / 压缩 JSON API 返回 Promise，可返回 data URL / gzip base64 或触发浏览器下载。阶段 3 已完成图层控制、单位偏好和气候只读第一批：`layers.setViewMode()`、`layers.setVisible()`、`units.get()`、`units.apply()` 和 `climate.get()` 均已接入；写偏好的 API 不改变地图 checksum。
 
 ### 验证要求
 
@@ -470,6 +470,11 @@
    - 边界：本步只改显示偏好和相关控件；不改地图数据、生成参数、气候模型或 checksum。
    - 完成记录：新增 `api.units.get()` 和 `api.units.apply(preferences)`；`apply()` 使用既有 `normalizeUnitPreferences()` 校准输入，更新单位控件、全局控制偏好和 renderer unit preferences。`api.info.capabilities()` 已声明 `units` 命名空间。
 
+74. 控制台气候只读 API 第一刀。`已完成`
+   - 目标：继续阶段 3，先开放气候只读摘要，供脚本读取温度、降水、纬度、风带和生物群系统计。
+   - 边界：本步只做 `climate.get()`；不接 `apply()`、`setLatitude()`、重算气候或派生 stale。
+   - 完成记录：新增 `api.climate.get()`，返回温度范围与基础参数、降水范围、纬度模式 / 经纬边界、风带方向 / profile，以及 biome counts / total。`api.info.capabilities()` 已声明 `climate` 命名空间。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -533,6 +538,7 @@
 - 控制台压缩地图导出 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\console-api.js`、`node --check app\webgl-generator\src\runtime\map-file-io.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `data.exportCompressedAll({download:false})` 返回 gzip base64，解压后为 `webgl-generator-map` 文档且 checksum 保持 `506ad108`，原始 `15,418,281` 字节、压缩 `2,453,326` 字节、base64 长度 `3,271,104`；`data.exportCompressedAll({download:true})` 触发 `fmg-stage-2-1-506ad108.webgl-map.json.gz` 下载，`glError = 0`，health / console / page error 均为 `0`。
 - 控制台图层 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\console-api.js`、`node --check app\webgl-generator\src\ui\panel.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `layers.setViewMode("temperature")` 后 renderer 和按钮均为温度视图，`layers.setVisible("routes", false)` / `true` 可关闭并恢复路线图层，最终 renderer `routes=true`、路线按钮 `aria-pressed=true` 且 active，调用前后 checksum 保持 `cbedb91c`，`glError = 0`，health / console / page error 均为 `0`。
 - 控制台单位 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\console-api.js`、`node --check app\webgl-generator\src\ui\panel.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `units.apply({distanceUnit:"km", numberAbbreviation:"none", mapScaleKmPerCm:125, populationScale:2, militaryScale:1.5, precipitationScale:0.5})` 后 API 返回和控件均同步为 `km / km2 / none / 125 / 2 / 1.5 / 0.5`，`layers.get().units` 同步更新，调用前后 checksum 保持 `f25a7b4e`，`glError = 0`，health / console / page error 均为 `0`。
+- 控制台气候只读 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `climate.get()` 返回温度范围 `-13..24`、降水范围 `0..63`、纬度模式 `auto / 自动纬度`、经纬边界 `latN 7.7 / latS -37.3 / lonW -45 / lonE 45`、风带 `customBands` 和 biome total `5968`，调用前后 checksum 保持 `e42ee4f3`，`glError = 0`，health / console / page error 均为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

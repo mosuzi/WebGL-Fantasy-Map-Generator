@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台气候只读 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 3，先开放气候只读摘要，给脚本提供温度、降水、纬度、风带和生物群系统计。
+
+修正：
+
+- `api.info.capabilities()` 增加 `climate` 命名空间，声明 `get`。
+- `api.climate.get()` 返回温度范围与基础参数、降水范围、纬度模式 / 经纬边界、风带方向 / profile，以及 biome counts / total。
+- 气候摘要只读取 `map.climate.metadata`、`map.mapCoordinates` 和当前 options，不暴露内部数组引用。
+
+边界：
+
+- 本步只做只读，不接 `api.climate.apply()`、`setLatitude()`、气候重算或派生 stale。
+- 本步不修改地图数据、生成参数、显示偏好、selection、编辑历史或 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`climate.get()` 返回温度范围 `-13..24`、降水范围 `0..63`、纬度模式 `auto / 自动纬度`、经纬边界 `latN 7.7 / latS -37.3 / lonW -45 / lonE 45`、风带 `customBands` 和 biome total `5968`；调用前后 checksum 保持 `e42ee4f3`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台单位 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 3，开放单位显示偏好的读取和应用能力。

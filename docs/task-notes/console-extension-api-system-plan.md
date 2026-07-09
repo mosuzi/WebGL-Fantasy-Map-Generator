@@ -426,7 +426,9 @@ api.edit.measurement.delete(id)
 - `api.units.get()` 返回当前标准化单位偏好。
 - `api.units.apply(preferences)` 使用 `normalizeUnitPreferences()` 校准输入，同步单位控件、本地显示偏好和 renderer unit preferences。
 - 单位 API 只改显示偏好，不改变地图数据或 checksum。
-- 气候 API 尚未接入。
+- 气候 API 已完成只读第一刀。
+- `api.climate.get()` 返回温度范围、降水范围、纬度模式 / 经纬边界、风带 profile 和 biome 计数。
+- 气候写入 API 尚未接入。
 
 ### 阶段 4：编辑命令 API 第一刀
 
@@ -472,7 +474,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步有两条可选路线：
 
-1. 继续阶段 3，先接 `api.climate.get()` 只读摘要，暴露温度、降水、纬度和风带关键元数据。
-2. `api.climate.apply()` 和 `setLatitude()` 涉及生成参数与派生 stale，应单独拆小步并明确是否进入撤销 / 重生成链路。
+1. 若继续阶段 3，评估是否接 `api.climate.apply()` 的显示控件同步，但要先明确它是否立即重算气候、是否进入撤销，以及如何标记派生 stale。
+2. 也可以先进入阶段 4，接最稳定的编辑命令 API：备注删除 / 测量重命名删除 / 标签新增删除 / 路线删除。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。

@@ -35,6 +35,9 @@ function createConsoleApi(documentRef, state) {
       get: () => apiCall(() => buildUnitSnapshot(state, documentRef)),
       apply: (preferences = {}) => apiCall(() => applyUnitPreferences(state, documentRef, preferences))
     }),
+    climate: Object.freeze({
+      get: () => apiCall(() => buildClimateSnapshot(state))
+    }),
     data: Object.freeze({
       exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
       exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
@@ -50,12 +53,13 @@ function buildCapabilities() {
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "selection", "layers", "units", "data"],
+    namespaces: ["info", "selection", "layers", "units", "climate", "data"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get"],
       layers: ["get", "setViewMode", "setVisible"],
       units: ["get", "apply"],
+      climate: ["get"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {
@@ -63,6 +67,7 @@ function buildCapabilities() {
       selection: "readonly",
       layers: "display-preference",
       units: "display-preference",
+      climate: "readonly",
       data: "readonly-download"
     }
   };
@@ -181,6 +186,49 @@ function applyUnitPreferences(state, documentRef, preferences = {}) {
   updateControlPreferences(documentRef, {units});
   state?.renderer?.setUnitPreferences?.(units);
   return buildUnitSnapshot(state, documentRef);
+}
+
+function buildClimateSnapshot(state) {
+  const map = assertApiMap(state);
+  const climate = map.climate || {};
+  const metadata = climate.metadata || {};
+  const coordinates = map.mapCoordinates || climate.mapCoordinates || {};
+  return {
+    temperature: {
+      min: numberOrNull(metadata.temperatureMin),
+      max: numberOrNull(metadata.temperatureMax),
+      equator: numberOrNull(map.options?.temperatureEquator ?? state.options?.temperatureEquator),
+      northPole: numberOrNull(map.options?.temperatureNorthPole ?? state.options?.temperatureNorthPole),
+      southPole: numberOrNull(map.options?.temperatureSouthPole ?? state.options?.temperatureSouthPole)
+    },
+    precipitation: {
+      min: numberOrNull(metadata.precipitationMin),
+      max: numberOrNull(metadata.precipitationMax),
+      scale: numberOrNull(map.options?.precipitation ?? state.options?.precipitation)
+    },
+    latitude: {
+      mode: metadata.latitudeMode || coordinates.latitudeMode || "",
+      label: metadata.latitudeLabel || coordinates.latitudeLabel || "",
+      center: numberOrNull(metadata.latitudeCenter ?? coordinates.latCenter),
+      mapSizePercent: numberOrNull(metadata.mapSizePercent ?? coordinates.mapSizePercent),
+      latitudeRangePercent: numberOrNull(metadata.latitudeRangePercent ?? coordinates.latitudeRangePercent),
+      longitudeRangePercent: numberOrNull(metadata.longitudeRangePercent ?? coordinates.longitudeRangePercent),
+      latN: numberOrNull(coordinates.latN),
+      latS: numberOrNull(coordinates.latS),
+      lonW: numberOrNull(coordinates.lonW),
+      lonE: numberOrNull(coordinates.lonE)
+    },
+    atmosphere: {
+      direction: metadata.atmosphereDirection || state.options?.atmosphereDirection || "",
+      label: metadata.atmosphereLabel || coordinates.atmosphereLabel || "",
+      windAngle: numberOrNull(metadata.windAngle),
+      windProfile: Array.isArray(metadata.windProfile) ? [...metadata.windProfile] : []
+    },
+    biomes: {
+      counts: {...(metadata.biomeCounts || {})},
+      total: Object.values(metadata.biomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    }
+  };
 }
 
 function exportAllMapData(state, documentRef, options = {}) {
