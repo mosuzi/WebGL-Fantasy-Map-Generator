@@ -2544,12 +2544,20 @@ function reportGenerateError(documentRef, error) {
 async function exportMapImage(state, documentRef) {
   try {
     assertMapAvailable(state);
+    const pixelScale = readPngExportScale(documentRef);
     setFileOperationStatus(documentRef, "正在导出图片...");
-    await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`, {includeMapOverlays: true, renderer: state.renderer});
-    setFileOperationStatus(documentRef, "图片已导出。");
+    const result = await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`, {includeMapOverlays: true, pixelScale, renderer: state.renderer});
+    setFileOperationStatus(documentRef, `图片已导出：${result.width} x ${result.height}px，倍率 ${result.pixelScale}x，${formatStorageBytes(result.bytes)}。`);
   } catch (error) {
     reportFileOperationError(documentRef, "图片导出失败", error);
   }
+}
+
+function readPngExportScale(documentRef) {
+  const control = documentRef.getElementById("export-png-scale");
+  const value = Number(control?.value);
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.min(4, Math.round(value)));
 }
 
 function saveMapToLocalFile(state, documentRef) {

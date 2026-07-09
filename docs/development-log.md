@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：PNG 导出倍率第一刀
+
+本步继续推进“导出能力矩阵收尾”，为图片导出补齐倍率选项。图片导出此前已合成 WebGL canvas 和地图 overlay，但输出尺寸只能跟随当前 canvas。
+
+修正：
+
+- 导出浮层新增 `PNG 倍率` 控件，支持 `1x / 2x / 3x / 4x`。
+- `downloadCanvasPng()` 新增 `pixelScale` 选项，按倍率放大合成 canvas；WebGL 画面、比例尺、地图摘要、城市 / 标记 / 军事图标和标签 overlay 会按同一比例绘制。
+- 图片导出状态会显示实际像素尺寸、倍率和文件大小。
+- 地图未就绪时禁用列表补上压缩地图数据按钮和 PNG 倍率控件。
+
+边界：
+
+- 本步不做透明背景、裁剪范围或是否包含 overlay 的显式开关。
+- PNG 导出仍默认合成当前地图 overlay，不导出浮动面板 UI。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\map-file-io.js`、`node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`PNG 倍率` 控件包含 `1/2/3/4x`，设置 `2x` 后下载到 `docs/generated/smoke/png-scale-2x-smoke.png` 的 PNG 文件头尺寸为 `2560 x 1600`，源 canvas 为 `1280 x 800`，状态显示“倍率 2x”，`glError = 0`，非 health console/page error 为 `0`。
+
 ## 2026-07-09：地图数据导入错误详情第一刀
 
 本步继续推进“导出能力矩阵收尾”，补齐完整地图数据导入失败时的可读诊断。此前控制面板只显示一行失败状态，坏 JSON、错误文件格式或未来版本文件都缺少文件维度的排查信息。

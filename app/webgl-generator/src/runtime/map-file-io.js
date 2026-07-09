@@ -210,6 +210,12 @@ export async function downloadCanvasPng(documentRef, canvas, filename, options =
     : canvas;
   const blob = await canvasToBlob(exportCanvas);
   downloadBlob(documentRef, blob, filename);
+  return {
+    bytes: blob.size,
+    width: exportCanvas.width || canvas.width || 0,
+    height: exportCanvas.height || canvas.height || 0,
+    pixelScale: normalizePngPixelScale(options.pixelScale)
+  };
 }
 
 export function mapFileBaseName(map) {
@@ -831,8 +837,9 @@ function downloadBlob(documentRef, blob, filename) {
 
 async function composeMapExportCanvas(documentRef, canvas, options = {}) {
   const output = documentRef.createElement("canvas");
-  output.width = canvas.width;
-  output.height = canvas.height;
+  const pixelScale = normalizePngPixelScale(options.pixelScale);
+  output.width = Math.max(1, Math.round((canvas.width || 1) * pixelScale));
+  output.height = Math.max(1, Math.round((canvas.height || 1) * pixelScale));
   const context = output.getContext("2d");
   if (!context) return canvas;
   if (!copyWebglCanvasTo2d(context, canvas, options.renderer)) {
@@ -848,6 +855,12 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
 
   await drawMapOverlayElements(documentRef, context, canvasRect, scale, options);
   return output;
+}
+
+function normalizePngPixelScale(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 1;
+  return Math.max(1, Math.min(4, Math.round(number)));
 }
 
 function canvasToBlob(canvas) {

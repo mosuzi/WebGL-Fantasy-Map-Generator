@@ -75,6 +75,15 @@
             <UiButton id="export-map-geojson" variant="secondary" @click="closeExportPanel">GeoJSON</UiButton>
             <UiButton id="export-map-features-geojson" variant="secondary" @click="closeExportPanel">要素 GeoJSON</UiButton>
           </div>
+          <label class="project-export-scale-control" for="export-png-scale">
+            <span>PNG 倍率</span>
+            <select id="export-png-scale">
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="3">3x</option>
+              <option value="4">4x</option>
+            </select>
+          </label>
           <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
             <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>
             <div class="feature-export-layer-grid">
