@@ -59,6 +59,10 @@ function createConsoleApi(documentRef, state, actions = {}) {
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.provinces?.add, "edit.provinces.add")(gridCell)),
         delete: provinceId => apiCall(() => requireApiAction(actions.edit?.provinces?.delete, "edit.provinces.delete")(provinceId))
       }),
+      states: Object.freeze({
+        add: gridCell => apiCall(() => requireApiAction(actions.edit?.states?.add, "edit.states.add")(gridCell)),
+        delete: stateId => apiCall(() => requireApiAction(actions.edit?.states?.delete, "edit.states.delete")(stateId))
+      }),
       routes: Object.freeze({
         delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId))
       }),
@@ -95,7 +99,7 @@ function buildCapabilities() {
       units: ["get", "apply"],
       climate: ["get"],
       history: ["get", "undo", "redo"],
-      edit: ["notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "provinces.add", "provinces.delete", "routes.delete", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
+      edit: ["notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "provinces.add", "provinces.delete", "states.add", "states.delete", "routes.delete", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {

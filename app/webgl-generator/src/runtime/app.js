@@ -1972,6 +1972,10 @@ function createConsoleApiActions(state, documentRef) {
         add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
         delete: provinceId => deleteProvinceViaApi(state, documentRef, provinceId)
       },
+      states: {
+        add: gridCell => addStateViaApi(state, documentRef, gridCell),
+        delete: stateId => deleteStateViaApi(state, documentRef, stateId)
+      },
       routes: {
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId)
       },
@@ -4011,6 +4015,60 @@ function deleteProvinceViaApi(state, documentRef, provinceId) {
     state.panels.province?.setSelectedProvinceId(0);
   }
   state.panels.province?.updateDeleteMode?.(false);
+  updateAllObjectPanels(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function addStateViaApi(state, documentRef, gridCell) {
+  const targetGridCell = normalizeApiInteger(gridCell, "grid cell");
+  const command = createAddStateAtCellCommand(targetGridCell);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "目标 grid cell 无效或不是陆地。",
+    status: command => {
+      const created = command.getResult?.();
+      return Number.isInteger(created?.stateId)
+        ? `已新增国家 #${created.stateId}。`
+        : "已新增国家。";
+    },
+    refresh: refreshAfterStateEdit,
+    throwOnError: false
+  });
+  const created = result.command?.getResult?.();
+  if (result.executed) {
+    state.stateEdit.addMode = false;
+    state.stateEdit.lastAffected = created?.cells || 0;
+    state.stateEdit.sourceStateId = created?.stateId || null;
+    if (Number.isInteger(created?.stateId)) {
+      const object = resolveObject(state.map, {kind: OBJECT_KIND.STATE, id: created.stateId}) || {kind: OBJECT_KIND.STATE, id: created.stateId};
+      state.panels.state?.setTargetStateId(created.stateId);
+      state.selectionStore.setSelection({object});
+    }
+  }
+  state.panels.state?.updateAddMode?.(false);
+  updateAllObjectPanels(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteStateViaApi(state, documentRef, stateId) {
+  const id = normalizeApiInteger(stateId, "国家 ID");
+  const command = createDeleteStateCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "国家不存在、为中立国家或已被删除。",
+    status: `已删除国家 #${id}。`,
+    refresh: refreshAfterStateEdit,
+    throwOnError: false
+  });
+  if (result.executed) {
+    state.stateEdit.deleteMode = false;
+    state.stateEdit.lastAffected = 0;
+    state.selectionStore.clear();
+    state.panels.state?.setTargetStateId(0);
+  }
+  state.panels.state?.updateDeleteMode?.(false);
   updateAllObjectPanels(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);

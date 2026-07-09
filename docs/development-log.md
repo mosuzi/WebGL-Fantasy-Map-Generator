@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台国家新增 / 删除 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，把国家新增和删除接入 API。
+
+修正：
+
+- app action 增加 `edit.states.add(gridCell)` 和 `edit.states.delete(stateId)`。
+- `api.edit.states.add()` 复用 `createAddStateAtCellCommand()` 和 `executeEditCommand()`，新增成功后用 `resolveObject()` 选中新国家。
+- `api.edit.states.delete()` 复用 `createDeleteStateCommand()` 和 `executeEditCommand()`，删除成功后清空选择。
+- API 执行后刷新对象面板、runtime 和编辑锁，保持和现有国家面板路径一致。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `states.add` 和 `states.delete`。
+
+边界：
+
+- 本步不接屏幕坐标拾取、国家笔刷、重命名、政体、颜色、外交或国家重算。
+- API 国家 collection 编辑会改变政治面、省份、首都城市和相关派生统计，但不重算地图 checksum；这与当前国家面板编辑路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `states.add/delete`；`edit.states.add(934)` 新增国家 `#21`、省份 `#239`、城市 `#828`、影响 `3` cells、国家数量 `20 -> 21`、selection 指向新国家，派生过期包含 `military / zones / state-markers / economy / diplomacy`；撤销后回到 `20`，重做恢复同一国家；`edit.states.delete(21)` 后数量回到 `20` 且国家 `removed=true`，撤销删除恢复为 `21`；metadata 为 `21`，checksum 保持 `eefd2f3b`，校验值 `ac14f830`。
+
 ## 2026-07-09：控制台省份新增 / 删除 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，把省份新增和删除接入 API。

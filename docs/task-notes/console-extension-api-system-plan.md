@@ -453,6 +453,7 @@ api.edit.measurement.delete(id)
 - `api.edit.measurements.rename(id, name)` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - `api.edit.cities.add(gridCell)` 和 `api.edit.cities.delete(cityId)` 已接入城市 collection edit commands。
 - `api.edit.provinces.add(gridCell)` 和 `api.edit.provinces.delete(provinceId)` 已接入省份 collection edit commands。
+- `api.edit.states.add(gridCell)` 和 `api.edit.states.delete(stateId)` 已接入国家 collection edit commands。
 - `api.edit.routes.delete(routeId)` 已接入路线删除 edit command。
 - `api.edit.labels.delete(label)` 和 `api.edit.labels.restore(label)` 已接入标签 edit commands，覆盖手工标签删除和生成标签恢复。
 - `api.edit.markers.add({type, packCell, name})`、`api.edit.markers.delete(markerId)` 和 `api.edit.markers.move(markerId, packCell)` 已接入 marker collection edit commands。
@@ -460,6 +461,7 @@ api.edit.measurement.delete(id)
 - 浏览器烟测已覆盖测量对象重命名、删除、撤销删除和重做删除。
 - 浏览器烟测已覆盖城市新增 / 撤销 / 重做，以及城市删除 / 撤销删除。
 - 浏览器烟测已覆盖省份新增 / 撤销 / 重做，以及省份删除 / 撤销删除；记录一次省份 collection 编辑 long-task。
+- 浏览器烟测已覆盖国家新增 / 撤销 / 重做，以及国家删除 / 撤销删除。
 - 浏览器烟测已覆盖路线删除、撤销和重做。
 - 浏览器烟测已覆盖手工标签删除、撤销 / 重做，以及生成城市标签恢复 / 撤销。
 - 浏览器烟测已覆盖 marker 移动 / 撤销移动，以及 marker 删除 / 撤销 / 重做。
@@ -494,7 +496,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步建议继续阶段 4：
 
-1. 继续对象编辑 API，接国家新增 / 删除。
-2. 进入选择 / 定位 API，接 `selection.select()`、`selection.locate()` 和结构化对象 resolve。
+1. 进入选择 / 定位 API，接 `selection.select()`、`selection.locate()` 和结构化对象 resolve。
+2. 继续编辑 API，接国家 / 省份 / 城市的名称、颜色、人口等已有单对象命令。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。
