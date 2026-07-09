@@ -84,7 +84,7 @@ import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
+import {formatDistance, formatNumber as formatDisplayNumber, formatRiverFlow as formatDisplayRiverFlow} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -116,7 +116,7 @@ const columns = Object.freeze([
   {key: "name", label: "名称"},
   {key: "type", label: "类型"},
   {key: "length", label: "长度", align: "right", format: value => formatLength(value)},
-  {key: "flux", label: "流量", align: "right", format: value => formatNumber(value)}
+  {key: "flux", label: "流量", align: "right", format: value => formatRiverFlow(value)}
 ]);
 
 const unitPreferences = useUnitPreferences();
@@ -148,14 +148,14 @@ const riverListActions = computed(() => [
 const summaryMetrics = computed(() => [
   {label: "河流", value: formatNumber(rows.value.length)},
   {label: "总长度", value: formatLength(totalLength.value)},
-  {label: "最大流量", value: formatNumber(maxFlux.value)},
+  {label: "最大流量", value: formatRiverFlow(maxFlux.value)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
   {label: "长度", value: formatLength(selected.value.length)},
-  {label: "流量", value: formatNumber(selected.value.flux)},
+  {label: "流量", value: formatRiverFlow(selected.value.flux)},
   {label: "河段", value: formatNumber(selected.value.segments)},
   {label: "宽度因子", value: selected.value.widthFactor.toFixed(2)},
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
@@ -242,6 +242,10 @@ function formatLength(value) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function formatRiverFlow(value) {
+  return formatDisplayRiverFlow(value, unitPreferences.value);
 }
 
 function normalizeWidth(value) {

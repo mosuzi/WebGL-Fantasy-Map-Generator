@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：河流流量显示补充单位
+
+用户指出河流流量不应只是裸数字，而应显示为带流量单位的数值。
+
+修正：
+
+- `display-units.js` 新增 `formatRiverFlow()`，统一把河流流量显示为 `m³/s`。
+- 河流管理面板的列表列、摘要“最大流量”和详情“流量”改用统一流量格式器。
+- 对象详情面板中的河流“流量”改为带单位显示。
+- 运行统计、hover 调试行和河流 hover 对象摘要中的河流流量改为带单位显示，并把河流摘要中的英文 `flux / length` 文案改为中文“流量 / 长度”。
+
+边界：
+
+- 本步只修河流流量展示口径，不改变河流生成、宽度计算、排序字段、导出数据或内部 `flux / discharge` 字段。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\display-units.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开河流管理后，摘要显示“最大流量 `1,474 m³/s`”，表格首行显示 `1,474 m³/s`，详情显示“流量 `1,474 m³/s`”，选中详情显示“流量 `1,474 m³/s` / 长度 ...”；`glError = 0`，console/page error 均为空。
+
 ## 2026-07-09：控制台气候 API 读写补齐
 
 用户指出 `api.climate` 只有 `get()` 不完整，气候参数虽然在 UI 中有控件，但本质上可通过 API 参数直接传入，不应把 UI 控制范围当成 API 能力边界。

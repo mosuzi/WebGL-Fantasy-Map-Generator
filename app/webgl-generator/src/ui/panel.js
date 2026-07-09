@@ -12,6 +12,7 @@ import {
   formatNumber as formatDisplayNumber,
   formatPopulation as formatDisplayPopulation,
   formatPrecipitation as formatDisplayPrecipitation,
+  formatRiverFlow as formatDisplayRiverFlow,
   formatScaleLabel,
   normalizeUnitPreferences
 } from "./display-units.js";
@@ -40,7 +41,7 @@ const OBJECT_DETAIL_FORMATTERS = Object.freeze({
   [OBJECT_KIND.MARKER]: (object, units) => formatMarkerObjectSummary(object, units),
   [OBJECT_KIND.ROUTE]: (object, units) => `${object.type} / ${object.level} / distance ${formatDisplayDistance(object.distance, units)}`,
   [OBJECT_KIND.TRADE_FLOW]: (object, units) => `${object.sellerName || "卖方"} -> ${object.buyerName || "买方"} / 金额 ${formatDisplayNumber(object.value, units)} / 价差 ${formatSignedDisplayNumber(object.priceDelta, units)}`,
-  [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / flux ${formatDisplayNumber(object.flux, units)} / length ${formatDisplayDistance(object.length, units)}`,
+  [OBJECT_KIND.RIVER]: (object, units) => `${object.type} / 流量 ${formatDisplayRiverFlow(object.flux, units)} / 长度 ${formatDisplayDistance(object.length, units)}`,
   [OBJECT_KIND.LAKE]: (object, units) => `${object.type || "湖泊"} / 面积 ${formatDisplayNumber(object.area, units)} / cells ${formatDisplayNumber(object.cells, units)}`,
   [OBJECT_KIND.STATE]: object => `${object.culture} / ${object.religion}`,
   [OBJECT_KIND.MILITARY]: (object, units) => `${object.state || "国家"} / ${object.name || "军团"} / ${object.statusLabel || object.status || "待命"} / ${formatDisplayMilitary(object.troops, units)}`,
@@ -609,7 +610,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "河流三角形", stats.riverTriangleCount),
     statRow(documentRef, "河流 mesh", `${stats.riverWidthMode}, ${stats.riverBuildMs}ms`),
     statRow(documentRef, "河流宽度", `${stats.riverWidthStats.minWidthPx} - ${stats.riverWidthStats.maxWidthPx}px / ${stats.riverWidthStats.rivers} 条`),
-    statRow(documentRef, "河流流量", `${stats.riverWidthStats.minFlux} - ${stats.riverWidthStats.maxFlux}`),
+    statRow(documentRef, "河流流量", `${formatDisplayRiverFlow(stats.riverWidthStats.minFlux, unitPreferences)} - ${formatDisplayRiverFlow(stats.riverWidthStats.maxFlux, unitPreferences)}`),
     statRow(documentRef, "选中高亮", `${stats.selectionHighlightMode}, ${stats.selectionTriangleCount} tris, ${stats.selectionBuildMs}ms`),
     statRow(documentRef, "定位状态", stats.locateStatus),
     statRow(documentRef, "编辑历史", formatEditHistory(state.editHistory?.getStats())),
@@ -908,7 +909,7 @@ function formatHoverDebugLine(pick, unitPreferences = {}) {
     `h ${formatDisplayHeight(pick.packHeight ?? pick.height, unitPreferences)}`,
     `s ${formatDisplayNumber(pick.suitability, unitPreferences)}`,
     `pack ${pick.packCell ?? "none"}`,
-    `flux ${formatDisplayNumber(pick.flux, unitPreferences)}`,
+    `流量 ${formatDisplayRiverFlow(pick.flux, unitPreferences)}`,
     `resource ${resource}`
   ].join(" / ");
 }
@@ -919,7 +920,7 @@ function formatHoverObjectLine(pick, unitPreferences = {}) {
   if (pick.marker) return formatMarkerObjectSummary(pick.marker, unitPreferences);
   if (pick.tradeFlow) return `${pick.tradeFlow.goodName} / ${pick.tradeFlow.sellerName} -> ${pick.tradeFlow.buyerName} / ${pick.tradeFlow.priceSignalLabel || "平稳"} ${formatSignedDisplayNumber(pick.tradeFlow.priceDelta, unitPreferences)}`;
   if (isNamedRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
-  if (pick.river) return `河流 #${pick.river.id} / flux ${formatDisplayNumber(pick.river.flux, unitPreferences)}`;
+  if (pick.river) return `河流 #${pick.river.id} / 流量 ${formatDisplayRiverFlow(pick.river.flux, unitPreferences)}`;
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
   if (pick.politicalObject) return formatObjectTitle(pick.politicalObject);
   return "";

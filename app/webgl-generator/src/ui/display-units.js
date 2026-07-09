@@ -124,6 +124,11 @@ export function formatPrecipitation(value, preferences = {}) {
   return `${formatNumber(numberOrZero(value) * units.precipitationScale, units, {maximumFractionDigits: 1})} mm`;
 }
 
+export function formatRiverFlow(value, preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  return `${formatNumber(numberOrZero(value), units, {maximumFractionDigits: 1})} m³/s`;
+}
+
 export function formatScaleLabel(preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   return `1 cm = ${formatNumber(units.mapScaleKmPerCm, units, {maximumFractionDigits: 1})} km`;

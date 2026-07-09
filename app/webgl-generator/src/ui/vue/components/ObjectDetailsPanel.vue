@@ -30,7 +30,7 @@ import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatDistance, formatMilitary, formatNumber, formatPopulation} from "../../display-units.js";
+import {formatDistance, formatMilitary, formatNumber, formatPopulation, formatRiverFlow} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../../runtime/object-kinds.js";
 
@@ -128,7 +128,7 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
   [OBJECT_KIND.RIVER]: object => [
     {label: "名称", value: object.name || `#${object.id}`},
     {label: "类型", value: object.type},
-    {label: "流量", value: formatNumberValue(object.flux)},
+    {label: "流量", value: formatRiverFlowValue(object.flux)},
     {label: "长度", value: formatDistanceValue(object.length)},
     {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
     {label: "对象 id", value: object.id, debug: true}
@@ -233,6 +233,10 @@ function formatMilitaryValue(value) {
 
 function formatNumberValue(value) {
   return formatNumber(value, unitPreferences.value);
+}
+
+function formatRiverFlowValue(value) {
+  return formatRiverFlow(value, unitPreferences.value);
 }
 
 function formatSignedNumberValue(value) {

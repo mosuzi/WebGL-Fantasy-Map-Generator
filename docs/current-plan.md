@@ -98,6 +98,18 @@
 - 贸易查看增强、Element Plus 完整 source theme、单位系统增强、气候系统深化、文化 / 宗教继承深化、政体系统增强、名称库更多入口与原版多词率 `m`、测量曲线尺细化、高度图导入增强、对象注记增强、经济 / 军事 / 纹章等其它未被重新点名的旧专题。
 - 任何未被用户重新点名的历史专题计划。
 
+## 2026-07-09 追加修复：河流流量显示单位
+
+用户指出河流流量不应只是裸数字，应显示为带流量单位的数值。
+
+完成记录：
+
+- 新增 `formatRiverFlow()` 共享格式器，河流流量统一显示为 `m³/s`。
+- 河流管理面板的列表、摘要和详情流量字段改用带单位格式。
+- 对象详情面板、hover 对象摘要、hover 调试行和运行统计中的河流流量改为带单位显示。
+- 本步只改展示口径，不改变河流生成、宽度、排序或导出数据。
+- 验证：`node --check app\webgl-generator\src\ui\display-units.js`、`node --check app\webgl-generator\src\ui\panel.js`、`git diff --check`、`$env:CI='true'; pnpm run build:app` 均通过；Playwright + 系统 Chrome 构建产物 smoke 确认河流摘要、表格、详情和选中详情均显示 `m³/s`，`glError = 0`。
+
 ## 2026-07-09 追加修复：控制台气候 API 读写补齐
 
 用户指出 `api.climate` 不应只有只读 `get()`；气候控制参数虽然有 UI，但本质可以通过 API 参数传入，因此仍应作为不依赖 UI 的能力暴露。
