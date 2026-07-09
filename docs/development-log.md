@@ -2,6 +2,25 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：Edit Command 轻量契约第一刀
+
+本步推进编辑器基础设施清单中的命令字段规范，先写入中文契约文档，不强制批量改造既有命令。
+
+修正：
+
+- 新增 `docs/task-notes/edit-command-contract.md`，记录编辑命令的最小字段、推荐字段、`context` 边界、`effects` 结构、调用层约定、撤销快照要求和删除命令边界。
+- `docs/task-notes/README.md` 新增专题索引。
+- `docs/task-notes/editor-and-stat-panel-inventory.md` 把命令规范小步更新为“维护契约并逐步让新增命令遵守”。
+
+边界：
+
+- 本步不新增运行时校验，不要求一次性补齐所有旧命令的 `domain / getResult`。
+- 后续新增命令应优先按该契约提供 `effects.affected` 和清晰的 `isNoop` 语义。
+
+验证：
+
+- `git diff --check` 通过。
+
 ## 2026-07-09：`executeEditCommand()` helper 第一刀
 
 本步推进编辑器基础设施清单中的统一命令执行入口，先选测量面板作为低风险调用点试迁移。

@@ -261,7 +261,7 @@
 下一批施工小步：
 
 1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案，先覆盖测量对象重命名 / 删除；后续再补 `getResult()` 返回、异常处理策略，并迁移路线、备注或名称库等低风险调用点。
-2. 为 edit command 补一个轻量规范文档或类型注释：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，并定义 `affected` 的对象格式。
+2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
 3. 新增 `refreshPanelsForEdit(state, command)` 小函数：先只根据 `effects.derived` 和 `affected.kind` 刷新对象面板，逐步减少调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 抽出 `locateAndSelectObject(state, object, documentRef, options)`：统一“设置 selection、打开 / 更新面板、定位、闪烁高亮”的入口，为后续 API 和 AI 操作复用。
 5. 给 `UiObjectTable` 增加可选 `actionsSlot` 或标准空态动作，避免各面板为了同一类列表级操作反复决定放置位置。
