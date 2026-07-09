@@ -1,5 +1,5 @@
 import {readControlPreferences} from "../ui/panel.js";
-import {createCanvasPngBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
+import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 
 const API_VERSION = "0.1.0";
@@ -32,6 +32,7 @@ function createConsoleApi(documentRef, state) {
       exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
       exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
       exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options)),
+      exportCompressedAll: (options = {}) => apiCall(() => exportCompressedAllMapData(state, documentRef, options)),
       exportPNG: (options = {}) => apiCall(() => exportPngData(state, documentRef, options))
     })
   };
@@ -47,7 +48,7 @@ function buildCapabilities() {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get"],
       layers: ["get"],
-      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportPNG"]
+      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {
       info: "readonly",
@@ -181,6 +182,42 @@ function exportPackGeoJson(state, documentRef, options = {}) {
   });
 }
 
+async function exportCompressedAllMapData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const document = createMapDocument(map, {
+    ...(state.options || {}),
+    visualTheme: currentVisualThemeId(state, documentRef)
+  });
+  const filename = `${mapFileBaseName(map)}.webgl-map.json.gz`;
+  const metadata = {
+    type: document.type,
+    version: document.version,
+    seed: document.metadata.seed || "",
+    checksum: document.metadata.checksum || ""
+  };
+  if (options.download === true) {
+    const result = await downloadCompressedMapDocument(documentRef, document, filename);
+    return {
+      filename,
+      mimeType: "application/gzip",
+      originalBytes: result.originalBytes,
+      compressedBytes: result.compressedBytes,
+      metadata
+    };
+  }
+
+  const result = await createCompressedMapDocumentBlob(documentRef, document);
+  const data = {
+    filename,
+    mimeType: "application/gzip",
+    originalBytes: result.originalBytes,
+    compressedBytes: result.compressedBytes,
+    metadata
+  };
+  if (options.includeBase64 !== false) data.base64 = await blobToBase64(documentRef, result.blob);
+  return data;
+}
+
 function exportFeatureGeoJsonData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const layers = options.layers && typeof options.layers === "object" ? {...options.layers} : readFeatureGeoJsonLayerOptions(documentRef);
@@ -295,6 +332,18 @@ function blobToDataUrl(documentRef, blob) {
     reader.addEventListener("error", () => reject(reader.error || new Error("PNG data URL 读取失败")), {once: true});
     reader.readAsDataURL(blob);
   });
+}
+
+async function blobToBase64(documentRef, blob) {
+  const view = documentRef.defaultView || window;
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return view.btoa(binary);
 }
 
 function summarizeSelection(selection) {

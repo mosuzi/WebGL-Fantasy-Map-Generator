@@ -52,11 +52,20 @@ export async function parseMapDocumentFile(documentRef, file) {
 }
 
 export async function downloadCompressedMapDocument(documentRef, document, filename) {
+  const result = await createCompressedMapDocumentBlob(documentRef, document);
+  downloadBlob(documentRef, result.blob, filename);
+  return {
+    originalBytes: result.originalBytes,
+    compressedBytes: result.compressedBytes
+  };
+}
+
+export async function createCompressedMapDocumentBlob(documentRef, document) {
   const text = stringifyMapDocument(document);
   const originalBytes = textByteLength(documentRef, text);
   const blob = await createGzipTextBlob(documentRef, text);
-  downloadBlob(documentRef, blob, filename);
   return {
+    blob,
     originalBytes,
     compressedBytes: blob.size
   };

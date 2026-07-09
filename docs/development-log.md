@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台压缩地图导出 API 第一刀
+
+本步补齐控制台 / 扩展 API 系统阶段 2 的压缩完整地图导出能力，让脚本可以拿到 `.webgl-map.json.gz` 的 gzip base64 或触发浏览器下载。
+
+修正：
+
+- `map-file-io.js` 拆出 `createCompressedMapDocumentBlob()`，UI 的 `downloadCompressedMapDocument()` 继续复用该 helper 并保持现有下载行为。
+- `api.data.exportCompressedAll({download, includeBase64})` 复用完整地图文档序列化和 gzip 压缩逻辑，返回文件名、MIME、原始字节数、压缩字节数和文档元数据。
+- `download:false` 默认返回 gzip base64；`download:true` 默认只触发浏览器下载并返回摘要。
+- `api.info.capabilities()` 的 `data` 命名空间补充 `exportCompressedAll`。
+
+边界：
+
+- 本步只做压缩完整地图导出，不接压缩导入、浏览器存档、生成、编辑或非 gzip 编码。
+- API 不修改地图数据、视图偏好或状态文案；压缩失败会通过 `ApiResult` 返回结构化错误。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js`、`node --check app\webgl-generator\src\runtime\map-file-io.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`data.exportCompressedAll({download:false})` 返回 gzip base64，解压后为 `webgl-generator-map` 文档且 checksum 保持 `506ad108`，原始 `15,418,281` 字节、压缩 `2,453,326` 字节、base64 长度 `3,271,104`；`data.exportCompressedAll({download:true})` 触发 `fmg-stage-2-1-506ad108.webgl-map.json.gz` 下载，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台 PNG 导出 API 第一刀
 
 本步继续推进控制台 / 扩展 API 系统阶段 2，把 PNG 导出开放为异步 API，同时复用现有 overlay 合成和倍率逻辑。
