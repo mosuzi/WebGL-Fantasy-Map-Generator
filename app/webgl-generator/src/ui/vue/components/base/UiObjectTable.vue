@@ -7,8 +7,22 @@
             v-for="column in columns"
             :key="column.key"
             :style="columnStyle(column)"
+            :aria-sort="headerSortState(column)"
           >
-            {{ column.label }}
+            <button
+              v-if="sortableColumn(column)"
+              class="object-table-sort-button"
+              type="button"
+              :title="`按${column.label}排序`"
+              :style="headerButtonStyle(column)"
+              @click="handleHeaderSort(column)"
+            >
+              <span class="object-table-sort-label">{{ column.label }}</span>
+              <span v-if="isActiveSortColumn(column)" class="object-table-sort-indicator" aria-hidden="true">
+                {{ sortIndicator }}
+              </span>
+            </button>
+            <span v-else>{{ column.label }}</span>
           </th>
           <th v-if="showLocateAction" class="object-table-action-column">定位</th>
         </tr>
@@ -100,6 +114,23 @@ const props = defineProps({
     type: String,
     default: "locate",
     validator: value => ["locate", "edit"].includes(value)
+  },
+  sortable: {
+    type: Boolean,
+    default: false
+  },
+  sortKey: {
+    type: String,
+    default: ""
+  },
+  sortDirection: {
+    type: String,
+    default: "asc",
+    validator: value => ["asc", "desc"].includes(value)
+  },
+  sortOptions: {
+    type: Array,
+    default: null
   }
 });
 
@@ -107,7 +138,7 @@ const VIRTUAL_ROW_HEIGHT = 32;
 const VIRTUAL_THRESHOLD = 120;
 const VIRTUAL_OVERSCAN_ROWS = 8;
 
-const emit = defineEmits(["select", "locate", "edit", "empty-action"]);
+const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort"]);
 
 const tableWrap = ref(null);
 const scrollTop = ref(0);
@@ -128,6 +159,8 @@ const virtualWindow = computed(() => {
 const visibleRows = computed(() => props.rows.slice(virtualWindow.value.start, virtualWindow.value.end));
 const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.value.start * VIRTUAL_ROW_HEIGHT : 0);
 const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * VIRTUAL_ROW_HEIGHT : 0);
+const sortableKeys = computed(() => new Set((props.sortOptions || []).map(option => option?.key).filter(Boolean)));
+const sortIndicator = computed(() => props.sortDirection === "asc" ? "↑" : "↓");
 
 watch(
   () => [props.selectedId, props.rows, props.rows.length],
@@ -167,6 +200,11 @@ function handleRowDoubleClick(row) {
     return;
   }
   if (props.showLocateAction) emit("locate", row);
+}
+
+function handleHeaderSort(column) {
+  if (!sortableColumn(column)) return;
+  emit("sort", columnSortKey(column));
 }
 
 function handleScroll() {
@@ -273,6 +311,33 @@ function stringRowId(value) {
 function formatCell(column, row) {
   if (typeof column.format === "function") return column.format(row[column.key], row);
   return row[column.key];
+}
+
+function columnSortKey(column) {
+  return column.sortKey || column.key;
+}
+
+function sortableColumn(column) {
+  if (!props.sortable || column.sortable === false) return false;
+  const key = columnSortKey(column);
+  return sortableKeys.value.size ? sortableKeys.value.has(key) : Boolean(key);
+}
+
+function isActiveSortColumn(column) {
+  return columnSortKey(column) === props.sortKey;
+}
+
+function headerSortState(column) {
+  if (!sortableColumn(column)) return undefined;
+  if (!isActiveSortColumn(column)) return "none";
+  return props.sortDirection === "asc" ? "ascending" : "descending";
+}
+
+function headerButtonStyle(column) {
+  const align = column.align || "left";
+  return {
+    justifyContent: align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start"
+  };
 }
 
 function columnWidth(column) {

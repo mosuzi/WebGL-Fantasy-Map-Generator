@@ -4,12 +4,14 @@
   <div class="lake-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型" @update:model-value="callbacks.onFilter" />
   </div>
-
-  <UiSortBar class-name="lake-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="selectedId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的湖泊"
@@ -52,7 +54,6 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";

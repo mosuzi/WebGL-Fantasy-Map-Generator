@@ -43,12 +43,14 @@
       </tbody>
     </table>
   </div>
-
-  <UiSortBar class-name="diplomacy-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedObjectId"
     empty-text="没有匹配的外交关系"
     @select="callbacks.onSelect"
@@ -148,7 +150,6 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";

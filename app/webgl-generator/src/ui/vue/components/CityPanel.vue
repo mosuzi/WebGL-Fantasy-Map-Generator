@@ -5,12 +5,14 @@
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 国家 / 省份" @update:model-value="callbacks.onFilter" />
     <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
   </div>
-
-  <UiSortBar class-name="city-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedCityId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的城市"
@@ -84,7 +86,6 @@ import UiNoteField from "./base/UiNoteField.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {
   CITY_PALETTE_OPTIONS,

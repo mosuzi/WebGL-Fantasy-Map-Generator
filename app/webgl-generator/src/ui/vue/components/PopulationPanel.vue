@@ -4,12 +4,14 @@
   <div class="population-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选范围 / 名称 / 所属" @update:model-value="callbacks.onFilter" />
   </div>
-
-  <UiSortBar class-name="population-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedPopulationId"
     row-id-key="id"
     :show-locate-action="false"
@@ -26,7 +28,6 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";

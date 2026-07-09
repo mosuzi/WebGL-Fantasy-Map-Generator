@@ -12,12 +12,14 @@
       @update:model-value="callbacks.onFamilyFilter"
     />
   </div>
-
-  <UiSortBar class-name="government-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="governmentColumns"
     :rows="visibleGovernmentRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="selectedGovernmentKey"
     row-id-key="key"
     empty-text="没有匹配的政体"
@@ -76,7 +78,6 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareListValues} from "../../sort-utils.js";

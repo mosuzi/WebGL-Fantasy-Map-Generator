@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：列表排序入口改为表头排序，河流流量做展示标定
+
+用户要求把所有列表上的独立排序按钮改为表格自带的列排序功能，并质疑长达 1800+ 千米的河流只显示 `56 m³/s` 是否合理。
+
+修正：
+
+- `UiObjectTable` 增加可选表头排序能力，支持 `sortKey / sortDirection / sortOptions`，点击表头后继续发出原有排序 key，让各面板沿用既有 `onSort`、默认方向和偏好持久化逻辑。
+- 国家、省份、城市、路线、河流、湖泊、文化、宗教、外交、经济、政体、军事、标记、备注、名称库、测量、气候、生物群系、纹章、地貌、人口和地区等列表面板已移除独立 `UiSortBar` 渲染，改由表头排序。
+- 表头排序只开放原排序按钮中已有的 key；政体面板的从属国家表保持普通表，避免误用主列表排序状态。
+- 河流 `flux / discharge` 明确按内部水文累计量处理，展示时通过 `formatRiverFlow()` 标定到 `m³/s`：默认比例尺下 `1 flux ≈ 20 m³/s`，比例尺改变时按面积比例平方缩放。
+
+边界：
+
+- 本步不改变河流生成、河宽、地图数据、排序原始字段、导出 JSON / GeoJSON 或对象解析中的 `flux / discharge`。
+- `UiSortBar.vue` 组件暂时保留为基础组件文件，但当前列表面板不再引用它。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\display-units.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：国家、河流和经济面板旧 `.ui-sort-bar` 数量均为 `0`；国家“人口”、河流“长度”、经济“库存”表头点击后箭头和 `aria-sort` 均正确切换；河流原始最大 `flux = 1474` 展示为约 `3万 m³/s`，不再显示裸原始值；`glError = 0`，console / page error 为空。
+- `$env:CI='true'; pnpm run audit:panels -- --scenario deep --template continents --browser-channel chrome --out <临时文件> --markdown <临时文件>` 通过；17 个管理面板、0 待复核项、0 console error、0 health event。
+
 ## 2026-07-09：统一编辑面板筛选和排序区间距
 
 用户指出最近新增的编辑面板中，列表上下各模块之间仍然缺少间距；参考国家编辑面板，筛选输入框应与上方信息区有间距，也应与下方排序按钮行有间距。

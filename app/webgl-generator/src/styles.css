@@ -2293,6 +2293,38 @@ select:disabled {
   font-weight: 700;
 }
 
+.object-table-sort-button {
+  width: 100%;
+  min-height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: inherit;
+  gap: 5px;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.object-table-sort-button:hover,
+.object-table-sort-button:focus-visible {
+  color: #fff2c9;
+  outline: none;
+}
+
+.object-table-sort-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.object-table-sort-indicator {
+  flex: 0 0 auto;
+  color: #d7a84f;
+}
+
 .object-table-row {
   background: #0f1519;
   color: #dfe8eb;

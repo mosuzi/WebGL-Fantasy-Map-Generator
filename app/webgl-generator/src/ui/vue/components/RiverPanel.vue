@@ -4,12 +4,14 @@
   <div class="river-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型" @update:model-value="callbacks.onFilter" />
   </div>
-
-  <UiSortBar class-name="river-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="selectedId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的河流"
@@ -82,7 +84,6 @@ import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSliderField from "./base/UiSliderField.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatDistance, formatNumber as formatDisplayNumber, formatRiverFlow as formatDisplayRiverFlow} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";

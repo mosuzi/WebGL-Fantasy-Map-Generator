@@ -58,9 +58,6 @@
   </div>
 
   <UiHistoryActions class-name="namebase-history-actions" :history="state.history" label="名称库编辑" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
-
-  <UiSortBar class-name="namebase-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiSelectField
     class-name="namebase-import-mode"
     input-id="namebase-import-mode"
@@ -95,6 +92,11 @@
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedNamebaseId"
     row-id-key="id"
     empty-text="没有匹配的名称库"
@@ -184,7 +186,6 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {compareListValues} from "../../sort-utils.js";

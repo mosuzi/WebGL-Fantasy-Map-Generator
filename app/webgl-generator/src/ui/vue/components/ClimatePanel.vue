@@ -4,12 +4,14 @@
   <div class="climate-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选温度带 / id" @update:model-value="callbacks.onFilter" />
   </div>
-
-  <UiSortBar class-name="climate-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedBandId"
     row-id-key="id"
     :show-locate-action="false"
@@ -26,7 +28,6 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import {formatNumber as formatDisplayNumber, formatPrecipitation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";

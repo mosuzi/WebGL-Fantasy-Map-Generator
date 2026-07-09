@@ -98,6 +98,25 @@
 - 贸易查看增强、Element Plus 完整 source theme、单位系统增强、气候系统深化、文化 / 宗教继承深化、政体系统增强、名称库更多入口与原版多词率 `m`、测量曲线尺细化、高度图导入增强、对象注记增强、经济 / 军事 / 纹章等其它未被重新点名的旧专题。
 - 任何未被用户重新点名的历史专题计划。
 
+## 2026-07-09 追加修复：列表表头排序与河流流量标定
+
+用户要求把所有列表上的独立排序按钮替换为表格自带的列排序功能，并指出 1800+ 千米河流只显示 `56 m³/s` 不合理。
+
+完成记录：
+
+- `UiObjectTable` 增加可选表头排序能力，点击可排序列会复用各面板原有 `onSort` 回调、排序方向切换和列表偏好持久化。
+- 主要列表面板已移除独立 `UiSortBar` 渲染，改为把 `sortKey / sortDir / sortOptions` 传给对象表格；经济面板三个 tab 的表格会跟随当前 tab 的排序 key 集合。
+- 表格表头只允许原排序按钮集合中已有的 key 排序，避免临时列或从属表误触发未设计的排序。
+- 河流流量展示不再把内部 `flux / discharge` 裸值直接标为 `m³/s`，而是按默认比例尺 `1 flux ≈ 20 m³/s` 做展示标定，并随地图比例尺按面积比例平方缩放；本步不改变河流生成、宽度、排序原始字段或导出数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\display-units.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：国家、河流和经济面板旧 `.ui-sort-bar` 数量均为 `0`；国家“人口”、河流“长度”、经济“库存”表头点击后箭头和 `aria-sort` 均正确切换；河流原始最大 `flux = 1474` 展示为约 `3万 m³/s`，不再显示裸原始值；`glError = 0`，console / page error 为空。
+- `$env:CI='true'; pnpm run audit:panels -- --scenario deep --template continents --browser-channel chrome --out <临时文件> --markdown <临时文件>` 通过；17 个管理面板、0 待复核项、0 console error、0 health event。
+
 ## 2026-07-09 追加修复：编辑面板筛选和排序区间距统一
 
 用户指出最近新增的编辑面板中，各模块之间仍然缺少间距；参考国家编辑面板，筛选输入框与上方信息区、下方排序按钮行之间都应有稳定间距。

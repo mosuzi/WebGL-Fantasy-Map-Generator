@@ -4,12 +4,14 @@
   <div class="notes-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选类型 / 名称 / id / 正文" @update:model-value="callbacks.onFilter" />
   </div>
-
-  <UiSortBar class-name="notes-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedNoteId"
     row-id-key="id"
     empty-text="暂无备注"
@@ -46,7 +48,6 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {compareListValues} from "../../sort-utils.js";
 

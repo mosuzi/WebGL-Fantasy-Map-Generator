@@ -72,12 +72,14 @@
   </section>
 
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
-
-  <UiSortBar class-name="military-panel-sort" :options="sortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     :columns="columns"
     :rows="visibleRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="sortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedRegimentId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的军团"
@@ -439,7 +441,6 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatMilitary, formatNumber as formatDisplayNumber} from "../../display-units.js";

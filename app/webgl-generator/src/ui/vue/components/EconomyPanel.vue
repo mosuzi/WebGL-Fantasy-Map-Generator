@@ -5,13 +5,15 @@
     <UiSegmented label="经济范围" :options="tabOptions" :model-value="state.tab" @select="callbacks.onTab" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选商品 / 市场 / 城镇 / 国家 / 来源" @update:model-value="callbacks.onFilter" />
   </div>
-
-  <UiSortBar class-name="economy-panel-sort" :options="activeSortOptions" :active-key="state.sortKey" :direction="state.sortDir" @sort="callbacks.onSort" />
-
   <UiObjectTable
     v-if="state.tab === 'goods'"
     :columns="goodColumns"
     :rows="visibleGoodRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="activeSortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedGoodId"
     empty-text="没有匹配的商品"
     @select="callbacks.onSelectGood"
@@ -21,6 +23,11 @@
     v-else-if="state.tab === 'markets'"
     :columns="marketColumns"
     :rows="visibleMarketRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="activeSortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedMarketId"
     empty-text="没有匹配的市场"
     @select="callbacks.onSelectMarket"
@@ -30,6 +37,11 @@
     v-else
     :columns="dealColumns"
     :rows="visibleDealRows"
+    :sort-key="state.sortKey"
+    :sort-direction="state.sortDir"
+    :sort-options="activeSortOptions"
+    sortable
+    @sort="callbacks.onSort"
     :selected-id="state.selectedDealId"
     empty-text="没有匹配的交易"
     @select="callbacks.onSelectDeal"
@@ -103,7 +115,6 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSegmented from "./base/UiSegmented.vue";
-import UiSortBar from "./base/UiSortBar.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
