@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：路线删除接入编辑 helper
+
+本步继续推进 `executeEditCommand()` 的低风险调用点迁移，把路线面板删除入口改走统一命令执行 helper。
+
+修正：
+
+- 路线面板删除回调改走 `executeEditCommand()`，统一 no-op 判断、`EditHistory.execute`、`refreshAfterEdit` 和状态文案。
+- 删除成功后调用 `refreshPanelsForEdit()`，通过路线删除命令已有的 `derived: ["route-mesh", "object-panels", "object-index"]` 保持路线 mesh、对象索引和对象面板刷新。
+
+边界：
+
+- 本步只迁移路线删除，不改变路线备注、道路重算、改线、端点重连或路线撤销 / 重做逻辑。
+- 本步不修改路线删除命令本身的数据约束。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：点击真实“删除路线”按钮后路线数 `589 -> 588`、metadata routes `588`、路线段数 `2776 -> 2593`、状态显示“已删除路线 #452。”、撤销栈 `undo=1`；点击面板头部撤销后路线数和 metadata 恢复到 `589`，`redo=1`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：`locateAndSelectObject()` 地区与军事对象扩展
 
 本步继续推进统一定位 / 选择入口，把地区和军事面板的定位回调迁移到 `locateAndSelectObject()`。

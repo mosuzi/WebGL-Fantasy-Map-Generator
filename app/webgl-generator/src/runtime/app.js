@@ -1259,10 +1259,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onDelete: object => {
       const context = {map: state.map};
       const command = createDeleteRouteCommand(object.id);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+      const result = executeEditCommand(state, documentRef, command, {
+        context,
+        noopStatus: "路线不存在或已被删除。",
+        status: `已删除路线 #${object.id}。`
+      });
+      if (result.executed) refreshPanelsForEdit(state, result.command);
       updateEditingInteractionLock(state, documentRef);
     },
     onRegenerateRoutes: () => {
