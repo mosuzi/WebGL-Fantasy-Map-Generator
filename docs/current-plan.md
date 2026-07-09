@@ -425,6 +425,11 @@
    - 边界：本步只迁移国家、省份、城市面板的“定位”回调；不改政府、外交、文化、宗教、标签或对象详情定位路径。
    - 完成记录：国家、省份和城市面板定位改走 `locateAndSelectObject()`；定位后同步 selection，并保留各自面板目标 / 选中行状态。
 
+65. `locateAndSelectObject()` 社会对象扩展。`已完成`
+   - 目标：继续推进统一定位 / 选择入口，覆盖文化和宗教面板定位路径。
+   - 边界：本步只迁移文化、宗教面板的“定位”回调；不改文化 / 宗教新增删除、继承编辑、名称库绑定或备注编辑。
+   - 完成记录：文化和宗教面板定位改走 `locateAndSelectObject()`；定位后同步 selection，并保留各自面板选中行状态。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -479,6 +484,7 @@
 - 备注删除接入编辑 helper 和面板刷新调度已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认注入 `烟测备注` 后点击真实“删除选中备注”按钮，备注数和 metadata `1 -> 0`，摘要刷新为 `备注0`，状态显示“已删除备注 烟测备注。”，撤销栈 `undo=1`，`glError = 0`，health / console / page error 均为 `0`。
 - `locateAndSelectObject()` 线性对象扩展已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测依次打开路线、河流和湖泊面板并点击表格定位按钮，selection 分别保持 `route / river / lake`，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
 - `locateAndSelectObject()` 区域与城市对象扩展已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测依次打开国家、省份和城市面板并点击选中行定位按钮，selection 分别保持 `state / province / city` 和对应 id，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
+- `locateAndSelectObject()` 社会对象扩展已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测依次打开文化和宗教面板并点击选中行定位按钮，selection 分别保持 `culture / religion` 和对应 id，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

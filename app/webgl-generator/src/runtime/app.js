@@ -853,8 +853,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       culturePanel.setSelectedCultureId(object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      culturePanel.setSelectedCultureId(object.id);
+      locateAndSelectObject("culture-panel", object, {
+        afterSelect: target => culturePanel.setSelectedCultureId(target.id)
+      });
     },
     onAdd: () => {
       const command = createAddCultureCommand();
@@ -943,8 +944,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       religionPanel.setSelectedReligionId(object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      religionPanel.setSelectedReligionId(object.id);
+      locateAndSelectObject("religion-panel", object, {
+        afterSelect: target => religionPanel.setSelectedReligionId(target.id)
+      });
     },
     onAdd: () => {
       const command = createAddReligionCommand();

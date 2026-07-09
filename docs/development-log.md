@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：`locateAndSelectObject()` 社会对象扩展
+
+本步继续推进统一定位 / 选择入口，把文化和宗教面板的定位回调迁移到 `locateAndSelectObject()`。
+
+修正：
+
+- 文化面板 `onLocate` 改走 `locateAndSelectObject("culture-panel", object, ...)`，定位后保留文化选中行。
+- 宗教面板 `onLocate` 改走 `locateAndSelectObject("religion-panel", object, ...)`，定位后保留宗教选中行。
+
+边界：
+
+- 本步不改变文化 / 宗教新增删除、继承编辑、名称库绑定或备注编辑。
+- 本步不新增闪烁高亮，不改变进入编辑模式的语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：依次打开文化和宗教面板并点击选中行定位按钮，selection 分别保持 `culture / religion` 和对应 id，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：`locateAndSelectObject()` 区域与城市对象扩展
 
 本步继续推进统一定位 / 选择入口，把国家、省份和城市面板的定位回调迁移到 `locateAndSelectObject()`。

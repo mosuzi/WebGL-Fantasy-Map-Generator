@@ -253,7 +253,7 @@
 
 1. `EditHistory` 只校验 `apply / revert`，没有统一校验 `effects / domain / affected / isNoop / getResult`，不同命令的返回值和 no-op 判断仍靠调用方约定。
 2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，`refreshPanelsForEdit()` 已覆盖 `affected.kind` 和 `derived: object-panels` 的第一层面板刷新，但调用点仍需逐步迁移。
-3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份和城市面板定位路径；但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义大多仍分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
+3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化和宗教面板定位路径；但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义大多仍分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
 4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀；批量选择、列宽持久化和更多空态动作接入仍未完成。
 5. 面板状态只存在内存中，筛选词、排序字段、打开状态、位置和大小尚未按 workspace/session 持久化。
 6. 派生重建只覆盖已明确 effects 的对象；文化 / 宗教 cell 归属、河流 / 湖泊删除、政治面 dissolve、导出校验等更复杂链路还缺“先标脏、后重建、可解释”的统一策略。
@@ -263,7 +263,7 @@
 1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit`、status 文案、标准 `getResult()` 返回和保守异常通道；后续再迁移路线、备注或名称库等低风险调用点，并补更明确的错误展示策略。
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
 3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，并支持 `derived: ["object-panels"]` 全对象面板刷新；后续要覆盖撤销 / 重做路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
-4. 继续扩展 `locateAndSelectObject()`：当前已覆盖 marker、路线、河流、湖泊、国家、省份和城市面板定位路径，后续逐步迁移文化、宗教、标签、政府 / 外交入口和对象详情定位，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。
+4. 继续扩展 `locateAndSelectObject()`：当前已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化和宗教面板定位路径，后续逐步迁移标签、政府 / 外交入口和对象详情定位，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。
 5. 继续扩展 `UiObjectTable.emptyAction`：当前先覆盖测量对象“开始测量”，后续可按面板语义迁移空态新增、导入或创建动作；批量选择和列宽持久化另行拆小步。
 6. 建立面板状态持久化第一刀：先保存筛选词、排序字段和窗口位置，不保存编辑草稿，避免刷新页面后丢失基本工作区上下文。
 
