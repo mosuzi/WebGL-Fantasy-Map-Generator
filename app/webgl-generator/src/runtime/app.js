@@ -357,8 +357,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       setStatePanelTarget(state, object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      setStatePanelTarget(state, object.id);
+      locateAndSelectObject("state-panel", object, {
+        afterSelect: target => setStatePanelTarget(state, target.id)
+      });
     },
     onEdit: object => {
       selectionStore.setSelection({object});
@@ -637,8 +638,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       provincePanel.setSelectedProvinceId(object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      provincePanel.setSelectedProvinceId(object.id);
+      locateAndSelectObject("province-panel", object, {
+        afterSelect: target => provincePanel.setSelectedProvinceId(target.id)
+      });
     },
     onEdit: object => {
       selectionStore.setSelection({object});
@@ -701,8 +703,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       cityPanel.setSelectedCityId(object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      cityPanel.setSelectedCityId(object.id);
+      locateAndSelectObject("city-panel", object, {
+        afterSelect: target => cityPanel.setSelectedCityId(target.id)
+      });
     },
     onRename: (cityId, name) => {
       const object = {kind: "city", id: cityId};
