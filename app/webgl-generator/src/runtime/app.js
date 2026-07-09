@@ -1956,6 +1956,12 @@ function createConsoleApiActions(state, documentRef) {
       undo: () => executeHistoryCommand(state, documentRef, "undo"),
       redo: () => executeHistoryCommand(state, documentRef, "redo")
     },
+    selection: {
+      resolve: object => resolveObjectViaApi(state, object),
+      select: object => selectObjectViaApi(state, object),
+      clear: () => clearSelectionViaApi(state),
+      locate: object => locateObjectViaApi(state, documentRef, object)
+    },
     edit: {
       notes: {
         delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
@@ -3628,6 +3634,7 @@ function locateObject(state, object, documentRef) {
   }
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
+  return located;
 }
 
 function renameSelectedObjectFromNamebase(state, documentRef, object) {
@@ -3856,6 +3863,47 @@ function executeHistoryCommand(state, documentRef, action) {
     label: command.label || "",
     history: state.editHistory.getStats()
   };
+}
+
+function resolveObjectViaApi(state, object) {
+  const target = normalizeApiObjectIdentifier(object);
+  if (!Object.values(OBJECT_KIND).includes(target.kind)) throw new Error(`未知对象类型：${target.kind}`);
+  const resolved = resolveObject(state.map, target);
+  if (!resolved || resolved === target) throw new Error(`找不到对象：${target.kind} #${target.id ?? target.targetId ?? ""}`);
+  return resolved;
+}
+
+function selectObjectViaApi(state, object) {
+  const resolved = resolveObjectViaApi(state, object);
+  state.selectionStore.setSelection({object: resolved});
+  return {
+    object: resolved,
+    selection: state.selectionStore.getSnapshot().selection
+  };
+}
+
+function clearSelectionViaApi(state) {
+  state.selectionStore.clear();
+  return state.selectionStore.getSnapshot();
+}
+
+function locateObjectViaApi(state, documentRef, object) {
+  const resolved = resolveObjectViaApi(state, object);
+  const located = locateObject(state, resolved, documentRef);
+  return {
+    located,
+    object: resolved,
+    selection: state.selectionStore.getSnapshot().selection
+  };
+}
+
+function normalizeApiObjectIdentifier(object) {
+  if (!object || typeof object !== "object") throw new Error("对象标识必须是对象");
+  const kind = typeof object.kind === "string" ? object.kind.trim() : "";
+  if (!kind) throw new Error("缺少对象 kind");
+  const id = object.id ?? object.i ?? object.targetId;
+  if (id === undefined || id === null || id === "") throw new Error("缺少对象 id");
+  return {...object, kind, id: Number.isFinite(Number(id)) ? Number(id) : id};
 }
 
 function deleteNoteViaApi(state, documentRef, noteId, options = {}) {

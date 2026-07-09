@@ -24,7 +24,11 @@ function createConsoleApi(documentRef, state, actions = {}) {
       runtimeStats: () => apiCall(() => buildRuntimeStats(state, documentRef))
     }),
     selection: Object.freeze({
-      get: () => apiCall(() => buildSelectionSnapshot(state))
+      get: () => apiCall(() => buildSelectionSnapshot(state)),
+      resolve: object => apiCall(() => requireApiAction(actions.selection?.resolve, "selection.resolve")(object)),
+      select: object => apiCall(() => requireApiAction(actions.selection?.select, "selection.select")(object)),
+      clear: () => apiCall(() => requireApiAction(actions.selection?.clear, "selection.clear")()),
+      locate: object => apiCall(() => requireApiAction(actions.selection?.locate, "selection.locate")(object))
     }),
     layers: Object.freeze({
       get: () => apiCall(() => buildLayerSnapshot(state, documentRef)),
@@ -94,7 +98,7 @@ function buildCapabilities() {
     namespaces: ["info", "selection", "layers", "units", "climate", "history", "edit", "data"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
-      selection: ["get"],
+      selection: ["get", "resolve", "select", "clear", "locate"],
       layers: ["get", "setViewMode", "setVisible"],
       units: ["get", "apply"],
       climate: ["get"],

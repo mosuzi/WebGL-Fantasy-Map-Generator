@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台选择 / 定位 API 第一刀
+
+本步进入控制台 / 扩展 API 系统的 selection / locate 能力，开放对象解析、选择、清空和定位。
+
+修正：
+
+- `api.selection` 增加 `resolve(object)`、`select(object)`、`clear()` 和 `locate(object)`。
+- app action 复用 `resolveObject()` 和 `SelectionStore`，`select()` 会走现有 selection change 流程刷新 renderer、对象详情、runtime 和 pick 面板。
+- `locate()` 复用 `locateObject()`，并让该 helper 返回定位是否成功。
+- API 层对未知类型或不存在对象返回结构化错误，不沿用 UI 的对象标识容错回退。
+- `api.info.capabilities()` 的 `selection` 方法列表补充 `resolve/select/clear/locate`。
+
+边界：
+
+- 本步不接临时高亮、多对象选择、编辑态 start/stop 或屏幕坐标 pick。
+- selection API 只改变当前 UI 选择和视图定位，不修改地图数据或 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `selection.get/resolve/select/clear/locate`；`selection.resolve({kind:"city", id:1})` 返回城市“玄昌”快照，`select()` 和 `locate()` 均能设置 selection，`clear()` 清空 selection / editingObject，不存在城市 `#999999` 返回 `ok=false` 和“找不到对象”错误；checksum 保持 `8ab0c776`，校验值 `4bf48804`。
+
 ## 2026-07-09：控制台国家新增 / 删除 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，把国家新增和删除接入 API。

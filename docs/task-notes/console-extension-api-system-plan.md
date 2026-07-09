@@ -466,6 +466,8 @@ api.edit.measurement.delete(id)
 - 浏览器烟测已覆盖手工标签删除、撤销 / 重做，以及生成城市标签恢复 / 撤销。
 - 浏览器烟测已覆盖 marker 移动 / 撤销移动，以及 marker 删除 / 撤销 / 重做。
 - 浏览器烟测已覆盖 marker 新增 / 撤销 / 重做和新建对象 selection。
+- `api.selection.resolve(object)`、`api.selection.select(object)`、`api.selection.clear()` 和 `api.selection.locate(object)` 已接入。
+- 浏览器烟测已覆盖城市对象 resolve / select / clear / locate，以及不存在对象的结构化错误。
 
 ### 阶段 5：生成、导入和批量能力
 
@@ -496,7 +498,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步建议继续阶段 4：
 
-1. 进入选择 / 定位 API，接 `selection.select()`、`selection.locate()` 和结构化对象 resolve。
+1. 继续 selection API，评估临时高亮、多对象高亮和屏幕坐标 pick。
 2. 继续编辑 API，接国家 / 省份 / 城市的名称、颜色、人口等已有单对象命令。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。
