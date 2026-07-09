@@ -602,11 +602,176 @@ function collectPoliticalCellGroups(map, field) {
   return groups;
 }
 
+export function dissolvePackCellPolygons(map, cellIds = []) {
+  const cells = map?.pack?.cells;
+  const vertices = map?.pack?.vertices?.p;
+  if (!cells?.v || !vertices) return [];
+  const boundaryEdges = new Map();
+  const selected = new Set(cellIds.map(Number).filter(Number.isInteger));
+  for (const cellId of selected) {
+    const vertexIds = cells.v?.[cellId];
+    if (!Array.isArray(vertexIds) || vertexIds.length < 3) continue;
+    for (let index = 0; index < vertexIds.length; index += 1) {
+      const from = Number(vertexIds[index]);
+      const to = Number(vertexIds[(index + 1) % vertexIds.length]);
+      if (!Number.isInteger(from) || !Number.isInteger(to) || from === to) continue;
+      const key = edgeKey(from, to);
+      if (boundaryEdges.has(key)) boundaryEdges.delete(key);
+      else boundaryEdges.set(key, {from, to});
+    }
+  }
+  const rings = stitchBoundaryRings(boundaryEdges, map);
+  return ringsToMultiPolygon(rings);
+}
+
 function countValidPoliticalObjects(objects = []) {
   return objects.filter(object => {
     const id = Number(object?.i ?? object?.id) || 0;
     return id && !object?.removed;
   }).length;
+}
+
+function edgeKey(a, b) {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+function stitchBoundaryRings(edgeMap, map) {
+  const unused = new Map(edgeMap);
+  const outgoing = new Map();
+  for (const [key, edge] of unused) {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    outgoing.get(edge.from).push(key);
+  }
+  const rings = [];
+  while (unused.size) {
+    const [startKey, startEdge] = unused.entries().next().value;
+    const vertexIds = [startEdge.from, startEdge.to];
+    removeBoundaryEdge(unused, outgoing, startKey);
+    let current = startEdge.to;
+    let guard = 0;
+    while (current !== startEdge.from && guard < edgeMap.size + 1) {
+      guard += 1;
+      const nextKey = firstUnusedOutgoingKey(outgoing, unused, current);
+      if (!nextKey) break;
+      const edge = unused.get(nextKey);
+      removeBoundaryEdge(unused, outgoing, nextKey);
+      vertexIds.push(edge.to);
+      current = edge.to;
+    }
+    if (current !== startEdge.from || vertexIds.length < 4) continue;
+    const ring = vertexIds.map(vertexId => projectWorldPoint(map.pack.vertices.p?.[vertexId], map)).filter(Boolean);
+    if (ring.length >= 4 && sameCoordinate(ring[0], ring[ring.length - 1])) rings.push(ring);
+  }
+  return rings;
+}
+
+function removeBoundaryEdge(unused, outgoing, key) {
+  const edge = unused.get(key);
+  unused.delete(key);
+  const keys = outgoing.get(edge?.from) || [];
+  const index = keys.indexOf(key);
+  if (index >= 0) keys.splice(index, 1);
+}
+
+function firstUnusedOutgoingKey(outgoing, unused, vertexId) {
+  const keys = outgoing.get(vertexId) || [];
+  while (keys.length && !unused.has(keys[0])) keys.shift();
+  return keys[0] || null;
+}
+
+function ringsToMultiPolygon(rings) {
+  const entries = rings
+    .map(ring => ({ring, area: ringSignedArea(ring), parent: -1}))
+    .filter(entry => Math.abs(entry.area) > 0)
+    .sort((a, b) => Math.abs(b.area) - Math.abs(a.area));
+  for (let index = 0; index < entries.length; index += 1) {
+    const point = firstRingPoint(entries[index].ring);
+    let parent = -1;
+    let parentArea = Infinity;
+    for (let candidateIndex = 0; candidateIndex < index; candidateIndex += 1) {
+      const candidate = entries[candidateIndex];
+      const area = Math.abs(candidate.area);
+      if (area >= parentArea || !pointInRing(point, candidate.ring)) continue;
+      parent = candidateIndex;
+      parentArea = area;
+    }
+    entries[index].parent = parent;
+  }
+  const polygons = [];
+  const outerIndexes = [];
+  entries.forEach((entry, index) => {
+    if (ringDepth(entries, index) % 2 !== 0) return;
+    outerIndexes.push(index);
+    polygons.push([orientRing(entry.ring, true)]);
+  });
+  entries.forEach((entry, index) => {
+    if (ringDepth(entries, index) % 2 === 0) return;
+    const outerIndex = nearestOuterIndex(entries, outerIndexes, index);
+    const polygonIndex = outerIndexes.indexOf(outerIndex);
+    if (polygonIndex >= 0) polygons[polygonIndex].push(orientRing(entry.ring, false));
+  });
+  return polygons;
+}
+
+function ringDepth(entries, index) {
+  let depth = 0;
+  let current = entries[index]?.parent ?? -1;
+  while (current >= 0) {
+    depth += 1;
+    current = entries[current]?.parent ?? -1;
+  }
+  return depth;
+}
+
+function nearestOuterIndex(entries, outerIndexes, holeIndex) {
+  const point = firstRingPoint(entries[holeIndex].ring);
+  let best = -1;
+  let bestArea = Infinity;
+  for (const index of outerIndexes) {
+    const area = Math.abs(entries[index].area);
+    if (area >= bestArea || !pointInRing(point, entries[index].ring)) continue;
+    best = index;
+    bestArea = area;
+  }
+  return best;
+}
+
+function orientRing(ring, ccw) {
+  const area = ringSignedArea(ring);
+  const shouldReverse = ccw ? area < 0 : area > 0;
+  return shouldReverse ? [...ring].reverse() : ring;
+}
+
+function ringSignedArea(ring) {
+  let area = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const a = ring[index];
+    const b = ring[index + 1];
+    area += a[0] * b[1] - b[0] * a[1];
+  }
+  return area / 2;
+}
+
+function firstRingPoint(ring) {
+  return ring.find((point, index) => index === 0 || !sameCoordinate(point, ring[0])) || ring[0];
+}
+
+function sameCoordinate(a, b) {
+  return Array.isArray(a) && Array.isArray(b) && a[0] === b[0] && a[1] === b[1];
+}
+
+function pointInRing(point, ring) {
+  if (!point || !ring?.length) return false;
+  let inside = false;
+  const x = point[0];
+  const y = point[1];
+  for (let index = 0, prev = ring.length - 1; index < ring.length; prev = index, index += 1) {
+    const a = ring[index];
+    const b = ring[prev];
+    const intersects = ((a[1] > y) !== (b[1] > y)) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0];
+    if (intersects) inside = !inside;
+  }
+  return inside;
 }
 
 function routeFeatures(map) {

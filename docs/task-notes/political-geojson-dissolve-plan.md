@@ -85,7 +85,22 @@
 
 ## 建议顺序
 
-1. 先做 dissolve 算法原型，先在工具脚本中用固定 seed 验证 ring 拼接。
+1. 先做 dissolve 算法原型，先在工具脚本中用固定 seed 验证 ring 拼接。`已完成第一刀`
 2. 补导出验证和文件体积记录。
 3. 稳定后接入 UI，提供“合并政治面边界”开关。
 4. 若导出耗时影响主线程，再评估 Worker 或懒加载几何库。
+
+## 2026-07-09 原型验证记录
+
+已在 `app/webgl-generator/src/runtime/map-file-io.js` 新增 `dissolvePackCellPolygons(map, cellIds)` 纯函数，当前仅作为导出拓扑原型和后续接入点，还没有接入要素 GeoJSON UI。
+
+已验证：
+
+- 两个相邻方形 cell 可合并为一个 MultiPolygon，闭合外环点数从非合并的 `10` 点降为 `7` 点，共享边被消除。
+- `3x3` 方格缺中心的合成对象可输出一个 polygon、两个 rings：外环 `13` 点，hole `5` 点，两个 ring 均闭合。
+- `node --check app\webgl-generator\src\runtime\map-file-io.js`、`git diff --check` 和 `pnpm run build:app` 通过。
+
+后续接入前仍需：
+
+- 用真实生成地图验证 state / province / zone 的 ring 数、点数缩减比例和导出耗时。
+- 接入导出层选项时保留非 dissolve 输出作为回退。

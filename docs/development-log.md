@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：政治面 dissolve 拓扑原型第一刀
+
+本步启动“政治面 GeoJSON dissolve”的第二阶段，但先只做可命令级验证的拓扑纯函数，不改变当前要素 GeoJSON 导出 UI。
+
+修正：
+
+- `map-file-io.js` 新增 `dissolvePackCellPolygons(map, cellIds)`，输入 pack cell ids 后按 Voronoi 顶点边生成边界。
+- 同一对象内部共享边会被消除，保留边界边后再按端点拼接闭合 rings。
+- rings 会按包含关系组装为 MultiPolygon，并把 hole 归入对应外环。
+
+边界：
+
+- 本步不接入 state / province / zone 导出开关，现有 `.features.geojson` 仍输出 `dissolved=false` 的 cell MultiPolygon。
+- 不引入 GIS 运行时库，不做坐标简化，不做真实地图体积和耗时统计；这些留给下一刀导出验证。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\map-file-io.js` 通过。
+- `git diff --check` 通过。
+- 命令级 Node 断言确认两个相邻方形 cell dissolve 后输出一个闭合 MultiPolygon，点数从非合并的 `10` 点降为 `7` 点。
+- 命令级 Node 断言确认 `3x3` 缺中心对象输出一个 polygon、两个 rings：外环 `13` 点、hole `5` 点，两个 ring 均闭合。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-09：PNG 导出倍率第一刀
 
 本步继续推进“导出能力矩阵收尾”，为图片导出补齐倍率选项。图片导出此前已合成 WebGL canvas 和地图 overlay，但输出尺寸只能跟随当前 canvas。
