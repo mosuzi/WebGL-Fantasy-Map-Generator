@@ -422,7 +422,11 @@ api.edit.measurement.delete(id)
 - `api.layers.setViewMode(mode)` 会校验页面已有 `data-mode`，同步 active 按钮、本地显示偏好和 renderer color mode。
 - `api.layers.setVisible(layer, visible)` 会校验 renderer 已知图层，同步 UI 控件、本地显示偏好和 renderer layer visibility。
 - 本步只改显示偏好，不改变地图数据或 checksum。
-- 单位 API 和气候 API 尚未接入。
+- 单位 API 已完成第一刀。
+- `api.units.get()` 返回当前标准化单位偏好。
+- `api.units.apply(preferences)` 使用 `normalizeUnitPreferences()` 校准输入，同步单位控件、本地显示偏好和 renderer unit preferences。
+- 单位 API 只改显示偏好，不改变地图数据或 checksum。
+- 气候 API 尚未接入。
 
 ### 阶段 4：编辑命令 API 第一刀
 
@@ -468,7 +472,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步有两条可选路线：
 
-1. 继续阶段 3，接 `api.units.get()/apply()`，让脚本能读写距离、面积、缩写、比例尺、人口、军事和降水单位偏好。
-2. 再接 `api.climate.get()` 只读摘要；`apply()` 和 `setLatitude()` 涉及生成参数与派生 stale，应单独拆小步。
+1. 继续阶段 3，先接 `api.climate.get()` 只读摘要，暴露温度、降水、纬度和风带关键元数据。
+2. `api.climate.apply()` 和 `setLatitude()` 涉及生成参数与派生 stale，应单独拆小步并明确是否进入撤销 / 重生成链路。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。

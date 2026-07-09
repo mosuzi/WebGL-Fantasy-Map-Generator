@@ -449,7 +449,7 @@ function layerVisibilityPreferencePatch(layer, visible) {
   return layer === "coastline" ? {coastline: value, lakeShore: value} : {[layer]: value};
 }
 
-function updateControlPreferences(documentRef, patch) {
+export function updateControlPreferences(documentRef, patch) {
   if (patchGlobalConfigPreferences(patch)) return;
   try {
     const storage = documentRef.defaultView?.localStorage;

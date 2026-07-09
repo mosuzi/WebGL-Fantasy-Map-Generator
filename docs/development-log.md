@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台单位 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 3，开放单位显示偏好的读取和应用能力。
+
+修正：
+
+- `api.info.capabilities()` 增加 `units` 命名空间，声明 `get` 和 `apply`。
+- `api.units.get()` 返回当前标准化单位偏好。
+- `api.units.apply(preferences)` 使用 `normalizeUnitPreferences()` 校准输入，同步单位控件、全局控制偏好和 renderer `setUnitPreferences()`。
+- `ui/panel.js` 导出 `updateControlPreferences()`，供 API 复用现有控制偏好写入逻辑。
+
+边界：
+
+- 本步只改显示偏好和控件状态，不修改地图生成数据、气候模型、selection、编辑历史或 checksum。
+- `apply()` 对非法单位值走既有标准化回落，不新增自定义单位类型。
+- 本步不接气候 API；`api.climate.apply()` 后续需要单独处理派生 stale 和重生成语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js`、`node --check app\webgl-generator\src\ui\panel.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`units.apply({distanceUnit:"km", numberAbbreviation:"none", mapScaleKmPerCm:125, populationScale:2, militaryScale:1.5, precipitationScale:0.5})` 后 API 返回和控件均同步为 `km / km2 / none / 125 / 2 / 1.5 / 0.5`，`layers.get().units` 同步更新；调用前后 checksum 保持 `f25a7b4e`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台图层 API 第一刀
 
 本步进入控制台 / 扩展 API 系统阶段 3，先开放视图模式和图层显隐两类显示偏好操作。

@@ -1,4 +1,5 @@
-import {readControlPreferences, setActiveModeButton, updateLayerPreference} from "../ui/panel.js";
+import {readControlPreferences, setActiveModeButton, updateControlPreferences, updateLayerPreference} from "../ui/panel.js";
+import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 
@@ -30,6 +31,10 @@ function createConsoleApi(documentRef, state) {
       setViewMode: mode => apiCall(() => setLayerViewMode(state, documentRef, mode)),
       setVisible: (layer, visible) => apiCall(() => setLayerVisible(state, documentRef, layer, visible))
     }),
+    units: Object.freeze({
+      get: () => apiCall(() => buildUnitSnapshot(state, documentRef)),
+      apply: (preferences = {}) => apiCall(() => applyUnitPreferences(state, documentRef, preferences))
+    }),
     data: Object.freeze({
       exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
       exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
@@ -45,17 +50,19 @@ function buildCapabilities() {
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "selection", "layers", "data"],
+    namespaces: ["info", "selection", "layers", "units", "data"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get"],
       layers: ["get", "setViewMode", "setVisible"],
+      units: ["get", "apply"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {
       info: "readonly",
       selection: "readonly",
       layers: "display-preference",
+      units: "display-preference",
       data: "readonly-download"
     }
   };
@@ -155,6 +162,25 @@ function setLayerVisible(state, documentRef, layer, visible) {
   updateLayerControlState(documentRef, nextLayer, nextVisible);
   state?.renderer?.setLayerVisible?.(nextLayer, nextVisible);
   return buildLayerSnapshot(state, documentRef);
+}
+
+function buildUnitSnapshot(state, documentRef) {
+  const preferences = readControlPreferences(documentRef);
+  const units = normalizeUnitPreferences(preferences.units);
+  return {
+    units,
+    rendererApplied: Boolean(state?.renderer)
+  };
+}
+
+function applyUnitPreferences(state, documentRef, preferences = {}) {
+  if (!preferences || typeof preferences !== "object") throw new Error("单位偏好必须是对象");
+  const current = buildUnitSnapshot(state, documentRef).units;
+  const units = normalizeUnitPreferences({...current, ...preferences});
+  updateUnitControls(documentRef, units);
+  updateControlPreferences(documentRef, {units});
+  state?.renderer?.setUnitPreferences?.(units);
+  return buildUnitSnapshot(state, documentRef);
 }
 
 function exportAllMapData(state, documentRef, options = {}) {
@@ -333,6 +359,22 @@ function updateLayerControlState(documentRef, layer, visible) {
       control.checked = enabled;
     }
   }
+}
+
+function updateUnitControls(documentRef, units) {
+  const normalized = normalizeUnitPreferences(units);
+  setControlValue(documentRef, "distance-unit", normalized.distanceUnit);
+  setControlValue(documentRef, "area-unit", normalized.areaUnit);
+  setControlValue(documentRef, "number-abbreviation", normalized.numberAbbreviation);
+  setControlValue(documentRef, "map-scale-km-per-cm", normalized.mapScaleKmPerCm);
+  setControlValue(documentRef, "population-scale", normalized.populationScale);
+  setControlValue(documentRef, "military-scale", normalized.militaryScale);
+  setControlValue(documentRef, "precipitation-scale", normalized.precipitationScale);
+}
+
+function setControlValue(documentRef, id, value) {
+  const control = documentRef.getElementById(id);
+  if (control) control.value = String(value);
 }
 
 function readFeatureGeoJsonLayerOptions(documentRef) {
