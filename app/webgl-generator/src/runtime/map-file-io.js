@@ -162,14 +162,15 @@ export function createMapGeoJson(map) {
 export function createMapFeatureGeoJson(map, options = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
   const layers = normalizeFeatureLayerOptions(options.layers);
+  const dissolvePolitical = options.dissolvePolitical === true;
   const features = [
-    ...(layers.state ? stateFeatures(map) : []),
-    ...(layers.province ? provinceFeatures(map) : []),
+    ...(layers.state ? stateFeatures(map, {dissolve: dissolvePolitical}) : []),
+    ...(layers.province ? provinceFeatures(map, {dissolve: dissolvePolitical}) : []),
     ...(layers.city ? cityFeatures(map) : []),
     ...(layers.route ? routeFeatures(map) : []),
     ...(layers.river ? riverFeatures(map) : []),
     ...(layers.marker ? markerFeatures(map) : []),
-    ...(layers.zone ? zoneFeatures(map) : [])
+    ...(layers.zone ? zoneFeatures(map, {dissolve: dissolvePolitical}) : [])
   ];
   const layerSet = selectedFeatureLayerNames(layers);
 
@@ -182,6 +183,7 @@ export function createMapFeatureGeoJson(map, options = {}) {
       seed: map.metadata?.seed || "",
       checksum: map.metadata?.checksum || "",
       generatedAt: map.metadata?.generatedAt || "",
+      dissolvedPolitical: dissolvePolitical,
       states: layers.state ? countValidPoliticalObjects(map.politics?.states) : 0,
       provinces: layers.province ? countValidPoliticalObjects(map.politics?.provinces) : 0,
       cities: layers.city ? map.settlements?.cities?.length || 0 : 0,
@@ -438,7 +440,7 @@ function selectedFeatureLayerNames(layers) {
   ].filter(Boolean);
 }
 
-function stateFeatures(map) {
+function stateFeatures(map, options = {}) {
   const groups = collectPoliticalCellGroups(map, "state");
   return (map.politics?.states || []).map(state => {
     const id = Number(state?.i ?? state?.id) || 0;
@@ -449,6 +451,8 @@ function stateFeatures(map) {
     const note = readObjectNote(map, {kind: "state", id});
     const cultureId = Number(state.culture) || 0;
     const religionId = Number(state.religion) || 0;
+    const coordinates = politicalGroupCoordinates(map, group, options);
+    if (!coordinates.length) return null;
     return {
       type: "Feature",
       id: `state-${id}`,
@@ -476,19 +480,19 @@ function stateFeatures(map) {
         burgs: state.burgs || 0,
         color: state.color || "",
         neighbors: Array.isArray(state.neighbors) ? state.neighbors.filter(Boolean) : [],
-        dissolved: false,
+        dissolved: options.dissolve === true,
         hasNote: Boolean(note?.body),
         note: note?.body || ""
       },
       geometry: {
         type: "MultiPolygon",
-        coordinates: group.polygons
+        coordinates
       }
     };
   }).filter(Boolean);
 }
 
-function provinceFeatures(map) {
+function provinceFeatures(map, options = {}) {
   const groups = collectPoliticalCellGroups(map, "province");
   return (map.politics?.provinces || []).map(province => {
     const id = Number(province?.i ?? province?.id) || 0;
@@ -499,6 +503,8 @@ function provinceFeatures(map) {
     const state = map.politics?.states?.[stateId];
     const burg = map.pack?.burgs?.[province.burg];
     const note = readObjectNote(map, {kind: "province", id});
+    const coordinates = politicalGroupCoordinates(map, group, options);
+    if (!coordinates.length) return null;
     return {
       type: "Feature",
       id: `province-${id}`,
@@ -516,13 +522,13 @@ function provinceFeatures(map) {
         population: roundCoordinate(group.population),
         color: province.color || "",
         neighbors: Array.isArray(province.neighbors) ? province.neighbors.filter(Boolean) : [],
-        dissolved: false,
+        dissolved: options.dissolve === true,
         hasNote: Boolean(note?.body),
         note: note?.body || ""
       },
       geometry: {
         type: "MultiPolygon",
-        coordinates: group.polygons
+        coordinates
       }
     };
   }).filter(Boolean);
@@ -590,16 +596,22 @@ function collectPoliticalCellGroups(map, field) {
     if (!polygon) continue;
     let group = groups.get(ownerId);
     if (!group) {
-      group = {cells: 0, area: 0, population: 0, polygons: []};
+      group = {cells: 0, area: 0, population: 0, polygons: [], cellIds: []};
       groups.set(ownerId, group);
     }
     group.cells += 1;
     group.area += Number(cells.area?.[cellId]) || 0;
     group.population += Number(cells.pop?.[cellId]) || 0;
     group.polygons.push(polygon);
+    group.cellIds.push(cellId);
   }
 
   return groups;
+}
+
+function politicalGroupCoordinates(map, group, options = {}) {
+  if (options.dissolve !== true) return group.polygons || [];
+  return dissolvePackCellPolygons(map, group.cellIds || []);
 }
 
 export function dissolvePackCellPolygons(map, cellIds = []) {
@@ -873,9 +885,11 @@ function markerFeatures(map) {
   }).filter(Boolean);
 }
 
-function zoneFeatures(map) {
+function zoneFeatures(map, options = {}) {
   return (map.zones?.zones || []).map(zone => {
-    const polygons = (zone.cells || []).map(cell => packCellPolygon(map, cell)).filter(Boolean);
+    const polygons = options.dissolve === true
+      ? dissolvePackCellPolygons(map, zone.cells || [])
+      : (zone.cells || []).map(cell => packCellPolygon(map, cell)).filter(Boolean);
     if (!polygons.length) return null;
     return {
       type: "Feature",
@@ -889,7 +903,8 @@ function zoneFeatures(map) {
         cells: zone.cells?.length || 0,
         color: zone.color || "",
         pattern: zone.pattern || "",
-        hexColor: zone.hexColor || ""
+        hexColor: zone.hexColor || "",
+        dissolved: options.dissolve === true
       },
       geometry: {
         type: "MultiPolygon",

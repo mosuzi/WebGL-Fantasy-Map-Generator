@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：政治面 dissolve 内部导出验证第一刀
+
+本步把上一刀的 dissolve 拓扑原型接入 `createMapFeatureGeoJson()` 内部选项，完成真实生成图验证，但暂不暴露 UI 开关。
+
+修正：
+
+- `createMapFeatureGeoJson(map, {dissolvePolitical: true})` 会对 state / province / zone 图层使用 `dissolvePackCellPolygons()`。
+- collection properties 新增 `dissolvedPolitical` 标记。
+- state / province / zone feature 在 dissolve 模式下写入 `properties.dissolved = true`；默认导出仍保持非 dissolve 输出和 `dissolved=false`。
+- 政治 cell 分组保存 `cellIds`，供 dissolve 函数复用，避免从 MultiPolygon 坐标反推拓扑。
+
+边界：
+
+- 本步不修改导出浮层 UI，不改变用户默认 `.features.geojson` 文件。
+- 暂不做浏览器下载烟测；下一刀接入 UI 开关时再验证实际文件。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\map-file-io.js` 通过。
+- `git diff --check` 通过。
+- 命令级 Node 真实生成图验证通过：`dissolve-smoke`、`10000` cells、`continents` 模板下，state / province / zone 的非 dissolve 与 dissolve feature 数均为 `206`；坐标点 `53180 -> 10383`，减少 `80.48%`；非 dissolve 导出 `21.74ms`，dissolve 导出 `44.43ms`；dissolve 输出的 collection `properties.dissolvedPolitical = true`，所有 feature `properties.dissolved = true`。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-09：政治面 dissolve 拓扑原型第一刀
 
 本步启动“政治面 GeoJSON dissolve”的第二阶段，但先只做可命令级验证的拓扑纯函数，不改变当前要素 GeoJSON 导出 UI。

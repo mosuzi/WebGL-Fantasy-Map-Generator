@@ -86,7 +86,7 @@
 ## 建议顺序
 
 1. 先做 dissolve 算法原型，先在工具脚本中用固定 seed 验证 ring 拼接。`已完成第一刀`
-2. 补导出验证和文件体积记录。
+2. 补导出验证和文件体积记录。`已完成第一刀`
 3. 稳定后接入 UI，提供“合并政治面边界”开关。
 4. 若导出耗时影响主线程，再评估 Worker 或懒加载几何库。
 
@@ -102,5 +102,32 @@
 
 后续接入前仍需：
 
-- 用真实生成地图验证 state / province / zone 的 ring 数、点数缩减比例和导出耗时。
 - 接入导出层选项时保留非 dissolve 输出作为回退。
+
+## 2026-07-09 真实导出验证记录
+
+`createMapFeatureGeoJson(map, {dissolvePolitical: true})` 已支持内部可选 dissolve，但默认导出和 UI 仍保持非 dissolve 输出。
+
+固定生成参数：
+
+- seed：`dissolve-smoke`
+- cells：`10000`
+- graph：`1440 x 960`
+- template：`continents`
+- layers：`state / province / zone`
+
+验证结果：
+
+| 指标 | 非 dissolve | dissolve |
+|---|---:|---:|
+| pack cells | 5485 | 5485 |
+| features | 206 | 206 |
+| 坐标点 | 53180 | 10383 |
+| 导出耗时 | 21.74ms | 44.43ms |
+
+点数减少约 `80.48%`；dissolve 输出的 collection `properties.dissolvedPolitical = true`，所有 state / province / zone feature 的 `properties.dissolved = true`。
+
+后续接入前仍需：
+
+- 增加导出 UI 开关，并保留非 dissolve 输出作为回退。
+- 用浏览器下载烟测确认实际 `.features.geojson` 文件中的 `dissolved` 标记和点数缩减。
