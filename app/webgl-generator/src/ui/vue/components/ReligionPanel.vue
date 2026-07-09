@@ -38,6 +38,7 @@
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
   />
+  <UiPanelIoActions class-name="religion-panel-list-actions" label="宗教列表操作" :actions="religionListActions" @action="handleListAction" />
 
   <UiDetailGrid class-name="religion-panel-details" empty-text="未选中宗教" :rows="detailRows" />
 
@@ -93,6 +94,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -151,6 +153,16 @@ const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根�
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
+const religionListActions = computed(() => [
+  {key: "add", label: "新增空宗教", icon: "+"},
+  {key: "locate", label: "定位宗教", icon: "⌖", disabled: !selected.value},
+  {
+    key: "delete",
+    label: selected.value?.canDelete ? "删除空宗教" : "只能删除无覆盖、无子级、无关联对象的空宗教",
+    icon: "×",
+    disabled: !selected.value?.canDelete
+  }
+]);
 const religionActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
@@ -212,6 +224,15 @@ function openRenameEditor(row) {
   });
 }
 
+function handleListAction(actionKey) {
+  if (actionKey === "add") {
+    props.callbacks.onAdd?.();
+    return;
+  }
+  if (actionKey === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
+  if (actionKey === "delete" && selected.value?.canDelete) props.callbacks.onDelete?.(selected.value);
+}
+
 function buildReligionMetrics(map) {
   const baseRows = religionRows(map);
   const tree = buildTreeFields(baseRows, "根宗教");
@@ -219,6 +240,7 @@ function buildReligionMetrics(map) {
     const cities = religionCities(map, religion.id);
     const stateStats = religionStateStats(map, cities);
     const cultureStats = religionCultureStats(map, cities);
+    const stateOwners = religionStateOwnerCount(map, religion.id);
     const urban = cities.reduce((sum, city) => sum + (Number(city.population) || 0), 0);
     const rural = Number(religion.rural) || 0;
     const treeFields = tree.get(religion.id) || {};
@@ -235,6 +257,7 @@ function buildReligionMetrics(map) {
       cultures: cultureStats.length,
       stateSummary: stateStats.slice(0, 4).map(item => `${item.name} ${formatNumber(item.count)}`).join(" / ") || "none",
       cultureSummary: cultureStats.slice(0, 4).map(item => `${item.name} ${formatNumber(item.count)}`).join(" / ") || "none",
+      canDelete: religion.cells === 0 && cities.length === 0 && stateStats.length === 0 && stateOwners === 0 && (treeFields.childCount || 0) === 0,
       noteBody: note?.body || "",
       noteUpdatedAt: note?.updatedAt || "",
       color: normalizeHexColor(religion.color) || fallbackReligionColor(religion.id)
@@ -418,6 +441,12 @@ function religionStateStats(map, cities) {
       name: indexedName(map?.politics?.states, stateId)
     }))
     .sort((a, b) => b.count - a.count || a.stateId - b.stateId);
+}
+
+function religionStateOwnerCount(map, religionId) {
+  return (map?.politics?.states || map?.pack?.states || [])
+    .filter(state => state?.i && !state.removed && Number(state.religion) === religionId)
+    .length;
 }
 
 function religionCultureStats(map, cities) {

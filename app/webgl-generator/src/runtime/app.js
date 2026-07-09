@@ -61,7 +61,12 @@ import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
-import {createSetReligionColorCommand, createSetReligionParentCommand} from "./religion-edit-commands.js";
+import {
+  createAddReligionCommand,
+  createDeleteReligionCommand,
+  createSetReligionColorCommand,
+  createSetReligionParentCommand
+} from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
@@ -927,6 +932,33 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onLocate: object => {
       locateObject(state, object, documentRef);
       religionPanel.setSelectedReligionId(object.id);
+    },
+    onAdd: () => {
+      const command = createAddReligionCommand();
+      const context = {map: state.map};
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+        const religionId = command.getReligionId?.();
+        if (religionId) {
+          religionPanel.setSelectedReligionId(religionId);
+          selectFromPanel("religion-panel", {kind: OBJECT_KIND.RELIGION, id: religionId, name: `新宗教 ${religionId}`});
+        }
+        setFileOperationStatus(documentRef, `已新增空宗教 #${religionId || ""}。`);
+      }
+      updateReligionPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onDelete: object => {
+      const command = createDeleteReligionCommand(object.id);
+      const context = {map: state.map};
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+        setFileOperationStatus(documentRef, `已删除空宗教 ${object.name || `#${object.id}`}。`);
+      } else {
+        setFileOperationStatus(documentRef, "只能删除无覆盖、无子级、无关联对象的空宗教。");
+      }
+      updateReligionPanel(state);
+      updateEditingInteractionLock(state, documentRef);
     },
     onRename: (religionId, name) => {
       const object = {kind: "religion", id: religionId};

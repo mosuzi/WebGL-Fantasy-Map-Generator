@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：宗教面板新增 / 删除空宗教第一刀
+
+本步继续推进编辑面板新增 / 删除统一化，为宗教管理补齐低风险的空宗教新增和删除入口。
+
+修正：
+
+- 新增 `createAddReligionCommand()`，可在宗教存储中创建无覆盖、无中心、无子级的用户空宗教，并支持撤销删除该新增项。
+- 新增 `createDeleteReligionCommand()`，删除前检查 pack/grid cell 使用、子宗教、城市、城镇和国家所有者；只有完全空置的叶子宗教会被标记为 `removed`。
+- 宗教面板列表动作条新增“新增空宗教 / 定位宗教 / 删除空宗教”，删除按钮会根据当前宗教是否可删自动禁用。
+- 运行时接入新增 / 删除回调，命令执行后刷新派生面板、选中新宗教或清理选择，并同步编辑锁状态。
+
+边界：
+
+- 本步不做宗教 cell 归属刷、覆盖重分配、中心迁移、扩张约束编辑或文化联动重算。
+- 非空宗教删除会被阻止，不做强制迁移或级联删除。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\religion-edit-commands.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\religion-panel.js` 和 `git diff --check` 通过。
+- 命令级 Node 断言确认新增宗教、撤销新增、重做新增、删除空宗教、撤销删除和非空宗教删除阻止逻辑正常。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：新增 `新宗教 19` 后宗教数 `19 -> 20`，删除后可见数回到 `19` 且 `removed=true`，头部撤销后恢复到 `20`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-09：文化面板新增 / 删除空文化第一刀
 
 本步继续推进编辑面板新增 / 删除统一化，先为文化管理补齐低风险的空文化新增和删除入口。
