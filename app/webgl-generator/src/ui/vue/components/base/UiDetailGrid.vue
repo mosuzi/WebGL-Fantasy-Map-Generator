@@ -1,24 +1,23 @@
 <template>
-  <div :class="['ui-detail-grid', className]">
-    <template v-if="visibleRows.length">
-      <div v-for="row in visibleRows" :key="row.label">
-        <span>{{ row.label }}</span>
-        <strong>{{ row.value }}</strong>
-      </div>
-    </template>
-    <p v-else class="ui-detail-grid-empty">{{ emptyText }}</p>
-  </div>
+  <UiKeyValueGrid
+    :class-name="className"
+    :items="rows"
+    :empty-text="emptyText"
+    variant="detail"
+    :min-width="minWidth"
+    :auto-wide="autoWide"
+    :wide-value-length="wideValueLength"
+  />
 </template>
 
 <script setup>
-import {computed} from "vue";
-import {useDebugMode} from "../../composables/use-debug-mode.js";
+import UiKeyValueGrid from "./UiKeyValueGrid.vue";
 
 defineOptions({
   name: "UiDetailGrid"
 });
 
-const props = defineProps({
+defineProps({
   className: {
     type: String,
     required: true
@@ -30,9 +29,18 @@ const props = defineProps({
   emptyText: {
     type: String,
     default: "未选中对象"
+  },
+  minWidth: {
+    type: Number,
+    default: 150
+  },
+  autoWide: {
+    type: Boolean,
+    default: true
+  },
+  wideValueLength: {
+    type: Number,
+    default: 18
   }
 });
-
-const debugEnabled = useDebugMode();
-const visibleRows = computed(() => props.rows.filter(row => !row?.debug || debugEnabled.value));
 </script>

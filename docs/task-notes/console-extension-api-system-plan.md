@@ -426,9 +426,12 @@ api.edit.measurement.delete(id)
 - `api.units.get()` 返回当前标准化单位偏好。
 - `api.units.apply(preferences)` 使用 `normalizeUnitPreferences()` 校准输入，同步单位控件、本地显示偏好和 renderer unit preferences。
 - 单位 API 只改显示偏好，不改变地图数据或 checksum。
-- 气候 API 已完成只读第一刀。
-- `api.climate.get()` 返回温度范围、降水范围、纬度模式 / 经纬边界、风带 profile 和 biome 计数。
-- 气候写入 API 尚未接入。
+- 气候 API 已完成读写补齐。
+- `api.climate.get()` 默认返回 `options / temperature / precipitation / latitude / atmosphere / biomes` 分区摘要，也可传 `temperature / precipitation / latitude / atmosphere / biomes / options` 只读单一分区。
+- 新增细分读取：`getOptions()`、`getTemperature()`、`getPrecipitation()`、`getLatitude()`、`getAtmosphere()`、`getBiomes()`。
+- 新增写入：`apply(patch)`、`setLatitude(value)`、`setLatitudeRange(percent)`、`setLongitudeRange(percent)`、`setTemperature({equator, northPole, southPole})`、`setPrecipitation(scale)`、`setWind(index, direction)`。
+- 写入 API 直接接收用户可理解参数并绕开 UI 表单限制，随后同步控件、重算当前地图气候与生物群系，并返回 `changed / options / climate / derivedStale / checksum`。
+- 气候写入会标记城市、国家、省份、宗教、marker、zone、军事、经济、外交等下游派生 stale；当前不进入 `EditHistory`，后续若要撤销气候配置应单独设计配置命令。
 
 ### 阶段 4：编辑命令 API 第一刀
 

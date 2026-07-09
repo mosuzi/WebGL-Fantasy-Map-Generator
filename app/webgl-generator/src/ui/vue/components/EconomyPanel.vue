@@ -59,22 +59,24 @@
       </div>
     </header>
 
-    <div class="economy-detail-highlights">
-      <div v-for="item in economyDetail.highlights" :key="item.label">
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-      </div>
-    </div>
+    <UiKeyValueGrid
+      class-name="economy-detail-highlights"
+      :items="economyDetail.highlights"
+      variant="metric"
+      :min-width="112"
+      :auto-wide="false"
+    />
 
     <div class="economy-detail-sections">
       <section v-for="section in economyDetail.sections" :key="section.title" class="economy-detail-section">
         <h4>{{ section.title }}</h4>
-        <dl>
-          <div v-for="row in section.rows" :key="row.label">
-            <dt>{{ row.label }}</dt>
-            <dd>{{ row.value }}</dd>
-          </div>
-        </dl>
+        <UiKeyValueGrid
+          class-name="economy-detail-section-grid"
+          :items="section.rows"
+          variant="compact"
+          :min-width="160"
+          :wide-value-length="20"
+        />
       </section>
     </div>
   </section>
@@ -96,6 +98,7 @@
 import {computed, watch} from "vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
+import UiKeyValueGrid from "./base/UiKeyValueGrid.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";

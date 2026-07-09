@@ -6,6 +6,7 @@ import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
+import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {normalizeVisualThemeId} from "../renderer/themes.js";
@@ -147,8 +148,10 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
   "winds",
   "temperatureEquator",
   "temperatureNorthPole",
-  "temperatureSouthPole"
+  "temperatureSouthPole",
+  "precipitation"
 ]);
+const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
 
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -1963,6 +1966,15 @@ function createConsoleApiActions(state, documentRef) {
       locate: object => locateObjectViaApi(state, documentRef, object),
       pick: (clientX, clientY) => pickClientPointViaApi(state, documentRef, clientX, clientY)
     },
+    climate: {
+      apply: (patch = {}, options = {}) => applyClimatePatchViaApi(state, documentRef, patch, options),
+      setLatitude: (value, options = {}) => setClimateLatitudeViaApi(state, documentRef, value, options),
+      setLatitudeRange: (percent, options = {}) => applyClimatePatchViaApi(state, documentRef, {climateLatitudeRangePercent: percent, climateMapSizePercent: percent}, options),
+      setLongitudeRange: (percent, options = {}) => applyClimatePatchViaApi(state, documentRef, {climateLongitudeRangePercent: percent}, options),
+      setTemperature: (patch, options = {}) => applyClimatePatchViaApi(state, documentRef, {temperature: patch}, options),
+      setPrecipitation: (scale, options = {}) => applyClimatePatchViaApi(state, documentRef, {precipitation: scale}, options),
+      setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options)
+    },
     edit: {
       notes: {
         delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
@@ -3597,9 +3609,171 @@ function sameNumberArray(left = [], right = []) {
   return left.every((value, index) => Number(value) === Number(right[index]));
 }
 
+function applyClimatePatchViaApi(state, documentRef, patch = {}, options = {}) {
+  if (!state.map) throw new Error("当前没有可更新气候的地图");
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("气候配置 patch 必须是对象");
+  const normalizedPatch = normalizeClimateApiPatch(patch, state.options);
+  const currentClimate = climateOptionSnapshot(state.options);
+  const nextOptions = normalizeOptions({...state.options, ...normalizedPatch});
+  const nextClimate = climateOptionSnapshot(nextOptions);
+  const changed = !sameClimateOptions(currentClimate, nextClimate);
+  syncClimateInputs(documentRef, nextOptions);
+  if (!changed && options.force !== true) return climateApiUpdateResult(state, false);
+  return measureHealthOperation(state, "api-climate-apply", {keys: Object.keys(normalizedPatch)}, () => applyClimateOptions(state, documentRef, nextOptions, changed));
+}
+
+function setClimateLatitudeViaApi(state, documentRef, value, options = {}) {
+  return applyClimatePatchViaApi(state, documentRef, normalizeClimateLatitudeApiValue(value), options);
+}
+
+function setClimateWindViaApi(state, documentRef, index, direction, options = {}) {
+  const band = Number.parseInt(index, 10);
+  if (!Number.isInteger(band) || band < 0 || band > 5) throw new Error("风带 index 必须是 0 到 5 的整数");
+  const winds = normalizeWindProfile(state.options?.winds);
+  winds[band] = normalizeWindDirectionApiValue(direction);
+  return applyClimatePatchViaApi(state, documentRef, {atmosphereDirection: "customBands", winds}, options);
+}
+
+function normalizeClimateApiPatch(patch, currentOptions = {}) {
+  const next = {};
+  for (const key of CLIMATE_OPTION_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
+  }
+  if (Object.prototype.hasOwnProperty.call(next, "climateLatitudeMode")) next.climateLatitudeMode = normalizeClimateLatitudeModeForApi(next.climateLatitudeMode);
+  if (Object.prototype.hasOwnProperty.call(next, "atmosphereDirection")) next.atmosphereDirection = normalizeAtmosphereDirectionForApi(next.atmosphereDirection);
+  if (Object.prototype.hasOwnProperty.call(patch, "latitude")) Object.assign(next, normalizeClimateLatitudeApiValue(patch.latitude));
+  if (Object.prototype.hasOwnProperty.call(patch, "latitudeMode")) next.climateLatitudeMode = normalizeClimateLatitudeModeForApi(patch.latitudeMode);
+  if (Object.prototype.hasOwnProperty.call(patch, "mode")) next.climateLatitudeMode = normalizeClimateLatitudeModeForApi(patch.mode);
+  assignNumberPatch(next, patch, "climateLatitudeCenter", "latitudeCenter");
+  assignNumberPatch(next, patch, "climateLatitudeCenter", "center");
+  assignNumberPatch(next, patch, "climateLatitudeSpan", "latitudeSpan");
+  assignNumberPatch(next, patch, "climateLatitudeSpan", "span");
+  assignNumberPatch(next, patch, "climateLatitudeRangePercent", "latitudeRangePercent");
+  assignNumberPatch(next, patch, "climateLatitudeRangePercent", "latitudeRange");
+  assignNumberPatch(next, patch, "climateMapSizePercent", "mapSizePercent");
+  assignNumberPatch(next, patch, "climateLongitudeRangePercent", "longitudeRangePercent");
+  assignNumberPatch(next, patch, "climateLongitudeRangePercent", "longitudeRange");
+  if (Object.prototype.hasOwnProperty.call(patch, "temperature")) Object.assign(next, normalizeTemperatureApiPatch(patch.temperature));
+  assignNumberPatch(next, patch, "temperatureEquator", "equator");
+  assignNumberPatch(next, patch, "temperatureNorthPole", "northPole");
+  assignNumberPatch(next, patch, "temperatureSouthPole", "southPole");
+  assignNumberPatch(next, patch, "precipitation", "precipitation");
+  if (Object.prototype.hasOwnProperty.call(patch, "atmosphere")) Object.assign(next, normalizeAtmosphereApiPatch(patch.atmosphere));
+  if (Object.prototype.hasOwnProperty.call(patch, "atmosphereDirection")) next.atmosphereDirection = normalizeAtmosphereDirectionForApi(patch.atmosphereDirection);
+  if (Object.prototype.hasOwnProperty.call(patch, "windProfile")) next.winds = normalizeWindProfile(patch.windProfile);
+  if (Object.prototype.hasOwnProperty.call(patch, "winds")) next.winds = normalizeWindProfile(patch.winds);
+  if (next.climateLatitudeCenter !== undefined && next.climateLatitudeMode === undefined) next.climateLatitudeMode = "custom";
+  if (next.winds !== undefined && next.atmosphereDirection === undefined) next.atmosphereDirection = "customBands";
+  if (next.climateLatitudeRangePercent !== undefined && next.climateMapSizePercent === undefined) next.climateMapSizePercent = next.climateLatitudeRangePercent;
+  if (Object.keys(next).length === 0) return climateOptionSnapshot(currentOptions);
+  return next;
+}
+
+function normalizeClimateLatitudeApiValue(value) {
+  if (typeof value === "number" || typeof value === "bigint" || numericString(value)) {
+    return {climateLatitudeMode: "custom", climateLatitudeCenter: normalizeApiNumber(value, "纬度中心")};
+  }
+  if (typeof value === "string") return {climateLatitudeMode: normalizeClimateLatitudeModeForApi(value)};
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("纬度参数必须是数字、预设名称或对象");
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(value, "mode")) patch.climateLatitudeMode = normalizeClimateLatitudeModeForApi(value.mode);
+  if (Object.prototype.hasOwnProperty.call(value, "climateLatitudeMode")) patch.climateLatitudeMode = normalizeClimateLatitudeModeForApi(value.climateLatitudeMode);
+  assignNumberPatch(patch, value, "climateLatitudeCenter", "center");
+  assignNumberPatch(patch, value, "climateLatitudeCenter", "latitudeCenter");
+  assignNumberPatch(patch, value, "climateLatitudeSpan", "span");
+  assignNumberPatch(patch, value, "climateLatitudeSpan", "latitudeSpan");
+  assignNumberPatch(patch, value, "climateLatitudeRangePercent", "range");
+  assignNumberPatch(patch, value, "climateLatitudeRangePercent", "latitudeRange");
+  assignNumberPatch(patch, value, "climateLatitudeRangePercent", "latitudeRangePercent");
+  assignNumberPatch(patch, value, "climateLongitudeRangePercent", "longitudeRange");
+  assignNumberPatch(patch, value, "climateLongitudeRangePercent", "longitudeRangePercent");
+  if (patch.climateLatitudeCenter !== undefined && patch.climateLatitudeMode === undefined) patch.climateLatitudeMode = "custom";
+  if (Object.keys(patch).length === 0) throw new Error("纬度对象缺少 mode、center 或 range 字段");
+  return patch;
+}
+
+function normalizeTemperatureApiPatch(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("温度参数必须是对象");
+  const patch = {};
+  assignNumberPatch(patch, value, "temperatureEquator", "equator");
+  assignNumberPatch(patch, value, "temperatureEquator", "temperatureEquator");
+  assignNumberPatch(patch, value, "temperatureNorthPole", "northPole");
+  assignNumberPatch(patch, value, "temperatureNorthPole", "temperatureNorthPole");
+  assignNumberPatch(patch, value, "temperatureSouthPole", "southPole");
+  assignNumberPatch(patch, value, "temperatureSouthPole", "temperatureSouthPole");
+  if (Object.keys(patch).length === 0) throw new Error("温度对象缺少 equator、northPole 或 southPole 字段");
+  return patch;
+}
+
+function normalizeAtmosphereApiPatch(value) {
+  if (typeof value === "string") return {atmosphereDirection: normalizeAtmosphereDirectionForApi(value)};
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("大气参数必须是方向名称或对象");
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(value, "direction")) patch.atmosphereDirection = normalizeAtmosphereDirectionForApi(value.direction);
+  if (Object.prototype.hasOwnProperty.call(value, "atmosphereDirection")) patch.atmosphereDirection = normalizeAtmosphereDirectionForApi(value.atmosphereDirection);
+  if (Object.prototype.hasOwnProperty.call(value, "winds")) patch.winds = normalizeWindProfile(value.winds);
+  if (Object.prototype.hasOwnProperty.call(value, "windProfile")) patch.winds = normalizeWindProfile(value.windProfile);
+  if (patch.winds !== undefined && patch.atmosphereDirection === undefined) patch.atmosphereDirection = "customBands";
+  if (Object.keys(patch).length === 0) throw new Error("大气对象缺少 direction 或 winds 字段");
+  return patch;
+}
+
+function normalizeClimateLatitudeModeForApi(value) {
+  const normalized = normalizeClimateLatitudeMode(value);
+  if (typeof value !== "string" || normalized !== value) throw new Error(`未知纬度模式：${value}`);
+  return normalized;
+}
+
+function normalizeAtmosphereDirectionForApi(value) {
+  const normalized = normalizeAtmosphereDirection(value);
+  if (typeof value !== "string" || normalized !== value) throw new Error(`未知大气方向：${value}`);
+  return normalized;
+}
+
+function normalizeWindDirectionApiValue(value) {
+  if (typeof value === "number" || typeof value === "bigint" || numericString(value)) {
+    const angle = Math.round(normalizeApiNumber(value, "风向角度"));
+    return ((angle % 360) + 360) % 360;
+  }
+  const aliases = {
+    ne: "northeast",
+    se: "southeast",
+    nw: "northwest",
+    sw: "southwest",
+    northeast: "northeast",
+    southeast: "southeast",
+    northwest: "northwest",
+    southwest: "southwest"
+  };
+  const key = aliases[String(value || "").trim().toLowerCase()];
+  if (!key) throw new Error(`未知风带方向：${value}`);
+  return windAngleFromDirection(key);
+}
+
+function assignNumberPatch(target, source, targetKey, sourceKey) {
+  if (!Object.prototype.hasOwnProperty.call(source, sourceKey)) return;
+  target[targetKey] = normalizeApiNumber(source[sourceKey], sourceKey);
+}
+
+function normalizeApiNumber(value, name) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error(`${name} 必须是有效数字`);
+  return number;
+}
+
+function numericString(value) {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return trimmed !== "" && Number.isFinite(Number(trimmed));
+}
+
 function applyClimateControls(state, documentRef) {
   if (!state.map) return;
   const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+  return applyClimateOptions(state, documentRef, options, true);
+}
+
+function applyClimateOptions(state, documentRef, options, changed = true) {
   state.options = options;
   state.map.options = options;
   const climate = buildClimate(state.map.grid, state.map.features, options, createRandom(options.seed));
@@ -3610,7 +3784,7 @@ function applyClimateControls(state, documentRef) {
   state.map.mapCoordinates = climate.mapCoordinates;
   state.map.summary = createGenerationSummary(options, state.map.grid, state.map.features, climate, state.map.society, state.map.politics, state.map.settlements, state.map.markers, state.map.pack, state.map.rivers, state.map.layers, state.map.military, state.map.zones, state.map.economy, state.map.diplomacy);
   if (state.map.metadata) state.map.metadata.checksum = state.map.summary.checksum;
-  markDerivedStale(state.map, ["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
+  markDerivedStale(state.map, CLIMATE_DERIVED_STALE_SYSTEMS);
 
   refreshAfterEdit(state, {
     render: "draw",
@@ -3626,6 +3800,29 @@ function applyClimateControls(state, documentRef) {
   updateStatePanel(state);
   updateGovernmentPanel(state);
   updateProvincePanel(state);
+  return climateApiUpdateResult(state, changed);
+}
+
+function climateApiUpdateResult(state, changed) {
+  const climate = state.map?.climate || {};
+  const metadata = climate.metadata || {};
+  return {
+    changed,
+    checksum: state.map?.metadata?.checksum || state.map?.summary?.checksum || "",
+    options: climateOptionSnapshot(state.options),
+    climate: {
+      temperatureMin: metadata.temperatureMin ?? null,
+      temperatureMax: metadata.temperatureMax ?? null,
+      precipitationMin: metadata.precipitationMin ?? null,
+      precipitationMax: metadata.precipitationMax ?? null,
+      latitudeMode: metadata.latitudeMode || "",
+      latitudeLabel: metadata.latitudeLabel || "",
+      atmosphereDirection: metadata.atmosphereDirection || state.options?.atmosphereDirection || "",
+      atmosphereLabel: metadata.atmosphereLabel || "",
+      biomeCounts: {...(metadata.biomeCounts || {})}
+    },
+    derivedStale: [...(state.map?.metadata?.derivedStale?.systems || [])]
+  };
 }
 
 function locateObject(state, object, documentRef) {

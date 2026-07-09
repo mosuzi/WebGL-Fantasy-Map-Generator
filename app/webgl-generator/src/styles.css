@@ -7940,25 +7940,72 @@ input.ui-switch-native {
   grid-template-columns: 64px minmax(0, 1fr);
 }
 
-.ui-metric-grid {
-  --ui-metric-grid-min: 112px;
+.ui-key-value-grid {
+  --ui-key-value-min: 140px;
+  --ui-key-value-label-size: 11px;
+  --ui-key-value-value-size: 13px;
+  --ui-key-value-label-color: #80919c;
+  --ui-key-value-value-color: #edf4f6;
+  --ui-key-value-cell-padding: 0;
+  --ui-key-value-cell-border: 0;
+  --ui-key-value-cell-bg: transparent;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-metric-grid-min)), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
   gap: 8px;
-}
-
-.ui-detail-grid {
-  --ui-detail-grid-min: 150px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-detail-grid-min)), 1fr));
-  gap: 8px;
-}
-
-.ui-metric-grid > div,
-.ui-detail-grid > div {
   min-width: 0;
 }
 
+.ui-key-value-grid--metric {
+  --ui-key-value-min: 112px;
+}
+
+.ui-key-value-grid--detail {
+  --ui-key-value-min: 150px;
+}
+
+.ui-key-value-grid--compact {
+  --ui-key-value-min: 160px;
+  --ui-key-value-label-size: 10px;
+  --ui-key-value-value-size: 11px;
+}
+
+.ui-key-value-item {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 3px;
+  border: var(--ui-key-value-cell-border);
+  border-radius: 7px;
+  padding: var(--ui-key-value-cell-padding);
+  background: var(--ui-key-value-cell-bg);
+}
+
+.ui-key-value-grid--detail .ui-key-value-item.is-wide,
+.ui-key-value-grid--compact .ui-key-value-item.is-wide {
+  grid-column: span 2;
+}
+
+.ui-key-value-label {
+  min-width: 0;
+  color: var(--ui-key-value-label-color);
+  font-size: var(--ui-key-value-label-size);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ui-key-value-value {
+  min-width: 0;
+  color: var(--ui-key-value-value-color);
+  font-size: var(--ui-key-value-value-size);
+  line-height: 1.3;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ui-key-value-empty,
 .ui-detail-grid-empty {
   grid-column: 1 / -1;
   margin: 0;
@@ -7968,13 +8015,114 @@ input.ui-switch-native {
   line-height: 1.45;
 }
 
-.ui-metric-grid strong,
-.ui-detail-grid strong {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
+.ui-metric-grid,
+.ui-detail-grid {
+  min-width: 0;
+}
+
+.state-panel-summary,
+.province-panel-summary,
+.route-panel-summary,
+.city-panel-summary,
+.marker-panel-summary,
+.notes-panel-summary,
+.namebase-panel-summary,
+.culture-panel-summary,
+.religion-panel-summary,
+.economy-panel-summary,
+.government-panel-summary,
+.diplomacy-panel-summary,
+.military-panel-summary,
+.river-panel-summary,
+.lake-panel-summary,
+.measurement-panel-summary,
+.height-panel-summary,
+.biome-panel-summary,
+.climate-panel-summary,
+.emblem-panel-summary,
+.feature-panel-summary,
+.population-panel-summary,
+.zone-panel-summary {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
+}
+
+.state-panel-details,
+.province-panel-details,
+.route-panel-details,
+.city-panel-details,
+.marker-panel-details,
+.notes-panel-details,
+.namebase-panel-details,
+.culture-panel-details,
+.religion-panel-details,
+.diplomacy-panel-details,
+.military-panel-details,
+.river-panel-details,
+.lake-panel-details,
+.measurement-panel-details,
+.government-panel-details,
+.biome-panel-details,
+.climate-panel-details,
+.emblem-panel-details,
+.feature-panel-details,
+.population-panel-details,
+.zone-panel-details,
+.object-details-list,
+.economy-panel-diagnostic-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
+}
+
+.state-panel-details,
+.province-panel-details,
+.route-panel-details,
+.city-panel-details,
+.marker-panel-details,
+.notes-panel-details,
+.namebase-panel-details,
+.culture-panel-details,
+.religion-panel-details,
+.diplomacy-panel-details,
+.military-panel-details,
+.river-panel-details,
+.lake-panel-details,
+.measurement-panel-details,
+.government-panel-details,
+.zone-panel-details {
+  margin: 10px 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(189, 206, 213, 0.12);
+}
+
+.economy-detail-highlights {
+  --ui-key-value-cell-padding: 7px 8px;
+  --ui-key-value-cell-border: 1px solid rgba(189, 206, 213, 0.11);
+  --ui-key-value-cell-bg: rgba(16, 23, 27, 0.72);
+  --ui-key-value-label-size: 10px;
+}
+
+.economy-detail-section-grid {
+  --ui-key-value-label-size: 10px;
+  --ui-key-value-value-size: 11px;
+  --ui-key-value-min: 160px;
+  gap: 5px;
+}
+
+.economy-detail-section-grid .ui-key-value-item {
+  border-bottom: 1px solid rgba(189, 206, 213, 0.08);
+  border-radius: 0;
+  padding-bottom: 5px;
+}
+
+.economy-detail-section-grid .ui-key-value-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+@media (max-width: 520px) {
+  .ui-key-value-grid--detail .ui-key-value-item.is-wide,
+  .ui-key-value-grid--compact .ui-key-value-item.is-wide {
+    grid-column: 1 / -1;
+  }
 }
 
 .ui-sort-bar {

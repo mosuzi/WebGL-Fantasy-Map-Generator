@@ -80,7 +80,7 @@
    - 要做什么：考虑把所有不依赖 UI 的操作收束为统一 API 系统，挂到可在控制台调用的入口上，例如 `api.climate.setLatitude(...)`、`api.data.exportAll()`、`api.data.exportGEO()` 等；后续还应覆盖生成、导入导出、气候、单位、图层、对象选择 / 定位、编辑命令、名称库、测量、备注和派生重建等非 UI 能力。
    - 为什么做：API 化能方便后续接入 AI、脚本化操作、开发扩展、自动化测试和批量处理；同时把功能收束成 API 也是对现有 runtime 能力、数据边界、命令副作用和权限语义的间接梳理。
    - 执行方式：本轮只写入计划，不立即实现；真正开始时必须先出详细方案，明确 API 命名空间、同步 / 异步返回、错误格式、撤销语义、权限边界、与 UI store 的关系、浏览器控制台暴露方式、测试策略和稳定性承诺。
-   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一批：`data.exportAll()`、`data.exportCompressedAll()`、`data.exportGEO()`、`data.exportFeatureGEO()` 和 `data.exportPNG()` 支持脚本调用，其中 PNG / 压缩 JSON API 返回 Promise，可返回 data URL / gzip base64 或触发浏览器下载。阶段 3 已完成图层控制、单位偏好和气候只读第一批：`layers.setViewMode()`、`layers.setVisible()`、`units.get()`、`units.apply()` 和 `climate.get()` 均已接入；写偏好的 API 不改变地图 checksum。阶段 4 已完成编辑 API 第一批：`history.get()` / `undo()` / `redo()`、`edit.notes.delete()`、`edit.measurements.rename()`、`edit.measurements.delete()`、`edit.cities.add/delete()`、`edit.provinces.add/delete()`、`edit.states.add/delete()`、`edit.routes.delete()`、`edit.labels.delete/restore()` 和 `edit.markers.add/delete/move()` 已接统一命令系统；selection API 已接入 `resolve/select/clear/locate/pick`。
+   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一批：`data.exportAll()`、`data.exportCompressedAll()`、`data.exportGEO()`、`data.exportFeatureGEO()` 和 `data.exportPNG()` 支持脚本调用，其中 PNG / 压缩 JSON API 返回 Promise，可返回 data URL / gzip base64 或触发浏览器下载。阶段 3 已完成图层控制、单位偏好和气候 API：`layers.setViewMode()`、`layers.setVisible()`、`units.get()`、`units.apply()`、`climate.get()`、`climate.getTemperature()`、`climate.getPrecipitation()`、`climate.getLatitude()`、`climate.getAtmosphere()`、`climate.getBiomes()`、`climate.apply()`、`climate.setLatitude()`、`climate.setLatitudeRange()`、`climate.setLongitudeRange()`、`climate.setTemperature()`、`climate.setPrecipitation()` 和 `climate.setWind()` 均已接入；图层 / 单位写偏好不改变地图 checksum，气候写入会重算当前地图气候并标记下游派生 stale。阶段 4 已完成编辑 API 第一批：`history.get()` / `undo()` / `redo()`、`edit.notes.delete()`、`edit.measurements.rename()`、`edit.measurements.delete()`、`edit.cities.add/delete()`、`edit.provinces.add/delete()`、`edit.states.add/delete()`、`edit.routes.delete()`、`edit.labels.delete/restore()` 和 `edit.markers.add/delete/move()` 已接统一命令系统；selection API 已接入 `resolve/select/clear/locate/pick`。
 
 ### 验证要求
 
@@ -97,6 +97,30 @@
 - 编辑器基础设施旧队列，除非用户重新要求按项目计划继续执行。
 - 贸易查看增强、Element Plus 完整 source theme、单位系统增强、气候系统深化、文化 / 宗教继承深化、政体系统增强、名称库更多入口与原版多词率 `m`、测量曲线尺细化、高度图导入增强、对象注记增强、经济 / 军事 / 纹章等其它未被重新点名的旧专题。
 - 任何未被用户重新点名的历史专题计划。
+
+## 2026-07-09 追加修复：控制台气候 API 读写补齐
+
+用户指出 `api.climate` 不应只有只读 `get()`；气候控制参数虽然有 UI，但本质可以通过 API 参数传入，因此仍应作为不依赖 UI 的能力暴露。
+
+完成记录：
+
+- `api.climate.get(section)` 支持按 `temperature / precipitation / latitude / atmosphere / biomes / options` 读取单一分区；无参数时返回完整分区摘要。
+- 新增 `getOptions()`、`getTemperature()`、`getPrecipitation()`、`getLatitude()`、`getAtmosphere()`、`getBiomes()` 细分读取。
+- 新增 `apply(patch)`、`setLatitude(value)`、`setLatitudeRange(percent)`、`setLongitudeRange(percent)`、`setTemperature({equator, northPole, southPole})`、`setPrecipitation(scale)`、`setWind(index, direction)` 写入。
+- 写入 API 直接归一化参数为气候 options，随后同步 UI 控件、重算当前地图气候 / 生物群系 / 摘要，并返回 `changed / options / climate / derivedStale / checksum`。
+- 验证：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js`、`git diff --check`、`$env:CI='true'; pnpm run build:app` 均通过；Playwright + 系统 Chrome 构建产物 smoke 确认 14 个气候方法声明完整，细分 getter、setter、`apply()`、非法参数错误、checksum 变化、派生 stale 和 `glError = 0` 均符合预期。
+
+## 2026-07-09 追加修复：label/value 数据展示组件统一
+
+用户指出最近新增的编辑面板中，列表上下方的 label + value 数据展示部分出现样式崩坏；本轮作为编辑器基础设施的小修复立即处理。
+
+完成记录：
+
+- 新增 `UiKeyValueGrid.vue`，统一 label/value 数据项的 label、value、空态、debug 行过滤、长值自动宽格和 `auto-fit` 自适应排布。
+- `UiMetricGrid.vue` 和 `UiDetailGrid.vue` 已改为薄封装，现有面板调用方式不变，自动复用新排布规则。
+- 经济总览详情区原手写 highlights 与分组 `dl / dt / dd` 已迁到 `UiKeyValueGrid`，避免形成第二套样式。
+- `styles.css` 新增 `.ui-key-value-*` 共享样式，统一字号、断行、宽格跨列和窄宽度回退；面板专属类只保留间距、边框和特殊容器语义。
+- 验证完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；`pnpm run audit:panels -- --scenario deep --template continents --browser-channel chrome` 通过，24 / 24 面板预热完成、失败 0、报告结论“未发现待复核项”。
 
 ## 2026-07-08 追加执行计划：编辑器基础设施小步推进
 

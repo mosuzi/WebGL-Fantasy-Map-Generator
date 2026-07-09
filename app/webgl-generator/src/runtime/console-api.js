@@ -41,7 +41,20 @@ function createConsoleApi(documentRef, state, actions = {}) {
       apply: (preferences = {}) => apiCall(() => applyUnitPreferences(state, documentRef, preferences))
     }),
     climate: Object.freeze({
-      get: () => apiCall(() => buildClimateSnapshot(state))
+      get: section => apiCall(() => buildClimateSnapshot(state, section)),
+      getOptions: () => apiCall(() => buildClimateOptionsSnapshot(state)),
+      getTemperature: () => apiCall(() => buildClimateTemperatureSnapshot(state)),
+      getPrecipitation: () => apiCall(() => buildClimatePrecipitationSnapshot(state)),
+      getLatitude: () => apiCall(() => buildClimateLatitudeSnapshot(state)),
+      getAtmosphere: () => apiCall(() => buildClimateAtmosphereSnapshot(state)),
+      getBiomes: () => apiCall(() => buildClimateBiomeSnapshot(state)),
+      apply: (patch = {}, options = {}) => apiCall(() => requireApiAction(actions.climate?.apply, "climate.apply")(patch, options)),
+      setLatitude: (value, options = {}) => apiCall(() => requireApiAction(actions.climate?.setLatitude, "climate.setLatitude")(value, options)),
+      setLatitudeRange: (percent, options = {}) => apiCall(() => requireApiAction(actions.climate?.setLatitudeRange, "climate.setLatitudeRange")(percent, options)),
+      setLongitudeRange: (percent, options = {}) => apiCall(() => requireApiAction(actions.climate?.setLongitudeRange, "climate.setLongitudeRange")(percent, options)),
+      setTemperature: (patch, options = {}) => apiCall(() => requireApiAction(actions.climate?.setTemperature, "climate.setTemperature")(patch, options)),
+      setPrecipitation: (scale, options = {}) => apiCall(() => requireApiAction(actions.climate?.setPrecipitation, "climate.setPrecipitation")(scale, options)),
+      setWind: (index, direction, options = {}) => apiCall(() => requireApiAction(actions.climate?.setWind, "climate.setWind")(index, direction, options))
     }),
     history: Object.freeze({
       get: () => apiCall(() => actions.history?.get?.() || state?.editHistory?.getStats?.() || null),
@@ -102,7 +115,7 @@ function buildCapabilities() {
       selection: ["get", "resolve", "select", "clear", "locate", "pick"],
       layers: ["get", "setViewMode", "setVisible"],
       units: ["get", "apply"],
-      climate: ["get"],
+      climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
       edit: ["notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "provinces.add", "provinces.delete", "states.add", "states.delete", "routes.delete", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
@@ -112,7 +125,7 @@ function buildCapabilities() {
       selection: "readonly",
       layers: "display-preference",
       units: "display-preference",
-      climate: "readonly",
+      climate: "readonly-and-climate-update",
       history: "edit-history",
       edit: "edit-command",
       data: "readonly-download"
@@ -240,46 +253,118 @@ function applyUnitPreferences(state, documentRef, preferences = {}) {
   return buildUnitSnapshot(state, documentRef);
 }
 
-function buildClimateSnapshot(state) {
+function buildClimateSnapshot(state, section) {
+  if (section !== undefined && section !== null && section !== "") return buildClimateSectionSnapshot(state, section);
+  return {
+    options: buildClimateOptionsSnapshot(state),
+    temperature: buildClimateTemperatureSnapshot(state),
+    precipitation: buildClimatePrecipitationSnapshot(state),
+    latitude: buildClimateLatitudeSnapshot(state),
+    atmosphere: buildClimateAtmosphereSnapshot(state),
+    biomes: buildClimateBiomeSnapshot(state)
+  };
+}
+
+function buildClimateSectionSnapshot(state, section) {
+  const key = String(section || "").trim().toLowerCase();
+  const builders = {
+    options: buildClimateOptionsSnapshot,
+    option: buildClimateOptionsSnapshot,
+    temperature: buildClimateTemperatureSnapshot,
+    temp: buildClimateTemperatureSnapshot,
+    precipitation: buildClimatePrecipitationSnapshot,
+    precip: buildClimatePrecipitationSnapshot,
+    latitude: buildClimateLatitudeSnapshot,
+    lat: buildClimateLatitudeSnapshot,
+    atmosphere: buildClimateAtmosphereSnapshot,
+    wind: buildClimateAtmosphereSnapshot,
+    winds: buildClimateAtmosphereSnapshot,
+    biomes: buildClimateBiomeSnapshot,
+    biome: buildClimateBiomeSnapshot
+  };
+  const builder = builders[key];
+  if (!builder) throw new Error(`未知气候快照分区：${section}`);
+  return builder(state);
+}
+
+function buildClimateContext(state) {
   const map = assertApiMap(state);
   const climate = map.climate || {};
   const metadata = climate.metadata || {};
   const coordinates = map.mapCoordinates || climate.mapCoordinates || {};
+  const options = {...(state.options || {}), ...(map.options || {})};
+  return {map, climate, metadata, coordinates, options};
+}
+
+function buildClimateOptionsSnapshot(state) {
+  const {options} = buildClimateContext(state);
   return {
-    temperature: {
-      min: numberOrNull(metadata.temperatureMin),
-      max: numberOrNull(metadata.temperatureMax),
-      equator: numberOrNull(map.options?.temperatureEquator ?? state.options?.temperatureEquator),
-      northPole: numberOrNull(map.options?.temperatureNorthPole ?? state.options?.temperatureNorthPole),
-      southPole: numberOrNull(map.options?.temperatureSouthPole ?? state.options?.temperatureSouthPole)
-    },
-    precipitation: {
-      min: numberOrNull(metadata.precipitationMin),
-      max: numberOrNull(metadata.precipitationMax),
-      scale: numberOrNull(map.options?.precipitation ?? state.options?.precipitation)
-    },
-    latitude: {
-      mode: metadata.latitudeMode || coordinates.latitudeMode || "",
-      label: metadata.latitudeLabel || coordinates.latitudeLabel || "",
-      center: numberOrNull(metadata.latitudeCenter ?? coordinates.latCenter),
-      mapSizePercent: numberOrNull(metadata.mapSizePercent ?? coordinates.mapSizePercent),
-      latitudeRangePercent: numberOrNull(metadata.latitudeRangePercent ?? coordinates.latitudeRangePercent),
-      longitudeRangePercent: numberOrNull(metadata.longitudeRangePercent ?? coordinates.longitudeRangePercent),
-      latN: numberOrNull(coordinates.latN),
-      latS: numberOrNull(coordinates.latS),
-      lonW: numberOrNull(coordinates.lonW),
-      lonE: numberOrNull(coordinates.lonE)
-    },
-    atmosphere: {
-      direction: metadata.atmosphereDirection || state.options?.atmosphereDirection || "",
-      label: metadata.atmosphereLabel || coordinates.atmosphereLabel || "",
-      windAngle: numberOrNull(metadata.windAngle),
-      windProfile: Array.isArray(metadata.windProfile) ? [...metadata.windProfile] : []
-    },
-    biomes: {
-      counts: {...(metadata.biomeCounts || {})},
-      total: Object.values(metadata.biomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
-    }
+    climateLatitudeMode: options.climateLatitudeMode || "",
+    climateLatitudeCenter: numberOrNull(options.climateLatitudeCenter),
+    climateLatitudeSpan: numberOrNull(options.climateLatitudeSpan),
+    climateMapSizePercent: numberOrNull(options.climateMapSizePercent),
+    climateLatitudeRangePercent: numberOrNull(options.climateLatitudeRangePercent),
+    climateLongitudeRangePercent: numberOrNull(options.climateLongitudeRangePercent),
+    atmosphereDirection: options.atmosphereDirection || "",
+    winds: Array.isArray(options.winds) ? [...options.winds] : [],
+    temperatureEquator: numberOrNull(options.temperatureEquator),
+    temperatureNorthPole: numberOrNull(options.temperatureNorthPole),
+    temperatureSouthPole: numberOrNull(options.temperatureSouthPole),
+    precipitation: numberOrNull(options.precipitation)
+  };
+}
+
+function buildClimateTemperatureSnapshot(state) {
+  const {metadata, options} = buildClimateContext(state);
+  return {
+    min: numberOrNull(metadata.temperatureMin),
+    max: numberOrNull(metadata.temperatureMax),
+    equator: numberOrNull(options.temperatureEquator),
+    northPole: numberOrNull(options.temperatureNorthPole),
+    southPole: numberOrNull(options.temperatureSouthPole)
+  };
+}
+
+function buildClimatePrecipitationSnapshot(state) {
+  const {metadata, options} = buildClimateContext(state);
+  return {
+    min: numberOrNull(metadata.precipitationMin),
+    max: numberOrNull(metadata.precipitationMax),
+    scale: numberOrNull(options.precipitation)
+  };
+}
+
+function buildClimateLatitudeSnapshot(state) {
+  const {metadata, coordinates} = buildClimateContext(state);
+  return {
+    mode: metadata.latitudeMode || coordinates.latitudeMode || "",
+    label: metadata.latitudeLabel || coordinates.latitudeLabel || "",
+    center: numberOrNull(metadata.latitudeCenter ?? coordinates.latCenter),
+    mapSizePercent: numberOrNull(metadata.mapSizePercent ?? coordinates.mapSizePercent),
+    latitudeRangePercent: numberOrNull(metadata.latitudeRangePercent ?? coordinates.latitudeRangePercent),
+    longitudeRangePercent: numberOrNull(metadata.longitudeRangePercent ?? coordinates.longitudeRangePercent),
+    latN: numberOrNull(coordinates.latN),
+    latS: numberOrNull(coordinates.latS),
+    lonW: numberOrNull(coordinates.lonW),
+    lonE: numberOrNull(coordinates.lonE)
+  };
+}
+
+function buildClimateAtmosphereSnapshot(state) {
+  const {metadata, coordinates, options} = buildClimateContext(state);
+  return {
+    direction: metadata.atmosphereDirection || options.atmosphereDirection || "",
+    label: metadata.atmosphereLabel || coordinates.atmosphereLabel || "",
+    windAngle: numberOrNull(metadata.windAngle),
+    windProfile: Array.isArray(metadata.windProfile) ? [...metadata.windProfile] : []
+  };
+}
+
+function buildClimateBiomeSnapshot(state) {
+  const {metadata} = buildClimateContext(state);
+  return {
+    counts: {...(metadata.biomeCounts || {})},
+    total: Object.values(metadata.biomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
   };
 }
 

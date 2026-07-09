@@ -2,6 +2,54 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台气候 API 读写补齐
+
+用户指出 `api.climate` 只有 `get()` 不完整，气候参数虽然在 UI 中有控件，但本质上可通过 API 参数直接传入，不应把 UI 控制范围当成 API 能力边界。
+
+修正：
+
+- `api.climate.get(section)` 支持按 `temperature / precipitation / latitude / atmosphere / biomes / options` 读取单一分区；无参数时返回完整分区摘要。
+- 新增细分读取方法：`getOptions()`、`getTemperature()`、`getPrecipitation()`、`getLatitude()`、`getAtmosphere()`、`getBiomes()`。
+- 新增写入方法：`apply(patch)`、`setLatitude(value)`、`setLatitudeRange(percent)`、`setLongitudeRange(percent)`、`setTemperature({equator, northPole, southPole})`、`setPrecipitation(scale)`、`setWind(index, direction)`。
+- app action 新增气候 API 应用路径，直接把 API 参数归一化为气候 options，复用现有 `buildClimate()`、`defineBiomesAndPopulation()` 和 `refreshAfterEdit()`，同步控件后重算当前地图气候。
+- 气候写入返回 `changed / options / climate / derivedStale / checksum`，并标记城市、国家、省份、宗教、marker、zone、军事、经济、外交等下游派生 stale。
+
+边界：
+
+- 本步不把气候配置写入 `EditHistory`，所以暂不支持撤销 / 重做气候参数；如果后续需要，应补专用配置命令。
+- 本步不接生成 API，也不触发整图重新生成，只重算当前地图的气候、生物群系与相关摘要。
+- UI 控件仅作为同步对象，不再作为 API 参数能力边界。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：`api.info.capabilities()` 包含全部 14 个气候方法；`climate.get("temperature")` 和 6 个细分 getter 均返回 `ok=true`；`setLatitude(37)` 后纬度为 `custom / 37`，`setLatitudeRange(30)` 和 `setLongitudeRange(70)` 同步 options，`setTemperature({equator:30,northPole:-30,southPole:-12})` 后温度参数生效，`setWind(0,"southeast")` 后 `customBands` 首段风向为 `315`，`apply({precipitation:120, atmosphere:{direction:"west"}})` 后降水倍率为 `120`；checksum `6912643b -> 7c04d11d`，派生过期包含城市、国家、省份、宗教、marker、zone、军事、经济、外交；非法纬度模式返回 `ok=false / 未知纬度模式`，`glError = 0`，console/page error 均为空。
+
+## 2026-07-09：统一 label/value 数据展示组件
+
+用户指出最近新增的编辑面板中，列表上下方的 label + value 数据展示部分出现样式崩坏，并要求抽成统一组件，同时考虑自动排布。
+
+修正：
+
+- 新增 `UiKeyValueGrid.vue`，统一处理 label/value 数据项、空态、debug 行过滤、长值自动宽格和 `auto-fit` 自适应列宽。
+- `UiMetricGrid.vue` 和 `UiDetailGrid.vue` 改为 `UiKeyValueGrid` 的薄封装，保留既有调用方式，让国家、省份、城市、文化、宗教、经济、军事等现有面板自动复用同一排布规则。
+- 经济总览详情区原本手写的 highlights 和分组 `dl / dt / dd` 改为复用 `UiKeyValueGrid`，避免形成第二套 label/value 样式。
+- `styles.css` 增加 `.ui-key-value-*` 共享规则，统一 label/value 字号、换行、长值断词、宽格跨列和窄宽度回退；旧面板类只继续承担间距、边框和特殊容器角色。
+
+边界：
+
+- 本步只修数据展示组件和样式，不改变任何编辑命令、地图数据、导入导出或 selection 行为。
+- 军事战报链、兵种条等带专用语义的展示暂不强行迁移，避免把非等价结构压成普通字段。
+
+验证：
+
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `pnpm run audit:panels -- --scenario deep --template continents --browser-channel chrome` 通过；报告显示 24 / 24 面板预热完成、失败 0、结论为“未发现待复核项”，国家、省份、城市、文化、宗教、经济、军事等面板 body 均无横向溢出，console error 和 healthEvents 均为空。
+
 ## 2026-07-09：控制台屏幕坐标 pick API 第一刀
 
 本步继续控制台 / 扩展 API 系统的 selection / locate 能力，开放屏幕坐标拾取。
