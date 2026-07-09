@@ -30,6 +30,7 @@ export function buildRivers(grid, features, pack, options = {}) {
     cells.r = new Uint16Array(cells.i.length);
     cells.conf = new Uint8Array(cells.i.length);
   });
+  const hydrology = profile.stage("init-hydrology", "初始化河流水文诊断", () => createHydrologyBuffers(cells));
   const lakeOutCells = profile.stage("lake-climate", "计算湖泊水文", () => defineLakeClimateData(grid, pack, effectiveHeights, options, variation));
 
   const cellsNumberModifier = Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25);
@@ -40,7 +41,9 @@ export function buildRivers(grid, features, pack, options = {}) {
   profile.stage("flow-accumulation", "累计降水并追踪河道", () => {
     let nextRiverId = 1;
     for (const cell of land) {
-      addFlux(cells.fl, cell, getCellPrecipitation(grid, cells, cell, variation) / cellsNumberModifier);
+      const precipitation = getCellPrecipitation(grid, cells, cell, variation);
+      addCellHydrology(hydrology, cells, cell, precipitation);
+      addFlux(cells.fl, cell, precipitation / cellsNumberModifier);
 
       const outletLakes = lakeOutCells[cell]
         ? (pack.features || []).filter(feature => feature && cell === feature.outCell && feature.flux > feature.evaporation)
@@ -51,6 +54,7 @@ export function buildRivers(grid, features, pack, options = {}) {
         if (lakeCell === undefined) continue;
 
         addFlux(cells.fl, lakeCell, Math.max(lake.flux - lake.evaporation, 0));
+        addLakeHydrology(hydrology, grid, cells, lakeCell, lake, variation);
 
         if (cells.r[lakeCell] !== lake.river) {
           const sameRiver = (cells.c[lakeCell] || []).some(neighbor => cells.r[neighbor] === lake.river);
@@ -66,7 +70,7 @@ export function buildRivers(grid, features, pack, options = {}) {
         }
 
         lake.outlet = cells.r[lakeCell];
-        flowDown(pack, riverPaths, riverParents, cell, cells.fl[lakeCell], lake.outlet);
+        flowDown(pack, riverPaths, riverParents, cell, cells.fl[lakeCell], lake.outlet, hydrology, lakeCell);
       }
 
       const outlet = outletLakes[0]?.outlet;
@@ -94,11 +98,11 @@ export function buildRivers(grid, features, pack, options = {}) {
         nextRiverId++;
       }
 
-      flowDown(pack, riverPaths, riverParents, downhill, cells.fl[cell], cells.r[cell]);
+      flowDown(pack, riverPaths, riverParents, downhill, cells.fl[cell], cells.r[cell], hydrology, cell);
     }
   });
 
-  const rivers = profile.stage("define-rivers", "构建河流对象", () => defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator}));
+  const rivers = profile.stage("define-rivers", "构建河流对象", () => defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology}));
   profile.stage("mark-confluences", "标记河流 cell 与汇流", () => {
     cells.r = new Uint16Array(cells.i.length);
     cells.conf = new Uint16Array(cells.i.length);
@@ -189,6 +193,58 @@ function getHydronymSeed(options = {}) {
 function getCellPrecipitation(grid, cells, cell, variation = null) {
   const precipitation = grid.cells.prec?.[cells.g[cell]] || 0;
   return variation ? precipitation * (variation.precipitation?.[cell] || 1) : precipitation;
+}
+
+function createHydrologyBuffers(cells) {
+  return {
+    area: new Float64Array(cells.i.length),
+    cells: new Uint32Array(cells.i.length),
+    precipitationArea: new Float64Array(cells.i.length)
+  };
+}
+
+function addCellHydrology(hydrology, cells, cell, precipitation) {
+  if (!hydrology || cell === undefined || cell < 0) return;
+  const area = cellArea(cells, cell);
+  hydrology.area[cell] += area;
+  hydrology.cells[cell] += 1;
+  hydrology.precipitationArea[cell] += precipitation * area;
+}
+
+function addLakeHydrology(hydrology, grid, cells, lakeCell, lake, variation = null) {
+  if (!hydrology || lakeCell === undefined || lakeCell < 0 || !Array.isArray(lake?.shoreline)) return;
+  for (const cell of lake.shoreline) {
+    const precipitation = getCellPrecipitation(grid, cells, cell, variation);
+    const area = cellArea(cells, cell);
+    hydrology.area[lakeCell] += area;
+    hydrology.cells[lakeCell] += 1;
+    hydrology.precipitationArea[lakeCell] += precipitation * area;
+  }
+}
+
+function transferHydrology(hydrology, fromCell, toCell) {
+  if (!hydrology || fromCell === undefined || toCell === undefined || fromCell < 0 || toCell < 0) return;
+  hydrology.area[toCell] += hydrology.area[fromCell];
+  hydrology.cells[toCell] += hydrology.cells[fromCell];
+  hydrology.precipitationArea[toCell] += hydrology.precipitationArea[fromCell];
+}
+
+function riverHydrology(hydrology, mouth) {
+  if (!hydrology || mouth === undefined || mouth < 0) return null;
+  const area = hydrology.area[mouth] || 0;
+  const catchmentCells = hydrology.cells[mouth] || 0;
+  const averagePrecipitation = area > 0 ? hydrology.precipitationArea[mouth] / area : 0;
+  return {
+    catchmentArea: round(area, 2),
+    catchmentCells,
+    averagePrecipitation: round(averagePrecipitation, 2)
+  };
+}
+
+function cellArea(cells, cell) {
+  const area = cells.area?.[cell];
+  if (Number.isFinite(area) && area > 0) return area;
+  return 1;
 }
 
 function alterHeights(cells, variation = null) {
@@ -504,7 +560,7 @@ function effectiveHeightForCell(pack, heights, cell) {
   return feature?.height || heights[cell];
 }
 
-function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId) {
+function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hydrology = null, fromCell = null) {
   const {cells, features} = pack;
   const toFlux = cells.fl[toCell] - cells.conf[toCell];
   const toRiver = cells.r[toCell];
@@ -534,13 +590,14 @@ function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId) {
       waterBody.inlets.push(riverId);
     }
   } else {
+    transferHydrology(hydrology, fromCell, toCell);
     addFlux(cells.fl, toCell, fromFlux);
   }
 
   addCellToRiver(riverPaths, riverId, toCell);
 }
 
-function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator}) {
+function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology}) {
   const rivers = [];
   const cells = pack.cells;
   const defaultWidthFactor = round(1 / Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25), 2);
@@ -577,6 +634,7 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
       width,
       widthFactor,
       sourceWidth,
+      hydrology: riverHydrology(hydrology, mouth),
       cells: riverCells,
       gridCells: riverCells.filter(cell => cell >= 0).map(cell => cells.g[cell]),
       points,

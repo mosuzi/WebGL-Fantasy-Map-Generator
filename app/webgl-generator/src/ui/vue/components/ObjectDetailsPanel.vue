@@ -30,7 +30,7 @@ import {computed} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatDistance, formatMilitary, formatNumber, formatPopulation, formatRiverFlow} from "../../display-units.js";
+import {formatArea, formatDistance, formatMilitary, formatNumber, formatPopulation, formatPrecipitation, formatRiverFlow, formatRiverRunoffFlowRange} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../../runtime/object-kinds.js";
 
@@ -130,6 +130,9 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "类型", value: object.type},
     {label: "流量", value: formatRiverFlowValue(object.flux)},
     {label: "长度", value: formatDistanceValue(object.length)},
+    {label: "汇水面积", value: formatHydrologyArea(object.hydrology)},
+    {label: "流域均降水", value: formatHydrologyPrecipitation(object.hydrology)},
+    {label: "物理估算", value: formatHydrologyFlowRange(object.hydrology)},
     {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
     {label: "对象 id", value: object.id, debug: true}
   ],
@@ -237,6 +240,25 @@ function formatNumberValue(value) {
 
 function formatRiverFlowValue(value) {
   return formatRiverFlow(value, unitPreferences.value);
+}
+
+function formatHydrologyArea(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return formatArea(hydrology.catchmentArea, unitPreferences.value);
+}
+
+function formatHydrologyPrecipitation(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return formatPrecipitation(hydrology.averagePrecipitation, unitPreferences.value);
+}
+
+function formatHydrologyFlowRange(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return `${formatRiverRunoffFlowRange(hydrology, unitPreferences.value)}（径流系数 0.2-0.5）`;
+}
+
+function hasHydrology(hydrology) {
+  return Number.isFinite(hydrology?.catchmentArea) && hydrology.catchmentArea > 0 && Number.isFinite(hydrology.averagePrecipitation);
 }
 
 function formatSignedNumberValue(value) {

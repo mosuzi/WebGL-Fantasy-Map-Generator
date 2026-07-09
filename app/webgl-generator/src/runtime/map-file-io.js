@@ -859,6 +859,9 @@ function riverFeatures(map) {
         length: river.length || roundCoordinate(worldLineLength(river.points)),
         width: river.width || 0,
         widthFactor: river.widthFactor || 1,
+        catchmentArea: river.hydrology?.catchmentArea || 0,
+        catchmentCells: river.hydrology?.catchmentCells || 0,
+        averagePrecipitation: river.hydrology?.averagePrecipitation || 0,
         hasNote: Boolean(note?.body),
         note: note?.body || ""
       },

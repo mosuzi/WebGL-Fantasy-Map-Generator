@@ -117,6 +117,27 @@
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物 smoke 通过：`api.climate.getPrecipitation()` 返回 `max = 63`、`maxMillimeters = 6300`、`millimetersPerUnit = 100`，气候面板文本包含 `6,300 mm`，`glError = 0`，console / page error 为空。
 
+## 2026-07-09 追加修复：河流汇水与降水诊断数据
+
+用户要求补齐河流与降水体系中用于判断流量可信度的数据，而不是只按长度和附近单点降水主观判断。
+
+完成记录：
+
+- 河流生成阶段新增水文诊断累计：每个河流 mouth 会保存 `hydrology.catchmentArea`、`hydrology.catchmentCells` 和 `hydrology.averagePrecipitation`。
+- 汇水诊断随流量下传，同步考虑湖泊出口的湖岸降水近似补给；本步仍保持原有河流生成、路径、宽度和内部 `flux` 逻辑不变。
+- 共享单位模块新增基于现实水文公式的估算：`Q = 年降水量 × 汇水面积 × 径流系数 / 年秒数`，默认展示 `0.2-0.5` 径流系数区间，并以 `0.3` 作为中位参考。
+- 河流管理面板选中详情新增“汇水面积 / 汇水格子 / 流域均降水 / 物理估算 / 模型与估算比值”。
+- 对象详情面板的河流对象也显示汇水面积、流域均降水和物理估算区间。
+- 河流要素 GeoJSON properties 新增 `catchmentArea / catchmentCells / averagePrecipitation`，方便外部核查。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\rivers.js`、`node --check app\webgl-generator\src\ui\display-units.js`、`node --check app\webgl-generator\src\runtime\object-resolver.js` 和 `node --check app\webgl-generator\src\runtime\map-file-io.js` 通过。
+- `node --input-type=module` 生成级断言通过：新生成地图至少一条河流带有正 `catchmentArea`、`catchmentCells` 和 `averagePrecipitation`，并能计算 `low / medium / high` 理论流量区间。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：河流管理面板详情显示“汇水面积 / 汇水格子 / 流域均降水 / 物理估算 / 模型与估算比值”；河流要素 GeoJSON properties 含 `catchmentArea / catchmentCells / averagePrecipitation`；`glError = 0`，console / page error 为空。
+
 ## 2026-07-09 追加修复：列表表头排序与河流流量标定
 
 用户要求把所有列表上的独立排序按钮替换为表格自带的列排序功能，并指出 1800+ 千米河流只显示 `56 m³/s` 不合理。

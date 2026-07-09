@@ -85,7 +85,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
-import {formatDistance, formatNumber as formatDisplayNumber, formatRiverFlow as formatDisplayRiverFlow} from "../../display-units.js";
+import {estimateRiverRunoffFlowRange, formatArea, formatDistance, formatNumber as formatDisplayNumber, formatPrecipitation, formatRiverFlow as formatDisplayRiverFlow, formatRiverRunoffFlowRange, riverFluxToCubicMetersPerSecond} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -157,6 +157,11 @@ const detailRows = computed(() => selected.value ? [
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
   {label: "长度", value: formatLength(selected.value.length)},
   {label: "流量", value: formatRiverFlow(selected.value.flux)},
+  {label: "汇水面积", value: formatHydrologyArea(selected.value.hydrology)},
+  {label: "汇水格子", value: formatHydrologyCells(selected.value.hydrology)},
+  {label: "流域均降水", value: formatHydrologyPrecipitation(selected.value.hydrology)},
+  {label: "物理估算", value: formatHydrologyFlowRange(selected.value.hydrology)},
+  {label: "模型 / 估算", value: formatHydrologyFlowRatio(selected.value)},
   {label: "河段", value: formatNumber(selected.value.segments)},
   {label: "宽度因子", value: selected.value.widthFactor.toFixed(2)},
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
@@ -187,6 +192,7 @@ function riverRows(map) {
       type: river.parent ? "支流" : "主河",
       length,
       flux,
+      hydrology: normalizeHydrology(river.hydrology),
       widthFactor: Number.isFinite(river.widthFactor) ? river.widthFactor : 1,
       segments: Math.max(0, (river.points?.length || 0) - 1),
       noteBody: note?.body || "",
@@ -247,6 +253,49 @@ function formatNumber(value) {
 
 function formatRiverFlow(value) {
   return formatDisplayRiverFlow(value, unitPreferences.value);
+}
+
+function formatHydrologyArea(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return formatArea(hydrology.catchmentArea, unitPreferences.value);
+}
+
+function formatHydrologyCells(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return formatNumber(hydrology.catchmentCells);
+}
+
+function formatHydrologyPrecipitation(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return formatPrecipitation(hydrology.averagePrecipitation, unitPreferences.value);
+}
+
+function formatHydrologyFlowRange(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return `${formatRiverRunoffFlowRange(hydrology, unitPreferences.value)}（径流系数 0.2-0.5）`;
+}
+
+function formatHydrologyFlowRatio(row) {
+  if (!hasHydrology(row?.hydrology)) return "未知";
+  const current = estimateRiverRunoffFlowRange(row.hydrology, unitPreferences.value).medium;
+  if (!Number.isFinite(current) || current <= 0) return "未知";
+  const actual = riverFluxToCubicMetersPerSecond(row.flux, unitPreferences.value);
+  return `${formatNumber(actual / current)}x（相对 0.3 径流）`;
+}
+
+function normalizeHydrology(hydrology = {}) {
+  const catchmentArea = Number(hydrology.catchmentArea);
+  const catchmentCells = Number(hydrology.catchmentCells);
+  const averagePrecipitation = Number(hydrology.averagePrecipitation);
+  return {
+    catchmentArea: Number.isFinite(catchmentArea) ? catchmentArea : 0,
+    catchmentCells: Number.isFinite(catchmentCells) ? catchmentCells : 0,
+    averagePrecipitation: Number.isFinite(averagePrecipitation) ? averagePrecipitation : 0
+  };
+}
+
+function hasHydrology(hydrology) {
+  return Number.isFinite(hydrology?.catchmentArea) && hydrology.catchmentArea > 0 && Number.isFinite(hydrology.averagePrecipitation);
 }
 
 function normalizeWidth(value) {

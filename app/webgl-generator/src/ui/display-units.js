@@ -2,6 +2,13 @@ const CSS_PX_PER_CM = 96 / 2.54;
 const INTERNAL_POPULATION_UNIT_PEOPLE = 1000;
 const INTERNAL_PRECIPITATION_UNIT_MILLIMETERS = 100;
 const INTERNAL_RIVER_FLOW_TO_CUBIC_METERS_PER_SECOND = 6;
+const SECONDS_PER_YEAR = 365.25 * 24 * 60 * 60;
+
+export const RIVER_RUNOFF_COEFFICIENTS = Object.freeze({
+  low: 0.2,
+  medium: 0.3,
+  high: 0.5
+});
 
 export const DEFAULT_UNIT_PREFERENCES = Object.freeze({
   distanceUnit: "km-cn",
@@ -134,13 +141,37 @@ export function precipitationUnitsToMillimeters(value, preferences = {}) {
 export function formatRiverFlow(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   const flow = riverFluxToCubicMetersPerSecond(value, units);
-  return `${formatPlainNumber(flow, {maximumFractionDigits: flow >= 100 ? 0 : 1})} m³/s`;
+  return formatCubicMetersPerSecond(flow);
 }
 
 export function riverFluxToCubicMetersPerSecond(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   const scaleRatio = units.mapScaleKmPerCm / DEFAULT_UNIT_PREFERENCES.mapScaleKmPerCm;
   return numberOrZero(value) * INTERNAL_RIVER_FLOW_TO_CUBIC_METERS_PER_SECOND * scaleRatio * scaleRatio;
+}
+
+export function estimateRiverRunoffFlow(hydrology = {}, preferences = {}, coefficient = RIVER_RUNOFF_COEFFICIENTS.medium) {
+  const areaKm2 = mapUnitsToSquareKm(hydrology.catchmentArea, preferences);
+  const precipitationMm = precipitationUnitsToMillimeters(hydrology.averagePrecipitation, preferences);
+  const runoffCoefficient = clampRunoffCoefficient(coefficient);
+  return areaKm2 * 1000000 * (precipitationMm / 1000) * runoffCoefficient / SECONDS_PER_YEAR;
+}
+
+export function estimateRiverRunoffFlowRange(hydrology = {}, preferences = {}) {
+  const low = estimateRiverRunoffFlow(hydrology, preferences, RIVER_RUNOFF_COEFFICIENTS.low);
+  const medium = estimateRiverRunoffFlow(hydrology, preferences, RIVER_RUNOFF_COEFFICIENTS.medium);
+  const high = estimateRiverRunoffFlow(hydrology, preferences, RIVER_RUNOFF_COEFFICIENTS.high);
+  return {low, medium, high};
+}
+
+export function formatRiverRunoffFlowRange(hydrology = {}, preferences = {}) {
+  const range = estimateRiverRunoffFlowRange(hydrology, preferences);
+  return `${formatCubicMetersPerSecond(range.low)} .. ${formatCubicMetersPerSecond(range.high)}`;
+}
+
+export function formatCubicMetersPerSecond(value) {
+  const flow = numberOrZero(value);
+  return `${formatPlainNumber(flow, {maximumFractionDigits: flow >= 100 ? 0 : 1})} m³/s`;
 }
 
 export function formatScaleLabel(preferences = {}) {
@@ -215,6 +246,12 @@ function clampNumber(value, limit, fallback) {
 function roundToStep(value, step) {
   if (!Number.isFinite(step) || step <= 0) return value;
   return Math.round(value / step) * step;
+}
+
+function clampRunoffCoefficient(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return RIVER_RUNOFF_COEFFICIENTS.medium;
+  return Math.max(0, Math.min(1, numeric));
 }
 
 function numberOrZero(value) {
