@@ -47,7 +47,7 @@ import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentFile, stringifyMapDocument} from "./map-file-io.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
-import {createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
+import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
@@ -837,6 +837,33 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onLocate: object => {
       locateObject(state, object, documentRef);
       culturePanel.setSelectedCultureId(object.id);
+    },
+    onAdd: () => {
+      const command = createAddCultureCommand();
+      const context = {map: state.map};
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+        const cultureId = command.getCultureId?.();
+        if (cultureId) {
+          culturePanel.setSelectedCultureId(cultureId);
+          selectFromPanel("culture-panel", {kind: OBJECT_KIND.CULTURE, id: cultureId, name: `新文化 ${cultureId}`});
+        }
+        setFileOperationStatus(documentRef, `已新增空文化 #${cultureId || ""}。`);
+      }
+      updateCulturePanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onDelete: object => {
+      const command = createDeleteCultureCommand(object.id);
+      const context = {map: state.map};
+      if (!command.isNoop(context)) {
+        refreshAfterEdit(state, state.editHistory.execute(command, context));
+        setFileOperationStatus(documentRef, `已删除空文化 ${object.name || `#${object.id}`}。`);
+      } else {
+        setFileOperationStatus(documentRef, "只能删除无覆盖、无子级、无关联对象的空文化。");
+      }
+      updateCulturePanel(state);
+      updateEditingInteractionLock(state, documentRef);
     },
     onRename: (cultureId, name) => {
       const object = {kind: "culture", id: cultureId};

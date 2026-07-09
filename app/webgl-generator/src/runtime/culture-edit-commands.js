@@ -16,6 +16,91 @@ const CULTURE_PARENT_EFFECTS = Object.freeze({
   derived: Object.freeze(["culture-inheritance", "object-panels"])
 });
 
+const CULTURE_STRUCTURE_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["culture-structure", "cell-colors", "object-index", "object-panels"])
+});
+
+export function createAddCultureCommand({name = "", label = "新增文化"} = {}) {
+  let cultureId = null;
+  const normalizedName = String(name || "").trim();
+
+  return {
+    label,
+    effects: {
+      ...CULTURE_STRUCTURE_EFFECTS,
+      affected: []
+    },
+    apply(context) {
+      const stores = getCultureStores(context.map);
+      const primary = stores[0];
+      if (!primary) throw new Error("当前地图没有文化数据");
+      if (!cultureId) cultureId = nextCultureId(primary);
+      const culture = createEmptyCulture(cultureId, normalizedName || `新文化 ${cultureId}`);
+      for (const store of stores) {
+        if (store[cultureId] && !store[cultureId].removed) throw new Error(`文化 #${cultureId} 已存在`);
+        store[cultureId] = {...culture};
+      }
+      updateCultureTreeMetadata(context.map, primary);
+      this.effects.affected = [{kind: "culture", id: cultureId}];
+    },
+    revert(context) {
+      if (!cultureId) return;
+      for (const store of getCultureStores(context.map)) {
+        if (store[cultureId]) delete store[cultureId];
+      }
+      updateCultureTreeMetadata(context.map, getCultures(context.map));
+    },
+    isNoop(context) {
+      return !getCultureStores(context.map).length;
+    },
+    getCultureId() {
+      return cultureId;
+    }
+  };
+}
+
+export function createDeleteCultureCommand(cultureId, {label = "删除文化"} = {}) {
+  const normalizedCultureId = Number(cultureId);
+  let snapshots = null;
+
+  return {
+    label: `${label} #${normalizedCultureId}`,
+    effects: {
+      ...CULTURE_STRUCTURE_EFFECTS,
+      affected: [{kind: "culture", id: normalizedCultureId}]
+    },
+    apply(context) {
+      const stores = getCultureStores(context.map);
+      if (!stores.length) throw new Error("当前地图没有文化数据");
+      const primary = stores[0];
+      const culture = primary?.[normalizedCultureId];
+      if (!culture || culture.removed) throw new Error(`找不到文化 #${normalizedCultureId}`);
+      const blockers = cultureDeleteBlockers(context.map, normalizedCultureId);
+      if (blockers.length) throw new Error(`只能删除空文化：${blockers.join("、")}`);
+      snapshots ??= stores.map(store => ({store, value: cloneCulture(store[normalizedCultureId])}));
+      for (const {store} of snapshots) {
+        if (store[normalizedCultureId]) store[normalizedCultureId].removed = true;
+      }
+      updateCultureTreeMetadata(context.map, primary);
+    },
+    revert(context) {
+      if (!snapshots) return;
+      for (const {store, value} of snapshots) {
+        store[normalizedCultureId] = cloneCulture(value);
+      }
+      updateCultureTreeMetadata(context.map, getCultures(context.map));
+    },
+    isNoop(context) {
+      const culture = getCultures(context.map)?.[normalizedCultureId];
+      return !culture || culture.removed || cultureDeleteBlockers(context.map, normalizedCultureId).length > 0;
+    }
+  };
+}
+
 export function createSetCultureColorCommand(cultureId, color, {beforeColor = null, label = "文化颜色"} = {}) {
   const normalizedCultureId = Number(cultureId);
   const after = normalizeHexColor(color);
@@ -90,6 +175,75 @@ function findCulture(map, cultureId) {
 
 function getCultures(map) {
   return map?.society?.cultures || map?.pack?.cultures || [];
+}
+
+function getCultureStores(map) {
+  const stores = [map?.society?.cultures, map?.pack?.cultures]
+    .filter(store => Array.isArray(store));
+  return stores.filter((store, index) => stores.indexOf(store) === index);
+}
+
+function nextCultureId(cultures) {
+  let maxId = 0;
+  for (const culture of cultures || []) {
+    const id = Number(culture?.i ?? culture?.id);
+    if (Number.isInteger(id)) maxId = Math.max(maxId, id);
+  }
+  return maxId + 1;
+}
+
+function createEmptyCulture(cultureId, name) {
+  return {
+    i: cultureId,
+    id: cultureId,
+    name,
+    root: name.replace(/文化$/, ""),
+    type: "Generic",
+    nameStyle: "default",
+    expansionism: 1,
+    parent: 0,
+    children: [],
+    depth: 0,
+    center: -1,
+    gridCenter: -1,
+    cells: 0,
+    area: 0,
+    rural: 0,
+    color: null,
+    userCreated: true
+  };
+}
+
+function cultureDeleteBlockers(map, cultureId) {
+  const blockers = [];
+  const culture = getCultures(map)?.[cultureId];
+  if (Number(culture?.cells) > 0 || packCellUsage(map, cultureId) > 0 || gridCellUsage(map, cultureId) > 0) blockers.push("仍有覆盖 cells");
+  if ((culture?.children || []).some(childId => getCultures(map)?.[childId] && !getCultures(map)?.[childId]?.removed)) blockers.push("仍有子文化");
+  if ((map?.settlements?.cities || []).some(city => Number(city?.culture) === cultureId)) blockers.push("仍有关联城市");
+  if ((map?.pack?.burgs || []).some(burg => burg?.i && !burg.removed && Number(burg?.culture) === cultureId)) blockers.push("仍有关联城镇");
+  if ((map?.politics?.states || map?.pack?.states || []).some(state => state?.i && !state.removed && Number(state?.culture) === cultureId)) blockers.push("仍有关联国家");
+  return blockers;
+}
+
+function packCellUsage(map, cultureId) {
+  return countTypedArrayValue(map?.pack?.cells?.culture, cultureId);
+}
+
+function gridCellUsage(map, cultureId) {
+  return countTypedArrayValue(map?.grid?.cells?.culture, cultureId);
+}
+
+function countTypedArrayValue(values, target) {
+  if (!values) return 0;
+  let count = 0;
+  for (const value of values) {
+    if (Number(value) === target) count++;
+  }
+  return count;
+}
+
+function cloneCulture(culture) {
+  return culture ? {...culture, children: Array.isArray(culture.children) ? [...culture.children] : []} : null;
 }
 
 function updateCultureTreeMetadata(map, cultures) {

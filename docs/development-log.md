@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：文化面板新增 / 删除空文化第一刀
+
+本步继续推进编辑面板新增 / 删除统一化，先为文化管理补齐低风险的空文化新增和删除入口。
+
+修正：
+
+- 新增 `createAddCultureCommand()`，可在文化存储中创建无覆盖、无中心、无子级的用户空文化，并支持撤销删除该新增项。
+- 新增 `createDeleteCultureCommand()`，删除前检查 pack/grid cell 使用、子文化、城市、城镇和国家所有者；只有完全空置的叶子文化会被标记为 `removed`。
+- 文化面板列表动作条新增“新增空文化 / 定位文化 / 删除空文化”，删除按钮会根据当前文化是否可删自动禁用。
+- 运行时接入新增 / 删除回调，命令执行后刷新派生面板、选中新文化或清理选择，并同步编辑锁状态。
+
+边界：
+
+- 本步不做文化 cell 归属刷、覆盖重分配、中心迁移、扩张参数编辑或宗教联动重算。
+- 非空文化删除会被阻止，不做强制迁移或级联删除。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\culture-edit-commands.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\culture-panel.js` 和 `git diff --check` 通过。
+- 命令级 Node 断言确认新增文化、撤销新增、重做新增、删除空文化、撤销删除和非空文化删除阻止逻辑正常。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：新增 `新文化 13` 后文化数 `13 -> 14`，删除后可见数回到 `13` 且 `removed=true`，头部撤销后恢复到 `14`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-09：PNG 导出合成固定地图 overlay
 
 本步收尾视觉主题第一阶段的导出验证，把比例尺和地图图例纳入 PNG 合成。

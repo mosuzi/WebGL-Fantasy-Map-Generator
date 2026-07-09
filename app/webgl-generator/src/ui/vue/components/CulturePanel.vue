@@ -39,6 +39,13 @@
     @edit="openRenameEditor"
   />
 
+  <UiPanelIoActions
+    class-name="culture-panel-list-actions"
+    label="文化列表操作"
+    :actions="cultureListActions"
+    @action="handleListAction"
+  />
+
   <UiDetailGrid class-name="culture-panel-details" empty-text="未选中文化" :rows="detailRows" />
 
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
@@ -93,6 +100,7 @@ import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSortBar from "./base/UiSortBar.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -157,6 +165,16 @@ const cultureActions = Object.freeze([
   {key: "namebase", label: "名称库绑定", icon: "名"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
+const cultureListActions = computed(() => [
+  {key: "add", label: "新增空文化", icon: "+"},
+  {key: "locate", label: "定位文化", icon: "⌖", disabled: !selected.value},
+  {
+    key: "delete",
+    label: selected.value?.canDelete ? "删除空文化" : "只能删除无覆盖、无子级、无关联对象的空文化",
+    icon: "×",
+    disabled: !selected.value?.canDelete
+  }
+]);
 
 const summaryMetrics = computed(() => [
   {label: "文化", value: formatNumber(metrics.value.total)},
@@ -215,12 +233,23 @@ function openRenameEditor(row) {
   });
 }
 
+function handleListAction(actionKey) {
+  if (actionKey === "add") {
+    props.callbacks.onAdd?.();
+    return;
+  }
+  if (!selected.value) return;
+  if (actionKey === "locate") props.callbacks.onLocate?.(selected.value);
+  if (actionKey === "delete" && selected.value.canDelete) props.callbacks.onDelete?.(selected.value);
+}
+
 function buildCultureMetrics(map) {
   const baseRows = cultureRows(map);
   const tree = buildTreeFields(baseRows, "根文化");
   const rows = baseRows.map(culture => {
     const cities = cultureCities(map, culture.id);
     const stateStats = cultureStateStats(map, culture.id);
+    const stateOwners = cultureStateOwnerCount(map, culture.id);
     const urban = cities.reduce((sum, city) => sum + (Number(city.population) || 0), 0);
     const rural = Number(culture.rural) || 0;
     const treeFields = tree.get(culture.id) || {};
@@ -233,10 +262,12 @@ function buildCultureMetrics(map) {
       population: rural + urban,
       cities: cities.length,
       states: stateStats.length,
+      stateOwners,
       stateSummary: stateStats.slice(0, 4).map(item => `${item.name} ${formatNumber(item.count)}`).join(" / ") || "none",
       noteBody: note?.body || "",
       noteUpdatedAt: note?.updatedAt || "",
-      color: normalizeHexColor(culture.color) || fallbackCultureColor(culture.id)
+      color: normalizeHexColor(culture.color) || fallbackCultureColor(culture.id),
+      canDelete: culture.cells === 0 && cities.length === 0 && stateStats.length === 0 && stateOwners === 0 && (treeFields.childCount || 0) === 0
     };
   });
 
@@ -442,6 +473,12 @@ function cultureStateStats(map, cultureId) {
       name: map?.politics?.states?.[stateId]?.name || (stateId ? `#${stateId}` : "none")
     }))
     .sort((a, b) => b.count - a.count || a.stateId - b.stateId);
+}
+
+function cultureStateOwnerCount(map, cultureId) {
+  return (map?.politics?.states || map?.pack?.states || []).filter(state =>
+    state?.i && !state.removed && Number(state.culture) === cultureId
+  ).length;
 }
 
 function normalizeHexColor(color) {
