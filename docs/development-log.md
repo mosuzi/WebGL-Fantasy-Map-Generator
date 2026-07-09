@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台 API 根对象与只读能力第一刀
+
+本步进入控制台 / 扩展 API 系统阶段 1，先建立浏览器控制台可读取的 API 根对象，并只开放不会改变地图数据的快照能力。
+
+修正：
+
+- 新增 `app/webgl-generator/src/runtime/api-result.js`，统一 `ApiResult` 成功 / 失败返回壳，并在返回前转成可 JSON 化快照。
+- 新增 `app/webgl-generator/src/runtime/console-api.js`，安装 `window.webglGeneratorApi`，并在 `window.api` 未被占用时提供开发别名。
+- 接入 `api.info.capabilities()`、`api.info.mapSummary()`、`api.info.runtimeStats()`、`api.selection.get()` 和 `api.layers.get()`。
+- 在 `app.js` app ready 后安装 API，保证 API 读取当前 `state / renderer / healthMonitor / control preferences`，但不暴露内部 `state.map` 大对象或 typed array 引用。
+
+边界：
+
+- 本步只做只读 API，不接入导出、编辑、生成、导入或图层写操作。
+- `layers.get()` 只读当前偏好和 renderer 状态，不会切换视图或写入本地偏好。
+- `selection.get()` 只返回 selection / editing object 摘要，不暴露 resolver 后的内部对象引用。
+
+验证：
+
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`window.webglGeneratorApi` 与 `window.api` 可读，`info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()`、`layers.get()` 均返回 `ok=true`；调用前后 checksum 保持 `989744d0`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：路线删除接入编辑 helper
 
 本步继续推进 `executeEditCommand()` 的低风险调用点迁移，把路线面板删除入口改走统一命令执行 helper。

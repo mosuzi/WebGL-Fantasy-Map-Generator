@@ -80,7 +80,7 @@
    - 要做什么：考虑把所有不依赖 UI 的操作收束为统一 API 系统，挂到可在控制台调用的入口上，例如 `api.climate.setLatitude(...)`、`api.data.exportAll()`、`api.data.exportGEO()` 等；后续还应覆盖生成、导入导出、气候、单位、图层、对象选择 / 定位、编辑命令、名称库、测量、备注和派生重建等非 UI 能力。
    - 为什么做：API 化能方便后续接入 AI、脚本化操作、开发扩展、自动化测试和批量处理；同时把功能收束成 API 也是对现有 runtime 能力、数据边界、命令副作用和权限语义的间接梳理。
    - 执行方式：本轮只写入计划，不立即实现；真正开始时必须先出详细方案，明确 API 命名空间、同步 / 异步返回、错误格式、撤销语义、权限边界、与 UI store 的关系、浏览器控制台暴露方式、测试策略和稳定性承诺。
-   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。API 运行时代码尚未开始；在前置高优任务继续推进前，不应直接进入 API 实现。
+   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照；下一步可进入导出 API 第一刀。
 
 ### 验证要求
 
@@ -440,6 +440,11 @@
    - 边界：本步只迁移路线删除；不改变路线备注、道路重算、改线、端点重连或路线撤销 / 重做逻辑。
    - 完成记录：路线面板删除回调改走 `executeEditCommand()`；执行成功后通过 `refreshPanelsForEdit()` 按 `object-panels` 派生刷新对象面板，并保留 route mesh / object index 的命令 effects。
 
+68. 控制台 API 根对象与只读能力第一刀。`已完成`
+   - 目标：推进控制台 / 扩展 API 系统阶段 1，先提供可从浏览器控制台读取的 API 根对象和只读快照能力。
+   - 边界：本步只暴露 `info`、`selection` 和 `layers` 只读命名空间；不接入导出、编辑、生成、导入或任何写地图数据的 API。
+   - 完成记录：新增 `api-result.js` 和 `console-api.js`，在 app ready 后安装 `window.webglGeneratorApi`，并在未占用时安装 `window.api` 别名；`info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 均返回统一 `ApiResult`，并只返回 JSON 快照摘要，不暴露内部 map 大对象或 typed array 引用。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -497,6 +502,7 @@
 - `locateAndSelectObject()` 社会对象扩展已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测依次打开文化和宗教面板并点击选中行定位按钮，selection 分别保持 `culture / religion` 和对应 id，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
 - `locateAndSelectObject()` 地区与军事对象扩展已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测依次打开地区和军事面板，点击首行后再点击定位按钮，selection 分别保持 `zone / military` 和对应 id，各面板均只有 1 个选中行，`glError = 0`，health / console / page error 均为 `0`。
 - 路线删除接入编辑 helper 已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认点击真实“删除路线”按钮后路线数 `589 -> 588`、metadata routes `588`、路线段数 `2776 -> 2593`、状态显示“已删除路线 #452。”、撤销栈 `undo=1`；点击面板头部撤销后路线数和 metadata 恢复到 `589`，`redo=1`，`glError = 0`，health / console / page error 均为 `0`。
+- 控制台 API 根对象与只读能力第一刀已完成：`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `window.webglGeneratorApi` 和 `window.api` 可读，`info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()`、`layers.get()` 均返回 `ok=true`，调用前后 checksum 保持 `989744d0`，`glError = 0`，health / console / page error 均为 `0`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

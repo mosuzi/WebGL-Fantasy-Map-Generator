@@ -77,6 +77,7 @@ import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
+import {installConsoleApi} from "./console-api.js";
 
 const LOADING_MESSAGES = Object.freeze({
   request: "星图启明",
@@ -1942,6 +1943,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 
   const view = documentRef.defaultView || window;
   view.__webglGeneratorApp = state;
+  installConsoleApi(documentRef, state);
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;

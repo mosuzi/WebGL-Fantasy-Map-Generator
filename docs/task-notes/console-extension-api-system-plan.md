@@ -370,8 +370,11 @@ api.edit.measurement.delete(id)
 
 当前状态：
 
-- 尚未开始运行时代码实现。
-- 本文档只完成阶段 0 的方案和能力边界梳理；阶段 1 需要在前置高优任务继续推进后，再按用户明确指令进入。
+- 已完成第一刀运行时代码实现。
+- 新增 `app/webgl-generator/src/runtime/api-result.js` 和 `app/webgl-generator/src/runtime/console-api.js`，并在 app ready 后安装 `window.webglGeneratorApi`。
+- 已接入 `api.info.mapSummary()`、`api.info.runtimeStats()`、`api.info.capabilities()`、`api.selection.get()` 和 `api.layers.get()`。
+- 当前 API 只返回 JSON 快照摘要，不暴露内部 `state.map`、typed array 或可直接写入的对象引用。
+- 浏览器烟测已确认只读 API 调用前后 checksum 不变。
 
 ### 阶段 2：导出 API 第一刀
 
@@ -442,10 +445,10 @@ api.edit.measurement.delete(id)
 
 ## 建议下一步
 
-下一步可以先做 **阶段 1：API 根对象与只读能力**，这是低风险入口：
+下一步可以进入 **阶段 2：导出 API 第一刀**。建议先做不自动下载的返回模式，再复用既有 UI 下载能力：
 
-1. 新增 API 根对象。
-2. 暴露 `info.capabilities()` 和 `info.mapSummary()`。
-3. 增加最小浏览器断言，确认控制台能读到 API 且不改变地图 checksum。
+1. 接入 `api.data.exportAll({download: false})`，返回完整地图 JSON 文本和文件元数据。
+2. 接入 `api.data.exportGEO({download: false})` 与 `api.data.exportFeatureGEO({download: false})`，返回可解析 GeoJSON 文本和摘要。
+3. 对 `download: true` 复用现有下载路径，并补最小浏览器断言确认 UI 导出和 API 导出结构一致。
 
-完成阶段 1 后，再进入导出 API，因为导出 API 对后续 AI / 自动化最有直接价值。
+导出 API 对后续 AI / 自动化最有直接价值；实现时仍应保持只读，不改变地图数据和 checksum。
