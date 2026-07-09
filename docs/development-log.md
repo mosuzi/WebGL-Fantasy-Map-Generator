@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台路线删除 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，把路线删除接入 API。
+
+修正：
+
+- app action 增加 `edit.routes.delete(routeId)`。
+- `api.edit.routes.delete()` 复用 `createDeleteRouteCommand()`、`executeEditCommand()` 和 route effects。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `routes.delete`。
+
+边界：
+
+- 本步只接路线删除，不接路线新增、改线、重算道路或路线备注编辑。
+- API 编辑会改变路线数据，但不重算地图 checksum；这与当前面板编辑路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：对真实路线 `#0` 调用 `edit.routes.delete(0)` 后路线数和 metadata `589 -> 588`，`history.undo()` 恢复为 `589`，`history.redo()` 再次删除为 `588`，最终 history 为 `undo=1 / redo=0 / lastLabel=重做 删除路线 #0 #0`，状态显示“已删除路线 #0。”；调用前后 checksum 保持 `8fe1d6f8`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：控制台测量对象编辑 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，把测量对象重命名和删除接入 API。

@@ -1963,6 +1963,9 @@ function createConsoleApiActions(state, documentRef) {
       measurements: {
         rename: (measurementId, name) => renameMeasurementViaApi(state, documentRef, measurementId, name),
         delete: measurementId => deleteMeasurementViaApi(state, documentRef, measurementId)
+      },
+      routes: {
+        delete: routeId => deleteRouteViaApi(state, documentRef, routeId)
       }
     }
   };
@@ -3877,6 +3880,19 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
   const result = executeEditCommand(state, documentRef, command, {
     noopStatus: "测量对象不存在或已被删除。",
     status: `已删除测量对象 ${id}。`,
+    throwOnError: false
+  });
+  if (result.executed) refreshPanelsForEdit(state, result.command);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteRouteViaApi(state, documentRef, routeId) {
+  const id = Number(routeId);
+  const command = createDeleteRouteCommand(id, {label: `删除路线 #${Number.isFinite(id) ? id : routeId}`});
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "路线不存在或已被删除。",
+    status: `已删除路线 #${Number.isFinite(id) ? id : routeId}。`,
     throwOnError: false
   });
   if (result.executed) refreshPanelsForEdit(state, result.command);
