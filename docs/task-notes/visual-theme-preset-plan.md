@@ -75,12 +75,13 @@
 - 已新增 `renderer/themes.js`，提供默认、古地图、浅色图册、暗海、单色、夜间六个只读主题。
 - 控制面板“视图”页新增“视觉主题”下拉，主题选择写入全局偏好。
 - renderer 已接入主题背景、水色和高度色带；切换主题只刷新渲染 surface，不改变生成数据和 checksum。
+- renderer 已接入海岸线、湖岸线、国界、省界和三档道路颜色 token；切换主题会刷新线层和道路动态 buffer。
 - 完整地图 JSON 会保存 `map.visualTheme.preset`、`map.options.visualTheme` 和 `options.visualTheme`；重新导入后会恢复主题选择。
-- 构建产物浏览器烟测确认切换 `night` 后 stage 背景、renderer token 和偏好同步变化，导出 / 导入地图 JSON 后仍恢复 `night`，checksum 不变，`glError = 0`。
+- 构建产物浏览器烟测确认切换 `night` 后 stage 背景、renderer token、线层 token 和偏好同步变化，导出 / 导入地图 JSON 后仍恢复 `night`，checksum 不变，`glError = 0`。
 
 仍待继续：
 
-- 边界、道路、标签、比例尺和图例 token 尚未接入。
+- 标签、比例尺和图例 token 尚未接入。
 - PNG 导出需要补主题下 overlay 文本 / 比例尺颜色验证。
 
 ### 阶段 2：主题导入导出

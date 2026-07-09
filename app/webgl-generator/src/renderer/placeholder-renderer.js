@@ -405,6 +405,8 @@ export class PlaceholderMapRenderer {
     if (this.map) applyMapStageBackground(this.stage, this.map, theme);
     if (!this.map) return;
     this.refreshCellSurface({draw: false});
+    this.refreshLineLayers({draw: false});
+    this.dynamicBuffersDirty.routes = true;
     this.draw();
   }
 
@@ -800,7 +802,7 @@ export class PlaceholderMapRenderer {
 
   updateRouteBuffer() {
     const startedAt = performance.now();
-    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, snapshotCamera(this.camera), this.canvas, this.selection);
+    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, snapshotCamera(this.camera), this.canvas, this.selection, this.visualTheme);
     this.routeVertexCount = routeVertices.length / 6;
     this.routeRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
@@ -817,7 +819,7 @@ export class PlaceholderMapRenderer {
       yieldToBrowser,
       sliceMs,
       shouldContinue
-    });
+    }, this.visualTheme);
     if (stats.aborted || !shouldContinue()) return false;
     this.routeVertexCount = routeVertices.length / 6;
     this.routeRenderStats = stats;
@@ -2714,21 +2716,22 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   const vertices = [];
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
-  pushMapEdgeFade(vertices, context, map);
+  const themeLines = viewOptions.visualTheme?.lines || {};
+  pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
   pushZoneTextureLayer(vertices, context, map, visibility);
-  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
-  if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
+  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
+  if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLines(vertices, context, map, visibility);
   return new Float32Array(vertices);
 }
 
-function pushMapEdgeFade(vertices, context, map) {
+function pushMapEdgeFade(vertices, context, map, visualTheme) {
   const width = Number(map?.metadata?.graphWidth) || 0;
   const height = Number(map?.metadata?.graphHeight) || 0;
   if (width <= 0 || height <= 0) return;
   const fade = clamp(Math.min(width, height) * MAP_EDGE_FADE_RATIO, MAP_EDGE_FADE_MIN_WORLD, MAP_EDGE_FADE_MAX_WORLD);
-  const outer = withAlpha(map.layers?.background || [0.36, 0.49, 0.64, 1], 1);
+  const outer = withAlpha(visualTheme?.canvas?.background || map.layers?.background || [0.36, 0.49, 0.64, 1], 1);
   const edge = withAlpha(outer, MAP_EDGE_FADE_ALPHA);
   const inner = withAlpha(outer, 0);
   pushGradientQuad(vertices, context, [-fade, -fade], [0, -fade], [0, height + fade], [-fade, height + fade], outer, edge, edge, outer);
@@ -3145,16 +3148,16 @@ function emptyTradeFlowRenderStats() {
   };
 }
 
-function buildRouteMeshVertices(map, camera, canvas, selection) {
-  const build = createRouteMeshBuild(map, camera, canvas, selection);
+function buildRouteMeshVertices(map, camera, canvas, selection, visualTheme) {
+  const build = createRouteMeshBuild(map, camera, canvas, selection, visualTheme);
   for (const route of map.settlements.routes) {
     if (!pushRouteMesh(build, route)) break;
   }
   return finalizeRouteMeshBuild(build);
 }
 
-async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
-  const build = createRouteMeshBuild(map, camera, canvas, selection);
+async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}, visualTheme) {
+  const build = createRouteMeshBuild(map, camera, canvas, selection, visualTheme);
   let sliceStartedAt = performance.now();
   for (const route of map.settlements.routes) {
     if (!shouldContinue()) {
@@ -3173,13 +3176,14 @@ async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yiel
   return finalizeRouteMeshBuild(build);
 }
 
-function createRouteMeshBuild(map, camera, canvas, selection) {
+function createRouteMeshBuild(map, camera, canvas, selection, visualTheme) {
   const context = createRenderContext(map, {camera, canvas});
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
   return {
     context,
     pixelRatio,
     viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
+    visualTheme,
     selection,
     vertices: [],
     stats: emptyRouteRenderStats()
@@ -3199,7 +3203,7 @@ function pushRouteMesh(build, route) {
     return true;
   }
   const selected = build.selection?.kind === OBJECT_KIND.ROUTE && build.selection.id === route.id;
-  const style = routeStyle(route);
+  const style = routeStyle(route, build.visualTheme);
   const color = selected ? [1, 0.82, 0.34, 1] : style.color;
   const baseWidth = style.width;
   const widthPx = (selected ? baseWidth + 2.4 : baseWidth) * build.pixelRatio;
@@ -3300,10 +3304,11 @@ function emptyRouteRenderStats() {
   };
 }
 
-function routeStyle(route) {
-  if (route.level === "primary") return {color: [0.56, 0.47, 0.34, 0.88], width: 3.6};
-  if (route.level === "secondary") return {color: [0.5, 0.43, 0.33, 0.8], width: 2.6};
-  return {color: [0.43, 0.38, 0.31, 0.64], width: 1.8};
+function routeStyle(route, visualTheme) {
+  const lines = visualTheme?.lines || {};
+  if (route.level === "primary") return {color: lines.routePrimary || [0.56, 0.47, 0.34, 0.88], width: 3.6};
+  if (route.level === "secondary") return {color: lines.routeSecondary || [0.5, 0.43, 0.33, 0.8], width: 2.6};
+  return {color: lines.routeMinor || [0.43, 0.38, 0.31, 0.64], width: 1.8};
 }
 
 function buildPointVertices(map, visibility = {}) {

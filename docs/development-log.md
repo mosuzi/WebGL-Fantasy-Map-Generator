@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：视觉主题线层 token 第一刀
+
+本步继续推进视觉主题第一阶段，把主题 token 从背景 / 水色 / 高度色带扩展到主要线层。
+
+修正：
+
+- 六个内置主题新增 `lines` token，覆盖海岸线、湖岸线、国界、省界、主路、次路和小路。
+- `shore-layer.js` 读取主题海岸线 / 湖岸线颜色。
+- `placeholder-renderer.js` 的政治边界、地图边缘淡出和路线动态 mesh 读取主题 token。
+- 切换主题时会刷新 cell surface、静态线层，并标记道路动态 buffer 重建。
+
+边界：
+
+- 本步不改标签、比例尺、图例和图标 DOM 颜色。
+- 选中路线高亮色保持原有金色，不随主题变化。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\shore-layer.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：切换到 `night` 后，海岸线、湖岸线、国界、省界、主路、次路和小路 token 全部变化；路线 buffer `34488` 顶点、线层 buffer `124194` 顶点、渲染路线 `589`，`glError = 0`，checksum 保持 `720ca4c7`，非 health console/page error 为 `0`。
+
 ## 2026-07-09：视觉主题预设基础第一刀
 
 本步启动“视觉主题与样式预设第一阶段”，先建立 WebGL 版自己的轻量主题 token 和只读主题选择，不兼容原版 SVG selector 样式系统。

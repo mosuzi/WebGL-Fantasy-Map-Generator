@@ -4,6 +4,15 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     label: "默认",
     canvas: {background: [0.36, 0.49, 0.64, 1]},
     water: {fill: [0.37, 0.56, 0.76, 1]},
+    lines: {
+      coastline: [0.7, 0.76, 0.78, 0.58],
+      lakeShore: [0.62, 0.76, 0.8, 0.54],
+      stateBorder: [0.36, 0.34, 0.3, 0.34],
+      provinceBorder: [0.45, 0.43, 0.38, 0.22],
+      routePrimary: [0.56, 0.47, 0.34, 0.88],
+      routeSecondary: [0.5, 0.43, 0.33, 0.8],
+      routeMinor: [0.43, 0.38, 0.31, 0.64]
+    },
     terrain: {
       heightRamp: [
         [20, [0.5, 0.63, 0.46, 1]],
@@ -20,6 +29,15 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     label: "古地图",
     canvas: {background: [0.55, 0.49, 0.36, 1]},
     water: {fill: [0.51, 0.62, 0.63, 1]},
+    lines: {
+      coastline: [0.42, 0.36, 0.24, 0.46],
+      lakeShore: [0.45, 0.42, 0.28, 0.4],
+      stateBorder: [0.31, 0.24, 0.15, 0.42],
+      provinceBorder: [0.38, 0.3, 0.19, 0.28],
+      routePrimary: [0.47, 0.31, 0.16, 0.9],
+      routeSecondary: [0.42, 0.29, 0.18, 0.78],
+      routeMinor: [0.36, 0.28, 0.2, 0.62]
+    },
     terrain: {
       heightRamp: [
         [20, [0.64, 0.59, 0.39, 1]],
@@ -35,6 +53,15 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     label: "浅色图册",
     canvas: {background: [0.78, 0.86, 0.88, 1]},
     water: {fill: [0.64, 0.79, 0.86, 1]},
+    lines: {
+      coastline: [0.46, 0.59, 0.62, 0.5],
+      lakeShore: [0.46, 0.62, 0.66, 0.44],
+      stateBorder: [0.28, 0.35, 0.4, 0.38],
+      provinceBorder: [0.38, 0.44, 0.48, 0.24],
+      routePrimary: [0.56, 0.43, 0.25, 0.84],
+      routeSecondary: [0.52, 0.42, 0.3, 0.72],
+      routeMinor: [0.45, 0.38, 0.3, 0.56]
+    },
     terrain: {
       heightRamp: [
         [20, [0.76, 0.83, 0.61, 1]],
@@ -50,6 +77,15 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     label: "暗海",
     canvas: {background: [0.08, 0.16, 0.2, 1]},
     water: {fill: [0.08, 0.22, 0.3, 1]},
+    lines: {
+      coastline: [0.55, 0.74, 0.77, 0.54],
+      lakeShore: [0.5, 0.68, 0.73, 0.44],
+      stateBorder: [0.76, 0.69, 0.47, 0.42],
+      provinceBorder: [0.72, 0.67, 0.55, 0.26],
+      routePrimary: [0.78, 0.64, 0.4, 0.88],
+      routeSecondary: [0.66, 0.56, 0.38, 0.76],
+      routeMinor: [0.55, 0.48, 0.36, 0.58]
+    },
     terrain: {
       heightRamp: [
         [20, [0.4, 0.54, 0.36, 1]],
@@ -65,6 +101,15 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     label: "单色",
     canvas: {background: [0.56, 0.6, 0.58, 1]},
     water: {fill: [0.62, 0.68, 0.66, 1]},
+    lines: {
+      coastline: [0.38, 0.42, 0.4, 0.46],
+      lakeShore: [0.42, 0.46, 0.44, 0.4],
+      stateBorder: [0.25, 0.25, 0.24, 0.36],
+      provinceBorder: [0.33, 0.33, 0.32, 0.24],
+      routePrimary: [0.34, 0.33, 0.31, 0.82],
+      routeSecondary: [0.4, 0.39, 0.36, 0.68],
+      routeMinor: [0.45, 0.43, 0.4, 0.52]
+    },
     terrain: {
       heightRamp: [
         [20, [0.58, 0.61, 0.57, 1]],
@@ -80,6 +125,15 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     label: "夜间",
     canvas: {background: [0.03, 0.06, 0.1, 1]},
     water: {fill: [0.05, 0.13, 0.22, 1]},
+    lines: {
+      coastline: [0.3, 0.58, 0.72, 0.5],
+      lakeShore: [0.26, 0.5, 0.66, 0.42],
+      stateBorder: [0.82, 0.72, 0.46, 0.42],
+      provinceBorder: [0.7, 0.66, 0.52, 0.25],
+      routePrimary: [0.72, 0.58, 0.33, 0.9],
+      routeSecondary: [0.58, 0.5, 0.34, 0.76],
+      routeMinor: [0.46, 0.42, 0.34, 0.58]
+    },
     terrain: {
       heightRamp: [
         [20, [0.14, 0.24, 0.19, 1]],
