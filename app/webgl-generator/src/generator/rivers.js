@@ -88,7 +88,10 @@ export function buildRivers(grid, features, pack, options = {}) {
       if (downhill === null || effectiveHeights[cell] <= effectiveHeights[downhill]) continue;
 
       if (cells.fl[cell] < MIN_FLUX_TO_FORM_RIVER) {
-        if (cells.h[downhill] >= WATER_LEVEL) addFlux(cells.fl, downhill, cells.fl[cell]);
+        if (cells.h[downhill] >= WATER_LEVEL) {
+          transferHydrology(hydrology, cell, downhill);
+          addFlux(cells.fl, downhill, cells.fl[cell]);
+        }
         continue;
       }
 
@@ -152,6 +155,39 @@ export function renameHydronymsByCulture(rivers, pack, options = {}) {
   defineLakeNames(pack, nameGenerator);
 }
 
+export function backfillRiverHydrology(grid, features, pack, rivers, options = {}) {
+  const targetRivers = rivers?.rivers || [];
+  if (!targetRivers.length || targetRivers.every(river => validRiverHydrology(river?.hydrology))) {
+    return {changed: 0, total: targetRivers.length, regenerated: 0};
+  }
+  if (!grid?.cells?.prec || !pack?.cells?.i?.length) {
+    return {changed: 0, total: targetRivers.length, regenerated: 0, reason: "missing-grid-or-pack"};
+  }
+
+  const diagnosticPack = clonePackForHydrology(pack);
+  const rebuilt = buildRivers(grid, diagnosticPack.features || features, diagnosticPack, options);
+  const byId = new Map((rebuilt.rivers || []).map(river => [river.i ?? river.id, river]));
+  const byEndpoints = new Map((rebuilt.rivers || []).map(river => [riverEndpointKey(river), river]));
+  let changed = 0;
+
+  for (const river of targetRivers) {
+    if (!river || validRiverHydrology(river.hydrology)) continue;
+    const candidate = byId.get(river.i ?? river.id) || byEndpoints.get(riverEndpointKey(river));
+    const hydrology = validRiverHydrology(candidate?.hydrology)
+      ? {...candidate.hydrology}
+      : approximateRiverPathHydrology(grid, pack, river);
+    if (!validRiverHydrology(hydrology)) continue;
+    river.hydrology = hydrology;
+    changed++;
+  }
+
+  if (changed && rivers.metadata) {
+    rivers.metadata.hydrologyBackfilled = changed;
+    rivers.metadata.hydrologyBackfillSource = "diagnostic-regeneration";
+  }
+  return {changed, total: targetRivers.length, regenerated: rebuilt.rivers?.length || 0};
+}
+
 
 function buildEmptyRivers() {
   return {
@@ -166,6 +202,48 @@ function buildEmptyRivers() {
       cellsWithRiver: 0,
       flowModel: "empty"
     }
+  };
+}
+
+function clonePackForHydrology(pack) {
+  return {
+    ...pack,
+    cells: {...(pack.cells || {})},
+    features: (pack.features || []).map(feature => feature && typeof feature === "object" ? {...feature} : feature),
+    rivers: []
+  };
+}
+
+function validRiverHydrology(hydrology) {
+  return Number.isFinite(hydrology?.catchmentArea) &&
+    hydrology.catchmentArea > 0 &&
+    Number.isFinite(hydrology.catchmentCells) &&
+    hydrology.catchmentCells > 0 &&
+    Number.isFinite(hydrology.averagePrecipitation);
+}
+
+function riverEndpointKey(river = {}) {
+  return `${river.source ?? ""}:${river.mouth ?? ""}`;
+}
+
+function approximateRiverPathHydrology(grid, pack, river = {}) {
+  const cells = pack?.cells;
+  const riverCells = (river.cells || []).filter(cell => cell >= 0 && cells?.h?.[cell] >= WATER_LEVEL);
+  if (!cells || !riverCells.length) return null;
+  let area = 0;
+  let precipitationArea = 0;
+  for (const cell of riverCells) {
+    const cellAreaValue = cellArea(cells, cell);
+    const precipitation = getCellPrecipitation(grid, cells, cell);
+    area += cellAreaValue;
+    precipitationArea += precipitation * cellAreaValue;
+  }
+  if (area <= 0) return null;
+  return {
+    catchmentArea: round(area, 2),
+    catchmentCells: riverCells.length,
+    averagePrecipitation: round(precipitationArea / area, 2),
+    method: "river-path-fallback"
   };
 }
 
@@ -564,6 +642,9 @@ function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hyd
   const {cells, features} = pack;
   const toFlux = cells.fl[toCell] - cells.conf[toCell];
   const toRiver = cells.r[toCell];
+  const toLand = cells.h[toCell] >= WATER_LEVEL;
+
+  if (toLand) transferHydrology(hydrology, fromCell, toCell);
 
   if (toRiver) {
     if (fromFlux > toFlux) {
@@ -578,7 +659,7 @@ function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hyd
     cells.r[toCell] = riverId;
   }
 
-  if (cells.h[toCell] < WATER_LEVEL) {
+  if (!toLand) {
     const waterBody = features[cells.f[toCell]];
     if (waterBody?.type === "lake") {
       if (!waterBody.river || fromFlux > (waterBody.enteringFlux || 0)) {
@@ -590,7 +671,6 @@ function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hyd
       waterBody.inlets.push(riverId);
     }
   } else {
-    transferHydrology(hydrology, fromCell, toCell);
     addFlux(cells.fl, toCell, fromFlux);
   }
 
@@ -609,6 +689,7 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
     const source = riverCells[0];
     if (source < 0 || cells.h[source] < WATER_LEVEL) continue;
     const mouth = getRiverMouth(riverCells);
+    const hydrologyMouth = getRiverHydrologyMouth(riverCells, cells);
     const parent = riverParents.get(riverId) || 0;
     const widthFactor = !parent || parent === riverId ? mainStemWidthFactor : defaultWidthFactor;
     const points = addMeandering(pack, riverCells, riverId);
@@ -634,7 +715,7 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
       width,
       widthFactor,
       sourceWidth,
-      hydrology: riverHydrology(hydrology, mouth),
+      hydrology: riverHydrology(hydrology, hydrologyMouth),
       cells: riverCells,
       gridCells: riverCells.filter(cell => cell >= 0).map(cell => cells.g[cell]),
       points,
@@ -718,6 +799,14 @@ function getRiverMouth(riverCells) {
   const last = riverCells[riverCells.length - 1];
   if (last < 0) return riverCells[riverCells.length - 2];
   return last;
+}
+
+function getRiverHydrologyMouth(riverCells, cells) {
+  for (let index = riverCells.length - 1; index >= 0; index--) {
+    const cell = riverCells[index];
+    if (cell >= 0 && cells.h[cell] >= WATER_LEVEL) return cell;
+  }
+  return getRiverMouth(riverCells);
 }
 
 function addMeandering(pack, riverCells, riverId) {

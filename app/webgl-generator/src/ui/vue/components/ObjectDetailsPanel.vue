@@ -133,6 +133,7 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "汇水面积", value: formatHydrologyArea(object.hydrology)},
     {label: "流域均降水", value: formatHydrologyPrecipitation(object.hydrology)},
     {label: "物理估算", value: formatHydrologyFlowRange(object.hydrology)},
+    {label: "诊断方式", value: formatHydrologyMethod(object.hydrology)},
     {label: "命中距离", value: formatDistanceValue(object.distance), debug: true},
     {label: "对象 id", value: object.id, debug: true}
   ],
@@ -255,6 +256,11 @@ function formatHydrologyPrecipitation(hydrology) {
 function formatHydrologyFlowRange(hydrology) {
   if (!hasHydrology(hydrology)) return "未知";
   return `${formatRiverRunoffFlowRange(hydrology, unitPreferences.value)}（径流系数 0.2-0.5）`;
+}
+
+function formatHydrologyMethod(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return hydrology.method === "river-path-fallback" ? "河道近似" : "汇水累计";
 }
 
 function hasHydrology(hydrology) {

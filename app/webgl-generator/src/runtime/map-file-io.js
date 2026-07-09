@@ -862,6 +862,7 @@ function riverFeatures(map) {
         catchmentArea: river.hydrology?.catchmentArea || 0,
         catchmentCells: river.hydrology?.catchmentCells || 0,
         averagePrecipitation: river.hydrology?.averagePrecipitation || 0,
+        hydrologyMethod: river.hydrology?.method || "flow-accumulation",
         hasNote: Boolean(note?.body),
         note: note?.body || ""
       },

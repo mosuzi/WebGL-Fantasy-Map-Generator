@@ -162,6 +162,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "流域均降水", value: formatHydrologyPrecipitation(selected.value.hydrology)},
   {label: "物理估算", value: formatHydrologyFlowRange(selected.value.hydrology)},
   {label: "模型 / 估算", value: formatHydrologyFlowRatio(selected.value)},
+  {label: "诊断方式", value: formatHydrologyMethod(selected.value.hydrology)},
   {label: "河段", value: formatNumber(selected.value.segments)},
   {label: "宽度因子", value: selected.value.widthFactor.toFixed(2)},
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
@@ -283,6 +284,11 @@ function formatHydrologyFlowRatio(row) {
   return `${formatNumber(actual / current)}x（相对 0.3 径流）`;
 }
 
+function formatHydrologyMethod(hydrology) {
+  if (!hasHydrology(hydrology)) return "未知";
+  return hydrology.method === "river-path-fallback" ? "河道近似" : "汇水累计";
+}
+
 function normalizeHydrology(hydrology = {}) {
   const catchmentArea = Number(hydrology.catchmentArea);
   const catchmentCells = Number(hydrology.catchmentCells);
@@ -290,7 +296,8 @@ function normalizeHydrology(hydrology = {}) {
   return {
     catchmentArea: Number.isFinite(catchmentArea) ? catchmentArea : 0,
     catchmentCells: Number.isFinite(catchmentCells) ? catchmentCells : 0,
-    averagePrecipitation: Number.isFinite(averagePrecipitation) ? averagePrecipitation : 0
+    averagePrecipitation: Number.isFinite(averagePrecipitation) ? averagePrecipitation : 0,
+    method: String(hydrology.method || "")
   };
 }
 

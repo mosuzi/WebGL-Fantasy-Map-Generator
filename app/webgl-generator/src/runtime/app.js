@@ -2,7 +2,7 @@ import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
 import {createLegacyNamebaseText, createNamebaseDocument, createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
-import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
+import {backfillRiverHydrology, buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
@@ -2354,6 +2354,7 @@ function normalizeGenerationCultureNamebaseBindings(cultures) {
 async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = ""} = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   state.map = map;
+  ensureRiverHydrology(state.map);
   state.pick = null;
   state.editHistory.clear();
   state.heightEdit.activeStroke = null;
@@ -2459,6 +2460,23 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateGenerationLoading(documentRef, false);
   showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);
+}
+
+function ensureRiverHydrology(map) {
+  if (!map?.rivers?.rivers?.length) return;
+  const result = backfillRiverHydrology(map.grid, map.features, map.pack, map.rivers, riverHydrologyBackfillOptions(map));
+  if (!result.changed) return;
+  appendGenerationLog(map, `backfill river hydrology: ${result.changed}/${result.total} rivers, regenerated=${result.regenerated}`);
+}
+
+function riverHydrologyBackfillOptions(map) {
+  const salt = map.metadata?.regeneration?.rivers ?? map.rivers?.metadata?.variationSalt ?? "";
+  const riverRegenerationSalt = salt === "" || salt === null || salt === undefined || Number(salt) === 0 ? undefined : salt;
+  return {
+    ...(map.options || {}),
+    namebases: map.namebases,
+    riverRegenerationSalt
+  };
 }
 
 function restorePersistedPanels(state) {

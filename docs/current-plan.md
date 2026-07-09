@@ -138,6 +138,27 @@
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物 smoke 通过：河流管理面板详情显示“汇水面积 / 汇水格子 / 流域均降水 / 物理估算 / 模型与估算比值”；河流要素 GeoJSON properties 含 `catchmentArea / catchmentCells / averagePrecipitation`；`glError = 0`，console / page error 为空。
 
+### 2026-07-10 补充修正：已有地图水文诊断回填
+
+用户发现已有地图中“汇水面积”为空。原因是上一刀只让新生成 / 新重算河流写入 `hydrology`，浏览器缓存或已保存的旧地图 JSON 不会自动拥有新增字段；同时上一刀在入湖 / 入海水格和汇流分支处也存在部分河流诊断没有下传完整的问题。
+
+完成记录：
+
+- `rivers.js` 新增 `backfillRiverHydrology()`，可在不覆盖旧河流名称、宽度、备注和当前列表的前提下，使用克隆 pack 做一次诊断重算并把 `hydrology` 贴回既有河流。
+- 载入地图运行时会自动调用回填；浏览器缓存地图、完整 JSON 导入后的旧图都会自动补齐。
+- 汇水诊断下传修正：低于成河阈值的小溪向下游累计时会同步传递水文诊断；河流汇入已有河道时也会传递上游汇水。
+- 河流水文诊断改用最后一个陆地河格作为诊断 mouth，避免入湖 / 入海水格没有面积导致汇水为空。
+- 对极少数旧图中无法按 id 或 source/mouth 精确匹配的河流，使用河道 cell 做保底近似，并在面板 / 对象详情 / GeoJSON 中标记 `river-path-fallback` / “河道近似”。
+
+验证：
+
+- `node --check app\webgl-generator\src\generator\rivers.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\map-file-io.js` 通过。
+- 新生成地图完整性断言通过：`hydrology-completeness` 生成 64 条河流，64 条均有正 `catchmentArea`。
+- 旧图模拟回填断言通过：删除 `legacy-hydrology-backfill` 地图 295 条河流的 `hydrology` 后，`backfillRiverHydrology()` 回填 295 / 295；其中 2 条使用 `river-path-fallback` 保底近似。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：用 gzip 版浏览器缓存旧图恢复后，运行时自动记录 `backfill river hydrology: 202/202 rivers, regenerated=202`；河流管理面板显示汇水字段和诊断方式；河流要素 GeoJSON 输出 `hydrologyMethod = flow-accumulation`；`glError = 0`，console / page error 为空。
+
 ## 2026-07-09 追加修复：列表表头排序与河流流量标定
 
 用户要求把所有列表上的独立排序按钮替换为表格自带的列排序功能，并指出 1800+ 千米河流只显示 `56 m³/s` 不合理。
