@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台屏幕坐标 pick API 第一刀
+
+本步继续控制台 / 扩展 API 系统的 selection / locate 能力，开放屏幕坐标拾取。
+
+修正：
+
+- `api.selection` 增加 `pick(clientX, clientY)`。
+- app action 复用 renderer `pickClientPoint()`，并刷新 pick 面板。
+- 非法坐标返回结构化错误。
+- `api.info.capabilities()` 的 `selection` 方法列表补充 `pick`。
+
+边界：
+
+- 本步不接临时高亮、多对象高亮或自动选择拾取对象。
+- pick API 只读取当前 renderer 拾取结果，不改变 selection、地图数据或 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `selection.pick`；对 canvas 中心点调用 `selection.pick()` 返回 grid cell `4941`、pack cell `2570`、海洋 feature 和 route `#467` pick 结果，非法坐标返回 `ok=false` 和“clientX / clientY 必须是有限数”；checksum 保持 `5b0ba5fe`，校验值 `21fc36fd`。
+
 ## 2026-07-09：控制台选择 / 定位 API 第一刀
 
 本步进入控制台 / 扩展 API 系统的 selection / locate 能力，开放对象解析、选择、清空和定位。

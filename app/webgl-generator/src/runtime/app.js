@@ -1960,7 +1960,8 @@ function createConsoleApiActions(state, documentRef) {
       resolve: object => resolveObjectViaApi(state, object),
       select: object => selectObjectViaApi(state, object),
       clear: () => clearSelectionViaApi(state),
-      locate: object => locateObjectViaApi(state, documentRef, object)
+      locate: object => locateObjectViaApi(state, documentRef, object),
+      pick: (clientX, clientY) => pickClientPointViaApi(state, documentRef, clientX, clientY)
     },
     edit: {
       notes: {
@@ -3895,6 +3896,16 @@ function locateObjectViaApi(state, documentRef, object) {
     object: resolved,
     selection: state.selectionStore.getSnapshot().selection
   };
+}
+
+function pickClientPointViaApi(state, documentRef, clientX, clientY) {
+  const x = Number(clientX);
+  const y = Number(clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("clientX / clientY 必须是有限数");
+  const pick = state.renderer?.pickClientPoint?.(x, y) || null;
+  state.pick = pick;
+  updatePickPanel(documentRef, state);
+  return pick;
 }
 
 function normalizeApiObjectIdentifier(object) {

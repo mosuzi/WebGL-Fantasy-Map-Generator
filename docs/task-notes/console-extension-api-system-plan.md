@@ -468,6 +468,8 @@ api.edit.measurement.delete(id)
 - 浏览器烟测已覆盖 marker 新增 / 撤销 / 重做和新建对象 selection。
 - `api.selection.resolve(object)`、`api.selection.select(object)`、`api.selection.clear()` 和 `api.selection.locate(object)` 已接入。
 - 浏览器烟测已覆盖城市对象 resolve / select / clear / locate，以及不存在对象的结构化错误。
+- `api.selection.pick(clientX, clientY)` 已接入 renderer `pickClientPoint()`，浏览器烟测已覆盖中心点拾取和非法坐标错误。
+- 临时高亮 / 多对象高亮暂缓；当前 renderer 没有独立于 selection 的高亮态入口，后续需要先设计高亮生命周期。
 
 ### 阶段 5：生成、导入和批量能力
 
@@ -498,7 +500,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步建议继续阶段 4：
 
-1. 继续 selection API，评估临时高亮、多对象高亮和屏幕坐标 pick。
-2. 继续编辑 API，接国家 / 省份 / 城市的名称、颜色、人口等已有单对象命令。
+1. 继续编辑 API，接国家 / 省份 / 城市的名称、颜色、人口等已有单对象命令。
+2. 进入生成 / 导入类 API 前，先明确异步状态、loading、health 和导入错误返回格式。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。
