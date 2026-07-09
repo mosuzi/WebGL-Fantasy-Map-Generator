@@ -2,6 +2,7 @@ import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConf
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
 import {DIPLOMACY_RELATIONS} from "../generator/diplomacy.js";
 import {GOVERNMENT_FAMILY_LEGEND} from "../renderer/color-modes.js";
+import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {
   formatDistance as formatDisplayDistance,
@@ -76,6 +77,11 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("smooth-cell-borders")?.addEventListener("change", event => {
     updateControlPreferences(documentRef, {smoothCellBorders: event.target.checked});
     handlers.onSmoothCellBorders?.(event.target.checked);
+  });
+  documentRef.getElementById("visual-theme-preset")?.addEventListener("change", event => {
+    const visualTheme = normalizeVisualThemeId(event.target.value);
+    updateControlPreferences(documentRef, {visualTheme});
+    handlers.onVisualTheme?.(visualTheme);
   });
   bindBooleanPreferenceButton(documentRef, "show-hover-info", "showHoverInfo", handlers.onShowHoverInfo);
   documentRef.getElementById("max-city-labels")?.addEventListener("change", event => {
@@ -256,6 +262,7 @@ function editLockControls(documentRef) {
     "#auto-random-seed",
     "#show-ocean-height",
     "#smooth-cell-borders",
+    "#visual-theme-preset",
     "#show-hover-info",
     "#max-city-labels",
     "#distance-unit",
@@ -306,6 +313,10 @@ function applyControlPreferences(documentRef) {
   if (typeof preferences.smoothCellBorders === "boolean") {
     const input = documentRef.getElementById("smooth-cell-borders");
     if (input) input.checked = preferences.smoothCellBorders;
+  }
+  if (typeof preferences.visualTheme === "string") {
+    const input = documentRef.getElementById("visual-theme-preset");
+    if (input) input.value = normalizeVisualThemeId(preferences.visualTheme);
   }
   if (typeof preferences.showHoverInfo === "boolean") {
     const control = documentRef.getElementById("show-hover-info");
@@ -459,6 +470,7 @@ function updateControlPreferences(documentRef, patch) {
 function normalizeControlPreferences(preferences) {
   if (!preferences || typeof preferences !== "object") return {};
   const normalized = {...preferences};
+  normalized.visualTheme = normalizeVisualThemeId(normalized.visualTheme);
   normalized.units = normalizeUnitPreferences(normalized.units);
   if (normalized.layers && typeof normalized.layers === "object") {
     normalized.layers = {...normalized.layers};

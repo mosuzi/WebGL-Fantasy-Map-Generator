@@ -1,5 +1,6 @@
 import {useLocalStorage} from "@vueuse/core";
 import {defineStore} from "pinia";
+import {normalizeVisualThemeId} from "../../../renderer/themes.js";
 import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../../display-units.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
@@ -7,6 +8,7 @@ export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   controlPanelTab: "generation",
   colorMode: "height",
+  visualTheme: "default",
   showOceanHeight: false,
   smoothCellBorders: true,
   showHoverInfo: true,
@@ -60,6 +62,7 @@ function normalizePreferences(input = {}) {
   return {
     controlPanelTab: normalizeControlPanelTab(input.controlPanelTab),
     colorMode: typeof input.colorMode === "string" ? input.colorMode : DEFAULT_CONTROL_PREFERENCES.colorMode,
+    visualTheme: normalizeVisualThemeId(input.visualTheme),
     showOceanHeight: typeof input.showOceanHeight === "boolean" ? input.showOceanHeight : DEFAULT_CONTROL_PREFERENCES.showOceanHeight,
     smoothCellBorders: typeof input.smoothCellBorders === "boolean" ? input.smoothCellBorders : DEFAULT_CONTROL_PREFERENCES.smoothCellBorders,
     showHoverInfo: typeof input.showHoverInfo === "boolean"

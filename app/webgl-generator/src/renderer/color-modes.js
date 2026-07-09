@@ -3,7 +3,7 @@ import {diplomacyRelationColor} from "../generator/diplomacy.js";
 
 export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
-    return colorForHeight(map.grid.cells.h[cellIndex], map.layers);
+    return colorForHeight(map.grid.cells.h[cellIndex], map.layers, viewOptions);
   }
   if (colorMode === "temperature") return colorForTemperature(map.grid.cells.temp[cellIndex]);
   if (colorMode === "precipitation") return colorForPrecipitation(map.grid.cells.prec[cellIndex]);
@@ -25,12 +25,9 @@ export function isLandCell(cellIndex, map) {
 }
 
 export function colorForHeight(height, layers, viewOptions = {}) {
-  if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, layers) : layers.ocean;
-  if (height < 36) return mix([0.5, 0.63, 0.46, 1], [0.62, 0.68, 0.5, 1], (height - 20) / 16);
-  if (height < 56) return mix([0.62, 0.68, 0.5, 1], [0.7, 0.67, 0.54, 1], (height - 36) / 20);
-  if (height < 76) return mix([0.7, 0.67, 0.54, 1], [0.75, 0.71, 0.62, 1], (height - 56) / 20);
-  if (height < 92) return mix([0.75, 0.71, 0.62, 1], [0.81, 0.79, 0.72, 1], (height - 76) / 16);
-  return mix([0.81, 0.79, 0.72, 1], [0.87, 0.86, 0.82, 1], Math.min(1, (height - 92) / 8));
+  const water = viewOptions.visualTheme?.water?.fill || layers.ocean;
+  if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, {...layers, ocean: water}) : water;
+  return colorForLandHeight(height, viewOptions.visualTheme?.terrain?.heightRamp);
 }
 
 function colorForOceanHeight(height, layers) {
@@ -38,6 +35,25 @@ function colorForOceanHeight(height, layers) {
   const deep = mix(layers.ocean, [0.25, 0.37, 0.54, 1], 0.58);
   const shelf = mix(layers.ocean, [0.62, 0.75, 0.84, 1], 0.46);
   return mix(deep, shelf, t ** 0.75);
+}
+
+function colorForLandHeight(height, ramp) {
+  const stops = Array.isArray(ramp) && ramp.length >= 2 ? ramp : [
+    [20, [0.5, 0.63, 0.46, 1]],
+    [36, [0.62, 0.68, 0.5, 1]],
+    [56, [0.7, 0.67, 0.54, 1]],
+    [76, [0.75, 0.71, 0.62, 1]],
+    [92, [0.81, 0.79, 0.72, 1]],
+    [100, [0.87, 0.86, 0.82, 1]]
+  ];
+  for (let index = 1; index < stops.length; index += 1) {
+    const [previousHeight, previousColor] = stops[index - 1];
+    const [nextHeight, nextColor] = stops[index];
+    if (height > nextHeight) continue;
+    const span = Math.max(1, nextHeight - previousHeight);
+    return mix(previousColor, nextColor, Math.max(0, Math.min(1, (height - previousHeight) / span)));
+  }
+  return stops[stops.length - 1][1];
 }
 
 function colorForTemperature(temp) {

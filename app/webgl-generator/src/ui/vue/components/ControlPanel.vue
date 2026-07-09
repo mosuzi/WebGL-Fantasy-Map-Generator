@@ -265,6 +265,7 @@
     </div>
 
     <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
+      <UiSelectField label="视觉主题" input-id="visual-theme-preset" :model-value="preferences.visualTheme" :options="visualThemePresetOptions" />
       <UiSegmented class="view-mode-segmented" label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
       <div class="preference-toggle-grid">
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
@@ -433,6 +434,7 @@ import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTabs from "./base/UiTabs.vue";
 import {Lock, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
+import {visualThemeOptions} from "../../../renderer/themes.js";
 import {
   DISTANCE_UNIT_OPTIONS,
   NUMBER_ABBREVIATION_OPTIONS,
@@ -553,6 +555,8 @@ const terrainTemplates = Object.freeze([
   {value: "pangea", label: "盘古大陆"},
   {value: "archipelago", label: "群岛"}
 ]);
+
+const visualThemePresetOptions = Object.freeze(visualThemeOptions());
 
 const themes = Object.freeze([
   {value: "height", label: "高度"},

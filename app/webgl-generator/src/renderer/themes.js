@@ -1,0 +1,109 @@
+export const VISUAL_THEME_PRESETS = Object.freeze([
+  {
+    id: "default",
+    label: "默认",
+    canvas: {background: [0.36, 0.49, 0.64, 1]},
+    water: {fill: [0.37, 0.56, 0.76, 1]},
+    terrain: {
+      heightRamp: [
+        [20, [0.5, 0.63, 0.46, 1]],
+        [36, [0.62, 0.68, 0.5, 1]],
+        [56, [0.7, 0.67, 0.54, 1]],
+        [76, [0.75, 0.71, 0.62, 1]],
+        [92, [0.81, 0.79, 0.72, 1]],
+        [100, [0.87, 0.86, 0.82, 1]]
+      ]
+    }
+  },
+  {
+    id: "ancient",
+    label: "古地图",
+    canvas: {background: [0.55, 0.49, 0.36, 1]},
+    water: {fill: [0.51, 0.62, 0.63, 1]},
+    terrain: {
+      heightRamp: [
+        [20, [0.64, 0.59, 0.39, 1]],
+        [38, [0.73, 0.67, 0.47, 1]],
+        [58, [0.78, 0.7, 0.52, 1]],
+        [78, [0.83, 0.76, 0.61, 1]],
+        [100, [0.9, 0.84, 0.72, 1]]
+      ]
+    }
+  },
+  {
+    id: "atlas",
+    label: "浅色图册",
+    canvas: {background: [0.78, 0.86, 0.88, 1]},
+    water: {fill: [0.64, 0.79, 0.86, 1]},
+    terrain: {
+      heightRamp: [
+        [20, [0.76, 0.83, 0.61, 1]],
+        [40, [0.82, 0.84, 0.66, 1]],
+        [60, [0.86, 0.8, 0.67, 1]],
+        [80, [0.89, 0.84, 0.75, 1]],
+        [100, [0.93, 0.91, 0.86, 1]]
+      ]
+    }
+  },
+  {
+    id: "dark-seas",
+    label: "暗海",
+    canvas: {background: [0.08, 0.16, 0.2, 1]},
+    water: {fill: [0.08, 0.22, 0.3, 1]},
+    terrain: {
+      heightRamp: [
+        [20, [0.4, 0.54, 0.36, 1]],
+        [40, [0.5, 0.58, 0.38, 1]],
+        [60, [0.58, 0.54, 0.38, 1]],
+        [80, [0.66, 0.6, 0.5, 1]],
+        [100, [0.75, 0.73, 0.68, 1]]
+      ]
+    }
+  },
+  {
+    id: "monochrome",
+    label: "单色",
+    canvas: {background: [0.56, 0.6, 0.58, 1]},
+    water: {fill: [0.62, 0.68, 0.66, 1]},
+    terrain: {
+      heightRamp: [
+        [20, [0.58, 0.61, 0.57, 1]],
+        [40, [0.65, 0.67, 0.63, 1]],
+        [60, [0.73, 0.73, 0.69, 1]],
+        [80, [0.82, 0.8, 0.76, 1]],
+        [100, [0.9, 0.88, 0.84, 1]]
+      ]
+    }
+  },
+  {
+    id: "night",
+    label: "夜间",
+    canvas: {background: [0.03, 0.06, 0.1, 1]},
+    water: {fill: [0.05, 0.13, 0.22, 1]},
+    terrain: {
+      heightRamp: [
+        [20, [0.14, 0.24, 0.19, 1]],
+        [40, [0.2, 0.31, 0.23, 1]],
+        [60, [0.29, 0.34, 0.25, 1]],
+        [80, [0.38, 0.38, 0.32, 1]],
+        [100, [0.56, 0.54, 0.48, 1]]
+      ]
+    }
+  }
+]);
+
+export const DEFAULT_VISUAL_THEME_ID = "default";
+
+export function visualThemeOptions() {
+  return VISUAL_THEME_PRESETS.map(theme => ({value: theme.id, label: theme.label}));
+}
+
+export function normalizeVisualThemeId(value) {
+  const id = String(value || DEFAULT_VISUAL_THEME_ID);
+  return VISUAL_THEME_PRESETS.some(theme => theme.id === id) ? id : DEFAULT_VISUAL_THEME_ID;
+}
+
+export function resolveVisualTheme(value) {
+  const id = normalizeVisualThemeId(value);
+  return VISUAL_THEME_PRESETS.find(theme => theme.id === id) || VISUAL_THEME_PRESETS[0];
+}

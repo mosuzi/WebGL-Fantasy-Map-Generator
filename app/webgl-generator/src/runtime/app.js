@@ -8,6 +8,7 @@ import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../gener
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
+import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
@@ -1677,6 +1678,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateRuntimePanel(documentRef, state);
       });
     },
+    onVisualTheme: visualTheme => {
+      measureHealthOperation(state, "set-visual-theme", {visualTheme}, () => {
+        renderer.setVisualTheme?.(visualTheme);
+        updateRuntimePanel(documentRef, state);
+      });
+    },
     onShowHoverInfo: () => {
       updatePickPanel(documentRef, state);
     },
@@ -1868,6 +1875,7 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
   });
   try {
     if (typeof preferences.colorMode === "string") renderer.setColorMode(preferences.colorMode);
+    if (typeof preferences.visualTheme === "string") renderer.setVisualTheme?.(preferences.visualTheme);
     if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
     if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
     if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
@@ -2076,6 +2084,7 @@ async function restoreMapFromBrowserStorage(state, documentRef, {startup = false
     const options = normalizeOptions(document.map.options || document.options || state.options);
     document.map.options = options;
     state.options = options;
+    applyPersistedVisualTheme(state, documentRef, document);
     syncGenerationInputs(documentRef, options);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     await loadMapIntoRuntime(state, documentRef, document.map, {
@@ -3139,6 +3148,7 @@ async function importMapData(state, documentRef, file) {
     const options = normalizeOptions(document.map.options || document.options || state.options);
     document.map.options = options;
     state.options = options;
+    applyPersistedVisualTheme(state, documentRef, document);
     syncGenerationInputs(documentRef, options);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     await loadMapIntoRuntime(state, documentRef, document.map, {
@@ -3394,7 +3404,20 @@ function setInputValue(documentRef, id, value) {
 
 function createPersistableMapDocument(state, documentRef) {
   syncClimateOptionsForPersistence(state, documentRef);
-  return createMapDocument(state.map, state.options);
+  const visualTheme = currentVisualThemeId(documentRef);
+  state.map.visualTheme = {version: 1, preset: visualTheme, overrides: {}};
+  state.map.options = {...(state.map.options || state.options), visualTheme};
+  return createMapDocument(state.map, {...state.options, visualTheme});
+}
+
+function applyPersistedVisualTheme(state, documentRef, document) {
+  const visualTheme = normalizeVisualThemeId(document?.map?.visualTheme?.preset || document?.map?.options?.visualTheme || document?.options?.visualTheme);
+  setInputValue(documentRef, "visual-theme-preset", visualTheme);
+  state.renderer?.setVisualTheme?.(visualTheme);
+}
+
+function currentVisualThemeId(documentRef) {
+  return normalizeVisualThemeId(readControlPreferences(documentRef).visualTheme);
 }
 
 function syncClimateOptionsForPersistence(state, documentRef) {

@@ -47,6 +47,7 @@ import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js"
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
+import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
 
 const MARKER_ICON_MIN_SCALE = 2.15;
 const MARKER_ICON_RELAXED_SCALE = 4.4;
@@ -191,7 +192,8 @@ export class PlaceholderMapRenderer {
     this.locateFlash = null;
     this.locateFlashFrame = 0;
     this.colorMode = "height";
-    this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, diplomacySubjectId: null};
+    this.visualTheme = resolveVisualTheme(DEFAULT_VISUAL_THEME_ID);
+    this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, diplomacySubjectId: null, visualTheme: this.visualTheme};
     this.labelOptions = {maxCityLabels: 5000};
     this.unitPreferences = normalizeUnitPreferences();
     this.layerVisibility = {
@@ -239,7 +241,7 @@ export class PlaceholderMapRenderer {
   loadMap(map) {
     const profile = createRendererLoadProfile();
     this.map = map;
-    applyMapStageBackground(this.stage, map);
+    applyMapStageBackground(this.stage, map, this.visualTheme);
     this.objectPickingIndex = profile.stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     profile.stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
     profile.stage("shore-cache", "构建水陆线缓存", () => this.rebuildShoreVisualCache());
@@ -306,7 +308,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
-    applyMapStageBackground(this.stage, map);
+    applyMapStageBackground(this.stage, map, this.visualTheme);
     this.objectPickingIndex = await stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     await stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
     await stage("shore-cache", "构建水陆线缓存", () => this.rebuildShoreVisualCache());
@@ -392,6 +394,17 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     this.refreshCellSurface({draw: false});
     if (shouldRefreshLineLayers) this.refreshLineLayers({draw: false});
+    this.draw();
+  }
+
+  setVisualTheme(themeId) {
+    const theme = resolveVisualTheme(themeId);
+    if (this.visualTheme.id === theme.id) return;
+    this.visualTheme = theme;
+    this.viewOptions = {...this.viewOptions, visualTheme: theme};
+    if (this.map) applyMapStageBackground(this.stage, this.map, theme);
+    if (!this.map) return;
+    this.refreshCellSurface({draw: false});
     this.draw();
   }
 
@@ -587,7 +600,7 @@ export class PlaceholderMapRenderer {
 
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(...this.map.layers.background);
+    gl.clearColor(...(this.visualTheme?.canvas?.background || this.map.layers.background));
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
     gl.uniform1i(this.locations.pointMode, 0);
@@ -1576,9 +1589,10 @@ function buildUndevelopedPickResult(map, world, reason, candidates = 0) {
   };
 }
 
-function applyMapStageBackground(stage, map) {
-  if (!stage || !map?.layers?.background) return;
-  stage.style.backgroundColor = rgbaCss(map.layers.background);
+function applyMapStageBackground(stage, map, theme) {
+  const background = theme?.canvas?.background || map?.layers?.background;
+  if (!stage || !background) return;
+  stage.style.backgroundColor = rgbaCss(background);
 }
 
 function rgbaCss(color) {

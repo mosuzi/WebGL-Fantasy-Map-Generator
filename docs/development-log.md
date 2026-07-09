@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：视觉主题预设基础第一刀
+
+本步启动“视觉主题与样式预设第一阶段”，先建立 WebGL 版自己的轻量主题 token 和只读主题选择，不兼容原版 SVG selector 样式系统。
+
+修正：
+
+- 新增 `app/webgl-generator/src/renderer/themes.js`，提供默认、古地图、浅色图册、暗海、单色、夜间六个只读主题。
+- 控制面板“视图”页新增“视觉主题”下拉，并把选择写入全局控制偏好。
+- renderer 新增 `setVisualTheme()`；主题会影响 WebGL clear 背景、地图 stage 背景、水色和高度色带，并触发 surface 刷新。
+- 完整地图 JSON 保存 `map.visualTheme.preset`、`map.options.visualTheme` 和 `options.visualTheme`；导入本地文件或浏览器存档时会恢复主题。
+
+边界：
+
+- 本步不做主题编辑器、用户主题导入导出或原版 `public/styles/*.json` 兼容。
+- 边界、道路、标签、比例尺和图例 token 尚未接入；后续需继续推进。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\color-modes.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel.js`、`node --check app\webgl-generator\src\ui\vue\stores\global-config-store.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：切换到 `night` 后，renderer 主题、选择框、偏好、stage 背景和主题 token 同步变化，checksum 保持不变，`glError = 0`，非 health console/page error 为 `0`。
+- 主题持久化烟测通过：导出 `docs/generated/smoke/visual-theme-night-map.webgl-map.json` 后文件中 `map.visualTheme.preset`、`map.options.visualTheme`、`options.visualTheme` 均为 `night`；切回默认再导入该文件后恢复 `night`，checksum 保持 `218187a0`，`glError = 0`，非 health console/page error 为 `0`。
+
 ## 2026-07-09：政治面 dissolve 导出 UI 开关第一刀
 
 本步把已验证的政治面 dissolve 内部选项接入要素 GeoJSON 导出浮层，用户可以按需输出真正合并外轮廓。
