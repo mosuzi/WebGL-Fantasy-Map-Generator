@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：控制台 marker 新增 API 第一刀
+
+本步继续控制台 / 扩展 API 系统阶段 4，补齐资源标记新增 API。
+
+修正：
+
+- app action 增加 `edit.markers.add({type, packCell, name})`。
+- `api.edit.markers.add()` 复用 `createAddMarkerCommand()` 和 marker collection API 执行 helper。
+- 新增成功后 API 返回 `createdMarker` 快照，并选中新建 marker，方便脚本继续定位或编辑。
+- `api.info.capabilities()` 的 `edit` 方法列表补充 `markers.add`。
+
+边界：
+
+- 本步不接屏幕坐标拾取、图标编辑、备注编辑或资源重生成。
+- API 新增 marker 会改变标记集合和经济资源派生，但不重算地图 checksum；这与当前 marker 面板新增路径一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`api.info.capabilities()` 包含 `markers.add`；`edit.markers.add({type:"mines", packCell:0, name:"API 新增标记"})` 新增 marker `#44`、数量 `44 -> 45`、selection 指向新 marker、派生过期包含 `military / diplomacy`；撤销后数量回到 `44` 且新 marker 不存在，重做恢复同一 marker；metadata 为 `45`，checksum 保持 `dbffbd09`，校验值 `37be900b`。
+
 ## 2026-07-09：控制台 marker 删除 / 移动 API 第一刀
 
 本步继续控制台 / 扩展 API 系统阶段 4，把资源标记删除和移动接入 API。

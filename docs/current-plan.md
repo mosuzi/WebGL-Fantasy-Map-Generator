@@ -80,7 +80,7 @@
    - 要做什么：考虑把所有不依赖 UI 的操作收束为统一 API 系统，挂到可在控制台调用的入口上，例如 `api.climate.setLatitude(...)`、`api.data.exportAll()`、`api.data.exportGEO()` 等；后续还应覆盖生成、导入导出、气候、单位、图层、对象选择 / 定位、编辑命令、名称库、测量、备注和派生重建等非 UI 能力。
    - 为什么做：API 化能方便后续接入 AI、脚本化操作、开发扩展、自动化测试和批量处理；同时把功能收束成 API 也是对现有 runtime 能力、数据边界、命令副作用和权限语义的间接梳理。
    - 执行方式：本轮只写入计划，不立即实现；真正开始时必须先出详细方案，明确 API 命名空间、同步 / 异步返回、错误格式、撤销语义、权限边界、与 UI store 的关系、浏览器控制台暴露方式、测试策略和稳定性承诺。
-   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一批：`data.exportAll()`、`data.exportCompressedAll()`、`data.exportGEO()`、`data.exportFeatureGEO()` 和 `data.exportPNG()` 支持脚本调用，其中 PNG / 压缩 JSON API 返回 Promise，可返回 data URL / gzip base64 或触发浏览器下载。阶段 3 已完成图层控制、单位偏好和气候只读第一批：`layers.setViewMode()`、`layers.setVisible()`、`units.get()`、`units.apply()` 和 `climate.get()` 均已接入；写偏好的 API 不改变地图 checksum。阶段 4 已完成编辑 API 第一批：`history.get()` / `undo()` / `redo()`、`edit.notes.delete()`、`edit.measurements.rename()`、`edit.measurements.delete()`、`edit.routes.delete()`、`edit.labels.delete/restore()` 和 `edit.markers.delete/move()` 已接统一命令系统。
+   - 进展记录：已新增 `docs/task-notes/console-extension-api-system-plan.md`，完成详细方案第一版，明确 `api.info / generate / climate / units / layers / selection / edit / history / data / namebases / debug` 命名空间、统一 `ApiResult`、能力元数据、副作用边界、UI 关系和 0-5 阶段实施路径。阶段 1 已完成第一刀：新增 `window.webglGeneratorApi` 和开发别名 `window.api`，接入 `info.capabilities()`、`info.mapSummary()`、`info.runtimeStats()`、`selection.get()` 和 `layers.get()` 只读快照。阶段 2 已完成导出 API 第一批：`data.exportAll()`、`data.exportCompressedAll()`、`data.exportGEO()`、`data.exportFeatureGEO()` 和 `data.exportPNG()` 支持脚本调用，其中 PNG / 压缩 JSON API 返回 Promise，可返回 data URL / gzip base64 或触发浏览器下载。阶段 3 已完成图层控制、单位偏好和气候只读第一批：`layers.setViewMode()`、`layers.setVisible()`、`units.get()`、`units.apply()` 和 `climate.get()` 均已接入；写偏好的 API 不改变地图 checksum。阶段 4 已完成编辑 API 第一批：`history.get()` / `undo()` / `redo()`、`edit.notes.delete()`、`edit.measurements.rename()`、`edit.measurements.delete()`、`edit.routes.delete()`、`edit.labels.delete/restore()` 和 `edit.markers.add/delete/move()` 已接统一命令系统。
 
 ### 验证要求
 
@@ -500,6 +500,11 @@
    - 边界：本步只接 `edit.markers.delete(markerId)` 和 `edit.markers.move(markerId, packCell)`；不接新增 marker、图标编辑、备注编辑、资源重生成或屏幕坐标拾取。
    - 完成记录：app action 复用 `createDeleteMarkerCommand()`、`createMoveMarkerCommand()`，并在 API 执行后标记 markers / economy 为 fresh、military / diplomacy 为 stale，刷新 summary、marker / economy / state / province / runtime 面板。`api.info.capabilities()` 已声明 `edit.markers.delete/move`。
 
+80. 控制台 marker 新增 API 第一刀。`已完成`
+   - 目标：补齐 marker 新增 API，让脚本可以指定 type、pack cell 和可选名称创建资源标记。
+   - 边界：本步只接 `edit.markers.add({type, packCell, name})`；不接屏幕坐标拾取、图标编辑、备注编辑或资源重生成。
+   - 完成记录：app action 复用 `createAddMarkerCommand()` 和 marker collection API 执行 helper；新增成功后返回 `createdMarker` 快照，并选中新建 marker。`api.info.capabilities()` 已声明 `edit.markers.add`。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -569,6 +574,7 @@
 - 控制台路线删除 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测对真实路线 `#0` 调用 `edit.routes.delete(0)` 后路线数和 metadata `589 -> 588`，`history.undo()` 恢复为 `589`，`history.redo()` 再次删除为 `588`，最终 history 为 `undo=1 / redo=0 / lastLabel=重做 删除路线 #0 #0`，状态显示“已删除路线 #0。”，调用前后 checksum 保持 `8fe1d6f8`，`glError = 0`，health / console / page error 均为 `0`。
 - 控制台标签编辑 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `api.info.capabilities()` 包含 `labels.delete/restore`，注入手工标签 `900001` 后 `edit.labels.delete({targetKind:"custom", targetId:900001})` 可删除、`history.undo()` 恢复、`history.redo()` 再删；对真实城市标签 `#1` 预置 hidden 后 `edit.labels.restore({targetKind:"city", targetId:1})` 可恢复，`history.undo()` 可重新隐藏，校验值 `63ee1433`。
 - 控制台 marker 删除 / 移动 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `api.info.capabilities()` 包含 `markers.delete/move`；真实标记 `#0` 从 pack cell `1068` 移动到 `0` 后可撤销恢复，派生过期包含 `military / diplomacy`；真实标记 `#43` 删除后数量 `44 -> 43`、metadata `43`，撤销恢复为 `44`，重做再次删除为 `43`，checksum 保持 `003593d4`，校验值 `2d18884b`。
+- 控制台 marker 新增 API 第一刀已完成：`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\runtime\console-api.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认 `api.info.capabilities()` 包含 `markers.add`；`edit.markers.add({type:"mines", packCell:0, name:"API 新增标记"})` 新增 marker `#44`、数量 `44 -> 45`、selection 指向新 marker、派生过期包含 `military / diplomacy`，撤销后数量回到 `44` 且新 marker 不存在，重做恢复同一 marker，metadata `45`，checksum 保持 `dbffbd09`，校验值 `37be900b`。
 - Playwright + 系统 Chrome 浏览器烟测通过：河流面板打开状态保存为 `open: true` 后刷新会恢复；关闭后保存为 `open: false`，再次刷新不恢复；河流筛选词 `river-smoke` 和排序 `ID ↑` 跨刷新恢复；对象详情面板即使本地状态被写入 `open: true` 也不会自动恢复；`glError = 0`。
 - 路线、湖泊和地区面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。
 - 国家、省份和城市面板列表偏好接入后已完成 `node --check`，综合构建和浏览器烟测待后续再累积几步后统一执行。

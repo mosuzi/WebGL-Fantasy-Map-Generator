@@ -1972,6 +1972,7 @@ function createConsoleApiActions(state, documentRef) {
         restore: label => restoreGeneratedLabelViaApi(state, documentRef, label)
       },
       markers: {
+        add: options => addMarkerViaApi(state, documentRef, options),
         delete: markerId => deleteMarkerViaApi(state, documentRef, markerId),
         move: (markerId, packCell) => moveMarkerViaApi(state, documentRef, markerId, packCell)
       }
@@ -3950,6 +3951,22 @@ function formatApiLabelTarget(target) {
   return `${target.targetKind} #${target.id}`;
 }
 
+function addMarkerViaApi(state, documentRef, options = {}) {
+  const targetPackCell = normalizeApiInteger(options?.packCell, "pack cell");
+  const command = createAddMarkerCommand({
+    type: options?.type,
+    packCell: targetPackCell,
+    name: options?.name
+  });
+  const result = executeMarkerCollectionApiCommand(state, documentRef, command, {
+    noopStatus: "目标 pack cell 无效，无法新增标记。",
+    status: `已新增标记到 pack cell ${targetPackCell}。`,
+    includeCreatedMarker: true,
+    selectCreated: true
+  });
+  return editApiResult(state, result);
+}
+
 function deleteMarkerViaApi(state, documentRef, markerId) {
   const id = normalizeApiInteger(markerId, "标记 ID");
   const command = createDeleteMarkerCommand(id);
@@ -3986,9 +4003,11 @@ function executeMarkerCollectionApiCommand(state, documentRef, command, options 
     markDerivedStale(state.map, ["military", "diplomacy"]);
     refreshGenerationSummary(state.map);
     refreshAfterEdit(state, executedCommand);
-    if (Number.isInteger(options.selectMarkerId) && state.map.markers?.markers?.[options.selectMarkerId]) {
-      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: options.selectMarkerId}});
-      state.panels.marker?.setSelectedMarkerId(options.selectMarkerId);
+    const createdMarker = options.selectCreated ? command.getCreatedMarker?.() : null;
+    const markerId = Number.isInteger(options.selectMarkerId) ? options.selectMarkerId : createdMarker?.id;
+    if (Number.isInteger(markerId) && state.map.markers?.markers?.[markerId]) {
+      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
+      state.panels.marker?.setSelectedMarkerId(markerId);
     }
     updateMarkerPanel(state);
     updateEconomyPanel(state);
@@ -3997,7 +4016,10 @@ function executeMarkerCollectionApiCommand(state, documentRef, command, options 
     updateRuntimePanel(documentRef, state);
     updateEditingInteractionLock(state, documentRef);
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
-    return {executed: true, command: executedCommand, result: readEditCommandResult(executedCommand), error: null};
+    const result = options.includeCreatedMarker && createdMarker
+      ? {createdMarker}
+      : readEditCommandResult(executedCommand);
+    return {executed: true, command: executedCommand, result, error: null};
   } catch (error) {
     return {executed: false, command, result: null, error};
   }

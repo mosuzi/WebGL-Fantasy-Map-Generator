@@ -453,13 +453,13 @@ api.edit.measurement.delete(id)
 - `api.edit.measurements.rename(id, name)` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - `api.edit.routes.delete(routeId)` 已接入路线删除 edit command。
 - `api.edit.labels.delete(label)` 和 `api.edit.labels.restore(label)` 已接入标签 edit commands，覆盖手工标签删除和生成标签恢复。
-- `api.edit.markers.delete(markerId)` 和 `api.edit.markers.move(markerId, packCell)` 已接入 marker collection edit commands。
+- `api.edit.markers.add({type, packCell, name})`、`api.edit.markers.delete(markerId)` 和 `api.edit.markers.move(markerId, packCell)` 已接入 marker collection edit commands。
 - 浏览器烟测已覆盖备注删除、撤销和重做。
 - 浏览器烟测已覆盖测量对象重命名、删除、撤销删除和重做删除。
 - 浏览器烟测已覆盖路线删除、撤销和重做。
 - 浏览器烟测已覆盖手工标签删除、撤销 / 重做，以及生成城市标签恢复 / 撤销。
 - 浏览器烟测已覆盖 marker 移动 / 撤销移动，以及 marker 删除 / 撤销 / 重做。
-- marker 新增 API 尚未接入。
+- 浏览器烟测已覆盖 marker 新增 / 撤销 / 重做和新建对象 selection。
 
 ### 阶段 5：生成、导入和批量能力
 
@@ -490,7 +490,7 @@ api.edit.measurement.delete(id)
 
 阶段 2 第一刀已完成。下一步建议继续阶段 4：
 
-1. 接 marker `add` API；需要明确 type、pack cell、默认命名、资源类型和选中新建对象语义。
-2. 继续对象编辑 API，优先选择已有命令且副作用清晰的国家 / 省份 / 城市新增删除。
+1. 继续对象编辑 API，优先选择已有命令且副作用清晰的国家 / 省份 / 城市新增删除。
+2. 进入选择 / 定位 API，接 `selection.select()`、`selection.locate()` 和结构化对象 resolve。
 
 无论选择哪条路线，仍应优先保证返回格式结构化、错误可诊断、checksum 边界清晰，并用浏览器烟测覆盖。
