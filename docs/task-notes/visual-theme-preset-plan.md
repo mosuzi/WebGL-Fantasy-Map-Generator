@@ -77,12 +77,12 @@
 - renderer 已接入主题背景、水色和高度色带；切换主题只刷新渲染 surface，不改变生成数据和 checksum。
 - renderer 已接入海岸线、湖岸线、国界、省界和三档道路颜色 token；切换主题会刷新线层和道路动态 buffer。
 - DOM overlay 已接入城市标签、国家标签、手工标签和比例尺 token；renderer 会把主题颜色写入 `.map-stage` CSS 变量，样式和 PNG overlay 合成继续读取 computed style。
+- 地图图例已接入背景、边框、标题、刻度、条目文字和 swatch 边框 token；温度 / 降水渐变条与政体 / 外交 swatch 仍保持语义色。
 - 完整地图 JSON 会保存 `map.visualTheme.preset`、`map.options.visualTheme` 和 `options.visualTheme`；重新导入后会恢复主题选择。
-- 构建产物浏览器烟测确认切换 `night` 后 stage 背景、renderer token、线层 token、标签 / 比例尺 token 和偏好同步变化，导出 / 导入地图 JSON 后仍恢复 `night`，渲染数据签名不变，`glError = 0`。
+- 构建产物浏览器烟测确认切换 `night` 后 stage 背景、renderer token、线层 token、标签 / 比例尺 token、图例 token 和偏好同步变化，导出 / 导入地图 JSON 后仍恢复 `night`，渲染数据签名不变，`glError = 0`。
 
 仍待继续：
 
-- 图例 token 尚未接入。
 - PNG 导出需要补主题下 overlay 文本 / 比例尺颜色的文件级像素或 computed-style 回归验证。
 
 ### 阶段 2：主题导入导出

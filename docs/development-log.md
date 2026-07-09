@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：视觉主题图例 token 第一刀
+
+本步继续推进视觉主题第一阶段，把地图图例面板接入主题 token。
+
+修正：
+
+- 六个内置主题新增 `legend` token，覆盖图例背景、边框、主文字、弱文字和 swatch 边框。
+- `placeholder-renderer.js` 把 `legend` token 写入 `.map-stage` 上的 `--theme-legend-*` CSS 变量。
+- `.map-legend`、`.legend-title`、`.legend-ticks`、`.legend-swatch-item` 和 swatch 边框改为读取主题变量。
+
+边界：
+
+- 温度 / 降水渐变条保持数值语义色，不随主题改色。
+- 政体 / 外交 swatch 保持对象语义色，只改 swatch 边框和图例容器文字。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：切换到 `night` 并切到温度视图后，图例可见，背景为 `rgba(3, 8, 13, 0.84)`、标题为 `rgb(214, 235, 235)`、刻度为 `rgba(194, 219, 224, 0.88)`，`glError = 0`，非 health console/page error 为 `0`。
+
 ## 2026-07-09：视觉主题标签和比例尺 token 第一刀
 
 本步继续推进视觉主题第一阶段，把主题 token 从 WebGL 线层接到 DOM overlay 的主要文字与比例尺样式。

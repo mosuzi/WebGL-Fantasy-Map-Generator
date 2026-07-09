@@ -28,6 +28,13 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       background: [0.05, 0.07, 0.09, 0.74],
       border: [0.82, 0.87, 0.88, 0.24]
     },
+    legend: {
+      text: [0.88, 0.93, 0.95, 1],
+      muted: [0.88, 0.93, 0.95, 0.88],
+      background: [0.05, 0.07, 0.09, 0.78],
+      border: [0.82, 0.87, 0.88, 0.24],
+      swatchBorder: [1, 1, 1, 0.28]
+    },
     terrain: {
       heightRamp: [
         [20, [0.5, 0.63, 0.46, 1]],
@@ -68,6 +75,13 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       background: [0.86, 0.76, 0.52, 0.72],
       border: [0.36, 0.22, 0.08, 0.24]
     },
+    legend: {
+      text: [0.26, 0.15, 0.07, 1],
+      muted: [0.28, 0.17, 0.08, 0.88],
+      background: [0.84, 0.73, 0.48, 0.76],
+      border: [0.36, 0.22, 0.08, 0.26],
+      swatchBorder: [0.34, 0.2, 0.08, 0.34]
+    },
     terrain: {
       heightRamp: [
         [20, [0.64, 0.59, 0.39, 1]],
@@ -106,6 +120,13 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       text: [0.18, 0.25, 0.29, 0.94],
       background: [0.93, 0.97, 0.94, 0.72],
       border: [0.26, 0.36, 0.4, 0.24]
+    },
+    legend: {
+      text: [0.15, 0.23, 0.27, 1],
+      muted: [0.18, 0.25, 0.29, 0.88],
+      background: [0.93, 0.97, 0.94, 0.76],
+      border: [0.26, 0.36, 0.4, 0.24],
+      swatchBorder: [0.25, 0.36, 0.4, 0.3]
     },
     terrain: {
       heightRamp: [
@@ -146,6 +167,13 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       background: [0.02, 0.05, 0.07, 0.78],
       border: [0.68, 0.8, 0.82, 0.24]
     },
+    legend: {
+      text: [0.84, 0.92, 0.92, 1],
+      muted: [0.78, 0.88, 0.88, 0.88],
+      background: [0.02, 0.05, 0.07, 0.8],
+      border: [0.68, 0.8, 0.82, 0.24],
+      swatchBorder: [0.9, 0.95, 0.9, 0.28]
+    },
     terrain: {
       heightRamp: [
         [20, [0.4, 0.54, 0.36, 1]],
@@ -185,6 +213,13 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       background: [0.88, 0.88, 0.82, 0.72],
       border: [0.25, 0.26, 0.25, 0.24]
     },
+    legend: {
+      text: [0.14, 0.15, 0.14, 1],
+      muted: [0.16, 0.17, 0.16, 0.88],
+      background: [0.88, 0.88, 0.82, 0.76],
+      border: [0.25, 0.26, 0.25, 0.24],
+      swatchBorder: [0.22, 0.23, 0.22, 0.32]
+    },
     terrain: {
       heightRamp: [
         [20, [0.58, 0.61, 0.57, 1]],
@@ -223,6 +258,13 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       text: [0.84, 0.92, 0.92, 0.94],
       background: [0.01, 0.03, 0.05, 0.82],
       border: [0.56, 0.72, 0.78, 0.28]
+    },
+    legend: {
+      text: [0.84, 0.92, 0.92, 1],
+      muted: [0.76, 0.86, 0.88, 0.88],
+      background: [0.01, 0.03, 0.05, 0.84],
+      border: [0.56, 0.72, 0.78, 0.28],
+      swatchBorder: [0.9, 0.95, 0.9, 0.3]
     },
     terrain: {
       heightRamp: [

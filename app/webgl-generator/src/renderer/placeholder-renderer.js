@@ -1600,7 +1600,13 @@ function applyMapStageBackground(stage, map, theme) {
 
 function applyVisualThemeCssVariables(stage, theme) {
   const labels = theme?.labels || {};
+  const legend = theme?.legend || {};
   const scaleBar = theme?.scaleBar || {};
+  setThemeCssColor(stage, "--theme-legend-bg", legend.background);
+  setThemeCssColor(stage, "--theme-legend-border", legend.border);
+  setThemeCssColor(stage, "--theme-legend-text", legend.text);
+  setThemeCssColor(stage, "--theme-legend-muted", legend.muted);
+  setThemeCssColor(stage, "--theme-legend-swatch-border", legend.swatchBorder);
   setThemeCssColor(stage, "--theme-scale-bg", scaleBar.background);
   setThemeCssColor(stage, "--theme-scale-border", scaleBar.border);
   setThemeCssColor(stage, "--theme-scale-line", scaleBar.foreground);

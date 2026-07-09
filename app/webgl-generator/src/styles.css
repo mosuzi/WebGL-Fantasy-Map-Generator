@@ -796,11 +796,11 @@ select:disabled {
   bottom: 76px;
   width: min(240px, calc(100% - 36px));
   padding: 10px 12px;
-  border: 1px solid rgba(208, 221, 225, 0.24);
+  border: 1px solid var(--theme-legend-border, rgba(208, 221, 225, 0.24));
   border-radius: 8px;
-  background: rgba(12, 18, 22, 0.78);
+  background: var(--theme-legend-bg, rgba(12, 18, 22, 0.78));
   box-shadow: 0 12px 34px rgba(2, 6, 23, 0.28);
-  color: #dfe9ed;
+  color: var(--theme-legend-text, #dfe9ed);
   pointer-events: none;
 }
 
@@ -1059,6 +1059,7 @@ select:disabled {
 
 .legend-title {
   margin-bottom: 8px;
+  color: var(--theme-legend-text, #dfe9ed);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1082,7 +1083,7 @@ select:disabled {
   gap: 8px;
   margin-top: 7px;
   font-size: 11px;
-  color: rgba(223, 233, 237, 0.88);
+  color: var(--theme-legend-muted, rgba(223, 233, 237, 0.88));
 }
 
 .legend-list {
@@ -1096,14 +1097,14 @@ select:disabled {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  color: #cbd7dc;
+  color: var(--theme-legend-muted, #cbd7dc);
   font-size: 11px;
 }
 
 .legend-swatch-item i {
   width: 12px;
   height: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid var(--theme-legend-swatch-border, rgba(255, 255, 255, 0.28));
   border-radius: 3px;
   flex: 0 0 auto;
 }
