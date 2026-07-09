@@ -1104,8 +1104,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       militaryPanel.setSelectedRegimentId(object.id);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      militaryPanel.setSelectedRegimentId(object.id);
+      locateAndSelectObject("military-panel", object, {
+        afterSelect: target => militaryPanel.setSelectedRegimentId(target.id)
+      });
     },
     onRatiosApply: (stateId, ratios) => {
       const command = createSetMilitaryRatiosCommand(stateId, ratios);
@@ -1668,8 +1669,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectFromPanel("zone-panel", object);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      zonePanel.setSelection({object});
+      locateAndSelectObject("zone-panel", object, {
+        afterSelect: target => zonePanel.setSelection({object: target})
+      });
     },
     onStyleChange: (zoneId, patch) => {
       const context = {map: state.map};
