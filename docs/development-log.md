@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：备注删除接入编辑 helper 和面板刷新调度
+
+本步继续推进编辑器基础设施清单中的低风险调用点迁移，并补上 `refreshPanelsForEdit()` 对全对象面板刷新的第一层支持。
+
+修正：
+
+- 备注面板删除回调改走 `executeEditCommand()`，不再手写 `isNoop -> EditHistory.execute -> refreshAfterEdit`。
+- `refreshPanelsForEdit()` 在命令声明 `derived: ["object-panels"]` 时统一调用 `updateAllObjectPanels()`，保留备注删除对对象面板的刷新语义。
+- 修正 `NotesPanel.vue` 动作条脚本中未定义的 `callbacks` 引用，改为 `props.callbacks`，确保定位、删除和导出动作能触发真实回调。
+
+边界：
+
+- 本步只迁移备注删除，不改变备注创建、正文编辑、导出摘要或撤销 / 重做路径。
+- 本步不批量迁移其它面板的删除或重命名调用点。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：注入 `烟测备注` 后点击真实“删除选中备注”按钮，备注数和 metadata `1 -> 0`，摘要刷新为 `备注0`，状态显示“已删除备注 烟测备注。”，撤销栈 `undo=1`，`glError = 0`，health / console / page error 均为 `0`。
+
 ## 2026-07-09：`executeEditCommand()` 返回结果第一刀
 
 本步继续推进编辑器基础设施清单中的统一命令执行入口，让调用点可以从 helper 读取命令执行后的标准结果。

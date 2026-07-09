@@ -204,13 +204,13 @@ function formatDateTime(value) {
 }
 
 function handleNotesExport(key) {
-  if (key === "notes") callbacks.onExport?.(visibleRows.value);
+  if (key === "notes") props.callbacks.onExport?.(visibleRows.value);
 }
 
 function handleNotesAction(key) {
   if (!selected.value) return;
-  if (key === "locate" && !selected.value.orphan) callbacks.onLocate?.(selected.value);
-  if (key === "delete") callbacks.onDelete?.(selected.value);
+  if (key === "locate" && !selected.value.orphan) props.callbacks.onLocate?.(selected.value);
+  if (key === "delete") props.callbacks.onDelete?.(selected.value);
 }
 
 function formatNumber(value) {

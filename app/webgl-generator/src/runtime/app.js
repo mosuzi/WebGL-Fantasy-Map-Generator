@@ -1468,10 +1468,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onDelete: row => {
       if (!row?.id) return;
       const command = createDeleteNoteCommand(row.id, {name: row.name});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-      }
-      updateAllObjectPanels(state);
+      const result = executeEditCommand(state, documentRef, command, {
+        noopStatus: "备注不存在或已被删除。",
+        status: `已删除备注 ${row.name || row.id}。`
+      });
+      if (result.executed) refreshPanelsForEdit(state, result.command);
       updateEditingInteractionLock(state, documentRef);
     },
     onExport: rows => exportNotesSummary(state, documentRef, rows),
@@ -3784,7 +3785,7 @@ function refreshPanelsForEdit(state, commandOrEffects) {
   const affected = Array.isArray(effects.affected) ? effects.affected : [];
   const kinds = new Set(affected.map(item => item?.kind).filter(Boolean));
   const derived = Array.isArray(effects.derived) ? effects.derived : [];
-  if (!kinds.size && derived.includes("object-panels")) {
+  if (derived.includes("object-panels")) {
     updateAllObjectPanels(state);
     return;
   }
