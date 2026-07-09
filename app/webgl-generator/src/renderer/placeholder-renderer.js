@@ -1593,8 +1593,32 @@ function buildUndevelopedPickResult(map, world, reason, candidates = 0) {
 
 function applyMapStageBackground(stage, map, theme) {
   const background = theme?.canvas?.background || map?.layers?.background;
-  if (!stage || !background) return;
-  stage.style.backgroundColor = rgbaCss(background);
+  if (!stage) return;
+  if (background) stage.style.backgroundColor = rgbaCss(background);
+  applyVisualThemeCssVariables(stage, theme);
+}
+
+function applyVisualThemeCssVariables(stage, theme) {
+  const labels = theme?.labels || {};
+  const scaleBar = theme?.scaleBar || {};
+  setThemeCssColor(stage, "--theme-scale-bg", scaleBar.background);
+  setThemeCssColor(stage, "--theme-scale-border", scaleBar.border);
+  setThemeCssColor(stage, "--theme-scale-line", scaleBar.foreground);
+  setThemeCssColor(stage, "--theme-scale-text", scaleBar.text);
+  setThemeCssColor(stage, "--theme-city-label", labels.city);
+  setThemeCssColor(stage, "--theme-city-label-halo", labels.cityHalo);
+  setThemeCssColor(stage, "--theme-city-label-halo-soft", labels.cityHalo);
+  setThemeCssColor(stage, "--theme-state-label", labels.state);
+  setThemeCssColor(stage, "--theme-state-label-shadow", labels.stateShadow);
+  setThemeCssColor(stage, "--theme-state-label-glow", labels.stateShadow);
+  setThemeCssColor(stage, "--theme-custom-label", labels.custom);
+  setThemeCssColor(stage, "--theme-custom-label-bg", labels.customBackground);
+  setThemeCssColor(stage, "--theme-custom-label-border", labels.customBorder);
+}
+
+function setThemeCssColor(stage, property, color) {
+  if (Array.isArray(color)) stage.style.setProperty(property, rgbaCss(color));
+  else stage.style.removeProperty(property);
 }
 
 function rgbaCss(color) {

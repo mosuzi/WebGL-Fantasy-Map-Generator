@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-09：视觉主题标签和比例尺 token 第一刀
+
+本步继续推进视觉主题第一阶段，把主题 token 从 WebGL 线层接到 DOM overlay 的主要文字与比例尺样式。
+
+修正：
+
+- 六个内置主题新增 `labels` 和 `scaleBar` token，覆盖城市标签、国家标签、手工标签、比例尺文字、比例尺线、比例尺背景和边框。
+- `placeholder-renderer.js` 在应用地图背景时同步把主题 token 写入 `.map-stage` CSS 变量。
+- `styles.css` 中比例尺、城市标签、国家标签和手工标签改为读取主题 CSS 变量，并保留原有 fallback。
+- 切换主题时沿用既有 `setVisualTheme()` 路径实时刷新 DOM overlay 变量；PNG overlay 合成仍可通过 computed style 读取当前颜色。
+
+边界：
+
+- 本步不改图例、城市 / marker / 军事图标配色。
+- 本步不做主题编辑器、PNG 透明背景或图例 token。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：切换到 `night` 后，`.map-stage` 写入比例尺、城市标签、国家标签和手工标签主题变量；比例尺背景为 `rgba(3, 8, 13, 0.82)`、比例尺线为 `rgb(209, 230, 230)`，城市标签为 `rgb(219, 230, 194)`，国家标签为 `rgba(242, 199, 115, 0.94)`；渲染数据签名保持不变，`glError = 0`，非 health console/page error 为 `0`。
+
 ## 2026-07-09：视觉主题线层 token 第一刀
 
 本步继续推进视觉主题第一阶段，把主题 token 从背景 / 水色 / 高度色带扩展到主要线层。

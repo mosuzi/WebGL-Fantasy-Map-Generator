@@ -13,6 +13,21 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routeSecondary: [0.5, 0.43, 0.33, 0.8],
       routeMinor: [0.43, 0.38, 0.31, 0.64]
     },
+    labels: {
+      city: [0.06, 0.08, 0.07, 1],
+      cityHalo: [0.96, 0.94, 0.85, 0.72],
+      state: [1, 0.91, 0.68, 0.92],
+      stateShadow: [0.02, 0.03, 0.04, 0.82],
+      custom: [0.97, 0.91, 0.73, 1],
+      customBackground: [0.08, 0.11, 0.11, 0.74],
+      customBorder: [0.93, 0.84, 0.57, 0.34]
+    },
+    scaleBar: {
+      foreground: [0.93, 0.96, 0.96, 1],
+      text: [0.95, 0.97, 0.98, 0.94],
+      background: [0.05, 0.07, 0.09, 0.74],
+      border: [0.82, 0.87, 0.88, 0.24]
+    },
     terrain: {
       heightRamp: [
         [20, [0.5, 0.63, 0.46, 1]],
@@ -38,6 +53,21 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routeSecondary: [0.42, 0.29, 0.18, 0.78],
       routeMinor: [0.36, 0.28, 0.2, 0.62]
     },
+    labels: {
+      city: [0.17, 0.11, 0.06, 1],
+      cityHalo: [0.87, 0.78, 0.56, 0.72],
+      state: [0.37, 0.22, 0.08, 0.92],
+      stateShadow: [0.96, 0.86, 0.58, 0.52],
+      custom: [0.36, 0.21, 0.08, 1],
+      customBackground: [0.84, 0.73, 0.48, 0.72],
+      customBorder: [0.36, 0.21, 0.08, 0.36]
+    },
+    scaleBar: {
+      foreground: [0.31, 0.2, 0.1, 1],
+      text: [0.28, 0.17, 0.08, 0.94],
+      background: [0.86, 0.76, 0.52, 0.72],
+      border: [0.36, 0.22, 0.08, 0.24]
+    },
     terrain: {
       heightRamp: [
         [20, [0.64, 0.59, 0.39, 1]],
@@ -61,6 +91,21 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routePrimary: [0.56, 0.43, 0.25, 0.84],
       routeSecondary: [0.52, 0.42, 0.3, 0.72],
       routeMinor: [0.45, 0.38, 0.3, 0.56]
+    },
+    labels: {
+      city: [0.08, 0.13, 0.15, 1],
+      cityHalo: [0.96, 0.98, 0.92, 0.72],
+      state: [0.2, 0.28, 0.34, 0.92],
+      stateShadow: [0.94, 0.97, 0.9, 0.56],
+      custom: [0.08, 0.13, 0.15, 1],
+      customBackground: [0.92, 0.96, 0.9, 0.72],
+      customBorder: [0.35, 0.45, 0.42, 0.28]
+    },
+    scaleBar: {
+      foreground: [0.18, 0.27, 0.31, 1],
+      text: [0.18, 0.25, 0.29, 0.94],
+      background: [0.93, 0.97, 0.94, 0.72],
+      border: [0.26, 0.36, 0.4, 0.24]
     },
     terrain: {
       heightRamp: [
@@ -86,6 +131,21 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routeSecondary: [0.66, 0.56, 0.38, 0.76],
       routeMinor: [0.55, 0.48, 0.36, 0.58]
     },
+    labels: {
+      city: [0.89, 0.89, 0.72, 1],
+      cityHalo: [0.03, 0.06, 0.08, 0.72],
+      state: [0.94, 0.78, 0.45, 0.92],
+      stateShadow: [0.01, 0.02, 0.03, 0.84],
+      custom: [0.95, 0.85, 0.56, 1],
+      customBackground: [0.04, 0.09, 0.12, 0.78],
+      customBorder: [0.74, 0.62, 0.38, 0.34]
+    },
+    scaleBar: {
+      foreground: [0.84, 0.92, 0.92, 1],
+      text: [0.84, 0.92, 0.92, 0.94],
+      background: [0.02, 0.05, 0.07, 0.78],
+      border: [0.68, 0.8, 0.82, 0.24]
+    },
     terrain: {
       heightRamp: [
         [20, [0.4, 0.54, 0.36, 1]],
@@ -110,6 +170,21 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routeSecondary: [0.4, 0.39, 0.36, 0.68],
       routeMinor: [0.45, 0.43, 0.4, 0.52]
     },
+    labels: {
+      city: [0.12, 0.13, 0.12, 1],
+      cityHalo: [0.9, 0.9, 0.86, 0.7],
+      state: [0.16, 0.16, 0.15, 0.9],
+      stateShadow: [0.86, 0.86, 0.82, 0.54],
+      custom: [0.12, 0.13, 0.12, 1],
+      customBackground: [0.88, 0.88, 0.82, 0.72],
+      customBorder: [0.3, 0.3, 0.28, 0.3]
+    },
+    scaleBar: {
+      foreground: [0.16, 0.17, 0.16, 1],
+      text: [0.16, 0.17, 0.16, 0.94],
+      background: [0.88, 0.88, 0.82, 0.72],
+      border: [0.25, 0.26, 0.25, 0.24]
+    },
     terrain: {
       heightRamp: [
         [20, [0.58, 0.61, 0.57, 1]],
@@ -133,6 +208,21 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routePrimary: [0.72, 0.58, 0.33, 0.9],
       routeSecondary: [0.58, 0.5, 0.34, 0.76],
       routeMinor: [0.46, 0.42, 0.34, 0.58]
+    },
+    labels: {
+      city: [0.86, 0.9, 0.76, 1],
+      cityHalo: [0.01, 0.03, 0.05, 0.78],
+      state: [0.95, 0.78, 0.45, 0.94],
+      stateShadow: [0, 0.01, 0.02, 0.88],
+      custom: [0.95, 0.84, 0.58, 1],
+      customBackground: [0.02, 0.05, 0.08, 0.82],
+      customBorder: [0.74, 0.62, 0.38, 0.36]
+    },
+    scaleBar: {
+      foreground: [0.82, 0.9, 0.9, 1],
+      text: [0.84, 0.92, 0.92, 0.94],
+      background: [0.01, 0.03, 0.05, 0.82],
+      border: [0.56, 0.72, 0.78, 0.28]
     },
     terrain: {
       heightRamp: [
