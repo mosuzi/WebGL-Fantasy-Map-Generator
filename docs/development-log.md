@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：名称库编辑接入统一编辑执行器
+
+本步继续迁移编辑器基础设施中的旧执行路径，把名称库专用 `executeNamebaseEdit()` 接到 `executeEditCommand()`。
+
+修正：
+
+- `executeNamebaseEdit()` 不再直接调用 `state.editHistory.execute()`。
+- 名称库命令现在通过 `executeEditCommand()` 执行，继续复用原有 `domain: "namebase"`、`getResult()` 和 `NAMEBASE_EDIT_EFFECTS`。
+- 刷新顺序保留名称库语义：先走 `refreshAfterEdit()` 写入编辑刷新摘要，再执行 `refreshAfterNamebaseEdit()` 刷新名称库面板、保存本地名称库偏好、刷新运行时面板和编辑锁。
+
+边界：
+
+- 本步只改名称库编辑 helper 的执行入口，不改变名称库数据结构、导入格式、绑定语义、生成命名逻辑或本地偏好 key。
+- 不新增持久化字段，不涉及旧地图转换。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开名称库总览并点击真实“新建用户库”按钮，用户库数量 `0 -> 1`，新增 `user-namebase-1` / “用户名称库 1”，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-panels` / `selection none`，面板文本包含新库，本地 `webgl-generator-namebase-preferences-v1` 包含新库 id，`glError = 0`。health monitor 仍报告生成启动期长任务 warning。
+
 ## 2026-07-10：多对象备注保存接入统一编辑执行器
 
 本步沿着路线备注迁移继续清理旧调用路径，把国家、省份、城市、文化、宗教、标记、标签和河流面板的备注保存统一接入 `executeEditCommand()`。

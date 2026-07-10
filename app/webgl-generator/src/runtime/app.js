@@ -2851,9 +2851,14 @@ function exportLegacyNamebases(state, documentRef) {
 }
 
 function executeNamebaseEdit(state, documentRef, command) {
-  const executed = state.editHistory.execute(command, {map: state.map});
-  refreshAfterNamebaseEdit(state, documentRef);
-  return executed.getResult?.() || null;
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: (state, command) => {
+      refreshAfterEdit(state, command);
+      refreshAfterNamebaseEdit(state, documentRef);
+    }
+  });
+  return result.result;
 }
 
 function undoNamebaseEdit(state, documentRef) {
