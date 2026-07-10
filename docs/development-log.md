@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：名称库历史按钮接入统一历史执行器
+
+本步继续清理最后一处面板撤销 / 重做旧路径，把名称库总览的历史按钮接入 `executeHistoryCommand()`。
+
+修正：
+
+- `undoNamebaseEdit()` 和 `redoNamebaseEdit()` 不再直接调用 `state.editHistory.undo/redo()`。
+- 新增 `executeNamebaseHistoryCommand()` 作为名称库专用历史入口，复用统一历史执行器，并保留“无可撤销 / 无可重做”的名称库文案。
+- 原 `refreshAfterUndoRedoCommand()` 收敛为 `refreshAfterNamebaseHistoryCommand()`，继续保留名称库命令的 `refreshAfterNamebaseEdit()`、本地偏好持久化、名称库面板刷新，以及非名称库命令从名称库面板撤销时的通用刷新兜底。
+
+边界：
+
+- 本步只迁移名称库历史按钮，不改变名称库导入、导出、新建、复制、删除、清空、绑定或质量参数命令。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-namebase-history-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `namebase-history-smoke / 10000 cells` 地图后，打开名称库面板并点击“新建用户库 / 撤销上次 / 重做上次”，用户库数量和本地名称库偏好同步为 `0 -> 1 -> 0 -> 1`；历史提示从 `undo 0 / redo 0` 更新为 `undo 1 / redo 0 / 重做 新建用户名称库`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：高度和测量面板历史按钮接入统一历史执行器
 
 本步继续清理面板撤销 / 重做旧路径，把高度编辑和测量对象面板的历史按钮接入 `executeHistoryCommand()`。

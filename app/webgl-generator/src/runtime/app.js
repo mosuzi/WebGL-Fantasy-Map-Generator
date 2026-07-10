@@ -2646,33 +2646,27 @@ function executeNamebaseEdit(state, documentRef, command) {
 }
 
 function undoNamebaseEdit(state, documentRef) {
-  try {
-    const command = state.editHistory.undo({map: state.map});
-    if (!command) {
-      setFileOperationStatus(documentRef, "没有可撤销的名称库编辑。");
-      return null;
-    }
-    refreshAfterUndoRedoCommand(state, documentRef, command);
-    setFileOperationStatus(documentRef, `已撤销：${command.label}。`);
-    return command;
-  } catch (error) {
-    reportFileOperationError(documentRef, "撤销名称库编辑失败", error);
-    return null;
-  }
+  return executeNamebaseHistoryCommand(state, documentRef, "undo");
 }
 
 function redoNamebaseEdit(state, documentRef) {
+  return executeNamebaseHistoryCommand(state, documentRef, "redo");
+}
+
+function executeNamebaseHistoryCommand(state, documentRef, action) {
   try {
-    const command = state.editHistory.redo({map: state.map});
-    if (!command) {
-      setFileOperationStatus(documentRef, "没有可重做的名称库编辑。");
+    const result = executeHistoryCommand(state, documentRef, action, {
+      refresh: (state, command) => refreshAfterNamebaseHistoryCommand(state, documentRef, command),
+      refreshPanels: false
+    });
+    if (!result.executed) {
+      setFileOperationStatus(documentRef, action === "redo" ? "没有可重做的名称库编辑。" : "没有可撤销的名称库编辑。");
       return null;
     }
-    refreshAfterUndoRedoCommand(state, documentRef, command);
-    setFileOperationStatus(documentRef, `已重做：${command.label}。`);
-    return command;
+    setFileOperationStatus(documentRef, `已${action === "redo" ? "重做" : "撤销"}：${result.label}。`);
+    return result;
   } catch (error) {
-    reportFileOperationError(documentRef, "重做名称库编辑失败", error);
+    reportFileOperationError(documentRef, action === "redo" ? "重做名称库编辑失败" : "撤销名称库编辑失败", error);
     return null;
   }
 }
@@ -2684,7 +2678,7 @@ function refreshAfterNamebaseEdit(state, documentRef) {
   updateEditingInteractionLock(state, documentRef);
 }
 
-function refreshAfterUndoRedoCommand(state, documentRef, command) {
+function refreshAfterNamebaseHistoryCommand(state, documentRef, command) {
   if (command?.domain === "namebase") {
     refreshAfterNamebaseEdit(state, documentRef);
     return;
