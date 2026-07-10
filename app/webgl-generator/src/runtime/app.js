@@ -676,23 +676,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: "city", id: cityId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameVisibleFromNamebase: cityIds => {
       const context = {map: state.map};
       const command = createRenameCitiesFromNamebaseCommand(cityIds);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-        const result = command.getResult?.();
-        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 个城市。`);
-      } else {
-        setFileOperationStatus(documentRef, "当前筛选城市没有可按名称库更新的名称。");
-      }
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {
+        context,
+        status: executed => `已按当前名称库重命名 ${executed.getResult?.().renamed || 0} 个城市。`,
+        noopStatus: "当前筛选城市没有可按名称库更新的名称。"
+      });
       updateEditingInteractionLock(state, documentRef);
     },
     onAddMode: active => {
