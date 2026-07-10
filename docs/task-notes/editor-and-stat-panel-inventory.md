@@ -231,7 +231,7 @@
 - 列表下的图标二级操作已统一通过 `UiActionDock` 打开独立 Teleport 浮层，重命名、调色、继承、人口、首都、剪影、宽度和外交关系等操作不再在当前列表面板内展开。
 - 浮动面板位置、宽度和打开状态已通过 `PanelManager` 持久化；对象详情面板因依赖当前 selection，不恢复打开状态。
 - 河流、路线、湖泊、地区、国家、省份、城市、文化、宗教、外交、marker、标签 / 命名、备注总览、测量对象、名称库总览、政体、经济和军事面板已通过 `panel-list-preferences.js` 持久化筛选词和排序字段。
-- 控制面板当前 tab、经济面板内部 tab、名称库导入方式和资源标记范围筛选已持久化；其它有内部 tab 或二级筛选的面板仍按各自运行时状态处理，后续若要扩大需要单独拆项。
+- 控制面板当前 tab、经济面板内部 tab、名称库导入方式、资源标记范围筛选和外交历史范围筛选已持久化；其它有内部 tab 或二级筛选的面板仍按各自运行时状态处理，后续若要扩大需要单独拆项。
 - `UiObjectTable` 已完成固定行高虚拟滚动第一刀，并在城市大表浏览器烟测中确认只渲染可视窗口、滚动换页和点击选中正常；空态动作已覆盖测量对象“开始测量”、文化“新增空文化”、宗教“新增空宗教”、标签“新增标签”和名称库“新建用户库”，公共空态按钮也已支持 `disabled` 禁用态。
 - 对象表格双击进入编辑已覆盖城市、河流、湖泊、国家、省份、文化、宗教、标签、标记、测量和军事管理面板；未显式接入 `edit` 的面板继续保留原双击定位行为。
 
@@ -255,7 +255,7 @@
 2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，`refreshPanelsForEdit()` 已覆盖 `affected.kind` 和 `derived: object-panels` 的第一层面板刷新，且 `executeEditCommand()` 会默认兜底调用；但直接手写 `state.editHistory.execute()` 的旧路径仍需逐步迁移。
 3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区、军事、测量、标签、政府 / 外交入口、经济、备注总览、对象详情面板和控制台 `selection.locate()` 定位路径；测量对象通过自定义 bounds 定位回调复用统一 selection / 刷新流程，且面板定位、导入后自动定位和进入编辑定位已收束到同一条测量定位动作；对象详情通过 `sourcePanelId = null` 复用定位但不伪装成领域面板来源。进入 / 退出编辑已新增运行时 `startObjectEditing()` / `stopObjectEditing()` / `toggleObjectEditing()` 第一刀，覆盖对象详情、国家、省份和河流既有入口，国家 / 省份模式切换与河流面板关闭时的保护性退出也已复用 `stopObjectEditing({ifKind})`。控制面板打开对象面板的当前 selection 预选逻辑已开始复用 `openSelectionAwarePanel()`；selection handler 中同构“已打开则 update，否则 open”的分支已开始复用 `updateOrOpenSelectionPanel()`，marker、label、economy 仍保留“未打开时不自动打开”的特殊规则；定位、selection、载入完成和单位偏好中的 runtime / pick 双刷新已开始复用 `refreshRuntimeAndPickPanels()`。但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义仍有一部分分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
 4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀，并已覆盖测量、文化、宗教、标签和名称库面板的空态主动作；空态按钮已支持 `disabled`，批量选择、列宽持久化和更多空态动作接入仍未完成。
-5. 面板位置、宽度、打开状态、常见列表筛选 / 排序、控制面板 / 经济 tab、名称库导入方式和资源标记范围筛选已持久化；剩余缺口集中在少数内部 tab、二级筛选和编辑草稿，不应再按“面板状态只在内存中”处理。
+5. 面板位置、宽度、打开状态、常见列表筛选 / 排序、控制面板 / 经济 tab、名称库导入方式、资源标记范围筛选和外交历史范围筛选已持久化；剩余缺口集中在少数内部 tab、二级筛选和编辑草稿，不应再按“面板状态只在内存中”处理。
 6. 派生重建只覆盖已明确 effects 的对象；文化 / 宗教 cell 归属、河流 / 湖泊删除、政治面 dissolve、导出校验等更复杂链路还缺“先标脏、后重建、可解释”的统一策略。
 
 下一批施工小步：

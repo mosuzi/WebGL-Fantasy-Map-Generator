@@ -23530,6 +23530,23 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 
+### 2026-07-11 外交历史范围筛选持久化
+
+背景：
+
+- 外交面板的筛选词和排序已持久化，但外交历史预览的“当前关系 / 主体国家 / 全部历史”范围仍保存在组件运行时 `ref` 中。
+- 历史范围是明确的浏览偏好，不是主体国家、选中外交对象或关系编辑说明草稿，适合保存为轻量偏好。
+
+实现：
+
+- 外交面板默认列表偏好增加 `scope: "selected"` 和允许值 `selected / subject / all`。
+- 面板 state 新增 `historyScope`，打开面板时从 `panel-list-preferences` 读取；切换历史范围时通过 `onHistoryScope` 写回偏好。
+- `DiplomacyPanel.vue` 改为从 `state.historyScope` 派生当前范围，不再把范围保存在组件本地 `ref` 中。
+
+验证：
+
+- 待本批次统一验证。
+
 ### 2026-07-11 资源标记范围与空态禁用态批次综合验证
 
 范围：

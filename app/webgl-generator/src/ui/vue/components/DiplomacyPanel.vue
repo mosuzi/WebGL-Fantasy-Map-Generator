@@ -77,7 +77,7 @@
       label="范围"
       :model-value="historyFilterMode"
       :options="historyFilterOptions"
-      @update:model-value="setHistoryFilter"
+      @update:model-value="callbacks.onHistoryScope"
     />
     <ol v-if="relationHistoryPreview.length">
       <li v-for="entry in relationHistoryPreview" :key="`${entry.index}:${entry.type}:${entry.text}`">
@@ -192,7 +192,6 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const relationReasonDraft = ref("");
-const historyFilterMode = ref("selected");
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
 const historyFilterOptions = Object.freeze([
   {value: "selected", label: "当前关系"},
@@ -291,6 +290,10 @@ const relationHistoryLabel = computed(() => {
   if (historyFilterMode.value === "subject") return `主体 ${formatNumber(subjectHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
   return `当前关系 ${formatNumber(relationHistoryRows.value.length)} / 全部 ${formatNumber(total)}`;
 });
+const historyFilterMode = computed(() => {
+  const mode = props.state.historyScope;
+  return mode === "subject" || mode === "all" ? mode : "selected";
+});
 
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
@@ -301,10 +304,6 @@ function applyRelationChange(relation) {
   const row = selected.value;
   if (!row) return;
   props.callbacks.onRelationChange?.(row.subjectId, row.id, relation, relationReasonDraft.value);
-}
-
-function setHistoryFilter(value) {
-  historyFilterMode.value = ["selected", "subject", "all"].includes(value) ? value : "selected";
 }
 
 function buildDiplomacyMetrics(map, selectedStateId) {

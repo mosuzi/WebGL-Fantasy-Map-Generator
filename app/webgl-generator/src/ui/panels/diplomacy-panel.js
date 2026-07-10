@@ -6,6 +6,8 @@ import {readPanelListPreferences, updatePanelListPreferences} from "../panel-lis
 const DIPLOMACY_PANEL_ID = "diplomacy-panel";
 const DIPLOMACY_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  scope: "selected",
+  scopes: Object.freeze(["selected", "subject", "all"]),
   sortKey: "relation",
   sortDir: "asc"
 });
@@ -18,6 +20,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    historyScope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedStateId: null,
@@ -34,6 +37,10 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     onFilter: value => {
       panelState.filter = value;
       updatePanelListPreferences(documentRef, DIPLOMACY_PANEL_ID, {filter: value}, DIPLOMACY_LIST_DEFAULTS);
+    },
+    onHistoryScope: value => {
+      panelState.historyScope = value === "subject" || value === "all" ? value : "selected";
+      updatePanelListPreferences(documentRef, DIPLOMACY_PANEL_ID, {scope: panelState.historyScope}, DIPLOMACY_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
