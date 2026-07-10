@@ -3740,44 +3740,49 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     state.panels.objectDetails.clear();
     state.panels.state.setTargetStateId(selection.object.id);
     if (isSelectionFromPanel(context, "state-panel") || isSelectionFromPanel(context, "government-panel")) return true;
-    if (state.panels.state.isOpen?.()) updateStatePanel(state);
-    else state.panels.state.open(state.map, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.state, {
+      update: () => updateStatePanel(state),
+      open: () => state.panels.state.open(state.map, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.CITY]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.city.setSelectedCityId(selection.object.id);
     if (isSelectionFromPanel(context, "city-panel")) return true;
-    if (state.panels.city.isOpen?.()) updateCityPanel(state);
-    else state.panels.city.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.city, {
+      update: () => updateCityPanel(state),
+      open: () => state.panels.city.open(state.map, selection, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.PROVINCE]: (state, selection, editingObject, context) => {
     if (!shouldOpenProvincePanelForSelection(state)) return false;
     state.panels.objectDetails.clear();
     state.panels.province.setSelectedProvinceId(selection.object.id);
     if (isSelectionFromPanel(context, "province-panel")) return true;
-    if (state.panels.province.isOpen?.()) updateProvincePanel(state);
-    else state.panels.province.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.province, {
+      update: () => updateProvincePanel(state),
+      open: () => state.panels.province.open(state.map, selection, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.CULTURE]: (state, selection, editingObject, context) => {
     if (!shouldOpenCulturePanelForSelection(state)) return false;
     state.panels.objectDetails.clear();
     state.panels.culture.setSelectedCultureId(selection.object.id);
     if (isSelectionFromPanel(context, "culture-panel")) return true;
-    if (state.panels.culture.isOpen?.()) updateCulturePanel(state);
-    else state.panels.culture.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.culture, {
+      update: () => updateCulturePanel(state),
+      open: () => state.panels.culture.open(state.map, selection, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.RELIGION]: (state, selection, editingObject, context) => {
     if (!shouldOpenReligionPanelForSelection(state)) return false;
     state.panels.objectDetails.clear();
     state.panels.religion.setSelectedReligionId(selection.object.id);
     if (isSelectionFromPanel(context, "religion-panel")) return true;
-    if (state.panels.religion.isOpen?.()) updateReligionPanel(state);
-    else state.panels.religion.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.religion, {
+      update: () => updateReligionPanel(state),
+      open: () => state.panels.religion.open(state.map, selection, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.RIVER]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
@@ -3786,32 +3791,36 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
       return true;
     }
     if (isSelectionFromPanel(context, "river-panel")) return true;
-    if (state.panels.river.isOpen?.()) updateRiverPanel(state);
-    else state.panels.river.open(state.map, selection, state.editHistory.getStats(), editingObject);
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.river, {
+      update: () => updateRiverPanel(state),
+      open: () => state.panels.river.open(state.map, selection, state.editHistory.getStats(), editingObject)
+    });
   },
   [OBJECT_KIND.LAKE]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     if (isSelectionFromPanel(context, "lake-panel")) return true;
-    if (state.panels.lake.isOpen?.()) updateLakePanel(state);
-    else state.panels.lake.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.lake, {
+      update: () => updateLakePanel(state),
+      open: () => state.panels.lake.open(state.map, selection, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.ZONE]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.zone.setSelection(selection);
     if (isSelectionFromPanel(context, "zone-panel")) return true;
-    if (state.panels.zone.isOpen?.()) updateZonePanel(state);
-    else state.panels.zone.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.zone, {
+      update: () => updateZonePanel(state),
+      open: () => state.panels.zone.open(state.map, selection, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.ROUTE]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.route.setSelectedRouteId(selection.object.id);
     if (isSelectionFromPanel(context, "route-panel")) return true;
-    if (state.panels.route.isOpen?.()) updateRoutePanel(state);
-    else state.panels.route.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.route, {
+      update: () => updateRoutePanel(state),
+      open: () => state.panels.route.open(state.map, selection, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.TRADE_FLOW]: (state, selection) => {
     if (!state.panels.economy?.isOpen?.()) return false;
@@ -3840,22 +3849,30 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     state.panels.objectDetails.clear();
     state.panels.measurement?.setSelectedMeasurementId?.(selection.object.id);
     if (isSelectionFromPanel(context, "measurement-panel")) return true;
-    if (state.panels.measurement?.isOpen?.()) updateMeasurementPanel(state);
-    else state.panels.measurement?.open(state.map, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.measurement, {
+      update: () => updateMeasurementPanel(state),
+      open: () => state.panels.measurement?.open(state.map, state.editHistory.getStats())
+    });
   },
   [OBJECT_KIND.MILITARY]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.military.setSelectedRegimentId(selection.object.id);
     if (isSelectionFromPanel(context, "military-panel")) return true;
-    if (state.panels.military.isOpen?.()) updateMilitaryPanel(state);
-    else state.panels.military.open(state.map, selection, state.editHistory.getStats());
-    return true;
+    return updateOrOpenSelectionPanel(state.panels.military, {
+      update: () => updateMilitaryPanel(state),
+      open: () => state.panels.military.open(state.map, selection, state.editHistory.getStats())
+    });
   }
 });
 
 function isSelectionFromPanel(context, panelId) {
   return context?.sourcePanelId === panelId;
+}
+
+function updateOrOpenSelectionPanel(panel, {update, open}) {
+  if (panel?.isOpen?.()) update?.();
+  else open?.();
+  return true;
 }
 
 function handleSelectionPanel(state, selection, editingObject, context) {

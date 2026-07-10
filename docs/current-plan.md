@@ -704,6 +704,11 @@
    - 边界：本步只迁移控制面板打开国家、政体、省份、城市、文化、宗教、外交、经济、军事、地区、路线、标记和标签面板的预选逻辑；不改变面板持久化、selection handler、列表筛选或对象详情打开规则。
    - 完成记录：新增 `openSelectionAwarePanel({kind, beforeOpen, open, afterOpen})`，可在打开前后根据当前 selection 执行领域预选；经济 trade-flow 保持 open 后再选中交易的旧语义，其余对象面板保持打开前预选的旧顺序。
 
+92. selection handler 更新 / 打开面板 helper 第一刀。`已完成`
+   - 目标：继续补齐打开 / 更新面板语义，把 selection handler 中“面板已打开则 update，否则 open”的重复分支收束到同一个 helper。
+   - 边界：本步只迁移 state、city、province、culture、religion、river、lake、zone、route、measurement 和 military 的同构 update/open 分支；marker、label、economy 仍保留“只在面板已打开时更新”的特殊规则。
+   - 完成记录：新增 `updateOrOpenSelectionPanel(panel, {update, open})`，selection handler 继续先同步对象详情清理与领域选中目标，再通过 helper 执行 update/open；各对象是否自动打开面板的既有规则保持不变。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

@@ -23460,3 +23460,22 @@ full 矩阵结果：
 - 本批次综合验证中，`.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物烟测通过：`openSelectionAwarePanel` 存在；对 `trade-flow / 0` 调用经济总览打开动作时，记录到调用顺序为 `open -> set:0`，保留先刷新面板 map 再选中交易的语义；`glError = 0`、health error 和 console/page error 均为 `0`。
 - 本批次按要求尝试启动验证子智能体；该子智能体长时间无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
+
+### 2026-07-11 selection handler 更新 / 打开面板 helper 第一刀
+
+背景：
+
+- selection handler 中 state / city / province / culture / religion / river / lake / zone / route / measurement / military 都有“面板已打开则 update，否则 open”的同构分支。
+- marker、label 和 economy 有“只在面板已打开时更新”的特殊规则，不能一起抽平。
+
+实现：
+
+- 新增 `updateOrOpenSelectionPanel(panel, {update, open})`，统一处理 selection handler 的 update/open 分支。
+- state、city、province、culture、religion、river、lake、zone、route、measurement 和 military selection handler 改走该 helper。
+- marker、label、economy 保持原分支，避免改变“未打开时不自动打开”的特殊行为。
+- 本步不改变对象详情清理、领域面板目标同步、source panel 抑制和河流 suppressor 语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
