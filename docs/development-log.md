@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：测量保存与导入补充影响目标
+
+本步继续细化 edit command 的 `effects.affected`。保存测量对象此前初始 effects 没有 affected 字段，导入测量对象此前初始 affected 是空数组；历史摘要、控制台历史 API 或执行前诊断无法稳定判断测量保存 / 导入会影响什么。
+
+修正：
+
+- 保存测量对象命令初始 affected 改为 `measurement#new`，执行成功后仍替换为真实测量对象 id。
+- 导入测量对象命令初始 affected 改为 `derived-system#measurements-import, measurement#new`。
+- 导入测量对象执行成功后 affected 会保留 `derived-system#measurements-import`，并列出实际导入的测量对象 id。
+
+边界：
+
+- 本步不改变测量对象创建、导入解析、id 分配、撤销 / 重做、overlay 刷新或导入结果返回，只补齐历史摘要和刷新诊断可见的影响目标。
+
+验证：
+
+- `node --check` 覆盖 `measurement-edit-commands.js` 和 `edit-command-effects.js`，均通过。
+- `node --input-type=module` 行为断言通过：保存测量对象初始 affected 为 `measurement#new`，执行成功后回写为真实 `measurement#1`；导入测量对象初始 affected 为 `derived-system#measurements-import, measurement#new`，执行成功后保留系统来源并列出实际导入的测量对象 id。断言同时记录既有行为：无效导入项会占用一个 `nextId` 后被跳过，因此有效对象 id 可能不连续。直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-10：新增对象命令补充初始影响目标
 
 本步继续细化 edit command 的 `effects.affected`。新增空文化、新增空宗教、新增手工标签和新增 marker 命令此前会在 `apply()` 后把 affected 改成真实对象 id，但命令初始结构仍是空数组；历史摘要、控制台历史 API 或执行前诊断无法稳定判断这是新增哪类对象。

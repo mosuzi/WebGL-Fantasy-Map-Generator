@@ -10,6 +10,7 @@ import {
   restoreMeasurementStore
 } from "./measurement-objects.js";
 import {normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
+import {systemAffected} from "./edit-command-effects.js";
 
 const MEASUREMENT_EFFECTS = Object.freeze({
   render: "none",
@@ -26,7 +27,10 @@ export function createSaveMeasurementCommand(points, {name = "", routeFit = "non
   return {
     label,
     domain: "measurement",
-    effects: {...MEASUREMENT_EFFECTS},
+    effects: {
+      ...MEASUREMENT_EFFECTS,
+      affected: [{kind: "measurement", id: "new"}]
+    },
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
       created ??= createMeasurementFromPoints(context.map, points, {name, routeFit});
@@ -156,7 +160,7 @@ export function createImportMeasurementsCommand(measurements, {label = "导入�
     domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
-      affected: []
+      affected: systemAffected("measurements-import", [{kind: "measurement", id: "new"}])
     },
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
@@ -174,7 +178,7 @@ export function createImportMeasurementsCommand(measurements, {label = "导入�
         imported.push(item);
       }
       refreshMeasurementsMetadata(store);
-      this.effects.affected = imported.map(item => ({kind: "measurement", id: item.id}));
+      this.effects.affected = systemAffected("measurements-import", imported.map(item => ({kind: "measurement", id: item.id})));
     },
     revert(context) {
       restoreMeasurementStore(context.map, previous);
