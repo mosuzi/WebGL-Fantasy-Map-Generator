@@ -65,7 +65,7 @@
         :title="emptyAction.label"
         :aria-label="emptyAction.label"
         :disabled="emptyAction.disabled"
-        @click="emit('empty-action', emptyAction.key)"
+        @click="handleEmptyAction"
       >
         <span aria-hidden="true">{{ emptyAction.icon || "+" }}</span>
         <span>{{ emptyAction.label }}</span>
@@ -206,6 +206,11 @@ function handleRowDoubleClick(row) {
 function handleHeaderSort(column) {
   if (!sortableColumn(column)) return;
   emit("sort", columnSortKey(column));
+}
+
+function handleEmptyAction() {
+  if (!props.emptyAction || props.emptyAction.disabled) return;
+  emit("empty-action", props.emptyAction.key);
 }
 
 function handleScroll() {

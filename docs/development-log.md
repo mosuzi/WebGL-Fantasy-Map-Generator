@@ -23736,3 +23736,24 @@ full 矩阵结果：
 
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-11 `UiObjectTable.emptyAction` 禁用态事件保护
+
+背景：
+
+- 上一步已让公共空态按钮透传 `disabled`，但模板仍直接 emit `empty-action`。
+- 浏览器会阻止真实禁用按钮点击，但组件内部也应保护程序化触发和未来测试注入，避免不可用动作漏到面板回调。
+
+实现：
+
+- `UiObjectTable` 空态按钮点击改为统一调用 `handleEmptyAction()`。
+- `handleEmptyAction()` 在未传 `emptyAction` 或 `emptyAction.disabled` 为真时直接返回；只有可用动作才 emit `empty-action`。
+- 现有可用空态动作不传 `disabled`，行为保持不变；本步不新增任何面板动作。
+
+验证：
+
+- `git diff --check` 通过。
+- 源码静态检查确认空态按钮使用 `@click="handleEmptyAction"`，且 `handleEmptyAction()` 对未传动作和 `emptyAction.disabled` 均直接返回。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，`window.__webglGeneratorApp` 存在，WebGL2 正常；打开名称库面板并输入不存在的筛选词触发空态，空态动作“新建用户库”可见且 `disabled=false`；直接读取 canvas WebGL2 context 的 `glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `verify_empty_action_guard`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
