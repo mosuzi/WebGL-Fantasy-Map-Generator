@@ -4249,6 +4249,13 @@ function deleteMarkerViaApi(state, documentRef, markerId) {
     noopStatus: "标记不存在或已被删除。",
     status: `已删除标记 #${id}。`
   });
+  const selectedObject = state.selectionStore.getSnapshot().selection?.object;
+  if (result.executed && selectedObject?.kind === OBJECT_KIND.MARKER && Number(selectedObject.id) === id) {
+    state.selectionStore.clear();
+    state.panels.marker?.setSelectedMarkerId(null);
+    updateMarkerPanel(state);
+    updateRuntimePanel(documentRef, state);
+  }
   if (state.markerEdit.markerId === id) stopMarkerEditMode(state, documentRef);
   return editApiResult(state, result);
 }
@@ -4269,15 +4276,18 @@ function executeMarkerCollectionApiCommand(state, documentRef, command, options 
   const context = {map: state.map};
   if (!state.map || !command) return {executed: false, command, result: null, error: null};
   try {
-    if (command.isNoop?.(context)) {
-      if (options.noopStatus) setFileOperationStatus(documentRef, messageFromOption(options.noopStatus, command));
-      return {executed: false, command, result: null, error: null};
-    }
-    const executedCommand = state.editHistory.execute(command, context);
-    markDerivedFresh(state.map, ["markers", "economy"]);
-    markDerivedStale(state.map, ["military", "diplomacy"]);
-    refreshGenerationSummary(state.map);
-    refreshAfterEdit(state, executedCommand);
+    const execution = executeEditCommand(state, documentRef, command, {
+      context,
+      noopStatus: options.noopStatus,
+      refresh: (targetState, executedCommand) => {
+        markDerivedFresh(targetState.map, ["markers", "economy"]);
+        markDerivedStale(targetState.map, ["military", "diplomacy"]);
+        refreshGenerationSummary(targetState.map);
+        refreshAfterEdit(targetState, executedCommand);
+      },
+      throwOnError: false
+    });
+    if (!execution.executed) return execution;
     const createdMarker = options.selectCreated ? command.getCreatedMarker?.() : null;
     const markerId = Number.isInteger(options.selectMarkerId) ? options.selectMarkerId : createdMarker?.id;
     if (Number.isInteger(markerId) && state.map.markers?.markers?.[markerId]) {
@@ -4285,16 +4295,13 @@ function executeMarkerCollectionApiCommand(state, documentRef, command, options 
       state.panels.marker?.setSelectedMarkerId(markerId);
     }
     updateMarkerPanel(state);
-    updateEconomyPanel(state);
-    updateStatePanel(state);
-    updateProvincePanel(state);
     updateRuntimePanel(documentRef, state);
     updateEditingInteractionLock(state, documentRef);
-    if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
+    if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, execution.command));
     const result = options.includeCreatedMarker && createdMarker
       ? {createdMarker}
-      : readEditCommandResult(executedCommand);
-    return {executed: true, command: executedCommand, result, error: null};
+      : execution.result;
+    return {executed: true, command: execution.command, result, error: null};
   } catch (error) {
     return {executed: false, command, result: null, error};
   }

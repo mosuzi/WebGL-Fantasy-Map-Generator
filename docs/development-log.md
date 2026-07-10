@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：标记编辑 API 接入统一编辑执行器
+
+本步继续清理 API 编辑路径，把 `api.edit.markers.add/delete/move()` 共用的 marker 集合命令 helper 接入 `executeEditCommand()`。
+
+修正：
+
+- marker API 新增 / 删除 / 移动不再手写 `command.isNoop()`、`state.editHistory.execute()` 和 `refreshAfterEdit()`。
+- helper 继续保留 `markDerivedFresh(["markers", "economy"])`、`markDerivedStale(["military", "diplomacy"])`、`refreshGenerationSummary()`、状态文案和新增 / 移动后的 marker 选择逻辑。
+- API 删除当前选中 marker 后会清空 selection，避免选择状态指向已删除对象。
+- 对象面板刷新改由 marker 命令 effects 中的 `object-panels` 和统一执行器驱动；选择 marker 后只补一次 marker 面板同步。
+
+边界：
+
+- 本步只迁移 marker API helper，不改变 marker 面板 UI、marker 命令本身、资源点重生成、资源类型规则或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `stage-2-1 / 10000 cells` 地图后调用公开 `api.edit.markers.add({type:"mines", packCell:13})`、`api.edit.markers.move(44, 14)`、`api.edit.markers.delete(44)`；marker 数量 `44 -> 45 -> 45 -> 44`，新增返回 `createdMarker #44` 并选中该 marker，移动后 `packCell = 14`，删除后 marker 不存在且 selection 清空；撤销栈 `undo=3 / redo=0`，`lastEditRefresh` 均包含 `point-layers / labels / object-panels / object-index`，`derivedStale` 包含 `military / diplomacy`，`markers` 与 `economy` 均为 fresh，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：城市画布新增删除接入统一编辑执行器
 
 本步继续清理编辑面板基础设施，把城市面板的画布“新增城市 / 删除城市”交互接入 `executeEditCommand()`。
