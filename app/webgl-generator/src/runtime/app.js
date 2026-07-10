@@ -955,12 +955,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRelationChange: (subjectId, objectId, relation, reason) => {
       const command = createSetDiplomacyRelationCommand(subjectId, objectId, relation, {reason});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (result.executed) {
         refreshGenerationSummary(state.map);
       }
-      updateDiplomacyPanel(state);
-      updateStatePanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onRegenerate: () => {

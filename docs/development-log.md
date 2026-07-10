@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：外交关系字段接入统一编辑执行器
+
+本步继续清理外交面板的旧执行路径，把单个外交关系调整接入 `executeEditCommand()`。
+
+修正：
+
+- 外交关系调整不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部外交 / 国家面板刷新。
+- 关系实际变更后仍保留 `refreshGenerationSummary()`，确保地图摘要中的外交统计同步更新。
+- 面板刷新改由命令 effects 中的 `diplomacy / cell-colors / object-panels` 驱动。
+
+边界：
+
+- 本步只迁移单个外交关系字段，不改变外交生成算法、外交重生成入口、关系选项、外交历史记录、国家面板打开逻辑或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开外交面板后，真实点击“调整关系”并把 `#1 -> #2` 的关系从 `Neutral` 改为 `Ally`，撤销栈 `undo=1`，`lastLabel` 为 `外交关系 #1-#2`，`lastEditRefresh` 为 `diplomacy, cell-colors, object-panels` / `affected state#1, state#2`，外交详情从“中立”刷新为“盟友”，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：对象详情名称编辑接入统一编辑执行器
 
 本步继续清理对象详情面板的旧执行路径，把对象详情里的重命名和“名称库改名”接入 `executeEditCommand()`。
