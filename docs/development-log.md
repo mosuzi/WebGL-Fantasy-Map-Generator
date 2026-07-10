@@ -24405,3 +24405,24 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_marker_label_namebase_empty_filter`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：资源标记面板输入无匹配筛选词后显示“没有匹配的资源点或标记 / 清空筛选”，点击后筛选词清空并恢复 `44` 个可见行；标签面板同样恢复 `26` 个可见行，且列表操作栏仍有 `1` 个“新增标签”按钮；名称库面板同样恢复 `62` 个可见行，且列表操作栏仍有 `1` 个“新建用户库”按钮。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。
+
+### 2026-07-11 生物群系 / 气候 / 水体地貌 / 人口统计筛选空态清理
+
+背景：
+
+- 筛选空态“清空筛选”已覆盖多个对象管理面板。
+- 生物群系、气候、水体地貌和人口统计面板是只读统计表格，适合继续接入纯筛选状态动作。
+
+实现：
+
+- 生物群系、气候、水体地貌和人口统计面板新增筛选空态“清空筛选”动作。
+- 点击动作只调用对应 `callbacks.onFilter("")`，恢复当前列表。
+- 本步不改变统计口径、选中详情、列宽、排序或筛选匹配规则。
+
+验证：
+
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_stats_empty_filter`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：生物群系面板输入无匹配筛选词后显示“没有匹配的生物群系 / 清空筛选”，点击后筛选词清空并恢复 `13` 个可见行；气候面板同样恢复 `5` 个可见行；水体地貌面板同样恢复 `11` 个可见行；人口统计面板同样恢复 `26` 个可见行。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
