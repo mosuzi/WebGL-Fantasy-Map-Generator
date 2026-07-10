@@ -23530,6 +23530,21 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 
+### 2026-07-11 资源标记范围与空态禁用态批次综合验证
+
+范围：
+
+- 本批次覆盖 `10ebb5f 持久化资源标记范围筛选` 和 `959a877 支持空态动作禁用态`。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\marker-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，资源标记范围从默认 `all` 切换为 `resource`，本地偏好写入 `scope: "resource"`；刷新页面并重新打开资源标记面板后，范围仍保持 `resource`；名称库面板输入不存在的筛选词触发空态，空态动作“新建用户库”仍可见且 `disabled = false`；`window.__webglGeneratorApp` 存在，WebGL2 正常，`glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `batch_verify_marker_empty_action`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
+
 ### 2026-07-11 标签空态新增动作接入
 
 背景：
