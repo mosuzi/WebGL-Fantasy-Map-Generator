@@ -36,6 +36,11 @@ function normalizePanelListPreferences(value = {}, defaults = {}) {
     defaults.importMode,
     defaults.importModes
   );
+  if (typeof defaults.scope === "string") normalized.scope = normalizePreferenceValue(
+    value.scope,
+    defaults.scope,
+    defaults.scopes
+  );
   return normalized;
 }
 

@@ -6,6 +6,8 @@ import {readPanelListPreferences, updatePanelListPreferences} from "../panel-lis
 const MARKER_PANEL_ID = "marker-panel";
 const MARKER_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  scope: "all",
+  scopes: Object.freeze(["all", "resource", "marker"]),
   sortKey: "economicValue",
   sortDir: "desc"
 });
@@ -18,7 +20,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
-    scope: "all",
+    scope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedMarkerId: null,
@@ -33,7 +35,8 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       updatePanelListPreferences(documentRef, MARKER_PANEL_ID, {filter: value}, MARKER_LIST_DEFAULTS);
     },
     onScope: value => {
-      panelState.scope = value;
+      panelState.scope = value === "resource" || value === "marker" ? value : "all";
+      updatePanelListPreferences(documentRef, MARKER_PANEL_ID, {scope: panelState.scope}, MARKER_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {
