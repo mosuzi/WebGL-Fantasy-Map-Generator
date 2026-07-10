@@ -23931,3 +23931,29 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_route_river_column_resize_drag`；该子智能体只返回接手状态，未产出有效浏览器验证证据。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开路线面板并拖动“起点”列表头列宽手柄，header / cell 从 `112px` 变为 `202px`，localStorage `webgl-generator-panel-list:route-panel` 写入 `columnWidths.fromName = 202`，刷新页面并重新打开路线面板后 header / cell 仍保持 `202px`；打开河流面板并拖动“名称”列表头列宽手柄，header / cell 从 `120px` 变为 `216px`，localStorage `webgl-generator-panel-list:river-panel` 写入 `columnWidths.name = 216`，刷新页面并重新打开河流面板后 header / cell 仍保持 `216px`；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 城市 / 国家 / 省份面板列宽拖拽持久化
+
+背景：
+
+- 名称库、湖泊、路线和河流面板已经验证 `UiObjectTable` 列宽拖拽、`columnWidths` 写回和刷新恢复链路可按面板扩展。
+- 城市、国家和省份管理都是高频编辑面板，名称、归属和数值列同时存在，用户更容易需要临时调宽查看。
+
+实现：
+
+- 城市面板新增 `CITY_COLUMN_WIDTHS`，并在 `CITY_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 国家面板新增 `STATE_COLUMN_WIDTHS`，并在 `STATE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 省份面板新增 `PROVINCE_COLUMN_WIDTHS`，并在 `PROVINCE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 三个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
+- 城市、国家和省份表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变新增 / 删除、地图编辑模式、排序、筛选、定位、重命名、人口、政体、颜色或备注逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\city-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\state-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\province-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_city_state_province_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开城市、国家和省份面板并拖动“名称”列表头列宽手柄；三个面板 header / cell 都从 `120px` 变为 `210px`，各自 localStorage `webgl-generator-panel-list:city-panel / state-panel / province-panel` 写入 `columnWidths.name = 210`，刷新页面并重新打开面板后 header / cell 仍保持 `210px`；`glError = 0`，health error、console error 和 page error 均为 `0`。

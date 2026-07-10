@@ -4,8 +4,18 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const CITY_PANEL_ID = "city-panel";
+const CITY_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 120,
+  type: 76,
+  stateName: 112,
+  provinceName: 112,
+  resourceCells: 64,
+  population: 92
+});
 const CITY_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: CITY_COLUMN_WIDTHS,
   sortKey: "population",
   sortDir: "desc"
 });
@@ -18,6 +28,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedCityId: null,
@@ -41,6 +52,16 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, CITY_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, CITY_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, CITY_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedCityId = row.id;

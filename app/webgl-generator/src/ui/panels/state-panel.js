@@ -4,8 +4,19 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const STATE_PANEL_ID = "state-panel";
+const STATE_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 120,
+  governmentLabel: 84,
+  capitalName: 112,
+  burgs: 64,
+  population: 92,
+  economicPower: 64,
+  resourcePotential: 64
+});
 const STATE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: STATE_COLUMN_WIDTHS,
   sortKey: "population",
   sortDir: "desc"
 });
@@ -19,6 +30,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     targetStateId: null,
     sourceStateId: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     radius: 28,
@@ -51,6 +63,16 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, STATE_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, STATE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, STATE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.targetStateId = row.id;

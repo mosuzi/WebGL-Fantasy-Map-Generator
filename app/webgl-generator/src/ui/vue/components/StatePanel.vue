@@ -7,6 +7,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -16,9 +17,11 @@
     :selected-id="state.targetStateId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的国家"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
