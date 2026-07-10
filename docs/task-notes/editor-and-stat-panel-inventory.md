@@ -247,12 +247,12 @@
 4. `SELECTION_PANEL_HANDLERS` 已把对象种类映射到领域面板打开 / 更新逻辑，`selectFromPanel()` 可避免从面板选择对象时反复重开同一面板。
 5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口；`refreshPanelsForEdit()` 已落地，可按 `effects.affected.kind` 刷新对象面板，并在命令声明 `derived: ["object-panels"]` 时刷新所有对象面板，当前已接入测量对象重命名 / 删除和备注删除。
 6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`，空列表主动作可优先走 `UiObjectTable.emptyAction`。
-7. `executeEditCommand()` 已在 `app.js` 内部落地，先迁移测量对象重命名 / 删除、备注删除和路线删除调用点，统一 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和 status 文案；返回结果第一刀已补 `{executed, command, result, error}`，测量保存和 GEO 测量导入已改用标准 `getResult()`。
+7. `executeEditCommand()` 已在 `app.js` 内部落地，先迁移测量对象重命名 / 删除、备注删除和路线删除调用点，统一 `isNoop`、`EditHistory.execute`、刷新函数、对象面板 helper 和 status 文案；返回结果第一刀已补 `{executed, command, result, error}`，测量保存和 GEO 测量导入已改用标准 `getResult()`。执行器现在会在 `options.refresh` 或默认 `refreshAfterEdit()` 后统一调用 `refreshPanelsForEdit()`，自定义刷新路径不再需要各自记住对象面板刷新。
 
 主要缺口：
 
 1. `EditHistory` 只校验 `apply / revert`，没有统一校验 `effects / domain / affected / isNoop / getResult`，不同命令的返回值和 no-op 判断仍靠调用方约定。
-2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，`refreshPanelsForEdit()` 已覆盖 `affected.kind` 和 `derived: object-panels` 的第一层面板刷新，但调用点仍需逐步迁移。
+2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，`refreshPanelsForEdit()` 已覆盖 `affected.kind` 和 `derived: object-panels` 的第一层面板刷新，且 `executeEditCommand()` 会默认兜底调用；但直接手写 `state.editHistory.execute()` 的旧路径仍需逐步迁移。
 3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区和军事面板定位路径；但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义大多仍分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
 4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀；批量选择、列宽持久化和更多空态动作接入仍未完成。
 5. 面板状态只存在内存中，筛选词、排序字段、打开状态、位置和大小尚未按 workspace/session 持久化。
@@ -262,7 +262,7 @@
 
 1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit`、status 文案、标准 `getResult()` 返回和保守异常通道；后续再迁移路线备注、名称库或其它低风险调用点，并补更明确的错误展示策略。
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
-3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，并支持 `derived: ["object-panels"]` 全对象面板刷新；后续要覆盖撤销 / 重做路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
+3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，并支持 `derived: ["object-panels"]` 全对象面板刷新；`executeEditCommand()` 默认会在任意刷新函数后调用它。后续重点是覆盖仍直接调用 `state.editHistory.execute()` / `undo()` / `redo()` 的旧路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 继续扩展 `locateAndSelectObject()`：当前已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区和军事面板定位路径，后续逐步迁移标签、政府 / 外交入口和对象详情定位，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。
 5. 继续扩展 `UiObjectTable.emptyAction`：当前先覆盖测量对象“开始测量”，后续可按面板语义迁移空态新增、导入或创建动作；批量选择和列宽持久化另行拆小步。
 6. 建立面板状态持久化第一刀：先保存筛选词、排序字段和窗口位置，不保存编辑草稿，避免刷新页面后丢失基本工作区上下文。

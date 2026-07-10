@@ -4033,11 +4033,6 @@ function refreshAfterEdit(state, commandOrEffects) {
   state.editRefreshScheduler.run(commandOrEffects);
 }
 
-function refreshAfterCommandEdit(state, commandOrEffects) {
-  refreshAfterEdit(state, commandOrEffects);
-  refreshPanelsForEdit(state, commandOrEffects);
-}
-
 function executeEditCommand(state, documentRef, command, options = {}) {
   const context = options.context || {map: state.map};
   if (!command) return {executed: false, command: null, result: null, error: null};
@@ -4047,8 +4042,9 @@ function executeEditCommand(state, documentRef, command, options = {}) {
       return {executed: false, command, result: null, error: null};
     }
     const executedCommand = state.editHistory.execute(command, context);
-    const refresh = options.refresh || refreshAfterCommandEdit;
+    const refresh = options.refresh || refreshAfterEdit;
     refresh(state, executedCommand);
+    if (options.refreshPanels !== false) refreshPanelsForEdit(state, executedCommand);
     const result = readEditCommandResult(executedCommand);
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
     return {executed: true, command: executedCommand, result, error: null};

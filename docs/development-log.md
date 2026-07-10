@@ -8,13 +8,13 @@
 
 修正：
 
-- 新增 `refreshAfterCommandEdit()` 作为 `executeEditCommand()` 默认后处理入口。
-- 默认入口统一先调用 `refreshAfterEdit()` 完成渲染、选择、运行统计和 pick 面板刷新，再调用 `refreshPanelsForEdit()` 按命令 `effects.affected` / `object-panels` 刷新对象面板。
+- `executeEditCommand()` 执行成功后统一先调用 `options.refresh` 或默认 `refreshAfterEdit()`，完成渲染、选择、运行统计和 pick 面板刷新。
+- `executeEditCommand()` 随后默认调用 `refreshPanelsForEdit()`，按命令 `effects.affected` / `object-panels` 刷新对象面板；调用方必要时可用 `refreshPanels: false` 显式关闭。
 - 删除路线删除、备注删除、测量重命名 / 删除及对应 API 中重复手写的 `refreshPanelsForEdit()`。
 
 边界：
 
-- 自定义 `options.refresh` 的国家 / 省份新增删除路径继续保留原有专门刷新逻辑，本步不扩大政治派生或选择语义。
+- 自定义 `options.refresh` 的国家 / 省份新增删除路径继续保留原有专门刷新逻辑，但不再绕过统一对象面板 helper；本步不扩大政治派生或选择语义。
 - 本步不新增地图持久化字段，也不修改地图数据结构，因此不需要旧图迁移或回填。
 
 验证：
@@ -23,6 +23,7 @@
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物 smoke 通过：临时标记路线面板为打开后调用公开 `webglGeneratorApi.edit.routes.delete()`，路线数量 `589 -> 588`，撤销栈 `undo=1`，`lastEditRefresh` 为 `route-mesh, object-panels, object-index` / `affected route#0`，路线面板 `update()` 被默认后处理调用 `1` 次，`glError = 0`。health monitor 仍报告生成启动期主线程长任务 warning，和本次编辑刷新收口无关。
+- 补充 smoke 通过：临时标记国家面板为打开后调用带自定义 `refreshAfterStateEdit` 的公开 `webglGeneratorApi.edit.states.add(934)`，国家数量 `21 -> 22`，撤销栈 `undo=1`，`lastEditRefresh` 包含 `object-panels` / `affected state#new`，国家面板 `update()` 被调用，`glError = 0`。health monitor 仍报告生成启动期主线程长任务 warning。
 
 ## 2026-07-09：降水显示按原版毫米口径换算
 
