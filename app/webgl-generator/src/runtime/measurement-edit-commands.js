@@ -167,15 +167,17 @@ export function createImportMeasurementsCommand(measurements, {label = "导入�
       const store = ensureMeasurementStore(context.map);
       imported = [];
       for (const source of measurements || []) {
+        const idNumber = nextAvailableImportedMeasurementId(store);
         const item = normalizeMeasurementItem({
           ...source,
-          id: nextImportedMeasurementId(store),
+          id: `measurement-${idNumber}`,
           createdAt: source.createdAt || new Date().toISOString(),
           updatedAt: source.updatedAt || source.createdAt || new Date().toISOString()
         }, context.map);
         if (!item.points.length) continue;
         store.items.push(JSON.parse(JSON.stringify(item)));
         imported.push(item);
+        refreshMeasurementsMetadata(store);
       }
       refreshMeasurementsMetadata(store);
       this.effects.affected = systemAffected("measurements-import", imported.map(item => ({kind: "measurement", id: item.id})));
@@ -224,9 +226,7 @@ function measurementTypeForPoints(points, item = {}, routeFit = item.routeFit) {
   return points.length >= 3 ? "polygon" : "polyline";
 }
 
-function nextImportedMeasurementId(store) {
+function nextAvailableImportedMeasurementId(store) {
   refreshMeasurementsMetadata(store);
-  const nextId = Math.max(1, Number(store.metadata?.nextId) || 1);
-  store.metadata.nextId = nextId + 1;
-  return `measurement-${nextId}`;
+  return Math.max(1, Number(store.metadata?.nextId) || 1);
 }

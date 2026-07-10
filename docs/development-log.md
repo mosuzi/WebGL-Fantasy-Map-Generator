@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：测量导入无效项不再消耗 ID
+
+本步修正测量对象导入的小数据一致性问题。上一轮行为断言暴露出：导入列表里如果夹着空 points 的无效测量项，旧逻辑会先消耗 `nextId`，再因为无有效点位跳过该项，导致实际导入的测量对象 id 不连续。
+
+修正：
+
+- `createImportMeasurementsCommand()` 现在只窥视下一个可用测量 id，不会在规范化前直接推进 `nextId`。
+- 只有规范化后确认存在有效点位并写入 store 时，才刷新 metadata 推进下一次 id 分配。
+- 导入列表中的无效项会被跳过，但不会再占用测量对象 id。
+
+边界：
+
+- 本步不改变测量导入格式、点位规范化、撤销 / 重做、导入结果返回或 `effects.affected` 的系统来源，只修正无效项导致 id 跳号的问题。
+
+验证：
+
+- `node --check` 覆盖 `measurement-edit-commands.js` 和 `measurement-objects.js`，均通过。
+- `node --input-type=module` 行为断言通过：导入列表中夹着空 points 无效项时，实际导入对象 id 为连续的 `measurement-1`、`measurement-2`，`metadata.nextId` 更新为 `3`，affected 保留 `derived-system#measurements-import` 并列出实际导入 id。直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-10：测量保存与导入补充影响目标
 
 本步继续细化 edit command 的 `effects.affected`。保存测量对象此前初始 effects 没有 affected 字段，导入测量对象此前初始 affected 是空数组；历史摘要、控制台历史 API 或执行前诊断无法稳定判断测量保存 / 导入会影响什么。

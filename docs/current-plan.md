@@ -785,5 +785,5 @@
 - 编辑命令 `domain` 第一批已完成：路线、河流、湖泊、地区、备注和测量对象命令已主动声明 `domain`，用于后续按领域聚合调试、刷新诊断和 API 错误归因；城市、国家、省份、文化、宗教、marker、标签、外交和军事等命令后续继续分批补齐。
 - 编辑命令 `domain` 第二批已完成：城市、国家、省份、文化和宗教命令已主动声明 `domain`；剩余 marker、标签、外交、军事和对象详情通用字段等命令后续继续分批补齐。
 - 编辑命令 `domain` 第三批已完成：marker、标签、外交和对象详情通用字段命令已主动声明 `domain`；对象详情重命名 / 备注使用真实 `target.kind` 作为领域，剩余军事命令后续单独补齐。
-- 编辑命令 `domain` 军事批次已完成：军事编辑命令 9 个导出工厂均已主动声明 `domain: "military"`；至此当前 `*-edit-commands.js` 主要命令域已覆盖，后续重点转向残留直接历史路径和更精确的 `effects.affected`。刷子与 GEO 导入命令已补充 `derived-system#height-brush/state-brush/province-brush/geo-import` 来源，外交重生成和批量政体调整已补充 `derived-system#diplomacy-regeneration/state-government-batch` 来源，测量对象导入已补充 `derived-system#measurements-import` 来源；新增对象和保存测量对象命令已开始用 `kind#new` 避免初始 affected 为空。
+- 编辑命令 `domain` 军事批次已完成：军事编辑命令 9 个导出工厂均已主动声明 `domain: "military"`；至此当前 `*-edit-commands.js` 主要命令域已覆盖，后续重点转向残留直接历史路径和更精确的 `effects.affected`。刷子与 GEO 导入命令已补充 `derived-system#height-brush/state-brush/province-brush/geo-import` 来源，外交重生成和批量政体调整已补充 `derived-system#diplomacy-regeneration/state-government-batch` 来源，测量对象导入已补充 `derived-system#measurements-import` 来源；新增对象和保存测量对象命令已开始用 `kind#new` 避免初始 affected 为空。测量对象导入已修正无效项消耗 `nextId` 的问题，跳过无效项后有效导入 id 保持连续。
 - 编辑历史领域统计已完成：`EditHistory.getStats()` 新增 `lastDomain`，执行 / 撤销 / 重做后会记录最近命令领域；控制台历史 API 和各类历史摘要可显示 `@domain`，便于后续刷新诊断和错误归因。
