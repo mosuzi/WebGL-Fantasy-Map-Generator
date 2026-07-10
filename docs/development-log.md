@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事军团态势编辑接入统一编辑执行器
+
+本步继续清理军事面板的旧执行路径，把单个军团态势调整接入 `executeEditCommand()`。
+
+修正：
+
+- 军团态势调整不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 态势实际变更后继续保留 `markDerivedFresh(["military"])`、`refreshGenerationSummary()` 和 generation log 记录。
+- 面板刷新改由命令 effects 中的 `point-layers / object-index / object-panels` 驱动。
+
+边界：
+
+- 本步只迁移单个军团态势入口，不改变军事生成、军团重命名、兵种比例、批量态势、驻地 / 基地、战报事件或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开军事面板后选中军团 `1:0`，真实点击“调整态势”并把状态从 `patrolling / 巡逻中` 改为 `marching / 行军中`，撤销栈 `undo=1`，`lastLabel` 为 `调整军团态势 #1:0`，generation log 追加 `update military status: regiment=1:0, status=marching`，`military.metadata.stale = false`，`lastEditRefresh` 为 `point-layers, object-index, object-panels` / `affected military#1:0`，面板详情同步显示“行军中”，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事军团重命名接入统一编辑执行器
 
 本步继续清理军事面板的旧执行路径，把单个军团重命名接入 `executeEditCommand()`。
