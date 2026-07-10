@@ -54,11 +54,13 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedObjectId"
     empty-text="没有匹配的外交关系"
+    :empty-action="filterEmptyAction"
     resizable-columns
     selectable-rows
     :selected-row-ids="selectedRelationIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
     @selection-change="selectedRelationIds = $event"
   />
@@ -212,6 +214,9 @@ const metrics = computed(() => {
 const stateOptions = computed(() => metrics.value.states.map(state => ({value: state.id, label: state.name})));
 const selectedSubjectId = computed(() => toIntegerId(props.state.selectedStateId) ?? stateOptions.value[0]?.value ?? null);
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const selectedRelationIdSet = computed(() => new Set(selectedRelationIds.value.map(id => String(id))));
 const selectedRelationRows = computed(() => visibleRows.value.filter(row => selectedRelationIdSet.value.has(String(row.id))));
 const diplomacyExportActions = computed(() => [
@@ -439,6 +444,10 @@ function filterRows(rows, filter) {
 
 function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function normalizeRelation(relation) {

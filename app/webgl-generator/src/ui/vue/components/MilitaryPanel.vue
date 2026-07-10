@@ -84,12 +84,14 @@
     :selected-id="state.selectedRegimentId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的军团"
+    :empty-action="filterEmptyAction"
     resizable-columns
     selectable-rows
     :selected-row-ids="selectedRegimentIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
     @selection-change="selectedRegimentIds = $event"
   />
@@ -589,6 +591,9 @@ const eventExportScope = computed(() => {
 });
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const selectedRegimentIdSet = computed(() => new Set(selectedRegimentIds.value.map(id => String(id))));
 const selectedRegimentRows = computed(() => visibleRows.value.filter(row => selectedRegimentIdSet.value.has(String(row.id))));
 const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);
@@ -910,6 +915,10 @@ function statusValue(row) {
 
 function sortRows(rows, key, direction) {
   return [...rows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function syncRatioDraft() {

@@ -17,8 +17,10 @@
     row-id-key="id"
     :show-locate-action="false"
     empty-text="没有匹配的纹章"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -74,6 +76,9 @@ const metrics = computed(() => {
   return buildEmblemMetrics(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedEmblemId));
 
 const summaryMetrics = computed(() => [
@@ -178,6 +183,10 @@ function filterRows(sourceRows, filter) {
 
 function sortRows(sourceRows, key, direction) {
   return [...sourceRows].sort((a, b) => compareRowsByKey(a, b, key, direction));
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function formatNumber(value) {

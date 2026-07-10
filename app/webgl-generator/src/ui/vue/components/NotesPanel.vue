@@ -15,12 +15,14 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedNoteId"
     row-id-key="id"
-    empty-text="暂无备注"
+    :empty-text="notesEmptyText"
+    :empty-action="filterEmptyAction"
     resizable-columns
     selectable-rows
     :selected-row-ids="selectedNoteIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
     @selection-change="selectedNoteIds = $event"
   />
@@ -94,6 +96,10 @@ const rows = computed(() => {
   return noteRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
+const notesEmptyText = computed(() => filterEmptyAction.value ? "没有匹配的备注" : "暂无备注");
 const selectedNoteIdSet = computed(() => new Set(selectedNoteIds.value.map(id => String(id))));
 const selectedNoteRows = computed(() => visibleRows.value.filter(row => selectedNoteIdSet.value.has(String(row.id))));
 const notesExportActions = computed(() => [
@@ -205,6 +211,10 @@ function sortRows(sourceRows, key, dir) {
 
 function compareValue(a, b) {
   return compareListValues(a, b, "zh-Hans-CN");
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function excerpt(body) {

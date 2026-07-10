@@ -24,9 +24,11 @@
     :selected-id="selectedGovernmentKey"
     row-id-key="key"
     empty-text="没有匹配的政体"
+    :empty-action="filterEmptyAction"
     :show-locate-action="false"
     resizable-columns
     @select="callbacks.onSelectGovernment"
+    @empty-action="handleEmptyAction"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'governments'})"
   />
 
@@ -157,6 +159,9 @@ const visibleGovernmentRows = computed(() => sortRows(filterGovernmentRows(
   props.state.filter,
   props.state.familyFilter
 ), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const governmentColumnWidths = computed(() => tableColumnWidths("governments"));
 const stateColumnWidths = computed(() => tableColumnWidths("states"));
 const selectedGovernmentKey = computed(() => (
@@ -277,6 +282,10 @@ function tableColumnWidths(table) {
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, width]) => [key.slice(prefix.length), width])
   );
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") callbacks.onFilter?.("");
 }
 
 function syncBatchGovernmentKey() {

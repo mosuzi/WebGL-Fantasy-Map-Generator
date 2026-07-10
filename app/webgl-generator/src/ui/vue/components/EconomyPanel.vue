@@ -17,11 +17,13 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedGoodId"
     empty-text="没有匹配的商品"
+    :empty-action="filterEmptyAction"
     resizable-columns
     selectable-rows
     :selected-row-ids="selectedEconomyRowIds"
     @select="callbacks.onSelectGood"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'goods'})"
     @selection-change="selectedEconomyRowIds = $event"
   />
@@ -37,11 +39,13 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedMarketId"
     empty-text="没有匹配的市场"
+    :empty-action="filterEmptyAction"
     resizable-columns
     selectable-rows
     :selected-row-ids="selectedEconomyRowIds"
     @select="callbacks.onSelectMarket"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'markets'})"
     @selection-change="selectedEconomyRowIds = $event"
   />
@@ -57,11 +61,13 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedDealId"
     empty-text="没有匹配的交易"
+    :empty-action="filterEmptyAction"
     resizable-columns
     selectable-rows
     :selected-row-ids="selectedEconomyRowIds"
     @select="callbacks.onSelectDeal"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'deals'})"
     @selection-change="selectedEconomyRowIds = $event"
   />
@@ -253,6 +259,9 @@ const filteredDealRows = computed(() => sortRows(filterRows(metrics.value.deals,
 const visibleGoodRows = computed(() => filteredGoodRows.value.slice(0, ROW_LIMIT));
 const visibleMarketRows = computed(() => filteredMarketRows.value.slice(0, ROW_LIMIT));
 const visibleDealRows = computed(() => filteredDealRows.value.slice(0, DEAL_ROW_LIMIT));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const goodColumnWidths = computed(() => tableColumnWidths("goods"));
 const marketColumnWidths = computed(() => tableColumnWidths("markets"));
 const dealColumnWidths = computed(() => tableColumnWidths("deals"));
@@ -388,6 +397,10 @@ function tableColumnWidths(table) {
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, width]) => [key.slice(prefix.length), width])
   );
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") callbacks.onFilter?.("");
 }
 
 function buildMarketDetail(market) {
