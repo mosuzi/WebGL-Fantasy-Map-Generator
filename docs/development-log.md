@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：编辑命令默认刷新入口收口
+
+本步继续推进编辑器基础设施计划中 `refreshPanelsForEdit()` 的落地范围。此前 `executeEditCommand()` 默认只触发 `edit-refresh-scheduler`，路线、备注、测量等调用点需要在执行成功后再手写 `refreshPanelsForEdit()`，容易在新增 API 或面板操作时漏掉对象面板刷新。
+
+修正：
+
+- 新增 `refreshAfterCommandEdit()` 作为 `executeEditCommand()` 默认后处理入口。
+- 默认入口统一先调用 `refreshAfterEdit()` 完成渲染、选择、运行统计和 pick 面板刷新，再调用 `refreshPanelsForEdit()` 按命令 `effects.affected` / `object-panels` 刷新对象面板。
+- 删除路线删除、备注删除、测量重命名 / 删除及对应 API 中重复手写的 `refreshPanelsForEdit()`。
+
+边界：
+
+- 自定义 `options.refresh` 的国家 / 省份新增删除路径继续保留原有专门刷新逻辑，本步不扩大政治派生或选择语义。
+- 本步不新增地图持久化字段，也不修改地图数据结构，因此不需要旧图迁移或回填。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：临时标记路线面板为打开后调用公开 `webglGeneratorApi.edit.routes.delete()`，路线数量 `589 -> 588`，撤销栈 `undo=1`，`lastEditRefresh` 为 `route-mesh, object-panels, object-index` / `affected route#0`，路线面板 `update()` 被默认后处理调用 `1` 次，`glError = 0`。health monitor 仍报告生成启动期主线程长任务 warning，和本次编辑刷新收口无关。
+
 ## 2026-07-09：降水显示按原版毫米口径换算
 
 用户指出当前页面中 30 度地区、降水倍率调为 `1` 后只有 `6 mm` 降水，并据此质疑河流流量与气候数据计算不合理。复查原版 FMG 后确认，原版 UI 的降水显示为内部降水指数 `prec * 100 + " mm"`；WebGL 版此前直接把内部指数标为 `mm`，导致显示少了 100 倍。

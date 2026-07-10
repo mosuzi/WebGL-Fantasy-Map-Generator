@@ -1268,7 +1268,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         noopStatus: "路线不存在或已被删除。",
         status: `已删除路线 #${object.id}。`
       });
-      if (result.executed) refreshPanelsForEdit(state, result.command);
       updateEditingInteractionLock(state, documentRef);
     },
     onRegenerateRoutes: () => {
@@ -1485,7 +1484,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         noopStatus: "备注不存在或已被删除。",
         status: `已删除备注 ${row.name || row.id}。`
       });
-      if (result.executed) refreshPanelsForEdit(state, result.command);
       updateEditingInteractionLock(state, documentRef);
     },
     onExport: rows => exportNotesSummary(state, documentRef, rows),
@@ -1514,7 +1512,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onRename: (measurementId, name) => {
       const command = createRenameMeasurementCommand(measurementId, name);
       const result = executeEditCommand(state, documentRef, command);
-      if (result.executed) refreshPanelsForEdit(state, result.command);
       updateMeasurementOverlay(state, documentRef);
     },
     onDelete: row => {
@@ -1522,7 +1519,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const result = executeEditCommand(state, documentRef, command, {
         status: `已删除测量对象 ${row.name || row.id}。`
       });
-      if (result.executed) refreshPanelsForEdit(state, result.command);
       if (result.executed && state.measurement.editingMeasurementId === row.id) {
         state.measurement.editingMeasurementId = null;
         state.measurement.points = [];
@@ -4037,6 +4033,11 @@ function refreshAfterEdit(state, commandOrEffects) {
   state.editRefreshScheduler.run(commandOrEffects);
 }
 
+function refreshAfterCommandEdit(state, commandOrEffects) {
+  refreshAfterEdit(state, commandOrEffects);
+  refreshPanelsForEdit(state, commandOrEffects);
+}
+
 function executeEditCommand(state, documentRef, command, options = {}) {
   const context = options.context || {map: state.map};
   if (!command) return {executed: false, command: null, result: null, error: null};
@@ -4046,7 +4047,7 @@ function executeEditCommand(state, documentRef, command, options = {}) {
       return {executed: false, command, result: null, error: null};
     }
     const executedCommand = state.editHistory.execute(command, context);
-    const refresh = options.refresh || refreshAfterEdit;
+    const refresh = options.refresh || refreshAfterCommandEdit;
     refresh(state, executedCommand);
     const result = readEditCommandResult(executedCommand);
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
@@ -4141,7 +4142,6 @@ function deleteNoteViaApi(state, documentRef, noteId, options = {}) {
     status: `已删除备注 ${name || id}。`,
     throwOnError: false
   });
-  if (result.executed) refreshPanelsForEdit(state, result.command);
   updateEditingInteractionLock(state, documentRef);
   return {
     executed: result.executed,
@@ -4164,7 +4164,6 @@ function renameMeasurementViaApi(state, documentRef, measurementId, name) {
     status: `已重命名测量对象 ${nextName || id}。`,
     throwOnError: false
   });
-  if (result.executed) refreshPanelsForEdit(state, result.command);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -4177,7 +4176,6 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
     status: `已删除测量对象 ${id}。`,
     throwOnError: false
   });
-  if (result.executed) refreshPanelsForEdit(state, result.command);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -4190,7 +4188,6 @@ function deleteRouteViaApi(state, documentRef, routeId) {
     status: `已删除路线 #${Number.isFinite(id) ? id : routeId}。`,
     throwOnError: false
   });
-  if (result.executed) refreshPanelsForEdit(state, result.command);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
