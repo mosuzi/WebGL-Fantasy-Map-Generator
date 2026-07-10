@@ -263,8 +263,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       else selectionStore.setSelection({object});
       afterSelect?.(object);
     }
-    updateRuntimePanel(documentRef, state);
-    updatePickPanel(documentRef, state);
+    refreshRuntimeAndPickPanels(documentRef, state);
     return located;
   };
   state.locateAndSelectObject = locateAndSelectObject;
@@ -1521,8 +1520,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.objectDetails.show(selection, editingObject);
     }
     updateEditingInteractionLock(state, documentRef);
-    updateRuntimePanel(documentRef, state);
-    updatePickPanel(documentRef, state);
+    refreshRuntimeAndPickPanels(documentRef, state);
   }, object => resolveObject(state.map, object));
   state.selectionStore = selectionStore;
   state.editRefreshScheduler = createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel});
@@ -1578,8 +1576,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onUnitPreferences: () => {
       renderer.setUnitPreferences(readControlPreferences(documentRef).units);
-      updateRuntimePanel(documentRef, state);
-      updatePickPanel(documentRef, state);
+      refreshRuntimeAndPickPanels(documentRef, state);
       updateMeasurementOverlay(state, documentRef);
     },
     onClimateControls: () => {
@@ -2254,8 +2251,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateMeasurementPanel(state);
   restorePersistedPanels(state);
   updateEditingInteractionLock(state, documentRef);
-  updateRuntimePanel(documentRef, state);
-  updatePickPanel(documentRef, state);
+  refreshRuntimeAndPickPanels(documentRef, state);
   updateMeasurementOverlay(state, documentRef);
   emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
   emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
@@ -3664,8 +3660,7 @@ function locateObject(state, object, documentRef) {
   if (located) {
     state.selectionStore.setSelection({object});
   }
-  updateRuntimePanel(documentRef, state);
-  updatePickPanel(documentRef, state);
+  refreshRuntimeAndPickPanels(documentRef, state);
   return located;
 }
 
@@ -5235,8 +5230,7 @@ function locateMeasurement(state, row, documentRef) {
   }
   const located = locate();
   if (located) state.selectionStore?.setSelection({object});
-  updateRuntimePanel(documentRef, state);
-  updatePickPanel(documentRef, state);
+  refreshRuntimeAndPickPanels(documentRef, state);
   return located;
 }
 
@@ -6374,6 +6368,11 @@ function updateRiverPanel(state) {
 
 function isPanelOpen(panel) {
   return Boolean(panel?.isOpen?.());
+}
+
+function refreshRuntimeAndPickPanels(documentRef, state) {
+  updateRuntimePanel(documentRef, state);
+  updatePickPanel(documentRef, state);
 }
 
 function labelKeyForObject(object) {

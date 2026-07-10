@@ -23479,3 +23479,21 @@ full 矩阵结果：
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+
+### 2026-07-11 runtime / pick 双刷新 helper 第一刀
+
+背景：
+
+- 定位、selection 监听、载入完成和单位偏好刷新里有多处固定相邻的 runtime panel 与 pick panel 双刷新。
+- 这些路径属于定位 / selection 后的公共状态刷新语义，但单独 runtime 刷新、单独 pick 刷新和 measurement overlay 刷新顺序仍各有语义，不能一次性合并。
+
+实现：
+
+- 新增 `refreshRuntimeAndPickPanels(documentRef, state)`，内部保持原顺序：先更新 runtime panel，再更新 pick panel。
+- `locateAndSelectObject()`、selection store 监听、单位偏好刷新、地图载入完成、通用对象定位和测量对象定位改走该 helper。
+- 本步不改变编辑交互锁、measurement overlay、单独面板刷新或其它运行时刷新调用。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
