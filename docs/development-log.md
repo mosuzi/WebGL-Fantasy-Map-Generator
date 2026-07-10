@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事批量态势编辑接入统一编辑执行器
+
+本步继续清理军事面板的旧执行路径，把当前筛选军团的批量态势调整接入 `executeEditCommand()`。
+
+修正：
+
+- 批量态势调整不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 批量态势实际变更后继续保留 `markDerivedFresh(["military"])`、`refreshGenerationSummary()` 和 generation log 记录。
+- 面板刷新改由命令 effects 中按受影响军团生成的 `point-layers / object-index / object-panels` 驱动。
+
+边界：
+
+- 本步只迁移当前筛选军团的批量态势入口，不改变单军团态势、兵种比例、驻地 / 基地、战报事件或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开军事面板后通过真实“批量态势”面板把当前筛选的 `113` 支军团从混合态势批量改为 `routed / 败逃中`；撤销栈 `undo=1`，`lastLabel` 为 `批量调整军团态势 113支`，generation log 追加 `batch update military status: count=113, status=routed`，`military.metadata.statuses.routed = 113`，`military.metadata.stale = false`，`lastEditRefresh` 为 `point-layers, object-index, object-panels` 并列出受影响的 `military#...` 对象，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事兵种比例编辑接入统一编辑执行器
 
 本步继续清理军事面板的旧执行路径，把国家级兵种比例调整接入 `executeEditCommand()`。
