@@ -694,6 +694,11 @@
    - 边界：本步只新增并迁移 `startObjectEditing()` / `stopObjectEditing()` / `toggleObjectEditing()`，覆盖对象详情、国家、省份和河流既有入口；不改变高度、国家、省份刷子模式、河道编辑细节或对象表格双击策略。
    - 完成记录：运行时编辑动作会集中处理 selection、`SelectionStore` 编辑态、编辑交互锁和 runtime 面板刷新；对象详情编辑 / 取消、国家编辑、省份编辑和河流编辑开关已复用该动作，面板内部退出模式的保护性 stop 分支仍保留在原调用点。
 
+90. 对象退出编辑动作 helper 第一刀。`已完成`
+   - 目标：继续收束进入 / 退出编辑语义，把国家、省份和河流退出编辑的保护性清理也纳入运行时统一动作。
+   - 边界：本步只为 `stopObjectEditing()` 增加 `ifKind` 守卫，并迁移国家 / 省份切换模式、关闭画笔和河流面板关闭时的编辑态清理；不改变新增 / 删除模式、画笔 active stroke、面板打开关闭或河流编辑细节。
+   - 完成记录：`stopObjectEditing({ifKind})` 会在对象类型匹配时停止编辑并统一刷新编辑交互锁和 runtime 面板；国家 / 省份退出编辑、进入新增 / 删除模式前的清理，以及关闭河流面板时退出河流编辑都已复用该 helper，直接 `selectionStore.startEditing/stopEditing` 只保留在 helper 内部。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

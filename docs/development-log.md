@@ -217,6 +217,9 @@
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
 - 本批次综合验证中，`node .\tools\webgl-generator-measurement-import-regression.mjs --browser-channel chrome --cells 3000 --out $env:TEMP\fmg-measurement-locate-action.json --markdown $env:TEMP\fmg-measurement-locate-action.md` 通过；报告结论为通过，定位后 selection 为 `measurement / measurement-2`，测量选中行 `1`，对象详情面板关闭，`WebGL error = 0`。
 
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
@@ -23408,6 +23411,26 @@ full 矩阵结果：
 - 对象详情编辑 / 取消改走 start / stop helper；国家和省份编辑改走 start helper，并保留原来的专题色彩模式切换和面板选中目标更新。
 - 河流编辑按钮改走 toggle helper，继续保留“再次点击同一条河流关闭编辑”的既有语义。
 - 本步不迁移退出画笔、关闭面板和增删模式中的保护性 `stopEditing()` 分支，避免把模式清理和编辑入口混在同一刀里。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+
+### 2026-07-10 对象退出编辑动作 helper 第一刀
+
+背景：
+
+- 进入编辑入口已经复用 `startObjectEditing()` / `toggleObjectEditing()`，但国家 / 省份切换新增、删除或关闭画笔时，仍在多个回调里直接判断 `state.editingObject?.kind` 后调用 `selectionStore.stopEditing()`。
+- 这些分支是模式切换时的保护性清理，不应改变业务行为，但可以收束到同一个 stop helper，减少后续 edit action 层的旁路。
+
+实现：
+
+- `stopObjectEditing()` 新增 `ifKind` 守卫：只有当前编辑对象类型匹配时才停止编辑，否则返回 `false`。
+- 国家面板关闭编辑态、进入新增模式、进入删除模式前的编辑清理改走 `stopObjectEditing({ifKind: OBJECT_KIND.STATE})`。
+- 省份面板关闭编辑态、进入新增模式、进入删除模式前的编辑清理改走 `stopObjectEditing({ifKind: OBJECT_KIND.PROVINCE})`。
+- 河流面板关闭时退出河流编辑改走 `stopObjectEditing({ifKind: OBJECT_KIND.RIVER})`，继续保留 `suppressNextRiverPanelOpen` 语义。
+- 本步不改变新增 / 删除模式、active stroke 清理、面板开关或河流编辑细节。
 
 验证：
 

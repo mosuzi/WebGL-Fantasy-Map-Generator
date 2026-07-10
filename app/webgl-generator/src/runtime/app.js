@@ -277,7 +277,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     updateRuntimePanel(documentRef, state);
     return true;
   };
-  const stopObjectEditing = ({afterStop = null} = {}) => {
+  const stopObjectEditing = ({afterStop = null, ifKind = null} = {}) => {
+    if (ifKind && state.editingObject?.kind !== ifKind) return false;
     selectionStore.stopEditing();
     afterStop?.();
     updateEditingInteractionLock(state, documentRef);
@@ -363,7 +364,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateRuntimePanel(documentRef, state);
       } else {
         state.stateEdit.activeStroke = null;
-        if (state.editingObject?.kind === OBJECT_KIND.STATE) selectionStore.stopEditing();
+        stopObjectEditing({ifKind: OBJECT_KIND.STATE});
         updateEditingInteractionLock(state, documentRef);
       }
     },
@@ -395,7 +396,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.stateEdit.addMode = Boolean(active);
       if (active) {
         state.stateEdit.deleteMode = false;
-        if (state.editingObject?.kind === OBJECT_KIND.STATE) selectionStore.stopEditing();
+        stopObjectEditing({ifKind: OBJECT_KIND.STATE});
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
@@ -412,7 +413,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.stateEdit.deleteMode = Boolean(active);
       if (active) {
         state.stateEdit.addMode = false;
-        if (state.editingObject?.kind === OBJECT_KIND.STATE) selectionStore.stopEditing();
+        stopObjectEditing({ifKind: OBJECT_KIND.STATE});
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
@@ -559,7 +560,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateRuntimePanel(documentRef, state);
       } else {
         state.provinceEdit.activeStroke = null;
-        if (state.editingObject?.kind === OBJECT_KIND.PROVINCE) selectionStore.stopEditing();
+        stopObjectEditing({ifKind: OBJECT_KIND.PROVINCE});
         updateEditingInteractionLock(state, documentRef);
       }
     },
@@ -567,7 +568,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.provinceEdit.addMode = Boolean(active);
       if (active) {
         state.provinceEdit.deleteMode = false;
-        if (state.editingObject?.kind === OBJECT_KIND.PROVINCE) selectionStore.stopEditing();
+        stopObjectEditing({ifKind: OBJECT_KIND.PROVINCE});
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
@@ -587,7 +588,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.provinceEdit.deleteMode = Boolean(active);
       if (active) {
         state.provinceEdit.addMode = false;
-        if (state.editingObject?.kind === OBJECT_KIND.PROVINCE) selectionStore.stopEditing();
+        stopObjectEditing({ifKind: OBJECT_KIND.PROVINCE});
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
@@ -1401,7 +1402,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onClose: () => {
       if (state.editingObject?.kind === OBJECT_KIND.RIVER) {
         suppressNextRiverPanelOpen = true;
-        selectionStore.stopEditing();
+        stopObjectEditing({ifKind: OBJECT_KIND.RIVER});
       }
     },
     onSetWidthFactor: (riverId, widthFactor) => {
