@@ -62,9 +62,12 @@
     :selected-id="state.selectedStateId"
     empty-text="该政体下没有国家"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedGovernmentStateIds"
     @select="callbacks.onSelectState"
     @locate="callbacks.onLocateState"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'states'})"
+    @selection-change="selectedGovernmentStateIds = $event"
   />
 
   <div class="government-panel-actions">
@@ -108,6 +111,7 @@ const callbacks = props.callbacks;
 const GOVERNMENT_BY_KEY = new Map(GOVERNMENT_TYPES.map(type => [type.key, type]));
 const unitPreferences = useUnitPreferences();
 const batchGovernmentKey = ref("");
+const selectedGovernmentStateIds = ref([]);
 
 const sortOptions = Object.freeze([
   {key: "count", label: "国家"},
@@ -167,11 +171,15 @@ const exportStateRows = computed(() => metrics.value.states
   .sort((a, b) => a.governmentLabel.localeCompare(b.governmentLabel, "zh-CN") || b.population - a.population || a.id - b.id));
 const governmentExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !exportStateRows.value.length},
-  {key: "json", label: "导出 JSON", disabled: !visibleGovernmentRows.value.length}
+  {key: "json", label: "导出 JSON", disabled: !visibleGovernmentRows.value.length},
+  {key: "selected-csv", label: `导出选中国家 CSV ${formatNumber(selectedGovernmentStateRows.value.length)}`, disabled: !selectedGovernmentStateRows.value.length},
+  {key: "selected-json", label: `导出选中国家 JSON ${formatNumber(selectedGovernmentStateRows.value.length)}`, disabled: !selectedGovernmentStateRows.value.length}
 ]);
 const selectedStateRows = computed(() => metrics.value.states
   .filter(row => row.governmentKey === selectedGovernmentKey.value)
   .sort((a, b) => b.population - a.population || b.economicPower - a.economicPower || a.id - b.id));
+const selectedGovernmentStateIdSet = computed(() => new Set(selectedGovernmentStateIds.value.map(id => String(id))));
+const selectedGovernmentStateRows = computed(() => selectedStateRows.value.filter(row => selectedGovernmentStateIdSet.value.has(String(row.id))));
 const selectedState = computed(() => findByObjectId(selectedStateRows.value, props.state.selectedStateId) || selectedStateRows.value[0] || null);
 const batchGovernmentOptions = computed(() => GOVERNMENT_OPTIONS
   .filter(option => option.value !== selectedGovernmentKey.value)
@@ -192,7 +200,8 @@ const summaryMetrics = computed(() => [
   {label: "主流政体", value: metrics.value.dominantGovernmentLabel},
   {label: "共和系", value: formatNumber(metrics.value.familyCounts.republic || 0)},
   {label: "君主系", value: formatNumber((metrics.value.familyCounts.monarchy || 0) + (metrics.value.familyCounts.autocracy || 0))},
-  {label: "筛选", value: formatNumber(visibleGovernmentRows.value.length)}
+  {label: "筛选", value: formatNumber(visibleGovernmentRows.value.length)},
+  {label: "已选国家", value: formatNumber(selectedGovernmentStateRows.value.length)}
 ]);
 
 const detailRows = computed(() => selectedGovernment.value ? [
@@ -219,6 +228,11 @@ watch(selectedGovernmentKey, key => {
 });
 
 watch(() => props.state.version, syncBatchGovernmentKey, {immediate: true});
+
+watch(selectedStateRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedGovernmentStateIds.value = selectedGovernmentStateIds.value.filter(id => visibleIds.has(String(id)));
+});
 
 function buildGovernmentMetrics(map) {
   const states = stateRows(map);
@@ -279,8 +293,8 @@ function applyBatchGovernment() {
   callbacks.onBatchGovernmentChange?.(selectedStateRows.value.map(row => row.id), batchGovernmentKey.value);
 }
 
-function exportCsv() {
-  if (!exportStateRows.value.length) return;
+function exportCsv(rows = exportStateRows.value, {selectedOnly = false} = {}) {
+  if (!rows.length) return;
   const header = [
     "国家ID",
     "国家",
@@ -303,7 +317,7 @@ function exportCsv() {
     "附庸",
     "城镇"
   ];
-  const body = exportStateRows.value.map(row => [
+  const body = rows.map(row => [
     row.id,
     row.name,
     row.governmentKey,
@@ -326,13 +340,16 @@ function exportCsv() {
     row.burgs
   ]);
   const text = [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n");
-  downloadText(`fmg-governments-${safeFilePart(props.state.map?.metadata?.seed)}.csv`, text, "text/csv;charset=utf-8");
+  const suffix = selectedOnly ? "-selected-states" : "";
+  downloadText(`fmg-governments-${safeFilePart(props.state.map?.metadata?.seed)}${suffix}.csv`, text, "text/csv;charset=utf-8");
 }
 
-function exportJson() {
-  if (!visibleGovernmentRows.value.length) return;
+function exportJson(rows = exportStateRows.value, {selectedOnly = false} = {}) {
+  if (!visibleGovernmentRows.value.length || !rows.length) return;
+  const exportedGovernmentKeys = new Set(rows.map(row => row.governmentKey));
   const payload = {
     type: "fmg-government-summary",
+    exportMode: selectedOnly ? "selected-government-states" : "current-government-filter",
     exportedAt: new Date().toISOString(),
     seed: props.state.map?.metadata?.seed || "",
     filter: props.state.filter || "",
@@ -340,20 +357,25 @@ function exportJson() {
     selectedGovernmentKey: selectedGovernmentKey.value,
     summary: {
       totalStates: metrics.value.totalStates,
-      exportedStates: exportStateRows.value.length,
-      governments: visibleGovernmentRows.value.length,
+      exportedStates: rows.length,
+      governments: selectedOnly ? exportedGovernmentKeys.size : visibleGovernmentRows.value.length,
       dominantGovernmentLabel: metrics.value.dominantGovernmentLabel,
       familyCounts: metrics.value.familyCounts
     },
-    governments: visibleGovernmentRows.value.map(row => exportGovernmentRow(row)),
-    states: exportStateRows.value.map(row => exportStateRow(row))
+    governments: visibleGovernmentRows.value
+      .filter(row => !selectedOnly || exportedGovernmentKeys.has(row.key))
+      .map(row => exportGovernmentRow(row)),
+    states: rows.map(row => exportStateRow(row))
   };
-  downloadText(`fmg-governments-${safeFilePart(props.state.map?.metadata?.seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  const suffix = selectedOnly ? "-selected-states" : "";
+  downloadText(`fmg-governments-${safeFilePart(props.state.map?.metadata?.seed)}${suffix}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
 function handleGovernmentExport(key) {
   if (key === "csv") exportCsv();
   if (key === "json") exportJson();
+  if (key === "selected-csv") exportCsv(selectedGovernmentStateRows.value, {selectedOnly: true});
+  if (key === "selected-json") exportJson(selectedGovernmentStateRows.value, {selectedOnly: true});
 }
 
 function ensureGovernmentGroup(groups, key) {

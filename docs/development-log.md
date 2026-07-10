@@ -24167,6 +24167,31 @@ full 矩阵结果：
 - 点击表头全选后，`19` 个可见行 checkbox 全部选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 JSON 19”菜单项。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
 
+### 2026-07-11 政体面板国家列表批量选择导出
+
+背景：
+
+- 公共表格批量选择已经在备注、测量和外交面板验证，下一步继续选择只读导出语义清晰、不会触发编辑副作用的面板。
+- 政体面板下方国家列表只表示当前选中政体下的国家；给它补“导出选中国家”可以复用既有政体 CSV / JSON 导出结构，不改变上方政体分组表和“批量套用到当前分组”的编辑语义。
+
+实现：
+
+- 政体面板下方国家列表启用 `UiObjectTable` 的 `selectableRows` 和 `selectedRowIds`。
+- 面板内部维护 `selectedGovernmentStateIds`，并在当前政体国家列表变化时清理不可见选中项。
+- 摘要指标新增“已选国家”，导出下拉新增“导出选中国家 CSV N”和“导出选中国家 JSON N”。
+- CSV / JSON 导出函数改为可接收国家 rows；普通导出继续导出当前筛选政体范围内的国家，选中导出只导出当前政体列表中已选国家，并给文件名追加 `-selected-states` 后缀。
+- 本步不改变政体分组筛选、政体列表选中、批量套用目标、国家定位、国家编辑入口、列宽、排序或政体编辑命令。
+
+验证：
+
+- 本轮按要求启动验证子智能体 `verify_government_state_batch_export`；该子智能体等待 90 秒无输出，已中断释放，最终有效验证证据来自主线程兜底复跑。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 浏览器验证通过：政体面板下方国家列表出现 `1` 个可见行选择 checkbox 和 1 个表头全选 checkbox；单选第一条后摘要变为“已选国家1”，导出下拉出现“导出选中国家 JSON 1”和“导出选中国家 CSV 1”。
+- 点击“导出选中国家 JSON 1”后，下载文件为 `fmg-governments-stage-2-1-selected-states.json`，JSON 中 `exportMode = selected-government-states`、`summary.exportedStates = 1`、`states.length = 1`。
+- 点击表头全选后，当前分组的 `1` 个可见行 checkbox 处于选中状态，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中国家 JSON 1”菜单项。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
+
 ### 2026-07-11 测量对象批量选择导出
 
 背景：
