@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：国家政府省份城市面板历史按钮接入统一历史执行器
+
+本步继续清理面板撤销 / 重做旧路径，把国家编辑、政府总览、省份管理和城市管理的历史按钮接入 `executeHistoryCommand()`。
+
+修正：
+
+- `executeHistoryCommand()` 新增可选 `refresh` 和 `afterRefresh` 参数，默认行为保持不变。
+- 国家编辑历史按钮复用统一历史执行器，并继续使用 `refreshAfterStateEdit()` 保留最后指针国家 pick、政府 / 省份 / 城市面板联动刷新。
+- 政府总览历史按钮复用统一历史执行器，并继续使用 `refreshAfterStateEdit()` 与运行面板刷新。
+- 省份管理历史按钮复用统一历史执行器，并继续使用 `refreshAfterProvinceEdit()` 保留最后指针省份 pick、城市面板联动刷新。
+- 城市管理历史按钮复用统一历史执行器，由统一对象面板刷新覆盖原先国家 / 省份 / 城市面板手写刷新。
+
+边界：
+
+- 本步只迁移国家 / 政府 / 省份 / 城市面板历史按钮，不改变国家、省份、城市字段编辑命令和新增 / 删除命令。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-state-government-history-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `state-government-history-smoke / 10000 cells` 地图后，在国家编辑面板用 `api.edit.states.add(1041)` 制造历史记录，再点击浮动面板 header “撤销 / 重做”，国家数量 `20 -> 21 -> 20 -> 21`；在政府总览面板用 `api.edit.states.add(1041)` 制造历史记录，再点击 header “撤销 / 重做”，国家数量 `21 -> 22 -> 21 -> 22`；在省份管理面板用 `api.edit.provinces.add(1041)` 制造历史记录，再点击 header “撤销 / 重做”，省份数量 `198 -> 199 -> 198 -> 199`；在城市管理面板用 `api.edit.cities.add(1041)` 制造历史记录，再点击 header “撤销 / 重做”，城市数量 `894 -> 895 -> 894 -> 895`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：河流湖泊地区面板历史按钮接入统一历史执行器
 
 本步继续清理面板撤销 / 重做旧路径，把河流管理、湖泊管理和地区管理的历史按钮接入 `executeHistoryCommand()`。

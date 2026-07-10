@@ -459,16 +459,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterStateEdit(state, command);
-      updateStatePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "undo", {refresh: refreshAfterStateEdit});
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterStateEdit(state, command);
-      updateStatePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "redo", {refresh: refreshAfterStateEdit});
     }
   });
   state.panels.state = statePanel;
@@ -500,22 +494,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterStateEdit(state, command);
-      updateStatePanel(state);
-      updateGovernmentPanel(state);
-      updateDiplomacyPanel(state);
-      updateMilitaryPanel(state);
-      updateRuntimePanel(documentRef, state);
+      return executeHistoryCommand(state, documentRef, "undo", {
+        refresh: refreshAfterStateEdit,
+        afterRefresh: () => updateRuntimePanel(documentRef, state)
+      });
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterStateEdit(state, command);
-      updateStatePanel(state);
-      updateGovernmentPanel(state);
-      updateDiplomacyPanel(state);
-      updateMilitaryPanel(state);
-      updateRuntimePanel(documentRef, state);
+      return executeHistoryCommand(state, documentRef, "redo", {
+        refresh: refreshAfterStateEdit,
+        afterRefresh: () => updateRuntimePanel(documentRef, state)
+      });
     }
   });
   state.panels.government = governmentPanel;
@@ -640,16 +628,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "undo", {refresh: refreshAfterProvinceEdit});
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "redo", {refresh: refreshAfterProvinceEdit});
     }
   });
   state.panels.province = provincePanel;
@@ -761,18 +743,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateStatePanel(state);
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateStatePanel(state);
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.city = cityPanel;
@@ -3865,7 +3839,7 @@ function executeEditCommand(state, documentRef, command, options = {}) {
   }
 }
 
-function executeHistoryCommand(state, documentRef, action) {
+function executeHistoryCommand(state, documentRef, action, options = {}) {
   const command = action === "redo"
     ? state.editHistory.redo({map: state.map})
     : state.editHistory.undo({map: state.map});
@@ -3877,8 +3851,10 @@ function executeHistoryCommand(state, documentRef, action) {
       history: state.editHistory.getStats()
     };
   }
-  refreshAfterEdit(state, command);
-  updateAllObjectPanels(state);
+  const refresh = options.refresh || refreshAfterEdit;
+  refresh(state, command);
+  if (options.refreshPanels !== false) updateAllObjectPanels(state);
+  options.afterRefresh?.(state, command);
   updateEditingInteractionLock(state, documentRef);
   return {
     executed: true,
