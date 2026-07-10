@@ -2,6 +2,31 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：编辑历史影响对象统计
+
+本步继续推进编辑器基础设施，把最近编辑命令的影响对象从刷新调度元数据暴露到历史统计中，方便后续排查面板刷新、控制台 API 和命令 `effects.affected` 精度。
+
+修正：
+
+- `EditHistory` 新增 `lastAffected`，执行、撤销和重做后会记录最近命令的 `effects.affected` 快照。
+- 历史对象内部用 `WeakMap` 缓存每个命令第一次执行后的 affected 快照，避免撤销 / 重做时被外部继续修改的命令对象污染。
+- 新增共享历史摘要 formatter，JS 面板和 Vue 面板统一显示 `@domain [kind#id]` 短格式，超过 3 个影响对象时折叠为 `+N`。
+- 控制面板、公共历史按钮、国家面板、省份面板和编辑器 store 已同步支持 `lastAffected`。
+
+边界：
+
+- 本步只暴露和展示已有 `effects.affected`，不改变任何编辑命令的实际影响范围、刷新策略或撤销 / 重做语义。
+- 后续仍需继续分批校准不精确或过宽的 `effects.affected`。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\edit-history.js` 通过。
+- `node --check app\webgl-generator\src\ui\history-format.js`、`node --check app\webgl-generator\src\ui\components\history-actions.js` 和 `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `node --input-type=module` 行为断言通过：执行后 `lastAffected` 不受外部数组变更污染，`getStats()` 返回克隆，撤销 / 重做保留同一 affected 快照，`clear()` 清空 affected；直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：调用 `webglGeneratorApi.edit.routes.delete(0)` 后，`history.get()` 返回 `lastDomain = route`、`lastAffected = [{kind: "route", id: 0}]`；控制面板正文显示 `@route [route#0]`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：自定义标签拖拽接入统一执行器
 
 本步清理 `app.js` 中最后一条业务侧直接 `state.editHistory.execute()` 调用，把自定义标签拖拽移动命令接入 `executeEditCommand()`。

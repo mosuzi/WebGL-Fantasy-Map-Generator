@@ -3,8 +3,10 @@ export class EditHistory {
     this.limit = limit;
     this.undoStack = [];
     this.redoStack = [];
+    this.commandAffected = new WeakMap();
     this.lastLabel = "none";
     this.lastDomain = "none";
+    this.lastAffected = [];
   }
 
   execute(command, context) {
@@ -15,6 +17,7 @@ export class EditHistory {
     this.redoStack = [];
     this.lastLabel = command.label;
     this.lastDomain = command.domain || "none";
+    this.lastAffected = this.captureCommandAffected(command);
     return command;
   }
 
@@ -25,6 +28,7 @@ export class EditHistory {
     this.redoStack.push(command);
     this.lastLabel = `撤销 ${command.label}`;
     this.lastDomain = command.domain || "none";
+    this.lastAffected = this.captureCommandAffected(command);
     return command;
   }
 
@@ -35,14 +39,25 @@ export class EditHistory {
     this.undoStack.push(command);
     this.lastLabel = `重做 ${command.label}`;
     this.lastDomain = command.domain || "none";
+    this.lastAffected = this.captureCommandAffected(command);
     return command;
   }
 
   clear() {
     this.undoStack = [];
     this.redoStack = [];
+    this.commandAffected = new WeakMap();
     this.lastLabel = "none";
     this.lastDomain = "none";
+    this.lastAffected = [];
+  }
+
+  captureCommandAffected(command) {
+    const cached = this.commandAffected.get(command);
+    if (cached) return cloneAffectedTargets(cached);
+    const affected = cloneAffectedTargets(command.effects?.affected);
+    this.commandAffected.set(command, affected);
+    return cloneAffectedTargets(affected);
   }
 
   getStats() {
@@ -50,9 +65,15 @@ export class EditHistory {
       undo: this.undoStack.length,
       redo: this.redoStack.length,
       lastLabel: this.lastLabel,
-      lastDomain: this.lastDomain
+      lastDomain: this.lastDomain,
+      lastAffected: cloneAffectedTargets(this.lastAffected)
     };
   }
+}
+
+function cloneAffectedTargets(affected) {
+  if (!Array.isArray(affected)) return [];
+  return affected.map(target => ({kind: target.kind, id: target.id}));
 }
 
 export function validateEditCommandContract(command) {

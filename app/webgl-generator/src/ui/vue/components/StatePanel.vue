@@ -124,6 +124,7 @@ import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {GOVERNMENT_OPTIONS} from "../../../generator/governments.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
+import {formatHistoryStats} from "../../history-format.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -242,9 +243,7 @@ const detailRows = computed(() => selected.value ? [
 
 const historyNote = computed(() => {
   const history = props.state.history;
-  const domain = history?.lastDomain && history.lastDomain !== "none" ? ` @${history.lastDomain}` : "";
-  const historyText = history ? `undo ${history.undo} / redo ${history.redo} / ${history.lastLabel}${domain}` : "none";
-  return `历史：${historyText}；来源：${formatStateName(props.state.map, props.state.sourceStateId)}`;
+  return `历史：${formatHistoryStats(history)}；来源：${formatStateName(props.state.map, props.state.sourceStateId)}`;
 });
 
 watch(() => selected.value?.capitalBurgId, next => {

@@ -8,6 +8,7 @@
 
 <script setup>
 import {computed} from "vue";
+import {formatHistoryStats} from "../../../history-format.js";
 import UiButton from "./UiButton.vue";
 
 defineOptions({
@@ -37,8 +38,6 @@ defineEmits(["undo", "redo"]);
 
 const note = computed(() => {
   if (props.noteText) return props.noteText;
-  if (!props.history) return `${props.label}：none`;
-  const domain = props.history.lastDomain && props.history.lastDomain !== "none" ? ` @${props.history.lastDomain}` : "";
-  return `${props.label}：undo ${props.history.undo} / redo ${props.history.redo} / ${props.history.lastLabel}${domain}`;
+  return `${props.label}：${formatHistoryStats(props.history)}`;
 });
 </script>

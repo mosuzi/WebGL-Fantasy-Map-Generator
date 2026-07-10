@@ -16,6 +16,7 @@ import {
   formatScaleLabel,
   normalizeUnitPreferences
 } from "./display-units.js";
+import {formatHistoryStats} from "./history-format.js";
 
 const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
@@ -975,9 +976,7 @@ function formatMarkerResources(map, unitPreferences = {}) {
 }
 
 function formatEditHistory(stats) {
-  if (!stats) return "none";
-  const domain = stats.lastDomain && stats.lastDomain !== "none" ? ` @${stats.lastDomain}` : "";
-  return `undo ${stats.undo} / redo ${stats.redo} / ${stats.lastLabel}${domain}`;
+  return formatHistoryStats(stats);
 }
 
 function formatEditRefresh(refresh) {
