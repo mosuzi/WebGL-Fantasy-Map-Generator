@@ -23842,3 +23842,24 @@ full 矩阵结果：
 - 源码静态检查确认 `UiObjectTable` 已声明 `columnWidths` prop，且 `columnStyle()` 会优先读取 `columnWidthOverride(column)`。
 - Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开名称库面板，表格首列 header / cell 均保持 `width = 76px` 与 `minWidth = 76px`；输入不存在的筛选词触发空态后，“新建用户库”仍可见且 `disabled=false`；`glError = 0`，health error、console error 和 page error 均为 `0`。
 - 本批次按要求启动验证子智能体 `verify_column_width_batch`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
+
+### 2026-07-11 名称库面板列宽偏好读路径
+
+背景：
+
+- `panel-list-preferences` 已有 `columnWidths` 存储层，`UiObjectTable` 也已有 `columnWidths` 覆盖入口。
+- 名称库面板列数较多、默认列宽明确，适合作为第一处真实面板接入点，用来验证本地偏好能实际影响表格列宽。
+
+实现：
+
+- 名称库面板新增 `NAMEBASE_COLUMN_WIDTHS`，与 Vue 组件里的名称库列定义保持一致。
+- `NAMEBASE_LIST_DEFAULTS` 声明 `columnWidths`，因此读取列表偏好时会启用列宽归一化。
+- 面板 state 新增 `columnWidths`，并传给 `NamebasePanel.vue` 内的 `UiObjectTable`。
+- 本步只接读路径，不实现拖拽改宽 UI，也不写回新列宽。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\namebase-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 验证子智能体 `verify_namebase_column_width_read` 的 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，先在 localStorage 中预置 `webgl-generator-panel-list:namebase-panel.columnWidths.name = 180`，再刷新并打开名称库面板；名称库表格“名称”列 header / cell 均为 `width = 180px` 与 `minWidth = 180px`，其它列保持默认宽度；输入不存在的筛选词触发空态后，“新建用户库”仍可见且 `disabled=false`；`glError = 0`，health error、console error 和 page error 均为 `0`。

@@ -4,8 +4,19 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const NAMEBASE_PANEL_ID = "namebase-panel";
+const NAMEBASE_COLUMN_WIDTHS = Object.freeze({
+  category: 76,
+  origin: 60,
+  name: 112,
+  kind: 76,
+  samples: 60,
+  duplicateSamples: 60,
+  lengthRange: 60,
+  bindingUsageLabel: 108
+});
 const NAMEBASE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: NAMEBASE_COLUMN_WIDTHS,
   importMode: "append",
   importModes: Object.freeze(["append", "replace"]),
   sortKey: "category",
@@ -22,6 +33,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     bindingStatus: getNamebaseBindingStatus(null),
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     importMode: listPreferences.importMode,
     importPreview: null,
     sortKey: listPreferences.sortKey,
