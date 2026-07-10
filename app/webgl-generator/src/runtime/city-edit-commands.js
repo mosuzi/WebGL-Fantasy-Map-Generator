@@ -1,5 +1,5 @@
 import {defaultCityVisual, normalizeCityVisualPatch, resolveCityVisual} from "./city-visuals.js";
-import {namebaseRenameAffected, newObjectAffected} from "./edit-command-effects.js";
+import {namebaseRenameAffected, newObjectAffected, objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
@@ -66,6 +66,7 @@ export function createAddCityAtCellCommand(gridCell, {label = "新增城市"} = 
     apply(context) {
       snapshot ??= captureCityCollectionSnapshot(context.map);
       result = addCityAtGridCell(context.map, targetGridCell);
+      this.effects.affected = objectAffected(OBJECT_KIND.CITY, result.cityId);
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的城市新增快照");
@@ -89,7 +90,7 @@ export function createDeleteCityCommand(cityId, {label = "删除城市"} = {}) {
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_COLLECTION_EFFECTS,
-      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+      affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
     apply(context) {
       snapshot ??= captureCityCollectionSnapshot(context.map);
@@ -119,7 +120,7 @@ export function createSetCityPopulationCommand(cityId, nextPopulation, {label = 
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_POPULATION_EFFECTS,
-      affected: [{kind: "city", id: normalizedCityId}]
+      affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
     apply(context) {
       if (after === null) throw new Error("城市人口必须是非负有限数");
@@ -153,7 +154,7 @@ export function createSyncCityOwnerToCellCommand(cityId, {label = "同步城市�
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_OWNER_SYNC_EFFECTS,
-      affected: [{kind: "city", id: normalizedCityId}]
+      affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
     apply(context) {
       snapshot ??= captureCitySnapshot(context.map, normalizedCityId);
@@ -191,7 +192,7 @@ export function createSetCityVisualCommand(cityId, patch = {}, {label = "调整�
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_VISUAL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+      affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
     apply(context) {
       snapshot ??= captureCityVisualSnapshot(context.map, normalizedCityId);
@@ -224,7 +225,7 @@ export function createResetCityVisualCommand(cityId, {label = "恢复城市自�
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_VISUAL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+      affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
     apply(context) {
       snapshot ??= captureCityVisualSnapshot(context.map, normalizedCityId);
@@ -263,7 +264,7 @@ export function createSetCityNoteCommand(cityId, body, {name = ""} = {}) {
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_NOTE_EFFECTS,
-      affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
+      affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
     apply(context) {
       const city = context.map?.settlements?.cities?.[normalizedCityId];

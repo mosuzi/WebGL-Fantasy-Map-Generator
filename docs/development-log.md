@@ -24638,3 +24638,28 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_route_river_zone_note_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：路线备注和路线删除均返回 `route#7`；河流宽度和河流备注均返回 `river#7`；地区样式返回 `zone#7`；备注删除返回 `note#note-7`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 城市 affected helper 收口
+
+背景：
+
+- 单对象 affected helper 已覆盖多组对象命令，城市命令仍保留多处手写 `{kind, id}`。
+- 新增城市命令初始目标已是 `city#new`，但执行成功后尚未回写真实城市 id，不利于历史摘要和后续按对象刷新诊断。
+
+实现：
+
+- `city-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 新增城市命令执行成功后将 `effects.affected` 回写为 `city#真实 cityId`。
+- 城市删除、人口、归属同步、剪影设置、剪影重置和城市备注命令均改为复用 `objectAffected(OBJECT_KIND.CITY, id)`。
+- 城市按名称库批量重命名仍保留 `namebaseRenameAffected()`，不混入本批单对象迁移。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充城市单对象 helper 迁移状态。
+- 本步不改变城市新增 / 删除快照、人口同步、归属同步、剪影、备注、名称库批量重命名、派生刷新或面板刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\city-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_city_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：城市删除、人口、归属同步、剪影设置、剪影重置和备注均返回 `city#7`；最小 mock map 执行新增城市命令后回写 `city#0`，结果为 `cityId=0 / burgId=0 / packCell=0 / gridCell=0`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
