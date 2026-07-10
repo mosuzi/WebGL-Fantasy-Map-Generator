@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：标记与标签字段编辑接入统一编辑执行器
+
+本步继续清理资源标记和标签管理面板的旧执行路径，把标记重命名、标记视觉设置、标签重命名、新增手工标签、删除标签和恢复生成标签接入 `executeEditCommand()`。
+
+修正：
+
+- 标记重命名 / 视觉设置不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部标记面板刷新。
+- 标签重命名、新增、删除和恢复不再手写执行流程；新增手工标签成功后仍保留原有 selection、面板选中行和待放置状态。
+- 标签删除 / 恢复成功后继续保留运行时面板刷新，避免标签隐藏统计滞后。
+- 修正标签管理动作栏内部回调引用，`新增标签 / 删除标签 / 恢复标签` 现在通过 `props.callbacks` 调用真实面板回调，不再因未定义 `callbacks` 在浏览器中抛错。
+- 标记移动、资源重生成和地图点击创建 / 移动标记仍保留 marker 集合专用 helper，因为这些路径还维护经济派生 fresh/stale 和相关面板刷新。
+
+边界：
+
+- 本步只迁移执行入口，不改变标记数据结构、资源重生成、标签存储、手工标签拖放、隐藏生成标签语义、备注或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：标记面板真实“重命名”把标记 `#0` 改为 `标记统一执行器烟测`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected marker#0`；真实“调整图标”把标记 `#0` 设为 `symbol=marker / palette=natural`，撤销栈 `undo=2`，`lastEditRefresh` 为 `point-layers, labels, object-panels` / `affected marker#0`；标签面板真实“新增标签”新增手工标签 `#1`，撤销栈递增并设置待放置状态与 selection；生成城市标签真实“删除标签 / 恢复标签”会让 `labels.hidden.city` 加入再移除目标 id，撤销栈递增，刷新摘要为 `labels, object-panels`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：文化与宗教字段编辑接入统一编辑执行器
 
 本步继续清理文化和宗教面板的旧执行路径，把新增空对象、删除空对象、重命名、调整颜色和调整继承父级接入 `executeEditCommand()`。

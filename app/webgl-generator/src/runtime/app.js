@@ -1220,19 +1220,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: OBJECT_KIND.MARKER, id: markerId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateMarkerPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onVisualChange: (markerId, patch) => {
       const context = {map: state.map};
       const command = createSetMarkerVisualCommand(markerId, patch);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateMarkerPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (markerId, body) => {
@@ -1292,12 +1286,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onRename: (object, name) => {
       const context = {map: state.map};
       const command = object.targetKind === LABEL_TARGET_KIND.CUSTOM ? createRenameCustomLabelCommand(object.targetId ?? object.id, name) : createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateLabelNamingPanel(state);
-      updateStatePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (object, body) => {
@@ -1310,37 +1299,28 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const point = getNewLabelPoint(state);
       const context = {map: state.map};
       const command = createAddCustomLabelCommand({text: "新标签", x: point.x, y: point.y});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      const created = command.getCreatedLabel?.();
-      if (created) {
+      const result = executeEditCommand(state, documentRef, command, {context});
+      const created = result.command?.getCreatedLabel?.();
+      if (result.executed && created) {
         const object = {kind: OBJECT_KIND.LABEL, id: created.id, targetKind: LABEL_TARGET_KIND.CUSTOM, targetId: created.id, text: created.text, targetName: created.text};
         selectionStore.setSelection({object});
         labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
-        state.pendingCustomLabelPlacement = {labelId: created.id, command};
+        state.pendingCustomLabelPlacement = {labelId: created.id, command: result.command};
       }
-      updateLabelNamingPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {
       const context = {map: state.map};
       const command = createDeleteLabelCommand(object);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateLabelNamingPanel(state);
-      updateRuntimePanel(documentRef, state);
+      const result = executeEditCommand(state, documentRef, command, {context});
+      if (result.executed) updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },
     onRestore: object => {
       const context = {map: state.map};
       const command = createRestoreGeneratedLabelCommand(object);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateLabelNamingPanel(state);
-      updateRuntimePanel(documentRef, state);
+      const result = executeEditCommand(state, documentRef, command, {context});
+      if (result.executed) updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {

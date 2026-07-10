@@ -150,12 +150,12 @@ watch(() => selected.value?.key, key => {
 
 function handleLabelManagementAction(key) {
   if (key === "add") {
-    callbacks.onAdd?.();
+    props.callbacks.onAdd?.();
     return;
   }
   if (!selected.value) return;
-  if (key === "restore") callbacks.onRestore?.(selected.value);
-  if (key === "delete") callbacks.onDelete?.(selected.value);
+  if (key === "restore") props.callbacks.onRestore?.(selected.value);
+  if (key === "delete") props.callbacks.onDelete?.(selected.value);
 }
 
 function openRenameEditor(row) {
