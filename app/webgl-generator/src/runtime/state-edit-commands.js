@@ -2,6 +2,7 @@ import {GOVERNMENT_BY_KEY, applyStateGovernment, setStateGovernment} from "../ge
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {createRandom} from "../generator/random.js";
 import {defaultCityVisual} from "./city-visuals.js";
+import {namebaseRenameAffected} from "./edit-command-effects.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -221,7 +222,7 @@ export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名
     domain: "state",
     effects: {
       ...STATE_NAME_BATCH_EFFECTS,
-      affected: normalizedStateIds.map(id => ({kind: "state", id}))
+      affected: namebaseRenameAffected("state", normalizedStateIds)
     },
     apply(context) {
       changes ??= buildStateRenameChanges(context.map, normalizedStateIds);

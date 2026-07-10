@@ -1,4 +1,5 @@
 import {OBJECT_KIND} from "./object-kinds.js";
+import {namebaseRenameAffected} from "./edit-command-effects.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 
 const LAKE_NAME_BATCH_EFFECTS = Object.freeze({
@@ -18,7 +19,7 @@ export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名�
     domain: OBJECT_KIND.LAKE,
     effects: {
       ...LAKE_NAME_BATCH_EFFECTS,
-      affected: targets.map(id => ({kind: OBJECT_KIND.LAKE, id}))
+      affected: namebaseRenameAffected(OBJECT_KIND.LAKE, targets)
     },
     apply(context) {
       changes ??= buildLakeRenameChanges(context.map, targets);

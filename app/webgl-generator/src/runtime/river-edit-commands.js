@@ -1,4 +1,5 @@
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
+import {namebaseRenameAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
@@ -108,7 +109,7 @@ export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名
     domain: OBJECT_KIND.RIVER,
     effects: {
       ...RIVER_NAME_BATCH_EFFECTS,
-      affected: targets.map(id => ({kind: OBJECT_KIND.RIVER, id}))
+      affected: namebaseRenameAffected(OBJECT_KIND.RIVER, targets)
     },
     apply(context) {
       changes ??= buildRiverRenameChanges(context.map, targets);

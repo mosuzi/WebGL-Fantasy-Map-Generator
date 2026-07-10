@@ -1,4 +1,5 @@
 import {defaultCityVisual, normalizeCityVisualPatch, resolveCityVisual} from "./city-visuals.js";
+import {namebaseRenameAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
@@ -300,7 +301,7 @@ export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名�
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_NAME_BATCH_EFFECTS,
-      affected: targets.map(id => ({kind: OBJECT_KIND.CITY, id}))
+      affected: namebaseRenameAffected(OBJECT_KIND.CITY, targets)
     },
     apply(context) {
       changes ??= buildCityRenameChanges(context.map, targets);

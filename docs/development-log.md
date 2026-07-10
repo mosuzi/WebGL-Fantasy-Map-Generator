@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：名称库批量重命名补充系统来源
+
+本步继续细化批量 edit command 的 `effects.affected`。城市、国家、河流和湖泊的“按名称库重命名筛选”此前只列出对象 id；当筛选结果很多时，历史摘要只能看到一串同类对象，缺少“这是名称库批量命名”的来源。
+
+修正：
+
+- 新增 `runtime/edit-command-effects.js`，提供 `systemAffected()` 和 `namebaseRenameAffected()`。
+- 城市、国家、河流和湖泊按名称库批量重命名命令的 affected 现在以 `derived-system#namebase-rename` 开头，再列出具体对象目标。
+- 原有对象级 affected 保留，面板仍可按对象 kind 刷新。
+
+边界：
+
+- 本步不改变名称生成、重命名筛选、撤销 / 重做快照或批量命名成功数量统计。
+
+验证：
+
+- `node --check` 覆盖 `edit-command-effects.js`、城市、国家、河流和湖泊命令文件。
+- `node --input-type=module` 行为断言通过：四类按名称库重命名命令的 affected 第一项均为 `derived-system#namebase-rename`，且保留对象目标。直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-10：军事批量与事件命令补充系统来源
 
 本步继续细化批量 edit command 的 `effects.affected`。军事批量态势调整、战报记录、战报导入和战报清空此前只显示军团 id 或 `military#events`，不容易看出这是军事态势或军事事件子系统变更。
