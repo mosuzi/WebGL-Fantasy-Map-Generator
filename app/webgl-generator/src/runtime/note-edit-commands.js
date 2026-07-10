@@ -1,4 +1,5 @@
 import {cloneObjectNote, deleteObjectNote, readObjectNote, restoreObjectNote} from "./object-notes.js";
+import {objectAffected} from "./edit-command-effects.js";
 
 const NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -16,7 +17,7 @@ export function createDeleteNoteCommand(noteId, {name = ""} = {}) {
     domain: "note",
     effects: {
       ...NOTE_EFFECTS,
-      affected: [{kind: "note", id}]
+      affected: objectAffected("note", id)
     },
     apply(context) {
       if (!id) return;

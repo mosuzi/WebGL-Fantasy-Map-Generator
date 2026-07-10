@@ -1,5 +1,6 @@
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
+import {objectAffected} from "./edit-command-effects.js";
 
 const ROUTE_NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -29,7 +30,7 @@ export function createSetRouteNoteCommand(routeId, body, {name = ""} = {}) {
     domain: OBJECT_KIND.ROUTE,
     effects: {
       ...ROUTE_NOTE_EFFECTS,
-      affected: [{kind: OBJECT_KIND.ROUTE, id: normalizedRouteId}]
+      affected: objectAffected(OBJECT_KIND.ROUTE, normalizedRouteId)
     },
     apply(context) {
       const route = findRoute(context.map, normalizedRouteId);
@@ -70,7 +71,7 @@ export function createDeleteRouteCommand(routeId, {label = "删除路线"} = {})
     domain: OBJECT_KIND.ROUTE,
     effects: {
       ...ROUTE_DELETE_EFFECTS,
-      affected: [{kind: OBJECT_KIND.ROUTE, id: normalizedRouteId}]
+      affected: objectAffected(OBJECT_KIND.ROUTE, normalizedRouteId)
     },
     apply(context) {
       const routes = readRoutes(context.map);

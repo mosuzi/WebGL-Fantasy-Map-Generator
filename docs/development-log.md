@@ -24609,3 +24609,32 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_culture_religion_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：文化新增执行后回写 `culture#2`，文化删除、颜色和继承父级均返回 `culture#7`；宗教新增执行后回写 `religion#2`，宗教删除、颜色和继承父级均返回 `religion#7`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 路线 / 河流 / 地区 / 备注 affected helper 收口
+
+背景：
+
+- 单对象 affected helper 已覆盖 marker、标签、测量对象、文化和宗教命令。
+- 路线备注 / 删除、河流宽度 / 备注、地区样式和备注删除仍是手写 `{kind, id}`，语义均为单对象目标，适合继续迁移。
+- 河流按名称库批量重命名仍保留 `namebaseRenameAffected()`，不混入本批单对象迁移。
+
+实现：
+
+- `route-edit-commands.js` 引入 `objectAffected(kind, id)`，路线备注和路线删除命令改为复用 `objectAffected(OBJECT_KIND.ROUTE, id)`。
+- `river-edit-commands.js` 引入 `objectAffected(kind, id)`，河流宽度因子和河流备注命令改为复用 `objectAffected(OBJECT_KIND.RIVER, id)`。
+- `zone-edit-commands.js` 引入 `objectAffected(kind, id)`，地区样式命令改为复用 `objectAffected(OBJECT_KIND.ZONE, id)`。
+- `note-edit-commands.js` 引入 `objectAffected(kind, id)`，备注删除命令改为复用 `objectAffected("note", id)`。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充本批 helper 迁移状态。
+- 本步不改变路线删除派生刷新、河流宽度刷新、备注读写、地区样式、对象面板刷新或批量重命名语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\route-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\river-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\zone-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\note-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_route_river_zone_note_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：路线备注和路线删除均返回 `route#7`；河流宽度和河流备注均返回 `river#7`；地区样式返回 `zone#7`；备注删除返回 `note#note-7`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

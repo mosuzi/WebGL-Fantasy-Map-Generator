@@ -1,5 +1,5 @@
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
-import {namebaseRenameAffected} from "./edit-command-effects.js";
+import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
@@ -31,7 +31,7 @@ export function createSetRiverWidthFactorCommand(riverId, nextValue) {
     domain: OBJECT_KIND.RIVER,
     effects: {
       ...EDIT_REFRESH_PRESETS.RIVER_WIDTH_ONLY,
-      affected: [{kind: "river", id: riverId}]
+      affected: objectAffected(OBJECT_KIND.RIVER, riverId)
     },
     apply(context) {
       const river = findRiver(context.map, riverId);
@@ -71,7 +71,7 @@ export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {
     domain: OBJECT_KIND.RIVER,
     effects: {
       ...RIVER_NOTE_EFFECTS,
-      affected: [{kind: OBJECT_KIND.RIVER, id: normalizedRiverId}]
+      affected: objectAffected(OBJECT_KIND.RIVER, normalizedRiverId)
     },
     apply(context) {
       const river = findRiver(context.map, normalizedRiverId);

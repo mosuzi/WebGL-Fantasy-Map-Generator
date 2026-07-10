@@ -1,4 +1,5 @@
 import {OBJECT_KIND} from "./object-kinds.js";
+import {objectAffected} from "./edit-command-effects.js";
 
 const ZONE_STYLE_EFFECTS = Object.freeze({
   render: "draw",
@@ -20,7 +21,7 @@ export function createSetZoneStyleCommand(zoneId, patch = {}) {
     domain: OBJECT_KIND.ZONE,
     effects: {
       ...ZONE_STYLE_EFFECTS,
-      affected: [{kind: OBJECT_KIND.ZONE, id: normalizedZoneId}]
+      affected: objectAffected(OBJECT_KIND.ZONE, normalizedZoneId)
     },
     apply(context) {
       const zone = readZone(context.map, normalizedZoneId);
