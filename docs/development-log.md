@@ -23497,3 +23497,17 @@ full 矩阵结果：
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+
+### 2026-07-11 打开 / 刷新 helper 批次综合验证
+
+范围：
+
+- 本批次覆盖 `87184a3 统一选择面板更新打开分支` 和 `4ab7d58 收束运行时和拾取面板双刷新`。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过；`pnpm` 当前不在 PowerShell PATH 中，因此使用项目本地 Vite 可执行文件跑同等构建。构建仍只有既有大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，`window.__webglGeneratorApp` 存在，`locateAndSelectObject()` 可定位并选中 `state` 对象，WebGL2 正常，`glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `batch_verify_open_refresh`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
