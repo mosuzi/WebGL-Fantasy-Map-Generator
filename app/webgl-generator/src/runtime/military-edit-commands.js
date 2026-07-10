@@ -147,7 +147,7 @@ export function createSetMilitaryStatusBatchCommand(targets, status, {label = "Ê
     domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
-      affected: normalizedTargets.map(target => ({kind: "military", id: target.id || `${target.stateId}:${target.regimentId}`}))
+      affected: militarySystemAffected("military-status", normalizedTargets.map(militaryTargetAffected))
     },
     apply(context) {
       previous ??= snapshotRegimentStatuses(context.map, normalizedTargets);
@@ -196,7 +196,7 @@ export function createRecordMilitaryBattleEventCommand(target, event = {}, {labe
     domain: "military",
     effects: {
       ...effects,
-      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+      affected: militarySystemAffected("military-events", [militaryTargetAffected(normalizedTarget)])
     },
     apply(context) {
       const {state, regiment} = findRegiment(context.map, normalizedTarget);
@@ -238,7 +238,7 @@ export function createImportMilitaryBattleEventsCommand(document, {label = "ÂØºÂ
     domain: "military",
     effects: {
       ...MILITARY_EVENT_EFFECTS,
-      affected: [{kind: "military", id: "events"}]
+      affected: militarySystemAffected("military-events", [{kind: "military", id: "events"}])
     },
     apply(context) {
       const prepared = preparedEvents ?? prepareImportedBattleEvents(context.map, document);
@@ -286,7 +286,7 @@ export function createClearMilitaryBattleEventsCommand(target, {label = "Ê∏ÖÁ©∫Â
     domain: "military",
     effects: {
       ...MILITARY_EVENT_EFFECTS,
-      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+      affected: militarySystemAffected("military-events", [militaryTargetAffected(normalizedTarget)])
     },
     apply(context) {
       const {state, regiment} = findRegiment(context.map, normalizedTarget);
@@ -448,6 +448,14 @@ export function createRenameMilitaryRegimentCommand(target, name, {label = "ÈáçÂ
       return !nextName || String(regiment.name || "").trim() === nextName;
     }
   };
+}
+
+function militarySystemAffected(system, targets = []) {
+  return [{kind: "derived-system", id: system}, ...targets];
+}
+
+function militaryTargetAffected(target) {
+  return {kind: "military", id: target.id || `${target.stateId}:${target.regimentId}`};
 }
 
 function snapshotMilitary(map) {

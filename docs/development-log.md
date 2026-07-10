@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事批量与事件命令补充系统来源
+
+本步继续细化批量 edit command 的 `effects.affected`。军事批量态势调整、战报记录、战报导入和战报清空此前只显示军团 id 或 `military#events`，不容易看出这是军事态势或军事事件子系统变更。
+
+修正：
+
+- 新增军事命令本地 helper：`militarySystemAffected()` 和 `militaryTargetAffected()`。
+- 批量军团态势调整 affected 现在以 `derived-system#military-status` 开头，再列出具体军团目标。
+- 战报记录、战报导入和战报清空 affected 现在以 `derived-system#military-events` 开头，再列出事件集合或目标军团。
+- 单个军团移动、基地设置、重命名等非批量 / 非事件命令保持原对象级 affected。
+
+边界：
+
+- 本步不改变军事态势算法、战报写入、战斗结果应用、快照、撤销 / 重做或面板刷新策略。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\military-edit-commands.js` 通过。
+- `node --input-type=module` 行为断言通过：批量军团态势调整进入历史后 `lastAffected` 以 `derived-system#military-status` 开头并保留两个军团目标；战报导入进入历史后 `lastAffected` 为 `derived-system#military-events, military#events`。直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-10：资源点重生成影响对象补充系统来源
 
 本步继续细化批量 edit command 的 `effects.affected`。资源点重生成此前只记录 `marker#resources`，能说明影响了资源点集合，但不能说明这是派生系统级重建。
