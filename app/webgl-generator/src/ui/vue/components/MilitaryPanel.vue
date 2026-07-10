@@ -85,10 +85,13 @@
     :doubleClickAction="'edit'"
     empty-text="没有匹配的军团"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedRegimentIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedRegimentIds = $event"
   />
 
   <UiPanelIoActions
@@ -500,6 +503,7 @@ const militaryOverviewIcons = Object.freeze({
 });
 const activeAction = ref(null);
 const renameRequestId = ref(null);
+const selectedRegimentIds = ref([]);
 const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
@@ -585,6 +589,8 @@ const eventExportScope = computed(() => {
 });
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
+const selectedRegimentIdSet = computed(() => new Set(selectedRegimentIds.value.map(id => String(id))));
+const selectedRegimentRows = computed(() => visibleRows.value.filter(row => selectedRegimentIdSet.value.has(String(row.id))));
 const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
@@ -601,7 +607,9 @@ const battleEventChainSummary = computed(() => buildBattleEventChainSummary(sele
 const exportBattleEventRows = computed(() => battleEventRowsForExport(eventExportScope.value));
 const militaryExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !visibleRows.value.length},
-  {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length}
+  {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length},
+  {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedRegimentRows.value.length)}`, disabled: !selectedRegimentRows.value.length},
+  {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedRegimentRows.value.length)}`, disabled: !selectedRegimentRows.value.length}
 ]);
 const battleEventExportActions = computed(() => [
   {key: "json", label: "档案 JSON", disabled: !exportBattleEventRows.value.length},
@@ -667,7 +675,8 @@ const summaryMetrics = computed(() => [
   {label: "战报链", value: formatNumber(metrics.value.campaigns)},
   {label: "战线", value: formatNumber(metrics.value.fronts)},
   {label: "记录", value: formatNumber(allBattleEvents.value.length)},
-  {label: "筛选", value: formatNumber(visibleRows.value.length)}
+  {label: "筛选", value: formatNumber(visibleRows.value.length)},
+  {label: "已选", value: formatNumber(selectedRegimentRows.value.length)}
 ]);
 
 const militaryDossierGroups = computed(() => selected.value ? [
@@ -750,6 +759,10 @@ watch(() => `${selected.value?.id || ""}|${selectedBattleChainOptions.value.map(
 watch(() => `${selected.value?.id || ""}|${battleEventRecordChainOptions.value.map(option => option.value).join("|")}`, syncBattleEventChainDraft, {immediate: true});
 watch(() => `${selected.value?.id || ""}|${eventChainFilter.value}|${eventTypeFilter.value}|${eventOutcomeFilter.value}|${eventApplyFilter.value}`, () => {
   showAllSelectedBattleEvents.value = false;
+});
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedRegimentIds.value = selectedRegimentIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function buildMilitaryMetrics(map) {
@@ -1238,6 +1251,11 @@ function eventsForRegiment(events = [], regiment) {
     .filter(event => eventBelongsToRegiment(event, regiment));
 }
 
+function eventsForRegiments(events = [], regiments = []) {
+  if (!regiments.length) return [];
+  return events.filter(event => regiments.some(regiment => eventBelongsToRegiment(event, regiment)));
+}
+
 function filterBattleEvents(events = [], chainKey = "all", type = "all", outcome = "all", applyStatus = "all") {
   return events.filter(event =>
     (chainKey === "all" || event.chainKey === chainKey)
@@ -1616,10 +1634,11 @@ function formatMilitaryValue(value) {
   return formatMilitary(value, unitPreferences.value);
 }
 
-function militaryExportSummary(seed, map, rows, events) {
+function militaryExportSummary(seed, map, rows, events, {selectedOnly = false} = {}) {
   const eventSummary = buildBattleEventChainSummary(events);
   return {
     seed,
+    exportMode: selectedOnly ? "selected-regiments" : "current-filter",
     exportedAt: new Date().toISOString(),
     filters: {
       state: selectedStateFilterLabel.value,
@@ -1762,18 +1781,18 @@ function appendCsvSection(rows, title, records) {
   rows.push([]);
 }
 
-function exportCsv() {
+function exportCsv(rows = visibleRows.value, {selectedOnly = false} = {}) {
   const map = props.state.map;
   const seed = map?.metadata?.seed || "map";
-  const rows = visibleRows.value;
-  const events = allBattleEvents.value;
-  const summary = militaryExportSummary(seed, map, rows, events);
+  const events = selectedOnly ? eventsForRegiments(allBattleEvents.value, rows) : allBattleEvents.value;
+  const summary = militaryExportSummary(seed, map, rows, events, {selectedOnly});
   const stateSummaries = militaryStateSummaries(rows);
   const regimentRows = militaryRegimentExportRows(rows);
   const csvRows = [];
   appendCsvSection(csvRows, "军事导出摘要", [
     ["字段", "值"],
     ["seed", seed],
+    ["导出模式", selectedOnly ? "选中军团" : "当前筛选"],
     ["导出时间", summary.exportedAt],
     ["国家筛选", summary.filters.state],
     ["态势筛选", summary.filters.status],
@@ -1806,22 +1825,23 @@ function exportCsv() {
     ["ID", "进攻方", "防守方", "长度", "上限", "边界段", "点数"],
     ...militaryFrontExportRows(map).map(row => [row.id, row.attacker, row.defender, row.length, row.maxLength, row.borderSegments, row.points])
   ]);
-  downloadText(`fmg-military-${safeFilePart(seed)}.csv`, csvRows.map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+  const suffix = selectedOnly ? "-selected" : "";
+  downloadText(`fmg-military-${safeFilePart(seed)}${suffix}.csv`, csvRows.map(values => values.map(csvEscape).join(",")).join("\r\n"), "text/csv;charset=utf-8");
 }
 
-function exportJson() {
+function exportJson(rows = visibleRows.value, {selectedOnly = false} = {}) {
   const map = props.state.map;
   const seed = map?.metadata?.seed || "map";
-  const rows = visibleRows.value;
-  const events = allBattleEvents.value;
+  const events = selectedOnly ? eventsForRegiments(allBattleEvents.value, rows) : allBattleEvents.value;
   const eventSummary = buildBattleEventChainSummary(events);
   const payload = {
     type: "webgl-generator-military-summary",
     version: 1,
+    exportMode: selectedOnly ? "selected-regiments" : "current-filter",
     seed,
     exportedAt: new Date().toISOString(),
     metadata: map?.military?.metadata || {},
-    summary: militaryExportSummary(seed, map, rows, events),
+    summary: militaryExportSummary(seed, map, rows, events, {selectedOnly}),
     states: militaryStateSummaries(rows),
     regiments: militaryRegimentExportRows(rows),
     campaigns: militaryCampaignExportRows(map),
@@ -1832,7 +1852,8 @@ function exportJson() {
       events
     }
   };
-  downloadText(`fmg-military-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  const suffix = selectedOnly ? "-selected" : "";
+  downloadText(`fmg-military-${safeFilePart(seed)}${suffix}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
 function exportBattleEvents() {
@@ -1911,6 +1932,8 @@ function exportBattleEventsCsv() {
 function handleMilitaryExport(key) {
   if (key === "csv") exportCsv();
   if (key === "json") exportJson();
+  if (key === "selected-csv") exportCsv(selectedRegimentRows.value, {selectedOnly: true});
+  if (key === "selected-json") exportJson(selectedRegimentRows.value, {selectedOnly: true});
 }
 
 function handleBattleEventExport(key) {
