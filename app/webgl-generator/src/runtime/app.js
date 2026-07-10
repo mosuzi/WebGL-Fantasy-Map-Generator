@@ -1106,22 +1106,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) {
-        refreshAfterEdit(state, command);
+      const result = executeHistoryCommand(state, documentRef, "undo");
+      if (result.executed) {
         refreshGenerationSummary(state.map);
       }
-      updateMilitaryPanel(state);
-      updateStatePanel(state);
+      updateRuntimePanel(documentRef, state);
+      return result;
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) {
-        refreshAfterEdit(state, command);
+      const result = executeHistoryCommand(state, documentRef, "redo");
+      if (result.executed) {
         refreshGenerationSummary(state.map);
       }
-      updateMilitaryPanel(state);
-      updateStatePanel(state);
+      updateRuntimePanel(documentRef, state);
+      return result;
     }
   });
   state.panels.military = militaryPanel;

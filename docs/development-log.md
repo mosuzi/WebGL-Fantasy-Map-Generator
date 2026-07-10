@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事历史按钮接入统一历史执行器
+
+本步继续清理军事面板的旧执行路径，把军事面板内的“撤销上次 / 重做上次”接入 `executeHistoryCommand()`。
+
+修正：
+
+- 军事面板历史按钮不再手写 `state.editHistory.undo()` / `redo()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 撤销 / 重做实际执行后继续保留 `refreshGenerationSummary()`，并刷新 runtime 面板与编辑交互锁。
+- 对象面板刷新改由统一历史执行器的 `updateAllObjectPanels()` 驱动。
+
+边界：
+
+- 本步只迁移军事面板内的历史按钮入口，不改变全局 API 历史行为、具体军事命令、战报记录 / 清空 / 导入或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `stage-2-1 / 10000 cells` 地图后打开军事面板并固定选中军团 `1:0`，先通过真实“记录战报”写入一条普通战报，再点击军事浮动面板标题栏真实 `撤销 / 重做` 按钮；撤销后军团事件数和全局战报数 `1 -> 0`，历史 `undo 0 / redo 1`，标题栏重做按钮可用；重做后事件数 `0 -> 1`，历史 `undo 1 / redo 0`，标题栏撤销按钮可用；两次历史操作的 `lastEditRefresh` 均为 `render:none / object-panels / affected military#1:0`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事战报导入接入统一编辑执行器
 
 本步继续清理军事面板的旧执行路径，把“导入战报档案”接入 `executeEditCommand()`。
