@@ -56,6 +56,26 @@ function normalizePanelListPreferences(value = {}, defaults = {}) {
     defaults.statusFilter,
     defaults.statusFilters
   );
+  if (typeof defaults.eventChainFilter === "string") normalized.eventChainFilter = normalizePreferenceValue(
+    value.eventChainFilter,
+    defaults.eventChainFilter,
+    defaults.eventChainFilters
+  );
+  if (typeof defaults.eventTypeFilter === "string") normalized.eventTypeFilter = normalizePreferenceValue(
+    value.eventTypeFilter,
+    defaults.eventTypeFilter,
+    defaults.eventTypeFilters
+  );
+  if (typeof defaults.eventOutcomeFilter === "string") normalized.eventOutcomeFilter = normalizePreferenceValue(
+    value.eventOutcomeFilter,
+    defaults.eventOutcomeFilter,
+    defaults.eventOutcomeFilters
+  );
+  if (typeof defaults.eventApplyFilter === "string") normalized.eventApplyFilter = normalizePreferenceValue(
+    value.eventApplyFilter,
+    defaults.eventApplyFilter,
+    defaults.eventApplyFilters
+  );
   if (typeof defaults.treeOpen === "boolean") {
     normalized.treeOpen = typeof value.treeOpen === "boolean" ? value.treeOpen : defaults.treeOpen;
   }

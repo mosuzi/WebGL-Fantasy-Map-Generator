@@ -156,7 +156,7 @@
           label="链路"
           :model-value="eventChainFilter"
           :options="selectedBattleChainOptions"
-          @update:model-value="value => eventChainFilter = value"
+          @update:model-value="setEventChainFilter"
         />
         <UiSelectField
           input-id="military-event-type-filter"
@@ -164,7 +164,7 @@
           label="类型"
           :model-value="eventTypeFilter"
           :options="battleEventFilterTypeOptions"
-          @update:model-value="value => eventTypeFilter = value"
+          @update:model-value="setEventTypeFilter"
         />
         <UiSelectField
           input-id="military-event-outcome-filter"
@@ -172,7 +172,7 @@
           label="结果"
           :model-value="eventOutcomeFilter"
           :options="battleEventFilterOutcomeOptions"
-          @update:model-value="value => eventOutcomeFilter = value"
+          @update:model-value="setEventOutcomeFilter"
         />
         <UiSelectField
           input-id="military-event-apply-filter"
@@ -180,7 +180,7 @@
           label="结算"
           :model-value="eventApplyFilter"
           :options="battleEventApplyFilterOptions"
-          @update:model-value="value => eventApplyFilter = value"
+          @update:model-value="setEventApplyFilter"
         />
         <UiSelectField
           input-id="military-event-export-scope"
@@ -511,10 +511,6 @@ const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
 const stationDestinationDraft = ref("capital");
 const battleEventsImportStatus = ref("");
-const eventChainFilter = ref("all");
-const eventTypeFilter = ref("all");
-const eventOutcomeFilter = ref("all");
-const eventApplyFilter = ref("all");
 const showAllSelectedBattleEvents = ref(false);
 const battleEventDraft = reactive({
   chainKey: "",
@@ -589,6 +585,10 @@ const eventExportScope = computed(() => {
   const scope = props.state.eventExportScope;
   return scope === "selected" || scope === "filtered" ? scope : "all";
 });
+const eventChainFilter = computed(() => props.state.eventChainFilter || "all");
+const eventTypeFilter = computed(() => props.state.eventTypeFilter || "all");
+const eventOutcomeFilter = computed(() => props.state.eventOutcomeFilter || "all");
+const eventApplyFilter = computed(() => props.state.eventApplyFilter || "all");
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
@@ -964,7 +964,19 @@ function setBattleEventChainDraft(value) {
 }
 
 function setEventChainFilter(value) {
-  eventChainFilter.value = value;
+  props.callbacks.onEventChainFilter?.(value || "all");
+}
+
+function setEventTypeFilter(value) {
+  props.callbacks.onEventTypeFilter?.(battleEventFilterTypeOptions.some(option => option.value === value) ? value : "all");
+}
+
+function setEventOutcomeFilter(value) {
+  props.callbacks.onEventOutcomeFilter?.(battleEventFilterOutcomeOptions.some(option => option.value === value) ? value : "all");
+}
+
+function setEventApplyFilter(value) {
+  props.callbacks.onEventApplyFilter?.(battleEventApplyFilterOptions.some(option => option.value === value) ? value : "all");
 }
 
 function applyStatus() {
@@ -1036,7 +1048,7 @@ function clearBattleEventDescription() {
 
 function syncBattleChainFilter() {
   if (selectedBattleChainOptions.value.some(option => option.value === eventChainFilter.value)) return;
-  eventChainFilter.value = "all";
+  setEventChainFilter("all");
 }
 
 function syncBattleEventChainDraft() {

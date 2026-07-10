@@ -18,6 +18,13 @@ const MILITARY_LIST_DEFAULTS = Object.freeze({
   scopes: Object.freeze(["all", "selected", "filtered"]),
   stateFilter: "all",
   statusFilter: "all",
+  eventChainFilter: "all",
+  eventTypeFilter: "all",
+  eventTypeFilters: Object.freeze(["all", "skirmish", "siege", "raid", "naval", "retreat", "report"]),
+  eventOutcomeFilter: "all",
+  eventOutcomeFilters: Object.freeze(["all", "victory", "defeat", "draw", "loss", "regroup"]),
+  eventApplyFilter: "all",
+  eventApplyFilters: Object.freeze(["all", "applied", "pending"]),
   sortKey: "troops",
   sortDir: "desc"
 });
@@ -32,6 +39,10 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     filter: listPreferences.filter,
     columnWidths: listPreferences.columnWidths,
     eventExportScope: listPreferences.scope,
+    eventChainFilter: listPreferences.eventChainFilter,
+    eventTypeFilter: listPreferences.eventTypeFilter,
+    eventOutcomeFilter: listPreferences.eventOutcomeFilter,
+    eventApplyFilter: listPreferences.eventApplyFilter,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedStateId: listPreferences.stateFilter,
@@ -47,6 +58,22 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     onEventExportScope: value => {
       panelState.eventExportScope = value === "selected" || value === "filtered" ? value : "all";
       updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {scope: panelState.eventExportScope}, MILITARY_LIST_DEFAULTS);
+    },
+    onEventChainFilter: value => {
+      panelState.eventChainFilter = value || "all";
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {eventChainFilter: panelState.eventChainFilter}, MILITARY_LIST_DEFAULTS);
+    },
+    onEventTypeFilter: value => {
+      panelState.eventTypeFilter = normalizeBattleEventFilter(value, MILITARY_LIST_DEFAULTS.eventTypeFilters);
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {eventTypeFilter: panelState.eventTypeFilter}, MILITARY_LIST_DEFAULTS);
+    },
+    onEventOutcomeFilter: value => {
+      panelState.eventOutcomeFilter = normalizeBattleEventFilter(value, MILITARY_LIST_DEFAULTS.eventOutcomeFilters);
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {eventOutcomeFilter: panelState.eventOutcomeFilter}, MILITARY_LIST_DEFAULTS);
+    },
+    onEventApplyFilter: value => {
+      panelState.eventApplyFilter = normalizeBattleEventFilter(value, MILITARY_LIST_DEFAULTS.eventApplyFilters);
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {eventApplyFilter: panelState.eventApplyFilter}, MILITARY_LIST_DEFAULTS);
     },
     onStateChange: stateId => {
       panelState.selectedStateId = stateId === "all" ? "all" : Number(stateId);
@@ -200,6 +227,10 @@ function militaryObject(row) {
     eventCount: row.eventCount,
     latestEvent: row.latestEvent
   };
+}
+
+function normalizeBattleEventFilter(value, allowedValues) {
+  return allowedValues.includes(value) ? value : "all";
 }
 
 function firstRegimentId(map, stateId = "all", status = "all") {
