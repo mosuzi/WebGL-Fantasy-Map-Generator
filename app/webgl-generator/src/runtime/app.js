@@ -5547,15 +5547,12 @@ function bindCityEditing(canvas, state, documentRef) {
       const cityId = getCityIdAtEvent(state, event);
       if (!Number.isInteger(cityId) || cityId < 0) return;
       const command = createDeleteCityCommand(cityId);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (!execution.executed) return;
       state.cityEdit.deleteMode = false;
       state.selectionStore.clear();
       state.panels.city?.setSelectedCityId(null);
       state.panels.city?.updateDeleteMode?.(false);
-      updateStatePanel(state);
-      updateProvincePanel(state);
-      updateCityPanel(state);
       updateEditingInteractionLock(state, documentRef);
       updateRuntimePanel(documentRef, state);
       return;
@@ -5567,9 +5564,9 @@ function bindCityEditing(canvas, state, documentRef) {
     const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
     if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
     const command = createAddCityAtCellCommand(pick.gridCell);
-    if (command.isNoop({map: state.map})) return;
-    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-    const result = command.getResult?.();
+    const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+    if (!execution.executed) return;
+    const result = execution.result || command.getResult?.();
     state.cityEdit.addMode = false;
     state.cityEdit.lastCreatedCityId = result?.cityId ?? null;
     if (Number.isInteger(result?.cityId)) {
@@ -5577,9 +5574,6 @@ function bindCityEditing(canvas, state, documentRef) {
       state.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: result.cityId}});
     }
     state.panels.city?.updateAddMode?.(false);
-    updateStatePanel(state);
-    updateProvincePanel(state);
-    updateCityPanel(state);
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
   }, true);

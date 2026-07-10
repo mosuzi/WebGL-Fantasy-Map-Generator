@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：城市画布新增删除接入统一编辑执行器
+
+本步继续清理编辑面板基础设施，把城市面板的画布“新增城市 / 删除城市”交互接入 `executeEditCommand()`。
+
+修正：
+
+- 城市新增 / 删除不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部国家 / 省份 / 城市面板刷新。
+- 命令实际执行后继续关闭对应新增 / 删除模式、更新选中城市和编辑交互锁，并刷新 runtime 面板。
+- 对象面板刷新改由城市命令 effects 中的 `object-panels` 和统一执行器驱动。
+
+边界：
+
+- 本步只迁移城市面板的画布新增 / 删除调用点，不改变城市创建规则、删除约束、名称生成、人口 / 归属算法或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `stage-2-1 / 10000 cells` 地图后打开城市面板，通过真实“新增城市：下一次点击地图 cell”按钮进入新增模式并点击可见陆地空 cell，城市数 `828 -> 829`，新城市 `#828 / 清苑` 被选中，撤销栈 `undo=1`，`lastLabel = 新增城市`；再通过真实“删除城市：下一次点击地图城市”按钮进入删除模式并点击该城市，未 removed 城市数 `829 -> 828`，城市 `#828` 标记 removed，选择清空，撤销栈 `undo=2`，`lastLabel = 删除城市 #828`；两次操作的 `lastEditRefresh` 均包含 `point-layers / labels / object-panels / object-index / state-statistics`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事历史按钮接入统一历史执行器
 
 本步继续清理军事面板的旧执行路径，把军事面板内的“撤销上次 / 重做上次”接入 `executeHistoryCommand()`。
