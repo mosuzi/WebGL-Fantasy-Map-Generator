@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：外交重生成与批量政体补充系统来源
+
+本步继续细化批量 edit command 的 `effects.affected`。外交重生成此前只显示 `diplomacy#all`，批量调整政体此前只显示一串 `state#id`，在历史摘要里能看到影响对象，但缺少“这是外交系统重生成”或“这是批量政体入口”的来源。
+
+修正：
+
+- 外交重生成 affected 现在以 `derived-system#diplomacy-regeneration` 开头，再保留 `diplomacy#all`。
+- 批量调整政体 affected 现在以 `derived-system#state-government-batch` 开头，再保留具体国家目标。
+
+边界：
+
+- 本步不改变外交生成算法、政体应用规则、下游派生标脏、撤销 / 重做快照或面板刷新范围，只补历史摘要、控制台历史 API 和刷新诊断可见的影响来源。
+
+验证：
+
+- `node --check` 覆盖 `diplomacy-edit-commands.js`、`state-edit-commands.js` 和 `edit-command-effects.js`，均通过。
+- `node --input-type=module` 行为断言通过：外交重生成 affected 第一项为 `derived-system#diplomacy-regeneration` 且保留 `diplomacy#all`；批量调整政体 affected 第一项为 `derived-system#state-government-batch` 且保留去重后的国家目标。直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-10：刷子与 GEO 导入补充系统来源
 
 本步继续细化批量 edit command 的 `effects.affected`。高度刷子、国家刷子、省份刷子和 FMG Cells GEO 导入此前主要显示 `grid-cells#数量`、对象列表或 `derived-map-data#geo-import-reset`，能说明影响对象，但不容易看出这是哪一类批量地形 / 归属编辑入口。

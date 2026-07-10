@@ -1,4 +1,5 @@
 import {buildDiplomacy, normalizeDiplomacyRelation, setDiplomacyRelation} from "../generator/diplomacy.js";
+import {systemAffected} from "./edit-command-effects.js";
 
 const DIPLOMACY_EFFECTS = Object.freeze({
   render: "draw",
@@ -52,7 +53,7 @@ export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成�
     domain: "diplomacy",
     effects: {
       ...DIPLOMACY_EFFECTS,
-      affected: [{kind: "diplomacy", id: "all"}]
+      affected: systemAffected("diplomacy-regeneration", [{kind: "diplomacy", id: "all"}])
     },
     apply(context) {
       snapshot ??= snapshotDiplomacy(context.map);

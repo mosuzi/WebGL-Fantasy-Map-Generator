@@ -186,7 +186,7 @@ export function createSetStatesGovernmentBatchCommand(stateIds, governmentKey, {
     domain: "state",
     effects: {
       ...STATE_GOVERNMENT_EFFECTS,
-      affected: normalizedStateIds.map(id => ({kind: "state", id}))
+      affected: systemAffected("state-government-batch", normalizedStateIds.map(id => ({kind: "state", id})))
     },
     apply(context) {
       previous ??= snapshotBatchStateGovernments(context.map, normalizedStateIds, normalizedGovernmentKey);
