@@ -217,6 +217,7 @@
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+- 本批次综合验证中，`node .\tools\webgl-generator-measurement-import-regression.mjs --browser-channel chrome --cells 3000 --out $env:TEMP\fmg-measurement-locate-action.json --markdown $env:TEMP\fmg-measurement-locate-action.md` 通过；报告结论为通过，定位后 selection 为 `measurement / measurement-2`，测量选中行 `1`，对象详情面板关闭，`WebGL error = 0`。
 
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物 smoke 通过：触发控制面板道路重生成后，`lastEditRefresh.affected` 为 `derived-system#routes, route#all`，控制面板正文同步包含这两个 affected，`route-mesh / object-panels / object-index` 刷新摘要保留，`glError = 0`，console/page error 为 `0`。
@@ -264,6 +265,9 @@
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+- 本批次综合验证中，`.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：运行时 `startObjectEditing / stopObjectEditing / toggleObjectEditing` 均存在；调用 `startObjectEditing({kind: "state", id: 1})` 后 selection 和 editingObject 均为 `state / 1`；对 `river / 1` 连续调用 `toggleObjectEditing()` 后先进入河流编辑，再退出同一河流编辑；`glError = 0`、health error 为 `0`，console/page error 为 `0`。
+- 本批次按用户要求尝试启动验证子智能体；两个验证子智能体均长时间无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - `rg -n "state\.editHistory\.execute\(" app\webgl-generator\src\runtime\app.js` 只剩 `executeEditCommand()` 内部一处调用，确认业务入口不再直接入栈。
 
