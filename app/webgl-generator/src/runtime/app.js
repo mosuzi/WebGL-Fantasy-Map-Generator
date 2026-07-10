@@ -256,8 +256,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectionSourcePanelId = null;
     }
   };
-  const locateAndSelectObject = (panelId, object, {afterSelect = null} = {}) => {
-    const located = object ? state.renderer.locateObject(object) : false;
+  const locateAndSelectObject = (panelId, object, {afterSelect = null, locate = null} = {}) => {
+    const located = object ? (locate ? locate(object) : state.renderer.locateObject(object)) : false;
     if (located) {
       selectFromPanel(panelId, object);
       afterSelect?.(object);
@@ -1296,7 +1296,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.notes = notesPanel;
   measurementPanel = createMeasurementPanel(documentRef, panelManager, {
     onLocate: row => {
-      locateMeasurement(state, row, documentRef);
+      locateAndSelectObject("measurement-panel", measurementObject(row), {
+        locate: () => locateMeasurementBounds(state, row),
+        afterSelect: () => measurementPanel.setSelectedMeasurementId(row.id)
+      });
     },
     onEdit: row => {
       startMeasurementObjectEdit(state, row, documentRef);
@@ -3775,6 +3778,14 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     updateMarkerPanel(state);
     return true;
   },
+  measurement: (state, selection, editingObject, context) => {
+    state.panels.objectDetails.clear();
+    state.panels.measurement?.setSelectedMeasurementId?.(selection.object.id);
+    if (isSelectionFromPanel(context, "measurement-panel")) return true;
+    if (state.panels.measurement?.isOpen?.()) updateMeasurementPanel(state);
+    else state.panels.measurement?.open(state.map, state.editHistory.getStats());
+    return true;
+  },
   [OBJECT_KIND.MILITARY]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.military.setSelectedRegimentId(selection.object.id);
@@ -5139,17 +5150,29 @@ function startMeasurementObjectEdit(state, row, documentRef) {
 }
 
 function locateMeasurement(state, row, documentRef) {
-  const bounds = measurementBounds(row, 48, state.map);
-  const located = bounds ? state.renderer.locateBounds(bounds, {
-    status: `measurement ${row.id}`,
-    minScale: row.pointCount <= 2 ? 2.2 : 1.4,
-    maxScale: 18
-  }) : false;
+  const located = locateMeasurementBounds(state, row);
   if (located) {
     state.panels.measurement?.setSelectedMeasurementId?.(row.id);
   }
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
+}
+
+function locateMeasurementBounds(state, row) {
+  const bounds = measurementBounds(row, 48, state.map);
+  return bounds ? state.renderer.locateBounds(bounds, {
+    status: `measurement ${row.id}`,
+    minScale: row.pointCount <= 2 ? 2.2 : 1.4,
+    maxScale: 18
+  }) : false;
+}
+
+function measurementObject(row) {
+  return {
+    kind: "measurement",
+    id: row?.id,
+    name: row?.name || row?.id || ""
+  };
 }
 
 function exportMeasurementObjects(state, documentRef, rows) {

@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：测量面板定位接入统一选择 helper
+
+本步继续推进编辑器基础设施清单中的 highlight / locate API 收口。测量面板此前定位使用专用 `locateMeasurement()`，能移动视图和选中测量行，但不会通过统一 `locateAndSelectObject()` 写入 selection store，和国家、城市、河流、湖泊等面板的定位路径不一致。
+
+修正：
+
+- `locateAndSelectObject()` 新增可选 `locate` 回调，允许不走 renderer 通用 `locateObject()` 的对象也复用统一选择 / 面板刷新流程。
+- 测量面板定位现在传入 `{kind: "measurement", id, name}`，并通过统一 helper 写入 selection store。
+- 测量对象仍使用 `measurementBounds()` + `renderer.locateBounds()` 定位，不要求 renderer 立即支持通用 `measurement` bounds。
+- selection 面板分发新增 `measurement` handler，定位后只更新测量面板选中行，不再落到通用对象详情面板。
+- `webgl-generator-measurement-import-regression.mjs` 增加测量对象定位断言，导入后点击测量面板定位按钮，检查 selection、选中行、对象详情面板和 WebGL error。
+
+边界：
+
+- 本步不改变测量对象 bounds 计算、相机缩放参数、测量 overlay、编辑测量流程或 renderer 的通用 object bounds 表；只统一测量面板定位后的 selection / runtime / pick 刷新路径。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check tools\webgl-generator-measurement-import-regression.mjs` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 首次执行 `pnpm run regress:measurement` 未设置 `CI=true`，被 pnpm 非 TTY 依赖确认保护拦截；随后直接运行脚本并缩小到 `--cells 3000` 完成浏览器回归：系统 Chrome 构建产物生成 `measurement-import-smoke` 地图，创建并导入 2 个测量对象，点击测量面板定位按钮后 selection 为 `measurement / measurement-2`，测量面板选中行 `1`，对象详情面板关闭，`glError = 0`。
+
 ## 2026-07-10：测量导入无效项不再消耗 ID
 
 本步修正测量对象导入的小数据一致性问题。上一轮行为断言暴露出：导入列表里如果夹着空 points 的无效测量项，旧逻辑会先消耗 `nextId`，再因为无有效点位跳过该项，导致实际导入的测量对象 id 不连续。

@@ -281,6 +281,7 @@ async function importFullMap(page, filePath, before) {
     button.click();
   });
   await page.waitForFunction(() => document.querySelector(".measurement-panel-details")?.textContent?.includes("模式"), null, {timeout: timeoutMs});
+  const located = await locateFirstMeasurement(page);
 
   return page.evaluate(before => {
     const app = window.__webglGeneratorApp;
@@ -322,6 +323,11 @@ async function importFullMap(page, filePath, before) {
     if (!routeFitValues.has("roads") || !routeFitValues.has("none")) failures.push(`导入后测量模式不完整：${[...routeFitValues].join(" / ")}`);
     const panelText = document.querySelector('[data-panel-id="measurement-panel"]')?.textContent || "";
     if (!panelText.includes("模式") || !panelText.includes("贴路")) failures.push("测量面板未显示模式字段或贴路状态");
+    const located = window.__measurementLocateRegression || {};
+    if (located.selectionKind !== "measurement") failures.push(`定位后 selection 类型异常：${located.selectionKind || "none"}`);
+    if (!located.selectionExists) failures.push(`定位后 selection id 未匹配测量对象：${located.selectionId || "none"}`);
+    if (located.selectedRows !== 1) failures.push(`定位后测量面板选中行数量异常：${located.selectedRows ?? "none"}`);
+    if (located.objectDetailsOpen) failures.push("测量定位不应打开通用对象详情面板");
     const glError = app.renderer.getStats().draw?.glError || 0;
     if (glError) failures.push(`WebGL error ${glError}`);
     return {
@@ -329,6 +335,7 @@ async function importFullMap(page, filePath, before) {
       metadata: app.map.measurements.metadata,
       overlayPaths,
       overlayPathPointCounts,
+      located,
       glError,
       failures,
       passed: failures.length === 0
@@ -344,6 +351,40 @@ async function importFullMap(page, filePath, before) {
       return a.every((stop, index) => JSON.stringify(stop || null) === JSON.stringify(b[index] || null));
     }
   }, before);
+}
+
+async function locateFirstMeasurement(page) {
+  const measurementCount = await page.evaluate(() => window.__webglGeneratorApp?.map?.measurements?.items?.length || 0);
+  if (!measurementCount) throw new Error("没有可定位的测量对象");
+  await page.locator('[data-panel-id="measurement-panel"] .table-icon-action[aria-label="定位"]').first().click();
+  await page.waitForFunction(
+    () => {
+      const app = window.__webglGeneratorApp;
+      const selectedRows = document.querySelectorAll('[data-panel-id="measurement-panel"] .object-table-row.selected-row').length;
+      return app?.selection?.object?.kind === "measurement" &&
+        app.map?.measurements?.items?.some(item => item?.id === app.selection.object.id) &&
+        selectedRows === 1 &&
+        app.renderer?.getStats?.()?.draw?.glError === 0;
+    },
+    null,
+    {timeout: timeoutMs}
+  );
+  return page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const objectDetails = document.querySelector('[data-panel-id="object-details"]');
+    const selectionId = app.selection?.object?.id || "";
+    const located = {
+      selectionKind: app.selection?.object?.kind || "",
+      selectionId,
+      selectionExists: app.map?.measurements?.items?.some(item => item?.id === selectionId) || false,
+      selectedRows: document.querySelectorAll('[data-panel-id="measurement-panel"] .object-table-row.selected-row').length,
+      locateStatus: app.renderer?.locateStatus || "",
+      objectDetailsOpen: Boolean(objectDetails && !objectDetails.hidden && objectDetails.offsetParent !== null),
+      glError: app.renderer?.getStats?.()?.draw?.glError || 0
+    };
+    window.__measurementLocateRegression = located;
+    return located;
+  });
 }
 
 async function readDownloadedText(download) {
@@ -371,6 +412,9 @@ function renderMarkdown(report) {
   lines.push(`- 导出显示点：${report.exported.documentRouteDisplayPointCounts.join(" / ") || "none"}`);
   lines.push(`- 导入后 overlay 路径：${report.imported.overlayPaths}`);
   lines.push(`- 导入后 overlay 点数：${report.imported.overlayPathPointCounts.join(" / ") || "none"}`);
+  lines.push(`- 定位后 selection：${report.imported.located.selectionKind || "none"} / ${report.imported.located.selectionId || "none"}`);
+  lines.push(`- 定位后测量选中行：${report.imported.located.selectedRows ?? "none"}`);
+  lines.push(`- 定位后对象详情面板：${report.imported.located.objectDetailsOpen ? "打开" : "关闭"}`);
   lines.push(`- WebGL error：${report.imported.glError}`);
   lines.push("");
   lines.push("## 性能", "");
