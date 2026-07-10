@@ -23530,6 +23530,23 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 
+### 2026-07-11 军事战报导出范围持久化
+
+背景：
+
+- 军事面板的筛选词和排序已持久化，但战报档案“导出范围”每次打开仍回到“全部记录”。
+- 导出范围是明确的导出偏好，不是战报链路 / 类型 / 结果 / 结算筛选、展开状态、待导入文件或战报编辑草稿，适合保存为轻量偏好。
+
+实现：
+
+- 军事面板默认列表偏好增加 `scope: "all"` 和允许值 `all / selected / filtered`。
+- 面板 state 新增 `eventExportScope`，打开面板时从 `panel-list-preferences` 读取；切换导出范围时通过 `onEventExportScope` 写回偏好。
+- `MilitaryPanel.vue` 改为从 `state.eventExportScope` 派生当前导出范围，不再把该偏好保存在组件本地 `ref` 中。
+
+验证：
+
+- 待本批次统一验证。
+
 ### 2026-07-11 外交历史范围筛选持久化
 
 背景：

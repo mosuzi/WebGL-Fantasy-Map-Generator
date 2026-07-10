@@ -180,7 +180,7 @@
           label="导出"
           :model-value="eventExportScope"
           :options="battleEventExportScopeOptions"
-          @update:model-value="value => eventExportScope = value"
+          @update:model-value="callbacks.onEventExportScope"
         />
       </div>
       <div class="military-event-actions">
@@ -506,7 +506,6 @@ const eventChainFilter = ref("all");
 const eventTypeFilter = ref("all");
 const eventOutcomeFilter = ref("all");
 const eventApplyFilter = ref("all");
-const eventExportScope = ref("all");
 const showAllSelectedBattleEvents = ref(false);
 const battleEventDraft = reactive({
   chainKey: "",
@@ -577,6 +576,10 @@ const statusOptions = computed(() => {
 });
 const selectedStateFilterLabel = computed(() => stateOptions.value.find(option => String(option.value) === String(props.state.selectedStateId))?.label || "全部国家");
 const selectedStatusFilterLabel = computed(() => statusOptions.value.find(option => String(option.value) === String(props.state.selectedStatus))?.label || "全部态势");
+const eventExportScope = computed(() => {
+  const scope = props.state.eventExportScope;
+  return scope === "selected" || scope === "filtered" ? scope : "all";
+});
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);

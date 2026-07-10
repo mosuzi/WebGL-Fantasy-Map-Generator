@@ -5,6 +5,8 @@ import {readPanelListPreferences, updatePanelListPreferences} from "../panel-lis
 const MILITARY_PANEL_ID = "military-panel";
 const MILITARY_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  scope: "all",
+  scopes: Object.freeze(["all", "selected", "filtered"]),
   sortKey: "troops",
   sortDir: "desc"
 });
@@ -17,6 +19,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    eventExportScope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedStateId: "all",
@@ -28,6 +31,10 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     onFilter: value => {
       panelState.filter = value;
       updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {filter: value}, MILITARY_LIST_DEFAULTS);
+    },
+    onEventExportScope: value => {
+      panelState.eventExportScope = value === "selected" || value === "filtered" ? value : "all";
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {scope: panelState.eventExportScope}, MILITARY_LIST_DEFAULTS);
     },
     onStateChange: stateId => {
       panelState.selectedStateId = stateId === "all" ? "all" : Number(stateId);
