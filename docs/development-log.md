@@ -23530,6 +23530,23 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 
+### 2026-07-11 文化 / 宗教树状面板打开状态持久化
+
+背景：
+
+- 文化和宗教面板的树状总览打开状态仍保存在组件本地 `ref(false)` 中，刷新或重新打开后会回到关闭状态。
+- 树状总览是否打开是浏览布局偏好，不是选中树节点、重命名 / 继承 / 备注编辑浮层或编辑草稿，适合保存为轻量偏好。
+
+实现：
+
+- `panel-list-preferences` 新增可选 `treeOpen` 布尔归一化字段，仅在面板 defaults 明确声明时保存。
+- 文化和宗教面板默认偏好增加 `treeOpen: false`，面板 state 初始化时读取该值。
+- `CulturePanel.vue` 和 `ReligionPanel.vue` 的树状面板打开状态改为 computed getter / setter，并通过 `onTreeOpen` 写回面板偏好。
+
+验证：
+
+- 待本批次统一验证。
+
 ### 2026-07-11 军事战报导出范围持久化
 
 背景：

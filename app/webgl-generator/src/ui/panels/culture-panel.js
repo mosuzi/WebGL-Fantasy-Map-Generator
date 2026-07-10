@@ -6,6 +6,7 @@ import {readPanelListPreferences, updatePanelListPreferences} from "../panel-lis
 const CULTURE_PANEL_ID = "culture-panel";
 const CULTURE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  treeOpen: false,
   sortKey: "cells",
   sortDir: "desc"
 });
@@ -18,6 +19,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    treeOpen: listPreferences.treeOpen,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedCultureId: null,
@@ -27,6 +29,10 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onFilter: value => {
       panelState.filter = value;
       updatePanelListPreferences(documentRef, CULTURE_PANEL_ID, {filter: value}, CULTURE_LIST_DEFAULTS);
+    },
+    onTreeOpen: value => {
+      panelState.treeOpen = Boolean(value);
+      updatePanelListPreferences(documentRef, CULTURE_PANEL_ID, {treeOpen: panelState.treeOpen}, CULTURE_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {

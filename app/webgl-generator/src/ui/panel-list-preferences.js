@@ -41,6 +41,9 @@ function normalizePanelListPreferences(value = {}, defaults = {}) {
     defaults.scope,
     defaults.scopes
   );
+  if (typeof defaults.treeOpen === "boolean") {
+    normalized.treeOpen = typeof value.treeOpen === "boolean" ? value.treeOpen : defaults.treeOpen;
+  }
   return normalized;
 }
 

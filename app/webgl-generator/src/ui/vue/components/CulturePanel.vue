@@ -152,7 +152,10 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestId = ref(null);
-const treePanelOpen = ref(false);
+const treePanelOpen = computed({
+  get: () => Boolean(props.state.treeOpen),
+  set: value => props.callbacks.onTreeOpen?.(value)
+});
 const metrics = computed(() => {
   props.state.version;
   return buildCultureMetrics(props.state.map);
