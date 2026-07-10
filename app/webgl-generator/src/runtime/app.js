@@ -485,10 +485,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: OBJECT_KIND.STATE, id: stateId};
       const context = {map: state.map};
       const command = createSetObjectNoteCommand(object, body, {name: stateItem?.fullName || stateItem?.name || `国家 #${stateId}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
@@ -681,10 +678,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: OBJECT_KIND.PROVINCE, id: provinceId};
       const context = {map: state.map};
       const command = createSetObjectNoteCommand(object, body, {name: province?.fullName || province?.name || `省份 #${provinceId}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateProvincePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
@@ -829,10 +823,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const city = state.map?.settlements?.cities?.[cityId];
       const context = {map: state.map};
       const command = createSetCityNoteCommand(cityId, body, {name: city?.name || `城市 #${cityId}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
@@ -921,10 +912,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: OBJECT_KIND.CULTURE, id: cultureId};
       const context = {map: state.map};
       const command = createSetObjectNoteCommand(object, body, {name: culture?.name || `文化 #${cultureId}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateCulturePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onNamebaseBinding: cultureId => {
@@ -1012,10 +1000,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: OBJECT_KIND.RELIGION, id: religionId};
       const context = {map: state.map};
       const command = createSetObjectNoteCommand(object, body, {name: religion?.name || `宗教 #${religionId}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateReligionPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
@@ -1319,10 +1304,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const marker = state.map?.markers?.markers?.[markerId];
       const context = {map: state.map};
       const command = createSetMarkerNoteCommand(markerId, body, {name: marker?.name || marker?.label || `标记 #${markerId}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateMarkerPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onAddResourceMode: type => {
@@ -1386,10 +1368,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onNoteChange: (object, body) => {
       const context = {map: state.map};
       const command = createSetLabelNoteCommand(object, body, {name: object.targetName || object.text || `标签 #${object.targetId ?? object.id}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateLabelNamingPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onAdd: () => {
@@ -1599,10 +1578,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const river = state.map?.rivers?.rivers?.find(item => item.id === riverId);
       const context = {map: state.map};
       const command = createSetRiverNoteCommand(riverId, body, {name: river?.name || `河流 #${riverId}`});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {

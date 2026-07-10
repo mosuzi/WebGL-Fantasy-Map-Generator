@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：多对象备注保存接入统一编辑执行器
+
+本步沿着路线备注迁移继续清理旧调用路径，把国家、省份、城市、文化、宗教、标记、标签和河流面板的备注保存统一接入 `executeEditCommand()`。
+
+修正：
+
+- 上述面板的 `onNoteChange` 不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部 `updateXPanel()`。
+- 各备注命令继续使用原有命令类型：国家 / 省份 / 文化 / 宗教走 `createSetObjectNoteCommand()`，城市、标记、标签和河流走各自专用 note command。
+- 面板刷新统一交给 `executeEditCommand()` 的 `refreshPanelsForEdit()` 兜底路径，根据命令 `effects.affected` 和 `derived: ["object-panels"]` 刷新。
+
+边界：
+
+- 本步只迁移备注保存调用路径，不改变备注存储结构、对象命名、标签渲染、河流 mesh 或 marker 图层。
+- 不新增持久化字段，不涉及旧地图转换。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：国家面板真实“编辑备注”表单写入 `国家备注迁移烟测` 后生成 `state:1` 备注，`history undo=1`，`lastEditRefresh` 为 `object-panels` / `affected state#1`；河流面板真实“编辑备注”表单写入 `河流备注迁移烟测` 后生成 `river:1` 备注，`history undo=2`，`lastEditRefresh` 为 `object-panels` / `affected river#1`；两处详情均显示“有备注（8字）”，`glError = 0`。health monitor 仍报告生成启动期长任务 warning。
+
 ## 2026-07-10：路线备注接入统一编辑执行器
 
 本步继续清理编辑器基础设施中的旧调用路径，把路线管理面板的备注保存从手写 `isNoop -> EditHistory.execute -> refreshAfterEdit -> update route panel` 迁移到 `executeEditCommand()`。
