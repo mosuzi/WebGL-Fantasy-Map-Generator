@@ -23546,3 +23546,16 @@ full 矩阵结果：
 
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-11 空态新增动作批次综合验证
+
+范围：
+
+- 本批次覆盖 `778f145 接入文化宗教空态新增动作` 和 `4d85745 接入标签空态新增动作`。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开文化管理、宗教管理和标签管理，分别输入不存在的筛选词触发空态；文化空态显示“新增空文化”，宗教空态显示“新增空宗教”，标签空态显示“新增标签”；`window.__webglGeneratorApp` 存在，WebGL2 正常，`glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `empty_action_verify`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
