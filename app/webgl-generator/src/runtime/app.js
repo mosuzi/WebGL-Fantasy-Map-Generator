@@ -1287,8 +1287,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.labelNaming = labelNamingPanel;
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
-    onExport: () => exportNamebases(state, documentRef),
-    onExportLegacy: () => exportLegacyNamebases(state, documentRef),
+    onExport: rows => exportNamebases(state, documentRef, rows),
+    onExportLegacy: rows => exportLegacyNamebases(state, documentRef, rows),
     onImportPreview: (file, mode) => previewNamebaseImport(state, documentRef, file, mode),
     onImport: (file, mode) => importNamebases(state, documentRef, file, mode),
     onCreateUser: () => createManualNamebase(state, documentRef),
@@ -2659,31 +2659,40 @@ function exportNotesSummary(state, documentRef, rows = []) {
   }
 }
 
-function exportNamebases(state, documentRef) {
+function exportNamebases(state, documentRef, rows = null) {
   try {
-    const payload = createNamebaseDocument(state.map);
-    const filename = state.map ? `${mapFileBaseName(state.map)}.namebases.json` : "webgl-generator-namebases.json";
+    const selectedIds = selectedNamebaseIds(rows);
+    const payload = createNamebaseDocument(state.map, {baseIds: selectedIds});
+    const suffix = selectedIds ? ".namebases-selected.json" : ".namebases.json";
+    const filename = state.map ? `${mapFileBaseName(state.map)}${suffix}` : `webgl-generator${suffix}`;
     downloadText(documentRef, JSON.stringify(payload, null, 2), filename, "application/json;charset=utf-8");
-    setFileOperationStatus(documentRef, `名称库已导出，共 ${payload.metadata.bases} 个词池，用户库 ${payload.metadata.user} 个。`);
+    setFileOperationStatus(documentRef, `${selectedIds ? "选中名称库" : "名称库"}已导出，共 ${payload.metadata.bases} 个词池，用户库 ${payload.metadata.user} 个。`);
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导出失败", error);
   }
 }
 
-function exportLegacyNamebases(state, documentRef) {
+function exportLegacyNamebases(state, documentRef, rows = null) {
   try {
-    const text = createLegacyNamebaseText(state.map);
+    const selectedIds = selectedNamebaseIds(rows);
+    const text = createLegacyNamebaseText(state.map, {baseIds: selectedIds});
     if (!text) {
       setFileOperationStatus(documentRef, "当前没有可导出的名称库。");
       return;
     }
-    const filename = state.map ? `${mapFileBaseName(state.map)}.namebases.txt` : "webgl-generator-namebases.txt";
+    const suffix = selectedIds ? ".namebases-selected.txt" : ".namebases.txt";
+    const filename = state.map ? `${mapFileBaseName(state.map)}${suffix}` : `webgl-generator${suffix}`;
     downloadText(documentRef, text, filename, "text/plain;charset=utf-8");
     const lines = text.split(/\r?\n/g).filter(Boolean).length;
-    setFileOperationStatus(documentRef, `原版文本名称库已导出，共 ${lines} 个词池。`);
+    setFileOperationStatus(documentRef, `${selectedIds ? "选中" : ""}原版文本名称库已导出，共 ${lines} 个词池。`);
   } catch (error) {
     reportFileOperationError(documentRef, "原版文本名称库导出失败", error);
   }
+}
+
+function selectedNamebaseIds(rows) {
+  if (!Array.isArray(rows)) return null;
+  return rows.map(row => String(row?.id || "").trim()).filter(Boolean);
 }
 
 function executeNamebaseEdit(state, documentRef, command) {

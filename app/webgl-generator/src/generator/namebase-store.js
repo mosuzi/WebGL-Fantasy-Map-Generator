@@ -10,7 +10,8 @@ export const NAMEBASE_BINDING_TARGETS = Object.freeze([
   {key: "religion", label: "宗教"}
 ]);
 
-export function createNamebaseDocument(map = null, {includeUser = true} = {}) {
+export function createNamebaseDocument(map = null, {includeUser = true, baseIds = null} = {}) {
+  const selectedIds = normalizeNamebaseExportIds(baseIds);
   const builtinBases = getBuiltinNamebaseSummaries({includeSource: true}).map(row => ({
     id: row.id,
     name: row.name,
@@ -41,18 +42,19 @@ export function createNamebaseDocument(map = null, {includeUser = true} = {}) {
     source: row.source || []
   }));
   const userBases = includeUser ? (map?.namebases?.bases || []).map(base => namebaseExportRecord(base)).filter(Boolean) : [];
-  const bases = [...builtinBases, ...userBases];
+  const bases = [...builtinBases, ...userBases].filter(base => !selectedIds || selectedIds.has(String(base.id)));
   return {
     type: NAMEBASE_DOCUMENT_TYPE,
     version: NAMEBASE_DOCUMENT_VERSION,
+    exportMode: selectedIds ? "selected-namebases" : "all-namebases",
     exportedAt: new Date().toISOString(),
     metadata: {
       seed: map?.metadata?.seed || "",
       checksum: map?.metadata?.checksum || "",
       bases: bases.length,
       samples: bases.reduce((sum, base) => sum + base.samples, 0),
-      builtin: builtinBases.length,
-      user: userBases.length
+      builtin: bases.filter(base => base.builtin).length,
+      user: bases.filter(base => !base.builtin).length
     },
     bases
   };
@@ -62,11 +64,16 @@ export function createBuiltinNamebaseDocument(map = null) {
   return createNamebaseDocument(map, {includeUser: false});
 }
 
-export function createLegacyNamebaseText(map = null) {
-  return createNamebaseDocument(map).bases
+export function createLegacyNamebaseText(map = null, options = {}) {
+  return createNamebaseDocument(map, options).bases
     .map(formatLegacyNamebaseLine)
     .filter(Boolean)
     .join("\r\n");
+}
+
+function normalizeNamebaseExportIds(baseIds) {
+  if (!Array.isArray(baseIds)) return null;
+  return new Set(baseIds.map(id => String(id || "").trim()).filter(Boolean));
 }
 
 export function parseNamebaseDocument(text) {

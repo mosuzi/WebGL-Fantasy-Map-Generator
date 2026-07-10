@@ -104,9 +104,12 @@
     :empty-action="namebaseEmptyAction"
     :show-locate-action="false"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedNamebaseIds"
     @select="callbacks.onSelect"
     @empty-action="handleNamebaseAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedNamebaseIds = $event"
   />
 
   <UiPanelIoActions
@@ -217,6 +220,7 @@ const maxLengthDraft = ref(4);
 const duplicateCharsDraft = ref("");
 const generatedExamples = ref([]);
 const previewNonce = ref(0);
+const selectedNamebaseIds = ref([]);
 
 const sortOptions = Object.freeze([
   {key: "category", label: "分类"},
@@ -255,9 +259,13 @@ const rows = computed(() => {
   return (props.state.summaries || []).map(toRow);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selectedNamebaseIdSet = computed(() => new Set(selectedNamebaseIds.value.map(id => String(id))));
+const selectedNamebaseRows = computed(() => visibleRows.value.filter(row => selectedNamebaseIdSet.value.has(String(row.id))));
 const namebaseExportActions = computed(() => [
   {key: "json", label: "导出名称库", disabled: !rows.value.length},
-  {key: "legacy", label: "导出原版文本", disabled: !rows.value.length}
+  {key: "legacy", label: "导出原版文本", disabled: !rows.value.length},
+  {key: "selected-json", label: `导出选中名称库 ${formatNumber(selectedNamebaseRows.value.length)}`, disabled: !selectedNamebaseRows.value.length},
+  {key: "selected-legacy", label: `导出选中原版文本 ${formatNumber(selectedNamebaseRows.value.length)}`, disabled: !selectedNamebaseRows.value.length}
 ]);
 const namebaseImportActions = Object.freeze([
   {key: "namebase", label: "导入名称库", accept: ".json,.txt,application/json,text/plain"}
@@ -279,7 +287,8 @@ const summaryMetrics = computed(() => [
   {label: "词池", value: formatNumber(rows.value.length)},
   {label: "样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.samples, 0))},
   {label: "唯一样本", value: formatNumber(rows.value.reduce((sum, row) => sum + row.uniqueSamples, 0))},
-  {label: "重复", value: formatNumber(rows.value.reduce((sum, row) => sum + row.duplicateSamples, 0))}
+  {label: "重复", value: formatNumber(rows.value.reduce((sum, row) => sum + row.duplicateSamples, 0))},
+  {label: "已选", value: formatNumber(selectedNamebaseRows.value.length)}
 ]);
 const bindingInvalidEntries = computed(() => props.state.bindingStatus?.invalid || []);
 const bindingInvalidLabel = computed(() => bindingInvalidEntries.value.map(item => `${item.label} -> ${item.id}`).join("；"));
@@ -476,6 +485,8 @@ function collectCultures(map) {
 function handleNamebaseExport(key) {
   if (key === "json") props.callbacks.onExport?.();
   if (key === "legacy") props.callbacks.onExportLegacy?.();
+  if (key === "selected-json") props.callbacks.onExport?.(selectedNamebaseRows.value);
+  if (key === "selected-legacy") props.callbacks.onExportLegacy?.(selectedNamebaseRows.value);
 }
 
 function handleNamebaseImport({file}) {
@@ -535,4 +546,9 @@ watch(cultures, value => {
     selectedCultureId.value = String(value[0].id);
   }
 }, {immediate: true});
+
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedNamebaseIds.value = selectedNamebaseIds.value.filter(id => visibleIds.has(String(id)));
+});
 </script>

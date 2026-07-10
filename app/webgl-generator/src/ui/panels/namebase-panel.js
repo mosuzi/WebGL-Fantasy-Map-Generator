@@ -73,8 +73,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onSelect: row => {
       panelState.selectedNamebaseId = row.id;
     },
-    onExport: () => callbacks.onExport?.(),
-    onExportLegacy: () => callbacks.onExportLegacy?.(),
+    onExport: rows => callbacks.onExport?.(rows),
+    onExportLegacy: rows => callbacks.onExportLegacy?.(rows),
     onImportMode: mode => {
       panelState.importMode = mode === "replace" ? "replace" : "append";
       updatePanelListPreferences(documentRef, NAMEBASE_PANEL_ID, {importMode: panelState.importMode}, NAMEBASE_LIST_DEFAULTS);
