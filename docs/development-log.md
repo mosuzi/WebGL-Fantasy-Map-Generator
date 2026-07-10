@@ -23798,3 +23798,24 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开名称库面板并输入不存在的筛选词触发空态，空态动作“新建用户库”仍可见且 `disabled=false`；页面临时插入 disabled 的 `.object-table-empty-action` 后，computed style 显示 `cursor = not-allowed`、文本 `rgb(111, 127, 136)`、背景 `rgba(189, 206, 213, 0.06)`、边框 `rgba(189, 206, 213, 0.12)`；`glError = 0`，health error、console error 和 page error 均为 `0`。
 - 本批次按要求启动验证子智能体 `verify_table_style_batch`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
+
+### 2026-07-11 `panel-list-preferences` 列宽偏好存储层
+
+背景：
+
+- `UiObjectTable` 已能解释 `width / minWidth / maxWidth`，但列表偏好存储还没有可复用的列宽字段。
+- 后续做列宽持久化时，需要先有安全的数据层，避免坏 localStorage 值把表格撑爆，或把任意未知 key 混进面板状态。
+
+实现：
+
+- `panel-list-preferences` 新增可选 `columnWidths` 归一化字段，仅当面板 defaults 显式声明 `columnWidths` 时启用。
+- 归一化只保留 defaults 中列出的列 key。
+- 列宽会转为整数并限制在 `32..640px`；无效值回退到 defaults，同样受范围保护。
+- 未声明 `columnWidths` 的现有面板读写结构保持不变。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
+- 本地 Node 断言通过：坏宽度 `9999` 被夹到 `640`，过小宽度 `16` 被夹到 `32`，无效宽度回退到 defaults，未知列 key 被丢弃；未声明 `columnWidths` 的 defaults 不会把该字段写入偏好。
+- Node 在动态导入该 `.js` 文件时仍输出当前包缺少 `type: module` 的既有 warning，不影响断言结果。
+- 浏览器烟测待本批次收尾统一执行。

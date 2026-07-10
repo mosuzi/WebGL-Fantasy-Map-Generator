@@ -1,4 +1,6 @@
 const PANEL_LIST_PREFERENCES_PREFIX = "webgl-generator-panel-list:";
+const MIN_COLUMN_WIDTH = 32;
+const MAX_COLUMN_WIDTH = 640;
 
 export function readPanelListPreferences(documentRef, panelId, defaults = {}) {
   try {
@@ -44,6 +46,9 @@ function normalizePanelListPreferences(value = {}, defaults = {}) {
   if (typeof defaults.treeOpen === "boolean") {
     normalized.treeOpen = typeof value.treeOpen === "boolean" ? value.treeOpen : defaults.treeOpen;
   }
+  if (isPlainObject(defaults.columnWidths)) {
+    normalized.columnWidths = normalizeColumnWidths(value.columnWidths, defaults.columnWidths);
+  }
   return normalized;
 }
 
@@ -60,4 +65,23 @@ function normalizePanelTab(value, defaults) {
 function normalizePreferenceValue(value, fallback, allowedValues = null) {
   const normalized = typeof value === "string" && value ? value : fallback;
   return !Array.isArray(allowedValues) || allowedValues.includes(normalized) ? normalized : fallback;
+}
+
+function normalizeColumnWidths(value, defaults = {}) {
+  const source = isPlainObject(value) ? value : {};
+  return Object.fromEntries(
+    Object.keys(defaults).map(key => [key, normalizeColumnWidth(source[key], defaults[key])])
+  );
+}
+
+function normalizeColumnWidth(value, fallback) {
+  const width = Number(value);
+  const fallbackWidth = Number(fallback);
+  const base = Number.isFinite(width) ? width : fallbackWidth;
+  if (!Number.isFinite(base)) return MIN_COLUMN_WIDTH;
+  return Math.round(Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, base)));
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
