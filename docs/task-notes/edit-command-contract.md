@@ -67,6 +67,8 @@
 - `route-mesh` / `river-mesh`：路线或河流动态 mesh 需要失效。
 - `labels`：标签 DOM overlay 需要刷新。
 
+批量重算或全量重生成命令的 `affected` 不应只写 `{kind: "xxx", id: "all"}`。建议先追加一个系统级目标，例如 `{kind: "derived-system", id: "routes"}`、`{kind: "derived-system", id: "rivers"}`，再列出会被刷新或替换的对象集合。这样历史摘要可以解释“为什么是全量”，面板刷新仍能按对象 kind 工作。
+
 如果某个命令会让派生系统过期但不立即重建，可使用已有 `defer:*` 风格，后续面板负责把过期状态解释给用户。
 
 ## 调用层约定
@@ -115,5 +117,6 @@
 - `executeEditCommand()` 已成为主要编辑入口，覆盖测量、备注、名称库、城市、国家、省份、文化、宗教、路线、河流、湖泊、地区、marker、标签、外交、军事、高度刷子、GEO 地形导入和自定义标签拖拽等常见路径。
 - 已主动声明 `domain` 的命令范围：路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化、宗教、marker、标签、外交、对象详情通用字段和军事。
 - `EditHistory.getStats()` 已暴露 `lastDomain` 和 `lastAffected`，控制台历史 API 和面板历史摘要可直接看到最近命令领域与影响对象；历史摘要使用共享 formatter，以 `@domain [kind#id]` 的短格式展示，超过 3 个对象时折叠为 `+N`。
+- 国家、省份、道路、河流和城市重生成入口已开始使用 `derived-system#xxx` 作为批量 affected 的第一项，避免历史和刷新摘要只出现对象级 `all`。
 - 面板历史按钮已开始复用 `executeHistoryCommand()`，避免各面板分别手写撤销 / 重做刷新。
 - 后续重点是继续迁移残留的直接 `state.editHistory.execute()` 路径，并让新增命令保持 `domain` 和更精确的 `effects.affected`。

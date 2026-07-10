@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：重生成影响对象增加系统标记
+
+本步继续收窄 `effects.affected` 的可读性问题，先处理控制面板里的国家、省份、道路、河流和城市重生成入口。这些入口本来确实会替换整类对象，不能简单从 `all` 改成单个 id；因此本步增加系统级 affected，用来解释对象级全量影响的来源。
+
+修正：
+
+- 新增 `regenerationAffected(system, targets)` helper。
+- 国家、省份、道路、河流和城市重生成的 affected 现在会以 `{kind: "derived-system", id: "xxx"}` 开头，再列出具体对象集合，例如 `route#all`。
+- 原有对象级 affected 保留，`refreshPanelsForEdit()` 仍可按 `state / province / city / route / river` 刷新领域面板。
+- 编辑命令契约文档补充批量重算 affected 约定：全量对象影响应先说明系统来源，再列对象集合。
+
+边界：
+
+- 本步不改变重生成算法、扰动 salt、派生标脏、对象索引刷新或面板刷新策略。
+- 资源点和外交重生成已经走各自命令 / effects，后续可继续按同一约定细化。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：触发控制面板道路重生成后，`lastEditRefresh.affected` 为 `derived-system#routes, route#all`，控制面板正文同步包含这两个 affected，`route-mesh / object-panels / object-index` 刷新摘要保留，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：编辑历史影响对象统计
 
 本步继续推进编辑器基础设施，把最近编辑命令的影响对象从刷新调度元数据暴露到历史统计中，方便后续排查面板刷新、控制台 API 和命令 `effects.affected` 精度。

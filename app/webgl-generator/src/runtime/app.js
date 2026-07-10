@@ -4386,7 +4386,12 @@ function regenerateStates(state, documentRef) {
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
-    affected: [{kind: OBJECT_KIND.STATE, id: "all"}, {kind: OBJECT_KIND.PROVINCE, id: "all"}, {kind: OBJECT_KIND.CITY, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+    affected: regenerationAffected("states", [
+      {kind: OBJECT_KIND.STATE, id: "all"},
+      {kind: OBJECT_KIND.PROVINCE, id: "all"},
+      {kind: OBJECT_KIND.CITY, id: "all"},
+      {kind: OBJECT_KIND.ROUTE, id: "all"}
+    ])
   });
 
   return regenerationResult(
@@ -4413,7 +4418,11 @@ function regenerateProvinces(state, documentRef) {
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
-    affected: [{kind: OBJECT_KIND.PROVINCE, id: "all"}, {kind: OBJECT_KIND.CITY, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+    affected: regenerationAffected("provinces", [
+      {kind: OBJECT_KIND.PROVINCE, id: "all"},
+      {kind: OBJECT_KIND.CITY, id: "all"},
+      {kind: OBJECT_KIND.ROUTE, id: "all"}
+    ])
   });
 
   return regenerationResult(
@@ -4433,7 +4442,7 @@ function regenerateRoutes(state, documentRef) {
   appendGenerationLog(map, `regenerate routes: salt=${routeSalt}, routes=${map.settlements.metadata.routes}, segments=${map.settlements.metadata.routeSegments}`);
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["route-mesh", "object-panels", "object-index"],
-    affected: [{kind: OBJECT_KIND.ROUTE, id: "all"}]
+    affected: regenerationAffected("routes", [{kind: OBJECT_KIND.ROUTE, id: "all"}])
   });
   return regenerationResult("routes", `道路已按当前国家、城镇、港口和陆海约束重算（扰动 #${routeSalt}）：${before} -> ${after}`, "陆路仍通过 pack 邻接寻路并避开水域，海路只连接同水体港口。");
 }
@@ -4459,7 +4468,10 @@ function regenerateRivers(state, documentRef) {
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["river-mesh", "river-width-stats", "route-mesh", "cell-colors", "point-layers", "object-panels", "object-index"],
-    affected: [{kind: OBJECT_KIND.RIVER, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+    affected: regenerationAffected("rivers", [
+      {kind: OBJECT_KIND.RIVER, id: "all"},
+      {kind: OBJECT_KIND.ROUTE, id: "all"}
+    ])
   });
 
   return regenerationResult(
@@ -4485,7 +4497,10 @@ function regenerateCities(state, documentRef) {
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["point-layers", "labels", "route-mesh", "object-panels", "object-index"],
-    affected: [{kind: OBJECT_KIND.CITY, id: "all"}, {kind: OBJECT_KIND.ROUTE, id: "all"}]
+    affected: regenerationAffected("cities", [
+      {kind: OBJECT_KIND.CITY, id: "all"},
+      {kind: OBJECT_KIND.ROUTE, id: "all"}
+    ])
   });
 
   return regenerationResult(
@@ -4536,6 +4551,10 @@ function regenerateDiplomacy(state, documentRef) {
     `外交已按当前国家邻接、文化、宗教、国力、资源竞争和海洋势力重算（扰动 #${salt}）：关系 ${beforePairs} -> ${map.diplomacy.metadata.pairs}；战争 ${beforeEnemies} -> ${map.diplomacy.metadata.enemies}`,
     "外交重算不会改写国家边界、城镇、经济或军队；战争状态只保留为外交记录和静态军事摘要上下文。"
   );
+}
+
+function regenerationAffected(system, targets = []) {
+  return [{kind: "derived-system", id: system}, ...targets];
 }
 
 function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
