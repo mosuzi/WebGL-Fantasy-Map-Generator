@@ -25,6 +25,7 @@ export function createSaveMeasurementCommand(points, {name = "", routeFit = "non
 
   return {
     label,
+    domain: "measurement",
     effects: {...MEASUREMENT_EFFECTS},
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
@@ -55,6 +56,7 @@ export function createRenameMeasurementCommand(measurementId, name, {label = "é‡
 
   return {
     label,
+    domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
       affected: [{kind: "measurement", id: measurementId}]
@@ -84,6 +86,7 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
 
   return {
     label,
+    domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
       affected: [{kind: "measurement", id: measurementId}]
@@ -124,6 +127,7 @@ export function createDeleteMeasurementCommand(measurementId, {label = "åˆ é™¤æµ
 
   return {
     label,
+    domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
       affected: [{kind: "measurement", id: measurementId}]
@@ -149,6 +153,7 @@ export function createImportMeasurementsCommand(measurements, {label = "å¯¼å…¥æµ
 
   return {
     label,
+    domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
       affected: []

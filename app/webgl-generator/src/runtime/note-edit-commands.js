@@ -13,6 +13,7 @@ export function createDeleteNoteCommand(noteId, {name = ""} = {}) {
   let previous = null;
   return {
     label: `删除备注 ${name || id}`,
+    domain: "note",
     effects: {
       ...NOTE_EFFECTS,
       affected: [{kind: "note", id}]

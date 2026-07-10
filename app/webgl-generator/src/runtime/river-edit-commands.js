@@ -27,6 +27,7 @@ export function createSetRiverWidthFactorCommand(riverId, nextValue) {
 
   return {
     label: `调整河流 #${riverId} 宽度因子`,
+    domain: OBJECT_KIND.RIVER,
     effects: {
       ...EDIT_REFRESH_PRESETS.RIVER_WIDTH_ONLY,
       affected: [{kind: "river", id: riverId}]
@@ -66,6 +67,7 @@ export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {
 
   return {
     label: normalizedBody ? `编辑河流备注 #${normalizedRiverId}` : `清空河流备注 #${normalizedRiverId}`,
+    domain: OBJECT_KIND.RIVER,
     effects: {
       ...RIVER_NOTE_EFFECTS,
       affected: [{kind: OBJECT_KIND.RIVER, id: normalizedRiverId}]
@@ -103,6 +105,7 @@ export function createRenameRiversFromNamebaseCommand(riverIds, {label = "按名
 
   return {
     label: `${label} ${targets.length} 条`,
+    domain: OBJECT_KIND.RIVER,
     effects: {
       ...RIVER_NAME_BATCH_EFFECTS,
       affected: targets.map(id => ({kind: OBJECT_KIND.RIVER, id}))

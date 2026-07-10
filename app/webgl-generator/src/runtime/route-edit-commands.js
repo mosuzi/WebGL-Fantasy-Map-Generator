@@ -26,6 +26,7 @@ export function createSetRouteNoteCommand(routeId, body, {name = ""} = {}) {
 
   return {
     label: normalizedBody ? `编辑路线备注 #${normalizedRouteId}` : `清空路线备注 #${normalizedRouteId}`,
+    domain: OBJECT_KIND.ROUTE,
     effects: {
       ...ROUTE_NOTE_EFFECTS,
       affected: [{kind: OBJECT_KIND.ROUTE, id: normalizedRouteId}]
@@ -66,6 +67,7 @@ export function createDeleteRouteCommand(routeId, {label = "删除路线"} = {})
 
   return {
     label: `${label} #${normalizedRouteId}`,
+    domain: OBJECT_KIND.ROUTE,
     effects: {
       ...ROUTE_DELETE_EFFECTS,
       affected: [{kind: OBJECT_KIND.ROUTE, id: normalizedRouteId}]

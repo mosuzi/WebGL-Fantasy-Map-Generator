@@ -15,6 +15,7 @@ export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名�
 
   return {
     label: `${label} ${targets.length} 个`,
+    domain: OBJECT_KIND.LAKE,
     effects: {
       ...LAKE_NAME_BATCH_EFFECTS,
       affected: targets.map(id => ({kind: OBJECT_KIND.LAKE, id}))

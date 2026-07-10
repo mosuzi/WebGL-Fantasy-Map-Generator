@@ -22978,3 +22978,23 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - `rg -n "state\.editHistory\.execute\(" app\webgl-generator\src\runtime\app.js` 确认直接执行入口只剩 `executeEditCommand()` 内部一处。
+
+### 2026-07-10 编辑命令 domain 第一批
+
+背景：
+
+- 契约校验已经允许并校验 `domain` 字段，但大多数旧命令仍没有主动声明领域。
+- 为了后续按领域聚合调试、刷新诊断和控制台 API 错误归因，需要逐步把命令来源从“只看 label”升级为稳定字段。
+
+实现：
+
+- 第一批只覆盖边界清楚、命令数量较少的低风险模块：路线、河流、湖泊、地区、备注和测量对象。
+- 对应命令对象新增 `domain` 字段，不修改 `effects`、`apply`、`revert`、`isNoop` 或 `getResult` 行为。
+- 同步更新 `edit-command-contract.md`、编辑器基础设施清单和当前计划，记录剩余城市、国家、省份、文化、宗教、marker、标签、外交、军事等命令后续分批补齐。
+
+验证：
+
+- `node --check` 覆盖 `route-edit-commands.js`、`river-edit-commands.js`、`lake-edit-commands.js`、`zone-edit-commands.js`、`measurement-edit-commands.js` 和 `note-edit-commands.js`，均通过。
+- `node --input-type=module` 契约断言通过：第一批 13 个命令实例均通过 `validateEditCommandContract()`，且 `domain` 分别为 `route / river / lake / zone / measurement / note`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。

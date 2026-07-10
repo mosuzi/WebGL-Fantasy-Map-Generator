@@ -17,6 +17,7 @@ export function createSetZoneStyleCommand(zoneId, patch = {}) {
 
   return {
     label: `调整地区样式 #${normalizedZoneId}`,
+    domain: OBJECT_KIND.ZONE,
     effects: {
       ...ZONE_STYLE_EFFECTS,
       affected: [{kind: OBJECT_KIND.ZONE, id: normalizedZoneId}]
