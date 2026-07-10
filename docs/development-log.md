@@ -24141,3 +24141,27 @@ full 矩阵结果：
 - 单选第一条备注后，摘要变为“已选1”，行 checkbox 选中数为 `1`，备注预览仍显示第一条正文；打开导出下拉并点击“导出选中 1”后，下载 JSON 的 `metadata.notes = 1`、`metadata.totalNotes = 2`，导出 notes 只包含 `state:1`。
 - 点击表头全选后，摘要变为“已选2”，两个行 checkbox 都选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 2”菜单项。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
+
+### 2026-07-11 测量对象批量选择导出
+
+背景：
+
+- 备注总览已验证公共表格批量选择列和“导出选中记录”闭环可用。
+- 测量对象面板已有导出回调，运行时导出函数天然接收 rows 参数；继续接入“导出选中测量”可以复用同一安全语义，不涉及批量删除或形状编辑。
+
+实现：
+
+- 测量对象面板启用 `UiObjectTable` 的 `selectableRows` 和 `selectedRowIds`。
+- 面板内部维护 `selectedMeasurementIds`，并在筛选 / 排序后的可见列表变化时清理不可见选中项。
+- 摘要指标新增“已选”，导出下拉新增“导出选中 N”；该动作只把选中的测量 rows 传给既有 `callbacks.onExport`。
+- 本步不改变测量对象新增、删除、定位、形状编辑、重命名、列宽、排序或筛选逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_measurement_batch_selection`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：Vite 本地服务加载当前应用后，在浏览器会话内临时注入两条测量对象用于表格验证，不写入源码或仓库文件。测量对象面板打开后有 `2` 个行 checkbox 和 `1` 个表头全选 checkbox；初始摘要为“测量2 / 总长度643.2 千米 / 总面积2万 平方公里 / 已选0 / 筛选2”。
+- 单选第一条测量对象后，摘要变为“已选1”，行 checkbox 选中数为 `1`；打开导出下拉并点击“导出选中 1”后，下载 JSON 的 `metadata.measurements = 1`，导出 measurements 只包含 `measure-test-1`。
+- 点击表头全选后，摘要变为“已选2”，两个行 checkbox 都选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 2”菜单项。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。

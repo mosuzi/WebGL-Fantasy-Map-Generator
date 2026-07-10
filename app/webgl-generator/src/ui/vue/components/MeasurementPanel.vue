@@ -19,11 +19,14 @@
     empty-text="暂无保存的测量对象"
     :empty-action="measurementEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedMeasurementIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedMeasurementIds = $event"
   />
 
   <UiPanelIoActions
@@ -92,6 +95,7 @@ const props = defineProps({
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestId = ref(null);
+const selectedMeasurementIds = ref([]);
 
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
@@ -120,8 +124,11 @@ const rows = computed(() => {
   return measurementRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selectedMeasurementIdSet = computed(() => new Set(selectedMeasurementIds.value.map(id => String(id))));
+const selectedMeasurementRows = computed(() => visibleRows.value.filter(row => selectedMeasurementIdSet.value.has(String(row.id))));
 const measurementExportActions = computed(() => [
-  {key: "measurement", label: "导出测量", disabled: !visibleRows.value.length}
+  {key: "measurement", label: "导出测量", disabled: !visibleRows.value.length},
+  {key: "selected-measurements", label: `导出选中 ${formatNumber(selectedMeasurementRows.value.length)}`, disabled: !selectedMeasurementRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
 const measurementListActions = computed(() => [
@@ -135,6 +142,7 @@ const summaryMetrics = computed(() => [
   {label: "测量", value: formatNumber(rows.value.length)},
   {label: "总长度", value: formatDistanceValue(totalDistance.value)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
+  {label: "已选", value: formatNumber(selectedMeasurementRows.value.length)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
@@ -158,6 +166,11 @@ watch(() => selected.value?.id, id => {
   nextTick(() => {
     activeAction.value = "rename";
   });
+});
+
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedMeasurementIds.value = selectedMeasurementIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function measurementRows(map) {
@@ -236,6 +249,10 @@ function formatAreaValue(value) {
 }
 
 function handleMeasurementExport(key) {
+  if (key === "selected-measurements") {
+    props.callbacks.onExport?.(selectedMeasurementRows.value);
+    return;
+  }
   if (key === "measurement") props.callbacks.onExport?.(visibleRows.value);
 }
 
