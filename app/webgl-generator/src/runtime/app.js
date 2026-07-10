@@ -3101,7 +3101,15 @@ async function importGeoData(state, documentRef, file) {
         setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
         return null;
       }
-      refreshAfterEdit(state, state.editHistory.execute(terrainCommand, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, terrainCommand, {
+        context: {map: state.map},
+        refresh: refreshAfterEdit,
+        refreshPanels: false
+      });
+      if (!result.executed) {
+        setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
+        return null;
+      }
       const summary = terrainCommand.getSummary?.() || {};
       const reset = state.map.metadata?.geoImportDerivedRefresh || {};
       setFileOperationStatus(documentRef, `已从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}，可撤销。`);

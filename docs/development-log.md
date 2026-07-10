@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：GEO 地形导入入口接入统一执行器
+
+本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把 FMG Cells GEO 地形导入命令接入 `executeEditCommand()`。
+
+修正：
+
+- `importGeoData()` 中的 `createImportFmgCellsHeightCommand()` 分支不再直接调用 `state.editHistory.execute()`。
+- GEO 地形导入改由统一执行器处理入栈和基础刷新，并保留原有 no-op 文案、导入 summary、非 GEO 派生重置说明和普通 GeoJSON 测量导入分支。
+- 本入口关闭统一执行器默认面板刷新，避免 GEO 地形重建后和导入链路已有刷新重复。
+
+边界：
+
+- 本步不改变 FMG Cells GEO 解析、地形应用、非 GEO 数据重置、军事 / 资源 / 地区重建或普通 GeoJSON 测量对象导入语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run regress:geo -- --browser-channel chrome --out $env:TEMP\fmg-geo-regression-current.json --markdown $env:TEMP\fmg-geo-regression-current.md` 通过：普通 GeoJSON 导入 3 个测量对象；FMG Cells GEO 导入状态为“源 cells 770，陆地 660，水域 110，应用 9897 个当前 cells；军事 206，资源点 14，地区 3，可撤销”；`gridMismatch = 0`、`packMismatch = 0`、hover mismatch `0 / 80`，旧标签 / 备注 / 测量均清空，`glError = 0`。报告仍记录一次 GEO 导入期间的 health long-task，延续既有性能风险，不作为本步功能失败。
+
 ## 2026-07-10：外交重生成入口接入统一执行器
 
 本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把控制面板 / API 复用的外交重生成函数接入 `executeEditCommand()`。
