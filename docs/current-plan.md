@@ -695,7 +695,7 @@
 89. 对象进入编辑动作 helper 第一刀。`已完成`
    - 目标：继续补齐“定位 / 闪烁高亮 / 打开面板 / 进入编辑”语义中的进入编辑部分，先把已有入口收束到运行时统一动作。
    - 边界：本步只新增并迁移 `startObjectEditing()` / `stopObjectEditing()` / `toggleObjectEditing()`，覆盖对象详情、国家、省份和河流既有入口；不改变高度、国家、省份刷子模式、河道编辑细节或对象表格双击策略。
-   - 完成记录：运行时编辑动作会集中处理 selection、`SelectionStore` 编辑态、编辑交互锁和 runtime 面板刷新；对象详情编辑 / 取消、国家编辑、省份编辑和河流编辑开关已复用该动作，面板内部退出模式的保护性 stop 分支仍保留在原调用点。
+   - 完成记录：运行时编辑动作会集中处理 selection、`SelectionStore` 编辑态、编辑交互锁和 runtime 面板刷新；对象详情编辑 / 取消、国家编辑、省份编辑和河流编辑开关已复用该动作，面板内部退出模式的保护性 stop 分支仍保留在原调用点。2026-07-11 `toggleObjectEditing()` 的同一对象判断已改用 `sameObjectId()`，避免数字 id 与数字字符串 id 导致同一对象无法切换退出。
 
 90. 对象退出编辑动作 helper 第一刀。`已完成`
    - 目标：继续收束进入 / 退出编辑语义，把国家、省份和河流退出编辑的保护性清理也纳入运行时统一动作。
@@ -705,12 +705,12 @@
 91. 控制面板打开对象面板 helper 第一刀。`已完成`
    - 目标：继续补齐打开 / 更新面板语义，把控制面板中“如果当前 selection 是某类对象，先预选该对象再打开领域面板”的重复逻辑收束到运行时 helper。
    - 边界：本步只迁移控制面板打开国家、政体、省份、城市、文化、宗教、外交、经济、军事、地区、路线、标记和标签面板的预选逻辑；不改变面板持久化、selection handler、列表筛选或对象详情打开规则。
-   - 完成记录：新增 `openSelectionAwarePanel({kind, beforeOpen, open, afterOpen})`，可在打开前后根据当前 selection 执行领域预选；经济 trade-flow 保持 open 后再选中交易的旧语义，其余对象面板保持打开前预选的旧顺序。
+   - 完成记录：新增 `openSelectionAwarePanel({kind, beforeOpen, open, afterOpen})`，可在打开前后根据当前 selection 执行领域预选；经济 trade-flow 保持 open 后再选中交易的旧语义，其余对象面板保持打开前预选的旧顺序。2026-07-11 已将该逻辑提升为文件级 `openSelectionAwarePanelForState()`，保留运行时绑定入口，方便后续 locate / open action 继续复用。
 
 92. selection handler 更新 / 打开面板 helper 第一刀。`已完成`
    - 目标：继续补齐打开 / 更新面板语义，把 selection handler 中“面板已打开则 update，否则 open”的重复分支收束到同一个 helper。
    - 边界：本步只迁移 state、city、province、culture、religion、river、lake、zone、route、measurement 和 military 的同构 update/open 分支；marker、label、economy 仍保留“只在面板已打开时更新”的特殊规则。
-   - 完成记录：新增 `updateOrOpenSelectionPanel(panel, {update, open})`，selection handler 继续先同步对象详情清理与领域选中目标，再通过 helper 执行 update/open；各对象是否自动打开面板的既有规则保持不变。
+   - 完成记录：新增 `updateOrOpenSelectionPanel(panel, {update, open})`，selection handler 继续先同步对象详情清理与领域选中目标，再通过 helper 执行 update/open；各对象是否自动打开面板的既有规则保持不变。2026-07-11 已补 `updateExistingSelectionPanel(panel, update)`，把 economy、marker 和 label “只在面板已打开时更新”的特殊规则也命名化，不改变自动打开边界。
 
 93. runtime / pick 双刷新 helper 第一刀。`已完成`
    - 目标：继续收束定位、selection 和加载完成后的公共刷新语义，把固定相邻的 runtime panel 与 pick panel 双刷新合并到同一个 helper。

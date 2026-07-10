@@ -13,6 +13,7 @@ import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
+import {sameObjectId} from "../ui/object-id.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createClimatePanel} from "../ui/panels/climate-panel.js";
@@ -285,20 +286,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     return true;
   };
   const toggleObjectEditing = (object, options = {}) => {
-    const sameObject = object && state.editingObject?.kind === object.kind && state.editingObject.id === object.id;
+    const sameObject = object && state.editingObject?.kind === object.kind && sameObjectId(state.editingObject.id, object.id);
     if (sameObject) return stopObjectEditing({afterStop: options.afterStop});
     return startObjectEditing(object, options);
   };
   state.startObjectEditing = startObjectEditing;
   state.stopObjectEditing = stopObjectEditing;
   state.toggleObjectEditing = toggleObjectEditing;
-  const openSelectionAwarePanel = ({kind = null, beforeOpen = null, open, afterOpen = null}) => {
-    const object = kind && state.selection?.object?.kind === kind ? state.selection.object : null;
-    if (object) beforeOpen?.(object);
-    open?.(object);
-    if (object) afterOpen?.(object);
-    return object;
-  };
+  const openSelectionAwarePanel = options => openSelectionAwarePanelForState(state, options);
   state.openSelectionAwarePanel = openSelectionAwarePanel;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
@@ -3827,27 +3822,25 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     });
   },
   [OBJECT_KIND.TRADE_FLOW]: (state, selection) => {
-    if (!state.panels.economy?.isOpen?.()) return false;
-    state.panels.objectDetails.clear();
-    state.panels.economy.setSelectedDealId?.(selection.object.id);
-    updateEconomyPanel(state);
-    return true;
+    return updateExistingSelectionPanel(state.panels.economy, () => {
+      state.panels.objectDetails.clear();
+      state.panels.economy.setSelectedDealId?.(selection.object.id);
+      updateEconomyPanel(state);
+    });
   },
   [OBJECT_KIND.MARKER]: (state, selection, editingObject, context) => {
-    if (!state.panels.marker?.isOpen?.()) return false;
-    state.panels.objectDetails.clear();
-    state.panels.marker.setSelectedMarkerId(selection.object.id);
-    if (isSelectionFromPanel(context, "marker-panel")) return true;
-    updateMarkerPanel(state);
-    return true;
+    return updateExistingSelectionPanel(state.panels.marker, () => {
+      state.panels.objectDetails.clear();
+      state.panels.marker.setSelectedMarkerId(selection.object.id);
+      if (!isSelectionFromPanel(context, "marker-panel")) updateMarkerPanel(state);
+    });
   },
   [OBJECT_KIND.LABEL]: (state, selection, editingObject, context) => {
-    if (!state.panels.labelNaming?.isOpen?.()) return false;
-    state.panels.objectDetails.clear();
-    state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(selection.object));
-    if (isSelectionFromPanel(context, "label-naming-panel")) return true;
-    updateLabelNamingPanel(state);
-    return true;
+    return updateExistingSelectionPanel(state.panels.labelNaming, () => {
+      state.panels.objectDetails.clear();
+      state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(selection.object));
+      if (!isSelectionFromPanel(context, "label-naming-panel")) updateLabelNamingPanel(state);
+    });
   },
   measurement: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
@@ -3877,6 +3870,20 @@ function updateOrOpenSelectionPanel(panel, {update, open}) {
   if (panel?.isOpen?.()) update?.();
   else open?.();
   return true;
+}
+
+function updateExistingSelectionPanel(panel, update) {
+  if (!panel?.isOpen?.()) return false;
+  update?.();
+  return true;
+}
+
+function openSelectionAwarePanelForState(state, {kind = null, beforeOpen = null, open, afterOpen = null} = {}) {
+  const object = kind && state.selection?.object?.kind === kind ? state.selection.object : null;
+  if (object) beforeOpen?.(object);
+  open?.(object);
+  if (object) afterOpen?.(object);
+  return object;
 }
 
 function handleSelectionPanel(state, selection, editingObject, context) {

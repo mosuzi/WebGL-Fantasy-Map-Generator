@@ -24479,3 +24479,28 @@ full 矩阵结果：
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：浏览器会话内给 `1（苍原）军团` 临时注入两条战报链路，预置 `smoke-chain-a / skirmish / victory / applied` 后首次打开军事面板可恢复；通过 UI 改成 `smoke-chain-b / raid / defeat / pending` 后，localStorage 写入 `eventChainFilter / eventTypeFilter / eventOutcomeFilter / eventApplyFilter`；刷新页面并重新注入同一临时战报后，四项仍恢复为 `smoke-chain-b / raid / defeat / pending`。
 - 军事主筛选未被误改：国家 / 态势保持 `all / all`，战报导出范围保持 `selected`。
 - WebGL 与健康检查通过：直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`；UI 改值后的 renderer `lastDraw.glError = 0`。
+
+### 2026-07-11 selection 打开 / 更新 helper 命名化收口
+
+背景：
+
+- 当前计划要求继续收束“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的运行时语义。
+- 控制面板打开对象面板的 selection 预选逻辑已有 `openSelectionAwarePanel()`，但还停留在初始化闭包中。
+- selection handler 中 marker、label、economy 仍保留“只在面板已打开时更新”的特殊规则，需要保留行为同时让边界更清晰。
+
+实现：
+
+- 将 selection-aware 打开逻辑提升为文件级 `openSelectionAwarePanelForState()`，初始化阶段只保留绑定当前 `state` 的轻量入口。
+- 新增 `updateExistingSelectionPanel()`，显式表达“面板未打开时不自动打开，只更新已打开面板”的特殊规则。
+- economy trade-flow、marker 和 label selection handler 改用 `updateExistingSelectionPanel()`，保持原有不自动打开面板的边界。
+- `toggleObjectEditing()` 的同一对象判断改用 `sameObjectId()`，避免对象 id 在数字和数字字符串之间转换时无法正确切换退出编辑。
+- 本步不改变 selection、定位、对象详情清理、面板打开状态、列表筛选、编辑命令或地图渲染逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_selection_helpers_smoke`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：`openSelectionAwarePanel` 和 `toggleObjectEditing` 均存在；marker、label 和 economy 面板初始未打开，分别选择 marker、label 和 trade-flow 后仍不会自动打开；`toggleObjectEditing({kind:"state", id:"1"})` 可进入国家编辑，随后 `toggleObjectEditing({kind:"state", id:1})` 可正确退出编辑；`openSelectionAwarePanel({kind:"trade-flow"})` 调用顺序为 `before:0 -> open:0 -> after:0`。
+- WebGL 与健康检查通过：直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
