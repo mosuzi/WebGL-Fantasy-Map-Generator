@@ -24312,6 +24312,7 @@ full 矩阵结果：
 验证：
 
 - `git diff --check` 通过。
+- 后续补充的资源点重生成命令 affected 收口同样通过 `node --check app\webgl-generator\src\runtime\marker-edit-commands.js` 和 `git diff --check`。
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
 - 本轮按要求启动验证子智能体 `verify_table_indeterminate`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：打开军事面板后单选 `1 / 113` 行，表头 checkbox 为 `checked=false / indeterminate=true / aria-checked=mixed`；点击表头全选后，表头为 `checked=true / indeterminate=false / aria-checked=true`，且 `113 / 113` 行全部选中。
@@ -24516,6 +24517,7 @@ full 矩阵结果：
 
 - `edit-command-effects.js` 新增 `newObjectAffected(kind)`。
 - 新增城市、省份、国家、空文化、空宗教、手工标签、marker、保存测量对象和测量对象导入命令的初始 affected 改为复用该 helper。
+- 资源点重生成命令从手写 `derived-system#markers` 改为复用 `systemAffected("markers", ...)`，继续收束批量 / 系统级 affected 写法。
 - 执行成功后的真实 id 回写保持不变，历史摘要和面板刷新仍能看到真实新增对象。
 - `edit-command-contract.md` 和编辑器基础设施清单同步新增对象 affected helper 约定。
 
@@ -24526,4 +24528,5 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
 - 本轮按要求启动验证子智能体 `verify_new_object_affected_smoke`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：`newObjectAffected("measurement")` 返回 `measurement#new`；`createSaveMeasurementCommand()` 执行前 initial affected 为 `measurement#new`，经 `EditHistory.execute()` 执行后回写为真实 `measurement-1`，`history.getStats().lastAffected` 同步为 `measurement-1`。
+- 主线程兜底资源点重生成命令验证通过：`createRegenerateResourceMarkersCommand({salt: 42})` 的 affected 仍为 `derived-system#markers + marker#resources`，确认改为 `systemAffected("markers", ...)` 后历史摘要目标形状不变。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 可用，WebGL2 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

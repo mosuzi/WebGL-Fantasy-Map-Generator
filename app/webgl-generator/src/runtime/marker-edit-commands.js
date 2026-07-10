@@ -2,7 +2,7 @@ import {createMarkerAtPackCell, createMarkerResult, regenerateResourceMarkers, r
 import {buildEconomy, refreshPoliticalEconomicPower} from "../generator/economy.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
-import {newObjectAffected} from "./edit-command-effects.js";
+import {newObjectAffected, systemAffected} from "./edit-command-effects.js";
 
 const MARKER_VISUAL_EFFECTS = Object.freeze({
   render: "draw",
@@ -207,7 +207,7 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
-      affected: [{kind: "derived-system", id: "markers"}, {kind: OBJECT_KIND.MARKER, id: "resources"}]
+      affected: systemAffected("markers", [{kind: OBJECT_KIND.MARKER, id: "resources"}])
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
