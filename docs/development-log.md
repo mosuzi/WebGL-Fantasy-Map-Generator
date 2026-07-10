@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：湖泊名称编辑接入统一编辑执行器
+
+本步继续清理湖泊管理面板的旧执行路径，把湖泊重命名和按名称库重命名筛选湖泊接入 `executeEditCommand()`。
+
+修正：
+
+- 湖泊重命名不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部湖泊面板刷新。
+- 按名称库重命名筛选湖泊改用统一执行器的 `status / noopStatus`，继续保留原有成功数量提示和无可更新名称提示。
+- 修正湖泊管理列表动作栏内部回调引用，`按名称库重命名筛选湖泊 / 定位选中湖泊` 现在通过 `props.callbacks` 调用真实面板回调，不再因未定义 `callbacks` 在浏览器中抛错。
+
+边界：
+
+- 本步只迁移湖泊名称类执行入口，不改变湖泊 feature 结构、湖泊生成、面积 / 补给统计、名称库算法、定位语义或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：湖泊面板选中湖泊 `#5` 后，真实“重命名”改为 `湖泊统一执行器烟测`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected lake#5`；随后真实点击“按名称库重命名筛选湖泊”把湖泊 `#5` 改回“秋泽”，撤销栈 `undo=2`，`lastLabel` 为 `按名称库重命名湖泊 4 个`，刷新摘要为 `object-name, object-panels`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：河流名称与宽度编辑接入统一编辑执行器
 
 本步继续清理河流管理面板的旧执行路径，把河流重命名、按名称库重命名筛选河流和河流宽度因子调整接入 `executeEditCommand()`。

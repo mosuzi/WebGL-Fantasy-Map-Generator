@@ -1507,23 +1507,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: OBJECT_KIND.LAKE, id: lakeId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateLakePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameVisibleFromNamebase: lakeIds => {
       const context = {map: state.map};
       const command = createRenameLakesFromNamebaseCommand(lakeIds);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-        const result = command.getResult?.();
-        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 个湖泊。`);
-      } else {
-        setFileOperationStatus(documentRef, "当前筛选湖泊没有可按名称库更新的名称。");
-      }
-      updateLakePanel(state);
+      executeEditCommand(state, documentRef, command, {
+        context,
+        status: executed => `已按当前名称库重命名 ${executed.getResult?.().renamed || 0} 个湖泊。`,
+        noopStatus: "当前筛选湖泊没有可按名称库更新的名称。"
+      });
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {

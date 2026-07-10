@@ -199,8 +199,8 @@ function lakeTypeLabel(type) {
 }
 
 function handleLakeListAction(key) {
-  if (key === "rename-visible") callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
-  if (key === "locate" && selected.value) callbacks.onLocate?.(selected.value);
+  if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
+  if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
 }
 
 function formatAreaValue(value) {
