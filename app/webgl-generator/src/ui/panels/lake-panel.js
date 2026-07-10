@@ -3,8 +3,17 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const LAKE_PANEL_ID = "lake-panel";
+const LAKE_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 112,
+  type: 76,
+  cells: 64,
+  area: 84,
+  flux: 64
+});
 const LAKE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: LAKE_COLUMN_WIDTHS,
   sortKey: "area",
   sortDir: "desc"
 });
@@ -17,6 +26,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     version: 0
@@ -37,6 +47,16 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, LAKE_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, LAKE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, LAKE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => callbacks.onSelect?.(lakeObject(row)),
     onLocate: row => callbacks.onLocate?.(lakeObject(row)),

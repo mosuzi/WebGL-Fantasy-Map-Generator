@@ -23876,6 +23876,7 @@ full 矩阵结果：
 - `UiObjectTable` 新增默认关闭的 `resizableColumns` prop；启用后表头会显示列宽拖拽手柄。
 - 拖拽手柄通过 pointer 事件计算新宽度并 emit `column-resize`，宽度限制为 `32..640px`。
 - 名称库面板启用 `resizable-columns`，接收 `column-resize` 后把对应 key 写回 `panel-list-preferences.columnWidths` 并更新 `panelState.columnWidths`。
+- `UiObjectTable` 的行级 `v-memo` 加入列布局签名，避免列宽变化时可见单元格 inline style 滞后到刷新后才更新。
 - 其它面板未传 `resizable-columns`，不会出现拖拽手柄，也不会改变默认列宽。
 
 验证：
@@ -23884,3 +23885,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 验证子智能体 `verify_namebase_column_resize_drag` 的 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开名称库面板并拖动“名称”列表头的列宽手柄，header / cell 宽度从约 `130.625px` 变为 `251px`；localStorage `webgl-generator-panel-list:namebase-panel` 写入 `columnWidths.name = 251`；刷新页面并重新打开名称库面板后，header / cell 仍保持 `251px`；输入不存在的筛选词触发空态后，“新建用户库”仍可见且 `disabled=false`；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 湖泊面板列宽拖拽持久化
+
+背景：
+
+- 名称库面板已经验证 `UiObjectTable` 列宽拖拽和 `columnWidths` 写回链路可用。
+- 湖泊管理面板列数较少、列定义稳定，适合作为第二个面板样本，验证该能力可按面板逐步扩展。
+
+实现：
+
+- 湖泊面板新增 `LAKE_COLUMN_WIDTHS`，并在 `LAKE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 面板 state 读取归一化列宽，传给 `LakePanel.vue` 的 `UiObjectTable`。
+- 湖泊表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变湖泊排序、筛选、定位、双击重命名或列表动作。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\lake-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_lake_column_resize_drag`；该子智能体连续等待无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开湖泊面板并拖动“名称”列表头列宽手柄，header / cell 从 `112px` 变为 `202px`，inline `width` 和 `minWidth` 均立即同步为 `202px`；localStorage `webgl-generator-panel-list:lake-panel` 写入 `columnWidths.name = 202`；刷新页面并重新打开湖泊面板后，header / cell 仍保持 `202px`；`glError = 0`，health error、console error 和 page error 均为 `0`。

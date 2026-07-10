@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -15,9 +16,11 @@
     :selected-id="selectedId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的湖泊"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions

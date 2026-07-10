@@ -43,7 +43,7 @@
         <tr
           v-for="row in visibleRows"
           :key="rowKey(row)"
-          v-memo="[rowKey(row), isSelected(row)]"
+          v-memo="[rowKey(row), isSelected(row), columnLayoutSignature]"
           class="object-table-row"
           :class="{'selected-row': isSelected(row)}"
           @click="handleRowClick(row)"
@@ -182,6 +182,14 @@ const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.va
 const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * VIRTUAL_ROW_HEIGHT : 0);
 const sortableKeys = computed(() => new Set((props.sortOptions || []).map(option => option?.key).filter(Boolean)));
 const sortIndicator = computed(() => props.sortDirection === "asc" ? "↑" : "↓");
+const columnLayoutSignature = computed(() => props.columns.map(column => [
+  column.key,
+  columnWidthOverride(column),
+  column.width,
+  column.minWidth,
+  column.maxWidth,
+  column.align
+].join(":")).join("|"));
 
 watch(
   () => [props.selectedId, props.rows, props.rows.length],
