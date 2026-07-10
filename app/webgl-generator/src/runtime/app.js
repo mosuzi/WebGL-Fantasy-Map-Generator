@@ -5290,7 +5290,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishHeightStroke(state);
+    finishHeightStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
   }, true);
@@ -5299,13 +5299,13 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishHeightStroke(state);
+    finishHeightStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
   }, true);
 }
 
-function bindStateEditing(canvas, state) {
+function bindStateEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (state.stateEdit.deleteMode && state.map) {
       if (!isPrimaryPointerDown(event)) return;
@@ -5383,7 +5383,7 @@ function bindStateEditing(canvas, state) {
     if (!state.stateEdit.activeStroke || state.stateEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishStateStroke(state);
+    finishStateStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateStatePanel(state);
   }, true);
@@ -5392,13 +5392,13 @@ function bindStateEditing(canvas, state) {
     if (!state.stateEdit.activeStroke || state.stateEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishStateStroke(state);
+    finishStateStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateStatePanel(state);
   }, true);
 }
 
-function bindProvinceEditing(canvas, state) {
+function bindProvinceEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (state.provinceEdit.deleteMode && state.map) {
       if (!isPrimaryPointerDown(event)) return;
@@ -5475,7 +5475,7 @@ function bindProvinceEditing(canvas, state) {
     if (!state.provinceEdit.activeStroke || state.provinceEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishProvinceStroke(state);
+    finishProvinceStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateProvincePanel(state);
   }, true);
@@ -5484,7 +5484,7 @@ function bindProvinceEditing(canvas, state) {
     if (!state.provinceEdit.activeStroke || state.provinceEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishProvinceStroke(state);
+    finishProvinceStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateProvincePanel(state);
   }, true);
@@ -5853,7 +5853,7 @@ function applyProvinceBrushAtEvent(state, event) {
   updateProvincePanel(state);
 }
 
-function finishHeightStroke(state) {
+function finishHeightStroke(state, documentRef) {
   const stroke = state.heightEdit.activeStroke;
   state.heightEdit.activeStroke = null;
   if (!stroke?.originals?.size) return;
@@ -5868,10 +5868,14 @@ function finishHeightStroke(state) {
   state.heightEdit.lastAffected = changes.length;
   state.heightEdit.lastHeight = summarizeChangedHeights(changes);
   state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
-  refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+  executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false
+  });
 }
 
-function finishStateStroke(state) {
+function finishStateStroke(state, documentRef) {
   const stroke = state.stateEdit.activeStroke;
   state.stateEdit.activeStroke = null;
   if (!stroke?.originals?.size) return;
@@ -5885,10 +5889,14 @@ function finishStateStroke(state) {
   if (command.isNoop({map: state.map})) return;
   state.stateEdit.lastAffected = changes.length;
   state.stateEdit.sourceStateId = stroke.sourceStateId;
-  refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
+  executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    refreshPanels: false
+  });
 }
 
-function finishProvinceStroke(state) {
+function finishProvinceStroke(state, documentRef) {
   const stroke = state.provinceEdit.activeStroke;
   state.provinceEdit.activeStroke = null;
   if (!stroke?.originals?.size) return;
@@ -5902,7 +5910,11 @@ function finishProvinceStroke(state) {
   if (command.isNoop({map: state.map})) return;
   state.provinceEdit.lastAffected = changes.length;
   state.provinceEdit.sourceProvinceId = stroke.sourceProvinceId;
-  refreshAfterProvinceEdit(state, state.editHistory.execute(command, {map: state.map}));
+  executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterProvinceEdit,
+    refreshPanels: false
+  });
 }
 
 function getHeightBrushChanges(map, point, brush, originals) {

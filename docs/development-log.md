@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：高度国家省份刷子落笔接入统一执行器
+
+本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把高度、国家和省份刷子的落笔命令接入 `executeEditCommand()`。
+
+修正：
+
+- `finishHeightStroke()`、`finishStateStroke()` 和 `finishProvinceStroke()` 不再直接调用 `state.editHistory.execute()`。
+- `bindStateEditing()` 和 `bindProvinceEditing()` 显式接收 `documentRef`，使画布刷子落笔也能使用统一执行器的异常通道。
+- 三类刷子仍保留原有刷新 helper：高度刷走 `refreshAfterEdit()`，国家刷走 `refreshAfterStateEdit()`，省份刷走 `refreshAfterProvinceEdit()`；同时关闭默认面板刷新，保留 pointerup / pointercancel 后各自面板更新节奏。
+
+边界：
+
+- 本步不改变高度刷参数、国家 / 省份刷影响范围、预览 effects、派生标脏或笔刷交互规则。
+- 自定义标签拖拽仍是当前 `app.js` 中最后一条直接业务 `state.editHistory.execute()` 旧路径。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-height-brush-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `height-brush-smoke / 10000 cells` 地图后，直接启用默认高度刷并向 canvas 派发 pointerdown / pointerup，目标 grid cell `1645` 高度 `30 -> 34`，历史栈 `undo 0 -> 1`，`lastAffected = 11`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：GEO 地形导入入口接入统一执行器
 
 本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把 FMG Cells GEO 地形导入命令接入 `executeEditCommand()`。
