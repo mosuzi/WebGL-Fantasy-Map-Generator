@@ -217,6 +217,7 @@
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物 smoke 通过：触发控制面板道路重生成后，`lastEditRefresh.affected` 为 `derived-system#routes, route#all`，控制面板正文同步包含这两个 affected，`route-mesh / object-panels / object-index` 刷新摘要保留，`glError = 0`，console/page error 为 `0`。
 
@@ -23384,6 +23385,25 @@ full 矩阵结果：
 - 运行时初始化时把闭包内 `locateAndSelectObject()` 暴露为 `state.locateAndSelectObject`，供 app 外层 helper 复用。
 - `locateMeasurement()` 优先调用 `state.locateAndSelectObject("measurement-panel", measurementObject(row), ...)`，并继续通过 `locateMeasurementBounds()` 保留测量对象 bounds 定位、缩放上下限和状态文案。
 - 测量面板 `onLocate` 改为复用 `locateMeasurement()`，因此面板定位、GEO 导入后定位、进入编辑定位三条路径统一到同一个测量定位动作；脱离 app 初始化的兜底路径仍会设置 selection 并刷新 runtime / pick 面板。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+
+### 2026-07-10 对象进入编辑动作 helper 第一刀
+
+背景：
+
+- `locateAndSelectObject()` 已经开始收束定位 / 选择路径，但进入编辑仍在对象详情、国家、省份、河流回调里各自直接操作 `SelectionStore`。
+- 这些入口虽然行为简单，却都需要同步 selection、编辑态、编辑交互锁和运行时面板；如果继续分散，后续补完整 locate / edit action 层时会重复处理。
+
+实现：
+
+- 运行时新增 `startObjectEditing()`、`stopObjectEditing()` 和 `toggleObjectEditing()`，并暴露到 `state` 供后续低风险入口复用。
+- 对象详情编辑 / 取消改走 start / stop helper；国家和省份编辑改走 start helper，并保留原来的专题色彩模式切换和面板选中目标更新。
+- 河流编辑按钮改走 toggle helper，继续保留“再次点击同一条河流关闭编辑”的既有语义。
+- 本步不迁移退出画笔、关闭面板和增删模式中的保护性 `stopEditing()` 分支，避免把模式清理和编辑入口混在同一刀里。
 
 验证：
 

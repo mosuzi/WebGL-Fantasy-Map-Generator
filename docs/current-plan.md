@@ -689,6 +689,11 @@
    - 边界：本步只收束测量对象的 bounds 定位调用；不改变测量点编辑、保存、导出、节点增删、路线贴合或闪烁高亮实现。
    - 完成记录：运行时把 `locateAndSelectObject()` 暴露为 `state.locateAndSelectObject`，`locateMeasurement()` 优先复用该动作并保留自定义 bounds 缩放；测量面板定位、GEO 测量导入后的首对象定位、进入测量对象编辑后的定位都共享 selection、runtime 和 pick 刷新语义，脱离 app 初始化的兜底路径仍保留。
 
+89. 对象进入编辑动作 helper 第一刀。`已完成`
+   - 目标：继续补齐“定位 / 闪烁高亮 / 打开面板 / 进入编辑”语义中的进入编辑部分，先把已有入口收束到运行时统一动作。
+   - 边界：本步只新增并迁移 `startObjectEditing()` / `stopObjectEditing()` / `toggleObjectEditing()`，覆盖对象详情、国家、省份和河流既有入口；不改变高度、国家、省份刷子模式、河道编辑细节或对象表格双击策略。
+   - 完成记录：运行时编辑动作会集中处理 selection、`SelectionStore` 编辑态、编辑交互锁和 runtime 面板刷新；对象详情编辑 / 取消、国家编辑、省份编辑和河流编辑开关已复用该动作，面板内部退出模式的保护性 stop 分支仍保留在原调用点。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

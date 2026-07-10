@@ -268,12 +268,36 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     return located;
   };
   state.locateAndSelectObject = locateAndSelectObject;
+  const startObjectEditing = (object, {select = true, afterStart = null} = {}) => {
+    if (!object) return false;
+    if (select) selectionStore.setSelection({object});
+    selectionStore.startEditing(object);
+    afterStart?.(object);
+    updateEditingInteractionLock(state, documentRef);
+    updateRuntimePanel(documentRef, state);
+    return true;
+  };
+  const stopObjectEditing = ({afterStop = null} = {}) => {
+    selectionStore.stopEditing();
+    afterStop?.();
+    updateEditingInteractionLock(state, documentRef);
+    updateRuntimePanel(documentRef, state);
+    return true;
+  };
+  const toggleObjectEditing = (object, options = {}) => {
+    const sameObject = object && state.editingObject?.kind === object.kind && state.editingObject.id === object.id;
+    if (sameObject) return stopObjectEditing({afterStop: options.afterStop});
+    return startObjectEditing(object, options);
+  };
+  state.startObjectEditing = startObjectEditing;
+  state.stopObjectEditing = stopObjectEditing;
+  state.toggleObjectEditing = toggleObjectEditing;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
-      selectionStore.startEditing(object);
+      startObjectEditing(object, {select: false});
     },
     onCancelEdit: () => {
-      selectionStore.stopEditing();
+      stopObjectEditing();
     },
     onLocate: object => {
       locateAndSelectObject(null, object);
@@ -359,13 +383,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
     },
     onEdit: object => {
-      selectionStore.setSelection({object});
-      selectionStore.startEditing(object);
-      setStatePanelTarget(state, object.id);
-      renderer.setColorMode("states");
-      setActiveModeButton(documentRef, "states");
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      startObjectEditing(object, {
+        afterStart: target => {
+          setStatePanelTarget(state, target.id);
+          renderer.setColorMode("states");
+          setActiveModeButton(documentRef, "states");
+        }
+      });
     },
     onAddMode: active => {
       state.stateEdit.addMode = Boolean(active);
@@ -606,13 +630,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
     },
     onEdit: object => {
-      selectionStore.setSelection({object});
-      selectionStore.startEditing(object);
-      provincePanel.setSelectedProvinceId(object.id);
-      renderer.setColorMode("provinces");
-      setActiveModeButton(documentRef, "provinces");
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      startObjectEditing(object, {
+        afterStart: target => {
+          provincePanel.setSelectedProvinceId(target.id);
+          renderer.setColorMode("provinces");
+          setActiveModeButton(documentRef, "provinces");
+        }
+      });
     },
     onRename: (provinceId, name) => {
       const object = {kind: "province", id: provinceId};
@@ -1355,12 +1379,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
     },
     onEdit: object => {
-      selectionStore.setSelection({object});
-      if (state.editingObject?.kind === OBJECT_KIND.RIVER && state.editingObject.id === object.id) {
-        selectionStore.stopEditing();
-      } else {
-        selectionStore.startEditing(object);
-      }
+      toggleObjectEditing(object);
     },
     onRename: (riverId, name) => {
       const object = {kind: "river", id: riverId};
