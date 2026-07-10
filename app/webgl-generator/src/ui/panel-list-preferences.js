@@ -31,6 +31,11 @@ function normalizePanelListPreferences(value = {}, defaults = {}) {
     sortDir: sortDir === "asc" || sortDir === "desc" ? sortDir : "asc"
   };
   if (typeof defaults.tab === "string") normalized.tab = normalizePanelTab(value.tab, defaults);
+  if (typeof defaults.importMode === "string") normalized.importMode = normalizePreferenceValue(
+    value.importMode,
+    defaults.importMode,
+    defaults.importModes
+  );
   return normalized;
 }
 
@@ -42,4 +47,9 @@ function normalizePanelTab(value, defaults) {
   const tab = typeof value === "string" && value ? value : defaults.tab;
   const allowed = Array.isArray(defaults.tabs) ? defaults.tabs : null;
   return !allowed || allowed.includes(tab) ? tab : defaults.tab;
+}
+
+function normalizePreferenceValue(value, fallback, allowedValues = null) {
+  const normalized = typeof value === "string" && value ? value : fallback;
+  return !Array.isArray(allowedValues) || allowedValues.includes(normalized) ? normalized : fallback;
 }

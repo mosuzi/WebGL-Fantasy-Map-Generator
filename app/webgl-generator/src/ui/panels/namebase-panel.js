@@ -6,6 +6,8 @@ import {readPanelListPreferences, updatePanelListPreferences} from "../panel-lis
 const NAMEBASE_PANEL_ID = "namebase-panel";
 const NAMEBASE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  importMode: "append",
+  importModes: Object.freeze(["append", "replace"]),
   sortKey: "category",
   sortDir: "asc"
 });
@@ -20,7 +22,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     summaries: getNamebaseSummariesForMap(null, {includeSource: true}),
     bindingStatus: getNamebaseBindingStatus(null),
     filter: listPreferences.filter,
-    importMode: "append",
+    importMode: listPreferences.importMode,
     importPreview: null,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -52,7 +54,8 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     onExport: () => callbacks.onExport?.(),
     onExportLegacy: () => callbacks.onExportLegacy?.(),
     onImportMode: mode => {
-      panelState.importMode = mode;
+      panelState.importMode = mode === "replace" ? "replace" : "append";
+      updatePanelListPreferences(documentRef, NAMEBASE_PANEL_ID, {importMode: panelState.importMode}, NAMEBASE_LIST_DEFAULTS);
       pendingImportFile = null;
       clearImportPreview(panelState);
     },

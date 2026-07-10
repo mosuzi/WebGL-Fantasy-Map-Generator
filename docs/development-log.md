@@ -23576,3 +23576,23 @@ full 矩阵结果：
 
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-11 名称库导入方式持久化
+
+背景：
+
+- 名称库面板的筛选和排序已经通过 `panel-list-preferences` 持久化，但“导入方式”每次打开仍回到“追加到用户库”。
+- 导入方式是明确的用户偏好，不是导入预览、待确认文件或编辑草稿，适合持久化；待导入文件仍不能保存，避免刷新后恢复半截导入状态。
+
+实现：
+
+- `panel-list-preferences` 新增可选 `importMode` 归一化字段，并支持 allowed values 校验。
+- 名称库面板默认偏好增加 `importMode: "append"` 和允许值 `append / replace`。
+- 名称库面板初始化时读取导入方式；切换“追加到用户库 / 替换用户库”时写回偏好，并继续清理待确认文件和导入预览。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\namebase-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
