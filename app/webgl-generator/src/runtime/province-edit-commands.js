@@ -1,4 +1,5 @@
 import {createChineseNameGenerator} from "../generator/names.js";
+import {systemAffected} from "./edit-command-effects.js";
 
 const PROVINCE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -52,7 +53,7 @@ export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷"
     domain: "province",
     effects: {
       ...PROVINCE_CELL_SURFACE_EFFECTS,
-      affected: affectedProvinces.length ? affectedProvinces.map(id => ({kind: "province", id})) : [{kind: "grid-cells", id: normalized.length}]
+      affected: systemAffected("province-brush", affectedProvinces.length ? affectedProvinces.map(id => ({kind: "province", id})) : [{kind: "grid-cells", id: normalized.length}])
     },
     apply(context) {
       snapshot ??= captureProvinceSnapshot(context.map, normalized);

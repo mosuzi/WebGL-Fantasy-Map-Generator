@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：刷子与 GEO 导入补充系统来源
+
+本步继续细化批量 edit command 的 `effects.affected`。高度刷子、国家刷子、省份刷子和 FMG Cells GEO 导入此前主要显示 `grid-cells#数量`、对象列表或 `derived-map-data#geo-import-reset`，能说明影响对象，但不容易看出这是哪一类批量地形 / 归属编辑入口。
+
+修正：
+
+- 高度刷子 affected 现在以 `derived-system#height-brush` 开头，再保留 `grid-cells#数量`。
+- 国家刷子 affected 现在以 `derived-system#state-brush` 开头，再保留具体国家目标或 `grid-cells#数量` fallback。
+- 省份刷子 affected 现在以 `derived-system#province-brush` 开头，再保留具体省份目标或 `grid-cells#数量` fallback。
+- FMG Cells GEO 导入 affected 现在以 `derived-system#geo-import` 开头，再保留 `grid-cells#数量` 和 `derived-map-data#geo-import-reset`。
+
+边界：
+
+- 本步不改变刷子落笔、GEO 高度采样、派生重建、撤销 / 重做快照或面板刷新范围，只补历史摘要、控制台历史 API 和刷新诊断可见的影响来源。
+
+验证：
+
+- `node --check` 覆盖 `edit-command-effects.js`、高度、国家、省份和 FMG Cells GEO 导入命令文件，均通过。
+- `node --input-type=module` 行为断言通过：高度刷子、国家刷子、省份刷子和 FMG Cells GEO 导入的 affected 第一项分别为 `derived-system#height-brush/state-brush/province-brush/geo-import`，且保留原 `grid-cells`、对象目标或 `derived-map-data#geo-import-reset`。直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `$env:CI='true'; pnpm run regress:geo -- --browser-channel chrome --out $env:TEMP\fmg-geo-regression-affected.json --markdown $env:TEMP\fmg-geo-regression-affected.md` 通过，报告写入临时目录；未设 `CI` 的首次运行停在 pnpm 非交互依赖确认，未进入测试本身。
+
 ## 2026-07-10：名称库批量重命名补充系统来源
 
 本步继续细化批量 edit command 的 `effects.affected`。城市、国家、河流和湖泊的“按名称库重命名筛选”此前只列出对象 id；当筛选结果很多时，历史摘要只能看到一串同类对象，缺少“这是名称库批量命名”的来源。

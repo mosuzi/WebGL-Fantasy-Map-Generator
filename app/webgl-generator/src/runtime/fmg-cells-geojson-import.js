@@ -13,6 +13,7 @@ import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {buildSettlements, finalizeSettlements} from "../generator/settlements.js";
 import {buildSociety, finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
+import {systemAffected} from "./edit-command-effects.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 
 const SPATIAL_BUCKETS = 64;
@@ -27,7 +28,7 @@ export function createImportFmgCellsHeightCommand(text, map, {label = "导入 FM
     effects: {
       ...EDIT_REFRESH_PRESETS.HEIGHT_SURFACE_ONLY,
       derived: ["terrain-caches", "height-field", "cell-colors", "line-layers", "height-stats", "river-mesh", "route-mesh", "point-layers", "labels", "political-boundaries", "object-panels", "object-index", "panels"],
-      affected: [{kind: "grid-cells", id: changes.length}, {kind: "derived-map-data", id: "geo-import-reset"}]
+      affected: systemAffected("geo-import", [{kind: "grid-cells", id: changes.length}, {kind: "derived-map-data", id: "geo-import-reset"}])
     },
     apply(context) {
       previousDerived ??= captureGeoImportDerivedSnapshot(context.map);

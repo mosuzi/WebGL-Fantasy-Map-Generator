@@ -2,7 +2,7 @@ import {GOVERNMENT_BY_KEY, applyStateGovernment, setStateGovernment} from "../ge
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {createRandom} from "../generator/random.js";
 import {defaultCityVisual} from "./city-visuals.js";
-import {namebaseRenameAffected} from "./edit-command-effects.js";
+import {namebaseRenameAffected, systemAffected} from "./edit-command-effects.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -101,7 +101,7 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
     domain: "state",
     effects: {
       ...STATE_CELL_SURFACE_EFFECTS,
-      affected: affectedStates.length ? affectedStates.map(id => ({kind: "state", id})) : [{kind: "grid-cells", id: normalized.length}]
+      affected: systemAffected("state-brush", affectedStates.length ? affectedStates.map(id => ({kind: "state", id})) : [{kind: "grid-cells", id: normalized.length}])
     },
     apply(context) {
       settlementSnapshot ??= captureSettlementSnapshot(context.map, normalized);
