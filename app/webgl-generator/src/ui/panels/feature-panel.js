@@ -4,8 +4,18 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const FEATURE_PANEL_ID = "feature-panel";
+const FEATURE_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  typeLabel: 76,
+  groupLabel: 96,
+  cells: 64,
+  area: 84,
+  shorelineCells: 64,
+  havenCells: 64
+});
 const FEATURE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: FEATURE_COLUMN_WIDTHS,
   sortKey: "cells",
   sortDir: "desc"
 });
@@ -17,6 +27,7 @@ export function createFeaturePanel(documentRef, manager) {
     map: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedFeatureId: null,
@@ -38,6 +49,16 @@ export function createFeaturePanel(documentRef, manager) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, FEATURE_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, FEATURE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, FEATURE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedFeatureId = toIntegerId(row.id);

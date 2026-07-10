@@ -3,8 +3,17 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const CLIMATE_PANEL_ID = "climate-panel";
+const CLIMATE_COLUMN_WIDTHS = Object.freeze({
+  name: 96,
+  cells: 64,
+  landCells: 64,
+  avgTemp: 72,
+  avgPrec: 92,
+  avgSuitability: 64
+});
 const CLIMATE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: CLIMATE_COLUMN_WIDTHS,
   sortKey: "cells",
   sortDir: "desc"
 });
@@ -16,6 +25,7 @@ export function createClimatePanel(documentRef, manager) {
     map: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedBandId: null,
@@ -37,6 +47,16 @@ export function createClimatePanel(documentRef, manager) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, CLIMATE_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, CLIMATE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, CLIMATE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedBandId = row.id;

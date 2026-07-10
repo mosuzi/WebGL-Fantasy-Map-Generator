@@ -3,8 +3,18 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const POPULATION_PANEL_ID = "population-panel";
+const POPULATION_COLUMN_WIDTHS = Object.freeze({
+  scopeLabel: 76,
+  name: 120,
+  parentName: 120,
+  population: 92,
+  rural: 92,
+  urban: 92,
+  density: 84
+});
 const POPULATION_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: POPULATION_COLUMN_WIDTHS,
   sortKey: "population",
   sortDir: "desc"
 });
@@ -16,6 +26,7 @@ export function createPopulationPanel(documentRef, manager) {
     map: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedPopulationId: null,
@@ -37,6 +48,16 @@ export function createPopulationPanel(documentRef, manager) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, POPULATION_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, POPULATION_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, POPULATION_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedPopulationId = row.id;

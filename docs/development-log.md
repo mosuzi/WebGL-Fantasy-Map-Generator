@@ -24009,3 +24009,52 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_marker_label_measurement_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开资源标记、标签和测量对象面板并拖动“名称”列表头列宽手柄；资源标记 header / cell 从 `120px` 变为 `215px`，标签 header / cell 从 `128px` 变为 `218px`，测量对象 header / cell 从 `132px` 变为 `225px`，各自 localStorage `webgl-generator-panel-list:marker-panel / label-naming-panel / measurement-panel` 写入 `columnWidths.name`，刷新页面并重新打开面板后 header / cell 仍保持新宽度；测量对象验证在浏览器会话内临时插入一个测量对象用于表格行验证，不写入源码或仓库文件；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 生物群系 / 气候 / 水体地貌 / 人口统计面板列宽拖拽持久化
+
+背景：
+
+- 只读统计面板已经统一使用 `UiObjectTable` 呈现核心列表，且保留 `show-locate-action=false` 的只读表格行为。
+- 生物群系、气候、水体地貌和人口统计表格都包含长名称与数值列，接入列宽持久化可以提升检查统计数据时的可读性。
+
+实现：
+
+- 生物群系面板新增 `BIOME_COLUMN_WIDTHS`，并在 `BIOME_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 气候面板新增 `CLIMATE_COLUMN_WIDTHS`，并在 `CLIMATE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 水体与地貌面板新增 `FEATURE_COLUMN_WIDTHS`，并在 `FEATURE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 人口统计面板新增 `POPULATION_COLUMN_WIDTHS`，并在 `POPULATION_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 四个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
+- 四个统计表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变统计口径、排序、筛选、选中详情或 `show-locate-action=false` 的只读行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\biome-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\climate-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\feature-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\population-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_stats_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开生物群系、气候、水体地貌和人口统计面板并拖动目标列表头列宽手柄；生物群系“名称”列从 `120px` 变为 `253px`，气候“温度带”列从 `96px` 变为 `216px`，水体地貌“类型”列从 `76px` 变为 `176px`，人口“名称”列从 `120px` 变为 `210px`，各自 localStorage 写入对应 `columnWidths`，刷新页面并重新打开面板后 header / cell 仍保持新宽度；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 生物群系 / 气候 / 水体地貌 / 人口统计面板列宽拖拽持久化
+
+背景：
+
+- 前几批对象管理面板已经验证 `UiObjectTable` 列宽拖拽、`columnWidths` 写回和刷新恢复链路稳定。
+- 生物群系、气候、水体地貌和人口都是只读统计面板，列内容以聚合数值为主；接入列宽持久化可以提高长名称、数值列和详情对照时的可读性。
+
+实现：
+
+- 生物群系面板新增 `BIOME_COLUMN_WIDTHS`，并在 `BIOME_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 气候面板新增 `CLIMATE_COLUMN_WIDTHS`，并在 `CLIMATE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 水体地貌面板新增 `FEATURE_COLUMN_WIDTHS`，并在 `FEATURE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 人口统计面板新增 `POPULATION_COLUMN_WIDTHS`，并在 `POPULATION_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 四个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
+- 四个统计表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变生物群系、气候、水体地貌或人口统计数据、排序、筛选、选中详情或专题派生逻辑。
+
+验证：
+
+- 待本批次统一验证后回填。

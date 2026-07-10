@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -15,7 +16,9 @@
     :selected-id="state.selectedBiomeId"
     :show-locate-action="false"
     empty-text="没有匹配的生物群系"
+    resizable-columns
     @select="callbacks.onSelect"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiDetailGrid class-name="biome-panel-details" empty-text="未选中生物群系" :rows="detailRows" />

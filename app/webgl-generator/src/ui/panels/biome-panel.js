@@ -4,8 +4,17 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const BIOME_PANEL_ID = "biome-panel";
+const BIOME_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 120,
+  cells: 64,
+  area: 84,
+  suitabilityAvg: 64,
+  population: 92
+});
 const BIOME_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: BIOME_COLUMN_WIDTHS,
   sortKey: "cells",
   sortDir: "desc"
 });
@@ -17,6 +26,7 @@ export function createBiomePanel(documentRef, manager) {
     map: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedBiomeId: null,
@@ -38,6 +48,16 @@ export function createBiomePanel(documentRef, manager) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, BIOME_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, BIOME_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, BIOME_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedBiomeId = normalizeBiomeId(row.id);

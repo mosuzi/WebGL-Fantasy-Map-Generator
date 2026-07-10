@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -16,7 +17,9 @@
     row-id-key="id"
     :show-locate-action="false"
     empty-text="没有匹配的人口统计"
+    resizable-columns
     @select="callbacks.onSelect"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiDetailGrid class-name="population-panel-details" empty-text="未选中人口统计" :rows="detailRows" />

@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -16,7 +17,9 @@
     row-id-key="id"
     :show-locate-action="false"
     empty-text="没有匹配的温度带"
+    resizable-columns
     @select="callbacks.onSelect"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiDetailGrid class-name="climate-panel-details" empty-text="未选中温度带" :rows="detailRows" />
