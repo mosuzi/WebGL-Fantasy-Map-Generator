@@ -16,10 +16,12 @@
     :selected-id="selectedId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的河流"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -135,6 +137,9 @@ const selectedId = computed(() => props.state.selection?.object?.kind === "river
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const editing = computed(() => props.state.editingObject?.kind === "river" && sameObjectId(props.state.editingObject.id, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const riverActions = computed(() => [
@@ -233,6 +238,10 @@ function handleRiverListAction(key) {
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
   if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function riverLength(river) {

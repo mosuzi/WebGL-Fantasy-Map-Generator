@@ -15,9 +15,11 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedRouteId"
     empty-text="没有匹配的路线"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -113,6 +115,9 @@ const rows = computed(() => {
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const routeListActions = computed(() => [
   {key: "locate", label: "定位路线", icon: "⌖", disabled: !selected.value},
   {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
@@ -149,6 +154,10 @@ watch(() => selected.value?.id, () => {
 
 function handleRouteManagementAction(key) {
   if (key === "delete" && selected.value) callbacks.onDelete?.(selected.value);
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function routeRows(map) {

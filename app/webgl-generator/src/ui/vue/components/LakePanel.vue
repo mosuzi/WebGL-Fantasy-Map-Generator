@@ -16,10 +16,12 @@
     :selected-id="selectedId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的湖泊"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -105,6 +107,9 @@ const rows = computed(() => {
 const selectedId = computed(() => props.state.selection?.object?.kind === "lake" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area, 0));
 const totalCells = computed(() => rows.value.reduce((sum, row) => sum + row.cells, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
@@ -204,6 +209,10 @@ function lakeTypeLabel(type) {
 function handleLakeListAction(key) {
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function formatAreaValue(value) {

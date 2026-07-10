@@ -24316,3 +24316,25 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_table_indeterminate`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：打开军事面板后单选 `1 / 113` 行，表头 checkbox 为 `checked=false / indeterminate=true / aria-checked=mixed`；点击表头全选后，表头为 `checked=true / indeterminate=false / aria-checked=true`，且 `113 / 113` 行全部选中。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。
+
+### 2026-07-11 路线 / 河流 / 湖泊筛选空态清理
+
+背景：
+
+- `UiObjectTable.emptyAction` 已用于新增、开始测量和新建名称库等空态主动作。
+- 路线、河流和湖泊面板的空态主要来自列表筛选无匹配；继续保留空白提示会让用户需要回到筛选框手动清理。
+- 这三个面板都有现成 `onFilter` 回调，适合接入纯列表状态的“清空筛选”动作，不触发任何编辑副作用。
+
+实现：
+
+- 路线、河流和湖泊的 `UiObjectTable` 均新增 `emptyAction`，仅在当前筛选词非空时显示“清空筛选”。
+- 点击空态动作只调用对应 `callbacks.onFilter("")`，恢复当前列表。
+- 本步不改变定位、编辑、删除、按名称库重命名、道路重算、列宽、排序或筛选匹配规则。
+
+验证：
+
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_route_river_lake_empty_filter`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：路线面板输入无匹配筛选词后显示“没有匹配的路线 / 清空筛选”，点击后筛选词清空并恢复 `26` 个可见行；河流面板同样恢复 `26` 个可见行；湖泊面板同样恢复 `4` 个可见行。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。
