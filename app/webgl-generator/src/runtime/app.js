@@ -1059,14 +1059,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onBaseApply: target => {
       const command = createSetMilitaryBaseCommand(target);
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (result.executed) {
         markDerivedFresh(state.map, ["military"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `set military base: regiment=${target.id}`);
       }
-      updateMilitaryPanel(state);
-      updateStatePanel(state);
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },
