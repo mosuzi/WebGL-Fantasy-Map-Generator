@@ -23511,3 +23511,21 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过；`pnpm` 当前不在 PowerShell PATH 中，因此使用项目本地 Vite 可执行文件跑同等构建。构建仍只有既有大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，`window.__webglGeneratorApp` 存在，`locateAndSelectObject()` 可定位并选中 `state` 对象，WebGL2 正常，`glError = 0`，health error、console error 和 page error 均为 `0`。
 - 本批次按要求启动验证子智能体 `batch_verify_open_refresh`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
+
+### 2026-07-11 文化 / 宗教空态新增动作接入
+
+背景：
+
+- `UiObjectTable.emptyAction` 已先在测量对象面板落地，但文化和宗教面板仍只在列表动作条里提供“新增空文化 / 新增空宗教”。
+- 文化 / 宗教列表在筛选后为空时，空态区域可以复用既有新增动作作为主动作，不需要新增命令或回调。
+
+实现：
+
+- 文化面板新增 `cultureEmptyAction`，表格空态接入该动作，并与列表动作条复用同一个冻结动作对象。
+- 宗教面板新增 `religionEmptyAction`，表格空态接入该动作，并与列表动作条复用同一个冻结动作对象。
+- 两个面板的空态动作都复用既有 `handleListAction()`，不改变新增、历史、筛选、定位或删除逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。

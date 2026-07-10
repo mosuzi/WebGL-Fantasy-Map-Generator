@@ -36,9 +36,11 @@
     :selected-id="state.selectedCultureId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的文化"
+    :empty-action="cultureEmptyAction"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleListAction"
   />
 
   <UiPanelIoActions
@@ -166,8 +168,9 @@ const cultureActions = Object.freeze([
   {key: "namebase", label: "名称库绑定", icon: "名"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
+const cultureEmptyAction = Object.freeze({key: "add", label: "新增空文化", icon: "+"});
 const cultureListActions = computed(() => [
-  {key: "add", label: "新增空文化", icon: "+"},
+  cultureEmptyAction,
   {key: "locate", label: "定位文化", icon: "⌖", disabled: !selected.value},
   {
     key: "delete",

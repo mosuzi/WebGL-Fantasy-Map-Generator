@@ -714,6 +714,11 @@
    - 边界：本步只迁移已经紧邻出现的 `updateRuntimePanel(documentRef, state)` + `updatePickPanel(documentRef, state)`；不迁移单独 runtime 刷新、单独 pick 刷新，也不改变 measurement overlay 刷新顺序。
    - 完成记录：新增 `refreshRuntimeAndPickPanels(documentRef, state)`，并用于 `locateAndSelectObject()`、selection store 监听、单位偏好刷新、地图载入完成、通用对象定位和测量对象定位的双刷新路径。
 
+94. 文化 / 宗教空态新增动作接入。`已完成`
+   - 目标：继续扩展 `UiObjectTable.emptyAction`，让已有新增动作在空列表区域也能作为主动作出现。
+   - 边界：本步只把文化和宗教列表空态按钮接到既有 `handleListAction("add")`；不改变新增空文化 / 空宗教命令、历史、筛选、定位或删除逻辑。
+   - 完成记录：文化面板空态显示“新增空文化”，宗教面板空态显示“新增空宗教”，两者与列表动作条复用同一个冻结动作对象和同一套回调。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
