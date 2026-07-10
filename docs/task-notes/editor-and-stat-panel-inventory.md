@@ -232,7 +232,7 @@
 - 浮动面板位置、宽度和打开状态已通过 `PanelManager` 持久化；对象详情面板因依赖当前 selection，不恢复打开状态。
 - 河流、路线、湖泊、地区、国家、省份、城市、文化、宗教、外交、marker、标签 / 命名、备注总览、测量对象、名称库总览、政体、经济和军事面板已通过 `panel-list-preferences.js` 持久化筛选词和排序字段。
 - 控制面板当前 tab、经济面板内部 tab、名称库导入方式、资源标记范围筛选、外交历史范围筛选、军事战报导出范围，以及文化 / 宗教树状面板打开状态已持久化；其它有内部 tab 或二级筛选的面板仍按各自运行时状态处理，后续若要扩大需要单独拆项。
-- `UiObjectTable` 已完成固定行高虚拟滚动第一刀，并在城市大表浏览器烟测中确认只渲染可视窗口、滚动换页和点击选中正常；空态动作已覆盖测量对象“开始测量”、文化“新增空文化”、宗教“新增空宗教”、标签“新增标签”和名称库“新建用户库”，公共空态按钮也已支持 `disabled` 禁用态和事件保护。
+- `UiObjectTable` 已完成固定行高虚拟滚动第一刀，并在城市大表浏览器烟测中确认只渲染可视窗口、滚动换页和点击选中正常；空态动作已覆盖测量对象“开始测量”、文化“新增空文化”、宗教“新增空宗教”、标签“新增标签”和名称库“新建用户库”，公共空态按钮也已支持 `disabled` 禁用态和事件保护；列尺寸解释已支持 `width / minWidth / maxWidth`。
 - 对象表格双击进入编辑已覆盖城市、河流、湖泊、国家、省份、文化、宗教、标签、标记、测量和军事管理面板；未显式接入 `edit` 的面板继续保留原双击定位行为。
 
 ### 2026-07-08 基础设施现状盘点
@@ -254,7 +254,7 @@
 1. `EditHistory.execute()` 已接入轻量运行时契约校验：`apply / revert / label` 基础字段严格，`domain / effects / affected / isNoop / getResult` 在出现时校验形状；路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化、宗教、marker、标签、外交、对象详情通用字段和军事命令已补齐 `domain`；`getStats()` 已暴露 `lastDomain` 和 `lastAffected`，面板历史摘要可直接看到最近命令领域与影响对象，国家 / 省份 / 道路 / 河流 / 城市重生成入口、资源点重生成命令、军事批量 / 事件命令、按名称库批量重命名命令、高度 / 国家 / 省份刷子、FMG Cells GEO 导入命令、外交重生成、批量政体调整和测量对象导入也已用 `derived-system#xxx` 解释对象级全量、集合别名、同类对象列表或 grid cells 数量影响；新增空文化、空宗教、手工标签、marker 和保存测量对象命令的初始 affected 已补为 `kind#new`，执行成功后仍回写真实对象 id；后续仍需让新增命令保持 `domain` 和更精确的 `effects.affected`。
 2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，`refreshPanelsForEdit()` 已覆盖 `affected.kind` 和 `derived: object-panels` 的第一层面板刷新，且 `executeEditCommand()` 会默认兜底调用；但直接手写 `state.editHistory.execute()` 的旧路径仍需逐步迁移。
 3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区、军事、测量、标签、政府 / 外交入口、经济、备注总览、对象详情面板和控制台 `selection.locate()` 定位路径；测量对象通过自定义 bounds 定位回调复用统一 selection / 刷新流程，且面板定位、导入后自动定位和进入编辑定位已收束到同一条测量定位动作；对象详情通过 `sourcePanelId = null` 复用定位但不伪装成领域面板来源。进入 / 退出编辑已新增运行时 `startObjectEditing()` / `stopObjectEditing()` / `toggleObjectEditing()` 第一刀，覆盖对象详情、国家、省份和河流既有入口，国家 / 省份模式切换与河流面板关闭时的保护性退出也已复用 `stopObjectEditing({ifKind})`。控制面板打开对象面板的当前 selection 预选逻辑已开始复用 `openSelectionAwarePanel()`；selection handler 中同构“已打开则 update，否则 open”的分支已开始复用 `updateOrOpenSelectionPanel()`，marker、label、economy 仍保留“未打开时不自动打开”的特殊规则；定位、selection、载入完成和单位偏好中的 runtime / pick 双刷新已开始复用 `refreshRuntimeAndPickPanels()`。但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义仍有一部分分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
-4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀，并已覆盖测量、文化、宗教、标签和名称库面板的空态主动作；空态按钮已支持 `disabled` 和禁用态事件保护，批量选择、列宽持久化和更多空态动作接入仍未完成。
+4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀，并已覆盖测量、文化、宗教、标签和名称库面板的空态主动作；空态按钮已支持 `disabled` 和禁用态事件保护，列尺寸解释已支持 `width / minWidth / maxWidth`；批量选择、列宽持久化和更多空态动作接入仍未完成。
 5. 面板位置、宽度、打开状态、常见列表筛选 / 排序、控制面板 / 经济 tab、名称库导入方式、资源标记范围筛选、外交历史范围筛选、军事战报导出范围和文化 / 宗教树状面板打开状态已持久化；剩余缺口集中在少数内部 tab、二级筛选和编辑草稿，不应再按“面板状态只在内存中”处理。
 6. 派生重建只覆盖已明确 effects 的对象；文化 / 宗教 cell 归属、河流 / 湖泊删除、政治面 dissolve、导出校验等更复杂链路还缺“先标脏、后重建、可解释”的统一策略。
 
@@ -264,7 +264,7 @@
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：运行时轻量校验已落地，推荐字段仍为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续重点是补齐残留命令的 `domain` 与更精确影响范围。
 3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，并支持 `derived: ["object-panels"]` 全对象面板刷新；`executeEditCommand()` 默认会在任意刷新函数后调用它，军事面板历史按钮也已复用统一 `executeHistoryCommand()`。后续重点是覆盖仍直接调用 `state.editHistory.execute()` / `undo()` / `redo()` 的旧路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 继续扩展 `locateAndSelectObject()`、编辑动作 helper 和打开面板 helper：当前已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区、军事、测量、标签、政府 / 外交入口、经济、备注、对象详情和控制台 `selection.locate()` 定位路径，进入 / 退出编辑 helper 已覆盖对象详情、国家、省份和河流，控制面板打开对象面板已有第一刀 `openSelectionAwarePanel()`，selection handler 更新 / 打开面板已有第一刀 `updateOrOpenSelectionPanel()`，runtime / pick 双刷新已有第一刀 `refreshRuntimeAndPickPanels()`；后续重点转向补齐闪烁高亮、更多打开 / 更新面板入口、更多编辑入口和更完整的 locate action 语义。
-5. 继续扩展 `UiObjectTable.emptyAction`：当前已覆盖测量对象“开始测量”、文化“新增空文化”、宗教“新增空宗教”、标签“新增标签”和名称库“新建用户库”，后续可按面板语义继续迁移空态新增、导入或创建动作；批量选择和列宽持久化另行拆小步。
+5. 继续扩展 `UiObjectTable.emptyAction`：当前已覆盖测量对象“开始测量”、文化“新增空文化”、宗教“新增空宗教”、标签“新增标签”和名称库“新建用户库”，后续可按面板语义继续迁移空态新增、导入或创建动作；批量选择和列宽持久化另行拆小步，列宽持久化可复用现有 `width / minWidth / maxWidth` 样式语义。
 6. 扩展剩余面板状态持久化：仅在有明确收益时继续保存少数内部 tab、模式或二级筛选，不保存编辑草稿、待导入文件或半截编辑状态。
 
 ## 优先级建议

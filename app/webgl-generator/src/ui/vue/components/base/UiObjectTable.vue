@@ -346,18 +346,31 @@ function headerButtonStyle(column) {
   };
 }
 
-function columnWidth(column) {
+function defaultColumnWidth(column) {
   if (Number.isFinite(column.width)) return column.width;
   if (column.key === "id") return 64;
   if (column.align === "right") return 88;
   return Math.max(96, String(column.label || column.key || "").length * 16 + 48);
 }
 
+function columnSize(value) {
+  if (Number.isFinite(value)) return `${Math.max(0, value)}px`;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
 function columnStyle(column) {
   const align = column.align || "left";
-  return {
-    minWidth: `${columnWidth(column)}px`,
+  const width = columnSize(column.width);
+  const minWidth = columnSize(column.minWidth) || width || `${defaultColumnWidth(column)}px`;
+  const maxWidth = columnSize(column.maxWidth);
+  const style = {
+    minWidth,
     textAlign: align
   };
+  if (width) style.width = width;
+  if (maxWidth) style.maxWidth = maxWidth;
+  return style;
 }
 </script>
