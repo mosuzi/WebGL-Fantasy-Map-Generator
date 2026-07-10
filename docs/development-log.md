@@ -24338,3 +24338,25 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_route_river_lake_empty_filter`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：路线面板输入无匹配筛选词后显示“没有匹配的路线 / 清空筛选”，点击后筛选词清空并恢复 `26` 个可见行；河流面板同样恢复 `26` 个可见行；湖泊面板同样恢复 `4` 个可见行。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。
+
+### 2026-07-11 城市 / 国家 / 省份筛选空态清理
+
+背景：
+
+- 路线、河流和湖泊面板已验证筛选空态“清空筛选”动作可用。
+- 城市、国家和省份是高频对象列表，也存在筛选无匹配后只能手动回到筛选框清理的问题。
+- 三个面板都有现成 `onFilter` 回调，且新增 / 删除模式、笔刷状态和目标对象选择均与筛选词分离，适合接入纯列表状态动作。
+
+实现：
+
+- 城市、国家和省份的 `UiObjectTable` 均新增 `emptyAction`，仅在当前筛选词非空时显示“清空筛选”。
+- 点击空态动作只调用对应 `callbacks.onFilter("")`，恢复当前列表。
+- 本步不改变新增 / 删除模式、笔刷状态、目标对象、定位、双击编辑、按名称库重命名、列宽、排序或筛选匹配规则。
+
+验证：
+
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_city_state_province_empty_filter`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：城市面板输入无匹配筛选词后显示“没有匹配的城市 / 清空筛选”，点击后筛选词清空并恢复 `26` 个可见行；国家面板同样恢复 `21` 个可见行；省份面板同样恢复 `26` 个可见行。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。

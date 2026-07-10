@@ -16,10 +16,12 @@
     :selected-id="state.selectedProvinceId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的省份"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -152,6 +154,9 @@ const metrics = computed(() => {
 });
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedProvinceId));
 const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.selectedProvinceId));
@@ -304,6 +309,10 @@ function openRenameEditor(row) {
     renameRequestId.value = null;
     activeAction.value = "rename";
   });
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function provinceRows(map) {

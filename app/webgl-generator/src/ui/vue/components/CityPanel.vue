@@ -17,10 +17,12 @@
     :selected-id="state.selectedCityId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的城市"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="handleCitySelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -153,6 +155,9 @@ const metrics = computed(() => {
   return buildCityMetrics(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
 const visualDraft = reactive({
@@ -287,6 +292,10 @@ function cityResourceGoodNames(map, ids) {
     .map(id => map?.economy?.goods?.[id]?.name || map?.pack?.goods?.[id]?.name || `#${id}`)
     .slice(0, 5)
     .join("、");
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function cityRows(map) {
