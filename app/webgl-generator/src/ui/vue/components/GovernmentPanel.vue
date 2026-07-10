@@ -14,6 +14,7 @@
   </div>
   <UiObjectTable
     :columns="governmentColumns"
+    :column-widths="governmentColumnWidths"
     :rows="visibleGovernmentRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -24,7 +25,9 @@
     row-id-key="key"
     empty-text="没有匹配的政体"
     :show-locate-action="false"
+    resizable-columns
     @select="callbacks.onSelectGovernment"
+    @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'governments'})"
   />
 
   <UiPanelIoActions
@@ -54,11 +57,14 @@
 
   <UiObjectTable
     :columns="stateColumns"
+    :column-widths="stateColumnWidths"
     :rows="selectedStateRows"
     :selected-id="state.selectedStateId"
     empty-text="该政体下没有国家"
+    resizable-columns
     @select="callbacks.onSelectState"
     @locate="callbacks.onLocateState"
+    @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'states'})"
   />
 
   <div class="government-panel-actions">
@@ -147,6 +153,8 @@ const visibleGovernmentRows = computed(() => sortRows(filterGovernmentRows(
   props.state.filter,
   props.state.familyFilter
 ), props.state.sortKey, props.state.sortDir));
+const governmentColumnWidths = computed(() => tableColumnWidths("governments"));
+const stateColumnWidths = computed(() => tableColumnWidths("states"));
 const selectedGovernmentKey = computed(() => (
   visibleGovernmentRows.value.some(row => row.key === props.state.selectedGovernmentKey)
     ? props.state.selectedGovernmentKey
@@ -245,6 +253,16 @@ function buildGovernmentMetrics(map) {
     dominantGovernmentLabel: dominant?.label || "无",
     familyCounts
   };
+}
+
+function tableColumnWidths(table) {
+  const source = props.state.columnWidths || {};
+  const prefix = `${table}.`;
+  return Object.fromEntries(
+    Object.entries(source)
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, width]) => [key.slice(prefix.length), width])
+  );
 }
 
 function syncBatchGovernmentKey() {

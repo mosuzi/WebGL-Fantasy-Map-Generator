@@ -24063,3 +24063,30 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_diplomacy_emblem_notes_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开外交、纹章和备注面板并拖动目标列表头列宽手柄；外交“国家”列从 `144px` 拖到 `239px`，localStorage `webgl-generator-panel-list:diplomacy-panel` 写入 `columnWidths.name = 239`；纹章“对象”列从 `140px` 拖到 `228px`，localStorage `webgl-generator-panel-list:emblem-panel` 写入 `columnWidths.name = 228`；备注“摘要”列从 `240px` 拖到 `363px`，localStorage `webgl-generator-panel-list:notes-panel` 写入 `columnWidths.excerpt = 363`；刷新页面并重新打开面板后，三个面板 header / cell 仍保持新宽度。备注验证在浏览器会话内临时插入一个备注对象用于表格行验证，不写入源码或仓库文件；`glError = 0`，health 无 error，console error 和 page error 均为 `0`。
+
+### 2026-07-11 经济 / 政体 / 军事面板列宽拖拽持久化
+
+背景：
+
+- 前几批单表面板已经完成列宽拖拽、写回和刷新恢复。
+- 经济和政体是多表面板，且不同表之间会共享 `id / name / value` 等列名；如果直接共用普通列 key，用户在一个 tab 改列宽会污染另一个 tab。
+- 军事面板主军团表是单表，但战报和动作区较重，需要只扩展主列表，不改变战报筛选、导出和编辑行为。
+
+实现：
+
+- 经济面板新增 `ECONOMY_COLUMN_WIDTHS`，使用 `goods.* / markets.* / deals.*` 分表 key 保存商品、市场和交易三张表的列宽。
+- 政体面板新增 `GOVERNMENT_COLUMN_WIDTHS`，使用 `governments.* / states.*` 分表 key 保存政体汇总表和当前政体国家表的列宽。
+- 军事面板新增 `MILITARY_COLUMN_WIDTHS`，按主军团表列 key 保存列宽。
+- 经济和政体 Vue 组件新增 `tableColumnWidths()` 映射 helper，把带前缀的本地偏好映射回当前 `UiObjectTable` 的普通列 key。
+- 三个面板均启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变经济 tab 偏好、政体家族筛选、军事战报导出范围、排序、筛选、定位、批量调整或历史行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\economy-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\government-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\military-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_economy_government_military_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，经济商品 tab “商品”列从 `112px` 拖到 `204px`，localStorage `webgl-generator-panel-list:economy-panel` 写入 `columnWidths["goods.name"] = 204`；经济市场 tab “市场”列从 `132px` 拖到 `220px`，写入 `columnWidths["markets.name"] = 220`；经济交易 tab “商品”列从 `104px` 拖到 `188px`，写入 `columnWidths["deals.goodName"] = 188`；政体汇总表“政体”列从 `132px` 拖到 `249px`，写入 `columnWidths["governments.label"] = 249`；政体国家表“国家”列从 `132px` 拖到 `243px`，写入 `columnWidths["states.name"] = 243`；军事“军团”列从 `136px` 拖到 `239px`，写入 `columnWidths.name = 239`。刷新页面并重新打开、切换对应 tab 后，以上 header / cell 均保持新宽度；`glError = 0`，health 无 error，console error 和 page error 均为 `0`。本次 health 记录一次 `input-handler-stall` warn，作为后续面板打开 / 点击性能观察信号保留。

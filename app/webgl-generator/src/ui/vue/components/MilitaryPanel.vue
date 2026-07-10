@@ -74,6 +74,7 @@
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -83,9 +84,11 @@
     :selected-id="state.selectedRegimentId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的军团"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions

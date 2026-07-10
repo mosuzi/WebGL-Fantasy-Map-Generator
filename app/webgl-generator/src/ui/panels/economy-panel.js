@@ -4,10 +4,43 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const ECONOMY_PANEL_ID = "economy-panel";
+const ECONOMY_COLUMN_WIDTHS = Object.freeze({
+  "goods.id": 56,
+  "goods.name": 112,
+  "goods.typeLabel": 84,
+  "goods.value": 76,
+  "goods.effectivePrice": 82,
+  "goods.priceDelta": 76,
+  "goods.stock": 76,
+  "goods.shortage": 76,
+  "goods.deals": 76,
+  "goods.tradeValue": 86,
+  "markets.id": 56,
+  "markets.name": 132,
+  "markets.stateName": 112,
+  "markets.cityName": 112,
+  "markets.cells": 72,
+  "markets.foreignCells": 72,
+  "markets.priceDelta": 76,
+  "markets.stock": 76,
+  "markets.shortage": 76,
+  "markets.tradeValue": 86,
+  "deals.id": 64,
+  "deals.goodName": 104,
+  "deals.sellerName": 118,
+  "deals.buyerName": 118,
+  "deals.stateRouteLabel": 104,
+  "deals.routeLabel": 82,
+  "deals.distance": 86,
+  "deals.distanceCost": 76,
+  "deals.units": 76,
+  "deals.value": 86
+});
 const ECONOMY_LIST_DEFAULTS = Object.freeze({
   tab: "goods",
   tabs: Object.freeze(["goods", "markets", "deals"]),
   filter: "",
+  columnWidths: ECONOMY_COLUMN_WIDTHS,
   sortKey: "stock",
   sortDir: "desc"
 });
@@ -21,6 +54,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     history: null,
     tab: listPreferences.tab,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedGoodId: null,
@@ -54,6 +88,17 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, ECONOMY_LIST_DEFAULTS);
+    },
+    onColumnResize: ({table, key, width} = {}) => {
+      if (!table || !key || !Number.isFinite(width)) return;
+      const storageKey = `${table}.${key}`;
+      const next = updatePanelListPreferences(documentRef, ECONOMY_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [storageKey]: width
+        }
+      }, ECONOMY_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelectGood: row => {
       panelState.selectedGoodId = normalizeId(row.id);

@@ -4,8 +4,23 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const GOVERNMENT_PANEL_ID = "government-panel";
+const GOVERNMENT_COLUMN_WIDTHS = Object.freeze({
+  "governments.label": 132,
+  "governments.category": 112,
+  "governments.count": 70,
+  "governments.population": 92,
+  "governments.economicPower": 78,
+  "governments.militaryPower": 78,
+  "states.id": 56,
+  "states.name": 132,
+  "states.population": 92,
+  "states.economicPower": 78,
+  "states.militaryPower": 78,
+  "states.capitalName": 112
+});
 const GOVERNMENT_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: GOVERNMENT_COLUMN_WIDTHS,
   sortKey: "count",
   sortDir: "desc"
 });
@@ -19,6 +34,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     history: null,
     filter: listPreferences.filter,
     familyFilter: "all",
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedGovernmentKey: null,
@@ -44,6 +60,17 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, GOVERNMENT_LIST_DEFAULTS);
+    },
+    onColumnResize: ({table, key, width} = {}) => {
+      if (!table || !key || !Number.isFinite(width)) return;
+      const storageKey = `${table}.${key}`;
+      const next = updatePanelListPreferences(documentRef, GOVERNMENT_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [storageKey]: width
+        }
+      }, GOVERNMENT_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelectGovernment: row => {
       panelState.selectedGovernmentKey = row.key;

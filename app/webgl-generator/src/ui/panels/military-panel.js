@@ -3,8 +3,17 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const MILITARY_PANEL_ID = "military-panel";
+const MILITARY_COLUMN_WIDTHS = Object.freeze({
+  stateName: 116,
+  name: 136,
+  statusLabel: 92,
+  dominantUnitLabel: 96,
+  troops: 88,
+  suitabilityScore: 72
+});
 const MILITARY_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: MILITARY_COLUMN_WIDTHS,
   scope: "all",
   scopes: Object.freeze(["all", "selected", "filtered"]),
   sortKey: "troops",
@@ -19,6 +28,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     eventExportScope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -59,6 +69,16 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, MILITARY_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, MILITARY_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedRegimentId = row.id;

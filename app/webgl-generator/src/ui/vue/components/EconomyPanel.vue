@@ -8,6 +8,7 @@
   <UiObjectTable
     v-if="state.tab === 'goods'"
     :columns="goodColumns"
+    :column-widths="goodColumnWidths"
     :rows="visibleGoodRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -16,12 +17,15 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedGoodId"
     empty-text="没有匹配的商品"
+    resizable-columns
     @select="callbacks.onSelectGood"
     @locate="callbacks.onLocate"
+    @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'goods'})"
   />
   <UiObjectTable
     v-else-if="state.tab === 'markets'"
     :columns="marketColumns"
+    :column-widths="marketColumnWidths"
     :rows="visibleMarketRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -30,12 +34,15 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedMarketId"
     empty-text="没有匹配的市场"
+    resizable-columns
     @select="callbacks.onSelectMarket"
     @locate="callbacks.onLocate"
+    @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'markets'})"
   />
   <UiObjectTable
     v-else
     :columns="dealColumns"
+    :column-widths="dealColumnWidths"
     :rows="visibleDealRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -44,8 +51,10 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedDealId"
     empty-text="没有匹配的交易"
+    resizable-columns
     @select="callbacks.onSelectDeal"
     @locate="callbacks.onLocate"
+    @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'deals'})"
   />
 
   <UiPanelIoActions
@@ -234,6 +243,9 @@ const filteredDealRows = computed(() => sortRows(filterRows(metrics.value.deals,
 const visibleGoodRows = computed(() => filteredGoodRows.value.slice(0, ROW_LIMIT));
 const visibleMarketRows = computed(() => filteredMarketRows.value.slice(0, ROW_LIMIT));
 const visibleDealRows = computed(() => filteredDealRows.value.slice(0, DEAL_ROW_LIMIT));
+const goodColumnWidths = computed(() => tableColumnWidths("goods"));
+const marketColumnWidths = computed(() => tableColumnWidths("markets"));
+const dealColumnWidths = computed(() => tableColumnWidths("deals"));
 const activeTotalRows = computed(() => {
   if (props.state.tab === "markets") return filteredMarketRows.value.length;
   if (props.state.tab === "deals") return props.state.filter ? filteredDealRows.value.length : metrics.value.summary.deals;
@@ -334,6 +346,16 @@ function buildGoodDetail(good) {
       }
     ])
   };
+}
+
+function tableColumnWidths(table) {
+  const source = props.state.columnWidths || {};
+  const prefix = `${table}.`;
+  return Object.fromEntries(
+    Object.entries(source)
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, width]) => [key.slice(prefix.length), width])
+  );
 }
 
 function buildMarketDetail(market) {
