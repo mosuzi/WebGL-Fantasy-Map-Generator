@@ -23776,7 +23776,8 @@ full 矩阵结果：
 
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
-- 浏览器烟测待本批次收尾统一执行。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开名称库面板，表格首列 header / cell 均写入 `width = 76px` 与 `minWidth = 76px`；`window.__webglGeneratorApp` 存在，WebGL2 正常，直接读取 canvas WebGL2 context 的 `glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `verify_table_style_batch`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
 
 ### 2026-07-11 `UiObjectTable.emptyAction` 禁用态视觉
 
@@ -23795,4 +23796,5 @@ full 矩阵结果：
 
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
-- 浏览器烟测待本批次收尾统一执行。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开名称库面板并输入不存在的筛选词触发空态，空态动作“新建用户库”仍可见且 `disabled=false`；页面临时插入 disabled 的 `.object-table-empty-action` 后，computed style 显示 `cursor = not-allowed`、文本 `rgb(111, 127, 136)`、背景 `rgba(189, 206, 213, 0.06)`、边框 `rgba(189, 206, 213, 0.12)`；`glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `verify_table_style_batch`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
