@@ -23349,3 +23349,25 @@ full 矩阵结果：
 - 当前 PowerShell 中 `pnpm` 不在 PATH，Corepack 写入用户缓存被沙箱拦截；本轮改用等价的本地 Vite 命令 `.\node_modules\.bin\vite.cmd build --config vite.config.mjs`，构建通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物烟测通过：标签管理首个定位按钮后 selection 为 `label / 10` 且标签面板选中行 `1`；政体管理定位后 selection 为 `state / 15` 且面板选中行 `2`；外交管理定位后 selection 为 `state / 2` 且面板选中行 `1`；对象详情选中 marker `0` 后点击“定位”，selection 保持 `marker / 0`；最终 `glError = 0`、health 事件 `0`、console/page error 均为 `0`。
 - 本轮按用户要求启动验证子智能体；第一个子智能体只返回状态复述、没有执行烟测，第二个子智能体长时间无输出后已中断释放，因此最终有效验证证据来自主线程复跑的同等浏览器烟测。
+
+### 2026-07-10 locateAndSelectObject 经济 / 备注与 API 复用
+
+背景：
+
+- 标签、政体、外交和对象详情已迁入统一定位 helper 后，经济总览、备注总览和控制台 `selection.locate()` 仍直接调用旧 `locateObject()`。
+- 这些入口虽然能定位和选中对象，但不会经过 `locateAndSelectObject()` 的 source panel / `afterSelect` / runtime / pick 刷新语义，后续继续补 locate action 层时会形成最后几条旁路。
+
+实现：
+
+- 经济总览 `onLocate` 改为 `locateAndSelectObject("economy-panel", object)`，trade flow 对象定位后继续由已有 selection handler 切到经济交易行。
+- 经济面板桥接层在 `onLocate` 中先按当前 tab 记录商品 / 市场 / 交易行选中状态，再把可定位对象交给 runtime，避免行内定位按钮绕过 `onSelect*` 导致选中行丢失。
+- 备注总览 `onLocate` 改为 `locateAndSelectObject("notes-panel", row.object, ...)`，定位成功后保留当前备注行选中状态。
+- 控制台 API 安装时注入 `locateObject` action，`selection.locate()` 通过该 action 复用 `locateAndSelectObject(null, object)`；底层 `locateObject()` 仍保留为 fallback，便于非 app 初始化路径继续工作。
+- 本步不改变 `renderer.locateObject()` 的闪烁动画实现，也不新增多对象高亮或编辑态 API。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panels\economy-panel.js` 和 `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：经济面板切到交易页后点击首个交易行定位按钮，selection 为卖方城市 `city / 99`，经济面板选中行 `1`；注入指向 marker `0` 的备注后打开备注总览并点击定位按钮，selection 为 `marker / 0`，备注面板选中行 `1`；`webglGeneratorApi.selection.locate({kind: "marker", id: 0})` 返回 `ok = true`、`data.located = true`，selection 保持 `marker / 0`；最终 `glError = 0`、health 事件 `0`、console/page error 均为 `0`。
+- 本轮按用户要求启动验证子智能体；该子智能体长时间无输出后已中断释放，因此最终有效验证证据来自主线程复跑的同等浏览器烟测。

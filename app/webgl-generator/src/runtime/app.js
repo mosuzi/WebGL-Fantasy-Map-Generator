@@ -965,7 +965,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.diplomacy = diplomacyPanel;
   economyPanel = createEconomyPanel(documentRef, panelManager, {
     onLocate: object => {
-      locateObject(state, object, documentRef);
+      locateAndSelectObject("economy-panel", object);
     }
   });
   state.panels.economy = economyPanel;
@@ -1279,8 +1279,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onLocate: row => {
       if (!row?.object || row.orphan) return;
-      locateObject(state, row.object, documentRef);
-      notesPanel.setSelectedNoteId(row.id);
+      locateAndSelectObject("notes-panel", row.object, {
+        afterSelect: () => notesPanel.setSelectedNoteId(row.id)
+      });
     },
     onDelete: row => {
       if (!row?.id) return;
@@ -1711,13 +1712,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 
   const view = documentRef.defaultView || window;
   view.__webglGeneratorApp = state;
-  installConsoleApi(documentRef, state, {actions: createConsoleApiActions(state, documentRef)});
+  installConsoleApi(documentRef, state, {
+    actions: createConsoleApiActions(state, documentRef, {
+      locateObject: object => locateAndSelectObject(null, object)
+    })
+  });
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;
 }
 
-function createConsoleApiActions(state, documentRef) {
+function createConsoleApiActions(state, documentRef, options = {}) {
   return {
     history: {
       get: () => state.editHistory.getStats(),
@@ -1728,7 +1733,7 @@ function createConsoleApiActions(state, documentRef) {
       resolve: object => resolveObjectViaApi(state, object),
       select: object => selectObjectViaApi(state, object),
       clear: () => clearSelectionViaApi(state),
-      locate: object => locateObjectViaApi(state, documentRef, object),
+      locate: object => locateObjectViaApi(state, documentRef, object, options),
       pick: (clientX, clientY) => pickClientPointViaApi(state, documentRef, clientX, clientY)
     },
     climate: {
@@ -3898,9 +3903,9 @@ function clearSelectionViaApi(state) {
   return state.selectionStore.getSnapshot();
 }
 
-function locateObjectViaApi(state, documentRef, object) {
+function locateObjectViaApi(state, documentRef, object, options = {}) {
   const resolved = resolveObjectViaApi(state, object);
-  const located = locateObject(state, resolved, documentRef);
+  const located = options.locateObject ? options.locateObject(resolved) : locateObject(state, resolved, documentRef);
   return {
     located,
     object: resolved,

@@ -65,6 +65,9 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedDealId = normalizeId(row.id);
     },
     onLocate: row => {
+      if (panelState.tab === "markets") panelState.selectedMarketId = normalizeId(row.id);
+      else if (panelState.tab === "deals") panelState.selectedDealId = normalizeId(row.id);
+      else panelState.selectedGoodId = normalizeId(row.id);
       if (row?.locateObject) callbacks.onLocate?.(row.locateObject);
     }
   };
