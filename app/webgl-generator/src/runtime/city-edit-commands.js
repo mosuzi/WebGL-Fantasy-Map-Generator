@@ -1,5 +1,5 @@
 import {defaultCityVisual, normalizeCityVisualPatch, resolveCityVisual} from "./city-visuals.js";
-import {namebaseRenameAffected} from "./edit-command-effects.js";
+import {namebaseRenameAffected, newObjectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
@@ -61,7 +61,7 @@ export function createAddCityAtCellCommand(gridCell, {label = "新增城市"} = 
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_COLLECTION_EFFECTS,
-      affected: [{kind: OBJECT_KIND.CITY, id: "new"}]
+      affected: newObjectAffected(OBJECT_KIND.CITY)
     },
     apply(context) {
       snapshot ??= captureCityCollectionSnapshot(context.map);

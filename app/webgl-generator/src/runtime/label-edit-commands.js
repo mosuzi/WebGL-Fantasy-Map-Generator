@@ -1,5 +1,6 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
+import {newObjectAffected} from "./edit-command-effects.js";
 
 const LABEL_EFFECTS = Object.freeze({
   render: "draw",
@@ -27,7 +28,7 @@ export function createAddCustomLabelCommand({text, x, y}) {
     domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.LABEL, id: "new"}]
+      affected: newObjectAffected(OBJECT_KIND.LABEL)
     },
     apply(context) {
       if (!name) throw new Error("标签文字不能为空");

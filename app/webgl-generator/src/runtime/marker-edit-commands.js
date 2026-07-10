@@ -2,6 +2,7 @@ import {createMarkerAtPackCell, createMarkerResult, regenerateResourceMarkers, r
 import {buildEconomy, refreshPoliticalEconomicPower} from "../generator/economy.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
+import {newObjectAffected} from "./edit-command-effects.js";
 
 const MARKER_VISUAL_EFFECTS = Object.freeze({
   render: "draw",
@@ -115,7 +116,7 @@ export function createAddMarkerCommand({type, packCell, name = ""} = {}) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
-      affected: [{kind: OBJECT_KIND.MARKER, id: "new"}]
+      affected: newObjectAffected(OBJECT_KIND.MARKER)
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);

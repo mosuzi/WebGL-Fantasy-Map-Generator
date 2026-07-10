@@ -71,6 +71,8 @@
 
 新增对象命令如果真实 id 只能在 `apply()` 时确定，初始 `affected` 应使用 `{kind, id: "new"}`，执行成功后再回写真实 id。这样执行前诊断、失败路径和历史摘要都能知道命令目标类型。
 
+新增命令应优先通过 `newObjectAffected(kind)` 生成这个初始目标，避免不同领域手写 `{kind, id: "new"}` 时出现字段拼写或 kind 不一致。批量导入可组合 `systemAffected(system, newObjectAffected(kind))`，先解释导入系统，再保留“将新增对象”的目标类型。
+
 如果某个命令会让派生系统过期但不立即重建，可使用已有 `defer:*` 风格，后续面板负责把过期状态解释给用户。
 
 ## 调用层约定
@@ -120,6 +122,6 @@
 - 已主动声明 `domain` 的命令范围：路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化、宗教、marker、标签、外交、对象详情通用字段和军事。
 - `EditHistory.getStats()` 已暴露 `lastDomain` 和 `lastAffected`，控制台历史 API 和面板历史摘要可直接看到最近命令领域与影响对象；历史摘要使用共享 formatter，以 `@domain [kind#id]` 的短格式展示，超过 3 个对象时折叠为 `+N`。
 - 国家、省份、道路、河流、城市重生成入口、资源点重生成命令、军事批量 / 事件命令、城市 / 国家 / 河流 / 湖泊按名称库批量重命名命令、高度 / 国家 / 省份刷子、FMG Cells GEO 导入命令、外交重生成、批量政体调整和测量对象导入，已开始使用 `derived-system#xxx` 作为批量 affected 的第一项，避免历史和刷新摘要只出现对象级 `all`、集合别名、一串同类对象 id 或 `grid-cells#数量`。
-- 新增空文化、空宗教、手工标签、marker 和保存测量对象命令的初始 affected 已补为 `kind#new`，执行成功后仍会替换为真实对象 id。
+- 新增城市、省份、国家、空文化、空宗教、手工标签、marker、保存测量对象和测量对象导入命令的初始 affected 已改为复用 `newObjectAffected(kind)` 生成 `kind#new`，执行成功后仍会替换为真实对象 id。
 - 面板历史按钮已开始复用 `executeHistoryCommand()`，避免各面板分别手写撤销 / 重做刷新。
 - 后续重点是继续迁移残留的直接 `state.editHistory.execute()` 路径，并让新增命令保持 `domain` 和更精确的 `effects.affected`。

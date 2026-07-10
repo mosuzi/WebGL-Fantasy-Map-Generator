@@ -2,7 +2,7 @@ import {GOVERNMENT_BY_KEY, applyStateGovernment, setStateGovernment} from "../ge
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {createRandom} from "../generator/random.js";
 import {defaultCityVisual} from "./city-visuals.js";
-import {namebaseRenameAffected, systemAffected} from "./edit-command-effects.js";
+import {namebaseRenameAffected, newObjectAffected, systemAffected} from "./edit-command-effects.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -251,7 +251,7 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
     domain: "state",
     effects: {
       ...STATE_COLLECTION_EFFECTS,
-      affected: [{kind: "state", id: "new"}]
+      affected: newObjectAffected("state")
     },
     apply(context) {
       snapshot ??= captureStateCollectionSnapshot(context.map);

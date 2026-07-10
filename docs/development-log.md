@@ -24504,3 +24504,26 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_selection_helpers_smoke`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：`openSelectionAwarePanel` 和 `toggleObjectEditing` 均存在；marker、label 和 economy 面板初始未打开，分别选择 marker、label 和 trade-flow 后仍不会自动打开；`toggleObjectEditing({kind:"state", id:"1"})` 可进入国家编辑，随后 `toggleObjectEditing({kind:"state", id:1})` 可正确退出编辑；`openSelectionAwarePanel({kind:"trade-flow"})` 调用顺序为 `before:0 -> open:0 -> after:0`。
 - WebGL 与健康检查通过：直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 新增对象 affected helper 收口
+
+背景：
+
+- 编辑命令契约要求新增对象命令在真实 id 未生成前用 `kind#new` 表示初始影响对象。
+- 多个新增命令仍手写 `{kind, id: "new"}`，后续继续扩展命令时容易出现字段或 kind 不一致。
+
+实现：
+
+- `edit-command-effects.js` 新增 `newObjectAffected(kind)`。
+- 新增城市、省份、国家、空文化、空宗教、手工标签、marker、保存测量对象和测量对象导入命令的初始 affected 改为复用该 helper。
+- 执行成功后的真实 id 回写保持不变，历史摘要和面板刷新仍能看到真实新增对象。
+- `edit-command-contract.md` 和编辑器基础设施清单同步新增对象 affected helper 约定。
+
+验证：
+
+- `node --check` 覆盖 `edit-command-effects.js`、城市 / 文化 / 宗教 / 标签 / marker / 测量 / 省份 / 国家命令文件并通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_new_object_affected_smoke`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：`newObjectAffected("measurement")` 返回 `measurement#new`；`createSaveMeasurementCommand()` 执行前 initial affected 为 `measurement#new`，经 `EditHistory.execute()` 执行后回写为真实 `measurement-1`，`history.getStats().lastAffected` 同步为 `measurement-1`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 可用，WebGL2 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

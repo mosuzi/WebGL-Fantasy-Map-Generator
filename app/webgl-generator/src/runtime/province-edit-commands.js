@@ -1,5 +1,5 @@
 import {createChineseNameGenerator} from "../generator/names.js";
-import {systemAffected} from "./edit-command-effects.js";
+import {newObjectAffected, systemAffected} from "./edit-command-effects.js";
 
 const PROVINCE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -82,7 +82,7 @@ export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份"
     domain: "province",
     effects: {
       ...PROVINCE_COLLECTION_EFFECTS,
-      affected: [{kind: "province", id: "new"}]
+      affected: newObjectAffected("province")
     },
     apply(context) {
       snapshot ??= captureProvinceCollectionSnapshot(context.map);

@@ -1,4 +1,5 @@
 import {canAssignInheritanceParent, setInheritanceParent, summarizeInheritanceTree} from "../generator/inheritance.js";
+import {newObjectAffected} from "./edit-command-effects.js";
 
 const RELIGION_COLOR_EFFECTS = Object.freeze({
   render: "draw",
@@ -33,7 +34,7 @@ export function createAddReligionCommand({name = "", label = "新增宗教"} = {
     domain: "religion",
     effects: {
       ...RELIGION_STRUCTURE_EFFECTS,
-      affected: [{kind: "religion", id: "new"}]
+      affected: newObjectAffected("religion")
     },
     apply(context) {
       const stores = getReligionStores(context.map);

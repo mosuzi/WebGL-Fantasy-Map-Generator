@@ -1,4 +1,5 @@
 import {canAssignInheritanceParent, setInheritanceParent, summarizeInheritanceTree} from "../generator/inheritance.js";
+import {newObjectAffected} from "./edit-command-effects.js";
 
 const CULTURE_COLOR_EFFECTS = Object.freeze({
   render: "draw",
@@ -33,7 +34,7 @@ export function createAddCultureCommand({name = "", label = "新增文化"} = {}
     domain: "culture",
     effects: {
       ...CULTURE_STRUCTURE_EFFECTS,
-      affected: [{kind: "culture", id: "new"}]
+      affected: newObjectAffected("culture")
     },
     apply(context) {
       const stores = getCultureStores(context.map);
