@@ -23436,3 +23436,22 @@ full 矩阵结果：
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+
+### 2026-07-10 控制面板打开对象面板 helper 第一刀
+
+背景：
+
+- 控制面板里多个“打开领域面板”入口都有同一类模式：如果当前 selection 是该领域对象，则先把领域面板选中目标切到该对象，再打开面板。
+- 这属于打开 / 更新面板语义的一部分，继续散落在每个 `onOpenXPanel` 回调里，会让后续 locate action 层难以统一处理。
+
+实现：
+
+- 运行时新增 `openSelectionAwarePanel({kind, beforeOpen, open, afterOpen})`，并暴露到 `state` 供后续复用。
+- 国家、政体、省份、城市、文化、宗教、外交、军事、地区、路线、标记和标签面板打开入口改走该 helper，保持原来的打开前预选对象顺序。
+- 经济总览打开入口也改走 helper，但 trade-flow 交易选中保留 open 后执行，避免在面板 map 尚未刷新前检查交易 id。
+- 本步不改面板持久化、selection handler、列表筛选、对象详情打开规则或普通统计面板打开入口。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。

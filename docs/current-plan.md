@@ -699,6 +699,11 @@
    - 边界：本步只为 `stopObjectEditing()` 增加 `ifKind` 守卫，并迁移国家 / 省份切换模式、关闭画笔和河流面板关闭时的编辑态清理；不改变新增 / 删除模式、画笔 active stroke、面板打开关闭或河流编辑细节。
    - 完成记录：`stopObjectEditing({ifKind})` 会在对象类型匹配时停止编辑并统一刷新编辑交互锁和 runtime 面板；国家 / 省份退出编辑、进入新增 / 删除模式前的清理，以及关闭河流面板时退出河流编辑都已复用该 helper，直接 `selectionStore.startEditing/stopEditing` 只保留在 helper 内部。
 
+91. 控制面板打开对象面板 helper 第一刀。`已完成`
+   - 目标：继续补齐打开 / 更新面板语义，把控制面板中“如果当前 selection 是某类对象，先预选该对象再打开领域面板”的重复逻辑收束到运行时 helper。
+   - 边界：本步只迁移控制面板打开国家、政体、省份、城市、文化、宗教、外交、经济、军事、地区、路线、标记和标签面板的预选逻辑；不改变面板持久化、selection handler、列表筛选或对象详情打开规则。
+   - 完成记录：新增 `openSelectionAwarePanel({kind, beforeOpen, open, afterOpen})`，可在打开前后根据当前 selection 执行领域预选；经济 trade-flow 保持 open 后再选中交易的旧语义，其余对象面板保持打开前预选的旧顺序。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

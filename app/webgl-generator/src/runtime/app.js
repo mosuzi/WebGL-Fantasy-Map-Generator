@@ -293,6 +293,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.startObjectEditing = startObjectEditing;
   state.stopObjectEditing = stopObjectEditing;
   state.toggleObjectEditing = toggleObjectEditing;
+  const openSelectionAwarePanel = ({kind = null, beforeOpen = null, open, afterOpen = null}) => {
+    const object = kind && state.selection?.object?.kind === kind ? state.selection.object : null;
+    if (object) beforeOpen?.(object);
+    open?.(object);
+    if (object) afterOpen?.(object);
+    return object;
+  };
+  state.openSelectionAwarePanel = openSelectionAwarePanel;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
       startObjectEditing(object, {select: false});
@@ -1591,28 +1599,32 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.height.open(state.editHistory.getStats());
     },
     onOpenStatePanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.STATE) {
-        state.panels.state.setTargetStateId(state.selection.object.id);
-      }
-      state.panels.state.open(state.map, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.STATE,
+        beforeOpen: object => state.panels.state.setTargetStateId(object.id),
+        open: () => state.panels.state.open(state.map, state.editHistory.getStats())
+      });
     },
     onOpenGovernmentPanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.STATE) {
-        state.panels.government.setSelectedStateId(state.selection.object.id);
-      }
-      state.panels.government.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.STATE,
+        beforeOpen: object => state.panels.government.setSelectedStateId(object.id),
+        open: () => state.panels.government.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenProvincePanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.PROVINCE) {
-        state.panels.province.setSelectedProvinceId(state.selection.object.id);
-      }
-      state.panels.province.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.PROVINCE,
+        beforeOpen: object => state.panels.province.setSelectedProvinceId(object.id),
+        open: () => state.panels.province.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenCityPanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.CITY) {
-        state.panels.city.setSelectedCityId(state.selection.object.id);
-      }
-      state.panels.city.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.CITY,
+        beforeOpen: object => state.panels.city.setSelectedCityId(object.id),
+        open: () => state.panels.city.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenBiomePanel: () => {
       state.panels.biome.open(state.map, state.editHistory.getStats());
@@ -1630,34 +1642,39 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.feature.open(state.map, state.editHistory.getStats());
     },
     onOpenCulturePanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.CULTURE) {
-        state.panels.culture.setSelectedCultureId(state.selection.object.id);
-      }
-      state.panels.culture.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.CULTURE,
+        beforeOpen: object => state.panels.culture.setSelectedCultureId(object.id),
+        open: () => state.panels.culture.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenReligionPanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.RELIGION) {
-        state.panels.religion.setSelectedReligionId(state.selection.object.id);
-      }
-      state.panels.religion.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.RELIGION,
+        beforeOpen: object => state.panels.religion.setSelectedReligionId(object.id),
+        open: () => state.panels.religion.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenDiplomacyPanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.STATE) {
-        state.panels.diplomacy.setSelectedStateId(state.selection.object.id);
-      }
-      state.panels.diplomacy.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.STATE,
+        beforeOpen: object => state.panels.diplomacy.setSelectedStateId(object.id),
+        open: () => state.panels.diplomacy.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenEconomyPanel: () => {
-      state.panels.economy.open(state.map, state.selection, state.editHistory.getStats());
-      if (state.selection?.object?.kind === OBJECT_KIND.TRADE_FLOW) {
-        state.panels.economy.setSelectedDealId?.(state.selection.object.id);
-      }
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.TRADE_FLOW,
+        open: () => state.panels.economy.open(state.map, state.selection, state.editHistory.getStats()),
+        afterOpen: object => state.panels.economy.setSelectedDealId?.(object.id)
+      });
     },
     onOpenMilitaryPanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.MILITARY) {
-        state.panels.military.setSelectedRegimentId(state.selection.object.id);
-      }
-      state.panels.military.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.MILITARY,
+        beforeOpen: object => state.panels.military.setSelectedRegimentId(object.id),
+        open: () => state.panels.military.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenRiverPanel: () => {
       state.panels.river.open(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
@@ -1666,28 +1683,32 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.lake.open(state.map, state.selection, state.editHistory.getStats());
     },
     onOpenZonePanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.ZONE) {
-        state.panels.zone.setSelection(state.selection);
-      }
-      state.panels.zone.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.ZONE,
+        beforeOpen: () => state.panels.zone.setSelection(state.selection),
+        open: () => state.panels.zone.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenRoutePanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.ROUTE) {
-        state.panels.route.setSelectedRouteId(state.selection.object.id);
-      }
-      state.panels.route.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.ROUTE,
+        beforeOpen: object => state.panels.route.setSelectedRouteId(object.id),
+        open: () => state.panels.route.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenMarkerPanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.MARKER) {
-        state.panels.marker.setSelectedMarkerId(state.selection.object.id);
-      }
-      state.panels.marker.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.MARKER,
+        beforeOpen: object => state.panels.marker.setSelectedMarkerId(object.id),
+        open: () => state.panels.marker.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenLabelNamingPanel: () => {
-      if (state.selection?.object?.kind === OBJECT_KIND.LABEL) {
-        state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(state.selection.object));
-      }
-      state.panels.labelNaming.open(state.map, state.selection, state.editHistory.getStats());
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.LABEL,
+        beforeOpen: object => state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(object)),
+        open: () => state.panels.labelNaming.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onOpenNotesPanel: () => {
       state.panels.notes.open(state.map, state.selection, state.editHistory.getStats());
