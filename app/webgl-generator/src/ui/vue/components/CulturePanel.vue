@@ -167,6 +167,9 @@ const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根�
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCultureId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根文化"));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const cultureActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
@@ -174,9 +177,10 @@ const cultureActions = Object.freeze([
   {key: "namebase", label: "名称库绑定", icon: "名"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
-const cultureEmptyAction = Object.freeze({key: "add", label: "新增空文化", icon: "+"});
+const defaultCultureEmptyAction = Object.freeze({key: "add", label: "新增空文化", icon: "+"});
+const cultureEmptyAction = computed(() => filterEmptyAction.value || defaultCultureEmptyAction);
 const cultureListActions = computed(() => [
-  cultureEmptyAction,
+  defaultCultureEmptyAction,
   {key: "locate", label: "定位文化", icon: "⌖", disabled: !selected.value},
   {
     key: "delete",
@@ -244,6 +248,10 @@ function openRenameEditor(row) {
 }
 
 function handleListAction(actionKey) {
+  if (actionKey === "clear-filter") {
+    props.callbacks.onFilter?.("");
+    return;
+  }
   if (actionKey === "add") {
     props.callbacks.onAdd?.();
     return;

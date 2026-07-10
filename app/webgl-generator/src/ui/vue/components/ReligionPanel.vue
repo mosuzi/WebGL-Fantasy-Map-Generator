@@ -162,9 +162,13 @@ const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根�
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
-const religionEmptyAction = Object.freeze({key: "add", label: "新增空宗教", icon: "+"});
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
+const defaultReligionEmptyAction = Object.freeze({key: "add", label: "新增空宗教", icon: "+"});
+const religionEmptyAction = computed(() => filterEmptyAction.value || defaultReligionEmptyAction);
 const religionListActions = computed(() => [
-  religionEmptyAction,
+  defaultReligionEmptyAction,
   {key: "locate", label: "定位宗教", icon: "⌖", disabled: !selected.value},
   {
     key: "delete",
@@ -235,6 +239,10 @@ function openRenameEditor(row) {
 }
 
 function handleListAction(actionKey) {
+  if (actionKey === "clear-filter") {
+    props.callbacks.onFilter?.("");
+    return;
+  }
   if (actionKey === "add") {
     props.callbacks.onAdd?.();
     return;

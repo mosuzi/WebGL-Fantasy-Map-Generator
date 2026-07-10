@@ -26,9 +26,11 @@
     @sort="callbacks.onSort"
     :selected-id="selectedId"
     empty-text="没有匹配的地区"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -150,6 +152,9 @@ const rows = computed(() => {
 const selectedId = computed(() => props.state.selection?.object?.kind === "zone" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const visibleCount = computed(() => rows.value.filter(row => !row.hidden).length);
 const totalCells = computed(() => rows.value.reduce((sum, row) => sum + row.cells, 0));
 const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area, 0));
@@ -196,6 +201,10 @@ function syncStyleDraft() {
 function applyPattern() {
   if (!selected.value) return;
   props.callbacks.onStyleChange?.(selected.value.id, {pattern: styleDraft.pattern});
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function zoneRows(map) {

@@ -24360,3 +24360,26 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_city_state_province_empty_filter`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：城市面板输入无匹配筛选词后显示“没有匹配的城市 / 清空筛选”，点击后筛选词清空并恢复 `26` 个可见行；国家面板同样恢复 `21` 个可见行；省份面板同样恢复 `26` 个可见行。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。
+
+### 2026-07-11 文化 / 宗教 / 地区筛选空态清理
+
+背景：
+
+- 筛选空态“清空筛选”已覆盖路线、河流、湖泊、城市、国家和省份面板。
+- 文化、宗教和地区面板同样有高频筛选列表；其中文化 / 宗教原本已有“新增空文化 / 新增空宗教”空态主动作，需要避免被永久覆盖。
+- 这三个面板都有现成 `onFilter` 回调，清筛选可作为纯列表状态动作实现。
+
+实现：
+
+- 文化和宗教的 `UiObjectTable.emptyAction` 改为筛选词非空时显示“清空筛选”，筛选为空时仍显示原有新增空对象动作。
+- 文化和宗教列表操作栏仍保留“新增空文化 / 新增空宗教”，不会因为筛选空态切换而改变列表操作栏语义。
+- 地区面板新增筛选空态“清空筛选”动作。
+- 本步不改变树状面板打开状态、空文化 / 空宗教新增、删除空对象、定位、双击编辑、地区样式编辑、列宽、排序或筛选匹配规则。
+
+验证：
+
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_culture_religion_zone_empty_filter`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：文化面板输入无匹配筛选词后显示“没有匹配的文化 / 清空筛选”，点击后筛选词清空并恢复 `12` 个可见行，且列表操作栏仍有 `1` 个“新增空文化”按钮；宗教面板同样恢复 `18` 个可见行，且仍有 `1` 个“新增空宗教”按钮；地区面板同样恢复 `3` 个可见行。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。
