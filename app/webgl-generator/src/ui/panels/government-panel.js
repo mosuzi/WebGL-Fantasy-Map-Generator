@@ -20,6 +20,7 @@ const GOVERNMENT_COLUMN_WIDTHS = Object.freeze({
 });
 const GOVERNMENT_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  familyFilter: "all",
   columnWidths: GOVERNMENT_COLUMN_WIDTHS,
   sortKey: "count",
   sortDir: "desc"
@@ -33,7 +34,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
-    familyFilter: "all",
+    familyFilter: listPreferences.familyFilter,
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -48,6 +49,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     },
     onFamilyFilter: value => {
       panelState.familyFilter = String(value || "all");
+      updatePanelListPreferences(documentRef, GOVERNMENT_PANEL_ID, {familyFilter: panelState.familyFilter}, GOVERNMENT_LIST_DEFAULTS);
     },
     onSort: key => {
       if (panelState.sortKey === key) {

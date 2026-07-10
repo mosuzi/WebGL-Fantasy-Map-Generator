@@ -43,6 +43,19 @@ function normalizePanelListPreferences(value = {}, defaults = {}) {
     defaults.scope,
     defaults.scopes
   );
+  if (typeof defaults.familyFilter === "string") normalized.familyFilter = normalizePreferenceValue(
+    value.familyFilter,
+    defaults.familyFilter,
+    defaults.familyFilters
+  );
+  if (Object.hasOwn(defaults, "stateFilter")) {
+    normalized.stateFilter = normalizeStateFilter(value.stateFilter, defaults.stateFilter);
+  }
+  if (typeof defaults.statusFilter === "string") normalized.statusFilter = normalizePreferenceValue(
+    value.statusFilter,
+    defaults.statusFilter,
+    defaults.statusFilters
+  );
   if (typeof defaults.treeOpen === "boolean") {
     normalized.treeOpen = typeof value.treeOpen === "boolean" ? value.treeOpen : defaults.treeOpen;
   }
@@ -65,6 +78,12 @@ function normalizePanelTab(value, defaults) {
 function normalizePreferenceValue(value, fallback, allowedValues = null) {
   const normalized = typeof value === "string" && value ? value : fallback;
   return !Array.isArray(allowedValues) || allowedValues.includes(normalized) ? normalized : fallback;
+}
+
+function normalizeStateFilter(value, fallback = "all") {
+  if (value === "all") return "all";
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : fallback;
 }
 
 function normalizeColumnWidths(value, defaults = {}) {

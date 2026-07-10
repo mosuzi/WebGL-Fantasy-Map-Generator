@@ -24090,3 +24090,29 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_economy_government_military_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，经济商品 tab “商品”列从 `112px` 拖到 `204px`，localStorage `webgl-generator-panel-list:economy-panel` 写入 `columnWidths["goods.name"] = 204`；经济市场 tab “市场”列从 `132px` 拖到 `220px`，写入 `columnWidths["markets.name"] = 220`；经济交易 tab “商品”列从 `104px` 拖到 `188px`，写入 `columnWidths["deals.goodName"] = 188`；政体汇总表“政体”列从 `132px` 拖到 `249px`，写入 `columnWidths["governments.label"] = 249`；政体国家表“国家”列从 `132px` 拖到 `243px`，写入 `columnWidths["states.name"] = 243`；军事“军团”列从 `136px` 拖到 `239px`，写入 `columnWidths.name = 239`。刷新页面并重新打开、切换对应 tab 后，以上 header / cell 均保持新宽度；`glError = 0`，health 无 error，console error 和 page error 均为 `0`。本次 health 记录一次 `input-handler-stall` warn，作为后续面板打开 / 点击性能观察信号保留。
+
+### 2026-07-11 政体家族与军事筛选持久化
+
+背景：
+
+- 面板状态持久化已经覆盖常见筛选、排序、tab、范围筛选、树状面板打开状态和表格列宽。
+- 政体面板的家族筛选、军事面板的国家筛选和态势筛选仍只停留在运行时 state，刷新后会回到默认值；这些筛选属于明确的阅读状态，适合纳入本地偏好，不涉及编辑草稿或导入文件。
+
+实现：
+
+- `panel-list-preferences.js` 新增 `familyFilter`、`stateFilter` 和 `statusFilter` 归一化字段，只有面板 defaults 显式声明时才会读写。
+- 政体面板 defaults 新增 `familyFilter: "all"`，打开面板时读取本地偏好，切换政体家族筛选时写回 `webgl-generator-panel-list:government-panel`。
+- 军事面板 defaults 新增 `stateFilter` 和 `statusFilter`，打开面板时读取本地偏好，切换国家或态势筛选时写回 `webgl-generator-panel-list:military-panel`。
+- 军事面板打开或刷新时会校验已保存的国家 / 态势筛选是否仍存在于当前地图军团数据中；如果不存在则回退到“全部”，避免旧地图偏好造成空筛选。
+- 本步不改变政体汇总、军事战报导出范围、排序、筛选词、列宽、定位、批量调整或编辑命令行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\government-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\military-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_government_military_filter_persistence`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，等待政治国家和军事数据生成，再打开政体与军事面板。政体家族筛选从“全部家族”切到 `republic / 共和系 2` 后，localStorage `webgl-generator-panel-list:government-panel` 写入 `familyFilter = "republic"`，刷新并重新打开后仍保持 `republic`。军事国家筛选切到 `1 / 霜庭国`、态势筛选切到 `routed / 败逃中` 后，localStorage `webgl-generator-panel-list:military-panel` 写入 `stateFilter = 1` 和 `statusFilter = "routed"`，刷新并重新打开后仍保持国家 `1` 和态势 `routed`；health error、console error 和 page error 均为 `0`。
+- 补充 WebGL 检查通过：构建产物加载后 renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error 为空。

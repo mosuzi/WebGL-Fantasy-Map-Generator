@@ -16,6 +16,8 @@ const MILITARY_LIST_DEFAULTS = Object.freeze({
   columnWidths: MILITARY_COLUMN_WIDTHS,
   scope: "all",
   scopes: Object.freeze(["all", "selected", "filtered"]),
+  stateFilter: "all",
+  statusFilter: "all",
   sortKey: "troops",
   sortDir: "desc"
 });
@@ -32,8 +34,8 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     eventExportScope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    selectedStateId: "all",
-    selectedStatus: "all",
+    selectedStateId: listPreferences.stateFilter,
+    selectedStatus: listPreferences.statusFilter,
     selectedRegimentId: null,
     version: 0
   });
@@ -48,12 +50,14 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     },
     onStateChange: stateId => {
       panelState.selectedStateId = stateId === "all" ? "all" : Number(stateId);
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {stateFilter: panelState.selectedStateId}, MILITARY_LIST_DEFAULTS);
       if (!regimentExists(panelState.map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
         panelState.selectedRegimentId = firstRegimentId(panelState.map, panelState.selectedStateId, panelState.selectedStatus);
       }
     },
     onStatusChange: status => {
       panelState.selectedStatus = status || "all";
+      updatePanelListPreferences(documentRef, MILITARY_PANEL_ID, {statusFilter: panelState.selectedStatus}, MILITARY_LIST_DEFAULTS);
       if (!regimentExists(panelState.map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
         panelState.selectedRegimentId = firstRegimentId(panelState.map, panelState.selectedStateId, panelState.selectedStatus);
       }
@@ -136,6 +140,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      normalizeMilitaryFilters(panelState, map);
       if (selection?.object?.kind === "military") panelState.selectedRegimentId = selection.object.id;
       if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
         panelState.selectedRegimentId = firstRegimentId(map, panelState.selectedStateId, panelState.selectedStatus);
@@ -149,6 +154,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      normalizeMilitaryFilters(panelState, map);
       if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
         panelState.selectedRegimentId = firstRegimentId(map, panelState.selectedStateId, panelState.selectedStatus);
       }
@@ -226,4 +232,13 @@ function regimentRows(map) {
       status: regiment.status,
       statusLabel: regiment.statusLabel
     })));
+}
+
+function normalizeMilitaryFilters(panelState, map) {
+  if (panelState.selectedStateId !== "all" && !regimentRows(map).some(row => row.stateId === Number(panelState.selectedStateId))) {
+    panelState.selectedStateId = "all";
+  }
+  if (panelState.selectedStatus !== "all" && !regimentRows(map).some(row => statusValue(row) === panelState.selectedStatus)) {
+    panelState.selectedStatus = "all";
+  }
 }
