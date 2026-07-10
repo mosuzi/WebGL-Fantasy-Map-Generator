@@ -2395,6 +2395,13 @@ select:disabled {
   outline: none;
 }
 
+.object-table-empty-action:disabled {
+  border-color: rgba(189, 206, 213, 0.12);
+  background: rgba(189, 206, 213, 0.06);
+  color: #6f7f88;
+  cursor: not-allowed;
+}
+
 .object-table-el {
   --el-color-primary: #d7a84f;
   --el-bg-color: #0f1519;

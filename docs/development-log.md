@@ -23777,3 +23777,22 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 浏览器烟测待本批次收尾统一执行。
+
+### 2026-07-11 `UiObjectTable.emptyAction` 禁用态视觉
+
+背景：
+
+- 公共空态按钮已经支持 `disabled` 属性和事件保护，但禁用按钮还沿用可点击按钮的主色外观。
+- 后续如果更多面板把“导入 / 创建 / 模式类”动作放进空态区域，需要让不可用状态在视觉上足够明确。
+
+实现：
+
+- `.object-table-empty-action:disabled` 新增低对比边框、背景和文字颜色。
+- 禁用空态按钮使用 `cursor: not-allowed`。
+- 本步只补样式，不改变事件、防抖、动作或任何面板回调。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 浏览器烟测待本批次收尾统一执行。
