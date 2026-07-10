@@ -24116,3 +24116,28 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_government_military_filter_persistence`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，等待政治国家和军事数据生成，再打开政体与军事面板。政体家族筛选从“全部家族”切到 `republic / 共和系 2` 后，localStorage `webgl-generator-panel-list:government-panel` 写入 `familyFilter = "republic"`，刷新并重新打开后仍保持 `republic`。军事国家筛选切到 `1 / 霜庭国`、态势筛选切到 `routed / 败逃中` 后，localStorage `webgl-generator-panel-list:military-panel` 写入 `stateFilter = 1` 和 `statusFilter = "routed"`，刷新并重新打开后仍保持国家 `1` 和态势 `routed`；health error、console error 和 page error 均为 `0`。
 - 补充 WebGL 检查通过：构建产物加载后 renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error 为空。
+
+### 2026-07-11 公共表格批量选择第一刀
+
+背景：
+
+- `UiObjectTable` 已承担多数管理面板的列表、虚拟滚动、排序、定位、空态动作和列宽拖拽。
+- 基础设施盘点中仍记录批量选择缺口；直接做批量删除风险较高，因此本步只先补公共表格选择能力，并接入备注总览的“导出选中备注”安全闭环。
+
+实现：
+
+- `UiObjectTable` 新增默认关闭的 `selectableRows`、`selectedRowIds` 和 `selection-change`，开启后会显示表头全选 checkbox 和每行 checkbox。
+- 批量选择与原有单行 `selectedId` 独立：勾选不会触发行选择，单击行仍保持原选择 / 定位语义。
+- 表头 checkbox 面向当前表格 `rows` 全选 / 取消；虚拟滚动场景下仍按完整当前列表处理，而不是只处理渲染窗口。
+- 备注总览启用批量选择，摘要指标新增“已选”，导出动作新增“导出选中 N”；该动作只复用既有备注摘要导出回调传入选中行，不新增批量删除或编辑。
+- 补充 checkbox 基础样式，保持与现有暗色表格和金色强调色一致。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_notes_batch_selection`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：Vite 本地服务加载当前应用后，在浏览器会话内临时注入两条备注用于表格验证，不写入源码或仓库文件。备注总览打开后有 `2` 个行 checkbox 和 `1` 个表头全选 checkbox；初始摘要为“备注2 / 可定位2 / 孤儿备注0 / 已选0 / 筛选2”。
+- 单选第一条备注后，摘要变为“已选1”，行 checkbox 选中数为 `1`，备注预览仍显示第一条正文；打开导出下拉并点击“导出选中 1”后，下载 JSON 的 `metadata.notes = 1`、`metadata.totalNotes = 2`，导出 notes 只包含 `state:1`。
+- 点击表头全选后，摘要变为“已选2”，两个行 checkbox 都选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 2”菜单项。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。

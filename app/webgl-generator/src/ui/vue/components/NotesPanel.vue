@@ -17,9 +17,12 @@
     row-id-key="id"
     empty-text="暂无备注"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedNoteIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedNoteIds = $event"
   />
 
   <UiPanelIoActions
@@ -41,7 +44,7 @@
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
@@ -70,6 +73,7 @@ const props = defineProps({
 });
 
 const unitPreferences = useUnitPreferences();
+const selectedNoteIds = ref([]);
 
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
@@ -90,8 +94,11 @@ const rows = computed(() => {
   return noteRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selectedNoteIdSet = computed(() => new Set(selectedNoteIds.value.map(id => String(id))));
+const selectedNoteRows = computed(() => visibleRows.value.filter(row => selectedNoteIdSet.value.has(String(row.id))));
 const notesExportActions = computed(() => [
-  {key: "notes", label: "导出备注摘要", disabled: !visibleRows.value.length}
+  {key: "notes", label: "导出备注摘要", disabled: !visibleRows.value.length},
+  {key: "selected-notes", label: `导出选中 ${formatNumber(selectedNoteRows.value.length)}`, disabled: !selectedNoteRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
 const notesListActions = computed(() => [
@@ -102,6 +109,7 @@ const summaryMetrics = computed(() => [
   {label: "备注", value: formatNumber(rows.value.length)},
   {label: "可定位", value: formatNumber(rows.value.filter(row => !row.orphan).length)},
   {label: "孤儿备注", value: formatNumber(rows.value.filter(row => row.orphan).length)},
+  {label: "已选", value: formatNumber(selectedNoteRows.value.length)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
@@ -113,6 +121,11 @@ const detailRows = computed(() => selected.value ? [
   {label: "字数", value: `${formatNumber(selected.value.bodyLength)}字`},
   {label: "更新时间", value: formatDateTime(selected.value.updatedAt)}
 ] : []);
+
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedNoteIds.value = selectedNoteIds.value.filter(id => visibleIds.has(String(id)));
+});
 
 function noteRows(map) {
   return (map?.notes?.notes || [])
@@ -208,6 +221,10 @@ function formatDateTime(value) {
 }
 
 function handleNotesExport(key) {
+  if (key === "selected-notes") {
+    props.callbacks.onExport?.(selectedNoteRows.value);
+    return;
+  }
   if (key === "notes") props.callbacks.onExport?.(visibleRows.value);
 }
 

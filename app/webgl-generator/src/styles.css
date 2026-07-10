@@ -2361,6 +2361,27 @@ select:disabled {
   color: #fff2c9;
 }
 
+.object-table-selection-column,
+.object-table-selection-cell {
+  width: 34px;
+  min-width: 34px;
+  text-align: center;
+}
+
+.object-table-selection-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #d7a84f;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.object-table-selection-checkbox:focus-visible {
+  outline: 2px solid rgba(255, 224, 161, 0.65);
+  outline-offset: 2px;
+}
+
 .object-table-spacer-row td {
   background: #0f1519;
   pointer-events: none;

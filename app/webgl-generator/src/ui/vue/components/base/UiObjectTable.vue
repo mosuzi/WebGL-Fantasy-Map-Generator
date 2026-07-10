@@ -3,6 +3,17 @@
     <table v-if="rows.length" class="object-table object-table-native">
       <thead>
         <tr>
+          <th v-if="selectableRows" class="object-table-selection-column">
+            <input
+              class="object-table-selection-checkbox object-table-select-all-checkbox"
+              type="checkbox"
+              :checked="allRowsSelected"
+              :aria-checked="selectionHeaderState"
+              aria-label="选择当前列表"
+              @click.stop
+              @change="handleSelectAllChange"
+            />
+          </th>
           <th
             v-for="column in columns"
             :key="column.key"
@@ -43,12 +54,22 @@
         <tr
           v-for="row in visibleRows"
           :key="rowKey(row)"
-          v-memo="[rowKey(row), isSelected(row), columnLayoutSignature]"
+          v-memo="[rowKey(row), isSelected(row), rowSelectionChecked(row), columnLayoutSignature]"
           class="object-table-row"
           :class="{'selected-row': isSelected(row)}"
           @click="handleRowClick(row)"
           @dblclick="handleRowDoubleClick(row)"
         >
+          <td v-if="selectableRows" class="object-table-selection-cell">
+            <input
+              class="object-table-selection-checkbox object-table-row-selection-checkbox"
+              type="checkbox"
+              :checked="rowSelectionChecked(row)"
+              :aria-label="`选择 ${rowKey(row)}`"
+              @click.stop
+              @change="event => handleRowSelectionChange(row, event.target.checked)"
+            />
+          </td>
           <td
             v-for="column in columns"
             :key="column.key"
@@ -149,6 +170,14 @@ const props = defineProps({
   resizableColumns: {
     type: Boolean,
     default: false
+  },
+  selectableRows: {
+    type: Boolean,
+    default: false
+  },
+  selectedRowIds: {
+    type: Array,
+    default: () => []
   }
 });
 
@@ -158,7 +187,7 @@ const VIRTUAL_OVERSCAN_ROWS = 8;
 const MIN_RESIZE_COLUMN_WIDTH = 32;
 const MAX_RESIZE_COLUMN_WIDTH = 640;
 
-const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize"]);
+const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize", "selection-change"]);
 
 const tableWrap = ref(null);
 const scrollTop = ref(0);
@@ -168,7 +197,7 @@ let scrollAttempt = 0;
 let scrollMetricsFrame = 0;
 let resizeState = null;
 
-const columnSpan = computed(() => props.columns.length + (props.showLocateAction ? 1 : 0));
+const columnSpan = computed(() => props.columns.length + (props.showLocateAction ? 1 : 0) + (props.selectableRows ? 1 : 0));
 const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
 const virtualWindow = computed(() => {
   if (!virtualEnabled.value) return {start: 0, end: props.rows.length};
@@ -182,6 +211,14 @@ const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.va
 const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * VIRTUAL_ROW_HEIGHT : 0);
 const sortableKeys = computed(() => new Set((props.sortOptions || []).map(option => option?.key).filter(Boolean)));
 const sortIndicator = computed(() => props.sortDirection === "asc" ? "↑" : "↓");
+const selectedRowKeySet = computed(() => new Set(props.selectedRowIds.map(id => stringRowId(id))));
+const allRowsSelected = computed(() => Boolean(props.rows.length) && props.rows.every(row => rowSelectionChecked(row)));
+const someRowsSelected = computed(() => props.rows.some(row => rowSelectionChecked(row)));
+const selectionHeaderState = computed(() => {
+  if (allRowsSelected.value) return "true";
+  if (someRowsSelected.value) return "mixed";
+  return "false";
+});
 const columnLayoutSignature = computed(() => props.columns.map(column => [
   column.key,
   columnWidthOverride(column),
@@ -215,6 +252,10 @@ function isSelected(row) {
   return sameObjectId(getRowId(row), props.selectedId);
 }
 
+function rowSelectionChecked(row) {
+  return selectedRowKeySet.value.has(rowKey(row));
+}
+
 function rowKey(row) {
   return stringRowId(getRowId(row));
 }
@@ -235,6 +276,27 @@ function handleRowDoubleClick(row) {
 function handleHeaderSort(column) {
   if (!sortableColumn(column)) return;
   emit("sort", columnSortKey(column));
+}
+
+function handleSelectAllChange(event) {
+  const checked = Boolean(event.target.checked);
+  const currentRows = props.rows || [];
+  const currentKeys = new Set(currentRows.map(row => rowKey(row)));
+  const selected = new Map(props.selectedRowIds.map(id => [stringRowId(id), id]));
+  if (checked) {
+    for (const row of currentRows) selected.set(rowKey(row), getRowId(row));
+  } else {
+    for (const key of currentKeys) selected.delete(key);
+  }
+  emit("selection-change", Array.from(selected.values()));
+}
+
+function handleRowSelectionChange(row, checked) {
+  const key = rowKey(row);
+  const selected = new Map(props.selectedRowIds.map(id => [stringRowId(id), id]));
+  if (checked) selected.set(key, getRowId(row));
+  else selected.delete(key);
+  emit("selection-change", Array.from(selected.values()));
 }
 
 function startColumnResize(event, column) {
