@@ -820,14 +820,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.namebase.open(state.map, {cultureId, history: state.editHistory.getStats()});
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateCulturePanel(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateCulturePanel(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.culture = culturePanel;
@@ -898,14 +894,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateReligionPanel(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateReligionPanel(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.religion = religionPanel;
@@ -952,22 +944,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       setDiplomacyThemeSubject(state, documentRef, stateId);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) {
-        refreshAfterEdit(state, command);
-        refreshGenerationSummary(state.map);
-      }
-      updateDiplomacyPanel(state);
-      updateStatePanel(state);
+      return executeHistoryCommand(state, documentRef, "undo", {
+        afterRefresh: () => refreshGenerationSummary(state.map)
+      });
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) {
-        refreshAfterEdit(state, command);
-        refreshGenerationSummary(state.map);
-      }
-      updateDiplomacyPanel(state);
-      updateStatePanel(state);
+      return executeHistoryCommand(state, documentRef, "redo", {
+        afterRefresh: () => refreshGenerationSummary(state.map)
+      });
     }
   });
   state.panels.diplomacy = diplomacyPanel;

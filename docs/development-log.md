@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：文化宗教外交面板历史按钮接入统一历史执行器
+
+本步继续清理面板撤销 / 重做旧路径，把文化管理、宗教管理和外交管理的历史按钮接入 `executeHistoryCommand()`。
+
+修正：
+
+- 文化管理 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()` 和 `updateCulturePanel()`。
+- 宗教管理 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()` 和 `updateReligionPanel()`。
+- 外交管理 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()`、`updateDiplomacyPanel()` 和 `updateStatePanel()`。
+- 外交管理通过历史执行器的 `afterRefresh` 保留 `refreshGenerationSummary(state.map)`，避免撤销 / 重做外交关系或重生成外交后 summary 不同步。
+
+边界：
+
+- 本步只迁移文化 / 宗教 / 外交面板历史按钮，不改变文化、宗教新增 / 删除 / 字段编辑命令，不改变外交关系编辑或重生成外交命令。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-society-diplomacy-history-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `society-diplomacy-history-smoke / 10000 cells` 地图后，在文化管理面板点击“新增空文化”并用浮动面板 header “撤销 / 重做”，文化数量 `12 -> 13 -> 12 -> 13`；在宗教管理面板点击“新增空宗教”并用 header “撤销 / 重做”，宗教数量 `18 -> 19 -> 18 -> 19`；在外交管理面板点击“重生成外交”并用 header “撤销 / 重做”，`diplomacyRegenerationSalt` `0 -> 1 -> 0 -> 1`，重做后 summary 仍包含 `states = 20`、`pairs = 190`、`allies = 30`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：国家政府省份城市面板历史按钮接入统一历史执行器
 
 本步继续清理面板撤销 / 重做旧路径，把国家编辑、政府总览、省份管理和城市管理的历史按钮接入 `executeHistoryCommand()`。
