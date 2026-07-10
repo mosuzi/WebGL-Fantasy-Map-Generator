@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：河流名称与宽度编辑接入统一编辑执行器
+
+本步继续清理河流管理面板的旧执行路径，把河流重命名、按名称库重命名筛选河流和河流宽度因子调整接入 `executeEditCommand()`。
+
+修正：
+
+- 河流重命名不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部河流面板刷新。
+- 按名称库重命名筛选河流改用统一执行器的 `status / noopStatus`，继续保留原有成功数量提示和无可更新名称提示。
+- 河流宽度因子调整改用统一执行器，刷新依赖 `RIVER_WIDTH_ONLY` effects 中的 `river-mesh / river-width-stats / object-panels`。
+
+边界：
+
+- 本步只迁移河流字段执行入口，不改变河流生成、路径、流量、水文诊断、宽度因子取值范围、名称库算法、备注或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：河流面板真实选中河流 `#68` 后，“重命名”改为 `河流统一执行器烟测`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected river#68`；“调整宽度”把 `widthFactor` 改为 `1.5`，撤销栈 `undo=2`，`lastEditRefresh` 为 `river-mesh, river-width-stats, object-panels`；随后真实点击“按名称库重命名筛选河流”把河流 `#68` 改回“白溪”，撤销栈 `undo=3`，`lastLabel` 为 `按名称库重命名河流 225 条`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：城市名称编辑补充接入统一编辑执行器
 
 本步继续补齐城市面板仍直接调用 `state.editHistory.execute()` 的名称类路径，把城市重命名和按名称库重命名筛选城市接入 `executeEditCommand()`。

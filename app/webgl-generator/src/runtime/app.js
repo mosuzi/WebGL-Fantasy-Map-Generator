@@ -1450,23 +1450,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: "river", id: riverId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameVisibleFromNamebase: riverIds => {
       const context = {map: state.map};
       const command = createRenameRiversFromNamebaseCommand(riverIds);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-        const result = command.getResult?.();
-        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 条河流。`);
-      } else {
-        setFileOperationStatus(documentRef, "当前筛选河流没有可按名称库更新的名称。");
-      }
-      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      executeEditCommand(state, documentRef, command, {
+        context,
+        status: executed => `已按当前名称库重命名 ${executed.getResult?.().renamed || 0} 条河流。`,
+        noopStatus: "当前筛选河流没有可按名称库更新的名称。"
+      });
       updateEditingInteractionLock(state, documentRef);
     },
     onClose: () => {
@@ -1478,10 +1472,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onSetWidthFactor: (riverId, widthFactor) => {
       const context = {map: state.map};
       const command = createSetRiverWidthFactorCommand(riverId, widthFactor);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      executeEditCommand(state, documentRef, command, {context});
     },
     onNoteChange: (riverId, body) => {
       const river = state.map?.rivers?.rivers?.find(item => item.id === riverId);
