@@ -1,5 +1,5 @@
 import {canAssignInheritanceParent, setInheritanceParent, summarizeInheritanceTree} from "../generator/inheritance.js";
-import {newObjectAffected} from "./edit-command-effects.js";
+import {newObjectAffected, objectAffected} from "./edit-command-effects.js";
 
 const CULTURE_COLOR_EFFECTS = Object.freeze({
   render: "draw",
@@ -47,7 +47,7 @@ export function createAddCultureCommand({name = "", label = "新增文化"} = {}
         store[cultureId] = {...culture};
       }
       updateCultureTreeMetadata(context.map, primary);
-      this.effects.affected = [{kind: "culture", id: cultureId}];
+      this.effects.affected = objectAffected("culture", cultureId);
     },
     revert(context) {
       if (!cultureId) return;
@@ -74,7 +74,7 @@ export function createDeleteCultureCommand(cultureId, {label = "删除文化"} =
     domain: "culture",
     effects: {
       ...CULTURE_STRUCTURE_EFFECTS,
-      affected: [{kind: "culture", id: normalizedCultureId}]
+      affected: objectAffected("culture", normalizedCultureId)
     },
     apply(context) {
       const stores = getCultureStores(context.map);
@@ -115,7 +115,7 @@ export function createSetCultureColorCommand(cultureId, color, {beforeColor = nu
     domain: "culture",
     effects: {
       ...CULTURE_COLOR_EFFECTS,
-      affected: [{kind: "culture", id: normalizedCultureId}]
+      affected: objectAffected("culture", normalizedCultureId)
     },
     apply(context) {
       if (!after) throw new Error("文化颜色必须是 #rrggbb");
@@ -150,7 +150,7 @@ export function createSetCultureParentCommand(cultureId, parentId, {beforeParent
     domain: "culture",
     effects: {
       ...CULTURE_PARENT_EFFECTS,
-      affected: [{kind: "culture", id: normalizedCultureId}]
+      affected: objectAffected("culture", normalizedCultureId)
     },
     apply(context) {
       const cultures = getCultures(context.map);

@@ -24583,3 +24583,29 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_label_measurement_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：标签移动、重命名、备注、删除、恢复均返回 `label#7`；手工标签新增执行后回写 `label#1`；测量对象重命名、更新和删除均返回 `measurement#measurement-7`；测量对象保存执行后回写 `measurement#measurement-1`；测量对象导入执行后回写 `derived-system#measurements-import + measurement#measurement-1 + measurement#measurement-2`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 文化与宗教 affected helper 收口
+
+背景：
+
+- 单对象 affected helper 已覆盖 marker、标签和测量对象命令。
+- 文化与宗教命令结构一致，新增成功后回写真实 id，删除、颜色和继承父级都是单对象影响目标，适合继续迁移。
+
+实现：
+
+- `culture-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 文化新增成功后的真实 id 回写、删除、颜色和继承父级命令均改为复用 `objectAffected("culture", id)`。
+- `religion-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 宗教新增成功后的真实 id 回写、删除、颜色和继承父级命令均改为复用 `objectAffected("religion", id)`。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充文化与宗教单对象 helper 迁移状态。
+- 本步不改变文化 / 宗教新增、删除约束、颜色、继承树、tree metadata、派生刷新或面板刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\culture-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\religion-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_culture_religion_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：文化新增执行后回写 `culture#2`，文化删除、颜色和继承父级均返回 `culture#7`；宗教新增执行后回写 `religion#2`，宗教删除、颜色和继承父级均返回 `religion#7`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

@@ -1,5 +1,5 @@
 import {canAssignInheritanceParent, setInheritanceParent, summarizeInheritanceTree} from "../generator/inheritance.js";
-import {newObjectAffected} from "./edit-command-effects.js";
+import {newObjectAffected, objectAffected} from "./edit-command-effects.js";
 
 const RELIGION_COLOR_EFFECTS = Object.freeze({
   render: "draw",
@@ -47,7 +47,7 @@ export function createAddReligionCommand({name = "", label = "新增宗教"} = {
         store[religionId] = {...religion};
       }
       updateReligionTreeMetadata(context.map, primary);
-      this.effects.affected = [{kind: "religion", id: religionId}];
+      this.effects.affected = objectAffected("religion", religionId);
     },
     revert(context) {
       if (!religionId) return;
@@ -74,7 +74,7 @@ export function createDeleteReligionCommand(religionId, {label = "删除宗教"}
     domain: "religion",
     effects: {
       ...RELIGION_STRUCTURE_EFFECTS,
-      affected: [{kind: "religion", id: normalizedReligionId}]
+      affected: objectAffected("religion", normalizedReligionId)
     },
     apply(context) {
       const stores = getReligionStores(context.map);
@@ -115,7 +115,7 @@ export function createSetReligionColorCommand(religionId, color, {beforeColor = 
     domain: "religion",
     effects: {
       ...RELIGION_COLOR_EFFECTS,
-      affected: [{kind: "religion", id: normalizedReligionId}]
+      affected: objectAffected("religion", normalizedReligionId)
     },
     apply(context) {
       if (!after) throw new Error("宗教颜色必须是 #rrggbb");
@@ -150,7 +150,7 @@ export function createSetReligionParentCommand(religionId, parentId, {beforePare
     domain: "religion",
     effects: {
       ...RELIGION_PARENT_EFFECTS,
-      affected: [{kind: "religion", id: normalizedReligionId}]
+      affected: objectAffected("religion", normalizedReligionId)
     },
     apply(context) {
       const religions = getReligions(context.map);
