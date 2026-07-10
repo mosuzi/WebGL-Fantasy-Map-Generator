@@ -1,5 +1,5 @@
 import {buildDiplomacy, normalizeDiplomacyRelation, setDiplomacyRelation} from "../generator/diplomacy.js";
-import {systemAffected} from "./edit-command-effects.js";
+import {objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const DIPLOMACY_EFFECTS = Object.freeze({
   render: "draw",
@@ -21,7 +21,10 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
     domain: "diplomacy",
     effects: {
       ...DIPLOMACY_EFFECTS,
-      affected: [{kind: "state", id: normalizedSubjectId}, {kind: "state", id: normalizedObjectId}]
+      affected: [
+        ...objectAffected("state", normalizedSubjectId),
+        ...objectAffected("state", normalizedObjectId)
+      ]
     },
     apply(context) {
       if (!normalizedRelation) throw new Error("不支持的外交关系");

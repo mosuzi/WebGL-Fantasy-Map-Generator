@@ -24691,3 +24691,31 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_state_province_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：国家颜色、国家政体和国家删除均返回 `state#7`，省份删除返回 `province#7`；最小 mock map 执行新增国家后回写 `state#1`，执行新增省份后回写 `province#1`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 对象详情与外交 affected helper 收口
+
+背景：
+
+- 国家、省份和城市等领域命令已开始复用 `objectAffected(kind, id)`。
+- 对象详情通用命令仍有动态 `{kind: target.kind, id: target.id}`，外交关系命令也手写两个国家目标。
+- 本批只迁移目标形状清晰的通用对象详情和外交关系命令；外交重生成仍保留 `systemAffected("diplomacy-regeneration", ...)`。
+
+实现：
+
+- `object-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 通用对象重命名和通用对象备注命令改为复用 `objectAffected(target.kind, target.id)`。
+- 国家首都命令改为组合 `objectAffected(OBJECT_KIND.STATE, stateId)` 与 `objectAffected(OBJECT_KIND.CITY, burgId)`。
+- 省份颜色命令改为复用 `objectAffected(OBJECT_KIND.PROVINCE, provinceId)`。
+- `diplomacy-edit-commands.js` 引入 `objectAffected(kind, id)`，外交关系编辑命令改为组合两个 `state#id` 目标。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充对象详情与外交关系 helper 迁移状态。
+- 本步不改变对象重命名 / 备注、国家首都切换、省份颜色、外交关系快照、外交重生成、派生刷新或面板刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\object-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\diplomacy-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_object_diplomacy_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：通用城市重命名和备注均返回 `city#7`；国家首都返回 `state#3 + city#9`；省份颜色返回 `province#7`；外交关系返回 `state#3 + state#4`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

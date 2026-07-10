@@ -1,6 +1,7 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {getStateFullName} from "../generator/names.js";
+import {objectAffected} from "./edit-command-effects.js";
 
 const OBJECT_NAME_EFFECTS = Object.freeze({
   render: "draw",
@@ -77,7 +78,7 @@ export function createRenameObjectCommand(object, nextName) {
     domain: target.kind,
     effects: {
       ...OBJECT_NAME_EFFECTS,
-      affected: [{kind: target.kind, id: target.id}]
+      affected: objectAffected(target.kind, target.id)
     },
     apply(context) {
       if (!normalizedName) throw new Error("名称不能为空");
@@ -107,7 +108,7 @@ export function createSetObjectNoteCommand(object, body, {name = ""} = {}) {
     domain: target.kind,
     effects: {
       ...OBJECT_NOTE_EFFECTS,
-      affected: [{kind: target.kind, id: target.id}]
+      affected: objectAffected(target.kind, target.id)
     },
     apply(context) {
       const current = readObjectName(context.map, target);
@@ -145,7 +146,10 @@ export function createSetStateCapitalCommand(stateId, nextBurgId) {
     domain: OBJECT_KIND.STATE,
     effects: {
       ...STATE_CAPITAL_EFFECTS,
-      affected: [{kind: "state", id: normalizedStateId}, {kind: "city", id: normalizedBurgId}]
+      affected: [
+        ...objectAffected(OBJECT_KIND.STATE, normalizedStateId),
+        ...objectAffected(OBJECT_KIND.CITY, normalizedBurgId)
+      ]
     },
     apply(context) {
       previous ??= readStateCapitalSnapshot(context.map, normalizedStateId, normalizedBurgId);
@@ -174,7 +178,7 @@ export function createSetProvinceColorCommand(provinceId, color, {beforeColor = 
     domain: OBJECT_KIND.PROVINCE,
     effects: {
       ...PROVINCE_COLOR_EFFECTS,
-      affected: [{kind: "province", id: normalizedProvinceId}]
+      affected: objectAffected(OBJECT_KIND.PROVINCE, normalizedProvinceId)
     },
     apply(context) {
       if (!after) throw new Error("省份颜色必须是 #rrggbb");
