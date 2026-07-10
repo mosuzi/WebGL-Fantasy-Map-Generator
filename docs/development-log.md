@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事驻地移动接入统一编辑执行器
+
+本步继续清理军事面板的旧执行路径，把单个军团驻地移动接入 `executeEditCommand()`。
+
+修正：
+
+- 军团驻地移动不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 驻地实际移动后继续保留 `markDerivedFresh(["military"])`、`refreshGenerationSummary()` 和 generation log 记录。
+- 面板刷新改由命令 effects 中的 `point-layers / object-index / object-panels` 驱动。
+
+边界：
+
+- 本步只迁移单个军团驻地移动入口，不改变设置基地、战报事件、军事生成算法、兵种比例、单个 / 批量态势或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开军事面板后固定选中军团 `1:0`，通过真实“驻地基地”面板把目标选为 `国家中心：鹿明 #5782` 并点击“移动驻地”；军团驻地从 `cell=5791 / 青铜 #5791` 移到 `cell=5782 / 鹿明 #5782`，态势变为 `garrisoned / 驻防中`，撤销栈 `undo=1`，`lastLabel` 为 `移动军团驻地 #1:0`，generation log 追加 `move military station: regiment=1:0, cell=5782`，`military.metadata.stale = false`，`lastEditRefresh` 为 `point-layers, object-index, object-panels` / `affected military#1:0`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事批量态势编辑接入统一编辑执行器
 
 本步继续清理军事面板的旧执行路径，把当前筛选军团的批量态势调整接入 `executeEditCommand()`。
