@@ -16,9 +16,11 @@
     row-id-key="key"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的标签"
+    :empty-action="labelEmptyAction"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleLabelManagementAction"
   />
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />
@@ -113,10 +115,11 @@ const labelActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
+const labelEmptyAction = Object.freeze({key: "add", label: "新增标签", icon: "+"});
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
 const labelManagementActions = computed(() => [
-  {key: "add", label: "新增标签", icon: "+"},
+  labelEmptyAction,
   {key: selected.value?.hidden ? "restore" : "delete", label: selected.value?.hidden ? "恢复标签" : "删除标签", icon: selected.value?.hidden ? "↺" : "×", disabled: !selected.value}
 ]);
 

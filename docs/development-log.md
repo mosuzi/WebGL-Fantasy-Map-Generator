@@ -23529,3 +23529,20 @@ full 矩阵结果：
 
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-11 标签空态新增动作接入
+
+背景：
+
+- 标签面板已有“新增标签”列表动作，但筛选后列表为空时，空态区域还不能直接触发同一动作。
+- 标签新增动作不依赖地图点击模式或禁用态，适合继续作为 `UiObjectTable.emptyAction` 的低风险接入点。
+
+实现：
+
+- 标签面板新增 `labelEmptyAction`，表格空态接入该动作，并与列表动作条复用同一个冻结动作对象。
+- 空态按钮复用既有 `handleLabelManagementAction()`，不改变新增、恢复、删除、重命名、定位或备注逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
