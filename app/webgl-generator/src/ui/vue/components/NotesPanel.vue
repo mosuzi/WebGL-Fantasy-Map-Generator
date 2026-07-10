@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -15,8 +16,10 @@
     :selected-id="state.selectedNoteId"
     row-id-key="id"
     empty-text="暂无备注"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions

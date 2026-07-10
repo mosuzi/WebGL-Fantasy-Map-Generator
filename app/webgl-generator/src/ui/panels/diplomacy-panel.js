@@ -4,8 +4,18 @@ import {sameObjectId, toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const DIPLOMACY_PANEL_ID = "diplomacy-panel";
+const DIPLOMACY_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 144,
+  relationLabel: 96,
+  tradeLabel: 96,
+  powerScore: 74,
+  neighborLabel: 74,
+  cultureName: 120
+});
 const DIPLOMACY_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: DIPLOMACY_COLUMN_WIDTHS,
   scope: "selected",
   scopes: Object.freeze(["selected", "subject", "all"]),
   sortKey: "relation",
@@ -20,6 +30,7 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     historyScope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -53,6 +64,16 @@ export function createDiplomacyPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, DIPLOMACY_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, DIPLOMACY_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, DIPLOMACY_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedObjectId = row.id;

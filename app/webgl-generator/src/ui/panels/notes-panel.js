@@ -3,8 +3,15 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const NOTES_PANEL_ID = "notes-panel";
+const NOTES_COLUMN_WIDTHS = Object.freeze({
+  kindLabel: 86,
+  name: 150,
+  excerpt: 240,
+  bodyLength: 72
+});
 const NOTES_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: NOTES_COLUMN_WIDTHS,
   sortKey: "updatedAt",
   sortDir: "desc"
 });
@@ -17,6 +24,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedNoteId: null,
@@ -38,6 +46,16 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, NOTES_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, NOTES_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, NOTES_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedNoteId = row.id;

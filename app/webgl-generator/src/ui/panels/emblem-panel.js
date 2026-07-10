@@ -3,8 +3,17 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const EMBLEM_PANEL_ID = "emblem-panel";
+const EMBLEM_COLUMN_WIDTHS = Object.freeze({
+  scopeLabel: 76,
+  name: 140,
+  shield: 92,
+  fieldColor: 96,
+  chargeSummary: 120,
+  status: 76
+});
 const EMBLEM_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: EMBLEM_COLUMN_WIDTHS,
   sortKey: "scope",
   sortDir: "asc"
 });
@@ -16,6 +25,7 @@ export function createEmblemPanel(documentRef, manager) {
     map: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedEmblemId: null,
@@ -37,6 +47,16 @@ export function createEmblemPanel(documentRef, manager) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, EMBLEM_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, EMBLEM_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, EMBLEM_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedEmblemId = row.id;

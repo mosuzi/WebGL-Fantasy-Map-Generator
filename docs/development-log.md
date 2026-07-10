@@ -24038,23 +24038,28 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_stats_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开生物群系、气候、水体地貌和人口统计面板并拖动目标列表头列宽手柄；生物群系“名称”列从 `120px` 变为 `253px`，气候“温度带”列从 `96px` 变为 `216px`，水体地貌“类型”列从 `76px` 变为 `176px`，人口“名称”列从 `120px` 变为 `210px`，各自 localStorage 写入对应 `columnWidths`，刷新页面并重新打开面板后 header / cell 仍保持新宽度；`glError = 0`，health error、console error 和 page error 均为 `0`。
 
-### 2026-07-11 生物群系 / 气候 / 水体地貌 / 人口统计面板列宽拖拽持久化
+### 2026-07-11 外交 / 纹章 / 备注面板列宽拖拽持久化
 
 背景：
 
-- 前几批对象管理面板已经验证 `UiObjectTable` 列宽拖拽、`columnWidths` 写回和刷新恢复链路稳定。
-- 生物群系、气候、水体地貌和人口都是只读统计面板，列内容以聚合数值为主；接入列宽持久化可以提高长名称、数值列和详情对照时的可读性。
+- 前几批对象管理和统计面板已经验证 `UiObjectTable` 列宽拖拽、`columnWidths` 写回和刷新恢复链路稳定。
+- 外交、纹章和备注面板也都使用公共对象表格；外交关系列表、纹章对象列表和备注摘要列都存在长文本，适合继续补齐列宽持久化。
 
 实现：
 
-- 生物群系面板新增 `BIOME_COLUMN_WIDTHS`，并在 `BIOME_LIST_DEFAULTS` 中声明 `columnWidths`。
-- 气候面板新增 `CLIMATE_COLUMN_WIDTHS`，并在 `CLIMATE_LIST_DEFAULTS` 中声明 `columnWidths`。
-- 水体地貌面板新增 `FEATURE_COLUMN_WIDTHS`，并在 `FEATURE_LIST_DEFAULTS` 中声明 `columnWidths`。
-- 人口统计面板新增 `POPULATION_COLUMN_WIDTHS`，并在 `POPULATION_LIST_DEFAULTS` 中声明 `columnWidths`。
-- 四个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
-- 四个统计表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
-- 本步不改变生物群系、气候、水体地貌或人口统计数据、排序、筛选、选中详情或专题派生逻辑。
+- 外交面板新增 `DIPLOMACY_COLUMN_WIDTHS`，并在 `DIPLOMACY_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 纹章面板新增 `EMBLEM_COLUMN_WIDTHS`，并在 `EMBLEM_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 备注面板新增 `NOTES_COLUMN_WIDTHS`，并在 `NOTES_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 三个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
+- 外交、纹章和备注表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变外交矩阵、外交历史范围、纹章统计口径、备注导出 / 删除、排序、筛选、定位或历史行为。
 
 验证：
 
-- 待本批次统一验证后回填。
+- `node --check app\webgl-generator\src\ui\panels\diplomacy-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\emblem-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\notes-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_diplomacy_emblem_notes_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开外交、纹章和备注面板并拖动目标列表头列宽手柄；外交“国家”列从 `144px` 拖到 `239px`，localStorage `webgl-generator-panel-list:diplomacy-panel` 写入 `columnWidths.name = 239`；纹章“对象”列从 `140px` 拖到 `228px`，localStorage `webgl-generator-panel-list:emblem-panel` 写入 `columnWidths.name = 228`；备注“摘要”列从 `240px` 拖到 `363px`，localStorage `webgl-generator-panel-list:notes-panel` 写入 `columnWidths.excerpt = 363`；刷新页面并重新打开面板后，三个面板 header / cell 仍保持新宽度。备注验证在浏览器会话内临时插入一个备注对象用于表格行验证，不写入源码或仓库文件；`glError = 0`，health 无 error，console error 和 page error 均为 `0`。

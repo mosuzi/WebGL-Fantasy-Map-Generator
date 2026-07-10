@@ -45,6 +45,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -53,8 +54,10 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedObjectId"
     empty-text="没有匹配的外交关系"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions
