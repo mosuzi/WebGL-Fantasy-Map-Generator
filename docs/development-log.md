@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：高度和测量面板历史按钮接入统一历史执行器
+
+本步继续清理面板撤销 / 重做旧路径，把高度编辑和测量对象面板的历史按钮接入 `executeHistoryCommand()`。
+
+修正：
+
+- 高度编辑 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()` 和 `updateHeightPanel()`。
+- 高度编辑通过历史执行器的 `afterRefresh` 保留 `updateHeightPanel(state)`，确保高度统计、待派生摘要和历史计数继续同步。
+- 测量对象 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()`、`updateMeasurementPanel()` 和 `updateMeasurementOverlay()`。
+- 测量对象通过统一对象面板刷新更新面板本体，并通过 `afterRefresh` 保留 `updateMeasurementOverlay(state, documentRef)`，避免保存测量 SVG 残留。
+
+边界：
+
+- 本步只迁移高度 / 测量面板历史按钮，不改变高度笔刷命令、河流重算入口、测量保存 / 删除 / 形状编辑命令。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-height-measurement-history-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `height-measurement-history-smoke / 10000 cells` 地图后，向高度历史栈注入一条可逆高度命令，再点击高度编辑 header “撤销 / 重做”，grid cell `1510` 高度 `21 -> 22 -> 21 -> 22`；向测量历史栈注入一条可逆测量命令，再点击测量对象 header “撤销 / 重做”，测量数量 `0 -> 1 -> 0 -> 1`，重做后 `.measurement-object-path = 1`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：文化宗教外交面板历史按钮接入统一历史执行器
 
 本步继续清理面板撤销 / 重做旧路径，把文化管理、宗教管理和外交管理的历史按钮接入 `executeHistoryCommand()`。

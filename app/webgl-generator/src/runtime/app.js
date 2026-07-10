@@ -306,14 +306,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateHeightPanel(state);
+      return executeHistoryCommand(state, documentRef, "undo", {
+        afterRefresh: () => updateHeightPanel(state)
+      });
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateHeightPanel(state);
+      return executeHistoryCommand(state, documentRef, "redo", {
+        afterRefresh: () => updateHeightPanel(state)
+      });
     },
     onRegenerateRivers: () => {
       const result = regenerateMapAttribute(state, "rivers", documentRef);
@@ -1322,16 +1322,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       exportMeasurementObjects(state, documentRef, rows);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateMeasurementPanel(state);
-      updateMeasurementOverlay(state, documentRef);
+      return executeHistoryCommand(state, documentRef, "undo", {
+        afterRefresh: () => updateMeasurementOverlay(state, documentRef)
+      });
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateMeasurementPanel(state);
-      updateMeasurementOverlay(state, documentRef);
+      return executeHistoryCommand(state, documentRef, "redo", {
+        afterRefresh: () => updateMeasurementOverlay(state, documentRef)
+      });
     }
   });
   state.panels.measurement = measurementPanel;
