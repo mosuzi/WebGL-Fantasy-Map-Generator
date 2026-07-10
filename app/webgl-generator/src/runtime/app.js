@@ -2868,15 +2868,15 @@ async function importMilitaryBattleEvents(state, documentRef, file) {
       setFileOperationStatus(documentRef, `未导入战斗事件：${result.total} 条记录中没有匹配当前地图军团的事件。`);
       return result;
     }
-    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-    markDerivedFresh(state.map, ["military"]);
-    refreshGenerationSummary(state.map);
-    updateMilitaryPanel(state);
-    updateStatePanel(state);
+    const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+    const result = execution.result || command.getResult();
+    if (execution.executed) {
+      markDerivedFresh(state.map, ["military"]);
+      refreshGenerationSummary(state.map);
+      appendGenerationLog(state.map, `import military battle events: imported=${result.imported}, skipped=${result.skipped}`);
+    }
     updateRuntimePanel(documentRef, state);
     updateEditingInteractionLock(state, documentRef);
-    const result = command.getResult();
-    appendGenerationLog(state.map, `import military battle events: imported=${result.imported}, skipped=${result.skipped}`);
     setFileOperationStatus(documentRef, `战斗事件已导入 ${result.imported} 条，跳过 ${result.skipped} 条。`);
     return result;
   } catch (error) {

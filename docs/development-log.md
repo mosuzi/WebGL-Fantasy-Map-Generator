@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事战报导入接入统一编辑执行器
+
+本步继续清理军事面板的旧执行路径，把“导入战报档案”接入 `executeEditCommand()`。
+
+修正：
+
+- 军团战报导入不再手写 `state.editHistory.execute()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 导入实际执行后继续保留 `markDerivedFresh(["military"])`、`refreshGenerationSummary()`、generation log 和导入结果状态文案。
+- 无匹配事件时仍沿用命令 `isNoop()` / `getResult()` 返回跳过统计，不写入撤销栈。
+- 面板刷新改由命令 effects 中的 `object-panels` 驱动。
+
+边界：
+
+- 本步只迁移战报档案导入入口，不改变导入 JSON 格式、事件匹配规则、战报记录 / 清空、军事生成算法或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `stage-2-1 / 10000 cells` 地图后打开军事面板并固定选中军团 `1:0`，通过真实文件 input 导入一条匹配该军团的 JSON 战报；全局战报数 `0 -> 1`，`military.metadata.events = 1`，撤销栈最后为 `导入军团战斗事件`，generation log 追加 `import military battle events: imported=1, skipped=0`，面板导入状态为 `已导入 1 条，跳过 0 条`，文件状态为 `战斗事件已导入 1 条，跳过 0 条。`，`military.metadata.stale = false`，`lastEditRefresh` 为 `render:none / object-panels / affected military#events`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事战报清空接入统一编辑执行器
 
 本步继续清理军事面板的旧执行路径，把“清空军团战斗事件 / 清空筛选战斗事件”接入 `executeEditCommand()`。
