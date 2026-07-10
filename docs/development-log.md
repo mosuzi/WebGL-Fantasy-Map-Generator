@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：资源点重生成影响对象补充系统来源
+
+本步继续细化批量 edit command 的 `effects.affected`。资源点重生成此前只记录 `marker#resources`，能说明影响了资源点集合，但不能说明这是派生系统级重建。
+
+修正：
+
+- `createRegenerateResourceMarkersCommand()` 的 affected 改为 `derived-system#markers, marker#resources`。
+- 原 marker 集合刷新 effects 保持不变，仍刷新 point layers、labels、object panels 和 object index。
+- 编辑命令契约、基础设施清单和当前计划同步记录批量 affected 的系统来源约定。
+
+边界：
+
+- 本步不改变资源点生成算法、资源点保留规则、经济刷新或撤销 / 重做快照。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\marker-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：触发资源点重生成后，资源点 `6 -> 10`、标记总数 `44 -> 48`、历史栈 `undo 0 -> 1`；`history.getStats().lastAffected` 为 `derived-system#markers, marker#resources`，`lastEditRefresh.affected` 和控制面板正文同步显示这两个目标，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：重生成影响对象增加系统标记
 
 本步继续收窄 `effects.affected` 的可读性问题，先处理控制面板里的国家、省份、道路、河流和城市重生成入口。这些入口本来确实会替换整类对象，不能简单从 `all` 改成单个 id；因此本步增加系统级 affected，用来解释对象级全量影响的来源。

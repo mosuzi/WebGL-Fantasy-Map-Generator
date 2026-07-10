@@ -206,7 +206,7 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
-      affected: [{kind: OBJECT_KIND.MARKER, id: "resources"}]
+      affected: [{kind: "derived-system", id: "markers"}, {kind: OBJECT_KIND.MARKER, id: "resources"}]
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
