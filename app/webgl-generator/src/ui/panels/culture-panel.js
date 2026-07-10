@@ -4,8 +4,19 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const CULTURE_PANEL_ID = "culture-panel";
+const CULTURE_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 120,
+  typeLabel: 76,
+  parentName: 112,
+  depth: 48,
+  cells: 64,
+  population: 92,
+  cities: 64
+});
 const CULTURE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: CULTURE_COLUMN_WIDTHS,
   treeOpen: false,
   sortKey: "cells",
   sortDir: "desc"
@@ -19,6 +30,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     treeOpen: listPreferences.treeOpen,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -45,6 +57,16 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, CULTURE_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, CULTURE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, CULTURE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedCultureId = row.id;

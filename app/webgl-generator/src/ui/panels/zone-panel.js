@@ -4,8 +4,17 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const ZONE_PANEL_ID = "zone-panel";
+const ZONE_COLUMN_WIDTHS = Object.freeze({
+  id: 54,
+  name: 150,
+  type: 80,
+  patternLabel: 82,
+  cells: 64,
+  statesLabel: 130
+});
 const ZONE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: ZONE_COLUMN_WIDTHS,
   sortKey: "id",
   sortDir: "asc"
 });
@@ -18,6 +27,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     version: 0
@@ -38,6 +48,16 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, ZONE_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, ZONE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, ZONE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => callbacks.onSelect?.(zoneObject(row)),
     onLocate: row => callbacks.onLocate?.(zoneObject(row)),

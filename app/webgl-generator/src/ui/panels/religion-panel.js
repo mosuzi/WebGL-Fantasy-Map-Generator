@@ -4,8 +4,19 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const RELIGION_PANEL_ID = "religion-panel";
+const RELIGION_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 120,
+  type: 76,
+  form: 84,
+  parentName: 112,
+  depth: 48,
+  cells: 64,
+  population: 92
+});
 const RELIGION_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: RELIGION_COLUMN_WIDTHS,
   treeOpen: false,
   sortKey: "cells",
   sortDir: "desc"
@@ -19,6 +30,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     treeOpen: listPreferences.treeOpen,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -45,6 +57,16 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, RELIGION_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, RELIGION_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, RELIGION_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedReligionId = row.id;

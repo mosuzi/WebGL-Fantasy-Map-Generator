@@ -27,6 +27,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -37,10 +38,12 @@
     :doubleClickAction="'edit'"
     empty-text="没有匹配的文化"
     :empty-action="cultureEmptyAction"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleListAction"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions

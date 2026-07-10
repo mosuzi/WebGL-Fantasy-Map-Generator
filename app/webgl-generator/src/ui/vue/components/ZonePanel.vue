@@ -17,6 +17,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -25,8 +26,10 @@
     @sort="callbacks.onSort"
     :selected-id="selectedId"
     empty-text="没有匹配的地区"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiDetailGrid class-name="zone-panel-details" empty-text="未选中地区" :rows="detailRows" />

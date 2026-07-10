@@ -23957,3 +23957,29 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_city_state_province_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开城市、国家和省份面板并拖动“名称”列表头列宽手柄；三个面板 header / cell 都从 `120px` 变为 `210px`，各自 localStorage `webgl-generator-panel-list:city-panel / state-panel / province-panel` 写入 `columnWidths.name = 210`，刷新页面并重新打开面板后 header / cell 仍保持 `210px`；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 文化 / 宗教 / 地区面板列宽拖拽持久化
+
+背景：
+
+- 前几批面板已经验证 `UiObjectTable` 列宽拖拽和 `columnWidths` 写回链路稳定。
+- 文化、宗教和地区面板同属对象管理面板；其中文化 / 宗教还带树状面板打开状态，地区面板已有显式列宽，适合验证列宽偏好与其它面板状态并存。
+
+实现：
+
+- 文化面板新增 `CULTURE_COLUMN_WIDTHS`，并在 `CULTURE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 宗教面板新增 `RELIGION_COLUMN_WIDTHS`，并在 `RELIGION_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 地区面板新增 `ZONE_COLUMN_WIDTHS`，并在 `ZONE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 三个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
+- 文化、宗教和地区表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变文化 / 宗教树状面板打开状态、空态新增动作、排序、筛选、定位、重命名、继承、地区样式或备注逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\culture-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\religion-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\zone-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_culture_religion_zone_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开文化、宗教和地区面板并拖动“名称”列表头列宽手柄；文化 / 宗教 header / cell 从 `120px` 变为 `210px`，地区 header / cell 从 `150px` 变为 `240px`，各自 localStorage `webgl-generator-panel-list:culture-panel / religion-panel / zone-panel` 写入 `columnWidths.name`，刷新页面并重新打开面板后 header / cell 仍保持新宽度；`glError = 0`，health error、console error 和 page error 均为 `0`。
