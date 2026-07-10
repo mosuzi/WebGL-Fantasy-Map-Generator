@@ -34,6 +34,7 @@ export function createSetMarkerVisualCommand(markerId, patch = {}) {
 
   return {
     label: `调整标记图标 #${normalizedMarkerId}`,
+    domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_VISUAL_EFFECTS,
       affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
@@ -71,6 +72,7 @@ export function createSetMarkerNoteCommand(markerId, body, {name = ""} = {}) {
 
   return {
     label: normalizedBody ? `编辑标记备注 #${normalizedMarkerId}` : `清空标记备注 #${normalizedMarkerId}`,
+    domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_NOTE_EFFECTS,
       affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
@@ -110,6 +112,7 @@ export function createAddMarkerCommand({type, packCell, name = ""} = {}) {
 
   return {
     label: `新增资源点 ${normalizedType}`,
+    domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
       affected: []
@@ -140,6 +143,7 @@ export function createMoveMarkerCommand(markerId, packCell) {
 
   return {
     label: `移动资源标记 #${normalizedMarkerId}`,
+    domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
       affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
@@ -174,6 +178,7 @@ export function createDeleteMarkerCommand(markerId) {
 
   return {
     label: `删除资源标记 #${normalizedMarkerId}`,
+    domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
       affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
@@ -198,6 +203,7 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
 
   return {
     label: `重生成资源点 #${salt}`,
+    domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
       affected: [{kind: OBJECT_KIND.MARKER, id: "resources"}]

@@ -106,6 +106,6 @@
 
 - `EditHistory.execute()` 已接入轻量运行时契约校验，基础字段严格、可选字段渐进校验。
 - `executeEditCommand()` 已成为主要编辑入口，覆盖测量、备注、名称库、城市、国家、省份、文化、宗教、路线、河流、湖泊、地区、marker、标签、外交、军事、高度刷子、GEO 地形导入和自定义标签拖拽等常见路径。
-- 已主动声明 `domain` 的命令范围：路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化和宗教。
+- 已主动声明 `domain` 的命令范围：路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化、宗教、marker、标签、外交和对象详情通用字段。
 - 面板历史按钮已开始复用 `executeHistoryCommand()`，避免各面板分别手写撤销 / 重做刷新。
-- 后续重点是继续迁移残留的直接 `state.editHistory.execute()` 路径，并让 marker、标签、外交、军事、对象详情通用字段等命令继续补齐 `domain` 和更精确的 `effects.affected`。
+- 后续重点是继续迁移残留的直接 `state.editHistory.execute()` 路径，并让军事等命令继续补齐 `domain` 和更精确的 `effects.affected`。

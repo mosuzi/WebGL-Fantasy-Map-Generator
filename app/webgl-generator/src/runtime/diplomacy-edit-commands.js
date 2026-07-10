@@ -17,6 +17,7 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
 
   return {
     label: `${label} #${normalizedSubjectId}-#${normalizedObjectId}`,
+    domain: "diplomacy",
     effects: {
       ...DIPLOMACY_EFFECTS,
       affected: [{kind: "state", id: normalizedSubjectId}, {kind: "state", id: normalizedObjectId}]
@@ -48,6 +49,7 @@ export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成�
   let snapshot = null;
   return {
     label,
+    domain: "diplomacy",
     effects: {
       ...DIPLOMACY_EFFECTS,
       affected: [{kind: "diplomacy", id: "all"}]

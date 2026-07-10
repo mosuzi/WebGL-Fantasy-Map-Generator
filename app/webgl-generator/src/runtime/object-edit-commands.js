@@ -74,6 +74,7 @@ export function createRenameObjectCommand(object, nextName) {
 
   return {
     label: `重命名${formatObjectKind(target.kind)} #${target.id}`,
+    domain: target.kind,
     effects: {
       ...OBJECT_NAME_EFFECTS,
       affected: [{kind: target.kind, id: target.id}]
@@ -103,6 +104,7 @@ export function createSetObjectNoteCommand(object, body, {name = ""} = {}) {
 
   return {
     label: normalizedBody ? `编辑${formatObjectKind(target.kind)}备注 #${target.id}` : `清空${formatObjectKind(target.kind)}备注 #${target.id}`,
+    domain: target.kind,
     effects: {
       ...OBJECT_NOTE_EFFECTS,
       affected: [{kind: target.kind, id: target.id}]
@@ -140,6 +142,7 @@ export function createSetStateCapitalCommand(stateId, nextBurgId) {
 
   return {
     label: `更换国家 #${normalizedStateId} 首都`,
+    domain: OBJECT_KIND.STATE,
     effects: {
       ...STATE_CAPITAL_EFFECTS,
       affected: [{kind: "state", id: normalizedStateId}, {kind: "city", id: normalizedBurgId}]
@@ -168,6 +171,7 @@ export function createSetProvinceColorCommand(provinceId, color, {beforeColor = 
 
   return {
     label: `${label} #${normalizedProvinceId}`,
+    domain: OBJECT_KIND.PROVINCE,
     effects: {
       ...PROVINCE_COLOR_EFFECTS,
       affected: [{kind: "province", id: normalizedProvinceId}]

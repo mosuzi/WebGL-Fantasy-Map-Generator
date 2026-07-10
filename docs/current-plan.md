@@ -784,3 +784,4 @@
 - 编辑命令契约校验第一刀已完成：`EditHistory.execute()` 现在会校验 `label / domain / effects / affected / isNoop / getResult` 等可选字段的形状；`edit-command-contract.md` 和编辑器基础设施清单已同步更新。该校验保持渐进兼容，不强制旧命令一次性补齐 `domain / effects`，但会阻止新增命令携带错误结构进入撤销栈。
 - 编辑命令 `domain` 第一批已完成：路线、河流、湖泊、地区、备注和测量对象命令已主动声明 `domain`，用于后续按领域聚合调试、刷新诊断和 API 错误归因；城市、国家、省份、文化、宗教、marker、标签、外交和军事等命令后续继续分批补齐。
 - 编辑命令 `domain` 第二批已完成：城市、国家、省份、文化和宗教命令已主动声明 `domain`；剩余 marker、标签、外交、军事和对象详情通用字段等命令后续继续分批补齐。
+- 编辑命令 `domain` 第三批已完成：marker、标签、外交和对象详情通用字段命令已主动声明 `domain`；对象详情重命名 / 备注使用真实 `target.kind` 作为领域，剩余军事命令后续单独补齐。

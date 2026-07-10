@@ -24,6 +24,7 @@ export function createAddCustomLabelCommand({text, x, y}) {
 
   return {
     label: "新增手工标签",
+    domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
       affected: []
@@ -70,6 +71,7 @@ export function createMoveCustomLabelCommand(labelId, nextPoint, {previousPoint 
 
   return {
     label: `移动手工标签 #${id}`,
+    domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
       affected: [{kind: OBJECT_KIND.LABEL, id}]
@@ -104,6 +106,7 @@ export function createRenameCustomLabelCommand(labelId, nextText) {
 
   return {
     label: `重命名手工标签 #${id}`,
+    domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
       affected: [{kind: OBJECT_KIND.LABEL, id}]
@@ -136,6 +139,7 @@ export function createSetLabelNoteCommand(label, body, {name = ""} = {}) {
 
   return {
     label: normalizedBody ? `编辑标签备注 #${target.targetKind}:${target.id}` : `清空标签备注 #${target.targetKind}:${target.id}`,
+    domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_NOTE_EFFECTS,
       affected: [{kind: OBJECT_KIND.LABEL, id: target.id}]
@@ -172,6 +176,7 @@ export function createDeleteLabelCommand(label) {
 
   return {
     label: target.targetKind === LABEL_TARGET_KIND.CUSTOM ? `删除手工标签 #${target.id}` : `隐藏${formatGeneratedLabelName(target)} #${target.id}`,
+    domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
       affected: [{kind: OBJECT_KIND.LABEL, id: target.id}]
@@ -218,6 +223,7 @@ export function createRestoreGeneratedLabelCommand(label) {
 
   return {
     label: `恢复${formatGeneratedLabelName(target)} #${target.id}`,
+    domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
       affected: [{kind: OBJECT_KIND.LABEL, id: target.id}]

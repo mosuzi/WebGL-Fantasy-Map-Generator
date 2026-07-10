@@ -23020,3 +23020,25 @@ full 矩阵结果：
 - `node --input-type=module` 契约断言通过：第二批 26 个命令实例均通过 `validateEditCommandContract()`，且 `domain` 分别为 `city / state / province / culture / religion`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-10 编辑命令 domain 第三批
+
+背景：
+
+- 第二批已覆盖主要对象域，剩余常见编辑入口集中在 marker、标签、外交和对象详情通用字段。
+- 对象详情入口会面向多个对象类型，`domain` 不能写死为 `object`，否则后续领域级刷新和错误归因会丢失真实目标。
+
+实现：
+
+- marker 命令新增 `domain: "marker"`，覆盖图标、备注、新增、移动、删除和资源点重生成。
+- 标签命令新增 `domain: "label"`，覆盖新增手工标签、移动、重命名、备注、删除 / 隐藏和恢复生成标签。
+- 外交命令新增 `domain: "diplomacy"`，覆盖单关系调整和重生成外交。
+- 对象详情通用命令补 `domain`：重命名和备注使用真实 `target.kind`，国家首都命令使用 `state`，省份颜色命令使用 `province`。
+- 同步更新 `edit-command-contract.md`、编辑器基础设施清单和当前计划；剩余军事命令后续单独补齐。
+
+验证：
+
+- `node --check` 覆盖 `marker-edit-commands.js`、`label-edit-commands.js`、`diplomacy-edit-commands.js` 和 `object-edit-commands.js`，均通过。
+- `node --input-type=module` 契约断言通过：第三批 18 个命令实例均通过 `validateEditCommandContract()`，且 `domain` 分别为 `marker / label / diplomacy / city / state / province`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
