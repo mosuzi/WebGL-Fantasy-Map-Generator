@@ -55,9 +55,12 @@
     :selected-id="state.selectedObjectId"
     empty-text="没有匹配的外交关系"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedRelationIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedRelationIds = $event"
   />
 
   <UiPanelIoActions
@@ -195,6 +198,7 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const relationReasonDraft = ref("");
+const selectedRelationIds = ref([]);
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
 const historyFilterOptions = Object.freeze([
   {value: "selected", label: "当前关系"},
@@ -208,9 +212,13 @@ const metrics = computed(() => {
 const stateOptions = computed(() => metrics.value.states.map(state => ({value: state.id, label: state.name})));
 const selectedSubjectId = computed(() => toIntegerId(props.state.selectedStateId) ?? stateOptions.value[0]?.value ?? null);
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selectedRelationIdSet = computed(() => new Set(selectedRelationIds.value.map(id => String(id))));
+const selectedRelationRows = computed(() => visibleRows.value.filter(row => selectedRelationIdSet.value.has(String(row.id))));
 const diplomacyExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !visibleRows.value.length},
-  {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length}
+  {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length},
+  {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedRelationRows.value.length)}`, disabled: !selectedRelationRows.value.length},
+  {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedRelationRows.value.length)}`, disabled: !selectedRelationRows.value.length}
 ]);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedObjectId) || visibleRows.value[0] || null);
 const matrix = computed(() => {
@@ -229,6 +237,7 @@ const summaryMetrics = computed(() => [
   {label: "宿敌", value: formatNumber(metrics.value.counts.Rival || 0)},
   {label: "战争", value: formatNumber(metrics.value.counts.Enemy || 0)},
   {label: "附庸", value: formatNumber(metrics.value.counts.Vassal || 0)},
+  {label: "已选", value: formatNumber(selectedRelationRows.value.length)},
   {label: "历史", value: formatNumber(metrics.value.history)}
 ]);
 
@@ -301,6 +310,11 @@ const historyFilterMode = computed(() => {
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
   relationReasonDraft.value = "";
+});
+
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedRelationIds.value = selectedRelationIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function applyRelationChange(relation) {
@@ -473,13 +487,14 @@ function formatPopulationValue(value) {
   return formatPopulation(value, unitPreferences.value);
 }
 
-function exportCsv() {
+function exportCsv(relationRows = metrics.value.rows, {selectedOnly = false} = {}) {
   const map = props.state.map;
   const seed = props.state.map?.metadata?.seed || "map";
-  downloadText(`fmg-diplomacy-${safeFilePart(seed)}.csv`, diplomacyToCsv({seed, map, metrics: metrics.value, matrix: matrix.value}), "text/csv;charset=utf-8");
+  const suffix = selectedOnly ? "-selected" : "";
+  downloadText(`fmg-diplomacy-${safeFilePart(seed)}${suffix}.csv`, diplomacyToCsv({seed, map, metrics: metrics.value, matrix: matrix.value, relationRows, selectedOnly}), "text/csv;charset=utf-8");
 }
 
-function exportJson() {
+function exportJson(relationRows = metrics.value.rows, {selectedOnly = false} = {}) {
   const map = props.state.map;
   const seed = map?.metadata?.seed || "map";
   const payload = {
@@ -487,15 +502,16 @@ function exportJson() {
     version: 1,
     exportedAt: new Date().toISOString(),
     seed,
+    exportMode: selectedOnly ? "selected-subject-relations" : "current-subject",
     metadata: map?.diplomacy?.metadata || {},
     subject: {
       id: selectedSubjectId.value,
       name: metrics.value.subjectName,
-      relations: metrics.value.rows.length,
+      relations: relationRows.length,
       counts: metrics.value.counts
     },
     states: diplomacyStateExportRows(map, matrix.value.states),
-    subjectRelations: metrics.value.rows.map(diplomacyRelationExportRow),
+    subjectRelations: relationRows.map(diplomacyRelationExportRow),
     relations: matrix.value.rows.map(row => ({
       id: row.id,
       name: row.name,
@@ -507,28 +523,32 @@ function exportJson() {
     })),
     chronicle: diplomacyChronicle(map)
   };
-  downloadText(`fmg-diplomacy-${safeFilePart(seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  const suffix = selectedOnly ? "-selected" : "";
+  downloadText(`fmg-diplomacy-${safeFilePart(seed)}${suffix}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
 function handleDiplomacyExport(key) {
-  if (key === "csv") exportCsv();
-  if (key === "json") exportJson();
+  if (key === "csv") exportCsv(visibleRows.value);
+  if (key === "json") exportJson(visibleRows.value);
+  if (key === "selected-csv") exportCsv(selectedRelationRows.value, {selectedOnly: true});
+  if (key === "selected-json") exportJson(selectedRelationRows.value, {selectedOnly: true});
 }
 
-function diplomacyToCsv({seed, map, metrics, matrix}) {
+function diplomacyToCsv({seed, map, metrics, matrix, relationRows = metrics.rows, selectedOnly = false}) {
   const rows = [];
   appendCsvSection(rows, "外交导出摘要", [
     ["字段", "值"],
     ["seed", seed],
+    ["导出模式", selectedOnly ? "选中主体关系" : "当前主体关系"],
     ["主体国家", metrics.subjectName],
     ["国家数", matrix.states.length],
-    ["主体关系数", metrics.rows.length],
+    ["主体关系数", relationRows.length],
     ["关系统计", relationCountsText(metrics.counts)],
     ["历史记录", diplomacyChronicle(map).length]
   ]);
   appendCsvSection(rows, "当前主体关系明细", [
     ["主体", "对象ID", "对象国家", "关系", "关系代码", "关系倾向", "邻接", "贸易额", "贸易量", "交易数", "主体流入", "主体流出", "净流向", "文化", "宗教", "政体", "人口", "面积", "国力", "经济力", "城镇"],
-    ...metrics.rows.map(row => [
+    ...relationRows.map(row => [
       metrics.subjectName,
       row.id,
       row.name,

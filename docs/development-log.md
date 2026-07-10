@@ -24142,6 +24142,31 @@ full 矩阵结果：
 - 点击表头全选后，摘要变为“已选2”，两个行 checkbox 都选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 2”菜单项。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
 
+### 2026-07-11 外交关系批量选择导出
+
+背景：
+
+- 备注总览和测量对象面板已经验证公共表格批量选择适合先服务“导出选中记录”这类安全动作。
+- 外交面板的 CSV / JSON 导出逻辑在 Vue 组件内，且关系列表只表示当前主体国家对其它国家的关系；给它补“导出选中关系”不需要改运行时编辑命令，也不会触发外交关系写入。
+
+实现：
+
+- 外交关系列表启用 `UiObjectTable` 的 `selectableRows` 和 `selectedRowIds`。
+- 面板内部维护 `selectedRelationIds`，并在当前可见关系列表变化时清理不可见选中项。
+- 摘要指标新增“已选”，导出下拉新增“导出选中 CSV N”和“导出选中 JSON N”。
+- CSV / JSON 导出函数改为可接收关系 rows；普通导出继续导出当前可见主体关系，选中导出只把选中的主体关系写入导出明细，并给文件名追加 `-selected` 后缀。
+- 本步不改变外交矩阵、主体选择、关系编辑、外交历史范围、排序、筛选或列宽逻辑。
+
+验证：
+
+- 本轮按要求启动验证子智能体 `verify_diplomacy_batch_export`；该子智能体等待 90 秒无输出，已中断释放，最终有效验证证据来自主线程兜底复跑。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 浏览器验证通过：外交关系列表出现 `19` 个可见行选择 checkbox 和 1 个表头全选 checkbox；单选第一条后摘要变为“已选1”，导出下拉出现“导出选中 JSON 1”和“导出选中 CSV 1”。
+- 点击“导出选中 JSON 1”后，下载文件为 `fmg-diplomacy-stage-2-1-selected.json`，JSON 中 `exportMode = selected-subject-relations`、`subject.relations = 1`、`subjectRelations.length = 1`。
+- 点击表头全选后，`19` 个可见行 checkbox 全部选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 JSON 19”菜单项。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
+
 ### 2026-07-11 测量对象批量选择导出
 
 背景：
