@@ -684,6 +684,11 @@
    - 边界：本步只迁移经济总览、备注总览和 `selection.locate()` 的定位路径；不改变 trade flow / 备注目标对象的打开面板规则，不新增多对象高亮或编辑态 start / stop API。
    - 完成记录：经济总览定位、备注总览定位和控制台 `selection.locate()` 均复用 `locateAndSelectObject()`；经济总览定位前会记录当前商品 / 市场 / 交易行，避免点击定位按钮后丢失行选中状态；控制台 API 通过运行时注入的 `locateObject` action 共享 selection、runtime 和 pick 刷新语义，旧 `locateObject()` 保留为底层兼容路径。
 
+88. 测量对象定位动作收束。`已完成`
+   - 目标：继续推进更完整的 locate action 语义，把测量对象的面板定位、导入后自动定位和进入编辑定位统一到同一条运行时动作。
+   - 边界：本步只收束测量对象的 bounds 定位调用；不改变测量点编辑、保存、导出、节点增删、路线贴合或闪烁高亮实现。
+   - 完成记录：运行时把 `locateAndSelectObject()` 暴露为 `state.locateAndSelectObject`，`locateMeasurement()` 优先复用该动作并保留自定义 bounds 缩放；测量面板定位、GEO 测量导入后的首对象定位、进入测量对象编辑后的定位都共享 selection、runtime 和 pick 刷新语义，脱离 app 初始化的兜底路径仍保留。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

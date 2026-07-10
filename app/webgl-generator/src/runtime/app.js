@@ -267,6 +267,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     updatePickPanel(documentRef, state);
     return located;
   };
+  state.locateAndSelectObject = locateAndSelectObject;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
       selectionStore.startEditing(object);
@@ -1303,10 +1304,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.notes = notesPanel;
   measurementPanel = createMeasurementPanel(documentRef, panelManager, {
     onLocate: row => {
-      locateAndSelectObject("measurement-panel", measurementObject(row), {
-        locate: () => locateMeasurementBounds(state, row),
-        afterSelect: () => measurementPanel.setSelectedMeasurementId(row.id)
-      });
+      locateMeasurement(state, row, documentRef);
     },
     onEdit: row => {
       startMeasurementObjectEdit(state, row, documentRef);
@@ -5169,12 +5167,19 @@ function startMeasurementObjectEdit(state, row, documentRef) {
 }
 
 function locateMeasurement(state, row, documentRef) {
-  const located = locateMeasurementBounds(state, row);
-  if (located) {
-    state.panels.measurement?.setSelectedMeasurementId?.(row.id);
+  const object = measurementObject(row);
+  const locate = () => locateMeasurementBounds(state, row);
+  if (typeof state.locateAndSelectObject === "function") {
+    return state.locateAndSelectObject("measurement-panel", object, {
+      locate,
+      afterSelect: () => state.panels.measurement?.setSelectedMeasurementId?.(row.id)
+    });
   }
+  const located = locate();
+  if (located) state.selectionStore?.setSelection({object});
   updateRuntimePanel(documentRef, state);
   updatePickPanel(documentRef, state);
+  return located;
 }
 
 function locateMeasurementBounds(state, row) {

@@ -23371,3 +23371,21 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物烟测通过：经济面板切到交易页后点击首个交易行定位按钮，selection 为卖方城市 `city / 99`，经济面板选中行 `1`；注入指向 marker `0` 的备注后打开备注总览并点击定位按钮，selection 为 `marker / 0`，备注面板选中行 `1`；`webglGeneratorApi.selection.locate({kind: "marker", id: 0})` 返回 `ok = true`、`data.located = true`，selection 保持 `marker / 0`；最终 `glError = 0`、health 事件 `0`、console/page error 均为 `0`。
 - 本轮按用户要求启动验证子智能体；该子智能体长时间无输出后已中断释放，因此最终有效验证证据来自主线程复跑的同等浏览器烟测。
+
+### 2026-07-10 测量对象定位动作收束
+
+背景：
+
+- 测量面板按钮定位已经接入 `locateAndSelectObject()`，但 GEO 测量导入后的首对象自动定位、进入测量对象编辑时的定位仍直接走旧 `locateMeasurement()` 手写刷新路径。
+- 这些路径都需要保留测量对象的 bounds 缩放逻辑，但也应共享 selection、runtime 和 pick 刷新语义，避免后续 locate action 层继续出现测量特例旁路。
+
+实现：
+
+- 运行时初始化时把闭包内 `locateAndSelectObject()` 暴露为 `state.locateAndSelectObject`，供 app 外层 helper 复用。
+- `locateMeasurement()` 优先调用 `state.locateAndSelectObject("measurement-panel", measurementObject(row), ...)`，并继续通过 `locateMeasurementBounds()` 保留测量对象 bounds 定位、缩放上下限和状态文案。
+- 测量面板 `onLocate` 改为复用 `locateMeasurement()`，因此面板定位、GEO 导入后定位、进入编辑定位三条路径统一到同一个测量定位动作；脱离 app 初始化的兜底路径仍会设置 selection 并刷新 runtime / pick 面板。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
