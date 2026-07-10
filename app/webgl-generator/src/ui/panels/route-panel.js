@@ -4,8 +4,17 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const ROUTE_PANEL_ID = "route-panel";
+const ROUTE_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  typeLabel: 76,
+  fromName: 112,
+  toName: 112,
+  resourceCells: 64,
+  length: 84
+});
 const ROUTE_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: ROUTE_COLUMN_WIDTHS,
   sortKey: "length",
   sortDir: "desc"
 });
@@ -18,6 +27,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedRouteId: null,
@@ -39,6 +49,16 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, ROUTE_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, ROUTE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, ROUTE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedRouteId = row.id;

@@ -3,8 +3,16 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const RIVER_PANEL_ID = "river-panel";
+const RIVER_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 120,
+  type: 64,
+  length: 84,
+  flux: 96
+});
 const RIVER_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: RIVER_COLUMN_WIDTHS,
   sortKey: "flux",
   sortDir: "desc"
 });
@@ -18,6 +26,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     editingObject: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     version: 0
@@ -38,6 +47,16 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, RIVER_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, RIVER_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, RIVER_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => callbacks.onSelect?.(riverObject(row)),
     onLocate: row => callbacks.onLocate?.(riverObject(row)),

@@ -23907,3 +23907,27 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_lake_column_resize_drag`；该子智能体连续等待无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开湖泊面板并拖动“名称”列表头列宽手柄，header / cell 从 `112px` 变为 `202px`，inline `width` 和 `minWidth` 均立即同步为 `202px`；localStorage `webgl-generator-panel-list:lake-panel` 写入 `columnWidths.name = 202`；刷新页面并重新打开湖泊面板后，header / cell 仍保持 `202px`；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 路线 / 河流面板列宽拖拽持久化
+
+背景：
+
+- 名称库和湖泊面板已经验证 `UiObjectTable` 列宽拖拽、`columnWidths` 写回和刷新恢复链路可用。
+- 路线和河流管理面板都是高频列表面板，列内容长短差异明显，适合继续按面板扩展列宽持久化。
+
+实现：
+
+- 路线面板新增 `ROUTE_COLUMN_WIDTHS`，并在 `ROUTE_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 河流面板新增 `RIVER_COLUMN_WIDTHS`，并在 `RIVER_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 两个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
+- 路线和河流表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变路线 / 河流排序、筛选、定位、编辑、重命名、备注或数据生成逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\route-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\river-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_route_river_column_resize_drag`；该子智能体只返回接手状态，未产出有效浏览器验证证据。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开路线面板并拖动“起点”列表头列宽手柄，header / cell 从 `112px` 变为 `202px`，localStorage `webgl-generator-panel-list:route-panel` 写入 `columnWidths.fromName = 202`，刷新页面并重新打开路线面板后 header / cell 仍保持 `202px`；打开河流面板并拖动“名称”列表头列宽手柄，header / cell 从 `120px` 变为 `216px`，localStorage `webgl-generator-panel-list:river-panel` 写入 `columnWidths.name = 216`，刷新页面并重新打开河流面板后 header / cell 仍保持 `216px`；`glError = 0`，health error、console error 和 page error 均为 `0`。

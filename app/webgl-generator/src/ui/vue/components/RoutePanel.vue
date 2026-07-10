@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -14,8 +15,10 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedRouteId"
     empty-text="没有匹配的路线"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions
