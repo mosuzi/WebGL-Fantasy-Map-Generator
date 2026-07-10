@@ -23545,7 +23545,13 @@ full 矩阵结果：
 
 验证：
 
-- 待本批次统一验证。
+- `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\culture-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\religion-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，文化树状面板打开写入 `treeOpen: true`，刷新页面并重新打开文化管理后树状面板恢复打开，关闭后写回 `treeOpen: false`；宗教树状面板同样完成打开、刷新恢复和关闭写回；`window.__webglGeneratorApp` 存在，WebGL2 正常，`glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `verify_culture_religion_tree_open`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
 
 ### 2026-07-11 军事战报导出范围持久化
 
