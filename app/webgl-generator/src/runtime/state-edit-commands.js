@@ -2,7 +2,7 @@ import {GOVERNMENT_BY_KEY, applyStateGovernment, setStateGovernment} from "../ge
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {createRandom} from "../generator/random.js";
 import {defaultCityVisual} from "./city-visuals.js";
-import {namebaseRenameAffected, newObjectAffected, systemAffected} from "./edit-command-effects.js";
+import {namebaseRenameAffected, newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -135,7 +135,7 @@ export function createSetStateColorCommand(stateId, color, {beforeColor = null, 
     domain: "state",
     effects: {
       ...STATE_COLOR_EFFECTS,
-      affected: [{kind: "state", id: normalizedStateId}]
+      affected: objectAffected("state", normalizedStateId)
     },
     apply(context) {
       setStateColor(context.map, normalizedStateId, after);
@@ -158,7 +158,7 @@ export function createSetStateGovernmentCommand(stateId, governmentKey, {label =
     domain: "state",
     effects: {
       ...STATE_GOVERNMENT_EFFECTS,
-      affected: [{kind: "state", id: normalizedStateId}]
+      affected: objectAffected("state", normalizedStateId)
     },
     apply(context) {
       previous ??= snapshotStateGovernment(context.map, normalizedStateId);
@@ -256,6 +256,7 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
     apply(context) {
       snapshot ??= captureStateCollectionSnapshot(context.map);
       result = addStateAtGridCell(context.map, targetGridCell);
+      this.effects.affected = objectAffected("state", result.stateId);
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的国家新增快照");
@@ -279,7 +280,7 @@ export function createDeleteStateCommand(stateId, {label = "删除国家"} = {})
     domain: "state",
     effects: {
       ...STATE_COLLECTION_EFFECTS,
-      affected: [{kind: "state", id: normalizedStateId}]
+      affected: objectAffected("state", normalizedStateId)
     },
     apply(context) {
       snapshot ??= captureStateCollectionSnapshot(context.map);

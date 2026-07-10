@@ -24663,3 +24663,31 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_city_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：城市删除、人口、归属同步、剪影设置、剪影重置和备注均返回 `city#7`；最小 mock map 执行新增城市命令后回写 `city#0`，结果为 `cityId=0 / burgId=0 / packCell=0 / gridCell=0`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 国家与省份 affected helper 收口
+
+背景：
+
+- 城市命令已完成单对象 affected helper 迁移，政治对象中仍有国家和省份的单对象目标手写 `{kind, id}`。
+- 国家 / 省份刷子、批量政体和按名称库批量重命名属于多对象或系统级路径，本批只迁移明确单对象命令。
+
+实现：
+
+- `state-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 国家颜色、国家政体和国家删除命令改为复用 `objectAffected("state", id)`。
+- 新增国家命令执行成功后将 `effects.affected` 从 `state#new` 回写为真实 `state#stateId`。
+- `province-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 省份删除命令改为复用 `objectAffected("province", id)`。
+- 新增省份命令执行成功后将 `effects.affected` 从 `province#new` 回写为真实 `province#provinceId`。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充国家 / 省份单对象 helper 迁移状态。
+- 本步不改变国家 / 省份刷子、批量政体、名称库批量重命名、新增 / 删除快照、首都 / 省会创建、政治统计、派生标脏或面板刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\state-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\province-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_state_province_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：国家颜色、国家政体和国家删除均返回 `state#7`，省份删除返回 `province#7`；最小 mock map 执行新增国家后回写 `state#1`，执行新增省份后回写 `province#1`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

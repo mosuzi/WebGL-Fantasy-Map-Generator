@@ -1,5 +1,5 @@
 import {createChineseNameGenerator} from "../generator/names.js";
-import {newObjectAffected, systemAffected} from "./edit-command-effects.js";
+import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const PROVINCE_CELL_SURFACE_EFFECTS = Object.freeze({
   render: "draw",
@@ -87,6 +87,7 @@ export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份"
     apply(context) {
       snapshot ??= captureProvinceCollectionSnapshot(context.map);
       result = addProvinceAtGridCell(context.map, targetGridCell);
+      this.effects.affected = objectAffected("province", result.provinceId);
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的省份新增快照");
@@ -110,7 +111,7 @@ export function createDeleteProvinceCommand(provinceId, {label = "删除省份"}
     domain: "province",
     effects: {
       ...PROVINCE_COLLECTION_EFFECTS,
-      affected: [{kind: "province", id: normalizedProvinceId}]
+      affected: objectAffected("province", normalizedProvinceId)
     },
     apply(context) {
       snapshot ??= captureProvinceCollectionSnapshot(context.map);
