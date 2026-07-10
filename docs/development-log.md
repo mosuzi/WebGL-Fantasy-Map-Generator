@@ -24192,6 +24192,33 @@ full 矩阵结果：
 - 点击表头全选后，当前分组的 `1` 个可见行 checkbox 处于选中状态，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中国家 JSON 1”菜单项。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
 
+### 2026-07-11 经济面板当前列表批量选择导出
+
+背景：
+
+- 公共表格批量选择已在备注、测量、外交和政体国家列表验证，继续沿同一条安全路径扩展到只读导出的统计面板。
+- 经济面板有商品、市场和交易三个 tab，三者共用同一套导出函数；为了避免不同 tab 的 ID 冲突，本步只保留当前 tab 可见列表的选择，并在切换 tab 或筛选导致行不可见时清理选中项。
+
+实现：
+
+- 经济面板商品、市场和交易三张表都启用 `UiObjectTable` 的 `selectableRows` 和 `selectedRowIds`。
+- 面板内部维护 `selectedEconomyRowIds`，并按当前 tab 的可见行计算 `selectedEconomyRows`。
+- 摘要指标新增“已选”，导出下拉新增“导出选中 CSV N”和“导出选中 JSON N”。
+- CSV / JSON 导出函数改为可接收 rows；普通导出继续导出当前 tab 的筛选结果，选中导出只导出当前 tab 可见列表里的选中 rows，并给文件名追加 `-selected` 后缀。
+- JSON 导出新增 `exportMode`，普通导出为 `current-<tab>-filter`，选中导出为 `selected-<tab>`。
+- 本步不改变商品 / 市场 / 交易 tab 切换、筛选、排序、定位、列宽、经济数据生成或诊断逻辑。
+
+验证：
+
+- 本轮按要求启动验证子智能体 `verify_economy_batch_export`；该子智能体等待 90 秒无输出，已中断释放，最终有效验证证据来自主线程兜底复跑。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 浏览器验证通过：经济面板默认商品 tab 出现 `71` 个可见行选择 checkbox 和 1 个表头全选 checkbox；单选第一条后摘要变为“已选1”，导出下拉出现“导出选中 JSON 1”和“导出选中 CSV 1”。
+- 点击“导出选中 JSON 1”后，下载文件为 `fmg-economy-goods-stage-2-1-selected.json`，JSON 中 `exportMode = selected-goods`、`count = 1`、`rows.length = 1`。
+- 点击表头全选后，`71` 个商品可见行 checkbox 全部选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 JSON 71”菜单项。
+- 切换到“市场”tab 后摘要回到“已选0”，市场列表出现 `30` 个可见行选择 checkbox 和 1 个表头全选 checkbox，已选行数为 `0`。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
+
 ### 2026-07-11 测量对象批量选择导出
 
 背景：

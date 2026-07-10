@@ -18,9 +18,12 @@
     :selected-id="state.selectedGoodId"
     empty-text="没有匹配的商品"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedEconomyRowIds"
     @select="callbacks.onSelectGood"
     @locate="callbacks.onLocate"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'goods'})"
+    @selection-change="selectedEconomyRowIds = $event"
   />
   <UiObjectTable
     v-else-if="state.tab === 'markets'"
@@ -35,9 +38,12 @@
     :selected-id="state.selectedMarketId"
     empty-text="没有匹配的市场"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedEconomyRowIds"
     @select="callbacks.onSelectMarket"
     @locate="callbacks.onLocate"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'markets'})"
+    @selection-change="selectedEconomyRowIds = $event"
   />
   <UiObjectTable
     v-else
@@ -52,9 +58,12 @@
     :selected-id="state.selectedDealId"
     empty-text="没有匹配的交易"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedEconomyRowIds"
     @select="callbacks.onSelectDeal"
     @locate="callbacks.onLocate"
     @column-resize="payload => callbacks.onColumnResize?.({...payload, table: 'deals'})"
+    @selection-change="selectedEconomyRowIds = $event"
   />
 
   <UiPanelIoActions
@@ -116,7 +125,7 @@
 </template>
 
 <script setup>
-import {computed, watch} from "vue";
+import {computed, ref, watch} from "vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiKeyValueGrid from "./base/UiKeyValueGrid.vue";
@@ -147,6 +156,7 @@ const props = defineProps({
 const callbacks = props.callbacks;
 const unitPreferences = useUnitPreferences();
 const debugEnabled = useDebugMode();
+const selectedEconomyRowIds = ref([]);
 const ROW_LIMIT = 500;
 const DEAL_ROW_LIMIT = 48;
 const DEAL_METRIC_LIMIT = 120;
@@ -256,9 +266,18 @@ const activeVisibleRows = computed(() => {
   if (props.state.tab === "deals") return visibleDealRows.value.length;
   return visibleGoodRows.value.length;
 });
+const activeVisibleRowObjects = computed(() => {
+  if (props.state.tab === "markets") return visibleMarketRows.value;
+  if (props.state.tab === "deals") return visibleDealRows.value;
+  return visibleGoodRows.value;
+});
+const selectedEconomyRowIdSet = computed(() => new Set(selectedEconomyRowIds.value.map(id => String(id))));
+const selectedEconomyRows = computed(() => activeVisibleRowObjects.value.filter(row => selectedEconomyRowIdSet.value.has(String(row.id))));
 const economyExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !activeTotalRows.value},
-  {key: "json", label: "导出 JSON", disabled: !activeTotalRows.value}
+  {key: "json", label: "导出 JSON", disabled: !activeTotalRows.value},
+  {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedEconomyRows.value.length)}`, disabled: !selectedEconomyRows.value.length},
+  {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedEconomyRows.value.length)}`, disabled: !selectedEconomyRows.value.length}
 ]);
 const selectedGood = computed(() => findByObjectId(metrics.value.goods, props.state.selectedGoodId) || metrics.value.goods[0] || null);
 const selectedMarket = computed(() => findByObjectId(metrics.value.markets, props.state.selectedMarketId) || metrics.value.markets[0] || null);
@@ -272,7 +291,8 @@ const summaryMetrics = computed(() => [
   {label: "总库存", value: formatNumber(metrics.value.summary.stock)},
   {label: "供需缺口", value: formatNumber(metrics.value.summary.shortage)},
   {label: "价格信号", value: formatNumber(metrics.value.summary.priceSignals)},
-  {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)}
+  {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)},
+  {label: "已选", value: formatNumber(selectedEconomyRows.value.length)}
 ]);
 
 const economyDetail = computed(() => {
@@ -295,6 +315,18 @@ const diagnosticRows = computed(() => [
 const diagnosticsSummary = computed(() => {
   const total = metrics.value.diagnostics.totalIssues;
   return total ? `${formatNumber(total)} 项需复查` : "未发现明显异常";
+});
+
+watch(
+  () => props.state.tab,
+  () => {
+    selectedEconomyRowIds.value = [];
+  }
+);
+
+watch(activeVisibleRowObjects, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedEconomyRowIds.value = selectedEconomyRowIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function buildGoodDetail(good) {
@@ -764,20 +796,20 @@ function buildEconomyDiagnostics({goods, markets, deals, aliveBurgs, marketsById
   };
 }
 
-function exportCsv() {
-  const rows = exportRows();
+function exportCsv(rows = exportRows(), {selectedOnly = false} = {}) {
   if (!rows.length) return;
   const header = exportColumns().map(column => column.label);
   const body = rows.map(row => exportColumns().map(column => exportValue(row, column.key)));
   const text = [header, ...body].map(values => values.map(csvEscape).join(",")).join("\r\n");
-  downloadText(`fmg-economy-${props.state.tab}-${safeFilePart(props.state.map?.metadata?.seed)}.csv`, text, "text/csv;charset=utf-8");
+  const suffix = selectedOnly ? "-selected" : "";
+  downloadText(`fmg-economy-${props.state.tab}-${safeFilePart(props.state.map?.metadata?.seed)}${suffix}.csv`, text, "text/csv;charset=utf-8");
 }
 
-function exportJson() {
-  const rows = exportRows();
+function exportJson(rows = exportRows(), {selectedOnly = false} = {}) {
   if (!rows.length) return;
   const payload = {
     type: "fmg-economy-summary",
+    exportMode: selectedOnly ? `selected-${props.state.tab}` : `current-${props.state.tab}-filter`,
     exportedAt: new Date().toISOString(),
     seed: props.state.map?.metadata?.seed || "",
     tab: props.state.tab,
@@ -791,12 +823,15 @@ function exportJson() {
       return record;
     }, {}))
   };
-  downloadText(`fmg-economy-${props.state.tab}-${safeFilePart(props.state.map?.metadata?.seed)}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  const suffix = selectedOnly ? "-selected" : "";
+  downloadText(`fmg-economy-${props.state.tab}-${safeFilePart(props.state.map?.metadata?.seed)}${suffix}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
 function handleEconomyExport(key) {
   if (key === "csv") exportCsv();
   if (key === "json") exportJson();
+  if (key === "selected-csv") exportCsv(selectedEconomyRows.value, {selectedOnly: true});
+  if (key === "selected-json") exportJson(selectedEconomyRows.value, {selectedOnly: true});
 }
 
 function exportRows() {
