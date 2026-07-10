@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：省份字段编辑接入统一编辑执行器
+
+本步继续清理省份面板的旧执行路径，把删除省份、重命名省份和调整省份颜色接入 `executeEditCommand()`。
+
+修正：
+
+- 省份删除不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterProvinceEdit()` 和全对象面板刷新。
+- 删除成功后仍保留原有清空 selection 与清空省份面板选中行逻辑；no-op 删除不会误清选择。
+- 省份重命名和颜色调整统一依赖命令 effects 驱动省份 / 城市面板刷新、对象面板刷新和运行时刷新摘要。
+
+边界：
+
+- 本步只迁移执行入口，不改变省份命令本身、省份归属规则、颜色格式、删除约束、撤销快照或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开控制面板管理 tab 和省份管理面板，先真实点击第一条有效省份行选中省份 `#187`，再通过真实“重命名”二级面板把“玉寒”改为 `省份统一执行器烟测`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected province#187`，目标省份更新为“省份统一执行器烟测州”；另一次 smoke 通过真实“调整颜色”二级面板把省份 `#187` 从 `#f3b7a8` 改为 `#7f6cc7`，撤销栈 `undo=1`，`lastEditRefresh` 为 `province-color, cell-colors, object-panels` / `affected province#187`；两次 smoke 均 `glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：国家字段编辑接入统一编辑执行器
 
 本步继续清理国家与政体面板的旧执行路径，把国家名称、按名称库批量重命名、颜色、政体、首都和政体面板批量调整接入 `executeEditCommand()`。

@@ -593,11 +593,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onDeleteProvince: provinceId => {
       const command = createDeleteProvinceCommand(provinceId);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterProvinceEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        refresh: refreshAfterProvinceEdit
+      });
+      if (!result.executed) return;
       state.selectionStore.clear();
       provincePanel.setSelectedProvinceId(0);
-      updateAllObjectPanels(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onSampleSelection: () => {
@@ -628,21 +630,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: "province", id: provinceId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterProvinceEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onColorChange: (provinceId, color) => {
+      const context = {map: state.map};
       const province = state.map?.politics?.provinces?.[provinceId] || state.map?.pack?.provinces?.[provinceId];
       const command = createSetProvinceColorCommand(provinceId, color, {beforeColor: province?.color || null});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-      }
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterProvinceEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (provinceId, body) => {
