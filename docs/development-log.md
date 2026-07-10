@@ -23863,3 +23863,24 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 验证子智能体 `verify_namebase_column_width_read` 的 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，先在 localStorage 中预置 `webgl-generator-panel-list:namebase-panel.columnWidths.name = 180`，再刷新并打开名称库面板；名称库表格“名称”列 header / cell 均为 `width = 180px` 与 `minWidth = 180px`，其它列保持默认宽度；输入不存在的筛选词触发空态后，“新建用户库”仍可见且 `disabled=false`；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 名称库列宽拖拽持久化
+
+背景：
+
+- 名称库面板已经能读取本地 `columnWidths`，但用户还不能从 UI 改列宽。
+- 列宽持久化应先在一个列定义明确、验证简单的面板闭环，再考虑扩展到其它 `UiObjectTable` 面板。
+
+实现：
+
+- `UiObjectTable` 新增默认关闭的 `resizableColumns` prop；启用后表头会显示列宽拖拽手柄。
+- 拖拽手柄通过 pointer 事件计算新宽度并 emit `column-resize`，宽度限制为 `32..640px`。
+- 名称库面板启用 `resizable-columns`，接收 `column-resize` 后把对应 key 写回 `panel-list-preferences.columnWidths` 并更新 `panelState.columnWidths`。
+- 其它面板未传 `resizable-columns`，不会出现拖拽手柄，也不会改变默认列宽。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\namebase-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 验证子智能体 `verify_namebase_column_resize_drag` 的 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开名称库面板并拖动“名称”列表头的列宽手柄，header / cell 宽度从约 `130.625px` 变为 `251px`；localStorage `webgl-generator-panel-list:namebase-panel` 写入 `columnWidths.name = 251`；刷新页面并重新打开名称库面板后，header / cell 仍保持 `251px`；输入不存在的筛选词触发空态后，“新建用户库”仍可见且 `disabled=false`；`glError = 0`，health error、console error 和 page error 均为 `0`。

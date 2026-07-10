@@ -103,8 +103,10 @@
     empty-text="没有匹配的名称库"
     :empty-action="namebaseEmptyAction"
     :show-locate-action="false"
+    resizable-columns
     @select="callbacks.onSelect"
     @empty-action="handleNamebaseAction"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions

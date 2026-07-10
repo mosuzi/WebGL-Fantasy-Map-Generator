@@ -60,6 +60,16 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
         sortDir: panelState.sortDir
       }, NAMEBASE_LIST_DEFAULTS);
     },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, NAMEBASE_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, NAMEBASE_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
+    },
     onSelect: row => {
       panelState.selectedNamebaseId = row.id;
     },

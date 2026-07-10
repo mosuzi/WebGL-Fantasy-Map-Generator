@@ -7,6 +7,7 @@
             v-for="column in columns"
             :key="column.key"
             :style="columnStyle(column)"
+            :class="{'object-table-resizable-column': columnResizable(column)}"
             :aria-sort="headerSortState(column)"
           >
             <button
@@ -23,6 +24,14 @@
               </span>
             </button>
             <span v-else>{{ column.label }}</span>
+            <button
+              v-if="columnResizable(column)"
+              class="object-table-column-resize-handle"
+              type="button"
+              :aria-label="`调整${column.label}列宽`"
+              title="拖拽调整列宽"
+              @pointerdown.stop.prevent="startColumnResize($event, column)"
+            ></button>
           </th>
           <th v-if="showLocateAction" class="object-table-action-column">定位</th>
         </tr>
@@ -136,14 +145,20 @@ const props = defineProps({
   columnWidths: {
     type: Object,
     default: null
+  },
+  resizableColumns: {
+    type: Boolean,
+    default: false
   }
 });
 
 const VIRTUAL_ROW_HEIGHT = 32;
 const VIRTUAL_THRESHOLD = 120;
 const VIRTUAL_OVERSCAN_ROWS = 8;
+const MIN_RESIZE_COLUMN_WIDTH = 32;
+const MAX_RESIZE_COLUMN_WIDTH = 640;
 
-const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort"]);
+const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize"]);
 
 const tableWrap = ref(null);
 const scrollTop = ref(0);
@@ -151,6 +166,7 @@ const viewportHeight = ref(300);
 let scrollFrame = 0;
 let scrollAttempt = 0;
 let scrollMetricsFrame = 0;
+let resizeState = null;
 
 const columnSpan = computed(() => props.columns.length + (props.showLocateAction ? 1 : 0));
 const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
@@ -180,6 +196,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   cancelScrollFrame();
   cancelScrollMetricsFrame();
+  stopColumnResize();
 });
 
 function getRowId(row) {
@@ -210,6 +227,39 @@ function handleRowDoubleClick(row) {
 function handleHeaderSort(column) {
   if (!sortableColumn(column)) return;
   emit("sort", columnSortKey(column));
+}
+
+function startColumnResize(event, column) {
+  if (!columnResizable(column)) return;
+  const view = tableWrap.value?.ownerDocument?.defaultView;
+  if (!view) return;
+  resizeState = {
+    view,
+    column,
+    startX: event.clientX,
+    startWidth: currentHeaderWidth(event.currentTarget, column)
+  };
+  view.addEventListener("pointermove", handleColumnResizeMove);
+  view.addEventListener("pointerup", stopColumnResize, {once: true});
+  view.addEventListener("pointercancel", stopColumnResize, {once: true});
+}
+
+function handleColumnResizeMove(event) {
+  if (!resizeState) return;
+  const delta = event.clientX - resizeState.startX;
+  const width = clampColumnWidth(resizeState.startWidth + delta);
+  emit("column-resize", {
+    key: resizeState.column.key,
+    width
+  });
+}
+
+function stopColumnResize() {
+  if (!resizeState) return;
+  resizeState.view?.removeEventListener?.("pointermove", handleColumnResizeMove);
+  resizeState.view?.removeEventListener?.("pointerup", stopColumnResize);
+  resizeState.view?.removeEventListener?.("pointercancel", stopColumnResize);
+  resizeState = null;
 }
 
 function handleEmptyAction() {
@@ -333,6 +383,10 @@ function sortableColumn(column) {
   return sortableKeys.value.size ? sortableKeys.value.has(key) : Boolean(key);
 }
 
+function columnResizable(column) {
+  return props.resizableColumns && column?.resizable !== false && Boolean(column?.key);
+}
+
 function isActiveSortColumn(column) {
   return columnSortKey(column) === props.sortKey;
 }
@@ -380,5 +434,20 @@ function columnStyle(column) {
   if (width) style.width = width;
   if (maxWidth) style.maxWidth = maxWidth;
   return style;
+}
+
+function currentHeaderWidth(handle, column) {
+  const header = handle?.closest?.("th");
+  const measured = header?.getBoundingClientRect?.().width;
+  if (Number.isFinite(measured) && measured > 0) return measured;
+  const override = Number(columnWidthOverride(column));
+  if (Number.isFinite(override)) return override;
+  if (Number.isFinite(column.width)) return column.width;
+  return defaultColumnWidth(column);
+}
+
+function clampColumnWidth(value) {
+  if (!Number.isFinite(value)) return MIN_RESIZE_COLUMN_WIDTH;
+  return Math.round(Math.min(MAX_RESIZE_COLUMN_WIDTH, Math.max(MIN_RESIZE_COLUMN_WIDTH, value)));
 }
 </script>
