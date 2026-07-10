@@ -1015,14 +1015,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRatiosApply: (stateId, ratios) => {
       const command = createSetMilitaryRatiosCommand(stateId, ratios);
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (result.executed) {
         markDerivedFresh(state.map, ["military"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `update military ratios: state=${stateId}, regiments=${state.map.military?.metadata?.regiments || 0}`);
       }
-      updateMilitaryPanel(state);
-      updateStatePanel(state);
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },

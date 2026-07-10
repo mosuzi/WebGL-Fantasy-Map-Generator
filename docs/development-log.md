@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事兵种比例编辑接入统一编辑执行器
+
+本步继续清理军事面板的旧执行路径，把国家级兵种比例调整接入 `executeEditCommand()`。
+
+修正：
+
+- 兵种比例调整不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 比例实际变更后继续保留 `markDerivedFresh(["military"])`、`refreshGenerationSummary()` 和 generation log 记录。
+- 面板刷新改由命令 effects 中的 `point-layers / line-layers / object-index / labels / object-panels` 驱动。
+
+边界：
+
+- 本步只迁移国家级兵种比例入口，不改变军事生成算法、单个军团态势、批量态势、驻地 / 基地、战报事件或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开军事面板后通过真实“兵种比例”面板调整国家 `#1 / 霜庭国` 的步兵比例滑块，`military-ratio-infantry` 从 `38` 调整到 `45` 后点击“应用比例”；撤销栈 `undo=1`，`lastLabel` 为 `调整兵种比例 #1`，generation log 追加 `update military ratios: state=1, regiments=113`，`military.metadata.stale = false`，`lastEditRefresh` 为 `point-layers, line-layers, object-index, labels, object-panels` / `affected state#1, military#1`，比例策略从 `infantry=0.3777` 更新到 `0.4206`，军团数量仍为 `113`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事军团态势编辑接入统一编辑执行器
 
 本步继续清理军事面板的旧执行路径，把单个军团态势调整接入 `executeEditCommand()`。
