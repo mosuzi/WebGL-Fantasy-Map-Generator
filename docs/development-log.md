@@ -23042,3 +23042,24 @@ full 矩阵结果：
 - `node --input-type=module` 契约断言通过：第三批 18 个命令实例均通过 `validateEditCommandContract()`，且 `domain` 分别为 `marker / label / diplomacy / city / state / province`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-10 编辑命令 domain 军事批次
+
+背景：
+
+- marker、标签、外交和对象详情通用字段已补齐 `domain`，剩余主要编辑命令集中在军事模块。
+- 军事模块内部有大量战役、战报和损耗计算 helper，不能机械给所有 `return` 对象补字段，必须只覆盖导出的编辑命令工厂。
+
+实现：
+
+- `military-edit-commands.js` 的 9 个导出编辑命令均新增 `domain: "military"`。
+- 覆盖范围包括兵种比例、单军团态势、批量态势、记录战斗事件、导入战斗事件、清空战斗事件、移动驻地、设置基地和重命名军团。
+- 内部 `createBattleEvent()`、`createManualOrder()`、战役态势摘要和损耗统计等纯数据 helper 不添加 `domain`。
+- 同步更新 `edit-command-contract.md`、编辑器基础设施清单和当前计划，记录当前主要 `*-edit-commands.js` 命令域已覆盖。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\military-edit-commands.js` 通过。
+- `node --input-type=module` 契约断言通过：军事模块 9 个导出编辑命令实例均通过 `validateEditCommandContract()`，且 `domain` 均为 `military`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。

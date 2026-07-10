@@ -72,6 +72,7 @@ export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整
 
   return {
     label: `${label} #${normalizedStateId}`,
+    domain: "military",
     effects: {
       ...MILITARY_EFFECTS,
       affected: [{kind: "state", id: normalizedStateId}, {kind: "military", id: normalizedStateId}]
@@ -104,6 +105,7 @@ export function createSetMilitaryStatusCommand(target, status, {label = "调整�
 
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
@@ -142,6 +144,7 @@ export function createSetMilitaryStatusBatchCommand(targets, status, {label = "�
 
   return {
     label: `${label} ${normalizedTargets.length}支`,
+    domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
       affected: normalizedTargets.map(target => ({kind: "military", id: target.id || `${target.stateId}:${target.regimentId}`}))
@@ -190,6 +193,7 @@ export function createRecordMilitaryBattleEventCommand(target, event = {}, {labe
 
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    domain: "military",
     effects: {
       ...effects,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
@@ -231,6 +235,7 @@ export function createImportMilitaryBattleEventsCommand(document, {label = "导�
 
   return {
     label,
+    domain: "military",
     effects: {
       ...MILITARY_EVENT_EFFECTS,
       affected: [{kind: "military", id: "events"}]
@@ -278,6 +283,7 @@ export function createClearMilitaryBattleEventsCommand(target, {label = "清空�
 
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    domain: "military",
     effects: {
       ...MILITARY_EVENT_EFFECTS,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
@@ -324,6 +330,7 @@ export function createMoveMilitaryStationCommand(target, destination, {label = "
 
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
@@ -374,6 +381,7 @@ export function createSetMilitaryBaseCommand(target, {label = "设置军团基�
 
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
@@ -414,6 +422,7 @@ export function createRenameMilitaryRegimentCommand(target, name, {label = "重�
 
   return {
     label: `${label} #${normalizedTarget.stateId}:${normalizedTarget.regimentId}`,
+    domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
       affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
