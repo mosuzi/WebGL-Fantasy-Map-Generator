@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -17,10 +18,12 @@
     :doubleClickAction="'edit'"
     empty-text="暂无保存的测量对象"
     :empty-action="measurementEmptyAction"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleEmptyAction"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions

@@ -6,6 +6,7 @@
   </div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -17,10 +18,12 @@
     :doubleClickAction="'edit'"
     empty-text="没有匹配的标签"
     :empty-action="labelEmptyAction"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleLabelManagementAction"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />

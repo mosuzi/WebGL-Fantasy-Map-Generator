@@ -4,8 +4,17 @@ import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const MARKER_PANEL_ID = "marker-panel";
+const MARKER_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  name: 120,
+  categoryLabel: 84,
+  resourceLabel: 84,
+  stateName: 112,
+  economicValue: 64
+});
 const MARKER_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: MARKER_COLUMN_WIDTHS,
   scope: "all",
   scopes: Object.freeze(["all", "resource", "marker"]),
   sortKey: "economicValue",
@@ -20,6 +29,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     scope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
@@ -49,6 +59,16 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, MARKER_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, MARKER_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, MARKER_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedMarkerId = row.id;

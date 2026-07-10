@@ -17,6 +17,7 @@
   <div v-if="editStatus" class="marker-edit-status">{{ editStatus }}</div>
   <UiObjectTable
     :columns="columns"
+    :column-widths="state.columnWidths"
     :rows="visibleRows"
     :sort-key="state.sortKey"
     :sort-direction="state.sortDir"
@@ -26,9 +27,11 @@
     :selected-id="activeSelectedMarkerId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的资源点或标记"
+    resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @column-resize="callbacks.onColumnResize"
   />
 
   <UiPanelIoActions

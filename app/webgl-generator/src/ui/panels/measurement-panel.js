@@ -3,8 +3,17 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const MEASUREMENT_PANEL_ID = "measurement-panel";
+const MEASUREMENT_COLUMN_WIDTHS = Object.freeze({
+  name: 132,
+  typeLabel: 76,
+  routeFitLabel: 70,
+  pointCount: 70,
+  distance: 102,
+  area: 102
+});
 const MEASUREMENT_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: MEASUREMENT_COLUMN_WIDTHS,
   sortKey: "updatedAt",
   sortDir: "desc"
 });
@@ -16,6 +25,7 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     map: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedMeasurementId: null,
@@ -37,6 +47,16 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, MEASUREMENT_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, MEASUREMENT_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, MEASUREMENT_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedMeasurementId = row.id;

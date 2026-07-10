@@ -23983,3 +23983,29 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_culture_religion_zone_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开文化、宗教和地区面板并拖动“名称”列表头列宽手柄；文化 / 宗教 header / cell 从 `120px` 变为 `210px`，地区 header / cell 从 `150px` 变为 `240px`，各自 localStorage `webgl-generator-panel-list:culture-panel / religion-panel / zone-panel` 写入 `columnWidths.name`，刷新页面并重新打开面板后 header / cell 仍保持新宽度；`glError = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 资源标记 / 标签 / 测量对象面板列宽拖拽持久化
+
+背景：
+
+- 资源标记、标签和测量对象面板都已经接入公共对象表格、列表偏好和列表动作。
+- 三者列内容差异大，尤其标签名称 / 归属、测量名称 / 长度和标记名称 / 国家列需要可读宽度，因此继续按面板补齐列宽持久化。
+
+实现：
+
+- 资源标记面板新增 `MARKER_COLUMN_WIDTHS`，并在 `MARKER_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 标签管理面板新增 `LABEL_NAMING_COLUMN_WIDTHS`，并在 `LABEL_NAMING_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 测量对象面板新增 `MEASUREMENT_COLUMN_WIDTHS`，并在 `MEASUREMENT_LIST_DEFAULTS` 中声明 `columnWidths`。
+- 三个面板 state 均读取归一化列宽，传给各自 Vue 组件内的 `UiObjectTable`。
+- 资源标记、标签和测量对象表格启用 `resizable-columns`，拖动列宽后通过 `updatePanelListPreferences()` 写回 `columnWidths` 并更新 state。
+- 本步不改变资源标记范围筛选、标签空态新增、测量对象保存 / 导出、排序、筛选、定位、重命名、图标或备注逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panels\marker-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\label-naming-panel.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\measurement-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_marker_label_measurement_column_resize`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，分别打开资源标记、标签和测量对象面板并拖动“名称”列表头列宽手柄；资源标记 header / cell 从 `120px` 变为 `215px`，标签 header / cell 从 `128px` 变为 `218px`，测量对象 header / cell 从 `132px` 变为 `225px`，各自 localStorage `webgl-generator-panel-list:marker-panel / label-naming-panel / measurement-panel` 写入 `columnWidths.name`，刷新页面并重新打开面板后 header / cell 仍保持新宽度；测量对象验证在浏览器会话内临时插入一个测量对象用于表格行验证，不写入源码或仓库文件；`glError = 0`，health error、console error 和 page error 均为 `0`。

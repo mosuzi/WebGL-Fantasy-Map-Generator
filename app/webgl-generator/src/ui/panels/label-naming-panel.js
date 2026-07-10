@@ -4,8 +4,17 @@ import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../runtime/object-kinds.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
 
 const LABEL_NAMING_PANEL_ID = "label-naming-panel";
+const LABEL_NAMING_COLUMN_WIDTHS = Object.freeze({
+  id: 56,
+  type: 76,
+  name: 128,
+  owner: 128,
+  status: 76,
+  priority: 72
+});
 const LABEL_NAMING_LIST_DEFAULTS = Object.freeze({
   filter: "",
+  columnWidths: LABEL_NAMING_COLUMN_WIDTHS,
   sortKey: "priority",
   sortDir: "desc"
 });
@@ -18,6 +27,7 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
     selection: null,
     history: null,
     filter: listPreferences.filter,
+    columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedLabelKey: null,
@@ -39,6 +49,16 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
         sortKey: panelState.sortKey,
         sortDir: panelState.sortDir
       }, LABEL_NAMING_LIST_DEFAULTS);
+    },
+    onColumnResize: ({key, width} = {}) => {
+      if (!key || !Number.isFinite(width)) return;
+      const next = updatePanelListPreferences(documentRef, LABEL_NAMING_PANEL_ID, {
+        columnWidths: {
+          ...panelState.columnWidths,
+          [key]: width
+        }
+      }, LABEL_NAMING_LIST_DEFAULTS);
+      panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
       panelState.selectedLabelKey = row.key;
