@@ -17,6 +17,16 @@
 - `isNoop(context)`：可选空操作判断；返回 `true` 时调用点不应进入 `EditHistory`。
 - `getResult()`：可选执行结果读取器，用于导入、批量重命名、生成对象 id 等需要给 UI 文案或后续选择使用的场景。
 
+`EditHistory.execute()` 会执行轻量运行时校验：
+
+- `apply / revert` 必须是函数。
+- `label` 缺失时会补为“未命名编辑”；如果提供则必须是字符串。
+- `domain` 仍为可选字段；如果提供则必须是非空字符串。
+- `isNoop / getResult` 仍为可选字段；如果提供则必须是函数。
+- `effects` 仍为可选字段；如果提供则必须是对象，且其中的 `render / selection / runtimeStats / pickPanel / derived / affected` 必须符合下文结构。
+
+这套校验是渐进约束，不要求旧命令一次性补齐 `domain` 或 `effects`，但会阻止新增命令携带形状错误的可选字段进入撤销栈。
+
 ## context 约定
 
 当前调用点默认传入：
@@ -41,6 +51,14 @@
 - `derived`：字符串数组，描述需要刷新的派生缓存或面板线索。
 - `affected`：对象数组，格式为 `{kind, id}`。
 
+当前运行时允许的 `effects` 字段值：
+
+- `render` 只能是 `"draw"` 或 `"none"`。
+- `selection` 只能是 `"refresh"` 或 `"none"`。
+- `runtimeStats / pickPanel` 只能是布尔值。
+- `derived` 必须是字符串数组；数组可以为空，但数组项不能是空字符串。
+- `affected` 必须是数组，每项必须提供非空字符串 `kind`，以及字符串或数字 `id`。
+
 常用 `derived` 示例：
 
 - `cell-colors`：专题 / 地表颜色需要刷新。
@@ -59,12 +77,13 @@
 - 调用 `state.editHistory.execute(command, context)`。
 - 调用 `refreshAfterEdit(state, executedCommand)`。
 - 按 `options.status` 写入状态文案。
+- 读取 `getResult()`，返回给调用方做选择、定位或文案。
+- 通过 `refreshPanelsForEdit()` 按 `affected.kind` 和 `derived: ["object-panels"]` 刷新领域面板。
 
 后续 helper 可继续扩展：
 
-- 读取 `getResult()`，返回给调用方做选择、定位或文案。
 - 标准化异常文案。
-- 按 `affected.kind` 自动刷新领域面板。
+- 进一步收口仍直接调用 `state.editHistory.execute()` 的旧路径。
 
 ## 撤销与快照
 
@@ -85,6 +104,7 @@
 
 ## 当前迁移状态
 
-- 测量对象重命名 / 删除已改走 `executeEditCommand()`。
-- 文化 / 宗教空对象新增删除已提供 `effects.affected` 和结构刷新语义，但尚未迁移到 helper。
-- 后续优先迁移路线、备注、名称库等低风险调用点，再考虑抽出跨模块执行器。
+- `EditHistory.execute()` 已接入轻量运行时契约校验，基础字段严格、可选字段渐进校验。
+- `executeEditCommand()` 已成为主要编辑入口，覆盖测量、备注、名称库、城市、国家、省份、文化、宗教、路线、河流、湖泊、地区、marker、标签、外交、军事、高度刷子、GEO 地形导入和自定义标签拖拽等常见路径。
+- 面板历史按钮已开始复用 `executeHistoryCommand()`，避免各面板分别手写撤销 / 重做刷新。
+- 后续重点是继续迁移残留的直接 `state.editHistory.execute()` 路径，并让新增命令主动声明 `domain` 和更精确的 `effects.affected`。

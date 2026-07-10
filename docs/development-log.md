@@ -22956,3 +22956,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过；仅保留既有的大 chunk 警告。
 - 构建产物 Playwright 烟测通过：打开地区管理，选中地区 `#0`，颜色从 `#d98238` 改为 `#7f6cc7`，纹理从 `diagonal` 改为 `dots`；撤销恢复纹理为 `diagonal`，重做恢复 `dots`，`glError = 0`，console/page error 为 `0`。
+
+### 2026-07-10 编辑命令契约校验第一刀
+
+背景：
+
+- 编辑器基础设施已经把大量对象编辑入口迁移到 `executeEditCommand()`，但 `EditHistory` 仍只校验 `apply / revert`。
+- 后续新增 / 删除、控制台 API 和字段编辑会继续增加命令数量，如果 `effects / affected / isNoop / getResult` 结构错误，问题会延后到刷新或 UI 状态才暴露。
+
+实现：
+
+- `EditHistory.execute()` 改为调用导出的 `validateEditCommandContract()`。
+- 校验保持渐进兼容：`apply / revert` 必须是函数，`label` 缺失时补默认值；`domain / effects / affected / isNoop / getResult` 仍为可选字段，但一旦提供就必须满足契约形状。
+- `effects.render` 限定为 `draw / none`，`effects.selection` 限定为 `refresh / none`，`runtimeStats / pickPanel` 必须为布尔值，`derived` 必须是字符串数组，`affected` 必须是 `{kind, id}` 数组。
+- 同步更新 `docs/task-notes/edit-command-contract.md` 和 `docs/task-notes/editor-and-stat-panel-inventory.md`，把旧的“尚未转成运行时校验”状态改为“轻量校验已落地，后续补齐 domain 和 affected 精度”。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\edit-history.js` 通过。
+- `node --input-type=module` 契约断言通过：合法命令可执行并入栈；缺省 `label` 会补默认值；错误的 `label / effects / render / affected / isNoop / getResult` 会被拒绝。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `rg -n "state\.editHistory\.execute\(" app\webgl-generator\src\runtime\app.js` 确认直接执行入口只剩 `executeEditCommand()` 内部一处。

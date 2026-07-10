@@ -251,7 +251,7 @@
 
 主要缺口：
 
-1. `EditHistory` 只校验 `apply / revert`，没有统一校验 `effects / domain / affected / isNoop / getResult`，不同命令的返回值和 no-op 判断仍靠调用方约定。
+1. `EditHistory.execute()` 已接入轻量运行时契约校验：`apply / revert / label` 基础字段严格，`domain / effects / affected / isNoop / getResult` 在出现时校验形状；后续仍需逐步让新增命令主动声明 `domain` 和更精确的 `effects.affected`。
 2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，`refreshPanelsForEdit()` 已覆盖 `affected.kind` 和 `derived: object-panels` 的第一层面板刷新，且 `executeEditCommand()` 会默认兜底调用；但直接手写 `state.editHistory.execute()` 的旧路径仍需逐步迁移。
 3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区和军事面板定位路径；但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义大多仍分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
 4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀；批量选择、列宽持久化和更多空态动作接入仍未完成。
@@ -261,7 +261,7 @@
 下一批施工小步：
 
 1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、刷新函数、对象面板 helper、status 文案、标准 `getResult()` 返回和保守异常通道；常见对象备注、名称库编辑、城市名称 / 字段 / 画布新增 / 画布删除、国家 / 省份画布新增 / 画布删除、GEO 地形导入、高度 / 国家 / 省份刷子落笔、自定义标签拖拽、marker API 集合编辑、marker 面板 / 画布集合编辑、国家字段、省份字段、文化 / 宗教字段、河流字段、湖泊字段、地区样式、对象详情名称入口、外交字段、控制面板外交重生成、军事兵种比例和军团重命名 / 单个态势 / 批量态势 / 驻地移动 / 基地设置 / 战报记录 / 战报清空 / 战报导入、标记字段和标签字段编辑路径已迁移，后续再迁移其它低风险调用点，并补更明确的错误展示策略；路线、marker、标签、备注、河流、湖泊、地区、国家、政府、省份、城市、文化、宗教、外交、高度、测量和名称库面板历史按钮已开始迁移到统一 `executeHistoryCommand()`。
-2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
+2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：运行时轻量校验已落地，推荐字段仍为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续重点是补齐残留命令的 `domain` 与更精确影响范围。
 3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，并支持 `derived: ["object-panels"]` 全对象面板刷新；`executeEditCommand()` 默认会在任意刷新函数后调用它，军事面板历史按钮也已复用统一 `executeHistoryCommand()`。后续重点是覆盖仍直接调用 `state.editHistory.execute()` / `undo()` / `redo()` 的旧路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 继续扩展 `locateAndSelectObject()`：当前已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区和军事面板定位路径，后续逐步迁移标签、政府 / 外交入口和对象详情定位，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。
 5. 继续扩展 `UiObjectTable.emptyAction`：当前先覆盖测量对象“开始测量”，后续可按面板语义迁移空态新增、导入或创建动作；批量选择和列宽持久化另行拆小步。
