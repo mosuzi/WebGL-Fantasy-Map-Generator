@@ -24530,3 +24530,29 @@ full 矩阵结果：
 - 主线程兜底命令契约验证通过：`newObjectAffected("measurement")` 返回 `measurement#new`；`createSaveMeasurementCommand()` 执行前 initial affected 为 `measurement#new`，经 `EditHistory.execute()` 执行后回写为真实 `measurement-1`，`history.getStats().lastAffected` 同步为 `measurement-1`。
 - 主线程兜底资源点重生成命令验证通过：`createRegenerateResourceMarkersCommand({salt: 42})` 的 affected 仍为 `derived-system#markers + marker#resources`，确认改为 `systemAffected("markers", ...)` 后历史摘要目标形状不变。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 可用，WebGL2 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 单对象 affected helper 收口
+
+背景：
+
+- 新增对象命令已开始复用 `newObjectAffected(kind)`，资源点重生成也已复用 `systemAffected("markers", ...)`。
+- marker 视觉、备注、移动和删除命令仍直接手写 `{kind: OBJECT_KIND.MARKER, id}`，后续扩展单对象命令时容易继续复制这种散落写法。
+- 编辑命令契约已经把 `affected` 固定为 `{kind, id}`，适合先补一个低风险单对象 helper，再按领域分批迁移。
+
+实现：
+
+- `edit-command-effects.js` 新增 `objectAffected(kind, id)`。
+- marker 视觉、备注、移动和删除命令的 `effects.affected` 改为复用 `objectAffected(OBJECT_KIND.MARKER, normalizedMarkerId)`。
+- 资源点重生成命令改为组合 `systemAffected("markers", objectAffected(OBJECT_KIND.MARKER, "resources"))`，继续保留 `derived-system#markers + marker#resources` 的历史摘要形状。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充单对象 helper 约定。
+- 本步不改变 marker 新增、删除、移动、视觉编辑、备注、资源点重生成、经济刷新、面板刷新或对象 id 归一化语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\edit-command-effects.js` 通过。
+- `node --check app\webgl-generator\src\runtime\marker-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_marker_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：`objectAffected("marker", 7)`、`createSetMarkerVisualCommand(7, ...)`、`createSetMarkerNoteCommand(7, ...)`、`createMoveMarkerCommand(7, ...)` 和 `createDeleteMarkerCommand(7)` 均返回 `marker#7`；`createRegenerateResourceMarkersCommand({salt: 42})` 返回 `derived-system#markers + marker#resources`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

@@ -2,7 +2,7 @@ import {createMarkerAtPackCell, createMarkerResult, regenerateResourceMarkers, r
 import {buildEconomy, refreshPoliticalEconomicPower} from "../generator/economy.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
-import {newObjectAffected, systemAffected} from "./edit-command-effects.js";
+import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const MARKER_VISUAL_EFFECTS = Object.freeze({
   render: "draw",
@@ -38,7 +38,7 @@ export function createSetMarkerVisualCommand(markerId, patch = {}) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_VISUAL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
+      affected: objectAffected(OBJECT_KIND.MARKER, normalizedMarkerId)
     },
     apply(context) {
       const marker = readMarker(context.map, normalizedMarkerId);
@@ -76,7 +76,7 @@ export function createSetMarkerNoteCommand(markerId, body, {name = ""} = {}) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_NOTE_EFFECTS,
-      affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
+      affected: objectAffected(OBJECT_KIND.MARKER, normalizedMarkerId)
     },
     apply(context) {
       const marker = readMarker(context.map, normalizedMarkerId);
@@ -147,7 +147,7 @@ export function createMoveMarkerCommand(markerId, packCell) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
-      affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
+      affected: objectAffected(OBJECT_KIND.MARKER, normalizedMarkerId)
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
@@ -182,7 +182,7 @@ export function createDeleteMarkerCommand(markerId) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
-      affected: [{kind: OBJECT_KIND.MARKER, id: normalizedMarkerId}]
+      affected: objectAffected(OBJECT_KIND.MARKER, normalizedMarkerId)
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
@@ -207,7 +207,7 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
-      affected: systemAffected("markers", [{kind: OBJECT_KIND.MARKER, id: "resources"}])
+      affected: systemAffected("markers", objectAffected(OBJECT_KIND.MARKER, "resources"))
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
