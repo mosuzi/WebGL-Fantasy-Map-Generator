@@ -532,6 +532,7 @@
    - 2026-07-10 再追加：国家、省份、城市、文化、宗教、标记、标签和河流备注保存路径也已接入 `executeEditCommand()`；同类回调不再手写 `EditHistory.execute` 与局部面板刷新。
    - 2026-07-10 名称库补充：`executeNamebaseEdit()` 已改为复用 `executeEditCommand()`，保留名称库面板刷新、本地偏好保存和 `getResult()` 返回，并让名称库编辑写入 `lastEditRefresh`。
    - 2026-07-10 城市字段补充：城市人口、同步归属、剪影设置 / 重置和删除城市回调已迁移到 `executeEditCommand()`；删除成功后的 selection 清理仍保留在调用点。
+   - 2026-07-10 国家字段补充：国家名称、按名称库批量重命名、颜色、政体、首都和政体面板批量调整已迁移到 `executeEditCommand()`；状态文案继续从命令 `getResult()` 读取，刷新统一依赖国家命令 effects 和 `refreshPanelsForEdit()`。
 
 59. `locateAndSelectObject()` helper 第一刀。`已完成`
    - 目标：推进编辑器基础设施清单中的统一定位 / 选择入口，先为面板内“定位对象”路径保留 source panel 语义。
@@ -769,3 +770,4 @@
 - 多对象备注保存接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认国家备注生成 `state:1`、河流备注生成 `river:1`，两者均进入撤销栈并刷新 `object-panels`，详情显示“有备注（8字）”，`glError = 0`。
 - 名称库编辑接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认“新建用户库”后用户库 `0 -> 1`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-panels` / `selection none`，名称库面板和本地名称库偏好均包含新库，`glError = 0`。
 - 城市字段编辑接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认城市 `#1` 人口 `17.549 -> 18.549` 后 `lastEditRefresh` 为 `city-population, point-layers, labels, object-panels`，随后应用剪影后 `visual.manual=true` 且 `lastEditRefresh` 为 `labels, object-panels`，`glError = 0`。
+- 国家字段编辑接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物 smoke 确认真实国家“重命名”二级面板把国家 `#1` 改为 `统一执行器烟测` 后进入撤销栈，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected state#1`；真实“调整政体”二级面板把国家 `#1` 改为 `monarchy` 后进入撤销栈，`lastEditRefresh` 为 `state-government, object-name, labels, object-panels, defer:economy, defer:diplomacy, defer:military`，下游派生标脏为 `economy, diplomacy, military`，`glError = 0`。

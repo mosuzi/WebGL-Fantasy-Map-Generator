@@ -424,60 +424,39 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const object = {kind: "state", id: stateId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameVisibleFromNamebase: stateIds => {
       const context = {map: state.map};
       const command = createRenameStatesFromNamebaseCommand(stateIds);
-      if (!command.isNoop(context)) {
-        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
-        const result = command.getResult?.();
-        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result?.renamed || 0} 个国家。`);
-      } else {
-        setFileOperationStatus(documentRef, "当前筛选国家没有可按名称库更新的名称。");
+      const result = executeEditCommand(state, documentRef, command, {
+        context,
+        refresh: refreshAfterStateEdit,
+        noopStatus: "当前筛选国家没有可按名称库更新的名称。"
+      });
+      if (result.executed) {
+        setFileOperationStatus(documentRef, `已按当前名称库重命名 ${result.result?.renamed || 0} 个国家。`);
       }
-      updateStatePanel(state);
-      updateCityPanel(state);
-      updateGovernmentPanel(state);
-      updateDiplomacyPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onColorChange: (stateId, color) => {
+      const context = {map: state.map};
       const beforeColor = state.map?.politics?.states?.[stateId]?.color || null;
       const command = createSetStateColorCommand(stateId, color, {beforeColor});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
-      }
-      updateStatePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onGovernmentChange: (stateId, governmentKey) => {
       const context = {map: state.map};
       const command = createSetStateGovernmentCommand(stateId, governmentKey);
-      if (!command.isNoop(context)) {
-        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
-      updateGovernmentPanel(state);
-      updateDiplomacyPanel(state);
-      updateMilitaryPanel(state);
-      updateRuntimePanel(documentRef, state);
+      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onCapitalChange: (stateId, burgId) => {
       const context = {map: state.map};
       const command = createSetStateCapitalCommand(stateId, burgId);
-      if (!command.isNoop(context)) {
-        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (stateId, body) => {
@@ -526,14 +505,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onBatchGovernmentChange: (stateIds, governmentKey) => {
       const context = {map: state.map};
       const command = createSetStatesGovernmentBatchCommand(stateIds, governmentKey);
-      if (!command.isNoop(context)) {
-        refreshAfterStateEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
-      updateGovernmentPanel(state);
-      updateDiplomacyPanel(state);
-      updateMilitaryPanel(state);
-      updateRuntimePanel(documentRef, state);
+      executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {

@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：国家字段编辑接入统一编辑执行器
+
+本步继续清理国家与政体面板的旧执行路径，把国家名称、按名称库批量重命名、颜色、政体、首都和政体面板批量调整接入 `executeEditCommand()`。
+
+修正：
+
+- 国家字段回调不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterStateEdit()` 和散落的 `updateStatePanel()` / `updateCityPanel()` / `updateGovernmentPanel()`。
+- 按名称库批量重命名继续通过标准 `getResult()` 读取重命名数量，no-op 状态文案保留。
+- 国家颜色、政体、首都和批量政体修改统一由命令 effects 驱动运行时刷新、对象面板刷新和派生标脏。
+
+边界：
+
+- 本步只迁移执行入口，不改变国家命令本身、政体数据结构、首都约束、名称库改名语义或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开控制面板管理 tab 和国家编辑面板后，通过真实“重命名”二级面板把国家 `#1` 从“霜庭”改为 `统一执行器烟测`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected state#1`，详情目标更新为“统一执行器烟测国”；另一次 smoke 通过真实“调整政体”二级面板把国家 `#1` 从 `feudal_monarchy` 改为 `monarchy`，撤销栈 `undo=1`，`lastEditRefresh` 为 `state-government, object-name, labels, object-panels, defer:economy, defer:diplomacy, defer:military` / `affected state#1`，下游派生标脏为 `economy, diplomacy, military`；两次 smoke 均 `glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：城市字段编辑接入统一编辑执行器
 
 本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把城市面板的人口、归属同步、剪影设置、剪影重置和删除城市回调接入 `executeEditCommand()`。
