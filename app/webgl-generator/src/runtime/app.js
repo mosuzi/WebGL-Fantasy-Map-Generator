@@ -1110,14 +1110,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRename: (target, name) => {
       const command = createRenameMilitaryRegimentCommand(target, name);
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (result.executed) {
         markDerivedFresh(state.map, ["military"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `rename military regiment: regiment=${target.id}, name=${name}`);
       }
-      updateMilitaryPanel(state);
-      updateStatePanel(state);
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },

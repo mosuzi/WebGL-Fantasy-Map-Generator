@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事军团重命名接入统一编辑执行器
+
+本步继续清理军事面板的旧执行路径，把单个军团重命名接入 `executeEditCommand()`。
+
+修正：
+
+- 军团重命名不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 重命名实际执行后继续保留 `markDerivedFresh(["military"])`、`refreshGenerationSummary()` 和 generation log 记录。
+- 面板刷新改由命令 effects 中的 `point-layers / object-index / object-panels` 驱动。
+
+边界：
+
+- 本步只迁移军团重命名入口，不改变军事生成、兵种比例、态势、驻地 / 基地、战报事件、批量操作或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开军事面板后选中军团 `1:0`，真实点击“重命名”并改为 `军团统一执行器烟测`，撤销栈 `undo=1`，`lastLabel` 为 `重命名军团 #1:0`，generation log 追加 `rename military regiment: regiment=1:0...`，`military.metadata.stale = false`，`lastEditRefresh` 为 `point-layers, object-index, object-panels` / `affected military#1:0`，面板详情同步显示新名称，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：外交重生成接入统一编辑执行器
 
 本步继续清理外交面板的旧执行路径，把“重生成外交”接入 `executeEditCommand()`。
