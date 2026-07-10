@@ -115,7 +115,7 @@ export function createAddMarkerCommand({type, packCell, name = ""} = {}) {
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
-      affected: []
+      affected: [{kind: OBJECT_KIND.MARKER, id: "new"}]
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);

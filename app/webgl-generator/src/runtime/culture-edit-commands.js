@@ -33,7 +33,7 @@ export function createAddCultureCommand({name = "", label = "新增文化"} = {}
     domain: "culture",
     effects: {
       ...CULTURE_STRUCTURE_EFFECTS,
-      affected: []
+      affected: [{kind: "culture", id: "new"}]
     },
     apply(context) {
       const stores = getCultureStores(context.map);

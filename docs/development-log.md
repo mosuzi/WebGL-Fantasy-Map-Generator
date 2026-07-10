@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：新增对象命令补充初始影响目标
+
+本步继续细化 edit command 的 `effects.affected`。新增空文化、新增空宗教、新增手工标签和新增 marker 命令此前会在 `apply()` 后把 affected 改成真实对象 id，但命令初始结构仍是空数组；历史摘要、控制台历史 API 或执行前诊断无法稳定判断这是新增哪类对象。
+
+修正：
+
+- 新增空文化命令初始 affected 改为 `culture#new`，执行成功后仍替换为真实文化 id。
+- 新增空宗教命令初始 affected 改为 `religion#new`，执行成功后仍替换为真实宗教 id。
+- 新增手工标签命令初始 affected 改为 `label#new`，执行成功后仍替换为真实标签 id。
+- 新增 marker 命令初始 affected 改为 `marker#new`，执行成功后仍替换为真实 marker id。
+
+边界：
+
+- 本步不改变新增对象的数据结构、id 分配、撤销 / 重做、selection、派生刷新或执行成功后的真实 affected 回写，只消除新增命令的空 affected 初始状态。
+
+验证：
+
+- `node --check` 覆盖 `culture-edit-commands.js`、`religion-edit-commands.js`、`label-edit-commands.js` 和 `marker-edit-commands.js`，均通过。
+- `node --input-type=module` 行为断言通过：新增空文化、空宗教、手工标签和 marker 的初始 affected 均为对应 `kind#new`；执行成功后分别回写为真实 `culture#1`、`religion#1`、`label#1` 和 `marker#0`。直接 import 仍有既有 `MODULE_TYPELESS_PACKAGE_JSON` 警告。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
 ## 2026-07-10：外交重生成与批量政体补充系统来源
 
 本步继续细化批量 edit command 的 `effects.affected`。外交重生成此前只显示 `diplomacy#all`，批量调整政体此前只显示一串 `state#id`，在历史摘要里能看到影响对象，但缺少“这是外交系统重生成”或“这是批量政体入口”的来源。

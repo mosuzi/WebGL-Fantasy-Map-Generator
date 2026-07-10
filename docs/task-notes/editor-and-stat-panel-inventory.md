@@ -251,7 +251,7 @@
 
 主要缺口：
 
-1. `EditHistory.execute()` 已接入轻量运行时契约校验：`apply / revert / label` 基础字段严格，`domain / effects / affected / isNoop / getResult` 在出现时校验形状；路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化、宗教、marker、标签、外交、对象详情通用字段和军事命令已补齐 `domain`；`getStats()` 已暴露 `lastDomain` 和 `lastAffected`，面板历史摘要可直接看到最近命令领域与影响对象，国家 / 省份 / 道路 / 河流 / 城市重生成入口、资源点重生成命令、军事批量 / 事件命令、按名称库批量重命名命令、高度 / 国家 / 省份刷子、FMG Cells GEO 导入命令、外交重生成和批量政体调整也已用 `derived-system#xxx` 解释对象级全量、集合别名、同类对象列表或 grid cells 数量影响；后续仍需让新增命令保持 `domain` 和更精确的 `effects.affected`。
+1. `EditHistory.execute()` 已接入轻量运行时契约校验：`apply / revert / label` 基础字段严格，`domain / effects / affected / isNoop / getResult` 在出现时校验形状；路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化、宗教、marker、标签、外交、对象详情通用字段和军事命令已补齐 `domain`；`getStats()` 已暴露 `lastDomain` 和 `lastAffected`，面板历史摘要可直接看到最近命令领域与影响对象，国家 / 省份 / 道路 / 河流 / 城市重生成入口、资源点重生成命令、军事批量 / 事件命令、按名称库批量重命名命令、高度 / 国家 / 省份刷子、FMG Cells GEO 导入命令、外交重生成和批量政体调整也已用 `derived-system#xxx` 解释对象级全量、集合别名、同类对象列表或 grid cells 数量影响；新增空文化、空宗教、手工标签和 marker 命令的初始 affected 已补为 `kind#new`，执行成功后仍回写真实对象 id；后续仍需让新增命令保持 `domain` 和更精确的 `effects.affected`。
 2. `refreshAfterEdit()` 仍常与手动 `updateXPanel()` 混用；命令 effects 已能描述部分刷新范围，`refreshPanelsForEdit()` 已覆盖 `affected.kind` 和 `derived: object-panels` 的第一层面板刷新，且 `executeEditCommand()` 会默认兜底调用；但直接手写 `state.editHistory.execute()` 的旧路径仍需逐步迁移。
 3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区和军事面板定位路径；但“定位 / 闪烁高亮 / 打开面板 / 进入编辑”的语义大多仍分散在 `app.js` 和各面板回调中，还没有完整的 highlight / locate action 层。
 4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀；批量选择、列宽持久化和更多空态动作接入仍未完成。

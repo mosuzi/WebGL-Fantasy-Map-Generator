@@ -33,7 +33,7 @@ export function createAddReligionCommand({name = "", label = "新增宗教"} = {
     domain: "religion",
     effects: {
       ...RELIGION_STRUCTURE_EFFECTS,
-      affected: []
+      affected: [{kind: "religion", id: "new"}]
     },
     apply(context) {
       const stores = getReligionStores(context.map);

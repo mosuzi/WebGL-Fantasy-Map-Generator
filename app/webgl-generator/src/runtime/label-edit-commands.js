@@ -27,7 +27,7 @@ export function createAddCustomLabelCommand({text, x, y}) {
     domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
-      affected: []
+      affected: [{kind: OBJECT_KIND.LABEL, id: "new"}]
     },
     apply(context) {
       if (!name) throw new Error("标签文字不能为空");
