@@ -256,10 +256,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectionSourcePanelId = null;
     }
   };
-  const locateAndSelectObject = (panelId, object, {afterSelect = null, locate = null} = {}) => {
+  const locateAndSelectObject = (panelId, object, {afterSelect = null, locate = null, sourcePanelId = panelId} = {}) => {
     const located = object ? (locate ? locate(object) : state.renderer.locateObject(object)) : false;
     if (located) {
-      selectFromPanel(panelId, object);
+      if (sourcePanelId) selectFromPanel(sourcePanelId, object);
+      else selectionStore.setSelection({object});
       afterSelect?.(object);
     }
     updateRuntimePanel(documentRef, state);
@@ -274,7 +275,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectionStore.stopEditing();
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
+      locateAndSelectObject(null, object);
     },
     onRename: (object, name) => {
       const context = {map: state.map};
@@ -475,8 +476,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       setStatePanelTarget(state, object.id);
     },
     onLocateState: object => {
-      locateObject(state, object, documentRef);
-      setStatePanelTarget(state, object.id);
+      locateAndSelectObject("government-panel", object, {
+        afterSelect: target => {
+          state.panels.government.setSelectedStateId(target.id);
+          setStatePanelTarget(state, target.id);
+        }
+      });
     },
     onOpenState: object => {
       selectionStore.setSelection({object});
@@ -914,7 +919,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       selectFromPanel("diplomacy-panel", object);
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
+      locateAndSelectObject("diplomacy-panel", object);
     },
     onOpenState: object => {
       selectionStore.setSelection({object});
@@ -1196,8 +1201,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
     },
     onLocate: object => {
-      locateObject(state, object, documentRef);
-      labelNamingPanel.setSelectedLabelKey(labelKeyForObject(object));
+      locateAndSelectObject("label-naming-panel", object, {
+        afterSelect: target => labelNamingPanel.setSelectedLabelKey(labelKeyForObject(target))
+      });
     },
     onRename: (object, name) => {
       const context = {map: state.map};
@@ -3776,6 +3782,14 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     state.panels.marker.setSelectedMarkerId(selection.object.id);
     if (isSelectionFromPanel(context, "marker-panel")) return true;
     updateMarkerPanel(state);
+    return true;
+  },
+  [OBJECT_KIND.LABEL]: (state, selection, editingObject, context) => {
+    if (!state.panels.labelNaming?.isOpen?.()) return false;
+    state.panels.objectDetails.clear();
+    state.panels.labelNaming.setSelectedLabelKey(labelKeyForObject(selection.object));
+    if (isSelectionFromPanel(context, "label-naming-panel")) return true;
+    updateLabelNamingPanel(state);
     return true;
   },
   measurement: (state, selection, editingObject, context) => {

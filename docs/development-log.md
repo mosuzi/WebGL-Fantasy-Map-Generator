@@ -23328,3 +23328,24 @@ full 矩阵结果：
 - `node --input-type=module` 行为断言通过：`execute / undo / redo / clear` 会正确维护 `undo / redo / lastLabel / lastDomain`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告，并覆盖 Vue 历史组件、国家面板、省份面板和 editor store 的语法。
+
+### 2026-07-10 locateAndSelectObject 标签与入口扩展
+
+背景：
+
+- 测量对象定位已经接入统一 helper，但标签管理、政体 / 外交入口和对象详情仍直接调用 `locateObject()`。
+- 标签对象此前没有 `SELECTION_PANEL_HANDLERS` 分支，标签面板定位后容易落回通用对象详情语义，不利于后续统一高亮和定位 API。
+
+实现：
+
+- `locateAndSelectObject()` 新增可选 `sourcePanelId`，对象详情定位用 `sourcePanelId = null` 复用定位、selection、runtime 和 pick 刷新，但不伪装成领域面板来源。
+- 标签管理、政体管理和外交管理的定位回调改走 `locateAndSelectObject()`。
+- 新增标签 selection handler：标签面板打开时定位会保持标签面板选中行，并清理对象详情面板；从标签面板发起的定位不再额外更新同一面板。
+- 本轮不改外交色彩模式下的主题切换规则，不新增闪烁高亮或进入编辑语义，避免扩大定位 helper 扩展范围。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过。
+- 当前 PowerShell 中 `pnpm` 不在 PATH，Corepack 写入用户缓存被沙箱拦截；本轮改用等价的本地 Vite 命令 `.\node_modules\.bin\vite.cmd build --config vite.config.mjs`，构建通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：标签管理首个定位按钮后 selection 为 `label / 10` 且标签面板选中行 `1`；政体管理定位后 selection 为 `state / 15` 且面板选中行 `2`；外交管理定位后 selection 为 `state / 2` 且面板选中行 `1`；对象详情选中 marker `0` 后点击“定位”，selection 保持 `marker / 0`；最终 `glError = 0`、health 事件 `0`、console/page error 均为 `0`。
+- 本轮按用户要求启动验证子智能体；第一个子智能体只返回状态复述、没有执行烟测，第二个子智能体长时间无输出后已中断释放，因此最终有效验证证据来自主线程复跑的同等浏览器烟测。
