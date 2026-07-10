@@ -531,6 +531,7 @@
    - 2026-07-10 追加：路线备注保存路径已迁移到 `executeEditCommand()`，不再手写 `isNoop`、`EditHistory.execute`、`refreshAfterEdit` 和 `state.panels.route.update()`；真实路线面板备注 smoke 已覆盖撤销栈和 `object-panels` 刷新。
    - 2026-07-10 再追加：国家、省份、城市、文化、宗教、标记、标签和河流备注保存路径也已接入 `executeEditCommand()`；同类回调不再手写 `EditHistory.execute` 与局部面板刷新。
    - 2026-07-10 名称库补充：`executeNamebaseEdit()` 已改为复用 `executeEditCommand()`，保留名称库面板刷新、本地偏好保存和 `getResult()` 返回，并让名称库编辑写入 `lastEditRefresh`。
+   - 2026-07-10 城市字段补充：城市人口、同步归属、剪影设置 / 重置和删除城市回调已迁移到 `executeEditCommand()`；删除成功后的 selection 清理仍保留在调用点。
 
 59. `locateAndSelectObject()` helper 第一刀。`已完成`
    - 目标：推进编辑器基础设施清单中的统一定位 / 选择入口，先为面板内“定位对象”路径保留 source panel 语义。
@@ -767,3 +768,4 @@
 - 路线备注接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认真实“编辑备注”二级面板写入 `路线备注迁移烟测` 后生成 `route:0` 备注，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-panels` / `affected route#0`，详情显示“有备注（8字）”，`glError = 0`。
 - 多对象备注保存接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认国家备注生成 `state:1`、河流备注生成 `river:1`，两者均进入撤销栈并刷新 `object-panels`，详情显示“有备注（8字）”，`glError = 0`。
 - 名称库编辑接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认“新建用户库”后用户库 `0 -> 1`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-panels` / `selection none`，名称库面板和本地名称库偏好均包含新库，`glError = 0`。
+- 城市字段编辑接入统一编辑执行器已完成：`node --check app\webgl-generator\src\runtime\app.js` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认城市 `#1` 人口 `17.549 -> 18.549` 后 `lastEditRefresh` 为 `city-population, point-layers, labels, object-panels`，随后应用剪影后 `visual.manual=true` 且 `lastEditRefresh` 为 `labels, object-panels`，`glError = 0`。

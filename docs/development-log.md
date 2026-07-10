@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：城市字段编辑接入统一编辑执行器
+
+本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把城市面板的人口、归属同步、剪影设置、剪影重置和删除城市回调接入 `executeEditCommand()`。
+
+修正：
+
+- 城市人口、同步归属到所在 cell、调整剪影和恢复自动剪影不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部 `updateCityPanel()`。
+- 删除城市改为通过 `executeEditCommand()` 执行，成功后仍保留原有清空 selection 与清空城市面板选中行逻辑。
+- 面板刷新统一依赖命令 effects：城市人口刷新 `city-population / point-layers / labels / object-panels`，剪影刷新 `labels / object-panels`。
+
+边界：
+
+- 本步只迁移执行入口，不改变城市命令本身、城市数据结构、人口数值口径、剪影选项、删除规则或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开城市管理并选中城市 `#1`“玄昌”，通过真实“调整人口”二级表单把人口 `17.549 -> 18.549`，撤销栈 `undo=1`，`lastEditRefresh` 为 `city-population, point-layers, labels, object-panels` / `affected city#1`；随后通过真实“调整剪影”二级面板应用当前剪影，城市 `visual.manual=true`，撤销栈 `undo=2`，`lastEditRefresh` 为 `labels, object-panels` / `affected city#1`，`glError = 0`。health monitor 仍报告生成启动期长任务 warning。
+
 ## 2026-07-10：名称库编辑接入统一编辑执行器
 
 本步继续迁移编辑器基础设施中的旧执行路径，把名称库专用 `executeNamebaseEdit()` 接到 `executeEditCommand()`。

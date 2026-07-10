@@ -770,53 +770,35 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onDeleteCity: cityId => {
       const command = createDeleteCityCommand(cityId);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-      state.selectionStore.clear();
-      cityPanel.setSelectedCityId(null);
-      updateStatePanel(state);
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (result.executed) {
+        state.selectionStore.clear();
+        cityPanel.setSelectedCityId(null);
+      }
       updateEditingInteractionLock(state, documentRef);
     },
     onPopulationChange: (cityId, population) => {
       const context = {map: state.map};
       const command = createSetCityPopulationCommand(cityId, population);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onSyncOwnerToCell: cityId => {
       const context = {map: state.map};
       const command = createSyncCityOwnerToCellCommand(cityId);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
-      updateProvincePanel(state);
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onVisualChange: (cityId, patch) => {
       const context = {map: state.map};
       const command = createSetCityVisualCommand(cityId, patch);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onVisualReset: cityId => {
       const context = {map: state.map};
       const command = createResetCityVisualCommand(cityId);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateCityPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (cityId, body) => {
