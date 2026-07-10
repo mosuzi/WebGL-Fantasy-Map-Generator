@@ -23819,3 +23819,23 @@ full 矩阵结果：
 - 本地 Node 断言通过：坏宽度 `9999` 被夹到 `640`，过小宽度 `16` 被夹到 `32`，无效宽度回退到 defaults，未知列 key 被丢弃；未声明 `columnWidths` 的 defaults 不会把该字段写入偏好。
 - Node 在动态导入该 `.js` 文件时仍输出当前包缺少 `type: module` 的既有 warning，不影响断言结果。
 - 浏览器烟测待本批次收尾统一执行。
+
+### 2026-07-11 `UiObjectTable.columnWidths` 覆盖入口
+
+背景：
+
+- 列宽偏好存储已经能安全保存 `columnWidths`，公共表格也能解释列尺寸，但二者之间还缺一个组件入口。
+- 后续面板接入列宽持久化时，应能把偏好对象直接传给 `UiObjectTable`，不必重写每个 columns 数组。
+
+实现：
+
+- `UiObjectTable` 新增可选 `columnWidths` prop。
+- `columnStyle()` 会优先读取 `columnWidths[column.key]` 作为列宽覆盖值；未传或对应 key 不存在时继续使用列定义里的 `width`。
+- 覆盖后的列宽仍复用现有 `columnSize()`、`minWidth` 和 `maxWidth` 逻辑。
+- 本步不实现拖拽改宽 UI，也不改变任何面板默认列宽。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 浏览器烟测待本批次收尾统一执行。

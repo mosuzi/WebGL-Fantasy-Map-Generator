@@ -132,6 +132,10 @@ const props = defineProps({
   sortOptions: {
     type: Array,
     default: null
+  },
+  columnWidths: {
+    type: Object,
+    default: null
   }
 });
 
@@ -353,6 +357,10 @@ function defaultColumnWidth(column) {
   return Math.max(96, String(column.label || column.key || "").length * 16 + 48);
 }
 
+function columnWidthOverride(column) {
+  return props.columnWidths?.[column.key];
+}
+
 function columnSize(value) {
   if (Number.isFinite(value)) return `${Math.max(0, value)}px`;
   if (typeof value !== "string") return null;
@@ -362,7 +370,7 @@ function columnSize(value) {
 
 function columnStyle(column) {
   const align = column.align || "left";
-  const width = columnSize(column.width);
+  const width = columnSize(columnWidthOverride(column)) || columnSize(column.width);
   const minWidth = columnSize(column.minWidth) || width || `${defaultColumnWidth(column)}px`;
   const maxWidth = columnSize(column.maxWidth);
   const style = {
