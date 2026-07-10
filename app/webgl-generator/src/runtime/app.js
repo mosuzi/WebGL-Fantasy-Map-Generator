@@ -5780,12 +5780,18 @@ function clearMarkerEditMode(state) {
 }
 
 function applyMarkerCollectionCommand(state, documentRef, command, {selectCreated = false, selectMarkerId = null} = {}) {
-  if (!state.map || !command || command.isNoop?.({map: state.map})) return null;
-  const executed = state.editHistory.execute(command, {map: state.map});
-  markDerivedFresh(state.map, ["markers", "economy"]);
-  markDerivedStale(state.map, ["military", "diplomacy"]);
-  refreshGenerationSummary(state.map);
-  refreshAfterEdit(state, executed);
+  if (!state.map || !command) return null;
+  const execution = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: (targetState, executedCommand) => {
+      markDerivedFresh(targetState.map, ["markers", "economy"]);
+      markDerivedStale(targetState.map, ["military", "diplomacy"]);
+      refreshGenerationSummary(targetState.map);
+      refreshAfterEdit(targetState, executedCommand);
+    },
+    throwOnError: false
+  });
+  if (!execution.executed) return null;
 
   const created = selectCreated ? command.getCreatedMarker?.() : null;
   const markerId = Number.isInteger(selectMarkerId) ? selectMarkerId : created?.id;
@@ -5795,12 +5801,9 @@ function applyMarkerCollectionCommand(state, documentRef, command, {selectCreate
   }
 
   updateMarkerPanel(state);
-  updateEconomyPanel(state);
-  updateStatePanel(state);
-  updateProvincePanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return executed;
+  return execution.command;
 }
 
 function getMarkerPackCellAtEvent(state, event) {

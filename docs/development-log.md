@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：标记面板集合命令接入统一编辑执行器
+
+本步继续清理 marker 编辑路径，把 marker 面板 / 画布交互共用的 `applyMarkerCollectionCommand()` 接入 `executeEditCommand()`。
+
+修正：
+
+- marker 面板删除、资源点重生成、画布新增资源点和画布移动 marker 不再通过该 helper 手写 `command.isNoop()`、`state.editHistory.execute()` 和 `refreshAfterEdit()`。
+- helper 继续保留 `markDerivedFresh(["markers", "economy"])`、`markDerivedStale(["military", "diplomacy"])`、`refreshGenerationSummary()` 和新增 / 移动后的 marker 选择逻辑。
+- 对象面板刷新改由 marker 命令 effects 中的 `object-panels` 和统一执行器驱动；执行后只补 marker 面板、runtime 面板和编辑交互锁同步。
+
+边界：
+
+- 本步只迁移 marker 面板 / 画布集合命令 helper，不改变 marker API、marker 命令本身、资源类型规则、资源点重生成算法或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-marker-panel-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `stage-2-1 / 10000 cells` 地图后打开 marker 面板，通过面板“放置”入口和 canvas pointerdown 新增资源点，marker 数量 `44 -> 45` 且新 marker `#44` 被选中；再通过“移动选中资源标记”入口把该 marker 从 pack cell `13` 移到 pack cell `36`，撤销栈 `undo=2`；最后通过“删除选中资源标记”入口删除该 marker，marker 数量 `45 -> 44`，撤销栈 `undo=3`。三次操作的 `lastEditRefresh` 均包含 `point-layers / labels / object-panels / object-index`，`derivedStale` 包含 `military / diplomacy`，`markers` 与 `economy` 不保持 stale，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：标记编辑 API 接入统一编辑执行器
 
 本步继续清理 API 编辑路径，把 `api.edit.markers.add/delete/move()` 共用的 marker 集合命令 helper 接入 `executeEditCommand()`。
