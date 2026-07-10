@@ -1545,10 +1545,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onStyleChange: (zoneId, patch) => {
       const context = {map: state.map};
       const command = createSetZoneStyleCommand(zoneId, patch);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateZonePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {

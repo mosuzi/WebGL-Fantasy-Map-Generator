@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：地区样式编辑接入统一编辑执行器
+
+本步继续清理地区管理面板的旧执行路径，把地区纹理 / 颜色样式调整接入 `executeEditCommand()`。
+
+修正：
+
+- 地区样式调整不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部地区面板刷新。
+- 地区样式命令继续依赖自身 effects 刷新 `line-layers` 与 `object-panels`，并通过 `affected zone#id` 更新对应对象面板。
+
+边界：
+
+- 本步只迁移地区样式执行入口，不改变地区生成、地区 cells 范围、类型语义、默认纹理 / 颜色、导出结构或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：地区面板选中地区 `#0` 后，真实点击“调整样式”并把纹理从 `diagonal` 改为 `cross`，撤销栈 `undo=1`，`lastLabel` 为 `调整地区样式 #0`，`lastEditRefresh` 为 `line-layers, object-panels` / `affected zone#0`，面板详情同步显示“交叉线 / #d98238”，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：湖泊名称编辑接入统一编辑执行器
 
 本步继续清理湖泊管理面板的旧执行路径，把湖泊重命名和按名称库重命名筛选湖泊接入 `executeEditCommand()`。
