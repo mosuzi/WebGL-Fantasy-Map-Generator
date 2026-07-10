@@ -23596,3 +23596,18 @@ full 矩阵结果：
 - `node --check app\webgl-generator\src\ui\panels\namebase-panel.js` 通过。
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-11 名称库空态与导入方式批次综合验证
+
+范围：
+
+- 本批次覆盖 `82d0b84 接入名称库空态新建动作` 和 `786c62f 持久化名称库导入方式`。
+
+验证：
+
+- `node --check app\webgl-generator\src\ui\panel-list-preferences.js` 通过。
+- `node --check app\webgl-generator\src\ui\panels\namebase-panel.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开名称库面板并输入不存在的筛选词触发空态，空态显示“新建用户库”；导入方式从 `append` 切到 `replace` 后刷新页面并重新打开名称库面板，仍保持 `replace`；`window.__webglGeneratorApp` 存在，WebGL2 正常，`glError = 0`，health error、console error 和 page error 均为 `0`。
+- 本批次按要求启动验证子智能体 `namebase_empty_prefs_verify`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
