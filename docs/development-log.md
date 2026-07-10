@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：军事战报记录接入统一编辑执行器
+
+本步继续清理军事面板的旧执行路径，把“记录战报”接入 `executeEditCommand()`。
+
+修正：
+
+- 军团战报记录不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部军事 / 国家面板刷新。
+- 战报实际写入后继续保留 `markDerivedFresh(["military"])`、`refreshGenerationSummary()` 和 generation log 记录。
+- 普通战报面板刷新改由命令 effects 中的 `object-panels` 驱动；勾选“记录轻量结算”时仍由命令自身 effects 扩展到点层和对象索引刷新。
+
+边界：
+
+- 本步只迁移单个军团战报记录入口，不改变战报导入 / 清空、设置基地、驻地移动、军事生成算法、兵种比例、单个 / 批量态势或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开军事面板后固定选中军团 `1:0`，通过真实“记录战报”面板提交说明 `统一执行器战报 smoke ...` 的普通战报；军团事件数 `0 -> 1`，全局战报数 `0 -> 1`，`military.metadata.events = 1`，新事件为 `skirmish / victory / 本地战报` 且 `resultApplied` 为空，撤销栈 `undo=1`，`lastLabel` 为 `记录军团战斗事件 #1:0`，generation log 追加 `record military battle event: regiment=1:0, type=skirmish, outcome=victory, apply=no`，`military.metadata.stale = false`，`lastEditRefresh` 为 `render:none / object-panels` / `affected military#1:0`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：军事基地设置接入统一编辑执行器
 
 本步继续清理军事面板的旧执行路径，把“设当前位置为基地”接入 `executeEditCommand()`。
