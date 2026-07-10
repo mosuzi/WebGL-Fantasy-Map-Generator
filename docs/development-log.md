@@ -23436,6 +23436,8 @@ full 矩阵结果：
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+- 本批次综合验证中，`.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`stopObjectEditing({ifKind: "state"})` 在当前编辑对象为 `river / 1` 时返回 `false` 且不清理河流编辑对象；切到 `state / 1` 后同一 helper 返回 `true` 并清空编辑对象；`glError = 0`、health error 和 console/page error 均为 `0`。
 
 ### 2026-07-10 控制面板打开对象面板 helper 第一刀
 
@@ -23455,3 +23457,6 @@ full 矩阵结果：
 
 - `node --check app\webgl-generator\src\runtime\app.js` 通过。
 - `git diff --check` 通过。
+- 本批次综合验证中，`.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物烟测通过：`openSelectionAwarePanel` 存在；对 `trade-flow / 0` 调用经济总览打开动作时，记录到调用顺序为 `open -> set:0`，保留先刷新面板 map 再选中交易的语义；`glError = 0`、health error 和 console/page error 均为 `0`。
+- 本批次按要求尝试启动验证子智能体；该子智能体长时间无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
