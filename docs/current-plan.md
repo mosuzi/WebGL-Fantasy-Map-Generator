@@ -739,6 +739,11 @@
    - 边界：本步只持久化 marker 面板范围筛选 `all / resource / marker`；不保存新增 / 移动编辑模式、选中标记、资源类型草稿或其它编辑状态。
    - 完成记录：`panel-list-preferences` 支持可选 `scope` 字段；资源标记面板打开时读取范围筛选，切换范围时写回偏好，无效值回退为 `all`。
 
+99. `UiObjectTable.emptyAction` 禁用态支持。`已完成`
+   - 目标：继续完善空态主动作基础设施，让空态按钮也能表达不可用状态。
+   - 边界：本步只让公共空态按钮读取 `emptyAction.disabled`；不改变现有测量、文化、宗教、标签和名称库空态动作的可用状态，也不新增业务动作。
+   - 完成记录：`UiObjectTable` 空态按钮会把 `emptyAction.disabled` 透传到原生 `disabled` 属性，后续导入 / 创建类空态动作可复用同一能力。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

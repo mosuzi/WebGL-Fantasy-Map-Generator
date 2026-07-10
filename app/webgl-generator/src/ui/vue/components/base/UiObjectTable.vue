@@ -64,6 +64,7 @@
         type="button"
         :title="emptyAction.label"
         :aria-label="emptyAction.label"
+        :disabled="emptyAction.disabled"
         @click="emit('empty-action', emptyAction.key)"
       >
         <span aria-hidden="true">{{ emptyAction.icon || "+" }}</span>

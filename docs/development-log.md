@@ -23631,3 +23631,20 @@ full 矩阵结果：
 - `node --check app\webgl-generator\src\ui\panels\marker-panel.js` 通过。
 - `git diff --check` 通过。
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-11 `UiObjectTable.emptyAction` 禁用态支持
+
+背景：
+
+- `UiObjectTable.emptyAction` 已覆盖多个空态主动作，但公共按钮尚未透传禁用态。
+- 后续若把导入、创建或模式类动作继续接入空态，需要保留动作不可用时的表达能力，而不是在每个面板重新实现空态按钮。
+
+实现：
+
+- `UiObjectTable` 空态按钮新增 `:disabled="emptyAction.disabled"`。
+- 现有空态动作未传 `disabled`，默认行为保持不变。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
