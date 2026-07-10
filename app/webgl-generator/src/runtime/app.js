@@ -804,9 +804,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAdd: () => {
       const command = createAddCultureCommand();
       const context = {map: state.map};
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-        const cultureId = command.getCultureId?.();
+      const result = executeEditCommand(state, documentRef, command, {context});
+      if (result.executed) {
+        const cultureId = result.command?.getCultureId?.();
         if (cultureId) {
           culturePanel.setSelectedCultureId(cultureId);
           selectFromPanel("culture-panel", {kind: OBJECT_KIND.CULTURE, id: cultureId, name: `新文化 ${cultureId}`});
@@ -819,41 +819,34 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onDelete: object => {
       const command = createDeleteCultureCommand(object.id);
       const context = {map: state.map};
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      const result = executeEditCommand(state, documentRef, command, {
+        context,
+        noopStatus: "只能删除无覆盖、无子级、无关联对象的空文化。"
+      });
+      if (result.executed) {
         setFileOperationStatus(documentRef, `已删除空文化 ${object.name || `#${object.id}`}。`);
-      } else {
-        setFileOperationStatus(documentRef, "只能删除无覆盖、无子级、无关联对象的空文化。");
       }
-      updateCulturePanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onRename: (cultureId, name) => {
       const object = {kind: "culture", id: cultureId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateCulturePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onColorChange: (cultureId, color) => {
+      const context = {map: state.map};
       const culture = state.map?.society?.cultures?.[cultureId] || state.map?.pack?.cultures?.[cultureId];
       const command = createSetCultureColorCommand(cultureId, color, {beforeColor: culture?.color || null});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-      }
-      updateCulturePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onParentChange: (cultureId, parentId) => {
+      const context = {map: state.map};
       const culture = state.map?.society?.cultures?.[cultureId] || state.map?.pack?.cultures?.[cultureId];
       const command = createSetCultureParentCommand(cultureId, parentId, {beforeParent: culture?.parent ?? 0});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-      }
-      updateCulturePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (cultureId, body) => {
@@ -892,9 +885,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAdd: () => {
       const command = createAddReligionCommand();
       const context = {map: state.map};
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-        const religionId = command.getReligionId?.();
+      const result = executeEditCommand(state, documentRef, command, {context});
+      if (result.executed) {
+        const religionId = result.command?.getReligionId?.();
         if (religionId) {
           religionPanel.setSelectedReligionId(religionId);
           selectFromPanel("religion-panel", {kind: OBJECT_KIND.RELIGION, id: religionId, name: `新宗教 ${religionId}`});
@@ -907,41 +900,34 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onDelete: object => {
       const command = createDeleteReligionCommand(object.id);
       const context = {map: state.map};
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
+      const result = executeEditCommand(state, documentRef, command, {
+        context,
+        noopStatus: "只能删除无覆盖、无子级、无关联对象的空宗教。"
+      });
+      if (result.executed) {
         setFileOperationStatus(documentRef, `已删除空宗教 ${object.name || `#${object.id}`}。`);
-      } else {
-        setFileOperationStatus(documentRef, "只能删除无覆盖、无子级、无关联对象的空宗教。");
       }
-      updateReligionPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onRename: (religionId, name) => {
       const object = {kind: "religion", id: religionId};
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateReligionPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onColorChange: (religionId, color) => {
+      const context = {map: state.map};
       const religion = state.map?.society?.religions?.[religionId] || state.map?.pack?.religions?.[religionId];
       const command = createSetReligionColorCommand(religionId, color, {beforeColor: religion?.color || null});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-      }
-      updateReligionPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onParentChange: (religionId, parentId) => {
+      const context = {map: state.map};
       const religion = state.map?.society?.religions?.[religionId] || state.map?.pack?.religions?.[religionId];
       const command = createSetReligionParentCommand(religionId, parentId, {beforeParent: religion?.parent ?? 0});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-      }
-      updateReligionPanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (religionId, body) => {

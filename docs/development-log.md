@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：文化与宗教字段编辑接入统一编辑执行器
+
+本步继续清理文化和宗教面板的旧执行路径，把新增空对象、删除空对象、重命名、调整颜色和调整继承父级接入 `executeEditCommand()`。
+
+修正：
+
+- 文化 / 宗教新增、删除、重命名、颜色和继承不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部面板刷新。
+- 新增成功后仍保留原有选中新对象、同步 selection 和状态文案逻辑。
+- 删除失败的 no-op 文案继续提示“只能删除无覆盖、无子级、无关联对象的空文化 / 空宗教”。
+- 字段修改统一依赖命令 effects 驱动对应面板、对象面板、专题颜色和对象索引刷新。
+
+边界：
+
+- 本步只迁移执行入口，不改变文化 / 宗教数据结构、删除约束、继承合法性、名称库绑定、备注、撤销快照或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开文化管理后，真实点击“新增空文化”新增 `#13`，撤销栈 `undo=1`，`lastEditRefresh` 为 `culture-structure, cell-colors, object-index, object-panels` / `affected culture#13`；随后通过真实“重命名”二级面板把 `#13` 改为 `文化统一执行器烟测`，撤销栈 `undo=2`，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected culture#13`。打开宗教管理后，真实点击“新增空宗教”新增 `#19`，撤销栈 `undo=1`，`lastEditRefresh` 为 `religion-structure, cell-colors, object-index, object-panels` / `affected religion#19`；随后通过真实“调整颜色”二级面板把 `#19` 改为 `#7f6cc7`，撤销栈 `undo=2`，`lastEditRefresh` 为 `religion-color, cell-colors, object-panels` / `affected religion#19`。两次 smoke 均 `glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：省份字段编辑接入统一编辑执行器
 
 本步继续清理省份面板的旧执行路径，把删除省份、重命名省份和调整省份颜色接入 `executeEditCommand()`。
