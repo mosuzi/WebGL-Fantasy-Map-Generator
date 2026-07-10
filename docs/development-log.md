@@ -23559,3 +23559,20 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - Playwright + 系统 Chrome 构建产物烟测通过：临时静态服务加载 `dist/webgl-generator` 后，打开文化管理、宗教管理和标签管理，分别输入不存在的筛选词触发空态；文化空态显示“新增空文化”，宗教空态显示“新增空宗教”，标签空态显示“新增标签”；`window.__webglGeneratorApp` 存在，WebGL2 正常，`glError = 0`，health error、console error 和 page error 均为 `0`。
 - 本批次按要求启动验证子智能体 `empty_action_verify`；该子智能体连续等待无输出，已中断释放，最终有效验证证据来自主线程兜底复跑的同等构建和浏览器烟测。
+
+### 2026-07-11 名称库空态新建用户库动作接入
+
+背景：
+
+- 名称库面板已有“新建用户库”列表动作，但筛选后列表为空时，空态区域还不能直接触发同一动作。
+- 新建用户库不依赖地图点击模式，适合作为 `UiObjectTable.emptyAction` 的低风险接入点。
+
+实现：
+
+- 名称库面板新增 `namebaseEmptyAction`，表格空态接入该动作，并与列表动作条复用同一个冻结动作对象。
+- 空态按钮复用既有 `handleNamebaseAction()`，不改变导入、复制、删除、清空、绑定或编辑逻辑。
+
+验证：
+
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。

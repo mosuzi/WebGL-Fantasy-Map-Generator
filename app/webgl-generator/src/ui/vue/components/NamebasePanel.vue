@@ -100,8 +100,10 @@
     :selected-id="state.selectedNamebaseId"
     row-id-key="id"
     empty-text="没有匹配的名称库"
+    :empty-action="namebaseEmptyAction"
     :show-locate-action="false"
     @select="callbacks.onSelect"
+    @empty-action="handleNamebaseAction"
   />
 
   <UiPanelIoActions
@@ -261,8 +263,9 @@ const userRows = computed(() => rows.value.filter(row => row.origin !== "内置"
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedNamebaseId));
 const selectedBuiltinRow = computed(() => selected.value?.builtin === true ? selected.value : null);
 const selectedUserRow = computed(() => isUserNamebaseRow(selected.value) ? selected.value : null);
+const namebaseEmptyAction = Object.freeze({key: "create", label: "新建用户库", icon: "+"});
 const namebaseListActions = computed(() => [
-  {key: "create", label: "新建用户库", icon: "+"},
+  namebaseEmptyAction,
   {key: "copy", label: "复制选中内置库", icon: "⧉", disabled: !selectedBuiltinRow.value},
   {key: "delete", label: "删除选中用户库", icon: "×", disabled: !selectedUserRow.value},
   {key: "clear", label: "清空用户库", icon: "⌫", disabled: !userRows.value.length}
