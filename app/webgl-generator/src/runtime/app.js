@@ -1254,10 +1254,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const route = state.map?.settlements?.routes?.find(item => item.id === routeId);
       const context = {map: state.map};
       const command = createSetRouteNoteCommand(routeId, body, {name: routeDisplayName(state.map, route, routeId)});
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {

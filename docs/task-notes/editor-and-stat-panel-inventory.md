@@ -247,7 +247,7 @@
 4. `SELECTION_PANEL_HANDLERS` 已把对象种类映射到领域面板打开 / 更新逻辑，`selectFromPanel()` 可避免从面板选择对象时反复重开同一面板。
 5. `updateAllObjectPanels()` 和各 `update*Panel()` 函数已形成运行时面板刷新入口；`refreshPanelsForEdit()` 已落地，可按 `effects.affected.kind` 刷新对象面板，并在命令声明 `derived: ["object-panels"]` 时刷新所有对象面板，当前已接入测量对象重命名 / 删除和备注删除。
 6. `UiObjectTable`、`UiPanelIoActions`、`UiActionDock`、`UiHistoryActions`、`UiDetailGrid`、`UiMetricGrid`、`UiFilterInput` 和 `UiSortBar` 已成为主要面板公共组件；近期路线、资源标记、备注、名称库、河流和湖泊列表动作已开始收束到 `UiPanelIoActions`，空列表主动作可优先走 `UiObjectTable.emptyAction`。
-7. `executeEditCommand()` 已在 `app.js` 内部落地，先迁移测量对象重命名 / 删除、备注删除和路线删除调用点，统一 `isNoop`、`EditHistory.execute`、刷新函数、对象面板 helper 和 status 文案；返回结果第一刀已补 `{executed, command, result, error}`，测量保存和 GEO 测量导入已改用标准 `getResult()`。执行器现在会在 `options.refresh` 或默认 `refreshAfterEdit()` 后统一调用 `refreshPanelsForEdit()`，自定义刷新路径不再需要各自记住对象面板刷新。
+7. `executeEditCommand()` 已在 `app.js` 内部落地，先迁移测量对象重命名 / 删除、备注删除、路线删除和路线备注调用点，统一 `isNoop`、`EditHistory.execute`、刷新函数、对象面板 helper 和 status 文案；返回结果第一刀已补 `{executed, command, result, error}`，测量保存和 GEO 测量导入已改用标准 `getResult()`。执行器现在会在 `options.refresh` 或默认 `refreshAfterEdit()` 后统一调用 `refreshPanelsForEdit()`，自定义刷新路径不再需要各自记住对象面板刷新。
 
 主要缺口：
 
@@ -260,7 +260,7 @@
 
 下一批施工小步：
 
-1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、`refreshAfterEdit`、status 文案、标准 `getResult()` 返回和保守异常通道；后续再迁移路线备注、名称库或其它低风险调用点，并补更明确的错误展示策略。
+1. 继续扩展 `executeEditCommand(state, documentRef, command, options)` 运行时 helper：当前已统一 `isNoop` 检查、`EditHistory.execute`、刷新函数、对象面板 helper、status 文案、标准 `getResult()` 返回和保守异常通道；路线备注已迁移，后续再迁移名称库或其它低风险调用点，并补更明确的错误展示策略。
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：推荐字段为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；后续再评估是否把契约转成轻量运行时校验。
 3. 继续扩展 `refreshPanelsForEdit(state, command)`：当前已根据 `effects.affected.kind` 刷新常见对象面板，并支持 `derived: ["object-panels"]` 全对象面板刷新；`executeEditCommand()` 默认会在任意刷新函数后调用它。后续重点是覆盖仍直接调用 `state.editHistory.execute()` / `undo()` / `redo()` 的旧路径，并逐步替换调用点手写 `updateStatePanel()`、`updateCityPanel()` 等散落逻辑。
 4. 继续扩展 `locateAndSelectObject()`：当前已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区和军事面板定位路径，后续逐步迁移标签、政府 / 外交入口和对象详情定位，并补齐闪烁高亮、打开 / 更新面板和 API 复用语义。

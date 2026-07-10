@@ -2,6 +2,26 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：路线备注接入统一编辑执行器
+
+本步继续清理编辑器基础设施中的旧调用路径，把路线管理面板的备注保存从手写 `isNoop -> EditHistory.execute -> refreshAfterEdit -> update route panel` 迁移到 `executeEditCommand()`。
+
+修正：
+
+- 路线面板 `onNoteChange` 现在复用 `executeEditCommand()`，保留原有 `createSetRouteNoteCommand()`、撤销栈和 `route` effects。
+- 成功后的路线面板刷新改由执行器里的 `refreshPanelsForEdit()` 兜底触发，不再在回调里手写 `state.panels.route.update()`。
+
+边界：
+
+- 本步只迁移路线备注保存路径，不改变路线删除、路线重算、道路 mesh 或备注数据结构。
+- 不新增持久化字段，不涉及旧地图转换。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开路线管理面板，通过真实“编辑备注”二级面板写入 `路线备注迁移烟测`，`map.notes.notes` 中生成 `route:0` 备注，`history undo=1`，`lastEditRefresh` 为 `object-panels` / `affected route#0`，面板详情显示“有备注（8字）”，`glError = 0`。health monitor 仍报告生成启动期长任务 / input-delay warning。
+
 ## 2026-07-10：编辑命令默认刷新入口收口
 
 本步继续推进编辑器基础设施计划中 `refreshPanelsForEdit()` 的落地范围。此前 `executeEditCommand()` 默认只触发 `edit-refresh-scheduler`，路线、备注、测量等调用点需要在执行成功后再手写 `refreshPanelsForEdit()`，容易在新增 API 或面板操作时漏掉对象面板刷新。
