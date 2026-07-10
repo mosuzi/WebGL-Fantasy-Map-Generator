@@ -1158,14 +1158,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.route = routePanel;
@@ -1226,14 +1222,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       stopMarkerEditMode(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateMarkerPanel(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateMarkerPanel(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.marker = markerPanel;

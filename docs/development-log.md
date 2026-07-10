@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：路线和标记面板历史按钮接入统一历史执行器
+
+本步继续清理面板撤销 / 重做旧路径，把路线管理和资源标记管理的历史按钮接入 `executeHistoryCommand()`。
+
+修正：
+
+- 路线面板 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()` 和单面板 `update()`。
+- marker 面板 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()` 和 `updateMarkerPanel()`。
+- 两个面板统一复用历史执行器的刷新路径：执行历史命令后刷新 edit effects、对象面板、编辑交互锁，并返回标准 `{executed, action, label, history}` 结果。
+
+边界：
+
+- 本步只迁移路线 / marker 面板历史按钮，不改变路线删除、资源点新增 / 移动 / 删除、资源点重生成或命令 effects。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-history-panel-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `stage-2-1 / 10000 cells` 地图后打开路线面板，用 `api.edit.routes.delete(0)` 制造历史记录，再点击路线面板 header “撤销 / 重做”，路线数量 `588 -> 589 -> 588`，`lastEditRefresh.derived` 包含 `route-mesh / object-panels / object-index`；打开 marker 面板后用 `api.edit.markers.add({type: "mines", packCell: 13})` 制造历史记录，再点击 marker 面板 header “撤销 / 重做”，marker 数量 `45 -> 44 -> 45`，`lastEditRefresh.derived` 包含 `point-layers / labels / object-panels / object-index`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：标记面板集合命令接入统一编辑执行器
 
 本步继续清理 marker 编辑路径，把 marker 面板 / 画布交互共用的 `applyMarkerCollectionCommand()` 接入 `executeEditCommand()`。
