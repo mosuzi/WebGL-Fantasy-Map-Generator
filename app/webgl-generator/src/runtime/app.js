@@ -4510,10 +4510,12 @@ function regenerateDiplomacy(state, documentRef) {
   const beforeEnemies = map.diplomacy?.metadata?.enemies || 0;
   const salt = nextRegenerationSalt(map, "diplomacy");
   const command = createRegenerateDiplomacyCommand({salt});
-  if (command.isNoop({map})) return regenerationResult("diplomacy", "未执行", "当前地图至少需要两个有效国家才能重生成外交。");
-
-  const executed = state.editHistory.execute(command, {map});
-  refreshAfterEdit(state, executed);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false
+  });
+  if (!result.executed) return regenerationResult("diplomacy", "未执行", "当前地图至少需要两个有效国家才能重生成外交。");
   markDerivedFresh(map, ["diplomacy"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate diplomacy: salt=${salt}, pairs=${map.diplomacy.metadata.pairs}, enemies=${map.diplomacy.metadata.enemies}`);

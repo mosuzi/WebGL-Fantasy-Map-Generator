@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：外交重生成入口接入统一执行器
+
+本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把控制面板 / API 复用的外交重生成函数接入 `executeEditCommand()`。
+
+修正：
+
+- `regenerateDiplomacy()` 不再直接调用 `state.editHistory.execute()`。
+- 外交重生成改由统一执行器处理 no-op、入栈和基础刷新；函数内继续保留 `markDerivedFresh()`、生成摘要刷新、生成日志、外交面板 / 国家面板 / runtime 面板更新。
+- 本入口关闭统一执行器默认面板刷新，避免和外交重生成已有的精确面板刷新重复。
+
+边界：
+
+- 本步不改变外交关系生成算法、salt 规则、外交面板内“重生成外交”按钮或单个外交关系编辑命令。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-diplomacy-regenerate-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `diplomacy-regenerate-smoke / 10000 cells` 地图后，点击控制面板 `[data-regenerate-kind="diplomacy"]`；`diplomacyRegenerationSalt` `0 -> 1`，历史栈 `undo 0 -> 1`，外交 stale 为空，外交关系 `pairs = 190`，战争数 `1 -> 0`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：国家省份画布新增删除接入统一执行器
 
 本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把国家 / 省份面板和画布新增删除入口收束到 `executeEditCommand()`。
