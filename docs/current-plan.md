@@ -783,3 +783,4 @@
 - 湖泊名称编辑接入统一编辑器已完成：`node --check app\webgl-generator\src\runtime\app.js` 和 `git diff --check` 通过；`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物 smoke 确认真实湖泊“重命名”把湖泊 `#5` 改为 `湖泊统一执行器烟测` 后进入撤销栈，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected lake#5`；真实“按名称库重命名筛选湖泊”把湖泊 `#5` 改回“秋泽”，撤销栈 `undo=2`，`lastLabel` 为 `按名称库重命名湖泊 4 个`，刷新摘要为 `object-name, object-panels`，`glError = 0`，console/page error 为 `0`。
 - 编辑命令契约校验第一刀已完成：`EditHistory.execute()` 现在会校验 `label / domain / effects / affected / isNoop / getResult` 等可选字段的形状；`edit-command-contract.md` 和编辑器基础设施清单已同步更新。该校验保持渐进兼容，不强制旧命令一次性补齐 `domain / effects`，但会阻止新增命令携带错误结构进入撤销栈。
 - 编辑命令 `domain` 第一批已完成：路线、河流、湖泊、地区、备注和测量对象命令已主动声明 `domain`，用于后续按领域聚合调试、刷新诊断和 API 错误归因；城市、国家、省份、文化、宗教、marker、标签、外交和军事等命令后续继续分批补齐。
+- 编辑命令 `domain` 第二批已完成：城市、国家、省份、文化和宗教命令已主动声明 `domain`；剩余 marker、标签、外交、军事和对象详情通用字段等命令后续继续分批补齐。

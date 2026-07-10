@@ -57,6 +57,7 @@ export function createAddCityAtCellCommand(gridCell, {label = "新增城市"} = 
   let result = null;
   return {
     label,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_COLLECTION_EFFECTS,
       affected: [{kind: OBJECT_KIND.CITY, id: "new"}]
@@ -84,6 +85,7 @@ export function createDeleteCityCommand(cityId, {label = "删除城市"} = {}) {
   let result = null;
   return {
     label: `${label} #${normalizedCityId}`,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_COLLECTION_EFFECTS,
       affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
@@ -113,6 +115,7 @@ export function createSetCityPopulationCommand(cityId, nextPopulation, {label = 
 
   return {
     label: `${label} #${normalizedCityId}`,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_POPULATION_EFFECTS,
       affected: [{kind: "city", id: normalizedCityId}]
@@ -146,6 +149,7 @@ export function createSyncCityOwnerToCellCommand(cityId, {label = "同步城市�
 
   return {
     label: `${label} #${normalizedCityId}`,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_OWNER_SYNC_EFFECTS,
       affected: [{kind: "city", id: normalizedCityId}]
@@ -183,6 +187,7 @@ export function createSetCityVisualCommand(cityId, patch = {}, {label = "调整�
 
   return {
     label: `${label} #${normalizedCityId}`,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_VISUAL_EFFECTS,
       affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
@@ -215,6 +220,7 @@ export function createResetCityVisualCommand(cityId, {label = "恢复城市自�
 
   return {
     label: `${label} #${normalizedCityId}`,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_VISUAL_EFFECTS,
       affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
@@ -253,6 +259,7 @@ export function createSetCityNoteCommand(cityId, body, {name = ""} = {}) {
 
   return {
     label: normalizedBody ? `编辑城市备注 #${normalizedCityId}` : `清空城市备注 #${normalizedCityId}`,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_NOTE_EFFECTS,
       affected: [{kind: OBJECT_KIND.CITY, id: normalizedCityId}]
@@ -290,6 +297,7 @@ export function createRenameCitiesFromNamebaseCommand(cityIds, {label = "按名�
 
   return {
     label: `${label} ${targets.length} 个`,
+    domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_NAME_BATCH_EFFECTS,
       affected: targets.map(id => ({kind: OBJECT_KIND.CITY, id}))

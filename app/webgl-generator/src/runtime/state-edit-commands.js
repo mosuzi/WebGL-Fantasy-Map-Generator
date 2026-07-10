@@ -97,6 +97,7 @@ export function createApplyStateBrushCommand(changes, {label = "国家笔刷"} =
   let politicalSnapshot = null;
   return {
     label: `${label} ${normalized.length} cells`,
+    domain: "state",
     effects: {
       ...STATE_CELL_SURFACE_EFFECTS,
       affected: affectedStates.length ? affectedStates.map(id => ({kind: "state", id})) : [{kind: "grid-cells", id: normalized.length}]
@@ -130,6 +131,7 @@ export function createSetStateColorCommand(stateId, color, {beforeColor = null, 
   const before = normalizeHexColor(beforeColor);
   return {
     label: `${label} #${normalizedStateId}`,
+    domain: "state",
     effects: {
       ...STATE_COLOR_EFFECTS,
       affected: [{kind: "state", id: normalizedStateId}]
@@ -152,6 +154,7 @@ export function createSetStateGovernmentCommand(stateId, governmentKey, {label =
   let previous = null;
   return {
     label: `${label} #${normalizedStateId}`,
+    domain: "state",
     effects: {
       ...STATE_GOVERNMENT_EFFECTS,
       affected: [{kind: "state", id: normalizedStateId}]
@@ -179,6 +182,7 @@ export function createSetStatesGovernmentBatchCommand(stateIds, governmentKey, {
   let previous = null;
   return {
     label: `${label} ${normalizedStateIds.length}国`,
+    domain: "state",
     effects: {
       ...STATE_GOVERNMENT_EFFECTS,
       affected: normalizedStateIds.map(id => ({kind: "state", id}))
@@ -214,6 +218,7 @@ export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名
 
   return {
     label: `${label} ${normalizedStateIds.length}国`,
+    domain: "state",
     effects: {
       ...STATE_NAME_BATCH_EFFECTS,
       affected: normalizedStateIds.map(id => ({kind: "state", id}))
@@ -242,6 +247,7 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
   let result = null;
   return {
     label,
+    domain: "state",
     effects: {
       ...STATE_COLLECTION_EFFECTS,
       affected: [{kind: "state", id: "new"}]
@@ -269,6 +275,7 @@ export function createDeleteStateCommand(stateId, {label = "删除国家"} = {})
   let result = null;
   return {
     label: `${label} #${normalizedStateId}`,
+    domain: "state",
     effects: {
       ...STATE_COLLECTION_EFFECTS,
       affected: [{kind: "state", id: normalizedStateId}]

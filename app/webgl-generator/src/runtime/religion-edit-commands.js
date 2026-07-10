@@ -30,6 +30,7 @@ export function createAddReligionCommand({name = "", label = "新增宗教"} = {
 
   return {
     label,
+    domain: "religion",
     effects: {
       ...RELIGION_STRUCTURE_EFFECTS,
       affected: []
@@ -69,6 +70,7 @@ export function createDeleteReligionCommand(religionId, {label = "删除宗教"}
 
   return {
     label: `${label} #${normalizedReligionId}`,
+    domain: "religion",
     effects: {
       ...RELIGION_STRUCTURE_EFFECTS,
       affected: [{kind: "religion", id: normalizedReligionId}]
@@ -109,6 +111,7 @@ export function createSetReligionColorCommand(religionId, color, {beforeColor = 
 
   return {
     label: `${label} #${normalizedReligionId}`,
+    domain: "religion",
     effects: {
       ...RELIGION_COLOR_EFFECTS,
       affected: [{kind: "religion", id: normalizedReligionId}]
@@ -143,6 +146,7 @@ export function createSetReligionParentCommand(religionId, parentId, {beforePare
 
   return {
     label: `${label} #${normalizedReligionId}`,
+    domain: "religion",
     effects: {
       ...RELIGION_PARENT_EFFECTS,
       affected: [{kind: "religion", id: normalizedReligionId}]

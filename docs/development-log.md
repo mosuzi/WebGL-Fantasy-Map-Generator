@@ -22998,3 +22998,25 @@ full 矩阵结果：
 - `node --input-type=module` 契约断言通过：第一批 13 个命令实例均通过 `validateEditCommandContract()`，且 `domain` 分别为 `route / river / lake / zone / measurement / note`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-10 编辑命令 domain 第二批
+
+背景：
+
+- 第一批已覆盖线性对象和轻量对象命令，下一步继续把高频对象命令纳入 `domain` 约定。
+- 城市、国家、省份、文化和宗教是当前编辑器与控制台 API 的主要对象域，补齐 `domain` 后更方便后续做领域级调试、刷新诊断和错误归因。
+
+实现：
+
+- 城市命令新增 `domain: "city"`，覆盖新增、删除、人口、归属同步、剪影、备注和名称库批量重命名。
+- 国家命令新增 `domain: "state"`，覆盖国家刷、颜色、政体、批量政体、名称库批量重命名、新增和删除。
+- 省份命令新增 `domain: "province"`，覆盖省份刷、新增和删除。
+- 文化和宗教命令新增 `domain: "culture"` / `domain: "religion"`，覆盖新增、删除、颜色和继承父级调整。
+- 同步更新 `edit-command-contract.md`、编辑器基础设施清单和当前计划，记录剩余 marker、标签、外交、军事和对象详情通用字段等命令后续继续分批补齐。
+
+验证：
+
+- `node --check` 覆盖 `city-edit-commands.js`、`state-edit-commands.js`、`province-edit-commands.js`、`culture-edit-commands.js` 和 `religion-edit-commands.js`，均通过。
+- `node --input-type=module` 契约断言通过：第二批 26 个命令实例均通过 `validateEditCommandContract()`，且 `domain` 分别为 `city / state / province / culture / religion`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。

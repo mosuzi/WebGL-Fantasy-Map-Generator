@@ -30,6 +30,7 @@ export function createAddCultureCommand({name = "", label = "新增文化"} = {}
 
   return {
     label,
+    domain: "culture",
     effects: {
       ...CULTURE_STRUCTURE_EFFECTS,
       affected: []
@@ -69,6 +70,7 @@ export function createDeleteCultureCommand(cultureId, {label = "删除文化"} =
 
   return {
     label: `${label} #${normalizedCultureId}`,
+    domain: "culture",
     effects: {
       ...CULTURE_STRUCTURE_EFFECTS,
       affected: [{kind: "culture", id: normalizedCultureId}]
@@ -109,6 +111,7 @@ export function createSetCultureColorCommand(cultureId, color, {beforeColor = nu
 
   return {
     label: `${label} #${normalizedCultureId}`,
+    domain: "culture",
     effects: {
       ...CULTURE_COLOR_EFFECTS,
       affected: [{kind: "culture", id: normalizedCultureId}]
@@ -143,6 +146,7 @@ export function createSetCultureParentCommand(cultureId, parentId, {beforeParent
 
   return {
     label: `${label} #${normalizedCultureId}`,
+    domain: "culture",
     effects: {
       ...CULTURE_PARENT_EFFECTS,
       affected: [{kind: "culture", id: normalizedCultureId}]

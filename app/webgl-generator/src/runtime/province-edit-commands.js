@@ -49,6 +49,7 @@ export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷"
   let snapshot = null;
   return {
     label: `${label} ${normalized.length} cells`,
+    domain: "province",
     effects: {
       ...PROVINCE_CELL_SURFACE_EFFECTS,
       affected: affectedProvinces.length ? affectedProvinces.map(id => ({kind: "province", id})) : [{kind: "grid-cells", id: normalized.length}]
@@ -77,6 +78,7 @@ export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份"
   let result = null;
   return {
     label,
+    domain: "province",
     effects: {
       ...PROVINCE_COLLECTION_EFFECTS,
       affected: [{kind: "province", id: "new"}]
@@ -104,6 +106,7 @@ export function createDeleteProvinceCommand(provinceId, {label = "删除省份"}
   let result = null;
   return {
     label: `${label} #${normalizedProvinceId}`,
+    domain: "province",
     effects: {
       ...PROVINCE_COLLECTION_EFFECTS,
       affected: [{kind: "province", id: normalizedProvinceId}]
