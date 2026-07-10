@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：国家省份画布新增删除接入统一执行器
+
+本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把国家 / 省份面板和画布新增删除入口收束到 `executeEditCommand()`。
+
+修正：
+
+- 国家面板“删除国家”入口不再直接调用 `state.editHistory.execute()`，改由统一执行器处理 no-op、入栈和刷新。
+- 国家画布新增 / 删除模式的 pointerdown 入口改由统一执行器执行命令，并继续保留模式退出、选择更新、目标国家同步和 runtime 面板刷新。
+- 省份画布新增 / 删除模式的 pointerdown 入口改由统一执行器执行命令，并继续保留模式退出、选择更新、目标省份同步和 runtime 面板刷新。
+
+边界：
+
+- 本步不改变国家 / 省份新增、删除、刷子涂抹、派生修复或命名规则；只迁移入栈方式。
+- 高度 / 国家 / 省份刷子落笔、GEO 地形导入、外交重生成和自定义标签拖拽仍保留为后续直接 `state.editHistory.execute()` 清理项。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-state-province-canvas-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `state-province-canvas-smoke / 10000 cells` 地图后，分别通过国家 / 省份面板动作按钮进入新增和删除模式，并向 canvas 派发真实 pointerdown；国家数量 `20 -> 21 -> 20`，省份数量 `206 -> 207 -> 206`，历史栈 `undo 0 -> 4`，新增后 selection 指向新国家 / 新省份，删除后 selection 清空；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：名称库历史按钮接入统一历史执行器
 
 本步继续清理最后一处面板撤销 / 重做旧路径，把名称库总览的历史按钮接入 `executeHistoryCommand()`。

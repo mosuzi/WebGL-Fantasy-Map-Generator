@@ -404,8 +404,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onDeleteState: stateId => {
       const command = createDeleteStateCommand(stateId);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        refresh: refreshAfterStateEdit
+      });
+      if (!result.executed) return;
       state.selectionStore.clear();
       state.panels.state.setTargetStateId(0);
       updateAllObjectPanels(state);
@@ -5301,8 +5304,11 @@ function bindStateEditing(canvas, state) {
       const stateId = getStateIdAtEvent(state, event);
       if (!Number.isInteger(stateId) || stateId <= 0) return;
       const command = createDeleteStateCommand(stateId);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, canvas.ownerDocument || document, command, {
+        context: {map: state.map},
+        refresh: refreshAfterStateEdit
+      });
+      if (!result.executed) return;
       state.stateEdit.deleteMode = false;
       state.stateEdit.lastAffected = 0;
       state.selectionStore.clear();
@@ -5320,9 +5326,12 @@ function bindStateEditing(canvas, state) {
       const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
       if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
       const command = createAddStateAtCellCommand(pick.gridCell);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterStateEdit(state, state.editHistory.execute(command, {map: state.map}));
-      const result = command.getResult?.();
+      const execution = executeEditCommand(state, canvas.ownerDocument || document, command, {
+        context: {map: state.map},
+        refresh: refreshAfterStateEdit
+      });
+      if (!execution.executed) return;
+      const result = execution.result;
       state.stateEdit.addMode = false;
       state.stateEdit.lastAffected = result?.cells || 0;
       state.stateEdit.sourceStateId = result?.stateId || null;
@@ -5388,8 +5397,11 @@ function bindProvinceEditing(canvas, state) {
       const provinceId = getProvinceIdAtEvent(state, event);
       if (!Number.isInteger(provinceId) || provinceId <= 0) return;
       const command = createDeleteProvinceCommand(provinceId);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterProvinceEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, canvas.ownerDocument || document, command, {
+        context: {map: state.map},
+        refresh: refreshAfterProvinceEdit
+      });
+      if (!result.executed) return;
       state.provinceEdit.deleteMode = false;
       state.provinceEdit.lastAffected = 0;
       state.selectionStore.clear();
@@ -5407,9 +5419,12 @@ function bindProvinceEditing(canvas, state) {
       const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
       if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
       const command = createAddProvinceAtCellCommand(pick.gridCell);
-      if (command.isNoop({map: state.map})) return;
-      refreshAfterProvinceEdit(state, state.editHistory.execute(command, {map: state.map}));
-      const result = command.getResult?.();
+      const execution = executeEditCommand(state, canvas.ownerDocument || document, command, {
+        context: {map: state.map},
+        refresh: refreshAfterProvinceEdit
+      });
+      if (!execution.executed) return;
+      const result = execution.result;
       state.provinceEdit.addMode = false;
       state.provinceEdit.lastAffected = result?.cells || 0;
       state.provinceEdit.sourceProvinceId = result?.provinceId || null;
