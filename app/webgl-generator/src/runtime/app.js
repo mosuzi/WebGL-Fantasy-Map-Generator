@@ -279,16 +279,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onRename: (object, name) => {
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      if (!command.isNoop(context)) {
-        refreshAfterEdit(state, state.editHistory.execute(command, context));
-      }
-      updateStatePanel(state);
-      updateProvincePanel(state);
-      updateCityPanel(state);
-      updateCulturePanel(state);
-      updateReligionPanel(state);
-      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
-      updateLakePanel(state);
+      executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameFromNamebase: object => {
@@ -3726,15 +3717,19 @@ function renameSelectedObjectFromNamebase(state, documentRef, object) {
   }
   const command = createSelectedNamebaseRenameCommand(target);
   const context = {map: state.map};
-  if (!command || command.isNoop(context)) {
+  if (!command) {
     setFileOperationStatus(documentRef, `当前选中${selectedNamebaseTargetLabel(target)}没有可按名称库更新的名称。`);
     return;
   }
-  refreshAfterEdit(state, state.editHistory.execute(command, context));
-  const result = command.getResult?.();
-  setFileOperationStatus(documentRef, `已按当前名称库重命名选中${selectedNamebaseTargetLabel(target)} ${result?.renamed || 0} 个。`);
-  updateAllObjectPanels(state);
-  updateEditingInteractionLock(state, documentRef);
+  const execution = executeEditCommand(state, documentRef, command, {
+    context,
+    noopStatus: () => `当前选中${selectedNamebaseTargetLabel(target)}没有可按名称库更新的名称。`,
+    status: executedCommand => {
+      const result = executedCommand.getResult?.();
+      return `已按当前名称库重命名选中${selectedNamebaseTargetLabel(target)} ${result?.renamed || 0} 个。`;
+    }
+  });
+  if (execution.executed) updateEditingInteractionLock(state, documentRef);
 }
 
 function namebaseRenameTargetForObject(object) {

@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：对象详情名称编辑接入统一编辑执行器
+
+本步继续清理对象详情面板的旧执行路径，把对象详情里的重命名和“名称库改名”接入 `executeEditCommand()`。
+
+修正：
+
+- 对象详情重命名不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和一组散落的领域面板刷新。
+- 选中对象的名称库改名改用统一执行器的 `status / noopStatus`，继续保留成功数量提示和无可更新名称提示。
+- 面板同步改由命令 effects、`refreshPanelsForEdit()` 和 selection refresh 驱动，不再由对象详情入口手动逐个更新国家、省份、城市、文化、宗教、河流和湖泊面板。
+
+边界：
+
+- 本步只迁移对象详情公共名称入口，不改变各领域专用面板的名称库算法、对象解析规则、可编辑对象范围、标签目标语义或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：选中城市生成标签并在对象详情进入编辑后，真实“应用名称”把城市 `#0` 改为 `对象详情统一执行器烟测`，撤销栈 `undo=1`，`lastEditRefresh` 为 `object-name, labels, object-panels` / `affected city#0`；随后真实点击“名称库改名”把同一城市改为名称库生成名，撤销栈 `undo=2`，状态文案为“已按当前名称库重命名选中城市 1 个。”，selection 仍保持 `label -> city`，对象详情文本同步刷新，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：地区样式编辑接入统一编辑执行器
 
 本步继续清理地区管理面板的旧执行路径，把地区纹理 / 颜色样式调整接入 `executeEditCommand()`。
