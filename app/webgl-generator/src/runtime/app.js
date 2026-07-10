@@ -1085,14 +1085,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         eventIds,
         label: eventIds?.length ? "清空筛选战斗事件" : "清空军团战斗事件"
       });
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (result.executed) {
         markDerivedFresh(state.map, ["military"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `clear military battle events: regiment=${target.id}, scope=${eventIds?.length ? "filtered" : "selected"}`);
       }
-      updateMilitaryPanel(state);
-      updateStatePanel(state);
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },
