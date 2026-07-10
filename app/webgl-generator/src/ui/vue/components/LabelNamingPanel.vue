@@ -118,11 +118,15 @@ const labelActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
-const labelEmptyAction = Object.freeze({key: "add", label: "新增标签", icon: "+"});
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
+const defaultLabelEmptyAction = Object.freeze({key: "add", label: "新增标签", icon: "+"});
+const labelEmptyAction = computed(() => filterEmptyAction.value || defaultLabelEmptyAction);
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
 const labelManagementActions = computed(() => [
-  labelEmptyAction,
+  defaultLabelEmptyAction,
   {key: selected.value?.hidden ? "restore" : "delete", label: selected.value?.hidden ? "恢复标签" : "删除标签", icon: selected.value?.hidden ? "↺" : "×", disabled: !selected.value}
 ]);
 
@@ -155,6 +159,10 @@ watch(() => selected.value?.key, key => {
 });
 
 function handleLabelManagementAction(key) {
+  if (key === "clear-filter") {
+    props.callbacks.onFilter?.("");
+    return;
+  }
   if (key === "add") {
     props.callbacks.onAdd?.();
     return;

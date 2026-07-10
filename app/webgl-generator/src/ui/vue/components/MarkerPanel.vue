@@ -27,10 +27,12 @@
     :selected-id="activeSelectedMarkerId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的资源点或标记"
+    :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
+    @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
   />
 
@@ -183,6 +185,9 @@ const metrics = computed(() => {
 });
 const scopedRows = computed(() => applyScope(metrics.value.rows, props.state.scope));
 const visibleRows = computed(() => sortRows(filterRows(scopedRows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const activeSelectedMarkerId = computed(() => {
   const selectionId = props.state.selection?.object?.kind === "marker" ? props.state.selection.object.id : null;
   return selectionId !== null && selectionId !== undefined ? selectionId : props.state.selectedMarkerId;
@@ -338,6 +343,10 @@ function handleMarkerListAction(key) {
     return;
   }
   if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
+}
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
 function syncVisualDraft() {

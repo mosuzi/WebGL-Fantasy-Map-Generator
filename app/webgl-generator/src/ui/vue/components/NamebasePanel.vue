@@ -274,9 +274,13 @@ const userRows = computed(() => rows.value.filter(row => row.origin !== "内置"
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedNamebaseId));
 const selectedBuiltinRow = computed(() => selected.value?.builtin === true ? selected.value : null);
 const selectedUserRow = computed(() => isUserNamebaseRow(selected.value) ? selected.value : null);
-const namebaseEmptyAction = Object.freeze({key: "create", label: "新建用户库", icon: "+"});
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
+const defaultNamebaseEmptyAction = Object.freeze({key: "create", label: "新建用户库", icon: "+"});
+const namebaseEmptyAction = computed(() => filterEmptyAction.value || defaultNamebaseEmptyAction);
 const namebaseListActions = computed(() => [
-  namebaseEmptyAction,
+  defaultNamebaseEmptyAction,
   {key: "copy", label: "复制选中内置库", icon: "⧉", disabled: !selectedBuiltinRow.value},
   {key: "delete", label: "删除选中用户库", icon: "×", disabled: !selectedUserRow.value},
   {key: "clear", label: "清空用户库", icon: "⌫", disabled: !userRows.value.length}
@@ -497,6 +501,10 @@ function handleNamebaseImport({file}) {
 }
 
 function handleNamebaseAction(key) {
+  if (key === "clear-filter") {
+    props.callbacks.onFilter?.("");
+    return;
+  }
   if (key === "create") props.callbacks.onCreateUser?.();
   if (key === "copy" && selectedBuiltinRow.value) props.callbacks.onCopyBuiltin?.(selectedBuiltinRow.value);
   if (key === "delete" && selectedUserRow.value) props.callbacks.onDeleteUser?.(selectedUserRow.value);
