@@ -1,6 +1,6 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
-import {newObjectAffected} from "./edit-command-effects.js";
+import {newObjectAffected, objectAffected} from "./edit-command-effects.js";
 
 const LABEL_EFFECTS = Object.freeze({
   render: "draw",
@@ -42,7 +42,7 @@ export function createAddCustomLabelCommand({text, x, y}) {
       };
       store.custom.push({...created});
       updateLabelMetadata(store);
-      this.effects.affected = [{kind: OBJECT_KIND.LABEL, id: created.id}];
+      this.effects.affected = objectAffected(OBJECT_KIND.LABEL, created.id);
     },
     revert(context) {
       const store = ensureLabelStore(context.map);
@@ -75,7 +75,7 @@ export function createMoveCustomLabelCommand(labelId, nextPoint, {previousPoint 
     domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.LABEL, id}]
+      affected: objectAffected(OBJECT_KIND.LABEL, id)
     },
     apply(context) {
       const label = findCustomLabel(context.map, id);
@@ -110,7 +110,7 @@ export function createRenameCustomLabelCommand(labelId, nextText) {
     domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.LABEL, id}]
+      affected: objectAffected(OBJECT_KIND.LABEL, id)
     },
     apply(context) {
       if (!text) throw new Error("标签文字不能为空");
@@ -143,7 +143,7 @@ export function createSetLabelNoteCommand(label, body, {name = ""} = {}) {
     domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_NOTE_EFFECTS,
-      affected: [{kind: OBJECT_KIND.LABEL, id: target.id}]
+      affected: objectAffected(OBJECT_KIND.LABEL, target.id)
     },
     apply(context) {
       const currentName = readLabelName(context.map, target);
@@ -180,7 +180,7 @@ export function createDeleteLabelCommand(label) {
     domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.LABEL, id: target.id}]
+      affected: objectAffected(OBJECT_KIND.LABEL, target.id)
     },
     apply(context) {
       const store = ensureLabelStore(context.map);
@@ -227,7 +227,7 @@ export function createRestoreGeneratedLabelCommand(label) {
     domain: OBJECT_KIND.LABEL,
     effects: {
       ...LABEL_EFFECTS,
-      affected: [{kind: OBJECT_KIND.LABEL, id: target.id}]
+      affected: objectAffected(OBJECT_KIND.LABEL, target.id)
     },
     apply(context) {
       const store = ensureLabelStore(context.map);

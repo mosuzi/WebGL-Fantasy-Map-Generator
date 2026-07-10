@@ -24556,3 +24556,30 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_marker_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：`objectAffected("marker", 7)`、`createSetMarkerVisualCommand(7, ...)`、`createSetMarkerNoteCommand(7, ...)`、`createMoveMarkerCommand(7, ...)` 和 `createDeleteMarkerCommand(7)` 均返回 `marker#7`；`createRegenerateResourceMarkersCommand({salt: 42})` 返回 `derived-system#markers + marker#resources`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 标签与测量对象 affected helper 收口
+
+背景：
+
+- 单对象 affected helper 已先覆盖 marker 命令，但标签和测量对象命令仍有多处手写 `{kind, id}`。
+- 标签与测量命令都是低风险对象命令，适合继续作为第二批 helper 迁移，减少后续新增命令复制散落写法。
+
+实现：
+
+- `label-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 手工标签新增成功后的真实 id 回写、移动、重命名、标签备注、删除和恢复生成标签命令均改为复用 `objectAffected(OBJECT_KIND.LABEL, id)`。
+- `measurement-edit-commands.js` 引入 `objectAffected(kind, id)`。
+- 测量对象保存成功后的真实 id 回写、重命名、点位更新、删除和导入成功后的对象列表回写均改为复用 `objectAffected("measurement", id)`；导入命令继续组合 `systemAffected("measurements-import", ...)` 保留系统来源。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充标签与测量对象单对象 helper 迁移状态。
+- 本步不改变标签新增 / 移动 / 删除 / 恢复、生成标签隐藏列表、标签备注、测量对象保存 / 更新 / 删除 / 导入、派生刷新或面板刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\label-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\measurement-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\edit-command-effects.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_label_measurement_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：标签移动、重命名、备注、删除、恢复均返回 `label#7`；手工标签新增执行后回写 `label#1`；测量对象重命名、更新和删除均返回 `measurement#measurement-7`；测量对象保存执行后回写 `measurement#measurement-1`；测量对象导入执行后回写 `derived-system#measurements-import + measurement#measurement-1 + measurement#measurement-2`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。

@@ -10,7 +10,7 @@ import {
   restoreMeasurementStore
 } from "./measurement-objects.js";
 import {normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
-import {newObjectAffected, systemAffected} from "./edit-command-effects.js";
+import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const MEASUREMENT_EFFECTS = Object.freeze({
   render: "none",
@@ -37,7 +37,7 @@ export function createSaveMeasurementCommand(points, {name = "", routeFit = "non
       const store = ensureMeasurementStore(context.map);
       store.items.push(JSON.parse(JSON.stringify(created)));
       refreshMeasurementsMetadata(store);
-      this.effects.affected = [{kind: "measurement", id: created.id}];
+      this.effects.affected = objectAffected("measurement", created.id);
     },
     revert(context) {
       restoreMeasurementStore(context.map, previous);
@@ -63,7 +63,7 @@ export function createRenameMeasurementCommand(measurementId, name, {label = "é‡
     domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
-      affected: [{kind: "measurement", id: measurementId}]
+      affected: objectAffected("measurement", measurementId)
     },
     apply(context) {
       const item = readMeasurement(context.map, measurementId);
@@ -93,7 +93,7 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
     domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
-      affected: [{kind: "measurement", id: measurementId}]
+      affected: objectAffected("measurement", measurementId)
     },
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
@@ -134,7 +134,7 @@ export function createDeleteMeasurementCommand(measurementId, {label = "åˆ é™¤æµ
     domain: "measurement",
     effects: {
       ...MEASUREMENT_EFFECTS,
-      affected: [{kind: "measurement", id: measurementId}]
+      affected: objectAffected("measurement", measurementId)
     },
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
@@ -180,7 +180,7 @@ export function createImportMeasurementsCommand(measurements, {label = "å¯¼å…¥æµ
         refreshMeasurementsMetadata(store);
       }
       refreshMeasurementsMetadata(store);
-      this.effects.affected = systemAffected("measurements-import", imported.map(item => ({kind: "measurement", id: item.id})));
+      this.effects.affected = systemAffected("measurements-import", imported.flatMap(item => objectAffected("measurement", item.id)));
     },
     revert(context) {
       restoreMeasurementStore(context.map, previous);
