@@ -1279,18 +1279,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateLabelNamingPanel(state);
-      updateStatePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateLabelNamingPanel(state);
-      updateStatePanel(state);
-      updateCityPanel(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.labelNaming = labelNamingPanel;
@@ -1334,14 +1326,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onExport: rows => exportNotesSummary(state, documentRef, rows),
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateAllObjectPanels(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateAllObjectPanels(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.notes = notesPanel;

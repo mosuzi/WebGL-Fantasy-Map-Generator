@@ -2,6 +2,28 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：标签和备注面板历史按钮接入统一历史执行器
+
+本步继续清理面板撤销 / 重做旧路径，把标签管理和备注总览的历史按钮接入 `executeHistoryCommand()`。
+
+修正：
+
+- 标签管理 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()`、`updateLabelNamingPanel()`、`updateStatePanel()` 和 `updateCityPanel()`。
+- 备注总览 `onUndo/onRedo` 不再手写 `state.editHistory.undo/redo()`、`refreshAfterEdit()` 和 `updateAllObjectPanels()`。
+- 两个面板统一复用历史执行器的刷新路径：执行历史命令后刷新 edit effects、对象面板、编辑交互锁，并返回标准 `{executed, action, label, history}` 结果。
+
+边界：
+
+- 本步只迁移标签管理 / 备注总览历史按钮，不改变标签新增 / 删除 / 恢复、标签备注、备注删除或导出逻辑。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check work\fmg-label-notes-history-smoke.mjs` 通过；该脚本为本步临时 browser smoke，验证后已删除。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：生成 `stage-2-1 / 10000 cells` 地图后打开标签管理，用 `api.edit.routes.delete(0)` 制造历史记录，再点击标签管理 header “撤销 / 重做”，路线数量 `588 -> 589 -> 588`，`lastEditRefresh.derived` 包含 `route-mesh / object-panels / object-index`；打开备注总览后用 `api.edit.markers.add({type: "mines", packCell: 13})` 制造历史记录，再点击备注总览 header “撤销 / 重做”，marker 数量 `45 -> 44 -> 45`，`lastEditRefresh.derived` 包含 `point-layers / labels / object-panels / object-index`；`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：路线和标记面板历史按钮接入统一历史执行器
 
 本步继续清理面板撤销 / 重做旧路径，把路线管理和资源标记管理的历史按钮接入 `executeHistoryCommand()`。
