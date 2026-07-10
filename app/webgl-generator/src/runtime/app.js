@@ -965,14 +965,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (!state.map) return;
       const salt = nextRegenerationSalt(state.map, "diplomacy");
       const command = createRegenerateDiplomacyCommand({salt});
-      if (!command.isNoop({map: state.map})) {
-        refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
+      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (result.executed) {
         markDerivedFresh(state.map, ["diplomacy"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `regenerate diplomacy: salt=${salt}, pairs=${state.map.diplomacy?.metadata?.pairs || 0}, enemies=${state.map.diplomacy?.metadata?.enemies || 0}`);
       }
-      updateDiplomacyPanel(state);
-      updateStatePanel(state);
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },

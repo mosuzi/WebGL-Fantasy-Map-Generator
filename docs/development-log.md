@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：外交重生成接入统一编辑执行器
+
+本步继续清理外交面板的旧执行路径，把“重生成外交”接入 `executeEditCommand()`。
+
+修正：
+
+- 外交重生成不再手写 `command.isNoop()`、`state.editHistory.execute()`、`refreshAfterEdit()` 和局部外交 / 国家面板刷新。
+- 重生成实际执行后继续保留 `markDerivedFresh(["diplomacy"])`、`refreshGenerationSummary()` 和 generation log 记录。
+- 面板刷新改由命令 effects 中的 `diplomacy / cell-colors / object-panels` 驱动。
+
+边界：
+
+- 本步只迁移外交重生成入口，不改变外交生成算法、外交关系权重、salt 规则、撤销快照结构、关系字段编辑或旧图数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- Playwright + 系统 Chrome 构建产物 smoke 通过：打开外交面板后真实点击“重生成外交”，`diplomacyRegenerationSalt` 从 `0` 增至 `1`，撤销栈 `undo=1`，`lastLabel` 为 `重生成外交`，generation log 追加 `regenerate diplomacy: salt=1...`，`diplomacy.metadata.stale = false`，`lastEditRefresh` 为 `diplomacy, cell-colors, object-panels` / `affected diplomacy#all`，`glError = 0`，console/page error 为 `0`。
+
 ## 2026-07-10：外交关系字段接入统一编辑执行器
 
 本步继续清理外交面板的旧执行路径，把单个外交关系调整接入 `executeEditCommand()`。
