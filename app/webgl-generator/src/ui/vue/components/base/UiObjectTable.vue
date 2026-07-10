@@ -8,6 +8,7 @@
               class="object-table-selection-checkbox object-table-select-all-checkbox"
               type="checkbox"
               :checked="allRowsSelected"
+              :indeterminate="partialRowsSelected"
               :aria-checked="selectionHeaderState"
               aria-label="选择当前列表"
               @click.stop
@@ -214,9 +215,10 @@ const sortIndicator = computed(() => props.sortDirection === "asc" ? "↑" : "�
 const selectedRowKeySet = computed(() => new Set(props.selectedRowIds.map(id => stringRowId(id))));
 const allRowsSelected = computed(() => Boolean(props.rows.length) && props.rows.every(row => rowSelectionChecked(row)));
 const someRowsSelected = computed(() => props.rows.some(row => rowSelectionChecked(row)));
+const partialRowsSelected = computed(() => someRowsSelected.value && !allRowsSelected.value);
 const selectionHeaderState = computed(() => {
   if (allRowsSelected.value) return "true";
-  if (someRowsSelected.value) return "mixed";
+  if (partialRowsSelected.value) return "mixed";
   return "false";
 });
 const columnLayoutSignature = computed(() => props.columns.map(column => [

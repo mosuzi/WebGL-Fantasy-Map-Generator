@@ -24295,3 +24295,24 @@ full 矩阵结果：
 - 单选第一条测量对象后，摘要变为“已选1”，行 checkbox 选中数为 `1`；打开导出下拉并点击“导出选中 1”后，下载 JSON 的 `metadata.measurements = 1`，导出 measurements 只包含 `measure-test-1`。
 - 点击表头全选后，摘要变为“已选2”，两个行 checkbox 都选中，表头 checkbox 处于选中状态；导出下拉中出现可用的“导出选中 2”菜单项。
 - WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍可能记录既有 `main-thread-long-task` warn，本步未新增 error。
+
+### 2026-07-11 公共表格批量选择半选态
+
+背景：
+
+- 备注、测量、外交、政体、经济、名称库和军事等面板已逐步接入公共表格批量选择。
+- `UiObjectTable` 已计算 `aria-checked="mixed"`，但表头 checkbox 的原生半选视觉状态还未同步；部分选中时屏幕阅读语义和视觉反馈不够一致。
+
+实现：
+
+- `UiObjectTable` 表头全选 checkbox 新增 `indeterminate` 绑定。
+- 新增 `partialRowsSelected` 计算状态，复用既有“已选部分但非全选”的判定。
+- 本步只修正公共表格选择状态呈现，不改变全选范围、行选择、导出、排序、筛选或任何编辑动作。
+
+验证：
+
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_table_indeterminate`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：打开军事面板后单选 `1 / 113` 行，表头 checkbox 为 `checked=false / indeterminate=true / aria-checked=mixed`；点击表头全选后，表头为 `checked=true / indeterminate=false / aria-checked=true`，且 `113 / 113` 行全部选中。
+- WebGL 与健康检查通过：renderer `lastDraw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。Vite 控制台在页面启动阶段仍记录既有 `main-thread-long-task` warn，本步未新增 error。
