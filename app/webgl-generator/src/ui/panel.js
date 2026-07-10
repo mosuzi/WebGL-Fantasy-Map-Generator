@@ -976,7 +976,8 @@ function formatMarkerResources(map, unitPreferences = {}) {
 
 function formatEditHistory(stats) {
   if (!stats) return "none";
-  return `undo ${stats.undo} / redo ${stats.redo} / ${stats.lastLabel}`;
+  const domain = stats.lastDomain && stats.lastDomain !== "none" ? ` @${stats.lastDomain}` : "";
+  return `undo ${stats.undo} / redo ${stats.redo} / ${stats.lastLabel}${domain}`;
 }
 
 function formatEditRefresh(refresh) {

@@ -10,7 +10,7 @@ export const useEditorStore = defineStore("editor", {
     stateBrush: {active: false, addMode: false, deleteMode: false, targetStateId: null, lastAffected: 0, sourceStateId: null},
     provinceBrush: {active: false, addMode: false, deleteMode: false, targetProvinceId: null, lastAffected: 0, sourceProvinceId: null},
     city: {addMode: false, deleteMode: false, lastCreatedCityId: null},
-    history: {undo: 0, redo: 0, lastLabel: "none"},
+    history: {undo: 0, redo: 0, lastLabel: "none", lastDomain: "none"},
     lastEditRefresh: null
   }),
   actions: {

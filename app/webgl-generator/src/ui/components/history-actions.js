@@ -12,7 +12,8 @@ export function createHistoryActions(documentRef, {className, history, onUndo, o
   redo.textContent = "重做上次";
   redo.addEventListener("click", onRedo);
   const note = documentRef.createElement("span");
-  note.textContent = noteText ?? `${label}：${history ? `undo ${history.undo} / redo ${history.redo} / ${history.lastLabel}` : "none"}`;
+  const domain = history?.lastDomain && history.lastDomain !== "none" ? ` @${history.lastDomain}` : "";
+  note.textContent = noteText ?? `${label}：${history ? `undo ${history.undo} / redo ${history.redo} / ${history.lastLabel}${domain}` : "none"}`;
   actions.append(undo, redo, note);
   return actions;
 }

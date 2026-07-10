@@ -23063,3 +23063,25 @@ full 矩阵结果：
 - `node --input-type=module` 契约断言通过：军事模块 9 个导出编辑命令实例均通过 `validateEditCommandContract()`，且 `domain` 均为 `military`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
 - `git diff --check` 通过。
 - `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+
+### 2026-07-10 编辑历史领域统计
+
+背景：
+
+- 主要 `*-edit-commands.js` 命令已经补齐 `domain`，但历史统计仍只暴露 `lastLabel`。
+- 控制台 API、面板历史摘要和后续错误归因需要直接知道最近一次命令来自哪个领域，而不是从中文 label 里猜。
+
+实现：
+
+- `EditHistory` 新增 `lastDomain` 状态，`execute / undo / redo` 后记录最近命令的 `domain`，`clear()` 重置为 `"none"`。
+- `getStats()` 返回 `lastDomain`，控制台 `history.get()` 可直接读取。
+- 控制面板历史摘要、原生 `createHistoryActions()`、Vue `UiHistoryActions`、国家 / 省份面板专用历史文案会在有领域时显示 `@domain`。
+- Vue editor store 的初始 history 形状补齐 `lastDomain: "none"`。
+- 同步更新 `edit-command-contract.md`、编辑器基础设施清单和当前计划。
+
+验证：
+
+- `node --check` 覆盖 `edit-history.js`、`panel.js` 和 `history-actions.js`，均通过。
+- `node --input-type=module` 行为断言通过：`execute / undo / redo / clear` 会正确维护 `undo / redo / lastLabel / lastDomain`。该脚本只出现 Node 对仓库未声明 `"type": "module"` 的既有提示，不影响 Vite 构建。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告，并覆盖 Vue 历史组件、国家面板、省份面板和 editor store 的语法。

@@ -4,6 +4,7 @@ export class EditHistory {
     this.undoStack = [];
     this.redoStack = [];
     this.lastLabel = "none";
+    this.lastDomain = "none";
   }
 
   execute(command, context) {
@@ -13,6 +14,7 @@ export class EditHistory {
     if (this.undoStack.length > this.limit) this.undoStack.shift();
     this.redoStack = [];
     this.lastLabel = command.label;
+    this.lastDomain = command.domain || "none";
     return command;
   }
 
@@ -22,6 +24,7 @@ export class EditHistory {
     command.revert(context);
     this.redoStack.push(command);
     this.lastLabel = `撤销 ${command.label}`;
+    this.lastDomain = command.domain || "none";
     return command;
   }
 
@@ -31,6 +34,7 @@ export class EditHistory {
     command.apply(context);
     this.undoStack.push(command);
     this.lastLabel = `重做 ${command.label}`;
+    this.lastDomain = command.domain || "none";
     return command;
   }
 
@@ -38,13 +42,15 @@ export class EditHistory {
     this.undoStack = [];
     this.redoStack = [];
     this.lastLabel = "none";
+    this.lastDomain = "none";
   }
 
   getStats() {
     return {
       undo: this.undoStack.length,
       redo: this.redoStack.length,
-      lastLabel: this.lastLabel
+      lastLabel: this.lastLabel,
+      lastDomain: this.lastDomain
     };
   }
 }

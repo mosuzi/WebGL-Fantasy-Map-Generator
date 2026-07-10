@@ -242,7 +242,8 @@ const detailRows = computed(() => selected.value ? [
 
 const historyNote = computed(() => {
   const history = props.state.history;
-  const historyText = history ? `undo ${history.undo} / redo ${history.redo} / ${history.lastLabel}` : "none";
+  const domain = history?.lastDomain && history.lastDomain !== "none" ? ` @${history.lastDomain}` : "";
+  const historyText = history ? `undo ${history.undo} / redo ${history.redo} / ${history.lastLabel}${domain}` : "none";
   return `历史：${historyText}；来源：${formatStateName(props.state.map, props.state.sourceStateId)}`;
 });
 

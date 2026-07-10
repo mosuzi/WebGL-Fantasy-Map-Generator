@@ -80,6 +80,12 @@
 - 读取 `getResult()`，返回给调用方做选择、定位或文案。
 - 通过 `refreshPanelsForEdit()` 按 `affected.kind` 和 `derived: ["object-panels"]` 刷新领域面板。
 
+`EditHistory.getStats()` 会返回：
+
+- `undo / redo`：当前撤销栈和重做栈长度。
+- `lastLabel`：最近一次执行、撤销或重做的命令标签。
+- `lastDomain`：最近一次执行、撤销或重做命令的 `domain`；无领域时为 `"none"`。
+
 后续 helper 可继续扩展：
 
 - 标准化异常文案。
@@ -107,5 +113,6 @@
 - `EditHistory.execute()` 已接入轻量运行时契约校验，基础字段严格、可选字段渐进校验。
 - `executeEditCommand()` 已成为主要编辑入口，覆盖测量、备注、名称库、城市、国家、省份、文化、宗教、路线、河流、湖泊、地区、marker、标签、外交、军事、高度刷子、GEO 地形导入和自定义标签拖拽等常见路径。
 - 已主动声明 `domain` 的命令范围：路线、河流、湖泊、地区、备注、测量对象、城市、国家、省份、文化、宗教、marker、标签、外交、对象详情通用字段和军事。
+- `EditHistory.getStats()` 已暴露 `lastDomain`，控制台历史 API 和面板历史摘要可直接看到最近命令领域。
 - 面板历史按钮已开始复用 `executeHistoryCommand()`，避免各面板分别手写撤销 / 重做刷新。
 - 后续重点是继续迁移残留的直接 `state.editHistory.execute()` 路径，并让新增命令保持 `domain` 和更精确的 `effects.affected`。
