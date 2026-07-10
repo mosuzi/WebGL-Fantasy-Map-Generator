@@ -1431,14 +1431,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.river = riverPanel;
@@ -1470,14 +1466,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateLakePanel(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateLakePanel(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.lake = lakePanel;
@@ -1498,14 +1490,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const command = state.editHistory.undo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateZonePanel(state);
+      return executeHistoryCommand(state, documentRef, "undo");
     },
     onRedo: () => {
-      const command = state.editHistory.redo({map: state.map});
-      if (command) refreshAfterEdit(state, command);
-      updateZonePanel(state);
+      return executeHistoryCommand(state, documentRef, "redo");
     }
   });
   state.panels.zone = zonePanel;
