@@ -2,6 +2,27 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-10：自定义标签拖拽接入统一执行器
+
+本步清理 `app.js` 中最后一条业务侧直接 `state.editHistory.execute()` 调用，把自定义标签拖拽移动命令接入 `executeEditCommand()`。
+
+修正：
+
+- `finishCustomLabelDrag()` 中的 `createMoveCustomLabelCommand()` 不再直接调用 `state.editHistory.execute()`。
+- 自定义标签移动改由统一执行器处理 no-op、入栈和基础刷新，并继续保留无变化时 `renderer.refreshLabels()`、标签面板刷新和 runtime 面板刷新。
+- 标签初次放置的 `placementCommand` 仍按原逻辑保留，因为它不是直接调用 `state.editHistory.execute()` 的旧路径。
+
+边界：
+
+- 本步不改变标签创建、拖拽坐标、拖拽捕获、标签渲染或标签列表语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `$env:CI='true'; pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- `rg -n "state\.editHistory\.execute\(" app\webgl-generator\src\runtime\app.js` 只剩 `executeEditCommand()` 内部一处调用，确认业务入口不再直接入栈。
+
 ## 2026-07-10：高度国家省份刷子落笔接入统一执行器
 
 本步继续迁移直接调用 `state.editHistory.execute()` 的旧路径，把高度、国家和省份刷子的落笔命令接入 `executeEditCommand()`。

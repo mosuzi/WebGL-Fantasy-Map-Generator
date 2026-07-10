@@ -5666,9 +5666,12 @@ function finishCustomLabelDrag(state, documentRef, event) {
   }
 
   const command = createMoveCustomLabelCommand(drag.labelId, finalPoint, {previousPoint: drag.startedAt});
-  if (!command.isNoop({map: state.map})) {
-    refreshAfterEdit(state, state.editHistory.execute(command, {map: state.map}));
-  } else {
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false
+  });
+  if (!result.executed) {
     state.renderer.refreshLabels?.();
   }
   updateLabelNamingPanel(state);
