@@ -25022,3 +25022,26 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_namebase_write_api` 和 `verify_namebase_write_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.list / export / create / copyBuiltin / update / delete / bind`，`sideEffects.namebases = readonly-download-and-edit-command`；`api.namebases.create({name, source, minLength, maxLength, duplicateChars})` 新建 `user-namebase-1`，名称、3 个样本、`2-4` 字长和允许连写“玄”均正确，历史 undo 增加；`api.namebases.update(id, {name, source, minLength, maxLength})` 可改名、改 2 个样本和 `2-3` 字长，并可 undo / redo 恢复；`api.namebases.copyBuiltin("ancient-state-roots")` 新增一个用户库副本并可 undo 移除；`api.namebases.bind("global", "place", createdId)` 写入全局地名绑定并可 undo 清回；`api.namebases.delete(createdId)` 删除用户库并可 undo 恢复；最后继续 undo update 和 create 后用户库数量回到 `0`。调用前后 checksum 保持 `88adc7f6`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 名称库导入 API 第一刀
+
+背景：
+
+- 名称库 API 已覆盖读取、导出和基础写入，但还缺少脚本化导入入口。
+- 运行时已有名称库文件导入解析和 `createImportNamebasesCommand()`，适合先开放同步文档 / 文本导入，不触碰文件选择器 UI。
+
+实现：
+
+- `console-api.js` 新增 `api.namebases.import(document, {mode, filename})` 并登记到 `api.info.capabilities()`。
+- app action 层新增 `importNamebaseDocumentViaApi()`，支持传入当前 JSON 名称库文档对象、JSON 字符串或原版文本字符串。
+- 导入默认 `append`；传 `mode: "replace"` 时替换当前用户库。导入继续复用 `createImportNamebasesCommand()`、`EditHistory`、名称库面板刷新和本地偏好持久化。
+- 本步不接清空用户库，也不接按名称库批量重命名当前地图对象。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_namebase_import_api` 和 `verify_namebase_import_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.import` 且 `sideEffects.namebases = readonly-download-and-edit-command`；用 `api.namebases.export({download:false, baseIds:[ancient-state-roots]})` 得到 JSON 文档后，`api.namebases.import(JSON.parse(text), {filename:"api-import-smoke.json"})` 可导入 `1` 个用户库并可 undo 恢复；`api.namebases.import(text, {mode:"replace", filename:"api-import-replace.json"})` 可替换当前 `1` 个用户库并可 undo 恢复；`api.namebases.export({download:false, format:"legacy", baseIds:[ancient-state-roots]})` 得到原版文本后，`api.namebases.import(legacyText, {filename:"api-import-smoke.txt"})` 可导入并可 undo 恢复；最终用户库数量回到 `0`。调用前后 checksum 保持 `01378e8f`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

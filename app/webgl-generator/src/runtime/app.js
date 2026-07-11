@@ -1778,6 +1778,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options)
     },
     namebases: {
+      import: (document, options = {}) => importNamebaseDocumentViaApi(state, documentRef, document, options),
       create: payload => createNamebaseViaApi(state, documentRef, payload),
       copyBuiltin: (baseId, options = {}) => copyBuiltinNamebaseViaApi(state, documentRef, baseId, options),
       update: (baseId, patch = {}) => updateNamebaseViaApi(state, documentRef, baseId, patch),
@@ -2875,6 +2876,26 @@ function setCultureNamebaseBinding(state, documentRef, cultureId, target, value)
   }
 }
 
+function importNamebaseDocumentViaApi(state, documentRef, document, options = {}) {
+  assertMapAvailable(state);
+  const parsedDocument = normalizeApiNamebaseImportDocument(document);
+  const mode = normalizeApiNamebaseImportMode(options.mode);
+  const filename = String(options.filename || "api-namebases.json").trim();
+  const command = createImportNamebasesCommand(parsedDocument, {
+    filename,
+    mode,
+    label: options.label || "API 导入名称库"
+  });
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "未导入名称库：文档中没有可写入的词池。",
+    status: command => {
+      const payload = command.getResult?.() || {};
+      const replacedText = payload.replaced ? `，已替换 ${payload.replaced} 个用户库` : "";
+      return `已导入名称库 ${payload.imported || 0} 个词池${replacedText}。`;
+    }
+  });
+}
+
 function createNamebaseViaApi(state, documentRef, payload = {}) {
   assertMapAvailable(state);
   const command = createCreateUserNamebaseCommand({
@@ -2961,6 +2982,16 @@ function executeNamebaseCommandViaApi(state, documentRef, command, options = {})
     throwOnError: false
   });
   return editApiResult(state, result);
+}
+
+function normalizeApiNamebaseImportDocument(document) {
+  if (typeof document === "string") return parseNamebaseDocument(document);
+  if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("名称库导入文档必须是字符串或对象");
+  return parseNamebaseDocument(JSON.stringify(document));
+}
+
+function normalizeApiNamebaseImportMode(mode) {
+  return String(mode || "").trim().toLowerCase() === "replace" ? "replace" : "append";
 }
 
 function normalizeApiNamebaseBinding(scope, target, baseId, options = {}) {

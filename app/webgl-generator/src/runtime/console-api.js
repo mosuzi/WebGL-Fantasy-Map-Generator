@@ -144,6 +144,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
     namebases: Object.freeze({
       list: (options = {}) => apiCall(() => listNamebases(state, options)),
       export: (options = {}) => apiCall(() => exportNamebasesData(state, documentRef, options)),
+      import: (document, options = {}) => apiCall(() => requireApiAction(actions.namebases?.import, "namebases.import")(document, options)),
       create: (payload = {}) => apiCall(() => requireApiAction(actions.namebases?.create, "namebases.create")(payload)),
       copyBuiltin: (baseId, options = {}) => apiCall(() => requireApiAction(actions.namebases?.copyBuiltin, "namebases.copyBuiltin")(baseId, options)),
       update: (baseId, patch = {}) => apiCall(() => requireApiAction(actions.namebases?.update, "namebases.update")(baseId, patch)),
@@ -168,7 +169,7 @@ function buildCapabilities() {
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"],
-      namebases: ["list", "export", "create", "copyBuiltin", "update", "delete", "bind"]
+      namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "bind"]
     },
     sideEffects: {
       info: "readonly",
