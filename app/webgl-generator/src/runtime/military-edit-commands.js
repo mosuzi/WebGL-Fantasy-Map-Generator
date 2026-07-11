@@ -1,4 +1,5 @@
 import {applyRegimentIconProfile, buildMilitary, MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../generator/military.js";
+import {objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const MILITARY_EFFECTS = Object.freeze({
   render: "draw",
@@ -75,7 +76,10 @@ export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整
     domain: "military",
     effects: {
       ...MILITARY_EFFECTS,
-      affected: [{kind: "state", id: normalizedStateId}, {kind: "military", id: normalizedStateId}]
+      affected: [
+        ...objectAffected("state", normalizedStateId),
+        ...objectAffected("military", normalizedStateId)
+      ]
     },
     apply(context) {
       const state = context.map?.pack?.states?.[normalizedStateId] || context.map?.politics?.states?.[normalizedStateId];
@@ -108,7 +112,7 @@ export function createSetMilitaryStatusCommand(target, status, {label = "调整�
     domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
-      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+      affected: objectAffected("military", militaryTargetId(normalizedTarget))
     },
     apply(context) {
       const {state, regiment} = findRegiment(context.map, normalizedTarget);
@@ -238,7 +242,7 @@ export function createImportMilitaryBattleEventsCommand(document, {label = "导�
     domain: "military",
     effects: {
       ...MILITARY_EVENT_EFFECTS,
-      affected: militarySystemAffected("military-events", [{kind: "military", id: "events"}])
+      affected: militarySystemAffected("military-events", objectAffected("military", "events"))
     },
     apply(context) {
       const prepared = preparedEvents ?? prepareImportedBattleEvents(context.map, document);
@@ -333,7 +337,7 @@ export function createMoveMilitaryStationCommand(target, destination, {label = "
     domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
-      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+      affected: objectAffected("military", militaryTargetId(normalizedTarget))
     },
     apply(context) {
       const {state, regiment} = findRegiment(context.map, normalizedTarget);
@@ -384,7 +388,7 @@ export function createSetMilitaryBaseCommand(target, {label = "设置军团基�
     domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
-      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+      affected: objectAffected("military", militaryTargetId(normalizedTarget))
     },
     apply(context) {
       const {regiment} = findRegiment(context.map, normalizedTarget);
@@ -425,7 +429,7 @@ export function createRenameMilitaryRegimentCommand(target, name, {label = "重�
     domain: "military",
     effects: {
       ...MILITARY_REGIMENT_EFFECTS,
-      affected: [{kind: "military", id: normalizedTarget.id || `${normalizedTarget.stateId}:${normalizedTarget.regimentId}`}]
+      affected: objectAffected("military", militaryTargetId(normalizedTarget))
     },
     apply(context) {
       const {regiment} = findRegiment(context.map, normalizedTarget);
@@ -451,11 +455,15 @@ export function createRenameMilitaryRegimentCommand(target, name, {label = "重�
 }
 
 function militarySystemAffected(system, targets = []) {
-  return [{kind: "derived-system", id: system}, ...targets];
+  return systemAffected(system, targets);
 }
 
 function militaryTargetAffected(target) {
-  return {kind: "military", id: target.id || `${target.stateId}:${target.regimentId}`};
+  return objectAffected("military", militaryTargetId(target))[0];
+}
+
+function militaryTargetId(target) {
+  return target.id || `${target.stateId}:${target.regimentId}`;
 }
 
 function snapshotMilitary(map) {

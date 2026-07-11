@@ -24719,3 +24719,31 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_object_diplomacy_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：通用城市重命名和备注均返回 `city#7`；国家首都返回 `state#3 + city#9`；省份颜色返回 `province#7`；外交关系返回 `state#3 + state#4`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 军事 affected helper 收口
+
+背景：
+
+- 对象详情和外交命令已复用共享 `objectAffected(kind, id)`。
+- 军事命令中单国家 / 单军团目标仍有手写 `{kind, id}`，同时本地 `militarySystemAffected()` 与共享 `systemAffected()` 语义重复。
+- 本批只收束军事单对象目标和已有军事系统级 helper，不改变批量态势、战报记录、清空战报等系统级路径。
+
+实现：
+
+- `military-edit-commands.js` 引入 `objectAffected(kind, id)` 与 `systemAffected(system, targets)`。
+- 兵种比例命令改为组合 `state#stateId + military#stateId`。
+- 单军团态势、移动驻地、设置基地和军团重命名命令改为复用 `objectAffected("military", targetId)`。
+- 战报导入命令的目标改为组合 `systemAffected("military-events", objectAffected("military", "events"))`。
+- 本地 `militarySystemAffected()` 改为委托共享 `systemAffected()`，`militaryTargetAffected()` 改为通过共享 `objectAffected()` 生成单军团目标。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充军事 helper 迁移状态。
+- 本步不改变军事生成、兵种比例应用、军团态势、驻地 / 基地、战报导入 / 记录 / 清空、批量态势、派生刷新或面板刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\military-edit-commands.js` 通过。
+- `git diff --check` 通过。
+- `rg "affected: \\[\\{kind:" app\webgl-generator\src\runtime -n` 确认 runtime 命令文件中只剩 `app.js` 的气候即时命令手写目标。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；首次沙箱内执行因 pnpm registry 访问失败未进入 Vite，随后按规则提升权限复跑同一构建命令通过。
+- 本轮按要求启动验证子智能体 `verify_military_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底命令契约验证通过：兵种比例返回 `state#3 + military#3`；单军团态势、移动驻地、设置基地和军团重命名均返回 `military#3:4`；战报导入初始目标返回 `derived-system#military-events + military#events`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
