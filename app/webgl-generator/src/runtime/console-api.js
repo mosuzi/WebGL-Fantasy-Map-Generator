@@ -314,6 +314,8 @@ function buildMethodMetadata() {
       toggleEditing: {stable: "draft", mutates: "editing-state", undoable: false, async: false, requiresConfirm: false}
     },
     generate: {
+      getOptions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      setOptions: {stable: "draft", mutates: "generation-options", undoable: false, async: false, requiresConfirm: false},
       regenerate: {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: true, requiresConfirm: true},
       newMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       rerollSeed: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}

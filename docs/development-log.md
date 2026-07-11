@@ -25707,3 +25707,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-info-debug-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `e36b5477`、grid cells `1014`、pack cells `886`；随后读取 `api.info.capabilities()`，确认 `sideEffects.info = "readonly"`，`sideEffects.debug = "diagnostics-and-debug-ui"`，`methods.info` 仍包含全部 5 个公开方法，`methods.debug` 仍包含全部 7 个公开方法；`methodMetadata.info` 全部为 `mutates: "none" / undoable:false / async:false / requiresConfirm:false`；`methodMetadata.debug` 中 `enable / disable = debug-ui-state`，`snapshot / dumpState / renderer / health = none`，`profileNextRender = renderer-diagnostics`，全部 `undoable:false / async:false / requiresConfirm:false`；浏览器验证实际调用 `debug.snapshot()`、`debug.renderer()`、`debug.health()`、`debug.profileNextRender({updateOverlay:false})`、`debug.enable()` 和 `debug.disable()` 均成功，debug 开关只改变开发面板状态，调用前后 checksum 保持 `e36b5477` 不变，`profileNextRender` 返回 profiling 结果，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 generate 配置能力元数据副作用边界第一刀
+
+背景：
+
+- `api.generate.regenerate / newMap / rerollSeed` 已有方法级确认和生成副作用元数据，但 `getOptions / setOptions` 仍缺少方法级元数据。
+- `getOptions` 只读取当前规范化生成配置和当前地图摘要。
+- `setOptions` 会规范化 patch，写入 `state.options`，同步生成输入和运行时面板，但不会隐式生成新地图、替换当前地图或进入撤销栈。
+- 如果缺少方法级元数据，脚本或 AI 无法从能力表区分只读配置查询、轻量配置写入和必须确认的地图生成 / 受约束重算。
+
+实现：
+
+- `console-api.js` 为 `methodMetadata.generate.getOptions` 标注 `mutates: "none"`、`undoable: false`、`async: false`、`requiresConfirm: false`。
+- `console-api.js` 为 `methodMetadata.generate.setOptions` 标注 `mutates: "generation-options"`、`undoable: false`、`async: false`、`requiresConfirm: false`。
+- `regenerate / newMap / rerollSeed` 保持既有 `requiresConfirm: true` 和异步生成 / 重算元数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-generate-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `00ad9ac5`、grid cells `1014`、pack cells `713`；随后读取 `api.info.capabilities()`，确认 `methods.generate` 仍包含全部 5 个公开方法；`methodMetadata.generate.getOptions = none / undoable:false / async:false / requiresConfirm:false`，`setOptions = generation-options / undoable:false / async:false / requiresConfirm:false`，`regenerate = map-derived-data / undoable:"partial" / async:true / requiresConfirm:true`，`newMap / rerollSeed = replace-map / undoable:false / async:true / requiresConfirm:true`；`safety.confirmRequired.generate` 只包含 `regenerate / newMap / rerollSeed`。浏览器验证实际调用 `api.generate.getOptions()` 和 `api.generate.setOptions({seed:"api-generate-options-only", cellsTarget:1200})`，确认返回 options 已更新为 seed `api-generate-options-only`、cellsTarget `1200`，当前地图 checksum 和编辑历史摘要保持不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

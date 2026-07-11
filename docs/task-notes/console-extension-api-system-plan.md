@@ -337,6 +337,7 @@ api.edit.measurement.delete(id)
 - data 导出方法已补齐方法级副作用元数据：`exportAll / exportMap / exportGEO / exportFeatureGEO / exportCompressedAll / exportPNG / exportNotes / exportMeasurements` 标注为 `download-or-export-result`，表示只生成返回结果或触发浏览器下载，不修改地图数据、不进入 `EditHistory`、不要求 `confirm:true`；其中压缩完整地图和 PNG 导出为异步。`importMap / importGEO` 继续保持必须 `confirm:true` 的导入元数据；浏览器验证已确认读取该元数据不修改地图 checksum。
 - namebases 已补齐方法级副作用元数据：`list` 不改变状态，`export` 只生成返回结果或触发浏览器下载；`import / create / copyBuiltin / update / delete / clear / bind` 标注为 `namebases`，表示会通过名称库 edit command 写入名称库 / 绑定并进入 `EditHistory`；`renameObjects` 标注为 `object-names`，表示会按名称库批量改写当前地图对象名称并进入 `EditHistory`。`clear / renameObjects` 必须显式传 `confirm:true`，其它名称库写入方法不要求确认；浏览器验证已确认读取该元数据不修改地图 checksum。
 - info / debug 已补齐方法级副作用元数据：`info.version / capabilities / mapSummary / runtimeStats / healthEvents` 均不改变状态；`debug.snapshot / dumpState / renderer / health` 是只读诊断；`debug.enable / disable` 标注为 `debug-ui-state`，只开关开发面板 / debug UI；`debug.profileNextRender` 标注为 `renderer-diagnostics`，会强制执行一次 draw 并返回前后 renderer 诊断统计，但不修改地图数据、不进入 `EditHistory`、不要求 `confirm:true`；浏览器验证已确认读取元数据、执行诊断和开关 debug UI 均不修改地图 checksum。
+- generate 配置方法已补齐方法级副作用元数据：`getOptions` 不改变状态；`setOptions` 标注为 `generation-options`，表示只同步当前生成配置、主输入和运行时面板，不隐式生成新地图、不替换当前地图、不进入 `EditHistory`、不要求 `confirm:true`。`regenerate / newMap / rerollSeed` 继续保持必须显式确认的生成 / 重算元数据；浏览器验证已确认 `setOptions` 只更新生成配置，不修改当前地图 checksum 或编辑历史。
 
 ## 安全与副作用边界
 
