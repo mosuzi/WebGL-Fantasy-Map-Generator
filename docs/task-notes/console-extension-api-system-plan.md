@@ -342,6 +342,7 @@ api.edit.measurement.delete(id)
 - `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回方法总数、已记录元数据数、缺失项和多余项，并在顶层暴露 `complete / missing / extra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。浏览器验证已确认当前 127 个公开方法全部有元数据，`missing / extra` 均为空，读取覆盖摘要不修改地图 checksum。
 - `pnpm run regress:api` 已新增第一刀，脚本会在构建产物上通过控制台 API 生成小地图，检查 `methodMetadataCoverage`、确认边界和代表性 `mutates` 元数据，并输出 `docs/generated/reports/api-capabilities-regression-results.json` 与 Markdown 报告。后续新增 / 删除 API 方法时，应优先跑该脚本确认能力表没有漏记或漂移。
 - `pnpm run regress:api-roundtrip` 已新增第一刀，脚本会在构建产物上通过控制台 API 完成完整地图 roundtrip：生成源地图、导出完整 JSON、导出 gzip、扰动当前地图后分别导入 JSON 对象 / JSON 字符串 / 压缩导出对象 / gzip-base64 payload，并校验 seed、checksum、历史栈和错误边界。
+- `pnpm run regress:api-geo` 已新增第一刀，脚本会在构建产物上通过 `api.data.importGEO()` 覆盖普通 GeoJSON 测量对象导入和 FMG Cells 地形导入两条分支，并校验确认门槛、坏 JSON 错误、撤销、非 GEO 派生重置和水陆一致性。
 
 ## 安全与副作用边界
 
@@ -437,6 +438,7 @@ api.edit.measurement.delete(id)
 - 当前 `importMap` 不接 GEO 导入；GEO 仍由 `api.data.importGEO()` 单独处理。
 - GEO 导入 API 已完成第一刀。
 - `api.data.importGEO(document, {confirm:true})` 支持 GeoJSON 字符串或对象；FMG Cells GEO 复用 `createImportFmgCellsHeightCommand()` 导入地形并重置非 GEO 派生数据，普通 GeoJSON 复用测量对象导入命令写入 measurements。
+- GEO 导入 API 回归已固化为 `pnpm run regress:api-geo`；该脚本与 UI 侧 `regress:geo` 互补，直接验证控制台 API 路径，不依赖 file input。
 - `api.data.exportNotes({ids, noteIds, download, includeText})` 已完成第一刀，复用备注摘要 JSON 格式，默认返回文本，可按备注 id 筛选或触发浏览器下载。
 - `api.data.exportMeasurements({ids, measurementIds, download, includeText})` 已完成第一刀，复用测量对象 JSON 格式，默认返回文本，可按测量对象 id 筛选或触发浏览器下载。
 - 返回值会按分支标注 `mode = fmg-cells-terrain / measurements`，并返回地形导入 summary / reset 或测量对象导入数量；因为两类导入都会写当前地图，必须显式传 `confirm:true`。
@@ -549,6 +551,7 @@ api.edit.measurement.delete(id)
 - `api.generate.newMap(options)` 和 `api.generate.rerollSeed(options)` 复用 worker 生成和 `loadMapIntoRuntime()`，返回生成配置、地图摘要、生成 / 加载 timings 和历史摘要。
 - 为避免脚本误触大范围派生重建或替换当前地图，`regenerate / newMap / rerollSeed / importMap / importGEO` 必须显式传 `confirm:true`；备注与测量导出属于只读下载 / 文本返回能力，不进入撤销栈，也不修改 checksum。
 - 阶段 5 的完整地图 API roundtrip 回归已固化为 `pnpm run regress:api-roundtrip`，覆盖普通 JSON 和 gzip 两类完整地图导入输入，并确认未确认导入、坏 JSON 的结构化错误边界。
+- 阶段 5 的 GEO 导入 API 回归已固化为 `pnpm run regress:api-geo`，覆盖普通 GeoJSON 和 FMG Cells GeoJSON 两类导入输入，并确认普通测量导入可撤销、FMG Cells 导入会重置非 GEO 派生数据。
 
 ### 阶段 6：debug 诊断 API
 

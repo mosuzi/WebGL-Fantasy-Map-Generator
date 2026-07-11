@@ -25852,3 +25852,34 @@ full 矩阵结果：
 - `pnpm run regress:api-roundtrip -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认源地图 checksum `41db190e`、grid cells `1014`、pack cells `854`；JSON 导出 `5,477,509` bytes，gzip `628,875` bytes，base64 长度 `838,500`；四类导入输入均恢复 checksum `41db190e`；未确认导入和坏 JSON 均结构化失败，坏 JSON 后 checksum 保持；WebGL / health / console / page error 均为 `0`。
 - 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 roundtrip 脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
 - 第一轮两个验证子智能体受状态查询上下文影响，只回报了进度摘要，不能作为有效 smoke 证据；随后低上下文浏览器烟测子智能体重新验证通过，确认源 checksum `46c9449b`，JSON 对象、JSON 字符串、压缩导出对象和 gzip-base64 payload 均恢复 `46c9449b`，未确认导入和坏 JSON 均结构化失败且坏 JSON 后 checksum 保持，WebGL / health / console / page error 均为 `0`。
+
+### 2026-07-11 API GEO 导入回归脚本第一刀
+
+背景：
+
+- `api.data.importGEO()` 已经接入普通 GeoJSON 测量对象导入和 FMG Cells GeoJSON 地形导入两条分支。
+- 现有 `pnpm run regress:geo` 主要验证 UI file input 路径，无法直接守住控制台 API 调用路径。
+- API 专题阶段 5 需要把生成、导入和错误边界变成可复用自动化断言；GEO 导入尤其要避免 FMG Cells 文件被误当成普通测量对象。
+
+实现：
+
+- 新增 `tools/webgl-generator-api-geo-regression.mjs`。
+- 新增 `pnpm run regress:api-geo`。
+- 脚本会启动构建产物静态服务，并通过 Playwright + 系统 Chrome 使用控制台 API：
+  - 生成 seed `api-geo-import-regression` 的 10000 cells 地图。
+  - 构造普通 GeoJSON Point / LineString / Polygon fixture，分别用对象和字符串调用 `api.data.importGEO()`。
+  - 校验未传 `confirm:true` 会结构化失败且不写测量对象，普通 GeoJSON 导入后可通过 `api.history.undo()` 撤销。
+  - 校验坏 JSON 会结构化失败，且失败后 checksum 保持不变。
+  - 构造 FMG Cells GeoJSON fixture，并在当前地图里预先注入旧资源点、地区、军团、标签、备注和测量对象 residue。
+  - 通过 `api.data.importGEO({confirm:true})` 导入 FMG Cells 地形，校验导入模式、应用 cells 数、非 GEO 派生重建、旧 residue 清理、grid / pack 水陆一致和 hover 一致性。
+- 脚本会输出 JSON 和 Markdown 报告到 `docs/generated/reports/api-geo-regression-results.*`。
+
+验证：
+
+- `node --check tools\webgl-generator-api-geo-regression.mjs` 通过。
+- `git diff --check` 通过。
+- 主线程先用 `node .\tools\webgl-generator-api-geo-regression.mjs --browser-channel chrome` 直跑通过：生成地图 checksum `2b295c44`、grid cells `10004`、pack cells `5787`；普通 GeoJSON 对象 / 字符串导入均写入 `3` 个测量对象，未确认导入和坏 JSON 均结构化失败且坏 JSON 后 checksum 保持；FMG Cells 导入应用 `9897` 个当前 cells，重建资源点 `15`、军事 `218`、地区 `3`，grid / pack mismatch 为 `0 / 0`，hover mismatch 为 `0 / 80`；WebGL / health / console / page error 均为 `0`。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- `pnpm run regress:api-geo -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认生成地图 checksum `4d55f02f`、grid cells `10004`、pack cells `5787`；普通 GeoJSON 对象 / 字符串导入均写入 `3` 个测量对象，未确认导入和坏 JSON 均结构化失败且坏 JSON 后 checksum 保持；FMG Cells 导入应用 `9897` 个当前 cells，重建资源点 `15`、军事 `218`、地区 `3`，grid / pack mismatch 为 `0 / 0`，hover mismatch 为 `0`；WebGL / health / console / page error 均为 `0`。
+- 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API GEO 回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
+- 低上下文浏览器 smoke 子智能体验证通过，确认生成地图 checksum `21d82c5a`；普通 GeoJSON 对象 / 字符串导入均写入 `3` 个测量对象，未确认导入和坏 JSON 均结构化失败且坏 JSON 后 checksum 保持；FMG Cells 导入应用 `9897` 个当前 cells，资源点 `15`、军事 `218`、地区 `3`，grid / pack / hover mismatch 均为 `0`；WebGL / health / console / page error 均为 `0`。
