@@ -1842,7 +1842,9 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       markers: {
         add: options => addMarkerViaApi(state, documentRef, options),
         delete: markerId => deleteMarkerViaApi(state, documentRef, markerId),
-        move: (markerId, packCell) => moveMarkerViaApi(state, documentRef, markerId, packCell)
+        move: (markerId, packCell) => moveMarkerViaApi(state, documentRef, markerId, packCell),
+        setNote: (markerId, body, options = {}) => setMarkerNoteViaApi(state, documentRef, markerId, body, options),
+        setVisual: (markerId, patch) => setMarkerVisualViaApi(state, documentRef, markerId, patch)
       }
     }
   };
@@ -4789,6 +4791,41 @@ function moveMarkerViaApi(state, documentRef, markerId, packCell) {
   return editApiResult(state, result);
 }
 
+function setMarkerNoteViaApi(state, documentRef, markerId, body, options = {}) {
+  const id = normalizeApiInteger(markerId, "标记 ID");
+  const marker = state.map?.markers?.markers?.[id];
+  const command = createSetMarkerNoteCommand(id, body, {
+    ...options,
+    name: options.name || marker?.name || marker?.label || `标记 #${id}`
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "标记不存在或备注未变化。",
+    status: `已更新标记 #${id} 备注。`,
+    throwOnError: false
+  });
+  updateMarkerPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setMarkerVisualViaApi(state, documentRef, markerId, patch) {
+  const id = normalizeApiInteger(markerId, "标记 ID");
+  const visualPatch = normalizeApiMarkerVisualPatch(patch);
+  const command = createSetMarkerVisualCommand(id, visualPatch);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "标记不存在、视觉参数为空或未变化。",
+    status: `已更新标记 #${id} 图标。`,
+    throwOnError: false
+  });
+  updateMarkerPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function executeMarkerCollectionApiCommand(state, documentRef, command, options = {}) {
   const context = {map: state.map};
   if (!state.map || !command) return {executed: false, command, result: null, error: null};
@@ -4845,6 +4882,18 @@ function normalizeApiHexColor(color, name = "颜色") {
   const match = /^#?([0-9a-f]{6})$/i.exec(color.trim());
   if (!match) throw new Error(`${name} 必须是 #rrggbb`);
   return `#${match[1].toLowerCase()}`;
+}
+
+function normalizeApiMarkerVisualPatch(patch) {
+  if (!patch || typeof patch !== "object") throw new Error("标记视觉参数必须是对象");
+  const next = {};
+  for (const key of ["symbol", "palette", "shape", "cultureStyle"]) {
+    if (patch[key] === undefined) continue;
+    if (typeof patch[key] !== "string" || !patch[key].trim()) throw new Error(`标记视觉参数 ${key} 必须是非空字符串`);
+    next[key] = patch[key].trim();
+  }
+  if (!Object.keys(next).length) throw new Error("标记视觉参数不能为空");
+  return next;
 }
 
 function editApiResult(state, result) {

@@ -24899,3 +24899,27 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_label_field_api` 和 `verify_label_field_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `labels.addCustom / labels.delete / labels.moveCustom / labels.renameCustom / labels.setNote / labels.restore`；`labels.addCustom({text, x:123.4, y:456.7})` 新增手工标签 `#1`，公开 selection 指向 `label #1`，内部 selection 保留 `targetKind = custom`；`labels.moveCustom(1, {x:222.2, y:333.3})` 后坐标改变并可撤销回 `123.4 / 456.7`；`labels.renameCustom(1, "API标签改名烟测")` 后文字改变并可撤销回原名；`labels.setNote({targetKind:"custom", targetId:1}, "API标签备注烟测")` 写入 `label:custom:1` 备注并可撤销为空；`labels.delete({targetKind:"custom", targetId:1})` 删除手工标签并可撤销恢复；预置隐藏城市标签 `#1` 后 `labels.restore({targetKind:"city", targetId:1})` 可恢复并可撤销重新隐藏；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 标记字段编辑 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 阶段 4 已覆盖 marker 新增 / 删除 / 移动，但 marker 备注和图标视觉仍只能从 marker 面板入口触发。
+- 这两类能力已有 `createSetMarkerNoteCommand()` 和 `createSetMarkerVisualCommand()`，适合作为 API 薄封装继续扩展。
+
+实现：
+
+- `console-api.js` 新增 `api.edit.markers.setNote(markerId, body, {name})` 和 `api.edit.markers.setVisual(markerId, patch)`。
+- `api.info.capabilities()` 的编辑方法列表同步补充上述 marker 字段能力。
+- `app.js` 的 API actions 复用既有 marker note / visual edit commands，继续通过 `executeEditCommand()` 进入撤销栈。
+- `setVisual()` 只接受 `symbol / palette / shape / cultureStyle` 字符串补丁，并拒绝空补丁。
+- 本步不改变 marker 新增 / 删除 / 移动、资源重生成、经济资源刷新、军事 / 外交 stale 或面板 UI 语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_marker_field_api` 和 `verify_marker_field_smoke`；两个子智能体等待 90 秒无输出或未完成，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `markers.add / markers.delete / markers.move / markers.setNote / markers.setVisual`；真实 marker `#0` 调用 `markers.setNote(0, "API标记备注烟测1783732023135")` 后写入 `marker:0` 备注并可撤销为空；`markers.setVisual(0, {symbol:"star", palette:"gold", shape:"diamond", cultureStyle:"default"})` 后 `marker.visual` 和 `marker.data.visual` 均更新为补丁值并带 `manual = true`，撤销后恢复原始 `pin / volcano / natural / default / manual=false` 和原 categoryColor；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
