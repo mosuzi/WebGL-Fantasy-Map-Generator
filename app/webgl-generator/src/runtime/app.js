@@ -75,6 +75,7 @@ import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {createSetZoneStyleCommand} from "./zone-edit-commands.js";
+import {objectAffected} from "./edit-command-effects.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
@@ -1795,6 +1796,14 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       states: {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
         delete: stateId => deleteStateViaApi(state, documentRef, stateId)
+      },
+      cultures: {
+        add: options => addCultureViaApi(state, documentRef, options),
+        delete: cultureId => deleteCultureViaApi(state, documentRef, cultureId)
+      },
+      religions: {
+        add: options => addReligionViaApi(state, documentRef, options),
+        delete: religionId => deleteReligionViaApi(state, documentRef, religionId)
       },
       routes: {
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId)
@@ -3626,7 +3635,7 @@ function applyClimateOptions(state, documentRef, options, changed = true) {
     runtimeStats: true,
     pickPanel: true,
     derived: ["cell-colors", "point-layers", "object-panels"],
-    affected: [{kind: "climate", id: "live"}]
+    affected: objectAffected("climate", "live")
   });
   updateCulturePanel(state);
   updateReligionPanel(state);
@@ -4212,6 +4221,96 @@ function deleteStateViaApi(state, documentRef, stateId) {
   return editApiResult(state, result);
 }
 
+function addCultureViaApi(state, documentRef, options = {}) {
+  const payload = normalizeApiObjectOptions(options);
+  const command = createAddCultureCommand({name: payload.name});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "当前地图没有文化数据。",
+    status: command => {
+      const cultureId = command.getCultureId?.();
+      return cultureId ? `已新增空文化 #${cultureId}。` : "已新增空文化。";
+    },
+    throwOnError: false
+  });
+  const cultureId = result.command?.getCultureId?.();
+  if (result.executed && cultureId) {
+    state.panels.culture?.setSelectedCultureId(cultureId);
+    state.selectionStore.setSelection({
+      object: {kind: OBJECT_KIND.CULTURE, id: cultureId, name: payload.name || `新文化 ${cultureId}`}
+    });
+  }
+  updateCulturePanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteCultureViaApi(state, documentRef, cultureId) {
+  const id = normalizeApiInteger(cultureId, "文化 ID");
+  const command = createDeleteCultureCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "只能删除无覆盖、无子级、无关联对象的空文化。",
+    status: `已删除空文化 #${id}。`,
+    throwOnError: false
+  });
+  const selectedObject = state.selectionStore.getSnapshot().selection?.object;
+  if (result.executed && selectedObject?.kind === OBJECT_KIND.CULTURE && Number(selectedObject.id) === id) {
+    state.selectionStore.clear();
+    state.panels.culture?.setSelectedCultureId(null);
+  }
+  updateCulturePanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function addReligionViaApi(state, documentRef, options = {}) {
+  const payload = normalizeApiObjectOptions(options);
+  const command = createAddReligionCommand({name: payload.name});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "当前地图没有宗教数据。",
+    status: command => {
+      const religionId = command.getReligionId?.();
+      return religionId ? `已新增空宗教 #${religionId}。` : "已新增空宗教。";
+    },
+    throwOnError: false
+  });
+  const religionId = result.command?.getReligionId?.();
+  if (result.executed && religionId) {
+    state.panels.religion?.setSelectedReligionId(religionId);
+    state.selectionStore.setSelection({
+      object: {kind: OBJECT_KIND.RELIGION, id: religionId, name: payload.name || `新宗教 ${religionId}`}
+    });
+  }
+  updateReligionPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteReligionViaApi(state, documentRef, religionId) {
+  const id = normalizeApiInteger(religionId, "宗教 ID");
+  const command = createDeleteReligionCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "只能删除无覆盖、无子级、无关联对象的空宗教。",
+    status: `已删除空宗教 #${id}。`,
+    throwOnError: false
+  });
+  const selectedObject = state.selectionStore.getSnapshot().selection?.object;
+  if (result.executed && selectedObject?.kind === OBJECT_KIND.RELIGION && Number(selectedObject.id) === id) {
+    state.selectionStore.clear();
+    state.panels.religion?.setSelectedReligionId(null);
+  }
+  updateReligionPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function deleteLabelViaApi(state, documentRef, label) {
   const target = normalizeApiLabelTarget(label);
   const command = createDeleteLabelCommand(target);
@@ -4339,6 +4438,16 @@ function normalizeApiInteger(value, name) {
   const numeric = Number(value);
   if (!Number.isInteger(numeric)) throw new Error(`${name} 必须是整数`);
   return numeric;
+}
+
+function normalizeApiObjectOptions(options) {
+  if (options === null || options === undefined) return {};
+  if (typeof options === "string") return {name: options.trim()};
+  if (typeof options !== "object") throw new Error("对象选项必须是对象");
+  return {
+    ...options,
+    name: typeof options.name === "string" ? options.name.trim() : ""
+  };
 }
 
 function editApiResult(state, result) {

@@ -24747,3 +24747,53 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_military_object_affected`；该子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底命令契约验证通过：兵种比例返回 `state#3 + military#3`；单军团态势、移动驻地、设置基地和军团重命名均返回 `military#3:4`；战报导入初始目标返回 `derived-system#military-events + military#events`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：构建产物可启动，`window.__webglGeneratorApp` 和 renderer 可用，WebGL2 可用，地图已生成，直接 `gl.getError() = 0`，console/page error 均为 `0`。Node 动态导入源码时出现 package typeless ESM 性能警告，不影响验证结果。
+
+### 2026-07-11 气候即时 affected helper 收口
+
+背景：
+
+- 军事命令收口后，运行时里只剩 `app.js` 的气候即时刷新路径手写 `{kind, id}` affected 目标。
+- 该路径不是标准撤销栈命令，而是控制面板 / 控制台 API 触发的即时气候重算，因此本批只收束目标构造，不改变刷新和派生过期语义。
+
+实现：
+
+- `app.js` 引入共享 `objectAffected(kind, id)`。
+- `applyClimateOptions()` 的刷新元数据从手写 `climate#live` 改为 `objectAffected("climate", "live")`。
+- `edit-command-contract.md`、编辑器基础设施清单和当前计划同步补充气候即时刷新目标 helper 使用状态。
+- 本步不改变气候重算、checksum 更新、下游派生 stale 标记、面板刷新或控制台 API 返回结构。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `rg "affected: \\[\\{kind:" app\webgl-generator\src\runtime -n` 未找到运行时手写 affected 目标。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_culture_religion_api` 和 `verify_batch_browser_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：调用 `api.climate.setLatitude(12)` 后返回 `ok = true`，checksum 从 `e4caf972` 变为 `6054d002`，派生 stale 包含城市、国家、省份、宗教、marker、zone、军事、经济和外交；`EditHistory` 的 `undo / redo / lastAffected` 保持不变，确认气候即时路径不进入撤销栈；直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 文化与宗教编辑 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 阶段 4 已接入城市、国家、省份、路线、标签、marker、备注和测量对象等编辑命令。
+- 文化和宗教的新增 / 删除命令已经具备清晰约束：只能新增空对象，删除只允许无覆盖、无子级、无关联对象的空对象，适合作为下一批低风险编辑 API。
+
+实现：
+
+- `console-api.js` 新增 `api.edit.cultures.add({name})`、`api.edit.cultures.delete(cultureId)`、`api.edit.religions.add({name})` 和 `api.edit.religions.delete(religionId)`。
+- `api.info.capabilities()` 的编辑方法列表同步补充文化 / 宗教新增删除能力。
+- `app.js` 的 API actions 接入既有 `createAddCultureCommand()`、`createDeleteCultureCommand()`、`createAddReligionCommand()` 和 `createDeleteReligionCommand()`，并继续通过 `executeEditCommand()` 进入撤销栈。
+- API 新增成功后会选中新建文化 / 宗教；删除当前选中目标时会清理 selection。
+- `console-extension-api-system-plan.md` 和当前计划同步补充阶段 4 状态。
+- 本步不改变文化 / 宗教面板 UI、颜色、继承、备注、名称库绑定、删除约束或派生刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_culture_religion_api` 和 `verify_batch_browser_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：`api.info.capabilities()` 已包含 `cultures.add / cultures.delete / religions.add / religions.delete`；`api.edit.cultures.add({name: "API烟测文化"})` 新增 `culture#13` 并进入历史，撤销后对象移除，重做后可继续删除，删除后 `removed = true`，撤销删除后恢复；`api.edit.religions.add({name: "API烟测宗教"})` 新增 `religion#19` 并覆盖同样的撤销 / 重做 / 删除 / 撤销删除闭环；直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+- 补充 Playwright 断言通过：文化 / 宗教新增后撤销会移除对象，重做会恢复且 `removed = false`，直接 `gl.getError() = 0`。

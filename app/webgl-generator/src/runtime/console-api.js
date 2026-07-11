@@ -81,6 +81,14 @@ function createConsoleApi(documentRef, state, actions = {}) {
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.states?.add, "edit.states.add")(gridCell)),
         delete: stateId => apiCall(() => requireApiAction(actions.edit?.states?.delete, "edit.states.delete")(stateId))
       }),
+      cultures: Object.freeze({
+        add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.add, "edit.cultures.add")(options)),
+        delete: cultureId => apiCall(() => requireApiAction(actions.edit?.cultures?.delete, "edit.cultures.delete")(cultureId))
+      }),
+      religions: Object.freeze({
+        add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.add, "edit.religions.add")(options)),
+        delete: religionId => apiCall(() => requireApiAction(actions.edit?.religions?.delete, "edit.religions.delete")(religionId))
+      }),
       routes: Object.freeze({
         delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId))
       }),
@@ -117,7 +125,7 @@ function buildCapabilities() {
       units: ["get", "apply"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
-      edit: ["notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "provinces.add", "provinces.delete", "states.add", "states.delete", "routes.delete", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
+      edit: ["notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "provinces.add", "provinces.delete", "states.add", "states.delete", "cultures.add", "cultures.delete", "religions.add", "religions.delete", "routes.delete", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {

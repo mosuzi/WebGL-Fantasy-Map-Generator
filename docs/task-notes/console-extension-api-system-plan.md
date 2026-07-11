@@ -457,6 +457,8 @@ api.edit.measurement.delete(id)
 - `api.edit.cities.add(gridCell)` 和 `api.edit.cities.delete(cityId)` 已接入城市 collection edit commands。
 - `api.edit.provinces.add(gridCell)` 和 `api.edit.provinces.delete(provinceId)` 已接入省份 collection edit commands。
 - `api.edit.states.add(gridCell)` 和 `api.edit.states.delete(stateId)` 已接入国家 collection edit commands。
+- `api.edit.cultures.add({name})` 和 `api.edit.cultures.delete(cultureId)` 已接入文化新增 / 删除 edit commands；删除仍只允许空文化。
+- `api.edit.religions.add({name})` 和 `api.edit.religions.delete(religionId)` 已接入宗教新增 / 删除 edit commands；删除仍只允许空宗教。
 - `api.edit.routes.delete(routeId)` 已接入路线删除 edit command。
 - `api.edit.labels.delete(label)` 和 `api.edit.labels.restore(label)` 已接入标签 edit commands，覆盖手工标签删除和生成标签恢复。
 - `api.edit.markers.add({type, packCell, name})`、`api.edit.markers.delete(markerId)` 和 `api.edit.markers.move(markerId, packCell)` 已接入 marker collection edit commands。
