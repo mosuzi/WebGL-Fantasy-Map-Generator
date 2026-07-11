@@ -1787,15 +1787,22 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       },
       cities: {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
-        delete: cityId => deleteCityViaApi(state, documentRef, cityId)
+        delete: cityId => deleteCityViaApi(state, documentRef, cityId),
+        rename: (cityId, name) => renameCityViaApi(state, documentRef, cityId, name),
+        setPopulation: (cityId, population) => setCityPopulationViaApi(state, documentRef, cityId, population)
       },
       provinces: {
         add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
-        delete: provinceId => deleteProvinceViaApi(state, documentRef, provinceId)
+        delete: provinceId => deleteProvinceViaApi(state, documentRef, provinceId),
+        rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
+        setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color)
       },
       states: {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
-        delete: stateId => deleteStateViaApi(state, documentRef, stateId)
+        delete: stateId => deleteStateViaApi(state, documentRef, stateId),
+        rename: (stateId, name) => renameStateViaApi(state, documentRef, stateId, name),
+        setColor: (stateId, color) => setStateColorViaApi(state, documentRef, stateId, color),
+        setGovernment: (stateId, governmentKey) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey)
       },
       cultures: {
         add: options => addCultureViaApi(state, documentRef, options),
@@ -4221,6 +4228,115 @@ function deleteStateViaApi(state, documentRef, stateId) {
   return editApiResult(state, result);
 }
 
+function renameCityViaApi(state, documentRef, cityId, name) {
+  return renameObjectViaApi(state, documentRef, OBJECT_KIND.CITY, cityId, name, {
+    idLabel: "城市 ID",
+    noopStatus: "城市不存在或名称未变化。",
+    status: id => `已重命名城市 #${id}。`
+  });
+}
+
+function setCityPopulationViaApi(state, documentRef, cityId, population) {
+  const id = normalizeApiInteger(cityId, "城市 ID");
+  const command = createSetCityPopulationCommand(id, population);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "城市不存在或人口未变化。",
+    status: `已更新城市 #${id} 人口。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function renameProvinceViaApi(state, documentRef, provinceId, name) {
+  return renameObjectViaApi(state, documentRef, OBJECT_KIND.PROVINCE, provinceId, name, {
+    idLabel: "省份 ID",
+    refresh: refreshAfterProvinceEdit,
+    noopStatus: "省份不存在或名称未变化。",
+    status: id => `已重命名省份 #${id}。`
+  });
+}
+
+function setProvinceColorViaApi(state, documentRef, provinceId, color) {
+  const id = normalizeApiInteger(provinceId, "省份 ID");
+  const nextColor = normalizeApiHexColor(color, "省份颜色");
+  const province = state.map?.politics?.provinces?.[id] || state.map?.pack?.provinces?.[id];
+  const command = createSetProvinceColorCommand(id, nextColor, {beforeColor: province?.color || null});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterProvinceEdit,
+    noopStatus: "省份不存在或颜色未变化。",
+    status: `已更新省份 #${id} 颜色。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function renameStateViaApi(state, documentRef, stateId, name) {
+  return renameObjectViaApi(state, documentRef, OBJECT_KIND.STATE, stateId, name, {
+    idLabel: "国家 ID",
+    refresh: refreshAfterStateEdit,
+    noopStatus: "国家不存在或名称未变化。",
+    status: id => `已重命名国家 #${id}。`
+  });
+}
+
+function setStateColorViaApi(state, documentRef, stateId, color) {
+  const id = normalizeApiInteger(stateId, "国家 ID");
+  const nextColor = normalizeApiHexColor(color, "国家颜色");
+  const beforeColor = state.map?.politics?.states?.[id]?.color || null;
+  const command = createSetStateColorCommand(id, nextColor, {beforeColor});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    noopStatus: "国家不存在或颜色未变化。",
+    status: `已更新国家 #${id} 颜色。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey) {
+  const id = normalizeApiInteger(stateId, "国家 ID");
+  const key = String(governmentKey || "").trim();
+  if (!key) throw new Error("政体 key 不能为空");
+  const command = createSetStateGovernmentCommand(id, key);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    noopStatus: "国家不存在、政体无效或政体未变化。",
+    status: `已更新国家 #${id} 政体。`,
+    throwOnError: false
+  });
+  if (result.executed) refreshGenerationSummary(state.map);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function renameObjectViaApi(state, documentRef, kind, objectId, name, options = {}) {
+  const id = normalizeApiInteger(objectId, options.idLabel || "对象 ID");
+  const nextName = String(name || "").trim();
+  if (!nextName) throw new Error("名称不能为空");
+  const command = createRenameObjectCommand({kind, id}, nextName);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: options.refresh,
+    noopStatus: options.noopStatus || "对象不存在或名称未变化。",
+    status: typeof options.status === "function" ? options.status(id) : options.status,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function addCultureViaApi(state, documentRef, options = {}) {
   const payload = normalizeApiObjectOptions(options);
   const command = createAddCultureCommand({name: payload.name});
@@ -4448,6 +4564,13 @@ function normalizeApiObjectOptions(options) {
     ...options,
     name: typeof options.name === "string" ? options.name.trim() : ""
   };
+}
+
+function normalizeApiHexColor(color, name = "颜色") {
+  if (typeof color !== "string") throw new Error(`${name} 必须是 #rrggbb`);
+  const match = /^#?([0-9a-f]{6})$/i.exec(color.trim());
+  if (!match) throw new Error(`${name} 必须是 #rrggbb`);
+  return `#${match[1].toLowerCase()}`;
 }
 
 function editApiResult(state, result) {

@@ -24797,3 +24797,30 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_culture_religion_api` 和 `verify_batch_browser_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器烟测通过：`api.info.capabilities()` 已包含 `cultures.add / cultures.delete / religions.add / religions.delete`；`api.edit.cultures.add({name: "API烟测文化"})` 新增 `culture#13` 并进入历史，撤销后对象移除，重做后可继续删除，删除后 `removed = true`，撤销删除后恢复；`api.edit.religions.add({name: "API烟测宗教"})` 新增 `religion#19` 并覆盖同样的撤销 / 重做 / 删除 / 撤销删除闭环；直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
 - 补充 Playwright 断言通过：文化 / 宗教新增后撤销会移除对象，重做会恢复且 `removed = false`，直接 `gl.getError() = 0`。
+
+### 2026-07-11 政治与城市字段编辑 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 阶段 4 已覆盖新增 / 删除类编辑命令。
+- 计划下一步建议继续接国家 / 省份 / 城市的名称、颜色、人口等已有单对象命令；这些能力已在面板回调中使用 `executeEditCommand()`，适合作为 API 薄封装。
+
+实现：
+
+- `console-api.js` 新增 `api.edit.cities.rename(cityId, name)` 和 `api.edit.cities.setPopulation(cityId, population)`。
+- `console-api.js` 新增 `api.edit.provinces.rename(provinceId, name)` 和 `api.edit.provinces.setColor(provinceId, color)`。
+- `console-api.js` 新增 `api.edit.states.rename(stateId, name)`、`api.edit.states.setColor(stateId, color)` 和 `api.edit.states.setGovernment(stateId, governmentKey)`。
+- `api.info.capabilities()` 的编辑方法列表同步补充上述字段编辑能力。
+- `app.js` 的 API actions 复用既有 `createRenameObjectCommand()`、`createSetCityPopulationCommand()`、`createSetProvinceColorCommand()`、`createSetStateColorCommand()` 和 `createSetStateGovernmentCommand()`，并继续通过 `executeEditCommand()` 进入撤销栈。
+- API 颜色参数新增 `#rrggbb` 轻量校验，避免无效颜色被命令层解释为静默 noop。
+- 本步不改变城市、国家、省份面板 UI，不改变新增 / 删除、笔刷、首都、省会、剪影、名称库批量重命名、派生刷新或导出语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_political_city_field_api` 和 `verify_field_api_browser_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `cities.rename / cities.setPopulation / provinces.rename / provinces.setColor / states.rename / states.setColor / states.setGovernment`；城市 `#0` 重命名进入历史，撤销恢复原名“鹿明”，重做恢复“API城市字段烟测”；城市人口从 `3.218` 改到 `12348.218` 并可撤销恢复；省份 `#1` 重命名和颜色 `#123abc` 均进入历史并可撤销；国家 `#1` 重命名、颜色 `#abcdef` 和政体 `feudal_monarchy -> republic` 均进入历史并可撤销；直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+- 补充稳定态烟测通过：加载遮罩隐藏后 `window.__webglGeneratorApp`、renderer、`window.webglGeneratorApi` 和本批字段 API 均可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

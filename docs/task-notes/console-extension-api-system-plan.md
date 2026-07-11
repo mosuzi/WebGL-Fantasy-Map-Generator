@@ -455,8 +455,11 @@ api.edit.measurement.delete(id)
 - `api.edit.notes.delete(noteId, {name})` 已接入 `createDeleteNoteCommand()`、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
 - `api.edit.measurements.rename(id, name)` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - `api.edit.cities.add(gridCell)` 和 `api.edit.cities.delete(cityId)` 已接入城市 collection edit commands。
+- `api.edit.cities.rename(cityId, name)` 和 `api.edit.cities.setPopulation(cityId, population)` 已接入城市单对象 edit commands。
 - `api.edit.provinces.add(gridCell)` 和 `api.edit.provinces.delete(provinceId)` 已接入省份 collection edit commands。
+- `api.edit.provinces.rename(provinceId, name)` 和 `api.edit.provinces.setColor(provinceId, color)` 已接入省份单对象 edit commands。
 - `api.edit.states.add(gridCell)` 和 `api.edit.states.delete(stateId)` 已接入国家 collection edit commands。
+- `api.edit.states.rename(stateId, name)`、`api.edit.states.setColor(stateId, color)` 和 `api.edit.states.setGovernment(stateId, governmentKey)` 已接入国家单对象 edit commands。
 - `api.edit.cultures.add({name})` 和 `api.edit.cultures.delete(cultureId)` 已接入文化新增 / 删除 edit commands；删除仍只允许空文化。
 - `api.edit.religions.add({name})` 和 `api.edit.religions.delete(religionId)` 已接入宗教新增 / 删除 edit commands；删除仍只允许空宗教。
 - `api.edit.routes.delete(routeId)` 已接入路线删除 edit command。
