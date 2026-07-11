@@ -18,11 +18,14 @@
     empty-text="没有匹配的河流"
     :empty-action="filterEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedRiverIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedRiverIds = $event"
   />
 
   <UiPanelIoActions
@@ -126,6 +129,7 @@ const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const widthDraft = ref(1);
+const selectedRiverIds = ref([]);
 const rows = computed(() => {
   props.state.version;
   return riverRows(props.state.map);
@@ -134,6 +138,8 @@ const selectedId = computed(() => props.state.selection?.object?.kind === "river
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const editing = computed(() => props.state.editingObject?.kind === "river" && sameObjectId(props.state.editingObject.id, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selectedRiverIdSet = computed(() => new Set(selectedRiverIds.value.map(id => String(id))));
+const selectedRiverRows = computed(() => visibleRows.value.filter(row => selectedRiverIdSet.value.has(String(row.id))));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -146,6 +152,8 @@ const riverActions = computed(() => [
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 const riverListActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "◉", disabled: !selectedRiverRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
   {key: "locate", label: "定位选中河流", icon: "⌖", disabled: !selected.value},
   {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", active: editing.value, disabled: !selected.value}
@@ -155,6 +163,7 @@ const summaryMetrics = computed(() => [
   {label: "河流", value: formatNumber(rows.value.length)},
   {label: "总长度", value: formatLength(totalLength.value)},
   {label: "最大流量", value: formatRiverFlow(maxFlux.value)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -185,6 +194,11 @@ watch(() => selected.value?.id, id => {
 
 watch(() => selected.value?.widthFactor, next => {
   widthDraft.value = normalizeWidth(next ?? 1);
+});
+
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedRiverIds.value = selectedRiverIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function riverRows(map) {
@@ -232,6 +246,8 @@ function openRenameEditor(row) {
 }
 
 function handleRiverListAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRiverRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
   if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);

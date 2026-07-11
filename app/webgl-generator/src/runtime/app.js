@@ -1144,6 +1144,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => routePanel.setSelectedRouteId(target.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onNoteChange: (routeId, body) => {
       const route = state.map?.settlements?.routes?.find(item => item.id === routeId);
       const context = {map: state.map};
@@ -1398,6 +1401,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => riverPanel.setSelection({object: target}, state.editingObject)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onEdit: object => {
       toggleObjectEditing(object);
     },
@@ -1454,6 +1460,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => lakePanel.setSelection({object: target})
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onRename: (lakeId, name) => {
       const object = {kind: OBJECT_KIND.LAKE, id: lakeId};
       const context = {map: state.map};
@@ -1793,8 +1802,8 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       clear: () => clearSelectionViaApi(state),
       locate: (object, locateOptions = {}) => locateObjectViaApi(state, documentRef, object, {locateObject: options.locateObject, ...locateOptions}),
       flash: object => flashObjectViaApi(state, object),
-      highlight: (objects, highlightOptions = {}) => highlightObjectsViaApi(state, objects, highlightOptions),
-      clearHighlights: () => clearObjectHighlightsViaApi(state),
+      highlight: (objects, highlightOptions = {}) => highlightObjectsViaApi(state, documentRef, objects, highlightOptions),
+      clearHighlights: () => clearObjectHighlightsViaApi(state, documentRef),
       startEditing: (object, editOptions = {}) => startEditingObjectViaApi(state, object, editOptions),
       stopEditing: (editOptions = {}) => stopEditingObjectViaApi(state, editOptions),
       toggleEditing: (object, editOptions = {}) => toggleEditingObjectViaApi(state, object, editOptions),
@@ -4558,7 +4567,7 @@ function flashObjectViaApi(state, object) {
   };
 }
 
-function highlightObjectsViaApi(state, objects, options = {}) {
+function highlightObjectsViaApi(state, documentRef, objects, options = {}) {
   const targets = Array.isArray(objects) ? objects : [objects];
   if (!targets.length || targets.some(target => target === null || target === undefined)) throw new Error("缺少高亮对象");
   if (targets.length > MAX_API_OBJECT_HIGHLIGHTS) throw new Error(`单次最多高亮 ${MAX_API_OBJECT_HIGHLIGHTS} 个对象`);
@@ -4569,8 +4578,7 @@ function highlightObjectsViaApi(state, objects, options = {}) {
     const kinds = [...new Set(unsupported.map(object => object.kind))].join("、");
     throw new Error(`当前 renderer 不支持高亮对象类型：${kinds}`);
   }
-  const current = options.append === true ? state.renderer.objectHighlights || [] : [];
-  state.renderer.setObjectHighlights([...current, ...resolved]);
+  setPersistentObjectHighlights(state, documentRef, resolved, options);
   const rendererStats = state.renderer.getStats?.() || {};
   return {
     highlighted: rendererStats.objectHighlightCount || 0,
@@ -4582,15 +4590,45 @@ function highlightObjectsViaApi(state, objects, options = {}) {
   };
 }
 
-function clearObjectHighlightsViaApi(state) {
+function clearObjectHighlightsViaApi(state, documentRef) {
   if (typeof state.renderer?.clearObjectHighlights !== "function") throw new Error("当前 renderer 不支持清除对象高亮");
   const previous = state.renderer.getStats?.()?.objectHighlightCount || 0;
-  state.renderer.clearObjectHighlights();
+  clearPersistentObjectHighlights(state, documentRef);
   return {
     cleared: previous,
     highlighted: state.renderer.getStats?.()?.objectHighlightCount || 0,
     mode: "none"
   };
+}
+
+function setPersistentObjectHighlights(state, documentRef, objects, options = {}) {
+  if (typeof state.renderer?.setObjectHighlights !== "function") return 0;
+  const current = options.append === true ? state.renderer.objectHighlights || [] : [];
+  state.renderer.setObjectHighlights([...current, ...(Array.isArray(objects) ? objects : [])]);
+  refreshPersistentHighlightUi(state, documentRef);
+  const count = persistentObjectHighlightCount(state);
+  setFileOperationStatus(documentRef, `已高亮 ${count} 个地图对象。`);
+  return count;
+}
+
+function clearPersistentObjectHighlights(state, documentRef) {
+  if (typeof state.renderer?.clearObjectHighlights !== "function") return 0;
+  const previous = persistentObjectHighlightCount(state);
+  state.renderer.clearObjectHighlights();
+  refreshPersistentHighlightUi(state, documentRef);
+  setFileOperationStatus(documentRef, previous ? `已清除 ${previous} 个地图对象高亮。` : "当前没有地图对象高亮。");
+  return 0;
+}
+
+function persistentObjectHighlightCount(state) {
+  return Math.max(0, Number(state.renderer?.getStats?.()?.objectHighlightCount) || 0);
+}
+
+function refreshPersistentHighlightUi(state, documentRef) {
+  updateRuntimePanel(documentRef, state);
+  updateRoutePanel(state);
+  updateRiverPanel(state);
+  updateLakePanel(state);
 }
 
 function startEditingObjectViaApi(state, object, options = {}) {

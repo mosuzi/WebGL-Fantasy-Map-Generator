@@ -29,6 +29,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readHighlightCount(callbacks),
     version: 0
   });
   const panelCallbacks = {
@@ -60,6 +61,14 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => callbacks.onSelect?.(riverObject(row)),
     onLocate: row => callbacks.onLocate?.(riverObject(row)),
+    onHighlight: rows => {
+      callbacks.onHighlight?.(rows.map(riverObject));
+      panelState.highlightCount = readHighlightCount(callbacks);
+    },
+    onClearHighlights: () => {
+      callbacks.onClearHighlights?.();
+      panelState.highlightCount = readHighlightCount(callbacks);
+    },
     onEdit: row => callbacks.onEdit?.(riverObject(row)),
     onRename: (riverId, name) => callbacks.onRename?.(riverId, name),
     onRenameVisibleFromNamebase: riverIds => callbacks.onRenameVisibleFromNamebase?.(riverIds),
@@ -106,6 +115,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
       panelState.history = history;
+      panelState.highlightCount = readHighlightCount(callbacks);
       panelState.open = true;
       panelState.version++;
       manager.open("river-panel");
@@ -116,6 +126,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
       panelState.history = history;
+      panelState.highlightCount = readHighlightCount(callbacks);
       panelState.version++;
     },
     setSelection(selection, editingObject = panelState.editingObject) {
@@ -141,4 +152,8 @@ function riverObject(row) {
     length: Math.round(row.length),
     distance: 0
   };
+}
+
+function readHighlightCount(callbacks) {
+  return Math.max(0, Number(callbacks.getHighlightCount?.()) || 0);
 }

@@ -26086,3 +26086,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；`pnpm run regress:selection-highlight` 输出 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1109 modules、耗时 1.27 秒，仅有既有 chunk 体积警告；`git diff --check` 通过。pnpm 在沙箱内受 registry 包装器网络限制，原命令在沙箱外重跑通过。
 - 阶段末浏览器验收由子智能体按技能尝试复用现有会话，但 in-app Browser 返回 `Browser is not available: iab`，可用浏览器后端列表为 `[]`。按用户约束未启动或重启 Chrome、未使用 Playwright、未启动开发服务器；多对象高亮 API 的 replace / append / clear、checksum、WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。
+
+### 2026-07-12 路线河流湖泊批量高亮接入
+
+背景：
+
+- 多对象持久高亮已经具备 renderer 和控制台 API 生命周期，但正式 UI 还没有入口，用户无法从对象表格直接勾选多个目标进行地图比较。
+- 路线、河流和湖泊都是天然适合多对象对比的线性 / 水文列表，且批量高亮是只读视觉动作，不会引入批量删除或批量编辑风险。
+
+实现：
+
+- 三个 Vue 面板的 `UiObjectTable` 开启默认关闭的公共批量选择列，组件本地保存当前筛选结果内的勾选 id；筛选结果变化后会清理已不可见 id，避免隐藏目标继续混入下一次高亮。
+- 三个列表动作条新增“高亮选中 N”和“清除高亮 N”，摘要指标显示全局持久高亮数量；原有单行 selection、定位、河流编辑、名称库改名、路线删除和道路重算语义保持不变。
+- 三个 panel wrapper 新增批量 row 到对象摘要的桥接，并从 runtime 回调读取最新全局高亮数量；打开、更新或 API 改写高亮集合后均会同步。
+- `app.js` 新增共享 `setPersistentObjectHighlights()`、`clearPersistentObjectHighlights()`、`persistentObjectHighlightCount()` 和 `refreshPersistentHighlightUi()`；面板按钮与 `api.selection.highlight / clearHighlights` 共用该动作层，统一 renderer draw、runtime 摘要、三个面板和文件操作状态刷新。
+
+验证：
+
+- `node --check` 已覆盖 `app.js` 与路线、河流、湖泊三个 panel wrapper。
+- 全局搜索确认三个 Vue 面板均已接入 `selectableRows / selectedRowIds / selection-change`、高亮动作和高亮摘要。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：4 个目标 JS 文件 `node --check` 全过；`pnpm run regress:selection-highlight` 继续输出 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1109 modules、耗时 1.39 秒，路线、河流和湖泊三个 Vue SFC 均生成独立构建产物，无模板、响应式或 SFC 编译错误，仅有既有主 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有后端，结果为 `[]`。按用户约束未启动或重启 Chrome、未使用 Playwright、未启动开发服务器；批量 checkbox、高亮选中、跨面板清除、单对象 selection 保持、checksum 和 WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。

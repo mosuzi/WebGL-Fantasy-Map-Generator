@@ -17,10 +17,13 @@
     empty-text="没有匹配的路线"
     :empty-action="filterEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedRouteIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedRouteIds = $event"
   />
 
   <UiPanelIoActions
@@ -100,6 +103,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const selectedRouteIds = ref([]);
 const routeActions = Object.freeze([
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
@@ -111,11 +115,15 @@ const rows = computed(() => {
   return routeRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selectedRouteIdSet = computed(() => new Set(selectedRouteIds.value.map(id => String(id))));
+const selectedRouteRows = computed(() => visibleRows.value.filter(row => selectedRouteIdSet.value.has(String(row.id))));
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const routeListActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "◉", disabled: !selectedRouteRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "locate", label: "定位路线", icon: "⌖", disabled: !selected.value},
   {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
   {key: "regenerate", label: "重算道路", icon: "↻"}
@@ -125,6 +133,7 @@ const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.len
 const summaryMetrics = computed(() => [
   {label: "路线", value: formatNumberValue(rows.value.length)},
   {label: "筛选", value: formatNumberValue(visibleRows.value.length)},
+  {label: "高亮", value: formatNumberValue(props.state.highlightCount || 0)},
   {label: "总长度", value: formatRouteLength(totalLength.value)},
   {label: "资源路线", value: formatNumberValue(rows.value.filter(row => row.resourceCells > 0).length)},
   {label: "海路", value: formatNumberValue(rows.value.filter(row => row.type === "searoute").length)}
@@ -147,6 +156,11 @@ const detailRows = computed(() => selected.value ? [
 
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
+});
+
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedRouteIds.value = selectedRouteIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function handleRouteManagementAction(key) {
@@ -211,6 +225,8 @@ function sortRows(sourceRows, key, direction) {
 }
 
 function handleRouteAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRouteRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "regenerate") props.callbacks.onRegenerateRoutes?.();
   if (!selected.value) return;
   if (key === "locate") props.callbacks.onLocate?.(selected.value);

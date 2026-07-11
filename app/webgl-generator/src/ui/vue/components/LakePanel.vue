@@ -18,11 +18,14 @@
     empty-text="没有匹配的湖泊"
     :empty-action="filterEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedLakeIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedLakeIds = $event"
   />
 
   <UiPanelIoActions
@@ -97,6 +100,7 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestId = ref(null);
+const selectedLakeIds = ref([]);
 const rows = computed(() => {
   props.state.version;
   return lakeRows(props.state.map);
@@ -104,6 +108,8 @@ const rows = computed(() => {
 const selectedId = computed(() => props.state.selection?.object?.kind === "lake" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const selectedLakeIdSet = computed(() => new Set(selectedLakeIds.value.map(id => String(id))));
+const selectedLakeRows = computed(() => visibleRows.value.filter(row => selectedLakeIdSet.value.has(String(row.id))));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -114,6 +120,8 @@ const lakeActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"}
 ]);
 const lakeListActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedLakeRows.value.length)}`, icon: "◉", disabled: !selectedLakeRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选湖泊", icon: "名", disabled: !visibleRows.value.length},
   {key: "locate", label: "定位选中湖泊", icon: "⌖", disabled: !selected.value}
 ]);
@@ -122,6 +130,7 @@ const summaryMetrics = computed(() => [
   {label: "湖泊", value: formatNumber(rows.value.length)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
   {label: "水域 cells", value: formatNumber(totalCells.value)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -143,6 +152,11 @@ watch(() => selected.value?.id, id => {
   nextTick(() => {
     activeAction.value = "rename";
   });
+});
+
+watch(visibleRows, nextRows => {
+  const visibleIds = new Set(nextRows.map(row => String(row.id)));
+  selectedLakeIds.value = selectedLakeIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function lakeRows(map) {
@@ -204,6 +218,8 @@ function lakeTypeLabel(type) {
 }
 
 function handleLakeListAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedLakeRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
 }

@@ -534,7 +534,7 @@ api.edit.measurement.delete(id)
 - `api.selection.clearHighlights()` 会清空持久高亮；载入新地图时 renderer 也会自动清空，避免对象 id 跨地图残留。`selection.get()` 与 renderer stats 会返回高亮摘要。
 - 持久高亮不修改地图 checksum、不进入 `EditHistory`，`highlight / clearHighlights` 的能力元数据副作用为 `persistent-highlight-state`。
 - `api.selection.startEditing(object, {select})`、`stopEditing({ifKind})` 和 `toggleEditing(object, {select})` 已完成第一刀；当前复用运行时编辑态 helper，只控制 selection / editingObject 与编辑交互锁，不执行数据编辑命令。
-- 多对象持久高亮生命周期第一刀已完成；后续重点是让安全的公共表格批量选择入口直接复用该能力，以及评估贸易流的稳定对象身份和专用高亮渲染。
+- 多对象持久高亮生命周期第一刀已完成；路线、河流和湖泊公共表格批量选择已复用同一运行时动作，控制台 API 修改集合后已打开面板会同步刷新。后续重点是评估其它列表是否有明确安全的批量高亮语义，以及贸易流的稳定对象身份和专用高亮渲染。
 
 ### 阶段 5：生成、导入和批量能力
 

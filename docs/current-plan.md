@@ -837,6 +837,16 @@
    - 边界：高亮只改变运行时视觉状态，不进入 `EditHistory`，不改变地图 checksum，也不需要 `confirm:true`。
    - 完成记录：selection 方法新增 `clearHighlights`；`highlight / clearHighlights` 的 `mutates` 标为 `persistent-highlight-state`，命名空间副作用摘要更新为 `selection-camera-highlights-and-editing-state`。新增 `pnpm run regress:selection-highlight` 固化政治面、湖泊、河流组合与去重断言；capabilities 回归补入代表性副作用断言，并把 Playwright `context` 与 `browser` 都放入 `finally` 关闭路径。
 
+108. 路线 / 河流 / 湖泊批量选择高亮接入。`已完成`
+   - 目标：把持久高亮从控制台能力落到最适合批量比较的三个线性 / 水文列表，让用户可以勾选多行后一次高亮。
+   - 边界：批量 checkbox 只用于暂存高亮目标；不改变当前单对象 selection，不新增批量删除、批量重命名或批量编辑。筛选结果变化时会移除已不可见的暂存 id。
+   - 完成记录：路线、河流和湖泊 `UiObjectTable` 已开启 `selectableRows`，列表动作条新增“高亮选中 N / 清除高亮 N”，摘要区显示全局高亮数量；三个面板继续保留原单行定位、编辑和管理语义。
+
+109. UI / API 持久高亮运行时动作统一。`已完成`
+   - 目标：避免面板按钮和控制台 API 各自直接操作 renderer，统一高亮写入、清除、runtime 状态和面板刷新。
+   - 边界：运行时 helper 只改变视觉高亮集合和文件操作状态，不进入 `EditHistory`，不改变地图 checksum。
+   - 完成记录：新增共享 `setPersistentObjectHighlights()` / `clearPersistentObjectHighlights()` / `refreshPersistentHighlightUi()`；控制台 API 与三个面板共用同一入口，API 修改高亮后已打开的路线、河流、湖泊面板会同步更新数量。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -850,6 +860,7 @@
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 废弃内容区历史基础设施清理批次完成：应用源码不再引用 `UiHistoryActions`、`createHistoryActions` 或旧面板历史类；`pnpm run build:app` 通过（1109 modules，1.59s），`git diff --check` 通过。阶段末浏览器验收已交给子智能体，但 in-app Browser 与现有 Chrome 控制后端均不可连接；按约束未重启 Chrome、未使用 Playwright、未启动额外服务器，因此本批次浏览器 UI / WebGL 验收仍待可复用浏览器会话恢复后补跑。
 - 多对象持久高亮批次完成：子智能体执行的 6 个 `node --check`、`pnpm run regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；高亮回归为 12 / 30 / 30 顶点，Vite 构建 1109 modules、1.27s，仅有既有 chunk 警告。浏览器子智能体确认 in-app Browser 不可用且浏览器后端列表为空；按约束未启动 / 重启 Chrome、未使用 Playwright、未启动额外服务器，因此 API 持久高亮、append / clear、checksum 和 WebGL / console / health 真实浏览器验收待控制后端恢复后补跑。
+- 路线 / 河流 / 湖泊批量高亮 UI 批次完成：子智能体执行的 4 个 `node --check`、`pnpm run regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；三个 Vue SFC 均生成独立构建产物，无模板、响应式或 SFC 编译错误，Vite 构建 1109 modules、1.39s，仅有既有 chunk 警告。浏览器子智能体唯一一次后端检查仍为 `[]`；按约束未启动 / 重启 Chrome、未使用 Playwright、未启动服务器，因此 checkbox、高亮动作、跨面板清除、selection 不变、checksum 和 WebGL / console / health 验收待控制后端恢复后补跑。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。
