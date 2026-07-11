@@ -25464,3 +25464,25 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_units_area_api` 和 `verify_units_area_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-units-area", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `44ca87f4`；`api.info.capabilities().methods.units` 已包含 `setAreaUnit`；调用 `api.units.setDistanceUnit("m")` 后，API 单位偏好为 `distanceUnit="m"`、`areaUnit="m2"`；调用 `api.units.setAreaUnit("m2")` 成功，并同步到隐藏 DOM 控件 `#distance-unit = "m"`、`#area-unit = "m2"` 和 renderer `unitPreferences`；调用 `api.units.setAreaUnit("km2")` 返回结构化失败，错误信息为 `面积单位 km2 与当前距离单位 m 不匹配，应为 m2`；调用前后 checksum 保持 `44ca87f4` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 debug 面板开关 API 第一刀
+
+背景：
+
+- 控制台 API 方案中列出 `api.debug.enable()` 和 `api.debug.disable()`，但此前 debug 命名空间只提供诊断快照、状态转储、renderer / health 读取和下一帧 profiling。
+- 现有运行时已经有开发模式面板、`window.__webglGeneratorDebug` 和 `webgl-generator-debug-change` 事件；Vue 组件通过该事件决定是否显示 debug 行，因此适合作为 API 化的第一刀。
+
+实现：
+
+- `console-api.js` 新增 `api.debug.enable()` 和 `api.debug.disable()`。
+- 这两个入口只调用现有开发模式面板的 `open()` / `close()`，控制调试面板和 debug 行显示，不修改地图数据、health 阈值或 health 事件。
+- `api.debug.snapshot()` 的 `app.debug` 新增开发面板可用性、启用状态、收起状态、面板可见性、load trace 事件数和 health 事件数。
+- capabilities 同步补入 `debug.enable / debug.disable`，debug 副作用说明从只读诊断调整为“诊断与调试 UI”。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_debug_mode_api` 和 `verify_debug_mode_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-mode", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `e878fde1`；`api.info.capabilities().methods.debug` 已包含 `enable / disable`，`sideEffects.debug = "diagnostics-and-debug-ui"`；调用 `api.debug.enable()` 返回 `enabled=true`、`collapsed=false`、`panelVisible=true`，DOM 中开发模式按钮 `hidden=false`、`aria-pressed=true`，开发面板不 hidden，`api.debug.snapshot().app.debug.enabled=true`；调用 `api.debug.disable()` 返回 `enabled=false`、`collapsed=true`、`panelVisible=false`，开发面板 hidden，`api.debug.snapshot().app.debug.enabled=false`；`webgl-generator-debug-change` 事件按开 / 关各触发一次；调用前后 checksum 保持 `e878fde1` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

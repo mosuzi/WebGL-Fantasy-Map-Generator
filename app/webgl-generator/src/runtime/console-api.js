@@ -189,6 +189,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       renameObjects: (kind, ids, options = {}) => apiCall(() => requireApiAction(actions.namebases?.renameObjects, "namebases.renameObjects")(kind, ids, options))
     }),
     debug: Object.freeze({
+      enable: () => apiCall(() => setDebugMode(state, true)),
+      disable: () => apiCall(() => setDebugMode(state, false)),
       snapshot: (options = {}) => apiCall(() => buildDebugSnapshot(state, documentRef, options)),
       dumpState: (options = {}) => apiCall(() => buildDebugStateDump(state, documentRef, options)),
       renderer: () => apiCall(() => buildDebugRendererSnapshot(state)),
@@ -215,7 +217,7 @@ function buildCapabilities() {
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
       data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
       namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
-      debug: ["snapshot", "dumpState", "renderer", "health", "profileNextRender"]
+      debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
     },
     sideEffects: {
       info: "readonly",
@@ -228,7 +230,7 @@ function buildCapabilities() {
       edit: "edit-command",
       data: "readonly-download-and-map-import",
       namebases: "readonly-download-and-edit-command",
-      debug: "readonly-diagnostics"
+      debug: "diagnostics-and-debug-ui"
     }
   };
 }
@@ -341,7 +343,8 @@ function buildDebugSnapshot(state, documentRef, options = {}) {
       ready: Boolean(state),
       mapReady: Boolean(state?.map),
       rendererReady: Boolean(state?.renderer),
-      loading
+      loading,
+      debug: buildDebugModeSnapshot(state, documentRef)
     },
     map: buildMapSummary(state),
     layers: buildLayerSnapshot(state, documentRef),
@@ -350,6 +353,27 @@ function buildDebugSnapshot(state, documentRef, options = {}) {
     history: state?.editHistory?.getStats?.() || null,
     renderer,
     health
+  };
+}
+
+function setDebugMode(state, enabled) {
+  const debugPanel = state?.panels?.development;
+  if (!debugPanel) throw new Error("开发模式面板未初始化");
+  if (enabled) debugPanel.open?.();
+  else debugPanel.close?.();
+  return buildDebugModeSnapshot(state, debugPanel.panel?.ownerDocument || null);
+}
+
+function buildDebugModeSnapshot(state, documentRef) {
+  const debugPanel = state?.panels?.development || documentRef?.defaultView?.__webglGeneratorDebug || null;
+  const panel = debugPanel?.panel || null;
+  return {
+    available: Boolean(debugPanel),
+    enabled: Boolean(debugPanel?.enabled),
+    collapsed: Boolean(debugPanel?.collapsed),
+    panelVisible: Boolean(panel && !panel.classList.contains("hidden")),
+    loadTraceEvents: Array.isArray(debugPanel?.loadTrace) ? debugPanel.loadTrace.length : 0,
+    healthEvents: Array.isArray(debugPanel?.healthEvents) ? debugPanel.healthEvents.length : 0
   };
 }
 

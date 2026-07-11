@@ -534,12 +534,13 @@ api.edit.measurement.delete(id)
 ### 阶段 6：debug 诊断 API
 
 - debug API 已完成第一刀。
+- `api.debug.enable()` 和 `api.debug.disable()` 已完成第一刀，复用现有开发模式面板与 `webgl-generator-debug-change` 事件，只控制调试 UI 和 debug 行显示，不修改地图数据、health 阈值或 health 事件。
 - `api.debug.snapshot({limit, severity})` 返回当前页面、地图、图层 / 单位偏好、选择、历史、renderer 摘要和 health 摘要，供脚本或 AI 快速判断运行时状态。
 - `api.debug.dumpState({includeCapabilities, includeRendererStats})` 返回可复制的诊断转储，默认包含 snapshot 和 capabilities，可选附带完整 renderer stats；该入口不暴露原始 `state.map` 或 typed array。
 - `api.debug.renderer()` 返回完整 renderer stats，便于定位 WebGL、camera、动态 mesh、draw 和 loadMap 状态。
 - `api.debug.health({limit, severity})` 返回 health 事件、阈值、存储 key 和当前 operation。
 - `api.debug.profileNextRender({updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers})` 会强制执行一次 renderer draw，并返回前后 draw stats、动态 mesh cache 和 API 侧总耗时。
-- 本阶段为只读诊断能力，不修改地图数据、显示偏好或 health 存储；清理 health 事件、写入 debug delay 等破坏性或会改变环境状态的能力暂不暴露。
+- 本阶段为诊断与调试 UI 能力，不修改地图数据、显示偏好或 health 存储；清理 health 事件、写入 debug delay 等破坏性或会改变运行节奏的能力暂不暴露。
 
 ## 第一批代码落点建议
 
