@@ -324,7 +324,15 @@ function buildMethodMetadata() {
       importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: "partial", async: true, requiresConfirm: true}
     },
     namebases: {
+      list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      export: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      import: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
+      create: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
+      copyBuiltin: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
+      update: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
+      delete: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
       clear: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: true},
+      bind: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
       renameObjects: {stable: "draft", mutates: "object-names", undoable: true, async: false, requiresConfirm: true}
     }
   };

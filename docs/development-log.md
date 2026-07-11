@@ -25657,3 +25657,27 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-data-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `044fa6ab`、grid cells `1014`、pack cells `906`；随后读取 `api.info.capabilities()`，确认 `sideEffects.data = "readonly-download-and-map-import"`，`methods.data` 仍包含全部 10 个公开方法；`methodMetadata.data` 中 8 个导出方法均为 `mutates: "download-or-export-result"`、`undoable: false`、`requiresConfirm: false`，其中 `exportCompressedAll / exportPNG` 为 `async: true`、其它导出方法为 `async: false`；`importMap` 仍为 `replace-map / undoable: false / async: true / requiresConfirm: true`，`importGEO` 仍为 `map-or-measurements / undoable: "partial" / async: true / requiresConfirm: true`；调用前后 checksum 保持 `044fa6ab` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 namebases 能力元数据副作用边界第一刀
+
+背景：
+
+- `api.info.capabilities()` 此前只给 `namebases.clear / renameObjects` 标注了方法级确认边界，名称库只读、导出、导入和普通写入方法仍缺少方法级元数据。
+- `api.namebases.list()` 是纯只读快照；`api.namebases.export()` 会返回名称库 JSON / 原版文本或触发浏览器下载；`import / create / copyBuiltin / update / delete / clear / bind` 都复用名称库 edit command、进入 `EditHistory` 并刷新名称库面板；`renameObjects` 会复用按名称库批量重命名命令改写当前地图对象名称。
+- 如果缺少方法级元数据，脚本或 AI 无法从能力表区分名称库只读、下载导出、名称库自身写入和对象名称批量改写。
+
+实现：
+
+- `console-api.js` 为 `methodMetadata.namebases` 补齐全部 10 个公开方法。
+- `list` 标注 `mutates: "none"`、`undoable: false`、`requiresConfirm: false`。
+- `export` 标注 `mutates: "download-or-export-result"`、`undoable: false`、`requiresConfirm: false`。
+- `import / create / copyBuiltin / update / delete / clear / bind` 标注 `mutates: "namebases"`、`undoable: true`、`async: false`；其中只有 `clear` 要求 `confirm:true`。
+- `renameObjects` 标注 `mutates: "object-names"`、`undoable: true`、`async: false`、`requiresConfirm: true`。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-namebases-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `b760ab08`、grid cells `1014`、pack cells `868`；随后读取 `api.info.capabilities()`，确认 `sideEffects.namebases = "readonly-download-and-edit-command"`，`methods.namebases` 仍包含全部 10 个公开方法；`methodMetadata.namebases` 中 `list = none / undoable:false / async:false / requiresConfirm:false`，`export = download-or-export-result / undoable:false / async:false / requiresConfirm:false`，`import / create / copyBuiltin / update / delete / clear / bind = namebases / undoable:true / async:false` 且只有 `clear` 要求 `confirm:true`，`renameObjects = object-names / undoable:true / async:false / requiresConfirm:true`；`safety.confirmRequired.namebases` 只包含 `clear / renameObjects`；调用前后 checksum 保持 `b760ab08` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
