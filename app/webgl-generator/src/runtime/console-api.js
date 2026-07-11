@@ -2,6 +2,7 @@ import {readControlPreferences, setActiveModeButton, updateControlPreferences, u
 import {normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
+import {NAMEBASE_BINDING_TARGETS, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
 
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
@@ -139,6 +140,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options)),
       exportCompressedAll: (options = {}) => apiCall(() => exportCompressedAllMapData(state, documentRef, options)),
       exportPNG: (options = {}) => apiCall(() => exportPngData(state, documentRef, options))
+    }),
+    namebases: Object.freeze({
+      list: (options = {}) => apiCall(() => listNamebases(state, options))
     })
   };
   return Object.freeze(api);
@@ -148,7 +152,7 @@ function buildCapabilities() {
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "selection", "layers", "units", "climate", "history", "edit", "data"],
+    namespaces: ["info", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
       selection: ["get", "resolve", "select", "clear", "locate", "pick"],
@@ -157,7 +161,8 @@ function buildCapabilities() {
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
-      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
+      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"],
+      namebases: ["list"]
     },
     sideEffects: {
       info: "readonly",
@@ -167,7 +172,8 @@ function buildCapabilities() {
       climate: "readonly-and-climate-update",
       history: "edit-history",
       edit: "edit-command",
-      data: "readonly-download"
+      data: "readonly-download",
+      namebases: "readonly"
     }
   };
 }
@@ -411,6 +417,90 @@ function buildClimateBiomeSnapshot(state) {
     counts: {...(metadata.biomeCounts || {})},
     total: Object.values(metadata.biomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
   };
+}
+
+function listNamebases(state, options = {}) {
+  const map = state?.map || null;
+  const includeSource = options.includeSource === true;
+  const summaries = getNamebaseSummariesForMap(map, {includeSource}).map(row => summarizeNamebaseApiRow(row, includeSource));
+  const bindingStatus = getNamebaseBindingStatus(map);
+  return {
+    ready: Boolean(map),
+    metadata: {
+      version: numberOrNull(map?.namebases?.version) ?? 1,
+      ...(map?.namebases?.metadata && typeof map.namebases.metadata === "object" ? {...map.namebases.metadata} : {}),
+      builtinBases: summaries.filter(row => row.builtin).length,
+      userBases: summaries.filter(row => !row.builtin).length,
+      totalBases: summaries.length,
+      totalSamples: summaries.reduce((sum, row) => sum + row.samples, 0)
+    },
+    bindingTargets: NAMEBASE_BINDING_TARGETS.map(target => ({...target})),
+    bindings: cloneNamebaseBindings(bindingStatus.bindings),
+    bindingUsage: cloneNamebaseUsage(bindingStatus.usageById),
+    invalidBindings: bindingStatus.invalid.map(entry => ({...entry})),
+    invalidBindingCount: bindingStatus.invalidCount,
+    usedBindingCount: bindingStatus.used,
+    bases: summaries
+  };
+}
+
+function summarizeNamebaseApiRow(row, includeSource) {
+  const summary = {
+    index: numberOrZero(row.index),
+    id: String(row.id || ""),
+    name: String(row.name || row.id || ""),
+    kind: String(row.kind || ""),
+    category: String(row.category || ""),
+    builtin: row.builtin === true,
+    origin: String(row.origin || ""),
+    samples: numberOrZero(row.samples),
+    weightedSamples: numberOrZero(row.weightedSamples),
+    weightedNameSamples: numberOrZero(row.weightedNameSamples),
+    maxSampleWeight: numberOrZero(row.maxSampleWeight),
+    chainDiversity: numberOrZero(row.chainDiversity),
+    uniqueSamples: numberOrZero(row.uniqueSamples),
+    duplicateSamples: numberOrZero(row.duplicateSamples),
+    duplicateNames: cloneStringArray(row.duplicateNames),
+    minLength: numberOrZero(row.minLength),
+    maxLength: numberOrZero(row.maxLength),
+    sampleMinLength: numberOrZero(row.sampleMinLength),
+    sampleMaxLength: numberOrZero(row.sampleMaxLength),
+    sampleMeanLength: numberOrZero(row.sampleMeanLength),
+    sampleMedianLength: numberOrZero(row.sampleMedianLength),
+    lengthOutlierSamples: numberOrZero(row.lengthOutlierSamples),
+    lengthOutlierNames: cloneStringArray(row.lengthOutlierNames),
+    disallowedRepeatSamples: numberOrZero(row.disallowedRepeatSamples),
+    disallowedRepeatNames: cloneStringArray(row.disallowedRepeatNames),
+    doubledChars: cloneStringArray(row.doubledChars),
+    unusualChars: cloneStringArray(row.unusualChars),
+    duplicateChars: String(row.duplicateChars || ""),
+    examples: cloneStringArray(row.examples),
+    note: String(row.note || ""),
+    importedAt: String(row.importedAt || ""),
+    bindingUsageCount: numberOrZero(row.bindingUsageCount),
+    bindingUsageLabel: String(row.bindingUsageLabel || "")
+  };
+  if (includeSource) summary.source = cloneStringArray(row.source);
+  return summary;
+}
+
+function cloneNamebaseBindings(bindings) {
+  const source = bindings && typeof bindings === "object" ? bindings : {};
+  const cultures = source.cultures && typeof source.cultures === "object" ? source.cultures : {};
+  return {
+    global: {...(source.global || {})},
+    cultures: Object.fromEntries(Object.entries(cultures).map(([cultureId, cultureBindings]) => [
+      String(cultureId),
+      {...(cultureBindings || {})}
+    ]))
+  };
+}
+
+function cloneNamebaseUsage(usageById) {
+  return Object.fromEntries(Object.entries(usageById || {}).map(([id, entries]) => [
+    String(id),
+    Array.isArray(entries) ? entries.map(entry => ({...entry})) : []
+  ]));
 }
 
 function exportAllMapData(state, documentRef, options = {}) {
@@ -688,6 +778,10 @@ function countPoliticalItems(items) {
 function countArrayItems(items) {
   if (!Array.isArray(items)) return 0;
   return items.filter(Boolean).length;
+}
+
+function cloneStringArray(values) {
+  return Array.isArray(values) ? values.map(value => String(value || "")) : [];
 }
 
 function numberOrZero(value) {

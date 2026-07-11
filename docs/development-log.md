@@ -24949,3 +24949,26 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_measurement_points_api` 和 `verify_measurement_points_smoke`；稳定态烟测子智能体通过并关闭本地服务器，API 细测子智能体等待 90 秒无输出后已中断释放。
 - 子智能体稳定态烟测通过：`window.__webglGeneratorApp`、renderer 和 `window.webglGeneratorApi` 可用；`api.info.capabilities()` 已包含 `measurements.save / measurements.rename / measurements.updatePoints / measurements.delete`；`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`；直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器细测通过：`measurements.save([{x:100,y:100},{x:200,y:140},{x:220,y:230}], {name:"API测量点列烟测"})` 创建 `measurement-1`，测量对象数量 `0 -> 1`，返回 result 含新 measurement，撤销后对象移除，重做后恢复；`measurements.updatePoints("measurement-1", [{x:120,y:110},{x:230,y:160},{x:260,y:260},{x:180,y:300}])` 将点列改为 4 点，撤销后恢复原 3 点；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 名称库只读 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 方案中已有 `api.namebases` 命名空间规划，但此前尚未有运行时代码落点。
+- 名称库面板已有稳定的名称库摘要和绑定状态读取函数，适合作为只读 API 第一刀，先供脚本和后续 AI 调用读取名称库现状。
+
+实现：
+
+- `console-api.js` 新增 `api.namebases.list({includeSource})`。
+- `api.info.capabilities()` 的 `namespaces / methods / sideEffects` 同步登记 `namebases.list`，副作用类型为 `readonly`。
+- 返回数据包括：`metadata` 汇总、`bindingTargets`、全局 / 文化名称库绑定、绑定使用情况、无效绑定列表和 `bases` 摘要。
+- 默认 `includeSource = false`，只返回统计、示例和摘要字段；显式传 `includeSource: true` 时才返回每个名称库的 source 词条副本。
+- 本步不新增名称库导入、导出、创建、更新、删除、绑定或批量重命名对象能力；不进入 `EditHistory`，也不修改地图 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_namebases_list_api` 和 `verify_namebases_list_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`window.__webglGeneratorApp`、renderer 和 `window.webglGeneratorApi` 可用，加载遮罩已隐藏；`api.info.capabilities()` 已包含 `namebases` 命名空间、`namebases.list` 方法和 `readonly` 副作用标记；`api.namebases.list()` 返回 `62` 个名称库摘要，`metadata.totalBases = bases.length = 62`、内置库 `62`、用户库 `0`、样本数 `3314`，绑定目标包含 `stateRoot / place / hydro / culture / religion`，默认首个 base 不含 `source`；`api.namebases.list({includeSource:true})` 返回 source 数组，首个 source 长度 `96`；调用前后 checksum 保持 `e24c50a9`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

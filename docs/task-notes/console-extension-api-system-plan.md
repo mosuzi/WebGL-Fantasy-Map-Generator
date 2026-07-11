@@ -233,6 +233,12 @@ api.edit.measurement.delete(id)
 - 导入、编辑和绑定名称库不自动批量改写当前地图对象名称。
 - 显式重命名必须进入 `EditHistory`。
 
+当前状态：
+
+- `api.namebases.list({includeSource})` 已完成只读快照第一刀，返回内置 / 用户名称库摘要、绑定目标、全局与文化绑定、绑定使用情况、无效绑定和汇总 metadata。
+- 默认 `includeSource` 为 `false`，只返回示例与统计摘要，不回传完整 source；显式传 `includeSource: true` 时才返回名称库源词条副本。
+- 本 API 不进入 `EditHistory`，不修改名称库、绑定、地图 checksum 或面板状态；后续 `import / export / create / update / delete / bind / renameObjects` 仍需单独设计写入和撤销语义。
+
 ### `api.debug`
 
 开发辅助：
