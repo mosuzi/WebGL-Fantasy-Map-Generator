@@ -25351,3 +25351,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_selection_flash_api` 和 `verify_selection_flash_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-flash", cellsTarget:1000})` 生成地图，得到 checksum `63e36bb8`、grid cells `1014`、pack cells `754`；`api.info.capabilities()` 已包含 `selection.flash / selection.highlight`；对河流 `#1` 调用 `api.selection.flash({kind:"river", id:1})` 返回 `flashed=true`，selection 设置为该河流，renderer `selectionHighlightMode = "river red flash"`；`api.selection.highlight({kind:"river", id:1})` 同样返回 `river red flash`；不存在河流 `#999999` 返回结构化失败且错误信息包含“找不到对象”；调用前后 checksum 保持 `63e36bb8` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 选择编辑态 API 第一刀
+
+背景：
+
+- 运行时已经有 `startObjectEditing()`、`stopObjectEditing()` 和 `toggleObjectEditing()` helper，UI 的对象详情、国家、省份和河流编辑入口已复用这些动作。
+- 控制台 API 仍缺少进入 / 退出编辑态入口，脚本无法验证或驱动“selection / editingObject / 编辑交互锁”的运行时状态。
+
+实现：
+
+- `console-api.js` 新增 `api.selection.startEditing(object, {select})`、`stopEditing({ifKind})` 和 `toggleEditing(object, {select})`。
+- `app.js` 新增对应 API action，复用对象解析和运行时编辑态 helper，并返回 selection / editingObject 快照。
+- `api.info.capabilities()` 的 selection 方法列表补入 `startEditing / stopEditing / toggleEditing`。
+- 本步只改变运行时 selection / editingObject 与编辑交互锁，不执行对象数据编辑命令，不进入 `EditHistory`，不修改地图 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_selection_editing_api` 和 `verify_selection_editing_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-editing", cellsTarget:1000})` 生成地图，得到 checksum `0ce7d3e5`、grid cells `1014`、pack cells `932`；`api.info.capabilities()` 已包含 `selection.startEditing / stopEditing / toggleEditing`；对河流 `#1` 调用 `api.selection.startEditing({kind:"river", id:1})` 后 selection 和 editingObject 均为该河流；`api.selection.stopEditing({ifKind:"state"})` 返回 `stopped=false` 且不误清河流编辑态；`api.selection.stopEditing({ifKind:"river"})` 返回 `stopped=true` 并清除 editingObject；连续两次 `api.selection.toggleEditing({kind:"river", id:1})` 可进入再退出同一河流编辑态；不存在河流 `#999999` 返回结构化失败且错误信息包含“找不到对象”；调用前后 checksum 保持 `0ce7d3e5` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

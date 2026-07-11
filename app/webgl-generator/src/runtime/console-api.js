@@ -46,7 +46,10 @@ function createConsoleApi(documentRef, state, actions = {}) {
       locate: object => apiCall(() => requireApiAction(actions.selection?.locate, "selection.locate")(object)),
       pick: (clientX, clientY) => apiCall(() => requireApiAction(actions.selection?.pick, "selection.pick")(clientX, clientY)),
       flash: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object)),
-      highlight: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object))
+      highlight: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object)),
+      startEditing: (object, options = {}) => apiCall(() => requireApiAction(actions.selection?.startEditing, "selection.startEditing")(object, options)),
+      stopEditing: (options = {}) => apiCall(() => requireApiAction(actions.selection?.stopEditing, "selection.stopEditing")(options)),
+      toggleEditing: (object, options = {}) => apiCall(() => requireApiAction(actions.selection?.toggleEditing, "selection.toggleEditing")(object, options))
     }),
     layers: Object.freeze({
       get: () => apiCall(() => buildLayerSnapshot(state, documentRef)),
@@ -199,7 +202,7 @@ function buildCapabilities() {
     methods: {
       info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
       generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
-      selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight"],
+      selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "startEditing", "stopEditing", "toggleEditing"],
       layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
       units: ["get", "apply", "setDistanceUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],

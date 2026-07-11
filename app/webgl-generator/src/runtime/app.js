@@ -1774,6 +1774,9 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       clear: () => clearSelectionViaApi(state),
       locate: object => locateObjectViaApi(state, documentRef, object, options),
       flash: object => flashObjectViaApi(state, object),
+      startEditing: (object, editOptions = {}) => startEditingObjectViaApi(state, object, editOptions),
+      stopEditing: (editOptions = {}) => stopEditingObjectViaApi(state, editOptions),
+      toggleEditing: (object, editOptions = {}) => toggleEditingObjectViaApi(state, object, editOptions),
       pick: (clientX, clientY) => pickClientPointViaApi(state, documentRef, clientX, clientY)
     },
     climate: {
@@ -4525,6 +4528,38 @@ function flashObjectViaApi(state, object) {
     object: resolved,
     selection: state.selectionStore.getSnapshot().selection,
     highlightMode: rendererStats.selectionHighlightMode || ""
+  };
+}
+
+function startEditingObjectViaApi(state, object, options = {}) {
+  const resolved = resolveObjectViaApi(state, object);
+  const started = state.startObjectEditing?.(resolved, {select: options.select !== false}) === true;
+  return {
+    started,
+    object: resolved,
+    ...state.selectionStore.getSnapshot()
+  };
+}
+
+function stopEditingObjectViaApi(state, options = {}) {
+  const before = state.selectionStore.getSnapshot().editingObject;
+  const stopped = state.stopObjectEditing?.({ifKind: options.ifKind}) === true;
+  const snapshot = state.selectionStore.getSnapshot();
+  return {
+    stopped,
+    previousEditingObject: before,
+    ...snapshot
+  };
+}
+
+function toggleEditingObjectViaApi(state, object, options = {}) {
+  const resolved = resolveObjectViaApi(state, object);
+  state.toggleObjectEditing?.(resolved, {select: options.select !== false});
+  const snapshot = state.selectionStore.getSnapshot();
+  return {
+    editing: Boolean(snapshot.editingObject),
+    object: resolved,
+    ...snapshot
   };
 }
 
