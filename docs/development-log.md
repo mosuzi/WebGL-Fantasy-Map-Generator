@@ -26002,3 +26002,23 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 主线程 Playwright + 系统 Chrome 构建产物复现验证通过：生成 seed `unit-population-panel-refresh`、`3000` cells 地图，打开国家面板后不点击国家，只把人口倍率从 `1` 改为 `2`，第一行国家人口从 `115万 人` 自动变为 `230万 人`；checksum `4952a503` 不变，grid cells `3015`、pack cells `1752`，WebGL / health / console / page error 均为 `0`。
+
+### 2026-07-11 视觉主题画布滤镜补齐
+
+背景：
+
+- 用户指出切换主题后不应只改变海洋和画布边缘渐变，还应在整张画布上形成滤镜效果；否则国家颜色不变时，主题切换的感知价值很弱。
+- 复查确认现有主题 token 已覆盖背景、水色、地形色带、线层、标签、比例尺和图例，但缺少画布级后处理，政治色块这类语义颜色仍保留原色。
+
+实现：
+
+- 六个内置视觉主题新增 `effects.canvasFilter`；默认主题为 `none`，古地图、浅色图册、暗海、单色和夜间分别使用不同 CSS filter 组合调整整张 WebGL canvas 的色调、亮度、饱和度和对比度。
+- renderer 在应用主题 CSS 变量时写入 `--theme-canvas-filter`，`#map-canvas` 读取该变量并带过渡；renderer stats 同步暴露当前 `canvasFilter`，方便 debug API 和浏览器烟测断言。
+- PNG 导出合成会在复制 WebGL 内容后先把当前 canvas computed filter 应用到导出画布，再绘制标签、比例尺和图例等 overlay，避免屏幕主题和导出图片不一致。
+
+验证：
+
+- `node --check app\webgl-generator\src\renderer\themes.js`、`node --check app\webgl-generator\src\renderer\placeholder-renderer.js`、`node --check app\webgl-generator\src\runtime\map-file-io.js` 和 `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 主线程 Playwright + 系统 Chrome 构建产物 smoke 通过：生成 seed `visual-theme-filter-smoke`、`3000` cells 地图，默认主题 computed filter 和 renderer `canvasFilter` 均为 `none`；调用 `api.layers.setTheme("night")` 后 computed filter 和 renderer `canvasFilter` 均变为 `brightness(0.72) contrast(1.18) saturate(0.7) hue-rotate(190deg)`。
+- 同一 smoke 调用 `api.data.exportPNG({download:false, pixelScale:1, includeDataUrl:true})` 后，把导出 PNG 回读到浏览器 canvas，抽样对比 WebGL 原始像素与导出像素，最大 RGB 差值 `91`，确认导出图已应用主题滤镜；checksum `8aebcc81` 不变，WebGL / health / console / page error 均为 `0`。

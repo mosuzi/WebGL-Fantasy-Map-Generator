@@ -3,6 +3,7 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     id: "default",
     label: "默认",
     canvas: {background: [0.36, 0.49, 0.64, 1]},
+    effects: {canvasFilter: "none"},
     water: {fill: [0.37, 0.56, 0.76, 1]},
     lines: {
       coastline: [0.7, 0.76, 0.78, 0.58],
@@ -50,6 +51,7 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     id: "ancient",
     label: "古地图",
     canvas: {background: [0.55, 0.49, 0.36, 1]},
+    effects: {canvasFilter: "sepia(0.32) saturate(0.82) contrast(1.06) brightness(1.03)"},
     water: {fill: [0.51, 0.62, 0.63, 1]},
     lines: {
       coastline: [0.42, 0.36, 0.24, 0.46],
@@ -96,6 +98,7 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     id: "atlas",
     label: "浅色图册",
     canvas: {background: [0.78, 0.86, 0.88, 1]},
+    effects: {canvasFilter: "saturate(0.9) brightness(1.07) contrast(0.97)"},
     water: {fill: [0.64, 0.79, 0.86, 1]},
     lines: {
       coastline: [0.46, 0.59, 0.62, 0.5],
@@ -142,6 +145,7 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     id: "dark-seas",
     label: "暗海",
     canvas: {background: [0.08, 0.16, 0.2, 1]},
+    effects: {canvasFilter: "saturate(0.78) brightness(0.86) contrast(1.16)"},
     water: {fill: [0.08, 0.22, 0.3, 1]},
     lines: {
       coastline: [0.55, 0.74, 0.77, 0.54],
@@ -188,6 +192,7 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     id: "monochrome",
     label: "单色",
     canvas: {background: [0.56, 0.6, 0.58, 1]},
+    effects: {canvasFilter: "grayscale(0.9) saturate(0.28) contrast(1.1) brightness(1.02)"},
     water: {fill: [0.62, 0.68, 0.66, 1]},
     lines: {
       coastline: [0.38, 0.42, 0.4, 0.46],
@@ -234,6 +239,7 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
     id: "night",
     label: "夜间",
     canvas: {background: [0.03, 0.06, 0.1, 1]},
+    effects: {canvasFilter: "brightness(0.72) contrast(1.18) saturate(0.7) hue-rotate(190deg)"},
     water: {fill: [0.05, 0.13, 0.22, 1]},
     lines: {
       coastline: [0.3, 0.58, 0.72, 0.5],

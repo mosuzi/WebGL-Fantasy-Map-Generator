@@ -739,6 +739,7 @@ export class PlaceholderMapRenderer {
       stateLabelCount: this.stateLabelCount,
       visibleStateLabelCount: this.visibleStateLabelCount,
       colorMode: this.colorMode,
+      canvasFilter: this.visualTheme?.effects?.canvasFilter || "none",
       viewOptions: {...this.viewOptions},
       unitPreferences: {...this.unitPreferences},
       labelOptions: {...this.labelOptions},
@@ -1603,6 +1604,8 @@ function applyVisualThemeCssVariables(stage, theme) {
   const labels = theme?.labels || {};
   const legend = theme?.legend || {};
   const scaleBar = theme?.scaleBar || {};
+  const canvasFilter = theme?.effects?.canvasFilter || "none";
+  stage.style.setProperty("--theme-canvas-filter", canvasFilter);
   setThemeCssColor(stage, "--theme-legend-bg", legend.background);
   setThemeCssColor(stage, "--theme-legend-border", legend.border);
   setThemeCssColor(stage, "--theme-legend-text", legend.text);

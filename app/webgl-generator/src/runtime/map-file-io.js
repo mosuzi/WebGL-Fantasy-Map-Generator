@@ -1094,6 +1094,7 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
   if (!copyWebglCanvasTo2d(context, canvas, options.renderer)) {
     context.drawImage(canvas, 0, 0, output.width, output.height);
   }
+  applyCanvasCssFilterToExport(documentRef, output, canvas);
 
   const canvasRect = canvas.getBoundingClientRect();
   if (!canvasRect.width || !canvasRect.height) return output;
@@ -1158,6 +1159,30 @@ function copyWebglCanvasTo2d(context, canvas, renderer) {
   } catch {
     return false;
   }
+}
+
+function applyCanvasCssFilterToExport(documentRef, output, sourceCanvas) {
+  const context = output.getContext("2d");
+  if (!context || !("filter" in context)) return;
+  const filter = computedCanvasFilter(documentRef, sourceCanvas);
+  if (!filter) return;
+  const scratch = documentRef.createElement("canvas");
+  scratch.width = output.width;
+  scratch.height = output.height;
+  const scratchContext = scratch.getContext("2d");
+  if (!scratchContext) return;
+  scratchContext.drawImage(output, 0, 0);
+  context.save();
+  context.clearRect(0, 0, output.width, output.height);
+  context.filter = filter;
+  context.drawImage(scratch, 0, 0);
+  context.restore();
+}
+
+function computedCanvasFilter(documentRef, canvas) {
+  const view = documentRef.defaultView || window;
+  const filter = view.getComputedStyle?.(canvas)?.filter || canvas?.style?.filter || "";
+  return filter && filter !== "none" ? filter : "";
 }
 
 async function drawMapOverlayElements(documentRef, context, canvasRect, scale, options = {}) {
