@@ -25789,3 +25789,34 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 已按本轮约定启动 API 元数据覆盖验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-metadata-coverage", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `2f387f5c`、grid cells `1014`、pack cells `750`；随后读取 `api.info.capabilities()`，确认既有 `methods` 和 `methodMetadata` 字段仍存在，`methodMetadataCoverage.complete = true`，顶层 `methods / documented / metadata` 均为 `127`，`missing / extra` 均为空；各命名空间覆盖均完整，数量分别为 `info:5 / generate:5 / selection:11 / layers:5 / units:9 / climate:14 / history:5 / edit:46 / data:10 / namebases:10 / debug:7`；调用前后 checksum 保持 `2f387f5c` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 API capabilities 覆盖回归脚本第一刀
+
+背景：
+
+- `api.info.capabilities()` 已经提供 `methodMetadataCoverage`，并通过一次性浏览器脚本确认当前 127 个公开方法全部有元数据。
+- 后续 API 仍会继续增删改，如果覆盖检查只停留在临时脚本，新增方法时很容易忘记同步 `methodMetadata`、确认边界或代表性副作用说明。
+- 需要把这类能力表验证固化成可复用回归脚本，作为后续 API 小步的轻量门禁。
+
+实现：
+
+- 新增 `tools/webgl-generator-api-capabilities-regression.mjs`。
+- 新增 `pnpm run regress:api`。
+- 脚本会启动构建产物静态服务，并用 Playwright + 系统 Chrome 访问页面。
+- 脚本通过 `api.generate.newMap({confirm:true, seed:"api-capabilities-regression", cellsTarget:1000, heightmapTemplate:"continents"})` 生成小地图后读取 `api.info.capabilities()`。
+- 断言内容包括：
+  - `methodMetadataCoverage.complete = true`，且 `methods / documented / metadata` 数量一致。
+  - 顶层和各命名空间 `missing / extra` 均为空。
+  - 需要显式确认的 API 精确为 `generate.regenerate / newMap / rerollSeed`、`data.importMap / importGEO`、`namebases.clear / renameObjects`。
+  - `generate.setOptions`、`edit.notes.set`、`edit.states.setGovernment`、`data.exportPNG`、`debug.profileNextRender`、`selection.locate`、`history.undo` 和 `namebases.renameObjects` 的代表性 `mutates` 元数据未漂移。
+  - 读取 capabilities 前后 checksum 不变，WebGL / health / console / page error 均为 `0`。
+- 脚本会输出 JSON 和 Markdown 报告到 `docs/generated/reports/api-capabilities-regression-results.*`。
+
+验证：
+
+- `node --check tools\webgl-generator-api-capabilities-regression.mjs` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 主线程兜底 `pnpm run regress:api -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。浏览器回归确认 checksum `f5f8c5f1`、grid cells `1014`、pack cells `901`；`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`；各命名空间覆盖完整，数量为 `info:5 / generate:5 / selection:11 / layers:5 / units:9 / climate:14 / history:5 / edit:46 / data:10 / namebases:10 / debug:7`；确认方法列表精确为 7 项；代表性 `mutates` 元数据均符合预期；WebGL / health / console / page error 均为 `0`。
+- 浏览器烟测子智能体在未扩大权限时确认 `pnpm run regress:api -- --browser-channel chrome` 会被沙箱内 pnpm registry 访问拦截，随后用等价 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 直跑通过，确认覆盖完整、确认边界精确、代表性 `mutates` 正确且 WebGL / health / console / page error 均为 `0`；另一个静态审阅子智能体超时后已中断释放。
