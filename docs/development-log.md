@@ -25883,3 +25883,36 @@ full 矩阵结果：
 - `pnpm run regress:api-geo -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认生成地图 checksum `4d55f02f`、grid cells `10004`、pack cells `5787`；普通 GeoJSON 对象 / 字符串导入均写入 `3` 个测量对象，未确认导入和坏 JSON 均结构化失败且坏 JSON 后 checksum 保持；FMG Cells 导入应用 `9897` 个当前 cells，重建资源点 `15`、军事 `218`、地区 `3`，grid / pack mismatch 为 `0 / 0`，hover mismatch 为 `0`；WebGL / health / console / page error 均为 `0`。
 - 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API GEO 回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
 - 低上下文浏览器 smoke 子智能体验证通过，确认生成地图 checksum `21d82c5a`；普通 GeoJSON 对象 / 字符串导入均写入 `3` 个测量对象，未确认导入和坏 JSON 均结构化失败且坏 JSON 后 checksum 保持；FMG Cells 导入应用 `9897` 个当前 cells，资源点 `15`、军事 `218`、地区 `3`，grid / pack / hover mismatch 均为 `0`；WebGL / health / console / page error 均为 `0`。
+
+### 2026-07-11 API 备注与测量导出回归脚本第一刀
+
+背景：
+
+- `api.data.exportNotes()` 和 `api.data.exportMeasurements()` 已经完成接入，并通过一次性浏览器验证确认可导出、可筛选和可下载。
+- 这两个 API 属于导出能力矩阵收口的一部分，但此前没有长期回归脚本；后续备注、测量对象或单位显示调整时，容易误伤导出 JSON 结构、筛选语义或 `includeText:false` 行为。
+- 需要把备注摘要和测量结果导出固化成可复用门禁，补齐 API 导出类回归覆盖。
+
+实现：
+
+- 新增 `tools/webgl-generator-api-export-records-regression.mjs`。
+- 新增 `pnpm run regress:api-exports`。
+- 脚本会启动构建产物静态服务，并通过 Playwright + 系统 Chrome 使用控制台 API：
+  - 生成 seed `api-export-records-regression` 的约 1000 cells 地图。
+  - 通过 `api.edit.notes.set()` 给一个城市写入备注。
+  - 通过 `api.edit.measurements.save()` 保存一个三点测量对象。
+  - 验证 `api.data.exportNotes({download:false})` 和 `api.data.exportMeasurements({download:false})` 的全量 JSON 文本结构、metadata、文件名和新增对象内容。
+  - 验证 `ids / noteIds / measurementIds` 筛选只返回目标记录。
+  - 验证 `includeText:false` 不返回大文本，只保留 metadata / bytes / filename。
+  - 通过 Playwright download event 验证备注和测量对象下载文件名。
+  - 验证导出前后 checksum 不变，WebGL / health / console / page error 均为 `0`。
+- 脚本会输出 JSON 和 Markdown 报告到 `docs/generated/reports/api-export-records-regression-results.*`。
+
+验证：
+
+- `node --check tools\webgl-generator-api-export-records-regression.mjs` 通过。
+- `git diff --check` 通过。
+- 主线程先用 `node .\tools\webgl-generator-api-export-records-regression.mjs --browser-channel chrome` 直跑通过：生成地图 checksum `f9aaf9ba`、grid cells `1014`、pack cells `971`；备注全量 / 筛选均导出 `1` 条，测量全量 / 筛选均导出 `1` 条，测量距离 `419.334`；`includeText:false` 不返回 text；备注下载文件名为 `fmg-api-export-records-regression-f9aaf9ba.notes-selected.json`，测量下载文件名为 `fmg-api-export-records-regression-f9aaf9ba.measurements-selected.json`；WebGL / health / console / page error 均为 `0`。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- `pnpm run regress:api-exports -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认 checksum `8708a197`；备注全量 / 筛选均导出 `1` 条，测量全量 / 筛选均导出 `1` 条，测量距离 `419.334`；`includeText:false` 不返回 text；备注下载文件名为 `fmg-api-export-records-regression-8708a197.notes-selected.json`，测量下载文件名为 `fmg-api-export-records-regression-8708a197.measurements-selected.json`；WebGL / health / console / page error 均为 `0`。
+- 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API 备注与测量导出回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
+- 低上下文浏览器 smoke 子智能体验证通过，确认 checksum `dadfb37a`；备注全量 / 筛选均导出 `1` 条，测量全量 / 筛选均导出 `1` 条，测量距离 `419.334`；`includeText:false` 不返回 text；备注下载文件名为 `fmg-api-export-records-regression-dadfb37a.notes-selected.json`，测量下载文件名为 `fmg-api-export-records-regression-dadfb37a.measurements-selected.json`；WebGL / health / console / page error 均为 `0`。

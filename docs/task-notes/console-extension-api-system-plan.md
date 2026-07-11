@@ -343,6 +343,7 @@ api.edit.measurement.delete(id)
 - `pnpm run regress:api` 已新增第一刀，脚本会在构建产物上通过控制台 API 生成小地图，检查 `methodMetadataCoverage`、确认边界和代表性 `mutates` 元数据，并输出 `docs/generated/reports/api-capabilities-regression-results.json` 与 Markdown 报告。后续新增 / 删除 API 方法时，应优先跑该脚本确认能力表没有漏记或漂移。
 - `pnpm run regress:api-roundtrip` 已新增第一刀，脚本会在构建产物上通过控制台 API 完成完整地图 roundtrip：生成源地图、导出完整 JSON、导出 gzip、扰动当前地图后分别导入 JSON 对象 / JSON 字符串 / 压缩导出对象 / gzip-base64 payload，并校验 seed、checksum、历史栈和错误边界。
 - `pnpm run regress:api-geo` 已新增第一刀，脚本会在构建产物上通过 `api.data.importGEO()` 覆盖普通 GeoJSON 测量对象导入和 FMG Cells 地形导入两条分支，并校验确认门槛、坏 JSON 错误、撤销、非 GEO 派生重置和水陆一致性。
+- `pnpm run regress:api-exports` 已新增第一刀，脚本会在构建产物上通过编辑 API 创建备注和测量对象，再验证 `api.data.exportNotes()` / `exportMeasurements()` 的全量导出、ID 筛选、`includeText:false` 摘要返回、浏览器下载文件名和 checksum 不变边界。
 
 ## 安全与副作用边界
 
@@ -441,6 +442,7 @@ api.edit.measurement.delete(id)
 - GEO 导入 API 回归已固化为 `pnpm run regress:api-geo`；该脚本与 UI 侧 `regress:geo` 互补，直接验证控制台 API 路径，不依赖 file input。
 - `api.data.exportNotes({ids, noteIds, download, includeText})` 已完成第一刀，复用备注摘要 JSON 格式，默认返回文本，可按备注 id 筛选或触发浏览器下载。
 - `api.data.exportMeasurements({ids, measurementIds, download, includeText})` 已完成第一刀，复用测量对象 JSON 格式，默认返回文本，可按测量对象 id 筛选或触发浏览器下载。
+- 备注与测量导出 API 回归已固化为 `pnpm run regress:api-exports`，直接覆盖控制台 API 路径的筛选、下载和摘要返回，不依赖面板按钮。
 - 返回值会按分支标注 `mode = fmg-cells-terrain / measurements`，并返回地形导入 summary / reset 或测量对象导入数量；因为两类导入都会写当前地图，必须显式传 `confirm:true`。
 
 ### 阶段 3：气候、单位和图层 API
