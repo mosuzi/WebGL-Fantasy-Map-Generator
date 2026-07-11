@@ -24923,3 +24923,29 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_marker_field_api` 和 `verify_marker_field_smoke`；两个子智能体等待 90 秒无输出或未完成，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `markers.add / markers.delete / markers.move / markers.setNote / markers.setVisual`；真实 marker `#0` 调用 `markers.setNote(0, "API标记备注烟测1783732023135")` 后写入 `marker:0` 备注并可撤销为空；`markers.setVisual(0, {symbol:"star", palette:"gold", shape:"diamond", cultureStyle:"default"})` 后 `marker.visual` 和 `marker.data.visual` 均更新为补丁值并带 `manual = true`，撤销后恢复原始 `pin / volcano / natural / default / manual=false` 和原 categoryColor；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 测量对象点列编辑 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 阶段 4 已覆盖测量对象重命名和删除，但保存新测量对象、更新点列仍只能从测量面板交互触发。
+- 这两类能力已有 `createSaveMeasurementCommand()` 和 `createUpdateMeasurementPointsCommand()`，适合作为 API 薄封装继续扩展。
+
+实现：
+
+- `console-api.js` 新增 `api.edit.measurements.save(points, {name, routeFit})` 和 `api.edit.measurements.updatePoints(measurementId, points, {routeFit})`。
+- `api.info.capabilities()` 的编辑方法列表同步补充上述测量能力。
+- `app.js` 的 API actions 复用既有测量 edit commands，继续通过 `executeEditCommand()` 进入撤销栈。
+- `save()` 默认 `routeFit = none`；`updatePoints()` 未显式传入 `routeFit` 时保留原测量对象的路线贴合设置。
+- 新建 / 更新成功后同步测量面板选中项、运行统计和编辑交互锁。
+- 本步不改变测量面板 UI、测量拖拽、路线贴合算法、导入导出或测量图层渲染语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_measurement_points_api` 和 `verify_measurement_points_smoke`；稳定态烟测子智能体通过并关闭本地服务器，API 细测子智能体等待 90 秒无输出后已中断释放。
+- 子智能体稳定态烟测通过：`window.__webglGeneratorApp`、renderer 和 `window.webglGeneratorApi` 可用；`api.info.capabilities()` 已包含 `measurements.save / measurements.rename / measurements.updatePoints / measurements.delete`；`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`；直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器细测通过：`measurements.save([{x:100,y:100},{x:200,y:140},{x:220,y:230}], {name:"API测量点列烟测"})` 创建 `measurement-1`，测量对象数量 `0 -> 1`，返回 result 含新 measurement，撤销后对象移除，重做后恢复；`measurements.updatePoints("measurement-1", [{x:120,y:110},{x:230,y:160},{x:260,y:260},{x:180,y:300}])` 将点列改为 4 点，撤销后恢复原 3 点；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

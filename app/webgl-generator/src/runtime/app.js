@@ -1783,7 +1783,9 @@ function createConsoleApiActions(state, documentRef, options = {}) {
         delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
       },
       measurements: {
+        save: (points, options = {}) => saveMeasurementViaApi(state, documentRef, points, options),
         rename: (measurementId, name) => renameMeasurementViaApi(state, documentRef, measurementId, name),
+        updatePoints: (measurementId, points, options = {}) => updateMeasurementPointsViaApi(state, documentRef, measurementId, points, options),
         delete: measurementId => deleteMeasurementViaApi(state, documentRef, measurementId)
       },
       cities: {
@@ -4059,6 +4061,32 @@ function deleteNoteViaApi(state, documentRef, noteId, options = {}) {
   };
 }
 
+function saveMeasurementViaApi(state, documentRef, points, options = {}) {
+  const payload = normalizeApiMeasurementOptions(options, {defaultRouteFit: MEASUREMENT_ROUTE_FIT_NONE});
+  const command = createSaveMeasurementCommand(points, {
+    name: payload.name,
+    routeFit: payload.routeFit,
+    label: payload.label || "保存测量对象"
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "至少需要 2 个有效测量点才能保存。",
+    status: command => {
+      const measurement = command.getMeasurement?.();
+      return `已保存测量对象 ${measurement?.name || measurement?.id || ""}。`;
+    },
+    throwOnError: false
+  });
+  const created = result.command?.getMeasurement?.();
+  if (result.executed && created?.id) {
+    state.panels.measurement?.setSelectedMeasurementId?.(created.id);
+  }
+  updateMeasurementPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function renameMeasurementViaApi(state, documentRef, measurementId, name) {
   const id = String(measurementId || "").trim();
   const nextName = String(name || "").trim();
@@ -4068,6 +4096,26 @@ function renameMeasurementViaApi(state, documentRef, measurementId, name) {
     status: `已重命名测量对象 ${nextName || id}。`,
     throwOnError: false
   });
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function updateMeasurementPointsViaApi(state, documentRef, measurementId, points, options = {}) {
+  const id = String(measurementId || "").trim();
+  const payload = normalizeApiMeasurementOptions(options, {defaultRouteFit: null});
+  const command = createUpdateMeasurementPointsCommand(id, points, {
+    routeFit: payload.routeFit,
+    label: payload.label || `更新测量对象 ${id}`
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "测量对象不存在、点列无效或形状未变化。",
+    status: `已更新测量对象 ${id}。`,
+    throwOnError: false
+  });
+  if (result.executed) state.panels.measurement?.setSelectedMeasurementId?.(id);
+  updateMeasurementPanel(state);
+  updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -4082,6 +4130,16 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
   });
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function normalizeApiMeasurementOptions(options = {}, {defaultRouteFit = MEASUREMENT_ROUTE_FIT_NONE} = {}) {
+  if (options === null || options === undefined) return {name: "", routeFit: defaultRouteFit, label: ""};
+  if (typeof options !== "object") throw new Error("测量对象选项必须是对象");
+  return {
+    name: typeof options.name === "string" ? options.name.trim() : "",
+    routeFit: options.routeFit === undefined ? defaultRouteFit : normalizeMeasurementRouteFit(options.routeFit),
+    label: typeof options.label === "string" ? options.label.trim() : ""
+  };
 }
 
 function setObjectNoteViaApi(state, documentRef, object, body, options = {}) {

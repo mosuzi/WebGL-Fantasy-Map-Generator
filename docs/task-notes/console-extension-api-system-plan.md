@@ -453,7 +453,7 @@ api.edit.measurement.delete(id)
 - 已完成第一刀。
 - `api.history.get()`、`api.history.undo()` 和 `api.history.redo()` 已接入 app action，复用当前 `EditHistory` 和刷新路径。
 - `api.edit.notes.set(object, body, {name})` 和 `api.edit.notes.delete(noteId, {name})` 已接入对象备注 / 备注删除 edit commands、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
-- `api.edit.measurements.rename(id, name)` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
+- `api.edit.measurements.save(points, {name, routeFit})`、`api.edit.measurements.rename(id, name)`、`api.edit.measurements.updatePoints(id, points, {routeFit})` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - `api.edit.cities.add(gridCell)` 和 `api.edit.cities.delete(cityId)` 已接入城市 collection edit commands。
 - `api.edit.cities.rename(cityId, name)` 和 `api.edit.cities.setPopulation(cityId, population)` 已接入城市单对象 edit commands。
 - `api.edit.provinces.add(gridCell)` 和 `api.edit.provinces.delete(provinceId)` 已接入省份 collection edit commands。
