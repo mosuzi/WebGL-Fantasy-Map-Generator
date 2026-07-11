@@ -25586,3 +25586,26 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
 - 本轮按要求启动两个验证子智能体做 API 元数据 / 浏览器 smoke；等待 90 秒无输出后均已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-layers-units-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `895aebdb`、grid cells `1014`、pack cells `758`；随后读取 `api.info.capabilities()`，确认 `sideEffects.layers = "display-preference-and-camera-state"`、`sideEffects.units = "display-preference"`，`methods.layers / methods.units` 仍包含全部公开方法；`methodMetadata.layers` 中 `get = none`，`setViewMode / setVisible / setTheme = display-preference`，`fitView = camera-state`；`methodMetadata.units` 中 `get = none`，其余单位写入均为 `display-preference`；全部 layers / units 方法均有 `mutates / undoable / async / requiresConfirm` 且 `requiresConfirm = false`；调用前后 checksum 保持 `895aebdb` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 climate 能力元数据副作用边界第一刀
+
+背景：
+
+- `api.info.capabilities()` 已开始为确认类方法、selection、layers 和 units 提供方法级副作用元数据，但 `climate` 仍只有命名空间级 `readonly-and-climate-update`。
+- 气候 API 同时包含只读 getter 和会重算当前地图气候 / 生物群系的 setter；写入不替换地图、不进入 `EditHistory`、不需要 `confirm:true`，但会标记城市、国家、省份、宗教、marker、zone、军事、经济、外交等下游派生 stale。
+- 如果缺少方法级元数据，脚本或 AI 无法从能力表区分只读气候读取和会影响派生状态的气候写入。
+
+实现：
+
+- `console-api.js` 为 `methodMetadata.climate` 新增 `get / getOptions / getTemperature / getPrecipitation / getLatitude / getAtmosphere / getBiomes / apply / setLatitude / setLatitudeRange / setLongitudeRange / setTemperature / setPrecipitation / setWind` 元数据。
+- 气候读取方法标注 `mutates: "none"`。
+- `apply` 和各项 setter 标注 `mutates: "climate-state-and-derived-stale"`。
+- 上述方法均标注 `undoable: false`、`async: false`、`requiresConfirm: false`，保留原有调用行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
+- 本轮按要求启动两个验证子智能体做 API 元数据 / 浏览器 smoke；等待 90 秒无输出后均已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-climate-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `cf6e8606`、grid cells `1014`、pack cells `907`；随后读取 `api.info.capabilities()`，确认 `sideEffects.climate = "readonly-and-climate-update"`，`methods.climate` 仍包含全部 14 个公开方法；`methodMetadata.climate` 中 `get / getOptions / getTemperature / getPrecipitation / getLatitude / getAtmosphere / getBiomes = none`，`apply / setLatitude / setLatitudeRange / setLongitudeRange / setTemperature / setPrecipitation / setWind = climate-state-and-derived-stale`；全部 climate 方法均有 `mutates / undoable / async / requiresConfirm` 且 `undoable = false`、`async = false`、`requiresConfirm = false`；调用前后 checksum 保持 `cf6e8606` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

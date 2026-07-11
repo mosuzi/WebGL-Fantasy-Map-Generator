@@ -270,6 +270,22 @@ function buildMethodMetadata() {
       setMilitaryScale: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
       setPrecipitationScale: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false}
     },
+    climate: {
+      get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getOptions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getTemperature: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getPrecipitation: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getLatitude: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getAtmosphere: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getBiomes: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      apply: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
+      setLatitude: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
+      setLatitudeRange: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
+      setLongitudeRange: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
+      setTemperature: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
+      setPrecipitation: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
+      setWind: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false}
+    },
     selection: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       resolve: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
