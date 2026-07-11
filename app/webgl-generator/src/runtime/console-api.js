@@ -252,6 +252,13 @@ function buildCapabilities() {
 
 function buildMethodMetadata() {
   return {
+    info: {
+      version: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      capabilities: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      mapSummary: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      runtimeStats: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      healthEvents: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
     layers: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       setViewMode: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
@@ -334,6 +341,15 @@ function buildMethodMetadata() {
       clear: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: true},
       bind: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
       renameObjects: {stable: "draft", mutates: "object-names", undoable: true, async: false, requiresConfirm: true}
+    },
+    debug: {
+      enable: {stable: "draft", mutates: "debug-ui-state", undoable: false, async: false, requiresConfirm: false},
+      disable: {stable: "draft", mutates: "debug-ui-state", undoable: false, async: false, requiresConfirm: false},
+      snapshot: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      dumpState: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      renderer: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      health: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      profileNextRender: {stable: "draft", mutates: "renderer-diagnostics", undoable: false, async: false, requiresConfirm: false}
     }
   };
 }

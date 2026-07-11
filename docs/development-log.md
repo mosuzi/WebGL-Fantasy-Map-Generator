@@ -25681,3 +25681,29 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-namebases-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `b760ab08`、grid cells `1014`、pack cells `868`；随后读取 `api.info.capabilities()`，确认 `sideEffects.namebases = "readonly-download-and-edit-command"`，`methods.namebases` 仍包含全部 10 个公开方法；`methodMetadata.namebases` 中 `list = none / undoable:false / async:false / requiresConfirm:false`，`export = download-or-export-result / undoable:false / async:false / requiresConfirm:false`，`import / create / copyBuiltin / update / delete / clear / bind = namebases / undoable:true / async:false` 且只有 `clear` 要求 `confirm:true`，`renameObjects = object-names / undoable:true / async:false / requiresConfirm:true`；`safety.confirmRequired.namebases` 只包含 `clear / renameObjects`；调用前后 checksum 保持 `b760ab08` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 info / debug 诊断能力元数据副作用边界第一刀
+
+背景：
+
+- `api.info` 和 `api.debug` 诊断命名空间此前已完成第一刀功能，但还没有方法级 `methodMetadata`。
+- `api.info.version / capabilities / mapSummary / runtimeStats / healthEvents` 都只读取当前 API、地图、运行时和 health 摘要，不修改状态。
+- `api.debug.snapshot / dumpState / renderer / health` 是诊断读取；`debug.enable / disable` 只开关开发面板 / debug UI；`debug.profileNextRender` 会强制执行一次 renderer draw 并返回前后 draw stats / dynamic mesh cache，因此会刷新 renderer 诊断统计，但不修改地图数据或进入撤销栈。
+- 如果缺少方法级元数据，脚本或 AI 无法从能力表区分纯只读诊断、debug UI 开关和 renderer profiling 触发的 draw 诊断。
+
+实现：
+
+- `console-api.js` 为 `methodMetadata.info` 补齐 5 个公开方法，全部标注 `mutates: "none"`、`undoable: false`、`async: false`、`requiresConfirm: false`。
+- `console-api.js` 为 `methodMetadata.debug` 补齐 7 个公开方法。
+- `debug.enable / disable` 标注 `mutates: "debug-ui-state"`，表示只改开发面板 / debug UI 状态。
+- `debug.snapshot / dumpState / renderer / health` 标注 `mutates: "none"`。
+- `debug.profileNextRender` 标注 `mutates: "renderer-diagnostics"`，表示只强制 draw 并更新 renderer 诊断统计。
+- 全部 info / debug 方法均不进入 `EditHistory`，也不要求 `confirm:true`。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-info-debug-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `e36b5477`、grid cells `1014`、pack cells `886`；随后读取 `api.info.capabilities()`，确认 `sideEffects.info = "readonly"`，`sideEffects.debug = "diagnostics-and-debug-ui"`，`methods.info` 仍包含全部 5 个公开方法，`methods.debug` 仍包含全部 7 个公开方法；`methodMetadata.info` 全部为 `mutates: "none" / undoable:false / async:false / requiresConfirm:false`；`methodMetadata.debug` 中 `enable / disable = debug-ui-state`，`snapshot / dumpState / renderer / health = none`，`profileNextRender = renderer-diagnostics`，全部 `undoable:false / async:false / requiresConfirm:false`；浏览器验证实际调用 `debug.snapshot()`、`debug.renderer()`、`debug.health()`、`debug.profileNextRender({updateOverlay:false})`、`debug.enable()` 和 `debug.disable()` 均成功，debug 开关只改变开发面板状态，调用前后 checksum 保持 `e36b5477` 不变，`profileNextRender` 返回 profiling 结果，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
