@@ -129,6 +129,7 @@
    - 补充记录：API 完整地图 roundtrip 回归脚本第一刀已新增 `tools/webgl-generator-api-roundtrip-regression.mjs` 和 `pnpm run regress:api-roundtrip`，覆盖阶段 5 “生成地图 -> 导出 -> 导入 -> 校验”验收闭环。脚本会用控制台 API 生成源地图，分别验证完整 JSON 对象、JSON 字符串、压缩导出对象和 gzip-base64 payload 导入都能恢复源 seed / checksum，并确认未传 `confirm:true` 与坏 JSON 会结构化失败且不破坏当前地图。
    - 补充记录：API GEO 导入回归脚本第一刀已新增 `tools/webgl-generator-api-geo-regression.mjs` 和 `pnpm run regress:api-geo`，把 `api.data.importGEO()` 的普通 GeoJSON 测量对象分支和 FMG Cells 地形导入分支固化为可复用门禁。脚本会校验对象 / 字符串 GeoJSON 导入、撤销、未确认和坏 JSON 错误边界，以及 FMG Cells 导入后的非 GEO 派生重置、水陆一致性和 hover 一致性。
    - 补充记录：API 备注与测量导出回归脚本第一刀已新增 `tools/webgl-generator-api-export-records-regression.mjs` 和 `pnpm run regress:api-exports`，把 `api.data.exportNotes()` 与 `api.data.exportMeasurements()` 的全量导出、ID 筛选、`includeText:false` 摘要返回、浏览器下载文件名和 checksum 不变边界固化为可复用门禁。
+   - 补充记录：API 名称库文档回归脚本第一刀已新增 `tools/webgl-generator-api-namebase-docs-regression.mjs` 和 `pnpm run regress:api-namebases`，把 `api.namebases.list/export/import/create/clear` 的文档 roundtrip、JSON / 原版文本导出、`includeText:false`、浏览器下载文件名、append / replace / undo 和 `clear({confirm:true})` 确认边界固化为可复用门禁；本脚本暂不覆盖 `renameObjects`，后续可单独补对象批量改名回归。
 
 ### 验证要求
 

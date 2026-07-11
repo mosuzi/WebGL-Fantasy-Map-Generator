@@ -25916,3 +25916,35 @@ full 矩阵结果：
 - `pnpm run regress:api-exports -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认 checksum `8708a197`；备注全量 / 筛选均导出 `1` 条，测量全量 / 筛选均导出 `1` 条，测量距离 `419.334`；`includeText:false` 不返回 text；备注下载文件名为 `fmg-api-export-records-regression-8708a197.notes-selected.json`，测量下载文件名为 `fmg-api-export-records-regression-8708a197.measurements-selected.json`；WebGL / health / console / page error 均为 `0`。
 - 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API 备注与测量导出回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
 - 低上下文浏览器 smoke 子智能体验证通过，确认 checksum `dadfb37a`；备注全量 / 筛选均导出 `1` 条，测量全量 / 筛选均导出 `1` 条，测量距离 `419.334`；`includeText:false` 不返回 text；备注下载文件名为 `fmg-api-export-records-regression-dadfb37a.notes-selected.json`，测量下载文件名为 `fmg-api-export-records-regression-dadfb37a.measurements-selected.json`；WebGL / health / console / page error 均为 `0`。
+
+### 2026-07-11 API 名称库文档回归脚本第一刀
+
+背景：
+
+- `api.namebases.list/export/import/create/clear` 已完成运行时接入，并通过临时浏览器验证确认过只读、导出、导入、清空和撤销边界。
+- 名称库 API 仍缺少长期回归脚本；后续名称库文档格式、原版文本兼容或下载行为调整时，容易误伤 JSON / legacy roundtrip。
+- 本轮先固化名称库“文档路径”门禁，不把 `renameObjects` 批量改写当前地图对象的行为混进同一脚本；对象批量改名后续可单独补回归。
+
+实现：
+
+- 新增 `tools/webgl-generator-api-namebase-docs-regression.mjs`。
+- 新增 `pnpm run regress:api-namebases`。
+- 脚本会启动构建产物静态服务，并通过 Playwright + 系统 Chrome 使用控制台 API：
+  - 生成 seed `api-namebase-docs-regression` 的约 1000 cells 地图。
+  - 验证 `api.namebases.list({includeSource:false})` 默认不返回完整源词条，`includeSource:true` 会返回源词条副本。
+  - 选中内置 `ancient-state-roots`，分别验证 JSON 名称库文档和原版文本导出；JSON 文档必须是 `webgl-generator-namebases v1`，legacy 文本必须只含 1 行。
+  - 验证 JSON / legacy 的 `includeText:false` 不返回 `text`。
+  - 通过 Playwright download event 验证 JSON / legacy 选中导出的浏览器下载文件名。
+  - 验证 JSON 对象导入、JSON 字符串 `mode:"replace"` 导入和 legacy 文本导入均写入 1 个用户库，并可通过 `api.history.undo()` 恢复。
+  - 验证 `api.namebases.clear()` 未传 `confirm:true` 会结构化失败且不改用户库，`clear({confirm:true})` 可清空并可撤销。
+  - 验证回归前后地图 checksum 不变，WebGL / health / console / page error 均为 `0`。
+- 脚本会输出 JSON 和 Markdown 报告到 `docs/generated/reports/api-namebase-docs-regression-results.*`。
+
+验证：
+
+- `node --check tools\webgl-generator-api-namebase-docs-regression.mjs` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- `pnpm run regress:api-namebases -- --browser-channel chrome` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；放开同一命令后通过。package 命令回归确认 checksum `685a14a6`，选中名称库 `ancient-state-roots`；JSON 选中导出 `1` 个名称库，legacy 选中导出 `1` 行；JSON / legacy 的 `includeText:false` 均不返回 `text`；JSON 对象导入 `1` 个，JSON 字符串 replace 导入 `1` 个并替换 `1` 个，legacy 文本导入 `1` 个；未确认 clear 结构化失败，确认 clear 删除 `2` 个用户库；下载文件名为 `fmg-api-namebase-docs-regression-685a14a6.namebases-selected.json` 和 `fmg-api-namebase-docs-regression-685a14a6.namebases-selected.txt`；WebGL / health / console / page error 均为 `0`。
+- 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API 名称库文档回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
+- 低上下文浏览器 smoke 子智能体验证通过，确认 checksum `55df09ca`，选中名称库 `ancient-state-roots`；JSON 选中导出 `1` 个名称库，legacy 选中导出 `1` 行；JSON / legacy 的 `includeText:false` 均不返回 `text`；JSON 对象导入 `1` 个，JSON 字符串 replace 导入 `1` 个并替换 `1` 个，legacy 文本导入 `1` 个；未确认 clear 返回 `ok=false`，确认 clear 删除 `2` 个用户库；下载文件名为 `fmg-api-namebase-docs-regression-55df09ca.namebases-selected.json` 和 `fmg-api-namebase-docs-regression-55df09ca.namebases-selected.txt`；WebGL / health / console / page error 均为 `0`。

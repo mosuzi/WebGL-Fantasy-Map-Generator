@@ -344,6 +344,7 @@ api.edit.measurement.delete(id)
 - `pnpm run regress:api-roundtrip` 已新增第一刀，脚本会在构建产物上通过控制台 API 完成完整地图 roundtrip：生成源地图、导出完整 JSON、导出 gzip、扰动当前地图后分别导入 JSON 对象 / JSON 字符串 / 压缩导出对象 / gzip-base64 payload，并校验 seed、checksum、历史栈和错误边界。
 - `pnpm run regress:api-geo` 已新增第一刀，脚本会在构建产物上通过 `api.data.importGEO()` 覆盖普通 GeoJSON 测量对象导入和 FMG Cells 地形导入两条分支，并校验确认门槛、坏 JSON 错误、撤销、非 GEO 派生重置和水陆一致性。
 - `pnpm run regress:api-exports` 已新增第一刀，脚本会在构建产物上通过编辑 API 创建备注和测量对象，再验证 `api.data.exportNotes()` / `exportMeasurements()` 的全量导出、ID 筛选、`includeText:false` 摘要返回、浏览器下载文件名和 checksum 不变边界。
+- `pnpm run regress:api-namebases` 已新增第一刀，脚本会在构建产物上通过控制台 API 覆盖名称库文档路径：`list({includeSource})`、JSON / 原版文本选中导出、`includeText:false`、浏览器下载文件名、JSON 对象导入、JSON 字符串 replace 导入、legacy 文本导入、撤销恢复，以及 `clear()` 未确认失败和 `clear({confirm:true})` 可撤销清空。
 
 ## 安全与副作用边界
 
