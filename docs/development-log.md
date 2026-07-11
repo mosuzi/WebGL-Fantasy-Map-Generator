@@ -25210,3 +25210,25 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_data_export_notes_measurements_api` 和 `verify_data_export_notes_measurements_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `data.exportNotes / data.exportMeasurements`；生成 seed `api-export-notes-measurements-smoke` 的 1000 cells 地图后，通过 `api.edit.notes.set()` 新增城市备注 `city:1`，通过 `api.edit.measurements.save()` 新增测量对象 `measurement-1`；`api.data.exportNotes({download:false})` 返回 `webgl-generator-notes-summary` JSON 且包含新增备注，`api.data.exportNotes({ids:[noteId]})` 只返回 1 条选中备注；`api.data.exportMeasurements({download:false})` 返回 `webgl-generator-measurements` JSON 且包含新增测量对象，点数 `3`、距离 `191.423`，`api.data.exportMeasurements({measurementIds:[id]})` 只返回 1 条选中测量；`api.data.exportNotes({download:true, includeText:false})` 触发下载 `fmg-api-export-notes-measurements-smoke-dda146ea.notes.json` 且返回值不含 `text`；导出前后 checksum 均为 `dda146ea`；`api.info.runtimeStats()` 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 API 只读补齐批次
+
+背景：
+
+- 控制台 API 方案中列出的 `api.info.version()`、`api.info.healthEvents()` 和完整地图 JSON 的明确命名 `api.data.exportMap()` 尚未接入。
+- 这些接口都是只读能力，适合在不扩大编辑副作用面的情况下继续收口 API 命名和诊断能力。
+
+实现：
+
+- `console-api.js` 新增 `api.info.version()`，返回 `apiVersion` 与 `stability`，并登记到 `api.info.capabilities()`。
+- `console-api.js` 新增 `api.info.healthEvents({limit, severity})`，从现有 health monitor 读取最近事件，返回事件列表、级别计数、limit 和当前筛选级别；`severity` 支持 `info / warn / warning / error / all`，非法级别会返回结构化错误。
+- `console-api.js` 新增 `api.data.exportMap(options)`，作为完整地图 JSON 的明确别名，当前与 `api.data.exportAll(options)` 共用同一实现和下载 / 文本返回语义。
+- 本步只读，不进入 `EditHistory`，不修改地图 checksum，也不新增 debug 高风险内部状态导出。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_api_readonly_polish` 和 `verify_api_readonly_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `info.version / info.healthEvents / data.exportMap`；`api.info.version()` 返回 `apiVersion = 0.1.0`、`stability = experimental`；`api.info.healthEvents({limit:5})` 返回 `total = 5`、`counts.info = 5`、`severity = all`，`api.info.healthEvents({severity:"info", limit:10})` 只返回 info 事件，`severity:"warning"` 归一为 `warn`，`severity:"fatal"` 返回结构化失败；`api.data.exportMap({download:false})` 返回 `webgl-generator-map` 完整地图 JSON，文件名和 checksum metadata 与 `exportAll` 一致；`api.data.exportMap({download:true, includeText:false})` 触发下载 `fmg-stage-2-1-a8062d0f.webgl-map.json` 且返回值不含 `text`；调用前后 checksum 均为 `a8062d0f`；`api.info.runtimeStats()` 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

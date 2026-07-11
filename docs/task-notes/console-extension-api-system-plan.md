@@ -381,7 +381,8 @@ api.edit.measurement.delete(id)
 
 - 已完成第一刀运行时代码实现。
 - 新增 `app/webgl-generator/src/runtime/api-result.js` 和 `app/webgl-generator/src/runtime/console-api.js`，并在 app ready 后安装 `window.webglGeneratorApi`。
-- 已接入 `api.info.mapSummary()`、`api.info.runtimeStats()`、`api.info.capabilities()`、`api.selection.get()` 和 `api.layers.get()`。
+- 已接入 `api.info.version()`、`api.info.mapSummary()`、`api.info.runtimeStats()`、`api.info.healthEvents()`、`api.info.capabilities()`、`api.selection.get()` 和 `api.layers.get()`。
+- `api.info.healthEvents({limit, severity})` 返回最近 health monitor 事件、级别计数和筛选信息；`severity` 支持 `info / warn / warning / error / all`，`limit` 限制在 `1-180`。
 - 当前 API 只返回 JSON 快照摘要，不暴露内部 `state.map`、typed array 或可直接写入的对象引用。
 - 浏览器烟测已确认只读 API 调用前后 checksum 不变。
 
@@ -403,6 +404,7 @@ api.edit.measurement.delete(id)
 
 - 已完成第一刀运行时代码实现。
 - `api.data.exportAll({download: false})` 返回完整地图 JSON 文本、文件名、MIME、字节数和文档元数据。
+- `api.data.exportMap(options)` 已作为完整地图 JSON 的明确别名接入，当前等价于 `exportAll(options)`。
 - `api.data.exportCompressedAll({download: false})` 返回 gzip base64、压缩前后字节数、文件名、MIME 和文档元数据；该方法返回 Promise。
 - `api.data.exportGEO({download: false})` 返回 pack cell GeoJSON 文本、文件名、MIME、字节数和 feature 摘要。
 - `api.data.exportFeatureGEO({download: false, layers, dissolvePolitical})` 返回要素 GeoJSON 文本，支持调用方覆盖图层集合和政治面 dissolve 选项。

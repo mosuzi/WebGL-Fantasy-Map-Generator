@@ -24,9 +24,11 @@ function createConsoleApi(documentRef, state, actions = {}) {
     version: API_VERSION,
     stability: API_STABILITY,
     info: Object.freeze({
+      version: () => apiCall(() => buildApiVersion()),
       capabilities: () => apiCall(() => buildCapabilities()),
       mapSummary: () => apiCall(() => buildMapSummary(state)),
-      runtimeStats: () => apiCall(() => buildRuntimeStats(state, documentRef))
+      runtimeStats: () => apiCall(() => buildRuntimeStats(state, documentRef)),
+      healthEvents: (options = {}) => apiCall(() => buildHealthEventsSnapshot(state, options))
     }),
     generate: Object.freeze({
       getOptions: () => apiCall(() => requireApiAction(actions.generate?.getOptions, "generate.getOptions")()),
@@ -147,6 +149,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
     }),
     data: Object.freeze({
       exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
+      exportMap: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
       exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
       exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options)),
       exportCompressedAll: (options = {}) => apiCall(() => exportCompressedAllMapData(state, documentRef, options)),
@@ -178,7 +181,7 @@ function buildCapabilities() {
     stability: API_STABILITY,
     namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases"],
     methods: {
-      info: ["capabilities", "mapSummary", "runtimeStats"],
+      info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
       generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
       selection: ["get", "resolve", "select", "clear", "locate", "pick"],
       layers: ["get", "setViewMode", "setVisible"],
@@ -186,7 +189,7 @@ function buildCapabilities() {
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
-      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
+      data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
       namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"]
     },
     sideEffects: {
@@ -207,6 +210,13 @@ function buildCapabilities() {
 function requireApiAction(action, name) {
   if (typeof action !== "function") throw new Error(`API action 未安装：${name}`);
   return action;
+}
+
+function buildApiVersion() {
+  return {
+    apiVersion: API_VERSION,
+    stability: API_STABILITY
+  };
 }
 
 function buildMapSummary(state) {
@@ -244,7 +254,7 @@ function buildMapSummary(state) {
 function buildRuntimeStats(state, documentRef) {
   const rendererStats = state?.renderer?.getStats?.() || null;
   const history = state?.editHistory?.getStats?.() || null;
-  const health = state?.healthMonitor?.getEvents?.(20) || [];
+  const health = buildHealthEventsSnapshot(state, {limit: 20}).events;
   const loading = documentRef.getElementById("generation-loading");
   return {
     renderer: rendererStats,
@@ -259,6 +269,38 @@ function buildRuntimeStats(state, documentRef) {
       text: documentRef.getElementById("generation-loading-text")?.textContent?.trim() || ""
     }
   };
+}
+
+function buildHealthEventsSnapshot(state, options = {}) {
+  const limit = normalizeHealthEventLimit(options.limit);
+  const severity = normalizeHealthEventSeverity(options.severity ?? options.level);
+  const rawEvents = state?.healthMonitor?.getEvents?.(limit) || [];
+  const events = severity ? rawEvents.filter(event => event?.severity === severity || event?.level === severity) : rawEvents;
+  const counts = events.reduce((summary, event) => {
+    const key = event?.severity || event?.level || "unknown";
+    summary[key] = (summary[key] || 0) + 1;
+    return summary;
+  }, {});
+  return {
+    events,
+    total: events.length,
+    counts,
+    limit,
+    severity: severity || "all"
+  };
+}
+
+function normalizeHealthEventLimit(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 20;
+  return Math.max(1, Math.min(180, Math.round(number)));
+}
+
+function normalizeHealthEventSeverity(value) {
+  const severity = String(value || "").trim().toLowerCase();
+  if (!severity || severity === "all" || severity === "*") return "";
+  if (["info", "warn", "warning", "error"].includes(severity)) return severity === "warning" ? "warn" : severity;
+  throw new Error(`未知 health event 级别：${value}`);
 }
 
 function buildSelectionSnapshot(state) {
