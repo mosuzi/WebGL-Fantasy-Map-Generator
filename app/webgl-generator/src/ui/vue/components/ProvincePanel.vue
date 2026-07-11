@@ -77,8 +77,6 @@
     :step="2"
     @input="callbacks.onRadius"
   />
-
-  <UiHistoryActions class-name="province-history-actions" :history="state.history" :note-text="historyNote" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
@@ -88,7 +86,6 @@ import UiButton from "./base/UiButton.vue";
 import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
-import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
@@ -99,7 +96,6 @@ import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from 
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
-import {formatHistoryStats} from "../../history-format.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -201,11 +197,6 @@ const detailRows = computed(() => selected.value ? [
   {label: "宗教", value: selected.value.religion},
   {label: "备注", value: selected.value.noteBody ? `有备注（${formatNumber(selected.value.noteBody.length)}字）` : "无"}
 ] : []);
-
-const historyNote = computed(() => {
-  const history = props.state.history;
-  return `历史：${formatHistoryStats(history)}；来源：${formatProvinceName(props.state.map, props.state.sourceProvinceId)}`;
-});
 
 watch(() => selected.value?.id, id => {
   activeAction.value = null;

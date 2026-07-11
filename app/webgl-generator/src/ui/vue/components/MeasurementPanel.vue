@@ -52,8 +52,6 @@
       </template>
     </UiActionDock>
   </template>
-
-  <UiHistoryActions class-name="measurement-history-actions" :history="state.history" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
 </template>
 
 <script setup>
@@ -69,7 +67,6 @@ import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from ".
 import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
-import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";

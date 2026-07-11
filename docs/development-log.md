@@ -26022,3 +26022,22 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 主线程 Playwright + 系统 Chrome 构建产物 smoke 通过：生成 seed `visual-theme-filter-smoke`、`3000` cells 地图，默认主题 computed filter 和 renderer `canvasFilter` 均为 `none`；调用 `api.layers.setTheme("night")` 后 computed filter 和 renderer `canvasFilter` 均变为 `brightness(0.72) contrast(1.18) saturate(0.7) hue-rotate(190deg)`。
 - 同一 smoke 调用 `api.data.exportPNG({download:false, pixelScale:1, includeDataUrl:true})` 后，把导出 PNG 回读到浏览器 canvas，抽样对比 WebGL 原始像素与导出像素，最大 RGB 差值 `91`，确认导出图已应用主题滤镜；checksum `8aebcc81` 不变，WebGL / health / console / page error 均为 `0`。
+
+### 2026-07-11 清理对象列表底部历史按钮
+
+背景：
+
+- 用户指出地区管理面板列表下方仍残留大号撤销 / 重做按钮，并要求排查其它面板中同类按钮后统一清理。
+- 本次只处理对象列表或管理面板内容区里的大号 `UiHistoryActions`；面板框架标题栏的历史入口继续保留，高度编辑器的笔刷撤销 / 重做不属于“列表下方按钮”范围。
+
+实现：
+
+- 移除城市、国家、省份、文化、宗教、路线、河流、湖泊、地区、标签、资源标记、测量、名称库、备注、外交和军事面板模板中的内容区 `UiHistoryActions`。
+- 同步清理上述 Vue 组件中不再使用的 `UiHistoryActions` import；国家和省份面板额外移除只服务底部历史按钮的 `historyNote` 与 `formatHistoryStats`。
+- 当前全局搜索确认 `UiHistoryActions` 不再被对象列表面板引用；只剩基础组件定义本身和高度编辑器的笔刷撤销 / 重做按钮。
+
+验证：
+
+- 全局搜索确认 `app/webgl-generator/src/ui/vue/components` 下不再有对象面板引用 `<UiHistoryActions>` 或 `import UiHistoryActions`；国家 / 省份面板也不再残留 `historyNote` / `formatHistoryStats`。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。

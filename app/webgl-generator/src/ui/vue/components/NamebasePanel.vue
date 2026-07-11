@@ -56,8 +56,6 @@
   <div class="namebase-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 分类 / 类型 / 样例" @update:model-value="callbacks.onFilter" />
   </div>
-
-  <UiHistoryActions class-name="namebase-history-actions" :history="state.history" label="名称库编辑" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
   <UiSelectField
     class-name="namebase-import-mode"
     input-id="namebase-import-mode"
@@ -189,7 +187,6 @@ import {findByObjectId} from "../../object-id.js";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
-import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";

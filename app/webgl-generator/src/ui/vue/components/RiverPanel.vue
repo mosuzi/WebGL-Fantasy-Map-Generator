@@ -72,8 +72,6 @@
         />
       </template>
     </UiActionDock>
-
-    <UiHistoryActions class-name="river-history-note" :history="state.history" label="最近命令" @undo="callbacks.onUndo" @redo="callbacks.onRedo" />
   </template>
 </template>
 
@@ -83,7 +81,6 @@ import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
-import UiHistoryActions from "./base/UiHistoryActions.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
