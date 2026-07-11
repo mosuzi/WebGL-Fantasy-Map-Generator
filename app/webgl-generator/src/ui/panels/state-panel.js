@@ -2,6 +2,7 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const STATE_PANEL_ID = "state-panel";
 const STATE_COLUMN_WIDTHS = Object.freeze({
@@ -33,6 +34,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     radius: 28,
     addMode: false,
     deleteMode: false,
@@ -79,6 +81,8 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(stateObject(row));
     },
     onLocate: row => callbacks.onLocate?.(stateObject(row)),
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, stateObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onEdit: row => {
       const nextActive = !(panelState.active && panelState.targetStateId === row.id);
       panelState.targetStateId = row.id;
@@ -160,6 +164,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     open(map, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (panelState.targetStateId === null) panelState.targetStateId = firstStateId(map);
       panelState.open = true;
       panelState.version++;
@@ -171,6 +176,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       panelState.sourceStateId = sourceStateId;
       panelState.lastAffected = lastAffected;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (!stateExists(map, panelState.targetStateId)) panelState.targetStateId = firstStateId(map);
       panelState.version++;
     },

@@ -847,6 +847,21 @@
    - 边界：运行时 helper 只改变视觉高亮集合和文件操作状态，不进入 `EditHistory`，不改变地图 checksum。
    - 完成记录：新增共享 `setPersistentObjectHighlights()` / `clearPersistentObjectHighlights()` / `refreshPersistentHighlightUi()`；控制台 API 与三个面板共用同一入口，API 修改高亮后已打开的路线、河流、湖泊面板会同步更新数量。
 
+110. 可见行批量选择 composable。`已完成`
+   - 目标：把路线、河流、湖泊及后续面板重复的“勾选 id / 计算选中可见行 / 筛选后裁剪”逻辑收束为公共 Vue composable。
+   - 边界：只管理当前可见列表内的临时 checkbox 状态，不持久化、不改变单对象 selection，也不负责业务动作。
+   - 完成记录：新增 `useVisibleRowSelection()` 并迁移路线、河流、湖泊；新增 `pnpm run regress:visible-row-selection`，覆盖数字 / 字符串 id 统一、筛选裁剪和空列表清空。
+
+111. 政治 / 社会面板批量高亮接入。`已完成`
+   - 目标：把安全的批量高亮继续接入国家、省份、文化和宗教列表。
+   - 边界：排除中立 / id 0 行；checkbox 只暂存高亮目标，不新增批量删除、批量改色、批量继承或批量归属编辑。
+   - 完成记录：四个公共表格已开启批量选择，列表动作新增“高亮选中 N / 清除高亮 N”，摘要显示全局高亮数；文化 / 宗教复用原列表动作条，国家 / 省份新增轻量高亮动作条。
+
+112. 面板高亮桥接与 100 对象上限统一。`已完成`
+   - 目标：消除七个 wrapper 的重复桥接代码，并让 UI 与 API 遵守同一全局高亮上限。
+   - 边界：最多同时高亮 100 个对象；API 超限返回结构化错误，UI 批量选择超限时取前 100 个并显示状态提示，不静默扩张 renderer 负载。
+   - 完成记录：新增 `panel-highlight-actions.js` 统一 row 映射、清除和数量同步；`refreshPersistentHighlightUi()` 已覆盖国家、省份、文化、宗教、路线、河流和湖泊面板。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -861,6 +876,7 @@
 - 废弃内容区历史基础设施清理批次完成：应用源码不再引用 `UiHistoryActions`、`createHistoryActions` 或旧面板历史类；`pnpm run build:app` 通过（1109 modules，1.59s），`git diff --check` 通过。阶段末浏览器验收已交给子智能体，但 in-app Browser 与现有 Chrome 控制后端均不可连接；按约束未重启 Chrome、未使用 Playwright、未启动额外服务器，因此本批次浏览器 UI / WebGL 验收仍待可复用浏览器会话恢复后补跑。
 - 多对象持久高亮批次完成：子智能体执行的 6 个 `node --check`、`pnpm run regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；高亮回归为 12 / 30 / 30 顶点，Vite 构建 1109 modules、1.27s，仅有既有 chunk 警告。浏览器子智能体确认 in-app Browser 不可用且浏览器后端列表为空；按约束未启动 / 重启 Chrome、未使用 Playwright、未启动额外服务器，因此 API 持久高亮、append / clear、checksum 和 WebGL / console / health 真实浏览器验收待控制后端恢复后补跑。
 - 路线 / 河流 / 湖泊批量高亮 UI 批次完成：子智能体执行的 4 个 `node --check`、`pnpm run regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；三个 Vue SFC 均生成独立构建产物，无模板、响应式或 SFC 编译错误，Vite 构建 1109 modules、1.39s，仅有既有 chunk 警告。浏览器子智能体唯一一次后端检查仍为 `[]`；按约束未启动 / 重启 Chrome、未使用 Playwright、未启动服务器，因此 checkbox、高亮动作、跨面板清除、selection 不变、checksum 和 WebGL / console / health 验收待控制后端恢复后补跑。
+- 政治 / 社会面板批量高亮与选择复用批次完成：子智能体执行的 9 个 `node --check`、`regress:visible-row-selection`、`regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；筛选选择回归为 `1 -> 0`，高亮回归为 12 / 30 / 30 顶点，Vite 构建 1111 modules、1.30s，七个目标 Vue SFC 均生成独立 chunk，仅有既有大 chunk 警告。浏览器子智能体唯一一次后端检查仍为 `[]`，因此国家 / 省份高亮、中立排除、跨面板清除、selection / checksum 和 WebGL / console / health 验收待控制后端恢复后补跑。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。

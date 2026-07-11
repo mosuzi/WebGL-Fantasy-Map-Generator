@@ -1,6 +1,7 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const RIVER_PANEL_ID = "river-panel";
 const RIVER_COLUMN_WIDTHS = Object.freeze({
@@ -29,7 +30,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readHighlightCount(callbacks),
+    highlightCount: readPanelHighlightCount(callbacks),
     version: 0
   });
   const panelCallbacks = {
@@ -61,14 +62,8 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => callbacks.onSelect?.(riverObject(row)),
     onLocate: row => callbacks.onLocate?.(riverObject(row)),
-    onHighlight: rows => {
-      callbacks.onHighlight?.(rows.map(riverObject));
-      panelState.highlightCount = readHighlightCount(callbacks);
-    },
-    onClearHighlights: () => {
-      callbacks.onClearHighlights?.();
-      panelState.highlightCount = readHighlightCount(callbacks);
-    },
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, riverObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onEdit: row => callbacks.onEdit?.(riverObject(row)),
     onRename: (riverId, name) => callbacks.onRename?.(riverId, name),
     onRenameVisibleFromNamebase: riverIds => callbacks.onRenameVisibleFromNamebase?.(riverIds),
@@ -115,7 +110,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
       panelState.history = history;
-      panelState.highlightCount = readHighlightCount(callbacks);
+      syncPanelHighlightCount(panelState, callbacks);
       panelState.open = true;
       panelState.version++;
       manager.open("river-panel");
@@ -126,7 +121,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
       panelState.history = history;
-      panelState.highlightCount = readHighlightCount(callbacks);
+      syncPanelHighlightCount(panelState, callbacks);
       panelState.version++;
     },
     setSelection(selection, editingObject = panelState.editingObject) {
@@ -152,8 +147,4 @@ function riverObject(row) {
     length: Math.round(row.length),
     distance: 0
   };
-}
-
-function readHighlightCount(callbacks) {
-  return Math.max(0, Number(callbacks.getHighlightCount?.()) || 0);
 }

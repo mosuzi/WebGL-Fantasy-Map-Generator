@@ -18,11 +18,21 @@
     empty-text="没有匹配的省份"
     :empty-action="filterEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedProvinceIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedProvinceIds = $event"
+  />
+
+  <UiPanelIoActions
+    class-name="province-panel-list-actions"
+    label="省份列表高亮"
+    :actions="provinceHighlightActions"
+    @action="handleHighlightAction"
   />
 
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
@@ -89,6 +99,7 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -97,6 +108,7 @@ import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "ProvincePanel"
@@ -150,6 +162,8 @@ const metrics = computed(() => {
 });
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedProvinceIds, selectedRows: selectedProvinceRows} = useVisibleRowSelection(visibleRows);
+const highlightableProvinceRows = computed(() => selectedProvinceRows.value.filter(row => !row.neutral && Number(row.id) > 0));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -165,6 +179,10 @@ const provinceActions = computed(() => [
   {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
+const provinceHighlightActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableProvinceRows.value.length)}`, icon: "◉", disabled: !highlightableProvinceRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
@@ -174,6 +192,7 @@ const summaryMetrics = computed(() => [
   {label: "实力", value: formatNumber(metrics.value.powerScore)},
   {label: "资源", value: formatNumber(metrics.value.resourcePotential)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "目标省份", value: formatProvinceName(props.state.map, props.state.selectedProvinceId)},
   {label: "影响", value: formatNumber(props.state.lastAffected)}
 ]);
@@ -304,6 +323,11 @@ function openRenameEditor(row) {
 
 function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
+}
+
+function handleHighlightAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(highlightableProvinceRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function provinceRows(map) {

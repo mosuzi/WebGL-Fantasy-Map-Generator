@@ -2,6 +2,7 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const PROVINCE_PANEL_ID = "province-panel";
 const PROVINCE_COLUMN_WIDTHS = Object.freeze({
@@ -32,6 +33,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     selectedProvinceId: null,
     radius: 28,
     addMode: false,
@@ -72,6 +74,8 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(provinceObject(row));
     },
     onLocate: row => callbacks.onLocate?.(provinceObject(row)),
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, provinceObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onEdit: row => {
       const nextActive = !(panelState.active && panelState.selectedProvinceId === row.id);
       panelState.selectedProvinceId = row.id;
@@ -162,6 +166,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = normalizeProvinceId(selection.object.id);
       if (!provinceExists(map, panelState.selectedProvinceId)) panelState.selectedProvinceId = firstProvinceId(map);
       panelState.open = true;
@@ -173,6 +178,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       panelState.lastAffected = editState.lastAffected ?? panelState.lastAffected;
       panelState.sourceProvinceId = editState.sourceProvinceId ?? panelState.sourceProvinceId;
       if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = normalizeProvinceId(selection.object.id);

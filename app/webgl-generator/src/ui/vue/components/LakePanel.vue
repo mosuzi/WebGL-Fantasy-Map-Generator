@@ -64,6 +64,7 @@ import {formatArea, formatNumber as formatDisplayNumber} from "../../display-uni
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "LakePanel"
@@ -100,7 +101,6 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestId = ref(null);
-const selectedLakeIds = ref([]);
 const rows = computed(() => {
   props.state.version;
   return lakeRows(props.state.map);
@@ -108,8 +108,7 @@ const rows = computed(() => {
 const selectedId = computed(() => props.state.selection?.object?.kind === "lake" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selectedLakeIdSet = computed(() => new Set(selectedLakeIds.value.map(id => String(id))));
-const selectedLakeRows = computed(() => visibleRows.value.filter(row => selectedLakeIdSet.value.has(String(row.id))));
+const {selectedRowIds: selectedLakeIds, selectedRows: selectedLakeRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -152,11 +151,6 @@ watch(() => selected.value?.id, id => {
   nextTick(() => {
     activeAction.value = "rename";
   });
-});
-
-watch(visibleRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedLakeIds.value = selectedLakeIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function lakeRows(map) {

@@ -169,7 +169,7 @@ const API_HIGHLIGHT_OBJECT_KINDS = Object.freeze([
   OBJECT_KIND.REGION,
   OBJECT_KIND.ZONE
 ]);
-const MAX_API_OBJECT_HIGHLIGHTS = 100;
+const MAX_PERSISTENT_OBJECT_HIGHLIGHTS = 100;
 
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -402,6 +402,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => setStatePanelTarget(state, target.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onEdit: object => {
       startObjectEditing(object, {
         afterStart: target => {
@@ -649,6 +652,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => provincePanel.setSelectedProvinceId(target.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onEdit: object => {
       startObjectEditing(object, {
         afterStart: target => {
@@ -813,6 +819,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => culturePanel.setSelectedCultureId(target.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onAdd: () => {
       const command = createAddCultureCommand();
       const context = {map: state.map};
@@ -890,6 +899,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => religionPanel.setSelectedReligionId(target.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onAdd: () => {
       const command = createAddReligionCommand();
       const context = {map: state.map};
@@ -4570,7 +4582,7 @@ function flashObjectViaApi(state, object) {
 function highlightObjectsViaApi(state, documentRef, objects, options = {}) {
   const targets = Array.isArray(objects) ? objects : [objects];
   if (!targets.length || targets.some(target => target === null || target === undefined)) throw new Error("缺少高亮对象");
-  if (targets.length > MAX_API_OBJECT_HIGHLIGHTS) throw new Error(`单次最多高亮 ${MAX_API_OBJECT_HIGHLIGHTS} 个对象`);
+  if (targets.length > MAX_PERSISTENT_OBJECT_HIGHLIGHTS) throw new Error(`最多同时高亮 ${MAX_PERSISTENT_OBJECT_HIGHLIGHTS} 个对象`);
   if (typeof state.renderer?.setObjectHighlights !== "function") throw new Error("当前 renderer 不支持多对象高亮");
   const resolved = targets.map(target => resolveObjectViaApi(state, target));
   const unsupported = resolved.filter(object => !API_HIGHLIGHT_OBJECT_KINDS.includes(object.kind));
@@ -4578,7 +4590,7 @@ function highlightObjectsViaApi(state, documentRef, objects, options = {}) {
     const kinds = [...new Set(unsupported.map(object => object.kind))].join("、");
     throw new Error(`当前 renderer 不支持高亮对象类型：${kinds}`);
   }
-  setPersistentObjectHighlights(state, documentRef, resolved, options);
+  setPersistentObjectHighlights(state, documentRef, resolved, {...options, strictLimit: true});
   const rendererStats = state.renderer.getStats?.() || {};
   return {
     highlighted: rendererStats.objectHighlightCount || 0,
@@ -4604,10 +4616,18 @@ function clearObjectHighlightsViaApi(state, documentRef) {
 function setPersistentObjectHighlights(state, documentRef, objects, options = {}) {
   if (typeof state.renderer?.setObjectHighlights !== "function") return 0;
   const current = options.append === true ? state.renderer.objectHighlights || [] : [];
-  state.renderer.setObjectHighlights([...current, ...(Array.isArray(objects) ? objects : [])]);
+  const requested = deduplicatePersistentHighlights([...current, ...(Array.isArray(objects) ? objects : [])]);
+  if (requested.length > MAX_PERSISTENT_OBJECT_HIGHLIGHTS && options.strictLimit === true) {
+    throw new Error(`最多同时高亮 ${MAX_PERSISTENT_OBJECT_HIGHLIGHTS} 个对象`);
+  }
+  const next = requested.slice(0, MAX_PERSISTENT_OBJECT_HIGHLIGHTS);
+  state.renderer.setObjectHighlights(next);
   refreshPersistentHighlightUi(state, documentRef);
   const count = persistentObjectHighlightCount(state);
-  setFileOperationStatus(documentRef, `已高亮 ${count} 个地图对象。`);
+  const truncated = requested.length > next.length;
+  setFileOperationStatus(documentRef, truncated
+    ? `已高亮前 ${count} 个地图对象；单次最多 ${MAX_PERSISTENT_OBJECT_HIGHLIGHTS} 个。`
+    : `已高亮 ${count} 个地图对象。`);
   return count;
 }
 
@@ -4624,8 +4644,23 @@ function persistentObjectHighlightCount(state) {
   return Math.max(0, Number(state.renderer?.getStats?.()?.objectHighlightCount) || 0);
 }
 
+function deduplicatePersistentHighlights(objects) {
+  const seen = new Set();
+  return objects.filter(object => {
+    if (!object?.kind) return false;
+    const key = `${object.kind}:${object.targetKind || ""}:${object.targetId ?? object.id ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function refreshPersistentHighlightUi(state, documentRef) {
   updateRuntimePanel(documentRef, state);
+  updateStatePanel(state);
+  updateProvincePanel(state);
+  updateCulturePanel(state);
+  updateReligionPanel(state);
   updateRoutePanel(state);
   updateRiverPanel(state);
   updateLakePanel(state);

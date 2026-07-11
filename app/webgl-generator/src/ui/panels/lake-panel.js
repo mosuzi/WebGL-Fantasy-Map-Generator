@@ -1,6 +1,7 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const LAKE_PANEL_ID = "lake-panel";
 const LAKE_COLUMN_WIDTHS = Object.freeze({
@@ -29,7 +30,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
-    highlightCount: readHighlightCount(callbacks),
+    highlightCount: readPanelHighlightCount(callbacks),
     version: 0
   });
   const panelCallbacks = {
@@ -61,14 +62,8 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => callbacks.onSelect?.(lakeObject(row)),
     onLocate: row => callbacks.onLocate?.(lakeObject(row)),
-    onHighlight: rows => {
-      callbacks.onHighlight?.(rows.map(lakeObject));
-      panelState.highlightCount = readHighlightCount(callbacks);
-    },
-    onClearHighlights: () => {
-      callbacks.onClearHighlights?.();
-      panelState.highlightCount = readHighlightCount(callbacks);
-    },
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, lakeObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRename: (lakeId, name) => callbacks.onRename?.(lakeId, name),
     onRenameVisibleFromNamebase: lakeIds => callbacks.onRenameVisibleFromNamebase?.(lakeIds),
     onUndo: () => callbacks.onUndo?.(),
@@ -110,7 +105,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      panelState.highlightCount = readHighlightCount(callbacks);
+      syncPanelHighlightCount(panelState, callbacks);
       panelState.open = true;
       panelState.version++;
       manager.open("lake-panel");
@@ -120,7 +115,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
-      panelState.highlightCount = readHighlightCount(callbacks);
+      syncPanelHighlightCount(panelState, callbacks);
       panelState.version++;
     },
     setSelection(selection) {
@@ -148,8 +143,4 @@ function lakeObject(row) {
     evaporation: row.evaporation,
     firstCell: row.firstCell
   };
-}
-
-function readHighlightCount(callbacks) {
-  return Math.max(0, Number(callbacks.getHighlightCount?.()) || 0);
 }

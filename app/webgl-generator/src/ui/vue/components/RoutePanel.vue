@@ -68,6 +68,7 @@ import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "RoutePanel"
@@ -103,7 +104,6 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
-const selectedRouteIds = ref([]);
 const routeActions = Object.freeze([
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
@@ -115,8 +115,7 @@ const rows = computed(() => {
   return routeRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selectedRouteIdSet = computed(() => new Set(selectedRouteIds.value.map(id => String(id))));
-const selectedRouteRows = computed(() => visibleRows.value.filter(row => selectedRouteIdSet.value.has(String(row.id))));
+const {selectedRowIds: selectedRouteIds, selectedRows: selectedRouteRows} = useVisibleRowSelection(visibleRows);
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
@@ -156,11 +155,6 @@ const detailRows = computed(() => selected.value ? [
 
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
-});
-
-watch(visibleRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedRouteIds.value = selectedRouteIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function handleRouteManagementAction(key) {

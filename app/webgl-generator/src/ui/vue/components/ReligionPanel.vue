@@ -39,11 +39,14 @@
     empty-text="没有匹配的宗教"
     :empty-action="religionEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedReligionIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleListAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedReligionIds = $event"
   />
   <UiPanelIoActions class-name="religion-panel-list-actions" label="宗教列表操作" :actions="religionListActions" @action="handleListAction" />
 
@@ -107,6 +110,7 @@ import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "ReligionPanel"
@@ -157,6 +161,8 @@ const metrics = computed(() => {
 });
 const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根宗教"));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedReligionIds, selectedRows: selectedReligionRows} = useVisibleRowSelection(visibleRows);
+const highlightableReligionRows = computed(() => selectedReligionRows.value.filter(row => Number(row.id) > 0));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
@@ -165,6 +171,8 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
 const defaultReligionEmptyAction = Object.freeze({key: "add", label: "新增空宗教", icon: "+"});
 const religionEmptyAction = computed(() => filterEmptyAction.value || defaultReligionEmptyAction);
 const religionListActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableReligionRows.value.length)}`, icon: "◉", disabled: !highlightableReligionRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultReligionEmptyAction,
   {key: "locate", label: "定位宗教", icon: "⌖", disabled: !selected.value},
   {
@@ -187,7 +195,8 @@ const summaryMetrics = computed(() => [
   {label: "派生", value: formatNumber(metrics.value.derived)},
   {label: "层级", value: formatNumber(metrics.value.maxDepth)},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
-  {label: "城市", value: formatNumber(metrics.value.cities)}
+  {label: "城市", value: formatNumber(metrics.value.cities)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -236,6 +245,14 @@ function openRenameEditor(row) {
 }
 
 function handleListAction(actionKey) {
+  if (actionKey === "highlight-selected") {
+    props.callbacks.onHighlight?.(highlightableReligionRows.value);
+    return;
+  }
+  if (actionKey === "clear-highlights") {
+    props.callbacks.onClearHighlights?.();
+    return;
+  }
   if (actionKey === "clear-filter") {
     props.callbacks.onFilter?.("");
     return;

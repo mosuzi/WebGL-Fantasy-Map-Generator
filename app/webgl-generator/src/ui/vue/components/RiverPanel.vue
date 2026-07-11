@@ -95,6 +95,7 @@ import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "RiverPanel"
@@ -129,7 +130,6 @@ const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const widthDraft = ref(1);
-const selectedRiverIds = ref([]);
 const rows = computed(() => {
   props.state.version;
   return riverRows(props.state.map);
@@ -138,8 +138,7 @@ const selectedId = computed(() => props.state.selection?.object?.kind === "river
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const editing = computed(() => props.state.editingObject?.kind === "river" && sameObjectId(props.state.editingObject.id, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selectedRiverIdSet = computed(() => new Set(selectedRiverIds.value.map(id => String(id))));
-const selectedRiverRows = computed(() => visibleRows.value.filter(row => selectedRiverIdSet.value.has(String(row.id))));
+const {selectedRowIds: selectedRiverIds, selectedRows: selectedRiverRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -194,11 +193,6 @@ watch(() => selected.value?.id, id => {
 
 watch(() => selected.value?.widthFactor, next => {
   widthDraft.value = normalizeWidth(next ?? 1);
-});
-
-watch(visibleRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedRiverIds.value = selectedRiverIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function riverRows(map) {

@@ -26108,3 +26108,28 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：4 个目标 JS 文件 `node --check` 全过；`pnpm run regress:selection-highlight` 继续输出 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1109 modules、耗时 1.39 秒，路线、河流和湖泊三个 Vue SFC 均生成独立构建产物，无模板、响应式或 SFC 编译错误，仅有既有主 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有后端，结果为 `[]`。按用户约束未启动或重启 Chrome、未使用 Playwright、未启动开发服务器；批量 checkbox、高亮选中、跨面板清除、单对象 selection 保持、checksum 和 WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。
+
+### 2026-07-12 政治社会面板批量高亮与选择复用
+
+背景：
+
+- 路线、河流和湖泊已经验证公共表格批量选择适合只读持久高亮，但三个组件各自复制了 selected ids、选中行计算和筛选裁剪逻辑。
+- 国家、省份、文化和宗教同样适合在地图上同时比较多个区域，且 renderer 已支持这些政治 / 社会面 mesh。
+
+实现：
+
+- 新增 `useVisibleRowSelection()`，统一数字 / 字符串 id、当前可见选中行和筛选 / 空列表后的 id 裁剪；路线、河流、湖泊迁移到该 composable，国家、省份、文化、宗教直接复用。
+- 新增 `panel-highlight-actions.js`，统一 wrapper 的 row -> object 映射、清除动作和全局高亮数量同步；七个已接入面板不再各自复制桥接 helper。
+- 国家、省份、文化和宗教表格开启批量选择，新增“高亮选中 N / 清除高亮 N”和全局高亮摘要；国家 / 省份排除中立行，四个面板都排除 id 0。
+- `refreshPersistentHighlightUi()` 扩展到七个面板；UI 和控制台 API 改写高亮集合后，所有已打开的相关面板会同步数量。
+- 全局最多同时高亮 100 个对象。API replace / append 超限会返回结构化错误；UI 全选超限时保留前 100 个并显示限制提示，避免大政治面集合让 selection mesh 无上限增长。
+- 新增 `tools/webgl-generator-visible-row-selection-regression.mjs` 和 `pnpm run regress:visible-row-selection`，固化 id 归一、筛选裁剪和空列表清理。
+
+验证：
+
+- `node --check` 已覆盖 `app.js`、两个新公共 helper、四个新增接入 wrapper 和选择回归脚本。
+- `node --no-warnings tools/webgl-generator-visible-row-selection-regression.mjs` 通过：筛选后选中数为 1，空列表后为 0。
+- 全局搜索确认四个新增 Vue 面板均接入 `selectableRows / selectedRowIds / selection-change` 与高亮动作。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：9 个目标 JS / MJS `node --check` 全过；可见行选择回归为筛选后 1、空结果后 0；高亮回归为 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1111 modules、耗时 1.30 秒，国家、省份、文化、宗教、路线、河流和湖泊 SFC 均生成独立 chunk，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体按要求只检查一次现有后端，结果仍为 `[]`，随后立即停止并释放。未启动或重启 Chrome、未使用 Playwright、未启动服务器、未刷新页面；国家 / 省份批量高亮、中立排除、跨面板清除、selection / checksum 和 WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。

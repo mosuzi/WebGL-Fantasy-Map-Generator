@@ -35,6 +35,7 @@
     "regress:api-namebases": "node ./tools/webgl-generator-api-namebase-docs-regression.mjs",
     "regress:api-namebase-renames": "node ./tools/webgl-generator-api-namebase-renames-regression.mjs",
     "regress:selection-highlight": "node --no-warnings ./tools/webgl-generator-selection-highlight-regression.mjs",
+    "regress:visible-row-selection": "node --no-warnings ./tools/webgl-generator-visible-row-selection-regression.mjs",
     "regress:shoreline": "node ./tools/webgl-generator-shoreline-regression.mjs",
     "regress:rendering": "pnpm run regress:shoreline -- --max-switch-ms 1500",
     "diagnose:source-warns": "node ./tools/source-candidate-warn-diagnostics.mjs",
