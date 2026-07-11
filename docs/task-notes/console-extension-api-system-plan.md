@@ -334,6 +334,7 @@ api.edit.measurement.delete(id)
 - layers / units 已补齐方法级副作用元数据：`layers.get` 与 `units.get` 不改变状态，`layers.setViewMode / setVisible / setTheme` 和所有单位写入只改显示偏好，`layers.fitView` 只改相机；因此 `sideEffects.layers` 已从 `display-preference` 修正为 `display-preference-and-camera-state`。这些方法均不要求 `confirm:true`，也不进入 `EditHistory`；浏览器验证已确认读取该元数据不修改地图 checksum。
 - climate 已补齐方法级副作用元数据：`get / getOptions / getTemperature / getPrecipitation / getLatitude / getAtmosphere / getBiomes` 不改变状态，`apply / setLatitude / setLatitudeRange / setLongitudeRange / setTemperature / setPrecipitation / setWind` 标注为 `climate-state-and-derived-stale`，表示会更新当前地图气候 / 生物群系并标记下游派生 stale；这些方法均不要求 `confirm:true`，也不进入 `EditHistory`。浏览器验证已确认读取该元数据不修改地图 checksum。
 - history 已补齐方法级副作用元数据：`get / stats / peek` 不改变状态，`undo / redo` 标注为 `map-and-edit-history-state`，表示会通过当前 `EditHistory` 恢复或重放命令并改变地图或历史栈；因此 `sideEffects.history` 已从 `edit-history` 修正为 `edit-history-read-and-undo-redo`。这些方法均不要求 `confirm:true`，`undo / redo` 自身也不会再作为可撤销命令进入历史栈；浏览器验证已确认读取该元数据不修改地图 checksum。
+- data 导出方法已补齐方法级副作用元数据：`exportAll / exportMap / exportGEO / exportFeatureGEO / exportCompressedAll / exportPNG / exportNotes / exportMeasurements` 标注为 `download-or-export-result`，表示只生成返回结果或触发浏览器下载，不修改地图数据、不进入 `EditHistory`、不要求 `confirm:true`；其中压缩完整地图和 PNG 导出为异步。`importMap / importGEO` 继续保持必须 `confirm:true` 的导入元数据；浏览器验证已确认读取该元数据不修改地图 checksum。
 
 ## 安全与副作用边界
 

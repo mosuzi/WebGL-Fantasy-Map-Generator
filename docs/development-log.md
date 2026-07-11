@@ -25634,3 +25634,26 @@ full 矩阵结果：
 - 子智能体 API 元数据结构验证通过：`sideEffects.history = edit-history-read-and-undo-redo`，旧 `methods.history = get / stats / peek / undo / redo`，`get / stats / peek = none`，`undo / redo = map-and-edit-history-state`，5 个 history 方法均为 `undoable: false / async: false / requiresConfirm: false`。
 - 浏览器 smoke 子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-history-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `7cd02bc2`、grid cells `1014`、pack cells `866`；随后读取 `api.info.capabilities()`，确认 `sideEffects.history = "edit-history-read-and-undo-redo"`，`methods.history` 仍包含全部 5 个公开方法；`methodMetadata.history` 中 `get / stats / peek = none`，`undo / redo = map-and-edit-history-state`；全部 history 方法均有 `mutates / undoable / async / requiresConfirm` 且 `undoable = false`、`async = false`、`requiresConfirm = false`；调用前后 checksum 保持 `7cd02bc2` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 data 导出能力元数据副作用边界第一刀
+
+背景：
+
+- `api.info.capabilities()` 此前只给 `data.importMap / importGEO` 标注了方法级导入副作用和 `confirm:true` 要求，导出方法仍缺少方法级元数据。
+- `api.data.exportAll / exportMap / exportGEO / exportFeatureGEO / exportCompressedAll / exportPNG / exportNotes / exportMeasurements` 都不会修改地图数据，也不进入 `EditHistory`，但在 `download:true` 时会触发浏览器下载；压缩完整地图和 PNG 导出还会返回 Promise。
+- 如果缺少方法级元数据，脚本或 AI 无法从能力表区分同步文本导出、异步 Blob / PNG 导出和会替换 / 写入地图的导入。
+
+实现：
+
+- `console-api.js` 为 `methodMetadata.data` 补齐 8 个导出方法。
+- 所有导出方法标注 `mutates: "download-or-export-result"`、`undoable: false`、`requiresConfirm: false`。
+- `exportCompressedAll` 和 `exportPNG` 标注 `async: true`；其余导出方法标注 `async: false`。
+- `importMap / importGEO` 保持既有 `requiresConfirm: true`、异步导入和替换 / 写入地图元数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-data-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `044fa6ab`、grid cells `1014`、pack cells `906`；随后读取 `api.info.capabilities()`，确认 `sideEffects.data = "readonly-download-and-map-import"`，`methods.data` 仍包含全部 10 个公开方法；`methodMetadata.data` 中 8 个导出方法均为 `mutates: "download-or-export-result"`、`undoable: false`、`requiresConfirm: false`，其中 `exportCompressedAll / exportPNG` 为 `async: true`、其它导出方法为 `async: false`；`importMap` 仍为 `replace-map / undoable: false / async: true / requiresConfirm: true`，`importGEO` 仍为 `map-or-measurements / undoable: "partial" / async: true / requiresConfirm: true`；调用前后 checksum 保持 `044fa6ab` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

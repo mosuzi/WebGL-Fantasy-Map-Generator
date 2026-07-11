@@ -312,6 +312,14 @@ function buildMethodMetadata() {
       rerollSeed: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}
     },
     data: {
+      exportAll: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      exportMap: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      exportGEO: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      exportFeatureGEO: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      exportCompressedAll: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
+      exportPNG: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
+      exportNotes: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      exportMeasurements: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       importMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: "partial", async: true, requiresConfirm: true}
     },
