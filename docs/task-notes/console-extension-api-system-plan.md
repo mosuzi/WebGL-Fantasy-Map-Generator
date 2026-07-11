@@ -501,7 +501,7 @@ api.edit.measurement.delete(id)
 - 浏览器烟测已覆盖手工标签删除、撤销 / 重做，以及生成城市标签恢复 / 撤销。
 - 浏览器烟测已覆盖 marker 移动 / 撤销移动，以及 marker 删除 / 撤销 / 重做。
 - 浏览器烟测已覆盖 marker 新增 / 撤销 / 重做和新建对象 selection。
-- `api.selection.resolve(object)`、`api.selection.select(object)`、`api.selection.clear()` 和 `api.selection.locate(object)` 已接入。
+- `api.selection.resolve(object)`、`api.selection.select(object)`、`api.selection.clear()` 和 `api.selection.locate(object, {padding, minScale, maxScale})` 已接入；locate 返回定位后的 camera 和 locateStatus。
 - 浏览器烟测已覆盖城市对象 resolve / select / clear / locate，以及不存在对象的结构化错误。
 - `api.selection.pick(clientX, clientY)` 已接入 renderer `pickClientPoint()`，浏览器烟测已覆盖中心点拾取和非法坐标错误。
 - `api.selection.flash(object)` 已完成第一刀，并提供 `api.selection.highlight(object)` 同义入口；当前复用 selection store 与 renderer `startLocateFlash()`，支持单对象临时闪烁。

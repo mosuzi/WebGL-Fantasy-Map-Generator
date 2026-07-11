@@ -1746,7 +1746,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   view.__webglGeneratorApp = state;
   installConsoleApi(documentRef, state, {
     actions: createConsoleApiActions(state, documentRef, {
-      locateObject: object => locateAndSelectObject(null, object)
+      locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
+        locate: target => state.renderer.locateObject(target, locateOptions)
+      })
     })
   });
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
@@ -1772,7 +1774,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       resolve: object => resolveObjectViaApi(state, object),
       select: object => selectObjectViaApi(state, object),
       clear: () => clearSelectionViaApi(state),
-      locate: object => locateObjectViaApi(state, documentRef, object, options),
+      locate: (object, locateOptions = {}) => locateObjectViaApi(state, documentRef, object, {locateObject: options.locateObject, ...locateOptions}),
       flash: object => flashObjectViaApi(state, object),
       startEditing: (object, editOptions = {}) => startEditingObjectViaApi(state, object, editOptions),
       stopEditing: (editOptions = {}) => stopEditingObjectViaApi(state, editOptions),
@@ -4196,8 +4198,8 @@ function climateApiUpdateResult(state, changed) {
   };
 }
 
-function locateObject(state, object, documentRef) {
-  const located = object ? state.renderer.locateObject(object) : false;
+function locateObject(state, object, documentRef, locateOptions = {}) {
+  const located = object ? state.renderer.locateObject(object, locateOptions) : false;
   if (located) {
     state.selectionStore.setSelection({object});
   }
@@ -4509,11 +4511,17 @@ function clearSelectionViaApi(state) {
 
 function locateObjectViaApi(state, documentRef, object, options = {}) {
   const resolved = resolveObjectViaApi(state, object);
-  const located = options.locateObject ? options.locateObject(resolved) : locateObject(state, resolved, documentRef);
+  const locateOptions = normalizeApiLocateOptions(options);
+  const located = options.locateObject
+    ? options.locateObject(resolved, locateOptions)
+    : locateObject(state, resolved, documentRef, locateOptions);
+  const rendererStats = state.renderer?.getStats?.() || {};
   return {
     located,
     object: resolved,
-    selection: state.selectionStore.getSnapshot().selection
+    selection: state.selectionStore.getSnapshot().selection,
+    camera: {...(rendererStats.camera || {})},
+    locateStatus: rendererStats.locateStatus || ""
   };
 }
 
@@ -4571,6 +4579,30 @@ function pickClientPointViaApi(state, documentRef, clientX, clientY) {
   state.pick = pick;
   updatePickPanel(documentRef, state);
   return pick;
+}
+
+function normalizeApiLocateOptions(options = {}) {
+  const normalized = {};
+  for (const key of ["padding", "minScale", "maxScale"]) {
+    if (options[key] === undefined || options[key] === null) continue;
+    const value = Number(options[key]);
+    if (!Number.isFinite(value)) throw new Error(`定位选项 ${key} 必须是有限数`);
+    normalized[key] = value;
+  }
+  if (normalized.padding !== undefined && (normalized.padding < 0 || normalized.padding >= 0.95)) {
+    throw new Error("定位选项 padding 必须大于等于 0 且小于 0.95");
+  }
+  for (const key of ["minScale", "maxScale"]) {
+    if (normalized[key] !== undefined && normalized[key] <= 0) throw new Error(`定位选项 ${key} 必须大于 0`);
+  }
+  if (
+    normalized.minScale !== undefined &&
+    normalized.maxScale !== undefined &&
+    normalized.minScale > normalized.maxScale
+  ) {
+    throw new Error("定位选项 minScale 不能大于 maxScale");
+  }
+  return normalized;
 }
 
 function normalizeApiObjectIdentifier(object) {

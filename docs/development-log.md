@@ -25374,3 +25374,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_selection_editing_api` 和 `verify_selection_editing_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-editing", cellsTarget:1000})` 生成地图，得到 checksum `0ce7d3e5`、grid cells `1014`、pack cells `932`；`api.info.capabilities()` 已包含 `selection.startEditing / stopEditing / toggleEditing`；对河流 `#1` 调用 `api.selection.startEditing({kind:"river", id:1})` 后 selection 和 editingObject 均为该河流；`api.selection.stopEditing({ifKind:"state"})` 返回 `stopped=false` 且不误清河流编辑态；`api.selection.stopEditing({ifKind:"river"})` 返回 `stopped=true` 并清除 editingObject；连续两次 `api.selection.toggleEditing({kind:"river", id:1})` 可进入再退出同一河流编辑态；不存在河流 `#999999` 返回结构化失败且错误信息包含“找不到对象”；调用前后 checksum 保持 `0ce7d3e5` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 选择定位 API options 补齐批次
+
+背景：
+
+- 控制台 API 方案写的是 `api.selection.locate(object, options)`，但此前实现只接受 object，无法从脚本控制定位时的 padding、最小缩放或最大缩放。
+- renderer `locateObject()` 本身已有 `padding / minScale / maxScale` 支持，API 应复用这些现成能力，而不是另开定位路径。
+
+实现：
+
+- `console-api.js` 将 `api.selection.locate()` 扩展为 `(object, options = {})`。
+- `app.js` 的 selection locate action 现在会校验并转发 `padding / minScale / maxScale`，继续复用 `locateAndSelectObject()` 与 renderer `locateObject()`。
+- `api.selection.locate()` 返回值新增定位后的 `camera` 和 `locateStatus`，方便脚本判断定位是否按预期改变视口。
+- 本步只改变视口相机和 selection，不进入 `EditHistory`，不修改地图 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_selection_locate_options_api` 和 `verify_selection_locate_options_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-locate-options", cellsTarget:1000})` 生成地图，得到 checksum `64c5578e`、grid cells `1014`、pack cells `797`；对城市 `#1` 调用 `api.selection.locate({kind:"city", id:1}, {padding:0.1, minScale:2, maxScale:2})` 返回 `located=true`、selection 为该城市、camera scale 为 `2`、locateStatus 为 `city #1`；再次用 `{padding:0.4, minScale:6, maxScale:12}` 定位后 camera scale 为 `6.857142857142858`；非法 `{minScale:"bad"}` 返回结构化失败，错误信息为 `定位选项 minScale 必须是有限数`；调用前后 checksum 保持 `64c5578e` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

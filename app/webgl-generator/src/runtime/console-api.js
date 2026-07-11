@@ -43,7 +43,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
       resolve: object => apiCall(() => requireApiAction(actions.selection?.resolve, "selection.resolve")(object)),
       select: object => apiCall(() => requireApiAction(actions.selection?.select, "selection.select")(object)),
       clear: () => apiCall(() => requireApiAction(actions.selection?.clear, "selection.clear")()),
-      locate: object => apiCall(() => requireApiAction(actions.selection?.locate, "selection.locate")(object)),
+      locate: (object, options = {}) => apiCall(() => requireApiAction(actions.selection?.locate, "selection.locate")(object, options)),
       pick: (clientX, clientY) => apiCall(() => requireApiAction(actions.selection?.pick, "selection.pick")(clientX, clientY)),
       flash: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object)),
       highlight: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object)),
