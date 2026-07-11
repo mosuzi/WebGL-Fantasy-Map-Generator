@@ -827,6 +827,16 @@
    - 边界：只校准当前有效模式，不回写历史日志中的旧阶段事实。
    - 完成记录：`docs/architecture/vue-floating-panel-pattern.md` 和编辑器基础设施清单已改为标题栏历史入口规范，不再把 `UiHistoryActions` 列为公共组件。
 
+106. 多对象持久高亮生命周期第一刀。`已完成`
+   - 目标：补齐 `highlight / locate API` 中长期暂缓的多对象高亮，让脚本和后续批量列表操作能在不改变当前 selection 的情况下同时标出多个地图对象。
+   - 边界：`api.selection.flash(object)` 继续保持单对象 2.6 秒红色闪烁；`api.selection.highlight(objects, {append})` 改为独立持久高亮集合，显式调用 `clearHighlights()` 或载入新地图时清除。单次最多 100 个对象；贸易流暂不支持持久高亮并返回结构化错误。
+   - 完成记录：renderer 新增 `objectHighlights`，政治面、地区、湖泊和河流共用 selection mesh，路线复用动态路线 mesh，城市 / 标签 / 标记 / 军团复用 overlay selected 视觉；`selection.get()` 和 renderer stats 会返回当前高亮摘要。纯函数断言确认国家 + 湖泊 + 河流三对象高亮顶点可同时生成。
+
+107. 高亮 API 能力契约与回归门禁更新。`已完成`
+   - 目标：让 capabilities 方法清单、method metadata 和长期回归脚本准确反映持久高亮副作用。
+   - 边界：高亮只改变运行时视觉状态，不进入 `EditHistory`，不改变地图 checksum，也不需要 `confirm:true`。
+   - 完成记录：selection 方法新增 `clearHighlights`；`highlight / clearHighlights` 的 `mutates` 标为 `persistent-highlight-state`，命名空间副作用摘要更新为 `selection-camera-highlights-and-editing-state`。新增 `pnpm run regress:selection-highlight` 固化政治面、湖泊、河流组合与去重断言；capabilities 回归补入代表性副作用断言，并把 Playwright `context` 与 `browser` 都放入 `finally` 关闭路径。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -839,6 +849,7 @@
 - `git diff --check` 通过。
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 废弃内容区历史基础设施清理批次完成：应用源码不再引用 `UiHistoryActions`、`createHistoryActions` 或旧面板历史类；`pnpm run build:app` 通过（1109 modules，1.59s），`git diff --check` 通过。阶段末浏览器验收已交给子智能体，但 in-app Browser 与现有 Chrome 控制后端均不可连接；按约束未重启 Chrome、未使用 Playwright、未启动额外服务器，因此本批次浏览器 UI / WebGL 验收仍待可复用浏览器会话恢复后补跑。
+- 多对象持久高亮批次完成：子智能体执行的 6 个 `node --check`、`pnpm run regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；高亮回归为 12 / 30 / 30 顶点，Vite 构建 1109 modules、1.27s，仅有既有 chunk 警告。浏览器子智能体确认 in-app Browser 不可用且浏览器后端列表为空；按约束未启动 / 重启 Chrome、未使用 Playwright、未启动额外服务器，因此 API 持久高亮、append / clear、checksum 和 WebGL / console / health 真实浏览器验收待控制后端恢复后补跑。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。

@@ -171,6 +171,7 @@ export class PlaceholderMapRenderer {
     this.militaryIconCount = 0;
     this.visibleMilitaryIconCount = 0;
     this.selection = null;
+    this.objectHighlights = [];
     this.selectionMarker = null;
     this.objectPickingIndex = null;
     this.lastObjectCandidateCount = 0;
@@ -241,6 +242,7 @@ export class PlaceholderMapRenderer {
   loadMap(map) {
     const profile = createRendererLoadProfile();
     this.map = map;
+    this.objectHighlights = [];
     applyMapStageBackground(this.stage, map, this.visualTheme);
     this.objectPickingIndex = profile.stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     profile.stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
@@ -308,6 +310,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
+    this.objectHighlights = [];
     applyMapStageBackground(this.stage, map, this.visualTheme);
     this.objectPickingIndex = await stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     await stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
@@ -696,7 +699,9 @@ export class PlaceholderMapRenderer {
       selectionVertexCount: this.selectionVertexCount,
       selectionTriangleCount: this.selectionVertexCount / 3,
       selectionBuildMs: this.selectionBuildMs,
-      selectionHighlightMode: selectionHighlightMode(this.selection, this.locateFlash),
+      selectionHighlightMode: selectionHighlightMode(this.selection, this.locateFlash, this.objectHighlights),
+      objectHighlightCount: this.objectHighlights.length,
+      objectHighlights: this.objectHighlights.map(summarizeObjectHighlight),
       locateStatus: this.locateStatus,
       objectPickingIndex: this.objectPickingIndex ? {
         buckets: this.objectPickingIndex.bucketCount,
@@ -804,7 +809,7 @@ export class PlaceholderMapRenderer {
 
   updateRouteBuffer() {
     const startedAt = performance.now();
-    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, snapshotCamera(this.camera), this.canvas, this.selection, this.visualTheme);
+    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, snapshotCamera(this.camera), this.canvas, this.selection, this.objectHighlights, this.visualTheme);
     this.routeVertexCount = routeVertices.length / 6;
     this.routeRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
@@ -817,7 +822,8 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const camera = snapshotCamera(this.camera);
     const selection = this.selection ? {...this.selection} : null;
-    const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, {
+    const objectHighlights = this.objectHighlights.map(item => ({...item}));
+    const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, objectHighlights, {
       yieldToBrowser,
       sliceMs,
       shouldContinue
@@ -934,7 +940,7 @@ export class PlaceholderMapRenderer {
 
   updateSelectionBuffer() {
     const startedAt = performance.now();
-    const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash);
+    const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights);
     this.selectionVertexCount = selectionVertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, selectionVertices, this.gl.DYNAMIC_DRAW);
@@ -962,6 +968,20 @@ export class PlaceholderMapRenderer {
       return;
     }
     this.draw();
+  }
+
+  setObjectHighlights(objects, {draw = true} = {}) {
+    const previousHasRoutes = this.objectHighlights.some(item => item.kind === OBJECT_KIND.ROUTE);
+    this.objectHighlights = deduplicateObjectHighlights(objects);
+    const nextHasRoutes = this.objectHighlights.some(item => item.kind === OBJECT_KIND.ROUTE);
+    this.dynamicBuffersDirty.selection = true;
+    if (previousHasRoutes || nextHasRoutes) this.dynamicBuffersDirty.routes = true;
+    if (!draw) return;
+    this.draw();
+  }
+
+  clearObjectHighlights(options = {}) {
+    this.setObjectHighlights([], options);
   }
 
   invalidateDynamicBuffers(parts = {}) {
@@ -1285,7 +1305,7 @@ export class PlaceholderMapRenderer {
 
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
-      const selected = isSelectedLabelItem(this.selection, item);
+      const selected = isSelectedLabelItem(this.selection, item) || this.objectHighlights.some(highlight => isSelectedLabelItem(highlight, item));
       const forceVisible = selected && item.targetKind === LABEL_TARGET_KIND.CUSTOM;
       item.node.classList.toggle("selected", selected);
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
@@ -1389,7 +1409,7 @@ export class PlaceholderMapRenderer {
     for (const item of this.cityIconItems) {
       if (this.layerVisibility.cities === false || scale < item.minScale) {
         item.node.classList.toggle("visible", false);
-        item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.CITY && this.selection.id === item.id);
+        item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.CITY, item.id));
         item.visible = false;
         item.box = null;
         continue;
@@ -1405,7 +1425,7 @@ export class PlaceholderMapRenderer {
       );
       const shouldShow = canShow && !blocked;
       item.node.classList.toggle("visible", shouldShow);
-      item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.CITY && this.selection.id === item.id);
+      item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.CITY, item.id));
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
@@ -1436,7 +1456,7 @@ export class PlaceholderMapRenderer {
       if (!iconsEnabled || !layerVisible) {
         item.node.classList.toggle("visible", false);
         item.node.classList.toggle("city-overlap", false);
-        item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.MARKER && this.selection.id === item.id);
+        item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MARKER, item.id));
         item.visible = false;
         item.box = null;
         continue;
@@ -1453,7 +1473,7 @@ export class PlaceholderMapRenderer {
       const cityOverlap = shouldShow && item.category === "resource" && boxesOverlapAny(cityIconBoxes, box, 0);
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("city-overlap", cityOverlap);
-      item.node.classList.toggle("selected", this.selection?.kind === OBJECT_KIND.MARKER && this.selection.id === item.id);
+      item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MARKER, item.id));
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
@@ -1478,7 +1498,7 @@ export class PlaceholderMapRenderer {
     let visible = 0;
 
     for (const item of this.militaryIconItems) {
-      const selected = this.selection?.kind === OBJECT_KIND.MILITARY && this.selection.id === item.id;
+      const selected = isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MILITARY, item.id);
       if (this.layerVisibility.military === false || scale < item.minScale) {
         if (item.visible !== false) item.node.classList.toggle("visible", false);
         setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
@@ -2610,6 +2630,40 @@ function isSelectedLabelItem(selection, item) {
   return targetKind === item.targetKind && targetId === item.targetId;
 }
 
+function isSelectedOrHighlighted(selection, highlights, kind, id) {
+  if (selection?.kind === kind && String(selection.id) === String(id)) return true;
+  return highlights.some(item => item?.kind === kind && String(item.id) === String(id));
+}
+
+function deduplicateObjectHighlights(objects) {
+  const seen = new Set();
+  const highlights = [];
+  for (const object of Array.isArray(objects) ? objects : []) {
+    if (!object?.kind) continue;
+    const key = objectHighlightKey(object);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    highlights.push({...object});
+  }
+  return highlights;
+}
+
+function objectHighlightKey(object) {
+  const targetKind = object.targetKind || "";
+  const targetId = object.targetId ?? object.id ?? "";
+  return `${object.kind}:${targetKind}:${targetId}`;
+}
+
+function summarizeObjectHighlight(object) {
+  return {
+    kind: object.kind,
+    id: object.id,
+    ...(object.targetKind ? {targetKind: object.targetKind} : {}),
+    ...(object.targetId !== undefined ? {targetId: object.targetId} : {}),
+    name: object.name || ""
+  };
+}
+
 function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) {
   let activePointer = null;
   let lastX = 0;
@@ -3182,16 +3236,16 @@ function emptyTradeFlowRenderStats() {
   };
 }
 
-function buildRouteMeshVertices(map, camera, canvas, selection, visualTheme) {
-  const build = createRouteMeshBuild(map, camera, canvas, selection, visualTheme);
+function buildRouteMeshVertices(map, camera, canvas, selection, objectHighlights, visualTheme) {
+  const build = createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, visualTheme);
   for (const route of map.settlements.routes) {
     if (!pushRouteMesh(build, route)) break;
   }
   return finalizeRouteMeshBuild(build);
 }
 
-async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}, visualTheme) {
-  const build = createRouteMeshBuild(map, camera, canvas, selection, visualTheme);
+async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, objectHighlights, {yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}, visualTheme) {
+  const build = createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, visualTheme);
   let sliceStartedAt = performance.now();
   for (const route of map.settlements.routes) {
     if (!shouldContinue()) {
@@ -3210,7 +3264,7 @@ async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, {yiel
   return finalizeRouteMeshBuild(build);
 }
 
-function createRouteMeshBuild(map, camera, canvas, selection, visualTheme) {
+function createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, visualTheme) {
   const context = createRenderContext(map, {camera, canvas});
   const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
   return {
@@ -3219,6 +3273,7 @@ function createRouteMeshBuild(map, camera, canvas, selection, visualTheme) {
     viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
     visualTheme,
     selection,
+    objectHighlights,
     vertices: [],
     stats: emptyRouteRenderStats()
   };
@@ -3236,7 +3291,7 @@ function pushRouteMesh(build, route) {
     build.stats.culledRoutes++;
     return true;
   }
-  const selected = build.selection?.kind === OBJECT_KIND.ROUTE && build.selection.id === route.id;
+  const selected = isSelectedOrHighlighted(build.selection, build.objectHighlights, OBJECT_KIND.ROUTE, route.id);
   const style = routeStyle(route, build.visualTheme);
   const color = selected ? [1, 0.82, 0.34, 1] : style.color;
   const baseWidth = style.width;

@@ -154,6 +154,22 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
   "precipitation"
 ]);
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
+const API_HIGHLIGHT_OBJECT_KINDS = Object.freeze([
+  OBJECT_KIND.CITY,
+  OBJECT_KIND.LABEL,
+  OBJECT_KIND.MARKER,
+  OBJECT_KIND.ROUTE,
+  OBJECT_KIND.RIVER,
+  OBJECT_KIND.LAKE,
+  OBJECT_KIND.MILITARY,
+  OBJECT_KIND.STATE,
+  OBJECT_KIND.PROVINCE,
+  OBJECT_KIND.CULTURE,
+  OBJECT_KIND.RELIGION,
+  OBJECT_KIND.REGION,
+  OBJECT_KIND.ZONE
+]);
+const MAX_API_OBJECT_HIGHLIGHTS = 100;
 
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -1777,6 +1793,8 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       clear: () => clearSelectionViaApi(state),
       locate: (object, locateOptions = {}) => locateObjectViaApi(state, documentRef, object, {locateObject: options.locateObject, ...locateOptions}),
       flash: object => flashObjectViaApi(state, object),
+      highlight: (objects, highlightOptions = {}) => highlightObjectsViaApi(state, objects, highlightOptions),
+      clearHighlights: () => clearObjectHighlightsViaApi(state),
       startEditing: (object, editOptions = {}) => startEditingObjectViaApi(state, object, editOptions),
       stopEditing: (editOptions = {}) => stopEditingObjectViaApi(state, editOptions),
       toggleEditing: (object, editOptions = {}) => toggleEditingObjectViaApi(state, object, editOptions),
@@ -4537,6 +4555,41 @@ function flashObjectViaApi(state, object) {
     object: resolved,
     selection: state.selectionStore.getSnapshot().selection,
     highlightMode: rendererStats.selectionHighlightMode || ""
+  };
+}
+
+function highlightObjectsViaApi(state, objects, options = {}) {
+  const targets = Array.isArray(objects) ? objects : [objects];
+  if (!targets.length || targets.some(target => target === null || target === undefined)) throw new Error("缺少高亮对象");
+  if (targets.length > MAX_API_OBJECT_HIGHLIGHTS) throw new Error(`单次最多高亮 ${MAX_API_OBJECT_HIGHLIGHTS} 个对象`);
+  if (typeof state.renderer?.setObjectHighlights !== "function") throw new Error("当前 renderer 不支持多对象高亮");
+  const resolved = targets.map(target => resolveObjectViaApi(state, target));
+  const unsupported = resolved.filter(object => !API_HIGHLIGHT_OBJECT_KINDS.includes(object.kind));
+  if (unsupported.length) {
+    const kinds = [...new Set(unsupported.map(object => object.kind))].join("、");
+    throw new Error(`当前 renderer 不支持高亮对象类型：${kinds}`);
+  }
+  const current = options.append === true ? state.renderer.objectHighlights || [] : [];
+  state.renderer.setObjectHighlights([...current, ...resolved]);
+  const rendererStats = state.renderer.getStats?.() || {};
+  return {
+    highlighted: rendererStats.objectHighlightCount || 0,
+    requested: targets.length,
+    appended: options.append === true,
+    mode: "persistent-object-highlight",
+    objects: (rendererStats.objectHighlights || []).map(item => ({...item})),
+    highlightMode: rendererStats.selectionHighlightMode || ""
+  };
+}
+
+function clearObjectHighlightsViaApi(state) {
+  if (typeof state.renderer?.clearObjectHighlights !== "function") throw new Error("当前 renderer 不支持清除对象高亮");
+  const previous = state.renderer.getStats?.()?.objectHighlightCount || 0;
+  state.renderer.clearObjectHighlights();
+  return {
+    cleared: previous,
+    highlighted: state.renderer.getStats?.()?.objectHighlightCount || 0,
+    mode: "none"
   };
 }
 

@@ -27,10 +27,11 @@ mkdirSync(dirname(markdownPath), {recursive: true});
 const playwright = await loadPlaywright(sourceDir);
 const server = await startStaticServer({host, port, publicDir: distDir});
 let browser = null;
+let context = null;
 
 try {
   browser = await launchBrowser(playwright, {headless: !args.headful, browserChannel});
-  const context = await browser.newContext({viewport, deviceScaleFactor: 1});
+  context = await browser.newContext({viewport, deviceScaleFactor: 1});
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
@@ -71,6 +72,7 @@ try {
   console.log(`Wrote ${markdownPath}`);
   if (!report.passed) fail(renderFailureSummary(report));
 } finally {
+  if (context) await Promise.race([context.close(), delay(5000)]);
   if (browser) await Promise.race([browser.close(), delay(5000)]);
   await new Promise(resolveClose => server.close(resolveClose));
 }
@@ -99,6 +101,8 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       "data.exportPNG": "download-or-export-result",
       "debug.profileNextRender": "renderer-diagnostics",
       "selection.locate": "camera-and-selection-state",
+      "selection.highlight": "persistent-highlight-state",
+      "selection.clearHighlights": "persistent-highlight-state",
       "history.undo": "map-and-edit-history-state",
       "namebases.renameObjects": "object-names"
     };

@@ -26,51 +26,83 @@ const SELECTION_SMOOTHING = Object.freeze({
   river: Object.freeze({iterations: 1, factor: 0.18})
 });
 
-export function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash) {
+const MULTI_HIGHLIGHT_COLOR = Object.freeze([1, 0.46, 0.12, 0.72]);
+
+export function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash, highlights = []) {
   const vertices = [];
-  if (isNeutralStateSelection(selection)) return new Float32Array(vertices);
   const context = createRenderContext(map, {camera, canvas});
-  if (isPoliticalObjectKind(selection?.kind)) {
-    pushPoliticalSelectionMesh(vertices, context, selection, locateFlash);
-    return new Float32Array(vertices);
+  pushSelectionTarget(vertices, context, selection, locateFlash);
+  for (const highlight of highlights) {
+    if (sameSelectionTarget(selection, highlight)) continue;
+    pushSelectionTarget(vertices, context, highlight, null, MULTI_HIGHLIGHT_COLOR);
   }
-  if (selection?.kind === OBJECT_KIND.ZONE) {
-    pushZoneSelectionMesh(vertices, context, selection, locateFlash);
-    return new Float32Array(vertices);
-  }
-  if (selection?.kind !== OBJECT_KIND.RIVER) return new Float32Array(vertices);
-  const river = map.rivers.rivers.find(item => item.id === selection.id);
-  if (!river || river.points.length < 2) return new Float32Array(vertices);
-  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
-  const maxFlux = Math.max(1, map.rivers.metadata.maxFlux || river.flux || 1);
-  const fluxFactor = Math.sqrt(Math.max(0, river.flux || 0) / maxFlux);
-  const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
-  const color = locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
-  pushScreenPolyline(vertices, context, smoothWorldPath(river.points, SELECTION_SMOOTHING.river), color, widthPx);
   return new Float32Array(vertices);
 }
 
-function pushZoneSelectionMesh(vertices, context, selection, locateFlash) {
+function pushSelectionTarget(vertices, context, selection, locateFlash, overrideColor = null) {
+  if (!selection || isNeutralStateSelection(selection)) return;
+  if (isPoliticalObjectKind(selection?.kind)) {
+    pushPoliticalSelectionMesh(vertices, context, selection, locateFlash, overrideColor);
+    return;
+  }
+  if (selection?.kind === OBJECT_KIND.ZONE) {
+    pushZoneSelectionMesh(vertices, context, selection, locateFlash, overrideColor);
+    return;
+  }
+  if (selection?.kind === OBJECT_KIND.LAKE) {
+    pushLakeSelectionMesh(vertices, context, selection, overrideColor);
+    return;
+  }
+  if (selection?.kind !== OBJECT_KIND.RIVER) return;
+  const {map} = context;
+  const river = map.rivers.rivers.find(item => item.id === selection.id);
+  if (!river || river.points.length < 2) return;
+  const pixelRatio = context.canvas.width / Math.max(1, context.canvas.clientWidth);
+  const maxFlux = Math.max(1, map.rivers.metadata.maxFlux || river.flux || 1);
+  const fluxFactor = Math.sqrt(Math.max(0, river.flux || 0) / maxFlux);
+  const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
+  pushScreenPolyline(vertices, context, smoothWorldPath(river.points, SELECTION_SMOOTHING.river), color, widthPx);
+}
+
+function pushZoneSelectionMesh(vertices, context, selection, locateFlash, overrideColor = null) {
   const {map} = context;
   const zone = (map?.zones?.zones || map?.pack?.zones || []).find(item => Number(item?.i ?? item?.id) === Number(selection.id));
   if (!zone?.cells?.length) return;
-  const color = locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.ZONE];
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.ZONE];
   for (const cell of zone.cells) {
-    const vertexIds = map?.pack?.cells?.v?.[cell];
-    const centerPoint = map?.pack?.cells?.p?.[cell];
-    if (!Array.isArray(vertexIds) || vertexIds.length < 3 || !centerPoint) continue;
-    const center = worldToScreenPixel(context, centerPoint);
-    for (let index = 0; index < vertexIds.length; index++) {
-      const nextIndex = (index + 1) % vertexIds.length;
-      const a = map.pack.vertices.p?.[vertexIds[index]];
-      const b = map.pack.vertices.p?.[vertexIds[nextIndex]];
-      if (!a || !b) continue;
-      pushScreenTriangle(vertices, context, center, worldToScreenPixel(context, a), worldToScreenPixel(context, b), color);
-    }
+    pushPackCellSelectionMesh(vertices, context, cell, color);
   }
 }
 
-export function selectionHighlightMode(selection, locateFlash = null) {
+function pushLakeSelectionMesh(vertices, context, selection, overrideColor = null) {
+  const {map} = context;
+  const featureId = Number(selection.id);
+  if (!Number.isInteger(featureId)) return;
+  const color = overrideColor || [0.42, 0.86, 1, 0.5];
+  for (const cell of map?.pack?.cells?.i || []) {
+    if (Number(map.pack.cells.f?.[cell]) !== featureId || Number(map.pack.cells.h?.[cell]) >= 20) continue;
+    pushPackCellSelectionMesh(vertices, context, cell, color);
+  }
+}
+
+function pushPackCellSelectionMesh(vertices, context, cell, color) {
+  const {map} = context;
+  const vertexIds = map?.pack?.cells?.v?.[cell];
+  const centerPoint = map?.pack?.cells?.p?.[cell];
+  if (!Array.isArray(vertexIds) || vertexIds.length < 3 || !centerPoint) return;
+  const center = worldToScreenPixel(context, centerPoint);
+  for (let index = 0; index < vertexIds.length; index++) {
+    const nextIndex = (index + 1) % vertexIds.length;
+    const a = map.pack.vertices.p?.[vertexIds[index]];
+    const b = map.pack.vertices.p?.[vertexIds[nextIndex]];
+    if (!a || !b) continue;
+    pushScreenTriangle(vertices, context, center, worldToScreenPixel(context, a), worldToScreenPixel(context, b), color);
+  }
+}
+
+export function selectionHighlightMode(selection, locateFlash = null, highlights = []) {
+  if (highlights.length) return `multi-object highlight (${highlights.length})`;
   if (!selection) return "none";
   if (isNeutralStateSelection(selection)) return "none";
   if (isLocateFlashActive(selection, locateFlash)) return `${selection.kind} red flash`;
@@ -81,10 +113,10 @@ function isNeutralStateSelection(selection) {
   return selection?.kind === OBJECT_KIND.STATE && Number(selection.id) === 0;
 }
 
-function pushPoliticalSelectionMesh(vertices, context, selection, locateFlash) {
+function pushPoliticalSelectionMesh(vertices, context, selection, locateFlash, overrideColor = null) {
   const {map} = context;
   const field = POLITICAL_OBJECT_FIELD[selection.kind] || POLITICAL_OBJECT_FIELD[OBJECT_KIND.REGION];
-  const color = locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[selection.kind] || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.REGION];
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || SELECTION_HIGHLIGHT_COLORS[selection.kind] || SELECTION_HIGHLIGHT_COLORS[OBJECT_KIND.REGION];
   for (let cellIndex = 0; cellIndex < map.grid.cells.v.length; cellIndex++) {
     if (map.grid.cells[field][cellIndex] !== selection.id) continue;
     const vertexIds = map.grid.cells.v[cellIndex];
@@ -95,6 +127,10 @@ function pushPoliticalSelectionMesh(vertices, context, selection, locateFlash) {
       pushScreenTriangle(vertices, context, center, worldToScreenPixel(context, map.grid.vertices.p[vertexIds[index]]), worldToScreenPixel(context, map.grid.vertices.p[vertexIds[nextIndex]]), color);
     }
   }
+}
+
+function sameSelectionTarget(left, right) {
+  return Boolean(left && right && left.kind === right.kind && String(left.id) === String(right.id));
 }
 
 function locateFlashColor(selection, locateFlash) {

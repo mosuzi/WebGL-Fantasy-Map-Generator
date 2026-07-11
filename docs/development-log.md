@@ -26061,3 +26061,28 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末构建烟测由子智能体执行：`pnpm run build:app` 通过，Vite 构建 1109 个模块、耗时 1.59 秒，仅有既有主 chunk 超过 500 kB 警告；构建未产生新的跟踪变更。
 - 阶段末浏览器验收由子智能体尝试复用现有会话，但 in-app Browser 后端和 Chrome extension 控制后端均不可连接，且当前没有 FMG 监听端口。按用户约束未启动或重启 Chrome、未使用 Playwright、未启动额外服务器；对象面板标题栏、高度编辑器、console / page / WebGL 错误验收待浏览器控制会话恢复后补跑。
+
+### 2026-07-12 多对象持久高亮生命周期第一刀
+
+背景：
+
+- `api.selection.highlight(objects, options)` 虽然使用复数参数，但此前多对象数组只返回“不支持”错误，单对象又只是 `flash()` 的临时闪烁别名。
+- renderer 已有 selection buffer、路线动态 mesh 和点对象 overlay selected 视觉，可以在不引入第二套渲染系统的情况下建立独立持久高亮集合。
+
+实现：
+
+- `PlaceholderMapRenderer` 新增 `objectHighlights`、`setObjectHighlights()` 和 `clearObjectHighlights()`；同步 / 异步载入新地图时会清空集合，renderer stats 暴露数量、对象摘要和 `multi-object highlight (N)` 模式。
+- selection mesh 支持同时绘制多个政治面、地区、湖泊和河流；持久高亮使用橙色强调，当前 selection 继续保留原颜色，重复对象不会绘制两次。
+- 路线动态 mesh 会把高亮路线按选中样式加粗；城市、标签、标记和军团 overlay 会把高亮对象复用为 selected 视觉。路线异步 viewport rebuild 会复制高亮快照，避免构建期间读取可变集合。
+- `api.selection.highlight(objects, {append})` 默认替换当前集合，`append:true` 追加并由 renderer 去重，单次最多 100 个；支持除贸易流外的当前稳定可解析地图对象。`api.selection.clearHighlights()` 显式清除，`selection.get()` 返回当前高亮摘要。
+- capabilities 方法清单新增 `clearHighlights`；`highlight / clearHighlights` 的 `mutates` 更新为 `persistent-highlight-state`，selection 命名空间副作用摘要更新为 `selection-camera-highlights-and-editing-state`。capabilities 回归脚本补充代表性元数据断言，并把 Playwright context 与 browser 都放入 `finally` 关闭路径。
+- 新增 `tools/webgl-generator-selection-highlight-regression.mjs` 和 `pnpm run regress:selection-highlight`，用合成网格固化政治面、湖泊、河流组合高亮、selection 去重与模式摘要。
+
+验证：
+
+- `node --check` 已覆盖 `selection-layer.js`、`placeholder-renderer.js`、`console-api.js`、`app.js` 和 capabilities 回归脚本。
+- `node tools/webgl-generator-selection-highlight-regression.mjs` 通过：单国家高亮生成 12 个顶点；国家 + 湖泊 + 河流三对象持久高亮生成 30 个顶点；当前 selection 与集合重复时仍为 30 个顶点；模式为 `multi-object highlight (3)`。
+- 直接 Node 导入完整 `console-api.js` 的轻量断言受 Vite `.vue` import graph 限制而无法运行；该限制不是语法或构建错误，API 完整能力覆盖留给阶段末构建与浏览器门禁验证。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；`pnpm run regress:selection-highlight` 输出 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1109 modules、耗时 1.27 秒，仅有既有 chunk 体积警告；`git diff --check` 通过。pnpm 在沙箱内受 registry 包装器网络限制，原命令在沙箱外重跑通过。
+- 阶段末浏览器验收由子智能体按技能尝试复用现有会话，但 in-app Browser 返回 `Browser is not available: iab`，可用浏览器后端列表为 `[]`。按用户约束未启动或重启 Chrome、未使用 Playwright、未启动开发服务器；多对象高亮 API 的 replace / append / clear、checksum、WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。

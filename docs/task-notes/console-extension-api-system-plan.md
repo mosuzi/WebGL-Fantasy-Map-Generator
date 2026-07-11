@@ -529,10 +529,12 @@ api.edit.measurement.delete(id)
 - `api.selection.resolve(object)`、`api.selection.select(object)`、`api.selection.clear()` 和 `api.selection.locate(object, {padding, minScale, maxScale})` 已接入；locate 返回定位后的 camera 和 locateStatus。
 - 浏览器烟测已覆盖城市对象 resolve / select / clear / locate，以及不存在对象的结构化错误。
 - `api.selection.pick(clientX, clientY)` 已接入 renderer `pickClientPoint()`，浏览器烟测已覆盖中心点拾取和非法坐标错误。
-- `api.selection.flash(object)` 已完成第一刀，并提供 `api.selection.highlight(object)` 同义入口；当前复用 selection store 与 renderer `startLocateFlash()`，支持单对象临时闪烁。
-- `api.selection.highlight(objects, options)` 已补齐显式语义边界：单对象或单元素数组走单对象临时闪烁，多对象数组返回结构化失败，提示当前 renderer 尚不支持多对象高亮。
+- `api.selection.flash(object)` 保持单对象临时闪烁语义，复用 selection store 与 renderer `startLocateFlash()`，持续约 2.6 秒并同步当前 selection。
+- `api.selection.highlight(objects, {append})` 已升级为独立于 selection 的持久高亮集合：默认替换当前集合，`append: true` 追加并去重，单次最多 100 个；支持城市、标签、标记、路线、河流、湖泊、军团、国家、省份、文化、宗教、区域和地区，贸易流暂返回结构化不支持错误。
+- `api.selection.clearHighlights()` 会清空持久高亮；载入新地图时 renderer 也会自动清空，避免对象 id 跨地图残留。`selection.get()` 与 renderer stats 会返回高亮摘要。
+- 持久高亮不修改地图 checksum、不进入 `EditHistory`，`highlight / clearHighlights` 的能力元数据副作用为 `persistent-highlight-state`。
 - `api.selection.startEditing(object, {select})`、`stopEditing({ifKind})` 和 `toggleEditing(object, {select})` 已完成第一刀；当前复用运行时编辑态 helper，只控制 selection / editingObject 与编辑交互锁，不执行数据编辑命令。
-- 多对象高亮暂缓；当前 renderer 仍没有独立于 selection 的多对象高亮态入口，后续需要单独设计高亮生命周期。
+- 多对象持久高亮生命周期第一刀已完成；后续重点是让安全的公共表格批量选择入口直接复用该能力，以及评估贸易流的稳定对象身份和专用高亮渲染。
 
 ### 阶段 5：生成、导入和批量能力
 

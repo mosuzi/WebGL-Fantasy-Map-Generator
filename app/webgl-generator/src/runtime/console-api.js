@@ -55,7 +55,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       locate: (object, options = {}) => apiCall(() => requireApiAction(actions.selection?.locate, "selection.locate")(object, options)),
       pick: (clientX, clientY) => apiCall(() => requireApiAction(actions.selection?.pick, "selection.pick")(clientX, clientY)),
       flash: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object)),
-      highlight: (objects, options = {}) => apiCall(() => highlightSelectionObjects(actions, objects, options)),
+      highlight: (objects, options = {}) => apiCall(() => requireApiAction(actions.selection?.highlight, "selection.highlight")(objects, options)),
+      clearHighlights: () => apiCall(() => requireApiAction(actions.selection?.clearHighlights, "selection.clearHighlights")()),
       startEditing: (object, options = {}) => apiCall(() => requireApiAction(actions.selection?.startEditing, "selection.startEditing")(object, options)),
       stopEditing: (options = {}) => apiCall(() => requireApiAction(actions.selection?.stopEditing, "selection.stopEditing")(options)),
       toggleEditing: (object, options = {}) => apiCall(() => requireApiAction(actions.selection?.toggleEditing, "selection.toggleEditing")(object, options))
@@ -214,7 +215,7 @@ function buildCapabilities() {
   const methods = {
     info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
     generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
-    selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "startEditing", "stopEditing", "toggleEditing"],
+    selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"],
     layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
     units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
     climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
@@ -240,7 +241,7 @@ function buildCapabilities() {
     sideEffects: {
       info: "readonly",
       generate: "map-regeneration",
-      selection: "selection-camera-and-editing-state",
+      selection: "selection-camera-highlights-and-editing-state",
       layers: "display-preference-and-camera-state",
       units: "display-preference",
       climate: "readonly-and-climate-update",
@@ -349,7 +350,8 @@ function buildMethodMetadata() {
       locate: {stable: "draft", mutates: "camera-and-selection-state", undoable: false, async: false, requiresConfirm: false},
       pick: {stable: "draft", mutates: "pick-panel-state", undoable: false, async: false, requiresConfirm: false},
       flash: {stable: "draft", mutates: "selection-flash-state", undoable: false, async: false, requiresConfirm: false},
-      highlight: {stable: "draft", mutates: "selection-flash-state", undoable: false, async: false, requiresConfirm: false},
+      highlight: {stable: "draft", mutates: "persistent-highlight-state", undoable: false, async: false, requiresConfirm: false},
+      clearHighlights: {stable: "draft", mutates: "persistent-highlight-state", undoable: false, async: false, requiresConfirm: false},
       startEditing: {stable: "draft", mutates: "editing-state", undoable: false, async: false, requiresConfirm: false},
       stopEditing: {stable: "draft", mutates: "editing-state", undoable: false, async: false, requiresConfirm: false},
       toggleEditing: {stable: "draft", mutates: "editing-state", undoable: false, async: false, requiresConfirm: false}
@@ -458,20 +460,6 @@ function groupQualifiedMethodNames(methods) {
 function requireApiAction(action, name) {
   if (typeof action !== "function") throw new Error(`API action 未安装：${name}`);
   return action;
-}
-
-function highlightSelectionObjects(actions, objects, options = {}) {
-  const targets = Array.isArray(objects) ? objects : [objects];
-  if (targets.length === 0) throw new Error("缺少高亮对象");
-  if (targets.length > 1) {
-    throw new Error("当前 renderer 尚不支持多对象高亮；请逐个调用 api.selection.flash(object)");
-  }
-  const result = requireApiAction(actions.selection?.flash, "selection.flash")(targets[0], options);
-  return {
-    ...result,
-    requested: targets.length,
-    mode: "single-object-flash"
-  };
 }
 
 function buildHistoryStats(state, actions = {}) {
@@ -762,7 +750,8 @@ function buildSelectionSnapshot(state) {
   };
   return {
     selection: summarizeSelection(snapshot.selection),
-    editingObject: summarizeObject(snapshot.editingObject)
+    editingObject: summarizeObject(snapshot.editingObject),
+    highlights: (state?.renderer?.getStats?.()?.objectHighlights || []).map(item => ({...item}))
   };
 }
 
