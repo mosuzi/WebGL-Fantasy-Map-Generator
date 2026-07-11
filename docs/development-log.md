@@ -25328,3 +25328,26 @@ full 矩阵结果：
 - `pnpm run build:app` 因沙箱网络限制多次无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_units_setters_api` 和 `verify_units_setters_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-units-setters", cellsTarget:1000})` 生成地图，得到 checksum `bd56e742`、grid cells `1014`、pack cells `800`；`api.info.capabilities()` 已包含 `units.setDistanceUnit / setNumberAbbreviation / setMapScale / setPopulationScale / setMilitaryScale / setPrecipitationScale`；依次调用后，`api.units.get().units`、`#distance-unit / #area-unit / #number-abbreviation / #map-scale-km-per-cm / #population-scale / #military-scale / #precipitation-scale`、`localStorage.webgl-generator-control-preferences.units` 和 renderer stats `unitPreferences` 均同步为 `m / m2 / none / 250 / 2.5 / 3.5 / 1.7`；调用前后 checksum 保持 `bd56e742` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 选择临时高亮 API 第一刀
+
+背景：
+
+- 控制台 API 方案中列出过 `api.selection.highlight(objects, options)`，但此前实际 API 只支持选择、定位和拾取。
+- renderer 已经有 `startLocateFlash()` 与 selection 高亮层，适合先开放一个单对象临时闪烁入口；多对象高亮生命周期仍需后续单独设计。
+
+实现：
+
+- `console-api.js` 新增 `api.selection.flash(object)`，并提供 `api.selection.highlight(object)` 同义入口。
+- `app.js` 新增 `flashObjectViaApi()`，复用对象解析、selection store 和 renderer `startLocateFlash()`，返回解析后的对象、当前 selection 和 renderer highlight mode。
+- `api.info.capabilities()` 的 selection 方法列表补入 `flash / highlight`。
+- 本步只改变运行时选择和临时闪烁视觉态，不进入 `EditHistory`，不修改地图 checksum，不实现多对象高亮或独立高亮生命周期。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_selection_flash_api` 和 `verify_selection_flash_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-flash", cellsTarget:1000})` 生成地图，得到 checksum `63e36bb8`、grid cells `1014`、pack cells `754`；`api.info.capabilities()` 已包含 `selection.flash / selection.highlight`；对河流 `#1` 调用 `api.selection.flash({kind:"river", id:1})` 返回 `flashed=true`，selection 设置为该河流，renderer `selectionHighlightMode = "river red flash"`；`api.selection.highlight({kind:"river", id:1})` 同样返回 `river red flash`；不存在河流 `#999999` 返回结构化失败且错误信息包含“找不到对象”；调用前后 checksum 保持 `63e36bb8` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

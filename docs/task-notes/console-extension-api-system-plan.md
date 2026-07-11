@@ -504,7 +504,8 @@ api.edit.measurement.delete(id)
 - `api.selection.resolve(object)`、`api.selection.select(object)`、`api.selection.clear()` 和 `api.selection.locate(object)` 已接入。
 - 浏览器烟测已覆盖城市对象 resolve / select / clear / locate，以及不存在对象的结构化错误。
 - `api.selection.pick(clientX, clientY)` 已接入 renderer `pickClientPoint()`，浏览器烟测已覆盖中心点拾取和非法坐标错误。
-- 临时高亮 / 多对象高亮暂缓；当前 renderer 没有独立于 selection 的高亮态入口，后续需要先设计高亮生命周期。
+- `api.selection.flash(object)` 已完成第一刀，并提供 `api.selection.highlight(object)` 同义入口；当前复用 selection store 与 renderer `startLocateFlash()`，支持单对象临时闪烁。
+- 多对象高亮暂缓；当前 renderer 仍没有独立于 selection 的多对象高亮态入口，后续需要单独设计高亮生命周期。
 
 ### 阶段 5：生成、导入和批量能力
 

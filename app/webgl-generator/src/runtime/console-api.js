@@ -44,7 +44,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       select: object => apiCall(() => requireApiAction(actions.selection?.select, "selection.select")(object)),
       clear: () => apiCall(() => requireApiAction(actions.selection?.clear, "selection.clear")()),
       locate: object => apiCall(() => requireApiAction(actions.selection?.locate, "selection.locate")(object)),
-      pick: (clientX, clientY) => apiCall(() => requireApiAction(actions.selection?.pick, "selection.pick")(clientX, clientY))
+      pick: (clientX, clientY) => apiCall(() => requireApiAction(actions.selection?.pick, "selection.pick")(clientX, clientY)),
+      flash: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object)),
+      highlight: object => apiCall(() => requireApiAction(actions.selection?.flash, "selection.flash")(object))
     }),
     layers: Object.freeze({
       get: () => apiCall(() => buildLayerSnapshot(state, documentRef)),
@@ -197,7 +199,7 @@ function buildCapabilities() {
     methods: {
       info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
       generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
-      selection: ["get", "resolve", "select", "clear", "locate", "pick"],
+      selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight"],
       layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
       units: ["get", "apply", "setDistanceUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],

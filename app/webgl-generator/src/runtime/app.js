@@ -1773,6 +1773,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       select: object => selectObjectViaApi(state, object),
       clear: () => clearSelectionViaApi(state),
       locate: object => locateObjectViaApi(state, documentRef, object, options),
+      flash: object => flashObjectViaApi(state, object),
       pick: (clientX, clientY) => pickClientPointViaApi(state, documentRef, clientX, clientY)
     },
     climate: {
@@ -4510,6 +4511,20 @@ function locateObjectViaApi(state, documentRef, object, options = {}) {
     located,
     object: resolved,
     selection: state.selectionStore.getSnapshot().selection
+  };
+}
+
+function flashObjectViaApi(state, object) {
+  const resolved = resolveObjectViaApi(state, object);
+  state.selectionStore.setSelection({object: resolved});
+  if (typeof state.renderer?.startLocateFlash !== "function") throw new Error("当前 renderer 不支持临时高亮");
+  state.renderer.startLocateFlash(resolved);
+  const rendererStats = state.renderer.getStats?.() || {};
+  return {
+    flashed: true,
+    object: resolved,
+    selection: state.selectionStore.getSnapshot().selection,
+    highlightMode: rendererStats.selectionHighlightMode || ""
   };
 }
 
