@@ -25139,3 +25139,28 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_generate_new_map_api` 和 `verify_generate_new_map_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `generate.getOptions / setOptions / newMap / rerollSeed / regenerate`；`api.generate.getOptions()` 返回当前规范化配置；`api.generate.setOptions({seed:"api-option-smoke", cellsTarget:1000, graphWidth:800, graphHeight:600})` 更新配置但不生成新地图，调用前后 checksum 均为 `3f029d63`；直接调用 `api.generate.newMap({seed:"api-no-confirm", cellsTarget:1000})` 返回 `ok = false`，错误信息为“生成新地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}”；`api.generate.newMap({confirm:true, seed:"api-new-map-smoke", cellsTarget:1000, graphWidth:800, graphHeight:600})` 成功生成新地图，seed 为 `api-new-map-smoke`，grid cells `999`、pack cells `814`，历史栈清空；`api.generate.rerollSeed({confirm:true, cellsTarget:1000, graphWidth:800, graphHeight:600})` 成功生成新 seed `map-mrfz5akk-0oyq7ug`，grid cells `999`、pack cells `794`；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 完整地图导入 API 第一刀
+
+背景：
+
+- 阶段 5 已接入生成与受约束重算，但 `api.data` 仍只有导出能力，缺少脚本化完整地图导入。
+- UI 文件导入已有稳定路径：`parseMapDocumentFile()` 解析 `.webgl-map.json` / gzip 文件，再通过 `loadMapIntoRuntime()` 接入运行时。API 第一刀先复用文档解析和运行时接图路径，避免在同一小步里同时处理 File / Blob / gzip 和 GEO 导入。
+
+实现：
+
+- `console-api.js` 新增 `api.data.importMap(document, options)`，并在 `api.info.capabilities()` 中登记到 `data` 方法列表；`data` 副作用标记更新为 `readonly-download-and-map-import`。
+- app action 层新增 `importMapDocumentViaApi()`，支持当前 `.webgl-map.json` 文档对象和 JSON 字符串，内部统一走 `parseMapDocument()`。
+- 导入后复用 `loadMapIntoRuntime()`、生成输入同步、视觉主题恢复、名称库偏好持久化、loading trace 和运行时面板刷新路径。
+- 返回导入后的地图摘要、规范化生成配置、源文档 metadata、加载 timings、名称库偏好持久化结果和历史摘要。
+- 因为完整地图导入会替换当前地图并清空编辑历史，API 必须显式传入 `{confirm: true}`；未确认会返回结构化错误。
+- 本步不接 gzip Blob / File，也不接 GEO 导入 API。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_data_import_map_api` 和 `verify_data_import_map_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `data.importMap` 且 `sideEffects.data = readonly-download-and-map-import`；先用 `api.generate.newMap({confirm:true, seed:"api-import-source", cellsTarget:1000})` 生成源地图并通过 `api.data.exportAll({download:false})` 导出完整地图 JSON，源地图 seed 为 `api-import-source`、checksum `533cc2f7`、grid cells `999`；直接 `api.data.importMap(docObject)` 返回 `ok = false`，错误信息为“导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}”；生成另一张地图后，`api.data.importMap(JSON.parse(text), {confirm:true, toast:false})` 可恢复 seed `api-import-source` 与 checksum `533cc2f7`，历史栈清空；再次生成其它地图后，`api.data.importMap(text, {confirm:true, toast:false})` 同样恢复 seed 与 checksum；坏 JSON 字符串返回结构化解析错误；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

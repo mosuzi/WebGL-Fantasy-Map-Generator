@@ -1794,6 +1794,9 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       bind: (scope, target, baseId, options = {}) => bindNamebaseViaApi(state, documentRef, scope, target, baseId, options),
       renameObjects: (kind, ids, options = {}) => renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options)
     },
+    data: {
+      importMap: (document, options = {}) => importMapDocumentViaApi(state, documentRef, document, options)
+    },
     edit: {
       notes: {
         set: (object, body, options = {}) => setObjectNoteViaApi(state, documentRef, object, body, options),
@@ -3513,6 +3516,64 @@ async function importMapData(state, documentRef, file) {
     updateGenerationLoading(documentRef, false);
     reportMapImportError(documentRef, error, file);
   }
+}
+
+async function importMapDocumentViaApi(state, documentRef, document, options = {}) {
+  if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  const parsed = normalizeApiMapImportDocument(document);
+  return importParsedMapDocumentViaApi(state, documentRef, parsed, options);
+}
+
+async function importParsedMapDocumentViaApi(state, documentRef, document, options = {}) {
+  const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  try {
+    resetLoadTrace(documentRef);
+    clearFileOperationDetails(documentRef);
+    emitLoadTrace(documentRef, {phase: "request", id: "api-map-import-read", message: loadingMessage("map-import-read")});
+    setFileOperationStatus(documentRef, "正在通过 API 导入地图数据...");
+    setMythicGenerationLoading(documentRef, true, "map-import-read");
+    const normalizedOptions = normalizeOptions(document.map.options || document.options || state.options);
+    document.map.options = normalizedOptions;
+    state.options = normalizedOptions;
+    applyPersistedVisualTheme(state, documentRef, document);
+    syncGenerationInputs(documentRef, normalizedOptions);
+    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
+    await loadMapIntoRuntime(state, documentRef, document.map, {
+      loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
+      completionToast: options.toast === false ? "" : "地图数据已导入"
+    });
+    const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
+    updateGenerationLoading(documentRef, false);
+    clearFileOperationDetails(documentRef);
+    setFileOperationStatus(documentRef, `已通过 API 导入地图数据：seed ${document.map.metadata?.seed || normalizedOptions.seed || "未知"}`);
+    return {
+      map: generationApiMapSummary(state.map),
+      options: cloneGenerationOptions(state.options),
+      metadata: {
+        type: document.type || "",
+        version: document.version ?? null,
+        exportedAt: document.exportedAt || "",
+        sourceSeed: document.metadata?.seed || "",
+        sourceChecksum: document.metadata?.checksum || ""
+      },
+      timings: {
+        totalMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt),
+        loadMap: state.renderer?.getStats?.().loadMap || null
+      },
+      persistedNamebases,
+      history: state.editHistory.getStats()
+    };
+  } catch (error) {
+    updateGenerationLoading(documentRef, false);
+    reportFileOperationError(documentRef, "API 导入地图数据失败", error);
+    throw error;
+  }
+}
+
+function normalizeApiMapImportDocument(document) {
+  if (typeof document === "string") return parseMapDocument(document);
+  if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("地图导入文档必须是 JSON 字符串或对象");
+  return parseMapDocument(JSON.stringify(document));
 }
 
 async function importGeoData(state, documentRef, file) {

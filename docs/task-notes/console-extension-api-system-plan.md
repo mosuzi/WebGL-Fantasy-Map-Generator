@@ -411,6 +411,10 @@ api.edit.measurement.delete(id)
 - 压缩地图 JSON 方法支持 `download: true` 复用现有浏览器下载；下载模式默认不返回 base64，调用方可显式传 `includeBase64: true`。
 - PNG 方法支持 `download: true` 复用现有浏览器下载；下载模式默认不返回 data URL，调用方可显式传 `includeDataUrl: true`。
 - 浏览器烟测已确认三类文本导出可解析、压缩地图可解回完整文档、PNG data URL 文件头尺寸正确、checksum 不变，且 `download:true` 能触发 `.features.geojson`、`.webgl-map.json.gz` 和 `.png` 下载。
+- 完整地图导入 API 已完成第一刀。
+- `api.data.importMap(document, {confirm:true})` 支持当前 `.webgl-map.json` 文档对象和 JSON 字符串，复用 `parseMapDocument()`、`loadMapIntoRuntime()`、生成输入同步、视觉主题恢复和名称库偏好持久化路径。
+- 返回值包含导入后的地图摘要、生成配置、源文档 metadata、加载 timings、名称库偏好持久化结果和历史摘要；因为会替换当前地图并清空编辑历史，必须显式传 `confirm:true`。
+- 当前 `importMap` 不接 gzip Blob / File，也不接 GEO 导入；这两类仍待后续单独设计异步输入和错误详情。
 
 ### 阶段 3：气候、单位和图层 API
 
