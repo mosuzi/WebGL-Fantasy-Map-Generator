@@ -526,6 +526,14 @@ api.edit.measurement.delete(id)
 - `api.generate.newMap(options)` 和 `api.generate.rerollSeed(options)` 复用 worker 生成和 `loadMapIntoRuntime()`，返回生成配置、地图摘要、生成 / 加载 timings 和历史摘要。
 - 为避免脚本误触大范围派生重建或替换当前地图，`regenerate / newMap / rerollSeed / importMap / importGEO` 必须显式传 `confirm:true`；备注与测量导出属于只读下载 / 文本返回能力，不进入撤销栈，也不修改 checksum。
 
+### 阶段 6：debug 诊断 API
+
+- debug API 已完成第一刀。
+- `api.debug.snapshot({limit, severity})` 返回当前页面、地图、图层 / 单位偏好、选择、历史、renderer 摘要和 health 摘要，供脚本或 AI 快速判断运行时状态。
+- `api.debug.renderer()` 返回完整 renderer stats，便于定位 WebGL、camera、动态 mesh、draw 和 loadMap 状态。
+- `api.debug.health({limit, severity})` 返回 health 事件、阈值、存储 key 和当前 operation。
+- 本阶段为只读诊断能力，不修改地图数据、显示偏好或 health 存储；清理 health 事件、写入 debug delay 等破坏性或会改变环境状态的能力暂不暴露。
+
 ## 第一批代码落点建议
 
 - `app/webgl-generator/src/runtime/console-api.js`：创建 API 根对象。

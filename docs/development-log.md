@@ -25278,3 +25278,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_layers_theme_fit_api_after_fix` 和 `verify_layers_theme_fit_smoke_after_fix`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-layer-theme-fit", cellsTarget:1000})` 生成地图，得到 checksum `9c206efe`、grid cells `1014`、pack cells `880`；`api.info.capabilities()` 已包含 `layers.setTheme / layers.fitView`；`api.layers.setTheme("ancient")` 后 `api.layers.get().visualTheme`、`#visual-theme-preset`、`localStorage.webgl-generator-control-preferences.visualTheme` 和 renderer `viewOptions.visualTheme.id` 均为 `ancient`；`api.layers.setTheme("not-a-theme")` 返回结构化失败，错误信息为 `未知视觉主题：not-a-theme`；手动扰动 renderer camera 后调用 `api.layers.fitView()`，返回并实际复位为 `scale=1 / offsetX=0 / offsetY=0`；主题和视口 API 调用前后 checksum 保持 `9c206efe` 不变，`runtimeStats.renderer.draw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 debug 只读诊断 API 批次
+
+背景：
+
+- 控制台 API 方案第一版列出了 `debug` 命名空间，但此前实际 API 只在 `info.runtimeStats()` 和 `info.healthEvents()` 暴露零散诊断信息。
+- 后续脚本化验证、AI 调用和问题定位需要一个不暴露可写 state、也不改变地图或环境的运行时诊断入口。
+
+实现：
+
+- `console-api.js` 新增 `api.debug.snapshot({limit, severity})`，聚合 API 版本、页面位置 / 可见性、loading 状态、地图摘要、图层 / 单位偏好、选择、历史、renderer 摘要和 health 摘要。
+- `console-api.js` 新增 `api.debug.renderer()`，返回完整 renderer stats，便于脚本读取 WebGL、camera、动态 mesh、draw 和 loadMap 信息。
+- `console-api.js` 新增 `api.debug.health({limit, severity})`，在既有 health events 基础上补充 monitor `storageKey`、阈值和当前 operation。
+- `api.info.capabilities()` 新增 `debug` 命名空间、方法列表和 `readonly-diagnostics` 副作用说明。
+- 本步只读，不进入 `EditHistory`，不修改地图 checksum，不清理 health 存储，也不新增 debug delay 写入 API。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_debug_api_structure` 和 `verify_debug_api_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-diagnostics", cellsTarget:1000})` 生成地图，得到 checksum `2850e0b4`、grid cells `1014`、pack cells `815`；`api.info.capabilities()` 已包含 `debug` 命名空间、`snapshot / renderer / health` 方法和 `readonly-diagnostics` 副作用说明；`api.debug.snapshot()` 返回 API 版本、页面 / loading 状态、地图摘要、图层 / 单位偏好、选择、历史、renderer 摘要和 health 摘要；`api.debug.renderer()` 返回完整 renderer stats，包含 `webgl2 / camera / draw`；`api.debug.health({severity:"error", limit:10})` 返回 storage key、阈值、当前 operation 和筛选后的 health 事件；debug 调用前后 checksum 保持 `2850e0b4` 不变，`renderer.stats.draw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

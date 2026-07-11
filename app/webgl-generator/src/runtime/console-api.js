@@ -173,6 +173,11 @@ function createConsoleApi(documentRef, state, actions = {}) {
       clear: (options = {}) => apiCall(() => requireApiAction(actions.namebases?.clear, "namebases.clear")(options)),
       bind: (scope, target, baseId, options = {}) => apiCall(() => requireApiAction(actions.namebases?.bind, "namebases.bind")(scope, target, baseId, options)),
       renameObjects: (kind, ids, options = {}) => apiCall(() => requireApiAction(actions.namebases?.renameObjects, "namebases.renameObjects")(kind, ids, options))
+    }),
+    debug: Object.freeze({
+      snapshot: (options = {}) => apiCall(() => buildDebugSnapshot(state, documentRef, options)),
+      renderer: () => apiCall(() => buildDebugRendererSnapshot(state)),
+      health: (options = {}) => apiCall(() => buildDebugHealthSnapshot(state, options))
     })
   };
   return Object.freeze(api);
@@ -182,7 +187,7 @@ function buildCapabilities() {
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases"],
+    namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases", "debug"],
     methods: {
       info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
       generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
@@ -193,7 +198,8 @@ function buildCapabilities() {
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
       data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
-      namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"]
+      namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
+      debug: ["snapshot", "renderer", "health"]
     },
     sideEffects: {
       info: "readonly",
@@ -205,7 +211,8 @@ function buildCapabilities() {
       history: "edit-history",
       edit: "edit-command",
       data: "readonly-download-and-map-import",
-      namebases: "readonly-download-and-edit-command"
+      namebases: "readonly-download-and-edit-command",
+      debug: "readonly-diagnostics"
     }
   };
 }
@@ -271,6 +278,88 @@ function buildRuntimeStats(state, documentRef) {
       visible: Boolean(loading && !loading.hidden),
       text: documentRef.getElementById("generation-loading-text")?.textContent?.trim() || ""
     }
+  };
+}
+
+function buildDebugSnapshot(state, documentRef, options = {}) {
+  const health = buildDebugHealthSnapshot(state, {limit: options.limit ?? 20, severity: options.severity});
+  const renderer = buildDebugRendererSummary(state);
+  const loading = buildLoadingSnapshot(documentRef);
+  return {
+    api: buildApiVersion(),
+    location: buildDocumentLocationSnapshot(documentRef),
+    app: {
+      ready: Boolean(state),
+      mapReady: Boolean(state?.map),
+      rendererReady: Boolean(state?.renderer),
+      loading
+    },
+    map: buildMapSummary(state),
+    layers: buildLayerSnapshot(state, documentRef),
+    units: buildUnitSnapshot(state, documentRef),
+    selection: buildSelectionSnapshot(state),
+    history: state?.editHistory?.getStats?.() || null,
+    renderer,
+    health
+  };
+}
+
+function buildDebugRendererSnapshot(state) {
+  const stats = state?.renderer?.getStats?.() || null;
+  if (!stats) return {ready: false};
+  return {
+    ready: true,
+    stats
+  };
+}
+
+function buildDebugRendererSummary(state) {
+  const stats = state?.renderer?.getStats?.() || null;
+  if (!stats) return {ready: false};
+  return {
+    ready: true,
+    webgl2: Boolean(stats.webgl2),
+    colorMode: stats.colorMode || "",
+    visualTheme: stats.viewOptions?.visualTheme?.id || "",
+    vertexCount: numberOrZero(stats.vertexCount),
+    lineVertexCount: numberOrZero(stats.lineVertexCount),
+    pointVertexCount: numberOrZero(stats.pointVertexCount),
+    routeVertexCount: numberOrZero(stats.routeVertexCount),
+    riverVertexCount: numberOrZero(stats.riverVertexCount),
+    camera: {...(stats.camera || {})},
+    canvasSize: {...(stats.canvasSize || {})},
+    draw: {...(stats.draw || {})},
+    loadMap: stats.loadMap || null,
+    dynamicMeshCache: {...(stats.dynamicMeshCache || {})}
+  };
+}
+
+function buildDebugHealthSnapshot(state, options = {}) {
+  const monitor = state?.healthMonitor || null;
+  return {
+    ...buildHealthEventsSnapshot(state, options),
+    storageKey: monitor?.storageKey || "",
+    thresholds: monitor?.thresholds || {},
+    currentOperation: monitor?.currentOperation || null
+  };
+}
+
+function buildDocumentLocationSnapshot(documentRef) {
+  const view = documentRef.defaultView || window;
+  return {
+    href: view.location?.href || "",
+    path: view.location?.pathname || "",
+    search: view.location?.search || "",
+    visibilityState: documentRef.visibilityState || "unknown",
+    userAgent: view.navigator?.userAgent || ""
+  };
+}
+
+function buildLoadingSnapshot(documentRef) {
+  const loading = documentRef.getElementById("generation-loading");
+  return {
+    visible: Boolean(loading && !loading.hidden),
+    text: documentRef.getElementById("generation-loading-text")?.textContent?.trim() || ""
   };
 }
 
