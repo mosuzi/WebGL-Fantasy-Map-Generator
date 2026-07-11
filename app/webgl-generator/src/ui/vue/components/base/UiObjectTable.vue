@@ -55,7 +55,7 @@
         <tr
           v-for="row in visibleRows"
           :key="rowKey(row)"
-          v-memo="[rowKey(row), isSelected(row), rowSelectionChecked(row), columnLayoutSignature]"
+          v-memo="[rowKey(row), row, isSelected(row), rowSelectionChecked(row), columnLayoutSignature]"
           class="object-table-row"
           :class="{'selected-row': isSelected(row)}"
           @click="handleRowClick(row)"

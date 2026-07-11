@@ -25981,3 +25981,24 @@ full 矩阵结果：
 - `pnpm run regress:api-namebase-renames -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认 checksum `762f5ca8`；国家 `3 / 4`、城市 `6 / 6`、河流 `7 / 8`、湖泊 `1 / 1` 均改名并撤销恢复；未确认调用、不支持类型和空 ids 均结构化失败；WebGL / health / console / page error 均为 `0`。
 - 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API 名称库批量改名回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，`namebases.renameObjects` 的 `mutates` 仍为 `object-names`，WebGL / health / console / page error 均为 `0`。
 - 低上下文浏览器 smoke 子智能体验证通过，确认 checksum `04c9a710`；国家 `4 / 4`、城市 `6 / 6`、河流 `8 / 8`、湖泊 `1 / 1` 均改名并撤销恢复；未确认调用、不支持类型和空 ids 均结构化失败；WebGL / health / console / page error 均为 `0`。
+
+### 2026-07-11 人口倍率刷新国家列表修复
+
+背景：
+
+- 用户发现调整人口倍率后，国家列表中的人口不会自动刷新，必须点选某个国家后才触发刷新。
+- 复查后确认人口倍率是显示层单位偏好，不应该重算地图人口数据；问题来自单位偏好提交时只刷新 renderer、runtime 和 pick，没有刷新已打开对象面板。
+- 国家列表等公共表格还使用 `v-memo` 跳过同 key 行重绘，memo 依赖里没有 row 对象，导致即使面板刷新产生了新的格式化上下文，同一行也可能继续显示旧人口文本。
+
+实现：
+
+- `app.js` 的 `onUnitPreferences` 在更新 renderer unit preferences 后，会调用 `updateAllObjectPanels(state)` 刷新所有已打开对象面板。
+- `UiObjectTable` 的行级 `v-memo` 依赖补入 `row` 对象；面板刷新后新 row 会触发表格可见行重绘，人口 / 面积 / 军力 / 距离等格式化显示能跟随单位偏好变化。
+- 本步不新增手动批量更新按钮，因为这是显示倍率刷新问题，不是地图人口数据重算问题；自动刷新只作用于已打开面板，成本可控。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 主线程 Playwright + 系统 Chrome 构建产物复现验证通过：生成 seed `unit-population-panel-refresh`、`3000` cells 地图，打开国家面板后不点击国家，只把人口倍率从 `1` 改为 `2`，第一行国家人口从 `115万 人` 自动变为 `230万 人`；checksum `4952a503` 不变，grid cells `3015`、pack cells `1752`，WebGL / health / console / page error 均为 `0`。

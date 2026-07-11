@@ -1572,6 +1572,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onUnitPreferences: () => {
       renderer.setUnitPreferences(readControlPreferences(documentRef).units);
+      updateAllObjectPanels(state);
       refreshRuntimeAndPickPanels(documentRef, state);
       updateMeasurementOverlay(state, documentRef);
     },
