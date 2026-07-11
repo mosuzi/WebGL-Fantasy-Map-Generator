@@ -25730,3 +25730,36 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-generate-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `00ad9ac5`、grid cells `1014`、pack cells `713`；随后读取 `api.info.capabilities()`，确认 `methods.generate` 仍包含全部 5 个公开方法；`methodMetadata.generate.getOptions = none / undoable:false / async:false / requiresConfirm:false`，`setOptions = generation-options / undoable:false / async:false / requiresConfirm:false`，`regenerate = map-derived-data / undoable:"partial" / async:true / requiresConfirm:true`，`newMap / rerollSeed = replace-map / undoable:false / async:true / requiresConfirm:true`；`safety.confirmRequired.generate` 只包含 `regenerate / newMap / rerollSeed`。浏览器验证实际调用 `api.generate.getOptions()` 和 `api.generate.setOptions({seed:"api-generate-options-only", cellsTarget:1200})`，确认返回 options 已更新为 seed `api-generate-options-only`、cellsTarget `1200`，当前地图 checksum 和编辑历史摘要保持不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 edit 命名空间能力元数据副作用边界第一刀
+
+背景：
+
+- `api.edit.*` 已完成多批编辑 API 接入，并通过前序浏览器烟测覆盖备注、测量、城市、省份、国家、文化、宗教、路线、河流、湖泊、标签和 marker 等编辑命令的撤销 / 重做闭环。
+- `api.info.capabilities()` 此前还没有 `methodMetadata.edit`，脚本或 AI 只能看到 `sideEffects.edit = "edit-command"`，无法按方法判断这些调用是否同步、是否可撤销、是否需要确认或会写入哪个领域。
+- 这些编辑 API 当前均复用 edit command / `executeEditCommand()` / `EditHistory`，属于同步、可撤销、无需额外 `confirm:true` 的地图写入。
+
+实现：
+
+- `console-api.js` 新增 `methodMetadata.edit`，覆盖 `methods.edit` 列出的全部 46 个公开编辑方法。
+- 全部 edit 方法标注 `undoable: true`、`async: false`、`requiresConfirm: false`。
+- `mutates` 按领域标注：
+  - 备注：`notes`。
+  - 测量对象：`measurements`。
+  - 城市 / 聚落：`settlements`。
+  - 国家 / 省份：`political-entities`。
+  - 文化：`cultures`。
+  - 宗教：`religions`。
+  - 路线：`routes`。
+  - 河流：`rivers`。
+  - 湖泊：`lakes`。
+  - 标签：`labels`。
+  - marker：`markers`。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-edit-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `a87c500c`、grid cells `1014`、pack cells `880`；随后读取 `api.info.capabilities()`，确认 `sideEffects.edit = "edit-command"`，`methods.edit` 共 46 个公开方法，且 `methodMetadata.edit` 与 `methods.edit` 同名、无缺失、无多余；全部 edit 方法均为 `stable: "draft" / undoable:true / async:false / requiresConfirm:false`，`safety.confirmRequired.edit` 为空；`mutates` 汇总为 `notes:2 / measurements:4 / settlements:4 / political-entities:9 / cultures:5 / religions:5 / routes:2 / rivers:3 / lakes:1 / labels:6 / markers:5`；调用前后 checksum 保持 `a87c500c` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
