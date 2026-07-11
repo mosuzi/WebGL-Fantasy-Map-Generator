@@ -130,6 +130,7 @@
    - 补充记录：API GEO 导入回归脚本第一刀已新增 `tools/webgl-generator-api-geo-regression.mjs` 和 `pnpm run regress:api-geo`，把 `api.data.importGEO()` 的普通 GeoJSON 测量对象分支和 FMG Cells 地形导入分支固化为可复用门禁。脚本会校验对象 / 字符串 GeoJSON 导入、撤销、未确认和坏 JSON 错误边界，以及 FMG Cells 导入后的非 GEO 派生重置、水陆一致性和 hover 一致性。
    - 补充记录：API 备注与测量导出回归脚本第一刀已新增 `tools/webgl-generator-api-export-records-regression.mjs` 和 `pnpm run regress:api-exports`，把 `api.data.exportNotes()` 与 `api.data.exportMeasurements()` 的全量导出、ID 筛选、`includeText:false` 摘要返回、浏览器下载文件名和 checksum 不变边界固化为可复用门禁。
    - 补充记录：API 名称库文档回归脚本第一刀已新增 `tools/webgl-generator-api-namebase-docs-regression.mjs` 和 `pnpm run regress:api-namebases`，把 `api.namebases.list/export/import/create/clear` 的文档 roundtrip、JSON / 原版文本导出、`includeText:false`、浏览器下载文件名、append / replace / undo 和 `clear({confirm:true})` 确认边界固化为可复用门禁；本脚本暂不覆盖 `renameObjects`，后续可单独补对象批量改名回归。
+   - 补充记录：API 名称库批量改名回归脚本第一刀已新增 `tools/webgl-generator-api-namebase-renames-regression.mjs` 和 `pnpm run regress:api-namebase-renames`，把 `api.namebases.renameObjects(kind, ids, {confirm:true})` 的安全边界、国家 / 城市 / 河流 / 湖泊改名和撤销恢复固化为可复用门禁。脚本默认使用 `3000` cells；`10000` cells 下改名逻辑也能覆盖四类对象，但生成阶段可能触发 health long-task，不适合作为本 API 门禁默认规模。
 
 ### 验证要求
 

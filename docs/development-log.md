@@ -25948,3 +25948,36 @@ full 矩阵结果：
 - `pnpm run regress:api-namebases -- --browser-channel chrome` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；放开同一命令后通过。package 命令回归确认 checksum `685a14a6`，选中名称库 `ancient-state-roots`；JSON 选中导出 `1` 个名称库，legacy 选中导出 `1` 行；JSON / legacy 的 `includeText:false` 均不返回 `text`；JSON 对象导入 `1` 个，JSON 字符串 replace 导入 `1` 个并替换 `1` 个，legacy 文本导入 `1` 个；未确认 clear 结构化失败，确认 clear 删除 `2` 个用户库；下载文件名为 `fmg-api-namebase-docs-regression-685a14a6.namebases-selected.json` 和 `fmg-api-namebase-docs-regression-685a14a6.namebases-selected.txt`；WebGL / health / console / page error 均为 `0`。
 - 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API 名称库文档回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
 - 低上下文浏览器 smoke 子智能体验证通过，确认 checksum `55df09ca`，选中名称库 `ancient-state-roots`；JSON 选中导出 `1` 个名称库，legacy 选中导出 `1` 行；JSON / legacy 的 `includeText:false` 均不返回 `text`；JSON 对象导入 `1` 个，JSON 字符串 replace 导入 `1` 个并替换 `1` 个，legacy 文本导入 `1` 个；未确认 clear 返回 `ok=false`，确认 clear 删除 `2` 个用户库；下载文件名为 `fmg-api-namebase-docs-regression-55df09ca.namebases-selected.json` 和 `fmg-api-namebase-docs-regression-55df09ca.namebases-selected.txt`；WebGL / health / console / page error 均为 `0`。
+
+### 2026-07-11 API 名称库批量改名回归脚本第一刀
+
+背景：
+
+- `api.namebases.renameObjects(kind, ids, {confirm:true})` 已完成运行时接入，并通过临时浏览器验证确认城市和河流可改名并撤销。
+- 该 API 会真实改写当前地图对象名称，风险面不同于名称库文档导入导出；因此不并入 `regress:api-namebases`，而是单独固化为对象改名回归门禁。
+- 回归目标是守住确认边界、类型边界、ids 边界、四类对象改名和撤销恢复，不验证名称库文档 roundtrip。
+
+实现：
+
+- 新增 `tools/webgl-generator-api-namebase-renames-regression.mjs`。
+- 新增 `pnpm run regress:api-namebase-renames`。
+- 脚本会启动构建产物静态服务，并通过 Playwright + 系统 Chrome 使用控制台 API：
+  - 生成 seed `api-namebase-renames-regression` 的地图，默认 `3000` cells。
+  - 验证 `api.namebases.renameObjects("city", ids)` 未传 `confirm:true` 会结构化失败。
+  - 验证不支持的 `province` 类型和空 ids 会结构化失败。
+  - 收集当前地图中的国家、城市、河流和湖泊目标；如果某类对象不存在则记录跳过。
+  - 对 `state / city / river / lake` 分别调用 `renameObjects(kind, ids, {confirm:true})`，校验实际名称变化数与 API 返回 `renamed` 一致。
+  - 每类改名后立即调用 `api.history.undo()`，校验名称快照恢复。
+  - 验证全流程结束后地图 checksum 不变，WebGL / health / console / page error 均为 `0`。
+- 脚本会输出 JSON 和 Markdown 报告到 `docs/generated/reports/api-namebase-renames-regression-results.*`。
+
+验证：
+
+- `node --check tools\webgl-generator-api-namebase-renames-regression.mjs` 通过。
+- `git diff --check` 通过。
+- 主线程先用 `node .\tools\webgl-generator-api-namebase-renames-regression.mjs --browser-channel chrome` 直跑 `10000` cells 默认初版，确认四类对象改名和撤销逻辑均通过：国家 `3 / 4`、城市 `6 / 6`、河流 `8 / 8`、湖泊 `2 / 2` 均恢复；但生成阶段触发 `main-thread-long-task` health error，因此不采用 `10000` cells 作为默认门禁规模。
+- 主线程改用 `3000` cells 直跑通过：checksum `b7ad8c2c`；国家 `4 / 4`、城市 `6 / 6`、河流 `8 / 8`、湖泊 `1 / 1` 均改名并撤销恢复；未确认调用、不支持类型和空 ids 均结构化失败；WebGL / health / console / page error 均为 `0`。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- `pnpm run regress:api-namebase-renames -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认 checksum `762f5ca8`；国家 `3 / 4`、城市 `6 / 6`、河流 `7 / 8`、湖泊 `1 / 1` 均改名并撤销恢复；未确认调用、不支持类型和空 ids 均结构化失败；WebGL / health / console / page error 均为 `0`。
+- 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 API 名称库批量改名回归脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，`namebases.renameObjects` 的 `mutates` 仍为 `object-names`，WebGL / health / console / page error 均为 `0`。
+- 低上下文浏览器 smoke 子智能体验证通过，确认 checksum `04c9a710`；国家 `4 / 4`、城市 `6 / 6`、河流 `8 / 8`、湖泊 `1 / 1` 均改名并撤销恢复；未确认调用、不支持类型和空 ids 均结构化失败；WebGL / health / console / page error 均为 `0`。
