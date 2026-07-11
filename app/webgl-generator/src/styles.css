@@ -1622,23 +1622,6 @@ select:disabled {
   padding: 12px;
 }
 
-.city-history-actions,
-.culture-history-actions,
-.diplomacy-history-actions,
-.lake-history-actions,
-.marker-history-actions,
-.measurement-history-actions,
-.military-history-actions,
-.namebase-history-actions,
-.notes-history-actions,
-.province-history-actions,
-.religion-history-actions,
-.river-history-note,
-.route-history-actions,
-.state-history-actions {
-  display: none !important;
-}
-
 .development-panel-content {
   display: grid;
   gap: 12px;
@@ -2639,16 +2622,6 @@ select:disabled {
   grid-column: auto;
 }
 
-.river-history-note,
-.lake-history-actions,
-.measurement-history-actions {
-  color: #9fb0ba;
-  font-size: 11px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.measurement-history-actions .el-button,
 .measurement-panel-sort .el-button {
   margin-left: 0;
 }
@@ -3000,18 +2973,6 @@ select:disabled {
   line-height: 1.45;
 }
 
-.state-history-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.state-history-actions span {
-  grid-column: 1 / -1;
-  color: #9fb0ba;
-  font-size: 11px;
-}
-
 .province-panel-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3150,20 +3111,6 @@ select:disabled {
 
 .province-note-editor {
   margin-top: 8px;
-}
-
-.province-history-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.province-history-actions span {
-  grid-column: 1 / -1;
-  color: #9fb0ba;
-  font-size: 11px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
 
 .province-select-field,
@@ -5353,13 +5300,6 @@ input.ui-switch-native {
   font-size: 12px;
 }
 
-.marker-history-actions {
-  margin-top: 10px;
-  color: #9fb0ba;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
 .notes-panel-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -5436,20 +5376,11 @@ input.ui-switch-native {
   white-space: pre-wrap;
 }
 
-.notes-panel-actions,
-.notes-history-actions {
+.notes-panel-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
-}
-
-.notes-history-actions span {
-  grid-column: 1 / -1;
-  color: #9fb0ba;
-  font-size: 11px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
 
 .namebase-panel-summary {
@@ -5540,26 +5471,6 @@ input.ui-switch-native {
 
 .namebase-panel-controls input {
   width: 100%;
-}
-
-.namebase-history-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(189, 206, 213, 0.14);
-  border-radius: 6px;
-  background: rgba(13, 20, 24, 0.72);
-}
-
-.namebase-history-actions span {
-  min-width: 0;
-  color: #94a8b0;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .namebase-panel-sort {
@@ -5892,12 +5803,6 @@ input.ui-switch-native {
   font-size: 12px;
 }
 
-.city-history-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
 .measurement-panel-list-actions,
 .label-management-actions {
   justify-content: flex-end;
@@ -5941,14 +5846,6 @@ input.ui-switch-native {
   color: #9fb0ba;
   font-size: 11px;
   line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.city-history-actions span {
-  grid-column: 1 / -1;
-  color: #9fb0ba;
-  font-size: 11px;
-  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
@@ -7797,26 +7694,6 @@ input.ui-switch-native {
 .culture-note-editor,
 .religion-note-editor {
   margin-top: 8px;
-}
-
-.culture-history-actions,
-.religion-history-actions,
-.diplomacy-history-actions,
-.military-history-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.culture-history-actions span,
-.religion-history-actions span,
-.diplomacy-history-actions span,
-.military-history-actions span {
-  grid-column: 1 / -1;
-  color: #9fb0ba;
-  font-size: 11px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
 
 .ui-select-field {

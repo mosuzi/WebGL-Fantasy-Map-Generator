@@ -6,7 +6,7 @@
 
 - `panels/*.js` 仍保留为 runtime 适配层，负责注册 panel manager、创建 Vue 根节点、维护外部 API，并把大对象 `map` 用 `markRaw()` 放入 `shallowReactive` 状态。
 - `ui/vue/components/*.vue` 负责真实 UI 渲染、筛选、排序、派生展示行和轻量表单状态。
-- `ui/vue/components/base/*.vue` 只承载通用控件：按钮、tab、筛选输入、排序条、对象表格、详情网格、名称/颜色/数字字段和历史操作。
+- `ui/vue/components/base/*.vue` 只承载通用控件：按钮、tab、筛选输入、排序条、对象表格、详情网格和名称/颜色/数字字段。
 - `runtime` 继续负责 selection、edit history、派生刷新、renderer 调用和对象定位；Vue 面板只发出回调，不直接改 WebGL buffer、picking index 或地图大数组。
 
 ## 状态规则
@@ -38,7 +38,7 @@ Wrapper 应负责：
 - 列表使用 `UiObjectTable`。
 - 只读字段使用 `UiDetailGrid`。
 - 名称、颜色、数字编辑分别使用 `UiTextEditField`、`UiColorField`、`UiNumberField`。
-- 撤销/重做使用 `UiHistoryActions`。
+- 可撤销面板统一使用面板框架标题栏的撤销 / 重做入口；内容区不再重复放置大号历史按钮。高度编辑器的笔刷撤销 / 重做属于编辑工具本身，可保留在内容区。
 
 如果某个字段需要特殊交互，例如河流宽度滑动条，可以组合 `UiSliderField` 和 `UiButton`，但仍只通过 wrapper 回调提交命令。
 

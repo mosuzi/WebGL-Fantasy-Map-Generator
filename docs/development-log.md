@@ -26041,3 +26041,23 @@ full 矩阵结果：
 - 全局搜索确认 `app/webgl-generator/src/ui/vue/components` 下不再有对象面板引用 `<UiHistoryActions>` 或 `import UiHistoryActions`；国家 / 省份面板也不再残留 `historyNote` / `formatHistoryStats`。
 - `git diff --check` 通过。
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+
+### 2026-07-12 清理废弃内容区历史基础设施
+
+背景：
+
+- 上一刀已从对象列表和管理面板模板中移除大号 `UiHistoryActions`，但无调用方的 Vue / 旧 DOM 组件、面板专用 CSS 和架构规范仍然残留。
+- 这些残留不会直接显示，却会误导后续面板继续复用已经废弃的内容区历史模式，并让样式表长期保留无效选择器。
+
+实现：
+
+- 删除无调用方的 `ui/vue/components/base/UiHistoryActions.vue` 和 `ui/components/history-actions.js`；面板标题栏继续复用 `history-format.js`，高度编辑器笔刷历史入口保持不变。
+- 删除城市、国家、省份、文化、宗教、路线、河流、湖泊、标记、测量、名称库、备注、外交和军事等旧内容区历史类的 125 行死样式；保留 `.floating-panel-history-button` 和 `.height-history-actions`。
+- 更新 `docs/architecture/vue-floating-panel-pattern.md` 与编辑器基础设施清单，明确可撤销面板统一使用框架标题栏入口，内容区不重复放置大号撤销 / 重做按钮。
+
+验证：
+
+- 全局搜索确认应用源码和当前架构规范中不再引用 `UiHistoryActions`、`createHistoryActions` 或旧面板历史类；只保留高度编辑器与面板标题栏的有效历史样式。
+- `git diff --check` 通过。
+- 阶段末构建烟测由子智能体执行：`pnpm run build:app` 通过，Vite 构建 1109 个模块、耗时 1.59 秒，仅有既有主 chunk 超过 500 kB 警告；构建未产生新的跟踪变更。
+- 阶段末浏览器验收由子智能体尝试复用现有会话，但 in-app Browser 后端和 Chrome extension 控制后端均不可连接，且当前没有 FMG 监听端口。按用户约束未启动或重启 Chrome、未使用 Playwright、未启动额外服务器；对象面板标题栏、高度编辑器、console / page / WebGL 错误验收待浏览器控制会话恢复后补跑。

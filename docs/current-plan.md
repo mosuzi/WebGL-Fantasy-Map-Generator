@@ -812,6 +812,21 @@
    - 边界：本步只持久化树状面板是否打开；不保存选中树节点、重命名 / 继承 / 备注编辑浮层、树面板位置或任何编辑草稿。
    - 完成记录：`panel-list-preferences` 支持可选 `treeOpen` 布尔字段；文化和宗教面板初始化时读取树状面板打开状态，打开 / 关闭树状面板时写回偏好。
 
+103. 废弃内容区历史组件清理。`已完成`
+   - 目标：承接“对象列表底部历史按钮清理”，删除已无调用方的 Vue `UiHistoryActions` 和旧 DOM `createHistoryActions()`，避免后续面板继续复用已废弃模式。
+   - 边界：面板框架标题栏撤销 / 重做继续保留；高度编辑器的笔刷撤销 / 重做继续保留，不改变 `EditHistory`、历史格式化或命令执行语义。
+   - 完成记录：已删除无调用方的 `UiHistoryActions.vue` 和 `ui/components/history-actions.js`；`history-format.js` 继续由面板标题栏使用。
+
+104. 废弃内容区历史样式清理。`已完成`
+   - 目标：删除只服务已移除历史条的面板专用 CSS，并保留仍由高度编辑器和面板标题栏使用的样式。
+   - 边界：不调整其它动作条、列表、详情区或标题栏视觉。
+   - 完成记录：已删除城市、国家、省份、文化、宗教、路线、河流、湖泊、地区、标记、测量、名称库、备注、外交和军事等旧内容区历史类样式；`.height-history-actions` 与 `.floating-panel-history-button` 保留。
+
+105. Vue 浮动面板规范校准。`已完成`
+   - 目标：把架构规范从“内容区使用 `UiHistoryActions`”更新为“可撤销面板统一使用标题栏历史入口”，并同步基础设施清单和开发日志。
+   - 边界：只校准当前有效模式，不回写历史日志中的旧阶段事实。
+   - 完成记录：`docs/architecture/vue-floating-panel-pattern.md` 和编辑器基础设施清单已改为标题栏历史入口规范，不再把 `UiHistoryActions` 列为公共组件。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -823,6 +838,7 @@
 - `node --check app\webgl-generator\src\ui\panel-manager.js`、`node --check app\webgl-generator\src\ui\panels\object-details-panel.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel-list-preferences.js`、`node --check app\webgl-generator\src\ui\panels\river-panel.js` 均通过。
 - `git diff --check` 通过。
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 废弃内容区历史基础设施清理批次完成：应用源码不再引用 `UiHistoryActions`、`createHistoryActions` 或旧面板历史类；`pnpm run build:app` 通过（1109 modules，1.59s），`git diff --check` 通过。阶段末浏览器验收已交给子智能体，但 in-app Browser 与现有 Chrome 控制后端均不可连接；按约束未重启 Chrome、未使用 Playwright、未启动额外服务器，因此本批次浏览器 UI / WebGL 验收仍待可复用浏览器会话恢复后补跑。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。
