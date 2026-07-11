@@ -341,6 +341,7 @@ api.edit.measurement.delete(id)
 - edit 命名空间已补齐方法级副作用元数据：`notes.* / measurements.* / cities.* / provinces.* / states.* / cultures.* / religions.* / routes.* / rivers.* / lakes.* / labels.* / markers.*` 全部公开编辑方法均标注为同步、可撤销、不要求 `confirm:true`；`mutates` 按领域区分为 `notes / measurements / settlements / political-entities / cultures / religions / routes / rivers / lakes / labels / markers`，表示会通过 edit command 写入当前地图并进入 `EditHistory`，但不触发额外确认门槛；浏览器验证已确认 46 个 edit 方法均有同名元数据，且读取元数据不修改地图 checksum。
 - `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回方法总数、已记录元数据数、缺失项和多余项，并在顶层暴露 `complete / missing / extra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。浏览器验证已确认当前 127 个公开方法全部有元数据，`missing / extra` 均为空，读取覆盖摘要不修改地图 checksum。
 - `pnpm run regress:api` 已新增第一刀，脚本会在构建产物上通过控制台 API 生成小地图，检查 `methodMetadataCoverage`、确认边界和代表性 `mutates` 元数据，并输出 `docs/generated/reports/api-capabilities-regression-results.json` 与 Markdown 报告。后续新增 / 删除 API 方法时，应优先跑该脚本确认能力表没有漏记或漂移。
+- `pnpm run regress:api-roundtrip` 已新增第一刀，脚本会在构建产物上通过控制台 API 完成完整地图 roundtrip：生成源地图、导出完整 JSON、导出 gzip、扰动当前地图后分别导入 JSON 对象 / JSON 字符串 / 压缩导出对象 / gzip-base64 payload，并校验 seed、checksum、历史栈和错误边界。
 
 ## 安全与副作用边界
 
@@ -547,6 +548,7 @@ api.edit.measurement.delete(id)
 - `api.generate.setOptions(patch)` 会规范化并同步生成配置与主输入，不隐式生成新地图。
 - `api.generate.newMap(options)` 和 `api.generate.rerollSeed(options)` 复用 worker 生成和 `loadMapIntoRuntime()`，返回生成配置、地图摘要、生成 / 加载 timings 和历史摘要。
 - 为避免脚本误触大范围派生重建或替换当前地图，`regenerate / newMap / rerollSeed / importMap / importGEO` 必须显式传 `confirm:true`；备注与测量导出属于只读下载 / 文本返回能力，不进入撤销栈，也不修改 checksum。
+- 阶段 5 的完整地图 API roundtrip 回归已固化为 `pnpm run regress:api-roundtrip`，覆盖普通 JSON 和 gzip 两类完整地图导入输入，并确认未确认导入、坏 JSON 的结构化错误边界。
 
 ### 阶段 6：debug 诊断 API
 

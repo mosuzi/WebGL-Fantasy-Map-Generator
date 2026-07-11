@@ -25820,3 +25820,35 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 主线程兜底 `pnpm run regress:api -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。浏览器回归确认 checksum `f5f8c5f1`、grid cells `1014`、pack cells `901`；`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`；各命名空间覆盖完整，数量为 `info:5 / generate:5 / selection:11 / layers:5 / units:9 / climate:14 / history:5 / edit:46 / data:10 / namebases:10 / debug:7`；确认方法列表精确为 7 项；代表性 `mutates` 元数据均符合预期；WebGL / health / console / page error 均为 `0`。
 - 浏览器烟测子智能体在未扩大权限时确认 `pnpm run regress:api -- --browser-channel chrome` 会被沙箱内 pnpm registry 访问拦截，随后用等价 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 直跑通过，确认覆盖完整、确认边界精确、代表性 `mutates` 正确且 WebGL / health / console / page error 均为 `0`；另一个静态审阅子智能体超时后已中断释放。
+
+### 2026-07-11 API 完整地图 roundtrip 回归脚本第一刀
+
+背景：
+
+- `api.data.exportAll()`、`api.data.exportCompressedAll()` 和 `api.data.importMap()` 已经分别完成接入和手工浏览器验证。
+- API 专题阶段 5 的验收要求是自动化脚本可用 API 完成“生成地图 -> 导出 -> 导入 -> 校验”的闭环。
+- 前序验证还没有固化成长期回归脚本，后续完整地图 JSON / gzip / 导入加载路径调整时缺少一键守门。
+
+实现：
+
+- 新增 `tools/webgl-generator-api-roundtrip-regression.mjs`。
+- 新增 `pnpm run regress:api-roundtrip`。
+- 脚本会启动构建产物静态服务，并通过 Playwright + 系统 Chrome 使用控制台 API：
+  - 生成 seed `api-roundtrip-source` 的约 1000 cells 源地图。
+  - 调用 `api.data.exportAll({download:false})` 导出完整地图 JSON。
+  - 调用 `api.data.exportCompressedAll({download:false})` 导出 gzip base64。
+  - 验证未传 `confirm:true` 的 `api.data.importMap()` 会结构化失败且不改变当前 checksum。
+  - 扰动当前地图后，分别导入 JSON 对象、JSON 字符串、压缩导出对象和 `{encoding:"gzip-base64", data}` payload。
+  - 校验每次导入后 seed / checksum 恢复源地图，导入后 undo / redo 历史栈清空。
+  - 验证坏 JSON 导入结构化失败，且失败后 checksum 保持不变。
+- 脚本会输出 JSON 和 Markdown 报告到 `docs/generated/reports/api-roundtrip-regression-results.*`。
+
+验证：
+
+- `node --check tools\webgl-generator-api-roundtrip-regression.mjs` 通过。
+- `git diff --check` 通过。
+- 主线程先用 `node .\tools\webgl-generator-api-roundtrip-regression.mjs --browser-channel chrome` 直跑通过：源地图 checksum `75f8ef9f`、grid cells `1014`、pack cells `854`；JSON 导出 `5,477,497` bytes，gzip `628,867 / 5,498,935` bytes，base64 长度 `838,492`；JSON 对象、JSON 字符串、压缩导出对象和 gzip-base64 payload 都恢复 checksum `75f8ef9f`，导入后历史栈均为 `0 / 0`；未确认导入和坏 JSON 均结构化失败，坏 JSON 后 checksum 保持；WebGL / health / console / page error 均为 `0`。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/pnpm: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- `pnpm run regress:api-roundtrip -- --browser-channel chrome` 首次在沙箱内因同一 pnpm registry 元数据访问失败；放开同一命令后通过。package 命令回归确认源地图 checksum `41db190e`、grid cells `1014`、pack cells `854`；JSON 导出 `5,477,509` bytes，gzip `628,875` bytes，base64 长度 `838,500`；四类导入输入均恢复 checksum `41db190e`；未确认导入和坏 JSON 均结构化失败，坏 JSON 后 checksum 保持；WebGL / health / console / page error 均为 `0`。
+- 主线程额外直跑 `node .\tools\webgl-generator-api-capabilities-regression.mjs --browser-channel chrome` 通过，确认新增 roundtrip 脚本和 package 命令没有影响既有 capabilities 门禁：`methodMetadataCoverage.complete = true`，`methods / documented / metadata = 127 / 127 / 127`，确认方法列表仍为 7 项，WebGL / health / console / page error 均为 `0`。
+- 第一轮两个验证子智能体受状态查询上下文影响，只回报了进度摘要，不能作为有效 smoke 证据；随后低上下文浏览器烟测子智能体重新验证通过，确认源 checksum `46c9449b`，JSON 对象、JSON 字符串、压缩导出对象和 gzip-base64 payload 均恢复 `46c9449b`，未确认导入和坏 JSON 均结构化失败且坏 JSON 后 checksum 保持，WebGL / health / console / page error 均为 `0`。

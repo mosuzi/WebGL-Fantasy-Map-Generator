@@ -29,6 +29,7 @@
     "regress:geo": "node ./tools/webgl-generator-geo-import-regression.mjs",
     "regress:measurement": "node ./tools/webgl-generator-measurement-import-regression.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
+    "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:shoreline": "node ./tools/webgl-generator-shoreline-regression.mjs",
     "regress:rendering": "pnpm run regress:shoreline -- --max-switch-ms 1500",
     "diagnose:source-warns": "node ./tools/source-candidate-warn-diagnostics.mjs",
