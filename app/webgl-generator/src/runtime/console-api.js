@@ -55,7 +55,13 @@ function createConsoleApi(documentRef, state, actions = {}) {
     }),
     units: Object.freeze({
       get: () => apiCall(() => buildUnitSnapshot(state, documentRef)),
-      apply: (preferences = {}) => apiCall(() => applyUnitPreferences(state, documentRef, preferences))
+      apply: (preferences = {}) => apiCall(() => applyUnitPreferences(state, documentRef, preferences)),
+      setDistanceUnit: unit => apiCall(() => applyUnitPreferences(state, documentRef, {distanceUnit: unit})),
+      setNumberAbbreviation: mode => apiCall(() => applyUnitPreferences(state, documentRef, {numberAbbreviation: mode})),
+      setMapScale: kmPerCm => apiCall(() => applyUnitPreferences(state, documentRef, {mapScaleKmPerCm: kmPerCm})),
+      setPopulationScale: scale => apiCall(() => applyUnitPreferences(state, documentRef, {populationScale: scale})),
+      setMilitaryScale: scale => apiCall(() => applyUnitPreferences(state, documentRef, {militaryScale: scale})),
+      setPrecipitationScale: scale => apiCall(() => applyUnitPreferences(state, documentRef, {precipitationScale: scale}))
     }),
     climate: Object.freeze({
       get: section => apiCall(() => buildClimateSnapshot(state, section)),
@@ -193,7 +199,7 @@ function buildCapabilities() {
       generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
       selection: ["get", "resolve", "select", "clear", "locate", "pick"],
       layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
-      units: ["get", "apply"],
+      units: ["get", "apply", "setDistanceUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],

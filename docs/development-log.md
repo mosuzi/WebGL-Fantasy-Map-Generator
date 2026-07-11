@@ -25301,3 +25301,30 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_debug_api_structure` 和 `verify_debug_api_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-diagnostics", cellsTarget:1000})` 生成地图，得到 checksum `2850e0b4`、grid cells `1014`、pack cells `815`；`api.info.capabilities()` 已包含 `debug` 命名空间、`snapshot / renderer / health` 方法和 `readonly-diagnostics` 副作用说明；`api.debug.snapshot()` 返回 API 版本、页面 / loading 状态、地图摘要、图层 / 单位偏好、选择、历史、renderer 摘要和 health 摘要；`api.debug.renderer()` 返回完整 renderer stats，包含 `webgl2 / camera / draw`；`api.debug.health({severity:"error", limit:10})` 返回 storage key、阈值、当前 operation 和筛选后的 health 事件；debug 调用前后 checksum 保持 `2850e0b4` 不变，`renderer.stats.draw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 单位便捷 setter API 批次
+
+背景：
+
+- 控制台 API 方案中已经列出按字段调整单位偏好的便捷方法，但此前实际 API 只有 `api.units.get()` 和 `api.units.apply(preferences)`。
+- 脚本和 AI 调用如果只想改一个显示单位字段，不应每次都手动读取、合并并提交整份偏好。
+
+实现：
+
+- `console-api.js` 新增 `api.units.setDistanceUnit(unit)`、`setNumberAbbreviation(mode)`、`setMapScale(kmPerCm)`、`setPopulationScale(scale)`、`setMilitaryScale(scale)` 和 `setPrecipitationScale(scale)`。
+- 所有便捷 setter 都复用 `applyUnitPreferences()`，因此继续走 `normalizeUnitPreferences()`、控制面板控件同步、本地控制偏好写入和 renderer unit preferences 更新路径。
+- renderer stats 新增 `unitPreferences` 只读快照，方便脚本确认 API 写入已同步到 renderer 侧。
+- `display-units.js` 的 `roundToStep()` 改为按 step 小数位输出，避免 `1.7` 规范化后出现 `1.7000000000000002` 这类浮点残影。
+- `api.info.capabilities()` 的 `units` 方法列表补入上述便捷 setter。
+- 本步只改变显示单位偏好，不进入 `EditHistory`，不修改地图 checksum，也不改变地图生成或气候数据。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\renderer\placeholder-renderer.js` 通过。
+- `node --check app\webgl-generator\src\ui\display-units.js` 通过。
+- `node --input-type=module` 单位规范化断言通过：`precipitationScale: 1.7`、`populationScale: 2.5`、`militaryScale: 3.5` 均保持干净小数；Node 仅输出当前 package 未声明 module 类型的既有 warning。
+- `git diff --check` 通过。
+- `pnpm run build:app` 因沙箱网络限制多次无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_units_setters_api` 和 `verify_units_setters_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-units-setters", cellsTarget:1000})` 生成地图，得到 checksum `bd56e742`、grid cells `1014`、pack cells `800`；`api.info.capabilities()` 已包含 `units.setDistanceUnit / setNumberAbbreviation / setMapScale / setPopulationScale / setMilitaryScale / setPrecipitationScale`；依次调用后，`api.units.get().units`、`#distance-unit / #area-unit / #number-abbreviation / #map-scale-km-per-cm / #population-scale / #military-scale / #precipitation-scale`、`localStorage.webgl-generator-control-preferences.units` 和 renderer stats `unitPreferences` 均同步为 `m / m2 / none / 250 / 2.5 / 3.5 / 1.7`；调用前后 checksum 保持 `bd56e742` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

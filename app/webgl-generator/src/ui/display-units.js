@@ -245,7 +245,14 @@ function clampNumber(value, limit, fallback) {
 
 function roundToStep(value, step) {
   if (!Number.isFinite(step) || step <= 0) return value;
-  return Math.round(value / step) * step;
+  const precision = decimalPrecision(step);
+  return Number((Math.round(value / step) * step).toFixed(precision));
+}
+
+function decimalPrecision(value) {
+  const text = String(value);
+  const decimal = text.includes(".") ? text.split(".")[1] : "";
+  return Math.min(12, decimal.length);
 }
 
 function clampRunoffCoefficient(value) {

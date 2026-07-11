@@ -740,6 +740,7 @@ export class PlaceholderMapRenderer {
       visibleStateLabelCount: this.visibleStateLabelCount,
       colorMode: this.colorMode,
       viewOptions: {...this.viewOptions},
+      unitPreferences: {...this.unitPreferences},
       labelOptions: {...this.labelOptions},
       layerVisibility: {...this.layerVisibility},
       canvasSize: {...this.canvasSize},
