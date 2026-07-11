@@ -11,6 +11,15 @@ import {normalizeVisualThemeId} from "../renderer/themes.js";
 
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
+const CONFIRM_REQUIRED_METHODS = Object.freeze([
+  "generate.regenerate",
+  "generate.newMap",
+  "generate.rerollSeed",
+  "data.importMap",
+  "data.importGEO",
+  "namebases.clear",
+  "namebases.renameObjects"
+]);
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -219,6 +228,12 @@ function buildCapabilities() {
       namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
       debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
     },
+    methodMetadata: buildMethodMetadata(),
+    safety: {
+      confirmationOption: "confirm: true",
+      confirmRequiredMethods: [...CONFIRM_REQUIRED_METHODS],
+      confirmRequired: groupQualifiedMethodNames(CONFIRM_REQUIRED_METHODS)
+    },
     sideEffects: {
       info: "readonly",
       generate: "map-regeneration",
@@ -233,6 +248,34 @@ function buildCapabilities() {
       debug: "diagnostics-and-debug-ui"
     }
   };
+}
+
+function buildMethodMetadata() {
+  return {
+    generate: {
+      regenerate: {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: true, requiresConfirm: true},
+      newMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
+      rerollSeed: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}
+    },
+    data: {
+      importMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
+      importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: "partial", async: true, requiresConfirm: true}
+    },
+    namebases: {
+      clear: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: true},
+      renameObjects: {stable: "draft", mutates: "object-names", undoable: true, async: false, requiresConfirm: true}
+    }
+  };
+}
+
+function groupQualifiedMethodNames(methods) {
+  return methods.reduce((groups, methodName) => {
+    const [namespace, method] = methodName.split(".");
+    if (!namespace || !method) return groups;
+    groups[namespace] ||= [];
+    groups[namespace].push(method);
+    return groups;
+  }, {});
 }
 
 function requireApiAction(action, name) {

@@ -326,6 +326,11 @@ api.edit.measurement.delete(id)
 - `stable`：可作为脚本和扩展依赖。
 - `deprecated`：保留兼容，但不建议新调用。
 
+当前状态：
+
+- `api.info.capabilities()` 保留原有 `methods` 数组以兼容旧脚本，同时新增 `safety.confirmRequiredMethods`、按命名空间分组的 `safety.confirmRequired` 和 `methodMetadata` 第一刀。
+- 当前显式标注 `generate.regenerate / newMap / rerollSeed`、`data.importMap / importGEO`、`namebases.clear / renameObjects` 必须传 `confirm:true`；对应 `methodMetadata` 会记录 `mutates / undoable / async / requiresConfirm`，供 AI 或自动化脚本在调用前判断确认边界。浏览器验证已确认该元数据只读且不修改地图 checksum。
+
 ## 安全与副作用边界
 
 - 默认只在浏览器本地页面暴露，不做跨来源远程调用。

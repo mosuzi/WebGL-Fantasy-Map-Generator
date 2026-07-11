@@ -25508,3 +25508,29 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
 - 本轮按要求启动两个验证子智能体做 API / 浏览器烟测；等待 90 秒无输出后已中断释放，避免占用资源。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-highlight-semantics", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `023e21ce`、grid cells `1014`、pack cells `879`；`api.info.capabilities()` 已包含 `selection.highlight`；`api.selection.highlight({kind:"river", id:1})` 与 `api.selection.highlight([{kind:"river", id:1}])` 均返回 `requested = 1`、`mode = single-object-flash`、`flashed = true`、`highlightMode = river red flash`，selection 指向河流 `#1`；`api.selection.highlight([])` 返回结构化失败且错误信息包含“缺少高亮对象”；传入河流与城市两个对象的数组返回结构化失败且错误信息包含“多对象高亮”；调用前后 checksum 保持 `023e21ce` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 API 能力元数据确认边界第一刀
+
+背景：
+
+- 控制台 API 已有 `confirm:true` 保护多个替换地图、重建派生或批量改名入口，但 `api.info.capabilities()` 此前只返回粗粒度 `methods` 和命名空间级 `sideEffects`。
+- 后续 AI、脚本或插件在自动调用 API 前，需要能从只读元数据里判断哪些方法必须显式确认，避免误触新地图生成、导入、GEO 导入、清空名称库或批量重命名。
+
+实现：
+
+- `console-api.js` 新增 `CONFIRM_REQUIRED_METHODS`，集中列出必须显式传 `confirm:true` 的公开 API 方法。
+- `api.info.capabilities()` 保留原有 `methods` 数组以兼容旧脚本，同时新增：
+  - `safety.confirmationOption = "confirm: true"`；
+  - `safety.confirmRequiredMethods` 全量方法名列表；
+  - `safety.confirmRequired` 按命名空间分组的确认要求；
+  - `methodMetadata`，为确认类方法记录 `stable / mutates / undoable / async / requiresConfirm`。
+- 当前显式标注 `generate.regenerate / newMap / rerollSeed`、`data.importMap / importGEO`、`namebases.clear / renameObjects`；不改变这些方法既有行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
+- 子智能体 API 元数据结构验证通过：`safety.confirmRequiredMethods` 精确等于 `generate.regenerate / generate.newMap / generate.rerollSeed / data.importMap / data.importGEO / namebases.clear / namebases.renameObjects`，没有多也没有少；分组结果为 `generate: regenerate/newMap/rerollSeed`、`data: importMap/importGEO`、`namebases: clear/renameObjects`；对应 `methodMetadata` 均包含 `mutates / undoable / async / requiresConfirm: true`；旧 `methods` 数组仍保留原方法。
+- 浏览器 smoke 子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-capability-safety", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `25f32b7b`、grid cells `1014`、pack cells `928`；随后读取 `api.info.capabilities()`，确认 `safety.confirmationOption = "confirm: true"`、确认方法 7 项和分组均正确，且每个确认类方法的 `methodMetadata.requiresConfirm = true` 并带有 `mutates / undoable / async`；旧 `methods.generate / data / namebases` 仍包含对应方法；调用前后 checksum 保持 `25f32b7b` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
