@@ -1832,7 +1832,11 @@ function createConsoleApiActions(state, documentRef, options = {}) {
         rename: (lakeId, name) => renameLakeViaApi(state, documentRef, lakeId, name)
       },
       labels: {
+        addCustom: options => addCustomLabelViaApi(state, documentRef, options),
         delete: label => deleteLabelViaApi(state, documentRef, label),
+        moveCustom: (labelId, point) => moveCustomLabelViaApi(state, documentRef, labelId, point),
+        renameCustom: (labelId, text) => renameCustomLabelViaApi(state, documentRef, labelId, text),
+        setNote: (label, body, options = {}) => setLabelNoteViaApi(state, documentRef, label, body, options),
         restore: label => restoreGeneratedLabelViaApi(state, documentRef, label)
       },
       markers: {
@@ -4601,12 +4605,92 @@ function setReligionParentViaApi(state, documentRef, religionId, parentId) {
   return editApiResult(state, result);
 }
 
+function addCustomLabelViaApi(state, documentRef, options = {}) {
+  const payload = normalizeApiCustomLabelOptions(options);
+  const command = createAddCustomLabelCommand(payload);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "标签文字或坐标无效，无法新增手工标签。",
+    status: command => {
+      const created = command.getCreatedLabel?.();
+      return created ? `已新增手工标签 #${created.id}。` : "已新增手工标签。";
+    },
+    throwOnError: false
+  });
+  const created = result.command?.getCreatedLabel?.();
+  if (result.executed && created) {
+    const object = {
+      kind: OBJECT_KIND.LABEL,
+      id: created.id,
+      targetKind: LABEL_TARGET_KIND.CUSTOM,
+      targetId: created.id,
+      text: created.text,
+      targetName: created.text
+    };
+    state.selectionStore.setSelection({object});
+    state.panels.labelNaming?.setSelectedLabelKey?.(labelKeyForObject(object));
+  }
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function deleteLabelViaApi(state, documentRef, label) {
   const target = normalizeApiLabelTarget(label);
   const command = createDeleteLabelCommand(target);
   const result = executeEditCommand(state, documentRef, command, {
     noopStatus: "标签不存在或已被隐藏。",
     status: `已删除或隐藏标签 ${formatApiLabelTarget(target)}。`,
+    throwOnError: false
+  });
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function moveCustomLabelViaApi(state, documentRef, labelId, point) {
+  const id = normalizeApiInteger(labelId, "手工标签 ID");
+  const nextPoint = normalizeApiPoint(point, "手工标签坐标");
+  const current = ensureLabelStore(state.map).custom.find(item => item.id === id);
+  const command = createMoveCustomLabelCommand(id, nextPoint, {
+    previousPoint: current ? {x: current.x, y: current.y} : null
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "手工标签不存在、坐标无效或位置未变化。",
+    status: `已移动手工标签 #${id}。`,
+    throwOnError: false
+  });
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function renameCustomLabelViaApi(state, documentRef, labelId, text) {
+  const id = normalizeApiInteger(labelId, "手工标签 ID");
+  const command = createRenameCustomLabelCommand(id, text);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "手工标签不存在、文字为空或名称未变化。",
+    status: `已重命名手工标签 #${id}。`,
+    throwOnError: false
+  });
+  updateLabelNamingPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setLabelNoteViaApi(state, documentRef, label, body, options = {}) {
+  const target = normalizeApiLabelTarget(label);
+  const noteOptions = {
+    ...options,
+    name: options.name || label?.targetName || label?.text || `标签 ${formatApiLabelTarget(target)}`
+  };
+  const command = createSetLabelNoteCommand(target, body, noteOptions);
+  const result = executeEditCommand(state, documentRef, command, {
+    noopStatus: "标签不存在或备注未变化。",
+    status: `已更新标签备注 ${formatApiLabelTarget(target)}。`,
     throwOnError: false
   });
   updateLabelNamingPanel(state);
@@ -4627,6 +4711,22 @@ function restoreGeneratedLabelViaApi(state, documentRef, label) {
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function normalizeApiCustomLabelOptions(options) {
+  if (!options || typeof options !== "object") throw new Error("手工标签选项必须是对象");
+  return {
+    text: typeof options.text === "string" ? options.text.trim() : "",
+    ...normalizeApiPoint(options, "手工标签坐标")
+  };
+}
+
+function normalizeApiPoint(point, name = "坐标") {
+  if (!point || typeof point !== "object") throw new Error(`${name} 必须是对象`);
+  return {
+    x: normalizeApiNumber(point.x, `${name}.x`),
+    y: normalizeApiNumber(point.y, `${name}.y`)
+  };
 }
 
 function normalizeApiLabelTarget(label) {

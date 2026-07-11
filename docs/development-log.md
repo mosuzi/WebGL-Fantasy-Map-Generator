@@ -24875,3 +24875,27 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_culture_religion_field_api` 和 `verify_culture_religion_field_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `cultures.rename / cultures.setColor / cultures.setParent / religions.rename / religions.setColor / religions.setParent`；新增测试文化 `#13/#14` 后，文化 `#14` 重命名从“API字段子文化1783730927328”改为“API文化字段烟测1783730927328”并可撤销，颜色从 `null` 改为 `#123abc` 并可撤销，继承父级从 `0` 改为 `13` 并可撤销；新增测试宗教 `#19/#20` 后，宗教 `#20` 重命名从“API字段子宗教1783730927328”改为“API宗教字段烟测1783730927328”并可撤销，颜色从 `null` 改为 `#654321` 并可撤销，继承父级从 `0` 改为 `19` 并可撤销；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 标签字段编辑 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 阶段 4 已覆盖标签删除 / 恢复，但手工标签新增、移动、重命名和标签备注仍只能从标签面板入口触发。
+- 这些能力已有独立 label edit commands，适合作为 API 薄封装继续扩展。
+
+实现：
+
+- `console-api.js` 新增 `api.edit.labels.addCustom({text, x, y})`、`api.edit.labels.moveCustom(labelId, {x, y})`、`api.edit.labels.renameCustom(labelId, text)` 和 `api.edit.labels.setNote(label, body, {name})`。
+- `api.info.capabilities()` 的编辑方法列表同步补充上述标签能力。
+- `app.js` 的 API actions 复用既有 `createAddCustomLabelCommand()`、`createMoveCustomLabelCommand()`、`createRenameCustomLabelCommand()` 和 `createSetLabelNoteCommand()`，继续通过 `executeEditCommand()` 进入撤销栈。
+- 新增手工标签后会设置 selection 并同步标签管理面板选中 key；移动、重命名和备注写入会刷新标签面板、运行统计和编辑交互锁。
+- 移动 API 明确只覆盖手工标签；生成城市 / 国家标签的名称仍通过城市 / 国家对象 API 修改。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_label_field_api` 和 `verify_label_field_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `labels.addCustom / labels.delete / labels.moveCustom / labels.renameCustom / labels.setNote / labels.restore`；`labels.addCustom({text, x:123.4, y:456.7})` 新增手工标签 `#1`，公开 selection 指向 `label #1`，内部 selection 保留 `targetKind = custom`；`labels.moveCustom(1, {x:222.2, y:333.3})` 后坐标改变并可撤销回 `123.4 / 456.7`；`labels.renameCustom(1, "API标签改名烟测")` 后文字改变并可撤销回原名；`labels.setNote({targetKind:"custom", targetId:1}, "API标签备注烟测")` 写入 `label:custom:1` 备注并可撤销为空；`labels.delete({targetKind:"custom", targetId:1})` 删除手工标签并可撤销恢复；预置隐藏城市标签 `#1` 后 `labels.restore({targetKind:"city", targetId:1})` 可恢复并可撤销重新隐藏；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
