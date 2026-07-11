@@ -25609,3 +25609,28 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
 - 本轮按要求启动两个验证子智能体做 API 元数据 / 浏览器 smoke；等待 90 秒无输出后均已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-climate-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `cf6e8606`、grid cells `1014`、pack cells `907`；随后读取 `api.info.capabilities()`，确认 `sideEffects.climate = "readonly-and-climate-update"`，`methods.climate` 仍包含全部 14 个公开方法；`methodMetadata.climate` 中 `get / getOptions / getTemperature / getPrecipitation / getLatitude / getAtmosphere / getBiomes = none`，`apply / setLatitude / setLatitudeRange / setLongitudeRange / setTemperature / setPrecipitation / setWind = climate-state-and-derived-stale`；全部 climate 方法均有 `mutates / undoable / async / requiresConfirm` 且 `undoable = false`、`async = false`、`requiresConfirm = false`；调用前后 checksum 保持 `cf6e8606` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 history 能力元数据副作用边界第一刀
+
+背景：
+
+- `api.history.get / stats / peek` 是只读历史摘要，`api.history.undo / redo` 则会复用当前 `EditHistory` 恢复或重放命令，改变地图数据、选择 / 面板刷新结果或撤销 / 重做栈。
+- `api.info.capabilities()` 此前只有命名空间级 `sideEffects.history = "edit-history"`，脚本或 AI 无法区分读取历史和真正执行撤销 / 重做。
+- `undo / redo` 不需要 `confirm:true`，也不会作为新的可撤销命令再次进入历史栈；这个边界应在方法级元数据中明确。
+
+实现：
+
+- `console-api.js` 将 `sideEffects.history` 从 `edit-history` 修正为 `edit-history-read-and-undo-redo`。
+- `methodMetadata.history` 新增 `get / stats / peek / undo / redo` 元数据。
+- `get / stats / peek` 标注 `mutates: "none"`。
+- `undo / redo` 标注 `mutates: "map-and-edit-history-state"`。
+- 上述方法均标注 `undoable: false`、`async: false`、`requiresConfirm: false`，保留原有调用行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
+- 子智能体 API 元数据结构验证通过：`sideEffects.history = edit-history-read-and-undo-redo`，旧 `methods.history = get / stats / peek / undo / redo`，`get / stats / peek = none`，`undo / redo = map-and-edit-history-state`，5 个 history 方法均为 `undoable: false / async: false / requiresConfirm: false`。
+- 浏览器 smoke 子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-history-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `7cd02bc2`、grid cells `1014`、pack cells `866`；随后读取 `api.info.capabilities()`，确认 `sideEffects.history = "edit-history-read-and-undo-redo"`，`methods.history` 仍包含全部 5 个公开方法；`methodMetadata.history` 中 `get / stats / peek = none`，`undo / redo = map-and-edit-history-state`；全部 history 方法均有 `mutates / undoable / async / requiresConfirm` 且 `undoable = false`、`async = false`、`requiresConfirm = false`；调用前后 checksum 保持 `7cd02bc2` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

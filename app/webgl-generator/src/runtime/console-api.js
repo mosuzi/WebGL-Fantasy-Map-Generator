@@ -241,7 +241,7 @@ function buildCapabilities() {
       layers: "display-preference-and-camera-state",
       units: "display-preference",
       climate: "readonly-and-climate-update",
-      history: "edit-history",
+      history: "edit-history-read-and-undo-redo",
       edit: "edit-command",
       data: "readonly-download-and-map-import",
       namebases: "readonly-download-and-edit-command",
@@ -285,6 +285,13 @@ function buildMethodMetadata() {
       setTemperature: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
       setPrecipitation: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
       setWind: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false}
+    },
+    history: {
+      get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      stats: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      peek: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      undo: {stable: "draft", mutates: "map-and-edit-history-state", undoable: false, async: false, requiresConfirm: false},
+      redo: {stable: "draft", mutates: "map-and-edit-history-state", undoable: false, async: false, requiresConfirm: false}
     },
     selection: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
