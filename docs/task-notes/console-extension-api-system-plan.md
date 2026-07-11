@@ -452,7 +452,7 @@ api.edit.measurement.delete(id)
 
 - 已完成第一刀。
 - `api.history.get()`、`api.history.undo()` 和 `api.history.redo()` 已接入 app action，复用当前 `EditHistory` 和刷新路径。
-- `api.edit.notes.delete(noteId, {name})` 已接入 `createDeleteNoteCommand()`、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
+- `api.edit.notes.set(object, body, {name})` 和 `api.edit.notes.delete(noteId, {name})` 已接入对象备注 / 备注删除 edit commands、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
 - `api.edit.measurements.rename(id, name)` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - `api.edit.cities.add(gridCell)` 和 `api.edit.cities.delete(cityId)` 已接入城市 collection edit commands。
 - `api.edit.cities.rename(cityId, name)` 和 `api.edit.cities.setPopulation(cityId, population)` 已接入城市单对象 edit commands。
@@ -463,6 +463,9 @@ api.edit.measurement.delete(id)
 - `api.edit.cultures.add({name})` 和 `api.edit.cultures.delete(cultureId)` 已接入文化新增 / 删除 edit commands；删除仍只允许空文化。
 - `api.edit.religions.add({name})` 和 `api.edit.religions.delete(religionId)` 已接入宗教新增 / 删除 edit commands；删除仍只允许空宗教。
 - `api.edit.routes.delete(routeId)` 已接入路线删除 edit command。
+- `api.edit.routes.setNote(routeId, body, {name})` 已接入路线备注 edit command。
+- `api.edit.rivers.rename(riverId, name)`、`api.edit.rivers.setWidthFactor(riverId, widthFactor)` 和 `api.edit.rivers.setNote(riverId, body, {name})` 已接入河流单对象 edit commands。
+- `api.edit.lakes.rename(lakeId, name)` 已接入湖泊单对象重命名 edit command。
 - `api.edit.labels.delete(label)` 和 `api.edit.labels.restore(label)` 已接入标签 edit commands，覆盖手工标签删除和生成标签恢复。
 - `api.edit.markers.add({type, packCell, name})`、`api.edit.markers.delete(markerId)` 和 `api.edit.markers.move(markerId, packCell)` 已接入 marker collection edit commands。
 - 浏览器烟测已覆盖备注删除、撤销和重做。

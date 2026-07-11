@@ -1779,6 +1779,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
     },
     edit: {
       notes: {
+        set: (object, body, options = {}) => setObjectNoteViaApi(state, documentRef, object, body, options),
         delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
       },
       measurements: {
@@ -1813,7 +1814,16 @@ function createConsoleApiActions(state, documentRef, options = {}) {
         delete: religionId => deleteReligionViaApi(state, documentRef, religionId)
       },
       routes: {
-        delete: routeId => deleteRouteViaApi(state, documentRef, routeId)
+        delete: routeId => deleteRouteViaApi(state, documentRef, routeId),
+        setNote: (routeId, body, options = {}) => setRouteNoteViaApi(state, documentRef, routeId, body, options)
+      },
+      rivers: {
+        rename: (riverId, name) => renameRiverViaApi(state, documentRef, riverId, name),
+        setWidthFactor: (riverId, widthFactor) => setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor),
+        setNote: (riverId, body, options = {}) => setRiverNoteViaApi(state, documentRef, riverId, body, options)
+      },
+      lakes: {
+        rename: (lakeId, name) => renameLakeViaApi(state, documentRef, lakeId, name)
       },
       labels: {
         delete: label => deleteLabelViaApi(state, documentRef, label),
@@ -4062,6 +4072,20 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
   return editApiResult(state, result);
 }
 
+function setObjectNoteViaApi(state, documentRef, object, body, options = {}) {
+  const target = normalizeApiObjectIdentifier(object);
+  const command = createSetObjectNoteCommand(target, body, {name: options.name || ""});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "对象不存在或备注未变化。",
+    status: `已更新 ${target.kind}#${target.id} 备注。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function deleteRouteViaApi(state, documentRef, routeId) {
   const id = Number(routeId);
   const command = createDeleteRouteCommand(id, {label: `删除路线 #${Number.isFinite(id) ? id : routeId}`});
@@ -4072,6 +4096,70 @@ function deleteRouteViaApi(state, documentRef, routeId) {
   });
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function setRouteNoteViaApi(state, documentRef, routeId, body, options = {}) {
+  const id = normalizeApiInteger(routeId, "路线 ID");
+  const route = state.map?.settlements?.routes?.find(item => item.id === id);
+  const command = createSetRouteNoteCommand(id, body, {
+    name: options.name || routeDisplayName(state.map, route, id)
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "路线不存在或备注未变化。",
+    status: `已更新路线 #${id} 备注。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function renameRiverViaApi(state, documentRef, riverId, name) {
+  return renameObjectViaApi(state, documentRef, OBJECT_KIND.RIVER, riverId, name, {
+    idLabel: "河流 ID",
+    noopStatus: "河流不存在或名称未变化。",
+    status: id => `已重命名河流 #${id}。`
+  });
+}
+
+function setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor) {
+  const id = normalizeApiInteger(riverId, "河流 ID");
+  const numeric = Number(widthFactor);
+  if (!Number.isFinite(numeric)) throw new Error("河流宽度因子必须是有效数字");
+  const command = createSetRiverWidthFactorCommand(id, numeric);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "河流不存在或宽度因子未变化。",
+    status: `已更新河流 #${id} 宽度因子。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setRiverNoteViaApi(state, documentRef, riverId, body, options = {}) {
+  const id = normalizeApiInteger(riverId, "河流 ID");
+  const river = state.map?.rivers?.rivers?.find(item => item.id === id);
+  const command = createSetRiverNoteCommand(id, body, {name: options.name || river?.name || `河流 #${id}`});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "河流不存在或备注未变化。",
+    status: `已更新河流 #${id} 备注。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function renameLakeViaApi(state, documentRef, lakeId, name) {
+  return renameObjectViaApi(state, documentRef, OBJECT_KIND.LAKE, lakeId, name, {
+    idLabel: "湖泊 ID",
+    noopStatus: "湖泊不存在或名称未变化。",
+    status: id => `已重命名湖泊 #${id}。`
+  });
 }
 
 function addCityViaApi(state, documentRef, gridCell) {

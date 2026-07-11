@@ -63,6 +63,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
     }),
     edit: Object.freeze({
       notes: Object.freeze({
+        set: (object, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.set, "edit.notes.set")(object, body, options)),
         delete: (noteId, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.delete, "edit.notes.delete")(noteId, options))
       }),
       measurements: Object.freeze({
@@ -97,7 +98,16 @@ function createConsoleApi(documentRef, state, actions = {}) {
         delete: religionId => apiCall(() => requireApiAction(actions.edit?.religions?.delete, "edit.religions.delete")(religionId))
       }),
       routes: Object.freeze({
-        delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId))
+        delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId)),
+        setNote: (routeId, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.setNote, "edit.routes.setNote")(routeId, body, options))
+      }),
+      rivers: Object.freeze({
+        rename: (riverId, name) => apiCall(() => requireApiAction(actions.edit?.rivers?.rename, "edit.rivers.rename")(riverId, name)),
+        setWidthFactor: (riverId, widthFactor) => apiCall(() => requireApiAction(actions.edit?.rivers?.setWidthFactor, "edit.rivers.setWidthFactor")(riverId, widthFactor)),
+        setNote: (riverId, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.rivers?.setNote, "edit.rivers.setNote")(riverId, body, options))
+      }),
+      lakes: Object.freeze({
+        rename: (lakeId, name) => apiCall(() => requireApiAction(actions.edit?.lakes?.rename, "edit.lakes.rename")(lakeId, name))
       }),
       labels: Object.freeze({
         delete: label => apiCall(() => requireApiAction(actions.edit?.labels?.delete, "edit.labels.delete")(label)),
@@ -132,7 +142,7 @@ function buildCapabilities() {
       units: ["get", "apply"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
-      edit: ["notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "religions.add", "religions.delete", "routes.delete", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
+      edit: ["notes.set", "notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "religions.add", "religions.delete", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {

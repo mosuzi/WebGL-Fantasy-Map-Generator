@@ -24824,3 +24824,29 @@ full 矩阵结果：
 - 本轮按要求启动验证子智能体 `verify_political_city_field_api` 和 `verify_field_api_browser_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `cities.rename / cities.setPopulation / provinces.rename / provinces.setColor / states.rename / states.setColor / states.setGovernment`；城市 `#0` 重命名进入历史，撤销恢复原名“鹿明”，重做恢复“API城市字段烟测”；城市人口从 `3.218` 改到 `12348.218` 并可撤销恢复；省份 `#1` 重命名和颜色 `#123abc` 均进入历史并可撤销；国家 `#1` 重命名、颜色 `#abcdef` 和政体 `feudal_monarchy -> republic` 均进入历史并可撤销；直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
 - 补充稳定态烟测通过：加载遮罩隐藏后 `window.__webglGeneratorApp`、renderer、`window.webglGeneratorApi` 和本批字段 API 均可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 备注与水文对象编辑 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 阶段 4 已覆盖政治、城市、文化、宗教、marker、标签、测量和路线删除等入口。
+- 计划草案中仍有 `api.edit.note.set(object, body)` 缺口；路线备注、河流备注 / 宽度和湖泊 / 河流重命名也已有明确单对象命令，适合作为下一批低风险 API 薄封装。
+
+实现：
+
+- `console-api.js` 新增 `api.edit.notes.set(object, body, {name})`，复用 `createSetObjectNoteCommand()`。
+- `console-api.js` 新增 `api.edit.routes.setNote(routeId, body, {name})`，复用 `createSetRouteNoteCommand()`。
+- `console-api.js` 新增 `api.edit.rivers.rename(riverId, name)`、`api.edit.rivers.setWidthFactor(riverId, widthFactor)` 和 `api.edit.rivers.setNote(riverId, body, {name})`。
+- `console-api.js` 新增 `api.edit.lakes.rename(lakeId, name)`。
+- `api.info.capabilities()` 的编辑方法列表同步补充上述备注与水文对象字段能力。
+- `app.js` 的 API actions 继续通过 `executeEditCommand()` 进入撤销栈；河流宽度因子 API 会先校验数值，通用备注 API 使用统一对象标识 `{kind, id}`。
+- 本步不新增路线 / 河流 / 湖泊删除语义，不改变名称库批量重命名、河流拓扑、水文重算、湖泊 feature 或导出语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_note_hydro_api` 和 `verify_note_hydro_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `notes.set / routes.setNote / rivers.rename / rivers.setWidthFactor / rivers.setNote / lakes.rename`；城市 `#0` 通用备注写入后进入历史，撤销后备注恢复为空；路线 `#0` 备注写入后进入历史，撤销后恢复为空；河流 `#1` 重命名从“镜川”改为“API河流字段烟测”并可撤销，宽度因子从 `1.2` 改为 `2.34` 并可撤销，备注写入后可撤销；湖泊 `#5` 重命名从“白泊”改为“API湖泊字段烟测”并可撤销；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
