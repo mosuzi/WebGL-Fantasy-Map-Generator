@@ -25115,3 +25115,27 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_generate_regenerate_api` 和 `verify_generate_regenerate_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `generate` 命名空间、`generate.regenerate` 方法和 `map-regeneration` 副作用标记；直接调用 `api.generate.regenerate("routes")` 返回 `ok = false`，错误信息为“受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}”；不支持的 `terrain` 类型返回结构化错误；`api.generate.regenerate("routes", {confirm:true})` 成功返回道路重算状态，路线计数 `589 -> 589`，`staleSystems = []`；`api.generate.regenerate("diplomacy", {confirm:true})` 成功返回外交重算状态，关系数 `190 -> 190`、战争数 `1 -> 0`，历史摘要记录 `重生成外交` 且 `lastAffected` 包含 `derived-system#diplomacy-regeneration`；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 地图生成 API 第一刀
+
+背景：
+
+- `api.generate.regenerate()` 已覆盖受约束重算，但阶段 5 还缺少脚本化生成新地图、随机 seed 和生成配置读写能力。
+- UI 的“生成”和“随机 seed”已经统一走 `generateMapOffMainThread()` 与 `loadMapIntoRuntime()`，API 应复用同一条 worker 生成和运行时接入路径，避免单独维护第二套生成流程。
+
+实现：
+
+- `console-api.js` 扩展 `api.generate.getOptions()`、`setOptions(patch)`、`newMap(options)` 和 `rerollSeed(options)`，并登记到 `api.info.capabilities()`。
+- app action 层新增生成 API helper：`getOptions` 返回当前规范化生成配置与地图摘要；`setOptions` 会规范化 patch、更新 `state.options`、同步主生成输入和 runtime 面板，但不隐式生成。
+- `newMap` 和 `rerollSeed` 复用 `generateMapOffMainThread()`、名称库生成快照、`loadMapIntoRuntime()`、loading trace、运行时面板刷新和历史清空路径，并返回生成配置、地图摘要、生成 / 加载 timings 与历史摘要。
+- 为避免脚本误触替换当前地图并清空编辑历史，`newMap` 和 `rerollSeed` 必须显式传入 `{confirm: true}`；未确认会返回结构化错误。
+- 本步不接完整地图导入或 GEO 导入 API，也不改变 UI 按钮生成行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_generate_new_map_api` 和 `verify_generate_new_map_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `generate.getOptions / setOptions / newMap / rerollSeed / regenerate`；`api.generate.getOptions()` 返回当前规范化配置；`api.generate.setOptions({seed:"api-option-smoke", cellsTarget:1000, graphWidth:800, graphHeight:600})` 更新配置但不生成新地图，调用前后 checksum 均为 `3f029d63`；直接调用 `api.generate.newMap({seed:"api-no-confirm", cellsTarget:1000})` 返回 `ok = false`，错误信息为“生成新地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}”；`api.generate.newMap({confirm:true, seed:"api-new-map-smoke", cellsTarget:1000, graphWidth:800, graphHeight:600})` 成功生成新地图，seed 为 `api-new-map-smoke`，grid cells `999`、pack cells `814`，历史栈清空；`api.generate.rerollSeed({confirm:true, cellsTarget:1000, graphWidth:800, graphHeight:600})` 成功生成新 seed `map-mrfz5akk-0oyq7ug`，grid cells `999`、pack cells `794`；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

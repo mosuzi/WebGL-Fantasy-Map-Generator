@@ -25,6 +25,10 @@ function createConsoleApi(documentRef, state, actions = {}) {
       runtimeStats: () => apiCall(() => buildRuntimeStats(state, documentRef))
     }),
     generate: Object.freeze({
+      getOptions: () => apiCall(() => requireApiAction(actions.generate?.getOptions, "generate.getOptions")()),
+      setOptions: (patch = {}) => apiCall(() => requireApiAction(actions.generate?.setOptions, "generate.setOptions")(patch)),
+      newMap: (options = {}) => apiCall(() => requireApiAction(actions.generate?.newMap, "generate.newMap")(options)),
+      rerollSeed: (options = {}) => apiCall(() => requireApiAction(actions.generate?.rerollSeed, "generate.rerollSeed")(options)),
       regenerate: (kind, options = {}) => apiCall(() => requireApiAction(actions.generate?.regenerate, "generate.regenerate")(kind, options))
     }),
     selection: Object.freeze({
@@ -167,7 +171,7 @@ function buildCapabilities() {
     namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
-      generate: ["regenerate"],
+      generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
       selection: ["get", "resolve", "select", "clear", "locate", "pick"],
       layers: ["get", "setViewMode", "setVisible"],
       units: ["get", "apply"],

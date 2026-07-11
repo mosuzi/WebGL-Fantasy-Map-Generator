@@ -506,7 +506,11 @@ api.edit.measurement.delete(id)
 - 受约束重算 API 已完成第一刀。
 - `api.generate.regenerate(kind, {confirm:true})` 支持 `routes / rivers / cities / states / provinces / markers / diplomacy` 及常见别名，复用现有控制面板的受约束重算路径。
 - 返回值包含 `kind / action / status / constraint`、重算前后对象计数、当前 `staleSystems` 和历史摘要；其中 marker / diplomacy 继续复用既有命令或历史路径，其它派生重算暂保持现有非撤销语义。
-- 为避免脚本误触大范围派生重建，`regenerate` 必须显式传 `confirm:true`；地图生成、换 seed、完整地图导入和 GEO 导入仍待后续单独设计异步状态和错误详情。
+- 地图生成 API 已完成第一刀。
+- `api.generate.getOptions()` 返回当前规范化生成配置和当前地图摘要。
+- `api.generate.setOptions(patch)` 会规范化并同步生成配置与主输入，不隐式生成新地图。
+- `api.generate.newMap(options)` 和 `api.generate.rerollSeed(options)` 复用 worker 生成和 `loadMapIntoRuntime()`，返回生成配置、地图摘要、生成 / 加载 timings 和历史摘要。
+- 为避免脚本误触大范围派生重建或替换当前地图，`regenerate / newMap / rerollSeed` 必须显式传 `confirm:true`；完整地图导入和 GEO 导入仍待后续单独设计异步状态和错误详情。
 
 ## 第一批代码落点建议
 

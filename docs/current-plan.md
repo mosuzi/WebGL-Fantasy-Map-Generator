@@ -97,6 +97,7 @@
    - 补充记录：名称库清空 API 第一刀已接入 `api.namebases.clear({confirm:true})`，复用名称库 edit command、`EditHistory`、面板刷新和本地偏好持久化；因为这是批量删除用户名称库，API 必须显式传 `confirm:true`。本步不接按名称库批量重命名当前地图对象；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
    - 补充记录：名称库批量重命名对象 API 第一刀已接入 `api.namebases.renameObjects(kind, ids, {confirm:true})`，支持 `state / city / river / lake` 及常见复数别名，复用既有按名称库重命名命令并进入 `EditHistory`；因为这是批量改写当前地图对象名称，API 必须显式传 `confirm:true`，其它对象类型暂返回结构化错误。构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放；浏览器验证确认城市 6 个、河流 8 个可真实改名并撤销恢复，WebGL / health / console / page error 均为 `0`。
    - 补充记录：生成 / 受约束重算 API 第一刀已接入 `api.generate.regenerate(kind, {confirm:true})`，支持 `routes / rivers / cities / states / provinces / markers / diplomacy` 及常见别名，复用现有控制面板受约束重算路径并返回 before / after 计数、派生 stale 系统和历史摘要；因为多数重算会直接改写派生数据且并非全部可撤销，API 必须显式传 `confirm:true`。构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放；浏览器验证确认 `routes` 和 `diplomacy` 重算 API 可用，未确认 / 未知类型会结构化失败，WebGL / health / console / page error 均为 `0`。
+   - 补充记录：生成 API 地图生成第一刀已接入 `api.generate.getOptions()`、`setOptions(patch)`、`newMap(options)` 和 `rerollSeed(options)`；`setOptions` 只同步生成配置和主输入，不隐式生成，`newMap / rerollSeed` 复用 worker 生成和 `loadMapIntoRuntime()` 路径并返回地图摘要、timings 和历史摘要。因为生成会替换当前地图并清空编辑历史，`newMap / rerollSeed` 必须显式传 `confirm:true`。构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放；浏览器验证确认 `setOptions` 不改变当前地图 checksum，`newMap` 和 `rerollSeed` 可生成约 1000 cells 地图并清空历史，WebGL / health / console / page error 均为 `0`。
 
 ### 验证要求
 

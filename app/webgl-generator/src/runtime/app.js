@@ -1762,6 +1762,10 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       redo: () => executeHistoryCommand(state, documentRef, "redo")
     },
     generate: {
+      getOptions: () => getGenerationOptionsViaApi(state, documentRef),
+      setOptions: (patch = {}) => setGenerationOptionsViaApi(state, documentRef, patch),
+      newMap: (options = {}) => generateNewMapViaApi(state, documentRef, options),
+      rerollSeed: (options = {}) => rerollSeedViaApi(state, documentRef, options),
       regenerate: (kind, options = {}) => regenerateMapAttributeViaApi(state, documentRef, kind, options)
     },
     selection: {
@@ -2203,6 +2207,102 @@ function normalizeGenerationCultureNamebaseBindings(cultures) {
     };
   }
   return result;
+}
+
+function getGenerationOptionsViaApi(state, documentRef) {
+  const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+  return {
+    options: cloneGenerationOptions(options),
+    map: generationApiMapSummary(state.map)
+  };
+}
+
+function setGenerationOptionsViaApi(state, documentRef, patch = {}) {
+  const options = normalizeApiGenerationOptions(state, documentRef, patch);
+  state.options = options;
+  syncGenerationInputs(documentRef, options);
+  updateRuntimePanel(documentRef, state);
+  return {
+    options: cloneGenerationOptions(options),
+    map: generationApiMapSummary(state.map)
+  };
+}
+
+async function generateNewMapViaApi(state, documentRef, options = {}) {
+  if (options?.confirm !== true) throw new Error("生成新地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  const nextOptions = normalizeApiGenerationOptions(state, documentRef, options);
+  return generateMapViaApi(state, documentRef, nextOptions, {completionToast: state.map ? "生成完成" : ""});
+}
+
+async function rerollSeedViaApi(state, documentRef, options = {}) {
+  if (options?.confirm !== true) throw new Error("随机 seed 生成会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  const seed = String(options.seed || createRandomSeed()).trim() || createRandomSeed();
+  const nextOptions = normalizeApiGenerationOptions(state, documentRef, {...options, seed});
+  return generateMapViaApi(state, documentRef, nextOptions, {completionToast: "生成完成"});
+}
+
+async function generateMapViaApi(state, documentRef, options, {completionToast = ""} = {}) {
+  state.options = options;
+  syncGenerationInputs(documentRef, options);
+  const namebaseSnapshot = resolveGenerationNamebaseSnapshot(state, documentRef);
+  state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
+  const generateId = state.pendingGenerateId;
+  const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  try {
+    resetLoadTrace(documentRef);
+    emitLoadTrace(documentRef, {phase: "request", id: "api-generate", message: loadingMessage("request")});
+    setGenerationStatus(documentRef, state.options, "生成中");
+    setMythicGenerationLoading(documentRef, true, "generate");
+    await yieldToBrowser(documentRef, {debugDelay: true});
+    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(state.options, namebaseSnapshot), generateId);
+    if (generateId !== state.pendingGenerateId) throw new Error("生成请求已被新的生成任务取代");
+    await loadMapIntoRuntime(state, documentRef, map, {
+      loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")],
+      completionToast
+    });
+    return {
+      options: cloneGenerationOptions(state.options),
+      map: generationApiMapSummary(state.map),
+      timings: {
+        totalMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt),
+        generation: {...(state.map?.metadata?.generationTiming || {})},
+        loadMap: state.renderer?.getStats?.().loadMap || null
+      },
+      history: state.editHistory.getStats()
+    };
+  } catch (error) {
+    updateGenerationLoading(documentRef, false);
+    reportGenerateError(documentRef, error);
+    throw error;
+  }
+}
+
+function normalizeApiGenerationOptions(state, documentRef, patch = {}) {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("生成选项必须是对象");
+  const base = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+  const {confirm: _confirm, ...rest} = patch;
+  return normalizeOptions({...base, ...rest});
+}
+
+function cloneGenerationOptions(options) {
+  return JSON.parse(JSON.stringify(options || {}));
+}
+
+function generationApiMapSummary(map) {
+  if (!map) return {ready: false};
+  return {
+    ready: true,
+    seed: map.metadata?.seed || map.options?.seed || "",
+    checksum: map.metadata?.checksum || map.summary?.checksum || "",
+    gridCells: map.metadata?.gridCells || map.grid?.metadata?.actualCells || 0,
+    packCells: map.metadata?.packCells || map.pack?.metadata?.cells || 0,
+    states: countPoliticalItems(map.politics?.states || []),
+    provinces: countPoliticalItems(map.politics?.provinces || []),
+    cities: map.settlements?.cities?.filter(Boolean).length || 0,
+    routes: map.settlements?.routes?.filter(Boolean).length || 0,
+    rivers: map.rivers?.rivers?.filter(Boolean).length || 0,
+    markers: map.markers?.markers?.filter(Boolean).length || 0
+  };
 }
 
 async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = ""} = {}) {
