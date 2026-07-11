@@ -1807,11 +1807,17 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       },
       cultures: {
         add: options => addCultureViaApi(state, documentRef, options),
-        delete: cultureId => deleteCultureViaApi(state, documentRef, cultureId)
+        delete: cultureId => deleteCultureViaApi(state, documentRef, cultureId),
+        rename: (cultureId, name) => renameCultureViaApi(state, documentRef, cultureId, name),
+        setColor: (cultureId, color) => setCultureColorViaApi(state, documentRef, cultureId, color),
+        setParent: (cultureId, parentId) => setCultureParentViaApi(state, documentRef, cultureId, parentId)
       },
       religions: {
         add: options => addReligionViaApi(state, documentRef, options),
-        delete: religionId => deleteReligionViaApi(state, documentRef, religionId)
+        delete: religionId => deleteReligionViaApi(state, documentRef, religionId),
+        rename: (religionId, name) => renameReligionViaApi(state, documentRef, religionId, name),
+        setColor: (religionId, color) => setReligionColorViaApi(state, documentRef, religionId, color),
+        setParent: (religionId, parentId) => setReligionParentViaApi(state, documentRef, religionId, parentId)
       },
       routes: {
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId),
@@ -4470,6 +4476,46 @@ function deleteCultureViaApi(state, documentRef, cultureId) {
   return editApiResult(state, result);
 }
 
+function renameCultureViaApi(state, documentRef, cultureId, name) {
+  return renameObjectViaApi(state, documentRef, OBJECT_KIND.CULTURE, cultureId, name, {
+    idLabel: "文化 ID",
+    noopStatus: "文化不存在或名称未变化。",
+    status: id => `已重命名文化 #${id}。`
+  });
+}
+
+function setCultureColorViaApi(state, documentRef, cultureId, color) {
+  const id = normalizeApiInteger(cultureId, "文化 ID");
+  const nextColor = normalizeApiHexColor(color, "文化颜色");
+  const culture = state.map?.society?.cultures?.[id] || state.map?.pack?.cultures?.[id];
+  const command = createSetCultureColorCommand(id, nextColor, {beforeColor: culture?.color ?? null});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "文化不存在或颜色未变化。",
+    status: `已更新文化 #${id} 颜色。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setCultureParentViaApi(state, documentRef, cultureId, parentId) {
+  const id = normalizeApiInteger(cultureId, "文化 ID");
+  const parent = normalizeApiInteger(parentId, "文化父级 ID");
+  const culture = state.map?.society?.cultures?.[id] || state.map?.pack?.cultures?.[id];
+  const command = createSetCultureParentCommand(id, parent, {beforeParent: culture?.parent ?? 0});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "文化不存在、父级无效或继承未变化。",
+    status: `已更新文化 #${id} 继承父级。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function addReligionViaApi(state, documentRef, options = {}) {
   const payload = normalizeApiObjectOptions(options);
   const command = createAddReligionCommand({name: payload.name});
@@ -4510,6 +4556,46 @@ function deleteReligionViaApi(state, documentRef, religionId) {
     state.panels.religion?.setSelectedReligionId(null);
   }
   updateReligionPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function renameReligionViaApi(state, documentRef, religionId, name) {
+  return renameObjectViaApi(state, documentRef, OBJECT_KIND.RELIGION, religionId, name, {
+    idLabel: "宗教 ID",
+    noopStatus: "宗教不存在或名称未变化。",
+    status: id => `已重命名宗教 #${id}。`
+  });
+}
+
+function setReligionColorViaApi(state, documentRef, religionId, color) {
+  const id = normalizeApiInteger(religionId, "宗教 ID");
+  const nextColor = normalizeApiHexColor(color, "宗教颜色");
+  const religion = state.map?.society?.religions?.[id] || state.map?.pack?.religions?.[id];
+  const command = createSetReligionColorCommand(id, nextColor, {beforeColor: religion?.color ?? null});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "宗教不存在或颜色未变化。",
+    status: `已更新宗教 #${id} 颜色。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setReligionParentViaApi(state, documentRef, religionId, parentId) {
+  const id = normalizeApiInteger(religionId, "宗教 ID");
+  const parent = normalizeApiInteger(parentId, "宗教父级 ID");
+  const religion = state.map?.society?.religions?.[id] || state.map?.pack?.religions?.[id];
+  const command = createSetReligionParentCommand(id, parent, {beforeParent: religion?.parent ?? 0});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "宗教不存在、父级无效或继承未变化。",
+    status: `已更新宗教 #${id} 继承父级。`,
+    throwOnError: false
+  });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);

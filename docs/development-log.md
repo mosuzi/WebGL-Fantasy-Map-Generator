@@ -24850,3 +24850,28 @@ full 矩阵结果：
 - `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_note_hydro_api` 和 `verify_note_hydro_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `notes.set / routes.setNote / rivers.rename / rivers.setWidthFactor / rivers.setNote / lakes.rename`；城市 `#0` 通用备注写入后进入历史，撤销后备注恢复为空；路线 `#0` 备注写入后进入历史，撤销后恢复为空；河流 `#1` 重命名从“镜川”改为“API河流字段烟测”并可撤销，宽度因子从 `1.2` 改为 `2.34` 并可撤销，备注写入后可撤销；湖泊 `#5` 重命名从“白泊”改为“API湖泊字段烟测”并可撤销；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 文化与宗教字段编辑 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 阶段 4 已覆盖文化 / 宗教新增删除，但名称、颜色和继承父级仍只能从面板回调进入。
+- 这些字段已有 edit commands，适合作为 API 薄封装继续扩展。
+
+实现：
+
+- `console-api.js` 新增 `api.edit.cultures.rename(cultureId, name)`、`api.edit.cultures.setColor(cultureId, color)` 和 `api.edit.cultures.setParent(cultureId, parentId)`。
+- `console-api.js` 新增 `api.edit.religions.rename(religionId, name)`、`api.edit.religions.setColor(religionId, color)` 和 `api.edit.religions.setParent(religionId, parentId)`。
+- `api.info.capabilities()` 的编辑方法列表同步补充上述文化 / 宗教字段编辑能力。
+- `app.js` 的 API actions 复用既有 `createRenameObjectCommand()`、`createSetCultureColorCommand()`、`createSetCultureParentCommand()`、`createSetReligionColorCommand()` 和 `createSetReligionParentCommand()`，并继续通过 `executeEditCommand()` 进入撤销栈。
+- 颜色参数复用 `#rrggbb` 校验，父级参数使用整数对象 ID。
+- 本步不改变文化 / 宗教面板 UI、新增删除约束、继承树规则、名称库绑定或派生刷新语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `.\node_modules\.bin\vite.cmd build --config vite.config.mjs` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_culture_religion_field_api` 和 `verify_culture_religion_field_smoke`；两个子智能体等待 90 秒无输出，已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `cultures.rename / cultures.setColor / cultures.setParent / religions.rename / religions.setColor / religions.setParent`；新增测试文化 `#13/#14` 后，文化 `#14` 重命名从“API字段子文化1783730927328”改为“API文化字段烟测1783730927328”并可撤销，颜色从 `null` 改为 `#123abc` 并可撤销，继承父级从 `0` 改为 `13` 并可撤销；新增测试宗教 `#19/#20` 后，宗教 `#20` 重命名从“API字段子宗教1783730927328”改为“API宗教字段烟测1783730927328”并可撤销，颜色从 `null` 改为 `#654321` 并可撤销，继承父级从 `0` 改为 `19` 并可撤销；加载遮罩已隐藏，`api.info.mapSummary()` 和 `api.info.runtimeStats()` 均返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

@@ -91,11 +91,17 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       cultures: Object.freeze({
         add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.add, "edit.cultures.add")(options)),
-        delete: cultureId => apiCall(() => requireApiAction(actions.edit?.cultures?.delete, "edit.cultures.delete")(cultureId))
+        delete: cultureId => apiCall(() => requireApiAction(actions.edit?.cultures?.delete, "edit.cultures.delete")(cultureId)),
+        rename: (cultureId, name) => apiCall(() => requireApiAction(actions.edit?.cultures?.rename, "edit.cultures.rename")(cultureId, name)),
+        setColor: (cultureId, color) => apiCall(() => requireApiAction(actions.edit?.cultures?.setColor, "edit.cultures.setColor")(cultureId, color)),
+        setParent: (cultureId, parentId) => apiCall(() => requireApiAction(actions.edit?.cultures?.setParent, "edit.cultures.setParent")(cultureId, parentId))
       }),
       religions: Object.freeze({
         add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.add, "edit.religions.add")(options)),
-        delete: religionId => apiCall(() => requireApiAction(actions.edit?.religions?.delete, "edit.religions.delete")(religionId))
+        delete: religionId => apiCall(() => requireApiAction(actions.edit?.religions?.delete, "edit.religions.delete")(religionId)),
+        rename: (religionId, name) => apiCall(() => requireApiAction(actions.edit?.religions?.rename, "edit.religions.rename")(religionId, name)),
+        setColor: (religionId, color) => apiCall(() => requireApiAction(actions.edit?.religions?.setColor, "edit.religions.setColor")(religionId, color)),
+        setParent: (religionId, parentId) => apiCall(() => requireApiAction(actions.edit?.religions?.setParent, "edit.religions.setParent")(religionId, parentId))
       }),
       routes: Object.freeze({
         delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId)),
@@ -142,7 +148,7 @@ function buildCapabilities() {
       units: ["get", "apply"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
-      edit: ["notes.set", "notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "religions.add", "religions.delete", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
+      edit: ["notes.set", "notes.delete", "measurements.rename", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.delete", "labels.restore", "markers.add", "markers.delete", "markers.move"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"]
     },
     sideEffects: {
