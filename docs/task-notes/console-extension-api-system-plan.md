@@ -330,6 +330,7 @@ api.edit.measurement.delete(id)
 
 - `api.info.capabilities()` 保留原有 `methods` 数组以兼容旧脚本，同时新增 `safety.confirmRequiredMethods`、按命名空间分组的 `safety.confirmRequired` 和 `methodMetadata` 第一刀。
 - 当前显式标注 `generate.regenerate / newMap / rerollSeed`、`data.importMap / importGEO`、`namebases.clear / renameObjects` 必须传 `confirm:true`；对应 `methodMetadata` 会记录 `mutates / undoable / async / requiresConfirm`，供 AI 或自动化脚本在调用前判断确认边界。浏览器验证已确认该元数据只读且不修改地图 checksum。
+- selection 命名空间已从命名空间级 `readonly` 修正为 `selection-camera-and-editing-state`，并补齐方法级副作用元数据：`get / resolve` 不改变状态，`select / clear` 改选择态，`locate` 改相机与选择态，`pick` 改 pick 面板状态，`flash / highlight` 改临时闪烁态，`startEditing / stopEditing / toggleEditing` 改编辑态；这些方法均不要求 `confirm:true`，也不进入 `EditHistory`。
 
 ## 安全与副作用边界
 

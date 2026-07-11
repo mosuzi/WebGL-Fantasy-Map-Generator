@@ -25534,3 +25534,30 @@ full 矩阵结果：
 - 子智能体 API 元数据结构验证通过：`safety.confirmRequiredMethods` 精确等于 `generate.regenerate / generate.newMap / generate.rerollSeed / data.importMap / data.importGEO / namebases.clear / namebases.renameObjects`，没有多也没有少；分组结果为 `generate: regenerate/newMap/rerollSeed`、`data: importMap/importGEO`、`namebases: clear/renameObjects`；对应 `methodMetadata` 均包含 `mutates / undoable / async / requiresConfirm: true`；旧 `methods` 数组仍保留原方法。
 - 浏览器 smoke 子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-capability-safety", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `25f32b7b`、grid cells `1014`、pack cells `928`；随后读取 `api.info.capabilities()`，确认 `safety.confirmationOption = "confirm: true"`、确认方法 7 项和分组均正确，且每个确认类方法的 `methodMetadata.requiresConfirm = true` 并带有 `mutates / undoable / async`；旧 `methods.generate / data / namebases` 仍包含对应方法；调用前后 checksum 保持 `25f32b7b` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 selection 能力元数据副作用边界第一刀
+
+背景：
+
+- `api.info.capabilities().sideEffects.selection` 此前仍标为 `readonly`，但 selection 命名空间里除 `get / resolve` 外，`select / clear / locate / pick / flash / highlight / startEditing / stopEditing / toggleEditing` 都会改变运行时选择、相机、pick 面板、临时闪烁或编辑态。
+- 这些变化不改地图数据、不进入 `EditHistory`、也不需要 `confirm:true`，但如果仍标成纯只读，脚本或 AI 在自动调用前会误判副作用边界。
+
+实现：
+
+- `console-api.js` 将命名空间级 `sideEffects.selection` 从 `readonly` 修正为 `selection-camera-and-editing-state`。
+- `methodMetadata.selection` 新增完整方法级副作用说明：
+  - `get / resolve` 标注 `mutates: "none"`；
+  - `select / clear` 标注 `selection-state`；
+  - `locate` 标注 `camera-and-selection-state`；
+  - `pick` 标注 `pick-panel-state`；
+  - `flash / highlight` 标注 `selection-flash-state`；
+  - `startEditing / stopEditing / toggleEditing` 标注 `editing-state`。
+- 上述方法均标注 `undoable: false`、`async: false`、`requiresConfirm: false`，保留原有调用行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
+- 本轮按要求启动两个验证子智能体做 API 元数据 / 浏览器 smoke；等待 90 秒无输出后均已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `819ecc45`、grid cells `1014`、pack cells `877`；随后读取 `api.info.capabilities()`，确认 `sideEffects.selection = "selection-camera-and-editing-state"`，`methods.selection` 仍包含全部 11 个 selection 方法，`methodMetadata.selection` 中每个方法均有 `mutates / undoable / async / requiresConfirm`，且全部 `requiresConfirm = false`；`get / resolve` 为 `none`，`select / clear` 为 `selection-state`，`locate` 为 `camera-and-selection-state`，`pick` 为 `pick-panel-state`，`flash / highlight` 为 `selection-flash-state`，编辑态三项为 `editing-state`；调用前后 checksum 保持 `819ecc45` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

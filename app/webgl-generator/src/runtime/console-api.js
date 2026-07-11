@@ -237,7 +237,7 @@ function buildCapabilities() {
     sideEffects: {
       info: "readonly",
       generate: "map-regeneration",
-      selection: "readonly",
+      selection: "selection-camera-and-editing-state",
       layers: "display-preference",
       units: "display-preference",
       climate: "readonly-and-climate-update",
@@ -252,6 +252,19 @@ function buildCapabilities() {
 
 function buildMethodMetadata() {
   return {
+    selection: {
+      get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      resolve: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      select: {stable: "draft", mutates: "selection-state", undoable: false, async: false, requiresConfirm: false},
+      clear: {stable: "draft", mutates: "selection-state", undoable: false, async: false, requiresConfirm: false},
+      locate: {stable: "draft", mutates: "camera-and-selection-state", undoable: false, async: false, requiresConfirm: false},
+      pick: {stable: "draft", mutates: "pick-panel-state", undoable: false, async: false, requiresConfirm: false},
+      flash: {stable: "draft", mutates: "selection-flash-state", undoable: false, async: false, requiresConfirm: false},
+      highlight: {stable: "draft", mutates: "selection-flash-state", undoable: false, async: false, requiresConfirm: false},
+      startEditing: {stable: "draft", mutates: "editing-state", undoable: false, async: false, requiresConfirm: false},
+      stopEditing: {stable: "draft", mutates: "editing-state", undoable: false, async: false, requiresConfirm: false},
+      toggleEditing: {stable: "draft", mutates: "editing-state", undoable: false, async: false, requiresConfirm: false}
+    },
     generate: {
       regenerate: {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: true, requiresConfirm: true},
       newMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
