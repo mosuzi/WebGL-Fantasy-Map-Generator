@@ -25486,3 +25486,25 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_debug_mode_api` 和 `verify_debug_mode_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-mode", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `e878fde1`；`api.info.capabilities().methods.debug` 已包含 `enable / disable`，`sideEffects.debug = "diagnostics-and-debug-ui"`；调用 `api.debug.enable()` 返回 `enabled=true`、`collapsed=false`、`panelVisible=true`，DOM 中开发模式按钮 `hidden=false`、`aria-pressed=true`，开发面板不 hidden，`api.debug.snapshot().app.debug.enabled=true`；调用 `api.debug.disable()` 返回 `enabled=false`、`collapsed=true`、`panelVisible=false`，开发面板 hidden，`api.debug.snapshot().app.debug.enabled=false`；`webgl-generator-debug-change` 事件按开 / 关各触发一次；调用前后 checksum 保持 `e878fde1` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 选择高亮 API 语义补齐
+
+背景：
+
+- 控制台 API 方案把 `api.selection.highlight(objects, options)` 写成 objects 复数，但此前实现只是把 `highlight(object)` 作为 `flash(object)` 的别名。
+- 当前 renderer 仍只有 selection / locate flash 层，没有独立多对象高亮生命周期；继续让多对象数组落入对象解析错误，会让脚本难以判断是参数错误还是能力未支持。
+
+实现：
+
+- `console-api.js` 将 `api.selection.highlight(objects, options)` 改为显式包装。
+- 单对象或单元素数组继续复用 `selection.flash`，并在返回值中补充 `requested` 和 `mode: "single-object-flash"`。
+- 空数组返回“缺少高亮对象”；多对象数组返回“当前 renderer 尚不支持多对象高亮；请逐个调用 api.selection.flash(object)”的结构化失败。
+- 本步不新增多对象高亮生命周期，不改变 renderer，也不修改地图 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
+- 本轮按要求启动两个验证子智能体做 API / 浏览器烟测；等待 90 秒无输出后已中断释放，避免占用资源。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-highlight-semantics", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `023e21ce`、grid cells `1014`、pack cells `879`；`api.info.capabilities()` 已包含 `selection.highlight`；`api.selection.highlight({kind:"river", id:1})` 与 `api.selection.highlight([{kind:"river", id:1}])` 均返回 `requested = 1`、`mode = single-object-flash`、`flashed = true`、`highlightMode = river red flash`，selection 指向河流 `#1`；`api.selection.highlight([])` 返回结构化失败且错误信息包含“缺少高亮对象”；传入河流与城市两个对象的数组返回结构化失败且错误信息包含“多对象高亮”；调用前后 checksum 保持 `023e21ce` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

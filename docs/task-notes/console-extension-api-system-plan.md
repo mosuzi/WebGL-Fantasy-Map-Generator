@@ -507,6 +507,7 @@ api.edit.measurement.delete(id)
 - 浏览器烟测已覆盖城市对象 resolve / select / clear / locate，以及不存在对象的结构化错误。
 - `api.selection.pick(clientX, clientY)` 已接入 renderer `pickClientPoint()`，浏览器烟测已覆盖中心点拾取和非法坐标错误。
 - `api.selection.flash(object)` 已完成第一刀，并提供 `api.selection.highlight(object)` 同义入口；当前复用 selection store 与 renderer `startLocateFlash()`，支持单对象临时闪烁。
+- `api.selection.highlight(objects, options)` 已补齐显式语义边界：单对象或单元素数组走单对象临时闪烁，多对象数组返回结构化失败，提示当前 renderer 尚不支持多对象高亮。
 - `api.selection.startEditing(object, {select})`、`stopEditing({ifKind})` 和 `toggleEditing(object, {select})` 已完成第一刀；当前复用运行时编辑态 helper，只控制 selection / editingObject 与编辑交互锁，不执行数据编辑命令。
 - 多对象高亮暂缓；当前 renderer 仍没有独立于 selection 的多对象高亮态入口，后续需要单独设计高亮生命周期。
 
