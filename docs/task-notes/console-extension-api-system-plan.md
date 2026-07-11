@@ -416,7 +416,8 @@ api.edit.measurement.delete(id)
 - 完整地图导入 API 已完成第一刀。
 - `api.data.importMap(document, {confirm:true})` 支持当前 `.webgl-map.json` 文档对象和 JSON 字符串，复用 `parseMapDocument()`、`loadMapIntoRuntime()`、生成输入同步、视觉主题恢复和名称库偏好持久化路径。
 - 返回值包含导入后的地图摘要、生成配置、源文档 metadata、加载 timings、名称库偏好持久化结果和历史摘要；因为会替换当前地图并清空编辑历史，必须显式传 `confirm:true`。
-- 当前 `importMap` 不接 gzip Blob / File，也不接 GEO 导入；这两类仍待后续单独设计异步输入和错误详情。
+- `importMap` 已补齐 File / Blob、`{encoding:"gzip-base64", data}` 和 `api.data.exportCompressedAll({download:false})` 返回对象输入支持；gzip 输入复用 `DecompressionStream` 解压，仍走同一完整地图导入路径。
+- 当前 `importMap` 不接 GEO 导入；GEO 仍由 `api.data.importGEO()` 单独处理。
 - GEO 导入 API 已完成第一刀。
 - `api.data.importGEO(document, {confirm:true})` 支持 GeoJSON 字符串或对象；FMG Cells GEO 复用 `createImportFmgCellsHeightCommand()` 导入地形并重置非 GEO 派生数据，普通 GeoJSON 复用测量对象导入命令写入 measurements。
 - `api.data.exportNotes({ids, noteIds, download, includeText})` 已完成第一刀，复用备注摘要 JSON 格式，默认返回文本，可按备注 id 筛选或触发浏览器下载。

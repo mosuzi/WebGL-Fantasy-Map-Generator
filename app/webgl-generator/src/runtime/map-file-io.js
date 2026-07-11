@@ -43,6 +43,20 @@ export function parseMapDocument(text) {
   return migrateMapDocument(document);
 }
 
+export async function parseMapDocumentPayload(documentRef, payload) {
+  if (typeof payload === "string") return parseMapDocument(payload);
+  if (isMapDocumentFileLike(payload)) return parseMapDocumentFile(documentRef, payload);
+  if (isGzipBase64MapPayload(payload)) {
+    const data = payload.base64 ?? payload.data;
+    return parseMapDocument(await decompressGzipBase64Text(documentRef, data));
+  }
+  if (payload?.encoding === "plain") return parseMapDocument(String(payload.data || ""));
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("地图导入文档必须是 JSON 字符串、对象、File/Blob 或 gzip-base64 payload");
+  }
+  return parseMapDocument(JSON.stringify(payload));
+}
+
 export async function parseMapDocumentFile(documentRef, file) {
   if (!file) throw new Error("未选择地图文件");
   const text = isCompressedMapDocumentFile(file)
@@ -291,6 +305,16 @@ async function decompressMapDocumentFile(documentRef, file) {
   return new view.Response(stream).text();
 }
 
+export async function decompressGzipBase64Text(documentRef, data) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.DecompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
+    throw new Error("当前浏览器不支持读取压缩地图文件");
+  }
+  const bytes = base64ToUint8Array(view, data);
+  const stream = new view.Blob([bytes], {type: "application/gzip"}).stream().pipeThrough(new view.DecompressionStream("gzip"));
+  return new view.Response(stream).text();
+}
+
 async function createGzipTextBlob(documentRef, text) {
   const view = documentRef.defaultView || window;
   if (typeof view.CompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
@@ -299,6 +323,28 @@ async function createGzipTextBlob(documentRef, text) {
   const stream = new view.Blob([text], {type: "application/json;charset=utf-8"}).stream().pipeThrough(new view.CompressionStream("gzip"));
   const buffer = await new view.Response(stream).arrayBuffer();
   return new view.Blob([buffer], {type: "application/gzip"});
+}
+
+function isMapDocumentFileLike(value) {
+  return Boolean(value && typeof value === "object" && typeof value.text === "function" && typeof value.stream === "function");
+}
+
+function isGzipBase64MapPayload(value) {
+  if (!value || typeof value !== "object") return false;
+  if (value.encoding === "gzip-base64" && typeof value.data === "string") return true;
+  if (typeof value.base64 !== "string") return false;
+  const filename = String(value.filename || value.name || "").toLowerCase();
+  const type = String(value.mimeType || value.type || "").toLowerCase();
+  return filename.endsWith(".gz") || type.includes("gzip") || type === "application/x-gzip";
+}
+
+function base64ToUint8Array(view, base64) {
+  const binary = view.atob(String(base64 || ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 function projectWorldPoint(point, map) {

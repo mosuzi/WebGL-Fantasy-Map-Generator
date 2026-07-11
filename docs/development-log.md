@@ -25232,3 +25232,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_api_readonly_polish` 和 `verify_api_readonly_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `info.version / info.healthEvents / data.exportMap`；`api.info.version()` 返回 `apiVersion = 0.1.0`、`stability = experimental`；`api.info.healthEvents({limit:5})` 返回 `total = 5`、`counts.info = 5`、`severity = all`，`api.info.healthEvents({severity:"info", limit:10})` 只返回 info 事件，`severity:"warning"` 归一为 `warn`，`severity:"fatal"` 返回结构化失败；`api.data.exportMap({download:false})` 返回 `webgl-generator-map` 完整地图 JSON，文件名和 checksum metadata 与 `exportAll` 一致；`api.data.exportMap({download:true, includeText:false})` 触发下载 `fmg-stage-2-1-a8062d0f.webgl-map.json` 且返回值不含 `text`；调用前后 checksum 均为 `a8062d0f`；`api.info.runtimeStats()` 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 完整地图导入 API 压缩输入补齐
+
+背景：
+
+- `api.data.importMap()` 已支持完整地图 JSON 字符串和对象，但 UI 文件导入已经支持 `.webgl-map.json.gz`，API 仍无法直接吃压缩导出结果或浏览器 File / Blob。
+- `api.data.exportCompressedAll({download:false})` 会返回 gzip base64；如果导入 API 能直接接受该返回对象，就能形成“压缩导出 -> API 导入 -> 校验”的脚本闭环。
+
+实现：
+
+- `map-file-io.js` 新增 `parseMapDocumentPayload(documentRef, payload)`，统一解析 JSON 字符串、地图文档对象、File / Blob、`{encoding:"gzip-base64", data}` 和 gzip base64 导出对象。
+- `map-file-io.js` 新增 `decompressGzipBase64Text()`，用浏览器 `DecompressionStream` 解压 gzip base64 文本；浏览器 LocalStorage 地图恢复也改为复用该函数，避免保留第二套解压逻辑。
+- `importMapDocumentViaApi()` 改为异步调用 `parseMapDocumentPayload()`，导入后的 `loadMapIntoRuntime()`、生成输入同步、视觉主题恢复、名称库偏好持久化、loading trace 和历史清空语义保持不变。
+- 导入仍必须显式传 `{confirm:true}`；本步不改变 GEO 导入、UI 文件导入或完整地图格式。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\map-file-io.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_import_map_compressed_api` 和 `verify_import_map_compressed_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先生成 seed `api-compressed-import-source` 的 1000 cells 源地图，checksum `dc3a14cc`，`api.data.exportCompressedAll({download:false})` 返回 gzip base64，原始 `5,014,350` 字节、压缩 `585,259` 字节；未传 `confirm:true` 调用 `api.data.importMap(compressed)` 返回结构化失败，错误信息保留确认要求；生成另一张地图后，直接导入压缩导出对象可恢复 checksum `dc3a14cc`；再次生成其它地图后，导入 `{encoding:"gzip-base64", data: compressed.base64}` 同样恢复 checksum `dc3a14cc`；再生成其它地图后，用同一 base64 构造 `application/gzip` File 导入也恢复 checksum `dc3a14cc`；坏 gzip base64 返回结构化失败，且当前地图 checksum 仍保持 `dc3a14cc`；导入后历史栈清空，`api.info.runtimeStats()` 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

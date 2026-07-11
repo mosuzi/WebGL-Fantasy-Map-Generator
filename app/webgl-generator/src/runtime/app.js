@@ -47,7 +47,7 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentFile, stringifyMapDocument} from "./map-file-io.js";
+import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, decompressGzipBase64Text, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentFile, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
@@ -3424,7 +3424,7 @@ async function decodeBrowserMapStoragePayload(documentRef, raw) {
   const payload = JSON.parse(raw);
   if (payload?.type === BROWSER_MAP_STORAGE_TYPE) {
     if (payload.version !== 1) throw new Error(`暂不支持的浏览器存档版本：${payload.version}`);
-    if (payload.encoding === "gzip-base64") return decompressBase64Text(documentRef, payload.data);
+    if (payload.encoding === "gzip-base64") return decompressGzipBase64Text(documentRef, payload.data);
     if (payload.encoding === "plain") return String(payload.data || "");
     throw new Error(`暂不支持的浏览器存档编码：${payload.encoding || "未知"}`);
   }
@@ -3439,16 +3439,6 @@ async function compressTextToBase64(documentRef, text) {
   return {base64: arrayBufferToBase64(view, buffer), bytes: buffer.byteLength};
 }
 
-async function decompressBase64Text(documentRef, data) {
-  const view = documentRef.defaultView || window;
-  if (typeof view.DecompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
-    throw new Error("当前浏览器不支持读取压缩的 LocalStorage 地图存档");
-  }
-  const bytes = base64ToUint8Array(view, data);
-  const stream = new view.Blob([bytes], {type: "application/gzip"}).stream().pipeThrough(new view.DecompressionStream("gzip"));
-  return new view.Response(stream).text();
-}
-
 function arrayBufferToBase64(view, buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -3457,15 +3447,6 @@ function arrayBufferToBase64(view, buffer) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
   return view.btoa(binary);
-}
-
-function base64ToUint8Array(view, base64) {
-  const binary = view.atob(String(base64 || ""));
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return bytes;
 }
 
 function browserStorage(documentRef) {
@@ -3521,7 +3502,7 @@ async function importMapData(state, documentRef, file) {
 
 async function importMapDocumentViaApi(state, documentRef, document, options = {}) {
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
-  const parsed = normalizeApiMapImportDocument(document);
+  const parsed = await normalizeApiMapImportDocument(documentRef, document);
   return importParsedMapDocumentViaApi(state, documentRef, parsed, options);
 }
 
@@ -3571,10 +3552,8 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
   }
 }
 
-function normalizeApiMapImportDocument(document) {
-  if (typeof document === "string") return parseMapDocument(document);
-  if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("地图导入文档必须是 JSON 字符串或对象");
-  return parseMapDocument(JSON.stringify(document));
+async function normalizeApiMapImportDocument(documentRef, document) {
+  return parseMapDocumentPayload(documentRef, document);
 }
 
 async function importGeoData(state, documentRef, file) {
