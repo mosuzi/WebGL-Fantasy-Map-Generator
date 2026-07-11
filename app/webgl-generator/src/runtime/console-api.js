@@ -238,7 +238,7 @@ function buildCapabilities() {
       info: "readonly",
       generate: "map-regeneration",
       selection: "selection-camera-and-editing-state",
-      layers: "display-preference",
+      layers: "display-preference-and-camera-state",
       units: "display-preference",
       climate: "readonly-and-climate-update",
       history: "edit-history",
@@ -252,6 +252,24 @@ function buildCapabilities() {
 
 function buildMethodMetadata() {
   return {
+    layers: {
+      get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      setViewMode: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setVisible: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setTheme: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      fitView: {stable: "draft", mutates: "camera-state", undoable: false, async: false, requiresConfirm: false}
+    },
+    units: {
+      get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      apply: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setDistanceUnit: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setAreaUnit: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setNumberAbbreviation: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setMapScale: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setPopulationScale: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setMilitaryScale: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setPrecipitationScale: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false}
+    },
     selection: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       resolve: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

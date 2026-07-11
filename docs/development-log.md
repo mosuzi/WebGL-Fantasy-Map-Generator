@@ -25561,3 +25561,28 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
 - 本轮按要求启动两个验证子智能体做 API 元数据 / 浏览器 smoke；等待 90 秒无输出后均已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `819ecc45`、grid cells `1014`、pack cells `877`；随后读取 `api.info.capabilities()`，确认 `sideEffects.selection = "selection-camera-and-editing-state"`，`methods.selection` 仍包含全部 11 个 selection 方法，`methodMetadata.selection` 中每个方法均有 `mutates / undoable / async / requiresConfirm`，且全部 `requiresConfirm = false`；`get / resolve` 为 `none`，`select / clear` 为 `selection-state`，`locate` 为 `camera-and-selection-state`，`pick` 为 `pick-panel-state`，`flash / highlight` 为 `selection-flash-state`，编辑态三项为 `editing-state`；调用前后 checksum 保持 `819ecc45` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 layers / units 能力元数据副作用边界第一刀
+
+背景：
+
+- `api.info.capabilities()` 已开始为确认类方法和 selection 方法提供方法级副作用元数据，但 `layers / units` 仍只有命名空间级副作用。
+- 图层和单位 API 都不修改地图数据，也不进入 `EditHistory`；但它们并非都只读：图层可写显示偏好，单位可写显示偏好，而 `layers.fitView()` 会改变相机状态。
+- 如果只看命名空间级 `display-preference`，脚本或 AI 无法区分 `get`、显示偏好写入和相机变更。
+
+实现：
+
+- `console-api.js` 为 `methodMetadata.layers` 新增 `get / setViewMode / setVisible / setTheme / fitView` 元数据。
+- `layers.get` 标注 `mutates: "none"`；`setViewMode / setVisible / setTheme` 标注 `display-preference`；`fitView` 标注 `camera-state`。
+- `sideEffects.layers` 从 `display-preference` 修正为 `display-preference-and-camera-state`。
+- `console-api.js` 为 `methodMetadata.units` 新增 `get / apply / setDistanceUnit / setAreaUnit / setNumberAbbreviation / setMapScale / setPopulationScale / setMilitaryScale / setPrecipitationScale` 元数据。
+- `units.get` 标注 `mutates: "none"`；所有单位写入标注 `display-preference`。
+- 上述方法均标注 `undoable: false`、`async: false`、`requiresConfirm: false`，保留原有调用行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；第一次沙箱内运行因 npm registry 元数据访问被拦截失败，按规则放权后通过。
+- 本轮按要求启动两个验证子智能体做 API 元数据 / 浏览器 smoke；等待 90 秒无输出后均已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-layers-units-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `895aebdb`、grid cells `1014`、pack cells `758`；随后读取 `api.info.capabilities()`，确认 `sideEffects.layers = "display-preference-and-camera-state"`、`sideEffects.units = "display-preference"`，`methods.layers / methods.units` 仍包含全部公开方法；`methodMetadata.layers` 中 `get = none`，`setViewMode / setVisible / setTheme = display-preference`，`fitView = camera-state`；`methodMetadata.units` 中 `get = none`，其余单位写入均为 `display-preference`；全部 layers / units 方法均有 `mutates / undoable / async / requiresConfirm` 且 `requiresConfirm = false`；调用前后 checksum 保持 `895aebdb` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
