@@ -18,7 +18,7 @@ import {
 } from "./display-units.js";
 import {formatHistoryStats} from "./history-format.js";
 
-const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
+export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
 
 const OBJECT_TITLE_FORMATTERS = Object.freeze({
@@ -441,7 +441,11 @@ function bindBooleanPreferenceButton(documentRef, id, preferenceKey, handler) {
 export function updateLayerPreference(documentRef, layer, visible) {
   if (!layer) return;
   const patch = layerVisibilityPreferencePatch(layer, visible);
-  if (setGlobalConfigLayerVisible(layer, visible)) return;
+  const globalPreferences = setGlobalConfigLayerVisible(layer, visible);
+  if (globalPreferences) {
+    writeControlPreferences(documentRef, globalPreferences);
+    return;
+  }
   const preferences = readControlPreferences(documentRef);
   updateControlPreferences(documentRef, {layers: {...(preferences.layers || {}), ...patch}});
 }
@@ -452,18 +456,26 @@ function layerVisibilityPreferencePatch(layer, visible) {
 }
 
 export function updateControlPreferences(documentRef, patch) {
-  if (patchGlobalConfigPreferences(patch)) return;
+  const globalPreferences = patchGlobalConfigPreferences(patch);
+  if (globalPreferences) {
+    writeControlPreferences(documentRef, globalPreferences);
+    return;
+  }
+  const current = readControlPreferences(documentRef);
+  const preferences = normalizeControlPreferences({
+    ...current,
+    ...patch,
+    units: patch.units ? {...(current.units || {}), ...patch.units} : current.units || {},
+    layers: patch.layers ? {...(current.layers || {}), ...patch.layers} : current.layers || {}
+  });
+  writeControlPreferences(documentRef, preferences);
+}
+
+function writeControlPreferences(documentRef, preferences) {
   try {
     const storage = documentRef.defaultView?.localStorage;
     if (!storage) return;
-    const current = readControlPreferences(documentRef);
-    const preferences = normalizeControlPreferences({
-      ...current,
-      ...patch,
-      units: patch.units ? {...(current.units || {}), ...patch.units} : current.units || {},
-      layers: patch.layers ? {...(current.layers || {}), ...patch.layers} : current.layers || {}
-    });
-    storage.setItem(CONTROL_PREFERENCES_KEY, JSON.stringify(preferences));
+    storage.setItem(CONTROL_PREFERENCES_KEY, JSON.stringify(normalizeControlPreferences(preferences)));
   } catch {
     // localStorage may be unavailable in restricted browser modes.
   }

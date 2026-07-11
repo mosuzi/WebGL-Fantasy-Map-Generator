@@ -7,6 +7,7 @@ import {measurementArea, measurementDisplayPoints, measurementDistance} from "./
 import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {resolveObject} from "./object-resolver.js";
+import {normalizeVisualThemeId} from "../renderer/themes.js";
 
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
@@ -48,7 +49,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
     layers: Object.freeze({
       get: () => apiCall(() => buildLayerSnapshot(state, documentRef)),
       setViewMode: mode => apiCall(() => setLayerViewMode(state, documentRef, mode)),
-      setVisible: (layer, visible) => apiCall(() => setLayerVisible(state, documentRef, layer, visible))
+      setVisible: (layer, visible) => apiCall(() => setLayerVisible(state, documentRef, layer, visible)),
+      setTheme: themeId => apiCall(() => setLayerVisualTheme(state, documentRef, themeId)),
+      fitView: () => apiCall(() => fitLayerView(state, documentRef))
     }),
     units: Object.freeze({
       get: () => apiCall(() => buildUnitSnapshot(state, documentRef)),
@@ -184,7 +187,7 @@ function buildCapabilities() {
       info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
       generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
       selection: ["get", "resolve", "select", "clear", "locate", "pick"],
-      layers: ["get", "setViewMode", "setVisible"],
+      layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
       units: ["get", "apply"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
@@ -345,6 +348,29 @@ function setLayerVisible(state, documentRef, layer, visible) {
   updateLayerControlState(documentRef, nextLayer, nextVisible);
   state?.renderer?.setLayerVisible?.(nextLayer, nextVisible);
   return buildLayerSnapshot(state, documentRef);
+}
+
+function setLayerVisualTheme(state, documentRef, themeId) {
+  const rawThemeId = String(themeId || "").trim();
+  if (!rawThemeId) throw new Error("缺少视觉主题");
+  const nextThemeId = normalizeVisualThemeId(rawThemeId);
+  if (nextThemeId !== rawThemeId) throw new Error(`未知视觉主题：${themeId}`);
+  setControlValue(documentRef, "visual-theme-preset", nextThemeId);
+  updateControlPreferences(documentRef, {visualTheme: nextThemeId});
+  state?.renderer?.setVisualTheme?.(nextThemeId);
+  return buildLayerSnapshot(state, documentRef);
+}
+
+function fitLayerView(state, documentRef) {
+  const renderer = state?.renderer;
+  if (typeof renderer?.fitToView !== "function") throw new Error("当前 renderer 不支持适配视图");
+  renderer.fitToView();
+  const stats = renderer.getStats?.() || {};
+  return {
+    fitted: true,
+    camera: {...(stats.camera || {})},
+    layer: buildLayerSnapshot(state, documentRef)
+  };
 }
 
 function buildUnitSnapshot(state, documentRef) {

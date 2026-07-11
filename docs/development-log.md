@@ -25255,3 +25255,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_import_map_compressed_api` 和 `verify_import_map_compressed_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先生成 seed `api-compressed-import-source` 的 1000 cells 源地图，checksum `dc3a14cc`，`api.data.exportCompressedAll({download:false})` 返回 gzip base64，原始 `5,014,350` 字节、压缩 `585,259` 字节；未传 `confirm:true` 调用 `api.data.importMap(compressed)` 返回结构化失败，错误信息保留确认要求；生成另一张地图后，直接导入压缩导出对象可恢复 checksum `dc3a14cc`；再次生成其它地图后，导入 `{encoding:"gzip-base64", data: compressed.base64}` 同样恢复 checksum `dc3a14cc`；再生成其它地图后，用同一 base64 构造 `application/gzip` File 导入也恢复 checksum `dc3a14cc`；坏 gzip base64 返回结构化失败，且当前地图 checksum 仍保持 `dc3a14cc`；导入后历史栈清空，`api.info.runtimeStats()` 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 图层主题与视图适配 API 批次
+
+背景：
+
+- 控制台 API 方案中的 `api.layers.setTheme(themeId)` 和 `api.layers.fitView()` 尚未落地。
+- 运行时 UI 已有视觉主题切换与“适配视图”入口，API 应复用同一 renderer 能力，并保持只改显示状态、不改地图数据的边界。
+
+实现：
+
+- `console-api.js` 新增 `api.layers.setTheme(themeId)`，校验内置视觉主题后同步 `visual-theme-preset` 控件、本地控制偏好和 renderer visual theme。
+- `console-api.js` 新增 `api.layers.fitView()`，复用 renderer `fitToView()`，返回 `fitted`、适配后的 camera 快照和当前图层快照。
+- `api.info.capabilities()` 的 `layers` 方法列表补入 `setTheme / fitView`。
+- 本步不进入 `EditHistory`，不改变地图 checksum，也不写入地图文档本体；后续导出仍通过控制偏好读取当前视觉主题。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\ui\panel.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_layers_theme_fit_api_after_fix` 和 `verify_layers_theme_fit_smoke_after_fix`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-layer-theme-fit", cellsTarget:1000})` 生成地图，得到 checksum `9c206efe`、grid cells `1014`、pack cells `880`；`api.info.capabilities()` 已包含 `layers.setTheme / layers.fitView`；`api.layers.setTheme("ancient")` 后 `api.layers.get().visualTheme`、`#visual-theme-preset`、`localStorage.webgl-generator-control-preferences.visualTheme` 和 renderer `viewOptions.visualTheme.id` 均为 `ancient`；`api.layers.setTheme("not-a-theme")` 返回结构化失败，错误信息为 `未知视觉主题：not-a-theme`；手动扰动 renderer camera 后调用 `api.layers.fitView()`，返回并实际复位为 `scale=1 / offsetX=0 / offsetY=0`；主题和视口 API 调用前后 checksum 保持 `9c206efe` 不变，`runtimeStats.renderer.draw.glError = 0`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

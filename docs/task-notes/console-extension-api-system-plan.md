@@ -442,6 +442,8 @@ api.edit.measurement.delete(id)
 - 图层 API 已完成第一刀。
 - `api.layers.setViewMode(mode)` 会校验页面已有 `data-mode`，同步 active 按钮、本地显示偏好和 renderer color mode。
 - `api.layers.setVisible(layer, visible)` 会校验 renderer 已知图层，同步 UI 控件、本地显示偏好和 renderer layer visibility。
+- `api.layers.setTheme(themeId)` 会校验内置视觉主题，同步控制面板偏好和 renderer visual theme。
+- `api.layers.fitView()` 复用 renderer `fitToView()`，返回适配后的 camera 快照和图层快照。
 - 本步只改显示偏好，不改变地图数据或 checksum。
 - 单位 API 已完成第一刀。
 - `api.units.get()` 返回当前标准化单位偏好。
