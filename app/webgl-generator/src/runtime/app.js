@@ -1761,6 +1761,9 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       undo: () => executeHistoryCommand(state, documentRef, "undo"),
       redo: () => executeHistoryCommand(state, documentRef, "redo")
     },
+    generate: {
+      regenerate: (kind, options = {}) => regenerateMapAttributeViaApi(state, documentRef, kind, options)
+    },
     selection: {
       resolve: object => resolveObjectViaApi(state, object),
       select: object => selectObjectViaApi(state, object),
@@ -5306,6 +5309,53 @@ function regenerateMapAttribute(state, kind, documentRef) {
   }
 
   return regenerationResult(kind, "暂未执行", "该属性尚未接入受约束重算。");
+}
+
+function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}");
+  const targetKind = normalizeApiRegenerationKind(kind);
+  const before = regenerationApiSummary(state.map);
+  const result = regenerateMapAttribute(state, targetKind, documentRef);
+  updateRegenerationSection(documentRef, result);
+  updateEditingInteractionLock(state, documentRef);
+  return {
+    kind: targetKind,
+    action: result.action || targetKind,
+    status: result.status || "",
+    constraint: result.constraint || "",
+    before,
+    after: regenerationApiSummary(state.map),
+    staleSystems: [...(state.map?.metadata?.derivedStale?.systems || [])],
+    history: state.editHistory.getStats()
+  };
+}
+
+function normalizeApiRegenerationKind(kind) {
+  const value = String(kind || "").trim().toLowerCase();
+  if (["route", "routes", "road", "roads"].includes(value)) return "routes";
+  if (["river", "rivers", "hydro", "hydrology"].includes(value)) return "rivers";
+  if (["city", "cities", "settlement", "settlements", "burg", "burgs"].includes(value)) return "cities";
+  if (["state", "states", "country", "countries", "nation", "nations"].includes(value)) return "states";
+  if (["province", "provinces"].includes(value)) return "provinces";
+  if (["marker", "markers", "resource", "resources"].includes(value)) return "markers";
+  if (["diplomacy", "diplomatic", "relations"].includes(value)) return "diplomacy";
+  throw new Error("受约束重算类型必须是 routes / rivers / cities / states / provinces / markers / diplomacy");
+}
+
+function regenerationApiSummary(map) {
+  return {
+    checksum: map?.metadata?.checksum || map?.summary?.checksum || "",
+    states: countPoliticalItems(map?.politics?.states || []),
+    provinces: countPoliticalItems(map?.politics?.provinces || []),
+    cities: map?.settlements?.cities?.filter(Boolean).length || 0,
+    routes: map?.settlements?.routes?.filter(Boolean).length || 0,
+    rivers: map?.rivers?.rivers?.filter(Boolean).length || 0,
+    markers: map?.markers?.markers?.filter(Boolean).length || 0,
+    resourceMarkers: Number(map?.markers?.metadata?.resourceMarkers) || 0,
+    diplomacyPairs: Number(map?.diplomacy?.metadata?.pairs) || 0,
+    diplomacyEnemies: Number(map?.diplomacy?.metadata?.enemies) || 0
+  };
 }
 
 function regenerateStates(state, documentRef) {

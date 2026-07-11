@@ -24,6 +24,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       mapSummary: () => apiCall(() => buildMapSummary(state)),
       runtimeStats: () => apiCall(() => buildRuntimeStats(state, documentRef))
     }),
+    generate: Object.freeze({
+      regenerate: (kind, options = {}) => apiCall(() => requireApiAction(actions.generate?.regenerate, "generate.regenerate")(kind, options))
+    }),
     selection: Object.freeze({
       get: () => apiCall(() => buildSelectionSnapshot(state)),
       resolve: object => apiCall(() => requireApiAction(actions.selection?.resolve, "selection.resolve")(object)),
@@ -161,9 +164,10 @@ function buildCapabilities() {
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases"],
+    namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases"],
     methods: {
       info: ["capabilities", "mapSummary", "runtimeStats"],
+      generate: ["regenerate"],
       selection: ["get", "resolve", "select", "clear", "locate", "pick"],
       layers: ["get", "setViewMode", "setVisible"],
       units: ["get", "apply"],
@@ -175,6 +179,7 @@ function buildCapabilities() {
     },
     sideEffects: {
       info: "readonly",
+      generate: "map-regeneration",
       selection: "readonly",
       layers: "display-preference",
       units: "display-preference",

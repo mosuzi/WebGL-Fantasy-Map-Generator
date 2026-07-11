@@ -501,6 +501,13 @@ api.edit.measurement.delete(id)
 - 自动化脚本可用 API 完成“生成地图 -> 导出 -> 导入 -> 校验”的闭环。
 - 长任务和错误能进入 health monitor 或结构化返回。
 
+当前状态：
+
+- 受约束重算 API 已完成第一刀。
+- `api.generate.regenerate(kind, {confirm:true})` 支持 `routes / rivers / cities / states / provinces / markers / diplomacy` 及常见别名，复用现有控制面板的受约束重算路径。
+- 返回值包含 `kind / action / status / constraint`、重算前后对象计数、当前 `staleSystems` 和历史摘要；其中 marker / diplomacy 继续复用既有命令或历史路径，其它派生重算暂保持现有非撤销语义。
+- 为避免脚本误触大范围派生重建，`regenerate` 必须显式传 `confirm:true`；地图生成、换 seed、完整地图导入和 GEO 导入仍待后续单独设计异步状态和错误详情。
+
 ## 第一批代码落点建议
 
 - `app/webgl-generator/src/runtime/console-api.js`：创建 API 根对象。

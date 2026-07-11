@@ -25091,3 +25091,27 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_namebase_rename_objects_api` 和 `verify_namebase_rename_objects_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.renameObjects`；直接调用 `api.namebases.renameObjects("city", [id])` 返回 `ok = false`，错误信息为“按名称库批量重命名对象需要显式传入 {confirm: true}”，目标城市名称不变；不支持的 `province` 类型和空 ids 均返回结构化错误；`api.namebases.renameObjects("city", 前 6 个城市, {confirm:true})` 改名 `6 / 6` 个城市，`api.history.undo()` 可恢复原名；`api.namebases.renameObjects("river", 前 8 条河流, {confirm:true})` 改名 `8 / 8` 条河流，`api.history.undo()` 可恢复原名；历史 `lastAffected` 首项为 `derived-system#namebase-rename`；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 受约束重算 API 第一刀
+
+背景：
+
+- 控制台 / 扩展 API 方案的阶段 5 需要覆盖生成、导入和批量能力；名称库批量能力完成后，下一步进入现有控制面板已经具备的受约束重算。
+- 现有 `regenerateMapAttribute()` 已统一调度路线、河流、城市、国家、省份、资源点和外交重算，并负责刷新渲染、对象面板、派生 stale 标记和控制面板重算提示，适合作为 API 第一刀的共享入口。
+
+实现：
+
+- `console-api.js` 新增 `api.generate.regenerate(kind, options)`，并在 `api.info.capabilities()` 中登记 `generate` 命名空间和 `map-regeneration` 副作用。
+- app action 层新增 `regenerateMapAttributeViaApi()`，支持 `routes / rivers / cities / states / provinces / markers / diplomacy` 及常见别名。
+- API 复用现有 `regenerateMapAttribute()`，执行后同步控制面板的重算提示，并返回 `kind / action / status / constraint`、重算前后对象计数、当前派生 stale 系统和历史摘要。
+- 由于多数受约束重算会直接改写派生数据，且并非全部路径都进入 `EditHistory`，API 必须显式传入 `{confirm: true}`；未确认或不支持的 kind 会返回结构化错误。
+- 本步不接新地图生成、换 seed、完整地图导入或 GEO 导入；这些异步 / 导入能力仍需单独设计 loading、health 和错误详情。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_generate_regenerate_api` 和 `verify_generate_regenerate_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `generate` 命名空间、`generate.regenerate` 方法和 `map-regeneration` 副作用标记；直接调用 `api.generate.regenerate("routes")` 返回 `ok = false`，错误信息为“受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}”；不支持的 `terrain` 类型返回结构化错误；`api.generate.regenerate("routes", {confirm:true})` 成功返回道路重算状态，路线计数 `589 -> 589`，`staleSystems = []`；`api.generate.regenerate("diplomacy", {confirm:true})` 成功返回外交重算状态，关系数 `190 -> 190`、战争数 `1 -> 0`，历史摘要记录 `重生成外交` 且 `lastAffected` 包含 `derived-system#diplomacy-regeneration`；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
