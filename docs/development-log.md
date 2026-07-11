@@ -25441,3 +25441,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_debug_dump_history_api` 和 `verify_debug_dump_history_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-dump-history", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `40fe0b1a`；`api.info.capabilities()` 已包含 `debug.dumpState`、`history.stats` 和 `history.peek`；默认 `api.debug.dumpState()` 返回 `dumpVersion=1`、snapshot checksum `40fe0b1a`、capabilities，并且 `renderer=null`；`api.debug.dumpState({includeRendererStats:true})` 返回 `renderer.ready=true` 和 `renderer.stats.draw.glError=0`；`api.history.stats()` 与 `api.history.get()` 返回一致；对城市 `#1` 执行 `api.edit.cities.rename()` 后，`api.history.peek().undo` 返回 `重命名城市 #1`、`domain=city`、`affected=[{kind:"city", id:1}]`、`hasNoopCheck=true`；撤销后 `api.history.peek().redo` 返回同一命令摘要，城市名恢复为 `白城`；调用前后 checksum 恢复为 `40fe0b1a`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 单位面积 setter API 补齐
+
+背景：
+
+- 控制台 API 方案中列出 `api.units.setAreaUnit(unit)`，但此前实际只补齐了距离、数字缩写、比例尺、人口、军事和降水倍率 setter。
+- 现有控制面板没有独立面积单位选择器，面积单位会由距离单位派生；因此 API 不能悄悄接受与当前距离单位不匹配的面积单位，否则会造成脚本以为设置成功、实际被规范化覆盖的错觉。
+
+实现：
+
+- `console-api.js` 新增 `api.units.setAreaUnit(unit)` 并同步 capabilities。
+- 该入口读取当前单位偏好，用 `areaUnitForDistanceUnit(distanceUnit)` 计算当前距离单位对应的合法面积单位。
+- 当请求单位与当前距离单位不匹配时返回结构化失败；匹配时复用 `applyUnitPreferences()` 同步隐藏单位控件、本地控制偏好和 renderer unit preferences。
+- 本步保持“面积单位随距离单位派生”的现有产品语义，不新增独立面积单位 UI。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --input-type=module` 单位派生断言通过：`distanceUnit = "m"` 时面积单位为 `m2`，`distanceUnit = "km-cn"` 时面积单位为 `km2-cn`。Node 同时输出既有 `MODULE_TYPELESS_PACKAGE_JSON` warning，本步不调整 package 类型。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_units_area_api` 和 `verify_units_area_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-units-area", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `44ca87f4`；`api.info.capabilities().methods.units` 已包含 `setAreaUnit`；调用 `api.units.setDistanceUnit("m")` 后，API 单位偏好为 `distanceUnit="m"`、`areaUnit="m2"`；调用 `api.units.setAreaUnit("m2")` 成功，并同步到隐藏 DOM 控件 `#distance-unit = "m"`、`#area-unit = "m2"` 和 renderer `unitPreferences`；调用 `api.units.setAreaUnit("km2")` 返回结构化失败，错误信息为 `面积单位 km2 与当前距离单位 m 不匹配，应为 m2`；调用前后 checksum 保持 `44ca87f4` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

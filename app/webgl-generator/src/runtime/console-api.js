@@ -1,5 +1,5 @@
 import {readControlPreferences, setActiveModeButton, updateControlPreferences, updateLayerPreference} from "../ui/panel.js";
-import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
+import {areaUnitForDistanceUnit, formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 import {NAMEBASE_BINDING_TARGETS, createLegacyNamebaseText, createNamebaseDocument, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
@@ -62,6 +62,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
       get: () => apiCall(() => buildUnitSnapshot(state, documentRef)),
       apply: (preferences = {}) => apiCall(() => applyUnitPreferences(state, documentRef, preferences)),
       setDistanceUnit: unit => apiCall(() => applyUnitPreferences(state, documentRef, {distanceUnit: unit})),
+      setAreaUnit: unit => apiCall(() => setAreaUnitPreference(state, documentRef, unit)),
       setNumberAbbreviation: mode => apiCall(() => applyUnitPreferences(state, documentRef, {numberAbbreviation: mode})),
       setMapScale: kmPerCm => apiCall(() => applyUnitPreferences(state, documentRef, {mapScaleKmPerCm: kmPerCm})),
       setPopulationScale: scale => apiCall(() => applyUnitPreferences(state, documentRef, {populationScale: scale})),
@@ -208,7 +209,7 @@ function buildCapabilities() {
       generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
       selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "startEditing", "stopEditing", "toggleEditing"],
       layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
-      units: ["get", "apply", "setDistanceUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
+      units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "stats", "peek", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
@@ -580,6 +581,17 @@ function applyUnitPreferences(state, documentRef, preferences = {}) {
   updateControlPreferences(documentRef, {units});
   state?.renderer?.setUnitPreferences?.(units);
   return buildUnitSnapshot(state, documentRef);
+}
+
+function setAreaUnitPreference(state, documentRef, unit) {
+  const requested = String(unit || "").trim();
+  if (!requested) throw new Error("缺少面积单位");
+  const current = buildUnitSnapshot(state, documentRef).units;
+  const expected = areaUnitForDistanceUnit(current.distanceUnit, current.areaUnit);
+  if (requested !== expected) {
+    throw new Error(`面积单位 ${requested} 与当前距离单位 ${current.distanceUnit} 不匹配，应为 ${expected}`);
+  }
+  return applyUnitPreferences(state, documentRef, {areaUnit: requested});
 }
 
 function buildClimateSnapshot(state, section) {

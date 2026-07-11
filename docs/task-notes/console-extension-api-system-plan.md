@@ -448,7 +448,8 @@ api.edit.measurement.delete(id)
 - 单位 API 已完成第一刀。
 - `api.units.get()` 返回当前标准化单位偏好。
 - `api.units.apply(preferences)` 使用 `normalizeUnitPreferences()` 校准输入，同步单位控件、本地显示偏好和 renderer unit preferences。
-- 便捷 setter 已补齐：`setDistanceUnit(unit)`、`setNumberAbbreviation(mode)`、`setMapScale(kmPerCm)`、`setPopulationScale(scale)`、`setMilitaryScale(scale)` 和 `setPrecipitationScale(scale)` 均复用 `apply()` 的规范化与同步路径。
+- 便捷 setter 已补齐：`setDistanceUnit(unit)`、`setAreaUnit(unit)`、`setNumberAbbreviation(mode)`、`setMapScale(kmPerCm)`、`setPopulationScale(scale)`、`setMilitaryScale(scale)` 和 `setPrecipitationScale(scale)` 均复用 `apply()` 的规范化与同步路径。
+- 当前控制面板仍把面积单位视为距离单位派生值；`setAreaUnit(unit)` 只接受当前距离单位对应的面积单位，避免脚本写入会被 UI 规范化吞掉的混合单位组合。
 - 单位 API 只改显示偏好，不改变地图数据或 checksum。
 - 气候 API 已完成读写补齐。
 - `api.climate.get()` 默认返回 `options / temperature / precipitation / latitude / atmosphere / biomes` 分区摘要，也可传 `temperature / precipitation / latitude / atmosphere / biomes / options` 只读单一分区。
