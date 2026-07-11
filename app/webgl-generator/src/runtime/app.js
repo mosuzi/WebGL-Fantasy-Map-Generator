@@ -58,7 +58,7 @@ import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createR
 import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
-import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
+import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
@@ -1777,6 +1777,13 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       setPrecipitation: (scale, options = {}) => applyClimatePatchViaApi(state, documentRef, {precipitation: scale}, options),
       setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options)
     },
+    namebases: {
+      create: payload => createNamebaseViaApi(state, documentRef, payload),
+      copyBuiltin: (baseId, options = {}) => copyBuiltinNamebaseViaApi(state, documentRef, baseId, options),
+      update: (baseId, patch = {}) => updateNamebaseViaApi(state, documentRef, baseId, patch),
+      delete: baseId => deleteNamebaseViaApi(state, documentRef, baseId),
+      bind: (scope, target, baseId, options = {}) => bindNamebaseViaApi(state, documentRef, scope, target, baseId, options)
+    },
     edit: {
       notes: {
         set: (object, body, options = {}) => setObjectNoteViaApi(state, documentRef, object, body, options),
@@ -2866,6 +2873,112 @@ function setCultureNamebaseBinding(state, documentRef, cultureId, target, value)
     reportFileOperationError(documentRef, "设置文化名称库绑定失败", error);
     return null;
   }
+}
+
+function createNamebaseViaApi(state, documentRef, payload = {}) {
+  assertMapAvailable(state);
+  const command = createCreateUserNamebaseCommand({
+    payload,
+    label: "API 新建用户名称库"
+  });
+  const result = executeNamebaseCommandViaApi(state, documentRef, command, {
+    status: command => {
+      const payload = command.getResult?.() || {};
+      return `已新建用户名称库“${payload.name || payload.id || ""}”。`;
+    }
+  });
+  return result;
+}
+
+function copyBuiltinNamebaseViaApi(state, documentRef, baseId, options = {}) {
+  assertMapAvailable(state);
+  const id = String(baseId || "").trim();
+  const command = createCopyBuiltinNamebaseCommand(id, {
+    name: options.name || id,
+    label: "API 复制内置名称库"
+  });
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "未找到可复制的内置名称库。",
+    status: command => {
+      const payload = command.getResult?.() || {};
+      return `已复制内置名称库为“${payload.name || payload.id || id}”。`;
+    }
+  });
+}
+
+function updateNamebaseViaApi(state, documentRef, baseId, patch = {}) {
+  assertMapAvailable(state);
+  const id = String(baseId || "").trim();
+  const command = createUpdateUserNamebaseCommand(id, patch, {label: "API 更新名称库"});
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "用户名称库不存在或内容未变化。",
+    status: command => {
+      const payload = command.getResult?.() || {};
+      return `已更新用户名称库“${payload.name || id}”。`;
+    }
+  });
+}
+
+function deleteNamebaseViaApi(state, documentRef, baseId) {
+  assertMapAvailable(state);
+  const id = String(baseId || "").trim();
+  const command = createDeleteUserNamebaseCommand(id, {
+    name: id,
+    label: "API 删除名称库"
+  });
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "未找到可删除的用户名称库。",
+    status: command => {
+      const payload = command.getResult?.() || {};
+      return `已删除用户名称库“${payload.name || id}”。`;
+    }
+  });
+}
+
+function bindNamebaseViaApi(state, documentRef, scope, target, baseId, options = {}) {
+  assertMapAvailable(state);
+  const binding = normalizeApiNamebaseBinding(scope, target, baseId, options);
+  const command = createSetNamebaseBindingCommand(binding.target, binding.baseId, {
+    cultureId: binding.cultureId,
+    label: "API 设置名称库绑定"
+  });
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "名称库绑定没有变化。",
+    status: `已设置${binding.cultureId ? `文化 #${binding.cultureId}` : "全局"}${binding.target}名称库绑定。`
+  });
+}
+
+function executeNamebaseCommandViaApi(state, documentRef, command, options = {}) {
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: (state, command) => {
+      refreshAfterEdit(state, command);
+      refreshAfterNamebaseEdit(state, documentRef);
+    },
+    refreshPanels: false,
+    noopStatus: options.noopStatus,
+    status: options.status,
+    throwOnError: false
+  });
+  return editApiResult(state, result);
+}
+
+function normalizeApiNamebaseBinding(scope, target, baseId, options = {}) {
+  const scopeObject = scope && typeof scope === "object" && !Array.isArray(scope) ? scope : null;
+  const rawScope = scopeObject ? scopeObject.scope || (scopeObject.cultureId ? "culture" : "global") : scope || "global";
+  const scopeKey = String(rawScope).trim().toLowerCase();
+  const cultureId = String(options.cultureId ?? scopeObject?.cultureId ?? "").trim();
+  const targetKey = String(target ?? scopeObject?.target ?? "").trim();
+  const value = String(baseId ?? scopeObject?.baseId ?? scopeObject?.id ?? scopeObject?.value ?? "").trim();
+  if (!targetKey) throw new Error("名称库绑定目标不能为空");
+  if (scopeKey === "culture" && !cultureId) throw new Error("文化名称库绑定需要 cultureId");
+  if (!["global", "culture"].includes(scopeKey)) throw new Error(`未知名称库绑定范围：${scopeKey}`);
+  return {
+    scope: scopeKey,
+    cultureId: scopeKey === "culture" ? cultureId : "",
+    target: targetKey,
+    baseId: value
+  };
 }
 
 async function importMilitaryBattleEvents(state, documentRef, file) {

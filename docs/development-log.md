@@ -24996,3 +24996,29 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_namebases_export_api` 和 `verify_namebases_export_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`window.__webglGeneratorApp`、renderer 和 `window.webglGeneratorApi` 可用，加载遮罩已隐藏；`api.info.capabilities()` 已包含 `namebases.list / namebases.export`，`sideEffects.namebases = readonly-download`；`api.namebases.export({download:false})` 返回 `fmg-stage-2-1-837b2705.namebases.json`，metadata 类型为 `webgl-generator-namebases`，共 `62` 个词池，JSON 可解析且 `bases.length = 62`；选中首个 `ancient-state-roots` 后 `api.namebases.export({download:false, baseIds:[id]})` 返回 `.namebases-selected.json`，metadata 和解析结果均为 `1` 个词池；`api.namebases.export({download:false, format:"legacy"})` 返回 `.namebases.txt`，metadata `62` 个词池且文本 `62` 行；`api.namebases.export({download:true, includeText:false, baseIds:[id]})` 触发 `.namebases-selected.json` 下载且返回不含 `text`；调用前后 checksum 保持 `837b2705`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 名称库写入 API 第一刀
+
+背景：
+
+- `api.namebases.list/export` 已完成只读和导出闭环，但名称库编辑仍只能从名称库面板触发。
+- 名称库已有 edit command 快照撤销能力，适合先开放边界清楚的用户库创建、复制、更新、删除和绑定操作。
+
+实现：
+
+- `console-api.js` 新增 `api.namebases.create(payload)`、`copyBuiltin(baseId, options)`、`update(baseId, patch)`、`delete(baseId)` 和 `bind(scope, target, baseId, options)`。
+- `api.info.capabilities()` 的名称库方法列表同步补充上述写入能力，`sideEffects.namebases` 调整为 `readonly-download-and-edit-command`。
+- `namebase-edit-commands.js` 扩展 `createCreateUserNamebaseCommand({payload})`，新建用户库时可一次性写入名称、样本和生成参数，仍只产生一条 `EditHistory` 记录。
+- `namebase-edit-commands.js` 新增 `createUpdateUserNamebaseCommand(id, patch)`，可在一条命令内更新名称、样本和生成参数，并支持撤销 / 重做回完整快照。
+- app action 层新增名称库 API 写入入口，复用 `executeEditCommand()`、名称库面板刷新、本地名称库偏好持久化和统一 API 结果格式。
+- `bind()` 支持全局绑定和文化绑定；空 `baseId` 可恢复到内置策略。本步不接名称库文件导入、清空用户库或按名称库批量重命名当前地图对象。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\namebase-edit-commands.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_namebase_write_api` 和 `verify_namebase_write_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.list / export / create / copyBuiltin / update / delete / bind`，`sideEffects.namebases = readonly-download-and-edit-command`；`api.namebases.create({name, source, minLength, maxLength, duplicateChars})` 新建 `user-namebase-1`，名称、3 个样本、`2-4` 字长和允许连写“玄”均正确，历史 undo 增加；`api.namebases.update(id, {name, source, minLength, maxLength})` 可改名、改 2 个样本和 `2-3` 字长，并可 undo / redo 恢复；`api.namebases.copyBuiltin("ancient-state-roots")` 新增一个用户库副本并可 undo 移除；`api.namebases.bind("global", "place", createdId)` 写入全局地名绑定并可 undo 清回；`api.namebases.delete(createdId)` 删除用户库并可 undo 恢复；最后继续 undo update 和 create 后用户库数量回到 `0`。调用前后 checksum 保持 `88adc7f6`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

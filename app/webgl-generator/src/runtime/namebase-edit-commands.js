@@ -54,11 +54,16 @@ export function createCopyBuiltinNamebaseCommand(id, {name = "", label = "复制
   });
 }
 
-export function createCreateUserNamebaseCommand({label = "新建用户名称库"} = {}) {
+export function createCreateUserNamebaseCommand({label = "新建用户名称库", payload = null} = {}) {
+  const normalizedPayload = normalizeUserNamebasePayload(payload, {allowEmpty: true});
   return createNamebaseStoreCommand({
     label,
     applyEdit(map) {
-      return createUserNamebase(map);
+      const created = createUserNamebase(map);
+      return applyUserNamebasePayload(map, created.id, normalizedPayload, {
+        ...created,
+        created: true
+      });
     }
   });
 }
@@ -102,6 +107,27 @@ export function createUpdateUserNamebaseOptionsCommand(id, options, {label = "�
       const base = findUserNamebase(map, id);
       if (!base) return true;
       return optionsSnapshotKey(normalizeOptionsSnapshot(base)) === optionsSnapshotKey(normalizedOptions);
+    }
+  });
+}
+
+export function createUpdateUserNamebaseCommand(id, patch, {label = "更新名称库"} = {}) {
+  const normalizedPatch = normalizeUserNamebasePayload(patch, {allowEmpty: false});
+  return createNamebaseStoreCommand({
+    label: `${label} ${id}`,
+    applyEdit(map) {
+      return applyUserNamebasePayload(map, id, normalizedPatch, {
+        id,
+        updated: true
+      });
+    },
+    isNoop(map) {
+      const base = findUserNamebase(map, id);
+      if (!base) return true;
+      if (normalizedPatch.name !== null && String(base.name || base.id || "").trim() !== normalizedPatch.name) return false;
+      if (normalizedPatch.source !== null && normalizeSourceText(base.source || []).join("\n") !== normalizedPatch.source.join("\n")) return false;
+      if (normalizedPatch.options !== null && optionsSnapshotKey(normalizeOptionsSnapshot(base)) !== optionsSnapshotKey(normalizedPatch.options)) return false;
+      return true;
     }
   });
 }
@@ -185,7 +211,7 @@ function findUserNamebase(map, id) {
 function normalizeSourceText(source) {
   return Array.isArray(source)
     ? source.map(value => String(value || "").trim()).filter(Boolean)
-    : String(source || "").split(/\r?\n/g).map(value => value.trim()).filter(Boolean);
+    : String(source || "").split(/[,，\n\r]+/gu).map(value => value.trim()).filter(Boolean);
 }
 
 function normalizeOptionsSnapshot(options = {}) {
@@ -197,4 +223,47 @@ function normalizeOptionsSnapshot(options = {}) {
 
 function optionsSnapshotKey(options) {
   return `${options.minLength}|${options.maxLength}|${options.duplicateChars}`;
+}
+
+function normalizeUserNamebasePayload(payload, {allowEmpty}) {
+  if (payload === null || payload === undefined) {
+    if (allowEmpty) return {name: null, source: null, options: null};
+    throw new Error("名称库更新参数不能为空");
+  }
+  if (typeof payload !== "object" || Array.isArray(payload)) throw new Error("名称库参数必须是对象");
+  const name = payload.name === undefined ? null : String(payload.name || "").trim();
+  if (name !== null && !name) throw new Error("名称库名称不能为空");
+  const source = payload.source === undefined && payload.sourceText === undefined ? null : normalizeSourceText(payload.source ?? payload.sourceText);
+  if (source !== null && !source.length) throw new Error("名称库至少需要一个样本");
+  const hasOptions = ["minLength", "min", "maxLength", "max", "duplicateChars", "d"].some(key => payload[key] !== undefined) || payload.options !== undefined;
+  const optionSource = payload.options && typeof payload.options === "object"
+    ? {...payload.options, ...Object.fromEntries(["minLength", "min", "maxLength", "max", "duplicateChars", "d"].filter(key => payload[key] !== undefined).map(key => [key, payload[key]]))}
+    : payload;
+  const options = hasOptions ? normalizeOptionsSnapshot(optionSource) : null;
+  if (!allowEmpty && name === null && source === null && options === null) throw new Error("名称库更新参数不能为空");
+  return {name, source, options};
+}
+
+function applyUserNamebasePayload(map, id, payload, initialResult) {
+  let result = {...initialResult};
+  if (payload.name !== null) {
+    const renamed = renameUserNamebase(map, id, payload.name);
+    result = {...result, ...renamed, id, name: renamed.name || result.name || id};
+  }
+  if (payload.source !== null) {
+    const updatedSource = updateUserNamebaseSource(map, id, payload.source);
+    result = {...result, ...updatedSource, id, samples: updatedSource.samples};
+  }
+  if (payload.options !== null) {
+    const updatedOptions = updateUserNamebaseOptions(map, id, payload.options);
+    result = {
+      ...result,
+      ...updatedOptions,
+      id,
+      minLength: updatedOptions.minLength,
+      maxLength: updatedOptions.maxLength,
+      duplicateChars: updatedOptions.duplicateChars
+    };
+  }
+  return result;
 }
