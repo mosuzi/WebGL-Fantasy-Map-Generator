@@ -211,24 +211,27 @@ function createConsoleApi(documentRef, state, actions = {}) {
 }
 
 function buildCapabilities() {
+  const methods = {
+    info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
+    generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
+    selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "startEditing", "stopEditing", "toggleEditing"],
+    layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
+    units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
+    climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
+    history: ["get", "stats", "peek", "undo", "redo"],
+    edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
+    data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
+    namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
+    debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
+  };
+  const methodMetadata = buildMethodMetadata();
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
     namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases", "debug"],
-    methods: {
-      info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
-      generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
-      selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "startEditing", "stopEditing", "toggleEditing"],
-      layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
-      units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
-      climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
-      history: ["get", "stats", "peek", "undo", "redo"],
-      edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
-      data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
-      namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
-      debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
-    },
-    methodMetadata: buildMethodMetadata(),
+    methods,
+    methodMetadata,
+    methodMetadataCoverage: buildMethodMetadataCoverage(methods, methodMetadata),
     safety: {
       confirmationOption: "confirm: true",
       confirmRequiredMethods: [...CONFIRM_REQUIRED_METHODS],
@@ -247,6 +250,44 @@ function buildCapabilities() {
       namebases: "readonly-download-and-edit-command",
       debug: "diagnostics-and-debug-ui"
     }
+  };
+}
+
+function buildMethodMetadataCoverage(methods, methodMetadata) {
+  const namespaces = {};
+  const missing = [];
+  const extra = [];
+  let methodCount = 0;
+  let documentedCount = 0;
+
+  for (const [namespace, methodNames] of Object.entries(methods)) {
+    const metadataNames = Object.keys(methodMetadata[namespace] || {});
+    const methodSet = new Set(methodNames);
+    const namespaceMissing = methodNames.filter(method => !metadataNames.includes(method));
+    const namespaceExtra = metadataNames.filter(method => !methodSet.has(method));
+    const namespaceDocumented = methodNames.length - namespaceMissing.length;
+    methodCount += methodNames.length;
+    documentedCount += namespaceDocumented;
+    missing.push(...namespaceMissing.map(method => `${namespace}.${method}`));
+    extra.push(...namespaceExtra.map(method => `${namespace}.${method}`));
+    namespaces[namespace] = {
+      complete: namespaceMissing.length === 0 && namespaceExtra.length === 0,
+      methods: methodNames.length,
+      documented: namespaceDocumented,
+      metadata: metadataNames.length,
+      missing: namespaceMissing,
+      extra: namespaceExtra
+    };
+  }
+
+  return {
+    complete: missing.length === 0 && extra.length === 0,
+    methods: methodCount,
+    documented: documentedCount,
+    metadata: Object.values(methodMetadata).reduce((sum, namespaceMetadata) => sum + Object.keys(namespaceMetadata || {}).length, 0),
+    missing,
+    extra,
+    namespaces
   };
 }
 

@@ -25763,3 +25763,29 @@ full 矩阵结果：
 - `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
 - 已按本轮约定启动 API 元数据验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-edit-metadata", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `a87c500c`、grid cells `1014`、pack cells `880`；随后读取 `api.info.capabilities()`，确认 `sideEffects.edit = "edit-command"`，`methods.edit` 共 46 个公开方法，且 `methodMetadata.edit` 与 `methods.edit` 同名、无缺失、无多余；全部 edit 方法均为 `stable: "draft" / undoable:true / async:false / requiresConfirm:false`，`safety.confirmRequired.edit` 为空；`mutates` 汇总为 `notes:2 / measurements:4 / settlements:4 / political-entities:9 / cultures:5 / religions:5 / routes:2 / rivers:3 / lakes:1 / labels:6 / markers:5`；调用前后 checksum 保持 `a87c500c` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 能力元数据覆盖自检第一刀
+
+背景：
+
+- `api.info.capabilities()` 已经逐步补齐各命名空间的 `methodMetadata`，但此前没有机器可读的覆盖摘要。
+- 如果后续新增 API 方法却忘记补 `methodMetadata`，AI、脚本和人工评审只能手动比对 `methods` 与 `methodMetadata`，容易漏掉缺失或多余项。
+- 覆盖自检应该保持只读，且不改变既有 `methods`、`methodMetadata`、`safety` 和 `sideEffects` 字段形状。
+
+实现：
+
+- `buildCapabilities()` 中先构造 `methods` 和 `methodMetadata` 局部常量，再把二者原样返回，保持旧字段兼容。
+- 新增 `methodMetadataCoverage` 顶层字段，包含：
+  - `complete`：全部命名空间是否无缺失、无多余。
+  - `methods / documented / metadata`：总方法数、已覆盖数和元数据条目数。
+  - `missing / extra`：跨命名空间的完整缺失 / 多余方法名列表。
+  - `namespaces`：每个命名空间的覆盖数量、缺失项和多余项。
+- 新增 `buildMethodMetadataCoverage(methods, methodMetadata)`，只做纯数据比对，不访问 runtime state，也不修改地图或 UI。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次在沙箱内因 `GET https://registry.npmjs.org/@pnpm%2Fexe: fetch failed` 失败；按既有最小权限策略放开 pnpm registry 元数据访问后重跑通过，Vite 只保留既有 chunk size 警告。
+- 已按本轮约定启动 API 元数据覆盖验证和浏览器 smoke 两个子智能体；等待 90 秒未收到完整回报后已中断释放，避免继续占用资源。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-metadata-coverage", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `2f387f5c`、grid cells `1014`、pack cells `750`；随后读取 `api.info.capabilities()`，确认既有 `methods` 和 `methodMetadata` 字段仍存在，`methodMetadataCoverage.complete = true`，顶层 `methods / documented / metadata` 均为 `127`，`missing / extra` 均为空；各命名空间覆盖均完整，数量分别为 `info:5 / generate:5 / selection:11 / layers:5 / units:9 / climate:14 / history:5 / edit:46 / data:10 / namebases:10 / debug:7`；调用前后 checksum 保持 `2f387f5c` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
