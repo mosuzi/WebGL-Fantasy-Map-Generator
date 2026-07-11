@@ -2,7 +2,7 @@ import {readControlPreferences, setActiveModeButton, updateControlPreferences, u
 import {normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
-import {NAMEBASE_BINDING_TARGETS, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
+import {NAMEBASE_BINDING_TARGETS, createLegacyNamebaseText, createNamebaseDocument, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
 
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
@@ -142,7 +142,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       exportPNG: (options = {}) => apiCall(() => exportPngData(state, documentRef, options))
     }),
     namebases: Object.freeze({
-      list: (options = {}) => apiCall(() => listNamebases(state, options))
+      list: (options = {}) => apiCall(() => listNamebases(state, options)),
+      export: (options = {}) => apiCall(() => exportNamebasesData(state, documentRef, options))
     })
   };
   return Object.freeze(api);
@@ -162,7 +163,7 @@ function buildCapabilities() {
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
       data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG"],
-      namebases: ["list"]
+      namebases: ["list", "export"]
     },
     sideEffects: {
       info: "readonly",
@@ -173,7 +174,7 @@ function buildCapabilities() {
       history: "edit-history",
       edit: "edit-command",
       data: "readonly-download",
-      namebases: "readonly"
+      namebases: "readonly-download"
     }
   };
 }
@@ -501,6 +502,78 @@ function cloneNamebaseUsage(usageById) {
     String(id),
     Array.isArray(entries) ? entries.map(entry => ({...entry})) : []
   ]));
+}
+
+function exportNamebasesData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const format = normalizeNamebaseExportFormat(options.format);
+  const baseIds = normalizeNamebaseApiBaseIds(options.baseIds ?? options.ids);
+  const exportOptions = {
+    includeUser: options.includeUser !== false,
+    baseIds
+  };
+  if (format === "legacy") return exportLegacyNamebasesData(map, documentRef, options, exportOptions, baseIds);
+  return exportJsonNamebasesData(map, documentRef, options, exportOptions, baseIds);
+}
+
+function exportJsonNamebasesData(map, documentRef, options, exportOptions, baseIds) {
+  const document = createNamebaseDocument(map, exportOptions);
+  const text = JSON.stringify(document, null, options.pretty === false ? 0 : 2);
+  const filename = `${mapFileBaseName(map)}${baseIds ? ".namebases-selected.json" : ".namebases.json"}`;
+  if (options.download === true) {
+    downloadText(documentRef, text, filename, "application/json;charset=utf-8");
+  }
+  return withOptionalText(options, {
+    filename,
+    mimeType: "application/json;charset=utf-8",
+    format: "json",
+    text,
+    bytes: text.length,
+    metadata: {
+      type: document.type,
+      version: document.version,
+      exportMode: document.exportMode,
+      seed: document.metadata.seed || "",
+      checksum: document.metadata.checksum || "",
+      bases: numberOrZero(document.metadata.bases),
+      samples: numberOrZero(document.metadata.samples),
+      builtin: numberOrZero(document.metadata.builtin),
+      user: numberOrZero(document.metadata.user)
+    }
+  });
+}
+
+function exportLegacyNamebasesData(map, documentRef, options, exportOptions, baseIds) {
+  const text = createLegacyNamebaseText(map, exportOptions);
+  const lines = text ? text.split(/\r?\n/g).filter(Boolean).length : 0;
+  const filename = `${mapFileBaseName(map)}${baseIds ? ".namebases-selected.txt" : ".namebases.txt"}`;
+  if (options.download === true) {
+    downloadText(documentRef, text, filename, "text/plain;charset=utf-8");
+  }
+  return withOptionalText(options, {
+    filename,
+    mimeType: "text/plain;charset=utf-8",
+    format: "legacy",
+    text,
+    bytes: text.length,
+    metadata: {
+      exportMode: baseIds ? "selected-namebases" : "all-namebases",
+      seed: map.metadata?.seed || "",
+      checksum: map.metadata?.checksum || "",
+      bases: lines
+    }
+  });
+}
+
+function normalizeNamebaseExportFormat(format) {
+  const value = String(format || "json").trim().toLowerCase();
+  if (["legacy", "txt", "text", "fmg"].includes(value)) return "legacy";
+  return "json";
+}
+
+function normalizeNamebaseApiBaseIds(baseIds) {
+  if (!Array.isArray(baseIds)) return null;
+  return baseIds.map(id => String(id || "").trim()).filter(Boolean);
 }
 
 function exportAllMapData(state, documentRef, options = {}) {

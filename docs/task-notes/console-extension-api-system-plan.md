@@ -236,8 +236,9 @@ api.edit.measurement.delete(id)
 当前状态：
 
 - `api.namebases.list({includeSource})` 已完成只读快照第一刀，返回内置 / 用户名称库摘要、绑定目标、全局与文化绑定、绑定使用情况、无效绑定和汇总 metadata。
+- `api.namebases.export({format, baseIds, includeUser, download, includeText})` 已完成只读导出第一刀，支持当前 JSON 名称库文档和原版文本两种格式；`baseIds` 可限制导出选中名称库，下载模式复用浏览器下载能力。
 - 默认 `includeSource` 为 `false`，只返回示例与统计摘要，不回传完整 source；显式传 `includeSource: true` 时才返回名称库源词条副本。
-- 本 API 不进入 `EditHistory`，不修改名称库、绑定、地图 checksum 或面板状态；后续 `import / export / create / update / delete / bind / renameObjects` 仍需单独设计写入和撤销语义。
+- `list / export` 不进入 `EditHistory`，不修改名称库、绑定、地图 checksum 或面板状态；后续 `import / create / update / delete / bind / renameObjects` 仍需单独设计写入和撤销语义。
 
 ### `api.debug`
 

@@ -24972,3 +24972,27 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_namebases_list_api` 和 `verify_namebases_list_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`window.__webglGeneratorApp`、renderer 和 `window.webglGeneratorApi` 可用，加载遮罩已隐藏；`api.info.capabilities()` 已包含 `namebases` 命名空间、`namebases.list` 方法和 `readonly` 副作用标记；`api.namebases.list()` 返回 `62` 个名称库摘要，`metadata.totalBases = bases.length = 62`、内置库 `62`、用户库 `0`、样本数 `3314`，绑定目标包含 `stateRoot / place / hydro / culture / religion`，默认首个 base 不含 `source`；`api.namebases.list({includeSource:true})` 返回 source 数组，首个 source 长度 `96`；调用前后 checksum 保持 `e24c50a9`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 名称库导出 API 第一刀
+
+背景：
+
+- `api.namebases.list()` 已能读取名称库摘要，但名称库命名空间还没有脚本化导出能力。
+- 名称库面板已有 JSON 文档和原版文本导出路径，适合作为 API 薄封装，避免控制台导出格式与 UI 导出格式分叉。
+
+实现：
+
+- `console-api.js` 新增 `api.namebases.export({format, baseIds, includeUser, download, includeText})`。
+- `format` 默认导出当前 JSON 名称库文档；传 `legacy / txt / text / fmg` 时导出原版文本名称库。
+- `baseIds` / `ids` 可限制导出选中名称库；`includeUser: false` 可只导出内置库。
+- `download: false` 返回文本、文件名、MIME 和 metadata；`download: true` 复用浏览器下载能力，并默认不回传大文本，除非显式 `includeText: true`。
+- `api.info.capabilities()` 的 `namebases` 方法列表补充 `export`，命名空间副作用标记调整为 `readonly-download`。
+- 本步不新增名称库导入、创建、更新、删除、绑定或批量重命名对象语义，不进入 `EditHistory`，不修改地图 checksum。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_namebases_export_api` 和 `verify_namebases_export_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`window.__webglGeneratorApp`、renderer 和 `window.webglGeneratorApi` 可用，加载遮罩已隐藏；`api.info.capabilities()` 已包含 `namebases.list / namebases.export`，`sideEffects.namebases = readonly-download`；`api.namebases.export({download:false})` 返回 `fmg-stage-2-1-837b2705.namebases.json`，metadata 类型为 `webgl-generator-namebases`，共 `62` 个词池，JSON 可解析且 `bases.length = 62`；选中首个 `ancient-state-roots` 后 `api.namebases.export({download:false, baseIds:[id]})` 返回 `.namebases-selected.json`，metadata 和解析结果均为 `1` 个词池；`api.namebases.export({download:false, format:"legacy"})` 返回 `.namebases.txt`，metadata `62` 个词池且文本 `62` 行；`api.namebases.export({download:true, includeText:false, baseIds:[id]})` 触发 `.namebases-selected.json` 下载且返回不含 `text`；调用前后 checksum 保持 `837b2705`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
