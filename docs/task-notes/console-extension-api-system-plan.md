@@ -417,6 +417,8 @@ api.edit.measurement.delete(id)
 - 当前 `importMap` 不接 gzip Blob / File，也不接 GEO 导入；这两类仍待后续单独设计异步输入和错误详情。
 - GEO 导入 API 已完成第一刀。
 - `api.data.importGEO(document, {confirm:true})` 支持 GeoJSON 字符串或对象；FMG Cells GEO 复用 `createImportFmgCellsHeightCommand()` 导入地形并重置非 GEO 派生数据，普通 GeoJSON 复用测量对象导入命令写入 measurements。
+- `api.data.exportNotes({ids, noteIds, download, includeText})` 已完成第一刀，复用备注摘要 JSON 格式，默认返回文本，可按备注 id 筛选或触发浏览器下载。
+- `api.data.exportMeasurements({ids, measurementIds, download, includeText})` 已完成第一刀，复用测量对象 JSON 格式，默认返回文本，可按测量对象 id 筛选或触发浏览器下载。
 - 返回值会按分支标注 `mode = fmg-cells-terrain / measurements`，并返回地形导入 summary / reset 或测量对象导入数量；因为两类导入都会写当前地图，必须显式传 `confirm:true`。
 
 ### 阶段 3：气候、单位和图层 API
@@ -517,7 +519,7 @@ api.edit.measurement.delete(id)
 - `api.generate.getOptions()` 返回当前规范化生成配置和当前地图摘要。
 - `api.generate.setOptions(patch)` 会规范化并同步生成配置与主输入，不隐式生成新地图。
 - `api.generate.newMap(options)` 和 `api.generate.rerollSeed(options)` 复用 worker 生成和 `loadMapIntoRuntime()`，返回生成配置、地图摘要、生成 / 加载 timings 和历史摘要。
-- 为避免脚本误触大范围派生重建或替换当前地图，`regenerate / newMap / rerollSeed` 必须显式传 `confirm:true`；完整地图导入和 GEO 导入仍待后续单独设计异步状态和错误详情。
+- 为避免脚本误触大范围派生重建或替换当前地图，`regenerate / newMap / rerollSeed / importMap / importGEO` 必须显式传 `confirm:true`；备注与测量导出属于只读下载 / 文本返回能力，不进入撤销栈，也不修改 checksum。
 
 ## 第一批代码落点建议
 

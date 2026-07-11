@@ -1,8 +1,12 @@
 import {readControlPreferences, setActiveModeButton, updateControlPreferences, updateLayerPreference} from "../ui/panel.js";
-import {normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
+import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 import {NAMEBASE_BINDING_TARGETS, createLegacyNamebaseText, createNamebaseDocument, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
+import {measurementArea, measurementDisplayPoints, measurementDistance} from "./measurement-objects.js";
+import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
+import {OBJECT_KIND_LABEL} from "./object-kinds.js";
+import {resolveObject} from "./object-resolver.js";
 
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
@@ -147,6 +151,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options)),
       exportCompressedAll: (options = {}) => apiCall(() => exportCompressedAllMapData(state, documentRef, options)),
       exportPNG: (options = {}) => apiCall(() => exportPngData(state, documentRef, options)),
+      exportNotes: (options = {}) => apiCall(() => exportNotesData(state, documentRef, options)),
+      exportMeasurements: (options = {}) => apiCall(() => exportMeasurementsData(state, documentRef, options)),
       importMap: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importMap, "data.importMap")(document, options)),
       importGEO: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importGEO, "data.importGEO")(document, options))
     }),
@@ -180,7 +186,7 @@ function buildCapabilities() {
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
-      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "importMap", "importGEO"],
+      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
       namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"]
     },
     sideEffects: {
@@ -707,6 +713,74 @@ function exportFeatureGeoJsonData(state, documentRef, options = {}) {
   });
 }
 
+function exportNotesData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const ids = normalizeApiIdFilter(options.noteIds ?? options.ids);
+  const notes = buildApiNoteRows(map, ids);
+  const payload = {
+    type: "webgl-generator-notes-summary",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    metadata: {
+      seed: map.metadata?.seed || "",
+      checksum: map.metadata?.checksum || "",
+      notes: notes.length,
+      totalNotes: map.notes?.metadata?.notes || map.notes?.notes?.length || 0,
+      exportMode: ids ? "selected-notes" : "all-notes"
+    },
+    notes
+  };
+  const text = JSON.stringify(payload, null, options.pretty === false ? 0 : 2);
+  const filename = `${mapFileBaseName(map)}${ids ? ".notes-selected.json" : ".notes.json"}`;
+  if (options.download === true) {
+    downloadText(documentRef, text, filename, "application/json;charset=utf-8");
+  }
+  return withOptionalText(options, {
+    filename,
+    mimeType: "application/json;charset=utf-8",
+    text,
+    bytes: text.length,
+    metadata: {...payload.metadata, type: payload.type, version: payload.version}
+  });
+}
+
+function exportMeasurementsData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const ids = normalizeApiIdFilter(options.measurementIds ?? options.ids);
+  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const measurements = buildApiMeasurementRows(map, units, ids);
+  const payload = {
+    type: "webgl-generator-measurements",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    metadata: {
+      seed: map.metadata?.seed || "",
+      checksum: map.metadata?.checksum || "",
+      measurements: measurements.length,
+      totalMeasurements: map.measurements?.metadata?.measurements || map.measurements?.items?.length || 0,
+      exportMode: ids ? "selected-measurements" : "all-measurements"
+    },
+    units: {
+      distanceUnit: units.distanceUnit,
+      areaUnit: units.areaUnit,
+      mapScaleKmPerCm: units.mapScaleKmPerCm
+    },
+    measurements
+  };
+  const text = JSON.stringify(payload, null, options.pretty === false ? 0 : 2);
+  const filename = `${mapFileBaseName(map)}${ids ? ".measurements-selected.json" : ".measurements.json"}`;
+  if (options.download === true) {
+    downloadText(documentRef, text, filename, "application/json;charset=utf-8");
+  }
+  return withOptionalText(options, {
+    filename,
+    mimeType: "application/json;charset=utf-8",
+    text,
+    bytes: text.length,
+    metadata: {...payload.metadata, type: payload.type, version: payload.version}
+  });
+}
+
 async function exportPngData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const canvas = documentRef.getElementById("map-canvas");
@@ -739,6 +813,109 @@ async function exportPngData(state, documentRef, options = {}) {
   };
   if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
   return data;
+}
+
+function buildApiNoteRows(map, ids = null) {
+  const idSet = ids ? new Set(ids) : null;
+  return (map.notes?.notes || [])
+    .filter(note => note?.id && (!idSet || idSet.has(String(note.id))))
+    .map(note => {
+      const object = objectFromNote(note);
+      const resolved = object ? resolveObject(map, object) : null;
+      const body = String(note.body || "");
+      return {
+        id: String(note.id),
+        kind: note.kind || object?.kind || "",
+        kindLabel: OBJECT_KIND_LABEL[note.kind] || note.kind || "备注",
+        objectId: note.objectId ?? object?.id ?? "",
+        name: note.name || resolved?.name || resolved?.fullName || resolved?.targetName || resolved?.text || note.id,
+        body,
+        bodyLength: body.length,
+        orphan: Boolean(!object || !resolved),
+        createdAt: note.createdAt || "",
+        updatedAt: note.updatedAt || note.createdAt || ""
+      };
+    });
+}
+
+function objectFromNote(note) {
+  const kind = String(note.kind || "").trim();
+  if (!kind) return null;
+  if (kind === "label") return labelObjectFromNote(note);
+  const id = parseApiObjectId(note.objectId ?? suffixAfterKind(note.id, kind));
+  if (id === null || id === "") return null;
+  return {kind, id};
+}
+
+function labelObjectFromNote(note) {
+  const objectId = String(note.objectId || suffixAfterKind(note.id, "label") || "");
+  const [targetKind, rawTargetId] = objectId.split(":");
+  if (!targetKind || rawTargetId === undefined) return null;
+  const targetId = parseApiObjectId(rawTargetId);
+  if (targetId === null || targetId === "") return null;
+  return {
+    kind: "label",
+    id: targetId,
+    targetKind,
+    targetId,
+    targetName: note.name || ""
+  };
+}
+
+function buildApiMeasurementRows(map, units, ids = null) {
+  const idSet = ids ? new Set(ids) : null;
+  return (map.measurements?.items || [])
+    .filter(item => item?.id && (!idSet || idSet.has(String(item.id))))
+    .map(item => {
+      const points = Array.isArray(item.points) ? item.points : [];
+      const routeFit = normalizeMeasurementRouteFit(item.routeFit);
+      const displayPoints = measurementDisplayPoints(item, map);
+      const distance = Number(item.summary?.distanceMapUnits) || measurementDistance(displayPoints);
+      const area = Number(item.summary?.areaMapUnits) || (routeFit !== MEASUREMENT_ROUTE_FIT_ROADS && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0);
+      const cellStops = Array.isArray(item.cellStops) ? item.cellStops : [];
+      return {
+        id: String(item.id),
+        name: item.name || item.id,
+        type: item.type || (item.closed ? "polygon" : "polyline"),
+        routeFit,
+        pointCount: points.length,
+        displayPointCount: displayPoints.length,
+        routeStopCount: cellStops.filter(Boolean).length,
+        distanceMapUnits: roundApiExport(distance),
+        distanceLabel: formatDisplayDistance(distance, units),
+        areaMapUnits: roundApiExport(area),
+        areaLabel: area ? formatDisplayArea(area, units) : "",
+        cellStops,
+        points: points.map((point, index) => ({
+          index,
+          x: roundApiExport(point.x),
+          y: roundApiExport(point.y)
+        })),
+        createdAt: item.createdAt || "",
+        updatedAt: item.updatedAt || item.createdAt || ""
+      };
+    });
+}
+
+function normalizeApiIdFilter(ids) {
+  if (!Array.isArray(ids)) return null;
+  const normalized = ids.map(id => String(id ?? "").trim()).filter(Boolean);
+  return normalized.length ? normalized : null;
+}
+
+function suffixAfterKind(id, kind) {
+  const prefix = `${kind}:`;
+  return String(id || "").startsWith(prefix) ? String(id).slice(prefix.length) : "";
+}
+
+function parseApiObjectId(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value);
+  return /^\d+$/.test(text) ? Number(text) : text;
+}
+
+function roundApiExport(value) {
+  return Math.round(Number(value || 0) * 1000) / 1000;
 }
 
 function assertApiMap(state) {

@@ -25188,3 +25188,25 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_data_import_geo_api` 和 `verify_data_import_geo_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `data.importGEO`；直接调用 `api.data.importGEO(geo, {locate:false})` 返回 `ok = false`，错误信息为“导入 GEO 数据会写入当前地图，需要显式传入 {confirm: true}”，测量对象数量保持 `0`；普通 GeoJSON 对象包含 1 个 LineString 和 1 个 Polygon feature，`api.data.importGEO(geo, {confirm:true, locate:false})` 返回 `mode = measurements`、`importedCount = 2`、`featureCount = 2`，导入 `measurement-1 / measurement-2`，点数分别为 `3 / 4`，`api.history.undo()` 可移除导入对象；同一 GeoJSON 字符串也可导入 2 个测量对象，历史摘要记录 `API 导入 GEO 测量对象` 且 `lastAffected` 包含 `derived-system#measurements-import` 和两个测量对象 id；坏 JSON 字符串返回结构化解析错误；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 备注与测量导出 API 第一刀
+
+背景：
+
+- `api.data` 已覆盖完整地图、压缩地图、pack GeoJSON、要素 GeoJSON、PNG 和导入能力，但导出能力矩阵中仍缺备注摘要与测量结果的脚本入口。
+- UI 面板已经有稳定的备注摘要和测量对象 JSON 导出格式；API 应复用同一格式，而不是让控制台导出与 UI 导出分叉。
+
+实现：
+
+- `console-api.js` 新增 `api.data.exportNotes(options)` 和 `api.data.exportMeasurements(options)`，并登记到 `api.info.capabilities()` 的 `data` 方法列表。
+- `exportNotes()` 从 `map.notes.notes` 组装备注摘要，返回 `webgl-generator-notes-summary` JSON，可通过 `ids` 或 `noteIds` 筛选，支持 `download:true` 浏览器下载和 `includeText:false` 只返回摘要 metadata。
+- `exportMeasurements()` 从 `map.measurements.items` 组装测量对象 JSON，复用 `measurementDisplayPoints()`、`measurementDistance()`、`measurementArea()`、贴路测量 route fit 与当前显示单位生成距离 / 面积标签，可通过 `ids` 或 `measurementIds` 筛选。
+- 两个 API 都是只读导出能力，不进入 `EditHistory`，不修改地图 checksum，也不新增备注 / 测量导入或批量删除语义。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_data_export_notes_measurements_api` 和 `verify_data_export_notes_measurements_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `data.exportNotes / data.exportMeasurements`；生成 seed `api-export-notes-measurements-smoke` 的 1000 cells 地图后，通过 `api.edit.notes.set()` 新增城市备注 `city:1`，通过 `api.edit.measurements.save()` 新增测量对象 `measurement-1`；`api.data.exportNotes({download:false})` 返回 `webgl-generator-notes-summary` JSON 且包含新增备注，`api.data.exportNotes({ids:[noteId]})` 只返回 1 条选中备注；`api.data.exportMeasurements({download:false})` 返回 `webgl-generator-measurements` JSON 且包含新增测量对象，点数 `3`、距离 `191.423`，`api.data.exportMeasurements({measurementIds:[id]})` 只返回 1 条选中测量；`api.data.exportNotes({download:true, includeText:false})` 触发下载 `fmg-api-export-notes-measurements-smoke-dda146ea.notes.json` 且返回值不含 `text`；导出前后 checksum 均为 `dda146ea`；`api.info.runtimeStats()` 可用，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
