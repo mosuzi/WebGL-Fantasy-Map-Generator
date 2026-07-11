@@ -535,6 +535,7 @@ api.edit.measurement.delete(id)
 - `api.debug.snapshot({limit, severity})` 返回当前页面、地图、图层 / 单位偏好、选择、历史、renderer 摘要和 health 摘要，供脚本或 AI 快速判断运行时状态。
 - `api.debug.renderer()` 返回完整 renderer stats，便于定位 WebGL、camera、动态 mesh、draw 和 loadMap 状态。
 - `api.debug.health({limit, severity})` 返回 health 事件、阈值、存储 key 和当前 operation。
+- `api.debug.profileNextRender({updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers})` 会强制执行一次 renderer draw，并返回前后 draw stats、动态 mesh cache 和 API 侧总耗时。
 - 本阶段为只读诊断能力，不修改地图数据、显示偏好或 health 存储；清理 health 事件、写入 debug delay 等破坏性或会改变环境状态的能力暂不暴露。
 
 ## 第一批代码落点建议

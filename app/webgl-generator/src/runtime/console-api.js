@@ -188,7 +188,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
     debug: Object.freeze({
       snapshot: (options = {}) => apiCall(() => buildDebugSnapshot(state, documentRef, options)),
       renderer: () => apiCall(() => buildDebugRendererSnapshot(state)),
-      health: (options = {}) => apiCall(() => buildDebugHealthSnapshot(state, options))
+      health: (options = {}) => apiCall(() => buildDebugHealthSnapshot(state, options)),
+      profileNextRender: (options = {}) => apiCall(() => profileDebugNextRender(state, options))
     })
   };
   return Object.freeze(api);
@@ -210,7 +211,7 @@ function buildCapabilities() {
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
       data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
       namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
-      debug: ["snapshot", "renderer", "health"]
+      debug: ["snapshot", "renderer", "health", "profileNextRender"]
     },
     sideEffects: {
       info: "readonly",
@@ -353,6 +354,43 @@ function buildDebugHealthSnapshot(state, options = {}) {
     thresholds: monitor?.thresholds || {},
     currentOperation: monitor?.currentOperation || null
   };
+}
+
+function profileDebugNextRender(state, options = {}) {
+  const renderer = state?.renderer;
+  if (typeof renderer?.draw !== "function") throw new Error("当前 renderer 不支持渲染 profiling");
+  const beforeStats = renderer.getStats?.() || {};
+  const renderOptions = normalizeDebugRenderOptions(options);
+  const startedAt = currentApiTime();
+  renderer.draw(renderOptions);
+  const totalMs = roundApiExport(currentApiTime() - startedAt);
+  const afterStats = renderer.getStats?.() || {};
+  return {
+    profiled: true,
+    totalMs,
+    options: renderOptions,
+    before: {
+      draw: {...(beforeStats.draw || {})},
+      dynamicMeshCache: {...(beforeStats.dynamicMeshCache || {})}
+    },
+    after: {
+      draw: {...(afterStats.draw || {})},
+      dynamicMeshCache: {...(afterStats.dynamicMeshCache || {})},
+      selectionHighlightMode: afterStats.selectionHighlightMode || ""
+    }
+  };
+}
+
+function normalizeDebugRenderOptions(options = {}) {
+  const normalized = {};
+  for (const key of ["updateDynamicBuffers", "updateOverlay", "drawDirtyDynamicBuffers"]) {
+    if (options[key] !== undefined) normalized[key] = Boolean(options[key]);
+  }
+  return normalized;
+}
+
+function currentApiTime() {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
 }
 
 function buildDocumentLocationSnapshot(documentRef) {

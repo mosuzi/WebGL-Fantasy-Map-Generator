@@ -25397,3 +25397,24 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_selection_locate_options_api` 和 `verify_selection_locate_options_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-selection-locate-options", cellsTarget:1000})` 生成地图，得到 checksum `64c5578e`、grid cells `1014`、pack cells `797`；对城市 `#1` 调用 `api.selection.locate({kind:"city", id:1}, {padding:0.1, minScale:2, maxScale:2})` 返回 `located=true`、selection 为该城市、camera scale 为 `2`、locateStatus 为 `city #1`；再次用 `{padding:0.4, minScale:6, maxScale:12}` 定位后 camera scale 为 `6.857142857142858`；非法 `{minScale:"bad"}` 返回结构化失败，错误信息为 `定位选项 minScale 必须是有限数`；调用前后 checksum 保持 `64c5578e` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 debug 渲染 profiling API 第一刀
+
+背景：
+
+- 控制台 API 方案中列出了 `api.debug.profileNextRender()`，但 debug 第一刀只暴露了 snapshot、renderer 和 health 快照。
+- renderer stats 已经记录最近一次 draw 的耗时、WebGL error 和动态 mesh dirty 状态，适合先开放一个“强制画一帧并返回前后诊断”的窄口径入口。
+
+实现：
+
+- `console-api.js` 新增 `api.debug.profileNextRender({updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers})`。
+- 该入口会调用 renderer `draw()`，返回 API 侧 `totalMs`、实际传入的 draw options、前后 draw stats、动态 mesh cache 和最新 selectionHighlightMode。
+- `api.info.capabilities()` 的 debug 方法列表补入 `profileNextRender`。
+- 本步只更新 renderer draw 诊断统计和画面，不进入 `EditHistory`，不修改地图 checksum，不清理 health 事件，也不写入 debug 配置。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_debug_profile_render_api` 和 `verify_debug_profile_render_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-profile-render", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `c49d639e`；`api.info.capabilities().methods.debug` 包含 `profileNextRender`；调用 `api.debug.profileNextRender({updateDynamicBuffers:false, updateOverlay:false, drawDirtyDynamicBuffers:false})` 返回 `profiled=true`、`totalMs=114.3ms`、传入 options 三项均为 `false`、前后 draw stats 存在、`after.draw.glError=0`、动态 mesh cache 中 routes / tradeFlows / rivers / selection dirty 均为 `false`、`selectionHighlightMode=none`；调用前后 checksum 保持 `c49d639e` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
