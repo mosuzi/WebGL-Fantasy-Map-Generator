@@ -25164,3 +25164,27 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_data_import_map_api` 和 `verify_data_import_map_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `data.importMap` 且 `sideEffects.data = readonly-download-and-map-import`；先用 `api.generate.newMap({confirm:true, seed:"api-import-source", cellsTarget:1000})` 生成源地图并通过 `api.data.exportAll({download:false})` 导出完整地图 JSON，源地图 seed 为 `api-import-source`、checksum `533cc2f7`、grid cells `999`；直接 `api.data.importMap(docObject)` 返回 `ok = false`，错误信息为“导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}”；生成另一张地图后，`api.data.importMap(JSON.parse(text), {confirm:true, toast:false})` 可恢复 seed `api-import-source` 与 checksum `533cc2f7`，历史栈清空；再次生成其它地图后，`api.data.importMap(text, {confirm:true, toast:false})` 同样恢复 seed 与 checksum；坏 JSON 字符串返回结构化解析错误；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 GEO 导入 API 第一刀
+
+背景：
+
+- `api.data.importMap()` 已覆盖完整地图 JSON 导入，阶段 5 仍缺 GEO / GeoJSON 脚本化导入。
+- GEO 导入有两套既有语义：FMG Cells GEO 是地形导入，会重置非 GEO 派生数据；普通 GeoJSON 则导入为测量对象。API 第一刀必须复用现有分支，不能把 FMG Cells GEO 当作普通测量导入。
+
+实现：
+
+- `console-api.js` 新增 `api.data.importGEO(document, options)`，并登记到 `api.info.capabilities()`。
+- app action 层新增 `importGeoDocumentViaApi()`，支持 GeoJSON 字符串或对象。
+- 当输入识别为 FMG Cells GEO 时，复用 `createImportFmgCellsHeightCommand()`，执行后返回 `mode: "fmg-cells-terrain"`、导入 summary、非 GEO 派生 reset 结果、地图摘要和历史摘要。
+- 普通 GeoJSON 复用 `parseGeoJsonMeasurements()` 与 `createImportMeasurementsCommand()`，执行后返回 `mode: "measurements"`、来源 feature 数、导入测量对象数量和历史摘要，并沿用测量图层显示、面板选中和定位逻辑。
+- 因为两类 GEO 导入都会写当前地图，API 必须显式传入 `{confirm: true}`；未确认会返回结构化错误。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_data_import_geo_api` 和 `verify_data_import_geo_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `data.importGEO`；直接调用 `api.data.importGEO(geo, {locate:false})` 返回 `ok = false`，错误信息为“导入 GEO 数据会写入当前地图，需要显式传入 {confirm: true}”，测量对象数量保持 `0`；普通 GeoJSON 对象包含 1 个 LineString 和 1 个 Polygon feature，`api.data.importGEO(geo, {confirm:true, locate:false})` 返回 `mode = measurements`、`importedCount = 2`、`featureCount = 2`，导入 `measurement-1 / measurement-2`，点数分别为 `3 / 4`，`api.history.undo()` 可移除导入对象；同一 GeoJSON 字符串也可导入 2 个测量对象，历史摘要记录 `API 导入 GEO 测量对象` 且 `lastAffected` 包含 `derived-system#measurements-import` 和两个测量对象 id；坏 JSON 字符串返回结构化解析错误；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

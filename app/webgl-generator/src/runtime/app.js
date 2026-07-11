@@ -1795,7 +1795,8 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       renameObjects: (kind, ids, options = {}) => renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options)
     },
     data: {
-      importMap: (document, options = {}) => importMapDocumentViaApi(state, documentRef, document, options)
+      importMap: (document, options = {}) => importMapDocumentViaApi(state, documentRef, document, options),
+      importGEO: (document, options = {}) => importGeoDocumentViaApi(state, documentRef, document, options)
     },
     edit: {
       notes: {
@@ -3635,6 +3636,125 @@ async function importGeoData(state, documentRef, file) {
     reportFileOperationError(documentRef, "GEO 数据导入失败", error);
     return null;
   }
+}
+
+function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("导入 GEO 数据会写入当前地图，需要显式传入 {confirm: true}");
+  const text = normalizeApiGeoImportDocument(document);
+  const terrainCommand = createImportFmgCellsHeightCommand(text, state.map, {label: "API 导入 FMG Cells 地形"});
+  if (terrainCommand) return importFmgCellsGeoViaApi(state, documentRef, terrainCommand);
+  return importGeoMeasurementsViaApi(state, documentRef, text, options);
+}
+
+function importFmgCellsGeoViaApi(state, documentRef, command) {
+  if (command.isNoop({map: state.map})) {
+    setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
+    return {
+      mode: "fmg-cells-terrain",
+      imported: false,
+      reason: "noop",
+      history: state.editHistory.getStats()
+    };
+  }
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false,
+    throwOnError: false
+  });
+  if (!result.executed) {
+    if (result.error) throw result.error;
+    setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
+    return {
+      mode: "fmg-cells-terrain",
+      imported: false,
+      reason: "noop",
+      history: state.editHistory.getStats()
+    };
+  }
+  const summary = command.getSummary?.() || {};
+  const reset = state.map.metadata?.geoImportDerivedRefresh || {};
+  setFileOperationStatus(documentRef, `已通过 API 从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}，可撤销。`);
+  return {
+    mode: "fmg-cells-terrain",
+    imported: true,
+    summary,
+    reset: {...reset},
+    map: generationApiMapSummary(state.map),
+    history: state.editHistory.getStats()
+  };
+}
+
+function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
+  const payload = parseGeoJsonMeasurements(text, state.map, {limit: normalizeGeoImportLimit(options.limit)});
+  const command = createImportMeasurementsCommand(payload.measurements, {label: "API 导入 GEO 测量对象"});
+  if (command.isNoop({map: state.map})) {
+    setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
+    return {
+      mode: "measurements",
+      imported: false,
+      importedCount: 0,
+      featureCount: payload.featureCount,
+      history: state.editHistory.getStats()
+    };
+  }
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    throwOnError: false
+  });
+  if (!result.executed) {
+    if (result.error) throw result.error;
+    setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
+    return {
+      mode: "measurements",
+      imported: false,
+      importedCount: 0,
+      featureCount: payload.featureCount,
+      history: state.editHistory.getStats()
+    };
+  }
+  const imported = Array.isArray(result.result) ? result.result : [];
+  state.measurement.points = [];
+  state.measurement.editingMeasurementId = null;
+  state.measurement.active = false;
+  if (state.renderer?.layerVisibility?.measurements === false) {
+    state.renderer.setLayerVisible("measurements", true);
+    syncMeasurementLayerControl(documentRef, true);
+  }
+  updateMeasurementOverlay(state, documentRef);
+  updateMeasurementPanel(state);
+  const selected = imported[0];
+  if (selected && options.locate !== false) {
+    state.panels.measurement?.setSelectedMeasurementId?.(selected.id);
+    state.panels.measurement?.open(state.map, state.editHistory.getStats());
+    locateMeasurement(state, {...selected, pointCount: selected.points?.length || 0}, documentRef);
+  }
+  setFileOperationStatus(documentRef, `GEO 数据已通过 API 导入为 ${imported.length} 个测量对象，可撤销；来源 Feature ${payload.featureCount} 个。`);
+  return {
+    mode: "measurements",
+    imported: true,
+    importedCount: imported.length,
+    featureCount: payload.featureCount,
+    measurements: imported.map(item => ({
+      id: item.id,
+      name: item.name || "",
+      points: item.points?.length || 0
+    })),
+    history: state.editHistory.getStats()
+  };
+}
+
+function normalizeApiGeoImportDocument(document) {
+  if (typeof document === "string") return document;
+  if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("GEO 导入文档必须是 GeoJSON 字符串或对象");
+  return JSON.stringify(document);
+}
+
+function normalizeGeoImportLimit(value) {
+  const limit = Number(value);
+  if (!Number.isInteger(limit)) return 600;
+  return Math.max(1, Math.min(5000, limit));
 }
 
 function syncMeasurementLayerControl(documentRef, visible) {

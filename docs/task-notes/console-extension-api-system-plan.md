@@ -415,6 +415,9 @@ api.edit.measurement.delete(id)
 - `api.data.importMap(document, {confirm:true})` 支持当前 `.webgl-map.json` 文档对象和 JSON 字符串，复用 `parseMapDocument()`、`loadMapIntoRuntime()`、生成输入同步、视觉主题恢复和名称库偏好持久化路径。
 - 返回值包含导入后的地图摘要、生成配置、源文档 metadata、加载 timings、名称库偏好持久化结果和历史摘要；因为会替换当前地图并清空编辑历史，必须显式传 `confirm:true`。
 - 当前 `importMap` 不接 gzip Blob / File，也不接 GEO 导入；这两类仍待后续单独设计异步输入和错误详情。
+- GEO 导入 API 已完成第一刀。
+- `api.data.importGEO(document, {confirm:true})` 支持 GeoJSON 字符串或对象；FMG Cells GEO 复用 `createImportFmgCellsHeightCommand()` 导入地形并重置非 GEO 派生数据，普通 GeoJSON 复用测量对象导入命令写入 measurements。
+- 返回值会按分支标注 `mode = fmg-cells-terrain / measurements`，并返回地形导入 summary / reset 或测量对象导入数量；因为两类导入都会写当前地图，必须显式传 `confirm:true`。
 
 ### 阶段 3：气候、单位和图层 API
 

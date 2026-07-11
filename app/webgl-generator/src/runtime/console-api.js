@@ -147,7 +147,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options)),
       exportCompressedAll: (options = {}) => apiCall(() => exportCompressedAllMapData(state, documentRef, options)),
       exportPNG: (options = {}) => apiCall(() => exportPngData(state, documentRef, options)),
-      importMap: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importMap, "data.importMap")(document, options))
+      importMap: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importMap, "data.importMap")(document, options)),
+      importGEO: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importGEO, "data.importGEO")(document, options))
     }),
     namebases: Object.freeze({
       list: (options = {}) => apiCall(() => listNamebases(state, options)),
@@ -179,7 +180,7 @@ function buildCapabilities() {
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
       history: ["get", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
-      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "importMap"],
+      data: ["exportAll", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "importMap", "importGEO"],
       namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"]
     },
     sideEffects: {
