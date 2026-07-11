@@ -94,6 +94,7 @@
    - 补充记录：名称库导出 API 第一刀已接入 `api.namebases.export({format, baseIds, includeUser, download, includeText})`，可导出当前 JSON 名称库文档或原版文本名称库，并支持选中 `baseIds` 和浏览器下载；本步只读，不修改地图 checksum，不新增名称库导入 / 编辑 / 绑定语义；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
    - 补充记录：名称库写入 API 第一刀已接入 `api.namebases.create/copyBuiltin/update/delete/bind`，复用名称库 edit command、`EditHistory`、面板刷新和本地偏好持久化；`create / update` 支持名称、样本和生成参数补丁。本步不接名称库导入、清空用户库或按名称库批量重命名当前地图对象；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
    - 补充记录：名称库导入 API 第一刀已接入 `api.namebases.import(document, {mode, filename})`，支持当前 JSON 名称库文档对象、JSON 字符串和原版文本字符串；默认追加导入，`mode: "replace"` 时替换当前用户库，导入进入 `EditHistory`。本步不接清空用户库或按名称库批量重命名当前地图对象；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
+   - 补充记录：名称库清空 API 第一刀已接入 `api.namebases.clear({confirm:true})`，复用名称库 edit command、`EditHistory`、面板刷新和本地偏好持久化；因为这是批量删除用户名称库，API 必须显式传 `confirm:true`。本步不接按名称库批量重命名当前地图对象；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
 
 ### 验证要求
 

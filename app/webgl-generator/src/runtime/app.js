@@ -1783,6 +1783,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       copyBuiltin: (baseId, options = {}) => copyBuiltinNamebaseViaApi(state, documentRef, baseId, options),
       update: (baseId, patch = {}) => updateNamebaseViaApi(state, documentRef, baseId, patch),
       delete: baseId => deleteNamebaseViaApi(state, documentRef, baseId),
+      clear: (options = {}) => clearNamebasesViaApi(state, documentRef, options),
       bind: (scope, target, baseId, options = {}) => bindNamebaseViaApi(state, documentRef, scope, target, baseId, options)
     },
     edit: {
@@ -2952,6 +2953,19 @@ function deleteNamebaseViaApi(state, documentRef, baseId) {
     status: command => {
       const payload = command.getResult?.() || {};
       return `已删除用户名称库“${payload.name || id}”。`;
+    }
+  });
+}
+
+function clearNamebasesViaApi(state, documentRef, options = {}) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("清空用户名称库需要显式传入 {confirm: true}");
+  const command = createClearUserNamebasesCommand({label: "API 清空用户名称库"});
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "当前没有可清空的用户名称库。",
+    status: command => {
+      const payload = command.getResult?.() || {};
+      return `已清空 ${payload.removed || 0} 个用户名称库。`;
     }
   });
 }

@@ -25045,3 +25045,26 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_namebase_import_api` 和 `verify_namebase_import_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.import` 且 `sideEffects.namebases = readonly-download-and-edit-command`；用 `api.namebases.export({download:false, baseIds:[ancient-state-roots]})` 得到 JSON 文档后，`api.namebases.import(JSON.parse(text), {filename:"api-import-smoke.json"})` 可导入 `1` 个用户库并可 undo 恢复；`api.namebases.import(text, {mode:"replace", filename:"api-import-replace.json"})` 可替换当前 `1` 个用户库并可 undo 恢复；`api.namebases.export({download:false, format:"legacy", baseIds:[ancient-state-roots]})` 得到原版文本后，`api.namebases.import(legacyText, {filename:"api-import-smoke.txt"})` 可导入并可 undo 恢复；最终用户库数量回到 `0`。调用前后 checksum 保持 `01378e8f`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 名称库清空 API 第一刀
+
+背景：
+
+- 名称库 API 已覆盖导入、导出和单个用户库写入，但还缺少面板中已有的“清空用户库”脚本入口。
+- 清空用户库是批量删除操作，需要比单个删除更明确的 API 风险边界。
+
+实现：
+
+- `console-api.js` 新增 `api.namebases.clear(options)` 并登记到 `api.info.capabilities()`。
+- app action 层新增 `clearNamebasesViaApi()`，复用 `createClearUserNamebasesCommand()`、`EditHistory`、名称库面板刷新和本地偏好持久化。
+- 为避免误触，`clear()` 必须显式传入 `{confirm: true}`，否则返回结构化错误且不修改用户库。
+- 本步不接按名称库批量重命名当前地图对象。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_namebase_clear_api` 和 `verify_namebase_clear_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.clear` 且 `sideEffects.namebases = readonly-download-and-edit-command`；直接调用 `api.namebases.clear()` 返回 `ok = false`，错误信息为“清空用户名称库需要显式传入 {confirm: true}”，用户库数量不变；创建两个用户名称库后，`api.namebases.clear({confirm:true})` 可清空并进入 `EditHistory`；`api.history.undo()` 可恢复两个用户库；继续撤销两次创建后用户库数量回到 `0`。调用前后 checksum 保持 `013cc3e5`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
