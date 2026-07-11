@@ -95,6 +95,7 @@
    - 补充记录：名称库写入 API 第一刀已接入 `api.namebases.create/copyBuiltin/update/delete/bind`，复用名称库 edit command、`EditHistory`、面板刷新和本地偏好持久化；`create / update` 支持名称、样本和生成参数补丁。本步不接名称库导入、清空用户库或按名称库批量重命名当前地图对象；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
    - 补充记录：名称库导入 API 第一刀已接入 `api.namebases.import(document, {mode, filename})`，支持当前 JSON 名称库文档对象、JSON 字符串和原版文本字符串；默认追加导入，`mode: "replace"` 时替换当前用户库，导入进入 `EditHistory`。本步不接清空用户库或按名称库批量重命名当前地图对象；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
    - 补充记录：名称库清空 API 第一刀已接入 `api.namebases.clear({confirm:true})`，复用名称库 edit command、`EditHistory`、面板刷新和本地偏好持久化；因为这是批量删除用户名称库，API 必须显式传 `confirm:true`。本步不接按名称库批量重命名当前地图对象；构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放。
+   - 补充记录：名称库批量重命名对象 API 第一刀已接入 `api.namebases.renameObjects(kind, ids, {confirm:true})`，支持 `state / city / river / lake` 及常见复数别名，复用既有按名称库重命名命令并进入 `EditHistory`；因为这是批量改写当前地图对象名称，API 必须显式传 `confirm:true`，其它对象类型暂返回结构化错误。构建和主线程浏览器兜底验证通过，验证子智能体等待 90 秒无输出后已中断释放；浏览器验证确认城市 6 个、河流 8 个可真实改名并撤销恢复，WebGL / health / console / page error 均为 `0`。
 
 ### 验证要求
 

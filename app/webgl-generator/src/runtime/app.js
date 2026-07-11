@@ -1784,7 +1784,8 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       update: (baseId, patch = {}) => updateNamebaseViaApi(state, documentRef, baseId, patch),
       delete: baseId => deleteNamebaseViaApi(state, documentRef, baseId),
       clear: (options = {}) => clearNamebasesViaApi(state, documentRef, options),
-      bind: (scope, target, baseId, options = {}) => bindNamebaseViaApi(state, documentRef, scope, target, baseId, options)
+      bind: (scope, target, baseId, options = {}) => bindNamebaseViaApi(state, documentRef, scope, target, baseId, options),
+      renameObjects: (kind, ids, options = {}) => renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options)
     },
     edit: {
       notes: {
@@ -2981,6 +2982,77 @@ function bindNamebaseViaApi(state, documentRef, scope, target, baseId, options =
     noopStatus: "名称库绑定没有变化。",
     status: `已设置${binding.cultureId ? `文化 #${binding.cultureId}` : "全局"}${binding.target}名称库绑定。`
   });
+}
+
+function renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options = {}) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("按名称库批量重命名对象需要显式传入 {confirm: true}");
+  const targetKind = normalizeApiNamebaseRenameKind(kind);
+  const targetIds = normalizeApiNamebaseRenameIds(ids);
+  const command = createNamebaseRenameObjectsCommand(targetKind, targetIds, {
+    label: options.label || namebaseRenameApiLabel(targetKind)
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: `${namebaseRenameKindLabel(targetKind)}没有可按名称库更新的名称。`,
+    status: executed => {
+      const payload = executed.getResult?.() || {};
+      return `已按当前名称库重命名 ${payload.renamed || 0} 个${namebaseRenameKindLabel(targetKind)}。`;
+    },
+    throwOnError: false
+  });
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function createNamebaseRenameObjectsCommand(kind, ids, options = {}) {
+  switch (kind) {
+    case "state":
+      return createRenameStatesFromNamebaseCommand(ids, options);
+    case "city":
+      return createRenameCitiesFromNamebaseCommand(ids, options);
+    case "river":
+      return createRenameRiversFromNamebaseCommand(ids, options);
+    case "lake":
+      return createRenameLakesFromNamebaseCommand(ids, options);
+    default:
+      throw new Error(`暂不支持按名称库重命名对象类型：${kind}`);
+  }
+}
+
+function normalizeApiNamebaseRenameKind(kind) {
+  const value = String(kind || "").trim().toLowerCase();
+  if (["state", "states", "country", "countries", "nation", "nations"].includes(value)) return "state";
+  if (["city", "cities", "settlement", "settlements", "burg", "burgs", "place", "places"].includes(value)) return "city";
+  if (["river", "rivers", "hydro", "hydronym", "hydronyms"].includes(value)) return "river";
+  if (["lake", "lakes"].includes(value)) return "lake";
+  throw new Error("名称库批量重命名对象类型必须是 state / city / river / lake");
+}
+
+function normalizeApiNamebaseRenameIds(ids) {
+  if (!Array.isArray(ids)) throw new Error("名称库批量重命名对象 ids 必须是数组");
+  const normalized = [...new Set(ids.map(id => Number(id)).filter(id => Number.isInteger(id) && id >= 0))];
+  if (!normalized.length) throw new Error("名称库批量重命名对象 ids 不能为空");
+  return normalized;
+}
+
+function namebaseRenameApiLabel(kind) {
+  return `API 按名称库重命名${namebaseRenameKindLabel(kind)}`;
+}
+
+function namebaseRenameKindLabel(kind) {
+  switch (kind) {
+    case "state":
+      return "国家";
+    case "city":
+      return "城市";
+    case "river":
+      return "河流";
+    case "lake":
+      return "湖泊";
+    default:
+      return "对象";
+  }
 }
 
 function executeNamebaseCommandViaApi(state, documentRef, command, options = {}) {

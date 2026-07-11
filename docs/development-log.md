@@ -25068,3 +25068,26 @@ full 矩阵结果：
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_namebase_clear_api` 和 `verify_namebase_clear_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.clear` 且 `sideEffects.namebases = readonly-download-and-edit-command`；直接调用 `api.namebases.clear()` 返回 `ok = false`，错误信息为“清空用户名称库需要显式传入 {confirm: true}”，用户库数量不变；创建两个用户名称库后，`api.namebases.clear({confirm:true})` 可清空并进入 `EditHistory`；`api.history.undo()` 可恢复两个用户库；继续撤销两次创建后用户库数量回到 `0`。调用前后 checksum 保持 `013cc3e5`，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 名称库批量重命名对象 API 第一刀
+
+背景：
+
+- 名称库 API 已覆盖读取、导出、导入和名称库自身写入，但规划中的 `renameObjects` 尚未落地。
+- 运行时已有城市、国家、河流和湖泊四类“按名称库重命名”命令，且这些命令已支持 `EditHistory`、撤销 / 重做和对象级 affected 记录，适合作为控制台 API 的第一批显式批量改名能力。
+
+实现：
+
+- `console-api.js` 新增 `api.namebases.renameObjects(kind, ids, options)` 并登记到 `api.info.capabilities()`。
+- app action 层新增 `renameObjectsFromNamebaseViaApi()`，支持 `state / city / river / lake` 及常见复数别名，并复用 `createRenameStatesFromNamebaseCommand()`、`createRenameCitiesFromNamebaseCommand()`、`createRenameRiversFromNamebaseCommand()` 和 `createRenameLakesFromNamebaseCommand()`。
+- 为避免脚本误触批量改写当前地图对象名称，API 必须显式传入 `{confirm: true}`；未确认、空 ids 或不支持的对象类型会返回结构化错误。
+- 本步不新增文化、宗教、省份、路线、标记或其它对象的名称库批量命名语义，也不改变现有命名算法和 UI 面板按钮行为。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `node --check app\webgl-generator\src\runtime\app.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_namebase_rename_objects_api` 和 `verify_namebase_rename_objects_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：`api.info.capabilities()` 已包含 `namebases.renameObjects`；直接调用 `api.namebases.renameObjects("city", [id])` 返回 `ok = false`，错误信息为“按名称库批量重命名对象需要显式传入 {confirm: true}”，目标城市名称不变；不支持的 `province` 类型和空 ids 均返回结构化错误；`api.namebases.renameObjects("city", 前 6 个城市, {confirm:true})` 改名 `6 / 6` 个城市，`api.history.undo()` 可恢复原名；`api.namebases.renameObjects("river", 前 8 条河流, {confirm:true})` 改名 `8 / 8` 条河流，`api.history.undo()` 可恢复原名；历史 `lastAffected` 首项为 `derived-system#namebase-rename`；加载遮罩已隐藏，`api.info.runtimeStats()` 返回 `ok = true`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。

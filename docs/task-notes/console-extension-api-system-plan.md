@@ -238,9 +238,9 @@ api.edit.measurement.delete(id)
 - `api.namebases.list({includeSource})` 已完成只读快照第一刀，返回内置 / 用户名称库摘要、绑定目标、全局与文化绑定、绑定使用情况、无效绑定和汇总 metadata。
 - `api.namebases.export({format, baseIds, includeUser, download, includeText})` 已完成只读导出第一刀，支持当前 JSON 名称库文档和原版文本两种格式；`baseIds` 可限制导出选中名称库，下载模式复用浏览器下载能力。
 - `api.namebases.import(document, {mode, filename})` 已完成导入第一刀，支持当前 JSON 名称库文档对象、JSON 字符串和原版文本字符串；默认 append，`mode: "replace"` 时替换当前用户库，导入进入 `EditHistory`。
-- `api.namebases.create(payload)`、`copyBuiltin(baseId)`、`update(id, patch)`、`delete(id)`、`clear({confirm:true})` 和 `bind(scope, target, baseId, options)` 已完成写入第一刀，复用名称库 edit command、`EditHistory`、名称库面板刷新和本地偏好持久化；`create / update` 支持名称、样本和生成参数补丁；`clear` 必须显式传 `confirm:true`。
+- `api.namebases.create(payload)`、`copyBuiltin(baseId)`、`update(id, patch)`、`delete(id)`、`clear({confirm:true})`、`bind(scope, target, baseId, options)` 和 `renameObjects(kind, ids, {confirm:true})` 已完成写入第一刀；名称库自身写入复用名称库 edit command、名称库面板刷新和本地偏好持久化，批量重命名对象复用既有城市 / 国家 / 河流 / 湖泊名称库重命名命令并进入 `EditHistory`；`create / update` 支持名称、样本和生成参数补丁；`clear` 和 `renameObjects` 必须显式传 `confirm:true`。
 - 默认 `includeSource` 为 `false`，只返回示例与统计摘要，不回传完整 source；显式传 `includeSource: true` 时才返回名称库源词条副本。
-- `list / export` 不进入 `EditHistory`，不修改名称库、绑定、地图 checksum 或面板状态；`import / create / copyBuiltin / update / delete / clear / bind` 会进入 `EditHistory`，但不自动批量改写当前地图对象名称；后续 `renameObjects` 仍需单独设计写入、撤销和风险边界。
+- `list / export` 不进入 `EditHistory`，不修改名称库、绑定、地图 checksum 或面板状态；`import / create / copyBuiltin / update / delete / clear / bind` 会进入 `EditHistory`，但不自动批量改写当前地图对象名称；只有显式调用 `renameObjects(kind, ids, {confirm:true})` 时才会批量改写当前地图对象名称，当前支持 `state / city / river / lake`。
 
 ### `api.debug`
 
