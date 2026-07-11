@@ -476,6 +476,7 @@ api.edit.measurement.delete(id)
 
 - 已完成第一刀。
 - `api.history.get()`、`api.history.undo()` 和 `api.history.redo()` 已接入 app action，复用当前 `EditHistory` 和刷新路径。
+- `api.history.stats()` 已作为 `get()` 的明确别名补齐；`api.history.peek()` 返回 undo / redo 栈顶命令摘要、影响对象和 effects 标记，只读不执行命令。
 - `api.edit.notes.set(object, body, {name})` 和 `api.edit.notes.delete(noteId, {name})` 已接入对象备注 / 备注删除 edit commands、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
 - `api.edit.measurements.save(points, {name, routeFit})`、`api.edit.measurements.rename(id, name)`、`api.edit.measurements.updatePoints(id, points, {routeFit})` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - `api.edit.cities.add(gridCell)` 和 `api.edit.cities.delete(cityId)` 已接入城市 collection edit commands。
@@ -533,6 +534,7 @@ api.edit.measurement.delete(id)
 
 - debug API 已完成第一刀。
 - `api.debug.snapshot({limit, severity})` 返回当前页面、地图、图层 / 单位偏好、选择、历史、renderer 摘要和 health 摘要，供脚本或 AI 快速判断运行时状态。
+- `api.debug.dumpState({includeCapabilities, includeRendererStats})` 返回可复制的诊断转储，默认包含 snapshot 和 capabilities，可选附带完整 renderer stats；该入口不暴露原始 `state.map` 或 typed array。
 - `api.debug.renderer()` 返回完整 renderer stats，便于定位 WebGL、camera、动态 mesh、draw 和 loadMap 状态。
 - `api.debug.health({limit, severity})` 返回 health 事件、阈值、存储 key 和当前 operation。
 - `api.debug.profileNextRender({updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers})` 会强制执行一次 renderer draw，并返回前后 draw stats、动态 mesh cache 和 API 侧总耗时。

@@ -85,7 +85,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       setWind: (index, direction, options = {}) => apiCall(() => requireApiAction(actions.climate?.setWind, "climate.setWind")(index, direction, options))
     }),
     history: Object.freeze({
-      get: () => apiCall(() => actions.history?.get?.() || state?.editHistory?.getStats?.() || null),
+      get: () => apiCall(() => buildHistoryStats(state, actions)),
+      stats: () => apiCall(() => buildHistoryStats(state, actions)),
+      peek: () => apiCall(() => buildHistoryPeek(state)),
       undo: () => apiCall(() => requireApiAction(actions.history?.undo, "history.undo")()),
       redo: () => apiCall(() => requireApiAction(actions.history?.redo, "history.redo")())
     }),
@@ -187,6 +189,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
     }),
     debug: Object.freeze({
       snapshot: (options = {}) => apiCall(() => buildDebugSnapshot(state, documentRef, options)),
+      dumpState: (options = {}) => apiCall(() => buildDebugStateDump(state, documentRef, options)),
       renderer: () => apiCall(() => buildDebugRendererSnapshot(state)),
       health: (options = {}) => apiCall(() => buildDebugHealthSnapshot(state, options)),
       profileNextRender: (options = {}) => apiCall(() => profileDebugNextRender(state, options))
@@ -207,11 +210,11 @@ function buildCapabilities() {
       layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
       units: ["get", "apply", "setDistanceUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
       climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
-      history: ["get", "undo", "redo"],
+      history: ["get", "stats", "peek", "undo", "redo"],
       edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
       data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
       namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
-      debug: ["snapshot", "renderer", "health", "profileNextRender"]
+      debug: ["snapshot", "dumpState", "renderer", "health", "profileNextRender"]
     },
     sideEffects: {
       info: "readonly",
@@ -232,6 +235,39 @@ function buildCapabilities() {
 function requireApiAction(action, name) {
   if (typeof action !== "function") throw new Error(`API action 未安装：${name}`);
   return action;
+}
+
+function buildHistoryStats(state, actions = {}) {
+  return actions.history?.get?.() || state?.editHistory?.getStats?.() || null;
+}
+
+function buildHistoryPeek(state) {
+  const history = state?.editHistory;
+  if (!history) return {ready: false};
+  return {
+    ready: true,
+    stats: history.getStats?.() || null,
+    undo: summarizeHistoryCommand(history.undoStack?.at(-1)),
+    redo: summarizeHistoryCommand(history.redoStack?.at(-1))
+  };
+}
+
+function summarizeHistoryCommand(command) {
+  if (!command) return null;
+  return {
+    label: command.label || "未命名编辑",
+    domain: command.domain || "none",
+    affected: summarizeAffectedTargets(command.effects?.affected),
+    renderEffect: command.effects?.render || "",
+    selectionEffect: command.effects?.selection || "",
+    derived: Array.isArray(command.effects?.derived) ? [...command.effects.derived] : [],
+    hasNoopCheck: typeof command.isNoop === "function"
+  };
+}
+
+function summarizeAffectedTargets(affected) {
+  if (!Array.isArray(affected)) return [];
+  return affected.map(target => ({kind: target?.kind || "", id: target?.id ?? ""}));
 }
 
 function buildApiVersion() {
@@ -313,6 +349,22 @@ function buildDebugSnapshot(state, documentRef, options = {}) {
     history: state?.editHistory?.getStats?.() || null,
     renderer,
     health
+  };
+}
+
+function buildDebugStateDump(state, documentRef, options = {}) {
+  const includeCapabilities = options.includeCapabilities !== false;
+  const includeRendererStats = Boolean(options.includeRendererStats || options.fullRenderer || options.renderer === "full");
+  return {
+    dumpVersion: 1,
+    api: buildApiVersion(),
+    included: {
+      capabilities: includeCapabilities,
+      rendererStats: includeRendererStats
+    },
+    snapshot: buildDebugSnapshot(state, documentRef, options),
+    capabilities: includeCapabilities ? buildCapabilities() : null,
+    renderer: includeRendererStats ? buildDebugRendererSnapshot(state) : null
   };
 }
 

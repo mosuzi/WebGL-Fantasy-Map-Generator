@@ -25418,3 +25418,26 @@ full 矩阵结果：
 - `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
 - 本轮按要求启动验证子智能体 `verify_debug_profile_render_api` 和 `verify_debug_profile_render_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
 - 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-profile-render", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `c49d639e`；`api.info.capabilities().methods.debug` 包含 `profileNextRender`；调用 `api.debug.profileNextRender({updateDynamicBuffers:false, updateOverlay:false, drawDirtyDynamicBuffers:false})` 返回 `profiled=true`、`totalMs=114.3ms`、传入 options 三项均为 `false`、前后 draw stats 存在、`after.draw.glError=0`、动态 mesh cache 中 routes / tradeFlows / rivers / selection dirty 均为 `false`、`selectionHighlightMode=none`；调用前后 checksum 保持 `c49d639e` 不变，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
+
+### 2026-07-11 debug 状态转储与历史只读补齐
+
+背景：
+
+- 控制台 API 方案中曾列出 `api.debug.dumpState(options)`，实际实现已具备 snapshot / renderer / health / profile 片段，但缺少一个可复制的聚合诊断转储入口。
+- 方案中历史命名空间使用 `stats / peek` 表达只读查询，而实际 API 只有 `get / undo / redo`；脚本需要读取历史栈顶时还要依赖面板或内部对象。
+
+实现：
+
+- `console-api.js` 新增 `api.debug.dumpState({includeCapabilities, includeRendererStats})`，默认返回 debug snapshot 与 capabilities，可选附带完整 renderer stats。
+- `dumpState` 只返回 JSON 可序列化诊断，不暴露原始 `state.map`、typed array 或可写内部引用。
+- `api.history.stats()` 作为 `api.history.get()` 的明确别名补齐。
+- `api.history.peek()` 返回 undo / redo 栈顶命令的 label、domain、affected、render / selection effects、derived 标记和是否提供 noop 检查；为保持只读安全，peek 不执行命令，也不调用可能依赖上下文的 `isNoop()`。
+- capabilities 同步补入 `debug.dumpState`、`history.stats` 和 `history.peek`。
+
+验证：
+
+- `node --check app\webgl-generator\src\runtime\console-api.js` 通过。
+- `git diff --check` 通过。
+- `pnpm run build:app` 首次因沙箱网络限制无法访问 npm registry；提升权限重跑后通过，仅有既有 Vite 大 chunk 警告。
+- 本轮按要求启动验证子智能体 `verify_debug_dump_history_api` 和 `verify_debug_dump_history_smoke`；两个子智能体等待 90 秒无输出后已中断释放。
+- 主线程兜底 Playwright + 系统 Chrome 浏览器验证通过：先通过 `api.generate.newMap({confirm:true, seed:"api-debug-dump-history", cellsTarget:1000, heightmapTemplate:"continents"})` 生成地图，得到 checksum `40fe0b1a`；`api.info.capabilities()` 已包含 `debug.dumpState`、`history.stats` 和 `history.peek`；默认 `api.debug.dumpState()` 返回 `dumpVersion=1`、snapshot checksum `40fe0b1a`、capabilities，并且 `renderer=null`；`api.debug.dumpState({includeRendererStats:true})` 返回 `renderer.ready=true` 和 `renderer.stats.draw.glError=0`；`api.history.stats()` 与 `api.history.get()` 返回一致；对城市 `#1` 执行 `api.edit.cities.rename()` 后，`api.history.peek().undo` 返回 `重命名城市 #1`、`domain=city`、`affected=[{kind:"city", id:1}]`、`hasNoopCheck=true`；撤销后 `api.history.peek().redo` 返回同一命令摘要，城市名恢复为 `白城`；调用前后 checksum 恢复为 `40fe0b1a`，直接 `gl.getError() = 0`，health error、console error 和 page error 均为 `0`。
