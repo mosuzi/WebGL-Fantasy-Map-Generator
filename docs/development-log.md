@@ -26313,3 +26313,26 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；扩展后的 `regress:edit-command-affected` 覆盖名称库动态 id、导入 / 绑定 / 清空、外交重生成与高度领域；持久高亮兼容回归仍为支持 `16` 类、规范化 `3`、拒绝 `2`、去重 `1`、删除后 `2`、上限 `100`；`pnpm run build:app` 构建 1115 modules、耗时 1.21 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能并只执行一次现有标签检查，唯一页面仍为 GitHub commits，没有可复用 FMG 页面；已调用 finalize 释放会话。未 claim、刷新或新开页面，未启动 / 重启 Chrome、开发服务器或 Playwright，名称库 / 外交历史摘要和 WebGL / console / page / health 验收继续列入第 124 步。
+
+### 2026-07-12 重生成真实对象目标与摘要负载收口
+
+背景：
+
+- 国家、省份、路线、河流和城市重生成仍把刷新 affected 写成 `kind#all`，无法判断生成后的真实对象集合。
+- 直接替换为数百个真实 id 会让 `edit-refresh-scheduler` 把完整数组拼成巨量字符串；标题栏历史虽已折叠，但运行时刷新摘要没有同等保护。
+
+实现：
+
+- `edit-command-effects.js` 新增 `collectionAffected()`：从 `id / i` 提取对象目标，过滤空项、`removed`、重复 id，并支持排除中立 id 0。
+- 国家重生成记录国家、省份、城市和路线；省份重生成记录省份、城市和路线；路线重生成记录路线；河流重生成记录河流和同步路线；城市重生成记录城市和同步路线。
+- 五条路径统一复用 `systemAffected()`，移除 `app.js` 内重复的 `regenerationAffected()`。
+- `formatAffectedTargets()` 从 UI 提升到运行时共享 helper；`edit-refresh-scheduler` 与标题栏历史格式都默认展示前三项和 `+N`，完整 affected 数组仍供刷新和 API 消费。
+- 新增 `tools/webgl-generator-affected-summary-regression.mjs` 与 `pnpm run regress:affected-summary`，覆盖集合过滤、国家中立排除、共享格式和 scheduler 摘要。
+
+验证：
+
+- `node --check` 已覆盖 affected helper、刷新调度、历史格式、`app.js` 和新回归脚本；直接回归通过：路线目标 `4`、国家目标 `2`，运行时与历史摘要均为 `derived-system#routes, route#0, route#1 +2`。
+- 既有 `regress:edit-command-affected` 继续通过。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：7 个目标文件 `node --check` 全过；`regress:affected-summary` 返回路线目标 `4`、国家目标 `2`，共享折叠摘要符合预期；编辑命令 affected 回归覆盖名称库、绑定、清空、外交和高度；持久高亮兼容回归仍为支持 `16` 类、规范化 `3`、拒绝 `2`、去重 `1`、删除后 `2`、上限 `100`；`pnpm run build:app` 构建 1115 modules、耗时 1.45 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后仅检查一次既有 Chrome，唯一页面仍为 GitHub commits，没有现成 FMG 页面；已调用 finalize 释放会话。未 claim、刷新、新开页面、启动服务器或重启 Chrome，未使用 Playwright、未执行重生成；第 126 步刷新摘要、对象面板、selection 与 WebGL / console / page / health 验收继续待执行。

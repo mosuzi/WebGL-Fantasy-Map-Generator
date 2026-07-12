@@ -69,6 +69,8 @@
 
 批量重算或全量重生成命令的 `affected` 不应只写 `{kind: "xxx", id: "all"}`。建议先追加一个系统级目标，例如 `{kind: "derived-system", id: "routes"}`、`{kind: "derived-system", id: "rivers"}`，再列出会被刷新或替换的对象集合。这样历史摘要可以解释“为什么是全量”，面板刷新仍能按对象 kind 工作。
 
+对象集合应优先使用 `collectionAffected(kind, objects, options)` 提取真实目标；该 helper 会过滤空项、`removed` 对象和重复 id，并可通过 `includeZero: false` 排除国家 / 省份的中立项。运行时刷新摘要与历史标题统一使用 `formatAffectedTargets()`，默认只显示前三项和 `+N`，因此保留完整对象数组不会制造巨量 UI 文本。
+
 新增对象命令如果真实 id 只能在 `apply()` 时确定，初始 `affected` 应使用 `{kind, id: "new"}`，执行成功后再回写真实 id。这样执行前诊断、失败路径和历史摘要都能知道命令目标类型。
 
 新增命令应优先通过 `newObjectAffected(kind)` 生成这个初始目标，避免不同领域手写 `{kind, id: "new"}` 时出现字段拼写或 kind 不一致。批量导入可组合 `systemAffected(system, newObjectAffected(kind))`，先解释导入系统，再保留“将新增对象”的目标类型。
@@ -126,4 +128,4 @@
 - 国家、省份、道路、河流、城市重生成入口、资源点重生成命令、军事批量 / 事件命令、城市 / 国家 / 河流 / 湖泊按名称库批量重命名命令、高度 / 国家 / 省份刷子、FMG Cells GEO 导入命令、外交重生成、批量政体调整和测量对象导入，已开始使用 `derived-system#xxx` 作为批量 affected 的第一项，避免历史和刷新摘要只出现对象级 `all`、集合别名、一串同类对象 id 或 `grid-cells#数量`。
 - 新增城市、省份、国家、空文化、空宗教、手工标签、marker、保存测量对象、测量对象导入和用户名称库命令的初始 affected 已改为复用 `newObjectAffected(kind)` 生成 `kind#new`，执行成功后仍会替换为真实对象 id；marker 视觉、备注、移动、删除和资源点重生成命令，标签移动、重命名、备注、删除、恢复命令，测量对象保存回写、重命名、更新、删除和导入回写命令，文化 / 宗教新增回写、删除、颜色、继承父级命令，路线、河流、地区样式和备注删除的单对象命令，城市新增回写、删除、人口、归属同步、视觉和备注命令，国家 / 省份新增回写、删除、国家颜色和政体命令，对象详情通用重命名 / 备注、省份颜色、国家首都和外交关系命令，军事兵种比例、单军团态势、移动驻地、设置基地、军团重命名和战报导入目标，名称库重命名 / 样本 / 参数 / 综合更新 / 删除，以及气候即时刷新目标已开始复用 `objectAffected(kind, id)` 生成对象目标。名称库绑定使用 `derived-system#namebase-binding` 搭配具体 scope / target；名称库导入和清空在执行后比较前后快照并回写实际变化的库 id；外交重生成在执行后回写所有有效国家 id。
 - 面板历史按钮已开始复用 `executeHistoryCommand()`，避免各面板分别手写撤销 / 重做刷新。
-- 当前应用内 `state.editHistory.execute / undo / redo` 只保留在统一执行器内部；名称库导入 / 清空和外交重生成已不再把执行后的历史目标保留为集合级 `all`。后续重点是让新增命令持续遵守 `domain` 与精确 `effects.affected`，并审查其它确实能够低成本获得真实 id 的批量命令。
+- 当前应用内 `state.editHistory.execute / undo / redo` 只保留在统一执行器内部；名称库导入 / 清空和外交重生成已不再把执行后的历史目标保留为集合级 `all`。国家、省份、路线、河流和城市重生成刷新也已通过 `collectionAffected()` 记录真实对象，刷新摘要和历史 UI 统一折叠为前三项与 `+N`。后续重点是让新增命令持续遵守 `domain` 与精确 `effects.affected`。
