@@ -26450,3 +26450,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：7 个目标文件 `node --check` 全过；基础派生回归确认成功顺序 `rivers -> states`、河流失败立即短路、国家失败记录部分完成及显式 `executed`；高度笔刷回归和 1001 目标 239 字节摘要回归通过；`pnpm run build:app` 构建 1118 modules，HeightPanel 38.58 kB / gzip 12.99 kB；`git diff --check` 通过。
 - 阶段末浏览器子智能体长时间未返回，为避免会话泄漏已中断；随后只恢复该智能体执行资源清理，确认 Chrome 控制会话已通过 `tabs.finalize({})` 释放，未继续检查或操作页面，也未启动任何新资源。本轮没有取得按钮、组合重算、stale systems 与 WebGL / console / page / health 证据，第 136 步继续待执行。
+
+### 2026-07-12 高度下游派生顺序重算入口
+
+背景：
+
+- 高度基础派生已经能按 `rivers -> states` 重建河流、生物群系、路线、国家、省份和城镇，但宗教、资源点 / 经济、外交、军事和地区仍需要用户逐项重算。
+- 下游系统有明确依赖次序；资源点会同步重建经济，军事依赖外交和经济，地区又读取战争、宗教和军事上下文，因此不能并行或任意换序。
+
+实现：
+
+- `height-derived-rebuild.js` 新增固定顺序 `religions -> markers -> diplomacy -> military -> zones`，复用通用步骤执行器，并在任一步 `executed=false` 时立即短路。
+- 受约束重算增加宗教、军事和地区三类：宗教按当前文化、城镇和人口重新扩张；军事按当前国家、人口、经济和外交重建；地区按当前战争、宗教、军事和地形上下文重建。
+- `api.generate.regenerate()` 增加三类及常见别名，返回显式 `executed`，前后摘要增加宗教数、军团数、地区数和经济交易数。
+- 高度面板新增“重算下游派生”；所有非命令重算刷新完成后统一核对并清理已经失效的持久对象高亮。
+- 本步只重建已有受约束能力；文化不在这条下游顺序中，不宣称重建或修改文化。
+
+验证：
+
+- `node --check` 已覆盖下游顺序器、`app.js`、高度 panel wrapper 和扩展回归脚本；直接回归确认完整成功严格调用五步，资源点失败只调用宗教与资源点，军事失败不会继续执行地区。
+- 阶段末烟测子智能体确认 7 个目标文件 `node --check`、`regress:height-derived-rebuild`、`regress:height-brush`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check` 全部通过；pnpm 首次在沙箱内受 registry 网络限制失败，按规则升级后成功，构建只有既有大 chunk 警告。
+- 阶段末浏览器子智能体复用既有 `127.0.0.1:5410` 页面，未刷新、新开页面或启动 Chrome / 服务器 / Playwright。基础重算得到河流 `297 -> 259`、国家 `20 -> 20`、省份 `223 -> 192`，待派生 `9 项 -> 6 项`；下游严格按宗教、资源点 / 经济、外交、军事、地区执行，宗教 `18 -> 18`、资源点 `6 -> 10`、资源潜力 `84 -> 134`、外交关系 `190 -> 190`、战争 `0 -> 0`、军团 `97 -> 98`、地区 `3 -> 3`，待派生最终为“无”。console error 为 `0`；隔离作用域未能读取 `glError` 和单独经济交易数，7 条 health warn 均指向 React DevTools extension installHook URL。
+- 烟测与浏览器智能体均已结束；Chrome 控制会话已 finalize 释放，没有遗留浏览器、服务器或后台进程。

@@ -2,8 +2,11 @@ import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
 import {createLegacyNamebaseText, createNamebaseDocument, createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
+import {buildMilitary} from "../generator/military.js";
 import {backfillRiverHydrology, buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
+import {finalizeSocietyReligions} from "../generator/society.js";
+import {buildZones} from "../generator/zones.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -53,7 +56,7 @@ import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureCol
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getHeightBrushChanges} from "./height-brush.js";
-import {createRegenerationResult, rebuildHeightBaseDerived} from "./height-derived-rebuild.js";
+import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
@@ -355,6 +358,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRegenerateBase: () => {
       const result = rebuildHeightBaseDerived(kind => regenerateMapAttribute(state, kind, documentRef));
+      updateRegenerationSection(documentRef, result);
+      updateHeightPanel(state);
+    },
+    onRegenerateDownstream: () => {
+      const result = rebuildHeightDownstreamDerived(kind => regenerateMapAttribute(state, kind, documentRef));
       updateRegenerationSection(documentRef, result);
       updateHeightPanel(state);
     }
@@ -5824,6 +5832,12 @@ function regenerateMapAttribute(state, kind, documentRef) {
       return regenerateMarkerResources(state, documentRef);
     case "diplomacy":
       return regenerateDiplomacy(state, documentRef);
+    case "religions":
+      return regenerateReligions(state, documentRef);
+    case "military":
+      return regenerateMilitary(state, documentRef);
+    case "zones":
+      return regenerateZones(state, documentRef);
     default:
       break;
   }
@@ -5842,6 +5856,7 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   return {
     kind: targetKind,
     action: result.action || targetKind,
+    executed: Boolean(result.executed),
     status: result.status || "",
     constraint: result.constraint || "",
     before,
@@ -5860,7 +5875,10 @@ function normalizeApiRegenerationKind(kind) {
   if (["province", "provinces"].includes(value)) return "provinces";
   if (["marker", "markers", "resource", "resources"].includes(value)) return "markers";
   if (["diplomacy", "diplomatic", "relations"].includes(value)) return "diplomacy";
-  throw new Error("受约束重算类型必须是 routes / rivers / cities / states / provinces / markers / diplomacy");
+  if (["religion", "religions"].includes(value)) return "religions";
+  if (["military", "army", "armies"].includes(value)) return "military";
+  if (["zone", "zones", "region-event", "region-events"].includes(value)) return "zones";
+  throw new Error("受约束重算类型必须是 routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones");
 }
 
 function regenerationApiSummary(map) {
@@ -5873,6 +5891,10 @@ function regenerationApiSummary(map) {
     rivers: map?.rivers?.rivers?.filter(Boolean).length || 0,
     markers: map?.markers?.markers?.filter(Boolean).length || 0,
     resourceMarkers: Number(map?.markers?.metadata?.resourceMarkers) || 0,
+    religions: Number(map?.society?.metadata?.religions) || 0,
+    militaryRegiments: Number(map?.military?.metadata?.regiments) || 0,
+    zones: Number(map?.zones?.metadata?.zones) || 0,
+    economyDeals: Number(map?.economy?.metadata?.deals) || 0,
     diplomacyPairs: Number(map?.diplomacy?.metadata?.pairs) || 0,
     diplomacyEnemies: Number(map?.diplomacy?.metadata?.enemies) || 0
   };
@@ -6020,6 +6042,59 @@ function regenerateCities(state, documentRef) {
   );
 }
 
+function regenerateReligions(state, documentRef) {
+  const map = state.map;
+  if (!map?.pack?.cells?.s || !map?.society || !map?.settlements) return regenerationResult("religions", "未执行", "当前地图缺少 pack 社会、文化或城镇数据，无法重新扩张宗教。");
+  const before = Number(map.society?.metadata?.religions) || 0;
+  const salt = nextRegenerationSalt(map, "religions");
+  const seed = `${map.options?.seed || "map"}:regenerate-religions:${salt}`;
+  finalizeSocietyReligions(map.grid, map.society, map.pack, createRandom(seed), map.settlements, {...map.options, namebases: map.namebases, seed});
+  markDerivedFresh(map, ["religions"]);
+  markDerivedStale(map, ["diplomacy", "military", "zones"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate religions: salt=${salt}, religions=${map.society.metadata.religions}`);
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["cell-colors", "object-panels", "object-index"],
+    affected: systemAffected("religions", collectionAffected(OBJECT_KIND.RELIGION, map.society?.religions, {includeZero: false}))
+  });
+  return regenerationResult("religions", `宗教已按当前文化、城镇和人口重新扩张（扰动 #${salt}）：${before} -> ${map.society.metadata.religions}`, "已刷新宗教归属、覆盖统计和对象索引；外交、军事和地区仍标记为待派生。");
+}
+
+function regenerateMilitary(state, documentRef) {
+  const map = state.map;
+  if (!map?.pack?.cells?.i?.length || !map?.pack?.states?.length) return regenerationResult("military", "未执行", "当前地图缺少 pack cells 或国家数据，无法重建军事。");
+  const before = Number(map.military?.metadata?.regiments) || 0;
+  const salt = nextRegenerationSalt(map, "military");
+  const seed = `${map.options?.seed || "map"}:regenerate-military:${salt}`;
+  map.military = buildMilitary(map.pack, {...map.options, seed});
+  markDerivedFresh(map, ["military"]);
+  markDerivedStale(map, ["zones"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate military: salt=${salt}, regiments=${map.military.metadata.regiments}, troops=${map.military.metadata.troops}`);
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["point-layers", "object-panels", "object-index"],
+    affected: systemAffected("military", collectionAffected(OBJECT_KIND.MILITARY, militaryRegiments(map)))
+  });
+  return regenerationResult("military", `军事已按当前国家、人口、经济和外交重算（扰动 #${salt}）：军团 ${before} -> ${map.military.metadata.regiments}`, "已刷新军团、战线、战役、点图层和对象索引；地区仍标记为待派生。");
+}
+
+function regenerateZones(state, documentRef) {
+  const map = state.map;
+  if (!map?.pack?.cells?.i?.length) return regenerationResult("zones", "未执行", "当前地图缺少 pack cells，无法重建地区。");
+  const before = Number(map.zones?.metadata?.zones) || 0;
+  const salt = nextRegenerationSalt(map, "zones");
+  const seed = `${map.options?.seed || "map"}:regenerate-zones:${salt}`;
+  map.zones = buildZones(map.pack, {...map.options, seed});
+  markDerivedFresh(map, ["zones"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate zones: salt=${salt}, zones=${map.zones.metadata.zones}, cells=${map.zones.metadata.cells}`);
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["cell-colors", "object-panels", "object-index"],
+    affected: systemAffected("zones", collectionAffected(OBJECT_KIND.ZONE, map.zones?.zones))
+  });
+  return regenerationResult("zones", `地区已按当前战争、宗教、军事与地形上下文重算（扰动 #${salt}）：${before} -> ${map.zones.metadata.zones}`, "已刷新地区覆盖、统计和对象索引。");
+}
+
 function regenerateMarkerResources(state, documentRef) {
   const map = state.map;
   const beforeResources = map.markers?.metadata?.resourceMarkers || 0;
@@ -6035,6 +6110,10 @@ function regenerateMarkerResources(state, documentRef) {
     `资源点已按当前地形、河流、生物群系、温度和降水约束重算（扰动 #${salt}）：${beforeResources} -> ${map.markers.metadata.resourceMarkers}；资源潜力 ${beforePotential} -> ${map.markers.metadata.resourcePotential}`,
     "已刷新资源 marker、正式货物来源、市场库存、交易、国家/省份资源潜力、点图层、对象索引和统计；军事与外交已标记为待派生。"
   );
+}
+
+function militaryRegiments(map) {
+  return (map?.pack?.states || map?.politics?.states || []).flatMap(state => state?.military || []);
 }
 
 function regenerateDiplomacy(state, documentRef) {
@@ -6073,19 +6152,10 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
     derived,
     affected
   });
-  updateStatePanel(state);
-  updateProvincePanel(state);
-  updateCityPanel(state);
-  updateCulturePanel(state);
-  updateReligionPanel(state);
-  updateDiplomacyPanel(state);
-  updateMarkerPanel(state);
-  updateLabelNamingPanel(state);
-  state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
-  updateLakePanel(state);
-  state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
-  updateMeasurementPanel(state);
+  updateAllObjectPanels(state);
+  updateHeightPanel(state);
   updateRuntimePanel(documentRef, state);
+  reconcilePersistentObjectHighlights(state, documentRef);
 }
 
 function refreshGenerationSummary(map) {

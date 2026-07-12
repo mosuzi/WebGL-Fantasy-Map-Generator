@@ -968,9 +968,20 @@
    - 边界：固定执行 `rivers -> states`；河流步骤同步刷新生物群系和道路，国家步骤同步刷新省份、城镇和道路。任一步返回未执行时立即停止，不继续依赖失败数据；宗教、标记、地区、军事、经济和外交仍保留待派生。
    - 完成记录：新增纯运行时 `height-derived-rebuild.js`，统一 `createRegenerationResult()` 的显式 `executed` 字段和高度基础派生顺序 / 短路；高度面板新增“重算基础派生”，操作区改为 2 × 2。新增 `pnpm run regress:height-derived-rebuild`，覆盖完整成功、河流失败短路和国家失败部分完成。
 
-136. 高度基础派生真实浏览器验收。`待执行`
+136. 高度基础派生真实浏览器验收。`已完成`
    - 目标：在可复用 FMG 页面存在时，完成一次短整平后点击“重算基础派生”，确认执行顺序、对象计数、待派生从基础系统中清除、按钮布局和 WebGL / console / page / health。
    - 边界：只执行一次组合重算，不连续点击；继续复用现成页面和服务器，不新开或重启 Chrome。
+   - 完成记录：浏览器子智能体复用既有 `127.0.0.1:5410` 页面且没有刷新；本轮没有重复执行整平，只执行一次基础重算。河流 `297 -> 259`、道路 `540 -> 532`，随后国家 `20 -> 20`、省份 `223 -> 192`、道路 `532 -> 567`，待派生 `9 项 -> 6 项`；按钮唯一、完整成功状态可见，console error 为 `0`。
+
+137. 高度下游派生顺序重算入口。`已完成`
+   - 目标：在基础派生完成后，从高度面板继续按已经实现的依赖链收口剩余下游系统，不要求用户逐个打开生成面板。
+   - 边界：固定执行 `religions -> markers / economy -> diplomacy -> military -> zones`；任一步返回 `executed=false` 时立即短路。文化不在这条下游重算顺序中，本步不宣称重建或修改文化。
+   - 完成记录：高度面板新增“重算下游派生”；受约束重算增加 `religions / military / zones` 及常见 API 别名，API 返回显式 `executed` 和宗教、军团、地区、经济交易前后摘要。宗教重算同步 pack / grid / 城镇与政治宗教引用，军事和地区按当前上游上下文重建；所有重算刷新后会清理已经失效的持久对象高亮。下游顺序回归已并入 `regress:height-derived-rebuild`，覆盖完整成功、资源点失败和军事失败短路。
+
+138. 高度下游派生真实浏览器验收。`已完成`
+   - 目标：在可复用 FMG 页面存在时只执行一次“重算下游派生”，确认宗教、资源点 / 经济、外交、军事、地区顺序、`executed`、对象计数、待派生摘要和 WebGL / console / page / health。
+   - 边界：与第 136 步集中在阶段末验收；不循环点击、不持续刷新，不新开或重启 Chrome，不启动新的开发服务器。
+   - 完成记录：同一页面只执行一次下游重算，状态严格显示宗教、资源点 / 经济、外交、军事、地区完整成功链；宗教 `18 -> 18`、资源点 `6 -> 10`、资源潜力 `84 -> 134`、外交关系 `190 -> 190`、战争 `0 -> 0`、军团 `97 -> 98`、地区 `3 -> 3`，待派生最终为“无”。console error 为 `0`；隔离页面作用域不能读取 `glError` 和单独经济交易数，health 的 7 条 long-task / input-stall warn 均指向 React DevTools extension installHook URL，按实际证据保留而不误报为零。
 
 ### 验证要求
 
@@ -980,6 +991,7 @@
 
 ### 本轮综合验证记录
 
+- 高度下游派生顺序重算批次完成：烟测子智能体执行的 7 个 `node --check`、基础 / 下游顺序与短路回归、高度笔刷回归、affected 摘要回归、`pnpm run build:app` 和 `git diff --check` 均通过；pnpm 首次在沙箱内受 registry 网络限制失败，按规则升级后成功，构建只有既有大 chunk 警告。浏览器子智能体复用既有 `127.0.0.1:5410` 页面，未刷新、新开页面或启动 Chrome / 服务器 / Playwright；一次基础重算把待派生从 9 项降到 6 项，一次下游重算严格按 `religions -> markers / economy -> diplomacy -> military -> zones` 清为“无”。两名智能体均已结束，Chrome 控制会话已 finalize 释放。
 - `node --check app\webgl-generator\src\ui\panel-manager.js`、`node --check app\webgl-generator\src\ui\panels\object-details-panel.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel-list-preferences.js`、`node --check app\webgl-generator\src\ui\panels\river-panel.js` 均通过。
 - `git diff --check` 通过。
 - `pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告。

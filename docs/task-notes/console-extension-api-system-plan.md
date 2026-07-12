@@ -76,7 +76,7 @@ API 目标：
 约束：
 
 - `newMap()` 和 `rerollSeed()` 是异步 API，返回 `{ok, mapSummary, timings}`。
-- `regenerate(kind)` 只接受已存在的受约束重算类型，例如 `routes / rivers / cities / states / provinces / markers / diplomacy`。
+- `regenerate(kind)` 只接受已存在的受约束重算类型：`routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones`。
 - 修改生成 options 后不应立即隐式重生成，除非方法名明确表达生成行为。
 
 ### `api.climate`
@@ -552,7 +552,7 @@ api.edit.measurement.delete(id)
 当前状态：
 
 - 受约束重算 API 已完成第一刀。
-- `api.generate.regenerate(kind, {confirm:true})` 支持 `routes / rivers / cities / states / provinces / markers / diplomacy` 及常见别名，复用现有控制面板的受约束重算路径。
+- `api.generate.regenerate(kind, {confirm:true})` 支持 `routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones` 及常见别名，复用现有控制面板的受约束重算路径。
 - 返回值包含 `kind / action / executed / status / constraint`、重算前后对象计数、当前 `staleSystems` 和历史摘要；`executed` 明确区分成功与“未执行 / 暂未执行”。其中 marker / diplomacy 继续复用既有命令或历史路径，其它派生重算暂保持现有非撤销语义。
 - 地图生成 API 已完成第一刀。
 - `api.generate.getOptions()` 返回当前规范化生成配置和当前地图摘要。

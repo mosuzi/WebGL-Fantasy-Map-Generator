@@ -23,7 +23,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.(),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
-    onRegenerateBase: () => callbacks.onRegenerateBase?.()
+    onRegenerateBase: () => callbacks.onRegenerateBase?.(),
+    onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()
   };
 
   const record = manager.registerPanel("height-panel", {
