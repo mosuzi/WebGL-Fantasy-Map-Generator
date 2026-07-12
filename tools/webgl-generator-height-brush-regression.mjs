@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
-import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, inspectHeightFillTarget} from "../app/webgl-generator/src/runtime/height-brush.js";
+import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 
 const map = createSyntheticMap();
@@ -70,6 +70,46 @@ assert(JSON.stringify(globalDisrupt) === JSON.stringify(repeatedGlobalDisrupt), 
 assert(JSON.stringify(globalDisrupt) !== JSON.stringify(nextGlobalDisrupt), "不同 seed 的全局扰动没有推进形态");
 assert(!globalDisrupt.some(change => change.gridCell === 0), "全局扰动修改了低于 15 的深水 cell");
 assert(getGlobalHeightChanges(globalDisruptMap, {action: "unknown", scope: "all"}).length === 0, "未知全局工具产生了高度变化");
+
+const rangeTransformMap = createSyntheticMap();
+const multiplyPreview = inspectHeightRangeTransform(rangeTransformMap, {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 0.5});
+const multiplyChanges = getHeightRangeTransformChanges(rangeTransformMap, {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 0.5});
+assert(multiplyPreview.valid && multiplyPreview.selectedCount === 3 && multiplyPreview.changeCount === 2, `条件乘算预检异常：${JSON.stringify(multiplyPreview)}`);
+assert(!Object.hasOwn(multiplyPreview, "changes"), "公开条件变换预检暴露了完整 changes");
+assert(multiplyPreview.beforeRange.join(",") === "20,50" && multiplyPreview.afterRange.join(",") === "20,35" && multiplyPreview.averageDelta === -10, `条件乘算摘要异常：${JSON.stringify(multiplyPreview)}`);
+assertChanges(multiplyChanges, [
+  {gridCell: 2, before: 30, after: 25},
+  {gridCell: 3, before: 50, after: 35}
+], "条件乘算");
+const addChanges = getHeightRangeTransformChanges(createSyntheticMap(), {scope: "all", lower: 0, upper: 20, operator: "add", operand: 5});
+assertChanges(addChanges, [
+  {gridCell: 0, before: 10, after: 15},
+  {gridCell: 1, before: 20, after: 25}
+], "条件加高");
+const subtractWater = getHeightRangeTransformChanges(createSyntheticMap(), {scope: "water", lower: 0, upper: 19, operator: "subtract", operand: 20});
+assertChanges(subtractWater, [{gridCell: 0, before: 10, after: 0}], "条件水域降低");
+const divideLand = getHeightRangeTransformChanges(createSyntheticMap(), {scope: "land", lower: 50, upper: 50, operator: "divide", operand: 2});
+assertChanges(divideLand, [{gridCell: 3, before: 50, after: 35}], "条件除算");
+const zeroMultiplyLand = getHeightRangeTransformChanges(createSyntheticMap(), {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 0});
+assertChanges(zeroMultiplyLand, [
+  {gridCell: 2, before: 30, after: 20},
+  {gridCell: 3, before: 50, after: 20}
+], "条件归零乘算");
+const exponentLand = getHeightRangeTransformChanges(createSyntheticMap(), {scope: "land", lower: 30, upper: 30, operator: "exponent", operand: 2});
+assertChanges(exponentLand, [{gridCell: 2, before: 30, after: 100}], "条件指数变换");
+const invalidDivide = inspectHeightRangeTransform(createSyntheticMap(), {scope: "all", lower: 0, upper: 100, operator: "divide", operand: 0});
+assert(!invalidDivide.valid && invalidDivide.notice.includes("大于 0"), `零除数未被拒绝：${JSON.stringify(invalidDivide)}`);
+const invalidRange = inspectHeightRangeTransform(createSyntheticMap(), {scope: "all", lower: 80, upper: 20, operator: "add", operand: 1});
+assert(!invalidRange.valid && invalidRange.notice.includes("下限"), "倒置高度区间未被拒绝");
+const noopTransform = inspectHeightRangeTransform(createSyntheticMap(), {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 1});
+assert(!noopTransform.valid && noopTransform.selectedCount === 3 && noopTransform.changeCount === 0 && noopTransform.notice.includes("不会变化"), "无变化条件变换仍被标记为可执行");
+
+const rangeHistory = new EditHistory();
+rangeHistory.execute(createApplyHeightBrushCommand(multiplyChanges, {label: "条件乘算"}), {map: rangeTransformMap});
+rangeHistory.undo({map: rangeTransformMap});
+assert(rangeTransformMap.grid.cells.h[3] === 50 && rangeTransformMap.pack.cells.h[3] === 50, "撤销条件乘算没有恢复 grid / pack");
+rangeHistory.redo({map: rangeTransformMap});
+assert(rangeTransformMap.grid.cells.h[3] === 35 && rangeTransformMap.pack.cells.h[3] === 35, "重做条件乘算没有恢复 grid / pack");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -192,6 +232,9 @@ console.log(JSON.stringify({
   globalSmooth: {cells: globalSmooth.length, center: globalSmooth.find(change => change.gridCell === 4)?.after},
   globalDisrupt: {cells: globalDisrupt.length, first: globalDisrupt[0]?.after},
   globalHistory: globalHistory.getStats(),
+  multiplyPreview,
+  invalidDivideNotice: invalidDivide.notice,
+  rangeHistory: rangeHistory.getStats(),
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

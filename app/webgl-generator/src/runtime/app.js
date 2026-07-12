@@ -55,7 +55,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, inspectHeightFillTarget} from "./height-brush.js";
+import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -389,6 +389,43 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         refreshPanels: false
       });
       updateHeightPanel(state);
+      return result.executed;
+    },
+    onConditionalTransformPreview: () => {
+      const options = heightPanel.getConditionalTransform();
+      cancelHeightLine(state, documentRef);
+      const preview = inspectHeightRangeTransform(state.map, options);
+      heightPanel.updateConditionalTransformPreview(preview);
+      updateEditingInteractionLock(state, documentRef);
+      return preview;
+    },
+    onConditionalTransformApply: () => {
+      const options = heightPanel.getConditionalTransform();
+      cancelHeightLine(state, documentRef);
+      const preview = inspectHeightRangeTransform(state.map, options);
+      heightPanel.updateConditionalTransformPreview(preview);
+      if (!preview.valid) {
+        state.heightEdit.lastAffected = 0;
+        state.heightEdit.lastHeight = "none";
+        state.heightEdit.lastDelta = "none";
+        state.heightEdit.lastNotice = preview.notice;
+        updateHeightPanel(state);
+        return false;
+      }
+      const changes = getHeightRangeTransformChanges(state.map, options);
+      const label = conditionalHeightTransformLabel(options.operator);
+      state.heightEdit.lastAffected = changes.length;
+      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
+      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
+      state.heightEdit.lastNotice = `已${label} ${changes.length} cells。`;
+      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label}), {
+        context: {map: state.map},
+        refresh: refreshAfterEdit,
+        refreshPanels: false
+      });
+      heightPanel.updateConditionalTransformPreview(null);
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
       return result.executed;
     },
     onRegenerateRivers: () => {
@@ -6926,6 +6963,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    state.panels.height?.updateConditionalTransformPreview?.(null);
     if (brush.action === "line") {
       handleHeightLineClick(state, event, brush, documentRef);
       return;
@@ -7055,6 +7093,7 @@ function cancelHeightLine(state, documentRef) {
   state.heightEdit.lineStart = null;
   state.heightEdit.fillHoverCell = null;
   state.heightEdit.fillPreview = null;
+  state.panels.height?.updateConditionalTransformPreview?.(null);
   documentRef.querySelector(".height-line-preview")?.remove();
 }
 
@@ -8156,6 +8195,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       lastNotice: state.heightEdit.lastNotice,
       fillPreview: state.heightEdit.fillPreview ? {...state.heightEdit.fillPreview} : null
     },
+    conditionalHeightTransform: state.panels.height?.getConditionalTransformSnapshot?.() || null,
     stateBrush: {
       active: Boolean(stateBrush.active),
       addMode: Boolean(state.stateEdit.addMode),
@@ -8186,6 +8226,14 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     history: state.editHistory.getStats(),
     lastEditRefresh: state.lastEditRefresh
   };
+}
+
+function conditionalHeightTransformLabel(operator) {
+  if (operator === "add") return "条件加高";
+  if (operator === "subtract") return "条件降低";
+  if (operator === "multiply") return "条件乘算";
+  if (operator === "divide") return "条件除算";
+  return "条件指数变换";
 }
 
 function getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush) {

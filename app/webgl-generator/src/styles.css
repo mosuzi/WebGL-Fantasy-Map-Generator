@@ -2850,6 +2850,50 @@ select:disabled {
   margin-bottom: 8px;
 }
 
+.height-transform-panel {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(12, 18, 22, 0.46);
+}
+
+.height-transform-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #dce7eb;
+  font-size: 12px;
+}
+
+.height-transform-heading span {
+  color: #80919c;
+  font-size: 10px;
+}
+
+.height-transform-preview {
+  margin: 1px 0;
+  border-left: 2px solid rgba(215, 168, 79, 0.72);
+  padding-left: 8px;
+  color: #cbd7dc;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.height-transform-preview.valid {
+  border-left-color: rgba(106, 184, 133, 0.78);
+  color: #bde8c9;
+}
+
+.height-transform-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .state-panel-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

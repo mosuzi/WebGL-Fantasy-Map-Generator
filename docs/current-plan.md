@@ -1046,6 +1046,25 @@
    - 边界：浏览器验收集中在本阶段末；不刷新、不新开或重启 Chrome，不启动新服务器；若确需 Playwright，必须在 `finally` 中关闭 browser / context。
    - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、应用构建和 `git diff --check`，全部通过。浏览器子智能体复用既有 FMG 页面，确认两个全局按钮存在；选择“仅陆地”后只执行一次全局平滑，影响 `2449 cells`，高度 `9..5,929 米`、平均变化 `+1,617 米`，待派生 `9 -> 12` 项；撤销 / 重做各一次后历史为 `undo 1 / redo 0`，地图稳定且 console error 为 `0`。页面有限状态未提供逐 cell 水域 diff，因此浏览器只证明“仅陆地”已选中；水域不变由纯回归证明。全程没有刷新、新开或启动资源，也未使用 Playwright；两个子智能体均已结束。
 
+151. 高度区间条件变换与有界预检纯计算。`已完成`
+   - 目标：参考原版条件 rescaler，为指定原始高度区间和当前陆水范围提供加、减、乘、除、指数五类变换，并在写地图前返回有界候选 / 变化摘要。
+   - 计算边界：区间按修改前高度闭区间匹配；仅陆地 / 仅水域不能跨越海平面。除数为零、无效运算、非法操作数和下限高于上限必须结构化拒绝；公开预检不得暴露完整 changes。
+   - 完成记录：新增 `inspectHeightRangeTransform()` 和 `getHeightRangeTransformChanges()`；预检只返回作用范围、规范化区间、运算、操作数、候选 / 变化 / 不变数量、前后高度范围、平均变化、valid 和中文 notice。加减使用整数操作数；乘算允许 `0..10`，除算要求 `(0..10]`，指数要求 `(0..2]`。仅陆地的乘除 / 指数以海平面 `20` 为基线，水域和全部以 `0` 为基线，最终继续夹在当前范围内。
+
+152. 条件变换面板、预检与历史闭环。`已完成`
+   - 目标：高度面板提供区间、运算、操作数、“预检 / 执行”入口；执行前必须先得到当前参数的有效预检，真正执行时再次按当前地图计算，并复用高度命令、摘要、派生标脏与撤销 / 重做。
+   - 交互边界：修改任一条件、开始地图笔划、切换动作、历史操作或加载地图都会清理旧预检，避免把过期候选当成当前证据；无变化和非法条件不进入历史。
+   - 完成记录：高度面板新增高度下限 / 上限、五类运算、动态操作数范围和“预检条件 / 执行变换”按钮。只有当前预检 `valid` 时执行按钮可用；真正执行会再次读取当前地图计算 changes，并复用 `createApplyHeightBrushCommand()`、grid / pack 同步、影响摘要、派生标脏和统一历史。修改条件 / 作用范围、开始笔划或进入既有 cancel / 历史 / 重载路径都会清理预检；执行后只保留实际结果 notice。
+
+153. 条件变换回归与中文文档。`已完成`
+   - 目标：扩展高度回归覆盖五类运算、区间 / 陆水筛选、海平面夹取、非法除法、无变化、公开预检有界性和 grid / pack 撤销重做；同步专题清单与开发日志。
+   - 完成记录：高度回归已覆盖陆地乘算 `20/30/50 -> 20/25/35`、全部范围加高、水域降低夹到 `0`、陆地除算、陆地指数夹到 `100`、乘 `0` 回到陆地基线、零除数 / 倒置区间拒绝、乘 `1` 无变化、公开预检不含 changes，以及条件乘算 grid / pack 撤销重做。
+
+154. 条件变换阶段末统一验收。`已完成`
+   - 目标：累积实现完成后，由烟测子智能体统一执行语法检查、相关回归、构建和差异检查；浏览器子智能体复用既有 FMG 页面，完成一次安全预检、一次条件变换及撤销 / 重做。
+   - 边界：浏览器验收集中在阶段末；不持续调参或刷新，不新开 / 重启 Chrome 或服务器；若确需 Playwright，必须在 `finally` 中关闭 browser / context。
+   - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，全部通过。浏览器补验子智能体复用既有 `5410` 页面；在仅陆地、默认 `20..100 × 0.9` 下，预检前执行按钮 disabled，唯一一次预检显示变化 `2746/3326 cells`、高度 `20..100 -> 20..92`、平均约 `-2.5`，随后执行按钮启用。唯一一次执行后摘要为“已条件乘算 2746 cells”，preview 清理且执行按钮重新 disabled；撤销 / 重做各一次成功，重做后地图稳定且 console error 为 `0`。第一名浏览器智能体长时间无回报后已中断并单独 finalize；补验会话也已 finalize。全程未刷新、新开、启动 Chrome / 服务器或使用 Playwright。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1213,3 +1232,4 @@
 - 军事战报二级筛选持久化第一刀：战报链路、类型、结果和结算筛选四项已提升到 `panel-list-preferences`，刷新后可恢复；本步不保存战报导入状态、战报记录草稿、显示展开状态或其它编辑中间态。`node --check app\webgl-generator\src\ui\panel-list-preferences.js`、`node --check app\webgl-generator\src\ui\panels\military-panel.js`、`git diff --check` 和 `pnpm run build:app` 通过，构建仅有既有 Vite 大 chunk 警告；验证子智能体 `verify_military_event_filter_prefs` 等待 90 秒无输出，已中断释放，主线程兜底 Playwright + 系统 Chrome 烟测在浏览器会话内给 `1（苍原）军团` 临时注入两条战报，确认预置 `smoke-chain-a / skirmish / victory / applied` 可恢复，UI 改为 `smoke-chain-b / raid / defeat / pending` 后 localStorage 写入 `eventChainFilter / eventTypeFilter / eventOutcomeFilter / eventApplyFilter`，刷新后四项仍恢复为 `smoke-chain-b / raid / defeat / pending`；军事国家 / 态势主筛选保持 `all / all`，战报导出范围保持 `selected`，直接 `gl.getError() = 0`，health / console / page error 均为 `0`。
 - Fill 落点预检批次统一验证完成：烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过，构建仅有既有大 chunk 警告；公开预检确认封闭水域 `valid=true / 9 cells`、开放水域 `valid=false / 25 cells`、默认陆地容差 `6 / valid=true / 5 cells`，且不暴露内部 selection。浏览器子智能体复用既有 `5410` 页面，首个内陆候选预检 `65 cells`，唯一一次点击实际影响 `43 cells`，撤销 / 重做闭环和稳定态地图通过，console error 为 `0`；未刷新或启动浏览器、服务器、Playwright，两个子智能体均已结束并释放控制会话。
 - 全局高度平滑 / 稳定扰动批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；回归证明平滑整轮读取同一快照、陆水范围隔离、扰动 seed 可复现 / 可推进、深水保护以及 grid / pack 撤销重做。浏览器子智能体复用既有 FMG 页面，选择“仅陆地”后唯一一次全局平滑影响 `2449 cells`，高度 `9..5,929 米`、平均变化 `+1,617 米`、待派生 `9 -> 12` 项，撤销 / 重做闭环通过，地图稳定且 console error 为 `0`；未刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
+- 高度区间条件变换批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；五类运算、区间 / scope、海平面夹取、异常拒绝、有界预检和 grid / pack 历史覆盖完整。浏览器子智能体复用既有 `5410` 页面，在仅陆地 `20..100 × 0.9` 下唯一一次预检为变化 `2746/3326 cells`、高度 `20..100 -> 20..92`、均变约 `-2.5`；唯一一次执行后 preview 清理，撤销 / 重做闭环和稳定地图通过，console error 为 `0`。第一名浏览器智能体超时后已中断并 finalize，补验智能体也已结束；未刷新或启动 Chrome、服务器、Playwright。

@@ -55,6 +55,39 @@
   </div>
   <p class="height-action-help">作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
 
+  <section class="height-transform-panel" aria-labelledby="height-transform-title">
+    <div class="height-transform-heading">
+      <strong id="height-transform-title">高度区间条件变换</strong>
+      <span>先预检，再执行</span>
+    </div>
+    <UiSliderField label="高度下限" :model-value="state.transformLower" :min="0" :max="100" :step="1" @input="setTransformLower" />
+    <UiSliderField label="高度上限" :model-value="state.transformUpper" :min="0" :max="100" :step="1" @input="setTransformUpper" />
+    <UiSelectField
+      label="条件运算"
+      input-id="height-transform-operator"
+      class-name="height-transform-select"
+      :model-value="state.transformOperator"
+      :options="transformOperatorOptions"
+      @update:model-value="setTransformOperator"
+    />
+    <UiSliderField
+      label="操作数"
+      :model-value="state.transformOperand"
+      :min="transformOperandConfig.min"
+      :max="transformOperandConfig.max"
+      :step="transformOperandConfig.step"
+      @input="setTransformOperand"
+    />
+    <p v-if="state.transformPreview" class="height-transform-preview" :class="{valid: state.transformPreview.valid}" aria-live="polite">
+      {{ state.transformPreview.notice }}
+    </p>
+    <p v-else class="height-action-help">预检只返回候选数、变化数和高度范围，不把完整 cell 列表送入 UI。</p>
+    <div class="height-transform-actions">
+      <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onConditionalTransformPreview?.()">预检条件</UiButton>
+      <UiButton variant="secondary" :disabled="!state.active || !state.transformPreview?.valid" @click="callbacks.onConditionalTransformApply?.()">执行变换</UiButton>
+    </div>
+  </section>
+
   <div class="height-history-actions">
     <UiButton variant="secondary" @click="callbacks.onUndo?.()">撤销上次</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRedo?.()">重做上次</UiButton>
@@ -436,6 +469,14 @@ const scopes = Object.freeze([
   {value: "land", label: "仅陆地"},
   {value: "water", label: "仅水域"}
 ]);
+const transformOperatorOptions = Object.freeze([
+  {value: "add", label: "加高（+）"},
+  {value: "subtract", label: "降低（−）"},
+  {value: "multiply", label: "乘算（×）"},
+  {value: "divide", label: "除算（÷）"},
+  {value: "exponent", label: "指数（^）"}
+]);
+const transformOperandDefaults = Object.freeze({add: 5, subtract: 5, multiply: 0.9, divide: 1.1, exponent: 0.9});
 const heightmapFitOptions = Object.freeze([
   {value: "stretch", label: "拉伸铺满"},
   {value: "crop", label: "保持比例裁剪"}
@@ -551,6 +592,12 @@ const summaryMetrics = computed(() => {
     {label: "山地", value: current ? formatPercent(current.mountain / current.total) : "-"},
     {label: "海平面带", value: current ? formatPercent(current.seaLevelBand / current.total) : "-"}
   ];
+});
+const transformOperandConfig = computed(() => {
+  if (props.state.transformOperator === "add" || props.state.transformOperator === "subtract") return {min: 1, max: 30, step: 1};
+  if (props.state.transformOperator === "exponent") return {min: 0.5, max: 1.5, step: 0.05};
+  if (props.state.transformOperator === "multiply") return {min: 0, max: 3, step: 0.1};
+  return {min: 0.1, max: 3, step: 0.1};
 });
 
 const targetSizeLabel = computed(() => `${Number(props.state.graphWidth) || 1440} x ${Number(props.state.graphHeight) || 960}`);
@@ -716,6 +763,7 @@ function setAction(action) {
 
 function setScope(scope) {
   props.state.scope = scope;
+  clearTransformPreview();
 }
 
 function setRadius(radius) {
@@ -740,6 +788,31 @@ function setLinePower(power) {
 
 function setFalloff(falloff) {
   props.state.falloff = falloff;
+}
+
+function setTransformLower(value) {
+  props.state.transformLower = value;
+  clearTransformPreview();
+}
+
+function setTransformUpper(value) {
+  props.state.transformUpper = value;
+  clearTransformPreview();
+}
+
+function setTransformOperator(value) {
+  props.state.transformOperator = value;
+  props.state.transformOperand = transformOperandDefaults[value] ?? 1;
+  clearTransformPreview();
+}
+
+function setTransformOperand(value) {
+  props.state.transformOperand = value;
+  clearTransformPreview();
+}
+
+function clearTransformPreview() {
+  props.state.transformPreview = null;
 }
 
 function setHeightmapImportMin(value) {

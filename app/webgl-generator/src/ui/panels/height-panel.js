@@ -11,6 +11,11 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     fillTolerance: 6,
     lineWidth: 12,
     linePower: 12,
+    transformLower: 20,
+    transformUpper: 100,
+    transformOperator: "multiply",
+    transformOperand: 0.9,
+    transformPreview: null,
     falloff: true,
     lastAffected: 0,
     lastHeight: "none",
@@ -30,6 +35,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.(),
     onGlobalTool: action => callbacks.onGlobalTool?.(action),
+    onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
+    onConditionalTransformApply: () => callbacks.onConditionalTransformApply?.(),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
     onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()
@@ -65,6 +72,13 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       failure: "高度编辑加载失败，请检查开发模式日志。"
     }
   );
+  const getConditionalTransform = () => ({
+    scope: panelState.scope,
+    lower: panelState.transformLower,
+    upper: panelState.transformUpper,
+    operator: panelState.transformOperator,
+    operand: panelState.transformOperand
+  });
 
   return {
     open(history) {
@@ -78,6 +92,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       lastDelta = panelState.lastDelta,
       lastNotice = panelState.lastNotice,
       fillPreview = panelState.fillPreview,
+      transformPreview = panelState.transformPreview,
       graphWidth = panelState.graphWidth,
       graphHeight = panelState.graphHeight,
       currentHeightStats = panelState.currentHeightStats,
@@ -90,6 +105,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.lastDelta = lastDelta;
       panelState.lastNotice = lastNotice;
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
+      panelState.transformPreview = transformPreview ? {...transformPreview} : null;
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;
       panelState.currentHeightStats = currentHeightStats;
@@ -110,8 +126,20 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         falloff: panelState.falloff
       };
     },
+    getConditionalTransform() {
+      return getConditionalTransform();
+    },
+    getConditionalTransformSnapshot() {
+      return {
+        ...getConditionalTransform(),
+        preview: panelState.transformPreview ? {...panelState.transformPreview} : null
+      };
+    },
     updateFillPreview(fillPreview) {
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
+    },
+    updateConditionalTransformPreview(transformPreview) {
+      panelState.transformPreview = transformPreview ? {...transformPreview} : null;
     },
     setActive(active) {
       panelState.active = active;

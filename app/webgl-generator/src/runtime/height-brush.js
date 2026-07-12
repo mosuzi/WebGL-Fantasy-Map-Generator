@@ -144,6 +144,100 @@ export function getGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0
   return changes;
 }
 
+export function inspectHeightRangeTransform(map, options = {}) {
+  const {changes, ...summary} = analyzeHeightRangeTransform(map, options);
+  return summary;
+}
+
+export function getHeightRangeTransformChanges(map, options = {}) {
+  return analyzeHeightRangeTransform(map, options).changes;
+}
+
+function analyzeHeightRangeTransform(map, options) {
+  const heights = map?.grid?.cells?.h;
+  const scope = normalizeBrushScope(options?.scope);
+  const lower = normalizeRangeBound(options?.lower, 20);
+  const upper = normalizeRangeBound(options?.upper, 100);
+  const operator = String(options?.operator || "multiply");
+  const operand = Number(options?.operand);
+  const base = {scope, lower, upper, operator, operand, selectedCount: 0, changeCount: 0, unchangedCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
+  if (!heights?.length) return {...base, notice: "当前地图缺少高度数据，无法预检条件变换。"};
+  if (lower > upper) return {...base, notice: "高度区间下限不能高于上限。"};
+  const validationError = validateHeightRangeOperation(operator, operand);
+  if (validationError) return {...base, notice: validationError};
+
+  let selectedCount = 0;
+  let minBefore = Infinity;
+  let maxBefore = -Infinity;
+  let minAfter = Infinity;
+  let maxAfter = -Infinity;
+  let deltaSum = 0;
+  const changes = [];
+  for (let gridCell = 0; gridCell < heights.length; gridCell++) {
+    const before = Number(heights[gridCell]) || 0;
+    if (!matchesBrushScope(before, scope) || before < lower || before > upper) continue;
+    selectedCount += 1;
+    minBefore = Math.min(minBefore, before);
+    maxBefore = Math.max(maxBefore, before);
+    const next = transformHeightValue(before, operator, operand, scope);
+    const after = clampHeightToScope(next, scope);
+    minAfter = Math.min(minAfter, after);
+    maxAfter = Math.max(maxAfter, after);
+    if (after === before) continue;
+    deltaSum += after - before;
+    changes.push({gridCell, before, after});
+  }
+
+  if (!selectedCount) return {...base, notice: "当前作用范围与高度区间没有候选 cells。"};
+  const summary = {
+    ...base,
+    selectedCount,
+    changeCount: changes.length,
+    unchangedCount: selectedCount - changes.length,
+    beforeRange: [minBefore, maxBefore],
+    afterRange: [minAfter, maxAfter],
+    averageDelta: changes.length ? Math.round(deltaSum / changes.length * 10) / 10 : 0,
+    changes
+  };
+  if (!changes.length) return {...summary, notice: `候选 ${selectedCount} cells 的高度不会变化。`};
+  const label = heightRangeOperatorLabel(operator);
+  const signedAverage = summary.averageDelta > 0 ? `+${summary.averageDelta}` : String(summary.averageDelta);
+  return {...summary, valid: true, notice: `可${label} ${changes.length}/${selectedCount} cells，高度 ${minBefore}..${maxBefore} → ${minAfter}..${maxAfter}，均变 ${signedAverage}。`};
+}
+
+function validateHeightRangeOperation(operator, operand) {
+  if (!["add", "subtract", "multiply", "divide", "exponent"].includes(operator)) return "未知的高度条件运算。";
+  if (!Number.isFinite(operand)) return "条件变换操作数必须是有限数字。";
+  if ((operator === "add" || operator === "subtract") && (!Number.isInteger(operand) || operand < 0 || operand > 100)) return "加减操作数必须是 0..100 的整数。";
+  if (operator === "multiply" && (operand < 0 || operand > 10)) return "乘算操作数必须在 0..10 之间。";
+  if (operator === "divide" && (operand <= 0 || operand > 10)) return "除算操作数必须大于 0 且不超过 10。";
+  if (operator === "exponent" && (operand <= 0 || operand > 2)) return "指数操作数必须大于 0 且不超过 2。";
+  return "";
+}
+
+function transformHeightValue(height, operator, operand, scope) {
+  const baseline = scope === "land" ? 20 : 0;
+  const value = height - baseline;
+  if (operator === "add") return height + operand;
+  if (operator === "subtract") return height - operand;
+  if (operator === "multiply") return value * operand + baseline;
+  if (operator === "divide") return value / operand + baseline;
+  return value ** operand + baseline;
+}
+
+function heightRangeOperatorLabel(operator) {
+  if (operator === "add") return "加高";
+  if (operator === "subtract") return "降低";
+  if (operator === "multiply") return "乘算";
+  if (operator === "divide") return "除算";
+  return "指数变换";
+}
+
+function normalizeRangeBound(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
+}
+
 function getHeightFillChanges(map, point, brush, stroke) {
   const {cells, points} = map.grid;
   const start = findNearestGridCell(cells, points, point);
