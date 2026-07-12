@@ -9,6 +9,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     radius: 28,
     strength: 4,
     fillTolerance: 6,
+    lineWidth: 12,
+    linePower: 12,
     falloff: true,
     lastAffected: 0,
     lastHeight: "none",
@@ -23,6 +25,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
   });
   const panelCallbacks = {
     onActiveChange: active => callbacks.onActiveChange?.(active),
+    onActionChange: action => callbacks.onActionChange?.(action),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.(),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
@@ -98,6 +101,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         radius: panelState.radius,
         strength: panelState.strength,
         fillTolerance: panelState.fillTolerance,
+        lineWidth: panelState.lineWidth,
+        linePower: panelState.linePower,
         falloff: panelState.falloff
       };
     },

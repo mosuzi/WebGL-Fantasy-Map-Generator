@@ -55,7 +55,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {getHeightBrushChanges} from "./height-brush.js";
+import {getHeightBrushChanges, getHeightLineChanges} from "./height-brush.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -174,6 +174,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     editRefreshScheduler: null,
     heightEdit: {
       activeStroke: null,
+      lineStart: null,
       strokeSeed: 0,
       lastAffected: 0,
       lastHeight: "none",
@@ -340,30 +341,41 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateRuntimePanel(documentRef, state);
       } else {
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         updateEditingInteractionLock(state, documentRef);
       }
     },
+    onActionChange: action => {
+      cancelHeightLine(state, documentRef);
+      state.heightEdit.lastNotice = action === "line" ? "单击地图选择线段起点。" : "";
+      updateHeightPanel(state);
+    },
     onUndo: () => {
+      cancelHeightLine(state, documentRef);
       return executeHistoryCommand(state, documentRef, "undo", {
         afterRefresh: () => updateHeightPanel(state)
       });
     },
     onRedo: () => {
+      cancelHeightLine(state, documentRef);
       return executeHistoryCommand(state, documentRef, "redo", {
         afterRefresh: () => updateHeightPanel(state)
       });
     },
     onRegenerateRivers: () => {
+      cancelHeightLine(state, documentRef);
       const result = regenerateMapAttribute(state, "rivers", documentRef);
       updateRegenerationSection(documentRef, result);
       updateHeightPanel(state);
     },
     onRegenerateBase: () => {
+      cancelHeightLine(state, documentRef);
       const result = rebuildHeightBaseDerived(kind => regenerateMapAttribute(state, kind, documentRef));
       updateRegenerationSection(documentRef, result);
       updateHeightPanel(state);
     },
     onRegenerateDownstream: () => {
+      cancelHeightLine(state, documentRef);
       const result = rebuildHeightDownstreamDerived(kind => regenerateMapAttribute(state, kind, documentRef));
       updateRegenerationSection(documentRef, result);
       updateHeightPanel(state);
@@ -376,6 +388,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         heightPanel?.setActive(false);
         provincePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         state.provinceEdit.activeStroke = null;
         clearMarkerEditMode(state);
         updateMarkerPanel(state);
@@ -442,6 +455,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         state.provinceEdit.activeStroke = null;
         clearMarkerEditMode(state);
         updateMarkerPanel(state);
@@ -578,6 +592,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         heightPanel?.setActive(false);
         statePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         state.stateEdit.activeStroke = null;
         clearMarkerEditMode(state);
         updateMarkerPanel(state);
@@ -600,6 +615,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         state.stateEdit.activeStroke = null;
         clearMarkerEditMode(state);
         updateMarkerPanel(state);
@@ -620,6 +636,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         state.stateEdit.activeStroke = null;
         clearMarkerEditMode(state);
         updateMarkerPanel(state);
@@ -737,6 +754,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         state.stateEdit.activeStroke = null;
         state.provinceEdit.activeStroke = null;
         clearMarkerEditMode(state);
@@ -757,6 +775,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         statePanel?.setActive(false);
         provincePanel?.setActive(false);
         state.heightEdit.activeStroke = null;
+        cancelHeightLine(state, documentRef);
         state.stateEdit.activeStroke = null;
         state.provinceEdit.activeStroke = null;
         clearMarkerEditMode(state);
@@ -2394,6 +2413,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.pick = null;
   state.editHistory.clear();
   state.heightEdit.activeStroke = null;
+  cancelHeightLine(state, documentRef);
   state.heightEdit.strokeSeed = 0;
   state.heightEdit.lastAffected = 0;
   state.heightEdit.lastHeight = "none";
@@ -6871,10 +6891,15 @@ function roundMeasurementExport(value) {
 
 function bindHeightEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
-    if (!state.panels.height?.getBrush().active || !state.map) return;
+    const brush = state.panels.height?.getBrush();
+    if (!brush?.active || !state.map) return;
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (brush.action === "line") {
+      handleHeightLineClick(state, event, brush, documentRef);
+      return;
+    }
     state.heightEdit.activeStroke = {
       pointerId: event.pointerId,
       originals: new Map(),
@@ -6886,6 +6911,11 @@ function bindHeightEditing(canvas, state, documentRef) {
   }, true);
 
   canvas.addEventListener("pointermove", event => {
+    const brush = state.panels.height?.getBrush();
+    if (!state.heightEdit.activeStroke && brush?.active && brush.action === "line" && state.heightEdit.lineStart) {
+      updateHeightLinePreview(documentRef, state.heightEdit.lineStart, event.clientX, event.clientY);
+      return;
+    }
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -6909,6 +6939,66 @@ function bindHeightEditing(canvas, state, documentRef) {
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
   }, true);
+}
+
+function handleHeightLineClick(state, event, brush, documentRef) {
+  const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const start = state.heightEdit.lineStart;
+  if (!start) {
+    state.heightEdit.lineStart = {point, clientX: event.clientX, clientY: event.clientY};
+    state.heightEdit.lastNotice = "已选择线段起点，移动指针预览并单击终点。";
+    updateHeightLinePreview(documentRef, state.heightEdit.lineStart, event.clientX, event.clientY);
+    updateHeightPanel(state);
+    return;
+  }
+
+  const stroke = {originals: new Map()};
+  const changes = getHeightLineChanges(state.map, start.point, point, brush, stroke);
+  cancelHeightLine(state, documentRef);
+  state.heightEdit.lastNotice = stroke.notice || "";
+  if (!changes.length) {
+    state.heightEdit.lastAffected = 0;
+    state.heightEdit.lastHeight = "none";
+    state.heightEdit.lastDelta = "none";
+    updateHeightPanel(state);
+    return;
+  }
+
+  state.heightEdit.lastAffected = changes.length;
+  state.heightEdit.lastHeight = summarizeChangedHeights(changes);
+  state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
+  const label = Number(brush.linePower) < 0 ? "线段沟槽" : "线段山脊";
+  executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label}), {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false
+  });
+  updateHeightPanel(state);
+}
+
+function updateHeightLinePreview(documentRef, start, clientX, clientY) {
+  const stage = documentRef.querySelector(".map-stage");
+  if (!stage || !start) return;
+  let line = stage.querySelector(".height-line-preview");
+  if (!line) {
+    line = documentRef.createElement("div");
+    line.className = "height-line-preview";
+    stage.append(line);
+  }
+  const rect = stage.getBoundingClientRect();
+  const x1 = start.clientX - rect.left;
+  const y1 = start.clientY - rect.top;
+  const x2 = clientX - rect.left;
+  const y2 = clientY - rect.top;
+  line.style.left = `${x1}px`;
+  line.style.top = `${y1}px`;
+  line.style.width = `${Math.hypot(x2 - x1, y2 - y1)}px`;
+  line.style.transform = `rotate(${Math.atan2(y2 - y1, x2 - x1)}rad)`;
+}
+
+function cancelHeightLine(state, documentRef) {
+  state.heightEdit.lineStart = null;
+  documentRef.querySelector(".height-line-preview")?.remove();
 }
 
 function bindStateEditing(canvas, state, documentRef) {
@@ -7311,6 +7401,7 @@ function startMarkerEditMode(state, documentRef, {mode, type = "mines", markerId
   state.panels.state?.setActive(false);
   state.panels.province?.setActive(false);
   state.heightEdit.activeStroke = null;
+  cancelHeightLine(state, documentRef);
   state.stateEdit.activeStroke = null;
   state.provinceEdit.activeStroke = null;
   state.markerEdit.mode = mode || null;
@@ -7996,7 +8087,10 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       radius: Number(heightBrush.radius) || 0,
       strength: Number(heightBrush.strength) || 0,
       fillTolerance: Number(heightBrush.fillTolerance) || 0,
+      lineWidth: Number(heightBrush.lineWidth) || 0,
+      linePower: Number(heightBrush.linePower) || 0,
       falloff: Boolean(heightBrush.falloff),
+      lineStart: state.heightEdit.lineStart ? {x: Math.round(state.heightEdit.lineStart.point.x), y: Math.round(state.heightEdit.lineStart.point.y)} : null,
       lastAffected: state.heightEdit.lastAffected,
       lastHeight: state.heightEdit.lastHeight,
       lastDelta: state.heightEdit.lastDelta,

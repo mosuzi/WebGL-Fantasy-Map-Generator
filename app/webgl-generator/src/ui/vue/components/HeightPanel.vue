@@ -20,6 +20,7 @@
   <p v-if="state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
   <p v-else-if="state.action === 'disrupt'" class="height-action-help">按强度生成稳定的局部起伏，同一笔划连续拖动时会继续塑造崎岖地形。</p>
   <p v-else-if="state.action === 'fill'" class="height-action-help">单击等高陆地区域或封闭水域，按边缘距离生成中心更高的锥形地貌。</p>
+  <p v-else-if="state.action === 'line'" class="height-action-help">依次单击起点和终点，以正增量生成山脊、负增量生成沟槽。</p>
   <p v-if="state.lastNotice" class="height-action-notice" aria-live="polite">{{ state.lastNotice }}</p>
 
   <p class="height-control-label">作用范围</p>
@@ -36,9 +37,11 @@
     </button>
   </div>
 
-  <UiSliderField v-if="state.action !== 'fill'" label="半径" :model-value="state.radius" :min="6" :max="96" :step="2" @input="setRadius" />
-  <UiSliderField label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
+  <UiSliderField v-if="state.action !== 'fill' && state.action !== 'line'" label="半径" :model-value="state.radius" :min="6" :max="96" :step="2" @input="setRadius" />
+  <UiSliderField v-if="state.action !== 'line'" label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
   <UiSliderField v-if="state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
+  <UiSliderField v-if="state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="2" :max="48" :step="1" @input="setLineWidth" />
+  <UiSliderField v-if="state.action === 'line'" label="线段增量" :model-value="state.linePower" :min="-30" :max="30" :step="1" @input="setLinePower" />
 
   <UiSwitchField v-if="state.action !== 'fill'" label="中心衰减" field-class="height-check-row" :checked="state.falloff" @change="setFalloff" />
 
@@ -415,7 +418,8 @@ const actions = Object.freeze([
   {value: "smooth", label: "平滑"},
   {value: "flatten", label: "整平"},
   {value: "disrupt", label: "扰动"},
-  {value: "fill", label: "填充"}
+  {value: "fill", label: "填充"},
+  {value: "line", label: "线段"}
 ]);
 const scopes = Object.freeze([
   {value: "all", label: "全部"},
@@ -697,6 +701,7 @@ function setActive(active) {
 
 function setAction(action) {
   props.state.action = action;
+  props.callbacks.onActionChange?.(action);
 }
 
 function setScope(scope) {
@@ -713,6 +718,14 @@ function setStrength(strength) {
 
 function setFillTolerance(tolerance) {
   props.state.fillTolerance = tolerance;
+}
+
+function setLineWidth(width) {
+  props.state.lineWidth = width;
+}
+
+function setLinePower(power) {
+  props.state.linePower = power;
 }
 
 function setFalloff(falloff) {

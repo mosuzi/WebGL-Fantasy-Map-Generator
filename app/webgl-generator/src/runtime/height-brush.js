@@ -63,6 +63,54 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
   return affected.map(({gridCell, factor}) => heightChange(cells, originals, gridCell, cells.h[gridCell] + delta * factor)).filter(Boolean);
 }
 
+export function getHeightLineChanges(map, fromPoint, toPoint, brush, stroke) {
+  const cells = map?.grid?.cells;
+  const points = map?.grid?.points;
+  const originals = stroke?.originals;
+  if (!cells?.p || !cells?.h || !Array.isArray(points) || !(originals instanceof Map)) return [];
+
+  const fromCell = findNearestGridCell(cells, points, fromPoint);
+  const toCell = findNearestGridCell(cells, points, toPoint);
+  const dx = toPoint.x - fromPoint.x;
+  const dy = toPoint.y - fromPoint.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (fromCell === null || toCell === null || fromCell === toCell || lengthSq < 1) {
+    stroke.notice = "线段起点与终点过近，未执行。";
+    return [];
+  }
+
+  const power = normalizeLinePower(brush?.linePower);
+  if (!power) {
+    stroke.notice = "线段增量不能为 0。";
+    return [];
+  }
+  const width = normalizeLineWidth(brush?.lineWidth);
+  const scope = normalizeBrushScope(brush?.scope);
+  const maxCells = heightEditMaxCells(cells);
+  const selection = [];
+  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+    const scopeHeight = originals.has(gridCell) ? originals.get(gridCell) : cells.h[gridCell];
+    if (!matchesBrushScope(scopeHeight, scope)) continue;
+    const cellPoint = points[cells.p[gridCell]];
+    if (!cellPoint) continue;
+    const distance = pointToSegmentDistance(cellPoint[0], cellPoint[1], fromPoint, toPoint, lengthSq);
+    if (distance > width) continue;
+    selection.push({gridCell, factor: brush?.falloff ? brushFalloff(distance, width) : 1});
+    if (selection.length > maxCells) {
+      stroke.notice = `线段选区超过安全上限 ${maxCells} cells，未执行。`;
+      return [];
+    }
+  }
+  if (!selection.length) {
+    stroke.notice = "线段没有命中当前作用范围内的 cells。";
+    return [];
+  }
+
+  const changes = selection.map(({gridCell, factor}) => heightChange(cells, originals, gridCell, cells.h[gridCell] + power * factor)).filter(Boolean);
+  stroke.notice = changes.length ? `已生成线段地形 ${changes.length} cells。` : "线段选区高度没有变化。";
+  return changes;
+}
+
 function getHeightFillChanges(map, point, brush, stroke) {
   const {cells, points} = map.grid;
   if (!Array.isArray(cells.c)) {
@@ -84,7 +132,7 @@ function getHeightFillChanges(map, point, brush, stroke) {
     return [];
   }
   const tolerance = water ? 0 : normalizeFillTolerance(brush.fillTolerance);
-  const maxCells = Math.max(64, Math.min(5000, Math.floor(cells.h.length * 0.2)));
+  const maxCells = heightEditMaxCells(cells);
   const {selection, reachedBorder, exceededLimit} = collectFillSelection(cells, start, water, startHeight, tolerance, maxCells);
   if (exceededLimit) {
     stroke.notice = `连通区域超过安全上限 ${maxCells} cells，未执行填充。`;
@@ -141,6 +189,28 @@ function collectFillSelection(cells, start, water, targetHeight, tolerance, maxC
 function normalizeFillTolerance(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.min(12, Math.round(numeric))) : 6;
+}
+
+function normalizeLinePower(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(-30, Math.min(30, Math.round(numeric))) : 12;
+}
+
+function normalizeLineWidth(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0.5, Math.min(96, numeric)) : 12;
+}
+
+function heightEditMaxCells(cells) {
+  return Math.max(64, Math.min(5000, Math.floor(cells.h.length * 0.2)));
+}
+
+function pointToSegmentDistance(x, y, fromPoint, toPoint, lengthSq) {
+  const projection = ((x - fromPoint.x) * (toPoint.x - fromPoint.x) + (y - fromPoint.y) * (toPoint.y - fromPoint.y)) / lengthSq;
+  const t = Math.max(0, Math.min(1, projection));
+  const closestX = fromPoint.x + (toPoint.x - fromPoint.x) * t;
+  const closestY = fromPoint.y + (toPoint.y - fromPoint.y) * t;
+  return Math.hypot(x - closestX, y - closestY);
 }
 
 function applyConeToSelection(cells, selection, water, targetHeight, strengthValue, originals) {

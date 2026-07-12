@@ -2690,9 +2690,36 @@ select:disabled {
 
 .height-action-group {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin: 10px 0;
+}
+
+.height-line-preview {
+  position: absolute;
+  z-index: 18;
+  height: 2px;
+  transform-origin: 0 50%;
+  background: rgba(255, 224, 161, 0.92);
+  box-shadow: 0 0 0 1px rgba(28, 19, 7, 0.72), 0 0 8px rgba(215, 168, 79, 0.72);
+  pointer-events: none;
+}
+
+.height-line-preview::before,
+.height-line-preview::after {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border: 2px solid #2a1c08;
+  border-radius: 50%;
+  background: #ffe0a1;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.height-line-preview::after {
+  left: 100%;
 }
 
 .height-action-help {

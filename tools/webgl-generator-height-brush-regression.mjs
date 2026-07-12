@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
-import {getHeightBrushChanges} from "../app/webgl-generator/src/runtime/height-brush.js";
+import {getHeightBrushChanges, getHeightLineChanges} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 
 const map = createSyntheticMap();
@@ -118,6 +118,37 @@ const oversizedFillStroke = {originals: new Map()};
 const oversizedFill = getHeightBrushChanges(createSquareMap(20, () => 40), {x: 10, y: 10}, {action: "fill", scope: "land", strength: 4, fillTolerance: 6}, oversizedFillStroke);
 assert(oversizedFill.length === 0 && oversizedFillStroke.notice.includes("安全上限 80"), `过大连通域未被拒绝：${oversizedFillStroke.notice}`);
 
+const lineMap = createSquareMap(5, () => 40);
+const lineStroke = {originals: new Map()};
+const ridgeLine = getHeightLineChanges(lineMap, {x: 0, y: 2}, {x: 4, y: 2}, {linePower: 10, lineWidth: 0.4, scope: "land", falloff: false}, lineStroke);
+assert(ridgeLine.length === 5 && ridgeLine.every(change => change.after === 50), `正 power 山脊结果异常：${JSON.stringify(ridgeLine)}`);
+assert(lineStroke.notice === "已生成线段地形 5 cells。", `山脊提示异常：${lineStroke.notice}`);
+
+applyHeightBrushPreview(lineMap, ridgeLine);
+const lineHistory = new EditHistory();
+lineHistory.execute(createApplyHeightBrushCommand(ridgeLine, {label: "线段山脊"}), {map: lineMap});
+lineHistory.undo({map: lineMap});
+assert(lineMap.grid.cells.h[12] === 40 && lineMap.pack.cells.h[12] === 40, "撤销线段山脊没有恢复 grid / pack");
+lineHistory.redo({map: lineMap});
+assert(lineMap.grid.cells.h[12] === 50 && lineMap.pack.cells.h[12] === 50, "重做线段山脊没有恢复 grid / pack");
+
+const troughLine = getHeightLineChanges(createSquareMap(5, () => 40), {x: 0, y: 2}, {x: 4, y: 2}, {linePower: -8, lineWidth: 0.4, scope: "land", falloff: false}, {originals: new Map()});
+assert(troughLine.length === 5 && troughLine.every(change => change.after === 32), "负 power 沟槽没有按 signed power 降低高度");
+
+const falloffLine = getHeightLineChanges(createSquareMap(5, () => 40), {x: 0, y: 2}, {x: 4, y: 2}, {linePower: 10, lineWidth: 2, scope: "land", falloff: true}, {originals: new Map()});
+assert(falloffLine.length === 15, `线宽衰减命中数量异常：${falloffLine.length}`);
+assert(falloffLine.find(change => change.gridCell === 12)?.after === 50, "线段中心没有应用完整 power");
+assert(falloffLine.find(change => change.gridCell === 7)?.after === 45, "线段侧缘没有应用横向衰减");
+
+const zeroLineStroke = {originals: new Map()};
+assert(getHeightLineChanges(createSquareMap(5, () => 40), {x: 0, y: 2}, {x: 4, y: 2}, {linePower: 0, lineWidth: 1, scope: "all"}, zeroLineStroke).length === 0 && zeroLineStroke.notice.includes("不能为 0"), "零 power 线段未被拒绝");
+const shortLineStroke = {originals: new Map()};
+assert(getHeightLineChanges(createSquareMap(5, () => 40), {x: 2, y: 2}, {x: 2.2, y: 2.2}, {linePower: 10, lineWidth: 1, scope: "all"}, shortLineStroke).length === 0 && shortLineStroke.notice.includes("过近"), "同 cell 短线段未被拒绝");
+const scopeLineStroke = {originals: new Map()};
+assert(getHeightLineChanges(createSquareMap(5, () => 40), {x: 0, y: 2}, {x: 4, y: 2}, {linePower: 10, lineWidth: 1, scope: "water"}, scopeLineStroke).length === 0 && scopeLineStroke.notice.includes("没有命中"), "线段没有遵守陆水范围");
+const oversizedLineStroke = {originals: new Map()};
+assert(getHeightLineChanges(createSquareMap(20, () => 40), {x: 0, y: 10}, {x: 19, y: 10}, {linePower: 10, lineWidth: 100, scope: "all"}, oversizedLineStroke).length === 0 && oversizedLineStroke.notice.includes("安全上限 80"), "过大线段选区未被拒绝");
+
 console.log(JSON.stringify({
   ok: true,
   targetHeight: stroke.targetHeight,
@@ -139,6 +170,11 @@ console.log(JSON.stringify({
   defaultToleranceCells: defaultToleranceFill.length,
   preservedHighBandCell: !highBandFill.some(change => change.gridCell === 7),
   fillHistory: fillHistory.getStats(),
+  ridgeLine: {cells: ridgeLine.length, center: ridgeLine.find(change => change.gridCell === 12)?.after},
+  troughLine: {cells: troughLine.length, center: troughLine.find(change => change.gridCell === 12)?.after},
+  falloffLine: {cells: falloffLine.length, center: falloffLine.find(change => change.gridCell === 12)?.after, side: falloffLine.find(change => change.gridCell === 7)?.after},
+  oversizedLineNotice: oversizedLineStroke.notice,
+  lineHistory: lineHistory.getStats(),
   history: history.getStats()
 }, null, 2));
 
