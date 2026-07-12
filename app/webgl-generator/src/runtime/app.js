@@ -56,7 +56,7 @@ import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureCol
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
-import {composeHeightCellSelection, createHeightCellSelectionSet, createHeightCursorRadiusSelection} from "./height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -181,6 +181,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       strokeSeed: 0,
       globalToolSeed: 0,
       terrainSelection: null,
+      terrainSelectionSaved: null,
       terrainSelectionBox: null,
       terrainSelectionPoint: null,
       terrainSelectionPaintPending: null,
@@ -520,6 +521,61 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.heightEdit.lastNotice = "已清除锁定地形选区。";
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
+    },
+    onTerrainSelectionSave: () => {
+      cancelHeightLine(state, documentRef);
+      const current = state.heightEdit.terrainSelection;
+      const snapshot = createHeightCellSelectionSnapshot(state.map, current?.cellIds, {useForTools: current?.useForTools});
+      if (!snapshot.summary.valid) {
+        state.heightEdit.lastNotice = snapshot.summary.notice;
+        updateHeightPanel(state);
+        return snapshot.summary;
+      }
+      state.heightEdit.terrainSelectionSaved = snapshot;
+      heightPanel.updateTerrainSelectionSaved(snapshot.summary);
+      state.heightEdit.lastNotice = snapshot.summary.notice;
+      updateHeightPanel(state);
+      return snapshot.summary;
+    },
+    onTerrainSelectionRestore: () => {
+      cancelHeightLine(state, documentRef);
+      const restored = restoreHeightCellSelectionSnapshot(state.map, state.heightEdit.terrainSelectionSaved);
+      if (!restored.summary.valid) {
+        state.heightEdit.lastNotice = restored.summary.notice;
+        updateHeightPanel(state);
+        return restored.summary;
+      }
+      const summary = commitHeightTerrainSelection(state, restored, {useForTools: restored.useForTools});
+      state.heightEdit.lastNotice = summary.notice;
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      return summary;
+    },
+    onTerrainSelectionSavedClear: () => {
+      cancelHeightLine(state, documentRef);
+      state.heightEdit.terrainSelectionSaved = null;
+      heightPanel.updateTerrainSelectionSaved(null);
+      state.heightEdit.lastNotice = "已删除暂存地形选区。";
+      updateHeightPanel(state);
+    },
+    onTerrainSelectionTransform: operation => {
+      cancelHeightLine(state, documentRef);
+      const current = state.heightEdit.terrainSelection;
+      const transformed = transformHeightCellSelection(state.map, current?.cellIds, {
+        operation,
+        scope: heightPanel.getBrush().scope,
+        steps: 1
+      });
+      if (!transformed.summary.valid) {
+        state.heightEdit.lastNotice = transformed.summary.notice;
+        updateHeightPanel(state);
+        return transformed.summary;
+      }
+      const summary = commitHeightTerrainSelection(state, transformed, {useForTools: current?.useForTools});
+      state.heightEdit.lastNotice = summary.notice;
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      return summary;
     },
     onTerrainSelectionCancel: () => {
       cancelHeightSelectionBox(state, documentRef);
@@ -2589,6 +2645,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.heightEdit.activeStroke = null;
   cancelHeightLine(state, documentRef);
   clearHeightTerrainSelection(state);
+  clearSavedHeightTerrainSelection(state);
   state.heightEdit.strokeSeed = 0;
   state.heightEdit.globalToolSeed = 0;
   state.heightEdit.lastAffected = 0;
@@ -7422,14 +7479,19 @@ function clearHeightTerrainSelection(state, {draw = true} = {}) {
   state.renderer?.clearHeightCellSelection?.({draw});
 }
 
-function commitHeightTerrainSelection(state, selection) {
+function commitHeightTerrainSelection(state, selection, {useForTools = true} = {}) {
   clearHeightTransformPreview(state, {draw: false});
   const cellSet = createHeightCellSelectionSet(selection.cellIds);
   const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
   const summary = {...selection.summary, rendererSelection};
-  state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, summary, useForTools: true};
-  state.panels.height?.updateTerrainSelection?.(summary, true);
+  state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, summary, useForTools: Boolean(useForTools)};
+  state.panels.height?.updateTerrainSelection?.(summary, useForTools);
   return summary;
+}
+
+function clearSavedHeightTerrainSelection(state) {
+  state.heightEdit.terrainSelectionSaved = null;
+  state.panels.height?.updateTerrainSelectionSaved?.(null);
 }
 
 function restoreHeightTerrainSelectionBuffer(state) {
@@ -8146,6 +8208,9 @@ function updateHeightPanel(state) {
     lastDelta: state.heightEdit.lastDelta,
     lastNotice: state.heightEdit.lastNotice,
     fillPreview: state.heightEdit.fillPreview,
+    terrainSelection: state.heightEdit.terrainSelection?.summary || null,
+    terrainSelectionSaved: state.heightEdit.terrainSelectionSaved?.summary || null,
+    useTerrainSelection: Boolean(state.heightEdit.terrainSelection?.useForTools),
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,
     currentHeightStats: summarizeCurrentHeightStats(state.map),

@@ -123,6 +123,18 @@
         <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('subtract'))">排除区间</UiButton>
         <UiButton class="height-terrain-selection-clear" variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionClear?.()">清除选区</UiButton>
       </div>
+      <div class="height-terrain-selection-actions">
+        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionTransform?.('grow')">扩展一圈</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionTransform?.('shrink')">收缩一圈</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionSave?.()">暂存当前</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelectionSaved?.valid" @click="callbacks.onTerrainSelectionRestore?.()">恢复暂存</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelectionSaved?.valid" @click="callbacks.onTerrainSelectionSavedClear?.()">删除暂存</UiButton>
+      </div>
+      <p class="height-action-help">扩展只沿共享边加入当前作用范围内的邻格；收缩为空时保留原选区。</p>
+      <p v-if="state.terrainSelectionSaved?.valid" class="height-action-help">
+        已暂存 {{ state.terrainSelectionSaved.count }} cells；只对当前 grid 有效。
+      </p>
+      <p v-else class="height-action-help">暂无暂存选区；暂存不会写入浏览器偏好或地图文件。</p>
       <UiSwitchField
         v-if="state.terrainSelection?.valid"
         label="条件 / 全局工具仅作用于锁定选区"

@@ -1242,6 +1242,30 @@
    - 边界：不修改高度、不执行其它来源或布尔、不刷新、导航、新建或启动 Chrome / 服务器；若使用独立 Playwright，必须在 `finally` 中关闭 browser / context。
    - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，候选归一 / scope / 空 / 超大 / 组合、pending / active、candidateCount / stampCount、黄色 preview 与旧 buffer 恢复路径均通过，仅有既有大 chunk 警告。browser 语义接口只支持原子 `drag({path})`，无法在 pointerdown 持续期间暂停读取 DOM；子智能体没有把 final 冒充中途 preview，拖中 preview 由源码状态分离、纯组合回归和生产产物证明。最终浏览器复用同一 `5410` 页面，在仅陆地、半径 `24` 下执行 7 点短路径，抬手锁定 `57 cells / 7 stamps / 343 triangles`，黄色 overlay / swatch 可见、限制开关开启；高度影响 `0`、历史 `0/0`、无对象编辑 selection。清除后摘要、黄色 overlay、GPU 和开关消失，console error 为 `0`，地图 / 面板稳定。未执行其它来源、布尔、高度工具、历史或重算，未刷新或重启资源；两名智能体均已结束。
 
+193. 同图高度选区快照纯模型。`已完成`
+   - 目标：把当前锁定 cell ids 与“仅作用于选区”开关暂存到运行时，后续可在继续布尔、边界调整或清除后原样恢复。
+   - 安全：快照严格绑定当前 `grid.cells.h` 引用，不写 localStorage 或地图文件；换图或 grid 被替换后拒绝恢复。公开 summary 只含 count / heightRange / valid / notice，不暴露 ids 或 grid 引用。
+   - 完成记录：新增 `createHeightCellSelectionSnapshot()` / `restoreHeightCellSelectionSnapshot()`；暂存时归一化、去重和排序 ids，恢复时重新校验当前 grid 范围并按当前高度重算 heightRange，同时恢复 useForTools。空当前选区、空快照和跨 grid 恢复均给出有界拒绝原因。
+
+194. 暂存 / 恢复运行时与面板闭环。`已完成`
+   - 目标：高度面板增加“暂存当前 / 恢复暂存 / 删除暂存”，清除当前选区不删除暂存，地图载入统一清除两者。
+   - 生命周期：暂存、恢复和删除都会先取消矩形 / 单点 / 画笔 pending 与变化 preview；恢复仍通过统一 commit 更新黄色 GPU buffer，不产生高度命令、历史或地图对象 selection。
+   - 完成记录：heightEdit 新增 terrainSelectionSaved；panel wrapper 保存有界 saved summary，并在 terrainHeightSelection snapshot 下暴露 savedSelection，不含完整 ids。恢复保留暂存时 useForTools；清除当前后仍可恢复，删除只清暂存；loadMapIntoRuntime 显式清除跨图快照。面板说明暂存只对当前 grid 有效且不进入偏好或地图文件。
+
+195. 选区共享边扩展 / 收缩一圈。`已完成`
+   - 目标：为后续边缘羽化提供明确的拓扑边界操作；扩展沿 `grid.cells.c` 加入一圈邻格，收缩移除至少有一个邻格不在选区内的边界 cell。
+   - 安全：扩展新加入 cell 遵守当前陆水 scope；坏邻接、空当前选区和未知操作拒绝。收缩导致空结果时保留原选区，多圈纯模型限制在 `1..8`，UI 第一刀只执行一圈。
+   - 完成记录：新增 `transformHeightCellSelection()` / inspect，返回 previousCount / count / addedCount / removedCount / heightRange 有界摘要。运行时复用统一 commit 和原 useForTools；面板新增“扩展一圈 / 收缩一圈”及共享边 / 空结果提示。
+
+196. 快照与边界调整回归、中文文档。`已完成`
+   - 目标：覆盖 ids 归一、同 grid 恢复、跨 grid 拒绝、useForTools、单圈 / 多圈扩展、收缩、空收缩保护、scope 和公开 inspect；同步专题清单与开发日志。
+   - 完成记录：合成选区 `2/1/2/-1/99` 暂存为 `1/2` 并在同 grid 恢复，跨 grid 与空选区拒绝；`3×3` 中心扩展一圈得到十字 `5 cells`、两圈得到 `9 cells`，十字收缩回中心，单中心收缩为空被拒绝。land 扩展不加入左侧水格，公开 inspect 无 ids。四项语法、直接高度回归和 `git diff --check` 通过。
+
+197. 暂存与边界调整阶段末统一验收。`已完成`
+   - 目标：烟测子智能体统一跑语法、回归、构建和差异；浏览器子智能体复用现有 `5410` 页面，锁定局部选区后暂存，扩展 / 收缩，清除当前，再恢复并删除暂存，确认 count、黄色 GPU overlay、开关和历史零影响。
+   - 边界：浏览器验收集中到阶段末；不修改高度、不刷新、导航、新建或启动 Chrome / 服务器。若使用独立 Playwright，必须在 `finally` 中关闭 browser / context；保持输出有界。
+   - 完成记录：烟测子智能体完成 4 项 `node --check`、高度回归、affected 两组兼容回归、生产构建和 `git diff --check`；暂存 / 恢复 `2 cells`、扩展 `1→5`、收缩 `5→1`，生产产物包含五个新增按钮、savedSelection 和 saved / grow / shrink 路径，构建仅有既有大 chunk 警告。浏览器子智能体复用现有 `5410` 页面：初始暂存 `3326 cells / GPU 19965 triangles`；仅陆地扩展无邻格时合理不变，切到全部后扩展为 `4317`，收缩为 `3547`；清除当前后暂存摘要仍在，恢复精确回到 `3326 / 19965`，黄色 overlay 与 useForTools 同步恢复；删除后摘要消失且恢复 / 删除按钮禁用。全程高度影响 `0`、历史 `0/0`、对象 selection 不变、console error `0`、WebGL 稳定；未刷新、导航、启动或重启 Chrome / 服务器，未使用独立 Playwright，页面 handoff 保留，两名子智能体均已结束且无遗留进程。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

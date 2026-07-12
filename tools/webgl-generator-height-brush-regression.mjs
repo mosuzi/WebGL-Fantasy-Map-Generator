@@ -2,7 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCellSelectionTransform, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -228,6 +228,30 @@ assert(!oversizedPaintSelection.valid && oversizedPaintSelection.maxCells === 64
 assert(paintUnionSelection.summary.valid && [...paintUnionSelection.cellIds].join(",") === "0,1,2,3" && paintUnionSelection.summary.source === "paint" && paintUnionSelection.summary.radius === 12 && paintUnionSelection.summary.stampCount === 3, `画笔候选并入异常：${JSON.stringify(paintUnionSelection.summary)}`);
 assert(!Object.hasOwn(paintCompositionPreview, "cellIds") && paintCompositionPreview.count === 4, "公开画笔组合摘要暴露 ids 或计数异常");
 
+const savedSelection = createHeightCellSelectionSnapshot(selectionMap, [2, 1, 2, -1, 99], {useForTools: true});
+const restoredSelection = restoreHeightCellSelectionSnapshot(selectionMap, savedSelection);
+const staleRestoredSelection = restoreHeightCellSelectionSnapshot(createSyntheticMap(), savedSelection);
+const emptySavedSelection = createHeightCellSelectionSnapshot(selectionMap, []);
+assert(savedSelection.summary.valid && [...savedSelection.cellIds].join(",") === "1,2" && savedSelection.summary.heightRange.join(",") === "20,30" && savedSelection.useForTools, `选区暂存异常：${JSON.stringify(savedSelection.summary)}`);
+assert(restoredSelection.summary.valid && [...restoredSelection.cellIds].join(",") === "1,2" && restoredSelection.useForTools, `选区恢复异常：${JSON.stringify(restoredSelection.summary)}`);
+assert(!staleRestoredSelection.summary.valid && staleRestoredSelection.summary.notice.includes("不属于当前 grid"), `跨 grid 暂存选区没有被拒绝：${JSON.stringify(staleRestoredSelection.summary)}`);
+assert(!emptySavedSelection.summary.valid && emptySavedSelection.summary.notice.includes("没有可暂存"), `空选区仍可暂存：${JSON.stringify(emptySavedSelection.summary)}`);
+
+const morphologyMap = createSquareMap(3, () => 30);
+const grownSelection = transformHeightCellSelection(morphologyMap, [4], {operation: "grow", scope: "land", steps: 1});
+const grownTwiceSelection = transformHeightCellSelection(morphologyMap, [4], {operation: "grow", scope: "land", steps: 2});
+const shrunkSelection = transformHeightCellSelection(morphologyMap, grownSelection.cellIds, {operation: "shrink", scope: "land", steps: 1});
+const rejectedEmptyShrink = transformHeightCellSelection(morphologyMap, [4], {operation: "shrink", scope: "land", steps: 1});
+const morphologyPreview = inspectHeightCellSelectionTransform(morphologyMap, [4], {operation: "grow", scope: "land", steps: 1});
+const scopedMorphologyMap = createSquareMap(3, (x, y) => x === 0 && y === 1 ? 10 : 30);
+const landGrownSelection = transformHeightCellSelection(scopedMorphologyMap, [4], {operation: "grow", scope: "land", steps: 1});
+assert(grownSelection.summary.valid && [...grownSelection.cellIds].join(",") === "1,3,4,5,7" && grownSelection.summary.addedCount === 4, `选区扩展异常：${JSON.stringify(grownSelection.summary)}`);
+assert(grownTwiceSelection.summary.valid && grownTwiceSelection.cellIds.length === 9 && grownTwiceSelection.summary.steps === 2, `选区多圈扩展异常：${JSON.stringify(grownTwiceSelection.summary)}`);
+assert(shrunkSelection.summary.valid && [...shrunkSelection.cellIds].join(",") === "4" && shrunkSelection.summary.removedCount === 4, `选区收缩异常：${JSON.stringify(shrunkSelection.summary)}`);
+assert(!rejectedEmptyShrink.summary.valid && [...rejectedEmptyShrink.cellIds].join(",") === "4" && rejectedEmptyShrink.summary.notice.includes("保留原锁定选区"), `收缩空结果没有保留旧选区：${JSON.stringify(rejectedEmptyShrink.summary)}`);
+assert([...landGrownSelection.cellIds].join(",") === "1,4,5,7", `选区扩展跨越当前陆水 scope：${[...landGrownSelection.cellIds]}`);
+assert(!Object.hasOwn(morphologyPreview, "cellIds") && morphologyPreview.count === 5, "公开边界调整摘要暴露 ids 或计数异常");
+
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
 const crossSeaLevel = getHeightBrushChanges(stableScopeMap, {x: 10, y: 0}, {action: "lower", scope: "land", radius: 1, strength: 4, falloff: false}, stableScopeStroke);
@@ -375,6 +399,10 @@ console.log(JSON.stringify({
   connectedUnionSelection: connectedUnionSelection.summary,
   paintSelection: paintSelection.summary,
   paintUnionSelection: paintUnionSelection.summary,
+  savedSelection: savedSelection.summary,
+  restoredSelection: restoredSelection.summary,
+  grownSelection: grownSelection.summary,
+  shrunkSelection: shrunkSelection.summary,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

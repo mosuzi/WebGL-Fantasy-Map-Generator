@@ -344,6 +344,122 @@ export function createHeightCellSelectionSet(cellIds) {
   return result;
 }
 
+export function createHeightCellSelectionSnapshot(map, cellIds, options = {}) {
+  const heights = map?.grid?.cells?.h;
+  const normalizedIds = normalizeCellIds(cellIds, heights?.length || 0);
+  const base = {source: "saved", count: 0, heightRange: null, valid: false, notice: ""};
+  if (!heights?.length) return {gridHeights: null, cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度数据，无法暂存选区。"}};
+  if (!normalizedIds.length) return {gridHeights: heights, cellIds: normalizedIds, summary: {...base, notice: "当前没有可暂存的锁定选区。"}};
+  return {
+    gridHeights: heights,
+    cellIds: normalizedIds,
+    summary: {
+      ...base,
+      count: normalizedIds.length,
+      heightRange: heightRangeForIds(heights, normalizedIds),
+      valid: true,
+      notice: `已暂存当前地形选区 ${normalizedIds.length} cells。`
+    },
+    useForTools: Boolean(options.useForTools)
+  };
+}
+
+export function restoreHeightCellSelectionSnapshot(map, snapshot) {
+  const heights = map?.grid?.cells?.h;
+  const base = {source: "saved", count: 0, heightRange: null, valid: false, notice: ""};
+  if (!heights?.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度数据，无法恢复暂存选区。"}};
+  if (!snapshot?.summary?.valid || !snapshot.cellIds?.length) {
+    return {cellIds: new Uint32Array(), summary: {...base, notice: "当前没有可恢复的暂存选区。"}};
+  }
+  if (snapshot.gridHeights !== heights) {
+    return {cellIds: new Uint32Array(), summary: {...base, notice: "暂存选区不属于当前 grid，已拒绝恢复。"}};
+  }
+  const cellIds = normalizeCellIds(snapshot.cellIds, heights.length);
+  if (!cellIds.length) return {cellIds, summary: {...base, notice: "暂存选区已失效，无法恢复。"}};
+  return {
+    cellIds,
+    summary: {
+      ...base,
+      count: cellIds.length,
+      heightRange: heightRangeForIds(heights, cellIds),
+      valid: true,
+      notice: `已恢复暂存地形选区 ${cellIds.length} cells。`
+    },
+    useForTools: Boolean(snapshot.useForTools)
+  };
+}
+
+export function transformHeightCellSelection(map, cellIds, options = {}) {
+  const cells = map?.grid?.cells;
+  const heights = cells?.h;
+  const operation = options.operation === "grow" || options.operation === "shrink" ? options.operation : null;
+  const scope = normalizeScope(options.scope);
+  const steps = normalizeMorphologySteps(options.steps);
+  const currentIds = normalizeCellIds(cellIds, heights?.length || 0);
+  const base = {
+    source: "morphology",
+    operation: operation || String(options.operation || ""),
+    scope,
+    steps,
+    previousCount: currentIds.length,
+    count: currentIds.length,
+    addedCount: 0,
+    removedCount: 0,
+    heightRange: heightRangeForIds(heights, currentIds),
+    valid: false,
+    notice: ""
+  };
+  if (!heights?.length || !Array.isArray(cells.c)) return compositionResult(currentIds, {...base, notice: "当前地图缺少高度或共享边邻接，无法调整选区边界。"});
+  if (!currentIds.length) return compositionResult(currentIds, {...base, notice: "当前没有可调整边界的锁定选区。"});
+  if (!operation) return compositionResult(currentIds, {...base, notice: "未知的选区边界调整方式。"});
+
+  let resultSet = new Set(currentIds);
+  for (let step = 0; step < steps; step++) {
+    if (operation === "grow") {
+      const expanded = new Set(resultSet);
+      for (const gridCell of resultSet) {
+        for (const neighbor of cells.c[gridCell] || []) {
+          if (!Number.isInteger(neighbor) || neighbor < 0 || neighbor >= heights.length) continue;
+          if (matchesScope(Number(heights[neighbor]) || 0, scope)) expanded.add(neighbor);
+        }
+      }
+      resultSet = expanded;
+    } else {
+      const contracted = new Set();
+      for (const gridCell of resultSet) {
+        const neighbors = (cells.c[gridCell] || []).filter(neighbor => Number.isInteger(neighbor) && neighbor >= 0 && neighbor < heights.length);
+        if (neighbors.every(neighbor => resultSet.has(neighbor))) contracted.add(gridCell);
+      }
+      resultSet = contracted;
+    }
+    if (!resultSet.size) break;
+  }
+
+  const resultIds = Uint32Array.from([...resultSet].sort((a, b) => a - b));
+  if (!resultIds.length) return compositionResult(currentIds, {...base, notice: "收缩会清空选区，已保留原锁定选区。"});
+  const currentSet = new Set(currentIds);
+  const addedCount = resultIds.reduce((count, gridCell) => count + (currentSet.has(gridCell) ? 0 : 1), 0);
+  const removedCount = currentIds.reduce((count, gridCell) => count + (resultSet.has(gridCell) ? 0 : 1), 0);
+  if (!addedCount && !removedCount) {
+    const label = operation === "grow" ? "扩展" : "收缩";
+    return compositionResult(currentIds, {...base, notice: `当前选区无法继续${label}。`});
+  }
+  const label = operation === "grow" ? "扩展" : "收缩";
+  return compositionResult(resultIds, {
+    ...base,
+    count: resultIds.length,
+    addedCount,
+    removedCount,
+    heightRange: heightRangeForIds(heights, resultIds),
+    valid: true,
+    notice: `${label} ${steps} 圈后选区 ${resultIds.length} cells（新增 ${addedCount}，移除 ${removedCount}）。`
+  });
+}
+
+export function inspectHeightCellSelectionTransform(map, cellIds, options = {}) {
+  return transformHeightCellSelection(map, cellIds, options).summary;
+}
+
 function compositionResult(cellIds, summary) {
   return {cellIds: Uint32Array.from(cellIds || []), summary};
 }
@@ -408,6 +524,11 @@ function normalizeRadius(value, fallback) {
 function normalizeTolerance(value, fallback) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
+}
+
+function normalizeMorphologySteps(value) {
+  const numeric = Math.trunc(Number(value) || 1);
+  return Math.max(1, Math.min(8, numeric));
 }
 
 function heightSelectionMaxCells(cellCount) {

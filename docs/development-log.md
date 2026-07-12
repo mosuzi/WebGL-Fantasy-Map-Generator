@@ -26845,3 +26845,27 @@ full 矩阵结果：
 - browser 语义接口仅提供原子 `drag({path})`，会连续完成 pointerdown / moves / pointerup，不能在保持按下时暂停读取 DOM / notice；子智能体因此拒绝伪造“抬手前”截图。拖中 preview 的直接浏览器证据缺失由源码中正式 state 未替换、renderer preview 调用、纯组合回归与产物字段共同覆盖，不把 final 结果冒充 preview。
 - 最终浏览器子智能体复用现有 `5410` 页面和连接，来源画笔拖选、scope 仅陆地、半径 `24`，执行 7 点原子 drag；抬手后正式选区 `57 cells / 7 stamps / GPU 343 triangles`，黄色 overlay 截图与 swatch 可见，限制开关开启。
 - 高度影响保持 `0`，历史 `undo 0 / redo 0`，无对象编辑 selection。清除后恢复“尚未锁定地形选区”，黄色 overlay、GPU 摘要和限制开关消失；console error 为 `0`，地图与面板稳定。未执行其它来源、并入 / 交集 / 排除、高度工具、历史或重算；页面 handoff，两名子智能体均已结束且无遗留进程。
+
+### 2026-07-12 高度选区暂存与共享边调整
+
+背景：
+
+- 五种候选来源和四种布尔组合已经能构造复杂选区，但继续组合或清除前没有轻量检查点，用户无法快速回到上一版锁定集合。
+- 后续边缘羽化需要先有明确、可回归的选区拓扑边界操作，不能把邻接扩张逻辑散落在 Vue 或 renderer 中。
+
+实现：
+
+- `height-cell-selection.js` 新增选区快照创建 / 恢复纯函数。快照保存归一后的 ids、暂存时 useForTools 和当前 `grid.cells.h` 引用；恢复严格比较引用，换图或 grid 替换后拒绝，且按当前高度重算 heightRange。
+- heightEdit 新增运行时 terrainSelectionSaved；清除当前选区不删除快照，地图加载显式清除当前与快照。有限 `terrainHeightSelection` snapshot 只增加 savedSelection 摘要，不暴露 ids 或 grid 引用，也不写 localStorage / 地图文件。
+- 面板新增“暂存当前 / 恢复暂存 / 删除暂存”。相关动作先取消矩形、单点、画笔 pending 和变化 preview；恢复复用统一 selection commit、黄色 GPU buffer 和原 useForTools，不产生高度命令或地图对象 selection。
+- 新增 `transformHeightCellSelection()` / inspect。扩展沿 `grid.cells.c` 加入共享边邻格，新加入项遵守当前 scope；收缩移除存在未选邻格的边界 cell。纯模型支持 `1..8` 圈，UI 第一刀提供“扩展一圈 / 收缩一圈”。
+- 坏邻接、空选区、未知操作和无变化均拒绝；收缩会清空时返回原 ids 并拒绝提交。summary 仅含 operation / scope / steps / previousCount / count / addedCount / removedCount / heightRange / notice。
+
+直接验证：
+
+- 选区模块、运行时、panel wrapper 和回归脚本 `node --check` 通过，`git diff --check` 通过。
+- 直接高度回归通过：`2/1/2/-1/99` 暂存为 `1/2`，同 grid 恢复并保留 useForTools；跨 grid 与空选区拒绝。
+- `3×3` 中心 cell 扩展一圈得到十字 `5 cells`、两圈得到 `9 cells`，十字收缩回中心；单中心收缩为空被拒绝并保留原选区。land 扩展排除相邻水格，公开 inspect 不含 ids。
+- 阶段末烟测子智能体完成 4 项 `node --check`、高度回归、`regress:edit-command-affected`、`regress:affected-summary`、`build:app` 和 `git diff --check`，全部通过；构建仅有既有大 chunk 警告，生产产物包含五个新增按钮、savedSelection、saved / grow / shrink 和状态文案。
+- 浏览器子智能体复用现有 `5410` 页面与服务器，未刷新、导航、新建或启动 / 重启 Chrome / 服务器，也未使用独立 Playwright。初始选区暂存为 `3326 cells / GPU 19965 triangles`；仅陆地扩展无邻格时合理不变，切到全部后扩展为 `4317`，收缩为 `3547`。
+- 清除当前选区后暂存摘要继续保留；恢复后精确回到 `3326 cells / GPU 19965 triangles`，黄色 overlay 与 useForTools 一起恢复；删除暂存后摘要消失，恢复 / 删除按钮禁用。全程高度影响 `0`、历史 `0/0`、对象 selection 不变、console error `0`、WebGL 稳定。页面 handoff 保留，两名子智能体均已结束且无遗留进程。
