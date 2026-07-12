@@ -1218,6 +1218,30 @@
    - 边界：不修改高度、不执行其它来源或布尔、不刷新、导航、新建或启动 Chrome / 服务器；若使用独立 Playwright，必须在 `finally` 中关闭 browser / context。
    - 完成记录：首轮沿用画布中心命中同高海域并触发 `2000 cells` 安全拒绝，console error 为 `0`；据此把连通来源收口为显式“组合 -> 地图单击中心”的单点 pending。原 FMG tab 消失后复用既有 Chrome 唯一 tab、只导航一次到已运行 `5410`，首次陆地补验因导航后布局尚在收敛导致同一绝对点解析为不同中心，证据边界如实保留。最终稳定页面以实时 canvas rect 的相同 `(70%,30%)` 归一位置补验：容差 `0` 与 `2` 均命中 center `#3013`；A=`2 cells`、heightRange `84..84`、GPU `11 triangles`，B=`6 cells`、heightRange `82..86`、GPU `35 triangles`，满足 `B>A` 且黄色范围扩大。清除成功，高度影响 `0`、历史 `undo 0 / redo 0`、无 console error。最终烟测完成 4 项 `node --check`、三项回归、生产构建和差异检查，单点 pending / snapshot / 产物字段均通过。未执行其它来源、布尔、高度工具、历史、笔刷或重算，未重启 Chrome / 服务器，也未使用独立 Playwright；两名智能体均已结束。
 
+188. 画笔拖选候选纯模型。`已完成`
+   - 目标：把运行时连续圆形 stamp 累积的 grid ids 归一成 paint 候选，按当前 scope 过滤并返回 radius / stampCount / count / heightRange / maxCells 有界摘要，再进入四种布尔组合。
+   - 安全：坏 / 重复 / 越界 ids、空候选和超过 grid 20% / 5000 cells 上限都处理；完整候选 Set / ids 不进入 Vue。
+   - 完成记录：新增 `createHeightPaintSelection()` 与只读 inspect；输入 ids 按 grid 范围去重升序、再按 scope 过滤，沿用统一 maxCells。summary 只含 source、scope、radius、stampCount、maxCells、count、heightRange、valid 与 notice。空候选、缺高度和超大候选拒绝；compose 新增 paint source 并继续共享四种 Set 运算。
+
+189. 画笔拖选 pending / active 生命周期。`已完成`
+   - 目标：画笔来源点击布尔按钮后进入 pending；canvas pointerdown 开始 stroke，pointermove 按独立半径累积 stamp，pointerup 提交，pointercancel 恢复旧选区。
+   - 生命周期：来源 / 动作切换、历史、全局工具、清除、关闭编辑器和地图载入统一取消 pending / active 并恢复旧黄色 buffer，不触发高度笔刷或地图 selection。
+   - 完成记录：paint 按钮先写 terrainSelectionPaintPending；canvas capture pointerdown 建立 active candidate Set / pointerId 并捕获指针，pointermove 优先累积，pointerup finish，pointercancel restore。`cancelHeightLine()`、来源切换和清除都调用统一 cancel；有限 snapshot 只暴露 active、operation、stampCount、candidateCount，不含 Set。
+
+190. 拖中黄色 GPU 组合预览。`已完成`
+   - 目标：每个新中心 stamp 后用完整候选与旧选区计算当前布尔结果，只更新 renderer 黄色 buffer 和有界 lastNotice；不改 runtime cellSet / summary，抬手 valid 后才原子 commit。
+   - 性能：相同 centerCell 不重复 stamp；候选超上限后停止扩张，抬手不提交。
+   - 完成记录：每个不同中心用既有 cursor-circle 模型生成一个 stamp；只有候选 Set 实际增长才递增 stampCount 和重建组合 preview。preview 直接上传 renderer selection buffer，panel 只显示有界 count / stamps / GPU notice，旧 runtime terrainSelection 不变。invalid / 超上限时恢复旧 buffer，finish 仅对最后 valid preview 调原子 commit。
+
+191. 画笔拖选面板、回归与中文文档。`已完成`
+   - 目标：“选区构造”增加画笔拖选并复用独立半径；卡片显示最终 radius / stampCount。覆盖候选归一、scope、超大拒绝、画笔组合和有界 snapshot；同步专题清单与开发日志。
+   - 完成记录：来源新增“画笔拖选”，复用 height-selection-radius 并动态标为“选区笔刷半径”；帮助文案说明拖中预览 / 抬手提交，完成卡片显示 radius / stamps。合成 `[0,1,1,99,-1,2]` 归一为 `0/1/2`，land 为 `1/2`，空与 `100>64` 超大拒绝；并入旧 `3` 得到 `0/1/2/3`，公开 inspect 无 cellIds。四项语法、直接高度回归和差异检查通过。
+
+192. 画笔拖选阶段末统一验收。`已完成`
+   - 目标：烟测子智能体统一跑语法、回归、构建和差异；浏览器子智能体复用现有 `5410` 页面，选择画笔覆盖后只在可见陆地拖一笔，确认拖中 preview、抬手 count / stamps / GPU / 黄色 overlay 和历史零影响，再清除。
+   - 边界：不修改高度、不执行其它来源或布尔、不刷新、导航、新建或启动 Chrome / 服务器；若使用独立 Playwright，必须在 `finally` 中关闭 browser / context。
+   - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，候选归一 / scope / 空 / 超大 / 组合、pending / active、candidateCount / stampCount、黄色 preview 与旧 buffer 恢复路径均通过，仅有既有大 chunk 警告。browser 语义接口只支持原子 `drag({path})`，无法在 pointerdown 持续期间暂停读取 DOM；子智能体没有把 final 冒充中途 preview，拖中 preview 由源码状态分离、纯组合回归和生产产物证明。最终浏览器复用同一 `5410` 页面，在仅陆地、半径 `24` 下执行 7 点短路径，抬手锁定 `57 cells / 7 stamps / 343 triangles`，黄色 overlay / swatch 可见、限制开关开启；高度影响 `0`、历史 `0/0`、无对象编辑 selection。清除后摘要、黄色 overlay、GPU 和开关消失，console error 为 `0`，地图 / 面板稳定。未执行其它来源、布尔、高度工具、历史或重算，未刷新或重启资源；两名智能体均已结束。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1393,3 +1417,4 @@
 - 光标圆形高度选区批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / affected / affected 摘要三项回归、生产构建和 `git diff --check`，圆心 / 半径 / scope / 空中心 / 超大拒绝 / 空间组合与产物字段均通过。语义浏览器隔离世界无法形成 hover pick 后，运行时补产品级 canvas 中心 renderer picking 回退；最终复用同一 `5410` 页面确认半径 `24` 为 `13 cells / 79 triangles`、半径 `64` 为 `91 cells / 548 triangles`，圆心保持 `#4941`，黄色范围扩大且限制开关保持。清除后摘要、开关、GPU 和 overlay 消失，页面 / 画布稳定、console error 为 `0`。未修改高度、刷新、导航、新建或启动 Chrome / 服务器，所有子智能体均已结束释放。
 - 两角矩形高度选区批次统一验证完成：烟测子智能体执行 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，角序、scope、边界拒绝、矩形组合和产物字段均通过。浏览器复用既有 `5410` 页面，覆盖待选后第一角进入起角状态，移动到第二角时淡黄预览为 `456×218 px`；第二角完成得到 `404 cells`、world 尺寸 `288.5×191.6`、GPU `2428 triangles`，黄色 overlay 和限制开关正常，预览移除。清除后摘要、开关、GPU、overlay 和预览全部消失，画布完整、console error 为 `0`。未修改高度、刷新、导航、新建或启动 Chrome / 服务器，两名子智能体均已结束释放。
 - 连通等高区高度选区批次统一验证完成：烟测子智能体执行 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，BFS 容差 / scope / 邻接隔离 / 安全边界 / 组合与单点 pending 产物均通过。首次画布中心命中大海并正确触发 `2000 cells` 安全拒绝后，交互改为显式“组合 -> 单击中心”。最终浏览器在稳定页面用同一 canvas 归一位置命中 center `#3013`：容差 `0` 为 `2 cells / 84..84 / 11 triangles`，容差 `2` 为 `6 cells / 82..86 / 35 triangles`，黄色范围扩大。清除成功，高度影响 `0`、历史 `0/0`、console error 为 `0`。复用既有 Chrome 与服务器，仅在 FMG tab 消失时把既有唯一 tab 导航一次到 `5410`，未重启资源；两名子智能体均已结束释放。
+- 画笔拖选高度选区批次统一验证完成：烟测子智能体执行 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，候选归一、安全边界、paint 组合、pending / active、有界 snapshot、黄色 preview 与旧 buffer 恢复路径均通过。browser 语义接口只能原子 drag，无法直接观察抬手前 DOM；证据边界已记录，未把 final 当 preview。浏览器复用既有 `5410` 页面，在仅陆地、半径 `24` 下完成 7 点路径，抬手正式选区为 `57 cells / 7 stamps / 343 triangles`，黄色 overlay 与限制开关正常；高度影响 `0`、历史 `0/0`、无对象 selection、console error 为 `0`。清除后摘要、GPU、overlay 和开关消失，未刷新或重启 Chrome / 服务器；两名子智能体均已结束释放。

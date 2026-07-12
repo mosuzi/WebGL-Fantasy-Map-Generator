@@ -56,7 +56,7 @@ import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureCol
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
-import {composeHeightCellSelection, createHeightCellSelectionSet} from "./height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelectionSet, createHeightCursorRadiusSelection} from "./height-cell-selection.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -183,6 +183,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       terrainSelection: null,
       terrainSelectionBox: null,
       terrainSelectionPoint: null,
+      terrainSelectionPaintPending: null,
+      terrainSelectionPaint: null,
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none",
@@ -488,6 +490,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateEditingInteractionLock(state, documentRef);
         return {pending: true, operation: options.operation, source: options.source};
       }
+      if (options.source === "paint") {
+        cancelHeightLine(state, documentRef);
+        state.heightEdit.terrainSelectionPaintPending = {request: options};
+        state.heightEdit.lastNotice = "请在地图上按住并拖动画笔选区，抬手后提交。";
+        updateHeightPanel(state);
+        updateEditingInteractionLock(state, documentRef);
+        return {pending: true, operation: options.operation, source: options.source};
+      }
       if (options.source === "cursor-circle") options.centerCell = resolveHeightSelectionCenterCell(state, canvas, documentRef);
       const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, options);
       if (!selection.summary.valid) {
@@ -504,6 +514,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onTerrainSelectionClear: () => {
       cancelHeightSelectionBox(state, documentRef);
       cancelHeightSelectionPoint(state);
+      cancelHeightSelectionPaint(state);
       clearHeightTransformPreview(state);
       clearHeightTerrainSelection(state);
       state.heightEdit.lastNotice = "已清除锁定地形选区。";
@@ -513,6 +524,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onTerrainSelectionCancel: () => {
       cancelHeightSelectionBox(state, documentRef);
       cancelHeightSelectionPoint(state);
+      cancelHeightSelectionPaint(state);
       state.heightEdit.lastNotice = "";
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
@@ -7068,6 +7080,10 @@ function bindHeightEditing(canvas, state, documentRef) {
       handleHeightSelectionPointClick(state, event, documentRef);
       return;
     }
+    if (state.heightEdit.terrainSelectionPaintPending) {
+      startHeightSelectionPaint(state, event, documentRef, canvas);
+      return;
+    }
     clearHeightTransformPreview(state);
     if (brush.action === "line") {
       handleHeightLineClick(state, event, brush, documentRef);
@@ -7089,6 +7105,12 @@ function bindHeightEditing(canvas, state, documentRef) {
 
   canvas.addEventListener("pointermove", event => {
     const brush = state.panels.height?.getBrush();
+    if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      applyHeightSelectionPaintAtEvent(state, event, documentRef);
+      return;
+    }
     if (state.heightEdit.terrainSelectionBox?.start) {
       updateHeightSelectionBoxPreview(documentRef, state.heightEdit.terrainSelectionBox.start, event.clientX, event.clientY);
       return;
@@ -7108,6 +7130,13 @@ function bindHeightEditing(canvas, state, documentRef) {
   }, true);
 
   canvas.addEventListener("pointerup", event => {
+    if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      finishHeightSelectionPaint(state, documentRef);
+      releasePointer(canvas, event.pointerId);
+      return;
+    }
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -7117,6 +7146,13 @@ function bindHeightEditing(canvas, state, documentRef) {
   }, true);
 
   canvas.addEventListener("pointercancel", event => {
+    if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
+      cancelHeightSelectionPaint(state);
+      releasePointer(canvas, event.pointerId);
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      return;
+    }
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -7251,6 +7287,82 @@ function handleHeightSelectionPointClick(state, event, documentRef) {
   updateEditingInteractionLock(state, documentRef);
 }
 
+function startHeightSelectionPaint(state, event, documentRef, canvas) {
+  const pending = state.heightEdit.terrainSelectionPaintPending;
+  if (!pending) return;
+  state.heightEdit.terrainSelectionPaintPending = null;
+  state.heightEdit.terrainSelectionPaint = {
+    request: pending.request,
+    pointerId: event.pointerId,
+    candidateCellIds: new Set(),
+    stampCount: 0,
+    lastCenterCell: null,
+    previewSelection: null,
+    invalidNotice: ""
+  };
+  capturePointer(canvas, event.pointerId);
+  applyHeightSelectionPaintAtEvent(state, event, documentRef);
+  updateEditingInteractionLock(state, documentRef);
+}
+
+function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
+  const active = state.heightEdit.terrainSelectionPaint;
+  if (!active) return;
+  const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  const gridCell = Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
+  if (gridCell === null || gridCell === active.lastCenterCell) return;
+  active.lastCenterCell = gridCell;
+  const stamp = createHeightCursorRadiusSelection(state.map, gridCell, {
+    scope: active.request.scope,
+    radius: active.request.radius
+  });
+  if (!stamp.summary.valid) {
+    active.invalidNotice = stamp.summary.notice;
+    state.heightEdit.lastNotice = stamp.summary.notice;
+    updateHeightPanel(state);
+    return;
+  }
+  const previousCount = active.candidateCellIds.size;
+  for (const cellId of stamp.cellIds) active.candidateCellIds.add(cellId);
+  if (active.candidateCellIds.size === previousCount) return;
+  active.stampCount += 1;
+  const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, {
+    ...active.request,
+    candidateCellIds: active.candidateCellIds,
+    stampCount: active.stampCount
+  });
+  if (!selection.summary.valid) {
+    active.previewSelection = null;
+    active.invalidNotice = selection.summary.notice;
+    restoreHeightTerrainSelectionBuffer(state);
+    state.heightEdit.lastNotice = selection.summary.notice;
+    updateHeightPanel(state);
+    return;
+  }
+  active.previewSelection = selection;
+  active.invalidNotice = "";
+  const rendererPreview = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
+  state.heightEdit.lastNotice = `画笔选区预览 ${selection.summary.count} cells（${active.stampCount} stamps${rendererPreview ? ` / GPU ${rendererPreview.triangleCount} triangles` : ""}）。`;
+  updateHeightPanel(state);
+}
+
+function finishHeightSelectionPaint(state, documentRef) {
+  const active = state.heightEdit.terrainSelectionPaint;
+  state.heightEdit.terrainSelectionPaint = null;
+  if (!active?.previewSelection?.summary.valid || active.invalidNotice) {
+    restoreHeightTerrainSelectionBuffer(state);
+    state.heightEdit.lastNotice = active?.invalidNotice || "画笔没有形成有效选区，未提交。";
+    updateHeightPanel(state);
+    updateEditingInteractionLock(state, documentRef);
+    return false;
+  }
+  const summary = commitHeightTerrainSelection(state, active.previewSelection);
+  state.heightEdit.lastNotice = summary.notice;
+  updateHeightPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+  return true;
+}
+
 function updateHeightSelectionBoxPreview(documentRef, start, clientX, clientY) {
   const stage = documentRef.querySelector(".map-stage");
   if (!stage || !start) return;
@@ -7280,6 +7392,13 @@ function cancelHeightSelectionPoint(state) {
   state.heightEdit.terrainSelectionPoint = null;
 }
 
+function cancelHeightSelectionPaint(state) {
+  const hadPreview = Boolean(state.heightEdit.terrainSelectionPaint?.previewSelection);
+  state.heightEdit.terrainSelectionPaintPending = null;
+  state.heightEdit.terrainSelectionPaint = null;
+  if (hadPreview) restoreHeightTerrainSelectionBuffer(state);
+}
+
 function cancelHeightLine(state, documentRef) {
   state.heightEdit.lineStart = null;
   state.heightEdit.fillHoverCell = null;
@@ -7287,6 +7406,7 @@ function cancelHeightLine(state, documentRef) {
   clearHeightTransformPreview(state);
   cancelHeightSelectionBox(state, documentRef);
   cancelHeightSelectionPoint(state);
+  cancelHeightSelectionPaint(state);
   documentRef.querySelector(".height-line-preview")?.remove();
 }
 
@@ -7310,6 +7430,12 @@ function commitHeightTerrainSelection(state, selection) {
   state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, summary, useForTools: true};
   state.panels.height?.updateTerrainSelection?.(summary, true);
   return summary;
+}
+
+function restoreHeightTerrainSelectionBuffer(state) {
+  const cellIds = state.heightEdit.terrainSelection?.cellIds;
+  if (cellIds?.length) return state.renderer?.setHeightCellSelection?.(cellIds) || null;
+  return state.renderer?.clearHeightCellSelection?.() || null;
 }
 
 function heightToolAllowedCells(state) {
@@ -8434,6 +8560,17 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       terrainSelectionPoint: state.heightEdit.terrainSelectionPoint ? {
         operation: state.heightEdit.terrainSelectionPoint.request?.operation || "replace",
         source: state.heightEdit.terrainSelectionPoint.request?.source || "connected-height"
+      } : null,
+      terrainSelectionPaint: state.heightEdit.terrainSelectionPaint ? {
+        active: true,
+        operation: state.heightEdit.terrainSelectionPaint.request?.operation || "replace",
+        stampCount: state.heightEdit.terrainSelectionPaint.stampCount,
+        candidateCount: state.heightEdit.terrainSelectionPaint.candidateCellIds.size
+      } : state.heightEdit.terrainSelectionPaintPending ? {
+        active: false,
+        operation: state.heightEdit.terrainSelectionPaintPending.request?.operation || "replace",
+        stampCount: 0,
+        candidateCount: 0
       } : null
     },
     conditionalHeightTransform: state.panels.height?.getConditionalTransformSnapshot?.() || null,

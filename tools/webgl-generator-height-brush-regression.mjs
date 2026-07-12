@@ -2,7 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightRectangleSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -215,6 +215,18 @@ assert(!missingAdjacencySelection.valid && missingAdjacencySelection.notice.incl
 assert(!oversizedConnectedSelection.valid && oversizedConnectedSelection.maxCells === 64 && oversizedConnectedSelection.notice.includes("安全上限"), `超大连通选区没有被拒绝：${JSON.stringify(oversizedConnectedSelection)}`);
 assert(connectedUnionSelection.summary.valid && connectedUnionSelection.cellIds.length === 10 && connectedUnionSelection.cellIds[0] === 0 && connectedUnionSelection.summary.source === "connected-height" && connectedUnionSelection.summary.startHeight === 40 && connectedUnionSelection.summary.tolerance === 2, `连通候选并入异常：${JSON.stringify(connectedUnionSelection.summary)}`);
 assert(!Object.hasOwn(connectedCompositionPreview, "cellIds") && connectedCompositionPreview.count === 10, "公开连通组合摘要暴露 ids 或计数异常");
+const paintSelection = createHeightPaintSelection(selectionMap, [0, 1, 1, 99, -1, 2], {scope: "all", radius: 12, stampCount: 3});
+const landPaintSelection = createHeightPaintSelection(selectionMap, paintSelection.cellIds, {scope: "land", radius: 12, stampCount: 3});
+const emptyPaintSelection = inspectHeightPaintSelection(selectionMap, [], {scope: "all", radius: 12, stampCount: 0});
+const oversizedPaintSelection = inspectHeightPaintSelection(createSquareMap(10, () => 30), Array.from({length: 100}, (_, index) => index), {scope: "land", radius: 16, stampCount: 10});
+const paintUnionSelection = composeHeightCellSelection(selectionMap, [3], {operation: "union", source: "paint", scope: "all", radius: 12, stampCount: 3, candidateCellIds: paintSelection.cellIds});
+const paintCompositionPreview = inspectHeightCellSelectionComposition(selectionMap, [3], {operation: "union", source: "paint", scope: "all", radius: 12, stampCount: 3, candidateCellIds: paintSelection.cellIds});
+assert(paintSelection.summary.valid && [...paintSelection.cellIds].join(",") === "0,1,2" && paintSelection.summary.heightRange.join(",") === "10,30" && paintSelection.summary.stampCount === 3, `画笔候选归一异常：${JSON.stringify(paintSelection.summary)}`);
+assert([...landPaintSelection.cellIds].join(",") === "1,2", `画笔候选没有遵守scope：${[...landPaintSelection.cellIds]}`);
+assert(!emptyPaintSelection.valid && emptyPaintSelection.notice.includes("没有命中"), `空画笔候选没有被拒绝：${JSON.stringify(emptyPaintSelection)}`);
+assert(!oversizedPaintSelection.valid && oversizedPaintSelection.maxCells === 64 && oversizedPaintSelection.notice.includes("安全上限"), `超大画笔候选没有被拒绝：${JSON.stringify(oversizedPaintSelection)}`);
+assert(paintUnionSelection.summary.valid && [...paintUnionSelection.cellIds].join(",") === "0,1,2,3" && paintUnionSelection.summary.source === "paint" && paintUnionSelection.summary.radius === 12 && paintUnionSelection.summary.stampCount === 3, `画笔候选并入异常：${JSON.stringify(paintUnionSelection.summary)}`);
+assert(!Object.hasOwn(paintCompositionPreview, "cellIds") && paintCompositionPreview.count === 4, "公开画笔组合摘要暴露 ids 或计数异常");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -361,6 +373,8 @@ console.log(JSON.stringify({
   exactConnectedSelection: exactConnectedSelection.summary,
   tolerantConnectedSelection: tolerantConnectedSelection.summary,
   connectedUnionSelection: connectedUnionSelection.summary,
+  paintSelection: paintSelection.summary,
+  paintUnionSelection: paintUnionSelection.summary,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

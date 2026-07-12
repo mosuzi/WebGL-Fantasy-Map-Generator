@@ -82,9 +82,9 @@
       @update:model-value="setTerrainSelectionSource"
     />
     <UiSliderField
-      v-if="state.terrainSelectionSource === 'cursor-circle'"
+      v-if="state.terrainSelectionSource === 'cursor-circle' || state.terrainSelectionSource === 'paint'"
       input-id="height-selection-radius"
-      label="圆形半径"
+      :label="state.terrainSelectionSource === 'paint' ? '选区笔刷半径' : '圆形半径'"
       :model-value="state.terrainSelectionRadius"
       :min="8"
       :max="160"
@@ -104,12 +104,14 @@
     <p v-if="state.terrainSelectionSource === 'cursor-circle'" class="height-action-help">把鼠标停在地图目标处，再返回面板执行选区组合；没有有效光标时使用当前画布中心，候选仍遵守作用范围。</p>
     <p v-else-if="state.terrainSelectionSource === 'rectangle'" class="height-action-help">先选择覆盖 / 并入 / 交集 / 排除，再在地图上依次单击矩形两个角。</p>
     <p v-else-if="state.terrainSelectionSource === 'connected-height'" class="height-action-help">先选择覆盖 / 并入 / 交集 / 排除，再在地图单击中心；沿共享边只扩张与起点高度差不超过容差的 cells。</p>
+    <p v-else-if="state.terrainSelectionSource === 'paint'" class="height-action-help">先选择布尔动作，再在地图按住并拖动；拖动中预览黄色结果，抬手后提交。</p>
     <div class="height-terrain-selection">
       <p v-if="state.terrainSelection?.valid">
         <i class="height-terrain-selection-swatch"></i>已锁定 {{ state.terrainSelection.count }} cells / 高度 {{ state.terrainSelection.heightRange?.join('..') }}
         <span v-if="state.terrainSelection.source === 'cursor-circle'">/ 圆心 #{{ state.terrainSelection.centerCell }} / 半径 {{ state.terrainSelection.radius }}</span>
         <span v-else-if="state.terrainSelection.source === 'rectangle'">/ 矩形 {{ state.terrainSelection.width }} × {{ state.terrainSelection.height }}</span>
         <span v-else-if="state.terrainSelection.source === 'connected-height'">/ 中心 #{{ state.terrainSelection.centerCell }} / 高度 {{ state.terrainSelection.startHeight }}±{{ state.terrainSelection.tolerance }}</span>
+        <span v-else-if="state.terrainSelection.source === 'paint'">/ 半径 {{ state.terrainSelection.radius }} / {{ state.terrainSelection.stampCount }} stamps</span>
         <span v-if="state.terrainSelection.rendererSelection">/ GPU {{ state.terrainSelection.rendererSelection.triangleCount }} triangles / {{ state.terrainSelection.rendererSelection.buildMs }} ms</span>
       </p>
       <p v-else>尚未锁定地形选区；锁定时使用当前作用范围和高度区间。</p>
@@ -554,7 +556,8 @@ const terrainSelectionSourceOptions = Object.freeze([
   {value: "height-band", label: "当前高度区间"},
   {value: "cursor-circle", label: "光标圆形"},
   {value: "rectangle", label: "矩形框选"},
-  {value: "connected-height", label: "连通等高区"}
+  {value: "connected-height", label: "连通等高区"},
+  {value: "paint", label: "画笔拖选"}
 ]);
 const transformOperandDefaults = Object.freeze({add: 5, subtract: 5, multiply: 0.9, divide: 1.1, exponent: 0.9});
 const heightmapFitOptions = Object.freeze([
@@ -851,7 +854,7 @@ function setRadius(radius) {
 }
 
 function setTerrainSelectionSource(source) {
-  props.state.terrainSelectionSource = source === "cursor-circle" || source === "rectangle" || source === "connected-height" ? source : "height-band";
+  props.state.terrainSelectionSource = source === "cursor-circle" || source === "rectangle" || source === "connected-height" || source === "paint" ? source : "height-band";
   props.callbacks.onTerrainSelectionCancel?.();
 }
 

@@ -26818,3 +26818,30 @@ full 矩阵结果：
 - 页面稳定后用每次实时 canvas rect 的同一归一位置 `(70%,30%)` 补验：容差 `0` 点击 `(1593,296)` 与容差 `2` 点击 `(1593,287)` 都命中 center `#3013`。A=`2 cells`、startHeight / range `84 / 84..84`、GPU `11 triangles`；B=`6 cells`、range `82..86`、GPU `35 triangles`，满足 `B>A`，黄色 / GPU 范围扩大。
 - 清除成功；高度影响仍为 `0`，历史 `undo 0 / redo 0`，无对象选择 UI、无 console error。现有页面 handoff，没有执行其它来源、并入 / 交集 / 排除、高度工具、笔刷或重算。
 - 最终烟测子智能体完成 4 项 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过。生产产物含 terrainSelectionPoint、单击中心提示、connected-height / tolerance、terrainHeightSelection 和 pending operation / source；无遗留进程。
+
+### 2026-07-12 画笔拖选高度选区
+
+背景：
+
+- 高度 band、圆形、矩形和连通等高区都已覆盖常见一次性构造，但用户仍不能沿曲折山脉、海岸或任意局部形状连续“涂”出选区。
+- 拖选过程需要实时地图反馈，但不能在每个 pointermove 就替换正式 runtime cellSet / summary；取消或超上限必须恢复旧黄色选区。
+
+实现：
+
+- `height-cell-selection.js` 新增 `createHeightPaintSelection()` / inspect，把运行时累计候选 ids 按 grid 去重、排序、scope 和统一 maxCells 归一；summary 仅含 source / scope / radius / stampCount / count / heightRange / maxCells。
+- compose 增加 paint source，仍共用 replace / union / intersect / subtract、空结果保护和最终 GPU commit。
+- runtime 新增 terrainSelectionPaintPending / terrainSelectionPaint。点击布尔按钮进入 pending；canvas pointerdown 捕获 pointer 并建立 candidate Set，pointermove 对不同 centerCell 调 cursor-circle stamp，只有 Set 实际增长才递增 stampCount 和重建 preview；pointerup commit，pointercancel restore。
+- 拖中 preview 只调用 renderer `setHeightCellSelection()`，不改正式 terrainSelection；panel 只显示 count / stamps / GPU notice。invalid / 超上限恢复旧 buffer，抬手不提交。
+- `cancelHeightLine()`、来源切换、清除、历史 / 工具切换、关闭编辑器和地图载入统一取消 pending / active；有限 snapshot 只含 active / operation / stampCount / candidateCount。
+- 面板来源新增“画笔拖选”，复用 height-selection-radius 并显示“选区笔刷半径”，帮助文案明确拖中预览、抬手提交，完成卡片显示 radius / stamps。
+
+直接验证：
+
+- `node --check` 覆盖选区模块、运行时、panel wrapper 和回归脚本；直接高度回归与 `git diff --check` 通过。
+- 合成候选 `[0,1,1,99,-1,2]` 归一为 `0/1/2`、heightRange `10..30`、stampCount `3`；land scope 为 `1/2`。
+- 空候选拒绝；`10×10` 的 `100` ids 超过 maxCells `64` 后拒绝。paint 候选并入旧 `3` 得到 `0/1/2/3`，summary radius / stamps 正确，公开 inspect 不含 cellIds。
+- 阶段末烟测子智能体完成选区模块、运行时、panel wrapper 和回归脚本 4 项 `node --check`，以及 `regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过。生产产物包含画笔拖选、选区笔刷半径、拖中预览 / 抬手提交文案、terrainSelectionPaintPending / active、candidateCount / stampCount、画笔预览 notice 和 renderer selection buffer 入口；构建仅有既有大 chunk 警告。
+- `restoreHeightTerrainSelectionBuffer` 函数名经生产压缩后不保留，烟测按源码确认 invalid / cancel 会重新上传旧 cellIds，或在无旧选区时清空 buffer。纯回归覆盖 ids 去重 / 坏 id、land scope、空候选、`100>64` 超大拒绝、paint 并入和公开摘要无 ids。
+- browser 语义接口仅提供原子 `drag({path})`，会连续完成 pointerdown / moves / pointerup，不能在保持按下时暂停读取 DOM / notice；子智能体因此拒绝伪造“抬手前”截图。拖中 preview 的直接浏览器证据缺失由源码中正式 state 未替换、renderer preview 调用、纯组合回归与产物字段共同覆盖，不把 final 结果冒充 preview。
+- 最终浏览器子智能体复用现有 `5410` 页面和连接，来源画笔拖选、scope 仅陆地、半径 `24`，执行 7 点原子 drag；抬手后正式选区 `57 cells / 7 stamps / GPU 343 triangles`，黄色 overlay 截图与 swatch 可见，限制开关开启。
+- 高度影响保持 `0`，历史 `undo 0 / redo 0`，无对象编辑 selection。清除后恢复“尚未锁定地形选区”，黄色 overlay、GPU 摘要和限制开关消失；console error 为 `0`，地图与面板稳定。未执行其它来源、并入 / 交集 / 排除、高度工具、历史或重算；页面 handoff，两名子智能体均已结束且无遗留进程。

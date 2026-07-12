@@ -215,6 +215,47 @@ export function inspectHeightConnectedSelection(map, centerCell, options = {}) {
   return createHeightConnectedSelection(map, centerCell, options).summary;
 }
 
+export function createHeightPaintSelection(map, candidateCellIds, options = {}) {
+  const heights = map?.grid?.cells?.h;
+  const scope = normalizeScope(options.scope);
+  const radius = normalizeRadius(options.radius, 32);
+  const stampCount = Math.max(0, Math.trunc(Number(options.stampCount) || 0));
+  const maxCells = heightSelectionMaxCells(heights?.length || 0);
+  const normalizedIds = normalizeCellIds(candidateCellIds, heights?.length || 0);
+  const base = {source: "paint", scope, radius, stampCount, maxCells, count: 0, heightRange: null, valid: false, notice: ""};
+  if (!heights?.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度数据，无法生成画笔选区。"}};
+
+  const cellIds = [];
+  let minHeight = Infinity;
+  let maxHeight = -Infinity;
+  for (const gridCell of normalizedIds) {
+    const height = Number(heights[gridCell]) || 0;
+    if (!matchesScope(height, scope)) continue;
+    cellIds.push(gridCell);
+    if (cellIds.length > maxCells) {
+      return {cellIds: new Uint32Array(), summary: {...base, notice: `画笔选区超过安全上限 ${maxCells} cells，已拒绝。`}};
+    }
+    minHeight = Math.min(minHeight, height);
+    maxHeight = Math.max(maxHeight, height);
+  }
+  if (!cellIds.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "画笔没有命中当前作用范围内的 cells。"}};
+  const typedIds = Uint32Array.from(cellIds);
+  return {
+    cellIds: typedIds,
+    summary: {
+      ...base,
+      count: typedIds.length,
+      heightRange: [minHeight, maxHeight],
+      valid: true,
+      notice: `画笔候选 ${typedIds.length} cells（${stampCount} stamps，半径 ${radius}）。`
+    }
+  };
+}
+
+export function inspectHeightPaintSelection(map, candidateCellIds, options = {}) {
+  return createHeightPaintSelection(map, candidateCellIds, options).summary;
+}
+
 export function composeHeightCellSelection(map, currentCellIds, options = {}) {
   const heights = map?.grid?.cells?.h;
   const operation = normalizeCompositionOperation(options.operation);
@@ -222,6 +263,8 @@ export function composeHeightCellSelection(map, currentCellIds, options = {}) {
   const source = normalizeSelectionSource(options.source);
   const candidate = source === "cursor-circle"
     ? createHeightCursorRadiusSelection(map, options.centerCell, options)
+    : source === "paint"
+      ? createHeightPaintSelection(map, options.candidateCellIds, options)
     : source === "connected-height"
       ? createHeightConnectedSelection(map, options.centerCell, options)
     : source === "rectangle"
@@ -243,6 +286,7 @@ export function composeHeightCellSelection(map, currentCellIds, options = {}) {
     height: candidate.summary.height ?? null,
     startHeight: candidate.summary.startHeight ?? null,
     tolerance: candidate.summary.tolerance ?? null,
+    stampCount: candidate.summary.stampCount ?? null,
     previousCount: currentIds.length,
     incomingCount: candidate.cellIds.length,
     count: currentIds.length,
@@ -331,7 +375,7 @@ function normalizeCompositionOperation(operation) {
 
 function normalizeSelectionSource(source) {
   if (source === undefined || source === null || source === "") return "height-band";
-  return source === "height-band" || source === "cursor-circle" || source === "rectangle" || source === "connected-height" ? source : null;
+  return source === "height-band" || source === "cursor-circle" || source === "rectangle" || source === "connected-height" || source === "paint" ? source : null;
 }
 
 function compositionOperationLabel(operation) {
