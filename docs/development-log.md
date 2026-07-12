@@ -26472,3 +26472,28 @@ full 矩阵结果：
 - 阶段末烟测子智能体确认 7 个目标文件 `node --check`、`regress:height-derived-rebuild`、`regress:height-brush`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check` 全部通过；pnpm 首次在沙箱内受 registry 网络限制失败，按规则升级后成功，构建只有既有大 chunk 警告。
 - 阶段末浏览器子智能体复用既有 `127.0.0.1:5410` 页面，未刷新、新开页面或启动 Chrome / 服务器 / Playwright。基础重算得到河流 `297 -> 259`、国家 `20 -> 20`、省份 `223 -> 192`，待派生 `9 项 -> 6 项`；下游严格按宗教、资源点 / 经济、外交、军事、地区执行，宗教 `18 -> 18`、资源点 `6 -> 10`、资源潜力 `84 -> 134`、外交关系 `190 -> 190`、战争 `0 -> 0`、军团 `97 -> 98`、地区 `3 -> 3`，待派生最终为“无”。console error 为 `0`；隔离作用域未能读取 `glError` 和单独经济交易数，7 条 health warn 均指向 React DevTools extension installHook URL。
 - 烟测与浏览器智能体均已结束；Chrome 控制会话已 finalize 释放，没有遗留浏览器、服务器或后台进程。
+
+### 2026-07-12 高度扰动笔刷与陆水范围限制
+
+背景：
+
+- 高度编辑器已有抬升、降低、平滑和整平，但缺少原版 Disrupt 对应的局部不规则塑形能力，规则山脊、丘陵和海床仍需要多次手工交替操作。
+- 现有动作没有陆水范围限制，制作海床时容易误伤陆地，修整山地时也可能同时改写近岸水域。
+
+实现：
+
+- `height-brush.js` 新增 `disrupt`：由 stroke seed、pointer 迭代序号和 grid cell 生成稳定有符号噪声，强度与中心衰减继续复用既有参数；同一输入可复现，连续拖动会推进扰动形态。
+- 高度编辑 stroke 新增单调 seed 和 iteration；加载新地图时 seed 归零，最终变化仍由既有 `createApplyHeightBrushCommand()` 提交，不新增历史类型。
+- 五种动作统一支持 `all / land / water` 范围；陆地以高度 `>= 20` 判断，候选 cell 一旦进入 stroke，后续使用 `originals` 中首次修改前高度判断资格，跨越海平面不会半途停笔。
+- 高度面板增加“扰动”动作、动作说明和“全部 / 仅陆地 / 仅水域”三段控件；运行时编辑器快照补充动作、范围、半径、强度和中心衰减，方便 API 与浏览器验收读取有限诊断。
+- 首次浏览器验收发现 Element Plus 分段控件的隐藏 radio / bridge 无法由浏览器控制面可靠触发；动作与范围因此改为原生可见 button。五个动作使用三列布局，范围单独使用三列布局，同时改善真实交互、键盘可达性和自动化验收稳定性。
+
+验证：
+
+- `node --check` 已覆盖 `height-brush.js`、`app.js`、高度 panel wrapper 和扩展回归脚本；直接高度笔刷回归通过。
+- 扰动 seed `17` 的四个 cell 结果为 `4 / 19 / 35 / 51`，同时包含抬升与降低；相同 seed / iteration 的结果完全一致。
+- 仅陆地命中 cells `1 / 2 / 3`，仅水域只命中 cell `0`；高度 `20` 的陆地 cell 首次降低到 `16` 后，同一 stroke 继续降低到 `12`，证明范围按首次修改前高度锁定。
+- 阶段末烟测子智能体确认 5 个目标文件 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check` 全部通过；最终构建成功产出 HeightPanel chunk，仅有既有大 chunk 提示。
+- 浏览器子智能体复用既有 `127.0.0.1:5410` 页面，没有刷新、新开页面或启动 Chrome / 服务器 / Playwright。原生可见动作 5 项与范围 3 项均唯一可点击；选择 `disrupt + land` 后有限快照为半径 `28`、强度 `4`、中心衰减开启。
+- 唯一短 stroke 影响 `10` cells，高度范围 `484 米 - 1,849 米`、平均变化 `+3,283 米`，待派生 `12` 项，历史 `undo 1 / redo 0`；撤销变为 `0 / 1`，重做恢复 `1 / 0`。操作后立即截图曾捕获瞬时黑区，随后在不刷新、不点击的静态稳定态复核中地图完整显示，证明不是持续视觉回归。
+- console error 为 `0`，仅保留一条来自 React DevTools extension hook 的 `main-thread-long-task` warn；隔离控制面没有提供 `glError`，按实际证据记录为未取得。烟测与浏览器智能体均已结束，Chrome 会话已 finalize 释放。

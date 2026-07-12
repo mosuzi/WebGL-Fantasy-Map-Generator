@@ -5,6 +5,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const panelState = reactive({
     active: false,
     action: "raise",
+    scope: "all",
     radius: 28,
     strength: 4,
     falloff: true,
@@ -89,6 +90,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       return {
         active: panelState.active,
         action: panelState.action,
+        scope: panelState.scope,
         radius: panelState.radius,
         strength: panelState.strength,
         falloff: panelState.falloff

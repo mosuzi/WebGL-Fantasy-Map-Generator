@@ -174,6 +174,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     editRefreshScheduler: null,
     heightEdit: {
       activeStroke: null,
+      strokeSeed: 0,
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none"
@@ -2392,6 +2393,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.pick = null;
   state.editHistory.clear();
   state.heightEdit.activeStroke = null;
+  state.heightEdit.strokeSeed = 0;
   state.heightEdit.lastAffected = 0;
   state.heightEdit.lastHeight = "none";
   state.heightEdit.lastDelta = "none";
@@ -6873,7 +6875,9 @@ function bindHeightEditing(canvas, state, documentRef) {
     event.stopImmediatePropagation();
     state.heightEdit.activeStroke = {
       pointerId: event.pointerId,
-      originals: new Map()
+      originals: new Map(),
+      seed: ++state.heightEdit.strokeSeed,
+      iteration: 0
     };
     capturePointer(canvas, event.pointerId);
     applyHeightBrushAtEvent(state, event, documentRef);
@@ -7974,6 +7978,11 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     editingObject: state.editingObject ? {...state.editingObject} : null,
     height: {
       active: Boolean(heightBrush.active),
+      action: heightBrush.action || "raise",
+      scope: heightBrush.scope || "all",
+      radius: Number(heightBrush.radius) || 0,
+      strength: Number(heightBrush.strength) || 0,
+      falloff: Boolean(heightBrush.falloff),
       lastAffected: state.heightEdit.lastAffected,
       lastHeight: state.heightEdit.lastHeight,
       lastDelta: state.heightEdit.lastDelta

@@ -983,6 +983,21 @@
    - 边界：与第 136 步集中在阶段末验收；不循环点击、不持续刷新，不新开或重启 Chrome，不启动新的开发服务器。
    - 完成记录：同一页面只执行一次下游重算，状态严格显示宗教、资源点 / 经济、外交、军事、地区完整成功链；宗教 `18 -> 18`、资源点 `6 -> 10`、资源潜力 `84 -> 134`、外交关系 `190 -> 190`、战争 `0 -> 0`、军团 `97 -> 98`、地区 `3 -> 3`，待派生最终为“无”。console error 为 `0`；隔离页面作用域不能读取 `glError` 和单独经济交易数，health 的 7 条 long-task / input-stall warn 均指向 React DevTools extension installHook URL，按实际证据保留而不误报为零。
 
+139. 高度局部扰动笔刷。`已完成`
+   - 目标：参考原版高度编辑器的 Disrupt 工具，为平滑地形补充可控的局部随机起伏，方便制作崎岖山地、丘陵和不规则海床。
+   - 边界：扰动必须在同一 stroke 内可复现并进入既有高度命令、撤销 / 重做和派生标脏链路；不使用无界随机日志，不新增独立历史类型。
+   - 完成记录：`height-brush.js` 新增 `disrupt` 动作，以 stroke seed、迭代序号和 grid cell 生成稳定有符号扰动；连续 pointer 事件会推进迭代，同一输入仍可由回归复现。面板动作增加“扰动”及说明，运行时编辑器快照公开当前动作、范围、半径、强度和衰减。
+
+140. 高度笔刷地形范围限制。`已完成`
+   - 目标：增加“全部 / 仅陆地 / 仅水域”范围，让抬升、降低、平滑、整平和扰动可以避开不希望修改的另一类地形。
+   - 边界：陆地按海平面高度 `20` 判断；同一 stroke 以 cell 首次修改前高度判断范围，避免跨越海平面后半途失去或获得资格。
+   - 完成记录：高度面板增加原生可见的三段范围按钮，wrapper 的 `getBrush()` 统一返回 `scope`；五种动作在收集候选 cell 时复用同一范围过滤。动作与范围最终使用真实 button，而不是依赖 Element Plus 隐藏 radio / bridge，键盘与浏览器控制都可直接触发。高度笔刷回归新增扰动复现、正负变化、陆水排除和陆地 cell 跨海平面后继续 stroke 的断言。
+
+141. 扰动与范围限制真实浏览器验收。`已完成`
+   - 目标：在可复用 FMG 页面中只执行一条短扰动 stroke，确认五种动作、三种范围、影响数、撤销 / 重做、待派生摘要和 WebGL / console / page / health。
+   - 边界：验收集中在阶段末；不持续拖动或刷新，不新开或重启 Chrome，不启动新的开发服务器。
+   - 完成记录：浏览器子智能体复用既有 `127.0.0.1:5410` 页面，原生动作 5 项和范围 3 项均唯一可点击；选择 `disrupt + land` 后有限快照为半径 `28`、强度 `4`、中心衰减开启。一条短 stroke 影响 `10` cells，高度 `484 米 - 1,849 米`、均变 `+3,283 米`，待派生 `12` 项，历史 `1 / 0`；撤销为 `0 / 1`，重做恢复 `1 / 0`。稳定态截图确认地图完整，无大片黑区；console error 为 `0`，仅有一条来自 React DevTools hook 的 long-task warn。隔离控制面未提供 `glError`，不误记为零。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -991,6 +1006,7 @@
 
 ### 本轮综合验证记录
 
+- 高度扰动与陆水范围批次完成：烟测子智能体执行的 5 个 `node --check`、高度笔刷回归、编辑命令 affected 回归、affected 摘要回归、`pnpm run build:app` 和 `git diff --check` 均通过；最终构建成功产出 HeightPanel chunk，仅有既有大 chunk 提示。第一次浏览器验收发现 Element Plus 隐藏 radio / bridge 无法由控制面可靠选择，随后改为原生可见按钮并重新构建；最终复用现有 `5410` 页面完成一条 `disrupt + land` stroke、撤销和重做，稳定态地图显示完整。浏览器未刷新、新开页面或启动 Chrome / 服务器 / Playwright，烟测与浏览器智能体均已结束并释放会话。
 - 高度下游派生顺序重算批次完成：烟测子智能体执行的 7 个 `node --check`、基础 / 下游顺序与短路回归、高度笔刷回归、affected 摘要回归、`pnpm run build:app` 和 `git diff --check` 均通过；pnpm 首次在沙箱内受 registry 网络限制失败，按规则升级后成功，构建只有既有大 chunk 警告。浏览器子智能体复用既有 `127.0.0.1:5410` 页面，未刷新、新开页面或启动 Chrome / 服务器 / Playwright；一次基础重算把待派生从 9 项降到 6 项，一次下游重算严格按 `religions -> markers / economy -> diplomacy -> military -> zones` 清为“无”。两名智能体均已结束，Chrome 控制会话已 finalize 释放。
 - `node --check app\webgl-generator\src\ui\panel-manager.js`、`node --check app\webgl-generator\src\ui\panels\object-details-panel.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel-list-preferences.js`、`node --check app\webgl-generator\src\ui\panels\river-panel.js` 均通过。
 - `git diff --check` 通过。

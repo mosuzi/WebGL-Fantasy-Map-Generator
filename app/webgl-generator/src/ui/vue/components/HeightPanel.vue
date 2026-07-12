@@ -5,8 +5,34 @@
     {{ state.active ? "停止高度编辑" : "启用高度编辑" }}
   </UiButton>
 
-  <UiSegmented class="height-action-group" label="高度编辑动作" :options="actions" :model-value="state.action" @select="setAction" />
+  <div class="segmented height-action-group" role="group" aria-label="高度编辑动作">
+    <button
+      v-for="action in actions"
+      :key="action.value"
+      type="button"
+      :class="{active: state.action === action.value}"
+      :data-mode="action.value"
+      @click="setAction(action.value)"
+    >
+      {{ action.label }}
+    </button>
+  </div>
   <p v-if="state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
+  <p v-else-if="state.action === 'disrupt'" class="height-action-help">按强度生成稳定的局部起伏，同一笔划连续拖动时会继续塑造崎岖地形。</p>
+
+  <p class="height-control-label">作用范围</p>
+  <div class="segmented height-scope-group" role="group" aria-label="高度笔刷作用范围">
+    <button
+      v-for="scope in scopes"
+      :key="scope.value"
+      type="button"
+      :class="{active: state.scope === scope.value}"
+      :data-mode="scope.value"
+      @click="setScope(scope.value)"
+    >
+      {{ scope.label }}
+    </button>
+  </div>
 
   <UiSliderField label="半径" :model-value="state.radius" :min="6" :max="96" :step="2" @input="setRadius" />
   <UiSliderField label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
@@ -359,7 +385,6 @@ import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
-import UiSegmented from "./base/UiSegmented.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
@@ -385,7 +410,13 @@ const actions = Object.freeze([
   {value: "raise", label: "抬升"},
   {value: "lower", label: "降低"},
   {value: "smooth", label: "平滑"},
-  {value: "flatten", label: "整平"}
+  {value: "flatten", label: "整平"},
+  {value: "disrupt", label: "扰动"}
+]);
+const scopes = Object.freeze([
+  {value: "all", label: "全部"},
+  {value: "land", label: "仅陆地"},
+  {value: "water", label: "仅水域"}
 ]);
 const heightmapFitOptions = Object.freeze([
   {value: "stretch", label: "拉伸铺满"},
@@ -662,6 +693,10 @@ function setActive(active) {
 
 function setAction(action) {
   props.state.action = action;
+}
+
+function setScope(scope) {
+  props.state.scope = scope;
 }
 
 function setRadius(radius) {

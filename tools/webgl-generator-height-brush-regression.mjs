@@ -37,6 +37,25 @@ assert(raise.map(change => change.after).join(",") === "14,24,34", `抬升兼容
 const smooth = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "smooth", radius: 10, strength: 4, falloff: true}, {originals: new Map()});
 assert(smooth.map(change => change.after).join(",") === "14,26", `平滑兼容结果异常：${smooth.map(change => change.after)}`);
 
+const disruptStroke = {originals: new Map(), seed: 17, iteration: 0};
+const disrupt = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "disrupt", scope: "all", radius: 25, strength: 8, falloff: false}, disruptStroke);
+const repeatedDisrupt = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "disrupt", scope: "all", radius: 25, strength: 8, falloff: false}, {originals: new Map(), seed: 17, iteration: 0});
+assert(JSON.stringify(disrupt) === JSON.stringify(repeatedDisrupt), "相同 seed 的扰动结果不可复现");
+assert(disruptStroke.iteration === 1, `扰动迭代没有推进：${disruptStroke.iteration}`);
+assert(disrupt.some(change => change.after > change.before) && disrupt.some(change => change.after < change.before), "扰动没有同时产生局部抬升和降低");
+
+const landScope = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "raise", scope: "land", radius: 25, strength: 4, falloff: false}, {originals: new Map()});
+assert(landScope.map(change => change.gridCell).join(",") === "1,2,3", `仅陆地范围包含了水域：${landScope.map(change => change.gridCell)}`);
+const waterScope = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "lower", scope: "water", radius: 25, strength: 4, falloff: false}, {originals: new Map()});
+assert(waterScope.map(change => change.gridCell).join(",") === "0", `仅水域范围包含了陆地：${waterScope.map(change => change.gridCell)}`);
+
+const stableScopeMap = createSyntheticMap();
+const stableScopeStroke = {originals: new Map()};
+const crossSeaLevel = getHeightBrushChanges(stableScopeMap, {x: 10, y: 0}, {action: "lower", scope: "land", radius: 1, strength: 4, falloff: false}, stableScopeStroke);
+applyHeightBrushPreview(stableScopeMap, crossSeaLevel);
+const continuedBelowSeaLevel = getHeightBrushChanges(stableScopeMap, {x: 10, y: 0}, {action: "lower", scope: "land", radius: 1, strength: 4, falloff: false}, stableScopeStroke);
+assert(continuedBelowSeaLevel[0]?.gridCell === 1 && continuedBelowSeaLevel[0]?.after === 12, "陆地 cell 跨海平面后没有按首次修改前高度继续 stroke");
+
 console.log(JSON.stringify({
   ok: true,
   targetHeight: stroke.targetHeight,
@@ -45,6 +64,10 @@ console.log(JSON.stringify({
   falloffEdgeChanged: falloff.some(change => change.gridCell === 3),
   raiseAfter: raise.map(change => change.after),
   smoothAfter: smooth.map(change => change.after),
+  disruptAfter: disrupt.map(change => change.after),
+  landScope: landScope.map(change => change.gridCell),
+  waterScope: waterScope.map(change => change.gridCell),
+  continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   history: history.getStats()
 }, null, 2));
 

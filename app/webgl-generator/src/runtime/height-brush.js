@@ -6,10 +6,13 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
 
   const radius = Math.max(1, Number(brush?.radius) || 1);
   const radiusSq = radius * radius;
+  const scope = normalizeBrushScope(brush?.scope);
   const affected = [];
   let nearest = null;
 
   for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+    const scopeHeight = originals.has(gridCell) ? originals.get(gridCell) : cells.h[gridCell];
+    if (!matchesBrushScope(scopeHeight, scope)) continue;
     const cellPoint = points[cells.p[gridCell]];
     if (!cellPoint) continue;
     const dx = cellPoint[0] - point.x;
@@ -39,10 +42,38 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
       return heightChange(cells, originals, gridCell, current + step);
     }).filter(Boolean);
   }
+  if (brush.action === "disrupt") {
+    const strength = Math.max(1, Number(brush.strength) || 1);
+    const seed = Number.isFinite(stroke.seed) ? Math.trunc(stroke.seed) : 0;
+    const iteration = Math.max(0, Math.trunc(Number(stroke.iteration) || 0));
+    stroke.iteration = iteration + 1;
+    return affected.map(({gridCell, factor}) => {
+      const delta = stableSignedNoise(gridCell, seed, iteration) * strength * factor;
+      return heightChange(cells, originals, gridCell, cells.h[gridCell] + delta);
+    }).filter(Boolean);
+  }
 
   const strength = Math.max(1, Number(brush.strength) || 1);
   const delta = brush.action === "lower" ? -strength : strength;
   return affected.map(({gridCell, factor}) => heightChange(cells, originals, gridCell, cells.h[gridCell] + delta * factor)).filter(Boolean);
+}
+
+function normalizeBrushScope(scope) {
+  return scope === "land" || scope === "water" ? scope : "all";
+}
+
+function matchesBrushScope(height, scope) {
+  if (scope === "land") return height >= 20;
+  if (scope === "water") return height < 20;
+  return true;
+}
+
+function stableSignedNoise(gridCell, seed, iteration) {
+  let value = Math.imul(gridCell + 1, 0x9e3779b1) ^ Math.imul(seed + 1, 0x85ebca6b) ^ Math.imul(iteration + 1, 0xc2b2ae35);
+  value = Math.imul(value ^ (value >>> 16), 0x7feb352d);
+  value = Math.imul(value ^ (value >>> 15), 0x846ca68b);
+  value = (value ^ (value >>> 16)) >>> 0;
+  return value / 0xffffffff * 2 - 1;
 }
 
 function heightChange(cells, originals, gridCell, nextValue) {
