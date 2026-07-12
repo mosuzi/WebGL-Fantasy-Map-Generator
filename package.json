@@ -34,6 +34,7 @@
     "regress:edit-command-affected": "node --no-warnings ./tools/webgl-generator-edit-command-affected-regression.mjs",
     "regress:affected-summary": "node --no-warnings ./tools/webgl-generator-affected-summary-regression.mjs",
     "regress:history-peek-summary": "node --no-warnings ./tools/webgl-generator-history-peek-summary-regression.mjs",
+    "regress:height-brush": "node --no-warnings ./tools/webgl-generator-height-brush-regression.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:api-geo": "node ./tools/webgl-generator-api-geo-regression.mjs",

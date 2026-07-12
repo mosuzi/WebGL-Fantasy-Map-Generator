@@ -26404,3 +26404,26 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：8 个目标文件 `node --check` 全过；历史摘要回归确认内部完整 affected 1001 项、默认公开预览 3 项、自定义 5 项、peek 852 字节、stats 389 字节，limit 0 / 51 与非对象 options 边界均有断言；affected 摘要回归为 1001 目标 239 字节，编辑命令 affected 回归通过；`pnpm run build:app` 构建 1116 modules、耗时 1.24 秒；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有可复用 FMG 页面；已 finalize 释放。未 claim、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright，`history.get / stats / peek`、面板摘要、撤销、checksum 与 WebGL / console / page / health 验收继续列入第 132 步。
+
+### 2026-07-12 高度编辑局部整平笔刷
+
+背景：
+
+- 高度编辑已有抬升、降低和平滑，但缺少以指定局部高度塑造平台或削平山谷 / 山脊的工具；编辑器清单仍把“局部地形工具”列为主要缺口。
+- 原笔刷计算内嵌在 `app.js`，只能依赖浏览器间接验证，不利于固定连续 stroke 的目标锁定、衰减与命令结果。
+
+实现：
+
+- 新增 `runtime/height-brush.js`，集中范围扫描、中心衰减、抬升、降低、平滑、高度钳制和变化对象构造；`app.js` 只负责指针生命周期、预览应用和命令提交。
+- 新增 `flatten` 动作：首次命中最近 grid cell 时锁定 `stroke.targetHeight`，同一 stroke 后续移动仍朝该高度渐进；每次变化步长不超过 `strength × falloff`，防止一次把陡峭地形硬切平。
+- `heightChange()` 过滤当前高度未变化的项，平滑中心和衰减为零的边缘不再增加影响计数或 originals。
+- 高度面板的 segmented 扩展为四列“抬升 / 降低 / 平滑 / 整平”，选择整平时显示落笔目标说明。
+- 新增 `tools/webgl-generator-height-brush-regression.mjs` 与 `pnpm run regress:height-brush`。
+
+验证：
+
+- `node --check` 覆盖 `height-brush.js`、`app.js` 和新回归脚本；直接回归通过：落笔目标为 `20`，首次把 `10 / 30 / 50` 渐进到 `14 / 26 / 46`，继续拖动时 cell 3 到 `42` 且目标不变；衰减为零边缘未进入变化数组。
+- 抬升兼容结果为 `14 / 24 / 34`，平滑去除不变中心后为 `14 / 26`；整平命令进入 `domain=height`，撤销恢复 grid / pack `10 / 20 / 30 / 50`，重做恢复 `14 / 20 / 26 / 46`。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；高度笔刷回归确认目标 `20`、连续拖动 cell 3 到 `42`、衰减边缘无变化过滤、撤销 / 重做与 `height` domain；编辑命令 affected 兼容回归和 1001 目标 239 字节摘要回归通过；`pnpm run build:app` 构建 1117 modules，HeightPanel 38.44 kB / gzip 12.97 kB，主包 1129.84 kB / gzip 327.98 kB，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有可复用 FMG 页面；已 finalize 释放且无遗留浏览器资源。未 claim、刷新或新开页面，未启动 Chrome、开发服务器或 Playwright，四段动作、整平说明、短 stroke、历史 / 派生与 WebGL / console / page / health 验收继续列入第 134 步。

@@ -2697,10 +2697,17 @@ select:disabled {
 
 .height-action-group .el-segmented__group {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   overflow: visible;
   padding: 6px;
+}
+
+.height-action-help {
+  margin: -4px 0 10px;
+  color: #9eacb4;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .height-action-group .el-segmented__item {

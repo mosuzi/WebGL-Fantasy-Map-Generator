@@ -52,6 +52,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
+import {getHeightBrushChanges} from "./height-brush.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
@@ -7345,7 +7346,7 @@ function applyHeightBrushAtEvent(state, event) {
   if (!brush.active || !stroke) return;
 
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
-  const changes = getHeightBrushChanges(state.map, point, brush, stroke.originals);
+  const changes = getHeightBrushChanges(state.map, point, brush, stroke);
   if (!changes.length) return;
 
   applyHeightBrushPreview(state.map, changes);
@@ -7454,33 +7455,6 @@ function finishProvinceStroke(state, documentRef) {
   });
 }
 
-function getHeightBrushChanges(map, point, brush, originals) {
-  const radiusSq = brush.radius * brush.radius;
-  const affected = [];
-  const cells = map.grid.cells;
-
-  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
-    const cellPoint = map.grid.points[cells.p[gridCell]];
-    if (!cellPoint) continue;
-    const dx = cellPoint[0] - point.x;
-    const dy = cellPoint[1] - point.y;
-    const distanceSq = dx * dx + dy * dy;
-    if (distanceSq > radiusSq) continue;
-    const distance = Math.sqrt(distanceSq);
-    const factor = brush.falloff && brush.action !== "smooth" ? brushFalloff(distance, brush.radius) : 1;
-    affected.push({gridCell, factor});
-  }
-
-  if (!affected.length) return [];
-  if (brush.action === "smooth") {
-    const average = affected.reduce((sum, item) => sum + cells.h[item.gridCell], 0) / affected.length;
-    return affected.map(({gridCell}) => heightChange(cells, originals, gridCell, cells.h[gridCell] * 0.62 + average * 0.38));
-  }
-
-  const delta = brush.action === "lower" ? -brush.strength : brush.strength;
-  return affected.map(({gridCell, factor}) => heightChange(cells, originals, gridCell, cells.h[gridCell] + delta * factor));
-}
-
 function getStateBrushChanges(map, point, brush, originals) {
   const radiusSq = brush.radius * brush.radius;
   const affected = [];
@@ -7521,15 +7495,6 @@ function getProvinceBrushChanges(map, point, brush, originals) {
   }
 
   return affected;
-}
-
-function heightChange(cells, originals, gridCell, nextValue) {
-  if (!originals.has(gridCell)) originals.set(gridCell, cells.h[gridCell]);
-  return {
-    gridCell,
-    before: originals.get(gridCell),
-    after: clampHeight(nextValue)
-  };
 }
 
 function stateChange(cells, originals, gridCell, nextValue) {
@@ -8018,17 +7983,6 @@ function summarizeChangedHeightDelta(changes) {
   const average = changes.reduce((sum, change) => sum + change.after - change.before, 0) / changes.length;
   const rounded = Math.round(average * 10) / 10;
   return rounded > 0 ? `+${rounded}` : String(rounded);
-}
-
-function brushFalloff(distance, radius) {
-  const t = Math.max(0, Math.min(1, 1 - distance / Math.max(1, radius)));
-  return t * t * (3 - 2 * t);
-}
-
-function clampHeight(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
 function capturePointer(element, pointerId) {

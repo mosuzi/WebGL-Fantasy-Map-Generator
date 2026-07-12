@@ -954,6 +954,15 @@
    - 目标：在可复用 FMG 页面存在时验证默认与 `affectedLimit=5` 的 get / stats、面板标题历史摘要、撤销 / 重做以及 checksum / WebGL / console / page / health。
    - 边界：与第 130 步合并执行；不请求超过 50 项，不重复转储完整 runtime snapshot。
 
+133. 高度编辑局部整平笔刷。`已完成`
+   - 目标：补充第一种真正的局部地形塑形工具，让用户能以落笔点高度为基准逐步整平山地、谷地或建设平台。
+   - 边界：目标高度在每次 pointer stroke 开始时锁定，拖动中不随最近 cell 改变；继续复用现有强度、半径、中心衰减、预览、命令提交、派生标脏和撤销 / 重做，不新增独立历史类型。
+   - 完成记录：新增纯运行时 `height-brush.js`，从 `app.js` 抽出抬升、降低、平滑和衰减计算；新增 `flatten` 动作，按 `min(高度差, 强度 × 衰减)` 向落笔起点高度渐进靠拢。高度面板增加“整平”第四段和说明；无实际高度变化的中心 / 边缘 cell 不再计入预览与最终命令。新增 `pnpm run regress:height-brush`，覆盖目标锁定、连续拖动、衰减边缘、旧动作兼容及 grid / pack 撤销重做。
+
+134. 整平笔刷真实浏览器验收。`待执行`
+   - 目标：在可复用 FMG 页面存在时验证四段动作布局、整平说明、落笔目标锁定、拖动预览、影响数、撤销 / 重做、待派生摘要与 WebGL / console / page / health。
+   - 边界：只执行一条短 stroke，不持续拖动或刷新；继续复用现成页面和服务器，不新开或重启 Chrome。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -976,6 +985,7 @@
 - 有界 affected 结构化诊断批次完成：烟测子智能体执行的 6 个 `node --check`、三组回归、`pnpm run build:app` 和 `git diff --check` 均通过；1001 目标摘要为 239 字节，构建 1115 modules、1.44 秒，入口 1128.58 kB / gzip 327.43 kB，仅有既有大 chunk 警告。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放，未认领、刷新或新开页面，未启动 Chrome、服务器或 Playwright，第 128 步 runtime stats 验收继续待执行。
 - history.peek 有界 affected 批次完成：烟测子智能体执行的 7 个 `node --check`、三组回归、`pnpm run build:app` 和 `git diff --check` 均通过；1001 目标默认预览 3 项、结果 852 字节，自定义 5 项与非法参数边界均通过，构建 1116 modules、1.63 秒，仅有既有大 chunk 警告。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放，未 claim、刷新或新建页面，未启动 Chrome、服务器或 Playwright，第 130 步真实 API 验收继续待执行。
 - history stats 有界 lastAffected 批次完成：烟测子智能体执行的 8 个 `node --check`、三组回归、`pnpm run build:app` 和 `git diff --check` 均通过；内部完整目标 1001 项、默认公开预览 3 项、stats 389 字节，自定义 5 项及非法参数边界均通过，构建 1116 modules、1.24 秒。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放，未 claim、刷新或新建页面，未启动 Chrome、服务器或 Playwright，第 132 步真实 API / 面板验收继续待执行。
+- 高度整平笔刷批次完成：烟测子智能体执行的 6 个 `node --check`、高度笔刷回归、编辑命令 affected 兼容回归、摘要负载回归、`pnpm run build:app` 和 `git diff --check` 均通过；整平目标 `20`、连续拖动 cell 3 到 `42`、无变化边缘过滤、撤销 / 重做和 `height` domain 均符合预期，构建 1117 modules，HeightPanel 38.44 kB / gzip 12.97 kB，仅有既有大 chunk 警告。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放且无遗留资源，未 claim、刷新、新开页面或启动 Chrome / 服务器 / Playwright，第 134 步交互验收继续待执行。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。

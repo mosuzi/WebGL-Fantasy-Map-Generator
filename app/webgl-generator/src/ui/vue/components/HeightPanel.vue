@@ -6,6 +6,7 @@
   </UiButton>
 
   <UiSegmented class="height-action-group" label="高度编辑动作" :options="actions" :model-value="state.action" @select="setAction" />
+  <p v-if="state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
 
   <UiSliderField label="半径" :model-value="state.radius" :min="6" :max="96" :step="2" @input="setRadius" />
   <UiSliderField label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
@@ -381,7 +382,8 @@ const props = defineProps({
 const actions = Object.freeze([
   {value: "raise", label: "抬升"},
   {value: "lower", label: "降低"},
-  {value: "smooth", label: "平滑"}
+  {value: "smooth", label: "平滑"},
+  {value: "flatten", label: "整平"}
 ]);
 const heightmapFitOptions = Object.freeze([
   {value: "stretch", label: "拉伸铺满"},
