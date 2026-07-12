@@ -17,6 +17,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     transformOperand: 0.9,
     transformPreview: null,
     globalToolPreview: null,
+    terrainSelection: null,
+    useTerrainSelection: false,
     falloff: true,
     lastAffected: 0,
     lastHeight: "none",
@@ -40,6 +42,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
     onConditionalTransformApply: () => callbacks.onConditionalTransformApply?.(),
     onConditionalTransformChange: () => callbacks.onConditionalTransformChange?.(),
+    onTerrainSelectionLock: () => callbacks.onTerrainSelectionLock?.(),
+    onTerrainSelectionClear: () => callbacks.onTerrainSelectionClear?.(),
+    onTerrainSelectionUseChange: value => callbacks.onTerrainSelectionUseChange?.(value),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
     onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()
@@ -97,6 +102,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       fillPreview = panelState.fillPreview,
       transformPreview = panelState.transformPreview,
       globalToolPreview = panelState.globalToolPreview,
+      terrainSelection = panelState.terrainSelection,
+      useTerrainSelection = panelState.useTerrainSelection,
       graphWidth = panelState.graphWidth,
       graphHeight = panelState.graphHeight,
       currentHeightStats = panelState.currentHeightStats,
@@ -111,6 +118,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
       panelState.transformPreview = cloneTransformPreview(transformPreview);
       panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
+      panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
+      panelState.useTerrainSelection = Boolean(useTerrainSelection && terrainSelection?.valid);
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;
       panelState.currentHeightStats = currentHeightStats;
@@ -143,6 +152,12 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     getGlobalToolPreview() {
       return cloneTransformPreview(panelState.globalToolPreview);
     },
+    getTerrainSelectionSnapshot() {
+      return {
+        selection: cloneTerrainSelection(panelState.terrainSelection),
+        useForTools: Boolean(panelState.useTerrainSelection && panelState.terrainSelection?.valid)
+      };
+    },
     updateFillPreview(fillPreview) {
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
     },
@@ -151,6 +166,10 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     },
     updateGlobalToolPreview(globalToolPreview) {
       panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
+    },
+    updateTerrainSelection(terrainSelection, useForTools = panelState.useTerrainSelection) {
+      panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
+      panelState.useTerrainSelection = Boolean(useForTools && terrainSelection?.valid);
     },
     setActive(active) {
       panelState.active = active;
@@ -166,5 +185,14 @@ function cloneTransformPreview(preview) {
   return {
     ...preview,
     rendererPreview: preview.rendererPreview ? {...preview.rendererPreview} : null
+  };
+}
+
+function cloneTerrainSelection(selection) {
+  if (!selection) return null;
+  return {
+    ...selection,
+    heightRange: Array.isArray(selection.heightRange) ? [...selection.heightRange] : null,
+    rendererSelection: selection.rendererSelection ? {...selection.rendererSelection} : null
   };
 }

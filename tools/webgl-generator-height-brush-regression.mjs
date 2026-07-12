@@ -2,7 +2,8 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
+import {createHeightCellSelection, createHeightCellSelectionSet, inspectHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
 const stroke = {originals: new Map()};
@@ -129,6 +130,27 @@ assert(previewMesh.stats.vertexCount === 24 && previewMesh.stats.triangleCount =
 assert(previewMesh.vertices[2] === 1 && previewMesh.vertices[4] < 0.1, "升高预览没有使用暖色");
 assert(previewMesh.vertices[74] < 0.1 && previewMesh.vertices[76] === 1, "降低预览没有使用冷色");
 assert(buildHeightTransformPreviewMesh({}, multiplyChanges).stats.vertexCount === 0, "坏地图仍生成了空间预览 mesh");
+
+const terrainSelection = createHeightCellSelection(createSyntheticMap(), {scope: "land", lower: 20, upper: 30});
+const terrainSelectionPreview = inspectHeightCellSelection(createSyntheticMap(), {scope: "land", lower: 20, upper: 30});
+const terrainSelectionSet = createHeightCellSelectionSet(terrainSelection.cellIds);
+assert(terrainSelection.summary.valid && [...terrainSelection.cellIds].join(",") === "1,2" && terrainSelection.summary.heightRange.join(",") === "20,30", `地形选区异常：${JSON.stringify(terrainSelection.summary)}`);
+assert(!Object.hasOwn(terrainSelectionPreview, "cellIds") && terrainSelectionPreview.count === 2, "公开地形选区摘要暴露了 cellIds 或计数异常");
+assert(!inspectHeightCellSelection(createSyntheticMap(), {scope: "water", lower: 15, upper: 19}).valid, "空水域选区未被拒绝");
+assert(inspectHeightCellSelection(createSyntheticMap(), {scope: "all", lower: 80, upper: 20}).notice.includes("下限"), "倒置地形选区未被拒绝");
+const selectedRangePreview = inspectHeightRangeTransform(createSyntheticMap(), {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 0.5, allowedCells: terrainSelectionSet});
+const selectedRangeChanges = getHeightRangeTransformChanges(createSyntheticMap(), {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 0.5, allowedCells: terrainSelectionSet});
+assert(selectedRangePreview.selectionLimited && selectedRangePreview.selectedCount === 2 && selectedRangePreview.changeCount === 1, `条件变换没有受锁定选区约束：${JSON.stringify(selectedRangePreview)}`);
+assertChanges(selectedRangeChanges, [{gridCell: 2, before: 30, after: 25}], "锁定选区条件乘算");
+const selectedGlobalMap = createSquareMap(3, (x, y) => x === 1 && y === 1 ? 80 : Math.abs(x - 1) + Math.abs(y - 1) === 1 ? 20 : 10);
+const selectedGlobalPreview = inspectGlobalHeightChanges(selectedGlobalMap, {action: "smooth", scope: "land", allowedCells: new Set([4])});
+const selectedGlobalChanges = getGlobalHeightChanges(selectedGlobalMap, {action: "smooth", scope: "land", allowedCells: new Set([4])});
+assert(selectedGlobalPreview.selectionLimited && selectedGlobalPreview.selectedCount === 1 && selectedGlobalPreview.changeCount === 1, `全局工具没有受锁定选区约束：${JSON.stringify(selectedGlobalPreview)}`);
+assertChanges(selectedGlobalChanges, [{gridCell: 4, before: 80, after: 65}], "锁定选区全局平滑");
+const terrainSelectionMesh = buildHeightCellSelectionMesh(createTransformPreviewMap(), [0, 1, 2, 0]);
+assert(terrainSelectionMesh.stats.cells === 2 && terrainSelectionMesh.stats.skippedCells === 2 && terrainSelectionMesh.stats.vertexCount === 24 && terrainSelectionMesh.stats.triangleCount === 8, `地形选区 mesh 异常：${JSON.stringify(terrainSelectionMesh.stats)}`);
+assert(terrainSelectionMesh.vertices[2] === 1 && terrainSelectionMesh.vertices[3] > 0.77 && terrainSelectionMesh.vertices[4] > 0.17, "地形选区没有使用黄色 overlay");
+assert(terrainSelectionSet.has(1) && terrainSelectionSet.has(2), "地形选区 Set 丢失稳定 grid id");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -257,6 +279,10 @@ console.log(JSON.stringify({
   invalidDivideNotice: invalidDivide.notice,
   rangeHistory: rangeHistory.getStats(),
   previewMesh: previewMesh.stats,
+  terrainSelection: terrainSelection.summary,
+  selectedRangePreview,
+  selectedGlobalPreview,
+  terrainSelectionMesh: terrainSelectionMesh.stats,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

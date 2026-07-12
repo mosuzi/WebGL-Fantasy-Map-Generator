@@ -116,8 +116,8 @@ export function inspectHeightFillTarget(map, gridCell, brush = {}) {
   return summary;
 }
 
-export function getGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0} = {}) {
-  return analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed}).changes;
+export function getGlobalHeightChanges(map, options = {}) {
+  return analyzeGlobalHeightChanges(map, options).changes;
 }
 
 export function inspectGlobalHeightChanges(map, options = {}) {
@@ -125,11 +125,12 @@ export function inspectGlobalHeightChanges(map, options = {}) {
   return summary;
 }
 
-function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0} = {}) {
+function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0, allowedCells = null} = {}) {
   const cells = map?.grid?.cells;
   const scope = normalizeBrushScope(scopeValue);
   const normalizedSeed = Math.trunc(Number(seed) || 0);
-  const base = {action: action || "", scope, seed: normalizedSeed, selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
+  const allowedCellSet = normalizeAllowedCells(allowedCells);
+  const base = {action: action || "", scope, seed: normalizedSeed, selectionLimited: Boolean(allowedCellSet), selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
   if (!cells?.h || !Array.isArray(cells.c)) return {...base, notice: "当前地图缺少高度或邻接数据，无法预览全局工具。"};
   if (action !== "smooth" && action !== "disrupt") return {...base, notice: "未知的全局高度工具。"};
   const heights = Array.from(cells.h, value => Number(value) || 0);
@@ -144,6 +145,7 @@ function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0} =
   let deltaSum = 0;
 
   for (let gridCell = 0; gridCell < heights.length; gridCell++) {
+    if (allowedCellSet && !allowedCellSet.has(gridCell)) continue;
     const before = heights[gridCell];
     if (!matchesBrushScope(before, scope)) continue;
     selectedCount += 1;
@@ -204,7 +206,8 @@ function analyzeHeightRangeTransform(map, options) {
   const upper = normalizeRangeBound(options?.upper, 100);
   const operator = String(options?.operator || "multiply");
   const operand = Number(options?.operand);
-  const base = {scope, lower, upper, operator, operand, selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
+  const allowedCellSet = normalizeAllowedCells(options?.allowedCells);
+  const base = {scope, lower, upper, operator, operand, selectionLimited: Boolean(allowedCellSet), selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
   if (!heights?.length) return {...base, notice: "当前地图缺少高度数据，无法预检条件变换。"};
   if (lower > upper) return {...base, notice: "高度区间下限不能高于上限。"};
   const validationError = validateHeightRangeOperation(operator, operand);
@@ -220,6 +223,7 @@ function analyzeHeightRangeTransform(map, options) {
   let loweredCount = 0;
   const changes = [];
   for (let gridCell = 0; gridCell < heights.length; gridCell++) {
+    if (allowedCellSet && !allowedCellSet.has(gridCell)) continue;
     const before = Number(heights[gridCell]) || 0;
     if (!matchesBrushScope(before, scope) || before < lower || before > upper) continue;
     selectedCount += 1;
@@ -476,4 +480,10 @@ function clampHeightToScope(value, scope) {
   if (scope === "land") return Math.max(20, height);
   if (scope === "water") return Math.min(19, height);
   return height;
+}
+
+function normalizeAllowedCells(value) {
+  if (value instanceof Set) return value;
+  if (Array.isArray(value) || ArrayBuffer.isView(value)) return new Set(value);
+  return null;
 }

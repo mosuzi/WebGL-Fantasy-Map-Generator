@@ -5,7 +5,7 @@ import {isLandCell} from "./color-modes.js";
 import {politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshVertices, selectionHighlightMode} from "./selection-layer.js";
-import {buildHeightTransformPreviewMesh, emptyHeightTransformPreviewStats} from "./height-transform-preview-layer.js";
+import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh, emptyHeightCellSelectionStats, emptyHeightTransformPreviewStats} from "./height-transform-preview-layer.js";
 import {pushZoneTextureLayer} from "./zone-layer.js";
 import {
   pushScreenPolyline,
@@ -142,6 +142,7 @@ export class PlaceholderMapRenderer {
     this.riverBuffer = this.gl.createBuffer();
     this.selectionBuffer = this.gl.createBuffer();
     this.heightTransformPreviewBuffer = this.gl.createBuffer();
+    this.heightCellSelectionBuffer = this.gl.createBuffer();
     this.lineBuffer = this.gl.createBuffer();
     this.pointBuffer = this.gl.createBuffer();
     this.politicalMeshDebugBuffer = this.gl.createBuffer();
@@ -154,6 +155,9 @@ export class PlaceholderMapRenderer {
     this.heightTransformPreviewVertexCount = 0;
     this.heightTransformPreviewBuildMs = 0;
     this.heightTransformPreviewStats = emptyHeightTransformPreviewStats();
+    this.heightCellSelectionVertexCount = 0;
+    this.heightCellSelectionBuildMs = 0;
+    this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.lineVertexCount = 0;
     this.pointVertexCount = 0;
     this.politicalMeshDebugMode = "none";
@@ -268,6 +272,9 @@ export class PlaceholderMapRenderer {
     this.heightTransformPreviewVertexCount = 0;
     this.heightTransformPreviewBuildMs = 0;
     this.heightTransformPreviewStats = emptyHeightTransformPreviewStats();
+    this.heightCellSelectionVertexCount = 0;
+    this.heightCellSelectionBuildMs = 0;
+    this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
@@ -282,6 +289,8 @@ export class PlaceholderMapRenderer {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightTransformPreviewBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
@@ -341,6 +350,9 @@ export class PlaceholderMapRenderer {
     this.heightTransformPreviewVertexCount = 0;
     this.heightTransformPreviewBuildMs = 0;
     this.heightTransformPreviewStats = emptyHeightTransformPreviewStats();
+    this.heightCellSelectionVertexCount = 0;
+    this.heightCellSelectionBuildMs = 0;
+    this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     await stage("gpu-upload", "上传静态 GPU buffer", () => {
@@ -355,6 +367,8 @@ export class PlaceholderMapRenderer {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightTransformPreviewBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
@@ -630,6 +644,16 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    if (this.heightCellSelectionVertexCount > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
+      gl.uniform1f(this.locations.scale, this.camera.scale);
+      gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
+      bindVertexBuffer(gl, this.locations);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArrays(gl.TRIANGLES, 0, this.heightCellSelectionVertexCount);
+      gl.disable(gl.BLEND);
+    }
     if (this.heightTransformPreviewVertexCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.heightTransformPreviewBuffer);
       gl.uniform1f(this.locations.scale, this.camera.scale);
@@ -729,6 +753,10 @@ export class PlaceholderMapRenderer {
       heightTransformPreview: {
         ...this.heightTransformPreviewStats,
         buildMs: this.heightTransformPreviewBuildMs
+      },
+      heightCellSelection: {
+        ...this.heightCellSelectionStats,
+        buildMs: this.heightCellSelectionBuildMs
       },
       objectHighlightCount: this.objectHighlights.length,
       objectHighlights: this.objectHighlights.map(summarizeObjectHighlight),
@@ -1039,6 +1067,25 @@ export class PlaceholderMapRenderer {
       return {...this.heightTransformPreviewStats, buildMs: this.heightTransformPreviewBuildMs};
     }
     return this.setHeightTransformPreview([], options);
+  }
+
+  setHeightCellSelection(cellIds, {draw = true} = {}) {
+    const startedAt = performance.now();
+    const {vertices, stats} = buildHeightCellSelectionMesh(this.map, cellIds);
+    this.heightCellSelectionVertexCount = vertices.length / 6;
+    this.heightCellSelectionStats = stats;
+    this.heightCellSelectionBuildMs = roundMs(performance.now() - startedAt);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+    if (draw) this.draw();
+    return {...stats, buildMs: this.heightCellSelectionBuildMs};
+  }
+
+  clearHeightCellSelection(options = {}) {
+    if (!this.heightCellSelectionVertexCount && !this.heightCellSelectionStats.cells) {
+      return {...this.heightCellSelectionStats, buildMs: this.heightCellSelectionBuildMs};
+    }
+    return this.setHeightCellSelection([], options);
   }
 
   invalidateDynamicBuffers(parts = {}) {

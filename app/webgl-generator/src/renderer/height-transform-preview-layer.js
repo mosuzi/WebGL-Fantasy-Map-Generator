@@ -1,6 +1,8 @@
 import {pushWorldVertex} from "./mesh-writer.js";
 import {createRenderContext} from "./render-context.js";
 
+const HEIGHT_CELL_SELECTION_COLOR = Object.freeze([1, 0.78, 0.18, 0.28]);
+
 export function buildHeightTransformPreviewMesh(map, changes) {
   const cells = map?.grid?.cells;
   const points = map?.grid?.points;
@@ -70,6 +72,62 @@ export function heightTransformPreviewColor(delta) {
   return delta > 0 ? [1, 0.28, 0.08, alpha] : [0.08, 0.62, 1, alpha];
 }
 
+export function buildHeightCellSelectionMesh(map, cellIds) {
+  const cells = map?.grid?.cells;
+  const points = map?.grid?.points;
+  const verticesById = map?.grid?.vertices?.p;
+  if (!cells?.p || !Array.isArray(cells.v) || !Array.isArray(points) || !Array.isArray(verticesById)) {
+    return {vertices: new Float32Array(), stats: emptyHeightCellSelectionStats()};
+  }
+  const context = createRenderContext(map);
+  const vertices = [];
+  const visited = new Set();
+  let cellsCount = 0;
+  let skippedCells = 0;
+  for (const value of cellIds || []) {
+    const gridCell = Number(value);
+    if (!Number.isInteger(gridCell) || gridCell < 0 || visited.has(gridCell)) {
+      skippedCells += 1;
+      continue;
+    }
+    visited.add(gridCell);
+    const center = points[cells.p[gridCell]];
+    const vertexIds = cells.v[gridCell];
+    if (!center || !Array.isArray(vertexIds) || vertexIds.length < 3) {
+      skippedCells += 1;
+      continue;
+    }
+    const beforeLength = vertices.length;
+    for (let index = 0; index < vertexIds.length; index++) {
+      const a = verticesById[vertexIds[index]];
+      const b = verticesById[vertexIds[(index + 1) % vertexIds.length]];
+      if (!a || !b) continue;
+      pushWorldVertex(vertices, context, center, HEIGHT_CELL_SELECTION_COLOR);
+      pushWorldVertex(vertices, context, a, HEIGHT_CELL_SELECTION_COLOR);
+      pushWorldVertex(vertices, context, b, HEIGHT_CELL_SELECTION_COLOR);
+    }
+    if (vertices.length === beforeLength) {
+      skippedCells += 1;
+      continue;
+    }
+    cellsCount += 1;
+  }
+  const typedVertices = new Float32Array(vertices);
+  return {
+    vertices: typedVertices,
+    stats: {
+      cells: cellsCount,
+      skippedCells,
+      vertexCount: typedVertices.length / 6,
+      triangleCount: typedVertices.length / 18
+    }
+  };
+}
+
 export function emptyHeightTransformPreviewStats() {
   return {cells: 0, raisedCells: 0, loweredCells: 0, skippedCells: 0, vertexCount: 0, triangleCount: 0};
+}
+
+export function emptyHeightCellSelectionStats() {
+  return {cells: 0, skippedCells: 0, vertexCount: 0, triangleCount: 0};
 }

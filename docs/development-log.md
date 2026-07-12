@@ -26684,3 +26684,33 @@ full 矩阵结果：
 - 截图确认地图同时出现暖橙升高与冷蓝降低 overlay，路线、边界、标签和底图稳定。只点击一次“应用全局预览”后摘要为“已全局扰动 2428 cells”，文字 preview、图例、GPU 统计和 overlay 全部清理；影响高度 `4..5,625 米`、平均变化 `+1,379 米`、待派生 `12` 项，历史 `undo 1 / redo 0`。
 - 撤销 / 重做各一次成功，重做后摘要恢复且地图稳定；console error 为 `0`，health 只有一条来自 React DevTools extension URL 的 `main-thread-long-task` warn。可见 UI 没有单列 preview seed，且按约束未使用 Playwright，因此 `globalToolSeed` 数值推进没有浏览器直证；源码成功后写回与同 / 异 seed 纯回归共同作为该项证据。
 - 浏览器没有预览平滑、条件变换、笔刷或派生重算，也没有刷新、新开、启动 Chrome / 服务器或使用 Playwright。烟测与浏览器子智能体均已结束；Chrome 会话 finalize 并以 handoff 保留现有 FMG 标签，没有遗留控制资源。
+
+### 2026-07-12 高度区间可复用地形选区
+
+背景：
+
+- 条件和全局工具已有 preview，但每次都重新按全图条件选 cells；用户无法锁定一组山地 / 浅海后切换多个运算反复塑形。
+- 可复用选区需要完整 grid id 集合，但这类大数组不能进入 Vue 响应式状态、renderer stats 或有限 runtime snapshot。
+
+实现：
+
+- 新增 `runtime/height-cell-selection.js`。`createHeightCellSelection()` 按 scope 与高度闭区间返回内部 `Uint32Array cellIds` 和有界 summary；`inspectHeightCellSelection()` 只返回 scope / lower / upper / count / heightRange / valid / notice；`createHeightCellSelectionSet()` 为工具过滤构造运行时 Set。
+- `height-brush.js` 的条件与全局分析新增内部 `allowedCells` 支持；Set 存在时先按 grid id 裁剪，再计算范围、候选、changes 和升降摘要。公开对象只新增 `selectionLimited`，不暴露 Set / ids。
+- preview layer 新增固定黄色半透明 `buildHeightCellSelectionMesh()`；renderer 新增独立 `heightCellSelectionBuffer` 与有界 stats，在基础 surface 后、暖 / 冷变化 preview 前绘制。选区与一次性变化可以叠加，镜头变化都只复用 world-space buffer。
+- 高度条件分区新增“锁定当前区间 / 清除选区”和“条件 / 全局工具仅作用于锁定选区”。锁定成功默认启用限制，UI 只显示黄色 swatch、count、heightRange 和 GPU triangle / buildMs；运行时保存 cellIds / cellSet / summary / useForTools。
+- 同图高度命令、撤销 / 重做和派生重算不清除选区；新地图、GEO 重建和完整地图导入统一经过 `loadMapIntoRuntime()`，会清除运行时选区、面板摘要与 GPU buffer。清除选区还会清理依赖该选区的一次性变化 preview 并关闭限制。
+
+直接验证：
+
+- `node --check` 已覆盖选区模块、高度笔刷、preview layer、renderer、运行时、panel wrapper 与扩展回归；直接高度回归和 `git diff --check` 通过。
+- 合成 `10/20/30/50` 高度的仅陆地 `20..30` 选区得到 cell ids `1/2`、count `2`、heightRange `20..30`；公开 inspect 无 cellIds，空水域和倒置区间拒绝。
+- 锁定 Set 限制条件乘算后候选 `2`、变化 `1`，只生成 cell `2: 30 -> 25`；限制全局平滑到中心 cell 后候选 / 变化 `1/1`。
+- 两个四边形的黄色选区 mesh 为 `24` 顶点 / `8` 三角形，重复与坏 cell 跳过 `2`，首顶点颜色命中黄色；选区 Set 保留稳定 grid ids `1/2`。
+- 阶段末烟测子智能体完成 7 项 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过。生产主 bundle 包含 selection buffer / stats，HeightPanel 包含锁定、清除和“条件 / 全局工具仅作用于锁定选区”，黄色 swatch 进入 CSS 产物；bounded snapshot 仅克隆 summary / renderer stats，不含 ids / Set。未启动浏览器或服务器，没有遗留进程。
+- 浏览器子智能体复用既有 `5410` 页面和开发服务器，没有刷新、新开或启动 Chrome / 服务器，也未使用 Playwright。页面受 HMR 重置后只做必要设置：启用高度编辑、选择仅陆地并设置 `20..40`。
+- 只锁定一次得到 `1889 cells`、高度 `20..40`，黄色选区 GPU 为 `11348 triangles / 7.2 ms`；黄色 swatch、半透明地图 overlay 与默认开启的限制开关正常。
+- 首轮只预览一次全局扰动时，文字为变化 `1356/1889 cells`，GPU 却仍为 `2428 cells / 14584 triangles / 27 ms`。该不变量失败说明实际 changes 未受选区限制；源码追查确认 `inspectGlobalHeightChanges()` 接收了 `allowedCells`，但 `getGlobalHeightChanges()` 只转发 action / scope / seed，导致摘要受限而 renderer 与应用 changes 未受限。首轮清除契约和 console error `0` 成立，但单次截图出现右下黑帧缺口及 render-frame-gap，不能作为最终视觉通过证据。
+- 修复后 `getGlobalHeightChanges()` 直接把完整 options 传给统一分析器；回归新增实际 changes 断言，锁定中心 cell 后只返回 `gridCell 4: 80 -> 65`。烟测子智能体补跑高度笔刷与回归脚本语法、`regress:height-brush`、生产构建和 `git diff --check`，全部通过。
+- 浏览器子智能体继续复用同一 `5410` 页面补验，没有刷新、新开、启动 Chrome / 服务器或使用 Playwright。锁定 `1889 cells` 后只预览一次全局扰动：文字 changeCount 与 GPU preview cells 均为 `1356`，满足 `1356 = 1356 <= 1889`；GPU 为 `8155 triangles / 11.3 ms`，升高 `958`、降低 `398`，高度 `20..40 -> 20..42`、平均变化 `+0.8`。截图确认暖橙 / 冷蓝变化只叠加于黄色选区，高海拔未选灰白区保持无变化，应用按钮启用；没有应用地图变化、历史、笔刷、条件工具或派生重算。
+- 补验只清除一次后，选区摘要、限制开关、黄色 overlay、依赖预览文字 / 图例 / GPU 统计和暖冷 overlay 全部消失，应用按钮 disabled，地图完整稳定，console error 为 `0`。Health 仅三条来自 React DevTools extension URL 的 `main-thread-long-task`，本轮没有 render-frame-gap。
+- 烟测与浏览器子智能体均已完成并释放；浏览器控制会话 finalize / handoff，没有新增进程。

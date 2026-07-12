@@ -56,6 +56,7 @@ import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureCol
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
+import {createHeightCellSelection, createHeightCellSelectionSet} from "./height-cell-selection.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -179,6 +180,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       fillPreview: null,
       strokeSeed: 0,
       globalToolSeed: 0,
+      terrainSelection: null,
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none",
@@ -369,10 +371,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       cancelHeightLine(state, documentRef);
       const scope = heightPanel.getBrush().scope;
       const seed = action === "disrupt" ? state.heightEdit.globalToolSeed + 1 : 0;
-      const preview = inspectGlobalHeightChanges(state.map, {action, scope, seed});
+      const allowedCells = heightToolAllowedCells(state);
+      const preview = inspectGlobalHeightChanges(state.map, {action, scope, seed, allowedCells});
       let rendererPreview = null;
       if (preview.valid) {
-        const changes = getGlobalHeightChanges(state.map, {action, scope, seed});
+        const changes = getGlobalHeightChanges(state.map, {action, scope, seed, allowedCells});
         rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
       }
       heightPanel.updateGlobalToolPreview({...preview, rendererPreview});
@@ -391,7 +394,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         return false;
       }
       const scope = heightPanel.getBrush().scope;
-      const options = {action: reserved.action, scope, seed: reserved.seed};
+      const options = {action: reserved.action, scope, seed: reserved.seed, allowedCells: heightToolAllowedCells(state)};
       const preview = inspectGlobalHeightChanges(state.map, options);
       if (!preview.valid) {
         state.heightEdit.lastAffected = 0;
@@ -418,7 +421,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       return result.executed;
     },
     onConditionalTransformPreview: () => {
-      const options = heightPanel.getConditionalTransform();
+      const options = {...heightPanel.getConditionalTransform(), allowedCells: heightToolAllowedCells(state)};
       cancelHeightLine(state, documentRef);
       const preview = inspectHeightRangeTransform(state.map, options);
       let rendererPreview = null;
@@ -431,7 +434,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       return preview;
     },
     onConditionalTransformApply: () => {
-      const options = heightPanel.getConditionalTransform();
+      const options = {...heightPanel.getConditionalTransform(), allowedCells: heightToolAllowedCells(state)};
       cancelHeightLine(state, documentRef);
       const preview = inspectHeightRangeTransform(state.map, options);
       heightPanel.updateConditionalTransformPreview(preview);
@@ -461,6 +464,39 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onConditionalTransformChange: () => {
       clearHeightTransformPreview(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onTerrainSelectionLock: () => {
+      clearHeightTransformPreview(state);
+      const options = heightPanel.getConditionalTransform();
+      const selection = createHeightCellSelection(state.map, options);
+      if (!selection.summary.valid) {
+        state.heightEdit.lastNotice = selection.summary.notice;
+        updateHeightPanel(state);
+        return selection.summary;
+      }
+      const cellSet = createHeightCellSelectionSet(selection.cellIds);
+      const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
+      const summary = {...selection.summary, rendererSelection};
+      state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, summary, useForTools: true};
+      heightPanel.updateTerrainSelection(summary, true);
+      state.heightEdit.lastNotice = summary.notice;
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      return summary;
+    },
+    onTerrainSelectionClear: () => {
+      clearHeightTransformPreview(state);
+      clearHeightTerrainSelection(state);
+      state.heightEdit.lastNotice = "已清除锁定地形选区。";
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onTerrainSelectionUseChange: value => {
+      if (!state.heightEdit.terrainSelection) return;
+      clearHeightTransformPreview(state);
+      state.heightEdit.terrainSelection.useForTools = Boolean(value);
+      heightPanel.updateTerrainSelection(state.heightEdit.terrainSelection.summary, value);
       updateEditingInteractionLock(state, documentRef);
     },
     onRegenerateRivers: () => {
@@ -2515,6 +2551,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.editHistory.clear();
   state.heightEdit.activeStroke = null;
   cancelHeightLine(state, documentRef);
+  clearHeightTerrainSelection(state);
   state.heightEdit.strokeSeed = 0;
   state.heightEdit.globalToolSeed = 0;
   state.heightEdit.lastAffected = 0;
@@ -7138,6 +7175,17 @@ function clearHeightTransformPreview(state, {draw = true} = {}) {
   state.renderer?.clearHeightTransformPreview?.({draw});
 }
 
+function clearHeightTerrainSelection(state, {draw = true} = {}) {
+  state.heightEdit.terrainSelection = null;
+  state.panels.height?.updateTerrainSelection?.(null, false);
+  state.renderer?.clearHeightCellSelection?.({draw});
+}
+
+function heightToolAllowedCells(state) {
+  const selection = state.heightEdit.terrainSelection;
+  return selection?.useForTools ? selection.cellSet : null;
+}
+
 function bindStateEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (state.stateEdit.deleteMode && state.map) {
@@ -8238,6 +8286,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
     },
     conditionalHeightTransform: state.panels.height?.getConditionalTransformSnapshot?.() || null,
     globalHeightToolPreview: state.panels.height?.getGlobalToolPreview?.() || null,
+    terrainHeightSelection: state.panels.height?.getTerrainSelectionSnapshot?.() || null,
     stateBrush: {
       active: Boolean(stateBrush.active),
       addMode: Boolean(state.stateEdit.addMode),
