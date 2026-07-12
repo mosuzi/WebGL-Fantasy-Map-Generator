@@ -1031,6 +1031,21 @@
    - 边界：最多检查少量不同 hover cells，不持续扫图、不刷新、不启动新 Chrome / 服务器或 Playwright；成功后不再第二次填充。
    - 完成记录：首个检查的内陆 hover cell 即显示有效候选 `65 cells`，随后唯一一次点击影响 `43 cells`；高度变化、待派生摘要、撤销 / 重做和稳定态地图均通过。验收后没有执行第二次 Fill、线段或派生重算；控制会话已 finalize，FMG 标签以 handoff 保留。
 
+148. 全局高度平滑与稳定扰动纯计算。`已完成`
+   - 目标：参考原版高度编辑器的“平滑全部 / 扰动全部”，为当前 grid 提供可测试、可撤销的全局变化列表；继续遵守全部 / 仅陆地 / 仅水域范围。
+   - 计算边界：平滑必须从同一份修改前快照读取自身和邻居，避免按遍历顺序污染结果；陆地 / 水域范围只使用同类邻居并夹在各自海平面一侧。扰动使用显式 seed 生成稳定噪声，不能把不可复现的 `Math.random()` 写入命令结果。
+   - 完成记录：`height-brush.js` 新增 `getGlobalHeightChanges()`；全局平滑按 `(当前高度 × 3 + 邻居均值 + 1.5) / 4` 计算，整轮统一读取修改前快照。仅陆地 / 仅水域会过滤异类邻居并分别夹到 `20..100 / 0..19`；全局扰动对高度 `>=15` 的 cells 使用显式 seed 稳定噪声，同 seed 结果一致、下一 seed 形态变化。
+
+149. 高度面板全局微调入口与历史闭环。`已完成`
+   - 目标：在高度面板加入“全局平滑 / 全局扰动”入口，复用当前作用范围和高度命令、影响摘要、待派生标记、撤销 / 重做，不新增第二套历史系统。
+   - 交互边界：点击前清理未完成 Line / Fill transient；无变化时给出有限提示，不产生空命令；连续全局扰动要推进 seed，但同一 seed 的纯计算必须可复现。
+   - 完成记录：高度面板新增“全局平滑 / 全局扰动”双按钮，未启用高度编辑时禁用；执行时读取当前作用范围、清理 Line / Fill transient，并继续用 `createApplyHeightBrushCommand()` 提交。面板同步显示影响数、高度范围、平均变化、中文结果提示和待派生摘要；无变化不会进入历史。全局扰动 seed 在每次执行时递增，加载新地图会归零，有限编辑器快照暴露当前 seed 供验收。
+
+150. 全局高度工具阶段末统一验收。`已完成`
+   - 目标：实现和文档累积完成后，由烟测子智能体统一执行语法检查、相关回归、构建与差异检查；浏览器子智能体复用既有 FMG 页面和服务器，分别执行一次安全的全局平滑或扰动并验证影响摘要、撤销 / 重做和稳定态地图。
+   - 边界：浏览器验收集中在本阶段末；不刷新、不新开或重启 Chrome，不启动新服务器；若确需 Playwright，必须在 `finally` 中关闭 browser / context。
+   - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、应用构建和 `git diff --check`，全部通过。浏览器子智能体复用既有 FMG 页面，确认两个全局按钮存在；选择“仅陆地”后只执行一次全局平滑，影响 `2449 cells`，高度 `9..5,929 米`、平均变化 `+1,617 米`，待派生 `9 -> 12` 项；撤销 / 重做各一次后历史为 `undo 1 / redo 0`，地图稳定且 console error 为 `0`。页面有限状态未提供逐 cell 水域 diff，因此浏览器只证明“仅陆地”已选中；水域不变由纯回归证明。全程没有刷新、新开或启动资源，也未使用 Playwright；两个子智能体均已结束。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1197,3 +1212,4 @@
 - 外交 / 纹章 / 备注 / 经济 / 政体 / 军事面板筛选空态清理第一刀：六个剩余带 `UiFilterInput + UiObjectTable` 的管理 / 报表面板已接入筛选空态“清空筛选”动作；点击后仅调用各自 `onFilter("")` 恢复当前列表。经济面板三张表共享同一清理动作，政体面板只在政体汇总表筛选为空时清理文本筛选，军事面板只清理文本筛选，不改变国家 / 态势下拉筛选、战报筛选、批量态势、导出、编辑或列宽逻辑。`git diff --check` 和 `pnpm run build:app` 通过，构建仅有既有 Vite 大 chunk 警告；验证子智能体 `verify_report_empty_filter` 等待 90 秒无输出，已中断释放，主线程兜底 Playwright + 系统 Chrome 烟测确认外交、纹章、备注、经济商品、经济市场、经济交易、政体和军事表格分别在无匹配筛选时显示“清空筛选”，点击后筛选词清空并恢复 `19 / 26 / 1 / 71 / 30 / 48 / 10 / 113` 个可见行；备注验证在浏览器会话内临时插入 1 条备注用于表格行验证，不写入源码或仓库文件；军事国家 / 态势下拉在清理前后保持 `all / all`；`glError = 0`，health / console / page error 均为 `0`。
 - 军事战报二级筛选持久化第一刀：战报链路、类型、结果和结算筛选四项已提升到 `panel-list-preferences`，刷新后可恢复；本步不保存战报导入状态、战报记录草稿、显示展开状态或其它编辑中间态。`node --check app\webgl-generator\src\ui\panel-list-preferences.js`、`node --check app\webgl-generator\src\ui\panels\military-panel.js`、`git diff --check` 和 `pnpm run build:app` 通过，构建仅有既有 Vite 大 chunk 警告；验证子智能体 `verify_military_event_filter_prefs` 等待 90 秒无输出，已中断释放，主线程兜底 Playwright + 系统 Chrome 烟测在浏览器会话内给 `1（苍原）军团` 临时注入两条战报，确认预置 `smoke-chain-a / skirmish / victory / applied` 可恢复，UI 改为 `smoke-chain-b / raid / defeat / pending` 后 localStorage 写入 `eventChainFilter / eventTypeFilter / eventOutcomeFilter / eventApplyFilter`，刷新后四项仍恢复为 `smoke-chain-b / raid / defeat / pending`；军事国家 / 态势主筛选保持 `all / all`，战报导出范围保持 `selected`，直接 `gl.getError() = 0`，health / console / page error 均为 `0`。
 - Fill 落点预检批次统一验证完成：烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过，构建仅有既有大 chunk 警告；公开预检确认封闭水域 `valid=true / 9 cells`、开放水域 `valid=false / 25 cells`、默认陆地容差 `6 / valid=true / 5 cells`，且不暴露内部 selection。浏览器子智能体复用既有 `5410` 页面，首个内陆候选预检 `65 cells`，唯一一次点击实际影响 `43 cells`，撤销 / 重做闭环和稳定态地图通过，console error 为 `0`；未刷新或启动浏览器、服务器、Playwright，两个子智能体均已结束并释放控制会话。
+- 全局高度平滑 / 稳定扰动批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；回归证明平滑整轮读取同一快照、陆水范围隔离、扰动 seed 可复现 / 可推进、深水保护以及 grid / pack 撤销重做。浏览器子智能体复用既有 FMG 页面，选择“仅陆地”后唯一一次全局平滑影响 `2449 cells`，高度 `9..5,929 米`、平均变化 `+1,617 米`、待派生 `9 -> 12` 项，撤销 / 重做闭环通过，地图稳定且 console error 为 `0`；未刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。

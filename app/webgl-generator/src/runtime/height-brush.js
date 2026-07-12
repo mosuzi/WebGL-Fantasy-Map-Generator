@@ -116,6 +116,34 @@ export function inspectHeightFillTarget(map, gridCell, brush = {}) {
   return summary;
 }
 
+export function getGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0} = {}) {
+  const cells = map?.grid?.cells;
+  if (!cells?.h || !Array.isArray(cells.c)) return [];
+  if (action !== "smooth" && action !== "disrupt") return [];
+  const scope = normalizeBrushScope(scopeValue);
+  const heights = Array.from(cells.h, value => Number(value) || 0);
+  const changes = [];
+
+  for (let gridCell = 0; gridCell < heights.length; gridCell++) {
+    const before = heights[gridCell];
+    if (!matchesBrushScope(before, scope)) continue;
+    let next = before;
+    if (action === "smooth") {
+      const neighbors = (cells.c[gridCell] || []).filter(cell => Number.isInteger(cell) && cell >= 0 && cell < heights.length && matchesBrushScope(heights[cell], scope));
+      if (!neighbors.length) continue;
+      const neighborMean = neighbors.reduce((sum, cell) => sum + heights[cell], 0) / neighbors.length;
+      next = (before * 3 + neighborMean + 1.5) / 4;
+    } else {
+      if (before < 15) continue;
+      next = before + 0.5 + stableSignedNoise(gridCell, Math.trunc(Number(seed) || 0), 0) * 2;
+    }
+    const after = clampHeightToScope(next, scope);
+    if (after !== before) changes.push({gridCell, before, after});
+  }
+
+  return changes;
+}
+
 function getHeightFillChanges(map, point, brush, stroke) {
   const {cells, points} = map.grid;
   const start = findNearestGridCell(cells, points, point);
@@ -297,4 +325,11 @@ function clampHeight(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
   return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function clampHeightToScope(value, scope) {
+  const height = clampHeight(value);
+  if (scope === "land") return Math.max(20, height);
+  if (scope === "water") return Math.min(19, height);
+  return height;
 }

@@ -29,6 +29,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onActionChange: action => callbacks.onActionChange?.(action),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.(),
+    onGlobalTool: action => callbacks.onGlobalTool?.(action),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
     onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()

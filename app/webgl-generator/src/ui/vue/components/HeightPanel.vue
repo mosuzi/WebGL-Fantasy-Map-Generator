@@ -48,6 +48,13 @@
 
   <UiSwitchField v-if="state.action !== 'fill'" label="中心衰减" field-class="height-check-row" :checked="state.falloff" @change="setFalloff" />
 
+  <p class="height-control-label">全局微调</p>
+  <div class="height-global-actions">
+    <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onGlobalTool?.('smooth')">全局平滑</UiButton>
+    <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onGlobalTool?.('disrupt')">全局扰动</UiButton>
+  </div>
+  <p class="height-action-help">作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
+
   <div class="height-history-actions">
     <UiButton variant="secondary" @click="callbacks.onUndo?.()">撤销上次</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRedo?.()">重做上次</UiButton>

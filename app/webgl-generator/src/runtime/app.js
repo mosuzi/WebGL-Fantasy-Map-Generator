@@ -55,7 +55,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {getHeightBrushChanges, getHeightLineChanges, inspectHeightFillTarget} from "./height-brush.js";
+import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, inspectHeightFillTarget} from "./height-brush.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -178,6 +178,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       fillHoverCell: null,
       fillPreview: null,
       strokeSeed: 0,
+      globalToolSeed: 0,
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none",
@@ -363,6 +364,32 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       return executeHistoryCommand(state, documentRef, "redo", {
         afterRefresh: () => updateHeightPanel(state)
       });
+    },
+    onGlobalTool: action => {
+      cancelHeightLine(state, documentRef);
+      const scope = heightPanel.getBrush().scope;
+      const seed = action === "disrupt" ? ++state.heightEdit.globalToolSeed : 0;
+      const changes = getGlobalHeightChanges(state.map, {action, scope, seed});
+      if (!changes.length) {
+        state.heightEdit.lastAffected = 0;
+        state.heightEdit.lastHeight = "none";
+        state.heightEdit.lastDelta = "none";
+        state.heightEdit.lastNotice = "当前作用范围内的高度没有变化。";
+        updateHeightPanel(state);
+        return false;
+      }
+      const label = action === "smooth" ? "全局平滑" : "全局扰动";
+      state.heightEdit.lastAffected = changes.length;
+      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
+      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
+      state.heightEdit.lastNotice = `已${label} ${changes.length} cells。`;
+      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label}), {
+        context: {map: state.map},
+        refresh: refreshAfterEdit,
+        refreshPanels: false
+      });
+      updateHeightPanel(state);
+      return result.executed;
     },
     onRegenerateRivers: () => {
       cancelHeightLine(state, documentRef);
@@ -2417,6 +2444,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.heightEdit.activeStroke = null;
   cancelHeightLine(state, documentRef);
   state.heightEdit.strokeSeed = 0;
+  state.heightEdit.globalToolSeed = 0;
   state.heightEdit.lastAffected = 0;
   state.heightEdit.lastHeight = "none";
   state.heightEdit.lastDelta = "none";
@@ -8120,6 +8148,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       lineWidth: Number(heightBrush.lineWidth) || 0,
       linePower: Number(heightBrush.linePower) || 0,
       falloff: Boolean(heightBrush.falloff),
+      globalToolSeed: state.heightEdit.globalToolSeed,
       lineStart: state.heightEdit.lineStart ? {x: Math.round(state.heightEdit.lineStart.point.x), y: Math.round(state.heightEdit.lineStart.point.y)} : null,
       lastAffected: state.heightEdit.lastAffected,
       lastHeight: state.heightEdit.lastHeight,

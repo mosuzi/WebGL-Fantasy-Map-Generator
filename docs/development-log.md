@@ -26579,3 +26579,28 @@ full 矩阵结果：
 - 浏览器子智能体复用既有 `127.0.0.1:5410` 页面，没有刷新、新开页面或启动 Chrome / 服务器 / Playwright。在 `fill + all`、强度 `4`、容差 `6` 下，第一个内陆 hover 候选即显示 `可填充 65 cells（陆地高度 80±6）`。
 - 唯一一次点击实际锥形填充 `43 cells`；预检数是完整连通候选，实际 affected 会过滤无需变化或原本更高的 cells。高度范围 `3,969..5,476 米`、平均变化 `+142 米`、待派生 `12` 项；撤销 / 重做各一次后历史为 `undo 1 / redo 0`，地图稳定完整、console error 为 `0`。
 - 验收后没有执行第二次 Fill、线段或派生重算；烟测和浏览器智能体均已结束，Chrome 控制会话 finalize，FMG 标签以 handoff 保留，没有遗留控制进程。
+
+### 2026-07-12 全局高度平滑与稳定扰动
+
+背景：
+
+- 当前高度面板已有七种局部笔刷，但参考实现还提供“平滑全部 / 扰动全部”快捷动作；用户若要给整片地形消除尖刺或增加细小起伏，只能手工反复拖动。
+- 全局平滑若一边遍历一边读取已经改过的高度，会让结果依赖 cell 顺序；全局随机扰动若直接调用 `Math.random()`，则无法写出可复现的回归和诊断证据。
+
+实现：
+
+- `height-brush.js` 新增 `getGlobalHeightChanges(map, {action, scope, seed})`。平滑整轮先复制高度快照，再按 `(当前高度 × 3 + 邻居均值 + 1.5) / 4` 生成变化；仅陆地 / 仅水域只读取同类邻居，并分别限制在海平面两侧。
+- 全局扰动沿用稳定有符号噪声，以显式 seed 生成约 `-1.5..+2.5` 的轻量变化，并保留参考实现不扰动高度低于 `15` 的深水边界；相同 seed 结果一致，连续执行由运行时递增 seed。
+- 高度面板新增“全局平滑 / 全局扰动”入口，未启用高度编辑时禁用；执行前统一清理 Line / Fill transient，变化继续通过 `createApplyHeightBrushCommand()` 进入同一历史、grid / pack 同步和高度派生标脏链路。
+- 运行时更新影响数、高度范围、平均变化和有限中文提示；无变化不创建历史命令。加载新地图时全局扰动 seed 归零，有限编辑器快照新增 `globalToolSeed` 供浏览器验收读取。
+
+直接验证：
+
+- `node --check` 已覆盖 `height-brush.js`、`app.js`、高度 panel wrapper 和扩展回归脚本；`git diff --check` 通过。
+- 3×3 合成地形中，仅陆地全局平滑把中心 `80` 变为 `65`、四个相邻陆地 `20` 统一变为 `35`，证明所有 cells 从同一修改前快照读取；水域未被修改，也没有跨越海平面。
+- seed `23` 的全局扰动重复执行结果完全一致，seed `24` 产生不同变化；高度 `10` 的深水 cell 保持不变。全局平滑命令撤销后 grid / pack 中心恢复 `80`，重做后同步回到 `65`。
+- 阶段末烟测子智能体执行 4 项 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过；生产构建包含“全局平滑 / 全局扰动”和 `.height-global-actions`。首次沙箱 pnpm registry 访问失败后只升级重跑必要门禁，没有遗留进程。
+- 浏览器子智能体复用既有 FMG 页面和服务器，没有刷新、新开标签或启动 Chrome / 服务器 / Playwright。确认两个全局按钮存在，启用高度编辑并选择“仅陆地”后，只点击一次“全局平滑”。
+- 执行前历史为 `undo 0 / redo 0`、待派生 `9` 项；执行后提示“已全局平滑 2449 cells”，高度范围 `9..5,929 米`、平均变化 `+1,617 米`、待派生 `12` 项。撤销 / 重做各一次后最终历史为 `undo 1 / redo 0`，地图稳定完整、console error 为 `0`。
+- 浏览器有限状态只证明执行时“仅陆地”范围已选中，没有逐 cell 水域 diff；“水域未变”由纯回归独立证明，不扩大浏览器证据。仅记录 4 条来自 Chrome React DevTools extension hook 的 long-task warn；禁用 Playwright 时没有取得独立 `glError` / health 对象。
+- 烟测和浏览器子智能体均已结束；Chrome 控制会话 finalize，FMG 标签以 handoff 保留，没有遗留控制资源。
