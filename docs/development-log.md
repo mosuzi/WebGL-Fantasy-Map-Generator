@@ -26154,3 +26154,26 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：9 个目标 JS / MJS 文件 `node --check` 全过；可见行选择回归为筛选后 1、空结果后 0；持久高亮回归为 12 / 30 / 30 顶点，模式为 `multi-object highlight (3)`；`pnpm run build:app` 构建 1111 modules、耗时 1.25 秒，入口 chunk `1,117.45 kB / gzip 324.35 kB`，仅有既有大 chunk 警告；`git diff --check` 通过。首次 pnpm 回归在沙箱内因 registry fetch 失败，按最小权限策略只升级重跑一次后通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有后端，结果为 `[]`，随后立即停止并释放。未启动或重启 Chrome、未刷新页面、未使用 Playwright、未启动服务器；城市、资源标记、军事和地区的批量勾选、高亮 / 清除、selection、checksum 与 WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。
+
+### 2026-07-12 标签、备注与政体国家批量高亮
+
+背景：
+
+- 剩余列表中只有部分行能稳定映射到 renderer 已支持的地图对象；测量对象仍由独立 SVG overlay 绘制，外交关系一行对应两个国家，经济列表又混合城市、路线和贸易流。
+- 本轮先接入对象身份明确的标签、备注目标和政体下国家，并保留其余列表的真实模型边界。
+
+实现：
+
+- 标签管理开启公共批量选择，按复合 `targetKind:targetId` key 维护勾选；只把当前未隐藏标签送入高亮集合，避免隐藏标签计数存在但地图无视觉反馈。
+- 备注总览迁移到 `useVisibleRowSelection()`，导出与高亮复用同一选中集合；仅高亮非孤儿且属于 renderer 支持类型的备注目标。
+- 政体面板把原手工国家选择迁移到公共 composable，导出和高亮复用同一选中国家集合；政体分组切换后自动裁剪旧 id。
+- 三个 panel wrapper 复用 `panel-highlight-actions.js`，`refreshPersistentHighlightUi()` 同步范围扩展到标签、备注和政体面板。
+- 可见行选择回归补充复合 `idKey` 选择与列表变化裁剪，固化标签 `targetKind:targetId` key 的公共 composable 用法。
+- 明确暂缓测量、外交和经济列表：测量需要 SVG overlay 专用持久高亮模型，外交与经济需要复合对象身份和专用渲染，不用任取一个关联对象代替整行语义。
+
+验证：
+
+- `node --check` 已覆盖 `app.js`、标签 / 备注 / 政体三个 panel wrapper 和可见行选择回归脚本；旧的备注 / 政体手工 selected id set 和筛选 watch 已清理。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：8 个目标 JS / MJS 文件 `node --check` 全过；可见行选择回归为筛选后 1、空结果后 0、复合 key 裁剪后 1；持久高亮回归为 12 / 30 / 30 顶点，模式为 `multi-object highlight (3)`；`pnpm run build:app` 构建 1111 modules、耗时 1.40 秒，仅有既有主 chunk 超过 500 kB 警告；`git diff --check` 通过。首次 pnpm 在沙箱内因 registry 网络失败，按最小权限策略只升级重跑一次后通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，发现 1 个现有 Chrome 扩展连接，但其中仅有 GitHub 提交页，没有已启动的 FMG 页面可复用。按用户约束未新开页面、未启动服务器、未刷新、未重启 Chrome、未使用 Playwright，并已立即释放；标签隐藏项排除、备注目标过滤、政体国家高亮、跨面板清除、selection / checksum 与 WebGL / console / page / health 断言待可复用 FMG 页面存在时补跑。

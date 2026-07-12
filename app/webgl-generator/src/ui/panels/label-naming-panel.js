@@ -2,6 +2,7 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../runtime/object-kinds.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const LABEL_NAMING_PANEL_ID = "label-naming-panel";
 const LABEL_NAMING_COLUMN_WIDTHS = Object.freeze({
@@ -30,6 +31,7 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     selectedLabelKey: null,
     version: 0
   });
@@ -65,6 +67,8 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(labelObject(row));
     },
     onLocate: row => callbacks.onLocate?.(labelObject(row)),
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, labelObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRename: (row, name) => callbacks.onRename?.(labelObject(row), name),
     onNoteChange: (row, body) => callbacks.onNoteChange?.(labelObject(row), body),
     onAdd: () => callbacks.onAdd?.(),
@@ -109,6 +113,7 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === OBJECT_KIND.LABEL) panelState.selectedLabelKey = labelKeyForObject(selection.object);
       if (!labelExists(map, panelState.selectedLabelKey)) panelState.selectedLabelKey = firstLabelKey(map);
       panelState.open = true;
@@ -120,6 +125,7 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === OBJECT_KIND.LABEL) panelState.selectedLabelKey = labelKeyForObject(selection.object);
       if (!labelExists(map, panelState.selectedLabelKey)) panelState.selectedLabelKey = firstLabelKey(map);
       panelState.version++;

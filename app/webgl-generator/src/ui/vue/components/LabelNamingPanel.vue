@@ -19,11 +19,14 @@
     empty-text="没有匹配的标签"
     :empty-action="labelEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedLabelKeys"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleLabelManagementAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedLabelKeys = $event"
   />
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中标签" :rows="detailRows" />
@@ -72,6 +75,7 @@ import {readObjectNote} from "../../../runtime/object-notes.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "LabelNamingPanel"
@@ -116,6 +120,8 @@ const labelActions = Object.freeze([
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedLabelKeys, selectedRows: selectedLabelRows} = useVisibleRowSelection(visibleRows, {idKey: "key"});
+const highlightableLabelRows = computed(() => selectedLabelRows.value.filter(row => !row.hidden));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -123,6 +129,8 @@ const defaultLabelEmptyAction = Object.freeze({key: "add", label: "新增标签"
 const labelEmptyAction = computed(() => filterEmptyAction.value || defaultLabelEmptyAction);
 const selected = computed(() => rows.value.find(row => row.key === props.state.selectedLabelKey) || null);
 const labelManagementActions = computed(() => [
+  {key: "highlight-selected", label: `高亮可见标签 ${formatNumber(highlightableLabelRows.value.length)}`, icon: "◉", disabled: !highlightableLabelRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultLabelEmptyAction,
   {key: selected.value?.hidden ? "restore" : "delete", label: selected.value?.hidden ? "恢复标签" : "删除标签", icon: selected.value?.hidden ? "↺" : "×", disabled: !selected.value}
 ]);
@@ -132,6 +140,7 @@ const summaryMetrics = computed(() => [
   {label: "城市", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CITY).length)},
   {label: "国家", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.STATE).length)},
   {label: "手工", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CUSTOM).length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -156,6 +165,14 @@ watch(() => selected.value?.key, key => {
 });
 
 function handleLabelManagementAction(key) {
+  if (key === "highlight-selected") {
+    props.callbacks.onHighlight?.(highlightableLabelRows.value);
+    return;
+  }
+  if (key === "clear-highlights") {
+    props.callbacks.onClearHighlights?.();
+    return;
+  }
   if (key === "clear-filter") {
     props.callbacks.onFilter?.("");
     return;

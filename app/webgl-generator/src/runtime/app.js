@@ -531,6 +531,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         }
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onOpenState: object => {
       selectionStore.setSelection({object});
       setStatePanelTarget(state, object.id);
@@ -1274,6 +1277,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => labelNamingPanel.setSelectedLabelKey(labelKeyForObject(target))
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onRename: (object, name) => {
       const context = {map: state.map};
       const command = object.targetKind === LABEL_TARGET_KIND.CUSTOM ? createRenameCustomLabelCommand(object.targetId ?? object.id, name) : createRenameObjectCommand(object, name);
@@ -1352,6 +1358,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: () => notesPanel.setSelectedNoteId(row.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onDelete: row => {
       if (!row?.id) return;
       const command = createDeleteNoteCommand(row.id, {name: row.name});
@@ -4680,6 +4689,9 @@ function refreshPersistentHighlightUi(state, documentRef) {
   updateMarkerPanel(state);
   updateMilitaryPanel(state);
   updateZonePanel(state);
+  updateLabelNamingPanel(state);
+  updateNotesPanel(state);
+  updateGovernmentPanel(state);
 }
 
 function startEditingObjectViaApi(state, object, options = {}) {

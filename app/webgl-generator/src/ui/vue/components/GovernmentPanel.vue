@@ -36,7 +36,9 @@
     class-name="government-panel-export-actions"
     label="政体导出"
     :export-actions="governmentExportActions"
+    :actions="governmentHighlightActions"
     @export="handleGovernmentExport"
+    @action="handleGovernmentHighlightAction"
   />
 
   <UiDetailGrid class-name="government-panel-details" empty-text="未选中政体" :rows="detailRows" />
@@ -93,6 +95,7 @@ import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatP
 import {findByObjectId} from "../../object-id.js";
 import {compareListValues} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "GovernmentPanel"
@@ -113,7 +116,6 @@ const callbacks = props.callbacks;
 const GOVERNMENT_BY_KEY = new Map(GOVERNMENT_TYPES.map(type => [type.key, type]));
 const unitPreferences = useUnitPreferences();
 const batchGovernmentKey = ref("");
-const selectedGovernmentStateIds = ref([]);
 
 const sortOptions = Object.freeze([
   {key: "count", label: "国家"},
@@ -183,8 +185,11 @@ const governmentExportActions = computed(() => [
 const selectedStateRows = computed(() => metrics.value.states
   .filter(row => row.governmentKey === selectedGovernmentKey.value)
   .sort((a, b) => b.population - a.population || b.economicPower - a.economicPower || a.id - b.id));
-const selectedGovernmentStateIdSet = computed(() => new Set(selectedGovernmentStateIds.value.map(id => String(id))));
-const selectedGovernmentStateRows = computed(() => selectedStateRows.value.filter(row => selectedGovernmentStateIdSet.value.has(String(row.id))));
+const {selectedRowIds: selectedGovernmentStateIds, selectedRows: selectedGovernmentStateRows} = useVisibleRowSelection(selectedStateRows);
+const governmentHighlightActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中国家 ${formatNumber(selectedGovernmentStateRows.value.length)}`, icon: "◉", disabled: !selectedGovernmentStateRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
+]);
 const selectedState = computed(() => findByObjectId(selectedStateRows.value, props.state.selectedStateId) || selectedStateRows.value[0] || null);
 const batchGovernmentOptions = computed(() => GOVERNMENT_OPTIONS
   .filter(option => option.value !== selectedGovernmentKey.value)
@@ -206,7 +211,8 @@ const summaryMetrics = computed(() => [
   {label: "共和系", value: formatNumber(metrics.value.familyCounts.republic || 0)},
   {label: "君主系", value: formatNumber((metrics.value.familyCounts.monarchy || 0) + (metrics.value.familyCounts.autocracy || 0))},
   {label: "筛选", value: formatNumber(visibleGovernmentRows.value.length)},
-  {label: "已选国家", value: formatNumber(selectedGovernmentStateRows.value.length)}
+  {label: "已选国家", value: formatNumber(selectedGovernmentStateRows.value.length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const detailRows = computed(() => selectedGovernment.value ? [
@@ -233,11 +239,6 @@ watch(selectedGovernmentKey, key => {
 });
 
 watch(() => props.state.version, syncBatchGovernmentKey, {immediate: true});
-
-watch(selectedStateRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedGovernmentStateIds.value = selectedGovernmentStateIds.value.filter(id => visibleIds.has(String(id)));
-});
 
 function buildGovernmentMetrics(map) {
   const states = stateRows(map);
@@ -286,6 +287,11 @@ function tableColumnWidths(table) {
 
 function handleEmptyAction(key) {
   if (key === "clear-filter") callbacks.onFilter?.("");
+}
+
+function handleGovernmentHighlightAction(key) {
+  if (key === "highlight-selected") callbacks.onHighlight?.(selectedGovernmentStateRows.value);
+  if (key === "clear-highlights") callbacks.onClearHighlights?.();
 }
 
 function syncBatchGovernmentKey() {

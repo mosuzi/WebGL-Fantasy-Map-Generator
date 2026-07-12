@@ -1,6 +1,7 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const NOTES_PANEL_ID = "notes-panel";
 const NOTES_COLUMN_WIDTHS = Object.freeze({
@@ -27,6 +28,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     selectedNoteId: null,
     version: 0
   });
@@ -67,6 +69,8 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     },
     onDelete: row => callbacks.onDelete?.(row),
     onExport: rows => callbacks.onExport?.(rows),
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, row => row.object),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -106,6 +110,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (!noteExists(map, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(map);
       panelState.open = true;
       panelState.version++;
@@ -116,6 +121,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (!noteExists(map, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(map);
       panelState.version++;
     },

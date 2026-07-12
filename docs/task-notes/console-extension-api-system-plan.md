@@ -534,7 +534,7 @@ api.edit.measurement.delete(id)
 - `api.selection.clearHighlights()` 会清空持久高亮；载入新地图时 renderer 也会自动清空，避免对象 id 跨地图残留。`selection.get()` 与 renderer stats 会返回高亮摘要。
 - 持久高亮不修改地图 checksum、不进入 `EditHistory`，`highlight / clearHighlights` 的能力元数据副作用为 `persistent-highlight-state`。
 - `api.selection.startEditing(object, {select})`、`stopEditing({ifKind})` 和 `toggleEditing(object, {select})` 已完成第一刀；当前复用运行时编辑态 helper，只控制 selection / editingObject 与编辑交互锁，不执行数据编辑命令。
-- 多对象持久高亮生命周期第一刀已完成；路线、河流、湖泊、国家、省份、文化、宗教、城市、资源标记、军事和地区公共表格批量选择已复用同一运行时动作，控制台 API 修改集合后已打开面板会同步刷新。UI 与 API 最多同时保留 100 个高亮对象；军事面板复用原有导出选择，后续重点是评估其余列表是否有稳定对象身份和明确安全语义，以及贸易流的专用高亮渲染。
+- 多对象持久高亮生命周期第一刀已完成；路线、河流、湖泊、国家、省份、文化、宗教、城市、资源标记、军事、地区、标签、备注目标和政体下国家的公共表格批量选择已复用同一运行时动作，控制台 API 修改集合后已打开面板会同步刷新。UI 与 API 最多同时保留 100 个高亮对象；标签排除隐藏项，备注排除孤儿和不支持类型，军事 / 备注 / 政体复用原有导出选择。测量对象等待 SVG overlay 高亮模型；外交关系和经济流等待明确的复合对象身份及专用渲染。
 
 ### 阶段 5：生成、导入和批量能力
 

@@ -44,8 +44,8 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
-import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
+import {computed} from "vue";
+import {OBJECT_KIND, OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -54,6 +54,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {compareListValues} from "../../sort-utils.js";
 
 defineOptions({
@@ -72,8 +73,21 @@ const props = defineProps({
 });
 
 const unitPreferences = useUnitPreferences();
-const selectedNoteIds = ref([]);
-
+const HIGHLIGHTABLE_NOTE_KINDS = new Set([
+  OBJECT_KIND.CITY,
+  OBJECT_KIND.LABEL,
+  OBJECT_KIND.MARKER,
+  OBJECT_KIND.ROUTE,
+  OBJECT_KIND.RIVER,
+  OBJECT_KIND.LAKE,
+  OBJECT_KIND.MILITARY,
+  OBJECT_KIND.STATE,
+  OBJECT_KIND.PROVINCE,
+  OBJECT_KIND.CULTURE,
+  OBJECT_KIND.RELIGION,
+  OBJECT_KIND.REGION,
+  OBJECT_KIND.ZONE
+]);
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
   {key: "kindLabel", label: "类型"},
@@ -93,18 +107,20 @@ const rows = computed(() => {
   return noteRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedNoteIds, selectedRows: selectedNoteRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const notesEmptyText = computed(() => filterEmptyAction.value ? "没有匹配的备注" : "暂无备注");
-const selectedNoteIdSet = computed(() => new Set(selectedNoteIds.value.map(id => String(id))));
-const selectedNoteRows = computed(() => visibleRows.value.filter(row => selectedNoteIdSet.value.has(String(row.id))));
+const highlightableNoteRows = computed(() => selectedNoteRows.value.filter(row => row.object && !row.orphan && HIGHLIGHTABLE_NOTE_KINDS.has(row.object.kind)));
 const notesExportActions = computed(() => [
   {key: "notes", label: "导出备注摘要", disabled: !visibleRows.value.length},
   {key: "selected-notes", label: `导出选中 ${formatNumber(selectedNoteRows.value.length)}`, disabled: !selectedNoteRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
 const notesListActions = computed(() => [
+  {key: "highlight-selected", label: `高亮备注对象 ${formatNumber(highlightableNoteRows.value.length)}`, icon: "◉", disabled: !highlightableNoteRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "locate", label: "定位备注对象", icon: "⌖", disabled: !selected.value || selected.value.orphan},
   {key: "delete", label: "删除选中备注", icon: "×", disabled: !selected.value}
 ]);
@@ -113,6 +129,7 @@ const summaryMetrics = computed(() => [
   {label: "可定位", value: formatNumber(rows.value.filter(row => !row.orphan).length)},
   {label: "孤儿备注", value: formatNumber(rows.value.filter(row => row.orphan).length)},
   {label: "已选", value: formatNumber(selectedNoteRows.value.length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
@@ -124,11 +141,6 @@ const detailRows = computed(() => selected.value ? [
   {label: "字数", value: `${formatNumber(selected.value.bodyLength)}字`},
   {label: "更新时间", value: formatDateTime(selected.value.updatedAt)}
 ] : []);
-
-watch(visibleRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedNoteIds.value = selectedNoteIds.value.filter(id => visibleIds.has(String(id)));
-});
 
 function noteRows(map) {
   return (map?.notes?.notes || [])
@@ -236,6 +248,14 @@ function handleNotesExport(key) {
 }
 
 function handleNotesAction(key) {
+  if (key === "highlight-selected") {
+    props.callbacks.onHighlight?.(highlightableNoteRows.value);
+    return;
+  }
+  if (key === "clear-highlights") {
+    props.callbacks.onClearHighlights?.();
+    return;
+  }
   if (!selected.value) return;
   if (key === "locate" && !selected.value.orphan) props.callbacks.onLocate?.(selected.value);
   if (key === "delete") props.callbacks.onDelete?.(selected.value);
