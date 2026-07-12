@@ -72,7 +72,7 @@ export function heightTransformPreviewColor(delta) {
   return delta > 0 ? [1, 0.28, 0.08, alpha] : [0.08, 0.62, 1, alpha];
 }
 
-export function buildHeightCellSelectionMesh(map, cellIds) {
+export function buildHeightCellSelectionMesh(map, cellIds, weights = null) {
   const cells = map?.grid?.cells;
   const points = map?.grid?.points;
   const verticesById = map?.grid?.vertices?.p;
@@ -83,6 +83,8 @@ export function buildHeightCellSelectionMesh(map, cellIds) {
   const vertices = [];
   const visited = new Set();
   let cellsCount = 0;
+  let featheredCells = 0;
+  let minWeight = 1;
   let skippedCells = 0;
   for (const value of cellIds || []) {
     const gridCell = Number(value);
@@ -97,26 +99,36 @@ export function buildHeightCellSelectionMesh(map, cellIds) {
       skippedCells += 1;
       continue;
     }
+    const weight = heightCellSelectionWeight(weights, gridCell);
+    if (weight <= 0) {
+      skippedCells += 1;
+      continue;
+    }
+    const color = weight < 1 ? [1, 0.78, 0.18, 0.08 + weight * 0.2] : HEIGHT_CELL_SELECTION_COLOR;
     const beforeLength = vertices.length;
     for (let index = 0; index < vertexIds.length; index++) {
       const a = verticesById[vertexIds[index]];
       const b = verticesById[vertexIds[(index + 1) % vertexIds.length]];
       if (!a || !b) continue;
-      pushWorldVertex(vertices, context, center, HEIGHT_CELL_SELECTION_COLOR);
-      pushWorldVertex(vertices, context, a, HEIGHT_CELL_SELECTION_COLOR);
-      pushWorldVertex(vertices, context, b, HEIGHT_CELL_SELECTION_COLOR);
+      pushWorldVertex(vertices, context, center, color);
+      pushWorldVertex(vertices, context, a, color);
+      pushWorldVertex(vertices, context, b, color);
     }
     if (vertices.length === beforeLength) {
       skippedCells += 1;
       continue;
     }
     cellsCount += 1;
+    if (weight < 1) featheredCells += 1;
+    minWeight = Math.min(minWeight, weight);
   }
   const typedVertices = new Float32Array(vertices);
   return {
     vertices: typedVertices,
     stats: {
       cells: cellsCount,
+      featheredCells,
+      minWeight: cellsCount ? Math.round(minWeight * 1000) / 1000 : null,
       skippedCells,
       vertexCount: typedVertices.length / 6,
       triangleCount: typedVertices.length / 18
@@ -129,5 +141,11 @@ export function emptyHeightTransformPreviewStats() {
 }
 
 export function emptyHeightCellSelectionStats() {
-  return {cells: 0, skippedCells: 0, vertexCount: 0, triangleCount: 0};
+  return {cells: 0, featheredCells: 0, minWeight: null, skippedCells: 0, vertexCount: 0, triangleCount: 0};
+}
+
+function heightCellSelectionWeight(weights, gridCell) {
+  if (!(weights instanceof Map)) return 1;
+  const value = Number(weights.get(gridCell));
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
 }

@@ -2,7 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCellSelectionTransform, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCellSelectionFeather, inspectHeightCellSelectionTransform, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -228,12 +228,12 @@ assert(!oversizedPaintSelection.valid && oversizedPaintSelection.maxCells === 64
 assert(paintUnionSelection.summary.valid && [...paintUnionSelection.cellIds].join(",") === "0,1,2,3" && paintUnionSelection.summary.source === "paint" && paintUnionSelection.summary.radius === 12 && paintUnionSelection.summary.stampCount === 3, `画笔候选并入异常：${JSON.stringify(paintUnionSelection.summary)}`);
 assert(!Object.hasOwn(paintCompositionPreview, "cellIds") && paintCompositionPreview.count === 4, "公开画笔组合摘要暴露 ids 或计数异常");
 
-const savedSelection = createHeightCellSelectionSnapshot(selectionMap, [2, 1, 2, -1, 99], {useForTools: true});
+const savedSelection = createHeightCellSelectionSnapshot(selectionMap, [2, 1, 2, -1, 99], {useForTools: true, featherRings: 3});
 const restoredSelection = restoreHeightCellSelectionSnapshot(selectionMap, savedSelection);
 const staleRestoredSelection = restoreHeightCellSelectionSnapshot(createSyntheticMap(), savedSelection);
 const emptySavedSelection = createHeightCellSelectionSnapshot(selectionMap, []);
-assert(savedSelection.summary.valid && [...savedSelection.cellIds].join(",") === "1,2" && savedSelection.summary.heightRange.join(",") === "20,30" && savedSelection.useForTools, `选区暂存异常：${JSON.stringify(savedSelection.summary)}`);
-assert(restoredSelection.summary.valid && [...restoredSelection.cellIds].join(",") === "1,2" && restoredSelection.useForTools, `选区恢复异常：${JSON.stringify(restoredSelection.summary)}`);
+assert(savedSelection.summary.valid && [...savedSelection.cellIds].join(",") === "1,2" && savedSelection.summary.heightRange.join(",") === "20,30" && savedSelection.useForTools && savedSelection.featherRings === 3, `选区暂存异常：${JSON.stringify(savedSelection.summary)}`);
+assert(restoredSelection.summary.valid && [...restoredSelection.cellIds].join(",") === "1,2" && restoredSelection.useForTools && restoredSelection.featherRings === 3, `选区恢复异常：${JSON.stringify(restoredSelection.summary)}`);
 assert(!staleRestoredSelection.summary.valid && staleRestoredSelection.summary.notice.includes("不属于当前 grid"), `跨 grid 暂存选区没有被拒绝：${JSON.stringify(staleRestoredSelection.summary)}`);
 assert(!emptySavedSelection.summary.valid && emptySavedSelection.summary.notice.includes("没有可暂存"), `空选区仍可暂存：${JSON.stringify(emptySavedSelection.summary)}`);
 
@@ -251,6 +251,32 @@ assert(shrunkSelection.summary.valid && [...shrunkSelection.cellIds].join(",") =
 assert(!rejectedEmptyShrink.summary.valid && [...rejectedEmptyShrink.cellIds].join(",") === "4" && rejectedEmptyShrink.summary.notice.includes("保留原锁定选区"), `收缩空结果没有保留旧选区：${JSON.stringify(rejectedEmptyShrink.summary)}`);
 assert([...landGrownSelection.cellIds].join(",") === "1,4,5,7", `选区扩展跨越当前陆水 scope：${[...landGrownSelection.cellIds]}`);
 assert(!Object.hasOwn(morphologyPreview, "cellIds") && morphologyPreview.count === 5, "公开边界调整摘要暴露 ids 或计数异常");
+
+const featherMap = createSquareMap(5, () => 40);
+const featherIds = Uint32Array.from([6, 7, 8, 11, 12, 13, 16, 17, 18]);
+const hardFeather = createHeightCellSelectionFeather(featherMap, featherIds, {rings: 0});
+const oneRingFeather = createHeightCellSelectionFeather(featherMap, featherIds, {rings: 1});
+const twoRingFeather = createHeightCellSelectionFeather(featherMap, featherIds, {rings: 2});
+const featherPreview = inspectHeightCellSelectionFeather(featherMap, featherIds, {rings: 2});
+assert(hardFeather.summary.valid && hardFeather.summary.featheredCount === 0 && [...hardFeather.weights.values()].every(weight => weight === 1), `硬边权重异常：${JSON.stringify(hardFeather.summary)}`);
+assert(oneRingFeather.summary.boundaryCount === 8 && oneRingFeather.summary.featheredCount === 8 && oneRingFeather.summary.coreCount === 1 && oneRingFeather.weights.get(6) === 0.5 && oneRingFeather.weights.get(12) === 1, `一圈羽化异常：${JSON.stringify(oneRingFeather.summary)}`);
+assert(twoRingFeather.summary.boundaryCount === 8 && twoRingFeather.summary.featheredCount === 9 && twoRingFeather.summary.coreCount === 0 && twoRingFeather.weights.get(6) === 1 / 3 && twoRingFeather.weights.get(12) === 2 / 3, `两圈羽化异常：${JSON.stringify(twoRingFeather.summary)}`);
+assert(!Object.hasOwn(featherPreview, "weights") && featherPreview.weightRange.join(",") === "0.333,0.667", "公开羽化摘要暴露 weights 或权重范围异常");
+
+const featheredRangePreview = inspectHeightRangeTransform(featherMap, {scope: "land", lower: 40, upper: 40, operator: "add", operand: 12, allowedCells: oneRingFeather.weights});
+const featheredRangeChanges = getHeightRangeTransformChanges(featherMap, {scope: "land", lower: 40, upper: 40, operator: "add", operand: 12, allowedCells: oneRingFeather.weights});
+assert(featheredRangePreview.selectionLimited && featheredRangePreview.selectionFeathered && featheredRangePreview.selectionWeightRange.join(",") === "0.5,1", `条件变换未暴露羽化摘要：${JSON.stringify(featheredRangePreview)}`);
+assert(featheredRangeChanges.find(change => change.gridCell === 6)?.after === 46 && featheredRangeChanges.find(change => change.gridCell === 12)?.after === 52, `条件变换未按羽化权重缩放：${JSON.stringify(featheredRangeChanges)}`);
+
+const featherSmoothMap = createSquareMap(5, (x, y) => x === 2 && y === 2 ? 80 : x >= 1 && x <= 3 && y >= 1 && y <= 3 ? 20 : 10);
+const featheredGlobalPreview = inspectGlobalHeightChanges(featherSmoothMap, {action: "smooth", scope: "land", allowedCells: twoRingFeather.weights});
+const featheredGlobalChanges = getGlobalHeightChanges(featherSmoothMap, {action: "smooth", scope: "land", allowedCells: twoRingFeather.weights});
+assert(featheredGlobalPreview.selectionLimited && featheredGlobalPreview.selectionFeathered, `全局工具未识别羽化选区：${JSON.stringify(featheredGlobalPreview)}`);
+assert(featheredGlobalChanges.find(change => change.gridCell === 12)?.after === 70, `全局平滑未按中心 2/3 权重缩放：${JSON.stringify(featheredGlobalChanges)}`);
+
+const featherSelectionMesh = buildHeightCellSelectionMesh(createTransformPreviewMap(), [0, 1], new Map([[0, 0.25], [1, 1]]));
+assert(featherSelectionMesh.stats.featheredCells === 1 && featherSelectionMesh.stats.minWeight === 0.25, `黄色 overlay 羽化统计异常：${JSON.stringify(featherSelectionMesh.stats)}`);
+assert(featherSelectionMesh.vertices[5] < featherSelectionMesh.vertices[77], "黄色 overlay 没有按羽化权重降低边缘透明度");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -403,6 +429,11 @@ console.log(JSON.stringify({
   restoredSelection: restoredSelection.summary,
   grownSelection: grownSelection.summary,
   shrunkSelection: shrunkSelection.summary,
+  oneRingFeather: oneRingFeather.summary,
+  twoRingFeather: twoRingFeather.summary,
+  featheredRangePreview,
+  featheredGlobalPreview,
+  featherSelectionMesh: featherSelectionMesh.stats,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

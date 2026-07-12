@@ -112,7 +112,9 @@
         <span v-else-if="state.terrainSelection.source === 'rectangle'">/ 矩形 {{ state.terrainSelection.width }} × {{ state.terrainSelection.height }}</span>
         <span v-else-if="state.terrainSelection.source === 'connected-height'">/ 中心 #{{ state.terrainSelection.centerCell }} / 高度 {{ state.terrainSelection.startHeight }}±{{ state.terrainSelection.tolerance }}</span>
         <span v-else-if="state.terrainSelection.source === 'paint'">/ 半径 {{ state.terrainSelection.radius }} / {{ state.terrainSelection.stampCount }} stamps</span>
+        <span v-if="state.terrainSelection.feather?.rings">/ 羽化 {{ state.terrainSelection.feather.rings }} 圈 / 过渡 {{ state.terrainSelection.feather.featheredCount }} cells</span>
         <span v-if="state.terrainSelection.rendererSelection">/ GPU {{ state.terrainSelection.rendererSelection.triangleCount }} triangles / {{ state.terrainSelection.rendererSelection.buildMs }} ms</span>
+        <span v-if="state.terrainSelection.rendererSelection?.featheredCells">/ 渐变 {{ state.terrainSelection.rendererSelection.featheredCells }} cells / 最低 {{ state.terrainSelection.rendererSelection.minWeight }}</span>
       </p>
       <p v-else>尚未锁定地形选区；锁定时使用当前作用范围和高度区间。</p>
       <p v-if="state.terrainSelection?.notice" class="height-action-help">{{ state.terrainSelection.notice }}</p>
@@ -132,9 +134,18 @@
       </div>
       <p class="height-action-help">扩展只沿共享边加入当前作用范围内的邻格；收缩为空时保留原选区。</p>
       <p v-if="state.terrainSelectionSaved?.valid" class="height-action-help">
-        已暂存 {{ state.terrainSelectionSaved.count }} cells；只对当前 grid 有效。
+        已暂存 {{ state.terrainSelectionSaved.count }} cells / 羽化 {{ state.terrainSelectionSaved.featherRings }} 圈；只对当前 grid 有效。
       </p>
       <p v-else class="height-action-help">暂无暂存选区；暂存不会写入浏览器偏好或地图文件。</p>
+      <UiSliderField
+        label="选区内缘羽化圈数"
+        :model-value="state.terrainSelectionFeather"
+        :min="0"
+        :max="8"
+        :step="1"
+        @input="setTerrainSelectionFeather"
+      />
+      <p class="height-action-help">0 为硬边；增加圈数后，条件变换和全局工具从选区边界向内逐圈增强，黄色覆盖层同步显示强度。</p>
       <UiSwitchField
         v-if="state.terrainSelection?.valid"
         label="条件 / 全局工具仅作用于锁定选区"
@@ -876,6 +887,12 @@ function setTerrainSelectionRadius(radius) {
 
 function setTerrainSelectionTolerance(tolerance) {
   props.state.terrainSelectionTolerance = tolerance;
+}
+
+function setTerrainSelectionFeather(value) {
+  const rings = Math.max(0, Math.min(8, Math.trunc(Number(value) || 0)));
+  props.state.terrainSelectionFeather = rings;
+  props.callbacks.onTerrainSelectionFeatherChange?.(rings);
 }
 
 function terrainSelectionRequest(operation) {

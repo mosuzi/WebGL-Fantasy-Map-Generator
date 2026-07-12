@@ -56,7 +56,7 @@ import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureCol
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
-import {composeHeightCellSelection, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -182,6 +182,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       globalToolSeed: 0,
       terrainSelection: null,
       terrainSelectionSaved: null,
+      terrainSelectionFeather: 0,
       terrainSelectionBox: null,
       terrainSelectionPoint: null,
       terrainSelectionPaintPending: null,
@@ -525,7 +526,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onTerrainSelectionSave: () => {
       cancelHeightLine(state, documentRef);
       const current = state.heightEdit.terrainSelection;
-      const snapshot = createHeightCellSelectionSnapshot(state.map, current?.cellIds, {useForTools: current?.useForTools});
+      const snapshot = createHeightCellSelectionSnapshot(state.map, current?.cellIds, {
+        useForTools: current?.useForTools,
+        featherRings: current?.featherRings
+      });
       if (!snapshot.summary.valid) {
         state.heightEdit.lastNotice = snapshot.summary.notice;
         updateHeightPanel(state);
@@ -545,8 +549,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateHeightPanel(state);
         return restored.summary;
       }
-      const summary = commitHeightTerrainSelection(state, restored, {useForTools: restored.useForTools});
+      state.heightEdit.terrainSelectionFeather = restored.featherRings;
+      heightPanel.updateTerrainSelectionFeather(restored.featherRings);
+      const summary = commitHeightTerrainSelection(state, restored, {useForTools: restored.useForTools, featherRings: restored.featherRings});
       state.heightEdit.lastNotice = summary.notice;
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      return summary;
+    },
+    onTerrainSelectionFeatherChange: value => {
+      const rings = Math.max(0, Math.min(8, Math.trunc(Number(value) || 0)));
+      state.heightEdit.terrainSelectionFeather = rings;
+      clearHeightTransformPreview(state);
+      const summary = updateHeightTerrainSelectionFeather(state, rings);
+      state.heightEdit.lastNotice = summary?.notice || `选区羽化已设为 ${rings} 圈。`;
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
       return summary;
@@ -2646,6 +2662,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   cancelHeightLine(state, documentRef);
   clearHeightTerrainSelection(state);
   clearSavedHeightTerrainSelection(state);
+  state.heightEdit.terrainSelectionFeather = 0;
+  state.panels.height?.updateTerrainSelectionFeather?.(0);
   state.heightEdit.strokeSeed = 0;
   state.heightEdit.globalToolSeed = 0;
   state.heightEdit.lastAffected = 0;
@@ -7398,7 +7416,8 @@ function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
   }
   active.previewSelection = selection;
   active.invalidNotice = "";
-  const rendererPreview = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
+  const feather = createHeightCellSelectionFeather(state.map, selection.cellIds, {rings: state.heightEdit.terrainSelectionFeather});
+  const rendererPreview = state.renderer?.setHeightCellSelection?.(selection.cellIds, {weights: feather.summary.valid ? feather.weights : null}) || null;
   state.heightEdit.lastNotice = `画笔选区预览 ${selection.summary.count} cells（${active.stampCount} stamps${rendererPreview ? ` / GPU ${rendererPreview.triangleCount} triangles` : ""}）。`;
   updateHeightPanel(state);
 }
@@ -7479,14 +7498,29 @@ function clearHeightTerrainSelection(state, {draw = true} = {}) {
   state.renderer?.clearHeightCellSelection?.({draw});
 }
 
-function commitHeightTerrainSelection(state, selection, {useForTools = true} = {}) {
+function commitHeightTerrainSelection(state, selection, {useForTools = true, featherRings = state.heightEdit.terrainSelectionFeather} = {}) {
   clearHeightTransformPreview(state, {draw: false});
   const cellSet = createHeightCellSelectionSet(selection.cellIds);
-  const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
-  const summary = {...selection.summary, rendererSelection};
-  state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, summary, useForTools: Boolean(useForTools)};
+  const feather = createHeightCellSelectionFeather(state.map, selection.cellIds, {rings: featherRings});
+  const featherWeights = feather.summary.valid ? feather.weights : new Map([...cellSet].map(gridCell => [gridCell, 1]));
+  const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds, {weights: featherWeights}) || null;
+  const summary = {...selection.summary, feather: feather.summary, rendererSelection};
+  state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, featherWeights, featherRings: feather.summary.rings, summary, useForTools: Boolean(useForTools)};
   state.panels.height?.updateTerrainSelection?.(summary, useForTools);
   return summary;
+}
+
+function updateHeightTerrainSelectionFeather(state, rings) {
+  const selection = state.heightEdit.terrainSelection;
+  if (!selection?.cellIds?.length) return null;
+  const feather = createHeightCellSelectionFeather(state.map, selection.cellIds, {rings});
+  if (!feather.summary.valid) return feather.summary;
+  const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds, {weights: feather.weights}) || null;
+  selection.featherWeights = feather.weights;
+  selection.featherRings = feather.summary.rings;
+  selection.summary = {...selection.summary, feather: feather.summary, rendererSelection};
+  state.panels.height?.updateTerrainSelection?.(selection.summary, selection.useForTools);
+  return feather.summary;
 }
 
 function clearSavedHeightTerrainSelection(state) {
@@ -7495,14 +7529,15 @@ function clearSavedHeightTerrainSelection(state) {
 }
 
 function restoreHeightTerrainSelectionBuffer(state) {
-  const cellIds = state.heightEdit.terrainSelection?.cellIds;
-  if (cellIds?.length) return state.renderer?.setHeightCellSelection?.(cellIds) || null;
+  const selection = state.heightEdit.terrainSelection;
+  if (selection?.cellIds?.length) return state.renderer?.setHeightCellSelection?.(selection.cellIds, {weights: selection.featherWeights}) || null;
   return state.renderer?.clearHeightCellSelection?.() || null;
 }
 
 function heightToolAllowedCells(state) {
   const selection = state.heightEdit.terrainSelection;
-  return selection?.useForTools ? selection.cellSet : null;
+  if (!selection?.useForTools) return null;
+  return selection.featherRings > 0 ? selection.featherWeights : selection.cellSet;
 }
 
 function resolveHeightSelectionCenterCell(state, canvas, documentRef) {
@@ -8210,6 +8245,7 @@ function updateHeightPanel(state) {
     fillPreview: state.heightEdit.fillPreview,
     terrainSelection: state.heightEdit.terrainSelection?.summary || null,
     terrainSelectionSaved: state.heightEdit.terrainSelectionSaved?.summary || null,
+    terrainSelectionFeather: state.heightEdit.terrainSelectionFeather,
     useTerrainSelection: Boolean(state.heightEdit.terrainSelection?.useForTools),
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,

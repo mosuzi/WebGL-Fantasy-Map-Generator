@@ -130,7 +130,8 @@ function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0, a
   const scope = normalizeBrushScope(scopeValue);
   const normalizedSeed = Math.trunc(Number(seed) || 0);
   const allowedCellSet = normalizeAllowedCells(allowedCells);
-  const base = {action: action || "", scope, seed: normalizedSeed, selectionLimited: Boolean(allowedCellSet), selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
+  const allowedSummary = summarizeAllowedCells(allowedCellSet);
+  const base = {action: action || "", scope, seed: normalizedSeed, selectionLimited: Boolean(allowedCellSet), ...allowedSummary, selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
   if (!cells?.h || !Array.isArray(cells.c)) return {...base, notice: "当前地图缺少高度或邻接数据，无法预览全局工具。"};
   if (action !== "smooth" && action !== "disrupt") return {...base, notice: "未知的全局高度工具。"};
   const heights = Array.from(cells.h, value => Number(value) || 0);
@@ -145,7 +146,8 @@ function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0, a
   let deltaSum = 0;
 
   for (let gridCell = 0; gridCell < heights.length; gridCell++) {
-    if (allowedCellSet && !allowedCellSet.has(gridCell)) continue;
+    const selectionWeight = allowedCellWeight(allowedCellSet, gridCell);
+    if (selectionWeight <= 0) continue;
     const before = heights[gridCell];
     if (!matchesBrushScope(before, scope)) continue;
     selectedCount += 1;
@@ -161,7 +163,8 @@ function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0, a
     } else {
       if (before >= 15) next = before + 0.5 + stableSignedNoise(gridCell, normalizedSeed, 0) * 2;
     }
-    const after = clampHeightToScope(next, scope);
+    const fullAfter = clampHeightToScope(next, scope);
+    const after = clampHeightToScope(before + (fullAfter - before) * selectionWeight, scope);
     minAfter = Math.min(minAfter, after);
     maxAfter = Math.max(maxAfter, after);
     if (after === before) continue;
@@ -187,7 +190,8 @@ function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0, a
   if (!changes.length) return {...summary, notice: `候选 ${selectedCount} cells 的高度不会变化。`};
   const label = action === "smooth" ? "全局平滑" : "全局扰动";
   const signedAverage = summary.averageDelta > 0 ? `+${summary.averageDelta}` : String(summary.averageDelta);
-  return {...summary, valid: true, notice: `可${label} ${changes.length}/${selectedCount} cells，高度 ${minBefore}..${maxBefore} → ${minAfter}..${maxAfter}，均变 ${signedAverage}。`};
+  const featherNotice = summary.selectionFeathered ? `，选区权重 ${summary.selectionWeightRange.join("..")}` : "";
+  return {...summary, valid: true, notice: `可${label} ${changes.length}/${selectedCount} cells，高度 ${minBefore}..${maxBefore} → ${minAfter}..${maxAfter}，均变 ${signedAverage}${featherNotice}。`};
 }
 
 export function inspectHeightRangeTransform(map, options = {}) {
@@ -207,7 +211,8 @@ function analyzeHeightRangeTransform(map, options) {
   const operator = String(options?.operator || "multiply");
   const operand = Number(options?.operand);
   const allowedCellSet = normalizeAllowedCells(options?.allowedCells);
-  const base = {scope, lower, upper, operator, operand, selectionLimited: Boolean(allowedCellSet), selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
+  const allowedSummary = summarizeAllowedCells(allowedCellSet);
+  const base = {scope, lower, upper, operator, operand, selectionLimited: Boolean(allowedCellSet), ...allowedSummary, selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
   if (!heights?.length) return {...base, notice: "当前地图缺少高度数据，无法预检条件变换。"};
   if (lower > upper) return {...base, notice: "高度区间下限不能高于上限。"};
   const validationError = validateHeightRangeOperation(operator, operand);
@@ -223,14 +228,16 @@ function analyzeHeightRangeTransform(map, options) {
   let loweredCount = 0;
   const changes = [];
   for (let gridCell = 0; gridCell < heights.length; gridCell++) {
-    if (allowedCellSet && !allowedCellSet.has(gridCell)) continue;
+    const selectionWeight = allowedCellWeight(allowedCellSet, gridCell);
+    if (selectionWeight <= 0) continue;
     const before = Number(heights[gridCell]) || 0;
     if (!matchesBrushScope(before, scope) || before < lower || before > upper) continue;
     selectedCount += 1;
     minBefore = Math.min(minBefore, before);
     maxBefore = Math.max(maxBefore, before);
     const next = transformHeightValue(before, operator, operand, scope);
-    const after = clampHeightToScope(next, scope);
+    const fullAfter = clampHeightToScope(next, scope);
+    const after = clampHeightToScope(before + (fullAfter - before) * selectionWeight, scope);
     minAfter = Math.min(minAfter, after);
     maxAfter = Math.max(maxAfter, after);
     if (after === before) continue;
@@ -256,7 +263,8 @@ function analyzeHeightRangeTransform(map, options) {
   if (!changes.length) return {...summary, notice: `候选 ${selectedCount} cells 的高度不会变化。`};
   const label = heightRangeOperatorLabel(operator);
   const signedAverage = summary.averageDelta > 0 ? `+${summary.averageDelta}` : String(summary.averageDelta);
-  return {...summary, valid: true, notice: `可${label} ${changes.length}/${selectedCount} cells，高度 ${minBefore}..${maxBefore} → ${minAfter}..${maxAfter}，均变 ${signedAverage}。`};
+  const featherNotice = summary.selectionFeathered ? `，选区权重 ${summary.selectionWeightRange.join("..")}` : "";
+  return {...summary, valid: true, notice: `可${label} ${changes.length}/${selectedCount} cells，高度 ${minBefore}..${maxBefore} → ${minAfter}..${maxAfter}，均变 ${signedAverage}${featherNotice}。`};
 }
 
 function validateHeightRangeOperation(operator, operand) {
@@ -483,7 +491,34 @@ function clampHeightToScope(value, scope) {
 }
 
 function normalizeAllowedCells(value) {
-  if (value instanceof Set) return value;
+  if (value instanceof Map || value instanceof Set) return value;
   if (Array.isArray(value) || ArrayBuffer.isView(value)) return new Set(value);
   return null;
+}
+
+function allowedCellWeight(allowedCells, gridCell) {
+  if (!allowedCells) return 1;
+  if (allowedCells instanceof Map) {
+    const value = Number(allowedCells.get(gridCell));
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+  }
+  return allowedCells.has(gridCell) ? 1 : 0;
+}
+
+function summarizeAllowedCells(allowedCells) {
+  if (!(allowedCells instanceof Map)) return {selectionFeathered: false, selectionWeightRange: null};
+  let min = 1;
+  let max = 0;
+  let found = false;
+  for (const value of allowedCells.values()) {
+    const weight = Number(value);
+    if (!Number.isFinite(weight) || weight <= 0) continue;
+    found = true;
+    min = Math.min(min, Math.min(1, weight));
+    max = Math.max(max, Math.min(1, weight));
+  }
+  return {
+    selectionFeathered: found && min < 1,
+    selectionWeightRange: found ? [Math.round(min * 1000) / 1000, Math.round(max * 1000) / 1000] : null
+  };
 }

@@ -1069,9 +1069,9 @@ export class PlaceholderMapRenderer {
     return this.setHeightTransformPreview([], options);
   }
 
-  setHeightCellSelection(cellIds, {draw = true} = {}) {
+  setHeightCellSelection(cellIds, {draw = true, weights = null} = {}) {
     const startedAt = performance.now();
-    const {vertices, stats} = buildHeightCellSelectionMesh(this.map, cellIds);
+    const {vertices, stats} = buildHeightCellSelectionMesh(this.map, cellIds, weights);
     this.heightCellSelectionVertexCount = vertices.length / 6;
     this.heightCellSelectionStats = stats;
     this.heightCellSelectionBuildMs = roundMs(performance.now() - startedAt);

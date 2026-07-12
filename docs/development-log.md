@@ -26869,3 +26869,31 @@ full 矩阵结果：
 - 阶段末烟测子智能体完成 4 项 `node --check`、高度回归、`regress:edit-command-affected`、`regress:affected-summary`、`build:app` 和 `git diff --check`，全部通过；构建仅有既有大 chunk 警告，生产产物包含五个新增按钮、savedSelection、saved / grow / shrink 和状态文案。
 - 浏览器子智能体复用现有 `5410` 页面与服务器，未刷新、导航、新建或启动 / 重启 Chrome / 服务器，也未使用独立 Playwright。初始选区暂存为 `3326 cells / GPU 19965 triangles`；仅陆地扩展无邻格时合理不变，切到全部后扩展为 `4317`，收缩为 `3547`。
 - 清除当前选区后暂存摘要继续保留；恢复后精确回到 `3326 cells / GPU 19965 triangles`，黄色 overlay 与 useForTools 一起恢复；删除暂存后摘要消失，恢复 / 删除按钮禁用。全程高度影响 `0`、历史 `0/0`、对象 selection 不变、console error `0`、WebGL 稳定。页面 handoff 保留，两名子智能体均已结束且无遗留进程。
+
+### 2026-07-12 高度选区内缘羽化
+
+背景：
+
+- 选区扩展 / 收缩已经明确拓扑边界，但条件变换和全局工具仍在黄色选区边缘以完整强度截断，容易形成硬台阶。
+- 羽化必须与真实工具变化共用同一权重，不能只把 overlay 画淡而保留硬边计算；同时不能把完整权重 Map 推入 Vue 或有限运行时快照。
+
+实现：
+
+- `height-cell-selection.js` 新增 `createHeightCellSelectionFeather()` / inspect。以选区内存在未选邻格的 cell 为边界，沿共享边向内 BFS；N 圈内第 d 圈权重为 `(d+1)/(N+1)`，更深核心为 1。0 圈、全图或无可识别边界时使用完整强度。
+- 羽化 summary 只含 rings、count、boundaryCount、featheredCount、coreCount、weightRange、valid 和 notice；完整 Map 留在 runtime。缺高度 / 邻接和空选区拒绝。
+- `height-brush.js` 的 allowedCells 兼容原 Set 和权重 Map。条件变换、全局平滑 / 扰动先计算完整目标，再按 `before + (fullAfter-before)*weight` 插值，最后继续执行统一整数 round 与陆水 clamp；公开预检增加 selectionFeathered / selectionWeightRange。
+- heightEdit 新增 terrainSelectionFeather。正式选区保存 featherWeights / featherRings / 有界 summary；限制开关开启且圈数大于 0 时把 Map 传给工具，硬边仍传 Set。组合、扩展、收缩、画笔 preview 和恢复都重建权重，地图载入重置为 0。
+- 选区快照增加 featherRings，暂存 / 恢复同时保留圈数与 useForTools。面板增加“选区内缘羽化圈数”0..8 slider，修改只清变化 preview 并重建黄色 buffer，不产生高度命令、历史或对象 selection。
+- 黄色 selection mesh 接收同一 Map：完整强度保持 alpha 0.28，软边 alpha 为 `0.08 + weight*0.2`；renderer stats 增加 featheredCells / minWeight，面板显示过渡 cells、渐变 GPU cells 和最低权重。
+
+直接验证：
+
+- 选区、工具、运行时、renderer、panel wrapper 和回归脚本语法通过，直接高度回归与 `git diff --check` 通过。
+- `5×5` 合成地图内侧 `3×3`：0 圈权重全 1；1 圈 8 个边界 cell 为 0.5、中心为 1；2 圈边界为 1/3、中心为 2/3，公开 inspect 无 weights。
+- 条件加 12 时边界 `40→46`、中心 `40→52`；全局平滑中心按 2/3 权重从 `80→70`，公开预检识别 selectionFeathered 并给出权重范围。
+- 黄色 mesh 使用 0.25 / 1 两级权重时 featheredCells=1、minWeight=0.25，边缘顶点 alpha 低于核心；暂存 / 恢复保留 3 圈。
+- 阶段末烟测子智能体完成 7 项 `node --check`、高度回归、`regress:edit-command-affected`、`regress:affected-summary`、`build:app` 和 `git diff --check`，全部通过；构建只有既有大 chunk 警告，生产产物包含羽化 slider、selectionFeathered / weightRange、featheredCells / minWeight、featherWeights / featherRings 和 renderer weights 路径。
+- 浏览器子智能体复用现有 `5410` 页面和服务器。硬边选区为 `3326 cells / GPU 19965 triangles`，同参条件预检为 `2746/3326`、高度 `20..100→20..92`、均变 `-2.5`；没有执行变换。
+- 切到 3 圈后 selection count 与 triangles 不变，过渡 / 渐变 `2273 cells`、核心 `1053`、minWeight `0.25`，黄色边缘截图可见变淡。同参预检变为 `1998/3326`、均变 `-2.4`，notice 含权重 `0.25..1`，绝对均变不高于硬边。
+- 暂存摘要确认 `3326 cells / 3圈`；清除当前后恢复为相同 count、3 圈、渐变 `2273`、minWeight `0.25` 和 useForTools，高度影响 `0`、历史 `0/0`。恢复前把 slider 改为 0 的动作没有可靠成立，因此本次浏览器证据只证明快照恢复 3 圈，不声称覆盖 0 圈配置；覆盖恢复由纯回归证明。
+- 浏览器控制会话随后在定位控件时超出合理窗口，被中断并只执行 finalize。最终 console error、对象 selection / editing 和 WebGL health 没有取得新的收口证据；补充智能体仅确认现有 `WebGL 地图生成器` 标签仍位于 `http://127.0.0.1:5410/`，未把存在标签冒充健康证据。全程未刷新、导航、启动 / 重启 Chrome / 服务器或使用 Playwright，未应用高度变化；验证智能体均已结束并释放。

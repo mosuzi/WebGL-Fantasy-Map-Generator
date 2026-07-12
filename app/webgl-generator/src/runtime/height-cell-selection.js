@@ -347,7 +347,8 @@ export function createHeightCellSelectionSet(cellIds) {
 export function createHeightCellSelectionSnapshot(map, cellIds, options = {}) {
   const heights = map?.grid?.cells?.h;
   const normalizedIds = normalizeCellIds(cellIds, heights?.length || 0);
-  const base = {source: "saved", count: 0, heightRange: null, valid: false, notice: ""};
+  const featherRings = normalizeFeatherRings(options.featherRings);
+  const base = {source: "saved", featherRings, count: 0, heightRange: null, valid: false, notice: ""};
   if (!heights?.length) return {gridHeights: null, cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度数据，无法暂存选区。"}};
   if (!normalizedIds.length) return {gridHeights: heights, cellIds: normalizedIds, summary: {...base, notice: "当前没有可暂存的锁定选区。"}};
   return {
@@ -360,13 +361,15 @@ export function createHeightCellSelectionSnapshot(map, cellIds, options = {}) {
       valid: true,
       notice: `已暂存当前地形选区 ${normalizedIds.length} cells。`
     },
-    useForTools: Boolean(options.useForTools)
+    useForTools: Boolean(options.useForTools),
+    featherRings
   };
 }
 
 export function restoreHeightCellSelectionSnapshot(map, snapshot) {
   const heights = map?.grid?.cells?.h;
-  const base = {source: "saved", count: 0, heightRange: null, valid: false, notice: ""};
+  const featherRings = normalizeFeatherRings(snapshot?.featherRings);
+  const base = {source: "saved", featherRings, count: 0, heightRange: null, valid: false, notice: ""};
   if (!heights?.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度数据，无法恢复暂存选区。"}};
   if (!snapshot?.summary?.valid || !snapshot.cellIds?.length) {
     return {cellIds: new Uint32Array(), summary: {...base, notice: "当前没有可恢复的暂存选区。"}};
@@ -385,7 +388,8 @@ export function restoreHeightCellSelectionSnapshot(map, snapshot) {
       valid: true,
       notice: `已恢复暂存地形选区 ${cellIds.length} cells。`
     },
-    useForTools: Boolean(snapshot.useForTools)
+    useForTools: Boolean(snapshot.useForTools),
+    featherRings
   };
 }
 
@@ -460,6 +464,69 @@ export function inspectHeightCellSelectionTransform(map, cellIds, options = {}) 
   return transformHeightCellSelection(map, cellIds, options).summary;
 }
 
+export function createHeightCellSelectionFeather(map, cellIds, options = {}) {
+  const cells = map?.grid?.cells;
+  const rings = normalizeFeatherRings(options.rings);
+  const normalizedIds = normalizeCellIds(cellIds, cells?.h?.length || 0);
+  const base = {rings, count: normalizedIds.length, boundaryCount: 0, featheredCount: 0, coreCount: normalizedIds.length, weightRange: normalizedIds.length ? [1, 1] : null, valid: false, notice: ""};
+  if (!cells?.h?.length || !Array.isArray(cells.c)) {
+    return {weights: new Map(), summary: {...base, notice: "当前地图缺少高度或共享边邻接，无法计算选区羽化。"}};
+  }
+  if (!normalizedIds.length) return {weights: new Map(), summary: {...base, notice: "当前没有可羽化的锁定选区。"}};
+
+  const selected = new Set(normalizedIds);
+  const weights = new Map([...normalizedIds].map(gridCell => [gridCell, 1]));
+  if (!rings) return {weights, summary: {...base, valid: true, notice: `选区羽化已关闭，${normalizedIds.length} cells 使用完整强度。`}};
+
+  const boundary = [];
+  for (const gridCell of normalizedIds) {
+    const neighbors = (cells.c[gridCell] || []).filter(neighbor => Number.isInteger(neighbor) && neighbor >= 0 && neighbor < cells.h.length);
+    if (neighbors.some(neighbor => !selected.has(neighbor))) boundary.push(gridCell);
+  }
+  if (!boundary.length) {
+    return {weights, summary: {...base, valid: true, notice: `选区没有可识别的内边界，${normalizedIds.length} cells 使用完整强度。`}};
+  }
+
+  const distances = new Map(boundary.map(gridCell => [gridCell, 0]));
+  for (let index = 0; index < boundary.length; index++) {
+    const gridCell = boundary[index];
+    const distance = distances.get(gridCell);
+    if (distance + 1 >= rings) continue;
+    for (const neighbor of cells.c[gridCell] || []) {
+      if (!selected.has(neighbor) || distances.has(neighbor)) continue;
+      distances.set(neighbor, distance + 1);
+      boundary.push(neighbor);
+    }
+  }
+
+  let minWeight = 1;
+  let maxWeight = 0;
+  for (const [gridCell, distance] of distances) {
+    const weight = (distance + 1) / (rings + 1);
+    weights.set(gridCell, weight);
+    minWeight = Math.min(minWeight, weight);
+    maxWeight = Math.max(maxWeight, weight);
+  }
+  if (distances.size < normalizedIds.length) maxWeight = 1;
+  const featheredCount = distances.size;
+  return {
+    weights,
+    summary: {
+      ...base,
+      boundaryCount: distances.size ? [...distances.values()].filter(distance => distance === 0).length : 0,
+      featheredCount,
+      coreCount: normalizedIds.length - featheredCount,
+      weightRange: [roundWeight(minWeight), roundWeight(maxWeight)],
+      valid: true,
+      notice: `选区内缘羽化 ${rings} 圈：过渡 ${featheredCount} cells，核心 ${normalizedIds.length - featheredCount} cells。`
+    }
+  };
+}
+
+export function inspectHeightCellSelectionFeather(map, cellIds, options = {}) {
+  return createHeightCellSelectionFeather(map, cellIds, options).summary;
+}
+
 function compositionResult(cellIds, summary) {
   return {cellIds: Uint32Array.from(cellIds || []), summary};
 }
@@ -529,6 +596,15 @@ function normalizeTolerance(value, fallback) {
 function normalizeMorphologySteps(value) {
   const numeric = Math.trunc(Number(value) || 1);
   return Math.max(1, Math.min(8, numeric));
+}
+
+function normalizeFeatherRings(value) {
+  const numeric = Math.trunc(Number(value) || 0);
+  return Math.max(0, Math.min(8, numeric));
+}
+
+function roundWeight(value) {
+  return Math.round(Number(value) * 1000) / 1000;
 }
 
 function heightSelectionMaxCells(cellCount) {

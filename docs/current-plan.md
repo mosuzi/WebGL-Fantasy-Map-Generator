@@ -1266,6 +1266,34 @@
    - 边界：浏览器验收集中到阶段末；不修改高度、不刷新、导航、新建或启动 Chrome / 服务器。若使用独立 Playwright，必须在 `finally` 中关闭 browser / context；保持输出有界。
    - 完成记录：烟测子智能体完成 4 项 `node --check`、高度回归、affected 两组兼容回归、生产构建和 `git diff --check`；暂存 / 恢复 `2 cells`、扩展 `1→5`、收缩 `5→1`，生产产物包含五个新增按钮、savedSelection 和 saved / grow / shrink 路径，构建仅有既有大 chunk 警告。浏览器子智能体复用现有 `5410` 页面：初始暂存 `3326 cells / GPU 19965 triangles`；仅陆地扩展无邻格时合理不变，切到全部后扩展为 `4317`，收缩为 `3547`；清除当前后暂存摘要仍在，恢复精确回到 `3326 / 19965`，黄色 overlay 与 useForTools 同步恢复；删除后摘要消失且恢复 / 删除按钮禁用。全程高度影响 `0`、历史 `0/0`、对象 selection 不变、console error `0`、WebGL 稳定；未刷新、导航、启动或重启 Chrome / 服务器，未使用独立 Playwright，页面 handoff 保留，两名子智能体均已结束且无遗留进程。
 
+198. 高度选区内缘羽化纯模型。`已完成`
+   - 目标：从锁定 selection 的内边界沿 `grid.cells.c` 向内计算 `0..8` 圈距离，为每个选中 cell 生成 `0..1` 强度；边界最弱，向核心逐圈增强。
+   - 边界：只在选区内部生成权重，不扩张或移除 ids；0 圈全部为 1。缺邻接 / 高度和空选区拒绝；全图或没有可识别内边界时保守使用完整强度。公开 inspect 不暴露 Map。
+   - 完成记录：新增 `createHeightCellSelectionFeather()` / inspect。N 圈内第 d 圈权重为 `(d+1)/(N+1)`，未落入过渡带的核心为 1；summary 只含 rings / count / boundaryCount / featheredCount / coreCount / weightRange / valid / notice。
+
+199. 条件与全局高度工具消费羽化权重。`已完成`
+   - 目标：既有 allowedCells 同时兼容 Set 硬选区与 Map 权重；条件加减乘除指数、全局平滑和稳定扰动先算完整目标，再以 `before + (fullAfter-before)*weight` 插值并执行原陆水 clamp。
+   - 边界：selectionWeight<=0 不进入候选，Set 路径保持旧行为；公开预检增加 selectionFeathered / selectionWeightRange，不暴露 Map 或完整 weights。
+   - 完成记录：两类分析器共享 allowedCellWeight / summarizeAllowedCells；硬选区现有回归保持不变。羽化预检 notice 显示权重范围，整数高度仍走统一 round / scope clamp，无变化 cell 不虚增命令目标。
+
+200. 羽化运行时、暂存与面板闭环。`已完成`
+   - 目标：面板增加“选区内缘羽化圈数”0..8；当前选区实时重建权重和黄色 overlay，条件 / 全局工具打开限制时读取权重 Map。暂存 / 恢复同时保存圈数。
+   - 生命周期：换图重置为 0；组合、扩展、收缩和恢复后统一重算；画笔拖中 preview 使用当前圈数但仍不提交 runtime selection。修改圈数只清变化 preview，不产生高度命令、历史或对象 selection。
+   - 完成记录：heightEdit 新增 terrainSelectionFeather；正式 terrainSelection 保存 featherWeights / featherRings / 有界 feather summary。heightToolAllowedCells 在圈数大于 0 时返回 Map，否则仍返回 Set。快照增加 featherRings，恢复同步 panel 配置与 useForTools。
+
+201. 黄色 GPU overlay 羽化可视化。`已完成`
+   - 目标：黄色持久选区与工具强度使用同一权重；边界降低 alpha，核心保持原黄色，renderer stats 暴露 featheredCells / minWeight 供 UI 和浏览器验收。
+   - 完成记录：buildHeightCellSelectionMesh 接收可选 Map；weight 1 保持 alpha 0.28，软边 alpha 为 `0.08 + weight*0.2`。renderer setter 转发 weights，卡片显示羽化圈数、过渡 cells、渐变 GPU cells 与最低权重；无 Map 的旧调用保持硬边。
+
+202. 羽化回归与中文文档。`已完成`
+   - 目标：覆盖 0 / 1 / 2 圈权重、边界 / 核心、条件变换、全局平滑、overlay alpha / stats、暂存圈数与有界 inspect；同步专题清单和开发日志。
+   - 完成记录：`5×5` 地图内侧 `3×3` 选区：0 圈全 1；1 圈边界 8 cells 权重 0.5、中心 1；2 圈边界 1/3、中心 2/3。条件加 12 后边界 `40→46`、中心 `40→52`；全局平滑中心按 2/3 从 `80→70`。overlay 合成权重 0.25 / 1 时 featheredCells=1、minWeight=0.25 且边缘 alpha 更低。暂存 / 恢复保留 3 圈；公开 inspect 无 weights。相关语法、直接高度回归和 `git diff --check` 通过。
+
+203. 选区羽化阶段末统一验收。`已完成`
+   - 目标：烟测子智能体统一跑语法、回归、构建和差异；浏览器子智能体复用现有 `5410` 页面，在已有局部选区上对比 0 圈与正数圈的黄色渐变 stats，并对同一条件变换执行两次只读预检，确认羽化权重范围 / 均变降低且不提交高度。
+   - 边界：浏览器验收集中到阶段末；不应用条件或全局变化，不修改高度，不刷新、导航、新建或启动 Chrome / 服务器。若使用独立 Playwright，必须在 `finally` 中关闭 browser / context；保持输出有界。
+   - 完成记录：烟测子智能体完成 7 项 `node --check`、高度回归、两项 affected 兼容回归、生产构建和 `git diff --check`，全部通过；0 / 1 / 2 圈、条件 `40→46/52`、全局 `80→70`、overlay alpha / stats 与暂存 3 圈均被覆盖，构建只有既有大 chunk 警告。浏览器子智能体复用现有 `5410` 页面：硬边 `3326 cells / GPU 19965`，同参条件预检为 `2746/3326`、均变 `-2.5`；切到 3 圈后 count / triangles 不变，过渡 / 渐变 `2273 cells`、核心 `1053`、minWeight `0.25`，黄色边缘可见变淡；同参预检为 `1998/3326`、均变 `-2.4`，notice 含权重 `0.25..1`，未执行变换。暂存摘要为 `3326 / 3圈`，清除当前后恢复到相同 count、渐变统计、minWeight 和 useForTools；高度影响 `0`、历史 `0/0`。控制会话随后因定位控件超时被中断并 finalize，最终 console error、对象 selection / editing 与 WebGL health 没有取得新的收口证据，不能宣称已复核；补充智能体只确认现有 FMG `5410` 标签仍在并释放会话。全程未刷新、导航、启动 / 重启 Chrome / 服务器或使用 Playwright，未应用高度变化；所有验证智能体已结束。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。

@@ -22,6 +22,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     terrainSelectionTolerance: 6,
     terrainSelection: null,
     terrainSelectionSaved: null,
+    terrainSelectionFeather: 0,
     useTerrainSelection: false,
     falloff: true,
     lastAffected: 0,
@@ -52,6 +53,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onTerrainSelectionRestore: () => callbacks.onTerrainSelectionRestore?.(),
     onTerrainSelectionSavedClear: () => callbacks.onTerrainSelectionSavedClear?.(),
     onTerrainSelectionTransform: operation => callbacks.onTerrainSelectionTransform?.(operation),
+    onTerrainSelectionFeatherChange: value => callbacks.onTerrainSelectionFeatherChange?.(value),
     onTerrainSelectionCancel: () => callbacks.onTerrainSelectionCancel?.(),
     onTerrainSelectionUseChange: value => callbacks.onTerrainSelectionUseChange?.(value),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
@@ -122,6 +124,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       globalToolPreview = panelState.globalToolPreview,
       terrainSelection = panelState.terrainSelection,
       terrainSelectionSaved = panelState.terrainSelectionSaved,
+      terrainSelectionFeather = panelState.terrainSelectionFeather,
       useTerrainSelection = panelState.useTerrainSelection,
       graphWidth = panelState.graphWidth,
       graphHeight = panelState.graphHeight,
@@ -139,6 +142,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
       panelState.terrainSelectionSaved = cloneTerrainSelection(terrainSelectionSaved);
+      panelState.terrainSelectionFeather = Math.max(0, Math.min(8, Math.trunc(Number(terrainSelectionFeather) || 0)));
       panelState.useTerrainSelection = Boolean(useTerrainSelection && terrainSelection?.valid);
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;
@@ -179,6 +183,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         tolerance: panelState.terrainSelectionTolerance,
         selection: cloneTerrainSelection(panelState.terrainSelection),
         savedSelection: cloneTerrainSelection(panelState.terrainSelectionSaved),
+        featherRings: panelState.terrainSelectionFeather,
         useForTools: Boolean(panelState.useTerrainSelection && panelState.terrainSelection?.valid)
       };
     },
@@ -200,6 +205,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     },
     updateTerrainSelectionSaved(terrainSelectionSaved) {
       panelState.terrainSelectionSaved = cloneTerrainSelection(terrainSelectionSaved);
+    },
+    updateTerrainSelectionFeather(terrainSelectionFeather) {
+      panelState.terrainSelectionFeather = Math.max(0, Math.min(8, Math.trunc(Number(terrainSelectionFeather) || 0)));
     },
     setActive(active) {
       panelState.active = active;
@@ -224,6 +232,7 @@ function cloneTerrainSelection(selection) {
     ...selection,
     heightRange: Array.isArray(selection.heightRange) ? [...selection.heightRange] : null,
     bounds: selection.bounds ? {...selection.bounds} : null,
+    feather: selection.feather ? {...selection.feather, weightRange: Array.isArray(selection.feather.weightRange) ? [...selection.feather.weightRange] : null} : null,
     rendererSelection: selection.rendererSelection ? {...selection.rendererSelection} : null
   };
 }
