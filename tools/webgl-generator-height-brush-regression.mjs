@@ -2,7 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightCursorRadiusSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCursorRadiusSelection, inspectHeightRectangleSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightRectangleSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -198,6 +198,23 @@ assert(!invalidRectangleSelection.valid && invalidRectangleSelection.notice.incl
 assert(!oversizedRectangleSelection.valid && oversizedRectangleSelection.maxCells === 64 && oversizedRectangleSelection.notice.includes("安全上限"), `超大矩形没有被拒绝：${JSON.stringify(oversizedRectangleSelection)}`);
 assert(rectangleUnionSelection.summary.valid && [...rectangleUnionSelection.cellIds].join(",") === "0,1,2" && rectangleUnionSelection.summary.source === "rectangle" && rectangleUnionSelection.summary.bounds.minX === 5, `矩形候选并入异常：${JSON.stringify(rectangleUnionSelection.summary)}`);
 assert(!Object.hasOwn(rectangleCompositionPreview, "cellIds") && rectangleCompositionPreview.count === 3, "公开矩形组合摘要暴露 ids 或计数异常");
+const connectedMap = createSquareMap(5, (x, y) => x >= 1 && x <= 3 && y >= 1 && y <= 3 ? (x === 2 && y === 2 ? 40 : 42) : 60);
+const exactConnectedSelection = createHeightConnectedSelection(connectedMap, 12, {scope: "land", tolerance: 0});
+const tolerantConnectedSelection = createHeightConnectedSelection(connectedMap, 12, {scope: "land", tolerance: 2});
+const waterConnectedSelection = inspectHeightConnectedSelection(connectedMap, 12, {scope: "water", tolerance: 2});
+const invalidConnectedSelection = inspectHeightConnectedSelection(connectedMap, null, {scope: "all", tolerance: 2});
+const missingAdjacencySelection = inspectHeightConnectedSelection(selectionMap, 1, {scope: "land", tolerance: 2});
+const oversizedConnectedSelection = inspectHeightConnectedSelection(createSquareMap(10, () => 30), 55, {scope: "land", tolerance: 0});
+const connectedUnionSelection = composeHeightCellSelection(connectedMap, [0], {operation: "union", source: "connected-height", scope: "land", centerCell: 12, tolerance: 2});
+const connectedCompositionPreview = inspectHeightCellSelectionComposition(connectedMap, [0], {operation: "union", source: "connected-height", scope: "land", centerCell: 12, tolerance: 2});
+assert(exactConnectedSelection.summary.valid && [...exactConnectedSelection.cellIds].join(",") === "12" && exactConnectedSelection.summary.heightRange.join(",") === "40,40", `容差0连通选区异常：${JSON.stringify(exactConnectedSelection.summary)}`);
+assert(tolerantConnectedSelection.summary.valid && tolerantConnectedSelection.cellIds.length === 9 && tolerantConnectedSelection.summary.heightRange.join(",") === "40,42", `正容差连通选区异常：${JSON.stringify(tolerantConnectedSelection.summary)}`);
+assert(!waterConnectedSelection.valid && waterConnectedSelection.notice.includes("不属于当前作用范围"), `连通选区没有遵守scope：${JSON.stringify(waterConnectedSelection)}`);
+assert(!invalidConnectedSelection.valid && invalidConnectedSelection.notice.includes("有效中心"), `坏连通中心没有被拒绝：${JSON.stringify(invalidConnectedSelection)}`);
+assert(!missingAdjacencySelection.valid && missingAdjacencySelection.notice.includes("共享边邻接"), `缺邻接连通选区没有被拒绝：${JSON.stringify(missingAdjacencySelection)}`);
+assert(!oversizedConnectedSelection.valid && oversizedConnectedSelection.maxCells === 64 && oversizedConnectedSelection.notice.includes("安全上限"), `超大连通选区没有被拒绝：${JSON.stringify(oversizedConnectedSelection)}`);
+assert(connectedUnionSelection.summary.valid && connectedUnionSelection.cellIds.length === 10 && connectedUnionSelection.cellIds[0] === 0 && connectedUnionSelection.summary.source === "connected-height" && connectedUnionSelection.summary.startHeight === 40 && connectedUnionSelection.summary.tolerance === 2, `连通候选并入异常：${JSON.stringify(connectedUnionSelection.summary)}`);
+assert(!Object.hasOwn(connectedCompositionPreview, "cellIds") && connectedCompositionPreview.count === 10, "公开连通组合摘要暴露 ids 或计数异常");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -341,6 +358,9 @@ console.log(JSON.stringify({
   cursorUnionSelection: cursorUnionSelection.summary,
   rectangleSelection: rectangleSelection.summary,
   rectangleUnionSelection: rectangleUnionSelection.summary,
+  exactConnectedSelection: exactConnectedSelection.summary,
+  tolerantConnectedSelection: tolerantConnectedSelection.summary,
+  connectedUnionSelection: connectedUnionSelection.summary,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

@@ -182,6 +182,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       globalToolSeed: 0,
       terrainSelection: null,
       terrainSelectionBox: null,
+      terrainSelectionPoint: null,
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none",
@@ -479,6 +480,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateEditingInteractionLock(state, documentRef);
         return {pending: true, operation: options.operation, source: options.source};
       }
+      if (options.source === "connected-height") {
+        cancelHeightLine(state, documentRef);
+        state.heightEdit.terrainSelectionPoint = {request: options};
+        state.heightEdit.lastNotice = "请在地图上单击连通等高区的中心。";
+        updateHeightPanel(state);
+        updateEditingInteractionLock(state, documentRef);
+        return {pending: true, operation: options.operation, source: options.source};
+      }
       if (options.source === "cursor-circle") options.centerCell = resolveHeightSelectionCenterCell(state, canvas, documentRef);
       const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, options);
       if (!selection.summary.valid) {
@@ -494,6 +503,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onTerrainSelectionClear: () => {
       cancelHeightSelectionBox(state, documentRef);
+      cancelHeightSelectionPoint(state);
       clearHeightTransformPreview(state);
       clearHeightTerrainSelection(state);
       state.heightEdit.lastNotice = "已清除锁定地形选区。";
@@ -502,6 +512,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onTerrainSelectionCancel: () => {
       cancelHeightSelectionBox(state, documentRef);
+      cancelHeightSelectionPoint(state);
       state.heightEdit.lastNotice = "";
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
@@ -7053,6 +7064,10 @@ function bindHeightEditing(canvas, state, documentRef) {
       handleHeightSelectionBoxClick(state, event, documentRef);
       return;
     }
+    if (state.heightEdit.terrainSelectionPoint) {
+      handleHeightSelectionPointClick(state, event, documentRef);
+      return;
+    }
     clearHeightTransformPreview(state);
     if (brush.action === "line") {
       handleHeightLineClick(state, event, brush, documentRef);
@@ -7213,6 +7228,29 @@ function handleHeightSelectionBoxClick(state, event, documentRef) {
   updateEditingInteractionLock(state, documentRef);
 }
 
+function handleHeightSelectionPointClick(state, event, documentRef) {
+  const pending = state.heightEdit.terrainSelectionPoint;
+  if (!pending) return;
+  const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, {
+    ...pending.request,
+    centerCell: pick?.gridCell
+  });
+  cancelHeightSelectionPoint(state);
+  if (!selection.summary.valid) {
+    state.heightEdit.lastNotice = selection.summary.notice;
+    updateHeightPanel(state);
+    updateEditingInteractionLock(state, documentRef);
+    return;
+  }
+  state.pick = pick;
+  updatePickPanel(documentRef, state);
+  const summary = commitHeightTerrainSelection(state, selection);
+  state.heightEdit.lastNotice = summary.notice;
+  updateHeightPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
 function updateHeightSelectionBoxPreview(documentRef, start, clientX, clientY) {
   const stage = documentRef.querySelector(".map-stage");
   if (!stage || !start) return;
@@ -7238,12 +7276,17 @@ function cancelHeightSelectionBox(state, documentRef) {
   documentRef.querySelector(".height-selection-box-preview")?.remove();
 }
 
+function cancelHeightSelectionPoint(state) {
+  state.heightEdit.terrainSelectionPoint = null;
+}
+
 function cancelHeightLine(state, documentRef) {
   state.heightEdit.lineStart = null;
   state.heightEdit.fillHoverCell = null;
   state.heightEdit.fillPreview = null;
   clearHeightTransformPreview(state);
   cancelHeightSelectionBox(state, documentRef);
+  cancelHeightSelectionPoint(state);
   documentRef.querySelector(".height-line-preview")?.remove();
 }
 
@@ -8387,6 +8430,10 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
           x: Math.round(state.heightEdit.terrainSelectionBox.start.point.x * 10) / 10,
           y: Math.round(state.heightEdit.terrainSelectionBox.start.point.y * 10) / 10
         } : null
+      } : null,
+      terrainSelectionPoint: state.heightEdit.terrainSelectionPoint ? {
+        operation: state.heightEdit.terrainSelectionPoint.request?.operation || "replace",
+        source: state.heightEdit.terrainSelectionPoint.request?.source || "connected-height"
       } : null
     },
     conditionalHeightTransform: state.panels.height?.getConditionalTransformSnapshot?.() || null,

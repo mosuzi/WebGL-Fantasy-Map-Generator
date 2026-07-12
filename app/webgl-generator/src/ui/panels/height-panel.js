@@ -19,6 +19,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     globalToolPreview: null,
     terrainSelectionSource: "height-band",
     terrainSelectionRadius: 48,
+    terrainSelectionTolerance: 6,
     terrainSelection: null,
     useTerrainSelection: false,
     falloff: true,
@@ -96,7 +97,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     scope: panelState.scope,
     lower: panelState.transformLower,
     upper: panelState.transformUpper,
-    radius: panelState.terrainSelectionRadius
+    radius: panelState.terrainSelectionRadius,
+    tolerance: panelState.terrainSelectionTolerance
   });
 
   return {
@@ -167,6 +169,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       return {
         source: panelState.terrainSelectionSource,
         radius: panelState.terrainSelectionRadius,
+        tolerance: panelState.terrainSelectionTolerance,
         selection: cloneTerrainSelection(panelState.terrainSelection),
         useForTools: Boolean(panelState.useTerrainSelection && panelState.terrainSelection?.valid)
       };

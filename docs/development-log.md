@@ -26790,3 +26790,31 @@ full 矩阵结果：
 - 浏览器子智能体复用既有 browser 语义连接、同一 `5410` 页面、Chrome 和服务器，没有刷新、导航、新建或启动资源。切换矩形框选、scope 全部并点击覆盖后显示待选提示；第一角约 `(910,358)` 后提示“已选择矩形起角”且 preview DOM 存在，移动到第二角 `(1366,576)` 时预览宽 `456px`、高约 `218px`。
 - 第二角完成后选区为 `404 cells`、world 矩形 `288.5×191.6`、GPU `2428 triangles`；黄色 overlay 可见，限制开关保持选中，preview DOM 已移除。清除后摘要、限制开关、GPU、黄色 overlay 和 preview 全部消失。
 - 页面完整，画布 `2276×1092`，无 alert、无 console error。没有执行其它来源、并入 / 交集 / 排除、高度工具、历史、笔刷或重算；页面 handoff，两名子智能体均已结束且无遗留进程。
+
+### 2026-07-12 连通等高区高度选区
+
+背景：
+
+- 圆形与矩形按几何范围构造，容易把邻近但不属于同一山脊 / 盆地 / 浅海连通块的 cells 一并纳入；需要基于共享边邻接和起点高度容差的拓扑来源。
+- 该来源必须复用正式 `grid.cells.c`，不能重新推断邻接或把 BFS 工作集暴露给 Vue。
+
+实现：
+
+- `height-cell-selection.js` 新增 `createHeightConnectedSelection()` / inspect。从中心 cell 开始 BFS，只有匹配 scope 且与 startHeight 差不超过 tolerance 的 cell 才加入并继续向邻居扩张。
+- summary 只暴露 source / scope / centerCell / startHeight / tolerance / maxCells / count / heightRange / valid / notice；queue、visited 与 ids 留在纯模型内部。缺邻接 / 高度、坏中心、中心 scope 不匹配和超大块均拒绝。
+- 通用 compose 增加 connected-height 路由，并继续复用四种布尔、空结果旧选区保持与黄色 GPU buffer。
+- panel state 增加 terrainSelectionTolerance=`6`，request 与有限 snapshot 同步；UI 来源新增“连通等高区”、`0..20` slider 和稳定 id `height-selection-tolerance`，卡片显示中心和起点高度±容差。
+- runtime 对 connected-height 使用显式单点 pending：点击组合按钮后等待下一次 canvas 主按钮点击，通过 renderer picking 取得中心并立即组合；capture handler 优先消费该点击，不进入高度笔刷或对象 selection。有限 snapshot 只增加 pending operation / source；来源或容差修改不清除旧选区，只有组合成功才原子替换。
+
+直接验证：
+
+- `node --check` 覆盖选区模块、运行时、panel wrapper 和回归脚本；直接高度回归与 `git diff --check` 通过。
+- `5×5` 地图中心 `40`、内圈 `42`、外圈 `60`：容差 `0` 只得到中心 cell `12`；容差 `2` 得到内侧 `9 cells`、heightRange `40..42`，不会穿过外圈。
+- 中心在 water scope 下拒绝，null 中心和缺共享边邻接拒绝；`10×10` 全同高块超过 maxCells `64` 后拒绝。
+- 容差 `2` 的连通候选并入旧 id `0` 得到 `10 cells`，summary source / startHeight / tolerance 正确，公开 inspect 不含 cellIds。
+- 阶段末首轮浏览器在 scope 全部、容差 `0` 下沿用画布中心，命中大面积同高海域并被 `maxCells=2000` 正确拒绝；没有生成选区，画布完整且无 console error。该结果说明安全边界成立，也说明连通拓扑起点不能依赖不明确的旧 hover。
+- 运行时随后改为显式 `terrainSelectionPoint` pending：点击布尔按钮后提示“请在地图上单击连通等高区的中心”，下一次 canvas 主按钮点击由 capture handler 调 renderer picking、注入 centerCell 并组合，不进入高度笔刷或对象 selection；取消路径并入 `cancelHeightLine()`，有限 snapshot 仅含 operation / source。
+- 原 FMG tab 已不存在时，浏览器子智能体复用既有 Chrome 进程与唯一 GitHub tab，只导航一次到已运行的 `5410`，没有新建 tab 或重启服务器。首次明显陆地点绝对坐标补验中，导航后的 canvas 布局仍在收敛，两个相同屏幕坐标分别命中 `#3619 / #3740`；虽得到 `3 -> 11 cells`，但不能归因于同一中心，已明确标为不足证据。
+- 页面稳定后用每次实时 canvas rect 的同一归一位置 `(70%,30%)` 补验：容差 `0` 点击 `(1593,296)` 与容差 `2` 点击 `(1593,287)` 都命中 center `#3013`。A=`2 cells`、startHeight / range `84 / 84..84`、GPU `11 triangles`；B=`6 cells`、range `82..86`、GPU `35 triangles`，满足 `B>A`，黄色 / GPU 范围扩大。
+- 清除成功；高度影响仍为 `0`，历史 `undo 0 / redo 0`，无对象选择 UI、无 console error。现有页面 handoff，没有执行其它来源、并入 / 交集 / 排除、高度工具、笔刷或重算。
+- 最终烟测子智能体完成 4 项 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过。生产产物含 terrainSelectionPoint、单击中心提示、connected-height / tolerance、terrainHeightSelection 和 pending operation / source；无遗留进程。

@@ -156,6 +156,65 @@ export function inspectHeightRectangleSelection(map, fromPoint, toPoint, options
   return createHeightRectangleSelection(map, fromPoint, toPoint, options).summary;
 }
 
+export function createHeightConnectedSelection(map, centerCell, options = {}) {
+  const cells = map?.grid?.cells;
+  const scope = normalizeScope(options.scope);
+  const tolerance = normalizeTolerance(options.tolerance, 6);
+  const maxCells = heightSelectionMaxCells(cells?.h?.length || 0);
+  const normalizedCenter = Number.isInteger(centerCell) ? centerCell : null;
+  const startHeight = normalizedCenter !== null && cells?.h?.length && normalizedCenter >= 0 && normalizedCenter < cells.h.length
+    ? Number(cells.h[normalizedCenter]) || 0
+    : null;
+  const base = {source: "connected-height", scope, centerCell: normalizedCenter, startHeight, tolerance, maxCells, count: 0, heightRange: null, valid: false, notice: ""};
+  if (!cells?.h?.length || !Array.isArray(cells.c)) {
+    return {cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度或共享边邻接，无法生成连通等高区。"}};
+  }
+  if (normalizedCenter === null || normalizedCenter < 0 || normalizedCenter >= cells.h.length) {
+    return {cellIds: new Uint32Array(), summary: {...base, centerCell: null, startHeight: null, notice: "连通等高区需要一个有效中心 cell。"}};
+  }
+  if (!matchesScope(startHeight, scope)) {
+    return {cellIds: new Uint32Array(), summary: {...base, notice: "中心 cell 不属于当前作用范围。"}};
+  }
+
+  const queue = [normalizedCenter];
+  const visited = new Set([normalizedCenter]);
+  const cellIds = [];
+  let minHeight = Infinity;
+  let maxHeight = -Infinity;
+  for (let index = 0; index < queue.length; index++) {
+    const gridCell = queue[index];
+    const height = Number(cells.h[gridCell]) || 0;
+    if (!matchesScope(height, scope) || Math.abs(height - startHeight) > tolerance) continue;
+    cellIds.push(gridCell);
+    if (cellIds.length > maxCells) {
+      return {cellIds: new Uint32Array(), summary: {...base, notice: `连通等高区超过安全上限 ${maxCells} cells，已拒绝。`}};
+    }
+    minHeight = Math.min(minHeight, height);
+    maxHeight = Math.max(maxHeight, height);
+    for (const neighbor of cells.c[gridCell] || []) {
+      if (!Number.isInteger(neighbor) || neighbor < 0 || neighbor >= cells.h.length || visited.has(neighbor)) continue;
+      visited.add(neighbor);
+      queue.push(neighbor);
+    }
+  }
+  if (!cellIds.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前中心没有命中可用的连通等高 cells。"}};
+  const typedIds = Uint32Array.from(cellIds.sort((a, b) => a - b));
+  return {
+    cellIds: typedIds,
+    summary: {
+      ...base,
+      count: typedIds.length,
+      heightRange: [minHeight, maxHeight],
+      valid: true,
+      notice: `连通等高候选 ${typedIds.length} cells（中心 #${normalizedCenter}，高度 ${startHeight}±${tolerance}）。`
+    }
+  };
+}
+
+export function inspectHeightConnectedSelection(map, centerCell, options = {}) {
+  return createHeightConnectedSelection(map, centerCell, options).summary;
+}
+
 export function composeHeightCellSelection(map, currentCellIds, options = {}) {
   const heights = map?.grid?.cells?.h;
   const operation = normalizeCompositionOperation(options.operation);
@@ -163,6 +222,8 @@ export function composeHeightCellSelection(map, currentCellIds, options = {}) {
   const source = normalizeSelectionSource(options.source);
   const candidate = source === "cursor-circle"
     ? createHeightCursorRadiusSelection(map, options.centerCell, options)
+    : source === "connected-height"
+      ? createHeightConnectedSelection(map, options.centerCell, options)
     : source === "rectangle"
       ? createHeightRectangleSelection(map, options.fromPoint, options.toPoint, options)
     : source === "height-band"
@@ -180,6 +241,8 @@ export function composeHeightCellSelection(map, currentCellIds, options = {}) {
     bounds: candidate.summary.bounds ? {...candidate.summary.bounds} : null,
     width: candidate.summary.width ?? null,
     height: candidate.summary.height ?? null,
+    startHeight: candidate.summary.startHeight ?? null,
+    tolerance: candidate.summary.tolerance ?? null,
     previousCount: currentIds.length,
     incomingCount: candidate.cellIds.length,
     count: currentIds.length,
@@ -268,7 +331,7 @@ function normalizeCompositionOperation(operation) {
 
 function normalizeSelectionSource(source) {
   if (source === undefined || source === null || source === "") return "height-band";
-  return source === "height-band" || source === "cursor-circle" || source === "rectangle" ? source : null;
+  return source === "height-band" || source === "cursor-circle" || source === "rectangle" || source === "connected-height" ? source : null;
 }
 
 function compositionOperationLabel(operation) {
@@ -296,6 +359,11 @@ function normalizeBound(value, fallback) {
 function normalizeRadius(value, fallback) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(1, Math.min(256, Math.round(numeric))) : fallback;
+}
+
+function normalizeTolerance(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
 }
 
 function heightSelectionMaxCells(cellCount) {
