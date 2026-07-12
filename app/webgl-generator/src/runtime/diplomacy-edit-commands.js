@@ -56,13 +56,14 @@ export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成�
     domain: "diplomacy",
     effects: {
       ...DIPLOMACY_EFFECTS,
-      affected: systemAffected("diplomacy-regeneration", [{kind: "diplomacy", id: "all"}])
+      affected: systemAffected("diplomacy-regeneration", [{kind: "state", id: "all"}])
     },
     apply(context) {
       snapshot ??= snapshotDiplomacy(context.map);
       context.map.options = {...context.map.options, diplomacyRegenerationSalt: salt};
       context.map.diplomacy = buildDiplomacy(context.map.pack, context.map.society, context.map.options);
       syncDiplomacy(context.map);
+      this.effects.affected = diplomacyRegenerationAffected(context.map);
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的外交快照");
@@ -73,6 +74,14 @@ export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成�
       return states.filter(state => state?.i && !state.removed).length < 2;
     }
   };
+}
+
+export function diplomacyRegenerationAffected(map) {
+  const states = map?.pack?.states || map?.politics?.states || [];
+  const targets = states
+    .filter(state => state && !state.removed && Number(state.i ?? state.id) > 0)
+    .flatMap(state => objectAffected("state", Number(state.i ?? state.id)));
+  return systemAffected("diplomacy-regeneration", targets);
 }
 
 function snapshotDiplomacy(map) {

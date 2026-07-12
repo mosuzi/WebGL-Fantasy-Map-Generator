@@ -26292,3 +26292,24 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：6 个目标 JS / MJS 文件 `node --check` 全过；`regress:edit-command-affected` 覆盖名称库创建、绑定、清空及高度笔刷 affected 元数据；持久高亮共享契约回归仍为支持 `16` 类、规范化 `3`、拒绝 `2`、去重 `1`、删除后 `2`、上限 `100`；`pnpm run build:app` 构建 1115 modules、耗时 1.33 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取控制技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面。会话已立即释放；未接管、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright。名称库 / 高度历史摘要、撤销 / 重做摘要与 WebGL / console / page / health 证据继续列入第 122 步。
+
+### 2026-07-12 集合编辑命令真实影响目标回写
+
+背景：
+
+- 名称库导入和清空已经有系统级 affected，但成功执行后仍保留 `namebase#all`，无法从历史摘要判断实际新增、替换或移除了哪些库。
+- 外交重生成以 `diplomacy#all` 表示全量关系，虽然说明了系统来源，却不能驱动国家面板按实际对象刷新或诊断。
+
+实现：
+
+- 名称库命令工厂把执行前后快照交给 affected resolver；`changedNamebaseAffected()` 按 id 比较用户库内容，只回写新增、修改或删除的真实库。
+- 名称库导入初始目标改为 `derived-system#namebase-import + namebase#new`，执行后替换为实际导入 id；清空执行后把 `namebase#all` 替换为所有实际删除 id。
+- 外交重生成完成后调用 `diplomacyRegenerationAffected()`，过滤中立和已移除国家，写入 `derived-system#diplomacy-regeneration` 与有效 `state#id` 列表。
+- 扩展 `regress:edit-command-affected`，覆盖导入、清空集合差异以及外交有效国家过滤。
+
+验证：
+
+- `node --check` 已覆盖名称库、外交命令和扩展回归脚本；直接回归通过：导入目标为 `namebase#imported-import-a`，清空目标为 `namebase#user-namebase-1 / namebase#imported-import-a`，外交目标为 `state#1 / state#3`，中立和已移除国家均被排除。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；扩展后的 `regress:edit-command-affected` 覆盖名称库动态 id、导入 / 绑定 / 清空、外交重生成与高度领域；持久高亮兼容回归仍为支持 `16` 类、规范化 `3`、拒绝 `2`、去重 `1`、删除后 `2`、上限 `100`；`pnpm run build:app` 构建 1115 modules、耗时 1.21 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能并只执行一次现有标签检查，唯一页面仍为 GitHub commits，没有可复用 FMG 页面；已调用 finalize 释放会话。未 claim、刷新或新开页面，未启动 / 重启 Chrome、开发服务器或 Playwright，名称库 / 外交历史摘要和 WebGL / console / page / health 验收继续列入第 124 步。

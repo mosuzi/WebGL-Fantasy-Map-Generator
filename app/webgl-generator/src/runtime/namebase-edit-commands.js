@@ -12,7 +12,8 @@ const NAMEBASE_EDIT_EFFECTS = Object.freeze({
 export function createImportNamebasesCommand(document, {filename = "", mode = "append", label = "导入名称库"} = {}) {
   return createNamebaseStoreCommand({
     label,
-    affected: systemAffected("namebase-import", [{kind: "namebase", id: "all"}]),
+    affected: systemAffected("namebase-import", newObjectAffected("namebase")),
+    resolveAffected: (_result, snapshots) => changedNamebaseAffected("namebase-import", snapshots.before, snapshots.after),
     applyEdit(map) {
       return importNamebaseDocument(map, document, {filename, mode});
     },
@@ -147,6 +148,7 @@ export function createClearUserNamebasesCommand({label = "清空用户名称库"
   return createNamebaseStoreCommand({
     label,
     affected: systemAffected("namebase-clear", [{kind: "namebase", id: "all"}]),
+    resolveAffected: (_result, snapshots) => changedNamebaseAffected("namebase-clear", snapshots.before, snapshots.after),
     applyEdit(map) {
       return clearUserNamebases(map);
     },
@@ -193,7 +195,7 @@ function createNamebaseStoreCommand({label, affected, resolveAffected = null, ap
       hasBefore = true;
       result = applyEdit(map);
       after = snapshotNamebases(map);
-      const resolvedAffected = resolveAffected?.(result);
+      const resolvedAffected = resolveAffected?.(result, {before, after, map});
       if (Array.isArray(resolvedAffected) && resolvedAffected.length) this.effects.affected = resolvedAffected;
     },
     revert(context) {
@@ -211,6 +213,18 @@ function createNamebaseStoreCommand({label, affected, resolveAffected = null, ap
 
 function snapshotNamebases(map) {
   return map.namebases ? JSON.parse(JSON.stringify(map.namebases)) : null;
+}
+
+function changedNamebaseAffected(system, before, after) {
+  const beforeById = namebasesById(before);
+  const afterById = namebasesById(after);
+  const ids = [...new Set([...beforeById.keys(), ...afterById.keys()])]
+    .filter(id => JSON.stringify(beforeById.get(id) || null) !== JSON.stringify(afterById.get(id) || null));
+  return systemAffected(system, ids.flatMap(id => objectAffected("namebase", id)));
+}
+
+function namebasesById(snapshot) {
+  return new Map((snapshot?.bases || []).filter(base => base?.id).map(base => [base.id, base]));
 }
 
 function restoreNamebases(map, snapshot) {
