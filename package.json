@@ -31,6 +31,7 @@
     "regress:measurement-highlight": "node --no-warnings ./tools/webgl-generator-measurement-highlight-regression.mjs",
     "regress:composite-highlight": "node --no-warnings ./tools/webgl-generator-composite-highlight-regression.mjs",
     "regress:persistent-highlight-contract": "node --no-warnings ./tools/webgl-generator-persistent-highlight-contract-regression.mjs",
+    "regress:edit-command-affected": "node --no-warnings ./tools/webgl-generator-edit-command-affected-regression.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:api-geo": "node ./tools/webgl-generator-api-geo-regression.mjs",

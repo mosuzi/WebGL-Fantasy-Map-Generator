@@ -1,4 +1,5 @@
 import {clearUserNamebases, copyBuiltinNamebaseToUser, createNamebaseImportPreview, createUserNamebase, deleteUserNamebase, importNamebaseDocument, NAMEBASE_BINDING_TARGETS, renameUserNamebase, setNamebaseBinding, updateUserNamebaseOptions, updateUserNamebaseSource} from "../generator/namebase-store.js";
+import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const NAMEBASE_EDIT_EFFECTS = Object.freeze({
   render: "none",
@@ -11,6 +12,7 @@ const NAMEBASE_EDIT_EFFECTS = Object.freeze({
 export function createImportNamebasesCommand(document, {filename = "", mode = "append", label = "导入名称库"} = {}) {
   return createNamebaseStoreCommand({
     label,
+    affected: systemAffected("namebase-import", [{kind: "namebase", id: "all"}]),
     applyEdit(map) {
       return importNamebaseDocument(map, document, {filename, mode});
     },
@@ -29,6 +31,7 @@ export function createSetNamebaseBindingCommand(target, value, {cultureId = "", 
   const scopeLabel = cultureKey ? `文化 #${cultureKey}` : "全局";
   return createNamebaseStoreCommand({
     label: `${label} ${scopeLabel}${targetLabel}`,
+    affected: systemAffected("namebase-binding", [{kind: "namebase-binding", id: `${cultureKey ? `culture:${cultureKey}` : "global"}:${targetKey}`}]),
     applyEdit(map) {
       return setNamebaseBinding(map, targetKey, nextValue, {cultureId: cultureKey});
     },
@@ -45,6 +48,8 @@ export function createSetNamebaseBindingCommand(target, value, {cultureId = "", 
 export function createCopyBuiltinNamebaseCommand(id, {name = "", label = "复制名称库"} = {}) {
   return createNamebaseStoreCommand({
     label: `${label} ${name || id}`,
+    affected: newObjectAffected("namebase"),
+    resolveAffected: result => result?.id ? objectAffected("namebase", result.id) : null,
     applyEdit(map) {
       return copyBuiltinNamebaseToUser(map, id);
     },
@@ -58,6 +63,8 @@ export function createCreateUserNamebaseCommand({label = "新建用户名称库"
   const normalizedPayload = normalizeUserNamebasePayload(payload, {allowEmpty: true});
   return createNamebaseStoreCommand({
     label,
+    affected: newObjectAffected("namebase"),
+    resolveAffected: result => result?.id ? objectAffected("namebase", result.id) : null,
     applyEdit(map) {
       const created = createUserNamebase(map);
       return applyUserNamebasePayload(map, created.id, normalizedPayload, {
@@ -72,6 +79,7 @@ export function createRenameUserNamebaseCommand(id, name, {label = "重命名名
   const nextName = String(name || "").trim();
   return createNamebaseStoreCommand({
     label: `${label} ${nextName || id}`,
+    affected: objectAffected("namebase", id),
     applyEdit(map) {
       return renameUserNamebase(map, id, nextName);
     },
@@ -86,6 +94,7 @@ export function createUpdateUserNamebaseSourceCommand(id, sourceText, {label = "
   const nextSource = normalizeSourceText(sourceText);
   return createNamebaseStoreCommand({
     label: `${label} ${id}`,
+    affected: objectAffected("namebase", id),
     applyEdit(map) {
       return updateUserNamebaseSource(map, id, sourceText);
     },
@@ -100,6 +109,7 @@ export function createUpdateUserNamebaseOptionsCommand(id, options, {label = "�
   const normalizedOptions = normalizeOptionsSnapshot(options);
   return createNamebaseStoreCommand({
     label: `${label} ${id}`,
+    affected: objectAffected("namebase", id),
     applyEdit(map) {
       return updateUserNamebaseOptions(map, id, normalizedOptions);
     },
@@ -115,6 +125,7 @@ export function createUpdateUserNamebaseCommand(id, patch, {label = "更新名�
   const normalizedPatch = normalizeUserNamebasePayload(patch, {allowEmpty: false});
   return createNamebaseStoreCommand({
     label: `${label} ${id}`,
+    affected: objectAffected("namebase", id),
     applyEdit(map) {
       return applyUserNamebasePayload(map, id, normalizedPatch, {
         id,
@@ -135,6 +146,7 @@ export function createUpdateUserNamebaseCommand(id, patch, {label = "更新名�
 export function createClearUserNamebasesCommand({label = "清空用户名称库"} = {}) {
   return createNamebaseStoreCommand({
     label,
+    affected: systemAffected("namebase-clear", [{kind: "namebase", id: "all"}]),
     applyEdit(map) {
       return clearUserNamebases(map);
     },
@@ -147,6 +159,7 @@ export function createClearUserNamebasesCommand({label = "清空用户名称库"
 export function createDeleteUserNamebaseCommand(id, {name = "", label = "删除名称库"} = {}) {
   return createNamebaseStoreCommand({
     label: `${label} ${name || id}`,
+    affected: objectAffected("namebase", id),
     applyEdit(map) {
       return deleteUserNamebase(map, id);
     },
@@ -156,7 +169,7 @@ export function createDeleteUserNamebaseCommand(id, {name = "", label = "删除�
   });
 }
 
-function createNamebaseStoreCommand({label, applyEdit, isNoop = () => false}) {
+function createNamebaseStoreCommand({label, affected, resolveAffected = null, applyEdit, isNoop = () => false}) {
   let before = null;
   let after = null;
   let hasBefore = false;
@@ -165,7 +178,10 @@ function createNamebaseStoreCommand({label, applyEdit, isNoop = () => false}) {
   return {
     label,
     domain: "namebase",
-    effects: NAMEBASE_EDIT_EFFECTS,
+    effects: {
+      ...NAMEBASE_EDIT_EFFECTS,
+      affected: Array.isArray(affected) ? affected : systemAffected("namebase-store")
+    },
     apply(context) {
       const map = context.map;
       if (!map) throw new Error("当前没有可编辑名称库的地图");
@@ -177,6 +193,8 @@ function createNamebaseStoreCommand({label, applyEdit, isNoop = () => false}) {
       hasBefore = true;
       result = applyEdit(map);
       after = snapshotNamebases(map);
+      const resolvedAffected = resolveAffected?.(result);
+      if (Array.isArray(resolvedAffected) && resolvedAffected.length) this.effects.affected = resolvedAffected;
     },
     revert(context) {
       if (!hasBefore) throw new Error("缺少可撤销的名称库快照");

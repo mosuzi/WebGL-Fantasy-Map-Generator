@@ -26271,3 +26271,24 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：8 个目标 JS / MJS 文件 `node --check` 全过；共享契约回归返回支持类型 `16`、规范化 `3`、拒绝 `2`、重复 `1`、删除后剩余 `2`、上限 `100`；selection 高亮回归为 `12 / 30 / 30` 顶点；复合高亮回归为 connector `12` 顶点、负载 `600` 顶点 / `100` 候选、构建约 `0.879ms`；`pnpm run build:app` 构建 1115 modules、耗时 1.25 秒，仅有既有大 chunk 警告；`git diff --check` 通过。首次 pnpm 在沙箱内约 40 秒无输出后已终止，随后只按最小升级策略重跑一次并通过，没有持续挂起。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能，但当前任务未暴露技能要求的合规浏览器控制入口，工具发现中也没有可加载入口，因此立即结束并释放；未启动或重启 Chrome、开发服务器或 Playwright，未新开、认领或刷新页面。重命名 / 删除 / 撤销 / 重做后的高亮摘要、视觉、checksum 与 WebGL / console / page / health 真实浏览器证据继续列入第 120 步。
+
+### 2026-07-12 编辑命令领域与影响目标契约收尾第一刀
+
+背景：
+
+- 应用内直接历史调用已经收束到统一执行器，但高度笔刷仍没有 `domain`，历史摘要只能显示 `none`。
+- 名称库命令已有统一 `domain` 和刷新 effects，却没有 `affected`，新增、单对象修改和批量导入 / 清空在历史统计中无法区分。
+
+实现：
+
+- 高度笔刷命令新增 `domain: "height"`，保留既有 `derived-system#height-brush + grid-cells#数量` 影响目标。
+- 名称库命令工厂接受每条命令自己的 affected；新增和复制先用 `namebase#new`，执行成功后回写真实 id。
+- 名称库重命名、样本更新、参数更新、综合更新和删除声明具体 `namebase#id`；绑定声明 `derived-system#namebase-binding + namebase-binding#scope:target`；导入和清空分别声明系统级原因与集合目标。
+- 新增 `tools/webgl-generator-edit-command-affected-regression.mjs` 与 `pnpm run regress:edit-command-affected`，用真实 `EditHistory` 覆盖名称库新增、撤销、重做、重命名，以及高度 grid / pack 同步应用和撤销。
+
+验证：
+
+- `node --check` 已覆盖高度命令、名称库命令和新回归脚本；直接回归通过：名称库新增真实 id 为 `user-namebase-1`，绑定目标为 `culture:3:place`，清空目标为 `derived-system#namebase-clear + namebase#all`，高度领域为 `height` 且目标为 `derived-system#height-brush + grid-cells#1`。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：6 个目标 JS / MJS 文件 `node --check` 全过；`regress:edit-command-affected` 覆盖名称库创建、绑定、清空及高度笔刷 affected 元数据；持久高亮共享契约回归仍为支持 `16` 类、规范化 `3`、拒绝 `2`、去重 `1`、删除后 `2`、上限 `100`；`pnpm run build:app` 构建 1115 modules、耗时 1.33 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取控制技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面。会话已立即释放；未接管、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright。名称库 / 高度历史摘要、撤销 / 重做摘要与 WebGL / console / page / health 证据继续列入第 122 步。
