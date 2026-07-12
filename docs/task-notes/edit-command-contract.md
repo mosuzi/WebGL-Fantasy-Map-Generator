@@ -71,6 +71,8 @@
 
 对象集合应优先使用 `collectionAffected(kind, objects, options)` 提取真实目标；该 helper 会过滤空项、`removed` 对象和重复 id，并可通过 `includeZero: false` 排除国家 / 省份的中立项。运行时刷新摘要与历史标题统一使用 `formatAffectedTargets()`，默认只显示前三项和 `+N`。`lastEditRefresh` 不保存完整大数组，而是保存 `affectedCount`、前三项 `affectedPreview` 和按 kind 聚合的 `affectedKinds`；完整数组只在调度当次消费。
 
+控制台 `api.history.peek({affectedLimit})` 同样使用有界输出：`affected` 是预览数组，另附 `affectedCount / affectedKinds / affectedSummary / affectedTruncated`；默认 3 项，最大 50 项。不要通过历史只读 API 暴露无界 affected 数组。
+
 新增对象命令如果真实 id 只能在 `apply()` 时确定，初始 `affected` 应使用 `{kind, id: "new"}`，执行成功后再回写真实 id。这样执行前诊断、失败路径和历史摘要都能知道命令目标类型。
 
 新增命令应优先通过 `newObjectAffected(kind)` 生成这个初始目标，避免不同领域手写 `{kind, id: "new"}` 时出现字段拼写或 kind 不一致。批量导入可组合 `systemAffected(system, newObjectAffected(kind))`，先解释导入系统，再保留“将新增对象”的目标类型。

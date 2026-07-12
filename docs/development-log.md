@@ -26358,3 +26358,26 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；affected 摘要回归返回 `affectedCount=5`、`affectedKinds=derived-system×1 / route×4`，1001 目标摘要为 239 字节；编辑命令 affected 与持久高亮契约兼容回归均通过；`pnpm run build:app` 构建 1115 modules、耗时 1.44 秒，入口 1128.58 kB / gzip 327.43 kB，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面；已 finalize 并释放。未认领、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright，道路重生成与单次 `runtimeStats()` 验收继续列入第 128 步。
+
+### 2026-07-12 历史 peek 有界 affected API
+
+背景：
+
+- `lastEditRefresh` 已改为有界结构，但 `api.history.peek()` 仍直接克隆栈顶命令的完整 affected；批量改名、导入或重生成命令可能让一次只读调用输出上千项目标。
+- 小命令现有消费者依赖 `affected` 数组，不能简单删除该字段；需要把它明确收束为可调但有上界的预览。
+
+实现：
+
+- 新增 `runtime/history-peek.js` 纯运行时模块，避免 API 摘要回归沿 `console-api.js -> panel.js` 加载 Vue SFC；控制台 API 改为复用该模块。
+- `api.history.peek({affectedLimit = 3})` 为 undo / redo 命令返回 affected 预览，并新增 `affectedCount`、`affectedKinds`、`affectedSummary` 和 `affectedTruncated`。
+- `affectedLimit` 允许 `0..50`；0 项预览仍保留总数、kind 计数和 `+N` 文本，超过 50 或非对象 options 返回结构化错误。
+- 小于等于 limit 的命令继续返回完整 affected 预览，既有单对象调用形状保持兼容。
+- 新增 `tools/webgl-generator-history-peek-summary-regression.mjs` 与 `pnpm run regress:history-peek-summary`。
+
+验证：
+
+- `node --check` 覆盖 `history-peek.js`、`console-api.js` 和新回归脚本；直接回归通过：1001 目标默认预览 3 项，kind 计数为 `derived-system=1 / city=1000`，摘要以 `+998` 收尾，整个 peek 结果为 852 字节；自定义 limit 5 返回 5 项，limit 0 和非法参数边界符合预期。
+- `regress:affected-summary` 继续通过。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：7 个目标文件 `node --check` 全过；`regress:history-peek-summary` 确认 1001 目标默认预览 3 项、摘要 `+998`、结果 852 字节，自定义 5 项、limit 0、limit 51 与非对象 options 边界均符合预期；affected 摘要回归仍为 1001 目标 239 字节，编辑命令 affected 回归通过；`pnpm run build:app` 构建 1116 modules、耗时 1.63 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面；已 finalize 并释放。未 claim、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright，默认 / 自定义 `history.peek()` 与撤销、checksum、WebGL / console / page / health 验收继续列入第 130 步。

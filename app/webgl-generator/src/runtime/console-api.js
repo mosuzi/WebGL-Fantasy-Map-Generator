@@ -8,6 +8,7 @@ import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measu
 import {OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {resolveObject} from "./object-resolver.js";
 import {normalizeVisualThemeId} from "../renderer/themes.js";
+import {buildHistoryPeek} from "./history-peek.js";
 
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
@@ -98,7 +99,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
     history: Object.freeze({
       get: () => apiCall(() => buildHistoryStats(state, actions)),
       stats: () => apiCall(() => buildHistoryStats(state, actions)),
-      peek: () => apiCall(() => buildHistoryPeek(state)),
+      peek: (options = {}) => apiCall(() => buildHistoryPeek(state, options)),
       undo: () => apiCall(() => requireApiAction(actions.history?.undo, "history.undo")()),
       redo: () => apiCall(() => requireApiAction(actions.history?.redo, "history.redo")())
     }),
@@ -464,35 +465,6 @@ function requireApiAction(action, name) {
 
 function buildHistoryStats(state, actions = {}) {
   return actions.history?.get?.() || state?.editHistory?.getStats?.() || null;
-}
-
-function buildHistoryPeek(state) {
-  const history = state?.editHistory;
-  if (!history) return {ready: false};
-  return {
-    ready: true,
-    stats: history.getStats?.() || null,
-    undo: summarizeHistoryCommand(history.undoStack?.at(-1)),
-    redo: summarizeHistoryCommand(history.redoStack?.at(-1))
-  };
-}
-
-function summarizeHistoryCommand(command) {
-  if (!command) return null;
-  return {
-    label: command.label || "未命名编辑",
-    domain: command.domain || "none",
-    affected: summarizeAffectedTargets(command.effects?.affected),
-    renderEffect: command.effects?.render || "",
-    selectionEffect: command.effects?.selection || "",
-    derived: Array.isArray(command.effects?.derived) ? [...command.effects.derived] : [],
-    hasNoopCheck: typeof command.isNoop === "function"
-  };
-}
-
-function summarizeAffectedTargets(affected) {
-  if (!Array.isArray(affected)) return [];
-  return affected.map(target => ({kind: target?.kind || "", id: target?.id ?? ""}));
 }
 
 function buildApiVersion() {

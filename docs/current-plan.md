@@ -936,6 +936,15 @@
    - 目标：在可复用 FMG 页面存在时，通过 `api.info.runtimeStats()` 确认重生成后的 `lastEditRefresh` 同时返回折叠文本、正确总数、前三项预览和 kind 计数，且无巨量控制台输出。
    - 边界：继续与第 126 步合并执行；不启动额外浏览器或服务器，不持续轮询 runtime stats。
 
+129. 历史 peek 有界 affected API。`已完成`
+   - 目标：避免 `api.history.peek()` 对批量命令返回数百 / 数千个完整 affected，同时保留可机器读取的规模和类型信息。
+   - 边界：小命令的 `affected` 数组保持兼容；默认预览 3 项，调用方只能通过 `affectedLimit` 在 0 到 50 内调整，不能请求无界结果。
+   - 完成记录：新增纯运行时 `history-peek.js`；`peek({affectedLimit})` 返回 `affected / affectedCount / affectedKinds / affectedSummary / affectedTruncated`。1001 目标默认只返回 3 项预览，结果序列化 852 字节；`affectedLimit=5` 返回 5 项，非法上界与非对象 options 返回结构化错误。新增 `pnpm run regress:history-peek-summary`。
+
+130. history.peek 有界输出真实浏览器验收。`待执行`
+   - 目标：在可复用 FMG 页面存在时制造一条已有批量命令历史，验证默认 / 自定义 limit、截断标记、kind 计数、撤销栈切换和 checksum 语义。
+   - 边界：与第 128 步合并到阶段末；只读取一次默认与一次自定义 peek，不输出完整地图对象或反复轮询。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -956,6 +965,7 @@
 - 集合编辑真实 affected 批次完成：烟测子智能体执行的 6 个 `node --check`、扩展后的 `regress:edit-command-affected`、持久高亮兼容回归、`pnpm run build:app` 和 `git diff --check` 均通过；构建 1115 modules、1.21 秒，仅有既有大 chunk 警告。浏览器子智能体完整读取控制技能后仅检查一次现有 Chrome，唯一页面仍是 GitHub commits；已调用 finalize 释放会话，未 claim、刷新或新开页面，未启动 Chrome、服务器或 Playwright，第 124 步真实摘要与健康验收继续待执行。
 - 重生成真实 affected 与摘要负载批次完成：烟测子智能体执行的 7 个 `node --check`、`regress:affected-summary`、编辑命令 affected 回归、持久高亮兼容回归、`pnpm run build:app` 和 `git diff --check` 均通过；构建 1115 modules、1.45 秒，仅有既有大 chunk 警告。浏览器子智能体只检查一次既有 Chrome，唯一页面仍为 GitHub commits；会话已 finalize 释放，未 claim、刷新、新开页面、启动服务器或重启 Chrome，未使用 Playwright，第 126 步重生成运行时验收继续待执行。
 - 有界 affected 结构化诊断批次完成：烟测子智能体执行的 6 个 `node --check`、三组回归、`pnpm run build:app` 和 `git diff --check` 均通过；1001 目标摘要为 239 字节，构建 1115 modules、1.44 秒，入口 1128.58 kB / gzip 327.43 kB，仅有既有大 chunk 警告。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放，未认领、刷新或新开页面，未启动 Chrome、服务器或 Playwright，第 128 步 runtime stats 验收继续待执行。
+- history.peek 有界 affected 批次完成：烟测子智能体执行的 7 个 `node --check`、三组回归、`pnpm run build:app` 和 `git diff --check` 均通过；1001 目标默认预览 3 项、结果 852 字节，自定义 5 项与非法参数边界均通过，构建 1116 modules、1.63 秒，仅有既有大 chunk 警告。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放，未 claim、刷新或新建页面，未启动 Chrome、服务器或 Playwright，第 130 步真实 API 验收继续待执行。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。
