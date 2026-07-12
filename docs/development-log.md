@@ -26427,3 +26427,26 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；高度笔刷回归确认目标 `20`、连续拖动 cell 3 到 `42`、衰减边缘无变化过滤、撤销 / 重做与 `height` domain；编辑命令 affected 兼容回归和 1001 目标 239 字节摘要回归通过；`pnpm run build:app` 构建 1117 modules，HeightPanel 38.44 kB / gzip 12.97 kB，主包 1129.84 kB / gzip 327.98 kB，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有可复用 FMG 页面；已 finalize 释放且无遗留浏览器资源。未 claim、刷新或新开页面，未启动 Chrome、开发服务器或 Playwright，四段动作、整平说明、短 stroke、历史 / 派生与 WebGL / console / page / health 验收继续列入第 134 步。
+
+### 2026-07-12 高度基础派生顺序重算入口
+
+背景：
+
+- 高度笔刷会把河流、路线、生物群系、城镇、国家、省份和下游系统同时标脏；高度面板此前只有“重算河流”，用户需要去生成面板自行推断剩余重算顺序。
+- 正确基础顺序是先根据高度重建河流 / 生物群系 / 道路，再基于新地理重建国家 / 省份 / 城镇 / 道路；如果河流失败，不应继续政治重算。
+
+实现：
+
+- 新增 `runtime/height-derived-rebuild.js`，定义不可变步骤 `rivers -> states`，并提供可注入 `regenerate(kind)` 的纯顺序执行器。
+- `createRegenerationResult()` 统一受约束重算结果并新增 `executed`；`未执行 / 暂未执行` 为 false，其它成功状态为 true。
+- 顺序器在任一步 `executed=false` 时短路，并返回每步 kind / action / executed 摘要；完整成功时解释河流 / 生物群系 / 道路到国家 / 省份 / 城镇 / 道路的拓扑。
+- 高度面板新增“重算基础派生”回调和按钮，操作区由三列改为 2 × 2；组合结果复用现有 regeneration status 和高度面板刷新。
+- 新增 `tools/webgl-generator-height-derived-rebuild-regression.mjs` 与 `pnpm run regress:height-derived-rebuild`。
+
+验证：
+
+- `node --check` 覆盖顺序器、`app.js`、高度 panel wrapper 和新回归脚本；直接回归确认完整成功只按 `rivers, states` 调用，河流失败时调用序列只有 `rivers`，国家失败时为 `rivers, states` 且步骤摘要显示部分完成。
+- 高度整平笔刷回归继续通过。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：7 个目标文件 `node --check` 全过；基础派生回归确认成功顺序 `rivers -> states`、河流失败立即短路、国家失败记录部分完成及显式 `executed`；高度笔刷回归和 1001 目标 239 字节摘要回归通过；`pnpm run build:app` 构建 1118 modules，HeightPanel 38.58 kB / gzip 12.99 kB；`git diff --check` 通过。
+- 阶段末浏览器子智能体长时间未返回，为避免会话泄漏已中断；随后只恢复该智能体执行资源清理，确认 Chrome 控制会话已通过 `tabs.finalize({})` 释放，未继续检查或操作页面，也未启动任何新资源。本轮没有取得按钮、组合重算、stale systems 与 WebGL / console / page / health 证据，第 136 步继续待执行。

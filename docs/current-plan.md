@@ -963,6 +963,15 @@
    - 目标：在可复用 FMG 页面存在时验证四段动作布局、整平说明、落笔目标锁定、拖动预览、影响数、撤销 / 重做、待派生摘要与 WebGL / console / page / health。
    - 边界：只执行一条短 stroke，不持续拖动或刷新；继续复用现成页面和服务器，不新开或重启 Chrome。
 
+135. 高度基础派生顺序重算入口。`已完成`
+   - 目标：让高度编辑后的基础地理依赖能在同一面板按正确拓扑一次重算，不要求用户在生成面板手工猜河流、城镇和政治的顺序。
+   - 边界：固定执行 `rivers -> states`；河流步骤同步刷新生物群系和道路，国家步骤同步刷新省份、城镇和道路。任一步返回未执行时立即停止，不继续依赖失败数据；宗教、标记、地区、军事、经济和外交仍保留待派生。
+   - 完成记录：新增纯运行时 `height-derived-rebuild.js`，统一 `createRegenerationResult()` 的显式 `executed` 字段和高度基础派生顺序 / 短路；高度面板新增“重算基础派生”，操作区改为 2 × 2。新增 `pnpm run regress:height-derived-rebuild`，覆盖完整成功、河流失败短路和国家失败部分完成。
+
+136. 高度基础派生真实浏览器验收。`待执行`
+   - 目标：在可复用 FMG 页面存在时，完成一次短整平后点击“重算基础派生”，确认执行顺序、对象计数、待派生从基础系统中清除、按钮布局和 WebGL / console / page / health。
+   - 边界：只执行一次组合重算，不连续点击；继续复用现成页面和服务器，不新开或重启 Chrome。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -986,6 +995,7 @@
 - history.peek 有界 affected 批次完成：烟测子智能体执行的 7 个 `node --check`、三组回归、`pnpm run build:app` 和 `git diff --check` 均通过；1001 目标默认预览 3 项、结果 852 字节，自定义 5 项与非法参数边界均通过，构建 1116 modules、1.63 秒，仅有既有大 chunk 警告。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放，未 claim、刷新或新建页面，未启动 Chrome、服务器或 Playwright，第 130 步真实 API 验收继续待执行。
 - history stats 有界 lastAffected 批次完成：烟测子智能体执行的 8 个 `node --check`、三组回归、`pnpm run build:app` 和 `git diff --check` 均通过；内部完整目标 1001 项、默认公开预览 3 项、stats 389 字节，自定义 5 项及非法参数边界均通过，构建 1116 modules、1.24 秒。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放，未 claim、刷新或新建页面，未启动 Chrome、服务器或 Playwright，第 132 步真实 API / 面板验收继续待执行。
 - 高度整平笔刷批次完成：烟测子智能体执行的 6 个 `node --check`、高度笔刷回归、编辑命令 affected 兼容回归、摘要负载回归、`pnpm run build:app` 和 `git diff --check` 均通过；整平目标 `20`、连续拖动 cell 3 到 `42`、无变化边缘过滤、撤销 / 重做和 `height` domain 均符合预期，构建 1117 modules，HeightPanel 38.44 kB / gzip 12.97 kB，仅有既有大 chunk 警告。浏览器子智能体只检查一次现有 Chrome，唯一页面仍为 GitHub commits；已 finalize 释放且无遗留资源，未 claim、刷新、新开页面或启动 Chrome / 服务器 / Playwright，第 134 步交互验收继续待执行。
+- 高度基础派生顺序重算批次完成：烟测子智能体执行的 7 个 `node --check`、基础派生顺序 / 短路回归、高度笔刷回归、affected 摘要回归、`pnpm run build:app` 和 `git diff --check` 均通过；成功顺序为 `rivers -> states`，河流失败只调用第一步，国家失败记录部分完成，构建 1118 modules，HeightPanel 38.58 kB / gzip 12.99 kB。浏览器子智能体长时间未返回后已中断；随后只恢复该智能体执行 `tabs.finalize({})`，确认 Chrome 控制会话已释放且未继续操作页面或启动资源，第 136 步真实组合重算验收继续待执行。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。

@@ -53,6 +53,7 @@ import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureCol
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getHeightBrushChanges} from "./height-brush.js";
+import {createRegenerationResult, rebuildHeightBaseDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
@@ -349,6 +350,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRegenerateRivers: () => {
       const result = regenerateMapAttribute(state, "rivers", documentRef);
+      updateRegenerationSection(documentRef, result);
+      updateHeightPanel(state);
+    },
+    onRegenerateBase: () => {
+      const result = rebuildHeightBaseDerived(kind => regenerateMapAttribute(state, kind, documentRef));
       updateRegenerationSection(documentRef, result);
       updateHeightPanel(state);
     }
@@ -6173,18 +6179,7 @@ function clearGeneratedCityLabelHides(map) {
 }
 
 function regenerationResult(kind, status, constraint) {
-  const labels = {
-    states: "国家",
-    provinces: "省份",
-    cities: "城镇",
-    routes: "道路",
-    rivers: "河流"
-  };
-  return {
-    action: labels[kind] || kind,
-    status,
-    constraint
-  };
+  return createRegenerationResult(kind, status, constraint);
 }
 
 function shouldOpenProvincePanelForSelection(state) {

@@ -553,7 +553,7 @@ api.edit.measurement.delete(id)
 
 - 受约束重算 API 已完成第一刀。
 - `api.generate.regenerate(kind, {confirm:true})` 支持 `routes / rivers / cities / states / provinces / markers / diplomacy` 及常见别名，复用现有控制面板的受约束重算路径。
-- 返回值包含 `kind / action / status / constraint`、重算前后对象计数、当前 `staleSystems` 和历史摘要；其中 marker / diplomacy 继续复用既有命令或历史路径，其它派生重算暂保持现有非撤销语义。
+- 返回值包含 `kind / action / executed / status / constraint`、重算前后对象计数、当前 `staleSystems` 和历史摘要；`executed` 明确区分成功与“未执行 / 暂未执行”。其中 marker / diplomacy 继续复用既有命令或历史路径，其它派生重算暂保持现有非撤销语义。
 - 地图生成 API 已完成第一刀。
 - `api.generate.getOptions()` 返回当前规范化生成配置和当前地图摘要。
 - `api.generate.setOptions(patch)` 会规范化并同步生成配置与主输入，不隐式生成新地图。

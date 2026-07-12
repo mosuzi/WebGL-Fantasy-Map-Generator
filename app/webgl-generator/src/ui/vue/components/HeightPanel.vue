@@ -17,6 +17,7 @@
     <UiButton variant="secondary" @click="callbacks.onUndo?.()">撤销上次</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRedo?.()">重做上次</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRegenerateRivers?.()">重算河流</UiButton>
+    <UiButton variant="secondary" @click="callbacks.onRegenerateBase?.()">重算基础派生</UiButton>
   </div>
 
   <section class="heightmap-import-launcher" aria-labelledby="heightmap-import-title">
