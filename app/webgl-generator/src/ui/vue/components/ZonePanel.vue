@@ -28,10 +28,20 @@
     empty-text="没有匹配的地区"
     :empty-action="filterEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedZoneIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedZoneIds = $event"
+  />
+
+  <UiPanelIoActions
+    class-name="zone-panel-list-actions"
+    label="地区列表高亮"
+    :actions="zoneHighlightActions"
+    @action="handleHighlightAction"
   />
 
   <UiDetailGrid class-name="zone-panel-details" empty-text="未选中地区" :rows="detailRows" />
@@ -68,11 +78,13 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "ZonePanel"
@@ -149,6 +161,7 @@ const rows = computed(() => {
 const selectedId = computed(() => props.state.selection?.object?.kind === "zone" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedZoneIds, selectedRows: selectedZoneRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -166,12 +179,17 @@ const legendItems = computed(() => {
     color: meta.color
   }));
 });
+const zoneHighlightActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedZoneRows.value.length)}`, icon: "◉", disabled: !selectedZoneRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "地区", value: formatNumber(rows.value.length)},
   {label: "可见", value: formatNumber(visibleCount.value)},
   {label: "涉及 cells", value: formatNumber(totalCells.value)},
-  {label: "总面积", value: formatAreaValue(totalArea.value)}
+  {label: "总面积", value: formatAreaValue(totalArea.value)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const detailRows = computed(() => selected.value ? [
@@ -202,6 +220,11 @@ function applyPattern() {
 
 function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
+}
+
+function handleHighlightAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedZoneRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function zoneRows(map) {

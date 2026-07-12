@@ -704,6 +704,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => cityPanel.setSelectedCityId(target.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onRename: (cityId, name) => {
       const object = {kind: "city", id: cityId};
       const context = {map: state.map};
@@ -1036,6 +1039,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => militaryPanel.setSelectedRegimentId(target.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onRatiosApply: (stateId, ratios) => {
       const command = createSetMilitaryRatiosCommand(stateId, ratios);
       const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
@@ -1201,6 +1207,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: selected => markerPanel.setSelectedMarkerId(selected.id)
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onRename: (markerId, name) => {
       const object = {kind: OBJECT_KIND.MARKER, id: markerId};
       const context = {map: state.map};
@@ -1510,6 +1519,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => zonePanel.setSelection({object: target})
       });
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onStyleChange: (zoneId, patch) => {
       const context = {map: state.map};
       const command = createSetZoneStyleCommand(zoneId, patch);
@@ -4664,6 +4676,10 @@ function refreshPersistentHighlightUi(state, documentRef) {
   updateRoutePanel(state);
   updateRiverPanel(state);
   updateLakePanel(state);
+  updateCityPanel(state);
+  updateMarkerPanel(state);
+  updateMilitaryPanel(state);
+  updateZonePanel(state);
 }
 
 function startEditingObjectViaApi(state, object, options = {}) {

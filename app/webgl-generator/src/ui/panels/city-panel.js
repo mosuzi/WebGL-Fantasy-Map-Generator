@@ -2,6 +2,7 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const CITY_PANEL_ID = "city-panel";
 const CITY_COLUMN_WIDTHS = Object.freeze({
@@ -31,6 +32,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     selectedCityId: null,
     addMode: false,
     deleteMode: false,
@@ -68,6 +70,8 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(cityObject(row));
     },
     onLocate: row => callbacks.onLocate?.(cityObject(row)),
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, cityObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRename: (cityId, name) => callbacks.onRename?.(cityId, name),
     onRenameVisibleFromNamebase: cityIds => callbacks.onRenameVisibleFromNamebase?.(cityIds),
     onAddMode: active => {
@@ -129,6 +133,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "city") panelState.selectedCityId = normalizeCityId(selection.object.id);
       if (!cityExists(map, panelState.selectedCityId)) panelState.selectedCityId = firstCityId(map);
       panelState.open = true;
@@ -140,6 +145,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "city") panelState.selectedCityId = normalizeCityId(selection.object.id);
       if (!cityExists(map, panelState.selectedCityId)) panelState.selectedCityId = firstCityId(map);
       panelState.version++;

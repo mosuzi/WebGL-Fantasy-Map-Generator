@@ -29,11 +29,14 @@
     empty-text="没有匹配的资源点或标记"
     :empty-action="filterEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedMarkerIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedMarkerIds = $event"
   />
 
   <UiPanelIoActions
@@ -93,6 +96,7 @@ import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "MarkerPanel"
@@ -182,6 +186,7 @@ const metrics = computed(() => {
 });
 const scopedRows = computed(() => applyScope(metrics.value.rows, props.state.scope));
 const visibleRows = computed(() => sortRows(filterRows(scopedRows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedMarkerIds, selectedRows: selectedMarkerRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -196,6 +201,8 @@ const markerActions = Object.freeze([
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 const markerListActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMarkerRows.value.length)}`, icon: "◉", disabled: !selectedMarkerRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "move", label: "移动选中资源标记", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
   {key: "delete", label: "删除选中资源标记", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
 ]);
@@ -204,6 +211,7 @@ const summaryMetrics = computed(() => [
   {label: "标记", value: formatNumber(metrics.value.total)},
   {label: "资源点", value: formatNumber(metrics.value.resources)},
   {label: "资源潜力", value: formatNumber(metrics.value.resourcePotential)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 
@@ -335,6 +343,14 @@ function startMoveSelected() {
 }
 
 function handleMarkerListAction(key) {
+  if (key === "highlight-selected") {
+    props.callbacks.onHighlight?.(selectedMarkerRows.value);
+    return;
+  }
+  if (key === "clear-highlights") {
+    props.callbacks.onClearHighlights?.();
+    return;
+  }
   if (key === "move") {
     startMoveSelected();
     return;

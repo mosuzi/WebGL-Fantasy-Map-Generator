@@ -2,6 +2,7 @@ import {markRaw, shallowReactive} from "vue";
 import {OBJECT_KIND} from "../../runtime/object-kinds.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const ZONE_PANEL_ID = "zone-panel";
 const ZONE_COLUMN_WIDTHS = Object.freeze({
@@ -30,6 +31,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     version: 0
   });
   const panelCallbacks = {
@@ -61,6 +63,8 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => callbacks.onSelect?.(zoneObject(row)),
     onLocate: row => callbacks.onLocate?.(zoneObject(row)),
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, zoneObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onStyleChange: (zoneId, patch) => callbacks.onStyleChange?.(zoneId, patch),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
@@ -101,6 +105,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       panelState.open = true;
       panelState.version++;
       manager.open("zone-panel");
@@ -110,6 +115,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       panelState.version++;
     },
     setSelection(selection) {

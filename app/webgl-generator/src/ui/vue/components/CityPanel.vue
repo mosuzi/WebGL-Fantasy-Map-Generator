@@ -19,11 +19,21 @@
     empty-text="没有匹配的城市"
     :empty-action="filterEmptyAction"
     resizable-columns
+    selectable-rows
+    :selected-row-ids="selectedCityIds"
     @select="handleCitySelect"
     @locate="callbacks.onLocate"
     @edit="openRenameEditor"
     @empty-action="handleEmptyAction"
     @column-resize="callbacks.onColumnResize"
+    @selection-change="selectedCityIds = $event"
+  />
+
+  <UiPanelIoActions
+    class-name="city-panel-list-actions"
+    label="城市列表高亮"
+    :actions="cityHighlightActions"
+    @action="handleHighlightAction"
   />
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
@@ -87,6 +97,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {
@@ -102,6 +113,7 @@ import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "CityPanel"
@@ -152,6 +164,7 @@ const metrics = computed(() => {
   return buildCityMetrics(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedCityIds, selectedRows: selectedCityRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
@@ -170,6 +183,10 @@ const cityActions = computed(() => [
   {key: "visual", label: "调整剪影", icon: "▣", disabled: modalActionActive.value || !selected.value},
   {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !selected.value}
 ]);
+const cityHighlightActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedCityRows.value.length)}`, icon: "◉", disabled: !selectedCityRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
+]);
 
 const summaryMetrics = computed(() => [
   {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
@@ -179,6 +196,7 @@ const summaryMetrics = computed(() => [
   {label: "港口", value: formatNumberValue(metrics.value.ports)},
   {label: "资源城镇", value: formatNumberValue(metrics.value.resourceCities)},
   {label: "人口", value: formatPopulationValue(metrics.value.totalPopulation)},
+  {label: "高亮", value: formatNumberValue(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumberValue(visibleRows.value.length)}
 ]);
 
@@ -293,6 +311,11 @@ function cityResourceGoodNames(map, ids) {
 
 function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
+}
+
+function handleHighlightAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedCityRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function cityRows(map) {

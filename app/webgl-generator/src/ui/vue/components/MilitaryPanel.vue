@@ -100,7 +100,9 @@
     class-name="military-panel-export-actions"
     label="军事导出"
     :export-actions="militaryExportActions"
+    :actions="militaryHighlightActions"
     @export="handleMilitaryExport"
+    @action="handleMilitaryHighlightAction"
   />
 
   <section v-if="selected" class="military-event-list" aria-label="选中军团战报记录">
@@ -452,6 +454,7 @@ import {formatMilitary, formatNumber as formatDisplayNumber} from "../../display
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "MilitaryPanel"
@@ -502,7 +505,6 @@ const militaryOverviewIcons = Object.freeze({
 });
 const activeAction = ref(null);
 const renameRequestId = ref(null);
-const selectedRegimentIds = ref([]);
 const ratioDraft = reactive({});
 const statusDraft = ref("garrisoned");
 const batchStatusDraft = ref("garrisoned");
@@ -588,11 +590,10 @@ const eventOutcomeFilter = computed(() => props.state.eventOutcomeFilter || "all
 const eventApplyFilter = computed(() => props.state.eventApplyFilter || "all");
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedRegimentIds, selectedRows: selectedRegimentRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
-const selectedRegimentIdSet = computed(() => new Set(selectedRegimentIds.value.map(id => String(id))));
-const selectedRegimentRows = computed(() => visibleRows.value.filter(row => selectedRegimentIdSet.value.has(String(row.id))));
 const selected = computed(() => findByObjectId(visibleRows.value, props.state.selectedRegimentId) || visibleRows.value[0] || null);
 const selectedUnitBreakdown = computed(() => unitBreakdown(selected.value));
 const allBattleEvents = computed(() => collectBattleEvents(props.state.map, metrics.value.rows));
@@ -612,6 +613,10 @@ const militaryExportActions = computed(() => [
   {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length},
   {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedRegimentRows.value.length)}`, disabled: !selectedRegimentRows.value.length},
   {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedRegimentRows.value.length)}`, disabled: !selectedRegimentRows.value.length}
+]);
+const militaryHighlightActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRegimentRows.value.length)}`, icon: "◉", disabled: !selectedRegimentRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
 ]);
 const battleEventExportActions = computed(() => [
   {key: "json", label: "档案 JSON", disabled: !exportBattleEventRows.value.length},
@@ -678,7 +683,8 @@ const summaryMetrics = computed(() => [
   {label: "战线", value: formatNumber(metrics.value.fronts)},
   {label: "记录", value: formatNumber(allBattleEvents.value.length)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)},
-  {label: "已选", value: formatNumber(selectedRegimentRows.value.length)}
+  {label: "已选", value: formatNumber(selectedRegimentRows.value.length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const militaryDossierGroups = computed(() => selected.value ? [
@@ -762,11 +768,6 @@ watch(() => `${selected.value?.id || ""}|${battleEventRecordChainOptions.value.m
 watch(() => `${selected.value?.id || ""}|${eventChainFilter.value}|${eventTypeFilter.value}|${eventOutcomeFilter.value}|${eventApplyFilter.value}`, () => {
   showAllSelectedBattleEvents.value = false;
 });
-watch(visibleRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedRegimentIds.value = selectedRegimentIds.value.filter(id => visibleIds.has(String(id)));
-});
-
 function buildMilitaryMetrics(map) {
   const states = stateRows(map);
   const campaigns = militaryCampaigns(map);
@@ -1952,6 +1953,11 @@ function handleMilitaryExport(key) {
   if (key === "json") exportJson();
   if (key === "selected-csv") exportCsv(selectedRegimentRows.value, {selectedOnly: true});
   if (key === "selected-json") exportJson(selectedRegimentRows.value, {selectedOnly: true});
+}
+
+function handleMilitaryHighlightAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRegimentRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function handleBattleEventExport(key) {

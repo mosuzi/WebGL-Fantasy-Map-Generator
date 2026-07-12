@@ -26133,3 +26133,24 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：9 个目标 JS / MJS `node --check` 全过；可见行选择回归为筛选后 1、空结果后 0；高亮回归为 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1111 modules、耗时 1.30 秒，国家、省份、文化、宗教、路线、河流和湖泊 SFC 均生成独立 chunk，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体按要求只检查一次现有后端，结果仍为 `[]`，随后立即停止并释放。未启动或重启 Chrome、未使用 Playwright、未启动服务器、未刷新页面；国家 / 省份批量高亮、中立排除、跨面板清除、selection / checksum 和 WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。
+
+### 2026-07-12 点对象、地区与军事面板批量高亮
+
+背景：
+
+- 城市、资源标记、军团和地区均已有稳定对象身份与 renderer 持久高亮视觉，但正式列表仍只能逐行定位，无法直接比较多个目标。
+- 军事面板已经为了导出选中记录维护批量选择，新增高亮不应再引入第二套 checkbox 状态。
+
+实现：
+
+- 城市、资源标记、军事和地区表格接入公共批量选择列与 `useVisibleRowSelection()`；筛选变化会自动裁剪不可见 id。
+- 四个面板新增“高亮选中 N / 清除高亮 N”和全局高亮数量摘要；军事面板的导出与高亮共用同一选中军团集合。
+- 四个 panel wrapper 复用 `panel-highlight-actions.js` 映射对象摘要、清除集合并同步数量，避免复制上限和状态文案逻辑。
+- `app.js` 为四个面板接入统一运行时回调，`refreshPersistentHighlightUi()` 的同步范围扩展到十一类已接入对象面板。
+
+验证：
+
+- `node --check` 已覆盖 `app.js` 与四个 panel wrapper；全局搜索确认军事面板不再残留旧的手工选中 id set。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：9 个目标 JS / MJS 文件 `node --check` 全过；可见行选择回归为筛选后 1、空结果后 0；持久高亮回归为 12 / 30 / 30 顶点，模式为 `multi-object highlight (3)`；`pnpm run build:app` 构建 1111 modules、耗时 1.25 秒，入口 chunk `1,117.45 kB / gzip 324.35 kB`，仅有既有大 chunk 警告；`git diff --check` 通过。首次 pnpm 回归在沙箱内因 registry fetch 失败，按最小权限策略只升级重跑一次后通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有后端，结果为 `[]`，随后立即停止并释放。未启动或重启 Chrome、未刷新页面、未使用 Playwright、未启动服务器；城市、资源标记、军事和地区的批量勾选、高亮 / 清除、selection、checksum 与 WebGL / console / page / health 断言仍待浏览器控制后端恢复后补跑。

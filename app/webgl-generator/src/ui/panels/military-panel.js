@@ -1,6 +1,7 @@
 import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const MILITARY_PANEL_ID = "military-panel";
 const MILITARY_COLUMN_WIDTHS = Object.freeze({
@@ -47,6 +48,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     sortDir: listPreferences.sortDir,
     selectedStateId: listPreferences.stateFilter,
     selectedStatus: listPreferences.statusFilter,
+    highlightCount: readPanelHighlightCount(callbacks),
     selectedRegimentId: null,
     version: 0
   });
@@ -119,6 +121,8 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedRegimentId = row.id;
       callbacks.onLocate?.(militaryObject(row));
     },
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, militaryObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRatiosApply: (stateId, ratios) => callbacks.onRatiosApply?.(stateId, ratios),
     onStatusApply: (target, status) => callbacks.onStatusApply?.(target, status),
     onBatchStatusApply: (targets, status) => callbacks.onBatchStatusApply?.(targets, status),
@@ -167,6 +171,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       normalizeMilitaryFilters(panelState, map);
       if (selection?.object?.kind === "military") panelState.selectedRegimentId = selection.object.id;
       if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
@@ -181,6 +186,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       normalizeMilitaryFilters(panelState, map);
       if (!regimentExists(map, panelState.selectedRegimentId, panelState.selectedStateId, panelState.selectedStatus)) {
         panelState.selectedRegimentId = firstRegimentId(map, panelState.selectedStateId, panelState.selectedStatus);

@@ -2,6 +2,7 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const MARKER_PANEL_ID = "marker-panel";
 const MARKER_COLUMN_WIDTHS = Object.freeze({
@@ -33,6 +34,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     scope: listPreferences.scope,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     selectedMarkerId: null,
     editMode: null,
     editType: null,
@@ -78,6 +80,8 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedMarkerId = row.id;
       callbacks.onLocate?.(markerObject(row));
     },
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, markerObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRename: (markerId, name) => callbacks.onRename?.(markerId, name),
     onVisualChange: (markerId, patch) => callbacks.onVisualChange?.(markerId, patch),
     onNoteChange: (markerId, body) => callbacks.onNoteChange?.(markerId, body),
@@ -125,6 +129,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "marker") panelState.selectedMarkerId = normalizeMarkerId(selection.object.id);
       if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
       panelState.open = true;
@@ -136,6 +141,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "marker") panelState.selectedMarkerId = normalizeMarkerId(selection.object.id);
       if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
       panelState.version++;
