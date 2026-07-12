@@ -2,6 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
+import {buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
 const stroke = {originals: new Map()};
@@ -75,6 +76,7 @@ const rangeTransformMap = createSyntheticMap();
 const multiplyPreview = inspectHeightRangeTransform(rangeTransformMap, {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 0.5});
 const multiplyChanges = getHeightRangeTransformChanges(rangeTransformMap, {scope: "land", lower: 20, upper: 50, operator: "multiply", operand: 0.5});
 assert(multiplyPreview.valid && multiplyPreview.selectedCount === 3 && multiplyPreview.changeCount === 2, `条件乘算预检异常：${JSON.stringify(multiplyPreview)}`);
+assert(multiplyPreview.raisedCount === 0 && multiplyPreview.loweredCount === 2, `条件乘算升降统计异常：${JSON.stringify(multiplyPreview)}`);
 assert(!Object.hasOwn(multiplyPreview, "changes"), "公开条件变换预检暴露了完整 changes");
 assert(multiplyPreview.beforeRange.join(",") === "20,50" && multiplyPreview.afterRange.join(",") === "20,35" && multiplyPreview.averageDelta === -10, `条件乘算摘要异常：${JSON.stringify(multiplyPreview)}`);
 assertChanges(multiplyChanges, [
@@ -110,6 +112,18 @@ rangeHistory.undo({map: rangeTransformMap});
 assert(rangeTransformMap.grid.cells.h[3] === 50 && rangeTransformMap.pack.cells.h[3] === 50, "撤销条件乘算没有恢复 grid / pack");
 rangeHistory.redo({map: rangeTransformMap});
 assert(rangeTransformMap.grid.cells.h[3] === 35 && rangeTransformMap.pack.cells.h[3] === 35, "重做条件乘算没有恢复 grid / pack");
+
+const previewMesh = buildHeightTransformPreviewMesh(createTransformPreviewMap(), [
+  {gridCell: 0, before: 20, after: 30},
+  {gridCell: 1, before: 30, after: 25},
+  {gridCell: 2, before: 10, after: 20},
+  {gridCell: 0, before: 20, after: 31}
+]);
+assert(previewMesh.stats.cells === 2 && previewMesh.stats.raisedCells === 1 && previewMesh.stats.loweredCells === 1 && previewMesh.stats.skippedCells === 2, `空间预览 cell 统计异常：${JSON.stringify(previewMesh.stats)}`);
+assert(previewMesh.stats.vertexCount === 24 && previewMesh.stats.triangleCount === 8, `空间预览三角化异常：${JSON.stringify(previewMesh.stats)}`);
+assert(previewMesh.vertices[2] === 1 && previewMesh.vertices[4] < 0.1, "升高预览没有使用暖色");
+assert(previewMesh.vertices[74] < 0.1 && previewMesh.vertices[76] === 1, "降低预览没有使用冷色");
+assert(buildHeightTransformPreviewMesh({}, multiplyChanges).stats.vertexCount === 0, "坏地图仍生成了空间预览 mesh");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -235,6 +249,7 @@ console.log(JSON.stringify({
   multiplyPreview,
   invalidDivideNotice: invalidDivide.notice,
   rangeHistory: rangeHistory.getStats(),
+  previewMesh: previewMesh.stats,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,
@@ -310,6 +325,22 @@ function createSquareMap(size, getHeight) {
       cells: {
         g: Uint32Array.from(points, (_, index) => index),
         h: Uint8Array.from(heights)
+      }
+    }
+  };
+}
+
+function createTransformPreviewMap() {
+  return {
+    metadata: {graphWidth: 2, graphHeight: 1},
+    grid: {
+      points: [[0.5, 0.5], [1.5, 0.5]],
+      cells: {
+        p: Uint32Array.from([0, 1]),
+        v: [[0, 1, 2, 3], [1, 4, 5, 2]]
+      },
+      vertices: {
+        p: [[0, 0], [1, 0], [1, 1], [0, 1], [2, 0], [2, 1]]
       }
     }
   };

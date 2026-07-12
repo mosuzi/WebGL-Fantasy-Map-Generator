@@ -160,7 +160,7 @@ function analyzeHeightRangeTransform(map, options) {
   const upper = normalizeRangeBound(options?.upper, 100);
   const operator = String(options?.operator || "multiply");
   const operand = Number(options?.operand);
-  const base = {scope, lower, upper, operator, operand, selectedCount: 0, changeCount: 0, unchangedCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
+  const base = {scope, lower, upper, operator, operand, selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
   if (!heights?.length) return {...base, notice: "当前地图缺少高度数据，无法预检条件变换。"};
   if (lower > upper) return {...base, notice: "高度区间下限不能高于上限。"};
   const validationError = validateHeightRangeOperation(operator, operand);
@@ -172,6 +172,8 @@ function analyzeHeightRangeTransform(map, options) {
   let minAfter = Infinity;
   let maxAfter = -Infinity;
   let deltaSum = 0;
+  let raisedCount = 0;
+  let loweredCount = 0;
   const changes = [];
   for (let gridCell = 0; gridCell < heights.length; gridCell++) {
     const before = Number(heights[gridCell]) || 0;
@@ -185,6 +187,8 @@ function analyzeHeightRangeTransform(map, options) {
     maxAfter = Math.max(maxAfter, after);
     if (after === before) continue;
     deltaSum += after - before;
+    if (after > before) raisedCount += 1;
+    else loweredCount += 1;
     changes.push({gridCell, before, after});
   }
 
@@ -194,6 +198,8 @@ function analyzeHeightRangeTransform(map, options) {
     selectedCount,
     changeCount: changes.length,
     unchangedCount: selectedCount - changes.length,
+    raisedCount,
+    loweredCount,
     beforeRange: [minBefore, maxBefore],
     afterRange: [minAfter, maxAfter],
     averageDelta: changes.length ? Math.round(deltaSum / changes.length * 10) / 10 : 0,

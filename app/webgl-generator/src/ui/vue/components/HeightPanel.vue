@@ -81,6 +81,13 @@
     <p v-if="state.transformPreview" class="height-transform-preview" :class="{valid: state.transformPreview.valid}" aria-live="polite">
       {{ state.transformPreview.notice }}
     </p>
+    <div v-if="state.transformPreview?.valid" class="height-transform-legend" aria-label="条件变换地图预览图例">
+      <span class="raised"><i></i>升高 {{ state.transformPreview.raisedCount }}</span>
+      <span class="lowered"><i></i>降低 {{ state.transformPreview.loweredCount }}</span>
+    </div>
+    <p v-if="state.transformPreview?.rendererPreview" class="height-transform-gpu-stats">
+      GPU 预览 {{ state.transformPreview.rendererPreview.cells }} cells / {{ state.transformPreview.rendererPreview.triangleCount }} triangles / {{ state.transformPreview.rendererPreview.buildMs }} ms
+    </p>
     <p v-else class="height-action-help">预检只返回候选数、变化数和高度范围，不把完整 cell 列表送入 UI。</p>
     <div class="height-transform-actions">
       <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onConditionalTransformPreview?.()">预检条件</UiButton>
@@ -812,7 +819,9 @@ function setTransformOperand(value) {
 }
 
 function clearTransformPreview() {
+  const hadPreview = Boolean(props.state.transformPreview);
   props.state.transformPreview = null;
+  if (hadPreview) props.callbacks.onConditionalTransformChange?.();
 }
 
 function setHeightmapImportMin(value) {

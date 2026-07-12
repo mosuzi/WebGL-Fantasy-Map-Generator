@@ -395,7 +395,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const options = heightPanel.getConditionalTransform();
       cancelHeightLine(state, documentRef);
       const preview = inspectHeightRangeTransform(state.map, options);
-      heightPanel.updateConditionalTransformPreview(preview);
+      let rendererPreview = null;
+      if (preview.valid) {
+        const changes = getHeightRangeTransformChanges(state.map, options);
+        rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
+      }
+      heightPanel.updateConditionalTransformPreview({...preview, rendererPreview});
       updateEditingInteractionLock(state, documentRef);
       return preview;
     },
@@ -427,6 +432,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
       return result.executed;
+    },
+    onConditionalTransformChange: () => {
+      clearHeightTransformPreview(state);
+      updateEditingInteractionLock(state, documentRef);
     },
     onRegenerateRivers: () => {
       cancelHeightLine(state, documentRef);
@@ -6963,7 +6972,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    state.panels.height?.updateConditionalTransformPreview?.(null);
+    clearHeightTransformPreview(state);
     if (brush.action === "line") {
       handleHeightLineClick(state, event, brush, documentRef);
       return;
@@ -7093,8 +7102,13 @@ function cancelHeightLine(state, documentRef) {
   state.heightEdit.lineStart = null;
   state.heightEdit.fillHoverCell = null;
   state.heightEdit.fillPreview = null;
-  state.panels.height?.updateConditionalTransformPreview?.(null);
+  clearHeightTransformPreview(state);
   documentRef.querySelector(".height-line-preview")?.remove();
+}
+
+function clearHeightTransformPreview(state, {draw = true} = {}) {
+  state.panels.height?.updateConditionalTransformPreview?.(null);
+  state.renderer?.clearHeightTransformPreview?.({draw});
 }
 
 function bindStateEditing(canvas, state, documentRef) {

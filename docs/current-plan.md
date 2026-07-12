@@ -1065,6 +1065,25 @@
    - 边界：浏览器验收集中在阶段末；不持续调参或刷新，不新开 / 重启 Chrome 或服务器；若确需 Playwright，必须在 `finally` 中关闭 browser / context。
    - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，全部通过。浏览器补验子智能体复用既有 `5410` 页面；在仅陆地、默认 `20..100 × 0.9` 下，预检前执行按钮 disabled，唯一一次预检显示变化 `2746/3326 cells`、高度 `20..100 -> 20..92`、平均约 `-2.5`，随后执行按钮启用。唯一一次执行后摘要为“已条件乘算 2746 cells”，preview 清理且执行按钮重新 disabled；撤销 / 重做各一次成功，重做后地图稳定且 console error 为 `0`。第一名浏览器智能体长时间无回报后已中断并单独 finalize；补验会话也已 finalize。全程未刷新、新开、启动 Chrome / 服务器或使用 Playwright。
 
+155. 条件变换地图空间预览 mesh。`已完成`
+   - 目标：把条件预检的变化 cells 直接覆盖到 WebGL 地图上，升高与降低使用不同半透明颜色，用户不再只能从文字数量猜测空间分布。
+   - 性能边界：完整 changes 只保留在运行时 / renderer，不进入 Vue 或有限快照；预览使用独立 world-space GPU buffer，镜头移动时不重建几何。renderer stats 只暴露 cell / 顶点 / 三角形 / 升降数量和构建耗时。
+   - 完成记录：新增 `height-transform-preview-layer.js`，按 grid cell 中心与 Voronoi 顶点生成 world-space triangle fan；升高使用暖橙、降低使用冷蓝，透明度按变化绝对值有界增强。renderer 新增独立动态 buffer，在基础 surface 之后、路线 / 河流 / selection 之前半透明绘制；镜头变化只更新统一 transform。stats 仅返回 cells、raised / lowered / skipped、vertex / triangle 和 buildMs。
+
+156. 空间预览生命周期与条件面板联动。`已完成`
+   - 目标：有效预检时构建并显示空间 overlay；修改任一条件、范围、动作，开始笔划，执行 / 撤销 / 重做、派生重算或加载地图时清理，避免旧预览滞留。
+   - 交互边界：文字预检与 GPU 预览来自同一份 fresh changes；执行仍再次计算当前地图，不能把旧 preview changes 直接当作命令输入。
+   - 完成记录：有效预检会从当前地图重新生成 changes 并调用 `renderer.setHeightTransformPreview()`；文字摘要新增升高 / 降低数量和双色图例。修改区间、运算、操作数或作用范围会同时清理 Vue preview 与 GPU buffer；既有 action / editor / history / regenerate / load cancel 路径、开始地图笔划和执行条件变换也统一清理。renderer 空预览清理为幂等，不重复上传或 draw。
+
+157. 空间预览回归与中文文档。`已完成`
+   - 目标：补纯函数 mesh 回归，覆盖升高 / 降低颜色、polygon 扇形三角化、坏 cell 跳过和有界统计；同步高度专题清单与开发日志。
+   - 完成记录：合成两个四边形 cell 的预览回归生成 `24` 顶点 / `8` 三角形，统计升高 `1`、降低 `1`、跳过坏 cell 与重复 cell `2`；顶点颜色断言分别命中暖色 / 冷色，坏地图返回空 mesh。条件预检同步断言 `raisedCount=0 / loweredCount=2`。
+
+158. 空间预览阶段末统一验收。`已完成`
+   - 目标：由烟测子智能体验证语法、条件 / preview 回归、构建和差异；浏览器子智能体复用既有 FMG 页面，只做一次预检，确认 renderer preview 统计和地图暖 / 冷图例对应 overlay，再清理预检并确认 overlay 消失。
+   - 边界：本轮浏览器不真正执行第二次条件变换，避免与上一批重复改图；不刷新或重启 Chrome / 服务器，不持续预检；若确需 Playwright，必须在 `finally` 中关闭 browser / context。
+   - 完成记录：烟测子智能体完成 6 项 `node --check`、三项回归、生产构建和 `git diff --check`；补充 GPU 统计 UI 后又完成 3 项语法检查、构建和差异检查，全部通过。有界 `rendererPreview` 仅含 cells、raised / lowered / skipped、vertex / triangle、buildMs，不含 changes。浏览器子智能体复用既有 `5410` 页面，唯一一次有效预检为变化 `2746/3326 cells`、降低 `2746`、高度 `20..100 -> 20..92`、均变 `-2.5`；地图显示冷蓝半透明 overlay，路线 / 标签 / 边界稳定，可见 GPU 统计为 `2746 cells / 16466 triangles / 9.1 ms`。下限 `20 -> 21` 后文字、图例、GPU 统计和 overlay 全部清理，执行按钮 disabled；console error 为 `0`。HMR 曾重置页面初态，补验仅做一次必要参数纠正；没有执行地图变换、刷新、新开或启动 Chrome / 服务器 / Playwright。两个子智能体均已结束。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1233,3 +1252,4 @@
 - Fill 落点预检批次统一验证完成：烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过，构建仅有既有大 chunk 警告；公开预检确认封闭水域 `valid=true / 9 cells`、开放水域 `valid=false / 25 cells`、默认陆地容差 `6 / valid=true / 5 cells`，且不暴露内部 selection。浏览器子智能体复用既有 `5410` 页面，首个内陆候选预检 `65 cells`，唯一一次点击实际影响 `43 cells`，撤销 / 重做闭环和稳定态地图通过，console error 为 `0`；未刷新或启动浏览器、服务器、Playwright，两个子智能体均已结束并释放控制会话。
 - 全局高度平滑 / 稳定扰动批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；回归证明平滑整轮读取同一快照、陆水范围隔离、扰动 seed 可复现 / 可推进、深水保护以及 grid / pack 撤销重做。浏览器子智能体复用既有 FMG 页面，选择“仅陆地”后唯一一次全局平滑影响 `2449 cells`，高度 `9..5,929 米`、平均变化 `+1,617 米`、待派生 `9 -> 12` 项，撤销 / 重做闭环通过，地图稳定且 console error 为 `0`；未刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
 - 高度区间条件变换批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；五类运算、区间 / scope、海平面夹取、异常拒绝、有界预检和 grid / pack 历史覆盖完整。浏览器子智能体复用既有 `5410` 页面，在仅陆地 `20..100 × 0.9` 下唯一一次预检为变化 `2746/3326 cells`、高度 `20..100 -> 20..92`、均变约 `-2.5`；唯一一次执行后 preview 清理，撤销 / 重做闭环和稳定地图通过，console error 为 `0`。第一名浏览器智能体超时后已中断并 finalize，补验智能体也已结束；未刷新或启动 Chrome、服务器、Playwright。
+- 条件变换 WebGL 空间预览批次统一验证完成：烟测子智能体执行 preview layer、renderer、运行时等 6 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check`，补充 GPU 统计 UI 后再跑 3 项语法检查、构建与差异检查，全部通过；合成 mesh 为 `24` 顶点 / `8` 三角形且暖冷色、坏 cell / 坏地图保护成立。浏览器唯一一次有效预检显示降低 `2746/3326 cells`，地图出现冷蓝 overlay，可见 GPU 统计 `2746 cells / 16466 triangles / 9.1 ms`；参数变化后 preview、图例、统计和 overlay 同时清理，地图稳定且 console error 为 `0`。未执行地图变换、刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。

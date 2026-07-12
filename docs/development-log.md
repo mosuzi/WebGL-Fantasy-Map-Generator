@@ -26631,3 +26631,29 @@ full 矩阵结果：
 - 补验确认高度编辑原已启用；选择“仅陆地”后默认参数为下限 `20`、上限 `100`、乘算 `0.9`。预检前执行按钮 disabled；唯一一次预检显示变化 `2746/3326 cells`、高度 `20..100 -> 20..92`、平均约 `-2.5`，执行按钮随即启用。
 - 唯一一次执行后摘要为“已条件乘算 2746 cells”，preview 文案清理且执行按钮重新 disabled；撤销与重做各一次成功，重做后摘要恢复、地图稳定完整，console error 为 `0`。可见 DOM 没有文字型历史计数，因此历史证据限定为撤销 / 重做动作均成功及两按钮状态正常，不扩大为精确计数。
 - 烟测、补验和被中断浏览器智能体均已释放；两个 Chrome 控制会话均 finalize，FMG 标签以 handoff 保留，没有遗留控制资源。
+
+### 2026-07-12 条件变换 WebGL 空间预览
+
+背景：
+
+- 条件变换已有候选数、前后高度范围和平均变化，但用户仍无法从文字判断变化集中在哪些大陆、山带或浅海。
+- 完整 changes 可能包含数千到数万 cells，不能为了地图预览把它放进 Vue 响应式状态或有限 runtime 快照；同时镜头平移 / 缩放不应重新三角化同一批 cell。
+
+实现：
+
+- 新增 `renderer/height-transform-preview-layer.js`，用 grid cell 中心和 Voronoi 顶点构造 world-space triangle fan。升高为暖橙、降低为冷蓝，alpha 按变化绝对值在有界范围内增强。
+- `PlaceholderMapRenderer` 新增独立 `heightTransformPreviewBuffer`，在基础 surface 之后以 alpha blend 绘制；因为顶点已经是 world-space NDC，镜头变化只复用 shader scale / offset，不重建几何。
+- renderer stats 只暴露 `cells / raisedCells / loweredCells / skippedCells / vertexCount / triangleCount / buildMs`，不保存或返回完整 changes；载入同步 / 异步地图时都会清空 buffer 与统计。
+- 条件预检有效时，运行时用同一份 fresh 参数重新取得 changes 并调用 `setHeightTransformPreview()`；文字预检新增 raised / lowered 数量和暖橙 / 冷蓝图例。执行命令时仍重新计算当前地图，不复用旧 changes。
+- 修改区间、运算、操作数、作用范围，开始地图笔划，切换动作 / 编辑器，执行全局或条件工具，撤销 / 重做、派生重算和地图载入都会通过统一 helper 清理 Vue preview 与 GPU buffer。空 buffer 清理幂等，不产生重复 upload / draw。
+
+直接验证：
+
+- `node --check` 已覆盖 preview layer、renderer、运行时、高度笔刷、panel wrapper 和扩展回归脚本；直接高度回归与 `git diff --check` 通过。
+- 两个四边形 grid cells 的合成 mesh 生成 `24` 顶点 / `8` 三角形；统计升高 `1`、降低 `1`、跳过坏 cell 和重复 cell `2`。顶点颜色分别命中暖色与冷色，坏地图返回空 mesh。
+- 条件乘算预检新增 `raisedCount=0 / loweredCount=2`，公开摘要仍不含完整 changes。
+- 阶段末烟测子智能体执行 preview layer、renderer、运行时、笔刷、panel wrapper 和回归脚本 6 项 `node --check`，以及 `regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过；构建包含 preview 模块、`heightTransformPreview` stats 和双色图例。首次沙箱 pnpm registry 访问失败后只升级重跑必要门禁，没有遗留进程。
+- 首轮浏览器验收复用既有 `5410` 页面，只执行一次有效预检：变化 `2746/3326 cells`、高度 `20..100 -> 20..92`、平均 `-2.5`，图例升高 `0` / 降低 `2746`；截图确认陆地区域出现稳定冷蓝半透明 overlay，路线、标签、边界和底图仍正常。下限 `20 -> 21` 后文字 preview、图例、执行按钮状态和 overlay 同时清理；console error 为 `0`，health 只有正常 load-stage / map-ready debug。
+- 首轮非 Playwright 控制面不能直接读取 renderer 内部统计，因此把 `rendererPreview` 七项有界统计并入用户可见预检卡片；烟测子智能体补跑 app / wrapper / renderer 语法、构建和差异检查，确认字段严格为 cells、raisedCells、loweredCells、skippedCells、vertexCount、triangleCount、buildMs，不含 changes。
+- 浏览器补验页面受 HMR 影响已重置到高度编辑未启用、全部范围、下限 `20`；智能体发现任务假设与实态不符后做一次必要纠正，再启用编辑、选择仅陆地并只预检一次。可见文本为 `GPU 预览 2746 cells / 16466 triangles / 9.1 ms`，与降低 `2746` 图例和冷蓝 overlay 一致；下限改为 `21` 后统计、preview、图例和 overlay 全部消失，执行按钮 disabled，console error 为 `0`。
+- 两轮浏览器均没有执行条件变换、历史、其它高度工具或派生重算，也没有刷新、新开、启动 Chrome / 服务器或使用 Playwright。烟测与浏览器子智能体均已结束；Chrome 会话 finalize 并以 handoff 保留现有 FMG 标签，没有遗留控制资源。

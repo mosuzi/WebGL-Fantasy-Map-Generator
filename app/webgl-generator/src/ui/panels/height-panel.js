@@ -37,6 +37,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onGlobalTool: action => callbacks.onGlobalTool?.(action),
     onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
     onConditionalTransformApply: () => callbacks.onConditionalTransformApply?.(),
+    onConditionalTransformChange: () => callbacks.onConditionalTransformChange?.(),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
     onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()
@@ -105,7 +106,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.lastDelta = lastDelta;
       panelState.lastNotice = lastNotice;
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
-      panelState.transformPreview = transformPreview ? {...transformPreview} : null;
+      panelState.transformPreview = cloneTransformPreview(transformPreview);
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;
       panelState.currentHeightStats = currentHeightStats;
@@ -132,14 +133,14 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     getConditionalTransformSnapshot() {
       return {
         ...getConditionalTransform(),
-        preview: panelState.transformPreview ? {...panelState.transformPreview} : null
+        preview: cloneTransformPreview(panelState.transformPreview)
       };
     },
     updateFillPreview(fillPreview) {
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
     },
     updateConditionalTransformPreview(transformPreview) {
-      panelState.transformPreview = transformPreview ? {...transformPreview} : null;
+      panelState.transformPreview = cloneTransformPreview(transformPreview);
     },
     setActive(active) {
       panelState.active = active;
@@ -147,5 +148,13 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     unmount() {
       lazyPanel.unmount();
     }
+  };
+}
+
+function cloneTransformPreview(preview) {
+  if (!preview) return null;
+  return {
+    ...preview,
+    rendererPreview: preview.rendererPreview ? {...preview.rendererPreview} : null
   };
 }
