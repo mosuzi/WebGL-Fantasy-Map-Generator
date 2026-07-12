@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {compositeConnectorPoints, pickCompositeConnector} from "../app/webgl-generator/src/renderer/composite-connectors.js";
+import {compositeConnectorPoints, compositeConnectorSelectionColor, pickCompositeConnector} from "../app/webgl-generator/src/renderer/composite-connectors.js";
 import {buildSelectionMeshVertices, selectionHighlightMode} from "../app/webgl-generator/src/renderer/selection-layer.js";
 import {diplomacyRelationObject, resolveDiplomacyRelation} from "../app/webgl-generator/src/runtime/diplomacy-relations.js";
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
@@ -28,6 +28,20 @@ const vertices = buildSelectionMeshVertices(map, camera, canvas, null, null, hig
 assert(vertices.length / 6 === 12, `两条复合高亮连线顶点数异常：${vertices.length / 6}`);
 assert(selectionHighlightMode(null, null, highlights) === "multi-object highlight (2)", "复合多对象高亮模式错误");
 assert(compositeConnectorPoints(map, resolvedRelation)?.length === 2, "外交关系高亮几何缺失");
+const relationColor = compositeConnectorSelectionColor(resolvedRelation);
+assert(relationColor.map(value => Math.round(value * 1000)).join(",") === "584,843,435,960", "当前外交关系没有使用关系色");
+
+const overlapPick = pickCompositeConnector(map, [resolvedRelation, tradeFlow], 50, 50, 2);
+assert(overlapPick?.kind === OBJECT_KIND.DIPLOMACY_RELATION, "重叠 connector 没有保持当前 selection 优先顺序");
+
+const loadHighlights = createLoadHighlights(100);
+const loadStartedAt = performance.now();
+const loadVertices = buildSelectionMeshVertices(map, camera, canvas, null, null, loadHighlights);
+const loadBuildMs = Math.round((performance.now() - loadStartedAt) * 1000) / 1000;
+const loadPick = pickCompositeConnector(map, loadHighlights, 50, 50, 2);
+assert(loadVertices.length / 6 === 600, `100 个 connector 顶点数异常：${loadVertices.length / 6}`);
+assert(loadPick?.candidateCount === 100, `100 个 connector 拾取候选数异常：${loadPick?.candidateCount}`);
+assert(selectionHighlightMode(null, null, loadHighlights) === "multi-object highlight (100)", "100 对象高亮模式错误");
 
 console.log(JSON.stringify({
   ok: true,
@@ -36,8 +50,28 @@ console.log(JSON.stringify({
   tradeFlowId: tradeFlow.id,
   connectorVertices: vertices.length / 6,
   relationPickCandidates: relationPick.candidateCount,
-  tradePickCandidates: tradePick.candidateCount
+  tradePickCandidates: tradePick.candidateCount,
+  overlapPickKind: overlapPick.kind,
+  loadConnectorVertices: loadVertices.length / 6,
+  loadPickCandidates: loadPick.candidateCount,
+  loadBuildMs
 }, null, 2));
+
+function createLoadHighlights(count) {
+  return Array.from({length: count}, (_, index) => index % 2 === 0 ? {
+    kind: OBJECT_KIND.DIPLOMACY_RELATION,
+    id: `${index + 1}:${index + 101}`,
+    subjectId: index + 1,
+    objectId: index + 101,
+    from: [0, 50],
+    to: [100, 50]
+  } : {
+    kind: OBJECT_KIND.TRADE_FLOW,
+    id: 1000 + index,
+    from: [50, 0],
+    to: [50, 100]
+  });
+}
 
 function createSyntheticMap() {
   const states = [

@@ -535,6 +535,7 @@ api.edit.measurement.delete(id)
 - 持久高亮不修改地图 checksum、不进入 `EditHistory`，`highlight / clearHighlights` 的能力元数据副作用为 `persistent-highlight-state`。
 - `api.selection.startEditing(object, {select})`、`stopEditing({ifKind})` 和 `toggleEditing(object, {select})` 已完成第一刀；当前复用运行时编辑态 helper，只控制 selection / editingObject 与编辑交互锁，不执行数据编辑命令。
 - 多对象持久高亮生命周期第一刀已完成；路线、河流、湖泊、国家、省份、文化、宗教、城市、资源标记、军事、地区、标签、备注目标、政体下国家、测量对象、外交关系和交易流的公共表格批量选择已复用同一运行时动作，控制台 API 修改集合后已打开面板会同步刷新。UI 与 API 最多同时保留 100 个高亮对象；标签排除隐藏项，备注排除孤儿和不支持类型，军事 / 备注 / 政体 / 测量 / 外交 / 经济复用原有导出选择。测量对象使用 SVG overlay 专用样式；外交关系与贸易流使用高亮专用 connector、bounds、locate 和拾取，不恢复全量贸易网络。
+- 复合 connector 负载门禁第一刀已完成：当前外交关系使用关系色，持久集合保持统一橙色；同距重叠时当前 selection 因输入顺序优先于持久集合。100 个外交 / 交易 connector 生成 600 个顶点并检查 100 个拾取候选，阶段末子智能体纯函数回归约 1.018ms；真实浏览器 GPU / health 证据仍待可复用 FMG 页面。
 
 ### 阶段 5：生成、导入和批量能力
 

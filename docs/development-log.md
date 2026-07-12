@@ -26229,3 +26229,23 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：任务指定 10 个 JS / MJS 文件及后补 `ui/panel.js` 的 `node --check` 全过；复合回归返回关系 `1:2`、反向 `2:1`、贸易流 `#7`、connector 顶点 `12`、两类拾取候选各 `1`；可见行选择回归为筛选后 `1`、空结果 `0`、复合 key `1`；既有 selection 高亮回归为 `12 / 30 / 30` 顶点；`pnpm run build:app` 构建 1114 modules、耗时 1.32 秒，仅有既有大 chunk 警告；`git diff --check` 通过。沙箱内 pnpm 首次 registry 失败或无输出后均按约束终止并只升级重跑一次，没有持续挂起。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，现有 Chrome 仍只有 GitHub commits 页，没有已打开的 FMG 页面。按约束未 claim、新开或刷新页面，未启动服务器或重启 Chrome，未使用 Playwright，并已 finalize / 释放；外交关系 / 交易流 checkbox、connector 拾取与定位、商品 / 市场禁用边界、跨面板清除、selection / checksum 和 WebGL / console / page / health 断言待可复用 FMG 页面存在时补跑。
+
+### 2026-07-12 复合 connector 视觉与负载门禁
+
+背景：
+
+- 第一刀复合 connector 已能绘制和拾取，但当前外交关系仍使用固定金色，未利用 resolver 已提供的关系色。
+- 全局持久高亮上限为 100；需要先用确定性回归固定顶点规模和拾取候选规则，再等待真实浏览器观察 GPU 与交互表现。
+
+实现：
+
+- `composite-connectors.js` 新增当前 connector 颜色解析：外交关系把 `#rrggbb` / `#rgb` 转为 RGBA，贸易流保持绿色；无效关系色回退金色。
+- selection layer 的当前外交关系 connector 与两国轻量范围使用真实关系色；持久多选继续统一使用橙色，保持跨对象类型的一致强调语义。
+- `pickCompositeConnector()` 保持稳定输入顺序；renderer 传入 `[current selection, ...objectHighlights]`，因此完全重叠且同距时当前 selection 优先，避免持久集合抢走点击。
+- 复合回归新增 100 对象上限场景：50 条外交关系和 50 条交易流均穿过中心，selection mesh 生成 600 个顶点，拾取遍历 100 个候选，高亮模式为 `multi-object highlight (100)`。
+
+验证：
+
+- `node --check` 覆盖复合 connector、selection layer 和回归脚本；`git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：3 个目标文件 `node --check` 全过；复合回归关系色为 `0.584 / 0.843 / 0.435 / 0.96`、重叠拾取优先 `diplomacy-relation`，100 connector 为 600 顶点 / 100 候选、纯函数构建约 1.018ms；既有 selection 高亮回归为 `12 / 30 / 30` 顶点；`pnpm run build:app` 构建 1114 modules、耗时 1.40 秒，入口 chunk `1126.11 kB / gzip 326.75 kB`，仅有既有大 chunk 警告；`git diff --check` 通过。三个 pnpm 命令在沙箱内无输出后均按约束终止并只升级重跑一次，没有持续挂起。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面。按约束未认领或刷新无关页面，未新开页面，未启动 Chrome / 服务器 / Playwright，并已 finalize 释放；关系色、贸易流绿色、持久橙色、selection 优先、100 connector buffer / checksum 与 WebGL / console / page / health 仍待可复用 FMG 页面。

@@ -3,7 +3,7 @@ import {smoothWorldPath} from "./geometry.js";
 import {pushScreenPolyline, pushScreenTriangle} from "./mesh-writer.js";
 import {OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {parseDiplomacyRelationIdentity} from "../runtime/diplomacy-relations.js";
-import {compositeConnectorPoints} from "./composite-connectors.js";
+import {compositeConnectorPoints, compositeConnectorSelectionColor} from "./composite-connectors.js";
 
 const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
   [OBJECT_KIND.STATE]: [1, 0.86, 0.28, 0.3],
@@ -82,7 +82,7 @@ function pushDiplomacyRelationSelection(vertices, context, selection, locateFlas
   if (!identity) return;
   const points = compositeConnectorPoints(context.map, selection);
   if (!points) return;
-  const color = overrideColor || locateFlashColor(selection, locateFlash) || [1, 0.72, 0.22, 0.96];
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || compositeConnectorSelectionColor(selection);
   if (!overrideColor) {
     const surfaceColor = [color[0], color[1], color[2], Math.min(0.22, color[3])];
     pushPoliticalSelectionMesh(vertices, context, {kind: OBJECT_KIND.STATE, id: identity.subjectId}, null, surfaceColor);
@@ -94,7 +94,7 @@ function pushDiplomacyRelationSelection(vertices, context, selection, locateFlas
 function pushTradeFlowSelection(vertices, context, selection, locateFlash, overrideColor = null) {
   const points = compositeConnectorPoints(context.map, selection);
   if (!points) return;
-  const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.32, 0.9, 0.72, 0.98];
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || compositeConnectorSelectionColor(selection);
   pushScreenPolyline(vertices, context, points, color, selectionLineWidth(context, overrideColor ? 4.8 : 5.8));
 }
 

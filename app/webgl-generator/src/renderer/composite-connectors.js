@@ -25,6 +25,14 @@ export function pickCompositeConnector(map, objects, worldX, worldY, maxDistance
   return best;
 }
 
+export function compositeConnectorSelectionColor(object) {
+  if (object?.kind === OBJECT_KIND.DIPLOMACY_RELATION) {
+    return rgbaFromHex(object.relationColor, 0.96) || [1, 0.72, 0.22, 0.96];
+  }
+  if (object?.kind === OBJECT_KIND.TRADE_FLOW) return [0.32, 0.9, 0.72, 0.98];
+  return null;
+}
+
 function diplomacyRelationPoints(map, object) {
   const identity = parseDiplomacyRelationIdentity(object);
   if (!identity) return null;
@@ -70,4 +78,16 @@ function distanceToSegment(x, y, a, b) {
   if (lengthSquared <= 0.000001) return Math.hypot(x - a[0], y - a[1]);
   const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / lengthSquared));
   return Math.hypot(x - (a[0] + dx * t), y - (a[1] + dy * t));
+}
+
+function rgbaFromHex(value, alpha) {
+  const hex = String(value || "").trim().replace(/^#/, "");
+  const normalized = hex.length === 3 ? hex.split("").map(part => `${part}${part}`).join("") : hex;
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return null;
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16) / 255,
+    Number.parseInt(normalized.slice(2, 4), 16) / 255,
+    Number.parseInt(normalized.slice(4, 6), 16) / 255,
+    alpha
+  ];
 }

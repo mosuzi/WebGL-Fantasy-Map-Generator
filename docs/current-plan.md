@@ -882,9 +882,14 @@
    - 边界：不得把关系行随意降级为单个国家或城市；贸易流在 renderer 有稳定线性几何和 pick / locate 语义前继续返回结构化不支持错误。
    - 完成记录：新增有方向的 `OBJECT_KIND.DIPLOMACY_RELATION`，以 `subjectId:objectId` 区分正反关系并解析两国中心；贸易流继续使用稳定 deal id。两类复合对象共享高亮专用 connector 几何、bounds、locate 和仅针对当前 selection / 持久集合的拾取，不恢复已退役的全量 `tradeFlows` 图层。外交与经济面板复用原导出多选，分别只提交关系行和端点有效的交易行；新增 `pnpm run regress:composite-highlight` 覆盖方向身份、resolver、12 个 connector 顶点与两类拾取。
 
-117. 复合 connector 视觉与负载观察。`待执行`
+117. 复合 connector 视觉与负载门禁第一刀。`已完成`
    - 目标：在真实地图浏览器验收恢复后，评估多条外交 / 交易 connector 的重叠、颜色辨识、拾取优先级和 100 对象上限下的 selection buffer 构建耗时。
    - 边界：没有实测证据前不恢复全量贸易流图层；如需长期显示全部贸易网络，应单独设计密度裁剪、图例和性能门禁，而不是借持久高亮入口绕过图层治理。
+   - 完成记录：当前外交关系 connector 使用 resolver 返回的真实关系色，持久多选仍统一使用橙色；重叠线段按输入顺序拾取，renderer 始终把当前 selection 放在持久集合前，因此同距时 selection 优先。复合回归新增 100 对象上限负载：生成 600 个 GPU 顶点，拾取检查 100 个候选，阶段末子智能体纯函数构建约 1.018ms；该数值只作本轮观察，不替代真实浏览器门禁。
+
+118. 复合 connector 真实浏览器验收。`待执行`
+   - 目标：在可复用 FMG 页面存在时验证关系色、交易流颜色、重叠拾取、100 对象交互流畅度、checksum 与 WebGL / console / page / health 状态。
+   - 边界：继续遵守不新开或重启 Chrome、不重复启动服务器、不持续刷新；没有现成 FMG 页面时只记录缺口，不用主线程或临时 Playwright 绕过用户约束。
 
 ### 验证要求
 
