@@ -998,6 +998,17 @@
    - 边界：验收集中在阶段末；不持续拖动或刷新，不新开或重启 Chrome，不启动新的开发服务器。
    - 完成记录：浏览器子智能体复用既有 `127.0.0.1:5410` 页面，原生动作 5 项和范围 3 项均唯一可点击；选择 `disrupt + land` 后有限快照为半径 `28`、强度 `4`、中心衰减开启。一条短 stroke 影响 `10` cells，高度 `484 米 - 1,849 米`、均变 `+3,283 米`，待派生 `12` 项，历史 `1 / 0`；撤销为 `0 / 1`，重做恢复 `1 / 0`。稳定态截图确认地图完整，无大片黑区；console error 为 `0`，仅有一条来自 React DevTools hook 的 long-task warn。隔离控制面未提供 `glError`，不误记为零。
 
+142. 高度连通域锥形填充工具。`已完成`
+   - 目标：参考原版 Fill 工具，单击等高陆地区域或封闭水域后，按区域边缘距离生成中心更高的锥形 / 岛屿地貌。
+   - 边界：陆地按可调“高度容差”收集落点附近的近似等高连通带，默认 `±6`、范围 `0..12`；水域收集高度 `< 20` 的连通水体，若触及 grid 边界则视为开放海域并拒绝填充。少于 3 cells 或超过 `min(5000, grid cells × 20%)` 安全上限的区域不执行。
+   - 交互：Fill 是单击工具，同一次 pointer stroke 最多执行一次；半径和中心衰减不参与，强度控制峰值增量，高度容差控制陆地带宽，范围限制继续决定落点是否可操作。
+   - 完成记录：`height-brush.js` 新增连通域 BFS 与从区域边缘出发的多源距离 BFS，边缘至少抬升 1、中心按 `强度 × 3` 形成峰值，且不会降低容差带内原本更高的 cell；封闭水域以海平面 `20` 为坡脚。真实浏览器证明完全同高与固定 `±1` 在当前连续高度网格上都过于稀疏，因此增加显式高度容差，避免继续硬编码放宽。缺少邻接 / 边界标记、开放水域、过小 / 过大区域和范围不匹配都会拒绝并写入面板提示。Fill 只在 pointerdown 执行一次，隐藏无效的半径与中心衰减控件；结果继续复用高度命令、grid / pack 同步与派生标脏。
+
+143. 锥形填充真实浏览器验收。`待执行`
+   - 目标：在可复用 FMG 页面中选择 Fill，只单击一次符合范围的连通域，确认影响数、高度变化、撤销 / 重做、待派生摘要和稳定态地图显示。
+   - 边界：阶段末集中执行；不尝试开放海域破坏性填充，不持续点击或刷新，不新开或重启 Chrome，不启动新的开发服务器。
+   - 当前证据：既有 `5410` 页面确认动作 6 项、Fill 会隐藏半径 / 衰减并保留强度；第一次内陆点击正确提示少于 3 cells，第二次湖区点击正确提示落点不属于仅水域范围，均未修改历史。由此把陆地完全同高规则改为显式高度容差并补安全上限；最终成功路径浏览器智能体连续两次未在合理时间返回，均已中断并单独恢复执行 finalize，未取得可声明成功的真实 stroke / 撤销 / 重做证据。本项继续待执行，不以纯回归替代浏览器成功路径。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1006,6 +1017,7 @@
 
 ### 本轮综合验证记录
 
+- 高度锥形填充代码批次完成：烟测子智能体执行的 5 个 `node --check`、高度笔刷回归、编辑命令 affected 回归、affected 摘要回归、`pnpm run build:app` 和 `git diff --check` 均通过；最终回归覆盖默认容差 6、可调容差、封闭水域、开放海域、缺边界、过小 / 过大区域、范围不匹配和 grid / pack 撤销重做。浏览器复用现有 `5410` 页面验证了六动作、Fill 控件切换和两条拒绝边界，但没有取得成功填充路径；后续两个最终成功路径智能体未在合理时间返回，均已中断并恢复执行 finalize，未刷新、新开或启动 Chrome / 服务器 / Playwright。第 143 步继续待执行，所有验证智能体和控制会话已释放。
 - 高度扰动与陆水范围批次完成：烟测子智能体执行的 5 个 `node --check`、高度笔刷回归、编辑命令 affected 回归、affected 摘要回归、`pnpm run build:app` 和 `git diff --check` 均通过；最终构建成功产出 HeightPanel chunk，仅有既有大 chunk 提示。第一次浏览器验收发现 Element Plus 隐藏 radio / bridge 无法由控制面可靠选择，随后改为原生可见按钮并重新构建；最终复用现有 `5410` 页面完成一条 `disrupt + land` stroke、撤销和重做，稳定态地图显示完整。浏览器未刷新、新开页面或启动 Chrome / 服务器 / Playwright，烟测与浏览器智能体均已结束并释放会话。
 - 高度下游派生顺序重算批次完成：烟测子智能体执行的 7 个 `node --check`、基础 / 下游顺序与短路回归、高度笔刷回归、affected 摘要回归、`pnpm run build:app` 和 `git diff --check` 均通过；pnpm 首次在沙箱内受 registry 网络限制失败，按规则升级后成功，构建只有既有大 chunk 警告。浏览器子智能体复用既有 `127.0.0.1:5410` 页面，未刷新、新开页面或启动 Chrome / 服务器 / Playwright；一次基础重算把待派生从 9 项降到 6 项，一次下游重算严格按 `religions -> markers / economy -> diplomacy -> military -> zones` 清为“无”。两名智能体均已结束，Chrome 控制会话已 finalize 释放。
 - `node --check app\webgl-generator\src\ui\panel-manager.js`、`node --check app\webgl-generator\src\ui\panels\object-details-panel.js`、`node --check app\webgl-generator\src\runtime\app.js`、`node --check app\webgl-generator\src\ui\panel-list-preferences.js`、`node --check app\webgl-generator\src\ui\panels\river-panel.js` 均通过。

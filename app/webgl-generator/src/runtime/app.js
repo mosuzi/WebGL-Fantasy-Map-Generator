@@ -177,7 +177,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       strokeSeed: 0,
       lastAffected: 0,
       lastHeight: "none",
-      lastDelta: "none"
+      lastDelta: "none",
+      lastNotice: ""
     },
     stateEdit: {
       activeStroke: null,
@@ -2397,6 +2398,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.heightEdit.lastAffected = 0;
   state.heightEdit.lastHeight = "none";
   state.heightEdit.lastDelta = "none";
+  state.heightEdit.lastNotice = "";
   state.stateEdit.activeStroke = null;
   state.stateEdit.addMode = false;
   state.stateEdit.deleteMode = false;
@@ -7416,12 +7418,22 @@ function applyHeightBrushAtEvent(state, event) {
 
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   const changes = getHeightBrushChanges(state.map, point, brush, stroke);
-  if (!changes.length) return;
+  if (!changes.length) {
+    if (brush.action === "fill" && !stroke.originals.size) {
+      state.heightEdit.lastAffected = 0;
+      state.heightEdit.lastHeight = "none";
+      state.heightEdit.lastDelta = "none";
+      state.heightEdit.lastNotice = stroke.notice || "未找到可填充的连通区域。";
+      updateHeightPanel(state);
+    }
+    return;
+  }
 
   applyHeightBrushPreview(state.map, changes);
   state.heightEdit.lastAffected = changes.length;
   state.heightEdit.lastHeight = summarizeChangedHeights(changes);
   state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
+  state.heightEdit.lastNotice = stroke.notice || "";
   state.editRefreshScheduler.run(EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW);
   updateHeightPanel(state);
 }
@@ -7589,6 +7601,7 @@ function updateHeightPanel(state) {
     lastAffected: state.heightEdit.lastAffected,
     lastHeight: state.heightEdit.lastHeight,
     lastDelta: state.heightEdit.lastDelta,
+    lastNotice: state.heightEdit.lastNotice,
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,
     currentHeightStats: summarizeCurrentHeightStats(state.map),
@@ -7982,10 +7995,12 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       scope: heightBrush.scope || "all",
       radius: Number(heightBrush.radius) || 0,
       strength: Number(heightBrush.strength) || 0,
+      fillTolerance: Number(heightBrush.fillTolerance) || 0,
       falloff: Boolean(heightBrush.falloff),
       lastAffected: state.heightEdit.lastAffected,
       lastHeight: state.heightEdit.lastHeight,
-      lastDelta: state.heightEdit.lastDelta
+      lastDelta: state.heightEdit.lastDelta,
+      lastNotice: state.heightEdit.lastNotice
     },
     stateBrush: {
       active: Boolean(stateBrush.active),

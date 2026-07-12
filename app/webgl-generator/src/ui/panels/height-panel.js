@@ -8,10 +8,12 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     scope: "all",
     radius: 28,
     strength: 4,
+    fillTolerance: 6,
     falloff: true,
     lastAffected: 0,
     lastHeight: "none",
     lastDelta: "none",
+    lastNotice: "",
     graphWidth: 1440,
     graphHeight: 960,
     currentHeightStats: null,
@@ -69,6 +71,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       lastAffected = panelState.lastAffected,
       lastHeight = panelState.lastHeight,
       lastDelta = panelState.lastDelta,
+      lastNotice = panelState.lastNotice,
       graphWidth = panelState.graphWidth,
       graphHeight = panelState.graphHeight,
       currentHeightStats = panelState.currentHeightStats,
@@ -79,6 +82,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.lastAffected = lastAffected;
       panelState.lastHeight = lastHeight;
       panelState.lastDelta = lastDelta;
+      panelState.lastNotice = lastNotice;
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;
       panelState.currentHeightStats = currentHeightStats;
@@ -93,6 +97,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         scope: panelState.scope,
         radius: panelState.radius,
         strength: panelState.strength,
+        fillTolerance: panelState.fillTolerance,
         falloff: panelState.falloff
       };
     },

@@ -3,6 +3,11 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
   const points = map?.grid?.points;
   const originals = stroke?.originals;
   if (!cells?.p || !cells?.h || !Array.isArray(points) || !(originals instanceof Map)) return [];
+  if (brush?.action === "fill") {
+    if (stroke.fillApplied) return [];
+    stroke.fillApplied = true;
+    return getHeightFillChanges(map, point, brush, stroke);
+  }
 
   const radius = Math.max(1, Number(brush?.radius) || 1);
   const radiusSq = radius * radius;
@@ -56,6 +61,120 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
   const strength = Math.max(1, Number(brush.strength) || 1);
   const delta = brush.action === "lower" ? -strength : strength;
   return affected.map(({gridCell, factor}) => heightChange(cells, originals, gridCell, cells.h[gridCell] + delta * factor)).filter(Boolean);
+}
+
+function getHeightFillChanges(map, point, brush, stroke) {
+  const {cells, points} = map.grid;
+  if (!Array.isArray(cells.c)) {
+    stroke.notice = "当前 grid 缺少连通邻接，无法执行填充。";
+    return [];
+  }
+  const start = findNearestGridCell(cells, points, point);
+  if (start === null) return [];
+  const scope = normalizeBrushScope(brush.scope);
+  const startHeight = cells.h[start];
+  if (!matchesBrushScope(startHeight, scope)) {
+    stroke.notice = "落点不属于当前笔刷作用范围。";
+    return [];
+  }
+
+  const water = startHeight < 20;
+  if (water && !cells.b) {
+    stroke.notice = "当前 grid 缺少边界标记，无法确认水域是否封闭。";
+    return [];
+  }
+  const tolerance = water ? 0 : normalizeFillTolerance(brush.fillTolerance);
+  const maxCells = Math.max(64, Math.min(5000, Math.floor(cells.h.length * 0.2)));
+  const {selection, reachedBorder, exceededLimit} = collectFillSelection(cells, start, water, startHeight, tolerance, maxCells);
+  if (exceededLimit) {
+    stroke.notice = `连通区域超过安全上限 ${maxCells} cells，未执行填充。`;
+    return [];
+  }
+  if (selection.length < 3) {
+    stroke.notice = "连通区域少于 3 cells，未执行填充。";
+    return [];
+  }
+  if (water && reachedBorder) {
+    stroke.notice = "水域连通到地图边界，开放海域不能执行填充。";
+    return [];
+  }
+
+  const changes = applyConeToSelection(cells, selection, water, startHeight, brush.strength, stroke.originals);
+  stroke.notice = changes.length ? `已锥形填充 ${changes.length} cells。` : "连通区域高度没有变化。";
+  return changes;
+}
+
+function findNearestGridCell(cells, points, point) {
+  let nearest = null;
+  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+    const cellPoint = points[cells.p[gridCell]];
+    if (!cellPoint) continue;
+    const dx = cellPoint[0] - point.x;
+    const dy = cellPoint[1] - point.y;
+    const distanceSq = dx * dx + dy * dy;
+    if (!nearest || distanceSq < nearest.distanceSq) nearest = {gridCell, distanceSq};
+  }
+  return nearest?.gridCell ?? null;
+}
+
+function collectFillSelection(cells, start, water, targetHeight, tolerance, maxCells) {
+  const visited = new Uint8Array(cells.h.length);
+  const stack = [start];
+  const selection = [];
+  let reachedBorder = false;
+  while (stack.length) {
+    const cell = stack.pop();
+    if (visited[cell]) continue;
+    visited[cell] = 1;
+    const matches = water ? cells.h[cell] < 20 : Math.abs(cells.h[cell] - targetHeight) <= tolerance;
+    if (!matches) continue;
+    selection.push(cell);
+    if (selection.length > maxCells) return {selection, reachedBorder, exceededLimit: true};
+    if (cells.b?.[cell]) reachedBorder = true;
+    for (const next of cells.c[cell] || []) {
+      if (!visited[next]) stack.push(next);
+    }
+  }
+  return {selection, reachedBorder, exceededLimit: false};
+}
+
+function normalizeFillTolerance(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(12, Math.round(numeric))) : 6;
+}
+
+function applyConeToSelection(cells, selection, water, targetHeight, strengthValue, originals) {
+  const inSelection = new Uint8Array(cells.h.length);
+  const edgeDistance = new Uint16Array(cells.h.length);
+  for (const cell of selection) inSelection[cell] = 1;
+
+  const queue = [];
+  for (const cell of selection) {
+    const neighbors = cells.c[cell] || [];
+    if (!cells.b?.[cell] && !neighbors.some(next => !inSelection[next])) continue;
+    inSelection[cell] = 2;
+    queue.push(cell);
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const cell = queue[head];
+    const nextDistance = edgeDistance[cell] + 1;
+    for (const next of cells.c[cell] || []) {
+      if (inSelection[next] !== 1) continue;
+      inSelection[next] = 2;
+      edgeDistance[next] = nextDistance;
+      queue.push(next);
+    }
+  }
+
+  let maxDistance = 0;
+  for (const cell of selection) maxDistance = Math.max(maxDistance, edgeDistance[cell]);
+  const peakRise = Math.max(1, Number(strengthValue) || 1) * 3;
+  const baseHeight = water ? 20 : targetHeight;
+  return selection.map(cell => {
+    const ratio = maxDistance ? edgeDistance[cell] / maxDistance : 1;
+    const rise = Math.max(1, Math.round(peakRise * ratio));
+    return heightChange(cells, originals, cell, Math.max(cells.h[cell], baseHeight + rise));
+  }).filter(Boolean);
 }
 
 function normalizeBrushScope(scope) {

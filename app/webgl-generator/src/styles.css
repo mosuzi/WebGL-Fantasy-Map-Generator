@@ -2702,6 +2702,15 @@ select:disabled {
   line-height: 1.5;
 }
 
+.height-action-notice {
+  margin: -2px 0 10px;
+  border-left: 2px solid rgba(215, 168, 79, 0.72);
+  padding-left: 8px;
+  color: #cbd7dc;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .height-action-group button,
 .height-scope-group button {
   min-width: 0;

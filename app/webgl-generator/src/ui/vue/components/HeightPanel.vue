@@ -19,6 +19,8 @@
   </div>
   <p v-if="state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
   <p v-else-if="state.action === 'disrupt'" class="height-action-help">按强度生成稳定的局部起伏，同一笔划连续拖动时会继续塑造崎岖地形。</p>
+  <p v-else-if="state.action === 'fill'" class="height-action-help">单击等高陆地区域或封闭水域，按边缘距离生成中心更高的锥形地貌。</p>
+  <p v-if="state.lastNotice" class="height-action-notice" aria-live="polite">{{ state.lastNotice }}</p>
 
   <p class="height-control-label">作用范围</p>
   <div class="segmented height-scope-group" role="group" aria-label="高度笔刷作用范围">
@@ -34,10 +36,11 @@
     </button>
   </div>
 
-  <UiSliderField label="半径" :model-value="state.radius" :min="6" :max="96" :step="2" @input="setRadius" />
+  <UiSliderField v-if="state.action !== 'fill'" label="半径" :model-value="state.radius" :min="6" :max="96" :step="2" @input="setRadius" />
   <UiSliderField label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
+  <UiSliderField v-if="state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
 
-  <UiSwitchField label="中心衰减" field-class="height-check-row" :checked="state.falloff" @change="setFalloff" />
+  <UiSwitchField v-if="state.action !== 'fill'" label="中心衰减" field-class="height-check-row" :checked="state.falloff" @change="setFalloff" />
 
   <div class="height-history-actions">
     <UiButton variant="secondary" @click="callbacks.onUndo?.()">撤销上次</UiButton>
@@ -411,7 +414,8 @@ const actions = Object.freeze([
   {value: "lower", label: "降低"},
   {value: "smooth", label: "平滑"},
   {value: "flatten", label: "整平"},
-  {value: "disrupt", label: "扰动"}
+  {value: "disrupt", label: "扰动"},
+  {value: "fill", label: "填充"}
 ]);
 const scopes = Object.freeze([
   {value: "all", label: "全部"},
@@ -705,6 +709,10 @@ function setRadius(radius) {
 
 function setStrength(strength) {
   props.state.strength = strength;
+}
+
+function setFillTolerance(tolerance) {
+  props.state.fillTolerance = tolerance;
 }
 
 function setFalloff(falloff) {
