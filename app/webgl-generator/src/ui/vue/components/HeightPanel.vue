@@ -21,6 +21,9 @@
   <p v-else-if="state.action === 'disrupt'" class="height-action-help">按强度生成稳定的局部起伏，同一笔划连续拖动时会继续塑造崎岖地形。</p>
   <p v-else-if="state.action === 'fill'" class="height-action-help">单击等高陆地区域或封闭水域，按边缘距离生成中心更高的锥形地貌。</p>
   <p v-else-if="state.action === 'line'" class="height-action-help">依次单击起点和终点，以正增量生成山脊、负增量生成沟槽。</p>
+  <p v-if="state.action === 'fill' && state.fillPreview" class="height-fill-preview" :class="{valid: state.fillPreview.valid}" aria-live="polite">
+    {{ state.fillPreview.notice }}
+  </p>
   <p v-if="state.lastNotice" class="height-action-notice" aria-live="polite">{{ state.lastNotice }}</p>
 
   <p class="height-control-label">作用范围</p>

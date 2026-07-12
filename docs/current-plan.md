@@ -1004,10 +1004,10 @@
    - 交互：Fill 是单击工具，同一次 pointer stroke 最多执行一次；半径和中心衰减不参与，强度控制峰值增量，高度容差控制陆地带宽，范围限制继续决定落点是否可操作。
    - 完成记录：`height-brush.js` 新增连通域 BFS 与从区域边缘出发的多源距离 BFS，边缘至少抬升 1、中心按 `强度 × 3` 形成峰值，且不会降低容差带内原本更高的 cell；封闭水域以海平面 `20` 为坡脚。真实浏览器证明完全同高与固定 `±1` 在当前连续高度网格上都过于稀疏，因此增加显式高度容差，避免继续硬编码放宽。缺少邻接 / 边界标记、开放水域、过小 / 过大区域和范围不匹配都会拒绝并写入面板提示。Fill 只在 pointerdown 执行一次，隐藏无效的半径与中心衰减控件；结果继续复用高度命令、grid / pack 同步与派生标脏。
 
-143. 锥形填充真实浏览器验收。`待执行`
+143. 锥形填充真实浏览器验收。`已完成`
    - 目标：在可复用 FMG 页面中选择 Fill，只单击一次符合范围的连通域，确认影响数、高度变化、撤销 / 重做、待派生摘要和稳定态地图显示。
    - 边界：阶段末集中执行；不尝试开放海域破坏性填充，不持续点击或刷新，不新开或重启 Chrome，不启动新的开发服务器。
-   - 当前证据：既有 `5410` 页面确认动作 6 项、Fill 会隐藏半径 / 衰减并保留强度；第一次内陆点击正确提示少于 3 cells，第二次湖区点击正确提示落点不属于仅水域范围，均未修改历史。由此把陆地完全同高规则改为显式高度容差并补安全上限；最终成功路径浏览器智能体连续两次未在合理时间返回，均已中断并单独恢复执行 finalize，未取得可声明成功的真实 stroke / 撤销 / 重做证据。本项继续待执行，不以纯回归替代浏览器成功路径。
+   - 完成记录：浏览器子智能体复用既有 `5410` 页面，没有刷新、新开页面或启动 Chrome / 服务器 / Playwright；在 `fill + all`、强度 `4`、容差 `6` 下，第一个内陆候选预检为 `65 cells（陆地高度 80±6）`。只点击一次后实际锥形填充 `43 cells`；预检数包含完整连通候选，实际数会过滤无需变化或原本更高的 cells，因此差异符合设计。高度范围变为 `3,969..5,476 米`、平均变化 `+142 米`、待派生 `12` 项；撤销 / 重做各一次后历史为 `undo 1 / redo 0`，地图稳定完整且 console error 为 `0`。
 
 144. 高度两点线段山脊 / 沟槽工具。`已完成`
    - 目标：参考原版 Line 工具，通过两次点击选择起点和终点，在直线附近按可调宽度与 signed power 生成山脊或沟槽。
@@ -1020,6 +1020,16 @@
    - 目标：在可复用 FMG 页面中选择 Line，设置一条短正 power 线段，确认起点提示、预览线、第二点提交、影响数、撤销 / 重做、待派生摘要和稳定态地图；不再追加第三条线。
    - 边界：浏览器验收集中到阶段末，不刷新、不新开或重启 Chrome，不启动新的服务器或 Playwright。
    - 完成记录：浏览器子智能体复用既有 `5410` 页面；动作唯一 7 项。`line + all` 下只显示线宽 `12`、增量 `12` 和中心衰减。晋邦联内短线首击显示起点提示和可见预览，第二击生成山脊 `9` cells，预览清除；高度 `1,764..3,481 米`、均变 `+163 米`、待派生 `12` 项。撤销 / 重做各一次后历史恢复 `undo 1 / redo 0`，稳定态地图完整、console error 为 `0`，仅一条来自 React DevTools hook 的 long-task warn；隔离控制面未取得独立 `glError`。
+
+146. Fill 落点预检与候选提示。`已完成`
+   - 目标：在单击修改地图前，随指针显示当前 grid cell 的可填候选数和拒绝原因，解决用户只能盲点后才知道“过小 / 开放 / 超限”的问题。
+   - 性能边界：复用 renderer picking 获取 grid cell，只有 hover cell 变化时才执行一次连通域分析；只更新高度面板的预检字段，不重算高度统计、差值预览或 runtime 全量快照。
+   - 完成记录：新增纯函数 `inspectHeightFillTarget()`，返回有界 `gridCell / startHeight / terrain / tolerance / maxCells / selectionCount / reachedBorder / valid / notice`，不暴露完整 selection。Fill hover 在候选有效时显示绿色“可填充 N cells”，无效时显示与真实点击一致的中文拒绝原因；离开 canvas、切换动作 / 编辑器、历史操作、重算或地图加载会清理预检。
+
+147. Fill 预检引导成功路径浏览器验收。`已完成`
+   - 目标：在可复用 FMG 页面中移动到预检为 valid 的位置后只点击一次，确认预检候选数与实际 affected、提示、撤销 / 重做、待派生和稳定态地图，并据此关闭第 143 步。
+   - 边界：最多检查少量不同 hover cells，不持续扫图、不刷新、不启动新 Chrome / 服务器或 Playwright；成功后不再第二次填充。
+   - 完成记录：首个检查的内陆 hover cell 即显示有效候选 `65 cells`，随后唯一一次点击影响 `43 cells`；高度变化、待派生摘要、撤销 / 重做和稳定态地图均通过。验收后没有执行第二次 Fill、线段或派生重算；控制会话已 finalize，FMG 标签以 handoff 保留。
 
 ### 验证要求
 
@@ -1186,3 +1196,4 @@
 - 生物群系 / 气候 / 水体地貌 / 人口统计面板筛选空态清理第一刀：四个只读统计列表在筛选后没有匹配行时，会通过 `UiObjectTable.emptyAction` 显示“清空筛选”，点击后仅调用各自 `onFilter("")` 恢复当前列表；本步不改变统计口径、选中详情、列宽或排序逻辑。`git diff --check` 和 `pnpm run build:app` 通过，构建仅有既有 Vite 大 chunk 警告；验证子智能体 `verify_stats_empty_filter` 等待 90 秒无输出，已中断释放，主线程兜底 Playwright + 系统 Chrome 烟测确认生物群系、气候、水体地貌和人口统计面板分别在无匹配筛选时显示“清空筛选”，点击后筛选词清空并恢复 `13 / 5 / 11 / 26` 个可见行；`glError = 0`，health / console / page error 均为 `0`。
 - 外交 / 纹章 / 备注 / 经济 / 政体 / 军事面板筛选空态清理第一刀：六个剩余带 `UiFilterInput + UiObjectTable` 的管理 / 报表面板已接入筛选空态“清空筛选”动作；点击后仅调用各自 `onFilter("")` 恢复当前列表。经济面板三张表共享同一清理动作，政体面板只在政体汇总表筛选为空时清理文本筛选，军事面板只清理文本筛选，不改变国家 / 态势下拉筛选、战报筛选、批量态势、导出、编辑或列宽逻辑。`git diff --check` 和 `pnpm run build:app` 通过，构建仅有既有 Vite 大 chunk 警告；验证子智能体 `verify_report_empty_filter` 等待 90 秒无输出，已中断释放，主线程兜底 Playwright + 系统 Chrome 烟测确认外交、纹章、备注、经济商品、经济市场、经济交易、政体和军事表格分别在无匹配筛选时显示“清空筛选”，点击后筛选词清空并恢复 `19 / 26 / 1 / 71 / 30 / 48 / 10 / 113` 个可见行；备注验证在浏览器会话内临时插入 1 条备注用于表格行验证，不写入源码或仓库文件；军事国家 / 态势下拉在清理前后保持 `all / all`；`glError = 0`，health / console / page error 均为 `0`。
 - 军事战报二级筛选持久化第一刀：战报链路、类型、结果和结算筛选四项已提升到 `panel-list-preferences`，刷新后可恢复；本步不保存战报导入状态、战报记录草稿、显示展开状态或其它编辑中间态。`node --check app\webgl-generator\src\ui\panel-list-preferences.js`、`node --check app\webgl-generator\src\ui\panels\military-panel.js`、`git diff --check` 和 `pnpm run build:app` 通过，构建仅有既有 Vite 大 chunk 警告；验证子智能体 `verify_military_event_filter_prefs` 等待 90 秒无输出，已中断释放，主线程兜底 Playwright + 系统 Chrome 烟测在浏览器会话内给 `1（苍原）军团` 临时注入两条战报，确认预置 `smoke-chain-a / skirmish / victory / applied` 可恢复，UI 改为 `smoke-chain-b / raid / defeat / pending` 后 localStorage 写入 `eventChainFilter / eventTypeFilter / eventOutcomeFilter / eventApplyFilter`，刷新后四项仍恢复为 `smoke-chain-b / raid / defeat / pending`；军事国家 / 态势主筛选保持 `all / all`，战报导出范围保持 `selected`，直接 `gl.getError() = 0`，health / console / page error 均为 `0`。
+- Fill 落点预检批次统一验证完成：烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过，构建仅有既有大 chunk 警告；公开预检确认封闭水域 `valid=true / 9 cells`、开放水域 `valid=false / 25 cells`、默认陆地容差 `6 / valid=true / 5 cells`，且不暴露内部 selection。浏览器子智能体复用既有 `5410` 页面，首个内陆候选预检 `65 cells`，唯一一次点击实际影响 `43 cells`，撤销 / 重做闭环和稳定态地图通过，console error 为 `0`；未刷新或启动浏览器、服务器、Playwright，两个子智能体均已结束并释放控制会话。

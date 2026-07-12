@@ -55,7 +55,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {getHeightBrushChanges, getHeightLineChanges} from "./height-brush.js";
+import {getHeightBrushChanges, getHeightLineChanges, inspectHeightFillTarget} from "./height-brush.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -175,6 +175,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     heightEdit: {
       activeStroke: null,
       lineStart: null,
+      fillHoverCell: null,
+      fillPreview: null,
       strokeSeed: 0,
       lastAffected: 0,
       lastHeight: "none",
@@ -6900,6 +6902,10 @@ function bindHeightEditing(canvas, state, documentRef) {
       handleHeightLineClick(state, event, brush, documentRef);
       return;
     }
+    if (brush.action === "fill") {
+      state.heightEdit.fillHoverCell = null;
+      state.heightEdit.fillPreview = null;
+    }
     state.heightEdit.activeStroke = {
       pointerId: event.pointerId,
       originals: new Map(),
@@ -6912,6 +6918,10 @@ function bindHeightEditing(canvas, state, documentRef) {
 
   canvas.addEventListener("pointermove", event => {
     const brush = state.panels.height?.getBrush();
+    if (!state.heightEdit.activeStroke && brush?.active && brush.action === "fill") {
+      updateHeightFillPreviewAtEvent(state, event, brush);
+      return;
+    }
     if (!state.heightEdit.activeStroke && brush?.active && brush.action === "line" && state.heightEdit.lineStart) {
       updateHeightLinePreview(documentRef, state.heightEdit.lineStart, event.clientX, event.clientY);
       return;
@@ -6939,6 +6949,23 @@ function bindHeightEditing(canvas, state, documentRef) {
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
   }, true);
+
+  canvas.addEventListener("pointerleave", () => {
+    const brush = state.panels.height?.getBrush();
+    if (state.heightEdit.activeStroke || !brush?.active || brush.action !== "fill") return;
+    state.heightEdit.fillHoverCell = null;
+    state.heightEdit.fillPreview = null;
+    state.panels.height?.updateFillPreview?.(null);
+  }, true);
+}
+
+function updateHeightFillPreviewAtEvent(state, event, brush) {
+  const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  const gridCell = Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
+  if (state.heightEdit.fillHoverCell === gridCell) return;
+  state.heightEdit.fillHoverCell = gridCell;
+  state.heightEdit.fillPreview = inspectHeightFillTarget(state.map, gridCell, brush);
+  state.panels.height?.updateFillPreview?.(state.heightEdit.fillPreview);
 }
 
 function handleHeightLineClick(state, event, brush, documentRef) {
@@ -6998,6 +7025,8 @@ function updateHeightLinePreview(documentRef, start, clientX, clientY) {
 
 function cancelHeightLine(state, documentRef) {
   state.heightEdit.lineStart = null;
+  state.heightEdit.fillHoverCell = null;
+  state.heightEdit.fillPreview = null;
   documentRef.querySelector(".height-line-preview")?.remove();
 }
 
@@ -7693,6 +7722,7 @@ function updateHeightPanel(state) {
     lastHeight: state.heightEdit.lastHeight,
     lastDelta: state.heightEdit.lastDelta,
     lastNotice: state.heightEdit.lastNotice,
+    fillPreview: state.heightEdit.fillPreview,
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,
     currentHeightStats: summarizeCurrentHeightStats(state.map),
@@ -8094,7 +8124,8 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       lastAffected: state.heightEdit.lastAffected,
       lastHeight: state.heightEdit.lastHeight,
       lastDelta: state.heightEdit.lastDelta,
-      lastNotice: state.heightEdit.lastNotice
+      lastNotice: state.heightEdit.lastNotice,
+      fillPreview: state.heightEdit.fillPreview ? {...state.heightEdit.fillPreview} : null
     },
     stateBrush: {
       active: Boolean(stateBrush.active),

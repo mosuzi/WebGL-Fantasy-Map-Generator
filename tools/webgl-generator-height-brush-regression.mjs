@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
-import {getHeightBrushChanges, getHeightLineChanges} from "../app/webgl-generator/src/runtime/height-brush.js";
+import {getHeightBrushChanges, getHeightLineChanges, inspectHeightFillTarget} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 
 const map = createSyntheticMap();
@@ -57,6 +57,8 @@ const continuedBelowSeaLevel = getHeightBrushChanges(stableScopeMap, {x: 10, y: 
 assert(continuedBelowSeaLevel[0]?.gridCell === 1 && continuedBelowSeaLevel[0]?.after === 12, "陆地 cell 跨海平面后没有按首次修改前高度继续 stroke");
 
 const enclosedWaterMap = createSquareMap(5, (x, y) => x > 0 && x < 4 && y > 0 && y < 4 ? 10 : 30);
+const enclosedWaterPreview = inspectHeightFillTarget(enclosedWaterMap, 12, {scope: "water", fillTolerance: 6});
+assert(enclosedWaterPreview.valid && enclosedWaterPreview.selectionCount === 9 && enclosedWaterPreview.notice.includes("可填充 9"), `封闭水域预检异常：${JSON.stringify(enclosedWaterPreview)}`);
 const enclosedWaterStroke = {originals: new Map()};
 const enclosedWaterFill = getHeightBrushChanges(enclosedWaterMap, {x: 2, y: 2}, {action: "fill", scope: "water", strength: 4}, enclosedWaterStroke);
 assert(enclosedWaterFill.length === 9, `封闭水域填充数量异常：${enclosedWaterFill.length}`);
@@ -74,7 +76,10 @@ fillHistory.redo({map: enclosedWaterMap});
 assert(enclosedWaterMap.grid.cells.h[12] === 32 && enclosedWaterMap.pack.cells.h[12] === 32, "重做锥形填充没有恢复 grid / pack 中心高度");
 
 const openWaterStroke = {originals: new Map()};
-const openWaterFill = getHeightBrushChanges(createSquareMap(5, () => 10), {x: 2, y: 2}, {action: "fill", scope: "water", strength: 4}, openWaterStroke);
+const openWaterMap = createSquareMap(5, () => 10);
+const openWaterPreview = inspectHeightFillTarget(openWaterMap, 12, {scope: "water", fillTolerance: 6});
+assert(!openWaterPreview.valid && openWaterPreview.selectionCount === 25 && openWaterPreview.notice.includes("开放海域"), `开放水域预检异常：${JSON.stringify(openWaterPreview)}`);
+const openWaterFill = getHeightBrushChanges(openWaterMap, {x: 2, y: 2}, {action: "fill", scope: "water", strength: 4}, openWaterStroke);
 assert(openWaterFill.length === 0 && openWaterStroke.notice.includes("开放海域"), `开放水域未被拒绝：${openWaterStroke.notice}`);
 
 const missingBorderMap = createSquareMap(5, (x, y) => x > 0 && x < 4 && y > 0 && y < 4 ? 10 : 30);
@@ -96,6 +101,8 @@ assert(landFill.find(change => change.gridCell === 7)?.before === 39, "陆地 ±
 const defaultToleranceMap = createSquareMap(5, (x, y) => (x === 2 && y === 2) || Math.abs(x - 2) + Math.abs(y - 2) === 1 ? (x === 2 && y === 2 ? 40 : 35) : 20);
 const defaultToleranceFill = getHeightBrushChanges(defaultToleranceMap, {x: 2, y: 2}, {action: "fill", scope: "land", strength: 4}, {originals: new Map()});
 assert(defaultToleranceFill.length === 5, `默认高度容差 6 没有纳入差值 5 的邻接 cells：${defaultToleranceFill.length}`);
+const defaultTolerancePreview = inspectHeightFillTarget(defaultToleranceMap, 12, {scope: "land"});
+assert(defaultTolerancePreview.valid && defaultTolerancePreview.tolerance === 6 && defaultTolerancePreview.selectionCount === 5, `默认高度容差预检异常：${JSON.stringify(defaultTolerancePreview)}`);
 
 const highBandMap = createSquareMap(5, (x, y) => {
   if (x === 2 && y === 1) return 46;
@@ -162,12 +169,15 @@ console.log(JSON.stringify({
   waterScope: waterScope.map(change => change.gridCell),
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
+  enclosedWaterPreview,
   openWaterNotice: openWaterStroke.notice,
+  openWaterPreview,
   missingBorderNotice: missingBorderStroke.notice,
   tinyFillNotice: tinyFillStroke.notice,
   oversizedFillNotice: oversizedFillStroke.notice,
   landFill: {cells: landFill.length, center: landFill.find(change => change.gridCell === 12)?.after},
   defaultToleranceCells: defaultToleranceFill.length,
+  defaultTolerancePreview,
   preservedHighBandCell: !highBandFill.some(change => change.gridCell === 7),
   fillHistory: fillHistory.getStats(),
   ridgeLine: {cells: ridgeLine.length, center: ridgeLine.find(change => change.gridCell === 12)?.after},

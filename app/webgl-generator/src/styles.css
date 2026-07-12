@@ -2738,6 +2738,22 @@ select:disabled {
   line-height: 1.5;
 }
 
+.height-fill-preview {
+  margin: -2px 0 10px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: rgba(12, 18, 22, 0.72);
+  color: #9eacb4;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.height-fill-preview.valid {
+  border-color: rgba(106, 184, 133, 0.42);
+  color: #bde8c9;
+}
+
 .height-action-group button,
 .height-scope-group button {
   min-width: 0;

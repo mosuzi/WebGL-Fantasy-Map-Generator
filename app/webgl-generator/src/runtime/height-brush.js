@@ -111,45 +111,57 @@ export function getHeightLineChanges(map, fromPoint, toPoint, brush, stroke) {
   return changes;
 }
 
+export function inspectHeightFillTarget(map, gridCell, brush = {}) {
+  const {selection, ...summary} = analyzeHeightFillTarget(map, gridCell, brush);
+  return summary;
+}
+
 function getHeightFillChanges(map, point, brush, stroke) {
   const {cells, points} = map.grid;
-  if (!Array.isArray(cells.c)) {
-    stroke.notice = "当前 grid 缺少连通邻接，无法执行填充。";
-    return [];
-  }
   const start = findNearestGridCell(cells, points, point);
-  if (start === null) return [];
-  const scope = normalizeBrushScope(brush.scope);
-  const startHeight = cells.h[start];
-  if (!matchesBrushScope(startHeight, scope)) {
-    stroke.notice = "落点不属于当前笔刷作用范围。";
-    return [];
-  }
-
-  const water = startHeight < 20;
-  if (water && !cells.b) {
-    stroke.notice = "当前 grid 缺少边界标记，无法确认水域是否封闭。";
-    return [];
-  }
-  const tolerance = water ? 0 : normalizeFillTolerance(brush.fillTolerance);
-  const maxCells = heightEditMaxCells(cells);
-  const {selection, reachedBorder, exceededLimit} = collectFillSelection(cells, start, water, startHeight, tolerance, maxCells);
-  if (exceededLimit) {
-    stroke.notice = `连通区域超过安全上限 ${maxCells} cells，未执行填充。`;
-    return [];
-  }
-  if (selection.length < 3) {
-    stroke.notice = "连通区域少于 3 cells，未执行填充。";
-    return [];
-  }
-  if (water && reachedBorder) {
-    stroke.notice = "水域连通到地图边界，开放海域不能执行填充。";
-    return [];
-  }
-
-  const changes = applyConeToSelection(cells, selection, water, startHeight, brush.strength, stroke.originals);
+  const analysis = analyzeHeightFillTarget(map, start, brush);
+  stroke.notice = analysis.notice;
+  if (!analysis.valid) return [];
+  const changes = applyConeToSelection(cells, analysis.selection, analysis.water, analysis.startHeight, brush.strength, stroke.originals);
   stroke.notice = changes.length ? `已锥形填充 ${changes.length} cells。` : "连通区域高度没有变化。";
   return changes;
+}
+
+function analyzeHeightFillTarget(map, gridCell, brush) {
+  const cells = map?.grid?.cells;
+  const maxCells = cells?.h ? heightEditMaxCells(cells) : 0;
+  if (!cells?.h || !Array.isArray(cells.c)) return fillAnalysis({gridCell, maxCells, notice: "当前 grid 缺少连通邻接，无法执行填充。"});
+  if (!Number.isInteger(gridCell) || gridCell < 0 || gridCell >= cells.h.length) return fillAnalysis({gridCell: null, maxCells, notice: "当前指针没有命中可填充的 grid cell。"});
+
+  const scope = normalizeBrushScope(brush.scope);
+  const startHeight = cells.h[gridCell];
+  const water = startHeight < 20;
+  const tolerance = water ? 0 : normalizeFillTolerance(brush.fillTolerance);
+  if (!matchesBrushScope(startHeight, scope)) return fillAnalysis({gridCell, startHeight, water, tolerance, maxCells, notice: "落点不属于当前笔刷作用范围。"});
+  if (water && !cells.b) return fillAnalysis({gridCell, startHeight, water, tolerance, maxCells, notice: "当前 grid 缺少边界标记，无法确认水域是否封闭。"});
+
+  const {selection, reachedBorder, exceededLimit} = collectFillSelection(cells, gridCell, water, startHeight, tolerance, maxCells);
+  if (exceededLimit) return fillAnalysis({gridCell, startHeight, water, tolerance, maxCells, selection, notice: `连通区域超过安全上限 ${maxCells} cells，未执行填充。`});
+  if (selection.length < 3) return fillAnalysis({gridCell, startHeight, water, tolerance, maxCells, selection, notice: "连通区域少于 3 cells，未执行填充。"});
+  if (water && reachedBorder) return fillAnalysis({gridCell, startHeight, water, tolerance, maxCells, selection, reachedBorder, notice: "水域连通到地图边界，开放海域不能执行填充。"});
+  const label = water ? "封闭水域" : `陆地高度 ${startHeight}±${tolerance}`;
+  return fillAnalysis({gridCell, startHeight, water, tolerance, maxCells, selection, reachedBorder, valid: true, notice: `可填充 ${selection.length} cells（${label}）。`});
+}
+
+function fillAnalysis({gridCell = null, startHeight = null, water = false, tolerance = 0, maxCells = 0, selection = [], reachedBorder = false, valid = false, notice = ""}) {
+  return {
+    gridCell,
+    startHeight,
+    terrain: water ? "water" : "land",
+    water,
+    tolerance,
+    maxCells,
+    selection,
+    selectionCount: selection.length,
+    reachedBorder,
+    valid,
+    notice
+  };
 }
 
 function findNearestGridCell(cells, points, point) {

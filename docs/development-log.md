@@ -26554,3 +26554,28 @@ full 矩阵结果：
 - 晋邦联内唯一短线首击后显示“已选择线段起点”提示，移动指针时预览线与两端圆点可见；第二击生成线段山脊 `9` cells 并清理预览。高度范围 `1,764..3,481 米`、平均变化 `+163 米`，待派生 `12` 项，历史 `undo 1 / redo 0`。
 - 撤销 / 重做各一次后历史恢复 `1 / 0`，稳定态地图完整；console error 为 `0`，仅一条来自 React DevTools extension hook 的 `main-thread-long-task` warn。隔离控制面没有取得独立 `glError`，按未取得记录。
 - 烟测和浏览器智能体均已结束；Chrome 会话 finalize，FMG 页面以 handoff 保留，没有遗留控制进程。
+
+### 2026-07-12 Fill 落点预检与候选提示
+
+背景：
+
+- Fill 的纯回归已经覆盖成功路径，但真实浏览器两次安全点击分别落到过小陆地区域和岸侧 grid cell；仅在点击后返回拒绝原因，用户仍需要盲试落点。
+- 直接在每个 pointermove 重跑完整高度面板更新会重复构建统计和差值预览，不能用高频全量刷新换取提示。
+
+实现：
+
+- `height-brush.js` 新增 `inspectHeightFillTarget(map, gridCell, brush)`，复用与真实 Fill 完全相同的 scope、容差、连通域、边界和安全上限分析。
+- 公开结果只包含 `gridCell / startHeight / terrain / tolerance / maxCells / selectionCount / reachedBorder / valid / notice`，内部完整 selection 不出现在 runtime 或 Vue 状态中。
+- 高度编辑 pointermove 复用 `renderer.pickClientPoint()` 获取 grid cell；只有 cell 改变时才预检，避免同 cell 内连续鼠标事件重复 BFS。
+- hover 只调用 `heightPanel.updateFillPreview()` 更新一个响应式字段，不经过 `updateHeightPanel()`，因此不重算当前高度统计、差值采样、历史摘要或 runtime 全量快照。
+- 高度面板新增 Fill 预检提示，有效候选使用绿色边框；pointerleave、动作 / 编辑器切换、历史操作、重算与地图加载统一清理预检。
+
+验证：
+
+- `node --check` 已覆盖高度笔刷、运行时、panel wrapper 和扩展回归脚本；直接高度笔刷回归通过。
+- 合成封闭水域预检返回 `valid=true / selectionCount=9 / reachedBorder=false`，提示“可填充 9 cells”；开放水域返回 `valid=false / selectionCount=25 / reachedBorder=true`，提示开放海域拒绝。
+- 默认容差预检返回 `tolerance=6 / selectionCount=5 / valid=true`，与实际 Fill 使用同一分析路径。
+- 阶段末烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；构建完成 1118 modules，仅有既有大 chunk 警告。公开预检结果不包含内部 `selection` 字段。
+- 浏览器子智能体复用既有 `127.0.0.1:5410` 页面，没有刷新、新开页面或启动 Chrome / 服务器 / Playwright。在 `fill + all`、强度 `4`、容差 `6` 下，第一个内陆 hover 候选即显示 `可填充 65 cells（陆地高度 80±6）`。
+- 唯一一次点击实际锥形填充 `43 cells`；预检数是完整连通候选，实际 affected 会过滤无需变化或原本更高的 cells。高度范围 `3,969..5,476 米`、平均变化 `+142 米`、待派生 `12` 项；撤销 / 重做各一次后历史为 `undo 1 / redo 0`，地图稳定完整、console error 为 `0`。
+- 验收后没有执行第二次 Fill、线段或派生重算；烟测和浏览器智能体均已结束，Chrome 控制会话 finalize，FMG 标签以 handoff 保留，没有遗留控制进程。
