@@ -1,3 +1,5 @@
+import {normalizeAffectedLimit, summarizeAffectedTargets} from "./edit-command-effects.js";
+
 export class EditHistory {
   constructor({limit = 100} = {}) {
     this.limit = limit;
@@ -60,13 +62,20 @@ export class EditHistory {
     return cloneAffectedTargets(affected);
   }
 
-  getStats() {
+  getStats(options = {}) {
+    const affectedLimit = normalizeAffectedLimit(options, {label: "EditHistory.getStats"});
+    const affectedSummary = summarizeAffectedTargets(this.lastAffected, {limit: affectedLimit});
     return {
       undo: this.undoStack.length,
       redo: this.redoStack.length,
       lastLabel: this.lastLabel,
       lastDomain: this.lastDomain,
-      lastAffected: cloneAffectedTargets(this.lastAffected)
+      affectedLimit,
+      lastAffected: affectedSummary.preview,
+      lastAffectedCount: affectedSummary.count,
+      lastAffectedKinds: affectedSummary.kinds,
+      lastAffectedSummary: affectedSummary.text || "none",
+      lastAffectedTruncated: affectedSummary.count > affectedSummary.preview.length
     };
   }
 }

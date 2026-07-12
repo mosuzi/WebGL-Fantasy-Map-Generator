@@ -73,6 +73,8 @@
 
 控制台 `api.history.peek({affectedLimit})` 同样使用有界输出：`affected` 是预览数组，另附 `affectedCount / affectedKinds / affectedSummary / affectedTruncated`；默认 3 项，最大 50 项。不要通过历史只读 API 暴露无界 affected 数组。
 
+`EditHistory` 内部的 `lastAffected` 保留完整克隆，用于撤销 / 重做缓存；`getStats({affectedLimit})` 只返回 `lastAffected` 预览，并附 `lastAffectedCount / lastAffectedKinds / lastAffectedSummary / lastAffectedTruncated`。面板和 `api.history.get / stats` 均消费这份有界统计。
+
 新增对象命令如果真实 id 只能在 `apply()` 时确定，初始 `affected` 应使用 `{kind, id: "new"}`，执行成功后再回写真实 id。这样执行前诊断、失败路径和历史摘要都能知道命令目标类型。
 
 新增命令应优先通过 `newObjectAffected(kind)` 生成这个初始目标，避免不同领域手写 `{kind, id: "new"}` 时出现字段拼写或 kind 不一致。批量导入可组合 `systemAffected(system, newObjectAffected(kind))`，先解释导入系统，再保留“将新增对象”的目标类型。

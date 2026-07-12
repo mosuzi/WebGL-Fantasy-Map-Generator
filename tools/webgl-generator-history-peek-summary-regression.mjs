@@ -1,8 +1,28 @@
 #!/usr/bin/env node
 import {buildHistoryPeek} from "../app/webgl-generator/src/runtime/history-peek.js";
 import {systemAffected} from "../app/webgl-generator/src/runtime/edit-command-effects.js";
+import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 
 const largeAffected = systemAffected("cities", Array.from({length: 1000}, (_, id) => ({kind: "city", id})));
+const history = new EditHistory();
+history.execute({
+  label: "批量重算城市",
+  domain: "city",
+  effects: {render: "draw", selection: "refresh", derived: ["point-layers", "object-panels"], affected: largeAffected},
+  apply() {},
+  revert() {}
+}, {});
+const stats = history.getStats();
+assert(history.lastAffected.length === 1001, "EditHistory 内部完整 affected 被意外截断");
+assert(stats.affectedLimit === 3 && stats.lastAffected.length === 3, "EditHistory.getStats 默认预览异常");
+assert(stats.lastAffectedCount === 1001 && stats.lastAffectedTruncated === true && stats.lastAffectedSummary.endsWith("+998"), "EditHistory.getStats 结构化摘要异常");
+assert(JSON.stringify(stats.lastAffectedKinds) === JSON.stringify([{kind: "derived-system", count: 1}, {kind: "city", count: 1000}]), "EditHistory.getStats kind 计数异常");
+assert(JSON.stringify(stats).length < 600, `EditHistory.getStats 结果体积异常：${JSON.stringify(stats).length}`);
+const expandedStats = history.getStats({affectedLimit: 5});
+assert(expandedStats.lastAffected.length === 5 && expandedStats.lastAffectedSummary.endsWith("+996"), "EditHistory.getStats 自定义预览异常");
+assertThrows(() => history.getStats({affectedLimit: 51}), "EditHistory.getStats affectedLimit 上界没有拒绝");
+assertThrows(() => history.getStats([]), "EditHistory.getStats 非对象 options 没有拒绝");
+
 const state = {
   editHistory: {
     undoStack: [{
@@ -46,6 +66,7 @@ console.log(JSON.stringify({
   affectedKinds: peek.undo.affectedKinds,
   affectedSummary: peek.undo.affectedSummary,
   resultBytes: JSON.stringify(peek).length,
+  statsBytes: JSON.stringify(stats).length,
   expandedPreview: expanded.undo.affected.length
 }, null, 2));
 

@@ -1812,7 +1812,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 function createConsoleApiActions(state, documentRef, options = {}) {
   return {
     history: {
-      get: () => state.editHistory.getStats(),
+      get: (options = {}) => state.editHistory.getStats(options),
       undo: () => executeHistoryCommand(state, documentRef, "undo"),
       redo: () => executeHistoryCommand(state, documentRef, "redo")
     },

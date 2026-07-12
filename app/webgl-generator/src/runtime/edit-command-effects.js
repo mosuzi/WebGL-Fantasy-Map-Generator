@@ -47,6 +47,14 @@ export function summarizeAffectedTargets(affected, {limit = 3} = {}) {
   };
 }
 
+export function normalizeAffectedLimit(options, {label = "affected", defaultLimit = 3, max = 50} = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error(`${label} options 必须是对象`);
+  const value = options.affectedLimit ?? defaultLimit;
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 0 || limit > max) throw new Error(`${label} affectedLimit 必须是 0 到 ${max} 的整数`);
+  return limit;
+}
+
 export function namebaseRenameAffected(kind, ids = []) {
   return systemAffected("namebase-rename", ids.map(id => ({kind, id})));
 }

@@ -500,7 +500,7 @@ api.edit.measurement.delete(id)
 
 - 已完成第一刀。
 - `api.history.get()`、`api.history.undo()` 和 `api.history.redo()` 已接入 app action，复用当前 `EditHistory` 和刷新路径。
-- `api.history.stats()` 已作为 `get()` 的明确别名补齐；`api.history.peek({affectedLimit = 3})` 返回 undo / redo 栈顶命令摘要、affected 有界预览、总数、kind 计数、折叠文本、截断标记和 effects。`affectedLimit` 只允许 `0..50`；小命令的 `affected` 数组保持原形，大命令不再返回无界目标列表。该入口只读，不执行命令或 `isNoop()`。
+- `api.history.get({affectedLimit = 3})` 与 `stats(options)` 返回有界 `lastAffected` 预览，并附 `lastAffectedCount / lastAffectedKinds / lastAffectedSummary / lastAffectedTruncated`；`api.history.peek({affectedLimit = 3})` 对 undo / redo 栈顶返回对应的 affected 有界字段与 effects。三者的 `affectedLimit` 都只允许 `0..50`；小命令数组保持原形，大命令不再返回无界目标列表。只读入口不执行命令或 `isNoop()`。
 - `api.edit.notes.set(object, body, {name})` 和 `api.edit.notes.delete(noteId, {name})` 已接入对象备注 / 备注删除 edit commands、`executeEditCommand()` 和 `refreshPanelsForEdit()`。
 - `api.edit.measurements.save(points, {name, routeFit})`、`api.edit.measurements.rename(id, name)`、`api.edit.measurements.updatePoints(id, points, {routeFit})` 和 `api.edit.measurements.delete(id)` 已接入测量对象 edit commands。
 - `api.edit.cities.add(gridCell)` 和 `api.edit.cities.delete(cityId)` 已接入城市 collection edit commands。

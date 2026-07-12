@@ -26381,3 +26381,26 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：7 个目标文件 `node --check` 全过；`regress:history-peek-summary` 确认 1001 目标默认预览 3 项、摘要 `+998`、结果 852 字节，自定义 5 项、limit 0、limit 51 与非对象 options 边界均符合预期；affected 摘要回归仍为 1001 目标 239 字节，编辑命令 affected 回归通过；`pnpm run build:app` 构建 1116 modules、耗时 1.63 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面；已 finalize 并释放。未 claim、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright，默认 / 自定义 `history.peek()` 与撤销、checksum、WebGL / console / page / health 验收继续列入第 130 步。
+
+### 2026-07-12 历史 stats 有界 lastAffected
+
+背景：
+
+- `history.peek()` 已有界，但 `EditHistory.getStats()` 仍复制完整 `lastAffected`；所有面板、编辑器 Pinia 快照、`api.history.get / stats` 和 runtime snapshot 都会经过该入口。
+- 批量命令可能包含上千目标，因此只限制 peek 仍无法阻止常规面板刷新和 API stats 产生线性大对象。
+
+实现：
+
+- `edit-command-effects.js` 新增共享 `normalizeAffectedLimit()`，统一 options 类型、默认值和 `0..50` 上界。
+- `EditHistory.getStats({affectedLimit = 3})` 使用结构化 affected 摘要返回前三项预览、总数、kind 计数、折叠文本和截断标记；类内部 `lastAffected` 保持完整数组。
+- `api.history.get(options)`、`stats(options)` 与 app history action 透传预览选项；`history.peek()` 的嵌套 stats 使用同一 limit。
+- 扩展 `regress:history-peek-summary`，用真实 `EditHistory.execute()` 固化内部完整数组与公开有界 stats 的分层。
+
+验证：
+
+- `node --check` 覆盖 affected helper、`edit-history.js`、`history-peek.js`、`console-api.js`、`app.js` 和扩展回归脚本。
+- 直接回归通过：内部 `lastAffected` 保持 1001 项，默认 stats 预览 3 项、kind 为 `derived-system=1 / city=1000`、文本 `+998`、结果 389 字节；自定义 5 项、limit 51 和非对象 options 均符合预期。
+- 既有编辑命令 affected 回归继续通过。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：8 个目标文件 `node --check` 全过；历史摘要回归确认内部完整 affected 1001 项、默认公开预览 3 项、自定义 5 项、peek 852 字节、stats 389 字节，limit 0 / 51 与非对象 options 边界均有断言；affected 摘要回归为 1001 目标 239 字节，编辑命令 affected 回归通过；`pnpm run build:app` 构建 1116 modules、耗时 1.24 秒；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有可复用 FMG 页面；已 finalize 释放。未 claim、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright，`history.get / stats / peek`、面板摘要、撤销、checksum 与 WebGL / console / page / health 验收继续列入第 132 步。

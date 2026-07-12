@@ -97,8 +97,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       setWind: (index, direction, options = {}) => apiCall(() => requireApiAction(actions.climate?.setWind, "climate.setWind")(index, direction, options))
     }),
     history: Object.freeze({
-      get: () => apiCall(() => buildHistoryStats(state, actions)),
-      stats: () => apiCall(() => buildHistoryStats(state, actions)),
+      get: (options = {}) => apiCall(() => buildHistoryStats(state, actions, options)),
+      stats: (options = {}) => apiCall(() => buildHistoryStats(state, actions, options)),
       peek: (options = {}) => apiCall(() => buildHistoryPeek(state, options)),
       undo: () => apiCall(() => requireApiAction(actions.history?.undo, "history.undo")()),
       redo: () => apiCall(() => requireApiAction(actions.history?.redo, "history.redo")())
@@ -463,8 +463,8 @@ function requireApiAction(action, name) {
   return action;
 }
 
-function buildHistoryStats(state, actions = {}) {
-  return actions.history?.get?.() || state?.editHistory?.getStats?.() || null;
+function buildHistoryStats(state, actions = {}, options = {}) {
+  return actions.history?.get?.(options) || state?.editHistory?.getStats?.(options) || null;
 }
 
 function buildApiVersion() {
