@@ -2850,6 +2850,11 @@ select:disabled {
   margin-bottom: 8px;
 }
 
+.height-global-apply {
+  width: 100%;
+  margin: 8px 0;
+}
+
 .height-transform-panel {
   display: grid;
   gap: 7px;

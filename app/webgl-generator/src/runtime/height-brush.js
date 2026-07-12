@@ -117,31 +117,75 @@ export function inspectHeightFillTarget(map, gridCell, brush = {}) {
 }
 
 export function getGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0} = {}) {
+  return analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed}).changes;
+}
+
+export function inspectGlobalHeightChanges(map, options = {}) {
+  const {changes, ...summary} = analyzeGlobalHeightChanges(map, options);
+  return summary;
+}
+
+function analyzeGlobalHeightChanges(map, {action, scope: scopeValue, seed = 0} = {}) {
   const cells = map?.grid?.cells;
-  if (!cells?.h || !Array.isArray(cells.c)) return [];
-  if (action !== "smooth" && action !== "disrupt") return [];
   const scope = normalizeBrushScope(scopeValue);
+  const normalizedSeed = Math.trunc(Number(seed) || 0);
+  const base = {action: action || "", scope, seed: normalizedSeed, selectedCount: 0, changeCount: 0, unchangedCount: 0, raisedCount: 0, loweredCount: 0, beforeRange: null, afterRange: null, averageDelta: 0, valid: false, notice: "", changes: []};
+  if (!cells?.h || !Array.isArray(cells.c)) return {...base, notice: "当前地图缺少高度或邻接数据，无法预览全局工具。"};
+  if (action !== "smooth" && action !== "disrupt") return {...base, notice: "未知的全局高度工具。"};
   const heights = Array.from(cells.h, value => Number(value) || 0);
   const changes = [];
+  let selectedCount = 0;
+  let raisedCount = 0;
+  let loweredCount = 0;
+  let minBefore = Infinity;
+  let maxBefore = -Infinity;
+  let minAfter = Infinity;
+  let maxAfter = -Infinity;
+  let deltaSum = 0;
 
   for (let gridCell = 0; gridCell < heights.length; gridCell++) {
     const before = heights[gridCell];
     if (!matchesBrushScope(before, scope)) continue;
+    selectedCount += 1;
+    minBefore = Math.min(minBefore, before);
+    maxBefore = Math.max(maxBefore, before);
     let next = before;
     if (action === "smooth") {
       const neighbors = (cells.c[gridCell] || []).filter(cell => Number.isInteger(cell) && cell >= 0 && cell < heights.length && matchesBrushScope(heights[cell], scope));
-      if (!neighbors.length) continue;
-      const neighborMean = neighbors.reduce((sum, cell) => sum + heights[cell], 0) / neighbors.length;
-      next = (before * 3 + neighborMean + 1.5) / 4;
+      if (neighbors.length) {
+        const neighborMean = neighbors.reduce((sum, cell) => sum + heights[cell], 0) / neighbors.length;
+        next = (before * 3 + neighborMean + 1.5) / 4;
+      }
     } else {
-      if (before < 15) continue;
-      next = before + 0.5 + stableSignedNoise(gridCell, Math.trunc(Number(seed) || 0), 0) * 2;
+      if (before >= 15) next = before + 0.5 + stableSignedNoise(gridCell, normalizedSeed, 0) * 2;
     }
     const after = clampHeightToScope(next, scope);
-    if (after !== before) changes.push({gridCell, before, after});
+    minAfter = Math.min(minAfter, after);
+    maxAfter = Math.max(maxAfter, after);
+    if (after === before) continue;
+    deltaSum += after - before;
+    if (after > before) raisedCount += 1;
+    else loweredCount += 1;
+    changes.push({gridCell, before, after});
   }
 
-  return changes;
+  if (!selectedCount) return {...base, notice: "当前作用范围没有可预览的 cells。"};
+  const summary = {
+    ...base,
+    selectedCount,
+    changeCount: changes.length,
+    unchangedCount: selectedCount - changes.length,
+    raisedCount,
+    loweredCount,
+    beforeRange: [minBefore, maxBefore],
+    afterRange: [minAfter, maxAfter],
+    averageDelta: changes.length ? Math.round(deltaSum / changes.length * 10) / 10 : 0,
+    changes
+  };
+  if (!changes.length) return {...summary, notice: `候选 ${selectedCount} cells 的高度不会变化。`};
+  const label = action === "smooth" ? "全局平滑" : "全局扰动";
+  const signedAverage = summary.averageDelta > 0 ? `+${summary.averageDelta}` : String(summary.averageDelta);
+  return {...summary, valid: true, notice: `可${label} ${changes.length}/${selectedCount} cells，高度 ${minBefore}..${maxBefore} → ${minAfter}..${maxAfter}，均变 ${signedAverage}。`};
 }
 
 export function inspectHeightRangeTransform(map, options = {}) {

@@ -50,10 +50,21 @@
 
   <p class="height-control-label">全局微调</p>
   <div class="height-global-actions">
-    <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onGlobalTool?.('smooth')">全局平滑</UiButton>
-    <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onGlobalTool?.('disrupt')">全局扰动</UiButton>
+    <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onGlobalToolPreview?.('smooth')">预览全局平滑</UiButton>
+    <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onGlobalToolPreview?.('disrupt')">预览全局扰动</UiButton>
   </div>
-  <p class="height-action-help">作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
+  <p v-if="state.globalToolPreview" class="height-transform-preview" :class="{valid: state.globalToolPreview.valid}" aria-live="polite">
+    {{ state.globalToolPreview.notice }}
+  </p>
+  <div v-if="state.globalToolPreview?.valid" class="height-transform-legend" aria-label="全局高度工具地图预览图例">
+    <span class="raised"><i></i>升高 {{ state.globalToolPreview.raisedCount }}</span>
+    <span class="lowered"><i></i>降低 {{ state.globalToolPreview.loweredCount }}</span>
+  </div>
+  <p v-if="state.globalToolPreview?.rendererPreview" class="height-transform-gpu-stats">
+    GPU 预览 {{ state.globalToolPreview.rendererPreview.cells }} cells / {{ state.globalToolPreview.rendererPreview.triangleCount }} triangles / {{ state.globalToolPreview.rendererPreview.buildMs }} ms
+  </p>
+  <UiButton class="height-global-apply" variant="secondary" :disabled="!state.active || !state.globalToolPreview?.valid" @click="callbacks.onGlobalToolApply?.()">应用全局预览</UiButton>
+  <p class="height-action-help">预览与应用都作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
 
   <section class="height-transform-panel" aria-labelledby="height-transform-title">
     <div class="height-transform-heading">
@@ -819,8 +830,9 @@ function setTransformOperand(value) {
 }
 
 function clearTransformPreview() {
-  const hadPreview = Boolean(props.state.transformPreview);
+  const hadPreview = Boolean(props.state.transformPreview || props.state.globalToolPreview);
   props.state.transformPreview = null;
+  props.state.globalToolPreview = null;
   if (hadPreview) props.callbacks.onConditionalTransformChange?.();
 }
 

@@ -1084,6 +1084,25 @@
    - 边界：本轮浏览器不真正执行第二次条件变换，避免与上一批重复改图；不刷新或重启 Chrome / 服务器，不持续预检；若确需 Playwright，必须在 `finally` 中关闭 browser / context。
    - 完成记录：烟测子智能体完成 6 项 `node --check`、三项回归、生产构建和 `git diff --check`；补充 GPU 统计 UI 后又完成 3 项语法检查、构建和差异检查，全部通过。有界 `rendererPreview` 仅含 cells、raised / lowered / skipped、vertex / triangle、buildMs，不含 changes。浏览器子智能体复用既有 `5410` 页面，唯一一次有效预检为变化 `2746/3326 cells`、降低 `2746`、高度 `20..100 -> 20..92`、均变 `-2.5`；地图显示冷蓝半透明 overlay，路线 / 标签 / 边界稳定，可见 GPU 统计为 `2746 cells / 16466 triangles / 9.1 ms`。下限 `20 -> 21` 后文字、图例、GPU 统计和 overlay 全部清理，执行按钮 disabled；console error 为 `0`。HMR 曾重置页面初态，补验仅做一次必要参数纠正；没有执行地图变换、刷新、新开或启动 Chrome / 服务器 / Playwright。两个子智能体均已结束。
 
+159. 全局平滑 / 扰动有界预检摘要。`已完成`
+   - 目标：为现有全局高度变化生成与条件变换一致的有界摘要，包含作用范围、动作、seed、候选 / 变化 / 不变、升高 / 降低、前后范围和平均变化；公开对象不含 changes。
+   - 计算边界：扰动预览使用下一 seed 但不提前消耗；应用时用同一 seed 在当前地图重新计算，成功后才推进 seed。全局平滑继续整轮读取同一修改前快照。
+   - 完成记录：新增 `inspectGlobalHeightChanges()`，与 `getGlobalHeightChanges()` 复用同一分析路径；公开摘要仅含 action、scope、seed、候选 / 变化 / 不变、升高 / 降低、前后范围、平均变化、valid 和 notice。扰动预览使用 `globalToolSeed + 1`，重复预览保持同一形态；只有 `executeEditCommand()` 成功后才把运行时 seed 推进到预留值。
+
+160. 全局工具预览优先交互与共享 GPU overlay。`已完成`
+   - 目标：把“全局平滑 / 全局扰动”改为预览入口，复用现有暖 / 冷 world-space buffer、图例和 GPU 统计，并新增“应用全局预览”。
+   - 生命周期：作用范围、条件参数、动作 / 编辑器、地图笔划、条件预检、历史、重算、加载或应用任一高度工具时，必须同时清理条件与全局 preview；两者不能在地图上叠加或相互复用旧 changes。
+   - 完成记录：原“全局平滑 / 全局扰动”直接按钮改为“预览全局平滑 / 预览全局扰动”，新增“应用全局预览”；有效预览复用现有暖 / 冷 world-space buffer、升降图例和 GPU 统计。应用会保存有界 preview 配置、清理 overlay，再按当前地图与预留 seed fresh 计算 changes 并进入同一高度命令。统一清理 helper 同时清空条件 / 全局 UI preview 和唯一 renderer buffer；有限编辑器快照新增有界 `globalHeightToolPreview`。
+
+161. 全局预览回归与中文文档。`已完成`
+   - 目标：扩展高度回归覆盖全局摘要有界性、平滑升降统计、扰动 seed 预览一致性、深水不变和全局命令 grid / pack 历史；同步专题清单与开发日志。
+   - 完成记录：合成全局平滑预检为候选 / 变化 `5/5`、升高 `4`、降低 `1`，公开对象不含 changes；seed `23` 扰动预检为候选 `25`、变化 `18`、升高 `10`、降低 `8`，changeCount 与同 seed changes 一致，seed `24` 形态不同且深水保持。既有全局平滑 grid / pack 撤销重做继续通过。
+
+162. 全局预览阶段末统一验收。`已完成`
+   - 目标：烟测子智能体统一验证语法、回归、构建和差异；浏览器子智能体复用现有 FMG 页面，只预览一次全局扰动，确认暖 / 冷 overlay 与 GPU 统计，再应用一次并完成撤销 / 重做。
+   - 边界：不预览第二个全局工具，不持续调参或刷新，不新开 / 重启 Chrome 或服务器；若使用 Playwright，必须在 `finally` 中关闭 browser / context。
+   - 完成记录：烟测子智能体完成 5 项 `node --check`、三项回归、生产构建和 `git diff --check`，全部通过；有界全局 preview 不含 changes，指定 UI / 快照字段进入产物。浏览器子智能体复用既有 `5410` 页面，仅陆地范围下只预览一次全局扰动：变化 `2428/3326 cells`、不变 `898`、升高 `1678`、降低 `750`、高度 `20..100 -> 20..100`、均变 `+0.7`，GPU 为 `2428 cells / 14584 triangles / 8 ms`，暖橙 / 冷蓝 overlay 同时出现且地图稳定。唯一一次应用后摘要“已全局扰动 2428 cells”，preview / 图例 / GPU / overlay 全清，影响高度 `4..5,625 米`、均变 `+1,379 米`、待派生 `12` 项；撤销 / 重做各一次后历史恢复 `undo 1 / redo 0`，console error 为 `0`，仅一条 React DevTools extension long-task warn。可见 UI 未单列 seed 且未使用 Playwright，因此 seed 数值推进由源码和回归证明，不声明为浏览器直证。全程未刷新、新开或启动 Chrome / 服务器，两个子智能体均已结束。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1253,3 +1272,4 @@
 - 全局高度平滑 / 稳定扰动批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；回归证明平滑整轮读取同一快照、陆水范围隔离、扰动 seed 可复现 / 可推进、深水保护以及 grid / pack 撤销重做。浏览器子智能体复用既有 FMG 页面，选择“仅陆地”后唯一一次全局平滑影响 `2449 cells`，高度 `9..5,929 米`、平均变化 `+1,617 米`、待派生 `9 -> 12` 项，撤销 / 重做闭环通过，地图稳定且 console error 为 `0`；未刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
 - 高度区间条件变换批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check` 均通过；五类运算、区间 / scope、海平面夹取、异常拒绝、有界预检和 grid / pack 历史覆盖完整。浏览器子智能体复用既有 `5410` 页面，在仅陆地 `20..100 × 0.9` 下唯一一次预检为变化 `2746/3326 cells`、高度 `20..100 -> 20..92`、均变约 `-2.5`；唯一一次执行后 preview 清理，撤销 / 重做闭环和稳定地图通过，console error 为 `0`。第一名浏览器智能体超时后已中断并 finalize，补验智能体也已结束；未刷新或启动 Chrome、服务器、Playwright。
 - 条件变换 WebGL 空间预览批次统一验证完成：烟测子智能体执行 preview layer、renderer、运行时等 6 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check`，补充 GPU 统计 UI 后再跑 3 项语法检查、构建与差异检查，全部通过；合成 mesh 为 `24` 顶点 / `8` 三角形且暖冷色、坏 cell / 坏地图保护成立。浏览器唯一一次有效预检显示降低 `2746/3326 cells`，地图出现冷蓝 overlay，可见 GPU 统计 `2746 cells / 16466 triangles / 9.1 ms`；参数变化后 preview、图例、统计和 overlay 同时清理，地图稳定且 console error 为 `0`。未执行地图变换、刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
+- 全局高度工具预览优先批次统一验证完成：烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check`，全部通过；平滑预检 `5/5`、升 `4` / 降 `1`，扰动 seed `23` 预检 `25/18`、升 `10` / 降 `8`，同 / 异 seed、深水保护和 grid / pack 历史成立。浏览器仅一次扰动预览为变化 `2428/3326 cells`、升 `1678` / 降 `750`，GPU `2428 cells / 14584 triangles / 8 ms`，暖 / 冷 overlay 同时出现；唯一一次应用清理全部 preview，撤销 / 重做闭环和稳定地图通过，console error 为 `0`。浏览器未直接读取 seed 数值，证据边界已记录；未刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。

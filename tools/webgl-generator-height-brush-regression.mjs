@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
-import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
+import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
@@ -52,7 +52,10 @@ assert(waterScope.map(change => change.gridCell).join(",") === "0", `仅水域�
 
 const globalSmoothMap = createSquareMap(3, (x, y) => x === 1 && y === 1 ? 80 : Math.abs(x - 1) + Math.abs(y - 1) === 1 ? 20 : 10);
 const globalSmooth = getGlobalHeightChanges(globalSmoothMap, {action: "smooth", scope: "land"});
+const globalSmoothPreview = inspectGlobalHeightChanges(globalSmoothMap, {action: "smooth", scope: "land"});
 assert(globalSmooth.find(change => change.gridCell === 4)?.after === 65, `全局平滑中心结果异常：${JSON.stringify(globalSmooth)}`);
+assert(globalSmoothPreview.valid && globalSmoothPreview.selectedCount === 5 && globalSmoothPreview.changeCount === 5 && globalSmoothPreview.raisedCount === 4 && globalSmoothPreview.loweredCount === 1, `全局平滑预检异常：${JSON.stringify(globalSmoothPreview)}`);
+assert(!Object.hasOwn(globalSmoothPreview, "changes"), "公开全局工具预检暴露了完整 changes");
 assert([1, 3, 5, 7].every(gridCell => globalSmooth.find(change => change.gridCell === gridCell)?.after === 35), "全局平滑没有统一从修改前快照读取邻居");
 assert(globalSmooth.every(change => change.before >= 20 && change.after >= 20), "仅陆地全局平滑跨越海平面或修改了水域");
 applyHeightBrushPreview(globalSmoothMap, globalSmooth);
@@ -65,9 +68,11 @@ assert(globalSmoothMap.grid.cells.h[4] === 65 && globalSmoothMap.pack.cells.h[4]
 
 const globalDisruptMap = createSquareMap(5, (x, y) => x === 0 && y === 0 ? 10 : 40);
 const globalDisrupt = getGlobalHeightChanges(globalDisruptMap, {action: "disrupt", scope: "all", seed: 23});
+const globalDisruptPreview = inspectGlobalHeightChanges(globalDisruptMap, {action: "disrupt", scope: "all", seed: 23});
 const repeatedGlobalDisrupt = getGlobalHeightChanges(globalDisruptMap, {action: "disrupt", scope: "all", seed: 23});
 const nextGlobalDisrupt = getGlobalHeightChanges(globalDisruptMap, {action: "disrupt", scope: "all", seed: 24});
 assert(JSON.stringify(globalDisrupt) === JSON.stringify(repeatedGlobalDisrupt), "相同 seed 的全局扰动不可复现");
+assert(globalDisruptPreview.valid && globalDisruptPreview.seed === 23 && globalDisruptPreview.changeCount === globalDisrupt.length, `全局扰动预检异常：${JSON.stringify(globalDisruptPreview)}`);
 assert(JSON.stringify(globalDisrupt) !== JSON.stringify(nextGlobalDisrupt), "不同 seed 的全局扰动没有推进形态");
 assert(!globalDisrupt.some(change => change.gridCell === 0), "全局扰动修改了低于 15 的深水 cell");
 assert(getGlobalHeightChanges(globalDisruptMap, {action: "unknown", scope: "all"}).length === 0, "未知全局工具产生了高度变化");
@@ -244,7 +249,9 @@ console.log(JSON.stringify({
   landScope: landScope.map(change => change.gridCell),
   waterScope: waterScope.map(change => change.gridCell),
   globalSmooth: {cells: globalSmooth.length, center: globalSmooth.find(change => change.gridCell === 4)?.after},
+  globalSmoothPreview,
   globalDisrupt: {cells: globalDisrupt.length, first: globalDisrupt[0]?.after},
+  globalDisruptPreview,
   globalHistory: globalHistory.getStats(),
   multiplyPreview,
   invalidDivideNotice: invalidDivide.notice,

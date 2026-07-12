@@ -26657,3 +26657,30 @@ full 矩阵结果：
 - 首轮非 Playwright 控制面不能直接读取 renderer 内部统计，因此把 `rendererPreview` 七项有界统计并入用户可见预检卡片；烟测子智能体补跑 app / wrapper / renderer 语法、构建和差异检查，确认字段严格为 cells、raisedCells、loweredCells、skippedCells、vertexCount、triangleCount、buildMs，不含 changes。
 - 浏览器补验页面受 HMR 影响已重置到高度编辑未启用、全部范围、下限 `20`；智能体发现任务假设与实态不符后做一次必要纠正，再启用编辑、选择仅陆地并只预检一次。可见文本为 `GPU 预览 2746 cells / 16466 triangles / 9.1 ms`，与降低 `2746` 图例和冷蓝 overlay 一致；下限改为 `21` 后统计、preview、图例和 overlay 全部消失，执行按钮 disabled，console error 为 `0`。
 - 两轮浏览器均没有执行条件变换、历史、其它高度工具或派生重算，也没有刷新、新开、启动 Chrome / 服务器或使用 Playwright。烟测与浏览器子智能体均已结束；Chrome 会话 finalize 并以 handoff 保留现有 FMG 标签，没有遗留控制资源。
+
+### 2026-07-12 全局高度工具预览优先
+
+背景：
+
+- 条件变换已经能在地图上预览变化，但全局平滑 / 扰动仍是点击即执行；它们可能影响数千 cells，却无法事先看到升降分布。
+- 全局扰动依赖 seed。若预览时直接推进运行时 seed，取消预览也会改变下一次结果；若应用时换 seed，地图结果又会和预览不一致。
+
+实现：
+
+- `height-brush.js` 新增 `inspectGlobalHeightChanges()`，与真实 `getGlobalHeightChanges()` 复用同一分析路径；摘要包含 action / scope / seed、候选 / 变化 / 不变、升高 / 降低、前后范围、平均变化、valid 和 notice，不含 changes。
+- 全局扰动预览使用 `globalToolSeed + 1` 作为预留 seed，不立即写回；应用时保存有界 preview 配置、清理 overlay，再按当前地图和同一 seed fresh 计算。只有命令实际执行成功才推进 seed。
+- 高度面板把两个直接按钮改为“预览全局平滑 / 预览全局扰动”，新增“应用全局预览”；有效预览复用条件变换的暖 / 冷 world-space GPU buffer、升降图例和 GPU 统计。
+- 条件参数、作用范围、动作 / 编辑器、地图笔划、任一 preview、历史、重算、加载和应用工具都复用统一清理 helper，同时清空条件 / 全局 Vue preview 与唯一 GPU buffer，避免 overlay 叠加或旧 changes 泄漏。
+- 有限编辑器快照新增 `globalHeightToolPreview`，只包含有界摘要和 rendererPreview 七项统计。
+
+直接验证：
+
+- `node --check` 已覆盖高度笔刷、运行时、panel wrapper、renderer 和扩展回归脚本；直接高度回归与 `git diff --check` 通过。
+- 合成全局平滑预检为候选 / 变化 `5/5`、升高 `4`、降低 `1`，中心 `80 -> 65`、四个相邻陆地 `20 -> 35`；公开摘要不含 changes。
+- seed `23` 的扰动预检为候选 `25`、变化 `18`、升高 `10`、降低 `8`，与同 seed changes 数量一致；重复 seed 结果相同，seed `24` 形态不同，高度 `10` 的深水 cell 不变。
+- 全局平滑命令既有 grid / pack 撤销重做回归继续通过。
+- 阶段末烟测子智能体执行 5 项 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过；生产产物包含“预览全局平滑 / 预览全局扰动 / 应用全局预览”、`globalToolPreview / globalHeightToolPreview` 和 GPU 图例统计。首次沙箱 pnpm registry 访问失败后只升级重跑必要门禁，没有遗留进程。
+- 浏览器子智能体复用既有 `5410` 页面，启用高度编辑并选择“仅陆地”；应用按钮在预览前 disabled。只点击一次“预览全局扰动”，有界摘要为候选 `3326`、变化 `2428`、不变 `898`、升高 `1678`、降低 `750`、高度 `20..100 -> 20..100`、平均 `+0.7`；GPU 为 `2428 cells / 14584 triangles / 8 ms`。
+- 截图确认地图同时出现暖橙升高与冷蓝降低 overlay，路线、边界、标签和底图稳定。只点击一次“应用全局预览”后摘要为“已全局扰动 2428 cells”，文字 preview、图例、GPU 统计和 overlay 全部清理；影响高度 `4..5,625 米`、平均变化 `+1,379 米`、待派生 `12` 项，历史 `undo 1 / redo 0`。
+- 撤销 / 重做各一次成功，重做后摘要恢复且地图稳定；console error 为 `0`，health 只有一条来自 React DevTools extension URL 的 `main-thread-long-task` warn。可见 UI 没有单列 preview seed，且按约束未使用 Playwright，因此 `globalToolSeed` 数值推进没有浏览器直证；源码成功后写回与同 / 异 seed 纯回归共同作为该项证据。
+- 浏览器没有预览平滑、条件变换、笔刷或派生重算，也没有刷新、新开、启动 Chrome / 服务器或使用 Playwright。烟测与浏览器子智能体均已结束；Chrome 会话 finalize 并以 handoff 保留现有 FMG 标签，没有遗留控制资源。

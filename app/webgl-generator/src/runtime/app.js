@@ -55,7 +55,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
-import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
+import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -365,20 +365,44 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterRefresh: () => updateHeightPanel(state)
       });
     },
-    onGlobalTool: action => {
+    onGlobalToolPreview: action => {
       cancelHeightLine(state, documentRef);
       const scope = heightPanel.getBrush().scope;
-      const seed = action === "disrupt" ? ++state.heightEdit.globalToolSeed : 0;
-      const changes = getGlobalHeightChanges(state.map, {action, scope, seed});
-      if (!changes.length) {
+      const seed = action === "disrupt" ? state.heightEdit.globalToolSeed + 1 : 0;
+      const preview = inspectGlobalHeightChanges(state.map, {action, scope, seed});
+      let rendererPreview = null;
+      if (preview.valid) {
+        const changes = getGlobalHeightChanges(state.map, {action, scope, seed});
+        rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
+      }
+      heightPanel.updateGlobalToolPreview({...preview, rendererPreview});
+      updateEditingInteractionLock(state, documentRef);
+      return preview;
+    },
+    onGlobalToolApply: () => {
+      const reserved = heightPanel.getGlobalToolPreview();
+      cancelHeightLine(state, documentRef);
+      if (!reserved?.valid) {
         state.heightEdit.lastAffected = 0;
         state.heightEdit.lastHeight = "none";
         state.heightEdit.lastDelta = "none";
-        state.heightEdit.lastNotice = "当前作用范围内的高度没有变化。";
+        state.heightEdit.lastNotice = "请先生成有效的全局工具预览。";
         updateHeightPanel(state);
         return false;
       }
-      const label = action === "smooth" ? "全局平滑" : "全局扰动";
+      const scope = heightPanel.getBrush().scope;
+      const options = {action: reserved.action, scope, seed: reserved.seed};
+      const preview = inspectGlobalHeightChanges(state.map, options);
+      if (!preview.valid) {
+        state.heightEdit.lastAffected = 0;
+        state.heightEdit.lastHeight = "none";
+        state.heightEdit.lastDelta = "none";
+        state.heightEdit.lastNotice = preview.notice;
+        updateHeightPanel(state);
+        return false;
+      }
+      const changes = getGlobalHeightChanges(state.map, options);
+      const label = reserved.action === "smooth" ? "全局平滑" : "全局扰动";
       state.heightEdit.lastAffected = changes.length;
       state.heightEdit.lastHeight = summarizeChangedHeights(changes);
       state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
@@ -388,7 +412,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         refresh: refreshAfterEdit,
         refreshPanels: false
       });
+      if (result.executed && reserved.action === "disrupt") state.heightEdit.globalToolSeed = reserved.seed;
       updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
       return result.executed;
     },
     onConditionalTransformPreview: () => {
@@ -7108,6 +7134,7 @@ function cancelHeightLine(state, documentRef) {
 
 function clearHeightTransformPreview(state, {draw = true} = {}) {
   state.panels.height?.updateConditionalTransformPreview?.(null);
+  state.panels.height?.updateGlobalToolPreview?.(null);
   state.renderer?.clearHeightTransformPreview?.({draw});
 }
 
@@ -8210,6 +8237,7 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       fillPreview: state.heightEdit.fillPreview ? {...state.heightEdit.fillPreview} : null
     },
     conditionalHeightTransform: state.panels.height?.getConditionalTransformSnapshot?.() || null,
+    globalHeightToolPreview: state.panels.height?.getGlobalToolPreview?.() || null,
     stateBrush: {
       active: Boolean(stateBrush.active),
       addMode: Boolean(state.stateEdit.addMode),

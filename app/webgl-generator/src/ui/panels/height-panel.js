@@ -16,6 +16,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     transformOperator: "multiply",
     transformOperand: 0.9,
     transformPreview: null,
+    globalToolPreview: null,
     falloff: true,
     lastAffected: 0,
     lastHeight: "none",
@@ -34,7 +35,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onActionChange: action => callbacks.onActionChange?.(action),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.(),
-    onGlobalTool: action => callbacks.onGlobalTool?.(action),
+    onGlobalToolPreview: action => callbacks.onGlobalToolPreview?.(action),
+    onGlobalToolApply: () => callbacks.onGlobalToolApply?.(),
     onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
     onConditionalTransformApply: () => callbacks.onConditionalTransformApply?.(),
     onConditionalTransformChange: () => callbacks.onConditionalTransformChange?.(),
@@ -94,6 +96,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       lastNotice = panelState.lastNotice,
       fillPreview = panelState.fillPreview,
       transformPreview = panelState.transformPreview,
+      globalToolPreview = panelState.globalToolPreview,
       graphWidth = panelState.graphWidth,
       graphHeight = panelState.graphHeight,
       currentHeightStats = panelState.currentHeightStats,
@@ -107,6 +110,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.lastNotice = lastNotice;
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
       panelState.transformPreview = cloneTransformPreview(transformPreview);
+      panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;
       panelState.currentHeightStats = currentHeightStats;
@@ -136,11 +140,17 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         preview: cloneTransformPreview(panelState.transformPreview)
       };
     },
+    getGlobalToolPreview() {
+      return cloneTransformPreview(panelState.globalToolPreview);
+    },
     updateFillPreview(fillPreview) {
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
     },
     updateConditionalTransformPreview(transformPreview) {
       panelState.transformPreview = cloneTransformPreview(transformPreview);
+    },
+    updateGlobalToolPreview(globalToolPreview) {
+      panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
     },
     setActive(active) {
       panelState.active = active;
