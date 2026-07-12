@@ -71,6 +71,7 @@ import {
   createSetReligionParentCommand
 } from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
+import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights} from "./persistent-highlights.js";
 import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
@@ -155,26 +156,6 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
   "precipitation"
 ]);
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
-const API_HIGHLIGHT_OBJECT_KINDS = Object.freeze([
-  OBJECT_KIND.CITY,
-  OBJECT_KIND.LABEL,
-  OBJECT_KIND.MARKER,
-  OBJECT_KIND.ROUTE,
-  OBJECT_KIND.TRADE_FLOW,
-  OBJECT_KIND.RIVER,
-  OBJECT_KIND.LAKE,
-  OBJECT_KIND.MEASUREMENT,
-  OBJECT_KIND.MILITARY,
-  OBJECT_KIND.DIPLOMACY_RELATION,
-  OBJECT_KIND.STATE,
-  OBJECT_KIND.PROVINCE,
-  OBJECT_KIND.CULTURE,
-  OBJECT_KIND.RELIGION,
-  OBJECT_KIND.REGION,
-  OBJECT_KIND.ZONE
-]);
-const MAX_PERSISTENT_OBJECT_HIGHLIGHTS = 100;
-
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
@@ -1002,7 +983,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
       if (result.executed) {
         refreshGenerationSummary(state.map);
-        reconcilePersistentObjectHighlights(state, documentRef);
       }
       updateEditingInteractionLock(state, documentRef);
     },
@@ -1015,7 +995,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         markDerivedFresh(state.map, ["diplomacy"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `regenerate diplomacy: salt=${salt}, pairs=${state.map.diplomacy?.metadata?.pairs || 0}, enemies=${state.map.diplomacy?.metadata?.enemies || 0}`);
-        reconcilePersistentObjectHighlights(state, documentRef);
       }
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
@@ -1406,8 +1385,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     getHighlightCount: () => persistentObjectHighlightCount(state),
     onRename: (measurementId, name) => {
       const command = createRenameMeasurementCommand(measurementId, name);
-      const result = executeEditCommand(state, documentRef, command);
-      if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
+      executeEditCommand(state, documentRef, command);
       updateMeasurementOverlay(state, documentRef);
     },
     onDelete: row => {
@@ -1420,7 +1398,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         state.measurement.points = [];
         cancelMeasurementDrag(state, documentRef);
       }
-      if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
       updateMeasurementOverlay(state, documentRef);
     },
     onExport: rows => {
@@ -4540,6 +4517,7 @@ function executeEditCommand(state, documentRef, command, options = {}) {
     const refresh = options.refresh || refreshAfterEdit;
     refresh(state, executedCommand);
     if (options.refreshPanels !== false) refreshPanelsForEdit(state, executedCommand);
+    reconcilePersistentObjectHighlights(state, documentRef);
     const result = readEditCommandResult(executedCommand);
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
     return {executed: true, command: executedCommand, result, error: null};
@@ -4566,6 +4544,7 @@ function executeHistoryCommand(state, documentRef, action, options = {}) {
   refresh(state, command);
   if (options.refreshPanels !== false) updateAllObjectPanels(state);
   options.afterRefresh?.(state, command);
+  reconcilePersistentObjectHighlights(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
   return {
     executed: true,
@@ -4634,7 +4613,7 @@ function highlightObjectsViaApi(state, documentRef, objects, options = {}) {
   if (targets.length > MAX_PERSISTENT_OBJECT_HIGHLIGHTS) throw new Error(`最多同时高亮 ${MAX_PERSISTENT_OBJECT_HIGHLIGHTS} 个对象`);
   if (typeof state.renderer?.setObjectHighlights !== "function") throw new Error("当前 renderer 不支持多对象高亮");
   const resolved = targets.map(target => resolveObjectViaApi(state, target));
-  const unsupported = resolved.filter(object => !API_HIGHLIGHT_OBJECT_KINDS.includes(object.kind));
+  const unsupported = resolved.filter(object => !isPersistentHighlightObjectKind(object.kind));
   if (unsupported.length) {
     const kinds = [...new Set(unsupported.map(object => object.kind))].join("、");
     throw new Error(`当前 renderer 不支持高亮对象类型：${kinds}`);
@@ -4665,7 +4644,8 @@ function clearObjectHighlightsViaApi(state, documentRef) {
 function setPersistentObjectHighlights(state, documentRef, objects, options = {}) {
   if (typeof state.renderer?.setObjectHighlights !== "function") return 0;
   const current = options.append === true ? state.renderer.objectHighlights || [] : [];
-  const requested = deduplicatePersistentHighlights([...current, ...(Array.isArray(objects) ? objects : [])]);
+  const normalized = normalizePersistentHighlights(state.map, [...current, ...(Array.isArray(objects) ? objects : [])]);
+  const requested = normalized.highlights;
   if (requested.length > MAX_PERSISTENT_OBJECT_HIGHLIGHTS && options.strictLimit === true) {
     throw new Error(`最多同时高亮 ${MAX_PERSISTENT_OBJECT_HIGHLIGHTS} 个对象`);
   }
@@ -4674,9 +4654,15 @@ function setPersistentObjectHighlights(state, documentRef, objects, options = {}
   refreshPersistentHighlightUi(state, documentRef);
   const count = persistentObjectHighlightCount(state);
   const truncated = requested.length > next.length;
+  const skipped = normalized.rejected.length;
+  const duplicates = normalized.duplicates;
   setFileOperationStatus(documentRef, truncated
     ? `已高亮前 ${count} 个地图对象；单次最多 ${MAX_PERSISTENT_OBJECT_HIGHLIGHTS} 个。`
-    : `已高亮 ${count} 个地图对象。`);
+    : skipped
+      ? `已高亮 ${count} 个地图对象；跳过 ${skipped} 个无效或不支持对象。`
+      : duplicates
+        ? `已高亮 ${count} 个地图对象；已去重 ${duplicates} 个重复对象。`
+        : `已高亮 ${count} 个地图对象。`);
   return count;
 }
 
@@ -4696,23 +4682,10 @@ function persistentObjectHighlightCount(state) {
 function reconcilePersistentObjectHighlights(state, documentRef) {
   const current = Array.isArray(state.renderer?.objectHighlights) ? state.renderer.objectHighlights : [];
   if (!current.length || typeof state.renderer?.setObjectHighlights !== "function") return 0;
-  const next = current
-    .map(object => resolveObject(state.map, object))
-    .filter((resolved, index) => resolved && resolved !== current[index]);
+  const next = normalizePersistentHighlights(state.map, current).highlights;
   state.renderer.setObjectHighlights(next);
   refreshPersistentHighlightUi(state, documentRef);
   return next.length;
-}
-
-function deduplicatePersistentHighlights(objects) {
-  const seen = new Set();
-  return objects.filter(object => {
-    if (!object?.kind) return false;
-    const key = `${object.kind}:${object.targetKind || ""}:${object.targetId ?? object.id ?? ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function refreshPersistentHighlightUi(state, documentRef) {
@@ -4869,7 +4842,6 @@ function renameMeasurementViaApi(state, documentRef, measurementId, name) {
     status: `已重命名测量对象 ${nextName || id}。`,
     throwOnError: false
   });
-  if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -4888,7 +4860,6 @@ function updateMeasurementPointsViaApi(state, documentRef, measurementId, points
     throwOnError: false
   });
   if (result.executed) state.panels.measurement?.setSelectedMeasurementId?.(id);
-  if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
   updateMeasurementPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
@@ -4903,7 +4874,6 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
     status: `已删除测量对象 ${id}。`,
     throwOnError: false
   });
-  if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }

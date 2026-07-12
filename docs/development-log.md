@@ -26249,3 +26249,25 @@ full 矩阵结果：
 - `node --check` 覆盖复合 connector、selection layer 和回归脚本；`git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：3 个目标文件 `node --check` 全过；复合回归关系色为 `0.584 / 0.843 / 0.435 / 0.96`、重叠拾取优先 `diplomacy-relation`，100 connector 为 600 顶点 / 100 候选、纯函数构建约 1.018ms；既有 selection 高亮回归为 `12 / 30 / 30` 顶点；`pnpm run build:app` 构建 1114 modules、耗时 1.40 秒，入口 chunk `1126.11 kB / gzip 326.75 kB`，仅有既有大 chunk 警告；`git diff --check` 通过。三个 pnpm 命令在沙箱内无输出后均按约束终止并只升级重跑一次，没有持续挂起。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面。按约束未认领或刷新无关页面，未新开页面，未启动 Chrome / 服务器 / Playwright，并已 finalize 释放；关系色、贸易流绿色、持久橙色、selection 优先、100 connector buffer / checksum 与 WebGL / console / page / health 仍待可复用 FMG 页面。
+
+### 2026-07-12 持久高亮共享契约与编辑生命周期
+
+背景：
+
+- 控制台 API、面板批量动作和备注面板此前分别维护支持类型或过滤逻辑，新增测量、外交关系和贸易流后容易再次分叉。
+- 测量与外交回调曾各自手工校正高亮；其它对象经统一编辑器重命名或删除后，高亮摘要与计数仍可能陈旧。
+
+实现：
+
+- 新增 `runtime/persistent-highlights.js`，集中 16 类持久高亮对象、100 对象上限、resolver 校正、稳定 key 去重以及无效目标分类。
+- 控制台 API 的支持类型检查、运行时写入集合、备注目标过滤统一复用共享契约；UI 会过滤无效 / 已删除目标并报告跳过数，严格 API 仍保留结构化错误。
+- `executeEditCommand()` 与 `executeHistoryCommand()` 在完成地图和对象面板刷新后统一重新解析当前高亮；重命名会刷新摘要，删除会移除目标，撤销 / 重做也走同一生命周期。
+- 移除测量和外交领域回调中的手工校正，避免新增领域继续复制相同逻辑。
+- 新增 `tools/webgl-generator-persistent-highlight-contract-regression.mjs` 与 `pnpm run regress:persistent-highlight-contract`，覆盖类型范围、无效 / 不支持目标、重复项、重命名摘要刷新和删除清理。
+
+验证：
+
+- `node --check` 已覆盖共享契约、运行时应用和新回归脚本；直接回归通过：支持类型 `16`、规范化对象 `3`、拒绝 `2`、重复 `1`、删除后剩余 `2`、上限 `100`。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：8 个目标 JS / MJS 文件 `node --check` 全过；共享契约回归返回支持类型 `16`、规范化 `3`、拒绝 `2`、重复 `1`、删除后剩余 `2`、上限 `100`；selection 高亮回归为 `12 / 30 / 30` 顶点；复合高亮回归为 connector `12` 顶点、负载 `600` 顶点 / `100` 候选、构建约 `0.879ms`；`pnpm run build:app` 构建 1115 modules、耗时 1.25 秒，仅有既有大 chunk 警告；`git diff --check` 通过。首次 pnpm 在沙箱内约 40 秒无输出后已终止，随后只按最小升级策略重跑一次并通过，没有持续挂起。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能，但当前任务未暴露技能要求的合规浏览器控制入口，工具发现中也没有可加载入口，因此立即结束并释放；未启动或重启 Chrome、开发服务器或 Playwright，未新开、认领或刷新页面。重命名 / 删除 / 撤销 / 重做后的高亮摘要、视觉、checksum 与 WebGL / console / page / health 真实浏览器证据继续列入第 120 步。

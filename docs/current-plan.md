@@ -891,6 +891,15 @@
    - 目标：在可复用 FMG 页面存在时验证关系色、交易流颜色、重叠拾取、100 对象交互流畅度、checksum 与 WebGL / console / page / health 状态。
    - 边界：继续遵守不新开或重启 Chrome、不重复启动服务器、不持续刷新；没有现成 FMG 页面时只记录缺口，不用主线程或临时 Playwright 绕过用户约束。
 
+119. 持久高亮共享契约与编辑生命周期。`已完成`
+   - 目标：消除运行时 API、面板和备注列表各自维护支持类型与对象校正逻辑的分叉，并保证对象编辑、撤销和重做后高亮摘要不会陈旧。
+   - 边界：只收束持久高亮的类型、解析、去重、上限与生命周期；不改变单对象闪烁、当前 selection、地图 checksum 或 `EditHistory` 语义。
+   - 完成记录：新增 `runtime/persistent-highlights.js`，集中 16 类对象、100 对象上限、resolver 校正与稳定 key 去重；控制台 API、公共面板高亮动作和备注目标过滤复用同一契约。任意成功编辑、撤销或重做在完成地图与面板刷新后都会重新解析现有高亮，更新重命名摘要、合并重复项并清除已删除对象；新增 `pnpm run regress:persistent-highlight-contract` 固化类型范围、无效目标过滤、去重、重命名刷新与删除清理。
+
+120. 高亮生命周期真实浏览器验收。`待执行`
+   - 目标：在可复用 FMG 页面存在时，跨城市、测量对象和复合关系验证重命名、删除、撤销、重做后的高亮数量、摘要、视觉、checksum 与错误状态。
+   - 边界：与第 118 步合并到阶段末浏览器验收；继续复用既有浏览器与开发服务器，不新开或重启 Chrome，不持续刷新，没有现成 FMG 页面时保留待验收状态。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -906,6 +915,7 @@
 - 多对象持久高亮批次完成：子智能体执行的 6 个 `node --check`、`pnpm run regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；高亮回归为 12 / 30 / 30 顶点，Vite 构建 1109 modules、1.27s，仅有既有 chunk 警告。浏览器子智能体确认 in-app Browser 不可用且浏览器后端列表为空；按约束未启动 / 重启 Chrome、未使用 Playwright、未启动额外服务器，因此 API 持久高亮、append / clear、checksum 和 WebGL / console / health 真实浏览器验收待控制后端恢复后补跑。
 - 路线 / 河流 / 湖泊批量高亮 UI 批次完成：子智能体执行的 4 个 `node --check`、`pnpm run regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；三个 Vue SFC 均生成独立构建产物，无模板、响应式或 SFC 编译错误，Vite 构建 1109 modules、1.39s，仅有既有 chunk 警告。浏览器子智能体唯一一次后端检查仍为 `[]`；按约束未启动 / 重启 Chrome、未使用 Playwright、未启动服务器，因此 checkbox、高亮动作、跨面板清除、selection 不变、checksum 和 WebGL / console / health 验收待控制后端恢复后补跑。
 - 政治 / 社会面板批量高亮与选择复用批次完成：子智能体执行的 9 个 `node --check`、`regress:visible-row-selection`、`regress:selection-highlight`、`pnpm run build:app` 和 `git diff --check` 均通过；筛选选择回归为 `1 -> 0`，高亮回归为 12 / 30 / 30 顶点，Vite 构建 1111 modules、1.30s，七个目标 Vue SFC 均生成独立 chunk，仅有既有大 chunk 警告。浏览器子智能体唯一一次后端检查仍为 `[]`，因此国家 / 省份高亮、中立排除、跨面板清除、selection / checksum 和 WebGL / console / health 验收待控制后端恢复后补跑。
+- 持久高亮共享契约与编辑生命周期批次完成：烟测子智能体执行的 8 个 `node --check` 全过；共享契约回归为支持类型 `16`、规范化 `3`、拒绝 `2`、重复 `1`、删除后 `2`、上限 `100`，selection 高亮回归为 `12 / 30 / 30` 顶点，复合高亮回归为 `12 / 600` 顶点与 `100` 个负载候选；Vite 构建 1115 modules、1.25 秒，仅有既有大 chunk 警告，`git diff --check` 通过。pnpm 在沙箱内无输出后已按约束终止并只升级重跑一次。浏览器子智能体完整读取 Browser / Chrome 技能，但本轮没有暴露合规的浏览器控制入口，因而立即结束且未触碰 Chrome、页面、服务器或 Playwright；第 118 / 120 步真实浏览器验收继续待可复用入口恢复。
 - 标记管理构建产物浏览器烟测通过：打开控制面板管理页和标记管理，双击首行标记后选中 1 行并打开“重命名”二级编辑浮层，输入值为该标记名称，`glError = 0`，console/page error 为 `0`。
 - 本批次综合验证已完成：`git diff --check` 通过，`pnpm run build:app` 通过，仅有既有 Vite 大 chunk 警告；Playwright + 系统 Chrome 构建产物烟测确认测量对象和军事管理双击首行后均能打开对应“重命名”浮层，输入值与选中对象一致，`glError = 0`，console/page error 为 `0`。
 - 编辑器专题清单状态校准已完成：`git diff --check` 通过。

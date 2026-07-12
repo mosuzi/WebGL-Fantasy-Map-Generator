@@ -45,7 +45,8 @@
 
 <script setup>
 import {computed} from "vue";
-import {OBJECT_KIND, OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
+import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
+import {isPersistentHighlightObjectKind} from "../../../runtime/persistent-highlights.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -73,22 +74,6 @@ const props = defineProps({
 });
 
 const unitPreferences = useUnitPreferences();
-const HIGHLIGHTABLE_NOTE_KINDS = new Set([
-  OBJECT_KIND.CITY,
-  OBJECT_KIND.LABEL,
-  OBJECT_KIND.MARKER,
-  OBJECT_KIND.ROUTE,
-  OBJECT_KIND.RIVER,
-  OBJECT_KIND.LAKE,
-  OBJECT_KIND.MEASUREMENT,
-  OBJECT_KIND.MILITARY,
-  OBJECT_KIND.STATE,
-  OBJECT_KIND.PROVINCE,
-  OBJECT_KIND.CULTURE,
-  OBJECT_KIND.RELIGION,
-  OBJECT_KIND.REGION,
-  OBJECT_KIND.ZONE
-]);
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
   {key: "kindLabel", label: "类型"},
@@ -113,7 +98,7 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const notesEmptyText = computed(() => filterEmptyAction.value ? "没有匹配的备注" : "暂无备注");
-const highlightableNoteRows = computed(() => selectedNoteRows.value.filter(row => row.object && !row.orphan && HIGHLIGHTABLE_NOTE_KINDS.has(row.object.kind)));
+const highlightableNoteRows = computed(() => selectedNoteRows.value.filter(row => row.object && !row.orphan && isPersistentHighlightObjectKind(row.object.kind)));
 const notesExportActions = computed(() => [
   {key: "notes", label: "导出备注摘要", disabled: !visibleRows.value.length},
   {key: "selected-notes", label: `导出选中 ${formatNumber(selectedNoteRows.value.length)}`, disabled: !selectedNoteRows.value.length}

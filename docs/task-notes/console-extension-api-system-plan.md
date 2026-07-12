@@ -531,10 +531,12 @@ api.edit.measurement.delete(id)
 - `api.selection.pick(clientX, clientY)` 已接入 renderer `pickClientPoint()`，浏览器烟测已覆盖中心点拾取和非法坐标错误。
 - `api.selection.flash(object)` 保持单对象临时闪烁语义，复用 selection store 与 renderer `startLocateFlash()`，持续约 2.6 秒并同步当前 selection。
 - `api.selection.highlight(objects, {append})` 已升级为独立于 selection 的持久高亮集合：默认替换当前集合，`append: true` 追加并去重，单次最多 100 个；支持城市、标签、标记、路线、贸易流、河流、湖泊、测量对象、军团、外交关系、国家、省份、文化、宗教、区域和地区。外交关系 id 为有方向的 `subjectId:objectId`；贸易流只绘制当前 selection / 持久集合中的专用 connector，不恢复全量贸易流图层。
+- 持久高亮的 16 类支持范围、100 对象上限、resolver 校正与稳定 key 去重已集中到 `runtime/persistent-highlights.js`；控制台 API、公共面板动作和备注目标过滤不再各自维护类型白名单。严格 API 仍对非法请求返回结构化错误，UI 路径则过滤无效 / 已删除目标并在状态区说明跳过数量。
 - `api.selection.clearHighlights()` 会清空持久高亮；载入新地图时 renderer 也会自动清空，避免对象 id 跨地图残留。`selection.get()` 与 renderer stats 会返回高亮摘要。
 - 持久高亮不修改地图 checksum、不进入 `EditHistory`，`highlight / clearHighlights` 的能力元数据副作用为 `persistent-highlight-state`。
+- 任意成功编辑、撤销或重做都会在刷新后重新解析当前持久高亮：重命名对象会更新摘要，删除对象会从集合移除，解析到同一对象的重复项会合并；各领域回调不再手工补生命周期校正。
 - `api.selection.startEditing(object, {select})`、`stopEditing({ifKind})` 和 `toggleEditing(object, {select})` 已完成第一刀；当前复用运行时编辑态 helper，只控制 selection / editingObject 与编辑交互锁，不执行数据编辑命令。
-- 多对象持久高亮生命周期第一刀已完成；路线、河流、湖泊、国家、省份、文化、宗教、城市、资源标记、军事、地区、标签、备注目标、政体下国家、测量对象、外交关系和交易流的公共表格批量选择已复用同一运行时动作，控制台 API 修改集合后已打开面板会同步刷新。UI 与 API 最多同时保留 100 个高亮对象；标签排除隐藏项，备注排除孤儿和不支持类型，军事 / 备注 / 政体 / 测量 / 外交 / 经济复用原有导出选择。测量对象使用 SVG overlay 专用样式；外交关系与贸易流使用高亮专用 connector、bounds、locate 和拾取，不恢复全量贸易网络。
+- 多对象持久高亮生命周期第一刀已完成；路线、河流、湖泊、国家、省份、文化、宗教、城市、资源标记、军事、地区、标签、备注目标、政体下国家、测量对象、外交关系和交易流的公共表格批量选择已复用同一运行时动作，控制台 API 修改集合后已打开面板会同步刷新。UI 与 API 最多同时保留 100 个高亮对象；标签排除隐藏项，备注排除孤儿和不支持类型，军事 / 备注 / 政体 / 测量 / 外交 / 经济复用原有导出选择。测量对象使用 SVG overlay 专用样式；外交关系与贸易流使用高亮专用 connector、bounds、locate 和拾取，不恢复全量贸易网络。支持范围与对象校正现已由共享契约维护，所有编辑 / 撤销 / 重做统一刷新高亮摘要并清理已删除目标。
 - 复合 connector 负载门禁第一刀已完成：当前外交关系使用关系色，持久集合保持统一橙色；同距重叠时当前 selection 因输入顺序优先于持久集合。100 个外交 / 交易 connector 生成 600 个顶点并检查 100 个拾取候选，阶段末子智能体纯函数回归约 1.018ms；真实浏览器 GPU / health 证据仍待可复用 FMG 页面。
 
 ### 阶段 5：生成、导入和批量能力
