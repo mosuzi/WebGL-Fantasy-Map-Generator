@@ -181,6 +181,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       strokeSeed: 0,
       globalToolSeed: 0,
       terrainSelection: null,
+      terrainSelectionBox: null,
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none",
@@ -470,6 +471,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const options = request && typeof request === "object"
         ? {...request}
         : heightPanel.getTerrainSelectionRequest(typeof request === "string" ? request : "replace");
+      if (options.source === "rectangle") {
+        cancelHeightLine(state, documentRef);
+        state.heightEdit.terrainSelectionBox = {request: options, start: null};
+        state.heightEdit.lastNotice = "请在地图上依次单击矩形的两个角。";
+        updateHeightPanel(state);
+        updateEditingInteractionLock(state, documentRef);
+        return {pending: true, operation: options.operation, source: options.source};
+      }
       if (options.source === "cursor-circle") options.centerCell = resolveHeightSelectionCenterCell(state, canvas, documentRef);
       const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, options);
       if (!selection.summary.valid) {
@@ -477,21 +486,23 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateHeightPanel(state);
         return selection.summary;
       }
-      clearHeightTransformPreview(state);
-      const cellSet = createHeightCellSelectionSet(selection.cellIds);
-      const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
-      const summary = {...selection.summary, rendererSelection};
-      state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, summary, useForTools: true};
-      heightPanel.updateTerrainSelection(summary, true);
+      const summary = commitHeightTerrainSelection(state, selection);
       state.heightEdit.lastNotice = summary.notice;
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
       return summary;
     },
     onTerrainSelectionClear: () => {
+      cancelHeightSelectionBox(state, documentRef);
       clearHeightTransformPreview(state);
       clearHeightTerrainSelection(state);
       state.heightEdit.lastNotice = "已清除锁定地形选区。";
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onTerrainSelectionCancel: () => {
+      cancelHeightSelectionBox(state, documentRef);
+      state.heightEdit.lastNotice = "";
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
     },
@@ -7038,6 +7049,10 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (state.heightEdit.terrainSelectionBox) {
+      handleHeightSelectionBoxClick(state, event, documentRef);
+      return;
+    }
     clearHeightTransformPreview(state);
     if (brush.action === "line") {
       handleHeightLineClick(state, event, brush, documentRef);
@@ -7059,6 +7074,10 @@ function bindHeightEditing(canvas, state, documentRef) {
 
   canvas.addEventListener("pointermove", event => {
     const brush = state.panels.height?.getBrush();
+    if (state.heightEdit.terrainSelectionBox?.start) {
+      updateHeightSelectionBoxPreview(documentRef, state.heightEdit.terrainSelectionBox.start, event.clientX, event.clientY);
+      return;
+    }
     if (!state.heightEdit.activeStroke && brush?.active && brush.action === "fill") {
       updateHeightFillPreviewAtEvent(state, event, brush);
       return;
@@ -7164,11 +7183,67 @@ function updateHeightLinePreview(documentRef, start, clientX, clientY) {
   line.style.transform = `rotate(${Math.atan2(y2 - y1, x2 - x1)}rad)`;
 }
 
+function handleHeightSelectionBoxClick(state, event, documentRef) {
+  const pending = state.heightEdit.terrainSelectionBox;
+  if (!pending) return;
+  const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+  if (!pending.start) {
+    pending.start = {point, clientX: event.clientX, clientY: event.clientY};
+    state.heightEdit.lastNotice = "已选择矩形起角，移动指针预览并单击对角。";
+    updateHeightSelectionBoxPreview(documentRef, pending.start, event.clientX, event.clientY);
+    updateHeightPanel(state);
+    updateEditingInteractionLock(state, documentRef);
+    return;
+  }
+  const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, {
+    ...pending.request,
+    fromPoint: pending.start.point,
+    toPoint: point
+  });
+  cancelHeightSelectionBox(state, documentRef);
+  if (!selection.summary.valid) {
+    state.heightEdit.lastNotice = selection.summary.notice;
+    updateHeightPanel(state);
+    updateEditingInteractionLock(state, documentRef);
+    return;
+  }
+  const summary = commitHeightTerrainSelection(state, selection);
+  state.heightEdit.lastNotice = summary.notice;
+  updateHeightPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
+function updateHeightSelectionBoxPreview(documentRef, start, clientX, clientY) {
+  const stage = documentRef.querySelector(".map-stage");
+  if (!stage || !start) return;
+  let box = stage.querySelector(".height-selection-box-preview");
+  if (!box) {
+    box = documentRef.createElement("div");
+    box.className = "height-selection-box-preview";
+    stage.append(box);
+  }
+  const rect = stage.getBoundingClientRect();
+  const x1 = start.clientX - rect.left;
+  const y1 = start.clientY - rect.top;
+  const x2 = clientX - rect.left;
+  const y2 = clientY - rect.top;
+  box.style.left = `${Math.min(x1, x2)}px`;
+  box.style.top = `${Math.min(y1, y2)}px`;
+  box.style.width = `${Math.abs(x2 - x1)}px`;
+  box.style.height = `${Math.abs(y2 - y1)}px`;
+}
+
+function cancelHeightSelectionBox(state, documentRef) {
+  state.heightEdit.terrainSelectionBox = null;
+  documentRef.querySelector(".height-selection-box-preview")?.remove();
+}
+
 function cancelHeightLine(state, documentRef) {
   state.heightEdit.lineStart = null;
   state.heightEdit.fillHoverCell = null;
   state.heightEdit.fillPreview = null;
   clearHeightTransformPreview(state);
+  cancelHeightSelectionBox(state, documentRef);
   documentRef.querySelector(".height-line-preview")?.remove();
 }
 
@@ -7182,6 +7257,16 @@ function clearHeightTerrainSelection(state, {draw = true} = {}) {
   state.heightEdit.terrainSelection = null;
   state.panels.height?.updateTerrainSelection?.(null, false);
   state.renderer?.clearHeightCellSelection?.({draw});
+}
+
+function commitHeightTerrainSelection(state, selection) {
+  clearHeightTransformPreview(state, {draw: false});
+  const cellSet = createHeightCellSelectionSet(selection.cellIds);
+  const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
+  const summary = {...selection.summary, rendererSelection};
+  state.heightEdit.terrainSelection = {cellIds: selection.cellIds, cellSet, summary, useForTools: true};
+  state.panels.height?.updateTerrainSelection?.(summary, true);
+  return summary;
 }
 
 function heightToolAllowedCells(state) {
@@ -8295,7 +8380,14 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
       lastHeight: state.heightEdit.lastHeight,
       lastDelta: state.heightEdit.lastDelta,
       lastNotice: state.heightEdit.lastNotice,
-      fillPreview: state.heightEdit.fillPreview ? {...state.heightEdit.fillPreview} : null
+      fillPreview: state.heightEdit.fillPreview ? {...state.heightEdit.fillPreview} : null,
+      terrainSelectionBox: state.heightEdit.terrainSelectionBox ? {
+        operation: state.heightEdit.terrainSelectionBox.request?.operation || "replace",
+        start: state.heightEdit.terrainSelectionBox.start ? {
+          x: Math.round(state.heightEdit.terrainSelectionBox.start.point.x * 10) / 10,
+          y: Math.round(state.heightEdit.terrainSelectionBox.start.point.y * 10) / 10
+        } : null
+      } : null
     },
     conditionalHeightTransform: state.panels.height?.getConditionalTransformSnapshot?.() || null,
     globalHeightToolPreview: state.panels.height?.getGlobalToolPreview?.() || null,

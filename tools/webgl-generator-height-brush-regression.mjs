@@ -2,7 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightCursorRadiusSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCursorRadiusSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightCursorRadiusSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCursorRadiusSelection, inspectHeightRectangleSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -181,6 +181,23 @@ assert(!invalidCursorCircleSelection.valid && invalidCursorCircleSelection.notic
 assert(!oversizedCursorCircleSelection.valid && oversizedCursorCircleSelection.maxCells === 64 && oversizedCursorCircleSelection.notice.includes("安全上限"), `超大光标圆形没有被拒绝：${JSON.stringify(oversizedCursorCircleSelection)}`);
 assert(cursorUnionSelection.summary.valid && [...cursorUnionSelection.cellIds].join(",") === "1,2,3" && cursorUnionSelection.summary.source === "cursor-circle" && cursorUnionSelection.summary.centerCell === 3 && cursorUnionSelection.summary.radius === 11, `空间候选并入异常：${JSON.stringify(cursorUnionSelection.summary)}`);
 assert(!Object.hasOwn(cursorCompositionPreview, "cellIds") && cursorCompositionPreview.count === 3, "公开空间组合摘要暴露 ids 或计数异常");
+const rectangleSelection = createHeightRectangleSelection(selectionMap, {x: 5, y: -1}, {x: 25, y: 1}, {scope: "all"});
+const reversedRectangleSelection = createHeightRectangleSelection(selectionMap, {x: 25, y: 1}, {x: 5, y: -1}, {scope: "all"});
+const landRectangleSelection = createHeightRectangleSelection(selectionMap, {x: 5, y: -1}, {x: 25, y: 1}, {scope: "land"});
+const waterRectangleSelection = inspectHeightRectangleSelection(selectionMap, {x: 5, y: -1}, {x: 25, y: 1}, {scope: "water"});
+const narrowRectangleSelection = inspectHeightRectangleSelection(selectionMap, {x: 5, y: 0}, {x: 25, y: 0}, {scope: "all"});
+const invalidRectangleSelection = inspectHeightRectangleSelection(selectionMap, null, {x: 25, y: 1}, {scope: "all"});
+const oversizedRectangleSelection = inspectHeightRectangleSelection(createSquareMap(10, () => 30), {x: -1, y: -1}, {x: 10, y: 10}, {scope: "land"});
+const rectangleUnionSelection = composeHeightCellSelection(selectionMap, [0], {operation: "union", source: "rectangle", scope: "all", fromPoint: {x: 5, y: -1}, toPoint: {x: 25, y: 1}});
+const rectangleCompositionPreview = inspectHeightCellSelectionComposition(selectionMap, [0], {operation: "union", source: "rectangle", scope: "all", fromPoint: {x: 5, y: -1}, toPoint: {x: 25, y: 1}});
+assert(rectangleSelection.summary.valid && [...rectangleSelection.cellIds].join(",") === "1,2" && rectangleSelection.summary.width === 20 && rectangleSelection.summary.height === 2, `矩形选区异常：${JSON.stringify(rectangleSelection.summary)}`);
+assert([...reversedRectangleSelection.cellIds].join(",") === "1,2" && JSON.stringify(reversedRectangleSelection.summary.bounds) === JSON.stringify(rectangleSelection.summary.bounds), "矩形选区依赖角点顺序");
+assert([...landRectangleSelection.cellIds].join(",") === "1,2" && !waterRectangleSelection.valid, "矩形选区没有遵守陆水 scope");
+assert(!narrowRectangleSelection.valid && narrowRectangleSelection.notice.includes("至少为 1"), `过窄矩形没有被拒绝：${JSON.stringify(narrowRectangleSelection)}`);
+assert(!invalidRectangleSelection.valid && invalidRectangleSelection.notice.includes("两个有效角点"), `坏矩形角点没有被拒绝：${JSON.stringify(invalidRectangleSelection)}`);
+assert(!oversizedRectangleSelection.valid && oversizedRectangleSelection.maxCells === 64 && oversizedRectangleSelection.notice.includes("安全上限"), `超大矩形没有被拒绝：${JSON.stringify(oversizedRectangleSelection)}`);
+assert(rectangleUnionSelection.summary.valid && [...rectangleUnionSelection.cellIds].join(",") === "0,1,2" && rectangleUnionSelection.summary.source === "rectangle" && rectangleUnionSelection.summary.bounds.minX === 5, `矩形候选并入异常：${JSON.stringify(rectangleUnionSelection.summary)}`);
+assert(!Object.hasOwn(rectangleCompositionPreview, "cellIds") && rectangleCompositionPreview.count === 3, "公开矩形组合摘要暴露 ids 或计数异常");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -322,6 +339,8 @@ console.log(JSON.stringify({
   },
   cursorCircleSelection: cursorCircleSelection.summary,
   cursorUnionSelection: cursorUnionSelection.summary,
+  rectangleSelection: rectangleSelection.summary,
+  rectangleUnionSelection: rectangleUnionSelection.summary,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

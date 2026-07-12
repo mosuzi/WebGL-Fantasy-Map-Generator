@@ -89,6 +89,73 @@ export function inspectHeightCursorRadiusSelection(map, centerCell, options = {}
   return createHeightCursorRadiusSelection(map, centerCell, options).summary;
 }
 
+export function createHeightRectangleSelection(map, fromPoint, toPoint, options = {}) {
+  const cells = map?.grid?.cells;
+  const points = map?.grid?.points;
+  const scope = normalizeScope(options.scope);
+  const start = normalizePoint(fromPoint);
+  const end = normalizePoint(toPoint);
+  const maxCells = heightSelectionMaxCells(cells?.h?.length || 0);
+  const rawBounds = start && end ? {
+    minX: Math.min(start.x, end.x),
+    minY: Math.min(start.y, end.y),
+    maxX: Math.max(start.x, end.x),
+    maxY: Math.max(start.y, end.y)
+  } : null;
+  const width = rawBounds ? rawBounds.maxX - rawBounds.minX : 0;
+  const height = rawBounds ? rawBounds.maxY - rawBounds.minY : 0;
+  const base = {
+    source: "rectangle",
+    scope,
+    bounds: rawBounds ? summarizeBounds(rawBounds) : null,
+    width: roundCoordinate(width),
+    height: roundCoordinate(height),
+    maxCells,
+    count: 0,
+    heightRange: null,
+    valid: false,
+    notice: ""
+  };
+  if (!cells?.h?.length || !cells?.p || !Array.isArray(points)) {
+    return {cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度或点位数据，无法生成矩形选区。"}};
+  }
+  if (!rawBounds) return {cellIds: new Uint32Array(), summary: {...base, notice: "矩形选区需要两个有效角点。"}};
+  if (width < 1 || height < 1) return {cellIds: new Uint32Array(), summary: {...base, notice: "矩形两个角过近，宽和高都必须至少为 1。"}};
+
+  const cellIds = [];
+  let minHeight = Infinity;
+  let maxHeight = -Infinity;
+  for (let gridCell = 0; gridCell < cells.h.length; gridCell++) {
+    const cellPoint = points[cells.p[gridCell]];
+    if (!cellPoint) continue;
+    if (cellPoint[0] < rawBounds.minX || cellPoint[0] > rawBounds.maxX || cellPoint[1] < rawBounds.minY || cellPoint[1] > rawBounds.maxY) continue;
+    const cellHeight = Number(cells.h[gridCell]) || 0;
+    if (!matchesScope(cellHeight, scope)) continue;
+    cellIds.push(gridCell);
+    if (cellIds.length > maxCells) {
+      return {cellIds: new Uint32Array(), summary: {...base, notice: `矩形选区超过安全上限 ${maxCells} cells，已拒绝。`}};
+    }
+    minHeight = Math.min(minHeight, cellHeight);
+    maxHeight = Math.max(maxHeight, cellHeight);
+  }
+  if (!cellIds.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前矩形没有命中作用范围内的 cells。"}};
+  const typedIds = Uint32Array.from(cellIds);
+  return {
+    cellIds: typedIds,
+    summary: {
+      ...base,
+      count: typedIds.length,
+      heightRange: [minHeight, maxHeight],
+      valid: true,
+      notice: `矩形候选 ${typedIds.length} cells（${base.width} × ${base.height}）。`
+    }
+  };
+}
+
+export function inspectHeightRectangleSelection(map, fromPoint, toPoint, options = {}) {
+  return createHeightRectangleSelection(map, fromPoint, toPoint, options).summary;
+}
+
 export function composeHeightCellSelection(map, currentCellIds, options = {}) {
   const heights = map?.grid?.cells?.h;
   const operation = normalizeCompositionOperation(options.operation);
@@ -96,6 +163,8 @@ export function composeHeightCellSelection(map, currentCellIds, options = {}) {
   const source = normalizeSelectionSource(options.source);
   const candidate = source === "cursor-circle"
     ? createHeightCursorRadiusSelection(map, options.centerCell, options)
+    : source === "rectangle"
+      ? createHeightRectangleSelection(map, options.fromPoint, options.toPoint, options)
     : source === "height-band"
       ? createHeightCellSelection(map, options)
       : {cellIds: new Uint32Array(), summary: {source: String(options.source || ""), scope: normalizeScope(options.scope), count: 0, heightRange: null, valid: false, notice: "未知的地形选区来源。"}};
@@ -108,6 +177,9 @@ export function composeHeightCellSelection(map, currentCellIds, options = {}) {
     centerCell: candidate.summary.centerCell ?? null,
     radius: candidate.summary.radius ?? null,
     maxCells: candidate.summary.maxCells ?? null,
+    bounds: candidate.summary.bounds ? {...candidate.summary.bounds} : null,
+    width: candidate.summary.width ?? null,
+    height: candidate.summary.height ?? null,
     previousCount: currentIds.length,
     incomingCount: candidate.cellIds.length,
     count: currentIds.length,
@@ -196,7 +268,7 @@ function normalizeCompositionOperation(operation) {
 
 function normalizeSelectionSource(source) {
   if (source === undefined || source === null || source === "") return "height-band";
-  return source === "height-band" || source === "cursor-circle" ? source : null;
+  return source === "height-band" || source === "cursor-circle" || source === "rectangle" ? source : null;
 }
 
 function compositionOperationLabel(operation) {
@@ -229,4 +301,23 @@ function normalizeRadius(value, fallback) {
 function heightSelectionMaxCells(cellCount) {
   if (!cellCount) return 0;
   return Math.max(64, Math.min(5000, Math.floor(cellCount * 0.2)));
+}
+
+function normalizePoint(point) {
+  const x = Number(point?.x);
+  const y = Number(point?.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? {x, y} : null;
+}
+
+function summarizeBounds(bounds) {
+  return {
+    minX: roundCoordinate(bounds.minX),
+    minY: roundCoordinate(bounds.minY),
+    maxX: roundCoordinate(bounds.maxX),
+    maxY: roundCoordinate(bounds.maxY)
+  };
+}
+
+function roundCoordinate(value) {
+  return Math.round(Number(value) * 10) / 10;
 }

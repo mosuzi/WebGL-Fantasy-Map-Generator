@@ -2722,6 +2722,15 @@ select:disabled {
   left: 100%;
 }
 
+.height-selection-box-preview {
+  position: absolute;
+  z-index: 18;
+  border: 1px solid rgba(255, 224, 161, 0.96);
+  background: rgba(255, 199, 46, 0.16);
+  box-shadow: 0 0 0 1px rgba(28, 19, 7, 0.68), inset 0 0 12px rgba(215, 168, 79, 0.16);
+  pointer-events: none;
+}
+
 .height-action-help {
   margin: -4px 0 10px;
   color: #9eacb4;

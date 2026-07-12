@@ -46,6 +46,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onConditionalTransformChange: () => callbacks.onConditionalTransformChange?.(),
     onTerrainSelectionLock: request => callbacks.onTerrainSelectionLock?.(request),
     onTerrainSelectionClear: () => callbacks.onTerrainSelectionClear?.(),
+    onTerrainSelectionCancel: () => callbacks.onTerrainSelectionCancel?.(),
     onTerrainSelectionUseChange: value => callbacks.onTerrainSelectionUseChange?.(value),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
@@ -208,6 +209,7 @@ function cloneTerrainSelection(selection) {
   return {
     ...selection,
     heightRange: Array.isArray(selection.heightRange) ? [...selection.heightRange] : null,
+    bounds: selection.bounds ? {...selection.bounds} : null,
     rendererSelection: selection.rendererSelection ? {...selection.rendererSelection} : null
   };
 }

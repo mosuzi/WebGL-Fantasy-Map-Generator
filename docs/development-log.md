@@ -26765,3 +26765,28 @@ full 矩阵结果：
 - 最终浏览器子智能体复用既有 browser 语义连接、同一 `5410` 页面和服务器，只操作可见 UI：半径 `24` 覆盖得到 `13 cells`、圆心 `#4941`、GPU `79 triangles`；半径 `64` 再覆盖得到 `91 cells`、圆心仍为 `#4941`、GPU `548 triangles`。黄色 overlay 与 GPU 范围明显扩大，限制开关两次均保持选中。
 - 清除后选区摘要、限制开关、GPU 摘要和黄色 overlay 消失；页面 readyState complete、画布 `2276×1092`，无 console error。没有执行并入 / 交集 / 排除、条件 / 全局工具、高度历史、笔刷或重算，也没有刷新、导航、新建页面或启动 Chrome / 服务器；现有页面 handoff。
 - 最终烟测子智能体完成 4 项 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过。生产产物包含选区构造、光标圆形、圆形半径、稳定输入 id、画布中心回退文案与 snapshot source / radius；未启动或遗留进程。
+
+### 2026-07-12 两角矩形高度选区
+
+背景：
+
+- 圆形来源适合局部地貌，但无法准确覆盖狭长或规则区域；下一种空间来源需要明确的两角矩形，并继续复用四种布尔组合和黄色 GPU 选区。
+- 框选过程不能误触高度笔刷或地图对象 selection，未完成的起角 / DOM 预览也必须随编辑生命周期可靠清理。
+
+实现：
+
+- `height-cell-selection.js` 新增 `createHeightRectangleSelection()` / inspect。两个 world-space 角点归一为 bounds，宽和高至少为 `1`；按 grid 点位与 scope 过滤，继续使用 `64..5000 / grid 20%` 安全上限。
+- 通用 compose 新增 rectangle source，summary 带 bounds、width / height 和 maxCells；height-band / cursor-circle / rectangle 仍共享 replace / union / intersect / subtract 与空结果保护。
+- runtime 新增 `terrainSelectionBox` pending。矩形来源点击组合按钮后不立即生成候选；高度 canvas capture handler 优先消费第一次 / 第二次主按钮点击，第一次保存起角，pointermove 更新 `.height-selection-box-preview`，第二次组合并原子上传黄色 buffer，不进入笔刷或 renderer selection。
+- `cancelHeightLine()` 同步取消框选 pending 和预览；来源切换、清除选区也显式取消。有限 editor snapshot 的 height.terrainSelectionBox 只含 operation 与一位小数起角；selection bounds 在 panel clone 中深拷贝。
+- 面板“选区构造”新增“矩形框选”，隐藏圆形半径，提示先选组合再点两个角；完成卡片显示矩形尺寸。
+
+直接验证：
+
+- `node --check` 覆盖选区模块、运行时、panel wrapper 和回归脚本；直接高度回归与 `git diff --check` 通过。
+- 一维地图 `{5,-1}->{25,1}` 命中 ids `1/2`、bounds `5,-1..25,1`、尺寸 `20×2`；反向角点结果相同，陆地 scope 命中 `1/2`、水域为空并拒绝。
+- 高度为 `0` 的窄矩形、坏起角和 `10×10` 全图超 maxCells `64` 都拒绝；矩形候选并入旧 id `0` 得到 `0/1/2`，公开 inspect 不含 cellIds。
+- 阶段末烟测子智能体完成选区模块、运行时、panel wrapper 和回归脚本 4 项 `node --check`，以及 `regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过；构建仅有既有大 chunk 警告。生产产物包含矩形框选、两角 / 起角 / 对角提示、`.height-selection-box-preview`、height-selection-source、terrainSelectionBox、bounds 与 radius。
+- 浏览器子智能体复用既有 browser 语义连接、同一 `5410` 页面、Chrome 和服务器，没有刷新、导航、新建或启动资源。切换矩形框选、scope 全部并点击覆盖后显示待选提示；第一角约 `(910,358)` 后提示“已选择矩形起角”且 preview DOM 存在，移动到第二角 `(1366,576)` 时预览宽 `456px`、高约 `218px`。
+- 第二角完成后选区为 `404 cells`、world 矩形 `288.5×191.6`、GPU `2428 triangles`；黄色 overlay 可见，限制开关保持选中，preview DOM 已移除。清除后摘要、限制开关、GPU、黄色 overlay 和 preview 全部消失。
+- 页面完整，画布 `2276×1092`，无 alert、无 console error。没有执行其它来源、并入 / 交集 / 排除、高度工具、历史、笔刷或重算；页面 handoff，两名子智能体均已结束且无遗留进程。

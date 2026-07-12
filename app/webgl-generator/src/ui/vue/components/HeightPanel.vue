@@ -92,10 +92,12 @@
       @input="setTerrainSelectionRadius"
     />
     <p v-if="state.terrainSelectionSource === 'cursor-circle'" class="height-action-help">把鼠标停在地图目标处，再返回面板执行选区组合；没有有效光标时使用当前画布中心，候选仍遵守作用范围。</p>
+    <p v-else-if="state.terrainSelectionSource === 'rectangle'" class="height-action-help">先选择覆盖 / 并入 / 交集 / 排除，再在地图上依次单击矩形两个角。</p>
     <div class="height-terrain-selection">
       <p v-if="state.terrainSelection?.valid">
         <i class="height-terrain-selection-swatch"></i>已锁定 {{ state.terrainSelection.count }} cells / 高度 {{ state.terrainSelection.heightRange?.join('..') }}
         <span v-if="state.terrainSelection.source === 'cursor-circle'">/ 圆心 #{{ state.terrainSelection.centerCell }} / 半径 {{ state.terrainSelection.radius }}</span>
+        <span v-else-if="state.terrainSelection.source === 'rectangle'">/ 矩形 {{ state.terrainSelection.width }} × {{ state.terrainSelection.height }}</span>
         <span v-if="state.terrainSelection.rendererSelection">/ GPU {{ state.terrainSelection.rendererSelection.triangleCount }} triangles / {{ state.terrainSelection.rendererSelection.buildMs }} ms</span>
       </p>
       <p v-else>尚未锁定地形选区；锁定时使用当前作用范围和高度区间。</p>
@@ -538,7 +540,8 @@ const transformOperatorOptions = Object.freeze([
 ]);
 const terrainSelectionSourceOptions = Object.freeze([
   {value: "height-band", label: "当前高度区间"},
-  {value: "cursor-circle", label: "光标圆形"}
+  {value: "cursor-circle", label: "光标圆形"},
+  {value: "rectangle", label: "矩形框选"}
 ]);
 const transformOperandDefaults = Object.freeze({add: 5, subtract: 5, multiply: 0.9, divide: 1.1, exponent: 0.9});
 const heightmapFitOptions = Object.freeze([
@@ -835,7 +838,8 @@ function setRadius(radius) {
 }
 
 function setTerrainSelectionSource(source) {
-  props.state.terrainSelectionSource = source === "cursor-circle" ? source : "height-band";
+  props.state.terrainSelectionSource = source === "cursor-circle" || source === "rectangle" ? source : "height-band";
+  props.callbacks.onTerrainSelectionCancel?.();
 }
 
 function setTerrainSelectionRadius(radius) {
