@@ -74,9 +74,11 @@
 
   <UiPanelIoActions
     class-name="economy-panel-export-actions"
-    label="经济导出"
+    label="经济列表操作"
     :export-actions="economyExportActions"
+    :actions="economyHighlightActions"
     @export="handleEconomyExport"
+    @action="handleEconomyHighlightAction"
   />
 
   <p v-if="activeTotalRows > activeVisibleRows" class="economy-panel-limit">
@@ -131,7 +133,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, watch} from "vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiKeyValueGrid from "./base/UiKeyValueGrid.vue";
@@ -144,6 +146,7 @@ import {findByObjectId} from "../../object-id.js";
 import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "EconomyPanel"
@@ -162,7 +165,6 @@ const props = defineProps({
 const callbacks = props.callbacks;
 const unitPreferences = useUnitPreferences();
 const debugEnabled = useDebugMode();
-const selectedEconomyRowIds = ref([]);
 const ROW_LIMIT = 500;
 const DEAL_ROW_LIMIT = 48;
 const DEAL_METRIC_LIMIT = 120;
@@ -280,13 +282,19 @@ const activeVisibleRowObjects = computed(() => {
   if (props.state.tab === "deals") return visibleDealRows.value;
   return visibleGoodRows.value;
 });
-const selectedEconomyRowIdSet = computed(() => new Set(selectedEconomyRowIds.value.map(id => String(id))));
-const selectedEconomyRows = computed(() => activeVisibleRowObjects.value.filter(row => selectedEconomyRowIdSet.value.has(String(row.id))));
+const {selectedRowIds: selectedEconomyRowIds, selectedRows: selectedEconomyRows} = useVisibleRowSelection(activeVisibleRowObjects);
+const highlightableTradeFlowRows = computed(() => props.state.tab === "deals"
+  ? selectedEconomyRows.value.filter(row => row.sellerValid && row.buyerValid)
+  : []);
 const economyExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !activeTotalRows.value},
   {key: "json", label: "导出 JSON", disabled: !activeTotalRows.value},
   {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedEconomyRows.value.length)}`, disabled: !selectedEconomyRows.value.length},
   {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedEconomyRows.value.length)}`, disabled: !selectedEconomyRows.value.length}
+]);
+const economyHighlightActions = computed(() => [
+  {key: "highlight-selected", label: `高亮交易流 ${formatNumber(highlightableTradeFlowRows.value.length)}`, icon: "⇢", disabled: !highlightableTradeFlowRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
 ]);
 const selectedGood = computed(() => findByObjectId(metrics.value.goods, props.state.selectedGoodId) || metrics.value.goods[0] || null);
 const selectedMarket = computed(() => findByObjectId(metrics.value.markets, props.state.selectedMarketId) || metrics.value.markets[0] || null);
@@ -301,7 +309,8 @@ const summaryMetrics = computed(() => [
   {label: "供需缺口", value: formatNumber(metrics.value.summary.shortage)},
   {label: "价格信号", value: formatNumber(metrics.value.summary.priceSignals)},
   {label: "交易额", value: formatNumber(metrics.value.summary.tradeValue)},
-  {label: "已选", value: formatNumber(selectedEconomyRows.value.length)}
+  {label: "已选", value: formatNumber(selectedEconomyRows.value.length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
 const economyDetail = computed(() => {
@@ -332,11 +341,6 @@ watch(
     selectedEconomyRowIds.value = [];
   }
 );
-
-watch(activeVisibleRowObjects, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedEconomyRowIds.value = selectedEconomyRowIds.value.filter(id => visibleIds.has(String(id)));
-});
 
 function buildGoodDetail(good) {
   return {
@@ -845,6 +849,11 @@ function handleEconomyExport(key) {
   if (key === "json") exportJson();
   if (key === "selected-csv") exportCsv(selectedEconomyRows.value, {selectedOnly: true});
   if (key === "selected-json") exportJson(selectedEconomyRows.value, {selectedOnly: true});
+}
+
+function handleEconomyHighlightAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(highlightableTradeFlowRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function exportRows() {

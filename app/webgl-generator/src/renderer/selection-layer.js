@@ -2,6 +2,8 @@ import {createRenderContext, worldToScreenPixel} from "./render-context.js";
 import {smoothWorldPath} from "./geometry.js";
 import {pushScreenPolyline, pushScreenTriangle} from "./mesh-writer.js";
 import {OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPoliticalObjectKind} from "../runtime/object-kinds.js";
+import {parseDiplomacyRelationIdentity} from "../runtime/diplomacy-relations.js";
+import {compositeConnectorPoints} from "./composite-connectors.js";
 
 const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
   [OBJECT_KIND.STATE]: [1, 0.86, 0.28, 0.3],
@@ -19,7 +21,9 @@ const SELECTION_HIGHLIGHT_MODES = Object.freeze({
   [OBJECT_KIND.CULTURE]: "culture translucent cells",
   [OBJECT_KIND.RELIGION]: "religion translucent cells",
   [OBJECT_KIND.REGION]: "region translucent cells",
-  [OBJECT_KIND.ZONE]: "zone translucent cells"
+  [OBJECT_KIND.ZONE]: "zone translucent cells",
+  [OBJECT_KIND.DIPLOMACY_RELATION]: "diplomacy relation connector",
+  [OBJECT_KIND.TRADE_FLOW]: "trade flow connector"
 });
 
 const SELECTION_SMOOTHING = Object.freeze({
@@ -53,6 +57,14 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
     pushLakeSelectionMesh(vertices, context, selection, overrideColor);
     return;
   }
+  if (selection?.kind === OBJECT_KIND.DIPLOMACY_RELATION) {
+    pushDiplomacyRelationSelection(vertices, context, selection, locateFlash, overrideColor);
+    return;
+  }
+  if (selection?.kind === OBJECT_KIND.TRADE_FLOW) {
+    pushTradeFlowSelection(vertices, context, selection, locateFlash, overrideColor);
+    return;
+  }
   if (selection?.kind !== OBJECT_KIND.RIVER) return;
   const {map} = context;
   const river = map.rivers.rivers.find(item => item.id === selection.id);
@@ -63,6 +75,31 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
   const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
   const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
   pushScreenPolyline(vertices, context, smoothWorldPath(river.points, SELECTION_SMOOTHING.river), color, widthPx);
+}
+
+function pushDiplomacyRelationSelection(vertices, context, selection, locateFlash, overrideColor = null) {
+  const identity = parseDiplomacyRelationIdentity(selection);
+  if (!identity) return;
+  const points = compositeConnectorPoints(context.map, selection);
+  if (!points) return;
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || [1, 0.72, 0.22, 0.96];
+  if (!overrideColor) {
+    const surfaceColor = [color[0], color[1], color[2], Math.min(0.22, color[3])];
+    pushPoliticalSelectionMesh(vertices, context, {kind: OBJECT_KIND.STATE, id: identity.subjectId}, null, surfaceColor);
+    pushPoliticalSelectionMesh(vertices, context, {kind: OBJECT_KIND.STATE, id: identity.objectId}, null, surfaceColor);
+  }
+  pushScreenPolyline(vertices, context, points, color, selectionLineWidth(context, overrideColor ? 5.2 : 6.2));
+}
+
+function pushTradeFlowSelection(vertices, context, selection, locateFlash, overrideColor = null) {
+  const points = compositeConnectorPoints(context.map, selection);
+  if (!points) return;
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.32, 0.9, 0.72, 0.98];
+  pushScreenPolyline(vertices, context, points, color, selectionLineWidth(context, overrideColor ? 4.8 : 5.8));
+}
+
+function selectionLineWidth(context, cssPixels) {
+  return cssPixels * context.canvas.width / Math.max(1, context.canvas.clientWidth);
 }
 
 function pushZoneSelectionMesh(vertices, context, selection, locateFlash, overrideColor = null) {

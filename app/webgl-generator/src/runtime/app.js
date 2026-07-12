@@ -160,10 +160,12 @@ const API_HIGHLIGHT_OBJECT_KINDS = Object.freeze([
   OBJECT_KIND.LABEL,
   OBJECT_KIND.MARKER,
   OBJECT_KIND.ROUTE,
+  OBJECT_KIND.TRADE_FLOW,
   OBJECT_KIND.RIVER,
   OBJECT_KIND.LAKE,
   OBJECT_KIND.MEASUREMENT,
   OBJECT_KIND.MILITARY,
+  OBJECT_KIND.DIPLOMACY_RELATION,
   OBJECT_KIND.STATE,
   OBJECT_KIND.PROVINCE,
   OBJECT_KIND.CULTURE,
@@ -986,6 +988,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onLocate: object => {
       locateAndSelectObject("diplomacy-panel", object);
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onOpenState: object => {
       selectionStore.setSelection({object});
       setStatePanelTarget(state, object.id);
@@ -997,6 +1002,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
       if (result.executed) {
         refreshGenerationSummary(state.map);
+        reconcilePersistentObjectHighlights(state, documentRef);
       }
       updateEditingInteractionLock(state, documentRef);
     },
@@ -1009,6 +1015,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         markDerivedFresh(state.map, ["diplomacy"]);
         refreshGenerationSummary(state.map);
         appendGenerationLog(state.map, `regenerate diplomacy: salt=${salt}, pairs=${state.map.diplomacy?.metadata?.pairs || 0}, enemies=${state.map.diplomacy?.metadata?.enemies || 0}`);
+        reconcilePersistentObjectHighlights(state, documentRef);
       }
       updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
@@ -1031,7 +1038,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   economyPanel = createEconomyPanel(documentRef, panelManager, {
     onLocate: object => {
       locateAndSelectObject("economy-panel", object);
-    }
+    },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state)
   });
   state.panels.economy = economyPanel;
   militaryPanel = createMilitaryPanel(documentRef, panelManager, {
@@ -4437,6 +4447,14 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
       updateEconomyPanel(state);
     });
   },
+  [OBJECT_KIND.DIPLOMACY_RELATION]: (state, selection) => {
+    state.panels.objectDetails.clear();
+    state.panels.diplomacy?.setRelation?.(selection.object.subjectId, selection.object.objectId);
+    return updateOrOpenSelectionPanel(state.panels.diplomacy, {
+      update: () => updateDiplomacyPanel(state),
+      open: () => state.panels.diplomacy?.open(state.map, state.selection, state.editHistory.getStats())
+    });
+  },
   [OBJECT_KIND.MARKER]: (state, selection, editingObject, context) => {
     return updateExistingSelectionPanel(state.panels.marker, () => {
       state.panels.objectDetails.clear();
@@ -4715,6 +4733,8 @@ function refreshPersistentHighlightUi(state, documentRef) {
   updateGovernmentPanel(state);
   updateMeasurementPanel(state);
   updateMeasurementOverlay(state, documentRef);
+  updateDiplomacyPanel(state);
+  updateEconomyPanel(state);
 }
 
 function startEditingObjectViaApi(state, object, options = {}) {

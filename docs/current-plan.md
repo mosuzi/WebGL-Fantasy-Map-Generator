@@ -877,9 +877,14 @@
    - 边界：不能把测量对象伪装为普通 renderer mesh 对象；需要明确 API resolve / highlight 契约、overlay 更新时机和载入新地图后的清理语义，再接入测量面板 checkbox。
    - 完成记录：新增正式 `OBJECT_KIND.MEASUREMENT`、resolver 和纯函数高亮状态 helper；控制台 resolve / select / locate / highlight 已能处理保存的测量对象，renderer 继续只保存统一集合与统计，SVG overlay 按 id 渲染持久橙色强调和临时 flash。测量面板复用原导出多选接入高亮，重命名、点列更新和删除后会重新解析并清理高亮集合；新增 `pnpm run regress:measurement-highlight` 固化 resolver 与 overlay class 状态。
 
-116. 外交关系与经济流复合高亮模型。`待执行`
+116. 外交关系与经济流复合高亮模型。`已完成`
    - 目标：为“一行关联多个地图对象”的外交关系、贸易流和经济聚合行定义明确身份、端点与专用视觉，再决定批量高亮入口。
    - 边界：不得把关系行随意降级为单个国家或城市；贸易流在 renderer 有稳定线性几何和 pick / locate 语义前继续返回结构化不支持错误。
+   - 完成记录：新增有方向的 `OBJECT_KIND.DIPLOMACY_RELATION`，以 `subjectId:objectId` 区分正反关系并解析两国中心；贸易流继续使用稳定 deal id。两类复合对象共享高亮专用 connector 几何、bounds、locate 和仅针对当前 selection / 持久集合的拾取，不恢复已退役的全量 `tradeFlows` 图层。外交与经济面板复用原导出多选，分别只提交关系行和端点有效的交易行；新增 `pnpm run regress:composite-highlight` 覆盖方向身份、resolver、12 个 connector 顶点与两类拾取。
+
+117. 复合 connector 视觉与负载观察。`待执行`
+   - 目标：在真实地图浏览器验收恢复后，评估多条外交 / 交易 connector 的重叠、颜色辨识、拾取优先级和 100 对象上限下的 selection buffer 构建耗时。
+   - 边界：没有实测证据前不恢复全量贸易流图层；如需长期显示全部贸易网络，应单独设计密度裁剪、图例和性能门禁，而不是借持久高亮入口绕过图层治理。
 
 ### 验证要求
 

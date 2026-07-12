@@ -67,9 +67,11 @@
 
   <UiPanelIoActions
     class-name="diplomacy-panel-export-actions"
-    label="外交导出"
+    label="外交列表操作"
     :export-actions="diplomacyExportActions"
+    :actions="diplomacyHighlightActions"
     @export="handleDiplomacyExport"
+    @action="handleDiplomacyHighlightAction"
   />
 
   <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
@@ -159,6 +161,7 @@ import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from 
 import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 
 defineOptions({
   name: "DiplomacyPanel"
@@ -197,7 +200,6 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const relationReasonDraft = ref("");
-const selectedRelationIds = ref([]);
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
 const historyFilterOptions = Object.freeze([
   {value: "selected", label: "当前关系"},
@@ -211,16 +213,19 @@ const metrics = computed(() => {
 const stateOptions = computed(() => metrics.value.states.map(state => ({value: state.id, label: state.name})));
 const selectedSubjectId = computed(() => toIntegerId(props.state.selectedStateId) ?? stateOptions.value[0]?.value ?? null);
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const {selectedRowIds: selectedRelationIds, selectedRows: selectedRelationRows} = useVisibleRowSelection(visibleRows);
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
-const selectedRelationIdSet = computed(() => new Set(selectedRelationIds.value.map(id => String(id))));
-const selectedRelationRows = computed(() => visibleRows.value.filter(row => selectedRelationIdSet.value.has(String(row.id))));
 const diplomacyExportActions = computed(() => [
   {key: "csv", label: "导出 CSV", disabled: !visibleRows.value.length},
   {key: "json", label: "导出 JSON", disabled: !visibleRows.value.length},
   {key: "selected-csv", label: `导出选中 CSV ${formatNumber(selectedRelationRows.value.length)}`, disabled: !selectedRelationRows.value.length},
   {key: "selected-json", label: `导出选中 JSON ${formatNumber(selectedRelationRows.value.length)}`, disabled: !selectedRelationRows.value.length}
+]);
+const diplomacyHighlightActions = computed(() => [
+  {key: "highlight-selected", label: `高亮关系 ${formatNumber(selectedRelationRows.value.length)}`, icon: "⇄", disabled: !selectedRelationRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
 ]);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedObjectId) || visibleRows.value[0] || null);
 const matrix = computed(() => {
@@ -240,6 +245,7 @@ const summaryMetrics = computed(() => [
   {label: "战争", value: formatNumber(metrics.value.counts.Enemy || 0)},
   {label: "附庸", value: formatNumber(metrics.value.counts.Vassal || 0)},
   {label: "已选", value: formatNumber(selectedRelationRows.value.length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "历史", value: formatNumber(metrics.value.history)}
 ]);
 
@@ -314,9 +320,8 @@ watch(() => selected.value?.id, () => {
   relationReasonDraft.value = "";
 });
 
-watch(visibleRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedRelationIds.value = selectedRelationIds.value.filter(id => visibleIds.has(String(id)));
+watch(selectedSubjectId, () => {
+  selectedRelationIds.value = [];
 });
 
 function applyRelationChange(relation) {
@@ -538,6 +543,11 @@ function handleDiplomacyExport(key) {
   if (key === "json") exportJson(visibleRows.value);
   if (key === "selected-csv") exportCsv(selectedRelationRows.value, {selectedOnly: true});
   if (key === "selected-json") exportJson(selectedRelationRows.value, {selectedOnly: true});
+}
+
+function handleDiplomacyHighlightAction(key) {
+  if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRelationRows.value);
+  if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }
 
 function diplomacyToCsv({seed, map, metrics, matrix, relationRows = metrics.rows, selectedOnly = false}) {

@@ -2,6 +2,8 @@ import {markRaw, shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
+import {OBJECT_KIND} from "../../runtime/object-kinds.js";
+import {clearPanelHighlights, highlightPanelRows, readPanelHighlightCount, syncPanelHighlightCount} from "./panel-highlight-actions.js";
 
 const ECONOMY_PANEL_ID = "economy-panel";
 const ECONOMY_COLUMN_WIDTHS = Object.freeze({
@@ -57,6 +59,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     columnWidths: listPreferences.columnWidths,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
+    highlightCount: readPanelHighlightCount(callbacks),
     selectedGoodId: null,
     selectedMarketId: null,
     selectedDealId: null,
@@ -113,8 +116,11 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       if (panelState.tab === "markets") panelState.selectedMarketId = normalizeId(row.id);
       else if (panelState.tab === "deals") panelState.selectedDealId = normalizeId(row.id);
       else panelState.selectedGoodId = normalizeId(row.id);
-      if (row?.locateObject) callbacks.onLocate?.(row.locateObject);
-    }
+      if (panelState.tab === "deals") callbacks.onLocate?.(tradeFlowObject(row));
+      else if (row?.locateObject) callbacks.onLocate?.(row.locateObject);
+    },
+    onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, tradeFlowObject),
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks)
   };
 
   const record = manager.registerPanel(ECONOMY_PANEL_ID, {
@@ -147,6 +153,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       ensureSelection(panelState);
       panelState.version++;
       panelState.open = true;
@@ -173,6 +180,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      syncPanelHighlightCount(panelState, callbacks);
       ensureSelection(panelState);
       panelState.version++;
     },
@@ -226,4 +234,25 @@ function defaultSortKey(tab) {
 
 function normalizeId(value) {
   return toIntegerId(value);
+}
+
+function tradeFlowObject(row) {
+  return {
+    kind: OBJECT_KIND.TRADE_FLOW,
+    id: row.id,
+    goodId: row.goodId,
+    goodName: row.goodName,
+    name: `${row.goodName || `商品 #${row.goodId}`}：${row.sellerName || "卖方"} -> ${row.buyerName || "买方"}`,
+    sellerType: row.sellerType,
+    sellerId: row.sellerId,
+    sellerName: row.sellerName,
+    buyerType: row.buyerType,
+    buyerId: row.buyerId,
+    buyerName: row.buyerName,
+    units: row.units,
+    price: row.price,
+    value: row.value,
+    source: row.source,
+    sourceLabel: row.sourceLabel
+  };
 }

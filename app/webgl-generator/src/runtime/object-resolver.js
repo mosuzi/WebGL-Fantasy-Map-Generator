@@ -1,4 +1,5 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
+import {resolveDiplomacyRelation} from "./diplomacy-relations.js";
 
 const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.CITY]: resolveCity,
@@ -10,6 +11,7 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.LAKE]: resolveLake,
   [OBJECT_KIND.MEASUREMENT]: resolveMeasurement,
   [OBJECT_KIND.MILITARY]: resolveMilitary,
+  [OBJECT_KIND.DIPLOMACY_RELATION]: resolveDiplomacyRelation,
   [OBJECT_KIND.STATE]: resolveState,
   [OBJECT_KIND.PROVINCE]: resolveProvince,
   [OBJECT_KIND.CULTURE]: resolveCulture,

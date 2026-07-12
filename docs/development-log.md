@@ -26202,3 +26202,30 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：9 个目标 JS / MJS 文件 `node --check` 全过；测量高亮回归返回 `measurement / measurement-7`、持久 class `measurement-object-path highlighted`、临时 class `measurement-object-point locate-flash`；可见行选择回归为筛选后 1、空结果后 0、复合 key 1；持久高亮回归为 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1112 modules、耗时 1.43 秒，入口 chunk `1119.80 kB / gzip 324.99 kB`，仅有既有大 chunk 警告；`git diff --check` 通过。pnpm 在沙箱内遇到 registry 失败或无输出后均只升级重跑一次，没有持续挂起；新回归脚本命令已加 `--no-warnings`，避免重复输出 Node 模块类型提示。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，现有 Chrome 仍只有 GitHub commits 页，没有已打开的 FMG 页面。按用户约束未新开或刷新页面、未启动服务器、未重启 Chrome、未使用 Playwright，并已调用会话释放；测量面板多选、点 / 线 / 面 SVG 强调、API resolve / locate / highlight / flash、删除后计数清理、selection / checksum 与 WebGL / console / page / health 断言待可复用 FMG 页面存在时补跑。
+
+### 2026-07-12 外交关系与交易流复合高亮
+
+背景：
+
+- 外交列表一行表示“主体国家 -> 对象国家”的有向关系，不能降级成对象国家单选；附庸 / 宗主等关系反向语义尤其不同。
+- renderer 已保留贸易流 deal 端点、bounds 和旧 pick 代码，但全量 `tradeFlows` 图层已主动退役；直接恢复会重新引入地图噪声和未验证负载。
+
+实现：
+
+- 新增 `OBJECT_KIND.DIPLOMACY_RELATION` 和 `diplomacy-relations.js`；稳定 id 为有方向的 `subjectId:objectId`，resolver 返回双方名称、关系、颜色、倾向与两个国家中心点。
+- 新增 `composite-connectors.js`，统一外交关系与贸易流的两端点解析、去重和线段距离拾取；renderer bounds、selection mesh 和高亮拾取复用同一几何来源。
+- selection layer 为当前外交关系绘制两个国家的轻量范围与连接线，为持久关系高亮绘制 connector；贸易流使用独立绿色当前线和橙色持久线。两类对象都支持 locate / flash。
+- renderer 只拾取当前 selection 或 `objectHighlights` 中的复合 connector，不恢复全量贸易流 buffer；地图上的高亮线可以重新选回外交关系或贸易流。
+- runtime / pick 摘要补充外交关系标题与“关系 / 主体 -> 对象”详情，避免拾取 connector 后显示 `unknown`。
+- 外交面板把原手工关系多选迁移到 `useVisibleRowSelection()`，导出与高亮共用 selection；wrapper 把行映射为有方向关系对象，行内定位现在定位关系两端，单行选择仍保持原国家选择语义。
+- 经济面板把原手工多选迁移到公共 composable；只有交易 tab 且买卖端点有效的勾选行进入贸易流高亮，商品和市场聚合行继续只支持导出。交易行定位改为定位完整贸易流，而不是任取卖方城市。
+- API 持久高亮支持类型扩展到外交关系和贸易流；外交关系编辑或重生成后会重新 resolve 当前集合，更新关系摘要并丢弃失效对象。
+- 新增 `tools/webgl-generator-composite-highlight-regression.mjs` 与 `pnpm run regress:composite-highlight`，覆盖正反关系 id、resolver 端点、两条 connector 的 12 个顶点和各 1 个拾取候选。
+
+验证：
+
+- `node --check` 已覆盖关系 helper、复合 connector、resolver、selection layer、renderer、两个 panel wrapper、`app.js` 和新回归脚本。
+- 直接运行复合高亮回归通过：关系 `1:2`、反向 `2:1`、贸易流 `#7`，connector 顶点 `12`，两类拾取候选均为 `1`。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：任务指定 10 个 JS / MJS 文件及后补 `ui/panel.js` 的 `node --check` 全过；复合回归返回关系 `1:2`、反向 `2:1`、贸易流 `#7`、connector 顶点 `12`、两类拾取候选各 `1`；可见行选择回归为筛选后 `1`、空结果 `0`、复合 key `1`；既有 selection 高亮回归为 `12 / 30 / 30` 顶点；`pnpm run build:app` 构建 1114 modules、耗时 1.32 秒，仅有既有大 chunk 警告；`git diff --check` 通过。沙箱内 pnpm 首次 registry 失败或无输出后均按约束终止并只升级重跑一次，没有持续挂起。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，现有 Chrome 仍只有 GitHub commits 页，没有已打开的 FMG 页面。按约束未 claim、新开或刷新页面，未启动服务器或重启 Chrome，未使用 Playwright，并已 finalize / 释放；外交关系 / 交易流 checkbox、connector 拾取与定位、商品 / 市场禁用边界、跨面板清除、selection / checksum 和 WebGL / console / page / health 断言待可复用 FMG 页面存在时补跑。

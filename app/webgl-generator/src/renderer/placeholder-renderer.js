@@ -43,6 +43,7 @@ import {
   summarizePoliticalVisualPaths
 } from "./political-layer.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
+import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
 import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
@@ -788,14 +789,18 @@ export class PlaceholderMapRenderer {
       : null;
     const marker = markerIcon || pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
     const military = militaryIcon || (this.layerVisibility.military !== false ? pickMilitary(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(13)) : null);
-    const tradeFlow = this.layerVisibility.tradeFlows ? this.pickTradeFlow(world.x, world.y, this.pickThresholdWorld(9)) : null;
+    const highlightedConnector = this.pickHighlightedConnector(world.x, world.y, this.pickThresholdWorld(9));
+    const tradeFlow = this.layerVisibility.tradeFlows
+      ? this.pickTradeFlow(world.x, world.y, this.pickThresholdWorld(9))
+      : highlightedConnector?.kind === OBJECT_KIND.TRADE_FLOW ? highlightedConnector : null;
+    const diplomacyRelation = highlightedConnector?.kind === OBJECT_KIND.DIPLOMACY_RELATION ? highlightedConnector : null;
     const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
     const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
     const lake = pickLakeObject(this.map, result);
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
-    const object = militaryIcon || markerIcon || label || lake || cityObject || marker || military || tradeFlow || river || route || politicalObject;
-    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
-    return result ? {...result, label, cityObject, marker, military, tradeFlow, route, river, lake, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
+    const object = militaryIcon || markerIcon || label || diplomacyRelation || tradeFlow || lake || cityObject || marker || military || river || route || politicalObject;
+    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (highlightedConnector?.candidateCount || tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
+    return result ? {...result, label, cityObject, marker, military, tradeFlow, diplomacyRelation, route, river, lake, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
 
   screenToWorld(clientX, clientY) {
@@ -907,6 +912,10 @@ export class PlaceholderMapRenderer {
     }
     if (best) best.candidateCount = candidateCount;
     return best;
+  }
+
+  pickHighlightedConnector(worldX, worldY, maxDistance) {
+    return pickCompositeConnector(this.map, [this.selection, ...this.objectHighlights], worldX, worldY, maxDistance);
   }
 
   updateRiverBuffer() {
@@ -1716,6 +1725,10 @@ function getObjectBounds(map, object) {
   }
   if (object.kind === OBJECT_KIND.TRADE_FLOW) {
     const points = tradeFlowBoundsPoints(map, object);
+    return points ? pointsBounds(points, 60) : null;
+  }
+  if (object.kind === OBJECT_KIND.DIPLOMACY_RELATION) {
+    const points = compositeConnectorPoints(map, object);
     return points ? pointsBounds(points, 60) : null;
   }
   if (object.kind === OBJECT_KIND.RIVER) {
