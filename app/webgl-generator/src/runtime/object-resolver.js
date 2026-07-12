@@ -8,6 +8,7 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.TRADE_FLOW]: resolveTradeFlow,
   [OBJECT_KIND.RIVER]: resolveRiver,
   [OBJECT_KIND.LAKE]: resolveLake,
+  [OBJECT_KIND.MEASUREMENT]: resolveMeasurement,
   [OBJECT_KIND.MILITARY]: resolveMilitary,
   [OBJECT_KIND.STATE]: resolveState,
   [OBJECT_KIND.PROVINCE]: resolveProvince,
@@ -228,6 +229,22 @@ function resolveLake(map, object) {
     flux: feature.flux,
     evaporation: feature.evaporation,
     firstCell: feature.firstCell
+  };
+}
+
+function resolveMeasurement(map, object) {
+  const measurement = (map?.measurements?.items || []).find(item => String(item?.id || "") === String(object.id || ""));
+  if (!measurement) return null;
+  return {
+    ...object,
+    ...measurement,
+    kind: OBJECT_KIND.MEASUREMENT,
+    id: String(measurement.id),
+    name: measurement.name || String(measurement.id),
+    pointCount: measurement.points?.length || 0,
+    displayPointCount: measurement.summary?.displayPointCount || measurement.points?.length || 0,
+    distance: Number(measurement.summary?.distanceMapUnits) || 0,
+    area: Number(measurement.summary?.areaMapUnits) || 0
   };
 }
 

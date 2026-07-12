@@ -72,6 +72,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {compareListValues} from "../../sort-utils.js";
 
 defineOptions({
@@ -92,7 +93,6 @@ const props = defineProps({
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestId = ref(null);
-const selectedMeasurementIds = ref([]);
 
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
@@ -121,14 +121,15 @@ const rows = computed(() => {
   return measurementRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const selectedMeasurementIdSet = computed(() => new Set(selectedMeasurementIds.value.map(id => String(id))));
-const selectedMeasurementRows = computed(() => visibleRows.value.filter(row => selectedMeasurementIdSet.value.has(String(row.id))));
+const {selectedRowIds: selectedMeasurementIds, selectedRows: selectedMeasurementRows} = useVisibleRowSelection(visibleRows);
 const measurementExportActions = computed(() => [
   {key: "measurement", label: "导出测量", disabled: !visibleRows.value.length},
   {key: "selected-measurements", label: `导出选中 ${formatNumber(selectedMeasurementRows.value.length)}`, disabled: !selectedMeasurementRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
 const measurementListActions = computed(() => [
+  {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMeasurementRows.value.length)}`, icon: "◉", disabled: !selectedMeasurementRows.value.length},
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "edit", label: "编辑测量形状", icon: "◎", disabled: !selected.value},
   {key: "locate", label: "定位测量", icon: "⌖", disabled: !selected.value},
   {key: "delete", label: "删除测量", icon: "×", disabled: !selected.value}
@@ -140,6 +141,7 @@ const summaryMetrics = computed(() => [
   {label: "总长度", value: formatDistanceValue(totalDistance.value)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
   {label: "已选", value: formatNumber(selectedMeasurementRows.value.length)},
+  {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
 const detailRows = computed(() => selected.value ? [
@@ -163,11 +165,6 @@ watch(() => selected.value?.id, id => {
   nextTick(() => {
     activeAction.value = "rename";
   });
-});
-
-watch(visibleRows, nextRows => {
-  const visibleIds = new Set(nextRows.map(row => String(row.id)));
-  selectedMeasurementIds.value = selectedMeasurementIds.value.filter(id => visibleIds.has(String(id)));
 });
 
 function measurementRows(map) {
@@ -264,6 +261,14 @@ function openRenameEditor(row) {
 }
 
 function handleMeasurementAction(key) {
+  if (key === "highlight-selected") {
+    props.callbacks.onHighlight?.(selectedMeasurementRows.value);
+    return;
+  }
+  if (key === "clear-highlights") {
+    props.callbacks.onClearHighlights?.();
+    return;
+  }
   if (!selected.value) return;
   if (key === "edit") props.callbacks.onEdit?.(selected.value);
   if (key === "locate") props.callbacks.onLocate?.(selected.value);

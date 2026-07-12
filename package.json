@@ -28,6 +28,7 @@
     "profile:generation": "node ./tools/webgl-generator-generation-profile.mjs",
     "regress:geo": "node ./tools/webgl-generator-geo-import-regression.mjs",
     "regress:measurement": "node ./tools/webgl-generator-measurement-import-regression.mjs",
+    "regress:measurement-highlight": "node --no-warnings ./tools/webgl-generator-measurement-highlight-regression.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:api-geo": "node ./tools/webgl-generator-api-geo-regression.mjs",

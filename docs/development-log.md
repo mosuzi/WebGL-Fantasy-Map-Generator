@@ -26177,3 +26177,28 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：8 个目标 JS / MJS 文件 `node --check` 全过；可见行选择回归为筛选后 1、空结果后 0、复合 key 裁剪后 1；持久高亮回归为 12 / 30 / 30 顶点，模式为 `multi-object highlight (3)`；`pnpm run build:app` 构建 1111 modules、耗时 1.40 秒，仅有既有主 chunk 超过 500 kB 警告；`git diff --check` 通过。首次 pnpm 在沙箱内因 registry 网络失败，按最小权限策略只升级重跑一次后通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，发现 1 个现有 Chrome 扩展连接，但其中仅有 GitHub 提交页，没有已启动的 FMG 页面可复用。按用户约束未新开页面、未启动服务器、未刷新、未重启 Chrome、未使用 Playwright，并已立即释放；标签隐藏项排除、备注目标过滤、政体国家高亮、跨面板清除、selection / checksum 与 WebGL / console / page / health 断言待可复用 FMG 页面存在时补跑。
+
+### 2026-07-12 测量对象持久高亮模型
+
+背景：
+
+- 测量对象已经有稳定字符串 id、对象面板和独立 SVG overlay，但此前不属于 `OBJECT_KIND`，控制台对象解析也无法查询它。
+- renderer 的持久高亮集合可以统一生命周期和数量统计，但测量形状不应伪装成 WebGL mesh；视觉反馈仍应由 measurement overlay 负责。
+
+实现：
+
+- 新增 `OBJECT_KIND.MEASUREMENT` 与中文类型名，`object-resolver.js` 可按字符串 id 返回测量名称、类型、点数、长度、面积和原始形状数据。
+- 新增 `measurement-highlights.js`，统一测量对象摘要、持久 / 临时状态判断和 SVG class 拼装；renderer 继续保存同一 `objectHighlights` 集合。
+- `api.selection.resolve / select / locate / highlight` 接受测量对象；locate 复用 `measurementBounds()` 与 `renderer.locateBounds()`，flash 会刷新 overlay 并在 renderer 计时结束后清理视觉。
+- 保存测量 overlay 为点、线、面增加 `highlighted` 与 `locate-flash` class，CSS 提供橙色持久强调和独立闪烁动画；相机或高亮集合变化时沿既有 overlay 刷新路径重绘。
+- 测量面板迁移到 `useVisibleRowSelection()`，导出与高亮复用同一 checkbox 集合；wrapper 复用公共高亮桥接与全局数量同步。
+- 测量对象重命名、点列更新或删除后会重新 resolve 当前高亮集合，刷新摘要并丢弃已删除对象，避免无视觉反馈的陈旧计数。
+- 新增 `tools/webgl-generator-measurement-highlight-regression.mjs` 与 `pnpm run regress:measurement-highlight`，覆盖 resolver、对象映射、持久 class、临时 class 和 flash 过期。
+
+验证：
+
+- `node --check` 已覆盖对象 kind、resolver、测量高亮 helper、`app.js`、测量 panel wrapper 和新回归脚本。
+- 直接运行测量高亮回归通过：对象为 `measurement / measurement-7`，持久 class 为 `measurement-object-path highlighted`，临时 class 为 `measurement-object-point locate-flash`。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：9 个目标 JS / MJS 文件 `node --check` 全过；测量高亮回归返回 `measurement / measurement-7`、持久 class `measurement-object-path highlighted`、临时 class `measurement-object-point locate-flash`；可见行选择回归为筛选后 1、空结果后 0、复合 key 1；持久高亮回归为 12 / 30 / 30 顶点；`pnpm run build:app` 构建 1112 modules、耗时 1.43 秒，入口 chunk `1119.80 kB / gzip 324.99 kB`，仅有既有大 chunk 警告；`git diff --check` 通过。pnpm 在沙箱内遇到 registry 失败或无输出后均只升级重跑一次，没有持续挂起；新回归脚本命令已加 `--no-warnings`，避免重复输出 Node 模块类型提示。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只探测一次，现有 Chrome 仍只有 GitHub commits 页，没有已打开的 FMG 页面。按用户约束未新开或刷新页面、未启动服务器、未重启 Chrome、未使用 Playwright，并已调用会话释放；测量面板多选、点 / 线 / 面 SVG 强调、API resolve / locate / highlight / flash、删除后计数清理、selection / checksum 与 WebGL / console / page / health 断言待可复用 FMG 页面存在时补跑。

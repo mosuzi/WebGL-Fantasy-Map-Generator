@@ -914,6 +914,41 @@ select:disabled {
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.48));
 }
 
+.measurement-object-area.highlighted {
+  fill: rgba(255, 166, 76, 0.2);
+  stroke: rgba(255, 183, 92, 0.94);
+  stroke-width: 2.4;
+}
+
+.measurement-object-path.highlighted {
+  stroke: rgba(255, 183, 92, 0.98);
+  stroke-width: 3.4;
+  stroke-dasharray: none;
+}
+
+.measurement-object-point.highlighted {
+  fill: rgba(255, 166, 76, 0.96);
+  stroke: rgba(255, 244, 218, 0.98);
+  stroke-width: 2.4;
+}
+
+.measurement-object-area.locate-flash,
+.measurement-object-path.locate-flash,
+.measurement-object-point.locate-flash {
+  animation: measurement-object-locate-flash 650ms ease-in-out infinite alternate;
+}
+
+@keyframes measurement-object-locate-flash {
+  from {
+    opacity: 0.48;
+  }
+
+  to {
+    opacity: 1;
+    filter: drop-shadow(0 0 7px rgba(255, 224, 161, 0.92));
+  }
+}
+
 .measurement-point {
   fill: #111a20;
   cursor: grab;

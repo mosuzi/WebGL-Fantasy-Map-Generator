@@ -55,6 +55,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-e
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
+import {measurementHighlightObject, measurementShapeClass} from "./measurement-highlights.js";
 import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
@@ -161,6 +162,7 @@ const API_HIGHLIGHT_OBJECT_KINDS = Object.freeze([
   OBJECT_KIND.ROUTE,
   OBJECT_KIND.RIVER,
   OBJECT_KIND.LAKE,
+  OBJECT_KIND.MEASUREMENT,
   OBJECT_KIND.MILITARY,
   OBJECT_KIND.STATE,
   OBJECT_KIND.PROVINCE,
@@ -1389,9 +1391,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onStart: () => {
       startMeasurementMode(state, documentRef);
     },
+    onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
+    onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
+    getHighlightCount: () => persistentObjectHighlightCount(state),
     onRename: (measurementId, name) => {
       const command = createRenameMeasurementCommand(measurementId, name);
       const result = executeEditCommand(state, documentRef, command);
+      if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
       updateMeasurementOverlay(state, documentRef);
     },
     onDelete: row => {
@@ -1404,6 +1410,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         state.measurement.points = [];
         cancelMeasurementDrag(state, documentRef);
       }
+      if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
       updateMeasurementOverlay(state, documentRef);
     },
     onExport: rows => {
@@ -1834,7 +1841,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       select: object => selectObjectViaApi(state, object),
       clear: () => clearSelectionViaApi(state),
       locate: (object, locateOptions = {}) => locateObjectViaApi(state, documentRef, object, {locateObject: options.locateObject, ...locateOptions}),
-      flash: object => flashObjectViaApi(state, object),
+      flash: object => flashObjectViaApi(state, documentRef, object),
       highlight: (objects, highlightOptions = {}) => highlightObjectsViaApi(state, documentRef, objects, highlightOptions),
       clearHighlights: () => clearObjectHighlightsViaApi(state, documentRef),
       startEditing: (object, editOptions = {}) => startEditingObjectViaApi(state, object, editOptions),
@@ -4260,7 +4267,9 @@ function climateApiUpdateResult(state, changed) {
 }
 
 function locateObject(state, object, documentRef, locateOptions = {}) {
-  const located = object ? state.renderer.locateObject(object, locateOptions) : false;
+  const located = object?.kind === OBJECT_KIND.MEASUREMENT
+    ? locateMeasurementBounds(state, object, locateOptions)
+    : object ? state.renderer.locateObject(object, locateOptions) : false;
   if (located) {
     state.selectionStore.setSelection({object});
   }
@@ -4442,7 +4451,7 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
       if (!isSelectionFromPanel(context, "label-naming-panel")) updateLabelNamingPanel(state);
     });
   },
-  measurement: (state, selection, editingObject, context) => {
+  [OBJECT_KIND.MEASUREMENT]: (state, selection, editingObject, context) => {
     state.panels.objectDetails.clear();
     state.panels.measurement?.setSelectedMeasurementId?.(selection.object.id);
     if (isSelectionFromPanel(context, "measurement-panel")) return true;
@@ -4586,11 +4595,12 @@ function locateObjectViaApi(state, documentRef, object, options = {}) {
   };
 }
 
-function flashObjectViaApi(state, object) {
+function flashObjectViaApi(state, documentRef, object) {
   const resolved = resolveObjectViaApi(state, object);
   state.selectionStore.setSelection({object: resolved});
   if (typeof state.renderer?.startLocateFlash !== "function") throw new Error("当前 renderer 不支持临时高亮");
   state.renderer.startLocateFlash(resolved);
+  if (resolved.kind === OBJECT_KIND.MEASUREMENT) updateMeasurementOverlay(state, documentRef);
   const rendererStats = state.renderer.getStats?.() || {};
   return {
     flashed: true,
@@ -4665,6 +4675,17 @@ function persistentObjectHighlightCount(state) {
   return Math.max(0, Number(state.renderer?.getStats?.()?.objectHighlightCount) || 0);
 }
 
+function reconcilePersistentObjectHighlights(state, documentRef) {
+  const current = Array.isArray(state.renderer?.objectHighlights) ? state.renderer.objectHighlights : [];
+  if (!current.length || typeof state.renderer?.setObjectHighlights !== "function") return 0;
+  const next = current
+    .map(object => resolveObject(state.map, object))
+    .filter((resolved, index) => resolved && resolved !== current[index]);
+  state.renderer.setObjectHighlights(next);
+  refreshPersistentHighlightUi(state, documentRef);
+  return next.length;
+}
+
 function deduplicatePersistentHighlights(objects) {
   const seen = new Set();
   return objects.filter(object => {
@@ -4692,6 +4713,8 @@ function refreshPersistentHighlightUi(state, documentRef) {
   updateLabelNamingPanel(state);
   updateNotesPanel(state);
   updateGovernmentPanel(state);
+  updateMeasurementPanel(state);
+  updateMeasurementOverlay(state, documentRef);
 }
 
 function startEditingObjectViaApi(state, object, options = {}) {
@@ -4826,6 +4849,7 @@ function renameMeasurementViaApi(state, documentRef, measurementId, name) {
     status: `已重命名测量对象 ${nextName || id}。`,
     throwOnError: false
   });
+  if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -4844,6 +4868,7 @@ function updateMeasurementPointsViaApi(state, documentRef, measurementId, points
     throwOnError: false
   });
   if (result.executed) state.panels.measurement?.setSelectedMeasurementId?.(id);
+  if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
   updateMeasurementPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
@@ -4858,6 +4883,7 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
     status: `已删除测量对象 ${id}。`,
     throwOnError: false
   });
+  if (result.executed) reconcilePersistentObjectHighlights(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -6376,13 +6402,14 @@ function visibleSavedMeasurements(state) {
 function appendSavedMeasurementShapes(documentRef, svg, state, measurements, rect) {
   if (!measurements.length || !state.renderer) return;
   for (const item of measurements) {
+    const shapeClass = baseClass => measurementShapeClass(baseClass, state.renderer.objectHighlights, state.renderer.locateFlash, item.id);
     const displayPoints = measurementDisplayPoints(item, state.map);
     const screenPoints = displayPoints.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
     if (screenPoints.length === 1 || item.type === "point") {
       const point = screenPoints[0];
       if (!point) continue;
       const circle = documentRef.createElementNS("http://www.w3.org/2000/svg", "circle");
-      circle.setAttribute("class", "measurement-object-point");
+      circle.setAttribute("class", shapeClass("measurement-object-point"));
       circle.dataset.measurementObject = String(item.id || "");
       circle.setAttribute("cx", roundMeasurementDisplay(point.x));
       circle.setAttribute("cy", roundMeasurementDisplay(point.y));
@@ -6392,13 +6419,13 @@ function appendSavedMeasurementShapes(documentRef, svg, state, measurements, rec
     }
     if (screenPoints.length >= 3 && normalizeMeasurementRouteFit(item.routeFit) !== MEASUREMENT_ROUTE_FIT_ROADS && (item.closed || item.type === "polygon")) {
       const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      polygon.setAttribute("class", "measurement-object-area");
+      polygon.setAttribute("class", shapeClass("measurement-object-area"));
       polygon.dataset.measurementObject = String(item.id || "");
       polygon.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
       svg.append(polygon);
     }
     const polyline = documentRef.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    polyline.setAttribute("class", "measurement-object-path");
+    polyline.setAttribute("class", shapeClass("measurement-object-path"));
     polyline.dataset.measurementObject = String(item.id || "");
     polyline.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
     svg.append(polyline);
@@ -6640,21 +6667,18 @@ function locateMeasurement(state, row, documentRef) {
   return located;
 }
 
-function locateMeasurementBounds(state, row) {
+function locateMeasurementBounds(state, row, options = {}) {
   const bounds = measurementBounds(row, 48, state.map);
   return bounds ? state.renderer.locateBounds(bounds, {
     status: `measurement ${row.id}`,
-    minScale: row.pointCount <= 2 ? 2.2 : 1.4,
-    maxScale: 18
+    padding: options.padding,
+    minScale: options.minScale ?? (row.pointCount <= 2 ? 2.2 : 1.4),
+    maxScale: options.maxScale ?? 18
   }) : false;
 }
 
 function measurementObject(row) {
-  return {
-    kind: "measurement",
-    id: row?.id,
-    name: row?.name || row?.id || ""
-  };
+  return measurementHighlightObject(row);
 }
 
 function exportMeasurementObjects(state, documentRef, rows) {
