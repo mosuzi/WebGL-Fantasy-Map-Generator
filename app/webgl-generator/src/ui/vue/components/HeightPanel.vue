@@ -73,18 +73,38 @@
     </div>
     <UiSliderField input-id="height-transform-lower" label="高度下限" :model-value="state.transformLower" :min="0" :max="100" :step="1" @input="setTransformLower" />
     <UiSliderField input-id="height-transform-upper" label="高度上限" :model-value="state.transformUpper" :min="0" :max="100" :step="1" @input="setTransformUpper" />
+    <UiSelectField
+      label="选区构造"
+      input-id="height-selection-source"
+      class-name="height-transform-select"
+      :model-value="state.terrainSelectionSource"
+      :options="terrainSelectionSourceOptions"
+      @update:model-value="setTerrainSelectionSource"
+    />
+    <UiSliderField
+      v-if="state.terrainSelectionSource === 'cursor-circle'"
+      input-id="height-selection-radius"
+      label="圆形半径"
+      :model-value="state.terrainSelectionRadius"
+      :min="8"
+      :max="160"
+      :step="4"
+      @input="setTerrainSelectionRadius"
+    />
+    <p v-if="state.terrainSelectionSource === 'cursor-circle'" class="height-action-help">把鼠标停在地图目标处，再返回面板执行选区组合；没有有效光标时使用当前画布中心，候选仍遵守作用范围。</p>
     <div class="height-terrain-selection">
       <p v-if="state.terrainSelection?.valid">
         <i class="height-terrain-selection-swatch"></i>已锁定 {{ state.terrainSelection.count }} cells / 高度 {{ state.terrainSelection.heightRange?.join('..') }}
+        <span v-if="state.terrainSelection.source === 'cursor-circle'">/ 圆心 #{{ state.terrainSelection.centerCell }} / 半径 {{ state.terrainSelection.radius }}</span>
         <span v-if="state.terrainSelection.rendererSelection">/ GPU {{ state.terrainSelection.rendererSelection.triangleCount }} triangles / {{ state.terrainSelection.rendererSelection.buildMs }} ms</span>
       </p>
       <p v-else>尚未锁定地形选区；锁定时使用当前作用范围和高度区间。</p>
       <p v-if="state.terrainSelection?.notice" class="height-action-help">{{ state.terrainSelection.notice }}</p>
       <div class="height-terrain-selection-actions">
-        <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onTerrainSelectionLock?.('replace')">覆盖锁定</UiButton>
-        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.('union')">并入区间</UiButton>
-        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.('intersect')">保留交集</UiButton>
-        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.('subtract')">排除区间</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('replace'))">覆盖锁定</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('union'))">并入区间</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('intersect'))">保留交集</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('subtract'))">排除区间</UiButton>
         <UiButton class="height-terrain-selection-clear" variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionClear?.()">清除选区</UiButton>
       </div>
       <UiSwitchField
@@ -516,6 +536,10 @@ const transformOperatorOptions = Object.freeze([
   {value: "divide", label: "除算（÷）"},
   {value: "exponent", label: "指数（^）"}
 ]);
+const terrainSelectionSourceOptions = Object.freeze([
+  {value: "height-band", label: "当前高度区间"},
+  {value: "cursor-circle", label: "光标圆形"}
+]);
 const transformOperandDefaults = Object.freeze({add: 5, subtract: 5, multiply: 0.9, divide: 1.1, exponent: 0.9});
 const heightmapFitOptions = Object.freeze([
   {value: "stretch", label: "拉伸铺满"},
@@ -808,6 +832,25 @@ function setScope(scope) {
 
 function setRadius(radius) {
   props.state.radius = radius;
+}
+
+function setTerrainSelectionSource(source) {
+  props.state.terrainSelectionSource = source === "cursor-circle" ? source : "height-band";
+}
+
+function setTerrainSelectionRadius(radius) {
+  props.state.terrainSelectionRadius = radius;
+}
+
+function terrainSelectionRequest(operation) {
+  return {
+    operation,
+    source: props.state.terrainSelectionSource,
+    scope: props.state.scope,
+    lower: props.state.transformLower,
+    upper: props.state.transformUpper,
+    radius: props.state.terrainSelectionRadius
+  };
 }
 
 function setStrength(strength) {

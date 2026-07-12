@@ -1148,6 +1148,29 @@
    - 边界：不预览或应用高度变化，不刷新、新开、启动 Chrome / 服务器；若使用 Playwright，必须在 `finally` 中关闭 browser / context。
    - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，四种组合、坏 id、空结果保护、公开摘要和生产按钮均通过。可视控制通道无法可靠替换 Element Plus 数字框或点击复合滑轨，因此及时释放两轮控制会话；随后为上下限补稳定原生 range id，并由同一子智能体按 browser 插件正式语义连接复用 `5410` 页面，通过原生 input / change 事件设为 `0..100`。仅水域覆盖为 `6678 cells / 39876 triangles`；并入仅陆地后为 `10004 cells`、新增 `3326`、`59841 triangles`；排除仅陆地后回到 `6678 cells`、移除 `3326`、`39876 triangles`。限制开关全程开启，黄色 overlay 随 count 扩张 / 收缩；清除后选区摘要、GPU 统计和黄色 overlay 消失，页面 complete、画布尺寸正常、无 alert / console error。补充稳定 id 后再次执行生产构建与 `git diff --check` 通过，产物包含两个 id 和四个按钮。全程未预览或应用高度变化，未刷新、导航、新建页面或启动 Chrome / 服务器，也未使用独立 Playwright；所有验证智能体已结束。
 
+173. 光标圆形选区纯模型。`已完成`
+   - 目标：按最后一个有效 grid pick 的中心点、独立圆形半径和当前全部 / 陆地 / 水域 scope 生成候选 cell ids；返回中心、半径、count、高度范围与有界 notice。
+   - 安全：缺少 points / cells、无有效 hover、坏中心 cell、空命中和超过 grid 20% / 5000 cells 上限都结构化拒绝，不把候选 ids 送入 UI。
+   - 完成记录：新增 `createHeightCursorRadiusSelection()` 与只读 inspect；用 `grid.cells.p -> grid.points` 取得圆心和每个 cell 点位，按半径平方与 scope 过滤。summary 仅含 source、scope、centerCell、radius、maxCells、count、heightRange、valid 与 notice；安全上限与现有 Fill / 线段一致为 `max(64, min(5000, grid×20%))`。缺图、`null` / 坏中心、缺点位、空命中和超大候选均拒绝。
+
+174. 通用组合摘要支持空间来源。`已完成`
+   - 目标：既有 replace / union / intersect / subtract 统一接受高度 band 或光标圆形候选；summary 额外标识 source、centerCell / radius 或 lower / upper，成功与空结果保护语义不变。
+   - 完成记录：`composeHeightCellSelection()` 按 source 路由 height-band / cursor-circle 候选，统一组合后摘要同时有 source 与来源专属的 lower / upper 或 centerCell / radius / maxCells；未知来源拒绝。四种 Set 运算、空结果旧选区保持、输入 ids 归一和最终 heightRange 继续复用同一路径。
+
+175. 运行时与面板空间选区入口。`已完成`
+   - 目标：高度选区分区增加“高度区间 / 光标圆形”来源和独立半径；用户把鼠标停在地图后可用原四个组合按钮更新黄色选区，运行时优先读取最后 pick，没有有效 hover 时通过 renderer picking 使用当前画布中心，不改地图 selection。
+   - 边界：来源 / 半径是有限面板配置；完整候选 ids、合成 ids 与 Set 仍只留在运行时。切换来源不清除旧选区或变化 preview，只有组合成功才原子替换。
+   - 完成记录：面板状态新增 terrainSelectionSource=`height-band` 与独立 terrainSelectionRadius=`48`；有限 snapshot 暴露 source / radius 和既有有界 selection，不含 ids / Set。UI 新增“当前高度区间 / 光标圆形”来源选择、`8..160` 圆形半径和操作提示；四个按钮提交同一有界 request。运行时在 cursor-circle 时优先读取 `state.pick.gridCell`，缺少有效 hover 则对 canvas 中心调用 renderer `pickClientPoint()` 并更新 pick 面板，再注入纯模型；不改变地图 selection，成功后才清 preview / 更新黄色 buffer。
+
+176. 光标圆形选区回归与中文文档。`已完成`
+   - 目标：覆盖圆心、半径边界、scope、坏 pick、空命中、超大拒绝、空间候选与四种组合、有界 inspect / snapshot；同步专题清单与开发日志。
+   - 完成记录：合成一维地图中心 cell `1`、半径 `11` 命中 `0/1/2`，陆地命中 `1/2`、水域命中 `0`，半径 `1` 只命中圆心；`null` hover 拒绝。`10×10` 地图半径 `256` 超过 maxCells `64` 后拒绝。圆心 cell `3`、半径 `11` 并入旧 `1/2` 得到 `1/2/3`，公开 inspect 无 cellIds。选区模块、运行时、panel wrapper、回归脚本语法、直接高度回归和差异检查通过。
+
+177. 光标圆形选区阶段末统一验收。`已完成`
+   - 目标：烟测子智能体统一跑语法、回归、构建和差异；浏览器子智能体复用现有 `5410` 页面，用语义浏览器把指针停在地图，再执行一次圆形覆盖、扩大半径覆盖和清除，确认 count / GPU / 黄色 overlay 随半径变化。
+   - 边界：不修改高度、不执行区间布尔、不刷新、导航、新建或启动 Chrome / 服务器；若使用独立 Playwright，必须在 `finally` 中关闭 browser / context。
+   - 完成记录：语义浏览器的隔离世界不能构造 PointerEvent，也看不到页面全局 API，相关尝试均按停机条件立即 handoff；据此补齐产品级 canvas 中心 picking 回退。最终子智能体复用同一 `5410` 页面直接操作可见 UI：光标圆形半径 `24` 覆盖得到 A=`13 cells`、圆心 `#4941`、GPU `79 triangles`；半径 `64` 覆盖得到 B=`91 cells`、同圆心、GPU `548 triangles`，满足 `B>A` 且黄色范围明显扩大。限制开关两次均保持，清除后选区摘要、开关、GPU 和黄色 overlay 消失；页面 complete、画布 `2276×1092`、console error 为 `0`。烟测子智能体随后完成 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，产物字段与回退文案齐全。全程未修改高度、刷新、导航、新建或启动 Chrome / 服务器，也未使用独立 Playwright；所有智能体已结束。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1320,3 +1343,4 @@
 - 全局高度工具预览优先批次统一验证完成：烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check`，全部通过；平滑预检 `5/5`、升 `4` / 降 `1`，扰动 seed `23` 预检 `25/18`、升 `10` / 降 `8`，同 / 异 seed、深水保护和 grid / pack 历史成立。浏览器仅一次扰动预览为变化 `2428/3326 cells`、升 `1678` / 降 `750`，GPU `2428 cells / 14584 triangles / 8 ms`，暖 / 冷 overlay 同时出现；唯一一次应用清理全部 preview，撤销 / 重做闭环和稳定地图通过，console error 为 `0`。浏览器未直接读取 seed 数值，证据边界已记录；未刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
 - 高度区间可复用地形选区批次统一验证完成：烟测子智能体执行 7 项 `node --check`、三项回归、生产构建和 `git diff --check`，全部通过；仅陆地 `20..30` 纯模型锁定 ids `1/2`，有界摘要不含 ids / Set，限制条件变换为候选 `2` / 变化 `1`、限制全局平滑为 `1/1`，黄色 mesh 为 `24` 顶点 / `8` 三角形。首轮浏览器数据暴露 `getGlobalHeightChanges()` 漏传 `allowedCells`，修复并增加实际 changes 回归后，子智能体补跑最小烟测和同页浏览器验收均通过：仅陆地 `20..40` 锁定 `1889 cells`，全局扰动文字与 GPU 均为 `1356 cells`，升高 `958`、降低 `398`，GPU `8155 triangles / 11.3 ms`，暖 / 冷 overlay 只叠加于黄色选区。清除后选区及依赖预览完整清理，应用按钮 disabled，地图完整稳定，console error 为 `0`，本轮无 render-frame-gap；未应用地图变化、刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
 - 高度选区布尔组合批次统一验证完成：烟测子智能体执行 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，四种运算、坏 id、空结果旧选区保持、有界摘要与生产按钮均通过。浏览器可视控制无法可靠替换 Element Plus 数字框，相关会话均按停机条件及时释放；补充上下限原生 range id 后，子智能体使用 browser 插件语义连接复用既有 `5410` 页面完成正向闭环：仅水域覆盖 `6678 cells / 39876 triangles`，并入仅陆地为 `10004 cells / +3326 / 59841 triangles`，排除仅陆地回到 `6678 cells / -3326 / 39876 triangles`。限制开关保持，黄色 overlay 同步扩缩；清除后摘要、GPU 和 overlay 消失，页面 / 画布正常且 console error 为 `0`。未预览或应用高度变化，未刷新、导航、新建或启动 Chrome / 服务器，所有子智能体均已结束并释放。
+- 光标圆形高度选区批次统一验证完成：烟测子智能体执行 4 项 `node --check`、高度笔刷 / affected / affected 摘要三项回归、生产构建和 `git diff --check`，圆心 / 半径 / scope / 空中心 / 超大拒绝 / 空间组合与产物字段均通过。语义浏览器隔离世界无法形成 hover pick 后，运行时补产品级 canvas 中心 renderer picking 回退；最终复用同一 `5410` 页面确认半径 `24` 为 `13 cells / 79 triangles`、半径 `64` 为 `91 cells / 548 triangles`，圆心保持 `#4941`，黄色范围扩大且限制开关保持。清除后摘要、开关、GPU 和 overlay 消失，页面 / 画布稳定、console error 为 `0`。未修改高度、刷新、导航、新建或启动 Chrome / 服务器，所有子智能体均已结束释放。

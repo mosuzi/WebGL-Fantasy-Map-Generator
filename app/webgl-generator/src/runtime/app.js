@@ -466,8 +466,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       clearHeightTransformPreview(state);
       updateEditingInteractionLock(state, documentRef);
     },
-    onTerrainSelectionLock: (operation = "replace") => {
-      const options = {...heightPanel.getConditionalTransform(), operation};
+    onTerrainSelectionLock: request => {
+      const options = request && typeof request === "object"
+        ? {...request}
+        : heightPanel.getTerrainSelectionRequest(typeof request === "string" ? request : "replace");
+      if (options.source === "cursor-circle") options.centerCell = resolveHeightSelectionCenterCell(state, canvas, documentRef);
       const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, options);
       if (!selection.summary.valid) {
         state.heightEdit.lastNotice = selection.summary.notice;
@@ -7184,6 +7187,16 @@ function clearHeightTerrainSelection(state, {draw = true} = {}) {
 function heightToolAllowedCells(state) {
   const selection = state.heightEdit.terrainSelection;
   return selection?.useForTools ? selection.cellSet : null;
+}
+
+function resolveHeightSelectionCenterCell(state, canvas, documentRef) {
+  if (Number.isInteger(state.pick?.gridCell) && state.pick.gridCell >= 0) return state.pick.gridCell;
+  const rect = canvas?.getBoundingClientRect?.();
+  if (!rect?.width || !rect?.height) return null;
+  const pick = state.renderer?.pickClientPoint?.(rect.left + rect.width / 2, rect.top + rect.height / 2) || null;
+  state.pick = pick;
+  updatePickPanel(documentRef, state);
+  return Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
 }
 
 function bindStateEditing(canvas, state, documentRef) {

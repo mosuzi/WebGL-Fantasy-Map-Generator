@@ -26740,3 +26740,28 @@ full 矩阵结果：
 - 正向闭环结果：仅水域 `0..100` 覆盖得到 A=`6678 cells`、GPU `39876 triangles`；切到仅陆地并入得到 B=`10004 cells`、新增 `3326`、GPU `59841 triangles`；仍为仅陆地执行排除后回到 `6678 cells`、移除 `3326`、GPU `39876 triangles`。满足 `B - A = added = removed = 3326`，黄色 overlay 与 GPU 几何同步扩张 / 收缩，限制开关全程选中。
 - 清除后选区摘要、GPU 统计和黄色 overlay 消失；页面 readyState complete、画布尺寸正常、无 alert、无 console error。未执行交集、条件 / 全局 preview 或应用、高度历史、笔刷和重算，也未刷新、导航、新建页面或启动 Chrome / 服务器；现有页面 handoff 保留，所有子智能体均已结束释放。
 - 补充稳定输入 id 与最终文档后，烟测子智能体再次执行 `pnpm run build:app` 和 `git diff --check`，均通过；生产 HeightPanel 产物包含 `height-transform-lower / height-transform-upper` 及覆盖、并入、交集、排除四个按钮，没有遗留进程。
+
+### 2026-07-12 光标圆形高度选区
+
+背景：
+
+- 高度 band 和四种布尔组合仍只能按数值构造选区，用户无法直接指向地图上的局部山系、盆地或浅海区域。
+- 第一种空间来源应复用已有 pick 和黄色 GPU buffer，不另造地图 selection，也不能把完整候选 ids 送入 Vue。
+
+实现：
+
+- `height-cell-selection.js` 新增 `createHeightCursorRadiusSelection()` / `inspectHeightCursorRadiusSelection()`。模型从 centerCell 解析 grid 点位，按独立半径和全部 / 陆地 / 水域 scope 扫描候选。
+- 空 hover、坏 cell、缺 points / cells、空命中和超大圆形都返回有界拒绝；maxCells 与 Fill / 线段保持 `max(64, min(5000, grid×20%))`。直接回归曾发现 `Number(null) = 0` 会把空 hover 误认成 cell 0，已改为只接受真正整数。
+- `composeHeightCellSelection()` 新增 source 路由；height-band 保留 lower / upper，cursor-circle 暴露 centerCell / radius / maxCells，四种 Set 运算和空结果保护不分叉。
+- 高度面板新增“选区构造”选择和独立 `8..160` 圆形半径。按钮提交 source / scope / 区间 / 半径的有界 request；运行时优先注入最后 `state.pick.gridCell`，没有有效 hover 时通过 renderer picking 取当前 canvas 中心并更新 pick 面板，不改变地图 selection。有限 editor snapshot 增加 source / radius，完整 ids / Set 仍只在 runtime。
+
+直接验证：
+
+- `node --check` 覆盖选区模块、运行时、panel wrapper 和回归脚本；直接高度回归与 `git diff --check` 通过。
+- 一维高度 `10/20/30/50` 中，以 cell `1` 为圆心、半径 `11`：全部 scope 命中 `0/1/2`、陆地命中 `1/2`、水域命中 `0`，半径 `1` 只命中圆心；空 hover 拒绝。
+- `10×10` 全陆地地图圆心 `55`、半径 `256` 超过 maxCells `64` 后拒绝。以 cell `3`、半径 `11` 的空间候选并入旧 `1/2` 得到 `1/2/3`，summary source / centerCell / radius 正确，公开 inspect 不含 cellIds。
+- 首轮语义浏览器验收成功切换“光标圆形”并用原生 range 输入事件设置半径 `24`，但语义指针移动没有触发 renderer hover；页面隔离世界又不能构造 PointerEvent，且看不到主页面 `webglGeneratorApi / __webglGeneratorApp`，各次都按停机条件立即 handoff，没有直接写 pick/state 或回退 Computer Use。
+- 为避免依赖测试通道，也改善用户尚未 hover 时的交互，新增 `resolveHeightSelectionCenterCell()`：优先复用最后有效 grid pick；没有时读取 canvas rect 中心并调用 renderer `pickClientPoint()`，同步 pick 面板后再走同一纯模型。中心仍无效时由模型拒绝。UI 文案明确“没有有效光标时使用当前画布中心”。
+- 最终浏览器子智能体复用既有 browser 语义连接、同一 `5410` 页面和服务器，只操作可见 UI：半径 `24` 覆盖得到 `13 cells`、圆心 `#4941`、GPU `79 triangles`；半径 `64` 再覆盖得到 `91 cells`、圆心仍为 `#4941`、GPU `548 triangles`。黄色 overlay 与 GPU 范围明显扩大，限制开关两次均保持选中。
+- 清除后选区摘要、限制开关、GPU 摘要和黄色 overlay 消失；页面 readyState complete、画布 `2276×1092`，无 console error。没有执行并入 / 交集 / 排除、条件 / 全局工具、高度历史、笔刷或重算，也没有刷新、导航、新建页面或启动 Chrome / 服务器；现有页面 handoff。
+- 最终烟测子智能体完成 4 项 `node --check`、`regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过。生产产物包含选区构造、光标圆形、圆形半径、稳定输入 id、画布中心回退文案与 snapshot source / radius；未启动或遗留进程。

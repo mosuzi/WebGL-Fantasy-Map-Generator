@@ -3,7 +3,7 @@ export function createHeightCellSelection(map, options = {}) {
   const scope = normalizeScope(options.scope);
   const lower = normalizeBound(options.lower, 20);
   const upper = normalizeBound(options.upper, 100);
-  const base = {scope, lower, upper, count: 0, heightRange: null, valid: false, notice: ""};
+  const base = {source: "height-band", scope, lower, upper, count: 0, heightRange: null, valid: false, notice: ""};
   if (!heights?.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度数据，无法锁定地形选区。"}};
   if (lower > upper) return {cellIds: new Uint32Array(), summary: {...base, notice: "地形选区高度下限不能高于上限。"}};
 
@@ -35,16 +35,79 @@ export function inspectHeightCellSelection(map, options = {}) {
   return createHeightCellSelection(map, options).summary;
 }
 
+export function createHeightCursorRadiusSelection(map, centerCell, options = {}) {
+  const cells = map?.grid?.cells;
+  const points = map?.grid?.points;
+  const scope = normalizeScope(options.scope);
+  const radius = normalizeRadius(options.radius, 48);
+  const maxCells = heightSelectionMaxCells(cells?.h?.length || 0);
+  const normalizedCenter = Number.isInteger(centerCell) ? centerCell : null;
+  const base = {source: "cursor-circle", scope, centerCell: normalizedCenter, radius, maxCells, count: 0, heightRange: null, valid: false, notice: ""};
+  if (!cells?.h?.length || !cells?.p || !Array.isArray(points)) {
+    return {cellIds: new Uint32Array(), summary: {...base, notice: "当前地图缺少高度或点位数据，无法生成光标圆形选区。"}};
+  }
+  if (!Number.isInteger(normalizedCenter) || normalizedCenter < 0 || normalizedCenter >= cells.h.length) {
+    return {cellIds: new Uint32Array(), summary: {...base, centerCell: null, notice: "请先把鼠标停在地图上的有效 cell。"}};
+  }
+  const centerPoint = points[cells.p[normalizedCenter]];
+  if (!centerPoint) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前光标 cell 缺少点位，无法生成圆形选区。"}};
+
+  const radiusSq = radius * radius;
+  const cellIds = [];
+  let minHeight = Infinity;
+  let maxHeight = -Infinity;
+  for (let gridCell = 0; gridCell < cells.h.length; gridCell++) {
+    const height = Number(cells.h[gridCell]) || 0;
+    if (!matchesScope(height, scope)) continue;
+    const point = points[cells.p[gridCell]];
+    if (!point) continue;
+    const dx = point[0] - centerPoint[0];
+    const dy = point[1] - centerPoint[1];
+    if (dx * dx + dy * dy > radiusSq) continue;
+    cellIds.push(gridCell);
+    if (cellIds.length > maxCells) {
+      return {cellIds: new Uint32Array(), summary: {...base, notice: `光标圆形选区超过安全上限 ${maxCells} cells，已拒绝。`}};
+    }
+    minHeight = Math.min(minHeight, height);
+    maxHeight = Math.max(maxHeight, height);
+  }
+  if (!cellIds.length) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前圆形范围没有命中作用范围内的 cells。"}};
+  const typedIds = Uint32Array.from(cellIds);
+  return {
+    cellIds: typedIds,
+    summary: {
+      ...base,
+      count: typedIds.length,
+      heightRange: [minHeight, maxHeight],
+      valid: true,
+      notice: `光标圆形候选 ${typedIds.length} cells（中心 #${normalizedCenter}，半径 ${radius}）。`
+    }
+  };
+}
+
+export function inspectHeightCursorRadiusSelection(map, centerCell, options = {}) {
+  return createHeightCursorRadiusSelection(map, centerCell, options).summary;
+}
+
 export function composeHeightCellSelection(map, currentCellIds, options = {}) {
   const heights = map?.grid?.cells?.h;
   const operation = normalizeCompositionOperation(options.operation);
   const currentIds = normalizeCellIds(currentCellIds, heights?.length || 0);
-  const candidate = createHeightCellSelection(map, options);
+  const source = normalizeSelectionSource(options.source);
+  const candidate = source === "cursor-circle"
+    ? createHeightCursorRadiusSelection(map, options.centerCell, options)
+    : source === "height-band"
+      ? createHeightCellSelection(map, options)
+      : {cellIds: new Uint32Array(), summary: {source: String(options.source || ""), scope: normalizeScope(options.scope), count: 0, heightRange: null, valid: false, notice: "未知的地形选区来源。"}};
   const base = {
     operation,
+    source: candidate.summary.source,
     scope: candidate.summary.scope,
-    lower: candidate.summary.lower,
-    upper: candidate.summary.upper,
+    lower: candidate.summary.lower ?? null,
+    upper: candidate.summary.upper ?? null,
+    centerCell: candidate.summary.centerCell ?? null,
+    radius: candidate.summary.radius ?? null,
+    maxCells: candidate.summary.maxCells ?? null,
     previousCount: currentIds.length,
     incomingCount: candidate.cellIds.length,
     count: currentIds.length,
@@ -131,6 +194,11 @@ function normalizeCompositionOperation(operation) {
   return operation === "replace" || operation === "union" || operation === "intersect" || operation === "subtract" ? operation : null;
 }
 
+function normalizeSelectionSource(source) {
+  if (source === undefined || source === null || source === "") return "height-band";
+  return source === "height-band" || source === "cursor-circle" ? source : null;
+}
+
 function compositionOperationLabel(operation) {
   if (operation === "replace") return "覆盖锁定";
   if (operation === "union") return "并入区间";
@@ -151,4 +219,14 @@ function matchesScope(height, scope) {
 function normalizeBound(value, fallback) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
+}
+
+function normalizeRadius(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(1, Math.min(256, Math.round(numeric))) : fallback;
+}
+
+function heightSelectionMaxCells(cellCount) {
+  if (!cellCount) return 0;
+  return Math.max(64, Math.min(5000, Math.floor(cellCount * 0.2)));
 }

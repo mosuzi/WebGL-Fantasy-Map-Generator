@@ -17,6 +17,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     transformOperand: 0.9,
     transformPreview: null,
     globalToolPreview: null,
+    terrainSelectionSource: "height-band",
+    terrainSelectionRadius: 48,
     terrainSelection: null,
     useTerrainSelection: false,
     falloff: true,
@@ -42,7 +44,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
     onConditionalTransformApply: () => callbacks.onConditionalTransformApply?.(),
     onConditionalTransformChange: () => callbacks.onConditionalTransformChange?.(),
-    onTerrainSelectionLock: operation => callbacks.onTerrainSelectionLock?.(operation),
+    onTerrainSelectionLock: request => callbacks.onTerrainSelectionLock?.(request),
     onTerrainSelectionClear: () => callbacks.onTerrainSelectionClear?.(),
     onTerrainSelectionUseChange: value => callbacks.onTerrainSelectionUseChange?.(value),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
@@ -86,6 +88,14 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     upper: panelState.transformUpper,
     operator: panelState.transformOperator,
     operand: panelState.transformOperand
+  });
+  const getTerrainSelectionRequest = operation => ({
+    operation,
+    source: panelState.terrainSelectionSource,
+    scope: panelState.scope,
+    lower: panelState.transformLower,
+    upper: panelState.transformUpper,
+    radius: panelState.terrainSelectionRadius
   });
 
   return {
@@ -154,9 +164,14 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     },
     getTerrainSelectionSnapshot() {
       return {
+        source: panelState.terrainSelectionSource,
+        radius: panelState.terrainSelectionRadius,
         selection: cloneTerrainSelection(panelState.terrainSelection),
         useForTools: Boolean(panelState.useTerrainSelection && panelState.terrainSelection?.valid)
       };
+    },
+    getTerrainSelectionRequest(operation = "replace") {
+      return getTerrainSelectionRequest(operation);
     },
     updateFillPreview(fillPreview) {
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;

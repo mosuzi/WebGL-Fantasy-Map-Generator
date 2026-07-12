@@ -2,7 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, inspectHeightCellSelection, inspectHeightCellSelectionComposition} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, createHeightCursorRadiusSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCursorRadiusSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -166,6 +166,21 @@ assert(subtractedSelection.summary.valid && [...subtractedSelection.cellIds].joi
 assert(!rejectedEmptySelection.summary.valid && [...rejectedEmptySelection.cellIds].join(",") === "1,2" && rejectedEmptySelection.summary.notice.includes("保留原锁定选区"), `空结果没有保留旧选区：${JSON.stringify(rejectedEmptySelection.summary)}`);
 assert([...normalizedUnionSelection.cellIds].join(",") === "0,1,2", `选区组合没有去重或过滤坏 id：${[...normalizedUnionSelection.cellIds]}`);
 assert(!Object.hasOwn(compositionPreview, "cellIds") && compositionPreview.previousCount === 2 && compositionPreview.count === 3, "公开选区组合摘要暴露 ids 或计数异常");
+const cursorCircleSelection = createHeightCursorRadiusSelection(selectionMap, 1, {scope: "all", radius: 11});
+const landCursorCircleSelection = createHeightCursorRadiusSelection(selectionMap, 1, {scope: "land", radius: 11});
+const waterCursorCircleSelection = createHeightCursorRadiusSelection(selectionMap, 1, {scope: "water", radius: 11});
+const tightCursorCircleSelection = createHeightCursorRadiusSelection(selectionMap, 1, {scope: "all", radius: 1});
+const invalidCursorCircleSelection = inspectHeightCursorRadiusSelection(selectionMap, null, {scope: "all", radius: 11});
+const oversizedCursorCircleSelection = inspectHeightCursorRadiusSelection(createSquareMap(10, () => 30), 55, {scope: "land", radius: 256});
+const cursorUnionSelection = composeHeightCellSelection(selectionMap, replacedSelection.cellIds, {operation: "union", source: "cursor-circle", scope: "all", centerCell: 3, radius: 11});
+const cursorCompositionPreview = inspectHeightCellSelectionComposition(selectionMap, replacedSelection.cellIds, {operation: "union", source: "cursor-circle", scope: "all", centerCell: 3, radius: 11});
+assert(cursorCircleSelection.summary.valid && [...cursorCircleSelection.cellIds].join(",") === "0,1,2" && cursorCircleSelection.summary.heightRange.join(",") === "10,30", `光标圆形选区异常：${JSON.stringify(cursorCircleSelection.summary)}`);
+assert([...landCursorCircleSelection.cellIds].join(",") === "1,2" && [...waterCursorCircleSelection.cellIds].join(",") === "0", "光标圆形选区没有遵守陆水 scope");
+assert([...tightCursorCircleSelection.cellIds].join(",") === "1", `光标圆形最小半径异常：${[...tightCursorCircleSelection.cellIds]}`);
+assert(!invalidCursorCircleSelection.valid && invalidCursorCircleSelection.notice.includes("鼠标"), `坏光标没有被拒绝：${JSON.stringify(invalidCursorCircleSelection)}`);
+assert(!oversizedCursorCircleSelection.valid && oversizedCursorCircleSelection.maxCells === 64 && oversizedCursorCircleSelection.notice.includes("安全上限"), `超大光标圆形没有被拒绝：${JSON.stringify(oversizedCursorCircleSelection)}`);
+assert(cursorUnionSelection.summary.valid && [...cursorUnionSelection.cellIds].join(",") === "1,2,3" && cursorUnionSelection.summary.source === "cursor-circle" && cursorUnionSelection.summary.centerCell === 3 && cursorUnionSelection.summary.radius === 11, `空间候选并入异常：${JSON.stringify(cursorUnionSelection.summary)}`);
+assert(!Object.hasOwn(cursorCompositionPreview, "cellIds") && cursorCompositionPreview.count === 3, "公开空间组合摘要暴露 ids 或计数异常");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -305,6 +320,8 @@ console.log(JSON.stringify({
     subtract: subtractedSelection.summary,
     rejectedEmpty: rejectedEmptySelection.summary
   },
+  cursorCircleSelection: cursorCircleSelection.summary,
+  cursorUnionSelection: cursorUnionSelection.summary,
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,
