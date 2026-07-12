@@ -26326,7 +26326,7 @@ full 矩阵结果：
 - `edit-command-effects.js` 新增 `collectionAffected()`：从 `id / i` 提取对象目标，过滤空项、`removed`、重复 id，并支持排除中立 id 0。
 - 国家重生成记录国家、省份、城市和路线；省份重生成记录省份、城市和路线；路线重生成记录路线；河流重生成记录河流和同步路线；城市重生成记录城市和同步路线。
 - 五条路径统一复用 `systemAffected()`，移除 `app.js` 内重复的 `regenerationAffected()`。
-- `formatAffectedTargets()` 从 UI 提升到运行时共享 helper；`edit-refresh-scheduler` 与标题栏历史格式都默认展示前三项和 `+N`，完整 affected 数组仍供刷新和 API 消费。
+- `formatAffectedTargets()` 从 UI 提升到运行时共享 helper；`edit-refresh-scheduler` 与标题栏历史格式都默认展示前三项和 `+N`。完整 affected 数组只在调度当次消费，不写入长期运行时摘要。
 - 新增 `tools/webgl-generator-affected-summary-regression.mjs` 与 `pnpm run regress:affected-summary`，覆盖集合过滤、国家中立排除、共享格式和 scheduler 摘要。
 
 验证：
@@ -26336,3 +26336,25 @@ full 矩阵结果：
 - `git diff --check` 通过。
 - 阶段末烟测由子智能体执行并通过：7 个目标文件 `node --check` 全过；`regress:affected-summary` 返回路线目标 `4`、国家目标 `2`，共享折叠摘要符合预期；编辑命令 affected 回归覆盖名称库、绑定、清空、外交和高度；持久高亮兼容回归仍为支持 `16` 类、规范化 `3`、拒绝 `2`、去重 `1`、删除后 `2`、上限 `100`；`pnpm run build:app` 构建 1115 modules、耗时 1.45 秒，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后仅检查一次既有 Chrome，唯一页面仍为 GitHub commits，没有现成 FMG 页面；已调用 finalize 释放会话。未 claim、刷新、新开页面、启动服务器或重启 Chrome，未使用 Playwright、未执行重生成；第 126 步刷新摘要、对象面板、selection 与 WebGL / console / page / health 验收继续待执行。
+
+### 2026-07-12 刷新 affected 有界结构化诊断
+
+背景：
+
+- 上一步把数百个真实对象交给刷新调度，并把展示文本折叠为前三项与 `+N`；但只保存文本会丢失机器可读的总量和类型分布。
+- 把完整目标数组直接挂到 `lastEditRefresh` 又会让 API runtime stats、Pinia 快照和调试输出随地图规模线性膨胀。
+
+实现：
+
+- `edit-command-effects.js` 新增 `summarizeAffectedTargets()`，一次生成折叠文本、合法目标总数、前三项目标克隆和按首次出现顺序聚合的 kind 计数。
+- `formatAffectedTargets()` 改为共享结构化摘要的薄封装，历史 UI 输出保持兼容。
+- `edit-refresh-scheduler` 的 `lastEditRefresh` 新增 `affectedCount`、`affectedPreview` 和 `affectedKinds`；不保存完整 affected 数组。
+- `regress:affected-summary` 新增 1001 目标压力断言，确保预览恒为 3 项，文本以 `+998` 折叠，结构化摘要序列化体积小于 320 字节。
+
+验证：
+
+- `node --check` 覆盖 affected helper、刷新调度和扩展回归脚本；直接回归通过：普通集合总数 `5`、kind 计数为 `derived-system=1 / route=4`，1001 目标摘要为 239 字节。
+- 既有 `regress:edit-command-affected` 继续通过。
+- `git diff --check` 通过。
+- 阶段末烟测由子智能体执行并通过：6 个目标文件 `node --check` 全过；affected 摘要回归返回 `affectedCount=5`、`affectedKinds=derived-system×1 / route×4`，1001 目标摘要为 239 字节；编辑命令 affected 与持久高亮契约兼容回归均通过；`pnpm run build:app` 构建 1115 modules、耗时 1.44 秒，入口 1128.58 kB / gzip 327.43 kB，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 阶段末浏览器子智能体完整读取 Browser / Chrome 技能后只检查一次现有 Chrome，唯一页面仍为 GitHub commits，没有已打开的 FMG 页面；已 finalize 并释放。未认领、刷新或新建页面，未启动 Chrome、开发服务器或 Playwright，道路重生成与单次 `runtimeStats()` 验收继续列入第 128 步。

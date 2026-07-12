@@ -69,7 +69,7 @@
 
 批量重算或全量重生成命令的 `affected` 不应只写 `{kind: "xxx", id: "all"}`。建议先追加一个系统级目标，例如 `{kind: "derived-system", id: "routes"}`、`{kind: "derived-system", id: "rivers"}`，再列出会被刷新或替换的对象集合。这样历史摘要可以解释“为什么是全量”，面板刷新仍能按对象 kind 工作。
 
-对象集合应优先使用 `collectionAffected(kind, objects, options)` 提取真实目标；该 helper 会过滤空项、`removed` 对象和重复 id，并可通过 `includeZero: false` 排除国家 / 省份的中立项。运行时刷新摘要与历史标题统一使用 `formatAffectedTargets()`，默认只显示前三项和 `+N`，因此保留完整对象数组不会制造巨量 UI 文本。
+对象集合应优先使用 `collectionAffected(kind, objects, options)` 提取真实目标；该 helper 会过滤空项、`removed` 对象和重复 id，并可通过 `includeZero: false` 排除国家 / 省份的中立项。运行时刷新摘要与历史标题统一使用 `formatAffectedTargets()`，默认只显示前三项和 `+N`。`lastEditRefresh` 不保存完整大数组，而是保存 `affectedCount`、前三项 `affectedPreview` 和按 kind 聚合的 `affectedKinds`；完整数组只在调度当次消费。
 
 新增对象命令如果真实 id 只能在 `apply()` 时确定，初始 `affected` 应使用 `{kind, id: "new"}`，执行成功后再回写真实 id。这样执行前诊断、失败路径和历史摘要都能知道命令目标类型。
 

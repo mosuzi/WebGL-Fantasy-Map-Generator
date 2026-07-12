@@ -1,4 +1,4 @@
-import {formatAffectedTargets} from "./edit-command-effects.js";
+import {summarizeAffectedTargets} from "./edit-command-effects.js";
 
 const DEFAULT_EDIT_EFFECTS = Object.freeze({
   render: "draw",
@@ -121,13 +121,16 @@ export function normalizeEditEffects(effects = {}) {
 }
 
 function summarizeEditRefresh(effects) {
-  const affected = formatAffectedTargets(effects.affected) || "none";
+  const affectedSummary = summarizeAffectedTargets(effects.affected);
   const pendingDerived = effects.derived.filter(item => item.startsWith("defer:")).map(item => item.slice("defer:".length));
   return {
     render: effects.render,
     selection: effects.selection,
     derived: effects.derived.join(", "),
     pendingDerived: pendingDerived.join(", ") || "none",
-    affected
+    affected: affectedSummary.text || "none",
+    affectedCount: affectedSummary.count,
+    affectedPreview: affectedSummary.preview,
+    affectedKinds: affectedSummary.kinds
   };
 }
