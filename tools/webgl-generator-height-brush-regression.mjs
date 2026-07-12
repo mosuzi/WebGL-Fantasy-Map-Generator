@@ -2,7 +2,7 @@
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
-import {createHeightCellSelection, createHeightCellSelectionSet, inspectHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionSet, inspectHeightCellSelection, inspectHeightCellSelectionComposition} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -151,6 +151,21 @@ const terrainSelectionMesh = buildHeightCellSelectionMesh(createTransformPreview
 assert(terrainSelectionMesh.stats.cells === 2 && terrainSelectionMesh.stats.skippedCells === 2 && terrainSelectionMesh.stats.vertexCount === 24 && terrainSelectionMesh.stats.triangleCount === 8, `地形选区 mesh 异常：${JSON.stringify(terrainSelectionMesh.stats)}`);
 assert(terrainSelectionMesh.vertices[2] === 1 && terrainSelectionMesh.vertices[3] > 0.77 && terrainSelectionMesh.vertices[4] > 0.17, "地形选区没有使用黄色 overlay");
 assert(terrainSelectionSet.has(1) && terrainSelectionSet.has(2), "地形选区 Set 丢失稳定 grid id");
+const selectionMap = createSyntheticMap();
+const replacedSelection = composeHeightCellSelection(selectionMap, null, {operation: "replace", scope: "land", lower: 20, upper: 30});
+const unionSelection = composeHeightCellSelection(selectionMap, replacedSelection.cellIds, {operation: "union", scope: "water", lower: 0, upper: 19});
+const intersectedSelection = composeHeightCellSelection(selectionMap, unionSelection.cellIds, {operation: "intersect", scope: "land", lower: 30, upper: 50});
+const subtractedSelection = composeHeightCellSelection(selectionMap, replacedSelection.cellIds, {operation: "subtract", scope: "land", lower: 30, upper: 30});
+const rejectedEmptySelection = composeHeightCellSelection(selectionMap, replacedSelection.cellIds, {operation: "subtract", scope: "land", lower: 20, upper: 30});
+const normalizedUnionSelection = composeHeightCellSelection(selectionMap, [2, 2, -1, 99, 1], {operation: "union", scope: "water", lower: 10, upper: 10});
+const compositionPreview = inspectHeightCellSelectionComposition(selectionMap, replacedSelection.cellIds, {operation: "union", scope: "water", lower: 10, upper: 10});
+assert(replacedSelection.summary.valid && [...replacedSelection.cellIds].join(",") === "1,2" && replacedSelection.summary.addedCount === 2, `覆盖锁定异常：${JSON.stringify(replacedSelection.summary)}`);
+assert(unionSelection.summary.valid && [...unionSelection.cellIds].join(",") === "0,1,2" && unionSelection.summary.addedCount === 1 && unionSelection.summary.removedCount === 0, `选区并入异常：${JSON.stringify(unionSelection.summary)}`);
+assert(intersectedSelection.summary.valid && [...intersectedSelection.cellIds].join(",") === "2" && intersectedSelection.summary.removedCount === 2, `选区交集异常：${JSON.stringify(intersectedSelection.summary)}`);
+assert(subtractedSelection.summary.valid && [...subtractedSelection.cellIds].join(",") === "1" && subtractedSelection.summary.removedCount === 1, `选区排除异常：${JSON.stringify(subtractedSelection.summary)}`);
+assert(!rejectedEmptySelection.summary.valid && [...rejectedEmptySelection.cellIds].join(",") === "1,2" && rejectedEmptySelection.summary.notice.includes("保留原锁定选区"), `空结果没有保留旧选区：${JSON.stringify(rejectedEmptySelection.summary)}`);
+assert([...normalizedUnionSelection.cellIds].join(",") === "0,1,2", `选区组合没有去重或过滤坏 id：${[...normalizedUnionSelection.cellIds]}`);
+assert(!Object.hasOwn(compositionPreview, "cellIds") && compositionPreview.previousCount === 2 && compositionPreview.count === 3, "公开选区组合摘要暴露 ids 或计数异常");
 
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
@@ -283,6 +298,13 @@ console.log(JSON.stringify({
   selectedRangePreview,
   selectedGlobalPreview,
   terrainSelectionMesh: terrainSelectionMesh.stats,
+  selectionComposition: {
+    replace: replacedSelection.summary,
+    union: unionSelection.summary,
+    intersect: intersectedSelection.summary,
+    subtract: subtractedSelection.summary,
+    rejectedEmpty: rejectedEmptySelection.summary
+  },
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

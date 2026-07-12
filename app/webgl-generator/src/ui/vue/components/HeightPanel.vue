@@ -71,17 +71,21 @@
       <strong id="height-transform-title">高度区间条件变换</strong>
       <span>先预检，再执行</span>
     </div>
-    <UiSliderField label="高度下限" :model-value="state.transformLower" :min="0" :max="100" :step="1" @input="setTransformLower" />
-    <UiSliderField label="高度上限" :model-value="state.transformUpper" :min="0" :max="100" :step="1" @input="setTransformUpper" />
+    <UiSliderField input-id="height-transform-lower" label="高度下限" :model-value="state.transformLower" :min="0" :max="100" :step="1" @input="setTransformLower" />
+    <UiSliderField input-id="height-transform-upper" label="高度上限" :model-value="state.transformUpper" :min="0" :max="100" :step="1" @input="setTransformUpper" />
     <div class="height-terrain-selection">
       <p v-if="state.terrainSelection?.valid">
         <i class="height-terrain-selection-swatch"></i>已锁定 {{ state.terrainSelection.count }} cells / 高度 {{ state.terrainSelection.heightRange?.join('..') }}
         <span v-if="state.terrainSelection.rendererSelection">/ GPU {{ state.terrainSelection.rendererSelection.triangleCount }} triangles / {{ state.terrainSelection.rendererSelection.buildMs }} ms</span>
       </p>
       <p v-else>尚未锁定地形选区；锁定时使用当前作用范围和高度区间。</p>
+      <p v-if="state.terrainSelection?.notice" class="height-action-help">{{ state.terrainSelection.notice }}</p>
       <div class="height-terrain-selection-actions">
-        <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onTerrainSelectionLock?.()">锁定当前区间</UiButton>
-        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionClear?.()">清除选区</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onTerrainSelectionLock?.('replace')">覆盖锁定</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.('union')">并入区间</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.('intersect')">保留交集</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.('subtract')">排除区间</UiButton>
+        <UiButton class="height-terrain-selection-clear" variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionClear?.()">清除选区</UiButton>
       </div>
       <UiSwitchField
         v-if="state.terrainSelection?.valid"

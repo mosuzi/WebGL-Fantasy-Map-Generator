@@ -1126,6 +1126,28 @@
    - 边界：本轮浏览器不应用地图变化，避免连续全图命令；不持续改区间或刷新，不新开 / 重启 Chrome 或服务器；若使用 Playwright，必须在 `finally` 中关闭 browser / context。
    - 完成记录：烟测子智能体完成 7 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、生产构建和 `git diff --check`，全部通过；有界公开摘要、allowedCells 过滤、黄色 mesh 与生产产物字段均已覆盖。首轮浏览器验收发现摘要变化 `1356`、GPU preview `2428 cells` 不一致，追查为 `getGlobalHeightChanges()` 遗漏转发 `allowedCells`；修复后新增实际 changes 断言并补跑语法、回归、构建和差异检查，全部通过。浏览器复用既有 `5410` 页面补验：锁定仅陆地 `20..40` 得到 `1889 cells`，唯一一次全局扰动预览文字与 GPU 均为 `1356 cells`，满足 `1356 <= 1889`；升高 `958`、降低 `398`，GPU 为 `8155 triangles / 11.3 ms`，暖 / 冷变化只叠加于黄色选区。清除后选区、限制开关、黄色 overlay、依赖预览 / 图例 / GPU 统计全部消失，应用按钮 disabled，地图完整稳定，console error 为 `0`；本轮没有 render-frame-gap，仅三条 React DevTools extension URL 相关 long-task warn。全程未应用地图变化、刷新、新开或启动 Chrome / 服务器，也未使用 Playwright；两个子智能体均已结束。
 
+168. 高度选区布尔组合纯模型。`已完成`
+   - 目标：以当前作用范围和高度闭区间生成候选 band，再对已有稳定 grid ids 执行覆盖、并入、取交集和排除；返回有界前后数量、增减数量、高度范围和中文 notice，不把完整 ids 暴露给 UI。
+   - 安全：交集 / 排除结果为空时结构化拒绝并保留旧选区；输入 ids 去重、排序并限制在当前 grid 范围，避免坏 id 进入 renderer 或工具过滤 Set。
+   - 完成记录：`height-cell-selection.js` 新增 `composeHeightCellSelection()` 和只读 `inspectHeightCellSelectionComposition()`；四种运算统一返回 operation、scope / 区间、previous / incoming / result count、added / removed、heightRange、valid 与 notice。输入 ids 会按当前 grid 去重、排序和裁边；交集 / 排除空结果返回旧 typed ids 并明确提示使用“清除选区”。
+
+169. 选区组合运行时与 GPU 更新。`已完成`
+   - 目标：组合成功后原子替换 runtime cellIds / cellSet / summary 和黄色 GPU buffer，并继续默认启用工具限制；组合失败只更新有界提示，不破坏旧选区或依赖 preview。
+   - 完成记录：运行时锁定回调接收 operation，先用旧 cellIds 计算完整组合；valid 后才清理一次性变化 preview、重建 cellSet / 黄色 GPU buffer 并原子替换 terrainSelection，失败只更新 lastNotice。组合成功继续默认开启 useForTools，有限面板与编辑器快照仍只接收 summary 和 renderer stats。
+
+170. 高度面板四种选区组合入口。`已完成`
+   - 目标：在高度区间分区提供覆盖锁定、并入区间、保留交集和排除区间四个明确动作，并显示本次组合的增减摘要；没有已有选区时只允许覆盖。
+   - 完成记录：原“锁定当前区间”扩展为 2×2 的覆盖锁定、并入区间、保留交集、排除区间，清除选区独占整行；没有有效旧选区时后三项 disabled。选区卡片直接显示有界 operation notice、当前 count / heightRange 和 GPU 统计。
+
+171. 选区组合回归与中文文档。`已完成`
+   - 目标：覆盖四种运算、重复 / 坏 id、空结果拒绝、旧选区保持、有界摘要和 runtime snapshot 不泄漏 ids / Set；同步专题清单与开发日志。
+   - 完成记录：合成 `10/20/30/50` 地图覆盖得到 ids `1/2`，并入水域得到 `0/1/2`，交集得到 `2`，排除得到 `1`；全量排除被拒绝并保留 `1/2`，重复 / 负数 / 越界 id 被归一。公开 composition inspect 不含 cellIds。选区模块、运行时、panel wrapper、扩展回归脚本语法、直接高度回归和 `git diff --check` 通过。
+
+172. 选区组合阶段末统一验收。`已完成`
+   - 目标：烟测子智能体统一跑语法、回归、构建和差异；浏览器子智能体复用现有 FMG 页面，只做一条“覆盖 -> 并入 -> 排除 -> 清除”闭环，确认 count / 增减摘要、黄色 overlay 和限制开关。
+   - 边界：不预览或应用高度变化，不刷新、新开、启动 Chrome / 服务器；若使用 Playwright，必须在 `finally` 中关闭 browser / context。
+   - 完成记录：烟测子智能体完成 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，四种组合、坏 id、空结果保护、公开摘要和生产按钮均通过。可视控制通道无法可靠替换 Element Plus 数字框或点击复合滑轨，因此及时释放两轮控制会话；随后为上下限补稳定原生 range id，并由同一子智能体按 browser 插件正式语义连接复用 `5410` 页面，通过原生 input / change 事件设为 `0..100`。仅水域覆盖为 `6678 cells / 39876 triangles`；并入仅陆地后为 `10004 cells`、新增 `3326`、`59841 triangles`；排除仅陆地后回到 `6678 cells`、移除 `3326`、`39876 triangles`。限制开关全程开启，黄色 overlay 随 count 扩张 / 收缩；清除后选区摘要、GPU 统计和黄色 overlay 消失，页面 complete、画布尺寸正常、无 alert / console error。补充稳定 id 后再次执行生产构建与 `git diff --check` 通过，产物包含两个 id 和四个按钮。全程未预览或应用高度变化，未刷新、导航、新建页面或启动 Chrome / 服务器，也未使用独立 Playwright；所有验证智能体已结束。
+
 ### 验证要求
 
 - 每个代码步骤至少运行相关文件的 `node --check` 和 `git diff --check`。
@@ -1297,3 +1319,4 @@
 - 条件变换 WebGL 空间预览批次统一验证完成：烟测子智能体执行 preview layer、renderer、运行时等 6 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check`，补充 GPU 统计 UI 后再跑 3 项语法检查、构建与差异检查，全部通过；合成 mesh 为 `24` 顶点 / `8` 三角形且暖冷色、坏 cell / 坏地图保护成立。浏览器唯一一次有效预检显示降低 `2746/3326 cells`，地图出现冷蓝 overlay，可见 GPU 统计 `2746 cells / 16466 triangles / 9.1 ms`；参数变化后 preview、图例、统计和 overlay 同时清理，地图稳定且 console error 为 `0`。未执行地图变换、刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
 - 全局高度工具预览优先批次统一验证完成：烟测子智能体执行 5 项 `node --check`、高度笔刷 / 编辑命令 affected / affected 摘要三项回归、`pnpm run build:app` 和 `git diff --check`，全部通过；平滑预检 `5/5`、升 `4` / 降 `1`，扰动 seed `23` 预检 `25/18`、升 `10` / 降 `8`，同 / 异 seed、深水保护和 grid / pack 历史成立。浏览器仅一次扰动预览为变化 `2428/3326 cells`、升 `1678` / 降 `750`，GPU `2428 cells / 14584 triangles / 8 ms`，暖 / 冷 overlay 同时出现；唯一一次应用清理全部 preview，撤销 / 重做闭环和稳定地图通过，console error 为 `0`。浏览器未直接读取 seed 数值，证据边界已记录；未刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
 - 高度区间可复用地形选区批次统一验证完成：烟测子智能体执行 7 项 `node --check`、三项回归、生产构建和 `git diff --check`，全部通过；仅陆地 `20..30` 纯模型锁定 ids `1/2`，有界摘要不含 ids / Set，限制条件变换为候选 `2` / 变化 `1`、限制全局平滑为 `1/1`，黄色 mesh 为 `24` 顶点 / `8` 三角形。首轮浏览器数据暴露 `getGlobalHeightChanges()` 漏传 `allowedCells`，修复并增加实际 changes 回归后，子智能体补跑最小烟测和同页浏览器验收均通过：仅陆地 `20..40` 锁定 `1889 cells`，全局扰动文字与 GPU 均为 `1356 cells`，升高 `958`、降低 `398`，GPU `8155 triangles / 11.3 ms`，暖 / 冷 overlay 只叠加于黄色选区。清除后选区及依赖预览完整清理，应用按钮 disabled，地图完整稳定，console error 为 `0`，本轮无 render-frame-gap；未应用地图变化、刷新或启动 Chrome、服务器、Playwright，两个子智能体均已结束并释放会话。
+- 高度选区布尔组合批次统一验证完成：烟测子智能体执行 4 项 `node --check`、三项回归、生产构建和 `git diff --check`，四种运算、坏 id、空结果旧选区保持、有界摘要与生产按钮均通过。浏览器可视控制无法可靠替换 Element Plus 数字框，相关会话均按停机条件及时释放；补充上下限原生 range id 后，子智能体使用 browser 插件语义连接复用既有 `5410` 页面完成正向闭环：仅水域覆盖 `6678 cells / 39876 triangles`，并入仅陆地为 `10004 cells / +3326 / 59841 triangles`，排除仅陆地回到 `6678 cells / -3326 / 39876 triangles`。限制开关保持，黄色 overlay 同步扩缩；清除后摘要、GPU 和 overlay 消失，页面 / 画布正常且 console error 为 `0`。未预览或应用高度变化，未刷新、导航、新建或启动 Chrome / 服务器，所有子智能体均已结束并释放。

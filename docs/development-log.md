@@ -26714,3 +26714,29 @@ full 矩阵结果：
 - 浏览器子智能体继续复用同一 `5410` 页面补验，没有刷新、新开、启动 Chrome / 服务器或使用 Playwright。锁定 `1889 cells` 后只预览一次全局扰动：文字 changeCount 与 GPU preview cells 均为 `1356`，满足 `1356 = 1356 <= 1889`；GPU 为 `8155 triangles / 11.3 ms`，升高 `958`、降低 `398`，高度 `20..40 -> 20..42`、平均变化 `+0.8`。截图确认暖橙 / 冷蓝变化只叠加于黄色选区，高海拔未选灰白区保持无变化，应用按钮启用；没有应用地图变化、历史、笔刷、条件工具或派生重算。
 - 补验只清除一次后，选区摘要、限制开关、黄色 overlay、依赖预览文字 / 图例 / GPU 统计和暖冷 overlay 全部消失，应用按钮 disabled，地图完整稳定，console error 为 `0`。Health 仅三条来自 React DevTools extension URL 的 `main-thread-long-task`，本轮没有 render-frame-gap。
 - 烟测与浏览器子智能体均已完成并释放；浏览器控制会话 finalize / handoff，没有新增进程。
+
+### 2026-07-12 高度选区布尔组合
+
+背景：
+
+- 高度 band 已能一次锁定为可复用选区，但改变上下限后只能覆盖旧结果，不能把多个离散高度带合并，也不能从大选区中排除某一高度层。
+- 组合操作仍必须保持完整 ids / Set 只存在于运行时；失败不能误清空旧选区或清掉基于旧选区的有效 preview。
+
+实现：
+
+- `height-cell-selection.js` 新增 `composeHeightCellSelection()`，支持 replace / union / intersect / subtract。当前 ids 与候选 ids 都按 grid 长度过滤、去重并升序输出为 `Uint32Array`。
+- 有界 summary 新增 operation、previousCount、incomingCount、count、addedCount、removedCount、heightRange、valid 和中文 notice；`inspectHeightCellSelectionComposition()` 只返回 summary。交集 / 排除结果为空时返回旧 ids、valid=false，并提示用户显式使用“清除选区”。
+- 运行时先完成纯组合，只有成功后才清理暖 / 冷 preview、重建 cellSet、上传黄色选区 buffer，并原子替换 terrainSelection；失败只写 lastNotice。组合成功默认继续启用工具限制。
+- 高度面板把单一锁定按钮扩展为覆盖锁定、并入区间、保留交集和排除区间四个入口；没有旧选区时后三项 disabled，清除按钮独占整行。卡片直接显示本次组合增减 notice。
+
+直接验证：
+
+- `node --check` 覆盖选区模块、运行时、panel wrapper 和高度回归脚本；直接高度回归与 `git diff --check` 通过。
+- 合成高度 `10/20/30/50`：覆盖陆地 `20..30` 得到 `1/2`；并入水域 `0..19` 得到 `0/1/2`、新增 `1`；与陆地 `30..50` 交集得到 `2`、移除 `2`；从 `1/2` 排除 `30` 得到 `1`、移除 `1`。
+- 从 `1/2` 排除完整 `20..30` 会拒绝并保留旧 ids；输入 `[2,2,-1,99,1]` 再并入水域会归一为 `0/1/2`。公开 composition inspect 不含 cellIds，previousCount `2`、result count `3`。
+- 阶段末烟测子智能体完成选区模块、运行时、panel wrapper 和回归脚本 4 项 `node --check`，以及 `regress:height-brush`、`regress:edit-command-affected`、`regress:affected-summary`、`pnpm run build:app` 和 `git diff --check`，全部通过；产物包含四个操作按钮和组合 helper，公开摘要不含 cellIds。未启动或遗留进程。
+- 首轮可视浏览器控制已证明 `20..30` 覆盖锁定为 `1105 cells / 6672 triangles / 16.5 ms`，黄色 overlay 与限制开关正常，清除后入口状态正确；但受控键盘的 `Ctrl+A` 仍产生 `2020`，滑轨视觉左端点击也未把下限从 `20` 改为 `0`。各智能体都按预设停机条件立即停止并 finalize，没有刷新或另启资源，不能用这些失败交互证明并入 / 排除。
+- 为提供稳定而非猜测的浏览器入口，条件上下限 `UiSliderField` 新增 `height-transform-lower / height-transform-upper` 原生 range id。最终子智能体完整读取 browser 插件技能和连接文档，复用既有 `5410` 页面，通过原生 input / change 事件驱动正常 Vue 输入链路，没有直接改 runtime state，也没有使用鼠标键盘模拟或独立 Playwright。
+- 正向闭环结果：仅水域 `0..100` 覆盖得到 A=`6678 cells`、GPU `39876 triangles`；切到仅陆地并入得到 B=`10004 cells`、新增 `3326`、GPU `59841 triangles`；仍为仅陆地执行排除后回到 `6678 cells`、移除 `3326`、GPU `39876 triangles`。满足 `B - A = added = removed = 3326`，黄色 overlay 与 GPU 几何同步扩张 / 收缩，限制开关全程选中。
+- 清除后选区摘要、GPU 统计和黄色 overlay 消失；页面 readyState complete、画布尺寸正常、无 alert、无 console error。未执行交集、条件 / 全局 preview 或应用、高度历史、笔刷和重算，也未刷新、导航、新建页面或启动 Chrome / 服务器；现有页面 handoff 保留，所有子智能体均已结束释放。
+- 补充稳定输入 id 与最终文档后，烟测子智能体再次执行 `pnpm run build:app` 和 `git diff --check`，均通过；生产 HeightPanel 产物包含 `height-transform-lower / height-transform-upper` 及覆盖、并入、交集、排除四个按钮，没有遗留进程。

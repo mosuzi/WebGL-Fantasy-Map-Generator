@@ -56,7 +56,7 @@ import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureCol
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
-import {createHeightCellSelection, createHeightCellSelectionSet} from "./height-cell-selection.js";
+import {composeHeightCellSelection, createHeightCellSelectionSet} from "./height-cell-selection.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -466,15 +466,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       clearHeightTransformPreview(state);
       updateEditingInteractionLock(state, documentRef);
     },
-    onTerrainSelectionLock: () => {
-      clearHeightTransformPreview(state);
-      const options = heightPanel.getConditionalTransform();
-      const selection = createHeightCellSelection(state.map, options);
+    onTerrainSelectionLock: (operation = "replace") => {
+      const options = {...heightPanel.getConditionalTransform(), operation};
+      const selection = composeHeightCellSelection(state.map, state.heightEdit.terrainSelection?.cellIds, options);
       if (!selection.summary.valid) {
         state.heightEdit.lastNotice = selection.summary.notice;
         updateHeightPanel(state);
         return selection.summary;
       }
+      clearHeightTransformPreview(state);
       const cellSet = createHeightCellSelectionSet(selection.cellIds);
       const rendererSelection = state.renderer?.setHeightCellSelection?.(selection.cellIds) || null;
       const summary = {...selection.summary, rendererSelection};
