@@ -17,6 +17,12 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     transformOperand: 0.9,
     transformPreview: null,
     globalToolPreview: null,
+    terrainTemplateId: "plateau",
+    terrainTemplateIntensity: 0.7,
+    terrainTemplateTargetHeight: 68,
+    terrainTemplateTerraceStep: 10,
+    terrainTemplateAmplitude: 12,
+    terrainTemplatePreview: null,
     terrainSelectionSource: "height-band",
     terrainSelectionRadius: 48,
     terrainSelectionTolerance: 6,
@@ -44,6 +50,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.(),
     onGlobalToolPreview: action => callbacks.onGlobalToolPreview?.(action),
     onGlobalToolApply: () => callbacks.onGlobalToolApply?.(),
+    onTerrainTemplatePreview: () => callbacks.onTerrainTemplatePreview?.(),
+    onTerrainTemplateApply: () => callbacks.onTerrainTemplateApply?.(),
+    onTerrainTemplateChange: () => callbacks.onTerrainTemplateChange?.(),
     onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
     onConditionalTransformApply: () => callbacks.onConditionalTransformApply?.(),
     onConditionalTransformChange: () => callbacks.onConditionalTransformChange?.(),
@@ -122,6 +131,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       fillPreview = panelState.fillPreview,
       transformPreview = panelState.transformPreview,
       globalToolPreview = panelState.globalToolPreview,
+      terrainTemplatePreview = panelState.terrainTemplatePreview,
       terrainSelection = panelState.terrainSelection,
       terrainSelectionSaved = panelState.terrainSelectionSaved,
       terrainSelectionFeather = panelState.terrainSelectionFeather,
@@ -140,6 +150,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.fillPreview = fillPreview ? {...fillPreview} : null;
       panelState.transformPreview = cloneTransformPreview(transformPreview);
       panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
+      panelState.terrainTemplatePreview = cloneTransformPreview(terrainTemplatePreview);
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
       panelState.terrainSelectionSaved = cloneTerrainSelection(terrainSelectionSaved);
       panelState.terrainSelectionFeather = Math.max(0, Math.min(8, Math.trunc(Number(terrainSelectionFeather) || 0)));
@@ -176,6 +187,28 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     getGlobalToolPreview() {
       return cloneTransformPreview(panelState.globalToolPreview);
     },
+    getTerrainTemplate() {
+      return {
+        templateId: panelState.terrainTemplateId,
+        intensity: panelState.terrainTemplateIntensity,
+        targetHeight: panelState.terrainTemplateTargetHeight,
+        terraceStep: panelState.terrainTemplateTerraceStep,
+        amplitude: panelState.terrainTemplateAmplitude
+      };
+    },
+    getTerrainTemplatePreview() {
+      return cloneTransformPreview(panelState.terrainTemplatePreview);
+    },
+    getTerrainTemplateSnapshot() {
+      return {
+        templateId: panelState.terrainTemplateId,
+        intensity: panelState.terrainTemplateIntensity,
+        targetHeight: panelState.terrainTemplateTargetHeight,
+        terraceStep: panelState.terrainTemplateTerraceStep,
+        amplitude: panelState.terrainTemplateAmplitude,
+        preview: cloneTransformPreview(panelState.terrainTemplatePreview)
+      };
+    },
     getTerrainSelectionSnapshot() {
       return {
         source: panelState.terrainSelectionSource,
@@ -198,6 +231,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     },
     updateGlobalToolPreview(globalToolPreview) {
       panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
+    },
+    updateTerrainTemplatePreview(terrainTemplatePreview) {
+      panelState.terrainTemplatePreview = cloneTransformPreview(terrainTemplatePreview);
     },
     updateTerrainSelection(terrainSelection, useForTools = panelState.useTerrainSelection) {
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);

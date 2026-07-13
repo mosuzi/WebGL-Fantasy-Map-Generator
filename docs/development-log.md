@@ -26897,3 +26897,58 @@ full 矩阵结果：
 - 切到 3 圈后 selection count 与 triangles 不变，过渡 / 渐变 `2273 cells`、核心 `1053`、minWeight `0.25`，黄色边缘截图可见变淡。同参预检变为 `1998/3326`、均变 `-2.4`，notice 含权重 `0.25..1`，绝对均变不高于硬边。
 - 暂存摘要确认 `3326 cells / 3圈`；清除当前后恢复为相同 count、3 圈、渐变 `2273`、minWeight `0.25` 和 useForTools，高度影响 `0`、历史 `0/0`。恢复前把 slider 改为 0 的动作没有可靠成立，因此本次浏览器证据只证明快照恢复 3 圈，不声称覆盖 0 圈配置；覆盖恢复由纯回归证明。
 - 浏览器控制会话随后在定位控件时超出合理窗口，被中断并只执行 finalize。最终 console error、对象 selection / editing 和 WebGL health 没有取得新的收口证据；补充智能体仅确认现有 `WebGL 地图生成器` 标签仍位于 `http://127.0.0.1:5410/`，未把存在标签冒充健康证据。全程未刷新、导航、启动 / 重启 Chrome / 服务器或使用 Playwright，未应用高度变化；验证智能体均已结束并释放。
+
+### 2026-07-13 封闭任务清单：任务 1 验收
+
+- 用户批准三项封闭任务清单后，先复核“高度选区内缘羽化与工具权重联动”，未继续实施范围外模板功能。
+- `node --check app/webgl-generator/src/runtime/height-cell-selection.js`、`node --check app/webgl-generator/src/runtime/height-brush.js` 和 `node --check app/webgl-generator/src/renderer/height-transform-preview-layer.js` 通过。
+- `pnpm run regress:height-brush` 通过：1 圈边界权重为 `0.5`，2 圈权重范围为 `0.333..0.667`；条件加高得到边界 / 核心 `40→46/52`，全局平滑中心按羽化权重得到 `80→70`。任务 1 达到最小验收，立即转入任务 2。
+- 首次沙箱内 pnpm 调用因 `registry.npmjs.org/@pnpm/exe` 网络限制失败；按权限规则升级后同一命令成功，不属于产品回归失败。
+
+### 2026-07-13 封闭任务清单：任务 2 验收
+
+- 任务 1 达到最小验收后立即转入“羽化运行时、面板、暂存与 GPU 可视化闭环”，未返回深化羽化数学，也未继续范围外模板实现。
+- `node --check app/webgl-generator/src/runtime/app.js`、`node --check app/webgl-generator/src/ui/panels/height-panel.js` 和 `node --check app/webgl-generator/src/renderer/placeholder-renderer.js` 通过；编辑命令 affected 与摘要兼容回归通过。
+- `pnpm run build:app` 通过，HeightPanel 进入生产产物，仅有既有大 chunk 警告。高度回归确认暂存 / 恢复保留 3 圈，合成黄色 GPU mesh 为 `featheredCells=1 / minWeight=0.25`；既有真实页面证据确认羽化与恢复选区不修改高度、历史保持 `0/0`。任务 2 达到最小验收，立即转入任务 3。
+- 直接调用 `node_modules/.bin/vite.cmd` 时 Rolldown 把 Windows 绝对 HTML 入口误作输出名而失败；改用项目权威 `pnpm run build:app` 后成功。沙箱内 pnpm 仍会尝试访问 `@pnpm/exe`，按权限规则升级执行后成功；均未修改产品代码。
+
+### 2026-07-13 封闭任务清单：任务 3 验收
+
+- 任务 2 达到最小验收后立即转入“选区羽化阶段末完整验收”。生产浏览器普通页硬边选区为 `3428 cells / GPU 20580 triangles`，条件乘算预检为 `3428/3428`、均变 `-3.5`。
+- 切到 3 圈后选区数量和 triangles 不变，过渡 / 渐变 `2025 cells`、最低权重 `0.25`；同参预检收窄为 `2783/3428`、均变 `-3.1`，notice 明确权重 `0.25..1`。没有执行变换，高度影响保持 `0`，历史保持 `undo 0 / redo 0`。
+- 高度编辑期间只有 generation / height 两个面板可见，无对象详情或对象选择面板。验收后清除选区并停止高度编辑，锁定摘要消失，状态回到“未启用”，历史仍为 `0/0`。
+- 普通页和 `?debug=1` 页的浏览器 error 日志均为空；开发面板显示 `WebGL error = 0`，健康事件只有 `INFO map-ready`。三项封闭任务全部达到最小验收，本轮停止，不继续模板或其它优化。
+- `5410` 初始没有服务；两次沙箱内隐藏预览进程未形成可访问监听，按封闭规则停止重复尝试并请求权限决策。获准在沙箱外启动 `5411` 生产预览后页面可访问并完成验收；该问题属于验证环境，不是产品回归。
+
+### 2026-07-12 选区地形模板第一刀
+
+背景：
+
+- 原项目高度模板以 Hill / Pit / Range / Trough / Strait / Smooth 等步骤生成整张高度图；当前应用已经有笔刷、线段、选区、布尔、暂存和羽化，但缺少可复用的复合地形预设。
+- 直接把原项目整图模板接入当前已生成地图会覆盖大量现有语义，且难以提供有界预览与撤销；第一刀先建立选区内、可预览、可撤销的正式模板引擎，为后续多步骤模板工作台打基础。
+
+实现：
+
+- 新增 `height-terrain-templates.js`，注册高原塑形、盆地塑形、阶地量化和破碎地形四个 preset，并提供 get / inspect / label / usesSeed。
+- 高原 / 盆地按目标高度与少量邻域均值收束；阶地按 scope 基线和固定间隔量化；破碎地形用 gridCell / seed 稳定噪声并混入 28% 邻居噪声。所有预设先算完整目标，再按模板强度 × 选区羽化权重插值，最后执行统一高度 round 与陆水 clamp。
+- 模板必须有锁定选区，始终消费当前 selection Set / feather Map，不依赖条件 / 全局工具限制开关。公开 inspect 只返回模板参数、候选 / 变化 / 升降数、高度范围、均变、权重范围与 notice，不暴露 changes。
+- runtime 新增 terrainTemplateSeed、preview / apply / change callbacks。预览复用暖 / 冷 GPU buffer；应用从有界 preview 保留 templateId / intensity / target / step / amplitude / seed / scope，再按当前选区重新验证，最后通过 createApplyHeightBrushCommand / executeEditCommand 进入 height domain。
+- 破碎模板只在命令成功后推进 seed；参数、scope、选区、其它编辑动作或地图加载会清 preview。换图 seed 重置为 0。
+- 高度面板新增“选区地形模板”分区：四预设、`0.1..1` 强度，以及高原 / 盆地目标高度、阶地间隔、破碎幅度专属参数；必须先预览再应用，显示升降、GPU 与有界 notice。panel snapshot 新增 terrainHeightTemplate，不含 changes / ids / Map。
+
+直接验证：
+
+- 新模板模块、运行时、panel wrapper 和回归脚本语法通过，直接高度回归与 `git diff --check` 通过。
+- `3×3` 合成地图中心：高原目标 80、强度 1 把 `40→69`，选区权重 0.5 后为 `40→55`；盆地目标 20 把 `60→34`；阶地间隔 10 把 `43→40`。
+- 破碎模板相同 seed 输出相同 changes、不同 seed 输出不同；无锁定选区拒绝，四 preset 注册与 usesSeed 契约正确，公开 inspect 无 changes。
+- 高原模板通过统一高度命令后 grid / pack 都为 69，撤销恢复 40，重做恢复 69，历史 domain 为 height。
+- 阶段末统一烟测、构建和生产浏览器验收由 2026-07-13 追加批准的最小任务完成。
+
+### 2026-07-13 选区地形模板最小闭环验收
+
+- 用户将此前未获批的选区地形模板改动追加批准为一个最小任务；范围固定为现有四种预设、锁定选区预览、一次历史化应用及撤销 / 重做。多步骤模板编排、用户模板保存 / 导入 / 导出和 source 全图模板完整兼容只记录到 `FOLLOWUPS.md`，未实施。
+- `node --check` 覆盖模板引擎、运行时、panel wrapper 和高度回归脚本；高度回归、`regress:edit-command-affected`、`regress:affected-summary` 和生产构建全部通过。Corepack 解析 `pnpm` 时因受限网络访问 registry 失败，随后使用仓库本地 Node / Vite 入口执行同等命令并通过；构建只有既有大 chunk 警告。
+- 生产页面在 `3428 cells` 锁定选区上预览高原塑形：变化 `3407/3428`，升高 `3211`、降低 `196`，GPU `3407 cells / 20450 triangles`；预览后高度影响仍为 `0`，历史仍为 `undo 0 / redo 0`。
+- 破碎地形连续两次预览均得到变化 `3222/3428`、升高 `1637`、降低 `1585`、高度 `20..93→13..92`、均变 `+0.156` 和 `19368 triangles`；仅 GPU 构建耗时不同，确认同参数与 seed 的地形结果稳定。预览阶段高度和历史仍为零影响。
+- 切回高原塑形并只应用一次后，影响为 `3407`、历史为 `undo 1 / redo 0`；撤销恢复验收前均高并变为 `undo 0 / redo 1`，重做恢复应用结果及 `undo 1 / redo 0`。随后再次撤销回原高度、清除选区并停止高度编辑；验收标签关闭，临时 `5411` 生产预览服务器停止。
+- 开发面板显示 `WebGL error = 0`，健康记录只有 `INFO map-ready`，浏览器 error 日志为空。追加批准的单一任务达到最小验收后停止，没有继续精修或扩展完成标准。

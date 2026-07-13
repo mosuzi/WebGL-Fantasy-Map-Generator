@@ -3,6 +3,7 @@ import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCellSelectionFeather, inspectHeightCellSelectionTransform, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {getHeightTerrainTemplateChanges, HEIGHT_TERRAIN_TEMPLATE_PRESETS, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "../app/webgl-generator/src/runtime/height-terrain-templates.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
 const map = createSyntheticMap();
@@ -278,6 +279,37 @@ const featherSelectionMesh = buildHeightCellSelectionMesh(createTransformPreview
 assert(featherSelectionMesh.stats.featheredCells === 1 && featherSelectionMesh.stats.minWeight === 0.25, `黄色 overlay 羽化统计异常：${JSON.stringify(featherSelectionMesh.stats)}`);
 assert(featherSelectionMesh.vertices[5] < featherSelectionMesh.vertices[77], "黄色 overlay 没有按羽化权重降低边缘透明度");
 
+const templateIds = HEIGHT_TERRAIN_TEMPLATE_PRESETS.map(template => template.id).join(",");
+assert(templateIds === "plateau,basin,terraces,rugged" && heightTerrainTemplateUsesSeed("rugged") && !heightTerrainTemplateUsesSeed("plateau"), `模板预设注册异常：${templateIds}`);
+const missingTemplateSelection = inspectHeightTerrainTemplate(createSquareMap(3, () => 40), {templateId: "plateau", scope: "land", targetHeight: 80, intensity: 1});
+assert(!missingTemplateSelection.valid && missingTemplateSelection.notice.includes("锁定"), `无选区模板未被拒绝：${JSON.stringify(missingTemplateSelection)}`);
+const plateauMap = createSquareMap(3, () => 40);
+const plateauPreview = inspectHeightTerrainTemplate(plateauMap, {templateId: "plateau", scope: "land", targetHeight: 80, intensity: 1, allowedCells: new Set([4])});
+const plateauChanges = getHeightTerrainTemplateChanges(plateauMap, {templateId: "plateau", scope: "land", targetHeight: 80, intensity: 1, allowedCells: new Set([4])});
+assert(plateauPreview.valid && plateauPreview.changeCount === 1 && plateauChanges[0]?.after === 69, `高原模板异常：${JSON.stringify(plateauPreview)}`);
+assert(!Object.hasOwn(plateauPreview, "changes"), "公开模板预检暴露完整 changes");
+const featheredPlateau = getHeightTerrainTemplateChanges(plateauMap, {templateId: "plateau", scope: "land", targetHeight: 80, intensity: 1, allowedCells: new Map([[4, 0.5]])});
+assert(featheredPlateau[0]?.after === 55, `高原模板未消费选区羽化：${JSON.stringify(featheredPlateau)}`);
+const basinChanges = getHeightTerrainTemplateChanges(createSquareMap(3, () => 60), {templateId: "basin", scope: "land", targetHeight: 20, intensity: 1, allowedCells: new Set([4])});
+assert(basinChanges[0]?.after === 34, `盆地模板异常：${JSON.stringify(basinChanges)}`);
+const terraceMap = createSquareMap(3, () => 43);
+const terraceChanges = getHeightTerrainTemplateChanges(terraceMap, {templateId: "terraces", scope: "land", terraceStep: 10, intensity: 1, allowedCells: new Set([4])});
+assert(terraceChanges[0]?.after === 40, `阶地模板异常：${JSON.stringify(terraceChanges)}`);
+const ruggedMap = createSquareMap(3, () => 50);
+const ruggedOptions = {templateId: "rugged", scope: "land", amplitude: 20, intensity: 1, seed: 17, allowedCells: new Set(Array.from({length: 9}, (_, index) => index))};
+const ruggedChanges = getHeightTerrainTemplateChanges(ruggedMap, ruggedOptions);
+const repeatedRugged = getHeightTerrainTemplateChanges(ruggedMap, ruggedOptions);
+const nextRugged = getHeightTerrainTemplateChanges(ruggedMap, {...ruggedOptions, seed: 18});
+assert(ruggedChanges.length > 0 && JSON.stringify(ruggedChanges) === JSON.stringify(repeatedRugged), "破碎模板相同 seed 不可复现");
+assert(JSON.stringify(ruggedChanges) !== JSON.stringify(nextRugged), "破碎模板不同 seed 没有改变形态");
+const templateHistory = new EditHistory();
+templateHistory.execute(createApplyHeightBrushCommand(plateauChanges, {label: "高原塑形"}), {map: plateauMap});
+assert(plateauMap.grid.cells.h[4] === 69 && templateHistory.getStats().lastDomain === "height", "模板应用没有进入高度命令历史");
+templateHistory.undo({map: plateauMap});
+assert(plateauMap.grid.cells.h[4] === 40 && plateauMap.pack.cells.h[4] === 40, "撤销模板没有恢复 grid / pack");
+templateHistory.redo({map: plateauMap});
+assert(plateauMap.grid.cells.h[4] === 69 && plateauMap.pack.cells.h[4] === 69, "重做模板没有恢复 grid / pack");
+
 const stableScopeMap = createSyntheticMap();
 const stableScopeStroke = {originals: new Map()};
 const crossSeaLevel = getHeightBrushChanges(stableScopeMap, {x: 10, y: 0}, {action: "lower", scope: "land", radius: 1, strength: 4, falloff: false}, stableScopeStroke);
@@ -434,6 +466,12 @@ console.log(JSON.stringify({
   featheredRangePreview,
   featheredGlobalPreview,
   featherSelectionMesh: featherSelectionMesh.stats,
+  plateauPreview,
+  featheredPlateau: featheredPlateau[0],
+  basinChange: basinChanges[0],
+  terraceChange: terraceChanges[0],
+  ruggedCells: ruggedChanges.length,
+  templateHistory: templateHistory.getStats(),
   continuedBelowSeaLevel: continuedBelowSeaLevel[0]?.after,
   enclosedWaterFill: {cells: enclosedWaterFill.length, edge: enclosedWaterFill.find(change => change.gridCell === 6)?.after, center: enclosedWaterFill.find(change => change.gridCell === 12)?.after},
   enclosedWaterPreview,

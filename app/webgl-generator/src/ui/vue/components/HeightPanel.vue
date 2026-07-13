@@ -66,6 +66,64 @@
   <UiButton class="height-global-apply" variant="secondary" :disabled="!state.active || !state.globalToolPreview?.valid" @click="callbacks.onGlobalToolApply?.()">应用全局预览</UiButton>
   <p class="height-action-help">预览与应用都作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
 
+  <section class="height-transform-panel" aria-labelledby="height-template-title">
+    <div class="height-transform-heading">
+      <strong id="height-template-title">选区地形模板</strong>
+      <span>需要锁定选区</span>
+    </div>
+    <UiSelectField
+      label="模板预设"
+      input-id="height-terrain-template"
+      class-name="height-transform-select"
+      :model-value="state.terrainTemplateId"
+      :options="terrainTemplateOptions"
+      @update:model-value="setTerrainTemplateId"
+    />
+    <UiSliderField label="模板强度" :model-value="state.terrainTemplateIntensity" :min="0.1" :max="1" :step="0.05" @input="setTerrainTemplateIntensity" />
+    <UiSliderField
+      v-if="state.terrainTemplateId === 'plateau' || state.terrainTemplateId === 'basin'"
+      label="目标高度"
+      :model-value="state.terrainTemplateTargetHeight"
+      :min="0"
+      :max="100"
+      :step="1"
+      @input="setTerrainTemplateTargetHeight"
+    />
+    <UiSliderField
+      v-else-if="state.terrainTemplateId === 'terraces'"
+      label="阶地间隔"
+      :model-value="state.terrainTemplateTerraceStep"
+      :min="2"
+      :max="25"
+      :step="1"
+      @input="setTerrainTemplateTerraceStep"
+    />
+    <UiSliderField
+      v-else
+      label="起伏幅度"
+      :model-value="state.terrainTemplateAmplitude"
+      :min="1"
+      :max="30"
+      :step="1"
+      @input="setTerrainTemplateAmplitude"
+    />
+    <p class="height-action-help">模板始终作用于当前锁定选区，并消费选区羽化权重；破碎地形使用稳定 seed。</p>
+    <p v-if="state.terrainTemplatePreview" class="height-transform-preview" :class="{valid: state.terrainTemplatePreview.valid}" aria-live="polite">
+      {{ state.terrainTemplatePreview.notice }}
+    </p>
+    <div v-if="state.terrainTemplatePreview?.valid" class="height-transform-legend" aria-label="地形模板地图预览图例">
+      <span class="raised"><i></i>升高 {{ state.terrainTemplatePreview.raisedCount }}</span>
+      <span class="lowered"><i></i>降低 {{ state.terrainTemplatePreview.loweredCount }}</span>
+    </div>
+    <p v-if="state.terrainTemplatePreview?.rendererPreview" class="height-transform-gpu-stats">
+      GPU 预览 {{ state.terrainTemplatePreview.rendererPreview.cells }} cells / {{ state.terrainTemplatePreview.rendererPreview.triangleCount }} triangles / {{ state.terrainTemplatePreview.rendererPreview.buildMs }} ms
+    </p>
+    <div class="height-transform-actions">
+      <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainTemplatePreview?.()">预览模板</UiButton>
+      <UiButton variant="secondary" :disabled="!state.active || !state.terrainTemplatePreview?.valid" @click="callbacks.onTerrainTemplateApply?.()">应用模板</UiButton>
+    </div>
+  </section>
+
   <section class="height-transform-panel" aria-labelledby="height-transform-title">
     <div class="height-transform-heading">
       <strong id="height-transform-title">高度区间条件变换</strong>
@@ -582,6 +640,12 @@ const terrainSelectionSourceOptions = Object.freeze([
   {value: "connected-height", label: "连通等高区"},
   {value: "paint", label: "画笔拖选"}
 ]);
+const terrainTemplateOptions = Object.freeze([
+  {value: "plateau", label: "高原塑形"},
+  {value: "basin", label: "盆地塑形"},
+  {value: "terraces", label: "阶地量化"},
+  {value: "rugged", label: "破碎地形"}
+]);
 const transformOperandDefaults = Object.freeze({add: 5, subtract: 5, multiply: 0.9, divide: 1.1, exponent: 0.9});
 const heightmapFitOptions = Object.freeze([
   {value: "stretch", label: "拉伸铺满"},
@@ -895,6 +959,39 @@ function setTerrainSelectionFeather(value) {
   props.callbacks.onTerrainSelectionFeatherChange?.(rings);
 }
 
+function setTerrainTemplateId(value) {
+  props.state.terrainTemplateId = terrainTemplateOptions.some(option => option.value === value) ? value : "plateau";
+  if (props.state.terrainTemplateId === "basin" && props.state.terrainTemplateTargetHeight === 68) props.state.terrainTemplateTargetHeight = 28;
+  if (props.state.terrainTemplateId === "plateau" && props.state.terrainTemplateTargetHeight === 28) props.state.terrainTemplateTargetHeight = 68;
+  clearTerrainTemplatePreview();
+}
+
+function setTerrainTemplateIntensity(value) {
+  props.state.terrainTemplateIntensity = Math.max(0.1, Math.min(1, Number(value) || 0.7));
+  clearTerrainTemplatePreview();
+}
+
+function setTerrainTemplateTargetHeight(value) {
+  props.state.terrainTemplateTargetHeight = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  clearTerrainTemplatePreview();
+}
+
+function setTerrainTemplateTerraceStep(value) {
+  props.state.terrainTemplateTerraceStep = Math.max(2, Math.min(25, Math.round(Number(value) || 10)));
+  clearTerrainTemplatePreview();
+}
+
+function setTerrainTemplateAmplitude(value) {
+  props.state.terrainTemplateAmplitude = Math.max(1, Math.min(30, Math.round(Number(value) || 12)));
+  clearTerrainTemplatePreview();
+}
+
+function clearTerrainTemplatePreview() {
+  const hadPreview = Boolean(props.state.terrainTemplatePreview);
+  props.state.terrainTemplatePreview = null;
+  if (hadPreview) props.callbacks.onTerrainTemplateChange?.();
+}
+
 function terrainSelectionRequest(operation) {
   return {
     operation,
@@ -949,9 +1046,10 @@ function setTransformOperand(value) {
 }
 
 function clearTransformPreview() {
-  const hadPreview = Boolean(props.state.transformPreview || props.state.globalToolPreview);
+  const hadPreview = Boolean(props.state.transformPreview || props.state.globalToolPreview || props.state.terrainTemplatePreview);
   props.state.transformPreview = null;
   props.state.globalToolPreview = null;
+  props.state.terrainTemplatePreview = null;
   if (hadPreview) props.callbacks.onConditionalTransformChange?.();
 }
 
