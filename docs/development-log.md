@@ -27004,3 +27004,9 @@ full 矩阵结果：
 - 当前权威计划中第 135–208 步及 2026-07-13 追加批准项均已完成；除上述六个同一会话依赖的补验外，没有新的开放代码实现项。后续先执行不依赖 Chrome 的最终门禁，补验需待既有页面恢复可控后按原边界完成。
 - 暂缓后的非浏览器门禁已执行：`edit-command-effects.js`、`history-peek.js`、`edit-history.js`、`height-brush.js`、`history-format.js` 和 `panel-manager.js` 语法检查通过；`regress:edit-command-affected`、`regress:affected-summary`、`regress:history-peek-summary`、`regress:height-brush` 与持久高亮契约回归通过。`pnpm run build:app` 构建 `1121` modules，耗时约 `842ms`，仅有既有大 chunk 警告；`git diff --check` 通过。
 - 上述门禁证明相关纯逻辑、命令历史和生产构建仍然稳定，但不替代六项暂缓的真实浏览器证据；因此未触发“所有计划项完成后统一推送”。
+
+### 2026-07-14 第 126 步重生成 affected 真实浏览器验收
+
+- 用户明确指出可以新开标签页，覆盖此前“只复用原标签页”的验收边界；既有 `5410` 服务器保持运行，没有重启。新系统 Chrome 页面完成一次道路受约束重生成，道路数量 `589 -> 589`，checksum 保持 `1244231e`。
+- 运行时 `lastEditRefresh` 返回 `affected = derived-system#routes, route#0, route#1 +587`、`affectedCount = 590`、3 项 preview，以及 `derived-system: 1 / route: 589` 类型计数。重生成前后 selection、editing 和 highlights 均为空，对象索引与道路 mesh 正常刷新，道路三角形 `11514 -> 11562`。
+- `WebGL error = 0`，console / page error 为空，health error 总数为 0。第 126 步达到最小验收；同页同时暴露第 128 步缺口：`api.info.runtimeStats()` 尚未公开 `lastEditRefresh`，后续按第 128 步最小范围修复。

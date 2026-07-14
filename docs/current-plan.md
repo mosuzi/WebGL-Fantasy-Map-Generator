@@ -927,10 +927,10 @@
    - 边界：不把这些既有重生成入口改造成可撤销命令，不改变生成算法、盐值或刷新层；只收束 affected 提取与摘要表现。
    - 完成记录：`edit-command-effects.js` 新增 `collectionAffected()`，统一过滤空项、已移除对象、重复 id 和可选的中立 id；五类重生成现在按生成后的国家、省份、城市、路线与河流集合写入真实对象目标。`formatAffectedTargets()` 提升为运行时共享格式，刷新调度和标题栏历史 UI 都只显示前 3 项与 `+N`；完整数组只在本次调度中消费，持久诊断状态由下一步的有界结构承接。新增 `pnpm run regress:affected-summary` 覆盖集合过滤、共享格式与刷新摘要。
 
-126. 重生成 affected 真实浏览器验收。`暂缓`
+126. 重生成 affected 真实浏览器验收。`已完成`
    - 目标：在可复用 FMG 页面存在时执行一类小范围重生成，确认 runtime `lastEditRefresh.affected` 显示前三项与 `+N`，对象面板、selection、WebGL / console / page / health 正常。
    - 边界：继续合并到阶段末浏览器验收；只使用现成 FMG 页面与服务器，不新开或重启 Chrome，不持续刷新。
-   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
+   - 完成记录：用户明确允许新开标签页后，复用既有 `5410` 服务器在系统 Chrome 新页执行一次道路重生成；道路保持 `589 -> 589`，`lastEditRefresh.affected` 为 `derived-system#routes, route#0, route#1 +587`，总量 `590`、预览 3 项、类型计数为系统 1 / 路线 589。selection / editing / highlights 均为空，checksum 保持 `1244231e`，道路三角形 `11514 -> 11562`，`WebGL error = 0`，console / page / health error 均为 0。
 
 127. 刷新 affected 有界结构化诊断。`已完成`
    - 目标：让 API / Pinia 消费者在不接收完整大数组的前提下，机器可读地获得 affected 总量、类型分布和预览。
