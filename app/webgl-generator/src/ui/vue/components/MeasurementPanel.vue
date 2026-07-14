@@ -128,6 +128,7 @@ const measurementExportActions = computed(() => [
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
 const measurementListActions = computed(() => [
+  measurementEmptyAction,
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMeasurementRows.value.length)}`, icon: "◉", disabled: !selectedMeasurementRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "edit", label: "编辑测量形状", icon: "◎", disabled: !selected.value},
@@ -261,6 +262,10 @@ function openRenameEditor(row) {
 }
 
 function handleMeasurementAction(key) {
+  if (key === "start") {
+    props.callbacks.onStart?.();
+    return;
+  }
   if (key === "highlight-selected") {
     props.callbacks.onHighlight?.(selectedMeasurementRows.value);
     return;

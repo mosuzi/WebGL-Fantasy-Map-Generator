@@ -8,7 +8,6 @@
 
   <div class="marker-edit-toolbar">
     <UiSelectField class-name="marker-resource-select" label="新增资源" :model-value="resourceDraft.type" :options="resourceTypeOptions" @update:model-value="resourceDraft.type = $event" />
-    <UiButton variant="secondary" :active="state.editMode === 'add'" @click="startAddResource">放置</UiButton>
     <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
     <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
     <UiButton class="marker-regenerate-button" variant="secondary" @click="callbacks.onRegenerateResources?.()">重生成资源点</UiButton>
@@ -27,7 +26,7 @@
     :selected-id="activeSelectedMarkerId"
     :doubleClickAction="'edit'"
     empty-text="没有匹配的资源点或标记"
-    :empty-action="filterEmptyAction"
+    :empty-action="markerEmptyAction"
     resizable-columns
     selectable-rows
     :selected-row-ids="selectedMarkerIds"
@@ -190,6 +189,8 @@ const {selectedRowIds: selectedMarkerIds, selectedRows: selectedMarkerRows} = us
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
+const defaultMarkerEmptyAction = Object.freeze({key: "add", label: "放置资源标记", icon: "+"});
+const markerEmptyAction = computed(() => filterEmptyAction.value || defaultMarkerEmptyAction);
 const activeSelectedMarkerId = computed(() => {
   const selectionId = props.state.selection?.object?.kind === "marker" ? props.state.selection.object.id : null;
   return selectionId !== null && selectionId !== undefined ? selectionId : props.state.selectedMarkerId;
@@ -201,6 +202,7 @@ const markerActions = Object.freeze([
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 const markerListActions = computed(() => [
+  {...defaultMarkerEmptyAction, active: props.state.editMode === "add", disabled: props.state.editMode === "move"},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMarkerRows.value.length)}`, icon: "◉", disabled: !selectedMarkerRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "move", label: "移动选中资源标记", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
@@ -343,6 +345,10 @@ function startMoveSelected() {
 }
 
 function handleMarkerListAction(key) {
+  if (key === "add") {
+    startAddResource();
+    return;
+  }
   if (key === "highlight-selected") {
     props.callbacks.onHighlight?.(selectedMarkerRows.value);
     return;
@@ -360,6 +366,7 @@ function handleMarkerListAction(key) {
 
 function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
+  if (key === "add") startAddResource();
 }
 
 function syncVisualDraft() {
