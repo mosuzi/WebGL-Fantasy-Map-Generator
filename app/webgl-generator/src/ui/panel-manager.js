@@ -1,3 +1,5 @@
+import {formatHistoryCommand} from "./history-format.js";
+
 export class PanelManager {
   constructor(documentRef, host) {
     this.documentRef = documentRef;
@@ -213,7 +215,8 @@ function refreshHeaderActions(record) {
   const history = actions.getHistory?.() || null;
   const undoCount = Math.max(0, Number(history?.undo) || 0);
   const redoCount = Math.max(0, Number(history?.redo) || 0);
-  const label = history?.lastLabel ? `：${history.lastLabel}` : "";
+  const commandSummary = history ? formatHistoryCommand(history) : "none";
+  const label = commandSummary && commandSummary !== "none" ? `：${commandSummary}` : "";
   const undoDisabled = !actions.onUndo || undoCount <= 0;
   const redoDisabled = !actions.onRedo || redoCount <= 0;
   const undoTitle = undoDisabled ? "没有可撤销操作" : `撤销${label}`;

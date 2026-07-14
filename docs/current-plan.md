@@ -907,9 +907,10 @@
    - 边界：不改变名称库数据格式、生成算法、高度笔刷数值或撤销语义；只补 `domain / effects.affected` 与确定性回归。
    - 完成记录：高度笔刷新增 `domain: "height"`；名称库新增 / 复制先声明 `namebase#new`，执行后回写真实 id，重命名、样本、参数、综合更新和删除声明具体 `namebase#id`，绑定、导入和清空以 `derived-system` 说明批量原因。新增 `pnpm run regress:edit-command-affected`，通过真实 `EditHistory` 执行、撤销和重做固化动态 id、历史 `lastDomain / lastAffected` 与高度 grid / pack 同步恢复。
 
-122. 编辑命令历史摘要真实浏览器验收。`待执行`
+122. 编辑命令历史摘要真实浏览器验收。`已完成`
    - 目标：在可复用 FMG 页面存在时确认名称库新增 / 重命名与高度笔刷后，面板标题栏历史摘要显示真实领域和影响目标，撤销 / 重做后的摘要保持一致。
    - 边界：与第 118 / 120 步合并到阶段末浏览器验收；不为单独验证而新开页面、重启 Chrome 或启动额外开发服务器。
+   - 完成记录：真实页面首验确认运行时已有 `@domain [affected]`，但标题栏只显示命令名；已让 `PanelManager` 复用 `formatHistoryCommand()`。复验名称库新增标题为 `新建用户名称库 @namebase [namebase#user-namebase-1]`，重命名、撤销与重做均保持同一真实 id；高度短抬升影响 `9 cells`，标题为 `高度笔刷 9 cells @height [derived-system#height-brush, grid-cells#9]`，撤销 / 重做摘要稳定。最终撤销恢复现场，checksum 保持 `f3912a5d`，`WebGL error = 0`，浏览器无 error。
 
 123. 集合编辑命令真实影响目标回写。`已完成`
    - 目标：继续消除历史执行后的集合级 `all`，让名称库导入 / 清空和外交重生成展示实际受影响对象。

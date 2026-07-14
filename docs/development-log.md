@@ -26979,3 +26979,20 @@ full 矩阵结果：
 - 生产构建后只刷新当前 `5410` 页面一次。外交关系由猜疑改为友好后，面板详情和外交历史立即显示友好；撤销回猜疑、重做回友好，高亮数量全程为 `1`。编辑前 / 撤销后 checksum 为 `3c19d328`，编辑后为 `13050c90`，证明撤销恢复原地图语义。
 - `node --check` 覆盖外交命令和扩展回归；`webgl-generator-edit-command-affected-regression.mjs`、`webgl-generator-persistent-highlight-contract-regression.mjs`、生产构建和 `git diff --check` 全部通过。构建 `1121` modules，仅有既有大 chunk 警告。
 - `WebGL error = 0`，Chrome 没有 error；health 只有 `INFO map-ready` 和 React DevTools extension `installHook.js` 记录的 long-task warning。第 120 步达到最小验收，立即转入下一项。
+
+### 2026-07-14 封闭任务清单：编辑命令历史摘要真实浏览器验收
+
+发现与修复：
+
+- 名称库面板新建 `user-namebase-1` 后，运行时历史已经正确返回 `新建用户名称库 @namebase [namebase#user-namebase-1]`，但标题栏撤销按钮只有“撤销：新建用户名称库”，没有显示领域和影响目标，未达到第 122 步验收。
+- `panel-manager.js` 改为复用既有 `formatHistoryCommand()` 构造撤销 / 重做 title；不改变历史栈、命令数据或按钮行为，只让所有可撤销浮动面板使用同一 `label @domain [affected]` 摘要。
+
+浏览器复验：
+
+- 名称库新增后的标题为 `撤销：新建用户名称库 @namebase [namebase#user-namebase-1]`。重命名为“验收名称库”后标题为 `撤销：重命名名称库 验收名称库 @namebase [namebase#user-namebase-1]`；撤销标题切换为对应重做摘要并恢复“用户名称库 1”，重做恢复“验收名称库”及同一真实 id。随后连续撤销重命名和新增，临时用户库没有留在页面中。
+- 高度编辑只执行一次短抬升，影响 `9 cells`、高度 `-450 米 .. 16 米`、均变 `+506 米`；标题栏为 `撤销：高度笔刷 9 cells @height [derived-system#height-brush, grid-cells#9]`。撤销后重做标题保留同一领域与 affected，重做后撤销标题同样稳定；最终再次撤销并停止编辑。
+- 验收前后 checksum 都为 `f3912a5d`，说明本地图摘要校验不把这笔高度变化纳入哈希，但撤销 / 重做的影响数、历史栈和 UI 高度摘要已直接证明命令切换；`WebGL error = 0`，Chrome 没有 error，只有 React DevTools extension long-task warning。
+
+门禁：
+
+- `node --check app/webgl-generator/src/ui/panel-manager.js`、`webgl-generator-affected-summary-regression.mjs`、生产构建和 `git diff --check` 通过。构建 `1121` modules，仅有既有大 chunk 警告。第 122 步达到最小验收，立即转入下一项。
