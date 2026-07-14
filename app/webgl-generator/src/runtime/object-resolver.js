@@ -22,7 +22,8 @@ const OBJECT_RESOLVERS = Object.freeze({
 
 export function resolveObject(map, object) {
   if (!map || !object?.kind) return null;
-  return OBJECT_RESOLVERS[object.kind]?.(map, object) || object;
+  const resolver = OBJECT_RESOLVERS[object.kind];
+  return resolver ? resolver(map, object) : object;
 }
 
 function resolveCity(map, object) {

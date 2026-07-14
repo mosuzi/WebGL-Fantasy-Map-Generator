@@ -2,6 +2,30 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-14：河流安全删除闭环
+
+本步完成权威任务清单第 10 项。河流删除不再是只删列表项，而是按参考实现的流域语义删除目标河流、递归支流和 `basin` 归属河流，并把全部变化纳入一个可撤销命令。
+
+修正：
+
+- 新增 `createDeleteRiverCommand()`，同步维护正式河流列表、`pack.rivers`、`pack.cells.r / fl / conf`、共享汇流 cell、湖泊 `inlets / outlet / river / enteringFlux`、河流备注和河流 metadata。
+- 删除后的结构索引立即重建；精确水文以及道路、生物群系、城镇、政治、宗教、标记、地区、军事、经济和外交标记为待派生，避免删除操作把用户刚删掉的河网自动生成回来。
+- 河流面板列表动作条新增“删除选中河流及支流”，控制台新增 `api.edit.rivers.delete(id)`；二者均复用 `executeEditCommand()`。
+- 命令执行后 `effects.affected` 会回写全部实际级联删除河流，历史摘要、对象面板、river mesh、对象 picking、selection、编辑态和持久高亮同步刷新。
+- `resolveObject()` 对已注册但已经不存在的对象改为返回 `null`，从而让 selection / editingObject 在删除后真正清理；未知扩展对象种类仍保留原对象回退行为。
+- 新增 `regress:river-delete`，覆盖中间支流级联、共享汇流 cell、湖泊引用、备注、metadata、派生标脏、历史 affected、选择清理、拾取、要素 GeoJSON、撤销 / 重做和不存在对象 no-op。
+
+验证：
+
+- `node --check` 覆盖河流命令、应用接线、控制台 API、对象 resolver、河流面板桥接和回归脚本，均通过。
+- `node --no-warnings tools/webgl-generator-river-delete-regression.mjs`、编辑命令 affected 回归、持久高亮契约回归均通过。
+- 本地 Vite 生产构建通过，仅保留既有大 chunk 警告；`pnpm run build:app` 因当前 pnpm 启动器尝试联网获取 `@pnpm/exe` 失败，故使用仓库已安装的本地 Vite 二进制执行同一构建。
+- 真实系统 Chrome 固定 seed 验收通过：62 条河流中从面板删除主河 `#21` 时级联删除 `#12`，列表变为 60；selection、editingObject、高亮、备注、对象解析、picking 和要素 GeoJSON 均无残留；撤销恢复 62 条与备注，重做再次回到 60；`glError = 0`，health / console / page error 均为 0。
+
+边界：
+
+- 本步不实现湖泊删除，不自动重生成完整河网或下游社会系统，也不新增批量河流删除。
+
 ## 2026-07-10：测量面板定位接入统一选择 helper
 
 本步继续推进编辑器基础设施清单中的 highlight / locate API 收口。测量面板此前定位使用专用 `locateMeasurement()`，能移动视图和选中测量行，但不会通过统一 `locateAndSelectObject()` 写入 selection store，和国家、城市、河流、湖泊等面板的定位路径不一致。

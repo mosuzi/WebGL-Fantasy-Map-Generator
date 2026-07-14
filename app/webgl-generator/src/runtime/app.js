@@ -79,7 +79,7 @@ import {
 } from "./religion-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights} from "./persistent-highlights.js";
-import {createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
+import {createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
@@ -1801,6 +1801,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
       updateEditingInteractionLock(state, documentRef);
     },
+    onDelete: riverId => {
+      const command = createDeleteRiverCommand(riverId);
+      const result = executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        status: executed => {
+          const removed = executed.getResult?.().removed || 0;
+          return `已删除河流 #${riverId} 及其支流，共 ${removed} 条。`;
+        },
+        noopStatus: "河流不存在，未执行删除。",
+        throwOnError: false
+      });
+      updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
     onClose: () => {
       if (state.editingObject?.kind === OBJECT_KIND.RIVER) {
         suppressNextRiverPanelOpen = true;
@@ -2261,6 +2275,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
         setNote: (routeId, body, options = {}) => setRouteNoteViaApi(state, documentRef, routeId, body, options)
       },
       rivers: {
+        delete: riverId => deleteRiverViaApi(state, documentRef, riverId),
         rename: (riverId, name) => renameRiverViaApi(state, documentRef, riverId, name),
         setWidthFactor: (riverId, widthFactor) => setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor),
         setNote: (riverId, body, options = {}) => setRiverNoteViaApi(state, documentRef, riverId, body, options)
@@ -5299,6 +5314,20 @@ function renameRiverViaApi(state, documentRef, riverId, name) {
     noopStatus: "河流不存在或名称未变化。",
     status: id => `已重命名河流 #${id}。`
   });
+}
+
+function deleteRiverViaApi(state, documentRef, riverId) {
+  const id = normalizeApiInteger(riverId, "河流 ID");
+  const command = createDeleteRiverCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "河流不存在，未执行删除。",
+    status: executed => `已删除河流 #${id} 及其支流，共 ${executed.getResult?.().removed || 0} 条。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
 }
 
 function setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor) {

@@ -155,7 +155,8 @@ const riverListActions = computed(() => [
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
   {key: "locate", label: "定位选中河流", icon: "⌖", disabled: !selected.value},
-  {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", active: editing.value, disabled: !selected.value}
+  {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", active: editing.value, disabled: !selected.value},
+  {key: "delete", label: "删除选中河流及支流", icon: "删", disabled: !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -245,6 +246,7 @@ function handleRiverListAction(key) {
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
   if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
+  if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
 }
 
 function handleEmptyAction(key) {
