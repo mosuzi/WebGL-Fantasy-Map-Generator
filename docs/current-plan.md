@@ -917,54 +917,60 @@
    - 边界：命令创建时仍允许用 `new / all` 表达尚未知的目标；只有成功执行后的 `lastAffected` 必须回写真实 id，不改变导入、清空或外交生成算法。
    - 完成记录：名称库命令工厂会比较执行前后用户库快照，导入只记录新增 / 替换 / 删除的库 id，清空记录实际移除的库 id；外交重生成在生成完成后记录所有未移除的有效国家 id，不再保留 `diplomacy#all`。既有 `regress:edit-command-affected` 已扩展为覆盖导入 `imported-import-a`、清空两个真实库以及外交 `state#1 / state#3`。
 
-124. 集合 affected 历史摘要真实浏览器验收。`待执行`
+124. 集合 affected 历史摘要真实浏览器验收。`暂缓`
    - 目标：在可复用 FMG 页面存在时确认名称库导入 / 清空和外交重生成后的标题栏历史摘要显示真实对象并正确折叠 `+N`，撤销 / 重做摘要稳定。
    - 边界：继续与第 118 / 120 / 122 步合并到阶段末浏览器验收；不新开或重启 Chrome，不启动额外开发服务器。
+   - 暂缓记录：2026-07-14 既有 Chrome 页面停留在名称库清空原生确认框，扩展可枚举标签页但无法接管；用户明确要求先跳过当前阻塞并执行后续任务。本项不计完成，连同同一页面依赖的第 126 / 128 / 130 / 132 / 134 步转入 `FOLLOWUPS.md`，待浏览器会话可控后补验。
 
 125. 重生成真实对象目标与摘要负载收口。`已完成`
    - 目标：让国家、省份、路线、河流和城市重生成的刷新诊断摆脱 `kind#all`，同时避免数百个真实 id 形成巨量运行时文本。
    - 边界：不把这些既有重生成入口改造成可撤销命令，不改变生成算法、盐值或刷新层；只收束 affected 提取与摘要表现。
    - 完成记录：`edit-command-effects.js` 新增 `collectionAffected()`，统一过滤空项、已移除对象、重复 id 和可选的中立 id；五类重生成现在按生成后的国家、省份、城市、路线与河流集合写入真实对象目标。`formatAffectedTargets()` 提升为运行时共享格式，刷新调度和标题栏历史 UI 都只显示前 3 项与 `+N`；完整数组只在本次调度中消费，持久诊断状态由下一步的有界结构承接。新增 `pnpm run regress:affected-summary` 覆盖集合过滤、共享格式与刷新摘要。
 
-126. 重生成 affected 真实浏览器验收。`待执行`
+126. 重生成 affected 真实浏览器验收。`暂缓`
    - 目标：在可复用 FMG 页面存在时执行一类小范围重生成，确认 runtime `lastEditRefresh.affected` 显示前三项与 `+N`，对象面板、selection、WebGL / console / page / health 正常。
    - 边界：继续合并到阶段末浏览器验收；只使用现成 FMG 页面与服务器，不新开或重启 Chrome，不持续刷新。
+   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
 
 127. 刷新 affected 有界结构化诊断。`已完成`
    - 目标：让 API / Pinia 消费者在不接收完整大数组的前提下，机器可读地获得 affected 总量、类型分布和预览。
    - 边界：`lastEditRefresh` 不保存完整目标数组；完整数组只参与调度当次的刷新决策与摘要计算，持久状态必须保持常量级预览。
    - 完成记录：新增 `summarizeAffectedTargets()`，返回 `text / count / preview / kinds`；刷新调度在既有 `affected` 折叠文本之外新增 `affectedCount / affectedPreview / affectedKinds`。1001 个目标的回归摘要只保留 3 项预览和 2 类计数，序列化体积为 239 字节。
 
-128. 有界刷新诊断真实浏览器验收。`待执行`
+128. 有界刷新诊断真实浏览器验收。`暂缓`
    - 目标：在可复用 FMG 页面存在时，通过 `api.info.runtimeStats()` 确认重生成后的 `lastEditRefresh` 同时返回折叠文本、正确总数、前三项预览和 kind 计数，且无巨量控制台输出。
    - 边界：继续与第 126 步合并执行；不启动额外浏览器或服务器，不持续轮询 runtime stats。
+   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
 
 129. 历史 peek 有界 affected API。`已完成`
    - 目标：避免 `api.history.peek()` 对批量命令返回数百 / 数千个完整 affected，同时保留可机器读取的规模和类型信息。
    - 边界：小命令的 `affected` 数组保持兼容；默认预览 3 项，调用方只能通过 `affectedLimit` 在 0 到 50 内调整，不能请求无界结果。
    - 完成记录：新增纯运行时 `history-peek.js`；`peek({affectedLimit})` 返回 `affected / affectedCount / affectedKinds / affectedSummary / affectedTruncated`。1001 目标默认只返回 3 项预览，结果序列化 852 字节；`affectedLimit=5` 返回 5 项，非法上界与非对象 options 返回结构化错误。新增 `pnpm run regress:history-peek-summary`。
 
-130. history.peek 有界输出真实浏览器验收。`待执行`
+130. history.peek 有界输出真实浏览器验收。`暂缓`
    - 目标：在可复用 FMG 页面存在时制造一条已有批量命令历史，验证默认 / 自定义 limit、截断标记、kind 计数、撤销栈切换和 checksum 语义。
    - 边界：与第 128 步合并到阶段末；只读取一次默认与一次自定义 peek，不输出完整地图对象或反复轮询。
+   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
 
 131. 历史 stats 有界 lastAffected。`已完成`
    - 目标：让面板快照和 `api.history.get / stats` 不再复制批量命令的完整 `lastAffected`，补齐 peek 之外的另一条大输出路径。
    - 边界：`EditHistory` 内部继续保留完整数组供撤销 / 重做与命令缓存；公开统计默认 3 项、最大 50 项，小命令字段保持兼容。
    - 完成记录：`EditHistory.getStats({affectedLimit})` 返回 `lastAffected / lastAffectedCount / lastAffectedKinds / lastAffectedSummary / lastAffectedTruncated`；控制台 `get / stats` 与 app action 透传 options，`history.peek` 的嵌套 stats 使用相同 limit。1001 目标内部仍为 1001 项，公开 stats 为 3 项、389 字节；自定义 5 项和非法参数边界已进入既有 history peek 回归。
 
-132. history.get / stats 有界输出真实浏览器验收。`待执行`
+132. history.get / stats 有界输出真实浏览器验收。`暂缓`
    - 目标：在可复用 FMG 页面存在时验证默认与 `affectedLimit=5` 的 get / stats、面板标题历史摘要、撤销 / 重做以及 checksum / WebGL / console / page / health。
    - 边界：与第 130 步合并执行；不请求超过 50 项，不重复转储完整 runtime snapshot。
+   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
 
 133. 高度编辑局部整平笔刷。`已完成`
    - 目标：补充第一种真正的局部地形塑形工具，让用户能以落笔点高度为基准逐步整平山地、谷地或建设平台。
    - 边界：目标高度在每次 pointer stroke 开始时锁定，拖动中不随最近 cell 改变；继续复用现有强度、半径、中心衰减、预览、命令提交、派生标脏和撤销 / 重做，不新增独立历史类型。
    - 完成记录：新增纯运行时 `height-brush.js`，从 `app.js` 抽出抬升、降低、平滑和衰减计算；新增 `flatten` 动作，按 `min(高度差, 强度 × 衰减)` 向落笔起点高度渐进靠拢。高度面板增加“整平”第四段和说明；无实际高度变化的中心 / 边缘 cell 不再计入预览与最终命令。新增 `pnpm run regress:height-brush`，覆盖目标锁定、连续拖动、衰减边缘、旧动作兼容及 grid / pack 撤销重做。
 
-134. 整平笔刷真实浏览器验收。`待执行`
+134. 整平笔刷真实浏览器验收。`暂缓`
    - 目标：在可复用 FMG 页面存在时验证四段动作布局、整平说明、落笔目标锁定、拖动预览、影响数、撤销 / 重做、待派生摘要与 WebGL / console / page / health。
    - 边界：只执行一条短 stroke，不持续拖动或刷新；继续复用现成页面和服务器，不新开或重启 Chrome。
+   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
 
 135. 高度基础派生顺序重算入口。`已完成`
    - 目标：让高度编辑后的基础地理依赖能在同一面板按正确拓扑一次重算，不要求用户在生成面板手工猜河流、城镇和政治的顺序。
