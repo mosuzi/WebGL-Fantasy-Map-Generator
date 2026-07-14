@@ -37,6 +37,10 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
     selectedReligionId: null,
+    targetReligionId: null,
+    assignmentActive: false,
+    assignmentRadius: 28,
+    lastAffected: 0,
     version: 0
   });
   const panelCallbacks = {
@@ -72,6 +76,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => {
       panelState.selectedReligionId = row.id;
+      panelState.targetReligionId = row.id;
       callbacks.onSelect?.(religionObject(row));
     },
     onLocate: row => callbacks.onLocate?.(religionObject(row)),
@@ -83,6 +88,16 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     onColorChange: (religionId, color) => callbacks.onColorChange?.(religionId, color),
     onParentChange: (religionId, parentId) => callbacks.onParentChange?.(religionId, parentId),
     onNoteChange: (religionId, body) => callbacks.onNoteChange?.(religionId, body),
+    onAssignmentActive: active => {
+      panelState.assignmentActive = Boolean(active);
+      callbacks.onAssignmentActive?.(panelState.assignmentActive, panelState.targetReligionId);
+    },
+    onTargetReligionId: religionId => {
+      panelState.targetReligionId = normalizeReligionId(religionId) ?? 0;
+    },
+    onAssignmentRadius: radius => {
+      panelState.assignmentRadius = Math.max(4, Math.min(120, Number(radius) || 28));
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -100,6 +115,8 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.open = false;
+      panelState.assignmentActive = false;
+      callbacks.onAssignmentActive?.(false, panelState.targetReligionId);
     }
   });
   const root = documentRef.createElement("div");
@@ -125,23 +142,41 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
+      if (!religionExists(map, panelState.targetReligionId)) panelState.targetReligionId = panelState.selectedReligionId;
       panelState.open = true;
       panelState.version++;
       manager.open("religion-panel");
       lazyPanel.load();
     },
-    update(map, selection, history) {
+    update(map, selection, history, assignment = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "religion") panelState.selectedReligionId = normalizeReligionId(selection.object.id);
       if (!religionExists(map, panelState.selectedReligionId)) panelState.selectedReligionId = firstReligionId(map);
+      if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);
+      if (assignment.lastAffected !== undefined) panelState.lastAffected = Number(assignment.lastAffected) || 0;
+      if (!religionExists(map, panelState.targetReligionId)) panelState.targetReligionId = panelState.selectedReligionId;
       panelState.version++;
     },
     setSelectedReligionId(religionId) {
       const normalized = normalizeReligionId(religionId);
-      if (religionExists(panelState.map, normalized)) panelState.selectedReligionId = normalized;
+      if (religionExists(panelState.map, normalized)) {
+        panelState.selectedReligionId = normalized;
+        panelState.targetReligionId = normalized;
+      }
+    },
+    setAssignmentActive(active) {
+      panelState.assignmentActive = Boolean(active);
+      panelState.version++;
+    },
+    getBrush() {
+      return {
+        active: panelState.assignmentActive,
+        targetId: panelState.targetReligionId ?? 0,
+        radius: panelState.assignmentRadius
+      };
     },
     isOpen() {
       return panelState.open;
@@ -173,7 +208,9 @@ function religionObject(row) {
 
 function religionExists(map, religionId) {
   religionId = normalizeReligionId(religionId);
-  return Boolean(Number.isInteger(religionId) && (map?.society?.religions?.[religionId] || map?.pack?.religions?.[religionId]));
+  if (religionId === 0) return true;
+  const religion = map?.society?.religions?.[religionId] || map?.pack?.religions?.[religionId];
+  return Boolean(Number.isInteger(religionId) && religion && !religion.removed);
 }
 
 function normalizeReligionId(religionId) {

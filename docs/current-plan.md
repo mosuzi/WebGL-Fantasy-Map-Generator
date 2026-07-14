@@ -50,6 +50,8 @@
    - 执行方式：每次只选一个领域面板，先梳理数据约束、撤销 / 重做、派生刷新和导出影响，再实现小步；涉及 UI 的小图标入口要与现有 `UiPanelIoActions` 视觉保持一致。
    - 进展记录：路线管理已完成“删除选中路线”小图标第一刀；命令会从 `settlements.routes` 中移除目标路线、清理对应路线备注，并支持撤销恢复路线与备注。本刀不新增路线绘制入口，也不重算经济 / 贸易派生。资源标记面板已把“移动 / 删除选中资源标记”收束到列表下方小图标动作条，删除继续复用既有 `createDeleteMarkerCommand()` 和 `EditHistory`，不新增资源重生成语义。备注总览已把“定位备注对象 / 删除选中备注”并入表格下方 `UiPanelIoActions`，删除继续复用 `createDeleteNoteCommand()`。名称库总览已把“新建用户库 / 复制内置 / 删除选中用户库 / 清空用户库”收束到同一列表动作条，继续复用名称库 edit command 快照撤销逻辑。河流管理已把“按名称库重命名筛选河流 / 定位选中河流 / 进入河流编辑”收束到列表动作条。河流安全删除已完成：目标河流及其递归支流 / 流域归属河流会作为一个 `EditHistory` 命令删除，命令同步维护 `map.rivers.rivers`、`pack.rivers`、`pack.cells.r/fl/conf`、湖泊进出口引用、河流备注、metadata、选择 / 编辑 / 高亮 / picking / 导出，并支持完整撤销 / 重做；精确水文与下游系统标记为待派生，不在删除命令内自动重生成。湖泊安全删除也已完成：删除语义为填平湖盆并合并相邻陆地 feature，同时同步 pack / grid 高度、feature 归属、岸线、haven / harbor、湖泊备注、对象引用、选择 / 高亮 / picking / 导出与派生标脏；完整快照支持撤销 / 重做，湖泊面板和 `api.edit.lakes.delete(id)` 共用同一命令。文化管理已把“新增空文化 / 定位文化 / 删除空文化”接入列表动作条；新增和删除均进入 `EditHistory`，删除只允许无 cells、无城市 / 城镇 / 国家关联、无子级的空文化，本刀不做文化 cell 归属刷或覆盖重分配。宗教管理已把“新增空宗教 / 定位宗教 / 删除空宗教”接入列表动作条；新增和删除均进入 `EditHistory`，删除只允许无 cells、无城市 / 城镇 / 国家关联、无子级的空宗教，本刀不做宗教 cell 归属刷或文化联动重算。
 
+   - 第 12 项补充：文化与宗教完整删除及归属编辑已完成。删除非空对象会把 grid / pack cells、城市 / burg、已有政治对象字段和文化扩展引用归零到中立对象，清理继承引用、备注与文化名称库绑定，并完整支持撤销 / 重做；两个面板新增归属目标与半径笔刷，单次拖动只写入一条历史命令，`api.edit.cultures.assignCells()` / `api.edit.religions.assignCells()` 与面板共用同一命令路径。
+
 2. 编辑器基础设施和统计面板清单重新入队。
    - 来源：旧计划审视中的第 17 项；对应备份文档为 `docs/plan-backups/2026-07-08-reset-current-plan/docs/task-notes/editor-and-stat-panel-inventory.md`。
    - 要做什么：把正式版编辑器的基础设施重新作为高优方向，包括统一 edit command / undo command、selection store、highlight / locate API、对象表格组件、派生重建调度、全局撤销入口，以及各领域面板职责边界。

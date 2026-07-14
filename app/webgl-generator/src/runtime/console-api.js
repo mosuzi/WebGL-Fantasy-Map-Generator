@@ -135,6 +135,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       cultures: Object.freeze({
         add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.add, "edit.cultures.add")(options)),
+        assignCells: (cultureId, gridCellIds) => apiCall(() => requireApiAction(actions.edit?.cultures?.assignCells, "edit.cultures.assignCells")(cultureId, gridCellIds)),
         delete: cultureId => apiCall(() => requireApiAction(actions.edit?.cultures?.delete, "edit.cultures.delete")(cultureId)),
         rename: (cultureId, name) => apiCall(() => requireApiAction(actions.edit?.cultures?.rename, "edit.cultures.rename")(cultureId, name)),
         setColor: (cultureId, color) => apiCall(() => requireApiAction(actions.edit?.cultures?.setColor, "edit.cultures.setColor")(cultureId, color)),
@@ -142,6 +143,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       religions: Object.freeze({
         add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.add, "edit.religions.add")(options)),
+        assignCells: (religionId, gridCellIds) => apiCall(() => requireApiAction(actions.edit?.religions?.assignCells, "edit.religions.assignCells")(religionId, gridCellIds)),
         delete: religionId => apiCall(() => requireApiAction(actions.edit?.religions?.delete, "edit.religions.delete")(religionId)),
         rename: (religionId, name) => apiCall(() => requireApiAction(actions.edit?.religions?.rename, "edit.religions.rename")(religionId, name)),
         setColor: (religionId, color) => apiCall(() => requireApiAction(actions.edit?.religions?.setColor, "edit.religions.setColor")(religionId, color)),
@@ -223,7 +225,7 @@ function buildCapabilities() {
     units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
     climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
     history: ["get", "stats", "peek", "undo", "redo"],
-    edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.delete", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
+    edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.assignCells", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.delete", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
     data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
     namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
     debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
@@ -387,11 +389,13 @@ function buildMethodMetadata() {
       "states.setColor": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.setGovernment": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "cultures.add": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
+      "cultures.assignCells": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.delete": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.rename": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.setColor": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.setParent": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "religions.add": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
+      "religions.assignCells": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.delete": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.rename": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.setColor": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},

@@ -1,5 +1,6 @@
 import {canAssignInheritanceParent, setInheritanceParent, summarizeInheritanceTree} from "../generator/inheritance.js";
 import {newObjectAffected, objectAffected} from "./edit-command-effects.js";
+import {createApplySocialAssignmentCommand, createDeleteSocialObjectCommand} from "./social-ownership-edit-commands.js";
 
 const CULTURE_COLOR_EFFECTS = Object.freeze({
   render: "draw",
@@ -66,42 +67,11 @@ export function createAddCultureCommand({name = "", label = "新增文化"} = {}
 }
 
 export function createDeleteCultureCommand(cultureId, {label = "删除文化"} = {}) {
-  const normalizedCultureId = Number(cultureId);
-  let snapshots = null;
+  return createDeleteSocialObjectCommand("culture", cultureId, {label});
+}
 
-  return {
-    label: `${label} #${normalizedCultureId}`,
-    domain: "culture",
-    effects: {
-      ...CULTURE_STRUCTURE_EFFECTS,
-      affected: objectAffected("culture", normalizedCultureId)
-    },
-    apply(context) {
-      const stores = getCultureStores(context.map);
-      if (!stores.length) throw new Error("当前地图没有文化数据");
-      const primary = stores[0];
-      const culture = primary?.[normalizedCultureId];
-      if (!culture || culture.removed) throw new Error(`找不到文化 #${normalizedCultureId}`);
-      const blockers = cultureDeleteBlockers(context.map, normalizedCultureId);
-      if (blockers.length) throw new Error(`只能删除空文化：${blockers.join("、")}`);
-      snapshots ??= stores.map(store => ({store, value: cloneCulture(store[normalizedCultureId])}));
-      for (const {store} of snapshots) {
-        if (store[normalizedCultureId]) store[normalizedCultureId].removed = true;
-      }
-      updateCultureTreeMetadata(context.map, primary);
-    },
-    revert(context) {
-      if (!snapshots) return;
-      for (const {store, value} of snapshots) {
-        store[normalizedCultureId] = cloneCulture(value);
-      }
-      updateCultureTreeMetadata(context.map, getCultures(context.map));
-    },
-    isNoop(context) {
-      const culture = getCultures(context.map)?.[normalizedCultureId];
-      return !culture || culture.removed || cultureDeleteBlockers(context.map, normalizedCultureId).length > 0;
-    }
-  };
+export function createApplyCultureAssignmentCommand(changes, options = {}) {
+  return createApplySocialAssignmentCommand("culture", changes, options);
 }
 
 export function createSetCultureColorCommand(cultureId, color, {beforeColor = null, label = "文化颜色"} = {}) {
@@ -217,34 +187,6 @@ function createEmptyCulture(cultureId, name) {
     color: null,
     userCreated: true
   };
-}
-
-function cultureDeleteBlockers(map, cultureId) {
-  const blockers = [];
-  const culture = getCultures(map)?.[cultureId];
-  if (Number(culture?.cells) > 0 || packCellUsage(map, cultureId) > 0 || gridCellUsage(map, cultureId) > 0) blockers.push("仍有覆盖 cells");
-  if ((culture?.children || []).some(childId => getCultures(map)?.[childId] && !getCultures(map)?.[childId]?.removed)) blockers.push("仍有子文化");
-  if ((map?.settlements?.cities || []).some(city => Number(city?.culture) === cultureId)) blockers.push("仍有关联城市");
-  if ((map?.pack?.burgs || []).some(burg => burg?.i && !burg.removed && Number(burg?.culture) === cultureId)) blockers.push("仍有关联城镇");
-  if ((map?.politics?.states || map?.pack?.states || []).some(state => state?.i && !state.removed && Number(state?.culture) === cultureId)) blockers.push("仍有关联国家");
-  return blockers;
-}
-
-function packCellUsage(map, cultureId) {
-  return countTypedArrayValue(map?.pack?.cells?.culture, cultureId);
-}
-
-function gridCellUsage(map, cultureId) {
-  return countTypedArrayValue(map?.grid?.cells?.culture, cultureId);
-}
-
-function countTypedArrayValue(values, target) {
-  if (!values) return 0;
-  let count = 0;
-  for (const value of values) {
-    if (Number(value) === target) count++;
-  }
-  return count;
 }
 
 function cloneCulture(culture) {

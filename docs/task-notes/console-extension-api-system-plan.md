@@ -509,8 +509,8 @@ api.edit.measurement.delete(id)
 - `api.edit.provinces.rename(provinceId, name)` 和 `api.edit.provinces.setColor(provinceId, color)` 已接入省份单对象 edit commands。
 - `api.edit.states.add(gridCell)` 和 `api.edit.states.delete(stateId)` 已接入国家 collection edit commands。
 - `api.edit.states.rename(stateId, name)`、`api.edit.states.setColor(stateId, color)` 和 `api.edit.states.setGovernment(stateId, governmentKey)` 已接入国家单对象 edit commands。
-- `api.edit.cultures.add({name})`、`api.edit.cultures.delete(cultureId)`、`api.edit.cultures.rename(cultureId, name)`、`api.edit.cultures.setColor(cultureId, color)` 和 `api.edit.cultures.setParent(cultureId, parentId)` 已接入文化 edit commands；删除仍只允许空文化。
-- `api.edit.religions.add({name})`、`api.edit.religions.delete(religionId)`、`api.edit.religions.rename(religionId, name)`、`api.edit.religions.setColor(religionId, color)` 和 `api.edit.religions.setParent(religionId, parentId)` 已接入宗教 edit commands；删除仍只允许空宗教。
+- `api.edit.cultures.add({name})`、`api.edit.cultures.assignCells(cultureId, gridCellIds)`、`api.edit.cultures.delete(cultureId)`、`api.edit.cultures.rename(cultureId, name)`、`api.edit.cultures.setColor(cultureId, color)` 和 `api.edit.cultures.setParent(cultureId, parentId)` 已接入文化 edit commands；删除支持非空文化并归零相关引用，归属编辑同步 pack / grid 与中心对象。
+- `api.edit.religions.add({name})`、`api.edit.religions.assignCells(religionId, gridCellIds)`、`api.edit.religions.delete(religionId)`、`api.edit.religions.rename(religionId, name)`、`api.edit.religions.setColor(religionId, color)` 和 `api.edit.religions.setParent(religionId, parentId)` 已接入宗教 edit commands；删除支持非空宗教并归零相关引用，归属编辑同步 pack / grid 与中心对象。
 - `api.edit.routes.delete(routeId)` 已接入路线删除 edit command。
 - `api.edit.routes.setNote(routeId, body, {name})` 已接入路线备注 edit command。
 - `api.edit.rivers.rename(riverId, name)`、`api.edit.rivers.setWidthFactor(riverId, widthFactor)` 和 `api.edit.rivers.setNote(riverId, body, {name})` 已接入河流单对象 edit commands。

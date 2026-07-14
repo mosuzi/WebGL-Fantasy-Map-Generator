@@ -37,6 +37,10 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
     selectedCultureId: null,
+    targetCultureId: null,
+    assignmentActive: false,
+    assignmentRadius: 28,
+    lastAffected: 0,
     version: 0
   });
   const panelCallbacks = {
@@ -72,6 +76,7 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => {
       panelState.selectedCultureId = row.id;
+      panelState.targetCultureId = row.id;
       callbacks.onSelect?.(cultureObject(row));
     },
     onLocate: row => callbacks.onLocate?.(cultureObject(row)),
@@ -84,6 +89,16 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onParentChange: (cultureId, parentId) => callbacks.onParentChange?.(cultureId, parentId),
     onNoteChange: (cultureId, body) => callbacks.onNoteChange?.(cultureId, body),
     onNamebaseBinding: cultureId => callbacks.onNamebaseBinding?.(cultureId),
+    onAssignmentActive: active => {
+      panelState.assignmentActive = Boolean(active);
+      callbacks.onAssignmentActive?.(panelState.assignmentActive, panelState.targetCultureId);
+    },
+    onTargetCultureId: cultureId => {
+      panelState.targetCultureId = normalizeCultureId(cultureId) ?? 0;
+    },
+    onAssignmentRadius: radius => {
+      panelState.assignmentRadius = Math.max(4, Math.min(120, Number(radius) || 28));
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -101,6 +116,8 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.open = false;
+      panelState.assignmentActive = false;
+      callbacks.onAssignmentActive?.(false, panelState.targetCultureId);
     }
   });
   const root = documentRef.createElement("div");
@@ -126,23 +143,41 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
+      if (!cultureExists(map, panelState.targetCultureId)) panelState.targetCultureId = panelState.selectedCultureId;
       panelState.open = true;
       panelState.version++;
       manager.open("culture-panel");
       lazyPanel.load();
     },
-    update(map, selection, history) {
+    update(map, selection, history, assignment = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "culture") panelState.selectedCultureId = normalizeCultureId(selection.object.id);
       if (!cultureExists(map, panelState.selectedCultureId)) panelState.selectedCultureId = firstCultureId(map);
+      if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);
+      if (assignment.lastAffected !== undefined) panelState.lastAffected = Number(assignment.lastAffected) || 0;
+      if (!cultureExists(map, panelState.targetCultureId)) panelState.targetCultureId = panelState.selectedCultureId;
       panelState.version++;
     },
     setSelectedCultureId(cultureId) {
       const normalized = normalizeCultureId(cultureId);
-      if (cultureExists(panelState.map, normalized)) panelState.selectedCultureId = normalized;
+      if (cultureExists(panelState.map, normalized)) {
+        panelState.selectedCultureId = normalized;
+        panelState.targetCultureId = normalized;
+      }
+    },
+    setAssignmentActive(active) {
+      panelState.assignmentActive = Boolean(active);
+      panelState.version++;
+    },
+    getBrush() {
+      return {
+        active: panelState.assignmentActive,
+        targetId: panelState.targetCultureId ?? 0,
+        radius: panelState.assignmentRadius
+      };
     },
     isOpen() {
       return panelState.open;
@@ -173,7 +208,9 @@ function cultureObject(row) {
 
 function cultureExists(map, cultureId) {
   cultureId = normalizeCultureId(cultureId);
-  return Boolean(Number.isInteger(cultureId) && (map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId]));
+  if (cultureId === 0) return true;
+  const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
+  return Boolean(Number.isInteger(cultureId) && culture && !culture.removed);
 }
 
 function normalizeCultureId(cultureId) {

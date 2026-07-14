@@ -58,6 +58,23 @@
 
   <UiDetailGrid class-name="culture-panel-details" empty-text="未选中文化" :rows="detailRows" />
 
+  <UiSelectField
+    input-id="culture-assignment-target"
+    label="归属笔刷目标"
+    :model-value="state.targetCultureId ?? 0"
+    :options="assignmentOptions"
+    @update:model-value="callbacks.onTargetCultureId"
+  />
+  <UiSliderField
+    label="归属笔刷半径"
+    :model-value="state.assignmentRadius"
+    :min="4"
+    :max="120"
+    :step="2"
+    unit-label="px"
+    @input="callbacks.onAssignmentRadius"
+  />
+
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
@@ -109,6 +126,7 @@ import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
+import UiSliderField from "./base/UiSliderField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
@@ -173,12 +191,17 @@ const parentOptions = computed(() => buildParentOptions(metrics.value.rows, sele
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
-const cultureActions = Object.freeze([
+const cultureActions = computed(() => [
+  {key: "assign", label: props.state.assignmentActive ? "退出文化归属笔刷" : "编辑文化归属", icon: "◎", panel: false, active: props.state.assignmentActive},
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
   {key: "parent", label: "调整继承", icon: "↳"},
   {key: "namebase", label: "名称库绑定", icon: "名"},
   {key: "note", label: "编辑备注", icon: "☰"}
+]);
+const assignmentOptions = computed(() => [
+  {value: 0, label: "无文化"},
+  ...metrics.value.rows.map(row => ({value: row.id, label: row.name}))
 ]);
 const defaultCultureEmptyAction = Object.freeze({key: "add", label: "新增空文化", icon: "+"});
 const cultureEmptyAction = computed(() => filterEmptyAction.value || defaultCultureEmptyAction);
@@ -189,9 +212,9 @@ const cultureListActions = computed(() => [
   {key: "locate", label: "定位文化", icon: "⌖", disabled: !selected.value},
   {
     key: "delete",
-    label: selected.value?.canDelete ? "删除空文化" : "只能删除无覆盖、无子级、无关联对象的空文化",
+    label: "删除文化并清除归属",
     icon: "×",
-    disabled: !selected.value?.canDelete
+    disabled: !selected.value
   }
 ]);
 
@@ -202,6 +225,8 @@ const summaryMetrics = computed(() => [
   {label: "层级", value: formatNumber(metrics.value.maxDepth)},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: formatNumber(metrics.value.cities)},
+  {label: "归属笔刷", value: props.state.assignmentActive ? "启用" : "关闭"},
+  {label: "本次影响", value: formatNumber(props.state.lastAffected || 0)},
   {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
@@ -238,6 +263,11 @@ function selectTreeNode(node) {
 }
 
 function handleActionSelect(actionKey) {
+  if (actionKey === "assign") {
+    activeAction.value = null;
+    props.callbacks.onAssignmentActive?.(!props.state.assignmentActive);
+    return;
+  }
   if (actionKey !== "namebase" || !selected.value) return;
   activeAction.value = null;
   props.callbacks.onNamebaseBinding?.(selected.value.id);
@@ -272,7 +302,7 @@ function handleListAction(actionKey) {
   }
   if (!selected.value) return;
   if (actionKey === "locate") props.callbacks.onLocate?.(selected.value);
-  if (actionKey === "delete" && selected.value.canDelete) props.callbacks.onDelete?.(selected.value);
+  if (actionKey === "delete") props.callbacks.onDelete?.(selected.value);
 }
 
 function buildCultureMetrics(map) {

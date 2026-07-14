@@ -1,5 +1,6 @@
 import {canAssignInheritanceParent, setInheritanceParent, summarizeInheritanceTree} from "../generator/inheritance.js";
 import {newObjectAffected, objectAffected} from "./edit-command-effects.js";
+import {createApplySocialAssignmentCommand, createDeleteSocialObjectCommand} from "./social-ownership-edit-commands.js";
 
 const RELIGION_COLOR_EFFECTS = Object.freeze({
   render: "draw",
@@ -66,42 +67,11 @@ export function createAddReligionCommand({name = "", label = "新增宗教"} = {
 }
 
 export function createDeleteReligionCommand(religionId, {label = "删除宗教"} = {}) {
-  const normalizedReligionId = Number(religionId);
-  let snapshots = null;
+  return createDeleteSocialObjectCommand("religion", religionId, {label});
+}
 
-  return {
-    label: `${label} #${normalizedReligionId}`,
-    domain: "religion",
-    effects: {
-      ...RELIGION_STRUCTURE_EFFECTS,
-      affected: objectAffected("religion", normalizedReligionId)
-    },
-    apply(context) {
-      const stores = getReligionStores(context.map);
-      if (!stores.length) throw new Error("当前地图没有宗教数据");
-      const primary = stores[0];
-      const religion = primary?.[normalizedReligionId];
-      if (!religion || religion.removed) throw new Error(`找不到宗教 #${normalizedReligionId}`);
-      const blockers = religionDeleteBlockers(context.map, normalizedReligionId);
-      if (blockers.length) throw new Error(`只能删除空宗教：${blockers.join("、")}`);
-      snapshots ??= stores.map(store => ({store, value: cloneReligion(store[normalizedReligionId])}));
-      for (const {store} of snapshots) {
-        if (store[normalizedReligionId]) store[normalizedReligionId].removed = true;
-      }
-      updateReligionTreeMetadata(context.map, primary);
-    },
-    revert(context) {
-      if (!snapshots) return;
-      for (const {store, value} of snapshots) {
-        store[normalizedReligionId] = cloneReligion(value);
-      }
-      updateReligionTreeMetadata(context.map, getReligions(context.map));
-    },
-    isNoop(context) {
-      const religion = getReligions(context.map)?.[normalizedReligionId];
-      return !religion || religion.removed || religionDeleteBlockers(context.map, normalizedReligionId).length > 0;
-    }
-  };
+export function createApplyReligionAssignmentCommand(changes, options = {}) {
+  return createApplySocialAssignmentCommand("religion", changes, options);
 }
 
 export function createSetReligionColorCommand(religionId, color, {beforeColor = null, label = "宗教颜色"} = {}) {
@@ -219,34 +189,6 @@ function createEmptyReligion(religionId, name) {
     color: null,
     userCreated: true
   };
-}
-
-function religionDeleteBlockers(map, religionId) {
-  const blockers = [];
-  const religion = getReligions(map)?.[religionId];
-  if (Number(religion?.cells) > 0 || packCellUsage(map, religionId) > 0 || gridCellUsage(map, religionId) > 0) blockers.push("仍有覆盖 cells");
-  if ((religion?.children || []).some(childId => getReligions(map)?.[childId] && !getReligions(map)?.[childId]?.removed)) blockers.push("仍有子宗教");
-  if ((map?.settlements?.cities || []).some(city => Number(city?.religion) === religionId)) blockers.push("仍有关联城市");
-  if ((map?.pack?.burgs || []).some(burg => burg?.i && !burg.removed && Number(burg?.religion) === religionId)) blockers.push("仍有关联城镇");
-  if ((map?.politics?.states || map?.pack?.states || []).some(state => state?.i && !state.removed && Number(state?.religion) === religionId)) blockers.push("仍有关联国家");
-  return blockers;
-}
-
-function packCellUsage(map, religionId) {
-  return countTypedArrayValue(map?.pack?.cells?.religion, religionId);
-}
-
-function gridCellUsage(map, religionId) {
-  return countTypedArrayValue(map?.grid?.cells?.religion, religionId);
-}
-
-function countTypedArrayValue(values, target) {
-  if (!values) return 0;
-  let count = 0;
-  for (const value of values) {
-    if (Number(value) === target) count++;
-  }
-  return count;
 }
 
 function cloneReligion(religion) {

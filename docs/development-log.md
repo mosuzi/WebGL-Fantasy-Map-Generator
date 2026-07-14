@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-07-14：文化与宗教完整删除及归属编辑
+
+- 新增共享 `social-ownership-edit-commands.js`，文化 / 宗教删除会把 pack / grid cells 和关联对象归零到中立 id `0`，清理继承引用、备注及文化名称库绑定，刷新覆盖统计并标记下游派生；完整快照支持撤销 / 重做。
+- 文化与宗教面板新增归属目标、笔刷半径和启停动作；一次拖动只生成一条 `EditHistory` 命令。控制台新增 `api.edit.cultures.assignCells()` 与 `api.edit.religions.assignCells()`，并补齐 capabilities 方法和元数据。
+- 新增 `regress:social-ownership` 与 `regress:social-ownership-browser`。命令回归覆盖非空删除、引用清理、导出、撤销 / 重做和归属同步；系统 Chrome 浏览器回归覆盖面板删除、两个归属 API、能力表、WebGL / health / console / page error。
+- 验证通过：相关 `node --check`、生产构建、`regress:social-ownership`、`regress:social-ownership-browser`、`regress:api` 和 `git diff --check`；浏览器结果中 WebGL / health / console / page error 均为 `0`。
+
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
 ## 2026-07-14：湖泊安全删除闭环

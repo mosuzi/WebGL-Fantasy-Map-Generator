@@ -393,7 +393,7 @@ function resolveProvince(map, object) {
 
 function resolveCulture(map, object) {
   const culture = map.society.cultures[object.id];
-  if (!culture || !culture.i) return null;
+  if (!culture || !culture.i || culture.removed) return null;
   const urban = (map.settlements?.cities || []).reduce((sum, city) => sum + (Number(city?.culture) === object.id ? Number(city.population) || 0 : 0), 0);
   return {
     ...object,
@@ -411,7 +411,7 @@ function resolveCulture(map, object) {
 
 function resolveReligion(map, object) {
   const religion = map.society.religions[object.id];
-  if (!religion || !religion.i) return null;
+  if (!religion || !religion.i || religion.removed) return null;
   const urban = (map.settlements?.cities || []).reduce((sum, city) => sum + (Number(city?.religion) === object.id ? Number(city.population) || 0 : 0), 0);
   return {
     ...object,

@@ -52,7 +52,7 @@ import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, decompressGzipBase64Text, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentFile, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
-import {createAddCultureCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
+import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
@@ -73,10 +73,12 @@ import {createDeleteLakeCommand, createRenameLakesFromNamebaseCommand} from "./l
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
   createAddReligionCommand,
+  createApplyReligionAssignmentCommand,
   createDeleteReligionCommand,
   createSetReligionColorCommand,
   createSetReligionParentCommand
 } from "./religion-edit-commands.js";
+import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights} from "./persistent-highlights.js";
 import {createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
@@ -210,6 +212,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       sourceProvinceId: null,
       lastPointer: null
     },
+    cultureEdit: {activeStroke: null, lastAffected: 0},
+    religionEdit: {activeStroke: null, lastAffected: 0},
     cityEdit: {
       addMode: false,
       deleteMode: false,
@@ -1186,10 +1190,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const context = {map: state.map};
       const result = executeEditCommand(state, documentRef, command, {
         context,
-        noopStatus: "只能删除无覆盖、无子级、无关联对象的空文化。"
+        noopStatus: "文化不存在或已删除。"
       });
       if (result.executed) {
-        setFileOperationStatus(documentRef, `已删除空文化 ${object.name || `#${object.id}`}。`);
+        setFileOperationStatus(documentRef, `已删除文化 ${object.name || `#${object.id}`} 并清除相关归属。`);
       }
       updateEditingInteractionLock(state, documentRef);
     },
@@ -1224,6 +1228,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onNamebaseBinding: cultureId => {
       state.panels.namebase.open(state.map, {cultureId, history: state.editHistory.getStats()});
+    },
+    onAssignmentActive: active => {
+      state.cultureEdit.activeStroke = null;
+      culturePanel.setAssignmentActive(active);
+      if (active) {
+        state.religionEdit.activeStroke = null;
+        religionPanel?.setAssignmentActive(false);
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        renderer.setColorMode("cultures");
+        setActiveModeButton(documentRef, "cultures");
+      }
+      updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
@@ -1266,10 +1284,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const context = {map: state.map};
       const result = executeEditCommand(state, documentRef, command, {
         context,
-        noopStatus: "只能删除无覆盖、无子级、无关联对象的空宗教。"
+        noopStatus: "宗教不存在或已删除。"
       });
       if (result.executed) {
-        setFileOperationStatus(documentRef, `已删除空宗教 ${object.name || `#${object.id}`}。`);
+        setFileOperationStatus(documentRef, `已删除宗教 ${object.name || `#${object.id}`} 并清除相关归属。`);
       }
       updateEditingInteractionLock(state, documentRef);
     },
@@ -1300,6 +1318,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const context = {map: state.map};
       const command = createSetObjectNoteCommand(object, body, {name: religion?.name || `宗教 #${religionId}`});
       executeEditCommand(state, documentRef, command, {context});
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onAssignmentActive: active => {
+      state.religionEdit.activeStroke = null;
+      religionPanel.setAssignmentActive(active);
+      if (active) {
+        state.cultureEdit.activeStroke = null;
+        culturePanel?.setAssignmentActive(false);
+        heightPanel?.setActive(false);
+        statePanel?.setActive(false);
+        provincePanel?.setActive(false);
+        renderer.setColorMode("religions");
+        setActiveModeButton(documentRef, "religions");
+      }
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
@@ -1958,6 +1990,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindHeightEditing(canvas, state, documentRef);
   bindStateEditing(canvas, state, documentRef);
   bindProvinceEditing(canvas, state, documentRef);
+  bindSocialAssignmentEditing(canvas, state, documentRef, "culture");
+  bindSocialAssignmentEditing(canvas, state, documentRef, "religion");
   bindCityEditing(canvas, state, documentRef);
   bindMarkerEditing(canvas, state, documentRef);
   bindCustomLabelDrag(state, documentRef);
@@ -2272,6 +2306,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       },
       cultures: {
         add: options => addCultureViaApi(state, documentRef, options),
+        assignCells: (cultureId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "culture", cultureId, gridCellIds),
         delete: cultureId => deleteCultureViaApi(state, documentRef, cultureId),
         rename: (cultureId, name) => renameCultureViaApi(state, documentRef, cultureId, name),
         setColor: (cultureId, color) => setCultureColorViaApi(state, documentRef, cultureId, color),
@@ -2279,6 +2314,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       },
       religions: {
         add: options => addReligionViaApi(state, documentRef, options),
+        assignCells: (religionId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "religion", religionId, gridCellIds),
         delete: religionId => deleteReligionViaApi(state, documentRef, religionId),
         rename: (religionId, name) => renameReligionViaApi(state, documentRef, religionId, name),
         setColor: (religionId, color) => setReligionColorViaApi(state, documentRef, religionId, color),
@@ -2784,6 +2820,12 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.provinceEdit.lastAffected = 0;
   state.provinceEdit.sourceProvinceId = null;
   state.provinceEdit.lastPointer = null;
+  state.cultureEdit.activeStroke = null;
+  state.cultureEdit.lastAffected = 0;
+  state.religionEdit.activeStroke = null;
+  state.religionEdit.lastAffected = 0;
+  state.panels.culture?.setAssignmentActive?.(false);
+  state.panels.religion?.setAssignmentActive?.(false);
   state.cityEdit.addMode = false;
   state.cityEdit.deleteMode = false;
   state.cityEdit.lastCreatedCityId = null;
@@ -5691,8 +5733,8 @@ function deleteCultureViaApi(state, documentRef, cultureId) {
   const command = createDeleteCultureCommand(id);
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    noopStatus: "只能删除无覆盖、无子级、无关联对象的空文化。",
-    status: `已删除空文化 #${id}。`,
+    noopStatus: "文化不存在或已删除。",
+    status: `已删除文化 #${id} 并清除相关归属。`,
     throwOnError: false
   });
   const selectedObject = state.selectionStore.getSnapshot().selection?.object;
@@ -5701,6 +5743,37 @@ function deleteCultureViaApi(state, documentRef, cultureId) {
     state.panels.culture?.setSelectedCultureId(null);
   }
   updateCulturePanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function assignSocialCellsViaApi(state, documentRef, kind, targetId, gridCellIds) {
+  const label = kind === "culture" ? "文化" : "宗教";
+  const id = normalizeApiInteger(targetId, `${label} ID`);
+  const store = kind === "culture"
+    ? state.map?.society?.cultures || state.map?.pack?.cultures
+    : state.map?.society?.religions || state.map?.pack?.religions;
+  if (id > 0 && (!store?.[id] || store[id].removed)) throw new Error(`${label}不存在或已删除`);
+  if (!Array.isArray(gridCellIds)) throw new Error("gridCellIds 必须是数组");
+  const field = kind === "culture" ? "culture" : "religion";
+  const cells = state.map?.grid?.cells;
+  const changes = [...new Set(gridCellIds.map(value => normalizeApiInteger(value, "grid cell ID")))]
+    .filter(gridCell => gridCell >= 0 && gridCell < (cells?.[field]?.length || 0) && isGridLandCell(state.map, gridCell))
+    .filter(gridCell => Number(cells[field][gridCell] || 0) !== id)
+    .map(gridCell => ({gridCell, before: Number(cells[field][gridCell] || 0), after: id}));
+  const command = kind === "culture"
+    ? createApplyCultureAssignmentCommand(changes)
+    : createApplyReligionAssignmentCommand(changes);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    noopStatus: `没有需要更新的${label}归属。`,
+    status: `已更新 ${changes.length} 个 grid cells 的${label}归属。`,
+    throwOnError: false
+  });
+  state[`${kind}Edit`].lastAffected = result.executed ? changes.length : 0;
+  kind === "culture" ? updateCulturePanel(state) : updateReligionPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5776,8 +5849,8 @@ function deleteReligionViaApi(state, documentRef, religionId) {
   const command = createDeleteReligionCommand(id);
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    noopStatus: "只能删除无覆盖、无子级、无关联对象的空宗教。",
-    status: `已删除空宗教 #${id}。`,
+    noopStatus: "宗教不存在或已删除。",
+    status: `已删除宗教 #${id} 并清除相关归属。`,
     throwOnError: false
   });
   const selectedObject = state.selectionStore.getSnapshot().selection?.object;
@@ -7872,6 +7945,36 @@ function bindProvinceEditing(canvas, state, documentRef) {
   }, true);
 }
 
+function bindSocialAssignmentEditing(canvas, state, documentRef, kind) {
+  const editState = state[`${kind}Edit`];
+  const panel = () => state.panels[kind];
+  canvas.addEventListener("pointerdown", event => {
+    const brush = panel()?.getBrush?.();
+    if (!brush?.active || !state.map || !isPrimaryPointerDown(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    editState.activeStroke = {pointerId: event.pointerId, originals: new Map()};
+    capturePointer(canvas, event.pointerId);
+    applySocialAssignmentAtEvent(state, event, kind);
+  }, true);
+  canvas.addEventListener("pointermove", event => {
+    if (!editState.activeStroke || editState.activeStroke.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    applySocialAssignmentAtEvent(state, event, kind);
+  }, true);
+  for (const eventName of ["pointerup", "pointercancel"]) {
+    canvas.addEventListener(eventName, event => {
+      if (!editState.activeStroke || editState.activeStroke.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      finishSocialAssignmentStroke(state, documentRef, kind);
+      releasePointer(canvas, event.pointerId);
+      kind === "culture" ? updateCulturePanel(state) : updateReligionPanel(state);
+    }, true);
+  }
+}
+
 function bindCityEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (state.cityEdit.deleteMode && state.map) {
@@ -8249,6 +8352,43 @@ function applyProvinceBrushAtEvent(state, event) {
   updateProvincePanel(state);
 }
 
+function applySocialAssignmentAtEvent(state, event, kind) {
+  const brush = state.panels[kind]?.getBrush?.();
+  const editState = state[`${kind}Edit`];
+  if (!brush?.active || !editState.activeStroke || brush.targetId < 0) return;
+  const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const changes = getSocialAssignmentChanges(state.map, point, brush, editState.activeStroke.originals, kind);
+  if (!changes.length) return;
+  applySocialAssignmentPreview(state.map, kind, changes);
+  editState.lastAffected = changes.length;
+  state.editRefreshScheduler.run(SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS);
+  kind === "culture" ? updateCulturePanel(state) : updateReligionPanel(state);
+}
+
+function finishSocialAssignmentStroke(state, documentRef, kind) {
+  const editState = state[`${kind}Edit`];
+  const stroke = editState.activeStroke;
+  editState.activeStroke = null;
+  if (!stroke?.originals?.size) return;
+  const values = state.map.grid.cells[kind];
+  const changes = [];
+  for (const [gridCell, original] of stroke.originals) {
+    const before = original.gridBefore;
+    const after = Number(values[gridCell] || 0);
+    if (before !== after) changes.push({gridCell, before, after, packBefore: original.packBefore});
+  }
+  const command = kind === "culture"
+    ? createApplyCultureAssignmentCommand(changes)
+    : createApplyReligionAssignmentCommand(changes);
+  if (command.isNoop({map: state.map})) return;
+  editState.lastAffected = changes.length;
+  executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false
+  });
+}
+
 function finishHeightStroke(state, documentRef) {
   const stroke = state.heightEdit.activeStroke;
   state.heightEdit.activeStroke = null;
@@ -8352,6 +8492,31 @@ function getProvinceBrushChanges(map, point, brush, originals) {
     affected.push(provinceChange(cells, originals, gridCell, brush.targetProvinceId));
   }
 
+  return affected;
+}
+
+function getSocialAssignmentChanges(map, point, brush, originals, kind) {
+  const radiusSq = brush.radius * brush.radius;
+  const cells = map.grid.cells;
+  const values = cells[kind];
+  const affected = [];
+  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+    if (!isGridLandCell(map, gridCell)) continue;
+    const cellPoint = map.grid.points[cells.p[gridCell]];
+    if (!cellPoint) continue;
+    const dx = cellPoint[0] - point.x;
+    const dy = cellPoint[1] - point.y;
+    if (dx * dx + dy * dy > radiusSq || Number(values[gridCell] || 0) === brush.targetId) continue;
+    if (!originals.has(gridCell)) {
+      const packBefore = [];
+      for (let packCell = 0; packCell < (map.pack?.cells?.g?.length || 0); packCell++) {
+        if (Number(map.pack.cells.g[packCell]) !== gridCell || Number(map.pack.cells.h?.[packCell]) < 20) continue;
+        packBefore.push({packCell, before: Number(map.pack.cells[kind]?.[packCell]) || 0});
+      }
+      originals.set(gridCell, {gridBefore: Number(values[gridCell] || 0), packBefore});
+    }
+    affected.push({gridCell, before: originals.get(gridCell).gridBefore, after: brush.targetId});
+  }
   return affected;
 }
 
@@ -8529,12 +8694,18 @@ function updateFeaturePanel(state) {
 
 function updateCulturePanel(state) {
   if (!isPanelOpen(state.panels.culture)) return;
-  state.panels.culture?.update(state.map, state.selection, state.editHistory.getStats());
+  state.panels.culture?.update(state.map, state.selection, state.editHistory.getStats(), {
+    active: state.panels.culture?.getBrush?.().active,
+    lastAffected: state.cultureEdit.lastAffected
+  });
 }
 
 function updateReligionPanel(state) {
   if (!isPanelOpen(state.panels.religion)) return;
-  state.panels.religion?.update(state.map, state.selection, state.editHistory.getStats());
+  state.panels.religion?.update(state.map, state.selection, state.editHistory.getStats(), {
+    active: state.panels.religion?.getBrush?.().active,
+    lastAffected: state.religionEdit.lastAffected
+  });
 }
 
 function updateDiplomacyPanel(state) {
@@ -8748,7 +8919,7 @@ function updateEditingInteractionLock(state, documentRef) {
 }
 
 function isEditingInteractionLocked(state) {
-  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.stateEdit.deleteMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.provinceEdit.deleteMode || state.cityEdit.addMode || state.cityEdit.deleteMode || state.markerEdit.mode || state.editingObject);
+  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.stateEdit.deleteMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.provinceEdit.deleteMode || state.panels.culture?.getBrush?.().active || state.panels.religion?.getBrush?.().active || state.cityEdit.addMode || state.cityEdit.deleteMode || state.markerEdit.mode || state.editingObject);
 }
 
 function getAllowedEditingPanelIds(state) {
@@ -8759,6 +8930,8 @@ function getAllowedEditingPanelIds(state) {
   if (state.panels.province?.getBrush().active) return ["province-panel"];
   if (state.provinceEdit.addMode) return ["province-panel"];
   if (state.provinceEdit.deleteMode) return ["province-panel"];
+  if (state.panels.culture?.getBrush?.().active) return ["culture-panel"];
+  if (state.panels.religion?.getBrush?.().active) return ["religion-panel"];
   if (state.cityEdit.addMode) return ["city-panel"];
   if (state.cityEdit.deleteMode) return ["city-panel"];
   if (state.markerEdit.mode) return ["marker-panel"];

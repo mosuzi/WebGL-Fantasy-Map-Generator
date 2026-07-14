@@ -52,7 +52,24 @@
 
   <UiDetailGrid class-name="religion-panel-details" empty-text="未选中宗教" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="religionActions">
+  <UiSelectField
+    input-id="religion-assignment-target"
+    label="归属笔刷目标"
+    :model-value="state.targetReligionId ?? 0"
+    :options="assignmentOptions"
+    @update:model-value="callbacks.onTargetReligionId"
+  />
+  <UiSliderField
+    label="归属笔刷半径"
+    :model-value="state.assignmentRadius"
+    :min="4"
+    :max="120"
+    :step="2"
+    unit-label="px"
+    @input="callbacks.onAssignmentRadius"
+  />
+
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="religionActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="religion-name-editor"
@@ -103,6 +120,7 @@ import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
+import UiSliderField from "./base/UiSliderField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import UiTreeDisplayPanel from "./base/UiTreeDisplayPanel.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
@@ -177,16 +195,21 @@ const religionListActions = computed(() => [
   {key: "locate", label: "定位宗教", icon: "⌖", disabled: !selected.value},
   {
     key: "delete",
-    label: selected.value?.canDelete ? "删除空宗教" : "只能删除无覆盖、无子级、无关联对象的空宗教",
+    label: "删除宗教并清除归属",
     icon: "×",
-    disabled: !selected.value?.canDelete
+    disabled: !selected.value
   }
 ]);
-const religionActions = Object.freeze([
+const religionActions = computed(() => [
+  {key: "assign", label: props.state.assignmentActive ? "退出宗教归属笔刷" : "编辑宗教归属", icon: "◎", panel: false, active: props.state.assignmentActive},
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
   {key: "parent", label: "调整继承", icon: "↳"},
   {key: "note", label: "编辑备注", icon: "☰"}
+]);
+const assignmentOptions = computed(() => [
+  {value: 0, label: "无宗教"},
+  ...metrics.value.rows.map(row => ({value: row.id, label: row.name}))
 ]);
 
 const summaryMetrics = computed(() => [
@@ -196,6 +219,8 @@ const summaryMetrics = computed(() => [
   {label: "层级", value: formatNumber(metrics.value.maxDepth)},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: formatNumber(metrics.value.cities)},
+  {label: "归属笔刷", value: props.state.assignmentActive ? "启用" : "关闭"},
+  {label: "本次影响", value: formatNumber(props.state.lastAffected || 0)},
   {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
 
@@ -244,6 +269,12 @@ function openRenameEditor(row) {
   });
 }
 
+function handleActionSelect(actionKey) {
+  if (actionKey !== "assign") return;
+  activeAction.value = null;
+  props.callbacks.onAssignmentActive?.(!props.state.assignmentActive);
+}
+
 function handleListAction(actionKey) {
   if (actionKey === "highlight-selected") {
     props.callbacks.onHighlight?.(highlightableReligionRows.value);
@@ -262,7 +293,7 @@ function handleListAction(actionKey) {
     return;
   }
   if (actionKey === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
-  if (actionKey === "delete" && selected.value?.canDelete) props.callbacks.onDelete?.(selected.value);
+  if (actionKey === "delete" && selected.value) props.callbacks.onDelete?.(selected.value);
 }
 
 function buildReligionMetrics(map) {
