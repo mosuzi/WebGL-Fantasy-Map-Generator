@@ -52,6 +52,7 @@
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
         <pre id="file-operation-error-details" class="file-operation-error-details" hidden></pre>
+        <UiButton id="export-map-import-diagnostic" variant="secondary" hidden>导出诊断</UiButton>
       </section>
 
       <Teleport to="body">

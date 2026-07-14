@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-07-14：完整地图导入错误诊断
+
+本步完成权威任务清单第 18 项，在既有文本详情基础上增加可复用、可导出的结构化诊断，不改变地图导入成功路径。
+
+- 新增 `map-import-diagnostics.js`，统一生成 `webgl-generator-map-import-diagnostic v1`；诊断包含发生时间、来源、当前期望 document type / version / map schema、文件元数据和错误分类，不包含原始文件正文。
+- 错误分类覆盖 `invalid-json / wrong-document-type / unsupported-version / missing-map / invalid-schema / unsupported-typed-array / unsupported-decompression / invalid-gzip / unknown-import-error`，每类给出稳定 code、失败阶段和中文建议。
+- 本地文件导入和 API 地图导入的解析、迁移与运行时错误均保存为 `state.lastMapImportDiagnostic`；控制面板显示诊断代码和阶段，并提供“导出诊断”JSON。下一次导入开始会清空旧记录并隐藏按钮，避免误导用户导出过期错误。
+- 新增 `regress:map-import-diagnostics`，覆盖九类分类、结构字段、格式化建议、JSON roundtrip 和 UI / handler / 下载接线；迁移回归继续通过。生产构建完成 `1123` modules，仅有既有大 chunk 警告。本项按快速迭代约定未运行浏览器测试。
+
 ## 2026-07-14：完整地图跨版本迁移器
 
 本步完成权威任务清单第 17 项，把此前只有空管线的完整地图格式升级为真实 `webgl-generator-map v2`。

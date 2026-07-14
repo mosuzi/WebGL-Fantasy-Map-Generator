@@ -51,6 +51,7 @@ import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, decompressGzipBase64Text, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentFile, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
+import {createMapImportDiagnostic, formatMapImportDiagnosticLines, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
@@ -237,6 +238,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       editingMeasurementId: null
     },
     lastEditRefresh: null,
+    lastMapImportDiagnostic: null,
     selectionStore: null,
     renderer: null,
     panelManager,
@@ -2189,6 +2191,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onExportGeoJson: () => exportGeoJson(state, documentRef),
     onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef),
+    onExportMapImportDiagnostic: () => exportMapImportDiagnostic(state, documentRef),
     onImportMapData: file => importMapData(state, documentRef, file),
     onImportGeoData: file => importGeoData(state, documentRef, file),
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload),
@@ -3963,6 +3966,7 @@ async function importMapData(state, documentRef, file) {
   if (!file) return;
   try {
     resetLoadTrace(documentRef);
+    state.lastMapImportDiagnostic = null;
     clearFileOperationDetails(documentRef);
     emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
     setFileOperationStatus(documentRef, "正在读取地图数据...");
@@ -3984,13 +3988,20 @@ async function importMapData(state, documentRef, file) {
     setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    reportMapImportError(documentRef, error, file);
+    reportMapImportError(state, documentRef, error, file);
   }
 }
 
 async function importMapDocumentViaApi(state, documentRef, document, options = {}) {
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
-  const parsed = await normalizeApiMapImportDocument(documentRef, document);
+  state.lastMapImportDiagnostic = null;
+  let parsed;
+  try {
+    parsed = await normalizeApiMapImportDocument(documentRef, document);
+  } catch (error) {
+    reportMapImportError(state, documentRef, error, null, {source: "api", prefix: "API 导入地图数据失败"});
+    throw error;
+  }
   return importParsedMapDocumentViaApi(state, documentRef, parsed, options);
 }
 
@@ -3998,6 +4009,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
   try {
     resetLoadTrace(documentRef);
+    state.lastMapImportDiagnostic = null;
     clearFileOperationDetails(documentRef);
     emitLoadTrace(documentRef, {phase: "request", id: "api-map-import-read", message: loadingMessage("map-import-read")});
     setFileOperationStatus(documentRef, "正在通过 API 导入地图数据...");
@@ -4035,7 +4047,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    reportFileOperationError(documentRef, "API 导入地图数据失败", error);
+    reportMapImportError(state, documentRef, error, null, {source: "api", prefix: "API 导入地图数据失败"});
     throw error;
   }
 }
@@ -4322,11 +4334,24 @@ function setFileOperationStatus(documentRef, message, targetIds = ["file-operati
   }
 }
 
-function reportMapImportError(documentRef, error, file) {
+function reportMapImportError(state, documentRef, error, file, options = {}) {
   const message = error instanceof Error ? error.message : String(error);
-  setFileOperationStatus(documentRef, `地图数据导入失败：${message}`);
-  setFileOperationDetails(documentRef, mapImportErrorDetails(error, file));
+  const diagnostic = createMapImportDiagnostic(error, file, {source: options.source});
+  state.lastMapImportDiagnostic = diagnostic;
+  setFileOperationStatus(documentRef, `${options.prefix || "地图数据导入失败"}：${message}`);
+  setFileOperationDetails(documentRef, formatMapImportDiagnosticLines(diagnostic));
+  const exportButton = documentRef.getElementById("export-map-import-diagnostic");
+  if (exportButton) exportButton.hidden = false;
   console.warn(error);
+}
+
+function exportMapImportDiagnostic(state, documentRef) {
+  const diagnostic = state.lastMapImportDiagnostic;
+  if (!diagnostic) return false;
+  const suffix = String(diagnostic.file.name || "map-import").replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "map-import";
+  downloadText(documentRef, stringifyMapImportDiagnostic(diagnostic), `${suffix}.diagnostic.json`, "application/json;charset=utf-8");
+  setFileOperationStatus(documentRef, `已导出导入诊断：${diagnostic.error.code}`);
+  return true;
 }
 
 function reportFileOperationError(documentRef, prefix, error, targetIds) {
@@ -4345,37 +4370,12 @@ function setFileOperationDetails(documentRef, lines, targetId = "file-operation-
 
 function clearFileOperationDetails(documentRef, targetId = "file-operation-error-details") {
   const details = documentRef.getElementById(targetId);
-  if (!details) return;
-  details.textContent = "";
-  details.hidden = true;
-}
-
-function mapImportErrorDetails(error, file) {
-  const message = error instanceof Error ? error.message : String(error);
-  return [
-    `文件：${file?.name || "未命名文件"}`,
-    `大小：${formatStorageBytes(file?.size || 0)}`,
-    `MIME：${file?.type || "未提供"}`,
-    `推断格式：${mapImportFileKindLabel(file)}`,
-    `错误类型：${error?.name || typeof error}`,
-    `错误信息：${message}`,
-    mapImportErrorSuggestion(message)
-  ];
-}
-
-function mapImportFileKindLabel(file) {
-  const name = String(file?.name || "").toLowerCase();
-  const type = String(file?.type || "").toLowerCase();
-  if (name.endsWith(".gz") || type.includes("gzip") || type === "application/x-gzip") return "gzip 压缩地图 JSON";
-  return "地图 JSON";
-}
-
-function mapImportErrorSuggestion(message) {
-  if (/不是当前地图保存格式/.test(message)) return "建议：请确认文件来自“导出 / 地图数据”或“导出 / 压缩地图数据”。";
-  if (/暂不支持的地图格式版本/.test(message)) return "建议：请使用当前版本导出的地图文件，或等待后续版本迁移器支持。";
-  if (/Unexpected|JSON|position|token/i.test(message)) return "建议：文件内容不是有效 JSON；若文件以 .gz 结尾，请确认它确实为 gzip 压缩文件。";
-  if (/压缩|Decompression|gzip/i.test(message)) return "建议：请确认压缩文件未损坏，并且浏览器支持 DecompressionStream。";
-  return "建议：保留此详情并重新导入原始 .webgl-map.json 或 .webgl-map.json.gz 文件。";
+  if (details) {
+    details.textContent = "";
+    details.hidden = true;
+  }
+  const exportButton = documentRef.getElementById("export-map-import-diagnostic");
+  if (exportButton) exportButton.hidden = true;
 }
 
 function syncGenerationInputs(documentRef, options) {

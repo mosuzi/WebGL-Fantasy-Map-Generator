@@ -76,6 +76,7 @@
    - 为什么做：导出是用户长期保存、迁移、外部分析和二次加工地图的关键链路；当前导出种类多，但仍缺压缩、版本迁移、错误诊断和部分 GIS 质量收尾。
    - 执行方式：每个导出能力都要明确“是否可重新导入复原地图”；完整地图 JSON 的兼容性优先级高于只读摘要导出，GIS 输出则与下一项 dissolve 专项协同推进。
    - 第 17 项补充：完整地图跨版本迁移器已落地。当前导出格式升级为 `webgl-generator-map v2` / `map schema v2`，明确要求 notes、measurements、labels 和 visualTheme 四类持久化存储；`migrateMapDocument()` 注册真实 v1→v2 步骤，旧文档会在不原地修改输入 map 的前提下补齐存储与 metadata，并保留旧备注、隐藏标签、主题和 typed arrays。新增固定 v1 样本与 `regress:map-migration`，覆盖迁移、当前版本幂等、未来版本、缺失 map 和损坏 v2 拒绝。本项不提前扩展第 18 项导入错误详情 UI。
+   - 第 18 项补充：完整地图导入错误诊断已结构化。文件入口和 API 入口共用 `webgl-generator-map-import-diagnostic v1`，记录当前期望文档类型 / 版本 / schema、文件名 / 大小 / MIME / 推断格式，以及错误 code、失败阶段、原始信息和中文建议，不收集原文件正文。控制面板错误详情新增诊断代码与阶段，并只在存在最近一次错误时显示“导出诊断”；下一次导入开始即清空旧诊断。九类错误覆盖 JSON、文档类型、版本、map 缺失、schema、typed array、浏览器缺压缩能力、gzip 损坏和未知运行时错误。新增 `regress:map-import-diagnostics`，本项不扩展 GEO / 高度图导入诊断。
 
 4. 政治面 GeoJSON dissolve。
    - 来源：旧计划审视中的第 19 项；对应备份文档为 `docs/plan-backups/2026-07-08-reset-current-plan/docs/task-notes/political-geojson-dissolve-plan.md`。

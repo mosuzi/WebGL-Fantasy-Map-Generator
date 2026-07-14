@@ -129,6 +129,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("export-map-data-compressed")?.addEventListener("click", () => handlers.onExportCompressedMapData?.());
   documentRef.getElementById("export-map-geojson")?.addEventListener("click", () => handlers.onExportGeoJson?.());
   documentRef.getElementById("export-map-features-geojson")?.addEventListener("click", () => handlers.onExportFeatureGeoJson?.());
+  documentRef.getElementById("export-map-import-diagnostic")?.addEventListener("click", () => handlers.onExportMapImportDiagnostic?.());
   documentRef.getElementById("import-map-file")?.addEventListener("change", event => {
     const file = event.target.files?.[0];
     if (file) handlers.onImportMapData?.(file);
