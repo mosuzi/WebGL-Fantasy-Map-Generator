@@ -26960,3 +26960,22 @@ full 矩阵结果：
 - 当前地图只有 `20` 个国家，外交列表无法通过 UI 构造 `100` 条关系；经济交易列表单次展示上限为 `48`。为保持封闭任务边界，没有调整产品行数限制，也没有用页面脚本绕过 UI。改用同一持久高亮共享契约在城市列表一次选中 `731` 个对象，UI 明确提示只高亮前 `100` 个，运行时显示 `multi-object highlight (100)`、selection buffer 构建 `0ms`、绘制约 `0.2ms`，交互保持可用。
 - 高亮前后地图摘要校验保持 `f3912a5d`；清除持久集合后仍保留当前贸易流 selection，`WebGL error = 0`、绘制约 `0.1ms`。开发健康记录没有 error，只有地图生成阶段既有 `main-thread-long-task` warning；Chrome error 日志为空，唯一 warning 来自 React DevTools 扩展注入脚本记录同一健康长任务。
 - 直接运行 `node --no-warnings .\\tools\\webgl-generator-composite-highlight-regression.mjs` 通过：关系 / 贸易流 connector 共 `12` 个顶点，两类拾取候选各 `1`，重叠拾取为 `diplomacy-relation`；精确 `100` connector 为 `600` 个 GPU 顶点、`100` 个拾取候选、构建约 `0.761ms`。第 118 步达到最小验收，立即转入下一项。
+
+### 2026-07-14 封闭任务清单：高亮生命周期真实浏览器验收
+
+浏览器验收：
+
+- 城市 `#12` 在持久高亮 `1` 时由“景驿”重命名为“景驿验收”，列表行和历史摘要更新为 `重命名城市 #12 @city [city#12]`；撤销恢复旧名并保持高亮 `1`，重做恢复新名并保持高亮 `1`。本类名称编辑不改变摘要校验，仍为 `f3912a5d`。
+- 通过地图测量工具绘制两点、总长 `2,815.5 千米` 的临时对象 `measurement-1`。重命名为“测量验收”后高亮仍为 `1`；删除后测量数量、选择和高亮都归零。撤销删除恢复对象但不重新加入已经清理的持久高亮集合，重做再次删除；历史摘要为 `measurement#measurement-1`，符合删除时清理无效高亮、撤销不隐式重建用户选择的契约。验收结束后连续撤销创建链，临时测量没有留在地图中。
+- 复合关系首轮把“越部盟 -> 邢国”从猜疑改为友好后，历史已增加 `外交关系 #1-#18 @diplomacy [state#1, state#18]`，但外交面板仍显示猜疑。源码确认命令只更新 `pack.states`，而面板优先读取已与之分离的 `politics.states` 镜像；这直接阻断当前计划项的复合摘要刷新验收。
+
+最小修复：
+
+- `diplomacy-edit-commands.js` 在关系编辑和重生成同步阶段，把 canonical `pack.states` 的 `diplomacy / diplomacySummary / campaigns` 同步到独立 `politics.states` 镜像；撤销恢复外交快照后执行同一镜像同步。共享同一 states 数组时直接跳过，不增加重复写入或历史记录。
+- `webgl-generator-edit-command-affected-regression.mjs` 新增刻意分离的 pack / politics states，确认关系执行为 `Friendly`、撤销恢复 `Suspicion`、重做恢复 `Friendly`，两份镜像始终一致。
+
+复验与门禁：
+
+- 生产构建后只刷新当前 `5410` 页面一次。外交关系由猜疑改为友好后，面板详情和外交历史立即显示友好；撤销回猜疑、重做回友好，高亮数量全程为 `1`。编辑前 / 撤销后 checksum 为 `3c19d328`，编辑后为 `13050c90`，证明撤销恢复原地图语义。
+- `node --check` 覆盖外交命令和扩展回归；`webgl-generator-edit-command-affected-regression.mjs`、`webgl-generator-persistent-highlight-contract-regression.mjs`、生产构建和 `git diff --check` 全部通过。构建 `1121` modules，仅有既有大 chunk 警告。
+- `WebGL error = 0`，Chrome 没有 error；health 只有 `INFO map-ready` 和 React DevTools extension `installHook.js` 记录的 long-task warning。第 120 步达到最小验收，立即转入下一项。

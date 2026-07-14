@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
-import {diplomacyRegenerationAffected} from "../app/webgl-generator/src/runtime/diplomacy-edit-commands.js";
+import {createSetDiplomacyRelationCommand, diplomacyRegenerationAffected} from "../app/webgl-generator/src/runtime/diplomacy-edit-commands.js";
 import {createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {
   createClearUserNamebasesCommand,
@@ -72,6 +72,16 @@ assertAffected(diplomacyAffected, [
   {kind: "state", id: 3}
 ], "外交重生成目标");
 
+const diplomacyMap = createDiplomacyMap();
+const diplomacyHistory = new EditHistory();
+const relationCommand = createSetDiplomacyRelationCommand(1, 2, "Friendly");
+diplomacyHistory.execute(relationCommand, {map: diplomacyMap});
+assertDiplomacyMirrors(diplomacyMap, "Friendly", "外交关系执行");
+diplomacyHistory.undo({map: diplomacyMap});
+assertDiplomacyMirrors(diplomacyMap, "Suspicion", "外交关系撤销");
+diplomacyHistory.redo({map: diplomacyMap});
+assertDiplomacyMirrors(diplomacyMap, "Friendly", "外交关系重做");
+
 const heightCommand = createApplyHeightBrushCommand([{gridCell: 0, before: 10, after: 24}]);
 history.execute(heightCommand, {map});
 assert(map.grid.cells.h[0] === 24 && map.pack.cells.h[0] === 24, "高度笔刷没有同步 grid / pack 高度");
@@ -91,6 +101,7 @@ console.log(JSON.stringify({
   bindingAffected: bindingCommand.effects.affected,
   clearAffected: clearCommand.effects.affected,
   diplomacyAffected,
+  diplomacyMirrorRelation: diplomacyMap.politics.states[1].diplomacy[2],
   heightDomain: heightCommand.domain,
   heightAffected: heightCommand.effects.affected
 }, null, 2));
@@ -102,6 +113,26 @@ function createSyntheticMap() {
     grid: {cells: {h: Uint8Array.from([10, 20])}},
     pack: {cells: {g: Uint32Array.from([0, 1]), h: Uint8Array.from([10, 20])}}
   };
+}
+
+function createDiplomacyMap() {
+  const packStates = [
+    {i: 0, name: "中立", diplomacy: []},
+    {i: 1, name: "甲", diplomacy: ["x", "x", "Suspicion"], diplomacySummary: {Suspicion: 1}, campaigns: []},
+    {i: 2, name: "乙", diplomacy: ["x", "Suspicion", "x"], diplomacySummary: {Suspicion: 1}, campaigns: []}
+  ];
+  return {
+    pack: {states: packStates, diplomacy: {chronicle: [], metadata: {buildMs: 0}}},
+    politics: {states: JSON.parse(JSON.stringify(packStates))},
+    diplomacy: null
+  };
+}
+
+function assertDiplomacyMirrors(map, relation, label) {
+  assert(map.pack.states[1].diplomacy[2] === relation, `${label} pack 关系异常`);
+  assert(map.politics.states[1].diplomacy[2] === relation, `${label} politics 关系异常`);
+  assert(map.pack.states[2].diplomacy[1] === relation, `${label} pack 反向关系异常`);
+  assert(map.politics.states[2].diplomacy[1] === relation, `${label} politics 反向关系异常`);
 }
 
 function assertHistory(history, domain, affected, label) {

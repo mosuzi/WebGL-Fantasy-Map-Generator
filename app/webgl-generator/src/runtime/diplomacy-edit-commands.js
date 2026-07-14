@@ -117,11 +117,28 @@ function restoreDiplomacy(map, snapshot) {
     if (snapshot.optionsSalt === undefined) delete map.options.diplomacyRegenerationSalt;
     else map.options.diplomacyRegenerationSalt = snapshot.optionsSalt;
   }
+  syncDiplomacyStateMirrors(states, map?.politics?.states);
 }
 
 function syncDiplomacy(map) {
-  if (!map?.pack?.diplomacy) return;
-  map.diplomacy = map.pack.diplomacy;
+  if (map?.pack?.diplomacy) map.diplomacy = map.pack.diplomacy;
+  syncDiplomacyStateMirrors(map?.pack?.states, map?.politics?.states);
+}
+
+function syncDiplomacyStateMirrors(sourceStates, targetStates) {
+  if (!Array.isArray(sourceStates) || !Array.isArray(targetStates) || sourceStates === targetStates) return;
+  for (const source of sourceStates) {
+    if (!source) continue;
+    const id = Number(source.i ?? source.id);
+    const target = targetStates[id];
+    if (!target) continue;
+    if (Array.isArray(source.diplomacy)) target.diplomacy = [...source.diplomacy];
+    else delete target.diplomacy;
+    if (source.diplomacySummary) target.diplomacySummary = {...source.diplomacySummary};
+    else delete target.diplomacySummary;
+    if (Array.isArray(source.campaigns)) target.campaigns = clonePlain(source.campaigns);
+    else delete target.campaigns;
+  }
 }
 
 function clonePlain(value) {
