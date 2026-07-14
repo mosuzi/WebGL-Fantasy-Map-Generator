@@ -7,7 +7,7 @@
 | 入口 | 文件名后缀 | 格式 | 主要内容 | 可重新导入复原 | 当前状态 |
 |---|---|---|---|---|---|
 | 导出图片 | `.png` | PNG | WebGL 画布、地图尺寸摘要、比例尺 overlay | 否 | 已完成第一刀 |
-| 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v1` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成第一刀 |
+| 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v2` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成跨版本迁移 |
 | 导出压缩地图数据 | `.webgl-map.json.gz` | gzip JSON | 与完整地图 JSON 相同，使用浏览器 `CompressionStream` 压缩 | 是 | 已完成第一刀 |
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
 | 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route LineString、river LineString、marker Point、zone MultiPolygon、state/province 非 dissolve MultiPolygon；简介 tab 可选择导出图层 | 否 | 已完成第二刀 |
@@ -24,16 +24,21 @@
 当前字段：
 
 - `type = webgl-generator-map`
-- `version = 1`
+- `version = 2`
 - `exportedAt`
 - `metadata.seed / checksum / generatorStage`
 - `options`
 - `map`
+- `metadata.mapSchemaVersion = 2`
+- `map.metadata.schemaVersion = 2`
 
 已验证：
 
 - typed arrays 显式序列化并恢复构造器。
 - marker、city、river、route、state、province、culture、religion 与 label 的 `map.notes` 会随完整 JSON 导出。
+- v2 明确保证 `map.notes / measurements / labels / visualTheme` 四类持久化存储存在。
+- 固定 v1 旧样本可迁移到 v2；旧备注、隐藏标签、主题和 typed arrays 均保留，缺失存储按兼容默认值补齐。
+- 当前 v2 重复迁移保持幂等；未来版本和结构损坏的 v2 文档会被拒绝。
 
 已验证：
 
@@ -42,7 +47,6 @@
 
 缺口：
 
-- 迁移器已预留 `migrateMapDocument()` 管线，但当前仍只有 v1，无实际跨版本迁移步骤。
 - 导入失败时已在控制面板显示文件名、大小、MIME、推断格式、错误类型、错误信息和中文处理建议；后续若要继续增强，可把最近错误记录导出为诊断包。
 
 ## pack cell GeoJSON
@@ -165,4 +169,4 @@
 
 1. 国家、省份和 zone dissolve：补真正适合 GIS 的外轮廓，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑原型验证。
 2. PNG 透明背景、裁剪范围和是否包含 overlay 的显式开关。
-3. 完整 JSON 版本迁移器和导入诊断包。
+3. 完整 JSON 导入诊断包和后续 schema 版本的增量迁移。

@@ -1,7 +1,8 @@
 import {readObjectNote} from "./object-notes.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
-export const MAP_DOCUMENT_VERSION = 1;
+export const MAP_DOCUMENT_VERSION = 2;
+export const MAP_SCHEMA_VERSION = 2;
 
 const TYPED_ARRAYS = Object.freeze({
   Int8Array,
@@ -19,18 +20,20 @@ const TYPED_ARRAYS = Object.freeze({
 
 export function createMapDocument(map, options = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
+  const normalizedMap = normalizeMapSchemaV2(map, options);
   return {
     type: MAP_DOCUMENT_TYPE,
     version: MAP_DOCUMENT_VERSION,
     exportedAt: new Date().toISOString(),
     app: "fmg-webgl-reimplementation",
     metadata: {
-      seed: map.metadata?.seed || options.seed,
-      checksum: map.metadata?.checksum || null,
-      generatorStage: map.metadata?.generatorStage || null
+      seed: normalizedMap.metadata?.seed || options.seed,
+      checksum: normalizedMap.metadata?.checksum || null,
+      generatorStage: normalizedMap.metadata?.generatorStage || null,
+      mapSchemaVersion: MAP_SCHEMA_VERSION
     },
     options: {...options},
-    map
+    map: normalizedMap
   };
 }
 
@@ -87,6 +90,7 @@ export async function createCompressedMapDocumentBlob(documentRef, document) {
 
 export function migrateMapDocument(document) {
   if (document?.type !== MAP_DOCUMENT_TYPE) throw new Error("文件不是当前地图保存格式");
+  if (!document.map || typeof document.map !== "object") throw new Error("地图文件缺少 map 数据");
   const sourceVersion = Number(document.version);
   if (!Number.isInteger(sourceVersion) || sourceVersion < 1) throw new Error(`暂不支持的地图格式版本：${document.version ?? "未知"}`);
   if (sourceVersion > MAP_DOCUMENT_VERSION) throw new Error(`暂不支持的地图格式版本：${document.version}`);
@@ -94,7 +98,7 @@ export function migrateMapDocument(document) {
   for (let version = sourceVersion; version < MAP_DOCUMENT_VERSION; version += 1) {
     migrated = migrateMapDocumentStep(migrated, version);
   }
-  if (!migrated.map || typeof migrated.map !== "object") throw new Error("地图文件缺少 map 数据");
+  validateCurrentMapDocument(migrated);
   return migrated;
 }
 
@@ -281,7 +285,108 @@ function migrateMapDocumentStep(document, version) {
   return migrator(document);
 }
 
-const MAP_DOCUMENT_MIGRATORS = Object.freeze({});
+const MAP_DOCUMENT_MIGRATORS = Object.freeze({
+  1: migrateMapDocumentV1ToV2
+});
+
+function migrateMapDocumentV1ToV2(document) {
+  return {
+    ...document,
+    version: 2,
+    metadata: {
+      ...(document.metadata || {}),
+      mapSchemaVersion: MAP_SCHEMA_VERSION
+    },
+    options: {...(document.options || {})},
+    map: normalizeMapSchemaV2(document.map, document.options)
+  };
+}
+
+function validateCurrentMapDocument(document) {
+  if (Number(document?.metadata?.mapSchemaVersion) !== MAP_SCHEMA_VERSION) throw new Error("地图文件缺少当前文档 schema 标记");
+  if (Number(document?.map?.metadata?.schemaVersion) !== MAP_SCHEMA_VERSION) throw new Error("地图数据缺少当前 schema 标记");
+  if (!Array.isArray(document.map.notes?.notes)) throw new Error("地图数据缺少 notes 存储");
+  if (!Array.isArray(document.map.measurements?.items)) throw new Error("地图数据缺少 measurements 存储");
+  if (Number(document.map.measurements?.version) !== 1 || !Number.isInteger(Number(document.map.measurements?.metadata?.nextId))) {
+    throw new Error("地图数据的 measurements 存储不完整");
+  }
+  if (!Array.isArray(document.map.labels?.custom)) throw new Error("地图数据缺少 labels 存储");
+  if (!Array.isArray(document.map.labels?.hidden?.city) || !Array.isArray(document.map.labels?.hidden?.state)) {
+    throw new Error("地图数据的 labels 隐藏表不完整");
+  }
+  if (!document.map.visualTheme || typeof document.map.visualTheme !== "object") throw new Error("地图数据缺少 visualTheme 存储");
+  if (!document.map.visualTheme.preset || !document.map.visualTheme.overrides || typeof document.map.visualTheme.overrides !== "object") {
+    throw new Error("地图数据的 visualTheme 存储不完整");
+  }
+}
+
+function normalizeMapSchemaV2(map, documentOptions = {}) {
+  const source = map && typeof map === "object" ? map : {};
+  const options = {...(documentOptions || {}), ...(source.options || {})};
+  return {
+    ...source,
+    metadata: {...(source.metadata || {}), schemaVersion: MAP_SCHEMA_VERSION},
+    options,
+    notes: normalizeNotesStoreV2(source.notes),
+    measurements: normalizeMeasurementStoreV2(source.measurements),
+    labels: normalizeLabelStoreV2(source.labels),
+    visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme)
+  };
+}
+
+function normalizeNotesStoreV2(source) {
+  const notes = Array.isArray(source?.notes) ? [...source.notes] : [];
+  return {
+    ...(source && typeof source === "object" ? source : {}),
+    notes,
+    metadata: {
+      ...(source?.metadata || {}),
+      notes: notes.length,
+      formatVersion: 1
+    }
+  };
+}
+
+function normalizeMeasurementStoreV2(source) {
+  const items = Array.isArray(source?.items) ? [...source.items] : [];
+  const maxId = items.reduce((max, item) => Math.max(max, measurementNumericId(item?.id)), 0);
+  return {
+    ...(source && typeof source === "object" ? source : {}),
+    version: 1,
+    items,
+    metadata: {
+      ...(source?.metadata || {}),
+      measurements: items.length,
+      nextId: Math.max(Number(source?.metadata?.nextId) || 1, maxId + 1)
+    }
+  };
+}
+
+function normalizeLabelStoreV2(source) {
+  const custom = Array.isArray(source?.custom) ? [...source.custom] : [];
+  const city = Array.isArray(source?.hidden?.city) ? [...source.hidden.city] : [];
+  const state = Array.isArray(source?.hidden?.state) ? [...source.hidden.state] : [];
+  return {
+    ...(source && typeof source === "object" ? source : {}),
+    custom,
+    hidden: {...(source?.hidden || {}), city, state},
+    metadata: {custom: custom.length, hidden: city.length + state.length}
+  };
+}
+
+function normalizeVisualThemeStoreV2(source, fallbackPreset) {
+  return {
+    ...(source && typeof source === "object" ? source : {}),
+    version: 1,
+    preset: String(source?.preset || fallbackPreset || "default"),
+    overrides: source?.overrides && typeof source.overrides === "object" ? {...source.overrides} : {}
+  };
+}
+
+function measurementNumericId(id) {
+  const match = String(id ?? "").match(/(\d+)$/);
+  return match ? Number(match[1]) || 0 : 0;
+}
 
 function isCompressedMapDocumentFile(file) {
   const name = String(file?.name || "").toLowerCase();

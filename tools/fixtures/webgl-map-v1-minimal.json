@@ -1,0 +1,48 @@
+{
+  "type": "webgl-generator-map",
+  "version": 1,
+  "exportedAt": "2026-07-02T00:00:00.000Z",
+  "metadata": {
+    "seed": "legacy-v1-sample",
+    "checksum": "legacy-checksum",
+    "generatorStage": "legacy-stage"
+  },
+  "options": {
+    "seed": "legacy-v1-sample",
+    "visualTheme": "ancient"
+  },
+  "map": {
+    "metadata": {
+      "seed": "legacy-v1-sample",
+      "checksum": "legacy-checksum"
+    },
+    "options": {
+      "seed": "legacy-v1-sample"
+    },
+    "grid": {
+      "cells": {
+        "h": {
+          "__webglGeneratorTypedArray": "Uint8Array",
+          "data": [12, 20, 48]
+        }
+      }
+    },
+    "notes": {
+      "notes": [
+        {
+          "id": "state:1",
+          "kind": "state",
+          "objectId": 1,
+          "name": "旧样本备注",
+          "body": "保留正文"
+        }
+      ]
+    },
+    "labels": {
+      "custom": [],
+      "hidden": {
+        "state": [1]
+      }
+    }
+  }
+}

@@ -151,7 +151,7 @@
 
 状态：
 
-- 已实现 `webgl-generator-map v1` 完整 JSON 导出/导入，typed arrays 会显式保存并恢复。
+- 完整 JSON 导出/导入已由初始 `webgl-generator-map v1` 升级为带真实 v1→v2 迁移器的 v2，typed arrays 会显式保存并恢复。
 - 已实现 PNG 导出第一刀，并补充地图尺寸摘要和比例尺 overlay 合成；完整图例、标签和浮动面板暂不合成。
 - 已实现 pack cell GeoJSON 第一刀，默认图可输出 `5950` 个 Polygon。
 - 已实现要素 GeoJSON 第一刀，单独输出路线 `LineString`、河流 `LineString`、marker `Point` 和区域 `MultiPolygon`，与 pack cell Polygon 导出分离。
