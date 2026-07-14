@@ -27024,3 +27024,10 @@ full 矩阵结果：
 - 默认 `api.history.peek()` 返回 3 项 preview、`+18`、`affectedCount = 21`、系统 1 / 国家 20 类型计数和 `affectedTruncated = true`；唯一一次自定义 `affectedLimit=5` 返回 5 项 preview 和 `+16`，总数与类型计数不变。
 - 撤销后 undo 栈 `1 -> 0`、redo 栈 `0 -> 1`，peek 的命令转入 redo；重做后恢复 undo `1` / redo `0`。最终再次撤销恢复现场，checksum 全程为 `4fd97de0`，`WebGL error = 0`，console / page / health error 均为 0。
 - 同页继续检查第 132 步时发现标题栏仍只格式化已经截断的 `lastAffected` preview，未利用 `lastAffectedSummary`，因此标题缺少 `+18`；该问题不影响第 130 步 peek API 验收，留在紧接的第 132 步最小修复。
+
+### 2026-07-14 第 132 步 history.get / stats 有界输出真实浏览器验收
+
+- 沿用系统 Chrome 新页的一次外交重生成：`api.history.get / stats` 默认只返回 3 项 preview 和 `+18`，`affectedLimit=5` 返回 5 项和 `+16`；两种入口均保留总量 21、`derived-system: 1 / state: 20` 与截断标记，没有输出完整目标数组。
+- 首轮验收确认面板标题仍从已经截断的 `lastAffected` 数组重新格式化，导致 `+18` 丢失。`history-format.js` 最小改为优先使用已有 `lastAffectedSummary`，并扩展 affected 摘要回归，固化截断预览必须保留 `+N` 的标题契约。
+- 生产构建后的真实页面复验中，外交重生成标题为 `撤销：重生成外交 @diplomacy [derived-system#diplomacy-regeneration, state#1, state#2 +18]`；等待既有 250ms 标题刷新周期后，撤销按钮正确禁用、重做标题保留同一完整摘要，重做后再次切回撤销标题。
+- checksum 全程保持 `947e9fe5`，`WebGL error = 0`，console / page / health error 均为 0。相关文件语法检查、affected 摘要与 history peek 回归、`pnpm run build:app` 和 `git diff --check` 均通过；构建 `1121` modules、约 `840ms`，只有既有大 chunk 警告。

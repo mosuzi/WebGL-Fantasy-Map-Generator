@@ -28,6 +28,7 @@ const expectedSummary = "derived-system#routes, route#0, route#1 +2";
 assert(formatAffectedTargets(affected) === expectedSummary, `运行时 affected 折叠异常：${formatAffectedTargets(affected)}`);
 assert(formatUiAffectedTargets(affected) === expectedSummary, `历史 UI affected 折叠异常：${formatUiAffectedTargets(affected)}`);
 assert(formatHistoryCommand({lastLabel: "重算道路", lastDomain: "route", lastAffected: affected}) === `重算道路 @route [${expectedSummary}]`, "历史命令摘要没有复用共享折叠格式");
+assert(formatHistoryCommand({lastLabel: "重算道路", lastDomain: "route", lastAffected: affected.slice(0, 3), lastAffectedSummary: expectedSummary}) === `重算道路 @route [${expectedSummary}]`, "历史命令摘要丢失公开 stats 的完整折叠文本");
 const structured = summarizeAffectedTargets(affected);
 assert(structured.count === 5, `结构化摘要总数异常：${structured.count}`);
 assertAffected(structured.preview, affected.slice(0, 3), "结构化摘要预览");

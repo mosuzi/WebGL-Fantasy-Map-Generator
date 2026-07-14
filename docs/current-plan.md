@@ -957,10 +957,10 @@
    - 边界：`EditHistory` 内部继续保留完整数组供撤销 / 重做与命令缓存；公开统计默认 3 项、最大 50 项，小命令字段保持兼容。
    - 完成记录：`EditHistory.getStats({affectedLimit})` 返回 `lastAffected / lastAffectedCount / lastAffectedKinds / lastAffectedSummary / lastAffectedTruncated`；控制台 `get / stats` 与 app action 透传 options，`history.peek` 的嵌套 stats 使用相同 limit。1001 目标内部仍为 1001 项，公开 stats 为 3 项、389 字节；自定义 5 项和非法参数边界已进入既有 history peek 回归。
 
-132. history.get / stats 有界输出真实浏览器验收。`暂缓`
+132. history.get / stats 有界输出真实浏览器验收。`已完成`
    - 目标：在可复用 FMG 页面存在时验证默认与 `affectedLimit=5` 的 get / stats、面板标题历史摘要、撤销 / 重做以及 checksum / WebGL / console / page / health。
    - 边界：与第 130 步合并执行；不请求超过 50 项，不重复转储完整 runtime snapshot。
-   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
+   - 完成记录：系统 Chrome 新页执行一次外交重生成，`api.history.get / stats` 默认返回 3 项、`+18`，`affectedLimit=5` 返回 5 项、`+16`，总量 21 与系统 1 / 国家 20 类型计数一致。首轮发现面板标题只格式化截断 preview，最小修复为优先使用 `lastAffectedSummary`；复验撤销 / 重做标题均保留 `@diplomacy`、真实目标和 `+18`，按钮按既有 250ms 周期正确切换。checksum 保持 `947e9fe5`，`WebGL error = 0`，console / page / health error 均为 0。
 
 133. 高度编辑局部整平笔刷。`已完成`
    - 目标：补充第一种真正的局部地形塑形工具，让用户能以落笔点高度为基准逐步整平山地、谷地或建设平台。

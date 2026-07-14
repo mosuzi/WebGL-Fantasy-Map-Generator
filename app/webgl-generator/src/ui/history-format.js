@@ -10,6 +10,8 @@ export function formatHistoryStats(history) {
 export function formatHistoryCommand(history) {
   if (!history) return "none";
   const domain = history.lastDomain && history.lastDomain !== "none" ? ` @${history.lastDomain}` : "";
-  const affected = formatAffectedTargets(history.lastAffected);
+  const affected = history.lastAffectedSummary && history.lastAffectedSummary !== "none"
+    ? history.lastAffectedSummary
+    : formatAffectedTargets(history.lastAffected);
   return `${history.lastLabel}${domain}${affected ? ` [${affected}]` : ""}`;
 }
