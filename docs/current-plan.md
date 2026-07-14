@@ -947,10 +947,10 @@
    - 边界：小命令的 `affected` 数组保持兼容；默认预览 3 项，调用方只能通过 `affectedLimit` 在 0 到 50 内调整，不能请求无界结果。
    - 完成记录：新增纯运行时 `history-peek.js`；`peek({affectedLimit})` 返回 `affected / affectedCount / affectedKinds / affectedSummary / affectedTruncated`。1001 目标默认只返回 3 项预览，结果序列化 852 字节；`affectedLimit=5` 返回 5 项，非法上界与非对象 options 返回结构化错误。新增 `pnpm run regress:history-peek-summary`。
 
-130. history.peek 有界输出真实浏览器验收。`暂缓`
+130. history.peek 有界输出真实浏览器验收。`已完成`
    - 目标：在可复用 FMG 页面存在时制造一条已有批量命令历史，验证默认 / 自定义 limit、截断标记、kind 计数、撤销栈切换和 checksum 语义。
    - 边界：与第 128 步合并到阶段末；只读取一次默认与一次自定义 peek，不输出完整地图对象或反复轮询。
-   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
+   - 完成记录：系统 Chrome 新页执行一次外交重生成，产生 `derived-system#diplomacy-regeneration + 20 states` 共 21 项历史目标。默认 peek 只返回 3 项和 `+18`，`affectedLimit=5` 返回 5 项和 `+16`；两者都保留系统 1 / 国家 20 类型计数与 `affectedTruncated=true`。撤销后命令从 undo 转入 redo，重做后回到 undo，最终再次撤销恢复现场；checksum 全程保持 `4fd97de0`，`WebGL error = 0`，console / page / health error 均为 0。
 
 131. 历史 stats 有界 lastAffected。`已完成`
    - 目标：让面板快照和 `api.history.get / stats` 不再复制批量命令的完整 `lastAffected`，补齐 peek 之外的另一条大输出路径。

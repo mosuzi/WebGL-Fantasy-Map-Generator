@@ -27017,3 +27017,10 @@ full 矩阵结果：
 - `console-api.js` 只增加 `lastEditRefresh: state?.lastEditRefresh || null`，不改变刷新调度、重生成算法、历史或选择语义。`webgl-generator-api-capabilities-regression.mjs` 增加字段存在性断言，防止控制台 API 再次漏出该诊断。
 - 构建后真实系统 Chrome 复验道路重生成：API 返回 `affected = derived-system#routes, route#0, route#1 +587`、`affectedCount = 590`、3 项 preview、`derived-system: 1 / route: 589`；checksum `a307757e` 不变，selection / editing / highlights 为空，`WebGL error = 0`，console / page / health error 为 0。
 - `console-api.js` 与 API capabilities 脚本语法检查、affected / history peek 回归、`pnpm run build:app`、API capabilities 浏览器回归和 `git diff --check` 全部通过；构建 `1121` modules、约 `912ms`，只有既有大 chunk 警告。
+
+### 2026-07-14 第 130 步 history.peek 有界输出真实浏览器验收
+
+- 系统 Chrome 新页执行一次外交受约束重生成，关系 `190 -> 190`、战争 `1 -> 0`，历史命令为 `重生成外交 @diplomacy`，真实目标总数为 21：`derived-system#diplomacy-regeneration` 与 20 个有效国家。
+- 默认 `api.history.peek()` 返回 3 项 preview、`+18`、`affectedCount = 21`、系统 1 / 国家 20 类型计数和 `affectedTruncated = true`；唯一一次自定义 `affectedLimit=5` 返回 5 项 preview 和 `+16`，总数与类型计数不变。
+- 撤销后 undo 栈 `1 -> 0`、redo 栈 `0 -> 1`，peek 的命令转入 redo；重做后恢复 undo `1` / redo `0`。最终再次撤销恢复现场，checksum 全程为 `4fd97de0`，`WebGL error = 0`，console / page / health error 均为 0。
+- 同页继续检查第 132 步时发现标题栏仍只格式化已经截断的 `lastAffected` preview，未利用 `lastAffectedSummary`，因此标题缺少 `+18`；该问题不影响第 130 步 peek API 验收，留在紧接的第 132 步最小修复。
