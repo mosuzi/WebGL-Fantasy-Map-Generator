@@ -37,6 +37,8 @@
     "regress:height-brush": "node --no-warnings ./tools/webgl-generator-height-brush-regression.mjs",
     "regress:height-derived-rebuild": "node --no-warnings ./tools/webgl-generator-height-derived-rebuild-regression.mjs",
     "regress:river-delete": "node --no-warnings ./tools/webgl-generator-river-delete-regression.mjs",
+    "regress:lake-delete": "node --no-warnings ./tools/webgl-generator-lake-delete-regression.mjs",
+    "regress:lake-delete-browser": "node --no-warnings ./tools/webgl-generator-lake-delete-browser-regression.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:api-geo": "node ./tools/webgl-generator-api-geo-regression.mjs",

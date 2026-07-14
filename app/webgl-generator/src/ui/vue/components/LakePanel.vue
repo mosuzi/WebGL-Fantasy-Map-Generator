@@ -122,7 +122,8 @@ const lakeListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedLakeRows.value.length)}`, icon: "◉", disabled: !selectedLakeRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选湖泊", icon: "名", disabled: !visibleRows.value.length},
-  {key: "locate", label: "定位选中湖泊", icon: "⌖", disabled: !selected.value}
+  {key: "locate", label: "定位选中湖泊", icon: "⌖", disabled: !selected.value},
+  {key: "delete", label: "填平并删除选中湖泊", icon: "删", disabled: !selected.value}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -216,6 +217,7 @@ function handleLakeListAction(key) {
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
+  if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
 }
 
 function handleEmptyAction(key) {

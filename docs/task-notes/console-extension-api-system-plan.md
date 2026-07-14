@@ -514,7 +514,7 @@ api.edit.measurement.delete(id)
 - `api.edit.routes.delete(routeId)` 已接入路线删除 edit command。
 - `api.edit.routes.setNote(routeId, body, {name})` 已接入路线备注 edit command。
 - `api.edit.rivers.rename(riverId, name)`、`api.edit.rivers.setWidthFactor(riverId, widthFactor)` 和 `api.edit.rivers.setNote(riverId, body, {name})` 已接入河流单对象 edit commands。
-- `api.edit.lakes.rename(lakeId, name)` 已接入湖泊单对象重命名 edit command。
+- `api.edit.lakes.rename(lakeId, name)` 已接入湖泊单对象重命名 edit command；`api.edit.lakes.delete(lakeId)` 已接入湖盆填平、相邻陆地 feature 合并和完整撤销 / 重做命令。
 - `api.edit.labels.addCustom({text, x, y})`、`api.edit.labels.delete(label)`、`api.edit.labels.moveCustom(labelId, {x, y})`、`api.edit.labels.renameCustom(labelId, text)`、`api.edit.labels.setNote(label, body, {name})` 和 `api.edit.labels.restore(label)` 已接入标签 edit commands，覆盖手工标签新增 / 删除 / 移动 / 重命名、标签备注和生成标签恢复。
 - `api.edit.markers.add({type, packCell, name})`、`api.edit.markers.delete(markerId)`、`api.edit.markers.move(markerId, packCell)`、`api.edit.markers.setNote(markerId, body, {name})` 和 `api.edit.markers.setVisual(markerId, patch)` 已接入 marker collection / field edit commands。
 - 浏览器烟测已覆盖备注删除、撤销和重做。

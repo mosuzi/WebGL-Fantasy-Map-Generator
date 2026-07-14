@@ -158,6 +158,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
         setNote: (riverId, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.rivers?.setNote, "edit.rivers.setNote")(riverId, body, options))
       }),
       lakes: Object.freeze({
+        delete: lakeId => apiCall(() => requireApiAction(actions.edit?.lakes?.delete, "edit.lakes.delete")(lakeId)),
         rename: (lakeId, name) => apiCall(() => requireApiAction(actions.edit?.lakes?.rename, "edit.lakes.rename")(lakeId, name))
       }),
       labels: Object.freeze({
@@ -222,7 +223,7 @@ function buildCapabilities() {
     units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
     climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
     history: ["get", "stats", "peek", "undo", "redo"],
-    edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
+    edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.delete", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
     data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
     namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
     debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
@@ -401,6 +402,7 @@ function buildMethodMetadata() {
       "rivers.rename": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "rivers.setWidthFactor": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "rivers.setNote": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
+      "lakes.delete": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
       "lakes.rename": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
       "labels.addCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.delete": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},

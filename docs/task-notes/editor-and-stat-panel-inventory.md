@@ -71,7 +71,7 @@
 - 需要统计面板：是。
 - 统计范围：ocean/lake/island feature 数、湖泊面积、岸线长度、haven/harbor 数、异常引用。
 - 优先级：中高。
-- 当前状态：水体与地貌统计面板第一刀已完成，支持管理页入口、筛选、排序、选中详情，以及 pack feature 类型 / 分组、cells、面积、岸线段数、海岸 / 湖岸长度、水位、补给、蒸发、haven / harbor 和 grid/pack feature 引用异常汇总；湖泊出口、海岸线修补和 feature 类型编辑仍未实现。
+- 当前状态：水体与地貌统计面板第一刀已完成，支持管理页入口、筛选、排序、选中详情，以及 pack feature 类型 / 分组、cells、面积、岸线段数、海岸 / 湖岸长度、水位、补给、蒸发、haven / harbor 和 grid/pack feature 引用异常汇总；湖泊面板已支持把选中湖泊安全填平并合并到相邻陆地 feature，删除会同步 pack / grid 高度与归属、岸线、haven / harbor、备注、对象引用和派生标脏，并支持撤销 / 重做；湖泊出口编辑、海岸线手工修补和 feature 类型编辑仍未实现。
 
 ### 生物群系与适居度面板
 
@@ -268,7 +268,7 @@
 3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区、军事、测量、标签、政府 / 外交入口、经济、备注总览、对象详情面板和控制台 `selection.locate()` 定位路径；测量对象通过自定义 bounds 定位回调复用统一 selection / 刷新流程，且面板定位、导入后自动定位和进入编辑定位已收束到同一条测量定位动作；对象详情通过 `sourcePanelId = null` 复用定位但不伪装成领域面板来源。进入 / 退出编辑已新增运行时 `startObjectEditing()` / `stopObjectEditing()` / `toggleObjectEditing()` 第一刀，覆盖对象详情、国家、省份和河流既有入口，国家 / 省份模式切换与河流面板关闭时的保护性退出也已复用 `stopObjectEditing({ifKind})`，`toggleObjectEditing()` 已改用 `sameObjectId()` 判断同一对象。控制面板打开对象面板的当前 selection 预选逻辑已开始复用 `openSelectionAwarePanel()`，并已提升出初始化闭包为 `openSelectionAwarePanelForState()`；selection handler 中同构“已打开则 update，否则 open”的分支已开始复用 `updateOrOpenSelectionPanel()`，marker、label、economy 的“未打开时不自动打开”特殊规则已命名为 `updateExistingSelectionPanel()`；定位、selection、载入完成和单位偏好中的 runtime / pick 双刷新已开始复用 `refreshRuntimeAndPickPanels()`。单位偏好变化现在还会刷新已打开对象面板，并让公共表格 memo 响应新的 row 对象，避免人口倍率等显示倍率在国家列表中滞后到下一次点选。控制台 API 已新增独立于 selection 的多对象持久高亮集合与清除入口，覆盖 16 类稳定地图对象；支持范围、100 对象上限、resolver 校正与去重已集中到 `runtime/persistent-highlights.js`，任意编辑 / 撤销 / 重做后会统一刷新摘要并清除已删除目标。后续重点是继续收束仍分散在面板回调中的打开 / 编辑动作语义。
 4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀，并已覆盖测量、文化、宗教、标签和名称库面板的空态主动作；筛选空态的“清空筛选”已覆盖路线、河流、湖泊、城市、国家、省份、文化、宗教、地区、资源标记、标签、名称库、生物群系、气候、水体地貌、人口统计、外交、纹章、备注、经济、政体和军事面板；空态按钮已支持 `disabled`、禁用态事件保护和禁用视觉，列尺寸解释已支持 `width / minWidth / maxWidth`，`panel-list-preferences` 已有 `columnWidths` 存储层第一刀，公共表格已能接收 `columnWidths` 覆盖并提供可选拖拽手柄，名称库、湖泊、路线、河流、城市、国家、省份、文化、宗教、地区、资源标记、标签、测量对象、生物群系、气候、水体地貌、人口、外交、纹章、备注、经济、政体和军事面板已接入列宽读写闭环第一刀；公共表格批量选择已完成默认关闭的第一刀，备注总览、测量对象、外交关系列表、政体面板国家列表和经济面板当前 tab 列表已用它支持“导出选中记录”，路线、河流、湖泊、国家、省份、文化和宗教已用它支持“高亮选中对象”；表头 checkbox 已补原生半选态，更多面板批量操作和更多空态动作接入仍需按安全语义逐项评估。
 5. 面板位置、宽度、打开状态、常见列表筛选 / 排序、控制面板 / 经济 tab、名称库导入方式、资源标记范围筛选、外交历史范围筛选、军事战报导出范围、军事战报链路 / 类型 / 结果 / 结算筛选、政体家族筛选、军事国家 / 态势筛选和文化 / 宗教树状面板打开状态已持久化；剩余缺口集中在少数内部 tab、二级筛选和编辑草稿，不应再按“面板状态只在内存中”处理。
-6. 河流安全删除已补齐“结构立即一致、精确水文与下游系统标脏”的第一刀：级联删除目标流域闭包，重建存活河流 cell / 汇流索引，清理湖泊引用和备注，并用精确 affected 驱动 river mesh、对象索引、selection 与面板刷新；文化 / 宗教 cell 归属、湖泊删除、政治面 dissolve、导出校验等复杂链路仍缺同类策略。
+6. 河流与湖泊安全删除已补齐“结构立即一致、精确派生标脏”的第一刀：河流会级联删除目标流域闭包并重建存活水文索引；湖泊会填平湖盆、合并相邻陆地 feature，并重建 pack / grid feature 元数据、岸线和 haven / harbor。两者都会清理备注与无效对象状态，用精确 affected 驱动渲染、对象索引、selection 与面板刷新，并支持完整撤销 / 重做；文化 / 宗教 cell 归属、政治面 dissolve、导出总门禁等复杂链路仍缺同类策略。
 
 下一批施工小步：
 

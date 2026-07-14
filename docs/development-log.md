@@ -2,6 +2,29 @@
 
 本文档用于记录项目推进历史、关键决策和已完成工作。后续每次完成阶段性工作，都应追加记录。
 
+## 2026-07-14：湖泊安全删除闭环
+
+本步完成权威任务清单第 11 项。湖泊删除采用“填平湖盆并并入相邻陆地”的安全语义，不保留悬空湖泊 feature，也不在删除命令中自动重生成河流或社会系统。
+
+修正：
+
+- 新增 `createDeleteLakeCommand()`：定位 pack 湖泊 cells 与对应 grid 湖泊 feature，选择相邻陆地中的最大 feature 作为合并目标，并把湖盆及其它相邻陆地 feature 统一并入该目标。
+- 湖盆 cells 提升到陆地高度；pack / grid 的 `h / f / t`、pack 的 `haven / harbor / type / r / fl / conf`、feature cells / area / vertices / firstCell、grid 岸线和 feature metadata 会立即重建。
+- burg、route、city、marker 和港口诊断等已知 feature 引用会改指合并后的陆地 feature；湖泊备注会删除，河流、路线、生物群系、城镇、政治、宗教、标记、地区、军事、经济和外交等下游系统标记为待派生。
+- 删除命令保存 pack / grid feature、cells、岸线、对象引用、备注和 stale 状态的完整快照，撤销可精确恢复，重做可再次删除；不存在的湖泊按 no-op 处理。
+- 湖泊列表动作条新增“填平并删除选中湖泊”，控制台新增 `api.edit.lakes.delete(id)`；二者共用 `executeEditCommand()`，删除后 selection、持久高亮、对象 resolver、picking 和完整地图导出同步清理。
+- 新增 `regress:lake-delete` 与 `regress:lake-delete-browser`，分别固化命令级数据一致性和真实界面接线闭环。
+
+验证：
+
+- 相关运行时、面板桥接、Vue 组件与两个回归脚本的 `node --check` 通过；命令级回归确认固定地图湖泊删除后湖泊数 `2 -> 1`，原湖区 pack / grid cells 均转为陆地，湖岸段 `69 -> 6`，haven / harbor metadata 与实际 cells 一致，港口诊断无悬空引用，完整快照撤销与重做通过。
+- 本地 Vite 生产构建通过，仅有既有大 chunk 警告；Windows 下首次构建出现一次 Vite HTML emitted chunk 路径异常，立即单独重试通过，未改构建配置。
+- 真实系统 Chrome 固定 seed 验收通过：从湖泊面板删除湖泊 `#6` 后湖泊数 `4 -> 3`、湖岸段 `79 -> 43`，原湖区 pack / grid cells 均为陆地，selection、高亮、备注、resolver 与完整地图导出无残留；撤销恢复到 `4 / 79` 并恢复备注，重做再次回到 `3 / 43`；`glError = 0`，health / console / page error 均为 0。
+
+边界：
+
+- 本步不实现删除确认弹窗、批量湖泊删除、湖泊出口手工编辑、海岸线修补或删除后自动重生成全部派生系统。
+
 ## 2026-07-14：河流安全删除闭环
 
 本步完成权威任务清单第 10 项。河流删除不再是只删列表项，而是按参考实现的流域语义删除目标河流、递归支流和 `basin` 归属河流，并把全部变化纳入一个可撤销命令。

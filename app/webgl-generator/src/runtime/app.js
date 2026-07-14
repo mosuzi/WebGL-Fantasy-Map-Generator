@@ -69,7 +69,7 @@ import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEvents
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
-import {createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
+import {createDeleteLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
   createAddReligionCommand,
@@ -1871,6 +1871,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
       updateEditingInteractionLock(state, documentRef);
     },
+    onDelete: lakeId => {
+      const command = createDeleteLakeCommand(lakeId);
+      const result = executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        status: executed => {
+          const filled = executed.getResult?.().packCells || 0;
+          return `已填平并删除湖泊 #${lakeId}，处理 ${filled} 个 pack cells。`;
+        },
+        noopStatus: "湖泊不存在，未执行删除。",
+        throwOnError: false
+      });
+      updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -2281,6 +2295,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
         setNote: (riverId, body, options = {}) => setRiverNoteViaApi(state, documentRef, riverId, body, options)
       },
       lakes: {
+        delete: lakeId => deleteLakeViaApi(state, documentRef, lakeId),
         rename: (lakeId, name) => renameLakeViaApi(state, documentRef, lakeId, name)
       },
       labels: {
@@ -5367,6 +5382,20 @@ function renameLakeViaApi(state, documentRef, lakeId, name) {
     noopStatus: "湖泊不存在或名称未变化。",
     status: id => `已重命名湖泊 #${id}。`
   });
+}
+
+function deleteLakeViaApi(state, documentRef, lakeId) {
+  const id = normalizeApiInteger(lakeId, "湖泊 ID");
+  const command = createDeleteLakeCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "湖泊不存在，未执行删除。",
+    status: executed => `已填平并删除湖泊 #${id}，处理 ${executed.getResult?.().packCells || 0} 个 pack cells。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
 }
 
 function addCityViaApi(state, documentRef, gridCell) {
