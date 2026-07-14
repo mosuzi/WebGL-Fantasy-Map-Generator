@@ -27002,3 +27002,5 @@ full 矩阵结果：
 - 第 124 步开始前，既有 `http://127.0.0.1:5410/` 页面停留在名称库清空原生确认框。Chrome 扩展可以枚举该标签页，但 `claimTab()` 连续超时；Windows 应用控制因无法可靠确认当前浏览器 URL 被安全策略终止。现有 Chrome 进程没有远程调试端口，在“不新开或重启 Chrome”的既定边界内没有其它可信控制通道。
 - 用户明确要求先跳过该阻塞并执行后续任务。第 124 / 126 / 128 / 130 / 132 / 134 步因此统一标记为暂缓并转入 `FOLLOWUPS.md`，均不计完成，也不以已有自动回归替代真实浏览器证据。
 - 当前权威计划中第 135–208 步及 2026-07-13 追加批准项均已完成；除上述六个同一会话依赖的补验外，没有新的开放代码实现项。后续先执行不依赖 Chrome 的最终门禁，补验需待既有页面恢复可控后按原边界完成。
+- 暂缓后的非浏览器门禁已执行：`edit-command-effects.js`、`history-peek.js`、`edit-history.js`、`height-brush.js`、`history-format.js` 和 `panel-manager.js` 语法检查通过；`regress:edit-command-affected`、`regress:affected-summary`、`regress:history-peek-summary`、`regress:height-brush` 与持久高亮契约回归通过。`pnpm run build:app` 构建 `1121` modules，耗时约 `842ms`，仅有既有大 chunk 警告；`git diff --check` 通过。
+- 上述门禁证明相关纯逻辑、命令历史和生产构建仍然稳定，但不替代六项暂缓的真实浏览器证据；因此未触发“所有计划项完成后统一推送”。
