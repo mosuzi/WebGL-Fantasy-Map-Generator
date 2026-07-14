@@ -27010,3 +27010,10 @@ full 矩阵结果：
 - 用户明确指出可以新开标签页，覆盖此前“只复用原标签页”的验收边界；既有 `5410` 服务器保持运行，没有重启。新系统 Chrome 页面完成一次道路受约束重生成，道路数量 `589 -> 589`，checksum 保持 `1244231e`。
 - 运行时 `lastEditRefresh` 返回 `affected = derived-system#routes, route#0, route#1 +587`、`affectedCount = 590`、3 项 preview，以及 `derived-system: 1 / route: 589` 类型计数。重生成前后 selection、editing 和 highlights 均为空，对象索引与道路 mesh 正常刷新，道路三角形 `11514 -> 11562`。
 - `WebGL error = 0`，console / page error 为空，health error 总数为 0。第 126 步达到最小验收；同页同时暴露第 128 步缺口：`api.info.runtimeStats()` 尚未公开 `lastEditRefresh`，后续按第 128 步最小范围修复。
+
+### 2026-07-14 第 128 步有界刷新诊断真实浏览器验收
+
+- 首轮同页检查确认 `state.lastEditRefresh` 已正确保存折叠文本、总量、3 项 preview 和 kind 计数，但 `api.info.runtimeStats()` 返回值只有 renderer、editHistory、selection、health 和 loading，未公开该字段，无法达到第 128 步明确验收。
+- `console-api.js` 只增加 `lastEditRefresh: state?.lastEditRefresh || null`，不改变刷新调度、重生成算法、历史或选择语义。`webgl-generator-api-capabilities-regression.mjs` 增加字段存在性断言，防止控制台 API 再次漏出该诊断。
+- 构建后真实系统 Chrome 复验道路重生成：API 返回 `affected = derived-system#routes, route#0, route#1 +587`、`affectedCount = 590`、3 项 preview、`derived-system: 1 / route: 589`；checksum `a307757e` 不变，selection / editing / highlights 为空，`WebGL error = 0`，console / page / health error 为 0。
+- `console-api.js` 与 API capabilities 脚本语法检查、affected / history peek 回归、`pnpm run build:app`、API capabilities 浏览器回归和 `git diff --check` 全部通过；构建 `1121` modules、约 `912ms`，只有既有大 chunk 警告。

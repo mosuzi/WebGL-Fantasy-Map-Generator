@@ -116,6 +116,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     }), "generate.newMap");
     const beforeSummary = unwrap(api.info.mapSummary(), "info.mapSummary.before");
     const capabilities = unwrap(api.info.capabilities(), "info.capabilities");
+    const runtimeStats = unwrap(api.info.runtimeStats(), "info.runtimeStats");
     const afterSummary = unwrap(api.info.mapSummary(), "info.mapSummary.after");
     const stats = window.__webglGeneratorApp?.renderer?.getStats?.() || {};
     const glError = stats.draw?.glError ?? 0;
@@ -126,6 +127,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     if (!capabilities.methods) failures.push("capabilities 缺少 methods 字段");
     if (!capabilities.methodMetadata) failures.push("capabilities 缺少 methodMetadata 字段");
     if (!capabilities.methodMetadataCoverage) failures.push("capabilities 缺少 methodMetadataCoverage 字段");
+    if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
     if (coverage.methods !== coverage.documented || coverage.methods !== coverage.metadata) {
@@ -193,6 +195,10 @@ async function inspectCapabilities(page, {cells, seed, template}) {
         confirmRequired: confirmGroups
       },
       representativeMutates,
+      runtimeStats: {
+        hasLastEditRefresh: Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh"),
+        lastEditRefresh: runtimeStats.lastEditRefresh
+      },
       glError,
       failures,
       passed: failures.length === 0

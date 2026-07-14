@@ -514,6 +514,7 @@ function buildRuntimeStats(state, documentRef) {
   return {
     renderer: rendererStats,
     editHistory: history,
+    lastEditRefresh: state?.lastEditRefresh || null,
     selection: buildSelectionSnapshot(state),
     health: {
       events: health.length,

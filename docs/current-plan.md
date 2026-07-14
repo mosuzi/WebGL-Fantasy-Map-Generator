@@ -937,10 +937,10 @@
    - 边界：`lastEditRefresh` 不保存完整目标数组；完整数组只参与调度当次的刷新决策与摘要计算，持久状态必须保持常量级预览。
    - 完成记录：新增 `summarizeAffectedTargets()`，返回 `text / count / preview / kinds`；刷新调度在既有 `affected` 折叠文本之外新增 `affectedCount / affectedPreview / affectedKinds`。1001 个目标的回归摘要只保留 3 项预览和 2 类计数，序列化体积为 239 字节。
 
-128. 有界刷新诊断真实浏览器验收。`暂缓`
+128. 有界刷新诊断真实浏览器验收。`已完成`
    - 目标：在可复用 FMG 页面存在时，通过 `api.info.runtimeStats()` 确认重生成后的 `lastEditRefresh` 同时返回折叠文本、正确总数、前三项预览和 kind 计数，且无巨量控制台输出。
    - 边界：继续与第 126 步合并执行；不启动额外浏览器或服务器，不持续轮询 runtime stats。
-   - 暂缓记录：受第 124 步记录的同一既有 Chrome 会话阻塞影响；不以自动回归替代真实浏览器验收，待后续统一补验。
+   - 完成记录：首轮真实浏览器验收发现内部 `state.lastEditRefresh` 已有完整有界结构，但 `api.info.runtimeStats()` 未公开该字段；最小修复把 `lastEditRefresh` 快照加入 runtime stats，并在 API capabilities 回归中固化字段存在性。复验道路重生成后 API 返回折叠文本 `derived-system#routes, route#0, route#1 +587`、总量 `590`、3 项 preview 和系统 1 / 路线 589 类型计数；selection 为空，checksum 保持 `a307757e`，`WebGL error = 0`，console / page / health error 均为 0，输出保持有界。
 
 129. 历史 peek 有界 affected API。`已完成`
    - 目标：避免 `api.history.peek()` 对批量命令返回数百 / 数千个完整 affected，同时保留可机器读取的规模和类型信息。
