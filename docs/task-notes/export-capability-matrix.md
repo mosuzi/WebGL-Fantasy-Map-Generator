@@ -100,6 +100,7 @@
 | `province` | `MultiPolygon` | id、name、fullName、state、stateName、burg、burgName、cells、area、population、color、neighbors、dissolved、hasNote、note | 默认关闭；按省份陆地 cell 集合输出，`dissolved=false` |
 
 所有要素 GeoJSON 的 FeatureCollection 与每个 Feature 都输出标准 `bbox`，方便外部 GIS 工具和后续范围导出快速判断空间范围。
+FeatureCollection 同时写入 `coordinateReference = approximate-equirectangular`，明确坐标来自地图世界范围的近似等距圆柱映射。
 
 已验证：
 
@@ -108,6 +109,7 @@
 - 简介 tab 的“要素 GeoJSON 图层”开关可限制导出图层，导出元数据 `layerSet` 会同步反映选择。
 - 国家面和省份面默认关闭，手动开启后输出非 dissolve MultiPolygon，并明确 `dissolved=false`。
 - “合并政治面边界”开关可对 state / province / zone 输出真正 dissolve MultiPolygon，并在生成图验证中将坐标点从 `53180` 降到 `10383`；构建产物下载烟测确认实际 `.features.geojson` 带 `dissolvedPolitical=true`。
+- `regress:dissolve-compatibility` 已固化政治面闭环、方向、hole、多岛、自交、跨 polygon 重叠和 bbox 门禁；固定合法输出经 JSON 往返后通过，7 类坏输出会被拒绝。
 
 缺口：
 

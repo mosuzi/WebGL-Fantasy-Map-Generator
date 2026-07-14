@@ -1,5 +1,16 @@
 # 开发历史
 
+## 2026-07-15：政治面 dissolve 外部兼容性门禁
+
+本步完成权威任务清单第 20 项，不重写已经接入导出的 dissolve 算法，只补外部读取所需的结构、拓扑和坐标说明代码门禁。
+
+- 要素 GeoJSON 的 FeatureCollection 新增 `coordinateReference = approximate-equirectangular`，明确当前经纬度是地图世界坐标的近似等距圆柱映射，不冒充可直接测地计算的真实地理 CRS。
+- 新增 `tools/lib/geojson-compatibility.mjs`，独立校验政治面 FeatureCollection、Feature 和 MultiPolygon 嵌套；每个 ring 必须坐标有限、至少 4 点、首尾闭合、面积非零，outer 逆时针、hole 顺时针，hole 位于所属 outer 内且不与边界或其它 hole 相交。
+- validator 同时拒绝 ring 自交、同一 MultiPolygon 内 polygon 的重复、真交叉、内部包含和同向共线面积重叠；仅点接触和没有内部重叠的反向边界不会被共线规则误判。
+- feature 与 collection 的 `bbox` 必须为四项有限数组并精确包围全部坐标；JSON stringify / parse 后重新校验，避免非有限数值在外部读取时静默变为 `null`。
+- 新增 `regress:dissolve-compatibility`。固定样本确认两个相邻 cell dissolve 后为 `7` 点闭环，带中心 hole 的 state / province / zone 共得到 `3 features / 3 polygons / 6 rings / 3 holes / 54 points`，两个不相连 cell 作为合法多岛通过完整 FeatureCollection 门禁；未闭合、错误方向、错误 bbox、非有限坐标、自交、重复 polygon 和共线面积重叠共 7 类坏输出会被拒绝。
+- 相关 `node --check`、专项回归、生产构建（`1123 modules`）和 `git diff --check` 全部通过；独立审查补出并复核了跨 polygon 重叠检查。本项按快速迭代约定未运行浏览器或外部 GIS 手工测试，100k 性能不混入本项。
+
 ## 2026-07-14：PNG 导出显式选项
 
 本步完成权威任务清单第 19 项，在既有 PNG 倍率基础上补齐 overlay 与透明背景选择，并修正 API 传入 `includeMapOverlays:false` 时仍会合成 overlay 的旧路径。

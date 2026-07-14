@@ -210,6 +210,7 @@ export function createMapFeatureGeoJson(map, options = {}) {
       seed: map.metadata?.seed || "",
       checksum: map.metadata?.checksum || "",
       generatedAt: map.metadata?.generatedAt || "",
+      coordinateReference: "approximate-equirectangular",
       dissolvedPolitical: dissolvePolitical,
       states: layers.state ? countValidPoliticalObjects(map.politics?.states) : 0,
       provinces: layers.province ? countValidPoliticalObjects(map.politics?.provinces) : 0,

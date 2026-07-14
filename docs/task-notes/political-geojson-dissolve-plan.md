@@ -146,3 +146,21 @@
 
 - 100k cells 大图的浏览器导出耗时和主线程占用。
 - 若耗时过高，再评估 Worker 或懒加载几何库。
+
+## 2026-07-15 外部兼容性代码门禁
+
+要素 GeoJSON 的 collection 现在显式写入 `coordinateReference = approximate-equirectangular`。这不是已注册 CRS，只用于提醒外部消费者：坐标来自当前地图世界范围的近似等距圆柱映射。
+
+新增 `pnpm run regress:dissolve-compatibility`，固定验证：
+
+- FeatureCollection、Feature、MultiPolygon 的 RFC 结构层级。
+- 所有坐标为有限数值，ring 至少 4 点且首尾闭合。
+- outer ring 逆时针、hole 顺时针，hole 位于所属 outer 内。
+- ring 不自交；hole 不与 outer 或其它 hole 相交、嵌套。
+- 同一 MultiPolygon 内不同 polygon 不重复、不真交叉、不互相包含，也不存在同向共线边造成的面积重叠；合法多岛保持可读。
+- feature 与 collection 的 `bbox` 精确包围实际坐标。
+- JSON 往返后仍通过相同门禁。
+
+固定合成样本结果为 `3 features / 3 polygons / 6 rings / 3 holes / 54 points`；相邻双 cell 的共享边消除后为 `7` 点闭环，两个分离 cell 输出两个 polygon。专项回归还确认未闭合、错误方向、错误 bbox、非有限坐标、自交、重复 polygon 和共线面积重叠 7 类坏样本会被拒绝。
+
+本项只建立代码兼容门禁，不包含 100k 性能结论，也没有在快速迭代阶段运行浏览器或 QGIS / geojson.io 手工测试。大图耗时由下一项独立门禁处理。

@@ -84,6 +84,7 @@
    - 要做什么：把当前 state / province / zone 的 cell polygon 集合型 `MultiPolygon` 升级为可选的真正 dissolve 外轮廓：消除同一对象相邻 cell 的共享边，输出闭合 outer rings 和 holes，并在 properties 中标注 `dissolved: true`。
    - 为什么做：非 dissolve 的政治面文件大、碎片多，也不适合 QGIS / geojson.io 等外部 GIS 工具继续分析；真正外轮廓能显著提升地理数据导出质量。
    - 执行方式：先做工具脚本或纯函数原型，用固定 seed 验证 ring 拼接、hole 归属、坐标方向和文件体积，再接入导出 UI；若 100k cells 导出耗时过高，再评估 Worker 或懒加载几何库。
+   - 第 20 项补充：外部兼容性代码门禁已完成。要素 GeoJSON 现在显式声明 `coordinateReference = approximate-equirectangular`；新增 `regress:dissolve-compatibility`，独立验证 FeatureCollection / Feature / MultiPolygon 嵌套、有限坐标、最小 ring、闭环、outer 逆时针、hole 顺时针、hole 归属、自交、同一 MultiPolygon 内 polygon 的交叉 / 包含 / 共线面积重叠，以及 feature / collection bbox 精确包含。固定样本覆盖相邻共享边、带 hole、合法多岛，并确认 7 类坏输出会被拒绝。本项按快速迭代约定只跑语法、专项回归、生产构建和差异检查，不执行浏览器或外部 GIS 手工测试；100k 性能留给第 21 项。
 
 5. 视觉主题与样式预设第一阶段。
    - 来源：旧计划审视中的第 34 项；对应备份文档为 `docs/plan-backups/2026-07-08-reset-current-plan/docs/task-notes/visual-theme-preset-plan.md`。
