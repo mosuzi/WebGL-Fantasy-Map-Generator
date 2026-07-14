@@ -10,6 +10,8 @@
 
 2026-07-15 阶段收口：权威任务第 10～24 项已经全部达到各自最小验收。第 10～13 项完成河流、湖泊、文化 / 宗教和剩余安全新增删除入口；第 14～16 项收口编辑命令、面板刷新和选择动作；第 17～22 项完成地图迁移、导入诊断、PNG 选项、政治面兼容 / 性能与导出聚合门禁；第 23 项完成集中浏览器验收；第 24 项完成本文档与三个专题文档的状态校准。阶段外增强统一记录到 `FOLLOWUPS.md`，不得据此继续扩展；这不代表视觉主题或控制台 API 等其它高优专题自动完成。
 
+2026-07-15 追加计划：用户新增权威任务第 25 项“军事重新生成”。当前运行时和 `api.generate.regenerate("military", {confirm: true})` 已有内部重算路径，但控制面板“重新生成”区尚未暴露军事入口，也没有独立回归固化用户兵种比例保留、派生刷新和 stale 语义。第 25 项是当前新增开放项，只登记下述封闭范围，不提前实现。
+
 ### 计划备份
 
 重置前的计划类文档已备份到：
@@ -156,6 +158,14 @@
    - 补充记录：API 备注与测量导出回归脚本第一刀已新增 `tools/webgl-generator-api-export-records-regression.mjs` 和 `pnpm run regress:api-exports`，把 `api.data.exportNotes()` 与 `api.data.exportMeasurements()` 的全量导出、ID 筛选、`includeText:false` 摘要返回、浏览器下载文件名和 checksum 不变边界固化为可复用门禁。
    - 补充记录：API 名称库文档回归脚本第一刀已新增 `tools/webgl-generator-api-namebase-docs-regression.mjs` 和 `pnpm run regress:api-namebases`，把 `api.namebases.list/export/import/create/clear` 的文档 roundtrip、JSON / 原版文本导出、`includeText:false`、浏览器下载文件名、append / replace / undo 和 `clear({confirm:true})` 确认边界固化为可复用门禁；本脚本暂不覆盖 `renameObjects`，后续可单独补对象批量改名回归。
    - 补充记录：API 名称库批量改名回归脚本第一刀已新增 `tools/webgl-generator-api-namebase-renames-regression.mjs` 和 `pnpm run regress:api-namebase-renames`，把 `api.namebases.renameObjects(kind, ids, {confirm:true})` 的安全边界、国家 / 城市 / 河流 / 湖泊改名和撤销恢复固化为可复用门禁。脚本默认使用 `3000` cells；`10000` cells 下改名逻辑也能覆盖四类对象，但生成阶段可能触发 health long-task，不适合作为本 API 门禁默认规模。
+
+7. 军事重新生成。`权威任务第 25 项，待实施`
+   - 现状：`regenerateMapAttribute()`、`normalizeApiRegenerationKind()` 和 `regenerateMilitary()` 已支持 `military / army / armies`，会调用 `buildMilitary()` 重建军团、战线和战役；控制面板的 `regenerationActions` 目前只列国家、省份、城镇、道路、河流、资源点和外交，用户没有可见的军事重新生成入口。
+   - 目标：在控制面板“重新生成”区增加“军事”动作，复用现有受约束重算路径；同时把控制台 API 的既有军事分支纳入正式能力与回归门禁，不再另建第二套军事生成逻辑。
+   - 数据语义：按当前国家、人口、经济、外交和地图 seed 生成新的军事数据；必须保留各国用户已调整的 `militaryPolicy.unitRatios`，重建 `map.military`、`pack.military` 和各国军团，并刷新战线、战役、军事图层、对象索引、选择 / 高亮、运行时摘要和已打开军事面板。
+   - stale 语义：成功后军事标记为 fresh，依赖军事结果的地区继续标记为 stale；不得误把经济、外交或用户兵种比例改写为默认值。缺少 pack cells 或有效国家时应返回明确的未执行结果，不留下半更新状态。
+   - 边界：本项只做全图军事派生重新生成，不新增动态战斗模拟、自动推进战役、单国局部重算、军事 AI、经济消耗或外交反向联动；既有战报档案如何处理必须在实现前按当前静态记录语义确认，不能静默混入新的动态系统。
+   - 验收：固定地图执行后返回重算前后军团数、扰动编号和 affected 摘要；用户兵种比例保持不变，军团 / 战线 / 战役与 metadata 一致，军事 stale 清除、地区 stale 生效，图层与对象索引读取新数据；`api.generate.regenerate("military", {confirm: true})` 与 UI 走同一路径，未确认调用结构化失败。新增纯代码回归并通过生产构建和 `git diff --check`；按当前快速迭代约定不要求实现过程中逐步跑浏览器，真实 UI 验收集中到本项收口时执行一次。
 
 ### 验证要求
 

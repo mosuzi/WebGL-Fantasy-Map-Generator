@@ -362,3 +362,15 @@ WebGL 版暂不直接复刻战斗模拟，因为当前对象编辑、撤销、�
 - 有战争原因和战争线。
 
 战斗事件、可撤销军团移动和实时演算不再作为当前路线推进；除非用户重新要求，军事方向只做静态管理和视觉收尾。
+
+## 2026-07-15 追加计划：军事重新生成
+
+该项对应 `docs/current-plan.md` 的权威任务第 25 项。源码已经存在 `regenerateMilitary()` 及控制台 API 的 `military / army / armies` 归一化分支，本次不重新设计军事算法；实际缺口是可见入口和可复现门禁。
+
+- 控制面板“重新生成”区增加“军事”，复用统一 `data-regenerate-kind` 事件和 `regenerateMapAttribute()`。
+- 全图重算继续由 `buildMilitary()` 生成军团、战线和战役，并保留各国有效的用户 `militaryPolicy.unitRatios`。
+- 完成后同步 `map.military / pack.military / pack.states[].military`，刷新军事点层、战线、对象索引、选择 / 高亮、摘要与军事面板；军事变为 fresh，地区变为 stale。
+- UI 与 `api.generate.regenerate("military", {confirm: true})` 必须走同一路径；缺少确认、pack cells 或有效国家时不得部分写入。
+- 战斗模拟、自动战役推进、经济扣减、外交反写和单国局部重算不在本项范围。已有战报档案保持静态记录定位，实现时需明确重算后的保留或清理规则并用回归固定，不能静默丢失。
+
+最小验收以纯代码回归、生产构建和差异检查为主，浏览器只在本项收口时集中验证一次可见入口、状态文案和图层刷新。
