@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-15：导出回归聚合门禁
+
+本步完成权威任务清单第 22 项，把第 17～21 项形成的纯 Node 导出专项收束为一个稳定入口，不在快速迭代阶段混入浏览器回归。
+
+- 新增 `tools/webgl-generator-export-regression-suite.mjs` 和 `regress:exports`，固定顺序执行完整地图跨版本迁移、完整地图导入诊断、PNG 显式选项、政治面 dissolve 外部兼容性、政治面 dissolve 100k 性能五项门禁。
+- 聚合器直接使用 `process.execPath` 和 `spawnSync` 启动独立 Node 子进程，不递归调用 pnpm；100k 性能门禁放在最后，前面的便宜确定性检查失败时不会继续浪费大图生成时间，子进程结束后也能释放各自内存。
+- 子进程 stdout / stderr 直接透传。任一步失败会保留原非零退出码，后续步骤写为 `skipped`；最终统一输出 `suite / ok / durationMs / steps[]`，每步包含 id、中文标签、状态、耗时和退出码。
+- 聚合门禁明确排除会启动 HTTP server、Playwright 和 Chrome 的 API capabilities、完整地图 roundtrip、GEO、导出记录、名称库等浏览器脚本，也不运行会写生成报告的 export baseline；这些路径只在第 23 项集中浏览器验收。
+- 主线程首轮与独立审查复跑均为 5/5 `passed`，总耗时约 `7.8s`；100k 子门禁仍为 `99846 grid / 56944 pack / 638 features` 并通过既定阈值。聚合脚本语法、生产构建（`1123 modules`）和 `git diff --check` 通过，源码审查确认没有浏览器 / server 路径。
+
 ## 2026-07-15：政治面 dissolve 100k 性能门禁
 
 本步完成权威任务清单第 21 项，在不改 dissolve 算法、不引入 Worker 或 GIS 依赖的前提下，把 100k 大图导出耗时和体积缩减固化为纯 Node 回归。

@@ -174,6 +174,18 @@ FeatureCollection 同时写入 `coordinateReference = approximate-equirectangula
 
 ## 后续顺序建议
 
+### 纯 Node 聚合门禁
+
+`pnpm run regress:exports` 会按顺序执行：
+
+1. 完整地图跨版本迁移。
+2. 完整地图导入诊断。
+3. PNG 显式选项。
+4. 政治面 dissolve 外部兼容性。
+5. 政治面 dissolve 100k 性能。
+
+五项使用独立 Node 子进程，失败即停并传播退出码，后续步骤标记为 `skipped`。该命令不会启动浏览器；API roundtrip、下载文件和 WebGL / console / health 验收由阶段末浏览器门禁负责。
+
 1. 国家、省份和 zone dissolve：补真正适合 GIS 的外轮廓，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑原型验证。
 2. PNG 任意裁剪范围和更细的 overlay 图层选择。
 3. 完整 JSON 导入诊断包和后续 schema 版本的增量迁移。
