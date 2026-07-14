@@ -268,15 +268,15 @@
 3. selection 已集中，`locateAndSelectObject()` 已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区、军事、测量、标签、政府 / 外交入口、经济、备注总览、对象详情面板和控制台 `selection.locate()` 定位路径；测量对象通过自定义 bounds 定位回调复用统一 selection / 刷新流程，且面板定位、导入后自动定位和进入编辑定位已收束到同一条测量定位动作；对象详情通过 `sourcePanelId = null` 复用定位但不伪装成领域面板来源。`SelectionStore.batch()` 已把编辑前 selection 准备和 scheduler refresh 合并为一次通知，进入编辑时选择与 editingObject 也原子提交；持久高亮会在对象面板刷新前校正，避免校正后再全量刷新面板。测量和 marker 画布模式已双向互斥。进入 / 退出编辑继续复用 `startObjectEditing()` / `stopObjectEditing()` / `toggleObjectEditing()`，控制面板打开对象面板复用 `openSelectionAwarePanelForState()`，selection handler 同构分支复用 `updateOrOpenSelectionPanel()` / `updateExistingSelectionPanel()`，runtime / pick 双刷新复用 `refreshRuntimeAndPickPanels()`。控制台多对象持久高亮继续覆盖 16 类稳定地图对象及 100 对象上限。后续若要统一所有画布编辑工具或改变对象面板自动打开策略，必须另做产品与递归回调审计，不在本项扩展。
 4. `UiObjectTable` 已支持虚拟滚动和统一空态动作第一刀，并已覆盖测量、文化、宗教、标签和名称库面板的空态主动作；筛选空态的“清空筛选”已覆盖路线、河流、湖泊、城市、国家、省份、文化、宗教、地区、资源标记、标签、名称库、生物群系、气候、水体地貌、人口统计、外交、纹章、备注、经济、政体和军事面板；空态按钮已支持 `disabled`、禁用态事件保护和禁用视觉，列尺寸解释已支持 `width / minWidth / maxWidth`，`panel-list-preferences` 已有 `columnWidths` 存储层第一刀，公共表格已能接收 `columnWidths` 覆盖并提供可选拖拽手柄，名称库、湖泊、路线、河流、城市、国家、省份、文化、宗教、地区、资源标记、标签、测量对象、生物群系、气候、水体地貌、人口、外交、纹章、备注、经济、政体和军事面板已接入列宽读写闭环第一刀；公共表格批量选择已完成默认关闭的第一刀，备注总览、测量对象、外交关系列表、政体面板国家列表和经济面板当前 tab 列表已用它支持“导出选中记录”，路线、河流、湖泊、国家、省份、文化和宗教已用它支持“高亮选中对象”；表头 checkbox 已补原生半选态，更多面板批量操作和更多空态动作接入仍需按安全语义逐项评估。
 5. 面板位置、宽度、打开状态、常见列表筛选 / 排序、控制面板 / 经济 tab、名称库导入方式、资源标记范围筛选、外交历史范围筛选、军事战报导出范围、军事战报链路 / 类型 / 结果 / 结算筛选、政体家族筛选、军事国家 / 态势筛选和文化 / 宗教树状面板打开状态已持久化；剩余缺口集中在少数内部 tab、二级筛选和编辑草稿，不应再按“面板状态只在内存中”处理。
-6. 河流、湖泊、文化与宗教已补齐“结构立即一致、精确派生标脏”的安全删除第一刀：河流级联删除流域闭包，湖泊填平湖盆并合并陆地 feature，文化 / 宗教归零 cells 和关联对象并重建继承摘要；四类操作均清理备注与无效对象状态，并支持完整撤销 / 重做。文化 / 宗教归属笔刷也已共用命令路径；政治面 dissolve 和导出总门禁仍待后续权威任务处理。
+6. 河流、湖泊、文化与宗教已补齐“结构立即一致、精确派生标脏”的安全删除第一刀：河流级联删除流域闭包，湖泊填平湖盆并合并陆地 feature，文化 / 宗教归零 cells 和关联对象并重建继承摘要；四类操作均清理备注与无效对象状态，并支持完整撤销 / 重做。文化 / 宗教归属笔刷也已共用命令路径；政治面 dissolve、导出总门禁和阶段末浏览器验收已由权威任务第 20～23 项完成。
 7. 安全且已有命令语义的新增 / 删除入口已统一到列表动作区：国家、省份、城市、文化、宗教、名称库、标签、资源标记和测量对象保留适用新增入口；路线、河流、湖泊、备注及其它可删除对象保留单一删除入口。资源标记放置与非空测量列表开始测量已补齐，路线重复删除区已移除；本项不据此推导路线 / 河流 / 湖泊 / Zone 创建器或批量删除。
 
-下一批施工小步：
+阶段完成状态与后续维护边界：
 
 1. 维护 `executeEditCommand(state, documentRef, command, options)` 与 `executeHistoryCommand()` 的统一执行边界：当前已统一 `isNoop` 检查、历史执行、刷新函数、对象面板 helper、status 文案、标准 `getResult()` 返回和保守异常通道；正式应用已无直接历史旁路，`regress:edit-execution-path` 会守住直接属性、可选链、方括号和直接变量别名等已审计入口。后续若扩展错误展示策略，也必须保留这一执行顺序与领域 wrapper 委托关系。
 2. 维护 `edit-command-contract.md` 并逐步让新增命令遵守：运行时轻量校验已落地，推荐字段仍为 `label / domain / effects / apply / revert / isNoop / getResult`，`affected` 格式为 `{kind, id}`；新增对象初始目标应复用 `newObjectAffected(kind)`，单对象目标应优先复用 `objectAffected(kind, id)`，集合目标应优先复用 `collectionAffected()`。高度、名称库、外交与地图重生成路径已补领域或真实对象目标；`lastEditRefresh` 只持久化总数、前三项预览和 kind 计数，避免大集合负载扩张。后续重点是持续约束新增命令。
 3. 维护 `refreshPanelsForEdit(state, command)` 作为编辑命令唯一显式对象面板刷新边界：当前已根据 `effects.affected.kind` 刷新常见对象及国家 / 省份 / 城市关联面板，支持 `derived: ["object-panels"]` 全量刷新，并为无 effects 的旧命令保留兼容回退。后续新增命令应优先补精确 affected；只有领域 overlay、即时预览或非对象面板状态可以保留独立刷新。
-4. 继续扩展 `locateAndSelectObject()`、编辑动作 helper 和打开面板 helper：当前已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区、军事、测量、标签、政府 / 外交入口、经济、备注、对象详情和控制台 `selection.locate()` 定位路径，进入 / 退出编辑 helper 已覆盖对象详情、国家、省份和河流，控制面板打开对象面板已有第一刀 `openSelectionAwarePanelForState()`，selection handler 更新 / 打开面板已有第一刀 `updateOrOpenSelectionPanel()` 和 `updateExistingSelectionPanel()`，runtime / pick 双刷新已有第一刀 `refreshRuntimeAndPickPanels()`，控制台多对象持久高亮与清除入口也已完成第一刀；后续重点转向公共表格批量选择与高亮联动、更多打开 / 更新面板入口、更多编辑入口和更完整的 locate action 语义。
+4. `locateAndSelectObject()`、编辑动作 helper 和打开面板 helper 的本轮基线已完成：当前已覆盖 marker、路线、河流、湖泊、国家、省份、城市、文化、宗教、地区、军事、测量、标签、政府 / 外交入口、经济、备注、对象详情和控制台 `selection.locate()` 定位路径，进入 / 退出编辑 helper 已覆盖对象详情、国家、省份和河流，控制面板打开对象面板已有第一刀 `openSelectionAwarePanelForState()`，selection handler 更新 / 打开面板已有第一刀 `updateOrOpenSelectionPanel()` 和 `updateExistingSelectionPanel()`，runtime / pick 双刷新已有第一刀 `refreshRuntimeAndPickPanels()`，控制台多对象持久高亮与清除入口也已完成第一刀；更多对象类型或新的 locate 产品语义属于阶段外扩展。
 5. 继续扩展 `UiObjectTable.emptyAction` 和批量选择：当前空态动作已覆盖测量对象“开始测量”、文化“新增空文化”、宗教“新增空宗教”、标签“新增标签”和名称库“新建用户库”；公共表格批量选择已在安全导出基础上完成当前稳定地图对象的持久高亮接入，包括路线、河流、湖泊、国家、省份、文化、宗教、城市、资源标记、军事、地区、标签、备注目标、政体下国家、测量对象、外交关系和交易流。`useVisibleRowSelection()` 已统一可见行勾选、id 归一和筛选裁剪；军事、备注、政体、测量、外交和经济面板复用原有导出选择。外交关系使用有方向的复合 id，交易流只在交易 tab 且端点有效时高亮；商品与市场聚合行不伪装成单对象。批量动作提交目标时复用持久高亮共享契约，无效或已删除对象会被过滤，领域命令不再各自维护校正回调。
 6. 扩展剩余面板状态持久化：仅在有明确收益时继续保存少数内部 tab、模式或二级筛选，不保存编辑草稿、待导入文件或半截编辑状态。
 
@@ -287,15 +287,15 @@
 - 导出联查：导出浮层显示 PNG `1x～4x`、地图标注和图外透明背景选项，默认分别为 `1x / 开启 / 关闭`；国家面、省份面和合并政治面边界选项可见。勾选国家面与合并边界后触发要素 GeoJSON 导出，浮层正常关闭，页面没有导出失败提示。
 - 最终运行状态：开发面板显示 `WebGL error = 0`，当前 health 没有 ERROR；自动化点击期间存在 `input-handler-stall` WARN。本项只完成阶段末集中浏览器门禁，不改变产品代码，也不把 WARN 记为全量健康通过。
 
-## 优先级建议
+## 历史优先级与当前状态
 
 ### 第一批
 
-- 河流独立浮动面板。
-- 编辑命令和撤销命令骨架。
-- 高亮/定位 API。
+- 河流独立浮动面板已完成。
+- 编辑命令和撤销命令骨架已完成，并由统一执行路径门禁守护。
+- 高亮 / 定位 API 第一刀已完成，并已通过阶段末浏览器验收。
 - 高度编辑器正式版第一刀已完成命令化；后续继续高度统计增强、派生重建范围和更复杂地形工具。
-- 国家编辑器正式版第一刀。
+- 国家编辑器正式版第一刀已完成。
 
 ### 第二批
 

@@ -114,7 +114,7 @@ FeatureCollection 同时写入 `coordinateReference = approximate-equirectangula
 
 缺口：
 
-- zone、state 和 province 已支持真正 dissolve 外轮廓；后续可继续补范围导出、CRS 元数据和大图耗时优化。
+- zone、state 和 province 已支持真正 dissolve 外轮廓；后续可继续补范围导出和可配置 CRS 元数据。大图是否需要优化，应先由阶段外浏览器主线程采样证明，不再直接列为当前缺口。
 - route / river 可继续补名称、等级中文标签和更完整统计。
 - 尚未支持范围导出或 CRS 元数据配置。
 
@@ -130,6 +130,7 @@ FeatureCollection 同时写入 `coordinateReference = approximate-equirectangula
 - 右上角地图尺寸摘要。
 - 左下角比例尺。
 - 城市 / 标记 / 军事图标和城市 / 国家 / 自定义标签等地图 overlay。
+- 内置图例。
 - 导出浮层支持 `1x / 2x / 3x / 4x` PNG 倍率。
 - 可显式关闭地图 DOM overlay、比例尺和固定摘要合成。
 - 可把当前相机下地图有效矩形之外的背景像素导出为透明；地图内海洋保持可见。
@@ -137,7 +138,7 @@ FeatureCollection 同时写入 `coordinateReference = approximate-equirectangula
 
 缺口：
 
-- 尚未合成图例、手工叠层和浮动面板。
+- 尚未合成手工叠层和浮动面板；内置图例已经纳入固定 PNG 合成。
 - 尚未支持任意裁剪范围或把地图内海洋也处理为透明。
 
 ## 备注摘要 JSON
@@ -172,7 +173,7 @@ FeatureCollection 同时写入 `coordinateReference = approximate-equirectangula
 - `summary.distanceMapUnits / distanceLabel / areaMapUnits / areaLabel`
 - `points[]`：index、x、y
 
-## 后续顺序建议
+## 当前阶段门禁与阶段外扩展
 
 ### 纯 Node 聚合门禁
 
@@ -184,8 +185,10 @@ FeatureCollection 同时写入 `coordinateReference = approximate-equirectangula
 4. 政治面 dissolve 外部兼容性。
 5. 政治面 dissolve 100k 性能。
 
-五项使用独立 Node 子进程，失败即停并传播退出码，后续步骤标记为 `skipped`。该命令不会启动浏览器；API roundtrip、下载文件和 WebGL / console / health 验收由阶段末浏览器门禁负责。
+五项使用独立 Node 子进程，失败即停并传播退出码，后续步骤标记为 `skipped`。该命令不会启动浏览器；第 23 项已集中确认导出浮层、PNG 显式选项、政治面合并开关和真实导出触发，最终 `WebGL error = 0` 且当前 health 没有 ERROR。下载事件没有在自动化等待窗内返回，因此不把本次浏览器证据扩大为新的文件内容结论；文件结构、拓扑和 100k 性能继续由上述代码门禁负责。
 
-1. 国家、省份和 zone dissolve：补真正适合 GIS 的外轮廓，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑原型验证。
-2. PNG 任意裁剪范围和更细的 overlay 图层选择。
-3. 完整 JSON 导入诊断包和后续 schema 版本的增量迁移。
+本轮国家、省份和 zone dissolve、PNG 显式选项、完整地图迁移与导入诊断均已完成。以下只作为阶段外增强，不再是当前执行队列：
+
+1. PNG 任意裁剪范围和更细的 overlay 图层选择。
+2. GEO / 高度图诊断包与未来 schema 版本的增量迁移。
+3. 外部 GIS 手工互操作和 100k 浏览器主线程耗时采样。

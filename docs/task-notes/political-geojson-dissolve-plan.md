@@ -100,9 +100,9 @@
 - `3x3` 方格缺中心的合成对象可输出一个 polygon、两个 rings：外环 `13` 点，hole `5` 点，两个 ring 均闭合。
 - `node --check app\webgl-generator\src\runtime\map-file-io.js`、`git diff --check` 和 `pnpm run build:app` 通过。
 
-后续接入前仍需：
+接入约束：
 
-- 接入导出层选项时保留非 dissolve 输出作为回退。
+- 导出层选项已经保留非 dissolve 输出作为默认回退。
 
 ## 2026-07-09 真实导出验证记录
 
@@ -127,8 +127,6 @@
 
 点数减少约 `80.48%`；dissolve 输出的 collection `properties.dissolvedPolitical = true`，所有 state / province / zone feature 的 `properties.dissolved = true`。
 
-后续接入前仍需：
-
 ## 2026-07-09 UI 接入验证记录
 
 导出浮层已新增“合并政治面边界”开关；启用后，state / province / zone 会走 dissolve 输出，未启用时仍保持原有非 dissolve MultiPolygon 回退。
@@ -142,10 +140,10 @@
 - feature 数 `261`，bad feature `0`，所有 feature 均为 `state / province / zone` 的 `MultiPolygon` 且 `properties.dissolved = true`。
 - 坐标点 `12030`，`glError = 0`，非 health console/page error 为 `0`。
 
-后续仍可优化：
+阶段外仍可优化：
 
-- 100k cells 大图的浏览器导出耗时和主线程占用。
-- 若耗时过高，再评估 Worker 或懒加载几何库。
+- 100k cells 大图的浏览器导出耗时和主线程占用仍可另做手工采样；本轮已有固定 100k Node 门禁，不把它作为收口阻塞项。
+- 只有后续浏览器采样证明耗时过高时，才评估 Worker 或懒加载几何库。
 
 ## 2026-07-15 外部兼容性代码门禁
 
@@ -186,3 +184,7 @@
 | 构建与序列化中位数 | 301.673ms | 257.58ms |
 
 点数减少 `89.665%`，字节减少 `87.832%`。独立审查复跑中位数为普通版 `308.153ms`、dissolve `256.013ms`，提交前最终复跑为普通版 `328.745ms`、dissolve `276.163ms`，均通过。地图生成约 4 秒只作环境记录，不纳入 dissolve 阈值。本项无需引入 Worker 或进一步优化算法。
+
+## 2026-07-15 阶段状态
+
+政治面 dissolve 的算法接入、非 dissolve 回退、UI 开关、外部兼容性代码门禁、100k 性能门禁和阶段末真实导出触发均已完成，本专题在权威任务第 20～24 项范围内收口。QGIS / geojson.io 手工互操作与 100k 浏览器主线程采样只记录为阶段外增强。
