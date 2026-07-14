@@ -1284,8 +1284,9 @@ async function exportPngData(state, documentRef, options = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const filename = `${mapFileBaseName(map)}.png`;
   const pixelScale = normalizePngApiScale(options.pixelScale ?? options.scale ?? readPngExportScale(documentRef));
-  const includeMapOverlays = options.includeMapOverlays !== false;
-  const pngOptions = {includeMapOverlays, pixelScale, renderer: state.renderer};
+  const includeMapOverlays = options.includeMapOverlays ?? (documentRef.getElementById("export-png-overlays")?.checked !== false);
+  const transparentBackground = options.transparentBackground ?? (documentRef.getElementById("export-png-transparent")?.checked === true);
+  const pngOptions = {includeMapOverlays, transparentBackground, pixelScale, renderer: state.renderer};
   if (options.download === true) {
     const result = await downloadCanvasPng(documentRef, canvas, filename, pngOptions);
     return {
@@ -1295,7 +1296,8 @@ async function exportPngData(state, documentRef, options = {}) {
       width: result.width,
       height: result.height,
       pixelScale: result.pixelScale,
-      includeMapOverlays
+      includeMapOverlays: result.includeMapOverlays,
+      transparentBackground: result.transparentBackground
     };
   }
 
@@ -1307,7 +1309,8 @@ async function exportPngData(state, documentRef, options = {}) {
     width: result.width,
     height: result.height,
     pixelScale: result.pixelScale,
-    includeMapOverlays
+    includeMapOverlays: result.includeMapOverlays,
+    transparentBackground: result.transparentBackground
   };
   if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
   return data;

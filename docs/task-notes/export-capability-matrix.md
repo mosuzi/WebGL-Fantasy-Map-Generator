@@ -128,11 +128,14 @@
 - 左下角比例尺。
 - 城市 / 标记 / 军事图标和城市 / 国家 / 自定义标签等地图 overlay。
 - 导出浮层支持 `1x / 2x / 3x / 4x` PNG 倍率。
+- 可显式关闭地图 DOM overlay、比例尺和固定摘要合成。
+- 可把当前相机下地图有效矩形之外的背景像素导出为透明；地图内海洋保持可见。
+- 控制台 `api.data.exportPNG()` 支持 `pixelScale / includeMapOverlays / transparentBackground` 并返回实际选项。
 
 缺口：
 
 - 尚未合成图例、手工叠层和浮动面板。
-- 尚未支持透明背景或裁剪范围。
+- 尚未支持任意裁剪范围或把地图内海洋也处理为透明。
 
 ## 备注摘要 JSON
 
@@ -169,5 +172,5 @@
 ## 后续顺序建议
 
 1. 国家、省份和 zone dissolve：补真正适合 GIS 的外轮廓，执行前先按 `docs/task-notes/political-geojson-dissolve-plan.md` 做拓扑原型验证。
-2. PNG 透明背景、裁剪范围和是否包含 overlay 的显式开关。
+2. PNG 任意裁剪范围和更细的 overlay 图层选择。
 3. 完整 JSON 导入诊断包和后续 schema 版本的增量迁移。

@@ -85,6 +85,10 @@
               <option value="4">4x</option>
             </select>
           </label>
+          <section class="feature-export-layers" aria-label="PNG 导出选项">
+            <UiSwitchField label="包含地图标注" input-id="export-png-overlays" field-class="feature-export-layer-switch" :checked="true" />
+            <UiSwitchField label="图外透明背景" input-id="export-png-transparent" field-class="feature-export-layer-switch" />
+          </section>
           <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
             <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>
             <div class="feature-export-layer-grid">

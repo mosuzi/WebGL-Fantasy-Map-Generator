@@ -239,21 +239,32 @@ export async function downloadCanvasPng(documentRef, canvas, filename, options =
     bytes: result.blob.size,
     width: result.width,
     height: result.height,
-    pixelScale: result.pixelScale
+    pixelScale: result.pixelScale,
+    includeMapOverlays: result.includeMapOverlays,
+    transparentBackground: result.transparentBackground
   };
 }
 
 export async function createCanvasPngBlob(documentRef, canvas, options = {}) {
   if (!canvas?.toBlob) throw new Error("当前浏览器不支持 canvas 图片导出");
-  const exportCanvas = options.includeMapOverlays || options.renderer
-    ? await composeMapExportCanvas(documentRef, canvas, options)
+  const normalizedOptions = normalizePngExportOptions(options);
+  const exportCanvas = normalizedOptions.includeMapOverlays || normalizedOptions.transparentBackground || normalizedOptions.pixelScale !== 1 || options.renderer
+    ? await composeMapExportCanvas(documentRef, canvas, {...options, ...normalizedOptions})
     : canvas;
   const blob = await canvasToBlob(exportCanvas);
   return {
     blob,
     width: exportCanvas.width || canvas.width || 0,
     height: exportCanvas.height || canvas.height || 0,
-    pixelScale: normalizePngPixelScale(options.pixelScale)
+    ...normalizedOptions
+  };
+}
+
+export function normalizePngExportOptions(options = {}) {
+  return {
+    pixelScale: normalizePngPixelScale(options.pixelScale),
+    includeMapOverlays: options.includeMapOverlays !== false,
+    transparentBackground: options.transparentBackground === true
   };
 }
 
@@ -1208,9 +1219,32 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
     y: output.height / canvasRect.height
   };
 
-  await drawMapOverlayElements(documentRef, context, canvasRect, scale, options);
-  drawFixedMapUiElements(documentRef, context, canvasRect, scale);
+  if (options.includeMapOverlays) {
+    await drawMapOverlayElements(documentRef, context, canvasRect, scale, options);
+    drawFixedMapUiElements(documentRef, context, canvasRect, scale);
+  }
+  if (options.transparentBackground) clearOutsideMapBounds(context, options.renderer, canvasRect, scale);
   return output;
+}
+
+export function clearOutsideMapBounds(context, renderer, canvasRect, scale) {
+  const width = Number(renderer?.map?.metadata?.graphWidth);
+  const height = Number(renderer?.map?.metadata?.graphHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || typeof renderer?.worldToScreen !== "function") return;
+  const start = renderer.worldToScreen(0, 0, canvasRect);
+  const end = renderer.worldToScreen(width, height, canvasRect);
+  const left = clampExportCoordinate(Math.min(start.x, end.x) * scale.x, context.canvas.width);
+  const top = clampExportCoordinate(Math.min(start.y, end.y) * scale.y, context.canvas.height);
+  const right = clampExportCoordinate(Math.max(start.x, end.x) * scale.x, context.canvas.width);
+  const bottom = clampExportCoordinate(Math.max(start.y, end.y) * scale.y, context.canvas.height);
+  context.clearRect(0, 0, context.canvas.width, top);
+  context.clearRect(0, bottom, context.canvas.width, context.canvas.height - bottom);
+  context.clearRect(0, top, left, Math.max(0, bottom - top));
+  context.clearRect(right, top, context.canvas.width - right, Math.max(0, bottom - top));
+}
+
+function clampExportCoordinate(value, limit) {
+  return Math.max(0, Math.min(limit, Number(value) || 0));
 }
 
 function normalizePngPixelScale(value) {

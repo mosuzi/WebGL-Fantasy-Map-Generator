@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-14：PNG 导出显式选项
+
+本步完成权威任务清单第 19 项，在既有 PNG 倍率基础上补齐 overlay 与透明背景选择，并修正 API 传入 `includeMapOverlays:false` 时仍会合成 overlay 的旧路径。
+
+- 导出浮层新增“包含地图标注”和“图外透明背景”；默认继续包含地图 DOM overlay、比例尺和固定摘要，透明背景默认关闭，保持既有导出视觉不变。
+- `createCanvasPngBlob()` 集中规范 `pixelScale / includeMapOverlays / transparentBackground`；关闭标注时不调用 overlay / fixed UI 合成，下载与 API 返回都报告最终实际选项。
+- 图外透明背景根据 renderer 当前 camera 与 map graph bounds 计算输出像素矩形，清除矩形四周像素；地图矩形内部的陆地、海洋、边缘柔化与可选标注保持，避免把“透明背景”误做成按颜色删除海洋。
+- `api.data.exportPNG()` 与 UI 共用选项语义，未显式传参时读取当前导出浮层，显式参数优先。
+- 新增 `regress:png-options`，覆盖默认 / 显式规范、`4x` 上限、图外四条清除矩形、透明清除晚于 overlay 合成的顺序和 UI / API 条件分支；生产构建完成 `1123` modules。首轮命中既有 Windows/Vite HTML emitted chunk 路径异常，未改配置直接重试通过，仅保留既有大 chunk 警告。本项按快速迭代约定未运行浏览器测试。
+
 ## 2026-07-14：完整地图导入错误诊断
 
 本步完成权威任务清单第 18 项，在既有文本详情基础上增加可复用、可导出的结构化诊断，不改变地图导入成功路径。

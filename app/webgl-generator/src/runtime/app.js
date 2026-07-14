@@ -3176,9 +3176,11 @@ async function exportMapImage(state, documentRef) {
   try {
     assertMapAvailable(state);
     const pixelScale = readPngExportScale(documentRef);
+    const includeMapOverlays = documentRef.getElementById("export-png-overlays")?.checked !== false;
+    const transparentBackground = documentRef.getElementById("export-png-transparent")?.checked === true;
     setFileOperationStatus(documentRef, "正在导出图片...");
-    const result = await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`, {includeMapOverlays: true, pixelScale, renderer: state.renderer});
-    setFileOperationStatus(documentRef, `图片已导出：${result.width} x ${result.height}px，倍率 ${result.pixelScale}x，${formatStorageBytes(result.bytes)}。`);
+    const result = await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`, {includeMapOverlays, transparentBackground, pixelScale, renderer: state.renderer});
+    setFileOperationStatus(documentRef, `图片已导出：${result.width} x ${result.height}px，倍率 ${result.pixelScale}x，标注${result.includeMapOverlays ? "包含" : "关闭"}，背景${result.transparentBackground ? "图外透明" : "保持画布"}，${formatStorageBytes(result.bytes)}。`);
   } catch (error) {
     reportFileOperationError(documentRef, "图片导出失败", error);
   }

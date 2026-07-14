@@ -47,6 +47,7 @@
     "regress:selection-actions": "node --no-warnings ./tools/webgl-generator-selection-action-regression.mjs",
     "regress:map-migration": "node --no-warnings ./tools/webgl-generator-map-migration-regression.mjs",
     "regress:map-import-diagnostics": "node --no-warnings ./tools/webgl-generator-map-import-diagnostics-regression.mjs",
+    "regress:png-options": "node --no-warnings ./tools/webgl-generator-png-options-regression.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:api-geo": "node ./tools/webgl-generator-api-geo-regression.mjs",
