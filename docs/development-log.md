@@ -27031,3 +27031,10 @@ full 矩阵结果：
 - 首轮验收确认面板标题仍从已经截断的 `lastAffected` 数组重新格式化，导致 `+18` 丢失。`history-format.js` 最小改为优先使用已有 `lastAffectedSummary`，并扩展 affected 摘要回归，固化截断预览必须保留 `+N` 的标题契约。
 - 生产构建后的真实页面复验中，外交重生成标题为 `撤销：重生成外交 @diplomacy [derived-system#diplomacy-regeneration, state#1, state#2 +18]`；等待既有 250ms 标题刷新周期后，撤销按钮正确禁用、重做标题保留同一完整摘要，重做后再次切回撤销标题。
 - checksum 全程保持 `947e9fe5`，`WebGL error = 0`，console / page / health error 均为 0。相关文件语法检查、affected 摘要与 history peek 回归、`pnpm run build:app` 和 `git diff --check` 均通过；构建 `1121` modules、约 `840ms`，只有既有大 chunk 警告。
+
+### 2026-07-14 第 134 步整平笔刷真实浏览器验收
+
+- 首轮生产页检查发现 `.segmented:not(.ui-segmented)` 的选择器优先级高于 `.height-action-group`，源码声明的四列因此实际显示为三列。最小修复把专用规则收敛为 `.segmented.height-action-group`；重新构建后真实计算样式为四个等宽列，核心“抬升 / 降低 / 平滑 / 整平”完整落在首行，整平说明可见。
+- 系统 Chrome 新页只执行一条短 stroke：从 grid cell `#1785` 的高度 25 落笔，拖到相距约 50.8 的 `#2274`。落笔后与拖动中 `activeStroke.targetHeight` 均为 25，终点原高度 37 按强度 4 渐进到 33，证明目标没有随最近 cell 改写。
+- 笔划最终影响 19 cells，历史为 `高度笔刷 19 cells @height [derived-system#height-brush, grid-cells#19]`；面板同步显示影响 19 和 12 项待派生。撤销把终点恢复为 37，重做恢复为 33，最终再次撤销并停止高度编辑，交互锁解除。
+- checksum 全程保持 `7075c7e3`，`WebGL error = 0`，console / page / health error 均为 0。高度笔刷回归、`pnpm run build:app` 和 `git diff --check` 通过；构建 `1121` modules、约 `828ms`，只有既有大 chunk 警告。
