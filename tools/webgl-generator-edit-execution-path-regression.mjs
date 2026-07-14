@@ -24,14 +24,15 @@ assert.ok(executeHistoryBody.includes("state.editHistory.redo("));
 assertOrdered(executeEditBody, [
   "command.isNoop?.(context)",
   "state.editHistory.execute(command, context)",
+  "readEditCommandResult(executedCommand)",
+  "options.preparePanelRefresh?.(state, executedCommand, result)",
   "refresh(state, executedCommand)",
   "refreshPanelsForEdit(state, executedCommand)",
-  "reconcilePersistentObjectHighlights(state, documentRef)",
-  "readEditCommandResult(executedCommand)"
+  "reconcilePersistentObjectHighlights(state, documentRef)"
 ], "统一编辑执行器顺序");
 assertOrdered(executeHistoryBody, [
   "refresh(state, command)",
-  "updateAllObjectPanels(state)",
+  'refreshPanelsForEdit(state, {derived: ["object-panels"]})',
   "reconcilePersistentObjectHighlights(state, documentRef)",
   "updateEditingInteractionLock(state, documentRef)"
 ], "统一历史执行器顺序");

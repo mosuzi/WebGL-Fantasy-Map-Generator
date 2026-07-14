@@ -792,12 +792,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createDeleteStateCommand(stateId);
       const result = executeEditCommand(state, documentRef, command, {
         context: {map: state.map},
-        refresh: refreshAfterStateEdit
+        refresh: refreshAfterStateEdit,
+        preparePanelRefresh: targetState => {
+          targetState.selectionStore.clear();
+          targetState.panels.state.setTargetStateId(0);
+        }
       });
       if (!result.executed) return;
-      state.selectionStore.clear();
-      state.panels.state.setTargetStateId(0);
-      updateAllObjectPanels(state);
       updateEditingInteractionLock(state, documentRef);
     },
     onRename: (stateId, name) => {
@@ -973,11 +974,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createDeleteProvinceCommand(provinceId);
       const result = executeEditCommand(state, documentRef, command, {
         context: {map: state.map},
-        refresh: refreshAfterProvinceEdit
+        refresh: refreshAfterProvinceEdit,
+        preparePanelRefresh: targetState => {
+          targetState.selectionStore.clear();
+          provincePanel.setSelectedProvinceId(0);
+        }
       });
       if (!result.executed) return;
-      state.selectionStore.clear();
-      provincePanel.setSelectedProvinceId(0);
       updateEditingInteractionLock(state, documentRef);
     },
     onSampleSelection: () => {
@@ -1111,11 +1114,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onDeleteCity: cityId => {
       const command = createDeleteCityCommand(cityId);
-      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
-      if (result.executed) {
-        state.selectionStore.clear();
-        cityPanel.setSelectedCityId(null);
-      }
+      executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        preparePanelRefresh: targetState => {
+          targetState.selectionStore.clear();
+          cityPanel.setSelectedCityId(null);
+        }
+      });
       updateEditingInteractionLock(state, documentRef);
     },
     onPopulationChange: (cityId, population) => {
@@ -1173,16 +1178,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAdd: () => {
       const command = createAddCultureCommand();
       const context = {map: state.map};
-      const result = executeEditCommand(state, documentRef, command, {context});
-      if (result.executed) {
-        const cultureId = result.command?.getCultureId?.();
-        if (cultureId) {
+      executeEditCommand(state, documentRef, command, {
+        context,
+        preparePanelRefresh: (targetState, executed) => {
+          const cultureId = executed.getCultureId?.();
+          if (!cultureId) return;
           culturePanel.setSelectedCultureId(cultureId);
           selectFromPanel("culture-panel", {kind: OBJECT_KIND.CULTURE, id: cultureId, name: `新文化 ${cultureId}`});
-        }
-        setFileOperationStatus(documentRef, `已新增空文化 #${cultureId || ""}。`);
-      }
-      updateCulturePanel(state);
+        },
+        status: executed => `已新增空文化 #${executed.getCultureId?.() || ""}。`
+      });
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {
@@ -1267,16 +1272,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAdd: () => {
       const command = createAddReligionCommand();
       const context = {map: state.map};
-      const result = executeEditCommand(state, documentRef, command, {context});
-      if (result.executed) {
-        const religionId = result.command?.getReligionId?.();
-        if (religionId) {
+      executeEditCommand(state, documentRef, command, {
+        context,
+        preparePanelRefresh: (targetState, executed) => {
+          const religionId = executed.getReligionId?.();
+          if (!religionId) return;
           religionPanel.setSelectedReligionId(religionId);
           selectFromPanel("religion-panel", {kind: OBJECT_KIND.RELIGION, id: religionId, name: `新宗教 ${religionId}`});
-        }
-        setFileOperationStatus(documentRef, `已新增空宗教 #${religionId || ""}。`);
-      }
-      updateReligionPanel(state);
+        },
+        status: executed => `已新增空宗教 #${executed.getReligionId?.() || ""}。`
+      });
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {
@@ -2039,7 +2044,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onUnitPreferences: () => {
       renderer.setUnitPreferences(readControlPreferences(documentRef).units);
-      updateAllObjectPanels(state);
+      refreshPanelsForEdit(state, {derived: ["object-panels"]});
       refreshRuntimeAndPickPanels(documentRef, state);
       updateMeasurementOverlay(state, documentRef);
     },
@@ -3364,8 +3369,7 @@ function redoNamebaseEdit(state, documentRef) {
 function executeNamebaseHistoryCommand(state, documentRef, action) {
   try {
     const result = executeHistoryCommand(state, documentRef, action, {
-      refresh: (state, command) => refreshAfterNamebaseHistoryCommand(state, documentRef, command),
-      refreshPanels: false
+      refresh: (state, command) => refreshAfterNamebaseHistoryCommand(state, documentRef, command)
     });
     if (!result.executed) {
       setFileOperationStatus(documentRef, action === "redo" ? "没有可重做的名称库编辑。" : "没有可撤销的名称库编辑。");
@@ -3380,20 +3384,17 @@ function executeNamebaseHistoryCommand(state, documentRef, action) {
 }
 
 function refreshAfterNamebaseEdit(state, documentRef) {
-  state.panels.namebase.update(state.map, state.editHistory.getStats());
   persistNamebasePreferences(state, documentRef);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
 }
 
 function refreshAfterNamebaseHistoryCommand(state, documentRef, command) {
+  refreshAfterEdit(state, command);
   if (command?.domain === "namebase") {
     refreshAfterNamebaseEdit(state, documentRef);
     return;
   }
-  refreshAfterEdit(state, command);
-  updateAllObjectPanels(state);
-  state.panels.namebase.update(state.map, state.editHistory.getStats());
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
 }
@@ -3664,7 +3665,6 @@ function executeNamebaseCommandViaApi(state, documentRef, command, options = {})
       refreshAfterEdit(state, command);
       refreshAfterNamebaseEdit(state, documentRef);
     },
-    refreshPanels: false,
     noopStatus: options.noopStatus,
     status: options.status,
     throwOnError: false
@@ -4065,8 +4065,7 @@ async function importGeoData(state, documentRef, file) {
       }
       const result = executeEditCommand(state, documentRef, terrainCommand, {
         context: {map: state.map},
-        refresh: refreshAfterEdit,
-        refreshPanels: false
+        refresh: refreshAfterEdit
       });
       if (!result.executed) {
         setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
@@ -4083,21 +4082,25 @@ async function importGeoData(state, documentRef, file) {
       setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
       return null;
     }
-    const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+    const result = executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      preparePanelRefresh: (targetState, executed, imported) => {
+        targetState.measurement.points = [];
+        targetState.measurement.editingMeasurementId = null;
+        targetState.measurement.active = false;
+        if (imported?.[0]?.id) targetState.panels.measurement?.setSelectedMeasurementId?.(imported[0].id);
+      }
+    });
     if (!result.executed) {
       setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
       return null;
     }
     const imported = Array.isArray(result.result) ? result.result : [];
-    state.measurement.points = [];
-    state.measurement.editingMeasurementId = null;
-    state.measurement.active = false;
     if (state.renderer?.layerVisibility?.measurements === false) {
       state.renderer.setLayerVisible("measurements", true);
       syncMeasurementLayerControl(documentRef, true);
     }
     updateMeasurementOverlay(state, documentRef);
-    updateMeasurementPanel(state);
     const selected = imported[0];
     if (selected) {
       state.panels.measurement?.setSelectedMeasurementId?.(selected.id);
@@ -4134,7 +4137,6 @@ function importFmgCellsGeoViaApi(state, documentRef, command) {
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     refresh: refreshAfterEdit,
-    refreshPanels: false,
     throwOnError: false
   });
   if (!result.executed) {
@@ -4175,6 +4177,12 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
   }
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
+    preparePanelRefresh: (targetState, executed, imported) => {
+      targetState.measurement.points = [];
+      targetState.measurement.editingMeasurementId = null;
+      targetState.measurement.active = false;
+      if (imported?.[0]?.id) targetState.panels.measurement?.setSelectedMeasurementId?.(imported[0].id);
+    },
     throwOnError: false
   });
   if (!result.executed) {
@@ -4189,15 +4197,11 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
     };
   }
   const imported = Array.isArray(result.result) ? result.result : [];
-  state.measurement.points = [];
-  state.measurement.editingMeasurementId = null;
-  state.measurement.active = false;
   if (state.renderer?.layerVisibility?.measurements === false) {
     state.renderer.setLayerVisible("measurements", true);
     syncMeasurementLayerControl(documentRef, true);
   }
   updateMeasurementOverlay(state, documentRef);
-  updateMeasurementPanel(state);
   const selected = imported[0];
   if (selected && options.locate !== false) {
     state.panels.measurement?.setSelectedMeasurementId?.(selected.id);
@@ -4948,11 +4952,12 @@ function executeEditCommand(state, documentRef, command, options = {}) {
       return {executed: false, command, result: null, error: null};
     }
     const executedCommand = state.editHistory.execute(command, context);
+    const result = readEditCommandResult(executedCommand);
+    options.preparePanelRefresh?.(state, executedCommand, result);
     const refresh = options.refresh || refreshAfterEdit;
     refresh(state, executedCommand);
     if (options.refreshPanels !== false) refreshPanelsForEdit(state, executedCommand);
     reconcilePersistentObjectHighlights(state, documentRef);
-    const result = readEditCommandResult(executedCommand);
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
     return {executed: true, command: executedCommand, result, error: null};
   } catch (error) {
@@ -4976,7 +4981,7 @@ function executeHistoryCommand(state, documentRef, action, options = {}) {
   }
   const refresh = options.refresh || refreshAfterEdit;
   refresh(state, command);
-  if (options.refreshPanels !== false) updateAllObjectPanels(state);
+  if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
   options.afterRefresh?.(state, command);
   reconcilePersistentObjectHighlights(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
@@ -5255,13 +5260,12 @@ function saveMeasurementViaApi(state, documentRef, points, options = {}) {
       const measurement = command.getMeasurement?.();
       return `已保存测量对象 ${measurement?.name || measurement?.id || ""}。`;
     },
+    preparePanelRefresh: (targetState, executed) => {
+      const created = executed.getMeasurement?.();
+      if (created?.id) targetState.panels.measurement?.setSelectedMeasurementId?.(created.id);
+    },
     throwOnError: false
   });
-  const created = result.command?.getMeasurement?.();
-  if (result.executed && created?.id) {
-    state.panels.measurement?.setSelectedMeasurementId?.(created.id);
-  }
-  updateMeasurementPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5291,10 +5295,9 @@ function updateMeasurementPointsViaApi(state, documentRef, measurementId, points
     context: {map: state.map},
     noopStatus: "测量对象不存在、点列无效或形状未变化。",
     status: `已更新测量对象 ${id}。`,
+    preparePanelRefresh: targetState => targetState.panels.measurement?.setSelectedMeasurementId?.(id),
     throwOnError: false
   });
-  if (result.executed) state.panels.measurement?.setSelectedMeasurementId?.(id);
-  updateMeasurementPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5451,17 +5454,14 @@ function addCityViaApi(state, documentRef, gridCell) {
         ? `已新增城市 #${created.cityId}。`
         : "已新增城市。";
     },
+    preparePanelRefresh: (targetState, executed, created) => {
+      if (!Number.isInteger(created?.cityId)) return;
+      targetState.cityEdit.lastCreatedCityId = created.cityId;
+      targetState.panels.city?.setSelectedCityId(created.cityId);
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: created.cityId}});
+    },
     throwOnError: false
   });
-  const created = result.command?.getResult?.();
-  if (result.executed && Number.isInteger(created?.cityId)) {
-    state.cityEdit.lastCreatedCityId = created.cityId;
-    state.panels.city?.setSelectedCityId(created.cityId);
-    state.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: created.cityId}});
-  }
-  updateStatePanel(state);
-  updateProvincePanel(state);
-  updateCityPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5473,15 +5473,12 @@ function deleteCityViaApi(state, documentRef, cityId) {
   const result = executeEditCommand(state, documentRef, command, {
     noopStatus: "城市不存在或已被删除。",
     status: `已删除城市 #${id}。`,
+    preparePanelRefresh: targetState => {
+      targetState.selectionStore.clear();
+      targetState.panels.city?.setSelectedCityId(null);
+    },
     throwOnError: false
   });
-  if (result.executed) {
-    state.selectionStore.clear();
-    state.panels.city?.setSelectedCityId(null);
-  }
-  updateStatePanel(state);
-  updateProvincePanel(state);
-  updateCityPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5499,20 +5496,17 @@ function addProvinceViaApi(state, documentRef, gridCell) {
         : "已新增省份。";
     },
     refresh: refreshAfterProvinceEdit,
+    preparePanelRefresh: (targetState, executed, created) => {
+      targetState.provinceEdit.addMode = false;
+      targetState.provinceEdit.lastAffected = created?.cells || 0;
+      targetState.provinceEdit.sourceProvinceId = created?.provinceId || null;
+      if (!Number.isInteger(created?.provinceId)) return;
+      targetState.panels.province?.setSelectedProvinceId(created.provinceId);
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.PROVINCE, id: created.provinceId}});
+    },
     throwOnError: false
   });
-  const created = result.command?.getResult?.();
-  if (result.executed) {
-    state.provinceEdit.addMode = false;
-    state.provinceEdit.lastAffected = created?.cells || 0;
-    state.provinceEdit.sourceProvinceId = created?.provinceId || null;
-    if (Number.isInteger(created?.provinceId)) {
-      state.panels.province?.setSelectedProvinceId(created.provinceId);
-      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.PROVINCE, id: created.provinceId}});
-    }
-  }
   state.panels.province?.updateAddMode?.(false);
-  updateAllObjectPanels(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5525,16 +5519,15 @@ function deleteProvinceViaApi(state, documentRef, provinceId) {
     noopStatus: "省份不存在、为中立省份或已被删除。",
     status: `已删除省份 #${id}。`,
     refresh: refreshAfterProvinceEdit,
+    preparePanelRefresh: targetState => {
+      targetState.provinceEdit.deleteMode = false;
+      targetState.provinceEdit.lastAffected = 0;
+      targetState.selectionStore.clear();
+      targetState.panels.province?.setSelectedProvinceId(0);
+    },
     throwOnError: false
   });
-  if (result.executed) {
-    state.provinceEdit.deleteMode = false;
-    state.provinceEdit.lastAffected = 0;
-    state.selectionStore.clear();
-    state.panels.province?.setSelectedProvinceId(0);
-  }
   state.panels.province?.updateDeleteMode?.(false);
-  updateAllObjectPanels(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5552,21 +5545,18 @@ function addStateViaApi(state, documentRef, gridCell) {
         : "已新增国家。";
     },
     refresh: refreshAfterStateEdit,
+    preparePanelRefresh: (targetState, executed, created) => {
+      targetState.stateEdit.addMode = false;
+      targetState.stateEdit.lastAffected = created?.cells || 0;
+      targetState.stateEdit.sourceStateId = created?.stateId || null;
+      if (!Number.isInteger(created?.stateId)) return;
+      const object = resolveObject(targetState.map, {kind: OBJECT_KIND.STATE, id: created.stateId}) || {kind: OBJECT_KIND.STATE, id: created.stateId};
+      targetState.panels.state?.setTargetStateId(created.stateId);
+      targetState.selectionStore.setSelection({object});
+    },
     throwOnError: false
   });
-  const created = result.command?.getResult?.();
-  if (result.executed) {
-    state.stateEdit.addMode = false;
-    state.stateEdit.lastAffected = created?.cells || 0;
-    state.stateEdit.sourceStateId = created?.stateId || null;
-    if (Number.isInteger(created?.stateId)) {
-      const object = resolveObject(state.map, {kind: OBJECT_KIND.STATE, id: created.stateId}) || {kind: OBJECT_KIND.STATE, id: created.stateId};
-      state.panels.state?.setTargetStateId(created.stateId);
-      state.selectionStore.setSelection({object});
-    }
-  }
   state.panels.state?.updateAddMode?.(false);
-  updateAllObjectPanels(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5579,16 +5569,15 @@ function deleteStateViaApi(state, documentRef, stateId) {
     noopStatus: "国家不存在、为中立国家或已被删除。",
     status: `已删除国家 #${id}。`,
     refresh: refreshAfterStateEdit,
+    preparePanelRefresh: targetState => {
+      targetState.stateEdit.deleteMode = false;
+      targetState.stateEdit.lastAffected = 0;
+      targetState.selectionStore.clear();
+      targetState.panels.state?.setTargetStateId(0);
+    },
     throwOnError: false
   });
-  if (result.executed) {
-    state.stateEdit.deleteMode = false;
-    state.stateEdit.lastAffected = 0;
-    state.selectionStore.clear();
-    state.panels.state?.setTargetStateId(0);
-  }
   state.panels.state?.updateDeleteMode?.(false);
-  updateAllObjectPanels(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5713,16 +5702,16 @@ function addCultureViaApi(state, documentRef, options = {}) {
       const cultureId = command.getCultureId?.();
       return cultureId ? `已新增空文化 #${cultureId}。` : "已新增空文化。";
     },
+    preparePanelRefresh: (targetState, executed) => {
+      const cultureId = executed.getCultureId?.();
+      if (!cultureId) return;
+      targetState.panels.culture?.setSelectedCultureId(cultureId);
+      targetState.selectionStore.setSelection({
+        object: {kind: OBJECT_KIND.CULTURE, id: cultureId, name: payload.name || `新文化 ${cultureId}`}
+      });
+    },
     throwOnError: false
   });
-  const cultureId = result.command?.getCultureId?.();
-  if (result.executed && cultureId) {
-    state.panels.culture?.setSelectedCultureId(cultureId);
-    state.selectionStore.setSelection({
-      object: {kind: OBJECT_KIND.CULTURE, id: cultureId, name: payload.name || `新文化 ${cultureId}`}
-    });
-  }
-  updateCulturePanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5735,14 +5724,14 @@ function deleteCultureViaApi(state, documentRef, cultureId) {
     context: {map: state.map},
     noopStatus: "文化不存在或已删除。",
     status: `已删除文化 #${id} 并清除相关归属。`,
+    preparePanelRefresh: targetState => {
+      const selectedObject = targetState.selectionStore.getSnapshot().selection?.object;
+      if (selectedObject?.kind !== OBJECT_KIND.CULTURE || Number(selectedObject.id) !== id) return;
+      targetState.selectionStore.clear();
+      targetState.panels.culture?.setSelectedCultureId(null);
+    },
     throwOnError: false
   });
-  const selectedObject = state.selectionStore.getSnapshot().selection?.object;
-  if (result.executed && selectedObject?.kind === OBJECT_KIND.CULTURE && Number(selectedObject.id) === id) {
-    state.selectionStore.clear();
-    state.panels.culture?.setSelectedCultureId(null);
-  }
-  updateCulturePanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5770,10 +5759,15 @@ function assignSocialCellsViaApi(state, documentRef, kind, targetId, gridCellIds
     refresh: refreshAfterEdit,
     noopStatus: `没有需要更新的${label}归属。`,
     status: `已更新 ${changes.length} 个 grid cells 的${label}归属。`,
+    preparePanelRefresh: targetState => {
+      targetState[`${kind}Edit`].lastAffected = changes.length;
+    },
     throwOnError: false
   });
-  state[`${kind}Edit`].lastAffected = result.executed ? changes.length : 0;
-  kind === "culture" ? updateCulturePanel(state) : updateReligionPanel(state);
+  if (!result.executed) {
+    state[`${kind}Edit`].lastAffected = 0;
+    refreshPanelsForEdit(state, {affected: [{kind, id}]});
+  }
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5829,16 +5823,16 @@ function addReligionViaApi(state, documentRef, options = {}) {
       const religionId = command.getReligionId?.();
       return religionId ? `已新增空宗教 #${religionId}。` : "已新增空宗教。";
     },
+    preparePanelRefresh: (targetState, executed) => {
+      const religionId = executed.getReligionId?.();
+      if (!religionId) return;
+      targetState.panels.religion?.setSelectedReligionId(religionId);
+      targetState.selectionStore.setSelection({
+        object: {kind: OBJECT_KIND.RELIGION, id: religionId, name: payload.name || `新宗教 ${religionId}`}
+      });
+    },
     throwOnError: false
   });
-  const religionId = result.command?.getReligionId?.();
-  if (result.executed && religionId) {
-    state.panels.religion?.setSelectedReligionId(religionId);
-    state.selectionStore.setSelection({
-      object: {kind: OBJECT_KIND.RELIGION, id: religionId, name: payload.name || `新宗教 ${religionId}`}
-    });
-  }
-  updateReligionPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5851,14 +5845,14 @@ function deleteReligionViaApi(state, documentRef, religionId) {
     context: {map: state.map},
     noopStatus: "宗教不存在或已删除。",
     status: `已删除宗教 #${id} 并清除相关归属。`,
+    preparePanelRefresh: targetState => {
+      const selectedObject = targetState.selectionStore.getSnapshot().selection?.object;
+      if (selectedObject?.kind !== OBJECT_KIND.RELIGION || Number(selectedObject.id) !== id) return;
+      targetState.selectionStore.clear();
+      targetState.panels.religion?.setSelectedReligionId(null);
+    },
     throwOnError: false
   });
-  const selectedObject = state.selectionStore.getSnapshot().selection?.object;
-  if (result.executed && selectedObject?.kind === OBJECT_KIND.RELIGION && Number(selectedObject.id) === id) {
-    state.selectionStore.clear();
-    state.panels.religion?.setSelectedReligionId(null);
-  }
-  updateReligionPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5913,22 +5907,22 @@ function addCustomLabelViaApi(state, documentRef, options = {}) {
       const created = command.getCreatedLabel?.();
       return created ? `已新增手工标签 #${created.id}。` : "已新增手工标签。";
     },
+    preparePanelRefresh: (targetState, executed) => {
+      const created = executed.getCreatedLabel?.();
+      if (!created) return;
+      const object = {
+        kind: OBJECT_KIND.LABEL,
+        id: created.id,
+        targetKind: LABEL_TARGET_KIND.CUSTOM,
+        targetId: created.id,
+        text: created.text,
+        targetName: created.text
+      };
+      targetState.selectionStore.setSelection({object});
+      targetState.panels.labelNaming?.setSelectedLabelKey?.(labelKeyForObject(object));
+    },
     throwOnError: false
   });
-  const created = result.command?.getCreatedLabel?.();
-  if (result.executed && created) {
-    const object = {
-      kind: OBJECT_KIND.LABEL,
-      id: created.id,
-      targetKind: LABEL_TARGET_KIND.CUSTOM,
-      targetId: created.id,
-      text: created.text,
-      targetName: created.text
-    };
-    state.selectionStore.setSelection({object});
-    state.panels.labelNaming?.setSelectedLabelKey?.(labelKeyForObject(object));
-  }
-  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5942,7 +5936,6 @@ function deleteLabelViaApi(state, documentRef, label) {
     status: `已删除或隐藏标签 ${formatApiLabelTarget(target)}。`,
     throwOnError: false
   });
-  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5960,7 +5953,6 @@ function moveCustomLabelViaApi(state, documentRef, labelId, point) {
     status: `已移动手工标签 #${id}。`,
     throwOnError: false
   });
-  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5974,7 +5966,6 @@ function renameCustomLabelViaApi(state, documentRef, labelId, text) {
     status: `已重命名手工标签 #${id}。`,
     throwOnError: false
   });
-  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -5992,7 +5983,6 @@ function setLabelNoteViaApi(state, documentRef, label, body, options = {}) {
     status: `已更新标签备注 ${formatApiLabelTarget(target)}。`,
     throwOnError: false
   });
-  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -6006,7 +5996,6 @@ function restoreGeneratedLabelViaApi(state, documentRef, label) {
     status: `已恢复生成标签 ${formatApiLabelTarget(target)}。`,
     throwOnError: false
   });
-  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -6063,16 +6052,10 @@ function deleteMarkerViaApi(state, documentRef, markerId) {
   const command = createDeleteMarkerCommand(id);
   const result = executeMarkerCollectionApiCommand(state, documentRef, command, {
     noopStatus: "标记不存在或已被删除。",
-    status: `已删除标记 #${id}。`
+    status: `已删除标记 #${id}。`,
+    clearSelectedMarkerId: id,
+    clearMarkerEditId: id
   });
-  const selectedObject = state.selectionStore.getSnapshot().selection?.object;
-  if (result.executed && selectedObject?.kind === OBJECT_KIND.MARKER && Number(selectedObject.id) === id) {
-    state.selectionStore.clear();
-    state.panels.marker?.setSelectedMarkerId(null);
-    updateMarkerPanel(state);
-    updateRuntimePanel(documentRef, state);
-  }
-  if (state.markerEdit.markerId === id) stopMarkerEditMode(state, documentRef);
   return editApiResult(state, result);
 }
 
@@ -6101,7 +6084,6 @@ function setMarkerNoteViaApi(state, documentRef, markerId, body, options = {}) {
     status: `已更新标记 #${id} 备注。`,
     throwOnError: false
   });
-  updateMarkerPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -6117,7 +6099,6 @@ function setMarkerVisualViaApi(state, documentRef, markerId, patch) {
     status: `已更新标记 #${id} 图标。`,
     throwOnError: false
   });
-  updateMarkerPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -6136,16 +6117,33 @@ function executeMarkerCollectionApiCommand(state, documentRef, command, options 
         refreshGenerationSummary(targetState.map);
         refreshAfterEdit(targetState, executedCommand);
       },
+      preparePanelRefresh: targetState => {
+        if (
+          Number.isInteger(options.clearMarkerEditId) &&
+          targetState.markerEdit.markerId === options.clearMarkerEditId
+        ) {
+          clearMarkerEditMode(targetState);
+        }
+        const selectedObject = targetState.selectionStore.getSnapshot().selection?.object;
+        if (
+          Number.isInteger(options.clearSelectedMarkerId) &&
+          selectedObject?.kind === OBJECT_KIND.MARKER &&
+          Number(selectedObject.id) === options.clearSelectedMarkerId
+        ) {
+          targetState.selectionStore.clear();
+          targetState.panels.marker?.setSelectedMarkerId(null);
+          return;
+        }
+        const createdMarker = options.selectCreated ? command.getCreatedMarker?.() : null;
+        const markerId = Number.isInteger(options.selectMarkerId) ? options.selectMarkerId : createdMarker?.id;
+        if (!Number.isInteger(markerId) || !targetState.map.markers?.markers?.[markerId]) return;
+        targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
+        targetState.panels.marker?.setSelectedMarkerId(markerId);
+      },
       throwOnError: false
     });
     if (!execution.executed) return execution;
     const createdMarker = options.selectCreated ? command.getCreatedMarker?.() : null;
-    const markerId = Number.isInteger(options.selectMarkerId) ? options.selectMarkerId : createdMarker?.id;
-    if (Number.isInteger(markerId) && state.map.markers?.markers?.[markerId]) {
-      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
-      state.panels.marker?.setSelectedMarkerId(markerId);
-    }
-    updateMarkerPanel(state);
     updateRuntimePanel(documentRef, state);
     updateEditingInteractionLock(state, documentRef);
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, execution.command));
@@ -6215,6 +6213,10 @@ function refreshPanelsForEdit(state, commandOrEffects) {
   const affected = Array.isArray(effects.affected) ? effects.affected : [];
   const kinds = new Set(affected.map(item => item?.kind).filter(Boolean));
   const derived = Array.isArray(effects.derived) ? effects.derived : [];
+  if (!kinds.size && !derived.length) {
+    updateAllObjectPanels(state);
+    return;
+  }
   if (derived.includes("object-panels")) {
     updateAllObjectPanels(state);
     return;
@@ -6229,15 +6231,20 @@ function updatePanelForAffectedKind(state, kind) {
     case OBJECT_KIND.STATE:
       updateStatePanel(state);
       updateGovernmentPanel(state);
+      updateProvincePanel(state);
+      updateCityPanel(state);
       updateDiplomacyPanel(state);
       updateEconomyPanel(state);
       updateMilitaryPanel(state);
       break;
     case OBJECT_KIND.PROVINCE:
       updateProvincePanel(state);
+      updateCityPanel(state);
       break;
     case OBJECT_KIND.CITY:
       updateCityPanel(state);
+      updateStatePanel(state);
+      updateProvincePanel(state);
       break;
     case OBJECT_KIND.CULTURE:
       updateCulturePanel(state);
@@ -6269,6 +6276,10 @@ function updatePanelForAffectedKind(state, kind) {
     case "measurement":
       updateMeasurementPanel(state);
       break;
+    case "namebase":
+    case "namebase-binding":
+      updateNamebasePanel(state);
+      break;
     default:
       break;
   }
@@ -6281,16 +6292,11 @@ function messageFromOption(message, command) {
 function refreshAfterStateEdit(state, commandOrEffects) {
   updateStatePickAtLastPointer(state);
   refreshAfterEdit(state, commandOrEffects);
-  updateGovernmentPanel(state);
-  updateProvincePanel(state);
-  updateCityPanel(state);
 }
 
 function refreshAfterProvinceEdit(state, commandOrEffects) {
   updateProvincePickAtLastPointer(state);
   refreshAfterEdit(state, commandOrEffects);
-  updateProvincePanel(state);
-  updateCityPanel(state);
 }
 
 function regenerateMapAttribute(state, kind, documentRef) {
@@ -6603,14 +6609,13 @@ function regenerateDiplomacy(state, documentRef) {
   const result = executeEditCommand(state, documentRef, command, {
     context: {map},
     refresh: refreshAfterEdit,
-    refreshPanels: false
+    preparePanelRefresh: targetState => {
+      markDerivedFresh(targetState.map, ["diplomacy"]);
+      refreshGenerationSummary(targetState.map);
+    }
   });
   if (!result.executed) return regenerationResult("diplomacy", "未执行", "当前地图至少需要两个有效国家才能重生成外交。");
-  markDerivedFresh(map, ["diplomacy"]);
-  refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate diplomacy: salt=${salt}, pairs=${map.diplomacy.metadata.pairs}, enemies=${map.diplomacy.metadata.enemies}`);
-  updateDiplomacyPanel(state);
-  updateStatePanel(state);
   updateRuntimePanel(documentRef, state);
 
   return regenerationResult(
@@ -6630,7 +6635,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
     derived,
     affected
   });
-  updateAllObjectPanels(state);
+  refreshPanelsForEdit(state, {derived, affected});
   updateHeightPanel(state);
   updateRuntimePanel(documentRef, state);
   reconcilePersistentObjectHighlights(state, documentRef);
@@ -7136,15 +7141,16 @@ function saveCurrentMeasurement(state, documentRef) {
     const command = createUpdateMeasurementPointsCommand(measurementId, state.measurement.points, {routeFit: state.measurement.routeFit});
     const result = executeEditCommand(state, documentRef, command, {
       context,
-      noopStatus: "测量对象没有可保存的形状变化，或点数不足。"
+      noopStatus: "测量对象没有可保存的形状变化，或点数不足。",
+      preparePanelRefresh: targetState => {
+        targetState.measurement.editingMeasurementId = null;
+        targetState.measurement.points = [];
+        targetState.panels.measurement?.setSelectedMeasurementId?.(measurementId);
+      }
     });
     if (!result.executed) return;
-    state.measurement.editingMeasurementId = null;
-    state.measurement.points = [];
     cancelMeasurementDrag(state, documentRef);
     updateMeasurementOverlay(state, documentRef);
-    updateMeasurementPanel(state);
-    state.panels.measurement?.setSelectedMeasurementId?.(measurementId);
     setFileOperationStatus(documentRef, `已更新测量对象 ${measurementId}。`);
     return;
   }
@@ -7152,15 +7158,16 @@ function saveCurrentMeasurement(state, documentRef) {
   const command = createSaveMeasurementCommand(state.measurement.points, {routeFit: state.measurement.routeFit});
   const result = executeEditCommand(state, documentRef, command, {
     context,
-    noopStatus: "至少需要 2 个测量点才能保存。"
+    noopStatus: "至少需要 2 个测量点才能保存。",
+    preparePanelRefresh: (targetState, executed, created) => {
+      targetState.measurement.points = [];
+      targetState.panels.measurement?.setSelectedMeasurementId?.(created?.id);
+    }
   });
   if (!result.executed) return;
   const created = result.result;
-  state.measurement.points = [];
   cancelMeasurementDrag(state, documentRef);
   updateMeasurementOverlay(state, documentRef);
-  updateMeasurementPanel(state);
-  state.panels.measurement?.setSelectedMeasurementId?.(created?.id);
   setFileOperationStatus(documentRef, `已保存测量对象 ${created?.name || created?.id || ""}。`);
 }
 
@@ -7771,15 +7778,16 @@ function bindStateEditing(canvas, state, documentRef) {
       const command = createDeleteStateCommand(stateId);
       const result = executeEditCommand(state, canvas.ownerDocument || document, command, {
         context: {map: state.map},
-        refresh: refreshAfterStateEdit
+        refresh: refreshAfterStateEdit,
+        preparePanelRefresh: targetState => {
+          targetState.stateEdit.deleteMode = false;
+          targetState.stateEdit.lastAffected = 0;
+          targetState.selectionStore.clear();
+          targetState.panels.state?.setTargetStateId(0);
+        }
       });
       if (!result.executed) return;
-      state.stateEdit.deleteMode = false;
-      state.stateEdit.lastAffected = 0;
-      state.selectionStore.clear();
-      state.panels.state?.setTargetStateId(0);
       state.panels.state?.updateDeleteMode?.(false);
-      updateAllObjectPanels(state);
       updateEditingInteractionLock(state, canvas.ownerDocument || document);
       updateRuntimePanel(canvas.ownerDocument || document, state);
       return;
@@ -7793,20 +7801,19 @@ function bindStateEditing(canvas, state, documentRef) {
       const command = createAddStateAtCellCommand(pick.gridCell);
       const execution = executeEditCommand(state, canvas.ownerDocument || document, command, {
         context: {map: state.map},
-        refresh: refreshAfterStateEdit
+        refresh: refreshAfterStateEdit,
+        preparePanelRefresh: (targetState, executed, result) => {
+          targetState.stateEdit.addMode = false;
+          targetState.stateEdit.lastAffected = result?.cells || 0;
+          targetState.stateEdit.sourceStateId = result?.stateId || null;
+          if (!Number.isInteger(result?.stateId)) return;
+          const stateObject = resolveObject(targetState.map, {kind: OBJECT_KIND.STATE, id: result.stateId}) || {kind: OBJECT_KIND.STATE, id: result.stateId};
+          targetState.panels.state?.setTargetStateId(result.stateId);
+          targetState.selectionStore.setSelection({object: stateObject});
+        }
       });
       if (!execution.executed) return;
-      const result = execution.result;
-      state.stateEdit.addMode = false;
-      state.stateEdit.lastAffected = result?.cells || 0;
-      state.stateEdit.sourceStateId = result?.stateId || null;
-      if (Number.isInteger(result?.stateId)) {
-        const stateObject = resolveObject(state.map, {kind: OBJECT_KIND.STATE, id: result.stateId}) || {kind: OBJECT_KIND.STATE, id: result.stateId};
-        state.panels.state?.setTargetStateId(result.stateId);
-        state.selectionStore.setSelection({object: stateObject});
-      }
       state.panels.state?.updateAddMode?.(false);
-      updateAllObjectPanels(state);
       updateEditingInteractionLock(state, canvas.ownerDocument || document);
       updateRuntimePanel(canvas.ownerDocument || document, state);
       return;
@@ -7840,7 +7847,6 @@ function bindStateEditing(canvas, state, documentRef) {
     event.stopImmediatePropagation();
     finishStateStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
-    updateStatePanel(state);
   }, true);
 
   canvas.addEventListener("pointercancel", event => {
@@ -7849,7 +7855,6 @@ function bindStateEditing(canvas, state, documentRef) {
     event.stopImmediatePropagation();
     finishStateStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
-    updateStatePanel(state);
   }, true);
 }
 
@@ -7864,15 +7869,16 @@ function bindProvinceEditing(canvas, state, documentRef) {
       const command = createDeleteProvinceCommand(provinceId);
       const result = executeEditCommand(state, canvas.ownerDocument || document, command, {
         context: {map: state.map},
-        refresh: refreshAfterProvinceEdit
+        refresh: refreshAfterProvinceEdit,
+        preparePanelRefresh: targetState => {
+          targetState.provinceEdit.deleteMode = false;
+          targetState.provinceEdit.lastAffected = 0;
+          targetState.selectionStore.clear();
+          targetState.panels.province?.setSelectedProvinceId(0);
+        }
       });
       if (!result.executed) return;
-      state.provinceEdit.deleteMode = false;
-      state.provinceEdit.lastAffected = 0;
-      state.selectionStore.clear();
-      state.panels.province?.setSelectedProvinceId(0);
       state.panels.province?.updateDeleteMode?.(false);
-      updateAllObjectPanels(state);
       updateEditingInteractionLock(state, canvas.ownerDocument || document);
       updateRuntimePanel(canvas.ownerDocument || document, state);
       return;
@@ -7886,19 +7892,18 @@ function bindProvinceEditing(canvas, state, documentRef) {
       const command = createAddProvinceAtCellCommand(pick.gridCell);
       const execution = executeEditCommand(state, canvas.ownerDocument || document, command, {
         context: {map: state.map},
-        refresh: refreshAfterProvinceEdit
+        refresh: refreshAfterProvinceEdit,
+        preparePanelRefresh: (targetState, executed, result) => {
+          targetState.provinceEdit.addMode = false;
+          targetState.provinceEdit.lastAffected = result?.cells || 0;
+          targetState.provinceEdit.sourceProvinceId = result?.provinceId || null;
+          if (!Number.isInteger(result?.provinceId)) return;
+          targetState.panels.province?.setSelectedProvinceId(result.provinceId);
+          targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.PROVINCE, id: result.provinceId}});
+        }
       });
       if (!execution.executed) return;
-      const result = execution.result;
-      state.provinceEdit.addMode = false;
-      state.provinceEdit.lastAffected = result?.cells || 0;
-      state.provinceEdit.sourceProvinceId = result?.provinceId || null;
-      if (Number.isInteger(result?.provinceId)) {
-        state.panels.province?.setSelectedProvinceId(result.provinceId);
-        state.selectionStore.setSelection({object: {kind: OBJECT_KIND.PROVINCE, id: result.provinceId}});
-      }
       state.panels.province?.updateAddMode?.(false);
-      updateAllObjectPanels(state);
       updateEditingInteractionLock(state, canvas.ownerDocument || document);
       updateRuntimePanel(canvas.ownerDocument || document, state);
       return;
@@ -7932,7 +7937,6 @@ function bindProvinceEditing(canvas, state, documentRef) {
     event.stopImmediatePropagation();
     finishProvinceStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
-    updateProvincePanel(state);
   }, true);
 
   canvas.addEventListener("pointercancel", event => {
@@ -7941,7 +7945,6 @@ function bindProvinceEditing(canvas, state, documentRef) {
     event.stopImmediatePropagation();
     finishProvinceStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
-    updateProvincePanel(state);
   }, true);
 }
 
@@ -7970,7 +7973,6 @@ function bindSocialAssignmentEditing(canvas, state, documentRef, kind) {
       event.stopImmediatePropagation();
       finishSocialAssignmentStroke(state, documentRef, kind);
       releasePointer(canvas, event.pointerId);
-      kind === "culture" ? updateCulturePanel(state) : updateReligionPanel(state);
     }, true);
   }
 }
@@ -7984,11 +7986,15 @@ function bindCityEditing(canvas, state, documentRef) {
       const cityId = getCityIdAtEvent(state, event);
       if (!Number.isInteger(cityId) || cityId < 0) return;
       const command = createDeleteCityCommand(cityId);
-      const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      const execution = executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        preparePanelRefresh: targetState => {
+          targetState.cityEdit.deleteMode = false;
+          targetState.selectionStore.clear();
+          targetState.panels.city?.setSelectedCityId(null);
+        }
+      });
       if (!execution.executed) return;
-      state.cityEdit.deleteMode = false;
-      state.selectionStore.clear();
-      state.panels.city?.setSelectedCityId(null);
       state.panels.city?.updateDeleteMode?.(false);
       updateEditingInteractionLock(state, documentRef);
       updateRuntimePanel(documentRef, state);
@@ -8001,15 +8007,17 @@ function bindCityEditing(canvas, state, documentRef) {
     const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
     if (!Number.isInteger(pick?.gridCell) || pick.gridCell < 0) return;
     const command = createAddCityAtCellCommand(pick.gridCell);
-    const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+    const execution = executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      preparePanelRefresh: (targetState, executed, result) => {
+        targetState.cityEdit.addMode = false;
+        targetState.cityEdit.lastCreatedCityId = result?.cityId ?? null;
+        if (!Number.isInteger(result?.cityId)) return;
+        targetState.panels.city?.setSelectedCityId(result.cityId);
+        targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: result.cityId}});
+      }
+    });
     if (!execution.executed) return;
-    const result = execution.result || command.getResult?.();
-    state.cityEdit.addMode = false;
-    state.cityEdit.lastCreatedCityId = result?.cityId ?? null;
-    if (Number.isInteger(result?.cityId)) {
-      state.panels.city?.setSelectedCityId(result.cityId);
-      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: result.cityId}});
-    }
     state.panels.city?.updateAddMode?.(false);
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
@@ -8153,13 +8161,12 @@ function finishCustomLabelDrag(state, documentRef, event) {
   const command = createMoveCustomLabelCommand(drag.labelId, finalPoint, {previousPoint: drag.startedAt});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    refresh: refreshAfterEdit,
-    refreshPanels: false
+    refresh: refreshAfterEdit
   });
   if (!result.executed) {
     state.renderer.refreshLabels?.();
+    updateLabelNamingPanel(state);
   }
-  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
 }
 
@@ -8223,18 +8230,16 @@ function applyMarkerCollectionCommand(state, documentRef, command, {selectCreate
       refreshGenerationSummary(targetState.map);
       refreshAfterEdit(targetState, executedCommand);
     },
+    preparePanelRefresh: targetState => {
+      const created = selectCreated ? command.getCreatedMarker?.() : null;
+      const markerId = Number.isInteger(selectMarkerId) ? selectMarkerId : created?.id;
+      if (!Number.isInteger(markerId) || !targetState.map.markers?.markers?.[markerId]) return;
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
+      targetState.panels.marker?.setSelectedMarkerId(markerId);
+    },
     throwOnError: false
   });
   if (!execution.executed) return null;
-
-  const created = selectCreated ? command.getCreatedMarker?.() : null;
-  const markerId = Number.isInteger(selectMarkerId) ? selectMarkerId : created?.id;
-  if (Number.isInteger(markerId) && state.map.markers?.markers?.[markerId]) {
-    state.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
-    state.panels.marker?.setSelectedMarkerId(markerId);
-  }
-
-  updateMarkerPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return execution.command;
@@ -8384,8 +8389,7 @@ function finishSocialAssignmentStroke(state, documentRef, kind) {
   editState.lastAffected = changes.length;
   executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    refresh: refreshAfterEdit,
-    refreshPanels: false
+    refresh: refreshAfterEdit
   });
 }
 
@@ -8427,8 +8431,7 @@ function finishStateStroke(state, documentRef) {
   state.stateEdit.sourceStateId = stroke.sourceStateId;
   executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    refresh: refreshAfterStateEdit,
-    refreshPanels: false
+    refresh: refreshAfterStateEdit
   });
 }
 
@@ -8448,8 +8451,7 @@ function finishProvinceStroke(state, documentRef) {
   state.provinceEdit.sourceProvinceId = stroke.sourceProvinceId;
   executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    refresh: refreshAfterProvinceEdit,
-    refreshPanels: false
+    refresh: refreshAfterProvinceEdit
   });
 }
 

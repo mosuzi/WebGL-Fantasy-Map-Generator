@@ -89,6 +89,7 @@
 
 - 调用 `isNoop(context)`，空操作不进入历史。
 - 调用 `state.editHistory.execute(command, context)`。
+- 读取 `getResult()` 后调用可选 `options.preparePanelRefresh(state, command, result)`，让选择态、面板 selectedId 和编辑模式在对象面板刷新前就绪。
 - 调用 `refreshAfterEdit(state, executedCommand)`。
 - 按 `options.status` 写入状态文案。
 - 读取 `getResult()`，返回给调用方做选择、定位或文案。
@@ -106,6 +107,8 @@
 - 标准化异常文案。
 
 正式应用中的执行边界由 `pnpm run regress:edit-execution-path` 守门：扫描器覆盖直接属性访问、可选链、方括号访问和直接变量别名，要求 `state.editHistory.execute / undo / redo` 只出现在统一执行器内；领域 wrapper 必须继续委托统一入口，`edit-history.js` 以外不得直接访问 `command.apply / revert`。
+
+对象面板显式刷新边界由 `pnpm run regress:panel-refresh-path` 守门：编辑和历史执行都必须调用 `refreshPanelsForEdit()`；编辑按 effects 定向或全量刷新，历史操作为同步所有面板的全局撤销 / 重做摘要而通过同一入口全量刷新。命令需要在刷新前更新 selection、selectedId、编辑模式或影响统计时使用 `preparePanelRefresh`，不得在统一刷新后再手写同一对象面板的第二次刷新。高度 preview、测量 overlay、名称库偏好持久化等非对象面板联动仍由领域刷新保留。
 
 ## 撤销与快照
 
@@ -133,4 +136,5 @@
 - 国家、省份、道路、河流、城市重生成入口、资源点重生成命令、军事批量 / 事件命令、城市 / 国家 / 河流 / 湖泊按名称库批量重命名命令、高度 / 国家 / 省份刷子、FMG Cells GEO 导入命令、外交重生成、批量政体调整和测量对象导入，已开始使用 `derived-system#xxx` 作为批量 affected 的第一项，避免历史和刷新摘要只出现对象级 `all`、集合别名、一串同类对象 id 或 `grid-cells#数量`。
 - 新增城市、省份、国家、空文化、空宗教、手工标签、marker、保存测量对象、测量对象导入和用户名称库命令的初始 affected 已改为复用 `newObjectAffected(kind)` 生成 `kind#new`，执行成功后仍会替换为真实对象 id；marker 视觉、备注、移动、删除和资源点重生成命令，标签移动、重命名、备注、删除、恢复命令，测量对象保存回写、重命名、更新、删除和导入回写命令，文化 / 宗教新增回写、删除、颜色、继承父级命令，路线、河流、地区样式和备注删除的单对象命令，城市新增回写、删除、人口、归属同步、视觉和备注命令，国家 / 省份新增回写、删除、国家颜色和政体命令，对象详情通用重命名 / 备注、省份颜色、国家首都和外交关系命令，军事兵种比例、单军团态势、移动驻地、设置基地、军团重命名和战报导入目标，名称库重命名 / 样本 / 参数 / 综合更新 / 删除，以及气候即时刷新目标已开始复用 `objectAffected(kind, id)` 生成对象目标。名称库绑定使用 `derived-system#namebase-binding` 搭配具体 scope / target；名称库导入和清空在执行后比较前后快照并回写实际变化的库 id；外交重生成在执行后回写所有有效国家 id。
 - 面板历史按钮已开始复用 `executeHistoryCommand()`，避免各面板分别手写撤销 / 重做刷新。
+- 编辑与撤销 / 重做的对象面板显式刷新已统一通过 `refreshPanelsForEdit()`；`updateAllObjectPanels()` 只保留为该 helper 内部的无 effects 兼容回退与 `derived: ["object-panels"]` 分支。
 - 当前应用内 `state.editHistory.execute / undo / redo` 只保留在统一执行器内部，并由 `regress:edit-execution-path` 扫描全部正式应用源码持续守门；名称库导入 / 清空和外交重生成已不再把执行后的历史目标保留为集合级 `all`。国家、省份、路线、河流和城市重生成刷新也已通过 `collectionAffected()` 记录真实对象，刷新摘要和历史 UI 统一折叠为前三项与 `+N`。后续重点是让新增命令持续遵守 `domain` 与精确 `effects.affected`。

@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-14：对象面板刷新路径收口
+
+本步完成权威任务清单第 15 项。编辑命令和撤销 / 重做不再分别维护对象面板显式刷新路径，统一通过 `refreshPanelsForEdit()`；编辑由命令 `effects` 驱动，历史操作为同步全局历史摘要保持全量刷新。
+
+- `executeEditCommand()` 新增 `preparePanelRefresh`，允许新增 / 删除对象、GEO 测量导入、归属笔刷等路径先更新 selection、selectedId、编辑模式和影响统计，再进入统一的 effects 对象面板显式刷新入口。
+- `executeHistoryCommand()`、名称库 wrapper、外交重生成和通用重生成刷新均改走统一入口；国家、省份和城市的关联面板映射补齐，无 effects 的旧编辑命令保守回退为全量刷新。
+- 移除标签与 marker API、国家 / 省份 / 城市画布编辑、文化 / 宗教、测量对象等路径的重复 `updateXPanel()` / `updateAllObjectPanels()`；全量对象面板刷新现在只由 `refreshPanelsForEdit()` 内部调用。
+- 新增 `regress:panel-refresh-path`。按快速迭代要求，本项只执行语法检查、专项 Node 回归、生产构建和 `git diff --check`，浏览器验收集中留到权威任务第 23 项。
+- 最终门禁通过面板刷新路径、编辑执行路径、affected、历史摘要、文化 / 宗教归属、高度笔刷和持久高亮契约等 Node 回归；生产构建完成 `1122` modules。最终构建首轮命中既有 Windows/Vite HTML emitted chunk 路径异常，未改配置直接重试通过，仅保留既有大 chunk 警告。
+
 ## 2026-07-14：编辑命令执行路径收口
 
 本步完成权威任务清单第 14 项。审计确认正式应用业务代码已全部通过统一执行器进入编辑历史，无需再次改写生产逻辑。
