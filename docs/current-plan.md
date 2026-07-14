@@ -64,6 +64,7 @@
 
    - 第 14 项补充：编辑命令执行路径已收口。正式应用源码中的 `EditHistory.execute / undo / redo` 各只保留在 `executeEditCommand()` / `executeHistoryCommand()` 内部，领域 wrapper 均委托统一执行器，业务代码不存在直接 `command.apply / revert`。新增 `regress:edit-execution-path` 扫描整个 `app/webgl-generator/src`，把直接属性访问、可选链、方括号访问、直接变量别名、唯一调用点、统一后处理顺序和 wrapper 委托关系固化为回归门禁；本项不提前处理第 15 项的对象面板刷新收口。
    - 第 15 项补充：对象面板显式刷新路径已收口。编辑按 `effects` 通过 `refreshPanelsForEdit()` 定向或全量刷新；撤销 / 重做也复用同一入口，但为同步所有已打开面板的全局历史摘要保持全量刷新。国家、省份和城市的关联面板映射补齐，名称库、外交重生成、GEO 导入、文化 / 宗教、标签、marker、测量对象及画布新增 / 删除不再在统一刷新后手写第二次对象面板刷新。需要先更新 selection、selectedId、编辑模式或 `lastAffected` 的路径统一使用 `preparePanelRefresh`，在 effects 面板刷新前完成运行时状态准备。新增 `regress:panel-refresh-path` 固化执行顺序、唯一显式全量入口和代表性无重复路径。
+   - 第 16 项补充：选择、定位和编辑动作语义已收口。`SelectionStore.batch()` 把编辑前 selection 准备与 scheduler refresh 合并为一次通知，并保留 `sourcePanelId` 来源元数据；进入编辑时选择对象和 `editingObject` 也原子提交，单次 `setSelection / clear / refresh` 的同步通知语义保持不变。编辑、撤销、重做和通用重生成会在对象面板刷新前校正持久高亮；成员未变时保持 effects 定向刷新，成员被删除时改为一次全量面板刷新以同步全局高亮计数，不再在刷新完成后追加第二轮高亮 UI 刷新。测量模式与资源标记放置 / 移动模式已双向互斥，编辑已有测量对象也复用统一测量入口。新增 `regress:selection-actions` 固化通知次数、来源面板、删除对象清理和模式互斥；定位继续统一复用既有 `locateAndSelectObject()`，不改变各对象面板的自动打开策略。
 
    - 补充记录：名称库列表也已接入公共表格批量选择，并支持只导出选中名称库 JSON 或选中原版文本；本步不新增批量删除、批量绑定或批量编辑语义。
    - 补充记录：军事面板主军团列表已接入公共表格批量选择，并支持只导出选中军团 CSV / JSON；独立战报档案导入导出、军团编辑和批量态势语义保持不变。

@@ -80,7 +80,7 @@ import {
 } from "./religion-edit-commands.js";
 import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
-import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights} from "./persistent-highlights.js";
+import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
 import {createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
@@ -275,14 +275,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let notesPanel = null;
   let measurementPanel = null;
   let suppressNextRiverPanelOpen = false;
-  let selectionSourcePanelId = null;
   const selectFromPanel = (panelId, object) => {
-    selectionSourcePanelId = panelId;
-    try {
-      selectionStore.setSelection({object});
-    } finally {
-      selectionSourcePanelId = null;
-    }
+    selectionStore.setSelection({object}, {sourcePanelId: panelId});
   };
   const locateAndSelectObject = (panelId, object, {afterSelect = null, locate = null, sourcePanelId = panelId} = {}) => {
     const located = object ? (locate ? locate(object) : state.renderer.locateObject(object)) : false;
@@ -297,8 +291,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.locateAndSelectObject = locateAndSelectObject;
   const startObjectEditing = (object, {select = true, afterStart = null} = {}) => {
     if (!object) return false;
-    if (select) selectionStore.setSelection({object});
-    selectionStore.startEditing(object);
+    selectionStore.startEditing(object, {select});
     afterStart?.(object);
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
@@ -1970,14 +1963,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     selectionStore.setSelection(selection);
   });
   state.renderer = renderer;
-  selectionStore = new SelectionStore(({selection, editingObject}) => {
+  selectionStore = new SelectionStore(({selection, editingObject}, metadata = null) => {
     state.selection = selection;
     state.editingObject = editingObject;
     renderer.setSelection(selection?.object || null);
     const handled = handleSelectionPanel(state, selection, editingObject, {
       documentRef,
       suppressNextRiverPanelOpen,
-      sourcePanelId: selectionSourcePanelId,
+      sourcePanelId: metadata?.sourcePanelId || null,
       clearRiverSuppressor: () => {
         suppressNextRiverPanelOpen = false;
       }
@@ -4953,11 +4946,16 @@ function executeEditCommand(state, documentRef, command, options = {}) {
     }
     const executedCommand = state.editHistory.execute(command, context);
     const result = readEditCommandResult(executedCommand);
-    options.preparePanelRefresh?.(state, executedCommand, result);
     const refresh = options.refresh || refreshAfterEdit;
-    refresh(state, executedCommand);
-    if (options.refreshPanels !== false) refreshPanelsForEdit(state, executedCommand);
-    reconcilePersistentObjectHighlights(state, documentRef);
+    let highlightsChanged = false;
+    state.selectionStore.batch(() => {
+      options.preparePanelRefresh?.(state, executedCommand, result);
+      highlightsChanged = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
+      refresh(state, executedCommand);
+    });
+    if (options.refreshPanels !== false) {
+      refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand);
+    }
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
     return {executed: true, command: executedCommand, result, error: null};
   } catch (error) {
@@ -4980,10 +4978,12 @@ function executeHistoryCommand(state, documentRef, action, options = {}) {
     };
   }
   const refresh = options.refresh || refreshAfterEdit;
-  refresh(state, command);
+  state.selectionStore.batch(() => {
+    reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+    refresh(state, command);
+  });
   if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
   options.afterRefresh?.(state, command);
-  reconcilePersistentObjectHighlights(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
   return {
     executed: true,
@@ -5118,13 +5118,14 @@ function persistentObjectHighlightCount(state) {
   return Math.max(0, Number(state.renderer?.getStats?.()?.objectHighlightCount) || 0);
 }
 
-function reconcilePersistentObjectHighlights(state, documentRef) {
+function reconcilePersistentObjectHighlights(state, documentRef, {refreshUi = true} = {}) {
   const current = Array.isArray(state.renderer?.objectHighlights) ? state.renderer.objectHighlights : [];
-  if (!current.length || typeof state.renderer?.setObjectHighlights !== "function") return 0;
+  if (!current.length || typeof state.renderer?.setObjectHighlights !== "function") return {count: 0, changed: false};
   const next = normalizePersistentHighlights(state.map, current).highlights;
+  const changed = !samePersistentHighlightMembership(current, next);
   state.renderer.setObjectHighlights(next);
-  refreshPersistentHighlightUi(state, documentRef);
-  return next.length;
+  if (refreshUi && changed) refreshPersistentHighlightUi(state, documentRef);
+  return {count: next.length, changed};
 }
 
 function refreshPersistentHighlightUi(state, documentRef) {
@@ -6627,6 +6628,7 @@ function regenerateDiplomacy(state, documentRef) {
 
 function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
   state.renderer.refreshObjectPickingIndex?.();
+  const highlightsChanged = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
   refreshAfterEdit(state, {
     render: "draw",
     selection: "refresh",
@@ -6635,10 +6637,9 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
     derived,
     affected
   });
-  refreshPanelsForEdit(state, {derived, affected});
+  refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : {derived, affected});
   updateHeightPanel(state);
   updateRuntimePanel(documentRef, state);
-  reconcilePersistentObjectHighlights(state, documentRef);
 }
 
 function refreshGenerationSummary(map) {
@@ -6752,6 +6753,7 @@ function shouldSwitchDiplomacySubjectForSelection(state) {
 }
 
 function startMeasurementMode(state, documentRef, {status = "已进入测量模式。"} = {}) {
+  if (state.markerEdit.mode) stopMarkerEditMode(state, documentRef);
   state.measurement.active = true;
   state.measurement.pointer = null;
   state.measurement.notice = "";
@@ -7182,7 +7184,7 @@ function startMeasurementObjectEdit(state, row, documentRef) {
     ...(item.cellStops?.[index] ? {cellStop: item.cellStops[index]} : {})
   }));
   state.measurement.routeFit = normalizeMeasurementRouteFit(item.routeFit);
-  state.measurement.active = true;
+  startMeasurementMode(state, documentRef, {status: ""});
   state.panels.measurement?.setSelectedMeasurementId?.(item.id);
   locateMeasurement(state, {...row, points: item.points}, documentRef);
   updateMeasurementOverlay(state, documentRef);
@@ -8193,6 +8195,7 @@ function isMouseButtonNavigationEvent(event) {
 }
 
 function startMarkerEditMode(state, documentRef, {mode, type = "mines", markerId = null} = {}) {
+  if (state.measurement.active) stopMeasurementMode(state, documentRef);
   state.panels.height?.setActive(false);
   state.panels.state?.setActive(false);
   state.panels.province?.setActive(false);

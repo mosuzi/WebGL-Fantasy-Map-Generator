@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-14：选择、定位和编辑动作语义收口
+
+本步完成权威任务清单第 16 项，保留既有对象定位与面板打开策略，只修正同一编辑动作的重复 selection 通知、持久高亮二次面板刷新和两个会争用画布的编辑模式。
+
+- `SelectionStore` 新增可嵌套 `batch()`；`executeEditCommand()` 把 `preparePanelRefresh`、持久高亮校正和 scheduler refresh 放入同一批次，撤销 / 重做复用相同顺序。批次通知保留 `sourcePanelId`，文化 / 宗教等从自身面板新增对象后不会丢失来源语义；删除对象后 `refresh()` 仍会发出一次最终通知并清空失效 selection / editingObject。
+- `startObjectEditing()` 通过一次 `startEditing(object, {select})` 原子提交选择和编辑态，不再先后触发两次 selection handler；单独调用 `setSelection / clear / refresh` 仍保持同步通知，避免 store 与运行时 state 分叉。
+- 编辑、历史和通用重生成在对象面板刷新前校正 renderer 持久高亮；成员身份未变时继续按 effects 定向刷新，成员被删除时只执行一次全量面板刷新来同步所有面板的全局高亮计数，完成后不再追加第二轮高亮 UI 刷新。
+- 测量模式启动时会先停止 marker 放置 / 移动，marker 编辑启动时也会先停止测量；编辑已有测量对象改为复用 `startMeasurementMode()`，不再绕过互斥入口。
+- 新增 `regress:selection-actions`，覆盖 selection 批次单次通知、来源面板保留、删除后清理、原子进入编辑和测量 / marker 双向互斥；编辑执行、面板刷新、持久高亮、文化 / 宗教归属和历史摘要兼容回归均通过。生产构建完成 `1122` modules；首轮命中既有 Windows/Vite HTML emitted chunk 路径异常，未改配置直接重试通过，仅保留既有大 chunk 警告。本项按快速迭代约定未执行浏览器测试，集中留到第 23 项。
+
 ## 2026-07-14：对象面板刷新路径收口
 
 本步完成权威任务清单第 15 项。编辑命令和撤销 / 重做不再分别维护对象面板显式刷新路径，统一通过 `refreshPanelsForEdit()`；编辑由命令 `effects` 驱动，历史操作为同步全局历史摘要保持全量刷新。

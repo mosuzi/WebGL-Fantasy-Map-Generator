@@ -12,7 +12,7 @@ assertOrdered(executeEdit, [
   "readEditCommandResult(executedCommand)",
   "options.preparePanelRefresh?.(state, executedCommand, result)",
   "refresh(state, executedCommand)",
-  "refreshPanelsForEdit(state, executedCommand)"
+  'refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand)'
 ], "编辑命令面板刷新顺序");
 
 const executeHistory = functionBlock("executeHistoryCommand", "readEditCommandResult");
@@ -34,7 +34,7 @@ for (const name of ["refreshAfterStateEdit", "refreshAfterProvinceEdit"]) {
 }
 
 const regenerated = functionBlock("refreshRegeneratedLayers", "refreshGenerationSummary");
-assert.ok(regenerated.includes("refreshPanelsForEdit(state, {derived, affected})"));
+assert.ok(regenerated.includes('refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : {derived, affected})'));
 assert.ok(!regenerated.includes("updateAllObjectPanels(state)"));
 
 for (const name of [

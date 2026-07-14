@@ -66,3 +66,13 @@ export function persistentHighlightKey(object) {
   if (targetId === undefined || targetId === null || targetId === "") return "";
   return `${object.kind}:${object.targetKind || ""}:${targetId}`;
 }
+
+export function samePersistentHighlightMembership(current, next) {
+  const currentKeys = new Set((Array.isArray(current) ? current : []).map(persistentHighlightKey).filter(Boolean));
+  const nextKeys = new Set((Array.isArray(next) ? next : []).map(persistentHighlightKey).filter(Boolean));
+  if (currentKeys.size !== nextKeys.size) return false;
+  for (const key of currentKeys) {
+    if (!nextKeys.has(key)) return false;
+  }
+  return true;
+}

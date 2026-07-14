@@ -4,16 +4,20 @@ export class SelectionStore {
     this.resolveObject = resolveObject;
     this.selection = null;
     this.editingObject = null;
+    this.batchDepth = 0;
+    this.pendingEmit = false;
+    this.pendingMetadata = null;
   }
 
-  setSelection(selection) {
+  setSelection(selection, metadata = null) {
     const normalized = this.normalizeSelection(selection);
-    const changed = !sameSelection(this.selection, normalized);
+    const selectionChanged = !sameSelection(this.selection, normalized);
+    const editingChanged = selectionChanged && !sameObject(this.editingObject, normalized?.object) && Boolean(this.editingObject);
     this.selection = normalized;
-    if (changed && !sameObject(this.editingObject, normalized?.object)) {
+    if (editingChanged) {
       this.editingObject = null;
     }
-    this.emit();
+    this.emit(metadata);
   }
 
   clear() {
@@ -22,14 +26,32 @@ export class SelectionStore {
     this.emit();
   }
 
-  startEditing(object) {
-    this.editingObject = object ? this.resolveObject(object) : null;
+  startEditing(object, {select = false} = {}) {
+    const resolved = object ? this.resolveObject(object) : null;
+    const selection = select ? (resolved ? {object: resolved} : null) : this.selection;
+    this.selection = selection;
+    this.editingObject = resolved;
     this.emit();
   }
 
   stopEditing() {
     this.editingObject = null;
     this.emit();
+  }
+
+  batch(callback) {
+    this.batchDepth++;
+    try {
+      return callback();
+    } finally {
+      this.batchDepth--;
+      if (this.batchDepth === 0 && this.pendingEmit) {
+        this.pendingEmit = false;
+        const metadata = this.pendingMetadata;
+        this.pendingMetadata = null;
+        this.onChange(this.getSnapshot(), metadata);
+      }
+    }
   }
 
   getSnapshot() {
@@ -39,8 +61,13 @@ export class SelectionStore {
     };
   }
 
-  emit() {
-    this.onChange(this.getSnapshot());
+  emit(metadata = null) {
+    if (this.batchDepth > 0) {
+      this.pendingEmit = true;
+      if (metadata) this.pendingMetadata = {...this.pendingMetadata, ...metadata};
+      return;
+    }
+    this.onChange(this.getSnapshot(), metadata);
   }
 
   refresh() {

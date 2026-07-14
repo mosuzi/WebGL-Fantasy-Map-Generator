@@ -5,7 +5,8 @@ import {
   PERSISTENT_HIGHLIGHT_OBJECT_KINDS,
   isPersistentHighlightObjectKind,
   normalizePersistentHighlights,
-  persistentHighlightKey
+  persistentHighlightKey,
+  samePersistentHighlightMembership
 } from "../app/webgl-generator/src/runtime/persistent-highlights.js";
 
 const map = createSyntheticMap();
@@ -32,10 +33,12 @@ map.measurements.items[0].name = "更新后的测量";
 const reconciled = normalizePersistentHighlights(map, normalized.highlights);
 const measurement = reconciled.highlights.find(object => object.kind === OBJECT_KIND.MEASUREMENT);
 assert(measurement?.name === "更新后的测量", "重新解析没有刷新对象摘要");
+assert(samePersistentHighlightMembership(normalized.highlights, reconciled.highlights), "对象摘要更新不应误判为高亮成员变化");
 
 map.measurements.items = [];
 const afterDelete = normalizePersistentHighlights(map, reconciled.highlights);
 assert(afterDelete.highlights.length === 2 && afterDelete.rejected.length === 1, "删除对象后没有清理陈旧高亮");
+assert(!samePersistentHighlightMembership(reconciled.highlights, afterDelete.highlights), "删除对象后应识别高亮成员变化");
 
 console.log(JSON.stringify({
   ok: true,
