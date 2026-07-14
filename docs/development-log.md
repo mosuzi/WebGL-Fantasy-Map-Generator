@@ -27038,3 +27038,10 @@ full 矩阵结果：
 - 系统 Chrome 新页只执行一条短 stroke：从 grid cell `#1785` 的高度 25 落笔，拖到相距约 50.8 的 `#2274`。落笔后与拖动中 `activeStroke.targetHeight` 均为 25，终点原高度 37 按强度 4 渐进到 33，证明目标没有随最近 cell 改写。
 - 笔划最终影响 19 cells，历史为 `高度笔刷 19 cells @height [derived-system#height-brush, grid-cells#19]`；面板同步显示影响 19 和 12 项待派生。撤销把终点恢复为 37，重做恢复为 33，最终再次撤销并停止高度编辑，交互锁解除。
 - checksum 全程保持 `7075c7e3`，`WebGL error = 0`，console / page / health error 均为 0。高度笔刷回归、`pnpm run build:app` 和 `git diff --check` 通过；构建 `1121` modules、约 `828ms`，只有既有大 chunk 警告。
+
+### 2026-07-14 第 124 步集合 affected 历史摘要真实浏览器验收
+
+- 用户允许新开标签页后，复用既有 `5410` 生产服务器，在系统 Chrome 新页通过正式控制台 API 导入 4 个临时名称库。导入历史为 `derived-system#namebase-import` 加 `imported-accept-a..d` 共 5 项，标题显示前三项与 `+2`；清空历史同样把系统目标和 4 个实际移除 id 折叠为 `+2`，没有保留 `namebase#all`。
+- 首轮复验发现通用 `api.history.undo / redo` 已正确切换历史栈，但 `updateAllObjectPanels()` 遗漏名称库面板，导致标题仍停在旧撤销状态。最小增加 `updateNamebasePanel()` 并只在面板打开时刷新；名称库 API 文档浏览器回归新增撤销后按钮状态、`@namebase` 与真实目标断言。
+- 修复后，导入撤销时撤销按钮禁用、重做标题保留 4 个真实 id 与 `+2`，重做后切回撤销；清空的撤销 / 重做也保持同一摘要。外交重生成影响 `derived-system#diplomacy-regeneration + 20 states` 共 21 项，标题显示 `+18`，撤销 / 重做稳定。
+- 验收结束时临时用户库为 0，外交重生成最终撤销；checksum 全程保持 `ae3b83a5`，`WebGL error = 0`，console / page / health error 均为 0。编辑命令 affected 回归、名称库 API 文档浏览器回归、`pnpm run build:app` 与 `git diff --check` 通过；构建 `1121` modules、约 `889ms`，只有既有大 chunk 警告。

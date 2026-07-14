@@ -80,6 +80,8 @@ async function inspectNamebaseDocs(page, {cells, seed, template}) {
     const failures = [];
     const api = window.webglGeneratorApi;
     unwrap(await api.generate.newMap({confirm: true, seed, cellsTarget: cells, heightmapTemplate: template}), "generate.newMap");
+    document.getElementById("open-namebase-panel")?.click();
+    await new Promise(resolve => setTimeout(resolve, 350));
     const before = unwrap(api.info.mapSummary(), "info.mapSummary.before");
     const initialList = unwrap(api.namebases.list({includeSource: false}), "namebases.list.initial");
     const sourceList = unwrap(api.namebases.list({includeSource: true}), "namebases.list.source");
@@ -116,9 +118,13 @@ async function inspectNamebaseDocs(page, {cells, seed, template}) {
     assertUserCount(afterObjectImport, initialUserCount + 1, "对象导入后用户库数量", failures);
     if (!objectImport.executed || objectImport.result?.imported !== 1) failures.push("对象导入未执行或 imported 不是 1");
     const undoObjectImport = unwrap(api.history.undo(), "history.undo.objectImport");
+    await new Promise(resolve => setTimeout(resolve, 350));
     const afterObjectUndo = unwrap(api.namebases.list(), "namebases.list.afterObjectUndo");
     assertUserCount(afterObjectUndo, initialUserCount, "对象导入撤销后用户库数量", failures);
     if (!undoObjectImport.executed) failures.push("对象导入撤销未执行");
+    const panelHistoryAfterObjectUndo = readNamebasePanelHistory();
+    if (!panelHistoryAfterObjectUndo.undoDisabled || panelHistoryAfterObjectUndo.redoDisabled) failures.push(`名称库面板未同步 API 撤销栈：${JSON.stringify(panelHistoryAfterObjectUndo)}`);
+    if (!panelHistoryAfterObjectUndo.redoTitle.includes("@namebase") || !panelHistoryAfterObjectUndo.redoTitle.includes("namebase#")) failures.push(`名称库面板重做摘要缺少领域或真实目标：${panelHistoryAfterObjectUndo.redoTitle}`);
 
     const transientCreate = unwrap(api.namebases.create({
       name: "API 临时待替换名称库",
@@ -243,6 +249,18 @@ async function inspectNamebaseDocs(page, {cells, seed, template}) {
         result: result.result || null,
         history: result.history || null,
         error: result.error || null
+      };
+    }
+
+    function readNamebasePanelHistory() {
+      const buttons = Array.from(document.querySelectorAll('[data-panel-id="namebase-panel"] .floating-panel-history-button'));
+      const undo = buttons.find(button => button.getAttribute("aria-label") === "撤销");
+      const redo = buttons.find(button => button.getAttribute("aria-label") === "重做");
+      return {
+        undoDisabled: Boolean(undo?.disabled),
+        redoDisabled: Boolean(redo?.disabled),
+        undoTitle: undo?.getAttribute("title") || "",
+        redoTitle: redo?.getAttribute("title") || ""
       };
     }
 

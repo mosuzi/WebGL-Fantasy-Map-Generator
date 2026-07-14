@@ -8525,6 +8525,7 @@ function updateAllObjectPanels(state) {
   updateMilitaryPanel(state);
   updateMarkerPanel(state);
   updateLabelNamingPanel(state);
+  updateNamebasePanel(state);
   updateRoutePanel(state);
   updateRiverPanel(state);
   updateLakePanel(state);
@@ -8543,6 +8544,10 @@ function updateZonePanel(state) {
 
 function updateMeasurementPanel(state) {
   if (isPanelOpen(state.panels.measurement)) state.panels.measurement?.update(state.map, state.editHistory.getStats());
+}
+
+function updateNamebasePanel(state) {
+  if (isPanelOpen(state.panels.namebase)) state.panels.namebase?.update(state.map, state.editHistory.getStats());
 }
 
 function updateRoutePanel(state) {
