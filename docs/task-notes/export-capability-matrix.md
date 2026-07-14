@@ -110,6 +110,7 @@ FeatureCollection 同时写入 `coordinateReference = approximate-equirectangula
 - 国家面和省份面默认关闭，手动开启后输出非 dissolve MultiPolygon，并明确 `dissolved=false`。
 - “合并政治面边界”开关可对 state / province / zone 输出真正 dissolve MultiPolygon，并在生成图验证中将坐标点从 `53180` 降到 `10383`；构建产物下载烟测确认实际 `.features.geojson` 带 `dissolvedPolitical=true`。
 - `regress:dissolve-compatibility` 已固化政治面闭环、方向、hole、多岛、自交、跨 polygon 重叠和 bbox 门禁；固定合法输出经 JSON 往返后通过，7 类坏输出会被拒绝。
+- `regress:dissolve-performance` 已固化真实 100k 图的含序列化耗时、feature 一致性和体积缩减：固定图点数减少 `89.665%`、JSON 字节减少 `87.832%`，三轮 dissolve 中位耗时约 `256～276ms`，低于 `1500ms` 和普通版 3 倍双阈值。
 
 缺口：
 

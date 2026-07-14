@@ -164,3 +164,25 @@
 固定合成样本结果为 `3 features / 3 polygons / 6 rings / 3 holes / 54 points`；相邻双 cell 的共享边消除后为 `7` 点闭环，两个分离 cell 输出两个 polygon。专项回归还确认未闭合、错误方向、错误 bbox、非有限坐标、自交、重复 polygon 和共线面积重叠 7 类坏样本会被拒绝。
 
 本项只建立代码兼容门禁，不包含 100k 性能结论，也没有在快速迭代阶段运行浏览器或 QGIS / geojson.io 手工测试。大图耗时由下一项独立门禁处理。
+
+## 2026-07-15 100k 性能门禁
+
+新增 `pnpm run regress:dissolve-performance`，固定使用 `dissolve-perf-100k / continents / 100000 / 1440×960`。脚本先生成一次真实 100k 地图，再预热普通版与 dissolve 版导出，各正式采样 3 次 `createMapFeatureGeoJson() + JSON.stringify()` 并取中位数。
+
+门禁断言：
+
+- `metadata.cellsTarget = 100000`，实际 grid cells 至少 `99000`。
+- state / province / zone 三类均非空，普通版与 dissolve 版的 feature id 和各层数量完全一致。
+- dissolve 输出标记、MultiPolygon、ring 闭环、有限坐标和 bbox 通过轻量 O(points) 检查。
+- 点数比例不超过 `0.35`，JSON 字节比例不超过 `0.40`。
+- dissolve 构建与序列化总中位数不超过 `1500ms`，同时不超过普通版的 3 倍。
+
+当前固定图实际为 `99846 grid / 56944 pack / 638 features`。主线程结果：
+
+| 指标 | 普通政治面 | dissolve |
+|---|---:|---:|
+| 坐标点 | 625768 | 64676 |
+| JSON 字节 | 11884400 | 1446142 |
+| 构建与序列化中位数 | 301.673ms | 257.58ms |
+
+点数减少 `89.665%`，字节减少 `87.832%`。独立审查复跑中位数为普通版 `308.153ms`、dissolve `256.013ms`，提交前最终复跑为普通版 `328.745ms`、dissolve `276.163ms`，均通过。地图生成约 4 秒只作环境记录，不纳入 dissolve 阈值。本项无需引入 Worker 或进一步优化算法。

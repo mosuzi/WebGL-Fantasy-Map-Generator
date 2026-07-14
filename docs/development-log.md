@@ -1,5 +1,16 @@
 # 开发历史
 
+## 2026-07-15：政治面 dissolve 100k 性能门禁
+
+本步完成权威任务清单第 21 项，在不改 dissolve 算法、不引入 Worker 或 GIS 依赖的前提下，把 100k 大图导出耗时和体积缩减固化为纯 Node 回归。
+
+- 新增 `regress:dissolve-performance`，固定 `seed=dissolve-perf-100k`、`template=continents`、`cellsTarget=100000` 和 `1440×960`；实际 grid cells 必须不低于 `99000`，避免小图冒充性能门禁。
+- 地图生成耗时只记录，不计入 dissolve 阈值。普通版与 dissolve 版各预热一次，再分别执行 3 次 `createMapFeatureGeoJson() + JSON.stringify()` 并取总耗时中位数，减少冷启动和单次调度抖动影响。
+- state / province / zone 三类 feature 必须全部非空；普通版与 dissolve 版的各层数量、总数和 feature id 集合完全一致。100k 路径只做 O(points) 的 MultiPolygon、ring 最小点数、闭环、有限坐标与 bbox sanity，不重复第 20 项的深拓扑检查。
+- 守门阈值为：dissolve 总中位数 `≤1500ms` 且 `≤普通版×3`，点数比例 `≤0.35`，JSON 字节比例 `≤0.40`；命令行参数可收紧阈值，但默认 package 门禁始终使用 100k 固定图。
+- 主线程正式执行得到 `99846 grid / 56944 pack / 638 features`；普通版 `625768 points / 11884400 bytes / 301.673ms`，dissolve 版 `64676 points / 1446142 bytes / 257.58ms`，点数减少 `89.665%`、字节减少 `87.832%`。独立审查复跑得到普通版 `308.153ms`、dissolve `256.013ms`；提交前最终复跑为普通版 `328.745ms`、dissolve `276.163ms`，结论一致。
+- `node --check`、100k 专项回归、生产构建（`1123 modules`）和 `git diff --check` 全部通过；本项按快速迭代约定未运行浏览器测试。
+
 ## 2026-07-15：政治面 dissolve 外部兼容性门禁
 
 本步完成权威任务清单第 20 项，不重写已经接入导出的 dissolve 算法，只补外部读取所需的结构、拓扑和坐标说明代码门禁。
