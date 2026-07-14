@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-14：编辑命令执行路径收口
+
+本步完成权威任务清单第 14 项。审计确认正式应用业务代码已全部通过统一执行器进入编辑历史，无需再次改写生产逻辑。
+
+- `EditHistory.execute()` 只由 `executeEditCommand()` 调用，`EditHistory.undo() / redo()` 只由 `executeHistoryCommand()` 调用；名称库和 marker 等领域 wrapper 均委托这两个入口。
+- 新增 `regress:edit-execution-path`，递归扫描整个 `app/webgl-generator/src`，识别直接属性访问、可选链、方括号访问和直接变量别名，守住已审计的历史写入口；同时禁止在 `edit-history.js` 以外直接访问 `command.apply / revert`。
+- 回归同时固定编辑执行、历史执行、刷新、对象面板更新、持久高亮校正和编辑交互锁更新的既有顺序。本项只固化执行边界，不提前扩展对象面板刷新语义。
+
 ## 2026-07-14：剩余对象新增删除入口统一化
 
 - 资源标记面板把“放置资源标记”从独立工具栏按钮迁入 `UiPanelIoActions`，资源类型选择、移动、取消和重生成语义保持不变；空列表也复用同一新增动作。
