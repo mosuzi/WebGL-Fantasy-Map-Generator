@@ -137,6 +137,8 @@ async function inspectShortcuts(page) {
   await pressCode(page, "KeyH", {shiftKey: true});
   await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
   await page.locator('.floating-panel[data-panel-id="height-panel"] .floating-panel-close').click();
+  await pressCode(page, "KeyG", {shiftKey: true});
+  await page.locator('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)').waitFor({state: "visible"});
   await page.locator('[data-control-tab="management"]').click();
   await page.locator("#open-height-panel").click();
   await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});

@@ -40,6 +40,7 @@
 - `action-entry-and-icon-vocabulary.md`：权威任务第 57 项的定位入口、领域重生成、危险动作分组与最小图标词表。
 - `high-complexity-panel-layers.md`：权威任务第 58 项的高度、军事、导出首层与高级区能力盘点及验收边界。
 - `ui-terminology-and-state-feedback.md`：权威任务第 59 项的对象术语、选中 / 编辑 / 预览状态和空态 / 异常态恢复契约。
+- `ui-system-audit-gate.md`：权威任务第 60 项的多面板、键盘可访问性、缩放安全区、懒加载、长任务和连续打开内存门禁。
 
 ## 导入导出与 GIS
 

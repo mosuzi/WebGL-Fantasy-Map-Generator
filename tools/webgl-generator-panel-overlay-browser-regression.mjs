@@ -5,6 +5,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -44,17 +45,19 @@ async function runViewportCase(browserInstance, viewport) {
     await waitForReady(page);
     const fixture = await page.evaluate(() => {
       const map = window.__webglGeneratorApp.map;
-      const route = map.settlements?.routes?.find(Boolean);
-      if (!route) throw new Error("固定地图没有可用于对象详情的路线");
-      return {routeId: route.id};
+      const packCell = map.pack.cells.h.findIndex(height => height >= 20);
+      const noteId = "panel-overlay-audit-note";
+      const created = window.webglGeneratorApi.edit.notes.createStandalone({id: noteId, name: "浮层审计备注", body: "用于验证对象详情共存", packCell});
+      if (!created?.ok) throw new Error(created?.error?.message || "无法创建浮层审计备注");
+      return {noteId};
     });
 
     await page.locator("#open-generation-panel").click();
     await page.waitForSelector('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)');
-    await page.evaluate(routeId => {
-      const result = window.webglGeneratorApi.selection.select({kind: "route", id: routeId});
-      if (!result?.ok) throw new Error(result?.error?.message || "路线选择失败");
-    }, fixture.routeId);
+    await page.evaluate(noteId => {
+      const result = window.webglGeneratorApi.selection.select({kind: "note", id: noteId});
+      if (!result?.ok) throw new Error(result?.error?.message || "备注选择失败");
+    }, fixture.noteId);
     await page.waitForSelector('.floating-panel[data-panel-id="object-details"]:not(.hidden)');
     const coexistence = await inspectPanelCoexistence(page);
     if (viewport.width >= 1000) {
@@ -77,6 +80,7 @@ async function runViewportCase(browserInstance, viewport) {
 
     await page.locator("#open-generation-panel").click();
     await page.waitForSelector('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)');
+    await page.locator('[data-control-tab="about"]').click();
     const exportTrigger = page.locator("#open-export-panel");
     await exportTrigger.click();
     await page.waitForSelector('[data-overlay-id="project-export"]:not([style*="display: none"])');
@@ -126,8 +130,8 @@ async function runViewportCase(browserInstance, viewport) {
 }
 
 async function waitForReady(page) {
-  await page.waitForFunction(() => window.webglGeneratorApi && window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2);
-  await page.waitForFunction(() => !window.__webglGeneratorApp?.runtimeOperation && document.getElementById("generation-loading")?.hidden === true);
+  await waitForApiReady(page, 60000);
+  await page.waitForFunction(() => window.webglGeneratorApi.info.mapSummary()?.data?.ready === true);
 }
 
 async function inspectPanelCoexistence(page) {

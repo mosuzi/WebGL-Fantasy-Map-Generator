@@ -70,6 +70,18 @@ export class PanelManager {
       headerStateKey: "",
       refreshHeaderActions: () => refreshHeaderActions(record)
     };
+    const ResizeObserverCtor = this.documentRef.defaultView?.ResizeObserver;
+    if (ResizeObserverCtor) {
+      let resizeFrame = 0;
+      record.resizeObserver = new ResizeObserverCtor(() => {
+        if (record.panel.classList.contains("hidden") || resizeFrame) return;
+        resizeFrame = this.documentRef.defaultView.requestAnimationFrame(() => {
+          resizeFrame = 0;
+          if (!record.panel.classList.contains("hidden")) this.reflowPanels();
+        });
+      });
+      record.resizeObserver.observe(panel);
+    }
     this.panels.set(id, record);
     this.overlayRegistry?.register(record.overlayId, panel, {
       kind: "panel",

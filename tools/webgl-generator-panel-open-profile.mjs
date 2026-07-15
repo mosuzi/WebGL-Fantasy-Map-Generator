@@ -37,7 +37,7 @@ const defaultPanels = [
   ["open-route-panel", "route-panel", "路线管理"],
   ["open-river-panel", "river-panel", "河流管理"],
   ["open-lake-panel", "lake-panel", "湖泊管理"],
-  ["open-marker-panel", "marker-panel", "资源标记"],
+  ["open-marker-panel", "marker-panel", "资源点与通用标记"],
   ["open-label-naming-panel", "label-naming-panel", "标签管理"],
   ["open-notes-panel", "notes-panel", "备注总览"],
   ["open-measurement-panel", "measurement-panel", "测量对象"],
