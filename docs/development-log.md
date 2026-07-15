@@ -27399,3 +27399,11 @@ full 矩阵结果：
 - 完整地图迁移新增可注入 registry，每个 migrator 只允许执行 `vN -> vN+1`，重复注册、跳版产物、缺失中间迁移器和未知未来版本均明确拒绝；既有 `migrateMapDocument()` 继续使用同一 registry 完成 v1→v2 与当前 schema 校验。
 - `runtime-operation` 对已经带完整诊断分类的错误保留领域 code、stage 和 suggestion，不再统一压平为普通 operation 错误；原有未分类错误行为不变。GEO 继续在写命令前完成解析 / 验证，高度图继续由 map replace transaction 负责失败回滚。
 - 新增 `docs/task-notes/import-diagnostics-schema-evolution.md`；扩展 `regress:map-import-diagnostics` 与 `regress:map-migration`，覆盖三类成功 / 失败、隐私哨兵、模拟 v3 链和未来版本门禁。`regress:api-operation / api-data-compatibility / exports`、生产构建与差异检查通过；本项按快速迭代约定未单独启动浏览器。
+
+### 2026-07-15 完成权威任务第 43 项：政治面外部 GIS 与 100k 浏览器验证
+
+- 新增 `regress:political-gis-browser`：系统 Chrome 生成固定 `political-gis-browser-100k / continents / 100000` 地图，实际为 `99846 / 69624` 个 grid / pack cells；普通与 dissolve 政治面均触发真实下载并落盘为可解析 GeoJSON，图层均为国家 20、省份 586、地区 5，共 611 个 MultiPolygon。
+- 最终浏览器证据中普通版 `14,865,030 bytes`、API 导出调用 `513ms`、最大 longtask `515ms`、下载后双 RAF 恢复 `9.7ms`；dissolve 版 `1,669,558 bytes`、调用 `440.6ms`、最大 longtask `443ms`、恢复 `10.7ms`。两次导出后 API 均响应，console / page error 为 0；health 记录保留导出 longtask warn，没有把同步序列化阻塞隐去。
+- 使用 QGIS 官方 `3.44.12-Solothurn` 管理提取运行环境实际读取两份产物并转存 GeoPackage。首次发现数值 `properties.id` 被 GDAL 选作 FID 后，国家 / 省份 / 地区重复编号会触发自动改号告警；政治面导出改为全局唯一字符串 `id` 并新增 `numericId`。修正后 QGIS/GDAL 读取、转存两份 611 feature 文件均为 0 告警。
+- 修正后的 1.67MB dissolve 产物实际导入 geojson.io；网站成功解析、显示 MultiPolygon 并启用 Export，JSON 编辑器保留 `FeatureCollection`、`state-1`、`numericId`、`layer` 和 `dissolved`。浏览器文件门禁同时固定每个 feature bbox、地区 `attacker / defender` 和唯一外部 id。
+- 新增 `docs/task-notes/political-gis-external-verification.md`、`regress:political-gis-qgis` 与两类本地报告。`regress:dissolve-compatibility / dissolve-performance`、生产构建和差异检查通过；QGIS 初次告警已有可复现证据且已修复，不留未说明兼容边界。

@@ -671,7 +671,8 @@ function stateFeatures(map, options = {}) {
       id: `state-${id}`,
       properties: {
         layer: "state",
-        id,
+        id: `state-${id}`,
+        numericId: id,
         name: state.name || "",
         fullName: state.fullName || state.name || "",
         formName: state.formName || "",
@@ -723,7 +724,8 @@ function provinceFeatures(map, options = {}) {
       id: `province-${id}`,
       properties: {
         layer: "province",
-        id,
+        id: `province-${id}`,
+        numericId: id,
         name: province.name || "",
         fullName: province.fullName || province.name || "",
         state: stateId,
@@ -1104,16 +1106,18 @@ function markerFeatures(map) {
 
 function zoneFeatures(map, options = {}) {
   return (map.zones?.zones || []).map(zone => {
+    const id = zone.i ?? zone.id;
     const polygons = options.dissolve === true
       ? dissolvePackCellPolygons(map, zone.cells || [])
       : (zone.cells || []).map(cell => packCellPolygon(map, cell)).filter(Boolean);
     if (!polygons.length) return null;
     return {
       type: "Feature",
-      id: `zone-${zone.i ?? zone.id}`,
+      id: `zone-${id}`,
       properties: {
         layer: "zone",
-        id: zone.i ?? zone.id,
+        id: `zone-${id}`,
+        numericId: id,
         name: zone.name || "",
         type: zone.type || "",
         attacker: Number(zone.attacker) || 0,
