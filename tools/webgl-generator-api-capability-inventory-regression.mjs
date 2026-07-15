@@ -44,7 +44,7 @@ const [consoleApiSource, inventory] = await Promise.all([
 ]);
 assert.match(consoleApiSource, /capabilities: \(\) => apiCall\(\(\) => buildCapabilities\(api\)\)/, "capabilities 没有读取真实 API 对象");
 assert.match(consoleApiSource, /buildApiMethodCoverage\(methods, methodMetadata, api\)/, "capabilities 没有执行三方覆盖门禁");
-assert.match(inventory, /当前公开基线：11 个命名空间、170 个方法，其中 80 个为编辑方法/, "能力清单基线数量不完整");
+assert.match(inventory, /当前公开基线：11 个命名空间、173 个方法，其中 83 个为编辑方法/, "能力清单基线数量不完整");
 for (const classification of ["已暴露且共路径", "明确暂缓"]) {
   assert(inventory.includes(`| ${classification} |`), `能力清单缺少分类：${classification}`);
 }

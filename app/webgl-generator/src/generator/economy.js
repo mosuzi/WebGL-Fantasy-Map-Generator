@@ -148,7 +148,62 @@ export function buildEconomy(pack, options = {}) {
   collectStateTreasuries(states, deals, pack.markets, pack);
   const markerEconomy = refreshPoliticalEconomicPower(pack);
 
-  const metadata = {
+  const metadata = createEconomyMetadata(pack, {
+    goods,
+    aliveBurgs,
+    states,
+    resourcePopulation,
+    resourceTrade,
+    demand,
+    pricePropagation,
+    deals,
+    markerEconomy
+  });
+
+  return {goods: pack.goods, markets: pack.markets, deals: pack.deals, metadata};
+}
+
+export function rebuildEconomyFromMarketAssignments(pack, options = {}) {
+  const random = createRandom(`${options.seed}:economy-market-rebuild`);
+  const goods = ensurePackGoods(pack);
+  const rawGoods = goods.filter(good => good?.distribution);
+  const manufacturedGoods = goods.filter(good => good?.recipes?.length);
+  const aliveBurgs = (pack.burgs || []).filter(burg => burg?.i && !burg.removed);
+  const states = (pack.states || []).filter(state => state?.i && !state.removed);
+  const validMarketIds = new Set((pack.markets || []).filter(Boolean).map(market => Number(market.i ?? market.id)));
+  if (!validMarketIds.size) throw new Error("当前地图没有可用于经济重算的市场");
+  for (const cell of pack.cells?.i || []) {
+    const marketId = Number(pack.cells.market?.[cell] || 0);
+    if (marketId && !validMarketIds.has(marketId)) throw new Error(`pack cell #${cell} 指向不存在的市场 #${marketId}`);
+  }
+
+  resetMarketsForEconomicRebuild(pack, goods, options);
+  const resourcePopulation = options.resourcePopulation || pack.metadata?.resourcePopulation || {boostedCells: 0, totalBonus: 0};
+  const resourceTrade = applyResourceSupplyToMarkets(pack, pack.markets);
+  assignMarketsToBurgs(pack, aliveBurgs, pack.markets, {preferCellAssignment: true});
+  const demand = applyMarketDemandDiagnostics(pack, pack.markets, goods);
+  preserveTaxRates(states, random);
+  const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
+  pack.deals = deals;
+  const pricePropagation = applyPricePropagationDiagnostics(pack, pack.markets, deals, goods);
+  collectStateTreasuries(states, deals, pack.markets, pack);
+  const markerEconomy = refreshPoliticalEconomicPower(pack);
+  const metadata = createEconomyMetadata(pack, {
+    goods,
+    aliveBurgs,
+    states,
+    resourcePopulation,
+    resourceTrade,
+    demand,
+    pricePropagation,
+    deals,
+    markerEconomy
+  });
+  return {goods: pack.goods, markets: pack.markets, deals: pack.deals, metadata};
+}
+
+function createEconomyMetadata(pack, {goods, aliveBurgs, states, resourcePopulation, resourceTrade, demand, pricePropagation, deals, markerEconomy}) {
+  return {
     goods: goods.length,
     rawGoods: goods.filter(good => good.distribution && !good.recipes?.length).length,
     manufacturedGoods: goods.filter(good => !good.distribution && good.recipes?.length).length,
@@ -171,8 +226,31 @@ export function buildEconomy(pack, options = {}) {
     statesWithTaxes: states.filter(state => Number.isFinite(state.salesTax) && Number.isFinite(state.pollTax)).length,
     markerEconomy
   };
+}
 
-  return {goods: pack.goods, markets: pack.markets, deals: pack.deals, metadata};
+function resetMarketsForEconomicRebuild(pack, goods, options) {
+  const lowLandRatio = landRatio(pack) < 0.65;
+  const stockScale = getMarketStockScale(pack, options);
+  for (const market of (pack.markets || []).filter(Boolean)) {
+    const center = pack.burgs?.[market.centerBurgId];
+    if (!center?.i || center.removed) throw new Error(`市场 #${market.i ?? market.id} 缺少有效中心城市`);
+    const baseline = createMarket(Number(market.i ?? market.id), center, goods, {lowLandRatio, stockScale});
+    market.goods = baseline.goods;
+    delete market.resourceSupply;
+    delete market.resourceSupplySources;
+    delete market.demandSummary;
+    delete market.priceSummary;
+  }
+}
+
+function preserveTaxRates(states, random) {
+  for (const state of states) {
+    const salesTax = Number(state.salesTax);
+    const pollTax = Number(state.pollTax);
+    initializeTaxRates([state], random);
+    if (Number.isFinite(salesTax)) state.salesTax = salesTax;
+    if (Number.isFinite(pollTax)) state.pollTax = pollTax;
+  }
 }
 
 function ensurePackGoods(pack) {
@@ -560,18 +638,22 @@ function assignMarketsToCells(pack, markets) {
   return marketCells;
 }
 
-function assignMarketsToBurgs(pack, aliveBurgs, markets) {
+function assignMarketsToBurgs(pack, aliveBurgs, markets, {preferCellAssignment = false} = {}) {
   const validMarkets = markets.filter(Boolean);
   if (!validMarkets.length) return;
   const stateMarkets = new Map();
   for (const market of validMarkets) if (market.state > 0 && !stateMarkets.has(market.state)) stateMarkets.set(market.state, market);
 
   for (const burg of aliveBurgs) {
-    const market = stateMarkets.get(burg.state) || markets[pack.cells.market?.[burg.cell]] || validMarkets[0];
+    const cellMarket = markets[pack.cells.market?.[burg.cell]];
+    const market = preferCellAssignment
+      ? cellMarket || stateMarkets.get(burg.state) || validMarkets[0]
+      : stateMarkets.get(burg.state) || cellMarket || validMarkets[0];
     burg.market = market.i;
     burg.plaza = Number(market.centerBurgId === burg.i);
   }
 
+  if (preferCellAssignment) return;
   for (const market of validMarkets) {
     const center = pack.burgs?.[market.centerBurgId];
     if (!center?.i || center.removed) continue;

@@ -5,6 +5,42 @@
     <UiSegmented label="经济范围" :options="tabOptions" :model-value="state.tab" @select="callbacks.onTab" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选商品 / 市场 / 城镇 / 国家 / 来源" @update:model-value="callbacks.onFilter" />
   </div>
+  <section v-if="state.tab === 'markets'" class="economy-market-assignment" aria-label="市场归属编辑">
+    <div class="economy-market-assignment-fields">
+      <UiSelectField
+        input-id="economy-market-assignment-target"
+        label="目标市场"
+        :model-value="state.targetMarketId ?? ''"
+        :options="marketAssignmentOptions"
+        @update:model-value="callbacks.onTargetMarketId"
+      />
+      <UiSliderField
+        label="笔刷半径"
+        :model-value="state.assignmentRadius"
+        :min="2"
+        :max="120"
+        :step="2"
+        unit-label="px"
+        @input="callbacks.onAssignmentRadius"
+      />
+    </div>
+    <div class="economy-market-assignment-actions">
+      <UiButton variant="secondary" :active="state.marketAssignmentActive" @click="callbacks.onMarketAssignmentActive(!state.marketAssignmentActive)">
+        {{ state.marketAssignmentActive ? "退出归属笔刷" : "编辑市场归属" }}
+      </UiButton>
+      <UiButton variant="secondary" :disabled="state.marketAssignmentActive" @click="callbacks.onRebuildEconomy">重算经济链</UiButton>
+    </div>
+    <UiStateBanner
+      v-if="state.marketAssignmentActive"
+      kind="preview"
+      title="市场归属预览"
+      :message="marketAssignmentPreviewMessage"
+      action-label="应用并重算"
+      secondary-action-label="取消预览"
+      @action="callbacks.onApplyMarketAssignment"
+      @secondary-action="callbacks.onCancelMarketAssignment"
+    />
+  </section>
   <UiObjectTable
     v-if="state.tab === 'goods'"
     :columns="goodColumns"
@@ -134,6 +170,7 @@
 
 <script setup>
 import {computed, watch} from "vue";
+import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiKeyValueGrid from "./base/UiKeyValueGrid.vue";
@@ -141,6 +178,9 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSegmented from "./base/UiSegmented.vue";
+import UiSelectField from "./base/UiSelectField.vue";
+import UiSliderField from "./base/UiSliderField.vue";
+import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
@@ -299,6 +339,16 @@ const economyHighlightActions = computed(() => [
 const selectedGood = computed(() => findByObjectId(metrics.value.goods, props.state.selectedGoodId) || metrics.value.goods[0] || null);
 const selectedMarket = computed(() => findByObjectId(metrics.value.markets, props.state.selectedMarketId) || metrics.value.markets[0] || null);
 const selectedDeal = computed(() => findByObjectId(metrics.value.deals, props.state.selectedDealId) || metrics.value.deals[0] || null);
+const marketAssignmentOptions = computed(() => metrics.value.markets.map(row => ({value: row.id, label: `${row.name}（${row.stateName}）`})));
+const marketAssignmentPreviewMessage = computed(() => {
+  const preview = props.state.assignmentPreview;
+  if (!preview?.changed) return "在地图上拖动笔刷预览归属变化；取消不会修改经济数据。";
+  const warnings = [];
+  if (preview.crossStateCells) warnings.push(`跨国覆盖 ${formatNumber(preview.crossStateCells)} cells`);
+  if (preview.unassignedStateCells) warnings.push(`无国家覆盖 ${formatNumber(preview.unassignedStateCells)} cells`);
+  if (preview.invalidMarketCells || preview.waterCells) warnings.push("存在无效覆盖，不能应用");
+  return `待应用 ${formatNumber(preview.changed)} cells${warnings.length ? `；${warnings.join("；")}` : "；未发现跨国或无国家覆盖"}`;
+});
 
 const summaryMetrics = computed(() => [
   {label: "商品", value: formatNumber(metrics.value.summary.goods)},

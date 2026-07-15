@@ -18,6 +18,7 @@ export const API_METHODS = Object.freeze({
     "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
     "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
     "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "diplomacy.setRelation",
+    "economy.inspectAssignment", "economy.assignCells", "economy.rebuild",
     "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
     "zones.create", "zones.delete", "zones.setStyle",
     "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
@@ -42,7 +43,9 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "namebases.clear",
   "namebases.renameObjects",
   "edit.height.rebuildBaseDerived",
-  "edit.height.rebuildDownstreamDerived"
+  "edit.height.rebuildDownstreamDerived",
+  "edit.economy.assignCells",
+  "edit.economy.rebuild"
 ]);
 
 const STABILITY_LEVELS = Object.freeze({

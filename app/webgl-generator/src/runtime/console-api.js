@@ -142,6 +142,11 @@ function createConsoleApi(documentRef, state, actions = {}) {
         rebuildBaseDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildBaseDerived, "edit.height.rebuildBaseDerived")(options)),
         rebuildDownstreamDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildDownstreamDerived, "edit.height.rebuildDownstreamDerived")(options))
       }),
+      economy: Object.freeze({
+        inspectAssignment: (marketId, packCellIds) => apiCall(() => requireApiAction(actions.edit?.economy?.inspectAssignment, "edit.economy.inspectAssignment")(marketId, packCellIds)),
+        assignCells: (marketId, packCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.assignCells, "edit.economy.assignCells")(marketId, packCellIds, options)),
+        rebuild: (options = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.rebuild, "edit.economy.rebuild")(options))
+      }),
       diplomacy: Object.freeze({
         setRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.setRelation, "edit.diplomacy.setRelation")(subjectId, objectId, relation, options))
       }),
@@ -396,6 +401,9 @@ function buildMethodMetadata() {
       "height.applyChanges": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
       "height.rebuildBaseDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
       "height.rebuildDownstreamDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
+      "economy.inspectAssignment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "economy.assignCells": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
+      "economy.rebuild": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
       "diplomacy.setRelation": {stable: "draft", mutates: "diplomacy", undoable: true, async: false, requiresConfirm: false},
       "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.setStatus": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},

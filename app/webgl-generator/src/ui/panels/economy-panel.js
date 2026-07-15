@@ -63,6 +63,10 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     selectedGoodId: null,
     selectedMarketId: null,
     selectedDealId: null,
+    marketAssignmentActive: false,
+    targetMarketId: null,
+    assignmentRadius: 18,
+    assignmentPreview: null,
     version: 0
   });
   const panelCallbacks = {
@@ -108,6 +112,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     },
     onSelectMarket: row => {
       panelState.selectedMarketId = normalizeId(row.id);
+      if (!panelState.marketAssignmentActive) panelState.targetMarketId = normalizeId(row.id);
     },
     onSelectDeal: row => {
       panelState.selectedDealId = normalizeId(row.id);
@@ -120,7 +125,19 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       else if (row?.locateObject) callbacks.onLocate?.(row.locateObject);
     },
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, tradeFlowObject),
-    onClearHighlights: () => clearPanelHighlights(panelState, callbacks)
+    onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
+    onMarketAssignmentActive: active => callbacks.onMarketAssignmentActive?.(Boolean(active)),
+    onTargetMarketId: value => {
+      panelState.targetMarketId = normalizeId(value);
+      callbacks.onTargetMarketId?.(panelState.targetMarketId);
+    },
+    onAssignmentRadius: value => {
+      panelState.assignmentRadius = Math.max(2, Math.min(120, Number(value) || 18));
+      callbacks.onAssignmentRadius?.(panelState.assignmentRadius);
+    },
+    onApplyMarketAssignment: () => callbacks.onApplyMarketAssignment?.(),
+    onCancelMarketAssignment: () => callbacks.onCancelMarketAssignment?.(),
+    onRebuildEconomy: () => callbacks.onRebuildEconomy?.()
   };
 
   const record = manager.registerPanel(ECONOMY_PANEL_ID, {
@@ -131,6 +148,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     maxWidth: 1040,
     onClose: () => {
       panelState.open = false;
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");
@@ -155,6 +173,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
       ensureSelection(panelState);
+      panelState.targetMarketId ??= panelState.selectedMarketId;
       panelState.version++;
       panelState.open = true;
       manager.open("economy-panel");
@@ -182,6 +201,25 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
       ensureSelection(panelState);
+      panelState.version++;
+    },
+    getMarketBrush() {
+      return {
+        active: panelState.marketAssignmentActive,
+        targetMarketId: panelState.targetMarketId,
+        radius: panelState.assignmentRadius
+      };
+    },
+    setMarketAssignmentActive(active) {
+      panelState.marketAssignmentActive = Boolean(active);
+      if (panelState.marketAssignmentActive) {
+        panelState.tab = "markets";
+        panelState.targetMarketId ??= panelState.selectedMarketId;
+      }
+      panelState.version++;
+    },
+    updateMarketAssignmentPreview(preview) {
+      panelState.assignmentPreview = preview ? {...preview} : null;
       panelState.version++;
     },
     isOpen() {

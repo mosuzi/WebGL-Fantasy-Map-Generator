@@ -87,6 +87,7 @@ import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMi
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
 import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
+import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -210,6 +211,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   CITY_DELETE: "city:delete",
   CULTURE_ASSIGN: "culture:assign",
   RELIGION_ASSIGN: "religion:assign",
+  MARKET_ASSIGN: "economy:market-assign",
   MEASUREMENT_DRAW: "measurement:draw",
   MARKER_ADD: "marker:add",
   MARKER_MOVE: "marker:move",
@@ -268,6 +270,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     cultureEdit: {activeStroke: null, lastAffected: 0},
     religionEdit: {activeStroke: null, lastAffected: 0},
+    economyEdit: {activeStroke: null, originals: new Map(), preview: null},
     cityEdit: {
       addMode: false,
       deleteMode: false,
@@ -1375,7 +1378,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
-    getHighlightCount: () => persistentObjectHighlightCount(state)
+    getHighlightCount: () => persistentObjectHighlightCount(state),
+    onMarketAssignmentActive: active => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "panel-toggle");
+    },
+    onApplyMarketAssignment: () => applyPendingMarketAssignment(state, documentRef),
+    onCancelMarketAssignment: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "preview-cancel"),
+    onRebuildEconomy: () => rebuildEconomyViaAction(state, documentRef, {label: "重算经济链"}),
+    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "panel-close")
   });
   state.panels.economy = economyPanel;
   militaryPanel = createMilitaryPanel(documentRef, panelManager, {
@@ -2039,6 +2050,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindProvinceEditing(canvas, state, documentRef);
   bindSocialAssignmentEditing(canvas, state, documentRef, "culture");
   bindSocialAssignmentEditing(canvas, state, documentRef, "religion");
+  bindMarketAssignmentEditing(canvas, state, documentRef);
   bindCityEditing(canvas, state, documentRef);
   bindMarkerEditing(canvas, state, documentRef);
   bindObjectCreationTools(canvas, state, documentRef);
@@ -2377,6 +2389,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
         applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions),
         rebuildBaseDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
         rebuildDownstreamDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions)
+      },
+      economy: {
+        inspectAssignment: (marketId, packCellIds) => inspectMarketAssignmentViaApi(state, marketId, packCellIds),
+        assignCells: (marketId, packCellIds, editOptions = {}) => assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, editOptions),
+        rebuild: (editOptions = {}) => rebuildEconomyViaApi(state, documentRef, editOptions)
       },
       diplomacy: {
         setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, editOptions)
@@ -6341,6 +6358,41 @@ function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) 
   };
 }
 
+function inspectMarketAssignmentViaApi(state, marketId, packCellIds) {
+  assertMapAvailable(state);
+  const changes = buildMarketAssignmentChanges(state.map, marketId, packCellIds);
+  return {
+    marketId: Number(marketId),
+    packCellIds: changes.map(change => change.packCell),
+    ...inspectMarketAssignment(state.map, changes)
+  };
+}
+
+function assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, options = {}) {
+  assertMapAvailable(state);
+  const changes = buildMarketAssignmentChanges(state.map, marketId, packCellIds);
+  const preview = inspectMarketAssignment(state.map, changes);
+  if (!preview.valid) throw new Error(`市场归属预检失败：无效市场 ${preview.invalidMarketCells}，水域 ${preview.waterCells}`);
+  if (options?.confirm !== true) throw new Error(`市场归属会重算经济链（跨国 ${preview.crossStateCells} cells、无国家 ${preview.unassignedStateCells} cells），需要显式传入 {confirm: true}`);
+  const command = createApplyMarketAssignmentCommand(changes, {label: options.label || "API 市场归属"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    afterRefresh: () => refreshGenerationSummary(state.map),
+    noopStatus: "没有需要更新的市场归属。",
+    status: `已通过 API 更新 ${changes.length} 个 pack cells 的市场归属并重算经济链。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return {...editApiResult(state, result), preview};
+}
+
+function rebuildEconomyViaApi(state, documentRef, options = {}) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("经济链重算会改写生产、交易、价格压力和财政，需要显式传入 {confirm: true}");
+  return editApiResult(state, rebuildEconomyViaAction(state, documentRef, {label: options.label || "API 重算经济链"}));
+}
+
 function setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, options = {}) {
   const subject = normalizeApiInteger(subjectId, "外交主体国家 ID");
   const object = normalizeApiInteger(objectId, "外交对象国家 ID");
@@ -7753,6 +7805,19 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   registerCityOneShotMode(state, documentRef, register, CANVAS_TOOL_MODE.CITY_DELETE, "deleteMode");
   registerSocialAssignmentMode(state, documentRef, register, "culture");
   registerSocialAssignmentMode(state, documentRef, register, "religion");
+  register(CANVAS_TOOL_MODE.MARKET_ASSIGN, "economy-panel", {
+    onEnter: () => {
+      state.economyEdit.activeStroke = null;
+      state.economyEdit.originals = new Map();
+      state.economyEdit.preview = null;
+      state.panels.economy?.setMarketAssignmentActive(true);
+      state.panels.economy?.updateMarketAssignmentPreview(null);
+    },
+    onExit: () => {
+      cancelMarketAssignmentPreview(state);
+      state.panels.economy?.setMarketAssignmentActive(false);
+    }
+  });
 
   register(CANVAS_TOOL_MODE.MEASUREMENT_DRAW, "measurement-panel", {
     locksInteraction: false,
@@ -9330,6 +9395,39 @@ function bindSocialAssignmentEditing(canvas, state, documentRef, kind) {
   }, true);
 }
 
+function bindMarketAssignmentEditing(canvas, state, documentRef) {
+  canvas.addEventListener("pointerdown", event => {
+    const brush = state.panels.economy?.getMarketBrush?.();
+    if (!brush?.active || !state.map || !isPrimaryPointerDown(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    state.economyEdit.activeStroke = {pointerId: event.pointerId};
+    capturePointer(canvas, event.pointerId);
+    applyMarketAssignmentAtEvent(state, event);
+  }, true);
+  canvas.addEventListener("pointermove", event => {
+    if (state.economyEdit.activeStroke?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    applyMarketAssignmentAtEvent(state, event);
+  }, true);
+  canvas.addEventListener("pointerup", event => {
+    if (state.economyEdit.activeStroke?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    state.economyEdit.activeStroke = null;
+    releasePointer(canvas, event.pointerId);
+    updateMarketAssignmentPreview(state);
+    updateEconomyPanel(state);
+  }, true);
+  canvas.addEventListener("pointercancel", event => {
+    if (state.economyEdit.activeStroke?.pointerId !== event.pointerId) return;
+    state.economyEdit.activeStroke = null;
+    releasePointer(canvas, event.pointerId);
+    updateMarketAssignmentPreview(state);
+  }, true);
+}
+
 function bindCityEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     if (state.cityEdit.deleteMode && state.map) {
@@ -9754,6 +9852,95 @@ function applySocialAssignmentAtEvent(state, event, kind) {
   editState.lastAffected = changes.length;
   state.editRefreshScheduler.run(SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS);
   kind === "culture" ? updateCulturePanel(state) : updateReligionPanel(state);
+}
+
+function applyMarketAssignmentAtEvent(state, event) {
+  const brush = state.panels.economy?.getMarketBrush?.();
+  if (!brush?.active || !state.economyEdit.activeStroke) return;
+  const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const changes = getMarketAssignmentBrushChanges(state.map, point, brush, state.economyEdit.originals);
+  if (!changes.length) return;
+  applyMarketAssignmentPreview(state.map, changes);
+  state.editRefreshScheduler.run(MARKET_ASSIGNMENT_PREVIEW_EFFECTS);
+  updateMarketAssignmentSelection(state);
+  updateMarketAssignmentPreview(state);
+}
+
+function pendingMarketAssignmentChanges(state) {
+  const values = state.map?.pack?.cells?.market;
+  if (!values) return [];
+  return [...state.economyEdit.originals.entries()]
+    .map(([packCell, before]) => ({packCell, before: Number(before || 0), after: Number(values[packCell] || 0)}))
+    .filter(change => change.before !== change.after)
+    .sort((a, b) => a.packCell - b.packCell);
+}
+
+function updateMarketAssignmentPreview(state) {
+  const changes = pendingMarketAssignmentChanges(state);
+  const preview = changes.length ? inspectMarketAssignment(state.map, changes) : null;
+  state.economyEdit.preview = preview;
+  state.panels.economy?.updateMarketAssignmentPreview(preview);
+  return preview;
+}
+
+function updateMarketAssignmentSelection(state) {
+  const gridCells = [...state.economyEdit.originals.keys()]
+    .map(packCell => Number(state.map?.pack?.cells?.g?.[packCell]))
+    .filter(cell => Number.isInteger(cell) && cell >= 0);
+  state.renderer?.setHeightCellSelection?.(gridCells);
+}
+
+function cancelMarketAssignmentPreview(state) {
+  const changes = pendingMarketAssignmentChanges(state);
+  if (changes.length) restoreMarketAssignmentPreview(state.map, changes);
+  state.economyEdit.activeStroke = null;
+  state.economyEdit.originals = new Map();
+  state.economyEdit.preview = null;
+  state.renderer?.clearHeightCellSelection?.();
+  state.panels.economy?.updateMarketAssignmentPreview(null);
+  if (changes.length) {
+    state.editRefreshScheduler?.run(MARKET_ASSIGNMENT_PREVIEW_EFFECTS);
+    updateEconomyPanel(state);
+  }
+  return changes.length;
+}
+
+function applyPendingMarketAssignment(state, documentRef) {
+  const changes = pendingMarketAssignmentChanges(state);
+  const preview = changes.length ? inspectMarketAssignment(state.map, changes) : null;
+  if (!preview?.valid) {
+    setFileOperationStatus(documentRef, preview?.waterCells || preview?.invalidMarketCells
+      ? "市场归属预览含水域或无效市场，无法应用。"
+      : "当前没有可应用的市场归属变化。");
+    return {executed: false, reason: "invalid-preview", preview};
+  }
+  restoreMarketAssignmentPreview(state.map, changes);
+  const command = createApplyMarketAssignmentCommand(changes);
+  const execution = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    afterRefresh: () => refreshGenerationSummary(state.map),
+    status: executed => `已应用 ${executed.getResult?.().changed || 0} 个市场归属并重算经济链。`,
+    noopStatus: "市场归属没有变化。"
+  });
+  if (execution.executed) {
+    state.economyEdit.originals = new Map();
+    state.economyEdit.preview = null;
+    state.renderer?.clearHeightCellSelection?.();
+    completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, {command: execution.command});
+  } else applyMarketAssignmentPreview(state.map, changes);
+  return execution;
+}
+
+function rebuildEconomyViaAction(state, documentRef, {label = "重算经济链"} = {}) {
+  const command = createRebuildEconomyCommand({label});
+  const execution = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    afterRefresh: () => refreshGenerationSummary(state.map),
+    status: executed => `已重算经济链：${executed.getResult?.().deals || 0} 笔交易。`,
+    noopStatus: "当前地图没有可重算的市场。"
+  });
+  updateEditingInteractionLock(state, documentRef);
+  return execution;
 }
 
 function finishSocialAssignmentStroke(state, documentRef, kind) {
@@ -10419,6 +10606,7 @@ function getActiveEditorKind(state) {
   if (modeId === CANVAS_TOOL_MODE.PROVINCE_BRUSH) return "province";
   if (modeId === CANVAS_TOOL_MODE.CULTURE_ASSIGN) return "culture";
   if (modeId === CANVAS_TOOL_MODE.RELIGION_ASSIGN) return "religion";
+  if (modeId === CANVAS_TOOL_MODE.MARKET_ASSIGN) return "economy";
   if (modeId === CANVAS_TOOL_MODE.MEASUREMENT_DRAW) return "measurement";
   if (modeId) return modeId;
   if (state.editingObject?.kind) return state.editingObject.kind;

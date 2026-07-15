@@ -120,12 +120,17 @@
 当前状态：
 
 - 已完成市场归属诊断第一刀：经济面板市场 tab 会按 `pack.cells.market` 统计每个市场的覆盖 cells、陆地覆盖、本国覆盖、跨国覆盖和无国家覆盖；debug 诊断汇总跨国覆盖 cells 与无效归属 cells。该能力只是后续归属刷子的只读前置，不修改 `pack.cells.market`。
+- 已完成市场归属编辑：经济面板市场 tab 提供目标市场、半径、归属笔刷、预览、应用、取消与经济链重算。笔刷工作副本只改 `pack.cells.market`，应用时以单条命令重算 burg 市场、生产、交易、价格压力、财政和经济摘要。
+- 跨国、无国家、水域和无效市场在应用前给出计数与样例；写入 API 为 `api.edit.economy.assignCells / rebuild`，均要求 `confirm:true`，只读预检为 `inspectAssignment`。
+- 经济重算不触发外交或军事；市场面板、经济 CSV/JSON、完整地图 JSON 和现有静态贸易流数据源统一读取重算后的 `pack.cells.market / markets / deals`。
 
 验收：
 
 - 取消手工刷市场不改变地图数据。
 - 应用后经济摘要、市场面板和导出数据一致。
 - 市场归属诊断只读展示，不应触发经济重算或改变市场归属。
+
+完成证据：`regress:market-assignment` 覆盖取消、跨国/水域预检、单历史应用、经济链重算、外交/军事隔离、撤销/重做和完整地图 JSON 往返；API stability/edit coverage/action convergence/inventory、生产构建通过。当前 Chrome 实际笔刷验证中，市场 #1 覆盖 `205→212`、跨国覆盖 `80→87`，取消恢复 `205/80`；应用后库存、供需和交易额同步变化，`Ctrl+Z / Ctrl+Shift+Z` 精确恢复和重放。
 
 ## 暂缓项
 
