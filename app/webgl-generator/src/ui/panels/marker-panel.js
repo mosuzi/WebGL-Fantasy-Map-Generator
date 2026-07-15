@@ -95,7 +95,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
   };
 
   const record = manager.registerPanel(MARKER_PANEL_ID, {
-    title: "资源与标记管理",
+    title: "资源点与通用标记",
     left: 504,
     top: 96,
     width: 620,
@@ -119,9 +119,9 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     () => import("../vue/components/MarkerPanel.vue"),
     {state: panelState, callbacks: panelCallbacks},
     {
-      initial: "资源与标记管理将在首次打开时加载。",
-      loading: "正在加载资源与标记管理...",
-      failure: "资源与标记管理加载失败，请检查开发模式日志。"
+      initial: "资源点与通用标记将在首次打开时加载。",
+      loading: "正在加载资源点与通用标记...",
+      failure: "资源点与通用标记加载失败，请检查开发模式日志。"
     }
   );
 

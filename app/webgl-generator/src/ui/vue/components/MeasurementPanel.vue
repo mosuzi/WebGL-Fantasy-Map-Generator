@@ -16,7 +16,7 @@
     :selected-id="state.selectedMeasurementId"
     row-id-key="id"
     :doubleClickAction="'edit'"
-    empty-text="暂无保存的测量对象"
+    :empty-text="measurementEmptyText"
     :empty-action="measurementEmptyAction"
     resizable-columns
     selectable-rows
@@ -31,7 +31,7 @@
 
   <UiPanelIoActions
     class-name="measurement-panel-list-actions"
-    label="测量列表操作"
+    label="测量对象列表操作"
     :export-actions="measurementExportActions"
     :actions="measurementListActions"
     @export="handleMeasurementExport"
@@ -114,13 +114,18 @@ const columns = Object.freeze([
 const measurementActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"}
 ]);
-const measurementEmptyAction = Object.freeze({key: "start", label: "开始测量", icon: "+"});
+const startMeasurementAction = Object.freeze({key: "start", label: "开始测量", icon: "+"});
 
 const rows = computed(() => {
   props.state.version;
   return measurementRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
+const measurementEmptyAction = computed(() => filterEmptyAction.value || startMeasurementAction);
+const measurementEmptyText = computed(() => filterEmptyAction.value ? "没有匹配的测量对象" : "暂无保存的测量对象");
 const {selectedRowIds: selectedMeasurementIds, selectedRows: selectedMeasurementRows} = useVisibleRowSelection(visibleRows);
 const measurementExportActions = computed(() => [
   {key: "measurement", label: "导出测量", disabled: !visibleRows.value.length},
@@ -128,7 +133,7 @@ const measurementExportActions = computed(() => [
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedMeasurementId) || null);
 const measurementListActions = computed(() => [
-  measurementEmptyAction,
+  startMeasurementAction,
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMeasurementRows.value.length)}`, icon: "◉", disabled: !selectedMeasurementRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "edit", label: "编辑测量形状", icon: "◎", disabled: !selected.value},
@@ -280,6 +285,10 @@ function handleMeasurementAction(key) {
 }
 
 function handleEmptyAction(key) {
+  if (key === "clear-filter") {
+    props.callbacks.onFilter?.("");
+    return;
+  }
   if (key === "start") props.callbacks.onStart?.();
 }
 

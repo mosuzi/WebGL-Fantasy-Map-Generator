@@ -1,6 +1,26 @@
 <template>
   <UiMetricGrid :metrics="summaryMetrics" class-name="height-panel-summary" />
 
+  <UiStateBanner
+    v-if="state.derivedStaleSystems?.length"
+    kind="stale"
+    title="存在待派生结果"
+    :message="formatDerivedStaleSystems(state.derivedStaleSystems)"
+    action-label="重算下游派生"
+    secondary-action-label="重算基础派生"
+    @action="callbacks.onRegenerateDownstream?.()"
+    @secondary-action="callbacks.onRegenerateBase?.()"
+  />
+
+  <UiStateBanner
+    v-if="activePreviewState"
+    kind="preview"
+    :title="activePreviewState.title"
+    :message="activePreviewState.message"
+    action-label="退出预览"
+    @action="callbacks.onPreviewCancel?.()"
+  />
+
   <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="setActive(!state.active)">
     {{ state.active ? "停止高度编辑" : "启用高度编辑" }}
   </UiButton>
@@ -678,6 +698,7 @@ import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
+import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatHeight, formatNumber} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
@@ -838,6 +859,21 @@ let latestHeightBandSamples = null;
 useManagedOverlay(workbenchRef, workbenchOpen, {
   id: "heightmap-import-workbench",
   onClose: () => closeImportWorkbench()
+});
+
+const activePreviewState = computed(() => {
+  const candidates = [
+    [props.state.transformPreview, "条件变换预览中"],
+    [props.state.terrainProgramPreview, "多步骤地形程序预览中"],
+    [props.state.terrainTemplatePreview, "地形模板预览中"],
+    [props.state.globalToolPreview, "全局高度工具预览中"]
+  ];
+  const current = candidates.find(([preview]) => Boolean(preview));
+  if (!current) return null;
+  return {
+    title: current[1],
+    message: current[0]?.notice || "地图上的紫色预览尚未写入历史，可应用或退出。"
+  };
 });
 
 const summaryMetrics = computed(() => {

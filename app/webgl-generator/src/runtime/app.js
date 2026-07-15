@@ -462,6 +462,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
       return result.executed;
     },
+    onPreviewCancel: () => {
+      clearHeightTransformPreview(state);
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+    },
     onTerrainTemplatePreview: () => {
       cancelHeightLine(state, documentRef);
       const template = heightPanel.getTerrainTemplate();
@@ -4569,8 +4574,20 @@ function assertMapAvailable(state) {
 function setFileOperationStatus(documentRef, message, targetIds = ["file-operation-status"]) {
   for (const id of targetIds) {
     const status = documentRef.getElementById(id);
-    if (status) status.textContent = message;
+    if (!status) continue;
+    status.textContent = message;
+    const nextState = fileOperationFeedbackState(message);
+    if (nextState) status.dataset.state = nextState;
+    else delete status.dataset.state;
   }
+}
+
+function fileOperationFeedbackState(message) {
+  const text = String(message || "").trim();
+  if (!text) return "";
+  if (/失败|错误|无效|拒绝|无法|不支持/.test(text)) return "error";
+  if (/已|成功|完成/.test(text)) return "success";
+  return "progress";
 }
 
 function reportMapImportError(state, documentRef, error, file, options = {}) {

@@ -5,10 +5,11 @@
         v-for="action in actions"
         :key="action.key"
         class="ui-icon-action"
-        :class="{active: action.key === active || action.active}"
+        :class="{active: action.key === active || action.active, 'is-editing': action.key === active}"
         :disabled="action.disabled"
         :title="action.label"
         :aria-label="action.label"
+        :aria-pressed="action.key === active ? 'true' : 'false'"
         circle
         @click="toggleAction(action)"
       >
@@ -20,13 +21,14 @@
       <section
         v-if="active"
         ref="panel"
-        class="ui-secondary-action-panel"
+        class="ui-secondary-action-panel is-editing"
+        data-ui-state="editing"
         :style="panelStyle"
         role="dialog"
         :aria-label="activeActionLabel"
       >
         <header class="ui-secondary-action-header" :class="{dragging: dragState}" @pointerdown="startPanelDrag">
-          <strong>{{ activeActionLabel }}</strong>
+          <div class="ui-secondary-action-title"><span class="ui-state-token">编辑中</span><strong>{{ activeActionLabel }}</strong></div>
           <button type="button" class="ui-close-button ui-secondary-action-close" aria-label="关闭二级编辑面板" @pointerdown.stop @click="closePanel">×</button>
         </header>
         <div class="ui-secondary-action-body">
@@ -38,7 +40,8 @@
 </template>
 
 <script setup>
-import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch} from "vue";
+import {useManagedOverlay} from "../../composables/use-managed-overlay.js";
 
 defineOptions({
   name: "UiActionDock"
@@ -63,6 +66,12 @@ const dragState = ref(null);
 const userPositioned = ref(false);
 const activeAction = computed(() => props.actions.find(action => action.key === props.active));
 const activeActionLabel = computed(() => activeAction.value?.label || "对象操作");
+const overlayId = `ui-action-dock:${useId()}`;
+
+useManagedOverlay(panel, () => Boolean(props.active), {
+  id: overlayId,
+  onClose: () => closePanel()
+});
 
 watch(() => props.active, active => {
   if (active) {

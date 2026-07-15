@@ -65,7 +65,7 @@
     @update:model-value="callbacks.onImportMode"
   />
 
-  <div v-if="state.importPreview" class="namebase-import-preview">
+  <div v-if="state.importPreview" class="namebase-import-preview is-previewing" data-ui-state="preview">
     <div class="namebase-import-preview-header">
       <strong>导入预览</strong>
       <span>{{ state.importPreview.filename }}</span>

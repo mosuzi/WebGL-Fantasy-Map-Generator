@@ -57,7 +57,9 @@
           :key="rowKey(row)"
           v-memo="[rowKey(row), row, isSelected(row), rowSelectionChecked(row), columnLayoutSignature]"
           class="object-table-row"
-          :class="{'selected-row': isSelected(row)}"
+          :class="{'selected-row': isSelected(row), 'is-selected': isSelected(row)}"
+          :aria-selected="isSelected(row) ? 'true' : 'false'"
+          :data-ui-state="isSelected(row) ? 'selected' : undefined"
           @click="handleRowClick(row)"
           @dblclick="handleRowDoubleClick(row)"
         >
@@ -89,7 +91,7 @@
         </tr>
       </tbody>
     </table>
-    <div v-else class="object-table-empty">
+    <div v-else class="object-table-empty is-empty" data-ui-state="empty">
       <span>{{ emptyText }}</span>
       <button
         v-if="emptyAction"

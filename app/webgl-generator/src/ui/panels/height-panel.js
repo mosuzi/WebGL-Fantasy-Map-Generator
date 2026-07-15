@@ -68,6 +68,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onRedo: () => callbacks.onRedo?.(),
     onGlobalToolPreview: action => callbacks.onGlobalToolPreview?.(action),
     onGlobalToolApply: () => callbacks.onGlobalToolApply?.(),
+    onPreviewCancel: () => callbacks.onPreviewCancel?.(),
     onTerrainTemplatePreview: () => callbacks.onTerrainTemplatePreview?.(),
     onTerrainTemplateApply: () => callbacks.onTerrainTemplateApply?.(),
     onTerrainTemplateChange: () => callbacks.onTerrainTemplateChange?.(),

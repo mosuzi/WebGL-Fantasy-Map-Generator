@@ -39,6 +39,7 @@
 - `png-crop-overlay-export.md`：权威任务第 44 项的四类 PNG 裁剪、七类 overlay 白名单、默认兼容和浏览器文件级证据。
 - `action-entry-and-icon-vocabulary.md`：权威任务第 57 项的定位入口、领域重生成、危险动作分组与最小图标词表。
 - `high-complexity-panel-layers.md`：权威任务第 58 项的高度、军事、导出首层与高级区能力盘点及验收边界。
+- `ui-terminology-and-state-feedback.md`：权威任务第 59 项的对象术语、选中 / 编辑 / 预览状态和空态 / 异常态恢复契约。
 
 ## 导入导出与 GIS
 

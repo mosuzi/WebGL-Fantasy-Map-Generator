@@ -38,6 +38,15 @@
 
   <UiDetailGrid class-name="notes-panel-details" empty-text="未选中备注" :rows="detailRows" />
 
+  <UiStateBanner
+    v-if="selected?.orphan"
+    kind="orphan"
+    title="原对象已不存在"
+    message="这条备注仍可导出保留，但不能定位或继续编辑；如不再需要，可从当前地图删除。"
+    action-label="删除这条孤儿备注"
+    @action="callbacks.onDelete?.(selected)"
+  />
+
   <div v-if="selected" class="notes-panel-preview">
     {{ selected.body || "空备注" }}
   </div>
@@ -66,6 +75,7 @@ import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import UiStateBanner from "./base/UiStateBanner.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {compareListValues} from "../../sort-utils.js";

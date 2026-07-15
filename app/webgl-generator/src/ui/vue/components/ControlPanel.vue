@@ -52,6 +52,7 @@
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
         <pre id="file-operation-error-details" class="file-operation-error-details" hidden></pre>
+        <UiButton id="file-operation-clear-error" class="file-operation-recovery" variant="secondary" @click="clearFileOperationFeedback">清除错误并重试</UiButton>
         <UiButton id="export-map-import-diagnostic" variant="secondary" hidden>导出诊断</UiButton>
       </section>
 
@@ -115,7 +116,7 @@
               <UiSwitchField label="城市图标" input-id="export-png-overlay-city-icons" field-class="feature-export-layer-switch" :checked="true" />
               <UiSwitchField label="标记" input-id="export-png-overlay-markers" field-class="feature-export-layer-switch" :checked="true" />
               <UiSwitchField label="军事" input-id="export-png-overlay-military" field-class="feature-export-layer-switch" :checked="true" />
-              <UiSwitchField label="测量" input-id="export-png-overlay-measurements" field-class="feature-export-layer-switch" />
+              <UiSwitchField label="测量标注" input-id="export-png-overlay-measurements" field-class="feature-export-layer-switch" />
               <UiSwitchField label="图例" input-id="export-png-overlay-legend" field-class="feature-export-layer-switch" :checked="true" />
               <UiSwitchField label="比例尺" input-id="export-png-overlay-scale-bar" field-class="feature-export-layer-switch" :checked="true" />
             </div>
@@ -638,11 +639,11 @@ const layers = Object.freeze([
   {id: "rivers", label: "河流"},
   {id: "cities", label: "城市"},
   {id: "resources", label: "资源点"},
-  {id: "markers", label: "标记"},
+  {id: "markers", label: "通用标记"},
   {id: "military", label: "军事"},
   {id: "warFronts", label: "战线"},
   {id: "zones", label: "地区"},
-  {id: "measurements", label: "测量"},
+  {id: "measurements", label: "测量对象"},
   {id: "scaleBar", label: "比例尺"},
   {id: "labels", label: "城市标签"},
   {id: "stateLabels", label: "国家名称"},
@@ -656,7 +657,7 @@ const managementGroups = Object.freeze([
     ["open-height-panel", "高度编辑"],
     ["open-climate-panel", "气候统计"],
     ["open-biome-panel", "生物群系"],
-    ["open-feature-panel", "水体统计"],
+    ["open-feature-panel", "水体与地貌"],
     ["open-river-panel", "河流管理"],
     ["open-lake-panel", "湖泊管理"]
   ]),
@@ -677,7 +678,7 @@ const managementGroups = Object.freeze([
   ]),
   managementGroup("annotation", "标注对象", [
     ["open-zone-panel", "地区管理"],
-    ["open-marker-panel", "资源标记"],
+    ["open-marker-panel", "资源点与通用标记"],
     ["open-label-naming-panel", "标签管理"],
     ["open-notes-panel", "备注总览"],
     ["open-measurement-panel", "测量对象"]
@@ -769,6 +770,21 @@ function toggleExportPanel() {
 
 function closeExportPanel() {
   exportPanelOpen.value = false;
+}
+
+function clearFileOperationFeedback() {
+  const status = document.getElementById("file-operation-status");
+  if (status) {
+    status.textContent = "";
+    delete status.dataset.state;
+  }
+  const details = document.getElementById("file-operation-error-details");
+  if (details) {
+    details.textContent = "";
+    details.hidden = true;
+  }
+  const diagnostic = document.getElementById("export-map-import-diagnostic");
+  if (diagnostic) diagnostic.hidden = true;
 }
 
 function positionExportPanel() {

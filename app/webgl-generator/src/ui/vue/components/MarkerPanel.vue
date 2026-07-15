@@ -2,12 +2,12 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="marker-panel-summary" />
 
   <div class="marker-panel-controls">
-    <UiSegmented label="标记范围" :options="scopeOptions" :model-value="state.scope" @select="callbacks.onScope" />
+    <UiSegmented label="对象类型" :options="scopeOptions" :model-value="state.scope" @select="callbacks.onScope" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 国家 / 省份" @update:model-value="callbacks.onFilter" />
   </div>
 
   <div class="marker-edit-toolbar">
-    <UiSelectField class-name="marker-resource-select" label="新增标记" :model-value="markerDraft.type" :options="markerTypeOptions" @update:model-value="markerDraft.type = $event" />
+    <UiSelectField class-name="marker-resource-select" label="新增通用标记" :model-value="markerDraft.type" :options="markerTypeOptions" @update:model-value="markerDraft.type = $event" />
     <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
     <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
     <UiButton class="marker-regenerate-button" variant="danger" @click="callbacks.onRegenerateResources?.()">重新生成资源点</UiButton>
@@ -25,7 +25,7 @@
     @sort="callbacks.onSort"
     :selected-id="activeSelectedMarkerId"
     :doubleClickAction="'edit'"
-    empty-text="没有匹配的资源点或标记"
+    empty-text="没有匹配的资源点或通用标记"
     :empty-action="markerEmptyAction"
     resizable-columns
     selectable-rows
@@ -40,12 +40,12 @@
 
   <UiPanelIoActions
     class-name="marker-panel-list-actions"
-    label="资源标记列表操作"
+    label="资源点与通用标记列表操作"
     :actions="markerListActions"
     @action="handleMarkerListAction"
   />
 
-  <UiDetailGrid class-name="marker-panel-details" empty-text="未选中资源点或标记" :rows="detailRows" />
+  <UiDetailGrid class-name="marker-panel-details" empty-text="未选中资源点或通用标记" :rows="detailRows" />
 
   <UiActionDock v-if="selected" v-model:active="activeAction" :actions="markerActions">
     <template #rename>
@@ -115,7 +115,7 @@ const props = defineProps({
 const scopeOptions = Object.freeze([
   {value: "all", label: "全部"},
   {value: "resource", label: "资源点"},
-  {value: "marker", label: "标记"}
+  {value: "marker", label: "通用标记"}
 ]);
 
 const sortOptions = Object.freeze([
@@ -205,8 +205,8 @@ const markerListActions = computed(() => [
   {...defaultMarkerEmptyAction, active: props.state.editMode === "add", disabled: props.state.editMode === "move"},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMarkerRows.value.length)}`, icon: "◉", disabled: !selectedMarkerRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
-  {key: "move", label: "移动选中标记", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
-  {key: "delete", label: "删除选中标记", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
+  {key: "move", label: "移动选中对象", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
+  {key: "delete", label: "删除选中对象", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
 ]);
 
 const summaryMetrics = computed(() => [

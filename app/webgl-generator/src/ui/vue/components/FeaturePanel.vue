@@ -2,7 +2,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="feature-panel-summary" />
 
   <div class="feature-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选 id / 类型 / 分组" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选编号 / 类型 / 分组" @update:model-value="callbacks.onFilter" />
   </div>
   <UiObjectTable
     :columns="columns"
@@ -15,7 +15,7 @@
     @sort="callbacks.onSort"
     :selected-id="state.selectedFeatureId"
     :show-locate-action="false"
-    empty-text="没有匹配的 feature"
+    empty-text="没有匹配的地貌单元"
     :empty-action="filterEmptyAction"
     resizable-columns
     @select="callbacks.onSelect"
@@ -23,7 +23,7 @@
     @column-resize="callbacks.onColumnResize"
   />
 
-  <UiDetailGrid class-name="feature-panel-details" empty-text="未选中 feature" :rows="detailRows" />
+  <UiDetailGrid class-name="feature-panel-details" empty-text="未选中地貌单元" :rows="detailRows" />
 </template>
 
 <script setup>
@@ -53,7 +53,7 @@ const props = defineProps({
 });
 
 const sortOptions = Object.freeze([
-  {key: "cells", label: "cells"},
+  {key: "cells", label: "采样格"},
   {key: "area", label: "面积"},
   {key: "shorelineCells", label: "岸线"},
   {key: "flux", label: "补给"},
@@ -66,7 +66,7 @@ const columns = Object.freeze([
   {key: "id", label: "ID", align: "right", width: 56},
   {key: "typeLabel", label: "类型", width: 76},
   {key: "groupLabel", label: "分组", width: 96},
-  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
+  {key: "cells", label: "采样格", align: "right", format: value => formatNumber(value)},
   {key: "area", label: "面积", align: "right", format: value => formatAreaValue(value)},
   {key: "shorelineCells", label: "岸线", align: "right", format: value => formatNumber(value)},
   {key: "havenCells", label: "港湾", align: "right", format: value => formatNumber(value)}
@@ -84,14 +84,14 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedFeatureId));
 
 const summaryMetrics = computed(() => [
-  {label: "feature", value: formatNumber(metrics.value.total)},
+  {label: "地貌单元", value: formatNumber(metrics.value.total)},
   {label: "陆地", value: formatNumber(metrics.value.land)},
   {label: "水域", value: formatNumber(metrics.value.water)},
   {label: "湖泊", value: formatNumber(metrics.value.lakes)},
   {label: "海岸线段", value: formatNumber(metrics.value.coastlineSegments)},
   {label: "海岸长度", value: formatDistanceValue(metrics.value.coastlineLength)},
   {label: "湖岸长度", value: formatDistanceValue(metrics.value.lakeShoreLength)},
-  {label: "港湾 cells", value: formatNumber(metrics.value.havenCells)},
+  {label: "港湾采样格", value: formatNumber(metrics.value.havenCells)},
   {label: "泊位强度", value: formatNumber(metrics.value.harborScore)},
   {label: "异常引用", value: formatNumber(metrics.value.invalidReferences)}
 ]);
@@ -102,10 +102,10 @@ const detailRows = computed(() => selected.value ? [
   {label: "分组", value: selected.value.groupLabel},
   {label: "陆地", value: selected.value.land ? "是" : "否"},
   {label: "边界", value: selected.value.border ? "是" : "否"},
-  {label: "cells", value: formatNumber(selected.value.cells)},
+  {label: "采样格", value: formatNumber(selected.value.cells)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
-  {label: "岸线 cells", value: formatNumber(selected.value.shorelineCells)},
-  {label: "港湾 cells", value: formatNumber(selected.value.havenCells)},
+  {label: "岸线采样格", value: formatNumber(selected.value.shorelineCells)},
+  {label: "港湾采样格", value: formatNumber(selected.value.havenCells)},
   {label: "泊位强度", value: formatNumber(selected.value.harborScore)},
   {label: "高度 / 水位", value: formatNumber(selected.value.height)},
   {label: "补给", value: formatNumber(selected.value.flux)},

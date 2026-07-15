@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-15：对象术语、交互状态与恢复反馈统一
+
+- 完成权威任务第 59 项。普通界面明确区分“资源点 / 通用标记”“水体与地貌 / 湖泊 / 地貌单元”和“测量 / 测量对象”；控制面板、领域面板、图层、测量读数和导出提示同步使用术语表，内部 schema 与 API 字段名保持不变。
+- 新增共享 `UiStateBanner`。对象表格选中行现在同时提供蓝色 `is-selected`、`data-ui-state="selected"` 和 `aria-selected`；`UiActionDock` 使用琥珀色“编辑中”状态、`aria-pressed` 和统一关闭；高度变换与名称库导入使用紫色预览状态，高度预览新增“退出预览”并清理全部 GPU / 面板预览。
+- `UiActionDock` 接入统一 overlay registry。浏览器回归曾真实复现二级编辑面板固定 `z-index: 900`、被主面板拦截点击的问题；修正后编辑面板获得活动层级，关闭按钮和 Esc 均可退出。
+- 空态与异常态收口：23 个带筛选对象表格均有“清空筛选”；测量对象修正了无筛选结果时错误显示“开始测量”的旧逻辑；高度待派生提供基础 / 下游重算；孤儿备注明确说明仍可导出并可删除；文件操作失败写入稳定错误状态并提供“清除错误并重试”。
+- 新增 `docs/task-notes/ui-terminology-and-state-feedback.md`、`regress:ui-terminology-state` 和 `regress:ui-terminology-state-browser`。既有 `regress:control-ia`、`regress:action-ia`、`regress:selection-scroll-center`、`regress:height-brush`、`regress:map-import-diagnostics` 全部通过。
+- 生产构建完成 `1139 modules`，只保留既有大 chunk 警告。独立 Chrome 构建产物回归在 `1280×720` 验证三组术语、选中、编辑关闭、高度预览退出、筛选清除和无效地图导入错误恢复，控制台错误和页面异常均为零。
+- 本项达到最小验收后从活动权威清单移除；下一项转入第 60 项“多面板、可访问性与挂载性能审计门禁”。
+
 ## 2026-07-15：高度、军事与导出高复杂度面板分层
 
 - 完成权威任务第 58 项。高度面板首层保留启停编辑、笔刷动作、作用范围、全局微调和高度图导入；选区地形模板、多步骤程序、条件变换、模板库与 GPU 统计进入默认折叠的“高级地形程序与条件变换”。
