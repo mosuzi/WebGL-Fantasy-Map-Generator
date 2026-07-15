@@ -1,5 +1,17 @@
 # 开发历史
 
+## 2026-07-16：完成权威任务第 61 项——首都省份创建保护
+
+- 新增共享 `inspectStateCreation()`，根据目标 grid / pack cell 的省份归属查找未删除国家的首都；首都所在省份内无论点击首都还是普通 cell，都以 `capital-province-protected` 和明确国家 / 省份提示拒绝。
+- 画布新增与 `api.edit.states.add()` 从同一命令读取预检结果；命令 `apply` 也会再次校验，避免绕过 UI / API 预检直接写入非法国家。
+- `regress:state-lifecycle` 固定 3000 cells 地图验证首都 cell `578`、同省 cell `644` 均零数据 / 零历史变化；允许 cell `547` 仍创建国家 #18，并通过撤销 / 重做。语法检查和 `git diff --check` 同时通过。
+
+## 2026-07-16：登记权威任务第 61～63 项
+
+- 用户实测发现三个国家生命周期问题：可在既有国家首都所在省份创建新国家；新建国家无法通过着色笔刷扩张疆域；删除国家后列表仍保留人口为 0 的幽灵档案。
+- 只读排查确认三条直接原因：国家 seed 校验只检查陆地；国家笔刷把正常 `pointerup` 接到回滚、把 `pointercancel` 接到提交；国家删除仅写入 `removed=true`，而列表仍按 id 收集档案。
+- 三项冻结为第 61～63 项并按顺序独立提交；实现只覆盖首都省份保护、国家笔刷提交语义和国家档案移除，不扩展政治重生成或其它编辑器能力。
+
 ## 2026-07-15：湖泊出口与局部水陆修正
 
 - 完成权威任务第 50 项。湖泊面板新增出口河流编辑和局部水陆修正；UI 与 `api.edit.lakes.inspectOutlet / setOutlet`、`api.edit.features.inspectPatch / applyPatch` 共用预检、runtime action 和 edit command，没有引入整图侵蚀或完整海岸雕刻器。

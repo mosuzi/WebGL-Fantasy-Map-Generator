@@ -94,6 +94,7 @@
     "regress:feature-patch": "node --no-warnings ./tools/webgl-generator-feature-patch-regression.mjs",
     "regress:biome-assignment": "node --no-warnings ./tools/webgl-generator-biome-assignment-regression.mjs",
     "regress:visual-themes": "node --no-warnings ./tools/webgl-generator-visual-theme-regression.mjs",
+    "regress:state-lifecycle": "node --no-warnings ./tools/webgl-generator-state-lifecycle-regression.mjs",
     "regress:geojson-range": "node --no-warnings ./tools/webgl-generator-geojson-range-regression.mjs",
     "regress:geojson-range-qgis": "node --no-warnings ./tools/webgl-generator-geojson-range-qgis-regression.mjs",
     "regress:geojson-range-browser": "node --no-warnings ./tools/webgl-generator-geojson-range-browser-regression.mjs",

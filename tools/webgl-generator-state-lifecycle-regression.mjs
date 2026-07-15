@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {resolve} from "node:path";
+
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {createAddStateAtCellCommand, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
+
+const map = generatePlaceholderMap({seed: "state-lifecycle-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
+const history = new EditHistory();
+const protectedSample = findProtectedProvinceSample(map);
+const beforeRejected = snapshotStateCollections(map);
+
+for (const gridCell of [protectedSample.capitalGridCell, protectedSample.otherGridCell]) {
+  const inspection = inspectStateCreation(map, gridCell);
+  assert.equal(inspection.valid, false);
+  assert.equal(inspection.code, "capital-province-protected");
+  assert.equal(inspection.provinceId, protectedSample.provinceId);
+  assert.equal(inspection.protectedStateId, protectedSample.stateId);
+  const command = createAddStateAtCellCommand(gridCell);
+  assert.equal(command.isNoop({map}), true);
+  assert.match(command.getInspection().summary, /首都所在的省份/u);
+  assert.throws(() => command.apply({map}), /首都所在的省份/u, "直接 apply 也必须重新拒绝首都省份");
+}
+
+assert.deepEqual(snapshotStateCollections(map), beforeRejected, "拒绝路径不能修改国家、省份、城市或 cell 归属");
+assert.equal(history.getStats().undo, 0, "拒绝路径不能写入编辑历史");
+
+const allowedGridCell = findAllowedGridCell(map);
+const allowedInspection = inspectStateCreation(map, allowedGridCell);
+assert.equal(allowedInspection.valid, true);
+const beforeAllowed = snapshotStateCollections(map);
+const addCommand = createAddStateAtCellCommand(allowedGridCell);
+assert.equal(addCommand.isNoop({map}), false);
+history.execute(addCommand, {map});
+const created = addCommand.getResult();
+assert.ok(map.politics.states[created.stateId], "允许区域必须仍可创建国家");
+assert.equal(history.getStats().undo, 1);
+history.undo({map});
+assert.deepEqual(snapshotStateCollections(map), beforeAllowed, "撤销必须完整恢复允许创建前的状态");
+history.redo({map});
+assert.ok(map.politics.states[created.stateId], "重做必须恢复新建国家");
+
+const appSource = readFileSync(resolve("app/webgl-generator/src/runtime/app.js"), "utf8");
+assert.equal((appSource.match(/getInspection\?\.\(\)\?\.summary/g) || []).length, 2, "画布与 API 新增必须共用命令预检提示");
+
+console.log(JSON.stringify({
+  ok: true,
+  protected: protectedSample,
+  allowed: {gridCell: allowedGridCell, provinceId: allowedInspection.provinceId},
+  created,
+  history: history.getStats()
+}, null, 2));
+
+function findProtectedProvinceSample(targetMap) {
+  for (const state of targetMap.politics.states || []) {
+    const stateId = Number(state?.i ?? state?.id);
+    if (!state || state.removed || !stateId) continue;
+    const city = (targetMap.settlements.cities || []).find(item => item?.burgId === state.capital);
+    const provinceId = Number(city?.province || targetMap.pack.burgs?.[state.capital]?.province || 0);
+    if (!provinceId) continue;
+    const cells = Array.from(targetMap.grid.cells.i).filter(gridCell => targetMap.grid.cells.h[gridCell] >= 20 && Number(targetMap.grid.cells.province?.[gridCell]) === provinceId);
+    const capitalGridCell = Number(city?.cell ?? state.gridCenter);
+    const otherGridCell = cells.find(gridCell => gridCell !== capitalGridCell);
+    if (cells.includes(capitalGridCell) && Number.isInteger(otherGridCell)) return {stateId, provinceId, capitalGridCell, otherGridCell};
+  }
+  throw new Error("固定地图找不到含两个陆地 cells 的首都省份");
+}
+
+function findAllowedGridCell(targetMap) {
+  for (const gridCell of targetMap.grid.cells.i) {
+    if (inspectStateCreation(targetMap, gridCell).valid) return gridCell;
+  }
+  throw new Error("固定地图找不到允许创建国家的陆地 cell");
+}
+
+function snapshotStateCollections(targetMap) {
+  return clone({
+    states: targetMap.politics.states,
+    packStates: targetMap.pack.states,
+    provinces: targetMap.politics.provinces,
+    packProvinces: targetMap.pack.provinces,
+    gridState: targetMap.grid.cells.state,
+    gridProvince: targetMap.grid.cells.province,
+    packState: targetMap.pack.cells.state,
+    packProvince: targetMap.pack.cells.province,
+    burgs: targetMap.pack.burgs,
+    cities: targetMap.settlements.cities,
+    stale: targetMap.metadata.derivedStale
+  });
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}

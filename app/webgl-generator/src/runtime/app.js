@@ -6388,7 +6388,7 @@ function addStateViaApi(state, documentRef, gridCell) {
   const targetGridCell = normalizeApiInteger(gridCell, "grid cell");
   const command = createAddStateAtCellCommand(targetGridCell);
   const result = executeEditCommand(state, documentRef, command, {
-    noopStatus: "目标 grid cell 无效或不是陆地。",
+    noopStatus: current => current.getInspection?.()?.summary || "目标 grid cell 无效或不能创建国家。",
     status: command => {
       const created = command.getResult?.();
       return Number.isInteger(created?.stateId)
@@ -9604,6 +9604,7 @@ function bindStateEditing(canvas, state, documentRef) {
       const command = createAddStateAtCellCommand(pick.gridCell);
       const execution = executeEditCommand(state, canvas.ownerDocument || document, command, {
         context: {map: state.map},
+        noopStatus: current => current.getInspection?.()?.summary || "目标 grid cell 无效或不能创建国家。",
         refresh: refreshAfterStateEdit,
         preparePanelRefresh: (targetState, executed, result) => {
           targetState.stateEdit.addMode = false;
@@ -9613,7 +9614,8 @@ function bindStateEditing(canvas, state, documentRef) {
           const stateObject = resolveObject(targetState.map, {kind: OBJECT_KIND.STATE, id: result.stateId}) || {kind: OBJECT_KIND.STATE, id: result.stateId};
           targetState.panels.state?.setTargetStateId(result.stateId);
           targetState.selectionStore.setSelection({object: stateObject});
-        }
+        },
+        throwOnError: false
       });
       if (!execution.executed) return;
       completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.STATE_ADD, {command: execution.command});

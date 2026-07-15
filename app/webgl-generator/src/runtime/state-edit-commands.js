@@ -246,6 +246,7 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
   const targetGridCell = normalizeGridCell(gridCell);
   let snapshot = null;
   let result = null;
+  let inspection = null;
   return {
     label,
     domain: "state",
@@ -254,6 +255,8 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
       affected: newObjectAffected("state")
     },
     apply(context) {
+      inspection = inspectStateCreation(context.map, targetGridCell);
+      if (!inspection.valid) throw new Error(inspection.summary);
       snapshot ??= captureStateCollectionSnapshot(context.map);
       result = addStateAtGridCell(context.map, targetGridCell);
       this.effects.affected = objectAffected("state", result.stateId);
@@ -263,12 +266,42 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
       restoreStateCollectionSnapshot(context.map, snapshot);
     },
     isNoop(context) {
-      return !isValidStateSeedCell(context.map, targetGridCell);
+      inspection = inspectStateCreation(context.map, targetGridCell);
+      return !inspection.valid;
+    },
+    getInspection() {
+      return inspection;
     },
     getResult() {
       return result;
     }
   };
+}
+
+export function inspectStateCreation(map, gridCell) {
+  const targetGridCell = normalizeGridCell(gridCell);
+  if (targetGridCell < 0 || targetGridCell >= (map?.grid?.cells?.i?.length || 0)) {
+    return stateCreationInspection(false, "grid-cell-invalid", "目标 grid cell 无效。", {gridCell: targetGridCell});
+  }
+  if (!isGridLandCell(map, targetGridCell)) {
+    return stateCreationInspection(false, "grid-cell-water", "目标 grid cell 不是陆地。", {gridCell: targetGridCell});
+  }
+  const packCell = choosePackCellForGridCell(map, targetGridCell);
+  if (!Number.isInteger(packCell)) {
+    return stateCreationInspection(false, "pack-cell-missing", "目标 grid cell 没有可用的陆地 pack cell。", {gridCell: targetGridCell});
+  }
+  const provinceId = normalizeProvinceId(map?.grid?.cells?.province?.[targetGridCell] || map?.pack?.cells?.province?.[packCell]);
+  const protectedCapital = findCapitalStateInProvince(map, provinceId);
+  if (protectedCapital) {
+    const name = protectedCapital.state.fullName || protectedCapital.state.name || `国家 #${protectedCapital.stateId}`;
+    return stateCreationInspection(false, "capital-province-protected", `不能在${name}首都所在的省份 #${provinceId} 创建国家。`, {
+      gridCell: targetGridCell,
+      packCell,
+      provinceId,
+      protectedStateId: protectedCapital.stateId
+    });
+  }
+  return stateCreationInspection(true, "ok", "可以在目标 cell 创建国家。", {gridCell: targetGridCell, packCell, provinceId});
 }
 
 export function createDeleteStateCommand(stateId, {label = "删除国家"} = {}) {
@@ -380,8 +413,9 @@ function writeStateNameSnapshot(map, stateId, snapshot) {
 }
 
 function addStateAtGridCell(map, gridCell) {
-  const packCell = choosePackCellForGridCell(map, gridCell);
-  if (!Number.isInteger(packCell)) throw new Error("无法在当前 cell 创建国家");
+  const inspection = inspectStateCreation(map, gridCell);
+  if (!inspection.valid) throw new Error(inspection.summary);
+  const packCell = inspection.packCell;
   const stateId = nextPoliticalId(map?.politics?.states || map?.pack?.states || []);
   const provinceId = nextPoliticalId(map?.politics?.provinces || map?.pack?.provinces || []);
   const point = map.pack?.cells?.p?.[packCell] || map.grid?.points?.[map.grid.cells.p?.[gridCell]] || [0, 0];
@@ -1322,8 +1356,21 @@ function restoreStateCollectionSnapshot(map, snapshot) {
   restoreDerivedStale(map, snapshot.stale);
 }
 
-function isValidStateSeedCell(map, gridCell) {
-  return Number.isInteger(gridCell) && gridCell >= 0 && isGridLandCell(map, gridCell) && Number.isInteger(choosePackCellForGridCell(map, gridCell));
+function stateCreationInspection(valid, code, summary, details = {}) {
+  return {valid, code, summary, ...details};
+}
+
+function findCapitalStateInProvince(map, provinceId) {
+  if (!provinceId) return null;
+  for (const state of map?.politics?.states || []) {
+    const stateId = normalizeStateId(state?.i ?? state?.id);
+    if (!state || state.removed || stateId <= 0) continue;
+    const city = findCityByBurgId(map, state.capital);
+    const burg = map?.pack?.burgs?.[state.capital];
+    const capitalProvinceId = normalizeProvinceId(city?.province || burg?.province || map?.pack?.cells?.province?.[burg?.cell]);
+    if (capitalProvinceId === provinceId) return {state, stateId};
+  }
+  return null;
 }
 
 function normalizeGridCell(value) {
