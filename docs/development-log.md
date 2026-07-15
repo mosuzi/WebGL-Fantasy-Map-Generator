@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-16：国家生命周期第 61～63 项集中验收
+
+- 代码门禁通过：`regress:state-lifecycle`、`regress:map-migration`、`regress:delete-impact`、`regress:api-action-convergence`、`regress:api-edit-coverage`、`pnpm run build:app` 和 `git diff --check`；生产构建完成 1145 个模块，仅保留既有 Vite 大 chunk 警告。
+- 同一 Chrome 的临时验收标签页复现完整链路：点击魏共和国首都所在省份后显示“不能在魏共和国首都所在的省份 #75 创建国家”，国家列表保持 21 条且撤销禁用；在允许区域新建“北海王国”后列表增至 22 条、目标和 selection 指向新国家。
+- 新国家进入国家编辑后单次刷涂使影响格 `6 -> 7`、人口 `15.7 万 -> 31.2 万`，证明正常 `pointerup` 已提交疆域变化；随后退出编辑并删除该国，列表 `22 -> 21`，名称与 id 均不再出现，目标回到中立且撤销可用。
+- 原用户标签页连续两次未返回 DOM，但本地 `5410` 服务仍为 HTTP 200；按 Chrome 控制排障约定未重启 Chrome 或扩展，改用同一 Chrome 的临时标签页验收并在结束后关闭，原用户标签页未改动。浏览器 error 级日志只有一条经 React DevTools `installHook.js` 输出的既有 `main-thread-long-task` health 告警，没有出现本次三项操作失败。
+- 提前运行的 `regress:object-entries` 在旧构建自动生成尚未结束时与测试主动生成竞争，以 `operation_busy` 停止且未进入对象断言；本批次未为该准备阶段竞态扩大范围，最终国家列表行为由专项回归与真实页面链路覆盖。
+
 ## 2026-07-16：完成权威任务第 63 项——删除国家档案彻底移除
 
 - 国家删除命令在清空疆域、城市和省份归属后，直接把 `politics.states[id]` 与独立 `pack.states[id]` 槽位置空；数组不执行 splice，不重排其它国家 ID，完整集合快照继续支持撤销 / 重做。
