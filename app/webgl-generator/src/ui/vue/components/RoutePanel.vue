@@ -114,6 +114,7 @@ const routeListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "◉", disabled: !selectedRouteRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "locate", label: "定位路线", icon: "⌖", disabled: !selected.value},
+  {key: "delete-selected", label: `批量删除选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "删", disabled: !selectedRouteRows.value.length},
   {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
   {key: "regenerate", label: "重算道路", icon: "↻"}
 ]);
@@ -208,6 +209,7 @@ function handleRouteAction(key) {
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRouteRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "regenerate") props.callbacks.onRegenerateRoutes?.();
+  if (key === "delete-selected") props.callbacks.onDeleteMany?.(selectedRouteRows.value.map(row => row.id));
   if (!selected.value) return;
   if (key === "locate") props.callbacks.onLocate?.(selected.value);
   if (key === "delete") props.callbacks.onDelete?.(selected.value);

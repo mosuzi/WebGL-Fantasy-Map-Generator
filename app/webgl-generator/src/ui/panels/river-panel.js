@@ -68,6 +68,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     onRename: (riverId, name) => callbacks.onRename?.(riverId, name),
     onRenameVisibleFromNamebase: riverIds => callbacks.onRenameVisibleFromNamebase?.(riverIds),
     onDelete: riverId => callbacks.onDelete?.(riverId),
+    onDeleteMany: riverIds => callbacks.onDeleteMany?.(riverIds),
     onSetWidthFactor: (riverId, widthFactor) => callbacks.onSetWidthFactor?.(riverId, widthFactor),
     onNoteChange: (riverId, body) => callbacks.onNoteChange?.(riverId, body),
     onUndo: () => callbacks.onUndo?.(),

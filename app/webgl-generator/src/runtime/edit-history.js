@@ -127,6 +127,18 @@ export function validateEditCommandContract(command) {
   return command;
 }
 
+export function applyNestedEditCommand(command, context) {
+  validateEditCommandContract(command);
+  command.apply(context);
+  return command;
+}
+
+export function revertNestedEditCommand(command, context) {
+  validateEditCommandContract(command);
+  command.revert(context);
+  return command;
+}
+
 function validateEditCommandEffects(effects) {
   if (!effects || typeof effects !== "object" || Array.isArray(effects)) {
     throw new Error("编辑命令 effects 必须是对象");

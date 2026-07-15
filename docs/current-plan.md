@@ -49,41 +49,36 @@
 
 本节是当前唯一的活动任务清单。上一波已经明确验收通过的编辑器、导出、政治面、视觉主题第一阶段、军事重生成、交战区一致性和列表滚动居中任务均已移出；它们的实现证据继续保留在下方执行记录、专题文档和 `docs/development-log.md`，不得重新计为待办。
 
-下一波继续推进从 FOLLOWUPS 提升的剩余六项任务。当前 API 基线是：`window.webglGeneratorApi` 已覆盖 11 个命名空间、162 个公开方法和 72 个编辑方法；权威任务第 28～34 项已经完成完整 API 系统，第 35 项已经完成 22 项快捷键、23 组按键、统一 registry、键盘路由和悬停提示，第 36 项已经完成 14 个画布模式的统一生命周期与预览回滚，第 37 项已经按方案 B 统一 Selection 面板分发，第 38 项已经完成多步骤选区模板与用户模板交换。第 39～44 项已从 FOLLOWUPS 正式移入本清单，不再作为阶段外备忘。
+下一波继续推进从 FOLLOWUPS 提升的剩余五项任务。当前 API 基线是：`window.webglGeneratorApi` 已覆盖 11 个命名空间、162 个公开方法和 72 个编辑方法；权威任务第 28～34 项已经完成完整 API 系统，第 35 项已经完成 22 项快捷键、23 组按键、统一 registry、键盘路由和悬停提示，第 36 项已经完成 14 个画布模式的统一生命周期与预览回滚，第 37 项已经按方案 B 统一 Selection 面板分发，第 38 项已经完成多步骤选区模板与用户模板交换，第 39 项已经完成统一删除预检、高影响确认和路线 / 河流 / 湖泊批量事务。第 40～44 项继续作为当前活动清单。
 
-权威任务第 28～38 项已达到最小验收并移出活动清单；API 完成证据见 `docs/task-notes/console-api-capability-inventory.md`、`docs/task-notes/api-data-compatibility-matrix.md`、`docs/task-notes/console-api-stability-contract.md` 和 `regress:api-suite`；快捷键完成证据见 `docs/task-notes/keyboard-shortcuts.md`、`regress:shortcuts`、`regress:shortcuts-browser` 与浏览器报告；画布模式完成证据见 `docs/task-notes/canvas-tool-mode-manager.md` 和 `regress:canvas-tools`；Selection 面板策略完成证据见 `docs/task-notes/selection-panel-policy.md` 和 `regress:selection-panel-policy`；选区地形模板完成证据见 `docs/task-notes/height-terrain-template-programs.md` 和 `regress:height-template-programs`。
+权威任务第 28～39 项已达到最小验收并移出活动清单；API 完成证据见 `docs/task-notes/console-api-capability-inventory.md`、`docs/task-notes/api-data-compatibility-matrix.md`、`docs/task-notes/console-api-stability-contract.md` 和 `regress:api-suite`；快捷键完成证据见 `docs/task-notes/keyboard-shortcuts.md`、`regress:shortcuts`、`regress:shortcuts-browser` 与浏览器报告；画布模式完成证据见 `docs/task-notes/canvas-tool-mode-manager.md` 和 `regress:canvas-tools`；Selection 面板策略完成证据见 `docs/task-notes/selection-panel-policy.md` 和 `regress:selection-panel-policy`；选区地形模板完成证据见 `docs/task-notes/height-terrain-template-programs.md` 和 `regress:height-template-programs`；删除预检完成证据见 `docs/task-notes/delete-impact-and-batch.md` 和 `regress:delete-impact`。
 
-1. 破坏性操作确认、依赖预览与批量删除。`权威任务第 39 项，当前执行项；来自 FOLLOWUPS`
-   - 当前进度：河流等安全删除已完成数据一致性和撤销语义，但没有统一二次确认、删除前依赖数量预览和批量删除；不同对象删除的关联影响仍由各自命令维护。
-   - 剩余实现：为已有安全删除命令建立统一删除预检结果，展示将删除对象、级联对象和关键关联数量；高影响操作二次确认，批量删除按对象领域复用现有安全命令或新增事务命令，不用循环 DOM 点击拼接语义。
-   - 验收：取消确认时 checksum 与历史不变；确认后数据、备注、选择、高亮、索引、导出和 stale 状态一致，批量操作以一个事务撤销 / 重做；河流样本明确显示支流数量，混合无效 id 返回结构化跳过 / 失败摘要。
-
-2. 路线绘制、河流新增与湖泊开挖。`权威任务第 40 项，来自 FOLLOWUPS`
+1. 路线绘制、河流新增与湖泊开挖。`权威任务第 40 项，当前执行项；来自 FOLLOWUPS`
    - 当前进度：三类对象已有读取、编辑和安全删除能力，但缺少正式创建器；它们分别涉及路线拓扑、河流水文和湖盆 / feature 结构，不能复用一个粗放的通用新增命令。
    - 剩余实现：在第 36 项 mode manager 上分别设计路线绘制、河流新增和湖泊开挖的预检、画布交互、数据命令、派生刷新、撤销 / 重做和 API action；每类先完成数据约束与最小闭环，再进入下一类。
    - 验收：每类对象均能从 UI 与稳定 API / 公共 action 创建并被管理面板、拾取、定位、导出读取；撤销恢复创建前完整状态，重做复现；路线连通、河流上下游 / 汇流和湖泊 feature / 岸线各有专项坏样本拒绝测试。
 
-3. Zone、通用标记与独立备注创建 / 删除闭环。`权威任务第 41 项，来自 FOLLOWUPS`
+2. Zone、通用标记与独立备注创建 / 删除闭环。`权威任务第 41 项，来自 FOLLOWUPS`
    - 当前进度：资源 marker、对象备注和已有 Zone 已有部分编辑能力，但通用 marker 创建、独立备注新增、Zone 新增 / 删除仍缺少完整产品与数据约束。
    - 剩余实现：定义三类对象的身份、归属、位置、空值和孤儿规则，补齐 Zone 新增 / 删除、非资源通用 marker 创建和不依附现有对象的独立备注创建；全部进入命令、API、选择、高亮、面板和导入导出体系。
    - 验收：UI 与 API 共路径创建后可选择、定位、编辑、导出并随完整地图保存 / 恢复；删除与撤销 / 重做维护关联引用和 metadata；无归属、坏坐标、重复 id、孤儿备注和非法 Zone cells 均有明确拒绝或迁移策略。
 
-4. GEO、Cells GEO、高度图统一诊断与 schema 演进。`权威任务第 42 项，来自 FOLLOWUPS`
+3. GEO、Cells GEO、高度图统一诊断与 schema 演进。`权威任务第 42 项，来自 FOLLOWUPS`
    - 当前进度：完整地图文件 / API 已有结构化导入诊断和 v1→v2 迁移；普通 GEO、原版 Cells GEO 和高度图图片的解析上下文、几何样本、图像元数据及未来 schema 步骤尚未统一进入诊断 / 迁移契约。
    - 剩余实现：建立共享诊断外壳与分类型详情，统一 code、stage、suggestion、来源摘要和隐私边界，同时保留 GEO 几何、Cells 字段和图片元数据的专属信息；把 schema 迁移收束为可注册、逐版本、可测试的链式步骤和未来版本拒绝策略。
    - 验收：三类导入的成功、格式错误、字段错误、几何 / 图像错误和运行时错误均返回可导出的中文诊断且不包含原文件正文；旧 v1、当前 v2、模拟下一版本迁移链和未知未来版本门禁通过，失败不破坏当前地图。
 
-5. 政治面外部 GIS 互操作与 100k 浏览器导出验证。`权威任务第 43 项，来自 FOLLOWUPS`
+4. 政治面外部 GIS 互操作与 100k 浏览器导出验证。`权威任务第 43 项，来自 FOLLOWUPS`
    - 当前进度：dissolve 已有纯代码结构 / 拓扑兼容门禁和固定 100k Node 性能门禁；尚缺 QGIS / geojson.io 实际读取、100k 浏览器主线程占用和真实下载事件证据。
    - 剩余实现：用固定 100k 地图在真实浏览器执行普通 / dissolve 政治面导出，记录主线程长任务、导出耗时、文件大小、下载事件与页面恢复；分别在 QGIS 和 geojson.io 打开代表性产物并记录可读性、几何告警和属性保留。
    - 验收：浏览器导出成功且页面恢复交互，下载文件可解析，主线程与 health 数据如实记录；QGIS / geojson.io 均能读取国家、省份和地区层，dissolved、bbox、参与国等关键属性保留。若外部工具报告问题，必须形成可复现样本并修复或明确兼容边界。
 
-6. PNG 任意裁剪与细粒度 overlay 选择。`权威任务第 44 项，来自 FOLLOWUPS`
+5. PNG 任意裁剪与细粒度 overlay 选择。`权威任务第 44 项，来自 FOLLOWUPS`
    - 当前进度：PNG 已支持 1x～4x、整体地图标注开关和图外透明背景，尚不能选择任意裁剪范围，也不能独立控制标签、图例、比例尺、军事图标、测量等 overlay 类别。
    - 剩余实现：定义当前视口、地图全幅、矩形选择和显式像素 / 世界坐标裁剪契约；把 overlay 合成拆为稳定白名单选项，UI 与 API 使用同一规范化参数和导出流水线，默认行为保持兼容。
    - 验收：裁剪尺寸、世界边界与像素结果精确匹配，越界 / 空范围明确拒绝；各 overlay 可独立开关且组合结果可预测，默认参数输出保持现状。专项图片断言、API 回归、生产构建和真实浏览器文件级抽查通过。
 
-执行顺序固定为 `39 -> 40 -> 41 -> 42 -> 43 -> 44`。第 38 项已完成并移出活动清单。每项达到本节最小验收后立即进入下一项；新发现但不影响本项验收的增强只记入 `FOLLOWUPS.md`，不扩展完成标准。
+执行顺序固定为 `40 -> 41 -> 42 -> 43 -> 44`。第 39 项已完成并移出活动清单。每项达到本节最小验收后立即进入下一项；新发现但不影响本项验收的增强只记入 `FOLLOWUPS.md`，不扩展完成标准。
 
 ### 上一波执行记录（非活动任务清单）
 

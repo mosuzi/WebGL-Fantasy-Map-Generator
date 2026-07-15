@@ -71,6 +71,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onNoteChange: (routeId, body) => callbacks.onNoteChange?.(routeId, body),
     onDelete: row => callbacks.onDelete?.(routeObject(row)),
+    onDeleteMany: routeIds => callbacks.onDeleteMany?.(routeIds),
     onRegenerateRoutes: () => callbacks.onRegenerateRoutes?.(),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()

@@ -88,6 +88,7 @@ import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
 import {createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
+import {createDeleteBatchCommand, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -819,13 +820,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_DELETE, "panel-toggle");
     },
     onDeleteState: stateId => {
-      const command = createDeleteStateCommand(stateId);
-      const result = executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        refresh: refreshAfterStateEdit,
-        preparePanelRefresh: targetState => {
-          targetState.selectionStore.clear();
-          targetState.panels.state.setTargetStateId(0);
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.STATE,
+        ids: [stateId],
+        createCommand: id => createDeleteStateCommand(id),
+        label: "删除国家",
+        executeOptions: {
+          refresh: refreshAfterStateEdit,
+          preparePanelRefresh: targetState => {
+            targetState.selectionStore.clear();
+            targetState.panels.state.setTargetStateId(0);
+          }
         }
       });
       if (!result.executed) return;
@@ -948,13 +953,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_DELETE, "panel-toggle");
     },
     onDeleteProvince: provinceId => {
-      const command = createDeleteProvinceCommand(provinceId);
-      const result = executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        refresh: refreshAfterProvinceEdit,
-        preparePanelRefresh: targetState => {
-          targetState.selectionStore.clear();
-          provincePanel.setSelectedProvinceId(0);
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.PROVINCE,
+        ids: [provinceId],
+        createCommand: id => createDeleteProvinceCommand(id),
+        label: "删除省份",
+        executeOptions: {
+          refresh: refreshAfterProvinceEdit,
+          preparePanelRefresh: targetState => {
+            targetState.selectionStore.clear();
+            provincePanel.setSelectedProvinceId(0);
+          }
         }
       });
       if (!result.executed) return;
@@ -1056,12 +1065,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE, "panel-toggle");
     },
     onDeleteCity: cityId => {
-      const command = createDeleteCityCommand(cityId);
-      executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        preparePanelRefresh: targetState => {
-          targetState.selectionStore.clear();
-          cityPanel.setSelectedCityId(null);
+      executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.CITY,
+        ids: [cityId],
+        createCommand: id => createDeleteCityCommand(id),
+        label: "删除城市",
+        executeOptions: {
+          preparePanelRefresh: targetState => {
+            targetState.selectionStore.clear();
+            cityPanel.setSelectedCityId(null);
+          }
         }
       });
       updateEditingInteractionLock(state, documentRef);
@@ -1134,11 +1147,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {
-      const command = createDeleteCultureCommand(object.id);
-      const context = {map: state.map};
-      const result = executeEditCommand(state, documentRef, command, {
-        context,
-        noopStatus: "文化不存在或已删除。"
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.CULTURE,
+        ids: [object.id],
+        createCommand: id => createDeleteCultureCommand(id),
+        label: "删除文化",
+        executeOptions: {noopStatus: "文化不存在或已删除。"}
       });
       if (result.executed) {
         setFileOperationStatus(documentRef, `已删除文化 ${object.name || `#${object.id}`} 并清除相关归属。`);
@@ -1218,11 +1232,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {
-      const command = createDeleteReligionCommand(object.id);
-      const context = {map: state.map};
-      const result = executeEditCommand(state, documentRef, command, {
-        context,
-        noopStatus: "宗教不存在或已删除。"
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.RELIGION,
+        ids: [object.id],
+        createCommand: id => createDeleteReligionCommand(id),
+        label: "删除宗教",
+        executeOptions: {noopStatus: "宗教不存在或已删除。"}
       });
       if (result.executed) {
         setFileOperationStatus(documentRef, `已删除宗教 ${object.name || `#${object.id}`} 并清除相关归属。`);
@@ -1480,14 +1495,24 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: object => {
-      const context = {map: state.map};
-      const command = createDeleteRouteCommand(object.id);
-      const result = executeEditCommand(state, documentRef, command, {
-        context,
-        noopStatus: "路线不存在或已被删除。",
-        status: `已删除路线 #${object.id}。`
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.ROUTE,
+        ids: [object.id],
+        createCommand: id => createDeleteRouteCommand(id),
+        label: "删除路线"
       });
       updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
+    onDeleteMany: routeIds => {
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.ROUTE,
+        ids: routeIds,
+        createCommand: id => createDeleteRouteCommand(id),
+        label: "批量删除路线"
+      });
+      updateEditingInteractionLock(state, documentRef);
+      return result;
     },
     onRegenerateRoutes: () => {
       const result = regenerateMapAttribute(state, "routes", documentRef);
@@ -1766,15 +1791,21 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: riverId => {
-      const command = createDeleteRiverCommand(riverId);
-      const result = executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        status: executed => {
-          const removed = executed.getResult?.().removed || 0;
-          return `已删除河流 #${riverId} 及其支流，共 ${removed} 条。`;
-        },
-        noopStatus: "河流不存在，未执行删除。",
-        throwOnError: false
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.RIVER,
+        ids: [riverId],
+        createCommand: id => createDeleteRiverCommand(id),
+        label: "删除河流"
+      });
+      updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
+    onDeleteMany: riverIds => {
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.RIVER,
+        ids: riverIds,
+        createCommand: id => createDeleteRiverCommand(id),
+        label: "批量删除河流"
       });
       updateEditingInteractionLock(state, documentRef);
       return result;
@@ -1836,15 +1867,21 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: lakeId => {
-      const command = createDeleteLakeCommand(lakeId);
-      const result = executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        status: executed => {
-          const filled = executed.getResult?.().packCells || 0;
-          return `已填平并删除湖泊 #${lakeId}，处理 ${filled} 个 pack cells。`;
-        },
-        noopStatus: "湖泊不存在，未执行删除。",
-        throwOnError: false
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.LAKE,
+        ids: [lakeId],
+        createCommand: id => createDeleteLakeCommand(id),
+        label: "填平并删除湖泊"
+      });
+      updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
+    onDeleteMany: lakeIds => {
+      const result = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.LAKE,
+        ids: lakeIds,
+        createCommand: id => createDeleteLakeCommand(id),
+        label: "批量填平并删除湖泊"
       });
       updateEditingInteractionLock(state, documentRef);
       return result;
@@ -5053,6 +5090,33 @@ function handleSelectionPanel(state, selection, editingObject, context) {
 
 function refreshAfterEdit(state, commandOrEffects) {
   state.editRefreshScheduler.run(commandOrEffects);
+}
+
+function executeDeleteWithPreflight(state, documentRef, {kind, ids, createCommand, label, executeOptions = {}}) {
+  const preview = inspectDeleteImpact(state.map, kind, ids);
+  if (!preview.valid) {
+    setFileOperationStatus(documentRef, preview.summary);
+    return {executed: false, cancelled: false, preview, result: null};
+  }
+  if (preview.requiresConfirm) {
+    const confirmed = requestDeleteConfirmation(preview, message => documentRef.defaultView?.confirm?.(message));
+    if (!confirmed) {
+      setFileOperationStatus(documentRef, `已取消：${preview.summary}`);
+      return {executed: false, cancelled: true, preview, result: null};
+    }
+  }
+  const command = createDeleteBatchCommand({kind, ids, createCommand, label});
+  const execution = executeEditCommand(state, documentRef, command, {
+    ...executeOptions,
+    context: {map: state.map},
+    status: executeOptions.status || (executed => {
+      const result = executed.getResult?.();
+      return `已完成删除：${result?.deleted || 0} 个对象，跳过 ${result?.skipped?.length || 0} 项。`;
+    }),
+    noopStatus: executeOptions.noopStatus || "没有可删除的对象。",
+    throwOnError: false
+  });
+  return {executed: execution.executed, cancelled: false, preview, result: command.getResult?.() || null, execution};
 }
 
 function executeEditCommand(state, documentRef, command, options = {}) {

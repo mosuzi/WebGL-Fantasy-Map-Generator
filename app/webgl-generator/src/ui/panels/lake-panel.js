@@ -67,6 +67,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     onRename: (lakeId, name) => callbacks.onRename?.(lakeId, name),
     onRenameVisibleFromNamebase: lakeIds => callbacks.onRenameVisibleFromNamebase?.(lakeIds),
     onDelete: lakeId => callbacks.onDelete?.(lakeId),
+    onDeleteMany: lakeIds => callbacks.onDeleteMany?.(lakeIds),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
