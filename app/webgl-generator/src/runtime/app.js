@@ -70,7 +70,7 @@ import {measurementHighlightObject, measurementShapeClass} from "./measurement-h
 import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
-import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-regeneration-variation.js";
+import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMirrors} from "./military-regeneration-variation.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
@@ -7294,6 +7294,7 @@ function regenerateMilitary(state, documentRef) {
     attempts += 1;
     const attemptSeed = attempts === 1 ? seed : `${seed}:retry:${attempts}`;
     map.military = buildMilitary(map.pack, {...map.options, seed: attemptSeed});
+    syncMilitaryStateMirrors(map);
     variation = compareMilitaryVariation(beforeSnapshot, snapshotMilitaryVariation(map));
   } while (!variation.changed && attempts < 6);
   map.military.events = archivedEvents;

@@ -5,7 +5,7 @@ import {readFile} from "node:fs/promises";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {buildMilitary} from "../app/webgl-generator/src/generator/military.js";
 import {collectionAffected, summarizeAffectedTargets, systemAffected} from "../app/webgl-generator/src/runtime/edit-command-effects.js";
-import {compareMilitaryVariation, snapshotMilitaryVariation} from "../app/webgl-generator/src/runtime/military-regeneration-variation.js";
+import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMirrors} from "../app/webgl-generator/src/runtime/military-regeneration-variation.js";
 
 const map = generatePlaceholderMap({
   seed: "military-regeneration-regression",
@@ -48,6 +48,24 @@ assert(variation.changed, "军事重生成前后快照完全同构");
 assert(variation.changedRegiments > 0, "军事重生成没有改变任何军团");
 assert(variation.troopChanges + variation.compositionChanges + variation.statusChanges + variation.positionChanges + variation.orderChanges > 0, "军事重生成没有产生可观察变化");
 
+const restoredMap = structuredClone(map);
+restoredMap.politics.states = restoredMap.pack.states.map(state => ({...structuredClone(state), military: []}));
+assert.notStrictEqual(restoredMap.pack.states, restoredMap.politics.states, "序列化回归样本没有断开国家数组引用");
+assert.equal(restoredMap.politics.states.flatMap(state => state?.military || []).length, 0, "序列化回归样本未建立空军事镜像");
+restoredMap.military = buildMilitary(restoredMap.pack, {...restoredMap.options, seed: `${restoredMap.options.seed}:regenerate-military:restored`});
+const restoredRegiments = restoredMap.pack.states.flatMap(state => state?.military || []);
+assert(restoredRegiments.length > 0, "序列化回归样本没有在 pack 侧重建军团");
+const syncedStates = syncMilitaryStateMirrors(restoredMap);
+const mirroredRegiments = restoredMap.politics.states.flatMap(state => state?.military || []);
+assert(syncedStates > 0, "军事重生成没有同步断开引用的 politics 国家镜像");
+assert.equal(mirroredRegiments.length, restoredRegiments.length, "politics 国家镜像没有获得重建后的军团");
+for (const politicsState of restoredMap.politics.states) {
+  const packState = restoredMap.pack.states.find(state => Number(state?.i) === Number(politicsState?.i));
+  if (!packState) continue;
+  assert.strictEqual(politicsState.military, packState.military, `国家 ${politicsState.i} 的军团集合没有恢复共享引用`);
+  assert.strictEqual(politicsState.militaryPolicy, packState.militaryPolicy, `国家 ${politicsState.i} 的军事策略没有恢复共享引用`);
+}
+
 const regiments = map.pack.states.flatMap(item => item?.military || []);
 const affected = systemAffected("military", collectionAffected("military", regiments));
 const affectedSummary = summarizeAffectedTargets(affected);
@@ -70,6 +88,7 @@ assert.match(militaryBlock, /archiveReason: "military-regeneration"[\s\S]*map\.m
 assert.match(militaryBlock, /preservedBattleEvents: archivedEvents\.length/, "军事结果没有返回保留战报数");
 assert.match(militaryBlock, /regenerationSalt: salt/, "军事结果没有返回扰动编号");
 assert.match(militaryBlock, /attempts < 6/, "军事重生成没有在同构结果下自动更换扰动重试");
+assert.match(militaryBlock, /syncMilitaryStateMirrors\(map\)/, "军事重生成没有同步序列化后断开的国家军事镜像");
 assert.match(militaryBlock, /variation,/, "军事结果没有返回实际变化摘要");
 assert.match(militaryBlock, /\["point-layers", "line-layers", "labels", "object-panels", "object-index"\]/, "军事重生成没有同步刷新图标、标签和战线");
 assert.match(militaryBlock, /before,\s+after,/, "军事结果没有返回前后摘要");
@@ -85,6 +104,10 @@ console.log(JSON.stringify({
   before,
   after,
   variation,
+  restoredMirror: {
+    syncedStates,
+    regiments: mirroredRegiments.length
+  },
   preservedRatios,
   preservedBattleEvents: map.military.events.length,
   affected: {

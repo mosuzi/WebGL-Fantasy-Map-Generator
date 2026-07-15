@@ -61,6 +61,25 @@ export function compareMilitaryVariation(beforeSnapshot, afterSnapshot) {
   return result;
 }
 
+export function syncMilitaryStateMirrors(map) {
+  const packStates = map?.pack?.states;
+  const politicsStates = map?.politics?.states;
+  if (!Array.isArray(packStates) || !Array.isArray(politicsStates) || packStates === politicsStates) return 0;
+
+  const packById = new Map(packStates.filter(Boolean).map(state => [Number(state.i), state]));
+  let synced = 0;
+  for (const state of politicsStates) {
+    const source = packById.get(Number(state?.i));
+    if (!state || !source || state === source) continue;
+    state.military = source.military;
+    state.militaryPolicy = source.militaryPolicy;
+    state.militaryDiagnostics = source.militaryDiagnostics;
+    state.alert = source.alert;
+    synced += 1;
+  }
+  return synced;
+}
+
 function normalizeUnitMap(units) {
   return JSON.stringify(Object.entries(units || {}).sort(([left], [right]) => left.localeCompare(right)));
 }
