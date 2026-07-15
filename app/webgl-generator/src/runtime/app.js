@@ -87,7 +87,7 @@ import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMi
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
 import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
-import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
+import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
@@ -1038,6 +1038,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterProvinceEdit});
       updateEditingInteractionLock(state, documentRef);
     },
+    onRenameVisibleFromNamebase: provinceIds => executeNamedObjectNamebaseRename(state, documentRef, OBJECT_KIND.PROVINCE, provinceIds, {refresh: refreshAfterProvinceEdit}),
     onColorChange: (provinceId, color) => {
       const context = {map: state.map};
       const province = state.map?.politics?.provinces?.[provinceId] || state.map?.pack?.provinces?.[provinceId];
@@ -1202,6 +1203,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
+    onRenameVisibleFromNamebase: cultureIds => executeNamedObjectNamebaseRename(state, documentRef, OBJECT_KIND.CULTURE, cultureIds),
     onColorChange: (cultureId, color) => {
       const context = {map: state.map};
       const culture = state.map?.society?.cultures?.[cultureId] || state.map?.pack?.cultures?.[cultureId];
@@ -1287,6 +1289,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
+    onRenameVisibleFromNamebase: religionIds => executeNamedObjectNamebaseRename(state, documentRef, OBJECT_KIND.RELIGION, religionIds),
     onColorChange: (religionId, color) => {
       const context = {map: state.map};
       const religion = state.map?.society?.religions?.[religionId] || state.map?.pack?.religions?.[religionId];
@@ -2851,14 +2854,17 @@ function createGenerationNamebaseSnapshot(map, metadata = {}) {
       importedFrom: base?.importedFrom || "",
       minLength: Number(base?.minLength ?? base?.min) || 1,
       maxLength: Number(base?.maxLength ?? base?.max) || 8,
-      duplicateChars: String(base?.duplicateChars ?? base?.d ?? "").trim()
+      duplicateChars: String(base?.duplicateChars ?? base?.d ?? "").trim(),
+      legacyMultiwordRate: Math.max(0, Math.min(1, Number(base?.legacyMultiwordRate ?? base?.multiwordRate ?? base?.m) || 0))
     })).filter(base => base.id && base.source.length)
     : [];
   const bindings = {
     global: {
       stateRoot: String(namebases.bindings?.global?.stateRoot || "").trim(),
       place: String(namebases.bindings?.global?.place || "").trim(),
-      hydro: String(namebases.bindings?.global?.hydro || "").trim()
+      hydro: String(namebases.bindings?.global?.hydro || "").trim(),
+      culture: String(namebases.bindings?.global?.culture || "").trim(),
+      religion: String(namebases.bindings?.global?.religion || "").trim()
     },
     cultures: normalizeGenerationCultureNamebaseBindings(namebases.bindings?.cultures)
   };
@@ -2917,7 +2923,9 @@ function normalizeGenerationCultureNamebaseBindings(cultures) {
     result[String(cultureId)] = {
       stateRoot: String(binding.stateRoot || "").trim(),
       place: String(binding.place || "").trim(),
-      hydro: String(binding.hydro || "").trim()
+      hydro: String(binding.hydro || "").trim(),
+      culture: String(binding.culture || "").trim(),
+      religion: String(binding.religion || "").trim()
     };
   }
   return result;
@@ -3954,6 +3962,17 @@ function renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options 
   return editApiResult(state, result);
 }
 
+function executeNamedObjectNamebaseRename(state, documentRef, kind, ids, {refresh} = {}) {
+  const command = createRenameNamedObjectsFromNamebaseCommand(kind, ids);
+  executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh,
+    status: executed => `已按当前名称库重命名 ${executed.getResult?.().renamed || 0} 个${namebaseRenameKindLabel(kind)}。`,
+    noopStatus: `当前筛选${namebaseRenameKindLabel(kind)}没有可按名称库更新的名称。`
+  });
+  updateEditingInteractionLock(state, documentRef);
+}
+
 function createNamebaseRenameObjectsCommand(kind, ids, options = {}) {
   switch (kind) {
     case "state":
@@ -3964,6 +3983,10 @@ function createNamebaseRenameObjectsCommand(kind, ids, options = {}) {
       return createRenameRiversFromNamebaseCommand(ids, options);
     case "lake":
       return createRenameLakesFromNamebaseCommand(ids, options);
+    case "province":
+    case "culture":
+    case "religion":
+      return createRenameNamedObjectsFromNamebaseCommand(kind, ids, options);
     default:
       throw new Error(`暂不支持按名称库重命名对象类型：${kind}`);
   }
@@ -3975,7 +3998,10 @@ function normalizeApiNamebaseRenameKind(kind) {
   if (["city", "cities", "settlement", "settlements", "burg", "burgs", "place", "places"].includes(value)) return "city";
   if (["river", "rivers", "hydro", "hydronym", "hydronyms"].includes(value)) return "river";
   if (["lake", "lakes"].includes(value)) return "lake";
-  throw new Error("名称库批量重命名对象类型必须是 state / city / river / lake");
+  if (["province", "provinces"].includes(value)) return "province";
+  if (["culture", "cultures"].includes(value)) return "culture";
+  if (["religion", "religions"].includes(value)) return "religion";
+  throw new Error("名称库批量重命名对象类型必须是 state / city / river / lake / province / culture / religion");
 }
 
 function normalizeApiNamebaseRenameIds(ids) {
@@ -3999,6 +4025,12 @@ function namebaseRenameKindLabel(kind) {
       return "河流";
     case "lake":
       return "湖泊";
+    case "province":
+      return "省份";
+    case "culture":
+      return "文化";
+    case "religion":
+      return "宗教";
     default:
       return "对象";
   }

@@ -181,6 +181,7 @@ const provinceActions = computed(() => [
   {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
 const provinceHighlightActions = computed(() => [
+  {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.filter(row => !row.neutral).length)}`, icon: "名", disabled: !visibleRows.value.some(row => !row.neutral)},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableProvinceRows.value.length)}`, icon: "◉", disabled: !highlightableProvinceRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
 ]);
@@ -327,6 +328,7 @@ function handleEmptyAction(key) {
 }
 
 function handleHighlightAction(key) {
+  if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.filter(row => !row.neutral).map(row => row.id));
   if (key === "highlight-selected") props.callbacks.onHighlight?.(highlightableProvinceRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
 }

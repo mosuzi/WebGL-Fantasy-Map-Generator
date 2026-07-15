@@ -189,6 +189,7 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
 const defaultReligionEmptyAction = Object.freeze({key: "add", label: "新增空宗教", icon: "+"});
 const religionEmptyAction = computed(() => filterEmptyAction.value || defaultReligionEmptyAction);
 const religionListActions = computed(() => [
+  {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.length)}`, icon: "名", disabled: !visibleRows.value.length},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableReligionRows.value.length)}`, icon: "◉", disabled: !highlightableReligionRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultReligionEmptyAction,
@@ -275,6 +276,10 @@ function handleActionSelect(actionKey) {
 }
 
 function handleListAction(actionKey) {
+  if (actionKey === "rename-visible") {
+    props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
+    return;
+  }
   if (actionKey === "highlight-selected") {
     props.callbacks.onHighlight?.(highlightableReligionRows.value);
     return;

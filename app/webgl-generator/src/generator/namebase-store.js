@@ -1,4 +1,4 @@
-import {createNamebaseSourceEntry, formatNamebaseWeightedSample, generateNamebaseMarkovName, getBuiltinNamebaseSummaries, normalizeNamebaseGenerationOptions, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
+import {createNamebaseSourceEntry, formatNamebaseWeightedSample, generateNamebaseCandidate, getBuiltinNamebaseSummaries, normalizeNamebaseGenerationOptions, parseNamebaseWeightedSamples, summarizeNamebaseSource} from "./names.js";
 
 export const NAMEBASE_DOCUMENT_TYPE = "webgl-generator-namebases";
 export const NAMEBASE_DOCUMENT_VERSION = 1;
@@ -38,6 +38,7 @@ export function createNamebaseDocument(map = null, {includeUser = true, baseIds 
     doubledChars: row.doubledChars || [],
     unusualChars: row.unusualChars || [],
     duplicateChars: row.duplicateChars || "",
+    legacyMultiwordRate: row.multiwordRate || 0,
     note: row.note,
     source: row.source || []
   }));
@@ -189,7 +190,8 @@ export function copyBuiltinNamebaseToUser(map, id) {
     importedFrom: "内置名称库",
     minLength: sourceBase.minLength,
     maxLength: sourceBase.maxLength,
-    duplicateChars: sourceBase.duplicateChars || ""
+    duplicateChars: sourceBase.duplicateChars || "",
+    legacyMultiwordRate: sourceBase.multiwordRate || 0
   };
   store.bases.push(copy);
   updateNamebaseMetadata(store);
@@ -220,7 +222,8 @@ export function createUserNamebase(map) {
     importedFrom: "",
     minLength: 2,
     maxLength: 4,
-    duplicateChars: ""
+    duplicateChars: "",
+    legacyMultiwordRate: 0
   };
   store.bases.push(base);
   updateNamebaseMetadata(store);
@@ -298,6 +301,8 @@ export function updateUserNamebaseOptions(map, id, options = {}) {
   base.minLength = next.minLength;
   base.maxLength = next.maxLength;
   base.duplicateChars = next.duplicateChars;
+  base.legacyMultiwordRate = next.multiwordRate;
+  base.multiwordRate = next.multiwordRate;
   base.updatedAt = new Date().toISOString();
   updateNamebaseMetadata(map.namebases);
   return {
@@ -306,7 +311,8 @@ export function updateUserNamebaseOptions(map, id, options = {}) {
     name: base.name || base.id || "",
     minLength: base.minLength,
     maxLength: base.maxLength,
-    duplicateChars: base.duplicateChars
+    duplicateChars: base.duplicateChars,
+    legacyMultiwordRate: base.legacyMultiwordRate
   };
 }
 
@@ -412,9 +418,7 @@ export function createNamebaseGeneratedExamples(source, {count = 16, seed = "", 
   const seen = new Set();
   const maxAttempts = Math.max(80, count * 24);
   for (let attempt = 0; result.length < count && attempt < maxAttempts; attempt += 1) {
-    const candidate = attempt % 4 === 3
-      ? recombinePreviewName(records, rng)
-      : generateNamebaseMarkovName(entry.chain, rng, entry);
+    const candidate = generateNamebaseCandidate(rng, entry);
     const normalized = normalizePreviewName(candidate, entry);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
@@ -478,6 +482,7 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
   if (!values.length) return null;
   const id = uniqueId(`imported-${sanitizeId(base?.id || base?.name || `namebase-${index + 1}`)}`, existingIds);
   existingIds.add(id);
+  const generationOptions = normalizeNamebaseGenerationOptions(base, summarizeNamebaseSource({source: values}));
   return {
     id,
     sourceId: String(base?.id || ""),
@@ -490,8 +495,8 @@ function normalizeImportedBase(base, {existingIds, importedAt, filename, index})
     origin: "导入",
     importedAt,
     importedFrom: filename || "",
-    legacyMultiwordRate: Number(base?.legacyMultiwordRate ?? base?.m) || 0,
-    ...normalizeNamebaseGenerationOptions(base, summarizeNamebaseSource({source: values}))
+    legacyMultiwordRate: generationOptions.multiwordRate,
+    ...generationOptions
   };
 }
 
@@ -501,23 +506,17 @@ function normalizeSourceValues(source) {
     .filter(Boolean);
 }
 
-function recombinePreviewName(records, rng) {
-  if (records.length < 2) return records[0]?.value || "";
-  const left = Array.from(pickPreviewRecord(records, rng));
-  const right = Array.from(pickPreviewRecord(records, rng));
-  if (!left.length || !right.length) return "";
-  const leftCut = Math.max(1, Math.ceil(left.length * (0.35 + rng() * 0.45)));
-  const rightStart = Math.max(0, Math.floor(right.length * rng() * 0.65));
-  return [...left.slice(0, leftCut), ...right.slice(rightStart)].join("");
-}
-
 function normalizePreviewName(value, options = {}) {
   const minLength = Math.max(1, Number(options.minLength) || 1);
   const maxLength = Math.max(minLength, Number(options.maxLength) || 12);
-  const chars = Array.from(String(value || "").replace(/\s+/gu, "")).slice(0, maxLength);
-  if (chars.length < minLength) return "";
-  if (hasAdjacentRepeatedChar(chars, options.duplicateChars)) return "";
-  return chars.join("");
+  const words = String(value || "").trim().split(/\s+/gu).filter(Boolean);
+  const normalized = [];
+  for (const word of words) {
+    const chars = Array.from(word).slice(0, maxLength);
+    if (chars.length < minLength || hasAdjacentRepeatedChar(chars, options.duplicateChars)) return "";
+    normalized.push(chars.join(""));
+  }
+  return normalized.join(" ");
 }
 
 function hasAdjacentRepeatedChar(chars, duplicateChars = "") {
@@ -526,16 +525,6 @@ function hasAdjacentRepeatedChar(chars, duplicateChars = "") {
     if (chars[index] === chars[index - 1] && !allowed.has(chars[index])) return true;
   }
   return false;
-}
-
-function pickPreviewRecord(records, rng) {
-  const totalWeight = records.reduce((sum, record) => sum + Math.max(0.1, Number(record.weight || 1)), 0);
-  let roll = rng() * totalWeight;
-  for (const record of records) {
-    roll -= Math.max(0.1, Number(record.weight || 1));
-    if (roll <= 0) return record.value;
-  }
-  return records[0]?.value || "";
 }
 
 function createPreviewRng(seed) {
@@ -589,10 +578,11 @@ function namebaseExportRecord(base) {
     doubledChars: summary.doubledChars || [],
     unusualChars: summary.unusualChars || [],
     duplicateChars: summary.duplicateChars || "",
+    multiwordRate: summary.multiwordRate || 0,
     note: summary.note,
     importedAt: base.importedAt || "",
     importedFrom: base.importedFrom || "",
-    legacyMultiwordRate: Number(base.legacyMultiwordRate ?? base.m) || 0,
+    legacyMultiwordRate: summary.multiwordRate || 0,
     source: summary.source
   };
 }

@@ -206,6 +206,7 @@ const assignmentOptions = computed(() => [
 const defaultCultureEmptyAction = Object.freeze({key: "add", label: "新增空文化", icon: "+"});
 const cultureEmptyAction = computed(() => filterEmptyAction.value || defaultCultureEmptyAction);
 const cultureListActions = computed(() => [
+  {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.length)}`, icon: "名", disabled: !visibleRows.value.length},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableCultureRows.value.length)}`, icon: "◉", disabled: !highlightableCultureRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultCultureEmptyAction,
@@ -283,6 +284,10 @@ function openRenameEditor(row) {
 }
 
 function handleListAction(actionKey) {
+  if (actionKey === "rename-visible") {
+    props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
+    return;
+  }
   if (actionKey === "highlight-selected") {
     props.callbacks.onHighlight?.(highlightableCultureRows.value);
     return;

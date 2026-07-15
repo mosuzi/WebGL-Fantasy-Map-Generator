@@ -28,7 +28,7 @@
   <section class="namebase-binding-editor" aria-label="文化名称库绑定">
     <div class="namebase-binding-editor-header">
       <strong>文化绑定</strong>
-      <span>覆盖指定文化的后续国家、城镇和水文命名。</span>
+      <span>覆盖指定文化的后续国家、城镇、水文、文化和宗教命名。</span>
     </div>
     <UiSelectField
       class-name="namebase-culture-select"
@@ -172,6 +172,10 @@
         <span>允许连写</span>
         <input v-model.trim="duplicateCharsDraft" maxlength="24" placeholder="如：叠叠" />
       </label>
+      <label>
+        <span>多词率 m</span>
+        <input v-model.number="multiwordRateDraft" type="number" min="0" max="1" step="0.05" />
+      </label>
     </div>
     <p class="namebase-source-editor-note">未列入“允许连写”的相邻重复字符会被过滤，例如“清清”默认不会进入候选。</p>
     <UiButton variant="secondary" @click="applyOptions">应用参数</UiButton>
@@ -215,6 +219,7 @@ const sourceDraft = ref("");
 const minLengthDraft = ref(1);
 const maxLengthDraft = ref(4);
 const duplicateCharsDraft = ref("");
+const multiwordRateDraft = ref(0);
 const generatedExamples = ref([]);
 const previewNonce = ref(0);
 const selectedNamebaseIds = ref([]);
@@ -232,12 +237,16 @@ const importModeOptions = Object.freeze([
 const globalBindingTargets = Object.freeze([
   {key: "stateRoot", label: "国家根名"},
   {key: "place", label: "地名"},
-  {key: "hydro", label: "水文"}
+  {key: "hydro", label: "水文"},
+  {key: "culture", label: "文化"},
+  {key: "religion", label: "宗教"}
 ]);
 const bindingCompatibleKinds = Object.freeze({
   stateRoot: new Set(["state-root", "generic"]),
   place: new Set(["place", "place-part", "generic"]),
-  hydro: new Set(["hydro", "generic"])
+  hydro: new Set(["hydro", "generic"]),
+  culture: new Set(["culture", "place", "place-part", "generic"]),
+  religion: new Set(["religion", "culture", "place", "place-part", "generic"])
 });
 
 const columns = Object.freeze([
@@ -345,6 +354,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "连写风险", value: selected.value.repeatRiskLabel},
   {label: "特殊字符", value: selected.value.unusualCharsLabel},
   {label: "允许连写", value: selected.value.duplicateChars || "无"},
+  {label: "多词率 m", value: `${formatWeight((selected.value.multiwordRate || 0) * 100)}%`},
   {label: "说明", value: selected.value.note || "内置词池"}
 ] : []);
 
@@ -523,15 +533,17 @@ function applyOptions() {
   props.callbacks.onUpdateOptions?.(selectedUserRow.value, {
     minLength: minLengthDraft.value,
     maxLength: maxLengthDraft.value,
-    duplicateChars: duplicateCharsDraft.value
+    duplicateChars: duplicateCharsDraft.value,
+    legacyMultiwordRate: multiwordRateDraft.value
   });
 }
 
-watch(() => [selected.value?.id, selectedSourceFingerprint.value, selected.value?.minLength, selected.value?.maxLength, selected.value?.duplicateChars], () => {
+watch(() => [selected.value?.id, selectedSourceFingerprint.value, selected.value?.minLength, selected.value?.maxLength, selected.value?.duplicateChars, selected.value?.multiwordRate], () => {
   sourceDraft.value = selectedUserRow.value?.source?.join("\n") || "";
   minLengthDraft.value = selectedUserRow.value?.minLength || 1;
   maxLengthDraft.value = selectedUserRow.value?.maxLength || Math.max(minLengthDraft.value, 4);
   duplicateCharsDraft.value = selectedUserRow.value?.duplicateChars || "";
+  multiwordRateDraft.value = selectedUserRow.value?.multiwordRate || 0;
   generatedExamples.value = [];
 }, {immediate: true});
 

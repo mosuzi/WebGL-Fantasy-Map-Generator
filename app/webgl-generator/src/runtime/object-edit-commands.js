@@ -1,7 +1,7 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
-import {getStateFullName} from "../generator/names.js";
-import {objectAffected} from "./edit-command-effects.js";
+import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
+import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
 
 const OBJECT_NAME_EFFECTS = Object.freeze({
   render: "draw",
@@ -96,6 +96,38 @@ export function createRenameObjectCommand(object, nextName) {
       if (!normalizedName) return true;
       const current = readObjectName(context.map, target);
       return !current || current.name === normalizedName;
+    }
+  };
+}
+
+export function createRenameNamedObjectsFromNamebaseCommand(kind, ids, {label = ""} = {}) {
+  const targetKind = [OBJECT_KIND.PROVINCE, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION].includes(kind) ? kind : "";
+  const targets = [...new Set((ids || []).map(id => Number(id)).filter(id => Number.isInteger(id) && id > 0))];
+  let changes = null;
+  const kindLabel = formatObjectKind(targetKind);
+
+  return {
+    label: `${label || `按名称库重命名${kindLabel}`} ${targets.length} 个`,
+    domain: targetKind,
+    effects: {
+      ...OBJECT_NAME_EFFECTS,
+      affected: namebaseRenameAffected(targetKind, targets)
+    },
+    apply(context) {
+      if (!targetKind) throw new Error("当前对象类型不支持名称库批量重命名");
+      changes ??= buildNamedObjectRenameChanges(context.map, targetKind, targets);
+      if (!changes.length) throw new Error(`没有可重命名的${kindLabel}`);
+      for (const change of changes) writeObjectName(context.map, change.target, change.afterName);
+    },
+    revert(context) {
+      if (!changes) throw new Error(`缺少可撤销的${kindLabel}名称快照`);
+      for (const change of changes) restoreObjectName(context.map, change.target, change.before);
+    },
+    isNoop(context) {
+      return !targetKind || !targets.length || !buildNamedObjectRenameChanges(context.map, targetKind, targets).length;
+    },
+    getResult() {
+      return {renamed: changes?.length || 0, total: targets.length};
     }
   };
 }
@@ -227,6 +259,59 @@ function restoreObjectName(map, target, previous) {
   const restorer = OBJECT_NAME_RESTORERS[target.kind];
   if (restorer) return restorer(map, target, previous);
   throw new Error(`不支持恢复对象类型：${target.kind}`);
+}
+
+function buildNamedObjectRenameChanges(map, kind, ids) {
+  const seed = `${map?.metadata?.seed || map?.options?.seed || "map"}|explicit-${kind}-rename|${map?.metadata?.checksum || ""}`;
+  const generator = createChineseNameGenerator(seed, {namebases: map?.namebases});
+  const changes = [];
+  for (const id of ids) {
+    const target = {kind, id};
+    const before = readObjectName(map, target);
+    if (!before) continue;
+    const afterName = generateNamedObjectName(map, generator, target);
+    if (!afterName || afterName === before.name) continue;
+    changes.push({target, before, afterName});
+  }
+  return changes;
+}
+
+function generateNamedObjectName(map, generator, target) {
+  if (target.kind === OBJECT_KIND.PROVINCE) {
+    const province = map?.politics?.provinces?.[target.id] || map?.pack?.provinces?.[target.id];
+    const cultureId = Number(province?.culture ?? map?.pack?.cells?.culture?.[province?.center] ?? 0) || 0;
+    const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId];
+    return generator.makeProvinceName({
+      id: target.id,
+      cell: province?.center,
+      state: province?.state,
+      culture: cultureId,
+      cultureType: culture?.nameStyle || culture?.type,
+      baseName: beforeStateName(map, province?.state)
+    }).name;
+  }
+  if (target.kind === OBJECT_KIND.CULTURE) {
+    const culture = map?.society?.cultures?.[target.id] || map?.pack?.cultures?.[target.id];
+    return generator.makeCultureName({
+      id: target.id,
+      cell: culture?.center,
+      culture: target.id,
+      cultureType: culture?.nameStyle || culture?.type
+    });
+  }
+  const religion = map?.society?.religions?.[target.id] || map?.pack?.religions?.[target.id];
+  return generator.makeReligionName({
+    id: target.id,
+    cell: religion?.center,
+    culture: religion?.culture,
+    type: religion?.type,
+    form: religion?.form
+  });
+}
+
+function beforeStateName(map, stateId) {
+  const state = map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId];
+  return state?.name || state?.fullName || "";
 }
 
 function readStateName(map, stateId) {

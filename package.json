@@ -88,6 +88,7 @@
     "regress:api-exports": "node ./tools/webgl-generator-api-export-records-regression.mjs",
     "regress:api-namebases": "node ./tools/webgl-generator-api-namebase-docs-regression.mjs",
     "regress:api-namebase-renames": "node ./tools/webgl-generator-api-namebase-renames-regression.mjs",
+    "regress:namebase-multiword": "node ./tools/webgl-generator-namebase-multiword-regression.mjs",
     "regress:selection-highlight": "node --no-warnings ./tools/webgl-generator-selection-highlight-regression.mjs",
     "regress:visible-row-selection": "node --no-warnings ./tools/webgl-generator-visible-row-selection-regression.mjs",
     "regress:selection-scroll-center": "node --no-warnings ./tools/webgl-generator-selection-scroll-center-regression.mjs",

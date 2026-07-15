@@ -86,12 +86,12 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
     const targets = collectTargets(map);
 
     const noConfirm = api.namebases.renameObjects("city", targets.city.ids.slice(0, 1));
-    const unsupported = api.namebases.renameObjects("province", [1], {confirm: true});
+    const unsupported = api.namebases.renameObjects("marker", [1], {confirm: true});
     const emptyIds = api.namebases.renameObjects("city", [], {confirm: true});
     if (noConfirm?.ok !== false || !String(noConfirm?.error?.message || "").includes("confirm")) {
       failures.push(`未确认 renameObjects 未结构化失败：${JSON.stringify(noConfirm)}`);
     }
-    if (unsupported?.ok !== false || !String(unsupported?.error?.message || "").includes("state / city / river / lake")) {
+    if (unsupported?.ok !== false || !String(unsupported?.error?.message || "").includes("province / culture / religion")) {
       failures.push(`不支持类型未结构化失败：${JSON.stringify(unsupported)}`);
     }
     if (emptyIds?.ok !== false || !String(emptyIds?.error?.message || "").includes("ids")) {
@@ -99,7 +99,7 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
     }
 
     const results = [];
-    for (const kind of ["state", "city", "river", "lake"]) {
+    for (const kind of ["state", "city", "river", "lake", "province", "culture", "religion"]) {
       const plan = targets[kind];
       if (!plan.ids.length) {
         results.push({kind, skipped: true, reason: "当前地图没有可重命名对象", ids: []});
@@ -184,6 +184,18 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
         lake: {
           available: collectLakeIds(map).length,
           ids: collectLakeIds(map).slice(0, 4)
+        },
+        province: {
+          available: collectNamedIds(map?.politics?.provinces || map?.pack?.provinces).length,
+          ids: collectNamedIds(map?.politics?.provinces || map?.pack?.provinces).slice(0, 4)
+        },
+        culture: {
+          available: collectNamedIds(map?.society?.cultures || map?.pack?.cultures).length,
+          ids: collectNamedIds(map?.society?.cultures || map?.pack?.cultures).slice(0, 4)
+        },
+        religion: {
+          available: collectNamedIds(map?.society?.religions || map?.pack?.religions).length,
+          ids: collectNamedIds(map?.society?.religions || map?.pack?.religions).slice(0, 4)
         }
       };
     }
@@ -213,6 +225,12 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
         .filter(id => Number.isInteger(id) && id >= 0);
     }
 
+    function collectNamedIds(items) {
+      return (items || [])
+        .map((item, index) => Number(item?.id ?? item?.i ?? index))
+        .filter(id => id > 0 && items?.[id] && !items[id].removed);
+    }
+
     function readNameSnapshots(map, kind, ids) {
       return ids.map(id => {
         if (kind === "state") {
@@ -235,8 +253,20 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
           const river = (map?.rivers?.rivers || []).find(item => item?.id === id);
           return {id, name: river?.name || ""};
         }
-        const lake = (map?.pack?.features || []).find(feature => feature?.type === "lake" && Number(feature.i ?? feature.id) === id);
-        return {id, name: lake?.name || ""};
+        if (kind === "lake") {
+          const lake = (map?.pack?.features || []).find(feature => feature?.type === "lake" && Number(feature.i ?? feature.id) === id);
+          return {id, name: lake?.name || ""};
+        }
+        if (kind === "province") {
+          const item = map?.politics?.provinces?.[id] || map?.pack?.provinces?.[id];
+          return {id, name: item?.name || "", fullName: item?.fullName || ""};
+        }
+        if (kind === "culture") {
+          const item = map?.society?.cultures?.[id] || map?.pack?.cultures?.[id];
+          return {id, name: item?.name || "", root: item?.root || ""};
+        }
+        const item = map?.society?.religions?.[id] || map?.pack?.religions?.[id];
+        return {id, name: item?.name || ""};
       });
     }
 

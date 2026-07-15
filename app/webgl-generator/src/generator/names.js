@@ -328,7 +328,7 @@ const CHARGES = ["mount", "river", "star", "gate", "wave", "tree", "tower", "sun
 const FIELD_TINCTURES = ["#b94b4b", "#3d6f9e", "#4f7f52", "#a47a35", "#6e579b", "#9a9a70", "#3e7b7d", "#704f38"];
 const METAL_TINCTURES = ["#f0d889", "#e8e4d6", "#d8b56d", "#f3efe1"];
 const HYDRO_NAME_SUFFIXES = [...new Set([...WATER_SUFFIXES, ...LAKE_SUFFIXES, "溪", "水", "河", "江", "川"])];
-const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null, minLength: 1, maxLength: 8, duplicateChars: ""});
+const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null, minLength: 1, maxLength: 8, duplicateChars: "", multiwordRate: 0});
 const K170_BURG_NAMEBASE = Object.freeze({source: K170_BURG_NAMES, minLength: 1, maxLength: 6});
 
 const BUILTIN_NAMEBASE_SOURCES = {
@@ -450,6 +450,27 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
         formName,
         fullName: `${root}${formName}`
       };
+    },
+
+    makeCultureName(options = {}) {
+      const rng = rngFor(seed, "culture", options);
+      const boundSource = namebaseSources.sourceFor("culture", options);
+      const root = boundSource.records.length
+        ? generateNamebaseCandidate(rng, boundSource, {maxLength: 6})
+        : this.makePlaceName({...options, type: "culture"});
+      if (!root) return `新文化${options.id || ""}`;
+      return root.endsWith("文化") ? root : `${root}文化`;
+    },
+
+    makeReligionName(options = {}) {
+      const rng = rngFor(seed, "religion", options);
+      const boundSource = namebaseSources.sourceFor("religion", options);
+      const root = boundSource.records.length
+        ? generateNamebaseCandidate(rng, boundSource, {maxLength: 6})
+        : this.makePlaceName({...options, type: "religion"});
+      if (!root) return `新宗教${options.id || ""}`;
+      if (/(?:教|信仰|圣会|正道)$/u.test(root)) return root;
+      return `${root}${options.form || "教"}`;
     },
 
     makeEmblem(options = {}) {
@@ -678,7 +699,8 @@ export function createNamebaseSourceEntry(source) {
     chain: calculateNamebaseChain(records),
     minLength: options.minLength,
     maxLength: options.maxLength,
-    duplicateChars: options.duplicateChars
+    duplicateChars: options.duplicateChars,
+    multiwordRate: options.multiwordRate
   };
 }
 
@@ -691,7 +713,8 @@ export function normalizeNamebaseGenerationOptions(options = {}, fallback = {}) 
   return {
     minLength,
     maxLength,
-    duplicateChars: normalizeDuplicateChars(source.duplicateChars ?? source.d ?? "")
+    duplicateChars: normalizeDuplicateChars(source.duplicateChars ?? source.d ?? ""),
+    multiwordRate: normalizeMultiwordRate(source.legacyMultiwordRate ?? source.multiwordRate ?? source.m ?? fallback.multiwordRate ?? 0)
   };
 }
 
@@ -755,12 +778,21 @@ function pickNamebaseValue(rng, source) {
   return records[0]?.value || records[0] || "";
 }
 
-function generateNamebaseCandidate(rng, source, options = {}) {
+export function generateNamebaseCandidate(rng, source, options = {}) {
+  const settings = namebaseCandidateSettings(source, options);
+  if (!(settings.multiwordRate > 0) || namebaseRandom(rng) >= settings.multiwordRate) {
+    return generateSingleNamebaseCandidate(rng, source, settings);
+  }
+  const first = generateSingleNamebaseCandidate(rng, source, settings);
+  const second = generateSingleNamebaseCandidate(rng, source, settings);
+  return first && second ? `${first} ${second}` : first || second;
+}
+
+function generateSingleNamebaseCandidate(rng, source, settings) {
   const records = Array.isArray(source) ? source : source?.records || [];
   if (!records.length) return "";
   const chain = Array.isArray(source) ? calculateNamebaseChain(records) : source?.chain;
   const canUseMarkov = records.length >= 3 && chain?.diversity >= 1.25;
-  const settings = namebaseCandidateSettings(source, options);
   const maxAttempts = canUseMarkov ? 12 : 6;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (canUseMarkov && namebaseRandom(rng) < 0.72) {
@@ -800,7 +832,7 @@ function makeBoundPlaceName(rng, source, options, suffixes) {
 }
 
 function makeHydroName(prefix, rng, suffixes) {
-  const normalized = String(prefix || "").replace(/\s+/gu, "");
+  const normalized = String(prefix || "").trim().replace(/\s+/gu, " ");
   if (!normalized) return `${pick(rng, HYDRO_PREFIXES)}${pick(rng, suffixes)}`;
   if (HYDRO_NAME_SUFFIXES.some(suffix => normalized.endsWith(suffix))) return normalized;
   return `${normalized}${pick(rng, suffixes)}`;
@@ -841,7 +873,8 @@ function namebaseCandidateSettings(source, options = {}) {
   return {
     minLength,
     maxLength,
-    duplicateChars: options.duplicateChars ?? normalized.duplicateChars
+    duplicateChars: options.duplicateChars ?? normalized.duplicateChars,
+    multiwordRate: normalizeMultiwordRate(options.multiwordRate ?? options.legacyMultiwordRate ?? options.m ?? normalized.multiwordRate)
   };
 }
 
@@ -862,6 +895,12 @@ function hasDisallowedAdjacentRepeat(chars, duplicateChars = "") {
 
 function normalizeDuplicateChars(value) {
   return [...new Set(Array.from(String(value || "").replace(/\s+/gu, "")))].slice(0, 24).join("");
+}
+
+function normalizeMultiwordRate(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(1, Math.round(number * 1000) / 1000));
 }
 
 function clampInteger(value, min, max) {
@@ -1130,6 +1169,8 @@ function analyzeNamebase(id, name, kind, category, values, note = "", {includeSo
     doubledChars: doubledChars.slice(0, 12),
     unusualChars: unusualChars.slice(0, 12),
     duplicateChars: generationOptions.duplicateChars,
+    multiwordRate: generationOptions.multiwordRate,
+    legacyMultiwordRate: generationOptions.multiwordRate,
     examples: uniqueValues.slice(0, 16),
     note
   };
