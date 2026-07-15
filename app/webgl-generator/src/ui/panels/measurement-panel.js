@@ -93,6 +93,7 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.open = false;
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");

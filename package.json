@@ -72,6 +72,7 @@
     "regress:selection-scroll-center": "node --no-warnings ./tools/webgl-generator-selection-scroll-center-regression.mjs",
     "regress:shortcuts": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-regression.mjs",
     "regress:shortcuts-browser": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-browser-regression.mjs",
+    "regress:canvas-tools": "node --no-warnings ./tools/webgl-generator-canvas-tool-mode-manager-regression.mjs",
     "regress:shoreline": "node ./tools/webgl-generator-shoreline-regression.mjs",
     "regress:rendering": "pnpm run regress:shoreline -- --max-switch-ms 1500",
     "diagnose:source-warns": "node ./tools/source-candidate-warn-diagnostics.mjs",

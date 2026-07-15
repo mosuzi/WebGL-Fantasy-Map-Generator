@@ -97,6 +97,8 @@ import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationManager} from "./runtime-operation.js";
+import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
+import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
 import {
   exportAllMapData,
   exportCompressedAllMapData,
@@ -179,6 +181,22 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
   "precipitation"
 ]);
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
+export const CANVAS_TOOL_MODE = Object.freeze({
+  HEIGHT_BRUSH: "height:brush",
+  STATE_BRUSH: "state:brush",
+  STATE_ADD: "state:add",
+  STATE_DELETE: "state:delete",
+  PROVINCE_BRUSH: "province:brush",
+  PROVINCE_ADD: "province:add",
+  PROVINCE_DELETE: "province:delete",
+  CITY_ADD: "city:add",
+  CITY_DELETE: "city:delete",
+  CULTURE_ASSIGN: "culture:assign",
+  RELIGION_ASSIGN: "religion:assign",
+  MEASUREMENT_DRAW: "measurement:draw",
+  MARKER_ADD: "marker:add",
+  MARKER_MOVE: "marker:move"
+});
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
@@ -261,6 +279,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     healthMonitor,
     runtimeOperation: null,
     runtimeOperationSnapshot: null,
+    canvasToolModes: createCanvasToolModeManager(),
     lazyPanelPreloadScheduled: false,
     panels: {}
   };
@@ -357,22 +376,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.objectDetails = objectDetailsPanel;
   heightPanel = createHeightPanel(documentRef, panelManager, {
     onActiveChange: active => {
-      if (active) {
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        state.stateEdit.activeStroke = null;
-        state.provinceEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("height");
-        setActiveModeButton(documentRef, "height");
-        updateEditingInteractionLock(state, documentRef);
-        updateRuntimePanel(documentRef, state);
-      } else {
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        updateEditingInteractionLock(state, documentRef);
-      }
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH, "panel-toggle");
     },
     onActionChange: action => {
       cancelHeightLine(state, documentRef);
@@ -712,23 +717,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.height = heightPanel;
   statePanel = createStatePanel(documentRef, panelManager, {
     onActiveChange: active => {
-      if (active) {
-        heightPanel?.setActive(false);
-        provincePanel?.setActive(false);
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        state.provinceEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("states");
-        setActiveModeButton(documentRef, "states");
-        updateEditingInteractionLock(state, documentRef);
-        updateRuntimePanel(documentRef, state);
-      } else {
-        state.stateEdit.activeStroke = null;
-        stopObjectEditing({ifKind: OBJECT_KIND.STATE});
-        updateEditingInteractionLock(state, documentRef);
-      }
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH, "panel-toggle");
     },
     onSampleSelection: () => {
       setStatePanelTarget(state, getStateIdFromSelection(state));
@@ -758,42 +748,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
     },
     onAddMode: active => {
-      state.stateEdit.addMode = Boolean(active);
-      if (active) {
-        state.stateEdit.deleteMode = false;
-        stopObjectEditing({ifKind: OBJECT_KIND.STATE});
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        clearMarkerEditMode(state);
-        renderer.setColorMode("states");
-        setActiveModeButton(documentRef, "states");
-      }
-      state.panels.state.updateAddMode?.(state.stateEdit.addMode);
-      state.panels.state.updateDeleteMode?.(state.stateEdit.deleteMode);
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_ADD);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_ADD, "panel-toggle");
     },
     onDeleteMode: active => {
-      state.stateEdit.deleteMode = Boolean(active);
-      if (active) {
-        state.stateEdit.addMode = false;
-        stopObjectEditing({ifKind: OBJECT_KIND.STATE});
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        state.provinceEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("states");
-        setActiveModeButton(documentRef, "states");
-      }
-      state.panels.state.updateAddMode?.(state.stateEdit.addMode);
-      state.panels.state.updateDeleteMode?.(state.stateEdit.deleteMode);
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_DELETE);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_DELETE, "panel-toggle");
     },
     onDeleteState: stateId => {
       const command = createDeleteStateCommand(stateId);
@@ -913,69 +873,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.government = governmentPanel;
   provincePanel = createProvincePanel(documentRef, panelManager, {
     onActiveChange: active => {
-      state.provinceEdit.addMode = false;
-      state.provinceEdit.deleteMode = false;
-      provincePanel?.updateAddMode?.(false);
-      provincePanel?.updateDeleteMode?.(false);
-      if (active) {
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        state.stateEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("provinces");
-        setActiveModeButton(documentRef, "provinces");
-        updateEditingInteractionLock(state, documentRef);
-        updateRuntimePanel(documentRef, state);
-      } else {
-        state.provinceEdit.activeStroke = null;
-        stopObjectEditing({ifKind: OBJECT_KIND.PROVINCE});
-        updateEditingInteractionLock(state, documentRef);
-      }
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_BRUSH);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_BRUSH, "panel-toggle");
     },
     onAddMode: active => {
-      state.provinceEdit.addMode = Boolean(active);
-      if (active) {
-        state.provinceEdit.deleteMode = false;
-        stopObjectEditing({ifKind: OBJECT_KIND.PROVINCE});
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        state.stateEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("provinces");
-        setActiveModeButton(documentRef, "provinces");
-      }
-      provincePanel?.updateAddMode?.(state.provinceEdit.addMode);
-      provincePanel?.updateDeleteMode?.(state.provinceEdit.deleteMode);
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_ADD);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_ADD, "panel-toggle");
     },
     onDeleteMode: active => {
-      state.provinceEdit.deleteMode = Boolean(active);
-      if (active) {
-        state.provinceEdit.addMode = false;
-        stopObjectEditing({ifKind: OBJECT_KIND.PROVINCE});
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        state.stateEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("provinces");
-        setActiveModeButton(documentRef, "provinces");
-      }
-      provincePanel?.updateAddMode?.(state.provinceEdit.addMode);
-      provincePanel?.updateDeleteMode?.(state.provinceEdit.deleteMode);
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_DELETE);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_DELETE, "panel-toggle");
     },
     onDeleteProvince: provinceId => {
       const command = createDeleteProvinceCommand(provinceId);
@@ -1078,46 +985,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onAddMode: active => {
-      state.cityEdit.addMode = Boolean(active);
-      if (active) {
-        state.cityEdit.deleteMode = false;
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        state.stateEdit.activeStroke = null;
-        state.provinceEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("states");
-        setActiveModeButton(documentRef, "states");
-      }
-      cityPanel.updateAddMode?.(state.cityEdit.addMode);
-      cityPanel.updateDeleteMode?.(state.cityEdit.deleteMode);
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_ADD);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_ADD, "panel-toggle");
     },
     onDeleteMode: active => {
-      state.cityEdit.deleteMode = Boolean(active);
-      if (active) {
-        state.cityEdit.addMode = false;
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        state.heightEdit.activeStroke = null;
-        cancelHeightLine(state, documentRef);
-        state.stateEdit.activeStroke = null;
-        state.provinceEdit.activeStroke = null;
-        clearMarkerEditMode(state);
-        updateMarkerPanel(state);
-        renderer.setColorMode("states");
-        setActiveModeButton(documentRef, "states");
-      }
-      cityPanel.updateAddMode?.(state.cityEdit.addMode);
-      cityPanel.updateDeleteMode?.(state.cityEdit.deleteMode);
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE, "panel-toggle");
     },
     onDeleteCity: cityId => {
       const command = createDeleteCityCommand(cityId);
@@ -1242,18 +1115,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.namebase.open(state.map, {cultureId, history: state.editHistory.getStats()});
     },
     onAssignmentActive: active => {
-      state.cultureEdit.activeStroke = null;
-      culturePanel.setAssignmentActive(active);
-      if (active) {
-        state.religionEdit.activeStroke = null;
-        religionPanel?.setAssignmentActive(false);
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        renderer.setColorMode("cultures");
-        setActiveModeButton(documentRef, "cultures");
-      }
-      updateEditingInteractionLock(state, documentRef);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CULTURE_ASSIGN);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CULTURE_ASSIGN, "panel-toggle");
     },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
@@ -1333,18 +1196,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onAssignmentActive: active => {
-      state.religionEdit.activeStroke = null;
-      religionPanel.setAssignmentActive(active);
-      if (active) {
-        state.cultureEdit.activeStroke = null;
-        culturePanel?.setAssignmentActive(false);
-        heightPanel?.setActive(false);
-        statePanel?.setActive(false);
-        provincePanel?.setActive(false);
-        renderer.setColorMode("religions");
-        setActiveModeButton(documentRef, "religions");
-      }
-      updateEditingInteractionLock(state, documentRef);
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RELIGION_ASSIGN);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RELIGION_ASSIGN, "panel-toggle");
     },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
@@ -1647,6 +1500,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onCancelEdit: () => {
       stopMarkerEditMode(state, documentRef);
     },
+    onClose: () => {
+      stopMarkerEditMode(state, documentRef, "panel-close");
+    },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -1776,6 +1632,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onStart: () => {
       startMeasurementMode(state, documentRef);
+    },
+    onClose: () => {
+      stopMeasurementMode(state, documentRef, "panel-close");
     },
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
@@ -1995,6 +1854,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   }, object => resolveObject(state.map, object));
   state.selectionStore = selectionStore;
   state.editRefreshScheduler = createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel});
+  registerCanvasToolModes(state, documentRef, {stopObjectEditing});
   applyControlPreferencesToRenderer(documentRef, renderer);
   state.runtimeOperation = createRuntimeOperationManager({
     setLoading: (visible, message) => updateGenerationLoading(documentRef, visible, message),
@@ -3001,6 +2861,7 @@ function generationApiMapSummary(map) {
 async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = "", operation = null} = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   operation?.report("prepare-map", {message: "正在接入地图运行时"});
+  state.canvasToolModes.reset("map-replace");
   state.map = map;
   reconcileWarDerivedData(state.map);
   ensureRiverHydrology(state.map);
@@ -3045,6 +2906,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.markerEdit.markerId = null;
   state.markerEdit.lastPackCell = null;
   state.measurement.points = [];
+  state.measurement.active = false;
   state.measurement.pointer = null;
   state.measurement.drag = null;
   state.measurement.editingMeasurementId = null;
@@ -6636,6 +6498,13 @@ function executeMarkerCollectionApiCommand(state, documentRef, command, options 
       throwOnError: false
     });
     if (!execution.executed) return execution;
+    const activeModeId = state.canvasToolModes.getActive()?.id;
+    if (
+      Number.isInteger(options.clearMarkerEditId) &&
+      [CANVAS_TOOL_MODE.MARKER_ADD, CANVAS_TOOL_MODE.MARKER_MOVE].includes(activeModeId)
+    ) {
+      cancelCanvasToolMode(state, documentRef, activeModeId, "target-deleted");
+    }
     const createdMarker = options.selectCreated ? command.getCreatedMarker?.() : null;
     updateRuntimePanel(documentRef, state);
     updateEditingInteractionLock(state, documentRef);
@@ -7345,20 +7214,268 @@ function shouldSwitchDiplomacySubjectForSelection(state) {
   return state.renderer?.getStats?.().colorMode === "diplomacy";
 }
 
+function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
+  const register = (modeId, panelId, hooks = {}) => {
+    const exit = payload => hooks.onExit?.(payload);
+    state.canvasToolModes.register(modeId, {
+      locksInteraction: hooks.locksInteraction,
+      allowedPanelIds: panelId ? [panelId] : [],
+      onEnter: hooks.onEnter,
+      onRepeat: hooks.onRepeat,
+      onCancel: exit,
+      onComplete: exit,
+      onError: hooks.onError
+    });
+  };
+
+  register(CANVAS_TOOL_MODE.HEIGHT_BRUSH, "height-panel", {
+    onEnter: () => {
+      state.panels.height?.setActive(true);
+      activateCanvasToolTheme(state, documentRef, "height");
+    },
+    onExit: () => {
+      rollbackCanvasToolStroke(state, "height");
+      state.panels.height?.setActive(false);
+      cancelHeightLine(state, documentRef);
+      cancelHeightSelectionBox(state, documentRef);
+      cancelHeightSelectionPoint(state);
+      cancelHeightSelectionPaint(state);
+      clearHeightTransformPreview(state);
+      updateHeightPanel(state);
+    }
+  });
+
+  register(CANVAS_TOOL_MODE.STATE_BRUSH, "state-panel", {
+    onEnter: () => {
+      state.stateEdit.addMode = false;
+      state.stateEdit.deleteMode = false;
+      state.panels.state?.setActive(true);
+      syncPoliticalModePanel(state, "state");
+      activateCanvasToolTheme(state, documentRef, "states");
+    },
+    onExit: () => {
+      rollbackCanvasToolStroke(state, "state");
+      state.panels.state?.setActive(false);
+      stopObjectEditing?.({ifKind: OBJECT_KIND.STATE});
+      syncPoliticalModePanel(state, "state");
+    }
+  });
+  registerPoliticalOneShotMode(state, documentRef, register, {
+    modeId: CANVAS_TOOL_MODE.STATE_ADD,
+    kind: "state",
+    flag: "addMode",
+    panelId: "state-panel",
+    colorMode: "states",
+    objectKind: OBJECT_KIND.STATE,
+    stopObjectEditing
+  });
+  registerPoliticalOneShotMode(state, documentRef, register, {
+    modeId: CANVAS_TOOL_MODE.STATE_DELETE,
+    kind: "state",
+    flag: "deleteMode",
+    panelId: "state-panel",
+    colorMode: "states",
+    objectKind: OBJECT_KIND.STATE,
+    stopObjectEditing
+  });
+
+  register(CANVAS_TOOL_MODE.PROVINCE_BRUSH, "province-panel", {
+    onEnter: () => {
+      state.provinceEdit.addMode = false;
+      state.provinceEdit.deleteMode = false;
+      state.panels.province?.setActive(true);
+      syncPoliticalModePanel(state, "province");
+      activateCanvasToolTheme(state, documentRef, "provinces");
+    },
+    onExit: () => {
+      rollbackCanvasToolStroke(state, "province");
+      state.panels.province?.setActive(false);
+      stopObjectEditing?.({ifKind: OBJECT_KIND.PROVINCE});
+      syncPoliticalModePanel(state, "province");
+    }
+  });
+  registerPoliticalOneShotMode(state, documentRef, register, {
+    modeId: CANVAS_TOOL_MODE.PROVINCE_ADD,
+    kind: "province",
+    flag: "addMode",
+    panelId: "province-panel",
+    colorMode: "provinces",
+    objectKind: OBJECT_KIND.PROVINCE,
+    stopObjectEditing
+  });
+  registerPoliticalOneShotMode(state, documentRef, register, {
+    modeId: CANVAS_TOOL_MODE.PROVINCE_DELETE,
+    kind: "province",
+    flag: "deleteMode",
+    panelId: "province-panel",
+    colorMode: "provinces",
+    objectKind: OBJECT_KIND.PROVINCE,
+    stopObjectEditing
+  });
+
+  registerCityOneShotMode(state, documentRef, register, CANVAS_TOOL_MODE.CITY_ADD, "addMode");
+  registerCityOneShotMode(state, documentRef, register, CANVAS_TOOL_MODE.CITY_DELETE, "deleteMode");
+  registerSocialAssignmentMode(state, documentRef, register, "culture");
+  registerSocialAssignmentMode(state, documentRef, register, "religion");
+
+  register(CANVAS_TOOL_MODE.MEASUREMENT_DRAW, "measurement-panel", {
+    locksInteraction: false,
+    onEnter: () => {
+      state.measurement.active = true;
+      state.measurement.pointer = null;
+      state.measurement.notice = "";
+      updateMeasurementOverlay(state, documentRef);
+    },
+    onExit: ({reason}) => {
+      state.measurement.active = false;
+      state.measurement.pointer = null;
+      cancelMeasurementDrag(state, documentRef);
+      if (["switch", "panel-close", "map-replace", "enter-error"].includes(reason)) {
+        state.measurement.points = [];
+        state.measurement.editingMeasurementId = null;
+        state.measurement.notice = "";
+      }
+      updateMeasurementOverlay(state, documentRef);
+    }
+  });
+
+  register(CANVAS_TOOL_MODE.MARKER_ADD, "marker-panel", {
+    onEnter: ({context}) => activateMarkerModeState(state, {mode: "add", ...context}),
+    onRepeat: ({context}) => activateMarkerModeState(state, {mode: "add", ...context}),
+    onExit: () => clearMarkerModeState(state)
+  });
+  register(CANVAS_TOOL_MODE.MARKER_MOVE, "marker-panel", {
+    onEnter: ({context}) => activateMarkerModeState(state, {mode: "move", ...context}),
+    onRepeat: ({context}) => activateMarkerModeState(state, {mode: "move", ...context}),
+    onExit: () => clearMarkerModeState(state)
+  });
+}
+
+function registerPoliticalOneShotMode(state, documentRef, register, {modeId, kind, flag, panelId, colorMode, objectKind, stopObjectEditing}) {
+  register(modeId, panelId, {
+    onEnter: () => {
+      const editState = state[`${kind}Edit`];
+      editState.addMode = flag === "addMode";
+      editState.deleteMode = flag === "deleteMode";
+      state.panels[kind]?.setActive(false);
+      stopObjectEditing?.({ifKind: objectKind});
+      syncPoliticalModePanel(state, kind);
+      activateCanvasToolTheme(state, documentRef, colorMode);
+    },
+    onExit: () => {
+      rollbackCanvasToolStroke(state, kind);
+      state[`${kind}Edit`][flag] = false;
+      syncPoliticalModePanel(state, kind);
+    }
+  });
+}
+
+function registerCityOneShotMode(state, documentRef, register, modeId, flag) {
+  register(modeId, "city-panel", {
+    onEnter: () => {
+      state.cityEdit.addMode = flag === "addMode";
+      state.cityEdit.deleteMode = flag === "deleteMode";
+      state.panels.city?.updateAddMode?.(state.cityEdit.addMode);
+      state.panels.city?.updateDeleteMode?.(state.cityEdit.deleteMode);
+      activateCanvasToolTheme(state, documentRef, "states");
+    },
+    onExit: () => {
+      state.cityEdit[flag] = false;
+      state.panels.city?.updateAddMode?.(state.cityEdit.addMode);
+      state.panels.city?.updateDeleteMode?.(state.cityEdit.deleteMode);
+    }
+  });
+}
+
+function registerSocialAssignmentMode(state, documentRef, register, kind) {
+  const modeId = kind === "culture" ? CANVAS_TOOL_MODE.CULTURE_ASSIGN : CANVAS_TOOL_MODE.RELIGION_ASSIGN;
+  register(modeId, `${kind}-panel`, {
+    onEnter: () => {
+      state[`${kind}Edit`].activeStroke = null;
+      state.panels[kind]?.setAssignmentActive(true);
+      activateCanvasToolTheme(state, documentRef, `${kind}s`);
+    },
+    onExit: () => {
+      rollbackCanvasToolStroke(state, kind);
+      state.panels[kind]?.setAssignmentActive(false);
+    }
+  });
+}
+
+function activateCanvasToolTheme(state, documentRef, colorMode) {
+  state.renderer?.setColorMode(colorMode);
+  setActiveModeButton(documentRef, colorMode);
+}
+
+function syncPoliticalModePanel(state, kind) {
+  const editState = state[`${kind}Edit`];
+  state.panels[kind]?.updateAddMode?.(editState.addMode);
+  state.panels[kind]?.updateDeleteMode?.(editState.deleteMode);
+}
+
+function activateMarkerModeState(state, {mode, type = "mines", markerId = null} = {}) {
+  state.markerEdit.mode = mode || null;
+  state.markerEdit.type = type || state.markerEdit.type || "mines";
+  state.markerEdit.markerId = Number.isInteger(markerId) ? markerId : null;
+  state.markerEdit.lastPackCell = null;
+  updateMarkerPanel(state);
+}
+
+function clearMarkerModeState(state) {
+  clearMarkerEditMode(state);
+  updateMarkerPanel(state);
+}
+
+function enterCanvasToolMode(state, documentRef, modeId, context = {}) {
+  try {
+    return state.canvasToolModes.enter(modeId, context);
+  } finally {
+    updateEditingInteractionLock(state, documentRef);
+    updateRuntimePanel(documentRef, state);
+  }
+}
+
+function cancelCanvasToolMode(state, documentRef, modeId, reason = "cancel") {
+  try {
+    return state.canvasToolModes.cancel(modeId, reason);
+  } finally {
+    updateEditingInteractionLock(state, documentRef);
+    updateRuntimePanel(documentRef, state);
+  }
+}
+
+function completeCanvasToolMode(state, documentRef, modeId, detail = {}) {
+  try {
+    return state.canvasToolModes.complete(modeId, detail);
+  } finally {
+    updateEditingInteractionLock(state, documentRef);
+    updateRuntimePanel(documentRef, state);
+  }
+}
+
+function rollbackCanvasToolStroke(state, kind) {
+  const editState = state[`${kind}Edit`];
+  const stroke = editState?.activeStroke;
+  if (!stroke) return false;
+  editState.activeStroke = null;
+  releasePointer(state.renderer?.canvas, stroke.pointerId);
+  if (!stroke.originals?.size || !state.map) return false;
+  const restored = restoreCanvasToolStrokePreview(state.map, kind, stroke);
+  if (!restored.restoredGridCells) return false;
+  if (kind === "height") state.editRefreshScheduler?.run(EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW);
+  else if (kind === "state") state.editRefreshScheduler?.run(STATE_BRUSH_PREVIEW_EFFECTS);
+  else if (kind === "province") state.editRefreshScheduler?.run(PROVINCE_BRUSH_PREVIEW_EFFECTS);
+  else state.editRefreshScheduler?.run(SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS);
+  return true;
+}
+
 function startMeasurementMode(state, documentRef, {status = "已进入测量模式。"} = {}) {
-  if (state.markerEdit.mode) stopMarkerEditMode(state, documentRef);
-  state.measurement.active = true;
-  state.measurement.pointer = null;
-  state.measurement.notice = "";
-  updateMeasurementOverlay(state, documentRef);
+  enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MEASUREMENT_DRAW);
   if (status) setFileOperationStatus(documentRef, status);
 }
 
-function stopMeasurementMode(state, documentRef) {
-  state.measurement.active = false;
-  state.measurement.pointer = null;
-  cancelMeasurementDrag(state, documentRef);
-  updateMeasurementOverlay(state, documentRef);
+function stopMeasurementMode(state, documentRef, reason = "toggle-off") {
+  cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MEASUREMENT_DRAW, reason);
 }
 
 function bindMeasurementTool(canvas, state, documentRef) {
@@ -7991,7 +8108,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishHeightStroke(state, documentRef);
+    rollbackCanvasToolStroke(state, "height");
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
   }, true);
@@ -8353,9 +8470,7 @@ function bindStateEditing(canvas, state, documentRef) {
         }
       });
       if (!result.executed) return;
-      state.panels.state?.updateDeleteMode?.(false);
-      updateEditingInteractionLock(state, canvas.ownerDocument || document);
-      updateRuntimePanel(canvas.ownerDocument || document, state);
+      completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.STATE_DELETE, {command: result.command});
       return;
     }
     if (state.stateEdit.addMode && state.map) {
@@ -8379,9 +8494,7 @@ function bindStateEditing(canvas, state, documentRef) {
         }
       });
       if (!execution.executed) return;
-      state.panels.state?.updateAddMode?.(false);
-      updateEditingInteractionLock(state, canvas.ownerDocument || document);
-      updateRuntimePanel(canvas.ownerDocument || document, state);
+      completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.STATE_ADD, {command: execution.command});
       return;
     }
     if (!state.panels.state?.getBrush().active || !state.map) return;
@@ -8411,7 +8524,7 @@ function bindStateEditing(canvas, state, documentRef) {
     if (!state.stateEdit.activeStroke || state.stateEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishStateStroke(state, documentRef);
+    rollbackCanvasToolStroke(state, "state");
     releasePointer(canvas, event.pointerId);
   }, true);
 
@@ -8444,9 +8557,7 @@ function bindProvinceEditing(canvas, state, documentRef) {
         }
       });
       if (!result.executed) return;
-      state.panels.province?.updateDeleteMode?.(false);
-      updateEditingInteractionLock(state, canvas.ownerDocument || document);
-      updateRuntimePanel(canvas.ownerDocument || document, state);
+      completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.PROVINCE_DELETE, {command: result.command});
       return;
     }
     if (state.provinceEdit.addMode && state.map) {
@@ -8469,9 +8580,7 @@ function bindProvinceEditing(canvas, state, documentRef) {
         }
       });
       if (!execution.executed) return;
-      state.panels.province?.updateAddMode?.(false);
-      updateEditingInteractionLock(state, canvas.ownerDocument || document);
-      updateRuntimePanel(canvas.ownerDocument || document, state);
+      completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.PROVINCE_ADD, {command: execution.command});
       return;
     }
     if (!state.panels.province?.getBrush().active || !state.map) return;
@@ -8501,7 +8610,7 @@ function bindProvinceEditing(canvas, state, documentRef) {
     if (!state.provinceEdit.activeStroke || state.provinceEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishProvinceStroke(state, documentRef);
+    rollbackCanvasToolStroke(state, "province");
     releasePointer(canvas, event.pointerId);
   }, true);
 
@@ -8532,15 +8641,20 @@ function bindSocialAssignmentEditing(canvas, state, documentRef, kind) {
     event.stopImmediatePropagation();
     applySocialAssignmentAtEvent(state, event, kind);
   }, true);
-  for (const eventName of ["pointerup", "pointercancel"]) {
-    canvas.addEventListener(eventName, event => {
-      if (!editState.activeStroke || editState.activeStroke.pointerId !== event.pointerId) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      finishSocialAssignmentStroke(state, documentRef, kind);
-      releasePointer(canvas, event.pointerId);
-    }, true);
-  }
+  canvas.addEventListener("pointerup", event => {
+    if (!editState.activeStroke || editState.activeStroke.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    finishSocialAssignmentStroke(state, documentRef, kind);
+    releasePointer(canvas, event.pointerId);
+  }, true);
+  canvas.addEventListener("pointercancel", event => {
+    if (!editState.activeStroke || editState.activeStroke.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    rollbackCanvasToolStroke(state, kind);
+    releasePointer(canvas, event.pointerId);
+  }, true);
 }
 
 function bindCityEditing(canvas, state, documentRef) {
@@ -8561,9 +8675,7 @@ function bindCityEditing(canvas, state, documentRef) {
         }
       });
       if (!execution.executed) return;
-      state.panels.city?.updateDeleteMode?.(false);
-      updateEditingInteractionLock(state, documentRef);
-      updateRuntimePanel(documentRef, state);
+      completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE, {command: execution.command});
       return;
     }
     if (!state.cityEdit.addMode || !state.map) return;
@@ -8584,9 +8696,7 @@ function bindCityEditing(canvas, state, documentRef) {
       }
     });
     if (!execution.executed) return;
-    state.panels.city?.updateAddMode?.(false);
-    updateEditingInteractionLock(state, documentRef);
-    updateRuntimePanel(documentRef, state);
+    completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_ADD, {command: execution.command});
   }, true);
 }
 
@@ -8600,6 +8710,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
     const packCell = getMarkerPackCellAtEvent(state, event);
     if (!Number.isInteger(packCell)) return;
 
+    const activeModeId = state.markerEdit.mode === "move" ? CANVAS_TOOL_MODE.MARKER_MOVE : CANVAS_TOOL_MODE.MARKER_ADD;
     const command = state.markerEdit.mode === "move"
       ? createMoveMarkerCommand(state.markerEdit.markerId, packCell)
       : createAddMarkerCommand({type: state.markerEdit.type, packCell});
@@ -8607,7 +8718,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
     const executed = applyMarkerCollectionCommand(state, documentRef, command, {selectCreated: state.markerEdit.mode !== "move", selectMarkerId: selectedMarkerId});
     if (!executed) return;
     state.markerEdit.lastPackCell = packCell;
-    stopMarkerEditMode(state, documentRef);
+    completeCanvasToolMode(state, documentRef, activeModeId, {command: executed});
   }, true);
 }
 
@@ -8759,26 +8870,13 @@ function isMouseButtonNavigationEvent(event) {
 }
 
 function startMarkerEditMode(state, documentRef, {mode, type = "mines", markerId = null} = {}) {
-  if (state.measurement.active) stopMeasurementMode(state, documentRef);
-  state.panels.height?.setActive(false);
-  state.panels.state?.setActive(false);
-  state.panels.province?.setActive(false);
-  state.heightEdit.activeStroke = null;
-  cancelHeightLine(state, documentRef);
-  state.stateEdit.activeStroke = null;
-  state.provinceEdit.activeStroke = null;
-  state.markerEdit.mode = mode || null;
-  state.markerEdit.type = type || state.markerEdit.type || "mines";
-  state.markerEdit.markerId = Number.isInteger(markerId) ? markerId : null;
-  state.markerEdit.lastPackCell = null;
-  updateMarkerPanel(state);
-  updateEditingInteractionLock(state, documentRef);
+  const modeId = mode === "move" ? CANVAS_TOOL_MODE.MARKER_MOVE : CANVAS_TOOL_MODE.MARKER_ADD;
+  enterCanvasToolMode(state, documentRef, modeId, {type, markerId});
 }
 
-function stopMarkerEditMode(state, documentRef) {
-  clearMarkerEditMode(state);
-  updateMarkerPanel(state);
-  updateEditingInteractionLock(state, documentRef);
+function stopMarkerEditMode(state, documentRef, reason = "cancel") {
+  const modeId = state.markerEdit.mode === "move" ? CANVAS_TOOL_MODE.MARKER_MOVE : CANVAS_TOOL_MODE.MARKER_ADD;
+  cancelCanvasToolMode(state, documentRef, modeId, reason);
 }
 
 function clearMarkerEditMode(state) {
@@ -9488,22 +9586,12 @@ function updateEditingInteractionLock(state, documentRef) {
 }
 
 function isEditingInteractionLocked(state) {
-  return Boolean(state.panels.height?.getBrush().active || state.panels.state?.getBrush().active || state.stateEdit.addMode || state.stateEdit.deleteMode || state.panels.province?.getBrush().active || state.provinceEdit.addMode || state.provinceEdit.deleteMode || state.panels.culture?.getBrush?.().active || state.panels.religion?.getBrush?.().active || state.cityEdit.addMode || state.cityEdit.deleteMode || state.markerEdit.mode || state.editingObject);
+  return Boolean(state.canvasToolModes.getActive()?.locksInteraction || state.editingObject);
 }
 
 function getAllowedEditingPanelIds(state) {
-  if (state.panels.height?.getBrush().active) return ["height-panel"];
-  if (state.panels.state?.getBrush().active) return ["state-panel"];
-  if (state.stateEdit.addMode) return ["state-panel"];
-  if (state.stateEdit.deleteMode) return ["state-panel"];
-  if (state.panels.province?.getBrush().active) return ["province-panel"];
-  if (state.provinceEdit.addMode) return ["province-panel"];
-  if (state.provinceEdit.deleteMode) return ["province-panel"];
-  if (state.panels.culture?.getBrush?.().active) return ["culture-panel"];
-  if (state.panels.religion?.getBrush?.().active) return ["religion-panel"];
-  if (state.cityEdit.addMode) return ["city-panel"];
-  if (state.cityEdit.deleteMode) return ["city-panel"];
-  if (state.markerEdit.mode) return ["marker-panel"];
+  const activeMode = state.canvasToolModes.getActive();
+  if (activeMode?.locksInteraction) return activeMode.allowedPanelIds;
   if (state.editingObject?.kind === OBJECT_KIND.RIVER) return ["river-panel"];
   if (state.editingObject) return ["object-details"];
   return [];
@@ -9514,7 +9602,8 @@ function buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds) {
   const stateBrush = state.panels.state?.getBrush?.() || {};
   const provinceBrush = state.panels.province?.getBrush?.() || {};
   return {
-    activeEditor: getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush),
+    activeEditor: getActiveEditorKind(state),
+    canvasToolMode: state.canvasToolModes.getSnapshot(),
     interactionLocked,
     allowedPanelIds,
     editingObject: state.editingObject ? {...state.editingObject} : null,
@@ -9602,17 +9691,15 @@ function conditionalHeightTransformLabel(operator) {
   return "条件指数变换";
 }
 
-function getActiveEditorKind(state, heightBrush, stateBrush, provinceBrush) {
-  if (heightBrush.active) return "height";
-  if (state.stateEdit.addMode) return "state:add";
-  if (state.stateEdit.deleteMode) return "state:delete";
-  if (stateBrush.active) return "state";
-  if (state.provinceEdit.addMode) return "province:add";
-  if (state.provinceEdit.deleteMode) return "province:delete";
-  if (provinceBrush.active) return "province";
-  if (state.cityEdit.addMode) return "city:add";
-  if (state.cityEdit.deleteMode) return "city:delete";
-  if (state.markerEdit.mode) return `marker:${state.markerEdit.mode}`;
+function getActiveEditorKind(state) {
+  const modeId = state.canvasToolModes.getActive()?.id;
+  if (modeId === CANVAS_TOOL_MODE.HEIGHT_BRUSH) return "height";
+  if (modeId === CANVAS_TOOL_MODE.STATE_BRUSH) return "state";
+  if (modeId === CANVAS_TOOL_MODE.PROVINCE_BRUSH) return "province";
+  if (modeId === CANVAS_TOOL_MODE.CULTURE_ASSIGN) return "culture";
+  if (modeId === CANVAS_TOOL_MODE.RELIGION_ASSIGN) return "religion";
+  if (modeId === CANVAS_TOOL_MODE.MEASUREMENT_DRAW) return "measurement";
+  if (modeId) return modeId;
   if (state.editingObject?.kind) return state.editingObject.kind;
   return null;
 }

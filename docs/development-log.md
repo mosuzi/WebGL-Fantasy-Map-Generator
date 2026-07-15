@@ -27345,3 +27345,11 @@ full 矩阵结果：
 - 方法元数据运行时补齐 `stability / stable / since / capabilityGroup`，154 个经门禁覆盖的方法进入 `stable`，7 个 debug 方法保留 `experimental`，`data.exportAll` 作为 `data.exportMap` 的 `deprecated` 兼容入口保留到不早于 `2.0.0`；`window.api` 继续仅在未占用时指向正式根入口。
 - 能力表新增 13 个扩展能力组、稳定策略、兼容别名目录和稳定等级统计；原始元数据缺失、多余、字段不全或确认标记漂移会直接阻止契约生成。确认方法目录统一为 11 个，嵌套 `edit.height.*` 在按命名空间分组时不再丢失后续路径。
 - 新增 `regress:api-stability`，覆盖版本、154 / 7 / 1 稳定等级、13 个能力组、162 项完整字段、旧别名共路径、deprecated 替代入口、确认策略和坏元数据拒绝；`regress:api-inventory / api-edit-coverage / api-action-convergence / api-operation / api-data-compatibility`、语法、生产构建和 `git diff --check` 均通过。按快速迭代约定本项未启动浏览器；第 33 项移出活动清单，第 34 项成为当前执行项。
+
+### 2026-07-15 完成权威任务第 36 项：统一画布工具模式管理器
+
+- 新增 `canvas-tool-mode-manager.js`，统一注册高度、国家、省份、城市、文化、宗教、测量和标记共 14 个模式；管理器保证单一活动模式，支持进入、重复进入上下文更新、取消、完成、地图重置、重入队列和异常清理。
+- 原来散落在各面板回调中的手工交叉关闭改为统一模式切换。国家 / 省份 / 城市新增删除和标记新增移动只在领域命令成功后完成模式，退出钩子不执行命令；面板关闭与地图替换进入同一取消路径，marker / measurement 面板补齐关闭回调。
+- 新增 `canvas-tool-preview-rollback.js`：跨模式、关闭、地图替换和 `pointercancel` 会恢复高度、国家、省份、文化、宗教的未提交 preview；文化 / 宗教按 `packBefore` 精确恢复。高度线段、填充、选区中间态和 transform preview 同步清理，交互锁改为读取模式元数据。
+- 新增 `regress:canvas-tools`，覆盖 14 模式互斥、重复进入、跨模式、重入、取消、完成、面板关闭、地图替换、异常、一次历史语义、预览恢复和运行时静态接线。`regress:height-brush / social-ownership / edit-execution-path`、生产构建和差异检查通过；本项验收只要求纯代码回归，未启动浏览器。
+- 完整契约写入 `docs/task-notes/canvas-tool-mode-manager.md`。第 36 项达到最小验收后移出活动清单；第 37 项成为当前执行项，并按权威计划停在产品策略选择。

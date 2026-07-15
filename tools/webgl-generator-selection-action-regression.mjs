@@ -53,12 +53,14 @@ assert.match(
 );
 
 const measurementStart = sourceBetween("function startMeasurementMode", "function stopMeasurementMode");
-assert.ok(measurementStart.indexOf("stopMarkerEditMode") < measurementStart.indexOf("state.measurement.active = true"), "进入测量前应退出标记编辑");
+assert.match(measurementStart, /enterCanvasToolMode\(state, documentRef, CANVAS_TOOL_MODE\.MEASUREMENT_DRAW\)/, "测量应进入统一画布模式管理器");
 const measurementObjectEdit = sourceBetween("function startMeasurementObjectEdit", "function locateMeasurement");
 assert.match(measurementObjectEdit, /startMeasurementMode\(state, documentRef, \{status: ""\}\)/, "测量对象编辑应复用测量模式入口");
 assert.doesNotMatch(measurementObjectEdit, /state\.measurement\.active\s*=\s*true/, "测量对象编辑不得绕过统一入口");
 const markerStart = sourceBetween("function startMarkerEditMode", "function stopMarkerEditMode");
-assert.ok(markerStart.indexOf("stopMeasurementMode") < markerStart.indexOf("state.markerEdit.mode ="), "进入标记编辑前应退出测量模式");
+assert.match(markerStart, /CANVAS_TOOL_MODE\.MARKER_MOVE[\s\S]*?CANVAS_TOOL_MODE\.MARKER_ADD/, "标记新增与移动应映射为统一画布模式");
+assert.match(markerStart, /enterCanvasToolMode\(state, documentRef, modeId, \{type, markerId\}\)/, "标记应进入统一画布模式管理器");
+assert.match(appSource, /register\(CANVAS_TOOL_MODE\.MEASUREMENT_DRAW[\s\S]*?register\(CANVAS_TOOL_MODE\.MARKER_ADD[\s\S]*?register\(CANVAS_TOOL_MODE\.MARKER_MOVE/, "测量与标记必须注册到同一模式管理器");
 
 console.log(JSON.stringify({
   selectionEvents: events.length,
@@ -66,7 +68,7 @@ console.log(JSON.stringify({
   batchEvents: 1,
   deletedObjectSelection: events.at(-3).snapshot.selection,
   preservedSourcePanelId: events.at(3).metadata.sourcePanelId,
-  measurementMarkerMutualExclusion: true
+  unifiedCanvasModeEntry: true
 }, null, 2));
 
 function sourceBetween(start, end) {
