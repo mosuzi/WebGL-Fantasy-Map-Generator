@@ -1,15 +1,19 @@
 import {formatHistoryCommand} from "./history-format.js";
+import {getOverlayRegistry} from "./overlay-registry.js";
 
 export class PanelManager {
   constructor(documentRef, host) {
     this.documentRef = documentRef;
     this.host = host;
     this.panels = new Map();
-    this.nextZIndex = 20;
     this.storagePrefix = "webgl-generator-panel:";
+    this.lastMainStorageKey = `${this.storagePrefix}last-main`;
+    this.overlayRegistry = getOverlayRegistry(documentRef);
     this.layer = documentRef.createElement("div");
     this.layer.className = "floating-panel-layer";
     host.append(this.layer);
+    this.handleResize = () => this.reflowPanels();
+    documentRef.defaultView?.addEventListener("resize", this.handleResize);
   }
 
   registerPanel(id, options) {
@@ -21,6 +25,7 @@ export class PanelManager {
     panel.style.width = `${savedState?.width ?? options.width ?? 320}px`;
     if (options.maxWidth) panel.style.maxWidth = `min(${options.maxWidth}px, calc(100% - 16px))`;
     panel.dataset.panelId = id;
+    panel.dataset.panelRole = options.role === "detail" ? "detail" : "main";
 
     const header = this.documentRef.createElement("header");
     header.className = "floating-panel-header";
@@ -57,6 +62,8 @@ export class PanelManager {
       body,
       onClose: options.onClose || (() => {}),
       persistOpen: options.persistOpen !== false,
+      role: panel.dataset.panelRole,
+      overlayId: `panel:${id}`,
       historyActions,
       headerButtons: {undo, redo},
       headerRefreshTimer: 0,
@@ -64,6 +71,12 @@ export class PanelManager {
       refreshHeaderActions: () => refreshHeaderActions(record)
     };
     this.panels.set(id, record);
+    this.overlayRegistry?.register(record.overlayId, panel, {
+      kind: "panel",
+      role: record.role,
+      activateOnPointerDown: false,
+      onRequestClose: () => this.close(id, {fromRegistry: true})
+    });
     close.addEventListener("click", () => this.close(id));
     undo.addEventListener("click", () => {
       refreshHeaderActions(record);
@@ -98,26 +111,32 @@ export class PanelManager {
   open(id) {
     const record = this.panels.get(id);
     if (!record) return;
+    const returnFocus = this.documentRef.activeElement;
+    if (record.role === "main") this.closeOtherMainPanels(id);
     record.panel.classList.remove("hidden");
     this.constrain(record.panel);
-    this.activate(id);
+    this.resolvePanelCoexistence(id);
+    this.overlayRegistry?.show(record.overlayId, {returnFocus});
     this.startHeaderRefresh(record);
     this.savePanelState(id);
   }
 
-  close(id) {
+  close(id, {restoreFocus = true, fromRegistry = false} = {}) {
     const record = this.panels.get(id);
     if (!record) return;
+    const wasOpen = !record.panel.classList.contains("hidden");
     record.panel.classList.add("hidden");
     this.stopHeaderRefresh(record);
+    if (!fromRegistry) this.overlayRegistry?.hide(record.overlayId, {restoreFocus});
     this.savePanelState(id);
-    record.onClose();
+    if (wasOpen) record.onClose();
+    this.reflowPanels();
   }
 
   activate(id) {
     const record = this.panels.get(id);
     if (!record) return;
-    record.panel.style.zIndex = String(this.nextZIndex++);
+    this.overlayRegistry?.activate(record.overlayId);
     refreshHeaderActions(record);
   }
 
@@ -154,16 +173,19 @@ export class PanelManager {
   savePanelState(id) {
     const record = this.panels.get(id);
     if (!record) return;
+    const previous = this.readPanelState(id);
+    const open = !record.panel.classList.contains("hidden");
     const state = {
       left: Math.round(Number.parseFloat(record.panel.style.left) || 0),
       top: Math.round(Number.parseFloat(record.panel.style.top) || 0),
-      width: Math.round(record.panel.offsetWidth || Number.parseFloat(record.panel.style.width) || 320)
+      width: Math.round(record.panel.offsetWidth || Number.parseFloat(record.panel.style.width) || 320),
+      openedAt: open ? Date.now() : previous?.openedAt || 0
     };
-    if (record.persistOpen) state.open = !record.panel.classList.contains("hidden");
-    try {
-      this.host.ownerDocument.defaultView.localStorage.setItem(this.storagePrefix + id, JSON.stringify(state));
-    } catch {
-      // localStorage may be unavailable in restricted browser modes.
+    if (record.persistOpen) state.open = open;
+    this.writePanelState(id, state);
+    if (record.role === "main" && record.persistOpen) {
+      if (open) this.writeLastMainPanelId(id);
+      else if (this.readLastMainPanelId() === id) this.writeLastMainPanelId(null);
     }
   }
 
@@ -180,13 +202,131 @@ export class PanelManager {
   }
 
   getSavedOpenPanelIds() {
-    const panelIds = [];
+    const mainCandidates = [];
+    const auxiliary = [];
     for (const [id, record] of this.panels) {
       if (!record.persistOpen) continue;
-      if (this.readPanelState(id)?.open === true) panelIds.push(id);
+      const state = this.readPanelState(id);
+      if (state?.open !== true) continue;
+      if (record.role === "main") mainCandidates.push({id, openedAt: Number(state.openedAt) || 0});
+      else auxiliary.push(id);
     }
-    return panelIds;
+    const chosenMain = chooseLastOpenMainPanel(mainCandidates, this.readLastMainPanelId());
+    for (const candidate of mainCandidates) {
+      if (candidate.id === chosenMain) continue;
+      const state = this.readPanelState(candidate.id);
+      if (state) this.writePanelState(candidate.id, {...state, open: false});
+    }
+    if (chosenMain) this.writeLastMainPanelId(chosenMain);
+    else this.writeLastMainPanelId(null);
+    return [...auxiliary, ...(chosenMain ? [chosenMain] : [])];
   }
+
+  closeOtherMainPanels(exceptId) {
+    for (const [id, record] of this.panels) {
+      if (id === exceptId || record.role !== "main" || record.panel.classList.contains("hidden")) continue;
+      this.close(id, {restoreFocus: false});
+    }
+  }
+
+  resolvePanelCoexistence(openedId) {
+    const opened = this.panels.get(openedId);
+    if (!opened) return;
+    const main = this.visiblePanelByRole("main");
+    const detail = this.visiblePanelByRole("detail");
+    if (!main || !detail) {
+      this.reflowPanels();
+      return;
+    }
+    if (!panelsCanCoexist(this.host.clientWidth || this.host.getBoundingClientRect().width, panelWidth(main.panel), panelWidth(detail.panel))) {
+      if (opened.role === "detail") this.close(this.panelIdForRecord(main), {restoreFocus: false});
+      else this.close(this.panelIdForRecord(detail), {restoreFocus: false});
+      return;
+    }
+    this.dockPanelPair(main.panel, detail.panel);
+  }
+
+  reflowPanels() {
+    const main = this.visiblePanelByRole("main");
+    const detail = this.visiblePanelByRole("detail");
+    if (main && detail && panelsCanCoexist(this.host.clientWidth || this.host.getBoundingClientRect().width, panelWidth(main.panel), panelWidth(detail.panel))) {
+      this.dockPanelPair(main.panel, detail.panel);
+      return;
+    }
+    if (main) this.keepPanelClearOfToolbar(main.panel);
+    if (detail) {
+      detail.panel.style.top = `${Math.max(64, Number.parseFloat(detail.panel.style.top) || 0)}px`;
+      this.constrain(detail.panel);
+    }
+  }
+
+  dockPanelPair(mainPanel, detailPanel) {
+    const hostWidth = this.host.clientWidth || this.host.getBoundingClientRect().width;
+    mainPanel.style.left = `${Math.max(8, hostWidth - panelWidth(mainPanel) - 8)}px`;
+    mainPanel.style.top = "8px";
+    detailPanel.style.left = "8px";
+    detailPanel.style.top = "64px";
+    this.constrain(mainPanel);
+    this.constrain(detailPanel);
+  }
+
+  keepPanelClearOfToolbar(panel) {
+    this.constrain(panel);
+    const toolbar = this.documentRef.querySelector(".map-toolbar");
+    if (!toolbar || !rectanglesOverlap(panel.getBoundingClientRect(), toolbar.getBoundingClientRect())) return;
+    const hostWidth = this.host.clientWidth || this.host.getBoundingClientRect().width;
+    panel.style.left = `${Math.max(8, hostWidth - panelWidth(panel) - 8)}px`;
+    panel.style.top = "8px";
+    this.constrain(panel);
+  }
+
+  visiblePanelByRole(role) {
+    for (const record of this.panels.values()) {
+      if (record.role === role && !record.panel.classList.contains("hidden")) return record;
+    }
+    return null;
+  }
+
+  panelIdForRecord(target) {
+    for (const [id, record] of this.panels) if (record === target) return id;
+    return null;
+  }
+
+  writePanelState(id, state) {
+    try {
+      this.host.ownerDocument.defaultView.localStorage.setItem(this.storagePrefix + id, JSON.stringify(state));
+    } catch {
+      // localStorage may be unavailable in restricted browser modes.
+    }
+  }
+
+  readLastMainPanelId() {
+    try {
+      return this.host.ownerDocument.defaultView.localStorage.getItem(this.lastMainStorageKey) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  writeLastMainPanelId(id) {
+    try {
+      const storage = this.host.ownerDocument.defaultView.localStorage;
+      if (id) storage.setItem(this.lastMainStorageKey, id);
+      else storage.removeItem(this.lastMainStorageKey);
+    } catch {
+      // localStorage may be unavailable in restricted browser modes.
+    }
+  }
+}
+
+export function panelsCanCoexist(hostWidth, mainWidth, detailWidth, gap = 24) {
+  return Number(hostWidth) >= Number(mainWidth) + Number(detailWidth) + Number(gap);
+}
+
+export function chooseLastOpenMainPanel(candidates, preferredId = null) {
+  if (!Array.isArray(candidates) || !candidates.length) return null;
+  if (preferredId && candidates.some(candidate => candidate.id === preferredId)) return preferredId;
+  return [...candidates].sort((a, b) => (Number(a.openedAt) || 0) - (Number(b.openedAt) || 0)).at(-1)?.id || null;
 }
 
 function normalizeHistoryActions(actions) {
@@ -286,6 +426,14 @@ function installDrag(manager, panel, handle) {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function panelWidth(panel) {
+  return panel?.offsetWidth || panel?.getBoundingClientRect?.().width || Number.parseFloat(panel?.style?.width) || 320;
+}
+
+function rectanglesOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
 function captureFocusState(root) {

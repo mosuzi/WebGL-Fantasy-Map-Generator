@@ -61,6 +61,7 @@
           ref="exportPanelRef"
           class="project-export-panel"
           :style="exportPanelStyle"
+          tabindex="-1"
           role="dialog"
           aria-labelledby="project-export-panel-title"
           @click.stop
@@ -472,6 +473,7 @@ import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTabs from "./base/UiTabs.vue";
 import {Lock, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
+import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
 import {
   DISTANCE_UNIT_OPTIONS,
@@ -518,6 +520,12 @@ const {
   defaultHeight: 300,
   margin: 12,
   storageKey: "webgl-generator-panel:project-export"
+});
+useManagedOverlay(exportPanelRef, exportPanelOpen, {
+  id: "project-export",
+  onClose: () => {
+    exportPanelOpen.value = false;
+  }
 });
 const climateLatitudeMode = ref("auto");
 const climateLatitudeCenter = ref(0);

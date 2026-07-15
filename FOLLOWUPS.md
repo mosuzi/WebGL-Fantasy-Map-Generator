@@ -16,4 +16,4 @@
 
 ## 当前未提取事项
 
-- 无。
+- `regress:selection-panel-policy` 当前失败：`OBJECT_KIND.NOTE` 已是正式对象类型，但 `SELECTION_PANEL_BINDINGS` 没有声明其 `notes-panel` 领域绑定，导致“除区域外对象均有绑定”的既有门禁缺少 `note`。该问题与第 56 项浮层策略无关，本轮不顺带修复；后续应确认独立备注选择是更新已打开备注面板还是继续只落对象详情，再补绑定与回归。

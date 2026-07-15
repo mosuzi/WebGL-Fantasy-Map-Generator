@@ -3768,10 +3768,10 @@ select:disabled {
 
 .project-export-panel {
   position: fixed;
-  z-index: 980;
+  z-index: var(--managed-overlay-z-index, 900);
   display: grid;
   gap: 10px;
-  max-height: min(520px, calc(100vh - 24px));
+  max-height: min(520px, calc(100vh - 128px));
   overflow: auto;
   border: 1px solid rgba(189, 206, 213, 0.24);
   border-radius: 8px;
@@ -4031,11 +4031,11 @@ select:disabled {
 
 .heightmap-import-workbench {
   position: fixed;
-  z-index: 940;
+  z-index: var(--managed-overlay-z-index, 900);
   display: flex;
   flex-direction: column;
   width: min(460px, calc(100vw - 16px));
-  max-height: calc(100vh - 16px);
+  max-height: calc(100vh - 128px);
   border: 1px solid rgba(189, 206, 213, 0.24);
   border-radius: 8px;
   background: rgba(13, 19, 23, 0.98);
@@ -6720,13 +6720,13 @@ input.ui-switch-native {
 
 .ui-tree-display-panel {
   position: fixed;
-  z-index: 850;
+  z-index: var(--managed-overlay-z-index, 900);
   top: 64px;
   right: 24px;
   display: flex;
   flex-direction: column;
   width: min(760px, calc(100vw - 48px));
-  height: min(650px, calc(100vh - 88px));
+  height: min(650px, calc(100vh - 128px));
   border: 1px solid rgba(189, 206, 213, 0.24);
   border-radius: 8px;
   background: rgba(13, 19, 23, 0.98);

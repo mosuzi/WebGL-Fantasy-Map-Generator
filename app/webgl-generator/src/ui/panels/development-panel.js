@@ -4,6 +4,7 @@ export function createDevelopmentPanel(documentRef, manager) {
   const control = documentRef.getElementById("open-development-panel");
   const record = manager.registerPanel("development-panel", {
     title: "开发模式",
+    persistOpen: false,
     left: 24,
     top: 72,
     width: 420,

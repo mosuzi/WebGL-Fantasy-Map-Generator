@@ -334,8 +334,10 @@
   <Teleport to="body">
     <section
       v-if="workbenchOpen"
+      ref="workbenchRef"
       class="heightmap-import-workbench"
       :style="workbenchStyle"
+      tabindex="-1"
       role="dialog"
       aria-labelledby="heightmap-workbench-title"
       @pointerdown.stop
@@ -665,6 +667,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import {formatHeight, formatNumber} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 
 defineOptions({
   name: "HeightPanel"
@@ -792,6 +795,7 @@ const heightmapMappingMode = ref("grayscale");
 const heightmapUnassignedHeight = ref(0);
 const heightmapUnassignedStrategy = ref("fixed-height");
 const workbenchOpen = ref(false);
+const workbenchRef = ref(null);
 const previewCanvas = ref(null);
 const heightBandCanvas = ref(null);
 const heightDifferenceCanvas = ref(null);
@@ -817,6 +821,11 @@ const previewStatus = ref("尚未选择图片");
 const workbenchPosition = ref({left: 760, top: 110});
 let dragState = null;
 let latestHeightBandSamples = null;
+
+useManagedOverlay(workbenchRef, workbenchOpen, {
+  id: "heightmap-import-workbench",
+  onClose: () => closeImportWorkbench()
+});
 
 const summaryMetrics = computed(() => {
   const current = props.state.currentHeightStats;
@@ -844,8 +853,7 @@ const transformOperandConfig = computed(() => {
 const targetSizeLabel = computed(() => `${Number(props.state.graphWidth) || 1440} x ${Number(props.state.graphHeight) || 960}`);
 const workbenchStyle = computed(() => ({
   left: `${workbenchPosition.value.left}px`,
-  top: `${workbenchPosition.value.top}px`,
-  maxHeight: `calc(100vh - ${workbenchPosition.value.top + 8}px)`
+  top: `${workbenchPosition.value.top}px`
 }));
 const previewMetrics = computed(() => [
   {label: "图片", value: previewStats.value?.filename || "未选择"},

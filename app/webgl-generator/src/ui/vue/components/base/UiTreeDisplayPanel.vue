@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <section v-if="open" ref="panel" class="ui-tree-display-panel" role="dialog" :aria-label="title" :style="panelStyle">
+    <section v-if="open" ref="panel" class="ui-tree-display-panel" tabindex="-1" role="dialog" :aria-label="title" :style="panelStyle">
       <header class="ui-tree-display-header" @pointerdown="startPanelDrag">
         <strong>{{ title }}</strong>
         <span>{{ nodes.length }} 节点</span>
@@ -41,6 +41,7 @@ import {Close} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../../composables/use-draggable-floating-panel.js";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 import {createSelectionCenterController, selectionCenterAnchor, selectionOrderSignature} from "../../../components/selection-scroll.js";
+import {useManagedOverlay} from "../../composables/use-managed-overlay.js";
 
 defineOptions({
   name: "UiTreeDisplayPanel"
@@ -91,6 +92,10 @@ const {
   defaultWidth: 760,
   defaultHeight: 650,
   margin: 8
+});
+useManagedOverlay(panel, () => props.open, {
+  id: "tree-display",
+  onClose: () => emit("update:open", false)
 });
 
 watch(() => props.open, open => {

@@ -14,6 +14,7 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
     left: 24,
     top: 24,
     width: 320,
+    role: "detail",
     persistOpen: false,
     onClose: () => {
       const closedObject = panelState.object;
