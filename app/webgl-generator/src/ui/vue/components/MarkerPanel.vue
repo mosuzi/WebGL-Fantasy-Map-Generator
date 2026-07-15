@@ -7,7 +7,7 @@
   </div>
 
   <div class="marker-edit-toolbar">
-    <UiSelectField class-name="marker-resource-select" label="新增资源" :model-value="resourceDraft.type" :options="resourceTypeOptions" @update:model-value="resourceDraft.type = $event" />
+    <UiSelectField class-name="marker-resource-select" label="新增标记" :model-value="markerDraft.type" :options="markerTypeOptions" @update:model-value="markerDraft.type = $event" />
     <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
     <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
     <UiButton class="marker-regenerate-button" variant="secondary" @click="callbacks.onRegenerateResources?.()">重生成资源点</UiButton>
@@ -78,7 +78,7 @@
 
 <script setup>
 import {computed, nextTick, reactive, ref, watch} from "vue";
-import {MARKER_RESOURCE_TYPE_OPTIONS} from "../../../generator/markers.js";
+import {MARKER_TYPE_OPTIONS} from "../../../generator/markers.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -165,7 +165,7 @@ const paletteOptions = Object.freeze([
   {value: "mystery", label: "异象"}
 ]);
 
-const resourceTypeOptions = MARKER_RESOURCE_TYPE_OPTIONS;
+const markerTypeOptions = MARKER_TYPE_OPTIONS;
 const unitPreferences = useUnitPreferences();
 
 const visualDraft = reactive({
@@ -173,8 +173,8 @@ const visualDraft = reactive({
   palette: "mystery"
 });
 
-const resourceDraft = reactive({
-  type: resourceTypeOptions[0]?.value || "mines"
+const markerDraft = reactive({
+  type: markerTypeOptions.find(option => option.value === "encounters")?.value || markerTypeOptions[0]?.value || "encounters"
 });
 
 const activeAction = ref(null);
@@ -189,7 +189,7 @@ const {selectedRowIds: selectedMarkerIds, selectedRows: selectedMarkerRows} = us
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
-const defaultMarkerEmptyAction = Object.freeze({key: "add", label: "放置资源标记", icon: "+"});
+const defaultMarkerEmptyAction = Object.freeze({key: "add", label: "放置通用标记", icon: "+"});
 const markerEmptyAction = computed(() => filterEmptyAction.value || defaultMarkerEmptyAction);
 const activeSelectedMarkerId = computed(() => {
   const selectionId = props.state.selection?.object?.kind === "marker" ? props.state.selection.object.id : null;
@@ -205,8 +205,8 @@ const markerListActions = computed(() => [
   {...defaultMarkerEmptyAction, active: props.state.editMode === "add", disabled: props.state.editMode === "move"},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMarkerRows.value.length)}`, icon: "◉", disabled: !selectedMarkerRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
-  {key: "move", label: "移动选中资源标记", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
-  {key: "delete", label: "删除选中资源标记", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
+  {key: "move", label: "移动选中标记", icon: "⌖", active: props.state.editMode === "move", disabled: !selected.value || props.state.editMode === "add"},
+  {key: "delete", label: "删除选中标记", icon: "×", disabled: !selected.value || Boolean(props.state.editMode)}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -232,7 +232,7 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 const editStatus = computed(() => {
-  if (props.state.editMode === "add") return `放置：${resourceTypeLabel(props.state.editType || resourceDraft.type)}`;
+  if (props.state.editMode === "add") return `放置：${markerTypeLabel(props.state.editType || markerDraft.type)}`;
   if (props.state.editMode === "move") return `移动：#${props.state.editMarkerId ?? selected.value?.id ?? "none"}`;
   return "";
 });
@@ -336,7 +336,7 @@ function openRenameEditor(row) {
 }
 
 function startAddResource() {
-  props.callbacks.onAddResourceMode?.(resourceDraft.type);
+  props.callbacks.onAddResourceMode?.(markerDraft.type);
 }
 
 function startMoveSelected() {
@@ -387,8 +387,8 @@ function paletteLabel(value) {
   return paletteOptions.find(option => option.value === value)?.label || value || "异象";
 }
 
-function resourceTypeLabel(value) {
-  return resourceTypeOptions.find(option => option.value === value)?.label || value || "资源";
+function markerTypeLabel(value) {
+  return markerTypeOptions.find(option => option.value === value)?.label || value || "标记";
 }
 
 function formatNumber(value) {

@@ -2,6 +2,7 @@ export const OBJECT_KIND = Object.freeze({
   CITY: "city",
   LABEL: "label",
   MARKER: "marker",
+  NOTE: "note",
   ROUTE: "route",
   TRADE_FLOW: "trade-flow",
   RIVER: "river",
@@ -27,6 +28,7 @@ export const OBJECT_KIND_LABEL = Object.freeze({
   [OBJECT_KIND.CITY]: "城市",
   [OBJECT_KIND.LABEL]: "标签",
   [OBJECT_KIND.MARKER]: "标记",
+  [OBJECT_KIND.NOTE]: "独立备注",
   [OBJECT_KIND.ROUTE]: "路线",
   [OBJECT_KIND.TRADE_FLOW]: "贸易流",
   [OBJECT_KIND.RIVER]: "河流",
@@ -62,6 +64,7 @@ export const POINT_OBJECT_KINDS = Object.freeze([
   OBJECT_KIND.CITY,
   OBJECT_KIND.LABEL,
   OBJECT_KIND.MARKER,
+  OBJECT_KIND.NOTE,
   OBJECT_KIND.MILITARY
 ]);
 

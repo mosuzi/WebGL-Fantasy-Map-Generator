@@ -41,19 +41,31 @@
   <div v-if="selected" class="notes-panel-preview">
     {{ selected.body || "空备注" }}
   </div>
+
+  <UiActionDock v-if="selected && !selected.orphan" v-model:active="activeAction" :actions="noteActions">
+    <template #rename>
+      <UiTextEditField :model-value="selected.name" :max-length="64" @apply="name => callbacks.onRename?.(selected, name)" />
+    </template>
+    <template #edit>
+      <UiNoteField :model-value="selected.body" @apply="body => callbacks.onNoteChange?.(selected, body)" @clear="callbacks.onNoteChange?.(selected, '')" />
+    </template>
+  </UiActionDock>
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {isPersistentHighlightObjectKind} from "../../../runtime/persistent-highlights.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiTextEditField from "./base/UiTextEditField.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {compareListValues} from "../../sort-utils.js";
@@ -74,6 +86,11 @@ const props = defineProps({
 });
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
+const noteActions = Object.freeze([
+  {key: "rename", label: "重命名", icon: "✎"},
+  {key: "edit", label: "编辑正文", icon: "☰"}
+]);
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},
   {key: "kindLabel", label: "类型"},
@@ -105,11 +122,13 @@ const notesExportActions = computed(() => [
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
 const notesListActions = computed(() => [
+  {key: "create-standalone", label: props.state.createMode ? "取消放置独立备注" : "放置独立备注", icon: "+"},
   {key: "highlight-selected", label: `高亮备注对象 ${formatNumber(highlightableNoteRows.value.length)}`, icon: "◉", disabled: !highlightableNoteRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "locate", label: "定位备注对象", icon: "⌖", disabled: !selected.value || selected.value.orphan},
   {key: "delete", label: "删除选中备注", icon: "×", disabled: !selected.value}
 ]);
+watch(() => selected.value?.id, () => { activeAction.value = null; });
 const summaryMetrics = computed(() => [
   {label: "备注", value: formatNumber(rows.value.length)},
   {label: "可定位", value: formatNumber(rows.value.filter(row => !row.orphan).length)},
@@ -234,6 +253,10 @@ function handleNotesExport(key) {
 }
 
 function handleNotesAction(key) {
+  if (key === "create-standalone") {
+    props.callbacks.onCreateStandaloneMode?.(!props.state.createMode);
+    return;
+  }
   if (key === "highlight-selected") {
     props.callbacks.onHighlight?.(highlightableNoteRows.value);
     return;

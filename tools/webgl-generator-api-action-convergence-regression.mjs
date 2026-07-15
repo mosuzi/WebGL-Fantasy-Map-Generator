@@ -62,7 +62,10 @@ const apiActionSignatures = [
   "actions.edit?.height?.rebuildDownstreamDerived",
   "actions.edit?.routes?.create",
   "actions.edit?.rivers?.create",
-  "actions.edit?.lakes?.create"
+  "actions.edit?.lakes?.create",
+  "actions.edit?.zones?.create",
+  "actions.edit?.zones?.delete",
+  "actions.edit?.notes?.createStandalone"
 ];
 for (const signature of apiActionSignatures) assert(consoleApiSource.includes(signature), `控制台 API 没有委托公共 action：${signature}`);
 
@@ -109,8 +112,8 @@ assert.equal(failure.error.code, "api_error", "公共 action 参数错误 code �
 assert.match(failure.error.message, /当前没有可导出的地图/, "公共 action 错误消息漂移");
 
 const declaredCounts = countDeclaredMethods(API_METHODS);
-assert.equal(declaredCounts.total, 165, "公共 API 方法总数漂移");
-assert.equal(declaredCounts.edit, 75, "edit 方法数漂移");
+assert.equal(declaredCounts.total, 168, "公共 API 方法总数漂移");
+assert.equal(declaredCounts.edit, 78, "edit 方法数漂移");
 
 console.log(JSON.stringify({
   ok: true,

@@ -98,6 +98,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
     }),
     edit: Object.freeze({
       notes: Object.freeze({
+        createStandalone: (options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.createStandalone, "edit.notes.createStandalone")(options)),
         set: (object, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.set, "edit.notes.set")(object, body, options)),
         delete: (noteId, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.delete, "edit.notes.delete")(noteId, options))
       }),
@@ -154,6 +155,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
         rename: (target, name) => apiCall(() => requireApiAction(actions.edit?.military?.rename, "edit.military.rename")(target, name))
       }),
       zones: Object.freeze({
+        create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.zones?.create, "edit.zones.create")(options)),
+        delete: zoneId => apiCall(() => requireApiAction(actions.edit?.zones?.delete, "edit.zones.delete")(zoneId)),
         setStyle: (zoneId, patch) => apiCall(() => requireApiAction(actions.edit?.zones?.setStyle, "edit.zones.setStyle")(zoneId, patch))
       }),
       cultures: Object.freeze({
@@ -358,6 +361,7 @@ function buildMethodMetadata() {
       rerollSeed: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}
     },
     edit: {
+      "notes.createStandalone": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
       "notes.set": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
       "notes.delete": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
       "measurements.save": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
@@ -398,6 +402,8 @@ function buildMethodMetadata() {
       "military.importBattleEvents": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.clearBattleEvents": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.rename": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "zones.create": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
+      "zones.delete": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
       "zones.setStyle": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
       "cultures.add": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.assignCells": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
@@ -1300,6 +1306,10 @@ function buildApiNoteRows(map, ids = null) {
         body,
         bodyLength: body.length,
         orphan: Boolean(!object || !resolved),
+        standalone: Boolean(note.standalone),
+        packCell: note.standalone ? Number(note.packCell) : null,
+        x: note.standalone ? Number(note.x) : null,
+        y: note.standalone ? Number(note.y) : null,
         createdAt: note.createdAt || "",
         updatedAt: note.updatedAt || note.createdAt || ""
       };

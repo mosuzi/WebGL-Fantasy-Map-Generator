@@ -43,7 +43,8 @@ const OBJECT_NAME_READERS = Object.freeze({
   [OBJECT_KIND.RIVER]: readRiverName,
   [OBJECT_KIND.LAKE]: readLakeName,
   [OBJECT_KIND.CITY]: readCityName,
-  [OBJECT_KIND.MARKER]: readMarkerName
+  [OBJECT_KIND.MARKER]: readMarkerName,
+  [OBJECT_KIND.NOTE]: readStandaloneNoteName
 });
 
 const OBJECT_NAME_WRITERS = Object.freeze({
@@ -54,7 +55,8 @@ const OBJECT_NAME_WRITERS = Object.freeze({
   [OBJECT_KIND.RIVER]: writeRiverName,
   [OBJECT_KIND.LAKE]: writeLakeName,
   [OBJECT_KIND.CITY]: writeCityName,
-  [OBJECT_KIND.MARKER]: writeMarkerName
+  [OBJECT_KIND.MARKER]: writeMarkerName,
+  [OBJECT_KIND.NOTE]: writeStandaloneNoteName
 });
 
 const OBJECT_NAME_RESTORERS = Object.freeze({
@@ -65,7 +67,8 @@ const OBJECT_NAME_RESTORERS = Object.freeze({
   [OBJECT_KIND.RIVER]: (map, target, previous) => writeRiverName(map, target.id, previous.name),
   [OBJECT_KIND.LAKE]: (map, target, previous) => writeLakeName(map, target.id, previous.name),
   [OBJECT_KIND.CITY]: (map, target, previous) => writeCityName(map, target.id, previous.name, previous.burgName),
-  [OBJECT_KIND.MARKER]: (map, target, previous) => writeMarkerName(map, target.id, previous.name)
+  [OBJECT_KIND.MARKER]: (map, target, previous) => writeMarkerName(map, target.id, previous.name),
+  [OBJECT_KIND.NOTE]: (map, target, previous) => writeStandaloneNoteName(map, target.id, previous.name)
 });
 
 export function createRenameObjectCommand(object, nextName) {
@@ -257,8 +260,13 @@ function readLakeName(map, lakeId) {
 }
 
 function readMarkerName(map, markerId) {
-  const marker = map?.markers?.markers?.[markerId];
+  const marker = (map?.markers?.markers || []).find(item => Number(item?.id) === Number(markerId));
   return marker ? {name: marker.name || ""} : null;
+}
+
+function readStandaloneNoteName(map, noteId) {
+  const note = (map?.notes?.notes || []).find(item => item?.kind === OBJECT_KIND.NOTE && String(item.objectId) === String(noteId));
+  return note ? {name: note.name || ""} : null;
 }
 
 function readCityName(map, cityId) {
@@ -340,9 +348,16 @@ function writeLakeName(map, lakeId, name) {
 }
 
 function writeMarkerName(map, markerId, name) {
-  const marker = map?.markers?.markers?.[markerId];
+  const marker = (map?.markers?.markers || []).find(item => Number(item?.id) === Number(markerId));
   if (!marker) throw new Error(`找不到标记 #${markerId}`);
   marker.name = name;
+}
+
+function writeStandaloneNoteName(map, noteId, name) {
+  const note = (map?.notes?.notes || []).find(item => item?.kind === OBJECT_KIND.NOTE && String(item.objectId) === String(noteId));
+  if (!note) throw new Error(`找不到独立备注 #${noteId}`);
+  note.name = name;
+  note.updatedAt = new Date().toISOString();
 }
 
 function writeCityName(map, cityId, name, burgName = name) {
@@ -461,7 +476,7 @@ function normalizeName(name) {
 
 function createObjectNoteSnapshot(target, body, {name, previous = null} = {}) {
   const now = new Date().toISOString();
-  return {
+  const snapshot = {
     id: objectNoteId(target),
     kind: target.kind,
     objectId: target.id,
@@ -472,6 +487,13 @@ function createObjectNoteSnapshot(target, body, {name, previous = null} = {}) {
     createdAt: previous?.createdAt || now,
     updatedAt: now
   };
+  if (previous?.standalone === true && target.kind === OBJECT_KIND.NOTE) {
+    snapshot.standalone = true;
+    snapshot.packCell = previous.packCell;
+    snapshot.x = previous.x;
+    snapshot.y = previous.y;
+  }
+  return snapshot;
 }
 
 function normalizeNoteBody(body) {

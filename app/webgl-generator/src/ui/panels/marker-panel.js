@@ -188,7 +188,7 @@ function markerObject(row) {
 
 function markerExists(map, markerId) {
   markerId = normalizeMarkerId(markerId);
-  return Boolean(Number.isInteger(markerId) && map?.markers?.markers?.[markerId]);
+  return Boolean(Number.isInteger(markerId) && (map?.markers?.markers || []).some(marker => marker?.id === markerId));
 }
 
 function normalizeMarkerId(markerId) {

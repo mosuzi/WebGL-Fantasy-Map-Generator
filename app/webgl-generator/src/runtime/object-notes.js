@@ -54,7 +54,7 @@ export function cloneObjectNote(note) {
 
 function normalizeNote(note) {
   const now = new Date().toISOString();
-  return {
+  const normalized = {
     id: String(note.id),
     kind: String(note.kind || ""),
     objectId: note.objectId,
@@ -65,6 +65,13 @@ function normalizeNote(note) {
     createdAt: note.createdAt || now,
     updatedAt: note.updatedAt || now
   };
+  if (note.standalone === true || note.kind === "note") {
+    normalized.standalone = true;
+    normalized.packCell = Number.isInteger(Number(note.packCell)) ? Number(note.packCell) : -1;
+    normalized.x = Number(note.x);
+    normalized.y = Number(note.y);
+  }
+  return normalized;
 }
 
 function refreshNotesMetadata(store) {

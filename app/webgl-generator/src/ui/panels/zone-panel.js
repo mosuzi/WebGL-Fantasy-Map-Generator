@@ -32,6 +32,8 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
+    createMode: false,
+    createType: "Disaster",
     version: 0
   });
   const panelCallbacks = {
@@ -66,6 +68,8 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, zoneObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onStyleChange: (zoneId, patch) => callbacks.onStyleChange?.(zoneId, patch),
+    onCreateMode: type => callbacks.onCreateMode?.(type),
+    onDelete: zoneId => callbacks.onDelete?.(zoneId),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -83,6 +87,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.open = false;
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");
@@ -120,6 +125,10 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     },
     setSelection(selection) {
       panelState.selection = selection;
+    },
+    setCreateMode(active, type = panelState.createType) {
+      panelState.createMode = Boolean(active);
+      panelState.createType = type || "Disaster";
     },
     isOpen() {
       return panelState.open;

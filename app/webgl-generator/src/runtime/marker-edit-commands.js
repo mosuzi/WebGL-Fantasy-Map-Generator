@@ -56,7 +56,7 @@ export function createSetMarkerVisualCommand(markerId, patch = {}) {
       writeMarkerVisual(marker, previous || defaultMarkerVisual(marker));
     },
     isNoop(context) {
-      const marker = context.map?.markers?.markers?.[normalizedMarkerId];
+      const marker = findMarker(context.map, normalizedMarkerId);
       if (!marker || !Object.keys(nextPatch).length) return true;
       const current = marker.visual || marker.data?.visual || {};
       return Object.entries(nextPatch).every(([key, value]) => current[key] === value);
@@ -96,7 +96,7 @@ export function createSetMarkerNoteCommand(markerId, body, {name = ""} = {}) {
       else deleteObjectNote(context.map, target);
     },
     isNoop(context) {
-      const marker = context.map?.markers?.markers?.[normalizedMarkerId];
+      const marker = findMarker(context.map, normalizedMarkerId);
       if (!marker) return true;
       const current = readObjectNote(context.map, target)?.body || "";
       return current === normalizedBody;
@@ -104,24 +104,50 @@ export function createSetMarkerNoteCommand(markerId, body, {name = ""} = {}) {
   };
 }
 
-export function createAddMarkerCommand({type, packCell, name = ""} = {}) {
+export function inspectMarkerCreation(map, {id, type, packCell, name = ""} = {}) {
+  const normalizedPackCell = normalizeCellId(packCell);
+  const count = map?.pack?.cells?.i?.length || 0;
+  if (!Number.isInteger(normalizedPackCell) || normalizedPackCell < 0 || normalizedPackCell >= count) {
+    return {valid: false, code: "invalid-pack-cell", reason: "标记 pack cell 无效"};
+  }
+  const requestedId = id === undefined ? null : Number(id);
+  if (id !== undefined && (!Number.isInteger(requestedId) || requestedId < 0)) return {valid: false, code: "invalid-id", reason: "标记 id 必须是非负整数"};
+  if (requestedId !== null && findMarker(map, requestedId)) return {valid: false, code: "duplicate-id", reason: `标记 #${requestedId} 已存在`};
+  return {
+    valid: true,
+    code: "ok",
+    reason: "",
+    id: requestedId,
+    type: normalizeMarkerType(type),
+    packCell: normalizedPackCell,
+    name: normalizeMarkerName(name)
+  };
+}
+
+export function createAddMarkerCommand({id, type, packCell, name = ""} = {}) {
   const normalizedPackCell = normalizeCellId(packCell);
   const normalizedType = normalizeMarkerType(type);
   const normalizedName = normalizeMarkerName(name);
+  const requestedId = id === undefined ? null : Number(id);
   let previous = null;
   let created = null;
 
   return {
-    label: `新增资源点 ${normalizedType}`,
+    label: `新增标记 ${normalizedType}`,
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
       affected: newObjectAffected(OBJECT_KIND.MARKER)
     },
     apply(context) {
+      const preview = inspectMarkerCreation(context.map, {id, type, packCell, name});
+      if (!preview.valid) throw markerCreationError(preview);
       previous ??= captureMarkerSnapshot(context.map);
       const markers = markerRows(context.map);
-      created ??= createMarkerAtPackCell(markers, context.map.pack, context.map.grid, normalizedType, normalizedPackCell, normalizedName ? {name: normalizedName} : {});
+      created ??= createMarkerAtPackCell(markers, context.map.pack, context.map.grid, normalizedType, normalizedPackCell, {
+        ...(requestedId === null ? {} : {id: requestedId}),
+        ...(normalizedName ? {name: normalizedName} : {})
+      });
       writeMarkerCollection(context.map, [...markers, cloneMarker(created)]);
       this.effects.affected = [{kind: OBJECT_KIND.MARKER, id: created.id}];
     },
@@ -129,7 +155,9 @@ export function createAddMarkerCommand({type, packCell, name = ""} = {}) {
       restoreMarkerSnapshot(context.map, previous);
     },
     isNoop(context) {
-      return !context.map?.pack?.cells?.i?.length || !Number.isInteger(normalizedPackCell) || normalizedPackCell < 0;
+      const preview = inspectMarkerCreation(context.map, {id, type, packCell, name});
+      if (!preview.valid) throw markerCreationError(preview);
+      return false;
     },
     getCreatedMarker() {
       return created ? cloneMarker(created) : null;
@@ -143,7 +171,7 @@ export function createMoveMarkerCommand(markerId, packCell) {
   let previous = null;
 
   return {
-    label: `移动资源标记 #${normalizedMarkerId}`,
+    label: `移动标记 #${normalizedMarkerId}`,
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
@@ -152,7 +180,7 @@ export function createMoveMarkerCommand(markerId, packCell) {
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
       const markers = markerRows(context.map);
-      const marker = markers[normalizedMarkerId];
+      const marker = markers.find(item => item.id === normalizedMarkerId);
       if (!marker) throw new Error(`找不到标记 #${normalizedMarkerId}`);
       const moved = createMarkerAtPackCell(markers, context.map.pack, context.map.grid, marker.type, normalizedPackCell, {
         id: marker.id,
@@ -167,7 +195,7 @@ export function createMoveMarkerCommand(markerId, packCell) {
       restoreMarkerSnapshot(context.map, previous);
     },
     isNoop(context) {
-      const marker = context.map?.markers?.markers?.[normalizedMarkerId];
+      const marker = findMarker(context.map, normalizedMarkerId);
       return !marker || !Number.isInteger(normalizedPackCell) || normalizedPackCell < 0 || marker.packCell === normalizedPackCell;
     }
   };
@@ -178,7 +206,7 @@ export function createDeleteMarkerCommand(markerId) {
   let previous = null;
 
   return {
-    label: `删除资源标记 #${normalizedMarkerId}`,
+    label: `删除标记 #${normalizedMarkerId}`,
     domain: OBJECT_KIND.MARKER,
     effects: {
       ...MARKER_COLLECTION_EFFECTS,
@@ -187,14 +215,15 @@ export function createDeleteMarkerCommand(markerId) {
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
       const markers = markerRows(context.map);
-      if (!markers[normalizedMarkerId]) throw new Error(`找不到标记 #${normalizedMarkerId}`);
+      if (!markers.some(marker => marker.id === normalizedMarkerId)) throw new Error(`找不到标记 #${normalizedMarkerId}`);
       writeMarkerCollection(context.map, markers.filter(marker => marker.id !== normalizedMarkerId));
+      deleteObjectNote(context.map, {kind: OBJECT_KIND.MARKER, id: normalizedMarkerId});
     },
     revert(context) {
       restoreMarkerSnapshot(context.map, previous);
     },
     isNoop(context) {
-      return !context.map?.markers?.markers?.[normalizedMarkerId];
+      return !findMarker(context.map, normalizedMarkerId);
     }
   };
 }
@@ -216,7 +245,9 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
         ...context.map.options,
         resourceRegenerationSalt: salt
       }, preserved);
-      writeMarkerCollection(context.map, [...preserved, ...resources]);
+      const nextId = preserved.reduce((max, marker) => Math.max(max, marker.id), -1) + 1;
+      const identifiedResources = resources.map((marker, index) => ({...marker, id: nextId + index, i: nextId + index}));
+      writeMarkerCollection(context.map, [...preserved, ...identifiedResources]);
     },
     revert(context) {
       restoreMarkerSnapshot(context.map, previous);
@@ -228,7 +259,7 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
 }
 
 function readMarker(map, markerId) {
-  const marker = map?.markers?.markers?.[markerId];
+  const marker = findMarker(map, markerId);
   if (!marker) throw new Error(`找不到标记 #${markerId}`);
   return marker;
 }
@@ -282,11 +313,18 @@ function createMarkerNoteSnapshot(target, body, {name, previous = null} = {}) {
 }
 
 function captureMarkerSnapshot(map) {
-  return markerRows(map).map(cloneMarker);
+  return {
+    markers: markerRows(map).map(cloneMarker),
+    metadata: cloneMarker(map?.markers?.metadata || {}),
+    notes: (map?.notes?.notes || []).filter(note => note?.kind === OBJECT_KIND.MARKER).map(cloneObjectNote)
+  };
 }
 
 function restoreMarkerSnapshot(map, snapshot) {
-  writeMarkerCollection(map, (snapshot || []).map(cloneMarker));
+  writeMarkerCollection(map, (snapshot?.markers || []).map(cloneMarker));
+  map.markers.metadata = cloneMarker(snapshot?.metadata || map.markers.metadata);
+  for (const note of [...(map?.notes?.notes || [])]) if (note?.kind === OBJECT_KIND.MARKER) deleteObjectNote(map, note.id);
+  for (const note of snapshot?.notes || []) restoreObjectNote(map, note);
 }
 
 function writeMarkerCollection(map, markers) {
@@ -307,10 +345,15 @@ function writeMarkerCollection(map, markers) {
 }
 
 function normalizeMarkerIds(markers) {
-  return markers.map((marker, index) => {
+  const used = new Set();
+  return markers.map(marker => {
     const next = cloneMarker(marker);
-    next.id = index;
-    next.i = index;
+    const id = Number(next.id ?? next.i);
+    if (!Number.isInteger(id) || id < 0) throw new Error("标记 id 必须是非负整数");
+    if (used.has(id)) throw new Error(`标记 id 重复：#${id}`);
+    used.add(id);
+    next.id = id;
+    next.i = id;
     if (!next.data || typeof next.data !== "object") next.data = {};
     return next;
   });
@@ -322,6 +365,10 @@ function replaceMarker(markers, markerId, nextMarker) {
 
 function markerRows(map) {
   return (map?.markers?.markers || []).filter(marker => marker && Number.isInteger(marker.id));
+}
+
+function findMarker(map, markerId) {
+  return markerRows(map).find(marker => marker.id === Number(markerId)) || null;
 }
 
 function cloneMarker(marker) {
@@ -344,4 +391,10 @@ function normalizeCellId(value) {
   if (value === null || value === undefined || value === "") return -1;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.trunc(numeric) : -1;
+}
+
+function markerCreationError(preview) {
+  const error = new Error(preview.reason);
+  error.code = preview.code;
+  return error;
 }

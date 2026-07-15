@@ -65,6 +65,10 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
     pushTradeFlowSelection(vertices, context, selection, locateFlash, overrideColor);
     return;
   }
+  if (selection?.kind === OBJECT_KIND.NOTE) {
+    pushStandaloneNoteSelection(vertices, context, selection, locateFlash, overrideColor);
+    return;
+  }
   if (selection?.kind !== OBJECT_KIND.RIVER) return;
   const {map} = context;
   const river = map.rivers.rivers.find(item => item.id === selection.id);
@@ -75,6 +79,23 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
   const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
   const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
   pushScreenPolyline(vertices, context, smoothWorldPath(river.points, SELECTION_SMOOTHING.river), color, widthPx);
+}
+
+function pushStandaloneNoteSelection(vertices, context, selection, locateFlash, overrideColor = null) {
+  const note = (context.map?.notes?.notes || []).find(item => item?.kind === OBJECT_KIND.NOTE && String(item.objectId) === String(selection.id));
+  if (!note || !Number.isFinite(Number(note.x)) || !Number.isFinite(Number(note.y))) return;
+  const center = worldToScreenPixel(context, [Number(note.x), Number(note.y)]);
+  const pixelRatio = context.canvas.width / Math.max(1, context.canvas.clientWidth);
+  const radius = 8 * pixelRatio;
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || [1, 0.72, 0.2, 0.9];
+  const top = [center[0], center[1] - radius];
+  const right = [center[0] + radius, center[1]];
+  const bottom = [center[0], center[1] + radius];
+  const left = [center[0] - radius, center[1]];
+  pushScreenTriangle(vertices, context, center, top, right, color);
+  pushScreenTriangle(vertices, context, center, right, bottom, color);
+  pushScreenTriangle(vertices, context, center, bottom, left, color);
+  pushScreenTriangle(vertices, context, center, left, top, color);
 }
 
 function pushDiplomacyRelationSelection(vertices, context, selection, locateFlash, overrideColor = null) {

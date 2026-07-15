@@ -30,6 +30,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
     selectedNoteId: null,
+    createMode: false,
     version: 0
   });
   const panelCallbacks = {
@@ -68,6 +69,9 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       callbacks.onLocate?.(row);
     },
     onDelete: row => callbacks.onDelete?.(row),
+    onCreateStandaloneMode: active => callbacks.onCreateStandaloneMode?.(active),
+    onRename: (row, name) => callbacks.onRename?.(row, name),
+    onNoteChange: (row, body) => callbacks.onNoteChange?.(row, body),
     onExport: rows => callbacks.onExport?.(rows),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, row => row.object),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
@@ -88,6 +92,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.open = false;
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");
@@ -127,6 +132,9 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     },
     setSelectedNoteId(noteId) {
       if (noteExists(panelState.map, noteId)) panelState.selectedNoteId = noteId;
+    },
+    setCreateMode(active) {
+      panelState.createMode = Boolean(active);
     },
     isOpen() {
       return panelState.open;

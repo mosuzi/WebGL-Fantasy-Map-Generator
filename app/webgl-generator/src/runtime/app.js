@@ -72,7 +72,7 @@ import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMEN
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-regeneration-variation.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
-import {createDeleteNoteCommand} from "./note-edit-commands.js";
+import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -93,7 +93,7 @@ import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
-import {createSetZoneStyleCommand} from "./zone-edit-commands.js";
+import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
@@ -201,7 +201,9 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   MARKER_MOVE: "marker:move",
   ROUTE_DRAW: "route:draw",
   RIVER_ADD: "river:add",
-  LAKE_EXCAVATE: "lake:excavate"
+  LAKE_EXCAVATE: "lake:excavate",
+  ZONE_ADD: "zone:add",
+  NOTE_ADD: "note:add"
 });
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -266,6 +268,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     routeCreate: {active: false, type: "road", startPackCell: null},
     riverCreate: {active: false},
     lakeCreate: {active: false, radius: 0},
+    zoneCreate: {active: false, type: "Disaster", radius: 1},
+    noteCreate: {active: false},
     customLabelDrag: null,
     pendingCustomLabelPlacement: null,
     measurement: {
@@ -1567,7 +1571,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (markerId, body) => {
-      const marker = state.map?.markers?.markers?.[markerId];
+      const marker = (state.map?.markers?.markers || []).find(item => item?.id === markerId);
       const context = {map: state.map};
       const command = createSetMarkerNoteCommand(markerId, body, {name: marker?.name || marker?.label || `标记 #${markerId}`});
       executeEditCommand(state, documentRef, command, {context});
@@ -1577,7 +1581,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       startMarkerEditMode(state, documentRef, {mode: "add", type: type || "mines", markerId: null});
     },
     onMoveMode: markerId => {
-      const marker = state.map?.markers?.markers?.[markerId];
+      const marker = (state.map?.markers?.markers || []).find(item => item?.id === markerId);
       if (!marker) return;
       selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
       startMarkerEditMode(state, documentRef, {mode: "move", type: marker.type, markerId});
@@ -1690,6 +1694,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
+    onCreateStandaloneMode: active => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.NOTE_ADD);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.NOTE_ADD, "panel-toggle");
+    },
+    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.NOTE_ADD, "panel-close"),
     onSelect: row => {
       if (!row?.object || row.orphan) return;
       selectFromPanel("notes-panel", row.object);
@@ -1711,6 +1720,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         noopStatus: "备注不存在或已被删除。",
         status: `已删除备注 ${row.name || row.id}。`
       });
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onRename: (row, name) => {
+      if (!row?.object || row.orphan) return;
+      executeEditCommand(state, documentRef, createRenameObjectCommand(row.object, name), {context: {map: state.map}});
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onNoteChange: (row, body) => {
+      if (!row?.object || row.orphan) return;
+      executeEditCommand(state, documentRef, createSetObjectNoteCommand(row.object, body, {name: row.name}), {context: {map: state.map}});
       updateEditingInteractionLock(state, documentRef);
     },
     onExport: rows => exportNotesSummary(state, documentRef, rows, runtimeActions.data.exportNotes),
@@ -1916,6 +1935,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.lake = lakePanel;
   zonePanel = createZonePanel(documentRef, panelManager, {
+    onCreateMode: type => {
+      if (type) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ZONE_ADD, {type, radius: 1});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ZONE_ADD, "panel-toggle");
+    },
+    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ZONE_ADD, "panel-close"),
     onSelect: object => {
       zonePanel.setSelection({object});
       selectFromPanel("zone-panel", object);
@@ -1933,6 +1957,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createSetZoneStyleCommand(zoneId, patch);
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
+    },
+    onDelete: zoneId => {
+      const result = executeEditCommand(state, documentRef, createDeleteZoneCommand(zoneId), {
+        context: {map: state.map},
+        noopStatus: "地区不存在或已被删除。",
+        status: `已删除地区 #${zoneId}。`
+      });
+      updateEditingInteractionLock(state, documentRef);
+      return result;
     },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
@@ -2293,6 +2326,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
     },
     edit: {
       notes: {
+        createStandalone: options => createStandaloneNoteViaApi(state, documentRef, options),
         set: (object, body, options = {}) => setObjectNoteViaApi(state, documentRef, object, body, options),
         delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
       },
@@ -2349,6 +2383,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         rename: (target, name) => renameMilitaryRegimentViaApi(state, documentRef, target, name)
       },
       zones: {
+        create: options => createZoneViaApi(state, documentRef, options),
+        delete: zoneId => deleteZoneViaApi(state, documentRef, zoneId),
         setStyle: (zoneId, patch) => setZoneStyleViaApi(state, documentRef, zoneId, patch)
       },
       cultures: {
@@ -5570,6 +5606,24 @@ function setObjectNoteViaApi(state, documentRef, object, body, options = {}) {
   return editApiResult(state, result);
 }
 
+function createStandaloneNoteViaApi(state, documentRef, options = {}) {
+  if (!options || typeof options !== "object") throw new Error("独立备注创建参数必须是对象");
+  const command = createStandaloneNoteCommand(options);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: "已新增独立备注。",
+    preparePanelRefresh: (targetState, executed, created) => {
+      if (!created?.objectId) return;
+      targetState.panels.notes?.setSelectedNoteId(created.id);
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.NOTE, id: created.objectId}});
+    },
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function createRouteViaApi(state, documentRef, options = {}) {
   if (!options || typeof options !== "object") throw new Error("路线创建参数必须是对象");
   const command = createAddRouteCommand(options);
@@ -6208,6 +6262,42 @@ function setZoneStyleViaApi(state, documentRef, zoneId, patch) {
   return editApiResult(state, result);
 }
 
+function createZoneViaApi(state, documentRef, options = {}) {
+  if (!options || typeof options !== "object") throw new Error("地区创建参数必须是对象");
+  const command = createAddZoneCommand(options);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: executed => `已新增地区 #${executed.getResult?.().zoneId ?? ""}。`,
+    preparePanelRefresh: (targetState, executed, created) => {
+      if (!Number.isInteger(created?.zoneId)) return;
+      const object = {kind: OBJECT_KIND.ZONE, id: created.zoneId};
+      targetState.panels.zone?.setSelection({object});
+      targetState.selectionStore.setSelection({object});
+    },
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteZoneViaApi(state, documentRef, zoneId) {
+  const id = normalizeApiInteger(zoneId, "地区 ID");
+  const result = executeEditCommand(state, documentRef, createDeleteZoneCommand(id), {
+    context: {map: state.map},
+    noopStatus: "地区不存在或已被删除。",
+    status: `已删除地区 #${id}。`,
+    preparePanelRefresh: targetState => {
+      const selected = targetState.selectionStore.getSnapshot().selection?.object;
+      if (selected?.kind === OBJECT_KIND.ZONE && Number(selected.id) === id) targetState.selectionStore.clear();
+    },
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function renameObjectViaApi(state, documentRef, kind, objectId, name, options = {}) {
   const id = normalizeApiInteger(objectId, options.idLabel || "对象 ID");
   const nextName = String(name || "").trim();
@@ -6567,6 +6657,7 @@ function formatApiLabelTarget(target) {
 function addMarkerViaApi(state, documentRef, options = {}) {
   const targetPackCell = normalizeApiInteger(options?.packCell, "pack cell");
   const command = createAddMarkerCommand({
+    id: options?.id,
     type: options?.type,
     packCell: targetPackCell,
     name: options?.name
@@ -6606,7 +6697,7 @@ function moveMarkerViaApi(state, documentRef, markerId, packCell) {
 
 function setMarkerNoteViaApi(state, documentRef, markerId, body, options = {}) {
   const id = normalizeApiInteger(markerId, "标记 ID");
-  const marker = state.map?.markers?.markers?.[id];
+  const marker = (state.map?.markers?.markers || []).find(item => item?.id === id);
   const command = createSetMarkerNoteCommand(id, body, {
     ...options,
     name: options.name || marker?.name || marker?.label || `标记 #${id}`
@@ -6669,7 +6760,7 @@ function executeMarkerCollectionApiCommand(state, documentRef, command, options 
         }
         const createdMarker = options.selectCreated ? command.getCreatedMarker?.() : null;
         const markerId = Number.isInteger(options.selectMarkerId) ? options.selectMarkerId : createdMarker?.id;
-        if (!Number.isInteger(markerId) || !targetState.map.markers?.markers?.[markerId]) return;
+        if (!Number.isInteger(markerId) || !(targetState.map.markers?.markers || []).some(marker => marker?.id === markerId)) return;
         targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
         targetState.panels.marker?.setSelectedMarkerId(markerId);
       },
@@ -7547,6 +7638,32 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
     onExit: () => {
       state.lakeCreate.active = false;
       state.panels.lake?.setCreateMode(false);
+    }
+  });
+  register(CANVAS_TOOL_MODE.ZONE_ADD, "zone-panel", {
+    onEnter: ({context}) => {
+      state.zoneCreate.active = true;
+      state.zoneCreate.type = context.type || "Disaster";
+      state.zoneCreate.radius = Number.isInteger(Number(context.radius)) ? Number(context.radius) : 1;
+      state.panels.zone?.setCreateMode(true, state.zoneCreate.type);
+    },
+    onRepeat: ({context}) => {
+      state.zoneCreate.type = context.type || state.zoneCreate.type;
+      state.panels.zone?.setCreateMode(true, state.zoneCreate.type);
+    },
+    onExit: () => {
+      state.zoneCreate.active = false;
+      state.panels.zone?.setCreateMode(false);
+    }
+  });
+  register(CANVAS_TOOL_MODE.NOTE_ADD, "notes-panel", {
+    onEnter: () => {
+      state.noteCreate.active = true;
+      state.panels.notes?.setCreateMode(true);
+    },
+    onExit: () => {
+      state.noteCreate.active = false;
+      state.panels.notes?.setCreateMode(false);
     }
   });
 }
@@ -8926,7 +9043,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
 function bindObjectCreationTools(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const activeMode = state.canvasToolModes.getActive()?.id;
-    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const packCell = getMarkerPackCellAtEvent(state, event);
@@ -8954,8 +9071,20 @@ function bindObjectCreationTools(canvas, state, documentRef) {
       return;
     }
 
-    const result = state.runtimeActions.edit.lakes.create({packCell, radius: state.lakeCreate.radius});
-    if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, {result});
+    if (activeMode === CANVAS_TOOL_MODE.LAKE_EXCAVATE) {
+      const result = state.runtimeActions.edit.lakes.create({packCell, radius: state.lakeCreate.radius});
+      if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, {result});
+      return;
+    }
+
+    if (activeMode === CANVAS_TOOL_MODE.ZONE_ADD) {
+      const result = state.runtimeActions.edit.zones.create({centerPackCell: packCell, radius: state.zoneCreate.radius, type: state.zoneCreate.type});
+      if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ZONE_ADD, {result});
+      return;
+    }
+
+    const result = state.runtimeActions.edit.notes.createStandalone({packCell, name: "独立备注", body: "新建独立备注"});
+    if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.NOTE_ADD, {result});
   }, true);
 }
 
@@ -9135,7 +9264,7 @@ function applyMarkerCollectionCommand(state, documentRef, command, {selectCreate
     preparePanelRefresh: targetState => {
       const created = selectCreated ? command.getCreatedMarker?.() : null;
       const markerId = Number.isInteger(selectMarkerId) ? selectMarkerId : created?.id;
-      if (!Number.isInteger(markerId) || !targetState.map.markers?.markers?.[markerId]) return;
+      if (!Number.isInteger(markerId) || !(targetState.map.markers?.markers || []).some(marker => marker?.id === markerId)) return;
       targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.MARKER, id: markerId}});
       targetState.panels.marker?.setSelectedMarkerId(markerId);
     },

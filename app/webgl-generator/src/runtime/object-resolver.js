@@ -5,6 +5,7 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.CITY]: resolveCity,
   [OBJECT_KIND.LABEL]: resolveLabel,
   [OBJECT_KIND.MARKER]: resolveMarker,
+  [OBJECT_KIND.NOTE]: resolveStandaloneNote,
   [OBJECT_KIND.ROUTE]: resolveRoute,
   [OBJECT_KIND.TRADE_FLOW]: resolveTradeFlow,
   [OBJECT_KIND.RIVER]: resolveRiver,
@@ -92,7 +93,7 @@ function resolveLabel(map, object) {
 }
 
 function resolveMarker(map, object) {
-  const marker = map.markers.markers[object.id];
+  const marker = (map.markers?.markers || []).find(item => Number(item?.id) === Number(object.id));
   if (!marker) return null;
   return {
     ...object,
@@ -116,6 +117,26 @@ function resolveMarker(map, object) {
     data: marker.data,
     x: marker.x,
     y: marker.y
+  };
+}
+
+function resolveStandaloneNote(map, object) {
+  const objectId = String(object.id ?? object.objectId ?? "");
+  const note = (map?.notes?.notes || []).find(item => item?.kind === OBJECT_KIND.NOTE && String(item.objectId) === objectId);
+  if (!note || note.standalone !== true || !Number.isFinite(Number(note.x)) || !Number.isFinite(Number(note.y))) return null;
+  const packCell = Number(note.packCell);
+  if (!Number.isInteger(packCell) || packCell < 0 || packCell >= (map?.pack?.cells?.i?.length || 0)) return null;
+  return {
+    ...object,
+    kind: OBJECT_KIND.NOTE,
+    id: objectId,
+    noteId: note.id,
+    name: note.name || `独立备注 #${objectId}`,
+    body: note.body || "",
+    packCell,
+    x: Number(note.x),
+    y: Number(note.y),
+    standalone: true
   };
 }
 

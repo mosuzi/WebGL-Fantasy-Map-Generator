@@ -15,6 +15,10 @@
   <div class="zone-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / 类型 / 国家 / 纹理" @update:model-value="callbacks.onFilter" />
   </div>
+  <div class="zone-panel-controls">
+    <UiSelectField label="新增地区类型" :model-value="zoneDraft.type" :options="ZONE_CREATION_TYPE_OPTIONS" @update:model-value="zoneDraft.type = $event" />
+    <UiButton variant="secondary" :active="state.createMode" @click="toggleCreateMode">{{ state.createMode ? "取消放置" : "放置地区" }}</UiButton>
+  </div>
   <UiObjectTable
     :columns="columns"
     :column-widths="state.columnWidths"
@@ -71,6 +75,7 @@
 
 <script setup>
 import {computed, reactive, ref, watch} from "vue";
+import {ZONE_CREATION_TYPE_OPTIONS} from "../../../runtime/zone-edit-commands.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiColorActionPanel from "./base/UiColorActionPanel.vue";
@@ -154,6 +159,7 @@ const activeAction = ref(null);
 const styleDraft = reactive({
   pattern: "diagonal"
 });
+const zoneDraft = reactive({type: props.state.createType || "Disaster"});
 const rows = computed(() => {
   props.state.version;
   return zoneRows(props.state.map);
@@ -180,8 +186,10 @@ const legendItems = computed(() => {
   }));
 });
 const zoneHighlightActions = computed(() => [
+  {key: "create", label: props.state.createMode ? "取消放置地区" : "放置地区", icon: "+"},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedZoneRows.value.length)}`, icon: "◉", disabled: !selectedZoneRows.value.length},
-  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount}
+  {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
+  {key: "delete", label: "删除选中地区", icon: "×", disabled: !selected.value || props.state.createMode}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -223,8 +231,14 @@ function handleEmptyAction(key) {
 }
 
 function handleHighlightAction(key) {
+  if (key === "create") toggleCreateMode();
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedZoneRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
+  if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
+}
+
+function toggleCreateMode() {
+  props.callbacks.onCreateMode?.(props.state.createMode ? null : zoneDraft.type);
 }
 
 function zoneRows(map) {

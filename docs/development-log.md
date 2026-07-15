@@ -27383,3 +27383,11 @@ full 矩阵结果：
 - 三类命令同步维护对象列表、cell 索引、路线拓扑、河流水文、湖泊 grid / pack feature、岸线、haven / harbor、metadata 和待派生状态；每次创建只产生一条历史记录，撤销恢复完整快照，重做复现。对象解析、管理面板、选择 / 定位、拾取和地图 / 要素导出沿现有读取路径立即可用。
 - 稳定 API 新增 `edit.routes.create / edit.rivers.create / edit.lakes.create`，公开基线更新为 11 个命名空间、165 个公开方法和 75 个编辑方法；稳定等级统计更新为 157 / 7 / 1，声明、元数据和真实 API 三方覆盖继续一致。
 - 新增 `docs/task-notes/map-object-creation.md` 与 `regress:object-creation`。固定 3000 cells 回归覆盖路线地形不匹配、河流既有汇流和无下坡出口、湖盆连海、拾取、导出、撤销 / 重做；API inventory、action convergence、edit coverage、stability 和 suite contract 均通过。本项按快速迭代约定不单独启动浏览器。
+
+### 2026-07-15 完成权威任务第 41 项：地区、通用标记与独立备注创建闭环
+
+- 地区新增结构化创建预检和创建 / 删除命令：cell 集必须有效、连通且不与现有地区重叠；命令同步维护 `map.zones / pack.zones`、metadata 和关联备注，支持单条历史撤销 / 重做。地区管理新增类型选择与画布放置入口，UI 和 `api.edit.zones.create / delete` 共用 runtime action。
+- marker id 改为稳定对象身份，读取、解析、选择、定位、编辑和资源重生成不再依赖数组下标；标记管理开放全部 marker 类型，`api.edit.markers.add` 支持显式 id，删除级联清理备注并精确恢复原 metadata。
+- 独立备注新增 `note` 对象种类、字符串身份、`standalone / packCell / x / y` 持久化字段、对象解析、选择高亮和定位边界。备注总览可进入 `note:add` 模式放置并编辑名称 / 正文；`api.edit.notes.createStandalone` 与 UI 共用创建命令。缺少有效位置的旧独立备注保留为孤儿记录，不伪造位置。
+- 统一画布模式从 17 增至 19；稳定 API 基线更新为 11 个命名空间、168 个公开方法、78 个编辑方法，稳定等级为 160 / 7 / 1。能力清单和稳定契约同步更新。
+- 新增 `docs/task-notes/auxiliary-object-creation.md` 与 `regress:auxiliary-object-creation`，覆盖三类创建、解析、选择 / 高亮、导出、完整地图保存、关联备注级联、metadata、撤销 / 重做、重复 id、坏坐标、孤儿备注和非法地区 cells。`regress:canvas-tools`、API 门禁、生产构建和差异检查通过；本项按快速迭代约定未启动浏览器。

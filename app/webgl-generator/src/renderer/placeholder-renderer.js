@@ -1780,8 +1780,12 @@ function selectionPoint(map, selection) {
     return city ? {x: city.x, y: city.y} : null;
   }
   if (selection?.kind === OBJECT_KIND.MARKER) {
-    const marker = map.markers.markers[selection.id];
+    const marker = (map.markers?.markers || []).find(item => Number(item?.id) === Number(selection.id));
     return marker ? {x: marker.x, y: marker.y} : null;
+  }
+  if (selection?.kind === OBJECT_KIND.NOTE) {
+    const note = (map?.notes?.notes || []).find(item => item?.kind === OBJECT_KIND.NOTE && String(item.objectId) === String(selection.id));
+    return note && Number.isFinite(Number(note.x)) && Number.isFinite(Number(note.y)) ? {x: Number(note.x), y: Number(note.y)} : null;
   }
   if (selection?.kind === OBJECT_KIND.MILITARY) {
     const regiment = findRegiment(map, selection);
@@ -1807,8 +1811,12 @@ function getObjectBounds(map, object) {
     return city ? pointBounds(city.x, city.y, 42) : null;
   }
   if (object.kind === OBJECT_KIND.MARKER) {
-    const marker = map.markers.markers[object.id];
+    const marker = (map.markers?.markers || []).find(item => Number(item?.id) === Number(object.id));
     return marker ? pointBounds(marker.x, marker.y, 42) : null;
+  }
+  if (object.kind === OBJECT_KIND.NOTE) {
+    const note = (map?.notes?.notes || []).find(item => item?.kind === OBJECT_KIND.NOTE && String(item.objectId) === String(object.id));
+    return note && Number.isFinite(Number(note.x)) && Number.isFinite(Number(note.y)) ? pointBounds(Number(note.x), Number(note.y), 42) : null;
   }
   if (object.kind === OBJECT_KIND.MILITARY) {
     const regiment = findRegiment(map, object);
