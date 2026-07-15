@@ -3,7 +3,8 @@ const FIELD_BY_KIND = Object.freeze({
   state: "state",
   province: "province",
   culture: "culture",
-  religion: "religion"
+  religion: "religion",
+  biome: "biome"
 });
 
 export function restoreCanvasToolStrokePreview(map, kind, stroke) {
@@ -16,7 +17,7 @@ export function restoreCanvasToolStrokePreview(map, kind, stroke) {
   let restoredPackCells = 0;
   for (const [gridCell, original] of stroke.originals) {
     if (!Number.isInteger(gridCell) || gridCell < 0 || gridCell >= gridValues.length) continue;
-    const before = kind === "culture" || kind === "religion" ? Number(original?.gridBefore) || 0 : Number(original) || 0;
+    const before = kind === "culture" || kind === "religion" || kind === "biome" ? Number(original?.gridBefore) || 0 : Number(original) || 0;
     gridValues[gridCell] = before;
     restoredGridCells++;
 
@@ -31,7 +32,7 @@ export function restoreCanvasToolStrokePreview(map, kind, stroke) {
     if (!packValues) continue;
     for (let packCell = 0; packCell < (map.pack?.cells?.g?.length || 0); packCell++) {
       if (Number(map.pack.cells.g[packCell]) !== gridCell) continue;
-      if (kind !== "height" && Number(map.pack.cells.h?.[packCell]) < 20) continue;
+      if (kind !== "height" && kind !== "biome" && Number(map.pack.cells.h?.[packCell]) < 20) continue;
       packValues[packCell] = before;
       restoredPackCells++;
     }

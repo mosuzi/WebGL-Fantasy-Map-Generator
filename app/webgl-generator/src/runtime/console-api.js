@@ -142,6 +142,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
         rebuildBaseDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildBaseDerived, "edit.height.rebuildBaseDerived")(options)),
         rebuildDownstreamDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildDownstreamDerived, "edit.height.rebuildDownstreamDerived")(options))
       }),
+      biomes: Object.freeze({
+        assignCells: (biomeId, gridCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.biomes?.assignCells, "edit.biomes.assignCells")(biomeId, gridCellIds, options))
+      }),
       economy: Object.freeze({
         inspectAssignment: (marketId, packCellIds) => apiCall(() => requireApiAction(actions.edit?.economy?.inspectAssignment, "edit.economy.inspectAssignment")(marketId, packCellIds)),
         assignCells: (marketId, packCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.assignCells, "edit.economy.assignCells")(marketId, packCellIds, options)),
@@ -409,6 +412,7 @@ function buildMethodMetadata() {
       "height.applyChanges": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
       "height.rebuildBaseDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
       "height.rebuildDownstreamDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
+      "biomes.assignCells": {stable: "draft", mutates: "biomes-and-suitability", undoable: true, async: false, requiresConfirm: false},
       "economy.inspectAssignment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "economy.assignCells": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
       "economy.rebuild": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},

@@ -24,14 +24,53 @@
   />
 
   <UiDetailGrid class-name="biome-panel-details" empty-text="未选中生物群系" :rows="detailRows" />
+
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="biomeActions">
+    <template #assign>
+      <div class="biome-assignment-editor">
+        <UiSelectField
+          input-id="biome-assignment-target"
+          label="目标生物群系"
+          :model-value="state.selectedBiomeId"
+          :options="biomeOptions"
+          @update:model-value="callbacks.onAssignmentTarget"
+        />
+        <UiSelectField
+          input-id="biome-assignment-scope"
+          label="作用范围"
+          :model-value="state.assignmentScope"
+          :options="scopeOptions"
+          @update:model-value="callbacks.onAssignmentScope"
+        />
+        <UiSliderField
+          label="笔刷半径"
+          :model-value="state.assignmentRadius"
+          :min="4"
+          :max="120"
+          :step="2"
+          unit-label="px"
+          @input="callbacks.onAssignmentRadius"
+        />
+        <UiStateBanner
+          :kind="assignmentBanner.kind"
+          title="生物群系归属笔刷"
+          :message="assignmentBanner.message"
+        />
+      </div>
+    </template>
+  </UiActionDock>
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref, watch} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
+import UiSliderField from "./base/UiSliderField.vue";
+import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -72,6 +111,7 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
 const metrics = computed(() => {
   props.state.version;
   return buildBiomeMetrics(props.state.map);
@@ -81,6 +121,30 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBiomeId));
+const biomeActions = Object.freeze([{key: "assign", label: "归属笔刷", icon: "◉"}]);
+const biomeOptions = computed(() => metrics.value.rows.map(row => ({value: row.id, label: `${row.name}（#${row.id}）`})));
+const scopeOptions = Object.freeze([
+  {value: "land", label: "陆地"},
+  {value: "water", label: "水域"}
+]);
+const assignmentBanner = computed(() => {
+  const targetScope = Number(props.state.selectedBiomeId) === 0 ? "water" : "land";
+  if (props.state.assignmentScope !== targetScope) return {kind: "error", message: targetScope === "water" ? "海洋群系只能用于水域。" : "陆地群系不能用于水域。"};
+  const preview = props.state.assignmentPreview;
+  if (!preview) return {kind: "info", message: `按住鼠标在地图上涂刷；抬手提交一条历史。最近影响 ${formatNumber(props.state.lastAffected || 0)} cells。`};
+  if (!preview.valid) return {kind: "error", message: `${preview.code || "invalid"}：${preview.reason || "预览无效"}`};
+  const warning = preview.warningCells ? `；${formatNumber(preview.warningCells)} cells 存在气候或高度异常：${preview.warnings.join("、")}` : "；没有气候高度异常";
+  return {kind: preview.warningCells ? "preview" : "info", message: `预览 ${formatNumber(preview.changedGridCells?.length || 0)} grid cells${warning}`};
+});
+
+watch(activeAction, (next, previous) => {
+  if (next === "assign") props.callbacks.onAssignmentActive?.(true);
+  if (previous === "assign" && next !== "assign") props.callbacks.onAssignmentActive?.(false);
+});
+
+watch(() => props.state.assignmentActive, active => {
+  if (!active && activeAction.value === "assign") activeAction.value = null;
+});
 
 const summaryMetrics = computed(() => [
   {label: "群系", value: formatNumber(metrics.value.total)},

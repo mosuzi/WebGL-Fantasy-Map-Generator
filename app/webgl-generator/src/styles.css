@@ -6558,6 +6558,11 @@ input.ui-switch-native {
   gap: 10px;
 }
 
+.biome-assignment-editor {
+  display: grid;
+  gap: 10px;
+}
+
 .economy-panel-sort {
   display: flex;
   flex-wrap: wrap;

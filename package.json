@@ -92,6 +92,7 @@
     "regress:market-assignment": "node --no-warnings ./tools/webgl-generator-market-assignment-regression.mjs",
     "regress:route-edit": "node --no-warnings ./tools/webgl-generator-route-edit-regression.mjs",
     "regress:feature-patch": "node --no-warnings ./tools/webgl-generator-feature-patch-regression.mjs",
+    "regress:biome-assignment": "node --no-warnings ./tools/webgl-generator-biome-assignment-regression.mjs",
     "regress:selection-highlight": "node --no-warnings ./tools/webgl-generator-selection-highlight-regression.mjs",
     "regress:visible-row-selection": "node --no-warnings ./tools/webgl-generator-visible-row-selection-regression.mjs",
     "regress:selection-scroll-center": "node --no-warnings ./tools/webgl-generator-selection-scroll-center-regression.mjs",

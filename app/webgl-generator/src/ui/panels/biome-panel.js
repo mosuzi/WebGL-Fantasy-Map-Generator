@@ -19,7 +19,7 @@ const BIOME_LIST_DEFAULTS = Object.freeze({
   sortDir: "desc"
 });
 
-export function createBiomePanel(documentRef, manager) {
+export function createBiomePanel(documentRef, manager, callbacks = {}) {
   const listPreferences = readPanelListPreferences(documentRef, BIOME_PANEL_ID, BIOME_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
@@ -30,6 +30,11 @@ export function createBiomePanel(documentRef, manager) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedBiomeId: null,
+    assignmentActive: false,
+    assignmentScope: "land",
+    assignmentRadius: 28,
+    lastAffected: 0,
+    assignmentPreview: null,
     version: 0
   });
   const panelCallbacks = {
@@ -61,17 +66,43 @@ export function createBiomePanel(documentRef, manager) {
     },
     onSelect: row => {
       panelState.selectedBiomeId = normalizeBiomeId(row.id);
-    }
+      panelState.assignmentScope = panelState.selectedBiomeId === 0 ? "water" : "land";
+    },
+    onAssignmentActive: active => {
+      panelState.assignmentActive = Boolean(active);
+      callbacks.onAssignmentActive?.(panelState.assignmentActive);
+    },
+    onAssignmentTarget: biomeId => {
+      panelState.selectedBiomeId = normalizeBiomeId(biomeId);
+      panelState.assignmentScope = panelState.selectedBiomeId === 0 ? "water" : "land";
+      panelState.assignmentPreview = null;
+    },
+    onAssignmentScope: scope => {
+      panelState.assignmentScope = String(scope || "land");
+      panelState.assignmentPreview = null;
+    },
+    onAssignmentRadius: radius => {
+      panelState.assignmentRadius = Math.max(4, Math.min(120, Number(radius) || 28));
+    },
+    onUndo: () => callbacks.onUndo?.(),
+    onRedo: () => callbacks.onRedo?.()
   };
 
   const record = manager.registerPanel(BIOME_PANEL_ID, {
-    title: "生物群系统计",
+    title: "生物群系管理",
     left: 484,
     top: 128,
     width: 560,
     maxWidth: 700,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
+      panelState.assignmentActive = false;
+      callbacks.onAssignmentActive?.(false);
     }
   });
   const root = documentRef.createElement("div");
@@ -93,17 +124,43 @@ export function createBiomePanel(documentRef, manager) {
     open(map, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
-      if (!biomeExists(map, panelState.selectedBiomeId)) panelState.selectedBiomeId = firstBiomeId(map);
+      if (!biomeExists(map, panelState.selectedBiomeId)) {
+        panelState.selectedBiomeId = firstBiomeId(map);
+        panelState.assignmentScope = panelState.selectedBiomeId === 0 ? "water" : "land";
+      }
       panelState.open = true;
       panelState.version++;
       manager.open(BIOME_PANEL_ID);
       lazyPanel.load();
     },
-    update(map, history) {
+    update(map, history, assignment = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
-      if (!biomeExists(map, panelState.selectedBiomeId)) panelState.selectedBiomeId = firstBiomeId(map);
+      if (!biomeExists(map, panelState.selectedBiomeId)) {
+        panelState.selectedBiomeId = firstBiomeId(map);
+        panelState.assignmentScope = panelState.selectedBiomeId === 0 ? "water" : "land";
+      }
+      if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);
+      if (assignment.lastAffected !== undefined) panelState.lastAffected = Number(assignment.lastAffected) || 0;
+      if (assignment.preview !== undefined) panelState.assignmentPreview = assignment.preview;
       panelState.version++;
+    },
+    setAssignmentActive(active) {
+      panelState.assignmentActive = Boolean(active);
+      panelState.version++;
+    },
+    updateAssignment({lastAffected, preview} = {}) {
+      if (lastAffected !== undefined) panelState.lastAffected = Number(lastAffected) || 0;
+      if (preview !== undefined) panelState.assignmentPreview = preview;
+      panelState.version++;
+    },
+    getBrush() {
+      return {
+        active: panelState.assignmentActive,
+        targetId: panelState.selectedBiomeId ?? 0,
+        scope: panelState.assignmentScope,
+        radius: panelState.assignmentRadius
+      };
     },
     isOpen() {
       return panelState.open;

@@ -40,22 +40,29 @@ export function defineBiomesAndPopulation(grid, pack, options = {}) {
   const startedAt = performance.now();
   defineBiomes(grid, pack);
   const goodsAtRankTime = prepareInitialGoods(pack, options);
-  const rankCellsInputs = rankCells(pack);
-  pack.metadata.rankCellsInputs = rankCellsInputs;
-  mirrorPackFieldsToGrid(grid, pack);
+  const recalculated = recalculateBiomeSuitability(grid, pack);
 
   return {
     biomes: BIOMES,
     metadata: {
-      biomeCounts: countValues(pack.cells.biome),
-      positiveSuitabilityCells: countPositive(pack.cells.s),
-      positivePopulationCells: countPositive(pack.cells.pop),
-      maxSuitability: maxValue(pack.cells.s),
-      maxPopulation: round(maxValue(pack.cells.pop), 3),
+      ...recalculated,
       goodsAtRankTime,
-      rankCellsInputs,
       buildMs: roundMs(performance.now() - startedAt)
     }
+  };
+}
+
+export function recalculateBiomeSuitability(grid, pack) {
+  const rankCellsInputs = rankCells(pack);
+  pack.metadata.rankCellsInputs = rankCellsInputs;
+  mirrorPackFieldsToGrid(grid, pack);
+  return {
+    biomeCounts: countValues(pack.cells.biome),
+    positiveSuitabilityCells: countPositive(pack.cells.s),
+    positivePopulationCells: countPositive(pack.cells.pop),
+    maxSuitability: maxValue(pack.cells.s),
+    maxPopulation: round(maxValue(pack.cells.pop), 3),
+    rankCellsInputs
   };
 }
 
