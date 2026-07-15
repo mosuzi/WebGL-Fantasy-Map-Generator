@@ -4001,11 +4001,20 @@ select:disabled {
 }
 
 .heightmap-import-launcher h2,
-.generation-climate-section h2 {
+.generation-climate-section summary {
   margin: 0;
   color: #edf4f6;
   font-size: 12px;
+  font-weight: 700;
   line-height: 1.2;
+}
+
+.generation-climate-section summary {
+  cursor: pointer;
+}
+
+.generation-climate-section[open] summary {
+  margin-bottom: 8px;
 }
 
 .heightmap-import-launcher p {
@@ -5378,6 +5387,22 @@ input.ui-switch-native {
   gap: 12px;
 }
 
+.management-panel-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 6px;
+  background: rgba(16, 23, 27, 0.7);
+}
+
+.management-panel-group h2 {
+  margin: 0;
+  color: #d8e2e7;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .management-panel-actions,
 .regeneration-action-grid {
   display: grid;
@@ -5390,10 +5415,6 @@ input.ui-switch-native {
   width: 100%;
   min-width: 0;
   margin-left: 0 !important;
-}
-
-.management-panel-actions #fit-view {
-  grid-column: 1 / -1;
 }
 
 .city-panel-summary {

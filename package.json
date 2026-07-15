@@ -46,6 +46,7 @@
     "regress:social-ownership": "node --no-warnings ./tools/webgl-generator-social-ownership-regression.mjs",
     "regress:social-ownership-browser": "node --no-warnings ./tools/webgl-generator-social-ownership-browser-regression.mjs",
     "regress:object-entries": "node --no-warnings ./tools/webgl-generator-object-entry-regression.mjs",
+    "regress:control-ia": "node --no-warnings ./tools/webgl-generator-control-information-architecture-regression.mjs",
     "regress:edit-execution-path": "node --no-warnings ./tools/webgl-generator-edit-execution-path-regression.mjs",
     "regress:panel-refresh-path": "node --no-warnings ./tools/webgl-generator-panel-refresh-path-regression.mjs",
     "regress:selection-actions": "node --no-warnings ./tools/webgl-generator-selection-action-regression.mjs",

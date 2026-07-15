@@ -131,13 +131,13 @@
     </div>
 
     <div class="generation-panel-form" data-control-panel="generation" :hidden="activeTab !== 'generation'">
-      <UiField label="Seed" input-id="seed-input" model-value="stage-2-1" :input-attrs="{autocomplete: 'off'}" />
-      <UiField label="目标 cells" input-id="cells-input" type="number" :model-value="10000" :input-attrs="{min: 1000, max: 100000, step: 1000}" />
+      <UiField label="地图种子" input-id="seed-input" model-value="stage-2-1" :input-attrs="{autocomplete: 'off'}" />
+      <UiField label="地图规模" input-id="cells-input" type="number" :model-value="10000" :input-attrs="{min: 1000, max: 100000, step: 1000}" />
       <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
       <UiField label="高度" input-id="height-input" type="number" :model-value="960" :input-attrs="{min: 480, max: 4096, step: 80}" />
       <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />
-      <section class="generation-climate-section" aria-labelledby="generation-climate-title">
-        <h2 id="generation-climate-title">气候</h2>
+      <details class="generation-climate-section">
+        <summary id="generation-climate-title">高级气候</summary>
         <input id="climate-latitude-mode" type="hidden" :value="climateLatitudeMode" />
         <input id="climate-latitude-center" type="hidden" :value="climateLatitudeCenter" />
         <input id="climate-latitude-span" type="hidden" :value="climateLatitudeSpanDegrees" />
@@ -284,12 +284,12 @@
             />
           </div>
         </div>
-      </section>
-      <UiSwitchField label="生成时自动随机 seed" input-id="auto-random-seed" />
+      </details>
+      <UiSwitchField label="生成时自动随机种子" input-id="auto-random-seed" />
 
       <div class="generation-button-row">
-        <UiButton id="generate-map" variant="primary">生成 grid 地图</UiButton>
-        <UiButton id="random-seed" variant="secondary">换 seed</UiButton>
+        <UiButton id="generate-map" variant="primary">生成地图</UiButton>
+        <UiButton id="random-seed" variant="secondary">换种子</UiButton>
       </div>
     </div>
 
@@ -417,11 +417,20 @@
     </div>
 
     <div class="control-panel-section management-panel" data-control-panel="management" :hidden="activeTab !== 'management'">
-      <div class="management-panel-actions">
-        <UiButton v-for="action in actions" :id="action.id" :key="action.id" variant="secondary">
-          {{ action.label }}
-        </UiButton>
-      </div>
+      <section
+        v-for="group in managementGroups"
+        :key="group.id"
+        class="management-panel-group"
+        :data-management-group="group.id"
+        :aria-labelledby="`management-group-${group.id}`"
+      >
+        <h2 :id="`management-group-${group.id}`">{{ group.label }}</h2>
+        <div class="management-panel-actions">
+          <UiButton v-for="action in group.actions" :id="action.id" :key="action.id" variant="secondary">
+            {{ action.label }}
+          </UiButton>
+        </div>
+      </section>
 
       <div class="management-panel-divider" aria-hidden="true"></div>
 
@@ -620,33 +629,48 @@ const layers = Object.freeze([
   {id: "coastline", label: "水陆线"}
 ]);
 
-const actions = Object.freeze([
-  {id: "fit-view", label: "适配视图"},
-  {id: "open-height-panel", label: "高度编辑"},
-  {id: "open-state-panel", label: "国家编辑"},
-  {id: "open-government-panel", label: "政体管理"},
-  {id: "open-province-panel", label: "省份管理"},
-  {id: "open-city-panel", label: "城市管理"},
-  {id: "open-climate-panel", label: "气候统计"},
-  {id: "open-biome-panel", label: "生物群系"},
-  {id: "open-population-panel", label: "人口统计"},
-  {id: "open-emblem-panel", label: "纹章统计"},
-  {id: "open-feature-panel", label: "水体统计"},
-  {id: "open-culture-panel", label: "文化管理"},
-  {id: "open-religion-panel", label: "宗教管理"},
-  {id: "open-diplomacy-panel", label: "外交管理"},
-  {id: "open-economy-panel", label: "经济总览"},
-  {id: "open-military-panel", label: "军事管理"},
-  {id: "open-route-panel", label: "路线管理"},
-  {id: "open-river-panel", label: "河流管理"},
-  {id: "open-lake-panel", label: "湖泊管理"},
-  {id: "open-zone-panel", label: "地区管理"},
-  {id: "open-marker-panel", label: "资源标记"},
-  {id: "open-label-naming-panel", label: "标签管理"},
-  {id: "open-notes-panel", label: "备注总览"},
-  {id: "open-measurement-panel", label: "测量对象"},
-  {id: "open-namebase-panel", label: "名称库"}
+const managementGroups = Object.freeze([
+  managementGroup("terrain", "地形环境", [
+    ["open-height-panel", "高度编辑"],
+    ["open-climate-panel", "气候统计"],
+    ["open-biome-panel", "生物群系"],
+    ["open-feature-panel", "水体统计"],
+    ["open-river-panel", "河流管理"],
+    ["open-lake-panel", "湖泊管理"]
+  ]),
+  managementGroup("politics", "政治社会", [
+    ["open-state-panel", "国家编辑"],
+    ["open-government-panel", "政体管理"],
+    ["open-province-panel", "省份管理"],
+    ["open-city-panel", "城市管理"],
+    ["open-population-panel", "人口统计"],
+    ["open-culture-panel", "文化管理"],
+    ["open-religion-panel", "宗教管理"],
+    ["open-diplomacy-panel", "外交管理"]
+  ]),
+  managementGroup("network", "网络经济", [
+    ["open-economy-panel", "经济总览"],
+    ["open-military-panel", "军事管理"],
+    ["open-route-panel", "路线管理"]
+  ]),
+  managementGroup("annotation", "标注对象", [
+    ["open-zone-panel", "地区管理"],
+    ["open-marker-panel", "资源标记"],
+    ["open-label-naming-panel", "标签管理"],
+    ["open-notes-panel", "备注总览"],
+    ["open-measurement-panel", "测量对象"]
+  ]),
+  managementGroup("system", "系统工具", [["open-namebase-panel", "名称库"]]),
+  managementGroup("experimental", "实验功能", [["open-emblem-panel", "纹章统计"]])
 ]);
+
+function managementGroup(id, label, actions) {
+  return Object.freeze({
+    id,
+    label,
+    actions: Object.freeze(actions.map(([actionId, actionLabel]) => Object.freeze({id: actionId, label: actionLabel})))
+  });
+}
 
 const regenerationActions = Object.freeze([
   {kind: "states", label: "国家"},
