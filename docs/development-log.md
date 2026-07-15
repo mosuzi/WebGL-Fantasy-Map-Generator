@@ -27564,3 +27564,11 @@ full 矩阵结果：
 - UI 与新增稳定 API `api.edit.biomes.assignCells(biomeId, gridCellIds, options)` 共用同一命令；公开 API 基线更新为 11 个命名空间、180 个公开方法、90 个编辑方法，稳定等级为 `172 / 7 / 1`。
 - 新增 `regress:biome-assignment`，覆盖非法目标、越界 cell、陆水不匹配、气候异常提示、无历史预览、单命令提交、grid / pack 同步、统计与适居度重算、下游标脏、完整撤销 / 重做、旧地图往返和 GeoJSON biome 导出。
 - 当前系统 Chrome 真实页面抽查通过：选择 `Temperate deciduous forest（#6）` 后连续刷涂影响 44 cells，列表从 437 cells / 604万平方公里 / 1,922万人更新为 485 cells / 677万平方公里 / 2,138万人；撤销精确恢复前值，重做恢复后值，按钮状态同步。页面未出现本次功能错误；仅记录既有 React DevTools 扩展来源的 main-thread-long-task health 告警。
+
+### 2026-07-15 完成权威任务第 52 项：用户主题导入导出与颜色级编辑
+
+- 新增动态用户主题 registry、严格白名单 JSON 契约和 LocalStorage 持久化。文档固定为 `webgl-generator-visual-theme v1`，只接受八个颜色 token 与 `#rrggbb`，坏 JSON、未知字段 / token、非法 id / 版本 / 颜色均在写状态前拒绝。
+- 控制面板复用共享 `UiColorActionPanel`，支持复制内置主题、导入、导出、删除和陆地 / 水域 / 边界 / 道路 / 主要标签 / 比例尺颜色编辑；用户主题变化通过统一命令进入 `EditHistory`，支持撤销 / 重做。
+- renderer 地表、线层、DOM 标签 / 图例 / 比例尺和 PNG 主题流水线共用同一 materialized token。完整地图 `visualTheme` 存储升级为版本 2 并保存用户主题；旧 v1 与缺字段 v2 会迁移，非法用户主题拒绝导入。
+- `layers` API 新增主题列举、导出、导入、创建、更新和删除六个方法；API 基线更新为 186 个公开方法、90 个编辑方法，稳定等级 `178 / 7 / 1`。
+- `regress:visual-themes`、`regress:png-options`、`regress:map-migration`、四项 API 门禁、生产构建和差异检查通过。Chrome 抽查确认用户主题陆地色 `#123456` 可实际作用于高度视图，registry 跨刷新保留；删除三个临时主题并刷新后只剩六个内置主题。页面无本项错误，只有既有 React DevTools 扩展来源的 long-task 告警。

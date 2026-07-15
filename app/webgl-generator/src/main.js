@@ -1,11 +1,13 @@
 import {createGeneratorApp} from "./runtime/app.js";
 import {installWebglGeneratorHealthMonitor, recordStartupFailure} from "./runtime/health-monitor.js";
 import {initializeVueStateBridge} from "./ui/vue/state-bridge.js";
+import {loadUserVisualThemes} from "./runtime/visual-theme-storage.js";
 import "./styles.css";
 
 const healthMonitor = installWebglGeneratorHealthMonitor(document);
 
 try {
+  loadUserVisualThemes(window.localStorage);
   initializeVueStateBridge(document);
   createGeneratorApp(document, {healthMonitor});
 } catch (error) {

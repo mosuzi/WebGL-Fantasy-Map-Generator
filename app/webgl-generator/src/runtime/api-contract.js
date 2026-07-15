@@ -7,7 +7,7 @@ export const API_METHODS = Object.freeze({
   info: Object.freeze(["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"]),
   generate: Object.freeze(["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"]),
   selection: Object.freeze(["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"]),
-  layers: Object.freeze(["get", "setViewMode", "setVisible", "setTheme", "fitView", "setShowOceanHeight", "setSmoothCellBorders", "setShowHoverInfo", "setMaxCityLabels"]),
+  layers: Object.freeze(["get", "listThemes", "setViewMode", "setVisible", "setTheme", "exportTheme", "importTheme", "createTheme", "updateTheme", "deleteTheme", "fitView", "setShowOceanHeight", "setSmoothCellBorders", "setShowHoverInfo", "setMaxCityLabels"]),
   units: Object.freeze(["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"]),
   climate: Object.freeze(["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"]),
   history: Object.freeze(["get", "stats", "peek", "undo", "redo"]),

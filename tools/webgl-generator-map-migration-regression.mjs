@@ -31,7 +31,7 @@ assert.equal(migrated.map.notes.metadata.formatVersion, 1);
 assert.deepEqual(migrated.map.measurements, {version: 1, items: [], metadata: {measurements: 0, nextId: 1}});
 assert.deepEqual(migrated.map.labels.hidden, {state: [1], city: []});
 assert.deepEqual(migrated.map.labels.metadata, {custom: 0, hidden: 1});
-assert.deepEqual(migrated.map.visualTheme, {version: 1, preset: "ancient", overrides: {}});
+assert.deepEqual(migrated.map.visualTheme, {version: 2, preset: "ancient", overrides: {}, userThemes: []});
 assert.equal(migrated.map.options.visualTheme, "ancient");
 assert.equal(migrated.map.options.seed, "legacy-v1-sample", "map options 应优先于同名文档 options");
 assert.strictEqual(migrateMapDocument(migrated), migrated, "当前版本迁移应保持幂等且不复制文档");

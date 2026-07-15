@@ -25,6 +25,9 @@ const uiActionSignatures = {
   viewMode: "onMode: mode => runtimeActions.layers.setViewMode(mode)",
   layer: "onLayerVisible: (layer, visible) => runtimeActions.layers.setVisible(layer, visible)",
   display: "onShowOceanHeight: showOceanHeight => runtimeActions.layers.setShowOceanHeight(showOceanHeight)",
+  themeCreate: "onCreateVisualTheme: () => runtimeActions.layers.createTheme()",
+  themeImport: "onImportVisualTheme: file => importVisualThemeFile(state, documentRef, file, runtimeActions.layers.importTheme)",
+  themeUpdate: "onUpdateVisualTheme: (token, color) => runtimeActions.layers.updateTheme(currentVisualThemeId(documentRef), {[token]: color})",
   climate: "onClimateControls: () => applyClimateControls(state, documentRef, runtimeActions.climate.apply)",
   mapImport: "onImportMapData: file => importMapData(state, documentRef, file, runtimeActions.data.importMap)",
   geoImport: "onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO)",
@@ -46,6 +49,12 @@ const apiActionSignatures = [
   "actions.layers?.setSmoothCellBorders",
   "actions.layers?.setShowHoverInfo",
   "actions.layers?.setMaxCityLabels",
+  "actions.layers?.listThemes",
+  "actions.layers?.exportTheme",
+  "actions.layers?.importTheme",
+  "actions.layers?.createTheme",
+  "actions.layers?.updateTheme",
+  "actions.layers?.deleteTheme",
   "actions.data?.exportMap",
   "actions.data?.exportGEO",
   "actions.data?.exportFeatureGEO",
@@ -112,7 +121,7 @@ assert.equal(failure.error.code, "api_error", "公共 action 参数错误 code �
 assert.match(failure.error.message, /当前没有可导出的地图/, "公共 action 错误消息漂移");
 
 const declaredCounts = countDeclaredMethods(API_METHODS);
-assert.equal(declaredCounts.total, 180, "公共 API 方法总数漂移");
+assert.equal(declaredCounts.total, 186, "公共 API 方法总数漂移");
 assert.equal(declaredCounts.edit, 90, "edit 方法数漂移");
 
 console.log(JSON.stringify({

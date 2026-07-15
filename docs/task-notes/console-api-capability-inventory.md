@@ -8,16 +8,16 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：11 个命名空间、180 个方法，其中 90 个为编辑方法。
+当前公开基线：11 个命名空间、186 个方法，其中 90 个为编辑方法。
 
-第 51 项完成后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 172 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、13 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
+第 52 项完成后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 178 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、13 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
 | `info` | 5 | 已覆盖版本、能力、地图、运行时和 health 只读摘要 |
 | `generate` | 5 | 已覆盖配置、新地图、换 seed 和受约束重算 |
 | `selection` | 12 | 已覆盖选择、定位、拾取、闪烁、持久高亮和编辑态 |
-| `layers` | 9 | 已覆盖核心图层、视图模式、主题、fit view 和 4 项显示偏好 |
+| `layers` | 15 | 已覆盖核心图层、视图模式、内置 / 用户主题 registry 与交换编辑、fit view 和 4 项显示偏好 |
 | `units` | 9 | 已覆盖当前全部显示单位偏好 |
 | `climate` | 14 | 已覆盖气候读取与当前写入入口 |
 | `history` | 5 | 已覆盖历史读取、peek、撤销和重做 |
@@ -73,6 +73,7 @@
 | 34 | 高度 | 基础 / 下游派生重建 | 已暴露且共路径 | `api.edit.height.rebuildBaseDerived / rebuildDownstreamDerived` 与高度面板共用 action，要求 `confirm: true` | 第 30 项已完成；第 33 项稳定化 |
 | 35 | 经济 | 市场归属预检、cell 归属应用与经济链重算 | 已暴露且共路径 | `api.edit.economy.inspectAssignment / assignCells / rebuild` 与市场归属面板共用 command；写入方法要求 `confirm: true` | 第 48 项已完成 |
 | 36 | 生物群系 | 局部归属编辑 | 已暴露且共路径 | `api.edit.biomes.assignCells()` 与生物群系面板共用预检、适居度重算和 edit command；陆水不匹配、非法目标及越界输入统一拒绝 | 第 51 项已完成 |
+| 37 | 视觉主题 | 用户主题查询、导入导出、创建、颜色编辑与删除 | 已暴露且共路径 | `api.layers.listThemes / exportTheme / importTheme / createTheme / updateTheme / deleteTheme` 与视图页共用白名单 registry、地图存储和 edit command | 第 52 项已完成 |
 
 ## 第 29～33 项冻结范围
 

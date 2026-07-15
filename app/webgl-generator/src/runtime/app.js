@@ -13,7 +13,19 @@ import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
-import {normalizeVisualThemeId} from "../renderer/themes.js";
+import {
+  createUserVisualThemeDocument,
+  exportVisualThemeDocument,
+  isUserVisualTheme,
+  listUserVisualThemeDocuments,
+  listVisualThemes,
+  mergeUserVisualThemes,
+  normalizeVisualThemeDocument,
+  normalizeVisualThemeId,
+  replaceUserVisualThemes,
+  updateUserVisualThemeDocument,
+  visualThemeOptions
+} from "../renderer/themes.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
@@ -110,6 +122,8 @@ import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROU
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
+import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
+import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
@@ -2097,7 +2111,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     refreshRuntimeAndPickPanels(documentRef, state);
   }, object => resolveObject(state.map, object));
   state.selectionStore = selectionStore;
-  state.editRefreshScheduler = createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel});
+  state.editRefreshScheduler = createEditRefreshScheduler({
+    state,
+    documentRef,
+    updateRuntimePanel,
+    updatePickPanel,
+    applyVisualTheme: themeId => applyRuntimeVisualThemeState(state, documentRef, themeId, {force: true})
+  });
   registerCanvasToolModes(state, documentRef, {stopObjectEditing});
   applyControlPreferencesToRenderer(documentRef, renderer);
   state.runtimeOperation = createRuntimeOperationManager({
@@ -2139,6 +2159,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onShowOceanHeight: showOceanHeight => runtimeActions.layers.setShowOceanHeight(showOceanHeight),
     onSmoothCellBorders: smoothCellBorders => runtimeActions.layers.setSmoothCellBorders(smoothCellBorders),
     onVisualTheme: visualTheme => runtimeActions.layers.setTheme(visualTheme),
+    onCreateVisualTheme: () => runtimeActions.layers.createTheme(),
+    onExportVisualTheme: () => runtimeActions.layers.exportTheme(currentVisualThemeId(documentRef), {download: true}),
+    onImportVisualTheme: file => importVisualThemeFile(state, documentRef, file, runtimeActions.layers.importTheme),
+    onUpdateVisualTheme: (token, color) => runtimeActions.layers.updateTheme(currentVisualThemeId(documentRef), {[token]: color}),
+    onDeleteVisualTheme: () => runtimeActions.layers.deleteTheme(currentVisualThemeId(documentRef)),
     onShowHoverInfo: showHoverInfo => runtimeActions.layers.setShowHoverInfo(showHoverInfo),
     onMaxCityLabels: maxCityLabels => runtimeActions.layers.setMaxCityLabels(maxCityLabels),
     onUnitPreferences: () => {
@@ -2337,9 +2362,15 @@ function createRuntimeActions(state, documentRef, options = {}) {
       })
     },
     layers: {
+      listThemes: () => listRuntimeVisualThemes(documentRef),
       setViewMode: mode => setRuntimeViewMode(state, documentRef, mode),
       setVisible: (layer, visible) => setRuntimeLayerVisible(state, documentRef, layer, visible),
       setTheme: themeId => setRuntimeVisualTheme(state, documentRef, themeId),
+      exportTheme: (themeId, options = {}) => exportRuntimeVisualTheme(documentRef, themeId, options),
+      importTheme: (document, options = {}) => importRuntimeVisualTheme(state, documentRef, document, options),
+      createTheme: (options = {}) => createRuntimeVisualTheme(state, documentRef, options),
+      updateTheme: (themeId, colors = {}) => updateRuntimeVisualTheme(state, documentRef, themeId, colors),
+      deleteTheme: themeId => deleteRuntimeVisualTheme(state, documentRef, themeId),
       fitView: () => fitRuntimeView(state, documentRef),
       setShowOceanHeight: visible => setRuntimeOceanHeightVisible(state, documentRef, visible),
       setSmoothCellBorders: enabled => setRuntimeSmoothCellBorders(state, documentRef, enabled),
@@ -2598,12 +2629,127 @@ function setRuntimeVisualTheme(state, documentRef, themeId) {
   const nextThemeId = normalizeVisualThemeId(rawThemeId);
   if (nextThemeId !== rawThemeId) throw new Error(`未知视觉主题：${themeId}`);
   return measureHealthOperation(state, "set-visual-theme", {visualTheme: nextThemeId}, () => {
-    syncRuntimeControlValue(documentRef, "visual-theme-preset", nextThemeId);
-    updateControlPreferences(documentRef, {visualTheme: nextThemeId});
-    state.renderer?.setVisualTheme?.(nextThemeId);
-    updateRuntimePanel(documentRef, state);
+    syncMapVisualThemeStore(state.map, nextThemeId);
+    applyRuntimeVisualThemeState(state, documentRef, nextThemeId);
     return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
   });
+}
+
+function listRuntimeVisualThemes(documentRef) {
+  const current = currentVisualThemeId(documentRef);
+  const userDocuments = new Map(listUserVisualThemeDocuments().map(document => [document.id, document]));
+  return {
+    current,
+    themes: listVisualThemes().map(theme => ({
+      ...theme,
+      colors: userDocuments.get(theme.value)?.colors ? {...userDocuments.get(theme.value).colors} : null
+    }))
+  };
+}
+
+function exportRuntimeVisualTheme(documentRef, themeId, options = {}) {
+  const document = exportVisualThemeDocument(themeId || currentVisualThemeId(documentRef));
+  const text = JSON.stringify(document, null, 2);
+  const filename = `${document.id}.webgl-theme.json`;
+  if (options.download === true) downloadText(documentRef, text, filename, "application/json;charset=utf-8");
+  return {document, text: options.includeText === false ? undefined : text, filename, downloaded: options.download === true};
+}
+
+function createRuntimeVisualTheme(state, documentRef, options = {}) {
+  ensureThemeEditableMap(state.map);
+  const baseThemeId = options.baseThemeId || currentVisualThemeId(documentRef);
+  const document = createUserVisualThemeDocument({label: options.label, baseThemeId: isUserVisualTheme(baseThemeId) ? exportVisualThemeDocument(baseThemeId).base : baseThemeId});
+  if (isUserVisualTheme(baseThemeId)) document.colors = {...exportVisualThemeDocument(baseThemeId).colors};
+  const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
+  const after = {preset: document.id, userThemes: [...before.userThemes, document]};
+  return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `创建用户主题 ${document.label}`}));
+}
+
+function importRuntimeVisualTheme(state, documentRef, source, options = {}) {
+  ensureThemeEditableMap(state.map);
+  const document = normalizeVisualThemeDocument(source);
+  const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
+  const existingIndex = before.userThemes.findIndex(theme => theme.id === document.id);
+  if (existingIndex >= 0 && options.replace !== true) throw new Error(`用户主题已存在：${document.id}`);
+  const userThemes = before.userThemes.map(theme => ({...theme, colors: {...theme.colors}}));
+  if (existingIndex >= 0) userThemes.splice(existingIndex, 1, document);
+  else userThemes.push(document);
+  const after = {preset: options.select === false ? before.preset : document.id, userThemes};
+  return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `导入用户主题 ${document.label}`}));
+}
+
+function updateRuntimeVisualTheme(state, documentRef, themeId, colors = {}) {
+  ensureThemeEditableMap(state.map);
+  const id = String(themeId || currentVisualThemeId(documentRef));
+  const document = updateUserVisualThemeDocument(id, colors);
+  const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
+  const after = {
+    preset: id,
+    userThemes: before.userThemes.map(theme => theme.id === id ? document : theme)
+  };
+  return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `编辑用户主题 ${document.label}`}));
+}
+
+function deleteRuntimeVisualTheme(state, documentRef, themeId) {
+  ensureThemeEditableMap(state.map);
+  const id = String(themeId || currentVisualThemeId(documentRef));
+  if (!isUserVisualTheme(id)) throw new Error("内置主题不能删除");
+  const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
+  const after = {
+    preset: before.preset === id ? "default" : before.preset,
+    userThemes: before.userThemes.filter(theme => theme.id !== id)
+  };
+  return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `删除用户主题 ${id}`}));
+}
+
+function executeVisualThemeCommand(state, documentRef, command) {
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false
+  });
+  return editApiResult(state, result);
+}
+
+function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = false} = {}) {
+  const id = normalizeVisualThemeId(themeId);
+  syncMapVisualThemeStore(state.map, id);
+  persistUserVisualThemes(documentRef.defaultView?.localStorage);
+  documentRef.dispatchEvent(new CustomEvent("webgl-generator-visual-themes-changed", {
+    detail: {current: id, options: visualThemeOptions(), userTheme: isUserVisualTheme(id) ? exportVisualThemeDocument(id) : null}
+  }));
+  syncRuntimeControlValue(documentRef, "visual-theme-preset", id);
+  updateControlPreferences(documentRef, {visualTheme: id});
+  state.renderer?.setVisualTheme?.(id, {force});
+  updateRuntimePanel(documentRef, state);
+}
+
+function syncMapVisualThemeStore(map, preset) {
+  if (!map) return;
+  map.visualTheme = {
+    ...(map.visualTheme || {}),
+    version: 2,
+    preset,
+    overrides: map.visualTheme?.overrides && typeof map.visualTheme.overrides === "object" ? {...map.visualTheme.overrides} : {},
+    userThemes: listUserVisualThemeDocuments()
+  };
+  map.options = {...(map.options || {}), visualTheme: preset};
+}
+
+function ensureThemeEditableMap(map) {
+  if (!map) throw new Error("当前没有可编辑的地图");
+}
+
+async function importVisualThemeFile(state, documentRef, file, importTheme) {
+  try {
+    if (!file?.text) throw new Error("未选择主题文件");
+    const result = importTheme(await file.text());
+    showMapToast(documentRef, `已导入用户主题：${result?.result?.preset || "完成"}`);
+    return result;
+  } catch (error) {
+    showMapToast(documentRef, `主题导入失败：${error?.message || error}`, 2800, {tone: "error"});
+    return {executed: false, error};
+  }
 }
 
 function fitRuntimeView(state, documentRef) {
@@ -3276,7 +3422,8 @@ function captureMapReplaceSnapshot(state, documentRef) {
     history: state.editHistory.createSnapshot(),
     selection: state.selectionStore.getSnapshot(),
     lastEditRefresh: state.lastEditRefresh,
-    visualTheme: currentVisualThemeId(documentRef)
+    visualTheme: currentVisualThemeId(documentRef),
+    userVisualThemes: listUserVisualThemeDocuments()
   };
 }
 
@@ -3287,8 +3434,8 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
   state.options = cloneGenerationOptions(snapshot.options);
   state.lastEditRefresh = snapshot.lastEditRefresh;
   syncGenerationInputs(documentRef, state.options);
-  setInputValue(documentRef, "visual-theme-preset", snapshot.visualTheme);
-  state.renderer?.setVisualTheme?.(snapshot.visualTheme);
+  replaceUserVisualThemes(snapshot.userVisualThemes || []);
+  applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true});
   if (mapChanged && snapshot.map) {
     if (typeof state.renderer.loadMapAsync === "function") await state.renderer.loadMapAsync(snapshot.map);
     else state.renderer.loadMap(snapshot.map);
@@ -4897,9 +5044,9 @@ function setInputValue(documentRef, id, value, {emitChange = true} = {}) {
 }
 
 function applyPersistedVisualTheme(state, documentRef, document) {
+  mergePersistedUserVisualThemes(documentRef.defaultView?.localStorage, document?.map?.visualTheme?.userThemes || []);
   const visualTheme = normalizeVisualThemeId(document?.map?.visualTheme?.preset || document?.map?.options?.visualTheme || document?.options?.visualTheme);
-  setInputValue(documentRef, "visual-theme-preset", visualTheme);
-  state.renderer?.setVisualTheme?.(visualTheme);
+  applyRuntimeVisualThemeState(state, documentRef, visualTheme, {force: true});
 }
 
 function currentVisualThemeId(documentRef) {

@@ -430,9 +430,9 @@ export class PlaceholderMapRenderer {
     this.draw();
   }
 
-  setVisualTheme(themeId) {
+  setVisualTheme(themeId, {force = false} = {}) {
     const theme = resolveVisualTheme(themeId);
-    if (this.visualTheme.id === theme.id) return;
+    if (!force && this.visualTheme.id === theme.id) return;
     this.visualTheme = theme;
     this.viewOptions = {...this.viewOptions, visualTheme: theme};
     if (this.map) applyMapStageBackground(this.stage, this.map, theme);

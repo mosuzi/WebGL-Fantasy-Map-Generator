@@ -321,6 +321,54 @@ select {
   --ui-segmented-font-size: 13px;
 }
 
+.visual-theme-editor {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(9, 14, 17, 0.46);
+}
+
+.visual-theme-editor-header,
+.visual-theme-action-row,
+.visual-theme-color-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.visual-theme-editor-header span,
+.visual-theme-editor-note {
+  color: #9fadb3;
+  font-size: 12px;
+}
+
+.visual-theme-action-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.visual-theme-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.visual-theme-shared-color-field {
+  margin-top: 10px;
+}
+
+.visual-theme-import-action {
+  min-height: 34px;
+}
+
+.visual-theme-editor-note {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .view-mode-segmented .el-segmented__group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

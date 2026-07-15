@@ -335,7 +335,7 @@ api.edit.measurement.delete(id)
 - `api.info.capabilities()` 保留原有 `methods` 数组以兼容旧脚本，同时新增 `safety.confirmRequiredMethods`、按命名空间分组的 `safety.confirmRequired` 和 `methodMetadata` 第一刀。
 - 当前显式标注 `generate.regenerate / newMap / rerollSeed`、`data.importMap / importGEO / importHeightmap / restoreBrowserMap`、`namebases.clear / renameObjects`、`edit.height.rebuildBaseDerived / rebuildDownstreamDerived`、`edit.economy.assignCells / rebuild` 必须传 `confirm:true`；对应 `methodMetadata` 会记录 `mutates / undoable / async / requiresConfirm`，供 AI 或自动化脚本在调用前判断确认边界。
 - selection 命名空间已从命名空间级 `readonly` 修正为 `selection-camera-and-editing-state`，并补齐方法级副作用元数据：`get / resolve` 不改变状态，`select / clear` 改选择态，`locate` 改相机与选择态，`pick` 改 pick 面板状态，`flash / highlight` 改临时闪烁态，`startEditing / stopEditing / toggleEditing` 改编辑态；这些方法均不要求 `confirm:true`，也不进入 `EditHistory`。
-- layers / units 已补齐方法级副作用元数据：`layers.get` 与 `units.get` 不改变状态，`layers.setViewMode / setVisible / setTheme / setShowOceanHeight / setSmoothCellBorders / setShowHoverInfo / setMaxCityLabels` 和所有单位写入只改显示偏好，`layers.fitView` 只改相机；因此 `sideEffects.layers` 为 `display-preference-and-camera-state`。这些方法均不要求 `confirm:true`，也不进入 `EditHistory`。
+- layers / units 已补齐方法级副作用元数据：`layers.get / listThemes` 与 `units.get` 不改变状态，`layers.setViewMode / setVisible / setTheme / setShowOceanHeight / setSmoothCellBorders / setShowHoverInfo / setMaxCityLabels` 和所有单位写入只改显示偏好，`layers.fitView` 只改相机；主题导出只返回或下载白名单文档，主题导入 / 创建 / 编辑 / 删除会修改用户主题 registry 并进入 `EditHistory`。因此 `sideEffects.layers` 为 `display-preference-camera-and-theme-registry`，这些方法均不要求 `confirm:true`。
 - climate 已补齐方法级副作用元数据：`get / getOptions / getTemperature / getPrecipitation / getLatitude / getAtmosphere / getBiomes` 不改变状态，`apply / setLatitude / setLatitudeRange / setLongitudeRange / setTemperature / setPrecipitation / setWind` 标注为 `climate-state-and-derived-stale`，表示会更新当前地图气候 / 生物群系并标记下游派生 stale；这些方法均不要求 `confirm:true`，也不进入 `EditHistory`。浏览器验证已确认读取该元数据不修改地图 checksum。
 - history 已补齐方法级副作用元数据：`get / stats / peek` 不改变状态，`undo / redo` 标注为 `map-and-edit-history-state`，表示会通过当前 `EditHistory` 恢复或重放命令并改变地图或历史栈；因此 `sideEffects.history` 已从 `edit-history` 修正为 `edit-history-read-and-undo-redo`。这些方法均不要求 `confirm:true`，`undo / redo` 自身也不会再作为可撤销命令进入历史栈；浏览器验证已确认读取该元数据不修改地图 checksum。
 - data 导出方法已补齐方法级副作用元数据：`exportAll / exportMap / exportGEO / exportFeatureGEO / exportCompressedAll / exportPNG / exportNotes / exportMeasurements` 标注为 `download-or-export-result`，表示只生成返回结果或触发浏览器下载，不修改地图数据、不进入 `EditHistory`、不要求 `confirm:true`；其中压缩完整地图和 PNG 导出为异步。`importMap / importGEO` 继续保持必须 `confirm:true` 的导入元数据；浏览器验证已确认读取该元数据不修改地图 checksum。
@@ -343,7 +343,7 @@ api.edit.measurement.delete(id)
 - info / debug 已补齐方法级副作用元数据：`info.version / capabilities / mapSummary / runtimeStats / healthEvents` 均不改变状态；`debug.snapshot / dumpState / renderer / health` 是只读诊断；`debug.enable / disable` 标注为 `debug-ui-state`，只开关开发面板 / debug UI；`debug.profileNextRender` 标注为 `renderer-diagnostics`，会强制执行一次 draw 并返回前后 renderer 诊断统计，但不修改地图数据、不进入 `EditHistory`、不要求 `confirm:true`；浏览器验证已确认读取元数据、执行诊断和开关 debug UI 均不修改地图 checksum。
 - generate 配置方法已补齐方法级副作用元数据：`getOptions` 不改变状态；`setOptions` 标注为 `generation-options`，表示只同步当前生成配置、主输入和运行时面板，不隐式生成新地图、不替换当前地图、不进入 `EditHistory`、不要求 `confirm:true`。`regenerate / newMap / rerollSeed` 继续保持必须显式确认的生成 / 重算元数据；浏览器验证已确认 `setOptions` 只更新生成配置，不修改当前地图 checksum 或编辑历史。
 - edit 命名空间已补齐方法级副作用元数据：可撤销编辑方法继续通过 edit command 写入当前地图；`height.rebuildBaseDerived / rebuildDownstreamDerived` 标注为同步、部分可撤销、必须确认的派生重建 action；`biomes.assignCells` 共用归属笔刷命令并同步适居度与人口承载摘要；`economy.inspectAssignment` 只做覆盖诊断，`economy.assignCells / rebuild` 通过完整经济快照形成单条可撤销历史并要求确认；`routes.inspectEdit / update`、`lakes.inspectOutlet / setOutlet` 与 `features.inspectPatch / applyPatch` 分别提供无副作用预检和单条可撤销编辑。当前 90 个 edit 方法均有同名元数据。
-- `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回声明方法、元数据和真实 API 方法总数及缺失 / 多余项，并在顶层暴露 `complete / missing / extra / runtimeMissing / runtimeExtra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。当前公开基线为 11 个命名空间、180 个方法，其中 90 个为编辑方法；三方任一发生漂移都会使覆盖自检失败。
+- `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回声明方法、元数据和真实 API 方法总数及缺失 / 多余项，并在顶层暴露 `complete / missing / extra / runtimeMissing / runtimeExtra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。当前公开基线为 11 个命名空间、186 个方法，其中 90 个为编辑方法；三方任一发生漂移都会使覆盖自检失败。
 - `pnpm run regress:api` 已新增第一刀，脚本会在构建产物上通过控制台 API 生成小地图，检查 `methodMetadataCoverage`、确认边界和代表性 `mutates` 元数据，并输出 `docs/generated/reports/api-capabilities-regression-results.json` 与 Markdown 报告。后续新增 / 删除 API 方法时，应优先跑该脚本确认能力表没有漏记或漂移。
 - `pnpm run regress:api-roundtrip` 已新增第一刀，脚本会在构建产物上通过控制台 API 完成完整地图 roundtrip：生成源地图、导出完整 JSON、导出 gzip、扰动当前地图后分别导入 JSON 对象 / JSON 字符串 / 压缩导出对象 / gzip-base64 payload，并校验 seed、checksum、历史栈和错误边界。
 - `pnpm run regress:api-geo` 已新增第一刀，脚本会在构建产物上通过 `api.data.importGEO()` 覆盖普通 GeoJSON 测量对象导入和 FMG Cells 地形导入两条分支，并校验确认门槛、坏 JSON 错误、撤销、非 GEO 派生重置和水陆一致性。
@@ -471,7 +471,7 @@ api.edit.measurement.delete(id)
 - 图层 API 已完成第一刀。
 - `api.layers.setViewMode(mode)` 会校验页面已有 `data-mode`，同步 active 按钮、本地显示偏好和 renderer color mode。
 - `api.layers.setVisible(layer, visible)` 会校验 renderer 已知图层，同步 UI 控件、本地显示偏好和 renderer layer visibility。
-- `api.layers.setTheme(themeId)` 会校验内置视觉主题，同步控制面板偏好和 renderer visual theme。
+- `api.layers.setTheme(themeId)` 会校验内置或用户视觉主题，同步控制面板偏好、地图主题存储和 renderer visual theme。第 52 项新增 `listThemes / exportTheme / importTheme / createTheme / updateTheme / deleteTheme`，与视图页共用白名单 registry；用户主题颜色修改进入 `EditHistory`。
 - `api.layers.fitView()` 复用 renderer `fitToView()`，返回适配后的 camera 快照和图层快照。
 - 本步只改显示偏好，不改变地图数据或 checksum。
 - 单位 API 已完成第一刀。
@@ -597,9 +597,9 @@ api.edit.measurement.delete(id)
 
 ## 下一波全面实现
 
-阶段 0～6 都已完成第一刀，原“继续阶段 4”的建议已经过期。当前 API 基线为 11 个命名空间、162 个公开方法、72 个编辑方法；权威任务第 28 项完成 34 类能力映射与三方覆盖门禁，第 29 项补齐 20 个纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，第 31 项统一长任务 operation，第 32 项补齐高度图、浏览器存档与导入诊断数据入口，并用固定 v1 / v2 样本证明迁移往返，第 33 项完成 `1.0.0` 稳定版本、方法等级、兼容别名、确认策略和 13 个扩展能力分组。`regress:api-action-convergence / api-operation / api-data-compatibility / api-stability` 已固定公共委托、事务、数据兼容和稳定契约。剩余第 34 项只负责聚合门禁与阶段末一次真实浏览器综合验收。
+阶段 0～6 和权威任务第 28～34 项均已完成，原“继续阶段 4”及“剩余第 34 项”的建议已经过期。当前 API 基线为 11 个命名空间、186 个公开方法、90 个编辑方法，稳定等级为 `178 / 7 / 1`；第 28 项完成能力映射与三方覆盖门禁，第 29 项补齐纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，第 31 项统一长任务 operation，第 32 项补齐高度图、浏览器存档与导入诊断数据入口，第 33 项完成 `1.0.0` 稳定版本、兼容别名、确认策略和扩展能力分组，第 34 项完成聚合门禁与真实浏览器综合验收。后续主题、对象创建和局部编辑能力继续沿同一契约扩展；`regress:api-action-convergence / api-operation / api-data-compatibility / api-stability` 持续固定公共委托、事务、数据兼容和稳定契约。
 
-后续以 `docs/current-plan.md` 的权威任务第 28～34 项为唯一执行顺序：
+第 28～34 项的已完成顺序如下；当前活动任务始终以 `docs/current-plan.md#权威任务清单` 为准：
 
 1. 已完成 UI action、runtime helper、edit command、导入导出与 API 的全量映射和范围冻结。
 2. 已补齐已有命令但尚未暴露的编辑 API，覆盖军事、外交、地区、政体和高度等领域。
@@ -609,6 +609,4 @@ api.edit.measurement.delete(id)
 6. 定义版本、稳定等级、兼容别名和扩展能力契约。
 7. 建立聚合代码门禁，并在阶段末集中执行一次真实浏览器综合验收。
 
-下一波仍保持快速迭代：第 31～33 项以纯代码检查和专项回归为主，不为每个小步启动浏览器；第 34 项统一完成真实页面验收。
-
-第 34 项通过后，API 系统才解除权威任务第 35 项“常用操作键盘快捷键与悬停提示”的依赖。快捷键必须调用稳定 API / 公共 action；若第 34 项未通过，第 35 项应跳过，不得用 DOM 点击或 UI 私有回调绕开 API 契约。
+第 34 项已经通过并解除第 35 项的依赖；快捷键实现已完成，继续要求调用稳定 API / 公共 action，不得恢复 DOM 点击或 UI 私有回调绕开 API 契约。

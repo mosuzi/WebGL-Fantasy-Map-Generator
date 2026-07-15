@@ -46,12 +46,16 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
   })
 });
 
-export function createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel}) {
+export function createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel, applyVisualTheme}) {
   return {
     run(commandOrEffects = null) {
       const effects = normalizeEditEffects(commandOrEffects?.effects || commandOrEffects);
       state.lastEditRefresh = summarizeEditRefresh(effects);
       invalidateRendererBuffers(state.renderer, effects);
+
+      if (effects.derived.includes("visual-theme")) {
+        applyVisualTheme?.(state.map?.visualTheme?.preset || "default");
+      }
 
       if (effects.derived.includes("political-boundaries") && typeof state.renderer.refreshPoliticalVisualCaches === "function") {
         state.renderer.refreshPoliticalVisualCaches();

@@ -83,20 +83,24 @@
 - 完整地图 JSON 会保存 `map.visualTheme.preset`、`map.options.visualTheme` 和 `options.visualTheme`；重新导入后会恢复主题选择。
 - 构建产物浏览器烟测确认切换 `night` 后 stage 背景、renderer token、线层 token、标签 / 比例尺 token、图例 token 和偏好同步变化，导出 / 导入地图 JSON 后仍恢复 `night`，渲染数据签名不变，`glError = 0`；PNG 文件级烟测确认夜间主题下比例尺线与图例背景已写入导出图片。
 
-仍待继续：
-
-- 第一阶段只读预设的跨层 token 和轻量画布滤镜已完成；后续若继续推进，应转入阶段 2 的主题导入导出，或另立图标 / 纹理 / 高级后处理专题。
+阶段状态：第一阶段只读预设及跨层 token 已完成；阶段 2、3 也已按下述封闭范围完成。纹理、字体和高级后处理仍留在阶段 4，不作为当前待办。
 
 ### 阶段 2：主题导入导出
 
 - 支持导出当前主题 JSON。
 - 支持导入轻量 WebGL 主题 JSON，导入后作为用户主题加入列表。
-- 导入校验只接受白名单 token，忽略未知字段并报告。
+- 导入校验只接受白名单字段和 token；未知字段、未知 token、非法版本、非法 id 或非 `#rrggbb` 颜色会拒绝整份文档，不改变当前主题。
 
 验收：
 
 - 导入无效 JSON 不影响当前主题。
 - 用户主题随完整地图 JSON 保存，并可在重新导入地图后恢复。
+
+完成记录：
+
+- 新增版本 1 的 `webgl-generator-visual-theme` 文档，固定 `id / label / base / colors` 契约和八个可编辑颜色 token；内置主题导出时会生成新的用户主题文档。
+- 用户主题 registry、控制面板和 `layers.listThemes / exportTheme / importTheme / createTheme / updateTheme / deleteTheme` 共用同一校验与运行时动作，并使用独立 LocalStorage 键保存用户主题。
+- 完整地图 `visualTheme` 存储升级为版本 2，保存用户主题文档；旧版本 1 和缺少 `userThemes` 的早期版本 2 会补为空列表，非法用户主题拒绝导入。
 
 ### 阶段 3：颜色级编辑
 
@@ -108,6 +112,13 @@
 
 - 修改颜色后无需重新生成地图，只触发 renderer 重绘或 overlay 更新。
 - 撤销/重做能恢复主题 token。
+
+完成记录：
+
+- 控制面板复用 `UiColorActionPanel` 编辑陆地、水域、国界、省界、道路、主要标签、比例尺前景和比例尺背景；用户主题的创建、导入、颜色修改和删除均进入统一 `EditHistory`。
+- 主题 token 同时驱动 renderer 地表与线层、DOM 标签 / 图例 / 比例尺，以及 PNG 的主题滤镜与 overlay 合成；同一用户主题修改时支持强制刷新，无需重新生成地图。
+- `regress:visual-themes` 覆盖坏 JSON、未知字段 / token、非法颜色、历史撤销 / 重做、完整地图往返、旧数据迁移、存储恢复和跨层 token；PNG、地图迁移、API 契约和生产构建门禁同步通过。
+- Chrome 文件页抽查确认用户主题可创建、将陆地改为 `#123456`、切换内置 / 用户主题并在高度视图看到实际地表颜色变化；刷新后 registry 保留，删除测试主题后再次刷新只剩六个内置主题。页面无本项错误，只有既有 React DevTools 扩展来源的 long-task 告警。
 
 ### 阶段 4：纹理、滤镜和高级效果
 

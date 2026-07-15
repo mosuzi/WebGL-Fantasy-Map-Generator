@@ -305,6 +305,40 @@
 
     <div class="control-panel-section" data-control-panel="themes" :hidden="activeTab !== 'themes'">
       <UiSelectField label="视觉主题" input-id="visual-theme-preset" :model-value="preferences.visualTheme" :options="visualThemePresetOptions" />
+      <section class="visual-theme-editor" aria-labelledby="visual-theme-editor-title">
+        <div class="visual-theme-editor-header">
+          <strong id="visual-theme-editor-title">用户主题</strong>
+          <span>{{ activeUserThemeDocument ? "可编辑" : "内置只读" }}</span>
+        </div>
+        <div class="visual-theme-action-row">
+          <UiButton id="create-user-visual-theme" variant="secondary">复制为用户主题</UiButton>
+          <UiButton id="export-visual-theme" variant="secondary">导出主题</UiButton>
+          <label class="file-import-action secondary-action visual-theme-import-action">
+            <span>导入主题</span>
+            <input id="import-visual-theme-file" type="file" accept=".json,.webgl-theme.json,application/json" />
+          </label>
+        </div>
+        <div v-if="activeUserThemeDocument" class="visual-theme-edit-actions">
+          <UiActionDock v-model:active="activeThemeAction" :actions="visualThemeActions">
+            <template #color>
+              <UiSelectField
+                label="颜色 token"
+                input-id="visual-theme-color-token"
+                :model-value="selectedThemeColorKey"
+                :options="visualThemeColorFields"
+                @update:model-value="value => selectedThemeColorKey = value"
+              />
+              <UiColorActionPanel
+                class-name="visual-theme-shared-color-field"
+                :model-value="activeUserThemeDocument.colors[selectedThemeColorKey]"
+                @apply="applyVisualThemeColor"
+              />
+            </template>
+          </UiActionDock>
+          <UiButton id="delete-user-visual-theme" variant="danger" @click="requestDeleteVisualTheme">删除用户主题</UiButton>
+        </div>
+        <p class="visual-theme-editor-note">颜色修改进入编辑历史，可用撤销 / 重做恢复；纹理、字体和高级滤镜不在本轮范围。</p>
+      </section>
       <UiSegmented class="view-mode-segmented" label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
       <div class="preference-toggle-grid">
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
@@ -479,6 +513,8 @@
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {storeToRefs} from "pinia";
 import UiButton from "./base/UiButton.vue";
+import UiActionDock from "./base/UiActionDock.vue";
+import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiField from "./base/UiField.vue";
 import UiLayerToggleButton from "./base/UiLayerToggleButton.vue";
 import UiSegmented from "./base/UiSegmented.vue";
@@ -617,7 +653,21 @@ const terrainTemplates = Object.freeze([
   {value: "archipelago", label: "群岛"}
 ]);
 
-const visualThemePresetOptions = Object.freeze(visualThemeOptions());
+const visualThemePresetOptions = ref(visualThemeOptions());
+const activeUserThemeDocument = ref(null);
+const activeThemeAction = ref(null);
+const selectedThemeColorKey = ref("land");
+const visualThemeColorFields = Object.freeze([
+  {value: "land", label: "陆地"},
+  {value: "water", label: "水域"},
+  {value: "stateBorder", label: "国界"},
+  {value: "provinceBorder", label: "省界"},
+  {value: "roads", label: "道路"},
+  {value: "primaryLabel", label: "主要标签"},
+  {value: "scaleBarForeground", label: "比例尺前景"},
+  {value: "scaleBarBackground", label: "比例尺背景"}
+]);
+const visualThemeActions = Object.freeze([{key: "color", label: "编辑主题颜色", icon: "◐", panelWidth: 360, panelHeight: 420}]);
 
 const themes = Object.freeze([
   {value: "height", label: "高度"},
@@ -881,6 +931,24 @@ function handleClimateOptionsSync(event) {
   temperatureSouthPole.value = clampNumber(detail.temperatureSouthPole, temperatureRange.min, temperatureRange.max, temperatureSouthPole.value);
 }
 
+function handleVisualThemesChanged(event) {
+  visualThemePresetOptions.value = Array.isArray(event.detail?.options) ? event.detail.options.map(option => ({...option})) : visualThemeOptions();
+  activeUserThemeDocument.value = event.detail?.userTheme
+    ? {...event.detail.userTheme, colors: {...event.detail.userTheme.colors}}
+    : null;
+  if (!activeUserThemeDocument.value) activeThemeAction.value = null;
+}
+
+function applyVisualThemeColor(color) {
+  document.dispatchEvent(new CustomEvent("webgl-generator-visual-theme-color", {
+    detail: {token: selectedThemeColorKey.value, color}
+  }));
+}
+
+function requestDeleteVisualTheme() {
+  document.dispatchEvent(new CustomEvent("webgl-generator-delete-visual-theme"));
+}
+
 function normalizeClimateRangePercent(value, fallback = 25) {
   return clampNumber(value, climateMapSizeRange.min, climateMapSizeRange.max, fallback);
 }
@@ -907,6 +975,7 @@ watch(activeTab, tab => {
 onMounted(() => {
   document.addEventListener("click", handleExportPanelOutsideClick, true);
   document.addEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
+  document.addEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   window.addEventListener("resize", handleExportPanelReposition);
   window.addEventListener("scroll", handleExportPanelReposition, true);
 });
@@ -914,6 +983,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleExportPanelOutsideClick, true);
   document.removeEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
+  document.removeEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   window.removeEventListener("resize", handleExportPanelReposition);
   window.removeEventListener("scroll", handleExportPanelReposition, true);
 });

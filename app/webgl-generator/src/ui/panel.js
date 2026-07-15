@@ -87,6 +87,17 @@ export function bindRuntimePanel(documentRef, handlers) {
     updateControlPreferences(documentRef, {visualTheme});
     handlers.onVisualTheme?.(visualTheme);
   });
+  documentRef.getElementById("create-user-visual-theme")?.addEventListener("click", () => handlers.onCreateVisualTheme?.());
+  documentRef.getElementById("export-visual-theme")?.addEventListener("click", () => handlers.onExportVisualTheme?.());
+  documentRef.addEventListener("webgl-generator-delete-visual-theme", () => handlers.onDeleteVisualTheme?.());
+  documentRef.getElementById("import-visual-theme-file")?.addEventListener("change", event => {
+    const file = event.target.files?.[0];
+    if (file) handlers.onImportVisualTheme?.(file);
+    event.target.value = "";
+  });
+  documentRef.addEventListener("webgl-generator-visual-theme-color", event => {
+    handlers.onUpdateVisualTheme?.(event.detail?.token, event.detail?.color);
+  });
   bindBooleanPreferenceButton(documentRef, "show-hover-info", "showHoverInfo", handlers.onShowHoverInfo);
   documentRef.getElementById("max-city-labels")?.addEventListener("change", event => {
     const value = normalizeMaxCityLabels(event.target.value);

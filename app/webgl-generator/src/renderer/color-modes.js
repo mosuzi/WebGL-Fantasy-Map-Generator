@@ -27,7 +27,7 @@ export function isLandCell(cellIndex, map) {
 export function colorForHeight(height, layers, viewOptions = {}) {
   const water = viewOptions.visualTheme?.water?.fill || layers.ocean;
   if (height < 20) return viewOptions.showOceanHeight ? colorForOceanHeight(height, {...layers, ocean: water}) : water;
-  return colorForLandHeight(height, viewOptions.visualTheme?.terrain?.heightRamp);
+  return viewOptions.visualTheme?.land?.fill || colorForLandHeight(height, viewOptions.visualTheme?.terrain?.heightRamp);
 }
 
 function colorForOceanHeight(height, layers) {

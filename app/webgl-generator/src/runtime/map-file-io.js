@@ -1,4 +1,5 @@
 import {readObjectNote} from "./object-notes.js";
+import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -394,6 +395,7 @@ function validateCurrentMapDocument(document) {
   if (!document.map.visualTheme.preset || !document.map.visualTheme.overrides || typeof document.map.visualTheme.overrides !== "object") {
     throw new Error("地图数据的 visualTheme 存储不完整");
   }
+  if (document.map.visualTheme.userThemes !== undefined && !Array.isArray(document.map.visualTheme.userThemes)) throw new Error("地图数据的用户主题列表无效");
 }
 
 function normalizeMapSchemaV2(map, documentOptions = {}) {
@@ -451,11 +453,13 @@ function normalizeLabelStoreV2(source) {
 }
 
 function normalizeVisualThemeStoreV2(source, fallbackPreset) {
+  const userThemes = Array.isArray(source?.userThemes) ? source.userThemes.map(normalizeVisualThemeDocument) : [];
   return {
     ...(source && typeof source === "object" ? source : {}),
-    version: 1,
+    version: 2,
     preset: String(source?.preset || fallbackPreset || "default"),
-    overrides: source?.overrides && typeof source.overrides === "object" ? {...source.overrides} : {}
+    overrides: source?.overrides && typeof source.overrides === "object" ? {...source.overrides} : {},
+    userThemes
   };
 }
 
