@@ -74,6 +74,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(provinceObject(row));
     },
     onLocate: row => callbacks.onLocate?.(provinceObject(row)),
+    onRegenerate: () => callbacks.onRegenerate?.(),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, provinceObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onEdit: row => {

@@ -114,7 +114,6 @@ const routeListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消绘制路线" : "绘制路线", icon: "+", active: props.state.createMode},
   {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "◉", disabled: !selectedRouteRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
-  {key: "locate", label: "定位路线", icon: "⌖", disabled: !selected.value},
   {key: "delete-selected", label: `批量删除选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "删", disabled: !selectedRouteRows.value.length},
   {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
   {key: "regenerate", label: "重算道路", icon: "↻"}

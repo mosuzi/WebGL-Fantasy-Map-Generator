@@ -68,7 +68,7 @@
         >
           <div class="project-export-panel-header" :class="{dragging: exportPanelDragging}" @pointerdown="startExportPanelDrag">
             <strong id="project-export-panel-title">导出</strong>
-            <button type="button" class="project-export-panel-close" aria-label="关闭导出面板" @pointerdown.stop @click="closeExportPanel">×</button>
+            <button type="button" class="ui-close-button project-export-panel-close" aria-label="关闭导出面板" @pointerdown.stop @click="closeExportPanel">×</button>
           </div>
           <div class="project-export-action-grid">
             <UiButton id="export-map-image" variant="secondary" @click="closeExportPanel">图片</UiButton>
@@ -441,19 +441,25 @@
           <span id="regeneration-status"></span>
         </div>
 
-        <div class="regeneration-action-grid">
-          <UiButton
-            v-for="action in regenerationActions"
-            :key="action.kind"
-            variant="secondary"
-            :data-regenerate-kind="action.kind"
-          >
-            {{ action.label }}
+        <div class="regeneration-control">
+          <UiSelectField
+            label="目标领域"
+            input-id="regeneration-kind"
+            :model-value="selectedRegenerationKind"
+            :options="regenerationActions"
+            @update:model-value="selectedRegenerationKind = $event"
+          />
+          <UiButton variant="danger" :data-regenerate-kind="selectedRegenerationKind">
+            重新生成{{ selectedRegenerationAction.label }}
           </UiButton>
         </div>
 
-        <p id="regeneration-constraint" class="regeneration-status-note">
-          国家、省份、城镇、道路、河流和资源点会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。
+        <p
+          id="regeneration-constraint"
+          class="regeneration-status-note"
+          :data-default-constraint="selectedRegenerationAction.impact"
+        >
+          {{ selectedRegenerationAction.impact }}
         </p>
       </section>
     </div>
@@ -681,15 +687,17 @@ function managementGroup(id, label, actions) {
 }
 
 const regenerationActions = Object.freeze([
-  {kind: "states", label: "国家"},
-  {kind: "provinces", label: "省份"},
-  {kind: "cities", label: "城镇"},
-  {kind: "routes", label: "道路"},
-  {kind: "rivers", label: "河流"},
-  {kind: "markers", label: "资源点"},
-  {kind: "diplomacy", label: "外交"},
-  {kind: "military", label: "军事"}
+  {value: "states", kind: "states", label: "国家", impact: "会替换国家与省份归属，并重建城镇、道路及相关下游派生。"},
+  {value: "provinces", kind: "provinces", label: "省份", impact: "会在现有国家内替换省份归属，并重建道路与相关下游派生。"},
+  {value: "cities", kind: "cities", label: "城镇", impact: "会替换城镇与港口，并重建道路及相关下游派生。"},
+  {value: "routes", kind: "routes", label: "道路", impact: "会替换道路网络，不改写国家、省份或城镇。"},
+  {value: "rivers", kind: "rivers", label: "河流", impact: "会替换河流与水文引用，并标记相关下游系统待重算。"},
+  {value: "markers", kind: "markers", label: "资源点", impact: "会替换资源类标记，并刷新资源贸易摘要。"},
+  {value: "diplomacy", kind: "diplomacy", label: "外交", impact: "会替换国家关系、战争与贸易关系摘要。"},
+  {value: "military", kind: "military", label: "军事", impact: "会替换全部军团、兵力、舰队、战线和战役摘要。"}
 ]);
+const selectedRegenerationKind = ref(regenerationActions[0].kind);
+const selectedRegenerationAction = computed(() => regenerationActions.find(action => action.kind === selectedRegenerationKind.value) || regenerationActions[0]);
 
 function isLayerVisible(layer) {
   const config = layers.find(item => item.id === layer);

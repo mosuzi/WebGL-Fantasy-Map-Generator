@@ -63,6 +63,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => callbacks.onSelect?.(riverObject(row)),
     onLocate: row => callbacks.onLocate?.(riverObject(row)),
+    onRegenerate: () => callbacks.onRegenerate?.(),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, riverObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onEdit: row => callbacks.onEdit?.(riverObject(row)),

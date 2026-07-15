@@ -3,6 +3,7 @@
 
   <div class="river-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型" @update:model-value="callbacks.onFilter" />
+    <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成河流</UiButton>
   </div>
   <UiObjectTable
     :columns="columns"
@@ -155,7 +156,6 @@ const riverListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "◉", disabled: !selectedRiverRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
-  {key: "locate", label: "定位选中河流", icon: "⌖", disabled: !selected.value},
   {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", active: editing.value, disabled: !selected.value},
   {key: "delete-selected", label: `批量删除选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "删", disabled: !selectedRiverRows.value.length},
   {key: "delete", label: "删除选中河流及支流", icon: "删", disabled: !selected.value}

@@ -345,7 +345,7 @@
     >
       <header class="heightmap-workbench-header" @pointerdown="startWorkbenchDrag">
         <strong id="heightmap-workbench-title">高度图导入工作台</strong>
-        <ElButton class="heightmap-workbench-close" text circle aria-label="关闭高度图导入工作台" @click="closeImportWorkbench">×</ElButton>
+        <ElButton class="ui-close-button heightmap-workbench-close" text circle aria-label="关闭高度图导入工作台" @click="closeImportWorkbench">×</ElButton>
       </header>
 
       <div class="heightmap-workbench-body">

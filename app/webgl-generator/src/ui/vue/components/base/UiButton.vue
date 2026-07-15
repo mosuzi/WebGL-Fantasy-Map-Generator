@@ -31,6 +31,7 @@ const emit = defineEmits(["click"]);
 const variantClass = computed(() => {
   if (props.variant === "primary") return "primary-action";
   if (props.variant === "secondary") return "secondary-action";
+  if (props.variant === "danger") return "danger-action";
   return "";
 });
 </script>

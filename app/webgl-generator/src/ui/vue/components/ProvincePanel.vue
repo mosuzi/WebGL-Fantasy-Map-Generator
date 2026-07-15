@@ -3,6 +3,7 @@
 
   <div class="province-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 国家" @update:model-value="callbacks.onFilter" />
+    <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成省份</UiButton>
   </div>
   <UiObjectTable
     :columns="columns"

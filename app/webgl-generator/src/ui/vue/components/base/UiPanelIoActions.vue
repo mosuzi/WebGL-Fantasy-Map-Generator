@@ -51,7 +51,7 @@
     </span>
 
     <ElButton
-      v-for="action in actions"
+      v-for="action in safeActions"
       :key="action.key"
       class="ui-icon-action ui-panel-io-button"
       :class="{active: action.active}"
@@ -61,14 +61,32 @@
       :aria-label="action.label"
       @click="emit('action', action.key)"
     >
-      <span aria-hidden="true">{{ action.icon || "..." }}</span>
+      <ElIcon v-if="resolveActionIcon(action)" aria-hidden="true"><component :is="resolveActionIcon(action)" /></ElIcon>
+      <span v-else aria-hidden="true">{{ action.icon || "..." }}</span>
+    </ElButton>
+
+    <span v-if="dangerActions.length && hasSafeToolbarActions" class="ui-panel-action-divider" aria-hidden="true"></span>
+
+    <ElButton
+      v-for="action in dangerActions"
+      :key="action.key"
+      class="ui-icon-action ui-panel-io-button ui-panel-danger-action"
+      :class="{active: action.active}"
+      :disabled="action.disabled"
+      circle
+      :title="action.label"
+      :aria-label="action.label"
+      @click="emit('action', action.key)"
+    >
+      <ElIcon v-if="resolveActionIcon(action)" aria-hidden="true"><component :is="resolveActionIcon(action)" /></ElIcon>
+      <span v-else aria-hidden="true">{{ action.icon || "..." }}</span>
     </ElButton>
   </div>
 </template>
 
 <script setup>
 import {computed, ref} from "vue";
-import {Download, Upload} from "@element-plus/icons-vue";
+import {Brush, Delete, Document, Download, EditPen, Hide, Location, Plus, Rank, Refresh, Upload, View} from "@element-plus/icons-vue";
 
 defineOptions({
   name: "UiPanelIoActions"
@@ -101,11 +119,39 @@ const emit = defineEmits(["export", "import", "action"]);
 const fileInputs = ref(new Map());
 
 const allExportDisabled = computed(() => props.exportActions.every(action => action.disabled));
+const safeActions = computed(() => props.actions.filter(action => !isDangerAction(action)));
+const dangerActions = computed(() => props.actions.filter(action => isDangerAction(action)));
+const hasSafeToolbarActions = computed(() => Boolean(props.exportActions.length || props.importActions.length || safeActions.value.length));
+
+const ICON_RULES = Object.freeze([
+  [/locate/, Location],
+  [/^(add|create|new)/, Plus],
+  [/delete|remove/, Delete],
+  [/regenerate|rebuild|refresh/, Refresh],
+  [/rename|edit/, EditPen],
+  [/highlight-selected/, View],
+  [/clear-highlights/, Hide],
+  [/move|station/, Rank],
+  [/note|report|archive/, Document],
+  [/color|visual|style/, Brush]
+]);
 
 function handleExportCommand(key) {
   const action = props.exportActions.find(item => item.key === key);
   if (!action || action.disabled) return;
   emit("export", key);
+}
+
+function isDangerAction(action) {
+  if (action?.tone === "danger" || action?.danger === true) return true;
+  const key = String(action?.key || "");
+  if (/^(delete|remove|regenerate|rebuild|replace)/.test(key)) return true;
+  return /^(删除|批量删除|重新生成|重生成|重算|替换|批量覆盖|清空战报|清空事件)/.test(String(action?.label || ""));
+}
+
+function resolveActionIcon(action) {
+  const key = String(action?.key || "");
+  return ICON_RULES.find(([pattern]) => pattern.test(key))?.[1] || null;
 }
 
 function setFileInput(key, element) {

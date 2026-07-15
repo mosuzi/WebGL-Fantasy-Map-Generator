@@ -45,9 +45,9 @@ export class PanelManager {
     redo.textContent = "↷";
     const close = this.documentRef.createElement("button");
     close.type = "button";
-    close.className = "floating-panel-close";
+    close.className = "ui-close-button floating-panel-close";
     close.setAttribute("aria-label", "关闭面板");
-    close.textContent = "x";
+    close.textContent = "×";
     headerActions.append(undo, redo, close);
     header.append(title, headerActions);
 

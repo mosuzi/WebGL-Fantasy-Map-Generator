@@ -132,7 +132,6 @@ const measurementListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedMeasurementRows.value.length)}`, icon: "◉", disabled: !selectedMeasurementRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "edit", label: "编辑测量形状", icon: "◎", disabled: !selected.value},
-  {key: "locate", label: "定位测量", icon: "⌖", disabled: !selected.value},
   {key: "delete", label: "删除测量", icon: "×", disabled: !selected.value}
 ]);
 const totalDistance = computed(() => rows.value.reduce((sum, row) => sum + row.distance, 0));

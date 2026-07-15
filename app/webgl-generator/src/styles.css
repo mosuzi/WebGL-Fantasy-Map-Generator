@@ -407,7 +407,8 @@ select {
 }
 
 .primary-action,
-.secondary-action {
+.secondary-action,
+.danger-action {
   width: 100%;
   height: 36px;
   border: 0;
@@ -417,7 +418,8 @@ select {
 }
 
 .primary-action.el-button,
-.secondary-action.el-button {
+.secondary-action.el-button,
+.danger-action.el-button {
   margin-left: 0 !important;
 }
 
@@ -451,6 +453,21 @@ select {
   --el-button-disabled-text-color: #72838c;
 }
 
+.danger-action.el-button {
+  --el-button-bg-color: #3a1c20;
+  --el-button-border-color: #8f4650;
+  --el-button-text-color: #ffd8dc;
+  --el-button-hover-bg-color: #4b2228;
+  --el-button-hover-border-color: #c26672;
+  --el-button-hover-text-color: #fff1f2;
+  --el-button-active-bg-color: #2a1417;
+  --el-button-active-border-color: #d47781;
+  --el-button-active-text-color: #fff1f2;
+  --el-button-disabled-bg-color: #241719;
+  --el-button-disabled-border-color: #503036;
+  --el-button-disabled-text-color: #8f7175;
+}
+
 .primary-action {
   background: #d7a84f;
   color: #15120a;
@@ -468,6 +485,16 @@ select {
 
 .secondary-action:hover {
   background: #24313a;
+}
+
+.danger-action {
+  border: 1px solid #8f4650;
+  background: #3a1c20;
+  color: #ffd8dc;
+}
+
+.danger-action:hover {
+  background: #4b2228;
 }
 
 .el-input,
@@ -1657,6 +1684,13 @@ select:disabled {
   line-height: 1;
 }
 
+.ui-close-button {
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+
 .floating-panel-history-button:hover,
 .floating-panel-close:hover {
   border-color: #3e525f;
@@ -1946,6 +1980,22 @@ select:disabled {
 
 .ui-panel-io-button.el-button .el-icon {
   font-size: 15px;
+}
+
+.ui-panel-action-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 1px 2px;
+  background: rgba(194, 102, 114, 0.42);
+}
+
+.ui-panel-danger-action.el-button {
+  --el-button-bg-color: rgba(58, 28, 32, 0.92);
+  --el-button-border-color: #8f4650;
+  --el-button-text-color: #ffd8dc;
+  --el-button-hover-bg-color: #4b2228;
+  --el-button-hover-border-color: #c26672;
+  --el-button-hover-text-color: #fff1f2;
 }
 
 .ui-panel-io-dropdown.el-popper {
@@ -5403,15 +5453,26 @@ input.ui-switch-native {
   line-height: 1.2;
 }
 
-.management-panel-actions,
-.regeneration-action-grid {
+.management-panel-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.management-panel-actions .el-button,
-.regeneration-action-grid .el-button {
+.management-panel-actions .el-button {
+  width: 100%;
+  min-width: 0;
+  margin-left: 0 !important;
+}
+
+.regeneration-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.8fr);
+  align-items: end;
+  gap: 10px;
+}
+
+.regeneration-control .el-button {
   width: 100%;
   min-width: 0;
   margin-left: 0 !important;

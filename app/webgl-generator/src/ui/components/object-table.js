@@ -32,7 +32,6 @@ export function createObjectTable(documentRef, options) {
       const rowId = options.getRowId(row);
       tr.className = rowId === options.selectedId ? "selected" : "";
       tr.addEventListener("click", () => options.onSelect?.(row));
-      tr.addEventListener("dblclick", () => options.onLocate?.(row));
       for (const column of options.columns) {
         const td = documentRef.createElement("td");
         if (column.align) td.dataset.align = column.align;

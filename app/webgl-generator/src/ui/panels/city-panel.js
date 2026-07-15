@@ -70,6 +70,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(cityObject(row));
     },
     onLocate: row => callbacks.onLocate?.(cityObject(row)),
+    onRegenerate: () => callbacks.onRegenerate?.(),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, cityObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRename: (cityId, name) => callbacks.onRename?.(cityId, name),

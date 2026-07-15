@@ -121,6 +121,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedRegimentId = row.id;
       callbacks.onLocate?.(militaryObject(row));
     },
+    onRegenerate: () => callbacks.onRegenerate?.(),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, militaryObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRatiosApply: (stateId, ratios) => callbacks.onRatiosApply?.(stateId, ratios),

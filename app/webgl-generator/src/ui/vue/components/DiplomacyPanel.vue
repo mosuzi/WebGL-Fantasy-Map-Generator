@@ -15,7 +15,7 @@
 
   <div class="diplomacy-edit-toolbar">
     <UiButton id="diplomacy-show-theme" variant="secondary" @click="callbacks.onShowTheme?.(selectedSubjectId)">外交着色</UiButton>
-    <UiButton variant="secondary" @click="callbacks.onRegenerate?.()">重生成外交</UiButton>
+    <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成外交</UiButton>
   </div>
 
   <div ref="matrixWrap" class="diplomacy-matrix-wrap">

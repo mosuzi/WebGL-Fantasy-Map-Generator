@@ -81,6 +81,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       callbacks.onSelect?.(stateObject(row));
     },
     onLocate: row => callbacks.onLocate?.(stateObject(row)),
+    onRegenerate: () => callbacks.onRegenerate?.(),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, stateObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onEdit: row => {

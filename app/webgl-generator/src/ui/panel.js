@@ -520,7 +520,7 @@ function cssEscape(value) {
 export function updateRegenerationSection(documentRef, result = {}) {
   const status = documentRef.getElementById("regeneration-status");
   const constraint = documentRef.getElementById("regeneration-constraint");
-  const defaultConstraint = "国家、省份、城镇、道路、河流、资源点和外交会按各自生成约束逐步接入；marker / zone 的完整局部重算另行推进。";
+  const defaultConstraint = constraint?.dataset.defaultConstraint || "选择目标领域后查看本次替换范围。";
   const debugEnabled = Boolean(documentRef.defaultView?.__webglGeneratorDebug?.enabled);
   if (status) status.textContent = debugEnabled ? result.status || "" : "";
   if (constraint) constraint.textContent = debugEnabled && result.constraint ? result.constraint : defaultConstraint;

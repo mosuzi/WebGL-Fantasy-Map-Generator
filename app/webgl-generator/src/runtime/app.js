@@ -809,6 +809,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => setStatePanelTarget(state, target.id)
       });
     },
+    onRegenerate: () => runtimeActions.generate.regenerate("states", {confirm: true}),
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
@@ -979,6 +980,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (!result.executed) return;
       updateEditingInteractionLock(state, documentRef);
     },
+    onRegenerate: () => runtimeActions.generate.regenerate("provinces", {confirm: true}),
     onSampleSelection: () => {
       setProvincePanelTarget(state, getProvinceIdFromSelection(state));
     },
@@ -1046,6 +1048,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => cityPanel.setSelectedCityId(target.id)
       });
     },
+    onRegenerate: () => runtimeActions.generate.regenerate("cities", {confirm: true}),
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
@@ -1324,19 +1327,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       updateEditingInteractionLock(state, documentRef);
     },
-    onRegenerate: () => {
-      if (!state.map) return;
-      const salt = nextRegenerationSalt(state.map, "diplomacy");
-      const command = createRegenerateDiplomacyCommand({salt});
-      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
-      if (result.executed) {
-        markDerivedFresh(state.map, ["diplomacy"]);
-        refreshGenerationSummary(state.map);
-        appendGenerationLog(state.map, `regenerate diplomacy: salt=${salt}, pairs=${state.map.diplomacy?.metadata?.pairs || 0}, enemies=${state.map.diplomacy?.metadata?.enemies || 0}`);
-      }
-      updateRuntimePanel(documentRef, state);
-      updateEditingInteractionLock(state, documentRef);
-    },
+    onRegenerate: () => runtimeActions.generate.regenerate("diplomacy", {confirm: true}),
     onShowTheme: stateId => {
       setDiplomacyThemeSubject(state, documentRef, stateId);
     },
@@ -1371,6 +1362,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => militaryPanel.setSelectedRegimentId(target.id)
       });
     },
+    onRegenerate: () => runtimeActions.generate.regenerate("military", {confirm: true}),
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
@@ -1529,13 +1521,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
       return result;
     },
-    onRegenerateRoutes: () => {
-      const result = regenerateMapAttribute(state, "routes", documentRef);
-      updateRegenerationSection(documentRef, result);
-      if (result?.status) setFileOperationStatus(documentRef, result.status);
-      state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
-      updateEditingInteractionLock(state, documentRef);
-    },
+    onRegenerateRoutes: () => runtimeActions.generate.regenerate("routes", {confirm: true}),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -1591,15 +1577,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       applyMarkerCollectionCommand(state, documentRef, command);
       if (state.markerEdit.markerId === markerId) stopMarkerEditMode(state, documentRef);
     },
-    onRegenerateResources: () => {
-      if (!state.map) return;
-      const salt = nextRegenerationSalt(state.map, "markers");
-      const command = createRegenerateResourceMarkersCommand({salt});
-      const executed = applyMarkerCollectionCommand(state, documentRef, command);
-      if (!executed) return;
-      stopMarkerEditMode(state, documentRef);
-      appendGenerationLog(state.map, `regenerate resources: salt=${salt}, resources=${state.map.markers.metadata.resourceMarkers}, resourcePotential=${state.map.markers.metadata.resourcePotential}, markerResourceDeals=${state.map.economy?.metadata?.resourceTrade?.markerResourceDeals || 0}`);
-    },
+    onRegenerateResources: () => runtimeActions.generate.regenerate("markers", {confirm: true}),
     onCancelEdit: () => {
       stopMarkerEditMode(state, documentRef);
     },
@@ -1801,6 +1779,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => riverPanel.setSelection({object: target}, state.editingObject)
       });
     },
+    onRegenerate: () => runtimeActions.generate.regenerate("rivers", {confirm: true}),
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),

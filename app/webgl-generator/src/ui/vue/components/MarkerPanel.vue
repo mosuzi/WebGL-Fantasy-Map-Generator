@@ -10,7 +10,7 @@
     <UiSelectField class-name="marker-resource-select" label="新增标记" :model-value="markerDraft.type" :options="markerTypeOptions" @update:model-value="markerDraft.type = $event" />
     <UiButton variant="secondary" :disabled="!selected" :active="state.editMode === 'move'" @click="startMoveSelected">移动</UiButton>
     <UiButton variant="secondary" :disabled="!state.editMode" @click="callbacks.onCancelEdit?.()">取消</UiButton>
-    <UiButton class="marker-regenerate-button" variant="secondary" @click="callbacks.onRegenerateResources?.()">重生成资源点</UiButton>
+    <UiButton class="marker-regenerate-button" variant="danger" @click="callbacks.onRegenerateResources?.()">重新生成资源点</UiButton>
   </div>
 
   <div v-if="editStatus" class="marker-edit-status">{{ editStatus }}</div>

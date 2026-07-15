@@ -209,7 +209,6 @@ const cultureListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableCultureRows.value.length)}`, icon: "◉", disabled: !highlightableCultureRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultCultureEmptyAction,
-  {key: "locate", label: "定位文化", icon: "⌖", disabled: !selected.value},
   {
     key: "delete",
     label: "删除文化并清除归属",

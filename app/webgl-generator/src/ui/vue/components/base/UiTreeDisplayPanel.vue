@@ -4,7 +4,7 @@
       <header class="ui-tree-display-header" @pointerdown="startPanelDrag">
         <strong>{{ title }}</strong>
         <span>{{ nodes.length }} 节点</span>
-        <ElButton class="ui-tree-display-close" text circle :icon="Close" aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)" />
+        <ElButton class="ui-close-button ui-tree-display-close" text circle aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)">×</ElButton>
       </header>
 
       <div ref="viewport" class="ui-tree-display-viewport">
@@ -37,7 +37,6 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
-import {Close} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../../composables/use-draggable-floating-panel.js";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 import {createSelectionCenterController, selectionCenterAnchor, selectionOrderSignature} from "../../../components/selection-scroll.js";

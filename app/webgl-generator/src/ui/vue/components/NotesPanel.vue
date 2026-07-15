@@ -125,7 +125,6 @@ const notesListActions = computed(() => [
   {key: "create-standalone", label: props.state.createMode ? "取消放置独立备注" : "放置独立备注", icon: "+"},
   {key: "highlight-selected", label: `高亮备注对象 ${formatNumber(highlightableNoteRows.value.length)}`, icon: "◉", disabled: !highlightableNoteRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
-  {key: "locate", label: "定位备注对象", icon: "⌖", disabled: !selected.value || selected.value.orphan},
   {key: "delete", label: "删除选中备注", icon: "×", disabled: !selected.value}
 ]);
 watch(() => selected.value?.id, () => { activeAction.value = null; });

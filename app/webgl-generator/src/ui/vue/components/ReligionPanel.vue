@@ -192,7 +192,6 @@ const religionListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableReligionRows.value.length)}`, icon: "◉", disabled: !highlightableReligionRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   defaultReligionEmptyAction,
-  {key: "locate", label: "定位宗教", icon: "⌖", disabled: !selected.value},
   {
     key: "delete",
     label: "删除宗教并清除归属",

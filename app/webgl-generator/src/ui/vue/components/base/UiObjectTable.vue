@@ -79,7 +79,9 @@
             <span class="object-table-cell">{{ formatCell(column, row) }}</span>
           </td>
           <td v-if="showLocateAction" class="object-table-action-cell">
-            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)">⌖</button>
+            <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)">
+              <ElIcon aria-hidden="true"><Location /></ElIcon>
+            </button>
           </td>
         </tr>
         <tr v-if="virtualBottomPadding" class="object-table-spacer-row" aria-hidden="true">
@@ -107,6 +109,7 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
+import {Location} from "@element-plus/icons-vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 import {
   centerVirtualRowVertically,
@@ -150,8 +153,8 @@ const props = defineProps({
   },
   doubleClickAction: {
     type: String,
-    default: "locate",
-    validator: value => ["locate", "edit"].includes(value)
+    default: "none",
+    validator: value => ["none", "edit"].includes(value)
   },
   sortable: {
     type: Boolean,
@@ -289,12 +292,9 @@ function handleRowClick(row) {
 }
 
 function handleRowDoubleClick(row) {
+  if (props.doubleClickAction !== "edit") return;
   emit("select", row);
-  if (props.doubleClickAction === "edit") {
-    emit("edit", row);
-    return;
-  }
-  if (props.showLocateAction) emit("locate", row);
+  emit("edit", row);
 }
 
 function handleHeaderSort(column) {
