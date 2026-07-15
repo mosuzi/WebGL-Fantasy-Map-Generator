@@ -66,6 +66,99 @@
   <UiButton class="height-global-apply" variant="secondary" :disabled="!state.active || !state.globalToolPreview?.valid" @click="callbacks.onGlobalToolApply?.()">应用全局预览</UiButton>
   <p class="height-action-help">预览与应用都作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
 
+  <section class="height-transform-panel" aria-labelledby="height-selection-title">
+    <div class="height-transform-heading">
+      <strong id="height-selection-title">常用选区</strong>
+      <span>锁定后可组合与羽化</span>
+    </div>
+    <UiSliderField input-id="height-transform-lower" label="高度下限" :model-value="state.transformLower" :min="0" :max="100" :step="1" @input="setTransformLower" />
+    <UiSliderField input-id="height-transform-upper" label="高度上限" :model-value="state.transformUpper" :min="0" :max="100" :step="1" @input="setTransformUpper" />
+    <UiSelectField
+      label="选区构造"
+      input-id="height-selection-source"
+      class-name="height-transform-select"
+      :model-value="state.terrainSelectionSource"
+      :options="terrainSelectionSourceOptions"
+      @update:model-value="setTerrainSelectionSource"
+    />
+    <UiSliderField
+      v-if="state.terrainSelectionSource === 'cursor-circle' || state.terrainSelectionSource === 'paint'"
+      input-id="height-selection-radius"
+      :label="state.terrainSelectionSource === 'paint' ? '选区笔刷半径' : '圆形半径'"
+      :model-value="state.terrainSelectionRadius"
+      :min="8"
+      :max="160"
+      :step="4"
+      @input="setTerrainSelectionRadius"
+    />
+    <UiSliderField
+      v-if="state.terrainSelectionSource === 'connected-height'"
+      input-id="height-selection-tolerance"
+      label="连通高度容差"
+      :model-value="state.terrainSelectionTolerance"
+      :min="0"
+      :max="20"
+      :step="1"
+      @input="setTerrainSelectionTolerance"
+    />
+    <p v-if="state.terrainSelectionSource === 'cursor-circle'" class="height-action-help">把鼠标停在地图目标处，再返回面板执行选区组合；没有有效光标时使用当前画布中心，候选仍遵守作用范围。</p>
+    <p v-else-if="state.terrainSelectionSource === 'rectangle'" class="height-action-help">先选择覆盖 / 并入 / 交集 / 排除，再在地图上依次单击矩形两个角。</p>
+    <p v-else-if="state.terrainSelectionSource === 'connected-height'" class="height-action-help">先选择覆盖 / 并入 / 交集 / 排除，再在地图单击中心；沿共享边只扩张与起点高度差不超过容差的 cells。</p>
+    <p v-else-if="state.terrainSelectionSource === 'paint'" class="height-action-help">先选择布尔动作，再在地图按住并拖动；拖动中预览黄色结果，抬手后提交。</p>
+    <div class="height-terrain-selection">
+      <p v-if="state.terrainSelection?.valid">
+        <i class="height-terrain-selection-swatch"></i>已锁定 {{ state.terrainSelection.count }} cells / 高度 {{ state.terrainSelection.heightRange?.join('..') }}
+        <span v-if="state.terrainSelection.source === 'cursor-circle'">/ 圆心 #{{ state.terrainSelection.centerCell }} / 半径 {{ state.terrainSelection.radius }}</span>
+        <span v-else-if="state.terrainSelection.source === 'rectangle'">/ 矩形 {{ state.terrainSelection.width }} × {{ state.terrainSelection.height }}</span>
+        <span v-else-if="state.terrainSelection.source === 'connected-height'">/ 中心 #{{ state.terrainSelection.centerCell }} / 高度 {{ state.terrainSelection.startHeight }}±{{ state.terrainSelection.tolerance }}</span>
+        <span v-else-if="state.terrainSelection.source === 'paint'">/ 半径 {{ state.terrainSelection.radius }} / {{ state.terrainSelection.stampCount }} stamps</span>
+        <span v-if="state.terrainSelection.feather?.rings">/ 羽化 {{ state.terrainSelection.feather.rings }} 圈 / 过渡 {{ state.terrainSelection.feather.featheredCount }} cells</span>
+        <span v-if="state.terrainSelection.rendererSelection">/ GPU {{ state.terrainSelection.rendererSelection.triangleCount }} triangles / {{ state.terrainSelection.rendererSelection.buildMs }} ms</span>
+        <span v-if="state.terrainSelection.rendererSelection?.featheredCells">/ 渐变 {{ state.terrainSelection.rendererSelection.featheredCells }} cells / 最低 {{ state.terrainSelection.rendererSelection.minWeight }}</span>
+      </p>
+      <p v-else>尚未锁定地形选区；锁定时使用当前作用范围和高度区间。</p>
+      <p v-if="state.terrainSelection?.notice" class="height-action-help">{{ state.terrainSelection.notice }}</p>
+      <div class="height-terrain-selection-actions">
+        <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('replace'))">覆盖锁定</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('union'))">并入区间</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('intersect'))">保留交集</UiButton>
+        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('subtract'))">排除区间</UiButton>
+        <UiButton class="height-terrain-selection-clear" variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionClear?.()">清除选区</UiButton>
+      </div>
+      <div class="height-terrain-selection-actions">
+        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionTransform?.('grow')">扩展一圈</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionTransform?.('shrink')">收缩一圈</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionSave?.()">暂存当前</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelectionSaved?.valid" @click="callbacks.onTerrainSelectionRestore?.()">恢复暂存</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainSelectionSaved?.valid" @click="callbacks.onTerrainSelectionSavedClear?.()">删除暂存</UiButton>
+      </div>
+      <p class="height-action-help">扩展只沿共享边加入当前作用范围内的邻格；收缩为空时保留原选区。</p>
+      <p v-if="state.terrainSelectionSaved?.valid" class="height-action-help">
+        已暂存 {{ state.terrainSelectionSaved.count }} cells / 羽化 {{ state.terrainSelectionSaved.featherRings }} 圈；只对当前 grid 有效。
+      </p>
+      <p v-else class="height-action-help">暂无暂存选区；暂存不会写入浏览器偏好或地图文件。</p>
+      <UiSliderField
+        label="选区内缘羽化圈数"
+        :model-value="state.terrainSelectionFeather"
+        :min="0"
+        :max="8"
+        :step="1"
+        @input="setTerrainSelectionFeather"
+      />
+      <p class="height-action-help">0 为硬边；增加圈数后，条件变换和全局工具从选区边界向内逐圈增强，黄色覆盖层同步显示强度。</p>
+      <UiSwitchField
+        v-if="state.terrainSelection?.valid"
+        label="条件 / 全局工具仅作用于锁定选区"
+        field-class="height-check-row"
+        :checked="state.useTerrainSelection"
+        @change="callbacks.onTerrainSelectionUseChange?.($event)"
+      />
+    </div>
+  </section>
+
+  <details class="panel-advanced-section height-advanced-section">
+    <summary>高级地形程序与条件变换</summary>
+    <div class="panel-advanced-section-body">
   <section class="height-transform-panel" aria-labelledby="height-template-title">
     <div class="height-transform-heading">
       <strong id="height-template-title">选区地形模板</strong>
@@ -198,89 +291,7 @@
       <strong id="height-transform-title">高度区间条件变换</strong>
       <span>先预检，再执行</span>
     </div>
-    <UiSliderField input-id="height-transform-lower" label="高度下限" :model-value="state.transformLower" :min="0" :max="100" :step="1" @input="setTransformLower" />
-    <UiSliderField input-id="height-transform-upper" label="高度上限" :model-value="state.transformUpper" :min="0" :max="100" :step="1" @input="setTransformUpper" />
-    <UiSelectField
-      label="选区构造"
-      input-id="height-selection-source"
-      class-name="height-transform-select"
-      :model-value="state.terrainSelectionSource"
-      :options="terrainSelectionSourceOptions"
-      @update:model-value="setTerrainSelectionSource"
-    />
-    <UiSliderField
-      v-if="state.terrainSelectionSource === 'cursor-circle' || state.terrainSelectionSource === 'paint'"
-      input-id="height-selection-radius"
-      :label="state.terrainSelectionSource === 'paint' ? '选区笔刷半径' : '圆形半径'"
-      :model-value="state.terrainSelectionRadius"
-      :min="8"
-      :max="160"
-      :step="4"
-      @input="setTerrainSelectionRadius"
-    />
-    <UiSliderField
-      v-if="state.terrainSelectionSource === 'connected-height'"
-      input-id="height-selection-tolerance"
-      label="连通高度容差"
-      :model-value="state.terrainSelectionTolerance"
-      :min="0"
-      :max="20"
-      :step="1"
-      @input="setTerrainSelectionTolerance"
-    />
-    <p v-if="state.terrainSelectionSource === 'cursor-circle'" class="height-action-help">把鼠标停在地图目标处，再返回面板执行选区组合；没有有效光标时使用当前画布中心，候选仍遵守作用范围。</p>
-    <p v-else-if="state.terrainSelectionSource === 'rectangle'" class="height-action-help">先选择覆盖 / 并入 / 交集 / 排除，再在地图上依次单击矩形两个角。</p>
-    <p v-else-if="state.terrainSelectionSource === 'connected-height'" class="height-action-help">先选择覆盖 / 并入 / 交集 / 排除，再在地图单击中心；沿共享边只扩张与起点高度差不超过容差的 cells。</p>
-    <p v-else-if="state.terrainSelectionSource === 'paint'" class="height-action-help">先选择布尔动作，再在地图按住并拖动；拖动中预览黄色结果，抬手后提交。</p>
-    <div class="height-terrain-selection">
-      <p v-if="state.terrainSelection?.valid">
-        <i class="height-terrain-selection-swatch"></i>已锁定 {{ state.terrainSelection.count }} cells / 高度 {{ state.terrainSelection.heightRange?.join('..') }}
-        <span v-if="state.terrainSelection.source === 'cursor-circle'">/ 圆心 #{{ state.terrainSelection.centerCell }} / 半径 {{ state.terrainSelection.radius }}</span>
-        <span v-else-if="state.terrainSelection.source === 'rectangle'">/ 矩形 {{ state.terrainSelection.width }} × {{ state.terrainSelection.height }}</span>
-        <span v-else-if="state.terrainSelection.source === 'connected-height'">/ 中心 #{{ state.terrainSelection.centerCell }} / 高度 {{ state.terrainSelection.startHeight }}±{{ state.terrainSelection.tolerance }}</span>
-        <span v-else-if="state.terrainSelection.source === 'paint'">/ 半径 {{ state.terrainSelection.radius }} / {{ state.terrainSelection.stampCount }} stamps</span>
-        <span v-if="state.terrainSelection.feather?.rings">/ 羽化 {{ state.terrainSelection.feather.rings }} 圈 / 过渡 {{ state.terrainSelection.feather.featheredCount }} cells</span>
-        <span v-if="state.terrainSelection.rendererSelection">/ GPU {{ state.terrainSelection.rendererSelection.triangleCount }} triangles / {{ state.terrainSelection.rendererSelection.buildMs }} ms</span>
-        <span v-if="state.terrainSelection.rendererSelection?.featheredCells">/ 渐变 {{ state.terrainSelection.rendererSelection.featheredCells }} cells / 最低 {{ state.terrainSelection.rendererSelection.minWeight }}</span>
-      </p>
-      <p v-else>尚未锁定地形选区；锁定时使用当前作用范围和高度区间。</p>
-      <p v-if="state.terrainSelection?.notice" class="height-action-help">{{ state.terrainSelection.notice }}</p>
-      <div class="height-terrain-selection-actions">
-        <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('replace'))">覆盖锁定</UiButton>
-        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('union'))">并入区间</UiButton>
-        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('intersect'))">保留交集</UiButton>
-        <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionLock?.(terrainSelectionRequest('subtract'))">排除区间</UiButton>
-        <UiButton class="height-terrain-selection-clear" variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionClear?.()">清除选区</UiButton>
-      </div>
-      <div class="height-terrain-selection-actions">
-        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionTransform?.('grow')">扩展一圈</UiButton>
-        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionTransform?.('shrink')">收缩一圈</UiButton>
-        <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionSave?.()">暂存当前</UiButton>
-        <UiButton variant="secondary" :disabled="!state.terrainSelectionSaved?.valid" @click="callbacks.onTerrainSelectionRestore?.()">恢复暂存</UiButton>
-        <UiButton variant="secondary" :disabled="!state.terrainSelectionSaved?.valid" @click="callbacks.onTerrainSelectionSavedClear?.()">删除暂存</UiButton>
-      </div>
-      <p class="height-action-help">扩展只沿共享边加入当前作用范围内的邻格；收缩为空时保留原选区。</p>
-      <p v-if="state.terrainSelectionSaved?.valid" class="height-action-help">
-        已暂存 {{ state.terrainSelectionSaved.count }} cells / 羽化 {{ state.terrainSelectionSaved.featherRings }} 圈；只对当前 grid 有效。
-      </p>
-      <p v-else class="height-action-help">暂无暂存选区；暂存不会写入浏览器偏好或地图文件。</p>
-      <UiSliderField
-        label="选区内缘羽化圈数"
-        :model-value="state.terrainSelectionFeather"
-        :min="0"
-        :max="8"
-        :step="1"
-        @input="setTerrainSelectionFeather"
-      />
-      <p class="height-action-help">0 为硬边；增加圈数后，条件变换和全局工具从选区边界向内逐圈增强，黄色覆盖层同步显示强度。</p>
-      <UiSwitchField
-        v-if="state.terrainSelection?.valid"
-        label="条件 / 全局工具仅作用于锁定选区"
-        field-class="height-check-row"
-        :checked="state.useTerrainSelection"
-        @change="callbacks.onTerrainSelectionUseChange?.($event)"
-      />
-    </div>
+    <p class="height-action-help">使用首层当前高度范围与锁定选区执行数学变换。</p>
     <UiSelectField
       label="条件运算"
       input-id="height-transform-operator"
@@ -313,6 +324,8 @@
       <UiButton variant="secondary" :disabled="!state.active || !state.transformPreview?.valid" @click="callbacks.onConditionalTransformApply?.()">执行变换</UiButton>
     </div>
   </section>
+    </div>
+  </details>
 
   <div class="height-history-actions">
     <UiButton variant="secondary" @click="callbacks.onUndo?.()">撤销上次</UiButton>

@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-15：高度、军事与导出高复杂度面板分层
+
+- 完成权威任务第 58 项。高度面板首层保留启停编辑、笔刷动作、作用范围、全局微调和高度图导入；选区地形模板、多步骤程序、条件变换、模板库与 GPU 统计进入默认折叠的“高级地形程序与条件变换”。
+- 军事面板首层保留国家 / 态势筛选、军团列表、定位、基础态势、兵种比例、军事导出和重新生成；战报档案、链路 / 结果筛选、战报编辑和轻量结算进入默认折叠的高级区，不再占用首层动作栏。
+- 导出浮层拆为“快速导出”和“高级导出选项”：PNG 与地图 JSON 继续一步执行；压缩 JSON、GeoJSON、PNG 倍率 / 裁剪 / overlay 白名单及要素图层选择进入高级区。`UiActionDock` 的次级关闭入口同步使用统一 `×` 关闭控件。
+- 新增 `docs/task-notes/high-complexity-panel-layers.md`、`regress:complex-panel-layers` 和 `regress:complex-panel-layers-browser`，固化三类面板的能力分区、默认折叠、首层闭环及高级能力可达性。
+- `regress:height-template-programs`、`regress:height-brush`、`regress:military-regeneration`、`regress:png-options` 全部通过；军事固定样本仍生成 56 个军团且 56 个军团均有实际变化，镜像同步、兵种比例与战报归档契约保持不变。
+- 生产构建完成 `1138 modules`，只保留既有大 chunk 警告。独立 Chrome 构建产物回归在 `1280×720` 依次验证高度、军事、导出三条路径：首层核心可见、高级区默认折叠且展开可达，快速 PNG / 地图 JSON 位于首层，控制台错误和页面异常均为零。
+- 本项达到最小验收后从活动权威清单移除；下一项转入第 59 项“对象术语、交互状态与反馈语义统一”。
+
 ## 2026-07-15：重复入口、动作分组与控件词表收口
 
 - 完成权威任务第 57 项。`UiObjectTable` 保留逐行定位并改用 Element Plus `Location` 图标；双击默认动作改为 `none`，只有显式声明 `doubleClickAction="edit"` 的面板才进入编辑。文化、宗教、河流、湖泊、路线、备注和测量列表共七个底部定位入口移除，旧 DOM 表格也不再绑定双击定位。

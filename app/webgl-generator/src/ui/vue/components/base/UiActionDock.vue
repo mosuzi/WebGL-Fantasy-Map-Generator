@@ -27,7 +27,7 @@
       >
         <header class="ui-secondary-action-header" :class="{dragging: dragState}" @pointerdown="startPanelDrag">
           <strong>{{ activeActionLabel }}</strong>
-          <button type="button" class="ui-secondary-action-close" aria-label="关闭二级编辑面板" @pointerdown.stop @click="closePanel">x</button>
+          <button type="button" class="ui-close-button ui-secondary-action-close" aria-label="关闭二级编辑面板" @pointerdown.stop @click="closePanel">×</button>
         </header>
         <div class="ui-secondary-action-body">
           <slot :name="active" />

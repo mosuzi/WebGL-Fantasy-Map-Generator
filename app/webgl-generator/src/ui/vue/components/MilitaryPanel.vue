@@ -106,6 +106,9 @@
     @action="handleMilitaryHighlightAction"
   />
 
+  <details class="panel-advanced-section military-advanced-section">
+    <summary>高级战报档案与轻量结算</summary>
+    <div class="panel-advanced-section-body">
   <section v-if="selected" class="military-event-list" aria-label="选中军团战报记录">
     <div class="military-event-list-heading">
       <strong>战报记录</strong>
@@ -234,6 +237,70 @@
     />
   </section>
 
+  <section v-if="selected" class="military-advanced-editor" aria-label="记录战报与轻量结算">
+    <div class="military-status-panel military-editor-panel">
+      <div class="military-status-heading">
+        <strong>{{ selected.name }}</strong>
+        <span>{{ selectedLatestBattleEventLabel }}</span>
+      </div>
+      <div class="military-editor-context">
+        <span>
+          <small>战报链</small>
+          <b>{{ selected.campaignLabel || "本地战报" }}</b>
+        </span>
+        <span>
+          <small>记录数</small>
+          <b>{{ formatNumber(selectedBattleEventTotal) }}</b>
+        </span>
+      </div>
+      <UiSelectField
+        input-id="military-battle-event-chain"
+        class-name="military-status-editor"
+        label="链路"
+        :model-value="battleEventDraft.chainKey"
+        :options="battleEventRecordChainOptions"
+        :disabled="!battleEventRecordChainOptions.length"
+        @update:model-value="setBattleEventChainDraft"
+      />
+      <UiSelectField
+        input-id="military-battle-event-type"
+        class-name="military-status-editor"
+        label="类型"
+        :model-value="battleEventDraft.type"
+        :options="battleEventTypeOptions"
+        @update:model-value="value => battleEventDraft.type = value"
+      />
+      <UiSelectField
+        input-id="military-battle-event-outcome"
+        class-name="military-status-editor"
+        label="结果"
+        :model-value="battleEventDraft.outcome"
+        :options="battleEventOutcomeOptions"
+        @update:model-value="value => battleEventDraft.outcome = value"
+      />
+      <UiSwitchField
+        label="记录轻量结算"
+        input-id="military-battle-apply-result"
+        field-class="military-result-switch"
+        :checked="battleEventDraft.applyResult"
+        @change="value => battleEventDraft.applyResult = value"
+      />
+      <p v-if="battleEventDraft.applyResult" class="military-result-preview">{{ battleResultPreview }}</p>
+      <UiNoteField
+        class-name="military-battle-event-note"
+        label="说明"
+        :action-label="battleEventDraft.applyResult ? '记录并结算' : '记录战报'"
+        :model-value="battleEventDraft.description"
+        :rows="3"
+        :max-length="180"
+        @apply="applyBattleEvent"
+        @clear="clearBattleEventDescription"
+      />
+    </div>
+  </section>
+    </div>
+  </details>
+
   <UiActionDock v-if="selectedState" v-model:active="activeAction" :actions="militaryActions">
     <template #rename>
       <UiTextEditField
@@ -328,69 +395,6 @@
         />
         <UiButton class="military-status-apply" variant="secondary" :disabled="!selectedStationDestination" @click="applyStationMove">移动驻地</UiButton>
         <UiButton class="military-status-apply" variant="secondary" :disabled="!selected" @click="applySetBase">设当前位置为基地</UiButton>
-      </div>
-    </template>
-    <template #battle>
-      <div class="military-status-panel military-editor-panel">
-        <div class="military-status-heading">
-          <strong>{{ selected?.name || "未选中军团" }}</strong>
-          <span>{{ selectedLatestBattleEventLabel }}</span>
-        </div>
-        <div class="military-editor-context">
-          <span>
-            <small>战报链</small>
-            <b>{{ selected?.campaignLabel || "本地战报" }}</b>
-          </span>
-          <span>
-            <small>记录数</small>
-            <b>{{ formatNumber(selectedBattleEventTotal) }}</b>
-          </span>
-        </div>
-        <UiSelectField
-          input-id="military-battle-event-chain"
-          class-name="military-status-editor"
-          label="链路"
-          :model-value="battleEventDraft.chainKey"
-          :options="battleEventRecordChainOptions"
-          :disabled="!selected || !battleEventRecordChainOptions.length"
-          @update:model-value="setBattleEventChainDraft"
-        />
-        <UiSelectField
-          input-id="military-battle-event-type"
-          class-name="military-status-editor"
-          label="类型"
-          :model-value="battleEventDraft.type"
-          :options="battleEventTypeOptions"
-          :disabled="!selected"
-          @update:model-value="value => battleEventDraft.type = value"
-        />
-        <UiSelectField
-          input-id="military-battle-event-outcome"
-          class-name="military-status-editor"
-          label="结果"
-          :model-value="battleEventDraft.outcome"
-          :options="battleEventOutcomeOptions"
-          :disabled="!selected"
-          @update:model-value="value => battleEventDraft.outcome = value"
-        />
-        <UiSwitchField
-          label="记录轻量结算"
-          input-id="military-battle-apply-result"
-          field-class="military-result-switch"
-          :checked="battleEventDraft.applyResult"
-          @change="value => battleEventDraft.applyResult = value"
-        />
-        <p v-if="battleEventDraft.applyResult" class="military-result-preview">{{ battleResultPreview }}</p>
-        <UiNoteField
-          class-name="military-battle-event-note"
-          label="说明"
-          :action-label="battleEventDraft.applyResult ? '记录并结算' : '记录战报'"
-          :model-value="battleEventDraft.description"
-          :rows="3"
-          :max-length="180"
-          @apply="applyBattleEvent"
-          @clear="clearBattleEventDescription"
-        />
       </div>
     </template>
     <template #ratios>
@@ -671,7 +675,6 @@ const militaryActions = computed(() => [
   {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
   {key: "batchStatus", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
   {key: "station", label: "驻地基地", icon: "⌖", disabled: !selected.value},
-  {key: "battle", label: "记录战报", icon: "⚔", disabled: !selected.value},
   {key: "ratios", label: "兵种比例", icon: "⚖", panelWidth: 620, panelHeight: 620}
 ]);
 

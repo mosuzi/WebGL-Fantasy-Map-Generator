@@ -78,7 +78,7 @@ const [appSource, controlSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8")
 ]);
 const militaryBlock = functionBlock(appSource, "regenerateMilitary");
-assert.match(controlSource, /\{kind: "military", label: "军事"\}/, "控制面板缺少军事重生成入口");
+assert.match(controlSource, /\{value: "military", kind: "military", label: "军事", impact:/, "控制面板缺少军事重生成入口");
 assert.match(appSource, /\["military", "army", "armies"\]\.includes\(value\)/, "API 缺少 military 别名归一化");
 assert.match(militaryBlock, /validStates\.length/, "军事重生成没有拒绝缺少有效国家的地图");
 assert.match(militaryBlock, /nextRegenerationSalt\(map, "military"\)/, "军事重生成没有推进扰动编号");

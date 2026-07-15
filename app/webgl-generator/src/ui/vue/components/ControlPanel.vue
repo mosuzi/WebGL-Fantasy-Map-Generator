@@ -70,13 +70,19 @@
             <strong id="project-export-panel-title">导出</strong>
             <button type="button" class="ui-close-button project-export-panel-close" aria-label="关闭导出面板" @pointerdown.stop @click="closeExportPanel">×</button>
           </div>
+          <strong class="project-export-section-label">快速导出</strong>
           <div class="project-export-action-grid">
             <UiButton id="export-map-image" variant="secondary" @click="closeExportPanel">图片</UiButton>
             <UiButton id="export-map-data" variant="secondary" @click="closeExportPanel">地图数据</UiButton>
-            <UiButton id="export-map-data-compressed" variant="secondary" @click="closeExportPanel">压缩地图数据</UiButton>
-            <UiButton id="export-map-geojson" variant="secondary" @click="closeExportPanel">GeoJSON</UiButton>
-            <UiButton id="export-map-features-geojson" variant="secondary" @click="closeExportPanel">要素 GeoJSON</UiButton>
           </div>
+          <details class="panel-advanced-section project-export-advanced-section">
+            <summary>高级导出选项</summary>
+            <div class="panel-advanced-section-body">
+              <div class="project-export-action-grid project-export-advanced-actions">
+                <UiButton id="export-map-data-compressed" variant="secondary" @click="closeExportPanel">压缩地图数据</UiButton>
+                <UiButton id="export-map-geojson" variant="secondary" @click="closeExportPanel">GeoJSON</UiButton>
+                <UiButton id="export-map-features-geojson" variant="secondary" @click="closeExportPanel">要素 GeoJSON</UiButton>
+              </div>
           <label class="project-export-scale-control" for="export-png-scale">
             <span>PNG 倍率</span>
             <select id="export-png-scale">
@@ -127,6 +133,8 @@
             </div>
             <UiSwitchField label="合并政治面边界" input-id="feature-export-dissolve-political" field-class="feature-export-dissolve-switch" />
           </section>
+            </div>
+          </details>
         </section>
       </Teleport>
     </div>
