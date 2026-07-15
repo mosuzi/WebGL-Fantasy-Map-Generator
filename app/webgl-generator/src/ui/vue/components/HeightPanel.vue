@@ -124,6 +124,75 @@
     </div>
   </section>
 
+  <section class="height-transform-panel" aria-labelledby="height-program-title">
+    <div class="height-transform-heading">
+      <strong id="height-program-title">多步骤地形模板</strong>
+      <span>一次预览 / 一条历史</span>
+    </div>
+    <UiSelectField
+      label="模板程序"
+      input-id="height-terrain-program"
+      class-name="height-transform-select"
+      :model-value="state.terrainProgramId"
+      :options="state.terrainProgramOptions"
+      @update:model-value="setTerrainProgramId"
+    />
+    <p class="height-action-help">内置程序按顺序读取上一步结果；Source 群岛样本会明确保留精确转换、语义转换和不支持步骤边界。</p>
+    <p v-if="state.terrainProgramPreview" class="height-transform-preview" :class="{valid: state.terrainProgramPreview.valid}" aria-live="polite">
+      {{ state.terrainProgramPreview.notice }}
+    </p>
+    <ol v-if="state.terrainProgramPreview?.stepSummaries?.length" class="height-template-step-list">
+      <li v-for="step in state.terrainProgramPreview.stepSummaries" :key="`${step.index}-${step.operation}`">
+        {{ step.index + 1 }}. {{ step.label }}：{{ step.changeCount }} cells
+      </li>
+    </ol>
+    <div v-if="state.terrainProgramPreview?.valid" class="height-transform-legend" aria-label="多步骤地形模板地图预览图例">
+      <span class="raised"><i></i>升高 {{ state.terrainProgramPreview.raisedCount }}</span>
+      <span class="lowered"><i></i>降低 {{ state.terrainProgramPreview.loweredCount }}</span>
+    </div>
+    <p v-if="state.terrainProgramPreview?.rendererPreview" class="height-transform-gpu-stats">
+      GPU 预览 {{ state.terrainProgramPreview.rendererPreview.cells }} cells / {{ state.terrainProgramPreview.rendererPreview.triangleCount }} triangles / {{ state.terrainProgramPreview.rendererPreview.buildMs }} ms
+    </p>
+    <div class="height-transform-actions">
+      <UiButton variant="secondary" :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainProgramPreview?.()">预览程序</UiButton>
+      <UiButton variant="secondary" :disabled="!state.active || !state.terrainProgramPreview?.valid" @click="callbacks.onTerrainProgramApply?.()">应用程序</UiButton>
+    </div>
+    <div class="height-template-composer">
+      <label for="height-terrain-program-name">用户模板名称</label>
+      <input
+        id="height-terrain-program-name"
+        v-model="state.terrainProgramDraftName"
+        class="height-template-name-input"
+        type="text"
+        maxlength="60"
+      />
+      <p class="height-action-help">先在上方单步模板中设置参数，再逐步加入编排；最多 12 步。</p>
+      <ol v-if="state.terrainProgramDraftSteps.length" class="height-template-step-list">
+        <li v-for="(step, index) in state.terrainProgramDraftSteps" :key="`${index}-${step.operation}`">
+          <span>{{ index + 1 }}. {{ terrainProgramStepLabel(step) }}</span>
+          <button type="button" :aria-label="`移除第 ${index + 1} 步`" @click="callbacks.onTerrainProgramStepRemove?.(index)">×</button>
+        </li>
+      </ol>
+      <p v-else class="height-action-help">尚未加入步骤。</p>
+      <div class="height-transform-actions">
+        <UiButton variant="secondary" :disabled="state.terrainProgramDraftSteps.length >= 12" @click="callbacks.onTerrainProgramStepAdd?.()">加入当前步骤</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainProgramDraftSteps.length" @click="callbacks.onTerrainProgramDraftClear?.()">清空步骤</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainProgramDraftSteps.length || !state.terrainProgramDraftName.trim()" @click="callbacks.onTerrainProgramSave?.(state.terrainProgramDraftName)">保存模板</UiButton>
+      </div>
+      <div class="height-template-library-actions">
+        <UiButton variant="secondary" :disabled="!state.terrainProgramCanDelete" @click="callbacks.onTerrainProgramDelete?.()">删除所选用户模板</UiButton>
+        <UiPanelIoActions
+          label="用户地形模板导入导出"
+          :export-actions="terrainProgramExportActions"
+          :import-actions="terrainProgramImportActions"
+          @export="handleTerrainProgramExport"
+          @import="handleTerrainProgramImport"
+        />
+      </div>
+      <p v-if="state.terrainProgramNotice" class="height-transform-preview" aria-live="polite">{{ state.terrainProgramNotice }}</p>
+    </div>
+  </section>
+
   <section class="height-transform-panel" aria-labelledby="height-transform-title">
     <div class="height-transform-heading">
       <strong id="height-transform-title">高度区间条件变换</strong>
@@ -646,6 +715,8 @@ const terrainTemplateOptions = Object.freeze([
   {value: "terraces", label: "阶地量化"},
   {value: "rugged", label: "破碎地形"}
 ]);
+const terrainProgramExportActions = Object.freeze([{key: "templates", label: "导出用户模板"}]);
+const terrainProgramImportActions = Object.freeze([{key: "templates", label: "导入用户模板", accept: ".json,application/json"}]);
 const transformOperandDefaults = Object.freeze({add: 5, subtract: 5, multiply: 0.9, divide: 1.1, exponent: 0.9});
 const heightmapFitOptions = Object.freeze([
   {value: "stretch", label: "拉伸铺满"},
@@ -984,6 +1055,33 @@ function setTerrainTemplateTerraceStep(value) {
 function setTerrainTemplateAmplitude(value) {
   props.state.terrainTemplateAmplitude = Math.max(1, Math.min(30, Math.round(Number(value) || 12)));
   clearTerrainTemplatePreview();
+}
+
+function setTerrainProgramId(value) {
+  props.callbacks.onTerrainProgramChange?.(value);
+}
+
+function terrainProgramStepLabel(step) {
+  const base = terrainTemplateOptions.find(option => option.value === step.operation)?.label || step.operation;
+  if (step.operation === "plateau" || step.operation === "basin") return `${base} / 目标 ${step.targetHeight} / 强度 ${step.intensity}`;
+  if (step.operation === "terraces") return `${base} / 间隔 ${step.terraceStep} / 强度 ${step.intensity}`;
+  if (step.operation === "rugged") return `${base} / 幅度 ${step.amplitude} / 强度 ${step.intensity}`;
+  return base;
+}
+
+function handleTerrainProgramExport(key) {
+  if (key !== "templates") return;
+  const result = props.callbacks.onTerrainProgramExport?.();
+  if (result?.ok && result.text) downloadJsonText(result.filename || "height-terrain-templates.json", result.text);
+}
+
+async function handleTerrainProgramImport({key, file}) {
+  if (key !== "templates" || !file) return;
+  try {
+    props.callbacks.onTerrainProgramImport?.(await file.text());
+  } catch (error) {
+    props.state.terrainProgramNotice = `读取用户模板失败：${error.message}`;
+  }
 }
 
 function clearTerrainTemplatePreview() {

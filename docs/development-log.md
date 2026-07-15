@@ -27361,3 +27361,10 @@ full 矩阵结果：
 - `SELECTION_PANEL_HANDLERS` 全部改为复用统一路由，移除旧的强制打开 helper 和省份 / 文化 / 宗教着色模式条件。来源面板不重复刷新；政体面板作为国家等价来源；外交着色主题主体切换和河流主动关闭抑制继续保留。
 - 对象详情取消对国家、城市和河流的旧拒绝逻辑，并为未单独声明标题格式的对象提供中文类型与名称 / id 兜底，确保领域面板关闭时存在可见落点。
 - 新增 `regress:selection-panel-policy`，覆盖 15 类绑定、区域兜底、来源面板、`sourcePanelId`、定位、外交主题和河流关闭抑制；`regress:selection-actions` 与 `regress:panel-refresh-path` 同步通过。本项按快速迭代约定不执行浏览器测试。
+
+### 2026-07-15 完成权威任务第 38 项：选区地形模板完整体系
+
+- 新增 `height-terrain-template-programs.js`：固定模板程序按顺序消费上一步高度，最终折叠为原始到最终 changes；预览公开有界的步骤摘要和 `changeChecksum`，应用前重新计算并校验数量与 checksum，随后只提交一个 `createApplyHeightBrushCommand()`。
+- 内置“层叠高原”“阶地盆地”和“Source 群岛（转换）”三套多步骤程序。固定 seed 可复现；Source 样本精确转换 `Add / Smooth`，把 `Range / Hill / Trough` 转为稳定破碎塑形，并显式保留 `Strait` 不支持边界。
+- 高度面板新增多步骤程序预览 / 应用、把当前单步参数加入最多 12 步编排、保存 / 删除用户模板以及 JSON 导入导出。用户模板使用版本 1 文档和独立 LocalStorage 键；导入在持久化前整体检查文档类型、版本、id、步骤和数值范围。
+- 新增 `regress:height-template-programs`，覆盖同 seed 复现、不同 seed 变化、预览与实际 changes 一致、单条历史、撤销 / 重做、文档往返、存储恢复、坏版本 / 坏步骤不改图和 Source 转换样本；既有 `regress:height-brush` 继续守住四种单步模板与选区羽化。本项按快速迭代约定不执行浏览器测试。

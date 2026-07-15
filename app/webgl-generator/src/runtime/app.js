@@ -61,6 +61,7 @@ import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-e
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
+import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
@@ -518,6 +519,67 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onTerrainTemplateChange: () => {
       clearHeightTransformPreview(state);
       updateEditingInteractionLock(state, documentRef);
+    },
+    onTerrainProgramPreview: () => {
+      cancelHeightLine(state, documentRef);
+      const program = heightPanel.getTerrainProgram();
+      const options = {
+        scope: heightPanel.getBrush().scope,
+        seed: heightTerrainTemplateProgramUsesSeed(program) ? state.heightEdit.terrainTemplateSeed + 1 : 0,
+        allowedCells: heightTemplateAllowedCells(state)
+      };
+      const preview = inspectHeightTerrainTemplateProgram(state.map, program, options);
+      let rendererPreview = null;
+      if (preview.valid) {
+        const changes = getHeightTerrainTemplateProgramChanges(state.map, program, options);
+        rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
+      }
+      heightPanel.updateTerrainProgramPreview({...preview, program, rendererPreview});
+      updateEditingInteractionLock(state, documentRef);
+      return preview;
+    },
+    onTerrainProgramApply: () => {
+      const reserved = heightPanel.getTerrainProgramPreview();
+      cancelHeightLine(state, documentRef);
+      if (!reserved?.valid || !reserved.program) {
+        state.heightEdit.lastAffected = 0;
+        state.heightEdit.lastHeight = "none";
+        state.heightEdit.lastDelta = "none";
+        state.heightEdit.lastNotice = "请先生成有效的多步骤模板预览。";
+        updateHeightPanel(state);
+        return false;
+      }
+      const options = {
+        scope: reserved.scope,
+        seed: reserved.seed,
+        allowedCells: heightTemplateAllowedCells(state)
+      };
+      const preview = inspectHeightTerrainTemplateProgram(state.map, reserved.program, options);
+      if (!preview.valid || preview.changeCount !== reserved.changeCount || preview.changeChecksum !== reserved.changeChecksum) {
+        state.heightEdit.lastAffected = 0;
+        state.heightEdit.lastHeight = "none";
+        state.heightEdit.lastDelta = "none";
+        state.heightEdit.lastNotice = preview.valid ? "地图或选区已变化，请重新预览多步骤模板。" : preview.notice;
+        clearHeightTransformPreview(state);
+        heightPanel.updateTerrainProgramPreview(preview);
+        updateHeightPanel(state);
+        return false;
+      }
+      const changes = getHeightTerrainTemplateProgramChanges(state.map, reserved.program, options);
+      state.heightEdit.lastAffected = changes.length;
+      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
+      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
+      state.heightEdit.lastNotice = `已应用${reserved.program.name} ${changes.length} cells / ${reserved.program.steps.length} 步。`;
+      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label: reserved.program.name}), {
+        context: {map: state.map},
+        refresh: refreshAfterEdit,
+        refreshPanels: false
+      });
+      if (result.executed && heightTerrainTemplateProgramUsesSeed(reserved.program)) state.heightEdit.terrainTemplateSeed = reserved.seed;
+      if (result.executed) clearHeightTransformPreview(state);
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      return result.executed;
     },
     onConditionalTransformPreview: () => {
       const options = {...heightPanel.getConditionalTransform(), allowedCells: heightToolAllowedCells(state)};
@@ -8346,6 +8408,7 @@ function clearHeightTransformPreview(state, {draw = true} = {}) {
   state.panels.height?.updateConditionalTransformPreview?.(null);
   state.panels.height?.updateGlobalToolPreview?.(null);
   state.panels.height?.updateTerrainTemplatePreview?.(null);
+  state.panels.height?.updateTerrainProgramPreview?.(null);
   state.renderer?.clearHeightTransformPreview?.({draw});
 }
 

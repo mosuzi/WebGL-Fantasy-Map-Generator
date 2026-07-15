@@ -28,6 +28,7 @@
 - `keyboard-shortcuts.md`：权威任务第 35 项的快捷键清单、公共 action、禁用条件、悬停提示和冲突规则。
 - `canvas-tool-mode-manager.md`：权威任务第 36 项的 14 个画布模式、互斥生命周期、预览回滚、面板关闭和地图替换契约。
 - `selection-panel-policy.md`：权威任务第 37 项的方案 B、对象类型绑定、对象详情兜底与 selection 分发例外。
+- `height-terrain-template-programs.md`：权威任务第 38 项的多步骤选区模板、用户模板文档、持久化交换和 Source 转换边界。
 
 ## 导入导出与 GIS
 

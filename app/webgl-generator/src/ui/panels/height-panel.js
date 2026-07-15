@@ -1,7 +1,18 @@
 import {reactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {
+  createHeightTerrainTemplateDocument,
+  HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS,
+  HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY,
+  loadHeightTerrainTemplateDocument,
+  normalizeHeightTerrainTemplateProgram,
+  parseHeightTerrainTemplateDocument,
+  saveHeightTerrainTemplateDocument,
+  stringifyHeightTerrainTemplateDocument
+} from "../../runtime/height-terrain-template-programs.js";
 
 export function createHeightPanel(documentRef, manager, callbacks = {}) {
+  const loadedPrograms = loadUserTerrainPrograms(documentRef);
   const panelState = reactive({
     active: false,
     action: "raise",
@@ -23,6 +34,13 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     terrainTemplateTerraceStep: 10,
     terrainTemplateAmplitude: 12,
     terrainTemplatePreview: null,
+    terrainProgramId: HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS[0].id,
+    terrainProgramOptions: [],
+    terrainProgramPreview: null,
+    terrainProgramDraftName: "我的地形模板",
+    terrainProgramDraftSteps: [],
+    terrainProgramCanDelete: false,
+    terrainProgramNotice: loadedPrograms.notice,
     terrainSelectionSource: "height-band",
     terrainSelectionRadius: 48,
     terrainSelectionTolerance: 6,
@@ -53,6 +71,16 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onTerrainTemplatePreview: () => callbacks.onTerrainTemplatePreview?.(),
     onTerrainTemplateApply: () => callbacks.onTerrainTemplateApply?.(),
     onTerrainTemplateChange: () => callbacks.onTerrainTemplateChange?.(),
+    onTerrainProgramPreview: () => callbacks.onTerrainProgramPreview?.(),
+    onTerrainProgramApply: () => callbacks.onTerrainProgramApply?.(),
+    onTerrainProgramChange: id => selectTerrainProgram(id),
+    onTerrainProgramStepAdd: () => addTerrainProgramStep(),
+    onTerrainProgramStepRemove: index => removeTerrainProgramStep(index),
+    onTerrainProgramDraftClear: () => clearTerrainProgramDraft(),
+    onTerrainProgramSave: name => saveTerrainProgram(name),
+    onTerrainProgramDelete: () => deleteSelectedTerrainProgram(),
+    onTerrainProgramExport: () => exportUserTerrainPrograms(),
+    onTerrainProgramImport: text => importUserTerrainPrograms(text),
     onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
     onConditionalTransformApply: () => callbacks.onConditionalTransformApply?.(),
     onConditionalTransformChange: () => callbacks.onConditionalTransformChange?.(),
@@ -116,6 +144,156 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     radius: panelState.terrainSelectionRadius,
     tolerance: panelState.terrainSelectionTolerance
   });
+  let userTerrainPrograms = loadedPrograms.templates;
+  refreshTerrainProgramOptions();
+
+  function allTerrainPrograms() {
+    return [...HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS, ...userTerrainPrograms];
+  }
+
+  function refreshTerrainProgramOptions() {
+    panelState.terrainProgramOptions = allTerrainPrograms().map(template => ({
+      value: template.id,
+      label: template.user ? `用户：${template.name}` : template.name
+    }));
+    if (!allTerrainPrograms().some(template => template.id === panelState.terrainProgramId)) {
+      panelState.terrainProgramId = HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS[0].id;
+    }
+    panelState.terrainProgramCanDelete = userTerrainPrograms.some(template => template.id === panelState.terrainProgramId);
+  }
+
+  function selectedTerrainProgram() {
+    return allTerrainPrograms().find(template => template.id === panelState.terrainProgramId) || HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS[0];
+  }
+
+  function clearTerrainProgramPreview() {
+    const hadPreview = Boolean(panelState.terrainProgramPreview);
+    panelState.terrainProgramPreview = null;
+    if (hadPreview) callbacks.onTerrainTemplateChange?.();
+  }
+
+  function selectTerrainProgram(id) {
+    if (!allTerrainPrograms().some(template => template.id === id)) return false;
+    panelState.terrainProgramId = id;
+    panelState.terrainProgramCanDelete = userTerrainPrograms.some(template => template.id === id);
+    clearTerrainProgramPreview();
+    return true;
+  }
+
+  function currentSingleTemplateStep() {
+    const step = {
+      operation: panelState.terrainTemplateId,
+      intensity: panelState.terrainTemplateIntensity
+    };
+    if (step.operation === "plateau" || step.operation === "basin") step.targetHeight = panelState.terrainTemplateTargetHeight;
+    if (step.operation === "terraces") step.terraceStep = panelState.terrainTemplateTerraceStep;
+    if (step.operation === "rugged") step.amplitude = panelState.terrainTemplateAmplitude;
+    return step;
+  }
+
+  function addTerrainProgramStep() {
+    if (panelState.terrainProgramDraftSteps.length >= 12) {
+      panelState.terrainProgramNotice = "一个用户模板最多包含 12 个步骤。";
+      return false;
+    }
+    panelState.terrainProgramDraftSteps.push(currentSingleTemplateStep());
+    panelState.terrainProgramNotice = `已加入第 ${panelState.terrainProgramDraftSteps.length} 步。`;
+    return true;
+  }
+
+  function removeTerrainProgramStep(index) {
+    const numeric = Math.trunc(Number(index));
+    if (numeric < 0 || numeric >= panelState.terrainProgramDraftSteps.length) return false;
+    panelState.terrainProgramDraftSteps.splice(numeric, 1);
+    panelState.terrainProgramNotice = "已移除模板步骤。";
+    return true;
+  }
+
+  function clearTerrainProgramDraft() {
+    panelState.terrainProgramDraftSteps = [];
+    panelState.terrainProgramNotice = "已清空待保存步骤。";
+    return true;
+  }
+
+  function saveTerrainProgram(name) {
+    try {
+      const baseId = userTemplateId(name);
+      const existingIds = new Set(allTerrainPrograms().map(template => template.id));
+      let id = baseId;
+      let suffix = 2;
+      while (existingIds.has(id)) id = `${baseId}-${suffix++}`;
+      const template = normalizeHeightTerrainTemplateProgram({
+        id,
+        name,
+        description: "由高度面板多步骤编排保存。",
+        steps: panelState.terrainProgramDraftSteps
+      }, {user: true});
+      userTerrainPrograms = [...userTerrainPrograms, template];
+      persistUserTerrainPrograms(documentRef, userTerrainPrograms);
+      panelState.terrainProgramId = template.id;
+      panelState.terrainProgramDraftSteps = [];
+      panelState.terrainProgramNotice = `已保存用户模板“${template.name}”。`;
+      refreshTerrainProgramOptions();
+      clearTerrainProgramPreview();
+      return {ok: true, template};
+    } catch (error) {
+      panelState.terrainProgramNotice = error.message;
+      return {ok: false, error: error.message};
+    }
+  }
+
+  function deleteSelectedTerrainProgram() {
+    const selected = userTerrainPrograms.find(template => template.id === panelState.terrainProgramId);
+    if (!selected) {
+      panelState.terrainProgramNotice = "内置模板不能删除。";
+      return false;
+    }
+    try {
+      const nextPrograms = userTerrainPrograms.filter(template => template.id !== selected.id);
+      persistUserTerrainPrograms(documentRef, nextPrograms);
+      userTerrainPrograms = nextPrograms;
+      panelState.terrainProgramId = HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS[0].id;
+      panelState.terrainProgramNotice = `已删除用户模板“${selected.name}”。`;
+      refreshTerrainProgramOptions();
+      clearTerrainProgramPreview();
+      return true;
+    } catch (error) {
+      panelState.terrainProgramNotice = error.message;
+      return false;
+    }
+  }
+
+  function exportUserTerrainPrograms() {
+    try {
+      return {
+        ok: true,
+        filename: "height-terrain-templates.json",
+        text: stringifyHeightTerrainTemplateDocument(userTerrainPrograms)
+      };
+    } catch (error) {
+      panelState.terrainProgramNotice = error.message;
+      return {ok: false, error: error.message};
+    }
+  }
+
+  function importUserTerrainPrograms(text) {
+    try {
+      const document = parseHeightTerrainTemplateDocument(text);
+      const merged = new Map(userTerrainPrograms.map(template => [template.id, template]));
+      for (const template of document.templates) merged.set(template.id, template);
+      const nextPrograms = createHeightTerrainTemplateDocument([...merged.values()]).templates;
+      persistUserTerrainPrograms(documentRef, nextPrograms);
+      userTerrainPrograms = nextPrograms;
+      if (document.templates[0]) panelState.terrainProgramId = document.templates[0].id;
+      panelState.terrainProgramNotice = `已导入 ${document.templates.length} 个用户模板。`;
+      refreshTerrainProgramOptions();
+      clearTerrainProgramPreview();
+      return {ok: true, count: document.templates.length};
+    } catch (error) {
+      panelState.terrainProgramNotice = error.message;
+      return {ok: false, error: error.message};
+    }
+  }
 
   return {
     open(history) {
@@ -132,6 +310,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       transformPreview = panelState.transformPreview,
       globalToolPreview = panelState.globalToolPreview,
       terrainTemplatePreview = panelState.terrainTemplatePreview,
+      terrainProgramPreview = panelState.terrainProgramPreview,
       terrainSelection = panelState.terrainSelection,
       terrainSelectionSaved = panelState.terrainSelectionSaved,
       terrainSelectionFeather = panelState.terrainSelectionFeather,
@@ -151,6 +330,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.transformPreview = cloneTransformPreview(transformPreview);
       panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
       panelState.terrainTemplatePreview = cloneTransformPreview(terrainTemplatePreview);
+      panelState.terrainProgramPreview = cloneTransformPreview(terrainProgramPreview);
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
       panelState.terrainSelectionSaved = cloneTerrainSelection(terrainSelectionSaved);
       panelState.terrainSelectionFeather = Math.max(0, Math.min(8, Math.trunc(Number(terrainSelectionFeather) || 0)));
@@ -199,6 +379,12 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     getTerrainTemplatePreview() {
       return cloneTransformPreview(panelState.terrainTemplatePreview);
     },
+    getTerrainProgram() {
+      return structuredClone(selectedTerrainProgram());
+    },
+    getTerrainProgramPreview() {
+      return cloneTransformPreview(panelState.terrainProgramPreview);
+    },
     getTerrainTemplateSnapshot() {
       return {
         templateId: panelState.terrainTemplateId,
@@ -235,6 +421,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     updateTerrainTemplatePreview(terrainTemplatePreview) {
       panelState.terrainTemplatePreview = cloneTransformPreview(terrainTemplatePreview);
     },
+    updateTerrainProgramPreview(terrainProgramPreview) {
+      panelState.terrainProgramPreview = cloneTransformPreview(terrainProgramPreview);
+    },
     updateTerrainSelection(terrainSelection, useForTools = panelState.useTerrainSelection) {
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
       panelState.useTerrainSelection = Boolean(useForTools && terrainSelection?.valid);
@@ -252,6 +441,32 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       lazyPanel.unmount();
     }
   };
+}
+
+function loadUserTerrainPrograms(documentRef) {
+  try {
+    const storage = documentRef.defaultView?.localStorage;
+    if (!storage) return {templates: [], notice: ""};
+    const document = loadHeightTerrainTemplateDocument(storage, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY);
+    if (!document.templates.length) return {templates: [], notice: ""};
+    return {templates: document.templates, notice: `已恢复 ${document.templates.length} 个用户模板。`};
+  } catch (error) {
+    return {templates: [], notice: `用户模板未恢复：${error.message}`};
+  }
+}
+
+function persistUserTerrainPrograms(documentRef, templates) {
+  const storage = documentRef.defaultView?.localStorage;
+  if (!storage) throw new Error("当前浏览器不支持 LocalStorage，无法保存用户模板。");
+  saveHeightTerrainTemplateDocument(storage, templates, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY);
+}
+
+function userTemplateId(name) {
+  const slug = String(name || "").trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return `user-${slug || "terrain-template"}`;
 }
 
 function cloneTransformPreview(preview) {

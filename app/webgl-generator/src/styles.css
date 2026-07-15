@@ -2912,6 +2912,64 @@ select:disabled {
   font-size: 10px;
 }
 
+.height-template-composer {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid rgba(189, 206, 213, 0.12);
+  padding-top: 9px;
+}
+
+.height-template-composer > label {
+  color: #9eacb4;
+  font-size: 11px;
+}
+
+.height-template-name-input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid rgba(189, 206, 213, 0.2);
+  border-radius: 5px;
+  padding: 6px 8px;
+  background: rgba(5, 10, 13, 0.62);
+  color: #dce7eb;
+  font: inherit;
+}
+
+.height-template-step-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+  color: #aebdc5;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.height-template-step-list li {
+  min-width: 0;
+}
+
+.height-template-step-list li:has(> button) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.height-template-step-list button {
+  border: 0;
+  background: transparent;
+  color: #aebdc5;
+  cursor: pointer;
+}
+
+.height-template-library-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .height-terrain-selection {
   display: grid;
   gap: 7px;
