@@ -173,16 +173,19 @@ function createConsoleApi(documentRef, state, actions = {}) {
         setParent: (religionId, parentId) => apiCall(() => requireApiAction(actions.edit?.religions?.setParent, "edit.religions.setParent")(religionId, parentId))
       }),
       routes: Object.freeze({
+        create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.create, "edit.routes.create")(options)),
         delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId)),
         setNote: (routeId, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.setNote, "edit.routes.setNote")(routeId, body, options))
       }),
       rivers: Object.freeze({
+        create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.rivers?.create, "edit.rivers.create")(options)),
         delete: riverId => apiCall(() => requireApiAction(actions.edit?.rivers?.delete, "edit.rivers.delete")(riverId)),
         rename: (riverId, name) => apiCall(() => requireApiAction(actions.edit?.rivers?.rename, "edit.rivers.rename")(riverId, name)),
         setWidthFactor: (riverId, widthFactor) => apiCall(() => requireApiAction(actions.edit?.rivers?.setWidthFactor, "edit.rivers.setWidthFactor")(riverId, widthFactor)),
         setNote: (riverId, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.rivers?.setNote, "edit.rivers.setNote")(riverId, body, options))
       }),
       lakes: Object.freeze({
+        create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.lakes?.create, "edit.lakes.create")(options)),
         delete: lakeId => apiCall(() => requireApiAction(actions.edit?.lakes?.delete, "edit.lakes.delete")(lakeId)),
         rename: (lakeId, name) => apiCall(() => requireApiAction(actions.edit?.lakes?.rename, "edit.lakes.rename")(lakeId, name))
       }),
@@ -408,12 +411,15 @@ function buildMethodMetadata() {
       "religions.rename": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.setColor": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.setParent": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
+      "routes.create": {stable: "draft", mutates: "routes", undoable: true, async: false, requiresConfirm: false},
       "routes.delete": {stable: "draft", mutates: "routes", undoable: true, async: false, requiresConfirm: false},
       "routes.setNote": {stable: "draft", mutates: "routes", undoable: true, async: false, requiresConfirm: false},
+      "rivers.create": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "rivers.delete": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "rivers.rename": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "rivers.setWidthFactor": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "rivers.setNote": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
+      "lakes.create": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
       "lakes.delete": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
       "lakes.rename": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
       "labels.addCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},

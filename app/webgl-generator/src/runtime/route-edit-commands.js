@@ -1,6 +1,7 @@
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {objectAffected} from "./edit-command-effects.js";
+import {MinPriorityQueue} from "../generator/priority-queue.js";
 
 const ROUTE_NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -17,6 +18,69 @@ const ROUTE_DELETE_EFFECTS = Object.freeze({
   pickPanel: true,
   derived: Object.freeze(["route-mesh", "object-panels", "object-index"])
 });
+
+const ROUTE_CREATE_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["route-mesh", "object-panels", "object-index"])
+});
+
+const ROUTE_TYPES = new Set(["road", "trail", "searoute"]);
+
+export function inspectRouteCreation(map, options = {}) {
+  const startPackCell = Number(options.startPackCell);
+  const endPackCell = Number(options.endPackCell);
+  const type = normalizeRouteType(options.type);
+  if (!Number.isInteger(startPackCell) || !Number.isInteger(endPackCell)) return invalidCreation("invalid-cell", "路线端点必须是有效 pack cell");
+  if (startPackCell === endPackCell) return invalidCreation("same-endpoint", "路线起点和终点不能相同");
+  const cells = map?.pack?.cells;
+  const count = cells?.i?.length || cells?.h?.length || 0;
+  if (startPackCell < 0 || endPackCell < 0 || startPackCell >= count || endPackCell >= count) return invalidCreation("cell-out-of-range", "路线端点超出 pack cells 范围");
+  const water = type === "searoute";
+  if (isWaterCell(cells, startPackCell) !== water || isWaterCell(cells, endPackCell) !== water) {
+    return invalidCreation("terrain-mismatch", water ? "海路端点必须位于水域" : "陆路端点必须位于陆地");
+  }
+  const path = findRoutePath(map.pack, startPackCell, endPackCell, {water});
+  if (path.length < 2) return invalidCreation("unreachable", "端点之间不存在符合地形约束的连通路径");
+  const duplicate = (map?.settlements?.routes || []).find(route => route.type === type && samePathEndpoints(route.packCells, path));
+  if (duplicate) return invalidCreation("duplicate-route", `已存在相同端点的${type === "searoute" ? "海路" : "陆路"} #${duplicate.id}`);
+  return {valid: true, code: "ok", reason: "", type, startPackCell, endPackCell, path, cells: path.length};
+}
+
+export function createAddRouteCommand(options = {}) {
+  let snapshot = null;
+  let created = null;
+  const command = {
+    label: String(options.label || "绘制路线"),
+    domain: OBJECT_KIND.ROUTE,
+    effects: {...ROUTE_CREATE_EFFECTS, affected: objectAffected(OBJECT_KIND.ROUTE, "new")},
+    apply(context) {
+      const preview = inspectRouteCreation(context.map, options);
+      if (!preview.valid) throw creationError(preview);
+      snapshot ??= captureRouteCreateSnapshot(context.map);
+      created ??= buildRoute(context.map, preview);
+      readRoutes(context.map).push(cloneRoute(created));
+      refreshRouteDerived(context.map);
+      markRouteDependentDerivedStale(context.map);
+      command.effects.affected = objectAffected(OBJECT_KIND.ROUTE, created.id);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的路线创建快照");
+      restoreRouteCreateSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const preview = inspectRouteCreation(context.map, options);
+      if (!preview.valid) throw creationError(preview);
+      return false;
+    },
+    getResult() {
+      return created ? {routeId: created.id, type: created.type, cells: created.packCells.length, from: created.from, to: created.to} : null;
+    }
+  };
+  return command;
+}
 
 export function createSetRouteNoteCommand(routeId, body, {name = ""} = {}) {
   const normalizedRouteId = Number(routeId);
@@ -152,6 +216,165 @@ function refreshRouteDerived(map) {
     map.pack.routes = packRouteArray(routes);
     if (map.pack.cells) map.pack.cells.routes = buildPackRouteLinks(routes);
   }
+}
+
+function findRoutePath(pack, start, end, {water}) {
+  const size = pack.cells?.i?.length || pack.cells?.h?.length || 0;
+  const best = new Float64Array(size);
+  best.fill(Infinity);
+  const previous = new Int32Array(size);
+  previous.fill(-1);
+  const closed = new Uint8Array(size);
+  const queue = new MinPriorityQueue();
+  best[start] = 0;
+  queue.push(start, 0);
+  let visited = 0;
+  const maxVisited = Math.min(size, 50000);
+  while (queue.length && visited < maxVisited) {
+    const current = queue.pop();
+    if (closed[current]) continue;
+    closed[current] = 1;
+    visited++;
+    if (current === end) return reconstructRoutePath(previous, end);
+    for (const neighbor of pack.cells.c?.[current] || []) {
+      if (closed[neighbor] || isWaterCell(pack.cells, neighbor) !== water) continue;
+      const step = routeStepCost(pack.cells, current, neighbor, water);
+      if (!Number.isFinite(step)) continue;
+      const tentative = best[current] + step;
+      if (tentative >= best[neighbor]) continue;
+      best[neighbor] = tentative;
+      previous[neighbor] = current;
+      queue.push(neighbor, tentative + routeHeuristic(pack.cells, neighbor, end));
+    }
+  }
+  return [];
+}
+
+function routeStepCost(cells, current, next, water) {
+  const distance = Math.max(0.001, Math.hypot((cells.p?.[next]?.[0] || 0) - (cells.p?.[current]?.[0] || 0), (cells.p?.[next]?.[1] || 0) - (cells.p?.[current]?.[1] || 0)));
+  if (water) return distance * (1 + Math.max(0, -Number(cells.t?.[next] || 0)) * 0.15);
+  const slope = Math.abs(Number(cells.h?.[next]) - Number(cells.h?.[current]));
+  return distance * (1 + slope * 0.08 + (Number(cells.r?.[next]) ? 0.35 : 0));
+}
+
+function routeHeuristic(cells, current, end) {
+  return Math.hypot((cells.p?.[end]?.[0] || 0) - (cells.p?.[current]?.[0] || 0), (cells.p?.[end]?.[1] || 0) - (cells.p?.[current]?.[1] || 0));
+}
+
+function reconstructRoutePath(previous, end) {
+  const path = [];
+  for (let cell = end; cell >= 0; cell = previous[cell]) path.push(cell);
+  return path.reverse();
+}
+
+function buildRoute(map, preview) {
+  const cells = map.pack.cells;
+  const id = nextRouteId(map);
+  const start = preview.path[0];
+  const end = preview.path.at(-1);
+  const from = cityAtPackCell(map, start);
+  const to = cityAtPackCell(map, end);
+  const resources = countRouteResources(cells, preview.path);
+  return {
+    id,
+    type: preview.type,
+    level: preview.type === "trail" ? "trail" : "secondary",
+    feature: Number(cells.f?.[start]) || 0,
+    state: majorityCellValue(cells, preview.path, "state"),
+    province: preview.type === "searoute" ? 0 : majorityCellValue(cells, preview.path, "province"),
+    from,
+    to,
+    cells: preview.path.map(cell => Number(cells.g?.[cell]) || 0),
+    packCells: [...preview.path],
+    resourceCells: resources.resourceCells,
+    markerResourceCells: resources.markerResourceCells,
+    resourceGoodIds: resources.goodIds,
+    points: preview.path.map(cell => [...(cells.p?.[cell] || [0, 0])])
+  };
+}
+
+function countRouteResources(cells, path) {
+  const goodIds = new Set();
+  let resourceCells = 0;
+  let markerResourceCells = 0;
+  for (const cell of path) {
+    const goodId = Number(cells.good?.[cell]) || 0;
+    if (!goodId) continue;
+    resourceCells++;
+    goodIds.add(goodId);
+    if ((Number(cells.goodSource?.[cell]) || 0) >= 2) markerResourceCells++;
+  }
+  return {resourceCells, markerResourceCells, goodIds: [...goodIds].sort((a, b) => a - b)};
+}
+
+function majorityCellValue(cells, path, field) {
+  const counts = new Map();
+  for (const cell of path) {
+    const value = Number(cells[field]?.[cell]) || 0;
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] || 0;
+}
+
+function cityAtPackCell(map, packCell) {
+  const burgId = Number(map.pack?.cells?.burg?.[packCell]) || 0;
+  return (map.settlements?.cities || []).find(city => !city?.removed && (Number(city.packCell) === packCell || Number(city.burgId) === burgId))?.id ?? -1;
+}
+
+function nextRouteId(map) {
+  return (map.settlements?.routes || []).reduce((max, route) => Math.max(max, Number(route?.id) || 0), -1) + 1;
+}
+
+function captureRouteCreateSnapshot(map) {
+  return {
+    routes: cloneRoute(map.settlements?.routes || []),
+    metadata: cloneRoute(map.settlements?.metadata || {}),
+    packRoutes: cloneRoute(map.pack?.routes || []),
+    cellRoutes: cloneRoute(map.pack?.cells?.routes || {}),
+    stale: cloneRoute(map.metadata?.derivedStale || null)
+  };
+}
+
+function restoreRouteCreateSnapshot(map, snapshot) {
+  map.settlements.routes = cloneRoute(snapshot.routes);
+  map.settlements.metadata = cloneRoute(snapshot.metadata);
+  map.pack.routes = cloneRoute(snapshot.packRoutes);
+  map.pack.cells.routes = cloneRoute(snapshot.cellRoutes);
+  if (snapshot.stale) map.metadata.derivedStale = cloneRoute(snapshot.stale);
+  else delete map.metadata.derivedStale;
+}
+
+function markRouteDependentDerivedStale(map) {
+  if (!map?.metadata) return;
+  map.metadata.derivedStale = {
+    ...(map.metadata.derivedStale || {}),
+    systems: [...new Set([...(map.metadata.derivedStale?.systems || []), "economy", "military", "diplomacy"])],
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function normalizeRouteType(value) {
+  const type = String(value || "road").trim().toLowerCase();
+  return ROUTE_TYPES.has(type) ? type : "road";
+}
+
+function isWaterCell(cells, cell) {
+  return Number(cells?.h?.[cell]) < 20;
+}
+
+function samePathEndpoints(left = [], right = []) {
+  if (!left.length || !right.length) return false;
+  return left[0] === right[0] && left.at(-1) === right.at(-1) || left[0] === right.at(-1) && left.at(-1) === right[0];
+}
+
+function invalidCreation(code, reason) {
+  return {valid: false, code, reason, path: [], cells: 0};
+}
+
+function creationError(preview) {
+  const error = new Error(preview.reason);
+  error.code = preview.code;
+  return error;
 }
 
 function routeResourceStats(routes) {

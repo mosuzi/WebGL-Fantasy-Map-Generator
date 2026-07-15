@@ -21,6 +21,14 @@ const LAKE_DELETE_EFFECTS = Object.freeze({
   derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "line-layers", "object-index", "object-panels"])
 });
 
+const LAKE_CREATE_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "line-layers", "object-index", "object-panels"])
+});
+
 const LAKE_DELETE_STALE_SYSTEMS = Object.freeze([
   "features",
   "rivers",
@@ -36,6 +44,68 @@ const LAKE_DELETE_STALE_SYSTEMS = Object.freeze([
   "economy",
   "diplomacy"
 ]);
+
+export function inspectLakeCreation(map, options = {}) {
+  const packCell = Number(options.packCell);
+  const radius = Math.max(0, Math.min(4, Math.floor(Number(options.radius) || 0)));
+  const cells = map?.pack?.cells;
+  const count = cells?.i?.length || cells?.h?.length || 0;
+  if (!Number.isInteger(packCell) || packCell < 0 || packCell >= count) return invalidLakeCreation("invalid-cell", "湖泊中心必须是有效 pack cell");
+  if (Number(cells.h?.[packCell]) < WATER_LEVEL) return invalidLakeCreation("center-water", "湖泊中心必须位于陆地");
+  const seedPackCells = expandPackRegion(cells, packCell, radius);
+  const gridCells = [...new Set(seedPackCells.map(cell => Number(cells.g?.[cell])).filter(Number.isInteger))];
+  const selectedGrid = new Set(gridCells);
+  if (!gridCells.length || gridCells.length > 256) return invalidLakeCreation("region-size", "湖泊区域必须包含 1～256 个 grid cells");
+  if (gridCells.some(cell => Number(map.grid?.cells?.h?.[cell]) < WATER_LEVEL)) return invalidLakeCreation("region-water", "湖泊区域不能包含现有水域");
+  if (gridCells.some(cell => map.grid?.cells?.b?.[cell])) return invalidLakeCreation("border-region", "湖泊区域不能接触地图边界");
+  const externalGrid = [...new Set(gridCells.flatMap(cell => map.grid?.cells?.c?.[cell] || []).filter(cell => !selectedGrid.has(cell)))];
+  if (!externalGrid.length || externalGrid.some(cell => Number(map.grid?.cells?.h?.[cell]) < WATER_LEVEL)) {
+    return invalidLakeCreation("open-basin", "湖泊区域必须被陆地完整包围，不能连通现有水域");
+  }
+  const packCells = [];
+  for (let cell = 0; cell < count; cell += 1) if (selectedGrid.has(Number(cells.g?.[cell]))) packCells.push(cell);
+  const selectedPack = new Set(packCells);
+  if (packCells.some(cell => Number(cells.h?.[cell]) < WATER_LEVEL)) return invalidLakeCreation("pack-region-water", "湖泊区域对应的 pack cells 包含现有水域");
+  if (packCells.some(cell => Number(cells.burg?.[cell]) > 0)) return invalidLakeCreation("occupied-burg", "湖泊区域包含城市或城镇");
+  if (packCells.some(cell => Number(cells.r?.[cell]) > 0)) return invalidLakeCreation("occupied-river", "湖泊区域包含既有河道");
+  if ((map.settlements?.routes || []).some(route => (route.packCells || []).some(cell => selectedPack.has(Number(cell))))) return invalidLakeCreation("occupied-route", "湖泊区域包含既有路线");
+  if ((map.markers?.markers || []).some(marker => selectedPack.has(Number(marker?.packCell)))) return invalidLakeCreation("occupied-marker", "湖泊区域包含标记");
+  const shoreline = [...new Set(packCells.flatMap(cell => cells.c?.[cell] || []).filter(cell => !selectedPack.has(cell) && Number(cells.h?.[cell]) >= WATER_LEVEL))];
+  if (shoreline.length < 3) return invalidLakeCreation("invalid-shoreline", "湖泊区域无法形成有效岸线");
+  const requestedWaterHeight = Number(options.waterHeight);
+  const waterHeight = Math.max(0, Math.min(19, Number.isFinite(requestedWaterHeight) ? requestedWaterHeight : 19));
+  return {valid: true, code: "ok", reason: "", packCell, radius, packCells, gridCells, shoreline, waterHeight};
+}
+
+export function createExcavateLakeCommand(options = {}) {
+  let snapshot = null;
+  let created = null;
+  const command = {
+    label: String(options.label || "开挖湖泊"),
+    domain: OBJECT_KIND.LAKE,
+    effects: {...LAKE_CREATE_EFFECTS, affected: objectAffected(OBJECT_KIND.LAKE, "new")},
+    apply(context) {
+      const preview = inspectLakeCreation(context.map, options);
+      if (!preview.valid) throw lakeCreationError(preview);
+      snapshot ??= captureLakeDeleteSnapshot(context.map);
+      created = excavateLake(context.map, preview);
+      command.effects.affected = objectAffected(OBJECT_KIND.LAKE, created.lakeId);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的湖泊开挖快照");
+      restoreLakeDeleteSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const preview = inspectLakeCreation(context.map, options);
+      if (!preview.valid) throw lakeCreationError(preview);
+      return false;
+    },
+    getResult() {
+      return created ? {...created} : null;
+    }
+  };
+  return command;
+}
 
 export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名称库重命名湖泊"} = {}) {
   const targets = uniqueLakeIds(lakeIds);
@@ -142,6 +212,93 @@ function fillLake(map, lake) {
     mergedPackFeatures: packMergedIds.length - 1,
     mergedGridFeatures: gridMergedIds.length - 1
   };
+}
+
+function excavateLake(map, preview) {
+  const packFeatureId = map.pack.features.length;
+  const gridFeatureId = map.features.features.length;
+  const oldPackFeatures = new Set(preview.packCells.map(cell => Number(map.pack.cells.f?.[cell])).filter(Number.isInteger));
+  const oldGridFeatures = new Set(preview.gridCells.map(cell => Number(map.grid.cells.f?.[cell])).filter(Number.isInteger));
+  for (const cell of preview.packCells) {
+    map.pack.cells.h[cell] = preview.waterHeight;
+    map.pack.cells.f[cell] = packFeatureId;
+    if (map.pack.cells.type) map.pack.cells.type[cell] = "lake";
+  }
+  for (const cell of preview.gridCells) {
+    map.grid.cells.h[cell] = preview.waterHeight;
+    map.grid.cells.f[cell] = gridFeatureId;
+  }
+  map.pack.features[packFeatureId] = {
+    id: packFeatureId,
+    i: packFeatureId,
+    land: false,
+    border: false,
+    type: "lake",
+    group: "freshwater",
+    cells: preview.packCells.length,
+    firstCell: preview.packCells[0],
+    shoreline: [...preview.shoreline],
+    height: preview.waterHeight,
+    flux: 0,
+    evaporation: 0
+  };
+  map.features.features[gridFeatureId] = {
+    id: gridFeatureId,
+    i: gridFeatureId,
+    land: false,
+    border: false,
+    type: "lake",
+    cells: [...preview.gridCells]
+  };
+  map.grid.features = map.features.features;
+  for (const id of oldPackFeatures) if (map.pack.features[id]) refreshPackFeature(map.pack, id);
+  for (const id of oldGridFeatures) if (map.features.features[id]) refreshGridFeature(map, id);
+  refreshPackFeature(map.pack, packFeatureId);
+  refreshGridFeature(map, gridFeatureId);
+  refreshWaterLandTopology(map.pack.cells);
+  refreshWaterLandTopology(map.grid.cells, {distanceOnly: true});
+  refreshGridShore(map);
+  refreshFeatureMetadata(map);
+  const lake = map.pack.features[packFeatureId];
+  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|manual-lake|${packFeatureId}`, {namebases: map.namebases});
+  lake.name = generator.makeLakeName(lakeNameOptions(map, lake));
+  markLakeDependentDerivedStale(map);
+  return {
+    lakeId: packFeatureId,
+    gridFeatureId,
+    packCells: preview.packCells.length,
+    gridCells: preview.gridCells.length,
+    shoreline: preview.shoreline.length,
+    waterHeight: preview.waterHeight,
+    name: lake.name
+  };
+}
+
+function expandPackRegion(cells, center, radius) {
+  const visited = new Set([center]);
+  let frontier = [center];
+  for (let distance = 0; distance < radius; distance += 1) {
+    const next = [];
+    for (const cell of frontier) {
+      for (const neighbor of cells.c?.[cell] || []) {
+        if (visited.has(neighbor) || Number(cells.h?.[neighbor]) < WATER_LEVEL) continue;
+        visited.add(neighbor);
+        next.push(neighbor);
+      }
+    }
+    frontier = next;
+  }
+  return [...visited];
+}
+
+function invalidLakeCreation(code, reason) {
+  return {valid: false, code, reason, packCells: [], gridCells: [], shoreline: []};
+}
+
+function lakeCreationError(preview) {
+  const error = new Error(preview.reason);
+  error.code = preview.code;
+  return error;
 }
 
 function cellsWithFeature(cells, featureId) {

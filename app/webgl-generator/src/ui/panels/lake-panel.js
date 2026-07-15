@@ -31,6 +31,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
+    createMode: false,
     version: 0
   });
   const panelCallbacks = {
@@ -68,6 +69,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     onRenameVisibleFromNamebase: lakeIds => callbacks.onRenameVisibleFromNamebase?.(lakeIds),
     onDelete: lakeId => callbacks.onDelete?.(lakeId),
     onDeleteMany: lakeIds => callbacks.onDeleteMany?.(lakeIds),
+    onCreateMode: active => callbacks.onCreateMode?.(active),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -85,6 +87,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.open = false;
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");
@@ -122,6 +125,9 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     },
     setSelection(selection) {
       panelState.selection = selection;
+    },
+    setCreateMode(active) {
+      panelState.createMode = Boolean(active);
     },
     isOpen() {
       return panelState.open;

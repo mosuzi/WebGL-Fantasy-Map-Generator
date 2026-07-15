@@ -31,6 +31,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
+    createMode: false,
     version: 0
   });
   const panelCallbacks = {
@@ -69,6 +70,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     onRenameVisibleFromNamebase: riverIds => callbacks.onRenameVisibleFromNamebase?.(riverIds),
     onDelete: riverId => callbacks.onDelete?.(riverId),
     onDeleteMany: riverIds => callbacks.onDeleteMany?.(riverIds),
+    onCreateMode: active => callbacks.onCreateMode?.(active),
     onSetWidthFactor: (riverId, widthFactor) => callbacks.onSetWidthFactor?.(riverId, widthFactor),
     onNoteChange: (riverId, body) => callbacks.onNoteChange?.(riverId, body),
     onUndo: () => callbacks.onUndo?.(),
@@ -129,6 +131,9 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     setSelection(selection, editingObject = panelState.editingObject) {
       panelState.selection = selection;
       panelState.editingObject = editingObject;
+    },
+    setCreateMode(active) {
+      panelState.createMode = Boolean(active);
     },
     isOpen() {
       return panelState.open;

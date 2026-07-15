@@ -119,6 +119,7 @@ const lakeActions = Object.freeze([
   {key: "rename", label: "重命名", icon: "✎"}
 ]);
 const lakeListActions = computed(() => [
+  {key: "create", label: props.state.createMode ? "取消开挖湖泊" : "开挖湖泊", icon: "+", active: props.state.createMode},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedLakeRows.value.length)}`, icon: "◉", disabled: !selectedLakeRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选湖泊", icon: "名", disabled: !visibleRows.value.length},
@@ -214,6 +215,7 @@ function lakeTypeLabel(type) {
 }
 
 function handleLakeListAction(key) {
+  if (key === "create") props.callbacks.onCreateMode?.(!props.state.createMode);
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedLakeRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));

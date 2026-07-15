@@ -28,6 +28,14 @@ const RIVER_DELETE_EFFECTS = Object.freeze({
   derived: Object.freeze(["river-mesh", "river-width-stats", "object-index", "object-panels"])
 });
 
+const RIVER_CREATE_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["river-mesh", "river-width-stats", "object-index", "object-panels"])
+});
+
 const RIVER_DELETE_STALE_SYSTEMS = Object.freeze([
   "rivers",
   "routes",
@@ -42,6 +50,63 @@ const RIVER_DELETE_STALE_SYSTEMS = Object.freeze([
   "economy",
   "diplomacy"
 ]);
+
+export function inspectRiverCreation(map, options = {}) {
+  const sourcePackCell = Number(options.sourcePackCell);
+  const cells = map?.pack?.cells;
+  const count = cells?.i?.length || cells?.h?.length || 0;
+  if (!Number.isInteger(sourcePackCell) || sourcePackCell < 0 || sourcePackCell >= count) return invalidRiverCreation("invalid-source", "河源必须是有效 pack cell");
+  if (Number(cells.h?.[sourcePackCell]) < 20) return invalidRiverCreation("source-water", "河源必须位于陆地");
+  if (Number(cells.r?.[sourcePackCell]) > 0) return invalidRiverCreation("source-occupied", "河源 cell 已存在河流");
+  const traced = traceDownhillRiver(map, sourcePackCell);
+  if (!traced.valid) return traced;
+  if (traced.path.length < 3) return invalidRiverCreation("path-too-short", "河流至少需要 3 个连续 cells");
+  return {...traced, sourcePackCell};
+}
+
+export function createAddRiverCommand(options = {}) {
+  let snapshot = null;
+  let created = null;
+  const command = {
+    label: String(options.label || "新增河流"),
+    domain: OBJECT_KIND.RIVER,
+    effects: {...RIVER_CREATE_EFFECTS, affected: objectAffected(OBJECT_KIND.RIVER, "new")},
+    apply(context) {
+      const preview = inspectRiverCreation(context.map, options);
+      if (!preview.valid) throw riverCreationError(preview);
+      snapshot ??= captureRiverDeleteSnapshot(context.map);
+      created ??= buildCreatedRiver(context.map, preview);
+      readRivers(context.map).push(clonePlain(created));
+      if (context.map.pack) context.map.pack.rivers = context.map.rivers.rivers;
+      updateCreatedRiverFlux(context.map, created);
+      rebuildAllRiverCellState(context.map);
+      attachCreatedRiverToLake(context.map, created);
+      refreshRiverMetadata(context.map);
+      markRiverDependentDerivedStale(context.map);
+      command.effects.affected = objectAffected(OBJECT_KIND.RIVER, created.id);
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的河流创建快照");
+      restoreRiverDeleteSnapshot(context.map, snapshot);
+    },
+    isNoop(context) {
+      const preview = inspectRiverCreation(context.map, options);
+      if (!preview.valid) throw riverCreationError(preview);
+      return false;
+    },
+    getResult() {
+      return created ? {
+        riverId: created.id,
+        cells: created.cells.length,
+        source: created.source,
+        mouth: created.mouth,
+        parent: created.parent,
+        confluence: Boolean(created.parent)
+      } : null;
+    }
+  };
+  return command;
+}
 
 export function createSetRiverWidthFactorCommand(riverId, nextValue) {
   const nextWidthFactor = normalizeWidthFactor(nextValue);
@@ -263,6 +328,150 @@ function rebuildRiverCellState(map, rivers, removed, previousRiverCells) {
       .sort((a, b) => b - a);
     cells.conf[cell] = influx.reduce((sum, flux, index) => index ? sum + flux : sum, 0);
   }
+}
+
+function rebuildAllRiverCellState(map) {
+  const cells = map.pack?.cells;
+  if (!cells?.r || !cells?.conf) return;
+  cells.r.fill(0);
+  cells.conf.fill(0);
+  const rivers = [...readRivers(map)].sort((a, b) => Number(Boolean(a.parent)) - Number(Boolean(b.parent)) || riverIdOf(a) - riverIdOf(b));
+  for (const river of rivers) {
+    const id = riverIdOf(river);
+    for (const cell of river.cells || []) {
+      if (!Number.isInteger(cell) || cell < 0 || cell >= cells.r.length || Number(cells.h?.[cell]) < 20) continue;
+      if (cells.r[cell]) cells.conf[cell] = Math.max(Number(cells.conf[cell]) || 0, Number(river.discharge || river.flux) || 1);
+      else cells.r[cell] = id;
+    }
+  }
+}
+
+function traceDownhillRiver(map, sourcePackCell) {
+  const cells = map.pack.cells;
+  const path = [sourcePackCell];
+  const visited = new Set(path);
+  let current = sourcePackCell;
+  let parent = 0;
+  let termination = "";
+  for (let step = 0; step < 2048; step += 1) {
+    const currentHeight = Number(cells.h?.[current]);
+    const candidates = (cells.c?.[current] || [])
+      .filter(cell => !visited.has(cell) && Number(cells.h?.[cell]) < currentHeight)
+      .sort((a, b) => Number(Boolean(cells.r?.[b])) - Number(Boolean(cells.r?.[a])) || Number(cells.h?.[a]) - Number(cells.h?.[b]) || a - b);
+    const next = candidates[0];
+    if (!Number.isInteger(next)) return invalidRiverCreation("downhill-blocked", `河流在 pack cell #${current} 没有严格下坡出口`);
+    path.push(next);
+    visited.add(next);
+    if (Number(cells.h?.[next]) < 20) {
+      termination = "water";
+      break;
+    }
+    if (Number(cells.r?.[next]) > 0) {
+      parent = Number(cells.r[next]);
+      termination = "confluence";
+      break;
+    }
+    current = next;
+  }
+  if (!termination) return invalidRiverCreation("path-limit", "河流下坡追踪超过安全长度限制");
+  return {valid: true, code: "ok", reason: "", path, parent, termination, mouth: path.at(-1)};
+}
+
+function buildCreatedRiver(map, preview) {
+  const id = nextRiverId(map);
+  const cells = map.pack.cells;
+  const source = preview.path[0];
+  const mouth = preview.path.at(-1);
+  const parentRiver = preview.parent ? findRiver(map, preview.parent) : null;
+  const discharge = Math.max(1, Number(cells.fl?.[source]) || Number(map.grid?.cells?.prec?.[cells.g?.[source]]) || 1);
+  const points = preview.path.map(cell => [...(cells.p?.[cell] || [0, 0])]);
+  const length = polylineLength(points);
+  const widthFactor = preview.parent ? 1 : 1.2;
+  const cultureId = Number(cells.culture?.[source]) || 0;
+  const culture = map.pack?.cultures?.[cultureId] || map.society?.cultures?.[cultureId];
+  const nameGenerator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|manual-river|${id}`, {namebases: map.namebases});
+  return {
+    id,
+    i: id,
+    source,
+    sourceGrid: Number(cells.g?.[source]) || 0,
+    mouth,
+    mouthGrid: Number.isInteger(Number(cells.g?.[mouth])) ? Number(cells.g[mouth]) : -1,
+    parent: preview.parent,
+    basin: parentRiver?.basin || preview.parent || id,
+    discharge,
+    flux: discharge,
+    length,
+    width: Math.max(1, Math.sqrt(discharge) * widthFactor),
+    widthFactor,
+    sourceWidth: Math.max(0.1, Math.sqrt(discharge) / 10),
+    hydrology: approximateCreatedHydrology(map, preview.path),
+    cells: [...preview.path],
+    gridCells: preview.path.filter(cell => cell >= 0).map(cell => Number(cells.g?.[cell]) || 0),
+    points,
+    type: preview.parent ? "Branch" : "River",
+    name: nameGenerator.makeRiverName({id, cell: source, culture: cultureId, cultureType: culture?.nameStyle || culture?.type, flux: discharge, type: preview.parent ? "branch" : "river"})
+  };
+}
+
+function approximateCreatedHydrology(map, path) {
+  let area = 0;
+  let precipitationArea = 0;
+  for (const packCell of path) {
+    if (Number(map.pack?.cells?.h?.[packCell]) < 20) continue;
+    const cellArea = Number(map.pack?.cells?.area?.[packCell]) || 1;
+    const precipitation = Number(map.grid?.cells?.prec?.[map.pack?.cells?.g?.[packCell]]) || 0;
+    area += cellArea;
+    precipitationArea += precipitation * cellArea;
+  }
+  return {
+    catchmentArea: area,
+    catchmentCells: path.filter(cell => Number(map.pack?.cells?.h?.[cell]) >= 20).length,
+    averagePrecipitation: area ? precipitationArea / area : 0,
+    method: "manual-downhill"
+  };
+}
+
+function updateCreatedRiverFlux(map, river) {
+  const cells = map.pack?.cells;
+  if (!cells?.fl) return;
+  for (const cell of river.cells || []) {
+    if (!Number.isInteger(cell) || Number(cells.h?.[cell]) < 20) continue;
+    cells.fl[cell] = Math.max(Number(cells.fl[cell]) || 0, Number(river.discharge) || 1);
+  }
+}
+
+function attachCreatedRiverToLake(map, river) {
+  const mouth = river.cells?.at(-1);
+  if (!Number.isInteger(mouth) || Number(map.pack?.cells?.h?.[mouth]) >= 20) return;
+  const feature = map.pack?.features?.[map.pack.cells.f?.[mouth]];
+  if (!feature || feature.type !== "lake") return;
+  feature.inlets = [...new Set([...(feature.inlets || []), river.id])];
+  feature.flux = (Number(feature.flux) || 0) + (Number(river.discharge) || 0);
+  if (!feature.river || Number(river.discharge) > Number(feature.enteringFlux || 0)) {
+    feature.river = river.id;
+    feature.enteringFlux = river.discharge;
+  }
+}
+
+function nextRiverId(map) {
+  return readRivers(map).reduce((max, river) => Math.max(max, riverIdOf(river) || 0), 0) + 1;
+}
+
+function polylineLength(points) {
+  let length = 0;
+  for (let index = 0; index < points.length - 1; index += 1) length += Math.hypot(points[index + 1][0] - points[index][0], points[index + 1][1] - points[index][1]);
+  return length;
+}
+
+function invalidRiverCreation(code, reason) {
+  return {valid: false, code, reason, path: [], parent: 0, termination: ""};
+}
+
+function riverCreationError(preview) {
+  const error = new Error(preview.reason);
+  error.code = preview.code;
+  return error;
 }
 
 function cleanupLakeRiverReferences(map, removed) {

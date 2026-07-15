@@ -8,9 +8,9 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：11 个命名空间、162 个方法，其中 72 个为编辑方法。
+当前公开基线：11 个命名空间、165 个方法，其中 75 个为编辑方法。
 
-第 33 项完成后，根 API 为 `1.0.0 / stable`。方法级稳定性统计为 154 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、11 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
+第 40 项完成后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 157 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、11 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
@@ -21,7 +21,7 @@
 | `units` | 9 | 已覆盖当前全部显示单位偏好 |
 | `climate` | 14 | 已覆盖气候读取与当前写入入口 |
 | `history` | 5 | 已覆盖历史读取、peek、撤销和重做 |
-| `edit` | 72 | 已覆盖当前全部可纯参数调用的既有编辑命令及 2 项高度派生重建；交互手势型能力继续暂缓 |
+| `edit` | 75 | 已覆盖当前全部可纯参数调用的既有编辑命令、2 项高度派生重建，以及路线 / 河流 / 湖泊创建 |
 | `data` | 14 | 已覆盖地图 / GEO / 高度图 / 浏览器存档 / PNG / 记录与诊断导入导出 |
 | `namebases` | 10 | 已覆盖名称库读取、交换、编辑、绑定与批量改名 |
 | `debug` | 7 | 已覆盖只读诊断、debug UI 和单帧 profile |
@@ -60,7 +60,7 @@
 | 21 | 外交 | 设置关系、外交重生成命令 | 已暴露且共路径 | `api.edit.diplomacy.setRelation()` 与 diplomacy command；重生成另有 `api.generate.regenerate` | 第 29 项已完成；第 33 项稳定化 |
 | 22 | 军事 | 比例、态势 / 批量态势、驻地、基地、战报、重命名 | 已暴露且共路径 | `api.edit.military.*` 9 个方法与 9 个 military commands；军事重生成另由 generate 覆盖 | 第 29 项已完成；第 33 项稳定化 |
 | 23 | 地区 | Zone 样式编辑 | 已暴露且共路径 | `api.edit.zones.setStyle()` 与 `createSetZoneStyleCommand()` | 第 29 项已完成；第 33 项稳定化 |
-| 24 | 路线 / 河流 / 湖泊 | 当前删除、备注、重命名和河宽编辑 | 已暴露且共路径 | `api.edit.routes / rivers / lakes` | 第 33 项稳定化 |
+| 24 | 路线 / 河流 / 湖泊 | 创建、删除、备注、重命名和河宽编辑 | 已暴露且共路径 | `api.edit.routes / rivers / lakes`；创建入口与 UI 共用 runtime action 和 edit command | 第 40 项已完成 |
 | 25 | 标签 / marker | 当前新增、删除、移动、视觉、备注和恢复 | 已暴露且共路径 | `api.edit.labels / markers` | 第 33 项稳定化 |
 | 26 | 名称库 | list、export/import、CRUD、绑定、批量对象改名 | 已暴露且共路径 | UI 文件适配与 `api.namebases.*` 共用 `runtimeActions.namebases`；既有名称库文档往返门禁继续有效 | 第 30、32 项已完成；第 33 项稳定化 |
 | 27 | 数据导出 | 完整 JSON / gzip、GEO、要素 GEO、PNG、备注、测量 | 已暴露且共路径 | UI 下载提示与 `api.data.export*` 共用 `runtimeActions.data` 及同一序列化结果；PNG / gzip 已接统一 operation | 第 30、31 项已完成；第 33 项稳定化 |
@@ -69,7 +69,7 @@
 | 30 | 诊断 | debug 开关、snapshot、dump、renderer、health、profile | 已暴露且共路径 | `api.debug.*` | 第 33 项稳定化 |
 | 31 | 诊断写入 | 清空 health、注入 delay、裸 state / typed array 写入口 | 明确暂缓 | 当前计划非目标，存在破坏运行节奏或绕过契约风险 | 第 33 项只记录权限边界 |
 | 32 | UI shell | 面板打开 / 关闭、浮层焦点、文件选择器、画布手势模拟 | 明确暂缓 | 依赖具体 UI 与指针生命周期，不是非 UI 数据能力 | 第 35～37 项按各自范围处理 |
-| 33 | 未来创作 | 路线 / 河流 / 湖泊创建、Zone / 独立备注等尚未实现能力 | 明确暂缓 | 当前不存在可复用 runtime command，不能列为 API 漏项 | 第 40、41 项实现产品能力后再登记 API |
+| 33 | 未来创作 | Zone 创建、独立备注等尚未实现能力 | 明确暂缓 | 路线 / 河流 / 湖泊创建已由第 40 项补齐；其余能力仍缺少可复用 runtime command | 第 41 项及后续对应产品任务实现后再登记 API |
 | 34 | 高度 | 基础 / 下游派生重建 | 已暴露且共路径 | `api.edit.height.rebuildBaseDerived / rebuildDownstreamDerived` 与高度面板共用 action，要求 `confirm: true` | 第 30 项已完成；第 33 项稳定化 |
 
 ## 第 29～33 项冻结范围

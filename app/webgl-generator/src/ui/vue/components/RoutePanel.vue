@@ -111,6 +111,7 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const routeListActions = computed(() => [
+  {key: "create", label: props.state.createMode ? "取消绘制路线" : "绘制路线", icon: "+", active: props.state.createMode},
   {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "◉", disabled: !selectedRouteRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "locate", label: "定位路线", icon: "⌖", disabled: !selected.value},
@@ -206,6 +207,7 @@ function sortRows(sourceRows, key, direction) {
 }
 
 function handleRouteAction(key) {
+  if (key === "create") props.callbacks.onCreateMode?.(!props.state.createMode);
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRouteRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "regenerate") props.callbacks.onRegenerateRoutes?.();

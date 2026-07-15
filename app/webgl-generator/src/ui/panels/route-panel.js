@@ -32,6 +32,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
+    createMode: false,
     selectedRouteId: null,
     version: 0
   });
@@ -72,6 +73,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     onNoteChange: (routeId, body) => callbacks.onNoteChange?.(routeId, body),
     onDelete: row => callbacks.onDelete?.(routeObject(row)),
     onDeleteMany: routeIds => callbacks.onDeleteMany?.(routeIds),
+    onCreateMode: active => callbacks.onCreateMode?.(active),
     onRegenerateRoutes: () => callbacks.onRegenerateRoutes?.(),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
@@ -90,6 +92,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     },
     onClose: () => {
       panelState.open = false;
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");
@@ -132,6 +135,9 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     setSelectedRouteId(routeId) {
       const normalized = normalizeRouteId(routeId);
       if (routeExists(panelState.map, normalized)) panelState.selectedRouteId = normalized;
+    },
+    setCreateMode(active) {
+      panelState.createMode = Boolean(active);
     },
     isOpen() {
       return panelState.open;

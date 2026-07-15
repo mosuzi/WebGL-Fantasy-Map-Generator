@@ -27375,3 +27375,11 @@ full 矩阵结果：
 - 国家、省份、城市、文化、宗教的高影响 UI 删除接入统一二次确认；路线、河流和湖泊管理面板新增批量删除选中项。预检与取消发生在命令创建前，不改变地图或历史；稳定 API 的显式删除调用保持无交互弹窗。
 - 批量命令逐项复用已有安全领域命令，但只形成一条 `EditHistory`；中途失败会逆序回滚并返回结构化失败，混合无效 / 重复 / 不存在 id 以 `skipped` 保留原因。嵌套命令执行集中到 `edit-history.js`，未绕过顶层统一执行器。
 - `regress:delete-impact` 固定验证河流支流 `1` 条、三类混合无效 id、取消时地图 / 历史不变、国家关联预览、两条路线单事务、撤销 / 重做和中途失败回滚；`regress:river-delete / lake-delete / edit-execution-path / panel-refresh-path / selection-highlight`、生产构建和差异检查通过。本项按快速迭代约定未启动浏览器。
+
+### 2026-07-15 完成权威任务第 40 项：路线、河流与湖泊创建闭环
+
+- 新增路线、河流和湖泊三套独立创建命令及结构化预检。路线按类型校验陆地 / 水域并使用 pack 邻接 A* 寻路；河流沿严格下坡 cell 追踪到水域或既有河流汇流；湖泊只允许在封闭陆地湖盆内开挖，并拒绝城市、河道、路线和标记占用。
+- 第 36 项画布模式管理器新增 `route:draw / river:add / lake:excavate` 三个模式，总数从 14 增至 17。路线、河流和湖泊面板分别提供绘制 / 新增 / 开挖入口；UI 只采集 pack cell，随后与公开 API 共用 `runtimeActions.edit.*.create`、统一编辑执行器和领域命令。
+- 三类命令同步维护对象列表、cell 索引、路线拓扑、河流水文、湖泊 grid / pack feature、岸线、haven / harbor、metadata 和待派生状态；每次创建只产生一条历史记录，撤销恢复完整快照，重做复现。对象解析、管理面板、选择 / 定位、拾取和地图 / 要素导出沿现有读取路径立即可用。
+- 稳定 API 新增 `edit.routes.create / edit.rivers.create / edit.lakes.create`，公开基线更新为 11 个命名空间、165 个公开方法和 75 个编辑方法；稳定等级统计更新为 157 / 7 / 1，声明、元数据和真实 API 三方覆盖继续一致。
+- 新增 `docs/task-notes/map-object-creation.md` 与 `regress:object-creation`。固定 3000 cells 回归覆盖路线地形不匹配、河流既有汇流和无下坡出口、湖盆连海、拾取、导出、撤销 / 重做；API inventory、action convergence、edit coverage、stability 和 suite contract 均通过。本项按快速迭代约定不单独启动浏览器。

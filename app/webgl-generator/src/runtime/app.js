@@ -74,7 +74,7 @@ import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-re
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
-import {createDeleteLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
+import {createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
   createAddReligionCommand,
@@ -86,8 +86,8 @@ import {
 import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
-import {createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
-import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
+import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
+import {createAddRouteCommand, createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
@@ -198,7 +198,10 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   RELIGION_ASSIGN: "religion:assign",
   MEASUREMENT_DRAW: "measurement:draw",
   MARKER_ADD: "marker:add",
-  MARKER_MOVE: "marker:move"
+  MARKER_MOVE: "marker:move",
+  ROUTE_DRAW: "route:draw",
+  RIVER_ADD: "river:add",
+  LAKE_EXCAVATE: "lake:excavate"
 });
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
@@ -260,6 +263,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       markerId: null,
       lastPackCell: null
     },
+    routeCreate: {active: false, type: "road", startPackCell: null},
+    riverCreate: {active: false},
+    lakeCreate: {active: false, radius: 0},
     customLabelDrag: null,
     pendingCustomLabelPlacement: null,
     measurement: {
@@ -1475,6 +1481,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.military = militaryPanel;
   routePanel = createRoutePanel(documentRef, panelManager, {
+    onCreateMode: active => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, {type: "road"});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, "panel-toggle");
+    },
+    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, "panel-close"),
     onSelect: object => {
       selectFromPanel("route-panel", object);
       routePanel.setSelectedRouteId(object.id);
@@ -1758,6 +1769,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.measurement = measurementPanel;
   riverPanel = createRiverPanel(documentRef, panelManager, {
+    onCreateMode: active => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD, "panel-toggle");
+    },
     onSelect: object => {
       riverPanel.setSelection({object}, state.editingObject);
       selectFromPanel("river-panel", object);
@@ -1811,6 +1826,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       return result;
     },
     onClose: () => {
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD, "panel-close");
       if (state.editingObject?.kind === OBJECT_KIND.RIVER) {
         suppressNextRiverPanelOpen = true;
         stopObjectEditing({ifKind: OBJECT_KIND.RIVER});
@@ -1837,6 +1853,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.river = riverPanel;
   lakePanel = createLakePanel(documentRef, panelManager, {
+    onCreateMode: active => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, {radius: 0});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, "panel-toggle");
+    },
+    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, "panel-close"),
     onSelect: object => {
       lakePanel.setSelection({object});
       selectFromPanel("lake-panel", object);
@@ -1979,6 +2000,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindSocialAssignmentEditing(canvas, state, documentRef, "religion");
   bindCityEditing(canvas, state, documentRef);
   bindMarkerEditing(canvas, state, documentRef);
+  bindObjectCreationTools(canvas, state, documentRef);
   bindCustomLabelDrag(state, documentRef);
   bindEditingInteractionLock(canvas, state);
 
@@ -2346,16 +2368,19 @@ function createRuntimeActions(state, documentRef, options = {}) {
         setParent: (religionId, parentId) => setReligionParentViaApi(state, documentRef, religionId, parentId)
       },
       routes: {
+        create: options => createRouteViaApi(state, documentRef, options),
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId),
         setNote: (routeId, body, options = {}) => setRouteNoteViaApi(state, documentRef, routeId, body, options)
       },
       rivers: {
+        create: options => createRiverViaApi(state, documentRef, options),
         delete: riverId => deleteRiverViaApi(state, documentRef, riverId),
         rename: (riverId, name) => renameRiverViaApi(state, documentRef, riverId, name),
         setWidthFactor: (riverId, widthFactor) => setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor),
         setNote: (riverId, body, options = {}) => setRiverNoteViaApi(state, documentRef, riverId, body, options)
       },
       lakes: {
+        create: options => createLakeViaApi(state, documentRef, options),
         delete: lakeId => deleteLakeViaApi(state, documentRef, lakeId),
         rename: (lakeId, name) => renameLakeViaApi(state, documentRef, lakeId, name)
       },
@@ -5545,6 +5570,24 @@ function setObjectNoteViaApi(state, documentRef, object, body, options = {}) {
   return editApiResult(state, result);
 }
 
+function createRouteViaApi(state, documentRef, options = {}) {
+  if (!options || typeof options !== "object") throw new Error("路线创建参数必须是对象");
+  const command = createAddRouteCommand(options);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: executed => `已绘制路线 #${executed.getResult?.().routeId ?? ""}。`,
+    preparePanelRefresh: (targetState, executed, created) => {
+      if (!Number.isInteger(created?.routeId)) return;
+      targetState.panels.route?.setSelectedRouteId(created.routeId);
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.ROUTE, id: created.routeId}});
+    },
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function deleteRouteViaApi(state, documentRef, routeId) {
   const id = Number(routeId);
   const command = createDeleteRouteCommand(id, {label: `删除路线 #${Number.isFinite(id) ? id : routeId}`});
@@ -5553,6 +5596,23 @@ function deleteRouteViaApi(state, documentRef, routeId) {
     status: `已删除路线 #${Number.isFinite(id) ? id : routeId}。`,
     throwOnError: false
   });
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function createRiverViaApi(state, documentRef, options = {}) {
+  if (!options || typeof options !== "object") throw new Error("河流创建参数必须是对象");
+  const command = createAddRiverCommand(options);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: executed => `已新增河流 #${executed.getResult?.().riverId ?? ""}。`,
+    preparePanelRefresh: (targetState, executed, created) => {
+      if (!Number.isInteger(created?.riverId)) return;
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.RIVER, id: created.riverId}});
+    },
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -5580,6 +5640,23 @@ function renameRiverViaApi(state, documentRef, riverId, name) {
     noopStatus: "河流不存在或名称未变化。",
     status: id => `已重命名河流 #${id}。`
   });
+}
+
+function createLakeViaApi(state, documentRef, options = {}) {
+  if (!options || typeof options !== "object") throw new Error("湖泊创建参数必须是对象");
+  const command = createExcavateLakeCommand(options);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: executed => `已开挖湖泊 #${executed.getResult?.().lakeId ?? ""}。`,
+    preparePanelRefresh: (targetState, executed, created) => {
+      if (!Number.isInteger(created?.lakeId)) return;
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.LAKE, id: created.lakeId}});
+    },
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
 }
 
 function deleteRiverViaApi(state, documentRef, riverId) {
@@ -7438,6 +7515,40 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
     onRepeat: ({context}) => activateMarkerModeState(state, {mode: "move", ...context}),
     onExit: () => clearMarkerModeState(state)
   });
+  register(CANVAS_TOOL_MODE.ROUTE_DRAW, "route-panel", {
+    onEnter: ({context}) => {
+      state.routeCreate.active = true;
+      state.routeCreate.type = context.type || "road";
+      state.routeCreate.startPackCell = null;
+      state.panels.route?.setCreateMode(true);
+    },
+    onExit: () => {
+      state.routeCreate.active = false;
+      state.routeCreate.startPackCell = null;
+      state.panels.route?.setCreateMode(false);
+    }
+  });
+  register(CANVAS_TOOL_MODE.RIVER_ADD, "river-panel", {
+    onEnter: () => {
+      state.riverCreate.active = true;
+      state.panels.river?.setCreateMode(true);
+    },
+    onExit: () => {
+      state.riverCreate.active = false;
+      state.panels.river?.setCreateMode(false);
+    }
+  });
+  register(CANVAS_TOOL_MODE.LAKE_EXCAVATE, "lake-panel", {
+    onEnter: ({context}) => {
+      state.lakeCreate.active = true;
+      state.lakeCreate.radius = Number(context.radius) || 0;
+      state.panels.lake?.setCreateMode(true);
+    },
+    onExit: () => {
+      state.lakeCreate.active = false;
+      state.panels.lake?.setCreateMode(false);
+    }
+  });
 }
 
 function registerPoliticalOneShotMode(state, documentRef, register, {modeId, kind, flag, panelId, colorMode, objectKind, stopObjectEditing}) {
@@ -8809,6 +8920,42 @@ function bindMarkerEditing(canvas, state, documentRef) {
     if (!executed) return;
     state.markerEdit.lastPackCell = packCell;
     completeCanvasToolMode(state, documentRef, activeModeId, {command: executed});
+  }, true);
+}
+
+function bindObjectCreationTools(canvas, state, documentRef) {
+  canvas.addEventListener("pointerdown", event => {
+    const activeMode = state.canvasToolModes.getActive()?.id;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const packCell = getMarkerPackCellAtEvent(state, event);
+    if (!Number.isInteger(packCell)) return;
+
+    if (activeMode === CANVAS_TOOL_MODE.ROUTE_DRAW) {
+      if (!Number.isInteger(state.routeCreate.startPackCell)) {
+        state.routeCreate.startPackCell = packCell;
+        setFileOperationStatus(documentRef, `路线起点已选 pack cell #${packCell}，请选择终点。`);
+        updateRuntimePanel(documentRef, state);
+        return;
+      }
+      const result = state.runtimeActions.edit.routes.create({
+        startPackCell: state.routeCreate.startPackCell,
+        endPackCell: packCell,
+        type: state.routeCreate.type
+      });
+      if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, {result});
+      return;
+    }
+
+    if (activeMode === CANVAS_TOOL_MODE.RIVER_ADD) {
+      const result = state.runtimeActions.edit.rivers.create({sourcePackCell: packCell});
+      if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD, {result});
+      return;
+    }
+
+    const result = state.runtimeActions.edit.lakes.create({packCell, radius: state.lakeCreate.radius});
+    if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, {result});
   }, true);
 }
 

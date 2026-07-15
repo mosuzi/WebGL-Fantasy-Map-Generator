@@ -151,6 +151,7 @@ const riverActions = computed(() => [
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
 const riverListActions = computed(() => [
+  {key: "create", label: props.state.createMode ? "取消新增河流" : "新增河流", icon: "+", active: props.state.createMode},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "◉", disabled: !selectedRiverRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
@@ -242,6 +243,7 @@ function openRenameEditor(row) {
 }
 
 function handleRiverListAction(key) {
+  if (key === "create") props.callbacks.onCreateMode?.(!props.state.createMode);
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRiverRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));

@@ -22,7 +22,7 @@ export const API_METHODS = Object.freeze({
     "zones.setStyle",
     "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
     "religions.add", "religions.assignCells", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
-    "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.delete", "lakes.rename",
+    "routes.create", "routes.delete", "routes.setNote", "rivers.create", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.create", "lakes.delete", "lakes.rename",
     "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
     "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"
   ]),

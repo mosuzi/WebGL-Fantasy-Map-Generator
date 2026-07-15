@@ -24,7 +24,10 @@ const expectedModes = [
   "religion:assign",
   "measurement:draw",
   "marker:add",
-  "marker:move"
+  "marker:move",
+  "route:draw",
+  "river:add",
+  "lake:excavate"
 ];
 
 testSingleActiveAndRepeatedEnter();
@@ -218,6 +221,7 @@ function testRuntimeIntegrationContract() {
   assert.match(appSource, /function registerSocialAssignmentMode[\s\S]{0,900}?rollbackCanvasToolStroke\(state, kind\)/);
   assert.equal(countMatches(appSource, /completeCanvasToolMode\(state,[\s\S]{0,160}?CANVAS_TOOL_MODE\.(?:STATE|PROVINCE|CITY)_(?:ADD|DELETE)/g), 6);
   assert.match(appSource, /const activeModeId = state\.markerEdit\.mode === "move"[\s\S]{0,700}?completeCanvasToolMode\(state, documentRef, activeModeId/);
+  assert.match(appSource, /function bindObjectCreationTools[\s\S]*?CANVAS_TOOL_MODE\.ROUTE_DRAW[\s\S]*?CANVAS_TOOL_MODE\.RIVER_ADD[\s\S]*?CANVAS_TOOL_MODE\.LAKE_EXCAVATE/);
   assert.match(appSource, /canvasToolMode: state\.canvasToolModes\.getSnapshot\(\)/);
   assert.match(appSource, /return Boolean\(state\.canvasToolModes\.getActive\(\)\?\.locksInteraction \|\| state\.editingObject\)/);
   assert.match(markerPanelSource, /onClose:[\s\S]{0,120}?callbacks\.onClose\?\.\(\)/);
