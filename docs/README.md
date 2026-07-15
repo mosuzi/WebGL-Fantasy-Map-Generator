@@ -18,6 +18,7 @@
 - `milestones/`：里程碑说明。
 - `performance/`：性能基线说明和长期性能对照。
 - `audits/`：审查、复盘和整改方案。
+  - `audits/ui-function-and-information-architecture-audit.md`：现有功能入口、复杂度、分组、低优先级能力和浮层遮挡审计。
 - `deployment/`：部署说明和线上环境约定。
 - `task-notes/`：可入库的专题计划、评估记录、执行细则和功能积压。新增专题前先读 `task-notes/README.md`，并同步更新该索引。
 
