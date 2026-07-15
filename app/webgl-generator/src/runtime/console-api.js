@@ -566,6 +566,7 @@ function buildRuntimeStats(state, documentRef) {
       events: health.length,
       latest: health.slice(-5)
     },
+    operation: state?.runtimeOperation?.getSnapshot?.() || state?.runtimeOperationSnapshot || null,
     loading: {
       visible: Boolean(loading && !loading.hidden),
       text: documentRef.getElementById("generation-loading-text")?.textContent?.trim() || ""

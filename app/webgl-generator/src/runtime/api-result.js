@@ -35,9 +35,11 @@ export function apiCall(task, metadata = {}) {
 function normalizeApiError(error, code = "api_error") {
   if (error instanceof Error) {
     return {
-      code,
+      code: String(error.code || code),
       name: error.name,
-      message: error.message
+      message: error.message,
+      ...(error.stage ? {stage: String(error.stage)} : {}),
+      ...(error.suggestion ? {suggestion: String(error.suggestion)} : {})
     };
   }
   return {

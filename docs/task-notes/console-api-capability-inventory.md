@@ -27,7 +27,7 @@
 ## 分类规则
 
 - `已暴露且共路径`：公开 API 已存在，并与 UI 复用同一底层 command、runtime helper 或导入导出核心。
-- `已暴露但仍有分叉`：公开 API 已存在，但异步 operation、持久化兼容或稳定性契约仍需第 31～33 项收口。
+- `已暴露但仍有分叉`：公开 API 已存在，但持久化兼容或稳定性契约仍需第 32～33 项收口。
 - `未暴露`：当前能力已存在于 runtime 或 edit command，但没有同等公开 API。
 - `明确暂缓`：能力依赖 UI 手势、产品决策、未来功能或高风险内部状态，不属于第 29～33 项当前 API 补齐范围。
 
@@ -36,7 +36,7 @@
 | # | 领域 | 能力 | 分类 | 当前入口 / 证据 | 后续归属 |
 |---:|---|---|---|---|---|
 | 1 | 信息 | 版本、capabilities、地图 / runtime / health 摘要 | 已暴露且共路径 | `api.info.*`、runtime / renderer 只读快照 | 第 33 项稳定化 |
-| 2 | 生成 | 生成配置、新地图、换 seed、受约束重算 | 已暴露但仍有分叉 | UI 与 `api.generate.*` 已共用 `runtimeActions.generate`；loading / health 事务仍待统一 | 第 30 项已完成；第 31 项 |
+| 2 | 生成 | 生成配置、新地图、换 seed、受约束重算 | 已暴露且共路径 | UI 与 `api.generate.*` 共用 `runtimeActions.generate`；统一 operation 覆盖 busy、阶段、loading、health 和失败回滚 | 第 30、31 项已完成；第 33 项稳定化 |
 | 3 | 选择 | resolve、select、clear、locate、pick、flash | 已暴露且共路径 | `api.selection.*` 复用 selection store、renderer 与 locate helper | 第 33 项稳定化 |
 | 4 | 高亮 / 编辑态 | 持久高亮、清空高亮、开始 / 停止 / 切换编辑态 | 已暴露且共路径 | `api.selection.highlight / clearHighlights / *Editing` | 第 33 项稳定化 |
 | 5 | 图层 | 视图模式、可见性、主题、fit view | 已暴露且共路径 | UI 与 `api.layers.*` 共用 `runtimeActions.layers`，统一刷新 renderer / runtime / overlay effects | 第 30 项已完成；第 33 项稳定化 |
@@ -61,8 +61,8 @@
 | 24 | 路线 / 河流 / 湖泊 | 当前删除、备注、重命名和河宽编辑 | 已暴露且共路径 | `api.edit.routes / rivers / lakes` | 第 33 项稳定化 |
 | 25 | 标签 / marker | 当前新增、删除、移动、视觉、备注和恢复 | 已暴露且共路径 | `api.edit.labels / markers` | 第 33 项稳定化 |
 | 26 | 名称库 | list、export/import、CRUD、绑定、批量对象改名 | 已暴露且共路径 | UI 文件适配与 `api.namebases.*` 共用 `runtimeActions.namebases`；持久化兼容仍待统一证明 | 第 30 项已完成；第 32、33 项 |
-| 27 | 数据导出 | 完整 JSON / gzip、GEO、要素 GEO、PNG、备注、测量 | 已暴露但仍有分叉 | UI 下载提示与 `api.data.export*` 已共用 `runtimeActions.data` 及同一序列化结果；异步 operation 待统一 | 第 30 项已完成；第 31、33 项 |
-| 28 | 数据导入 | 完整地图、普通 GEO、Cells GEO | 已暴露但仍有分叉 | UI 文件读取与 `api.data.importMap / importGEO` 已共用 `runtimeActions.data`，统一数据结果和 effects；失败回滚待统一 | 第 30 项已完成；第 31、32 项 |
+| 27 | 数据导出 | 完整 JSON / gzip、GEO、要素 GEO、PNG、备注、测量 | 已暴露且共路径 | UI 下载提示与 `api.data.export*` 共用 `runtimeActions.data` 及同一序列化结果；PNG / gzip 已接统一 operation | 第 30、31 项已完成；第 33 项稳定化 |
+| 28 | 数据导入 | 完整地图、普通 GEO、Cells GEO | 已暴露但仍有分叉 | UI 文件读取与 `api.data.importMap / importGEO` 共用 action；完整地图失败会恢复 state、历史、选择和 renderer，旧数据统一证明仍待补齐 | 第 30、31 项已完成；第 32 项 |
 | 29 | 数据导入 | 高度图图片、导入诊断包导出、显式浏览器存储恢复 | 未暴露 | 控制面板 file action、map import diagnostic、浏览器存储 helper | 第 32 项 |
 | 30 | 诊断 | debug 开关、snapshot、dump、renderer、health、profile | 已暴露且共路径 | `api.debug.*` | 第 33 项稳定化 |
 | 31 | 诊断写入 | 清空 health、注入 delay、裸 state / typed array 写入口 | 明确暂缓 | 当前计划非目标，存在破坏运行节奏或绕过契约风险 | 第 33 项只记录权限边界 |
@@ -74,7 +74,7 @@
 
 - 第 29 项：已完成。20 个方法补齐当前已经存在、且可以用参数调用的 edit command；未模拟指针手势，也未创造新产品能力。
 - 第 30 项：已完成。建立应用级唯一 `runtimeActions`，收束生成 / 重算、图层 / 显示、气候、导入导出、选择与名称库代表路径；补 4 个显示偏好和 2 个高度派生方法，`regress:api-action-convergence` 固定公共 action、结果 effects、错误 code 和方法计数。
-- 第 31 项：统一生成、重算、导入和导出长任务的 busy、loading、错误、health 与 finally。
+- 第 31 项：已完成。统一生成、重算、导入和导出长任务的 busy、阶段、loading、错误、health 与 finally；地图替换失败执行事务回滚。
 - 第 32 项：补高度图 / 诊断 / 浏览器持久化等数据入口和旧数据往返证据。
 - 第 33 项：定义稳定等级、版本、兼容别名、确认与权限边界；不开放裸内部写入口。
 

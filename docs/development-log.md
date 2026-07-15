@@ -27297,3 +27297,10 @@ full 矩阵结果：
 - `api.layers` 新增 `setShowOceanHeight / setSmoothCellBorders / setShowHoverInfo / setMaxCityLabels`；`api.edit.height` 新增必须显式 `confirm:true` 的 `rebuildBaseDerived / rebuildDownstreamDerived`。公开基线更新为 11 个命名空间、158 个方法，其中 72 个编辑方法；声明、元数据和真实方法继续三方对齐。
 - 新增 `regress:api-action-convergence`，固定唯一 action 实例、14 类 UI 委托、15 个 API 委托、重复直接写入排除、代表性地图 / 名称库数据摘要、刷新 effects、`api_error` 和 `158 / 72` 计数。`regress:api-edit-coverage / api-inventory / height-derived-rebuild / selection-actions`、语法、生产构建与差异检查通过。
 - 一次提前启动的既有 API 浏览器脚本暴露“启动自动生成与测试主动生成并发时，旧请求会记录 console error”；现已恢复 UI 请求的 paint 后预约令牌，但不把这次失败运行当作浏览器验收，也不在第 30 项重复跑浏览器。第 34 项将用最新构建集中验证并发恢复、公开 API 与 `glError = 0`。第 30 项移出活动权威清单，第 31 项成为当前执行项。
+
+### 2026-07-15 完成权威任务第 31 项：异步长任务与错误事务统一
+
+- 新增统一 `runtimeOperation`，为 `newMap / rerollSeed / regenerate / importMap / importGEO / exportPNG / exportCompressedAll` 固定 busy 冲突、阶段进度、success / noop / failure 状态和 finally loading 清理；`api.info.runtimeStats()` 可读取当前与最近一次 operation 快照。
+- 结构化错误保留稳定 `code / stage / suggestion`：并发冲突为 `operation_busy`，取消为 `operation_cancelled`，参数或文档错误为 `operation_invalid_input`，非预期异常为 `operation_failed`，回滚失败为 `operation_rollback_failed`。预期拒绝只以 info 写入 health，非预期失败才写 error。
+- 新地图和完整地图导入在任务开始前保存旧 map、options、编辑历史、选择、诊断与主题；若生成、解析、renderer 或面板阶段失败，恢复旧 state 和输入，在已替换 renderer 时重新载入旧地图，再恢复历史与选择，避免留下半更新运行时。UI 预约令牌与 worker 生成令牌拆分，并发点击不再通过改写 worker token 取消当前任务。
+- `regress:api-operation` 纯 Node 覆盖成功、noop、参数错误、并发冲突、运行时异常、事务回滚和失败后重试，并静态核对 7 个公开长任务均接入统一 operation。`regress:api-action-convergence / api-inventory / api-edit-coverage / edit-execution-path / panel-refresh-path / map-migration`、语法、生产构建与差异检查通过；按快速迭代约定未启动浏览器，第 34 项再集中验证真实页面。补充运行的 `regress:map-import-diagnostics` 暴露其仍匹配第 30 项前的 UI 直接报错调用，已明确留给第 32 项随统一诊断入口更新，不计作第 31 项验收。第 31 项移出活动清单，第 32 项成为当前执行项。

@@ -94,6 +94,7 @@ import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
+import {createRuntimeOperationManager} from "./runtime-operation.js";
 import {
   exportAllMapData,
   exportCompressedAllMapData,
@@ -255,8 +256,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     renderer: null,
     panelManager,
     pendingGenerateId: 0,
+    pendingGenerateRequestId: 0,
     heightmapImportId: 0,
     healthMonitor,
+    runtimeOperation: null,
+    runtimeOperationSnapshot: null,
     lazyPanelPreloadScheduled: false,
     panels: {}
   };
@@ -1992,6 +1996,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.selectionStore = selectionStore;
   state.editRefreshScheduler = createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel});
   applyControlPreferencesToRenderer(documentRef, renderer);
+  state.runtimeOperation = createRuntimeOperationManager({
+    setLoading: (visible, message) => updateGenerationLoading(documentRef, visible, message),
+    beginHealthOperation: (name, detail) => healthMonitor?.beginOperation?.(name, detail),
+    recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity),
+    onStateChange: snapshot => {
+      state.runtimeOperationSnapshot = snapshot;
+    }
+  });
   runtimeActions = createRuntimeActions(state, documentRef, {
     locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
       locate: target => state.renderer.locateObject(target, locateOptions)
@@ -2184,6 +2196,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 }
 
 function createRuntimeActions(state, documentRef, options = {}) {
+  const operation = state.runtimeOperation;
+  const mapReplaceConfig = message => ({
+    message,
+    snapshot: () => captureMapReplaceSnapshot(state, documentRef),
+    rollback: (snapshot, error, context) => restoreMapReplaceSnapshot(state, documentRef, snapshot, error, context)
+  });
   return {
     history: {
       get: (options = {}) => state.editHistory.getStats(options),
@@ -2193,9 +2211,15 @@ function createRuntimeActions(state, documentRef, options = {}) {
     generate: {
       getOptions: () => getGenerationOptionsViaApi(state, documentRef),
       setOptions: (patch = {}) => setGenerationOptionsViaApi(state, documentRef, patch),
-      newMap: (options = {}) => generateNewMapViaApi(state, documentRef, options),
-      rerollSeed: (options = {}) => rerollSeedViaApi(state, documentRef, options),
-      regenerate: (kind, options = {}) => regenerateMapAttributeViaApi(state, documentRef, kind, options)
+      newMap: (options = {}) => operation.run("generate.newMap", context => generateNewMapViaApi(state, documentRef, options, context), mapReplaceConfig(loadingMessage("generate"))),
+      rerollSeed: (options = {}) => operation.run("generate.rerollSeed", context => rerollSeedViaApi(state, documentRef, options, context), mapReplaceConfig(loadingMessage("generate"))),
+      regenerate: (kind, options = {}) => operation.runSync("generate.regenerate", context => {
+        context.report("regenerate", {message: `正在重新生成 ${String(kind || "派生数据")}`});
+        return regenerateMapAttributeViaApi(state, documentRef, kind, options);
+      }, {
+        message: "正在重新生成派生数据",
+        isNoop: result => !result?.executed
+      })
     },
     layers: {
       setViewMode: mode => setRuntimeViewMode(state, documentRef, mode),
@@ -2245,12 +2269,24 @@ function createRuntimeActions(state, documentRef, options = {}) {
       exportMap: (options = {}) => exportAllMapData(state, documentRef, options),
       exportGEO: (options = {}) => exportPackGeoJson(state, documentRef, options),
       exportFeatureGEO: (options = {}) => exportFeatureGeoJsonData(state, documentRef, options),
-      exportCompressedAll: (options = {}) => exportCompressedAllMapData(state, documentRef, options),
-      exportPNG: (options = {}) => exportPngData(state, documentRef, options),
+      exportCompressedAll: (options = {}) => operation.run("data.exportCompressedAll", context => {
+        context.report("serialize", {message: "正在压缩完整地图数据"});
+        return exportCompressedAllMapData(state, documentRef, options);
+      }, {message: "正在压缩完整地图数据"}),
+      exportPNG: (options = {}) => operation.run("data.exportPNG", context => {
+        context.report("render-export", {message: "正在导出 PNG"});
+        return exportPngData(state, documentRef, options);
+      }, {message: "正在导出 PNG"}),
       exportNotes: (options = {}) => exportNotesData(state, documentRef, options),
       exportMeasurements: (options = {}) => exportMeasurementsData(state, documentRef, options),
-      importMap: (document, options = {}) => importMapDocumentViaApi(state, documentRef, document, options),
-      importGEO: (document, options = {}) => importGeoDocumentViaApi(state, documentRef, document, options)
+      importMap: (document, options = {}) => operation.run("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), mapReplaceConfig(loadingMessage("map-import-read"))),
+      importGEO: (document, options = {}) => operation.runSync("data.importGEO", context => {
+        context.report("import", {message: "正在导入 GEO 数据"});
+        return importGeoDocumentViaApi(state, documentRef, document, options);
+      }, {
+        message: "正在导入 GEO 数据",
+        isNoop: result => result?.imported === false
+      })
     },
     edit: {
       notes: {
@@ -2676,12 +2712,12 @@ function requestGenerate(state, documentRef, actions = state.runtimeActions) {
       setSeedInput(documentRef, createRandomSeed());
     }
     const options = readOptionsFromPanel(documentRef, state.options);
-    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
-    const requestId = state.pendingGenerateId;
+    state.pendingGenerateRequestId = (state.pendingGenerateRequestId || 0) + 1;
+    const requestId = state.pendingGenerateRequestId;
     setGenerationStatus(documentRef, options, "等待生成任务");
     setMythicGenerationLoading(documentRef, true, "request");
     scheduleAfterPaint(documentRef, () => {
-      if (requestId !== state.pendingGenerateId) return;
+      if (requestId !== state.pendingGenerateRequestId) return;
       void actions.generate.newMap({...options, confirm: true}).catch(() => {});
     });
   } catch (error) {
@@ -2846,20 +2882,22 @@ function setGenerationOptionsViaApi(state, documentRef, patch = {}) {
   };
 }
 
-async function generateNewMapViaApi(state, documentRef, options = {}) {
+async function generateNewMapViaApi(state, documentRef, options = {}, operation = null) {
+  operation?.report("validate", {message: "正在校验生成参数"});
   if (options?.confirm !== true) throw new Error("生成新地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   const nextOptions = normalizeApiGenerationOptions(state, documentRef, options);
-  return generateMapViaApi(state, documentRef, nextOptions, {completionToast: state.map ? "生成完成" : ""});
+  return generateMapViaApi(state, documentRef, nextOptions, {completionToast: state.map ? "生成完成" : "", operation});
 }
 
-async function rerollSeedViaApi(state, documentRef, options = {}) {
+async function rerollSeedViaApi(state, documentRef, options = {}, operation = null) {
+  operation?.report("validate", {message: "正在校验随机生成参数"});
   if (options?.confirm !== true) throw new Error("随机 seed 生成会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   const seed = String(options.seed || createRandomSeed()).trim() || createRandomSeed();
   const nextOptions = normalizeApiGenerationOptions(state, documentRef, {...options, seed});
-  return generateMapViaApi(state, documentRef, nextOptions, {completionToast: "生成完成"});
+  return generateMapViaApi(state, documentRef, nextOptions, {completionToast: "生成完成", operation});
 }
 
-async function generateMapViaApi(state, documentRef, options, {completionToast = ""} = {}) {
+async function generateMapViaApi(state, documentRef, options, {completionToast = "", operation = null} = {}) {
   state.options = options;
   syncGenerationInputs(documentRef, options);
   const namebaseSnapshot = resolveGenerationNamebaseSnapshot(state, documentRef);
@@ -2871,12 +2909,15 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
     emitLoadTrace(documentRef, {phase: "request", id: "api-generate", message: loadingMessage("request")});
     setGenerationStatus(documentRef, state.options, "生成中");
     setMythicGenerationLoading(documentRef, true, "generate");
+    operation?.report("generate", {message: loadingMessage("generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
     const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(state.options, namebaseSnapshot), generateId);
     if (generateId !== state.pendingGenerateId) throw new Error("生成请求已被新的生成任务取代");
+    operation?.report("load-map", {message: loadingMessage("cell-visual-mesh")});
     await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")],
-      completionToast
+      completionToast,
+      operation
     });
     return {
       options: cloneGenerationOptions(state.options),
@@ -2924,8 +2965,9 @@ function generationApiMapSummary(map) {
   };
 }
 
-async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = ""} = {}) {
+async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = "", operation = null} = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
+  operation?.report("prepare-map", {message: "正在接入地图运行时"});
   state.map = map;
   reconcileWarDerivedData(state.map);
   ensureRiverHydrology(state.map);
@@ -2982,6 +3024,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   if (typeof state.renderer.loadMapAsync === "function") {
     await state.renderer.loadMapAsync(state.map, {
       onStage: stage => {
+        operation?.report(stage.id || "renderer", {message: loadingMessage(stage)});
         setMythicGenerationLoading(documentRef, true, stage);
         emitLoadTrace(documentRef, {
           phase: "start",
@@ -3006,11 +3049,28 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
     state.renderer.loadMap(state.map);
   }
   emitLoadTrace(documentRef, {phase: "start", id: "panel-refresh", message: loadingMessage("panel-refresh"), delayMs: readDebugLoadDelayMs(documentRef)});
+  operation?.report("panel-refresh", {message: loadingMessage("panel-refresh")});
   if (loadingMessages[1]) {
     updateGenerationLoading(documentRef, true, loadingMessages[1]);
     await yieldToBrowser(documentRef, {debugDelay: true});
   }
   state.selectionStore.clear();
+  refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels: true});
+  emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
+  emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
+  emitLoadTrace(documentRef, {phase: "complete", id: "complete", message: "地图进入可交互状态"});
+  getWebglGeneratorHealthMonitor(documentRef)?.markMapReady({
+    seed: state.map?.metadata?.seed || state.options?.seed || "",
+    gridCells: state.map?.metadata?.gridCells || state.map?.grid?.metadata?.actualCells || 0,
+    packCells: state.map?.metadata?.packCells || state.map?.pack?.metadata?.cells || 0,
+    loadMap: state.renderer?.getStats?.().loadMap || null
+  });
+  updateGenerationLoading(documentRef, false);
+  showMapToast(documentRef, completionToast);
+  scheduleLazyPanelsAfterMapReady(state, documentRef);
+}
+
+function refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels = false} = {}) {
   updateHeightPanel(state);
   updateStatePanel(state);
   updateGovernmentPanel(state);
@@ -3032,22 +3092,46 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
   updateLakePanel(state);
   updateMeasurementPanel(state);
-  restorePersistedPanels(state);
+  if (restorePanels) restorePersistedPanels(state);
   updateEditingInteractionLock(state, documentRef);
   refreshRuntimeAndPickPanels(documentRef, state);
   updateMeasurementOverlay(state, documentRef);
-  emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
-  emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
-  emitLoadTrace(documentRef, {phase: "complete", id: "complete", message: "地图进入可交互状态"});
-  getWebglGeneratorHealthMonitor(documentRef)?.markMapReady({
-    seed: state.map?.metadata?.seed || state.options?.seed || "",
-    gridCells: state.map?.metadata?.gridCells || state.map?.grid?.metadata?.actualCells || 0,
-    packCells: state.map?.metadata?.packCells || state.map?.pack?.metadata?.cells || 0,
-    loadMap: state.renderer?.getStats?.().loadMap || null
+}
+
+function captureMapReplaceSnapshot(state, documentRef) {
+  return {
+    map: state.map,
+    options: cloneGenerationOptions(state.options),
+    history: state.editHistory.createSnapshot(),
+    selection: state.selectionStore.getSnapshot(),
+    lastEditRefresh: state.lastEditRefresh,
+    lastMapImportDiagnostic: state.lastMapImportDiagnostic,
+    visualTheme: currentVisualThemeId(documentRef)
+  };
+}
+
+async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, operation) {
+  operation?.report("rollback", {message: "正在恢复任务前的地图状态"});
+  const mapChanged = state.map !== snapshot.map;
+  state.map = snapshot.map;
+  state.options = cloneGenerationOptions(snapshot.options);
+  state.lastEditRefresh = snapshot.lastEditRefresh;
+  state.lastMapImportDiagnostic = snapshot.lastMapImportDiagnostic;
+  syncGenerationInputs(documentRef, state.options);
+  setInputValue(documentRef, "visual-theme-preset", snapshot.visualTheme);
+  state.renderer?.setVisualTheme?.(snapshot.visualTheme);
+  if (mapChanged && snapshot.map) {
+    if (typeof state.renderer.loadMapAsync === "function") await state.renderer.loadMapAsync(snapshot.map);
+    else state.renderer.loadMap(snapshot.map);
+  }
+  state.editHistory.restoreSnapshot(snapshot.history);
+  state.selectionStore.batch(() => {
+    const selected = snapshot.selection?.selection;
+    if (selected) state.selectionStore.setSelection(selected);
+    else state.selectionStore.clear();
+    if (snapshot.selection?.editingObject) state.selectionStore.startEditing(snapshot.selection.editingObject);
   });
-  updateGenerationLoading(documentRef, false);
-  showMapToast(documentRef, completionToast);
-  scheduleLazyPanelsAfterMapReady(state, documentRef);
+  if (snapshot.map) refreshRuntimeAfterMapLoad(state, documentRef);
 }
 
 function ensureRiverHydrology(map) {
@@ -4084,21 +4168,23 @@ async function importMapData(state, documentRef, file, importAction = state.runt
   }
 }
 
-async function importMapDocumentViaApi(state, documentRef, document, options = {}) {
+async function importMapDocumentViaApi(state, documentRef, document, options = {}, operation = null) {
+  operation?.report("validate", {message: "正在校验地图导入参数"});
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   const source = options.source === "ui" ? "ui" : "api";
   state.lastMapImportDiagnostic = null;
   let parsed;
   try {
+    operation?.report("parse", {message: loadingMessage("map-import-read")});
     parsed = await normalizeApiMapImportDocument(documentRef, document);
   } catch (error) {
     reportMapImportError(state, documentRef, error, source === "ui" ? document : null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
   }
-  return importParsedMapDocumentViaApi(state, documentRef, parsed, {...options, source});
+  return importParsedMapDocumentViaApi(state, documentRef, parsed, {...options, source}, operation);
 }
 
-async function importParsedMapDocumentViaApi(state, documentRef, document, options = {}) {
+async function importParsedMapDocumentViaApi(state, documentRef, document, options = {}, operation = null) {
   const source = options.source === "ui" ? "ui" : "api";
   const sourceLabel = source === "ui" ? "" : "通过 API ";
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
@@ -4115,9 +4201,11 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     applyPersistedVisualTheme(state, documentRef, document);
     syncGenerationInputs(documentRef, normalizedOptions);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
+    operation?.report("load-map", {message: loadingMessage("map-import-render")});
     await loadMapIntoRuntime(state, documentRef, document.map, {
       loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
-      completionToast: options.toast === false ? "" : "地图数据已导入"
+      completionToast: options.toast === false ? "" : "地图数据已导入",
+      operation
     });
     const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
     updateGenerationLoading(documentRef, false);

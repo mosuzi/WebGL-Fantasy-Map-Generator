@@ -54,6 +54,27 @@ export class EditHistory {
     this.lastAffected = [];
   }
 
+  createSnapshot() {
+    return {
+      undoStack: [...this.undoStack],
+      redoStack: [...this.redoStack],
+      commandAffected: this.commandAffected,
+      lastLabel: this.lastLabel,
+      lastDomain: this.lastDomain,
+      lastAffected: cloneAffectedTargets(this.lastAffected)
+    };
+  }
+
+  restoreSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== "object") throw new Error("编辑历史快照无效");
+    this.undoStack = [...(snapshot.undoStack || [])];
+    this.redoStack = [...(snapshot.redoStack || [])];
+    this.commandAffected = snapshot.commandAffected instanceof WeakMap ? snapshot.commandAffected : new WeakMap();
+    this.lastLabel = String(snapshot.lastLabel || "none");
+    this.lastDomain = String(snapshot.lastDomain || "none");
+    this.lastAffected = cloneAffectedTargets(snapshot.lastAffected);
+  }
+
   captureCommandAffected(command) {
     const cached = this.commandAffected.get(command);
     if (cached) return cloneAffectedTargets(cached);
