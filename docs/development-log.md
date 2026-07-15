@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-07-15：湖泊出口与局部水陆修正
+
+- 完成权威任务第 50 项。湖泊面板新增出口河流编辑和局部水陆修正；UI 与 `api.edit.lakes.inspectOutlet / setOutlet`、`api.edit.features.inspectPatch / applyPatch` 共用预检、runtime action 和 edit command，没有引入整图侵蚀或完整海岸雕刻器。
+- 湖泊出口只接受实际从目标湖泊流向相邻陆地的现有河流，也可明确清除为闭合湖泊；修改同步湖泊出口、入湖河流 parent / basin / type 与水文待派生状态，并以完整快照支持精确撤销 / 重做。
+- 局部修正限定半径 `0～2`、最多 `64 grid / 192 pack cells`，只允许扩展目标湖泊或把湖岸收回到唯一相邻陆地 feature。预检会拒绝开放海域、地图边界、城市、河道、路线、标记、整湖移除、湖泊分裂和模糊陆地归属；地图选点与参数预览不写历史，应用只形成一条命令。
+- 应用会同步 grid / pack 高度和 feature 归属，重建局部 feature 摘要、岸线、距离场、haven / harbor 和元数据，并把河流、路线、生物群系、城镇、政治、标记、地区、军事、经济与外交标记为待派生。完整地图文档与 pack cell GeoJSON 往返保持一致。
+- 新增 `regress:feature-patch`。固定 5000 cells 样本覆盖合法出口、无效出口、扩湖、收岸、五类拒绝、单历史、撤销 / 重做、岸线 / 港湾 / feature / stale / GeoJSON / 保存往返和 UI / API 静态共路径。既有湖泊删除、对象创建、画布工具、API inventory / edit coverage / action convergence / stability 与生产构建全部通过；构建完成 `1142 modules`，只保留既有大 chunk 警告。
+- 公开 API 基线更新为 11 个命名空间、179 个方法、89 个编辑方法，稳定等级 `171 / 7 / 1`。第 50 项达到最小验收后从活动权威清单移除，转入第 51 项“生物群系与适居度局部编辑”。
+
 ## 2026-07-15：路线改线、端点重连与样式编辑
 
 - 完成权威任务第 49 项。路线面板新增 `type / level`、起止城市和地图单点改线编辑；UI 与 `api.edit.routes.inspectEdit / update` 共用预检、runtime action 和 `createEditRouteCommand()`，没有引入动态交通模拟。

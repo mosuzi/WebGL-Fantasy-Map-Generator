@@ -6552,6 +6552,12 @@ input.ui-switch-native {
   gap: 8px;
 }
 
+.lake-outlet-editor,
+.lake-shore-editor {
+  display: grid;
+  gap: 10px;
+}
+
 .economy-panel-sort {
   display: flex;
   flex-wrap: wrap;

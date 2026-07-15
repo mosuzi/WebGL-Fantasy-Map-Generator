@@ -198,8 +198,14 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       lakes: Object.freeze({
         create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.lakes?.create, "edit.lakes.create")(options)),
+        inspectOutlet: (lakeId, outletRiverId) => apiCall(() => requireApiAction(actions.edit?.lakes?.inspectOutlet, "edit.lakes.inspectOutlet")(lakeId, outletRiverId)),
+        setOutlet: (lakeId, outletRiverId) => apiCall(() => requireApiAction(actions.edit?.lakes?.setOutlet, "edit.lakes.setOutlet")(lakeId, outletRiverId)),
         delete: lakeId => apiCall(() => requireApiAction(actions.edit?.lakes?.delete, "edit.lakes.delete")(lakeId)),
         rename: (lakeId, name) => apiCall(() => requireApiAction(actions.edit?.lakes?.rename, "edit.lakes.rename")(lakeId, name))
+      }),
+      features: Object.freeze({
+        inspectPatch: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.inspectPatch, "edit.features.inspectPatch")(options)),
+        applyPatch: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.applyPatch, "edit.features.applyPatch")(options))
       }),
       labels: Object.freeze({
         addCustom: (options = {}) => apiCall(() => requireApiAction(actions.edit?.labels?.addCustom, "edit.labels.addCustom")(options)),
@@ -442,8 +448,12 @@ function buildMethodMetadata() {
       "rivers.setWidthFactor": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "rivers.setNote": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},
       "lakes.create": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
+      "lakes.inspectOutlet": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "lakes.setOutlet": {stable: "draft", mutates: "features-and-hydrology", undoable: true, async: false, requiresConfirm: false},
       "lakes.delete": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
       "lakes.rename": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
+      "features.inspectPatch": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "features.applyPatch": {stable: "draft", mutates: "features-and-hydrology", undoable: true, async: false, requiresConfirm: false},
       "labels.addCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.delete": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.moveCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},

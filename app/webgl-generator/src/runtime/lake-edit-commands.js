@@ -29,6 +29,22 @@ const LAKE_CREATE_EFFECTS = Object.freeze({
   derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "line-layers", "object-index", "object-panels"])
 });
 
+const LAKE_OUTLET_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["line-layers", "object-index", "object-panels", "hydrology-stale"])
+});
+
+const FEATURE_PATCH_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "line-layers", "object-index", "object-panels", "hydrology-stale"])
+});
+
 const LAKE_DELETE_STALE_SYSTEMS = Object.freeze([
   "features",
   "rivers",
@@ -105,6 +121,146 @@ export function createExcavateLakeCommand(options = {}) {
     }
   };
   return command;
+}
+
+export function inspectLakeOutletChange(map, lakeId, outletRiverId) {
+  const lake = findLake(map, Number(lakeId));
+  if (!lake) return invalidLakeOutlet("missing-lake", `找不到湖泊 #${lakeId}`);
+  const outlet = Number(outletRiverId ?? 0);
+  if (!Number.isInteger(outlet) || outlet < 0) return invalidLakeOutlet("invalid-river", "湖泊出口必须是有效河流 ID 或 0");
+  const current = Number(lake.outlet) || 0;
+  if (!outlet) return {valid: true, code: "ok", reason: "", lakeId: Number(lake.i ?? lake.id), outletRiverId: 0, currentOutletRiverId: current, changed: current !== 0, affectedInlets: (lake.inlets || []).length};
+  const river = findRiver(map, outlet);
+  if (!river) return invalidLakeOutlet("missing-river", `找不到河流 #${outlet}`);
+  const lakeCells = new Set(cellsWithFeature(map.pack?.cells, Number(lake.i ?? lake.id)));
+  if (!riverExitsLake(map.pack?.cells, river.cells || [], lakeCells)) return invalidLakeOutlet("invalid-outlet-path", `河流 #${outlet} 没有从该湖泊流向相邻陆地`);
+  return {
+    valid: true,
+    code: "ok",
+    reason: "",
+    lakeId: Number(lake.i ?? lake.id),
+    outletRiverId: outlet,
+    currentOutletRiverId: current,
+    changed: current !== outlet,
+    affectedInlets: (lake.inlets || []).length
+  };
+}
+
+export function createSetLakeOutletCommand(lakeId, outletRiverId, {label = "编辑湖泊出口"} = {}) {
+  const normalizedLakeId = Number(lakeId);
+  const normalizedOutlet = Number(outletRiverId ?? 0);
+  let before = null;
+  let after = null;
+  return {
+    label: `${label} #${normalizedLakeId}`,
+    domain: OBJECT_KIND.LAKE,
+    effects: {...LAKE_OUTLET_EFFECTS, affected: objectAffected(OBJECT_KIND.LAKE, normalizedLakeId)},
+    apply(context) {
+      const preview = inspectLakeOutletChange(context.map, normalizedLakeId, normalizedOutlet);
+      if (!preview.valid) throw lakeOutletError(preview);
+      if (after) {
+        restoreLakeOutletSnapshot(context.map, after);
+        return;
+      }
+      before = captureLakeOutletSnapshot(context.map);
+      applyLakeOutletChange(context.map, preview);
+      after = captureLakeOutletSnapshot(context.map);
+    },
+    revert(context) {
+      if (!before) throw new Error("缺少可撤销的湖泊出口快照");
+      restoreLakeOutletSnapshot(context.map, before);
+    },
+    isNoop(context) {
+      const preview = inspectLakeOutletChange(context.map, normalizedLakeId, normalizedOutlet);
+      if (!preview.valid) throw lakeOutletError(preview);
+      return !preview.changed;
+    },
+    getResult() {
+      return {lakeId: normalizedLakeId, outletRiverId: normalizedOutlet};
+    }
+  };
+}
+
+export function inspectFeaturePatch(map, options = {}) {
+  const lakeId = Number(options.lakeId ?? options.featureId);
+  const lake = findLake(map, lakeId);
+  if (!lake) return invalidFeaturePatch("missing-lake", `找不到湖泊 #${options.lakeId ?? options.featureId}`);
+  const centerPackCell = Number(options.centerPackCell ?? options.packCell);
+  const cellCount = map?.pack?.cells?.i?.length || map?.pack?.cells?.h?.length || 0;
+  if (!Number.isInteger(centerPackCell) || centerPackCell < 0 || centerPackCell >= cellCount) return invalidFeaturePatch("invalid-cell", "局部修正中心必须是有效 pack cell");
+  const target = String(options.target || "").trim().toLowerCase();
+  if (!new Set(["water", "land"]).has(target)) return invalidFeaturePatch("invalid-target", "局部修正目标必须是 water 或 land");
+  const rawRadius = Number(options.radius ?? 0);
+  if (!Number.isInteger(rawRadius) || rawRadius < 0 || rawRadius > 2) return invalidFeaturePatch("invalid-radius", "局部修正半径必须是 0～2 的整数");
+  const packCells = expandPatchRegion(map.pack.cells, centerPackCell, rawRadius, cell => target === "water" ? Number(map.pack.cells.h?.[cell]) >= WATER_LEVEL : Number(map.pack.cells.f?.[cell]) === lakeId);
+  if (!packCells.length) return invalidFeaturePatch("empty-region", "局部修正没有可处理的 cells");
+  const gridCells = [...new Set(packCells.map(cell => Number(map.pack.cells.g?.[cell])).filter(Number.isInteger))];
+  if (!gridCells.length || gridCells.length > 64 || packCells.length > 192) return invalidFeaturePatch("region-size", "局部修正最多允许 64 个 grid cells / 192 个 pack cells");
+  const selectedGrid = new Set(gridCells);
+  const normalizedPackCells = [...map.pack.cells.i].filter(cell => selectedGrid.has(Number(map.pack.cells.g?.[cell])));
+  const selectedPack = new Set(normalizedPackCells);
+  const conflict = inspectFeaturePatchConflicts(map, selectedPack);
+  if (conflict) return invalidFeaturePatch(conflict.code, conflict.reason);
+  const lakePackCells = cellsWithFeature(map.pack.cells, lakeId);
+  const lakeGridCell = map.pack.cells.g?.[lakePackCells[0]];
+  const gridLakeId = Number(map.grid?.cells?.f?.[lakeGridCell]);
+  if (!lakePackCells.length || !Number.isInteger(gridLakeId) || map.features?.features?.[gridLakeId]?.type !== "lake") return invalidFeaturePatch("missing-grid-lake", "湖泊缺少对应的 grid feature");
+
+  if (target === "water") {
+    if (normalizedPackCells.some(cell => Number(map.pack.cells.h?.[cell]) < WATER_LEVEL) || gridCells.some(cell => Number(map.grid.cells.h?.[cell]) < WATER_LEVEL)) return invalidFeaturePatch("target-already-water", "扩展水域只能选择陆地 cells");
+    if (normalizedPackCells.some(cell => map.pack.cells.b?.[cell]) || gridCells.some(cell => map.grid.cells.b?.[cell])) return invalidFeaturePatch("border-region", "局部水域修正不能接触地图边界");
+    if (!touchesFeature(map.pack.cells, normalizedPackCells, lakeId) || !touchesFeature(map.grid.cells, gridCells, gridLakeId)) return invalidFeaturePatch("not-adjacent-lake", "扩展水域必须与目标湖泊直接相邻");
+    const externalWater = normalizedPackCells.flatMap(cell => map.pack.cells.c?.[cell] || []).filter(cell => !selectedPack.has(cell) && Number(map.pack.cells.h?.[cell]) < WATER_LEVEL);
+    if (externalWater.some(cell => Number(map.pack.cells.f?.[cell]) !== lakeId)) return invalidFeaturePatch("open-water-conflict", "局部修正不能把湖泊连通到其它湖泊或开放海域");
+    if (wouldEmptyFeatures(map.pack.cells, normalizedPackCells) || wouldEmptyFeatures(map.grid.cells, gridCells)) return invalidFeaturePatch("empty-land-feature", "局部修正不能移除整个陆地 feature");
+    return featurePatchPreview({lakeId, gridLakeId, centerPackCell, radius: rawRadius, target, packCells: normalizedPackCells, gridCells, packTargetFeature: lakeId, gridTargetFeature: gridLakeId, fillHeight: Math.min(19, Number(lake.height) || 19)});
+  }
+
+  if (normalizedPackCells.some(cell => Number(map.pack.cells.f?.[cell]) !== lakeId) || gridCells.some(cell => Number(map.grid.cells.f?.[cell]) !== gridLakeId)) return invalidFeaturePatch("target-not-lake", "收回陆地只能选择目标湖泊 cells");
+  const remainingPack = lakePackCells.filter(cell => !selectedPack.has(cell));
+  const remainingGrid = cellsWithFeature(map.grid.cells, gridLakeId).filter(cell => !selectedGrid.has(cell));
+  if (!remainingPack.length || !remainingGrid.length) return invalidFeaturePatch("remove-whole-lake", "局部修正不能移除整个湖泊");
+  if (!isConnectedSubset(map.pack.cells.c, remainingPack) || !isConnectedSubset(map.grid.cells.c, remainingGrid)) return invalidFeaturePatch("split-lake", "局部修正不能把湖泊分裂为多个水体");
+  const packTargets = adjacentLandFeatureIds(map.pack, normalizedPackCells);
+  const gridTargets = adjacentLandFeatureIds({cells: map.grid.cells, features: map.features.features}, gridCells);
+  if (packTargets.length !== 1 || gridTargets.length !== 1) return invalidFeaturePatch("ambiguous-land-feature", "收回陆地必须只连接一个现有陆地 feature");
+  const fillHeight = Math.max(WATER_LEVEL, minimumNeighborHeight(map.pack.cells, normalizedPackCells));
+  return featurePatchPreview({lakeId, gridLakeId, centerPackCell, radius: rawRadius, target, packCells: normalizedPackCells, gridCells, packTargetFeature: packTargets[0], gridTargetFeature: gridTargets[0], fillHeight});
+}
+
+export function createApplyFeaturePatchCommand(options = {}, {label = "局部水陆修正"} = {}) {
+  let before = null;
+  let after = null;
+  let result = null;
+  const featureId = Number(options.lakeId ?? options.featureId);
+  return {
+    label: `${label} #${featureId}`,
+    domain: OBJECT_KIND.LAKE,
+    effects: {...FEATURE_PATCH_EFFECTS, affected: objectAffected(OBJECT_KIND.LAKE, featureId)},
+    apply(context) {
+      if (after) {
+        restoreLakeDeleteSnapshot(context.map, after);
+        return;
+      }
+      const preview = inspectFeaturePatch(context.map, options);
+      if (!preview.valid) throw featurePatchError(preview);
+      before = captureLakeDeleteSnapshot(context.map);
+      result = applyFeaturePatch(context.map, preview);
+      after = captureLakeDeleteSnapshot(context.map);
+    },
+    revert(context) {
+      if (!before) throw new Error("缺少可撤销的局部水陆修正快照");
+      restoreLakeDeleteSnapshot(context.map, before);
+    },
+    isNoop(context) {
+      const preview = inspectFeaturePatch(context.map, options);
+      if (!preview.valid) throw featurePatchError(preview);
+      return false;
+    },
+    getResult() {
+      return result ? {...result} : null;
+    }
+  };
 }
 
 export function createRenameLakesFromNamebaseCommand(lakeIds, {label = "按名称库重命名湖泊"} = {}) {
@@ -291,6 +447,183 @@ function expandPackRegion(cells, center, radius) {
   return [...visited];
 }
 
+function expandPatchRegion(cells, center, radius, accepts) {
+  if (!accepts(center)) return [];
+  const visited = new Set([center]);
+  let frontier = [center];
+  for (let distance = 0; distance < radius; distance++) {
+    const next = [];
+    for (const cell of frontier) {
+      for (const neighbor of cells.c?.[cell] || []) {
+        if (visited.has(neighbor) || !accepts(neighbor)) continue;
+        visited.add(neighbor);
+        next.push(neighbor);
+      }
+    }
+    frontier = next;
+  }
+  return [...visited];
+}
+
+function inspectFeaturePatchConflicts(map, selectedPack) {
+  const cells = map.pack?.cells;
+  if ([...selectedPack].some(cell => Number(cells?.burg?.[cell]) > 0)) return {code: "occupied-burg", reason: "局部修正区域包含城市或城镇"};
+  if ([...selectedPack].some(cell => Number(cells?.r?.[cell]) > 0)) return {code: "occupied-river", reason: "局部修正区域包含河道或湖泊进出口"};
+  if ((map.settlements?.routes || []).some(route => (route.packCells || []).some(cell => selectedPack.has(Number(cell))))) return {code: "occupied-route", reason: "局部修正区域包含路线"};
+  if ((map.markers?.markers || []).some(marker => selectedPack.has(Number(marker?.packCell)))) return {code: "occupied-marker", reason: "局部修正区域包含标记"};
+  return null;
+}
+
+function touchesFeature(cells, sourceCells, featureId) {
+  const source = new Set(sourceCells);
+  return sourceCells.some(cell => (cells.c?.[cell] || []).some(neighbor => !source.has(neighbor) && Number(cells.f?.[neighbor]) === featureId));
+}
+
+function wouldEmptyFeatures(cells, removedCells) {
+  const removed = new Set(removedCells);
+  const affected = new Set(removedCells.map(cell => Number(cells.f?.[cell])).filter(id => Number.isInteger(id) && id > 0));
+  for (const featureId of affected) {
+    let remaining = 0;
+    for (let cell = 0; cell < (cells.f?.length || 0); cell++) {
+      if (!removed.has(cell) && Number(cells.f[cell]) === featureId) remaining++;
+    }
+    if (!remaining) return true;
+  }
+  return false;
+}
+
+function isConnectedSubset(neighbors, cells) {
+  if (!cells.length) return false;
+  const allowed = new Set(cells);
+  const visited = new Set([cells[0]]);
+  const queue = [cells[0]];
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    for (const neighbor of neighbors?.[queue[cursor]] || []) {
+      if (!allowed.has(neighbor) || visited.has(neighbor)) continue;
+      visited.add(neighbor);
+      queue.push(neighbor);
+    }
+  }
+  return visited.size === allowed.size;
+}
+
+function featurePatchPreview(values) {
+  return {valid: true, code: "ok", reason: "", changed: true, ...values};
+}
+
+function applyFeaturePatch(map, preview) {
+  const packSourceFeatures = new Set(preview.packCells.map(cell => Number(map.pack.cells.f?.[cell])).filter(Number.isInteger));
+  const gridSourceFeatures = new Set(preview.gridCells.map(cell => Number(map.grid.cells.f?.[cell])).filter(Number.isInteger));
+  for (const cell of preview.packCells) {
+    map.pack.cells.h[cell] = preview.fillHeight;
+    map.pack.cells.f[cell] = preview.packTargetFeature;
+    if (map.pack.cells.type) map.pack.cells.type[cell] = preview.target === "water" ? "lake" : map.pack.features?.[preview.packTargetFeature]?.type || "island";
+  }
+  for (const cell of preview.gridCells) {
+    map.grid.cells.h[cell] = preview.fillHeight;
+    map.grid.cells.f[cell] = preview.gridTargetFeature;
+  }
+  for (const id of new Set([...packSourceFeatures, preview.packTargetFeature, preview.lakeId])) if (map.pack.features?.[id]) refreshPackFeature(map.pack, id);
+  for (const id of new Set([...gridSourceFeatures, preview.gridTargetFeature, preview.gridLakeId])) if (map.features.features?.[id]) refreshGridFeature(map, id);
+  refreshWaterLandTopology(map.pack.cells);
+  refreshWaterLandTopology(map.grid.cells, {distanceOnly: true});
+  refreshGridShore(map);
+  refreshFeatureMetadata(map);
+  markLakeDependentDerivedStale(map);
+  return {
+    lakeId: preview.lakeId,
+    target: preview.target,
+    packCells: preview.packCells.length,
+    gridCells: preview.gridCells.length,
+    packTargetFeature: preview.packTargetFeature,
+    gridTargetFeature: preview.gridTargetFeature,
+    fillHeight: preview.fillHeight
+  };
+}
+
+function invalidFeaturePatch(code, reason) {
+  return {valid: false, code, reason, changed: false, packCells: [], gridCells: []};
+}
+
+function featurePatchError(preview) {
+  const error = new Error(preview.reason);
+  error.code = preview.code;
+  return error;
+}
+
+function invalidLakeOutlet(code, reason) {
+  return {valid: false, code, reason, changed: false};
+}
+
+function lakeOutletError(preview) {
+  const error = new Error(preview.reason);
+  error.code = preview.code;
+  return error;
+}
+
+function findRiver(map, riverId) {
+  return readRivers(map).find(river => Number(river?.i ?? river?.id) === riverId) || null;
+}
+
+function readRivers(map) {
+  return map?.rivers?.rivers || map?.pack?.rivers || [];
+}
+
+function riverExitsLake(cells, riverCells, lakeCells) {
+  for (let index = 0; index < riverCells.length - 1; index++) {
+    const current = Number(riverCells[index]);
+    const next = Number(riverCells[index + 1]);
+    if (lakeCells.has(current) && Number(cells?.h?.[next]) >= WATER_LEVEL) return true;
+  }
+  return false;
+}
+
+function applyLakeOutletChange(map, preview) {
+  const lake = findLake(map, preview.lakeId);
+  if (preview.outletRiverId) lake.outlet = preview.outletRiverId;
+  else delete lake.outlet;
+  const inletIds = new Set((lake.inlets || []).map(Number));
+  const outletRiver = preview.outletRiverId ? findRiver(map, preview.outletRiverId) : null;
+  for (const rivers of uniqueRiverCollections(map)) {
+    for (const river of rivers) {
+      const id = Number(river?.i ?? river?.id);
+      if (!inletIds.has(id)) continue;
+      if (!preview.outletRiverId || id === preview.outletRiverId) {
+        river.parent = 0;
+        river.basin = id;
+        river.type = "River";
+      } else {
+        river.parent = preview.outletRiverId;
+        river.basin = Number(outletRiver?.basin) || preview.outletRiverId;
+        river.type = "Branch";
+      }
+    }
+  }
+  markLakeDependentDerivedStale(map);
+}
+
+function uniqueRiverCollections(map) {
+  const collections = [map?.rivers?.rivers, map?.pack?.rivers].filter(Array.isArray);
+  return collections.filter((collection, index) => collections.indexOf(collection) === index);
+}
+
+function captureLakeOutletSnapshot(map) {
+  return {
+    packFeatures: clonePlain(map.pack?.features || []),
+    riversShared: map.rivers?.rivers === map.pack?.rivers,
+    rivers: clonePlain(map.rivers?.rivers || []),
+    packRivers: clonePlain(map.pack?.rivers || []),
+    stale: captureStaleState(map)
+  };
+}
+
+function restoreLakeOutletSnapshot(map, snapshot) {
+  map.pack.features = clonePlain(snapshot.packFeatures);
+  if (map.rivers) map.rivers.rivers = clonePlain(snapshot.rivers);
+  if (map.pack) map.pack.rivers = snapshot.riversShared && map.rivers ? map.rivers.rivers : clonePlain(snapshot.packRivers);
+  restoreStaleState(map, snapshot.stale);
+}
+
 function invalidLakeCreation(code, reason) {
   return {valid: false, code, reason, packCells: [], gridCells: [], shoreline: []};
 }
@@ -380,6 +713,10 @@ function refreshPackFeature(pack, featureId) {
   feature.area = round(featureCells.reduce((sum, cell) => sum + (Number(pack.cells.area?.[cell]) || 0), 0));
   feature.vertices = collectBoundaryVertices(pack, featureCells, featureId);
   feature.firstCell = featureCells.find(cell => isFeatureBorderCell(pack.cells, cell, featureId)) ?? featureCells[0] ?? feature.firstCell;
+  if (feature.type === "lake") {
+    const source = new Set(featureCells);
+    feature.shoreline = [...new Set(featureCells.flatMap(cell => pack.cells.c?.[cell] || []).filter(cell => !source.has(cell) && Number(pack.cells.h?.[cell]) >= WATER_LEVEL))];
+  }
 }
 
 function refreshGridFeature(map, featureId) {

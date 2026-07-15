@@ -89,7 +89,7 @@ import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-
 import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
 import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
-import {createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
+import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
   createAddReligionCommand,
@@ -219,6 +219,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   ROUTE_EDIT_WAYPOINT: "route:edit-waypoint",
   RIVER_ADD: "river:add",
   LAKE_EXCAVATE: "lake:excavate",
+  FEATURE_PATCH_SELECT: "feature:patch-select",
   ZONE_ADD: "zone:add",
   NOTE_ADD: "note:add"
 });
@@ -287,6 +288,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     routeEdit: {waypointRouteId: null},
     riverCreate: {active: false},
     lakeCreate: {active: false, radius: 0},
+    featurePatch: {active: false, draft: null},
     zoneCreate: {active: false, type: "Disaster", radius: 1},
     noteCreate: {active: false},
     customLabelDrag: null,
@@ -1921,7 +1923,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, {radius: 0});
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, "panel-toggle");
     },
-    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, "panel-close"),
+    onClose: () => {
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, "panel-close");
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, "panel-close");
+    },
     onSelect: object => {
       lakePanel.setSelection({object});
       selectFromPanel("lake-panel", object);
@@ -1950,6 +1955,36 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         noopStatus: "当前筛选湖泊没有可按名称库更新的名称。"
       });
       updateEditingInteractionLock(state, documentRef);
+    },
+    onInspectOutlet: (lakeId, outletRiverId) => inspectLakeOutletChange(state.map, lakeId, outletRiverId),
+    onApplyOutlet: (lakeId, outletRiverId) => {
+      const result = executeEditCommand(state, documentRef, createSetLakeOutletCommand(lakeId, outletRiverId), {
+        context: {map: state.map},
+        status: `已更新湖泊 #${lakeId} 的出口。`,
+        noopStatus: "湖泊出口没有变化。"
+      });
+      if (result.executed) lakePanel.clearEditor("outlet");
+      updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
+    onInspectPatch: draft => inspectFeaturePatch(state.map, draft),
+    onPatchSelectMode: (active, draft) => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, draft || {});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, "panel-toggle");
+    },
+    onApplyPatch: draft => {
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, "patch-apply");
+      const result = executeEditCommand(state, documentRef, createApplyFeaturePatchCommand(draft), {
+        context: {map: state.map},
+        status: executed => `已完成湖泊 #${executed.getResult?.().lakeId ?? draft?.lakeId} 的局部水陆修正。`
+      });
+      if (result.executed) lakePanel.clearEditor("patch");
+      updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
+    onEditCancel: kind => {
+      if (kind === "patch") cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, "edit-cancel");
+      lakePanel.clearEditor(kind);
     },
     onDelete: lakeId => {
       const result = executeDeleteWithPreflight(state, documentRef, {
@@ -2472,8 +2507,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       lakes: {
         create: options => createLakeViaApi(state, documentRef, options),
+        inspectOutlet: (lakeId, outletRiverId) => inspectLakeOutletViaApi(state, lakeId, outletRiverId),
+        setOutlet: (lakeId, outletRiverId) => setLakeOutletViaApi(state, documentRef, lakeId, outletRiverId),
         delete: lakeId => deleteLakeViaApi(state, documentRef, lakeId),
         rename: (lakeId, name) => renameLakeViaApi(state, documentRef, lakeId, name)
+      },
+      features: {
+        inspectPatch: options => inspectFeaturePatchViaApi(state, options),
+        applyPatch: options => applyFeaturePatchViaApi(state, documentRef, options)
       },
       labels: {
         addCustom: options => addCustomLabelViaApi(state, documentRef, options),
@@ -5958,6 +5999,51 @@ function createLakeViaApi(state, documentRef, options = {}) {
   return editApiResult(state, result);
 }
 
+function inspectLakeOutletViaApi(state, lakeId, outletRiverId) {
+  assertMapAvailable(state);
+  return inspectLakeOutletChange(state.map, normalizeApiInteger(lakeId, "湖泊 ID"), normalizeApiInteger(outletRiverId ?? 0, "河流 ID"));
+}
+
+function setLakeOutletViaApi(state, documentRef, lakeId, outletRiverId) {
+  assertMapAvailable(state);
+  const id = normalizeApiInteger(lakeId, "湖泊 ID");
+  const outlet = normalizeApiInteger(outletRiverId ?? 0, "河流 ID");
+  const command = createSetLakeOutletCommand(id, outlet, {label: "API 编辑湖泊出口"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: outlet ? `已将湖泊 #${id} 出口设为河流 #${outlet}。` : `已清除湖泊 #${id} 出口。`,
+    noopStatus: "湖泊出口没有变化。",
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function inspectFeaturePatchViaApi(state, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("局部水陆修正预检参数必须是对象");
+  return inspectFeaturePatch(state.map, options);
+}
+
+function applyFeaturePatchViaApi(state, documentRef, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("局部水陆修正参数必须是对象");
+  const command = createApplyFeaturePatchCommand(options, {label: "API 局部水陆修正"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: executed => {
+      const applied = executed.getResult?.();
+      return `已修正湖泊 #${applied?.lakeId ?? options.lakeId} 周边 ${applied?.packCells || 0} 个 pack cells。`;
+    },
+    noopStatus: "局部水陆修正没有变化。",
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function deleteRiverViaApi(state, documentRef, riverId) {
   const id = normalizeApiInteger(riverId, "河流 ID");
   const command = createDeleteRiverCommand(id);
@@ -7944,6 +8030,22 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.panels.lake?.setCreateMode(false);
     }
   });
+  register(CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, "lake-panel", {
+    onEnter: ({context}) => {
+      state.featurePatch.active = true;
+      state.featurePatch.draft = {...context};
+      state.panels.lake?.setPatchSelectMode(true);
+    },
+    onRepeat: ({context}) => {
+      state.featurePatch.draft = {...context};
+      state.panels.lake?.setPatchSelectMode(true);
+    },
+    onExit: () => {
+      state.featurePatch.active = false;
+      state.featurePatch.draft = null;
+      state.panels.lake?.setPatchSelectMode(false);
+    }
+  });
   register(CANVAS_TOOL_MODE.ZONE_ADD, "zone-panel", {
     onEnter: ({context}) => {
       state.zoneCreate.active = true;
@@ -9556,7 +9658,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
 function bindObjectCreationTools(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const activeMode = state.canvasToolModes.getActive()?.id;
-    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const packCell = getMarkerPackCellAtEvent(state, event);
@@ -9595,6 +9697,14 @@ function bindObjectCreationTools(canvas, state, documentRef) {
     if (activeMode === CANVAS_TOOL_MODE.LAKE_EXCAVATE) {
       const result = state.runtimeActions.edit.lakes.create({packCell, radius: state.lakeCreate.radius});
       if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, {result});
+      return;
+    }
+
+    if (activeMode === CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT) {
+      state.panels.lake?.setPatchCell(packCell);
+      setFileOperationStatus(documentRef, `局部水陆修正中心已选 pack cell #${packCell}。`);
+      completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, {packCell});
+      updateRuntimePanel(documentRef, state);
       return;
     }
 

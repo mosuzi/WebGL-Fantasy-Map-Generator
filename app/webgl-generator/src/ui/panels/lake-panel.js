@@ -32,6 +32,11 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
+    outletDraft: null,
+    outletPreview: null,
+    patchDraft: null,
+    patchPreview: null,
+    patchSelectMode: false,
     version: 0
   });
   const panelCallbacks = {
@@ -70,6 +75,36 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     onDelete: lakeId => callbacks.onDelete?.(lakeId),
     onDeleteMany: lakeIds => callbacks.onDeleteMany?.(lakeIds),
     onCreateMode: active => callbacks.onCreateMode?.(active),
+    onOutletStart: lakeId => {
+      const lake = findLake(panelState.map, lakeId);
+      if (!lake) return;
+      panelState.outletDraft = {lakeId: lake.id, outletRiverId: Number(lake.outlet) || 0};
+      panelState.outletPreview = callbacks.onInspectOutlet?.(lake.id, panelState.outletDraft.outletRiverId) || null;
+      panelState.version++;
+    },
+    onOutletDraft: outletRiverId => {
+      if (!panelState.outletDraft) return;
+      panelState.outletDraft = {...panelState.outletDraft, outletRiverId: Number(outletRiverId)};
+      panelState.outletPreview = callbacks.onInspectOutlet?.(panelState.outletDraft.lakeId, panelState.outletDraft.outletRiverId) || null;
+      panelState.version++;
+    },
+    onOutletApply: () => callbacks.onApplyOutlet?.(panelState.outletDraft?.lakeId, panelState.outletDraft?.outletRiverId),
+    onPatchStart: lakeId => {
+      panelState.patchDraft = {lakeId: Number(lakeId), target: "water", radius: 0, centerPackCell: null};
+      panelState.patchPreview = null;
+      panelState.version++;
+    },
+    onPatchDraft: patch => {
+      if (!panelState.patchDraft) return;
+      panelState.patchDraft = {...panelState.patchDraft, ...(patch || {})};
+      panelState.patchPreview = Number.isInteger(panelState.patchDraft.centerPackCell)
+        ? callbacks.onInspectPatch?.(panelState.patchDraft) || null
+        : null;
+      panelState.version++;
+    },
+    onPatchSelectMode: active => callbacks.onPatchSelectMode?.(Boolean(active), panelState.patchDraft),
+    onPatchApply: () => callbacks.onApplyPatch?.(panelState.patchDraft),
+    onEditCancel: kind => callbacks.onEditCancel?.(kind),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -129,6 +164,29 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     setCreateMode(active) {
       panelState.createMode = Boolean(active);
     },
+    setPatchSelectMode(active) {
+      panelState.patchSelectMode = Boolean(active);
+      panelState.version++;
+    },
+    setPatchCell(packCell) {
+      if (!panelState.patchDraft || !Number.isInteger(packCell)) return;
+      panelState.patchDraft = {...panelState.patchDraft, centerPackCell: packCell};
+      panelState.patchPreview = callbacks.onInspectPatch?.(panelState.patchDraft) || null;
+      panelState.patchSelectMode = false;
+      panelState.version++;
+    },
+    clearEditor(kind = "all") {
+      if (kind === "all" || kind === "outlet") {
+        panelState.outletDraft = null;
+        panelState.outletPreview = null;
+      }
+      if (kind === "all" || kind === "patch") {
+        panelState.patchDraft = null;
+        panelState.patchPreview = null;
+        panelState.patchSelectMode = false;
+      }
+      panelState.version++;
+    },
     isOpen() {
       return panelState.open;
     },
@@ -151,4 +209,10 @@ function lakeObject(row) {
     evaporation: row.evaporation,
     firstCell: row.firstCell
   };
+}
+
+function findLake(map, lakeId) {
+  const feature = map?.pack?.features?.[Number(lakeId)];
+  if (!feature || feature.type !== "lake") return null;
+  return {...feature, id: Number(feature.i ?? feature.id)};
 }

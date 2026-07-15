@@ -39,6 +39,56 @@
 
   <template v-if="selected">
     <UiActionDock v-model:active="activeAction" :actions="lakeActions">
+      <template #outlet>
+        <div v-if="state.outletDraft" class="lake-outlet-editor">
+          <UiSelectField
+            input-id="lake-outlet-river"
+            label="出口河流"
+            :model-value="state.outletDraft.outletRiverId"
+            :options="outletRiverOptions"
+            @update:model-value="callbacks.onOutletDraft"
+          />
+          <UiStateBanner
+            :kind="state.outletPreview?.valid ? 'preview' : 'error'"
+            title="湖泊出口预检"
+            :message="outletPreviewMessage"
+            :action-label="state.outletPreview?.valid && state.outletPreview?.changed ? '应用出口修改' : ''"
+            secondary-action-label="取消"
+            @action="handleOutletApply"
+            @secondary-action="activeAction = null"
+          />
+        </div>
+      </template>
+      <template #shore>
+        <div v-if="state.patchDraft" class="lake-shore-editor">
+          <UiSelectField
+            input-id="lake-shore-target"
+            label="修正方向"
+            :model-value="state.patchDraft.target"
+            :options="patchTargetOptions"
+            @update:model-value="value => callbacks.onPatchDraft({target: value})"
+          />
+          <UiSelectField
+            input-id="lake-shore-radius"
+            label="修正半径"
+            :model-value="state.patchDraft.radius"
+            :options="patchRadiusOptions"
+            @update:model-value="value => callbacks.onPatchDraft({radius: value})"
+          />
+          <UiButton variant="secondary" :active="state.patchSelectMode" @click="callbacks.onPatchSelectMode(!state.patchSelectMode)">
+            {{ state.patchSelectMode ? "取消选择修正中心" : "在地图选择修正中心" }}
+          </UiButton>
+          <UiStateBanner
+            :kind="state.patchPreview?.valid ? 'preview' : state.patchPreview ? 'error' : 'info'"
+            title="局部水陆修正预检"
+            :message="patchPreviewMessage"
+            :action-label="state.patchPreview?.valid ? '应用局部修正' : ''"
+            secondary-action-label="取消"
+            @action="handlePatchApply"
+            @secondary-action="activeAction = null"
+          />
+        </div>
+      </template>
       <template #rename>
         <UiTextEditField
           class-name="lake-name-editor"
@@ -54,11 +104,14 @@
 <script setup>
 import {computed, nextTick, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
+import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiSelectField from "./base/UiSelectField.vue";
+import UiStateBanner from "./base/UiStateBanner.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
@@ -116,8 +169,38 @@ const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area,
 const totalCells = computed(() => rows.value.reduce((sum, row) => sum + row.cells, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const lakeActions = Object.freeze([
+  {key: "outlet", label: "编辑湖泊出口", icon: "⇢"},
+  {key: "shore", label: "局部水陆修正", icon: "◒"},
   {key: "rename", label: "重命名", icon: "✎"}
 ]);
+const patchTargetOptions = Object.freeze([
+  {value: "water", label: "扩展为湖泊水域"},
+  {value: "land", label: "收回为相邻陆地"}
+]);
+const patchRadiusOptions = Object.freeze([
+  {value: 0, label: "单个 grid cell"},
+  {value: 1, label: "半径 1"},
+  {value: 2, label: "半径 2"}
+]);
+const outletRiverOptions = computed(() => [
+  {value: 0, label: "无出口（闭合湖泊）"},
+  ...(props.state.map?.rivers?.rivers || props.state.map?.pack?.rivers || []).map(river => {
+    const id = Number(river?.i ?? river?.id);
+    return {value: id, label: `${river?.name || `河流 #${id}`}（#${id}）`};
+  })
+]);
+const outletPreviewMessage = computed(() => {
+  const preview = props.state.outletPreview;
+  if (!preview) return "选择一条真实穿过该湖并流向陆地的河流，或设为无出口。";
+  if (!preview.valid) return `${preview.code || "invalid"}：${preview.reason || "出口修改无效"}`;
+  return `${preview.changed ? "可应用" : "没有变化"}；出口河流 ${preview.outletRiverId ? `#${preview.outletRiverId}` : "无"}；联动 ${formatNumber(preview.affectedInlets || 0)} 条入湖河流`;
+});
+const patchPreviewMessage = computed(() => {
+  const preview = props.state.patchPreview;
+  if (!preview) return "先选择修正方向和半径，再到地图上选择中心。预览不会写入历史。";
+  if (!preview.valid) return `${preview.code || "invalid"}：${preview.reason || "局部修正无效"}`;
+  return `可应用；${formatNumber(preview.packCells?.length || 0)} pack cells / ${formatNumber(preview.gridCells?.length || 0)} grid cells；目标 feature #${preview.packTargetFeature}`;
+});
 const lakeListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消开挖湖泊" : "开挖湖泊", icon: "+", active: props.state.createMode},
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedLakeRows.value.length)}`, icon: "◉", disabled: !selectedLakeRows.value.length},
@@ -154,6 +237,25 @@ watch(() => selected.value?.id, id => {
     activeAction.value = "rename";
   });
 });
+
+watch(activeAction, (next, previous) => {
+  if (next === "outlet" && selected.value) props.callbacks.onOutletStart?.(selected.value.id);
+  if (next === "shore" && selected.value) props.callbacks.onPatchStart?.(selected.value.id);
+  if (previous === "outlet" && next !== "outlet") props.callbacks.onEditCancel?.("outlet");
+  if (previous === "shore" && next !== "shore") props.callbacks.onEditCancel?.("patch");
+});
+
+function handleOutletApply() {
+  if (!props.state.outletPreview?.valid || !props.state.outletPreview?.changed) return;
+  const result = props.callbacks.onOutletApply?.();
+  if (result?.executed) activeAction.value = null;
+}
+
+function handlePatchApply() {
+  if (!props.state.patchPreview?.valid) return;
+  const result = props.callbacks.onPatchApply?.();
+  if (result?.executed) activeAction.value = null;
+}
 
 function lakeRows(map) {
   return (map?.pack?.features || [])
