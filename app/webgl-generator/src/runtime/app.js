@@ -4557,11 +4557,11 @@ function clearFileOperationDetails(documentRef, targetId = "file-operation-error
 }
 
 function syncGenerationInputs(documentRef, options) {
-  setInputValue(documentRef, "seed-input", options.seed);
-  setInputValue(documentRef, "cells-input", options.cellsTarget ?? options.cells);
-  setInputValue(documentRef, "width-input", options.graphWidth);
-  setInputValue(documentRef, "height-input", options.graphHeight);
-  setInputValue(documentRef, "heightmap-template", options.heightmapTemplate);
+  setInputValue(documentRef, "seed-input", options.seed, {emitChange: false});
+  setInputValue(documentRef, "cells-input", options.cellsTarget ?? options.cells, {emitChange: false});
+  setInputValue(documentRef, "width-input", options.graphWidth, {emitChange: false});
+  setInputValue(documentRef, "height-input", options.graphHeight, {emitChange: false});
+  setInputValue(documentRef, "heightmap-template", options.heightmapTemplate, {emitChange: false});
   syncClimateInputs(documentRef, options);
 }
 
@@ -4582,16 +4582,16 @@ function syncClimateInputs(documentRef, options) {
     temperatureSouthPole: "temperature-south-pole"
   })) {
     const value = key === "winds" ? detail.winds.join(",") : detail[key];
-    setInputValue(documentRef, id, value);
+    setInputValue(documentRef, id, value, {emitChange: false});
   }
 }
 
-function setInputValue(documentRef, id, value) {
+function setInputValue(documentRef, id, value, {emitChange = true} = {}) {
   const input = documentRef.getElementById(id);
   if (!input || value === undefined || value === null) return;
   if (input.tagName === "SELECT" && !Array.from(input.options).some(option => option.value === String(value))) return;
   input.value = String(value);
-  input.dispatchEvent(new Event("change", {bubbles: true}));
+  if (emitChange) input.dispatchEvent(new Event("change", {bubbles: true}));
 }
 
 function applyPersistedVisualTheme(state, documentRef, document) {

@@ -4,6 +4,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -43,7 +44,7 @@ try {
 
   const baseUrl = `http://${host}:${port}`;
   await page.goto(`${baseUrl}?healthClear=1`, {waitUntil: "domcontentloaded", timeout: timeoutMs});
-  await page.waitForFunction(() => window.webglGeneratorApi && window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2, null, {timeout: timeoutMs});
+  await waitForApiReady(page, timeoutMs);
   const result = await inspectRoundtrip(page, {cells, seed, alternateSeed, template});
   const healthErrors = await inspectHealthErrors(page);
 
@@ -89,8 +90,12 @@ async function inspectRoundtrip(page, {cells, seed, alternateSeed, template}) {
     }), "generate.newMap.source");
     const sourceSummary = unwrap(api.info.mapSummary(), "info.mapSummary.source");
     const exported = unwrap(api.data.exportAll({download: false}), "data.exportAll");
+    const afterJsonExport = unwrap(api.info.mapSummary(), "info.mapSummary.afterJsonExport");
     const documentObject = JSON.parse(exported.text);
     const compressed = unwrap(await api.data.exportCompressedAll({download: false}), "data.exportCompressedAll");
+    const afterCompressedExport = unwrap(api.info.mapSummary(), "info.mapSummary.afterCompressedExport");
+    if (afterJsonExport.checksum !== sourceSummary.checksum) failures.push("JSON 导出改变了当前地图 checksum");
+    if (afterCompressedExport.checksum !== sourceSummary.checksum) failures.push("压缩导出改变了当前地图 checksum");
     const noConfirm = await api.data.importMap(documentObject, {toast: false});
     if (noConfirm?.ok !== false || !String(noConfirm?.error?.message || "").includes("confirm")) {
       failures.push("importMap 未传 confirm:true 时没有结构化失败");
@@ -132,6 +137,14 @@ async function inspectRoundtrip(page, {cells, seed, alternateSeed, template}) {
     if (badImport?.ok !== false) failures.push("坏 JSON 导入没有结构化失败");
     const afterBadImport = unwrap(api.info.mapSummary(), "info.mapSummary.afterBadImport");
     if (afterBadImport.checksum !== beforeBadImport.checksum) failures.push("坏 JSON 导入改变了当前地图 checksum");
+    const badRuntime = unwrap(api.info.runtimeStats(), "info.runtimeStats.afterBadImport");
+    if (badRuntime.operation?.busy !== false) failures.push("坏 JSON 导入后 operation 没有回到空闲");
+    if (badRuntime.loading?.visible !== false) failures.push("坏 JSON 导入后 loading 没有关闭");
+    const recoveryImport = unwrap(await api.data.importMap(documentObject, {confirm: true, toast: false}), "data.importMap.recovery");
+    const recoverySummary = unwrap(api.info.mapSummary(), "info.mapSummary.recovery");
+    const recoveryRuntime = unwrap(api.info.runtimeStats(), "info.runtimeStats.recovery");
+    if (recoverySummary.checksum !== sourceSummary.checksum) failures.push("坏 JSON 后重试没有恢复源 checksum");
+    if (recoveryRuntime.operation?.busy !== false || recoveryRuntime.loading?.visible !== false) failures.push("坏 JSON 后成功重试没有恢复稳定运行状态");
 
     const history = unwrap(api.history.get(), "history.get");
     const stats = window.__webglGeneratorApp?.renderer?.getStats?.() || {};
@@ -175,6 +188,12 @@ async function inspectRoundtrip(page, {cells, seed, alternateSeed, template}) {
         }
       },
       checks: {
+        checkpoints: {
+          source: sourceSummary.checksum,
+          afterJsonExport: afterJsonExport.checksum,
+          afterCompressedExport: afterCompressedExport.checksum,
+          afterNoConfirm: afterNoConfirm.checksum
+        },
         noConfirm: {
           ok: noConfirm?.ok ?? null,
           message: noConfirm?.error?.message || ""
@@ -186,7 +205,15 @@ async function inspectRoundtrip(page, {cells, seed, alternateSeed, template}) {
         badImport: {
           ok: badImport?.ok ?? null,
           message: badImport?.error?.message || "",
-          checksumPreserved: afterBadImport.checksum === beforeBadImport.checksum
+          checksumPreserved: afterBadImport.checksum === beforeBadImport.checksum,
+          operationBusy: badRuntime.operation?.busy ?? null,
+          loadingVisible: badRuntime.loading?.visible ?? null
+        },
+        recovery: {
+          checksum: recoverySummary.checksum,
+          resultMetadata: recoveryImport.metadata,
+          operationBusy: recoveryRuntime.operation?.busy ?? null,
+          loadingVisible: recoveryRuntime.loading?.visible ?? null
         }
       },
       history,
@@ -269,9 +296,11 @@ function buildConsoleSummary(report) {
       compressed: report.checks.compressedImport.imported.checksum,
       gzipBase64: report.checks.gzipBase64Import.imported.checksum
     },
+    checkpoints: report.checks.checkpoints,
     noConfirmRejected: report.checks.noConfirm.ok === false,
     badImportRejected: report.checks.badImport.ok === false,
     badImportChecksumPreserved: report.checks.badImport.checksumPreserved,
+    recovery: report.checks.recovery,
     glError: report.glError,
     healthErrors: report.healthErrors.total,
     consoleErrors: report.metadata.consoleErrors.length,
@@ -308,6 +337,8 @@ function renderMarkdown(report) {
   lines.push(`- 未传 \`confirm:true\` 导入：${report.checks.noConfirm.ok === false ? "结构化失败" : "异常"}`);
   lines.push(`- 坏 JSON 导入：${report.checks.badImport.ok === false ? "结构化失败" : "异常"}`);
   lines.push(`- 坏 JSON 后 checksum 保持：${report.checks.badImport.checksumPreserved ? "是" : "否"}`);
+  lines.push(`- 坏 JSON 后 operation / loading：${report.checks.badImport.operationBusy} / ${report.checks.badImport.loadingVisible}`);
+  lines.push(`- 随后成功重试 checksum：\`${report.checks.recovery.checksum}\``);
   lines.push("");
   lines.push("## 运行状态", "");
   lines.push(`- WebGL error：${report.glError}`);

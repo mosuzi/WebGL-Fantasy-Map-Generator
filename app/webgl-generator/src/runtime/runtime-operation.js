@@ -121,7 +121,7 @@ export function createRuntimeOperationManager(options = {}) {
       report: (stage, detail = {}) => report(operation, stage, detail)
     };
     operation.context = context;
-    operation.health = options.beginHealthOperation?.(operation.name, {operationId: operation.id}) || null;
+    operation.health = operation.loading ? null : options.beginHealthOperation?.(operation.name, {operationId: operation.id}) || null;
     current = operation;
     if (operation.loading) options.setLoading?.(true, operation.message, snapshotOperation(operation));
     publish();

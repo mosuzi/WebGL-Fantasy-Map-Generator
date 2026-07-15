@@ -4,6 +4,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -43,8 +44,9 @@ try {
 
   const baseUrl = `http://${host}:${port}`;
   await page.goto(`${baseUrl}?healthClear=1`, {waitUntil: "domcontentloaded", timeout: timeoutMs});
-  await page.waitForFunction(() => window.webglGeneratorApi && window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2, null, {timeout: timeoutMs});
+  await waitForApiReady(page, timeoutMs);
   const result = await inspectCapabilities(page, {cells, seed, template});
+  const uiApiConvergence = await inspectUiApiConvergence(page);
   const healthErrors = await inspectHealthErrors(page);
 
   const report = {
@@ -61,8 +63,9 @@ try {
       pageErrors
     },
     ...result,
+    uiApiConvergence,
     healthErrors,
-    passed: result.passed && healthErrors.total === 0 && consoleErrors.length === 0 && pageErrors.length === 0
+    passed: result.passed && uiApiConvergence.passed && healthErrors.total === 0 && consoleErrors.length === 0 && pageErrors.length === 0
   };
 
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -113,6 +116,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     };
 
     const api = window.webglGeneratorApi;
+    const version = unwrap(api.info.version(), "info.version");
     const generation = unwrap(await api.generate.newMap({
       confirm: true,
       seed,
@@ -132,6 +136,14 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     if (!capabilities.methods) failures.push("capabilities 缺少 methods 字段");
     if (!capabilities.methodMetadata) failures.push("capabilities 缺少 methodMetadata 字段");
     if (!capabilities.methodMetadataCoverage) failures.push("capabilities 缺少 methodMetadataCoverage 字段");
+    if (api.version !== "1.0.0" || api.stability !== "stable") failures.push(`根 API 版本错误：${api.version} / ${api.stability}`);
+    if (window.api !== api) failures.push("window.api 没有指向正式根 API");
+    if (version.apiVersion !== "1.0.0" || version.stability !== "stable") failures.push("info.version 没有返回稳定版本");
+    if (version.capabilitySchemaVersion !== "1.0.0" || version.compatibilityPolicyVersion !== "1.0.0") failures.push("info.version 缺少能力或兼容策略版本");
+    if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
+    if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
+    if (Object.keys(capabilities.capabilityGroups || {}).length !== 13) failures.push("capabilities 能力组不是 13 个");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 154, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 154 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
@@ -152,6 +164,26 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       if ((namespaceCoverage.runtimeMissing || []).length) failures.push(`${namespace} 真实 API 缺失：${namespaceCoverage.runtimeMissing.join(", ")}`);
       if ((namespaceCoverage.runtimeExtra || []).length) failures.push(`${namespace} 真实 API 多余：${namespaceCoverage.runtimeExtra.join(", ")}`);
     }
+    for (const [namespace, methods] of Object.entries(capabilities.methodMetadata || {})) {
+      for (const [method, metadata] of Object.entries(methods || {})) {
+        const qualifiedName = `${namespace}.${method}`;
+        for (const field of ["stable", "stability", "since", "capabilityGroup", "mutates", "undoable", "async", "requiresConfirm"]) {
+          if (!Object.prototype.hasOwnProperty.call(metadata, field)) failures.push(`${qualifiedName} 缺少 ${field}`);
+        }
+        if (!capabilities.capabilityGroups?.[metadata.capabilityGroup]) failures.push(`${qualifiedName} 能力组未声明：${metadata.capabilityGroup}`);
+      }
+    }
+    for (const qualifiedName of ["info.mapSummary", "selection.locate", "layers.setVisible", "history.undo", "data.exportMap", "data.importMap", "edit.states.rename"]) {
+      if (getMethodMetadata(capabilities.methodMetadata, qualifiedName)?.stability !== "stable") failures.push(`${qualifiedName} 没有标记 stable`);
+    }
+    for (const method of capabilities.methods?.debug || []) {
+      if (getMethodMetadata(capabilities.methodMetadata, `debug.${method}`)?.stability !== "experimental") failures.push(`debug.${method} 没有标记 experimental`);
+    }
+    const exportAllMetadata = getMethodMetadata(capabilities.methodMetadata, "data.exportAll");
+    if (exportAllMetadata?.stability !== "deprecated" || exportAllMetadata?.deprecated?.replacement !== "data.exportMap") failures.push("data.exportAll deprecated 契约错误");
+    const aliases = capabilities.compatibility?.aliases || [];
+    if (!aliases.some(item => item.alias === "window.api" && item.target === "window.webglGeneratorApi")) failures.push("兼容目录缺少 window.api");
+    if (!aliases.some(item => item.alias === "data.exportAll" && item.target === "data.exportMap")) failures.push("兼容目录缺少 data.exportAll");
 
     const confirmRequiredMethods = capabilities.safety?.confirmRequiredMethods || [];
     assertSameMembers(confirmRequiredMethods, expectedConfirmRequired, "confirmRequiredMethods", failures);
@@ -176,6 +208,14 @@ async function inspectCapabilities(page, {cells, seed, template}) {
 
     return {
       generation,
+      contract: {
+        version,
+        rootVersion: api.version,
+        rootStability: api.stability,
+        stabilitySummary: capabilities.stabilitySummary,
+        capabilityGroups: Object.keys(capabilities.capabilityGroups || {}).length,
+        aliases: (capabilities.compatibility?.aliases || []).map(({alias, target, status}) => ({alias, target, status}))
+      },
       map: {
         checksum: beforeSummary.checksum,
         gridCells: beforeSummary.gridCells,
@@ -242,6 +282,51 @@ async function inspectCapabilities(page, {cells, seed, template}) {
   }, {cells, seed, template});
 }
 
+async function inspectUiApiConvergence(page) {
+  const initial = await page.evaluate(() => {
+    const result = window.webglGeneratorApi.layers.get();
+    if (!result?.ok) throw new Error(`layers.get 调用失败：${result?.error?.message || "未知错误"}`);
+    return Boolean(result.data.display.showHoverInfo);
+  });
+  if (initial) {
+    await page.evaluate(() => {
+      const result = window.webglGeneratorApi.layers.setShowHoverInfo(false);
+      if (!result?.ok) throw new Error(`API 关闭悬停信息失败：${result?.error?.message || "未知错误"}`);
+    });
+  }
+  await page.waitForFunction(() => document.getElementById("show-hover-info")?.getAttribute("aria-pressed") === "false");
+  await page.locator("#open-generation-panel").click();
+  await page.locator('.floating-panel[data-panel-id="generation-panel"]').waitFor({state: "visible"});
+  await page.locator('[data-control-tab="layers"]').click();
+  await page.locator("#show-hover-info").click();
+  await page.waitForFunction(() => {
+    const result = window.webglGeneratorApi.layers.get();
+    return result?.ok === true && result.data.display.showHoverInfo === true;
+  });
+  const uiResult = await page.evaluate(() => window.webglGeneratorApi.layers.get().data.display.showHoverInfo);
+  await page.evaluate(() => {
+    const result = window.webglGeneratorApi.layers.setShowHoverInfo(false);
+    if (!result?.ok) throw new Error(`API 再次关闭悬停信息失败：${result?.error?.message || "未知错误"}`);
+  });
+  await page.waitForFunction(() => document.getElementById("show-hover-info")?.getAttribute("aria-pressed") === "false");
+  const apiResult = await page.evaluate(() => ({
+    snapshot: window.webglGeneratorApi.layers.get().data.display.showHoverInfo,
+    ariaPressed: document.getElementById("show-hover-info")?.getAttribute("aria-pressed")
+  }));
+  if (initial) await page.evaluate(() => window.webglGeneratorApi.layers.setShowHoverInfo(true));
+  await page.waitForFunction(value => document.getElementById("show-hover-info")?.getAttribute("aria-pressed") === String(value), initial);
+  const finalState = await page.evaluate(() => window.webglGeneratorApi.layers.get().data.display.showHoverInfo);
+  const restored = finalState === initial;
+  return {
+    action: "layers.setShowHoverInfo",
+    initial,
+    uiResult,
+    apiResult,
+    restored,
+    passed: uiResult === true && apiResult.snapshot === false && apiResult.ariaPressed === "false" && restored
+  };
+}
+
 async function inspectHealthErrors(page) {
   return page.evaluate(() => {
     const result = window.webglGeneratorApi.info.healthEvents({severity: "error", limit: 180});
@@ -250,9 +335,11 @@ async function inspectHealthErrors(page) {
       total: result.data.total,
       counts: result.data.counts,
       events: result.data.events.map(event => ({
+        type: event.type || "",
         severity: event.severity || event.level || "",
-        message: event.message || "",
-        operation: event.operation || ""
+        message: event.detail?.message || event.message || "",
+        operation: event.detail?.operation || event.operation || "",
+        detail: event.detail || null
       }))
     };
   });
@@ -274,6 +361,8 @@ function buildConsoleSummary(report) {
     namespaceCounts: Object.fromEntries(Object.entries(report.coverage.namespaces).map(([namespace, item]) => [namespace, item.methods])),
     confirmRequired: report.safety.confirmRequiredMethods,
     representativeMutates: report.representativeMutates,
+    contract: report.contract,
+    uiApiConvergence: report.uiApiConvergence,
     glError: report.glError,
     healthErrors: report.healthErrors.total,
     consoleErrors: report.metadata.consoleErrors.length,
@@ -300,6 +389,9 @@ function renderMarkdown(report) {
   lines.push(`- extra：${report.coverage.extra.length ? report.coverage.extra.join(" / ") : "无"}`);
   lines.push(`- runtime missing：${report.coverage.runtimeMissing.length ? report.coverage.runtimeMissing.join(" / ") : "无"}`);
   lines.push(`- runtime extra：${report.coverage.runtimeExtra.length ? report.coverage.runtimeExtra.join(" / ") : "无"}`);
+  lines.push(`- API 版本 / 稳定等级：${report.contract.rootVersion} / ${report.contract.rootStability}`);
+  lines.push(`- stable / experimental / deprecated：${report.contract.stabilitySummary.stable} / ${report.contract.stabilitySummary.experimental} / ${report.contract.stabilitySummary.deprecated}`);
+  lines.push(`- 能力组：${report.contract.capabilityGroups}`);
   lines.push("");
   lines.push("## 命名空间", "");
   lines.push("| 命名空间 | methods | documented | metadata | runtime | 完整 |");
@@ -313,6 +405,10 @@ function renderMarkdown(report) {
   lines.push("");
   lines.push("## 代表性副作用元数据", "");
   for (const [method, mutates] of Object.entries(report.representativeMutates)) lines.push(`- \`${method}\`：\`${mutates}\``);
+  lines.push("", "## UI / API 共路径", "");
+  lines.push(`- 动作：\`${report.uiApiConvergence.action}\``);
+  lines.push(`- UI 开启后 API 读取：${report.uiApiConvergence.uiResult}`);
+  lines.push(`- API 关闭后控件同步：${report.uiApiConvergence.apiResult.ariaPressed === "false" ? "是" : "否"}`);
   lines.push("");
   lines.push("## 运行状态", "");
   lines.push(`- WebGL error：${report.glError}`);

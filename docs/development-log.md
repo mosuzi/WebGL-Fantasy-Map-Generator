@@ -1,5 +1,18 @@
 # 开发历史
 
+## 2026-07-15：API 聚合门禁与阶段末综合验收
+
+本步完成权威任务清单第 34 项，将第 28～33 项形成的稳定 API、代码回归和浏览器回归收束为一个可重复执行、失败即停止的总门禁。
+
+- 新增 `tools/regression-gate-runner.mjs` 和 `tools/webgl-generator-api-regression-suite.mjs`，通过独立 Node 子进程依次执行 6 项代码门禁和 6 项浏览器门禁；每步记录 id、中文标签、类型、状态、耗时和退出码，并生成中文 JSON / Markdown 汇总报告。
+- 新增 `tools/webgl-generator-api-regression-suite-contract.mjs` 与 `regress:api-suite-contract`，合成第二步退出码 `17` 的失败场景，确认状态为 `passed / failed / skipped`，只执行前两步且聚合器原样返回非零退出码。
+- 新增共享 `waitForApiReady()`，六条浏览器脚本统一等待公开 API、WebGL2 renderer、operation 空闲和 loading 隐藏，避免启动恢复尚未结束时误把预期 `operation_busy` 当成业务失败。
+- 能力浏览器回归新增 `1.0.0 / stable`、162 项方法元数据、13 个能力分组、兼容别名与确认策略断言，并以“显示悬浮信息”证明 UI 与 API 共用同一 action；往返回归新增坏 JSON 后 operation / loading 恢复和成功重试。
+- 修正长任务 health 边界：已有 loading 的生成 / 导入任务使用 12 秒 loading 与主线程长任务监控，不再同时套用面向普通非 loading action 的 250ms operation stall 阈值；非 loading operation 仍保留原 health 监控并有专项回归。
+- 修正程序同步生成控件的副作用：`syncGenerationInputs()` 不再向气候输入派发用户 `change` 事件，避免压缩导出等待期间防抖气候重算改写地图 checksum；Vue 气候控件继续通过专用同步事件更新。往返回归逐点确认 JSON 导出、压缩导出和未确认导入前后 checksum 不变，四种导入输入均恢复源 checksum。
+- 最终 `regress:api-suite` 为 `12/12 passed`（代码 6、浏览器 6、失败 0、跳过 0），总耗时约 `68.9s`。六条浏览器报告全部为 `glError = 0`、health / console / page error 为 `0`；GEO、完整地图四种输入、备注 / 测量导出、名称库文档和四类对象批量改名均通过。
+- `regress:api-suite-contract`、生产构建（`1130 modules`）和 `git diff --check` 通过；构建只保留既有大 chunk 警告。权威任务第 28～34 项至此全部移出活动清单，第 35 项快捷键机制的 API 前置条件已经满足。
+
 ## 2026-07-15：导出回归聚合门禁
 
 本步完成权威任务清单第 22 项，把第 17～21 项形成的纯 Node 导出专项收束为一个稳定入口，不在快速迭代阶段混入浏览器回归。

@@ -80,6 +80,11 @@ assert.equal(manager.getSnapshot().busy, false);
 assert.equal(manager.getSnapshot().last.name, "retry");
 assert.equal(loading.at(-1).visible, false);
 
+const nonLoading = manager.runSync("non-loading", () => ({done: true}), {loading: false});
+assert.equal(nonLoading.done, true);
+assert(health.some(item => item.type === "health-end" && item.name === "non-loading"), "非 loading 操作没有保留普通 operation stall 监测");
+assert(!health.some(item => item.type === "health-end" && item.name === "success"), "允许 loading 的长任务仍套用普通 250ms operation stall 阈值");
+
 const invalidHealth = health.find(item => item.type === "operation-rejected" && item.detail?.name === "invalid");
 const busyHealth = health.find(item => item.type === "operation-rejected" && item.detail?.name === "conflict");
 const runtimeHealth = health.find(item => item.type === "operation-failed" && item.detail?.name === "runtime-failure");
@@ -116,7 +121,7 @@ assert.match(appSource, /rollback: \(snapshot, error, context\) => restoreMapRep
 assert.match(appSource, /state\.editHistory\.restoreSnapshot\(snapshot\.history\)/);
 
 console.log(JSON.stringify({
-  scenarios: ["success", "noop", "invalid-input", "busy-conflict", "runtime-failure", "retry"],
+  scenarios: ["success", "noop", "invalid-input", "busy-conflict", "runtime-failure", "retry", "non-loading-health"],
   loadingClosed: loading.at(-1).visible === false,
   stableErrorCodes: [invalid.error.code, busy.error.code, failed.error.code],
   healthRule: {expected: "info", unexpected: "error"},
