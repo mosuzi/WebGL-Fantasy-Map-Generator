@@ -68,6 +68,7 @@ import {measurementHighlightObject, measurementShapeClass} from "./measurement-h
 import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
+import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-regeneration-variation.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand} from "./note-edit-commands.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
@@ -6557,6 +6558,7 @@ function regenerateMilitary(state, documentRef) {
   const validStates = (map?.pack?.states || []).filter(state => state?.i && !state.removed);
   if (!map?.pack?.cells?.i?.length || !validStates.length) return regenerationResult("military", "未执行", "当前地图缺少 pack cells 或有效国家数据，无法重建军事。");
   const before = militaryRegenerationCounts(map);
+  const beforeSnapshot = snapshotMilitaryVariation(map);
   const previousEvents = Array.isArray(map.military?.events) ? map.military.events : [];
   const eventSequence = Number(map.military?.metadata?.eventSequence) || 0;
   const salt = nextRegenerationSalt(map, "military");
@@ -6567,26 +6569,35 @@ function regenerateMilitary(state, documentRef) {
     archiveGeneration: salt
   }));
   const seed = `${map.options?.seed || "map"}:regenerate-military:${salt}`;
-  map.military = buildMilitary(map.pack, {...map.options, seed});
+  let variation;
+  let attempts = 0;
+  do {
+    attempts += 1;
+    const attemptSeed = attempts === 1 ? seed : `${seed}:retry:${attempts}`;
+    map.military = buildMilitary(map.pack, {...map.options, seed: attemptSeed});
+    variation = compareMilitaryVariation(beforeSnapshot, snapshotMilitaryVariation(map));
+  } while (!variation.changed && attempts < 6);
   map.military.events = archivedEvents;
   map.military.metadata.events = archivedEvents.length;
   map.military.metadata.eventSequence = eventSequence;
   markDerivedFresh(map, ["military"]);
   markDerivedStale(map, ["zones"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate military: salt=${salt}, regiments=${map.military.metadata.regiments}, troops=${map.military.metadata.troops}`);
+  appendGenerationLog(map, `regenerate military: salt=${salt}, attempts=${attempts}, changed=${variation.changedRegiments}, regiments=${map.military.metadata.regiments}, troops=${map.military.metadata.troops}`);
   const affected = systemAffected("military", collectionAffected(OBJECT_KIND.MILITARY, militaryRegiments(map)));
   refreshRegeneratedLayers(state, documentRef, {
-    derived: ["point-layers", "object-panels", "object-index"],
+    derived: ["point-layers", "line-layers", "labels", "object-panels", "object-index"],
     affected
   });
   const after = militaryRegenerationCounts(map);
   return regenerationResult(
     "military",
-    `军事已按当前国家、人口、经济和外交重算（扰动 #${salt}）：军团 ${before.regiments} -> ${after.regiments}；战线 ${before.fronts} -> ${after.fronts}；战役 ${before.campaigns} -> ${after.campaigns}`,
-    "已刷新军团、战线、战役、点图层和对象索引；地区仍标记为待派生。",
+    `军事已按当前国家、人口、经济和外交重算（扰动 #${salt}）：变化军团 ${variation.changedRegiments}；兵力 ${variation.troopChanges}；编成 ${variation.compositionChanges}；态势 ${variation.statusChanges}；驻地 ${variation.positionChanges}`,
+    `军团 ${before.regiments} -> ${after.regiments}；战线 ${before.fronts} -> ${after.fronts}；战役 ${before.campaigns} -> ${after.campaigns}。已刷新军事图标、标签、战线和对象索引；地区仍标记为待派生。`,
     {
       regenerationSalt: salt,
+      attempts,
+      variation,
       before,
       after,
       preservedBattleEvents: archivedEvents.length,

@@ -27249,3 +27249,10 @@ full 矩阵结果：
 - `UiObjectTable` 只监听主选中 id、选中位置和行 id 顺序；虚拟表先按索引估算，再等选中行进入 DOM 后按真实矩形二次校正。筛选 / 排序和首次挂载会触发，同一选中的无关 rows 新引用、列宽刷新和批量 checkbox 不触发。
 - 文化 / 宗教 `UiTreeDisplayPanel` 与外交矩阵接入同一 controller；军事战报、外交历史等无主选中项只读列表保持不变。
 - `pnpm run regress:selection-scroll-center` 通过；同时通过 `regress:panel-refresh-path`、`regress:selection-actions`、`regress:map-migration`、生产构建和 `git diff --check`。按用户最新快速迭代要求，本轮没有启动浏览器，不把纯代码结果表述为真实 UI 像素验收。
+
+### 2026-07-15 修正军事重新生成的可见变化验收
+
+- 用户实际点击后指出军事状态看起来没有变化。复查确认每次点击已经使用不同 seed，固定样本的内部军团数据也会变化；原验收只展示军团 / 战线 / 战役总数，而这些数量可能完全相同，且刷新 effects 遗漏了军事标签和战线，因此无法证明或完整呈现重生成结果。
+- 新增军事快照与差异统计，覆盖兵力、兵种编成、态势、驻地和命令。运行时若新旧完整快照意外同构，会在同一次点击内自动更换扰动重试，最多 6 次；结果状态和 API details 直接返回实际变化数量。
+- 军事重生成刷新范围补齐 `point-layers / line-layers / labels / object-panels / object-index`，确保 WebGL 军事点、HTML 军事图标与数量、战争战线和对象数据同步读取新结果。
+- 专项回归不再只校验 metadata：固定 3000 cells 样本虽然军团仍为 `56 -> 56`，但 56 个军团全部变化，兵力变化 56、编成变化 56、态势变化 13、驻地变化 32、命令变化 34；同时继续覆盖兵种比例、归档战报、affected 和 UI / API 共路径静态契约。

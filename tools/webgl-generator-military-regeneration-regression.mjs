@@ -5,6 +5,7 @@ import {readFile} from "node:fs/promises";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {buildMilitary} from "../app/webgl-generator/src/generator/military.js";
 import {collectionAffected, summarizeAffectedTargets, systemAffected} from "../app/webgl-generator/src/runtime/edit-command-effects.js";
+import {compareMilitaryVariation, snapshotMilitaryVariation} from "../app/webgl-generator/src/runtime/military-regeneration-variation.js";
 
 const map = generatePlaceholderMap({
   seed: "military-regeneration-regression",
@@ -27,7 +28,9 @@ map.military.metadata.events = previousEvents.length;
 map.military.metadata.eventSequence = eventSequence;
 
 const before = militaryCounts(map);
+const beforeSnapshot = snapshotMilitaryVariation(map);
 map.military = buildMilitary(map.pack, {...map.options, seed: `${map.options.seed}:regenerate-military:1`});
+const variation = compareMilitaryVariation(beforeSnapshot, snapshotMilitaryVariation(map));
 const archivedEvents = previousEvents.map(event => ({...event, archived: true, archiveReason: "military-regeneration", archiveGeneration: 1}));
 map.military.events = archivedEvents;
 map.military.metadata.events = archivedEvents.length;
@@ -41,6 +44,9 @@ assert(regimentsHaveNoArchivedEvents(map, archivedEvents), "旧战报被错误�
 assert.equal(after.regiments, map.pack.states.flatMap(item => item?.military || []).length, "军团摘要与国家军团集合不一致");
 assert.equal(after.fronts, map.military.fronts.length, "战线摘要与结果集合不一致");
 assert.equal(after.campaigns, map.military.campaigns.length, "战役摘要与结果集合不一致");
+assert(variation.changed, "军事重生成前后快照完全同构");
+assert(variation.changedRegiments > 0, "军事重生成没有改变任何军团");
+assert(variation.troopChanges + variation.compositionChanges + variation.statusChanges + variation.positionChanges + variation.orderChanges > 0, "军事重生成没有产生可观察变化");
 
 const regiments = map.pack.states.flatMap(item => item?.military || []);
 const affected = systemAffected("military", collectionAffected("military", regiments));
@@ -63,6 +69,9 @@ assert.match(militaryBlock, /markDerivedStale\(map, \["zones"\]\)/, "军事重�
 assert.match(militaryBlock, /archiveReason: "military-regeneration"[\s\S]*map\.military\.events = archivedEvents/, "军事重生成没有保留并标记全局战报档案");
 assert.match(militaryBlock, /preservedBattleEvents: archivedEvents\.length/, "军事结果没有返回保留战报数");
 assert.match(militaryBlock, /regenerationSalt: salt/, "军事结果没有返回扰动编号");
+assert.match(militaryBlock, /attempts < 6/, "军事重生成没有在同构结果下自动更换扰动重试");
+assert.match(militaryBlock, /variation,/, "军事结果没有返回实际变化摘要");
+assert.match(militaryBlock, /\["point-layers", "line-layers", "labels", "object-panels", "object-index"\]/, "军事重生成没有同步刷新图标、标签和战线");
 assert.match(militaryBlock, /before,\s+after,/, "军事结果没有返回前后摘要");
 assert.match(militaryBlock, /affected: \{\s+summary:/, "军事结果没有返回 affected 摘要");
 assert.match(appSource, /militaryFronts:[\s\S]*militaryCampaigns:/, "API 前后摘要缺少战线或战役数");
@@ -75,6 +84,7 @@ console.log(JSON.stringify({
   regenerationSalt: 1,
   before,
   after,
+  variation,
   preservedRatios,
   preservedBattleEvents: map.military.events.length,
   affected: {
