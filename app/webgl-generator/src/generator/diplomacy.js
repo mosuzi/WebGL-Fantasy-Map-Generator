@@ -1,5 +1,6 @@
 import {createRandom} from "./random.js";
 import {getGovernmentEffects} from "./governments.js";
+import {reconcileWarDerivedData} from "./war-consistency.js";
 
 export const DIPLOMACY_RELATIONS = Object.freeze({
   Ally: Object.freeze({value: "Ally", label: "盟友", color: "#2fa85a", polarity: 3}),
@@ -83,6 +84,7 @@ export function setDiplomacyRelation(pack, subjectId, objectId, relation, {recor
     states[0].diplomacy.push(createRelationHistoryEntry(subject, object, oldRelation, normalized, reason));
   }
   if (normalized === "Enemy") ensureWarCampaign(subject, object, createManualWarCause(subject, object, reason));
+  else reconcileWarDerivedData(pack);
 
   refreshDiplomacySummaries(states);
   if (pack?.diplomacy) {

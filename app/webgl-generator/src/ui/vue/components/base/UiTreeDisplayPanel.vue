@@ -7,7 +7,7 @@
         <ElButton class="ui-tree-display-close" text circle :icon="Close" aria-label="关闭树状总览" @pointerdown.stop @click="emit('update:open', false)" />
       </header>
 
-      <div class="ui-tree-display-viewport">
+      <div ref="viewport" class="ui-tree-display-viewport">
         <div class="ui-tree-display-canvas" :style="{width: `${layout.width}px`, height: `${layout.height}px`}">
           <svg class="ui-tree-display-lines" :viewBox="`0 0 ${layout.width} ${layout.height}`" aria-hidden="true">
             <path
@@ -22,7 +22,7 @@
             v-for="node in layout.nodes"
             :key="node.id"
             class="ui-tree-display-node"
-            :class="{active: node.id === selectedId}"
+            :class="{active: sameObjectId(node.id, selectedId)}"
             :style="{left: `${node.x}px`, top: `${node.y}px`}"
             @click="emit('select', node.raw)"
           >
@@ -36,9 +36,11 @@
 </template>
 
 <script setup>
-import {computed, nextTick, ref, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
 import {Close} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../../composables/use-draggable-floating-panel.js";
+import {objectIdKey, sameObjectId} from "../../../object-id.js";
+import {createSelectionCenterController, selectionCenterAnchor, selectionOrderSignature} from "../../../components/selection-scroll.js";
 
 defineOptions({
   name: "UiTreeDisplayPanel"
@@ -65,7 +67,19 @@ const props = defineProps({
 
 const emit = defineEmits(["update:open", "select"]);
 const panel = ref(null);
+const viewport = ref(null);
 const layout = computed(() => buildTreeLayout(props.nodes));
+const selectedNodePosition = computed(() => layout.value.nodes.findIndex(node => sameObjectId(node.id, props.selectedId)));
+const nodeOrderSignature = computed(() => selectionOrderSignature(layout.value.nodes.map(node => objectIdKey(node.id))));
+const selectedScrollAnchor = computed(() => props.open ? selectionCenterAnchor(
+  props.selectedId === null || props.selectedId === undefined ? null : objectIdKey(props.selectedId),
+  selectedNodePosition.value,
+  nodeOrderSignature.value
+) : null);
+const selectedCenterController = createSelectionCenterController({
+  getScroller: () => viewport.value,
+  getTarget: () => viewport.value?.querySelector(".ui-tree-display-node.active")
+});
 const {
   panelStyle,
   position,
@@ -89,6 +103,13 @@ watch(() => props.open, open => {
     else constrainPanel();
   });
 });
+
+watch(selectedScrollAnchor, () => {
+  if (selectedNodePosition.value < 0) return;
+  nextTick(() => selectedCenterController.request());
+}, {flush: "post", immediate: true});
+
+onBeforeUnmount(() => selectedCenterController.cancel());
 
 function buildTreeLayout(nodes) {
   const rowHeight = 46;

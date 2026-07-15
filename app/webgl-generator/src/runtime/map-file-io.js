@@ -1085,6 +1085,8 @@ function zoneFeatures(map, options = {}) {
         id: zone.i ?? zone.id,
         name: zone.name || "",
         type: zone.type || "",
+        attacker: Number(zone.attacker) || 0,
+        defender: Number(zone.defender) || 0,
         hidden: Boolean(zone.hidden),
         cells: zone.cells?.length || 0,
         color: zone.color || "",

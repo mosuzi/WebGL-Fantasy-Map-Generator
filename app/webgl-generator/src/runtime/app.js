@@ -7,6 +7,7 @@ import {backfillRiverHydrology, buildRivers, renameHydronymsByCulture} from "../
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
+import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -2793,6 +2794,7 @@ function generationApiMapSummary(map) {
 async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = ""} = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   state.map = map;
+  reconcileWarDerivedData(state.map);
   ensureRiverHydrology(state.map);
   state.pick = null;
   state.editHistory.clear();
@@ -6346,6 +6348,7 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
     executed: Boolean(result.executed),
     status: result.status || "",
     constraint: result.constraint || "",
+    details: result.details || null,
     before,
     after: regenerationApiSummary(state.map),
     staleSystems: [...(state.map?.metadata?.derivedStale?.systems || [])],
@@ -6380,6 +6383,8 @@ function regenerationApiSummary(map) {
     resourceMarkers: Number(map?.markers?.metadata?.resourceMarkers) || 0,
     religions: Number(map?.society?.metadata?.religions) || 0,
     militaryRegiments: Number(map?.military?.metadata?.regiments) || 0,
+    militaryFronts: Number(map?.military?.metadata?.fronts) || map?.military?.fronts?.length || 0,
+    militaryCampaigns: Number(map?.military?.metadata?.campaigns) || map?.military?.campaigns?.length || 0,
     zones: Number(map?.zones?.metadata?.zones) || 0,
     economyDeals: Number(map?.economy?.metadata?.deals) || 0,
     diplomacyPairs: Number(map?.diplomacy?.metadata?.pairs) || 0,
@@ -6549,20 +6554,57 @@ function regenerateReligions(state, documentRef) {
 
 function regenerateMilitary(state, documentRef) {
   const map = state.map;
-  if (!map?.pack?.cells?.i?.length || !map?.pack?.states?.length) return regenerationResult("military", "未执行", "当前地图缺少 pack cells 或国家数据，无法重建军事。");
-  const before = Number(map.military?.metadata?.regiments) || 0;
+  const validStates = (map?.pack?.states || []).filter(state => state?.i && !state.removed);
+  if (!map?.pack?.cells?.i?.length || !validStates.length) return regenerationResult("military", "未执行", "当前地图缺少 pack cells 或有效国家数据，无法重建军事。");
+  const before = militaryRegenerationCounts(map);
+  const previousEvents = Array.isArray(map.military?.events) ? map.military.events : [];
+  const eventSequence = Number(map.military?.metadata?.eventSequence) || 0;
   const salt = nextRegenerationSalt(map, "military");
+  const archivedEvents = previousEvents.map(event => ({
+    ...event,
+    archived: true,
+    archiveReason: "military-regeneration",
+    archiveGeneration: salt
+  }));
   const seed = `${map.options?.seed || "map"}:regenerate-military:${salt}`;
   map.military = buildMilitary(map.pack, {...map.options, seed});
+  map.military.events = archivedEvents;
+  map.military.metadata.events = archivedEvents.length;
+  map.military.metadata.eventSequence = eventSequence;
   markDerivedFresh(map, ["military"]);
   markDerivedStale(map, ["zones"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate military: salt=${salt}, regiments=${map.military.metadata.regiments}, troops=${map.military.metadata.troops}`);
+  const affected = systemAffected("military", collectionAffected(OBJECT_KIND.MILITARY, militaryRegiments(map)));
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["point-layers", "object-panels", "object-index"],
-    affected: systemAffected("military", collectionAffected(OBJECT_KIND.MILITARY, militaryRegiments(map)))
+    affected
   });
-  return regenerationResult("military", `军事已按当前国家、人口、经济和外交重算（扰动 #${salt}）：军团 ${before} -> ${map.military.metadata.regiments}`, "已刷新军团、战线、战役、点图层和对象索引；地区仍标记为待派生。");
+  const after = militaryRegenerationCounts(map);
+  return regenerationResult(
+    "military",
+    `军事已按当前国家、人口、经济和外交重算（扰动 #${salt}）：军团 ${before.regiments} -> ${after.regiments}；战线 ${before.fronts} -> ${after.fronts}；战役 ${before.campaigns} -> ${after.campaigns}`,
+    "已刷新军团、战线、战役、点图层和对象索引；地区仍标记为待派生。",
+    {
+      regenerationSalt: salt,
+      before,
+      after,
+      preservedBattleEvents: archivedEvents.length,
+      affected: {
+        summary: state.lastEditRefresh?.affected || "none",
+        count: state.lastEditRefresh?.affectedCount || affected.length,
+        kinds: state.lastEditRefresh?.affectedKinds || []
+      }
+    }
+  );
+}
+
+function militaryRegenerationCounts(map) {
+  return {
+    regiments: Number(map?.military?.metadata?.regiments) || militaryRegiments(map).length,
+    fronts: Number(map?.military?.metadata?.fronts) || map?.military?.fronts?.length || 0,
+    campaigns: Number(map?.military?.metadata?.campaigns) || map?.military?.campaigns?.length || 0
+  };
 }
 
 function regenerateZones(state, documentRef) {
@@ -6734,8 +6776,9 @@ function clearGeneratedCityLabelHides(map) {
   };
 }
 
-function regenerationResult(kind, status, constraint) {
-  return createRegenerationResult(kind, status, constraint);
+function regenerationResult(kind, status, constraint, details = null) {
+  const result = createRegenerationResult(kind, status, constraint);
+  return details ? {...result, details} : result;
 }
 
 function shouldOpenProvincePanelForSelection(state) {

@@ -1,4 +1,5 @@
 import {buildDiplomacy, normalizeDiplomacyRelation, setDiplomacyRelation} from "../generator/diplomacy.js";
+import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const DIPLOMACY_EFFECTS = Object.freeze({
@@ -6,7 +7,7 @@ const DIPLOMACY_EFFECTS = Object.freeze({
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
-  derived: Object.freeze(["diplomacy", "cell-colors", "object-panels"])
+  derived: Object.freeze(["diplomacy", "cell-colors", "point-layers", "object-panels", "object-index"])
 });
 
 export function createSetDiplomacyRelationCommand(subjectId, objectId, relation, {label = "外交关系", reason = "手动关系编辑"} = {}) {
@@ -15,6 +16,7 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
   const normalizedRelation = normalizeDiplomacyRelation(relation);
   const historyReason = normalizeRelationReason(reason);
   let snapshot = null;
+  let lastResult = null;
 
   return {
     label: `${label} #${normalizedSubjectId}-#${normalizedObjectId}`,
@@ -32,6 +34,13 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
       const changed = setDiplomacyRelation(context.map?.pack, normalizedSubjectId, normalizedObjectId, normalizedRelation, {record: true, reason: historyReason});
       if (!changed) throw new Error("无法设置外交关系");
       syncDiplomacy(context.map);
+      lastResult = reconcileWarDerivedData(context.map);
+      this.effects.affected = [
+        ...systemAffected("diplomacy-relation"),
+        ...objectAffected("state", normalizedSubjectId),
+        ...objectAffected("state", normalizedObjectId),
+        ...lastResult.removedWarzoneIds.filter(id => id !== undefined).flatMap(id => objectAffected("zone", id))
+      ];
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的外交快照");
@@ -40,6 +49,9 @@ export function createSetDiplomacyRelationCommand(subjectId, objectId, relation,
     isNoop(context) {
       const state = context.map?.pack?.states?.[normalizedSubjectId] || context.map?.politics?.states?.[normalizedSubjectId];
       return !state || !normalizedRelation || state.diplomacy?.[normalizedObjectId] === normalizedRelation || normalizedSubjectId === normalizedObjectId;
+    },
+    getResult() {
+      return lastResult;
     }
   };
 }
@@ -63,6 +75,7 @@ export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成�
       context.map.options = {...context.map.options, diplomacyRegenerationSalt: salt};
       context.map.diplomacy = buildDiplomacy(context.map.pack, context.map.society, context.map.options);
       syncDiplomacy(context.map);
+      reconcileWarDerivedData(context.map);
       this.effects.affected = diplomacyRegenerationAffected(context.map);
     },
     revert(context) {
@@ -88,6 +101,10 @@ function snapshotDiplomacy(map) {
   const states = map?.pack?.states || map?.politics?.states || [];
   return {
     diplomacy: map?.diplomacy ? clonePlain(map.diplomacy) : null,
+    military: map?.military ? clonePlain(map.military) : null,
+    packMilitary: map?.pack?.military ? clonePlain(map.pack.military) : null,
+    zones: map?.zones ? clonePlain(map.zones) : null,
+    packZones: Array.isArray(map?.pack?.zones) ? clonePlain(map.pack.zones) : null,
     optionsSalt: map?.options?.diplomacyRegenerationSalt,
     states: states.map(state => state ? {
       id: state.i ?? state.id,
@@ -113,11 +130,23 @@ function restoreDiplomacy(map, snapshot) {
   }
   map.diplomacy = snapshot.diplomacy ? clonePlain(snapshot.diplomacy) : null;
   if (map?.pack) map.pack.diplomacy = map.diplomacy;
+  restoreWarDerivedData(map, snapshot);
   if (map?.options) {
     if (snapshot.optionsSalt === undefined) delete map.options.diplomacyRegenerationSalt;
     else map.options.diplomacyRegenerationSalt = snapshot.optionsSalt;
   }
   syncDiplomacyStateMirrors(states, map?.politics?.states);
+}
+
+function restoreWarDerivedData(map, snapshot) {
+  const military = snapshot.military || snapshot.packMilitary;
+  map.military = military ? clonePlain(military) : null;
+  if (map?.pack) map.pack.military = map.military;
+
+  map.zones = snapshot.zones ? clonePlain(snapshot.zones) : null;
+  const zones = map.zones?.zones || snapshot.packZones;
+  if (map?.pack) map.pack.zones = zones ? clonePlain(zones) : [];
+  if (map.zones) map.zones.zones = map.pack?.zones || map.zones.zones || [];
 }
 
 function syncDiplomacy(map) {

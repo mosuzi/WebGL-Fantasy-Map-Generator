@@ -1488,6 +1488,7 @@ function countEventsForRegiment(events = [], regiment) {
 }
 
 function eventBelongsToRegiment(event, regiment) {
+  if (event?.archived) return false;
   if ((event.affectedRegiments || []).some(item =>
     item?.regimentObjectId === regiment.id
     || (Number(item?.stateId) === regiment.stateId && Number(item?.regimentId) === regiment.regimentId)

@@ -631,7 +631,8 @@ const regenerationActions = Object.freeze([
   {kind: "routes", label: "道路"},
   {kind: "rivers", label: "河流"},
   {kind: "markers", label: "资源点"},
-  {kind: "diplomacy", label: "外交"}
+  {kind: "diplomacy", label: "外交"},
+  {kind: "military", label: "军事"}
 ]);
 
 function isLayerVisible(layer) {

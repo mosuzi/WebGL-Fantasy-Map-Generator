@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {isActiveEnemyPair} from "./war-consistency.js";
 import {getGovernmentEffects} from "./governments.js";
 
 export const MILITARY_UNITS = Object.freeze([
@@ -774,6 +775,7 @@ function buildMilitaryCampaigns(pack, states, fronts = []) {
       if (campaign.attacker !== attacker.i) continue;
       const defender = pack.states?.[campaign.defender];
       if (!defender?.i || defender.removed) continue;
+      if (!isActiveEnemyPair(pack.states, campaign.attacker, campaign.defender)) continue;
       const key = campaignIdentity(campaign);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -912,6 +914,7 @@ function buildMilitaryFronts(pack, states) {
       if (campaign.attacker !== attacker.i) continue;
       const defender = pack.states?.[campaign.defender];
       if (!defender?.i || defender.removed) continue;
+      if (!isActiveEnemyPair(pack.states, campaign.attacker, campaign.defender)) continue;
       const key = `${campaign.attacker}:${campaign.defender}:${campaign.start}:${campaign.name}`;
       if (seen.has(key)) continue;
       seen.add(key);

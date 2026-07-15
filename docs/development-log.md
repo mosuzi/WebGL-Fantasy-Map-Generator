@@ -27228,3 +27228,24 @@ full 矩阵结果：
 - 源码盘点确认共享 `UiObjectTable` 已有中心点计算、虚拟列表索引定位和动画帧重试，但当前真实行为说明其实际滚动容器、固定虚拟行高、布局稳定时机或刷新触发仍可能漂移；历史开发记录中的城市列表居中验收不能替代当前回归复现。
 - 当前管理面板绝大多数列表复用 `UiObjectTable`；文化 / 宗教树状总览和外交矩阵另有独立滚动视口与活动项，不会自动继承公共表格修复。军事战报和外交历史等只读列表没有主选中项，不应为本项强加自动居中。
 - 第 27 项固定契约为：主选中项变化时纵向对齐实际滚动视口中央，首尾按边界钳制，横向滚动保持；筛选、排序、虚拟化和首次打开后仍成立。重复同选中刷新、用户手动滚动、列宽调整和批量勾选不得反复抢回中央。实现过程继续采用代码回归快速迭代，浏览器集中在本项收口时验证一次。
+
+### 2026-07-15 完成权威任务第 25 项：军事重新生成
+
+- 控制面板“重新生成”区新增“军事”，继续通过统一 `data-regenerate-kind` 路径调用 `regenerateMapAttribute()`；控制台 `military / army / armies` 分支与 UI 共用 `regenerateMilitary()`。
+- 重算前先确认 pack cells 和至少一个有效国家；成功结果补充扰动编号、军团 / 战线 / 战役前后数量、保留战报数和 affected 摘要。`buildMilitary()` 继续保留有效 `militaryPolicy.unitRatios`，同步 `map.military / pack.military`，军事标 fresh、地区标 stale。
+- 旧全局战报保留为静态档案并标记 `archived / archiveReason / archiveGeneration`；军事面板不会把归档事件按旧 id 自动挂到新军团。没有新增动态战斗、自动推进、单国重算或经济 / 外交反写。
+- `pnpm run regress:military-regeneration` 通过：固定 3000 cells 样本军团 `56 -> 56`、战线 `2 -> 2`、战役 `1 -> 1`，保留自定义兵种比例和 1 条归档战报，affected `57` 项。
+
+### 2026-07-15 完成权威任务第 26 项：外交关系与交战区一致性
+
+- 新增 `war-consistency.js`，把有效国家、双向 `Enemy` 关系作为 campaign、front 和 Warzone 的唯一合法依据。军事 front / campaign 与地区 front / fallback 生成均复用该判定，新 Warzone 持久化 attacker / defender。
+- 外交关系离开战争时，命令会同步清理国家 campaign、`map / pack` 军事 campaign/front 和对应 Warzone，并更新地区 metadata、对象索引和面板刷新 effects；快照同时覆盖外交、军事和地区，撤销恢复、重做再清理。
+- 旧地图接入运行时时执行同一修复：缺参与国的 Warzone 只有在 cells 恰好覆盖两个有效国家且双方仍为战争时回填，否则剔除；合法 Warzone 的用户 pattern / hexColor、非 Warzone 和其它数据保持不变。要素 GeoJSON 新增 attacker / defender。独立审查曾指出“三国区域中只有一对敌国”仍可能被错误回填，现已收紧并补坏样本。
+- `pnpm run regress:warzone-consistency` 通过，覆盖 `Neutral / Friendly / Ally / Vassal / Suzerain`、合法旧图回填、三国歧义区、已删除国家清理、撤销 / 重做和 GeoJSON 参与国字段。
+
+### 2026-07-15 完成权威任务第 27 项：列表选中项滚动居中一致性
+
+- 新增共享 `selection-scroll.js`：按真实滚动区域计算纵向中心，首尾钳制，保留 `scrollLeft`，并通过最多 10 个动画帧等待懒渲染目标。
+- `UiObjectTable` 只监听主选中 id、选中位置和行 id 顺序；虚拟表先按索引估算，再等选中行进入 DOM 后按真实矩形二次校正。筛选 / 排序和首次挂载会触发，同一选中的无关 rows 新引用、列宽刷新和批量 checkbox 不触发。
+- 文化 / 宗教 `UiTreeDisplayPanel` 与外交矩阵接入同一 controller；军事战报、外交历史等无主选中项只读列表保持不变。
+- `pnpm run regress:selection-scroll-center` 通过；同时通过 `regress:panel-refresh-path`、`regress:selection-actions`、`regress:map-migration`、生产构建和 `git diff --check`。按用户最新快速迭代要求，本轮没有启动浏览器，不把纯代码结果表述为真实 UI 像素验收。

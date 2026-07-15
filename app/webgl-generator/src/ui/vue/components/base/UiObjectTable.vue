@@ -108,6 +108,12 @@
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
+import {
+  centerVirtualRowVertically,
+  createSelectionCenterController,
+  selectionCenterAnchor,
+  selectionOrderSignature
+} from "../../../components/selection-scroll.js";
 
 defineOptions({
   name: "UiObjectTable"
@@ -193,8 +199,6 @@ const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "c
 const tableWrap = ref(null);
 const scrollTop = ref(0);
 const viewportHeight = ref(300);
-let scrollFrame = 0;
-let scrollAttempt = 0;
 let scrollMetricsFrame = 0;
 let resizeState = null;
 
@@ -229,19 +233,37 @@ const columnLayoutSignature = computed(() => props.columns.map(column => [
   column.maxWidth,
   column.align
 ].join(":")).join("|"));
+const selectedRowPosition = computed(() => selectedRowIndex());
+const rowOrderSignature = computed(() => selectionOrderSignature(props.rows.map(row => rowKey(row))));
+const selectedScrollAnchor = computed(() => selectionCenterAnchor(
+  props.selectedId === null || props.selectedId === undefined ? null : objectIdKey(props.selectedId),
+  selectedRowPosition.value,
+  rowOrderSignature.value
+));
+const selectedCenterController = createSelectionCenterController({
+  getScroller: () => tableScroller(tableWrap.value),
+  getTarget: () => tableWrap.value?.querySelector(".object-table-row.selected-row"),
+  prepareTarget: scroller => {
+    if (!virtualEnabled.value || selectedRowPosition.value < 0) return;
+    centerVirtualRowVertically(scroller, selectedRowPosition.value, VIRTUAL_ROW_HEIGHT);
+    refreshScrollMetrics();
+  },
+  onSettled: refreshScrollMetrics
+});
 
 watch(
-  () => [props.selectedId, props.rows, props.rows.length],
+  selectedScrollAnchor,
   () => scrollSelectedRowIntoView(),
   {flush: "post", immediate: true}
 );
 
 onMounted(() => {
   refreshScrollMetrics();
+  scrollSelectedRowIntoView();
 });
 
 onBeforeUnmount(() => {
-  cancelScrollFrame();
+  selectedCenterController.cancel();
   cancelScrollMetricsFrame();
   stopColumnResize();
 });
@@ -353,31 +375,8 @@ function handleScroll() {
 }
 
 function scrollSelectedRowIntoView() {
-  if (props.selectedId === null || props.selectedId === undefined) return;
-  scrollAttempt = 0;
-  nextTick(() => requestSelectedRowScroll());
-}
-
-function requestSelectedRowScroll() {
-  const view = tableWrap.value?.ownerDocument?.defaultView;
-  if (!view?.requestAnimationFrame) {
-    scrollSelectedRowNow();
-    return;
-  }
-  cancelScrollFrame();
-  scrollFrame = view.requestAnimationFrame(() => {
-    scrollFrame = 0;
-    const done = scrollSelectedRowNow();
-    scrollAttempt += 1;
-    if (!done && scrollAttempt < 10) requestSelectedRowScroll();
-  });
-}
-
-function cancelScrollFrame() {
-  if (!scrollFrame) return;
-  const view = tableWrap.value?.ownerDocument?.defaultView;
-  view?.cancelAnimationFrame?.(scrollFrame);
-  scrollFrame = 0;
+  if (selectedRowPosition.value < 0) return;
+  nextTick(() => selectedCenterController.request());
 }
 
 function cancelScrollMetricsFrame() {
@@ -385,32 +384,6 @@ function cancelScrollMetricsFrame() {
   const view = tableWrap.value?.ownerDocument?.defaultView;
   view?.cancelAnimationFrame?.(scrollMetricsFrame);
   scrollMetricsFrame = 0;
-}
-
-function scrollSelectedRowNow() {
-  const wrap = tableWrap.value;
-  const scroller = tableScroller(wrap);
-  if (!scroller) return false;
-  if (virtualEnabled.value) {
-    const index = selectedRowIndex();
-    if (index < 0) return false;
-    const nextScrollTop = Math.max(0, index * VIRTUAL_ROW_HEIGHT - (scroller.clientHeight - VIRTUAL_ROW_HEIGHT) / 2);
-    if (Math.abs(scroller.scrollTop - nextScrollTop) > 1) scroller.scrollTop = nextScrollTop;
-    refreshScrollMetrics();
-    return true;
-  }
-  const row = wrap?.querySelector(".object-table-row.selected-row");
-  if (!row) return false;
-  const rowRect = row.getBoundingClientRect();
-  const scrollerRect = scroller.getBoundingClientRect();
-  const rowCenter = rowRect.top + rowRect.height / 2;
-  const scrollerCenter = scrollerRect.top + scrollerRect.height / 2;
-  const delta = rowCenter - scrollerCenter;
-  if (Math.abs(delta) <= 1) return true;
-  scroller.scrollTop += delta;
-  const atStart = scroller.scrollTop <= 0;
-  const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
-  return atStart || atEnd;
 }
 
 function tableScroller(wrap) {

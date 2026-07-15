@@ -1,0 +1,107 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {buildMilitary} from "../app/webgl-generator/src/generator/military.js";
+import {collectionAffected, summarizeAffectedTargets, systemAffected} from "../app/webgl-generator/src/runtime/edit-command-effects.js";
+
+const map = generatePlaceholderMap({
+  seed: "military-regeneration-regression",
+  cellsTarget: 3000,
+  graphWidth: 960,
+  graphHeight: 640,
+  heightmapTemplate: "continents"
+});
+const state = map.pack.states.find(item => item?.i && !item.removed);
+assert(state, "固定样本没有生成有效国家");
+
+const ratioKeys = Object.keys(state.militaryPolicy?.unitRatios || {});
+assert(ratioKeys.length >= 2, "固定样本缺少可验证的兵种比例");
+const preservedRatios = Object.fromEntries(ratioKeys.map((key, index) => [key, index === 0 ? 0.7 : index === 1 ? 0.3 : 0]));
+state.militaryPolicy.unitRatios = {...preservedRatios};
+const previousEvents = [{id: "archive:event:1", regimentObjectId: "1:0", stateId: 1, regimentId: 0, kind: "battle"}];
+const eventSequence = 7;
+map.military.events = previousEvents;
+map.military.metadata.events = previousEvents.length;
+map.military.metadata.eventSequence = eventSequence;
+
+const before = militaryCounts(map);
+map.military = buildMilitary(map.pack, {...map.options, seed: `${map.options.seed}:regenerate-military:1`});
+const archivedEvents = previousEvents.map(event => ({...event, archived: true, archiveReason: "military-regeneration", archiveGeneration: 1}));
+map.military.events = archivedEvents;
+map.military.metadata.events = archivedEvents.length;
+map.military.metadata.eventSequence = eventSequence;
+const after = militaryCounts(map);
+assert.deepEqual(state.militaryPolicy.unitRatios, preservedRatios, "军事重生成没有保留有效兵种比例");
+assert.deepEqual(map.military.events, archivedEvents, "军事重生成静默丢失了全局战报档案");
+assert(map.military.events.every(event => event.archived && event.archiveReason === "military-regeneration"), "旧战报没有标记为静态归档");
+assert.equal(map.military.metadata.eventSequence, eventSequence, "军事重生成没有保留战报序号");
+assert(regimentsHaveNoArchivedEvents(map, archivedEvents), "旧战报被错误挂接到新军团");
+assert.equal(after.regiments, map.pack.states.flatMap(item => item?.military || []).length, "军团摘要与国家军团集合不一致");
+assert.equal(after.fronts, map.military.fronts.length, "战线摘要与结果集合不一致");
+assert.equal(after.campaigns, map.military.campaigns.length, "战役摘要与结果集合不一致");
+
+const regiments = map.pack.states.flatMap(item => item?.military || []);
+const affected = systemAffected("military", collectionAffected("military", regiments));
+const affectedSummary = summarizeAffectedTargets(affected);
+assert.equal(affectedSummary.count, regiments.length + 1, "affected 总数没有包含军事系统与全部军团");
+assert.equal(affectedSummary.kinds[0]?.kind, "derived-system", "affected 缺少军事系统目标");
+assert(affectedSummary.text.startsWith("derived-system#military"), "affected 摘要没有以军事系统开头");
+
+const [appSource, controlSource] = await Promise.all([
+  readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8")
+]);
+const militaryBlock = functionBlock(appSource, "regenerateMilitary");
+assert.match(controlSource, /\{kind: "military", label: "军事"\}/, "控制面板缺少军事重生成入口");
+assert.match(appSource, /\["military", "army", "armies"\]\.includes\(value\)/, "API 缺少 military 别名归一化");
+assert.match(militaryBlock, /validStates\.length/, "军事重生成没有拒绝缺少有效国家的地图");
+assert.match(militaryBlock, /nextRegenerationSalt\(map, "military"\)/, "军事重生成没有推进扰动编号");
+assert.match(militaryBlock, /markDerivedFresh\(map, \["military"\]\)/, "军事重生成没有把 military 标为 fresh");
+assert.match(militaryBlock, /markDerivedStale\(map, \["zones"\]\)/, "军事重生成没有把 zones 标为 stale");
+assert.match(militaryBlock, /archiveReason: "military-regeneration"[\s\S]*map\.military\.events = archivedEvents/, "军事重生成没有保留并标记全局战报档案");
+assert.match(militaryBlock, /preservedBattleEvents: archivedEvents\.length/, "军事结果没有返回保留战报数");
+assert.match(militaryBlock, /regenerationSalt: salt/, "军事结果没有返回扰动编号");
+assert.match(militaryBlock, /before,\s+after,/, "军事结果没有返回前后摘要");
+assert.match(militaryBlock, /affected: \{\s+summary:/, "军事结果没有返回 affected 摘要");
+assert.match(appSource, /militaryFronts:[\s\S]*militaryCampaigns:/, "API 前后摘要缺少战线或战役数");
+assert.match(appSource, /details: result\.details \|\| null/, "API 没有返回军事重生成详情");
+const militaryPanelSource = await readFile(new URL("../app/webgl-generator/src/ui/vue/components/MilitaryPanel.vue", import.meta.url), "utf8");
+assert.match(militaryPanelSource, /function eventBelongsToRegiment[\s\S]*if \(event\?\.archived\) return false;/, "已归档旧战报不得自动挂到新军团");
+
+console.log(JSON.stringify({
+  ok: true,
+  regenerationSalt: 1,
+  before,
+  after,
+  preservedRatios,
+  preservedBattleEvents: map.military.events.length,
+  affected: {
+    summary: affectedSummary.text,
+    count: affectedSummary.count,
+    kinds: affectedSummary.kinds
+  }
+}, null, 2));
+
+function militaryCounts(targetMap) {
+  return {
+    regiments: Number(targetMap.military?.metadata?.regiments) || 0,
+    fronts: Number(targetMap.military?.metadata?.fronts) || targetMap.military?.fronts?.length || 0,
+    campaigns: Number(targetMap.military?.metadata?.campaigns) || targetMap.military?.campaigns?.length || 0
+  };
+}
+
+function regimentsHaveNoArchivedEvents(targetMap, events) {
+  const ids = new Set(events.map(event => event.id));
+  return targetMap.pack.states
+    .flatMap(item => item?.military || [])
+    .every(regiment => !(regiment.events || []).some(event => ids.has(event?.id)));
+}
+
+function functionBlock(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert(start >= 0, `缺少函数 ${name}`);
+  const next = source.indexOf("\nfunction ", start + 1);
+  return source.slice(start, next < 0 ? source.length : next);
+}

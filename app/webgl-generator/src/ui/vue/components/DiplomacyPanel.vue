@@ -18,7 +18,7 @@
     <UiButton variant="secondary" @click="callbacks.onRegenerate?.()">重生成外交</UiButton>
   </div>
 
-  <div class="diplomacy-matrix-wrap">
+  <div ref="matrixWrap" class="diplomacy-matrix-wrap">
     <table id="diplomacy-matrix-table" class="diplomacy-matrix-table">
       <thead>
         <tr>
@@ -147,7 +147,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {DIPLOMACY_RELATION_OPTIONS, DIPLOMACY_RELATIONS} from "../../../generator/diplomacy.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
@@ -162,6 +162,7 @@ import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {createSelectionCenterController, selectionCenterAnchor, selectionOrderSignature} from "../../components/selection-scroll.js";
 
 defineOptions({
   name: "DiplomacyPanel"
@@ -199,6 +200,7 @@ const columns = Object.freeze([
 
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
+const matrixWrap = ref(null);
 const relationReasonDraft = ref("");
 const relationOptions = DIPLOMACY_RELATION_OPTIONS;
 const historyFilterOptions = Object.freeze([
@@ -232,10 +234,32 @@ const matrix = computed(() => {
   props.state.version;
   return buildDiplomacyMatrix(props.state.map);
 });
+const matrixSubjectPosition = computed(() => matrix.value.rows.findIndex(row => sameObjectId(row.id, selectedSubjectId.value)));
+const matrixSelectionAnchor = computed(() => {
+  const orderSignature = selectionOrderSignature(matrix.value.rows.map(row => row.id));
+  const subjectAnchor = selectionCenterAnchor(selectedSubjectId.value, matrixSubjectPosition.value, orderSignature);
+  if (!subjectAnchor || props.state.selectedObjectId === null || props.state.selectedObjectId === undefined) return subjectAnchor;
+  return `${subjectAnchor}:${String(props.state.selectedObjectId)}`;
+});
+const matrixCenterController = createSelectionCenterController({
+  getScroller: () => matrixWrap.value,
+  getTarget: () => matrixWrap.value?.querySelector("td.selected")
+});
 const diplomacyActions = Object.freeze([
   {key: "openState", label: "打开国家", icon: "◎"},
   {key: "relation", label: "调整关系", icon: "⇄"}
 ]);
+
+watch(matrixSelectionAnchor, () => {
+  if (matrixSubjectPosition.value < 0) return;
+  nextTick(() => matrixCenterController.request());
+}, {flush: "post"});
+
+onMounted(() => {
+  if (matrixSubjectPosition.value >= 0) nextTick(() => matrixCenterController.request());
+});
+
+onBeforeUnmount(() => matrixCenterController.cancel());
 
 const summaryMetrics = computed(() => [
   {label: "主体", value: metrics.value.subjectName},

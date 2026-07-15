@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {isActiveEnemyPair} from "./war-consistency.js";
 
 const ZONE_TYPES = [
   "Warzone",
@@ -73,7 +74,7 @@ function createZone(type, pack, random, occupied, id) {
   const result = factory?.(pack, random, occupied);
   if (!result?.cells?.length) return null;
 
-  return {
+  const zone = {
     i: id,
     name: result.name || `${type} ${id + 1}`,
     type,
@@ -83,10 +84,15 @@ function createZone(type, pack, random, occupied, id) {
     hexColor: result.hexColor || colorForZoneType(type),
     hidden: false
   };
+  if (Number(result.attacker) > 0) zone.attacker = Number(result.attacker);
+  if (Number(result.defender) > 0) zone.defender = Number(result.defender);
+  return zone;
 }
 
 function createWarzoneZone(pack, random, occupied) {
-  const front = pick((pack.military?.fronts || []).filter(item => item?.borderCellPairs?.length), random);
+  const front = pick((pack.military?.fronts || []).filter(item =>
+    item?.borderCellPairs?.length && isActiveEnemyPair(pack.states, item.attacker, item.defender)
+  ), random);
   if (front) {
     const pair = pick(front.borderCellPairs || [], random);
     const start = pair ? pick(pair.filter(Number.isInteger), random) : null;
@@ -99,7 +105,7 @@ function createWarzoneZone(pack, random, occupied) {
         occupied,
         allow: cell => isLand(pack.cells, cell) && allowedStates.has(Number(pack.cells.state?.[cell] || 0))
       });
-      return {name: `${stateName(attacker)}-${stateName(defender)}战区`, cells, pattern: "cross", hexColor: "#d65a42"};
+      return {name: `${stateName(attacker)}-${stateName(defender)}战区`, cells, pattern: "cross", hexColor: "#d65a42", attacker: front.attacker, defender: front.defender};
     }
   }
 
@@ -107,13 +113,14 @@ function createWarzoneZone(pack, random, occupied) {
   const start = pick(border, random);
   if (!Number.isInteger(start)) return null;
   const stateId = pack.cells.state[start];
-  const enemyId = (pack.cells.c[start] || []).map(cell => pack.cells.state[cell]).find(id => id && id !== stateId && pack.states?.[stateId]?.diplomacy?.[id] === "Enemy");
+  const enemyId = (pack.cells.c[start] || []).map(cell => pack.cells.state[cell]).find(id => id && id !== stateId && isActiveEnemyPair(pack.states, stateId, id));
+  if (!enemyId) return null;
   const cells = collectRegion(pack, start, random, {
     maxCells: random.integer(8, 24),
     occupied,
     allow: cell => isLand(pack.cells, cell) && (pack.cells.state[cell] === stateId || pack.cells.state[cell] === enemyId)
   });
-  return {name: `${stateName(pack.states?.[stateId])}-${stateName(pack.states?.[enemyId])}战区`, cells, pattern: "cross", hexColor: "#d65a42"};
+  return {name: `${stateName(pack.states?.[stateId])}-${stateName(pack.states?.[enemyId])}战区`, cells, pattern: "cross", hexColor: "#d65a42", attacker: stateId, defender: enemyId};
 }
 
 function createInvasionZone(pack, random, occupied) {
@@ -358,7 +365,7 @@ function enemyBorderCells(pack) {
     const state = pack.states?.[stateId];
     return (pack.cells.c[cell] || []).some(neighbor => {
       const neighborState = pack.cells.state?.[neighbor];
-      return neighborState && neighborState !== stateId && state?.diplomacy?.[neighborState] === "Enemy";
+      return neighborState && neighborState !== stateId && isActiveEnemyPair(pack.states, state?.i, neighborState);
     });
   });
 }
