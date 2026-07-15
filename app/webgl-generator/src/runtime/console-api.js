@@ -9,6 +9,7 @@ import {OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {resolveObject} from "./object-resolver.js";
 import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {buildHistoryPeek} from "./history-peek.js";
+import {buildApiMethodCoverage} from "./api-capability-coverage.js";
 
 const API_VERSION = "0.1.0";
 const API_STABILITY = "experimental";
@@ -36,7 +37,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
     stability: API_STABILITY,
     info: Object.freeze({
       version: () => apiCall(() => buildApiVersion()),
-      capabilities: () => apiCall(() => buildCapabilities()),
+      capabilities: () => apiCall(() => buildCapabilities(api)),
       mapSummary: () => apiCall(() => buildMapSummary(state)),
       runtimeStats: () => apiCall(() => buildRuntimeStats(state, documentRef)),
       healthEvents: (options = {}) => apiCall(() => buildHealthEventsSnapshot(state, options))
@@ -216,7 +217,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
   return Object.freeze(api);
 }
 
-function buildCapabilities() {
+function buildCapabilities(api) {
   const methods = {
     info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
     generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
@@ -237,7 +238,7 @@ function buildCapabilities() {
     namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases", "debug"],
     methods,
     methodMetadata,
-    methodMetadataCoverage: buildMethodMetadataCoverage(methods, methodMetadata),
+    methodMetadataCoverage: buildApiMethodCoverage(methods, methodMetadata, api),
     safety: {
       confirmationOption: "confirm: true",
       confirmRequiredMethods: [...CONFIRM_REQUIRED_METHODS],
@@ -256,44 +257,6 @@ function buildCapabilities() {
       namebases: "readonly-download-and-edit-command",
       debug: "diagnostics-and-debug-ui"
     }
-  };
-}
-
-function buildMethodMetadataCoverage(methods, methodMetadata) {
-  const namespaces = {};
-  const missing = [];
-  const extra = [];
-  let methodCount = 0;
-  let documentedCount = 0;
-
-  for (const [namespace, methodNames] of Object.entries(methods)) {
-    const metadataNames = Object.keys(methodMetadata[namespace] || {});
-    const methodSet = new Set(methodNames);
-    const namespaceMissing = methodNames.filter(method => !metadataNames.includes(method));
-    const namespaceExtra = metadataNames.filter(method => !methodSet.has(method));
-    const namespaceDocumented = methodNames.length - namespaceMissing.length;
-    methodCount += methodNames.length;
-    documentedCount += namespaceDocumented;
-    missing.push(...namespaceMissing.map(method => `${namespace}.${method}`));
-    extra.push(...namespaceExtra.map(method => `${namespace}.${method}`));
-    namespaces[namespace] = {
-      complete: namespaceMissing.length === 0 && namespaceExtra.length === 0,
-      methods: methodNames.length,
-      documented: namespaceDocumented,
-      metadata: metadataNames.length,
-      missing: namespaceMissing,
-      extra: namespaceExtra
-    };
-  }
-
-  return {
-    complete: missing.length === 0 && extra.length === 0,
-    methods: methodCount,
-    documented: documentedCount,
-    metadata: Object.values(methodMetadata).reduce((sum, namespaceMetadata) => sum + Object.keys(namespaceMetadata || {}).length, 0),
-    missing,
-    extra,
-    namespaces
   };
 }
 

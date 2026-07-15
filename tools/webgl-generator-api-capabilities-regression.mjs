@@ -130,18 +130,22 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
-    if (coverage.methods !== coverage.documented || coverage.methods !== coverage.metadata) {
-      failures.push(`覆盖数量不一致：methods=${coverage.methods}, documented=${coverage.documented}, metadata=${coverage.metadata}`);
+    if (coverage.methods !== coverage.documented || coverage.methods !== coverage.metadata || coverage.methods !== coverage.runtime) {
+      failures.push(`覆盖数量不一致：methods=${coverage.methods}, documented=${coverage.documented}, metadata=${coverage.metadata}, runtime=${coverage.runtime}`);
     }
     if ((coverage.missing || []).length) failures.push(`存在缺失元数据：${coverage.missing.join(", ")}`);
     if ((coverage.extra || []).length) failures.push(`存在多余元数据：${coverage.extra.join(", ")}`);
+    if ((coverage.runtimeMissing || []).length) failures.push(`真实 API 缺少声明方法：${coverage.runtimeMissing.join(", ")}`);
+    if ((coverage.runtimeExtra || []).length) failures.push(`真实 API 存在未声明方法：${coverage.runtimeExtra.join(", ")}`);
     for (const [namespace, namespaceCoverage] of Object.entries(coverage.namespaces || {})) {
       if (!namespaceCoverage.complete) failures.push(`${namespace} 命名空间覆盖不完整`);
-      if (namespaceCoverage.methods !== namespaceCoverage.documented || namespaceCoverage.methods !== namespaceCoverage.metadata) {
+      if (namespaceCoverage.methods !== namespaceCoverage.documented || namespaceCoverage.methods !== namespaceCoverage.metadata || namespaceCoverage.methods !== namespaceCoverage.runtime) {
         failures.push(`${namespace} 命名空间数量不一致`);
       }
       if ((namespaceCoverage.missing || []).length) failures.push(`${namespace} 缺失：${namespaceCoverage.missing.join(", ")}`);
       if ((namespaceCoverage.extra || []).length) failures.push(`${namespace} 多余：${namespaceCoverage.extra.join(", ")}`);
+      if ((namespaceCoverage.runtimeMissing || []).length) failures.push(`${namespace} 真实 API 缺失：${namespaceCoverage.runtimeMissing.join(", ")}`);
+      if ((namespaceCoverage.runtimeExtra || []).length) failures.push(`${namespace} 真实 API 多余：${namespaceCoverage.runtimeExtra.join(", ")}`);
     }
 
     const confirmRequiredMethods = capabilities.safety?.confirmRequiredMethods || [];
@@ -179,15 +183,21 @@ async function inspectCapabilities(page, {cells, seed, template}) {
         methods: coverage.methods,
         documented: coverage.documented,
         metadata: coverage.metadata,
+        runtime: coverage.runtime,
         missing: coverage.missing || [],
         extra: coverage.extra || [],
+        runtimeMissing: coverage.runtimeMissing || [],
+        runtimeExtra: coverage.runtimeExtra || [],
         namespaces: Object.fromEntries(Object.entries(coverage.namespaces || {}).map(([namespace, item]) => [namespace, {
           complete: item.complete,
           methods: item.methods,
           documented: item.documented,
           metadata: item.metadata,
+          runtime: item.runtime,
           missing: item.missing || [],
-          extra: item.extra || []
+          extra: item.extra || [],
+          runtimeMissing: item.runtimeMissing || [],
+          runtimeExtra: item.runtimeExtra || []
         }]))
       },
       safety: {
@@ -253,7 +263,8 @@ function buildConsoleSummary(report) {
       complete: report.coverage.complete,
       methods: report.coverage.methods,
       documented: report.coverage.documented,
-      metadata: report.coverage.metadata
+      metadata: report.coverage.metadata,
+      runtime: report.coverage.runtime
     },
     namespaceCounts: Object.fromEntries(Object.entries(report.coverage.namespaces).map(([namespace, item]) => [namespace, item.methods])),
     confirmRequired: report.safety.confirmRequiredMethods,
@@ -279,15 +290,17 @@ function renderMarkdown(report) {
   lines.push(`- grid cells：${report.map.gridCells}`);
   lines.push(`- pack cells：${report.map.packCells}`);
   lines.push(`- methodMetadataCoverage.complete：${report.coverage.complete}`);
-  lines.push(`- methods / documented / metadata：${report.coverage.methods} / ${report.coverage.documented} / ${report.coverage.metadata}`);
+  lines.push(`- methods / documented / metadata / runtime：${report.coverage.methods} / ${report.coverage.documented} / ${report.coverage.metadata} / ${report.coverage.runtime}`);
   lines.push(`- missing：${report.coverage.missing.length ? report.coverage.missing.join(" / ") : "无"}`);
   lines.push(`- extra：${report.coverage.extra.length ? report.coverage.extra.join(" / ") : "无"}`);
+  lines.push(`- runtime missing：${report.coverage.runtimeMissing.length ? report.coverage.runtimeMissing.join(" / ") : "无"}`);
+  lines.push(`- runtime extra：${report.coverage.runtimeExtra.length ? report.coverage.runtimeExtra.join(" / ") : "无"}`);
   lines.push("");
   lines.push("## 命名空间", "");
-  lines.push("| 命名空间 | methods | documented | metadata | 完整 |");
-  lines.push("|---|---:|---:|---:|---|");
+  lines.push("| 命名空间 | methods | documented | metadata | runtime | 完整 |");
+  lines.push("|---|---:|---:|---:|---:|---|");
   for (const [namespace, item] of Object.entries(report.coverage.namespaces)) {
-    lines.push(`| ${namespace} | ${item.methods} | ${item.documented} | ${item.metadata} | ${item.complete ? "是" : "否"} |`);
+    lines.push(`| ${namespace} | ${item.methods} | ${item.documented} | ${item.metadata} | ${item.runtime} | ${item.complete ? "是" : "否"} |`);
   }
   lines.push("");
   lines.push("## 确认边界", "");
