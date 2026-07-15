@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-07-16：完成权威任务第 62 项——新建国家疆域着色扩张
+
+- 国家笔刷正常 `pointerup` 从错误的预览回滚改为 `finishStateStroke()` 提交，`pointercancel` 改为 `rollbackCanvasToolStroke()`；本项没有顺带修改已登记到 `FOLLOWUPS.md` 的省份笔刷同源问题。
+- 新建国家完成后既有 `setTargetStateId(result.stateId)` 与 selection 写入继续保留，进入国家编辑即可直接以该国为目标扩张，不需要再次从列表取样。
+- `regress:state-lifecycle` 在新国家 #18 上把 grid cell `682` 与 pack cells `96 / 97` 归入该国，国家统计增加，笔刷只形成一条历史；撤销 / 重做和 pointerup / pointercancel 静态路由门禁均通过。语法检查与 `git diff --check` 同时通过。
+
 ## 2026-07-16：完成权威任务第 61 项——首都省份创建保护
 
 - 新增共享 `inspectStateCreation()`，根据目标 grid / pack cell 的省份归属查找未删除国家的首都；首都所在省份内无论点击首都还是普通 cell，都以 `capital-province-protected` 和明确国家 / 省份提示拒绝。

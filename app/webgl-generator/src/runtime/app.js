@@ -9648,7 +9648,7 @@ function bindStateEditing(canvas, state, documentRef) {
     if (!state.stateEdit.activeStroke || state.stateEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    rollbackCanvasToolStroke(state, "state");
+    finishStateStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
   }, true);
 
@@ -9656,7 +9656,7 @@ function bindStateEditing(canvas, state, documentRef) {
     if (!state.stateEdit.activeStroke || state.stateEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishStateStroke(state, documentRef);
+    rollbackCanvasToolStroke(state, "state");
     releasePointer(canvas, event.pointerId);
   }, true);
 }
