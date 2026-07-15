@@ -27407,3 +27407,11 @@ full 矩阵结果：
 - 使用 QGIS 官方 `3.44.12-Solothurn` 管理提取运行环境实际读取两份产物并转存 GeoPackage。首次发现数值 `properties.id` 被 GDAL 选作 FID 后，国家 / 省份 / 地区重复编号会触发自动改号告警；政治面导出改为全局唯一字符串 `id` 并新增 `numericId`。修正后 QGIS/GDAL 读取、转存两份 611 feature 文件均为 0 告警。
 - 修正后的 1.67MB dissolve 产物实际导入 geojson.io；网站成功解析、显示 MultiPolygon 并启用 Export，JSON 编辑器保留 `FeatureCollection`、`state-1`、`numericId`、`layer` 和 `dissolved`。浏览器文件门禁同时固定每个 feature bbox、地区 `attacker / defender` 和唯一外部 id。
 - 新增 `docs/task-notes/political-gis-external-verification.md`、`regress:political-gis-qgis` 与两类本地报告。`regress:dissolve-compatibility / dissolve-performance`、生产构建和差异检查通过；QGIS 初次告警已有可复现证据且已修复，不留未说明兼容边界。
+
+### 2026-07-15 完成权威任务第 44 项：PNG 任意裁剪与细粒度 overlay 选择
+
+- PNG 统一导出参数新增 `viewport / map / pixel / world` 四种裁剪模式。像素和世界坐标矩形严格校验有限值、非空与完整边界；地图全幅和世界坐标导出会临时适配 renderer camera、同步动态层与 DOM overlay，并在成功或失败后恢复原视角。
+- overlay 合成收束为 `labels / cityIcons / markers / military / measurements / legend / scaleBar` 七类稳定白名单；总开关关闭时全部禁用。默认继续导出旧流水线已有六类，测量作为新能力默认关闭，避免改变旧 PNG 输出。
+- 导出面板新增裁剪模式、矩形坐标和七类 overlay 控件；UI 与 `api.data.exportPNG()` 共用规范化、WebGL 像素读取、裁剪、倍率、主题滤镜、overlay 合成和透明边界流水线。API 返回规范化 crop、最终 pixelRect 和 overlay 实际值。
+- 测量 SVG 新增 canvas 图元合成，API 新建测量对象后立即刷新 overlay，确保随后导出可见。`regress:png-options` 覆盖精确源像素 / 输出像素、默认兼容、世界相机、空范围 / 越界和白名单；`regress:png-crop-browser` 使用系统 Chrome 验证真实下载、PNG 签名、IHDR、标签 / 测量文件差异、API 错误和相机恢复。
+- 最终浏览器样本为 3015 / 1753 个 grid / pack cells：默认 `1440×900`，`320×180` 像素矩形按 2x 得到 `640×360`；同尺寸无 overlay、仅标签、仅测量分别为 `45,630 / 61,122 / 49,311 bytes`，console / page error 为 0。生产构建与差异检查通过；第 44 项移出活动清单，当前权威任务清单为空。

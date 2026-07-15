@@ -85,9 +85,33 @@
               <option value="4">4x</option>
             </select>
           </label>
+          <label class="project-export-scale-control" for="export-png-crop-mode">
+            <span>PNG 裁剪</span>
+            <select id="export-png-crop-mode">
+              <option value="viewport">当前视口</option>
+              <option value="map">地图全幅</option>
+              <option value="pixel">像素矩形</option>
+              <option value="world">世界坐标矩形</option>
+            </select>
+          </label>
+          <div class="png-crop-rect-grid" aria-label="PNG 裁剪矩形坐标">
+            <label><span>X</span><input id="export-png-crop-x" type="number" value="0" step="any" /></label>
+            <label><span>Y</span><input id="export-png-crop-y" type="number" value="0" step="any" /></label>
+            <label><span>宽</span><input id="export-png-crop-width" type="number" value="800" min="0" step="any" /></label>
+            <label><span>高</span><input id="export-png-crop-height" type="number" value="600" min="0" step="any" /></label>
+          </div>
           <section class="feature-export-layers" aria-label="PNG 导出选项">
             <UiSwitchField label="包含地图标注" input-id="export-png-overlays" field-class="feature-export-layer-switch" :checked="true" />
             <UiSwitchField label="图外透明背景" input-id="export-png-transparent" field-class="feature-export-layer-switch" />
+            <div class="feature-export-layer-grid png-overlay-grid" aria-label="PNG overlay 类别">
+              <UiSwitchField label="标签" input-id="export-png-overlay-labels" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="城市图标" input-id="export-png-overlay-city-icons" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="标记" input-id="export-png-overlay-markers" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="军事" input-id="export-png-overlay-military" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="测量" input-id="export-png-overlay-measurements" field-class="feature-export-layer-switch" />
+              <UiSwitchField label="图例" input-id="export-png-overlay-legend" field-class="feature-export-layer-switch" :checked="true" />
+              <UiSwitchField label="比例尺" input-id="export-png-overlay-scale-bar" field-class="feature-export-layer-switch" :checked="true" />
+            </div>
           </section>
           <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
             <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>

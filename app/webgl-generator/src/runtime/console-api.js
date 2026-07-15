@@ -1259,7 +1259,9 @@ export async function exportPngData(state, documentRef, options = {}) {
   const pixelScale = normalizePngApiScale(options.pixelScale ?? options.scale ?? readPngExportScale(documentRef));
   const includeMapOverlays = options.includeMapOverlays ?? (documentRef.getElementById("export-png-overlays")?.checked !== false);
   const transparentBackground = options.transparentBackground ?? (documentRef.getElementById("export-png-transparent")?.checked === true);
-  const pngOptions = {includeMapOverlays, transparentBackground, pixelScale, renderer: state.renderer};
+  const crop = options.crop ?? readPngExportCrop(documentRef);
+  const overlays = options.overlays ?? readPngExportOverlays(documentRef);
+  const pngOptions = {includeMapOverlays, transparentBackground, pixelScale, crop, overlays, renderer: state.renderer};
   if (options.download === true) {
     const result = await downloadCanvasPng(documentRef, canvas, filename, pngOptions);
     return {
@@ -1270,7 +1272,9 @@ export async function exportPngData(state, documentRef, options = {}) {
       height: result.height,
       pixelScale: result.pixelScale,
       includeMapOverlays: result.includeMapOverlays,
-      transparentBackground: result.transparentBackground
+      transparentBackground: result.transparentBackground,
+      crop: result.crop,
+      overlays: result.overlays
     };
   }
 
@@ -1283,10 +1287,39 @@ export async function exportPngData(state, documentRef, options = {}) {
     height: result.height,
     pixelScale: result.pixelScale,
     includeMapOverlays: result.includeMapOverlays,
-    transparentBackground: result.transparentBackground
+    transparentBackground: result.transparentBackground,
+    crop: result.crop,
+    overlays: result.overlays
   };
   if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
   return data;
+}
+
+function readPngExportCrop(documentRef) {
+  const mode = documentRef.getElementById("export-png-crop-mode")?.value || "viewport";
+  if (mode === "viewport" || mode === "map") return {mode};
+  return {
+    mode,
+    rect: {
+      x: Number(documentRef.getElementById("export-png-crop-x")?.value),
+      y: Number(documentRef.getElementById("export-png-crop-y")?.value),
+      width: Number(documentRef.getElementById("export-png-crop-width")?.value),
+      height: Number(documentRef.getElementById("export-png-crop-height")?.value)
+    }
+  };
+}
+
+function readPngExportOverlays(documentRef) {
+  const checked = id => documentRef.getElementById(id)?.checked !== false;
+  return {
+    labels: checked("export-png-overlay-labels"),
+    cityIcons: checked("export-png-overlay-city-icons"),
+    markers: checked("export-png-overlay-markers"),
+    military: checked("export-png-overlay-military"),
+    measurements: checked("export-png-overlay-measurements"),
+    legend: checked("export-png-overlay-legend"),
+    scaleBar: checked("export-png-overlay-scale-bar")
+  };
 }
 
 function buildApiNoteRows(map, ids = null) {

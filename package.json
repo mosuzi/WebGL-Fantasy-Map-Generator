@@ -53,6 +53,7 @@
     "regress:map-migration": "node --no-warnings ./tools/webgl-generator-map-migration-regression.mjs",
     "regress:map-import-diagnostics": "node --no-warnings ./tools/webgl-generator-map-import-diagnostics-regression.mjs",
     "regress:png-options": "node --no-warnings ./tools/webgl-generator-png-options-regression.mjs",
+    "regress:png-crop-browser": "node ./tools/webgl-generator-png-crop-browser-regression.mjs",
     "regress:military-regeneration": "node --no-warnings ./tools/webgl-generator-military-regeneration-regression.mjs",
     "regress:warzone-consistency": "node --no-warnings ./tools/webgl-generator-warzone-consistency-regression.mjs",
     "regress:dissolve-compatibility": "node --no-warnings ./tools/webgl-generator-dissolve-compatibility-regression.mjs",

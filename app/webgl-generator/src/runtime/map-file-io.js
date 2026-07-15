@@ -3,6 +3,10 @@ import {readObjectNote} from "./object-notes.js";
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
 export const MAP_SCHEMA_VERSION = 2;
+export const PNG_OVERLAY_KEYS = Object.freeze(["labels", "cityIcons", "markers", "military", "measurements", "legend", "scaleBar"]);
+
+const PNG_OVERLAY_DEFAULTS = Object.freeze({labels: true, cityIcons: true, markers: true, military: true, measurements: false, legend: true, scaleBar: true});
+const PNG_CROP_MODES = new Set(["viewport", "map", "pixel", "world"]);
 
 const TYPED_ARRAYS = Object.freeze({
   Int8Array,
@@ -271,31 +275,60 @@ export async function downloadCanvasPng(documentRef, canvas, filename, options =
     height: result.height,
     pixelScale: result.pixelScale,
     includeMapOverlays: result.includeMapOverlays,
-    transparentBackground: result.transparentBackground
+    transparentBackground: result.transparentBackground,
+    crop: result.crop,
+    overlays: result.overlays
   };
 }
 
 export async function createCanvasPngBlob(documentRef, canvas, options = {}) {
   if (!canvas?.toBlob) throw new Error("当前浏览器不支持 canvas 图片导出");
   const normalizedOptions = normalizePngExportOptions(options);
-  const exportCanvas = normalizedOptions.includeMapOverlays || normalizedOptions.transparentBackground || normalizedOptions.pixelScale !== 1 || options.renderer
+  const composed = normalizedOptions.includeMapOverlays || normalizedOptions.transparentBackground || normalizedOptions.pixelScale !== 1 || normalizedOptions.crop.mode !== "viewport" || options.renderer
     ? await composeMapExportCanvas(documentRef, canvas, {...options, ...normalizedOptions})
-    : canvas;
+    : {canvas, crop: normalizedOptions.crop};
+  const exportCanvas = composed.canvas;
   const blob = await canvasToBlob(exportCanvas);
   return {
     blob,
     width: exportCanvas.width || canvas.width || 0,
     height: exportCanvas.height || canvas.height || 0,
-    ...normalizedOptions
+    ...normalizedOptions,
+    crop: composed.crop
   };
 }
 
 export function normalizePngExportOptions(options = {}) {
+  const includeMapOverlays = options.includeMapOverlays !== false;
   return {
     pixelScale: normalizePngPixelScale(options.pixelScale),
-    includeMapOverlays: options.includeMapOverlays !== false,
-    transparentBackground: options.transparentBackground === true
+    includeMapOverlays,
+    transparentBackground: options.transparentBackground === true,
+    crop: normalizePngCropOptions(options.crop),
+    overlays: normalizePngOverlayOptions(options.overlays, includeMapOverlays)
   };
+}
+
+export function normalizePngCropOptions(crop = {}) {
+  const source = crop && typeof crop === "object" ? crop : {};
+  const mode = String(source.mode || "viewport").trim().toLowerCase();
+  if (!PNG_CROP_MODES.has(mode)) throw new Error(`PNG 裁剪模式不受支持：${source.mode}`);
+  if (mode === "viewport" || mode === "map") return {mode, rect: null};
+  const rectSource = source.rect && typeof source.rect === "object" ? source.rect : source;
+  const rect = {
+    x: Number(rectSource.x),
+    y: Number(rectSource.y),
+    width: Number(rectSource.width),
+    height: Number(rectSource.height)
+  };
+  if (!Object.values(rect).every(Number.isFinite)) throw new Error("PNG 裁剪矩形必须提供有限的 x、y、width、height");
+  if (rect.width <= 0 || rect.height <= 0) throw new Error("PNG 裁剪矩形不能为空");
+  return {mode, rect};
+}
+
+export function normalizePngOverlayOptions(overlays = {}, includeMapOverlays = true) {
+  const source = overlays && typeof overlays === "object" ? overlays : {};
+  return Object.fromEntries(PNG_OVERLAY_KEYS.map(key => [key, includeMapOverlays && (Object.hasOwn(source, key) ? source[key] !== false : PNG_OVERLAY_DEFAULTS[key])]));
 }
 
 export function mapFileBaseName(map) {
@@ -1239,42 +1272,158 @@ function downloadBlob(documentRef, blob, filename) {
 }
 
 async function composeMapExportCanvas(documentRef, canvas, options = {}) {
-  const output = documentRef.createElement("canvas");
-  const pixelScale = normalizePngPixelScale(options.pixelScale);
-  output.width = Math.max(1, Math.round((canvas.width || 1) * pixelScale));
-  output.height = Math.max(1, Math.round((canvas.height || 1) * pixelScale));
-  const context = output.getContext("2d");
-  if (!context) return canvas;
-  if (!copyWebglCanvasTo2d(context, canvas, options.renderer)) {
-    context.drawImage(canvas, 0, 0, output.width, output.height);
-  }
-  applyCanvasCssFilterToExport(documentRef, output, canvas);
+  const exportFrame = preparePngExportFrame(canvas, options.renderer, options.crop);
+  try {
+    const output = documentRef.createElement("canvas");
+    const pixelScale = normalizePngPixelScale(options.pixelScale);
+    output.width = Math.max(1, exportFrame.sourceRect.width * pixelScale);
+    output.height = Math.max(1, exportFrame.sourceRect.height * pixelScale);
+    const context = output.getContext("2d");
+    if (!context) return {canvas, crop: exportFrame.crop};
+    if (!copyWebglCanvasTo2d(context, canvas, options.renderer, exportFrame.sourceRect)) {
+      context.drawImage(canvas, exportFrame.sourceRect.x, exportFrame.sourceRect.y, exportFrame.sourceRect.width, exportFrame.sourceRect.height, 0, 0, output.width, output.height);
+    }
+    applyCanvasCssFilterToExport(documentRef, output, canvas);
 
-  const canvasRect = canvas.getBoundingClientRect();
-  if (!canvasRect.width || !canvasRect.height) return output;
-  const scale = {
-    x: output.width / canvasRect.width,
-    y: output.height / canvasRect.height
-  };
+    const canvasRect = exportFrame.domRect;
+    const scale = {
+      x: output.width / canvasRect.width,
+      y: output.height / canvasRect.height
+    };
 
-  if (options.includeMapOverlays) {
-    await drawMapOverlayElements(documentRef, context, canvasRect, scale, options);
-    drawFixedMapUiElements(documentRef, context, canvasRect, scale);
+    if (options.includeMapOverlays) {
+      await drawMapOverlayElements(documentRef, context, canvasRect, scale, options);
+      await drawMeasurementOverlay(documentRef, context, canvasRect, scale, options);
+      drawFixedMapUiElements(documentRef, context, canvasRect, scale, options);
+    }
+    if (options.transparentBackground) clearOutsideMapBounds(context, options.renderer, exportFrame.fullDomRect, scale, exportFrame.cssRect);
+    return {canvas: output, crop: exportFrame.crop};
+  } finally {
+    exportFrame.restore();
   }
-  if (options.transparentBackground) clearOutsideMapBounds(context, options.renderer, canvasRect, scale);
-  return output;
 }
 
-export function clearOutsideMapBounds(context, renderer, canvasRect, scale) {
+export function resolvePngCropRect(crop, bounds) {
+  const normalized = normalizePngCropOptions(crop);
+  const width = Number(bounds?.width);
+  const height = Number(bounds?.height);
+  if (!(width > 0) || !(height > 0)) throw new Error("PNG 导出画布尺寸无效");
+  if (normalized.mode === "viewport") return {mode: "viewport", rect: {x: 0, y: 0, width, height}};
+  if (normalized.mode === "pixel") {
+    assertPngRectInBounds(normalized.rect, {width, height}, "像素");
+    return normalized;
+  }
+  const mapWidth = Number(bounds?.mapWidth);
+  const mapHeight = Number(bounds?.mapHeight);
+  if (!(mapWidth > 0) || !(mapHeight > 0)) throw new Error("PNG 世界坐标裁剪需要有效地图尺寸");
+  const rect = normalized.mode === "map" ? {x: 0, y: 0, width: mapWidth, height: mapHeight} : normalized.rect;
+  assertPngRectInBounds(rect, {width: mapWidth, height: mapHeight}, "世界坐标");
+  return {mode: normalized.mode, rect};
+}
+
+function preparePngExportFrame(canvas, renderer, crop) {
+  const fullDomRect = canvas.getBoundingClientRect();
+  if (!(fullDomRect.width > 0) || !(fullDomRect.height > 0)) throw new Error("PNG 导出画布不可见或尺寸为空");
+  const mapWidth = Number(renderer?.map?.metadata?.graphWidth);
+  const mapHeight = Number(renderer?.map?.metadata?.graphHeight);
+  const resolved = resolvePngCropRect(crop, {width: fullDomRect.width, height: fullDomRect.height, mapWidth, mapHeight});
+  let cssRect = resolved.rect;
+  let restore = () => {};
+
+  if (resolved.mode === "map" || resolved.mode === "world") {
+    if (!renderer?.camera || typeof renderer?.worldToScreen !== "function" || typeof renderer?.draw !== "function") {
+      throw new Error("PNG 世界坐标裁剪需要可用的地图渲染器");
+    }
+    const previousCamera = {...renderer.camera};
+    const camera = pngCameraForWorldRect(resolved.rect, mapWidth, mapHeight);
+    const restoreCamera = () => {
+      Object.assign(renderer.camera, previousCamera);
+      renderer.markViewportBuffersDirty?.();
+      renderer.draw({updateDynamicBuffers: true, updateOverlay: true});
+    };
+    restore = restoreCamera;
+    try {
+      Object.assign(renderer.camera, camera);
+      renderer.markViewportBuffersDirty?.();
+      renderer.draw({updateDynamicBuffers: true, updateOverlay: true});
+      const start = renderer.worldToScreen(resolved.rect.x, resolved.rect.y, fullDomRect);
+      const end = renderer.worldToScreen(resolved.rect.x + resolved.rect.width, resolved.rect.y + resolved.rect.height, fullDomRect);
+      cssRect = {
+        x: Math.min(start.x, end.x),
+        y: Math.min(start.y, end.y),
+        width: Math.abs(end.x - start.x),
+        height: Math.abs(end.y - start.y)
+      };
+    } catch (error) {
+      try {
+        restoreCamera();
+      } catch {}
+      throw error;
+    }
+  }
+
+  const sourceRect = cssRectToBackingRect(cssRect, fullDomRect, canvas);
+  const domRect = {
+    left: fullDomRect.left + cssRect.x,
+    top: fullDomRect.top + cssRect.y,
+    right: fullDomRect.left + cssRect.x + cssRect.width,
+    bottom: fullDomRect.top + cssRect.y + cssRect.height,
+    width: cssRect.width,
+    height: cssRect.height
+  };
+  return {
+    fullDomRect,
+    domRect,
+    cssRect,
+    sourceRect,
+    crop: {
+      mode: resolved.mode,
+      rect: {...resolved.rect},
+      pixelRect: {...sourceRect}
+    },
+    restore
+  };
+}
+
+export function pngCameraForWorldRect(rect, mapWidth, mapHeight) {
+  assertPngRectInBounds(rect, {width: mapWidth, height: mapHeight}, "世界坐标");
+  const scale = Math.min(mapWidth / rect.width, mapHeight / rect.height);
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
+  const centerNdcX = centerX / mapWidth * 2 - 1;
+  const centerNdcY = 1 - centerY / mapHeight * 2;
+  return {scale, offsetX: -centerNdcX * scale || 0, offsetY: -centerNdcY * scale || 0};
+}
+
+function assertPngRectInBounds(rect, bounds, label) {
+  const epsilon = 1e-7;
+  if (!rect || !Object.values(rect).every(Number.isFinite) || rect.width <= 0 || rect.height <= 0) throw new Error(`PNG ${label}裁剪矩形不能为空`);
+  if (rect.x < -epsilon || rect.y < -epsilon || rect.x + rect.width > bounds.width + epsilon || rect.y + rect.height > bounds.height + epsilon) {
+    throw new Error(`PNG ${label}裁剪矩形超出有效范围`);
+  }
+}
+
+function cssRectToBackingRect(rect, fullDomRect, canvas) {
+  const scaleX = (canvas.width || 1) / fullDomRect.width;
+  const scaleY = (canvas.height || 1) / fullDomRect.height;
+  const left = Math.max(0, Math.round(rect.x * scaleX));
+  const top = Math.max(0, Math.round(rect.y * scaleY));
+  const right = Math.min(canvas.width || 1, Math.round((rect.x + rect.width) * scaleX));
+  const bottom = Math.min(canvas.height || 1, Math.round((rect.y + rect.height) * scaleY));
+  if (right <= left || bottom <= top) throw new Error("PNG 裁剪矩形在输出像素中为空");
+  return {x: left, y: top, width: right - left, height: bottom - top};
+}
+
+export function clearOutsideMapBounds(context, renderer, canvasRect, scale, cropRect = {x: 0, y: 0}) {
   const width = Number(renderer?.map?.metadata?.graphWidth);
   const height = Number(renderer?.map?.metadata?.graphHeight);
   if (!Number.isFinite(width) || !Number.isFinite(height) || typeof renderer?.worldToScreen !== "function") return;
   const start = renderer.worldToScreen(0, 0, canvasRect);
   const end = renderer.worldToScreen(width, height, canvasRect);
-  const left = clampExportCoordinate(Math.min(start.x, end.x) * scale.x, context.canvas.width);
-  const top = clampExportCoordinate(Math.min(start.y, end.y) * scale.y, context.canvas.height);
-  const right = clampExportCoordinate(Math.max(start.x, end.x) * scale.x, context.canvas.width);
-  const bottom = clampExportCoordinate(Math.max(start.y, end.y) * scale.y, context.canvas.height);
+  const left = clampExportCoordinate((Math.min(start.x, end.x) - cropRect.x) * scale.x, context.canvas.width);
+  const top = clampExportCoordinate((Math.min(start.y, end.y) - cropRect.y) * scale.y, context.canvas.height);
+  const right = clampExportCoordinate((Math.max(start.x, end.x) - cropRect.x) * scale.x, context.canvas.width);
+  const bottom = clampExportCoordinate((Math.max(start.y, end.y) - cropRect.y) * scale.y, context.canvas.height);
   context.clearRect(0, 0, context.canvas.width, top);
   context.clearRect(0, bottom, context.canvas.width, context.canvas.height - bottom);
   context.clearRect(0, top, left, Math.max(0, bottom - top));
@@ -1303,7 +1452,7 @@ function canvasToBlob(canvas) {
   });
 }
 
-function copyWebglCanvasTo2d(context, canvas, renderer) {
+function copyWebglCanvasTo2d(context, canvas, renderer, sourceRect = null) {
   if (!renderer?.draw) return false;
   const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
   if (!gl?.readPixels) return false;
@@ -1321,7 +1470,8 @@ function copyWebglCanvasTo2d(context, canvas, renderer) {
       const targetOffset = y * rowBytes;
       imageData.data.set(pixels.subarray(sourceOffset, sourceOffset + rowBytes), targetOffset);
     }
-    if (context.canvas.width === width && context.canvas.height === height) {
+    const crop = sourceRect || {x: 0, y: 0, width, height};
+    if (context.canvas.width === width && context.canvas.height === height && crop.x === 0 && crop.y === 0 && crop.width === width && crop.height === height) {
       context.putImageData(imageData, 0, 0);
       return true;
     }
@@ -1331,7 +1481,7 @@ function copyWebglCanvasTo2d(context, canvas, renderer) {
     const scratchContext = scratch.getContext("2d");
     if (!scratchContext) return false;
     scratchContext.putImageData(imageData, 0, 0);
-    context.drawImage(scratch, 0, 0, context.canvas.width, context.canvas.height);
+    context.drawImage(scratch, crop.x, crop.y, crop.width, crop.height, 0, 0, context.canvas.width, context.canvas.height);
     return true;
   } catch {
     return false;
@@ -1365,14 +1515,12 @@ function computedCanvasFilter(documentRef, canvas) {
 async function drawMapOverlayElements(documentRef, context, canvasRect, scale, options = {}) {
   const overlay = options.renderer?.overlay || documentRef.querySelector(".map-overlay");
   if (!overlay) return;
-  const elements = Array.from(overlay.querySelectorAll([
-    ".city-map-icon.visible",
-    ".marker-map-icon.visible",
-    ".military-map-icon.visible",
-    ".state-label.visible",
-    ".city-label.visible",
-    ".custom-label.visible"
-  ].join(", "))).filter(isVisibleElement);
+  const selectors = [];
+  if (options.overlays?.cityIcons !== false) selectors.push(".city-map-icon.visible");
+  if (options.overlays?.markers !== false) selectors.push(".marker-map-icon.visible");
+  if (options.overlays?.military !== false) selectors.push(".military-map-icon.visible");
+  if (options.overlays?.labels !== false) selectors.push(".state-label.visible", ".city-label.visible", ".custom-label.visible");
+  const elements = selectors.length ? Array.from(overlay.querySelectorAll(selectors.join(", "))).filter(isVisibleElement) : [];
   elements.sort((a, b) => overlayZIndex(a) - overlayZIndex(b));
 
   for (const element of elements) {
@@ -1386,8 +1534,55 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   }
 }
 
-function drawFixedMapUiElements(documentRef, context, canvasRect, scale) {
-  for (const element of fixedMapUiElements(documentRef)) {
+async function drawMeasurementOverlay(documentRef, context, canvasRect, scale, options = {}) {
+  if (options.overlays?.measurements === false) return;
+  const overlay = documentRef.getElementById("measurement-overlay");
+  const svg = documentRef.getElementById("measurement-svg");
+  if (!isVisibleElement(overlay) || !svg) return;
+  const box = elementBox(svg, canvasRect, scale);
+  if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
+  const viewBox = svg.viewBox?.baseVal;
+  const viewWidth = Number(viewBox?.width) || svg.getBoundingClientRect().width || 1;
+  const viewHeight = Number(viewBox?.height) || svg.getBoundingClientRect().height || 1;
+  const point = value => ({x: box.x + value.x / viewWidth * box.width, y: box.y + value.y / viewHeight * box.height});
+  for (const shape of svg.querySelectorAll("polygon, polyline, circle")) {
+    const style = shape.ownerDocument.defaultView.getComputedStyle(shape);
+    context.save();
+    context.globalAlpha = cssOpacity(style);
+    context.strokeStyle = style.stroke || "transparent";
+    context.fillStyle = style.fill || "transparent";
+    context.lineWidth = Math.max(1, cssPixelValue(style.strokeWidth, Math.min(scale.x, scale.y)));
+    if (shape.localName === "circle") {
+      const center = point({x: Number(shape.getAttribute("cx")) || 0, y: Number(shape.getAttribute("cy")) || 0});
+      const radius = (Number(shape.getAttribute("r")) || 0) * Math.min(box.width / viewWidth, box.height / viewHeight);
+      context.beginPath();
+      context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+    } else {
+      const points = parseSvgPoints(shape.getAttribute("points")).map(point);
+      if (!points.length) {
+        context.restore();
+        continue;
+      }
+      context.beginPath();
+      context.moveTo(points[0].x, points[0].y);
+      for (const item of points.slice(1)) context.lineTo(item.x, item.y);
+      if (shape.localName === "polygon") context.closePath();
+    }
+    if (isPaintedColor(style.fill)) context.fill();
+    if (isPaintedColor(style.stroke)) context.stroke();
+    context.restore();
+  }
+}
+
+function parseSvgPoints(value) {
+  const numbers = String(value || "").trim().split(/[\s,]+/).map(Number).filter(Number.isFinite);
+  const points = [];
+  for (let index = 0; index + 1 < numbers.length; index += 2) points.push({x: numbers[index], y: numbers[index + 1]});
+  return points;
+}
+
+function drawFixedMapUiElements(documentRef, context, canvasRect, scale, options = {}) {
+  for (const element of fixedMapUiElements(documentRef, options.overlays)) {
     if (element.id === "map-scale-bar") {
       drawScaleBarElement(context, element, canvasRect, scale);
     } else if (element.id === "map-legend") {
@@ -1396,8 +1591,11 @@ function drawFixedMapUiElements(documentRef, context, canvasRect, scale) {
   }
 }
 
-function fixedMapUiElements(documentRef) {
-  return ["map-legend", "map-scale-bar"]
+function fixedMapUiElements(documentRef, overlays = PNG_OVERLAY_DEFAULTS) {
+  const ids = [];
+  if (overlays.legend !== false) ids.push("map-legend");
+  if (overlays.scaleBar !== false) ids.push("map-scale-bar");
+  return ids
     .map(id => documentRef.getElementById(id))
     .filter(isVisibleElement);
 }

@@ -3861,6 +3861,35 @@ select:disabled {
   font-size: 12px;
 }
 
+.png-crop-rect-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.png-crop-rect-grid label {
+  display: grid;
+  gap: 4px;
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
+.png-crop-rect-grid input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #3e525f;
+  border-radius: 6px;
+  padding: 0 6px;
+  background: #151f25;
+  color: #edf4f6;
+  font-size: 12px;
+}
+
+.png-overlay-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .file-import-action {
   position: relative;
   display: inline-flex;

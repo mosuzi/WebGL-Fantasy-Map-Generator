@@ -5554,6 +5554,7 @@ function saveMeasurementViaApi(state, documentRef, points, options = {}) {
     },
     throwOnError: false
   });
+  updateMeasurementOverlay(state, documentRef);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);

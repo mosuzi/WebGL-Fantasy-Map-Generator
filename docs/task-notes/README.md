@@ -34,6 +34,7 @@
 - `auxiliary-object-creation.md`：权威任务第 41 项的地区、通用标记和独立备注身份、创建、删除、孤儿迁移与持久化契约。
 - `import-diagnostics-schema-evolution.md`：权威任务第 42 项的 GEO、Cells GEO、高度图统一诊断、隐私边界与地图 schema 链式迁移契约。
 - `political-gis-external-verification.md`：权威任务第 43 项的固定 100k 浏览器下载、QGIS / geojson.io 实际读取与外部 id 兼容修正证据。
+- `png-crop-overlay-export.md`：权威任务第 44 项的四类 PNG 裁剪、七类 overlay 白名单、默认兼容和浏览器文件级证据。
 
 ## 导入导出与 GIS
 
