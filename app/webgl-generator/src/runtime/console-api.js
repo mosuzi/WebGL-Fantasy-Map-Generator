@@ -184,6 +184,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       routes: Object.freeze({
         create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.create, "edit.routes.create")(options)),
+        inspectEdit: (routeId, patch = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.inspectEdit, "edit.routes.inspectEdit")(routeId, patch)),
+        update: (routeId, patch = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.update, "edit.routes.update")(routeId, patch)),
         delete: routeId => apiCall(() => requireApiAction(actions.edit?.routes?.delete, "edit.routes.delete")(routeId)),
         setNote: (routeId, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.setNote, "edit.routes.setNote")(routeId, body, options))
       }),
@@ -430,6 +432,8 @@ function buildMethodMetadata() {
       "religions.setColor": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.setParent": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "routes.create": {stable: "draft", mutates: "routes", undoable: true, async: false, requiresConfirm: false},
+      "routes.inspectEdit": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "routes.update": {stable: "draft", mutates: "routes", undoable: true, async: false, requiresConfirm: false},
       "routes.delete": {stable: "draft", mutates: "routes", undoable: true, async: false, requiresConfirm: false},
       "routes.setNote": {stable: "draft", mutates: "routes", undoable: true, async: false, requiresConfirm: false},
       "rivers.create": {stable: "draft", mutates: "rivers", undoable: true, async: false, requiresConfirm: false},

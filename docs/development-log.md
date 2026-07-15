@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-07-15：路线改线、端点重连与样式编辑
+
+- 完成权威任务第 49 项。路线面板新增 `type / level`、起止城市和地图单点改线编辑；UI 与 `api.edit.routes.inspectEdit / update` 共用预检、runtime action 和 `createEditRouteCommand()`，没有引入动态交通模拟。
+- 预检拒绝不存在城市、相同城市端点、地形不匹配、不可达路径、断裂拓扑和重复端点路线；有效修改按 pack 邻接重新寻路并同步 `packCells / cells / points`、距离、feature、国家 / 省份、资源诊断、pack 路线、cell 路线链接、renderer picking、面板和 GeoJSON。
+- 单次路线编辑只形成一条 `EditHistory`；撤销恢复原路线、拓扑和派生过期状态，重做复用首次结果快照，保证路线与 `derivedStale.updatedAt` 完整一致。经济数据不在路线命令内重算，只把经济、军事和外交标记为待派生。
+- 新增 `regress:route-edit`。固定 3000 cells 样本覆盖三类拒绝、改线、样式修改、端点重连、资源 / 拾取 / GeoJSON 同步、单历史和完整撤销 / 重做；对象创建、19 种画布工具模式、导出套件、API inventory / edit coverage / action convergence / stability 与生产构建全部通过。
+- 当前 Chrome 对道路 #3 真实改线：`15 pack cells / 1,729.2 千米 / feature 1 / 10 个资源 cells` 变为 `21 pack cells / 2,670.4 千米 / feature 2 / 3 个资源 cells`；撤销精确恢复，重做精确重放。页面没有路线功能异常；health / console 仍记录生成加载与自动化点击期间的既有主线程长任务和输入处理告警。
+- 公开 API 基线更新为 11 个命名空间、175 个方法、85 个编辑方法，稳定等级 `167 / 7 / 1`。第 49 项达到最小验收后从活动权威清单移除，转入第 50 项“水体与 feature 局部修正”。
+
 ## 2026-07-15：市场归属编辑与经济链内重算
 
 - 完成权威任务第 48 项。经济面板市场 tab 新增目标市场、笔刷半径、市场 cell 归属预览 / 应用 / 取消和经济链重算；预览只修改工作中的 `pack.cells.market`，取消按原始值恢复，不写历史。

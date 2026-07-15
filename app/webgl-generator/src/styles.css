@@ -6541,6 +6541,17 @@ input.ui-switch-native {
   gap: 6px;
 }
 
+.route-edit-form {
+  display: grid;
+  gap: 10px;
+}
+
+.route-edit-waypoint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .economy-panel-sort {
   display: flex;
   flex-wrap: wrap;

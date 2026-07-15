@@ -102,7 +102,7 @@ import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from ".
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
 import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
-import {createAddRouteCommand, createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
+import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
@@ -216,6 +216,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   MARKER_ADD: "marker:add",
   MARKER_MOVE: "marker:move",
   ROUTE_DRAW: "route:draw",
+  ROUTE_EDIT_WAYPOINT: "route:edit-waypoint",
   RIVER_ADD: "river:add",
   LAKE_EXCAVATE: "lake:excavate",
   ZONE_ADD: "zone:add",
@@ -283,6 +284,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       lastPackCell: null
     },
     routeCreate: {active: false, type: "road", startPackCell: null},
+    routeEdit: {waypointRouteId: null},
     riverCreate: {active: false},
     lakeCreate: {active: false, radius: 0},
     zoneCreate: {active: false, type: "Disaster", radius: 1},
@@ -1518,7 +1520,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, {type: "road"});
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, "panel-toggle");
     },
-    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, "panel-close"),
+    onClose: () => {
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, "panel-close");
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "panel-close");
+    },
     onSelect: object => {
       selectFromPanel("route-panel", object);
       routePanel.setSelectedRouteId(object.id);
@@ -1537,6 +1542,27 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createSetRouteNoteCommand(routeId, body, {name: routeDisplayName(state.map, route, routeId)});
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
+    },
+    onInspectEdit: (routeId, draft) => inspectRouteEdit(state.map, routeId, draft),
+    onWaypointMode: (active, routeId) => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, {routeId});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "panel-toggle");
+    },
+    onEditApply: (routeId, draft) => {
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "edit-apply");
+      const command = createEditRouteCommand(routeId, draft);
+      const result = executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        status: executed => `已更新路线 #${executed.getResult?.().routeId ?? routeId}。`,
+        noopStatus: "路线编辑没有变化。"
+      });
+      if (result.executed) routePanel.setRouteEditActive(false);
+      updateEditingInteractionLock(state, documentRef);
+      return result;
+    },
+    onEditCancel: () => {
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "edit-cancel");
+      routePanel.setRouteEditActive(false);
     },
     onDelete: object => {
       const result = executeDeleteWithPreflight(state, documentRef, {
@@ -2432,6 +2458,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       routes: {
         create: options => createRouteViaApi(state, documentRef, options),
+        inspectEdit: (routeId, patch = {}) => inspectRouteEditViaApi(state, routeId, patch),
+        update: (routeId, patch = {}) => updateRouteViaApi(state, documentRef, routeId, patch),
         delete: routeId => deleteRouteViaApi(state, documentRef, routeId),
         setNote: (routeId, body, options = {}) => setRouteNoteViaApi(state, documentRef, routeId, body, options)
       },
@@ -5837,6 +5865,28 @@ function createRouteViaApi(state, documentRef, options = {}) {
   return editApiResult(state, result);
 }
 
+function inspectRouteEditViaApi(state, routeId, patch = {}) {
+  assertMapAvailable(state);
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("路线编辑预检参数必须是对象");
+  return inspectRouteEdit(state.map, normalizeApiInteger(routeId, "路线 ID"), patch);
+}
+
+function updateRouteViaApi(state, documentRef, routeId, patch = {}) {
+  assertMapAvailable(state);
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("路线编辑参数必须是对象");
+  const id = normalizeApiInteger(routeId, "路线 ID");
+  const command = createEditRouteCommand(id, patch, {label: "API 编辑路线"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: `已通过 API 更新路线 #${id}。`,
+    noopStatus: "路线编辑没有变化。",
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function deleteRouteViaApi(state, documentRef, routeId) {
   const id = Number(routeId);
   const command = createDeleteRouteCommand(id, {label: `删除路线 #${Number.isFinite(id) ? id : routeId}`});
@@ -7863,6 +7913,16 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.panels.route?.setCreateMode(false);
     }
   });
+  register(CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "route-panel", {
+    onEnter: ({context}) => {
+      state.routeEdit.waypointRouteId = Number(context.routeId);
+      state.panels.route?.setWaypointMode(true);
+    },
+    onExit: () => {
+      state.routeEdit.waypointRouteId = null;
+      state.panels.route?.setWaypointMode(false);
+    }
+  });
   register(CANVAS_TOOL_MODE.RIVER_ADD, "river-panel", {
     onEnter: () => {
       state.riverCreate.active = true;
@@ -9496,7 +9556,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
 function bindObjectCreationTools(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const activeMode = state.canvasToolModes.getActive()?.id;
-    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const packCell = getMarkerPackCellAtEvent(state, event);
@@ -9515,6 +9575,14 @@ function bindObjectCreationTools(canvas, state, documentRef) {
         type: state.routeCreate.type
       });
       if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, {result});
+      return;
+    }
+
+    if (activeMode === CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT) {
+      state.panels.route?.setEditWaypoint(packCell);
+      setFileOperationStatus(documentRef, `路线改线点已选 pack cell #${packCell}。`);
+      completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, {packCell, routeId: state.routeEdit.waypointRouteId});
+      updateRuntimePanel(documentRef, state);
       return;
     }
 

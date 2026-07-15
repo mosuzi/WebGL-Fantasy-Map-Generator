@@ -33,6 +33,10 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
+    editMode: false,
+    waypointMode: false,
+    editDraft: null,
+    editPreview: null,
     selectedRouteId: null,
     version: 0
   });
@@ -74,6 +78,23 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     onDelete: row => callbacks.onDelete?.(routeObject(row)),
     onDeleteMany: routeIds => callbacks.onDeleteMany?.(routeIds),
     onCreateMode: active => callbacks.onCreateMode?.(active),
+    onEditStart: routeId => {
+      const route = findRoute(panelState.map, routeId);
+      if (!route) return;
+      panelState.editMode = true;
+      panelState.editDraft = routeEditDraft(route);
+      panelState.editPreview = callbacks.onInspectEdit?.(route.id, panelState.editDraft) || null;
+      panelState.version++;
+    },
+    onEditDraft: patch => {
+      if (!panelState.editDraft) return;
+      panelState.editDraft = {...panelState.editDraft, ...(patch || {})};
+      panelState.editPreview = callbacks.onInspectEdit?.(panelState.editDraft.routeId, panelState.editDraft) || null;
+      panelState.version++;
+    },
+    onWaypointMode: active => callbacks.onWaypointMode?.(Boolean(active), panelState.editDraft?.routeId),
+    onEditApply: () => callbacks.onEditApply?.(panelState.editDraft?.routeId, panelState.editDraft),
+    onEditCancel: () => callbacks.onEditCancel?.(),
     onRegenerateRoutes: () => callbacks.onRegenerateRoutes?.(),
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
@@ -139,6 +160,26 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     setCreateMode(active) {
       panelState.createMode = Boolean(active);
     },
+    setRouteEditActive(active) {
+      panelState.editMode = Boolean(active);
+      if (!panelState.editMode) {
+        panelState.waypointMode = false;
+        panelState.editDraft = null;
+        panelState.editPreview = null;
+      }
+      panelState.version++;
+    },
+    setWaypointMode(active) {
+      panelState.waypointMode = Boolean(active);
+      panelState.version++;
+    },
+    setEditWaypoint(packCell) {
+      if (!panelState.editDraft || !Number.isInteger(packCell)) return;
+      panelState.editDraft = {...panelState.editDraft, viaPackCells: [packCell]};
+      panelState.editPreview = callbacks.onInspectEdit?.(panelState.editDraft.routeId, panelState.editDraft) || null;
+      panelState.waypointMode = false;
+      panelState.version++;
+    },
     isOpen() {
       return panelState.open;
     },
@@ -166,6 +207,21 @@ function routeObject(row) {
 function routeExists(map, routeId) {
   routeId = normalizeRouteId(routeId);
   return Boolean(Number.isInteger(routeId) && (map?.settlements?.routes || []).some(route => route.id === routeId));
+}
+
+function findRoute(map, routeId) {
+  return (map?.settlements?.routes || []).find(route => route?.id === normalizeRouteId(routeId)) || null;
+}
+
+function routeEditDraft(route) {
+  return {
+    routeId: route.id,
+    type: route.type || "road",
+    level: route.level || (route.type === "trail" ? "trail" : "secondary"),
+    fromId: Number.isInteger(route.from) ? route.from : -1,
+    toId: Number.isInteger(route.to) ? route.to : -1,
+    viaPackCells: []
+  };
 }
 
 function normalizeRouteId(routeId) {

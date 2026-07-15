@@ -8,9 +8,9 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：11 个命名空间、173 个方法，其中 83 个为编辑方法。
+当前公开基线：11 个命名空间、175 个方法，其中 85 个为编辑方法。
 
-第 48 项完成后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 165 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、13 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
+第 49 项完成后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 167 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、13 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
@@ -21,7 +21,7 @@
 | `units` | 9 | 已覆盖当前全部显示单位偏好 |
 | `climate` | 14 | 已覆盖气候读取与当前写入入口 |
 | `history` | 5 | 已覆盖历史读取、peek、撤销和重做 |
-| `edit` | 83 | 已覆盖当前全部可纯参数调用的既有编辑命令、2 项高度派生重建、市场归属预检 / 应用 / 经济重算，以及路线 / 河流 / 湖泊 / 地区 / 独立备注创建、备注导入和备注批量删除 |
+| `edit` | 85 | 已覆盖当前全部可纯参数调用的既有编辑命令、2 项高度派生重建、市场归属预检 / 应用 / 经济重算、路线改线预检 / 应用，以及路线 / 河流 / 湖泊 / 地区 / 独立备注创建、备注导入和备注批量删除 |
 | `data` | 14 | 已覆盖地图 / GEO / 高度图 / 浏览器存档 / PNG / 记录与诊断导入导出 |
 | `namebases` | 10 | 已覆盖名称库读取、交换、编辑、绑定与批量改名 |
 | `debug` | 7 | 已覆盖只读诊断、debug UI 和单帧 profile |
@@ -60,7 +60,7 @@
 | 21 | 外交 | 设置关系、外交重生成命令 | 已暴露且共路径 | `api.edit.diplomacy.setRelation()` 与 diplomacy command；重生成另有 `api.generate.regenerate` | 第 29 项已完成；第 33 项稳定化 |
 | 22 | 军事 | 比例、态势 / 批量态势、驻地、基地、战报、重命名 | 已暴露且共路径 | `api.edit.military.*` 9 个方法与 9 个 military commands；军事重生成另由 generate 覆盖 | 第 29 项已完成；第 33 项稳定化 |
 | 23 | 地区 | Zone 创建、删除和样式编辑 | 已暴露且共路径 | `api.edit.zones.*` 与 Zone commands | 第 29、41 项已完成；第 33 项稳定化 |
-| 24 | 路线 / 河流 / 湖泊 | 创建、删除、备注、重命名和河宽编辑 | 已暴露且共路径 | `api.edit.routes / rivers / lakes`；创建入口与 UI 共用 runtime action 和 edit command | 第 40 项已完成 |
+| 24 | 路线 / 河流 / 湖泊 | 创建、删除、改线、端点重连、样式、备注、重命名和河宽编辑 | 已暴露且共路径 | `api.edit.routes / rivers / lakes`；路线改线与 UI 共用预检、runtime action 和 edit command | 第 40、49 项已完成 |
 | 25 | 标签 / marker | 当前新增、删除、移动、视觉、备注和恢复 | 已暴露且共路径 | `api.edit.labels / markers`；marker id 作为稳定对象身份，不再依赖数组下标 | 第 33、41 项已完成 |
 | 26 | 名称库 | list、export/import、CRUD、绑定、批量对象改名 | 已暴露且共路径 | UI 文件适配与 `api.namebases.*` 共用 `runtimeActions.namebases`；既有名称库文档往返门禁继续有效 | 第 30、32 项已完成；第 33 项稳定化 |
 | 27 | 数据导出 | 完整 JSON / gzip、GEO、要素 GEO、PNG、备注、测量 | 已暴露且共路径 | UI 下载提示与 `api.data.export*` 共用 `runtimeActions.data` 及同一序列化结果；PNG / gzip 已接统一 operation | 第 30、31 项已完成；第 33 项稳定化 |
