@@ -89,17 +89,46 @@ export async function createCompressedMapDocumentBlob(documentRef, document) {
 }
 
 export function migrateMapDocument(document) {
+  return migrateMapDocumentWithRegistry(document, {
+    targetVersion: MAP_DOCUMENT_VERSION,
+    registry: MAP_DOCUMENT_MIGRATORS,
+    validate: validateCurrentMapDocument
+  });
+}
+
+export function migrateMapDocumentWithRegistry(document, options = {}) {
   if (document?.type !== MAP_DOCUMENT_TYPE) throw new Error("文件不是当前地图保存格式");
   if (!document.map || typeof document.map !== "object") throw new Error("地图文件缺少 map 数据");
+  const targetVersion = Number(options.targetVersion ?? MAP_DOCUMENT_VERSION);
+  if (!Number.isInteger(targetVersion) || targetVersion < 1) throw new Error(`迁移目标版本无效：${options.targetVersion}`);
+  const registry = options.registry || MAP_DOCUMENT_MIGRATORS;
   const sourceVersion = Number(document.version);
   if (!Number.isInteger(sourceVersion) || sourceVersion < 1) throw new Error(`暂不支持的地图格式版本：${document.version ?? "未知"}`);
-  if (sourceVersion > MAP_DOCUMENT_VERSION) throw new Error(`暂不支持的地图格式版本：${document.version}`);
+  if (sourceVersion > targetVersion) throw new Error(`暂不支持的地图格式版本：${document.version}`);
   let migrated = document;
-  for (let version = sourceVersion; version < MAP_DOCUMENT_VERSION; version += 1) {
-    migrated = migrateMapDocumentStep(migrated, version);
+  for (let version = sourceVersion; version < targetVersion; version += 1) {
+    migrated = migrateMapDocumentStep(migrated, version, registry);
   }
-  validateCurrentMapDocument(migrated);
+  if (typeof options.validate === "function") options.validate(migrated);
   return migrated;
+}
+
+export function createMapDocumentMigrationRegistry(entries = {}) {
+  const registry = new Map();
+  for (const [version, migrator] of entries instanceof Map ? entries : Object.entries(entries)) {
+    registerMapDocumentMigrator(registry, version, migrator);
+  }
+  return registry;
+}
+
+export function registerMapDocumentMigrator(registry, version, migrator) {
+  if (!(registry instanceof Map)) throw new Error("地图迁移 registry 必须是 Map");
+  const sourceVersion = Number(version);
+  if (!Number.isInteger(sourceVersion) || sourceVersion < 1) throw new Error(`地图迁移源版本无效：${version}`);
+  if (typeof migrator !== "function") throw new Error(`地图格式 v${sourceVersion} 迁移器必须是函数`);
+  if (registry.has(sourceVersion)) throw new Error(`地图格式 v${sourceVersion} 迁移器重复注册`);
+  registry.set(sourceVersion, migrator);
+  return registry;
 }
 
 export function parseGeoJsonMeasurements(text, map, options = {}) {
@@ -291,13 +320,15 @@ function typedArrayReviver(_key, value) {
   return new Constructor(value.data || []);
 }
 
-function migrateMapDocumentStep(document, version) {
-  const migrator = MAP_DOCUMENT_MIGRATORS[version];
+function migrateMapDocumentStep(document, version, registry) {
+  const migrator = registry instanceof Map ? registry.get(version) : registry?.[version];
   if (typeof migrator !== "function") throw new Error(`缺少地图格式 v${version} 迁移器`);
-  return migrator(document);
+  const migrated = migrator(document);
+  if (Number(migrated?.version) !== version + 1) throw new Error(`地图格式 v${version} 迁移器没有产出 v${version + 1}`);
+  return migrated;
 }
 
-const MAP_DOCUMENT_MIGRATORS = Object.freeze({
+const MAP_DOCUMENT_MIGRATORS = createMapDocumentMigrationRegistry({
   1: migrateMapDocumentV1ToV2
 });
 

@@ -53,7 +53,7 @@ import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
-import {createMapImportDiagnostic, formatMapImportDiagnosticLines, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
+import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
@@ -4314,7 +4314,7 @@ async function importGeoData(state, documentRef, file, importAction = state.runt
   try {
     setFileOperationStatus(documentRef, "正在导入 GEO 数据...");
     const text = await file.text();
-    return importAction(text, {confirm: true, source: "ui"});
+    return importAction(text, {confirm: true, source: "ui", sourceFile: file});
   } catch (error) {
     reportFileOperationError(documentRef, "GEO 数据导入失败", error);
     return null;
@@ -4324,10 +4324,26 @@ async function importGeoData(state, documentRef, file, importAction = state.runt
 function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("导入 GEO 数据会写入当前地图，需要显式传入 {confirm: true}");
-  const text = normalizeApiGeoImportDocument(document);
-  const terrainCommand = createImportFmgCellsHeightCommand(text, state.map, {label: "API 导入 FMG Cells 地形"});
-  if (terrainCommand) return importFmgCellsGeoViaApi(state, documentRef, terrainCommand, options);
-  return importGeoMeasurementsViaApi(state, documentRef, text, options);
+  let analysis = null;
+  try {
+    const text = normalizeApiGeoImportDocument(document);
+    analysis = inspectGeoImportSource(text);
+    const terrainCommand = createImportFmgCellsHeightCommand(text, state.map, {label: "API 导入 FMG Cells 地形"});
+    const result = terrainCommand
+      ? importFmgCellsGeoViaApi(state, documentRef, terrainCommand, options)
+      : importGeoMeasurementsViaApi(state, documentRef, text, options);
+    const diagnostic = createImportSuccessDiagnostic(analysis.kind, options.sourceFile, {
+      ...analysis.summary,
+      result: geoImportResultSummary(result)
+    }, {source: options.source === "ui" ? "ui" : "api"});
+    recordImportDiagnostic(state, documentRef, diagnostic);
+    return {...result, diagnostic};
+  } catch (error) {
+    const kind = analysis?.kind || (error?.code === "invalid-cells-fields" ? "fmg-cells-geojson" : "geojson");
+    const diagnostic = createImportFailureDiagnostic(kind, error, options.sourceFile, analysis?.summary || {}, {source: options.source === "ui" ? "ui" : "api"});
+    reportImportDiagnostic(state, documentRef, diagnostic, options.source === "ui" ? "GEO 数据导入失败" : "API 导入 GEO 数据失败");
+    throw attachImportDiagnostic(error, diagnostic);
+  }
 }
 
 function importFmgCellsGeoViaApi(state, documentRef, command, options = {}) {
@@ -4472,10 +4488,12 @@ async function importHeightmapImage(state, documentRef, payload, importAction = 
 async function importHeightmapImageViaApi(state, documentRef, payload, options = {}, operation = null) {
   if (options.confirm !== true) throw new Error("导入高度图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   operation?.report("validate", {message: "正在校验高度图导入参数"});
-  const {file, settings} = normalizeHeightmapImportPayload(payload, documentRef);
-  if (!file) throw new Error("请选择一张高度图");
+  let file = null;
+  let settings = {};
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
   try {
+    ({file, settings} = normalizeHeightmapImportPayload(payload, documentRef));
+    if (!file) throw new Error("请选择一张高度图");
     resetLoadTrace(documentRef);
     emitLoadTrace(documentRef, {phase: "request", id: "heightmap-read", message: loadingMessage("heightmap-read")});
     setFileOperationStatus(documentRef, "正在读取高度图...", ["heightmap-import-status"]);
@@ -4515,7 +4533,7 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
     });
     updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, heightmapImportSuccessMessage(heightmap), ["heightmap-import-status"]);
-    return {
+    const result = {
       imported: true,
       source: {...(heightmap.source || {})},
       map: generationApiMapSummary(state.map),
@@ -4528,9 +4546,14 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
       history: state.editHistory.getStats(),
       effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
+    const diagnostic = createImportSuccessDiagnostic("heightmap", file, createHeightmapSourceSummary(file, settings, heightmap.source), {source: options.source === "ui" ? "ui" : "api"});
+    recordImportDiagnostic(state, documentRef, diagnostic);
+    return {...result, diagnostic};
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    throw error;
+    const diagnostic = createImportFailureDiagnostic("heightmap", error, file, createHeightmapSourceSummary(file, settings), {source: options.source === "ui" ? "ui" : "api"});
+    reportImportDiagnostic(state, documentRef, diagnostic, options.source === "ui" ? "高度图导入失败" : "API 导入高度图失败", ["heightmap-import-status"]);
+    throw attachImportDiagnostic(error, diagnostic);
   }
 }
 
@@ -4572,21 +4595,41 @@ function setFileOperationStatus(documentRef, message, targetIds = ["file-operati
 }
 
 function reportMapImportError(state, documentRef, error, file, options = {}) {
-  const message = error instanceof Error ? error.message : String(error);
   const diagnostic = createMapImportDiagnostic(error, file, {source: options.source});
+  reportImportDiagnostic(state, documentRef, diagnostic, options.prefix || "地图数据导入失败");
+}
+
+function reportImportDiagnostic(state, documentRef, diagnostic, prefix, targetIds) {
+  const message = diagnostic.error?.message || "未知错误";
   state.lastMapImportDiagnostic = diagnostic;
-  setFileOperationStatus(documentRef, `${options.prefix || "地图数据导入失败"}：${message}`);
+  setFileOperationStatus(documentRef, `${prefix}：${message}`, targetIds);
   setFileOperationDetails(documentRef, formatMapImportDiagnosticLines(diagnostic));
   const exportButton = documentRef.getElementById("export-map-import-diagnostic");
   if (exportButton) exportButton.hidden = false;
-  console.warn(error);
+  console.warn(diagnostic.error || diagnostic);
+}
+
+function recordImportDiagnostic(state, documentRef, diagnostic) {
+  state.lastMapImportDiagnostic = diagnostic;
+  setFileOperationDetails(documentRef, formatMapImportDiagnosticLines(diagnostic));
+  const exportButton = documentRef.getElementById("export-map-import-diagnostic");
+  if (exportButton) exportButton.hidden = false;
+}
+
+function geoImportResultSummary(result) {
+  return {
+    mode: result?.mode || "",
+    imported: Boolean(result?.imported),
+    importedCount: Number(result?.importedCount || result?.summary?.appliedCells || 0),
+    featureCount: Number(result?.featureCount || result?.summary?.sourceCells || 0)
+  };
 }
 
 function exportMapImportDiagnostic(state, documentRef, exportAction = state.runtimeActions?.data?.exportImportDiagnostic) {
   try {
     const result = exportAction({download: true});
     if (!result.available) return false;
-    setFileOperationStatus(documentRef, `已导出导入诊断：${result.diagnostic.error.code}`);
+    setFileOperationStatus(documentRef, `已导出导入诊断：${result.diagnostic.error?.code || result.diagnostic.import?.status || "success"}`);
     return true;
   } catch (error) {
     reportFileOperationError(documentRef, "导入诊断导出失败", error);

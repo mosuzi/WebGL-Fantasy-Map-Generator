@@ -6,9 +6,12 @@ import {
   MAP_DOCUMENT_TYPE,
   MAP_DOCUMENT_VERSION,
   MAP_SCHEMA_VERSION,
+  createMapDocumentMigrationRegistry,
   createMapDocument,
   migrateMapDocument,
+  migrateMapDocumentWithRegistry,
   parseMapDocument,
+  registerMapDocumentMigrator,
   stringifyMapDocument
 } from "../app/webgl-generator/src/runtime/map-file-io.js";
 
@@ -50,6 +53,26 @@ const incompleteV2 = structuredClone(current);
 delete incompleteV2.map.labels.hidden.city;
 assert.throws(() => migrateMapDocument(incompleteV2), /labels 隐藏表不完整/);
 
+const futureRegistry = createMapDocumentMigrationRegistry({
+  1: document => ({...document, version: 2, map: {...document.map, migrationPath: ["v1-v2"]}})
+});
+registerMapDocumentMigrator(futureRegistry, 2, document => ({...document, version: 3, map: {...document.map, migrationPath: [...document.map.migrationPath, "v2-v3"]}}));
+const chained = migrateMapDocumentWithRegistry({type: MAP_DOCUMENT_TYPE, version: 1, map: {}}, {
+  targetVersion: 3,
+  registry: futureRegistry,
+  validate: document => assert.deepEqual(document.map.migrationPath, ["v1-v2", "v2-v3"])
+});
+assert.equal(chained.version, 3, "模拟下一版本必须逐步执行迁移链");
+assert.throws(() => registerMapDocumentMigrator(futureRegistry, 2, () => null), /重复注册/);
+assert.throws(() => migrateMapDocumentWithRegistry({type: MAP_DOCUMENT_TYPE, version: 1, map: {}}, {
+  targetVersion: 4,
+  registry: futureRegistry
+}), /缺少地图格式 v3 迁移器/);
+assert.throws(() => migrateMapDocumentWithRegistry({type: MAP_DOCUMENT_TYPE, version: 4, map: {}}, {
+  targetVersion: 3,
+  registry: futureRegistry
+}), /暂不支持的地图格式版本：4/);
+
 console.log(JSON.stringify({
   ok: true,
   sourceVersion: 1,
@@ -60,5 +83,7 @@ console.log(JSON.stringify({
   measurements: migrated.map.measurements.metadata.measurements,
   hiddenLabels: migrated.map.labels.metadata.hidden,
   visualTheme: migrated.map.visualTheme.preset,
-  currentDocumentIdempotent: true
+  currentDocumentIdempotent: true,
+  simulatedMigrationPath: chained.map.migrationPath,
+  futureVersionRejected: true
 }, null, 2));

@@ -191,6 +191,14 @@ export function createRuntimeOperationManager(options = {}) {
 export function normalizeRuntimeOperationError(error, stage = "run") {
   if (error instanceof RuntimeOperationError) return error;
   const message = error instanceof Error ? error.message : String(error);
+  if (error?.code && error?.stage && error?.suggestion) {
+    return new RuntimeOperationError(String(error.code), message, {
+      stage: String(error.stage),
+      suggestion: String(error.suggestion),
+      cause: error,
+      expected: true
+    });
+  }
   if (error?.name === "AbortError" || /取消|取代|cancel|abort/i.test(message)) {
     return new RuntimeOperationError("operation_cancelled", message, {stage, cause: error, expected: true});
   }

@@ -27391,3 +27391,11 @@ full 矩阵结果：
 - 独立备注新增 `note` 对象种类、字符串身份、`standalone / packCell / x / y` 持久化字段、对象解析、选择高亮和定位边界。备注总览可进入 `note:add` 模式放置并编辑名称 / 正文；`api.edit.notes.createStandalone` 与 UI 共用创建命令。缺少有效位置的旧独立备注保留为孤儿记录，不伪造位置。
 - 统一画布模式从 17 增至 19；稳定 API 基线更新为 11 个命名空间、168 个公开方法、78 个编辑方法，稳定等级为 160 / 7 / 1。能力清单和稳定契约同步更新。
 - 新增 `docs/task-notes/auxiliary-object-creation.md` 与 `regress:auxiliary-object-creation`，覆盖三类创建、解析、选择 / 高亮、导出、完整地图保存、关联备注级联、metadata、撤销 / 重做、重复 id、坏坐标、孤儿备注和非法地区 cells。`regress:canvas-tools`、API 门禁、生产构建和差异检查通过；本项按快速迭代约定未启动浏览器。
+
+### 2026-07-15 完成权威任务第 42 项：统一导入诊断与 schema 演进
+
+- 导入诊断文档升级为 v2，共用 `import.kind / label / status`、来源、文件摘要、类型详情和可空错误结构。普通 GEO、FMG Cells GEO 和高度图成功后均把可导出诊断放入结果；失败诊断写入最近记录，并把中文 `code / stage / suggestion` 透传到 API operation error。
+- 普通 GEO 诊断统计 Feature、几何类型、坐标对数和 bbox；Cells GEO 额外验证 `id / height / biome / neighbors` 字段完整率并统计陆地 / 水域；高度图记录宽高、模式、fit、映射和 invert。诊断不保存 GeoJSON properties、坐标数组、图片像素或文件正文，JSON 解析错误使用固定中文消息。
+- 完整地图迁移新增可注入 registry，每个 migrator 只允许执行 `vN -> vN+1`，重复注册、跳版产物、缺失中间迁移器和未知未来版本均明确拒绝；既有 `migrateMapDocument()` 继续使用同一 registry 完成 v1→v2 与当前 schema 校验。
+- `runtime-operation` 对已经带完整诊断分类的错误保留领域 code、stage 和 suggestion，不再统一压平为普通 operation 错误；原有未分类错误行为不变。GEO 继续在写命令前完成解析 / 验证，高度图继续由 map replace transaction 负责失败回滚。
+- 新增 `docs/task-notes/import-diagnostics-schema-evolution.md`；扩展 `regress:map-import-diagnostics` 与 `regress:map-migration`，覆盖三类成功 / 失败、隐私哨兵、模拟 v3 链和未来版本门禁。`regress:api-operation / api-data-compatibility / exports`、生产构建与差异检查通过；本项按快速迭代约定未单独启动浏览器。

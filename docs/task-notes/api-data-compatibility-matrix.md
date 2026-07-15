@@ -4,7 +4,7 @@
 
 本文档冻结权威任务第 32 项的数据范围。目标是让当前已经存在的持久化入口都可通过公共 action / API 调用，并用固定旧样本和当前样本证明完整地图迁移、导出、再导入不会丢失关键数据。
 
-本项只复用已有完整地图诊断，并保证 API 错误包含 `code / stage / suggestion`。普通 GEO、FMG Cells GEO 和高度图的分类型中文诊断、隐私摘要及未来 schema 链式注册仍属于权威任务第 42 项，不在本项提前实现。
+第 42 项已在本矩阵基础上补齐普通 GEO、FMG Cells GEO 和高度图的分类型中文诊断、隐私摘要及未来 schema 链；详细契约见 `import-diagnostics-schema-evolution.md`。
 
 ## 持久化入口矩阵
 
@@ -15,7 +15,7 @@
 | 浏览器存档保存 / 恢复 | `createMapDocument / stringifyMapDocument` 与存档 envelope | 新增 `data.saveBrowserMap / restoreBrowserMap` | 兼容旧的裸 JSON LocalStorage 和当前 envelope；显式恢复必须确认 |
 | 高度图图片 | `create*HeightmapFromImage -> generateMapOffMainThread -> loadMapIntoRuntime` | 新增 `data.importHeightmap` | 生成当前 schema 地图；替换失败恢复旧 map / 历史 / renderer |
 | 最近一次完整地图导入诊断 | `createMapImportDiagnostic / stringifyMapImportDiagnostic` | 新增 `data.exportImportDiagnostic` | 无诊断时返回 noop；API 失败后诊断不得被事务回滚抹除 |
-| 普通 GEO / FMG Cells GEO | `parseGeoJsonMeasurements` 或 `createImportFmgCellsHeightCommand` | 保留 `data.importGEO` | 继续走可撤销命令；详细分类型诊断留给第 42 项 |
+| 普通 GEO / FMG Cells GEO | `parseGeoJsonMeasurements` 或 `createImportFmgCellsHeightCommand` | 保留 `data.importGEO` | 继续走可撤销命令；成功与失败均写入 v2 分类型诊断 |
 | 名称库文档 | `parseNamebaseDocument` 与名称库命令 | 保留 `namebases.import / export` | 继续由既有名称库文档回归证明 |
 | 备注 / 测量记录导出 | 现有序列化 helper | 保留 `data.exportNotes / exportMeasurements` | 只读，不改变地图或历史 |
 
