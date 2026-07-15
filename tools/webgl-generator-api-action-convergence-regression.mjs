@@ -27,7 +27,10 @@ const uiActionSignatures = {
   climate: "onClimateControls: () => applyClimateControls(state, documentRef, runtimeActions.climate.apply)",
   mapImport: "onImportMapData: file => importMapData(state, documentRef, file, runtimeActions.data.importMap)",
   geoImport: "onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO)",
+  heightmapImport: "onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap)",
   mapExport: "onExportMapData: () => exportMapData(state, documentRef, runtimeActions.data.exportMap)",
+  browserSave: "saveMapToBrowserStorage(state, documentRef, runtimeActions.data.saveBrowserMap)",
+  importDiagnostic: "exportMapImportDiagnostic(state, documentRef, runtimeActions.data.exportImportDiagnostic)",
   namebaseImport: "onImport: (file, mode) => importNamebases(state, documentRef, file, mode, runtimeActions.namebases.import)",
   namebaseExport: "onExport: rows => exportNamebases(state, documentRef, rows, runtimeActions.namebases.export)",
   heightBase: "runtimeActions.edit.height.rebuildBaseDerived({confirm: true})",
@@ -48,6 +51,10 @@ const apiActionSignatures = [
   "actions.data?.exportPNG",
   "actions.data?.importMap",
   "actions.data?.importGEO",
+  "actions.data?.importHeightmap",
+  "actions.data?.saveBrowserMap",
+  "actions.data?.restoreBrowserMap",
+  "actions.data?.exportImportDiagnostic",
   "actions.namebases?.export",
   "actions.namebases?.import",
   "actions.edit?.height?.rebuildBaseDerived",
@@ -62,7 +69,10 @@ for (const legacy of ["function setLayerViewMode(", "function setLayerVisible(",
 assertAdapter("requestGenerate", ["actions.generate.newMap"], ["generateMapOffMainThread", "loadMapIntoRuntime"]);
 assertAdapter("importMapData", ["importAction"], ["loadMapIntoRuntime", "parseMapDocumentFile"]);
 assertAdapter("importGeoData", ["importAction"], ["executeEditCommand", "createImportFmgCellsHeightCommand"]);
+assertAdapter("importHeightmapImage", ["importAction"], ["generateMapOffMainThread", "loadMapIntoRuntime"]);
 assertAdapter("exportMapData", ["exportAction"], ["createMapDocument", "downloadText"]);
+assertAdapter("saveMapToBrowserStorage", ["saveAction"], ["stringifyMapDocument", "localStorage"]);
+assertAdapter("exportMapImportDiagnostic", ["exportAction"], ["downloadText", "stringifyMapImportDiagnostic"]);
 assertAdapter("exportGeoJson", ["exportAction"], ["createMapGeoJson", "downloadText"]);
 assertAdapter("exportNamebases", ["exportAction"], ["createNamebaseDocument", "downloadText"]);
 assertAdapter("applyClimateControls", ["applyAction"], ["applyClimateOptions"]);
@@ -95,7 +105,7 @@ assert.equal(failure.error.code, "api_error", "公共 action 参数错误 code �
 assert.match(failure.error.message, /当前没有可导出的地图/, "公共 action 错误消息漂移");
 
 const declaredCounts = countDeclaredMethods(consoleApiSource);
-assert.equal(declaredCounts.total, 158, "任务 30 API 方法总数漂移");
+assert.equal(declaredCounts.total, 162, "公共 API 方法总数漂移");
 assert.equal(declaredCounts.edit, 72, "任务 30 edit 方法数漂移");
 
 console.log(JSON.stringify({

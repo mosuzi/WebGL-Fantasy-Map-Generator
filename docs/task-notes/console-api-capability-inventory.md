@@ -8,7 +8,7 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：11 个命名空间、158 个方法，其中 72 个为编辑方法。
+当前公开基线：11 个命名空间、162 个方法，其中 72 个为编辑方法。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
@@ -20,7 +20,7 @@
 | `climate` | 14 | 已覆盖气候读取与当前写入入口 |
 | `history` | 5 | 已覆盖历史读取、peek、撤销和重做 |
 | `edit` | 72 | 已覆盖当前全部可纯参数调用的既有编辑命令及 2 项高度派生重建；交互手势型能力继续暂缓 |
-| `data` | 10 | 已覆盖主要地图 / GEO / PNG / 记录导入导出 |
+| `data` | 14 | 已覆盖地图 / GEO / 高度图 / 浏览器存档 / PNG / 记录与诊断导入导出 |
 | `namebases` | 10 | 已覆盖名称库读取、交换、编辑、绑定与批量改名 |
 | `debug` | 7 | 已覆盖只读诊断、debug UI 和单帧 profile |
 
@@ -60,10 +60,10 @@
 | 23 | 地区 | Zone 样式编辑 | 已暴露且共路径 | `api.edit.zones.setStyle()` 与 `createSetZoneStyleCommand()` | 第 29 项已完成；第 33 项稳定化 |
 | 24 | 路线 / 河流 / 湖泊 | 当前删除、备注、重命名和河宽编辑 | 已暴露且共路径 | `api.edit.routes / rivers / lakes` | 第 33 项稳定化 |
 | 25 | 标签 / marker | 当前新增、删除、移动、视觉、备注和恢复 | 已暴露且共路径 | `api.edit.labels / markers` | 第 33 项稳定化 |
-| 26 | 名称库 | list、export/import、CRUD、绑定、批量对象改名 | 已暴露且共路径 | UI 文件适配与 `api.namebases.*` 共用 `runtimeActions.namebases`；持久化兼容仍待统一证明 | 第 30 项已完成；第 32、33 项 |
+| 26 | 名称库 | list、export/import、CRUD、绑定、批量对象改名 | 已暴露且共路径 | UI 文件适配与 `api.namebases.*` 共用 `runtimeActions.namebases`；既有名称库文档往返门禁继续有效 | 第 30、32 项已完成；第 33 项稳定化 |
 | 27 | 数据导出 | 完整 JSON / gzip、GEO、要素 GEO、PNG、备注、测量 | 已暴露且共路径 | UI 下载提示与 `api.data.export*` 共用 `runtimeActions.data` 及同一序列化结果；PNG / gzip 已接统一 operation | 第 30、31 项已完成；第 33 项稳定化 |
-| 28 | 数据导入 | 完整地图、普通 GEO、Cells GEO | 已暴露但仍有分叉 | UI 文件读取与 `api.data.importMap / importGEO` 共用 action；完整地图失败会恢复 state、历史、选择和 renderer，旧数据统一证明仍待补齐 | 第 30、31 项已完成；第 32 项 |
-| 29 | 数据导入 | 高度图图片、导入诊断包导出、显式浏览器存储恢复 | 未暴露 | 控制面板 file action、map import diagnostic、浏览器存储 helper | 第 32 项 |
+| 28 | 数据导入 | 完整地图、普通 GEO、Cells GEO | 已暴露且共路径 | UI 与 API 共用 action；固定 v1 / v2 地图往返、失败回滚、GEO 命令路径均有代码门禁 | 第 30～32 项已完成；第 33 项稳定化 |
+| 29 | 数据导入 | 高度图图片、导入诊断包导出、浏览器存档保存 / 恢复 | 已暴露且共路径 | `data.importHeightmap / exportImportDiagnostic / saveBrowserMap / restoreBrowserMap`；控制面板共用 `runtimeActions.data` | 第 32 项已完成；第 33 项稳定化 |
 | 30 | 诊断 | debug 开关、snapshot、dump、renderer、health、profile | 已暴露且共路径 | `api.debug.*` | 第 33 项稳定化 |
 | 31 | 诊断写入 | 清空 health、注入 delay、裸 state / typed array 写入口 | 明确暂缓 | 当前计划非目标，存在破坏运行节奏或绕过契约风险 | 第 33 项只记录权限边界 |
 | 32 | UI shell | 面板打开 / 关闭、浮层焦点、文件选择器、画布手势模拟 | 明确暂缓 | 依赖具体 UI 与指针生命周期，不是非 UI 数据能力 | 第 35～37 项按各自范围处理 |
@@ -75,7 +75,7 @@
 - 第 29 项：已完成。20 个方法补齐当前已经存在、且可以用参数调用的 edit command；未模拟指针手势，也未创造新产品能力。
 - 第 30 项：已完成。建立应用级唯一 `runtimeActions`，收束生成 / 重算、图层 / 显示、气候、导入导出、选择与名称库代表路径；补 4 个显示偏好和 2 个高度派生方法，`regress:api-action-convergence` 固定公共 action、结果 effects、错误 code 和方法计数。
 - 第 31 项：已完成。统一生成、重算、导入和导出长任务的 busy、阶段、loading、错误、health 与 finally；地图替换失败执行事务回滚。
-- 第 32 项：补高度图 / 诊断 / 浏览器持久化等数据入口和旧数据往返证据。
+- 第 32 项：已完成。补高度图、完整地图诊断和浏览器存档数据入口；固定 v1 / v2 地图及旧裸浏览器存档完成导入、导出、再导入等价证明。
 - 第 33 项：定义稳定等级、版本、兼容别名、确认与权限边界；不开放裸内部写入口。
 
 第 29～33 项不得把“明确暂缓”项目偷渡进实现。后续真实新增 API 时，必须同时更新 `methods`、真实 API 对象、`methodMetadata` 和本文档归属。

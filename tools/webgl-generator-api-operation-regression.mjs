@@ -103,8 +103,11 @@ for (const operationName of [
   "generate.regenerate",
   "data.importMap",
   "data.importGEO",
+  "data.importHeightmap",
   "data.exportPNG",
-  "data.exportCompressedAll"
+  "data.exportCompressedAll",
+  "data.saveBrowserMap",
+  "data.restoreBrowserMap"
 ]) {
   assert.match(appSource, new RegExp(`operation\\.run(?:Sync)?\\(\"${operationName.replaceAll(".", "\\.")}\"`));
 }
@@ -117,6 +120,6 @@ console.log(JSON.stringify({
   loadingClosed: loading.at(-1).visible === false,
   stableErrorCodes: [invalid.error.code, busy.error.code, failed.error.code],
   healthRule: {expected: "info", unexpected: "error"},
-  integratedOperations: 7,
+  integratedOperations: 10,
   mapReplaceRollback: true
 }, null, 2));

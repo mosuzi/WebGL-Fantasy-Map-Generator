@@ -343,7 +343,7 @@ api.edit.measurement.delete(id)
 - info / debug 已补齐方法级副作用元数据：`info.version / capabilities / mapSummary / runtimeStats / healthEvents` 均不改变状态；`debug.snapshot / dumpState / renderer / health` 是只读诊断；`debug.enable / disable` 标注为 `debug-ui-state`，只开关开发面板 / debug UI；`debug.profileNextRender` 标注为 `renderer-diagnostics`，会强制执行一次 draw 并返回前后 renderer 诊断统计，但不修改地图数据、不进入 `EditHistory`、不要求 `confirm:true`；浏览器验证已确认读取元数据、执行诊断和开关 debug UI 均不修改地图 checksum。
 - generate 配置方法已补齐方法级副作用元数据：`getOptions` 不改变状态；`setOptions` 标注为 `generation-options`，表示只同步当前生成配置、主输入和运行时面板，不隐式生成新地图、不替换当前地图、不进入 `EditHistory`、不要求 `confirm:true`。`regenerate / newMap / rerollSeed` 继续保持必须显式确认的生成 / 重算元数据；浏览器验证已确认 `setOptions` 只更新生成配置，不修改当前地图 checksum 或编辑历史。
 - edit 命名空间已补齐方法级副作用元数据：可撤销编辑方法继续通过 edit command 写入当前地图；`height.rebuildBaseDerived / rebuildDownstreamDerived` 标注为同步、部分可撤销、必须确认的派生重建 action，不伪装为单条可完整撤销命令。当前 72 个 edit 方法均有同名元数据。
-- `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回声明方法、元数据和真实 API 方法总数及缺失 / 多余项，并在顶层暴露 `complete / missing / extra / runtimeMissing / runtimeExtra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。当前公开基线为 11 个命名空间、158 个方法，其中 72 个为编辑方法；三方任一发生漂移都会使覆盖自检失败。
+- `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回声明方法、元数据和真实 API 方法总数及缺失 / 多余项，并在顶层暴露 `complete / missing / extra / runtimeMissing / runtimeExtra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。当前公开基线为 11 个命名空间、162 个方法，其中 72 个为编辑方法；三方任一发生漂移都会使覆盖自检失败。
 - `pnpm run regress:api` 已新增第一刀，脚本会在构建产物上通过控制台 API 生成小地图，检查 `methodMetadataCoverage`、确认边界和代表性 `mutates` 元数据，并输出 `docs/generated/reports/api-capabilities-regression-results.json` 与 Markdown 报告。后续新增 / 删除 API 方法时，应优先跑该脚本确认能力表没有漏记或漂移。
 - `pnpm run regress:api-roundtrip` 已新增第一刀，脚本会在构建产物上通过控制台 API 完成完整地图 roundtrip：生成源地图、导出完整 JSON、导出 gzip、扰动当前地图后分别导入 JSON 对象 / JSON 字符串 / 压缩导出对象 / gzip-base64 payload，并校验 seed、checksum、历史栈和错误边界。
 - `pnpm run regress:api-geo` 已新增第一刀，脚本会在构建产物上通过 `api.data.importGEO()` 覆盖普通 GeoJSON 测量对象导入和 FMG Cells 地形导入两条分支，并校验确认门槛、坏 JSON 错误、撤销、非 GEO 派生重置和水陆一致性。
@@ -594,7 +594,7 @@ api.edit.measurement.delete(id)
 
 ## 下一波全面实现
 
-阶段 0～6 都已完成第一刀，原“继续阶段 4”的建议已经过期。当前 API 基线为 11 个命名空间、158 个公开方法、72 个编辑方法；权威任务第 28 项完成 34 类能力映射与三方覆盖门禁，第 29 项补齐 20 个纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，收束生成 / 重算、图层 / 显示、气候、导入导出、选择和名称库代表路径，并补齐 4 个显示偏好与 2 个高度派生方法。`regress:api-action-convergence` 已固定 UI / API 委托、直接写入审计、数据摘要、effects、错误 code 和方法计数。根 API 仍为 `experimental`，全部方法仍为 `draft`，异步事务、旧数据往返、稳定契约和聚合门禁继续按第 31～34 项推进。
+阶段 0～6 都已完成第一刀，原“继续阶段 4”的建议已经过期。当前 API 基线为 11 个命名空间、162 个公开方法、72 个编辑方法；权威任务第 28 项完成 34 类能力映射与三方覆盖门禁，第 29 项补齐 20 个纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，第 31 项统一长任务 operation，第 32 项补齐高度图、浏览器存档与导入诊断数据入口，并用固定 v1 / v2 样本证明迁移往返。`regress:api-action-convergence / api-operation / api-data-compatibility` 已固定公共委托、事务和数据兼容。根 API 仍为 `experimental`，全部方法仍为 `draft`，稳定契约和聚合门禁继续按第 33～34 项推进。
 
 后续以 `docs/current-plan.md` 的权威任务第 28～34 项为唯一执行顺序：
 

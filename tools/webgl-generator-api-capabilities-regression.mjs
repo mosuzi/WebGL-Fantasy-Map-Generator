@@ -86,6 +86,8 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       "generate.rerollSeed",
       "data.importMap",
       "data.importGEO",
+      "data.importHeightmap",
+      "data.restoreBrowserMap",
       "namebases.clear",
       "namebases.renameObjects",
       "edit.height.rebuildBaseDerived",
@@ -93,7 +95,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     ];
     const expectedConfirmGroups = {
       generate: ["regenerate", "newMap", "rerollSeed"],
-      data: ["importMap", "importGEO"],
+      data: ["importMap", "importGEO", "importHeightmap", "restoreBrowserMap"],
       namebases: ["clear", "renameObjects"],
       edit: ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived"]
     };

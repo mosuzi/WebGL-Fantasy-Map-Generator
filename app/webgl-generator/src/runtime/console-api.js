@@ -18,6 +18,8 @@ const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "generate.rerollSeed",
   "data.importMap",
   "data.importGEO",
+  "data.importHeightmap",
+  "data.restoreBrowserMap",
   "namebases.clear",
   "namebases.renameObjects",
   "edit.height.rebuildBaseDerived",
@@ -224,8 +226,12 @@ function createConsoleApi(documentRef, state, actions = {}) {
       exportPNG: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportPNG, "data.exportPNG")(options)),
       exportNotes: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportNotes, "data.exportNotes")(options)),
       exportMeasurements: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportMeasurements, "data.exportMeasurements")(options)),
+      exportImportDiagnostic: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportImportDiagnostic, "data.exportImportDiagnostic")(options)),
+      saveBrowserMap: (options = {}) => apiCall(() => requireApiAction(actions.data?.saveBrowserMap, "data.saveBrowserMap")(options)),
+      restoreBrowserMap: (options = {}) => apiCall(() => requireApiAction(actions.data?.restoreBrowserMap, "data.restoreBrowserMap")(options)),
       importMap: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importMap, "data.importMap")(document, options)),
-      importGEO: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importGEO, "data.importGEO")(document, options))
+      importGEO: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importGEO, "data.importGEO")(document, options)),
+      importHeightmap: (payload, options = {}) => apiCall(() => requireApiAction(actions.data?.importHeightmap, "data.importHeightmap")(payload, options))
     }),
     namebases: Object.freeze({
       list: (options = {}) => apiCall(() => listNamebases(state, options)),
@@ -276,7 +282,7 @@ function buildCapabilities(api) {
       "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
       "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"
     ],
-    data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
+    data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "exportImportDiagnostic", "saveBrowserMap", "restoreBrowserMap", "importMap", "importGEO", "importHeightmap"],
     namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
     debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
   };
@@ -467,8 +473,12 @@ function buildMethodMetadata() {
       exportPNG: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
       exportNotes: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       exportMeasurements: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      exportImportDiagnostic: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      saveBrowserMap: {stable: "draft", mutates: "browser-storage", undoable: false, async: true, requiresConfirm: false},
+      restoreBrowserMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       importMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
-      importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: "partial", async: true, requiresConfirm: true}
+      importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: "partial", async: true, requiresConfirm: true},
+      importHeightmap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}
     },
     namebases: {
       list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

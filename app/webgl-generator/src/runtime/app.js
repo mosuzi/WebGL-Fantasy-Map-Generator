@@ -48,10 +48,11 @@ import {createZonePanel} from "../ui/panels/zone-panel.js";
 import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
+import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload} from "./browser-map-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {createMapDocument, decompressGzipBase64Text, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
+import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {createMapImportDiagnostic, formatMapImportDiagnosticLines, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
@@ -162,8 +163,6 @@ const LOAD_TRACE_EVENT_NAME = "webgl-generator-load-stage";
 const LOAD_TRACE_DELAY_PARAMS = Object.freeze(["loadStepDelay", "debugLoadDelay", "loadTraceDelay"]);
 const MAX_DEBUG_LOAD_DELAY_MS = 2000;
 const NAMEBASE_PREFERENCES_STORAGE_KEY = "webgl-generator-namebase-preferences-v1";
-const BROWSER_MAP_STORAGE_KEY = "webgl-generator-current-map-v1";
-const BROWSER_MAP_STORAGE_TYPE = "webgl-generator-local-map-storage";
 const CLIMATE_OPTION_KEYS = Object.freeze([
   "climateLatitudeMode",
   "climateLatitudeCenter",
@@ -2170,7 +2169,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onSaveLocalFile: () => saveMapToLocalFile(state, documentRef, runtimeActions.data.exportMap),
     onSaveBrowserStorage: () => {
-      void saveMapToBrowserStorage(state, documentRef);
+      void saveMapToBrowserStorage(state, documentRef, runtimeActions.data.saveBrowserMap);
     },
     onExportImage: () => exportMapImage(state, documentRef, runtimeActions.data.exportPNG),
     onExportMapData: () => exportMapData(state, documentRef, runtimeActions.data.exportMap),
@@ -2179,10 +2178,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onExportGeoJson: () => exportGeoJson(state, documentRef, runtimeActions.data.exportGEO),
     onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef, runtimeActions.data.exportFeatureGEO),
-    onExportMapImportDiagnostic: () => exportMapImportDiagnostic(state, documentRef),
+    onExportMapImportDiagnostic: () => exportMapImportDiagnostic(state, documentRef, runtimeActions.data.exportImportDiagnostic),
     onImportMapData: file => importMapData(state, documentRef, file, runtimeActions.data.importMap),
     onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO),
-    onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload),
+    onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap),
     onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true}),
     onMode: mode => runtimeActions.layers.setViewMode(mode)
   });
@@ -2279,12 +2278,25 @@ function createRuntimeActions(state, documentRef, options = {}) {
       }, {message: "正在导出 PNG"}),
       exportNotes: (options = {}) => exportNotesData(state, documentRef, options),
       exportMeasurements: (options = {}) => exportMeasurementsData(state, documentRef, options),
+      exportImportDiagnostic: (options = {}) => exportMapImportDiagnosticViaApi(state, documentRef, options),
+      saveBrowserMap: (options = {}) => operation.run("data.saveBrowserMap", context => {
+        context.report("serialize", {message: "正在保存浏览器存档"});
+        return saveMapToBrowserStorageViaApi(state, documentRef, options);
+      }, {message: "正在保存浏览器存档"}),
+      restoreBrowserMap: (options = {}) => operation.run("data.restoreBrowserMap", context => restoreMapFromBrowserStorageViaApi(state, documentRef, options, context), {
+        ...mapReplaceConfig(loadingMessage("map-import-read")),
+        isNoop: result => result?.restored === false
+      }),
       importMap: (document, options = {}) => operation.run("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), mapReplaceConfig(loadingMessage("map-import-read"))),
       importGEO: (document, options = {}) => operation.runSync("data.importGEO", context => {
         context.report("import", {message: "正在导入 GEO 数据"});
         return importGeoDocumentViaApi(state, documentRef, document, options);
       }, {
         message: "正在导入 GEO 数据",
+        isNoop: result => result?.imported === false
+      }),
+      importHeightmap: (payload, options = {}) => operation.run("data.importHeightmap", context => importHeightmapImageViaApi(state, documentRef, payload, options, context), {
+        ...mapReplaceConfig(loadingMessage("heightmap-read")),
         isNoop: result => result?.imported === false
       })
     },
@@ -2727,40 +2739,52 @@ function requestGenerate(state, documentRef, actions = state.runtimeActions) {
 }
 
 async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
-  if (await restoreMapFromBrowserStorage(state, documentRef, {startup: true})) return;
+  try {
+    const result = await state.runtimeActions.data.restoreBrowserMap({confirm: true, startup: true, removeInvalid: true, toast: false});
+    if (result.restored) return;
+  } catch {
+    // Startup continues with a fresh map after an invalid browser snapshot.
+  }
   requestGenerate(state, documentRef, state.runtimeActions);
 }
 
-async function restoreMapFromBrowserStorage(state, documentRef, {startup = false} = {}) {
+async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = {}, operation = null) {
+  if (options.confirm !== true) throw new Error("恢复浏览器存档会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   const storage = browserStorage(documentRef);
-  if (!storage) return false;
+  if (!storage) throw new Error("当前浏览器不支持 LocalStorage");
   const raw = storage.getItem(BROWSER_MAP_STORAGE_KEY);
-  if (!raw) return false;
+  if (!raw) return {restored: false, reason: "missing", effects: []};
 
   try {
     resetLoadTrace(documentRef);
+    operation?.report("read-storage", {message: "正在读取浏览器存档"});
     emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
     setFileOperationStatus(documentRef, "正在读取浏览器保存的地图...");
     setMythicGenerationLoading(documentRef, true, "map-import-read");
+    operation?.report("decode-storage", {message: "正在解码浏览器存档"});
     const document = parseMapDocument(await decodeBrowserMapStoragePayload(documentRef, raw));
-    const options = normalizeOptions(document.map.options || document.options || state.options);
-    document.map.options = options;
-    state.options = options;
-    applyPersistedVisualTheme(state, documentRef, document);
-    syncGenerationInputs(documentRef, options);
-    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
-    await loadMapIntoRuntime(state, documentRef, document.map, {
-      loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
-      completionToast: startup ? "已恢复浏览器保存的地图" : "地图已从浏览器恢复"
-    });
+    const imported = await importParsedMapDocumentViaApi(state, documentRef, document, {
+      source: "browser-storage",
+      toast: false
+    }, operation);
     updateGenerationLoading(documentRef, false);
-    setFileOperationStatus(documentRef, `已恢复浏览器保存的地图：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
-    return true;
+    const seed = document.map.metadata?.seed || document.map.options?.seed || "未知";
+    setFileOperationStatus(documentRef, `已恢复浏览器保存的地图：seed ${seed}`);
+    if (options.toast !== false) showMapToast(documentRef, options.startup ? "已恢复浏览器保存的地图" : "地图已从浏览器恢复");
+    return {
+      ...imported,
+      restored: true,
+      storageKey: BROWSER_MAP_STORAGE_KEY,
+      effects: [...new Set([...(imported.effects || []), "browser-storage-read"])]
+    };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    storage.removeItem(BROWSER_MAP_STORAGE_KEY);
-    reportFileOperationError(documentRef, "浏览器地图恢复失败，已清除损坏存档", error);
-    return false;
+    if (options.removeInvalid === true) storage.removeItem(BROWSER_MAP_STORAGE_KEY);
+    reportMapImportError(state, documentRef, error, null, {
+      source: "browser-storage",
+      prefix: options.removeInvalid === true ? "浏览器地图恢复失败，已清除损坏存档" : "浏览器地图恢复失败"
+    });
+    throw error;
   }
 }
 
@@ -3105,7 +3129,6 @@ function captureMapReplaceSnapshot(state, documentRef) {
     history: state.editHistory.createSnapshot(),
     selection: state.selectionStore.getSnapshot(),
     lastEditRefresh: state.lastEditRefresh,
-    lastMapImportDiagnostic: state.lastMapImportDiagnostic,
     visualTheme: currentVisualThemeId(documentRef)
   };
 }
@@ -3116,7 +3139,6 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
   state.map = snapshot.map;
   state.options = cloneGenerationOptions(snapshot.options);
   state.lastEditRefresh = snapshot.lastEditRefresh;
-  state.lastMapImportDiagnostic = snapshot.lastMapImportDiagnostic;
   syncGenerationInputs(documentRef, state.options);
   setInputValue(documentRef, "visual-theme-preset", snapshot.visualTheme);
   state.renderer?.setVisualTheme?.(snapshot.visualTheme);
@@ -3427,21 +3449,37 @@ function saveMapToLocalFile(state, documentRef, exportAction = state.runtimeActi
   }
 }
 
-async function saveMapToBrowserStorage(state, documentRef) {
+async function saveMapToBrowserStorage(state, documentRef, saveAction = state.runtimeActions?.data?.saveBrowserMap) {
   try {
-    assertMapAvailable(state);
-    const storage = browserStorage(documentRef);
-    if (!storage) throw new Error("当前浏览器不支持 LocalStorage");
     setFileOperationStatus(documentRef, "正在保存地图到浏览器...");
-    const text = stringifyMapDocument(createPersistableMapDocument(state, documentRef));
-    const payload = await encodeBrowserMapStoragePayload(documentRef, text, state.map);
-    storage.setItem(BROWSER_MAP_STORAGE_KEY, JSON.stringify(payload));
-    setFileOperationStatus(documentRef, browserStorageSaveMessage(payload));
+    const result = await saveAction({source: "ui"});
+    setFileOperationStatus(documentRef, browserStorageSaveMessage(result));
     showMapToast(documentRef, "保存成功");
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "保存到浏览器失败", error);
     showMapToast(documentRef, "保存失败", 2600, {tone: "error"});
+    return null;
   }
+}
+
+async function saveMapToBrowserStorageViaApi(state, documentRef) {
+  assertMapAvailable(state);
+  const storage = browserStorage(documentRef);
+  if (!storage) throw new Error("当前浏览器不支持 LocalStorage");
+  const exported = exportAllMapData(state, documentRef, {download: false, includeText: true});
+  const text = exported.text;
+  const payload = await encodeBrowserMapStoragePayload(documentRef, text, state.map);
+  storage.setItem(BROWSER_MAP_STORAGE_KEY, JSON.stringify(payload));
+  return {
+    saved: true,
+    storageKey: BROWSER_MAP_STORAGE_KEY,
+    encoding: payload.encoding,
+    bytes: payload.bytes,
+    originalBytes: payload.originalBytes,
+    metadata: {...payload.metadata},
+    effects: ["browser-storage-write"]
+  };
 }
 
 function exportMapData(state, documentRef, exportAction = state.runtimeActions?.data?.exportMap) {
@@ -4088,55 +4126,6 @@ function readFeatureGeoJsonDissolveOption(documentRef) {
   return documentRef.getElementById("feature-export-dissolve-political")?.checked === true;
 }
 
-async function encodeBrowserMapStoragePayload(documentRef, text, map) {
-  const compressed = await compressTextToBase64(documentRef, text);
-  const encoded = compressed
-    ? {encoding: "gzip-base64", data: compressed.base64, bytes: compressed.bytes}
-    : {encoding: "plain", data: text, bytes: text.length};
-  return {
-    type: BROWSER_MAP_STORAGE_TYPE,
-    version: 1,
-    savedAt: new Date().toISOString(),
-    originalBytes: text.length,
-    metadata: {
-      seed: map?.metadata?.seed || map?.options?.seed || "",
-      checksum: map?.metadata?.checksum || map?.summary?.checksum || "",
-      gridCells: map?.metadata?.gridCells || map?.grid?.metadata?.actualCells || 0,
-      packCells: map?.metadata?.packCells || map?.pack?.metadata?.cells || 0
-    },
-    ...encoded
-  };
-}
-
-async function decodeBrowserMapStoragePayload(documentRef, raw) {
-  const payload = JSON.parse(raw);
-  if (payload?.type === BROWSER_MAP_STORAGE_TYPE) {
-    if (payload.version !== 1) throw new Error(`暂不支持的浏览器存档版本：${payload.version}`);
-    if (payload.encoding === "gzip-base64") return decompressGzipBase64Text(documentRef, payload.data);
-    if (payload.encoding === "plain") return String(payload.data || "");
-    throw new Error(`暂不支持的浏览器存档编码：${payload.encoding || "未知"}`);
-  }
-  return raw;
-}
-
-async function compressTextToBase64(documentRef, text) {
-  const view = documentRef.defaultView || window;
-  if (typeof view.CompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") return null;
-  const stream = new view.Blob([text], {type: "application/json;charset=utf-8"}).stream().pipeThrough(new view.CompressionStream("gzip"));
-  const buffer = await new view.Response(stream).arrayBuffer();
-  return {base64: arrayBufferToBase64(view, buffer), bytes: buffer.byteLength};
-}
-
-function arrayBufferToBase64(view, buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-  }
-  return view.btoa(binary);
-}
-
 function browserStorage(documentRef) {
   try {
     return documentRef.defaultView?.localStorage || null;
@@ -4391,49 +4380,77 @@ function syncMeasurementLayerControl(documentRef, visible) {
   if ("checked" in control) control.checked = visible;
 }
 
-async function importHeightmapImage(state, documentRef, payload) {
+async function importHeightmapImage(state, documentRef, payload, importAction = state.runtimeActions?.data?.importHeightmap) {
+  try {
+    return await importAction(payload, {confirm: true, source: "ui"});
+  } catch (error) {
+    reportFileOperationError(documentRef, "高度图导入失败", error, ["heightmap-import-status"]);
+    return null;
+  }
+}
+
+async function importHeightmapImageViaApi(state, documentRef, payload, options = {}, operation = null) {
+  if (options.confirm !== true) throw new Error("导入高度图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  operation?.report("validate", {message: "正在校验高度图导入参数"});
   const {file, settings} = normalizeHeightmapImportPayload(payload, documentRef);
-  if (!file) return;
+  if (!file) throw new Error("请选择一张高度图");
+  const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
   try {
     resetLoadTrace(documentRef);
     emitLoadTrace(documentRef, {phase: "request", id: "heightmap-read", message: loadingMessage("heightmap-read")});
     setFileOperationStatus(documentRef, "正在读取高度图...", ["heightmap-import-status"]);
     setMythicGenerationLoading(documentRef, true, "heightmap-read");
-    const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
+    operation?.report("read-image", {message: loadingMessage("heightmap-read")});
+    const generationOptions = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
     const namebaseSnapshot = resolveGenerationNamebaseSnapshot(state, documentRef);
     const importGenerateId = (state.pendingGenerateId || 0) + 1;
     state.pendingGenerateId = importGenerateId;
     state.heightmapImportId = importGenerateId;
     const heightmap = settings.kind === "image-palette"
-      ? await createPaletteHeightmapFromImage(documentRef, file, options, settings)
-      : await createGrayscaleHeightmapFromImage(documentRef, file, options, settings);
+      ? await createPaletteHeightmapFromImage(documentRef, file, generationOptions, settings)
+      : await createGrayscaleHeightmapFromImage(documentRef, file, generationOptions, settings);
     if (importGenerateId !== state.pendingGenerateId) {
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
-      return;
+      return {imported: false, reason: "superseded", effects: []};
     }
-    state.options = options;
+    state.options = generationOptions;
     setMythicGenerationLoading(documentRef, true, "heightmap-generate");
+    operation?.report("generate", {message: loadingMessage("heightmap-generate")});
     emitLoadTrace(documentRef, {phase: "start", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(options, namebaseSnapshot), importGenerateId, {
+    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(generationOptions, namebaseSnapshot), importGenerateId, {
       heightmap,
       heightmapPayload: heightmap.workerPayload || null
     });
     emitLoadTrace(documentRef, {phase: "end", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     if (importGenerateId !== state.pendingGenerateId) {
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
-      return;
+      return {imported: false, reason: "superseded", effects: []};
     }
     state.options = map.options;
     await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: [loadingMessage("heightmap-render"), loadingMessage("panel-refresh")],
-      completionToast: "高度图已应用"
+      completionToast: options.toast === false ? "" : "高度图已应用",
+      operation
     });
     updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, heightmapImportSuccessMessage(heightmap), ["heightmap-import-status"]);
+    return {
+      imported: true,
+      source: {...(heightmap.source || {})},
+      map: generationApiMapSummary(state.map),
+      options: cloneGenerationOptions(state.options),
+      timings: {
+        totalMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt),
+        generation: {...(state.map?.metadata?.generationTiming || {})},
+        loadMap: state.renderer?.getStats?.().loadMap || null
+      },
+      history: state.editHistory.getStats(),
+      effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
+    };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    reportFileOperationError(documentRef, "高度图导入失败", error, ["heightmap-import-status"]);
+    throw error;
   }
 }
 
@@ -4485,13 +4502,34 @@ function reportMapImportError(state, documentRef, error, file, options = {}) {
   console.warn(error);
 }
 
-function exportMapImportDiagnostic(state, documentRef) {
+function exportMapImportDiagnostic(state, documentRef, exportAction = state.runtimeActions?.data?.exportImportDiagnostic) {
+  try {
+    const result = exportAction({download: true});
+    if (!result.available) return false;
+    setFileOperationStatus(documentRef, `已导出导入诊断：${result.diagnostic.error.code}`);
+    return true;
+  } catch (error) {
+    reportFileOperationError(documentRef, "导入诊断导出失败", error);
+    return false;
+  }
+}
+
+function exportMapImportDiagnosticViaApi(state, documentRef, options = {}) {
   const diagnostic = state.lastMapImportDiagnostic;
-  if (!diagnostic) return false;
+  if (!diagnostic) return {available: false, reason: "missing", effects: []};
   const suffix = String(diagnostic.file.name || "map-import").replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "map-import";
-  downloadText(documentRef, stringifyMapImportDiagnostic(diagnostic), `${suffix}.diagnostic.json`, "application/json;charset=utf-8");
-  setFileOperationStatus(documentRef, `已导出导入诊断：${diagnostic.error.code}`);
-  return true;
+  const filename = `${suffix}.diagnostic.json`;
+  const text = stringifyMapImportDiagnostic(diagnostic);
+  if (options.download === true) downloadText(documentRef, text, filename, "application/json;charset=utf-8");
+  return {
+    available: true,
+    filename,
+    mimeType: "application/json;charset=utf-8",
+    bytes: text.length,
+    text: options.includeText === false ? undefined : text,
+    diagnostic: JSON.parse(text),
+    effects: options.download === true ? ["download"] : []
+  };
 }
 
 function reportFileOperationError(documentRef, prefix, error, targetIds) {
@@ -4556,14 +4594,6 @@ function setInputValue(documentRef, id, value) {
   input.dispatchEvent(new Event("change", {bubbles: true}));
 }
 
-function createPersistableMapDocument(state, documentRef) {
-  syncClimateOptionsForPersistence(state, documentRef);
-  const visualTheme = currentVisualThemeId(documentRef);
-  state.map.visualTheme = {version: 1, preset: visualTheme, overrides: {}};
-  state.map.options = {...(state.map.options || state.options), visualTheme};
-  return createMapDocument(state.map, {...state.options, visualTheme});
-}
-
 function applyPersistedVisualTheme(state, documentRef, document) {
   const visualTheme = normalizeVisualThemeId(document?.map?.visualTheme?.preset || document?.map?.options?.visualTheme || document?.options?.visualTheme);
   setInputValue(documentRef, "visual-theme-preset", visualTheme);
@@ -4572,15 +4602,6 @@ function applyPersistedVisualTheme(state, documentRef, document) {
 
 function currentVisualThemeId(documentRef) {
   return normalizeVisualThemeId(readControlPreferences(documentRef).visualTheme);
-}
-
-function syncClimateOptionsForPersistence(state, documentRef) {
-  if (!state.map) return;
-  const nextOptions = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
-  const currentClimate = climateOptionSnapshot(state.options);
-  const nextClimate = climateOptionSnapshot(nextOptions);
-  if (sameClimateOptions(currentClimate, nextClimate)) return;
-  applyClimateControls(state, documentRef);
 }
 
 function climateOptionSnapshot(options = {}) {

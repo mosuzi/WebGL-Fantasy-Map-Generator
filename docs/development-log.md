@@ -27304,3 +27304,11 @@ full 矩阵结果：
 - 结构化错误保留稳定 `code / stage / suggestion`：并发冲突为 `operation_busy`，取消为 `operation_cancelled`，参数或文档错误为 `operation_invalid_input`，非预期异常为 `operation_failed`，回滚失败为 `operation_rollback_failed`。预期拒绝只以 info 写入 health，非预期失败才写 error。
 - 新地图和完整地图导入在任务开始前保存旧 map、options、编辑历史、选择、诊断与主题；若生成、解析、renderer 或面板阶段失败，恢复旧 state 和输入，在已替换 renderer 时重新载入旧地图，再恢复历史与选择，避免留下半更新运行时。UI 预约令牌与 worker 生成令牌拆分，并发点击不再通过改写 worker token 取消当前任务。
 - `regress:api-operation` 纯 Node 覆盖成功、noop、参数错误、并发冲突、运行时异常、事务回滚和失败后重试，并静态核对 7 个公开长任务均接入统一 operation。`regress:api-action-convergence / api-inventory / api-edit-coverage / edit-execution-path / panel-refresh-path / map-migration`、语法、生产构建与差异检查通过；按快速迭代约定未启动浏览器，第 34 项再集中验证真实页面。补充运行的 `regress:map-import-diagnostics` 暴露其仍匹配第 30 项前的 UI 直接报错调用，已明确留给第 32 项随统一诊断入口更新，不计作第 31 项验收。第 31 项移出活动清单，第 32 项成为当前执行项。
+
+### 2026-07-15 完成权威任务第 32 项：API 数据兼容与完整往返
+
+- 新增 `api-data-compatibility-matrix.md`，冻结完整地图、浏览器存档、高度图、诊断、GEO、名称库、备注和测量的公共入口与兼容边界；详细 GEO / Cells GEO / 高度图分类型诊断和未来 schema 链仍保留给第 42 项，没有提前扩项。
+- `api.data` 新增 `importHeightmap / saveBrowserMap / restoreBrowserMap / exportImportDiagnostic`，公开基线更新为 11 个命名空间、162 个方法，其中 data 14 个、edit 72 个。高度图、浏览器保存和诊断导出控制面板入口均改为复用同一 `runtimeActions.data`；高度图和浏览器恢复进入第 31 项 map replace transaction，必须显式 `confirm:true`。
+- 浏览器存档 envelope 抽到 `browser-map-storage.js`，保存复用只读 `exportAllMapData()`，不再顺带改写地图主题 / 气候；恢复兼容旧裸地图 JSON 和当前 plain / gzip-base64 envelope，全部经过 `parseMapDocument()` 的 v1→v2 迁移。完整地图导入失败诊断不再被事务回滚恢复为旧值，`exportImportDiagnostic` 可返回或下载最近一次诊断。
+- 新增 `regress:api-data-compatibility`：固定 v1 样本迁移、导出、再导入后保持 checksum、typed array、备注、测量、隐藏标签、主题和 seed 等价；固定当前 v2 样本完成同一往返；plain、gzip envelope 与旧裸存档均通过；坏 JSON 保留当前 map 并返回 `operation_invalid_input / parse / suggestion`。同步恢复 `regress:map-import-diagnostics`，并更新 action、operation、inventory、edit coverage 与 capabilities 门禁到 162 方法。
+- 语法、`regress:api-data-compatibility / api-action-convergence / api-operation / api-inventory / api-edit-coverage / map-migration / map-import-diagnostics / exports`、生产构建和差异检查通过。一次误触的既有 `regress:api-namebases` 浏览器脚本在启动自动生成尚 busy 时立即主动生成，按新契约返回 `operation_busy`；它不是第 32 项代码级验收，等待条件修正已归入第 34 项聚合与阶段末浏览器收口。第 32 项移出活动清单，第 33 项成为当前执行项。

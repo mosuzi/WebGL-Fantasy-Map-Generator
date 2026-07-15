@@ -53,9 +53,11 @@ const [appSource, panelSource, controlPanelSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8")
 ]);
 assert.match(appSource, /lastMapImportDiagnostic:\s*null/);
-assert.match(appSource, /reportMapImportError\(state, documentRef, error, file\)/);
-assert.match(appSource, /source:\s*"api"/);
-assert.match(appSource, /downloadText\(documentRef, stringifyMapImportDiagnostic\(diagnostic\)/);
+assert.match(appSource, /reportMapImportError\(state, documentRef, error,/);
+assert.match(appSource, /const source = options\.source === "ui" \? "ui" : "api"/);
+assert.match(appSource, /exportImportDiagnostic:/);
+assert.match(appSource, /exportMapImportDiagnosticViaApi/);
+assert.match(appSource, /downloadText\(documentRef, text, filename/);
 assert.match(panelSource, /export-map-import-diagnostic/);
 assert.match(controlPanelSource, /id="export-map-import-diagnostic"[^>]*hidden/);
 
