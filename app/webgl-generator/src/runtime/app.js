@@ -1,7 +1,7 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
-import {createLegacyNamebaseText, createNamebaseDocument, createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
+import {createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildMilitary, MILITARY_STATUSES} from "../generator/military.js";
 import {backfillRiverHydrology, buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
@@ -15,7 +15,7 @@ import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {PanelManager} from "../ui/panel-manager.js";
-import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
+import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {sameObjectId} from "../ui/object-id.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
@@ -51,7 +51,7 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {createMapDocument, createMapFeatureGeoJson, createMapGeoJson, decompressGzipBase64Text, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentFile, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
+import {createMapDocument, decompressGzipBase64Text, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {createMapImportDiagnostic, formatMapImportDiagnosticLines, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
@@ -94,7 +94,17 @@ import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
-import {installConsoleApi} from "./console-api.js";
+import {
+  exportAllMapData,
+  exportCompressedAllMapData,
+  exportFeatureGeoJsonData,
+  exportMeasurementsData,
+  exportNamebasesData,
+  exportNotesData,
+  exportPackGeoJson,
+  exportPngData,
+  installConsoleApi
+} from "./console-api.js";
 
 const LOADING_MESSAGES = Object.freeze({
   request: "星图启明",
@@ -251,6 +261,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     panels: {}
   };
   let selectionStore = null;
+  let runtimeActions = null;
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
@@ -682,21 +693,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRegenerateRivers: () => {
       cancelHeightLine(state, documentRef);
-      const result = regenerateMapAttribute(state, "rivers", documentRef);
-      updateRegenerationSection(documentRef, result);
+      runtimeActions.generate.regenerate("rivers", {confirm: true});
       updateHeightPanel(state);
     },
     onRegenerateBase: () => {
       cancelHeightLine(state, documentRef);
-      const result = rebuildHeightBaseDerived(kind => regenerateMapAttribute(state, kind, documentRef));
-      updateRegenerationSection(documentRef, result);
-      updateHeightPanel(state);
+      runtimeActions.edit.height.rebuildBaseDerived({confirm: true});
     },
     onRegenerateDownstream: () => {
       cancelHeightLine(state, documentRef);
-      const result = rebuildHeightDownstreamDerived(kind => regenerateMapAttribute(state, kind, documentRef));
-      updateRegenerationSection(documentRef, result);
-      updateHeightPanel(state);
+      runtimeActions.edit.height.rebuildDownstreamDerived({confirm: true});
     }
   });
   state.panels.height = heightPanel;
@@ -1707,10 +1713,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.labelNaming = labelNamingPanel;
   namebasePanel = createNamebasePanel(documentRef, panelManager, {
-    onExport: rows => exportNamebases(state, documentRef, rows),
-    onExportLegacy: rows => exportLegacyNamebases(state, documentRef, rows),
+    onExport: rows => exportNamebases(state, documentRef, rows, runtimeActions.namebases.export),
+    onExportLegacy: rows => exportLegacyNamebases(state, documentRef, rows, runtimeActions.namebases.export),
     onImportPreview: (file, mode) => previewNamebaseImport(state, documentRef, file, mode),
-    onImport: (file, mode) => importNamebases(state, documentRef, file, mode),
+    onImport: (file, mode) => importNamebases(state, documentRef, file, mode, runtimeActions.namebases.import),
     onCreateUser: () => createManualNamebase(state, documentRef),
     onCopyBuiltin: row => copyBuiltinNamebase(state, documentRef, row),
     onRenameUser: (row, name) => renameImportedNamebase(state, documentRef, row, name),
@@ -1748,7 +1754,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       });
       updateEditingInteractionLock(state, documentRef);
     },
-    onExport: rows => exportNotesSummary(state, documentRef, rows),
+    onExport: rows => exportNotesSummary(state, documentRef, rows, runtimeActions.data.exportNotes),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -1787,9 +1793,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       updateMeasurementOverlay(state, documentRef);
     },
-    onExport: rows => {
-      exportMeasurementObjects(state, documentRef, rows);
-    },
+    onExport: rows => exportMeasurementObjects(state, documentRef, rows, runtimeActions.data.exportMeasurements),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo", {
         afterRefresh: () => updateMeasurementOverlay(state, documentRef)
@@ -1988,6 +1992,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.selectionStore = selectionStore;
   state.editRefreshScheduler = createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel});
   applyControlPreferencesToRenderer(documentRef, renderer);
+  runtimeActions = createRuntimeActions(state, documentRef, {
+    locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
+      locate: target => state.renderer.locateObject(target, locateOptions)
+    })
+  });
+  state.runtimeActions = runtimeActions;
   bindMeasurementTool(canvas, state, documentRef);
   bindHeightEditing(canvas, state, documentRef);
   bindStateEditing(canvas, state, documentRef);
@@ -2000,61 +2010,25 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindEditingInteractionLock(canvas, state);
 
   bindRuntimePanel(documentRef, {
-    onGenerate: () => requestGenerate(state, documentRef),
+    onGenerate: () => requestGenerate(state, documentRef, runtimeActions),
     onRandomSeed: () => {
       setSeedInput(documentRef, createRandomSeed());
-      requestGenerate(state, documentRef);
+      requestGenerate(state, documentRef, runtimeActions);
     },
-    onFitView: () => {
-      measureHealthOperation(state, "fit-view", {}, () => {
-        renderer.fitToView();
-        updateRuntimePanel(documentRef, state);
-        updateMeasurementOverlay(state, documentRef);
-      });
-    },
-    onShowOceanHeight: showOceanHeight => {
-      measureHealthOperation(state, "set-ocean-height-visibility", {showOceanHeight}, () => {
-        renderer.setViewOptions({showOceanHeight});
-        updateRuntimePanel(documentRef, state);
-      });
-    },
-    onSmoothCellBorders: smoothCellBorders => {
-      measureHealthOperation(state, "set-smooth-cell-borders", {smoothCellBorders}, () => {
-        renderer.setViewOptions({smoothCellBorders});
-        updateRuntimePanel(documentRef, state);
-      });
-    },
-    onVisualTheme: visualTheme => {
-      measureHealthOperation(state, "set-visual-theme", {visualTheme}, () => {
-        renderer.setVisualTheme?.(visualTheme);
-        updateRuntimePanel(documentRef, state);
-      });
-    },
-    onShowHoverInfo: () => {
-      updatePickPanel(documentRef, state);
-    },
-    onMaxCityLabels: maxCityLabels => {
-      measureHealthOperation(state, "set-max-city-labels", {maxCityLabels}, () => {
-        renderer.setLabelOptions({maxCityLabels});
-        updateRuntimePanel(documentRef, state);
-      });
-    },
+    onFitView: () => runtimeActions.layers.fitView(),
+    onShowOceanHeight: showOceanHeight => runtimeActions.layers.setShowOceanHeight(showOceanHeight),
+    onSmoothCellBorders: smoothCellBorders => runtimeActions.layers.setSmoothCellBorders(smoothCellBorders),
+    onVisualTheme: visualTheme => runtimeActions.layers.setTheme(visualTheme),
+    onShowHoverInfo: showHoverInfo => runtimeActions.layers.setShowHoverInfo(showHoverInfo),
+    onMaxCityLabels: maxCityLabels => runtimeActions.layers.setMaxCityLabels(maxCityLabels),
     onUnitPreferences: () => {
       renderer.setUnitPreferences(readControlPreferences(documentRef).units);
       refreshPanelsForEdit(state, {derived: ["object-panels"]});
       refreshRuntimeAndPickPanels(documentRef, state);
       updateMeasurementOverlay(state, documentRef);
     },
-    onClimateControls: () => {
-      measureHealthOperation(state, "apply-climate-controls", {}, () => applyClimateControls(state, documentRef));
-    },
-    onLayerVisible: (layer, visible) => {
-      measureHealthOperation(state, "set-layer-visible", {layer, visible}, () => {
-        renderer.setLayerVisible(layer, visible);
-        updateRuntimePanel(documentRef, state);
-        if (layer === "measurements") updateMeasurementOverlay(state, documentRef);
-      });
-    },
+    onClimateControls: () => applyClimateControls(state, documentRef, runtimeActions.climate.apply),
+    onLayerVisible: (layer, visible) => runtimeActions.layers.setVisible(layer, visible),
     onOpenGenerationPanel: () => {
       state.panels.generation.open();
     },
@@ -2182,52 +2156,34 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onOpenNamebasePanel: () => {
       state.panels.namebase.open(state.map, {history: state.editHistory.getStats()});
     },
-    onSaveLocalFile: () => saveMapToLocalFile(state, documentRef),
+    onSaveLocalFile: () => saveMapToLocalFile(state, documentRef, runtimeActions.data.exportMap),
     onSaveBrowserStorage: () => {
       void saveMapToBrowserStorage(state, documentRef);
     },
-    onExportImage: () => exportMapImage(state, documentRef),
-    onExportMapData: () => exportMapData(state, documentRef),
+    onExportImage: () => exportMapImage(state, documentRef, runtimeActions.data.exportPNG),
+    onExportMapData: () => exportMapData(state, documentRef, runtimeActions.data.exportMap),
     onExportCompressedMapData: () => {
-      void exportCompressedMapData(state, documentRef);
+      void exportCompressedMapData(state, documentRef, runtimeActions.data.exportCompressedAll);
     },
-    onExportGeoJson: () => exportGeoJson(state, documentRef),
-    onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef),
+    onExportGeoJson: () => exportGeoJson(state, documentRef, runtimeActions.data.exportGEO),
+    onExportFeatureGeoJson: () => exportFeatureGeoJson(state, documentRef, runtimeActions.data.exportFeatureGEO),
     onExportMapImportDiagnostic: () => exportMapImportDiagnostic(state, documentRef),
-    onImportMapData: file => importMapData(state, documentRef, file),
-    onImportGeoData: file => importGeoData(state, documentRef, file),
+    onImportMapData: file => importMapData(state, documentRef, file, runtimeActions.data.importMap),
+    onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO),
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload),
-    onRegenerate: kind => {
-      updateRegenerationSection(documentRef, regenerateMapAttribute(state, kind, documentRef));
-    },
-    onMode: mode => {
-      measureHealthOperation(state, "set-view-mode", {mode}, () => {
-        if (mode === "diplomacy") {
-          const subjectId = state.selection?.object?.kind === OBJECT_KIND.STATE ? state.selection.object.id : firstDiplomacyStateId(state.map);
-          state.panels.diplomacy?.setSelectedStateId?.(subjectId);
-          renderer.setDiplomacySubjectId?.(subjectId);
-        }
-        renderer.setColorMode(mode);
-        updateRuntimePanel(documentRef, state);
-      });
-    }
+    onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true}),
+    onMode: mode => runtimeActions.layers.setViewMode(mode)
   });
 
   const view = documentRef.defaultView || window;
   view.__webglGeneratorApp = state;
-  installConsoleApi(documentRef, state, {
-    actions: createConsoleApiActions(state, documentRef, {
-      locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
-        locate: target => state.renderer.locateObject(target, locateOptions)
-      })
-    })
-  });
+  installConsoleApi(documentRef, state, {actions: runtimeActions});
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;
 }
 
-function createConsoleApiActions(state, documentRef, options = {}) {
+function createRuntimeActions(state, documentRef, options = {}) {
   return {
     history: {
       get: (options = {}) => state.editHistory.getStats(options),
@@ -2240,6 +2196,16 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       newMap: (options = {}) => generateNewMapViaApi(state, documentRef, options),
       rerollSeed: (options = {}) => rerollSeedViaApi(state, documentRef, options),
       regenerate: (kind, options = {}) => regenerateMapAttributeViaApi(state, documentRef, kind, options)
+    },
+    layers: {
+      setViewMode: mode => setRuntimeViewMode(state, documentRef, mode),
+      setVisible: (layer, visible) => setRuntimeLayerVisible(state, documentRef, layer, visible),
+      setTheme: themeId => setRuntimeVisualTheme(state, documentRef, themeId),
+      fitView: () => fitRuntimeView(state, documentRef),
+      setShowOceanHeight: visible => setRuntimeOceanHeightVisible(state, documentRef, visible),
+      setSmoothCellBorders: enabled => setRuntimeSmoothCellBorders(state, documentRef, enabled),
+      setShowHoverInfo: visible => setRuntimeHoverInfoVisible(state, documentRef, visible),
+      setMaxCityLabels: limit => setRuntimeMaxCityLabels(state, documentRef, limit)
     },
     selection: {
       resolve: object => resolveObjectViaApi(state, object),
@@ -2264,6 +2230,7 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options)
     },
     namebases: {
+      export: (options = {}) => exportNamebasesData(state, documentRef, options),
       import: (document, options = {}) => importNamebaseDocumentViaApi(state, documentRef, document, options),
       create: payload => createNamebaseViaApi(state, documentRef, payload),
       copyBuiltin: (baseId, options = {}) => copyBuiltinNamebaseViaApi(state, documentRef, baseId, options),
@@ -2274,6 +2241,14 @@ function createConsoleApiActions(state, documentRef, options = {}) {
       renameObjects: (kind, ids, options = {}) => renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options)
     },
     data: {
+      exportAll: (options = {}) => exportAllMapData(state, documentRef, options),
+      exportMap: (options = {}) => exportAllMapData(state, documentRef, options),
+      exportGEO: (options = {}) => exportPackGeoJson(state, documentRef, options),
+      exportFeatureGEO: (options = {}) => exportFeatureGeoJsonData(state, documentRef, options),
+      exportCompressedAll: (options = {}) => exportCompressedAllMapData(state, documentRef, options),
+      exportPNG: (options = {}) => exportPngData(state, documentRef, options),
+      exportNotes: (options = {}) => exportNotesData(state, documentRef, options),
+      exportMeasurements: (options = {}) => exportMeasurementsData(state, documentRef, options),
       importMap: (document, options = {}) => importMapDocumentViaApi(state, documentRef, document, options),
       importGEO: (document, options = {}) => importGeoDocumentViaApi(state, documentRef, document, options)
     },
@@ -2316,7 +2291,9 @@ function createConsoleApiActions(state, documentRef, options = {}) {
         applyChanges: changes => applyStateChangesViaApi(state, documentRef, changes)
       },
       height: {
-        applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions)
+        applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions),
+        rebuildBaseDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
+        rebuildDownstreamDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions)
       },
       diplomacy: {
         setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, editOptions)
@@ -2388,6 +2365,155 @@ function measureHealthOperation(state, name, detail, task) {
   const monitor = state.healthMonitor;
   if (!monitor?.measureSyncOperation) return task();
   return monitor.measureSyncOperation(name, detail, task);
+}
+
+function setRuntimeViewMode(state, documentRef, mode) {
+  const nextMode = String(mode || "").trim();
+  if (!nextMode) throw new Error("缺少视图模式");
+  const availableModes = [...documentRef.querySelectorAll("[data-mode]")].map(item => item.dataset.mode).filter(Boolean);
+  if (availableModes.length && !availableModes.includes(nextMode)) throw new Error(`未知视图模式：${nextMode}`);
+  return measureHealthOperation(state, "set-view-mode", {mode: nextMode}, () => {
+    if (nextMode === "diplomacy") {
+      const subjectId = state.selection?.object?.kind === OBJECT_KIND.STATE ? state.selection.object.id : firstDiplomacyStateId(state.map);
+      state.panels.diplomacy?.setSelectedStateId?.(subjectId);
+      state.renderer?.setDiplomacySubjectId?.(subjectId);
+    }
+    setActiveModeButton(documentRef, nextMode);
+    updateControlPreferences(documentRef, {colorMode: nextMode});
+    state.renderer?.setColorMode?.(nextMode);
+    updateRuntimePanel(documentRef, state);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
+  });
+}
+
+function setRuntimeLayerVisible(state, documentRef, layer, visible) {
+  const nextLayer = String(layer || "").trim();
+  if (!nextLayer) throw new Error("缺少图层名称");
+  const knownLayers = state.renderer?.getStats?.()?.layerVisibility || state.renderer?.layerVisibility || {};
+  if (!Object.prototype.hasOwnProperty.call(knownLayers, nextLayer)) throw new Error(`未知图层：${nextLayer}`);
+  const nextVisible = Boolean(visible);
+  return measureHealthOperation(state, "set-layer-visible", {layer: nextLayer, visible: nextVisible}, () => {
+    updateLayerPreference(documentRef, nextLayer, nextVisible);
+    const controls = nextLayer === "coastline" ? ["coastline", "lakeShore"] : [nextLayer];
+    const layerControls = [...documentRef.querySelectorAll("[data-layer]")];
+    for (const item of controls) syncRuntimeBooleanControl(layerControls.find(control => control.dataset.layer === item), nextVisible);
+    state.renderer?.setLayerVisible?.(nextLayer, nextVisible);
+    updateRuntimePanel(documentRef, state);
+    if (nextLayer === "measurements") updateMeasurementOverlay(state, documentRef);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel", ...(nextLayer === "measurements" ? ["measurement-overlay"] : [])]);
+  });
+}
+
+function setRuntimeVisualTheme(state, documentRef, themeId) {
+  const rawThemeId = String(themeId || "").trim();
+  if (!rawThemeId) throw new Error("缺少视觉主题");
+  const nextThemeId = normalizeVisualThemeId(rawThemeId);
+  if (nextThemeId !== rawThemeId) throw new Error(`未知视觉主题：${themeId}`);
+  return measureHealthOperation(state, "set-visual-theme", {visualTheme: nextThemeId}, () => {
+    syncRuntimeControlValue(documentRef, "visual-theme-preset", nextThemeId);
+    updateControlPreferences(documentRef, {visualTheme: nextThemeId});
+    state.renderer?.setVisualTheme?.(nextThemeId);
+    updateRuntimePanel(documentRef, state);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
+  });
+}
+
+function fitRuntimeView(state, documentRef) {
+  if (typeof state.renderer?.fitToView !== "function") throw new Error("当前 renderer 不支持适配视图");
+  return measureHealthOperation(state, "fit-view", {}, () => {
+    state.renderer.fitToView();
+    updateRuntimePanel(documentRef, state);
+    updateMeasurementOverlay(state, documentRef);
+    return runtimeDisplayActionResult(state, documentRef, ["camera", "runtime-panel", "measurement-overlay"]);
+  });
+}
+
+function setRuntimeOceanHeightVisible(state, documentRef, visible) {
+  return setRuntimeBooleanDisplayPreference(state, documentRef, {
+    id: "show-ocean-height",
+    key: "showOceanHeight",
+    value: visible,
+    operation: "set-ocean-height-visibility",
+    apply: value => state.renderer?.setViewOptions?.({showOceanHeight: value})
+  });
+}
+
+function setRuntimeSmoothCellBorders(state, documentRef, enabled) {
+  return setRuntimeBooleanDisplayPreference(state, documentRef, {
+    id: "smooth-cell-borders",
+    key: "smoothCellBorders",
+    value: enabled,
+    operation: "set-smooth-cell-borders",
+    apply: value => state.renderer?.setViewOptions?.({smoothCellBorders: value})
+  });
+}
+
+function setRuntimeHoverInfoVisible(state, documentRef, visible) {
+  const nextVisible = Boolean(visible);
+  return measureHealthOperation(state, "set-hover-info-visibility", {showHoverInfo: nextVisible}, () => {
+    syncRuntimeBooleanControl(documentRef.getElementById("show-hover-info"), nextVisible);
+    updateControlPreferences(documentRef, {showHoverInfo: nextVisible});
+    updatePickPanel(documentRef, state);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "pick-panel"]);
+  });
+}
+
+function setRuntimeMaxCityLabels(state, documentRef, limit) {
+  const number = Number(limit);
+  if (!Number.isFinite(number)) throw new Error("最大城市标签数必须是有效数字");
+  const nextLimit = Math.max(8, Math.min(5000, Math.round(number)));
+  return measureHealthOperation(state, "set-max-city-labels", {maxCityLabels: nextLimit}, () => {
+    syncRuntimeControlValue(documentRef, "max-city-labels", nextLimit);
+    updateControlPreferences(documentRef, {maxCityLabels: nextLimit});
+    state.renderer?.setLabelOptions?.({maxCityLabels: nextLimit});
+    updateRuntimePanel(documentRef, state);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
+  });
+}
+
+function setRuntimeBooleanDisplayPreference(state, documentRef, {id, key, value, operation, apply}) {
+  const nextValue = Boolean(value);
+  return measureHealthOperation(state, operation, {[key]: nextValue}, () => {
+    syncRuntimeBooleanControl(documentRef.getElementById(id), nextValue);
+    updateControlPreferences(documentRef, {[key]: nextValue});
+    apply(nextValue);
+    updateRuntimePanel(documentRef, state);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
+  });
+}
+
+function runtimeDisplayActionResult(state, documentRef, effects) {
+  const preferences = readControlPreferences(documentRef);
+  const stats = state.renderer?.getStats?.() || {};
+  return {
+    colorMode: stats.colorMode || preferences.colorMode || "height",
+    visualTheme: stats.viewOptions?.visualTheme?.id || preferences.visualTheme || state.options?.visualTheme || "default",
+    layers: {...(stats.layerVisibility || preferences.layers || {})},
+    display: {
+      showOceanHeight: Boolean(preferences.showOceanHeight),
+      smoothCellBorders: Boolean(preferences.smoothCellBorders),
+      showHoverInfo: Boolean(preferences.showHoverInfo),
+      maxCityLabels: Number(preferences.maxCityLabels) || 5000
+    },
+    camera: {...(stats.camera || {})},
+    effects: [...effects]
+  };
+}
+
+function syncRuntimeBooleanControl(control, value) {
+  if (!control) return;
+  const enabled = Boolean(value);
+  if (control.tagName === "BUTTON") {
+    control.classList.toggle("active", enabled);
+    control.setAttribute("aria-pressed", enabled ? "true" : "false");
+    return;
+  }
+  control.checked = enabled;
+}
+
+function syncRuntimeControlValue(documentRef, id, value) {
+  const control = documentRef.getElementById(id);
+  if (control) control.value = String(value);
 }
 
 function applyControlPreferencesToRenderer(documentRef, renderer) {
@@ -2544,44 +2670,20 @@ function clampDebugLoadDelay(value) {
   return Math.max(0, Math.min(MAX_DEBUG_LOAD_DELAY_MS, Math.round(value)));
 }
 
-function requestGenerate(state, documentRef) {
+function requestGenerate(state, documentRef, actions = state.runtimeActions) {
   try {
     if (documentRef.getElementById("auto-random-seed").checked) {
       setSeedInput(documentRef, createRandomSeed());
     }
-    state.options = readOptionsFromPanel(documentRef, state.options);
-    const namebaseSnapshot = resolveGenerationNamebaseSnapshot(state, documentRef);
+    const options = readOptionsFromPanel(documentRef, state.options);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
-    const generateId = state.pendingGenerateId;
-    resetLoadTrace(documentRef);
-    emitLoadTrace(documentRef, {phase: "request", id: "request", message: loadingMessage("request")});
-    setGenerationStatus(documentRef, state.options, "等待生成任务");
+    const requestId = state.pendingGenerateId;
+    setGenerationStatus(documentRef, options, "等待生成任务");
     setMythicGenerationLoading(documentRef, true, "request");
     scheduleAfterPaint(documentRef, () => {
-      if (generateId !== state.pendingGenerateId) return;
-      void runGenerateNow(state, documentRef, generateId, namebaseSnapshot);
+      if (requestId !== state.pendingGenerateId) return;
+      void actions.generate.newMap({...options, confirm: true}).catch(() => {});
     });
-  } catch (error) {
-    updateGenerationLoading(documentRef, false);
-    reportGenerateError(documentRef, error);
-  }
-}
-
-async function runGenerateNow(state, documentRef, generateId, namebaseSnapshot = null) {
-  try {
-    const hadMap = Boolean(state.map);
-    setGenerationStatus(documentRef, state.options, "生成中");
-    setMythicGenerationLoading(documentRef, true, "generate");
-    emitLoadTrace(documentRef, {phase: "start", id: "generate", message: loadingMessage("generate"), delayMs: readDebugLoadDelayMs(documentRef)});
-    await yieldToBrowser(documentRef, {debugDelay: true});
-    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(state.options, namebaseSnapshot), generateId);
-    emitLoadTrace(documentRef, {phase: "end", id: "generate", message: loadingMessage("generate")});
-    if (generateId !== state.pendingGenerateId) return;
-    await loadMapIntoRuntime(state, documentRef, map, {
-      loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")],
-      completionToast: hadMap ? "生成完成" : ""
-    });
-    updateGenerationLoading(documentRef, false);
   } catch (error) {
     updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
@@ -2590,7 +2692,7 @@ async function runGenerateNow(state, documentRef, generateId, namebaseSnapshot =
 
 async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
   if (await restoreMapFromBrowserStorage(state, documentRef, {startup: true})) return;
-  requestGenerate(state, documentRef);
+  requestGenerate(state, documentRef, state.runtimeActions);
 }
 
 async function restoreMapFromBrowserStorage(state, documentRef, {startup = false} = {}) {
@@ -2739,7 +2841,8 @@ function setGenerationOptionsViaApi(state, documentRef, patch = {}) {
   updateRuntimePanel(documentRef, state);
   return {
     options: cloneGenerationOptions(options),
-    map: generationApiMapSummary(state.map)
+    map: generationApiMapSummary(state.map),
+    effects: ["generation-options", "runtime-panel"]
   };
 }
 
@@ -2783,7 +2886,8 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
         generation: {...(state.map?.metadata?.generationTiming || {})},
         loadMap: state.renderer?.getStats?.().loadMap || null
       },
-      history: state.editHistory.getStats()
+      history: state.editHistory.getStats(),
+      effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
@@ -3203,17 +3307,18 @@ function reportGenerateError(documentRef, error) {
   console.error(error);
 }
 
-async function exportMapImage(state, documentRef) {
+async function exportMapImage(state, documentRef, exportAction = state.runtimeActions?.data?.exportPNG) {
   try {
-    assertMapAvailable(state);
     const pixelScale = readPngExportScale(documentRef);
     const includeMapOverlays = documentRef.getElementById("export-png-overlays")?.checked !== false;
     const transparentBackground = documentRef.getElementById("export-png-transparent")?.checked === true;
     setFileOperationStatus(documentRef, "正在导出图片...");
-    const result = await downloadCanvasPng(documentRef, documentRef.getElementById("map-canvas"), `${mapFileBaseName(state.map)}.png`, {includeMapOverlays, transparentBackground, pixelScale, renderer: state.renderer});
+    const result = await exportAction({download: true, includeMapOverlays, transparentBackground, pixelScale});
     setFileOperationStatus(documentRef, `图片已导出：${result.width} x ${result.height}px，倍率 ${result.pixelScale}x，标注${result.includeMapOverlays ? "包含" : "关闭"}，背景${result.transparentBackground ? "图外透明" : "保持画布"}，${formatStorageBytes(result.bytes)}。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "图片导出失败", error);
+    return null;
   }
 }
 
@@ -3224,17 +3329,17 @@ function readPngExportScale(documentRef) {
   return Math.max(1, Math.min(4, Math.round(value)));
 }
 
-function saveMapToLocalFile(state, documentRef) {
+function saveMapToLocalFile(state, documentRef, exportAction = state.runtimeActions?.data?.exportMap) {
   try {
-    assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在保存地图到本地...");
-    const document = createPersistableMapDocument(state, documentRef);
-    downloadText(documentRef, stringifyMapDocument(document), `${mapFileBaseName(state.map)}.webgl-map.json`, "application/json;charset=utf-8");
+    const result = exportAction({download: true, includeText: false});
     setFileOperationStatus(documentRef, "地图已保存到本地文件。");
     showMapToast(documentRef, "保存成功");
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "保存到本地失败", error);
     showMapToast(documentRef, "保存失败", 2600, {tone: "error"});
+    return null;
   }
 }
 
@@ -3255,119 +3360,94 @@ async function saveMapToBrowserStorage(state, documentRef) {
   }
 }
 
-function exportMapData(state, documentRef) {
+function exportMapData(state, documentRef, exportAction = state.runtimeActions?.data?.exportMap) {
   try {
-    assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导出地图数据...");
-    const document = createPersistableMapDocument(state, documentRef);
-    downloadText(documentRef, stringifyMapDocument(document), `${mapFileBaseName(state.map)}.webgl-map.json`, "application/json;charset=utf-8");
+    const result = exportAction({download: true, includeText: false});
     setFileOperationStatus(documentRef, "地图数据已导出。");
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "地图数据导出失败", error);
+    return null;
   }
 }
 
-async function exportCompressedMapData(state, documentRef) {
+async function exportCompressedMapData(state, documentRef, exportAction = state.runtimeActions?.data?.exportCompressedAll) {
   try {
-    assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导出压缩地图数据...");
-    const document = createPersistableMapDocument(state, documentRef);
-    const result = await downloadCompressedMapDocument(documentRef, document, `${mapFileBaseName(state.map)}.webgl-map.json.gz`);
+    const result = await exportAction({download: true, includeBase64: false});
     setFileOperationStatus(documentRef, `压缩地图数据已导出：原始 ${formatStorageBytes(result.originalBytes)}，压缩后 ${formatStorageBytes(result.compressedBytes)}。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "压缩地图数据导出失败", error);
+    return null;
   }
 }
 
-function exportGeoJson(state, documentRef) {
+function exportGeoJson(state, documentRef, exportAction = state.runtimeActions?.data?.exportGEO) {
   try {
-    assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导出 GeoJSON...");
-    const geoJson = createMapGeoJson(state.map);
-    downloadText(documentRef, JSON.stringify(geoJson), `${mapFileBaseName(state.map)}.geojson`, "application/geo+json;charset=utf-8");
-    setFileOperationStatus(documentRef, `GeoJSON 已导出，共 ${geoJson.features.length} 个 cell 面。`);
+    const result = exportAction({download: true, includeText: false});
+    setFileOperationStatus(documentRef, `GeoJSON 已导出，共 ${result.metadata.features} 个 cell 面。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "GeoJSON 导出失败", error);
+    return null;
   }
 }
 
-function exportFeatureGeoJson(state, documentRef) {
+function exportFeatureGeoJson(state, documentRef, exportAction = state.runtimeActions?.data?.exportFeatureGEO) {
   try {
-    assertMapAvailable(state);
     const layers = readFeatureGeoJsonLayerOptions(documentRef);
     const dissolvePolitical = readFeatureGeoJsonDissolveOption(documentRef);
     setFileOperationStatus(documentRef, "正在导出要素 GeoJSON...");
-    const geoJson = createMapFeatureGeoJson(state.map, {layers, dissolvePolitical});
-    downloadText(documentRef, JSON.stringify(geoJson), `${mapFileBaseName(state.map)}.features.geojson`, "application/geo+json;charset=utf-8");
-    const dissolveStatus = geoJson.properties.dissolvedPolitical ? "，已合并政治面边界" : "";
-    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${geoJson.features.length} 个要素，图层：${geoJson.properties.layerSet}${dissolveStatus}。`);
+    const result = exportAction({download: true, includeText: false, layers, dissolvePolitical});
+    const dissolveStatus = result.metadata.dissolvedPolitical ? "，已合并政治面边界" : "";
+    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${result.metadata.features} 个要素，图层：${result.metadata.layerSet}${dissolveStatus}。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "要素 GeoJSON 导出失败", error);
+    return null;
   }
 }
 
-function exportNotesSummary(state, documentRef, rows = []) {
+function exportNotesSummary(state, documentRef, rows = [], exportAction = state.runtimeActions?.data?.exportNotes) {
   try {
-    assertMapAvailable(state);
-    const notes = (rows || []).map(row => ({
-      id: row.id,
-      kind: row.kind,
-      kindLabel: row.kindLabel,
-      objectId: row.objectId,
-      name: row.name,
-      body: row.body,
-      bodyLength: row.bodyLength,
-      orphan: Boolean(row.orphan),
-      createdAt: row.createdAt || "",
-      updatedAt: row.updatedAt || ""
-    }));
-    const payload = {
-      type: "webgl-generator-notes-summary",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      metadata: {
-        seed: state.map.metadata?.seed || "",
-        checksum: state.map.metadata?.checksum || "",
-        notes: notes.length,
-        totalNotes: state.map.notes?.metadata?.notes || state.map.notes?.notes?.length || 0
-      },
-      notes
-    };
-    downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.notes.json`, "application/json;charset=utf-8");
-    setFileOperationStatus(documentRef, `备注摘要已导出，共 ${notes.length} 条。`);
+    const noteIds = (rows || []).map(row => String(row?.id || "")).filter(Boolean);
+    const result = exportAction({noteIds, download: true, includeText: false});
+    setFileOperationStatus(documentRef, `备注摘要已导出，共 ${result.metadata.notes} 条。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "备注摘要导出失败", error);
+    return null;
   }
 }
 
-function exportNamebases(state, documentRef, rows = null) {
+function exportNamebases(state, documentRef, rows = null, exportAction = state.runtimeActions?.namebases?.export) {
   try {
     const selectedIds = selectedNamebaseIds(rows);
-    const payload = createNamebaseDocument(state.map, {baseIds: selectedIds});
-    const suffix = selectedIds ? ".namebases-selected.json" : ".namebases.json";
-    const filename = state.map ? `${mapFileBaseName(state.map)}${suffix}` : `webgl-generator${suffix}`;
-    downloadText(documentRef, JSON.stringify(payload, null, 2), filename, "application/json;charset=utf-8");
-    setFileOperationStatus(documentRef, `${selectedIds ? "选中名称库" : "名称库"}已导出，共 ${payload.metadata.bases} 个词池，用户库 ${payload.metadata.user} 个。`);
+    const result = exportAction({baseIds: selectedIds, download: true, includeText: false, format: "json"});
+    setFileOperationStatus(documentRef, `${selectedIds ? "选中名称库" : "名称库"}已导出，共 ${result.metadata.bases} 个词池，用户库 ${result.metadata.user} 个。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导出失败", error);
+    return null;
   }
 }
 
-function exportLegacyNamebases(state, documentRef, rows = null) {
+function exportLegacyNamebases(state, documentRef, rows = null, exportAction = state.runtimeActions?.namebases?.export) {
   try {
     const selectedIds = selectedNamebaseIds(rows);
-    const text = createLegacyNamebaseText(state.map, {baseIds: selectedIds});
-    if (!text) {
+    const result = exportAction({baseIds: selectedIds, download: true, includeText: false, format: "legacy"});
+    if (!result.bytes) {
       setFileOperationStatus(documentRef, "当前没有可导出的名称库。");
-      return;
+      return result;
     }
-    const suffix = selectedIds ? ".namebases-selected.txt" : ".namebases.txt";
-    const filename = state.map ? `${mapFileBaseName(state.map)}${suffix}` : `webgl-generator${suffix}`;
-    downloadText(documentRef, text, filename, "text/plain;charset=utf-8");
-    const lines = text.split(/\r?\n/g).filter(Boolean).length;
-    setFileOperationStatus(documentRef, `${selectedIds ? "选中" : ""}原版文本名称库已导出，共 ${lines} 个词池。`);
+    setFileOperationStatus(documentRef, `${selectedIds ? "选中" : ""}原版文本名称库已导出，共 ${result.metadata.bases} 个词池。`);
+    return result;
   } catch (error) {
     reportFileOperationError(documentRef, "原版文本名称库导出失败", error);
+    return null;
   }
 }
 
@@ -3428,21 +3508,21 @@ function refreshAfterNamebaseHistoryCommand(state, documentRef, command) {
   updateEditingInteractionLock(state, documentRef);
 }
 
-async function importNamebases(state, documentRef, file, mode = "append") {
+async function importNamebases(state, documentRef, file, mode = "append", importAction = state.runtimeActions?.namebases?.import) {
   if (!file) return;
   try {
-    assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导入名称库...");
     const document = parseNamebaseDocument(await file.text());
-    const command = createImportNamebasesCommand(document, {filename: file.name, mode});
-    if (command.isNoop({map: state.map})) {
+    const actionResult = importAction(document, {filename: file.name, mode, label: "导入名称库"});
+    if (actionResult.error) throw new Error(actionResult.error.message);
+    if (!actionResult.executed) {
       setFileOperationStatus(documentRef, "未导入名称库：文件中没有可写入的词池。");
       return null;
     }
-    const result = executeNamebaseEdit(state, documentRef, command);
+    const result = actionResult.result || {};
     const replacedText = result.replaced ? `，已替换原用户库 ${result.replaced} 个` : "";
     setFileOperationStatus(documentRef, `名称库已导入 ${result.imported} 个词池${replacedText}，当前用户库 ${result.total} 个，已保存为本地偏好。`);
-    return result;
+    return actionResult;
   } catch (error) {
     reportFileOperationError(documentRef, "名称库导入失败", error);
     return null;
@@ -3518,7 +3598,7 @@ function importNamebaseDocumentViaApi(state, documentRef, document, options = {}
   const command = createImportNamebasesCommand(parsedDocument, {
     filename,
     mode,
-    label: options.label || "API 导入名称库"
+    label: options.label || "导入名称库"
   });
   return executeNamebaseCommandViaApi(state, documentRef, command, {
     noopStatus: "未导入名称库：文档中没有可写入的词池。",
@@ -3995,57 +4075,39 @@ function formatStorageBytes(bytes) {
   return `${Math.round(value)}B`;
 }
 
-async function importMapData(state, documentRef, file) {
+async function importMapData(state, documentRef, file, importAction = state.runtimeActions?.data?.importMap) {
   if (!file) return;
   try {
-    resetLoadTrace(documentRef);
-    state.lastMapImportDiagnostic = null;
-    clearFileOperationDetails(documentRef);
-    emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
-    setFileOperationStatus(documentRef, "正在读取地图数据...");
-    setMythicGenerationLoading(documentRef, true, "map-import-read");
-    const document = await parseMapDocumentFile(documentRef, file);
-    const options = normalizeOptions(document.map.options || document.options || state.options);
-    document.map.options = options;
-    state.options = options;
-    applyPersistedVisualTheme(state, documentRef, document);
-    syncGenerationInputs(documentRef, options);
-    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
-    await loadMapIntoRuntime(state, documentRef, document.map, {
-      loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
-      completionToast: "地图数据已导入"
-    });
-    if (createGenerationNamebaseSnapshot(state.map)) persistNamebasePreferences(state, documentRef);
-    updateGenerationLoading(documentRef, false);
-    clearFileOperationDetails(documentRef);
-    setFileOperationStatus(documentRef, `已导入地图数据：seed ${document.map.metadata?.seed || options.seed || "未知"}`);
-  } catch (error) {
-    updateGenerationLoading(documentRef, false);
-    reportMapImportError(state, documentRef, error, file);
+    return await importAction(file, {confirm: true, source: "ui"});
+  } catch {
+    return null;
   }
 }
 
 async function importMapDocumentViaApi(state, documentRef, document, options = {}) {
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  const source = options.source === "ui" ? "ui" : "api";
   state.lastMapImportDiagnostic = null;
   let parsed;
   try {
     parsed = await normalizeApiMapImportDocument(documentRef, document);
   } catch (error) {
-    reportMapImportError(state, documentRef, error, null, {source: "api", prefix: "API 导入地图数据失败"});
+    reportMapImportError(state, documentRef, error, source === "ui" ? document : null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
   }
-  return importParsedMapDocumentViaApi(state, documentRef, parsed, options);
+  return importParsedMapDocumentViaApi(state, documentRef, parsed, {...options, source});
 }
 
 async function importParsedMapDocumentViaApi(state, documentRef, document, options = {}) {
+  const source = options.source === "ui" ? "ui" : "api";
+  const sourceLabel = source === "ui" ? "" : "通过 API ";
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
   try {
     resetLoadTrace(documentRef);
     state.lastMapImportDiagnostic = null;
     clearFileOperationDetails(documentRef);
-    emitLoadTrace(documentRef, {phase: "request", id: "api-map-import-read", message: loadingMessage("map-import-read")});
-    setFileOperationStatus(documentRef, "正在通过 API 导入地图数据...");
+    emitLoadTrace(documentRef, {phase: "request", id: `${source === "ui" ? "" : "api-"}map-import-read`, message: loadingMessage("map-import-read")});
+    setFileOperationStatus(documentRef, `正在${sourceLabel}导入地图数据...`);
     setMythicGenerationLoading(documentRef, true, "map-import-read");
     const normalizedOptions = normalizeOptions(document.map.options || document.options || state.options);
     document.map.options = normalizedOptions;
@@ -4060,7 +4122,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
     updateGenerationLoading(documentRef, false);
     clearFileOperationDetails(documentRef);
-    setFileOperationStatus(documentRef, `已通过 API 导入地图数据：seed ${document.map.metadata?.seed || normalizedOptions.seed || "未知"}`);
+    setFileOperationStatus(documentRef, `已${sourceLabel}导入地图数据：seed ${document.map.metadata?.seed || normalizedOptions.seed || "未知"}`);
     return {
       map: generationApiMapSummary(state.map),
       options: cloneGenerationOptions(state.options),
@@ -4076,11 +4138,12 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
         loadMap: state.renderer?.getStats?.().loadMap || null
       },
       persistedNamebases,
-      history: state.editHistory.getStats()
+      history: state.editHistory.getStats(),
+      effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    reportMapImportError(state, documentRef, error, null, {source: "api", prefix: "API 导入地图数据失败"});
+    reportMapImportError(state, documentRef, error, null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
   }
 }
@@ -4089,64 +4152,12 @@ async function normalizeApiMapImportDocument(documentRef, document) {
   return parseMapDocumentPayload(documentRef, document);
 }
 
-async function importGeoData(state, documentRef, file) {
+async function importGeoData(state, documentRef, file, importAction = state.runtimeActions?.data?.importGEO) {
   if (!file) return;
   try {
-    assertMapAvailable(state);
     setFileOperationStatus(documentRef, "正在导入 GEO 数据...");
     const text = await file.text();
-    const terrainCommand = createImportFmgCellsHeightCommand(text, state.map);
-    if (terrainCommand) {
-      if (terrainCommand.isNoop({map: state.map})) {
-        setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
-        return null;
-      }
-      const result = executeEditCommand(state, documentRef, terrainCommand, {
-        context: {map: state.map},
-        refresh: refreshAfterEdit
-      });
-      if (!result.executed) {
-        setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
-        return null;
-      }
-      const summary = terrainCommand.getSummary?.() || {};
-      const reset = state.map.metadata?.geoImportDerivedRefresh || {};
-      setFileOperationStatus(documentRef, `已从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}，可撤销。`);
-      return summary;
-    }
-    const payload = parseGeoJsonMeasurements(text, state.map, {limit: 600});
-    const command = createImportMeasurementsCommand(payload.measurements, {label: "导入 GEO 测量对象"});
-    if (command.isNoop({map: state.map})) {
-      setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
-      return null;
-    }
-    const result = executeEditCommand(state, documentRef, command, {
-      context: {map: state.map},
-      preparePanelRefresh: (targetState, executed, imported) => {
-        targetState.measurement.points = [];
-        targetState.measurement.editingMeasurementId = null;
-        targetState.measurement.active = false;
-        if (imported?.[0]?.id) targetState.panels.measurement?.setSelectedMeasurementId?.(imported[0].id);
-      }
-    });
-    if (!result.executed) {
-      setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
-      return null;
-    }
-    const imported = Array.isArray(result.result) ? result.result : [];
-    if (state.renderer?.layerVisibility?.measurements === false) {
-      state.renderer.setLayerVisible("measurements", true);
-      syncMeasurementLayerControl(documentRef, true);
-    }
-    updateMeasurementOverlay(state, documentRef);
-    const selected = imported[0];
-    if (selected) {
-      state.panels.measurement?.setSelectedMeasurementId?.(selected.id);
-      state.panels.measurement?.open(state.map, state.editHistory.getStats());
-      locateMeasurement(state, {...selected, pointCount: selected.points?.length || 0}, documentRef);
-    }
-    setFileOperationStatus(documentRef, `GEO 数据已导入为 ${imported.length} 个测量对象，可撤销；来源 Feature ${payload.featureCount} 个。`);
-    return imported;
+    return importAction(text, {confirm: true, source: "ui"});
   } catch (error) {
     reportFileOperationError(documentRef, "GEO 数据导入失败", error);
     return null;
@@ -4158,18 +4169,19 @@ function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
   if (options?.confirm !== true) throw new Error("导入 GEO 数据会写入当前地图，需要显式传入 {confirm: true}");
   const text = normalizeApiGeoImportDocument(document);
   const terrainCommand = createImportFmgCellsHeightCommand(text, state.map, {label: "API 导入 FMG Cells 地形"});
-  if (terrainCommand) return importFmgCellsGeoViaApi(state, documentRef, terrainCommand);
+  if (terrainCommand) return importFmgCellsGeoViaApi(state, documentRef, terrainCommand, options);
   return importGeoMeasurementsViaApi(state, documentRef, text, options);
 }
 
-function importFmgCellsGeoViaApi(state, documentRef, command) {
+function importFmgCellsGeoViaApi(state, documentRef, command, options = {}) {
   if (command.isNoop({map: state.map})) {
     setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
     return {
       mode: "fmg-cells-terrain",
       imported: false,
       reason: "noop",
-      history: state.editHistory.getStats()
+      history: state.editHistory.getStats(),
+      effects: []
     };
   }
   const result = executeEditCommand(state, documentRef, command, {
@@ -4184,25 +4196,29 @@ function importFmgCellsGeoViaApi(state, documentRef, command) {
       mode: "fmg-cells-terrain",
       imported: false,
       reason: "noop",
-      history: state.editHistory.getStats()
+      history: state.editHistory.getStats(),
+      effects: []
     };
   }
   const summary = command.getSummary?.() || {};
   const reset = state.map.metadata?.geoImportDerivedRefresh || {};
-  setFileOperationStatus(documentRef, `已通过 API 从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}，可撤销。`);
+  const sourceLabel = options.source === "ui" ? "" : "通过 API ";
+  setFileOperationStatus(documentRef, `已${sourceLabel}从原版 Cells GEO 导入地形并重置非 GEO 数据：源 cells ${summary.sourceCells || 0}，陆地 ${summary.sourceLandCells || 0}，水域 ${summary.sourceWaterCells || 0}，应用 ${summary.appliedCells || 0} 个当前 cells；军事 ${reset.militaryRegiments || 0}，资源点 ${reset.resourceMarkers || 0}，地区 ${reset.zones || 0}，可撤销。`);
   return {
     mode: "fmg-cells-terrain",
     imported: true,
     summary,
     reset: {...reset},
     map: generationApiMapSummary(state.map),
-    history: state.editHistory.getStats()
+    history: state.editHistory.getStats(),
+    effects: ["map-height", "map-derived-reset", "renderer", "runtime-panel", "object-panels", "object-index"]
   };
 }
 
 function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
   const payload = parseGeoJsonMeasurements(text, state.map, {limit: normalizeGeoImportLimit(options.limit)});
-  const command = createImportMeasurementsCommand(payload.measurements, {label: "API 导入 GEO 测量对象"});
+  const sourceLabel = options.source === "ui" ? "" : "通过 API ";
+  const command = createImportMeasurementsCommand(payload.measurements, {label: `${sourceLabel}导入 GEO 测量对象`.trim()});
   if (command.isNoop({map: state.map})) {
     setFileOperationStatus(documentRef, "未导入 GEO 数据：文件中没有可写入的几何。");
     return {
@@ -4210,7 +4226,8 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
       imported: false,
       importedCount: 0,
       featureCount: payload.featureCount,
-      history: state.editHistory.getStats()
+      history: state.editHistory.getStats(),
+      effects: []
     };
   }
   const result = executeEditCommand(state, documentRef, command, {
@@ -4231,7 +4248,8 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
       imported: false,
       importedCount: 0,
       featureCount: payload.featureCount,
-      history: state.editHistory.getStats()
+      history: state.editHistory.getStats(),
+      effects: []
     };
   }
   const imported = Array.isArray(result.result) ? result.result : [];
@@ -4246,7 +4264,7 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
     state.panels.measurement?.open(state.map, state.editHistory.getStats());
     locateMeasurement(state, {...selected, pointCount: selected.points?.length || 0}, documentRef);
   }
-  setFileOperationStatus(documentRef, `GEO 数据已通过 API 导入为 ${imported.length} 个测量对象，可撤销；来源 Feature ${payload.featureCount} 个。`);
+  setFileOperationStatus(documentRef, `GEO 数据已${sourceLabel}导入为 ${imported.length} 个测量对象，可撤销；来源 Feature ${payload.featureCount} 个。`);
   return {
     mode: "measurements",
     imported: true,
@@ -4257,7 +4275,8 @@ function importGeoMeasurementsViaApi(state, documentRef, text, options = {}) {
       name: item.name || "",
       points: item.points?.length || 0
     })),
-    history: state.editHistory.getStats()
+    history: state.editHistory.getStats(),
+    effects: ["measurements", "edit-history", "measurement-overlay", "selection", "runtime-panel"]
   };
 }
 
@@ -4511,7 +4530,7 @@ function applyClimatePatchViaApi(state, documentRef, patch = {}, options = {}) {
   const changed = !sameClimateOptions(currentClimate, nextClimate);
   syncClimateInputs(documentRef, nextOptions);
   if (!changed && options.force !== true) return climateApiUpdateResult(state, false);
-  return measureHealthOperation(state, "api-climate-apply", {keys: Object.keys(normalizedPatch)}, () => applyClimateOptions(state, documentRef, nextOptions, changed));
+  return measureHealthOperation(state, "apply-climate", {keys: Object.keys(normalizedPatch)}, () => applyClimateOptions(state, documentRef, nextOptions, changed));
 }
 
 function setClimateLatitudeViaApi(state, documentRef, value, options = {}) {
@@ -4659,10 +4678,11 @@ function numericString(value) {
   return trimmed !== "" && Number.isFinite(Number(trimmed));
 }
 
-function applyClimateControls(state, documentRef) {
+function applyClimateControls(state, documentRef, applyAction = state.runtimeActions?.climate?.apply) {
   if (!state.map) return;
   const options = normalizeOptions(readOptionsFromPanel(documentRef, state.options));
-  return applyClimateOptions(state, documentRef, options, true);
+  if (typeof applyAction !== "function") throw new Error("气候 action 尚未初始化");
+  return applyAction(climateOptionSnapshot(options), {force: true});
 }
 
 function applyClimateOptions(state, documentRef, options, changed = true) {
@@ -4713,7 +4733,8 @@ function climateApiUpdateResult(state, changed) {
       atmosphereLabel: metadata.atmosphereLabel || "",
       biomeCounts: {...(metadata.biomeCounts || {})}
     },
-    derivedStale: [...(state.map?.metadata?.derivedStale?.systems || [])]
+    derivedStale: [...(state.map?.metadata?.derivedStale?.systems || [])],
+    effects: ["map-climate", "derived-stale", "renderer", "runtime-panel", "pick-panel", "object-panels"]
   };
 }
 
@@ -5862,6 +5883,26 @@ function applyHeightChangesViaApi(state, documentRef, changes, options = {}) {
   return editApiResult(state, result);
 }
 
+function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("高度派生重建会改写当前地图派生数据，需要显式传入 {confirm: true}");
+  const before = regenerationApiSummary(state.map);
+  const regenerate = kind => state.runtimeActions.generate.regenerate(kind, {confirm: true});
+  const result = scope === "base" ? rebuildHeightBaseDerived(regenerate) : rebuildHeightDownstreamDerived(regenerate);
+  updateRegenerationSection(documentRef, result);
+  updateHeightPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+  return {
+    ...result,
+    scope,
+    before,
+    after: regenerationApiSummary(state.map),
+    staleSystems: [...(state.map?.metadata?.derivedStale?.systems || [])],
+    history: state.editHistory.getStats(),
+    effects: ["map-derived", "renderer", "runtime-panel", "height-panel", "object-index"]
+  };
+}
+
 function setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, options = {}) {
   const subject = normalizeApiInteger(subjectId, "外交主体国家 ID");
   const object = normalizeApiInteger(objectId, "外交对象国家 ID");
@@ -6682,7 +6723,8 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
     before,
     after: regenerationApiSummary(state.map),
     staleSystems: [...(state.map?.metadata?.derivedStale?.systems || [])],
-    history: state.editHistory.getStats()
+    history: state.editHistory.getStats(),
+    effects: ["map-derived", "renderer", "runtime-panel", "object-panels", "object-index"]
   };
 }
 
@@ -7605,45 +7647,16 @@ function measurementObject(row) {
   return measurementHighlightObject(row);
 }
 
-function exportMeasurementObjects(state, documentRef, rows) {
-  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
-  const measurements = (rows || []).map(row => ({
-    id: row.id,
-    name: row.name,
-    type: row.type,
-    routeFit: normalizeMeasurementRouteFit(row.routeFit),
-    pointCount: row.pointCount,
-    distanceMapUnits: roundMeasurementExport(row.distance),
-    distanceLabel: formatDisplayDistance(row.distance, units),
-    areaMapUnits: roundMeasurementExport(row.area),
-    areaLabel: row.area ? formatDisplayArea(row.area, units) : "",
-    cellStops: row.cellStops || [],
-    points: (row.points || []).map((point, index) => ({
-      index,
-      x: roundMeasurementExport(point.x),
-      y: roundMeasurementExport(point.y)
-    })),
-    createdAt: row.createdAt || "",
-    updatedAt: row.updatedAt || ""
-  }));
-  const payload = {
-    type: "webgl-generator-measurements",
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    metadata: {
-      seed: state.map?.metadata?.seed || "",
-      checksum: state.map?.metadata?.checksum || "",
-      measurements: measurements.length
-    },
-    units: {
-      distanceUnit: units.distanceUnit,
-      areaUnit: units.areaUnit,
-      mapScaleKmPerCm: units.mapScaleKmPerCm
-    },
-    measurements
-  };
-  downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.measurements.json`, "application/json;charset=utf-8");
-  setFileOperationStatus(documentRef, `测量对象已导出，共 ${measurements.length} 条。`);
+function exportMeasurementObjects(state, documentRef, rows, exportAction = state.runtimeActions?.data?.exportMeasurements) {
+  try {
+    const measurementIds = (rows || []).map(row => String(row?.id || "")).filter(Boolean);
+    const result = exportAction({measurementIds, download: true, includeText: false});
+    setFileOperationStatus(documentRef, `测量对象已导出，共 ${result.metadata.measurements} 条。`);
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "测量对象导出失败", error);
+    return null;
+  }
 }
 
 function startMeasurementPointDrag(event, state, documentRef, index) {

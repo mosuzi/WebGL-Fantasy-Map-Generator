@@ -27289,3 +27289,11 @@ full 矩阵结果：
 - 严格按第 28 项冻结范围新增 20 个 `api.edit.*` 方法：测量批量导入 1 个、城市归属 / 剪影 3 个、省份归属 changes 1 个、国家首都 / 批量政体 / 归属 changes 3 个、高度 changes 1 个、外交关系 1 个、军事 9 个、地区样式 1 个。复杂笔刷只接收纯 changes，没有模拟指针手势，也没有提前实现第 40～41 项的新建能力。
 - 所有新增方法直接复用已有 edit command 和同一 `EditHistory`；API changes 会从当前 grid 读取可信 before 值并校验 cell、目标对象与数值边界，避免调用方伪造撤销快照。统一编辑结果新增 `affected / stale / noop / effects`，错误与未变化可以客观区分。
 - 新增 `regress:api-edit-coverage`，在固定 3000 cells 地图上逐项执行 20 个真实命令，并断言数据变化、affected、撤销恢复与重做恢复；同时检查 API 方法、action 接线、元数据、结构化结果字段和声明数组自动计数。`regress:api-inventory / edit-command-affected / warzone-consistency / edit-execution-path / panel-refresh-path`、生产构建、语法和差异检查均通过；按快速迭代约定未在本项启动浏览器。当前公开基线更新为 11 个命名空间、152 个方法，其中 70 个编辑方法；第 29 项移出活动清单，第 30 项成为当前首项。
+
+### 2026-07-15 完成权威任务第 30 项：UI 与 API 公共 action 层收口
+
+- 原 `createConsoleApiActions()` 改为应用级唯一 `createRuntimeActions()`，创建后同时写入 `state.runtimeActions` 并传给 `installConsoleApi()`。控制面板与控制台 API 的生成 / 重算、视图 / 图层 / 显示偏好、气候、完整地图与 GEO 导入、各类导出、名称库导入导出、选择代表路径和高度派生重建不再各自保留业务写入。
+- UI 文件选择、状态提示与错误展示只保留输入 / 结果适配；地图 JSON、gzip、GEO、要素 GEO、PNG、备注、测量和名称库导出全部复用同一序列化 action。完整地图与 GEO 导入复用同一解析 / 命令 action，并以 `source` 仅区分 UI / API 文案。公共结果补充 generation、climate、regeneration、import、export、display 的 effects。
+- `api.layers` 新增 `setShowOceanHeight / setSmoothCellBorders / setShowHoverInfo / setMaxCityLabels`；`api.edit.height` 新增必须显式 `confirm:true` 的 `rebuildBaseDerived / rebuildDownstreamDerived`。公开基线更新为 11 个命名空间、158 个方法，其中 72 个编辑方法；声明、元数据和真实方法继续三方对齐。
+- 新增 `regress:api-action-convergence`，固定唯一 action 实例、14 类 UI 委托、15 个 API 委托、重复直接写入排除、代表性地图 / 名称库数据摘要、刷新 effects、`api_error` 和 `158 / 72` 计数。`regress:api-edit-coverage / api-inventory / height-derived-rebuild / selection-actions`、语法、生产构建与差异检查通过。
+- 一次提前启动的既有 API 浏览器脚本暴露“启动自动生成与测试主动生成并发时，旧请求会记录 console error”；现已恢复 UI 请求的 paint 后预约令牌，但不把这次失败运行当作浏览器验收，也不在第 30 项重复跑浏览器。第 34 项将用最新构建集中验证并发恢复、公开 API 与 `glError = 0`。第 30 项移出活动权威清单，第 31 项成为当前执行项。

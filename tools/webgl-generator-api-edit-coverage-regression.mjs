@@ -168,8 +168,8 @@ for (const field of ["affected:", "stale:", "noop:"]) assert(editResultSource.in
 assert(consoleApiSource.includes("buildDebugStateDump(state, documentRef, options, api)"), "debug.dumpState 没有复用真实 API 覆盖对象");
 assert.equal(expectedMethods.length, 20, "第 29 项冻结方法数量漂移");
 const declaredCounts = countDeclaredMethods(consoleApiSource);
-assert.equal(declaredCounts.edit, 70, "edit capabilities 方法数不是 70");
-assert.equal(declaredCounts.total, 152, "公开 capabilities 方法总数不是 152");
+assert.equal(declaredCounts.edit, 72, "edit capabilities 方法数不是 72");
+assert.equal(declaredCounts.total, 158, "公开 capabilities 方法总数不是 158");
 
 console.log(JSON.stringify({
   ok: true,

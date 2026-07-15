@@ -1,4 +1,4 @@
-import {readControlPreferences, setActiveModeButton, updateControlPreferences, updateLayerPreference} from "../ui/panel.js";
+import {readControlPreferences, updateControlPreferences} from "../ui/panel.js";
 import {areaUnitForDistanceUnit, formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
@@ -7,7 +7,6 @@ import {measurementArea, measurementDisplayPoints, measurementDistance} from "./
 import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {resolveObject} from "./object-resolver.js";
-import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {buildHistoryPeek} from "./history-peek.js";
 import {buildApiMethodCoverage} from "./api-capability-coverage.js";
 
@@ -20,7 +19,9 @@ const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "data.importMap",
   "data.importGEO",
   "namebases.clear",
-  "namebases.renameObjects"
+  "namebases.renameObjects",
+  "edit.height.rebuildBaseDerived",
+  "edit.height.rebuildDownstreamDerived"
 ]);
 
 export function installConsoleApi(documentRef, state, options = {}) {
@@ -65,10 +66,14 @@ function createConsoleApi(documentRef, state, actions = {}) {
     }),
     layers: Object.freeze({
       get: () => apiCall(() => buildLayerSnapshot(state, documentRef)),
-      setViewMode: mode => apiCall(() => setLayerViewMode(state, documentRef, mode)),
-      setVisible: (layer, visible) => apiCall(() => setLayerVisible(state, documentRef, layer, visible)),
-      setTheme: themeId => apiCall(() => setLayerVisualTheme(state, documentRef, themeId)),
-      fitView: () => apiCall(() => fitLayerView(state, documentRef))
+      setViewMode: mode => apiCall(() => requireApiAction(actions.layers?.setViewMode, "layers.setViewMode")(mode)),
+      setVisible: (layer, visible) => apiCall(() => requireApiAction(actions.layers?.setVisible, "layers.setVisible")(layer, visible)),
+      setTheme: themeId => apiCall(() => requireApiAction(actions.layers?.setTheme, "layers.setTheme")(themeId)),
+      fitView: () => apiCall(() => requireApiAction(actions.layers?.fitView, "layers.fitView")()),
+      setShowOceanHeight: visible => apiCall(() => requireApiAction(actions.layers?.setShowOceanHeight, "layers.setShowOceanHeight")(visible)),
+      setSmoothCellBorders: enabled => apiCall(() => requireApiAction(actions.layers?.setSmoothCellBorders, "layers.setSmoothCellBorders")(enabled)),
+      setShowHoverInfo: visible => apiCall(() => requireApiAction(actions.layers?.setShowHoverInfo, "layers.setShowHoverInfo")(visible)),
+      setMaxCityLabels: limit => apiCall(() => requireApiAction(actions.layers?.setMaxCityLabels, "layers.setMaxCityLabels")(limit))
     }),
     units: Object.freeze({
       get: () => apiCall(() => buildUnitSnapshot(state, documentRef)),
@@ -143,7 +148,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
         applyChanges: changes => apiCall(() => requireApiAction(actions.edit?.states?.applyChanges, "edit.states.applyChanges")(changes))
       }),
       height: Object.freeze({
-        applyChanges: (changes, options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyChanges, "edit.height.applyChanges")(changes, options))
+        applyChanges: (changes, options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyChanges, "edit.height.applyChanges")(changes, options)),
+        rebuildBaseDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildBaseDerived, "edit.height.rebuildBaseDerived")(options)),
+        rebuildDownstreamDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildDownstreamDerived, "edit.height.rebuildDownstreamDerived")(options))
       }),
       diplomacy: Object.freeze({
         setRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.setRelation, "edit.diplomacy.setRelation")(subjectId, objectId, relation, options))
@@ -209,20 +216,20 @@ function createConsoleApi(documentRef, state, actions = {}) {
       })
     }),
     data: Object.freeze({
-      exportAll: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
-      exportMap: (options = {}) => apiCall(() => exportAllMapData(state, documentRef, options)),
-      exportGEO: (options = {}) => apiCall(() => exportPackGeoJson(state, documentRef, options)),
-      exportFeatureGEO: (options = {}) => apiCall(() => exportFeatureGeoJsonData(state, documentRef, options)),
-      exportCompressedAll: (options = {}) => apiCall(() => exportCompressedAllMapData(state, documentRef, options)),
-      exportPNG: (options = {}) => apiCall(() => exportPngData(state, documentRef, options)),
-      exportNotes: (options = {}) => apiCall(() => exportNotesData(state, documentRef, options)),
-      exportMeasurements: (options = {}) => apiCall(() => exportMeasurementsData(state, documentRef, options)),
+      exportAll: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportAll, "data.exportAll")(options)),
+      exportMap: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportMap, "data.exportMap")(options)),
+      exportGEO: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportGEO, "data.exportGEO")(options)),
+      exportFeatureGEO: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportFeatureGEO, "data.exportFeatureGEO")(options)),
+      exportCompressedAll: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportCompressedAll, "data.exportCompressedAll")(options)),
+      exportPNG: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportPNG, "data.exportPNG")(options)),
+      exportNotes: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportNotes, "data.exportNotes")(options)),
+      exportMeasurements: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportMeasurements, "data.exportMeasurements")(options)),
       importMap: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importMap, "data.importMap")(document, options)),
       importGEO: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importGEO, "data.importGEO")(document, options))
     }),
     namebases: Object.freeze({
       list: (options = {}) => apiCall(() => listNamebases(state, options)),
-      export: (options = {}) => apiCall(() => exportNamebasesData(state, documentRef, options)),
+      export: (options = {}) => apiCall(() => requireApiAction(actions.namebases?.export, "namebases.export")(options)),
       import: (document, options = {}) => apiCall(() => requireApiAction(actions.namebases?.import, "namebases.import")(document, options)),
       create: (payload = {}) => apiCall(() => requireApiAction(actions.namebases?.create, "namebases.create")(payload)),
       copyBuiltin: (baseId, options = {}) => apiCall(() => requireApiAction(actions.namebases?.copyBuiltin, "namebases.copyBuiltin")(baseId, options)),
@@ -250,7 +257,7 @@ function buildCapabilities(api) {
     info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
     generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
     selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"],
-    layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView"],
+    layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView", "setShowOceanHeight", "setSmoothCellBorders", "setShowHoverInfo", "setMaxCityLabels"],
     units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
     climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
     history: ["get", "stats", "peek", "undo", "redo"],
@@ -260,7 +267,7 @@ function buildCapabilities(api) {
       "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
       "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
       "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
-      "height.applyChanges", "diplomacy.setRelation",
+      "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "diplomacy.setRelation",
       "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
       "zones.setStyle",
       "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
@@ -316,7 +323,11 @@ function buildMethodMetadata() {
       setViewMode: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
       setVisible: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
       setTheme: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
-      fitView: {stable: "draft", mutates: "camera-state", undoable: false, async: false, requiresConfirm: false}
+      fitView: {stable: "draft", mutates: "camera-state", undoable: false, async: false, requiresConfirm: false},
+      setShowOceanHeight: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setSmoothCellBorders: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setShowHoverInfo: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false},
+      setMaxCityLabels: {stable: "draft", mutates: "display-preference", undoable: false, async: false, requiresConfirm: false}
     },
     units: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
@@ -402,6 +413,8 @@ function buildMethodMetadata() {
       "states.setGovernmentBatch": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "height.applyChanges": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "height.rebuildBaseDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
+      "height.rebuildDownstreamDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
       "diplomacy.setRelation": {stable: "draft", mutates: "diplomacy", undoable: true, async: false, requiresConfirm: false},
       "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.setStatus": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
@@ -766,54 +779,15 @@ function buildLayerSnapshot(state, documentRef) {
   const rendererStats = state?.renderer?.getStats?.() || {};
   return {
     colorMode: rendererStats.colorMode || preferences.colorMode || "height",
-    visualTheme: rendererStats.visualTheme || preferences.visualTheme || state?.options?.visualTheme || "default",
+    visualTheme: rendererStats.viewOptions?.visualTheme?.id || rendererStats.visualTheme || preferences.visualTheme || state?.options?.visualTheme || "default",
     layers: {...(preferences.layers || {})},
+    display: {
+      showOceanHeight: Boolean(preferences.showOceanHeight),
+      smoothCellBorders: Boolean(preferences.smoothCellBorders),
+      showHoverInfo: Boolean(preferences.showHoverInfo),
+      maxCityLabels: Number(preferences.maxCityLabels) || 5000
+    },
     units: {...(preferences.units || {})}
-  };
-}
-
-function setLayerViewMode(state, documentRef, mode) {
-  const nextMode = String(mode || "").trim();
-  if (!nextMode) throw new Error("缺少视图模式");
-  const availableModes = [...documentRef.querySelectorAll("[data-mode]")].map(item => item.dataset.mode).filter(Boolean);
-  if (availableModes.length && !availableModes.includes(nextMode)) throw new Error(`未知视图模式：${nextMode}`);
-  setActiveModeButton(documentRef, nextMode);
-  state?.renderer?.setColorMode?.(nextMode);
-  return buildLayerSnapshot(state, documentRef);
-}
-
-function setLayerVisible(state, documentRef, layer, visible) {
-  const nextLayer = String(layer || "").trim();
-  if (!nextLayer) throw new Error("缺少图层名称");
-  const rendererLayers = state?.renderer?.getStats?.()?.layerVisibility || {};
-  if (!Object.prototype.hasOwnProperty.call(rendererLayers, nextLayer)) throw new Error(`未知图层：${nextLayer}`);
-  const nextVisible = Boolean(visible);
-  updateLayerPreference(documentRef, nextLayer, nextVisible);
-  updateLayerControlState(documentRef, nextLayer, nextVisible);
-  state?.renderer?.setLayerVisible?.(nextLayer, nextVisible);
-  return buildLayerSnapshot(state, documentRef);
-}
-
-function setLayerVisualTheme(state, documentRef, themeId) {
-  const rawThemeId = String(themeId || "").trim();
-  if (!rawThemeId) throw new Error("缺少视觉主题");
-  const nextThemeId = normalizeVisualThemeId(rawThemeId);
-  if (nextThemeId !== rawThemeId) throw new Error(`未知视觉主题：${themeId}`);
-  setControlValue(documentRef, "visual-theme-preset", nextThemeId);
-  updateControlPreferences(documentRef, {visualTheme: nextThemeId});
-  state?.renderer?.setVisualTheme?.(nextThemeId);
-  return buildLayerSnapshot(state, documentRef);
-}
-
-function fitLayerView(state, documentRef) {
-  const renderer = state?.renderer;
-  if (typeof renderer?.fitToView !== "function") throw new Error("当前 renderer 不支持适配视图");
-  renderer.fitToView();
-  const stats = renderer.getStats?.() || {};
-  return {
-    fitted: true,
-    camera: {...(stats.camera || {})},
-    layer: buildLayerSnapshot(state, documentRef)
   };
 }
 
@@ -1052,7 +1026,7 @@ function cloneNamebaseUsage(usageById) {
   ]));
 }
 
-function exportNamebasesData(state, documentRef, options = {}) {
+export function exportNamebasesData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const format = normalizeNamebaseExportFormat(options.format);
   const baseIds = normalizeNamebaseApiBaseIds(options.baseIds ?? options.ids);
@@ -1124,7 +1098,7 @@ function normalizeNamebaseApiBaseIds(baseIds) {
   return baseIds.map(id => String(id || "").trim()).filter(Boolean);
 }
 
-function exportAllMapData(state, documentRef, options = {}) {
+export function exportAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const document = createMapDocument(map, {
     ...(state.options || {}),
@@ -1149,7 +1123,7 @@ function exportAllMapData(state, documentRef, options = {}) {
   });
 }
 
-function exportPackGeoJson(state, documentRef, options = {}) {
+export function exportPackGeoJson(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const geoJson = createMapGeoJson(map);
   const text = JSON.stringify(geoJson);
@@ -1173,7 +1147,7 @@ function exportPackGeoJson(state, documentRef, options = {}) {
   });
 }
 
-async function exportCompressedAllMapData(state, documentRef, options = {}) {
+export async function exportCompressedAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const document = createMapDocument(map, {
     ...(state.options || {}),
@@ -1209,7 +1183,7 @@ async function exportCompressedAllMapData(state, documentRef, options = {}) {
   return data;
 }
 
-function exportFeatureGeoJsonData(state, documentRef, options = {}) {
+export function exportFeatureGeoJsonData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const layers = options.layers && typeof options.layers === "object" ? {...options.layers} : readFeatureGeoJsonLayerOptions(documentRef);
   const dissolvePolitical = typeof options.dissolvePolitical === "boolean" ? options.dissolvePolitical : readFeatureGeoJsonDissolveOption(documentRef);
@@ -1236,7 +1210,7 @@ function exportFeatureGeoJsonData(state, documentRef, options = {}) {
   });
 }
 
-function exportNotesData(state, documentRef, options = {}) {
+export function exportNotesData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const ids = normalizeApiIdFilter(options.noteIds ?? options.ids);
   const notes = buildApiNoteRows(map, ids);
@@ -1267,7 +1241,7 @@ function exportNotesData(state, documentRef, options = {}) {
   });
 }
 
-function exportMeasurementsData(state, documentRef, options = {}) {
+export function exportMeasurementsData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const ids = normalizeApiIdFilter(options.measurementIds ?? options.ids);
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
@@ -1304,7 +1278,7 @@ function exportMeasurementsData(state, documentRef, options = {}) {
   });
 }
 
-async function exportPngData(state, documentRef, options = {}) {
+export async function exportPngData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const canvas = documentRef.getElementById("map-canvas");
   const filename = `${mapFileBaseName(map)}.png`;
@@ -1450,30 +1424,17 @@ function assertApiMap(state) {
 }
 
 function withOptionalText(options, payload) {
+  const result = {...payload, effects: [options.download === true ? "download" : "serialize"]};
   if (options.includeText === false || options.download === true && options.includeText !== true) {
-    const {text: _text, ...summary} = payload;
+    const {text: _text, ...summary} = result;
     return summary;
   }
-  return payload;
+  return result;
 }
 
 function currentVisualThemeId(state, documentRef) {
   const preferences = readControlPreferences(documentRef);
   return preferences.visualTheme || state?.map?.visualTheme?.preset || state?.options?.visualTheme || "default";
-}
-
-function updateLayerControlState(documentRef, layer, visible) {
-  const patch = layer === "coastline" ? {coastline: visible, lakeShore: visible} : {[layer]: visible};
-  for (const [item, enabled] of Object.entries(patch)) {
-    const control = documentRef.querySelector(`[data-layer="${cssEscape(item)}"]`);
-    if (!control) continue;
-    if (control.tagName === "BUTTON") {
-      control.classList.toggle("active", enabled);
-      control.setAttribute("aria-pressed", enabled ? "true" : "false");
-    } else {
-      control.checked = enabled;
-    }
-  }
 }
 
 function updateUnitControls(documentRef, units) {
@@ -1539,11 +1500,6 @@ async function blobToBase64(documentRef, blob) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
   return view.btoa(binary);
-}
-
-function cssEscape(value) {
-  if (globalThis.CSS?.escape) return CSS.escape(value);
-  return String(value).replace(/["\\]/g, "\\$&");
 }
 
 function summarizeSelection(selection) {

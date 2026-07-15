@@ -87,12 +87,15 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       "data.importMap",
       "data.importGEO",
       "namebases.clear",
-      "namebases.renameObjects"
+      "namebases.renameObjects",
+      "edit.height.rebuildBaseDerived",
+      "edit.height.rebuildDownstreamDerived"
     ];
     const expectedConfirmGroups = {
       generate: ["regenerate", "newMap", "rerollSeed"],
       data: ["importMap", "importGEO"],
-      namebases: ["clear", "renameObjects"]
+      namebases: ["clear", "renameObjects"],
+      edit: ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived"]
     };
     const expectedRepresentativeMutates = {
       "generate.setOptions": "generation-options",
