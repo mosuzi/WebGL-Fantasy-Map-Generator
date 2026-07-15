@@ -433,8 +433,8 @@ api.edit.measurement.delete(id)
 - `api.data.exportAll({download: false})` 返回完整地图 JSON 文本、文件名、MIME、字节数和文档元数据。
 - `api.data.exportMap(options)` 已作为完整地图 JSON 的明确别名接入，当前等价于 `exportAll(options)`。
 - `api.data.exportCompressedAll({download: false})` 返回 gzip base64、压缩前后字节数、文件名、MIME 和文档元数据；该方法返回 Promise。
-- `api.data.exportGEO({download: false})` 返回 pack cell GeoJSON 文本、文件名、MIME、字节数和 feature 摘要。
-- `api.data.exportFeatureGEO({download: false, layers, dissolvePolitical})` 返回要素 GeoJSON 文本，支持调用方覆盖图层集合和政治面 dissolve 选项。
+- `api.data.exportGEO({download: false, range})` 返回 pack cell GeoJSON 文本、文件名、MIME、字节数、feature 摘要和实际范围；`range` 支持 `full / viewport / bbox`。
+- `api.data.exportFeatureGEO({download: false, layers, dissolvePolitical, range})` 返回要素 GeoJSON 文本，支持调用方覆盖图层集合、政治面 dissolve 和同一范围参数。
 - `api.data.exportPNG({download: false, pixelScale, includeMapOverlays})` 返回 PNG data URL、尺寸、字节数和文件元数据；该方法返回 Promise。
 - GeoJSON / JSON 方法支持 `download: true` 复用现有浏览器下载；下载模式默认不返回大文本，调用方可显式传 `includeText: true`。
 - 压缩地图 JSON 方法支持 `download: true` 复用现有浏览器下载；下载模式默认不返回 base64，调用方可显式传 `includeBase64: true`。

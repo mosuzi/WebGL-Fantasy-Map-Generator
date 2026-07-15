@@ -27572,3 +27572,13 @@ full 矩阵结果：
 - renderer 地表、线层、DOM 标签 / 图例 / 比例尺和 PNG 主题流水线共用同一 materialized token。完整地图 `visualTheme` 存储升级为版本 2 并保存用户主题；旧 v1 与缺字段 v2 会迁移，非法用户主题拒绝导入。
 - `layers` API 新增主题列举、导出、导入、创建、更新和删除六个方法；API 基线更新为 186 个公开方法、90 个编辑方法，稳定等级 `178 / 7 / 1`。
 - `regress:visual-themes`、`regress:png-options`、`regress:map-migration`、四项 API 门禁、生产构建和差异检查通过。Chrome 抽查确认用户主题陆地色 `#123456` 可实际作用于高度视图，registry 跨刷新保留；删除三个临时主题并刷新后只剩六个内置主题。页面无本项错误，只有既有 React DevTools 扩展来源的 long-task 告警。
+
+### 2026-07-15 完成权威任务第 54 项：GeoJSON 范围导出与坐标参考强化
+
+- pack cell 与要素 GeoJSON 共用 `full / viewport / bbox` 范围契约；当前视口由 renderer 的屏幕到世界坐标转换得到，显式 bbox 严格拒绝空范围、非有限值和越界。范围筛选使用几何与矩形相交判断，导出完整 feature，不裁切坐标。
+- FeatureCollection 新增 `worldBounds / coordinateBounds / exportRange / coordinateReferenceDetail`。继续保留 `coordinateReference = approximate-equirectangular` 兼容字段，并把 authority / identifier 明确设为 `null`，不伪造 EPSG。
+- 导出浮层新增全图、当前视口和世界坐标 bbox 控件；pack / feature UI 与 `api.data.exportGEO / exportFeatureGEO` 透传同一 `range` 参数。API metadata 返回规范化后的世界 / 坐标范围和完整几何语义。
+- `regress:geojson-range` 在 5046 / 3096 个 grid / pack cells 上确认 bbox pack 为 1463 个、普通与 dissolve 要素均为 763 个且政治集合一致；空 bbox、越界和无交集视口均拒绝。100k dissolve 复跑为 99846 / 56944 cells、297ms、点数比 0.103、字节比 0.123。
+- `regress:geojson-range-browser` 使用系统 Chrome 下载四份真实文件：当前视口与显式 bbox pack 均为 804 个 features，普通 / dissolve 要素均为 603 个；四份文件范围、bbox、完整几何标记和未注册 CRS 元数据正确，页面 / console / health error 均为 0。
+- 官方 QGIS LTR `3.44.12-Solothurn` 通过工作区管理提取运行，实际读取 bbox pack Polygon 1472 个和 dissolve 政治 MultiPolygon 125 个并转存 GeoPackage，QGIS / GDAL 告警为 0；下载包和临时运行时随后清理，只保留可复现脚本与生成报告。生产构建、dissolve 兼容性和差异检查通过。
+- 聚合 `regress:exports` 已把范围导出加入第 4 步，最终按“迁移 → 导入诊断 → PNG → GeoJSON 范围 → dissolve 兼容 → dissolve 100k 性能”完成 `6/6 passed`，总耗时约 `8.7s`。

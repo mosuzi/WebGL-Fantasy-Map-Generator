@@ -121,6 +121,24 @@
               <UiSwitchField label="比例尺" input-id="export-png-overlay-scale-bar" field-class="feature-export-layer-switch" :checked="true" />
             </div>
           </section>
+          <section class="feature-export-layers geojson-range-export" aria-labelledby="geojson-export-range-title">
+            <h3 id="geojson-export-range-title">GeoJSON 导出范围</h3>
+            <label class="project-export-scale-control" for="geojson-export-range-mode">
+              <span>范围</span>
+              <select id="geojson-export-range-mode">
+                <option value="full">地图全幅</option>
+                <option value="viewport">当前视口</option>
+                <option value="bbox">世界坐标 bbox</option>
+              </select>
+            </label>
+            <div class="png-crop-rect-grid geojson-range-bbox-grid" aria-label="GeoJSON 世界坐标 bbox">
+              <label><span>最小 X</span><input id="geojson-export-bbox-min-x" type="number" value="0" step="any" /></label>
+              <label><span>最小 Y</span><input id="geojson-export-bbox-min-y" type="number" value="0" step="any" /></label>
+              <label><span>最大 X</span><input id="geojson-export-bbox-max-x" type="number" value="1440" step="any" /></label>
+              <label><span>最大 Y</span><input id="geojson-export-bbox-max-y" type="number" value="960" step="any" /></label>
+            </div>
+            <p class="visual-theme-editor-note">范围导出保留与 bbox 相交的完整要素，不裁切几何。</p>
+          </section>
           <section class="feature-export-layers" aria-labelledby="feature-export-layers-title">
             <h3 id="feature-export-layers-title">要素 GeoJSON 图层</h3>
             <div class="feature-export-layer-grid">

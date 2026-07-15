@@ -1141,7 +1141,8 @@ export function exportAllMapData(state, documentRef, options = {}) {
 
 export function exportPackGeoJson(state, documentRef, options = {}) {
   const map = assertApiMap(state);
-  const geoJson = createMapGeoJson(map);
+  const rangeOptions = resolveGeoJsonRangeOptions(state, options.range);
+  const geoJson = createMapGeoJson(map, rangeOptions);
   const text = JSON.stringify(geoJson);
   const filename = `${mapFileBaseName(map)}.geojson`;
   if (options.download === true) {
@@ -1158,7 +1159,10 @@ export function exportPackGeoJson(state, documentRef, options = {}) {
       seed: geoJson.properties?.seed || "",
       checksum: geoJson.properties?.checksum || "",
       features: geoJson.features?.length || 0,
-      coordinateReference: geoJson.properties?.coordinateReference || ""
+      coordinateReference: geoJson.properties?.coordinateReference || "",
+      worldBounds: geoJson.properties?.worldBounds || null,
+      coordinateBounds: geoJson.properties?.coordinateBounds || null,
+      exportRange: geoJson.properties?.exportRange || null
     }
   });
 }
@@ -1203,7 +1207,8 @@ export function exportFeatureGeoJsonData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const layers = options.layers && typeof options.layers === "object" ? {...options.layers} : readFeatureGeoJsonLayerOptions(documentRef);
   const dissolvePolitical = typeof options.dissolvePolitical === "boolean" ? options.dissolvePolitical : readFeatureGeoJsonDissolveOption(documentRef);
-  const geoJson = createMapFeatureGeoJson(map, {layers, dissolvePolitical});
+  const rangeOptions = resolveGeoJsonRangeOptions(state, options.range);
+  const geoJson = createMapFeatureGeoJson(map, {layers, dissolvePolitical, ...rangeOptions});
   const text = JSON.stringify(geoJson);
   const filename = `${mapFileBaseName(map)}.features.geojson`;
   if (options.download === true) {
@@ -1221,9 +1226,35 @@ export function exportFeatureGeoJsonData(state, documentRef, options = {}) {
       checksum: geoJson.properties?.checksum || "",
       features: geoJson.features?.length || 0,
       layerSet: geoJson.properties?.layerSet || "",
-      dissolvedPolitical: Boolean(geoJson.properties?.dissolvedPolitical)
+      dissolvedPolitical: Boolean(geoJson.properties?.dissolvedPolitical),
+      worldBounds: geoJson.properties?.worldBounds || null,
+      coordinateBounds: geoJson.properties?.coordinateBounds || null,
+      exportRange: geoJson.properties?.exportRange || null
     }
   });
+}
+
+function resolveGeoJsonRangeOptions(state, range) {
+  const normalizedRange = range == null ? {mode: "full"} : range;
+  if (String(normalizedRange?.mode || "full").toLowerCase() !== "viewport") return {range: normalizedRange};
+  const renderer = state?.renderer;
+  const canvas = renderer?.canvas;
+  if (typeof renderer?.screenToWorld !== "function" || typeof canvas?.getBoundingClientRect !== "function") {
+    throw new Error("当前 renderer 无法解析 GeoJSON 视口范围");
+  }
+  const rect = canvas.getBoundingClientRect();
+  if (!(rect.width > 0) || !(rect.height > 0)) throw new Error("当前地图视口为空，无法按视口导出 GeoJSON");
+  const topLeft = renderer.screenToWorld(rect.left, rect.top);
+  const bottomRight = renderer.screenToWorld(rect.left + rect.width, rect.top + rect.height);
+  return {
+    range: normalizedRange,
+    viewportBbox: [
+      Math.min(topLeft.x, bottomRight.x),
+      Math.min(topLeft.y, bottomRight.y),
+      Math.max(topLeft.x, bottomRight.x),
+      Math.max(topLeft.y, bottomRight.y)
+    ]
+  };
 }
 
 export function exportNotesData(state, documentRef, options = {}) {

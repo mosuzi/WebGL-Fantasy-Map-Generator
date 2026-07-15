@@ -3850,9 +3850,10 @@ async function exportCompressedMapData(state, documentRef, exportAction = state.
 
 function exportGeoJson(state, documentRef, exportAction = state.runtimeActions?.data?.exportGEO) {
   try {
+    const range = readGeoJsonExportRangeOption(documentRef);
     setFileOperationStatus(documentRef, "正在导出 GeoJSON...");
-    const result = exportAction({download: true, includeText: false});
-    setFileOperationStatus(documentRef, `GeoJSON 已导出，共 ${result.metadata.features} 个 cell 面。`);
+    const result = exportAction({download: true, includeText: false, range});
+    setFileOperationStatus(documentRef, `GeoJSON 已导出，共 ${result.metadata.features} 个 cell 面，范围：${geoJsonRangeLabel(result.metadata.exportRange)}。`);
     return result;
   } catch (error) {
     reportFileOperationError(documentRef, "GeoJSON 导出失败", error);
@@ -3864,10 +3865,11 @@ function exportFeatureGeoJson(state, documentRef, exportAction = state.runtimeAc
   try {
     const layers = readFeatureGeoJsonLayerOptions(documentRef);
     const dissolvePolitical = readFeatureGeoJsonDissolveOption(documentRef);
+    const range = readGeoJsonExportRangeOption(documentRef);
     setFileOperationStatus(documentRef, "正在导出要素 GeoJSON...");
-    const result = exportAction({download: true, includeText: false, layers, dissolvePolitical});
+    const result = exportAction({download: true, includeText: false, layers, dissolvePolitical, range});
     const dissolveStatus = result.metadata.dissolvedPolitical ? "，已合并政治面边界" : "";
-    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${result.metadata.features} 个要素，图层：${result.metadata.layerSet}${dissolveStatus}。`);
+    setFileOperationStatus(documentRef, `要素 GeoJSON 已导出，共 ${result.metadata.features} 个要素，图层：${result.metadata.layerSet}，范围：${geoJsonRangeLabel(result.metadata.exportRange)}${dissolveStatus}。`);
     return result;
   } catch (error) {
     reportFileOperationError(documentRef, "要素 GeoJSON 导出失败", error);
@@ -4518,6 +4520,26 @@ function readFeatureGeoJsonLayerOptions(documentRef) {
 
 function readFeatureGeoJsonDissolveOption(documentRef) {
   return documentRef.getElementById("feature-export-dissolve-political")?.checked === true;
+}
+
+function readGeoJsonExportRangeOption(documentRef) {
+  const mode = String(documentRef.getElementById("geojson-export-range-mode")?.value || "full");
+  if (mode !== "bbox") return {mode};
+  return {
+    mode,
+    bbox: [
+      Number(documentRef.getElementById("geojson-export-bbox-min-x")?.value),
+      Number(documentRef.getElementById("geojson-export-bbox-min-y")?.value),
+      Number(documentRef.getElementById("geojson-export-bbox-max-x")?.value),
+      Number(documentRef.getElementById("geojson-export-bbox-max-y")?.value)
+    ]
+  };
+}
+
+function geoJsonRangeLabel(range) {
+  if (range?.mode === "viewport") return "当前视口";
+  if (range?.mode === "bbox") return `bbox ${range.worldBbox?.join(", ") || ""}`.trim();
+  return "地图全幅";
 }
 
 function browserStorage(documentRef) {

@@ -16,9 +16,9 @@
 - 可复现 seed/options 生成链路已经覆盖地形、气候、河流、文化、宗教、国家、省份、城市、路线、资源、经济、外交、静态军事和地区。
 - 地图对象使用统一 selection、定位、高亮、对象详情和领域面板；编辑进入 `EditHistory`，并通过 effects 驱动定向派生刷新。
 - 高度、国家、省份、文化、宗教及各类创建工具共用统一画布模式管理器，支持互斥、取消、完成、地图替换和未提交预览回滚。
-- `window.webglGeneratorApi` 当前覆盖 11 个命名空间、168 个公开方法和 78 个编辑方法；API 与 UI 尽量共用 runtime action 和数据契约。
+- `window.webglGeneratorApi` 当前覆盖 11 个命名空间、186 个公开方法和 90 个编辑方法；API 与 UI 尽量共用 runtime action 和数据契约。
 - 完整地图 JSON/gzip、浏览器存档、GEO、高度图、名称库、备注和测量具备兼容/诊断入口；旧数据变化必须补 migration/backfill。
-- PNG 支持倍率、四种裁剪模式和七类 overlay 白名单；政治面 GeoJSON 支持 dissolve，并有 Chrome、QGIS 与 geojson.io 验收证据。
+- PNG 支持倍率、四种裁剪模式和七类 overlay 白名单；pack 与分层 GeoJSON 支持全图、当前视口和世界坐标 bbox，政治面支持 dissolve，并有 Chrome、QGIS 与 geojson.io 验收证据。
 
 以上只是不带执行状态的概览。已完成项、待执行项和验收命令以[权威任务清单](../../docs/current-plan.md#权威任务清单)及[开发日志](../../docs/development-log.md)为准。
 

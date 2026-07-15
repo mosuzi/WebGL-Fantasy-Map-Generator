@@ -5,9 +5,11 @@ export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
 export const MAP_SCHEMA_VERSION = 2;
 export const PNG_OVERLAY_KEYS = Object.freeze(["labels", "cityIcons", "markers", "military", "measurements", "legend", "scaleBar"]);
+export const GEOJSON_RANGE_MODES = Object.freeze(["full", "viewport", "bbox"]);
 
 const PNG_OVERLAY_DEFAULTS = Object.freeze({labels: true, cityIcons: true, markers: true, military: true, measurements: false, legend: true, scaleBar: true});
 const PNG_CROP_MODES = new Set(["viewport", "map", "pixel", "world"]);
+const GEOJSON_RANGE_MODE_SET = new Set(GEOJSON_RANGE_MODES);
 
 const TYPED_ARRAYS = Object.freeze({
   Int8Array,
@@ -160,11 +162,12 @@ export function parseGeoJsonMeasurements(text, map, options = {}) {
   };
 }
 
-export function createMapGeoJson(map) {
+export function createMapGeoJson(map, options = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
   const cells = map.pack?.cells;
   const vertices = map.pack?.vertices?.p;
   if (!cells?.i || !vertices) throw new Error("当前地图缺少 pack cell 地理数据");
+  const range = normalizeGeoJsonExportRange(map, options.range, {viewportBbox: options.viewportBbox});
   const features = [];
   for (let index = 0; index < cells.i.length; index += 1) {
     const vertexIds = cells.v?.[index];
@@ -178,7 +181,7 @@ export function createMapGeoJson(map) {
     const provinceId = Number(cells.province?.[index]) || 0;
     const cultureId = Number(cells.culture?.[index]) || 0;
     const religionId = Number(cells.religion?.[index]) || 0;
-    features.push({
+    const feature = {
       type: "Feature",
       id: Number(cells.i[index]) || index,
       properties: {
@@ -201,10 +204,12 @@ export function createMapGeoJson(map) {
         type: "Polygon",
         coordinates: [ring]
       }
-    });
+    };
+    if (range.mode !== "full" && !geometryIntersectsBbox(feature.geometry, range.coordinateBbox)) continue;
+    features.push(feature);
   }
 
-  return attachGeoJsonBboxes({
+  return attachGeoJsonBboxes(withGeoJsonSpatialMetadata({
     type: "FeatureCollection",
     name: map.metadata?.seed ? `fmg-${map.metadata.seed}` : "fmg-webgl-map",
     properties: {
@@ -217,14 +222,15 @@ export function createMapGeoJson(map) {
       coordinateReference: "approximate-equirectangular"
     },
     features
-  });
+  }, map, range));
 }
 
 export function createMapFeatureGeoJson(map, options = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
   const layers = normalizeFeatureLayerOptions(options.layers);
   const dissolvePolitical = options.dissolvePolitical === true;
-  const features = [
+  const range = normalizeGeoJsonExportRange(map, options.range, {viewportBbox: options.viewportBbox});
+  const allFeatures = [
     ...(layers.state ? stateFeatures(map, {dissolve: dissolvePolitical}) : []),
     ...(layers.province ? provinceFeatures(map, {dissolve: dissolvePolitical}) : []),
     ...(layers.city ? cityFeatures(map) : []),
@@ -233,9 +239,12 @@ export function createMapFeatureGeoJson(map, options = {}) {
     ...(layers.marker ? markerFeatures(map) : []),
     ...(layers.zone ? zoneFeatures(map, {dissolve: dissolvePolitical}) : [])
   ];
+  const features = range.mode === "full"
+    ? allFeatures
+    : allFeatures.filter(feature => geometryIntersectsBbox(feature.geometry, range.coordinateBbox));
   const layerSet = selectedFeatureLayerNames(layers);
 
-  return attachGeoJsonBboxes({
+  return attachGeoJsonBboxes(withGeoJsonSpatialMetadata({
     type: "FeatureCollection",
     name: map.metadata?.seed ? `fmg-${map.metadata.seed}-features` : "fmg-webgl-map-features",
     properties: {
@@ -255,7 +264,32 @@ export function createMapFeatureGeoJson(map, options = {}) {
       zones: layers.zone ? map.zones?.zones?.length || 0 : 0
     },
     features
-  });
+  }, map, range));
+}
+
+export function normalizeGeoJsonExportRange(map, source = null, options = {}) {
+  if (!map) throw new Error("当前没有可导出的地图");
+  const width = Number(map.metadata?.graphWidth) || Number(map.options?.graphWidth) || 0;
+  const height = Number(map.metadata?.graphHeight) || Number(map.options?.graphHeight) || 0;
+  if (!(width > 0) || !(height > 0)) throw new Error("当前地图缺少有效世界边界");
+  const input = source == null ? {mode: "full"} : source;
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("GeoJSON 导出范围必须是对象");
+  const requestedMode = String(input.mode || "full").toLowerCase();
+  const mode = requestedMode === "world" ? "bbox" : requestedMode;
+  if (!GEOJSON_RANGE_MODE_SET.has(mode)) throw new Error(`不支持的 GeoJSON 导出范围：${requestedMode}`);
+  const worldBounds = [0, 0, width, height];
+  let worldBbox = worldBounds;
+  if (mode === "bbox") worldBbox = normalizeExplicitWorldBbox(input.bbox, worldBounds);
+  if (mode === "viewport") worldBbox = normalizeViewportWorldBbox(options.viewportBbox, worldBounds);
+  return {
+    mode,
+    worldBounds: worldBounds.map(roundCoordinate),
+    worldBbox: worldBbox.map(roundCoordinate),
+    coordinateBounds: projectWorldBbox(worldBounds, map),
+    coordinateBbox: projectWorldBbox(worldBbox, map),
+    inclusion: "intersects-complete-feature",
+    geometriesClipped: false
+  };
 }
 
 export function downloadJson(documentRef, data, filename, replacer = null) {
@@ -547,6 +581,46 @@ function projectWorldPoint(point, map) {
   const lon = lonW + (x / width) * (lonE - lonW);
   const lat = latN + (y / height) * (latS - latN);
   return [roundCoordinate(lon), roundCoordinate(lat)];
+}
+
+function projectWorldBbox(bbox, map) {
+  const corners = [
+    [bbox[0], bbox[1]],
+    [bbox[2], bbox[1]],
+    [bbox[2], bbox[3]],
+    [bbox[0], bbox[3]]
+  ].map(point => projectWorldPoint(point, map)).filter(Boolean);
+  const projected = createEmptyBbox();
+  for (const point of corners) expandBboxWithPoint(projected, point);
+  return finalizeBbox(projected);
+}
+
+function normalizeExplicitWorldBbox(source, worldBounds) {
+  const bbox = normalizeWorldBboxArray(source, "显式世界坐标 bbox");
+  if (bbox[0] < worldBounds[0] || bbox[1] < worldBounds[1] || bbox[2] > worldBounds[2] || bbox[3] > worldBounds[3]) {
+    throw new Error("显式世界坐标 bbox 超出地图世界边界");
+  }
+  return bbox;
+}
+
+function normalizeViewportWorldBbox(source, worldBounds) {
+  const bbox = normalizeWorldBboxArray(source, "当前视口 bbox");
+  const clipped = [
+    Math.max(worldBounds[0], bbox[0]),
+    Math.max(worldBounds[1], bbox[1]),
+    Math.min(worldBounds[2], bbox[2]),
+    Math.min(worldBounds[3], bbox[3])
+  ];
+  if (clipped[0] >= clipped[2] || clipped[1] >= clipped[3]) throw new Error("当前视口与地图世界边界没有交集");
+  return clipped;
+}
+
+function normalizeWorldBboxArray(source, label) {
+  if (!Array.isArray(source) || source.length !== 4) throw new Error(`${label} 必须是 [minX, minY, maxX, maxY] 四项数组`);
+  const bbox = source.map(Number);
+  if (!bbox.every(Number.isFinite)) throw new Error(`${label} 必须使用有限数值`);
+  if (bbox[0] >= bbox[2] || bbox[1] >= bbox[3]) throw new Error(`${label} 不能为空，且最小值必须小于最大值`);
+  return bbox;
 }
 
 function unprojectGeoPoint(coordinate, map) {
@@ -1220,6 +1294,119 @@ function attachGeoJsonBboxes(collection) {
   const bbox = finalizeBbox(collectionBbox);
   if (bbox) collection.bbox = bbox;
   return collection;
+}
+
+function withGeoJsonSpatialMetadata(collection, map, range) {
+  collection.properties = {
+    ...(collection.properties || {}),
+    coordinateReference: "approximate-equirectangular",
+    coordinateReferenceDetail: {
+      method: "approximate-equirectangular",
+      authority: null,
+      identifier: null,
+      axisOrder: ["longitude", "latitude"],
+      coordinateUnits: "degrees",
+      sourceWorldUnits: "map-units"
+    },
+    worldBounds: [...range.worldBounds],
+    coordinateBounds: [...range.coordinateBounds],
+    exportRange: {
+      mode: range.mode,
+      worldBbox: [...range.worldBbox],
+      coordinateBbox: [...range.coordinateBbox],
+      inclusion: range.inclusion,
+      geometriesClipped: range.geometriesClipped
+    }
+  };
+  return collection;
+}
+
+function geometryIntersectsBbox(geometry, bbox) {
+  if (!geometry || !Array.isArray(bbox) || bbox.length !== 4) return false;
+  if (geometry.type === "Point") return pointInsideBbox(geometry.coordinates, bbox);
+  if (geometry.type === "MultiPoint") return (geometry.coordinates || []).some(point => pointInsideBbox(point, bbox));
+  if (geometry.type === "LineString") return lineIntersectsBbox(geometry.coordinates, bbox);
+  if (geometry.type === "MultiLineString") return (geometry.coordinates || []).some(line => lineIntersectsBbox(line, bbox));
+  if (geometry.type === "Polygon") return polygonIntersectsBbox(geometry.coordinates, bbox);
+  if (geometry.type === "MultiPolygon") return (geometry.coordinates || []).some(polygon => polygonIntersectsBbox(polygon, bbox));
+  if (geometry.type === "GeometryCollection") return (geometry.geometries || []).some(child => geometryIntersectsBbox(child, bbox));
+  return false;
+}
+
+function lineIntersectsBbox(points, bbox) {
+  if (!Array.isArray(points) || !points.length) return false;
+  if (points.some(point => pointInsideBbox(point, bbox))) return true;
+  for (let index = 1; index < points.length; index += 1) {
+    if (segmentIntersectsBbox(points[index - 1], points[index], bbox)) return true;
+  }
+  return false;
+}
+
+function polygonIntersectsBbox(rings, bbox) {
+  if (!Array.isArray(rings) || !rings.length) return false;
+  if (rings.some(ring => lineIntersectsBbox(ring, bbox))) return true;
+  const corners = [
+    [bbox[0], bbox[1]],
+    [bbox[2], bbox[1]],
+    [bbox[2], bbox[3]],
+    [bbox[0], bbox[3]]
+  ];
+  return corners.some(point => pointInsidePolygon(point, rings));
+}
+
+function pointInsideBbox(point, bbox) {
+  const x = Number(point?.[0]);
+  const y = Number(point?.[1]);
+  return Number.isFinite(x) && Number.isFinite(y) && x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3];
+}
+
+function segmentIntersectsBbox(a, b, bbox) {
+  const ax = Number(a?.[0]);
+  const ay = Number(a?.[1]);
+  const bx = Number(b?.[0]);
+  const by = Number(b?.[1]);
+  if (![ax, ay, bx, by].every(Number.isFinite)) return false;
+  const dx = bx - ax;
+  const dy = by - ay;
+  let start = 0;
+  let end = 1;
+  for (const [p, q] of [[-dx, ax - bbox[0]], [dx, bbox[2] - ax], [-dy, ay - bbox[1]], [dy, bbox[3] - ay]]) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const ratio = q / p;
+    if (p < 0) start = Math.max(start, ratio);
+    else end = Math.min(end, ratio);
+    if (start > end) return false;
+  }
+  return true;
+}
+
+function pointInsidePolygon(point, rings) {
+  if (!pointInsideRing(point, rings[0])) return false;
+  for (let index = 1; index < rings.length; index += 1) {
+    if (pointInsideRing(point, rings[index])) return false;
+  }
+  return true;
+}
+
+function pointInsideRing(point, ring) {
+  const x = Number(point?.[0]);
+  const y = Number(point?.[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Array.isArray(ring) || ring.length < 3) return false;
+  let inside = false;
+  for (let current = 0, previous = ring.length - 1; current < ring.length; previous = current++) {
+    const currentX = Number(ring[current]?.[0]);
+    const currentY = Number(ring[current]?.[1]);
+    const previousX = Number(ring[previous]?.[0]);
+    const previousY = Number(ring[previous]?.[1]);
+    if (![currentX, currentY, previousX, previousY].every(Number.isFinite)) continue;
+    const crosses = (currentY > y) !== (previousY > y)
+      && x < ((previousX - currentX) * (y - currentY)) / (previousY - currentY) + currentX;
+    if (crosses) inside = !inside;
+  }
+  return inside;
 }
 
 function geometryBbox(geometry) {
