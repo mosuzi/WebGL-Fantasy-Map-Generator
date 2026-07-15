@@ -27353,3 +27353,11 @@ full 矩阵结果：
 - 新增 `canvas-tool-preview-rollback.js`：跨模式、关闭、地图替换和 `pointercancel` 会恢复高度、国家、省份、文化、宗教的未提交 preview；文化 / 宗教按 `packBefore` 精确恢复。高度线段、填充、选区中间态和 transform preview 同步清理，交互锁改为读取模式元数据。
 - 新增 `regress:canvas-tools`，覆盖 14 模式互斥、重复进入、跨模式、重入、取消、完成、面板关闭、地图替换、异常、一次历史语义、预览恢复和运行时静态接线。`regress:height-brush / social-ownership / edit-execution-path`、生产构建和差异检查通过；本项验收只要求纯代码回归，未启动浏览器。
 - 完整契约写入 `docs/task-notes/canvas-tool-mode-manager.md`。第 36 项达到最小验收后移出活动清单；第 37 项成为当前执行项，并按权威计划停在产品策略选择。
+
+### 2026-07-15 完成权威任务第 37 项：Selection 面板分发方案 B
+
+- 用户明确选择方案 B：selection 只更新已经打开的领域面板；对应领域面板关闭时显示对象详情，selection handler 不再自动打开领域面板。显式菜单、快捷键和面板动作的打开行为不变。
+- 新增 `selection-panel-policy.js`，集中声明 15 类对象的领域面板绑定和来源面板，并以纯函数返回来源面板、更新已打开面板或对象详情三种结果；区域没有领域面板，固定使用对象详情。
+- `SELECTION_PANEL_HANDLERS` 全部改为复用统一路由，移除旧的强制打开 helper 和省份 / 文化 / 宗教着色模式条件。来源面板不重复刷新；政体面板作为国家等价来源；外交着色主题主体切换和河流主动关闭抑制继续保留。
+- 对象详情取消对国家、城市和河流的旧拒绝逻辑，并为未单独声明标题格式的对象提供中文类型与名称 / id 兜底，确保领域面板关闭时存在可见落点。
+- 新增 `regress:selection-panel-policy`，覆盖 15 类绑定、区域兜底、来源面板、`sourcePanelId`、定位、外交主题和河流关闭抑制；`regress:selection-actions` 与 `regress:panel-refresh-path` 同步通过。本项按快速迭代约定不执行浏览器测试。

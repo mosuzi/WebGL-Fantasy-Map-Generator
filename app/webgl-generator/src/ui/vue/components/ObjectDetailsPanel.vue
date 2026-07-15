@@ -32,7 +32,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatDistance, formatMilitary, formatNumber, formatPopulation, formatPrecipitation, formatRiverFlow, formatRiverRunoffFlowRange} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
-import {LABEL_TARGET_KIND, OBJECT_KIND} from "../../../runtime/object-kinds.js";
+import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 
 defineOptions({
   name: "ObjectDetailsPanel"
@@ -173,7 +173,7 @@ function isSameObject(a, b) {
 
 function formatObjectTitle(object) {
   if (!object) return "未知对象";
-  return OBJECT_TITLE_FORMATTERS[object.kind]?.(object) || "未知对象";
+  return OBJECT_TITLE_FORMATTERS[object.kind]?.(object) || `${OBJECT_KIND_LABEL[object.kind] || "对象"} ${object.name || object.fullName || object.text || `#${object.id}`}`;
 }
 
 function detailRows(object) {

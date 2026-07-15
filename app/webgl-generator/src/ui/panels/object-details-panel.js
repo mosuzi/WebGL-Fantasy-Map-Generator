@@ -49,13 +49,6 @@ export function createObjectDetailsPanel(documentRef, manager, callbacks = {}) {
         manager.close("object-details");
         return;
       }
-      if (selection.object.kind === "state" || selection.object.kind === "river" || selection.object.kind === "city") {
-        panelState.object = null;
-        panelState.editingObject = null;
-        suppressNextViewOpenFor = null;
-        manager.close("object-details");
-        return;
-      }
       panelState.object = selection.object;
       panelState.editingObject = editingObject;
       if (!editingObject && isSameObject(selection.object, suppressNextViewOpenFor)) {

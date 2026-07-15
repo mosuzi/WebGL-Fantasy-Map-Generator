@@ -27,6 +27,7 @@
 - `console-api-stability-contract.md`：权威任务第 33 项的 API 版本、稳定等级、兼容别名、确认策略与扩展能力分组契约。
 - `keyboard-shortcuts.md`：权威任务第 35 项的快捷键清单、公共 action、禁用条件、悬停提示和冲突规则。
 - `canvas-tool-mode-manager.md`：权威任务第 36 项的 14 个画布模式、互斥生命周期、预览回滚、面板关闭和地图替换契约。
+- `selection-panel-policy.md`：权威任务第 37 项的方案 B、对象类型绑定、对象详情兜底与 selection 分发例外。
 
 ## 导入导出与 GIS
 

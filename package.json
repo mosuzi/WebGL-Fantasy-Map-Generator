@@ -45,6 +45,7 @@
     "regress:edit-execution-path": "node --no-warnings ./tools/webgl-generator-edit-execution-path-regression.mjs",
     "regress:panel-refresh-path": "node --no-warnings ./tools/webgl-generator-panel-refresh-path-regression.mjs",
     "regress:selection-actions": "node --no-warnings ./tools/webgl-generator-selection-action-regression.mjs",
+    "regress:selection-panel-policy": "node --no-warnings ./tools/webgl-generator-selection-panel-policy-regression.mjs",
     "regress:map-migration": "node --no-warnings ./tools/webgl-generator-map-migration-regression.mjs",
     "regress:map-import-diagnostics": "node --no-warnings ./tools/webgl-generator-map-import-diagnostics-regression.mjs",
     "regress:png-options": "node --no-warnings ./tools/webgl-generator-png-options-regression.mjs",
