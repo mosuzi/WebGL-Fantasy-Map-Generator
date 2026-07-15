@@ -59,6 +59,7 @@
     "regress:api-action-convergence": "node --no-warnings ./tools/webgl-generator-api-action-convergence-regression.mjs",
     "regress:api-operation": "node --no-warnings ./tools/webgl-generator-api-operation-regression.mjs",
     "regress:api-data-compatibility": "node --no-warnings ./tools/webgl-generator-api-data-compatibility-regression.mjs",
+    "regress:api-stability": "node --no-warnings ./tools/webgl-generator-api-stability-contract-regression.mjs",
     "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:api-geo": "node ./tools/webgl-generator-api-geo-regression.mjs",
     "regress:api-exports": "node ./tools/webgl-generator-api-export-records-regression.mjs",

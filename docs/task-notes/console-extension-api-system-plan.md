@@ -351,6 +351,8 @@ api.edit.measurement.delete(id)
 - `pnpm run regress:api-namebases` 已新增第一刀，脚本会在构建产物上通过控制台 API 覆盖名称库文档路径：`list({includeSource})`、JSON / 原版文本选中导出、`includeText:false`、浏览器下载文件名、JSON 对象导入、JSON 字符串 replace 导入、legacy 文本导入、撤销恢复，以及 `clear()` 未确认失败和 `clear({confirm:true})` 可撤销清空。
 - `pnpm run regress:api-namebase-renames` 已新增第一刀，脚本会在构建产物上通过控制台 API 覆盖 `api.namebases.renameObjects()` 的对象改名路径：未传 `confirm:true`、不支持类型和空 ids 必须结构化失败；`state / city / river / lake` 会在当前地图有对象时执行按名称库改名，并通过 `api.history.undo()` 验证名称恢复。
 
+第 33 项稳定契约已经完成：正式根入口升级为 `1.0.0 / stable`，能力表 schema 与兼容策略版本均为 `1.0.0`。162 个公开方法中 154 个为 `stable`、7 个 `debug` 方法为 `experimental`，旧入口 `data.exportAll` 为 `deprecated` 并指向 `data.exportMap`；`window.api` 继续只在未占用时作为 `window.webglGeneratorApi` 的兼容别名安装。每个方法元数据均包含稳定等级、能力组、副作用、撤销、异步和确认要求，13 个能力组为后续快捷键与扩展提供机器可读边界。deprecated 入口只允许在下一个主版本移除，stable 方法在同一主版本内保持兼容。
+
 ## 安全与副作用边界
 
 - 默认只在浏览器本地页面暴露，不做跨来源远程调用。
@@ -594,7 +596,7 @@ api.edit.measurement.delete(id)
 
 ## 下一波全面实现
 
-阶段 0～6 都已完成第一刀，原“继续阶段 4”的建议已经过期。当前 API 基线为 11 个命名空间、162 个公开方法、72 个编辑方法；权威任务第 28 项完成 34 类能力映射与三方覆盖门禁，第 29 项补齐 20 个纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，第 31 项统一长任务 operation，第 32 项补齐高度图、浏览器存档与导入诊断数据入口，并用固定 v1 / v2 样本证明迁移往返。`regress:api-action-convergence / api-operation / api-data-compatibility` 已固定公共委托、事务和数据兼容。根 API 仍为 `experimental`，全部方法仍为 `draft`，稳定契约和聚合门禁继续按第 33～34 项推进。
+阶段 0～6 都已完成第一刀，原“继续阶段 4”的建议已经过期。当前 API 基线为 11 个命名空间、162 个公开方法、72 个编辑方法；权威任务第 28 项完成 34 类能力映射与三方覆盖门禁，第 29 项补齐 20 个纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，第 31 项统一长任务 operation，第 32 项补齐高度图、浏览器存档与导入诊断数据入口，并用固定 v1 / v2 样本证明迁移往返，第 33 项完成 `1.0.0` 稳定版本、方法等级、兼容别名、确认策略和 13 个扩展能力分组。`regress:api-action-convergence / api-operation / api-data-compatibility / api-stability` 已固定公共委托、事务、数据兼容和稳定契约。剩余第 34 项只负责聚合门禁与阶段末一次真实浏览器综合验收。
 
 后续以 `docs/current-plan.md` 的权威任务第 28～34 项为唯一执行顺序：
 

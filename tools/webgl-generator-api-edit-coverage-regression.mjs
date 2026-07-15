@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {createSyncCityOwnerToCellCommand, createSetCityVisualCommand, createResetCityVisualCommand} from "../app/webgl-generator/src/runtime/city-edit-commands.js";
+import {API_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
 import {createSetDiplomacyRelationCommand} from "../app/webgl-generator/src/runtime/diplomacy-edit-commands.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
@@ -167,7 +168,7 @@ const editResultSource = /function editApiResult\(state, result\) \{[\s\S]*?\n\}
 for (const field of ["affected:", "stale:", "noop:"]) assert(editResultSource.includes(field), `editApiResult 缺少 ${field}`);
 assert(consoleApiSource.includes("buildDebugStateDump(state, documentRef, options, api)"), "debug.dumpState 没有复用真实 API 覆盖对象");
 assert.equal(expectedMethods.length, 20, "第 29 项冻结方法数量漂移");
-const declaredCounts = countDeclaredMethods(consoleApiSource);
+const declaredCounts = countDeclaredMethods(API_METHODS);
 assert.equal(declaredCounts.edit, 72, "edit capabilities 方法数不是 72");
 assert.equal(declaredCounts.total, 162, "公开 capabilities 方法总数不是 162");
 
@@ -265,18 +266,8 @@ function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
-function countDeclaredMethods(source) {
-  const block = /const methods = \{([\s\S]*?)\n  \};\n  const methodMetadata/.exec(source)?.[1] || "";
-  assert(block, "找不到 capabilities methods 声明");
-  const namespaces = ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases", "debug"];
-  const counts = {};
-  for (let index = 0; index < namespaces.length; index++) {
-    const namespace = namespaces[index];
-    const start = block.indexOf(`${namespace}: [`);
-    const end = index + 1 < namespaces.length ? block.indexOf(`${namespaces[index + 1]}: [`, start) : block.length;
-    assert(start >= 0 && end > start, `找不到 ${namespace} methods 声明`);
-    counts[namespace] = (block.slice(start, end).match(/"[^"]+"/g) || []).length;
-  }
+function countDeclaredMethods(methods) {
+  const counts = Object.fromEntries(Object.entries(methods).map(([namespace, names]) => [namespace, names.length]));
   return {
     total: Object.values(counts).reduce((sum, value) => sum + value, 0),
     edit: counts.edit,

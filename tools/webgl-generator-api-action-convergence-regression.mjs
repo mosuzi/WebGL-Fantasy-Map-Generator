@@ -6,6 +6,7 @@ import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index
 import {createNamebaseDocument} from "../app/webgl-generator/src/generator/namebase-store.js";
 import {createMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {apiCall} from "../app/webgl-generator/src/runtime/api-result.js";
+import {API_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
 
 const [appSource, consoleApiSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
@@ -104,7 +105,7 @@ assert.equal(failure.ok, false, "缺少地图时 action 没有失败");
 assert.equal(failure.error.code, "api_error", "公共 action 参数错误 code 漂移");
 assert.match(failure.error.message, /当前没有可导出的地图/, "公共 action 错误消息漂移");
 
-const declaredCounts = countDeclaredMethods(consoleApiSource);
+const declaredCounts = countDeclaredMethods(API_METHODS);
 assert.equal(declaredCounts.total, 162, "公共 API 方法总数漂移");
 assert.equal(declaredCounts.edit, 72, "任务 30 edit 方法数漂移");
 
@@ -139,18 +140,8 @@ function extractFunction(source, name) {
   return "";
 }
 
-function countDeclaredMethods(source) {
-  const block = /const methods = \{([\s\S]*?)\n  \};\n  const methodMetadata/.exec(source)?.[1] || "";
-  assert(block, "找不到 capabilities methods 声明");
-  const namespaces = ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases", "debug"];
-  const counts = {};
-  for (let index = 0; index < namespaces.length; index++) {
-    const namespace = namespaces[index];
-    const start = block.indexOf(`${namespace}: [`);
-    const end = index + 1 < namespaces.length ? block.indexOf(`${namespaces[index + 1]}: [`, start) : block.length;
-    assert(start >= 0 && end > start, `找不到 ${namespace} methods 声明`);
-    counts[namespace] = (block.slice(start, end).match(/"[^"]+"/g) || []).length;
-  }
+function countDeclaredMethods(methods) {
+  const counts = Object.fromEntries(Object.entries(methods).map(([namespace, names]) => [namespace, names.length]));
   return {
     total: Object.values(counts).reduce((sum, value) => sum + value, 0),
     edit: counts.edit,

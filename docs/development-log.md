@@ -27312,3 +27312,10 @@ full 矩阵结果：
 - 浏览器存档 envelope 抽到 `browser-map-storage.js`，保存复用只读 `exportAllMapData()`，不再顺带改写地图主题 / 气候；恢复兼容旧裸地图 JSON 和当前 plain / gzip-base64 envelope，全部经过 `parseMapDocument()` 的 v1→v2 迁移。完整地图导入失败诊断不再被事务回滚恢复为旧值，`exportImportDiagnostic` 可返回或下载最近一次诊断。
 - 新增 `regress:api-data-compatibility`：固定 v1 样本迁移、导出、再导入后保持 checksum、typed array、备注、测量、隐藏标签、主题和 seed 等价；固定当前 v2 样本完成同一往返；plain、gzip envelope 与旧裸存档均通过；坏 JSON 保留当前 map 并返回 `operation_invalid_input / parse / suggestion`。同步恢复 `regress:map-import-diagnostics`，并更新 action、operation、inventory、edit coverage 与 capabilities 门禁到 162 方法。
 - 语法、`regress:api-data-compatibility / api-action-convergence / api-operation / api-inventory / api-edit-coverage / map-migration / map-import-diagnostics / exports`、生产构建和差异检查通过。一次误触的既有 `regress:api-namebases` 浏览器脚本在启动自动生成尚 busy 时立即主动生成，按新契约返回 `operation_busy`；它不是第 32 项代码级验收，等待条件修正已归入第 34 项聚合与阶段末浏览器收口。第 32 项移出活动清单，第 33 项成为当前执行项。
+
+### 2026-07-15 完成权威任务第 33 项：API 稳定性、版本与扩展契约
+
+- 新增 `api-contract.js` 与 `console-api-stability-contract.md`，把正式根 API 提升为 `1.0.0 / stable`，能力表 schema 和兼容策略版本均为 `1.0.0`。统一 `API_METHODS` 固定 11 个命名空间、162 个方法，避免运行时能力表和代码回归继续各自解析重复清单。
+- 方法元数据运行时补齐 `stability / stable / since / capabilityGroup`，154 个经门禁覆盖的方法进入 `stable`，7 个 debug 方法保留 `experimental`，`data.exportAll` 作为 `data.exportMap` 的 `deprecated` 兼容入口保留到不早于 `2.0.0`；`window.api` 继续仅在未占用时指向正式根入口。
+- 能力表新增 13 个扩展能力组、稳定策略、兼容别名目录和稳定等级统计；原始元数据缺失、多余、字段不全或确认标记漂移会直接阻止契约生成。确认方法目录统一为 11 个，嵌套 `edit.height.*` 在按命名空间分组时不再丢失后续路径。
+- 新增 `regress:api-stability`，覆盖版本、154 / 7 / 1 稳定等级、13 个能力组、162 项完整字段、旧别名共路径、deprecated 替代入口、确认策略和坏元数据拒绝；`regress:api-inventory / api-edit-coverage / api-action-convergence / api-operation / api-data-compatibility`、语法、生产构建和 `git diff --check` 均通过。按快速迭代约定本项未启动浏览器；第 33 项移出活动清单，第 34 项成为当前执行项。

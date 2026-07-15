@@ -9,22 +9,7 @@ import {OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {resolveObject} from "./object-resolver.js";
 import {buildHistoryPeek} from "./history-peek.js";
 import {buildApiMethodCoverage} from "./api-capability-coverage.js";
-
-const API_VERSION = "0.1.0";
-const API_STABILITY = "experimental";
-const CONFIRM_REQUIRED_METHODS = Object.freeze([
-  "generate.regenerate",
-  "generate.newMap",
-  "generate.rerollSeed",
-  "data.importMap",
-  "data.importGEO",
-  "data.importHeightmap",
-  "data.restoreBrowserMap",
-  "namebases.clear",
-  "namebases.renameObjects",
-  "edit.height.rebuildBaseDerived",
-  "edit.height.rebuildDownstreamDerived"
-]);
+import {API_METHODS, API_STABILITY, API_VERSION, CONFIRM_REQUIRED_METHODS, buildApiContract, buildApiVersionContract, groupQualifiedMethodNames} from "./api-contract.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -259,38 +244,17 @@ function createConsoleApi(documentRef, state, actions = {}) {
 }
 
 function buildCapabilities(api) {
-  const methods = {
-    info: ["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"],
-    generate: ["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"],
-    selection: ["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"],
-    layers: ["get", "setViewMode", "setVisible", "setTheme", "fitView", "setShowOceanHeight", "setSmoothCellBorders", "setShowHoverInfo", "setMaxCityLabels"],
-    units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
-    climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
-    history: ["get", "stats", "peek", "undo", "redo"],
-    edit: [
-      "notes.set", "notes.delete",
-      "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "measurements.import",
-      "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
-      "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
-      "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
-      "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "diplomacy.setRelation",
-      "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
-      "zones.setStyle",
-      "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
-      "religions.add", "religions.assignCells", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
-      "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.delete", "lakes.rename",
-      "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
-      "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"
-    ],
-    data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "exportImportDiagnostic", "saveBrowserMap", "restoreBrowserMap", "importMap", "importGEO", "importHeightmap"],
-    namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
-    debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
-  };
-  const methodMetadata = buildMethodMetadata();
+  const methods = API_METHODS;
+  const apiContract = buildApiContract(methods, buildMethodMetadata());
+  const methodMetadata = apiContract.methodMetadata;
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
-    namespaces: ["info", "generate", "selection", "layers", "units", "climate", "history", "edit", "data", "namebases", "debug"],
+    contract: apiContract.contract,
+    capabilityGroups: apiContract.capabilityGroups,
+    compatibility: apiContract.compatibility,
+    stabilitySummary: apiContract.stabilitySummary,
+    namespaces: Object.keys(methods),
     methods,
     methodMetadata,
     methodMetadataCoverage: buildApiMethodCoverage(methods, methodMetadata, api),
@@ -504,16 +468,6 @@ function buildMethodMetadata() {
   };
 }
 
-function groupQualifiedMethodNames(methods) {
-  return methods.reduce((groups, methodName) => {
-    const [namespace, method] = methodName.split(".");
-    if (!namespace || !method) return groups;
-    groups[namespace] ||= [];
-    groups[namespace].push(method);
-    return groups;
-  }, {});
-}
-
 function requireApiAction(action, name) {
   if (typeof action !== "function") throw new Error(`API action 未安装：${name}`);
   return action;
@@ -524,10 +478,7 @@ function buildHistoryStats(state, actions = {}, options = {}) {
 }
 
 function buildApiVersion() {
-  return {
-    apiVersion: API_VERSION,
-    stability: API_STABILITY
-  };
+  return buildApiVersionContract();
 }
 
 function buildMapSummary(state) {
