@@ -561,13 +561,7 @@ function deleteState(map, stateId) {
       burg.group = burg.port ? "city" : "town";
     }
   }
-  state.removed = true;
-  state.provinces = [];
-  const packState = map?.pack?.states?.[stateId];
-  if (packState && packState !== state) {
-    packState.removed = true;
-    packState.provinces = [];
-  }
+  removePoliticalItem(map, "states", stateId);
   refreshProvinceSummaries(map);
   refreshProvincePoles(map);
   refreshStateSummaries(map);
@@ -1447,6 +1441,13 @@ function initialStateCells(map, centerGridCell) {
 function writePoliticalItem(map, collection, id, item) {
   if (map?.politics?.[collection]) map.politics[collection][id] = item;
   if (map?.pack?.[collection]) map.pack[collection][id] = map?.politics?.[collection]?.[id] || clonePlain(item);
+}
+
+function removePoliticalItem(map, collection, id) {
+  const politicsItems = map?.politics?.[collection];
+  const packItems = map?.pack?.[collection];
+  if (politicsItems) politicsItems[id] = null;
+  if (packItems && packItems !== politicsItems) packItems[id] = null;
 }
 
 function ensureCapitalCityForNewState(map, context) {

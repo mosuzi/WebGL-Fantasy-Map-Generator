@@ -5,7 +5,9 @@ import {resolve} from "node:path";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
-import {createAddStateAtCellCommand, createApplyStateBrushCommand, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
+import {createMapDocument, createMapFeatureGeoJson} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {resolveObject} from "../app/webgl-generator/src/runtime/object-resolver.js";
+import {createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
 
 const map = generatePlaceholderMap({seed: "state-lifecycle-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
 const history = new EditHistory();
@@ -59,6 +61,30 @@ assert.ok(expansionPackCells.every(packCell => map.pack.cells.state[packCell] ==
 brushHistory.redo({map});
 assert.equal(map.grid.cells.state[expansionGridCell], created.stateId, "重做必须恢复新国家扩张");
 
+const deleteHistory = new EditHistory();
+const beforeDelete = snapshotStateCollections(map);
+const deletedProvinceIds = (map.politics.provinces || []).filter(province => province && Number(province.state) === created.stateId).map(province => Number(province.i ?? province.id));
+const deleteCommand = createDeleteStateCommand(created.stateId);
+deleteHistory.execute(deleteCommand, {map});
+assert.equal(map.politics.states[created.stateId], null, "删除后 politics 国家档案槽位必须为空");
+assert.equal(map.pack.states[created.stateId], null, "删除后 pack 国家档案槽位必须为空");
+assert.ok(Array.from(map.grid.cells.state).every(stateId => Number(stateId) !== created.stateId), "grid cells 不能残留已删除国家");
+assert.ok(Array.from(map.pack.cells.state).every(stateId => Number(stateId) !== created.stateId), "pack cells 不能残留已删除国家");
+assert.ok((map.settlements.cities || []).every(city => !city || Number(city.state) !== created.stateId), "城市不能残留已删除国家归属");
+assert.ok(deletedProvinceIds.every(provinceId => map.politics.provinces[provinceId]?.removed), "原国家省份档案必须标记移除");
+assert.equal(resolveObject(map, {kind: "state", id: created.stateId}), null, "对象解析器不能再解析已删除国家");
+const stateGeoJson = createMapFeatureGeoJson(map, {layers: {state: true, city: false, route: false, river: false, marker: false, zone: false}});
+assert.ok(stateGeoJson.features.every(feature => feature.properties.numericId !== created.stateId), "要素导出不能包含已删除国家");
+const mapDocument = createMapDocument(map, map.options);
+assert.equal(mapDocument.map.politics.states[created.stateId], null, "完整地图导出不能保留国家档案");
+assert.equal(mapDocument.map.pack.states[created.stateId], null, "完整地图 pack 导出不能保留国家档案");
+assert.equal(deleteHistory.getStats().undo, 1, "删除国家只写入一条历史");
+deleteHistory.undo({map});
+assert.deepEqual(snapshotStateCollections(map), beforeDelete, "撤销必须完整恢复国家档案和关联数据");
+deleteHistory.redo({map});
+assert.equal(map.politics.states[created.stateId], null, "重做必须再次移除国家档案");
+assert.equal(map.pack.states[created.stateId], null, "重做必须再次移除 pack 国家档案");
+
 const appSource = readFileSync(resolve("app/webgl-generator/src/runtime/app.js"), "utf8");
 assert.equal((appSource.match(/getInspection\?\.\(\)\?\.summary/g) || []).length, 2, "画布与 API 新增必须共用命令预检提示");
 const stateBinding = appSource.slice(appSource.indexOf("function bindStateEditing"), appSource.indexOf("function bindProvinceEditing"));
@@ -71,6 +97,10 @@ assert.doesNotMatch(pointerUpBlock, /rollbackCanvasToolStroke\(state, "state"\)/
 assert.match(pointerCancelBlock, /rollbackCanvasToolStroke\(state, "state"\)/, "国家笔刷取消事件必须回滚预览");
 assert.doesNotMatch(pointerCancelBlock, /finishStateStroke\(state, documentRef\)/, "国家笔刷取消事件不能提交命令");
 assert.match(stateBinding, /setTargetStateId\(result\.stateId\)[\s\S]*setSelection\(\{object: stateObject\}\)/, "新建国家必须继续成为面板目标和地图选择对象");
+const statePanelBridgeSource = readFileSync(resolve("app/webgl-generator/src/ui/panels/state-panel.js"), "utf8");
+const statePanelVueSource = readFileSync(resolve("app/webgl-generator/src/ui/vue/components/StatePanel.vue"), "utf8");
+assert.match(statePanelBridgeSource, /!state\.removed/, "国家面板桥接列表必须兼容过滤旧 removed 档案");
+assert.match(statePanelVueSource, /!stateItem\.removed/, "国家 Vue 列表必须兼容过滤旧 removed 档案");
 
 console.log(JSON.stringify({
   ok: true,
@@ -78,8 +108,10 @@ console.log(JSON.stringify({
   allowed: {gridCell: allowedGridCell, provinceId: allowedInspection.provinceId},
   created,
   expansion: {gridCell: expansionGridCell, packCells: expansionPackCells, before: expansionBefore, after: created.stateId},
+  deleted: {stateId: created.stateId, provinceIds: deletedProvinceIds},
   history: history.getStats(),
-  brushHistory: brushHistory.getStats()
+  brushHistory: brushHistory.getStats(),
+  deleteHistory: deleteHistory.getStats()
 }, null, 2));
 
 function findProtectedProvinceSample(targetMap) {

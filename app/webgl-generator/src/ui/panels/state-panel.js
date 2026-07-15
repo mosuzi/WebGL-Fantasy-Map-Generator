@@ -238,7 +238,7 @@ function stateObject(row) {
 }
 
 function stateRows(map) {
-  const rows = (map?.politics?.states || []).filter(state => state?.i || state?.id).map(state => ({
+  const rows = (map?.politics?.states || []).filter(state => state && !state.removed && (state.i || state.id)).map(state => ({
     id: state.id ?? state.i,
     name: state.fullName || state.name || `国家 #${state.id ?? state.i}`,
     rawName: state.name || state.fullName || `国家 #${state.id ?? state.i}`,
@@ -258,7 +258,8 @@ function stateExists(map, stateId) {
   stateId = normalizeStateId(stateId);
   if (stateId === null || stateId === undefined) return false;
   if (stateId === 0) return Boolean(map?.politics?.states?.[0]);
-  return Boolean(map?.politics?.states?.[stateId]);
+  const state = map?.politics?.states?.[stateId];
+  return Boolean(state && !state.removed);
 }
 
 function normalizeStateId(stateId) {

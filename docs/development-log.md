@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-07-16：完成权威任务第 63 项——删除国家档案彻底移除
+
+- 国家删除命令在清空疆域、城市和省份归属后，直接把 `politics.states[id]` 与独立 `pack.states[id]` 槽位置空；数组不执行 splice，不重排其它国家 ID，完整集合快照继续支持撤销 / 重做。
+- 国家面板桥接列表、Vue 列表、`stateExists()`、国家对象及国家标签解析器显式忽略旧存档中的 `removed` tombstone，既修复当前删除，也避免旧地图再次显示零人口幽灵国家。
+- `regress:state-lifecycle` 验证国家 #18 删除后两个档案槽位均为空，grid / pack / 城市无归属残留，省份移除，对象解析、完整地图和 GeoJSON 导出均无该国；撤销完整恢复，重做再次移除且只形成一条历史。地图迁移、删除预检、API action convergence、API edit coverage、语法与差异检查同时通过。
+
 ## 2026-07-16：完成权威任务第 62 项——新建国家疆域着色扩张
 
 - 国家笔刷正常 `pointerup` 从错误的预览回滚改为 `finishStateStroke()` 提交，`pointercancel` 改为 `rollbackCanvasToolStroke()`；本项没有顺带修改已登记到 `FOLLOWUPS.md` 的省份笔刷同源问题。

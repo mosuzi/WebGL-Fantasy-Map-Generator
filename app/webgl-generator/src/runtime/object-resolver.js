@@ -63,7 +63,7 @@ function resolveLabel(map, object) {
   }
   if (object.targetKind === LABEL_TARGET_KIND.STATE) {
     const state = map.politics.states[object.targetId ?? object.id];
-    if (!state) return null;
+    if (!state || state.removed) return null;
     return {
       ...object,
       kind: OBJECT_KIND.LABEL,
@@ -339,7 +339,7 @@ function resolveMilitary(map, object) {
 
 function resolveState(map, object) {
   const state = map.politics.states[object.id];
-  if (!state) return null;
+  if (!state || state.removed) return null;
   if ((state.id ?? state.i ?? object.id) === 0) {
     return {
       ...object,

@@ -382,7 +382,7 @@ function handleHighlightAction(key) {
 }
 
 function stateRows(map) {
-  const rows = (map?.politics?.states || []).filter(stateItem => stateItem?.i || stateItem?.id).map(stateItem => ({
+  const rows = (map?.politics?.states || []).filter(stateItem => stateItem && !stateItem.removed && (stateItem.i || stateItem.id)).map(stateItem => ({
     id: stateItem.id ?? stateItem.i,
     name: stateItem.fullName || stateItem.name || `国家 #${stateItem.id ?? stateItem.i}`
   }));
