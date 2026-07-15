@@ -24,7 +24,7 @@
 
 | 候选功能 | 原版入口 | 当前缺口 | 复杂度 | 建议 |
 |---|---|---|---|---|
-| 纹章 / Coat of Arms | `source/Fantasy-Map-Generator/public/modules/ui/emblems-editor.js`、`src/generators/emblems/*`、`src/renderers/draw-emblems.ts` | 当前国家、省份、城市有颜色和图标；纹章数据占位、只读显示、轻量图层、按需生成器、编辑和导出计划已落到 `docs/task-notes/emblems-coa-plan.md`；尚未有纹章生成、编辑、图库和导出链路。 | 特别复杂 | 先保留数据占位与只读显示；完整生成器和 Armoria 集成远期后置。 |
+| 纹章 / Coat of Arms | `source/Fantasy-Map-Generator/public/modules/ui/emblems-editor.js`、`src/generators/emblems/*`、`src/renderers/draw-emblems.ts` | 当前国家、省份、城市有颜色和图标；纹章数据占位、只读显示、轻量图层、按需生成器、编辑和导出设计只作远期资料；尚未有纹章生成、编辑、图库和导出链路。 | 特别复杂 | 用户已明确短期不深化，不实施数据占位、只读图层、生成器或 Armoria 集成；不得自动入队。 |
 | 子地图与地图变换 | `source/Fantasy-Map-Generator/public/modules/ui/submap-tool.js`、`transform-tool.js`、`src/generators/resample.ts` | 当前不能从视口裁剪生成新地图，也不能旋转、镜像、缩放后重采样整图。 | 特别复杂 | 先作为远期规划，避免打断当前导入导出和编辑器基础设施。 |
 
 ## 建议顺序
