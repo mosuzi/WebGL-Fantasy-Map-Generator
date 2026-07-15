@@ -2,7 +2,7 @@
 
 ## 背景
 
-当前 WebGL 版测量工具已经支持临时折线测距、闭合面积、测量 JSON 导出、节点拖拽、撤销、删除、线段插入，以及把临时测量保存为 `map.measurements.items` 中的持久测量对象。测量对象会随完整地图 JSON 保存，已有独立浮层支持总览、筛选、排序、定位、重命名、删除、导出和撤销/重做；保存对象也已接入“测量”图层只读显隐，并可复用临时测量节点拖拽、删除和插入能力进行第一刀形状编辑。路线贴合、`cellStops` 持久化和沿道路自动补中间节点已完成第一刀，完整地图导出再导入回归烟测也已补为固定脚本；后续还需继续做曲线尺细化。
+当前 WebGL 版测量工具已经支持临时折线测距、闭合面积、测量 JSON 导出、节点拖拽、撤销、删除、线段插入，以及把临时测量保存为 `map.measurements.items` 中的持久测量对象。测量对象会随完整地图 JSON 保存，已有独立浮层支持总览、筛选、排序、定位、重命名、删除、导出和撤销/重做；保存对象也已接入“测量”图层只读显隐，并可复用临时测量节点拖拽、删除和插入能力进行第一刀形状编辑。路线贴合、`cellStops` 持久化、沿道路自动补中间节点、曲线尺连续采样、稳定点列简化和可选平滑闭合均已完成，完整地图导出再导入由固定回归脚本覆盖。
 
 原版 FMG 的测量系统位于 `source/Fantasy-Map-Generator/public/modules/ui/measurers.js` 和 `source/Fantasy-Map-Generator/public/modules/ui/units-editor.js`。原版不是单一临时折线，而是 `Rulers.data` 集合，包含 `Ruler`、`Opisometer`、`RouteOpisometer` 和 `Planimeter` 四类对象，并通过 `toString()` / `fromString()` 序列化到存档字段。
 
@@ -96,9 +96,11 @@
 
 ### 阶段 4：曲线尺和面积尺细化
 
-- 曲线尺增加拖拽连续采样模式和采样点优化。
-- 面积尺可选择直线闭合或平滑闭合。
-- 导出测量 JSON 时保留对象类型和单位配置。
+- `已完成（2026-07-15）`。测量读数条支持面积尺、折线尺和曲线尺切换；路线贴合时固定为路线尺。曲线尺使用真实 pointer 拖拽连续采样，抬手后按屏幕容差执行可复现的 Ramer-Douglas-Peucker 点列简化。
+- 面积尺支持直线闭合或平滑闭合，曲线尺支持开放曲线或平滑闭合；显示路径使用 Catmull-Rom 采样，控制点仍以结构化点列保存，未引入 SVG `getTotalLength()` 依赖。
+- 持久对象新增并兼容回填 `drawMode / closed / smooth / sampling`；旧 `point / polyline / polygon` 和 `routeFit` 数据会归一化为对应尺型。UI 保存、形状更新和 `edit.measurements.*` 共用同一参数与 edit command。
+- `pnpm run regress:measurement-curve` 固化开放/闭合简化的可复现性，样本长度误差为 `0.65%`，面积误差为 `1.63%`；`pnpm run regress:measurement` 使用真实 Chrome 鼠标拖拽生成 `21 -> 5` 个控制点的平滑闭合曲线，验证路线尺、折线尺、曲线尺完整地图往返、插值显示、API 编辑、撤销/重做和图层显隐，console / page error 与 WebGL error 均为 `0`。
+- 生产构建通过。阶段 4 对应权威任务第 45 项已经达到最小验收并从活动清单移除。
 
 ## 暂缓项
 

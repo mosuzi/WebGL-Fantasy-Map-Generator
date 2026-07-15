@@ -1,6 +1,11 @@
 import {expandRouteMeasurementPoints, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
+import {sampleMeasurementCurve} from "./measurement-geometry.js";
 
 export const MEASUREMENTS_VERSION = 1;
+export const MEASUREMENT_DRAW_RULER = "ruler";
+export const MEASUREMENT_DRAW_CURVE = "curve";
+export const MEASUREMENT_DRAW_ROUTE = "route";
+export const MEASUREMENT_DRAW_AREA = "area";
 
 export function ensureMeasurementStore(map) {
   if (!map.measurements || typeof map.measurements !== "object") {
@@ -13,6 +18,7 @@ export function ensureMeasurementStore(map) {
   if (!Array.isArray(map.measurements.items)) map.measurements.items = [];
   if (!map.measurements.metadata || typeof map.measurements.metadata !== "object") map.measurements.metadata = {};
   map.measurements.version = MEASUREMENTS_VERSION;
+  map.measurements.items = map.measurements.items.map(item => normalizeMeasurementItem(item, map));
   refreshMeasurementsMetadata(map.measurements);
   return map.measurements;
 }
@@ -27,19 +33,19 @@ export function refreshMeasurementsMetadata(store) {
   };
 }
 
-export function createMeasurementFromPoints(map, points, {name = "", routeFit = "none"} = {}) {
+export function createMeasurementFromPoints(map, points, {name = "", routeFit = "none", drawMode, closed, smooth, sampling} = {}) {
   const store = ensureMeasurementStore(map);
   const idNumber = Math.max(1, Number(store.metadata.nextId) || 1);
   const now = new Date().toISOString();
-  const normalizedPoints = normalizeMeasurementPoints(points, map);
   const measurementRouteFit = normalizeMeasurementRouteFit(routeFit);
-  const type = measurementTypeForPoints(normalizedPoints, {routeFit: measurementRouteFit});
   return normalizeMeasurementItem({
     id: `measurement-${idNumber}`,
-    type,
+    drawMode,
     name: normalizeMeasurementName(name) || `测量 ${idNumber}`,
     points,
-    closed: type === "polygon",
+    closed,
+    smooth,
+    sampling,
     routeFit: measurementRouteFit,
     createdAt: now,
     updatedAt: now
@@ -50,44 +56,89 @@ export function normalizeMeasurementItem(item, map) {
   const sourcePoints = Array.isArray(item?.points) ? item.points : [];
   const points = normalizeMeasurementPoints(sourcePoints, map);
   const routeFit = normalizeMeasurementRouteFit(item?.routeFit);
-  const type = measurementTypeForPoints(points, item, routeFit);
+  const drawMode = normalizeMeasurementDrawMode(item?.drawMode, item, points, routeFit);
+  const closed = normalizeMeasurementClosed(item, points, drawMode, routeFit);
+  const smooth = normalizeMeasurementSmooth(item, drawMode, routeFit);
+  const sampling = normalizeMeasurementSampling(item?.sampling, {drawMode, points});
+  const type = measurementTypeForGeometry(points, {closed});
   const now = new Date().toISOString();
   const normalized = {
     id: String(item?.id || ""),
     type,
     name: normalizeMeasurementName(item?.name) || "未命名测量",
     points,
-    closed: type === "polygon",
+    drawMode,
+    closed,
+    smooth,
+    sampling,
     routeFit,
     cellStops: routeFit === "roads" ? normalizeMeasurementCellStops(item?.cellStops, sourcePoints, points) : [],
     createdAt: item?.createdAt || now,
     updatedAt: item?.updatedAt || item?.createdAt || now
   };
   const displayPoints = measurementDisplayPoints(normalized, map);
-  const distance = measurementDistance(displayPoints);
+  const distance = measurementDistance(displayPoints, {closed: normalized.closed});
   const area = normalized.closed && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
   normalized.summary = {
     pointCount: points.length,
     displayPointCount: displayPoints.length,
     routeStopCount: normalized.cellStops.filter(Boolean).length,
+    rawPointCount: normalized.sampling.rawPointCount,
     distanceMapUnits: roundMeasurementValue(distance),
     areaMapUnits: roundMeasurementValue(area)
   };
   return normalized;
 }
 
-function measurementTypeForPoints(points, item = {}, routeFit = item.routeFit) {
-  const normalizedRouteFit = normalizeMeasurementRouteFit(routeFit);
-  if (normalizedRouteFit === "roads") return "polyline";
-  if (item?.type === "point" || points.length === 1) return "point";
-  if (item?.type === "polyline") return "polyline";
-  if (item?.type === "polygon" || item?.closed) return "polygon";
-  return points.length >= 3 ? "polygon" : "polyline";
+export function normalizeMeasurementDrawMode(value, item = {}, points = [], routeFit = item?.routeFit) {
+  if (normalizeMeasurementRouteFit(routeFit) === "roads") return MEASUREMENT_DRAW_ROUTE;
+  const requested = String(value || "").trim().toLowerCase();
+  if (requested === MEASUREMENT_DRAW_CURVE) return MEASUREMENT_DRAW_CURVE;
+  if (requested === MEASUREMENT_DRAW_RULER) return MEASUREMENT_DRAW_RULER;
+  if (requested === MEASUREMENT_DRAW_AREA) return points.length >= 3 ? MEASUREMENT_DRAW_AREA : MEASUREMENT_DRAW_RULER;
+  if (requested === MEASUREMENT_DRAW_ROUTE) return MEASUREMENT_DRAW_RULER;
+  if (item?.type === "curve") return MEASUREMENT_DRAW_CURVE;
+  if (item?.type === "polygon" || item?.closed === true) return points.length >= 3 ? MEASUREMENT_DRAW_AREA : MEASUREMENT_DRAW_RULER;
+  return MEASUREMENT_DRAW_RULER;
+}
+
+export function normalizeMeasurementSampling(value, {drawMode = MEASUREMENT_DRAW_RULER, points = []} = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const continuous = drawMode === MEASUREMENT_DRAW_CURVE;
+  return {
+    mode: continuous ? "continuous" : "click",
+    minDistancePx: roundMeasurementValue(clampNumber(source.minDistancePx, 1, 32, 4)),
+    simplifyTolerance: roundMeasurementValue(clampNumber(source.simplifyTolerance, 0, Infinity, 0)),
+    rawPointCount: Math.max(points.length, Math.round(clampNumber(source.rawPointCount, 0, 1000000, points.length))),
+    segmentsPerSpan: Math.round(clampNumber(source.segmentsPerSpan, 2, 24, 6))
+  };
+}
+
+export function normalizeMeasurementClosed(item, points, drawMode, routeFit = item?.routeFit) {
+  if (normalizeMeasurementRouteFit(routeFit) === "roads" || points.length < 3) return false;
+  if (typeof item?.closed === "boolean") return item.closed;
+  return drawMode === MEASUREMENT_DRAW_AREA;
+}
+
+export function normalizeMeasurementSmooth(item, drawMode, routeFit = item?.routeFit) {
+  if (normalizeMeasurementRouteFit(routeFit) === "roads") return false;
+  if (typeof item?.smooth === "boolean") return item.smooth;
+  if (typeof item?.smoothClosed === "boolean") return item.smoothClosed;
+  return drawMode === MEASUREMENT_DRAW_CURVE;
 }
 
 export function measurementDisplayPoints(item, map = null) {
   const points = normalizeMeasurementPoints(item?.points, map);
-  if (normalizeMeasurementRouteFit(item?.routeFit) !== "roads") return points;
+  const routeFit = normalizeMeasurementRouteFit(item?.routeFit);
+  if (routeFit !== "roads") {
+    const drawMode = normalizeMeasurementDrawMode(item?.drawMode, item, points, routeFit);
+    const closed = normalizeMeasurementClosed(item, points, drawMode, routeFit);
+    const smooth = normalizeMeasurementSmooth(item, drawMode, routeFit);
+    const sampling = normalizeMeasurementSampling(item?.sampling, {drawMode, points});
+    return smooth && points.length >= 3
+      ? normalizeMeasurementPoints(sampleMeasurementCurve(points, {closed, segmentsPerSpan: sampling.segmentsPerSpan}), map)
+      : points;
+  }
   const cellStops = Array.isArray(item?.cellStops) ? item.cellStops : normalizeMeasurementCellStops([], item?.points, points);
   return expandRouteMeasurementPoints(map, points, cellStops);
 }
@@ -113,12 +164,17 @@ export function normalizeMeasurementCellStops(cellStops = [], sourcePoints = [],
   });
 }
 
-export function measurementDistance(points) {
+export function measurementDistance(points, {closed = false} = {}) {
   let total = 0;
   for (let index = 1; index < (points || []).length; index += 1) {
     const previous = points[index - 1];
     const current = points[index];
     total += Math.hypot(current.x - previous.x, current.y - previous.y);
+  }
+  if (closed && points?.length > 2) {
+    const first = points[0];
+    const last = points.at(-1);
+    total += Math.hypot(first.x - last.x, first.y - last.y);
   }
   return total;
 }
@@ -190,6 +246,17 @@ function integerOrNull(value) {
 function measurementNumericId(id) {
   const match = String(id || "").match(/(\d+)$/);
   return match ? Number(match[1]) || 0 : 0;
+}
+
+function measurementTypeForGeometry(points, {closed = false} = {}) {
+  if (points.length === 1) return "point";
+  return closed ? "polygon" : "polyline";
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
 }
 
 function clampFinite(value, min, max) {

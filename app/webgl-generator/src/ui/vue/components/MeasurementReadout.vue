@@ -2,6 +2,8 @@
   <div class="measurement-readout-controls">
     <strong>测量</strong>
     <UiButton id="measurement-route-fit" variant="secondary" aria-pressed="false">自由</UiButton>
+    <UiButton id="measurement-draw-mode" variant="secondary" aria-pressed="false">面积尺</UiButton>
+    <UiButton id="measurement-smooth-close" variant="secondary" aria-pressed="false">直线闭合</UiButton>
     <UiButton id="measurement-save">保存</UiButton>
     <UiButton id="measurement-objects">测量对象</UiButton>
     <UiButton id="measurement-export">导出</UiButton>

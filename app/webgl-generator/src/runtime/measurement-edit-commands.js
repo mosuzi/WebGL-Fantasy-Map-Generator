@@ -3,7 +3,6 @@ import {
   createMeasurementFromPoints,
   ensureMeasurementStore,
   findMeasurement,
-  normalizeMeasurementCellStops,
   normalizeMeasurementItem,
   normalizeMeasurementPoints,
   refreshMeasurementsMetadata,
@@ -20,7 +19,7 @@ const MEASUREMENT_EFFECTS = Object.freeze({
   derived: Object.freeze(["object-panels"])
 });
 
-export function createSaveMeasurementCommand(points, {name = "", routeFit = "none", label = "保存测量对象"} = {}) {
+export function createSaveMeasurementCommand(points, {name = "", routeFit = "none", drawMode, closed, smooth, sampling, label = "保存测量对象"} = {}) {
   let previous = null;
   let created = null;
 
@@ -33,7 +32,7 @@ export function createSaveMeasurementCommand(points, {name = "", routeFit = "non
     },
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
-      created ??= createMeasurementFromPoints(context.map, points, {name, routeFit});
+      created ??= createMeasurementFromPoints(context.map, points, {name, routeFit, drawMode, closed, smooth, sampling});
       const store = ensureMeasurementStore(context.map);
       store.items.push(JSON.parse(JSON.stringify(created)));
       refreshMeasurementsMetadata(store);
@@ -85,7 +84,7 @@ export function createRenameMeasurementCommand(measurementId, name, {label = "�
   };
 }
 
-export function createUpdateMeasurementPointsCommand(measurementId, points, {routeFit = null, label = "更新测量对象"} = {}) {
+export function createUpdateMeasurementPointsCommand(measurementId, points, {routeFit = null, drawMode = null, closed = null, smooth = null, sampling = null, label = "更新测量对象"} = {}) {
   let previous = null;
 
   return {
@@ -98,13 +97,13 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
     apply(context) {
       previous ??= cloneMeasurementStore(ensureMeasurementStore(context.map));
       const item = readMeasurement(context.map, measurementId);
-      const normalizedPoints = normalizeMeasurementPoints(points, context.map);
       const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
-      const type = measurementTypeForPoints(normalizedPoints, item, nextRouteFit);
       Object.assign(item, normalizeMeasurementItem({
         ...item,
-        type,
-        closed: type === "polygon",
+        drawMode: drawMode === null ? item.drawMode : drawMode,
+        closed: closed === null ? item.closed : Boolean(closed),
+        smooth: smooth === null ? item.smooth : Boolean(smooth),
+        sampling: sampling === null ? item.sampling : sampling,
         routeFit: nextRouteFit,
         points,
         updatedAt: new Date().toISOString()
@@ -119,9 +118,25 @@ export function createUpdateMeasurementPointsCommand(measurementId, points, {rou
       if (!item) return true;
       const normalizedPoints = normalizeMeasurementPoints(points, context.map);
       const nextRouteFit = routeFit === null ? item.routeFit : normalizeMeasurementRouteFit(routeFit);
-      const normalizedCellStops = nextRouteFit === "roads" ? normalizeMeasurementCellStops([], points, normalizedPoints) : [];
+      const candidate = normalizeMeasurementItem({
+        ...item,
+        drawMode: drawMode === null ? item.drawMode : drawMode,
+        closed: closed === null ? item.closed : Boolean(closed),
+        smooth: smooth === null ? item.smooth : Boolean(smooth),
+        sampling: sampling === null ? item.sampling : sampling,
+        routeFit: nextRouteFit,
+        points
+      }, context.map);
       return normalizedPoints.length < 1
-        || (sameMeasurementPoints(item.points, normalizedPoints) && item.routeFit === nextRouteFit && sameMeasurementCellStops(item.cellStops, normalizedCellStops));
+        || (
+          sameMeasurementPoints(item.points, candidate.points) &&
+          item.routeFit === candidate.routeFit &&
+          item.drawMode === candidate.drawMode &&
+          item.closed === candidate.closed &&
+          item.smooth === candidate.smooth &&
+          JSON.stringify(item.sampling || null) === JSON.stringify(candidate.sampling || null) &&
+          sameMeasurementCellStops(item.cellStops, candidate.cellStops)
+        );
     }
   };
 }
@@ -215,15 +230,6 @@ function sameMeasurementPoints(a = [], b = []) {
 function sameMeasurementCellStops(a = [], b = []) {
   if ((a || []).length !== (b || []).length) return false;
   return (a || []).every((stop, index) => JSON.stringify(stop || null) === JSON.stringify(b[index] || null));
-}
-
-function measurementTypeForPoints(points, item = {}, routeFit = item.routeFit) {
-  const normalizedRouteFit = normalizeMeasurementRouteFit(routeFit);
-  if (normalizedRouteFit === "roads") return "polyline";
-  if (item?.type === "point" || points.length === 1) return "point";
-  if (item?.type === "polyline") return "polyline";
-  if (item?.type === "polygon" || item?.closed) return "polygon";
-  return points.length >= 3 ? "polygon" : "polyline";
 }
 
 function nextAvailableImportedMeasurementId(store) {

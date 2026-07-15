@@ -57,6 +57,10 @@
 <script setup>
 import {computed, nextTick, ref, watch} from "vue";
 import {
+  MEASUREMENT_DRAW_AREA,
+  MEASUREMENT_DRAW_CURVE,
+  MEASUREMENT_DRAW_ROUTE,
+  MEASUREMENT_DRAW_RULER,
   measurementArea,
   measurementBounds,
   measurementDisplayPoints,
@@ -153,7 +157,10 @@ const detailRows = computed(() => selected.value ? [
   {label: "名称", value: selected.value.name},
   {label: "类型", value: selected.value.typeLabel},
   {label: "模式", value: selected.value.routeFitLabel},
+  {label: "闭合", value: selected.value.closureLabel},
+  {label: "采样", value: selected.value.samplingLabel},
   {label: "点数", value: formatNumber(selected.value.pointCount)},
+  {label: "原始采样", value: formatNumber(selected.value.rawPointCount), debug: true},
   {label: "显示点", value: formatNumber(selected.value.displayPointCount), debug: true},
   {label: "路线点", value: formatNumber(selected.value.routeStopCount), debug: true},
   {label: "长度", value: formatDistanceValue(selected.value.distance)},
@@ -178,21 +185,26 @@ function measurementRows(map) {
     .map(item => {
       const points = Array.isArray(item.points) ? item.points : [];
       const routeFit = normalizeMeasurementRouteFit(item.routeFit);
+      const drawMode = routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? MEASUREMENT_DRAW_ROUTE : item.drawMode || (item.closed ? MEASUREMENT_DRAW_AREA : MEASUREMENT_DRAW_RULER);
       const displayPoints = measurementDisplayPoints(item, map);
-      const distance = Number(item.summary?.distanceMapUnits) || measurementDistance(displayPoints);
-      const area = Number(item.summary?.areaMapUnits) || (routeFit !== MEASUREMENT_ROUTE_FIT_ROADS && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0);
+      const distance = Number(item.summary?.distanceMapUnits) || measurementDistance(displayPoints, {closed: Boolean(item.closed)});
+      const area = Number(item.summary?.areaMapUnits) || (item.closed && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0);
       const cellStops = Array.isArray(item.cellStops) ? item.cellStops : [];
       const bounds = measurementBounds(item, 0, map);
       return {
         id: String(item.id),
         name: item.name || item.id,
         type: item.type || (item.closed ? "polygon" : "polyline"),
-        typeLabel: item.type === "point" ? "点" : item.closed || item.type === "polygon" ? "面积" : "折线",
+        drawMode,
+        typeLabel: measurementDrawModeLabel(drawMode, item.type),
         routeFit,
         routeFitLabel: routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? "贴路" : "自由",
+        closureLabel: item.closed ? item.smooth ? "平滑闭合" : "直线闭合" : "开放",
+        samplingLabel: item.sampling?.mode === "continuous" ? "连续" : "点击",
         cellStops,
         routeStopCount: cellStops.filter(Boolean).length,
         pointCount: points.length,
+        rawPointCount: Number(item.summary?.rawPointCount || item.sampling?.rawPointCount) || points.length,
         displayPointCount: displayPoints.length,
         distance,
         area,
@@ -230,6 +242,14 @@ function formatBounds(bounds) {
   const width = Math.max(0, bounds.maxX - bounds.minX);
   const height = Math.max(0, bounds.maxY - bounds.minY);
   return `${formatNumber(width)} x ${formatNumber(height)}`;
+}
+
+function measurementDrawModeLabel(drawMode, type) {
+  if (type === "point") return "点";
+  if (drawMode === MEASUREMENT_DRAW_ROUTE) return "路线";
+  if (drawMode === MEASUREMENT_DRAW_CURVE) return "曲线";
+  if (drawMode === MEASUREMENT_DRAW_AREA) return "面积";
+  return "折线";
 }
 
 function formatDateTime(value) {

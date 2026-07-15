@@ -88,6 +88,9 @@ try {
       bytes: exported.bytes,
       measurementCount: exported.documentMeasurementCount,
       routeFitValues: exported.documentRouteFitValues,
+      drawModes: exported.documentDrawModes,
+      closedValues: exported.documentClosedValues,
+      smoothValues: exported.documentSmoothValues,
       routeStopCounts: exported.documentRouteStopCounts,
       documentRouteDisplayPointCounts: exported.documentRouteDisplayPointCounts
     },
@@ -106,30 +109,33 @@ try {
 }
 
 async function generateMap(page, {cells, seed, template, graphWidth, graphHeight}) {
-  await page.waitForSelector("#cells-input", {state: "attached", timeout: timeoutMs});
-  const startedAt = await page.evaluate(({cells, seed, template, graphWidth, graphHeight}) => {
-    window.__measurementImportPreviousMap = window.__webglGeneratorApp?.map || null;
-    document.getElementById("auto-random-seed").checked = false;
-    document.getElementById("seed-input").value = seed;
-    document.getElementById("cells-input").value = String(cells);
-    document.getElementById("width-input").value = String(graphWidth);
-    document.getElementById("height-input").value = String(graphHeight);
-    document.getElementById("heightmap-template").value = template;
+  await page.waitForFunction(() => window.webglGeneratorApi?.generate?.newMap, null, {timeout: timeoutMs});
+  await page.waitForFunction(() => {
+    const ready = window.webglGeneratorApi?.info?.mapSummary?.()?.data?.ready === true;
+    const loading = document.getElementById("generation-loading");
+    return ready && loading?.hidden === true;
+  }, null, {timeout: timeoutMs});
+  const startedAt = await page.evaluate(async ({cells, seed, template, graphWidth, graphHeight}) => {
     const started = performance.now();
-    document.getElementById("generate-map").click();
+    const result = await window.webglGeneratorApi.generate.newMap({
+      confirm: true,
+      seed,
+      cellsTarget: cells,
+      graphWidth,
+      graphHeight,
+      heightmapTemplate: template
+    });
+    if (!result?.ok) throw new Error(result?.error?.message || "API 生成地图失败");
     return started;
   }, {cells, seed, template, graphWidth, graphHeight});
 
   await page.waitForFunction(
     expected => {
       const app = window.__webglGeneratorApp;
-      const loading = document.getElementById("generation-loading");
       return app?.map &&
-        app.map !== window.__measurementImportPreviousMap &&
         app.map.metadata?.seed === expected.seed &&
         app.map.metadata?.cellsTarget === expected.cells &&
-        app.renderer?.getStats?.()?.draw?.glError === 0 &&
-        loading?.hidden === true;
+        app.renderer?.getStats?.()?.draw?.glError === 0;
     },
     {cells, seed},
     {timeout: timeoutMs}
@@ -168,6 +174,20 @@ async function createMeasurementFixtures(page) {
   await page.locator("#measurement-save").click();
   await page.waitForFunction(() => window.__webglGeneratorApp?.map?.measurements?.items?.filter(item => item.points?.length >= 2).length >= 2, null, {timeout: timeoutMs});
 
+  await page.locator("#measurement-draw-mode").click();
+  await page.locator("#measurement-draw-mode").click();
+  await page.waitForFunction(() => document.getElementById("measurement-draw-mode")?.textContent?.includes("曲线尺"), null, {timeout: timeoutMs});
+  const curveTargets = await pickCurveTargets(page);
+  await page.mouse.move(curveTargets[0].clientX, curveTargets[0].clientY);
+  await page.mouse.down();
+  for (const target of curveTargets.slice(1)) await page.mouse.move(target.clientX, target.clientY, {steps: 5});
+  await page.mouse.up();
+  await page.waitForFunction(() => document.getElementById("measurement-summary")?.textContent?.includes("连续采样"), null, {timeout: timeoutMs});
+  await page.locator("#measurement-smooth-close").click();
+  await page.waitForFunction(() => document.getElementById("measurement-smooth-close")?.textContent?.includes("平滑闭合"), null, {timeout: timeoutMs});
+  await page.locator("#measurement-save").click();
+  await page.waitForFunction(() => window.__webglGeneratorApp?.map?.measurements?.items?.some(item => item.drawMode === "curve" && item.closed && item.smooth), null, {timeout: timeoutMs});
+
   return page.evaluate(() => {
     const app = window.__webglGeneratorApp;
     const items = app.map.measurements.items.map(item => ({
@@ -175,6 +195,10 @@ async function createMeasurementFixtures(page) {
       name: item.name,
       type: item.type,
       routeFit: item.routeFit,
+      drawMode: item.drawMode,
+      closed: item.closed,
+      smooth: item.smooth,
+      sampling: item.sampling,
       cellStops: item.cellStops || [],
       routeStopCount: (item.cellStops || []).filter(Boolean).length,
       displayPointCount: item.summary?.displayPointCount || item.points.length,
@@ -237,6 +261,25 @@ async function pickFreeTargets(page) {
   });
 }
 
+async function pickCurveTargets(page) {
+  return page.evaluate(() => {
+    const canvas = document.getElementById("map-canvas");
+    const rect = canvas.getBoundingClientRect();
+    const ratios = [
+      [0.18, 0.46],
+      [0.27, 0.36],
+      [0.37, 0.52],
+      [0.47, 0.32],
+      [0.57, 0.48]
+    ];
+    const targets = ratios.map(([x, y]) => ({clientX: rect.left + rect.width * x, clientY: rect.top + rect.height * y}));
+    if (targets.some(target => document.elementFromPoint(target.clientX, target.clientY)?.id !== "map-canvas")) {
+      throw new Error("连续曲线采样路径被其他界面元素遮挡");
+    }
+    return targets;
+  });
+}
+
 async function exportFullMap(page) {
   const downloadPromise = page.waitForEvent("download", {timeout: timeoutMs});
   await page.evaluate(() => {
@@ -255,6 +298,9 @@ async function exportFullMap(page) {
     bytes: Buffer.byteLength(text),
     documentMeasurementCount: document.map?.measurements?.items?.length || 0,
     documentRouteFitValues: (document.map?.measurements?.items || []).map(item => item.routeFit || "none"),
+    documentDrawModes: (document.map?.measurements?.items || []).map(item => item.drawMode || "legacy"),
+    documentClosedValues: (document.map?.measurements?.items || []).map(item => Boolean(item.closed)),
+    documentSmoothValues: (document.map?.measurements?.items || []).map(item => Boolean(item.smooth)),
     documentRouteStopCounts: (document.map?.measurements?.items || []).map(item => (item.cellStops || []).filter(Boolean).length),
     documentRouteDisplayPointCounts: (document.map?.measurements?.items || []).map(item => item.summary?.displayPointCount || item.points?.length || 0)
   };
@@ -282,14 +328,19 @@ async function importFullMap(page, filePath, before) {
   });
   await page.waitForFunction(() => document.querySelector(".measurement-panel-details")?.textContent?.includes("模式"), null, {timeout: timeoutMs});
   const located = await locateFirstMeasurement(page);
+  const interaction = await verifyMeasurementInteractions(page);
 
-  return page.evaluate(before => {
+  return page.evaluate(({before, interaction}) => {
     const app = window.__webglGeneratorApp;
     const items = app.map.measurements.items.map(item => ({
       id: item.id,
       name: item.name,
       type: item.type,
       routeFit: item.routeFit,
+      drawMode: item.drawMode,
+      closed: item.closed,
+      smooth: item.smooth,
+      sampling: item.sampling,
       cellStops: item.cellStops || [],
       routeStopCount: (item.cellStops || []).filter(Boolean).length,
       displayPointCount: item.summary?.displayPointCount || item.points.length,
@@ -304,6 +355,10 @@ async function importFullMap(page, filePath, before) {
       const actual = items[index];
       if (!actual) continue;
       if (actual.routeFit !== expected.routeFit) failures.push(`${actual.id} routeFit ${actual.routeFit} != ${expected.routeFit}`);
+      if (actual.drawMode !== expected.drawMode) failures.push(`${actual.id} drawMode ${actual.drawMode} != ${expected.drawMode}`);
+      if (actual.closed !== expected.closed) failures.push(`${actual.id} closed ${actual.closed} != ${expected.closed}`);
+      if (actual.smooth !== expected.smooth) failures.push(`${actual.id} smooth ${actual.smooth} != ${expected.smooth}`);
+      if (JSON.stringify(actual.sampling) !== JSON.stringify(expected.sampling)) failures.push(`${actual.id} sampling 不一致`);
       if (actual.pointCount !== expected.pointCount) failures.push(`${actual.id} pointCount ${actual.pointCount} != ${expected.pointCount}`);
       if (!samePoints(actual.points, expected.points)) failures.push(`${actual.id} 点列不一致`);
       if (!sameStops(actual.cellStops, expected.cellStops)) failures.push(`${actual.id} cellStops 不一致`);
@@ -312,8 +367,12 @@ async function importFullMap(page, filePath, before) {
     if (!routeItem || routeItem.routeStopCount !== routeItem.pointCount) failures.push(`贴路测量路线点数量异常：${routeItem?.routeStopCount ?? "none"} / ${routeItem?.pointCount ?? "none"}`);
     if (routeItem && routeItem.type !== "polyline") failures.push(`贴路测量类型异常：${routeItem.type}`);
     if (routeItem && routeItem.displayPointCount <= routeItem.pointCount) failures.push(`贴路测量未沿路线补点：${routeItem.displayPointCount} / ${routeItem.pointCount}`);
-    const freeItem = items.find(item => item.routeFit === "none");
+    const freeItem = items.find(item => item.drawMode === "ruler");
     if (!freeItem || freeItem.routeStopCount !== 0) failures.push(`自由测量不应包含路线点：${freeItem?.routeStopCount ?? "none"}`);
+    const curveItem = items.find(item => item.drawMode === "curve");
+    if (!curveItem || !curveItem.closed || !curveItem.smooth) failures.push("平滑闭合曲线尺参数未完整往返");
+    if (curveItem && curveItem.displayPointCount <= curveItem.pointCount) failures.push(`平滑曲线未生成插值点：${curveItem.displayPointCount} / ${curveItem.pointCount}`);
+    if (curveItem && !(curveItem.sampling?.rawPointCount > curveItem.pointCount)) failures.push(`连续采样未记录简化前点数：${curveItem.sampling?.rawPointCount ?? "none"} / ${curveItem.pointCount}`);
     const overlayPaths = document.querySelectorAll(".measurement-object-path").length;
     if (overlayPaths < before.items.length) failures.push(`测量 overlay 路径 ${overlayPaths} < ${before.items.length}`);
     const overlayPathPointCounts = [...document.querySelectorAll(".measurement-object-path")]
@@ -321,6 +380,8 @@ async function importFullMap(page, filePath, before) {
     if (routeItem && !overlayPathPointCounts.some(count => count > routeItem.pointCount)) failures.push(`贴路 overlay 未显示补点路径：${overlayPathPointCounts.join(" / ")}`);
     const routeFitValues = new Set(items.map(item => item.routeFit));
     if (!routeFitValues.has("roads") || !routeFitValues.has("none")) failures.push(`导入后测量模式不完整：${[...routeFitValues].join(" / ")}`);
+    const drawModes = new Set(items.map(item => item.drawMode));
+    if (!["route", "ruler", "curve"].every(mode => drawModes.has(mode))) failures.push(`导入后尺型不完整：${[...drawModes].join(" / ")}`);
     const panelText = document.querySelector('[data-panel-id="measurement-panel"]')?.textContent || "";
     if (!panelText.includes("模式") || !panelText.includes("贴路")) failures.push("测量面板未显示模式字段或贴路状态");
     const located = window.__measurementLocateRegression || {};
@@ -328,6 +389,8 @@ async function importFullMap(page, filePath, before) {
     if (!located.selectionExists) failures.push(`定位后 selection id 未匹配测量对象：${located.selectionId || "none"}`);
     if (located.selectedRows !== 1) failures.push(`定位后测量面板选中行数量异常：${located.selectedRows ?? "none"}`);
     if (located.objectDetailsOpen) failures.push("测量定位不应打开通用对象详情面板");
+    if (!interaction.updateExecuted || !interaction.undoRestored || !interaction.redoRestored || !interaction.finalUndoRestored) failures.push("测量编辑撤销重做链路不完整");
+    if (!interaction.layerHidden || !interaction.layerRestored) failures.push("测量图层显隐未保持 overlay 一致");
     const glError = app.renderer.getStats().draw?.glError || 0;
     if (glError) failures.push(`WebGL error ${glError}`);
     return {
@@ -336,6 +399,7 @@ async function importFullMap(page, filePath, before) {
       overlayPaths,
       overlayPathPointCounts,
       located,
+      interaction,
       glError,
       failures,
       passed: failures.length === 0
@@ -350,7 +414,65 @@ async function importFullMap(page, filePath, before) {
       if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
       return a.every((stop, index) => JSON.stringify(stop || null) === JSON.stringify(b[index] || null));
     }
-  }, before);
+  }, {before, interaction});
+}
+
+async function verifyMeasurementInteractions(page) {
+  const fixture = await page.evaluate(() => {
+    const item = window.__webglGeneratorApp.map.measurements.items.find(candidate => candidate.drawMode === "curve");
+    if (!item) throw new Error("导入后找不到曲线尺");
+    const originalPoints = item.points.map(point => ({x: point.x, y: point.y}));
+    const changedPoints = originalPoints.map((point, index) => index === 0 ? {x: point.x + 3, y: point.y + 2} : point);
+    const options = {
+      name: item.name,
+      routeFit: item.routeFit,
+      drawMode: item.drawMode,
+      closed: item.closed,
+      smooth: item.smooth,
+      sampling: item.sampling,
+      cellStops: item.cellStops
+    };
+    const result = window.webglGeneratorApi.edit.measurements.updatePoints(item.id, changedPoints, options);
+    return {id: item.id, originalPoints, changedPoints, updateExecuted: Boolean(result?.ok && result.data?.executed !== false)};
+  });
+  await page.waitForFunction(({id, x, y}) => {
+    const point = window.__webglGeneratorApp.map.measurements.items.find(item => item.id === id)?.points?.[0];
+    return point && Math.abs(point.x - x) < 0.001 && Math.abs(point.y - y) < 0.001;
+  }, {id: fixture.id, ...fixture.changedPoints[0]}, {timeout: timeoutMs});
+
+  const undo = await page.evaluate(() => window.webglGeneratorApi.history.undo());
+  await waitForMeasurementPoint(page, fixture.id, fixture.originalPoints[0]);
+  const redo = await page.evaluate(() => window.webglGeneratorApi.history.redo());
+  await waitForMeasurementPoint(page, fixture.id, fixture.changedPoints[0]);
+  const finalUndo = await page.evaluate(() => window.webglGeneratorApi.history.undo());
+  await waitForMeasurementPoint(page, fixture.id, fixture.originalPoints[0]);
+
+  const visibleCount = await page.locator(".measurement-object-path").count();
+  const hide = await page.evaluate(() => window.webglGeneratorApi.layers.setVisible("measurements", false));
+  await page.waitForFunction(() => document.querySelectorAll(".measurement-object-path").length === 0, null, {timeout: timeoutMs});
+  const hiddenCount = await page.locator(".measurement-object-path").count();
+  const show = await page.evaluate(() => window.webglGeneratorApi.layers.setVisible("measurements", true));
+  await page.waitForFunction(expected => document.querySelectorAll(".measurement-object-path").length === expected, visibleCount, {timeout: timeoutMs});
+  const restoredCount = await page.locator(".measurement-object-path").count();
+
+  return {
+    updateExecuted: fixture.updateExecuted,
+    undoRestored: Boolean(undo?.ok),
+    redoRestored: Boolean(redo?.ok),
+    finalUndoRestored: Boolean(finalUndo?.ok),
+    layerHidden: Boolean(hide?.ok && hiddenCount === 0),
+    layerRestored: Boolean(show?.ok && restoredCount === visibleCount),
+    visibleCount,
+    hiddenCount,
+    restoredCount
+  };
+}
+
+async function waitForMeasurementPoint(page, id, expected) {
+  await page.waitForFunction(({id, x, y}) => {
+    const point = window.__webglGeneratorApp.map.measurements.items.find(item => item.id === id)?.points?.[0];
+    return point && Math.abs(point.x - x) < 0.001 && Math.abs(point.y - y) < 0.001;
+  }, {id, x: expected.x, y: expected.y}, {timeout: timeoutMs});
 }
 
 async function locateFirstMeasurement(page) {
@@ -408,6 +530,9 @@ function renderMarkdown(report) {
   lines.push(`- 导出文件：${report.exported.suggestedFilename}，${report.exported.bytes} bytes`);
   lines.push(`- 导出测量对象：${report.exported.measurementCount}`);
   lines.push(`- 导出 routeFit：${report.exported.routeFitValues.join(" / ") || "none"}`);
+  lines.push(`- 导出尺型：${report.exported.drawModes.join(" / ") || "none"}`);
+  lines.push(`- 导出闭合：${report.exported.closedValues.join(" / ") || "none"}`);
+  lines.push(`- 导出平滑：${report.exported.smoothValues.join(" / ") || "none"}`);
   lines.push(`- 导出路线点：${report.exported.routeStopCounts.join(" / ") || "none"}`);
   lines.push(`- 导出显示点：${report.exported.documentRouteDisplayPointCounts.join(" / ") || "none"}`);
   lines.push(`- 导入后 overlay 路径：${report.imported.overlayPaths}`);
@@ -415,6 +540,8 @@ function renderMarkdown(report) {
   lines.push(`- 定位后 selection：${report.imported.located.selectionKind || "none"} / ${report.imported.located.selectionId || "none"}`);
   lines.push(`- 定位后测量选中行：${report.imported.located.selectedRows ?? "none"}`);
   lines.push(`- 定位后对象详情面板：${report.imported.located.objectDetailsOpen ? "打开" : "关闭"}`);
+  lines.push(`- 编辑撤销重做：${report.imported.interaction.updateExecuted && report.imported.interaction.undoRestored && report.imported.interaction.redoRestored && report.imported.interaction.finalUndoRestored ? "通过" : "失败"}`);
+  lines.push(`- 图层显隐：${report.imported.interaction.layerHidden && report.imported.interaction.layerRestored ? "通过" : "失败"}`);
   lines.push(`- WebGL error：${report.imported.glError}`);
   lines.push("");
   lines.push("## 性能", "");

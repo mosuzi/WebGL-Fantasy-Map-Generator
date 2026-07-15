@@ -67,7 +67,20 @@ import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomL
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {measurementHighlightObject, measurementShapeClass} from "./measurement-highlights.js";
-import {ensureMeasurementStore, findMeasurement, measurementArea, measurementBounds, measurementDisplayPoints, measurementDistance, normalizeMeasurementCellStops} from "./measurement-objects.js";
+import {
+  ensureMeasurementStore,
+  findMeasurement,
+  MEASUREMENT_DRAW_AREA,
+  MEASUREMENT_DRAW_CURVE,
+  MEASUREMENT_DRAW_ROUTE,
+  MEASUREMENT_DRAW_RULER,
+  measurementArea,
+  measurementBounds,
+  measurementDisplayPoints,
+  measurementDistance,
+  normalizeMeasurementCellStops
+} from "./measurement-objects.js";
+import {simplifyMeasurementPoints} from "./measurement-geometry.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
 import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMirrors} from "./military-regeneration-variation.js";
@@ -278,6 +291,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       pointer: null,
       drag: null,
       routeFit: MEASUREMENT_ROUTE_FIT_NONE,
+      drawMode: MEASUREMENT_DRAW_AREA,
+      closed: true,
+      smooth: false,
+      sampling: {mode: "click", minDistancePx: 4, simplifyTolerance: 0, rawPointCount: 0, segmentsPerSpan: 6},
       notice: "",
       editingMeasurementId: null
     },
@@ -5535,6 +5552,10 @@ function saveMeasurementViaApi(state, documentRef, points, options = {}) {
   const command = createSaveMeasurementCommand(points, {
     name: payload.name,
     routeFit: payload.routeFit,
+    drawMode: payload.drawMode,
+    closed: payload.closed,
+    smooth: payload.smooth,
+    sampling: payload.sampling,
     label: payload.label || "保存测量对象"
   });
   const result = executeEditCommand(state, documentRef, command, {
@@ -5574,6 +5595,10 @@ function updateMeasurementPointsViaApi(state, documentRef, measurementId, points
   const payload = normalizeApiMeasurementOptions(options, {defaultRouteFit: null});
   const command = createUpdateMeasurementPointsCommand(id, points, {
     routeFit: payload.routeFit,
+    drawMode: payload.drawMode,
+    closed: payload.closed,
+    smooth: payload.smooth,
+    sampling: payload.sampling,
     label: payload.label || `更新测量对象 ${id}`
   });
   const result = executeEditCommand(state, documentRef, command, {
@@ -5623,13 +5648,32 @@ function importMeasurementsViaApi(state, documentRef, input) {
 }
 
 function normalizeApiMeasurementOptions(options = {}, {defaultRouteFit = MEASUREMENT_ROUTE_FIT_NONE} = {}) {
-  if (options === null || options === undefined) return {name: "", routeFit: defaultRouteFit, label: ""};
+  const preserve = defaultRouteFit === null;
+  if (options === null || options === undefined) return {name: "", routeFit: defaultRouteFit, drawMode: preserve ? null : undefined, closed: preserve ? null : undefined, smooth: preserve ? null : undefined, sampling: preserve ? null : undefined, label: ""};
   if (typeof options !== "object") throw new Error("测量对象选项必须是对象");
+  const drawMode = options.drawMode === undefined
+    ? preserve ? null : undefined
+    : normalizeApiMeasurementDrawMode(options.drawMode);
   return {
     name: typeof options.name === "string" ? options.name.trim() : "",
     routeFit: options.routeFit === undefined ? defaultRouteFit : normalizeMeasurementRouteFit(options.routeFit),
+    drawMode,
+    closed: options.closed === undefined ? preserve ? null : undefined : Boolean(options.closed),
+    smooth: options.smooth === undefined ? preserve ? null : undefined : Boolean(options.smooth),
+    sampling: options.sampling === undefined ? preserve ? null : undefined : normalizeApiMeasurementSampling(options.sampling),
     label: typeof options.label === "string" ? options.label.trim() : ""
   };
+}
+
+function normalizeApiMeasurementDrawMode(value) {
+  const mode = String(value || "").trim().toLowerCase();
+  if ([MEASUREMENT_DRAW_RULER, MEASUREMENT_DRAW_CURVE, MEASUREMENT_DRAW_ROUTE, MEASUREMENT_DRAW_AREA].includes(mode)) return mode;
+  throw new Error("测量 drawMode 必须是 ruler、curve、route 或 area");
+}
+
+function normalizeApiMeasurementSampling(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("测量 sampling 必须是对象");
+  return {...value};
 }
 
 function setObjectNoteViaApi(state, documentRef, object, body, options = {}) {
@@ -7844,6 +7888,8 @@ function bindMeasurementTool(canvas, state, documentRef) {
   const saveButton = documentRef.getElementById("measurement-save");
   const objectsButton = documentRef.getElementById("measurement-objects");
   const routeFitButton = documentRef.getElementById("measurement-route-fit");
+  const drawModeButton = documentRef.getElementById("measurement-draw-mode");
+  const smoothCloseButton = documentRef.getElementById("measurement-smooth-close");
   toggle?.addEventListener("click", () => {
     if (state.measurement.active) stopMeasurementMode(state, documentRef);
     else startMeasurementMode(state, documentRef, {status: ""});
@@ -7852,6 +7898,7 @@ function bindMeasurementTool(canvas, state, documentRef) {
     cancelMeasurementDrag(state, documentRef);
     state.measurement.points = [];
     state.measurement.editingMeasurementId = null;
+    state.measurement.sampling = {...state.measurement.sampling, rawPointCount: 0};
     state.measurement.notice = "";
     updateMeasurementOverlay(state, documentRef);
   });
@@ -7861,6 +7908,30 @@ function bindMeasurementTool(canvas, state, documentRef) {
   objectsButton?.addEventListener("click", () => state.panels.measurement?.open(state.map, state.editHistory.getStats()));
   routeFitButton?.addEventListener("click", () => {
     state.measurement.routeFit = measurementRouteFitActive(state) ? MEASUREMENT_ROUTE_FIT_NONE : MEASUREMENT_ROUTE_FIT_ROADS;
+    state.measurement.sampling = {...state.measurement.sampling, mode: measurementRouteFitActive(state) ? "click" : state.measurement.drawMode === MEASUREMENT_DRAW_CURVE ? "continuous" : "click", rawPointCount: 0};
+    state.measurement.notice = "";
+    updateMeasurementOverlay(state, documentRef);
+  });
+  drawModeButton?.addEventListener("click", () => {
+    if (measurementRouteFitActive(state)) return;
+    const modes = [MEASUREMENT_DRAW_AREA, MEASUREMENT_DRAW_RULER, MEASUREMENT_DRAW_CURVE];
+    const current = modes.indexOf(state.measurement.drawMode);
+    state.measurement.drawMode = modes[(current + 1) % modes.length];
+    state.measurement.closed = state.measurement.drawMode === MEASUREMENT_DRAW_AREA;
+    state.measurement.smooth = state.measurement.drawMode === MEASUREMENT_DRAW_CURVE;
+    state.measurement.sampling = {...state.measurement.sampling, mode: state.measurement.drawMode === MEASUREMENT_DRAW_CURVE ? "continuous" : "click", rawPointCount: 0};
+    state.measurement.notice = "";
+    updateMeasurementOverlay(state, documentRef);
+  });
+  smoothCloseButton?.addEventListener("click", () => {
+    if (measurementRouteFitActive(state) || state.measurement.drawMode === MEASUREMENT_DRAW_RULER) return;
+    if (state.measurement.drawMode === MEASUREMENT_DRAW_CURVE) {
+      state.measurement.closed = !state.measurement.closed;
+      state.measurement.smooth = true;
+    } else {
+      state.measurement.closed = true;
+      state.measurement.smooth = !state.measurement.smooth;
+    }
     state.measurement.notice = "";
     updateMeasurementOverlay(state, documentRef);
   });
@@ -7869,18 +7940,49 @@ function bindMeasurementTool(canvas, state, documentRef) {
     if (!state.measurement.active || event.button !== 0) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    const continuous = measurementContinuousSamplingActive(state);
+    const measurementPoint = continuous ? measurementPointFromPointer(state, documentRef, event) : null;
+    if (continuous && !measurementPoint) return;
+    const sampling = state.measurement.sampling || {};
     state.measurement.pointer = {
       id: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      moved: false
+      lastX: event.clientX,
+      lastY: event.clientY,
+      moved: false,
+      continuous,
+      strokeStartIndex: state.measurement.points.length,
+      rawPointCount: continuous ? 1 : 0,
+      simplifyTolerance: continuous ? measurementPixelDistanceInWorld(state, event, 2) : 0,
+      minDistancePx: Math.max(1, Number(sampling.minDistancePx) || 4)
     };
+    if (measurementPoint) {
+      state.measurement.points.push(measurementPoint);
+      updateMeasurementOverlay(state, documentRef);
+    }
     capturePointer(canvas, event.pointerId);
   }, true);
 
   canvas.addEventListener("pointermove", event => {
     const pointer = state.measurement.pointer;
     if (!state.measurement.active || !pointer || pointer.id !== event.pointerId) return;
+    if (pointer.continuous) {
+      if (Math.hypot(event.clientX - pointer.lastX, event.clientY - pointer.lastY) >= pointer.minDistancePx) {
+        const point = measurementPointFromPointer(state, documentRef, event);
+        if (point) {
+          state.measurement.points.push(point);
+          pointer.lastX = event.clientX;
+          pointer.lastY = event.clientY;
+          pointer.rawPointCount++;
+          pointer.moved = true;
+          updateMeasurementOverlay(state, documentRef);
+        }
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 4) pointer.moved = true;
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -7893,6 +7995,10 @@ function bindMeasurementTool(canvas, state, documentRef) {
     event.stopImmediatePropagation();
     state.measurement.pointer = null;
     releasePointer(canvas, event.pointerId);
+    if (pointer.continuous) {
+      finishContinuousMeasurementStroke(state, pointer, event, documentRef);
+      return;
+    }
     if (pointer.moved || !state.map || !state.renderer) return;
     const measurementPoint = measurementPointFromPointer(state, documentRef, event);
     if (!measurementPoint) {
@@ -7909,9 +8015,46 @@ function bindMeasurementTool(canvas, state, documentRef) {
   canvas.addEventListener("pointercancel", event => {
     const pointer = state.measurement.pointer;
     if (!pointer || pointer.id !== event.pointerId) return;
+    if (pointer.continuous) state.measurement.points.splice(pointer.strokeStartIndex);
     state.measurement.pointer = null;
     releasePointer(canvas, event.pointerId);
+    updateMeasurementOverlay(state, documentRef);
   }, true);
+}
+
+function measurementContinuousSamplingActive(state) {
+  return !measurementRouteFitActive(state) && state.measurement.drawMode === MEASUREMENT_DRAW_CURVE;
+}
+
+function finishContinuousMeasurementStroke(state, pointer, event, documentRef) {
+  if (Math.hypot(event.clientX - pointer.lastX, event.clientY - pointer.lastY) >= 1) {
+    const point = measurementPointFromPointer(state, documentRef, event);
+    if (point) {
+      state.measurement.points.push(point);
+      pointer.rawPointCount++;
+    }
+  }
+  const start = pointer.strokeStartIndex;
+  const rawPoints = state.measurement.points.slice(start);
+  const simplified = simplifyMeasurementPoints(rawPoints, pointer.simplifyTolerance, {closed: false});
+  state.measurement.points.splice(start, rawPoints.length, ...simplified);
+  state.measurement.sampling = {
+    mode: "continuous",
+    minDistancePx: pointer.minDistancePx,
+    simplifyTolerance: roundMeasurementExport(pointer.simplifyTolerance),
+    rawPointCount: pointer.rawPointCount,
+    segmentsPerSpan: Math.max(2, Number(state.measurement.sampling?.segmentsPerSpan) || 6)
+  };
+  state.measurement.notice = `连续采样 ${pointer.rawPointCount} 点，简化为 ${simplified.length} 点`;
+  updateMeasurementOverlay(state, documentRef);
+}
+
+function measurementPixelDistanceInWorld(state, event, pixels) {
+  if (!state.renderer) return Number(pixels) || 0;
+  const start = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const end = state.renderer.screenToWorld(event.clientX + pixels, event.clientY);
+  const distance = Math.hypot(end.x - start.x, end.y - start.y);
+  return Number.isFinite(distance) && distance > 0 ? distance : Number(pixels) || 0;
 }
 
 function updateMeasurementOverlay(state, documentRef) {
@@ -7924,9 +8067,11 @@ function updateMeasurementOverlay(state, documentRef) {
   const exportButton = documentRef.getElementById("measurement-export");
   const saveButton = documentRef.getElementById("measurement-save");
   const routeFitButton = documentRef.getElementById("measurement-route-fit");
+  const drawModeButton = documentRef.getElementById("measurement-draw-mode");
+  const smoothCloseButton = documentRef.getElementById("measurement-smooth-close");
   const toggle = documentRef.getElementById("toggle-measurement");
   const canvas = documentRef.getElementById("map-canvas");
-  if (!overlay || !svg || !readout || !summary || !clear || !undo || !exportButton || !saveButton || !routeFitButton || !toggle || !canvas) return;
+  if (!overlay || !svg || !readout || !summary || !clear || !undo || !exportButton || !saveButton || !routeFitButton || !drawModeButton || !smoothCloseButton || !toggle || !canvas) return;
 
   const active = Boolean(state.measurement.active);
   const points = state.measurement.points || [];
@@ -7940,7 +8085,19 @@ function updateMeasurementOverlay(state, documentRef) {
   routeFitButton.classList.toggle("active", measurementRouteFitActive(state));
   routeFitButton.setAttribute("aria-pressed", measurementRouteFitActive(state) ? "true" : "false");
   routeFitButton.textContent = measurementRouteFitActive(state) ? "贴路" : "自由";
-  routeFitButton.title = measurementRouteFitActive(state) ? "点击道路附近添加测量点" : "自由折线测量";
+  routeFitButton.title = measurementRouteFitActive(state) ? "点击道路附近添加测量点" : "自由折线、曲线或面积测量";
+  const drawMode = activeMeasurementDrawMode(state);
+  const closed = activeMeasurementClosed(state);
+  drawModeButton.disabled = measurementRouteFitActive(state);
+  drawModeButton.classList.toggle("active", drawMode === MEASUREMENT_DRAW_CURVE);
+  drawModeButton.setAttribute("aria-pressed", drawMode === MEASUREMENT_DRAW_CURVE ? "true" : "false");
+  drawModeButton.textContent = measurementDrawModeLabel(drawMode);
+  drawModeButton.title = measurementRouteFitActive(state) ? "贴路模式固定使用路线尺" : "切换面积尺、折线尺和连续采样曲线尺";
+  smoothCloseButton.disabled = measurementRouteFitActive(state) || drawMode === MEASUREMENT_DRAW_RULER;
+  smoothCloseButton.classList.toggle("active", Boolean(state.measurement.smooth && closed));
+  smoothCloseButton.setAttribute("aria-pressed", state.measurement.smooth && closed ? "true" : "false");
+  smoothCloseButton.textContent = measurementClosureLabel(state, drawMode, closed);
+  smoothCloseButton.title = drawMode === MEASUREMENT_DRAW_AREA ? "切换直线闭合或平滑闭合" : "切换开放曲线或平滑闭合曲线";
   overlay.hidden = !showOverlay;
   readout.hidden = !active;
   clear.disabled = points.length === 0;
@@ -7958,7 +8115,7 @@ function updateMeasurementOverlay(state, documentRef) {
   const displayPoints = activeMeasurementDisplayPoints(state);
   const screenPoints = displayPoints.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
   const controlScreenPoints = points.map(point => state.renderer.worldToScreen(point.x, point.y, rect));
-  if (!measurementRouteFitActive(state) && screenPoints.length >= 3) {
+  if (closed && screenPoints.length >= 3) {
     const polygon = documentRef.createElementNS("http://www.w3.org/2000/svg", "polygon");
     polygon.setAttribute("class", "measurement-area");
     polygon.setAttribute("points", screenPoints.map(point => `${roundMeasurementDisplay(point.x)},${roundMeasurementDisplay(point.y)}`).join(" "));
@@ -7991,10 +8148,10 @@ function updateMeasurementOverlay(state, documentRef) {
   }
 
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
-  const distance = measurementDistance(displayPoints);
-  const area = !measurementRouteFitActive(state) && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
+  const distance = measurementDistance(displayPoints, {closed});
+  const area = closed && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
   const notice = state.measurement.notice ? `${state.measurement.notice} / ` : "";
-  summary.textContent = `${notice}${measurementSummary(points.length, distance, area, units, editingMeasurementLabel(state))}`;
+  summary.textContent = `${notice}${measurementSummary(points.length, distance, area, units, editingMeasurementLabel(state), measurementDrawModeLabel(drawMode))}`;
 }
 
 function visibleSavedMeasurements(state) {
@@ -8152,26 +8309,73 @@ function measurementRouteFitActive(state) {
   return normalizeMeasurementRouteFit(state.measurement.routeFit) === MEASUREMENT_ROUTE_FIT_ROADS;
 }
 
+function activeMeasurementDrawMode(state) {
+  return measurementRouteFitActive(state) ? MEASUREMENT_DRAW_ROUTE : state.measurement.drawMode || MEASUREMENT_DRAW_AREA;
+}
+
+function activeMeasurementClosed(state) {
+  return !measurementRouteFitActive(state) && state.measurement.points?.length >= 3 && Boolean(state.measurement.closed);
+}
+
+function activeMeasurementObjectOptions(state) {
+  const routeFit = normalizeMeasurementRouteFit(state.measurement.routeFit);
+  const drawMode = activeMeasurementDrawMode(state);
+  return {
+    routeFit,
+    drawMode,
+    closed: activeMeasurementClosed(state),
+    smooth: routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? false : Boolean(state.measurement.smooth),
+    sampling: {
+      ...(state.measurement.sampling || {}),
+      mode: drawMode === MEASUREMENT_DRAW_CURVE ? "continuous" : "click",
+      rawPointCount: Math.max(state.measurement.points?.length || 0, Number(state.measurement.sampling?.rawPointCount) || 0)
+    }
+  };
+}
+
+function measurementDrawModeLabel(drawMode) {
+  if (drawMode === MEASUREMENT_DRAW_ROUTE) return "路线尺";
+  if (drawMode === MEASUREMENT_DRAW_CURVE) return "曲线尺";
+  if (drawMode === MEASUREMENT_DRAW_RULER) return "折线尺";
+  return "面积尺";
+}
+
+function measurementClosureLabel(state, drawMode, closed) {
+  if (drawMode === MEASUREMENT_DRAW_ROUTE) return "路线开放";
+  if (drawMode === MEASUREMENT_DRAW_RULER) return "开放折线";
+  if (drawMode === MEASUREMENT_DRAW_CURVE) return closed ? "平滑闭合" : "开放曲线";
+  return state.measurement.smooth ? "平滑闭合" : "直线闭合";
+}
+
 function activeMeasurementDisplayPoints(state) {
   const points = state.measurement.points || [];
   const routeFit = normalizeMeasurementRouteFit(state.measurement.routeFit);
   const cellStops = routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? normalizeMeasurementCellStops([], points, points) : [];
-  return measurementDisplayPoints({points, routeFit, cellStops}, state.map);
+  return measurementDisplayPoints({
+    points,
+    routeFit,
+    cellStops,
+    drawMode: activeMeasurementDrawMode(state),
+    closed: activeMeasurementClosed(state),
+    smooth: Boolean(state.measurement.smooth),
+    sampling: state.measurement.sampling
+  }, state.map);
 }
 
 function exportMeasurement(state, documentRef) {
   if (!state.map || !state.measurement.points?.length) return;
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
-  const routeFit = normalizeMeasurementRouteFit(state.measurement.routeFit);
+  const options = activeMeasurementObjectOptions(state);
+  const {routeFit, drawMode, closed, smooth, sampling} = options;
   const cellStops = routeFit === MEASUREMENT_ROUTE_FIT_ROADS ? normalizeMeasurementCellStops([], state.measurement.points, state.measurement.points) : [];
   const points = state.measurement.points.map((point, index) => ({
     index,
     x: roundMeasurementExport(point.x),
     y: roundMeasurementExport(point.y)
   }));
-  const displayPoints = measurementDisplayPoints({points: state.measurement.points, routeFit, cellStops}, state.map);
-  const distance = measurementDistance(displayPoints);
-  const area = routeFit !== MEASUREMENT_ROUTE_FIT_ROADS && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
+  const displayPoints = measurementDisplayPoints({points: state.measurement.points, routeFit, cellStops, drawMode, closed, smooth, sampling}, state.map);
+  const distance = measurementDistance(displayPoints, {closed});
+  const area = closed && displayPoints.length >= 3 ? measurementArea(displayPoints) : 0;
   const payload = {
     type: "webgl-generator-measurement",
     version: 1,
@@ -8184,6 +8388,10 @@ function exportMeasurement(state, documentRef) {
       pointCount: points.length,
       displayPointCount: displayPoints.length,
       routeFit,
+      drawMode,
+      closed,
+      smooth,
+      sampling,
       routeStopCount: cellStops.filter(Boolean).length
     },
     units: {
@@ -8198,7 +8406,11 @@ function exportMeasurement(state, documentRef) {
       areaLabel: area ? formatDisplayArea(area, units) : ""
     },
     points,
-    cellStops
+    cellStops,
+    drawMode,
+    closed,
+    smooth,
+    sampling
   };
   downloadText(documentRef, JSON.stringify(payload, null, 2), `${mapFileBaseName(state.map)}.measurement.json`, "application/json;charset=utf-8");
 }
@@ -8206,15 +8418,17 @@ function exportMeasurement(state, documentRef) {
 function saveCurrentMeasurement(state, documentRef) {
   if (!state.map || !state.measurement.points?.length) return;
   const context = {map: state.map};
+  const options = activeMeasurementObjectOptions(state);
   if (state.measurement.editingMeasurementId) {
     const measurementId = state.measurement.editingMeasurementId;
-    const command = createUpdateMeasurementPointsCommand(measurementId, state.measurement.points, {routeFit: state.measurement.routeFit});
+    const command = createUpdateMeasurementPointsCommand(measurementId, state.measurement.points, options);
     const result = executeEditCommand(state, documentRef, command, {
       context,
       noopStatus: "测量对象没有可保存的形状变化，或点数不足。",
       preparePanelRefresh: targetState => {
         targetState.measurement.editingMeasurementId = null;
         targetState.measurement.points = [];
+        targetState.measurement.sampling = {...targetState.measurement.sampling, rawPointCount: 0};
         targetState.panels.measurement?.setSelectedMeasurementId?.(measurementId);
       }
     });
@@ -8225,12 +8439,13 @@ function saveCurrentMeasurement(state, documentRef) {
     return;
   }
 
-  const command = createSaveMeasurementCommand(state.measurement.points, {routeFit: state.measurement.routeFit});
+  const command = createSaveMeasurementCommand(state.measurement.points, options);
   const result = executeEditCommand(state, documentRef, command, {
     context,
     noopStatus: "至少需要 2 个测量点才能保存。",
     preparePanelRefresh: (targetState, executed, created) => {
       targetState.measurement.points = [];
+      targetState.measurement.sampling = {...targetState.measurement.sampling, rawPointCount: 0};
       targetState.panels.measurement?.setSelectedMeasurementId?.(created?.id);
     }
   });
@@ -8252,6 +8467,10 @@ function startMeasurementObjectEdit(state, row, documentRef) {
     ...(item.cellStops?.[index] ? {cellStop: item.cellStops[index]} : {})
   }));
   state.measurement.routeFit = normalizeMeasurementRouteFit(item.routeFit);
+  state.measurement.drawMode = item.drawMode || (item.closed ? MEASUREMENT_DRAW_AREA : MEASUREMENT_DRAW_RULER);
+  state.measurement.closed = Boolean(item.closed);
+  state.measurement.smooth = Boolean(item.smooth);
+  state.measurement.sampling = {...state.measurement.sampling, ...(item.sampling || {}), rawPointCount: item.sampling?.rawPointCount || item.points.length};
   startMeasurementMode(state, documentRef, {status: ""});
   state.panels.measurement?.setSelectedMeasurementId?.(item.id);
   locateMeasurement(state, {...row, points: item.points}, documentRef);
@@ -8363,11 +8582,12 @@ function measurementPointClass(state, index) {
   return state.measurement.drag?.index === index ? "measurement-point dragging" : "measurement-point";
 }
 
-function measurementSummary(pointCount, distance, area, units, editingLabel = "") {
+function measurementSummary(pointCount, distance, area, units, editingLabel = "", modeLabel = "") {
   const prefix = editingLabel ? `编辑 ${editingLabel} / ` : "";
-  if (pointCount === 0) return `${prefix}点击地图添加起点`;
-  if (pointCount === 1) return `${prefix}继续点击添加测量点`;
-  const distanceText = `${pointCount} 点 / 总长 ${formatDisplayDistance(distance, units)}`;
+  const mode = modeLabel ? `${modeLabel} / ` : "";
+  if (pointCount === 0) return `${prefix}${mode}${modeLabel === "曲线尺" ? "按住并拖动地图连续采样" : "点击地图添加起点"}`;
+  if (pointCount === 1) return `${prefix}${mode}${modeLabel === "曲线尺" ? "继续拖动采样曲线" : "继续点击添加测量点"}`;
+  const distanceText = `${mode}${pointCount} 点 / 总长 ${formatDisplayDistance(distance, units)}`;
   if (pointCount < 3) return `${prefix}${distanceText}`;
   return `${prefix}${distanceText} / 面积 ${formatDisplayArea(area, units)}`;
 }
