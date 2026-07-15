@@ -113,26 +113,54 @@ function createConsoleApi(documentRef, state, actions = {}) {
         save: (points, options = {}) => apiCall(() => requireApiAction(actions.edit?.measurements?.save, "edit.measurements.save")(points, options)),
         rename: (measurementId, name) => apiCall(() => requireApiAction(actions.edit?.measurements?.rename, "edit.measurements.rename")(measurementId, name)),
         updatePoints: (measurementId, points, options = {}) => apiCall(() => requireApiAction(actions.edit?.measurements?.updatePoints, "edit.measurements.updatePoints")(measurementId, points, options)),
-        delete: measurementId => apiCall(() => requireApiAction(actions.edit?.measurements?.delete, "edit.measurements.delete")(measurementId))
+        delete: measurementId => apiCall(() => requireApiAction(actions.edit?.measurements?.delete, "edit.measurements.delete")(measurementId)),
+        import: measurements => apiCall(() => requireApiAction(actions.edit?.measurements?.import, "edit.measurements.import")(measurements))
       }),
       cities: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.cities?.add, "edit.cities.add")(gridCell)),
         delete: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.delete, "edit.cities.delete")(cityId)),
         rename: (cityId, name) => apiCall(() => requireApiAction(actions.edit?.cities?.rename, "edit.cities.rename")(cityId, name)),
-        setPopulation: (cityId, population) => apiCall(() => requireApiAction(actions.edit?.cities?.setPopulation, "edit.cities.setPopulation")(cityId, population))
+        setPopulation: (cityId, population) => apiCall(() => requireApiAction(actions.edit?.cities?.setPopulation, "edit.cities.setPopulation")(cityId, population)),
+        syncOwner: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.syncOwner, "edit.cities.syncOwner")(cityId)),
+        setVisual: (cityId, patch) => apiCall(() => requireApiAction(actions.edit?.cities?.setVisual, "edit.cities.setVisual")(cityId, patch)),
+        resetVisual: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.resetVisual, "edit.cities.resetVisual")(cityId))
       }),
       provinces: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.provinces?.add, "edit.provinces.add")(gridCell)),
         delete: provinceId => apiCall(() => requireApiAction(actions.edit?.provinces?.delete, "edit.provinces.delete")(provinceId)),
         rename: (provinceId, name) => apiCall(() => requireApiAction(actions.edit?.provinces?.rename, "edit.provinces.rename")(provinceId, name)),
-        setColor: (provinceId, color) => apiCall(() => requireApiAction(actions.edit?.provinces?.setColor, "edit.provinces.setColor")(provinceId, color))
+        setColor: (provinceId, color) => apiCall(() => requireApiAction(actions.edit?.provinces?.setColor, "edit.provinces.setColor")(provinceId, color)),
+        applyChanges: changes => apiCall(() => requireApiAction(actions.edit?.provinces?.applyChanges, "edit.provinces.applyChanges")(changes))
       }),
       states: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.states?.add, "edit.states.add")(gridCell)),
         delete: stateId => apiCall(() => requireApiAction(actions.edit?.states?.delete, "edit.states.delete")(stateId)),
         rename: (stateId, name) => apiCall(() => requireApiAction(actions.edit?.states?.rename, "edit.states.rename")(stateId, name)),
         setColor: (stateId, color) => apiCall(() => requireApiAction(actions.edit?.states?.setColor, "edit.states.setColor")(stateId, color)),
-        setGovernment: (stateId, governmentKey) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernment, "edit.states.setGovernment")(stateId, governmentKey))
+        setGovernment: (stateId, governmentKey) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernment, "edit.states.setGovernment")(stateId, governmentKey)),
+        setCapital: (stateId, cityId) => apiCall(() => requireApiAction(actions.edit?.states?.setCapital, "edit.states.setCapital")(stateId, cityId)),
+        setGovernmentBatch: (stateIds, governmentKey) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernmentBatch, "edit.states.setGovernmentBatch")(stateIds, governmentKey)),
+        applyChanges: changes => apiCall(() => requireApiAction(actions.edit?.states?.applyChanges, "edit.states.applyChanges")(changes))
+      }),
+      height: Object.freeze({
+        applyChanges: (changes, options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyChanges, "edit.height.applyChanges")(changes, options))
+      }),
+      diplomacy: Object.freeze({
+        setRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.setRelation, "edit.diplomacy.setRelation")(subjectId, objectId, relation, options))
+      }),
+      military: Object.freeze({
+        setRatios: (stateId, ratios) => apiCall(() => requireApiAction(actions.edit?.military?.setRatios, "edit.military.setRatios")(stateId, ratios)),
+        setStatus: (target, status) => apiCall(() => requireApiAction(actions.edit?.military?.setStatus, "edit.military.setStatus")(target, status)),
+        setStatusBatch: (targets, status) => apiCall(() => requireApiAction(actions.edit?.military?.setStatusBatch, "edit.military.setStatusBatch")(targets, status)),
+        moveStation: (target, destination) => apiCall(() => requireApiAction(actions.edit?.military?.moveStation, "edit.military.moveStation")(target, destination)),
+        setBase: target => apiCall(() => requireApiAction(actions.edit?.military?.setBase, "edit.military.setBase")(target)),
+        recordBattleEvent: (target, event = {}) => apiCall(() => requireApiAction(actions.edit?.military?.recordBattleEvent, "edit.military.recordBattleEvent")(target, event)),
+        importBattleEvents: document => apiCall(() => requireApiAction(actions.edit?.military?.importBattleEvents, "edit.military.importBattleEvents")(document)),
+        clearBattleEvents: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.clearBattleEvents, "edit.military.clearBattleEvents")(target, options)),
+        rename: (target, name) => apiCall(() => requireApiAction(actions.edit?.military?.rename, "edit.military.rename")(target, name))
+      }),
+      zones: Object.freeze({
+        setStyle: (zoneId, patch) => apiCall(() => requireApiAction(actions.edit?.zones?.setStyle, "edit.zones.setStyle")(zoneId, patch))
       }),
       cultures: Object.freeze({
         add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.add, "edit.cultures.add")(options)),
@@ -208,7 +236,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
       enable: () => apiCall(() => setDebugMode(state, true)),
       disable: () => apiCall(() => setDebugMode(state, false)),
       snapshot: (options = {}) => apiCall(() => buildDebugSnapshot(state, documentRef, options)),
-      dumpState: (options = {}) => apiCall(() => buildDebugStateDump(state, documentRef, options)),
+      dumpState: (options = {}) => apiCall(() => buildDebugStateDump(state, documentRef, options, api)),
       renderer: () => apiCall(() => buildDebugRendererSnapshot(state)),
       health: (options = {}) => apiCall(() => buildDebugHealthSnapshot(state, options)),
       profileNextRender: (options = {}) => apiCall(() => profileDebugNextRender(state, options))
@@ -226,7 +254,21 @@ function buildCapabilities(api) {
     units: ["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"],
     climate: ["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"],
     history: ["get", "stats", "peek", "undo", "redo"],
-    edit: ["notes.set", "notes.delete", "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent", "religions.add", "religions.assignCells", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent", "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.delete", "lakes.rename", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore", "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"],
+    edit: [
+      "notes.set", "notes.delete",
+      "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "measurements.import",
+      "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
+      "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
+      "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
+      "height.applyChanges", "diplomacy.setRelation",
+      "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
+      "zones.setStyle",
+      "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
+      "religions.add", "religions.assignCells", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
+      "routes.delete", "routes.setNote", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.delete", "lakes.rename",
+      "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
+      "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"
+    ],
     data: ["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "importMap", "importGEO"],
     namebases: ["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"],
     debug: ["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"]
@@ -338,19 +380,39 @@ function buildMethodMetadata() {
       "measurements.rename": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "measurements.updatePoints": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "measurements.delete": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
+      "measurements.import": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "cities.add": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.delete": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.rename": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.setPopulation": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
+      "cities.syncOwner": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
+      "cities.setVisual": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
+      "cities.resetVisual": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "provinces.add": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.delete": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.rename": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.setColor": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "provinces.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.add": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.delete": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.rename": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.setColor": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.setGovernment": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "states.setCapital": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "states.setGovernmentBatch": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "states.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "height.applyChanges": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "diplomacy.setRelation": {stable: "draft", mutates: "diplomacy", undoable: true, async: false, requiresConfirm: false},
+      "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.setStatus": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.setStatusBatch": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.moveStation": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.setBase": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.recordBattleEvent": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.importBattleEvents": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.clearBattleEvents": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.rename": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "zones.setStyle": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
       "cultures.add": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.assignCells": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.delete": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
@@ -543,7 +605,7 @@ function buildDebugModeSnapshot(state, documentRef) {
   };
 }
 
-function buildDebugStateDump(state, documentRef, options = {}) {
+function buildDebugStateDump(state, documentRef, options = {}, api = null) {
   const includeCapabilities = options.includeCapabilities !== false;
   const includeRendererStats = Boolean(options.includeRendererStats || options.fullRenderer || options.renderer === "full");
   return {
@@ -554,7 +616,7 @@ function buildDebugStateDump(state, documentRef, options = {}) {
       rendererStats: includeRendererStats
     },
     snapshot: buildDebugSnapshot(state, documentRef, options),
-    capabilities: includeCapabilities ? buildCapabilities() : null,
+    capabilities: includeCapabilities ? buildCapabilities(api) : null,
     renderer: includeRendererStats ? buildDebugRendererSnapshot(state) : null
   };
 }

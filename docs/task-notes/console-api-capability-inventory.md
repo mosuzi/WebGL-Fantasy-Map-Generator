@@ -8,7 +8,7 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：11 个命名空间、128 个方法，其中 46 个为编辑方法。
+当前公开基线：11 个命名空间、152 个方法，其中 70 个为编辑方法。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
@@ -19,7 +19,7 @@
 | `units` | 9 | 已覆盖当前全部显示单位偏好 |
 | `climate` | 14 | 已覆盖气候读取与当前写入入口 |
 | `history` | 5 | 已覆盖历史读取、peek、撤销和重做 |
-| `edit` | 46 | 已覆盖 12 个对象领域，但仍有既有命令缺口 |
+| `edit` | 70 | 已覆盖当前全部可纯参数调用的既有编辑命令；交互手势型能力继续暂缓 |
 | `data` | 10 | 已覆盖主要地图 / GEO / PNG / 记录导入导出 |
 | `namebases` | 10 | 已覆盖名称库读取、交换、编辑、绑定与批量改名 |
 | `debug` | 7 | 已覆盖只读诊断、debug UI 和单帧 profile |
@@ -46,18 +46,18 @@
 | 9 | 历史 | stats、peek、undo、redo | 已暴露且共路径 | `api.history.*` 与统一历史执行器 | 第 33 项稳定化 |
 | 10 | 通用编辑 | 对象备注设置 / 删除 | 已暴露且共路径 | `api.edit.notes.*` 与 note command | 第 33 项稳定化 |
 | 11 | 测量 | 保存、重命名、更新点列、删除 | 已暴露且共路径 | `api.edit.measurements.*` 与 measurement commands | 第 33 项稳定化 |
-| 12 | 测量 | 批量导入测量对象 | 未暴露 | `createImportMeasurementsCommand()` | 第 29 项 |
+| 12 | 测量 | 批量导入测量对象 | 已暴露且共路径 | `api.edit.measurements.import()` 与 `createImportMeasurementsCommand()` | 第 29 项已完成；第 33 项稳定化 |
 | 13 | 城市 | 新增、删除、重命名、人口 | 已暴露且共路径 | `api.edit.cities.*` 与 city commands | 第 33 项稳定化 |
-| 14 | 城市 | 同步归属、剪影设置 / 恢复 | 未暴露 | `createSyncCityOwnerToCellCommand()`、城市 visual commands | 第 29 项 |
+| 14 | 城市 | 同步归属、剪影设置 / 恢复 | 已暴露且共路径 | `api.edit.cities.syncOwner / setVisual / resetVisual` 与城市 commands | 第 29 项已完成；第 33 项稳定化 |
 | 15 | 国家 | 新增、删除、重命名、颜色、单国政体 | 已暴露且共路径 | `api.edit.states.*` 与 state commands | 第 33 项稳定化 |
-| 16 | 国家 | 设置首都、批量政体、国家归属刷纯 changes | 未暴露 | state capital / batch government / brush commands | 第 29 项 |
+| 16 | 国家 | 设置首都、批量政体、国家归属刷纯 changes | 已暴露且共路径 | `api.edit.states.setCapital / setGovernmentBatch / applyChanges` 与 state commands | 第 29 项已完成；第 33 项稳定化 |
 | 17 | 省份 | 新增、删除、重命名、颜色 | 已暴露且共路径 | `api.edit.provinces.*` 与 province commands | 第 33 项稳定化 |
-| 18 | 省份 | 省份归属刷纯 changes | 未暴露 | `createApplyProvinceBrushCommand()` | 第 29 项 |
+| 18 | 省份 | 省份归属刷纯 changes | 已暴露且共路径 | `api.edit.provinces.applyChanges()` 与 `createApplyProvinceBrushCommand()` | 第 29 项已完成；第 33 项稳定化 |
 | 19 | 文化 / 宗教 | 新增、删除、重命名、颜色、继承、归属 changes | 已暴露且共路径 | `api.edit.cultures.* / religions.*` | 第 33 项稳定化 |
-| 20 | 高度 | 高度 changes、基础 / 下游派生重建 | 未暴露 | height command、`rebuildHeight*Derived()` | 第 29、30 项 |
-| 21 | 外交 | 设置关系、外交重生成命令 | 未暴露 | diplomacy commands；重生成另有 `api.generate.regenerate` | 第 29 项 |
-| 22 | 军事 | 比例、态势 / 批量态势、驻地、基地、战报、重命名 | 未暴露 | 9 个 military commands；军事重生成已由 generate 覆盖 | 第 29 项 |
-| 23 | 地区 | Zone 样式编辑 | 未暴露 | `createSetZoneStyleCommand()` | 第 29 项 |
+| 20 | 高度 | 高度纯 changes | 已暴露且共路径 | `api.edit.height.applyChanges()` 与 `createApplyHeightBrushCommand()` | 第 29 项已完成；第 33 项稳定化 |
+| 21 | 外交 | 设置关系、外交重生成命令 | 已暴露且共路径 | `api.edit.diplomacy.setRelation()` 与 diplomacy command；重生成另有 `api.generate.regenerate` | 第 29 项已完成；第 33 项稳定化 |
+| 22 | 军事 | 比例、态势 / 批量态势、驻地、基地、战报、重命名 | 已暴露且共路径 | `api.edit.military.*` 9 个方法与 9 个 military commands；军事重生成另由 generate 覆盖 | 第 29 项已完成；第 33 项稳定化 |
+| 23 | 地区 | Zone 样式编辑 | 已暴露且共路径 | `api.edit.zones.setStyle()` 与 `createSetZoneStyleCommand()` | 第 29 项已完成；第 33 项稳定化 |
 | 24 | 路线 / 河流 / 湖泊 | 当前删除、备注、重命名和河宽编辑 | 已暴露且共路径 | `api.edit.routes / rivers / lakes` | 第 33 项稳定化 |
 | 25 | 标签 / marker | 当前新增、删除、移动、视觉、备注和恢复 | 已暴露且共路径 | `api.edit.labels / markers` | 第 33 项稳定化 |
 | 26 | 名称库 | list、export/import、CRUD、绑定、批量对象改名 | 已暴露但仍有分叉 | `api.namebases.*` 复用 commands，UI / API 文件与状态包装分开 | 第 30、32 项 |
@@ -68,10 +68,11 @@
 | 31 | 诊断写入 | 清空 health、注入 delay、裸 state / typed array 写入口 | 明确暂缓 | 当前计划非目标，存在破坏运行节奏或绕过契约风险 | 第 33 项只记录权限边界 |
 | 32 | UI shell | 面板打开 / 关闭、浮层焦点、文件选择器、画布手势模拟 | 明确暂缓 | 依赖具体 UI 与指针生命周期，不是非 UI 数据能力 | 第 35～37 项按各自范围处理 |
 | 33 | 未来创作 | 路线 / 河流 / 湖泊创建、Zone / 独立备注等尚未实现能力 | 明确暂缓 | 当前不存在可复用 runtime command，不能列为 API 漏项 | 第 40、41 项实现产品能力后再登记 API |
+| 34 | 高度 | 基础 / 下游派生重建 | 未暴露 | `rebuildHeightBaseDerived()`、`rebuildHeightDownstreamDerived()` | 第 30 项 |
 
 ## 第 29～33 项冻结范围
 
-- 第 29 项：只补当前已经存在、且可以用参数调用的 edit command；不模拟指针手势，不创造新产品能力。
+- 第 29 项：已完成。20 个方法补齐当前已经存在、且可以用参数调用的 edit command；未模拟指针手势，也未创造新产品能力。
 - 第 30 项：收束已暴露 API 与 UI 的 action / 状态 / 刷新分叉，并补现有显示偏好与高度派生等非命令 runtime action。
 - 第 31 项：统一生成、重算、导入和导出长任务的 busy、loading、错误、health 与 finally。
 - 第 32 项：补高度图 / 诊断 / 浏览器持久化等数据入口和旧数据往返证据。

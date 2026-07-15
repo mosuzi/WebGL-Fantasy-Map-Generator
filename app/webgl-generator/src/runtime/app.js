@@ -2,7 +2,7 @@ import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
 import {createLegacyNamebaseText, createNamebaseDocument, createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
-import {buildMilitary} from "../generator/military.js";
+import {buildMilitary, MILITARY_STATUSES} from "../generator/military.js";
 import {backfillRiverHydrology, buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSocietyReligions} from "../generator/society.js";
@@ -2286,26 +2286,54 @@ function createConsoleApiActions(state, documentRef, options = {}) {
         save: (points, options = {}) => saveMeasurementViaApi(state, documentRef, points, options),
         rename: (measurementId, name) => renameMeasurementViaApi(state, documentRef, measurementId, name),
         updatePoints: (measurementId, points, options = {}) => updateMeasurementPointsViaApi(state, documentRef, measurementId, points, options),
-        delete: measurementId => deleteMeasurementViaApi(state, documentRef, measurementId)
+        delete: measurementId => deleteMeasurementViaApi(state, documentRef, measurementId),
+        import: measurements => importMeasurementsViaApi(state, documentRef, measurements)
       },
       cities: {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
         delete: cityId => deleteCityViaApi(state, documentRef, cityId),
         rename: (cityId, name) => renameCityViaApi(state, documentRef, cityId, name),
-        setPopulation: (cityId, population) => setCityPopulationViaApi(state, documentRef, cityId, population)
+        setPopulation: (cityId, population) => setCityPopulationViaApi(state, documentRef, cityId, population),
+        syncOwner: cityId => syncCityOwnerViaApi(state, documentRef, cityId),
+        setVisual: (cityId, patch) => setCityVisualViaApi(state, documentRef, cityId, patch),
+        resetVisual: cityId => resetCityVisualViaApi(state, documentRef, cityId)
       },
       provinces: {
         add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
         delete: provinceId => deleteProvinceViaApi(state, documentRef, provinceId),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
-        setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color)
+        setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
+        applyChanges: changes => applyProvinceChangesViaApi(state, documentRef, changes)
       },
       states: {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
         delete: stateId => deleteStateViaApi(state, documentRef, stateId),
         rename: (stateId, name) => renameStateViaApi(state, documentRef, stateId, name),
         setColor: (stateId, color) => setStateColorViaApi(state, documentRef, stateId, color),
-        setGovernment: (stateId, governmentKey) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey)
+        setGovernment: (stateId, governmentKey) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey),
+        setCapital: (stateId, cityId) => setStateCapitalViaApi(state, documentRef, stateId, cityId),
+        setGovernmentBatch: (stateIds, governmentKey) => setStatesGovernmentBatchViaApi(state, documentRef, stateIds, governmentKey),
+        applyChanges: changes => applyStateChangesViaApi(state, documentRef, changes)
+      },
+      height: {
+        applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions)
+      },
+      diplomacy: {
+        setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, editOptions)
+      },
+      military: {
+        setRatios: (stateId, ratios) => setMilitaryRatiosViaApi(state, documentRef, stateId, ratios),
+        setStatus: (target, status) => setMilitaryStatusViaApi(state, documentRef, target, status),
+        setStatusBatch: (targets, status) => setMilitaryStatusBatchViaApi(state, documentRef, targets, status),
+        moveStation: (target, destination) => moveMilitaryStationViaApi(state, documentRef, target, destination),
+        setBase: target => setMilitaryBaseViaApi(state, documentRef, target),
+        recordBattleEvent: (target, event = {}) => recordMilitaryBattleEventViaApi(state, documentRef, target, event),
+        importBattleEvents: document => importMilitaryBattleEventsViaApi(state, documentRef, document),
+        clearBattleEvents: (target, editOptions = {}) => clearMilitaryBattleEventsViaApi(state, documentRef, target, editOptions),
+        rename: (target, name) => renameMilitaryRegimentViaApi(state, documentRef, target, name)
+      },
+      zones: {
+        setStyle: (zoneId, patch) => setZoneStyleViaApi(state, documentRef, zoneId, patch)
       },
       cultures: {
         add: options => addCultureViaApi(state, documentRef, options),
@@ -5321,6 +5349,28 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
   return editApiResult(state, result);
 }
 
+function importMeasurementsViaApi(state, documentRef, input) {
+  const measurements = Array.isArray(input) ? input : input?.measurements;
+  if (!Array.isArray(measurements)) throw new Error("测量导入内容必须是数组或包含 measurements 数组的对象");
+  const command = createImportMeasurementsCommand(measurements, {label: "API 导入测量对象"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    preparePanelRefresh: (targetState, executed, imported) => {
+      targetState.measurement.points = [];
+      targetState.measurement.editingMeasurementId = null;
+      targetState.measurement.active = false;
+      if (imported?.[0]?.id) targetState.panels.measurement?.setSelectedMeasurementId?.(imported[0].id);
+    },
+    noopStatus: "没有可导入的测量对象。",
+    status: executed => `已通过 API 导入 ${executed.getResult?.().length || 0} 个测量对象。`,
+    throwOnError: false
+  });
+  updateMeasurementOverlay(state, documentRef);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function normalizeApiMeasurementOptions(options = {}, {defaultRouteFit = MEASUREMENT_ROUTE_FIT_NONE} = {}) {
   if (options === null || options === undefined) return {name: "", routeFit: defaultRouteFit, label: ""};
   if (typeof options !== "object") throw new Error("测量对象选项必须是对象");
@@ -5611,6 +5661,49 @@ function setCityPopulationViaApi(state, documentRef, cityId, population) {
   return editApiResult(state, result);
 }
 
+function syncCityOwnerViaApi(state, documentRef, cityId) {
+  const id = normalizeApiInteger(cityId, "城市 ID");
+  const command = createSyncCityOwnerToCellCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "城市不存在或归属已经与所在 cell 一致。",
+    status: `已同步城市 #${id} 归属。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setCityVisualViaApi(state, documentRef, cityId, patch) {
+  const id = normalizeApiInteger(cityId, "城市 ID");
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("城市剪影参数必须是对象");
+  const command = createSetCityVisualCommand(id, patch);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "城市不存在、剪影参数无效或未变化。",
+    status: `已更新城市 #${id} 剪影。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function resetCityVisualViaApi(state, documentRef, cityId) {
+  const id = normalizeApiInteger(cityId, "城市 ID");
+  const command = createResetCityVisualCommand(id);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "城市不存在或已经使用自动剪影。",
+    status: `已恢复城市 #${id} 自动剪影。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function renameProvinceViaApi(state, documentRef, provinceId, name) {
   return renameObjectViaApi(state, documentRef, OBJECT_KIND.PROVINCE, provinceId, name, {
     idLabel: "省份 ID",
@@ -5630,6 +5723,21 @@ function setProvinceColorViaApi(state, documentRef, provinceId, color) {
     refresh: refreshAfterProvinceEdit,
     noopStatus: "省份不存在或颜色未变化。",
     status: `已更新省份 #${id} 颜色。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function applyProvinceChangesViaApi(state, documentRef, changes) {
+  const normalized = normalizeApiGridChanges(state.map, changes, {field: "province", valueKeys: ["after", "provinceId"], label: "省份", targetKind: "province"});
+  const command = createApplyProvinceBrushCommand(normalized, {label: "API 省份归属"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterProvinceEdit,
+    noopStatus: "没有需要更新的省份归属。",
+    status: `已通过 API 更新 ${normalized.length} 个 grid cells 的省份归属。`,
     throwOnError: false
   });
   updateRuntimePanel(documentRef, state);
@@ -5676,6 +5784,178 @@ function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey) {
     throwOnError: false
   });
   if (result.executed) refreshGenerationSummary(state.map);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setStateCapitalViaApi(state, documentRef, stateId, cityId) {
+  const id = normalizeApiInteger(stateId, "国家 ID");
+  const capitalId = normalizeApiInteger(cityId, "城市 ID");
+  const city = state.map?.settlements?.cities?.[capitalId];
+  const burgId = Number(city?.burgId ?? city?.burg ?? capitalId);
+  const command = createSetStateCapitalCommand(id, burgId);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    noopStatus: "国家或城市不存在、城市不属于该国或已经是首都。",
+    status: `已把城市 #${capitalId} 设为国家 #${id} 首都。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setStatesGovernmentBatchViaApi(state, documentRef, stateIds, governmentKey) {
+  if (!Array.isArray(stateIds)) throw new Error("国家 ID 必须是数组");
+  const ids = [...new Set(stateIds.map(value => normalizeApiInteger(value, "国家 ID")))];
+  const key = String(governmentKey || "").trim();
+  if (!key) throw new Error("政体 key 不能为空");
+  const command = createSetStatesGovernmentBatchCommand(ids, key);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    noopStatus: "没有可调整政体的国家。",
+    status: `已批量更新 ${ids.length} 个国家的政体。`,
+    throwOnError: false
+  });
+  if (result.executed) refreshGenerationSummary(state.map);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function applyStateChangesViaApi(state, documentRef, changes) {
+  const normalized = normalizeApiGridChanges(state.map, changes, {field: "state", valueKeys: ["after", "stateId"], label: "国家", targetKind: "state"});
+  const command = createApplyStateBrushCommand(normalized, {label: "API 国家归属"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    noopStatus: "没有需要更新的国家归属。",
+    status: `已通过 API 更新 ${normalized.length} 个 grid cells 的国家归属。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function applyHeightChangesViaApi(state, documentRef, changes, options = {}) {
+  const normalized = normalizeApiGridChanges(state.map, changes, {field: "h", valueKeys: ["after", "height"], label: "高度", clamp: [0, 100]});
+  const label = String(options.label || "API 高度编辑").trim() || "API 高度编辑";
+  const command = createApplyHeightBrushCommand(normalized, {label});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    noopStatus: "没有需要更新的高度。",
+    status: `已通过 API 更新 ${normalized.length} 个 grid cells 的高度。`,
+    throwOnError: false
+  });
+  if (state.heightEdit) {
+    state.heightEdit.lastAffected = result.executed ? normalized.length : 0;
+    state.heightEdit.lastHeight = result.executed ? summarizeChangedHeights(normalized) : "none";
+    state.heightEdit.lastDelta = result.executed ? summarizeChangedHeightDelta(normalized) : "none";
+  }
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, options = {}) {
+  const subject = normalizeApiInteger(subjectId, "外交主体国家 ID");
+  const object = normalizeApiInteger(objectId, "外交对象国家 ID");
+  const command = createSetDiplomacyRelationCommand(subject, object, relation, {reason: options.reason});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "国家不存在、关系无效或关系未变化。",
+    status: `已更新国家 #${subject} 与 #${object} 的外交关系。`,
+    throwOnError: false
+  });
+  if (result.executed) refreshGenerationSummary(state.map);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setMilitaryRatiosViaApi(state, documentRef, stateId, ratios) {
+  const id = normalizeApiInteger(stateId, "国家 ID");
+  if (!ratios || typeof ratios !== "object" || Array.isArray(ratios)) throw new Error("兵种比例必须是对象");
+  return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryRatiosCommand(id, ratios), `update military ratios: state=${id}`);
+}
+
+function setMilitaryStatusViaApi(state, documentRef, target, status) {
+  const nextStatus = normalizeApiMilitaryStatus(status);
+  return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryStatusCommand(target, nextStatus), `update military status: regiment=${target?.id || ""}, status=${nextStatus}`);
+}
+
+function setMilitaryStatusBatchViaApi(state, documentRef, targets, status) {
+  if (!Array.isArray(targets)) throw new Error("军团目标必须是数组");
+  const nextStatus = normalizeApiMilitaryStatus(status);
+  return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryStatusBatchCommand(targets, nextStatus), `batch update military status: count=${targets.length}, status=${nextStatus}`);
+}
+
+function moveMilitaryStationViaApi(state, documentRef, target, destination) {
+  if (!destination || typeof destination !== "object" || Array.isArray(destination)) throw new Error("军团驻地目标必须是对象");
+  return executeMilitaryCommandViaApi(state, documentRef, createMoveMilitaryStationCommand(target, destination), `move military station: regiment=${target?.id || ""}, cell=${destination.cell ?? destination.packCell ?? ""}`);
+}
+
+function setMilitaryBaseViaApi(state, documentRef, target) {
+  return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryBaseCommand(target), `set military base: regiment=${target?.id || ""}`);
+}
+
+function recordMilitaryBattleEventViaApi(state, documentRef, target, event) {
+  if (!event || typeof event !== "object" || Array.isArray(event)) throw new Error("战斗事件必须是对象");
+  return executeMilitaryCommandViaApi(state, documentRef, createRecordMilitaryBattleEventCommand(target, event), `record military battle event: regiment=${target?.id || ""}, type=${event.type || ""}, outcome=${event.outcome || ""}`);
+}
+
+function importMilitaryBattleEventsViaApi(state, documentRef, document) {
+  if (!document || typeof document !== "object") throw new Error("战斗事件导入文档必须是对象或数组");
+  return executeMilitaryCommandViaApi(state, documentRef, createImportMilitaryBattleEventsCommand(document), "import military battle events");
+}
+
+function clearMilitaryBattleEventsViaApi(state, documentRef, target, options = {}) {
+  const eventIds = options.eventIds === undefined || options.eventIds === null ? null : options.eventIds;
+  if (eventIds !== null && !Array.isArray(eventIds)) throw new Error("eventIds 必须是数组");
+  const command = createClearMilitaryBattleEventsCommand(target, {
+    eventIds,
+    label: eventIds?.length ? "清空筛选战斗事件" : "清空军团战斗事件"
+  });
+  return executeMilitaryCommandViaApi(state, documentRef, command, `clear military battle events: regiment=${target?.id || ""}, scope=${eventIds?.length ? "filtered" : "selected"}`);
+}
+
+function renameMilitaryRegimentViaApi(state, documentRef, target, name) {
+  const nextName = String(name || "").trim();
+  if (!nextName) throw new Error("军团名称不能为空");
+  return executeMilitaryCommandViaApi(state, documentRef, createRenameMilitaryRegimentCommand(target, nextName), `rename military regiment: regiment=${target?.id || ""}`);
+}
+
+function executeMilitaryCommandViaApi(state, documentRef, command, logMessage) {
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "军事数据不存在或未发生变化。",
+    throwOnError: false
+  });
+  if (result.executed) {
+    markDerivedFresh(state.map, ["military"]);
+    refreshGenerationSummary(state.map);
+    appendGenerationLog(state.map, logMessage);
+  }
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setZoneStyleViaApi(state, documentRef, zoneId, patch) {
+  const id = normalizeApiInteger(zoneId, "地区 ID");
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("地区样式必须是对象");
+  const command = createSetZoneStyleCommand(id, patch);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "地区不存在、样式无效或未变化。",
+    status: `已更新地区 #${id} 样式。`,
+    throwOnError: false
+  });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -6168,6 +6448,43 @@ function normalizeApiInteger(value, name) {
   return numeric;
 }
 
+function normalizeApiGridChanges(map, changes, {field, valueKeys, label, clamp = null, targetKind = null}) {
+  if (!Array.isArray(changes)) throw new Error(`${label} changes 必须是数组`);
+  const values = map?.grid?.cells?.[field];
+  if (!values) throw new Error(`当前地图缺少 grid.cells.${field}`);
+  const targets = targetKind === "state"
+    ? map?.politics?.states || map?.pack?.states
+    : targetKind === "province"
+      ? map?.politics?.provinces || map?.pack?.provinces
+      : null;
+  const byCell = new Map();
+  for (const source of changes) {
+    if (!source || typeof source !== "object") throw new Error(`${label} change 必须是对象`);
+    const gridCell = normalizeApiInteger(source.gridCell ?? source.cell, `${label} grid cell ID`);
+    if (gridCell < 0 || gridCell >= values.length) throw new Error(`${label} grid cell ID 越界：${gridCell}`);
+    const rawAfter = valueKeys.find(key => source[key] !== undefined);
+    if (!rawAfter) throw new Error(`${label} change 缺少 ${valueKeys.join(" / ")}`);
+    let after = Number(source[rawAfter]);
+    if (!Number.isFinite(after)) throw new Error(`${label}目标值必须是有限数`);
+    if (clamp) after = Math.max(clamp[0], Math.min(clamp[1], Math.round(after)));
+    else if (!Number.isInteger(after) || after < 0) throw new Error(`${label}目标 ID 必须是非负整数`);
+    if (targets && after > 0 && (!targets[after] || targets[after].removed)) throw new Error(`找不到${label} #${after}`);
+    const before = Number(values[gridCell] || 0);
+    if (before === after) {
+      byCell.delete(gridCell);
+      continue;
+    }
+    byCell.set(gridCell, {gridCell, before, after});
+  }
+  return [...byCell.values()];
+}
+
+function normalizeApiMilitaryStatus(status) {
+  const value = String(status || "").trim();
+  if (!Object.prototype.hasOwnProperty.call(MILITARY_STATUSES, value)) throw new Error(`未知军团态势：${status}`);
+  return value;
+}
+
 function normalizeApiObjectOptions(options) {
   if (options === null || options === undefined) return {};
   if (typeof options === "string") return {name: options.trim()};
@@ -6198,10 +6515,22 @@ function normalizeApiMarkerVisualPatch(patch) {
 }
 
 function editApiResult(state, result) {
+  const effects = result.command?.effects || {};
+  const derived = Array.isArray(effects.derived) ? effects.derived : [];
   return {
     executed: result.executed,
+    noop: !result.executed && !result.error,
     label: result.command?.label || "",
     result: result.result,
+    affected: Array.isArray(effects.affected) ? effects.affected.map(item => ({...item})) : [],
+    stale: derived.filter(item => typeof item === "string" && item.startsWith("defer:")).map(item => item.slice(6)),
+    effects: {
+      render: effects.render || "none",
+      selection: effects.selection || "none",
+      runtimeStats: Boolean(effects.runtimeStats),
+      pickPanel: Boolean(effects.pickPanel),
+      derived: [...derived]
+    },
     error: result.error ? {
       name: result.error.name || "Error",
       message: result.error.message || String(result.error)

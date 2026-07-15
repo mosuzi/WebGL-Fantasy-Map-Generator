@@ -55,6 +55,7 @@
     "regress:exports": "node --no-warnings ./tools/webgl-generator-export-regression-suite.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:api-inventory": "node --no-warnings ./tools/webgl-generator-api-capability-inventory-regression.mjs",
+    "regress:api-edit-coverage": "node --no-warnings ./tools/webgl-generator-api-edit-coverage-regression.mjs",
     "regress:api-roundtrip": "node ./tools/webgl-generator-api-roundtrip-regression.mjs",
     "regress:api-geo": "node ./tools/webgl-generator-api-geo-regression.mjs",
     "regress:api-exports": "node ./tools/webgl-generator-api-export-records-regression.mjs",
