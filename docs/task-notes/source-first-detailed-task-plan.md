@@ -1,5 +1,7 @@
 # Source 优先详细任务规程
 
+> 状态校准：这是 source 优先复位阶段的历史施工图，不是当前任务队列。阶段记录和验收口径仍供追溯，但任何“下一步”都必须先进入 [`../current-plan.md`](../current-plan.md#权威任务清单) 才能执行。
+
 本文档是 `docs/task-notes/source-first-recovery-execution-plan.md` 的细化施工图。旧文档负责说明为什么复位和大阶段顺序；本文档负责让后续太子、尚书、门下、侍中可以直接按阶段开工、复核和验收。
 
 本规程基于两轮 source-only 审查形成：

@@ -2,6 +2,8 @@
 
 `task-notes/` 用来保存需要入库的专题计划、评估记录、执行细则和功能积压。这里的文档不是生成产物；新增或移动专题文档时，必须同步更新本索引。
 
+专题文档中的“下一步”“缺口”只表示候选方向，不自动成为活动任务。当前批准范围和顺序统一查看 [`../current-plan.md`](../current-plan.md#权威任务清单)。
+
 ## Source 对照与生成质量
 
 - `source-first-recovery-execution-plan.md`：source 优先复位整改总纲。

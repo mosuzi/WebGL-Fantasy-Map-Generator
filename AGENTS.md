@@ -31,7 +31,7 @@
   - `docs/README.md`：docs 目录结构和文档放置规则。
   - `graphics-reimplementation-plan.md`：早期图形化重实现分析，已被新复刻计划取代，仅作参考。
   - `docs/plans/gl-reimplementation-acceptance-plan.md`：独立 WebGL 地图生成器复刻可验收计划。
-  - `docs/current-plan.md`：当前开发计划和下一步。
+  - `docs/current-plan.md`：唯一权威任务清单、执行状态和最小验收口径；其它文档不得另建当前待办。
   - `docs/development-log.md`：开发历史与决策记录。
   - `docs/performance/performance-baseline.md`：第 0 里程碑 profiling 工具说明。
   - `docs/milestones/milestone-1-webgl-prototype.md`：第 1 里程碑 WebGL cells 原型说明。
@@ -64,7 +64,9 @@
 
 ## 当前状态
 
-已完成：
+正式应用已经跨过早期占位原型阶段。权威任务第 28～44 项已完成，公开 API 当前覆盖 11 个命名空间、168 个方法和 78 个编辑方法；第 45～54 项已经整理但尚未开始，批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”。README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
+
+以下内容是仍有参考价值的早期里程碑记录，不代表当前待办：
 
 - 阅读 `source/Fantasy-Map-Generator` 核心结构。
 - 编写图形化重实现总方案：`graphics-reimplementation-plan.md`。
@@ -118,7 +120,7 @@
 - Playwright 自带 Chromium 下载曾超时，当前可用 `--browser-channel chrome` 复用系统 Chrome。
 - 原项目 `generate()` 会在 points 未锁定时把点数重置为默认 10k；profiling 工具已经在生成前设置点数并锁定 `lock_points`。
 
-第 1 里程碑当前原型摘要：
+第 1 里程碑历史原型摘要：
 
 | 指标 | 数值 |
 |---|---:|
@@ -137,7 +139,7 @@
 | 平均候选 cells | 5.9 |
 | 最大候选 cells | 17 |
 
-第 1 里程碑当前 WebGL 性能采集摘要：
+第 1 里程碑历史 WebGL 性能采集摘要：
 
 | 指标 | 数值 |
 |---|---:|
@@ -172,4 +174,4 @@ node .\tools\serve-prototype.mjs --port 5400
 10. `docs/task-notes/README.md`
 11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
-然后根据用户最新指令继续。当前下一步建议是按 `docs/task-notes/editor-and-stat-panel-inventory.md` 进入正式版编辑器基础设施：先补 edit command / undo command、selection store、highlight / locate API、对象表格组件和派生重建调度，再做独立浮动 `river-panel`、高度编辑器第一刀和国家编辑器第一刀。
+然后只按 `docs/current-plan.md` 的活动权威任务继续。若清单为空，先等待用户批准下一波；不得从历史里程碑、README 或专题文档的“下一步”自行创造任务。
