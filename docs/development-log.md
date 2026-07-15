@@ -1,5 +1,18 @@
 # 开发历史
 
+## 2026-07-15：常用操作键盘快捷键与悬停提示
+
+本步完成权威任务清单第 35 项。API 前置任务第 28～34 项已经通过后，快捷键只接稳定公开 API 和控制面板原有公共 handler，不通过 DOM click 或内部地图字段拼接第二套动作。
+
+- 新增 `keyboard-shortcuts.js` 单一 registry，首版覆盖文件、生成入口、历史、常用编辑、选择定位、视图、图层和面板八组，共 22 项动作、23 组按键；Windows / Linux 使用 `Ctrl`，macOS 自动切换为 `Meta` 显示和匹配。
+- registry 集中保存操作名、组合键、作用域、禁用条件、菜单 selector 和 API / 公共 action。重复 id、同作用域按键冲突和不完整定义会直接拒绝；多作用域按 priority 和清单顺序确定性解析。
+- 键盘路由忽略输入框、文本域、下拉框、`contenteditable`、IME composing、`keyCode=229`、repeat 和独占键盘模态框；地图未就绪、operation 忙碌或历史栈为空时不执行禁用动作。
+- `bindRuntimePanel()` 的原 handler 对象同时提供给快捷键面板 action，菜单点击和快捷键因此复用同一函数；数据动作通过 `window.webglGeneratorApi` 调用。`layers.get()` 改为返回 renderer 的有效图层可见性，三项图层快捷键可安全读取后切换并恢复。
+- 新增独立 `#shortcut-toast`，悬停 `850ms` 后在页面底部居中显示“操作名 · 快捷键”，使用白灰半透明背景；离开、点击、元素移除、禁用或 `2400ms` 超时后清理。普通成功 / 错误 toast 优先，并通过显式事件立刻清理快捷键提示。
+- `docs/task-notes/keyboard-shortcuts.md` 固化完整清单和明确排除项。生成、换 seed、导入和破坏性操作因误触或确认风险不默认绑定，低频面板不为凑数量占用组合键。
+- `regress:shortcuts` 通过，覆盖平台规范化、冲突、作用域、输入 / IME / repeat、防误触、禁用条件、API / 公共 action 接线和提示计时器。集中 Chrome 回归对八组各抽查至少一项，确认菜单 / 键盘同结果、撤销重做、取消编辑、视图图层、适配视图和保存正常；提示中心偏差 `0px`、底部 `22px`、普通 toast 优先，`glError = 0`，health / console / page error 均为 `0`。
+- 生产构建完成 `1131 modules`，只保留既有大 chunk 警告；本项完成后从活动清单移除，下一项转入统一画布工具模式管理器。
+
 ## 2026-07-15：API 聚合门禁与阶段末综合验收
 
 本步完成权威任务清单第 34 项，将第 28～33 项形成的稳定 API、代码回归和浏览器回归收束为一个可重复执行、失败即停止的总门禁。

@@ -792,6 +792,30 @@ select:disabled {
   display: none;
 }
 
+.shortcut-toast {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  max-width: min(460px, calc(100% - 36px));
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(245, 247, 250, 0.82);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.22);
+  color: #1f2937;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  pointer-events: none;
+  text-align: center;
+  z-index: 3;
+}
+
+.shortcut-toast[hidden] {
+  display: none;
+}
+
 .map-legend {
   position: absolute;
   left: 18px;

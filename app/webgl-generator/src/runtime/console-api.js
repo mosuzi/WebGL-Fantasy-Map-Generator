@@ -742,7 +742,7 @@ function buildLayerSnapshot(state, documentRef) {
   return {
     colorMode: rendererStats.colorMode || preferences.colorMode || "height",
     visualTheme: rendererStats.viewOptions?.visualTheme?.id || rendererStats.visualTheme || preferences.visualTheme || state?.options?.visualTheme || "default",
-    layers: {...(preferences.layers || {})},
+    layers: {...(rendererStats.layerVisibility || preferences.layers || {})},
     display: {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),

@@ -88,6 +88,7 @@ import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, norma
 import {createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createDeleteRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {SelectionStore} from "./selection-store.js";
+import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
@@ -2001,6 +2002,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity),
     onStateChange: snapshot => {
       state.runtimeOperationSnapshot = snapshot;
+      state.keyboardShortcuts?.refreshAvailability?.();
     }
   });
   runtimeActions = createRuntimeActions(state, documentRef, {
@@ -2020,7 +2022,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindCustomLabelDrag(state, documentRef);
   bindEditingInteractionLock(canvas, state);
 
-  bindRuntimePanel(documentRef, {
+  const runtimePanelHandlers = {
     onGenerate: () => requestGenerate(state, documentRef, runtimeActions),
     onRandomSeed: () => {
       setSeedInput(documentRef, createRandomSeed());
@@ -2184,11 +2186,18 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap),
     onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true}),
     onMode: mode => runtimeActions.layers.setViewMode(mode)
-  });
+  };
+  bindRuntimePanel(documentRef, runtimePanelHandlers);
 
   const view = documentRef.defaultView || window;
   view.__webglGeneratorApp = state;
   installConsoleApi(documentRef, state, {actions: runtimeActions});
+  state.keyboardShortcuts = installKeyboardShortcuts(documentRef, {
+    canExecute: item => canExecuteKeyboardShortcut(state, item),
+    execute: item => executeKeyboardShortcut(state, documentRef, item, runtimePanelHandlers),
+    onDisabled: item => showMapToast(documentRef, `${item.label}当前不可用`, 1800, {tone: "error"}),
+    onError: (error, item) => showMapToast(documentRef, `${item.label}失败：${error?.message || error}`, 2600, {tone: "error"})
+  });
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;
@@ -3398,12 +3407,60 @@ function showMapToast(documentRef, message, durationMs = 2200, options = {}) {
   toast.textContent = text;
   toast.dataset.tone = options.tone || "success";
   toast.hidden = false;
+  documentRef.dispatchEvent(new CustomEvent("webgl-generator-map-toast-change", {detail: {visible: true, tone: toast.dataset.tone}}));
   view.__webglGeneratorToastTimer = view.setTimeout(() => {
     toast.hidden = true;
     toast.textContent = "";
     delete toast.dataset.tone;
     view.__webglGeneratorToastTimer = null;
+    documentRef.dispatchEvent(new CustomEvent("webgl-generator-map-toast-change", {detail: {visible: false}}));
   }, durationMs);
+}
+
+function canExecuteKeyboardShortcut(state, item) {
+  const busy = Boolean(state.runtimeOperation?.getSnapshot?.().busy);
+  const history = state.editHistory?.getStats?.() || {};
+  if (item.when === "map-idle") return Boolean(state.map) && !busy;
+  if (item.when === "map-ready") return Boolean(state.map);
+  if (item.when === "undo") return !busy && Number(history.undo) > 0;
+  if (item.when === "redo") return !busy && Number(history.redo) > 0;
+  if (item.when === "selection-or-editing") return Boolean(state.selection || state.editingObject);
+  return true;
+}
+
+async function executeKeyboardShortcut(state, documentRef, item, runtimePanelHandlers) {
+  const action = item.action || {};
+  if (action.type === "panel") {
+    const handler = runtimePanelHandlers[action.handler];
+    if (typeof handler !== "function") throw new Error(`面板 action 不存在：${action.handler}`);
+    return handler();
+  }
+  if (action.type === "toggle-layer") {
+    const snapshot = await invokePublicApi(documentRef, "layers.get");
+    const visible = Boolean(snapshot.layers?.[action.layer]);
+    return invokePublicApi(documentRef, "layers.setVisible", [action.layer, !visible]);
+  }
+  if (action.type === "api-sequence") {
+    let result = null;
+    for (const path of action.paths || []) result = await invokePublicApi(documentRef, path);
+    return result;
+  }
+  if (action.type !== "api") throw new Error(`快捷键 action 类型不受支持：${action.type || "未知"}`);
+  const result = await invokePublicApi(documentRef, action.path, action.args || []);
+  if (action.feedback) showMapToast(documentRef, action.feedback);
+  return result;
+}
+
+async function invokePublicApi(documentRef, path, args = []) {
+  const api = documentRef.defaultView?.webglGeneratorApi;
+  const parts = String(path || "").split(".").filter(Boolean);
+  const methodName = parts.pop();
+  const owner = parts.reduce((target, key) => target?.[key], api);
+  const method = owner?.[methodName];
+  if (typeof method !== "function") throw new Error(`公开 API 不存在：${path}`);
+  const response = await method.apply(owner, args);
+  if (!response?.ok) throw new Error(response?.error?.message || `${path} 调用失败`);
+  return response.data;
 }
 
 function reportGenerateError(documentRef, error) {
