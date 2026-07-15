@@ -30,6 +30,7 @@
     "regress:geo": "node ./tools/webgl-generator-geo-import-regression.mjs",
     "regress:measurement": "node ./tools/webgl-generator-measurement-import-regression.mjs",
     "regress:measurement-curve": "node --no-warnings ./tools/webgl-generator-measurement-curve-regression.mjs",
+    "regress:note-import": "node --no-warnings ./tools/webgl-generator-note-import-regression.mjs",
     "regress:measurement-highlight": "node --no-warnings ./tools/webgl-generator-measurement-highlight-regression.mjs",
     "regress:composite-highlight": "node --no-warnings ./tools/webgl-generator-composite-highlight-regression.mjs",
     "regress:persistent-highlight-contract": "node --no-warnings ./tools/webgl-generator-persistent-highlight-contract-regression.mjs",

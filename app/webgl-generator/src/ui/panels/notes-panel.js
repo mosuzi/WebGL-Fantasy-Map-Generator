@@ -13,11 +13,14 @@ const NOTES_COLUMN_WIDTHS = Object.freeze({
 const NOTES_LIST_DEFAULTS = Object.freeze({
   filter: "",
   columnWidths: NOTES_COLUMN_WIDTHS,
+  importMode: "append",
+  importModes: Object.freeze(["append", "replace"]),
   sortKey: "updatedAt",
   sortDir: "desc"
 });
 
 export function createNotesPanel(documentRef, manager, callbacks = {}) {
+  let pendingImportFile = null;
   const listPreferences = readPanelListPreferences(documentRef, NOTES_PANEL_ID, NOTES_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
@@ -26,6 +29,8 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     history: null,
     filter: listPreferences.filter,
     columnWidths: listPreferences.columnWidths,
+    importMode: listPreferences.importMode,
+    importPreview: null,
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
@@ -69,6 +74,29 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
       callbacks.onLocate?.(row);
     },
     onDelete: row => callbacks.onDelete?.(row),
+    onDeleteBatch: rows => callbacks.onDeleteBatch?.(rows),
+    onImportMode: mode => {
+      panelState.importMode = mode === "replace" ? "replace" : "append";
+      updatePanelListPreferences(documentRef, NOTES_PANEL_ID, {importMode: panelState.importMode}, NOTES_LIST_DEFAULTS);
+      pendingImportFile = null;
+      panelState.importPreview = null;
+    },
+    onImportPreview: async file => {
+      const preview = await callbacks.onImportPreview?.(file, panelState.importMode);
+      pendingImportFile = preview ? file : null;
+      panelState.importPreview = preview || null;
+    },
+    onConfirmImport: async () => {
+      if (!pendingImportFile || !panelState.importPreview?.canImport) return;
+      const result = await callbacks.onImport?.(pendingImportFile, panelState.importMode);
+      if (!result) return;
+      pendingImportFile = null;
+      panelState.importPreview = null;
+    },
+    onCancelImport: () => {
+      pendingImportFile = null;
+      panelState.importPreview = null;
+    },
     onCreateStandaloneMode: active => callbacks.onCreateStandaloneMode?.(active),
     onRename: (row, name) => callbacks.onRename?.(row, name),
     onNoteChange: (row, body) => callbacks.onNoteChange?.(row, body),

@@ -4,6 +4,32 @@
   <div class="notes-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选类型 / 名称 / id / 正文" @update:model-value="callbacks.onFilter" />
   </div>
+  <UiSelectField
+    class-name="notes-import-mode"
+    input-id="notes-import-mode"
+    label="导入方式"
+    :model-value="state.importMode"
+    :options="importModeOptions"
+    @update:model-value="callbacks.onImportMode"
+  />
+
+  <div v-if="state.importPreview" class="notes-import-preview namebase-import-preview is-previewing" data-ui-state="preview">
+    <div class="namebase-import-preview-header">
+      <strong>备注导入预检</strong>
+      <span>{{ state.importPreview.filename }}</span>
+    </div>
+    <UiMetricGrid :metrics="importPreviewMetrics" class-name="namebase-import-preview-metrics" />
+    <p class="namebase-import-preview-note">{{ importPreviewNote }}</p>
+    <div v-if="state.importPreview.diagnostics?.length" class="namebase-import-preview-list">
+      <span v-for="item in state.importPreview.diagnostics.slice(0, 8)" :key="`${item.index}-${item.code}-${item.id}`" :class="{conflict: item.severity === 'error'}">
+        {{ item.code }} · {{ item.id || item.message }}
+      </span>
+    </div>
+    <div class="namebase-import-preview-actions">
+      <UiButton variant="secondary" @click="callbacks.onCancelImport">取消</UiButton>
+      <UiButton :disabled="!state.importPreview.canImport" @click="callbacks.onConfirmImport">确认导入</UiButton>
+    </div>
+  </div>
   <UiObjectTable
     :columns="columns"
     :column-widths="state.columnWidths"
@@ -31,8 +57,10 @@
     class-name="notes-panel-list-actions"
     label="备注列表操作"
     :export-actions="notesExportActions"
+    :import-actions="notesImportActions"
     :actions="notesListActions"
     @export="handleNotesExport"
+    @import="handleNotesImport"
     @action="handleNotesAction"
   />
 
@@ -69,11 +97,13 @@ import {resolveObject} from "../../../runtime/object-resolver.js";
 import {formatNumber as formatDisplayNumber} from "../../display-units.js";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiActionDock from "./base/UiActionDock.vue";
+import UiButton from "./base/UiButton.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiSelectField from "./base/UiSelectField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -107,6 +137,13 @@ const sortOptions = Object.freeze([
   {key: "name", label: "名称"},
   {key: "bodyLength", label: "字数"}
 ]);
+const importModeOptions = Object.freeze([
+  {value: "append", label: "追加并更新同 id"},
+  {value: "replace", label: "替换全部备注"}
+]);
+const notesImportActions = Object.freeze([
+  {key: "notes", label: "导入备注摘要", accept: ".json,application/json"}
+]);
 
 const columns = Object.freeze([
   {key: "kindLabel", label: "类型"},
@@ -131,11 +168,14 @@ const notesExportActions = computed(() => [
   {key: "selected-notes", label: `导出选中 ${formatNumber(selectedNoteRows.value.length)}`, disabled: !selectedNoteRows.value.length}
 ]);
 const selected = computed(() => rows.value.find(row => row.id === props.state.selectedNoteId) || null);
+const visibleOrphanRows = computed(() => visibleRows.value.filter(row => row.orphan));
+const deleteTargetRows = computed(() => selectedNoteRows.value.length ? selectedNoteRows.value : selected.value ? [selected.value] : []);
 const notesListActions = computed(() => [
   {key: "create-standalone", label: props.state.createMode ? "取消放置独立备注" : "放置独立备注", icon: "+"},
+  {key: "select-orphans", label: `只选孤儿备注 ${formatNumber(visibleOrphanRows.value.length)}`, icon: "◎", disabled: !visibleOrphanRows.value.length},
   {key: "highlight-selected", label: `高亮备注对象 ${formatNumber(highlightableNoteRows.value.length)}`, icon: "◉", disabled: !highlightableNoteRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
-  {key: "delete", label: "删除选中备注", icon: "×", disabled: !selected.value}
+  {key: "delete-batch", label: deleteTargetRows.value.length > 1 ? `批量删除已选 ${formatNumber(deleteTargetRows.value.length)}` : "删除选中备注", icon: "×", disabled: !deleteTargetRows.value.length}
 ]);
 watch(() => selected.value?.id, () => { activeAction.value = null; });
 const summaryMetrics = computed(() => [
@@ -155,6 +195,29 @@ const detailRows = computed(() => selected.value ? [
   {label: "字数", value: `${formatNumber(selected.value.bodyLength)}字`},
   {label: "更新时间", value: formatDateTime(selected.value.updatedAt)}
 ] : []);
+const importPreviewMetrics = computed(() => {
+  const preview = props.state.importPreview;
+  if (!preview) return [];
+  return [
+    {label: "可导入", value: formatNumber(preview.valid)},
+    {label: "无效", value: formatNumber(preview.invalid)},
+    {label: "重复 id", value: formatNumber(preview.duplicateIds)},
+    {label: "孤儿", value: formatNumber(preview.missingObjects)},
+    {label: "同 id 更新", value: formatNumber(preview.existingConflicts)},
+    {label: "将替换", value: formatNumber(preview.replaceCount)}
+  ];
+});
+const importPreviewNote = computed(() => {
+  const preview = props.state.importPreview;
+  if (!preview) return "";
+  if (!preview.validDocument) return preview.diagnostics?.[0]?.message || "文档不可导入";
+  const parts = [preview.mode === "replace"
+    ? `确认后替换当前 ${formatNumber(preview.replaceCount)} 条备注`
+    : "确认后追加新备注，并用导入内容更新同 id 备注"];
+  if (preview.invalid) parts.push(`${formatNumber(preview.invalid)} 条无效记录会跳过`);
+  if (preview.missingObjects) parts.push(`${formatNumber(preview.missingObjects)} 条对象缺失记录会作为孤儿备注保留`);
+  return parts.join("；");
+});
 
 function noteRows(map) {
   return (map?.notes?.notes || [])
@@ -261,9 +324,17 @@ function handleNotesExport(key) {
   if (key === "notes") props.callbacks.onExport?.(visibleRows.value);
 }
 
+function handleNotesImport({file}) {
+  if (file) props.callbacks.onImportPreview?.(file);
+}
+
 function handleNotesAction(key) {
   if (key === "create-standalone") {
     props.callbacks.onCreateStandaloneMode?.(!props.state.createMode);
+    return;
+  }
+  if (key === "select-orphans") {
+    selectedNoteIds.value = visibleOrphanRows.value.map(row => row.id);
     return;
   }
   if (key === "highlight-selected") {
@@ -274,9 +345,13 @@ function handleNotesAction(key) {
     props.callbacks.onClearHighlights?.();
     return;
   }
+  if (key === "delete-batch") {
+    props.callbacks.onDeleteBatch?.(deleteTargetRows.value);
+    selectedNoteIds.value = [];
+    return;
+  }
   if (!selected.value) return;
   if (key === "locate" && !selected.value.orphan) props.callbacks.onLocate?.(selected.value);
-  if (key === "delete") props.callbacks.onDelete?.(selected.value);
 }
 
 function formatNumber(value) {

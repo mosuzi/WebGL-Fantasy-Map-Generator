@@ -12,7 +12,7 @@ export const API_METHODS = Object.freeze({
   climate: Object.freeze(["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"]),
   history: Object.freeze(["get", "stats", "peek", "undo", "redo"]),
   edit: Object.freeze([
-    "notes.createStandalone", "notes.set", "notes.delete",
+    "notes.createStandalone", "notes.set", "notes.delete", "notes.import", "notes.deleteBatch",
     "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "measurements.import",
     "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
     "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",

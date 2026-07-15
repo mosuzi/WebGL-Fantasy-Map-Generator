@@ -86,6 +86,7 @@ import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEvents
 import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMirrors} from "./military-regeneration-variation.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
+import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
 import {createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand} from "./lake-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -1733,6 +1734,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onExport: rows => exportNotesSummary(state, documentRef, rows, runtimeActions.data.exportNotes),
+    onImportPreview: (file, mode) => previewNotesImport(state, documentRef, file, mode),
+    onImport: (file, mode) => importNotesFile(state, documentRef, file, mode, runtimeActions.edit.notes.import),
+    onDeleteBatch: rows => runtimeActions.edit.notes.deleteBatch(rows.map(row => row.id), {label: "批量删除备注"}),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -2329,7 +2333,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       notes: {
         createStandalone: options => createStandaloneNoteViaApi(state, documentRef, options),
         set: (object, body, options = {}) => setObjectNoteViaApi(state, documentRef, object, body, options),
-        delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options)
+        delete: (noteId, options = {}) => deleteNoteViaApi(state, documentRef, noteId, options),
+        import: (document, options = {}) => importNotesViaApi(state, documentRef, document, options),
+        deleteBatch: (noteIds, options = {}) => deleteNotesBatchViaApi(state, documentRef, noteIds, options)
       },
       measurements: {
         save: (points, options = {}) => saveMeasurementViaApi(state, documentRef, points, options),
@@ -3622,6 +3628,34 @@ function exportNotesSummary(state, documentRef, rows = [], exportAction = state.
     return result;
   } catch (error) {
     reportFileOperationError(documentRef, "备注摘要导出失败", error);
+    return null;
+  }
+}
+
+async function previewNotesImport(state, documentRef, file, mode = "append") {
+  try {
+    const preview = inspectNotesImport(await file.text(), state.map, {mode});
+    const result = {...preview, filename: file.name || "备注摘要.json"};
+    setFileOperationStatus(documentRef, preview.canImport
+      ? `备注导入预检完成：可导入 ${preview.valid} 条，孤儿 ${preview.missingObjects} 条，无效 ${preview.invalid} 条。`
+      : `备注导入预检失败：${preview.diagnostics?.[0]?.message || "没有可导入记录"}`);
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "备注导入预检失败", error);
+    return null;
+  }
+}
+
+async function importNotesFile(state, documentRef, file, mode = "append", importAction = state.runtimeActions?.edit?.notes?.import) {
+  try {
+    const result = importAction(await file.text(), {mode});
+    if (result?.error) throw new Error(result.error.message || "备注导入失败");
+    setFileOperationStatus(documentRef, result?.executed
+      ? `备注摘要已${mode === "replace" ? "替换" : "追加"}导入，共 ${result.result?.valid || 0} 条。`
+      : "备注摘要与当前地图一致，没有写入变化。");
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "备注摘要导入失败", error);
     return null;
   }
 }
@@ -5545,6 +5579,34 @@ function deleteNoteViaApi(state, documentRef, noteId, options = {}) {
     } : null,
     history: state.editHistory.getStats()
   };
+}
+
+function importNotesViaApi(state, documentRef, document, options = {}) {
+  const command = createImportNotesCommand(document, {
+    mode: options.mode,
+    label: options.label || "导入备注摘要"
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "导入备注与当前地图一致。",
+    status: executed => `已${options.mode === "replace" ? "替换" : "追加"}导入 ${executed.getResult?.()?.valid || 0} 条备注。`,
+    throwOnError: false
+  });
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function deleteNotesBatchViaApi(state, documentRef, noteIds, options = {}) {
+  if (!Array.isArray(noteIds)) throw new Error("批量删除备注必须提供 noteIds 数组");
+  const command = createDeleteNotesBatchCommand(noteIds, {label: options.label || "批量删除备注"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "没有可删除的备注。",
+    status: executed => `已批量删除 ${executed.getDeletedCount?.() || 0} 条备注。`,
+    throwOnError: false
+  });
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
 }
 
 function saveMeasurementViaApi(state, documentRef, points, options = {}) {

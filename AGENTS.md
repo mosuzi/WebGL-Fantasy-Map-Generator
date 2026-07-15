@@ -64,7 +64,7 @@
 
 ## 当前状态
 
-正式应用已经跨过早期占位原型阶段。权威任务第 28～45、55～60 项已完成，公开 API 当前覆盖 11 个命名空间、168 个方法和 78 个编辑方法；现在执行第 46 项，后续按编号完成第 47～52、54 项；第 53 项按用户决定移除，短期不深化纹章系统。现有功能与界面信息架构审计及整改证据见 `docs/audits/ui-function-and-information-architecture-audit.md` 和 `docs/task-notes/ui-system-audit-gate.md`。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
+正式应用已经跨过早期占位原型阶段。权威任务第 28～46、55～60 项已完成，公开 API 当前覆盖 11 个命名空间、170 个方法和 80 个编辑方法；现在执行第 47 项，后续按编号完成第 48～52、54 项；第 53 项按用户决定移除，短期不深化纹章系统。现有功能与界面信息架构审计及整改证据见 `docs/audits/ui-function-and-information-architecture-audit.md` 和 `docs/task-notes/ui-system-audit-gate.md`。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
 
 以下内容是仍有参考价值的早期里程碑记录，不代表当前待办：
 

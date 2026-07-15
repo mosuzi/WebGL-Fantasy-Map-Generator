@@ -100,7 +100,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       notes: Object.freeze({
         createStandalone: (options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.createStandalone, "edit.notes.createStandalone")(options)),
         set: (object, body, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.set, "edit.notes.set")(object, body, options)),
-        delete: (noteId, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.delete, "edit.notes.delete")(noteId, options))
+        delete: (noteId, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.delete, "edit.notes.delete")(noteId, options)),
+        import: (document, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.import, "edit.notes.import")(document, options)),
+        deleteBatch: (noteIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.notes?.deleteBatch, "edit.notes.deleteBatch")(noteIds, options))
       }),
       measurements: Object.freeze({
         save: (points, options = {}) => apiCall(() => requireApiAction(actions.edit?.measurements?.save, "edit.measurements.save")(points, options)),
@@ -364,6 +366,8 @@ function buildMethodMetadata() {
       "notes.createStandalone": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
       "notes.set": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
       "notes.delete": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
+      "notes.import": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
+      "notes.deleteBatch": {stable: "draft", mutates: "notes", undoable: true, async: false, requiresConfirm: false},
       "measurements.save": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "measurements.rename": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "measurements.updatePoints": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
@@ -1338,6 +1342,8 @@ function buildApiNoteRows(map, ids = null) {
         name: note.name || resolved?.name || resolved?.fullName || resolved?.targetName || resolved?.text || note.id,
         body,
         bodyLength: body.length,
+        format: note.format || "plain",
+        pinned: Boolean(note.pinned),
         orphan: Boolean(!object || !resolved),
         standalone: Boolean(note.standalone),
         packCell: note.standalone ? Number(note.packCell) : null,

@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-07-15：备注独立导入与孤儿批量治理
+
+- 完成权威任务第 46 项。`webgl-generator-notes-summary v1` 摘要导出补齐 `format / pinned` 持久字段，现有 `id / kind / objectId / name / body / standalone / packCell / x / y / createdAt / updatedAt` 保持不变，可无损导回当前纯文本备注存储。
+- 新增备注导入预检：支持追加并更新同 id 或替换全部备注；重复 id、缺失 id / kind / objectId、未知对象类型、非纯文本格式、缺失对象和坏版本返回结构化诊断。混合文档只导入有效记录，缺失对象记录作为孤儿备注保留；预检、取消和失败不修改地图。
+- 新增 `createImportNotesCommand()` 与 `createDeleteNotesBatchCommand()`，UI 和 `api.edit.notes.import / deleteBatch` 共用同一运行时 action。批量删除以整份 notes 存储快照撤销，完整恢复记录顺序和 metadata；旧地图原本没有 notes 存储时，撤销导入会恢复为无该字段。
+- 备注总览新增导入方式、文件入口、预检指标 / 诊断、确认 / 取消、“只选孤儿备注”和单事务批量删除；已有已选备注导出继续作为批量导出入口。纯文本契约不变，没有引入富文本、Markdown 或 AI。
+- `regress:note-import` 通过：当前摘要 `2` 条持久字段完整往返；混合样本可导入 `2`、无效 `2`、重复 id `1`、孤儿 `1`、同 id 更新 `1`；导入与批量删除各只形成一条历史，撤销 / 重做完整。`regress:map-migration`、API inventory / stability / convergence / edit coverage 和生产构建通过，公开 API 基线更新为 11 个命名空间、170 个方法、80 个编辑方法，稳定等级为 `162 / 7 / 1`。
+- 第 46 项达到最小验收后从活动权威清单移除，转入第 47 项“名称库多词率与剩余显式入口”。
+
 ## 2026-07-15：曲线尺连续采样与平滑闭合
 
 - 完成权威任务第 45 项。测量读数条新增面积尺、折线尺和曲线尺切换；路线贴合继续固定为路线尺。曲线尺以 pointer 拖拽连续采样，按最小屏幕距离收点，并在抬手后使用稳定点列简化；面积尺和曲线尺分别支持直线 / 平滑闭合与开放 / 平滑闭合。

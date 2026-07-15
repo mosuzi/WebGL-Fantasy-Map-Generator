@@ -60,7 +60,7 @@
 - 在对象表格行操作或详情操作中新增“备注”图标。
 - 打开后显示对象名、当前备注、编辑 textarea、应用、清空、定位。
 - 对象已有备注时，在列表行或详情里显示一个小的“有备注”标记。
-- 独立“备注总览”浮动面板已完成第一刀，支持筛选、排序、定位、删除、孤儿备注标记、撤销/重做和备注摘要导出；备注独立导入后续再做。
+- 独立“备注总览”浮动面板支持筛选、排序、定位、删除、孤儿备注标记、撤销/重做、备注摘要导出，以及预检后的追加 / 替换导入和孤儿批量治理。
 
 ## 风险
 
@@ -90,4 +90,7 @@
 - 备注摘要导出第一刀已完成：备注总览可导出当前筛选结果为 `webgl-generator-notes-summary v1`，用于外部阅读或脚本处理，不替代完整地图 JSON。
 - 完整地图 JSON 导出已验证包含 marker、city、river、route、state、province、culture、religion 与 label 的 `map.notes`。
 - marker、river 与 route 要素 GeoJSON 已写入 `hasNote` 和 `note` 属性；其中 marker 和 route 已完成端到端导出验证。
-- 尚未做富文本、Markdown、备注独立导入和孤儿备注批量清理。
+- 备注独立导入与孤儿批量治理已完成：`webgl-generator-notes-summary v1` 导出补齐 `format / pinned` 持久字段，可预检后追加或替换导回；重复 id、对象缺失、坏版本和混合有效 / 无效记录均有结构化诊断，缺失对象记录会保留为孤儿备注。
+- 备注总览新增导入方式、预检确认 / 取消、“只选孤儿备注”和单事务批量删除；批量导出继续复用既有已选行导出。UI 与 `api.edit.notes.import / deleteBatch` 共用同一 edit command，撤销会恢复完整备注顺序和元数据。
+- `pnpm run regress:note-import` 覆盖当前摘要持久字段往返、预检无写入、坏版本、混合记录、追加导入、批量删除、撤销 / 重做和缺少 notes 存储的旧地图；生产构建与 API 稳定门禁通过。
+- 尚未做富文本、Markdown 或 AI 生成；当前继续只保存 `plain` 纯文本。
