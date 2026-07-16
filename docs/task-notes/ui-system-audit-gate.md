@@ -2,6 +2,8 @@
 
 本文记录权威任务第 60 项的稳定验收口径。生成结果写入 `docs/generated/reports/ui-system-audit-results.json` 和 `.md`，不作为手写文档提交；可复现入口为：
 
+> 2026-07-16 后续校准：第 60 项当时只证明自动左右停靠、无重叠和最后主面板恢复，没有覆盖“用户手动拖动后不得被自动停靠覆盖”。当前实测主面板会在重开、异步尺寸变化或对象详情共存时重新回到右侧，该缺口已提升为权威任务第 67 项，具体范围见 [`panel-manual-positioning.md`](./panel-manual-positioning.md)。
+
 ```powershell
 pnpm run build:app
 pnpm run regress:ui-system-audit-contract
