@@ -63,10 +63,11 @@
   - 验收：一次有效省份刷涂在 `pointerup` 后保留 grid / pack 归属变化并只写一条历史，省份统计与颜色刷新一致；`pointercancel` 恢复完整预览且历史不变；撤销 / 重做精确恢复；画布模式门禁覆盖全部 23 个注册模式；`regress:social-ownership`、`regress:canvas-tools`、生产构建和 `git diff --check` 通过。
   - 完成记录：省份笔刷现在与国家笔刷采用相同事件语义，`pointerup` 调用既有 `finishProvinceStroke()` 正式提交单条命令，`pointercancel` 复用 `rollbackCanvasToolStroke()` 恢复 grid / pack 预览且不写历史；既有省份命令、同国家约束、刷新和统计路径未改动。画布模式回归补齐 `biome:assign / economy:market-assign / route:edit-waypoint / feature:patch-select`，并新增省份两条 pointer 路由的正反断言，当前覆盖运行时全部 23 个模式；固定 seed 动态样本进一步验证同国两省预览提交后的 grid / pack 归属、单条历史、两省 cells / area / 邻省派生、目标颜色及完整撤销 / 重做，并验证真实回滚 helper 取消后恢复完整快照且历史不变。`regress:canvas-tools`、`regress:social-ownership`、`regress:api-edit-coverage`、生产构建和 `git diff --check` 全部通过；本项验收未要求浏览器，观察使未新开窗口。
 
-- **权威任务第 65 项：补齐独立备注的 Selection 领域面板绑定。** `Ready；来源：FOLLOWUPS 与失败门禁`
+- **权威任务第 65 项：补齐独立备注的 Selection 领域面板绑定。** `已完成；来源：FOLLOWUPS 与失败门禁`
   - 痛点：`OBJECT_KIND.NOTE` 已是正式可定位对象，但 `SELECTION_PANEL_BINDINGS` 缺少其 `notes-panel` 绑定，导致 `regress:selection-panel-policy` 直接失败，也使独立备注选择不能完整遵守第 37 项方案 B。
   - 范围：按既有方案 B 为独立备注声明备注总览领域绑定；从备注面板自身选择时不重复刷新，从地图、对象详情、API 或其它入口选择时只更新已经打开的备注面板，面板关闭时仍落到对象详情。不改变区域兜底、其它对象绑定或自动打开策略。
   - 验收：独立备注覆盖“来源面板、已打开领域面板、领域面板关闭”三条路由；对象详情兜底、定位和高亮保持一致；`regress:selection-panel-policy`、`regress:selection-actions`、`regress:panel-refresh-path`、生产构建和 `git diff --check` 通过。
+  - 完成记录：`SELECTION_PANEL_BINDINGS` 已增加 `note -> notes-panel`，NOTE handler 复用 `routeSelectionToPanel()`；仅在备注总览已打开且选择来自其它入口时，按解析对象的 `noteId` 选中并刷新现有面板，来源面板选择不重复刷新，面板关闭时继续由对象详情兜底，全程不调用 `open()`。独立备注解析、孤儿备注、定位与高亮路径均未改动；专项回归显式覆盖三条 NOTE 路由和 `noteId` 接线。`regress:selection-panel-policy`、`regress:selection-actions`、`regress:panel-refresh-path`、生产构建和 `git diff --check` 全部通过；本项验收未要求浏览器，观察使未操作现有 Chrome。
 
 - **权威任务第 66 项：道路与河流按画布缩放投影语义宽度。** `Ready；来源：用户视觉反馈与 renderer 代码复查`
   - 痛点：道路当前按等级固定为 `3.6 / 2.6 / 1.8 CSS px`，河流宽度也被钳制在 `1.1～9.5 CSS px`；画布缩放只改变路径位置而不改变基础线宽，导致适配视图时道路和河流相对地图明显过粗、视觉权重失真。

@@ -20,6 +20,7 @@ export const SELECTION_PANEL_BINDINGS = Object.freeze({
   [OBJECT_KIND.DIPLOMACY_RELATION]: binding("diplomacy-panel"),
   [OBJECT_KIND.MARKER]: binding("marker-panel"),
   [OBJECT_KIND.LABEL]: binding("label-naming-panel"),
+  [OBJECT_KIND.NOTE]: binding("notes-panel"),
   [OBJECT_KIND.MEASUREMENT]: binding("measurement-panel"),
   [OBJECT_KIND.MILITARY]: binding("military-panel")
 });

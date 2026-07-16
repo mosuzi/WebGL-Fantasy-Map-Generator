@@ -5490,6 +5490,13 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
       update: () => updateLabelNamingPanel(state)
     });
   },
+  [OBJECT_KIND.NOTE]: (state, selection, editingObject, context) => {
+    return routeSelectionToPanel(state, selection, context, {
+      panel: state.panels.notes,
+      prepare: () => state.panels.notes.setSelectedNoteId(selection.object.noteId),
+      update: () => updateNotesPanel(state)
+    });
+  },
   [OBJECT_KIND.MEASUREMENT]: (state, selection, editingObject, context) => {
     return routeSelectionToPanel(state, selection, context, {
       panel: state.panels.measurement,

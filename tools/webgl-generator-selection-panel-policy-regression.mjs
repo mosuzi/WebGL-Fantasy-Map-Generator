@@ -42,6 +42,12 @@ assert.equal(
 );
 assert.equal(decideSelectionPanelRoute(), SELECTION_PANEL_ROUTE.OBJECT_DETAILS, "没有领域面板的区域对象必须使用对象详情");
 
+const noteBinding = SELECTION_PANEL_BINDINGS[OBJECT_KIND.NOTE];
+assert.deepEqual(noteBinding, {panelId: "notes-panel", sourcePanelIds: ["notes-panel"]}, "独立备注必须绑定备注总览");
+assert.equal(decideSelectionPanelRoute({binding: noteBinding, sourcePanelId: "notes-panel", panelOpen: true}), SELECTION_PANEL_ROUTE.SOURCE_PANEL, "备注面板来源不得重复刷新");
+assert.equal(decideSelectionPanelRoute({binding: noteBinding, sourcePanelId: "object-details", panelOpen: true}), SELECTION_PANEL_ROUTE.UPDATE_OPEN_PANEL, "备注面板已打开时必须只更新现有面板");
+assert.equal(decideSelectionPanelRoute({binding: noteBinding, sourcePanelId: "object-details", panelOpen: false}), SELECTION_PANEL_ROUTE.OBJECT_DETAILS, "备注面板关闭时必须落到对象详情");
+
 const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 const objectDetailsSource = await readFile(new URL("../app/webgl-generator/src/ui/panels/object-details-panel.js", import.meta.url), "utf8");
 const handlerSource = sourceBetween(appSource, "const SELECTION_PANEL_HANDLERS", "function openSelectionAwarePanelForState");
@@ -55,6 +61,7 @@ assert.match(appSource, /selectionStore\.setSelection\(\{object\}, \{sourcePanel
 assert.match(appSource, /sourcePanelId = panelId[\s\S]*?if \(sourcePanelId\) selectFromPanel\(sourcePanelId, object\)/, "定位必须保留来源面板语义");
 assert.match(appSource, /object\.kind === OBJECT_KIND\.STATE && shouldSwitchDiplomacySubjectForSelection\(state\)/, "外交着色主题下的国家主体切换例外必须保留");
 assert.match(handlerSource, /context\.suppressNextRiverPanelOpen[\s\S]*?context\.clearRiverSuppressor\(\)/, "河流面板主动关闭抑制必须保留");
+assert.match(handlerSource, /\[OBJECT_KIND\.NOTE\]:[\s\S]{0,500}?panel: state\.panels\.notes,[\s\S]{0,300}?setSelectedNoteId\(selection\.object\.noteId\),[\s\S]{0,300}?updateNotesPanel\(state\)/, "独立备注 handler 必须按 noteId 更新已打开的备注总览");
 assert.doesNotMatch(objectDetailsSource, /selection\.object\.kind === "state"|selection\.object\.kind === "river"|selection\.object\.kind === "city"/, "对象详情不得拒绝国家、河流或城市兜底");
 
 console.log(JSON.stringify({

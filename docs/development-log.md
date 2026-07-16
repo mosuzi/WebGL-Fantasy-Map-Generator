@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-07-16：实施权威任务第 65 项——独立备注 Selection 面板绑定
+
+- 统一 Selection 绑定新增 `note -> notes-panel`，独立备注 handler 复用既有 `routeSelectionToPanel()`：从备注总览自身选择时不重复刷新；从地图、对象详情、API 或其它入口选择时，只在备注总览已经打开时按 `selection.object.noteId` 选中对应备注并刷新；面板关闭时继续落到对象详情，不自动打开领域面板。
+- `regress:selection-panel-policy` 显式覆盖 NOTE 的来源面板、已打开领域面板和领域面板关闭三条路由，并锁定 handler 使用 `state.panels.notes`、`setSelectedNoteId(selection.object.noteId)` 与 `updateNotesPanel(state)`。区域兜底、其它对象绑定、对象详情、定位、高亮、独立备注解析和孤儿备注规则均未改动。
+- 四级复核通过 `node --check`、`regress:selection-panel-policy`、`regress:selection-actions`、`regress:panel-refresh-path`、生产构建和 `git diff --check`；策略回归的映射对象数更新为 16。构建只有既有大 chunk 警告；本项验收未要求浏览器，观察使未操作现有 Chrome。
+
 ## 2026-07-16：实施权威任务第 64 项——省份疆域笔刷提交语义
 
 - 省份笔刷事件路由已与国家笔刷统一：正常 `pointerup` 调用既有 `finishProvinceStroke()`，把预览中的 grid / pack 归属差异交给省份命令形成单条历史；`pointercancel` 改为调用 `rollbackCanvasToolStroke()`，完整恢复预览且不提交历史。目标省份、同国家约束、边界 / 颜色刷新、统计和撤销 / 重做命令路径均保持不变。
