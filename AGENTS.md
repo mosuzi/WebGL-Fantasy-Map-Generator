@@ -174,4 +174,4 @@ node .\tools\serve-prototype.mjs --port 5400
 10. `docs/task-notes/README.md`
 11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
-然后只按 `docs/current-plan.md` 的活动权威任务继续。若清单为空，先等待用户批准下一波；不得从历史里程碑、README 或专题文档的“下一步”自行创造任务。
+然后只按 `docs/current-plan.md` 的活动权威任务继续。当前顺序为第 64 项省份笔刷结束语义、第 65 项独立备注 selection 绑定、第 66 项道路与河流尺度宽度；若清单为空，先等待用户批准下一波，不得从历史里程碑、README 或专题文档的“下一步”自行创造任务。

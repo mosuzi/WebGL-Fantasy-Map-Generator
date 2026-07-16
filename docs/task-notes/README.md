@@ -8,6 +8,7 @@
 
 - 权威任务第 64 项对应 `canvas-tool-mode-manager.md`：修正省份笔刷抬手提交与取消回滚，并把画布模式回归清单从 19 个同步到运行时真实 23 个，不扩展其它省份能力。
 - 权威任务第 65 项对应 `selection-panel-policy.md`：按既有方案 B 补独立备注的 `notes-panel` 绑定，不改变其它对象路由。
+- 权威任务第 66 项对应 `world-space-network-width.md`：把道路与河流基础线宽从固定屏幕像素改为随相机投影的世界尺度语义宽度，同时保留屏幕尺度的高亮与命中能力。
 
 以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
 
@@ -29,6 +30,7 @@
 - `measurement-rulers-plan.md`：测量对象与路线贴合计划。
 - `edit-command-contract.md`：编辑命令轻量契约，记录 `label / effects / affected / isNoop / getResult` 等统一约定。
 - `panel-layout-overlay-performance-plan.md`：面板布局宽松化与非 WebGL overlay 性能治理计划。
+- `world-space-network-width.md`：权威任务第 66 项的道路 / 河流世界尺度宽度、缩放投影、亚像素表现、高亮与 picking 分层契约。
 - `visual-theme-preset-plan.md`：视觉主题与样式预设计划。
 - `console-extension-api-system-plan.md`：控制台与扩展 API 系统计划，记录 API 命名空间、返回格式、副作用边界和分阶段实施。
 - `console-api-capability-inventory.md`：控制台 API 全量能力盘点，记录公开基线、现有 runtime / command 分类和第 29～33 项冻结范围。

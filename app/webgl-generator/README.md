@@ -1,6 +1,6 @@
 # 独立 WebGL 地图生成器应用
 
-`app/webgl-generator/` 是正式 WebGL 地图生成器应用目录，与 `prototype/webgl-cells/` 的早期快照 demo 分开维护。这里已经不是占位地图阶段；截至 2026-07-16，上一波功能与审计任务已经收口，当前只剩两项窄范围维护，详细状态只在[权威任务清单](../../docs/current-plan.md#权威任务清单)维护。
+`app/webgl-generator/` 是正式 WebGL 地图生成器应用目录，与 `prototype/webgl-cells/` 的早期快照 demo 分开维护。这里已经不是占位地图阶段；截至 2026-07-16，上一波功能与审计任务已经收口，当前只剩省份笔刷、独立备注 selection 和道路 / 河流尺度宽度三项窄范围维护，详细状态只在[权威任务清单](../../docs/current-plan.md#权威任务清单)维护。
 
 ## 目录职责
 
