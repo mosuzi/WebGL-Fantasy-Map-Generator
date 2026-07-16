@@ -64,7 +64,7 @@
 
 ## 当前状态
 
-正式应用已经跨过早期占位原型阶段。权威任务第 28～52、54～63 项已完成，第 53 项按用户决定移除；公开 API 当前覆盖 11 个命名空间、186 个方法和 90 个编辑方法。当前活动任务为第 64～70 项，顺序固定为 `64 -> 65 -> 66 -> 67 -> 68 -> 69 -> 70`，依次修正省份笔刷结束语义、独立备注 Selection 绑定、道路 / 河流尺度宽度、编辑面板手动位置、画笔大小 / 光标范围，新增标签类型样式系统，并调研夸克网盘保存集成。现有功能与界面信息架构审计及整改证据见 `docs/audits/ui-function-and-information-architecture-audit.md` 和 `docs/task-notes/ui-system-audit-gate.md`。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
+正式应用已经跨过早期占位原型阶段。权威任务第 28～52、54～63 项已完成，第 53 项按用户决定移除；公开 API 当前覆盖 11 个命名空间、186 个方法和 90 个编辑方法。当前活动任务为第 64～81 项，顺序严格按连续编号执行；第 71～81 项是用户批准原准权威池 `Q-01～Q-11` 整体转正后的任务。第 73～78 项含产品规则门禁，到达对应项时必须先冻结清单列出的选择再改数据。现有功能与界面信息架构审计及整改证据见 `docs/audits/ui-function-and-information-architecture-audit.md` 和 `docs/task-notes/ui-system-audit-gate.md`。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
 
 以下内容是仍有参考价值的早期里程碑记录，不代表当前待办：
 
@@ -174,4 +174,4 @@ node .\tools\serve-prototype.mjs --port 5400
 10. `docs/task-notes/README.md`
 11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
-然后只按 `docs/current-plan.md` 的活动权威任务继续。当前顺序为第 64 项省份笔刷结束语义、第 65 项独立备注 selection 绑定、第 66 项道路与河流尺度宽度、第 67 项编辑面板手动位置优先、第 68 项画笔大小与光标影响范围预览、第 69 项标签类型样式系统、第 70 项夸克网盘保存集成调研；若清单为空，先等待用户批准下一波，不得从历史里程碑、README 或专题文档的“下一步”自行创造任务。
+然后只按 `docs/current-plan.md` 的活动权威任务继续。当前顺序固定为第 64～81 项连续编号，前一项未达到最小验收不得开始后一项；第 71～81 项的准权威来源映射见 `docs/task-notes/promoted-quasi-authoritative-tasks.md`。若清单为空，先等待用户批准下一波，不得从历史里程碑、README 或专题文档的“下一步”自行创造任务。
