@@ -117,7 +117,8 @@ import {
   centerVirtualRowVertically,
   createSelectionCenterController,
   selectionCenterAnchor,
-  selectionOrderSignature
+  selectionOrderSignature,
+  stickyTableViewportInsets
 } from "../../../components/selection-scroll.js";
 
 defineOptions({
@@ -248,9 +249,10 @@ const selectedScrollAnchor = computed(() => selectionCenterAnchor(
 const selectedCenterController = createSelectionCenterController({
   getScroller: () => tableScroller(tableWrap.value),
   getTarget: () => tableWrap.value?.querySelector(".object-table-row.selected-row"),
+  getViewportInsets: scroller => tableViewportInsets(scroller),
   prepareTarget: scroller => {
     if (!virtualEnabled.value || selectedRowPosition.value < 0) return;
-    centerVirtualRowVertically(scroller, selectedRowPosition.value, VIRTUAL_ROW_HEIGHT);
+    centerVirtualRowVertically(scroller, selectedRowPosition.value, VIRTUAL_ROW_HEIGHT, tableViewportInsets(scroller));
     refreshScrollMetrics();
   },
   onSettled: refreshScrollMetrics
@@ -390,6 +392,10 @@ function cancelScrollMetricsFrame() {
 
 function tableScroller(wrap) {
   return wrap;
+}
+
+function tableViewportInsets(scroller) {
+  return stickyTableViewportInsets(scroller, scroller?.querySelector?.("thead"));
 }
 
 function refreshScrollMetrics() {

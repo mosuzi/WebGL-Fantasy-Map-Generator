@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-07-17：完成权威任务第 71 项——列表选中滚动居中浏览器证据
+
+- 中书阶段确认城市虚拟表和国家普通表共用 `UiObjectTable`，宗教树使用 `UiTreeDisplayPanel`，外交矩阵使用独立 selection controller；共享 helper 已保存横向位置并最多重试 10 帧。尚书郎只在既有 `regress:selection-scroll-center` 补齐第 10 帧停止且无遗留 RAF、首尾钳制后完整可见的纯模型断言，没有先改生产逻辑。
+- 观察使首次复用同一 Chrome 实测城市 828 行虚拟表：wrapper 为 `572×298px`，纵向最大 `26460px`、横向最大 `142px`。把横向滚动真实设为 `96px` 后，从有效视口边缘分别点击“绥德”和“星仁”，两次选中行中心都比 sticky 表头以下的有效视口中心偏 `16.778px`，但恰好落在整个 wrapper 的几何中心；两次失败满足门禁后立即停止，没有继续伪测其它控件。
+- 最小返工给共享 `centeredVerticalScrollTop / centerElementVertically / centerVirtualRowVertically` 增加向后兼容的 top / bottom inset，有效中心按 `topInset + (clientHeight - topInset - bottomInset) / 2` 计算，scrollTop 继续钳制在合法范围并保存 / 恢复 `scrollLeft`。新增 `stickyTableViewportInsets()` 从 scroller 与真实 `thead th` 可见交集计算动态顶部 inset；`UiObjectTable` 的虚拟预定位和真实行二次居中共用同一值，外交矩阵 `td.selected` 同样接入，树和无表头容器保持旧零 inset 行为。
+- 专项回归直接调用生产 helper / controller，覆盖 30px inset 中间居中、有效视口首尾完整可见、虚拟预定位、横向保持、controller 回调、sticky 表头全显 / 部分 / 上下离屏、真实 target 次帧出现和 10 帧停止；静态锁定普通 / 虚拟表与外交接线并禁止树误接。`regress:selection-scroll-center / panel-refresh-path / selection-actions`、CI 生产构建、范围和差异检查均通过，构建仅有既有大 chunk 提示。
+- 同一 Chrome 返工终验通过。城市两条中段样本误差均为 `0.778px`，首项钳制 `0px`、尾项钳制误差 `0px`，横向保持 `96 / 142px`；国家 21 行中段误差 `0.778px`，首项 `0px`、尾项 `0.889px`，横向保持 `96 / 206px`；宗教树 18 节点中段误差 `0.222px`，首项 `0px`、尾项 `0.667px`；外交 `20×20` 矩阵中段误差 `1.222px`，首项 `0px`、尾项 `0.111px`，横向保持 `96 / 237px`。所有目标均完整可见，中段均不在首尾钳制区。
+- 终态恢复城市“鹿明”、国家“霜庭国”、宗教“栖梧山川祭”和外交“霜庭国 → 须句汗国：中立”，关闭全部测试面板与树状对话框；没有触发地图编辑，可见错误、NaN / Infinity 和 console error 均为零。Chrome 插件隔离 world 无法读取内部 checksum / LocalStorage，因此没有伪称该项为浏览器直证；本轮只执行可见选择、滚动和面板导航，唯一标签已 handoff。
+
 ## 2026-07-17：完成权威任务第 70 项文档调研——保存到夸克网盘可行性
 
 - 以 2026-07-16 为核验日期整理正式中文报告 `docs/task-notes/quark-drive-save-feasibility.md`，证据只来自夸克网盘官网、PC 端与网盘隐私政策、网盘服务协议、会员协议、夸克官网与容量介绍、夸克扫描王开放平台 / 能力文档 / 开发者后台等第一方直达页面。每条证据均分别记录“支持的主张”和“不能推出”，没有把消费端 6TB、100G、会员容量、扫描王 API Key 或 5MB 输入限制误写成网盘 API 契约。

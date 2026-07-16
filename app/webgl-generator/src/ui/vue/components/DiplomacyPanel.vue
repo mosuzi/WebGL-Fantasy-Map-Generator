@@ -162,7 +162,12 @@ import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
-import {createSelectionCenterController, selectionCenterAnchor, selectionOrderSignature} from "../../components/selection-scroll.js";
+import {
+  createSelectionCenterController,
+  selectionCenterAnchor,
+  selectionOrderSignature,
+  stickyTableViewportInsets
+} from "../../components/selection-scroll.js";
 
 defineOptions({
   name: "DiplomacyPanel"
@@ -243,7 +248,8 @@ const matrixSelectionAnchor = computed(() => {
 });
 const matrixCenterController = createSelectionCenterController({
   getScroller: () => matrixWrap.value,
-  getTarget: () => matrixWrap.value?.querySelector("td.selected")
+  getTarget: () => matrixWrap.value?.querySelector("td.selected"),
+  getViewportInsets: scroller => stickyTableViewportInsets(scroller, scroller?.querySelector?.("thead"))
 });
 const diplomacyActions = Object.freeze([
   {key: "openState", label: "打开国家", icon: "◎"},
