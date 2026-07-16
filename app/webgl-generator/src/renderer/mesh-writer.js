@@ -96,18 +96,20 @@ export function pushScreenPolyline(vertices, context, points, color, widthPx, da
   pushSolidScreenPolyline(vertices, context, screenPoints, color, widthPx);
 }
 
-export function pushVariableScreenPolyline(vertices, context, points, widths, color) {
+export function pushVariableScreenPolyline(vertices, context, points, widths, color, colors = null) {
   const screenPoints = [];
   const screenWidths = [];
+  const screenColors = Array.isArray(colors) ? [] : null;
   for (let index = 0; index < points.length; index++) {
     const screenPoint = worldToScreenPixel(context, points[index]);
     const previous = screenPoints[screenPoints.length - 1];
     if (previous && Math.hypot(screenPoint.x - previous.x, screenPoint.y - previous.y) <= 0.5) continue;
     screenPoints.push(screenPoint);
     screenWidths.push(widths[index] || widths[widths.length - 1] || 1);
+    if (screenColors) screenColors.push(colors[index] || colors[colors.length - 1] || color);
   }
   if (screenPoints.length < 2) return;
-  pushVariableSolidScreenPolyline(vertices, context, screenPoints, screenWidths, color);
+  pushVariableSolidScreenPolyline(vertices, context, screenPoints, screenWidths, color, screenColors);
 }
 
 function pushDashedScreenPolyline(vertices, context, screenPoints, color, widthPx, dash) {
@@ -183,7 +185,7 @@ function pushSolidScreenPolyline(vertices, context, screenPoints, color, widthPx
   }
 }
 
-function pushVariableSolidScreenPolyline(vertices, context, screenPoints, widthPxByPoint, color) {
+function pushVariableSolidScreenPolyline(vertices, context, screenPoints, widthPxByPoint, color, colors = null) {
   const left = [];
   const right = [];
 
@@ -212,8 +214,10 @@ function pushVariableSolidScreenPolyline(vertices, context, screenPoints, widthP
   }
 
   for (let index = 0; index < left.length - 1; index++) {
-    pushScreenTriangle(vertices, context, left[index], left[index + 1], right[index + 1], color);
-    pushScreenTriangle(vertices, context, left[index], right[index + 1], right[index], color);
+    const startColor = colors?.[index] || color;
+    const endColor = colors?.[index + 1] || startColor;
+    pushScreenGradientTriangle(vertices, context, left[index], left[index + 1], right[index + 1], startColor, endColor, endColor);
+    pushScreenGradientTriangle(vertices, context, left[index], right[index + 1], right[index], startColor, endColor, startColor);
   }
 }
 
@@ -228,6 +232,12 @@ export function pushScreenTriangle(vertices, context, a, b, c, color) {
   pushScreenVertex(vertices, context, a, color);
   pushScreenVertex(vertices, context, b, color);
   pushScreenVertex(vertices, context, c, color);
+}
+
+function pushScreenGradientTriangle(vertices, context, a, b, c, colorA, colorB, colorC) {
+  pushScreenVertex(vertices, context, a, colorA);
+  pushScreenVertex(vertices, context, b, colorB);
+  pushScreenVertex(vertices, context, c, colorC);
 }
 
 function pushScreenVertex(vertices, context, point, color) {

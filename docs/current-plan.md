@@ -69,11 +69,12 @@
   - 验收：独立备注覆盖“来源面板、已打开领域面板、领域面板关闭”三条路由；对象详情兜底、定位和高亮保持一致；`regress:selection-panel-policy`、`regress:selection-actions`、`regress:panel-refresh-path`、生产构建和 `git diff --check` 通过。
   - 完成记录：`SELECTION_PANEL_BINDINGS` 已增加 `note -> notes-panel`，NOTE handler 复用 `routeSelectionToPanel()`；仅在备注总览已打开且选择来自其它入口时，按解析对象的 `noteId` 选中并刷新现有面板，来源面板选择不重复刷新，面板关闭时继续由对象详情兜底，全程不调用 `open()`。独立备注解析、孤儿备注、定位与高亮路径均未改动；专项回归显式覆盖三条 NOTE 路由和 `noteId` 接线。`regress:selection-panel-policy`、`regress:selection-actions`、`regress:panel-refresh-path`、生产构建和 `git diff --check` 全部通过；本项验收未要求浏览器，观察使未操作现有 Chrome。
 
-- **权威任务第 66 项：道路与河流按画布缩放投影语义宽度。** `Ready；来源：用户视觉反馈与 renderer 代码复查`
+- **权威任务第 66 项：道路与河流按画布缩放投影语义宽度。** `已完成；来源：用户视觉反馈与 renderer 代码复查`
   - 痛点：道路当前按等级固定为 `3.6 / 2.6 / 1.8 CSS px`，河流宽度也被钳制在 `1.1～9.5 CSS px`；画布缩放只改变路径位置而不改变基础线宽，导致适配视图时道路和河流相对地图明显过粗、视觉权重失真。
   - 产品语义：本项的“真实宽度”定义为地图世界尺度下的制图语义宽度，不虚构现实米制道路宽度。河流根据既有流量、汇水和 `widthFactor / sourceWidth` 派生世界宽度，道路按 `primary / secondary / minor` 等既有等级派生世界宽度，再随相机与画布缩放投影到屏幕。适配视图下允许次要线条进入亚像素、降低不透明度或按既有层级隐藏，不再用固定屏幕最小宽度强行放粗。
   - 范围：只整改道路与河流基础线层的宽度投影、亚像素表现和必要的缩放 LOD；保留现有拓扑、路径平滑、颜色主题、编辑数据和存档结构。选中 / 编辑高亮与 picking 容差继续使用可操作的屏幕尺度，不能因基础线变细而无法选中；实时画布与 PNG 导出共用同一宽度语义。本项不增加交通模拟、现实单位字段或新的河网 / 路网生成算法。
   - 验收：固定地图在适配视图及至少两个代表性放大级别下，同一路段 / 河段的投影 CSS 宽度随缩放单调变化，不再固定为当前像素档位；河流保持上游细、下游粗，道路保持主路宽于次路、次路宽于小路；适配视图下基础路网与河网不再压过地形和政治信息，选中高亮仍清晰且现有 `7 / 9 px` picking 容差或等价命中能力保留；连续平移、缩放、适配视图时旧视口异步结果不得覆盖新宽度，PNG 与实时画布一致；新增专项宽度回归并通过既有路线 / 河流渲染门禁、生产构建和 `git diff --check`，最后在同一 Chrome 中完成适配视图与放大视图的集中视觉验收。
+  - 完成记录：新增纯 `line-width-projection` 契约，世界宽度由 `camera.scale` 与 client / map 尺寸投影为 CSS 宽度，DPR 只把 CSS 宽度换算为 backing 宽度。道路世界宽度固定等级为 `primary 1.8 > secondary 1.15 > minor 0.7`，基础层不再使用固定 CSS floor；选中路线另加固定 `2.4 CSS px` halo。河流继续按沿程 flux、`widthFactor / sourceWidth` 和点位进程派生世界宽度，移除旧 `+1.1` 与 `1.1～9.5 CSS px` 钳制；宽度与 alpha 均按点采样并经相同 Chaikin 平滑，变量宽度 mesh 在每段端点分别写入颜色，使上游亚像素透明度连续过渡且下游恢复原河色 alpha。同步 / 异步 builder 共用同一投影 build context，保留 camera snapshot 与 yield 后取消检查；PNG 继续复用既有 dirty + draw。专项回归及 route edit、river delete、selection highlight、PNG options、生产构建和 `git diff --check` 全部通过。同一 Chrome 的 `200 / 100 / 50 千米` 三档集中验收确认适配视图不过粗、放大后层级清晰，道路与河流真实 picking / 高亮可用，连续缩放平移后无旧视口闪回；当前视口 PNG 成功导出为 `2561 × 1229px / 452.9KB`，导出前后同一画布区域哈希一致，console error 为零。
 
 - **权威任务第 67 项：编辑面板手动位置优先于自动停靠。** `Ready；来源：用户实测与 PanelManager 代码复查`
   - 痛点：第 56 项建立“一个主面板 + 可选对象详情”后，`PanelManager` 在面板打开、异步内容尺寸变化、窗口重排和对象详情共存时仍会反复执行自动布局。`dockPanelPair()` 无条件把主面板写到右侧，`keepPanelClearOfToolbar()` 在左侧相交时也直接右移，随后 `savePanelState()` 又把自动位置覆盖到持久化状态；因此用户即使把编辑面板拖到最左侧，重新打开或触发重排后仍会被强制送回最右侧。

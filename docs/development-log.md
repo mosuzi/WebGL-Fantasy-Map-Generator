@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-16：实施权威任务第 66 项——道路与河流世界宽度投影
+
+- 新增纯 `line-width-projection.js`：道路和河流先计算世界语义宽度，再按 `camera.scale` 与 client / map 尺寸投影 CSS 宽度，最后仅由 DPR 换算 backing 宽度。道路等级为 `1.8 / 1.15 / 0.7 world`，选中路线保留固定 `2.4 CSS px` halo；河流继续消费沿程 flux、`widthFactor / sourceWidth` 与点位进程，上游窄于下游，不再使用旧 `1.1～9.5 CSS px` 钳制。
+- route / river 同步与异步 builder 共用各自唯一 build context 中的投影对象；既有 `snapshotCamera()`、`shouldContinue()` 和 yield 后取消检查保持不变。河流宽度与 alpha 按点采样并经相同 Chaikin 平滑，变量宽度 mesh 按线段起终点分别写入颜色，上游亚像素透明度可沿程连续过渡且下游恢复原河色 alpha；统计仍保留平均 alpha 和 `faint / subpixel / full` LOD。路线与河流绘制启用 alpha blending，selection layer、高亮宽度和 `7 / 9 px` picking 容差未改动。
+- 新增 `regress:line-width-projection`：scale `1 / 2 / 4` 下 minor 道路为 `0.7 / 1.4 / 2.8 CSS px`，固定河流样本上游 / 下游约为 `0.1003 / 1.4487 world`，DPR 2 只把 backing 宽度翻倍；真实 mesh 顶点断言锁定上游 alpha 小于下游、`>=1px` 下游保持原河色 alpha，并静态锁定逐点 colors 接线；同时锁定等级、无 floor、halo、高亮、picking、异步取消与 PNG dirty + draw 共路径。专项回归、`regress:route-edit`、`regress:river-delete`、`regress:selection-highlight`、`regress:png-options`、生产构建和 `git diff --check` 全部通过，构建仅保留既有大 chunk 警告。
+- 四级流程中给事中首次阻断“整河平均 alpha”，尚书郎改为逐点颜色后复核放行。观察使复用用户原有 Chrome 标签，在同一地图完成 `200 / 100 / 50 千米` 三档视觉验收：适配视图基础线不压过地形和政治信息，放大后道路层级与河流宽度变化清晰；真实命中路线“月里 -> 星关”和河流“东月江 / #84”，道路黄色 halo、河流青色高亮均清晰，快速连续缩放和平移后稳定在末次 `50 千米` 视口且无旧结果闪回。
+- 同次 Chrome 验收以 `1x / 当前视口` 导出 PNG，页面回执为 `2561 × 1229px / 452.9KB`；导出前后同一 `720 × 480` 画布区域字节数均为 `20798`，SHA-256 均为 `f31976a5a30c6b07047b18192db442eacb12e8415b4b287ed9cd57efd20560af`。console error 为空，仅有一条既有 main-thread-long-task warning；用户原标签以 handoff 保留。
+
 ## 2026-07-16：实施权威任务第 65 项——独立备注 Selection 面板绑定
 
 - 统一 Selection 绑定新增 `note -> notes-panel`，独立备注 handler 复用既有 `routeSelectionToPanel()`：从备注总览自身选择时不重复刷新；从地图、对象详情、API 或其它入口选择时，只在备注总览已经打开时按 `selection.object.noteId` 选中对应备注并刷新；面板关闭时继续落到对象详情，不自动打开领域面板。

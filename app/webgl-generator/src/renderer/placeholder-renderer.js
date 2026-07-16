@@ -50,6 +50,14 @@ import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
+import {
+  ROUTE_SELECTION_HALO_CSS_PX,
+  createLineWidthProjection,
+  projectWorldLineWidth,
+  riverWorldWidth,
+  routeWorldWidth,
+  withProjectedLineAlpha
+} from "./line-width-projection.js";
 
 const MARKER_ICON_MIN_SCALE = 2.15;
 const MARKER_ICON_RELAXED_SCALE = 4.4;
@@ -186,13 +194,13 @@ export class PlaceholderMapRenderer {
     this.objectPickingIndex = null;
     this.lastObjectCandidateCount = 0;
     this.routeBuildMs = 0;
-    this.routeRenderStats = emptyRouteRenderStats();
+    this.routeRenderStats = normalizeRouteRenderStats(emptyRouteRenderStats());
     this.tradeFlowBuildMs = 0;
     this.tradeFlowRenderStats = emptyTradeFlowRenderStats();
     this.riverBuildMs = 0;
     this.selectionBuildMs = 0;
-    this.routeWidthMode = "screen-space";
-    this.riverWidthMode = "screen-space flux mesh";
+    this.routeWidthMode = "world-space projected";
+    this.riverWidthMode = "world-space flux projected";
     this.riverWidthStats = emptyRiverWidthStats();
     this.cellVisualMesh = emptyCellVisualMesh();
     this.shoreVisualPaths = emptyShoreVisualPaths();
@@ -678,7 +686,10 @@ export class PlaceholderMapRenderer {
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.layerVisibility.routes && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.routes)) gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
+    gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.tradeFlowBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
@@ -696,7 +707,10 @@ export class PlaceholderMapRenderer {
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
     bindVertexBuffer(gl, this.locations);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.layerVisibility.rivers && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.rivers)) gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
+    gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.selectionBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
@@ -902,7 +916,7 @@ export class PlaceholderMapRenderer {
 
   clearRouteBuffer() {
     this.routeVertexCount = 0;
-    this.routeRenderStats = emptyRouteRenderStats();
+    this.routeRenderStats = normalizeRouteRenderStats(emptyRouteRenderStats());
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
     this.routeBuildMs = 0;
@@ -3043,13 +3057,14 @@ async function buildRiverMeshVerticesAsync(map, camera, canvas, {yieldToBrowser 
 
 function createRiverMeshBuild(map, camera, canvas) {
   const context = createRenderContext(map, {camera, canvas});
+  const projection = createLineWidthProjection({map, camera, canvas});
   return {
     map,
     context,
-    pixelRatio: canvas.width / Math.max(1, canvas.clientWidth),
+    projection,
     viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
     vertices: [],
-    stats: emptyRiverBuildStats()
+    stats: emptyRiverBuildStats(projection)
   };
 }
 
@@ -3060,10 +3075,10 @@ function pushRiverMesh(build, river) {
     build.stats.culledRivers++;
     return;
   }
-  const {points, widths} = getRiverRenderPath(river, build.map, build.pixelRatio, build.stats, sourcePoints);
+  const {points, widths, colors} = getRiverRenderPath(river, build.map, build.projection, build.stats, sourcePoints);
   if (points.length < 2) return;
   const before = build.vertices.length;
-  pushVariableScreenPolyline(build.vertices, build.context, points, widths, riverRenderColor(river));
+  pushVariableScreenPolyline(build.vertices, build.context, points, widths, riverRenderColor(river), colors);
   if (build.vertices.length === before) return;
   build.stats.rivers++;
   build.stats.segments += points.length - 1;
@@ -3076,37 +3091,61 @@ function finalizeRiverMeshBuild(build) {
   };
 }
 
-function emptyRiverBuildStats() {
+function emptyRiverBuildStats(projection = null) {
   return {
     rivers: 0,
     culledRivers: 0,
     segments: 0,
+    scale: projection?.scale || 0,
+    cssPerWorld: projection?.cssPerWorld || 0,
+    backingPerCss: projection?.backingPerCss || 0,
+    minWorldWidth: Infinity,
+    maxWorldWidth: 0,
+    minCssWidth: Infinity,
+    maxCssWidth: 0,
+    minBackingWidth: Infinity,
+    maxBackingWidth: 0,
     minWidthPx: Infinity,
     maxWidthPx: 0,
     minFlux: Infinity,
     maxFlux: 0,
+    alphaTotal: 0,
+    widthSamples: 0,
+    lod: {hidden: 0, faint: 0, subpixel: 0, full: 0},
     aborted: false
   };
 }
 
-function getRiverRenderPath(river, map, pixelRatio, stats, sourcePoints = null) {
+function getRiverRenderPath(river, map, projection, stats, sourcePoints = null) {
   const points = sourcePoints || river.points.filter(isWorldPoint);
   const cells = Array.isArray(river.cells) ? river.cells : [];
   const widths = [];
+  const alphas = [];
   let runningFlux = 0;
 
   for (let index = 0; index < points.length; index++) {
     const cell = sampleRiverCell(cells, index, points.length);
     runningFlux = Math.max(runningFlux, riverPointFlux(points[index], map.pack.cells, cell, river));
-    const widthCss = riverWidthCssPx(river, runningFlux, index);
-    widths.push(widthCss * pixelRatio);
-    stats.minWidthPx = Math.min(stats.minWidthPx, widthCss);
-    stats.maxWidthPx = Math.max(stats.maxWidthPx, widthCss);
+    const projected = projectWorldLineWidth(riverWorldWidth({
+      flux: runningFlux,
+      pointIndex: index,
+      widthFactor: river.widthFactor,
+      sourceWidth: river.sourceWidth
+    }), projection);
+    widths.push(projected.backingWidth);
+    alphas.push(projected.alpha);
+    recordProjectedWidth(stats, projected);
     stats.minFlux = Math.min(stats.minFlux, runningFlux);
     stats.maxFlux = Math.max(stats.maxFlux, runningFlux);
   }
 
-  return smoothWorldPathWithValues(points, widths, LINE_SMOOTHING.river);
+  const smoothedPath = smoothWorldPathWithValues(points, widths, LINE_SMOOTHING.river);
+  const smoothedAlphas = smoothWorldPathWithValues(points, alphas, LINE_SMOOTHING.river).widths;
+  const baseColor = riverRenderColor(river);
+  return {
+    ...smoothedPath,
+    colors: smoothedAlphas.map(alpha => withProjectedLineAlpha(baseColor, alpha))
+  };
 }
 
 function sampleRiverCell(cells, pointIndex, pointsLength) {
@@ -3126,45 +3165,51 @@ function riverPointFlux(point, cells, cell, river) {
   return riverCellFlux(cells, cell, river);
 }
 
-function riverWidthCssPx(river, flux, pointIndex) {
-  const widthFactor = river.widthFactor || 1;
-  const sourceWidth = river.sourceWidth || 0.05;
-  const offset = getRiverRenderOffset(flux, pointIndex, widthFactor, sourceWidth);
-  const sourceLikeWidth = getRiverRenderWidth(offset);
-  return clamp(sourceLikeWidth * 6 + 1.1, 1.1, 9.5);
-}
-
-function getRiverRenderOffset(flux, pointIndex, widthFactor, startingWidth) {
-  const lengthProgression = [1, 1, 2, 3, 5, 8, 13, 21, 34].map(value => value / 200);
-  const fluxWidth = Math.min((flux || 0) ** 0.7 / 500, 1);
-  const lengthWidth = pointIndex / 200 + (lengthProgression[pointIndex] || lengthProgression[lengthProgression.length - 1]);
-  return widthFactor * (lengthWidth + fluxWidth) + startingWidth;
-}
-
-function getRiverRenderWidth(offset) {
-  return (offset / 1.5) ** 1.8;
-}
-
 function normalizeRiverWidthStats(stats) {
   return {
     rivers: stats.rivers,
     culledRivers: stats.culledRivers || 0,
     segments: stats.segments,
-    minWidthPx: stats.minWidthPx === Infinity ? 0 : roundValue(stats.minWidthPx),
-    maxWidthPx: roundValue(stats.maxWidthPx),
+    scale: roundValue(stats.scale),
+    cssPerWorld: roundValue(stats.cssPerWorld),
+    backingPerCss: roundValue(stats.backingPerCss),
+    minWorldWidth: finiteWidthStat(stats.minWorldWidth),
+    maxWorldWidth: roundValue(stats.maxWorldWidth),
+    minCssWidth: finiteWidthStat(stats.minCssWidth),
+    maxCssWidth: roundValue(stats.maxCssWidth),
+    minBackingWidth: finiteWidthStat(stats.minBackingWidth),
+    maxBackingWidth: roundValue(stats.maxBackingWidth),
+    minWidthPx: finiteWidthStat(stats.minCssWidth),
+    maxWidthPx: roundValue(stats.maxCssWidth),
     minFlux: stats.minFlux === Infinity ? 0 : roundValue(stats.minFlux),
-    maxFlux: roundValue(stats.maxFlux)
+    maxFlux: roundValue(stats.maxFlux),
+    averageAlpha: stats.widthSamples ? roundValue(stats.alphaTotal / stats.widthSamples) : 0,
+    lod: {...stats.lod},
+    aborted: Boolean(stats.aborted)
   };
 }
 
 function emptyRiverWidthStats() {
   return {
     rivers: 0,
+    culledRivers: 0,
     segments: 0,
+    scale: 0,
+    cssPerWorld: 0,
+    backingPerCss: 0,
+    minWorldWidth: 0,
+    maxWorldWidth: 0,
+    minCssWidth: 0,
+    maxCssWidth: 0,
+    minBackingWidth: 0,
+    maxBackingWidth: 0,
     minWidthPx: 0,
     maxWidthPx: 0,
     minFlux: 0,
-    maxFlux: 0
+    maxFlux: 0,
+    averageAlpha: 0,
+    lod: {hidden: 0, faint: 0, subpixel: 0, full: 0},
+    aborted: false
   };
 }
 
@@ -3382,16 +3427,16 @@ async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, objec
 
 function createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, visualTheme) {
   const context = createRenderContext(map, {camera, canvas});
-  const pixelRatio = canvas.width / Math.max(1, canvas.clientWidth);
+  const projection = createLineWidthProjection({map, camera, canvas});
   return {
     context,
-    pixelRatio,
+    projection,
     viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
     visualTheme,
     selection,
     objectHighlights,
     vertices: [],
-    stats: emptyRouteRenderStats()
+    stats: emptyRouteRenderStats(projection)
   };
 }
 
@@ -3409,12 +3454,17 @@ function pushRouteMesh(build, route) {
   }
   const selected = isSelectedOrHighlighted(build.selection, build.objectHighlights, OBJECT_KIND.ROUTE, route.id);
   const style = routeStyle(route, build.visualTheme);
-  const color = selected ? [1, 0.82, 0.34, 1] : style.color;
-  const baseWidth = style.width;
-  const widthPx = (selected ? baseWidth + 2.4 : baseWidth) * build.pixelRatio;
+  const baseProjection = projectWorldLineWidth(style.worldWidth, build.projection);
+  const renderedProjection = selected
+    ? projectWorldLineWidth(style.worldWidth, build.projection, {haloCssPx: ROUTE_SELECTION_HALO_CSS_PX})
+    : baseProjection;
+  const color = selected ? [1, 0.82, 0.34, 1] : withProjectedLineAlpha(style.color, baseProjection.alpha);
+  const widthPx = renderedProjection.backingWidth;
+  recordProjectedWidth(build.stats, baseProjection);
+  if (selected) build.stats.selectedHaloRoutes++;
   const dash = !selected && style.dash ? {
-    dashPx: style.dash[0] * build.pixelRatio,
-    gapPx: style.dash[1] * build.pixelRatio,
+    dashPx: style.dash[0] * build.projection.backingPerCss,
+    gapPx: style.dash[1] * build.projection.backingPerCss,
     maxPieces: MAX_ROUTE_DASH_PIECES
   } : null;
   const smoothed = smoothWorldPath(points, LINE_SMOOTHING.route);
@@ -3436,7 +3486,7 @@ function pushRouteMesh(build, route) {
 function finalizeRouteMeshBuild(build) {
   return {
     vertices: new Float32Array(build.vertices),
-    stats: build.stats
+    stats: normalizeRouteRenderStats(build.stats)
   };
 }
 
@@ -3488,7 +3538,7 @@ function decimateRoutePath(points, limit) {
   return result;
 }
 
-function emptyRouteRenderStats() {
+function emptyRouteRenderStats(projection = null) {
   return {
     routes: 0,
     renderedRoutes: 0,
@@ -3503,17 +3553,69 @@ function emptyRouteRenderStats() {
     duplicatePoints: 0,
     invalidPoints: 0,
     vertices: 0,
+    scale: projection?.scale || 0,
+    cssPerWorld: projection?.cssPerWorld || 0,
+    backingPerCss: projection?.backingPerCss || 0,
+    minWorldWidth: Infinity,
+    maxWorldWidth: 0,
+    minCssWidth: Infinity,
+    maxCssWidth: 0,
+    minBackingWidth: Infinity,
+    maxBackingWidth: 0,
+    alphaTotal: 0,
+    widthSamples: 0,
+    lod: {hidden: 0, faint: 0, subpixel: 0, full: 0},
+    selectedHaloCssPx: ROUTE_SELECTION_HALO_CSS_PX,
+    selectedHaloRoutes: 0,
     pointBudgetExceeded: false,
     vertexBudgetExceeded: false,
     aborted: false
   };
 }
 
+function normalizeRouteRenderStats(stats) {
+  const normalized = {
+    ...stats,
+    scale: roundValue(stats.scale),
+    cssPerWorld: roundValue(stats.cssPerWorld),
+    backingPerCss: roundValue(stats.backingPerCss),
+    minWorldWidth: finiteWidthStat(stats.minWorldWidth),
+    maxWorldWidth: roundValue(stats.maxWorldWidth),
+    minCssWidth: finiteWidthStat(stats.minCssWidth),
+    maxCssWidth: roundValue(stats.maxCssWidth),
+    minBackingWidth: finiteWidthStat(stats.minBackingWidth),
+    maxBackingWidth: roundValue(stats.maxBackingWidth),
+    averageAlpha: stats.widthSamples ? roundValue(stats.alphaTotal / stats.widthSamples) : 0,
+    lod: {...stats.lod},
+    aborted: Boolean(stats.aborted)
+  };
+  delete normalized.alphaTotal;
+  delete normalized.widthSamples;
+  return normalized;
+}
+
+function recordProjectedWidth(stats, projected) {
+  stats.minWorldWidth = Math.min(stats.minWorldWidth, projected.worldWidth);
+  stats.maxWorldWidth = Math.max(stats.maxWorldWidth, projected.worldWidth);
+  stats.minCssWidth = Math.min(stats.minCssWidth, projected.baseCssWidth);
+  stats.maxCssWidth = Math.max(stats.maxCssWidth, projected.baseCssWidth);
+  const baseBackingWidth = projected.baseCssWidth * (stats.backingPerCss || 1);
+  stats.minBackingWidth = Math.min(stats.minBackingWidth, baseBackingWidth);
+  stats.maxBackingWidth = Math.max(stats.maxBackingWidth, baseBackingWidth);
+  stats.alphaTotal += projected.alpha;
+  stats.widthSamples++;
+  stats.lod[projected.lod] = (stats.lod[projected.lod] || 0) + 1;
+}
+
+function finiteWidthStat(value) {
+  return value === Infinity ? 0 : roundValue(value);
+}
+
 function routeStyle(route, visualTheme) {
   const lines = visualTheme?.lines || {};
-  if (route.level === "primary") return {color: lines.routePrimary || [0.56, 0.47, 0.34, 0.88], width: 3.6};
-  if (route.level === "secondary") return {color: lines.routeSecondary || [0.5, 0.43, 0.33, 0.8], width: 2.6};
-  return {color: lines.routeMinor || [0.43, 0.38, 0.31, 0.64], width: 1.8};
+  if (route.level === "primary") return {color: lines.routePrimary || [0.56, 0.47, 0.34, 0.88], worldWidth: routeWorldWidth("primary")};
+  if (route.level === "secondary") return {color: lines.routeSecondary || [0.5, 0.43, 0.33, 0.8], worldWidth: routeWorldWidth("secondary")};
+  return {color: lines.routeMinor || [0.43, 0.38, 0.31, 0.64], worldWidth: routeWorldWidth("minor")};
 }
 
 function buildPointVertices(map, visibility = {}) {
