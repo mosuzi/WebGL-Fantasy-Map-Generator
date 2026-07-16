@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-16：重新梳理下一波权威任务并同步文档进度
+
+- 对仓库 58 份非 source Markdown 做任务语义审计，并以 `docs/current-plan.md`、`FOLLOWUPS.md`、真实代码接线和现有回归为准区分已完成、明确暂缓、历史建议和可复现缺口。第 45～52、54～63 项继续保持已完成，第 53 项继续保持移除；曲线尺、备注治理、名称库多词率、市场归属、路线 / 水体 / 生物群系编辑、用户主题、范围导出、UI 审计和国家生命周期均未被旧文档重新计为待办。
+- 下一波只冻结两个活动任务：第 64 项修正省份笔刷 `pointerup` 提交 / `pointercancel` 回滚，并把画布模式回归从过期的 19 个同步到运行时真实 23 个；第 65 项按方案 B 为独立备注补 `notes-panel` 领域绑定。两项顺序固定为 `64 -> 65`，都以纯代码专项回归和生产构建为主。
+- 代码复查确认省份笔刷事件接线与国家笔刷相反；`regress:selection-panel-policy` 当前稳定失败并明确缺少 `note`；`regress:canvas-tools` 虽通过，但输出只覆盖 19 个模式，漏掉 `biome:assign / economy:market-assign / route:edit-waypoint / feature:patch-select`。这些证据分别写入第 64、65 项最小验收，不另行扩项。
+- 同步更新接手入口、README、FOLLOWUPS、架构说明、UI 审计、早期里程碑 / 总计划状态、专题索引和相关能力计划。旧“下一步”统一标为历史或阶段外候选；城市 / 省份新增删除、经济 / 军事面板、备注导入与孤儿治理、用户主题、GeoJSON 范围导出等不再描述为未实现。
+- 纹章深化、动态军事、复杂贸易动画、3D / OBJ、子地图变换、富文本备注、真实 CRS 和新导出格式继续保持暂缓或远期候选，未经用户批准不得从专题文档自动入队。本次只改文档，没有实现第 64～65 项，也没有启动浏览器或生产构建；文档差异使用 `git diff --check` 验证。
+
 ## 2026-07-16：国家生命周期第 61～63 项集中验收
 
 - 代码门禁通过：`regress:state-lifecycle`、`regress:map-migration`、`regress:delete-impact`、`regress:api-action-convergence`、`regress:api-edit-coverage`、`pnpm run build:app` 和 `git diff --check`；生产构建完成 1145 个模块，仅保留既有 Vite 大 chunk 警告。

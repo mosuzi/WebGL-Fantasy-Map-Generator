@@ -1,10 +1,10 @@
 # 统一画布工具模式管理器
 
-本文档记录权威任务第 36 项的统一交互生命周期。它只管理画布工具的进入、互斥、取消、完成与清理，不替代各领域的编辑命令、笔刷算法或派生刷新规则。
+本文档记录权威任务第 36 项的统一交互生命周期。后续对象创建与局部编辑已把注册模式扩展到 23 个；权威任务第 64 项只修正省份笔刷 `pointerup / pointercancel` 的结束接线，不改变模式管理器契约。
 
 ## 模式清单
 
-当前统一注册 14 个模式：
+当前统一注册 23 个模式：
 
 | 工具领域 | 模式 ID | 是否锁定其它面板 | 允许面板 |
 |---|---|---:|---|
@@ -14,8 +14,16 @@
 | 城市 | `city:add`、`city:delete` | 是 | `city-panel` |
 | 文化 | `culture:assign` | 是 | `culture-panel` |
 | 宗教 | `religion:assign` | 是 | `religion-panel` |
+| 生物群系 | `biome:assign` | 是 | `biome-panel` |
+| 市场归属 | `economy:market-assign` | 是 | `economy-panel` |
 | 测量 | `measurement:draw` | 否 | `measurement-panel` |
 | 标记 | `marker:add`、`marker:move` | 是 | `marker-panel` |
+| 路线 | `route:draw`、`route:edit-waypoint` | 是 | `route-panel` |
+| 河流 | `river:add` | 是 | `river-panel` |
+| 湖泊 | `lake:excavate` | 是 | `lake-panel` |
+| 水体与地貌 | `feature:patch-select` | 是 | `lake-panel` |
+| 地区 | `zone:add` | 是 | `zone-panel` |
+| 独立备注 | `note:add` | 是 | `notes-panel` |
 
 测量模式继续保留既有的非锁定交互表现，但仍占用唯一活动模式，因此不能与其它画布工具并行。
 
@@ -49,7 +57,7 @@
 ## 验收门禁
 
 - `pnpm run regress:canvas-tools`
-  - 14 个模式注册与唯一活动模式；
+  - 运行时当前注册 23 个模式并保持唯一活动模式；现有回归固定清单仍只有 19 个，第 64 项需补齐 `biome:assign`、`economy:market-assign`、`route:edit-waypoint` 和 `feature:patch-select` 后再宣称全覆盖；
   - 重复进入与上下文更新；
   - 跨模式切换、重入队列、显式取消、一次完成；
   - 面板关闭、地图替换与进入异常清理；

@@ -4,6 +4,13 @@
 
 专题文档中的“下一步”“缺口”只表示候选方向，不自动成为活动任务。当前批准范围和顺序统一查看 [`../current-plan.md`](../current-plan.md#权威任务清单)。
 
+## 当前活动专题映射
+
+- 权威任务第 64 项对应 `canvas-tool-mode-manager.md`：修正省份笔刷抬手提交与取消回滚，并把画布模式回归清单从 19 个同步到运行时真实 23 个，不扩展其它省份能力。
+- 权威任务第 65 项对应 `selection-panel-policy.md`：按既有方案 B 补独立备注的 `notes-panel` 绑定，不改变其它对象路由。
+
+以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
+
 ## Source 对照与生成质量
 
 - `source-first-recovery-execution-plan.md`：source 优先复位整改总纲。
@@ -28,8 +35,8 @@
 - `api-data-compatibility-matrix.md`：权威任务第 32 项的持久化入口、旧数据兼容、诊断边界与往返验收矩阵。
 - `console-api-stability-contract.md`：权威任务第 33 项的 API 版本、稳定等级、兼容别名、确认策略与扩展能力分组契约。
 - `keyboard-shortcuts.md`：权威任务第 35 项的快捷键清单、公共 action、禁用条件、悬停提示和冲突规则。
-- `canvas-tool-mode-manager.md`：权威任务第 36 项的 14 个画布模式、互斥生命周期、预览回滚、面板关闭和地图替换契约。
-- `selection-panel-policy.md`：权威任务第 37 项的方案 B、对象类型绑定、对象详情兜底与 selection 分发例外。
+- `canvas-tool-mode-manager.md`：权威任务第 36 项的画布模式、互斥生命周期、预览回滚、面板关闭和地图替换契约；第 64 项只修正省份笔刷结束事件接线。
+- `selection-panel-policy.md`：权威任务第 37 项的方案 B、对象类型绑定、对象详情兜底与 selection 分发例外；第 65 项补独立备注绑定。
 - `height-terrain-template-programs.md`：权威任务第 38 项的多步骤选区模板、用户模板文档、持久化交换和 Source 转换边界。
 - `delete-impact-and-batch.md`：权威任务第 39 项的统一删除预检、高影响确认、领域批量事务和结构化结果契约。
 - `map-object-creation.md`：权威任务第 40 项的路线绘制、河流新增、湖泊开挖及其拓扑、水文、岸线和撤销契约。
