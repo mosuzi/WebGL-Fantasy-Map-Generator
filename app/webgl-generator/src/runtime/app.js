@@ -9734,7 +9734,7 @@ function bindProvinceEditing(canvas, state, documentRef) {
     if (!state.provinceEdit.activeStroke || state.provinceEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    rollbackCanvasToolStroke(state, "province");
+    finishProvinceStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
   }, true);
 
@@ -9742,7 +9742,7 @@ function bindProvinceEditing(canvas, state, documentRef) {
     if (!state.provinceEdit.activeStroke || state.provinceEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishProvinceStroke(state, documentRef);
+    rollbackCanvasToolStroke(state, "province");
     releasePointer(canvas, event.pointerId);
   }, true);
 }

@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-07-16：实施权威任务第 64 项——省份疆域笔刷提交语义
+
+- 省份笔刷事件路由已与国家笔刷统一：正常 `pointerup` 调用既有 `finishProvinceStroke()`，把预览中的 grid / pack 归属差异交给省份命令形成单条历史；`pointercancel` 改为调用 `rollbackCanvasToolStroke()`，完整恢复预览且不提交历史。目标省份、同国家约束、边界 / 颜色刷新、统计和撤销 / 重做命令路径均保持不变。
+- `regress:canvas-tools` 的注册模式清单从过期的 19 个补齐到运行时真实 23 个，新增 `biome:assign`、`economy:market-assign`、`route:edit-waypoint` 与 `feature:patch-select`；同时按函数边界锁定省份 `pointerup` 提交、`pointercancel` 回滚，避免两条路由再次反接。固定 seed 动态样本选取颜色不同的同国两省，真实执行预览、单命令提交、撤销 / 重做和取消回滚，逐项核对 grid / pack、历史深度、两省 cells / area / 邻省派生、目标颜色、关联城市与完整快照。
+- 四级复核最终通过 `app.js` 与画布工具回归脚本的 `node --check`、`regress:canvas-tools`、`regress:social-ownership`、`regress:api-edit-coverage`、生产构建和 `git diff --check`；构建只有既有大 chunk 警告。观察使复跑画布工具回归，确认输出覆盖 23 个模式及省份笔刷提交 / 取消契约。本项验收未要求浏览器，因此没有新开窗口，现有 Chrome 留给后续明确要求的集中视觉验收复用。
+
 ## 2026-07-16：准权威任务池 Q-01～Q-11 全部转正为第 71～81 项
 
 - 用户明确要求把此前“建议进入准权威池”的项目全部写入权威任务清单并提交推送。本次按原审阅顺序一一映射：`Q-01 -> 71`、`Q-02 -> 72`，依此类推至 `Q-11 -> 81`；没有把当时“保留但暂不建议转正”或“已排除”的事项混入活动清单。

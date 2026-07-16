@@ -57,10 +57,11 @@
 
 继续采用目标模式：只实现第 64～81 项的封闭范围，达到当前项最小验收后立即转入下一项；不影响当前验收的新发现只写入 `FOLLOWUPS.md`。日常实现仍以代码检查和专项回归快速迭代，只有各项验收明确要求时才集中执行浏览器验证。第 70 项只产出可追溯的可行性结论；第 73～78 项含显式产品规则门禁，到达对应项时先冻结清单内列出的选择，不得在未决状态下修改地图数据。
 
-- **权威任务第 64 项：修正省份疆域笔刷的抬手提交与取消回滚。** `Ready；来源：FOLLOWUPS 与代码复查`
+- **权威任务第 64 项：修正省份疆域笔刷的抬手提交与取消回滚。** `已完成；来源：FOLLOWUPS 与代码复查`
   - 痛点：省份笔刷仍把正常 `pointerup` 接到预览回滚、把 `pointercancel` 接到正式提交，语义与已修复的国家笔刷及其它归属笔刷相反，导致用户正常松手后看不到省份疆域变更。
   - 范围：只修正省份笔刷事件路由和对应回归；同时把 `regress:canvas-tools` 的模式清单从过期的 19 个同步到运行时真实 23 个。保留现有目标省份、同国家约束、预览、边界刷新、统计和命令实现，不扩展跨国家迁移、省份合并拆分或新的省份工具。
   - 验收：一次有效省份刷涂在 `pointerup` 后保留 grid / pack 归属变化并只写一条历史，省份统计与颜色刷新一致；`pointercancel` 恢复完整预览且历史不变；撤销 / 重做精确恢复；画布模式门禁覆盖全部 23 个注册模式；`regress:social-ownership`、`regress:canvas-tools`、生产构建和 `git diff --check` 通过。
+  - 完成记录：省份笔刷现在与国家笔刷采用相同事件语义，`pointerup` 调用既有 `finishProvinceStroke()` 正式提交单条命令，`pointercancel` 复用 `rollbackCanvasToolStroke()` 恢复 grid / pack 预览且不写历史；既有省份命令、同国家约束、刷新和统计路径未改动。画布模式回归补齐 `biome:assign / economy:market-assign / route:edit-waypoint / feature:patch-select`，并新增省份两条 pointer 路由的正反断言，当前覆盖运行时全部 23 个模式；固定 seed 动态样本进一步验证同国两省预览提交后的 grid / pack 归属、单条历史、两省 cells / area / 邻省派生、目标颜色及完整撤销 / 重做，并验证真实回滚 helper 取消后恢复完整快照且历史不变。`regress:canvas-tools`、`regress:social-ownership`、`regress:api-edit-coverage`、生产构建和 `git diff --check` 全部通过；本项验收未要求浏览器，观察使未新开窗口。
 
 - **权威任务第 65 项：补齐独立备注的 Selection 领域面板绑定。** `Ready；来源：FOLLOWUPS 与失败门禁`
   - 痛点：`OBJECT_KIND.NOTE` 已是正式可定位对象，但 `SELECTION_PANEL_BINDINGS` 缺少其 `notes-panel` 绑定，导致 `regress:selection-panel-policy` 直接失败，也使独立备注选择不能完整遵守第 37 项方案 B。
