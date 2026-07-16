@@ -4,6 +4,8 @@
 
 > 2026-07-16 后续校准：第 60 项当时只证明自动左右停靠、无重叠和最后主面板恢复，没有覆盖“用户手动拖动后不得被自动停靠覆盖”。当前实测主面板会在重开、异步尺寸变化或对象详情共存时重新回到右侧，该缺口已提升为权威任务第 67 项，具体范围见 [`panel-manual-positioning.md`](./panel-manual-positioning.md)。
 
+> 2026-07-16 笔刷反馈校准：现有圆形画笔虽各自持有半径数值，但未形成统一可见的大小控制和画布光标范围反馈，用户可能在不知道实际命中半径的情况下大范围刷涂。该缺口已提升为权威任务第 68 项，具体范围见 [`brush-radius-cursor-preview.md`](./brush-radius-cursor-preview.md)。
+
 ```powershell
 pnpm run build:app
 pnpm run regress:ui-system-audit-contract

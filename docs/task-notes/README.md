@@ -10,6 +10,7 @@
 - 权威任务第 65 项对应 `selection-panel-policy.md`：按既有方案 B 补独立备注的 `notes-panel` 绑定，不改变其它对象路由。
 - 权威任务第 66 项对应 `world-space-network-width.md`：把道路与河流基础线宽从固定屏幕像素改为随相机投影的世界尺度语义宽度，同时保留屏幕尺度的高亮与命中能力。
 - 权威任务第 67 项对应 `panel-manual-positioning.md`：用户拖动后的主面板位置优先于左右停靠、工具栏避让和对象详情配对，自动布局只做首次落点与越界兜底。
+- 权威任务第 68 项对应 `brush-radius-cursor-preview.md`：统一连续圆形画笔的可见大小控制、世界半径命中契约和随相机投影的光标范围预览。
 
 以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
 
@@ -32,6 +33,7 @@
 - `edit-command-contract.md`：编辑命令轻量契约，记录 `label / effects / affected / isNoop / getResult` 等统一约定。
 - `panel-layout-overlay-performance-plan.md`：面板布局宽松化与非 WebGL overlay 性能治理计划。
 - `panel-manual-positioning.md`：权威任务第 67 项的手动 / 自动位置状态、持久化兼容、共存重排和浏览器验收契约。
+- `brush-radius-cursor-preview.md`：权威任务第 68 项的画笔半径控制、共享光标轮廓、非圆形工具排除和浏览器验收契约。
 - `world-space-network-width.md`：权威任务第 66 项的道路 / 河流世界尺度宽度、缩放投影、亚像素表现、高亮与 picking 分层契约。
 - `visual-theme-preset-plan.md`：视觉主题与样式预设计划。
 - `console-extension-api-system-plan.md`：控制台与扩展 API 系统计划，记录 API 命名空间、返回格式、副作用边界和分阶段实施。
