@@ -6,6 +6,8 @@
 
 > 2026-07-16 笔刷反馈校准：现有圆形画笔虽各自持有半径数值，但未形成统一可见的大小控制和画布光标范围反馈，用户可能在不知道实际命中半径的情况下大范围刷涂。该缺口已提升为权威任务第 68 项，具体范围见 [`brush-radius-cursor-preview.md`](./brush-radius-cursor-preview.md)。
 
+> 2026-07-16 样式入口校准：控制面板现有“视图”只覆盖主题颜色和画布滤镜，没有按标签语义类型配置字体、字号与描边的独立信息架构。该需求已提升为权威任务第 69 项，并明确新增与“视图 / 图层”并列的“样式”Tab，具体范围见 [`label-type-style-system.md`](./label-type-style-system.md)。
+
 ```powershell
 pnpm run build:app
 pnpm run regress:ui-system-audit-contract
