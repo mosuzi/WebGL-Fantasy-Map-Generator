@@ -1,11 +1,19 @@
 import {formatHistoryCommand} from "./history-format.js";
 import {getOverlayRegistry} from "./overlay-registry.js";
 
+const PANEL_POSITION_AUTO = "auto";
+const PANEL_POSITION_MANUAL = "manual";
+const PANEL_MARGIN = 8;
+const PANEL_PAIR_GAP = 24;
+const PANEL_HEADER_HEIGHT = 44;
+const PANEL_MIN_VISIBLE_HEADER_WIDTH = 64;
+
 export class PanelManager {
   constructor(documentRef, host) {
     this.documentRef = documentRef;
     this.host = host;
     this.panels = new Map();
+    this.openSequence = 0;
     this.storagePrefix = "webgl-generator-panel:";
     this.lastMainStorageKey = `${this.storagePrefix}last-main`;
     this.overlayRegistry = getOverlayRegistry(documentRef);
@@ -17,11 +25,14 @@ export class PanelManager {
   }
 
   registerPanel(id, options) {
-    const savedState = this.readPanelState(id);
+    const defaultLeft = finiteCoordinate(options.left, 24);
+    const defaultTop = finiteCoordinate(options.top, 24);
+    const savedState = this.readPanelState(id, {left: defaultLeft, top: defaultTop});
+    const positionState = normalizePanelPositionState(savedState, {left: defaultLeft, top: defaultTop});
     const panel = this.documentRef.createElement("section");
     panel.className = "floating-panel hidden";
-    panel.style.left = `${savedState?.left ?? options.left ?? 24}px`;
-    panel.style.top = `${savedState?.top ?? options.top ?? 24}px`;
+    panel.style.left = `${positionState.left}px`;
+    panel.style.top = `${positionState.top}px`;
     panel.style.width = `${savedState?.width ?? options.width ?? 320}px`;
     if (options.maxWidth) panel.style.maxWidth = `min(${options.maxWidth}px, calc(100% - 16px))`;
     panel.dataset.panelId = id;
@@ -63,6 +74,12 @@ export class PanelManager {
       onClose: options.onClose || (() => {}),
       persistOpen: options.persistOpen !== false,
       role: panel.dataset.panelRole,
+      positionMode: positionState.positionMode,
+      preferredLeft: positionState.left,
+      preferredTop: positionState.top,
+      defaultLeft,
+      defaultTop,
+      openSequence: 0,
       overlayId: `panel:${id}`,
       historyActions,
       headerButtons: {undo, redo},
@@ -106,6 +123,7 @@ export class PanelManager {
     installDrag(this, panel, header);
     panel.addEventListener("pointerdown", event => {
       event.stopPropagation();
+      restoreManagedPanelViewportOrigin(this.documentRef?.defaultView);
       this.activate(id);
     });
     panel.addEventListener("wheel", event => event.stopPropagation());
@@ -125,10 +143,12 @@ export class PanelManager {
     if (!record) return;
     const returnFocus = this.documentRef.activeElement;
     if (record.role === "main") this.closeOtherMainPanels(id);
+    record.openSequence = ++this.openSequence;
     record.panel.classList.remove("hidden");
-    this.constrain(record.panel);
+    this.applyPreferredPosition(record);
     this.resolvePanelCoexistence(id);
     this.overlayRegistry?.show(record.overlayId, {returnFocus});
+    restoreManagedPanelViewportOrigin(this.documentRef?.defaultView);
     this.startHeaderRefresh(record);
     this.savePanelState(id);
   }
@@ -170,26 +190,63 @@ export class PanelManager {
     record.headerRefreshTimer = 0;
   }
 
-  constrain(panel) {
+  constrain(panel, {
+    left = Number.parseFloat(panel.style.left),
+    top = Number.parseFloat(panel.style.top),
+    reachableOnly = false
+  } = {}) {
     const hostRect = this.host.getBoundingClientRect();
-    const width = panel.offsetWidth || 320;
+    const header = panel.querySelector?.(".floating-panel-header");
+    const hostWidth = this.host.clientWidth || hostRect.width;
+    const hostHeight = this.host.clientHeight || hostRect.height;
+    const width = panelWidth(panel);
     const height = panel.offsetHeight || 180;
-    const maxLeft = Math.max(8, hostRect.width - width - 8);
-    const maxTop = Math.max(8, hostRect.height - height - 8);
-    const left = clamp(Number.parseFloat(panel.style.left) || 0, 8, maxLeft);
-    const top = clamp(Number.parseFloat(panel.style.top) || 0, 8, maxTop);
-    panel.style.left = `${left}px`;
-    panel.style.top = `${top}px`;
+    const position = reachableOnly
+      ? constrainPanelRuntimePosition({
+        left,
+        top,
+        hostWidth,
+        hostHeight,
+        panelWidth: width,
+        headerHeight: header?.offsetHeight || PANEL_HEADER_HEIGHT
+      })
+      : {
+        left: clamp(finiteCoordinate(left, 0), PANEL_MARGIN, Math.max(PANEL_MARGIN, hostWidth - width - PANEL_MARGIN)),
+        top: clamp(finiteCoordinate(top, 0), PANEL_MARGIN, Math.max(PANEL_MARGIN, hostHeight - height - PANEL_MARGIN))
+      };
+    writePanelRuntimePosition(panel, position);
+    return position;
+  }
+
+  applyPreferredPosition(record) {
+    return this.constrain(record.panel, {
+      left: record.preferredLeft,
+      top: record.preferredTop,
+      reachableOnly: record.positionMode === PANEL_POSITION_MANUAL
+    });
+  }
+
+  commitManualPosition(id) {
+    const record = this.panels.get(id);
+    if (!record) return;
+    const position = this.constrain(record.panel, {reachableOnly: true});
+    record.positionMode = PANEL_POSITION_MANUAL;
+    record.preferredLeft = Math.round(position.left);
+    record.preferredTop = Math.round(position.top);
+    this.applyPreferredPosition(record);
+    this.savePanelState(id);
+    this.reflowPanels();
   }
 
   savePanelState(id) {
     const record = this.panels.get(id);
     if (!record) return;
-    const previous = this.readPanelState(id);
+    const previous = this.readPanelState(id, {left: record.defaultLeft, top: record.defaultTop});
     const open = !record.panel.classList.contains("hidden");
     const state = {
-      left: Math.round(Number.parseFloat(record.panel.style.left) || 0),
-      top: Math.round(Number.parseFloat(record.panel.style.top) || 0),
+      positionMode: record.positionMode,
+      left: Math.round(record.preferredLeft),
+      top: Math.round(record.preferredTop),
       width: Math.round(record.panel.offsetWidth || Number.parseFloat(record.panel.style.width) || 320),
       openedAt: open ? Date.now() : previous?.openedAt || 0
     };
@@ -201,13 +258,16 @@ export class PanelManager {
     }
   }
 
-  readPanelState(id) {
+  readPanelState(id, defaults = null) {
     try {
       const raw = this.host.ownerDocument.defaultView.localStorage.getItem(this.storagePrefix + id);
       if (!raw) return null;
       const state = JSON.parse(raw);
-      if (!Number.isFinite(state.left) || !Number.isFinite(state.top)) return null;
-      return state;
+      const record = this.panels.get(id);
+      return normalizePanelPositionState(state, defaults || {
+        left: record?.defaultLeft ?? 24,
+        top: record?.defaultTop ?? 24
+      });
     } catch {
       return null;
     }
@@ -255,34 +315,66 @@ export class PanelManager {
       else this.close(this.panelIdForRecord(detail), {restoreFocus: false});
       return;
     }
-    this.dockPanelPair(main.panel, detail.panel);
+    this.dockPanelPair(main, detail);
   }
 
   reflowPanels() {
+    restoreManagedPanelViewportOrigin(this.documentRef?.defaultView);
     const main = this.visiblePanelByRole("main");
     const detail = this.visiblePanelByRole("detail");
-    if (main && detail && panelsCanCoexist(this.host.clientWidth || this.host.getBoundingClientRect().width, panelWidth(main.panel), panelWidth(detail.panel))) {
-      this.dockPanelPair(main.panel, detail.panel);
+    if (main && detail) {
+      if (panelsCanCoexist(this.host.clientWidth || this.host.getBoundingClientRect().width, panelWidth(main.panel), panelWidth(detail.panel))) {
+        this.dockPanelPair(main, detail);
+        return;
+      }
+      const keepRole = chooseLaterOpenedPanelRole(main.openSequence, detail.openSequence);
+      const closed = keepRole === "main" ? detail : main;
+      this.close(this.panelIdForRecord(closed), {restoreFocus: false});
       return;
     }
-    if (main) this.keepPanelClearOfToolbar(main.panel);
+    if (main) this.keepPanelClearOfToolbar(main);
     if (detail) {
-      detail.panel.style.top = `${Math.max(64, Number.parseFloat(detail.panel.style.top) || 0)}px`;
-      this.constrain(detail.panel);
+      if (detail.positionMode === PANEL_POSITION_MANUAL) this.applyPreferredPosition(detail);
+      else this.constrain(detail.panel, {top: Math.max(64, Number.parseFloat(detail.panel.style.top) || 0)});
     }
   }
 
-  dockPanelPair(mainPanel, detailPanel) {
+  dockPanelPair(main, detail) {
     const hostWidth = this.host.clientWidth || this.host.getBoundingClientRect().width;
-    mainPanel.style.left = `${Math.max(8, hostWidth - panelWidth(mainPanel) - 8)}px`;
-    mainPanel.style.top = "8px";
-    detailPanel.style.left = "8px";
-    detailPanel.style.top = "64px";
-    this.constrain(mainPanel);
-    this.constrain(detailPanel);
+    const mainManual = main.positionMode === PANEL_POSITION_MANUAL;
+    const detailManual = detail.positionMode === PANEL_POSITION_MANUAL;
+    if (!mainManual && !detailManual) {
+      this.constrain(main.panel, {left: hostWidth - panelWidth(main.panel) - PANEL_MARGIN, top: PANEL_MARGIN});
+      this.constrain(detail.panel, {left: PANEL_MARGIN, top: 64});
+      return;
+    }
+
+    if (mainManual) this.applyPreferredPosition(main);
+    if (detailManual) this.applyPreferredPosition(detail);
+    if (mainManual && detailManual && !rectanglesOverlap(main.panel.getBoundingClientRect(), detail.panel.getBoundingClientRect())) return;
+
+    const protectedRecord = mainManual ? main : detail;
+    const movingRecord = mainManual ? detail : main;
+    const protectedLeft = Number.parseFloat(protectedRecord.panel.style.left) || 0;
+    const left = chooseRemainingPanelLeft({
+      hostWidth,
+      protectedLeft,
+      protectedWidth: panelWidth(protectedRecord.panel),
+      movingWidth: panelWidth(movingRecord.panel),
+      prefer: movingRecord.role === "detail" ? "left" : "right"
+    });
+    const top = movingRecord.role === "detail"
+      ? (detailManual ? detail.preferredTop : 64)
+      : (mainManual ? main.preferredTop : PANEL_MARGIN);
+    this.constrain(movingRecord.panel, {left, top, reachableOnly: movingRecord.positionMode === PANEL_POSITION_MANUAL});
   }
 
-  keepPanelClearOfToolbar(panel) {
+  keepPanelClearOfToolbar(record) {
+    if (record.positionMode === PANEL_POSITION_MANUAL) {
+      this.applyPreferredPosition(record);
+      return;
+    }
+    const {panel} = record;
     this.constrain(panel);
     const toolbar = this.documentRef.querySelector(".map-toolbar");
     if (!toolbar || !rectanglesOverlap(panel.getBoundingClientRect(), toolbar.getBoundingClientRect())) return;
@@ -333,6 +425,84 @@ export class PanelManager {
 
 export function panelsCanCoexist(hostWidth, mainWidth, detailWidth, gap = 24) {
   return Number(hostWidth) >= Number(mainWidth) + Number(detailWidth) + Number(gap);
+}
+
+export function restoreManagedPanelViewportOrigin(windowRef) {
+  if (!windowRef || typeof windowRef.scrollTo !== "function") return false;
+  const scrollX = Number(windowRef.scrollX) || 0;
+  const scrollY = Number(windowRef.scrollY) || 0;
+  if (scrollX === 0 && scrollY === 0) return false;
+  windowRef.scrollTo(0, 0);
+  return true;
+}
+
+export function chooseLaterOpenedPanelRole(mainSequence, detailSequence) {
+  const main = Number.isFinite(mainSequence) ? mainSequence : 0;
+  const detail = Number.isFinite(detailSequence) ? detailSequence : 0;
+  return main > detail ? "main" : "detail";
+}
+
+export function normalizePanelPositionState(state, defaults = {}) {
+  const defaultLeft = finiteCoordinate(defaults.left, 24);
+  const defaultTop = finiteCoordinate(defaults.top, 24);
+  const source = state && typeof state === "object" ? state : {};
+  const hasCoordinates = Number.isFinite(source.left) && Number.isFinite(source.top);
+  const legacyManual = !Object.hasOwn(source, "positionMode") && hasCoordinates;
+  const manual = hasCoordinates && (source.positionMode === PANEL_POSITION_MANUAL || legacyManual);
+  return {
+    ...source,
+    positionMode: manual ? PANEL_POSITION_MANUAL : PANEL_POSITION_AUTO,
+    left: manual ? source.left : defaultLeft,
+    top: manual ? source.top : defaultTop
+  };
+}
+
+export function constrainPanelRuntimePosition({
+  left,
+  top,
+  hostWidth,
+  hostHeight,
+  panelWidth: width,
+  headerHeight = PANEL_HEADER_HEIGHT,
+  margin = PANEL_MARGIN,
+  minVisibleHeaderWidth = PANEL_MIN_VISIBLE_HEADER_WIDTH
+}) {
+  const safeWidth = Math.max(1, finiteCoordinate(width, 320));
+  const safeHeaderHeight = Math.max(1, finiteCoordinate(headerHeight, PANEL_HEADER_HEIGHT));
+  const safeHostWidth = Math.max(1, finiteCoordinate(hostWidth, safeWidth + margin * 2));
+  const safeHostHeight = Math.max(1, finiteCoordinate(hostHeight, safeHeaderHeight + margin * 2));
+  const minLeft = Math.min(margin, minVisibleHeaderWidth - safeWidth);
+  const maxLeft = Math.max(minLeft, safeHostWidth - safeWidth - margin);
+  const maxTop = Math.max(margin, safeHostHeight - safeHeaderHeight - margin);
+  return {
+    left: clamp(finiteCoordinate(left, margin), minLeft, maxLeft),
+    top: clamp(finiteCoordinate(top, margin), margin, maxTop)
+  };
+}
+
+export function chooseRemainingPanelLeft({
+  hostWidth,
+  protectedLeft,
+  protectedWidth,
+  movingWidth,
+  margin = PANEL_MARGIN,
+  gap = PANEL_PAIR_GAP,
+  prefer = "left"
+}) {
+  const leftCandidate = margin;
+  const rightCandidate = Math.max(margin, hostWidth - movingWidth - margin);
+  const fitsLeft = leftCandidate + movingWidth + gap <= protectedLeft;
+  const fitsRight = rightCandidate >= protectedLeft + protectedWidth + gap;
+  if (fitsLeft && fitsRight) return prefer === "right" ? rightCandidate : leftCandidate;
+  if (fitsLeft) return leftCandidate;
+  if (fitsRight) return rightCandidate;
+  const leftSpace = protectedLeft - gap - margin;
+  const rightSpace = hostWidth - margin - (protectedLeft + protectedWidth + gap);
+  return rightSpace > leftSpace ? rightCandidate : leftCandidate;
+}
+
+export function panelDragHasMoved(startLeft, startTop, endLeft, endTop, threshold = 0.5) {
+  return Math.hypot(endLeft - startLeft, endTop - startTop) > threshold;
 }
 
 export function chooseLastOpenMainPanel(candidates, preferredId = null) {
@@ -419,21 +589,35 @@ function installDrag(manager, panel, handle) {
     event.preventDefault();
     panel.style.left = `${startLeft + event.clientX - startX}px`;
     panel.style.top = `${startTop + event.clientY - startY}px`;
-    manager.constrain(panel);
+    manager.constrain(panel, {reachableOnly: true});
   });
 
   handle.addEventListener("pointerup", event => {
     if (!dragging) return;
     dragging = false;
-    manager.savePanelState(panel.dataset.panelId);
-    handle.releasePointerCapture(event.pointerId);
+    const endLeft = Number.parseFloat(panel.style.left) || 0;
+    const endTop = Number.parseFloat(panel.style.top) || 0;
+    if (panelDragHasMoved(startLeft, startTop, endLeft, endTop)) manager.commitManualPosition(panel.dataset.panelId);
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
   });
 
   handle.addEventListener("pointercancel", event => {
-    if (dragging) manager.savePanelState(panel.dataset.panelId);
+    if (dragging) manager.constrain(panel, {left: startLeft, top: startTop, reachableOnly: true});
     dragging = false;
     if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    manager.reflowPanels();
   });
+}
+
+function writePanelRuntimePosition(panel, position) {
+  const left = `${position.left}px`;
+  const top = `${position.top}px`;
+  if (panel.style.left !== left) panel.style.left = left;
+  if (panel.style.top !== top) panel.style.top = top;
+}
+
+function finiteCoordinate(value, fallback) {
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function clamp(value, min, max) {

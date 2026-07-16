@@ -1,5 +1,18 @@
 # 开发历史
 
+## 2026-07-16：实施权威任务第 67 项——手动面板位置优先
+
+- `PanelManager` 为每个面板记录 `positionMode`、`preferredLeft / preferredTop` 与默认坐标。LocalStorage 继续使用原 `webgl-generator-panel:*` key，新增 `positionMode`；缺字段且坐标有限的旧记录保守迁移为 `manual`，非法模式或坐标回退 `auto` 默认值。`savePanelState()` 只持久化 record 偏好，自动停靠、工具栏避让、打开关闭、resize 与 `ResizeObserver` 产生的临时 DOM 坐标不再反向覆盖用户偏好；`persistOpen: false` 的对象详情仍可保存位置，但不写 `open`。
+- 标题栏仅在 `pointerup` 后检测到实际位移时提交 `manual`，仅点按不改变模式；`pointercancel` 恢复拖动开始时的运行位置并重新套用当前布局，不提交偏好。手动面板始终从偏好坐标重算运行时位置，只为标题栏和关闭按钮可达做最小钳制，并跳过工具栏强制避让；视口缩小只改变 runtime，恢复后仍能回到原偏好。
+- 主面板与对象详情共存时，手动一方保持偏好，自动一方选择可容纳的剩余侧；两者均手动且重叠时保护主面板，只临时移动详情且不持久化临时位置。`auto / auto` 继续使用既有主面板右侧、详情左侧布局，空间不足仍执行后打开者胜出，单主面板和 last-main 规则未改。
+- 新增 `regress:panel-manual-position`，覆盖旧记录迁移、非法记录回退、点按 / 有效拖动阈值、偏好与临时 DOM 分离、窄视口最小钳制及恢复、对象详情 `persistOpen: false` 和手动面板剩余侧策略；同步扩展 `regress:panel-overlay-policy`、`regress:panel-overlay-browser`、`audit:ui-system` 与综合审计契约。尚书郎阶段未执行生产构建或浏览器脚本，留给给事中和观察使按四级门禁复核。
+- 给事中首次复核阻断两处遗漏：桌面主面板与详情已共存后，窗口缩窄到不可共存时 `reflowPanels()` 没有执行后打开者胜出；浏览器回归关闭城市面板后又点击隐藏的 `#open-city-panel`，导致等待超时。返工为 manager 与 record 增加仅运行时递增打开序号，resize 不可共存时保留序号较大者、同序号稳定保留详情，关闭仍只保存既有位置偏好；城市和生成面板重开分别改走正式 `Shift+C / Shift+G`，并补“桌面共存 -> 缩窄 -> 后打开者胜出 -> 恢复宽屏重开且偏好不变”的专项、浏览器与综合审计覆盖。
+- 返工后生产构建通过，仅有既有大 chunk 警告；`regress:panel-overlay-browser` 在桌面确认城市面板拖到 `180 / 96` 后重开、详情共存、缩到 `720px` 关闭较早城市、恢复宽屏以 `Shift+C` 唯一重开时 runtime 与 preference 均保持 `180 / 96`，窄视口 `48 / 88` 重开也通过。`audit:ui-system` 全量通过且 failures 为空，生成控制面板同样保持 `180 / 96`，缩窄保留后打开详情、恢复后 `Shift+G` 唯一重开；缩放样本关闭按钮和滚动底部可达。审计生成报告仍按既有规则留在 ignored 目录，不纳入提交。
+- 观察使随后在用户 Chrome 发现第三处阻断：高度面板偏好和 inline style 仍为 `900 / 16`，但真实点击深层 summary 后 document 被程序化 `scrollIntoView` 滚到 `window.scrollY = 124.44`，导致 `.map-stage` 与整个受管面板一起上移，面板 body 自身 `scrollTop = 942.22` 则是正常内部滚动。最小修复只在 `PanelManager` 的 open、受管面板 pointerdown 与 reflow 增加 document viewport 原点守卫；仅在 window 提供 `scrollTo` 且 `scrollX / scrollY` 非零时恢复 `(0, 0)`，写入幂等，不触碰 `.floating-panel-body.scrollTop`。两套浏览器门禁均补真实 `Shift+H`、唯一可见“高级地形程序与条件变换” summary 展开后的 runtime / preference、header / close、map-stage、window scroll 与 body 内部滚动证据。
+- 第三次返工后的独立 panel overlay browser 回归与 UI 全量审计均通过：高度面板展开前后 runtime / preference 保持 `900 / 16`，panel top 保持 `16`、header top 保持 `17`、`.map-stage.y` 保持 `0`、`window.scrollX / scrollY` 保持 `0 / 0`，标题栏和关闭按钮始终可达；与此同时 body `scrollTop` 从 `0` 增至 `1016`，证明修复只阻止 document 级滚动，没有破坏正常内部滚动。全量审计 `failures = []`，生产构建仍只有既有大 chunk 警告；ignored 审计报告未纳入工作树。
+- 同一用户 Chrome 终验通过：国家、城市、高度面板分别真实拖到左侧 `20 / 16`、中央 `340 / 16`、右侧 `900 / 16`，通过 `Shift+S / Shift+C / Shift+H` 关闭重开后偏差均为 `0px`；高度高级区真实展开后 panel / header 仍为 `900 / 16` 与 `y=16.89`，`window.scrollY` 和 `.map-stage.y` 均为 `0`。
+- 通过可见军事对象真实选择打开对象详情，主面板先开时城市为 `340 / 16 / 600×776`、详情为 `1094 / 64 / 320×256.89`，水平间隔 `154px`；详情先开时它先位于左侧 `24 / 64`，随后城市后开后详情自动移到右侧 `1094 / 64`，两种顺序均无重叠且关闭按钮可达。缩窄后只保留后打开的城市，运行时从 `340 / 16` 必要钳制到 `192 / 16`；恢复宽屏立即回到 `340 / 16`，证明临时钳制未覆盖偏好。刷新、还原原始视口并再次刷新后仍只恢复城市面板 `340 / 16`，document scroll、console error 和可见错误均为零；用户原 Chrome 标签以 handoff 保留。
+
 ## 2026-07-16：实施权威任务第 66 项——道路与河流世界宽度投影
 
 - 新增纯 `line-width-projection.js`：道路和河流先计算世界语义宽度，再按 `camera.scale` 与 client / map 尺寸投影 CSS 宽度，最后仅由 DPR 换算 backing 宽度。道路等级为 `1.8 / 1.15 / 0.7 world`，选中路线保留固定 `2.4 CSS px` halo；河流继续消费沿程 flux、`widthFactor / sourceWidth` 与点位进程，上游窄于下游，不再使用旧 `1.1～9.5 CSS px` 钳制。

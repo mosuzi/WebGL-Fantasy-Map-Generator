@@ -71,12 +71,18 @@ async function runViewportCase(browserInstance, viewport) {
     await page.keyboard.press("Escape");
     await page.waitForSelector('.floating-panel[data-panel-id="object-details"]', {state: "hidden"});
 
-    await page.evaluate(() => document.getElementById("open-state-panel")?.click());
+    await page.keyboard.press("Shift+S");
     await page.waitForSelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden)');
-    await page.evaluate(() => document.getElementById("open-city-panel")?.click());
+    await page.keyboard.press("Shift+C");
     await page.waitForSelector('.floating-panel[data-panel-id="city-panel"]:not(.hidden)');
     const switchedMain = await visibleMainPanelIds(page);
     assert.deepEqual(switchedMain, ["city-panel"], `${viewport.label} 打开新主面板后旧主面板仍可见`);
+    const manualPosition = await verifyManualPanelPosition(page, {
+      panelId: "city-panel",
+      noteId: fixture.noteId,
+      viewport
+    });
+    const heightViewportOrigin = viewport.width >= 1000 ? await verifyHeightPanelViewportOrigin(page, viewport) : null;
 
     await page.locator("#open-generation-panel").click();
     await page.waitForSelector('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)');
@@ -123,10 +129,176 @@ async function runViewportCase(browserInstance, viewport) {
 
     assert.deepEqual(consoleErrors, [], `${viewport.label} 出现控制台错误`);
     assert.deepEqual(pageErrors, [], `${viewport.label} 出现页面错误`);
-    return {viewport: `${viewport.width}x${viewport.height}`, coexistence, switchedMain, exportOverlay, workbenchOverlay, treeOverlay, restoredMain};
+    return {viewport: `${viewport.width}x${viewport.height}`, coexistence, switchedMain, manualPosition, heightViewportOrigin, exportOverlay, workbenchOverlay, treeOverlay, restoredMain};
   } finally {
     await context.close();
   }
+}
+
+async function verifyHeightPanelViewportOrigin(page, viewport) {
+  const panelId = "height-panel";
+  const panelSelector = `.floating-panel[data-panel-id="${panelId}"]`;
+  const target = {left: 900, top: 16};
+  await page.keyboard.press("Shift+H");
+  await page.waitForSelector(`${panelSelector}:not(.hidden)`);
+  await page.waitForFunction(selector => {
+    const body = document.querySelector(`${selector} .floating-panel-body`);
+    return body && !body.textContent.includes("正在加载") && body.textContent.includes("高级地形程序与条件变换");
+  }, panelSelector);
+  assert.deepEqual(await visibleMainPanelIds(page), [panelId], `${viewport.label} Shift+H 必须唯一打开高度面板`);
+
+  const header = page.locator(`${panelSelector} .floating-panel-header`);
+  const start = await readPanelPositionState(page, panelId);
+  const box = await header.boundingBox();
+  assert.ok(box, `${viewport.label} 无法读取高度面板标题栏位置`);
+  const pointer = {x: box.x + Math.min(100, box.width / 2), y: box.y + Math.min(20, box.height / 2)};
+  await page.mouse.move(pointer.x, pointer.y);
+  await page.mouse.down();
+  await page.mouse.move(pointer.x + target.left - start.runtime.left, pointer.y + target.top - start.runtime.top, {steps: 6});
+  await page.mouse.up();
+  await page.waitForFunction(id => JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}").positionMode === "manual", panelId);
+  const before = await inspectManagedPanelViewport(page, panelId);
+  assertPanelPositionNear(before.runtime, target, viewport, "高度面板展开前");
+  assert.equal(before.windowScroll.y, 0, `${viewport.label} 高度面板展开前 document viewport 已偏移`);
+
+  const summary = page.locator(`${panelSelector} details.height-advanced-section > summary`, {hasText: "高级地形程序与条件变换"});
+  assert.equal(await summary.count(), 1, `${viewport.label} 高级地形 summary 必须唯一`);
+  assert.equal(await summary.isVisible(), true, `${viewport.label} 高级地形 summary 必须可见`);
+  await summary.click();
+  await page.waitForFunction(selector => document.querySelector(`${selector} details.height-advanced-section`)?.open === true, panelSelector);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForTimeout(50);
+  const after = await inspectManagedPanelViewport(page, panelId);
+  assertPanelPositionNear(after.runtime, before.runtime, viewport, "高度面板展开后 runtime");
+  assertPanelPositionNear(after.preference, before.preference, viewport, "高度面板展开后 preference");
+  assert.equal(after.windowScroll.x, 0, `${viewport.label} 深层 summary 点击后 window.scrollX 必须归零`);
+  assert.equal(after.windowScroll.y, 0, `${viewport.label} 深层 summary 点击后 window.scrollY 必须归零`);
+  assert.ok(Math.abs(after.mapStage.y) <= 0.5, `${viewport.label} 深层 summary 点击后 map-stage 不得离开 viewport 原点`);
+  assert.equal(after.headerReachable, true, `${viewport.label} 深层 summary 点击后标题栏不可达`);
+  assert.equal(after.closeReachable, true, `${viewport.label} 深层 summary 点击后关闭按钮不可达`);
+  assert.equal(after.bodyScrollable, true, `${viewport.label} 高度面板 body 必须保留内部滚动能力`);
+  assert.ok(after.bodyScrollTop >= 0, `${viewport.label} 高度面板 body scrollTop 无效`);
+
+  await page.locator(`${panelSelector} .floating-panel-close`).click();
+  await page.waitForSelector(panelSelector, {state: "hidden"});
+  return {target, before, after};
+}
+
+async function inspectManagedPanelViewport(page, panelId) {
+  return page.evaluate(id => {
+    const panel = document.querySelector(`.floating-panel[data-panel-id="${id}"]`);
+    const header = panel.querySelector(".floating-panel-header");
+    const close = panel.querySelector(".floating-panel-close");
+    const body = panel.querySelector(".floating-panel-body");
+    const mapStage = document.querySelector(".map-stage");
+    const saved = JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}");
+    const panelRect = panel.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    const closeRect = close.getBoundingClientRect();
+    const stageRect = mapStage.getBoundingClientRect();
+    return {
+      runtime: {left: Number.parseFloat(panel.style.left) || 0, top: Number.parseFloat(panel.style.top) || 0},
+      preference: {left: saved.left, top: saved.top},
+      panelRect: {left: panelRect.left, top: panelRect.top, right: panelRect.right, bottom: panelRect.bottom},
+      headerRect: {left: headerRect.left, top: headerRect.top, right: headerRect.right, bottom: headerRect.bottom},
+      mapStage: {x: stageRect.x, y: stageRect.y},
+      windowScroll: {x: window.scrollX, y: window.scrollY},
+      headerReachable: headerRect.bottom > 0 && headerRect.top < innerHeight && headerRect.right > 0 && headerRect.left < innerWidth,
+      closeReachable: closeRect.left >= 0 && closeRect.top >= 0 && closeRect.right <= innerWidth && closeRect.bottom <= innerHeight,
+      bodyScrollable: body.scrollHeight > body.clientHeight,
+      bodyScrollTop: body.scrollTop
+    };
+  }, panelId);
+}
+
+async function verifyManualPanelPosition(page, {panelId, noteId, viewport}) {
+  const panelSelector = `.floating-panel[data-panel-id="${panelId}"]`;
+  const header = page.locator(`${panelSelector} .floating-panel-header`);
+  await header.click({position: {x: 80, y: 20}});
+  const clickMode = await page.evaluate(id => JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}").positionMode, panelId);
+  assert.equal(clickMode, "auto", `${viewport.label} 仅点按标题栏不应切换手动模式`);
+
+  const target = viewport.width >= 1000 ? {left: 180, top: 96} : {left: 48, top: 88};
+  const start = await page.evaluate(selector => {
+    const panel = document.querySelector(selector);
+    return {left: Number.parseFloat(panel.style.left) || 0, top: Number.parseFloat(panel.style.top) || 0};
+  }, panelSelector);
+  const box = await header.boundingBox();
+  assert.ok(box, `${viewport.label} 无法读取面板标题栏位置`);
+  const pointer = {x: box.x + Math.min(100, box.width / 2), y: box.y + Math.min(20, box.height / 2)};
+  await page.mouse.move(pointer.x, pointer.y);
+  await page.mouse.down();
+  await page.mouse.move(pointer.x + target.left - start.left, pointer.y + target.top - start.top, {steps: 6});
+  await page.mouse.up();
+  await page.waitForFunction(id => JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}").positionMode === "manual", panelId);
+
+  const dragged = await readPanelPositionState(page, panelId);
+  assertPanelPositionNear(dragged.runtime, target, viewport, "拖动后");
+  assertPanelPositionNear(dragged.preference, target, viewport, "偏好写入后");
+
+  await page.locator(`${panelSelector} .floating-panel-close`).click();
+  assert.deepEqual(await visibleMainPanelIds(page), [], `${viewport.label} 城市面板关闭后仍有主面板可见`);
+  await page.keyboard.press("Shift+C");
+  await page.waitForSelector(`${panelSelector}:not(.hidden)`);
+  assert.deepEqual(await visibleMainPanelIds(page), [panelId], `${viewport.label} Shift+C 重开后必须只有城市面板可见`);
+  await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+  await page.waitForTimeout(30);
+  const reopened = await readPanelPositionState(page, panelId);
+  assertPanelPositionNear(reopened.runtime, target, viewport, "重开与 resize 后");
+  assertPanelPositionNear(reopened.preference, target, viewport, "重开后的偏好");
+
+  let coexistence = null;
+  let narrowed = null;
+  let restoredAfterNarrow = null;
+  if (viewport.width >= 1000) {
+    await page.evaluate(id => {
+      const result = window.webglGeneratorApi.selection.select({kind: "note", id});
+      if (!result?.ok) throw new Error(result?.error?.message || "备注选择失败");
+    }, noteId);
+    await page.waitForSelector('.floating-panel[data-panel-id="object-details"]:not(.hidden)');
+    coexistence = await inspectPanelCoexistence(page);
+    assert.equal(coexistence.overlap, false, `${viewport.label} 对象详情不得覆盖手动主面板`);
+    const withDetails = await readPanelPositionState(page, panelId);
+    assertPanelPositionNear(withDetails.runtime, target, viewport, "对象详情共存后");
+    assertPanelPositionNear(withDetails.preference, target, viewport, "对象详情共存偏好");
+
+    await page.setViewportSize({width: 720, height: viewport.height});
+    await page.waitForSelector(panelSelector, {state: "hidden"});
+    narrowed = await inspectPanelCoexistence(page);
+    assert.deepEqual(narrowed.main, [], `${viewport.label} 缩窄后较早打开的城市面板必须关闭`);
+    assert.deepEqual(narrowed.details.map(item => item.id), ["object-details"], `${viewport.label} 缩窄后必须保留后打开的对象详情`);
+    const narrowedPreference = await readPanelPositionState(page, panelId);
+    assertPanelPositionNear(narrowedPreference.preference, target, viewport, "缩窄关闭后的偏好");
+
+    await page.setViewportSize({width: viewport.width, height: viewport.height});
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('.floating-panel[data-panel-id="object-details"]', {state: "hidden"});
+    await page.keyboard.press("Shift+C");
+    await page.waitForSelector(`${panelSelector}:not(.hidden)`);
+    assert.deepEqual(await visibleMainPanelIds(page), [panelId], `${viewport.label} 恢复宽屏后 Shift+C 必须唯一重开城市面板`);
+    restoredAfterNarrow = await readPanelPositionState(page, panelId);
+    assertPanelPositionNear(restoredAfterNarrow.runtime, target, viewport, "恢复宽屏重开后");
+    assertPanelPositionNear(restoredAfterNarrow.preference, target, viewport, "恢复宽屏后的偏好");
+  }
+
+  return {clickMode, target, dragged, reopened, coexistence, narrowed, restoredAfterNarrow};
+}
+
+async function readPanelPositionState(page, panelId) {
+  return page.evaluate(id => {
+    const panel = document.querySelector(`.floating-panel[data-panel-id="${id}"]`);
+    const saved = JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}");
+    return {
+      runtime: {left: Number.parseFloat(panel.style.left) || 0, top: Number.parseFloat(panel.style.top) || 0},
+      preference: {left: saved.left, top: saved.top},
+      positionMode: saved.positionMode
+    };
+  }, panelId);
+}
+
+function assertPanelPositionNear(actual, expected, viewport, stage) {
+  assert.ok(Math.abs(actual.left - expected.left) <= 2, `${viewport.label} ${stage} left 偏差超过 2px`);
+  assert.ok(Math.abs(actual.top - expected.top) <= 2, `${viewport.label} ${stage} top 偏差超过 2px`);
 }
 
 async function waitForReady(page) {

@@ -61,7 +61,7 @@ try {
     ok: report.passed,
     lazyPanels: lazyPerformance.panels.map(panel => ({id: panel.panelId, firstOpenMs: panel.firstOpenMs, longTaskMaxMs: panel.longTaskMaxMs, lazyChunk: panel.lazyChunk})),
     heapDeltaMb: lazyPerformance.heap.deltaMb,
-    desktop: {coexistence: desktop.coexistence, keyboard: desktop.keyboard, fixedOverlay: desktop.fixedOverlay, persistence: desktop.persistence},
+    desktop: {coexistence: desktop.coexistence, manualPosition: desktop.manualPosition, heightViewportOrigin: desktop.heightViewportOrigin, keyboard: desktop.keyboard, fixedOverlay: desktop.fixedOverlay, persistence: desktop.persistence},
     scaled: {viewport: scaled.viewport, panel: scaled.panel, toast: scaled.toast},
     failures
   }, null, 2));
@@ -158,6 +158,8 @@ async function auditDesktopInteraction(browserInstance) {
     if (coexistence.main.length !== 1 || coexistence.details.length !== 1 || coexistence.overlap) failures.push("桌面主面板与对象详情没有无重叠共存");
     await page.keyboard.press("Escape");
     await page.waitForSelector('.floating-panel[data-panel-id="object-details"]', {state: "hidden"});
+    const manualPosition = await auditManualPanelPosition(page, noteId, failures);
+    const heightViewportOrigin = await auditHeightPanelViewportOrigin(page, failures);
 
     await closeAllPanels(page);
     const trigger = page.locator("#open-generation-panel");
@@ -229,10 +231,119 @@ async function auditDesktopInteraction(browserInstance) {
     }));
     if (persistence.visibleMain.length !== 1 || persistence.visibleMain[0] !== "city-panel" || persistence.oldMainOpen !== false) failures.push("持久化恢复没有收口到最后打开的主面板");
     appendRuntimeErrors(failures, errors);
-    return {coexistence, keyboard, accessibility, fixedOverlay, toast, persistence, errors, failures};
+    return {coexistence, manualPosition, heightViewportOrigin, keyboard, accessibility, fixedOverlay, toast, persistence, errors, failures};
   } finally {
     await context.close();
   }
+}
+
+async function auditHeightPanelViewportOrigin(page, failures) {
+  const panelId = "height-panel";
+  const panelSelector = `.floating-panel[data-panel-id="${panelId}"]`;
+  const target = {left: 900, top: 16};
+  await page.keyboard.press("Shift+H");
+  await page.waitForSelector(`${panelSelector}:not(.hidden)`);
+  await page.waitForFunction(selector => {
+    const body = document.querySelector(`${selector} .floating-panel-body`);
+    return body && !body.textContent.includes("正在加载") && body.textContent.includes("高级地形程序与条件变换");
+  }, panelSelector);
+  const mainIds = await visibleMainPanelIds(page);
+  if (mainIds.length !== 1 || mainIds[0] !== panelId) failures.push("Shift+H 未唯一打开高度面板");
+
+  const header = page.locator(`${panelSelector} .floating-panel-header`);
+  const start = await readPanelPositionState(page, panelId);
+  const box = await header.boundingBox();
+  if (!box) {
+    failures.push("无法读取高度面板标题栏位置");
+    return {target, before: null, after: null};
+  }
+  const pointer = {x: box.x + Math.min(100, box.width / 2), y: box.y + Math.min(20, box.height / 2)};
+  await page.mouse.move(pointer.x, pointer.y);
+  await page.mouse.down();
+  await page.mouse.move(pointer.x + target.left - start.runtime.left, pointer.y + target.top - start.runtime.top, {steps: 6});
+  await page.mouse.up();
+  await page.waitForFunction(id => JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}").positionMode === "manual", panelId);
+  const before = await inspectManagedPanelViewport(page, panelId);
+  if (!panelPositionNear(before.runtime, target) || before.windowScroll.y !== 0) failures.push("高度面板展开前位置或 document viewport 原点异常");
+
+  const summary = page.locator(`${panelSelector} details.height-advanced-section > summary`, {hasText: "高级地形程序与条件变换"});
+  if (await summary.count() !== 1 || !await summary.isVisible()) failures.push("高级地形 summary 不是唯一可见入口");
+  await summary.click();
+  await page.waitForFunction(selector => document.querySelector(`${selector} details.height-advanced-section`)?.open === true, panelSelector);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForTimeout(50);
+  const after = await inspectManagedPanelViewport(page, panelId);
+  if (!panelPositionNear(after.runtime, before.runtime) || !panelPositionNear(after.preference, before.preference)) failures.push("高级地形展开或 ResizeObserver 改写手动面板位置");
+  if (after.windowScroll.x !== 0 || after.windowScroll.y !== 0 || Math.abs(after.mapStage.y) > 0.5) failures.push("高级地形 summary 点击导致 document viewport 偏移");
+  if (!after.headerReachable || !after.closeReachable) failures.push("高级地形 summary 点击后标题栏或关闭按钮不可达");
+  if (!after.bodyScrollable || after.bodyScrollTop < 0) failures.push("高度面板 body 未保留内部滚动能力");
+
+  await page.locator(`${panelSelector} .floating-panel-close`).click();
+  await page.waitForSelector(panelSelector, {state: "hidden"});
+  return {target, before, after};
+}
+
+async function auditManualPanelPosition(page, noteId, failures) {
+  const panelId = "generation-panel";
+  const panelSelector = `.floating-panel[data-panel-id="${panelId}"]`;
+  const header = page.locator(`${panelSelector} .floating-panel-header`);
+  const target = {left: 180, top: 96};
+  await header.click({position: {x: 80, y: 20}});
+  const clickMode = await page.evaluate(id => JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}").positionMode, panelId);
+  if (clickMode !== "auto") failures.push("仅点按主面板标题栏错误切换为手动位置");
+
+  const start = await readPanelPositionState(page, panelId);
+  const box = await header.boundingBox();
+  if (!box) {
+    failures.push("无法读取主面板标题栏位置");
+    return {clickMode, target, start, dragged: null, reopened: null, withDetails: null};
+  }
+  const pointer = {x: box.x + Math.min(100, box.width / 2), y: box.y + Math.min(20, box.height / 2)};
+  await page.mouse.move(pointer.x, pointer.y);
+  await page.mouse.down();
+  await page.mouse.move(pointer.x + target.left - start.runtime.left, pointer.y + target.top - start.runtime.top, {steps: 6});
+  await page.mouse.up();
+  await page.waitForFunction(id => JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}").positionMode === "manual", panelId);
+  const dragged = await readPanelPositionState(page, panelId);
+  if (!panelPositionNear(dragged.runtime, target) || !panelPositionNear(dragged.preference, target)) failures.push("主面板拖动位置未同步为手动偏好");
+
+  await page.locator(`${panelSelector} .floating-panel-close`).click();
+  await page.keyboard.press("Shift+G");
+  await page.waitForSelector(`${panelSelector}:not(.hidden)`);
+  const reopenedMainIds = await visibleMainPanelIds(page);
+  if (reopenedMainIds.length !== 1 || reopenedMainIds[0] !== panelId) failures.push("Shift+G 未唯一重开生成控制面板");
+  await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+  await page.waitForTimeout(30);
+  const reopened = await readPanelPositionState(page, panelId);
+  if (!panelPositionNear(reopened.runtime, target) || !panelPositionNear(reopened.preference, target)) failures.push("主面板重开或 resize 覆盖手动偏好");
+
+  await page.evaluate(id => {
+    const result = window.webglGeneratorApi.selection.select({kind: "note", id});
+    if (!result?.ok) throw new Error(result?.error?.message || "备注选择失败");
+  }, noteId);
+  await page.waitForSelector('.floating-panel[data-panel-id="object-details"]:not(.hidden)');
+  const coexistence = await inspectCoexistence(page);
+  const withDetails = await readPanelPositionState(page, panelId);
+  if (coexistence.overlap) failures.push("对象详情覆盖手动定位的主面板");
+  if (!panelPositionNear(withDetails.runtime, target) || !panelPositionNear(withDetails.preference, target)) failures.push("对象详情共存覆盖主面板手动偏好");
+
+  await page.setViewportSize({width: 720, height: 720});
+  await page.waitForSelector(panelSelector, {state: "hidden"});
+  const narrowed = await inspectCoexistence(page);
+  if (narrowed.main.length !== 0 || narrowed.details.length !== 1 || narrowed.details[0]?.id !== "object-details") failures.push("桌面共存缩窄后未保留后打开的对象详情");
+  const narrowedPreference = await readPanelPositionState(page, panelId);
+  if (!panelPositionNear(narrowedPreference.preference, target)) failures.push("缩窄关闭主面板时污染了手动偏好");
+
+  await page.setViewportSize({width: 1280, height: 720});
+  await page.keyboard.press("Escape");
+  await page.waitForSelector('.floating-panel[data-panel-id="object-details"]', {state: "hidden"});
+  await page.keyboard.press("Shift+G");
+  await page.waitForSelector(`${panelSelector}:not(.hidden)`);
+  const restoredAfterNarrow = await readPanelPositionState(page, panelId);
+  const restoredMainIds = await visibleMainPanelIds(page);
+  if (restoredMainIds.length !== 1 || restoredMainIds[0] !== panelId) failures.push("恢复宽屏后 Shift+G 未唯一重开生成控制面板");
+  if (!panelPositionNear(restoredAfterNarrow.runtime, target) || !panelPositionNear(restoredAfterNarrow.preference, target)) failures.push("恢复宽屏重开后未恢复手动偏好");
+  return {clickMode, target, dragged, reopened, withDetails, coexistence, narrowed, restoredAfterNarrow};
 }
 
 async function auditScaledViewport(browserInstance) {
@@ -394,6 +505,54 @@ async function inspectCoexistence(page) {
   });
 }
 
+async function visibleMainPanelIds(page) {
+  return page.evaluate(() => [...document.querySelectorAll('.floating-panel[data-panel-role="main"]:not(.hidden)')].map(node => node.dataset.panelId));
+}
+
+async function readPanelPositionState(page, panelId) {
+  return page.evaluate(id => {
+    const panel = document.querySelector(`.floating-panel[data-panel-id="${id}"]`);
+    const saved = JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}");
+    return {
+      runtime: {left: Number.parseFloat(panel.style.left) || 0, top: Number.parseFloat(panel.style.top) || 0},
+      preference: {left: saved.left, top: saved.top},
+      positionMode: saved.positionMode
+    };
+  }, panelId);
+}
+
+async function inspectManagedPanelViewport(page, panelId) {
+  return page.evaluate(id => {
+    const panel = document.querySelector(`.floating-panel[data-panel-id="${id}"]`);
+    const header = panel.querySelector(".floating-panel-header");
+    const close = panel.querySelector(".floating-panel-close");
+    const body = panel.querySelector(".floating-panel-body");
+    const mapStage = document.querySelector(".map-stage");
+    const saved = JSON.parse(localStorage.getItem(`webgl-generator-panel:${id}`) || "{}");
+    const panelRect = panel.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    const closeRect = close.getBoundingClientRect();
+    const stageRect = mapStage.getBoundingClientRect();
+    return {
+      runtime: {left: Number.parseFloat(panel.style.left) || 0, top: Number.parseFloat(panel.style.top) || 0},
+      preference: {left: saved.left, top: saved.top},
+      panelRect: {left: panelRect.left, top: panelRect.top, right: panelRect.right, bottom: panelRect.bottom},
+      headerRect: {left: headerRect.left, top: headerRect.top, right: headerRect.right, bottom: headerRect.bottom},
+      mapStage: {x: stageRect.x, y: stageRect.y},
+      windowScroll: {x: window.scrollX, y: window.scrollY},
+      headerReachable: headerRect.bottom > 0 && headerRect.top < innerHeight && headerRect.right > 0 && headerRect.left < innerWidth,
+      closeReachable: closeRect.left >= 0 && closeRect.top >= 0 && closeRect.right <= innerWidth && closeRect.bottom <= innerHeight,
+      bodyScrollable: body.scrollHeight > body.clientHeight,
+      bodyScrollTop: body.scrollTop
+    };
+  }, panelId);
+}
+
+function panelPositionNear(actual, expected, tolerance = 2) {
+  if (!actual || !expected) return false;
+  return Math.abs(actual.left - expected.left) <= tolerance && Math.abs(actual.top - expected.top) <= tolerance;
+}
+
 async function inspectAccessibility(page) {
   return page.evaluate(() => {
     const visible = node => {
@@ -494,6 +653,8 @@ function renderMarkdown(report) {
     "| 领域 | 样本 | 结果 |",
     "|---|---|---|",
     `| 多面板组合 | 主面板 + 对象详情 | ${desktop.coexistence.overlap ? "重叠" : "无重叠"} |`,
+    `| 手动位置偏好 | 拖动 / 重开 / resize / 对象详情共存 | ${panelPositionNear(desktop.manualPosition?.withDetails?.runtime, desktop.manualPosition?.target) ? "保持" : "失败"} |`,
+    `| 面板 document viewport | 高度面板深层 summary 展开 | ${desktop.heightViewportOrigin?.after?.windowScroll?.y === 0 && desktop.heightViewportOrigin?.after?.closeReachable ? "原点与关闭按钮可达" : "失败"} |`,
     `| 持久化恢复 | 最后主面板 | ${desktop.persistence.visibleMain.join("、") || "无"} |`,
     `| 键盘路径 | 打开 / Tab 操作 / Esc / 焦点返回 | ${desktop.keyboard.focusEntered && desktop.keyboard.reachedTab && desktop.keyboard.focusReturned ? "通过" : "失败"} |`,
     `| 固定浮层 | 导出浮层安全区 | ${desktop.fixedOverlay.safe && desktop.fixedOverlay.closeVisible ? "通过" : "失败"} |`,

@@ -14,6 +14,12 @@ assert.equal(packageJson.scripts["audit:ui-system"], "node --no-warnings ./tools
 assert.match(auditSource, /auditLazyPerformance/);
 assert.match(auditSource, /auditDesktopInteraction/);
 assert.match(auditSource, /auditScaledViewport/);
+assert.match(auditSource, /auditManualPanelPosition/);
+assert.match(auditSource, /auditHeightPanelViewportOrigin/);
+assert.match(auditSource, /setViewportSize\(\{width: 720, height: 720\}\)/);
+assert.match(auditSource, /keyboard\.press\("Shift\+G"\)/);
+assert.match(auditSource, /高级地形程序与条件变换/);
+assert.match(auditSource, /windowScroll\.y !== 0/);
 assert.match(auditSource, /inspectCoexistence/);
 assert.match(auditSource, /inspectAccessibility/);
 assert.match(auditSource, /inspectShortcutToast/);
@@ -24,9 +30,10 @@ assert.match(lazyPanelSource, /PerformanceObserver|scheduleLazyVuePanelPreload/)
 assert.match(overlaySource, /focusEntry/);
 assert.match(overlaySource, /restoreFocusTarget/);
 assert.match(overlaySource, /closeTopmost/);
+assert.equal(packageJson.scripts["regress:panel-manual-position"], "node --no-warnings ./tools/webgl-generator-panel-manual-position-regression.mjs");
 
 console.log(JSON.stringify({
   ok: true,
-  matrix: ["多面板组合", "持久化恢复", "固定浮层", "键盘焦点", "缩放与字体", "底部提示", "懒加载", "长任务", "连续打开内存"],
+  matrix: ["多面板组合", "手动位置偏好", "持久化恢复", "固定浮层", "键盘焦点", "缩放与字体", "底部提示", "懒加载", "长任务", "连续打开内存"],
   lazyPanels: ["height-panel", "military-panel", "economy-panel", "namebase-panel"]
 }, null, 2));
