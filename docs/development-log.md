@@ -1,5 +1,20 @@
 # 开发历史
 
+## 2026-07-17：实施权威任务第 69 项——标签类型样式系统与独立样式页
+
+- 新增 `label-style-registry.js`，固定国家、省份、首都、普通城市和手工标签五类语义身份，只接受 `system / serif / sans / condensed / mono` 稳定字体栈 id。每类 resolved style 由内置默认、视觉主题标签 token 和地图局部 override 三层合成，覆盖字体、字号、字重、斜体、字距、颜色、不透明度、描边和阴影；非法字体 / 字段 / 颜色拒绝，数值按字段范围归一。
+- 地图新增 `labels.styles = {version: 1, overrides: {}}` 与 `labels.hidden.province`，没有提升地图或文档 schema v2。当前 v2 validator 对缺少新增字段保持宽容、字段存在时严格校验；v1 迁移、完整 JSON、gzip-base64、浏览器恢复和运行时装载均通过既有路径补齐。样式命令支持 patch、单类重置和全部重置，统一进入 `EditHistory`，撤销 / 重做不改地图 checksum。
+- renderer 以国家→省份→城市 / 首都→手工的固定顺序构建标签；省份优先使用 `province.pole`，回退 pack center，接入独立 `provinceLabels` 图层、缩放、碰撞、选择、定位、隐藏 / 恢复、备注、重命名和标签管理统计，并明确避让国家名称。DOM 使用 resolved CSS variables；碰撞盒在 overlay rebuild 时按相同字号、字距、描边和阴影确定性估算，不做逐帧 DOM layout 读取。
+- 控制面板新增顶层“样式”Tab，提供五类型切换、可见预览、继承 / 覆盖提示、全部样式字段、重置当前类型和重置全部；slider 与颜色控件只在 `change` 提交命令。图层页新增“省份名称”。视觉主题变化会重建标签并保留显式覆盖，未覆盖颜色继续随主题变化。
+- PNG overlay 纳入 `.province-label.visible`，从同一 DOM computed style 读取字体族、字号、字重、斜体、字距、颜色、不透明度、阴影与描边，并按描边后填充绘制。新增 `regress:label-styles`，覆盖五类型隔离、clamp / 非法字体、主题继承、重置撤销 / 重做、首都 target identity、省份位置 / 隐藏 / 层序 / 避让、碰撞盒响应、旧 v1 / v2、完整 JSON / gzip 和 checksum 不变；同步更新 `regress:map-migration`。
+- 尚书郎阶段通过新增 / 相关 JS 的 `node --check`、ControlPanel 与 LabelNamingPanel 两份 SFC 编译，以及 `regress:label-styles / map-migration / visual-themes / png-options / control-ia`。按四级流程本阶段未运行生产构建、浏览器验收、Git staging、commit 或 push，状态为“实现完成，待四级复核”。
+- 观察使浏览器复核确认五类样式 computed 值正确，但连续点击可见 `#open-label-naming-panel` 不会打开标签管理。只读追踪确认 runtime handler、label panel wrapper 与 `PanelManager.open()` 链完整，失效点是 ControlPanel 的 Vue / Element Plus 按钮节点替换后，初始化时写在旧节点上的 direct listener 不再存在。最小返工仅把该入口改为受限 document click delegation，并移除直接绑定；控制 IA 回归以可替换按钮模型锁定后挂载、替换后单次触发、旧节点 / 无关按钮不触发及解除委托。
+- 给事中兼容复核阻断 current-v2 的 malformed-present 漏验：`labels.hidden.province` 的字符串值，以及缺少版本 / overrides 或含假值类型覆盖的 `labels.styles` 会被接受后静默回填。最小返工保持新增字段整项缺失时宽容，但字段存在时严格要求 province 隐藏表为数组、styles 为版本 1 且 overrides 为对象，并以 `Object.hasOwn` 对五类已知覆盖逐项验证；旧 v2 缺字段仍由与运行时相同的 `ensureLabelStore()` 回填。返工回归走真实 `migrateMapDocument()`，没有伪造加载状态。
+- 给事中最终复核通过 16 个相关 JS / MJS 语法检查、两份 Vue SFC 编译、`regress:label-styles / map-migration / visual-themes / png-options / control-ia`、CI 生产构建、范围检查和 `git diff --check`；构建只有既有大 chunk 提示。标签入口返工确认受限委托只匹配在 document 内的 `#open-label-naming-panel`，子节点点击、后挂载和节点替换均单次触发，脱离文档旧节点、无关节点与 unbind 后不触发。
+- 观察使复用同一用户 Chrome 终验五类差异样式：国家为 `mono / 32px / 900 / italic / #ff2d55`，省份为 `sans / 24px / 600 / #21d4fd`，首都为 `condensed / 22px / 800 / italic / #ffd60a`，普通城市保持独立默认，手工标签为 `serif / 28px / 700 / italic / #bf5af2` 并带独立字距、描边和阴影。首都与普通城市继续共用 `targetKind=city` 而按 style type 隔离；省份样本包围盒由 `57.61×19.79` 变为 `79.5×26.39px`，所有 overlay 坐标与包围盒保持有限。
+- 标签管理经入口返工后一次真实点击即打开。省份“玉寒”执行隐藏后节点数 `238→237` 且省份对象仍保留，恢复后回到 `238`；临时重命名显示为“玉寒终验州”后已恢复原名。`provinceLabels` 图层由开到关再开时可见省份 `61→0→61`，国家名称保持。仅覆盖国家颜色后切换 night 主题，显式 `#ff2d55` 保持，未覆盖不透明度与阴影随主题变化；单类重置只清国家，全部重置清除五类覆盖。
+- 浏览器保存把 `14.70MB` 地图压缩为 `2.35MB`，刷新后五类样式、手工标签和省份名称精确恢复；最终全部重置、删除临时手工标签、恢复默认主题并再次保存刷新，手工标签为 0、比例尺为 `200km`。完整地图 JSON 与当前视口 PNG 均通过真实 UI 触发，PNG 页面报告 `2561×1158 / 1x / 标注包含 / 1.16MB`；Chrome 工具未捕获下载文件路径，因此没有伪称 JSON 文件回灌或 PNG 逐像素浏览器直证，改由实时重跑的标签样式与 PNG 回归补证完整 JSON / gzip / 旧 v1/v2 / checksum、province selector 和描边后填充契约。终态无可见面板、loading、NaN / Infinity 或 console error，唯一 Chrome 标签已 handoff。
+
 ## 2026-07-17：实施权威任务第 68 项——画笔大小与真实范围光标
 
 - 新增 `brush-radius-contract.js`，集中声明高度、高度拖选、国家、省份、文化、宗教、生物群系和经济市场八类半径的默认值、上下界与步长；七个面板 wrapper 的默认、读取和写入以及七个 Vue 控件全部复用契约。控件统一为“画笔大小”，高度 paint 使用“选区画笔大小”，并明确显示当前值和“地图单位”；原有合理范围与默认值保留。

@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
+
+import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "../app/webgl-generator/src/runtime/label-style-edit-commands.js";
+import {ensureLabelStore, isGeneratedLabelHidden} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
+import {
+  LABEL_FONT_FAMILIES,
+  LABEL_STYLE_TYPES,
+  estimateLabelTextBox,
+  labelStyleTypeForTarget,
+  patchLabelStyle,
+  resolveLabelStyle
+} from "../app/webgl-generator/src/runtime/label-style-registry.js";
+import {createCompressedMapDocumentBlob, createMapDocument, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {LABEL_TARGET_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
+
+const map = {
+  metadata: {seed: "label-style-regression", checksum: "checksum-must-stay"},
+  options: {},
+  settlements: {cities: [{id: 0, name: "王城", capital: true, x: 20, y: 30}]},
+  politics: {
+    states: [null, {i: 1, name: "北国", fullName: "北境王国", center: 1}],
+    provinces: [null, {i: 1, state: 1, name: "霜原", pole: [24, 36], center: 1}]
+  },
+  pack: {cells: {p: [[0, 0], [24, 36]]}}
+};
+const store = ensureLabelStore(map);
+assert.equal(store.styles.version, 1);
+assert.deepEqual(Object.keys(store.styles.overrides), []);
+assert.deepEqual(map.labels.hidden.province, []);
+assert.equal(LABEL_STYLE_TYPES.length, 5);
+for (const styleType of LABEL_STYLE_TYPES) {
+  const style = resolveLabelStyle(map, styleType);
+  assert.ok(Object.hasOwn(LABEL_FONT_FAMILIES, style.fontFamilyId), `${styleType} 字体 id 不稳定`);
+  for (const field of ["fontSize", "fontWeight", "letterSpacing", "opacity", "strokeWidth", "shadowOffsetX", "shadowOffsetY", "shadowBlur"]) {
+    assert.ok(Number.isFinite(style[field]), `${styleType}.${field} 不是有限数值`);
+  }
+}
+
+const theme = {labels: {state: [0.2, 0.4, 0.6, 0.7], stateShadow: [0.05, 0.1, 0.15, 1], city: [0.7, 0.8, 0.9, 0.85], cityHalo: [0.1, 0.1, 0.1, 1], custom: [0.9, 0.7, 0.5, 0.9], customBorder: [0.2, 0.1, 0.05, 1]}};
+assert.equal(resolveLabelStyle(map, "province", theme).color, resolveLabelStyle(map, "state", theme).color, "省份没有继承国家主题层");
+assert.equal(resolveLabelStyle(map, "capital", theme).color, resolveLabelStyle(map, "city", theme).color, "首都没有继承城市主题层");
+patchLabelStyle(map, "province", {fontSize: 999, opacity: -2, letterSpacing: 4, color: "#123456"});
+assert.equal(resolveLabelStyle(map, "province", theme).fontSize, 72, "字号没有 clamp");
+assert.equal(resolveLabelStyle(map, "province", theme).opacity, 0, "不透明度没有 clamp");
+assert.equal(resolveLabelStyle(map, "province", theme).color, "#123456", "地图覆盖没有高于主题层");
+assert.throws(() => patchLabelStyle(map, "city", {fontFamilyId: "remote-font"}), /不支持的标签字体/);
+
+const history = new EditHistory();
+const context = {map};
+const checksum = map.metadata.checksum;
+history.execute(createPatchLabelStyleCommand("state", {fontSize: 41}), context);
+assert.equal(resolveLabelStyle(map, "state").fontSize, 41);
+history.execute(createResetLabelStyleCommand("state"), context);
+assert.equal(resolveLabelStyle(map, "state").fontSize, 30);
+history.undo(context);
+assert.equal(resolveLabelStyle(map, "state").fontSize, 41, "重置撤销没有恢复覆盖");
+history.redo(context);
+assert.equal(resolveLabelStyle(map, "state").fontSize, 30, "重置重做没有清除覆盖");
+history.execute(createResetAllLabelStylesCommand(), context);
+assert.deepEqual(map.labels.styles.overrides, {});
+assert.equal(map.metadata.checksum, checksum, "样式命令不应改写地图 checksum");
+
+assert.equal(labelStyleTypeForTarget(LABEL_TARGET_KIND.CITY, map.settlements.cities[0]), "capital", "首都样式拆分改变了 city target identity");
+assert.equal(LABEL_TARGET_KIND.CITY, "city");
+map.labels.hidden.province.push(1);
+assert.equal(isGeneratedLabelHidden(map, LABEL_TARGET_KIND.PROVINCE, 1), true);
+map.labels.hidden.province.length = 0;
+
+const smallStyle = resolveLabelStyle({version: 1, overrides: {city: {fontSize: 12, letterSpacing: 0}}}, "city");
+const largeStyle = resolveLabelStyle({version: 1, overrides: {city: {fontSize: 30, letterSpacing: 6}}}, "city");
+const smallBox = estimateLabelTextBox("北境城", smallStyle);
+const largeBox = estimateLabelTextBox("北境城", largeStyle);
+assert.ok(largeBox.width > smallBox.width && largeBox.height > smallBox.height, "字号/字距没有改变碰撞盒");
+
+const document = createMapDocument(map, map.options);
+const roundTrip = parseMapDocument(stringifyMapDocument(document));
+assert.equal(roundTrip.map.labels.styles.version, 1);
+const oldV2 = structuredClone(document);
+delete oldV2.map.labels.styles;
+delete oldV2.map.labels.hidden.province;
+const parsedOldV2 = parseMapDocument(stringifyMapDocument(oldV2));
+assert.equal(parsedOldV2.map.labels.styles, undefined, "旧 v2 缺字段应保持宽容读取");
+const normalizedOldV2 = createMapDocument(parsedOldV2.map, parsedOldV2.options);
+assert.equal(normalizedOldV2.map.labels.styles.version, 1, "旧 v2 再导出没有补样式存储");
+assert.deepEqual(normalizedOldV2.map.labels.hidden.province, [], "旧 v2 再导出没有补省份隐藏表");
+
+const oldV1 = JSON.parse(await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8"));
+const migratedV1 = parseMapDocument(JSON.stringify(oldV1));
+assert.equal(migratedV1.map.labels.styles.version, 1);
+assert.deepEqual(migratedV1.map.labels.hidden.province, []);
+
+const documentRef = {defaultView: globalThis};
+const compressed = await createCompressedMapDocumentBlob(documentRef, document);
+const gzipBase64 = Buffer.from(await compressed.blob.arrayBuffer()).toString("base64");
+const parsedGzip = await parseMapDocumentPayload(documentRef, {encoding: "gzip-base64", data: gzipBase64});
+assert.equal(parsedGzip.map.labels.styles.version, 1, "gzip 全图链没有保留标签样式");
+
+const [rendererSource, controlPanelSource, mapIoSource] = await Promise.all([
+  readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8")
+]);
+assert.match(rendererSource, /getLabelStates\(map\), \.\.\.getLabelProvinces\(map\), \.\.\.getLabelCities/, "标签固定层序不是国家→省份→城市");
+assert.match(rendererSource, /isWorldPoint\(province\.pole\)[\s\S]*province\.center/, "省份标签没有 pole→center 回退");
+assert.match(rendererSource, /provinceLabel[\s\S]*boxesOverlapAny\(occupiedStates/, "省份标签没有避让国家名称");
+assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-label-styles/, "样式页或全部重置入口缺失");
+assert.match(mapIoSource, /\.province-label\.visible/, "PNG overlay 没有纳入省份名称");
+assert.match(mapIoSource, /context\.strokeText\([\s\S]*context\.fillText\(/, "PNG 文字没有按描边→填充绘制");
+
+console.log(JSON.stringify({
+  ok: true,
+  styleTypes: LABEL_STYLE_TYPES,
+  checksumUnchanged: map.metadata.checksum === checksum,
+  boxResponse: {small: smallBox, large: largeBox},
+  oldV1Migrated: migratedV1.map.labels.styles.version,
+  oldV2Normalized: normalizedOldV2.map.labels.styles.version,
+  gzipRoundTrip: parsedGzip.map.labels.styles.version,
+  history: history.getStats()
+}, null, 2));

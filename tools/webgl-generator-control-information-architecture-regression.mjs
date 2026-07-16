@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
+import {bindLabelNamingPanelTrigger} from "../app/webgl-generator/src/ui/label-naming-panel-trigger.js";
 
-const [controlPanelSource, toolbarSource, shortcutSource] = await Promise.all([
+const [controlPanelSource, toolbarSource, shortcutSource, runtimePanelSource, runtimeAppSource, labelPanelSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/MapToolbar.vue", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/runtime/keyboard-shortcuts.js", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/runtime/keyboard-shortcuts.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/panel.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/panels/label-naming-panel.js", import.meta.url), "utf8")
 ]);
 
 const expectedGroups = Object.freeze({
@@ -49,13 +53,75 @@ for (const controlId of ["climate-latitude-toggle", "temperature-equator", "temp
 for (const label of ["地图种子", "地图规模", "宽度", "高度", "地形", "生成地图"]) assert(controlPanelSource.includes(label), `生成首层缺少中文业务字段：${label}`);
 for (const legacyLabel of ['label="Seed"', 'label="目标 cells"', ">生成 grid 地图<", ">换 seed<"]) assert(!controlPanelSource.includes(legacyLabel), `普通界面仍使用内部术语：${legacyLabel}`);
 
+assert.match(runtimePanelSource, /bindLabelNamingPanelTrigger\(documentRef, handlers\.onOpenLabelNamingPanel\)/, "标签管理入口没有使用生命周期安全的受限委托");
+assert.doesNotMatch(runtimePanelSource, /getElementById\("open-label-naming-panel"\).*addEventListener\("click"/, "标签管理入口仍保留会失效或重复触发的直接绑定");
+assert.match(runtimeAppSource, /onOpenLabelNamingPanel:[\s\S]*state\.panels\.labelNaming\.open\(state\.map, state\.selection, state\.editHistory\.getStats\(\)\)/, "标签管理入口没有进入既有 panel wrapper open 链");
+assert.match(labelPanelSource, /manager\.open\("label-naming-panel"\)/, "标签管理 wrapper 没有调用 PanelManager.open");
+const delegatedDocument = createDelegatedDocument();
+let labelPanelOpenCount = 0;
+const unbindLabelTrigger = bindLabelNamingPanelTrigger(delegatedDocument, () => labelPanelOpenCount++);
+const initialButton = createTrigger("open-label-naming-panel");
+delegatedDocument.mount(initialButton);
+delegatedDocument.click(createTriggerChild(initialButton));
+assert.equal(labelPanelOpenCount, 1, "后挂载标签管理按钮没有触发一次 handler");
+const replacementButton = createTrigger("open-label-naming-panel");
+delegatedDocument.mount(replacementButton);
+delegatedDocument.click(createTriggerChild(replacementButton));
+assert.equal(labelPanelOpenCount, 2, "替换后的标签管理按钮没有继续单次触发 handler");
+delegatedDocument.click(createTriggerChild(initialButton));
+delegatedDocument.click(createTrigger("open-notes-panel"));
+assert.equal(labelPanelOpenCount, 2, "已脱离文档或无关按钮误触发标签管理 handler");
+unbindLabelTrigger();
+delegatedDocument.click(replacementButton);
+assert.equal(labelPanelOpenCount, 2, "解除标签管理入口委托后仍触发 handler");
+
 console.log(JSON.stringify({
   ok: true,
   managementGroups: Object.values(expectedGroups).map(group => ({label: group.label, actions: group.actions.length})),
   managementActions: actionIds.length,
   fitViewEntries: 1,
-  advancedClimateDefault: "collapsed"
+  advancedClimateDefault: "collapsed",
+  labelPanelDelegatedClicks: labelPanelOpenCount
 }, null, 2));
+
+function createDelegatedDocument() {
+  const listeners = new Set();
+  let mounted = null;
+  return {
+    addEventListener(type, listener) {
+      if (type === "click") listeners.add(listener);
+    },
+    removeEventListener(type, listener) {
+      if (type === "click") listeners.delete(listener);
+    },
+    contains(node) {
+      return node === mounted;
+    },
+    mount(node) {
+      mounted = node;
+    },
+    click(target) {
+      for (const listener of listeners) listener({target});
+    }
+  };
+}
+
+function createTrigger(id) {
+  return {
+    id,
+    closest(selector) {
+      return selector === `#${id}` ? this : null;
+    }
+  };
+}
+
+function createTriggerChild(parent) {
+  return {
+    closest(selector) {
+      return selector === `#${parent.id}` ? parent : null;
+    }
+  };
+}
 
 function sliceBetween(source, startToken, endToken) {
   const start = source.indexOf(startToken);

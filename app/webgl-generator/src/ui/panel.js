@@ -1,4 +1,5 @@
 import {patchGlobalConfigPreferences, readGlobalConfigPreferences, setGlobalConfigLayerVisible} from "./vue/state-bridge.js";
+import {bindLabelNamingPanelTrigger} from "./label-naming-panel-trigger.js";
 import {OBJECT_KIND} from "../runtime/object-kinds.js";
 import {DIPLOMACY_RELATIONS} from "../generator/diplomacy.js";
 import {GOVERNMENT_FAMILY_LEGEND} from "../renderer/color-modes.js";
@@ -98,6 +99,13 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.addEventListener("webgl-generator-visual-theme-color", event => {
     handlers.onUpdateVisualTheme?.(event.detail?.token, event.detail?.color);
   });
+  documentRef.addEventListener("webgl-generator-label-style-patch", event => {
+    handlers.onPatchLabelStyle?.(event.detail?.styleType, event.detail?.patch || {});
+  });
+  documentRef.addEventListener("webgl-generator-label-style-reset", event => {
+    handlers.onResetLabelStyle?.(event.detail?.styleType);
+  });
+  documentRef.addEventListener("webgl-generator-label-styles-reset-all", () => handlers.onResetAllLabelStyles?.());
   bindBooleanPreferenceButton(documentRef, "show-hover-info", "showHoverInfo", handlers.onShowHoverInfo);
   documentRef.getElementById("max-city-labels")?.addEventListener("change", event => {
     const value = normalizeMaxCityLabels(event.target.value);
@@ -127,7 +135,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-lake-panel")?.addEventListener("click", handlers.onOpenLakePanel);
   documentRef.getElementById("open-zone-panel")?.addEventListener("click", handlers.onOpenZonePanel);
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
-  documentRef.getElementById("open-label-naming-panel")?.addEventListener("click", handlers.onOpenLabelNamingPanel);
+  bindLabelNamingPanelTrigger(documentRef, handlers.onOpenLabelNamingPanel);
   documentRef.getElementById("open-notes-panel")?.addEventListener("click", handlers.onOpenNotesPanel);
   documentRef.getElementById("open-measurement-panel")?.addEventListener("click", handlers.onOpenMeasurementPanel);
   documentRef.getElementById("open-namebase-panel")?.addEventListener("click", handlers.onOpenNamebasePanel);

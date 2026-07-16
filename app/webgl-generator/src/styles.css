@@ -369,6 +369,52 @@ select {
   line-height: 1.5;
 }
 
+.label-style-panel {
+  gap: 10px;
+}
+
+.label-style-preview {
+  display: grid;
+  min-height: 76px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(189, 206, 213, 0.18);
+  border-radius: 8px;
+  padding: 8px;
+  background: linear-gradient(135deg, rgba(24, 42, 48, 0.92), rgba(10, 15, 18, 0.92));
+  text-align: center;
+  white-space: nowrap;
+}
+
+.label-style-inheritance {
+  margin: 0;
+  color: #9fadb3;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.label-style-color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.label-style-color-grid label {
+  display: grid;
+  gap: 5px;
+  color: #cbd7dc;
+  font-size: 12px;
+}
+
+.label-style-color-grid input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid rgba(189, 206, 213, 0.2);
+  border-radius: 6px;
+  padding: 2px;
+  background: #111a1e;
+}
+
 .view-mode-segmented .el-segmented__group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1279,40 +1325,48 @@ select:disabled {
 }
 
 .city-label,
-.custom-label {
+.custom-label,
+.state-label,
+.province-label {
   position: absolute;
   left: 0;
   top: 0;
+  color: var(--label-color);
+  font-family: var(--label-font-family);
+  font-size: var(--label-font-size);
+  font-style: var(--label-font-style);
+  font-weight: var(--label-font-weight);
+  letter-spacing: var(--label-letter-spacing);
+  -webkit-text-stroke: var(--label-stroke-width) var(--label-stroke-color);
+  text-shadow: var(--label-shadow-offset-x) var(--label-shadow-offset-y) var(--label-shadow-blur) var(--label-shadow-color);
+  white-space: nowrap;
+}
+
+.city-label,
+.custom-label {
   transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -100%);
   will-change: transform, opacity;
   max-width: 120px;
-  font-size: 11px;
   line-height: 1.25;
   opacity: 0;
   transition: opacity 140ms ease, visibility 0s linear 140ms;
   visibility: hidden;
-  white-space: nowrap;
 }
 
 .city-label {
-  color: var(--theme-city-label, #101411);
   z-index: 3;
-  text-shadow:
-    0 1px 2px var(--theme-city-label-halo, rgba(246, 239, 216, 0.72)),
-    0 0 4px var(--theme-city-label-halo-soft, rgba(246, 239, 216, 0.58));
 }
 
 .city-label.visible,
-.custom-label.visible {
-  opacity: 1;
+.custom-label.visible,
+.province-label.visible {
+  opacity: var(--label-opacity, 1);
   transition-delay: 0s;
   visibility: visible;
 }
 
 .city-label.capital {
   max-width: 156px;
-  font-size: 15px;
-  font-weight: 800;
   line-height: 1.2;
 }
 
@@ -1328,9 +1382,7 @@ select:disabled {
   border-radius: 4px;
   border: 1px solid var(--theme-custom-label-border, rgba(238, 213, 145, 0.34));
   background: var(--theme-custom-label-bg, rgba(20, 27, 28, 0.74));
-  color: var(--theme-custom-label, #f8e8ba);
   cursor: grab;
-  font-weight: 700;
   pointer-events: auto;
   user-select: none;
   z-index: 4;
@@ -1340,33 +1392,33 @@ select:disabled {
   cursor: grabbing;
 }
 
-.state-label {
-  position: absolute;
-  left: 0;
-  top: 0;
+.state-label,
+.province-label {
   transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -50%) rotate(var(--label-rotation, 0deg));
   will-change: transform, opacity;
   max-width: 280px;
-  color: var(--theme-state-label, rgba(255, 232, 174, 0.92));
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: 0;
   line-height: 1.1;
   opacity: 0;
   text-align: center;
-  text-shadow:
-    0 2px 4px var(--theme-state-label-shadow, rgba(4, 7, 8, 0.82)),
-    0 0 18px var(--theme-state-label-glow, rgba(28, 24, 12, 0.72));
   transition: opacity 240ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0s linear 240ms;
   visibility: hidden;
-  white-space: nowrap;
   z-index: 2;
 }
 
 .state-label.visible {
-  opacity: var(--state-label-opacity, 1);
+  opacity: calc(var(--label-opacity, 1) * var(--state-label-opacity, 1));
   transition-delay: 0s;
   visibility: visible;
+}
+
+.province-label {
+  max-width: 220px;
+  transition-duration: 180ms;
+  z-index: 2;
+}
+
+.province-label.selected {
+  color: #fff1b8;
 }
 
 .state-label.selected {

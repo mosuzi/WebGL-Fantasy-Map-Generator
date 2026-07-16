@@ -168,6 +168,7 @@ function labelExists(map, key) {
   if (!Number.isInteger(id)) return false;
   if (kind === LABEL_TARGET_KIND.CITY) return Boolean(map?.settlements?.cities?.[id]);
   if (kind === LABEL_TARGET_KIND.STATE) return Boolean(map?.politics?.states?.[id]);
+  if (kind === LABEL_TARGET_KIND.PROVINCE) return Boolean(map?.politics?.provinces?.[id]);
   if (kind === LABEL_TARGET_KIND.CUSTOM) return Boolean(map?.labels?.custom?.some(label => label?.id === id));
   return false;
 }
@@ -180,5 +181,7 @@ function firstLabelKey(map) {
   const city = (map?.settlements?.cities || []).find(item => item && Number.isInteger(item.id));
   if (city) return `${LABEL_TARGET_KIND.CITY}:${city.id}`;
   const state = (map?.politics?.states || []).find(item => item?.i || item?.id);
-  return state ? `${LABEL_TARGET_KIND.STATE}:${state.i ?? state.id}` : null;
+  if (state) return `${LABEL_TARGET_KIND.STATE}:${state.i ?? state.id}`;
+  const province = (map?.politics?.provinces || []).find(item => item?.i || item?.id);
+  return province ? `${LABEL_TARGET_KIND.PROVINCE}:${province.i ?? province.id}` : null;
 }

@@ -21,6 +21,7 @@ export const OBJECT_KIND = Object.freeze({
 export const LABEL_TARGET_KIND = Object.freeze({
   CITY: OBJECT_KIND.CITY,
   STATE: OBJECT_KIND.STATE,
+  PROVINCE: OBJECT_KIND.PROVINCE,
   CUSTOM: "custom"
 });
 

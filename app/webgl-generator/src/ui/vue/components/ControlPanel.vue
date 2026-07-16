@@ -364,6 +364,37 @@
       </div>
     </div>
 
+    <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
+      <UiSelectField
+        label="标签类型"
+        input-id="label-style-type"
+        :model-value="selectedLabelStyleType"
+        :options="labelStyleTypeOptions"
+        @update:model-value="value => selectedLabelStyleType = value"
+      />
+      <div class="label-style-preview" :style="labelStylePreviewCss" aria-live="polite">山河有名 · {{ activeLabelStyleLabel }}</div>
+      <p class="label-style-inheritance">{{ labelStyleInheritanceHint }}</p>
+      <UiSelectField label="字体" input-id="label-style-font" :model-value="activeLabelStyle.fontFamilyId" :options="labelFontOptions" @update:model-value="value => commitLabelStyle('fontFamilyId', value)" />
+      <UiSelectField label="字重" input-id="label-style-weight" :model-value="String(activeLabelStyle.fontWeight)" :options="labelWeightOptions" @update:model-value="value => commitLabelStyle('fontWeight', Number(value))" />
+      <UiSwitchField label="斜体" input-id="label-style-italic" :checked="activeLabelStyle.italic" @change="value => commitLabelStyle('italic', value)" />
+      <UiSliderField label="字号" input-id="label-style-font-size" :model-value="activeLabelStyle.fontSize" :min="8" :max="72" :step="1" unit-label="px" @change="value => commitLabelStyle('fontSize', value)" />
+      <UiSliderField label="字距" input-id="label-style-letter-spacing" :model-value="activeLabelStyle.letterSpacing" :min="-2" :max="12" :step="0.1" unit-label="px" @change="value => commitLabelStyle('letterSpacing', value)" />
+      <UiSliderField label="不透明度" input-id="label-style-opacity" :model-value="activeLabelStyle.opacity" :min="0" :max="1" :step="0.05" @change="value => commitLabelStyle('opacity', value)" />
+      <div class="label-style-color-grid">
+        <label>文字色<input id="label-style-color" type="color" :value="activeLabelStyle.color" @change="event => commitLabelStyle('color', event.target.value)" /></label>
+        <label>描边色<input id="label-style-stroke-color" type="color" :value="activeLabelStyle.strokeColor" @change="event => commitLabelStyle('strokeColor', event.target.value)" /></label>
+        <label>阴影色<input id="label-style-shadow-color" type="color" :value="activeLabelStyle.shadowColor" @change="event => commitLabelStyle('shadowColor', event.target.value)" /></label>
+      </div>
+      <UiSliderField label="描边" input-id="label-style-stroke-width" :model-value="activeLabelStyle.strokeWidth" :min="0" :max="8" :step="0.25" unit-label="px" @change="value => commitLabelStyle('strokeWidth', value)" />
+      <UiSliderField label="阴影横移" input-id="label-style-shadow-x" :model-value="activeLabelStyle.shadowOffsetX" :min="-20" :max="20" :step="0.5" unit-label="px" @change="value => commitLabelStyle('shadowOffsetX', value)" />
+      <UiSliderField label="阴影纵移" input-id="label-style-shadow-y" :model-value="activeLabelStyle.shadowOffsetY" :min="-20" :max="20" :step="0.5" unit-label="px" @change="value => commitLabelStyle('shadowOffsetY', value)" />
+      <UiSliderField label="阴影模糊" input-id="label-style-shadow-blur" :model-value="activeLabelStyle.shadowBlur" :min="0" :max="30" :step="0.5" unit-label="px" @change="value => commitLabelStyle('shadowBlur', value)" />
+      <div class="visual-theme-action-row">
+        <UiButton id="reset-current-label-style" variant="secondary" @click="resetCurrentLabelStyle">重置当前类型</UiButton>
+        <UiButton id="reset-all-label-styles" variant="danger" @click="resetAllLabelStyles">重置全部</UiButton>
+      </div>
+    </div>
+
     <div class="control-panel-section unit-control-panel" data-control-panel="units" :hidden="activeTab !== 'units'">
       <section class="unit-settings unit-settings-standalone" aria-labelledby="unit-settings-title">
         <h2 id="unit-settings-title">显示单位</h2>
@@ -544,6 +575,7 @@ import {Lock, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
+import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
 import {
   DISTANCE_UNIT_OPTIONS,
   NUMBER_ABBREVIATION_OPTIONS,
@@ -572,7 +604,7 @@ defineOptions({
 
 const config = useGlobalConfigStore();
 const {preferences} = storeToRefs(config);
-const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "layers", "management", "units"]);
+const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "styles", "layers", "management", "units"]);
 const activeTab = ref(normalizeControlPanelTab(preferences.value.controlPanelTab));
 const exportPanelOpen = ref(false);
 const exportAnchorRef = ref(null);
@@ -656,6 +688,7 @@ const tabs = Object.freeze([
   {id: "about", label: "简介"},
   {id: "generation", label: "生成"},
   {id: "themes", label: "视图"},
+  {id: "styles", label: "样式"},
   {id: "layers", label: "图层"},
   {id: "management", label: "管理"},
   {id: "units", label: "单位"}
@@ -687,6 +720,36 @@ const visualThemeColorFields = Object.freeze([
 ]);
 const visualThemeActions = Object.freeze([{key: "color", label: "编辑主题颜色", icon: "◐", panelWidth: 360, panelHeight: 420}]);
 
+const labelStyleTypeOptions = Object.freeze([
+  {value: "state", label: "国家名称"},
+  {value: "province", label: "省份名称"},
+  {value: "capital", label: "首都名称"},
+  {value: "city", label: "城市名称"},
+  {value: "custom", label: "手工标签"}
+]);
+const labelFontOptions = Object.freeze(Object.keys(LABEL_FONT_FAMILIES).map(value => ({value, label: labelFontLabel(value)})));
+const labelWeightOptions = Object.freeze([300, 400, 500, 600, 650, 700, 800, 900].map(value => ({value: String(value), label: String(value)})));
+const selectedLabelStyleType = ref(LABEL_STYLE_TYPES[0]);
+const labelStyleSnapshot = ref(createDefaultLabelStyleSnapshot());
+const activeLabelStyleEntry = computed(() => labelStyleSnapshot.value.styles?.[selectedLabelStyleType.value] || createDefaultLabelStyleEntry(selectedLabelStyleType.value));
+const activeLabelStyle = computed(() => activeLabelStyleEntry.value.resolved);
+const activeLabelStyleLabel = computed(() => labelStyleTypeOptions.find(option => option.value === selectedLabelStyleType.value)?.label || "标签");
+const labelStyleInheritanceHint = computed(() => {
+  const fields = Object.keys(activeLabelStyleEntry.value.override || {});
+  return fields.length ? `当前有 ${fields.length} 个地图级覆盖字段；其余沿用默认与主题。` : "当前未设地图级覆盖，沿用默认与主题。";
+});
+const labelStylePreviewCss = computed(() => ({
+  color: activeLabelStyle.value.color,
+  opacity: activeLabelStyle.value.opacity,
+  fontFamily: activeLabelStyle.value.fontFamily,
+  fontSize: `${activeLabelStyle.value.fontSize}px`,
+  fontWeight: activeLabelStyle.value.fontWeight,
+  fontStyle: activeLabelStyle.value.italic ? "italic" : "normal",
+  letterSpacing: `${activeLabelStyle.value.letterSpacing}px`,
+  WebkitTextStroke: `${activeLabelStyle.value.strokeWidth}px ${activeLabelStyle.value.strokeColor}`,
+  textShadow: `${activeLabelStyle.value.shadowOffsetX}px ${activeLabelStyle.value.shadowOffsetY}px ${activeLabelStyle.value.shadowBlur}px ${activeLabelStyle.value.shadowColor}`
+}));
+
 const themes = Object.freeze([
   {value: "height", label: "高度"},
   {value: "temperature", label: "温度"},
@@ -715,6 +778,7 @@ const layers = Object.freeze([
   {id: "scaleBar", label: "比例尺"},
   {id: "labels", label: "城市标签"},
   {id: "stateLabels", label: "国家名称"},
+  {id: "provinceLabels", label: "省份名称"},
   {id: "stateBorders", label: "国界"},
   {id: "provinceBorders", label: "省界"},
   {id: "coastline", label: "水陆线"}
@@ -957,6 +1021,49 @@ function handleVisualThemesChanged(event) {
   if (!activeUserThemeDocument.value) activeThemeAction.value = null;
 }
 
+function handleLabelStylesChanged(event) {
+  if (!event.detail?.styles) return;
+  labelStyleSnapshot.value = {
+    version: Number(event.detail.version) || 1,
+    overrides: {...(event.detail.overrides || {})},
+    styles: Object.fromEntries(Object.entries(event.detail.styles).map(([styleType, entry]) => [styleType, {
+      styleType,
+      override: {...(entry.override || {})},
+      resolved: {...(entry.resolved || {})}
+    }]))
+  };
+}
+
+function commitLabelStyle(field, value) {
+  document.dispatchEvent(new CustomEvent("webgl-generator-label-style-patch", {
+    detail: {styleType: selectedLabelStyleType.value, patch: {[field]: value}}
+  }));
+}
+
+function resetCurrentLabelStyle() {
+  document.dispatchEvent(new CustomEvent("webgl-generator-label-style-reset", {detail: {styleType: selectedLabelStyleType.value}}));
+}
+
+function resetAllLabelStyles() {
+  document.dispatchEvent(new CustomEvent("webgl-generator-label-styles-reset-all"));
+}
+
+function createDefaultLabelStyleSnapshot() {
+  return {
+    version: 1,
+    overrides: {},
+    styles: Object.fromEntries(LABEL_STYLE_TYPES.map(styleType => [styleType, createDefaultLabelStyleEntry(styleType)]))
+  };
+}
+
+function createDefaultLabelStyleEntry(styleType) {
+  return {styleType, override: {}, resolved: {...resolveLabelStyle({version: 1, overrides: {}}, styleType)}};
+}
+
+function labelFontLabel(fontFamilyId) {
+  return {system: "系统界面", serif: "衬线", sans: "无衬线", condensed: "窄体", mono: "等宽"}[fontFamilyId] || fontFamilyId;
+}
+
 function applyVisualThemeColor(color) {
   document.dispatchEvent(new CustomEvent("webgl-generator-visual-theme-color", {
     detail: {token: selectedThemeColorKey.value, color}
@@ -994,6 +1101,7 @@ onMounted(() => {
   document.addEventListener("click", handleExportPanelOutsideClick, true);
   document.addEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   document.addEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
+  document.addEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
   window.addEventListener("resize", handleExportPanelReposition);
   window.addEventListener("scroll", handleExportPanelReposition, true);
 });
@@ -1002,6 +1110,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("click", handleExportPanelOutsideClick, true);
   document.removeEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   document.removeEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
+  document.removeEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
   window.removeEventListener("resize", handleExportPanelReposition);
   window.removeEventListener("scroll", handleExportPanelReposition, true);
 });

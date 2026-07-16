@@ -42,7 +42,7 @@
     <template #rename>
       <UiTextEditField
         class-name="label-name-editor"
-        :label="selected.targetKind === LABEL_TARGET_KIND.STATE ? '国家名称' : selected.targetKind === LABEL_TARGET_KIND.CUSTOM ? '标签文字' : '城市名称'"
+        :label="selected.targetKind === LABEL_TARGET_KIND.STATE ? '国家名称' : selected.targetKind === LABEL_TARGET_KIND.PROVINCE ? '省份名称' : selected.targetKind === LABEL_TARGET_KIND.CUSTOM ? '标签文字' : '城市名称'"
         :model-value="selected.name"
         :max-length="48"
         @apply="name => callbacks.onRename(selected, name)"
@@ -139,6 +139,7 @@ const summaryMetrics = computed(() => [
   {label: "标签", value: formatNumber(rows.value.length)},
   {label: "城市", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CITY).length)},
   {label: "国家", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.STATE).length)},
+  {label: "省份", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.PROVINCE).length)},
   {label: "手工", value: formatNumber(rows.value.filter(row => row.targetKind === LABEL_TARGET_KIND.CUSTOM).length)},
   {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
@@ -197,7 +198,7 @@ function openRenameEditor(row) {
 }
 
 function labelRows(map) {
-  return [...customLabelRows(map), ...cityLabelRows(map), ...stateLabelRows(map)];
+  return [...customLabelRows(map), ...cityLabelRows(map), ...stateLabelRows(map), ...provinceLabelRows(map)];
 }
 
 function customLabelRows(map) {
@@ -278,6 +279,36 @@ function stateLabelRows(map) {
         center: point ? formatPoint(point[0], point[1]) : "none",
         priority: Number(state.area || 0) + Number(state.burgs || 0) * 100,
         rank: "state",
+        noteBody: note?.body || "",
+        noteUpdatedAt: note?.updatedAt || ""
+      };
+    });
+}
+
+function provinceLabelRows(map) {
+  return (map?.politics?.provinces || [])
+    .filter(province => province && (province.i || province.id) && !province.removed)
+    .map(province => {
+      const provinceId = province.i ?? province.id;
+      const state = map?.politics?.states?.[province.state];
+      const point = Array.isArray(province.pole) ? province.pole : map?.pack?.cells?.p?.[province.center];
+      const key = `${LABEL_TARGET_KIND.PROVINCE}:${provinceId}`;
+      const note = readObjectNote(map, {kind: "label", id: key});
+      const hidden = isHiddenLabel(map, LABEL_TARGET_KIND.PROVINCE, provinceId);
+      return {
+        key,
+        id: provinceId,
+        targetId: provinceId,
+        targetKind: LABEL_TARGET_KIND.PROVINCE,
+        type: "省份名称",
+        name: province.name || `省份 #${provinceId}`,
+        owner: state?.name || "无国家",
+        visibility: hidden ? "已隐藏，不在地图显示" : "随省份名称图层和缩放显示",
+        status: hidden ? "隐藏" : "显示",
+        hidden,
+        center: point ? formatPoint(point[0], point[1]) : "none",
+        priority: Number(province.area || 0) + Number(province.burgs || 0) * 40,
+        rank: "province",
         noteBody: note?.body || "",
         noteUpdatedAt: note?.updatedAt || ""
       };

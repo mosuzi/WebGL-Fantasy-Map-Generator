@@ -242,6 +242,9 @@ function normalizeObjectTarget(object) {
   if (object?.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.STATE) {
     return {kind: OBJECT_KIND.STATE, id: object.targetId ?? object.id};
   }
+  if (object?.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+    return {kind: OBJECT_KIND.PROVINCE, id: object.targetId ?? object.id};
+  }
   return {kind: object?.kind, id: object?.id};
 }
 

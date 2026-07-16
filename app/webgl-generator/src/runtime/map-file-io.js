@@ -1,5 +1,6 @@
 import {readObjectNote} from "./object-notes.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
+import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -425,6 +426,10 @@ function validateCurrentMapDocument(document) {
   if (!Array.isArray(document.map.labels?.hidden?.city) || !Array.isArray(document.map.labels?.hidden?.state)) {
     throw new Error("地图数据的 labels 隐藏表不完整");
   }
+  if (document.map.labels.hidden.province !== undefined && !Array.isArray(document.map.labels.hidden.province)) {
+    throw new Error("地图数据的 labels 省份隐藏表无效");
+  }
+  if (document.map.labels.styles !== undefined) validateLabelStyleStore(document.map.labels.styles);
   if (!document.map.visualTheme || typeof document.map.visualTheme !== "object") throw new Error("地图数据缺少 visualTheme 存储");
   if (!document.map.visualTheme.preset || !document.map.visualTheme.overrides || typeof document.map.visualTheme.overrides !== "object") {
     throw new Error("地图数据的 visualTheme 存储不完整");
@@ -478,11 +483,13 @@ function normalizeLabelStoreV2(source) {
   const custom = Array.isArray(source?.custom) ? [...source.custom] : [];
   const city = Array.isArray(source?.hidden?.city) ? [...source.hidden.city] : [];
   const state = Array.isArray(source?.hidden?.state) ? [...source.hidden.state] : [];
+  const province = Array.isArray(source?.hidden?.province) ? [...source.hidden.province] : [];
   return {
     ...(source && typeof source === "object" ? source : {}),
     custom,
-    hidden: {...(source?.hidden || {}), city, state},
-    metadata: {custom: custom.length, hidden: city.length + state.length}
+    hidden: {...(source?.hidden || {}), city, state, province},
+    styles: normalizeLabelStyleStore(source?.styles),
+    metadata: {custom: custom.length, hidden: city.length + state.length + province.length}
   };
 }
 
@@ -1710,7 +1717,7 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   if (options.overlays?.cityIcons !== false) selectors.push(".city-map-icon.visible");
   if (options.overlays?.markers !== false) selectors.push(".marker-map-icon.visible");
   if (options.overlays?.military !== false) selectors.push(".military-map-icon.visible");
-  if (options.overlays?.labels !== false) selectors.push(".state-label.visible", ".city-label.visible", ".custom-label.visible");
+  if (options.overlays?.labels !== false) selectors.push(".state-label.visible", ".province-label.visible", ".city-label.visible", ".custom-label.visible");
   const elements = selectors.length ? Array.from(overlay.querySelectorAll(selectors.join(", "))).filter(isVisibleElement) : [];
   elements.sort((a, b) => overlayZIndex(a) - overlayZIndex(b));
 
@@ -1920,30 +1927,30 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
   const opacity = exportOverlayOpacity(element, style);
   if (opacity <= 0) return;
   const isStateLabel = element.classList.contains("state-label");
+  const isProvinceLabel = element.classList.contains("province-label");
   const isCustomLabel = element.classList.contains("custom-label");
   const background = style.backgroundColor;
   const borderColor = style.borderColor;
 
   context.save();
   context.globalAlpha = opacity;
-  if (!isStateLabel && isPaintedColor(background)) {
+  if (!isStateLabel && !isProvinceLabel && isPaintedColor(background)) {
     drawPanel(context, box, cssPixelValue(style.borderRadius, scale.x), background, isPaintedColor(borderColor) ? borderColor : "transparent");
   }
   context.font = cssCanvasFont(style, scale.y);
+  if ("letterSpacing" in context) context.letterSpacing = `${cssPixelValue(style.letterSpacing, scale.x)}px`;
   context.fillStyle = style.color || "#111";
   context.textBaseline = "middle";
   context.textAlign = "center";
 
-  if (isStateLabel) {
+  if (isStateLabel || isProvinceLabel) {
     const rotation = cssRotationDegrees(element);
     context.translate(box.x + box.width / 2, box.y + box.height / 2);
     context.rotate(rotation * Math.PI / 180);
-    drawTextShadow(context, element, scale);
-    context.fillText(text, 0, 0, Math.max(40, box.width * 0.92));
+    drawTextWithResolvedStyle(context, element, text, 0, 0, Math.max(40, box.width * 0.92), scale);
   } else {
-    drawTextShadow(context, element, scale);
     const maxWidth = Math.max(20, box.width - (isCustomLabel ? 10 * scale.x : 0));
-    context.fillText(text, box.x + box.width / 2, box.y + box.height / 2, maxWidth);
+    drawTextWithResolvedStyle(context, element, text, box.x + box.width / 2, box.y + box.height / 2, maxWidth, scale);
   }
   context.restore();
 }
@@ -2082,23 +2089,20 @@ function cssCanvasFont(style, scaleY) {
   return `${fontStyle}${weight} ${fontSize}px ${family}`;
 }
 
-function drawTextShadow(context, element, scale) {
-  if (element.classList.contains("state-label")) {
-    drawShadowedText(context, "rgba(4, 7, 8, 0.82)", 4 * Math.min(scale.x, scale.y), 0, 2 * scale.y);
-    return;
+function drawTextWithResolvedStyle(context, element, text, x, y, maxWidth, scale) {
+  const style = element.ownerDocument.defaultView.getComputedStyle(element);
+  const strokeWidth = cssPixelValue(style.getPropertyValue("--label-stroke-width") || style.webkitTextStrokeWidth, Math.min(scale.x, scale.y));
+  context.shadowColor = style.getPropertyValue("--label-shadow-color").trim() || "rgba(4, 7, 8, 0.62)";
+  context.shadowBlur = cssPixelValue(style.getPropertyValue("--label-shadow-blur"), Math.min(scale.x, scale.y));
+  context.shadowOffsetX = cssPixelValue(style.getPropertyValue("--label-shadow-offset-x"), scale.x);
+  context.shadowOffsetY = cssPixelValue(style.getPropertyValue("--label-shadow-offset-y"), scale.y);
+  if (strokeWidth > 0) {
+    context.lineWidth = strokeWidth * 2;
+    context.lineJoin = "round";
+    context.strokeStyle = style.getPropertyValue("--label-stroke-color").trim() || style.webkitTextStrokeColor || "transparent";
+    context.strokeText(text, x, y, maxWidth);
   }
-  if (element.classList.contains("city-label")) {
-    drawShadowedText(context, "rgba(246, 239, 216, 0.72)", 3.5 * Math.min(scale.x, scale.y), 0, 1 * scale.y);
-    return;
-  }
-  drawShadowedText(context, "rgba(4, 7, 8, 0.62)", 2 * Math.min(scale.x, scale.y), 0, 1 * scale.y);
-}
-
-function drawShadowedText(context, color, blur, offsetX, offsetY) {
-  context.shadowColor = color;
-  context.shadowBlur = blur;
-  context.shadowOffsetX = offsetX;
-  context.shadowOffsetY = offsetY;
+  context.fillText(text, x, y, maxWidth);
 }
 
 function cssRotationDegrees(element) {

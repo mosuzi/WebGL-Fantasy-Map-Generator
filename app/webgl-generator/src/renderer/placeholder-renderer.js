@@ -47,6 +47,7 @@ import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKin
 import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
 import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
+import {estimateLabelTextBox, labelStyleTypeForTarget, resolveLabelStyle} from "../runtime/label-style-registry.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
@@ -176,6 +177,8 @@ export class PlaceholderMapRenderer {
     this.visibleCityLabelCount = 0;
     this.stateLabelCount = 0;
     this.visibleStateLabelCount = 0;
+    this.provinceLabelCount = 0;
+    this.visibleProvinceLabelCount = 0;
     this.labelItems = [];
     this.cityIconItems = [];
     this.cityIconCount = 0;
@@ -222,6 +225,7 @@ export class PlaceholderMapRenderer {
       cities: true,
       labels: true,
       stateLabels: true,
+      provinceLabels: true,
       population: true,
       markers: true,
       resources: true,
@@ -448,6 +452,7 @@ export class PlaceholderMapRenderer {
     this.refreshCellSurface({draw: false});
     this.refreshLineLayers({draw: false});
     this.dynamicBuffersDirty.routes = true;
+    this.refreshLabels();
     this.draw();
   }
 
@@ -815,6 +820,8 @@ export class PlaceholderMapRenderer {
       visibleCityLabelCount: this.visibleCityLabelCount,
       stateLabelCount: this.stateLabelCount,
       visibleStateLabelCount: this.visibleStateLabelCount,
+      provinceLabelCount: this.provinceLabelCount,
+      visibleProvinceLabelCount: this.visibleProvinceLabelCount,
       colorMode: this.colorMode,
       canvasFilter: this.visualTheme?.effects?.canvasFilter || "none",
       viewOptions: {...this.viewOptions},
@@ -1312,6 +1319,8 @@ export class PlaceholderMapRenderer {
       this.visibleCityLabelCount = 0;
       this.stateLabelCount = 0;
       this.visibleStateLabelCount = 0;
+      this.provinceLabelCount = 0;
+      this.visibleProvinceLabelCount = 0;
       this.cityIconCount = 0;
       this.visibleCityIconCount = 0;
       this.markerIconCount = 0;
@@ -1323,14 +1332,18 @@ export class PlaceholderMapRenderer {
     this.overlay.replaceChildren();
     const documentRef = this.overlay.ownerDocument || document;
     const fragment = documentRef.createDocumentFragment();
-    this.labelItems = [...getLabelStates(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
+    this.labelItems = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
       const node = documentRef.createElement("span");
       node.className = labelClassName(item);
       node.textContent = item.text;
       node.dataset.labelTargetKind = item.targetKind;
       node.dataset.labelTargetId = String(item.targetId);
+      const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
+      const resolvedStyle = resolveLabelStyle(map, styleType, this.visualTheme);
+      node.dataset.labelStyleType = styleType;
+      applyResolvedLabelStyle(node, resolvedStyle);
       fragment.append(node);
-      return {...item, node, box: null, visible: false};
+      return {...item, styleType, resolvedStyle, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, box: null, visible: false};
     });
     this.cityIconItems = getCityIconItems(map).map(item => {
       const node = documentRef.createElement("span");
@@ -1387,12 +1400,14 @@ export class PlaceholderMapRenderer {
     this.labelCount = this.labelItems.length;
     this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
     this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
+    this.provinceLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.PROVINCE).length;
     this.cityIconCount = this.cityIconItems.length;
     this.markerIconCount = this.markerIconItems.length;
     this.militaryIconCount = this.militaryIconItems.length;
     this.visibleLabelCount = 0;
     this.visibleCityLabelCount = 0;
     this.visibleStateLabelCount = 0;
+    this.visibleProvinceLabelCount = 0;
     this.visibleCityIconCount = 0;
     this.visibleMarkerIconCount = 0;
     this.visibleMilitaryIconCount = 0;
@@ -1407,19 +1422,16 @@ export class PlaceholderMapRenderer {
     const rect = this.canvas.getBoundingClientRect();
     const occupied = [];
     const occupiedStates = [];
+    const occupiedProvinces = [];
     let visible = 0;
     let visibleCities = 0;
     let visibleStates = 0;
+    let visibleProvinces = 0;
     const scale = this.camera.scale;
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
     const stateLabelScale = stateLabelScaleBehavior(scale);
-    const labelItems = stateLabelScale.blocksCities
-      ? this.labelItems
-      : [
-        ...this.labelItems.filter(item => item.targetKind !== LABEL_TARGET_KIND.STATE),
-        ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE)
-      ];
+    const labelItems = this.labelItems;
 
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
@@ -1427,6 +1439,7 @@ export class PlaceholderMapRenderer {
       const forceVisible = selected && item.targetKind === LABEL_TARGET_KIND.CUSTOM;
       item.node.classList.toggle("selected", selected);
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
+      const provinceLabel = item.targetKind === LABEL_TARGET_KIND.PROVINCE;
       const layerVisible = this.isLabelItemLayerVisible(item);
       const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
       if (!forceVisible && (!layerVisible || !withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible))) {
@@ -1441,34 +1454,39 @@ export class PlaceholderMapRenderer {
       const canShow = onScreen;
       const blocked = canShow && (stateLabel
         ? boxesOverlapAny(occupiedStates, box, padding)
-        : (stateLabelScale.blocksCities && boxesOverlapAny(occupiedStates, box, padding)) || boxesOverlapAny(occupied, box, padding));
+        : provinceLabel
+          ? boxesOverlapAny(occupiedStates, box, padding) || boxesOverlapAny(occupiedProvinces, box, padding)
+          : (stateLabelScale.blocksCities && boxesOverlapAny(occupiedStates, box, padding)) || boxesOverlapAny(occupiedProvinces, box, padding) || boxesOverlapAny(occupied, box, padding));
       const shouldShow = canShow && (forceVisible || !blocked);
       item.node.classList.toggle("visible", shouldShow);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      setOverlayNodePosition(item.node, screen.x, stateLabel ? screen.y : screen.y - 6);
+      setOverlayNodePosition(item.node, screen.x, stateLabel || provinceLabel ? screen.y : screen.y - 6);
       item.node.style.setProperty("--label-rotation", `${item.rotation || 0}deg`);
       if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
       if (stateLabel) occupiedStates.push(box);
+      else if (provinceLabel) occupiedProvinces.push(box);
       else occupied.push(box);
       visible++;
       if (item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
       if (item.targetKind === LABEL_TARGET_KIND.STATE) visibleStates++;
+      if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) visibleProvinces++;
     }
 
     this.visibleLabelCount = visible;
     this.visibleCityLabelCount = visibleCities;
     this.visibleStateLabelCount = visibleStates;
+    this.visibleProvinceLabelCount = visibleProvinces;
     const labelsMs = roundMs(performance.now() - labelStartedAt);
     const cityStartedAt = performance.now();
-    const cityIconBoxes = this.updateCityIcons(rect, occupiedStates);
+    const cityIconBoxes = this.updateCityIcons(rect, [...occupiedStates, ...occupiedProvinces]);
     const cityIconsMs = roundMs(performance.now() - cityStartedAt);
     const markerStartedAt = performance.now();
-    this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes], cityIconBoxes);
+    this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...occupiedProvinces, ...cityIconBoxes], cityIconBoxes);
     const markerIconsMs = roundMs(performance.now() - markerStartedAt);
     const militaryStartedAt = performance.now();
-    this.updateMilitaryIcons(rect, [...occupied, ...occupiedStates, ...cityIconBoxes]);
+    this.updateMilitaryIcons(rect, [...occupied, ...occupiedStates, ...occupiedProvinces, ...cityIconBoxes]);
     const militaryIconsMs = roundMs(performance.now() - militaryStartedAt);
     const selectionStartedAt = performance.now();
     this.updateSelectionMarker(rect);
@@ -1494,6 +1512,7 @@ export class PlaceholderMapRenderer {
 
   isLabelItemLayerVisible(item) {
     if (item.targetKind === LABEL_TARGET_KIND.STATE) return this.layerVisibility.stateLabels !== false;
+    if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) return this.layerVisibility.provinceLabels !== false;
     if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return this.layerVisibility.labels !== false;
     return this.layerVisibility.labels !== false;
   }
@@ -1785,6 +1804,11 @@ function selectionPoint(map, selection) {
     const placement = stateLabelPlacement(map, state, state?.fullName || state?.name || "");
     return placement ? {x: placement.x, y: placement.y} : null;
   }
+  if (selection?.kind === OBJECT_KIND.LABEL && selection.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+    const province = map.politics.provinces[selection.targetId ?? selection.id];
+    const placement = provinceLabelPlacement(map, province);
+    return placement ? {x: placement.x, y: placement.y} : null;
+  }
   if (selection?.kind === OBJECT_KIND.LABEL && selection.targetKind === LABEL_TARGET_KIND.CUSTOM) {
     const label = (map.labels?.custom || []).find(item => item.id === (selection.targetId ?? selection.id));
     return label ? {x: label.x, y: label.y} : null;
@@ -1815,6 +1839,9 @@ function getObjectBounds(map, object) {
   if (!map || !object) return null;
   if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.STATE) {
     return politicalBounds(map, {kind: OBJECT_KIND.STATE, id: object.targetId ?? object.id}, 48);
+  }
+  if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+    return politicalBounds(map, {kind: OBJECT_KIND.PROVINCE, id: object.targetId ?? object.id}, 42);
   }
   if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.CUSTOM) {
     const label = (map.labels?.custom || []).find(item => item.id === (object.targetId ?? object.id));
@@ -2048,6 +2075,30 @@ function getLabelStates(map) {
         state,
         rank,
         minScale: 0.5
+      } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.priority - a.priority);
+}
+
+function getLabelProvinces(map) {
+  return (map?.politics?.provinces || [])
+    .filter(province => province && (province.i || province.id) && !province.removed)
+    .filter(province => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.PROVINCE, province.i ?? province.id))
+    .map((province, rank) => {
+      const text = province.fullName || province.name || `省份 #${province.i ?? province.id}`;
+      const placement = provinceLabelPlacement(map, province);
+      return placement ? {
+        targetKind: LABEL_TARGET_KIND.PROVINCE,
+        targetId: province.i ?? province.id,
+        text,
+        x: placement.x,
+        y: placement.y,
+        rotation: 0,
+        priority: Number(province.area || 0) + Number(province.burgs || 0) * 40,
+        province,
+        rank,
+        minScale: 0.8
       } : null;
     })
     .filter(Boolean)
@@ -2694,6 +2745,14 @@ function stateLabelPlacement(map, state, text = "") {
   return null;
 }
 
+function provinceLabelPlacement(map, province) {
+  if (!province) return null;
+  if (isWorldPoint(province.pole)) return {x: province.pole[0], y: province.pole[1], rotation: 0};
+  const center = Number.isInteger(province.center) ? province.center : null;
+  const point = center === null ? null : map?.pack?.cells?.p?.[center];
+  return isWorldPoint(point) ? {x: point[0], y: point[1], rotation: 0} : null;
+}
+
 function stateCentroid(cells, stateId) {
   let weightSum = 0;
   let xSum = 0;
@@ -2746,6 +2805,7 @@ function clampLabelAngle(angle) {
 
 function labelClassName(item) {
   if (item.targetKind === LABEL_TARGET_KIND.STATE) return "state-label";
+  if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) return "province-label";
   if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return "custom-label";
   const city = item.city || {};
   return `city-label${city.capital ? " capital" : ""}`;
@@ -3703,9 +3763,10 @@ function stateLabelScaleBehavior(scale) {
 }
 
 function labelBoxForItem(item, screen) {
-  if (item.targetKind === LABEL_TARGET_KIND.STATE) {
-    const estimatedWidth = Math.max(72, Math.min(280, 22 + Array.from(item.text || "").length * 22));
-    const estimatedHeight = 36;
+  const metrics = item.metrics || estimateLabelTextBox(item.text, item.resolvedStyle);
+  if (item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+    const estimatedWidth = metrics.width;
+    const estimatedHeight = metrics.height;
     const radians = Math.abs((item.rotation || 0) * Math.PI / 180);
     const boxWidth = estimatedWidth * Math.cos(radians) + estimatedHeight * Math.sin(radians);
     const boxHeight = estimatedWidth * Math.sin(radians) + estimatedHeight * Math.cos(radians);
@@ -3716,18 +3777,30 @@ function labelBoxForItem(item, screen) {
       bottom: screen.y + boxHeight / 2
     };
   }
-  const city = item.city || {};
-  const text = item.text || city.name || "";
-  const estimatedWidth = city.capital
-    ? Math.max(48, Math.min(168, 18 + text.length * 16))
-    : Math.max(34, Math.min(132, 14 + text.length * 13));
-  const estimatedHeight = city.capital ? 27 : 18;
+  const estimatedWidth = metrics.width;
+  const estimatedHeight = metrics.height;
   return {
     left: screen.x - estimatedWidth / 2,
     right: screen.x + estimatedWidth / 2,
     top: screen.y - estimatedHeight - 8,
     bottom: screen.y + 2
   };
+}
+
+function applyResolvedLabelStyle(node, style) {
+  node.style.setProperty("--label-font-family", style.fontFamily);
+  node.style.setProperty("--label-font-size", `${style.fontSize}px`);
+  node.style.setProperty("--label-font-weight", String(style.fontWeight));
+  node.style.setProperty("--label-font-style", style.italic ? "italic" : "normal");
+  node.style.setProperty("--label-letter-spacing", `${style.letterSpacing}px`);
+  node.style.setProperty("--label-color", style.color);
+  node.style.setProperty("--label-opacity", String(style.opacity));
+  node.style.setProperty("--label-stroke-color", style.strokeColor);
+  node.style.setProperty("--label-stroke-width", `${style.strokeWidth}px`);
+  node.style.setProperty("--label-shadow-color", style.shadowColor);
+  node.style.setProperty("--label-shadow-offset-x", `${style.shadowOffsetX}px`);
+  node.style.setProperty("--label-shadow-offset-y", `${style.shadowOffsetY}px`);
+  node.style.setProperty("--label-shadow-blur", `${style.shadowBlur}px`);
 }
 
 function normalizeMaxCityLabels(value, fallback) {

@@ -14,6 +14,7 @@ import {
   registerMapDocumentMigrator,
   stringifyMapDocument
 } from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
 
 const fixtureText = await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8");
 const migrated = parseMapDocument(fixtureText);
@@ -29,8 +30,9 @@ assert.equal(migrated.map.notes.notes[0].body, "保留正文");
 assert.equal(migrated.map.notes.metadata.notes, 1);
 assert.equal(migrated.map.notes.metadata.formatVersion, 1);
 assert.deepEqual(migrated.map.measurements, {version: 1, items: [], metadata: {measurements: 0, nextId: 1}});
-assert.deepEqual(migrated.map.labels.hidden, {state: [1], city: []});
+assert.deepEqual(migrated.map.labels.hidden, {state: [1], city: [], province: []});
 assert.deepEqual(migrated.map.labels.metadata, {custom: 0, hidden: 1});
+assert.deepEqual(migrated.map.labels.styles, {version: 1, overrides: {}});
 assert.deepEqual(migrated.map.visualTheme, {version: 2, preset: "ancient", overrides: {}, userThemes: []});
 assert.equal(migrated.map.options.visualTheme, "ancient");
 assert.equal(migrated.map.options.seed, "legacy-v1-sample", "map options 应优先于同名文档 options");
@@ -52,6 +54,35 @@ assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 2, met
 const incompleteV2 = structuredClone(current);
 delete incompleteV2.map.labels.hidden.city;
 assert.throws(() => migrateMapDocument(incompleteV2), /labels 隐藏表不完整/);
+const oldCurrentV2 = structuredClone(current);
+delete oldCurrentV2.map.labels.styles;
+delete oldCurrentV2.map.labels.hidden.province;
+assert.strictEqual(migrateMapDocument(oldCurrentV2), oldCurrentV2, "旧 v2 缺少新增标签字段时应宽容读取");
+ensureLabelStore(oldCurrentV2.map);
+assert.deepEqual(oldCurrentV2.map.labels.hidden.province, [], "旧 v2 运行时装载没有回填省份隐藏表");
+assert.deepEqual(oldCurrentV2.map.labels.styles, {version: 1, overrides: {}}, "旧 v2 运行时装载没有回填标签样式存储");
+
+const invalidProvinceHiddenV2 = structuredClone(current);
+invalidProvinceHiddenV2.map.labels.hidden.province = "1";
+assert.throws(() => migrateMapDocument(invalidProvinceHiddenV2), /省份隐藏表无效/);
+
+const emptyStylesV2 = structuredClone(current);
+emptyStylesV2.map.labels.styles = {};
+assert.throws(() => migrateMapDocument(emptyStylesV2), /标签样式存储版本无效/);
+
+const missingStyleVersionV2 = structuredClone(current);
+missingStyleVersionV2.map.labels.styles = {overrides: {}};
+assert.throws(() => migrateMapDocument(missingStyleVersionV2), /标签样式存储版本无效/);
+
+const missingStyleOverridesV2 = structuredClone(current);
+missingStyleOverridesV2.map.labels.styles = {version: 1};
+assert.throws(() => migrateMapDocument(missingStyleOverridesV2), /标签样式覆盖表无效/);
+
+for (const invalidOverride of [null, false, 0, "", []]) {
+  const invalidStyleOverrideV2 = structuredClone(current);
+  invalidStyleOverrideV2.map.labels.styles = {version: 1, overrides: {city: invalidOverride}};
+  assert.throws(() => migrateMapDocument(invalidStyleOverrideV2), /标签样式覆盖无效/);
+}
 
 const futureRegistry = createMapDocumentMigrationRegistry({
   1: document => ({...document, version: 2, map: {...document.map, migrationPath: ["v1-v2"]}})

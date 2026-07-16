@@ -75,6 +75,20 @@ function resolveLabel(map, object) {
       rank: object.rank ?? "n/a"
     };
   }
+  if (object.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+    const province = map.politics.provinces[object.targetId ?? object.id];
+    if (!province || province.removed) return null;
+    return {
+      ...object,
+      kind: OBJECT_KIND.LABEL,
+      id: province.id ?? province.i ?? object.id,
+      text: province.name,
+      targetKind: LABEL_TARGET_KIND.PROVINCE,
+      targetId: province.id ?? province.i ?? object.id,
+      targetName: province.name,
+      rank: object.rank ?? "n/a"
+    };
+  }
   if (object.targetKind === LABEL_TARGET_KIND.CITY || object.id !== undefined) {
     const city = map.settlements.cities[object.id];
     if (!city) return null;

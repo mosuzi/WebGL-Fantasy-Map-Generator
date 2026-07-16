@@ -1,4 +1,5 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
+import {ensureLabelStyleStore} from "./label-style-registry.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {newObjectAffected, objectAffected} from "./edit-command-effects.js";
 
@@ -253,9 +254,11 @@ export function ensureLabelStore(map) {
   if (!map.labels.hidden || typeof map.labels.hidden !== "object") map.labels.hidden = {};
   if (!Array.isArray(map.labels.hidden[LABEL_TARGET_KIND.CITY])) map.labels.hidden[LABEL_TARGET_KIND.CITY] = [];
   if (!Array.isArray(map.labels.hidden[LABEL_TARGET_KIND.STATE])) map.labels.hidden[LABEL_TARGET_KIND.STATE] = [];
+  if (!Array.isArray(map.labels.hidden[LABEL_TARGET_KIND.PROVINCE])) map.labels.hidden[LABEL_TARGET_KIND.PROVINCE] = [];
+  ensureLabelStyleStore(map);
   map.labels.metadata = {
     custom: map.labels.custom.length,
-    hidden: map.labels.hidden[LABEL_TARGET_KIND.CITY].length + map.labels.hidden[LABEL_TARGET_KIND.STATE].length
+    hidden: map.labels.hidden[LABEL_TARGET_KIND.CITY].length + map.labels.hidden[LABEL_TARGET_KIND.STATE].length + map.labels.hidden[LABEL_TARGET_KIND.PROVINCE].length
   };
   return map.labels;
 }
@@ -299,6 +302,10 @@ function readLabelName(map, target) {
   if (target.targetKind === LABEL_TARGET_KIND.STATE) {
     const state = map?.politics?.states?.[target.id];
     return state?.fullName || state?.name || "";
+  }
+  if (target.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+    const province = map?.politics?.provinces?.[target.id];
+    return province?.fullName || province?.name || "";
   }
   const city = map?.settlements?.cities?.[target.id];
   return city?.name || "";
@@ -346,10 +353,12 @@ function removeId(list, id) {
 function updateLabelMetadata(store) {
   store.metadata = {
     custom: store.custom.length,
-    hidden: store.hidden[LABEL_TARGET_KIND.CITY].length + store.hidden[LABEL_TARGET_KIND.STATE].length
+    hidden: store.hidden[LABEL_TARGET_KIND.CITY].length + store.hidden[LABEL_TARGET_KIND.STATE].length + store.hidden[LABEL_TARGET_KIND.PROVINCE].length
   };
 }
 
 function formatGeneratedLabelName(target) {
-  return target.targetKind === LABEL_TARGET_KIND.STATE ? "国家名称" : "城市标签";
+  if (target.targetKind === LABEL_TARGET_KIND.STATE) return "国家名称";
+  if (target.targetKind === LABEL_TARGET_KIND.PROVINCE) return "省份名称";
+  return "城市标签";
 }

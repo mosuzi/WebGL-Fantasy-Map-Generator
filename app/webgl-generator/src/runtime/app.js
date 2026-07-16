@@ -78,6 +78,8 @@ import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerra
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
+import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "./label-style-edit-commands.js";
+import {LABEL_STYLE_TYPES, readLabelStyleOverride, resolveLabelStyle} from "./label-style-registry.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {measurementHighlightObject, measurementShapeClass} from "./measurement-highlights.js";
@@ -2181,6 +2183,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onDeleteVisualTheme: () => runtimeActions.layers.deleteTheme(currentVisualThemeId(documentRef)),
     onShowHoverInfo: showHoverInfo => runtimeActions.layers.setShowHoverInfo(showHoverInfo),
     onMaxCityLabels: maxCityLabels => runtimeActions.layers.setMaxCityLabels(maxCityLabels),
+    onPatchLabelStyle: (styleType, patch) => runtimeActions.edit.labels.setStyle(styleType, patch),
+    onResetLabelStyle: styleType => runtimeActions.edit.labels.resetStyle(styleType),
+    onResetAllLabelStyles: () => runtimeActions.edit.labels.resetStyles(),
     onUnitPreferences: () => {
       renderer.setUnitPreferences(readControlPreferences(documentRef).units);
       refreshPanelsForEdit(state, {derived: ["object-panels"]});
@@ -2577,6 +2582,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
         applyPatch: options => applyFeaturePatchViaApi(state, documentRef, options)
       },
       labels: {
+        getStyles: () => getRuntimeLabelStyles(state),
+        setStyle: (styleType, patch) => setLabelStyleViaApi(state, documentRef, styleType, patch),
+        resetStyle: styleType => resetLabelStyleViaApi(state, documentRef, styleType),
+        resetStyles: () => resetAllLabelStylesViaApi(state, documentRef),
         addCustom: options => addCustomLabelViaApi(state, documentRef, options),
         delete: label => deleteLabelViaApi(state, documentRef, label),
         moveCustom: (labelId, point) => moveCustomLabelViaApi(state, documentRef, labelId, point),
@@ -2736,6 +2745,7 @@ function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = fals
   syncRuntimeControlValue(documentRef, "visual-theme-preset", id);
   updateControlPreferences(documentRef, {visualTheme: id});
   state.renderer?.setVisualTheme?.(id, {force});
+  syncLabelStylesUi(state, documentRef);
   updateRuntimePanel(documentRef, state);
 }
 
@@ -3301,6 +3311,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.canvasToolModes.reset("map-replace");
   state.brushCursorPreview?.reset();
   state.map = map;
+  ensureLabelStore(state.map);
   reconcileWarDerivedData(state.map);
   ensureRiverHydrology(state.map);
   state.pick = null;
@@ -3389,6 +3400,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   }
   state.selectionStore.clear();
   refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels: true});
+  syncLabelStylesUi(state, documentRef);
   emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
   emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
   emitLoadTrace(documentRef, {phase: "complete", id: "complete", message: "地图进入可交互状态"});
@@ -5642,6 +5654,7 @@ function executeHistoryCommand(state, documentRef, action, options = {}) {
   });
   if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
   options.afterRefresh?.(state, command);
+  if (command.effects?.derived?.includes("labels")) syncLabelStylesUi(state, documentRef);
   updateEditingInteractionLock(state, documentRef);
   return {
     executed: true,
@@ -7110,6 +7123,48 @@ function setReligionParentViaApi(state, documentRef, religionId, parentId) {
   });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function getRuntimeLabelStyles(state) {
+  if (!state.map) return {version: 1, overrides: {}, styles: {}};
+  const store = ensureLabelStore(state.map).styles;
+  const styles = Object.fromEntries(LABEL_STYLE_TYPES.map(styleType => [styleType, {
+    styleType,
+    override: readLabelStyleOverride(store, styleType),
+    resolved: {...resolveLabelStyle(store, styleType, state.renderer?.visualTheme)}
+  }]));
+  return {
+    version: store.version,
+    overrides: Object.fromEntries(Object.entries(store.overrides).map(([key, value]) => [key, {...value}])),
+    styles
+  };
+}
+
+function syncLabelStylesUi(state, documentRef) {
+  documentRef.dispatchEvent(new CustomEvent("webgl-generator-label-styles-changed", {detail: getRuntimeLabelStyles(state)}));
+}
+
+function setLabelStyleViaApi(state, documentRef, styleType, patch) {
+  return executeLabelStyleCommand(state, documentRef, createPatchLabelStyleCommand(styleType, patch));
+}
+
+function resetLabelStyleViaApi(state, documentRef, styleType) {
+  return executeLabelStyleCommand(state, documentRef, createResetLabelStyleCommand(styleType));
+}
+
+function resetAllLabelStylesViaApi(state, documentRef) {
+  return executeLabelStyleCommand(state, documentRef, createResetAllLabelStylesCommand());
+}
+
+function executeLabelStyleCommand(state, documentRef, command) {
+  if (!state.map) throw new Error("当前没有可编辑的地图");
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    refreshPanels: false
+  });
+  syncLabelStylesUi(state, documentRef);
   return editApiResult(state, result);
 }
 

@@ -96,6 +96,6 @@ function normalizeMaxCityLabels(value) {
 }
 
 function normalizeControlPanelTab(value) {
-  const tabs = ["about", "generation", "themes", "layers", "management", "units"];
+  const tabs = ["about", "generation", "themes", "styles", "layers", "management", "units"];
   return tabs.includes(value) ? value : DEFAULT_CONTROL_PREFERENCES.controlPanelTab;
 }
