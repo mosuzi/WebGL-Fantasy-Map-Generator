@@ -24,14 +24,61 @@
     @column-resize="callbacks.onColumnResize"
   />
 
+  <section class="climate-downstream-rebuild" aria-label="气候下游重算">
+    <header class="climate-downstream-heading">
+      <strong>受约束下游重算</strong>
+      <span>默认不选，必需依赖会自动加入</span>
+    </header>
+    <UiNumberField
+      class-name="climate-downstream-seed"
+      label="固定 seed"
+      action-label="设置 seed"
+      :model-value="Number(state.downstreamSeed) || 0"
+      :min="0"
+      :step="1"
+      @apply="callbacks.onDownstreamSeed"
+    />
+    <div class="climate-downstream-candidates">
+      <label
+        v-for="candidate in downstreamCandidates"
+        :key="candidate.id"
+        class="climate-downstream-candidate"
+        :class="{'is-selected': candidate.selected, 'is-required': candidate.required}"
+      >
+        <input
+          type="checkbox"
+          :checked="candidate.requested"
+          @change="event => callbacks.onDownstreamSystem(candidate.id, event.target.checked)"
+        />
+        <span>
+          <strong>{{ candidate.label }}</strong>
+          <small>预计 {{ formatNumber(candidate.estimatedAffected) }} 对象</small>
+        </span>
+        <em v-if="candidate.required">依赖</em>
+        <em v-else-if="candidate.coveredBy && candidate.coveredBy !== candidate.id">由 {{ systemLabel(candidate.coveredBy) }} 覆盖</em>
+        <em v-else>{{ candidate.stale ? "stale" : "fresh" }}</em>
+      </label>
+    </div>
+    <p class="climate-downstream-dependencies">{{ dependencyHint }}</p>
+    <div class="climate-downstream-actions">
+      <UiButton variant="secondary" @click="callbacks.onInspectDownstream">预检</UiButton>
+      <UiButton :disabled="!canApplyDownstream" @click="callbacks.onApplyDownstream">应用选中重算</UiButton>
+    </div>
+    <p v-if="state.downstreamError" class="climate-downstream-error">{{ state.downstreamError }}</p>
+    <pre v-if="state.downstreamPreview" class="climate-downstream-result">{{ formattedPreview }}</pre>
+    <pre v-if="state.downstreamResult" class="climate-downstream-result is-applied">{{ formattedResult }}</pre>
+  </section>
+
   <UiDetailGrid class-name="climate-panel-details" empty-text="未选中温度带" :rows="detailRows" />
 </template>
 
 <script setup>
 import {computed} from "vue";
+import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import {formatNumber as formatDisplayNumber, formatPrecipitation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
@@ -90,6 +137,34 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBandId));
+const downstreamCandidates = computed(() => {
+  props.state.version;
+  return props.state.downstreamPreview?.candidates || [];
+});
+const canApplyDownstream = computed(() => Boolean(props.state.downstreamPreview?.requestedSystems?.length));
+const dependencyHint = computed(() => {
+  const preview = props.state.downstreamPreview;
+  if (!preview?.requestedSystems?.length) return "请勾选至少一个 stale 系统；未选系统保持 stale。";
+  const required = preview.requiredSystems?.map(systemLabel).join("、") || "无";
+  const order = preview.executionOrder?.map(systemLabel).join(" -> ") || "无";
+  return `必需依赖：${required}；实际顺序：${order}`;
+});
+const formattedPreview = computed(() => JSON.stringify({
+  seed: props.state.downstreamPreview?.seed,
+  requested: props.state.downstreamPreview?.requestedSystems || [],
+  required: props.state.downstreamPreview?.requiredSystems || [],
+  selected: props.state.downstreamPreview?.selectedSystems || [],
+  executionOrder: props.state.downstreamPreview?.executionOrder || [],
+  estimatedAffected: props.state.downstreamPreview?.estimatedAffected || 0
+}, null, 2));
+const formattedResult = computed(() => JSON.stringify({
+  executed: props.state.downstreamResult?.executed,
+  seed: props.state.downstreamResult?.seed,
+  executionOrder: props.state.downstreamResult?.executionOrder || [],
+  checksum: props.state.downstreamResult?.checksum || "",
+  staleSystems: props.state.downstreamResult?.staleSystems || [],
+  history: props.state.downstreamResult?.history || null
+}, null, 2));
 
 const summaryMetrics = computed(() => [
   {label: "温度范围", value: `${formatTemperature(metrics.value.temperatureMin)} .. ${formatTemperature(metrics.value.temperatureMax)}`},
@@ -264,5 +339,9 @@ function formatPrecipitationValue(value) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function systemLabel(systemId) {
+  return downstreamCandidates.value.find(item => item.id === systemId)?.label || systemId;
 }
 </script>

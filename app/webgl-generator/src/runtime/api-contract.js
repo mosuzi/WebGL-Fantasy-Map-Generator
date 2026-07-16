@@ -9,7 +9,7 @@ export const API_METHODS = Object.freeze({
   selection: Object.freeze(["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"]),
   layers: Object.freeze(["get", "listThemes", "setViewMode", "setVisible", "setTheme", "exportTheme", "importTheme", "createTheme", "updateTheme", "deleteTheme", "fitView", "setShowOceanHeight", "setSmoothCellBorders", "setShowHoverInfo", "setMaxCityLabels"]),
   units: Object.freeze(["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"]),
-  climate: Object.freeze(["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind"]),
+  climate: Object.freeze(["get", "getOptions", "getTemperature", "getPrecipitation", "getLatitude", "getAtmosphere", "getBiomes", "apply", "setLatitude", "setLatitudeRange", "setLongitudeRange", "setTemperature", "setPrecipitation", "setWind", "inspectDownstreamRebuild", "applyDownstreamRebuild"]),
   history: Object.freeze(["get", "stats", "peek", "undo", "redo"]),
   edit: Object.freeze([
     "notes.createStandalone", "notes.set", "notes.delete", "notes.import", "notes.deleteBatch",
@@ -42,6 +42,7 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "data.restoreBrowserMap",
   "namebases.clear",
   "namebases.renameObjects",
+  "climate.applyDownstreamRebuild",
   "edit.height.rebuildBaseDerived",
   "edit.height.rebuildDownstreamDerived",
   "edit.economy.assignCells",

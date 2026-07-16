@@ -18,7 +18,7 @@ const CLIMATE_LIST_DEFAULTS = Object.freeze({
   sortDir: "desc"
 });
 
-export function createClimatePanel(documentRef, manager) {
+export function createClimatePanel(documentRef, manager, callbacks = {}) {
   const listPreferences = readPanelListPreferences(documentRef, CLIMATE_PANEL_ID, CLIMATE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
@@ -29,6 +29,11 @@ export function createClimatePanel(documentRef, manager) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedBandId: null,
+    downstreamSystems: [],
+    downstreamSeed: 1,
+    downstreamPreview: null,
+    downstreamResult: null,
+    downstreamError: "",
     version: 0
   });
   const panelCallbacks = {
@@ -60,8 +65,56 @@ export function createClimatePanel(documentRef, manager) {
     },
     onSelect: row => {
       panelState.selectedBandId = row.id;
+    },
+    onDownstreamSystem: (systemId, selected) => {
+      const systems = new Set(panelState.downstreamSystems);
+      if (selected) systems.add(systemId);
+      else systems.delete(systemId);
+      panelState.downstreamSystems = [...systems];
+      panelState.downstreamResult = null;
+      refreshDownstreamPreview();
+    },
+    onDownstreamSeed: value => {
+      panelState.downstreamSeed = normalizeSeed(value);
+      panelState.downstreamResult = null;
+      refreshDownstreamPreview();
+    },
+    onInspectDownstream: () => refreshDownstreamPreview(),
+    onApplyDownstream: () => {
+      panelState.downstreamError = "";
+      try {
+        const result = callbacks.onApplyDownstreamRebuild?.({
+          systems: panelState.downstreamSystems,
+          seed: panelState.downstreamSeed,
+          confirm: true
+        });
+        panelState.downstreamResult = result ? markRaw(result) : null;
+        refreshDownstreamPreview({keepResult: true});
+        return result;
+      } catch (error) {
+        panelState.downstreamError = String(error?.message || error);
+        panelState.version++;
+        return null;
+      }
     }
   };
+
+  function refreshDownstreamPreview({keepResult = false} = {}) {
+    panelState.downstreamError = "";
+    if (!keepResult) panelState.downstreamResult = null;
+    try {
+      const preview = callbacks.onInspectDownstreamRebuild?.({
+        systems: panelState.downstreamSystems,
+        seed: panelState.downstreamSeed
+      });
+      panelState.downstreamPreview = preview ? markRaw(preview) : null;
+    } catch (error) {
+      panelState.downstreamPreview = null;
+      panelState.downstreamError = String(error?.message || error);
+    }
+    panelState.version++;
+    return panelState.downstreamPreview;
+  }
 
   const record = manager.registerPanel(CLIMATE_PANEL_ID, {
     title: "气候统计",
@@ -97,12 +150,14 @@ export function createClimatePanel(documentRef, manager) {
       panelState.version++;
       manager.open(CLIMATE_PANEL_ID);
       lazyPanel.load();
+      refreshDownstreamPreview({keepResult: true});
     },
     update(map, history) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       if (!climateBandExists(panelState.selectedBandId)) panelState.selectedBandId = firstClimateBandId();
       panelState.version++;
+      refreshDownstreamPreview({keepResult: true});
     },
     isOpen() {
       return panelState.open;
@@ -111,6 +166,11 @@ export function createClimatePanel(documentRef, manager) {
       lazyPanel.unmount();
     }
   };
+}
+
+function normalizeSeed(value) {
+  const seed = Math.trunc(Number(value));
+  return Number.isSafeInteger(seed) && seed >= 0 ? seed : 1;
 }
 
 function climateBandExists(bandId) {

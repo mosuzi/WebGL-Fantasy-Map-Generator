@@ -120,6 +120,7 @@ import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, norma
 import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
+import {executeClimateDownstreamRebuild, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -349,7 +350,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
-  state.panels.climate = createClimatePanel(documentRef, panelManager);
+  state.panels.climate = createClimatePanel(documentRef, panelManager, {
+    onInspectDownstreamRebuild: options => runtimeActions.climate.inspectDownstreamRebuild(options),
+    onApplyDownstreamRebuild: options => runtimeActions.climate.applyDownstreamRebuild(options)
+  });
   state.panels.biome = createBiomePanel(documentRef, panelManager, {
     onBrushRadiusChange: refreshBrushCursor,
     onAssignmentActive: active => {
@@ -2417,7 +2421,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       setLongitudeRange: (percent, options = {}) => applyClimatePatchViaApi(state, documentRef, {climateLongitudeRangePercent: percent}, options),
       setTemperature: (patch, options = {}) => applyClimatePatchViaApi(state, documentRef, {temperature: patch}, options),
       setPrecipitation: (scale, options = {}) => applyClimatePatchViaApi(state, documentRef, {precipitation: scale}, options),
-      setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options)
+      setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options),
+      inspectDownstreamRebuild: (options = {}) => inspectClimateDownstreamRebuildViaApi(state, options),
+      applyDownstreamRebuild: (options = {}) => applyClimateDownstreamRebuildViaApi(state, documentRef, options)
     },
     namebases: {
       export: (options = {}) => exportNamebasesData(state, documentRef, options),
@@ -5151,6 +5157,105 @@ function setClimateWindViaApi(state, documentRef, index, direction, options = {}
   const winds = normalizeWindProfile(state.options?.winds);
   winds[band] = normalizeWindDirectionApiValue(direction);
   return applyClimatePatchViaApi(state, documentRef, {atmosphereDirection: "customBands", winds}, options);
+}
+
+function inspectClimateDownstreamRebuildViaApi(state, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("气候下游重算预检参数必须是对象");
+  return inspectClimateDownstreamRebuild(state.map, {
+    systems: options.systems || options.selectedSystems || [],
+    seed: options.seed
+  });
+}
+
+function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("气候下游重算会改写多个地图派生系统，需要显式传入 {confirm: true}");
+  const before = regenerationApiSummary(state.map);
+  try {
+    const execution = executeClimateDownstreamRebuild({
+      map: state.map,
+      editHistory: state.editHistory,
+      systems: options.systems || options.selectedSystems || [],
+      seed: options.seed,
+      executeSystem: systemId => systemId === "economy"
+        ? rebuildEconomyViaAction(state, documentRef, {label: "气候下游重算：经济"})
+        : regenerateMapAttribute(state, systemId, documentRef),
+      executeCommand: command => executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        refresh: () => {},
+        refreshPanels: false
+      }),
+      refreshSummary: refreshGenerationSummary,
+      onRestore: map => {
+        state.options = map.options;
+      }
+    });
+    if (!execution.executed) {
+      return {
+        executed: false,
+        preview: execution.preview,
+        before,
+        after: before,
+        history: state.editHistory.getStats(),
+        effects: []
+      };
+    }
+    refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
+    const result = {
+      executed: true,
+      seed: execution.seed,
+      requestedSystems: execution.requestedSystems,
+      requiredSystems: execution.requiredSystems,
+      selectedSystems: execution.selectedSystems,
+      executionOrder: execution.executionOrder,
+      candidates: execution.preview.candidates,
+      estimatedAffected: execution.preview.estimatedAffected,
+      steps: execution.steps.map(climateDownstreamPublicStep),
+      checksum: execution.checksum,
+      staleSystems: execution.staleSystems,
+      before,
+      after: regenerationApiSummary(state.map),
+      history: state.editHistory.getStats(),
+      effects: ["map-derived", "renderer", "runtime-panel", "object-panels", "object-index"]
+    };
+    setFileOperationStatus(documentRef, `已完成气候下游重算：${result.executionOrder.join(" -> ")}`);
+    return result;
+  } catch (error) {
+    refreshClimateDownstreamRebuildState(state, documentRef, {
+      effects: {
+        render: "draw",
+        selection: "refresh",
+        runtimeStats: true,
+        pickPanel: true,
+        derived: ["cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "route-mesh", "object-panels", "object-index"]
+      }
+    });
+    setFileOperationStatus(documentRef, `气候下游重算失败并已回滚：${error.message}`);
+    throw error;
+  }
+}
+
+function climateDownstreamPublicStep(step) {
+  return {
+    system: step.system,
+    covers: [...step.covers],
+    regenerationSalt: step.regenerationSalt,
+    executed: step.result?.executed !== false,
+    status: step.result?.status || step.result?.result?.status || ""
+  };
+}
+
+function refreshClimateDownstreamRebuildState(state, documentRef, commandOrEffects) {
+  state.renderer.refreshObjectPickingIndex?.();
+  state.selectionStore.batch(() => {
+    reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+    refreshAfterEdit(state, commandOrEffects);
+  });
+  refreshPanelsForEdit(state, commandOrEffects);
+  updateClimatePanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
 }
 
 function normalizeClimateApiPatch(patch, currentOptions = {}) {

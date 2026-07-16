@@ -93,6 +93,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       "data.restoreBrowserMap",
       "namebases.clear",
       "namebases.renameObjects",
+      "climate.applyDownstreamRebuild",
       "edit.height.rebuildBaseDerived",
       "edit.height.rebuildDownstreamDerived",
       "edit.economy.assignCells",
@@ -102,6 +103,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       generate: ["regenerate", "newMap", "rerollSeed"],
       data: ["importMap", "importGEO", "importHeightmap", "restoreBrowserMap"],
       namebases: ["clear", "renameObjects"],
+      climate: ["applyDownstreamRebuild"],
       edit: ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "economy.assignCells", "economy.rebuild"]
     };
     const expectedRepresentativeMutates = {
@@ -145,7 +147,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
     if (Object.keys(capabilities.capabilityGroups || {}).length !== 13) failures.push("capabilities 能力组不是 13 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 178, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 178 / 7 / 1");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 180, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 180 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");

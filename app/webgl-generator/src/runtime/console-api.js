@@ -93,7 +93,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       setLongitudeRange: (percent, options = {}) => apiCall(() => requireApiAction(actions.climate?.setLongitudeRange, "climate.setLongitudeRange")(percent, options)),
       setTemperature: (patch, options = {}) => apiCall(() => requireApiAction(actions.climate?.setTemperature, "climate.setTemperature")(patch, options)),
       setPrecipitation: (scale, options = {}) => apiCall(() => requireApiAction(actions.climate?.setPrecipitation, "climate.setPrecipitation")(scale, options)),
-      setWind: (index, direction, options = {}) => apiCall(() => requireApiAction(actions.climate?.setWind, "climate.setWind")(index, direction, options))
+      setWind: (index, direction, options = {}) => apiCall(() => requireApiAction(actions.climate?.setWind, "climate.setWind")(index, direction, options)),
+      inspectDownstreamRebuild: (options = {}) => apiCall(() => requireApiAction(actions.climate?.inspectDownstreamRebuild, "climate.inspectDownstreamRebuild")(options)),
+      applyDownstreamRebuild: (options = {}) => apiCall(() => requireApiAction(actions.climate?.applyDownstreamRebuild, "climate.applyDownstreamRebuild")(options))
     }),
     history: Object.freeze({
       get: (options = {}) => apiCall(() => buildHistoryStats(state, actions, options)),
@@ -360,7 +362,9 @@ function buildMethodMetadata() {
       setLongitudeRange: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
       setTemperature: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
       setPrecipitation: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
-      setWind: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false}
+      setWind: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
+      inspectDownstreamRebuild: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      applyDownstreamRebuild: {stable: "draft", mutates: "map-derived-data", undoable: true, async: false, requiresConfirm: true}
     },
     history: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

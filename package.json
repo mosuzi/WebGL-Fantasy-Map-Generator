@@ -105,6 +105,7 @@
     "regress:selection-highlight": "node --no-warnings ./tools/webgl-generator-selection-highlight-regression.mjs",
     "regress:visible-row-selection": "node --no-warnings ./tools/webgl-generator-visible-row-selection-regression.mjs",
     "regress:selection-scroll-center": "node --no-warnings ./tools/webgl-generator-selection-scroll-center-regression.mjs",
+    "regress:climate-downstream-rebuild": "node --no-warnings ./tools/webgl-generator-climate-downstream-rebuild-regression.mjs",
     "regress:shortcuts": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-regression.mjs",
     "regress:shortcuts-browser": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-browser-regression.mjs",
     "regress:canvas-tools": "node --no-warnings ./tools/webgl-generator-canvas-tool-mode-manager-regression.mjs",

@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-07-17：完成权威任务第 72 项——气候受约束下游重算
+
+- 新增 `climate-downstream-rebuild.js`，统一九个气候下游系统的预检、依赖闭包、覆盖去重、预计对象和固定 seed 扰动。`states` 一步覆盖国家 / 省份 / 城市，`markers` 一步覆盖资源标记 / 经济；给事中首次审查发现经济仍可在资源标记 stale 时被错误标记 fresh，最小返工补 `economy -> markers` 依赖，使经济、外交和地区闭包都会先恢复资源供给。地区完整顺序收敛为 `states -> religions -> markers -> diplomacy -> military -> zones`。
+- 气候统计面板增加“受约束下游重算”区：默认九项全不选，提供固定 seed、候选 stale / fresh、逐项预计对象、自动依赖、覆盖来源、实际顺序、结构化预检与应用结果。公开 API 新增 `climate.inspectDownstreamRebuild()` 和 `climate.applyDownstreamRebuild()`，后者必须显式传 `confirm: true`；API 总基线更新为 11 个命名空间、188 个方法、稳定等级 `180 / 7 / 1`。
+- 编排层继续调用现有领域重建入口，不改气候基础算法。执行前保存整图与 `EditHistory`，各领域可能产生的内层历史在完成后恢复为原历史，再登记一条 `domain=climate` 的外层快照命令；任一步拒绝、抛错或外层登记失败都会恢复地图、派生 stale、扰动序号和历史。成功后选中及必需前置 fresh，未选系统继续 stale；撤销 / 重做恢复完整前后地图且保持运行时 options 对象引用。
+- 专项 `regress:climate-downstream-rebuild` 覆盖九候选、预计对象、依赖闭包、states / markers 覆盖去重、同 seed / 输入 / 选择的 checksum 与结构化摘要、两类外层登记失败、步骤中途失败、单历史撤销 / 重做、未选 stale、options 引用和完整地图导出导入；相关 API action convergence、edit coverage、stability、inventory、data compatibility、suite contract、生产构建与 `git diff --check` 全部通过。
+- 观察使首次在同一 Chrome 执行 `economy -> markers / seed 73` 时，功能、checksum、单历史和撤销均通过，但健康监控记录 error 级 `input-handler-stall / main-thread-long-task`，按门禁 BLOCK。根因是成功路径在 before / after 快照之外又把整图恢复到 before、再由外层命令恢复 after，产生两次冗余深克隆；返工改为 already-applied 外层命令，首次 apply 只登记历史，撤销 / 重做仍恢复快照，错误路径仍回滚。
+- 清空旧健康记录后的同场复验通过：经济选择自动加入资源标记依赖，实际只执行 `markers`，结果 `executed=true`、checksum `58b3516d`、history `undo=1`；等待并覆盖撤销 / 关闭阶段后 console error 与 FMG health error 均为 `0`。Ctrl+Z 后资源标记预计数 `48 -> 44`，军事 / 外交由 stale 恢复 fresh；表单恢复九项全不选、seed 1，全部面板关闭，唯一 Chrome 标签 handoff。10k 当前样本仍约 `1216ms` 并产生 warning 级长任务，已记录到 `FOLLOWUPS.md`，不在本项继续扩展异步 / Worker 改造。
+
 ## 2026-07-17：完成权威任务第 71 项——列表选中滚动居中浏览器证据
 
 - 中书阶段确认城市虚拟表和国家普通表共用 `UiObjectTable`，宗教树使用 `UiTreeDisplayPanel`，外交矩阵使用独立 selection controller；共享 helper 已保存横向位置并最多重试 10 帧。尚书郎只在既有 `regress:selection-scroll-center` 补齐第 10 帧停止且无遗留 RAF、首尾钳制后完整可见的纯模型断言，没有先改生产逻辑。

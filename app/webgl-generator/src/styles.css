@@ -8904,6 +8904,92 @@ input.ui-switch-native {
   border-top: 1px solid rgba(189, 206, 213, 0.12);
 }
 
+.climate-downstream-rebuild {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 6px;
+  background: rgba(15, 21, 25, 0.72);
+}
+
+.climate-downstream-heading,
+.climate-downstream-candidate,
+.climate-downstream-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.climate-downstream-heading {
+  justify-content: space-between;
+}
+
+.climate-downstream-heading span,
+.climate-downstream-candidate small,
+.climate-downstream-dependencies {
+  color: #91a6af;
+  font-size: 11px;
+}
+
+.climate-downstream-candidates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 6px;
+}
+
+.climate-downstream-candidate {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(189, 206, 213, 0.12);
+  border-radius: 5px;
+}
+
+.climate-downstream-candidate.is-selected {
+  border-color: rgba(255, 202, 99, 0.46);
+  background: rgba(255, 202, 99, 0.08);
+}
+
+.climate-downstream-candidate span {
+  display: grid;
+  min-width: 0;
+}
+
+.climate-downstream-candidate em {
+  margin-left: auto;
+  color: #ffd37a;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.climate-downstream-seed label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.climate-downstream-result {
+  max-height: 170px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 5px;
+  background: #0b1114;
+  color: #c8d7dd;
+  font-size: 11px;
+}
+
+.climate-downstream-result.is-applied {
+  border: 1px solid rgba(94, 197, 143, 0.34);
+}
+
+.climate-downstream-error {
+  margin: 0;
+  color: #ff9b93;
+}
+
 .economy-detail-highlights {
   --ui-key-value-cell-padding: 7px 8px;
   --ui-key-value-cell-border: 1px solid rgba(189, 206, 213, 0.11);
