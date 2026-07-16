@@ -66,12 +66,12 @@
     @update:model-value="callbacks.onTargetCultureId"
   />
   <UiSliderField
-    label="归属笔刷半径"
+    label="画笔大小"
     :model-value="state.assignmentRadius"
-    :min="4"
-    :max="120"
-    :step="2"
-    unit-label="px"
+    :min="brushRadius.min"
+    :max="brushRadius.max"
+    :step="brushRadius.step"
+    unit-label="地图单位"
     @input="callbacks.onAssignmentRadius"
   />
 
@@ -135,6 +135,9 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+
+const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.CULTURE);
 
 defineOptions({
   name: "CulturePanel"

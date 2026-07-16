@@ -1,4 +1,5 @@
 import {recalculateBiomeSuitability} from "../generator/biomes.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {systemAffected} from "./edit-command-effects.js";
 
 const WATER_LEVEL = 20;
@@ -66,7 +67,7 @@ export function buildBiomeAssignmentChanges(map, biomeId, gridCellIds, options =
 export function getBiomeBrushChanges(map, point, brush, originals) {
   const target = Number(brush?.targetId);
   const scope = String(brush?.scope || (target === 0 ? "water" : "land"));
-  const radius = Math.max(1, Number(brush?.radius) || 1);
+  const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, brush?.radius);
   const radiusSq = radius * radius;
   const changes = [];
   for (let gridCell = 0; gridCell < (map?.grid?.cells?.p?.length || 0); gridCell++) {

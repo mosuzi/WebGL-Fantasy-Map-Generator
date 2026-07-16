@@ -15,12 +15,12 @@
         @update:model-value="callbacks.onTargetMarketId"
       />
       <UiSliderField
-        label="笔刷半径"
+        label="画笔大小"
         :model-value="state.assignmentRadius"
-        :min="2"
-        :max="120"
-        :step="2"
-        unit-label="px"
+        :min="brushRadius.min"
+        :max="brushRadius.max"
+        :step="brushRadius.step"
+        unit-label="地图单位"
         @input="callbacks.onAssignmentRadius"
       />
     </div>
@@ -187,6 +187,9 @@ import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+
+const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.ECONOMY_MARKET);
 
 defineOptions({
   name: "EconomyPanel"

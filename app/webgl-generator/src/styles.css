@@ -742,6 +742,28 @@ select:disabled {
   transition: filter 180ms ease;
 }
 
+.brush-cursor-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  width: 100vw;
+  height: 100vh;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.brush-cursor-preview[hidden] {
+  display: none;
+}
+
+.brush-cursor-preview ellipse {
+  fill: rgba(255, 224, 161, 0.12);
+  stroke: rgba(255, 238, 190, 0.96);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 2px rgba(10, 18, 24, 0.9));
+  pointer-events: none;
+}
+
 .map-toolbar {
   position: absolute;
   left: 18px;

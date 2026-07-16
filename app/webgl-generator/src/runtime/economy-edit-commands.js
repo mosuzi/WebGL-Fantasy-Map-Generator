@@ -1,4 +1,5 @@
 import {rebuildEconomyFromMarketAssignments} from "../generator/economy.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {systemAffected} from "./edit-command-effects.js";
 
 const ECONOMY_REBUILD_EFFECTS = Object.freeze({
@@ -141,7 +142,7 @@ export function buildMarketAssignmentChanges(map, marketId, packCellIds) {
 export function getMarketAssignmentBrushChanges(map, point, brush, originals) {
   const target = Number(brush?.targetMarketId);
   if (!Number.isInteger(target) || target <= 0 || !map?.pack?.markets?.[target]) return [];
-  const radius = Math.max(1, Number(brush?.radius) || 18);
+  const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, brush?.radius);
   const radiusSq = radius * radius;
   const changes = [];
   for (const packCell of map.pack?.cells?.i || []) {

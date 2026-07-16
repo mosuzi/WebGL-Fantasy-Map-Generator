@@ -1,4 +1,5 @@
 import {markRaw, shallowReactive} from "vue";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
@@ -39,7 +40,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     selectedReligionId: null,
     targetReligionId: null,
     assignmentActive: false,
-    assignmentRadius: 28,
+    assignmentRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.RELIGION).defaultValue,
     lastAffected: 0,
     version: 0
   });
@@ -96,7 +97,8 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       panelState.targetReligionId = normalizeReligionId(religionId) ?? 0;
     },
     onAssignmentRadius: radius => {
-      panelState.assignmentRadius = Math.max(4, Math.min(120, Number(radius) || 28));
+      panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, radius);
+      callbacks.onBrushRadiusChange?.();
     },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
@@ -175,7 +177,7 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       return {
         active: panelState.assignmentActive,
         targetId: panelState.targetReligionId ?? 0,
-        radius: panelState.assignmentRadius
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, panelState.assignmentRadius)
       };
     },
     isOpen() {

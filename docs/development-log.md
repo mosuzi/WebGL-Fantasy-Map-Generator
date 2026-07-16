@@ -1,5 +1,18 @@
 # 开发历史
 
+## 2026-07-17：实施权威任务第 68 项——画笔大小与真实范围光标
+
+- 新增 `brush-radius-contract.js`，集中声明高度、高度拖选、国家、省份、文化、宗教、生物群系和经济市场八类半径的默认值、上下界与步长；七个面板 wrapper 的默认、读取和写入以及七个 Vue 控件全部复用契约。控件统一为“画笔大小”，高度 paint 使用“选区画笔大小”，并明确显示当前值和“地图单位”；原有合理范围与默认值保留。
+- 新增独立 `brush-cursor-preview.js` 与 SVG ellipse overlay。resolver 只允许高度 `raise / lower / smooth / flatten / disrupt`、高度 paint、国家 / 省份 / 文化 / 宗教 / 生物群系 / 市场归属；fill、线段、矩形、单点创建删除、测量、路线、河流、湖泊与地区等模式固定隐藏。overlay 不接收事件，也不复用测量或选择层。
+- 光标监听在各编辑器 capture listener 之前注册；圆心始终来自当前鼠标 `screenToWorld()`，横纵半径分别投影世界 `x + radius` 与 `y + radius`，不假定屏幕圆形或 DPR。指针进入 / 移动、拖动、滑杆 input / change、动作切换和 renderer draw 都可原位刷新；离开、取消、模式退出、面板关闭、高度 paint 完成 / 取消及地图替换统一幂等清理。
+- 高度 paint 继续从活动 `request.radius` 取半径，但候选盖章由命中 cell 中心改为精确鼠标世界点；候选集合、布尔合成、羽化、预览和提交 / 回滚语义均未改变。高度、国家、省份、文化、宗教、生物群系和市场的命中入口对外部半径值使用同一防御归一。
+- 新增 `regress:brush-cursor`，覆盖八类契约与异常归一、白名单和排除项、scale `1 / 2 / 4` 投影误差、非等比椭圆、精确高度中心、最小 / 中间 / 最大候选单调性与圈内约束、无事件 overlay、悬停不改地图 / 选择 / 历史、滑杆 / 相机重投影、生命周期清理和监听顺序；同步更新 `regress:height-brush / canvas-tools / social-ownership / biome-assignment / market-assignment`。尚书郎阶段专项及五项既有回归通过，未执行生产构建或浏览器验收，等待给事中与观察使继续复核。
+- 只读复查发现普通高度 stroke 的 `pointerup` 回滚、`pointercancel` 提交疑似反接；因第 68 项禁止改变提交 / 回滚语义，已写入 `FOLLOWUPS.md`，本项没有顺手修复。
+- 给事中首次复核阻断高度 resolver 的真实等待态：`height:brush` 模式中，即使矩形选区或连通等高单点选区已经进入等待，面板普通 action 仍可能保持 `raise`，旧 resolver 会错误返回普通高度圆环。最小返工保持 paint pending / active 最高优先，随后显式检查并隐藏 `terrainSelectionBox / terrainSelectionPoint`，仅在两者都不存在时才读取普通连续动作；专项回归使用真实 state shape 覆盖矩形等待首点、已有起点、连通等高单点等待、paint 与 box 并存时 paint 优先，以及清空等待态后普通 raise 恢复。给事中二次复核又清除了测试中的 `rectangle / cursor-circle` 伪 action 和不存在的 cursor-circle pending 描述；真实 cursor-circle 会直接解析并提交，不进入 `terrainSelectionPoint`。
+- 给事中最终复核通过：20 个相关 JS / MJS 语法检查、`regress:brush-cursor / height-brush / canvas-tools / social-ownership / biome-assignment / market-assignment`、生产构建与 `git diff --check` 均通过；专项同式圆约束确认八类半径的最小 / 中间 / 最大候选数单调不减，且所有候选中心均在对应世界半径内。构建只保留既有大 chunk 提示。
+- 观察使复用同一用户 Chrome 终验通过。高度默认 `28` 地图单位投影为 `44.256×30.508px`，`6 / 48 / 96` 三档分别为 `9.483×6.538 / 75.867×52.300 / 151.733×104.600px`；悬停历史始终为 `undo 0 / redo 0`。退出编辑后以真实滚轮把比例尺由 `200` 放大到 `100 / 50km`，重新进入同一 `48` 半径画笔后投影依次为 `75.867×52.300 / 182.907×126.090 / 440.970×303.990px`，中心误差约为零，恢复适配后回到原尺寸。
+- 高度短拖命中 `33` cells 并累计 `+106m`；国家、省份和文化均明确显示“地图单位”，`4 / 60 / 120` 三档投影一致为 `6.322×4.358 / 94.833×65.375 / 189.667×130.750px`，三者 `60` 半径短拖末点中心误差均为零，国家与省份分别命中 `21 / 239` cells。Fill、Line、矩形与连通等高等待态均不显示圆环；离开画布、Esc、退出工具和关闭面板都会清理。终态面板为空、圆环隐藏、比例尺恢复 `200km`、viewport 与 document scroll 恢复原值，可见错误和 console error 均为空；唯一 Chrome 标签已按 handoff 保留。
+
 ## 2026-07-16：实施权威任务第 67 项——手动面板位置优先
 
 - `PanelManager` 为每个面板记录 `positionMode`、`preferredLeft / preferredTop` 与默认坐标。LocalStorage 继续使用原 `webgl-generator-panel:*` key，新增 `positionMode`；缺字段且坐标有限的旧记录保守迁移为 `manual`，非法模式或坐标回退 `auto` 默认值。`savePanelState()` 只持久化 record 偏好，自动停靠、工具栏避让、打开关闭、resize 与 `ResizeObserver` 产生的临时 DOM 坐标不再反向覆盖用户偏好；`persistOpen: false` 的对象详情仍可保存位置，但不写 `open`。

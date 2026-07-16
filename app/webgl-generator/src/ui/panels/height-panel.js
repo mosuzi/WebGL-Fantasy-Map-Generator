@@ -1,5 +1,6 @@
 import {reactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {
   createHeightTerrainTemplateDocument,
   HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS,
@@ -11,13 +12,16 @@ import {
   stringifyHeightTerrainTemplateDocument
 } from "../../runtime/height-terrain-template-programs.js";
 
+const HEIGHT_RADIUS = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
+const HEIGHT_SELECTION_RADIUS = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
+
 export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const loadedPrograms = loadUserTerrainPrograms(documentRef);
   const panelState = reactive({
     active: false,
     action: "raise",
     scope: "all",
-    radius: 28,
+    radius: HEIGHT_RADIUS.defaultValue,
     strength: 4,
     fillTolerance: 6,
     lineWidth: 12,
@@ -42,7 +46,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     terrainProgramCanDelete: false,
     terrainProgramNotice: loadedPrograms.notice,
     terrainSelectionSource: "height-band",
-    terrainSelectionRadius: 48,
+    terrainSelectionRadius: HEIGHT_SELECTION_RADIUS.defaultValue,
     terrainSelectionTolerance: 6,
     terrainSelection: null,
     terrainSelectionSaved: null,
@@ -62,6 +66,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     history: null
   });
   const panelCallbacks = {
+    onBrushRadiusChange: () => callbacks.onBrushRadiusChange?.(),
     onActiveChange: active => callbacks.onActiveChange?.(active),
     onActionChange: action => callbacks.onActionChange?.(action),
     onUndo: () => callbacks.onUndo?.(),
@@ -142,7 +147,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     scope: panelState.scope,
     lower: panelState.transformLower,
     upper: panelState.transformUpper,
-    radius: panelState.terrainSelectionRadius,
+    radius: normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, panelState.terrainSelectionRadius),
     tolerance: panelState.terrainSelectionTolerance
   });
   let userTerrainPrograms = loadedPrograms.templates;
@@ -348,7 +353,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         active: panelState.active,
         action: panelState.action,
         scope: panelState.scope,
-        radius: panelState.radius,
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, panelState.radius),
         strength: panelState.strength,
         fillTolerance: panelState.fillTolerance,
         lineWidth: panelState.lineWidth,
@@ -399,7 +404,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     getTerrainSelectionSnapshot() {
       return {
         source: panelState.terrainSelectionSource,
-        radius: panelState.terrainSelectionRadius,
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, panelState.terrainSelectionRadius),
         tolerance: panelState.terrainSelectionTolerance,
         selection: cloneTerrainSelection(panelState.terrainSelection),
         savedSelection: cloneTerrainSelection(panelState.terrainSelectionSaved),

@@ -1,4 +1,5 @@
 import {markRaw, shallowReactive} from "vue";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
@@ -35,7 +36,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
-    radius: 28,
+    radius: readBrushRadiusContract(BRUSH_RADIUS_ID.STATE).defaultValue,
     addMode: false,
     deleteMode: false,
     lastAffected: 0,
@@ -113,7 +114,8 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     onRename: (stateId, name) => callbacks.onRename?.(stateId, name),
     onRenameVisibleFromNamebase: stateIds => callbacks.onRenameVisibleFromNamebase?.(stateIds),
     onRadius: radius => {
-      panelState.radius = radius;
+      panelState.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, radius);
+      callbacks.onBrushRadiusChange?.();
     },
     onColorChange: (stateId, color) => callbacks.onColorChange?.(stateId, color),
     onGovernmentChange: (stateId, governmentKey) => callbacks.onGovernmentChange?.(stateId, governmentKey),
@@ -193,7 +195,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       return {
         active: panelState.active,
         targetStateId: panelState.targetStateId,
-        radius: panelState.radius
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, panelState.radius)
       };
     },
     setTargetStateId(stateId) {

@@ -1,3 +1,5 @@
+import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+
 export function createHeightCellSelection(map, options = {}) {
   const heights = map?.grid?.cells?.h;
   const scope = normalizeScope(options.scope);
@@ -39,7 +41,7 @@ export function createHeightCursorRadiusSelection(map, centerCell, options = {})
   const cells = map?.grid?.cells;
   const points = map?.grid?.points;
   const scope = normalizeScope(options.scope);
-  const radius = normalizeRadius(options.radius, 48);
+  const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, options.radius);
   const maxCells = heightSelectionMaxCells(cells?.h?.length || 0);
   const normalizedCenter = Number.isInteger(centerCell) ? centerCell : null;
   const base = {source: "cursor-circle", scope, centerCell: normalizedCenter, radius, maxCells, count: 0, heightRange: null, valid: false, notice: ""};
@@ -49,7 +51,7 @@ export function createHeightCursorRadiusSelection(map, centerCell, options = {})
   if (!Number.isInteger(normalizedCenter) || normalizedCenter < 0 || normalizedCenter >= cells.h.length) {
     return {cellIds: new Uint32Array(), summary: {...base, centerCell: null, notice: "请先把鼠标停在地图上的有效 cell。"}};
   }
-  const centerPoint = points[cells.p[normalizedCenter]];
+  const centerPoint = normalizePoint(options.centerPoint) || normalizePoint(points[cells.p[normalizedCenter]]);
   if (!centerPoint) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前光标 cell 缺少点位，无法生成圆形选区。"}};
 
   const radiusSq = radius * radius;
@@ -61,8 +63,8 @@ export function createHeightCursorRadiusSelection(map, centerCell, options = {})
     if (!matchesScope(height, scope)) continue;
     const point = points[cells.p[gridCell]];
     if (!point) continue;
-    const dx = point[0] - centerPoint[0];
-    const dy = point[1] - centerPoint[1];
+    const dx = point[0] - centerPoint.x;
+    const dy = point[1] - centerPoint.y;
     if (dx * dx + dy * dy > radiusSq) continue;
     cellIds.push(gridCell);
     if (cellIds.length > maxCells) {
@@ -218,7 +220,7 @@ export function inspectHeightConnectedSelection(map, centerCell, options = {}) {
 export function createHeightPaintSelection(map, candidateCellIds, options = {}) {
   const heights = map?.grid?.cells?.h;
   const scope = normalizeScope(options.scope);
-  const radius = normalizeRadius(options.radius, 32);
+  const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, options.radius);
   const stampCount = Math.max(0, Math.trunc(Number(options.stampCount) || 0));
   const maxCells = heightSelectionMaxCells(heights?.length || 0);
   const normalizedIds = normalizeCellIds(candidateCellIds, heights?.length || 0);
@@ -583,11 +585,6 @@ function normalizeBound(value, fallback) {
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
 }
 
-function normalizeRadius(value, fallback) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? Math.max(1, Math.min(256, Math.round(numeric))) : fallback;
-}
-
 function normalizeTolerance(value, fallback) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : fallback;
@@ -613,8 +610,8 @@ function heightSelectionMaxCells(cellCount) {
 }
 
 function normalizePoint(point) {
-  const x = Number(point?.x);
-  const y = Number(point?.y);
+  const x = Number(Array.isArray(point) ? point[0] : point?.x);
+  const y = Number(Array.isArray(point) ? point[1] : point?.y);
   return Number.isFinite(x) && Number.isFinite(y) ? {x, y} : null;
 }
 

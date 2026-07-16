@@ -27,6 +27,7 @@ import {
   visualThemeOptions
 } from "../renderer/themes.js";
 import {PanelManager} from "../ui/panel-manager.js";
+import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {sameObjectId} from "../ui/object-id.js";
@@ -131,6 +132,7 @@ import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationManager} from "./runtime-operation.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
 import {
   exportAllMapData,
@@ -250,6 +252,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     editingObject: null,
     editHistory: new EditHistory(),
     editRefreshScheduler: null,
+    brushCursorPreview: null,
     heightEdit: {
       activeStroke: null,
       lineStart: null,
@@ -340,11 +343,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   };
   let selectionStore = null;
   let runtimeActions = null;
+  const refreshBrushCursor = () => state.brushCursorPreview?.refresh();
   const generationPanel = createGenerationPanel(documentRef, panelManager);
   state.panels.generation = generationPanel;
   state.panels.development = createDevelopmentPanel(documentRef, panelManager);
   state.panels.climate = createClimatePanel(documentRef, panelManager);
   state.panels.biome = createBiomePanel(documentRef, panelManager, {
+    onBrushRadiusChange: refreshBrushCursor,
     onAssignmentActive: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.BIOME_ASSIGN);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.BIOME_ASSIGN, "panel-toggle");
@@ -437,6 +442,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.objectDetails = objectDetailsPanel;
   heightPanel = createHeightPanel(documentRef, panelManager, {
+    onBrushRadiusChange: refreshBrushCursor,
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH, "panel-toggle");
@@ -445,6 +451,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       cancelHeightLine(state, documentRef);
       state.heightEdit.lastNotice = action === "line" ? "单击地图选择线段起点。" : "";
       updateHeightPanel(state);
+      state.brushCursorPreview?.scheduleRefresh();
     },
     onUndo: () => {
       cancelHeightLine(state, documentRef);
@@ -718,6 +725,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         state.heightEdit.lastNotice = "请在地图上按住并拖动画笔选区，抬手后提交。";
         updateHeightPanel(state);
         updateEditingInteractionLock(state, documentRef);
+        state.brushCursorPreview?.scheduleRefresh();
         return {pending: true, operation: options.operation, source: options.source};
       }
       if (options.source === "cursor-circle") options.centerCell = resolveHeightSelectionCenterCell(state, canvas, documentRef);
@@ -844,6 +852,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.height = heightPanel;
   statePanel = createStatePanel(documentRef, panelManager, {
+    onBrushRadiusChange: refreshBrushCursor,
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH, "panel-toggle");
@@ -1005,6 +1014,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.government = governmentPanel;
   provincePanel = createProvincePanel(documentRef, panelManager, {
+    onBrushRadiusChange: refreshBrushCursor,
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.PROVINCE_BRUSH, "panel-toggle");
@@ -1187,6 +1197,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.city = cityPanel;
   culturePanel = createCulturePanel(documentRef, panelManager, {
+    onBrushRadiusChange: refreshBrushCursor,
     onSelect: object => {
       selectFromPanel("culture-panel", object);
       culturePanel.setSelectedCultureId(object.id);
@@ -1273,6 +1284,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.culture = culturePanel;
   religionPanel = createReligionPanel(documentRef, panelManager, {
+    onBrushRadiusChange: refreshBrushCursor,
     onSelect: object => {
       selectFromPanel("religion-panel", object);
       religionPanel.setSelectedReligionId(object.id);
@@ -1401,6 +1413,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.diplomacy = diplomacyPanel;
   economyPanel = createEconomyPanel(documentRef, panelManager, {
+    onBrushRadiusChange: refreshBrushCursor,
     onLocate: object => {
       locateAndSelectObject("economy-panel", object);
     },
@@ -2083,6 +2096,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     if (state.map) {
       updateRuntimePanel(documentRef, state);
       if (!renderer.getStats?.()?.overlay?.interactionSuspended) updateMeasurementOverlay(state, documentRef);
+      state.brushCursorPreview?.refresh();
     }
   }, pick => {
     state.pick = pick;
@@ -2119,6 +2133,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     applyVisualTheme: themeId => applyRuntimeVisualThemeState(state, documentRef, themeId, {force: true})
   });
   registerCanvasToolModes(state, documentRef, {stopObjectEditing});
+  state.brushCursorPreview = createBrushCursorPreview(canvas, state, documentRef);
   applyControlPreferencesToRenderer(documentRef, renderer);
   state.runtimeOperation = createRuntimeOperationManager({
     setLoading: (visible, message) => updateGenerationLoading(documentRef, visible, message),
@@ -3284,6 +3299,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   operation?.report("prepare-map", {message: "正在接入地图运行时"});
   state.canvasToolModes.reset("map-replace");
+  state.brushCursorPreview?.reset();
   state.map = map;
   reconcileWarDerivedData(state.map);
   ensureRiverHydrology(state.map);
@@ -8050,7 +8066,10 @@ function shouldSwitchDiplomacySubjectForSelection(state) {
 
 function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   const register = (modeId, panelId, hooks = {}) => {
-    const exit = payload => hooks.onExit?.(payload);
+    const exit = payload => {
+      state.brushCursorPreview?.clear();
+      hooks.onExit?.(payload);
+    };
     state.canvasToolModes.register(modeId, {
       locksInteraction: hooks.locksInteraction,
       allowedPanelIds: panelId ? [panelId] : [],
@@ -8379,6 +8398,7 @@ function enterCanvasToolMode(state, documentRef, modeId, context = {}) {
   } finally {
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
+    state.brushCursorPreview?.scheduleRefresh();
   }
 }
 
@@ -8388,6 +8408,7 @@ function cancelCanvasToolMode(state, documentRef, modeId, reason = "cancel") {
   } finally {
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
+    state.brushCursorPreview?.scheduleRefresh();
   }
 }
 
@@ -8397,6 +8418,7 @@ function completeCanvasToolMode(state, documentRef, modeId, detail = {}) {
   } finally {
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
+    state.brushCursorPreview?.scheduleRefresh();
   }
 }
 
@@ -9393,6 +9415,7 @@ function startHeightSelectionPaint(state, event, documentRef, canvas) {
     candidateCellIds: new Set(),
     stampCount: 0,
     lastCenterCell: null,
+    lastCenterPoint: null,
     previewSelection: null,
     invalidNotice: ""
   };
@@ -9406,11 +9429,15 @@ function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
   if (!active) return;
   const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
   const gridCell = Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
-  if (gridCell === null || gridCell === active.lastCenterCell) return;
+  const centerPoint = state.renderer.screenToWorld(event.clientX, event.clientY);
+  if (gridCell === null || !Number.isFinite(centerPoint?.x) || !Number.isFinite(centerPoint?.y)) return;
+  if (active.lastCenterPoint && Math.hypot(centerPoint.x - active.lastCenterPoint.x, centerPoint.y - active.lastCenterPoint.y) < 0.01) return;
   active.lastCenterCell = gridCell;
+  active.lastCenterPoint = centerPoint;
   const stamp = createHeightCursorRadiusSelection(state.map, gridCell, {
     scope: active.request.scope,
-    radius: active.request.radius
+    radius: active.request.radius,
+    centerPoint
   });
   if (!stamp.summary.valid) {
     active.invalidNotice = stamp.summary.notice;
@@ -9446,6 +9473,7 @@ function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
 function finishHeightSelectionPaint(state, documentRef) {
   const active = state.heightEdit.terrainSelectionPaint;
   state.heightEdit.terrainSelectionPaint = null;
+  state.brushCursorPreview?.clear();
   if (!active?.previewSelection?.summary.valid || active.invalidNotice) {
     restoreHeightTerrainSelectionBuffer(state);
     state.heightEdit.lastNotice = active?.invalidNotice || "画笔没有形成有效选区，未提交。";
@@ -9493,6 +9521,7 @@ function cancelHeightSelectionPaint(state) {
   const hadPreview = Boolean(state.heightEdit.terrainSelectionPaint?.previewSelection);
   state.heightEdit.terrainSelectionPaintPending = null;
   state.heightEdit.terrainSelectionPaint = null;
+  state.brushCursorPreview?.clear();
   if (hadPreview) restoreHeightTerrainSelectionBuffer(state);
 }
 
@@ -10527,7 +10556,8 @@ function finishProvinceStroke(state, documentRef) {
 }
 
 function getStateBrushChanges(map, point, brush, originals) {
-  const radiusSq = brush.radius * brush.radius;
+  const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.STATE, brush?.radius);
+  const radiusSq = radius * radius;
   const affected = [];
   const cells = map.grid.cells;
 
@@ -10546,7 +10576,8 @@ function getStateBrushChanges(map, point, brush, originals) {
 }
 
 function getProvinceBrushChanges(map, point, brush, originals) {
-  const radiusSq = brush.radius * brush.radius;
+  const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, brush?.radius);
+  const radiusSq = radius * radius;
   const affected = [];
   const cells = map.grid.cells;
   const targetStateId = getProvinceStateId(map, brush.targetProvinceId);
@@ -10569,7 +10600,9 @@ function getProvinceBrushChanges(map, point, brush, originals) {
 }
 
 function getSocialAssignmentChanges(map, point, brush, originals, kind) {
-  const radiusSq = brush.radius * brush.radius;
+  const radiusId = kind === "religion" ? BRUSH_RADIUS_ID.RELIGION : BRUSH_RADIUS_ID.CULTURE;
+  const radius = normalizeBrushRadius(radiusId, brush?.radius);
+  const radiusSq = radius * radius;
   const cells = map.grid.cells;
   const values = cells[kind];
   const affected = [];

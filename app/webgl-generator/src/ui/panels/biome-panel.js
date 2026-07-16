@@ -1,4 +1,5 @@
 import {markRaw, shallowReactive} from "vue";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
@@ -32,7 +33,7 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
     selectedBiomeId: null,
     assignmentActive: false,
     assignmentScope: "land",
-    assignmentRadius: 28,
+    assignmentRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.BIOME).defaultValue,
     lastAffected: 0,
     assignmentPreview: null,
     version: 0
@@ -82,7 +83,8 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
       panelState.assignmentPreview = null;
     },
     onAssignmentRadius: radius => {
-      panelState.assignmentRadius = Math.max(4, Math.min(120, Number(radius) || 28));
+      panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, radius);
+      callbacks.onBrushRadiusChange?.();
     },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
@@ -159,7 +161,7 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
         active: panelState.assignmentActive,
         targetId: panelState.selectedBiomeId ?? 0,
         scope: panelState.assignmentScope,
-        radius: panelState.assignmentRadius
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, panelState.assignmentRadius)
       };
     },
     isOpen() {

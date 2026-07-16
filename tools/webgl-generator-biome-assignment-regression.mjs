@@ -10,6 +10,7 @@ import {
   inspectBiomeAssignment
 } from "../app/webgl-generator/src/runtime/biome-edit-commands.js";
 import {restoreCanvasToolStrokePreview} from "../app/webgl-generator/src/runtime/canvas-tool-preview-rollback.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, createMapGeoJson, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 
@@ -20,6 +21,8 @@ assert.match(appSource, /BIOME_ASSIGN: "biome:assign"/, "缺少生物群系画�
 assert.match(appSource, /createApplyBiomeAssignmentCommand\(changes/, "UI 与 API 没有共用生物群系命令");
 assert.match(apiSource, /biomes: Object\.freeze\(\{/, "控制台 API 缺少 biomes 命名空间");
 assert.match(panelSource, /<template #assign>/, "生物群系面板缺少归属笔刷入口");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, -1), 4, "生物群系画笔半径下界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, 999), 120, "生物群系画笔半径上界异常");
 
 const map = generatePlaceholderMap({seed: "biome-assignment-a", cellsTarget: 5000, heightmapTemplate: "continents"});
 const landGridCell = map.grid.cells.i.find(cell => map.grid.cells.h[cell] >= 20 && packCellsForGrid(map, cell).length);

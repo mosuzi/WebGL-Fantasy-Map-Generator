@@ -1,4 +1,5 @@
 import {markRaw, shallowReactive} from "vue";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
@@ -65,7 +66,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     selectedDealId: null,
     marketAssignmentActive: false,
     targetMarketId: null,
-    assignmentRadius: 18,
+    assignmentRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.ECONOMY_MARKET).defaultValue,
     assignmentPreview: null,
     version: 0
   });
@@ -132,8 +133,9 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       callbacks.onTargetMarketId?.(panelState.targetMarketId);
     },
     onAssignmentRadius: value => {
-      panelState.assignmentRadius = Math.max(2, Math.min(120, Number(value) || 18));
+      panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, value);
       callbacks.onAssignmentRadius?.(panelState.assignmentRadius);
+      callbacks.onBrushRadiusChange?.();
     },
     onApplyMarketAssignment: () => callbacks.onApplyMarketAssignment?.(),
     onCancelMarketAssignment: () => callbacks.onCancelMarketAssignment?.(),
@@ -207,7 +209,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       return {
         active: panelState.marketAssignmentActive,
         targetMarketId: panelState.targetMarketId,
-        radius: panelState.assignmentRadius
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, panelState.assignmentRadius)
       };
     },
     setMarketAssignmentActive(active) {

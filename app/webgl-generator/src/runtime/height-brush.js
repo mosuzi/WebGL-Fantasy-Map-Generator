@@ -1,3 +1,5 @@
+import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+
 export function getHeightBrushChanges(map, point, brush, stroke) {
   const cells = map?.grid?.cells;
   const points = map?.grid?.points;
@@ -9,7 +11,7 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
     return getHeightFillChanges(map, point, brush, stroke);
   }
 
-  const radius = Math.max(1, Number(brush?.radius) || 1);
+  const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, brush?.radius);
   const radiusSq = radius * radius;
   const scope = normalizeBrushScope(brush?.scope);
   const affected = [];

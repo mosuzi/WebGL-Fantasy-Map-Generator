@@ -1,4 +1,5 @@
 import {markRaw, shallowReactive} from "vue";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
 import {readPanelListPreferences, updatePanelListPreferences} from "../panel-list-preferences.js";
@@ -35,7 +36,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     sortDir: listPreferences.sortDir,
     highlightCount: readPanelHighlightCount(callbacks),
     selectedProvinceId: null,
-    radius: 28,
+    radius: readBrushRadiusContract(BRUSH_RADIUS_ID.PROVINCE).defaultValue,
     addMode: false,
     deleteMode: false,
     lastAffected: 0,
@@ -115,7 +116,8 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.selectedProvinceId = normalizeProvinceId(provinceId);
     },
     onRadius: radius => {
-      panelState.radius = radius;
+      panelState.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, radius);
+      callbacks.onBrushRadiusChange?.();
     },
     onSampleSelection: () => callbacks.onSampleSelection?.(),
     onSampleHover: () => callbacks.onSampleHover?.(),
@@ -202,7 +204,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       return {
         active: panelState.active,
         targetProvinceId: panelState.selectedProvinceId,
-        radius: panelState.radius
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, panelState.radius)
       };
     },
     setActive(active) {

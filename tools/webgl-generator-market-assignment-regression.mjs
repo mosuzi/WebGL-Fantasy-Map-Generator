@@ -6,6 +6,10 @@ import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index
 import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, inspectMarketAssignment, restoreMarketAssignmentPreview} from "../app/webgl-generator/src/runtime/economy-edit-commands.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
+
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, -1), 2, "市场画笔半径下界异常");
+assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.ECONOMY_MARKET, 999), 120, "市场画笔半径上界异常");
 
 const map = generatePlaceholderMap({seed: "market-assignment-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
 const target = findCrossStateBurgTarget(map);

@@ -43,12 +43,12 @@
           @update:model-value="callbacks.onAssignmentScope"
         />
         <UiSliderField
-          label="笔刷半径"
+          label="画笔大小"
           :model-value="state.assignmentRadius"
-          :min="4"
-          :max="120"
-          :step="2"
-          unit-label="px"
+          :min="brushRadius.min"
+          :max="brushRadius.max"
+          :step="brushRadius.step"
+          unit-label="地图单位"
           @input="callbacks.onAssignmentRadius"
         />
         <UiStateBanner
@@ -75,6 +75,9 @@ import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from 
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+
+const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.BIOME);
 
 defineOptions({
   name: "BiomePanel"

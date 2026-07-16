@@ -60,7 +60,7 @@
     </button>
   </div>
 
-  <UiSliderField v-if="state.action !== 'fill' && state.action !== 'line'" label="半径" :model-value="state.radius" :min="6" :max="96" :step="2" @input="setRadius" />
+  <UiSliderField v-if="state.action !== 'fill' && state.action !== 'line'" label="画笔大小" :model-value="state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" unit-label="地图单位" @input="setRadius" />
   <UiSliderField v-if="state.action !== 'line'" label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
   <UiSliderField v-if="state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
   <UiSliderField v-if="state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="2" :max="48" :step="1" @input="setLineWidth" />
@@ -104,11 +104,12 @@
     <UiSliderField
       v-if="state.terrainSelectionSource === 'cursor-circle' || state.terrainSelectionSource === 'paint'"
       input-id="height-selection-radius"
-      :label="state.terrainSelectionSource === 'paint' ? '选区笔刷半径' : '圆形半径'"
+      :label="state.terrainSelectionSource === 'paint' ? '选区画笔大小' : '圆形半径'"
       :model-value="state.terrainSelectionRadius"
-      :min="8"
-      :max="160"
-      :step="4"
+      :min="heightSelectionRadius.min"
+      :max="heightSelectionRadius.max"
+      :step="heightSelectionRadius.step"
+      unit-label="地图单位"
       @input="setTerrainSelectionRadius"
     />
     <UiSliderField
@@ -702,6 +703,10 @@ import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatHeight, formatNumber} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+
+const heightRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
+const heightSelectionRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
 
 defineOptions({
   name: "HeightPanel"
@@ -1065,7 +1070,8 @@ function setScope(scope) {
 }
 
 function setRadius(radius) {
-  props.state.radius = radius;
+  props.state.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, radius);
+  props.callbacks.onBrushRadiusChange?.();
 }
 
 function setTerrainSelectionSource(source) {
@@ -1074,7 +1080,8 @@ function setTerrainSelectionSource(source) {
 }
 
 function setTerrainSelectionRadius(radius) {
-  props.state.terrainSelectionRadius = radius;
+  props.state.terrainSelectionRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, radius);
+  props.callbacks.onBrushRadiusChange?.();
 }
 
 function setTerrainSelectionTolerance(tolerance) {

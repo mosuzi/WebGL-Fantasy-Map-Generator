@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCellSelectionFeather, inspectHeightCellSelectionTransform, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {getHeightTerrainTemplateChanges, HEIGHT_TERRAIN_TEMPLATE_PRESETS, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "../app/webgl-generator/src/runtime/height-terrain-templates.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
+
+const heightRadiusContract = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
+assert(heightRadiusContract.defaultValue === 28 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, -1) === 6 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, 999) === 96, "高度画笔半径契约异常");
+const heightSelectionRadiusContract = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
+assert(heightSelectionRadiusContract.defaultValue === 48 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, -1) === 8 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, 999) === 160, "高度选区半径契约异常");
 
 const map = createSyntheticMap();
 const stroke = {originals: new Map()};

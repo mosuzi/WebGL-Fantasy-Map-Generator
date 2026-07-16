@@ -109,12 +109,13 @@
   </div>
 
   <UiSliderField
-    label="半径"
+    label="画笔大小"
     field-class="state-range-field"
     :model-value="state.radius"
-    :min="4"
-    :max="120"
-    :step="2"
+    :min="brushRadius.min"
+    :max="brushRadius.max"
+    :step="brushRadius.step"
+    unit-label="地图单位"
     @input="callbacks.onRadius"
   />
 </template>
@@ -140,6 +141,9 @@ import {GOVERNMENT_OPTIONS} from "../../../generator/governments.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+
+const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.STATE);
 
 defineOptions({
   name: "StatePanel"
