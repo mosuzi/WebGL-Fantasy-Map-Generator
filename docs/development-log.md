@@ -27745,3 +27745,12 @@ full 矩阵结果：
 - `regress:geojson-range-browser` 使用系统 Chrome 下载四份真实文件：当前视口与显式 bbox pack 均为 804 个 features，普通 / dissolve 要素均为 603 个；四份文件范围、bbox、完整几何标记和未注册 CRS 元数据正确，页面 / console / health error 均为 0。
 - 官方 QGIS LTR `3.44.12-Solothurn` 通过工作区管理提取运行，实际读取 bbox pack Polygon 1472 个和 dissolve 政治 MultiPolygon 125 个并转存 GeoPackage，QGIS / GDAL 告警为 0；下载包和临时运行时随后清理，只保留可复现脚本与生成报告。生产构建、dissolve 兼容性和差异检查通过。
 - 聚合 `regress:exports` 已把范围导出加入第 4 步，最终按“迁移 → 导入诊断 → PNG → GeoJSON 范围 → dissolve 兼容 → dissolve 100k 性能”完成 `6/6 passed`，总耗时约 `8.7s`。
+
+### 2026-07-17 权威任务第 73 项完成：城市移动、迁国迁省及港口路线联动
+
+- 用户整体确认城市移动推荐冻结矩阵：普通城市四类归属跟随目标 cell；首都限原国家、省会限原省份、市场中心限原国家；原港城按目标重算港口与锚点，失效清港，非港城不自动升级。
+- 新增只读迁移预检与原子移动命令。预检校验陆水、双占位、grid / pack 映射、三类角色、港口三态和全部关联路线；港口合法性复用生成器的目标可通航候选判定，但移动不重新参加全图生成配额，既有非首都高 harbor 港城及配额外合法目标都能保港。命令同步 city / burg 双镜像、占位表、政治中心、市场镜像、位置派生字段与 politics / pack 双政治统计，重建农村人口点，并把经济 / 外交 / 军事 / 地区标记 stale。事务快照收窄到实际写集，失败、撤销与重做原位恢复城市、burg、占位槽、政治双镜像、路线索引、市场、备注、人口点及 stale metadata，不再克隆或删除重建 14.7MB 整图；map / options、无关对象及共享 / 独立政治镜像引用保持。
+- 路线只处理命中移动城市的端点：道路 / 小径复用 pack 邻接 A* 局部重寻，失败拒绝整次移动；合法海路局部重寻，港口失效或改连其它水体时按预检删除路线和路线备注。路线 ID、等级、手工视觉及全部无关路线保持，`pack.routes` 与 `pack.cells.routes` 同步刷新。
+- 城市面板新增与新增 / 删除互斥的移动模式、紧凑预检摘要和真实 Canvas `pointerdown -> pointermove -> pointerup` 拖动；拖动生命周期抽成可触发 helper，非法落点不改地图和历史，成功后保持城市选中，pointercancel、切图和关面板统一清理。稳定 API 新增 `edit.cities.inspectMove(cityId, target)` 与 `edit.cities.move(cityId, target)`，API 基线更新为 190 个公开方法、92 个编辑方法，稳定等级为 182 / 7 / 1。
+- 新增 `regress:city-relocation`，覆盖实际 pointerdown / move / up / cancel、预检纯度、同国 / 跨国 / 跨省、水域 / 占位 / 缺映射、首都 / 省会 / 市场中心拒绝、真实生成非首都高 harbor 港口保持、港口换 feature / 清除、陆路失败、海路重寻 / 删除与备注、无关路线 / 手工视觉、市场 / stale、往返后 politics / pack 双镜像统计、真实农村人口点移除与撤销 / 重做、故障注入、旧图和完整地图往返，以及 API metadata / effects。有界快照回归另以 8MB typed array 和不可克隆函数作为无关 payload 哨兵，验证执行 / 撤销 / 重做不复制或替换其引用；5000 cells 真实生成图最终复审执行 / 撤销 / 重做约 `23 / 13 / 19ms`，均低于 `250ms` 门槛。专项、路线、市场、生产构建及差异门禁通过。
+- 同一 Chrome 复用唯一标签完成 #718 武海的真实 Canvas 拖动、Ctrl+Z 和 Ctrl+Y；坐标精确闭环，国家 / 省份、选择与单条历史正确。性能返工后 FMG health、console、页面与 WebGL error 均为 0，原 `input-delay: click` ERROR 降为 WARN，关联 longtask 由 590ms 降至 371ms；其余 7 条均为有界 health WARN。标签已清理移动模式与面板并 handoff，本项达到最小验收。

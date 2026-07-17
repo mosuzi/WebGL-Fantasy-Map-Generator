@@ -39,6 +39,15 @@
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
+  <section v-if="state.moveMode || state.movePreview" class="city-move-preview" :data-valid="state.movePreview?.valid === true">
+    <strong>{{ state.moveMode ? "拖动城市到目标 cell" : "最近一次移动预检" }}</strong>
+    <span>{{ state.movePreview?.summary || "请从当前城市按下并拖动，松手前只做只读预检。" }}</span>
+    <span v-if="state.movePreview?.owners">归属：国家 #{{ state.movePreview.owners.before.state }} → #{{ state.movePreview.owners.after.state }}；省份 #{{ state.movePreview.owners.before.province }} → #{{ state.movePreview.owners.after.province }}</span>
+    <span v-if="state.movePreview?.port">港口：{{ state.movePreview.port.status }}；关联路线重寻 {{ state.movePreview.routes.rerouted }} / 删除 {{ state.movePreview.routes.deleted }}</span>
+    <span v-if="state.movePreview?.reasons?.length" class="city-move-preview-error">拒绝：{{ state.movePreview.reasons.join("；") }}</span>
+    <span v-if="state.movePreview?.warnings?.length" class="city-move-preview-warning">提示：{{ state.movePreview.warnings.join("；") }}</span>
+  </section>
+
   <UiActionDock v-model:active="activeAction" :actions="cityActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
@@ -170,14 +179,15 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
-const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
+const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode || props.state.moveMode));
 const visualDraft = reactive({
   silhouette: "town",
   palette: "town"
 });
 const cityActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode},
-  {key: "delete", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode},
+  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
+  {key: "delete", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
+  {key: "move", label: props.state.moveMode ? "取消移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
   {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
   {key: "population", label: "调整人口", icon: "#", disabled: modalActionActive.value || !selected.value},
   {key: "owner", label: "同步归属", icon: "⇄", disabled: modalActionActive.value || !selected.value?.canSyncOwner},
@@ -192,6 +202,7 @@ const cityHighlightActions = computed(() => [
 const summaryMetrics = computed(() => [
   {label: "新增", value: props.state.addMode ? "等待点击" : "关闭"},
   {label: "删除", value: props.state.deleteMode ? "等待点击" : "关闭"},
+  {label: "移动", value: props.state.moveMode ? "等待拖动" : "关闭"},
   {label: "城市", value: formatNumberValue(metrics.value.total)},
   {label: "首都", value: formatNumberValue(metrics.value.capitals)},
   {label: "港口", value: formatNumberValue(metrics.value.ports)},
@@ -347,6 +358,10 @@ function handleActionSelect(key) {
   }
   if (key === "delete") {
     props.callbacks.onDeleteMode?.(!props.state.deleteMode);
+    return;
+  }
+  if (key === "move") {
+    props.callbacks.onMoveMode?.(!props.state.moveMode, selected.value?.id);
     return;
   }
   if (!key) activeAction.value = null;

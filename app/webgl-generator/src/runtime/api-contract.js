@@ -14,7 +14,7 @@ export const API_METHODS = Object.freeze({
   edit: Object.freeze([
     "notes.createStandalone", "notes.set", "notes.delete", "notes.import", "notes.deleteBatch",
     "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "measurements.import",
-    "cities.add", "cities.delete", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
+    "cities.add", "cities.delete", "cities.inspectMove", "cities.move", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
     "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
     "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
     "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "biomes.assignCells", "diplomacy.setRelation",

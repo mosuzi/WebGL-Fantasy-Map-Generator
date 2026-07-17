@@ -36,6 +36,9 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     selectedCityId: null,
     addMode: false,
     deleteMode: false,
+    moveMode: false,
+    moveCityId: null,
+    movePreview: null,
     version: 0
   });
   const panelCallbacks = {
@@ -77,13 +80,29 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     onRenameVisibleFromNamebase: cityIds => callbacks.onRenameVisibleFromNamebase?.(cityIds),
     onAddMode: active => {
       panelState.addMode = Boolean(active);
-      if (active) panelState.deleteMode = false;
+      if (active) {
+        panelState.deleteMode = false;
+        panelState.moveMode = false;
+      }
       callbacks.onAddMode?.(panelState.addMode);
     },
     onDeleteMode: active => {
       panelState.deleteMode = Boolean(active);
-      if (active) panelState.addMode = false;
+      if (active) {
+        panelState.addMode = false;
+        panelState.moveMode = false;
+      }
       callbacks.onDeleteMode?.(panelState.deleteMode);
+    },
+    onMoveMode: (active, cityId) => {
+      panelState.moveMode = Boolean(active);
+      panelState.moveCityId = panelState.moveMode ? normalizeCityId(cityId) : null;
+      panelState.movePreview = null;
+      if (active) {
+        panelState.addMode = false;
+        panelState.deleteMode = false;
+      }
+      callbacks.onMoveMode?.(panelState.moveMode, panelState.moveCityId);
     },
     onDeleteCity: cityId => callbacks.onDeleteCity?.(cityId),
     onPopulationChange: (cityId, population) => callbacks.onPopulationChange?.(cityId, population),
@@ -109,9 +128,14 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     onClose: () => {
       panelState.addMode = false;
       panelState.deleteMode = false;
+      panelState.moveMode = false;
+      panelState.moveCityId = null;
+      panelState.movePreview = null;
       panelState.open = false;
       callbacks.onAddMode?.(false);
       callbacks.onDeleteMode?.(false);
+      callbacks.onMoveMode?.(false, null);
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");
@@ -161,6 +185,15 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     },
     updateDeleteMode(active) {
       panelState.deleteMode = Boolean(active);
+      panelState.version++;
+    },
+    updateMoveMode(active, cityId = null) {
+      panelState.moveMode = Boolean(active);
+      panelState.moveCityId = panelState.moveMode ? normalizeCityId(cityId) : null;
+      panelState.version++;
+    },
+    updateMovePreview(preview) {
+      panelState.movePreview = preview || null;
       panelState.version++;
     },
     isOpen() {

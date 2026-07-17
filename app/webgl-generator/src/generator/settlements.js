@@ -76,6 +76,57 @@ export function regenerateSettlementsWithinPolitics(grid, features, politics, se
   return finalizeSettlements(grid, features, politics, settlements, pack, options);
 }
 
+export function inspectRelocatedSettlementPort(grid, pack, packCell, {wasPort = 0, capital = false, burgId = 0, options = {}} = {}) {
+  const point = [...(pack?.cells?.p?.[packCell] || [0, 0])];
+  if (!wasPort) return {port: 0, source: "none", anchor: point, routePackCell: null, reason: "非港城不会自动升级"};
+
+  const riversById = new Map((pack?.rivers || []).map(river => [river.i, river]));
+  const existingBurg = pack?.burgs?.[burgId] || (pack?.burgs || []).find(burg => Number(burg?.i) === Number(burgId));
+  const relocatedBurg = existingBurg ? {...existingBurg, cell: packCell, capital: Number(capital)} : {i: burgId, cell: packCell, capital: Number(capital)};
+  const candidate = createSettlementPortCandidate(grid, pack, relocatedBurg, riversById, options);
+  if (candidate) return describeRelocatedPortCandidate(pack, candidate, riversById);
+  return {port: 0, source: "cleared", anchor: point, routePackCell: null, reason: "目标不再满足港口条件"};
+}
+
+export function refreshRelocatedSettlementDerived(grid, features, politics, settlements, pack) {
+  for (const states of new Set([politics?.states, pack?.states].filter(Boolean))) syncStateSettlementStats(pack, states);
+  for (const provinces of new Set([politics?.provinces, pack?.provinces].filter(Boolean))) syncProvinceSettlementStats(pack, provinces);
+
+  const cities = (settlements?.cities || []).filter(city => city && !city.removed);
+  const routes = (settlements?.routes || []).filter(Boolean);
+  const population = grid?.cells?.pop || [];
+  const populationPoints = buildPopulationPoints(grid, features, population);
+  settlements.populationPoints = populationPoints;
+  settlements.metadata ||= {};
+  Object.assign(settlements.metadata, createSettlementMetadata({grid, features, population, cities, routes, pack, populationPoints}));
+}
+
+export function deriveRelocatedSettlement(pack, city, burg) {
+  const resources = collectCityResourceContext(pack, burg.cell);
+  burg.feature = pack?.cells?.f?.[burg.cell] ?? 0;
+  burg.resourceCells = resources.resourceCells;
+  burg.markerResourceCells = resources.markerResourceCells;
+  burg.resourceGoodIds = resources.goodIds;
+  burg.resourceScore = resources.score;
+  city.resourceCells = resources.resourceCells;
+  city.markerResourceCells = resources.markerResourceCells;
+  city.resourceGoodIds = [...resources.goodIds];
+  city.resourceScore = resources.score;
+  burg.type = getBurgType(pack, burg.cell, burg.port);
+  city.type = burg.type;
+  defineBurgFeatures(pack, burg);
+  const populations = (pack?.burgs || []).filter(item => item?.i && !item.removed).map(item => Number(item.population) || 0).sort((a, b) => a - b);
+  burg.group = defineBurgGroup(pack, burg, populations);
+  city.group = burg.group;
+  city.citadel = burg.citadel;
+  city.plaza = burg.plaza;
+  city.walls = burg.walls;
+  city.temple = burg.temple;
+  assignCityCivilization(pack, city, burg);
+  syncCityVisual(pack, city, burg);
+  return {type: city.type, group: city.group, resources};
+}
+
 function createSettlementResult({grid, features, population, cities, routes, pack}) {
   const populationPoints = buildPopulationPoints(grid, features, population);
   return {
@@ -407,7 +458,7 @@ function anchorPackCell(pack, preferredCell, populated) {
 }
 
 function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, options = {}) {
-  const {cells, features} = pack;
+  const {cells} = pack;
   const featurePortCandidates = new Map();
   const selectedPortCandidates = [];
   const riversById = new Map((pack.rivers || []).map(river => [river.i, river]));
@@ -420,31 +471,8 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, optio
   for (const burg of burgs) {
     if (!burg?.i) continue;
     burg.port = 0;
-    const haven = cells.haven?.[burg.cell];
-    const landFeature = cells.f?.[burg.cell];
-    const harbor = cells.harbor?.[burg.cell] || 0;
-
-    if (haven) {
-      const featureId = cells.f?.[haven];
-      const feature = features?.[featureId];
-      if (!featureId || !feature) continue;
-
-      const isMulticell = (feature.cells || 0) > 1;
-      const isHarbor = (harbor && burg.capital) || harbor === 1;
-      const isFrozen = (grid.cells.temp?.[cells.g[burg.cell]] || 0) <= 0;
-      const isNavigableLake = feature.type !== "lake" || !NON_NAVIGABLE_LAKE_GROUPS.has(feature.group);
-      if (!isMulticell || !harbor || isFrozen || !isNavigableLake) continue;
-      if (shouldSkipSmallLakePortFeature(pack, feature, options)) continue;
-
-      const portFeatureId = feature.type === "lake" && feature.outlet ? resolveLakeDrainFeature(pack, featureId, riversById) || featureId : featureId;
-      addCandidate({burg, haven, portFeatureId: Number(portFeatureId), landFeature, preferred: Boolean(isHarbor), source: "coast", harbor});
-      continue;
-    }
-
-    if (!isNavigableRiverCell(cells, burg.cell)) continue;
-    const portFeatureId = resolveDrainFeature(pack, burg.cell, riversById);
-    if (!portFeatureId) continue;
-    addCandidate({burg, haven: null, portFeatureId: Number(portFeatureId), landFeature, preferred: true, source: "river", harbor: 0});
+    const candidate = createSettlementPortCandidate(grid, pack, burg, riversById, options);
+    if (candidate) addCandidate(candidate);
   }
 
   for (const candidates of featurePortCandidates.values()) {
@@ -489,6 +517,42 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, optio
     city.x = burg.x;
     city.y = burg.y;
   }
+}
+
+function createSettlementPortCandidate(grid, pack, burg, riversById, options = {}) {
+  const {cells, features} = pack;
+  const haven = cells.haven?.[burg.cell];
+  const landFeature = cells.f?.[burg.cell];
+  const harbor = cells.harbor?.[burg.cell] || 0;
+  if (haven) {
+    const featureId = cells.f?.[haven];
+    const feature = features?.[featureId];
+    if (!featureId || !feature) return null;
+    const isMulticell = (feature.cells || 0) > 1;
+    const isHarbor = (harbor && burg.capital) || harbor === 1;
+    const isFrozen = (grid.cells.temp?.[cells.g[burg.cell]] || 0) <= 0;
+    const isNavigableLake = feature.type !== "lake" || !NON_NAVIGABLE_LAKE_GROUPS.has(feature.group);
+    if (!isMulticell || !harbor || isFrozen || !isNavigableLake) return null;
+    if (shouldSkipSmallLakePortFeature(pack, feature, options)) return null;
+    const portFeatureId = feature.type === "lake" && feature.outlet ? resolveLakeDrainFeature(pack, featureId, riversById) || featureId : featureId;
+    return {burg, haven, portFeatureId: Number(portFeatureId), landFeature, preferred: Boolean(isHarbor), source: "coast", harbor};
+  }
+  if (!isNavigableRiverCell(cells, burg.cell)) return null;
+  const portFeatureId = resolveDrainFeature(pack, burg.cell, riversById);
+  return portFeatureId ? {burg, haven: null, portFeatureId: Number(portFeatureId), landFeature, preferred: true, source: "river", harbor: 0} : null;
+}
+
+function describeRelocatedPortCandidate(pack, candidate, riversById) {
+  const anchor = candidate.haven === null
+    ? shiftTowardsRiverBank(pack, candidate.burg.cell, riversById)
+    : getCloseToEdgePoint(pack, candidate.burg.cell, candidate.haven);
+  return {
+    port: candidate.portFeatureId,
+    source: candidate.source,
+    anchor,
+    routePackCell: candidate.haven === null ? candidate.burg.cell : candidate.haven,
+    reason: candidate.source === "river" ? "目标河道可通航" : "目标海岸可通航"
+  };
 }
 
 function shouldSkipSmallLakePortFeature(pack, feature, options = {}) {
@@ -789,9 +853,9 @@ function getBurgType(pack, cell, port) {
 function getCloseToEdgePoint(pack, landCell, waterCell) {
   const {cells, vertices} = pack;
   const [x0, y0] = cells.p[landCell];
-  const commonVertices = (cells.v[landCell] || []).filter(vertex => (vertices.c[vertex] || []).some(cell => cell === waterCell));
+  const commonVertices = (cells.v?.[landCell] || []).filter(vertex => (vertices?.c?.[vertex] || []).some(cell => cell === waterCell));
 
-  if (commonVertices.length >= 2) {
+  if (commonVertices.length >= 2 && vertices?.p) {
     const [x1, y1] = vertices.p[commonVertices[0]];
     const [x2, y2] = vertices.p[commonVertices[1]];
     const xEdge = (x1 + x2) / 2;

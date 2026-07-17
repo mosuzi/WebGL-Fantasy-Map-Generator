@@ -204,6 +204,50 @@ export function createEditRouteCommand(routeId, patch = {}, {label = "编辑路�
   };
 }
 
+export function planRouteRelocation(map, route, cityId, target) {
+  const movingFrom = Number(route?.from) === Number(cityId);
+  const movingTo = Number(route?.to) === Number(cityId);
+  if (!movingFrom && !movingTo) return {action: "unchanged", route: cloneRoute(route), reason: "路线不关联目标城市"};
+
+  const water = route.type === "searoute";
+  if (water && (!target.portFeature || !Number.isInteger(target.seaAnchor))) {
+    return {action: "delete", route: null, reason: "目标港口失效，关联海路将删除"};
+  }
+  if (water && Number(route.feature) > 0 && Number(route.feature) !== Number(target.portFeature)) {
+    return {action: "delete", route: null, reason: "目标港口改连其它水体，原海路将删除"};
+  }
+
+  const packCells = route.packCells || [];
+  const oppositeCityId = movingFrom ? Number(route.to) : Number(route.from);
+  const oppositeCity = oppositeCityId >= 0 ? findCity(map, oppositeCityId) : null;
+  const opposite = water
+    ? findSeaRouteAnchor(map.pack.cells, packCells, movingFrom)
+    : Number.isInteger(oppositeCity?.packCell) ? oppositeCity.packCell : movingFrom ? packCells.at(-1) : packCells[0];
+  const moving = water ? target.seaAnchor : target.packCell;
+  if (!Number.isInteger(moving) || !Number.isInteger(opposite) || moving === opposite) {
+    return {action: water ? "delete" : "failed", route: null, reason: "路线缺少可重寻的另一端"};
+  }
+
+  const start = movingFrom ? moving : opposite;
+  const end = movingFrom ? opposite : moving;
+  const path = findRelocationRoutePath(map.pack, start, end, {water});
+  if (path.length < 2) {
+    return {action: water ? "delete" : "failed", route: null, reason: water ? "海路无法在目标水体局部重寻，将删除" : "关联陆路或小径无法局部重寻"};
+  }
+  const relocated = buildRelocatedRoute(map, route, path, {
+    cityId,
+    point: target.point,
+    portFeature: target.portFeature,
+    movingFrom,
+    movingTo
+  });
+  return {action: "reroute", route: relocated, reason: "已规划局部重寻", cells: path.length};
+}
+
+export function refreshRouteDerivedAfterCityMove(map) {
+  refreshRouteDerived(map);
+}
+
 export function createSetRouteNoteCommand(routeId, body, {name = ""} = {}) {
   const normalizedRouteId = Number(routeId);
   const target = {kind: OBJECT_KIND.ROUTE, id: normalizedRouteId};
@@ -382,6 +426,43 @@ function findRoutePathThrough(pack, anchors, {water}) {
   return path;
 }
 
+function findRelocationRoutePath(pack, start, end, {water}) {
+  const size = pack.cells?.i?.length || pack.cells?.h?.length || 0;
+  const best = new Float64Array(size);
+  best.fill(Infinity);
+  const previous = new Int32Array(size);
+  previous.fill(-1);
+  const closed = new Uint8Array(size);
+  const queue = new MinPriorityQueue();
+  best[start] = 0;
+  queue.push(start, 0);
+  let visited = 0;
+  while (queue.length && visited < Math.min(size, 50000)) {
+    const current = queue.pop();
+    if (closed[current]) continue;
+    closed[current] = 1;
+    visited++;
+    if (current === end) return reconstructRoutePath(previous, end);
+    for (const neighbor of pack.cells.c?.[current] || []) {
+      if (closed[neighbor] || !relocationTerrainAllows(pack.cells, neighbor, {water, start, end})) continue;
+      const step = routeStepCost(pack.cells, current, neighbor, water);
+      if (!Number.isFinite(step)) continue;
+      const tentative = best[current] + step;
+      if (tentative >= best[neighbor]) continue;
+      best[neighbor] = tentative;
+      previous[neighbor] = current;
+      queue.push(neighbor, tentative + routeHeuristic(pack.cells, neighbor, end));
+    }
+  }
+  return [];
+}
+
+function relocationTerrainAllows(cells, cell, {water, start, end}) {
+  if (cell === start || cell === end) return true;
+  if (!water) return !isWaterCell(cells, cell);
+  return isWaterCell(cells, cell) || Boolean(cells.r?.[cell] && Number(cells.fl?.[cell] || 0) >= 100);
+}
+
 function routeStepCost(cells, current, next, water) {
   const distance = Math.max(0.001, Math.hypot((cells.p?.[next]?.[0] || 0) - (cells.p?.[current]?.[0] || 0), (cells.p?.[next]?.[1] || 0) - (cells.p?.[current]?.[1] || 0)));
   if (water) return distance * (1 + Math.max(0, -Number(cells.t?.[next] || 0)) * 0.15);
@@ -446,6 +527,26 @@ function buildEditedRoute(map, route, preview) {
   };
 }
 
+function buildRelocatedRoute(map, route, path, {point, portFeature, movingFrom, movingTo}) {
+  const cells = map.pack.cells;
+  const resources = countRouteResources(cells, path);
+  const points = path.map(cell => [...(cells.p?.[cell] || [0, 0])]);
+  if (movingFrom && point) points[0] = [...point];
+  if (movingTo && point) points[points.length - 1] = [...point];
+  return {
+    ...cloneRoute(route),
+    feature: route.type === "searoute" ? Number(portFeature) || Number(route.feature) || 0 : Number(cells.f?.[path[0]]) || 0,
+    state: majorityCellValue(cells, path, "state"),
+    province: route.type === "searoute" ? 0 : majorityCellValue(cells, path, "province"),
+    cells: path.map(cell => Number(cells.g?.[cell]) || 0),
+    packCells: [...path],
+    resourceCells: resources.resourceCells,
+    markerResourceCells: resources.markerResourceCells,
+    resourceGoodIds: resources.goodIds,
+    points
+  };
+}
+
 function countRouteResources(cells, path) {
   const goodIds = new Set();
   let resourceCells = 0;
@@ -472,6 +573,11 @@ function majorityCellValue(cells, path, field) {
 function cityAtPackCell(map, packCell) {
   const burgId = Number(map.pack?.cells?.burg?.[packCell]) || 0;
   return (map.settlements?.cities || []).find(city => !city?.removed && (Number(city.packCell) === packCell || Number(city.burgId) === burgId))?.id ?? -1;
+}
+
+function findSeaRouteAnchor(cells, packCells, movingFrom) {
+  const ordered = movingFrom ? [...packCells].reverse() : [...packCells];
+  return ordered.find(cell => isWaterCell(cells, cell) || Boolean(cells.r?.[cell] && Number(cells.fl?.[cell] || 0) >= 100));
 }
 
 function nextRouteId(map) {

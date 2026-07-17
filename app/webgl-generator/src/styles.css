@@ -9142,3 +9142,24 @@ input.ui-switch-native {
     min-height: 0;
   }
 }
+.city-move-preview {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border, #465466);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.city-move-preview[data-valid="true"] {
+  border-color: #4f8f70;
+}
+
+.city-move-preview-error {
+  color: #ef8f8f;
+}
+
+.city-move-preview-warning {
+  color: #e8bd6d;
+}

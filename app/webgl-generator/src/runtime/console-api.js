@@ -122,6 +122,8 @@ function createConsoleApi(documentRef, state, actions = {}) {
       cities: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.cities?.add, "edit.cities.add")(gridCell)),
         delete: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.delete, "edit.cities.delete")(cityId)),
+        inspectMove: (cityId, target) => apiCall(() => requireApiAction(actions.edit?.cities?.inspectMove, "edit.cities.inspectMove")(cityId, target)),
+        move: (cityId, target) => apiCall(() => requireApiAction(actions.edit?.cities?.move, "edit.cities.move")(cityId, target)),
         rename: (cityId, name) => apiCall(() => requireApiAction(actions.edit?.cities?.rename, "edit.cities.rename")(cityId, name)),
         setPopulation: (cityId, population) => apiCall(() => requireApiAction(actions.edit?.cities?.setPopulation, "edit.cities.setPopulation")(cityId, population)),
         syncOwner: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.syncOwner, "edit.cities.syncOwner")(cityId)),
@@ -407,6 +409,8 @@ function buildMethodMetadata() {
       "measurements.import": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "cities.add": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.delete": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
+      "cities.inspectMove": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "cities.move": {stable: "draft", mutates: "settlements-routes", undoable: true, async: false, requiresConfirm: false},
       "cities.rename": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.setPopulation": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.syncOwner": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},

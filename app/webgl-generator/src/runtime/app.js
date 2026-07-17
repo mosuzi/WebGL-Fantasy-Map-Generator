@@ -68,6 +68,8 @@ import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, norm
 import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
+import {createMoveCityCommand, inspectCityMove} from "./city-relocation.js";
+import {bindCityRelocationDrag} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
@@ -229,6 +231,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   PROVINCE_DELETE: "province:delete",
   CITY_ADD: "city:add",
   CITY_DELETE: "city:delete",
+  CITY_MOVE: "city:move",
   CULTURE_ASSIGN: "culture:assign",
   RELIGION_ASSIGN: "religion:assign",
   BIOME_ASSIGN: "biome:assign",
@@ -299,6 +302,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     cityEdit: {
       addMode: false,
       deleteMode: false,
+      moveMode: false,
+      moveCityId: null,
+      activeDrag: null,
+      dragController: null,
+      movePreview: null,
       lastCreatedCityId: null
     },
     markerEdit: {
@@ -1148,6 +1156,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE, "panel-toggle");
     },
+    onMoveMode: (active, cityId) => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, {cityId});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, "panel-toggle");
+    },
+    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, "panel-close"),
     onDeleteCity: cityId => {
       executeDeleteWithPreflight(state, documentRef, {
         kind: OBJECT_KIND.CITY,
@@ -2491,6 +2504,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       cities: {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
         delete: cityId => deleteCityViaApi(state, documentRef, cityId),
+        inspectMove: (cityId, target) => inspectCityMoveViaApi(state, cityId, target),
+        move: (cityId, target) => moveCityViaApi(state, documentRef, cityId, target),
         rename: (cityId, name) => renameCityViaApi(state, documentRef, cityId, name),
         setPopulation: (cityId, population) => setCityPopulationViaApi(state, documentRef, cityId, population),
         syncOwner: cityId => syncCityOwnerViaApi(state, documentRef, cityId),
@@ -3743,12 +3758,15 @@ function canExecuteKeyboardShortcut(state, item) {
   if (item.when === "map-ready") return Boolean(state.map);
   if (item.when === "undo") return !busy && Number(history.undo) > 0;
   if (item.when === "redo") return !busy && Number(history.redo) > 0;
-  if (item.when === "selection-or-editing") return Boolean(state.selection || state.editingObject);
+  if (item.when === "selection-or-editing") return Boolean(state.selection || state.editingObject || state.canvasToolModes.getActive()?.id === CANVAS_TOOL_MODE.CITY_MOVE);
   return true;
 }
 
 async function executeKeyboardShortcut(state, documentRef, item, runtimePanelHandlers) {
   const action = item.action || {};
+  if (item.id === "selection.cancel" && state.canvasToolModes.getActive()?.id === CANVAS_TOOL_MODE.CITY_MOVE) {
+    cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, "escape");
+  }
   if (action.type === "panel") {
     const handler = runtimePanelHandlers[action.handler];
     if (typeof handler !== "function") throw new Error(`面板 action 不存在：${action.handler}`);
@@ -6476,6 +6494,29 @@ function deleteCityViaApi(state, documentRef, cityId) {
   return editApiResult(state, result);
 }
 
+function inspectCityMoveViaApi(state, cityId, target) {
+  const id = normalizeApiInteger(cityId, "城市 ID");
+  return inspectCityMove(state.map, id, target);
+}
+
+function moveCityViaApi(state, documentRef, cityId, target) {
+  const id = normalizeApiInteger(cityId, "城市 ID");
+  const command = createMoveCityCommand(id, target);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: `城市 #${id} 已位于目标 cell。`,
+    status: `已移动城市 #${id}。`,
+    preparePanelRefresh: targetState => {
+      targetState.panels.city?.setSelectedCityId(id);
+      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id}});
+    },
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function addProvinceViaApi(state, documentRef, gridCell) {
   const targetGridCell = normalizeApiInteger(gridCell, "grid cell");
   const command = createAddProvinceAtCellCommand(targetGridCell);
@@ -8328,6 +8369,32 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
 
   registerCityOneShotMode(state, documentRef, register, CANVAS_TOOL_MODE.CITY_ADD, "addMode");
   registerCityOneShotMode(state, documentRef, register, CANVAS_TOOL_MODE.CITY_DELETE, "deleteMode");
+  register(CANVAS_TOOL_MODE.CITY_MOVE, "city-panel", {
+    onEnter: ({context}) => {
+      const cityId = Number(context.cityId);
+      if (!Number.isInteger(cityId) || cityId < 0) throw new Error("移动城市前必须选择城市");
+      state.cityEdit.addMode = false;
+      state.cityEdit.deleteMode = false;
+      state.cityEdit.moveMode = true;
+      state.cityEdit.moveCityId = cityId;
+      state.cityEdit.movePreview = null;
+      state.panels.city?.updateAddMode?.(false);
+      state.panels.city?.updateDeleteMode?.(false);
+      state.panels.city?.updateMoveMode?.(true, cityId);
+      state.panels.city?.updateMovePreview?.(null);
+      activateCanvasToolTheme(state, documentRef, "states");
+    },
+    onExit: () => {
+      state.cityEdit.dragController?.cancel("mode-exit", false);
+      if (state.cityEdit.activeDrag) releasePointer(state.renderer?.canvas, state.cityEdit.activeDrag.pointerId);
+      state.cityEdit.activeDrag = null;
+      state.cityEdit.moveMode = false;
+      state.cityEdit.moveCityId = null;
+      state.cityEdit.movePreview = null;
+      state.panels.city?.updateMoveMode?.(false, null);
+      state.panels.city?.updateMovePreview?.(null);
+    }
+  });
   registerSocialAssignmentMode(state, documentRef, register, "culture");
   registerSocialAssignmentMode(state, documentRef, register, "religion");
   register(CANVAS_TOOL_MODE.BIOME_ASSIGN, "biome-panel", {
@@ -8501,8 +8568,13 @@ function registerCityOneShotMode(state, documentRef, register, modeId, flag) {
     onEnter: () => {
       state.cityEdit.addMode = flag === "addMode";
       state.cityEdit.deleteMode = flag === "deleteMode";
+      state.cityEdit.moveMode = false;
+      state.cityEdit.moveCityId = null;
+      state.cityEdit.movePreview = null;
       state.panels.city?.updateAddMode?.(state.cityEdit.addMode);
       state.panels.city?.updateDeleteMode?.(state.cityEdit.deleteMode);
+      state.panels.city?.updateMoveMode?.(false, null);
+      state.panels.city?.updateMovePreview?.(null);
       activateCanvasToolTheme(state, documentRef, "states");
     },
     onExit: () => {
@@ -10052,7 +10124,41 @@ function bindMarketAssignmentEditing(canvas, state, documentRef) {
 }
 
 function bindCityEditing(canvas, state, documentRef) {
+  state.cityEdit.dragController = bindCityRelocationDrag(canvas, {
+    isActive: () => Boolean(state.cityEdit.moveMode && state.map),
+    isPrimaryPointerDown,
+    getCityId: event => getCityIdAtEvent(state, event),
+    getSelectedCityId: () => state.cityEdit.moveCityId,
+    getTarget: event => cityMoveTargetAtEvent(state, event),
+    inspect: (cityId, target) => inspectCityMove(state.map, cityId, target),
+    capturePointer: pointerId => capturePointer(canvas, pointerId),
+    releasePointer: pointerId => releasePointer(canvas, pointerId),
+    onDragChange: drag => {
+      state.cityEdit.activeDrag = drag;
+    },
+    onPreview: preview => {
+      state.cityEdit.movePreview = preview;
+      state.panels.city?.updateMovePreview?.(preview);
+    },
+    onInvalid: preview => setFileOperationStatus(documentRef, preview.summary),
+    onCancel: reason => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, reason),
+    onCommit: (cityId, target) => {
+      const command = createMoveCityCommand(cityId, target);
+      const execution = executeEditCommand(state, documentRef, command, {
+        context: {map: state.map},
+        status: `已移动城市 #${cityId}。`,
+        errorStatus: `城市 #${cityId} 移动失败。`,
+        preparePanelRefresh: targetState => {
+          targetState.panels.city?.setSelectedCityId(cityId);
+          targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: cityId}});
+        },
+        throwOnError: false
+      });
+      if (execution.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, {command: execution.command});
+    }
+  });
   canvas.addEventListener("pointerdown", event => {
+    if (state.cityEdit.moveMode && state.map) return;
     if (state.cityEdit.deleteMode && state.map) {
       if (!isPrimaryPointerDown(event)) return;
       event.preventDefault();
@@ -10092,6 +10198,11 @@ function bindCityEditing(canvas, state, documentRef) {
     if (!execution.executed) return;
     completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_ADD, {command: execution.command});
   }, true);
+}
+
+function cityMoveTargetAtEvent(state, event) {
+  const pick = state.renderer?.pickClientPoint?.(event.clientX, event.clientY) || {};
+  return {gridCell: pick.gridCell, packCell: pick.packCell};
 }
 
 function bindMarkerEditing(canvas, state, documentRef) {

@@ -27,6 +27,7 @@ const expectedModes = [
   "province:delete",
   "city:add",
   "city:delete",
+  "city:move",
   "culture:assign",
   "religion:assign",
   "biome:assign",
