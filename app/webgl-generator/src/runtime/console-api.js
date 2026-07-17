@@ -161,6 +161,10 @@ function createConsoleApi(documentRef, state, actions = {}) {
         inspectSuitability: (gridCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.biomes?.inspectSuitability, "edit.biomes.inspectSuitability")(gridCellIds, options)),
         applySuitability: (gridCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.biomes?.applySuitability, "edit.biomes.applySuitability")(gridCellIds, options))
       }),
+      population: Object.freeze({
+        inspectAdjustment: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.population?.inspectAdjustment, "edit.population.inspectAdjustment")(target, options)),
+        applyAdjustment: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.population?.applyAdjustment, "edit.population.applyAdjustment")(target, options))
+      }),
       economy: Object.freeze({
         inspectAssignment: (marketId, packCellIds) => apiCall(() => requireApiAction(actions.edit?.economy?.inspectAssignment, "edit.economy.inspectAssignment")(marketId, packCellIds)),
         assignCells: (marketId, packCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.assignCells, "edit.economy.assignCells")(marketId, packCellIds, options)),
@@ -451,6 +455,8 @@ function buildMethodMetadata() {
       "biomes.assignCells": {stable: "draft", mutates: "biomes-and-suitability", undoable: true, async: false, requiresConfirm: false},
       "biomes.inspectSuitability": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "biomes.applySuitability": {stable: "draft", mutates: "suitability-and-population", undoable: true, async: false, requiresConfirm: false},
+      "population.inspectAdjustment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "population.applyAdjustment": {stable: "draft", mutates: "population-and-economy-demand", undoable: true, async: false, requiresConfirm: false},
       "economy.inspectAssignment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "economy.assignCells": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
       "economy.rebuild": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},

@@ -13,7 +13,7 @@
 - 权威任务第 68 项对应 `brush-radius-cursor-preview.md`：统一连续圆形画笔的可见大小控制、世界半径命中契约和随相机投影的光标范围预览。
 - 权威任务第 69 项对应 `label-type-style-system.md`：按国家、省份、首都、普通城市和手工标签分别配置字体、字号、描边等样式，并在控制面板新增独立“样式”Tab。
 - 权威任务第 70 项对应 `quark-drive-save-feasibility.md`：第一方公开证据调研已完成，结论为“当前不建议集成”；当前唯一可交付路线是本地导出后由用户上传，客户端备份目录只作为不可观测的用户辅助降级。
-- 权威任务第 71～81 项统一登记于 `promoted-quasi-authoritative-tasks.md`，并分别复用 `ui-system-audit-gate.md`、`editor-and-stat-panel-inventory.md`、`height-terrain-template-programs.md`、`label-type-style-system.md` 与 `export-capability-matrix.md` 的领域证据；原 `Q-01～Q-11` 已全部按顺序转正，不再是候选池。第 73 项另有 `city-relocation-product-rules.md`；第 74 项另有 `state-merge-split-product-rules.md`；第 75 项另有 `coastline-feature-topology-product-rules.md`；第 76 项另有 `culture-religion-expansion-product-rules.md`；第 77 项另有 `suitability-brush-product-rules.md`，冻结直接设值、基础值 / override、陆水范围、人口承载和事务边界。
+- 权威任务第 71～81 项统一登记于 `promoted-quasi-authoritative-tasks.md`，并分别复用 `ui-system-audit-gate.md`、`editor-and-stat-panel-inventory.md`、`height-terrain-template-programs.md`、`label-type-style-system.md` 与 `export-capability-matrix.md` 的领域证据；原 `Q-01～Q-11` 已全部按顺序转正，不再是候选池。第 73 项另有 `city-relocation-product-rules.md`；第 74 项另有 `state-merge-split-product-rules.md`；第 75 项另有 `coastline-feature-topology-product-rules.md`；第 76 项另有 `culture-religion-expansion-product-rules.md`；第 77 项另有 `suitability-brush-product-rules.md`；第 78 项另有 `population-adjustment-product-rules.md`，冻结区域增减、非守恒总量、比例分摊、零人口和事务边界。
 
 以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
 
@@ -45,6 +45,7 @@
 - `coastline-feature-topology-product-rules.md`：权威任务第 75 项已确认的海岸雕刻、填岸、开 / 闭海峡、湖海开渠、整湖填平、派生 Feature split / merge、高度跨海平面、ID 与回滚兼容边界冻结稿。
 - `culture-religion-expansion-product-rules.md`：权威任务第 76 项的文化 / 宗教中心合法性、确定性回退、文化类型、宗教扩张范围、联动选择、继承修复和旧图默认值冻结稿。
 - `suitability-brush-product-rules.md`：权威任务第 77 项的直接设值范围、基础值 / 手工 override、陆水边界、人口承载、旧图回填和单 stroke 事务冻结稿。
+- `population-adjustment-product-rules.md`：权威任务第 78 项的单一区域人口增减、城乡比例分摊、零人口 / 上限拒绝、统计与经济摘要同步和单事务冻结稿。
 - `world-space-network-width.md`：权威任务第 66 项的道路 / 河流世界尺度宽度、缩放投影、亚像素表现、高亮与 picking 分层契约。
 - `visual-theme-preset-plan.md`：视觉主题与样式预设计划。
 - `console-extension-api-system-plan.md`：控制台与扩展 API 系统计划，记录 API 命名空间、返回格式、副作用边界和分阶段实施。

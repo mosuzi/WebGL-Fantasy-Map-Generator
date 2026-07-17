@@ -17,7 +17,7 @@ export const API_METHODS = Object.freeze({
     "cities.add", "cities.delete", "cities.inspectMove", "cities.move", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
     "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
     "states.add", "states.delete", "states.inspectMerge", "states.merge", "states.inspectSplit", "states.split", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
-    "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "biomes.assignCells", "biomes.inspectSuitability", "biomes.applySuitability", "diplomacy.setRelation",
+    "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "biomes.assignCells", "biomes.inspectSuitability", "biomes.applySuitability", "population.inspectAdjustment", "population.applyAdjustment", "diplomacy.setRelation",
     "economy.inspectAssignment", "economy.assignCells", "economy.rebuild",
     "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
     "zones.create", "zones.delete", "zones.setStyle",

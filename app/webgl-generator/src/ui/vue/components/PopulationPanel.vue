@@ -25,14 +25,46 @@
   />
 
   <UiDetailGrid class-name="population-panel-details" empty-text="未选中人口统计" :rows="detailRows" />
+
+  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="populationActions">
+    <template #adjustment>
+      <div class="population-adjustment-editor" aria-label="区域人口增减">
+        <ElForm label-position="top" size="small">
+          <ElFormItem label="人口增减量">
+            <ElInputNumber
+              :model-value="state.adjustmentDelta"
+              :min="-1000000"
+              :max="1000000"
+              :step="1"
+              controls-position="right"
+              @update:model-value="callbacks.onAdjustmentDelta"
+            />
+          </ElFormItem>
+        </ElForm>
+        <div class="population-adjustment-actions">
+          <UiButton variant="secondary" @click="callbacks.onInspectAdjustment">预检</UiButton>
+          <UiButton v-if="state.adjustmentInspection?.valid" variant="primary" @click="callbacks.onApplyAdjustment">应用单次调整</UiButton>
+        </div>
+        <UiStateBanner
+          v-if="adjustmentFeedback"
+          :kind="adjustmentFeedback.kind"
+          :title="adjustmentFeedback.title"
+          :message="adjustmentFeedback.message"
+        />
+      </div>
+    </template>
+  </UiActionDock>
 </template>
 
 <script setup>
-import {computed} from "vue";
+import {computed, ref} from "vue";
+import UiActionDock from "./base/UiActionDock.vue";
+import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -73,6 +105,10 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const activeAction = ref(null);
+const populationActions = Object.freeze([
+  {key: "adjustment", label: "区域人口增减", icon: "±", panelWidth: 360, panelHeight: 310}
+]);
 const metrics = computed(() => {
   props.state.version;
   return buildPopulationMetrics(props.state.map);
@@ -82,6 +118,27 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedPopulationId));
+const adjustmentFeedback = computed(() => {
+  props.state.version;
+  const inspection = props.state.adjustmentInspection;
+  if (inspection) {
+    if (!inspection.valid) return {kind: "error", title: "预检未通过", message: inspection.reason || "人口调整参数无效"};
+    return {
+      kind: "preview",
+      title: `${inspection.targetName}：${signedPopulation(inspection.delta)}`,
+      message: `总人口 ${formatPopulationValue(inspection.totalBefore)} → ${formatPopulationValue(inspection.totalAfter)}；乡村 ${formatPopulationValue(inspection.ruralAfter)}，城市 ${formatPopulationValue(inspection.urbanAfter)}。`
+    };
+  }
+  const result = props.state.adjustmentResult;
+  if (!result) return null;
+  if (result.error) return {kind: "error", title: "调整失败", message: result.error.message || "人口调整事务没有提交"};
+  if (!result.executed) return {kind: "empty", title: "人口没有变化", message: "本次调整未形成有效变更。"};
+  return {
+    kind: "selected",
+    title: "人口调整已提交",
+    message: `已更新 ${formatNumber(result.result?.packCells || 0)} 个人口 cells 和 ${formatNumber(result.result?.cities || 0)} 个城市，可通过历史撤销。`
+  };
+});
 
 const summaryMetrics = computed(() => [
   {label: "总人口", value: formatPopulationValue(metrics.value.population)},
@@ -264,5 +321,10 @@ function formatDensity(value) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function signedPopulation(value) {
+  const number = Number(value) || 0;
+  return `${number > 0 ? "+" : ""}${formatPopulationValue(number)}`;
 }
 </script>

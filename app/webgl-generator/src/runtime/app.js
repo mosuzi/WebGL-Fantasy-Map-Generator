@@ -74,6 +74,7 @@ import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDele
 import {createApplySocialExpansionCommand, inspectSocialExpansion, normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
 import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, normalizeSuitabilityMap, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
+import {buildPopulationAdjustmentPlan, createApplyPopulationAdjustmentCommand, inspectPopulationAdjustment} from "./population-adjustment-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
@@ -387,7 +388,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onUndo: () => executeHistoryCommand(state, documentRef, "undo"),
     onRedo: () => executeHistoryCommand(state, documentRef, "redo")
   });
-  state.panels.population = createPopulationPanel(documentRef, panelManager);
+  state.panels.population = createPopulationPanel(documentRef, panelManager, {
+    onInspectAdjustment: (target, editOptions = {}) => runtimeActions.edit.population.inspectAdjustment(target, editOptions),
+    onApplyAdjustment: (target, editOptions = {}) => runtimeActions.edit.population.applyAdjustment(target, editOptions),
+    onUndo: () => executeHistoryCommand(state, documentRef, "undo"),
+    onRedo: () => executeHistoryCommand(state, documentRef, "redo")
+  });
   state.panels.emblem = createEmblemPanel(documentRef, panelManager);
   state.panels.feature = createFeaturePanel(documentRef, panelManager, {
     onTopologyDraftChange: draft => {
@@ -2588,6 +2594,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
         assignCells: (biomeId, gridCellIds, editOptions = {}) => assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, editOptions),
         inspectSuitability: (gridCellIds, editOptions = {}) => inspectSuitabilityViaApi(state, gridCellIds, editOptions),
         applySuitability: (gridCellIds, editOptions = {}) => applySuitabilityViaApi(state, documentRef, gridCellIds, editOptions)
+      },
+      population: {
+        inspectAdjustment: (target, editOptions = {}) => inspectPopulationAdjustmentViaApi(state, target, editOptions),
+        applyAdjustment: (target, editOptions = {}) => applyPopulationAdjustmentViaApi(state, documentRef, target, editOptions)
       },
       economy: {
         inspectAssignment: (marketId, packCellIds) => inspectMarketAssignmentViaApi(state, marketId, packCellIds),
@@ -7184,6 +7194,34 @@ export function applySuitabilityViaApi(state, documentRef, gridCellIds, options 
   state.suitabilityEdit.lastAffected = result.executed ? changes.length : 0;
   state.suitabilityEdit.preview = null;
   (runtimeUi.updateBiomePanel || updateBiomePanel)(state);
+  (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
+  (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  return editApiResult(state, result);
+}
+
+export function inspectPopulationAdjustmentViaApi(state, target, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("人口调整预检参数必须是对象");
+  return inspectPopulationAdjustment(state.map, target, options);
+}
+
+export function applyPopulationAdjustmentViaApi(state, documentRef, target, options = {}, runtimeUi = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("人口调整参数必须是对象");
+  const plan = buildPopulationAdjustmentPlan(state.map, target, options);
+  const command = createApplyPopulationAdjustmentCommand(plan, {label: options.label || "区域人口增减"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    ...(runtimeUi.refresh ? {refresh: runtimeUi.refresh} : {}),
+    ...(runtimeUi.refreshPanels !== undefined ? {refreshPanels: runtimeUi.refreshPanels} : {}),
+    status: executed => {
+      const summary = executed.getResult?.();
+      return `已调整 ${summary?.packCells || 0} 个人口 cells 和 ${summary?.cities || 0} 个城市。`;
+    },
+    noopStatus: "区域人口没有变化。",
+    throwOnError: false
+  });
+  (runtimeUi.updatePopulationPanel || updatePopulationPanel)(state);
   (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
   (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
   return editApiResult(state, result);

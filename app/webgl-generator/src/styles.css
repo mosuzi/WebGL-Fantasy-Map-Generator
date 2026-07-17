@@ -8993,6 +8993,21 @@ input.ui-switch-native {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
 }
 
+.population-adjustment-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.population-adjustment-editor .el-input-number {
+  width: 100%;
+}
+
+.population-adjustment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .state-panel-details,
 .province-panel-details,
 .route-panel-details,

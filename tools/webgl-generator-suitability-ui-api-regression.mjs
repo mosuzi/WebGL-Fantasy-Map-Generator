@@ -12,8 +12,8 @@ for (const method of ["biomes.inspectSuitability", "biomes.applySuitability"]) {
   assert(API_METHODS.edit.includes(method), `稳定 API 目录缺少 ${method}`);
   assert(!CONFIRM_REQUIRED_METHODS.includes(`edit.${method}`), `${method} 不应要求显式确认`);
 }
-assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 202);
-assert.equal(API_METHODS.edit.length, 104);
+assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 204);
+assert.equal(API_METHODS.edit.length, 106);
 
 const [appSource, consoleSource, controllerSource, panelSource, cursorSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
@@ -40,7 +40,7 @@ assert.match(appSource, /pointerup[\s\S]*?finishSuitabilityStroke\(state, docume
 assert.match(appSource, /pointercancel[\s\S]*?rollbackCanvasToolStroke\(state, "suitability"\)/, "适居度 pointercancel 没有回滚预览");
 
 const dynamic = await testDynamicRuntime();
-console.log(JSON.stringify({ok: true, methodCounts: {total: 202, edit: 104}, dynamic}, null, 2));
+console.log(JSON.stringify({ok: true, methodCounts: {total: 204, edit: 106}, dynamic}, null, 2));
 
 async function testDynamicRuntime() {
   const server = await createViteServer({

@@ -206,6 +206,15 @@ export function rebuildEconomyFromMarketAssignments(pack, options = {}) {
   return {goods: pack.goods, markets: pack.markets, deals: pack.deals, metadata};
 }
 
+export function refreshPopulationDemandDiagnostics(pack, economy = null) {
+  const markets = pack?.markets || economy?.markets || [];
+  const goods = (pack?.goods || economy?.goods || []).filter(Boolean);
+  if (!markets.filter(Boolean).length || !goods.length) return null;
+  const demand = applyMarketDemandDiagnostics(pack, markets, goods);
+  if (economy?.metadata) economy.metadata.demand = demand;
+  return demand;
+}
+
 function createEconomyMetadata(pack, {goods, aliveBurgs, states, resourcePopulation, resourceTrade, demand, pricePropagation, deals, markerEconomy}) {
   return {
     goods: goods.length,

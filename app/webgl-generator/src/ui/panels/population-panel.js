@@ -19,7 +19,7 @@ const POPULATION_LIST_DEFAULTS = Object.freeze({
   sortDir: "desc"
 });
 
-export function createPopulationPanel(documentRef, manager) {
+export function createPopulationPanel(documentRef, manager, callbacks = {}) {
   const listPreferences = readPanelListPreferences(documentRef, POPULATION_PANEL_ID, POPULATION_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
@@ -30,6 +30,9 @@ export function createPopulationPanel(documentRef, manager) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedPopulationId: null,
+    adjustmentDelta: 10,
+    adjustmentInspection: null,
+    adjustmentResult: null,
     version: 0
   });
   const panelCallbacks = {
@@ -61,8 +64,45 @@ export function createPopulationPanel(documentRef, manager) {
     },
     onSelect: row => {
       panelState.selectedPopulationId = row.id;
-    }
+      clearAdjustmentFeedback();
+    },
+    onAdjustmentDelta: value => {
+      panelState.adjustmentDelta = Number(value);
+      clearAdjustmentFeedback();
+    },
+    onInspectAdjustment: () => {
+      const target = populationTarget(panelState.selectedPopulationId);
+      if (!target) return null;
+      try {
+        panelState.adjustmentInspection = callbacks.onInspectAdjustment?.(target, {delta: panelState.adjustmentDelta}) || null;
+        panelState.adjustmentResult = null;
+      } catch (error) {
+        panelState.adjustmentInspection = {valid: false, code: "runtime-error", reason: error?.message || String(error)};
+      }
+      panelState.version++;
+      return panelState.adjustmentInspection;
+    },
+    onApplyAdjustment: () => {
+      const target = populationTarget(panelState.selectedPopulationId);
+      if (!target || !panelState.adjustmentInspection?.valid) return null;
+      try {
+        panelState.adjustmentResult = callbacks.onApplyAdjustment?.(target, {delta: panelState.adjustmentDelta}) || null;
+        panelState.adjustmentInspection = null;
+      } catch (error) {
+        panelState.adjustmentResult = {executed: false, error: {message: error?.message || String(error)}};
+      }
+      panelState.version++;
+      return panelState.adjustmentResult;
+    },
+    onUndo: () => callbacks.onUndo?.(),
+    onRedo: () => callbacks.onRedo?.()
   };
+
+  function clearAdjustmentFeedback() {
+    panelState.adjustmentInspection = null;
+    panelState.adjustmentResult = null;
+    panelState.version++;
+  }
 
   const record = manager.registerPanel(POPULATION_PANEL_ID, {
     title: "人口统计",
@@ -70,6 +110,11 @@ export function createPopulationPanel(documentRef, manager) {
     top: 136,
     width: 620,
     maxWidth: 760,
+    historyActions: {
+      getHistory: () => panelState.history,
+      onUndo: panelCallbacks.onUndo,
+      onRedo: panelCallbacks.onRedo
+    },
     onClose: () => {
       panelState.open = false;
     }
@@ -116,6 +161,14 @@ export function createPopulationPanel(documentRef, manager) {
 
 function populationRowExists(map, rowId) {
   return Boolean(rowId && populationRowIds(map).has(rowId));
+}
+
+function populationTarget(rowId) {
+  if (typeof rowId !== "string") return null;
+  const [scope, rawId] = rowId.split(":");
+  const id = Number(rawId);
+  if (!["state", "province", "culture", "religion"].includes(scope) || !Number.isInteger(id) || id <= 0) return null;
+  return {scope, id};
 }
 
 function firstPopulationRowId(map) {

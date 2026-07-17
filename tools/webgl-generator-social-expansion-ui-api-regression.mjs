@@ -13,8 +13,8 @@ import {SelectionStore} from "../app/webgl-generator/src/runtime/selection-store
 for (const method of ["cultures.inspectExpansion", "cultures.applyExpansion", "religions.inspectExpansion", "religions.applyExpansion"]) {
   assert(API_METHODS.edit.includes(method), `稳定 API 目录缺少 ${method}`);
 }
-assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 202);
-assert.equal(API_METHODS.edit.length, 104);
+assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 204);
+assert.equal(API_METHODS.edit.length, 106);
 assert(!CONFIRM_REQUIRED_METHODS.includes("edit.cultures.inspectExpansion"), "文化扩张只读预检不应要求确认");
 assert(!CONFIRM_REQUIRED_METHODS.includes("edit.religions.inspectExpansion"), "宗教扩张只读预检不应要求确认");
 
@@ -44,7 +44,7 @@ assert(culturePanel.includes("同事务联动宗教（默认关闭）"), "文化
 assert(religionPanel.includes("Folk 固定为文化范围"), "宗教面板缺少 Folk 固定规则提示");
 
 const dynamic = await testDynamicRuntime();
-console.log(JSON.stringify({ok: true, methodCounts: {total: 202, edit: 104}, dynamic}, null, 2));
+console.log(JSON.stringify({ok: true, methodCounts: {total: 204, edit: 106}, dynamic}, null, 2));
 
 async function testDynamicRuntime() {
   const server = await createViteServer({
