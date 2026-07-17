@@ -71,6 +71,9 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onRename: (row, name) => callbacks.onRename?.(labelObject(row), name),
     onNoteChange: (row, body) => callbacks.onNoteChange?.(labelObject(row), body),
+    onPriorityChange: (row, priority) => callbacks.onPriorityChange?.(labelObject(row), priority),
+    onPriorityReset: row => callbacks.onPriorityReset?.(labelObject(row)),
+    onPositionToggle: row => callbacks.onPositionToggle?.(labelObject(row)),
     onAdd: () => callbacks.onAdd?.(),
     onDelete: row => callbacks.onDelete?.(labelObject(row)),
     onRestore: row => callbacks.onRestore?.(labelObject(row)),
@@ -152,7 +155,9 @@ function labelObject(row) {
     targetKind: row.targetKind,
     targetId: row.targetId,
     targetName: row.name,
-    rank: row.rank
+    rank: row.rank,
+    x: row.x,
+    y: row.y
   };
 }
 

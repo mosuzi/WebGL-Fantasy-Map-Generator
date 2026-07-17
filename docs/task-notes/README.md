@@ -12,6 +12,7 @@
 - 权威任务第 67 项对应 `panel-manual-positioning.md`：用户拖动后的主面板位置优先于左右停靠、工具栏避让和对象详情配对，自动布局只做首次落点与越界兜底。
 - 权威任务第 68 项对应 `brush-radius-cursor-preview.md`：统一连续圆形画笔的可见大小控制、世界半径命中契约和随相机投影的光标范围预览。
 - 权威任务第 69 项对应 `label-type-style-system.md`：按国家、省份、首都、普通城市和手工标签分别配置字体、字号、描边等样式，并在控制面板新增独立“样式”Tab。
+- 权威任务第 80 项对应 `label-display-priority-and-position-lock.md`：在同一标签类型 registry 上增加逐标签优先级、世界锚点锁定、确定性碰撞、完整地图和 PNG 一致性。
 - 权威任务第 70 项对应 `quark-drive-save-feasibility.md`：第一方公开证据调研已完成，结论为“当前不建议集成”；当前唯一可交付路线是本地导出后由用户上传，客户端备份目录只作为不可观测的用户辅助降级。
 - 权威任务第 71～81 项统一登记于 `promoted-quasi-authoritative-tasks.md`，并分别复用 `ui-system-audit-gate.md`、`editor-and-stat-panel-inventory.md`、`height-terrain-template-programs.md`、`label-type-style-system.md` 与 `export-capability-matrix.md` 的领域证据；原 `Q-01～Q-11` 已全部按顺序转正，不再是候选池。第 73 项另有 `city-relocation-product-rules.md`；第 74 项另有 `state-merge-split-product-rules.md`；第 75 项另有 `coastline-feature-topology-product-rules.md`；第 76 项另有 `culture-religion-expansion-product-rules.md`；第 77 项另有 `suitability-brush-product-rules.md`；第 78 项另有 `population-adjustment-product-rules.md`，冻结区域增减、非守恒总量、比例分摊、零人口和事务边界。
 
@@ -38,6 +39,7 @@
 - `panel-manual-positioning.md`：权威任务第 67 项的手动 / 自动位置状态、持久化兼容、共存重排和浏览器验收契约。
 - `brush-radius-cursor-preview.md`：权威任务第 68 项的画笔半径控制、共享光标轮廓、非圆形工具排除和浏览器验收契约。
 - `label-type-style-system.md`：权威任务第 69 项的标签类型 registry、样式字段、主题继承、省份标签、持久化和 PNG 一致性契约。
+- `label-display-priority-and-position-lock.md`：权威任务第 80 项的逐标签布局覆盖、优先级、世界锚点、碰撞 / LOD、旧图兼容与 PNG 契约。
 - `quark-drive-save-feasibility.md`：权威任务第 70 项的正式调研报告，记录第一方证据、公开契约空白、四路线数据流、“当前不建议集成”结论、风险、12 个书面问题和未来最小验收草案。
 - `promoted-quasi-authoritative-tasks.md`：原准权威 `Q-01～Q-11` 转为第 71～81 项的编号映射、依赖、产品规则门禁和排除边界。
 - `city-relocation-product-rules.md`：权威任务第 73 项已确认的归属跟随、港口失效、首都 / 省会限制、路线局部重寻和事务边界冻结稿。

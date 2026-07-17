@@ -48,6 +48,7 @@ import {compositeConnectorPoints, pickCompositeConnector} from "./composite-conn
 import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {estimateLabelTextBox, labelStyleTypeForTarget, resolveLabelStyle} from "../runtime/label-style-registry.js";
+import {hasManualLabelPriorities, resolveLabelLayout, sortLabelItemsByPriority} from "../runtime/label-layout-registry.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
@@ -477,6 +478,23 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     this.buildLabels(this.map);
     this.updateLabels();
+  }
+
+  getLabelLayoutSnapshot(targetKind, targetId) {
+    const id = Number(targetId);
+    const item = this.labelItems.find(label => label.targetKind === targetKind && label.targetId === id);
+    if (!item) return null;
+    return {
+      targetKind: item.targetKind,
+      targetId: item.targetId,
+      x: item.x,
+      y: item.y,
+      priority: item.layout.priority,
+      manualPriority: item.layout.manualPriority,
+      locked: item.layout.locked,
+      minScale: item.minScale,
+      visible: item.visible
+    };
   }
 
   refreshTerrainCaches({draw = true} = {}) {
@@ -1332,7 +1350,7 @@ export class PlaceholderMapRenderer {
     this.overlay.replaceChildren();
     const documentRef = this.overlay.ownerDocument || document;
     const fragment = documentRef.createDocumentFragment();
-    this.labelItems = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
+    const labels = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
       const node = documentRef.createElement("span");
       node.className = labelClassName(item);
       node.textContent = item.text;
@@ -1340,11 +1358,22 @@ export class PlaceholderMapRenderer {
       node.dataset.labelTargetId = String(item.targetId);
       const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
       const resolvedStyle = resolveLabelStyle(map, styleType, this.visualTheme);
+      const layout = resolveLabelLayout(map, item.targetKind, item.targetId, item.city, {
+        x: item.x,
+        y: item.y,
+        priority: item.priority,
+        minScale: item.minScale
+      });
       node.dataset.labelStyleType = styleType;
+      node.dataset.labelPriority = String(layout.priority);
+      node.dataset.labelPriorityMode = layout.manualPriority ? "manual" : "auto";
+      node.dataset.labelPositionLocked = String(layout.locked);
+      node.classList.toggle("position-locked", layout.locked);
       applyResolvedLabelStyle(node, resolvedStyle);
       fragment.append(node);
-      return {...item, styleType, resolvedStyle, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, box: null, visible: false};
+      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, box: null, visible: false};
     });
+    this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
     this.cityIconItems = getCityIconItems(map).map(item => {
       const node = documentRef.createElement("span");
       node.className = cityIconClassName(item);
@@ -1423,6 +1452,7 @@ export class PlaceholderMapRenderer {
     const occupied = [];
     const occupiedStates = [];
     const occupiedProvinces = [];
+    const occupiedByPriority = [];
     let visible = 0;
     let visibleCities = 0;
     let visibleStates = 0;
@@ -1432,6 +1462,7 @@ export class PlaceholderMapRenderer {
     const padding = labelPaddingForScale(scale);
     const stateLabelScale = stateLabelScaleBehavior(scale);
     const labelItems = this.labelItems;
+    const priorityLayout = hasManualLabelPriorities(this.map);
 
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
@@ -1452,7 +1483,9 @@ export class PlaceholderMapRenderer {
       const box = labelBoxForItem(item, screen);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const canShow = onScreen;
-      const blocked = canShow && (stateLabel
+      const blocked = canShow && (priorityLayout
+        ? boxesOverlapAny(occupiedByPriority, box, padding)
+        : stateLabel
         ? boxesOverlapAny(occupiedStates, box, padding)
         : provinceLabel
           ? boxesOverlapAny(occupiedStates, box, padding) || boxesOverlapAny(occupiedProvinces, box, padding)
@@ -1468,6 +1501,7 @@ export class PlaceholderMapRenderer {
       if (stateLabel) occupiedStates.push(box);
       else if (provinceLabel) occupiedProvinces.push(box);
       else occupied.push(box);
+      if (priorityLayout) occupiedByPriority.push(box);
       visible++;
       if (item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
       if (item.targetKind === LABEL_TARGET_KIND.STATE) visibleStates++;
@@ -2038,11 +2072,21 @@ function expandBounds(bounds, padding) {
 
 function getLabelCities(map, labelOptions = {}) {
   const maxCityLabels = normalizeMaxCityLabels(labelOptions.maxCityLabels, 5000);
-  return [...map.settlements.cities]
+  const candidates = [...map.settlements.cities]
     .filter(city => city && Number.isInteger(city.id))
     .filter(city => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.CITY, city.id))
-    .map(city => ({city, priority: scoreCityLabel(city)}))
-    .sort((a, b) => b.priority - a.priority)
+    .map(city => {
+      const priority = scoreCityLabel(city);
+      return {
+        city,
+        priority,
+        layout: resolveLabelLayout(map, LABEL_TARGET_KIND.CITY, city.id, city, {x: city.x, y: city.y, priority})
+      };
+    });
+  const ranked = hasManualLabelPriorities(map)
+    ? sortLabelItemsByPriority(candidates)
+    : candidates.sort((a, b) => b.priority - a.priority);
+  return ranked
     .slice(0, maxCityLabels)
     .map((item, rank) => ({
       targetKind: LABEL_TARGET_KIND.CITY,

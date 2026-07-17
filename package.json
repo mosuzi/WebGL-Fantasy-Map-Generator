@@ -106,6 +106,7 @@
     "regress:population-adjustment-ui-api": "node --no-warnings ./tools/webgl-generator-population-adjustment-ui-api-regression.mjs",
     "regress:visual-themes": "node --no-warnings ./tools/webgl-generator-visual-theme-regression.mjs",
     "regress:label-styles": "node --no-warnings ./tools/webgl-generator-label-style-regression.mjs",
+    "regress:label-layout": "node --no-warnings ./tools/webgl-generator-label-layout-regression.mjs",
     "regress:state-lifecycle": "node --no-warnings ./tools/webgl-generator-state-lifecycle-regression.mjs",
     "regress:state-topology": "node --no-warnings ./tools/webgl-generator-state-topology-regression.mjs",
     "regress:state-topology-ui-api": "node --no-warnings ./tools/webgl-generator-state-topology-ui-api-regression.mjs",

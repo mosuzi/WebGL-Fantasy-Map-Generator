@@ -85,6 +85,8 @@ import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstr
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "./label-style-edit-commands.js";
 import {LABEL_STYLE_TYPES, readLabelStyleOverride, resolveLabelStyle} from "./label-style-registry.js";
+import {createPatchLabelLayoutCommand} from "./label-layout-edit-commands.js";
+import {readLabelLayoutOverride} from "./label-layout-registry.js";
 import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {measurementHighlightObject, measurementShapeClass} from "./measurement-highlights.js";
@@ -1789,6 +1791,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
+    onPriorityChange: (object, priority) => applyLabelLayoutPatch(state, documentRef, object, {priority}),
+    onPriorityReset: object => applyLabelLayoutPatch(state, documentRef, object, {priority: null}),
+    onPositionToggle: object => toggleLabelPositionLock(state, documentRef, object),
     onAdd: () => {
       const point = getNewLabelPoint(state);
       const context = {map: state.map};
@@ -7675,6 +7680,39 @@ function setReligionParentViaApi(state, documentRef, religionId, parentId) {
   return editApiResult(state, result);
 }
 
+function applyLabelLayoutPatch(state, documentRef, object, patch) {
+  if (!state.map) return null;
+  const command = createPatchLabelLayoutCommand(object, patch);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "标签布局没有变化。",
+    status: `已更新标签 ${object.targetKind} #${object.targetId ?? object.id} 的显示布局。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return result;
+}
+
+function toggleLabelPositionLock(state, documentRef, object) {
+  const targetId = Number(object?.targetId ?? object?.id);
+  const targetKind = object?.targetKind;
+  const override = readLabelLayoutOverride(state.map, targetKind, targetId);
+  if (override.position) return applyLabelLayoutPatch(state, documentRef, object, {position: null});
+  const rendered = state.renderer?.getLabelLayoutSnapshot?.(targetKind, targetId);
+  const x = Number(rendered?.x ?? object?.x);
+  const y = Number(rendered?.y ?? object?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    setFileOperationStatus(documentRef, `标签 ${targetKind} #${targetId} 当前没有可锁定的世界锚点。`);
+    return null;
+  }
+  const result = applyLabelLayoutPatch(state, documentRef, object, {position: {x, y}});
+  if (result?.executed && targetKind === LABEL_TARGET_KIND.CUSTOM && state.pendingCustomLabelPlacement?.labelId === targetId) {
+    state.pendingCustomLabelPlacement = null;
+  }
+  return result;
+}
+
 function getRuntimeLabelStyles(state) {
   if (!state.map) return {version: 1, overrides: {}, styles: {}};
   const store = ensureLabelStore(state.map).styles;
@@ -10860,6 +10898,11 @@ function bindCustomLabelDrag(state, documentRef) {
       state.pendingCustomLabelPlacement = null;
       return;
     }
+    if (readLabelLayoutOverride(state.map, LABEL_TARGET_KIND.CUSTOM, label.id).position) {
+      state.pendingCustomLabelPlacement = null;
+      setFileOperationStatus(documentRef, `手工标签 #${label.id} 已锁定位置；已结束待放置状态。`);
+      return;
+    }
     event.preventDefault();
     event.stopImmediatePropagation();
     const point = state.renderer.screenToWorld(event.clientX, event.clientY);
@@ -10876,6 +10919,12 @@ function bindCustomLabelDrag(state, documentRef) {
     const node = event.target?.closest?.(".custom-label");
     const labelId = Number(node?.dataset?.labelTargetId);
     if (!node || !Number.isInteger(labelId)) return;
+    if (node.dataset.labelPositionLocked === "true") {
+      event.preventDefault();
+      event.stopPropagation();
+      setFileOperationStatus(documentRef, `手工标签 #${labelId} 已锁定位置；请先在标签管理中解锁。`);
+      return;
+    }
     const label = findCustomLabel(state.map, labelId);
     if (!label) return;
 

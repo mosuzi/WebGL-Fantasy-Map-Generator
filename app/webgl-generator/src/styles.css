@@ -6596,6 +6596,35 @@ input.ui-switch-native {
   margin-top: 8px;
 }
 
+.label-priority-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 8px;
+  align-items: end;
+  margin-top: 8px;
+}
+
+.label-priority-editor label {
+  display: grid;
+  gap: 5px;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
+.label-layout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.label-layout-help {
+  margin: 8px 0 0;
+  color: #9eacb4;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .city-visual-editor label {
   display: grid;
   gap: 5px;

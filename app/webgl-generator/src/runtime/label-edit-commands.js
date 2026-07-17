@@ -1,5 +1,6 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {ensureLabelStyleStore} from "./label-style-registry.js";
+import {deleteLabelLayoutOverride, ensureLabelLayoutStore, readLabelLayoutOverride, restoreLabelLayoutOverride} from "./label-layout-registry.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {newObjectAffected, objectAffected} from "./edit-command-effects.js";
 
@@ -81,6 +82,7 @@ export function createMoveCustomLabelCommand(labelId, nextPoint, {previousPoint 
     apply(context) {
       const label = findCustomLabel(context.map, id);
       if (!label) throw new Error(`找不到手工标签 #${id}`);
+      if (readLabelLayoutOverride(context.map, LABEL_TARGET_KIND.CUSTOM, id).position) throw new Error(`手工标签 #${id} 已锁定位置`);
       previous ??= {x: label.x, y: label.y};
       label.x = next.x;
       label.y = next.y;
@@ -95,6 +97,7 @@ export function createMoveCustomLabelCommand(labelId, nextPoint, {previousPoint 
       if (!Number.isInteger(id) || !Number.isFinite(next.x) || !Number.isFinite(next.y)) return true;
       const label = findCustomLabel(context.map, id);
       if (!label) return true;
+      if (readLabelLayoutOverride(context.map, LABEL_TARGET_KIND.CUSTOM, id).position) return true;
       const base = previous || label;
       return samePoint(base, next);
     }
@@ -188,8 +191,9 @@ export function createDeleteLabelCommand(label) {
       if (target.targetKind === LABEL_TARGET_KIND.CUSTOM) {
         const index = store.custom.findIndex(item => item.id === target.id);
         if (index < 0) throw new Error(`找不到手工标签 #${target.id}`);
-        previous ??= {index, label: {...store.custom[index]}};
+        previous ??= {index, label: {...store.custom[index]}, layout: readLabelLayoutOverride(context.map, target.targetKind, target.id)};
         store.custom.splice(index, 1);
+        deleteLabelLayoutOverride(context.map, target.targetKind, target.id);
         updateLabelMetadata(store);
         return;
       }
@@ -204,6 +208,7 @@ export function createDeleteLabelCommand(label) {
       if (target.targetKind === LABEL_TARGET_KIND.CUSTOM) {
         if (!previous?.label) throw new Error(`缺少手工标签 #${target.id} 快照`);
         store.custom.splice(Math.min(previous.index, store.custom.length), 0, {...previous.label});
+        restoreLabelLayoutOverride(context.map, target.targetKind, target.id, previous.layout);
         updateLabelMetadata(store);
         return;
       }
@@ -256,6 +261,7 @@ export function ensureLabelStore(map) {
   if (!Array.isArray(map.labels.hidden[LABEL_TARGET_KIND.STATE])) map.labels.hidden[LABEL_TARGET_KIND.STATE] = [];
   if (!Array.isArray(map.labels.hidden[LABEL_TARGET_KIND.PROVINCE])) map.labels.hidden[LABEL_TARGET_KIND.PROVINCE] = [];
   ensureLabelStyleStore(map);
+  ensureLabelLayoutStore(map);
   map.labels.metadata = {
     custom: map.labels.custom.length,
     hidden: map.labels.hidden[LABEL_TARGET_KIND.CITY].length + map.labels.hidden[LABEL_TARGET_KIND.STATE].length + map.labels.hidden[LABEL_TARGET_KIND.PROVINCE].length

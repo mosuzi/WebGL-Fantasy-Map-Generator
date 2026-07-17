@@ -1,6 +1,7 @@
 import {readObjectNote} from "./object-notes.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
+import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
@@ -431,6 +432,7 @@ function validateCurrentMapDocument(document) {
     throw new Error("地图数据的 labels 省份隐藏表无效");
   }
   if (document.map.labels.styles !== undefined) validateLabelStyleStore(document.map.labels.styles);
+  if (document.map.labels.layout !== undefined) validateLabelLayoutStore(document.map.labels.layout);
   if (!document.map.visualTheme || typeof document.map.visualTheme !== "object") throw new Error("地图数据缺少 visualTheme 存储");
   if (!document.map.visualTheme.preset || !document.map.visualTheme.overrides || typeof document.map.visualTheme.overrides !== "object") {
     throw new Error("地图数据的 visualTheme 存储不完整");
@@ -507,6 +509,7 @@ function normalizeLabelStoreV2(source) {
     custom,
     hidden: {...(source?.hidden || {}), city, state, province},
     styles: normalizeLabelStyleStore(source?.styles),
+    layout: normalizeLabelLayoutStore(source?.layout),
     metadata: {custom: custom.length, hidden: city.length + state.length + province.length}
   };
 }
