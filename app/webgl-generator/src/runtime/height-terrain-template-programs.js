@@ -4,15 +4,26 @@ import {
   heightTerrainTemplateUsesSeed,
   inspectHeightTerrainTemplate
 } from "./height-terrain-templates.js";
+import {MinPriorityQueue} from "../generator/priority-queue.js";
+import {createRandom} from "../generator/random.js";
 
 export const HEIGHT_TERRAIN_TEMPLATE_DOCUMENT_TYPE = "webgl-generator-height-terrain-templates";
 export const HEIGHT_TERRAIN_TEMPLATE_DOCUMENT_VERSION = 1;
 export const HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY = "webgl-generator-height-terrain-templates-v1";
 
+const SOURCE_OPERATION_ALIASES = Object.freeze({
+  Add: "source-add",
+  Multiply: "source-multiply",
+  Smooth: "source-smooth",
+  Strait: "source-strait",
+  Mask: "source-mask",
+  Invert: "source-invert"
+});
+
 export const SOURCE_HEIGHT_TEMPLATE_COMPATIBILITY = Object.freeze({
-  exact: Object.freeze(["Add", "Multiply", "Smooth"]),
-  converted: Object.freeze(["Hill", "Pit", "Range", "Trough"]),
-  unsupported: Object.freeze(["Strait", "Mask", "Invert"])
+  exact: Object.freeze(["Add", "Multiply", "Smooth", "Mask", "Invert"]),
+  converted: Object.freeze(["Hill", "Pit", "Range", "Trough", "Strait"]),
+  unsupported: Object.freeze([])
 });
 
 export const HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS = Object.freeze([
@@ -39,19 +50,21 @@ export const HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS = Object.freeze([
   program({
     id: "source-archipelago-converted",
     name: "Source 群岛（转换）",
-    description: "由原版 Archipelago 模板转换：Add / Smooth 精确映射，Range / Hill / Trough 转为稳定破碎塑形，Strait 明确省略。",
+    description: "由原版 Archipelago 模板转换：Add / Smooth 精确映射，Range / Hill / Trough 转为稳定破碎塑形，纵横 Strait 转为确定性选区通道。",
     source: {
       templateId: "archipelago",
       compatibility: "converted",
       exactOperations: ["Add", "Smooth"],
-      convertedOperations: ["Range", "Hill", "Trough"],
-      unsupportedOperations: ["Strait"]
+      convertedOperations: ["Range", "Hill", "Trough", "Strait"],
+      unsupportedOperations: []
     },
     steps: [
       {operation: "source-add", value: 11, range: "all"},
       {operation: "rugged", intensity: 0.8, amplitude: 18, seedOffset: 29},
       {operation: "source-smooth", factor: 3, iterations: 1},
-      {operation: "rugged", intensity: 0.35, amplitude: 8, seedOffset: 61}
+      {operation: "rugged", intensity: 0.35, amplitude: 8, seedOffset: 61},
+      {operation: "source-strait", width: 2, direction: "vertical", scope: "all", seedOffset: 83},
+      {operation: "source-strait", width: 2, direction: "horizontal", scope: "all", seedOffset: 109}
     ]
   })
 ]);
@@ -67,10 +80,35 @@ export function inspectHeightTerrainTemplateProgram(map, programValue, options =
 
 export function heightTerrainTemplateProgramUsesSeed(programValue) {
   try {
-    return normalizeHeightTerrainTemplateProgram(programValue).steps.some(step => step.operation === "rugged");
+    return normalizeHeightTerrainTemplateProgram(programValue).steps.some(step => step.operation === "rugged" || step.operation === "source-strait" || step.operation === "source-invert" && step.probability < 1);
   } catch {
     return false;
   }
+}
+
+export function inspectSourceHeightTemplateOperations(operations = []) {
+  if (!Array.isArray(operations)) throw new Error("Source 操作清单必须是数组。");
+  const exact = new Set(SOURCE_HEIGHT_TEMPLATE_COMPATIBILITY.exact);
+  const converted = new Set(SOURCE_HEIGHT_TEMPLATE_COMPATIBILITY.converted);
+  const unsupported = new Set(SOURCE_HEIGHT_TEMPLATE_COMPATIBILITY.unsupported);
+  const results = operations.map(value => {
+    const operation = String(value || "").trim();
+    const status = exact.has(operation) ? "exact" : converted.has(operation) ? "converted" : unsupported.has(operation) ? "unsupported" : "unknown";
+    return {
+      operation,
+      status,
+      internalOperation: SOURCE_OPERATION_ALIASES[operation] || null,
+      supported: status === "exact" || status === "converted"
+    };
+  });
+  return {
+    valid: results.every(result => result.supported),
+    operations: results,
+    exact: results.filter(result => result.status === "exact").map(result => result.operation),
+    converted: results.filter(result => result.status === "converted").map(result => result.operation),
+    unsupported: results.filter(result => result.status === "unsupported").map(result => result.operation),
+    unknown: results.filter(result => result.status === "unknown").map(result => result.operation)
+  };
 }
 
 export function normalizeHeightTerrainTemplateProgram(value, {user = false} = {}) {
@@ -140,7 +178,8 @@ function analyzeHeightTerrainTemplateProgram(map, programValue, options) {
   try {
     templateProgram = normalizeHeightTerrainTemplateProgram(programValue);
   } catch (error) {
-    return invalidProgramSummary(programValue, error.message);
+    const diagnostic = sourceDiagnostic(error.code || "invalid-terrain-template-program", "rejected", "unsupported", error.message || String(error));
+    return {...invalidProgramSummary(programValue, diagnostic.message), diagnostics: [diagnostic]};
   }
   const cells = map?.grid?.cells;
   const heights = cells?.h;
@@ -154,32 +193,57 @@ function analyzeHeightTerrainTemplateProgram(map, programValue, options) {
   const baseSeed = Math.trunc(Number(options.seed) || 0);
   const scope = normalizeScope(options.scope);
   const stepSummaries = [];
+  const diagnostics = [];
   for (let index = 0; index < templateProgram.steps.length; index++) {
     const step = templateProgram.steps[index];
     const stepScope = step.scope || scope;
     const stepSeed = baseSeed + (step.seedOffset || 0) + index;
     let stepChanges;
     let label;
-    if (isPresetOperation(step.operation)) {
-      const stepOptions = {
-        templateId: step.operation,
-        intensity: step.intensity,
-        targetHeight: step.targetHeight,
-        terraceStep: step.terraceStep,
-        amplitude: step.amplitude,
-        seed: stepSeed,
-        scope: stepScope,
-        allowedCells
+    let diagnostic = null;
+    try {
+      if (isPresetOperation(step.operation)) {
+        const stepOptions = {
+          templateId: step.operation,
+          intensity: step.intensity,
+          targetHeight: step.targetHeight,
+          terraceStep: step.terraceStep,
+          amplitude: step.amplitude,
+          seed: stepSeed,
+          scope: stepScope,
+          allowedCells
+        };
+        const preview = inspectHeightTerrainTemplate(workingMap, stepOptions);
+        stepChanges = getHeightTerrainTemplateChanges(workingMap, stepOptions);
+        label = preview.label || heightTerrainTemplateLabel(step.operation);
+      } else {
+        const result = getSourceCompatibleStepResult(workingMap, step, {scope: stepScope, allowedCells, seed: stepSeed});
+        stepChanges = result.changes;
+        diagnostic = result.diagnostic;
+        label = sourceStepLabel(step);
+      }
+    } catch (error) {
+      const rejected = sourceDiagnostic(error.code || "source-step-rejected", "rejected", "unsupported", error.message || String(error));
+      diagnostics.push({index, operation: step.operation, ...rejected});
+      return {
+        ...invalidProgramSummary(templateProgram, `第 ${index + 1} 步${sourceStepLabel(step)}无法执行：${rejected.message}`),
+        scope,
+        seed: baseSeed,
+        stepSummaries: [...stepSummaries, {index, operation: step.operation, label: sourceStepLabel(step), changeCount: 0, status: "rejected", compatibility: "unsupported", diagnostic: rejected}],
+        diagnostics
       };
-      const preview = inspectHeightTerrainTemplate(workingMap, stepOptions);
-      stepChanges = getHeightTerrainTemplateChanges(workingMap, stepOptions);
-      label = preview.label || heightTerrainTemplateLabel(step.operation);
-    } else {
-      stepChanges = getSourceCompatibleStepChanges(workingMap, step, {scope: stepScope, allowedCells});
-      label = sourceStepLabel(step);
     }
     applyWorkingChanges(working, stepChanges);
-    stepSummaries.push({index, operation: step.operation, label, changeCount: stepChanges.length});
+    if (diagnostic) diagnostics.push({index, operation: step.operation, ...diagnostic});
+    stepSummaries.push({
+      index,
+      operation: step.operation,
+      label,
+      changeCount: stepChanges.length,
+      status: diagnostic?.status || "supported",
+      compatibility: diagnostic?.compatibility || "native",
+      ...(diagnostic ? {diagnostic} : {})
+    });
   }
 
   const changes = [];
@@ -208,7 +272,10 @@ function analyzeHeightTerrainTemplateProgram(map, programValue, options) {
   if (!changes.length) {
     return {
       ...invalidProgramSummary(templateProgram, `${templateProgram.name}不会改变当前锁定选区。`),
-      stepSummaries
+      scope,
+      seed: baseSeed,
+      stepSummaries,
+      diagnostics
     };
   }
   const averageDelta = round(deltaSum / changes.length);
@@ -220,6 +287,7 @@ function analyzeHeightTerrainTemplateProgram(map, programValue, options) {
     seed: baseSeed,
     stepCount: templateProgram.steps.length,
     stepSummaries,
+    diagnostics,
     changeCount: changes.length,
     changeChecksum: checksumChanges(changes),
     raisedCount,
@@ -233,10 +301,14 @@ function analyzeHeightTerrainTemplateProgram(map, programValue, options) {
   };
 }
 
-function getSourceCompatibleStepChanges(map, step, {scope, allowedCells}) {
+function getSourceCompatibleStepResult(map, step, {scope, allowedCells, seed}) {
   const cells = map.grid.cells;
   const heights = Array.from(cells.h, value => Number(value) || 0);
-  if (step.operation === "source-smooth") return smoothChanges(heights, cells.c, step, {scope, allowedCells});
+  if (step.operation === "source-smooth") return sourceStepResult(smoothChanges(heights, cells.c, step, {scope, allowedCells}), "exact", "Source 平滑已按共享边邻接执行");
+  if (step.operation === "source-strait") return sourceStraitResult(map, heights, step, {scope, allowedCells, seed});
+  if (step.operation === "source-mask") return sourceStepResult(maskChanges(map, heights, step, {scope, allowedCells}), "exact", "Source 边缘遮罩已按全图归一化坐标执行");
+  if (step.operation === "source-invert") return sourceInvertResult(map, heights, step, {scope, allowedCells, seed});
+  if (step.operation !== "source-add" && step.operation !== "source-multiply") throw sourceStepError("source-operation-unsupported", `未支持的 Source 操作：${step.operation}`);
   const changes = [];
   for (let gridCell = 0; gridCell < heights.length; gridCell++) {
     const weight = allowedCellWeight(allowedCells, gridCell);
@@ -249,7 +321,8 @@ function getSourceCompatibleStepChanges(map, step, {scope, allowedCells}) {
     const after = clampSourceHeight(before + (target - before) * weight, scope);
     if (after !== before) changes.push({gridCell, before, after});
   }
-  return changes;
+  const message = step.operation === "source-add" ? "Source 加值已精确映射" : "Source 乘算已精确映射";
+  return sourceStepResult(changes, "exact", message);
 }
 
 function smoothChanges(initial, neighborsByCell, step, {scope, allowedCells}) {
@@ -268,9 +341,247 @@ function smoothChanges(initial, neighborsByCell, step, {scope, allowedCells}) {
   return working.flatMap((after, gridCell) => after === initial[gridCell] ? [] : [{gridCell, before: initial[gridCell], after}]);
 }
 
+function sourceStraitResult(map, heights, step, {scope, allowedCells, seed}) {
+  const points = map.grid?.points;
+  const neighbors = map.grid?.cells?.c;
+  if (!Array.isArray(points) || points.length !== heights.length || !Array.isArray(neighbors)) throw sourceStepError("source-strait-geometry", "当前地图缺少海峡转换所需的点位或共享边邻接");
+  const selected = selectedCellIds(allowedCells, heights.length);
+  if (selected.length < 2) throw sourceStepError("source-strait-selection", "海峡转换至少需要两个已锁定 cell");
+  const bounds = pointBounds(points, selected);
+  const primarySpan = step.direction === "vertical" ? bounds.height : bounds.width;
+  if (!(primarySpan > 0)) throw sourceStepError("source-strait-span", "锁定选区在海峡方向上没有有效跨度");
+
+  const random = createRandom(`terrain-strait:${seed}:${step.direction}:${Array.isArray(step.width) ? step.width.join("-") : step.width}`);
+  const resolvedWidth = Array.isArray(step.width) ? random.integer(step.width[0], step.width[1]) : step.width;
+  const crossStart = 0.3 + random.next() * 0.4;
+  const crossEnd = clamp01(1 - crossStart + (random.next() - 0.5) * 0.2);
+  const startPoint = step.direction === "vertical"
+    ? [bounds.minX + bounds.width * crossStart, bounds.minY]
+    : [bounds.minX, bounds.minY + bounds.height * crossStart];
+  const endPoint = step.direction === "vertical"
+    ? [bounds.minX + bounds.width * crossEnd, bounds.maxY]
+    : [bounds.maxX, bounds.minY + bounds.height * crossEnd];
+  const allowedSet = new Set(selected);
+  const start = closestSelectedCell(points, selected, startPoint);
+  const end = closestSelectedCell(points, selected, endPoint, start);
+  const path = findSelectionPath(points, neighbors, allowedSet, start, end, seed);
+  if (path.length < 2) throw sourceStepError("source-strait-disconnected", "锁定选区无法形成贯穿两侧的共享边通道");
+
+  const channel = [];
+  const used = new Set();
+  let frontier = [...path];
+  for (let layer = 0; layer < resolvedWidth && frontier.length; layer++) {
+    const next = new Set();
+    for (const cell of frontier) {
+      if (!allowedSet.has(cell) || used.has(cell)) continue;
+      used.add(cell);
+      channel.push({cell, layer});
+      for (const neighbor of neighbors[cell] || []) if (allowedSet.has(neighbor) && !used.has(neighbor)) next.add(neighbor);
+    }
+    frontier = [...next];
+  }
+
+  const changes = [];
+  for (const {cell, layer} of channel) {
+    const before = heights[cell];
+    if (!matchesScopeAndRange(before, scope, "all")) continue;
+    const exponent = 0.8 + layer * (0.1 / Math.max(1, resolvedWidth));
+    const target = Math.max(0, Math.min(100, before ** exponent));
+    const weight = allowedCellWeight(allowedCells, cell);
+    const after = clampSourceHeight(before + (target - before) * weight, scope);
+    if (after !== before) changes.push({gridCell: cell, before, after});
+  }
+  return sourceStepResult(changes, "converted", `已生成${step.direction === "vertical" ? "纵向" : "横向"}确定性海峡，主路径 ${path.length} cells，宽度 ${resolvedWidth}`, {
+    direction: step.direction,
+    requestedWidth: Array.isArray(step.width) ? [...step.width] : step.width,
+    width: resolvedWidth,
+    pathCells: path.length,
+    channelCells: channel.length
+  });
+}
+
+function maskChanges(map, heights, step, {scope, allowedCells}) {
+  const points = map.grid?.points;
+  if (!Array.isArray(points) || points.length !== heights.length) throw sourceStepError("source-mask-geometry", "当前地图缺少遮罩所需的全图点位");
+  const graphWidth = Number(map.grid?.metadata?.graphWidth) || Number(map.metadata?.graphWidth) || maxPointCoordinate(points, 0);
+  const graphHeight = Number(map.grid?.metadata?.graphHeight) || Number(map.metadata?.graphHeight) || maxPointCoordinate(points, 1);
+  if (!(graphWidth > 0) || !(graphHeight > 0)) throw sourceStepError("source-mask-bounds", "当前地图缺少遮罩所需的有效图幅尺寸");
+  const factor = Math.abs(step.power) || 1;
+  const changes = [];
+  for (let gridCell = 0; gridCell < heights.length; gridCell++) {
+    const weight = allowedCellWeight(allowedCells, gridCell);
+    if (weight <= 0) continue;
+    const before = heights[gridCell];
+    if (!matchesScopeAndRange(before, scope, "all")) continue;
+    const [x, y] = points[gridCell];
+    const nx = 2 * x / graphWidth - 1;
+    const ny = 2 * y / graphHeight - 1;
+    let distance = (1 - nx ** 2) * (1 - ny ** 2);
+    if (step.power < 0) distance = 1 - distance;
+    const masked = before * distance;
+    const target = (before * (factor - 1) + masked) / factor;
+    const after = clampSourceHeight(before + (target - before) * weight, scope);
+    if (after !== before) changes.push({gridCell, before, after});
+  }
+  return changes;
+}
+
+function sourceInvertResult(map, heights, step, {scope, allowedCells, seed}) {
+  const columns = Number(map.grid?.metadata?.columns);
+  const rows = Number(map.grid?.metadata?.rows);
+  if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns <= 0 || rows <= 0 || columns * rows !== heights.length) {
+    throw sourceStepError("source-invert-layout", "轴向镜像只支持带完整 columns / rows 的规则 grid；当前地图无法证明镜像索引");
+  }
+  const roll = createRandom(`terrain-invert:${seed}:${step.axes}`).next();
+  if (step.probability <= 0 || step.probability < 1 && roll >= step.probability) {
+    return {
+      changes: [],
+      diagnostic: sourceDiagnostic("source-invert-skipped", "skipped", "exact", `镜像概率门未命中（概率 ${step.probability}，固定采样 ${round(roll)}）`, {probability: step.probability, roll})
+    };
+  }
+  const invertX = step.axes !== "y";
+  const invertY = step.axes !== "x";
+  const changes = [];
+  for (let gridCell = 0; gridCell < heights.length; gridCell++) {
+    const weight = allowedCellWeight(allowedCells, gridCell);
+    if (weight <= 0) continue;
+    const before = heights[gridCell];
+    if (!matchesScopeAndRange(before, scope, "all")) continue;
+    const column = gridCell % columns;
+    const row = Math.floor(gridCell / columns);
+    const sourceColumn = invertX ? columns - column - 1 : column;
+    const sourceRow = invertY ? rows - row - 1 : row;
+    const target = heights[sourceRow * columns + sourceColumn];
+    const after = clampSourceHeight(before + (target - before) * weight, scope);
+    if (after !== before) changes.push({gridCell, before, after});
+  }
+  return sourceStepResult(changes, "exact", `已按规则 grid 执行 ${step.axes} 轴镜像`, {axes: step.axes, probability: step.probability, roll});
+}
+
+function selectedCellIds(allowedCells, length) {
+  const result = [];
+  for (let cell = 0; cell < length; cell++) if (allowedCellWeight(allowedCells, cell) > 0) result.push(cell);
+  return result;
+}
+
+function pointBounds(points, cells) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const cell of cells) {
+    const [x, y] = points[cell];
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+  return {minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY};
+}
+
+function maxPointCoordinate(points, axis) {
+  let max = 0;
+  for (const point of points) max = Math.max(max, Number(point?.[axis]) || 0);
+  return max;
+}
+
+function closestSelectedCell(points, cells, target, excluded = -1) {
+  let closest = -1;
+  let best = Infinity;
+  for (const cell of cells) {
+    if (cell === excluded && cells.length > 1) continue;
+    const distance = pointDistanceSquared(points[cell], target);
+    if (distance < best || distance === best && cell < closest) {
+      closest = cell;
+      best = distance;
+    }
+  }
+  return closest;
+}
+
+function findSelectionPath(points, neighbors, allowed, start, end, seed) {
+  const size = points.length;
+  const best = new Float64Array(size);
+  best.fill(Infinity);
+  const previous = new Int32Array(size);
+  previous.fill(-1);
+  const closed = new Uint8Array(size);
+  const queue = new MinPriorityQueue();
+  best[start] = 0;
+  queue.push(start, 0);
+  let visited = 0;
+  while (queue.length && visited < allowed.size) {
+    const current = queue.pop();
+    if (closed[current]) continue;
+    closed[current] = 1;
+    visited++;
+    if (current === end) return reconstructPath(previous, end);
+    for (const neighbor of neighbors[current] || []) {
+      if (!allowed.has(neighbor) || closed[neighbor]) continue;
+      const distance = Math.sqrt(pointDistanceSquared(points[current], points[neighbor]));
+      const step = distance * (0.9 + deterministicUnit(seed, current, neighbor) * 0.2);
+      const tentative = best[current] + step;
+      if (tentative >= best[neighbor]) continue;
+      best[neighbor] = tentative;
+      previous[neighbor] = current;
+      const heuristic = Math.sqrt(pointDistanceSquared(points[neighbor], points[end]));
+      queue.push(neighbor, tentative + heuristic);
+    }
+  }
+  return [];
+}
+
+function reconstructPath(previous, end) {
+  const path = [];
+  let current = end;
+  while (current >= 0) {
+    path.push(current);
+    current = previous[current];
+  }
+  return path.reverse();
+}
+
+function pointDistanceSquared(left, right) {
+  const dx = Number(left?.[0]) - Number(right?.[0]);
+  const dy = Number(left?.[1]) - Number(right?.[1]);
+  return dx * dx + dy * dy;
+}
+
+function deterministicUnit(seed, left, right) {
+  const text = `${seed}:${Math.min(left, right)}:${Math.max(left, right)}`;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) / 0xffffffff;
+}
+
+function sourceStepResult(changes, compatibility, message, details = {}) {
+  return {
+    changes,
+    diagnostic: sourceDiagnostic(`source-step-${compatibility}`, changes.length ? "applied" : "no-change", compatibility, message, details)
+  };
+}
+
+function sourceDiagnostic(code, status, compatibility, message, details = {}) {
+  return {code, status, compatibility, message, ...details};
+}
+
+function sourceStepError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
 function normalizeProgramStep(value, index) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`地形模板第 ${index + 1} 步必须是对象。`);
-  const operation = String(value.operation || value.templateId || "");
+  const sourceOperation = String(value.operation || value.templateId || "");
+  const operation = SOURCE_OPERATION_ALIASES[sourceOperation] || sourceOperation;
   const scope = value.scope === undefined ? undefined : normalizeStrictScope(value.scope, index);
   const range = normalizeRange(value.range, index);
   if (isPresetOperation(operation)) {
@@ -296,7 +607,28 @@ function normalizeProgramStep(value, index) {
     scope,
     range
   });
-  throw new Error(`地形模板第 ${index + 1} 步操作未知：${operation || "空"}`);
+  if (operation === "source-strait") return compactStep({
+    operation,
+    width: normalizeStraitWidth(value.width, index),
+    direction: normalizeDirection(value.direction, index),
+    seedOffset: integerInRange(value.seedOffset, -1000000, 1000000, 0, index, "seed 偏移"),
+    scope
+  });
+  if (operation === "source-mask") return compactStep({
+    operation,
+    power: numberInRange(value.power, -10, 10, 1, index, "遮罩幂次"),
+    scope
+  });
+  if (operation === "source-invert") return compactStep({
+    operation,
+    probability: numberInRange(value.probability ?? value.count, 0, 1, 1, index, "镜像概率"),
+    axes: normalizeInvertAxes(value.axes, index),
+    seedOffset: integerInRange(value.seedOffset, -1000000, 1000000, 0, index, "seed 偏移"),
+    scope
+  });
+  const error = new Error(`地形模板第 ${index + 1} 步操作未知或尚未转换：${sourceOperation || "空"}`);
+  error.code = "unknown-terrain-operation";
+  throw error;
 }
 
 function program(value) {
@@ -353,6 +685,30 @@ function normalizeStrictScope(value, index) {
   throw new Error(`地形模板第 ${index + 1} 步作用范围无效。`);
 }
 
+function normalizeDirection(value, index) {
+  const direction = value === undefined ? "vertical" : String(value);
+  if (direction === "vertical" || direction === "horizontal") return direction;
+  throw new Error(`地形模板第 ${index + 1} 步海峡方向必须是 vertical 或 horizontal。`);
+}
+
+function normalizeStraitWidth(value, index) {
+  if (value === undefined || value === null || value === "") return 1;
+  if (Array.isArray(value) && value.length === 2 || typeof value === "string" && /^\d+\s*-\s*\d+$/.test(value.trim())) {
+    const [rawMin, rawMax] = Array.isArray(value) ? value : value.trim().split("-");
+    const min = integerInRange(rawMin, 1, 50, null, index, "海峡宽度下限");
+    const max = integerInRange(rawMax, 1, 50, null, index, "海峡宽度上限");
+    if (min > max) throw new Error(`地形模板第 ${index + 1} 步海峡宽度下限不能大于上限。`);
+    return [min, max];
+  }
+  return integerInRange(value, 1, 50, 1, index, "海峡宽度");
+}
+
+function normalizeInvertAxes(value, index) {
+  const axes = value === undefined ? "both" : String(value);
+  if (axes === "x" || axes === "y" || axes === "both") return axes;
+  throw new Error(`地形模板第 ${index + 1} 步镜像轴必须是 x、y 或 both。`);
+}
+
 function normalizeScope(value) {
   return value === "land" || value === "water" ? value : "all";
 }
@@ -386,7 +742,11 @@ function isPresetOperation(operation) {
 function sourceStepLabel(step) {
   if (step.operation === "source-add") return "Source 加值";
   if (step.operation === "source-multiply") return "Source 乘算";
-  return "Source 平滑";
+  if (step.operation === "source-smooth") return "Source 平滑";
+  if (step.operation === "source-strait") return `Source ${step.direction === "horizontal" ? "横向" : "纵向"}海峡`;
+  if (step.operation === "source-mask") return "Source 边缘遮罩";
+  if (step.operation === "source-invert") return "Source 轴向镜像";
+  return "Source 操作";
 }
 
 function sourceAdd(before, value, range) {
@@ -434,6 +794,7 @@ function invalidProgramSummary(programValue, notice) {
     seed: 0,
     stepCount: Array.isArray(programValue?.steps) ? programValue.steps.length : 0,
     stepSummaries: [],
+    diagnostics: [],
     changeCount: 0,
     changeChecksum: null,
     raisedCount: 0,

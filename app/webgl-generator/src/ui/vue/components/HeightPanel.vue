@@ -251,13 +251,13 @@
       :options="state.terrainProgramOptions"
       @update:model-value="setTerrainProgramId"
     />
-    <p class="height-action-help">内置程序按顺序读取上一步结果；Source 群岛样本会明确保留精确转换、语义转换和不支持步骤边界。</p>
+    <p class="height-action-help">内置程序按顺序读取上一步结果；Source 群岛会执行确定性纵横海峡，Mask 使用全图坐标，Invert 缺少规则行列时会明确拒绝。</p>
     <p v-if="state.terrainProgramPreview" class="height-transform-preview" :class="{valid: state.terrainProgramPreview.valid}" aria-live="polite">
       {{ state.terrainProgramPreview.notice }}
     </p>
     <ol v-if="state.terrainProgramPreview?.stepSummaries?.length" class="height-template-step-list">
       <li v-for="step in state.terrainProgramPreview.stepSummaries" :key="`${step.index}-${step.operation}`">
-        {{ step.index + 1 }}. {{ step.label }}：{{ step.changeCount }} cells
+        {{ step.index + 1 }}. {{ step.label }}：{{ step.changeCount }} cells<span v-if="step.diagnostic">（{{ step.diagnostic.message }}）</span>
       </li>
     </ol>
     <div v-if="state.terrainProgramPreview?.valid" class="height-transform-legend" aria-label="多步骤地形模板地图预览图例">

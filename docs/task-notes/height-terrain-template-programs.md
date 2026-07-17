@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `layered-upland` | 层叠高原 | 高原塑形 → 破碎地形 → 阶地量化 | 使用 |
 | `terraced-basin` | 阶地盆地 | 盆地塑形 → 破碎地形 → 阶地量化 | 使用 |
-| `source-archipelago-converted` | Source 群岛（转换） | Source 加值 → 破碎转换 → Source 平滑 → 破碎转换 | 使用 |
+| `source-archipelago-converted` | Source 群岛（转换） | Source 加值 → 破碎转换 → Source 平滑 → 破碎转换 → 纵向海峡 → 横向海峡 | 使用 |
 
 预览和应用都必须使用当前锁定选区、羽化权重、作用范围和同一个 seed。预览只公开每步影响数量、最终影响数量和 `changeChecksum`，不把完整 changes 放入 Vue 状态；应用前重新计算并同时比对数量与校验值。地图或选区变化后必须重新预览。
 
@@ -40,6 +40,7 @@
 - 用户模板保存在 `webgl-generator-height-terrain-templates-v1` LocalStorage 键；导出和导入使用同一规范化文档。导入先完整解析、版本检查和步骤检查，全部通过后才合并并持久化。
 - 同 id 的导入模板覆盖已有用户模板；内置模板不能删除，也不会写入用户模板文档。
 - 未知文档类型、未知版本、重复 id、未知步骤、非法数值或超过 12 步会整体拒绝，不改变当前地图或已保存模板。
+- Source 原名 `Add / Multiply / Smooth / Strait / Mask / Invert` 可在导入时规范化为内部步骤名；`Strait` 支持固定整数或 `min-max` 宽度并由模板 seed 确定取值。旧版只含既有步骤的 v1 文档保持原样可读。
 
 ## Source 模板兼容边界
 
@@ -51,14 +52,16 @@
 | `Multiply` | 完整兼容 | 按高度范围乘算，陆地范围以高度 20 为基线 |
 | `Smooth` | 完整兼容 | 读取同一轮修改前快照，按共享边邻居和系数平滑 |
 | `Hill` / `Pit` / `Range` / `Trough` | 转换兼容 | 转为选区内稳定 seed 的高原、盆地、破碎和阶地步骤；保持创作意图，不承诺逐 cell 等同 Source 全图生成器 |
-| `Strait` | 不支持 | 需要全图方向、边界和连通切割，不能安全缩减为任意锁定选区操作 |
-| `Mask` | 不支持 | 依赖全图归一化坐标与图幅边缘，不适合作为局部选区模板 |
-| `Invert` | 不支持 | 依赖规则网格镜像轴；当前 Voronoi 选区没有等价索引镜像 |
+| `Strait` | 转换兼容 | 按锁定选区点位包围盒确定纵 / 横两侧，用共享边 A* 生成 seed 稳定的贯穿主路径，再按宽度扩张并应用 Source 幂次降高；选区不连通或无方向跨度时结构化拒绝 |
+| `Mask` | 完整兼容 | 继续用全图 `graphWidth / graphHeight` 归一化点位，只对锁定选区按羽化权重提交结果；缺少有效图幅点位或尺寸时结构化拒绝 |
+| `Invert` | 条件完整兼容 | `columns × rows` 与高度长度一致时按 Source 行列索引镜像，概率门由固定 seed 决定；缺少可证明的规则 grid 元数据时返回 `source-invert-layout`，不猜测 Voronoi 镜像 |
 
-`source-archipelago-converted` 是固定转换样本：原模板中的 `Add 11` 和 `Smooth 3` 精确映射，`Range / Hill / Trough` 合并成两步确定性破碎塑形，`Strait` 在 source 元数据中显式列为未支持。该样本用于验证转换文档、seed 可复现和执行闭环，不宣称与 Source 全图 Archipelago 像素一致。
+`source-archipelago-converted` 是固定转换样本：原模板中的 `Add 11` 和 `Smooth 3` 精确映射，`Range / Hill / Trough` 合并成两步确定性破碎塑形，最后按原顺序执行宽度 2 的纵向、横向海峡。其 source 元数据把 `Strait` 列入 converted，`unsupportedOperations` 为空；该样本验证转换文档、seed 可复现和执行闭环，不宣称与 Source 全图 Archipelago 逐 cell 相同。
+
+每个 Source 步骤的预览摘要新增 `status / compatibility / diagnostic`。成功步骤明确是 `exact` 或 `converted`，概率未命中为 `skipped`；缺少点位、共享边、方向跨度、连通路径、图幅尺寸或规则行列时，整段程序为无副作用的无效预览，并给出稳定诊断 code。`inspectSourceHeightTemplateOperations()` 可在转换前把操作清单分为 exact、converted、unsupported 和 unknown，未知操作导入时直接拒绝，不再静默省略。
 
 ## 回归与边界
 
-- `pnpm run regress:height-template-programs` 覆盖固定模板可复现、不同 seed 变化、预览与 changes 数量 / 校验值、单条历史、撤销 / 重做、用户文档往返、存储恢复、坏版本、坏步骤和 Source 群岛转换样本。
+- `pnpm run regress:height-template-programs` 覆盖固定模板可复现、不同 seed 变化、预览与 changes 数量 / 校验值、单条历史、撤销 / 重做、用户文档往返、存储恢复、坏版本、坏步骤、Source 群岛纵横海峡、Strait 固定 / 范围宽度、Mask、Invert 和缺少规则行列的结构化拒绝。
 - `pnpm run regress:height-brush` 继续覆盖四种单步模板、选区羽化和统一高度命令。
 - 本项按快速迭代约定执行纯代码回归和生产构建，不把未执行的浏览器交互表述为真实 UI 验收。
