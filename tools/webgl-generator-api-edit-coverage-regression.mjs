@@ -148,6 +148,10 @@ const actionSignatures = {
   "cities.resetVisual": "resetVisual: cityId => resetCityVisualViaApi",
   "provinces.applyChanges": "applyChanges: changes => applyProvinceChangesViaApi",
   "states.applyChanges": "applyChanges: changes => applyStateChangesViaApi",
+  "states.inspectMerge": "inspectMerge: options => inspectStateMergeViaApi",
+  "states.merge": "merge: options => mergeStatesViaApi",
+  "states.inspectSplit": "inspectSplit: options => inspectStateSplitViaApi",
+  "states.split": "split: options => splitStateViaApi",
   "states.setCapital": "setCapital: (stateId, cityId) => setStateCapitalViaApi",
   "states.setGovernmentBatch": "setGovernmentBatch: (stateIds, governmentKey) => setStatesGovernmentBatchViaApi",
   "height.applyChanges": "applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi",
@@ -169,8 +173,8 @@ for (const field of ["affected:", "stale:", "noop:"]) assert(editResultSource.in
 assert(consoleApiSource.includes("buildDebugStateDump(state, documentRef, options, api)"), "debug.dumpState 没有复用真实 API 覆盖对象");
 assert.equal(expectedMethods.length, 20, "第 29 项冻结方法数量漂移");
 const declaredCounts = countDeclaredMethods(API_METHODS);
-assert.equal(declaredCounts.edit, 92, "edit capabilities 方法数不是 92");
-assert.equal(declaredCounts.total, 190, "公开 capabilities 方法总数不是 190");
+assert.equal(declaredCounts.edit, 96, "edit capabilities 方法数不是 96");
+assert.equal(declaredCounts.total, 194, "公开 capabilities 方法总数不是 194");
 
 console.log(JSON.stringify({
   ok: true,

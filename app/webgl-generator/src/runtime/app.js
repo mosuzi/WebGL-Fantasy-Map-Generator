@@ -127,6 +127,7 @@ import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit} from "./state-topology-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
 import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
@@ -201,6 +202,7 @@ const LOADING_MESSAGES = Object.freeze({
   "overlay-draw": "题名山河",
   "fit-draw": "展开乾坤"
 });
+const STATE_TOPOLOGY_UI_HISTORY = new WeakMap();
 
 const LOAD_TRACE_EVENT_NAME = "webgl-generator-load-stage";
 const LOAD_TRACE_DELAY_PARAMS = Object.freeze(["loadStepDelay", "debugLoadDelay", "loadTraceDelay"]);
@@ -971,6 +973,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
+    onInspectMerge: options => runtimeActions.edit.states.inspectMerge(options),
+    onMerge: options => runtimeActions.edit.states.merge({...options, confirm: true}),
+    onInspectSplit: options => runtimeActions.edit.states.inspectSplit(options),
+    onSplit: options => runtimeActions.edit.states.split({...options, confirm: true}),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo", {refresh: refreshAfterStateEdit});
     },
@@ -2522,6 +2528,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
       states: {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
         delete: stateId => deleteStateViaApi(state, documentRef, stateId),
+        inspectMerge: options => inspectStateMergeViaApi(state, options),
+        merge: options => mergeStatesViaApi(state, documentRef, options),
+        inspectSplit: options => inspectStateSplitViaApi(state, options),
+        split: options => splitStateViaApi(state, documentRef, options),
         rename: (stateId, name) => renameStateViaApi(state, documentRef, stateId, name),
         setColor: (stateId, color) => setStateColorViaApi(state, documentRef, stateId, color),
         setGovernment: (stateId, governmentKey) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey),
@@ -5758,7 +5768,7 @@ function executeEditCommand(state, documentRef, command, options = {}) {
   }
 }
 
-function executeHistoryCommand(state, documentRef, action, options = {}) {
+export function executeHistoryCommand(state, documentRef, action, options = {}) {
   const command = action === "redo"
     ? state.editHistory.redo({map: state.map})
     : state.editHistory.undo({map: state.map});
@@ -5772,13 +5782,14 @@ function executeHistoryCommand(state, documentRef, action, options = {}) {
   }
   const refresh = options.refresh || refreshAfterEdit;
   state.selectionStore.batch(() => {
+    if (command.domain === "state-topology") synchronizeStateTopologyHistoryUi(state, command, action);
     reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
     refresh(state, command);
   });
   if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
   options.afterRefresh?.(state, command);
   if (command.effects?.derived?.includes("labels")) syncLabelStylesUi(state, documentRef);
-  updateEditingInteractionLock(state, documentRef);
+  (options.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
   return {
     executed: true,
     action,
@@ -6614,6 +6625,186 @@ function deleteStateViaApi(state, documentRef, stateId) {
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function inspectStateMergeViaApi(state, options = {}) {
+  assertMapAvailable(state);
+  return decorateStateTopologyInspection(state.map, inspectStateMerge(state.map, options));
+}
+
+function inspectStateSplitViaApi(state, options = {}) {
+  assertMapAvailable(state);
+  return decorateStateTopologyInspection(state.map, inspectStateSplit(state.map, options));
+}
+
+function mergeStatesViaApi(state, documentRef, options = {}) {
+  return executeStateTopologyViaApi(state, documentRef, "merge", options);
+}
+
+function splitStateViaApi(state, documentRef, options = {}) {
+  return executeStateTopologyViaApi(state, documentRef, "split", options);
+}
+
+export function executeStateTopologyViaApi(state, documentRef, operation, options, runtimeUi = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("国家拓扑参数必须是对象");
+  if (options.confirm !== true) throw new Error(`${operation === "merge" ? "合并" : "拆分"}国家需要显式传入 {confirm: true}`);
+  const {confirm, ...commandOptions} = options;
+  const command = operation === "merge" ? createMergeStatesCommand(commandOptions) : createSplitStateCommand(commandOptions);
+  const beforeUi = captureStateTopologyUiHistory(state);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    preparePanelRefresh: (targetState, executed, topologyResult) => applyStateTopologyUiResult(targetState, documentRef, topologyResult),
+    noopStatus: operation === "merge" ? "国家合并预检未通过。" : "国家拆分预检未通过。",
+    status: executed => executed.getResult?.()?.selectionTarget?.id
+      ? `${operation === "merge" ? "国家合并" : "国家拆分"}完成，当前国家 #${executed.getResult().selectionTarget.id}。`
+      : `${operation === "merge" ? "国家合并" : "国家拆分"}完成。`,
+    errorStatus: operation === "merge" ? "国家合并失败，地图与界面已保持执行前状态。" : "国家拆分失败，地图与界面已保持执行前状态。",
+    throwOnError: false
+  });
+  if (result.executed) {
+    STATE_TOPOLOGY_UI_HISTORY.set(result.command, {
+      undo: beforeUi,
+      redo: captureStateTopologyUiHistory(state)
+    });
+  }
+  (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
+  (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function applyStateTopologyUiResult(state, documentRef, result) {
+  if (!result?.selectionTarget) return;
+  const redirects = new Map((result.redirects || []).map(item => [`${item.kind}:${item.from}`, item]));
+  const redirectObject = object => {
+    const redirect = object ? redirects.get(`${object.kind}:${object.id}`) : null;
+    return redirect ? {...object, id: redirect.to} : object;
+  };
+  if (Array.isArray(state.renderer?.objectHighlights) && redirects.size && typeof state.renderer?.setObjectHighlights === "function") {
+    state.renderer.setObjectHighlights(state.renderer.objectHighlights.map(redirectObject));
+  }
+  if (state.editingObject) {
+    const redirectedEditing = redirectObject(state.editingObject);
+    if (redirectedEditing !== state.editingObject) state.selectionStore.startEditing(redirectedEditing, {select: false});
+  }
+  const target = resolveObject(state.map, result.selectionTarget) || result.selectionTarget;
+  state.panels.state?.setTargetStateId(result.selectionTarget.id);
+  state.selectionStore.setSelection({object: target});
+  state.stateEdit.sourceStateId = result.selectionTarget.id;
+  const topologyRefresh = result.topologyRefresh || {};
+  state.stateEdit.lastAffected = (topologyRefresh.gridCells?.length || 0) + (topologyRefresh.packCells?.length || 0);
+  reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+}
+
+function synchronizeStateTopologyHistoryUi(state, command, action) {
+  if (command?.domain !== "state-topology") return;
+  const stored = STATE_TOPOLOGY_UI_HISTORY.get(command)?.[action === "redo" ? "redo" : "undo"];
+  if (stored) {
+    restoreStateTopologyUiHistory(state, stored);
+    return;
+  }
+  const inspection = command.getInspection?.();
+  const result = command.getResult?.();
+  const stateId = action === "redo"
+    ? result?.selectionTarget?.id
+    : inspection?.operation === "split" ? inspection.sourceStateId : inspection?.survivorStateId;
+  if (!Number.isInteger(stateId) || !state.map?.politics?.states?.[stateId] || state.map.politics.states[stateId].removed) return;
+  state.panels.state?.setTargetStateId(stateId);
+  state.selectionStore.setSelection({object: resolveObject(state.map, {kind: OBJECT_KIND.STATE, id: stateId}) || {kind: OBJECT_KIND.STATE, id: stateId}});
+  state.stateEdit.sourceStateId = stateId;
+  if (state.editingObject && !resolveObject(state.map, state.editingObject)) {
+    state.selectionStore.startEditing({kind: OBJECT_KIND.STATE, id: stateId}, {select: false});
+  }
+}
+
+function captureStateTopologyUiHistory(state) {
+  const selection = state.selectionStore.getSnapshot();
+  return {
+    selection: cloneStateTopologySelection(selection.selection),
+    editingObject: cloneStateTopologyObject(selection.editingObject),
+    objectHighlights: Array.isArray(state.renderer?.objectHighlights)
+      ? state.renderer.objectHighlights.map(cloneStateTopologyObject).filter(Boolean)
+      : [],
+    panelStateId: state.panels.state?.getBrush?.().targetStateId ?? null,
+    sourceStateId: state.stateEdit.sourceStateId ?? null
+  };
+}
+
+function restoreStateTopologyUiHistory(state, snapshot) {
+  if (snapshot.selection) state.selectionStore.setSelection(cloneStateTopologySelection(snapshot.selection));
+  else state.selectionStore.clear();
+  if (snapshot.editingObject) state.selectionStore.startEditing(cloneStateTopologyObject(snapshot.editingObject), {select: false});
+  else state.selectionStore.stopEditing();
+  if (typeof state.renderer?.setObjectHighlights === "function") {
+    state.renderer.setObjectHighlights((snapshot.objectHighlights || []).map(cloneStateTopologyObject).filter(Boolean));
+  }
+  if (Number.isInteger(snapshot.panelStateId)) state.panels.state?.setTargetStateId(snapshot.panelStateId);
+  state.stateEdit.sourceStateId = snapshot.sourceStateId ?? null;
+}
+
+function cloneStateTopologySelection(selection) {
+  return selection?.object ? {...selection, object: cloneStateTopologyObject(selection.object)} : null;
+}
+
+function cloneStateTopologyObject(object) {
+  return object?.kind ? {...object} : null;
+}
+
+function decorateStateTopologyInspection(map, inspection) {
+  if (!inspection?.valid) {
+    return {
+      ...inspection,
+      rejection: {code: inspection?.code || "invalid", reason: inspection?.summary || "国家拓扑预检未通过"},
+      preview: null
+    };
+  }
+  const stateIds = inspection.operation === "merge"
+    ? [inspection.survivorStateId, inspection.victimStateId]
+    : [inspection.sourceStateId];
+  const stateIdSet = new Set(stateIds);
+  const affectedProvinceIds = new Set(inspection.affectedOldProvinceIds || []);
+  const military = stateIds.reduce((sum, id) => sum + (map.politics?.states?.[id]?.military?.length || 0), 0);
+  const wars = stateIds.reduce((sum, id) => sum + (map.politics?.states?.[id]?.campaigns || []).filter(item => item && !item.ended && !item.end).length, 0);
+  const markets = (map.pack?.markets || map.economy?.markets || []).filter(item => item && stateIdSet.has(Number(item.state))).length;
+  const routes = (map.settlements?.routes || []).filter(route => {
+    if (!route) return false;
+    if (stateIdSet.has(Number(route.state))) return true;
+    const fromState = map.settlements?.cities?.[route.from]?.state;
+    const toState = map.settlements?.cities?.[route.to]?.state;
+    return stateIdSet.has(Number(fromState)) || stateIdSet.has(Number(toState));
+  }).length;
+  const notes = (map.notes?.notes || []).filter(note => note && (
+    (note.kind === "state" && stateIdSet.has(Number(note.objectId ?? note.targetId)))
+    || (note.kind === "province" && affectedProvinceIds.has(Number(note.objectId ?? note.targetId)))
+  )).length;
+  const capital = inspection.operation === "merge"
+    ? stateTopologyCityName(map, inspection.capitalCityId)
+    : `${stateTopologyCityName(map, inspection.sourceCapitalCityId)} / ${stateTopologyCityName(map, inspection.newCapitalCityId)}`;
+  const preview = {
+    capital,
+    oldProvinceCount: inspection.affectedOldProvinceIds?.length || 0,
+    newProvinceCount: inspection.newProvinceIds?.length || 0,
+    military,
+    wars,
+    markets,
+    routes,
+    notes,
+    staleSystems: ["economy", "diplomacy", "military", "zones", "state-markers"]
+  };
+  preview.rows = [
+    {label: "首都", value: preview.capital},
+    {label: "旧省 / 新省", value: `${preview.oldProvinceCount} / ${preview.newProvinceCount}`},
+    {label: "军团 / 活动战争", value: `${preview.military} / ${preview.wars}`},
+    {label: "市场 / 路线 / 备注", value: `${preview.markets} / ${preview.routes} / ${preview.notes}`},
+    {label: "标记待派生", value: preview.staleSystems.join("、")}
+  ];
+  return {...inspection, preview};
+}
+
+function stateTopologyCityName(map, cityId) {
+  const city = (map.settlements?.cities || []).find(item => item?.id === cityId);
+  return city?.name || (Number.isInteger(cityId) ? `城市 #${cityId}` : "无");
 }
 
 function renameCityViaApi(state, documentRef, cityId, name) {

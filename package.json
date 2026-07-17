@@ -99,6 +99,8 @@
     "regress:visual-themes": "node --no-warnings ./tools/webgl-generator-visual-theme-regression.mjs",
     "regress:label-styles": "node --no-warnings ./tools/webgl-generator-label-style-regression.mjs",
     "regress:state-lifecycle": "node --no-warnings ./tools/webgl-generator-state-lifecycle-regression.mjs",
+    "regress:state-topology": "node --no-warnings ./tools/webgl-generator-state-topology-regression.mjs",
+    "regress:state-topology-ui-api": "node --no-warnings ./tools/webgl-generator-state-topology-ui-api-regression.mjs",
     "regress:geojson-range": "node --no-warnings ./tools/webgl-generator-geojson-range-regression.mjs",
     "regress:geojson-range-qgis": "node --no-warnings ./tools/webgl-generator-geojson-range-qgis-regression.mjs",
     "regress:geojson-range-browser": "node --no-warnings ./tools/webgl-generator-geojson-range-browser-regression.mjs",

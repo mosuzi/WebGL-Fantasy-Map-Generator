@@ -8,9 +8,9 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：11 个命名空间、186 个方法，其中 90 个为编辑方法。
+当前公开基线：11 个命名空间、194 个方法，其中 96 个为编辑方法。
 
-第 52 项完成后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 178 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、13 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
+第 74 项接入后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 186 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、16 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
@@ -19,9 +19,9 @@
 | `selection` | 12 | 已覆盖选择、定位、拾取、闪烁、持久高亮和编辑态 |
 | `layers` | 15 | 已覆盖核心图层、视图模式、内置 / 用户主题 registry 与交换编辑、fit view 和 4 项显示偏好 |
 | `units` | 9 | 已覆盖当前全部显示单位偏好 |
-| `climate` | 14 | 已覆盖气候读取与当前写入入口 |
+| `climate` | 16 | 已覆盖气候读取、当前写入入口和受约束下游重算预检 / 应用 |
 | `history` | 5 | 已覆盖历史读取、peek、撤销和重做 |
-| `edit` | 90 | 已覆盖当前全部可纯参数调用的既有编辑命令、2 项高度派生重建、生物群系归属、市场归属预检 / 应用 / 经济重算、路线改线预检 / 应用、湖泊出口预检 / 应用和局部水陆修正预检 / 应用，以及路线 / 河流 / 湖泊 / 地区 / 独立备注创建、备注导入和备注批量删除 |
+| `edit` | 96 | 已覆盖当前全部可纯参数调用的既有编辑命令，并新增国家合并 / 拆分只读预检与显式确认事务入口；自动重新分省仍只属于拓扑事务内部步骤 |
 | `data` | 14 | 已覆盖地图 / GEO / 高度图 / 浏览器存档 / PNG / 记录与诊断导入导出 |
 | `namebases` | 10 | 已覆盖名称库读取、交换、编辑、绑定与批量改名 |
 | `debug` | 7 | 已覆盖只读诊断、debug UI 和单帧 profile |
@@ -74,6 +74,7 @@
 | 35 | 经济 | 市场归属预检、cell 归属应用与经济链重算 | 已暴露且共路径 | `api.edit.economy.inspectAssignment / assignCells / rebuild` 与市场归属面板共用 command；写入方法要求 `confirm: true` | 第 48 项已完成 |
 | 36 | 生物群系 | 局部归属编辑 | 已暴露且共路径 | `api.edit.biomes.assignCells()` 与生物群系面板共用预检、适居度重算和 edit command；陆水不匹配、非法目标及越界输入统一拒绝 | 第 51 项已完成 |
 | 37 | 视觉主题 | 用户主题查询、导入导出、创建、颜色编辑与删除 | 已暴露且共路径 | `api.layers.listThemes / exportTheme / importTheme / createTheme / updateTheme / deleteTheme` 与视图页共用白名单 registry、地图存储和 edit command | 第 52 项已完成 |
+| 38 | 国家拓扑 | 相邻国家合并、完整旧省拆分的预检与事务提交 | 已暴露且共路径 | `api.edit.states.inspectMerge / merge / inspectSplit / split` 与国家面板共用 runtime action、EditHistory 和拓扑命令；写入口要求 `confirm: true`，没有独立分省 API | 第 74 项实现完成，待同一 Chrome 验收 |
 
 ## 第 29～33 项冻结范围
 

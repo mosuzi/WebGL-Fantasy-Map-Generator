@@ -16,7 +16,7 @@ export const API_METHODS = Object.freeze({
     "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "measurements.import",
     "cities.add", "cities.delete", "cities.inspectMove", "cities.move", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
     "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
-    "states.add", "states.delete", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
+    "states.add", "states.delete", "states.inspectMerge", "states.merge", "states.inspectSplit", "states.split", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
     "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "biomes.assignCells", "diplomacy.setRelation",
     "economy.inspectAssignment", "economy.assignCells", "economy.rebuild",
     "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
@@ -46,7 +46,9 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "edit.height.rebuildBaseDerived",
   "edit.height.rebuildDownstreamDerived",
   "edit.economy.assignCells",
-  "edit.economy.rebuild"
+  "edit.economy.rebuild",
+  "edit.states.merge",
+  "edit.states.split"
 ]);
 
 const STABILITY_LEVELS = Object.freeze({

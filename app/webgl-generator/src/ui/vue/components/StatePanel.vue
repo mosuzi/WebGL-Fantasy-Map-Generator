@@ -93,6 +93,66 @@
         @clear="callbacks.onNoteChange(selected.id, '')"
       />
     </template>
+
+    <template #merge>
+      <div class="state-topology-editor">
+        <p class="state-topology-anchor">配置基准：{{ topologySourceName }}</p>
+        <UiSelectField
+          label="相邻目标国"
+          :model-value="mergeOtherStateId ?? ''"
+          :options="mergeNeighborOptions"
+          :disabled="!mergeNeighborOptions.length"
+          @update:model-value="updateMergeOtherState"
+        />
+        <UiSelectField
+          label="保留国家"
+          :model-value="mergeSurvivorStateId ?? ''"
+          :options="mergeSurvivorOptions"
+          :disabled="mergeSurvivorOptions.length !== 2"
+          @update:model-value="updateMergeSurvivorState"
+        />
+        <div class="state-topology-actions">
+          <UiButton variant="secondary" :disabled="!canInspectMerge" @click="inspectMerge">预检合并</UiButton>
+          <UiButton variant="danger" :disabled="!canSubmitTopology" @click="submitMerge">确认合并</UiButton>
+        </div>
+        <p v-if="topologyError" class="state-topology-error">{{ topologyError }}</p>
+        <UiDetailGrid v-if="topologyPreviewRows.length" class-name="state-topology-preview" :rows="topologyPreviewRows" />
+      </div>
+    </template>
+
+    <template #split>
+      <div class="state-topology-editor">
+        <p class="state-topology-anchor">配置基准：{{ topologySourceName }}</p>
+        <fieldset class="state-topology-provinces">
+          <legend>完整旧省份（可多选）</legend>
+          <label v-for="province in splitProvinceOptions" :key="province.value">
+            <input
+              type="checkbox"
+              :checked="splitProvinceIds.includes(province.value)"
+              @change="toggleSplitProvince(province.value, $event.target.checked)"
+            />
+            <span>{{ province.label }}</span>
+          </label>
+        </fieldset>
+        <UiSelectField
+          label="新国首都"
+          :model-value="splitCapitalCityId ?? ''"
+          :options="splitCapitalOptions"
+          :disabled="!splitCapitalOptions.length"
+          @update:model-value="updateSplitCapitalCity"
+        />
+        <label class="state-topology-name">
+          <span>新国名称（留空采用默认）</span>
+          <ElInput v-model="splitNameDraft" type="text" maxlength="48" @input="invalidateTopologyPreview" />
+        </label>
+        <div class="state-topology-actions">
+          <UiButton variant="secondary" :disabled="!canInspectSplit" @click="inspectSplit">预检拆分</UiButton>
+          <UiButton variant="danger" :disabled="!canSubmitTopology" @click="submitSplit">确认拆分</UiButton>
+        </div>
+        <p v-if="topologyError" class="state-topology-error">{{ topologyError }}</p>
+        <UiDetailGrid v-if="topologyPreviewRows.length" class-name="state-topology-preview" :rows="topologyPreviewRows" />
+      </div>
+    </template>
   </UiActionDock>
 
   <UiSelectField
@@ -194,6 +254,14 @@ const activeAction = ref(null);
 const renameRequestId = ref(null);
 const capitalDraft = ref(0);
 const governmentDraft = ref("monarchy");
+const topologySourceStateId = ref(null);
+const mergeOtherStateId = ref(null);
+const mergeSurvivorStateId = ref(null);
+const splitProvinceIds = ref([]);
+const splitCapitalCityId = ref(null);
+const splitNameDraft = ref("");
+const topologyInspection = ref(null);
+const topologyError = ref("");
 const metrics = computed(() => {
   props.state.version;
   return buildStateMetrics(props.state.map);
@@ -219,6 +287,19 @@ const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
   label: `${option.label} / ${option.category}`
 })));
 const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体会影响国号后缀、税收、外交倾向和军事动员。");
+const topologySourceName = computed(() => formatStateName(props.state.map, topologySourceStateId.value));
+const mergeNeighborOptions = computed(() => activeStateNeighbors(props.state.map, topologySourceStateId.value));
+const mergeSurvivorOptions = computed(() => [topologySourceStateId.value, mergeOtherStateId.value]
+  .filter((id, index, values) => Number.isInteger(id) && id > 0 && values.indexOf(id) === index)
+  .map(id => ({value: id, label: formatStateName(props.state.map, id)})));
+const splitProvinceOptions = computed(() => stateProvinces(props.state.map, topologySourceStateId.value));
+const splitCapitalOptions = computed(() => stateCities(props.state.map, topologySourceStateId.value)
+  .filter(city => splitProvinceIds.value.includes(Number(city.province)))
+  .map(city => ({value: city.id, label: `${city.name || `城市 #${city.id}`}（省 #${city.province}）`})));
+const canInspectMerge = computed(() => mergeSurvivorOptions.value.length === 2 && mergeSurvivorOptions.value.some(option => option.value === mergeSurvivorStateId.value));
+const canInspectSplit = computed(() => splitProvinceIds.value.length > 0 && Number.isInteger(splitCapitalCityId.value));
+const canSubmitTopology = computed(() => Boolean(topologyInspection.value?.valid));
+const topologyPreviewRows = computed(() => topologyInspection.value?.preview?.rows || []);
 const stateActions = computed(() => [
   {key: "add", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
   {key: "delete", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
@@ -227,7 +308,9 @@ const stateActions = computed(() => [
   {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "government", label: "调整政体", icon: "⚖", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "capital", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
-  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
+  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "merge", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
+  {key: "split", label: "按完整省份拆分国家", icon: "⑂", panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}
 ]);
 const stateHighlightActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableStateRows.value.length)}`, icon: "◉", disabled: !highlightableStateRows.value.length},
@@ -277,8 +360,13 @@ watch(() => selected.value?.governmentKey, next => {
   governmentDraft.value = next || "monarchy";
 }, {immediate: true});
 
-watch(() => selected.value?.id, id => {
+watch(() => props.state.map, () => {
   activeAction.value = null;
+  resetTopologyDraft();
+});
+
+watch(() => selected.value?.id, id => {
+  if (!topologyActionActive()) activeAction.value = null;
   if (!sameObjectId(renameRequestId.value, id) || selected.value?.neutral) return;
   renameRequestId.value = null;
   nextTick(() => {
@@ -350,6 +438,11 @@ function sortRows(rows, key, direction) {
 }
 
 function handleActionSelect(key) {
+  if (key === "merge" || key === "split") {
+    beginTopologyDraft(key);
+    return;
+  }
+  if (topologySourceStateId.value !== null) resetTopologyDraft();
   if (key === "add") {
     props.callbacks.onAddMode?.(!props.state.addMode);
     return;
@@ -363,6 +456,126 @@ function handleActionSelect(key) {
     return;
   }
   if (!key) activeAction.value = null;
+}
+
+function beginTopologyDraft(kind) {
+  if (!topologyActionActive() || topologySourceStateId.value === null) {
+    topologySourceStateId.value = Number(selected.value?.id) || null;
+    mergeOtherStateId.value = activeStateNeighbors(props.state.map, topologySourceStateId.value)[0]?.value ?? null;
+    mergeSurvivorStateId.value = topologySourceStateId.value;
+    splitProvinceIds.value = [];
+    splitCapitalCityId.value = null;
+    splitNameDraft.value = "";
+  }
+  invalidateTopologyPreview();
+  if (kind === "merge" && !mergeNeighborOptions.value.some(option => option.value === mergeOtherStateId.value)) {
+    mergeOtherStateId.value = mergeNeighborOptions.value[0]?.value ?? null;
+  }
+}
+
+function topologyActionActive() {
+  return activeAction.value === "merge" || activeAction.value === "split";
+}
+
+function updateMergeSurvivorState(value) {
+  mergeSurvivorStateId.value = Number(value);
+  invalidateTopologyPreview();
+}
+
+function updateSplitCapitalCity(value) {
+  splitCapitalCityId.value = Number(value);
+  invalidateTopologyPreview();
+}
+
+function updateMergeOtherState(value) {
+  mergeOtherStateId.value = Number(value);
+  if (!mergeSurvivorOptions.value.some(option => option.value === mergeSurvivorStateId.value)) {
+    mergeSurvivorStateId.value = topologySourceStateId.value;
+  }
+  invalidateTopologyPreview();
+}
+
+function toggleSplitProvince(provinceId, checked) {
+  splitProvinceIds.value = checked
+    ? [...new Set([...splitProvinceIds.value, Number(provinceId)])].sort((a, b) => a - b)
+    : splitProvinceIds.value.filter(id => id !== Number(provinceId));
+  if (!splitCapitalOptions.value.some(option => option.value === splitCapitalCityId.value)) {
+    splitCapitalCityId.value = splitCapitalOptions.value[0]?.value ?? null;
+  }
+  invalidateTopologyPreview();
+}
+
+function mergeInput() {
+  const survivorStateId = mergeSurvivorStateId.value;
+  const other = [topologySourceStateId.value, mergeOtherStateId.value].find(id => id !== survivorStateId);
+  return {survivorStateId, victimStateId: other};
+}
+
+function splitInput() {
+  return {
+    sourceStateId: topologySourceStateId.value,
+    selectedProvinceIds: [...splitProvinceIds.value],
+    newCapitalCityId: splitCapitalCityId.value,
+    ...(splitNameDraft.value.trim() ? {name: splitNameDraft.value.trim()} : {})
+  };
+}
+
+function inspectMerge() {
+  inspectTopology(() => props.callbacks.onInspectMerge?.(mergeInput()));
+}
+
+function inspectSplit() {
+  inspectTopology(() => props.callbacks.onInspectSplit?.(splitInput()));
+}
+
+function inspectTopology(readInspection) {
+  topologyError.value = "";
+  try {
+    topologyInspection.value = readInspection?.() || null;
+    if (!topologyInspection.value?.valid) topologyError.value = topologyInspection.value?.rejection?.reason || topologyInspection.value?.summary || "预检未通过";
+  } catch (error) {
+    topologyInspection.value = null;
+    topologyError.value = error?.message || String(error);
+  }
+}
+
+function submitMerge() {
+  submitTopology(() => props.callbacks.onMerge?.(mergeInput()));
+}
+
+function submitSplit() {
+  submitTopology(() => props.callbacks.onSplit?.(splitInput()));
+}
+
+function submitTopology(execute) {
+  if (!topologyInspection.value?.valid) return;
+  try {
+    const result = execute?.();
+    if (!result?.executed) {
+      topologyError.value = result?.error?.message || "国家拓扑操作未执行";
+      return;
+    }
+    activeAction.value = null;
+    resetTopologyDraft();
+  } catch (error) {
+    topologyError.value = error?.message || String(error);
+  }
+}
+
+function invalidateTopologyPreview() {
+  topologyInspection.value = null;
+  topologyError.value = "";
+}
+
+function resetTopologyDraft() {
+  topologySourceStateId.value = null;
+  mergeOtherStateId.value = null;
+  mergeSurvivorStateId.value = null;
+  splitProvinceIds.value = [];
+  splitCapitalCityId.value = null;
+  splitNameDraft.value = "";
+  topologyInspection.value = null;
+  topologyError.value = "";
 }
 
 function openRenameEditor(row) {
@@ -397,6 +610,24 @@ function stateCities(map, stateId) {
   return (map?.settlements?.cities || [])
     .filter(city => city?.burgId && city.state === stateId)
     .sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population || a.id - b.id);
+}
+
+function activeStateNeighbors(map, stateId) {
+  const stateItem = map?.politics?.states?.[stateId];
+  return (stateItem?.neighbors || [])
+    .map(Number)
+    .filter(id => id > 0 && map?.politics?.states?.[id] && !map.politics.states[id].removed)
+    .map(id => ({value: id, label: formatStateName(map, id)}));
+}
+
+function stateProvinces(map, stateId) {
+  return (map?.politics?.provinces || [])
+    .filter(province => province && !province.removed && Number(province.state) === Number(stateId))
+    .sort((a, b) => Number(a.i ?? a.id) - Number(b.i ?? b.id))
+    .map(province => {
+      const id = Number(province.i ?? province.id);
+      return {value: id, label: `${province.name || `省份 #${id}`}（#${id}）`};
+    });
 }
 
 function findCapitalCity(map, burgId) {

@@ -39,11 +39,11 @@ assert.deepEqual(version, {
 }, "版本接口契约不完整");
 assert.equal(capabilities.contract?.stableCompatibility, "same-major", "缺少同主版本兼容策略");
 assert.equal(capabilities.contract?.deprecatedRemoval, "next-major-only", "缺少 deprecated 移除策略");
-assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 190, "公开方法基线发生变化");
-assert.deepEqual(capabilities.stabilitySummary, {stable: 182, experimental: 7, deprecated: 1}, "稳定等级统计错误");
+assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 194, "公开方法基线发生变化");
+assert.deepEqual(capabilities.stabilitySummary, {stable: 186, experimental: 7, deprecated: 1}, "稳定等级统计错误");
 
 const metadataEntries = flattenMetadata(capabilities.methodMetadata);
-assert.equal(metadataEntries.length, 190, "方法元数据数量错误");
+assert.equal(metadataEntries.length, 194, "方法元数据数量错误");
 for (const [qualifiedName, metadata] of metadataEntries) {
   for (const field of ["stable", "stability", "since", "capabilityGroup", "mutates", "undoable", "async", "requiresConfirm"]) {
     assert(Object.prototype.hasOwnProperty.call(metadata, field), `${qualifiedName} 缺少 ${field}`);
@@ -80,7 +80,7 @@ const requiredFromMetadata = metadataEntries
   .map(([qualifiedName]) => qualifiedName)
   .sort();
 assert.deepEqual(requiredFromMetadata, [...capabilities.safety.confirmRequiredMethods].sort(), "确认策略与方法元数据不一致");
-assert.deepEqual(groupQualifiedMethodNames(CONFIRM_REQUIRED_METHODS).edit, ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "economy.assignCells", "economy.rebuild"], "嵌套编辑确认分组丢失方法路径");
+assert.deepEqual(groupQualifiedMethodNames(CONFIRM_REQUIRED_METHODS).edit, ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "economy.assignCells", "economy.rebuild", "states.merge", "states.split"], "嵌套编辑确认分组丢失方法路径");
 
 assert.throws(() => buildApiContract(API_METHODS, {...rawMetadata, info: {...rawMetadata.info, version: undefined}}), /缺少原始元数据：info\.version/, "缺失方法元数据没有阻止契约生成");
 assert.throws(() => buildApiContract(API_METHODS, {...rawMetadata, info: {...rawMetadata.info, ghost: rawMetadata.info.version}}), /未声明方法：info\.ghost/, "多余方法元数据没有阻止契约生成");
@@ -95,7 +95,7 @@ assert.match(consoleApiSource, /version: API_VERSION,[\s\S]*stability: API_STABI
 assert.match(consoleApiSource, /view\.webglGeneratorApi = api;\s*if \(!view\.api\) view\.api = api;/, "window.api 兼容别名安装条件发生变化");
 assert.match(consoleApiSource, /const methods = API_METHODS;/, "运行时能力表没有复用统一方法目录");
 assert.match(consoleApiSource, /buildApiContract\(methods, buildMethodMetadata\(\)\)/, "运行时能力表没有应用稳定契约");
-assert.equal((consoleApiSource.match(/\{stable: "draft", mutates:/g) || []).length, 190, "运行时原始副作用元数据数量发生变化");
+assert.equal((consoleApiSource.match(/\{stable: "draft", mutates:/g) || []).length, 194, "运行时原始副作用元数据数量发生变化");
 assert.equal((consoleApiSource.match(/requiresConfirm: true/g) || []).length, CONFIRM_REQUIRED_METHODS.length, "运行时确认元数据数量与确认目录不一致");
 for (const qualifiedName of CONFIRM_REQUIRED_METHODS) {
   const method = qualifiedName.startsWith("edit.") ? qualifiedName.slice(5) : qualifiedName.split(".").at(-1);

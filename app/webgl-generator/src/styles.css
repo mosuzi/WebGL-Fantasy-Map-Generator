@@ -3467,6 +3467,78 @@ select:disabled {
   line-height: 1.45;
 }
 
+.state-topology-editor {
+  display: grid;
+  gap: 10px;
+  color: #c5d1d8;
+  font-size: 12px;
+}
+
+.state-topology-anchor,
+.state-topology-error {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.state-topology-anchor {
+  color: #edf4f6;
+  font-weight: 600;
+}
+
+.state-topology-error {
+  border: 1px solid #70454a;
+  border-radius: 6px;
+  padding: 8px;
+  background: #29191c;
+  color: #ffb9be;
+}
+
+.state-topology-provinces {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  max-height: 150px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid #33444f;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.state-topology-provinces legend {
+  padding: 0 4px;
+  color: #9fb0ba;
+}
+
+.state-topology-provinces label,
+.state-topology-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.state-topology-provinces span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state-topology-name {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+}
+
+.state-topology-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.state-topology-preview {
+  margin: 0;
+}
+
 .province-panel-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
