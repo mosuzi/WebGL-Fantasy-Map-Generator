@@ -3,6 +3,12 @@ import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
+import {
+  NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
+  NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
+  serializeRiverGeoJsonProperties,
+  serializeRouteGeoJsonProperties
+} from "./network-geojson-properties.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -257,6 +263,8 @@ export function createMapFeatureGeoJson(map, options = {}) {
       checksum: map.metadata?.checksum || "",
       generatedAt: map.metadata?.generatedAt || "",
       coordinateReference: "approximate-equirectangular",
+      networkPropertySchema: NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
+      networkPropertySchemaVersion: NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
       dissolvedPolitical: dissolvePolitical,
       states: layers.state ? countValidPoliticalObjects(map.politics?.states) : 0,
       provinces: layers.province ? countValidPoliticalObjects(map.politics?.provinces) : 0,
@@ -1145,12 +1153,14 @@ function routeFeatures(map) {
     const coordinates = lineCoordinates(route.points, map);
     if (coordinates.length < 2) return null;
     const note = readObjectNote(map, {kind: "route", id: route.id});
+    const stable = serializeRouteGeoJsonProperties(map, route);
     return {
       type: "Feature",
       id: `route-${route.id}`,
       properties: {
         layer: "route",
         id: route.id,
+        name: stable.displayName,
         type: route.type,
         level: route.level,
         state: route.state || 0,
@@ -1163,7 +1173,8 @@ function routeFeatures(map) {
         resourceGoodIds: route.resourceGoodIds || [],
         distance: roundCoordinate(worldLineLength(route.points)),
         hasNote: Boolean(note?.body),
-        note: note?.body || ""
+        note: note?.body || "",
+        ...stable
       },
       geometry: {
         type: "LineString",
@@ -1178,6 +1189,7 @@ function riverFeatures(map) {
     const coordinates = lineCoordinates(river.points, map);
     if (coordinates.length < 2) return null;
     const note = readObjectNote(map, {kind: "river", id: river.id});
+    const stable = serializeRiverGeoJsonProperties(map, river);
     return {
       type: "Feature",
       id: `river-${river.id}`,
@@ -1199,7 +1211,8 @@ function riverFeatures(map) {
         averagePrecipitation: river.hydrology?.averagePrecipitation || 0,
         hydrologyMethod: river.hydrology?.method || "flow-accumulation",
         hasNote: Boolean(note?.body),
-        note: note?.body || ""
+        note: note?.body || "",
+        ...stable
       },
       geometry: {
         type: "LineString",

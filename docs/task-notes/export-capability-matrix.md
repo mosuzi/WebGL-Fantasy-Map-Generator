@@ -93,8 +93,8 @@
 | layer | 几何 | 主要属性 | 备注 |
 |---|---|---|---|
 | `city` | `Point` | id、burg、name、type、group、population、capital、provincial、port、state/province/culture/religion、cell、packCell、hasNote、note | 城市备注正文已输出 |
-| `route` | `LineString` | id、type、level、state、province、from、to、cells、distance、hasNote、note | 路线备注正文已输出 |
-| `river` | `LineString` | id、name、type、source、mouth、parent、basin、flux、length、width、widthFactor、hasNote、note | 暂未输出变宽河道面；备注正文已输出 |
+| `route` | `LineString` | 保留 id、type、level、state、province、from、to、cells、distance 等旧字段；v1 增加 name / displayName、中文类型 / 等级、端点 / 归属名称、世界长度、段数及 grid / pack cell 数 | 路线备注正文已输出；稳定字典见 `network-geojson-field-dictionary.md` |
+| `river` | `LineString` | 保留 id、name、type、source、mouth、parent、basin、flux、length、width、widthFactor、水文和备注旧字段；v1 增加 displayName、规范类型 / 层级、中文标签、世界长度、段数、grid / pack cell 数和 discharge | 暂未输出变宽河道面；稳定字典见 `network-geojson-field-dictionary.md` |
 | `marker` | `Point` | id、name、type、label、category、resource、economicValue、state、province、cell、packCell、hasNote、note | marker 备注正文已输出 |
 | `zone` | `MultiPolygon` | id、name、type、hidden、cells、color | 当前按 zone 的 cell polygon 集合输出，未 dissolve |
 | `state` | `MultiPolygon` | id、name、fullName、capital、capitalName、culture、religion、cells、area、population、color、neighbors、dissolved、hasNote、note | 默认关闭；按国家陆地 cell 集合输出，`dissolved=false` |
@@ -103,6 +103,7 @@
 所有要素 GeoJSON 的 FeatureCollection 与每个 Feature 都输出标准 `bbox`，方便外部 GIS 工具和后续范围导出快速判断空间范围。
 FeatureCollection 同时写入 `coordinateReference = approximate-equirectangular`，明确坐标来自地图世界范围的近似等距圆柱映射。
 Collection 还会写入可机读的世界边界、坐标边界、实际导出范围、轴序和单位；authority / identifier 为 `null`，不把近似映射伪装成已注册 CRS。
+路线与河流 FeatureCollection 现在声明 `networkPropertySchema = fmg-network-properties-v1`；全图、viewport 和 bbox 范围导出共用 `network-geojson-properties.js` 唯一 serializer。旧字段不删除，新增稳定字段的空值和单位规则见字段字典。
 
 已验证：
 
@@ -119,7 +120,7 @@ Collection 还会写入可机读的世界边界、坐标边界、实际导出范
 缺口：
 
 - zone、state 和 province 已支持真正 dissolve 外轮廓；范围导出和显式“未注册近似 CRS”元数据已完成。若未来要支持真实 CRS，应新增明确转换流程，不能只写一个 EPSG 编号。
-- route / river 可继续补名称、等级中文标签和更完整统计。
+- route / river 已完成 v1 名称、代码 / 中文标签、世界长度和可靠统计字段；真实交通量、通航等级、流速、坡降和真实水文单位仍因现有数据无法证明而明确不导出。
 
 ## PNG
 

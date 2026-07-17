@@ -43,6 +43,15 @@ const documents = [
       dissolvePolitical: true,
       layers: {state: true, province: true, city: false, route: false, river: false, marker: false, zone: true}
     })
+  },
+  {
+    id: "network-lines",
+    geometry: "Line String",
+    expectedFields: ["networkSchema", "networkSchemaVersion", "displayName", "typeCode", "typeLabel", "levelCode", "levelLabel", "lengthWorld", "lengthUnit", "segmentCount", "gridCellCount", "packCellCount"],
+    document: createMapFeatureGeoJson(map, {
+      range,
+      layers: {state: false, province: false, city: false, route: true, river: true, marker: false, zone: false}
+    })
   }
 ];
 
@@ -66,6 +75,7 @@ for (const item of documents) {
   const featureCount = Number(info.match(/Feature Count:\s*(\d+)/)?.[1] || 0);
   if (featureCount !== item.document.features.length) fail(`${item.id} QGIS Feature Count ${featureCount} != ${item.document.features.length}`);
   if (!new RegExp(`Geometry:\\s*${item.geometry}`).test(info)) fail(`${item.id} QGIS 几何类型不是 ${item.geometry}`);
+  for (const field of item.expectedFields || []) if (!new RegExp(`^${field}:`, "m").test(info)) fail(`${item.id} QGIS 字段表缺少 ${field}`);
   results.push({
     id: item.id,
     source,
@@ -73,7 +83,8 @@ for (const item of documents) {
     featureCount,
     geometry: item.geometry,
     exportRange: item.document.properties.exportRange,
-    warnings: 0
+    warnings: 0,
+    fields: item.expectedFields || []
   });
 }
 
