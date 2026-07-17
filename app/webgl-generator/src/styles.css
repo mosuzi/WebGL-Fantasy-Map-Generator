@@ -7372,6 +7372,18 @@ input.ui-switch-native {
   color: #edf4f6;
 }
 
+.social-expansion-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.social-expansion-editor .el-form-item__content,
+.social-expansion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .diplomacy-panel-controls {
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);

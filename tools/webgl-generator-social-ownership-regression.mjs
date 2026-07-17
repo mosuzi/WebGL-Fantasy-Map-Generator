@@ -8,6 +8,7 @@ import {objectNoteId, restoreObjectNote} from "../app/webgl-generator/src/runtim
 import {resolveObject} from "../app/webgl-generator/src/runtime/object-resolver.js";
 import {createApplyReligionAssignmentCommand, createDeleteReligionCommand} from "../app/webgl-generator/src/runtime/religion-edit-commands.js";
 import {applySocialAssignmentPreview} from "../app/webgl-generator/src/runtime/social-ownership-edit-commands.js";
+import {selectDeterministicOwnedCenter} from "../app/webgl-generator/src/runtime/social-expansion-edit-commands.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 
 assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, -1), 4, "文化画笔半径下界异常");
@@ -22,6 +23,8 @@ assert.ok(culture && religion, "固定 seed 应生成有覆盖的文化与宗教
 
 verifyAssignment("culture", culture, createApplyCultureAssignmentCommand);
 verifyAssignment("religion", religion, createApplyReligionAssignmentCommand);
+verifyCenterFallback("culture", createApplyCultureAssignmentCommand);
+verifyCenterFallback("religion", createApplyReligionAssignmentCommand);
 verifyDeletion("culture", culture, createDeleteCultureCommand);
 verifyDeletion("religion", religion, createDeleteReligionCommand);
 
@@ -61,6 +64,32 @@ function verifyAssignment(kind, source, createCommand) {
   history.redo({map});
   assert.equal(map.grid.cells[field][gridCell], targetId);
   history.undo({map});
+}
+
+function verifyCenterFallback(kind, createCommand) {
+  const field = kind;
+  const source = activeObjects(kind)
+    .filter(item => Number.isInteger(Number(item.center)) && Number(item.center) >= 0)
+    .sort((left, right) => objectId(left) - objectId(right))[0];
+  assert.ok(source, `${kind} 应有可测试的中心对象`);
+  const sourceId = objectId(source);
+  const gridCell = Number(map.pack.cells.g[source.center]);
+  const packCells = packCellsForGridCell(gridCell);
+  const target = activeObjects(kind).find(item => objectId(item) !== sourceId);
+  assert.ok(target && packCells.length, `${kind} 中心回退缺少测试目标`);
+  const before = ownershipSnapshot(kind);
+  const changes = [{
+    gridCell,
+    before: Number(map.grid.cells[field][gridCell]) || 0,
+    after: objectId(target),
+    packBefore: packCells.map(packCell => ({packCell, before: Number(map.pack.cells[field][packCell]) || 0}))
+  }];
+  history.execute(createCommand(changes), {map});
+  const expected = selectDeterministicOwnedCenter(map.pack.cells, field, sourceId);
+  assert.equal(Number(map.society[`${kind}s`][sourceId].center), expected, `${kind} 中心没有按人口、适居度和 cell ID 确定性回退`);
+  assert.equal(Number(map.pack[`${kind}s`][sourceId].center), expected, `${kind} 双 store 中心回退不一致`);
+  history.undo({map});
+  assert.deepEqual(ownershipSnapshot(kind), before, `${kind} 中心回退撤销没有完整恢复`);
 }
 
 function findHeterogeneousGridCell(kind) {

@@ -1,6 +1,7 @@
 import {rebuildInheritanceTree, summarizeInheritanceTree} from "../generator/inheritance.js";
 import {deleteObjectNote} from "./object-notes.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
+import {selectDeterministicOwnedCenter} from "./social-expansion-edit-commands.js";
 
 const SOCIAL_ASSIGNMENT_STALE = Object.freeze({
   culture: ["states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"],
@@ -205,17 +206,20 @@ function refreshSocialCoverage(map, config) {
     }
   }
   for (const store of stores) {
-    for (const item of store) {
-      if (!item || item.removed || !(Number(item.i ?? item.id) > 0)) continue;
+    const used = new Set();
+    const items = store
+      .filter(item => item && !item.removed && Number(item.i ?? item.id) > 0)
+      .sort((left, right) => Number(left.i ?? left.id) - Number(right.i ?? right.id));
+    for (const item of items) {
       const id = Number(item.i ?? item.id);
-      const center = firstValueCell(packCells?.[config.field], id);
-      if (center < 0) {
-        item.center = -1;
-        item.gridCenter = -1;
-      } else if (Number(packCells[config.field]?.[item.center]) !== id) {
-        item.center = center;
-        item.gridCenter = Number(packCells.g?.[center]) || 0;
-      }
+      let center = Number(item.center);
+      const centerOwned = Number.isInteger(center)
+        && Number(packCells?.h?.[center]) >= 20
+        && Number(packCells?.[config.field]?.[center]) === id;
+      if (!centerOwned || used.has(center)) center = selectDeterministicOwnedCenter(packCells, config.field, id, used);
+      item.center = center;
+      item.gridCenter = center >= 0 && Number.isInteger(Number(packCells?.g?.[center])) ? Number(packCells.g[center]) : -1;
+      if (center >= 0) used.add(center);
     }
     rebuildInheritanceTree(store);
   }
@@ -482,11 +486,6 @@ function replaceValue(values, target, replacement) {
     changed++;
   }
   return changed;
-}
-
-function firstValueCell(values, target) {
-  for (let index = 0; index < (values?.length || 0); index++) if (Number(values[index]) === target) return index;
-  return -1;
 }
 
 function countPositive(values) {

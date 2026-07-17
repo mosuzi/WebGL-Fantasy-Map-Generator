@@ -48,6 +48,8 @@
     "regress:lake-delete": "node --no-warnings ./tools/webgl-generator-lake-delete-regression.mjs",
     "regress:lake-delete-browser": "node --no-warnings ./tools/webgl-generator-lake-delete-browser-regression.mjs",
     "regress:social-ownership": "node --no-warnings ./tools/webgl-generator-social-ownership-regression.mjs",
+    "regress:social-expansion": "node --no-warnings ./tools/webgl-generator-social-expansion-regression.mjs",
+    "regress:social-expansion-ui-api": "node --no-warnings ./tools/webgl-generator-social-expansion-ui-api-regression.mjs",
     "regress:social-ownership-browser": "node --no-warnings ./tools/webgl-generator-social-ownership-browser-regression.mjs",
     "regress:object-entries": "node --no-warnings ./tools/webgl-generator-object-entry-regression.mjs",
     "regress:control-ia": "node --no-warnings ./tools/webgl-generator-control-information-architecture-regression.mjs",

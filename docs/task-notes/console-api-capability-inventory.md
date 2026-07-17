@@ -8,9 +8,9 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：11 个命名空间、196 个方法，其中 98 个为编辑方法。
+当前公开基线：11 个命名空间、200 个方法，其中 102 个为编辑方法。
 
-第 75 项接入后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 188 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、17 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
+第 76 项接入后，根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 192 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 13 个能力组、17 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
@@ -55,7 +55,7 @@
 | 16 | 国家 | 设置首都、批量政体、国家归属刷纯 changes | 已暴露且共路径 | `api.edit.states.setCapital / setGovernmentBatch / applyChanges` 与 state commands | 第 29 项已完成；第 33 项稳定化 |
 | 17 | 省份 | 新增、删除、重命名、颜色 | 已暴露且共路径 | `api.edit.provinces.*` 与 province commands | 第 33 项稳定化 |
 | 18 | 省份 | 省份归属刷纯 changes | 已暴露且共路径 | `api.edit.provinces.applyChanges()` 与 `createApplyProvinceBrushCommand()` | 第 29 项已完成；第 33 项稳定化 |
-| 19 | 文化 / 宗教 | 新增、删除、重命名、颜色、继承、归属 changes | 已暴露且共路径 | `api.edit.cultures.* / religions.*` | 第 33 项稳定化 |
+| 19 | 文化 / 宗教 | 新增、删除、重命名、颜色、继承、归属、中心与受约束重扩张 | 已暴露且共路径 | `api.edit.cultures.* / religions.*` | 第 33 项稳定化；第 76 项补扩张预检 / 提交 |
 | 20 | 高度 | 高度纯 changes | 已暴露且共路径 | `api.edit.height.applyChanges()` 与 `createApplyHeightBrushCommand()` | 第 29 项已完成；第 33 项稳定化 |
 | 21 | 外交 | 设置关系、外交重生成命令 | 已暴露且共路径 | `api.edit.diplomacy.setRelation()` 与 diplomacy command；重生成另有 `api.generate.regenerate` | 第 29 项已完成；第 33 项稳定化 |
 | 22 | 军事 | 比例、态势 / 批量态势、驻地、基地、战报、重命名 | 已暴露且共路径 | `api.edit.military.*` 9 个方法与 9 个 military commands；军事重生成另由 generate 覆盖 | 第 29 项已完成；第 33 项稳定化 |

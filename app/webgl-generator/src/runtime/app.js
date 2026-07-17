@@ -71,6 +71,7 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createMoveCityCommand, inspectCityMove} from "./city-relocation.js";
 import {bindCityRelocationDrag} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
+import {createApplySocialExpansionCommand, inspectSocialExpansion, normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
@@ -238,6 +239,8 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   CITY_MOVE: "city:move",
   CULTURE_ASSIGN: "culture:assign",
   RELIGION_ASSIGN: "religion:assign",
+  CULTURE_CENTER: "culture:center",
+  RELIGION_CENTER: "religion:center",
   BIOME_ASSIGN: "biome:assign",
   MARKET_ASSIGN: "economy:market-assign",
   MEASUREMENT_DRAW: "measurement:draw",
@@ -1317,6 +1320,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CULTURE_ASSIGN);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CULTURE_ASSIGN, "panel-toggle");
     },
+    onCenterPickActive: (active, cultureId) => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CULTURE_CENTER, {id: cultureId});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CULTURE_CENTER, "panel-toggle");
+    },
+    onInspectExpansion: (cultureId, options) => state.runtimeActions.edit.cultures.inspectExpansion(cultureId, options),
+    onApplyExpansion: (cultureId, options) => state.runtimeActions.edit.cultures.applyExpansion(cultureId, options),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -1401,6 +1410,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RELIGION_ASSIGN);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RELIGION_ASSIGN, "panel-toggle");
     },
+    onCenterPickActive: (active, religionId) => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RELIGION_CENTER, {id: religionId});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RELIGION_CENTER, "panel-toggle");
+    },
+    onInspectExpansion: (religionId, options) => state.runtimeActions.edit.religions.inspectExpansion(religionId, options),
+    onApplyExpansion: (religionId, options) => state.runtimeActions.edit.religions.applyExpansion(religionId, options),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -2591,6 +2606,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       cultures: {
         add: options => addCultureViaApi(state, documentRef, options),
         assignCells: (cultureId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "culture", cultureId, gridCellIds),
+        inspectExpansion: (cultureId, options = {}) => inspectSocialExpansionViaApi(state, "culture", cultureId, options),
+        applyExpansion: (cultureId, options = {}) => applySocialExpansionViaApi(state, documentRef, "culture", cultureId, options),
         delete: cultureId => deleteCultureViaApi(state, documentRef, cultureId),
         rename: (cultureId, name) => renameCultureViaApi(state, documentRef, cultureId, name),
         setColor: (cultureId, color) => setCultureColorViaApi(state, documentRef, cultureId, color),
@@ -2599,6 +2616,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       religions: {
         add: options => addReligionViaApi(state, documentRef, options),
         assignCells: (religionId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "religion", religionId, gridCellIds),
+        inspectExpansion: (religionId, options = {}) => inspectSocialExpansionViaApi(state, "religion", religionId, options),
+        applyExpansion: (religionId, options = {}) => applySocialExpansionViaApi(state, documentRef, "religion", religionId, options),
         delete: religionId => deleteReligionViaApi(state, documentRef, religionId),
         rename: (religionId, name) => renameReligionViaApi(state, documentRef, religionId, name),
         setColor: (religionId, color) => setReligionColorViaApi(state, documentRef, religionId, color),
@@ -3361,6 +3380,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.canvasToolModes.reset("map-replace");
   state.brushCursorPreview?.reset();
   state.map = map;
+  normalizeSocialExpansionMap(state.map);
   ensureLabelStore(state.map);
   reconcileWarDerivedData(state.map);
   ensureRiverHydrology(state.map);
@@ -7408,6 +7428,41 @@ function assignSocialCellsViaApi(state, documentRef, kind, targetId, gridCellIds
   return editApiResult(state, result);
 }
 
+export function inspectSocialExpansionViaApi(state, kind, objectId, options = {}) {
+  assertMapAvailable(state);
+  const label = kind === "culture" ? "文化" : "宗教";
+  const id = normalizeApiInteger(objectId, `${label} ID`);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error(`${label}扩张预检参数必须是对象`);
+  return inspectSocialExpansion(state.map, {...options, kind, id});
+}
+
+export function applySocialExpansionViaApi(state, documentRef, kind, objectId, options = {}, runtimeUi = {}) {
+  assertMapAvailable(state);
+  const label = kind === "culture" ? "文化" : "宗教";
+  const id = normalizeApiInteger(objectId, `${label} ID`);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error(`${label}扩张编辑参数必须是对象`);
+  if (options.mode === "reexpand" && options.confirm !== true) throw new Error(`${label}重新扩张需要显式传入 {confirm: true}`);
+  const inspection = inspectSocialExpansion(state.map, {...options, kind, id});
+  if (!inspection.valid) throw new Error(inspection.reason);
+  const command = createApplySocialExpansionCommand({...options, kind, id}, {label: `${label}${options.mode === "reexpand" ? "重新扩张" : "中心与参数"}`});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    ...(runtimeUi.refresh ? {refresh: runtimeUi.refresh} : {}),
+    ...(runtimeUi.refreshPanels !== undefined ? {refreshPanels: runtimeUi.refreshPanels} : {}),
+    status: executed => {
+      const applied = executed.getResult?.();
+      return applied?.mode === "reexpand"
+        ? `已重新扩张${label}，更新 ${applied.changedPackCells || 0} 个 pack cells。`
+        : `已保存${label}中心与扩张参数。`;
+    },
+    noopStatus: `${label}中心、参数和覆盖均未变化。`,
+    throwOnError: false
+  });
+  (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
+  (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function renameCultureViaApi(state, documentRef, cultureId, name) {
   return renameObjectViaApi(state, documentRef, OBJECT_KIND.CULTURE, cultureId, name, {
     idLabel: "文化 ID",
@@ -8680,6 +8735,8 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   });
   registerSocialAssignmentMode(state, documentRef, register, "culture");
   registerSocialAssignmentMode(state, documentRef, register, "religion");
+  registerSocialCenterMode(state, documentRef, register, "culture");
+  registerSocialCenterMode(state, documentRef, register, "religion");
   register(CANVAS_TOOL_MODE.BIOME_ASSIGN, "biome-panel", {
     onEnter: () => {
       state.biomeEdit.activeStroke = null;
@@ -8897,6 +8954,17 @@ function registerSocialAssignmentMode(state, documentRef, register, kind) {
       rollbackCanvasToolStroke(state, kind);
       state.panels[kind]?.setAssignmentActive(false);
     }
+  });
+}
+
+function registerSocialCenterMode(state, documentRef, register, kind) {
+  const modeId = kind === "culture" ? CANVAS_TOOL_MODE.CULTURE_CENTER : CANVAS_TOOL_MODE.RELIGION_CENTER;
+  register(modeId, `${kind}-panel`, {
+    onEnter: () => {
+      state.panels[kind]?.setCenterPickActive?.(true);
+      activateCanvasToolTheme(state, documentRef, `${kind}s`);
+    },
+    onExit: () => state.panels[kind]?.setCenterPickActive?.(false)
   });
 }
 
@@ -10552,7 +10620,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
 function bindObjectCreationTools(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const activeMode = state.canvasToolModes.getActive()?.id;
-    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, CANVAS_TOOL_MODE.CULTURE_CENTER, CANVAS_TOOL_MODE.RELIGION_CENTER, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (activeMode === CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT) {
@@ -10565,6 +10633,14 @@ function bindObjectCreationTools(canvas, state, documentRef) {
     }
     const packCell = getMarkerPackCellAtEvent(state, event);
     if (!Number.isInteger(packCell)) return;
+
+    if (activeMode === CANVAS_TOOL_MODE.CULTURE_CENTER || activeMode === CANVAS_TOOL_MODE.RELIGION_CENTER) {
+      const kind = activeMode === CANVAS_TOOL_MODE.CULTURE_CENTER ? "culture" : "religion";
+      state.panels[kind]?.setExpansionCenter?.(packCell);
+      setFileOperationStatus(documentRef, `${kind === "culture" ? "文化" : "宗教"}中心已拾取 pack cell #${packCell}，请先预检再保存。`);
+      completeCanvasToolMode(state, documentRef, activeMode, {packCell});
+      return;
+    }
 
     if (activeMode === CANVAS_TOOL_MODE.ROUTE_DRAW) {
       if (!Number.isInteger(state.routeCreate.startPackCell)) {

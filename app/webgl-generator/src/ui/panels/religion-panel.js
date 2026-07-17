@@ -41,6 +41,9 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     targetReligionId: null,
     assignmentActive: false,
     assignmentRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.RELIGION).defaultValue,
+    centerPickActive: false,
+    pickedExpansionCenter: null,
+    expansionPreview: null,
     lastAffected: 0,
     version: 0
   });
@@ -100,6 +103,26 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.RELIGION, radius);
       callbacks.onBrushRadiusChange?.();
     },
+    onCenterPickActive: active => {
+      panelState.centerPickActive = Boolean(active);
+      callbacks.onCenterPickActive?.(panelState.centerPickActive, panelState.selectedReligionId);
+    },
+    onInspectExpansion: options => {
+      panelState.expansionPreview = callbacks.onInspectExpansion?.(panelState.selectedReligionId, options) || null;
+      panelState.version++;
+      return panelState.expansionPreview;
+    },
+    onExpansionDraftChange: () => {
+      if (!panelState.expansionPreview) return;
+      panelState.expansionPreview = null;
+      panelState.version++;
+    },
+    onApplyExpansion: options => {
+      const result = callbacks.onApplyExpansion?.(panelState.selectedReligionId, options) || null;
+      panelState.expansionPreview = null;
+      panelState.version++;
+      return result;
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -118,7 +141,9 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     onClose: () => {
       panelState.open = false;
       panelState.assignmentActive = false;
+      panelState.centerPickActive = false;
       callbacks.onAssignmentActive?.(false, panelState.targetReligionId);
+      callbacks.onCenterPickActive?.(false, panelState.selectedReligionId);
     }
   });
   const root = documentRef.createElement("div");
@@ -171,6 +196,15 @@ export function createReligionPanel(documentRef, manager, callbacks = {}) {
     },
     setAssignmentActive(active) {
       panelState.assignmentActive = Boolean(active);
+      panelState.version++;
+    },
+    setCenterPickActive(active) {
+      panelState.centerPickActive = Boolean(active);
+      panelState.version++;
+    },
+    setExpansionCenter(packCell) {
+      panelState.pickedExpansionCenter = Number.isInteger(Number(packCell)) ? Number(packCell) : null;
+      panelState.expansionPreview = null;
       panelState.version++;
     },
     getBrush() {

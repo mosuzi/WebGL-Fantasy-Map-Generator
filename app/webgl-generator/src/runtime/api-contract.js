@@ -21,8 +21,8 @@ export const API_METHODS = Object.freeze({
     "economy.inspectAssignment", "economy.assignCells", "economy.rebuild",
     "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
     "zones.create", "zones.delete", "zones.setStyle",
-    "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
-    "religions.add", "religions.assignCells", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
+    "cultures.add", "cultures.assignCells", "cultures.inspectExpansion", "cultures.applyExpansion", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
+    "religions.add", "religions.assignCells", "religions.inspectExpansion", "religions.applyExpansion", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
     "routes.create", "routes.inspectEdit", "routes.update", "routes.delete", "routes.setNote", "rivers.create", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.create", "lakes.inspectOutlet", "lakes.setOutlet", "lakes.delete", "lakes.rename", "features.inspectPatch", "features.applyPatch", "features.inspectTopology", "features.applyTopology",
     "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
     "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"

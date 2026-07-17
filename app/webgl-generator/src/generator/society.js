@@ -512,6 +512,21 @@ function expandPackReligions(pack, religions) {
   return religionIds;
 }
 
+export function reexpandSocietyReligions(grid, pack, religions, settlements = null) {
+  const before = Array.from(pack?.cells?.religion || []);
+  const religionIds = expandPackReligions(pack, religions);
+  pack.cells.religion = religionIds;
+  checkReligionCenters(pack, religions);
+  summarizeReligionCoverage(pack, religions);
+  const gridCells = mirrorPackReligionToGrid(grid, pack);
+  syncReligionsToSettlementsAndPolitics(pack, settlements);
+  return {
+    changedPackCells: countChanged(before, religionIds),
+    packCells: countPositive(religionIds),
+    gridCells
+  };
+}
+
 function spreadFolkReligions(pack, religions) {
   const religionIds = new Uint16Array(pack.cells.i.length);
   const cultureToReligion = new Map(
@@ -942,6 +957,28 @@ function expandPackCultures(pack, cultures, centers, cultureIds, populatedMask) 
   }
 }
 
+export function reexpandSocietyCultures(grid, pack, cultures) {
+  const cells = pack.cells;
+  const before = Array.from(cells.culture || []);
+  const cultureIds = new Uint16Array(cells.i.length);
+  const centers = cultures
+    .filter(culture => culture?.i && !culture.removed && isValidCultureCenter(cells, culture.center))
+    .map(culture => ({cell: culture.center, cultureId: culture.i, point: cells.p?.[culture.center]}));
+  const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
+  const populatedMask = createCellMask(cells.i.length, populated);
+  resetCultureCoverage(cultures);
+  expandPackCultures(pack, cultures, centers, cultureIds, populatedMask);
+  fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask);
+  cells.culture = cultureIds;
+  summarizeCultureCoverage(pack, cultures);
+  const gridCells = mirrorPackCultureToGrid(grid, pack);
+  return {
+    changedPackCells: countChanged(before, cultureIds),
+    packCells: countPositive(cultureIds),
+    gridCells
+  };
+}
+
 function shouldFillUnassignedPopulatedCultures(options = {}, pack) {
   return !(options.heightmapTemplate === "archipelago" && options.cellsTarget <= 10000 && (pack?.cells?.i?.length || 0) < 3500);
 }
@@ -1042,6 +1079,21 @@ function summarizeCultureCoverage(pack, cultures) {
     culture.cells = (culture.cells || 0) + 1;
     culture.area = round((culture.area || 0) + (cells.area[cell] || 0), 2);
     culture.rural = round((culture.rural || 0) + (cells.pop[cell] || 0), 2);
+  }
+  for (const burg of pack.burgs || []) {
+    if (!burg?.i || burg.removed) continue;
+    const culture = cultures[cells.culture[burg.cell]];
+    if (culture) culture.urban = round((culture.urban || 0) + (burg.population || 0), 2);
+  }
+}
+
+function resetCultureCoverage(cultures) {
+  for (const culture of cultures || []) {
+    if (!culture) continue;
+    culture.cells = 0;
+    culture.area = 0;
+    culture.rural = 0;
+    if (Object.prototype.hasOwnProperty.call(culture, "urban")) culture.urban = 0;
   }
 }
 
@@ -1145,6 +1197,17 @@ function religionCost(grid, riverCells, from, to, center) {
 
 function isPopulatedPackCell(cells, cell) {
   return cells.h[cell] >= 20 && (cells.s?.[cell] || 0) > 0 && (cells.pop?.[cell] || 0) > 0;
+}
+
+function isValidCultureCenter(cells, cell) {
+  return Number.isInteger(cell) && cell >= 0 && cell < cells.i.length && cells.h[cell] >= 20;
+}
+
+function countChanged(before, after) {
+  let changed = 0;
+  const length = Math.max(before?.length || 0, after?.length || 0);
+  for (let index = 0; index < length; index++) if (Number(before?.[index] || 0) !== Number(after?.[index] || 0)) changed++;
+  return changed;
 }
 
 function createWildlandsCulture() {

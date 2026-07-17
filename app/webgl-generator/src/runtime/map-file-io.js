@@ -1,6 +1,7 @@
 import {readObjectNote} from "./object-notes.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
+import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -440,15 +441,32 @@ function validateCurrentMapDocument(document) {
 function normalizeMapSchemaV2(map, documentOptions = {}) {
   const source = map && typeof map === "object" ? map : {};
   const options = {...(documentOptions || {}), ...(source.options || {})};
-  return {
+  const societyCultures = cloneSocialStore(source.society?.cultures);
+  const societyReligions = cloneSocialStore(source.society?.religions);
+  const packCultures = source.pack?.cultures === source.society?.cultures ? societyCultures : cloneSocialStore(source.pack?.cultures);
+  const packReligions = source.pack?.religions === source.society?.religions ? societyReligions : cloneSocialStore(source.pack?.religions);
+  const normalized = {
     ...source,
     metadata: {...(source.metadata || {}), schemaVersion: MAP_SCHEMA_VERSION},
     options,
+    society: source.society ? {...source.society, cultures: societyCultures, religions: societyReligions, metadata: {...(source.society.metadata || {})}} : source.society,
+    pack: source.pack ? {...source.pack, cultures: packCultures, religions: packReligions} : source.pack,
     notes: normalizeNotesStoreV2(source.notes),
     measurements: normalizeMeasurementStoreV2(source.measurements),
     labels: normalizeLabelStoreV2(source.labels),
     visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme)
   };
+  return normalizeSocialExpansionMap(normalized);
+}
+
+function cloneSocialStore(store) {
+  if (!Array.isArray(store)) return store;
+  return store.map(item => item ? {
+    ...item,
+    children: Array.isArray(item.children) ? [...item.children] : item.children,
+    lineage: Array.isArray(item.lineage) ? [...item.lineage] : item.lineage,
+    origins: Array.isArray(item.origins) ? [...item.origins] : item.origins
+  } : item);
 }
 
 function normalizeNotesStoreV2(source) {

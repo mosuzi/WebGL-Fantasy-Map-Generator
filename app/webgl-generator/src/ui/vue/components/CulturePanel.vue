@@ -104,6 +104,46 @@
       />
     </template>
 
+    <template #expansion>
+      <div class="social-expansion-editor" aria-label="文化中心与扩张编辑">
+        <ElForm label-position="top" size="small">
+          <ElFormItem label="中心 pack cell">
+            <ElInputNumber v-model="expansionDraft.center" :min="0" :step="1" controls-position="right" />
+            <ElButton @click="callbacks.onCenterPickActive?.(!state.centerPickActive)">
+              {{ state.centerPickActive ? "取消拾取" : "从画布拾取一次" }}
+            </ElButton>
+          </ElFormItem>
+          <ElFormItem label="文化类型">
+            <ElSelect v-model="expansionDraft.type">
+              <ElOption v-for="type in cultureTypeOptions" :key="type" :label="type" :value="type" />
+            </ElSelect>
+          </ElFormItem>
+          <ElFormItem label="扩张系数（0.1～10）">
+            <ElInputNumber v-model="expansionDraft.expansionism" :min="0.1" :max="10" :step="0.1" :precision="1" controls-position="right" />
+          </ElFormItem>
+          <ElFormItem label="执行方式">
+            <ElRadioGroup v-model="expansionDraft.mode">
+              <ElRadioButton value="save">仅保存</ElRadioButton>
+              <ElRadioButton value="reexpand">重新扩张</ElRadioButton>
+            </ElRadioGroup>
+          </ElFormItem>
+          <ElCheckbox v-model="expansionDraft.includeReligions" :disabled="expansionDraft.mode !== 'reexpand'">同事务联动宗教（默认关闭）</ElCheckbox>
+        </ElForm>
+        <ElAlert
+          v-if="state.expansionPreview"
+          :type="state.expansionPreview.valid ? 'info' : 'error'"
+          :closable="false"
+          :title="expansionPreviewText"
+          show-icon
+        />
+        <div class="social-expansion-actions">
+          <ElButton @click="inspectExpansion">只读预检</ElButton>
+          <ElButton v-if="expansionDraft.mode === 'save'" type="primary" :disabled="!state.expansionPreview?.valid" @click="applyExpansion(false)">仅保存</ElButton>
+          <ElButton v-else type="danger" :disabled="!state.expansionPreview?.valid" @click="applyExpansion(true)">确认并重新扩张</ElButton>
+        </div>
+      </div>
+    </template>
+
     <template #note>
       <UiNoteField
         class-name="culture-note-editor"
@@ -199,6 +239,7 @@ const cultureActions = computed(() => [
   {key: "rename", label: "重命名", icon: "✎"},
   {key: "color", label: "调整颜色", icon: "◐"},
   {key: "parent", label: "调整继承", icon: "↳"},
+  {key: "expansion", label: "中心与扩张", icon: "⊕"},
   {key: "namebase", label: "名称库绑定", icon: "名"},
   {key: "note", label: "编辑备注", icon: "☰"}
 ]);
@@ -206,6 +247,16 @@ const assignmentOptions = computed(() => [
   {value: 0, label: "无文化"},
   ...metrics.value.rows.map(row => ({value: row.id, label: row.name}))
 ]);
+const cultureTypeOptions = Object.freeze(["Generic", "Hunting", "Highland", "River", "Lake", "Naval", "Nomadic"]);
+const expansionDraft = ref({center: 0, type: "Generic", expansionism: 1, mode: "save", includeReligions: false});
+const expansionPreviewText = computed(() => {
+  const preview = props.state.expansionPreview;
+  if (!preview) return "";
+  if (!preview.valid) return preview.reason || "预检失败";
+  return preview.mode === "reexpand"
+    ? `预计更新 ${formatNumber(preview.changedPackCells || 0)} 个 pack cells${preview.includeReligions ? `，联动宗教 ${formatNumber(preview.linkedReligionPackCells || 0)} 个` : ""}`
+    : `仅保存中心与 ${formatNumber(preview.parameterChanges?.length || 0)} 个参数，不改变覆盖`;
+});
 const defaultCultureEmptyAction = Object.freeze({key: "add", label: "新增空文化", icon: "+"});
 const cultureEmptyAction = computed(() => filterEmptyAction.value || defaultCultureEmptyAction);
 const cultureListActions = computed(() => [
@@ -254,12 +305,43 @@ const detailRows = computed(() => selected.value ? [
 
 watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  resetExpansionDraft();
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
     activeAction.value = "rename";
   });
+}, {immediate: true});
+
+watch(() => props.state.pickedExpansionCenter, center => {
+  if (Number.isInteger(center)) expansionDraft.value.center = center;
 });
+
+watch(expansionDraft, () => props.callbacks.onExpansionDraftChange?.(), {deep: true});
+
+function resetExpansionDraft() {
+  const row = selected.value;
+  if (!row) return;
+  expansionDraft.value = {
+    center: Number(row.centerCell) || 0,
+    type: cultureTypeOptions.includes(row.type) ? row.type : "Generic",
+    expansionism: Number.isFinite(Number(row.expansionism)) ? Number(row.expansionism) : 1,
+    mode: "save",
+    includeReligions: false
+  };
+}
+
+function expansionOptions(confirm = false) {
+  return {...expansionDraft.value, confirm};
+}
+
+function inspectExpansion() {
+  props.callbacks.onInspectExpansion?.(expansionOptions(false));
+}
+
+function applyExpansion(confirm) {
+  props.callbacks.onApplyExpansion?.(expansionOptions(confirm));
+}
 
 function selectTreeNode(node) {
   props.callbacks.onSelect?.(node);

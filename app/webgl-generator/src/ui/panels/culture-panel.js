@@ -41,6 +41,9 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     targetCultureId: null,
     assignmentActive: false,
     assignmentRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.CULTURE).defaultValue,
+    centerPickActive: false,
+    pickedExpansionCenter: null,
+    expansionPreview: null,
     lastAffected: 0,
     version: 0
   });
@@ -101,6 +104,26 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.CULTURE, radius);
       callbacks.onBrushRadiusChange?.();
     },
+    onCenterPickActive: active => {
+      panelState.centerPickActive = Boolean(active);
+      callbacks.onCenterPickActive?.(panelState.centerPickActive, panelState.selectedCultureId);
+    },
+    onInspectExpansion: options => {
+      panelState.expansionPreview = callbacks.onInspectExpansion?.(panelState.selectedCultureId, options) || null;
+      panelState.version++;
+      return panelState.expansionPreview;
+    },
+    onExpansionDraftChange: () => {
+      if (!panelState.expansionPreview) return;
+      panelState.expansionPreview = null;
+      panelState.version++;
+    },
+    onApplyExpansion: options => {
+      const result = callbacks.onApplyExpansion?.(panelState.selectedCultureId, options) || null;
+      panelState.expansionPreview = null;
+      panelState.version++;
+      return result;
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -119,7 +142,9 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     onClose: () => {
       panelState.open = false;
       panelState.assignmentActive = false;
+      panelState.centerPickActive = false;
       callbacks.onAssignmentActive?.(false, panelState.targetCultureId);
+      callbacks.onCenterPickActive?.(false, panelState.selectedCultureId);
     }
   });
   const root = documentRef.createElement("div");
@@ -172,6 +197,15 @@ export function createCulturePanel(documentRef, manager, callbacks = {}) {
     },
     setAssignmentActive(active) {
       panelState.assignmentActive = Boolean(active);
+      panelState.version++;
+    },
+    setCenterPickActive(active) {
+      panelState.centerPickActive = Boolean(active);
+      panelState.version++;
+    },
+    setExpansionCenter(packCell) {
+      panelState.pickedExpansionCenter = Number.isInteger(Number(packCell)) ? Number(packCell) : null;
+      panelState.expansionPreview = null;
       panelState.version++;
     },
     getBrush() {
