@@ -18,6 +18,7 @@ export function resolveBrushCursor(state) {
   if (modeId === "culture:assign") return panelResolution(state.panels?.culture, "getBrush", BRUSH_RADIUS_ID.CULTURE);
   if (modeId === "religion:assign") return panelResolution(state.panels?.religion, "getBrush", BRUSH_RADIUS_ID.RELIGION);
   if (modeId === "biome:assign") return panelResolution(state.panels?.biome, "getBrush", BRUSH_RADIUS_ID.BIOME);
+  if (modeId === "biome:suitability") return panelResolution(state.panels?.biome, "getSuitabilityBrush", BRUSH_RADIUS_ID.SUITABILITY);
   if (modeId === "economy:market-assign") return panelResolution(state.panels?.economy, "getMarketBrush", BRUSH_RADIUS_ID.ECONOMY_MARKET);
   return null;
 }

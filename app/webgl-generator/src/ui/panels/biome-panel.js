@@ -1,4 +1,5 @@
 import {markRaw, shallowReactive} from "vue";
+import {SUITABILITY_VALUE_RANGE} from "../../generator/suitability.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {toIntegerId} from "../object-id.js";
@@ -36,6 +37,13 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
     assignmentRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.BIOME).defaultValue,
     lastAffected: 0,
     assignmentPreview: null,
+    suitabilityActive: false,
+    suitabilityScope: "land",
+    suitabilityMode: "set",
+    suitabilityValue: SUITABILITY_VALUE_RANGE.defaultValue,
+    suitabilityRadius: readBrushRadiusContract(BRUSH_RADIUS_ID.SUITABILITY).defaultValue,
+    suitabilityLastAffected: 0,
+    suitabilityPreview: null,
     version: 0
   });
   const panelCallbacks = {
@@ -86,6 +94,29 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
       panelState.assignmentRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, radius);
       callbacks.onBrushRadiusChange?.();
     },
+    onSuitabilityActive: active => {
+      panelState.suitabilityActive = Boolean(active);
+      callbacks.onSuitabilityActive?.(panelState.suitabilityActive);
+    },
+    onSuitabilityScope: scope => {
+      panelState.suitabilityScope = ["land", "water", "all"].includes(scope) ? scope : "land";
+      panelState.suitabilityPreview = null;
+    },
+    onSuitabilityMode: mode => {
+      panelState.suitabilityMode = mode === "reset" ? "reset" : "set";
+      panelState.suitabilityPreview = null;
+    },
+    onSuitabilityValue: value => {
+      panelState.suitabilityValue = Math.max(
+        SUITABILITY_VALUE_RANGE.min,
+        Math.min(SUITABILITY_VALUE_RANGE.max, Math.round(Number(value) || 0))
+      );
+      panelState.suitabilityPreview = null;
+    },
+    onSuitabilityRadius: radius => {
+      panelState.suitabilityRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, radius);
+      callbacks.onBrushRadiusChange?.();
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -104,7 +135,9 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
     onClose: () => {
       panelState.open = false;
       panelState.assignmentActive = false;
+      panelState.suitabilityActive = false;
       callbacks.onAssignmentActive?.(false);
+      callbacks.onSuitabilityActive?.(false);
     }
   });
   const root = documentRef.createElement("div");
@@ -135,7 +168,7 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
       manager.open(BIOME_PANEL_ID);
       lazyPanel.load();
     },
-    update(map, history, assignment = {}) {
+    update(map, history, assignment = {}, suitability = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       if (!biomeExists(map, panelState.selectedBiomeId)) {
@@ -145,6 +178,9 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
       if (assignment.active !== undefined) panelState.assignmentActive = Boolean(assignment.active);
       if (assignment.lastAffected !== undefined) panelState.lastAffected = Number(assignment.lastAffected) || 0;
       if (assignment.preview !== undefined) panelState.assignmentPreview = assignment.preview;
+      if (suitability.active !== undefined) panelState.suitabilityActive = Boolean(suitability.active);
+      if (suitability.lastAffected !== undefined) panelState.suitabilityLastAffected = Number(suitability.lastAffected) || 0;
+      if (suitability.preview !== undefined) panelState.suitabilityPreview = suitability.preview;
       panelState.version++;
     },
     setAssignmentActive(active) {
@@ -156,12 +192,30 @@ export function createBiomePanel(documentRef, manager, callbacks = {}) {
       if (preview !== undefined) panelState.assignmentPreview = preview;
       panelState.version++;
     },
+    setSuitabilityActive(active) {
+      panelState.suitabilityActive = Boolean(active);
+      panelState.version++;
+    },
+    updateSuitability({lastAffected, preview} = {}) {
+      if (lastAffected !== undefined) panelState.suitabilityLastAffected = Number(lastAffected) || 0;
+      if (preview !== undefined) panelState.suitabilityPreview = preview;
+      panelState.version++;
+    },
     getBrush() {
       return {
         active: panelState.assignmentActive,
         targetId: panelState.selectedBiomeId ?? 0,
         scope: panelState.assignmentScope,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, panelState.assignmentRadius)
+      };
+    },
+    getSuitabilityBrush() {
+      return {
+        active: panelState.suitabilityActive,
+        mode: panelState.suitabilityMode,
+        scope: panelState.suitabilityScope,
+        value: panelState.suitabilityValue,
+        radius: normalizeBrushRadius(BRUSH_RADIUS_ID.SUITABILITY, panelState.suitabilityRadius)
       };
     },
     isOpen() {

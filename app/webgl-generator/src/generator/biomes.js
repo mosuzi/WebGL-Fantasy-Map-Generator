@@ -1,4 +1,5 @@
 import {prepareInitialGoods} from "./economy.js";
+import {applySuitabilityOverrides, captureSuitabilityBase} from "./suitability.js";
 
 export const BIOMES = [
   {id: 0, name: "Marine", color: [0.27, 0.43, 0.67, 1], habitability: 0},
@@ -55,6 +56,8 @@ export function defineBiomesAndPopulation(grid, pack, options = {}) {
 export function recalculateBiomeSuitability(grid, pack) {
   const rankCellsInputs = rankCells(pack);
   pack.metadata.rankCellsInputs = rankCellsInputs;
+  captureSuitabilityBase(pack);
+  const suitabilityOverrides = applySuitabilityOverrides(pack);
   mirrorPackFieldsToGrid(grid, pack);
   return {
     biomeCounts: countValues(pack.cells.biome),
@@ -62,7 +65,8 @@ export function recalculateBiomeSuitability(grid, pack) {
     positivePopulationCells: countPositive(pack.cells.pop),
     maxSuitability: maxValue(pack.cells.s),
     maxPopulation: round(maxValue(pack.cells.pop), 3),
-    rankCellsInputs
+    rankCellsInputs,
+    manualSuitabilityCells: suitabilityOverrides.manualCells
   };
 }
 

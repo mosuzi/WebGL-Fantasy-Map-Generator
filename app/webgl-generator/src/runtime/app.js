@@ -73,6 +73,7 @@ import {bindCityRelocationDrag} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createApplySocialExpansionCommand, inspectSocialExpansion, normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
+import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, normalizeSuitabilityMap, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
@@ -242,6 +243,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   CULTURE_CENTER: "culture:center",
   RELIGION_CENTER: "religion:center",
   BIOME_ASSIGN: "biome:assign",
+  SUITABILITY_PAINT: "biome:suitability",
   MARKET_ASSIGN: "economy:market-assign",
   MEASUREMENT_DRAW: "measurement:draw",
   MARKER_ADD: "marker:add",
@@ -306,6 +308,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     cultureEdit: {activeStroke: null, lastAffected: 0},
     religionEdit: {activeStroke: null, lastAffected: 0},
     biomeEdit: {activeStroke: null, lastAffected: 0, preview: null},
+    suitabilityEdit: {activeStroke: null, lastAffected: 0, preview: null},
     economyEdit: {activeStroke: null, originals: new Map(), preview: null},
     cityEdit: {
       addMode: false,
@@ -376,6 +379,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onAssignmentActive: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.BIOME_ASSIGN);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.BIOME_ASSIGN, "panel-toggle");
+    },
+    onSuitabilityActive: active => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.SUITABILITY_PAINT);
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.SUITABILITY_PAINT, "panel-toggle");
     },
     onUndo: () => executeHistoryCommand(state, documentRef, "undo"),
     onRedo: () => executeHistoryCommand(state, documentRef, "redo")
@@ -2214,6 +2221,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindSocialAssignmentEditing(canvas, state, documentRef, "culture");
   bindSocialAssignmentEditing(canvas, state, documentRef, "religion");
   bindBiomeAssignmentEditing(canvas, state, documentRef);
+  bindSuitabilityEditing(canvas, state, documentRef);
   bindMarketAssignmentEditing(canvas, state, documentRef);
   bindCityEditing(canvas, state, documentRef);
   bindMarkerEditing(canvas, state, documentRef);
@@ -2577,7 +2585,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
         rebuildDownstreamDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions)
       },
       biomes: {
-        assignCells: (biomeId, gridCellIds, editOptions = {}) => assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, editOptions)
+        assignCells: (biomeId, gridCellIds, editOptions = {}) => assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, editOptions),
+        inspectSuitability: (gridCellIds, editOptions = {}) => inspectSuitabilityViaApi(state, gridCellIds, editOptions),
+        applySuitability: (gridCellIds, editOptions = {}) => applySuitabilityViaApi(state, documentRef, gridCellIds, editOptions)
       },
       economy: {
         inspectAssignment: (marketId, packCellIds) => inspectMarketAssignmentViaApi(state, marketId, packCellIds),
@@ -3381,6 +3391,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.brushCursorPreview?.reset();
   state.map = map;
   normalizeSocialExpansionMap(state.map);
+  normalizeSuitabilityMap(state.map);
   ensureLabelStore(state.map);
   reconcileWarDerivedData(state.map);
   ensureRiverHydrology(state.map);
@@ -3415,6 +3426,12 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.cultureEdit.lastAffected = 0;
   state.religionEdit.activeStroke = null;
   state.religionEdit.lastAffected = 0;
+  state.biomeEdit.activeStroke = null;
+  state.biomeEdit.lastAffected = 0;
+  state.biomeEdit.preview = null;
+  state.suitabilityEdit.activeStroke = null;
+  state.suitabilityEdit.lastAffected = 0;
+  state.suitabilityEdit.preview = null;
   state.panels.culture?.setAssignmentActive?.(false);
   state.panels.religion?.setAssignmentActive?.(false);
   state.cityEdit.addMode = false;
@@ -7140,6 +7157,38 @@ function assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, option
   return editApiResult(state, result);
 }
 
+export function inspectSuitabilityViaApi(state, gridCellIds, options = {}) {
+  assertMapAvailable(state);
+  if (!Array.isArray(gridCellIds)) throw new Error("适居度 grid cells 必须是数组");
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("适居度预检参数必须是对象");
+  return inspectSuitabilityEdit(state.map, gridCellIds, options);
+}
+
+export function applySuitabilityViaApi(state, documentRef, gridCellIds, options = {}, runtimeUi = {}) {
+  assertMapAvailable(state);
+  if (!Array.isArray(gridCellIds)) throw new Error("适居度 grid cells 必须是数组");
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("适居度编辑参数必须是对象");
+  const changes = buildSuitabilityChanges(state.map, gridCellIds, options);
+  const command = createApplySuitabilityCommand(changes, {label: options.label || "API 数值适居度"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    ...(runtimeUi.refresh ? {refresh: runtimeUi.refresh} : {}),
+    ...(runtimeUi.refreshPanels !== undefined ? {refreshPanels: runtimeUi.refreshPanels} : {}),
+    status: executed => {
+      const summary = executed.getResult?.();
+      return `已通过 API 更新 ${summary?.gridCells || 0} 个 grid cells 的数值适居度。`;
+    },
+    noopStatus: "数值适居度没有变化。",
+    throwOnError: false
+  });
+  state.suitabilityEdit.lastAffected = result.executed ? changes.length : 0;
+  state.suitabilityEdit.preview = null;
+  (runtimeUi.updateBiomePanel || updateBiomePanel)(state);
+  (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
+  (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  return editApiResult(state, result);
+}
+
 function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("高度派生重建会改写当前地图派生数据，需要显式传入 {confirm: true}");
@@ -8751,6 +8800,21 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.panels.biome?.updateAssignment({preview: null});
     }
   });
+  register(CANVAS_TOOL_MODE.SUITABILITY_PAINT, "biome-panel", {
+    onEnter: () => {
+      state.suitabilityEdit.activeStroke = null;
+      state.suitabilityEdit.preview = null;
+      state.panels.biome?.setSuitabilityActive(true);
+      state.panels.biome?.updateSuitability({preview: null});
+      activateCanvasToolTheme(state, documentRef, "population");
+    },
+    onExit: () => {
+      rollbackCanvasToolStroke(state, "suitability");
+      state.suitabilityEdit.preview = null;
+      state.panels.biome?.setSuitabilityActive(false);
+      state.panels.biome?.updateSuitability({preview: null});
+    }
+  });
   register(CANVAS_TOOL_MODE.MARKET_ASSIGN, "economy-panel", {
     onEnter: () => {
       state.economyEdit.activeStroke = null;
@@ -9029,6 +9093,15 @@ function rollbackCanvasToolStroke(state, kind) {
   editState.activeStroke = null;
   releasePointer(state.renderer?.canvas, stroke.pointerId);
   if (!stroke.originals?.size || !state.map) return false;
+  if (kind === "suitability") {
+    const changes = buildSuitabilityStrokeChanges(state.map, stroke.originals);
+    if (!changes.length) return false;
+    restoreSuitabilityPreview(state.map, changes);
+    state.editRefreshScheduler?.run(SUITABILITY_PREVIEW_EFFECTS);
+    state.suitabilityEdit.preview = null;
+    state.panels.biome?.updateSuitability({preview: null});
+    return true;
+  }
   const restored = restoreCanvasToolStrokePreview(state.map, kind, stroke);
   if (!restored.restoredGridCells) return false;
   if (kind === "height") state.editRefreshScheduler?.run(EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW);
@@ -10480,6 +10553,45 @@ function bindBiomeAssignmentEditing(canvas, state, documentRef) {
   }, true);
 }
 
+function bindSuitabilityEditing(canvas, state, documentRef) {
+  canvas.addEventListener("pointerdown", event => {
+    const brush = state.panels.biome?.getSuitabilityBrush?.();
+    if (!brush?.active || !state.map || !isPrimaryPointerDown(event)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const picked = state.renderer.pickClientPoint(event.clientX, event.clientY);
+    const preview = inspectSuitabilityEdit(state.map, [picked?.gridCell], brush);
+    if (!preview.valid) {
+      state.suitabilityEdit.preview = preview;
+      state.panels.biome?.updateSuitability({preview});
+      return;
+    }
+    state.suitabilityEdit.activeStroke = {pointerId: event.pointerId, originals: new Map()};
+    capturePointer(canvas, event.pointerId);
+    applySuitabilityAtEvent(state, event);
+  }, true);
+  canvas.addEventListener("pointermove", event => {
+    if (state.suitabilityEdit.activeStroke?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    applySuitabilityAtEvent(state, event);
+  }, true);
+  canvas.addEventListener("pointerup", event => {
+    if (state.suitabilityEdit.activeStroke?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    finishSuitabilityStroke(state, documentRef);
+    releasePointer(canvas, event.pointerId);
+  }, true);
+  canvas.addEventListener("pointercancel", event => {
+    if (state.suitabilityEdit.activeStroke?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    rollbackCanvasToolStroke(state, "suitability");
+    releasePointer(canvas, event.pointerId);
+  }, true);
+}
+
 function bindMarketAssignmentEditing(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const brush = state.panels.economy?.getMarketBrush?.();
@@ -11031,6 +11143,34 @@ function applyBiomeAssignmentAtEvent(state, event) {
   updateBiomePanel(state);
 }
 
+function applySuitabilityAtEvent(state, event) {
+  const brush = state.panels.biome?.getSuitabilityBrush?.();
+  const stroke = state.suitabilityEdit.activeStroke;
+  if (!brush?.active || !stroke) return;
+  const point = state.renderer.screenToWorld(event.clientX, event.clientY);
+  const changes = getSuitabilityBrushChanges(state.map, point, brush, stroke.originals);
+  if (!changes.length) return;
+  applySuitabilityPreview(state.map, changes);
+  const strokeChanges = buildSuitabilityStrokeChanges(state.map, stroke.originals);
+  const changedGridCells = strokeChanges.map(change => change.gridCell);
+  const changedPackCells = strokeChanges.flatMap(change => change.packChanges.map(entry => entry.packCell));
+  const preview = {
+    valid: true,
+    code: "ok",
+    reason: "",
+    changed: changedPackCells.length > 0,
+    mode: brush.mode,
+    scope: brush.scope,
+    value: brush.mode === "reset" ? null : brush.value,
+    changedGridCells,
+    changedPackCells
+  };
+  state.suitabilityEdit.lastAffected = changedGridCells.length;
+  state.suitabilityEdit.preview = preview;
+  state.editRefreshScheduler.run(SUITABILITY_PREVIEW_EFFECTS);
+  state.panels.biome?.updateSuitability({lastAffected: changedGridCells.length, preview});
+}
+
 function applyMarketAssignmentAtEvent(state, event) {
   const brush = state.panels.economy?.getMarketBrush?.();
   if (!brush?.active || !state.economyEdit.activeStroke) return;
@@ -11167,6 +11307,28 @@ function finishBiomeAssignmentStroke(state, documentRef) {
   });
   state.biomeEdit.lastAffected = execution.executed ? changes.length : 0;
   state.biomeEdit.preview = null;
+  updateBiomePanel(state);
+}
+
+function finishSuitabilityStroke(state, documentRef) {
+  const stroke = state.suitabilityEdit.activeStroke;
+  state.suitabilityEdit.activeStroke = null;
+  if (!stroke?.originals?.size) return;
+  const changes = buildSuitabilityStrokeChanges(state.map, stroke.originals);
+  restoreSuitabilityPreview(state.map, changes);
+  state.editRefreshScheduler.run(SUITABILITY_PREVIEW_EFFECTS);
+  const command = createApplySuitabilityCommand(changes);
+  const execution = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    status: executed => {
+      const result = executed.getResult?.();
+      return `已更新 ${result?.gridCells || 0} 个 grid cells、${result?.packCells || 0} 个 pack cells 的数值适居度。`;
+    },
+    noopStatus: "数值适居度没有变化。"
+  });
+  state.suitabilityEdit.lastAffected = execution.executed ? changes.length : 0;
+  state.suitabilityEdit.preview = null;
+  state.panels.biome?.updateSuitability({lastAffected: state.suitabilityEdit.lastAffected, preview: null});
   updateBiomePanel(state);
 }
 
@@ -11461,6 +11623,10 @@ function updateBiomePanel(state) {
     active: state.panels.biome?.getBrush?.().active,
     lastAffected: state.biomeEdit.lastAffected,
     preview: state.biomeEdit.preview
+  }, {
+    active: state.panels.biome?.getSuitabilityBrush?.().active,
+    lastAffected: state.suitabilityEdit.lastAffected,
+    preview: state.suitabilityEdit.preview
   });
 }
 
@@ -11819,6 +11985,7 @@ function getActiveEditorKind(state) {
   if (modeId === CANVAS_TOOL_MODE.CULTURE_ASSIGN) return "culture";
   if (modeId === CANVAS_TOOL_MODE.RELIGION_ASSIGN) return "religion";
   if (modeId === CANVAS_TOOL_MODE.BIOME_ASSIGN) return "biome";
+  if (modeId === CANVAS_TOOL_MODE.SUITABILITY_PAINT) return "suitability";
   if (modeId === CANVAS_TOOL_MODE.MARKET_ASSIGN) return "economy";
   if (modeId === CANVAS_TOOL_MODE.MEASUREMENT_DRAW) return "measurement";
   if (modeId) return modeId;

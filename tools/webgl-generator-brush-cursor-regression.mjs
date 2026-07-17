@@ -18,6 +18,7 @@ const EXPECTED_CONTRACTS = Object.freeze({
   culture: [28, 4, 120, 2],
   religion: [28, 4, 120, 2],
   biome: [28, 4, 120, 2],
+  suitability: [28, 4, 120, 2],
   "economy-market": [18, 2, 120, 2]
 });
 
@@ -54,6 +55,7 @@ function testResolverAllowlist() {
     culture: {active: true, radius: 28},
     religion: {active: true, radius: 28},
     biome: {active: true, radius: 28},
+    suitability: {active: true, radius: 28},
     economy: {active: true, radius: 18}
   };
   const state = {
@@ -65,7 +67,7 @@ function testResolverAllowlist() {
       province: {getBrush: () => brushes.province},
       culture: {getBrush: () => brushes.culture},
       religion: {getBrush: () => brushes.religion},
-      biome: {getBrush: () => brushes.biome},
+      biome: {getBrush: () => brushes.biome, getSuitabilityBrush: () => brushes.suitability},
       economy: {getMarketBrush: () => brushes.economy}
     }
   };
@@ -102,6 +104,7 @@ function testResolverAllowlist() {
     ["culture:assign", BRUSH_RADIUS_ID.CULTURE],
     ["religion:assign", BRUSH_RADIUS_ID.RELIGION],
     ["biome:assign", BRUSH_RADIUS_ID.BIOME],
+    ["biome:suitability", BRUSH_RADIUS_ID.SUITABILITY],
     ["economy:market-assign", BRUSH_RADIUS_ID.ECONOMY_MARKET]
   ];
   for (const [mode, radiusId] of allowed) {
@@ -271,4 +274,4 @@ testExactHeightPaintCenter();
 testCandidateMonotonicity();
 await testOverlayLifecycleAndIntegration();
 
-console.log("画笔光标回归通过：8 类半径契约、白名单、精确中心、1/2/4 倍投影、无事件 overlay 与生命周期清理均符合要求。");
+console.log("画笔光标回归通过：9 类半径契约、白名单、精确中心、1/2/4 倍投影、无事件 overlay 与生命周期清理均符合要求。");

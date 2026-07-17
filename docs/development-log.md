@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-18：实施权威任务第 77 项——数值适居度笔刷
+
+- 调查阶段冻结 `suitability-brush-product-rules.md`：首期只做整数 `0～100` 直接设值，恢复自动基准作为清除手工 override 的配套动作；不做增减或比例缩放。范围固定为 `land / water / all`，水域可保存适居度但人口承载恒为 0，单次 stroke 只形成一条历史。
+- 开发阶段新增 pack 级 `suitabilityBase / suitabilityOverride` 和统一适居度编辑命令。生成、生物群系重算与资源人口链会保留基础值并重新应用手工层；提交同步 grid / pack 适居度与人口承载、气候摘要、国家 / 省份 / 文化 / 宗教乡村人口，并标记城镇、政治、宗教、标记、地区、军事、经济和外交 stale，不自动重生成对象，也不写高度数组。
+- 生物群系面板新增“数值适居度”动作及直接设值 / 恢复基准、三类范围、半径、悬停光标、拖动预览、取消回滚和抬手提交闭环。公开 API 新增 `edit.biomes.inspectSuitability / applySuitability`，UI 与 API 共用命令；公开基线更新为 11 个命名空间、202 个方法、104 个编辑方法和稳定等级 `194 / 7 / 1`。
+- 代码审查补齐非对象 API 参数拒绝、同 stroke 重复经过零叠加、资源重算后 override 保留、缺少 climate / settlements 容器的稀疏旧图精确撤销 / 重做、两阶段故障回滚、完整地图往返、水域人口归零和高度零影响。核心、UI/API 收敛、生物群系兼容、共享画笔光标、API inventory / edit coverage / stability / action convergence、语法、生产构建与 `git diff --check` 已通过。
+- 按用户最新工作流，第 77 项当前为“代码与自动化完成，待统一浏览器验证”；第 76～81 项代码完成后再复用同一 Chrome 统一验证，第 64～75 项不复测。
+
 ## 2026-07-18：实施权威任务第 76 项——文化与宗教中心、扩张参数编辑
 
 - 调查阶段冻结 `culture-religion-expansion-product-rules.md`：文化重扩默认不联动宗教，显式联动时同事务执行；中心只能迁往自身合法陆地归属且同域不重叠，丢失后按人口、适居度和 pack cell ID 确定性回退。文化类型固定七类，文化及非 Folk 宗教扩张系数为 `0.1～10`；Folk 固定文化范围与系数 0，其他宗教按 `culture / state / global` 扩张。`save` 不改覆盖，`reexpand` 必须明确确认。

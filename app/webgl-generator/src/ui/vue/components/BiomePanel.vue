@@ -58,6 +58,47 @@
         />
       </div>
     </template>
+    <template #suitability>
+      <div class="biome-assignment-editor">
+        <UiSelectField
+          input-id="biome-suitability-mode"
+          label="编辑方式"
+          :model-value="state.suitabilityMode"
+          :options="suitabilityModeOptions"
+          @update:model-value="callbacks.onSuitabilityMode"
+        />
+        <UiSliderField
+          v-if="state.suitabilityMode === 'set'"
+          label="目标适居度"
+          :model-value="state.suitabilityValue"
+          :min="suitabilityRange.min"
+          :max="suitabilityRange.max"
+          :step="suitabilityRange.step"
+          @input="callbacks.onSuitabilityValue"
+        />
+        <UiSelectField
+          input-id="biome-suitability-scope"
+          label="作用范围"
+          :model-value="state.suitabilityScope"
+          :options="suitabilityScopeOptions"
+          @update:model-value="callbacks.onSuitabilityScope"
+        />
+        <UiSliderField
+          label="画笔大小"
+          :model-value="state.suitabilityRadius"
+          :min="suitabilityBrushRadius.min"
+          :max="suitabilityBrushRadius.max"
+          :step="suitabilityBrushRadius.step"
+          unit-label="地图单位"
+          @input="callbacks.onSuitabilityRadius"
+        />
+        <UiStateBanner
+          :kind="suitabilityBanner.kind"
+          title="数值适居度笔刷"
+          :message="suitabilityBanner.message"
+        />
+      </div>
+    </template>
   </UiActionDock>
 </template>
 
@@ -76,8 +117,11 @@ import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+import {SUITABILITY_VALUE_RANGE} from "../../../generator/suitability.js";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.BIOME);
+const suitabilityBrushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.SUITABILITY);
+const suitabilityRange = SUITABILITY_VALUE_RANGE;
 
 defineOptions({
   name: "BiomePanel"
@@ -124,11 +168,23 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBiomeId));
-const biomeActions = Object.freeze([{key: "assign", label: "归属笔刷", icon: "◉"}]);
+const biomeActions = Object.freeze([
+  {key: "assign", label: "归属笔刷", icon: "◉"},
+  {key: "suitability", label: "数值适居度", icon: "∿"}
+]);
 const biomeOptions = computed(() => metrics.value.rows.map(row => ({value: row.id, label: `${row.name}（#${row.id}）`})));
 const scopeOptions = Object.freeze([
   {value: "land", label: "陆地"},
   {value: "water", label: "水域"}
+]);
+const suitabilityModeOptions = Object.freeze([
+  {value: "set", label: "直接设值"},
+  {value: "reset", label: "恢复自动基准"}
+]);
+const suitabilityScopeOptions = Object.freeze([
+  {value: "land", label: "陆地"},
+  {value: "water", label: "水域"},
+  {value: "all", label: "全部"}
 ]);
 const assignmentBanner = computed(() => {
   const targetScope = Number(props.state.selectedBiomeId) === 0 ? "water" : "land";
@@ -139,14 +195,30 @@ const assignmentBanner = computed(() => {
   const warning = preview.warningCells ? `；${formatNumber(preview.warningCells)} cells 存在气候或高度异常：${preview.warnings.join("、")}` : "；没有气候高度异常";
   return {kind: preview.warningCells ? "preview" : "info", message: `预览 ${formatNumber(preview.changedGridCells?.length || 0)} grid cells${warning}`};
 });
+const suitabilityBanner = computed(() => {
+  const preview = props.state.suitabilityPreview;
+  if (preview && !preview.valid) return {kind: "error", message: `${preview.code || "invalid"}：${preview.reason || "预览无效"}`};
+  if (preview?.valid) {
+    const verb = preview.mode === "reset" ? "恢复基准" : `设为 ${preview.value}`;
+    return {kind: "preview", message: `预览将 ${formatNumber(preview.changedPackCells?.length || 0)} 个 pack cells ${verb}；水域人口承载恒为 0。`};
+  }
+  const verb = props.state.suitabilityMode === "reset" ? "恢复自动生成的基准值" : `直接设为 ${formatNumber(props.state.suitabilityValue)}`;
+  return {kind: "info", message: `按住鼠标涂刷，抬手提交一条历史；${verb}。最近影响 ${formatNumber(props.state.suitabilityLastAffected || 0)} 个 grid cells；水域人口承载恒为 0。`};
+});
 
 watch(activeAction, (next, previous) => {
   if (next === "assign") props.callbacks.onAssignmentActive?.(true);
   if (previous === "assign" && next !== "assign") props.callbacks.onAssignmentActive?.(false);
+  if (next === "suitability") props.callbacks.onSuitabilityActive?.(true);
+  if (previous === "suitability" && next !== "suitability") props.callbacks.onSuitabilityActive?.(false);
 });
 
 watch(() => props.state.assignmentActive, active => {
   if (!active && activeAction.value === "assign") activeAction.value = null;
+});
+
+watch(() => props.state.suitabilityActive, active => {
+  if (!active && activeAction.value === "suitability") activeAction.value = null;
 });
 
 const summaryMetrics = computed(() => [

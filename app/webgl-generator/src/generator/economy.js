@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {applySuitabilityOverrides, captureSuitabilityBase, restoreSuitabilityBase} from "./suitability.js";
 import {getGovernmentEffects} from "./governments.js";
 
 const RAW_GOODS = [
@@ -134,7 +135,10 @@ export function buildEconomy(pack, options = {}) {
 
   const resourceAssignment = assignResourceGoods(pack, rawGoods, random, {includeMarkers: true, preserveExisting: true});
   writeResourceGoods(pack, resourceAssignment);
+  restoreSuitabilityBase(pack);
   const resourcePopulation = applyResourcePopulationBonus(pack, {markerOnly: true});
+  captureSuitabilityBase(pack);
+  applySuitabilityOverrides(pack);
   syncPoliticalPopulationStats(pack);
   pack.markets = createMarkets(pack, aliveBurgs, goods, random, options);
   pack.cells.market = assignMarketsToCells(pack, pack.markets);

@@ -6,6 +6,7 @@ export const BRUSH_RADIUS_ID = Object.freeze({
   CULTURE: "culture",
   RELIGION: "religion",
   BIOME: "biome",
+  SUITABILITY: "suitability",
   ECONOMY_MARKET: "economy-market"
 });
 
@@ -17,6 +18,7 @@ const BRUSH_RADIUS_CONTRACTS = Object.freeze({
   [BRUSH_RADIUS_ID.CULTURE]: freezeContract(28, 4, 120, 2),
   [BRUSH_RADIUS_ID.RELIGION]: freezeContract(28, 4, 120, 2),
   [BRUSH_RADIUS_ID.BIOME]: freezeContract(28, 4, 120, 2),
+  [BRUSH_RADIUS_ID.SUITABILITY]: freezeContract(28, 4, 120, 2),
   [BRUSH_RADIUS_ID.ECONOMY_MARKET]: freezeContract(18, 2, 120, 2)
 });
 
