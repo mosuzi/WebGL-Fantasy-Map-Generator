@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-17：冻结权威任务第 75 项——完整海岸雕刻与 Feature 类型转换
+
+- 用户确认完整操作矩阵并解除第 75 项产品规则门禁。新增 `coastline-feature-topology-product-rules.md`，权威清单状态改为“规则已冻结、实施中”；本阶段只写规则文档，未修改代码、运行浏览器或开始实现。
+- 允许操作固定为：不改变陆水连通分量数的紧邻开放海域海岸雕刻、只并入单一陆地的填岸、连接两侧开放海域并形成有效通航水道的开海峡、连接两侧陆地且可合并陆地的闭海峡、显式渠道连接湖泊与开放海域、完整湖泊填平，以及由这些操作真实派生的岛屿 / 大陆 split、merge。湖泊不能直接改成 ocean，岛屿 / 大陆不能直接改 group。
+- 开放海域只按共享边水体能否到达地图边界判定，不看旧 type、group 或面积；海峡最小宽度为 1 个完整 grid cell，只认共享边连通，并同步该 grid cell 对应的全部 pack cells。持久 type 仅 `ocean / lake / island`，`continent / island / isle / lake_island` 为派生 group，`strait` 只表示操作。
+- 禁止翻转包含 city / burg、首都、省会、港口主体、河流源点或干流、路线端点或 waypoint 的 cell。邻近港口需要重算 `haven / harbor`；如果港口失效或路线中断，整次操作拒绝，不以静默删除港口或路线降级。
+- 未受影响 feature 保持 ID 和引用；分裂时含旧中心的分量保留 ID，新分量末尾追加；合并时开放海域优先存续，否则较大分量、同面积较小 ID 存续。退役对象保留 tombstone，ID 不复用，并保留备注和兼容追溯信息；共享 / 独立镜像及旧图缺字段均须兼容，任一步失败整事务回滚。
+- 专用 `land -> water` 把高度写到 `19` 或以下，专用 `water -> land` 写到 `20` 或以上，并在同一事务立即同步 Feature、岸线和要求的派生；撤销精确恢复原高度。普通高度编辑器的交互和数值语义不变：未跨 `19 / 20` 只刷新高度表面，跨越仍提交并标记 Feature / 下游 stale，不自动套海峡预检。高度基础派生重建先复用本项 Feature / 岸线重建，再继续河流、国家、省份等后续步骤。
+- 明确禁止整片开放海洋填陆、整岛 / 大陆沉没、直接改派生 group、无共享边连通证据的湖海转换、消灭全部陆地或最后开放海域及无约束水陆画笔。湖湖合并、手工切湖和多国水体等只记录为本项不覆盖，不扩成用户未确认的新完成条件。
+
 ## 2026-07-17：冻结权威任务第 74 项——国家合并、拆分与政治拓扑编辑
 
 - 用户确认完整产品矩阵并解除第 74 项规则门禁。先新增 `state-merge-split-product-rules.md` 并同步权威清单与专题索引，再在封闭范围内进入核心数据事务实施；当前仍未接 UI、公开 API 或浏览器验收。
@@ -27772,3 +27782,12 @@ full 矩阵结果：
 - 城市面板新增与新增 / 删除互斥的移动模式、紧凑预检摘要和真实 Canvas `pointerdown -> pointermove -> pointerup` 拖动；拖动生命周期抽成可触发 helper，非法落点不改地图和历史，成功后保持城市选中，pointercancel、切图和关面板统一清理。稳定 API 新增 `edit.cities.inspectMove(cityId, target)` 与 `edit.cities.move(cityId, target)`，API 基线更新为 190 个公开方法、92 个编辑方法，稳定等级为 182 / 7 / 1。
 - 新增 `regress:city-relocation`，覆盖实际 pointerdown / move / up / cancel、预检纯度、同国 / 跨国 / 跨省、水域 / 占位 / 缺映射、首都 / 省会 / 市场中心拒绝、真实生成非首都高 harbor 港口保持、港口换 feature / 清除、陆路失败、海路重寻 / 删除与备注、无关路线 / 手工视觉、市场 / stale、往返后 politics / pack 双镜像统计、真实农村人口点移除与撤销 / 重做、故障注入、旧图和完整地图往返，以及 API metadata / effects。有界快照回归另以 8MB typed array 和不可克隆函数作为无关 payload 哨兵，验证执行 / 撤销 / 重做不复制或替换其引用；5000 cells 真实生成图最终复审执行 / 撤销 / 重做约 `23 / 13 / 19ms`，均低于 `250ms` 门槛。专项、路线、市场、生产构建及差异门禁通过。
 - 同一 Chrome 复用唯一标签完成 #718 武海的真实 Canvas 拖动、Ctrl+Z 和 Ctrl+Y；坐标精确闭环，国家 / 省份、选择与单条历史正确。性能返工后 FMG health、console、页面与 WebGL error 均为 0，原 `input-delay: click` ERROR 降为 WARN，关联 longtask 由 590ms 降至 371ms；其余 7 条均为有界 health WARN。标签已清理移动模式与面板并 handoff，本项达到最小验收。
+
+### 2026-07-17 权威任务第 75 项完成：完整海岸雕刻与 Feature 类型转换
+
+- 用户确认海岸 / Feature 拓扑冻结矩阵：允许海岸雕刻、填岸、开 / 闭海峡、湖海开渠和沿用湖泊删除族的整湖填平；持久 type 只使用 `ocean / lake / island`，开放海域只按共享边到地图边界的连通证据判定，岛屿 / 大陆 group 只由真实拓扑派生。普通高度编辑不改交互，跨 `19 / 20` 时提交高度并把 Feature 及下游标脏。
+- 新增统一 `feature-topology-edit-commands`，只读预检与正式命令共用五类拓扑规则。专用事务把目标写为 19 / 20，同步全部映射 pack cells、Feature 归属与记录、岸线、haven / harbor、港口 / 路线引用、统计和导出；分裂保留旧中心分量 ID，合并按开放海域 / 面积 / ID 规则存续，其余 Feature 以 tombstone 退役并保留追溯。保护城市、独立 burg、首都、省会、港口、河源、干流、路线端点和 waypoint，任一预检或不变量失败均零历史、完整回滚。
+- FeaturePanel 新增五种模式、完整 grid cell 连续选择、19 / 20 临时预览、只读预检和显式确认。稳定 API 新增 `edit.features.inspectTopology / applyTopology`，写入口要求 `confirm: true`；API 基线为 196 个公开方法、98 个编辑方法，稳定等级为 188 / 7 / 1。普通高度跨海平面后的基础派生重建先执行 Feature / 岸线，再继续河流与国家 / 省份。
+- 湖泊填平不再清空 Feature 或删除备注；pack / grid 旧 Feature 退役为保留旧 ID、名称、type、group、备注与 `redirectTo` 的 tombstone。LakePanel、对象解析和统计只读取活动 Feature，完整地图 JSON 往返、撤销 / 重做和重复删除 no-op 均通过。
+- `regress:feature-topology / feature-topology-ui-api / lake-delete / height-derived-rebuild`、API inventory / edit coverage / stability / capabilities、生产构建和 `git diff --check` 全部通过；给事中最终复审 RELEASE，观察使终验 PASS。独立 headless Chrome capabilities 的 checksum 为 `3cbf11d3`，WebGL / health / console / page error 为 0。
+- 同一 Chrome 新建并关闭临时验收标签：固定种子地图完整 grid cell #3978 先以开海峡从陆地连通分量 `16 → 17`，再以闭海峡从 `17 → 16`，两次均完成画布预览、只读预检和明确确认。主标签先前用于验证海岸雕刻的 #8097 已通过填岸恢复，面板与临时标签清理完毕。应用页面没有自身来源的 console error；唯一可见错误级日志来自 React DevTools 扩展注入的 input-handler-stall / main-thread-long-task 健康告警。

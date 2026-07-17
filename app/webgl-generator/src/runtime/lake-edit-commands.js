@@ -1,6 +1,5 @@
 import {OBJECT_KIND} from "./object-kinds.js";
 import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
-import {deleteObjectNote} from "./object-notes.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 
 const WATER_LEVEL = 20;
@@ -344,8 +343,8 @@ function fillLake(map, lake) {
   const gridMergedIds = [...new Set([gridLakeId, ...gridAdjacentIds.filter(id => id !== gridTargetId)])];
   mergeFeatureCells(map.pack.cells, packMergedIds, packTargetId, fillHeight, new Set([lakeId]));
   mergeFeatureCells(map.grid.cells, gridMergedIds, gridTargetId, fillHeight, new Set([gridLakeId]));
-  for (const id of packMergedIds) if (id !== packTargetId) map.pack.features[id] = null;
-  for (const id of gridMergedIds) if (id !== gridTargetId) map.features.features[id] = null;
+  for (const id of packMergedIds) if (id !== packTargetId) retireFeature(map.pack.features, id, packTargetId);
+  for (const id of gridMergedIds) if (id !== gridTargetId) retireFeature(map.features.features, id, gridTargetId, {grid: true});
   remapPackFeatureReferences(map, new Map(packMergedIds.filter(id => id !== packTargetId).map(id => [id, packTargetId])));
   if (map.grid.features) map.grid.features = map.features.features;
 
@@ -355,7 +354,6 @@ function fillLake(map, lake) {
   refreshWaterLandTopology(map.grid.cells, {distanceOnly: true});
   refreshGridShore(map);
   refreshFeatureMetadata(map);
-  deleteObjectNote(map, {kind: OBJECT_KIND.LAKE, id: lakeId});
   markLakeDependentDerivedStale(map);
 
   return {
@@ -679,6 +677,20 @@ function mergeFeatureCells(cells, sourceFeatureIds, targetFeatureId, fillHeight,
   }
 }
 
+function retireFeature(features, featureId, redirectTo, {grid = false} = {}) {
+  const feature = features?.[featureId];
+  if (!feature) return;
+  features[featureId] = {
+    ...clonePlain(feature),
+    id: featureId,
+    i: featureId,
+    removed: true,
+    tombstone: true,
+    redirectTo,
+    cells: grid ? [] : 0
+  };
+}
+
 function remapPackFeatureReferences(map, replacements) {
   const remap = object => {
     if (!object || typeof object !== "object") return;
@@ -833,19 +845,21 @@ function sharedGridSegment(grid, firstCell, secondCell) {
 
 function refreshFeatureMetadata(map) {
   const gridFeatures = map.features?.features || [];
+  const activeGridFeatures = gridFeatures.filter(feature => feature && !feature.removed);
   map.features.metadata = {
     ...(map.features.metadata || {}),
-    featureCount: gridFeatures.filter(Boolean).length,
-    oceanFeatures: gridFeatures.filter(feature => feature?.type === "ocean").length,
-    landFeatures: gridFeatures.filter(feature => feature?.land).length,
-    lakeFeatures: gridFeatures.filter(feature => feature?.type === "lake").length,
+    featureCount: activeGridFeatures.length,
+    oceanFeatures: activeGridFeatures.filter(feature => feature.type === "ocean").length,
+    landFeatures: activeGridFeatures.filter(feature => feature.land).length,
+    lakeFeatures: activeGridFeatures.filter(feature => feature.type === "lake").length,
     coastlineSegments: map.features.shore?.coastline?.length || 0,
     lakeShoreSegments: map.features.shore?.lakeShore?.length || 0
   };
   const packFeatures = map.pack?.features || [];
+  const activePackFeatures = packFeatures.filter(feature => feature && !feature.removed);
   if (map.pack?.metadata) {
-    map.pack.metadata.packFeatureCount = packFeatures.filter(Boolean).length;
-    map.pack.metadata.featureGroups = countFeatureGroups(packFeatures);
+    map.pack.metadata.packFeatureCount = activePackFeatures.length;
+    map.pack.metadata.featureGroups = countFeatureGroups(activePackFeatures);
     map.pack.metadata.havenCells = countPositive(map.pack.cells?.haven);
     map.pack.metadata.harborCells = countPositive(map.pack.cells?.harbor);
   }
@@ -1014,7 +1028,7 @@ function lakeNameOptions(map, lake) {
 
 function findLake(map, lakeId) {
   const id = Number(lakeId);
-  return (map?.pack?.features || []).find(feature => feature?.type === "lake" && Number(feature.i ?? feature.id) === id) || null;
+  return (map?.pack?.features || []).find(feature => feature?.type === "lake" && !feature.removed && Number(feature.i ?? feature.id) === id) || null;
 }
 
 function writeLakeName(map, lakeId, name) {

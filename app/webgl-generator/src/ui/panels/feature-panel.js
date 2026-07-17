@@ -20,7 +20,7 @@ const FEATURE_LIST_DEFAULTS = Object.freeze({
   sortDir: "desc"
 });
 
-export function createFeaturePanel(documentRef, manager) {
+export function createFeaturePanel(documentRef, manager, callbacks = {}) {
   const listPreferences = readPanelListPreferences(documentRef, FEATURE_PANEL_ID, FEATURE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
@@ -31,6 +31,10 @@ export function createFeaturePanel(documentRef, manager) {
     sortKey: listPreferences.sortKey,
     sortDir: listPreferences.sortDir,
     selectedFeatureId: null,
+    topologyMode: "carve-coast",
+    topologyGridCells: [],
+    topologyInspection: null,
+    topologySelectMode: false,
     version: 0
   });
   const panelCallbacks = {
@@ -62,6 +66,41 @@ export function createFeaturePanel(documentRef, manager) {
     },
     onSelect: row => {
       panelState.selectedFeatureId = toIntegerId(row.id);
+    },
+    onTopologyMode: mode => {
+      panelState.topologyMode = String(mode || "carve-coast");
+      panelState.topologyInspection = null;
+      callbacks.onTopologyDraftChange?.(topologyDraft(panelState));
+    },
+    onTopologySelectMode: active => {
+      panelState.topologySelectMode = Boolean(active);
+      callbacks.onTopologySelectMode?.(panelState.topologySelectMode, topologyDraft(panelState));
+    },
+    onTopologyInspect: () => {
+      panelState.topologyInspection = callbacks.onTopologyInspect?.(topologyDraft(panelState)) || null;
+      panelState.version++;
+      return panelState.topologyInspection;
+    },
+    onTopologyApply: () => {
+      const result = callbacks.onTopologyApply?.({...topologyDraft(panelState), confirm: true}) || null;
+      if (result?.executed) clearTopologyDraft(panelState);
+      else if (result?.error) {
+        panelState.topologyInspection = {
+          valid: false,
+          code: "apply-failed",
+          reason: result.error.message || "Feature 拓扑应用失败"
+        };
+      }
+      panelState.version++;
+      return result;
+    },
+    onTopologyClear: () => {
+      clearTopologyDraft(panelState, {keepMode: true, keepSelectMode: true});
+      callbacks.onTopologyClear?.();
+    },
+    onTopologyCancel: () => {
+      clearTopologyDraft(panelState, {keepMode: true});
+      callbacks.onTopologyCancel?.();
     }
   };
 
@@ -73,6 +112,8 @@ export function createFeaturePanel(documentRef, manager) {
     maxWidth: 780,
     onClose: () => {
       panelState.open = false;
+      panelState.topologySelectMode = false;
+      callbacks.onClose?.();
     }
   });
   const root = documentRef.createElement("div");
@@ -109,6 +150,36 @@ export function createFeaturePanel(documentRef, manager) {
     isOpen() {
       return panelState.open;
     },
+    setTopologyCell(gridCell) {
+      const cell = Number(gridCell);
+      if (!Number.isInteger(cell) || cell < 0 || panelState.topologyGridCells.includes(cell)) return false;
+      panelState.topologyGridCells = [...panelState.topologyGridCells, cell].sort((a, b) => a - b);
+      panelState.topologyInspection = null;
+      panelState.version++;
+      callbacks.onTopologyDraftChange?.(topologyDraft(panelState));
+      return true;
+    },
+    clearTopologyDraft(options = {}) {
+      clearTopologyDraft(panelState, options);
+    },
+    setTopologySelectMode(active) {
+      panelState.topologySelectMode = Boolean(active);
+      panelState.version++;
+    },
+    setTopologyInspection(inspection) {
+      panelState.topologyInspection = inspection || null;
+      panelState.version++;
+    },
+    getTopologyDraft() {
+      return topologyDraft(panelState);
+    },
+    getSelectedFeatureId() {
+      return panelState.selectedFeatureId;
+    },
+    setSelectedFeatureId(featureId) {
+      panelState.selectedFeatureId = toIntegerId(featureId);
+      panelState.version++;
+    },
     unmount() {
       lazyPanel.unmount();
     }
@@ -117,10 +188,26 @@ export function createFeaturePanel(documentRef, manager) {
 
 function featureExists(map, featureId) {
   featureId = toIntegerId(featureId);
-  return Boolean(Number.isInteger(featureId) && map?.pack?.features?.[featureId]);
+  const feature = Number.isInteger(featureId) ? map?.pack?.features?.[featureId] : null;
+  return Boolean(feature && !feature.removed);
 }
 
 function firstFeatureId(map) {
-  const feature = (map?.pack?.features || []).find(item => Number.isInteger(item?.i ?? item?.id));
+  const feature = (map?.pack?.features || []).find(item => item && !item.removed && Number.isInteger(item?.i ?? item?.id));
   return feature ? toIntegerId(feature.i ?? feature.id) : null;
+}
+
+function topologyDraft(state) {
+  return {
+    mode: state.topologyMode,
+    gridCells: [...state.topologyGridCells]
+  };
+}
+
+function clearTopologyDraft(state, {keepMode = false, keepSelectMode = false} = {}) {
+  if (!keepMode) state.topologyMode = "carve-coast";
+  state.topologyGridCells = [];
+  state.topologyInspection = null;
+  if (!keepSelectMode) state.topologySelectMode = false;
+  state.version++;
 }

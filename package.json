@@ -95,6 +95,8 @@
     "regress:route-edit": "node --no-warnings ./tools/webgl-generator-route-edit-regression.mjs",
     "regress:line-width-projection": "node --no-warnings ./tools/webgl-generator-line-width-projection-regression.mjs",
     "regress:feature-patch": "node --no-warnings ./tools/webgl-generator-feature-patch-regression.mjs",
+    "regress:feature-topology": "node --no-warnings ./tools/webgl-generator-feature-topology-regression.mjs",
+    "regress:feature-topology-ui-api": "node --no-warnings ./tools/webgl-generator-feature-topology-ui-api-regression.mjs",
     "regress:biome-assignment": "node --no-warnings ./tools/webgl-generator-biome-assignment-regression.mjs",
     "regress:visual-themes": "node --no-warnings ./tools/webgl-generator-visual-theme-regression.mjs",
     "regress:label-styles": "node --no-warnings ./tools/webgl-generator-label-style-regression.mjs",

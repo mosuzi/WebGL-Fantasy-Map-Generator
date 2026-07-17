@@ -23,7 +23,7 @@ export const API_METHODS = Object.freeze({
     "zones.create", "zones.delete", "zones.setStyle",
     "cultures.add", "cultures.assignCells", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
     "religions.add", "religions.assignCells", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
-    "routes.create", "routes.inspectEdit", "routes.update", "routes.delete", "routes.setNote", "rivers.create", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.create", "lakes.inspectOutlet", "lakes.setOutlet", "lakes.delete", "lakes.rename", "features.inspectPatch", "features.applyPatch",
+    "routes.create", "routes.inspectEdit", "routes.update", "routes.delete", "routes.setNote", "rivers.create", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.create", "lakes.inspectOutlet", "lakes.setOutlet", "lakes.delete", "lakes.rename", "features.inspectPatch", "features.applyPatch", "features.inspectTopology", "features.applyTopology",
     "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
     "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"
   ]),
@@ -48,7 +48,8 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "edit.economy.assignCells",
   "edit.economy.rebuild",
   "edit.states.merge",
-  "edit.states.split"
+  "edit.states.split",
+  "edit.features.applyTopology"
 ]);
 
 const STABILITY_LEVELS = Object.freeze({

@@ -4,7 +4,7 @@ import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index
 import {pickGridCell} from "../app/webgl-generator/src/renderer/picking.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createDeleteLakeCommand} from "../app/webgl-generator/src/runtime/lake-edit-commands.js";
-import {createMapDocument, createMapGeoJson} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {createMapDocument, createMapGeoJson, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {objectNoteId, restoreObjectNote} from "../app/webgl-generator/src/runtime/object-notes.js";
 import {resolveObject} from "../app/webgl-generator/src/runtime/object-resolver.js";
 import {SelectionStore} from "../app/webgl-generator/src/runtime/selection-store.js";
@@ -13,6 +13,7 @@ const map = generatePlaceholderMap({seed: "lake-delete-regression", cellsTarget:
 const lake = map.pack.features.find(feature => feature?.type === "lake");
 assert.ok(lake, "固定 seed 应生成至少一个湖泊");
 const lakeId = Number(lake.i ?? lake.id);
+const lakeRecordBefore = JSON.parse(JSON.stringify(lake));
 const packLakeCells = cellsWithFeature(map.pack.cells, lakeId);
 const firstGridCell = map.pack.cells.g[packLakeCells[0]];
 const gridLakeId = Number(map.grid.cells.f[firstGridCell]);
@@ -43,8 +44,8 @@ assert.equal(result.lakeId, lakeId);
 assert.equal(result.packCells, packLakeCells.length);
 assert.equal(result.gridCells, gridLakeCells.length);
 assert.equal(countLakes(map.pack.features), lakeCountBefore - 1);
-assert.equal(map.pack.features[lakeId], null);
-assert.equal(map.features.features[gridLakeId], null);
+assertFeatureTombstone(map.pack.features[lakeId], lakeId, result.packTargetFeature, lakeRecordBefore);
+assertFeatureTombstone(map.features.features[gridLakeId], gridLakeId, result.gridTargetFeature);
 assert.ok(packLakeCells.every(cell => map.pack.cells.h[cell] >= 20));
 assert.ok(gridLakeCells.every(cell => map.grid.cells.h[cell] >= 20));
 assert.ok(packLakeCells.every(cell => map.pack.cells.f[cell] === result.packTargetFeature));
@@ -58,7 +59,7 @@ assert.ok((map.pack.portDiagnostics?.features || []).every(item => item.feature 
 assert.ok(map.features.shore.lakeShore.length < lakeShoreBefore, "填平后原湖岸线应消失");
 assert.equal(resolveObject(map, {kind: "lake", id: lakeId}), null);
 assert.equal(selection.getSnapshot().selection, null);
-assert.equal(map.notes.notes.some(note => note.id === `lake:${lakeId}`), false);
+assert.equal(map.notes.notes.some(note => note.id === `lake:${lakeId}` && note.body === "湖泊删除回归备注"), true);
 assert.ok(map.metadata.derivedStale.systems.includes("rivers"));
 assert.ok(map.metadata.derivedStale.systems.includes("features"));
 
@@ -74,7 +75,15 @@ for (const cell of packLakeCells) {
   assert.notEqual(feature.properties.feature, lakeId);
 }
 const document = createMapDocument(map, map.options);
-assert.equal(document.map.pack.features[lakeId], null);
+assertFeatureTombstone(document.map.pack.features[lakeId], lakeId, result.packTargetFeature, lakeRecordBefore);
+assertFeatureTombstone(document.map.features.features[gridLakeId], gridLakeId, result.gridTargetFeature);
+const roundtrip = parseMapDocument(stringifyMapDocument(document)).map;
+assertFeatureTombstone(roundtrip.pack.features[lakeId], lakeId, result.packTargetFeature, lakeRecordBefore);
+assertFeatureTombstone(roundtrip.features.features[gridLakeId], gridLakeId, result.gridTargetFeature);
+assert.equal(roundtrip.notes.notes.some(note => note.id === `lake:${lakeId}` && note.body === "湖泊删除回归备注"), true, "完整地图往返必须保留退役湖泊备注");
+assert.equal(resolveObject(roundtrip, {kind: "lake", id: lakeId}), null, "完整地图往返后 tombstone 不得恢复为活动湖泊");
+assertFeatureReferencesValid(roundtrip.pack.cells, roundtrip.pack.features, "roundtrip pack");
+assertFeatureReferencesValid(roundtrip.grid.cells, roundtrip.features.features, "roundtrip grid");
 assert.equal(history.getStats().lastDomain, "lake");
 assert.deepEqual(history.getStats().lastAffected, [{kind: "lake", id: lakeId}]);
 
@@ -86,6 +95,11 @@ assert.equal(map.notes.notes.some(note => note.id === `lake:${lakeId}`), true);
 history.redo({map});
 assert.equal(resolveObject(map, {kind: "lake", id: lakeId}), null);
 assert.equal(countLakes(map.pack.features), lakeCountBefore - 1);
+assertFeatureTombstone(map.pack.features[lakeId], lakeId, result.packTargetFeature, lakeRecordBefore);
+assert.equal(map.notes.notes.some(note => note.id === `lake:${lakeId}` && note.body === "湖泊删除回归备注"), true);
+
+const retired = createDeleteLakeCommand(lakeId);
+assert.equal(retired.isNoop({map}), true, "退役湖泊不得再次进入填平事务");
 
 const missingBefore = snapshot(map);
 const missing = createDeleteLakeCommand(999999);
@@ -113,12 +127,27 @@ function cellsWithFeature(cells, featureId) {
 }
 
 function countLakes(features) {
-  return features.filter(feature => feature?.type === "lake").length;
+  return features.filter(feature => feature?.type === "lake" && !feature.removed).length;
 }
 
 function assertFeatureReferencesValid(cells, features, label) {
   for (let cell = 0; cell < cells.f.length; cell += 1) {
-    assert.ok(features[cells.f[cell]], `${label} cell #${cell} 引用了不存在的 feature #${cells.f[cell]}`);
+    const feature = features[cells.f[cell]];
+    assert.ok(feature && !feature.removed, `${label} cell #${cell} 引用了不存在或已退役的 feature #${cells.f[cell]}`);
+  }
+}
+
+function assertFeatureTombstone(feature, featureId, redirectTo, source = null) {
+  assert.ok(feature, `Feature #${featureId} tombstone 不得被清空`);
+  assert.equal(feature.id, featureId);
+  assert.equal(feature.i, featureId);
+  assert.equal(feature.removed, true);
+  assert.equal(feature.tombstone, true);
+  assert.equal(feature.redirectTo, redirectTo);
+  if (source) {
+    assert.equal(feature.type, source.type);
+    assert.equal(feature.name, source.name);
+    assert.equal(feature.group, source.group);
   }
 }
 

@@ -24,14 +24,48 @@
   />
 
   <UiDetailGrid class-name="feature-panel-details" empty-text="未选中地貌单元" :rows="detailRows" />
+
+  <section class="feature-topology-editor" aria-label="海岸与 Feature 拓扑编辑器">
+    <h3>海岸与 Feature 拓扑</h3>
+    <UiSelectField
+      input-id="feature-topology-mode"
+      label="操作模式"
+      :model-value="state.topologyMode"
+      :options="topologyModeOptions"
+      @update:model-value="callbacks.onTopologyMode"
+    />
+    <p class="feature-topology-selection">
+      已选 {{ state.topologyGridCells.length }} 个完整 grid cells
+      <span v-if="state.topologyGridCells.length">：{{ topologyCellSummary }}</span>
+    </p>
+    <p class="feature-topology-note">整湖填平沿用湖泊面板的“填平并删除选中湖泊”；这里不提供无约束水陆翻转。</p>
+    <div class="feature-topology-actions">
+      <UiButton variant="secondary" :active="state.topologySelectMode" @click="callbacks.onTopologySelectMode(!state.topologySelectMode)">
+        {{ state.topologySelectMode ? "结束地图选择" : "在地图选择 cells" }}
+      </UiButton>
+      <UiButton variant="secondary" :disabled="!state.topologyGridCells.length" @click="callbacks.onTopologyClear">清空</UiButton>
+      <UiButton variant="secondary" :disabled="!state.topologyGridCells.length" @click="callbacks.onTopologyInspect">只读预检</UiButton>
+      <UiButton variant="secondary" @click="callbacks.onTopologyCancel">取消</UiButton>
+    </div>
+    <UiStateBanner
+      :kind="topologyBannerKind"
+      title="Feature 拓扑预检"
+      :message="topologyBannerMessage"
+      :action-label="state.topologyInspection?.valid ? '确认应用拓扑修改' : ''"
+      @action="callbacks.onTopologyApply"
+    />
+  </section>
 </template>
 
 <script setup>
 import {computed} from "vue";
+import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiSelectField from "./base/UiSelectField.vue";
+import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
@@ -71,6 +105,13 @@ const columns = Object.freeze([
   {key: "shorelineCells", label: "岸线", align: "right", format: value => formatNumber(value)},
   {key: "havenCells", label: "港湾", align: "right", format: value => formatNumber(value)}
 ]);
+const topologyModeOptions = Object.freeze([
+  {value: "carve-coast", label: "海岸雕刻（陆地 → 19）"},
+  {value: "reclaim-coast", label: "填岸（海域 → 20）"},
+  {value: "open-strait", label: "开海峡（陆地 → 19）"},
+  {value: "close-strait", label: "闭海峡（海域 → 20）"},
+  {value: "open-lake-to-sea", label: "湖海开渠（陆地 → 19）"}
+]);
 
 const unitPreferences = useUnitPreferences();
 const metrics = computed(() => {
@@ -82,6 +123,27 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedFeatureId));
+const topologyCellSummary = computed(() => {
+  const cells = props.state.topologyGridCells || [];
+  const visible = cells.slice(0, 12).map(cell => `#${cell}`).join("、");
+  return cells.length > 12 ? `${visible} 等` : visible;
+});
+const topologyBannerKind = computed(() => {
+  if (!props.state.topologyInspection) return "info";
+  return props.state.topologyInspection.valid ? "preview" : "error";
+});
+const topologyBannerMessage = computed(() => {
+  const inspection = props.state.topologyInspection;
+  if (!inspection) {
+    const height = ["reclaim-coast", "close-strait"].includes(props.state.topologyMode) ? 20 : 19;
+    return `地图点击会连续累积完整 grid cell，并临时预览为高度 ${height}；预检不会写入编辑历史。`;
+  }
+  if (!inspection.valid) return inspection.reason || `预检失败：${inspection.code || "unknown"}`;
+  const counts = inspection.beforeCounts && inspection.afterCounts
+    ? `连通分量：陆地 ${inspection.beforeCounts.land} → ${inspection.afterCounts.land}，水域 ${inspection.beforeCounts.water} → ${inspection.afterCounts.water}。`
+    : "";
+  return `${inspection.summary || "预检通过。"}${counts ? ` ${counts}` : ""}`;
+});
 
 const summaryMetrics = computed(() => [
   {label: "地貌单元", value: formatNumber(metrics.value.total)},
@@ -114,7 +176,7 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 function buildFeatureMetrics(map) {
-  const rows = (map?.pack?.features || []).filter(Boolean).map(featureRow);
+  const rows = (map?.pack?.features || []).filter(feature => feature && !feature.removed).map(featureRow);
   attachHavenHarborMetrics(rows, map);
   const shoreline = map?.features?.shore || {};
   const invalidReferences = countInvalidReferences(map);
@@ -178,9 +240,9 @@ function attachHavenHarborMetrics(rows, map) {
 function countInvalidReferences(map) {
   let invalid = 0;
   const packFeatures = map?.pack?.features || [];
-  for (const featureId of map?.pack?.cells?.f || []) if (featureId && !packFeatures[featureId]) invalid++;
+  for (const featureId of map?.pack?.cells?.f || []) if (featureId && (!packFeatures[featureId] || packFeatures[featureId].removed)) invalid++;
   const gridFeatures = map?.features?.features || [];
-  for (const featureId of map?.grid?.cells?.f || []) if (featureId && !gridFeatures[featureId]) invalid++;
+  for (const featureId of map?.grid?.cells?.f || []) if (featureId && (!gridFeatures[featureId] || gridFeatures[featureId].removed)) invalid++;
   return invalid;
 }
 

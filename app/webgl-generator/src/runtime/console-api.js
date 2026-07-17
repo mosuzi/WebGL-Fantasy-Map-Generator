@@ -222,7 +222,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       features: Object.freeze({
         inspectPatch: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.inspectPatch, "edit.features.inspectPatch")(options)),
-        applyPatch: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.applyPatch, "edit.features.applyPatch")(options))
+        applyPatch: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.applyPatch, "edit.features.applyPatch")(options)),
+        inspectTopology: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.inspectTopology, "edit.features.inspectTopology")(options)),
+        applyTopology: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.applyTopology, "edit.features.applyTopology")(options))
       }),
       labels: Object.freeze({
         addCustom: (options = {}) => apiCall(() => requireApiAction(actions.edit?.labels?.addCustom, "edit.labels.addCustom")(options)),
@@ -486,6 +488,8 @@ function buildMethodMetadata() {
       "lakes.rename": {stable: "draft", mutates: "lakes", undoable: true, async: false, requiresConfirm: false},
       "features.inspectPatch": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "features.applyPatch": {stable: "draft", mutates: "features-and-hydrology", undoable: true, async: false, requiresConfirm: false},
+      "features.inspectTopology": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "features.applyTopology": {stable: "draft", mutates: "features-topology-and-height", undoable: true, async: false, requiresConfirm: true},
       "labels.addCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.delete": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.moveCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},

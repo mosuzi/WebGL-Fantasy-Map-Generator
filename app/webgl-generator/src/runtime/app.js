@@ -108,6 +108,7 @@ import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImp
 import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
+import {createApplyFeatureTopologyCommand, FEATURE_TOPOLOGY_MODE, inspectFeatureTopology, rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
   createAddReligionCommand,
@@ -223,6 +224,7 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
   "precipitation"
 ]);
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
+const FEATURE_TOPOLOGY_UI_HISTORY = new WeakMap();
 export const CANVAS_TOOL_MODE = Object.freeze({
   HEIGHT_BRUSH: "height:brush",
   STATE_BRUSH: "state:brush",
@@ -246,6 +248,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   RIVER_ADD: "river:add",
   LAKE_EXCAVATE: "lake:excavate",
   FEATURE_PATCH_SELECT: "feature:patch-select",
+  FEATURE_TOPOLOGY_SELECT: "feature:topology-select",
   ZONE_ADD: "zone:add",
   NOTE_ADD: "note:add"
 });
@@ -322,6 +325,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     riverCreate: {active: false},
     lakeCreate: {active: false, radius: 0},
     featurePatch: {active: false, draft: null},
+    featureTopology: {active: false},
     zoneCreate: {active: false, type: "Disaster", radius: 1},
     noteCreate: {active: false},
     customLabelDrag: null,
@@ -375,7 +379,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.population = createPopulationPanel(documentRef, panelManager);
   state.panels.emblem = createEmblemPanel(documentRef, panelManager);
-  state.panels.feature = createFeaturePanel(documentRef, panelManager);
+  state.panels.feature = createFeaturePanel(documentRef, panelManager, {
+    onTopologyDraftChange: draft => {
+      if (state.featureTopology.active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, draft);
+    },
+    onTopologySelectMode: (active, draft) => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, draft || {});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, "panel-toggle");
+    },
+    onTopologyInspect: options => state.runtimeActions.edit.features.inspectTopology(options),
+    onTopologyApply: options => state.runtimeActions.edit.features.applyTopology(options),
+    onTopologyClear: () => clearFeatureTopologyPreview(state),
+    onTopologyCancel: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, "edit-cancel"),
+    onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, "panel-close")
+  });
   let heightPanel = null;
   let statePanel = null;
   let governmentPanel = null;
@@ -2610,7 +2627,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       features: {
         inspectPatch: options => inspectFeaturePatchViaApi(state, options),
-        applyPatch: options => applyFeaturePatchViaApi(state, documentRef, options)
+        applyPatch: options => applyFeaturePatchViaApi(state, documentRef, options),
+        inspectTopology: options => inspectFeatureTopologyViaApi(state, options),
+        applyTopology: options => applyFeatureTopologyViaApi(state, documentRef, options)
       },
       labels: {
         getStyles: () => getRuntimeLabelStyles(state),
@@ -5783,6 +5802,7 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
   const refresh = options.refresh || refreshAfterEdit;
   state.selectionStore.batch(() => {
     if (command.domain === "state-topology") synchronizeStateTopologyHistoryUi(state, command, action);
+    if (command.domain === "feature-topology") synchronizeFeatureTopologyHistoryUi(state, command, action);
     reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
     refresh(state, command);
   });
@@ -5796,6 +5816,13 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
     label: command.label || "",
     history: state.editHistory.getStats()
   };
+}
+
+function synchronizeFeatureTopologyHistoryUi(state, command, action) {
+  const snapshot = FEATURE_TOPOLOGY_UI_HISTORY.get(command);
+  if (!snapshot) return;
+  const featureId = action === "redo" ? snapshot.redoFeatureId : snapshot.undoFeatureId;
+  state.panels?.feature?.setSelectedFeatureId?.(featureId);
 }
 
 function resolveObjectViaApi(state, object) {
@@ -6394,6 +6421,49 @@ function applyFeaturePatchViaApi(state, documentRef, options = {}) {
   });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+export function inspectFeatureTopologyViaApi(state, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("Feature 拓扑预检参数必须是对象");
+  return inspectFeatureTopology(state.map, options);
+}
+
+export function applyFeatureTopologyViaApi(state, documentRef, options = {}, runtimeUi = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("Feature 拓扑编辑参数必须是对象");
+  if (options.confirm !== true) throw new Error("Feature 拓扑编辑会改写水陆连通和岸线，需要显式传入 {confirm: true}");
+  if (state.canvasToolModes?.getActive?.()?.id === CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT) {
+    cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, "topology-apply");
+  } else {
+    clearFeatureTopologyPreview(state);
+  }
+  const commandOptions = {...options};
+  delete commandOptions.confirm;
+  const undoFeatureId = state.panels?.feature?.getSelectedFeatureId?.() ?? null;
+  const command = createApplyFeatureTopologyCommand(commandOptions, {label: "API 编辑海岸与 Feature 拓扑"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    preparePanelRefresh: (targetState, executed, topologyResult) => {
+      const featureId = Number(topologyResult?.selectionTarget?.id);
+      if (Number.isInteger(featureId) && featureId > 0) targetState.panels?.feature?.setSelectedFeatureId?.(featureId);
+    },
+    status: executed => executed.getResult?.()?.mode
+      ? `已应用 Feature 拓扑编辑：${executed.getResult().mode}。`
+      : "已应用 Feature 拓扑编辑。",
+    noopStatus: "Feature 拓扑没有变化。",
+    throwOnError: false
+  });
+  if (result.executed) {
+    FEATURE_TOPOLOGY_UI_HISTORY.set(result.command, {
+      undoFeatureId,
+      redoFeatureId: state.panels?.feature?.getSelectedFeatureId?.() ?? null
+    });
+    state.panels?.feature?.clearTopologyDraft?.();
+  }
+  (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
+  (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
   return editApiResult(state, result);
 }
 
@@ -7966,6 +8036,8 @@ function refreshAfterProvinceEdit(state, commandOrEffects) {
 function regenerateMapAttribute(state, kind, documentRef) {
   if (!state.map) return regenerationResult(kind, "未执行", "当前没有可重算的地图。");
   switch (kind) {
+    case "features":
+      return regenerateFeatures(state, documentRef);
     case "routes":
       return regenerateRoutes(state, documentRef);
     case "rivers":
@@ -7993,6 +8065,25 @@ function regenerateMapAttribute(state, kind, documentRef) {
   return regenerationResult(kind, "暂未执行", "该属性尚未接入受约束重算。");
 }
 
+function regenerateFeatures(state, documentRef) {
+  const map = state.map;
+  const before = map.features?.metadata?.featureCount || 0;
+  const result = rebuildFeatureTopology(map);
+  markDerivedFresh(map, ["features"]);
+  markDerivedStale(map, ["rivers", "routes", "biomes", "cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate features: ${before} -> ${map.features?.metadata?.featureCount || 0}, removed=${result.removedFeatureIds.length}`);
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["terrain-caches", "height-field", "cell-colors", "line-layers", "point-layers", "labels", "object-panels", "object-index"],
+    affected: systemAffected("features", result.activeFeatureIds.map(id => ({kind: "feature", id})))
+  });
+  return regenerationResult(
+    "features",
+    `Feature 与岸线已按当前海平面重建：${before} -> ${map.features?.metadata?.featureCount || 0}`,
+    "已先刷新水陆连通、岸线、haven / harbor 和 Feature 身份；河流、道路、国家、省份等后续步骤将继续按顺序重算。"
+  );
+}
+
 function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}");
@@ -8018,6 +8109,7 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
 
 function normalizeApiRegenerationKind(kind) {
   const value = String(kind || "").trim().toLowerCase();
+  if (["feature", "features", "shore", "shoreline"].includes(value)) return "features";
   if (["route", "routes", "road", "roads"].includes(value)) return "routes";
   if (["river", "rivers", "hydro", "hydrology"].includes(value)) return "rivers";
   if (["city", "cities", "settlement", "settlements", "burg", "burgs"].includes(value)) return "cities";
@@ -8028,7 +8120,7 @@ function normalizeApiRegenerationKind(kind) {
   if (["religion", "religions"].includes(value)) return "religions";
   if (["military", "army", "armies"].includes(value)) return "military";
   if (["zone", "zones", "region-event", "region-events"].includes(value)) return "zones";
-  throw new Error("受约束重算类型必须是 routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones");
+  throw new Error("受约束重算类型必须是 features / routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones");
 }
 
 function regenerationApiSummary(map) {
@@ -8707,6 +8799,23 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.panels.lake?.setPatchSelectMode(false);
     }
   });
+  register(CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, "feature-panel", {
+    onEnter: ({context}) => {
+      state.featureTopology.active = true;
+      state.panels.feature?.setTopologySelectMode(true);
+      previewFeatureTopologyDraft(state, context);
+    },
+    onRepeat: ({context}) => {
+      state.featureTopology.active = true;
+      state.panels.feature?.setTopologySelectMode(true);
+      previewFeatureTopologyDraft(state, context);
+    },
+    onExit: () => {
+      state.featureTopology.active = false;
+      clearFeatureTopologyPreview(state);
+      state.panels.feature?.setTopologySelectMode(false);
+    }
+  });
   register(CANVAS_TOOL_MODE.ZONE_ADD, "zone-panel", {
     onEnter: ({context}) => {
       state.zoneCreate.active = true;
@@ -8864,6 +8973,28 @@ function rollbackCanvasToolStroke(state, kind) {
   }
   else state.editRefreshScheduler?.run(SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS);
   return true;
+}
+
+function previewFeatureTopologyDraft(state, draft = {}) {
+  const gridCells = [...new Set((draft.gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0 && cell < (state.map?.grid?.cells?.h?.length || 0)))].sort((a, b) => a - b);
+  if (!gridCells.length || !state.map) {
+    state.renderer?.clearHeightTransformPreview?.({draw: false});
+    state.renderer?.clearHeightCellSelection?.();
+    return 0;
+  }
+  const fillHeight = [FEATURE_TOPOLOGY_MODE.RECLAIM_COAST, FEATURE_TOPOLOGY_MODE.CLOSE_STRAIT].includes(draft.mode) ? 20 : 19;
+  const changes = gridCells.map(gridCell => {
+    const before = Number(state.map.grid.cells.h[gridCell]);
+    return {gridCell, before, after: fillHeight};
+  });
+  state.renderer?.setHeightTransformPreview?.(changes, {draw: false});
+  state.renderer?.setHeightCellSelection?.(gridCells);
+  return gridCells.length;
+}
+
+function clearFeatureTopologyPreview(state) {
+  state.renderer?.clearHeightTransformPreview?.({draw: false});
+  state.renderer?.clearHeightCellSelection?.();
 }
 
 function startMeasurementMode(state, documentRef, {status = "已进入测量模式。"} = {}) {
@@ -10421,9 +10552,17 @@ function bindMarkerEditing(canvas, state, documentRef) {
 function bindObjectCreationTools(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const activeMode = state.canvasToolModes.getActive()?.id;
-    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (activeMode === CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT) {
+      const pick = state.renderer?.pickClientPoint?.(event.clientX, event.clientY) || {};
+      if (!Number.isInteger(pick.gridCell) || pick.gridCell < 0) return;
+      const added = state.panels.feature?.setTopologyCell?.(pick.gridCell);
+      if (added) setFileOperationStatus(documentRef, `Feature 拓扑选区已加入 grid cell #${pick.gridCell}。`);
+      updateRuntimePanel(documentRef, state);
+      return;
+    }
     const packCell = getMarkerPackCellAtEvent(state, event);
     if (!Number.isInteger(packCell)) return;
 

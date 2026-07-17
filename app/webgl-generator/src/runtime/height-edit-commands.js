@@ -2,6 +2,7 @@ import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {systemAffected} from "./edit-command-effects.js";
 
 const HEIGHT_DEPENDENT_DERIVED_SYSTEMS = Object.freeze([
+  "features",
   "rivers",
   "routes",
   "biomes",
@@ -18,21 +19,25 @@ const HEIGHT_DEPENDENT_DERIVED_SYSTEMS = Object.freeze([
 
 export function createApplyHeightBrushCommand(changes, {label = "高度笔刷"} = {}) {
   const normalized = normalizeChanges(changes);
+  const crossesSeaLevel = normalized.some(change => (change.before < 20) !== (change.after < 20));
   return {
     label: `${label} ${normalized.length} cells`,
     domain: "height",
     effects: {
       ...EDIT_REFRESH_PRESETS.HEIGHT_SURFACE_ONLY,
-      derived: [...EDIT_REFRESH_PRESETS.HEIGHT_SURFACE_ONLY.derived, ...HEIGHT_DEPENDENT_DERIVED_SYSTEMS.map(system => `defer:${system}`)],
+      derived: [
+        ...EDIT_REFRESH_PRESETS.HEIGHT_SURFACE_ONLY.derived,
+        ...(crossesSeaLevel ? HEIGHT_DEPENDENT_DERIVED_SYSTEMS.map(system => `defer:${system}`) : [])
+      ],
       affected: systemAffected("height-brush", [{kind: "grid-cells", id: normalized.length}])
     },
     apply(context) {
       applyHeights(context.map, normalized, "after");
-      markHeightDependentDerivedStale(context.map);
+      if (crossesSeaLevel) markHeightDependentDerivedStale(context.map);
     },
     revert(context) {
       applyHeights(context.map, normalized, "before");
-      markHeightDependentDerivedStale(context.map);
+      if (crossesSeaLevel) markHeightDependentDerivedStale(context.map);
     },
     isNoop() {
       return normalized.length === 0;

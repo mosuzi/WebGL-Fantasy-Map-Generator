@@ -306,7 +306,7 @@ function tradePartyInfo(map, type, id) {
 
 function findLakeFeature(map, featureId) {
   const id = Number(featureId);
-  return (map?.pack?.features || []).find(feature => feature?.type === "lake" && Number(feature.i ?? feature.id) === id) || null;
+  return (map?.pack?.features || []).find(feature => feature?.type === "lake" && !feature.removed && Number(feature.i ?? feature.id) === id) || null;
 }
 
 function tradeSourceLabel(source) {

@@ -1,4 +1,4 @@
-export const HEIGHT_BASE_REBUILD_STEPS = Object.freeze(["rivers", "states"]);
+export const HEIGHT_BASE_REBUILD_STEPS = Object.freeze(["features", "rivers", "states"]);
 export const HEIGHT_DOWNSTREAM_REBUILD_STEPS = Object.freeze(["religions", "markers", "diplomacy", "military", "zones"]);
 
 export function createRegenerationResult(kind, status, constraint) {
@@ -13,6 +13,7 @@ export function createRegenerationResult(kind, status, constraint) {
     diplomacy: "外交",
     military: "军事",
     zones: "地区",
+    features: "Feature 与岸线",
     "height-base": "高度基础派生"
   };
   const normalizedStatus = String(status || "");
@@ -27,7 +28,7 @@ export function createRegenerationResult(kind, status, constraint) {
 export function rebuildHeightBaseDerived(regenerate) {
   return rebuildHeightDerivedSteps(regenerate, HEIGHT_BASE_REBUILD_STEPS, {
     action: "高度基础派生",
-    successConstraint: "已按河流 / 生物群系 / 道路 -> 国家 / 省份 / 城镇 / 道路的顺序完成基础派生重算。"
+    successConstraint: "已按 Feature / 岸线 -> 河流 / 生物群系 / 道路 -> 国家 / 省份 / 城镇 / 道路的顺序完成基础派生重算。"
   });
 }
 

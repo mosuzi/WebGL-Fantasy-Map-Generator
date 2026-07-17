@@ -6752,6 +6752,32 @@ input.ui-switch-native {
   gap: 10px;
 }
 
+.feature-topology-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border, rgba(148, 163, 184, 0.24));
+}
+
+.feature-topology-editor h3,
+.feature-topology-selection {
+  margin: 0;
+}
+
+.feature-topology-selection {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.feature-topology-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .biome-assignment-editor {
   display: grid;
   gap: 10px;

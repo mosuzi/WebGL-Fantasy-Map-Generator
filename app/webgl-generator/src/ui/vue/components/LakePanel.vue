@@ -259,7 +259,7 @@ function handlePatchApply() {
 
 function lakeRows(map) {
   return (map?.pack?.features || [])
-    .filter(feature => feature?.type === "lake")
+    .filter(feature => feature?.type === "lake" && !feature.removed)
     .map(feature => {
       const id = Number(feature.i ?? feature.id);
       const rawType = feature.group || feature.type || "lake";

@@ -213,6 +213,6 @@ function lakeObject(row) {
 
 function findLake(map, lakeId) {
   const feature = map?.pack?.features?.[Number(lakeId)];
-  if (!feature || feature.type !== "lake") return null;
+  if (!feature || feature.removed || feature.type !== "lake") return null;
   return {...feature, id: Number(feature.i ?? feature.id)};
 }
