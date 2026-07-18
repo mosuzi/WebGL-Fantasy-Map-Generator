@@ -10029,7 +10029,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    rollbackCanvasToolStroke(state, "height");
+    finishHeightStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
   }, true);
@@ -10045,7 +10045,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    finishHeightStroke(state, documentRef);
+    rollbackCanvasToolStroke(state, "height");
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
   }, true);

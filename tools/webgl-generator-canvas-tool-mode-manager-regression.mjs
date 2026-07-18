@@ -7,6 +7,7 @@ import {colorForProvince} from "../app/webgl-generator/src/renderer/color-modes.
 import {createCanvasToolModeManager} from "../app/webgl-generator/src/runtime/canvas-tool-mode-manager.js";
 import {restoreCanvasToolStrokePreview} from "../app/webgl-generator/src/runtime/canvas-tool-preview-rollback.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {applyProvinceBrushPreview, createApplyProvinceBrushCommand} from "../app/webgl-generator/src/runtime/province-edit-commands.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -50,10 +51,11 @@ testReentrantTransitionQueue();
 testEnterErrorCleanup();
 testLifecycleCleanup();
 testPreviewRollback();
+testHeightBrushCommitAndCancel();
 testProvinceBrushCommitAndCancel();
 testRuntimeIntegrationContract();
 
-console.log(`画布工具模式管理器回归通过：${expectedModes.length} 个模式，互斥 / 重入 / 取消 / 完成 / 异常 / 面板关闭 / 地图替换及省份笔刷提交 / 取消契约完整。`);
+console.log(`画布工具模式管理器回归通过：${expectedModes.length} 个模式，互斥 / 重入 / 取消 / 完成 / 异常 / 面板关闭 / 地图替换及高度 / 省份笔刷提交 / 取消契约完整。`);
 
 function testSingleActiveAndRepeatedEnter() {
   const manager = createCanvasToolModeManager();
@@ -224,6 +226,62 @@ function testPreviewRollback() {
   assert.deepEqual([map.grid.cells.religion[0], ...map.pack.cells.religion.slice(0, 2)], [1, 1, 2]);
 }
 
+function testHeightBrushCommitAndCancel() {
+  const map = generatePlaceholderMap({seed: "canvas-tool-height-pointer", cellsTarget: 3000, heightmapTemplate: "continents"});
+  const fixture = findHeightBrushFixture(map);
+  const {gridCell, packCells, before, after} = fixture;
+  const changes = [{gridCell, before, after}];
+  const history = new EditHistory();
+  const context = {map};
+  const snapshotBefore = captureHeightSnapshot(map);
+
+  applyHeightBrushPreview(map, changes);
+  assert.equal(map.grid.cells.h[gridCell], after, "高度预览必须先更新 grid 高度");
+  assert.ok(packCells.every(packCell => map.pack.cells.h[packCell] === after), "高度预览必须同步全部 pack 高度");
+  assert.equal(history.getStats().undo, 0, "高度预览不得写入历史");
+
+  history.execute(createApplyHeightBrushCommand(changes), context);
+  assert.equal(history.getStats().undo, 1, "高度 pointerup 提交必须只增加一条历史");
+  assert.equal(history.getStats().redo, 0, "高度 pointerup 提交不得产生重做残留");
+  const snapshotAfter = captureHeightSnapshot(map);
+
+  history.undo(context);
+  assert.deepEqual(captureHeightSnapshot(map), snapshotBefore, "高度提交撤销必须恢复 grid / pack 高度");
+  history.redo(context);
+  assert.deepEqual(captureHeightSnapshot(map), snapshotAfter, "高度提交重做必须恢复 grid / pack 高度");
+  history.undo(context);
+
+  const historyBeforeCancel = history.getStats();
+  applyHeightBrushPreview(map, changes);
+  const rollback = restoreCanvasToolStrokePreview(map, "height", {originals: new Map([[gridCell, before]])});
+  assert.deepEqual(rollback, {restoredGridCells: 1, restoredPackCells: packCells.length}, "高度 pointercancel 必须恢复完整 grid / pack 预览");
+  assert.deepEqual(captureHeightSnapshot(map), snapshotBefore, "高度 pointercancel 必须恢复取消前完整快照");
+  assert.deepEqual(history.getStats(), historyBeforeCancel, "高度 pointercancel 不得改变历史深度或状态");
+}
+
+function findHeightBrushFixture(map) {
+  for (let gridCell = 0; gridCell < map.grid.cells.h.length; gridCell++) {
+    const before = Number(map.grid.cells.h[gridCell]);
+    if (before < 20) continue;
+    const after = before < 100 ? before + 1 : before - 1;
+    const packCells = [];
+    for (let packCell = 0; packCell < map.pack.cells.g.length; packCell++) {
+      if (Number(map.pack.cells.g[packCell]) === gridCell) packCells.push(packCell);
+    }
+    if (packCells.length && packCells.every(packCell => Number(map.pack.cells.h[packCell]) === before)) {
+      return {gridCell, packCells, before, after};
+    }
+  }
+  throw new Error("固定 seed 没有找到 grid / pack 高度一致的普通笔刷样本");
+}
+
+function captureHeightSnapshot(map) {
+  return {
+    grid: Array.from(map.grid.cells.h),
+    pack: Array.from(map.pack.cells.h)
+  };
+}
+
 function testProvinceBrushCommitAndCancel() {
   const map = generatePlaceholderMap({seed: "canvas-tool-province-pointer", cellsTarget: 3000, heightmapTemplate: "continents"});
   const fixture = findProvinceBrushFixture(map);
@@ -338,6 +396,13 @@ function testRuntimeIntegrationContract() {
   for (const kind of ["height", "state", "province"]) {
     assert.match(appSource, new RegExp(escapeRegex(`rollbackCanvasToolStroke(state, "${kind}")`)));
   }
+  const heightBinding = sourceBetween(appSource, "function bindHeightEditing", "function updateHeightFillPreviewAtEvent");
+  const heightPointerUp = sourceBetween(heightBinding, 'canvas.addEventListener("pointerup"', 'canvas.addEventListener("pointercancel"');
+  const heightPointerCancel = heightBinding.slice(heightBinding.indexOf('canvas.addEventListener("pointercancel"'));
+  assert.match(heightPointerUp, /finishHeightStroke\(state, documentRef\)/, "高度 pointerup 必须正式提交笔刷");
+  assert.doesNotMatch(heightPointerUp, /rollbackCanvasToolStroke\(state, "height"\)/, "高度 pointerup 不得回滚预览");
+  assert.match(heightPointerCancel, /rollbackCanvasToolStroke\(state, "height"\)/, "高度 pointercancel 必须完整回滚预览");
+  assert.doesNotMatch(heightPointerCancel, /finishHeightStroke\(state, documentRef\)/, "高度 pointercancel 不得提交历史");
   const provinceBinding = sourceBetween(appSource, "function bindProvinceEditing", "function bindSocialAssignmentEditing");
   const provincePointerUp = sourceBetween(provinceBinding, 'canvas.addEventListener("pointerup"', 'canvas.addEventListener("pointercancel"');
   const provincePointerCancel = provinceBinding.slice(provinceBinding.indexOf('canvas.addEventListener("pointercancel"'));
