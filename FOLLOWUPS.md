@@ -37,5 +37,6 @@
 
 ## 当前未提取事项
 
+- `tools/webgl-generator-feature-topology-ui-api-regression.mjs` 仍硬编码第 75 项时期的公开 API 总数 `196 / 98`，而第 78 项后的当前权威基线已是 `204 / 106`，导致该脚本在进入 Feature 动态断言前失败。第 86 项只记录此既有测试基线漂移，不修改已完成任务的 API 门禁；后续应统一改为读取当前 inventory / stability 契约，避免领域测试重复冻结易漂移总数。
 - `bindHeightEditing` 的普通高度 stroke 现有结束路由疑似反接：`pointerup` 调用回滚，`pointercancel` 调用提交。第 68 项明确不得改变笔刷提交 / 回滚语义，因此本项只登记；后续需单独核对产品语义、历史行为与回归，再决定是否提升为权威任务。
 - 第 72 项气候受约束下游重算在当前 10k 浏览器样本执行 `economy -> markers` 时仍约耗时 `1216ms`，健康监控会记录 warning 级 `input-handler-stall / main-thread-long-task`；本项已消除成功路径两次冗余整图深克隆并把 error 降为零，但若后续要消除 warning，需要另立性能任务评估分步让出主线程、增量快照或 Worker 化，不能在后续领域编辑项中顺手改造。

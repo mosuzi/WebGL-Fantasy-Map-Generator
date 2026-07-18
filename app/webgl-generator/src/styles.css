@@ -9050,6 +9050,36 @@ input.ui-switch-native {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ui-key-value-min)), 1fr));
 }
 
+.vue-feature-panel-root {
+  container-type: inline-size;
+}
+
+.feature-panel-details {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 12px;
+  row-gap: 6px;
+  margin: 10px 0;
+  padding: 10px 0;
+  border-top: 1px solid rgba(189, 206, 213, 0.12);
+  border-bottom: 1px solid rgba(189, 206, 213, 0.12);
+}
+
+@container (max-width: 520px) {
+  .feature-panel-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 320px) {
+  .feature-panel-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .feature-panel-details .ui-key-value-item.is-wide {
+    grid-column: 1 / -1;
+  }
+}
+
 .population-adjustment-editor {
   display: grid;
   gap: 10px;

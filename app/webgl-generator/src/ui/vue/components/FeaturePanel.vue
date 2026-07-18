@@ -23,7 +23,7 @@
     @column-resize="callbacks.onColumnResize"
   />
 
-  <UiDetailGrid class-name="feature-panel-details" empty-text="未选中地貌单元" :rows="detailRows" />
+  <UiDetailGrid class-name="feature-panel-details" empty-text="未选中地貌单元" :rows="detailRows" :auto-wide="false" />
 
   <section class="feature-topology-editor" aria-label="海岸与 Feature 拓扑编辑器">
     <h3>海岸与 Feature 拓扑</h3>
@@ -70,6 +70,7 @@ import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from ".
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {buildFeatureDetailRows} from "./feature-detail-layout.js";
 
 defineOptions({
   name: "FeaturePanel"
@@ -158,22 +159,10 @@ const summaryMetrics = computed(() => [
   {label: "异常引用", value: formatNumber(metrics.value.invalidReferences)}
 ]);
 
-const detailRows = computed(() => selected.value ? [
-  {label: "ID", value: `#${selected.value.id}`},
-  {label: "类型", value: selected.value.typeLabel},
-  {label: "分组", value: selected.value.groupLabel},
-  {label: "陆地", value: selected.value.land ? "是" : "否"},
-  {label: "边界", value: selected.value.border ? "是" : "否"},
-  {label: "采样格", value: formatNumber(selected.value.cells)},
-  {label: "面积", value: formatAreaValue(selected.value.area)},
-  {label: "岸线采样格", value: formatNumber(selected.value.shorelineCells)},
-  {label: "港湾采样格", value: formatNumber(selected.value.havenCells)},
-  {label: "泊位强度", value: formatNumber(selected.value.harborScore)},
-  {label: "高度 / 水位", value: formatNumber(selected.value.height)},
-  {label: "补给", value: formatNumber(selected.value.flux)},
-  {label: "蒸发", value: formatNumber(selected.value.evaporation)},
-  {label: "first cell", value: formatNumber(selected.value.firstCell), debug: true}
-] : []);
+const detailRows = computed(() => buildFeatureDetailRows(selected.value, {
+  formatNumber,
+  formatArea: formatAreaValue
+}));
 
 function buildFeatureMetrics(map) {
   const rows = (map?.pack?.features || []).filter(feature => feature && !feature.removed).map(featureRow);
