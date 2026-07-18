@@ -18,6 +18,7 @@
 - 权威任务第 71～81 项统一登记于 `promoted-quasi-authoritative-tasks.md`，并分别复用 `ui-system-audit-gate.md`、`editor-and-stat-panel-inventory.md`、`height-terrain-template-programs.md`、`label-type-style-system.md` 与 `export-capability-matrix.md` 的领域证据；原 `Q-01～Q-11` 已全部按顺序转正，不再是候选池。第 73 项另有 `city-relocation-product-rules.md`；第 74 项另有 `state-merge-split-product-rules.md`；第 75 项另有 `coastline-feature-topology-product-rules.md`；第 76 项另有 `culture-religion-expansion-product-rules.md`；第 77 项另有 `suitability-brush-product-rules.md`；第 78 项另有 `population-adjustment-product-rules.md`，冻结区域增减、非守恒总量、比例分摊、零人口和事务边界。
 - 权威任务第 82～86 项统一登记于 `authoritative-tasks-82-86.md`：依次处理管理面板首次左侧落点、湖泊名称中“湖”的多数分布、地图 overlay 文本禁止选中、主题导入 / 导出按钮文字规格统一，以及水体与地貌统计详情区紧凑排版。
 - 权威任务第 87 项登记于 `authoritative-task-87.md`：只修正悬停菜单被国家、省份名称标签遮挡的堆叠层级，不扩展为全局浮层重构。
+- 下一批准权威候选 `Q-12～Q-17` 登记于 `next-quasi-authoritative-tasks-2026-07-18.md`：当前只供用户审阅，尚未写入权威任务清单，不得提前实施。
 
 以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
 
@@ -48,6 +49,7 @@
 - `promoted-quasi-authoritative-tasks.md`：原准权威 `Q-01～Q-11` 转为第 71～81 项的编号映射、依赖、产品规则门禁和排除边界。
 - `authoritative-tasks-82-86.md`：用户 2026-07-18 批准的五项新权威任务来源、顺序、共享执行方式和明确排除边界。
 - `authoritative-task-87.md`：用户 2026-07-18 反馈的悬停菜单与国家 / 省份标签层级问题、最小范围和验收边界。
+- `next-quasi-authoritative-tasks-2026-07-18.md`：从历史计划、FOLLOWUPS 和现有实现重新审计得到的下一批 `Q-12～Q-17` 候选、排除项和批准边界；批准前不是活动任务。
 - `city-relocation-product-rules.md`：权威任务第 73 项已确认的归属跟随、港口失效、首都 / 省会限制、路线局部重寻和事务边界冻结稿。
 - `state-merge-split-product-rules.md`：权威任务第 74 项已确认的国家合并 / 完整旧省拆分、ID 与 tombstone、首都继承、局部重新分省、外交军事经济联动、回滚兼容和排除边界冻结稿。
 - `coastline-feature-topology-product-rules.md`：权威任务第 75 项已确认的海岸雕刻、填岸、开 / 闭海峡、湖海开渠、整湖填平、派生 Feature split / merge、高度跨海平面、ID 与回滚兼容边界冻结稿。
