@@ -6771,6 +6771,42 @@ input.ui-switch-native {
   color: #edf4f6;
 }
 
+.economy-trade-query {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(12, 20, 24, 0.72);
+}
+
+.economy-trade-query-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.economy-trade-party-filter {
+  display: grid;
+  gap: 5px;
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
+.economy-trade-query-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
+.economy-deal-locate-actions {
+  justify-content: flex-start;
+}
+
 .economy-market-assignment {
   display: grid;
   gap: 8px;

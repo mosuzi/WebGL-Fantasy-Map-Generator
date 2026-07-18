@@ -128,6 +128,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       if (panelState.tab === "deals") callbacks.onLocate?.(tradeFlowObject(row));
       else if (row?.locateObject) callbacks.onLocate?.(row.locateObject);
     },
+    onLocateAssociation: object => callbacks.onLocate?.(object),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, tradeFlowObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onMarketAssignmentActive: active => callbacks.onMarketAssignmentActive?.(Boolean(active)),

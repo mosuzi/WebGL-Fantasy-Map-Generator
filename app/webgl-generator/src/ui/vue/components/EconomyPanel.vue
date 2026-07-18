@@ -5,6 +5,26 @@
     <UiSegmented label="经济范围" :options="tabOptions" :model-value="state.tab" @select="callbacks.onTab" />
     <UiFilterInput :model-value="state.filter" placeholder="筛选商品 / 市场 / 城镇 / 国家 / 来源" @update:model-value="callbacks.onFilter" />
   </div>
+  <section v-if="state.tab === 'deals'" class="economy-trade-query" aria-label="结构化贸易查询">
+    <div class="economy-trade-query-grid">
+      <UiSelectField input-id="economy-trade-state" label="国家" :model-value="tradeQuery.stateId" :options="tradeQueryOptions.states" @update:model-value="value => tradeQuery.stateId = value" />
+      <UiSelectField input-id="economy-trade-province" label="行政区域" :model-value="tradeQuery.provinceId" :options="tradeQueryOptions.provinces" @update:model-value="value => tradeQuery.provinceId = value" />
+      <UiSelectField input-id="economy-trade-market" label="市场" :model-value="tradeQuery.marketId" :options="tradeQueryOptions.markets" @update:model-value="value => tradeQuery.marketId = value" />
+      <UiSelectField input-id="economy-trade-good" label="商品" :model-value="tradeQuery.goodId" :options="tradeQueryOptions.goods" @update:model-value="value => tradeQuery.goodId = value" />
+      <label class="economy-trade-party-filter">
+        <span>卖方</span>
+        <UiFilterInput :model-value="tradeQuery.seller" placeholder="卖方名称或 ID" @update:model-value="value => tradeQuery.seller = value" />
+      </label>
+      <label class="economy-trade-party-filter">
+        <span>买方</span>
+        <UiFilterInput :model-value="tradeQuery.buyer" placeholder="买方名称或 ID" @update:model-value="value => tradeQuery.buyer = value" />
+      </label>
+    </div>
+    <div class="economy-trade-query-summary">
+      <span>{{ tradeQuerySummary }}</span>
+      <UiButton variant="secondary" :disabled="!hasActiveTradeQuery" @click="clearTradeQuery">清空全部筛选</UiButton>
+    </div>
+  </section>
   <section v-if="state.tab === 'markets'" class="economy-market-assignment" aria-label="市场归属编辑">
     <div class="economy-market-assignment-fields">
       <UiSelectField
@@ -164,6 +184,14 @@
       <UiButton variant="secondary" button-type="submit">保存市场展示属性</UiButton>
     </form>
 
+    <UiPanelIoActions
+      v-if="state.tab === 'deals' && selectedDeal"
+      class-name="economy-deal-locate-actions"
+      label="交易关联定位"
+      :actions="dealLocateActions"
+      @action="handleDealLocateAction"
+    />
+
     <UiKeyValueGrid
       class-name="economy-detail-highlights"
       :items="economyDetail.highlights"
@@ -215,12 +243,13 @@ import UiStateBanner from "./base/UiStateBanner.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
-import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
+import {compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
 import {goodDisplayName, normalizeGoodDisplayProperties, normalizeMarketDisplayProperties} from "../../../generator/economy-display-properties.js";
+import {buildTradeQueryOptions, EMPTY_TRADE_QUERY, queryTradeDeals} from "../../economy-trade-query.js";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.ECONOMY_MARKET);
 
@@ -244,6 +273,7 @@ const debugEnabled = useDebugMode();
 const ROW_LIMIT = 500;
 const DEAL_ROW_LIMIT = 48;
 const DEAL_METRIC_LIMIT = 120;
+const tradeQuery = reactive({...EMPTY_TRADE_QUERY});
 
 const tabOptions = Object.freeze([
   {value: "goods", label: "商品"},
@@ -326,7 +356,9 @@ const metrics = computed(() => {
     dealRowLimit: DEAL_METRIC_LIMIT,
     selectedDealId: props.state.selectedDealId,
     dealSortKey: props.state.sortKey,
-    dealSortDir: props.state.sortDir
+    dealSortDir: props.state.sortDir,
+    dealQuery: tradeQuery,
+    dealText: props.state.filter
   });
 });
 const activeSortOptions = computed(() => {
@@ -336,7 +368,7 @@ const activeSortOptions = computed(() => {
 });
 const filteredGoodRows = computed(() => sortRows(filterRows(metrics.value.goods, props.state.filter), props.state.sortKey, props.state.sortDir));
 const filteredMarketRows = computed(() => sortRows(filterRows(metrics.value.markets, props.state.filter), props.state.sortKey, props.state.sortDir));
-const filteredDealRows = computed(() => sortRows(filterRows(metrics.value.deals, props.state.filter), props.state.sortKey, props.state.sortDir));
+const filteredDealRows = computed(() => sortRows(metrics.value.deals, props.state.sortKey, props.state.sortDir));
 const visibleGoodRows = computed(() => filteredGoodRows.value.slice(0, ROW_LIMIT));
 const visibleMarketRows = computed(() => filteredMarketRows.value.slice(0, ROW_LIMIT));
 const visibleDealRows = computed(() => filteredDealRows.value.slice(0, DEAL_ROW_LIMIT));
@@ -348,7 +380,7 @@ const marketColumnWidths = computed(() => tableColumnWidths("markets"));
 const dealColumnWidths = computed(() => tableColumnWidths("deals"));
 const activeTotalRows = computed(() => {
   if (props.state.tab === "markets") return filteredMarketRows.value.length;
-  if (props.state.tab === "deals") return props.state.filter ? filteredDealRows.value.length : metrics.value.summary.deals;
+  if (props.state.tab === "deals") return metrics.value.dealQueryCount;
   return filteredGoodRows.value.length;
 });
 const activeVisibleRows = computed(() => {
@@ -388,6 +420,13 @@ const marketAssignmentPreviewMessage = computed(() => {
   if (preview.invalidMarketCells || preview.waterCells) warnings.push("存在无效覆盖，不能应用");
   return `待应用 ${formatNumber(preview.changed)} cells${warnings.length ? `；${warnings.join("；")}` : "；未发现跨国或无国家覆盖"}`;
 });
+const tradeQueryOptions = computed(() => {
+  props.state.version;
+  return buildTradeQueryOptions(props.state.map?.pack || {});
+});
+const activeStructuredQueryCount = computed(() => Object.values(tradeQuery).filter(value => String(value ?? "").trim()).length);
+const hasActiveTradeQuery = computed(() => activeStructuredQueryCount.value > 0 || Boolean(String(props.state.filter || "").trim()));
+const tradeQuerySummary = computed(() => `组合条件 ${activeStructuredQueryCount.value} 项${props.state.filter ? "，含自由文本" : ""}；匹配 ${formatNumber(metrics.value.dealQueryCount)} / ${formatNumber(metrics.value.summary.deals)} 笔交易`);
 const goodDisplayDraft = reactive({visible: true, color: "#d7a84f", icon: "●", label: ""});
 const marketDisplayDraft = reactive({name: "", color: "#4f9cc9"});
 
@@ -432,6 +471,11 @@ const economyDetail = computed(() => {
   if (props.state.tab === "deals") return selectedDeal.value ? buildDealDetail(selectedDeal.value) : null;
   return selectedGood.value ? buildGoodDetail(selectedGood.value) : null;
 });
+const dealLocateTargets = computed(() => selectedDeal.value ? buildDealLocateTargets(selectedDeal.value) : []);
+const dealLocateActions = computed(() => [
+  {key: "deal", label: `定位交易 #${selectedDeal.value?.id || ""}`, icon: "⌖"},
+  ...dealLocateTargets.value.map((item, index) => ({key: `related-${index}`, label: item.label, icon: "⌖"}))
+]);
 
 const diagnosticRows = computed(() => [
   {label: "无市场城镇", value: formatNumber(metrics.value.diagnostics.burgsWithoutMarket)},
@@ -515,6 +559,22 @@ function applyGoodDisplay() {
 function applyMarketDisplay() {
   if (!selectedMarket.value) return;
   callbacks.onMarketDisplayApply?.(selectedMarket.value.id, {...marketDisplayDraft});
+}
+
+function clearTradeQuery() {
+  Object.assign(tradeQuery, EMPTY_TRADE_QUERY);
+  callbacks.onFilter?.("");
+}
+
+function handleDealLocateAction(key) {
+  if (!selectedDeal.value) return;
+  if (key === "deal") {
+    callbacks.onLocate?.(selectedDeal.value);
+    return;
+  }
+  const index = Number(String(key).replace("related-", ""));
+  const item = dealLocateTargets.value[index];
+  if (item?.object) callbacks.onLocateAssociation?.(item.object);
 }
 
 function tableColumnWidths(table) {
@@ -607,6 +667,10 @@ function buildDealDetail(deal) {
           {label: "买方", value: deal.buyerName},
           {label: "卖方国家", value: deal.sellerStateName},
           {label: "买方国家", value: deal.buyerStateName},
+          {label: "卖方行政区域", value: deal.sellerProvinceName},
+          {label: "买方行政区域", value: deal.buyerProvinceName},
+          {label: "卖方市场", value: deal.sellerMarketName || "无"},
+          {label: "买方市场", value: deal.buyerMarketName || "无"},
           {label: "国家流向", value: deal.stateRouteLabel}
         ]
       },
@@ -654,13 +718,12 @@ watch(activeSortOptions, options => {
   callbacks.onSort?.(options[0]?.key || "id");
 });
 
-function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = Infinity, selectedDealId = null, dealSortKey = "value", dealSortDir = "desc"} = {}) {
+function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = Infinity, selectedDealId = null, dealSortKey = "value", dealSortDir = "desc", dealQuery = EMPTY_TRADE_QUERY, dealText = ""} = {}) {
   const pack = map?.pack || {};
   const goods = (pack.goods || []).filter(good => good?.i);
   const markets = (pack.markets || []).filter(market => market?.i);
   const deals = (pack.deals || []).filter(deal => Number.isInteger(deal?.i));
   const aliveBurgs = includeDiagnostics ? (pack.burgs || []).filter(burg => burg?.i && !burg.removed) : [];
-  const goodsById = new Map(goods.map(good => [good.i, good]));
   const marketsById = new Map(markets.map(market => [market.i, market]));
   const stockByGood = new Map();
   const demandByGood = new Map();
@@ -793,11 +856,8 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
   });
 
   const invalidDealSamples = [];
-  const panelDeals = selectDealRowsForPanel(deals, {limit: dealRowLimit, selectedDealId, sortKey: dealSortKey, sortDir: dealSortDir});
-  const dealRows = panelDeals.map(deal => {
-    const seller = partyInfo(pack, deal.sellerType, deal.seller, marketsById);
-    const buyer = partyInfo(pack, deal.buyerType, deal.buyer, marketsById);
-    const good = goodsById.get(deal.good);
+  const dealQueryResult = queryTradeDeals(pack, {query: dealQuery, text: dealText, limit: dealRowLimit, selectedDealId, sortKey: dealSortKey, sortDir: dealSortDir});
+  const dealRows = dealQueryResult.entries.map(({deal, seller, buyer, good}) => {
     const fallbackDistance = partyDistance(seller, buyer);
     const distance = Number.isFinite(deal.distance) ? Number(deal.distance) : fallbackDistance;
     const value = dealValue(deal);
@@ -815,12 +875,24 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       sellerName: seller.name,
       sellerStateId: seller.stateId,
       sellerStateName: seller.stateName,
+      sellerProvinceId: seller.provinceId,
+      sellerProvinceName: seller.provinceName,
+      sellerMarketId: seller.marketId,
+      sellerMarketName: seller.marketName,
+      sellerMarketCenterCityId: seller.marketCenterCityId,
+      sellerCityId: seller.cityId,
       buyerType: deal.buyerType,
       buyerId: deal.buyer,
       buyerValid: buyer.valid,
       buyerName: buyer.name,
       buyerStateId: buyer.stateId,
       buyerStateName: buyer.stateName,
+      buyerProvinceId: buyer.provinceId,
+      buyerProvinceName: buyer.provinceName,
+      buyerMarketId: buyer.marketId,
+      buyerMarketName: buyer.marketName,
+      buyerMarketCenterCityId: buyer.marketCenterCityId,
+      buyerCityId: buyer.cityId,
       stateRouteLabel: stateRouteLabel(seller, buyer),
       routeLabel: routeLabel(deal),
       source: deal.source || "scheduled",
@@ -834,7 +906,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       distanceCost: Number(deal.distanceCost || 0),
       distanceMultiplier: Number(deal.distanceMultiplier || 1),
       distanceLabel: Number.isFinite(distance) ? formatDistance(distance, unitPreferences.value) : "未知",
-      locateObject: seller.locateObject || buyer.locateObject
+      locateObject: cityLocateObject(seller.cityId) || cityLocateObject(buyer.cityId)
     });
   });
 
@@ -854,6 +926,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
     goods: goodRows,
     markets: marketRows,
     deals: dealRows,
+    dealQueryCount: dealQueryResult.total,
     summary: {
       goods: goods.length,
       markets: markets.length,
@@ -868,34 +941,6 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
     },
     diagnostics
   };
-}
-
-function selectDealRowsForPanel(deals, {limit = Infinity, selectedDealId = null, sortKey = "value", sortDir = "desc"} = {}) {
-  if (!Number.isFinite(limit)) return deals;
-  const sorted = [...deals].sort((a, b) => compareRawDeals(a, b, sortKey, sortDir));
-  const selectedId = Number(selectedDealId);
-  const rows = sorted.slice(0, Math.max(0, limit));
-  if (Number.isInteger(selectedId) && !rows.some(deal => deal?.i === selectedId)) {
-    const selected = deals.find(deal => deal?.i === selectedId);
-    if (selected) rows.push(selected);
-  }
-  return rows;
-}
-
-function compareRawDeals(a, b, key, direction) {
-  const factor = direction === "asc" ? 1 : -1;
-  const aValue = rawDealSortValue(a, key);
-  const bValue = rawDealSortValue(b, key);
-  return compareListValues(aValue, bValue) * factor || compareListValues(a?.i, b?.i);
-}
-
-function rawDealSortValue(deal, key) {
-  if (key === "units") return Number(deal?.units || 0);
-  if (key === "price") return Number(deal?.price || 0);
-  if (key === "distance") return Number(deal?.distance || 0);
-  if (key === "distanceCost") return Number(deal?.distanceCost || 0);
-  if (key === "routeLabel") return routeLabel(deal || {});
-  return dealValue(deal || {});
 }
 
 function emptyDiagnostics() {
@@ -960,6 +1005,7 @@ function exportJson(rows = exportRows(), {selectedOnly = false} = {}) {
     seed: props.state.map?.metadata?.seed || "",
     tab: props.state.tab,
     filter: props.state.filter || "",
+    tradeQuery: {...tradeQuery},
     sortKey: props.state.sortKey,
     sortDir: props.state.sortDir,
     summary: metrics.value.summary,
@@ -990,9 +1036,13 @@ function exportRows() {
   if (props.state.tab === "deals") {
     const fullMetrics = buildEconomyMetrics(props.state.map, {
       includeDiagnostics: false,
-      dealRowLimit: Infinity
+      dealRowLimit: Infinity,
+      dealQuery: tradeQuery,
+      dealText: props.state.filter,
+      dealSortKey: props.state.sortKey,
+      dealSortDir: props.state.sortDir
     });
-    return sortRows(filterRows(fullMetrics.deals, props.state.filter), props.state.sortKey, props.state.sortDir);
+    return sortRows(fullMetrics.deals, props.state.sortKey, props.state.sortDir);
   }
   return filteredGoodRows.value;
 }
@@ -1029,6 +1079,10 @@ function exportColumns() {
     {key: "buyerName", label: "买方"},
     {key: "sellerStateName", label: "卖方国家"},
     {key: "buyerStateName", label: "买方国家"},
+    {key: "sellerProvinceName", label: "卖方行政区域"},
+    {key: "buyerProvinceName", label: "买方行政区域"},
+    {key: "sellerMarketName", label: "卖方市场"},
+    {key: "buyerMarketName", label: "买方市场"},
     {key: "routeLabel", label: "类型"},
     {key: "sourceLabel", label: "来源"},
     {key: "units", label: "数量"},
@@ -1183,40 +1237,6 @@ function accumulateDeal(current = {count: 0, value: 0}, value) {
   return {count: current.count + 1, value: round(current.value + value)};
 }
 
-function partyInfo(pack, type, id, marketsById) {
-  if (type === "burg") {
-    const burg = pack.burgs?.[id];
-    const stateId = Number(burg?.state || 0);
-    return {
-      name: burg?.name || `城镇 #${id}`,
-      x: burg?.x,
-      y: burg?.y,
-      stateId,
-      stateName: stateName(pack, stateId),
-      valid: Boolean(burg),
-      locateObject: cityLocateObject(id)
-    };
-  }
-  const market = marketsById.get(id);
-  const city = pack.burgs?.[market?.centerBurgId];
-  const stateId = Number(market?.state || city?.state || 0);
-  return {
-    name: market?.name || `市场 #${id}`,
-    x: market?.x ?? city?.x,
-    y: market?.y ?? city?.y,
-    stateId,
-    stateName: stateName(pack, stateId),
-    valid: Boolean(market),
-    locateObject: cityLocateObject(market?.centerBurgId)
-  };
-}
-
-function stateName(pack, stateId) {
-  const state = pack.states?.[stateId];
-  if (state?.fullName || state?.name) return state.fullName || state.name;
-  return stateId > 0 ? `国家 #${stateId}` : "无国家";
-}
-
 function stateRouteLabel(seller, buyer) {
   if (seller.stateId && buyer.stateId && seller.stateId === buyer.stateId) return `${seller.stateName} 内部`;
   return `${seller.stateName} -> ${buyer.stateName}`;
@@ -1230,6 +1250,31 @@ function partyDistance(a, b) {
 function cityLocateObject(cityId) {
   const id = Number(cityId || 0);
   return id > 0 ? {kind: "city", id} : null;
+}
+
+function buildDealLocateTargets(deal) {
+  const candidates = [
+    {label: `定位卖方：${deal.sellerName}`, object: cityLocateObject(deal.sellerCityId)},
+    {label: `定位买方：${deal.buyerName}`, object: cityLocateObject(deal.buyerCityId)},
+    {label: `定位卖方国家：${deal.sellerStateName}`, object: politicalLocateObject("state", deal.sellerStateId)},
+    {label: `定位买方国家：${deal.buyerStateName}`, object: politicalLocateObject("state", deal.buyerStateId)},
+    {label: `定位卖方行政区域：${deal.sellerProvinceName}`, object: politicalLocateObject("province", deal.sellerProvinceId)},
+    {label: `定位买方行政区域：${deal.buyerProvinceName}`, object: politicalLocateObject("province", deal.buyerProvinceId)},
+    {label: `定位卖方市场中心：${deal.sellerMarketName}`, object: deal.sellerMarketId ? cityLocateObject(deal.sellerMarketCenterCityId) : null},
+    {label: `定位买方市场中心：${deal.buyerMarketName}`, object: deal.buyerMarketId ? cityLocateObject(deal.buyerMarketCenterCityId) : null}
+  ].filter(item => item.object);
+  const seen = new Set();
+  return candidates.filter(item => {
+    const key = `${item.object.kind}:${item.object.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function politicalLocateObject(kind, id) {
+  const normalized = Number(id || 0);
+  return normalized > 0 ? {kind, id: normalized} : null;
 }
 
 function dealValue(deal) {
