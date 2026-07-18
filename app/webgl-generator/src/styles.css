@@ -6924,6 +6924,57 @@ input.ui-switch-native {
   white-space: nowrap;
 }
 
+.economy-display-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  align-items: end;
+  gap: 8px;
+  border: 1px solid rgba(215, 168, 79, 0.18);
+  border-radius: 8px;
+  padding: 9px;
+  background: rgba(16, 23, 28, 0.58);
+}
+
+.economy-display-editor > label,
+.economy-display-color-field {
+  display: grid;
+  gap: 5px;
+  color: #9fb0ba;
+  font-size: 11px;
+}
+
+.economy-display-color-field {
+  grid-template-columns: auto 34px 1fr;
+  align-items: center;
+}
+
+.economy-display-color-field input {
+  width: 34px;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.economy-display-color-field code {
+  color: #d9e4e9;
+  font-size: 11px;
+}
+
+.object-table-color-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.object-table-color-cell i {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 3px;
+}
+
 .economy-detail-highlights {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));

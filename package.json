@@ -95,6 +95,7 @@
     "regress:namebase-multiword": "node ./tools/webgl-generator-namebase-multiword-regression.mjs",
     "regress:lake-names": "node --no-warnings ./tools/webgl-generator-lake-name-distribution-regression.mjs",
     "regress:market-assignment": "node --no-warnings ./tools/webgl-generator-market-assignment-regression.mjs",
+    "regress:economy-display-edit": "node --no-warnings ./tools/webgl-generator-economy-display-edit-regression.mjs",
     "regress:route-edit": "node --no-warnings ./tools/webgl-generator-route-edit-regression.mjs",
     "regress:line-width-projection": "node --no-warnings ./tools/webgl-generator-line-width-projection-regression.mjs",
     "regress:feature-patch": "node --no-warnings ./tools/webgl-generator-feature-patch-regression.mjs",

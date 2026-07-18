@@ -1,6 +1,6 @@
 # 控制台与扩展 API 系统计划
 
-> 状态校准（2026-07-18）：权威任务第 28～34 项已经完成；第 78 项新增区域人口增减预检和提交入口后，当前公开 API 为 11 个命名空间、204 个方法和 106 个编辑方法，根版本为 `1.0.0 / stable`。本文保留设计和阶段证据，不再维护另一份当前施工顺序。
+> 状态校准（2026-07-18）：权威任务第 28～34 项已经完成；第 91 项新增商品与市场展示属性入口后，当前公开 API 为 11 个命名空间、206 个方法和 108 个编辑方法，根版本为 `1.0.0 / stable`。本文保留设计和阶段证据，不再维护另一份当前施工顺序。
 
 本文档记录“把不依赖 UI 的操作收束为统一 API 系统”的详细方案。目标是让运行时能力可以通过浏览器控制台、自动化脚本、未来 AI 助手或扩展插件稳定调用，而不是只能从 Vue 面板和 DOM 事件进入。
 
@@ -344,8 +344,8 @@ api.edit.measurement.delete(id)
 - namebases 已补齐方法级副作用元数据：`list` 不改变状态，`export` 只生成返回结果或触发浏览器下载；`import / create / copyBuiltin / update / delete / clear / bind` 标注为 `namebases`，表示会通过名称库 edit command 写入名称库 / 绑定并进入 `EditHistory`；`renameObjects` 标注为 `object-names`，表示会按名称库批量改写当前地图对象名称并进入 `EditHistory`。`clear / renameObjects` 必须显式传 `confirm:true`，其它名称库写入方法不要求确认；浏览器验证已确认读取该元数据不修改地图 checksum。
 - info / debug 已补齐方法级副作用元数据：`info.version / capabilities / mapSummary / runtimeStats / healthEvents` 均不改变状态；`debug.snapshot / dumpState / renderer / health` 是只读诊断；`debug.enable / disable` 标注为 `debug-ui-state`，只开关开发面板 / debug UI；`debug.profileNextRender` 标注为 `renderer-diagnostics`，会强制执行一次 draw 并返回前后 renderer 诊断统计，但不修改地图数据、不进入 `EditHistory`、不要求 `confirm:true`；浏览器验证已确认读取元数据、执行诊断和开关 debug UI 均不修改地图 checksum。
 - generate 配置方法已补齐方法级副作用元数据：`getOptions` 不改变状态；`setOptions` 标注为 `generation-options`，表示只同步当前生成配置、主输入和运行时面板，不隐式生成新地图、不替换当前地图、不进入 `EditHistory`、不要求 `confirm:true`。`regenerate / newMap / rerollSeed` 继续保持必须显式确认的生成 / 重算元数据；浏览器验证已确认 `setOptions` 只更新生成配置，不修改当前地图 checksum 或编辑历史。
-- edit 命名空间已补齐方法级副作用元数据：可撤销编辑方法继续通过 edit command 写入当前地图；`height.rebuildBaseDerived / rebuildDownstreamDerived` 标注为同步、部分可撤销、必须确认的派生重建 action；`biomes.assignCells` 共用归属笔刷命令并同步适居度与人口承载摘要，`biomes.inspectSuitability / applySuitability` 共用数值适居度预检、单条历史与水域人口承载归零规则；`population.inspectAdjustment / applyAdjustment` 共用单区域人口预检、比例分摊和单事务命令；`economy.inspectAssignment` 只做覆盖诊断，`economy.assignCells / rebuild` 通过完整经济快照形成单条可撤销历史并要求确认；`routes.inspectEdit / update`、`lakes.inspectOutlet / setOutlet`、`features.inspectPatch / applyPatch`、`cultures.inspectExpansion / applyExpansion` 与 `religions.inspectExpansion / applyExpansion` 分别提供无副作用预检和单条可撤销编辑；扩张 `reexpand` 模式要求 `confirm:true`，`save` 保持安全口径。当前 106 个 edit 方法均有同名元数据。
-- `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回声明方法、元数据和真实 API 方法总数及缺失 / 多余项，并在顶层暴露 `complete / missing / extra / runtimeMissing / runtimeExtra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。当前公开基线为 11 个命名空间、204 个方法，其中 106 个为编辑方法；三方任一发生漂移都会使覆盖自检失败。
+- edit 命名空间已补齐方法级副作用元数据：可撤销编辑方法继续通过 edit command 写入当前地图；`height.rebuildBaseDerived / rebuildDownstreamDerived` 标注为同步、部分可撤销、必须确认的派生重建 action；`biomes.assignCells` 共用归属笔刷命令并同步适居度与人口承载摘要，`biomes.inspectSuitability / applySuitability` 共用数值适居度预检、单条历史与水域人口承载归零规则；`population.inspectAdjustment / applyAdjustment` 共用单区域人口预检、比例分摊和单事务命令；`economy.inspectAssignment` 只做覆盖诊断，`economy.assignCells / rebuild` 通过完整经济快照形成单条可撤销历史并要求确认，`economy.setGoodDisplay / setMarketDisplay` 共用展示属性命令且不触发经济重算；`routes.inspectEdit / update`、`lakes.inspectOutlet / setOutlet`、`features.inspectPatch / applyPatch`、`cultures.inspectExpansion / applyExpansion` 与 `religions.inspectExpansion / applyExpansion` 分别提供无副作用预检和单条可撤销编辑；扩张 `reexpand` 模式要求 `confirm:true`，`save` 保持安全口径。当前 108 个 edit 方法均有同名元数据。
+- `api.info.capabilities()` 已新增 `methodMetadataCoverage` 覆盖自检摘要，按命名空间返回声明方法、元数据和真实 API 方法总数及缺失 / 多余项，并在顶层暴露 `complete / missing / extra / runtimeMissing / runtimeExtra`；该字段用于 AI / 脚本在调用前判断能力表是否完整，也为后续新增 API 时提供轻量回归信号。当前公开基线为 11 个命名空间、206 个方法，其中 108 个为编辑方法；三方任一发生漂移都会使覆盖自检失败。
 - `pnpm run regress:api` 已新增第一刀，脚本会在构建产物上通过控制台 API 生成小地图，检查 `methodMetadataCoverage`、确认边界和代表性 `mutates` 元数据，并输出 `docs/generated/reports/api-capabilities-regression-results.json` 与 Markdown 报告。后续新增 / 删除 API 方法时，应优先跑该脚本确认能力表没有漏记或漂移。
 - `pnpm run regress:api-roundtrip` 已新增第一刀，脚本会在构建产物上通过控制台 API 完成完整地图 roundtrip：生成源地图、导出完整 JSON、导出 gzip、扰动当前地图后分别导入 JSON 对象 / JSON 字符串 / 压缩导出对象 / gzip-base64 payload，并校验 seed、checksum、历史栈和错误边界。
 - `pnpm run regress:api-geo` 已新增第一刀，脚本会在构建产物上通过 `api.data.importGEO()` 覆盖普通 GeoJSON 测量对象导入和 FMG Cells 地形导入两条分支，并校验确认门槛、坏 JSON 错误、撤销、非 GEO 派生重置和水陆一致性。
@@ -599,7 +599,7 @@ api.edit.measurement.delete(id)
 
 ## 下一波全面实现
 
-阶段 0～6 和权威任务第 28～34 项均已完成，原“继续阶段 4”及“剩余第 34 项”的建议已经过期。当前 API 基线为 11 个命名空间、204 个公开方法、106 个编辑方法，稳定等级为 `196 / 7 / 1`；第 28 项完成能力映射与三方覆盖门禁，第 29 项补齐纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，第 31 项统一长任务 operation，第 32 项补齐高度图、浏览器存档与导入诊断数据入口，第 33 项完成 `1.0.0` 稳定版本、兼容别名、确认策略和扩展能力分组，第 34 项完成聚合门禁与真实浏览器综合验收。后续主题、对象创建和局部编辑能力继续沿同一契约扩展；`regress:api-action-convergence / api-operation / api-data-compatibility / api-stability` 持续固定公共委托、事务、数据兼容和稳定契约。
+阶段 0～6 和权威任务第 28～34 项均已完成，原“继续阶段 4”及“剩余第 34 项”的建议已经过期。当前 API 基线为 11 个命名空间、206 个公开方法、108 个编辑方法，稳定等级为 `198 / 7 / 1`；第 28 项完成能力映射与三方覆盖门禁，第 29 项补齐纯参数编辑方法，第 30 项建立应用级唯一 `runtimeActions`，第 31 项统一长任务 operation，第 32 项补齐高度图、浏览器存档与导入诊断数据入口，第 33 项完成 `1.0.0` 稳定版本、兼容别名、确认策略和扩展能力分组，第 34 项完成聚合门禁与真实浏览器综合验收。后续主题、对象创建和局部编辑能力继续沿同一契约扩展；`regress:api-action-convergence / api-operation / api-data-compatibility / api-stability` 持续固定公共委托、事务、数据兼容和稳定契约。
 
 第 28～34 项的已完成顺序如下；当前活动任务始终以 `docs/current-plan.md#权威任务清单` 为准：
 

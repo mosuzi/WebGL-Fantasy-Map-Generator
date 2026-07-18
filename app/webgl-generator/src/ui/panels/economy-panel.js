@@ -10,6 +10,8 @@ const ECONOMY_PANEL_ID = "economy-panel";
 const ECONOMY_COLUMN_WIDTHS = Object.freeze({
   "goods.id": 56,
   "goods.name": 112,
+  "goods.color": 84,
+  "goods.visibleLabel": 68,
   "goods.typeLabel": 84,
   "goods.value": 76,
   "goods.effectivePrice": 82,
@@ -20,6 +22,7 @@ const ECONOMY_COLUMN_WIDTHS = Object.freeze({
   "goods.tradeValue": 86,
   "markets.id": 56,
   "markets.name": 132,
+  "markets.color": 84,
   "markets.stateName": 112,
   "markets.cityName": 112,
   "markets.cells": 72,

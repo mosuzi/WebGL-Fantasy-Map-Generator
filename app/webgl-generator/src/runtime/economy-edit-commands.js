@@ -1,4 +1,5 @@
 import {rebuildEconomyFromMarketAssignments} from "../generator/economy.js";
+import {normalizeGoodDisplayPatch, normalizeGoodDisplayProperties, normalizeMarketDisplayPatch, normalizeMarketDisplayProperties} from "../generator/economy-display-properties.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {systemAffected} from "./edit-command-effects.js";
 
@@ -26,6 +27,74 @@ export const MARKET_ASSIGNMENT_PREVIEW_EFFECTS = Object.freeze({
   pickPanel: true,
   derived: Object.freeze(["market-ownership", "object-panels"])
 });
+
+const ECONOMY_DISPLAY_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: false,
+  pickPanel: true,
+  derived: Object.freeze(["economy-display", "object-panels"])
+});
+
+export function createSetGoodDisplayCommand(goodId, patch, {label = "编辑商品展示属性"} = {}) {
+  const id = normalizeEconomyObjectId(goodId, "商品");
+  let before = null;
+  let after = null;
+  return {
+    label: `${label} #${id}`,
+    domain: "economy",
+    effects: {...ECONOMY_DISPLAY_EFFECTS, affected: systemAffected("economy-display", [{kind: "good", id}])},
+    apply(context) {
+      const good = findEconomyObject(context.map?.pack?.goods, id, "商品");
+      if (!before) {
+        before = normalizeGoodDisplayProperties(good);
+        after = normalizeGoodDisplayPatch(good, patch);
+      }
+      writeEconomyDisplay(context.map, "goods", id, after);
+    },
+    revert(context) {
+      if (!before) throw new Error("缺少可撤销的商品展示属性快照");
+      writeEconomyDisplay(context.map, "goods", id, before);
+    },
+    isNoop(context) {
+      const good = findEconomyObject(context.map?.pack?.goods, id, "商品");
+      return sameDisplayProperties(normalizeGoodDisplayProperties(good), normalizeGoodDisplayPatch(good, patch));
+    },
+    getResult() {
+      return {goodId: id, display: after ? {...after} : null};
+    }
+  };
+}
+
+export function createSetMarketDisplayCommand(marketId, patch, {label = "编辑市场展示属性"} = {}) {
+  const id = normalizeEconomyObjectId(marketId, "市场");
+  let before = null;
+  let after = null;
+  return {
+    label: `${label} #${id}`,
+    domain: "economy",
+    effects: {...ECONOMY_DISPLAY_EFFECTS, affected: systemAffected("economy-display", [{kind: "market", id}])},
+    apply(context) {
+      const market = findEconomyObject(context.map?.pack?.markets, id, "市场");
+      if (!before) {
+        before = normalizeMarketDisplayProperties(market);
+        after = normalizeMarketDisplayPatch(market, patch);
+      }
+      writeEconomyDisplay(context.map, "markets", id, after);
+    },
+    revert(context) {
+      if (!before) throw new Error("缺少可撤销的市场展示属性快照");
+      writeEconomyDisplay(context.map, "markets", id, before);
+    },
+    isNoop(context) {
+      const market = findEconomyObject(context.map?.pack?.markets, id, "市场");
+      return sameDisplayProperties(normalizeMarketDisplayProperties(market), normalizeMarketDisplayPatch(market, patch));
+    },
+    getResult() {
+      return {marketId: id, display: after ? {...after} : null};
+    }
+  };
+}
 
 export function createApplyMarketAssignmentCommand(changes, {label = "应用市场归属"} = {}) {
   const normalized = normalizeMarketAssignmentChanges(changes);
@@ -180,6 +249,36 @@ function normalizeMarketAssignmentChanges(changes) {
     byCell.set(packCell, {packCell, before: existing?.before ?? before, after});
   }
   return [...byCell.values()].filter(change => change.before !== change.after).sort((a, b) => a.packCell - b.packCell);
+}
+
+function writeEconomyDisplay(map, collectionKey, id, display) {
+  const collections = [map?.pack?.[collectionKey], map?.economy?.[collectionKey]].filter(Array.isArray);
+  const visited = new Set();
+  for (const collection of collections) {
+    const item = findEconomyObject(collection, id, collectionKey === "goods" ? "商品" : "市场", false);
+    if (!item || visited.has(item)) continue;
+    Object.assign(item, display);
+    visited.add(item);
+  }
+}
+
+function findEconomyObject(collection, id, label, required = true) {
+  const indexed = collection?.[id];
+  const item = Number(indexed?.i ?? indexed?.id) === id
+    ? indexed
+    : (collection || []).find(entry => Number(entry?.i ?? entry?.id) === id);
+  if (!item && required) throw new Error(`找不到${label} #${id}`);
+  return item || null;
+}
+
+function normalizeEconomyObjectId(value, label) {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) throw new Error(`${label} id 无效：${value}`);
+  return id;
+}
+
+function sameDisplayProperties(left, right) {
+  return Object.keys(right).every(key => left[key] === right[key]);
 }
 
 function applyMarketAssignmentChanges(map, changes, side) {

@@ -133,6 +133,37 @@
       </div>
     </header>
 
+    <form v-if="state.tab === 'goods' && selectedGood" class="economy-display-editor" @submit.prevent="applyGoodDisplay">
+      <UiSwitchField label="在展示中可见" :checked="goodDisplayDraft.visible" @change="value => goodDisplayDraft.visible = value" />
+      <label>
+        <span>标签</span>
+        <ElInput v-model="goodDisplayDraft.label" type="text" maxlength="48" />
+      </label>
+      <label>
+        <span>图标</span>
+        <ElInput v-model="goodDisplayDraft.icon" type="text" maxlength="8" />
+      </label>
+      <label class="economy-display-color-field">
+        <span>颜色</span>
+        <input v-model="goodDisplayDraft.color" type="color" />
+        <code>{{ goodDisplayDraft.color }}</code>
+      </label>
+      <UiButton variant="secondary" button-type="submit">保存商品展示属性</UiButton>
+    </form>
+
+    <form v-else-if="state.tab === 'markets' && selectedMarket" class="economy-display-editor" @submit.prevent="applyMarketDisplay">
+      <label>
+        <span>名称</span>
+        <ElInput v-model="marketDisplayDraft.name" type="text" maxlength="64" />
+      </label>
+      <label class="economy-display-color-field">
+        <span>颜色</span>
+        <input v-model="marketDisplayDraft.color" type="color" />
+        <code>{{ marketDisplayDraft.color }}</code>
+      </label>
+      <UiButton variant="secondary" button-type="submit">保存市场展示属性</UiButton>
+    </form>
+
     <UiKeyValueGrid
       class-name="economy-detail-highlights"
       :items="economyDetail.highlights"
@@ -169,7 +200,7 @@
 </template>
 
 <script setup>
-import {computed, watch} from "vue";
+import {computed, reactive, watch} from "vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
@@ -181,6 +212,7 @@ import UiSegmented from "./base/UiSegmented.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
+import UiSwitchField from "./base/UiSwitchField.vue";
 import {formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareListValues, compareRowsByKey} from "../../sort-utils.js";
@@ -188,6 +220,7 @@ import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+import {goodDisplayName, normalizeGoodDisplayProperties, normalizeMarketDisplayProperties} from "../../../generator/economy-display-properties.js";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.ECONOMY_MARKET);
 
@@ -249,6 +282,8 @@ const dealSortOptions = Object.freeze([
 const goodColumns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "商品"},
+  {key: "color", label: "颜色", type: "color"},
+  {key: "visibleLabel", label: "状态"},
   {key: "typeLabel", label: "类型"},
   {key: "value", label: "基价", align: "right", format: value => formatNumber(value)},
   {key: "effectivePrice", label: "有效价", align: "right", format: value => formatNumber(value)},
@@ -261,6 +296,7 @@ const goodColumns = Object.freeze([
 const marketColumns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "市场"},
+  {key: "color", label: "颜色", type: "color"},
   {key: "stateName", label: "国家"},
   {key: "cityName", label: "中心"},
   {key: "cells", label: "覆盖", align: "right", format: value => formatNumber(value)},
@@ -352,6 +388,31 @@ const marketAssignmentPreviewMessage = computed(() => {
   if (preview.invalidMarketCells || preview.waterCells) warnings.push("存在无效覆盖，不能应用");
   return `待应用 ${formatNumber(preview.changed)} cells${warnings.length ? `；${warnings.join("；")}` : "；未发现跨国或无国家覆盖"}`;
 });
+const goodDisplayDraft = reactive({visible: true, color: "#d7a84f", icon: "●", label: ""});
+const marketDisplayDraft = reactive({name: "", color: "#4f9cc9"});
+
+watch(
+  () => selectedGood.value ? [selectedGood.value.id, selectedGood.value.visible, selectedGood.value.color, selectedGood.value.icon, selectedGood.value.label] : null,
+  () => {
+    if (!selectedGood.value) return;
+    Object.assign(goodDisplayDraft, {
+      visible: selectedGood.value.visible,
+      color: selectedGood.value.color,
+      icon: selectedGood.value.icon,
+      label: selectedGood.value.label
+    });
+  },
+  {immediate: true}
+);
+
+watch(
+  () => selectedMarket.value ? [selectedMarket.value.id, selectedMarket.value.name, selectedMarket.value.color] : null,
+  () => {
+    if (!selectedMarket.value) return;
+    Object.assign(marketDisplayDraft, {name: selectedMarket.value.name, color: selectedMarket.value.color});
+  },
+  {immediate: true}
+);
 
 const summaryMetrics = computed(() => [
   {label: "商品", value: formatNumber(metrics.value.summary.goods)},
@@ -444,6 +505,16 @@ function buildGoodDetail(good) {
       }
     ])
   };
+}
+
+function applyGoodDisplay() {
+  if (!selectedGood.value) return;
+  callbacks.onGoodDisplayApply?.(selectedGood.value.id, {...goodDisplayDraft});
+}
+
+function applyMarketDisplay() {
+  if (!selectedMarket.value) return;
+  callbacks.onMarketDisplayApply?.(selectedMarket.value.id, {...marketDisplayDraft});
 }
 
 function tableColumnWidths(table) {
@@ -655,11 +726,14 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
   }
 
   const goodRows = goods.map(good => {
+    const display = normalizeGoodDisplayProperties(good);
     const dealStats = goodDeals.get(good.i) || {count: 0, value: 0};
     const bestMarket = bestMarketByGood.get(good.i)?.market || null;
     return {
       id: good.i,
-      name: good.name || `商品 #${good.i}`,
+      name: goodDisplayName(good),
+      sourceName: good.name || `商品 #${good.i}`,
+      ...display,
       typeLabel: goodTypeLabel(good),
       value: Number(good.value || 0),
       effectivePrice: averageValue(effectivePriceByGood.get(good.i)),
@@ -676,20 +750,22 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       tradeInUnits: tradeInUnitsByGood.get(good.i) || 0,
       tradeOutUnits: tradeOutUnitsByGood.get(good.i) || 0,
       tradeValue: round(dealStats.value),
-      visibleLabel: good.visible === false ? "隐藏" : "显示",
+      visibleLabel: display.visible ? "显示" : "隐藏",
       searchText: "",
       locateObject: cityLocateObject(bestMarket?.centerBurgId)
     };
   }).map(withSearchText);
 
   const marketRows = markets.map(market => {
+    const display = normalizeMarketDisplayProperties(market);
     const state = pack.states?.[market.state];
     const city = pack.burgs?.[market.centerBurgId];
     const dealStats = marketDeals.get(market.i) || {count: 0, value: 0};
     const coverage = marketCoverage.byMarket.get(market.i) || emptyMarketCoverage();
     return withSearchText({
       id: market.i,
-      name: market.name || `市场 #${market.i}`,
+      name: display.name,
+      color: display.color,
       centerBurgId: market.centerBurgId || 0,
       cell: market.cell ?? null,
       stateName: state?.fullName || state?.name || "无",
@@ -732,7 +808,7 @@ function buildEconomyMetrics(map, {includeDiagnostics = false, dealRowLimit = In
       id: deal.i,
       goodId: deal.good,
       goodValid: Boolean(good),
-      goodName: good?.name || `商品 #${deal.good}`,
+      goodName: good ? goodDisplayName(good) : `商品 #${deal.good}`,
       sellerType: deal.sellerType,
       sellerId: deal.seller,
       sellerValid: seller.valid,

@@ -1,4 +1,5 @@
 import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRoute} from "./picking.js";
+import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {isLandCell} from "./color-modes.js";
@@ -3396,7 +3397,7 @@ function tradeFlowPickItem(map, deal, seller, buyer, priceSignal = null) {
   return {
     dealId: deal.i,
     goodId: deal.good,
-    goodName: good?.name || `商品 #${deal.good}`,
+    goodName: good ? goodDisplayName(good) : `商品 #${deal.good}`,
     sellerType: deal.sellerType,
     sellerId: deal.seller,
     sellerName: seller.name,

@@ -78,7 +78,11 @@
             :key="column.key"
             :style="columnStyle(column)"
           >
-            <span class="object-table-cell">{{ formatCell(column, row) }}</span>
+            <span v-if="column.type === 'color'" class="object-table-cell object-table-color-cell">
+              <i :style="{backgroundColor: row[column.key]}" aria-hidden="true"></i>
+              {{ formatCell(column, row) }}
+            </span>
+            <span v-else class="object-table-cell">{{ formatCell(column, row) }}</span>
           </td>
           <td v-if="showLocateAction" class="object-table-action-cell">
             <button class="table-icon-action" type="button" title="定位" aria-label="定位" @click.stop="emit('locate', row)">

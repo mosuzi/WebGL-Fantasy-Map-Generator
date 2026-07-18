@@ -3,6 +3,7 @@ import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
+import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../generator/economy-display-properties.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -105,11 +106,13 @@ export async function createCompressedMapDocumentBlob(documentRef, document) {
 }
 
 export function migrateMapDocument(document) {
-  return migrateMapDocumentWithRegistry(document, {
+  const migrated = migrateMapDocumentWithRegistry(document, {
     targetVersion: MAP_DOCUMENT_VERSION,
-    registry: MAP_DOCUMENT_MIGRATORS,
-    validate: validateCurrentMapDocument
+    registry: MAP_DOCUMENT_MIGRATORS
   });
+  backfillEconomyDisplayProperties(migrated.map);
+  validateCurrentMapDocument(migrated);
+  return migrated;
 }
 
 export function migrateMapDocumentWithRegistry(document, options = {}) {
@@ -466,7 +469,7 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     labels: normalizeLabelStoreV2(source.labels),
     visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme)
   };
-  return normalizeSocialExpansionMap(normalized);
+  return normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized));
 }
 
 function cloneSocialStore(store) {

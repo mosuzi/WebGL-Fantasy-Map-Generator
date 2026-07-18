@@ -1,5 +1,6 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {resolveDiplomacyRelation} from "./diplomacy-relations.js";
+import {goodDisplayName} from "../generator/economy-display-properties.js";
 
 const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.CITY]: resolveCity,
@@ -186,7 +187,7 @@ function resolveTradeFlow(map, object) {
     kind: OBJECT_KIND.TRADE_FLOW,
     id: deal.i,
     goodId: deal.good,
-    goodName: good?.name || object.goodName || `商品 #${deal.good}`,
+    goodName: good ? goodDisplayName(good) : object.goodName || `商品 #${deal.good}`,
     sellerType: deal.sellerType,
     sellerId: deal.seller,
     sellerName: seller.name,

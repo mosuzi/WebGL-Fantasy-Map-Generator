@@ -168,7 +168,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       economy: Object.freeze({
         inspectAssignment: (marketId, packCellIds) => apiCall(() => requireApiAction(actions.edit?.economy?.inspectAssignment, "edit.economy.inspectAssignment")(marketId, packCellIds)),
         assignCells: (marketId, packCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.assignCells, "edit.economy.assignCells")(marketId, packCellIds, options)),
-        rebuild: (options = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.rebuild, "edit.economy.rebuild")(options))
+        rebuild: (options = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.rebuild, "edit.economy.rebuild")(options)),
+        setGoodDisplay: (goodId, patch = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.setGoodDisplay, "edit.economy.setGoodDisplay")(goodId, patch)),
+        setMarketDisplay: (marketId, patch = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.setMarketDisplay, "edit.economy.setMarketDisplay")(marketId, patch))
       }),
       diplomacy: Object.freeze({
         setRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.setRelation, "edit.diplomacy.setRelation")(subjectId, objectId, relation, options))
@@ -460,6 +462,8 @@ function buildMethodMetadata() {
       "economy.inspectAssignment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "economy.assignCells": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
       "economy.rebuild": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
+      "economy.setGoodDisplay": {stable: "draft", mutates: "economy-display", undoable: true, async: false, requiresConfirm: false},
+      "economy.setMarketDisplay": {stable: "draft", mutates: "economy-display", undoable: true, async: false, requiresConfirm: false},
       "diplomacy.setRelation": {stable: "draft", mutates: "diplomacy", undoable: true, async: false, requiresConfirm: false},
       "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.setStatus": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},

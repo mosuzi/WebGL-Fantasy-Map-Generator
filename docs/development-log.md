@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-07-18：完成权威任务第 91 项代码——商品与市场展示属性轻量编辑
+
+- 调查确认 `pack.goods / pack.markets` 是面板和经济运算的权威数据源，完整地图还会保存 `map.economy` 镜像；商品已有 `visible` 但没有颜色、图标和展示标签，市场已有名称但没有颜色，现有重算只重置库存、需求和价格字段，不需要为本项重算经济链。
+- 开发新增确定性展示默认值和旧图归一化：商品编辑可见状态、颜色、图标、标签，市场编辑名称、颜色；面板详情表单一次保存一组字段，列表同步显示图标 / 标签 / 显隐和颜色色块。面板与稳定 API `edit.economy.setGoodDisplay / setMarketDisplay` 共用同一命令，写入 `pack / economy` 镜像并随完整地图 JSON 往返，公开基线更新为 `206 / 108`、稳定等级 `198 / 7 / 1`。
+- 审查测试覆盖单历史、撤销 / 重做、非法字段、旧图补齐、新图往返和经济数值 checksum 不变；`regress:economy-display-edit`、市场归属、API inventory / stability / edit coverage / action convergence / data compatibility、语法、生产构建和 `git diff --check` 通过。按本批流程，面板真实交互和颜色呈现留到第 88～93 项统一浏览器验收。
+
 ## 2026-07-18：完成权威任务第 90 项代码——气候下游重算分段让出主线程
 
 - 调查以固定 10k Node 样本拆分耗时：重算前整图快照约 `135.59ms`、资源 marker 与经济同步重算约 `160.88ms`、结果快照约 `117.77ms`；三段连续执行会形成超过 400ms 的单任务，普通 marker 命令还会在气候外层统一刷新前先做一次内层 renderer / panel 刷新。

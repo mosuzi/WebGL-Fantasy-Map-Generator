@@ -13,8 +13,8 @@ for (const method of ["population.inspectAdjustment", "population.applyAdjustmen
   assert(API_METHODS.edit.includes(method), `稳定 API 目录缺少 ${method}`);
   assert(!CONFIRM_REQUIRED_METHODS.includes(`edit.${method}`), `${method} 不应要求显式确认`);
 }
-assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 204);
-assert.equal(API_METHODS.edit.length, 106);
+assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 206);
+assert.equal(API_METHODS.edit.length, 108);
 
 const [appSource, consoleSource, controllerSource, panelSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
@@ -29,7 +29,7 @@ for (const token of ["onAdjustmentDelta", "onInspectAdjustment", "onApplyAdjustm
 for (const text of ["区域人口增减", "人口增减量", "预检", "应用单次调整", "可通过历史撤销"]) assert(panelSource.includes(text), `人口面板缺少“${text}”`);
 
 const dynamic = await testDynamicRuntime();
-console.log(JSON.stringify({ok: true, methodCounts: {total: 204, edit: 106}, dynamic}, null, 2));
+console.log(JSON.stringify({ok: true, methodCounts: {total: 206, edit: 108}, dynamic}, null, 2));
 
 async function testDynamicRuntime() {
   const server = await createViteServer({

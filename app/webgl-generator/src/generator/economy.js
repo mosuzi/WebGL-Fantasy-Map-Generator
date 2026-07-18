@@ -1,6 +1,7 @@
 import {createRandom} from "./random.js";
 import {applySuitabilityOverrides, captureSuitabilityBase, restoreSuitabilityBase} from "./suitability.js";
 import {getGovernmentEffects} from "./governments.js";
+import {defaultGoodDisplayProperties, defaultMarketDisplayProperties} from "./economy-display-properties.js";
 
 const RAW_GOODS = [
   "稻米",
@@ -281,7 +282,7 @@ function createGoods() {
     goods.push({
       i: id,
       name,
-      visible: true,
+      ...defaultGoodDisplayProperties({i: id, name}),
       value: RAW_GOOD_VALUES[id - 1] || 2,
       distribution: createDistribution(id),
       biomeOutput: id <= 16 ? createBiomeOutput(id) : undefined,
@@ -294,7 +295,7 @@ function createGoods() {
     goods.push({
       i: id,
       name,
-      visible: true,
+      ...defaultGoodDisplayProperties({i: id, name}),
       recipes: [createRecipe(id)],
       demandCoverage: id <= 58 ? createDemandCoverage(id) : undefined
     });
@@ -305,7 +306,7 @@ function createGoods() {
     goods.push({
       i: id,
       name,
-      visible: true,
+      ...defaultGoodDisplayProperties({i: id, name}),
       value: 4 + (id % 5),
       distribution: createDistribution(id),
       recipes: [createRecipe(id)],
@@ -611,6 +612,7 @@ function createMarket(id, burg, goods, {lowLandRatio = false, stockScale = 1} = 
     i: id,
     id,
     name: `${burg.name}市`,
+    ...defaultMarketDisplayProperties({i: id, name: `${burg.name}市`}),
     centerBurgId: burg.i,
     cell: burg.cell,
     x: burg.x,

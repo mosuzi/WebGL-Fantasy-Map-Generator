@@ -110,7 +110,7 @@ import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMi
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
 import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
-import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
+import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, createSetGoodDisplayCommand, createSetMarketDisplayCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
 import {createApplyFeatureTopologyCommand, FEATURE_TOPOLOGY_MODE, inspectFeatureTopology, rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
@@ -1498,6 +1498,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onApplyMarketAssignment: () => applyPendingMarketAssignment(state, documentRef),
     onCancelMarketAssignment: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "preview-cancel"),
+    onGoodDisplayApply: (goodId, patch) => setGoodDisplayViaApi(state, documentRef, goodId, patch),
+    onMarketDisplayApply: (marketId, patch) => setMarketDisplayViaApi(state, documentRef, marketId, patch),
     onRebuildEconomy: () => rebuildEconomyViaAction(state, documentRef, {label: "重算经济链"}),
     onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "panel-close")
   });
@@ -2607,7 +2609,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       economy: {
         inspectAssignment: (marketId, packCellIds) => inspectMarketAssignmentViaApi(state, marketId, packCellIds),
         assignCells: (marketId, packCellIds, editOptions = {}) => assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, editOptions),
-        rebuild: (editOptions = {}) => rebuildEconomyViaApi(state, documentRef, editOptions)
+        rebuild: (editOptions = {}) => rebuildEconomyViaApi(state, documentRef, editOptions),
+        setGoodDisplay: (goodId, patch) => setGoodDisplayViaApi(state, documentRef, goodId, patch),
+        setMarketDisplay: (marketId, patch) => setMarketDisplayViaApi(state, documentRef, marketId, patch)
       },
       diplomacy: {
         setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, editOptions)
@@ -7298,6 +7302,34 @@ function rebuildEconomyViaApi(state, documentRef, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("经济链重算会改写生产、交易、价格压力和财政，需要显式传入 {confirm: true}");
   return editApiResult(state, rebuildEconomyViaAction(state, documentRef, {label: options.label || "API 重算经济链"}));
+}
+
+function setGoodDisplayViaApi(state, documentRef, goodId, patch = {}) {
+  assertMapAvailable(state);
+  const id = normalizeApiInteger(goodId, "商品 ID");
+  const result = executeEditCommand(state, documentRef, createSetGoodDisplayCommand(id, patch), {
+    context: {map: state.map},
+    noopStatus: "商品展示属性没有变化。",
+    status: `已更新商品 #${id} 的展示属性。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setMarketDisplayViaApi(state, documentRef, marketId, patch = {}) {
+  assertMapAvailable(state);
+  const id = normalizeApiInteger(marketId, "市场 ID");
+  const result = executeEditCommand(state, documentRef, createSetMarketDisplayCommand(id, patch), {
+    context: {map: state.map},
+    noopStatus: "市场展示属性没有变化。",
+    status: `已更新市场 #${id} 的展示属性。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
 }
 
 function setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, options = {}) {
