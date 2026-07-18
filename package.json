@@ -94,6 +94,7 @@
     "regress:api-namebase-renames": "node ./tools/webgl-generator-api-namebase-renames-regression.mjs",
     "regress:namebase-multiword": "node ./tools/webgl-generator-namebase-multiword-regression.mjs",
     "regress:lake-names": "node --no-warnings ./tools/webgl-generator-lake-name-distribution-regression.mjs",
+    "regress:province-names": "node --no-warnings ./tools/webgl-generator-province-name-diversity-regression.mjs",
     "regress:market-assignment": "node --no-warnings ./tools/webgl-generator-market-assignment-regression.mjs",
     "regress:economy-display-edit": "node --no-warnings ./tools/webgl-generator-economy-display-edit-regression.mjs",
     "regress:economy-trade-query": "node --no-warnings ./tools/webgl-generator-economy-trade-query-regression.mjs",

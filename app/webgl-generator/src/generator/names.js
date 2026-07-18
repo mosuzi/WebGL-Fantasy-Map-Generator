@@ -1,5 +1,6 @@
 import {createRandom} from "./random.js";
 import {K170_BURG_NAMES} from "./namebase-k170-burgs.js";
+import {CHINESE_PROVINCE_NAMES} from "./namebase-chinese-provinces.js";
 
 // 词素策略参考 zoningjs@3.2024.0 的县级以上中文地名韵脚，并保留项目内可 seed 的轻量词池。
 const PLACE_STEMS = [
@@ -331,6 +332,7 @@ const METAL_TINCTURES = ["#f0d889", "#e8e4d6", "#d8b56d", "#f3efe1"];
 const HYDRO_NAME_SUFFIXES = [...new Set([...WATER_SUFFIXES, ...LAKE_SUFFIXES, "溪", "水", "河", "江", "川"])];
 const EMPTY_NAMEBASE_SOURCE = Object.freeze({records: [], chain: null, minLength: 1, maxLength: 8, duplicateChars: "", multiwordRate: 0});
 const K170_BURG_NAMEBASE = Object.freeze({source: K170_BURG_NAMES, minLength: 1, maxLength: 6});
+const BUILTIN_NAMEBASE_ENTRY_CACHE = new Map();
 
 const BUILTIN_NAMEBASE_SOURCES = {
   "ancient-state-roots": ANCIENT_STATE_ROOTS,
@@ -344,6 +346,7 @@ const BUILTIN_NAMEBASE_SOURCES = {
   "state-forms-hunting": STATE_FORMS.Hunting,
   "state-forms-desert": STATE_FORMS.Desert,
   "place-stems": PLACE_STEMS,
+  "province-stems": CHINESE_PROVINCE_NAMES,
   "k170-burg-names": K170_BURG_NAMEBASE,
   "chinese-first-chars": CHINESE_FIRST_CHARS,
   "chinese-second-chars": CHINESE_SECOND_CHARS,
@@ -372,6 +375,7 @@ for (const [style, config] of Object.entries(CULTURE_STYLE_CONFIG)) {
 
 export function createChineseNameGenerator(seed = "map", context = {}) {
   const used = new Map();
+  reserveGeneratedNames(used, "province", context?.provinceNames);
   const namebaseSources = resolveNamebaseSources(context?.namebases || context);
 
   return {
@@ -445,7 +449,14 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
 
     makeProvinceName(options = {}) {
       const rng = rngFor(seed, "province", options);
-      const root = options.baseName && rng.next() < 0.55 ? trimStateForm(options.baseName) : this.makePlaceName({...options, type: "province"});
+      const boundPlaceSource = namebaseSources.sourceFor("place", options);
+      const makePrimaryCandidate = () => this.makePlaceName({...options, type: "province"});
+      const makeCollisionCandidate = () => shouldUseChineseProvinceFallback(options, boundPlaceSource)
+        ? pick(rng, CHINESE_PROVINCE_NAMES)
+        : makePrimaryCandidate();
+      const baseRoot = trimStateForm(options.baseName);
+      const initialRoot = baseRoot && rng.next() < 0.55 ? baseRoot : makePrimaryCandidate();
+      const root = makeUniqueGenerated(used, "province", initialRoot, rng, makeCollisionCandidate, 128);
       const formName = PROVINCE_FORMS[(options.id || 0) % PROVINCE_FORMS.length];
       return {
         name: root,
@@ -516,6 +527,7 @@ export function getBuiltinNamebaseSummaries({includeSource = false} = {}) {
     analyzeNamebase("state-forms-hunting", "林猎国家形制", "state-form", "国家形制", STATE_FORMS.Hunting, "林猎文化国家形制", {includeSource}),
     analyzeNamebase("province-forms", "省份形制", "province-form", "政区形制", PROVINCE_FORMS, "省份、州郡和地方行政名称后缀", {includeSource}),
     analyzeNamebase("place-stems", "中文地名词干", "place", "城镇地名", PLACE_STEMS, "主要城镇、地域和标签命名来源", {includeSource}),
+    analyzeNamebase("province-stems", "中文省份备用根名", "province", "政区名称", CHINESE_PROVINCE_NAMES, "省份根名去重失败时使用的确定性中文备用库", {includeSource}),
     analyzeNamebase("k170-burg-names", "K170 原版城镇名", "place", "城镇地名", K170_BURG_NAMES, "从用户原版 FMG Burgs CSV 提取的城镇名备选库，保留重复样本权重", {includeSource, options: K170_BURG_NAMEBASE}),
     analyzeNamebase("chinese-first-chars", "中文首字词素", "place-part", "城镇地名", CHINESE_FIRST_CHARS, "二字地名组合首字池", {includeSource}),
     analyzeNamebase("chinese-second-chars", "中文尾字词素", "place-part", "城镇地名", CHINESE_SECOND_CHARS, "二字地名组合尾字池", {includeSource}),
@@ -598,7 +610,7 @@ function resolveNamebaseSources(namebases) {
   const bindings = namebases?.bindings && typeof namebases.bindings === "object" ? namebases.bindings : {};
   const globalBindings = bindings.global && typeof bindings.global === "object" ? bindings.global : {};
   const cultureBindings = bindings.cultures && typeof bindings.cultures === "object" ? bindings.cultures : {};
-  const rows = new Map(Object.entries(BUILTIN_NAMEBASE_SOURCES).map(([id, source]) => [id, createNamebaseSourceEntry(source)]));
+  const rows = new Map();
   for (const base of namebases?.bases || []) {
     const id = String(base?.id || "").trim();
     if (!id) continue;
@@ -608,23 +620,34 @@ function resolveNamebaseSources(namebases) {
   const stateRootId = String(globalBindings.stateRoot || "").trim();
   const placeId = String(globalBindings.place || "").trim();
   const hydroId = String(globalBindings.hydro || "").trim();
+  const hasSource = id => rows.has(id) || Object.hasOwn(BUILTIN_NAMEBASE_SOURCES, id);
+  const resolveSource = id => rows.get(id) || getBuiltinNamebaseSourceEntry(id);
   const sourceFor = (target, options = {}) => {
     const cultureId = String(options.culture ?? options.cultureId ?? "").trim();
     const culture = cultureId && cultureBindings[cultureId] && typeof cultureBindings[cultureId] === "object" ? cultureBindings[cultureId] : null;
     const cultureValue = String(culture?.[target] || "").trim();
-    if (cultureValue) return rows.get(cultureValue) || EMPTY_NAMEBASE_SOURCE;
+    if (cultureValue) return resolveSource(cultureValue);
     const globalValue = String(globalBindings[target] || "").trim();
-    return globalValue ? rows.get(globalValue) || EMPTY_NAMEBASE_SOURCE : EMPTY_NAMEBASE_SOURCE;
+    return globalValue ? resolveSource(globalValue) : EMPTY_NAMEBASE_SOURCE;
   };
+  const availableSources = {has: hasSource};
   return {
     sourceFor,
     usage: {
-      stateRoot: rows.has(stateRootId) ? stateRootId : "",
-      place: rows.has(placeId) ? placeId : "",
-      hydro: rows.has(hydroId) ? hydroId : "",
-      cultures: getValidCultureNamebaseUsage(cultureBindings, rows)
+      stateRoot: hasSource(stateRootId) ? stateRootId : "",
+      place: hasSource(placeId) ? placeId : "",
+      hydro: hasSource(hydroId) ? hydroId : "",
+      cultures: getValidCultureNamebaseUsage(cultureBindings, availableSources)
     }
   };
+}
+
+function getBuiltinNamebaseSourceEntry(id) {
+  if (!Object.hasOwn(BUILTIN_NAMEBASE_SOURCES, id)) return EMPTY_NAMEBASE_SOURCE;
+  if (!BUILTIN_NAMEBASE_ENTRY_CACHE.has(id)) {
+    BUILTIN_NAMEBASE_ENTRY_CACHE.set(id, createNamebaseSourceEntry(BUILTIN_NAMEBASE_SOURCES[id]));
+  }
+  return BUILTIN_NAMEBASE_ENTRY_CACHE.get(id);
 }
 
 function getValidCultureNamebaseUsage(cultureBindings, rows) {
@@ -976,6 +999,12 @@ function hasExplicitCultureStyle(options = {}) {
   return Boolean(options.cultureType || options.nameStyle);
 }
 
+function shouldUseChineseProvinceFallback(options = {}, boundPlaceSource = EMPTY_NAMEBASE_SOURCE) {
+  if (boundPlaceSource.records.length) return false;
+  const style = String(options.cultureType || options.nameStyle || options.cultureNameStyle || "");
+  return !/(?:europe|western|english|西方|音译|nomad|steppe|游牧|草原|desert|southern|沙漠)/iu.test(style);
+}
+
 function transliterationStyleFor(type) {
   if (!type) return null;
   if (/europe|western|english|西方|音译/i.test(type)) return CULTURE_STYLE_CONFIG.European;
@@ -998,6 +1027,14 @@ function makeUnique(used, scope, name, rng) {
   if (!count) return name;
   if (count <= DIRECTION_PREFIXES.length) return `${pickDirectionPrefix(name, count - 1)}${name}`;
   return `${name}${toChineseOrdinal(count + 1)}`;
+}
+
+function reserveGeneratedNames(used, scope, names) {
+  if (!Array.isArray(names)) return;
+  for (const value of names) {
+    const name = String(value || "").trim();
+    if (name) used.set(`${scope}:${name}`, 1);
+  }
 }
 
 function makeUniqueGenerated(used, scope, initialName, rng, generate, attempts) {

@@ -1009,7 +1009,7 @@ select:disabled {
   position: absolute;
   left: 18px;
   bottom: 18px;
-  z-index: 4;
+  z-index: 5;
   display: grid;
   gap: 5px;
   min-width: 104px;
@@ -1044,7 +1044,7 @@ select:disabled {
 .measurement-overlay {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -1414,7 +1414,7 @@ select:disabled {
   cursor: grab;
   pointer-events: auto;
   user-select: none;
-  z-index: 4;
+  z-index: 3;
 }
 
 .custom-label.dragging {
@@ -1669,7 +1669,7 @@ select:disabled {
   visibility: hidden;
   will-change: transform, opacity;
   white-space: nowrap;
-  z-index: 6;
+  z-index: 3;
 }
 
 .military-map-icon.visible {

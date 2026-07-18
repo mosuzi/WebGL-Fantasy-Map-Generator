@@ -423,7 +423,10 @@ function addStateAtGridCell(map, gridCell) {
   const religionId = normalizeCultureId(map.pack?.cells?.religion?.[packCell] ?? map.grid?.cells?.religion?.[gridCell]);
   const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
   const random = createRandom(`${map.metadata?.seed || map.options?.seed || "map"}|add-state|${stateId}|${gridCell}`);
-  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|add-state-name|${stateId}`, {namebases: map.namebases});
+  const generator = createChineseNameGenerator(`${map.metadata?.seed || map.options?.seed || "map"}|add-state-name|${stateId}`, {
+    namebases: map.namebases,
+    provinceNames: (map?.politics?.provinces || map?.pack?.provinces || []).filter(item => item && !item.removed).map(item => item.name)
+  });
   const occupied = new Set((map?.politics?.states || [])
     .filter(state => state && !state.removed)
     .map(state => normalizeStateRoot(state.name))

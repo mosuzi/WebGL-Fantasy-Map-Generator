@@ -145,7 +145,10 @@ function addProvinceAtGridCell(map, gridCell) {
   const point = map?.pack?.cells?.p?.[packCell] || [0, 0];
   const cultureId = normalizeProvinceId(map?.pack?.cells?.culture?.[packCell] ?? map?.grid?.cells?.culture?.[gridCell]);
   const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
-  const generator = createChineseNameGenerator(`${map?.metadata?.seed || map?.options?.seed || "map"}|add-province|${provinceId}`, {namebases: map?.namebases});
+  const generator = createChineseNameGenerator(`${map?.metadata?.seed || map?.options?.seed || "map"}|add-province|${provinceId}`, {
+    namebases: map?.namebases,
+    provinceNames: (map?.politics?.provinces || map?.pack?.provinces || []).filter(item => item && !item.removed).map(item => item.name)
+  });
   const provinceName = generator.makeProvinceName({
     id: provinceId,
     cell: packCell,

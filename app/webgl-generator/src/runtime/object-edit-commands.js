@@ -266,7 +266,10 @@ function restoreObjectName(map, target, previous) {
 
 function buildNamedObjectRenameChanges(map, kind, ids) {
   const seed = `${map?.metadata?.seed || map?.options?.seed || "map"}|explicit-${kind}-rename|${map?.metadata?.checksum || ""}`;
-  const generator = createChineseNameGenerator(seed, {namebases: map?.namebases});
+  const generator = createChineseNameGenerator(seed, {
+    namebases: map?.namebases,
+    provinceNames: (map?.politics?.provinces || map?.pack?.provinces || []).filter(item => item && !item.removed).map(item => item.name)
+  });
   const changes = [];
   for (const id of ids) {
     const target = {kind, id};
