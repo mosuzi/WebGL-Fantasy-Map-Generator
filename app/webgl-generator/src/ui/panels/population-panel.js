@@ -33,6 +33,10 @@ export function createPopulationPanel(documentRef, manager, callbacks = {}) {
     adjustmentDelta: 10,
     adjustmentInspection: null,
     adjustmentResult: null,
+    transferTargetId: null,
+    transferAmount: 10,
+    transferInspection: null,
+    transferResult: null,
     version: 0
   });
   const panelCallbacks = {
@@ -64,7 +68,8 @@ export function createPopulationPanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => {
       panelState.selectedPopulationId = row.id;
-      clearAdjustmentFeedback();
+      ensureTransferTarget();
+      clearFeedback();
     },
     onAdjustmentDelta: value => {
       panelState.adjustmentDelta = Number(value);
@@ -94,6 +99,40 @@ export function createPopulationPanel(documentRef, manager, callbacks = {}) {
       panelState.version++;
       return panelState.adjustmentResult;
     },
+    onTransferTarget: value => {
+      panelState.transferTargetId = String(value || "") || null;
+      clearTransferFeedback();
+    },
+    onTransferAmount: value => {
+      panelState.transferAmount = Number(value);
+      clearTransferFeedback();
+    },
+    onInspectTransfer: () => {
+      const source = populationTarget(panelState.selectedPopulationId);
+      const target = populationTarget(panelState.transferTargetId);
+      if (!source || !target) return null;
+      try {
+        panelState.transferInspection = callbacks.onInspectTransfer?.(source, target, {amount: panelState.transferAmount}) || null;
+        panelState.transferResult = null;
+      } catch (error) {
+        panelState.transferInspection = {valid: false, code: "runtime-error", reason: error?.message || String(error)};
+      }
+      panelState.version++;
+      return panelState.transferInspection;
+    },
+    onApplyTransfer: () => {
+      const source = populationTarget(panelState.selectedPopulationId);
+      const target = populationTarget(panelState.transferTargetId);
+      if (!source || !target || !panelState.transferInspection?.valid) return null;
+      try {
+        panelState.transferResult = callbacks.onApplyTransfer?.(source, target, {amount: panelState.transferAmount, confirm: true}) || null;
+        panelState.transferInspection = null;
+      } catch (error) {
+        panelState.transferResult = {executed: false, error: {message: error?.message || String(error)}};
+      }
+      panelState.version++;
+      return panelState.transferResult;
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -102,6 +141,24 @@ export function createPopulationPanel(documentRef, manager, callbacks = {}) {
     panelState.adjustmentInspection = null;
     panelState.adjustmentResult = null;
     panelState.version++;
+  }
+
+  function clearTransferFeedback() {
+    panelState.transferInspection = null;
+    panelState.transferResult = null;
+    panelState.version++;
+  }
+
+  function clearFeedback() {
+    clearAdjustmentFeedback();
+    clearTransferFeedback();
+  }
+
+  function ensureTransferTarget() {
+    const source = populationTarget(panelState.selectedPopulationId);
+    const current = populationTarget(panelState.transferTargetId);
+    if (source && current && source.scope === current.scope && source.id !== current.id && populationRowExists(panelState.map, panelState.transferTargetId)) return;
+    panelState.transferTargetId = firstPopulationTargetId(panelState.map, source);
   }
 
   const record = manager.registerPanel(POPULATION_PANEL_ID, {
@@ -139,6 +196,7 @@ export function createPopulationPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       if (!populationRowExists(map, panelState.selectedPopulationId)) panelState.selectedPopulationId = firstPopulationRowId(map);
+      ensureTransferTarget();
       panelState.open = true;
       panelState.version++;
       manager.open(POPULATION_PANEL_ID);
@@ -148,6 +206,7 @@ export function createPopulationPanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.history = history;
       if (!populationRowExists(map, panelState.selectedPopulationId)) panelState.selectedPopulationId = firstPopulationRowId(map);
+      ensureTransferTarget();
       panelState.version++;
     },
     isOpen() {
@@ -173,6 +232,15 @@ function populationTarget(rowId) {
 
 function firstPopulationRowId(map) {
   return populationRowIds(map).values().next().value ?? null;
+}
+
+function firstPopulationTargetId(map, source) {
+  if (!source) return null;
+  for (const rowId of populationRowIds(map)) {
+    const target = populationTarget(rowId);
+    if (target?.scope === source.scope && target.id !== source.id) return rowId;
+  }
+  return null;
 }
 
 function populationRowIds(map) {

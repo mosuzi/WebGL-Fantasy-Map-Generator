@@ -74,7 +74,14 @@ import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDele
 import {createApplySocialExpansionCommand, inspectSocialExpansion, normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
 import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, normalizeSuitabilityMap, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
-import {buildPopulationAdjustmentPlan, createApplyPopulationAdjustmentCommand, inspectPopulationAdjustment} from "./population-adjustment-commands.js";
+import {
+  buildPopulationAdjustmentPlan,
+  buildPopulationTransferPlan,
+  createApplyPopulationAdjustmentCommand,
+  createApplyPopulationTransferCommand,
+  inspectPopulationAdjustment,
+  inspectPopulationTransfer
+} from "./population-adjustment-commands.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
@@ -393,6 +400,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.panels.population = createPopulationPanel(documentRef, panelManager, {
     onInspectAdjustment: (target, editOptions = {}) => runtimeActions.edit.population.inspectAdjustment(target, editOptions),
     onApplyAdjustment: (target, editOptions = {}) => runtimeActions.edit.population.applyAdjustment(target, editOptions),
+    onInspectTransfer: (source, target, editOptions = {}) => runtimeActions.edit.population.inspectTransfer(source, target, editOptions),
+    onApplyTransfer: (source, target, editOptions = {}) => runtimeActions.edit.population.transfer(source, target, editOptions),
     onUndo: () => executeHistoryCommand(state, documentRef, "undo"),
     onRedo: () => executeHistoryCommand(state, documentRef, "redo")
   });
@@ -2604,7 +2613,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       population: {
         inspectAdjustment: (target, editOptions = {}) => inspectPopulationAdjustmentViaApi(state, target, editOptions),
-        applyAdjustment: (target, editOptions = {}) => applyPopulationAdjustmentViaApi(state, documentRef, target, editOptions)
+        applyAdjustment: (target, editOptions = {}) => applyPopulationAdjustmentViaApi(state, documentRef, target, editOptions),
+        inspectTransfer: (source, target, editOptions = {}) => inspectPopulationTransferViaApi(state, source, target, editOptions),
+        transfer: (source, target, editOptions = {}) => applyPopulationTransferViaApi(state, documentRef, source, target, editOptions)
       },
       economy: {
         inspectAssignment: (marketId, packCellIds) => inspectMarketAssignmentViaApi(state, marketId, packCellIds),
@@ -7239,6 +7250,35 @@ export function applyPopulationAdjustmentViaApi(state, documentRef, target, opti
     status: executed => {
       const summary = executed.getResult?.();
       return `已调整 ${summary?.packCells || 0} 个人口 cells 和 ${summary?.cities || 0} 个城市。`;
+    },
+    noopStatus: "区域人口没有变化。",
+    throwOnError: false
+  });
+  (runtimeUi.updatePopulationPanel || updatePopulationPanel)(state);
+  (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
+  (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  return editApiResult(state, result);
+}
+
+export function inspectPopulationTransferViaApi(state, source, target, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("人口转移预检参数必须是对象");
+  return inspectPopulationTransfer(state.map, source, target, options);
+}
+
+export function applyPopulationTransferViaApi(state, documentRef, source, target, options = {}, runtimeUi = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("人口转移参数必须是对象");
+  if (options.confirm !== true) throw new Error("区域人口转移会同时改写两个区域，需要显式传入 {confirm: true}");
+  const plan = buildPopulationTransferPlan(state.map, source, target, options);
+  const command = createApplyPopulationTransferCommand(plan, {label: options.label || "区域人口转移"});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    ...(runtimeUi.refresh ? {refresh: runtimeUi.refresh} : {}),
+    ...(runtimeUi.refreshPanels !== undefined ? {refreshPanels: runtimeUi.refreshPanels} : {}),
+    status: executed => {
+      const summary = executed.getResult?.();
+      return `已转移 ${summary?.amount || 0} 人口，更新 ${summary?.packCells || 0} 个人口 cells 和 ${summary?.cities || 0} 个城市。`;
     },
     noopStatus: "区域人口没有变化。",
     throwOnError: false

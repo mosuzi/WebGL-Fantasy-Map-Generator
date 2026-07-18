@@ -108,6 +108,7 @@
     "regress:suitability-ui-api": "node --no-warnings ./tools/webgl-generator-suitability-ui-api-regression.mjs",
     "regress:population-adjustment": "node --no-warnings ./tools/webgl-generator-population-adjustment-regression.mjs",
     "regress:population-adjustment-ui-api": "node --no-warnings ./tools/webgl-generator-population-adjustment-ui-api-regression.mjs",
+    "regress:population-transfer": "node --no-warnings ./tools/webgl-generator-population-transfer-regression.mjs",
     "regress:visual-themes": "node --no-warnings ./tools/webgl-generator-visual-theme-regression.mjs",
     "regress:label-styles": "node --no-warnings ./tools/webgl-generator-label-style-regression.mjs",
     "regress:label-layout": "node --no-warnings ./tools/webgl-generator-label-layout-regression.mjs",

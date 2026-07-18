@@ -163,7 +163,9 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       population: Object.freeze({
         inspectAdjustment: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.population?.inspectAdjustment, "edit.population.inspectAdjustment")(target, options)),
-        applyAdjustment: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.population?.applyAdjustment, "edit.population.applyAdjustment")(target, options))
+        applyAdjustment: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.population?.applyAdjustment, "edit.population.applyAdjustment")(target, options)),
+        inspectTransfer: (source, target, options = {}) => apiCall(() => requireApiAction(actions.edit?.population?.inspectTransfer, "edit.population.inspectTransfer")(source, target, options)),
+        transfer: (source, target, options = {}) => apiCall(() => requireApiAction(actions.edit?.population?.transfer, "edit.population.transfer")(source, target, options))
       }),
       economy: Object.freeze({
         inspectAssignment: (marketId, packCellIds) => apiCall(() => requireApiAction(actions.edit?.economy?.inspectAssignment, "edit.economy.inspectAssignment")(marketId, packCellIds)),
@@ -459,6 +461,8 @@ function buildMethodMetadata() {
       "biomes.applySuitability": {stable: "draft", mutates: "suitability-and-population", undoable: true, async: false, requiresConfirm: false},
       "population.inspectAdjustment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "population.applyAdjustment": {stable: "draft", mutates: "population-and-economy-demand", undoable: true, async: false, requiresConfirm: false},
+      "population.inspectTransfer": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "population.transfer": {stable: "draft", mutates: "population-and-economy-demand", undoable: true, async: false, requiresConfirm: true},
       "economy.inspectAssignment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "economy.assignCells": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
       "economy.rebuild": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},

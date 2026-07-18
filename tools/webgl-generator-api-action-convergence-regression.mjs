@@ -121,8 +121,8 @@ assert.equal(failure.error.code, "api_error", "公共 action 参数错误 code �
 assert.match(failure.error.message, /当前没有可导出的地图/, "公共 action 错误消息漂移");
 
 const declaredCounts = countDeclaredMethods(API_METHODS);
-assert.equal(declaredCounts.total, 206, "公共 API 方法总数漂移");
-assert.equal(declaredCounts.edit, 108, "edit 方法数漂移");
+assert.equal(declaredCounts.total, 208, "公共 API 方法总数漂移");
+assert.equal(declaredCounts.edit, 110, "edit 方法数漂移");
 
 console.log(JSON.stringify({
   ok: true,

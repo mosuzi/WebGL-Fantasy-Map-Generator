@@ -100,6 +100,133 @@ export function buildPopulationAdjustmentPlan(map, target, options = {}) {
   return {...inspection, packChanges, cityChanges};
 }
 
+export function inspectPopulationTransfer(map, source, target, options = {}) {
+  if (!map?.pack?.cells || !map?.grid?.cells) return invalidTransferInspection("missing-map", "当前地图缺少人口转移所需的数据");
+  if (!options || typeof options !== "object" || Array.isArray(options)) return invalidTransferInspection("invalid-options", "人口转移参数必须是对象");
+  const normalizedSource = normalizePopulationTarget(source);
+  const normalizedTarget = normalizePopulationTarget(target);
+  if (!normalizedSource) return invalidTransferInspection("invalid-source", "人口转移来源必须是有效的国家、省份、文化或宗教 ID");
+  if (!normalizedTarget) return invalidTransferInspection("invalid-target", "人口转移目标必须是有效的国家、省份、文化或宗教 ID", normalizedSource);
+  if (normalizedSource.scope !== normalizedTarget.scope) return invalidTransferInspection("scope-mismatch", "人口转移只允许在两个同类型区域之间进行", normalizedSource, normalizedTarget);
+  if (normalizedSource.id === normalizedTarget.id) return invalidTransferInspection("same-target", "人口转移的来源与目标不能相同", normalizedSource, normalizedTarget);
+  const amount = Number(options.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return invalidTransferInspection("invalid-amount", "人口转移量必须是正有限数", normalizedSource, normalizedTarget, amount);
+  if (amount > POPULATION_ADJUSTMENT_LIMITS.deltaMax) return invalidTransferInspection("amount-range", `单次人口转移最多允许 ${POPULATION_ADJUSTMENT_LIMITS.deltaMax}`, normalizedSource, normalizedTarget, amount);
+
+  const sourceInspection = inspectPopulationAdjustment(map, normalizedSource, {delta: -amount});
+  if (!sourceInspection.valid) return invalidTransferInspection(`source-${sourceInspection.code}`, `来源区域不可转移：${sourceInspection.reason}`, normalizedSource, normalizedTarget, amount);
+  const targetInspection = inspectPopulationAdjustment(map, normalizedTarget, {delta: amount});
+  if (!targetInspection.valid) return invalidTransferInspection(`target-${targetInspection.code}`, `目标区域不可接收：${targetInspection.reason}`, normalizedSource, normalizedTarget, amount);
+  const sourcePackCells = new Set(sourceInspection.packCells);
+  if (targetInspection.packCells.some(packCell => sourcePackCells.has(packCell))) {
+    return invalidTransferInspection("overlapping-carriers", "来源与目标存在重叠人口载体，无法安全转移", normalizedSource, normalizedTarget, amount);
+  }
+  const sourceCityIds = new Set(sourceInspection.cityIds);
+  if (targetInspection.cityIds.some(cityId => sourceCityIds.has(cityId))) {
+    return invalidTransferInspection("overlapping-carriers", "来源与目标存在重叠人口载体，无法安全转移", normalizedSource, normalizedTarget, amount);
+  }
+  return {
+    valid: true,
+    code: "ok",
+    reason: "",
+    source: normalizedSource,
+    target: normalizedTarget,
+    sourceName: sourceInspection.targetName,
+    targetName: targetInspection.targetName,
+    requestedAmount: amount,
+    actualAmount: amount,
+    sourceTransferable: round(Math.min(sourceInspection.totalBefore, POPULATION_ADJUSTMENT_LIMITS.deltaMax), 6),
+    targetCapacity: round(Math.min(POPULATION_ADJUSTMENT_LIMITS.deltaMax, Math.max(0, POPULATION_ADJUSTMENT_LIMITS.totalMax - targetInspection.totalBefore)), 6),
+    sourceBefore: sourceInspection.totalBefore,
+    sourceAfter: sourceInspection.totalAfter,
+    targetBefore: targetInspection.totalBefore,
+    targetAfter: targetInspection.totalAfter,
+    sourceRuralBefore: sourceInspection.ruralBefore,
+    sourceRuralAfter: sourceInspection.ruralAfter,
+    sourceUrbanBefore: sourceInspection.urbanBefore,
+    sourceUrbanAfter: sourceInspection.urbanAfter,
+    targetRuralBefore: targetInspection.ruralBefore,
+    targetRuralAfter: targetInspection.ruralAfter,
+    targetUrbanBefore: targetInspection.urbanBefore,
+    targetUrbanAfter: targetInspection.urbanAfter,
+    packCells: sourceInspection.packCells.length + targetInspection.packCells.length,
+    cities: sourceInspection.cityIds.length + targetInspection.cityIds.length,
+    changed: sourceInspection.changed || targetInspection.changed
+  };
+}
+
+export function buildPopulationTransferPlan(map, source, target, options = {}) {
+  const inspection = inspectPopulationTransfer(map, source, target, options);
+  if (!inspection.valid) throw inspectionError(inspection);
+  const sourcePlan = buildPopulationAdjustmentPlan(map, inspection.source, {delta: -inspection.actualAmount});
+  const targetPlan = buildPopulationAdjustmentPlan(map, inspection.target, {delta: inspection.actualAmount});
+  return {
+    ...inspection,
+    packChanges: [...sourcePlan.packChanges, ...targetPlan.packChanges],
+    cityChanges: [...sourcePlan.cityChanges, ...targetPlan.cityChanges]
+  };
+}
+
+export function createApplyPopulationTransferCommand(plan, {label = "区域人口转移", faultAt = null} = {}) {
+  const normalized = normalizeTransferPlan(plan);
+  let before = null;
+  let after = null;
+  let result = null;
+  return {
+    label: `${label} ${scopeLabel(normalized.source.scope)} #${normalized.source.id} → #${normalized.target.id}`,
+    domain: "population-transfer",
+    effects: {
+      render: "draw",
+      selection: "refresh",
+      runtimeStats: true,
+      pickPanel: true,
+      affected: systemAffected("population-adjustment", [
+        {kind: normalized.source.scope, id: normalized.source.id},
+        {kind: normalized.target.scope, id: normalized.target.id}
+      ]),
+      derived: ["population-carrying", "population-stats", "point-layers", "labels", "object-panels", "economy-demand", "derived-stale"]
+    },
+    apply(context) {
+      if (after) {
+        restoreSnapshot(context.map, after);
+        return;
+      }
+      before = captureSnapshot(context.map);
+      try {
+        applyPopulationPlan(context.map, normalized);
+        failAt(faultAt, "after-values");
+        const summary = refreshPopulationDerived(context.map, normalized);
+        failAt(faultAt, "after-derived");
+        result = {
+          source: {...normalized.source},
+          target: {...normalized.target},
+          amount: normalized.actualAmount,
+          packCells: normalized.packChanges.length,
+          cities: normalized.cityChanges.length,
+          ...summary
+        };
+        after = captureSnapshot(context.map);
+      } catch (error) {
+        restoreSnapshot(context.map, before);
+        throw error;
+      }
+    },
+    revert(context) {
+      if (!before) throw new Error("缺少可撤销的人口转移快照");
+      restoreSnapshot(context.map, before);
+    },
+    isNoop() {
+      return !normalized.packChanges.length && !normalized.cityChanges.length;
+    },
+    getPlan() {
+      return clone(normalized);
+    },
+    getResult() {
+      return result ? clone(result) : null;
+    }
+  };
+}
+
 export function createApplyPopulationAdjustmentCommand(plan, {label = "区域人口增减", faultAt = null} = {}) {
   const normalized = normalizePlan(plan);
   let before = null;
@@ -188,6 +315,28 @@ function normalizePlan(plan) {
   if (packChanges.some(change => ![change.packCell, change.before, change.after].every(Number.isFinite) || !Number.isInteger(change.packCell) || change.packCell < 0 || change.before < 0 || change.after < 0 || Math.abs(change.after - change.before) <= 1e-6)) throw new Error("人口调整计划包含无效 pack cell 变更");
   if (cityChanges.some(change => ![change.cityId, change.beforeCity, change.after].every(Number.isFinite) || !Number.isInteger(change.cityId) || change.cityId < 0 || change.beforeCity < 0 || change.after < 0 || Math.abs(change.after - change.beforeCity) <= 1e-6)) throw new Error("人口调整计划包含无效城市变更");
   return {target, delta, packChanges, cityChanges};
+}
+
+function normalizeTransferPlan(plan) {
+  const source = normalizePopulationTarget(plan?.source);
+  const target = normalizePopulationTarget(plan?.target);
+  const actualAmount = Number(plan?.actualAmount);
+  if (!source || !target || source.scope !== target.scope || source.id === target.id) throw new Error("人口转移计划目标无效");
+  if (!Number.isFinite(actualAmount) || actualAmount <= 0 || actualAmount > POPULATION_ADJUSTMENT_LIMITS.deltaMax) throw new Error("人口转移计划数量无效");
+  if (!Array.isArray(plan?.packChanges) || !Array.isArray(plan?.cityChanges)) throw new Error("人口转移计划缺少变更列表");
+  const packChanges = plan.packChanges.map(change => ({packCell: Number(change.packCell), before: Number(change.before), after: Number(change.after)}));
+  const cityChanges = plan.cityChanges.map(change => ({
+    cityId: Number(change.cityId),
+    burgId: Number(change.burgId || 0),
+    beforeCity: Number(change.beforeCity),
+    beforeBurg: change.beforeBurg === null ? null : Number(change.beforeBurg),
+    after: Number(change.after)
+  }));
+  if (packChanges.length > POPULATION_ADJUSTMENT_LIMITS.packCellsMax * 2 || cityChanges.length > POPULATION_ADJUSTMENT_LIMITS.citiesMax * 2) throw new Error("人口转移计划超过单次范围上限");
+  if (new Set(packChanges.map(change => change.packCell)).size !== packChanges.length || new Set(cityChanges.map(change => change.cityId)).size !== cityChanges.length) throw new Error("人口转移计划包含重叠载体");
+  if (packChanges.some(change => ![change.packCell, change.before, change.after].every(Number.isFinite) || !Number.isInteger(change.packCell) || change.packCell < 0 || change.before < 0 || change.after < 0 || Math.abs(change.after - change.before) <= 1e-6)) throw new Error("人口转移计划包含无效 pack cell 变更");
+  if (cityChanges.some(change => ![change.cityId, change.beforeCity, change.after].every(Number.isFinite) || !Number.isInteger(change.cityId) || change.cityId < 0 || change.beforeCity < 0 || change.after < 0 || Math.abs(change.after - change.beforeCity) <= 1e-6)) throw new Error("人口转移计划包含无效城市变更");
+  return {source, target, actualAmount, packChanges, cityChanges};
 }
 
 function applyPopulationPlan(map, plan) {
@@ -451,6 +600,21 @@ function distributeChanges(entries, targetTotal, normalize) {
 
 function invalidInspection(code, reason, target = null, delta = null) {
   return {valid: false, code, reason, target, delta, packCells: [], cityIds: [], changedPackCells: [], changedCityIds: [], changed: false};
+}
+
+function invalidTransferInspection(code, reason, source = null, target = null, requestedAmount = null) {
+  return {
+    valid: false,
+    code,
+    reason,
+    source,
+    target,
+    requestedAmount,
+    actualAmount: 0,
+    sourceTransferable: 0,
+    targetCapacity: 0,
+    changed: false
+  };
 }
 
 function inspectionError(inspection) {

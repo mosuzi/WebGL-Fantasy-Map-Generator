@@ -53,6 +53,41 @@
         />
       </div>
     </template>
+    <template #transfer>
+      <div class="population-transfer-editor" aria-label="区域人口转移">
+        <ElForm label-position="top" size="small">
+          <ElFormItem label="目标区域">
+            <ElSelect
+              :model-value="state.transferTargetId"
+              placeholder="选择同类型目标"
+              @update:model-value="callbacks.onTransferTarget"
+            >
+              <ElOption v-for="row in transferTargets" :key="row.id" :label="row.name" :value="row.id" />
+            </ElSelect>
+          </ElFormItem>
+          <ElFormItem label="转移人口">
+            <ElInputNumber
+              :model-value="state.transferAmount"
+              :min="1"
+              :max="1000000"
+              :step="1"
+              controls-position="right"
+              @update:model-value="callbacks.onTransferAmount"
+            />
+          </ElFormItem>
+        </ElForm>
+        <div class="population-adjustment-actions">
+          <UiButton variant="secondary" @click="callbacks.onInspectTransfer">预检转移</UiButton>
+          <UiButton v-if="state.transferInspection?.valid" variant="primary" @click="callbacks.onApplyTransfer">确认转移</UiButton>
+        </div>
+        <UiStateBanner
+          v-if="transferFeedback"
+          :kind="transferFeedback.kind"
+          :title="transferFeedback.title"
+          :message="transferFeedback.message"
+        />
+      </div>
+    </template>
   </UiActionDock>
 </template>
 
@@ -107,7 +142,8 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const populationActions = Object.freeze([
-  {key: "adjustment", label: "区域人口增减", icon: "±", panelWidth: 360, panelHeight: 310}
+  {key: "adjustment", label: "区域人口增减", icon: "±", panelWidth: 360, panelHeight: 310},
+  {key: "transfer", label: "区域人口转移", icon: "⇄", panelWidth: 380, panelHeight: 390}
 ]);
 const metrics = computed(() => {
   props.state.version;
@@ -118,6 +154,11 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedPopulationId));
+const transferTargets = computed(() => {
+  const source = selected.value;
+  if (!source) return [];
+  return metrics.value.rows.filter(row => row.scope === source.scope && row.id !== source.id);
+});
 const adjustmentFeedback = computed(() => {
   props.state.version;
   const inspection = props.state.adjustmentInspection;
@@ -137,6 +178,27 @@ const adjustmentFeedback = computed(() => {
     kind: "selected",
     title: "人口调整已提交",
     message: `已更新 ${formatNumber(result.result?.packCells || 0)} 个人口 cells 和 ${formatNumber(result.result?.cities || 0)} 个城市，可通过历史撤销。`
+  };
+});
+const transferFeedback = computed(() => {
+  props.state.version;
+  const inspection = props.state.transferInspection;
+  if (inspection) {
+    if (!inspection.valid) return {kind: "error", title: "转移预检未通过", message: inspection.reason || "人口转移参数无效"};
+    return {
+      kind: "preview",
+      title: `${inspection.sourceName} → ${inspection.targetName}`,
+      message: `实际转移 ${formatPopulationValue(inspection.actualAmount)}；来源可转移 ${formatPopulationValue(inspection.sourceTransferable)}，目标容量 ${formatPopulationValue(inspection.targetCapacity)}；双方保持各自现有城乡比例。`
+    };
+  }
+  const result = props.state.transferResult;
+  if (!result) return null;
+  if (result.error) return {kind: "error", title: "转移失败", message: result.error.message || "人口转移事务没有提交"};
+  if (!result.executed) return {kind: "empty", title: "人口没有变化", message: "本次转移未形成有效变更。"};
+  return {
+    kind: "selected",
+    title: "人口转移已提交",
+    message: `已守恒转移 ${formatPopulationValue(result.result?.amount || 0)}，可通过历史撤销。`
   };
 });
 
