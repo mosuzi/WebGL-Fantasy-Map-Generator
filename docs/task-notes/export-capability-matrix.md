@@ -115,7 +115,7 @@ Collection 还会写入可机读的世界边界、坐标边界、实际导出范
 - `regress:dissolve-compatibility` 已固化政治面闭环、方向、hole、多岛、自交、跨 polygon 重叠和 bbox 门禁；固定合法输出经 JSON 往返后通过，7 类坏输出会被拒绝。
 - `regress:dissolve-performance` 已固化真实 100k 图的含序列化耗时、feature 一致性和体积缩减：固定图点数减少 `89.665%`、JSON 字节减少 `87.832%`，三轮 dissolve 中位耗时约 `256～276ms`，低于 `1500ms` 和普通版 3 倍双阈值。
 - `regress:geojson-range` 固化全图兼容、同 bbox 稳定集合、视口等价、完整 feature 语义、bbox 聚合、坏范围拒绝和 UI / API 共路径；`regress:geojson-range-browser` 已完成四份真实 Chrome 下载文件检查。
-- `regress:geojson-range-qgis` 使用 QGIS `3.44.12-Solothurn` 实际读取范围 pack Polygon `1472` 个和 dissolve 政治 MultiPolygon `125` 个，转存 GeoPackage，告警为 `0`。
+- `regress:geojson-range-qgis` 使用 QGIS `3.44.12-Solothurn` 实际读取范围 pack Polygon `1472` 个、dissolve 政治 MultiPolygon `125` 个、路线 LineString `195` 条和河流 LineString `54` 条，转存 GeoPackage；路线 / 河流稳定字段表一并断言，全部告警为 `0`。
 
 缺口：
 

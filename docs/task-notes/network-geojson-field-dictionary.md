@@ -62,4 +62,5 @@
 
 - `npm run regress:network-geojson` 固定 3k 地图，验证全图与等价 bbox 属性完全一致、route / river 层内字段集合和类型稳定、旧键保留、中文标签、名称、空关系、未知代码、长度 / 段数 / cells 统计及 JSON 往返。
 - `regress:geojson-range` 继续覆盖范围、bbox 和 UI / API 共路径；路线编辑、河流删除与对象创建专项继续作为旧消费者门禁。
-- QGIS 和 geojson.io 使用代表性 route / river FeatureCollection 验证；真实读取证据在第 76～81 项代码全部完成后的统一验证阶段记录，不提前把纯 JSON 解析写成外部工具通过。
+- geojson.io 已读取同一份代表性 route / river FeatureCollection，并识别两条 `LineString`，JSON 编辑区可见路线 / 河流的新旧字段和中文标签。
+- `regress:geojson-range-qgis` 使用官方 QGIS `3.44.12-Solothurn` 分别读取并转存范围路线 `195` 条、河流 `54` 条为 GeoPackage；几何类型与本字典稳定字段均通过实际字段表断言，告警为 `0`。固定样本分层只为避免路线、河流各自保留的旧数值 `id` 在混层时被 GDAL 解释成重复 FID，不改变正式混合 FeatureCollection 或任何旧字段。

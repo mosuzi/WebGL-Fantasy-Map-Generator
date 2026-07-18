@@ -29,6 +29,7 @@ const map = generatePlaceholderMap({
   randomSeed: false
 });
 const range = {mode: "bbox", bbox: [360, 240, 1080, 720]};
+const networkExpectedFields = ["networkSchema", "networkSchemaVersion", "displayName", "typeCode", "typeLabel", "levelCode", "levelLabel", "lengthWorld", "lengthUnit", "segmentCount", "gridCellCount", "packCellCount"];
 const documents = [
   {
     id: "pack",
@@ -45,12 +46,21 @@ const documents = [
     })
   },
   {
-    id: "network-lines",
+    id: "route-lines",
     geometry: "Line String",
-    expectedFields: ["networkSchema", "networkSchemaVersion", "displayName", "typeCode", "typeLabel", "levelCode", "levelLabel", "lengthWorld", "lengthUnit", "segmentCount", "gridCellCount", "packCellCount"],
+    expectedFields: [...networkExpectedFields, "fromName", "toName", "stateName", "provinceName"],
     document: createMapFeatureGeoJson(map, {
       range,
-      layers: {state: false, province: false, city: false, route: true, river: true, marker: false, zone: false}
+      layers: {state: false, province: false, city: false, route: true, river: false, marker: false, zone: false}
+    })
+  },
+  {
+    id: "river-lines",
+    geometry: "Line String",
+    expectedFields: [...networkExpectedFields, "discharge", "flux"],
+    document: createMapFeatureGeoJson(map, {
+      range,
+      layers: {state: false, province: false, city: false, route: false, river: true, marker: false, zone: false}
     })
   }
 ];
@@ -58,6 +68,7 @@ const documents = [
 const version = run(qgisProcess, ["--version"]).stdout.trim();
 const results = [];
 for (const item of documents) {
+  if (!item.document.features.length) fail(`${item.id} 固定样本没有可验证要素`);
   const source = join(artifactDir, `${item.id}.geojson`);
   const output = join(artifactDir, `${item.id}.gpkg`);
   writeFileSync(source, `${JSON.stringify(item.document)}\n`, "utf8");
