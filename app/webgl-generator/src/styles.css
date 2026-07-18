@@ -780,6 +780,20 @@ select:disabled {
   background: #0b1118;
 }
 
+#map-canvas,
+.map-overlay,
+.map-badge,
+.generation-loading-bubble,
+.map-toast,
+.shortcut-toast,
+.hover-overlay,
+.map-legend,
+.map-scale-bar,
+.measurement-overlay {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 #map-canvas {
   display: block;
   width: 100%;

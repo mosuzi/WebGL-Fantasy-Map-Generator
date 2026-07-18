@@ -108,6 +108,7 @@
     "regress:visual-themes": "node --no-warnings ./tools/webgl-generator-visual-theme-regression.mjs",
     "regress:label-styles": "node --no-warnings ./tools/webgl-generator-label-style-regression.mjs",
     "regress:label-layout": "node --no-warnings ./tools/webgl-generator-label-layout-regression.mjs",
+    "regress:map-text-selection": "node --no-warnings ./tools/webgl-generator-map-text-selection-regression.mjs",
     "regress:network-geojson": "node --no-warnings ./tools/webgl-generator-network-geojson-properties-regression.mjs",
     "regress:state-lifecycle": "node --no-warnings ./tools/webgl-generator-state-lifecycle-regression.mjs",
     "regress:state-topology": "node --no-warnings ./tools/webgl-generator-state-topology-regression.mjs",
