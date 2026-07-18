@@ -9203,6 +9203,12 @@ input.ui-switch-native {
   color: #ff9b93;
 }
 
+.climate-downstream-progress {
+  margin: 0;
+  color: #ffd37a;
+  font-size: 11px;
+}
+
 .economy-detail-highlights {
   --ui-key-value-cell-padding: 7px 8px;
   --ui-key-value-cell-border: 1px solid rgba(189, 206, 213, 0.11);

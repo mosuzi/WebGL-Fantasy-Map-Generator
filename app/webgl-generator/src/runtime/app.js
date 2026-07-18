@@ -128,7 +128,7 @@ import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, norma
 import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
-import {executeClimateDownstreamRebuild, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
+import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -5267,19 +5267,19 @@ function inspectClimateDownstreamRebuildViaApi(state, options = {}) {
   });
 }
 
-function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
+async function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("气候下游重算会改写多个地图派生系统，需要显式传入 {confirm: true}");
   const before = regenerationApiSummary(state.map);
+  updateGenerationLoading(documentRef, true, "正在准备气候下游重算");
   try {
-    const execution = executeClimateDownstreamRebuild({
+    await yieldToBrowser(documentRef);
+    const execution = await executeClimateDownstreamRebuildAsync({
       map: state.map,
       editHistory: state.editHistory,
       systems: options.systems || options.selectedSystems || [],
       seed: options.seed,
-      executeSystem: systemId => systemId === "economy"
-        ? rebuildEconomyViaAction(state, documentRef, {label: "气候下游重算：经济"})
-        : regenerateMapAttribute(state, systemId, documentRef),
+      executeSystem: systemId => executeClimateDownstreamSystem(state, documentRef, systemId),
       executeCommand: command => executeEditCommand(state, documentRef, command, {
         context: {map: state.map},
         refresh: () => {},
@@ -5288,7 +5288,9 @@ function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
       refreshSummary: refreshGenerationSummary,
       onRestore: map => {
         state.options = map.options;
-      }
+      },
+      onProgress: progress => updateGenerationLoading(documentRef, true, progress.message),
+      yieldToMain: () => yieldToBrowser(documentRef)
     });
     if (!execution.executed) {
       return {
@@ -5300,6 +5302,8 @@ function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
         effects: []
       };
     }
+    updateGenerationLoading(documentRef, true, "正在刷新气候下游结果");
+    await yieldToBrowser(documentRef);
     refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
     const result = {
       executed: true,
@@ -5312,6 +5316,7 @@ function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
       estimatedAffected: execution.preview.estimatedAffected,
       steps: execution.steps.map(climateDownstreamPublicStep),
       checksum: execution.checksum,
+      timings: execution.timings,
       staleSystems: execution.staleSystems,
       before,
       after: regenerationApiSummary(state.map),
@@ -5332,7 +5337,15 @@ function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
     });
     setFileOperationStatus(documentRef, `气候下游重算失败并已回滚：${error.message}`);
     throw error;
+  } finally {
+    updateGenerationLoading(documentRef, false);
   }
+}
+
+function executeClimateDownstreamSystem(state, documentRef, systemId) {
+  if (systemId === "markers") return regenerateMarkerResources(state, documentRef, {deferRefresh: true});
+  if (systemId === "economy") return rebuildEconomyViaAction(state, documentRef, {label: "气候下游重算：经济", deferRefresh: true});
+  return regenerateMapAttribute(state, systemId, documentRef);
 }
 
 function climateDownstreamPublicStep(step) {
@@ -8567,13 +8580,15 @@ function regenerateZones(state, documentRef) {
   return regenerationResult("zones", `地区已按当前战争、宗教、军事与地形上下文重算（扰动 #${salt}）：${before} -> ${map.zones.metadata.zones}`, "已刷新地区覆盖、统计和对象索引。");
 }
 
-function regenerateMarkerResources(state, documentRef) {
+function regenerateMarkerResources(state, documentRef, {deferRefresh = false} = {}) {
   const map = state.map;
   const beforeResources = map.markers?.metadata?.resourceMarkers || 0;
   const beforePotential = map.markers?.metadata?.resourcePotential || 0;
   const salt = nextRegenerationSalt(map, "markers");
   const command = createRegenerateResourceMarkersCommand({salt});
-  const executed = applyMarkerCollectionCommand(state, documentRef, command);
+  const executed = deferRefresh
+    ? executeDeferredMarkerRegeneration(state, command)
+    : applyMarkerCollectionCommand(state, documentRef, command);
   if (!executed) return regenerationResult("markers", "未执行", "当前地图缺少可用 pack 语义图或标记集合，无法重生成资源点。");
 
   appendGenerationLog(map, `regenerate resources: salt=${salt}, resources=${map.markers.metadata.resourceMarkers}, resourcePotential=${map.markers.metadata.resourcePotential}, markerResourceDeals=${map.economy?.metadata?.resourceTrade?.markerResourceDeals || 0}`);
@@ -8582,6 +8597,15 @@ function regenerateMarkerResources(state, documentRef) {
     `资源点已按当前地形、河流、生物群系、温度和降水约束重算（扰动 #${salt}）：${beforeResources} -> ${map.markers.metadata.resourceMarkers}；资源潜力 ${beforePotential} -> ${map.markers.metadata.resourcePotential}`,
     "已刷新资源 marker、正式货物来源、市场库存、交易、国家/省份资源潜力、点图层、对象索引和统计；军事与外交已标记为待派生。"
   );
+}
+
+function executeDeferredMarkerRegeneration(state, command) {
+  if (command.isNoop?.({map: state.map})) return null;
+  state.editHistory.execute(command, {map: state.map});
+  markDerivedFresh(state.map, ["markers", "economy"]);
+  markDerivedStale(state.map, ["military", "diplomacy"]);
+  refreshGenerationSummary(state.map);
+  return command;
 }
 
 function militaryRegiments(map) {
@@ -11335,15 +11359,17 @@ function applyPendingMarketAssignment(state, documentRef) {
   return execution;
 }
 
-function rebuildEconomyViaAction(state, documentRef, {label = "重算经济链"} = {}) {
+function rebuildEconomyViaAction(state, documentRef, {label = "重算经济链", deferRefresh = false} = {}) {
   const command = createRebuildEconomyCommand({label});
   const execution = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     afterRefresh: () => refreshGenerationSummary(state.map),
+    refresh: deferRefresh ? () => {} : undefined,
+    refreshPanels: !deferRefresh,
     status: executed => `已重算经济链：${executed.getResult?.().deals || 0} 笔交易。`,
     noopStatus: "当前地图没有可重算的市场。"
   });
-  updateEditingInteractionLock(state, documentRef);
+  if (!deferRefresh) updateEditingInteractionLock(state, documentRef);
   return execution;
 }
 

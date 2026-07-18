@@ -119,6 +119,80 @@ export function executeClimateDownstreamRebuild({
   }
 }
 
+export async function executeClimateDownstreamRebuildAsync({
+  map,
+  editHistory,
+  systems,
+  seed,
+  executeSystem,
+  executeCommand,
+  refreshSummary,
+  onRestore,
+  onProgress,
+  yieldToMain = async () => {},
+  now = currentTime
+}) {
+  if (!map || !editHistory?.createSnapshot || !editHistory?.restoreSnapshot) {
+    throw new Error("气候下游重算缺少地图或编辑历史上下文");
+  }
+  if (typeof executeSystem !== "function") throw new Error("气候下游重算缺少系统执行器");
+  if (typeof executeCommand !== "function") throw new Error("气候下游重算缺少统一命令执行器");
+  if (typeof yieldToMain !== "function") throw new Error("气候下游重算缺少主线程让出器");
+  const preview = inspectClimateDownstreamRebuild(map, {systems, seed});
+  if (!preview.valid) return {executed: false, preview, steps: [], command: null, timings: emptyTimings()};
+
+  const startedAt = now();
+  const chunks = [];
+  const historySnapshot = editHistory.createSnapshot();
+  const stepResults = [];
+  let before = null;
+  try {
+    onProgress?.({phase: "snapshot-before", message: "正在保存重算前状态"});
+    before = await runBlockingChunk("snapshot-before", () => cloneMap(map), {chunks, now, yieldToMain});
+    for (const step of preview.steps) {
+      onProgress?.({phase: "system", system: step.system, message: `正在重算${systemLabel(step.system)}`});
+      const regenerationSalt = prepareRegenerationSalt(map, preview.seed, step.system);
+      const result = await runBlockingChunk(`system:${step.system}`, () => executeSystem(step.system, {step, preview, regenerationSalt}), {chunks, now, yieldToMain});
+      if (!result || result.executed === false) throw new Error(`气候下游重算未完成：${step.system}`);
+      stepResults.push({system: step.system, covers: [...step.covers], regenerationSalt, result});
+    }
+    markSelectedFresh(map, preview.selectedSystems);
+    refreshSummary?.(map);
+    onProgress?.({phase: "snapshot-after", message: "正在保存重算结果"});
+    const after = await runBlockingChunk("snapshot-after", () => cloneMap(map), {chunks, now, yieldToMain});
+    editHistory.restoreSnapshot(historySnapshot);
+    const command = createSnapshotCommand(before, after, preview, stepResults);
+    onProgress?.({phase: "commit", message: "正在登记重算历史"});
+    const commandExecution = await runBlockingChunk("history-command", () => executeCommand(command), {chunks, now, yieldToMain});
+    if (commandExecution?.executed === false) throw commandExecution.error || new Error("气候下游重算命令未执行");
+    onRestore?.(map, "after-command");
+    return {
+      executed: true,
+      preview,
+      seed: preview.seed,
+      requestedSystems: [...preview.requestedSystems],
+      requiredSystems: [...preview.requiredSystems],
+      selectedSystems: [...preview.selectedSystems],
+      executionOrder: [...preview.executionOrder],
+      steps: stepResults,
+      staleSystems: [...(map.metadata?.derivedStale?.systems || [])],
+      checksum: map.metadata?.checksum || map.summary?.checksum || "",
+      command,
+      timings: summarizeTimings(chunks, now() - startedAt)
+    };
+  } catch (error) {
+    if (before) {
+      onProgress?.({phase: "rollback", message: "正在回滚重算状态"});
+      await runBlockingChunk("rollback", () => restoreMap(map, before), {chunks, now, yieldToMain});
+    }
+    editHistory.restoreSnapshot(historySnapshot);
+    onRestore?.(map, "rollback");
+    error.preview = preview;
+    error.timings = summarizeTimings(chunks, now() - startedAt);
+    throw error;
+  }
+}
+
 export function climateDownstreamRegenerationSalt(seed, systemId) {
   let hash = 2166136261;
   const text = `${normalizeSeed(seed)}:${systemId}`;
@@ -260,4 +334,38 @@ function restoreMap(target, snapshot) {
   }
   for (const key of Object.keys(target)) delete target[key];
   Object.assign(target, replacement);
+}
+
+async function runBlockingChunk(id, task, {chunks, now, yieldToMain}) {
+  const startedAt = now();
+  const pending = task();
+  const blockingMs = Math.max(0, now() - startedAt);
+  const result = pending && typeof pending.then === "function" ? await pending : pending;
+  chunks.push({id, blockingMs: roundTiming(blockingMs)});
+  await yieldToMain({id, blockingMs});
+  return result;
+}
+
+function summarizeTimings(chunks, totalMs) {
+  return {
+    chunks: chunks.map(chunk => ({...chunk})),
+    maxBlockingMs: roundTiming(chunks.reduce((max, chunk) => Math.max(max, chunk.blockingMs), 0)),
+    totalMs: roundTiming(totalMs)
+  };
+}
+
+function emptyTimings() {
+  return {chunks: [], maxBlockingMs: 0, totalMs: 0};
+}
+
+function currentTime() {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function roundTiming(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function systemLabel(systemId) {
+  return SYSTEM_SPECS.find(item => item.id === systemId)?.label || systemId;
 }

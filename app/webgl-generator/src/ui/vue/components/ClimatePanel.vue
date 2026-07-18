@@ -61,9 +61,12 @@
     </div>
     <p class="climate-downstream-dependencies">{{ dependencyHint }}</p>
     <div class="climate-downstream-actions">
-      <UiButton variant="secondary" @click="callbacks.onInspectDownstream">预检</UiButton>
-      <UiButton :disabled="!canApplyDownstream" @click="callbacks.onApplyDownstream">应用选中重算</UiButton>
+      <UiButton variant="secondary" :disabled="state.downstreamRunning" @click="callbacks.onInspectDownstream">预检</UiButton>
+      <UiButton :disabled="!canApplyDownstream || state.downstreamRunning" @click="callbacks.onApplyDownstream">
+        {{ state.downstreamRunning ? "重算中…" : "应用选中重算" }}
+      </UiButton>
     </div>
+    <p v-if="state.downstreamRunning" class="climate-downstream-progress">正在分阶段重算，下游数据将在完成后统一刷新。</p>
     <p v-if="state.downstreamError" class="climate-downstream-error">{{ state.downstreamError }}</p>
     <pre v-if="state.downstreamPreview" class="climate-downstream-result">{{ formattedPreview }}</pre>
     <pre v-if="state.downstreamResult" class="climate-downstream-result is-applied">{{ formattedResult }}</pre>

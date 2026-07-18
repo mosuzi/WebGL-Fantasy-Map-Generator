@@ -6,10 +6,12 @@ import {API_METHODS, CONFIRM_REQUIRED_METHODS} from "../app/webgl-generator/src/
 import {
   climateDownstreamRegenerationSalt,
   executeClimateDownstreamRebuild,
+  executeClimateDownstreamRebuildAsync,
   inspectClimateDownstreamRebuild
 } from "../app/webgl-generator/src/runtime/climate-downstream-rebuild.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {createRegenerateResourceMarkersCommand} from "../app/webgl-generator/src/runtime/marker-edit-commands.js";
 
 const allSystems = ["cities", "states", "provinces", "religions", "markers", "economy", "diplomacy", "military", "zones"];
 const preview = inspectClimateDownstreamRebuild(sampleMap(), {systems: ["zones"], seed: 41});
@@ -35,8 +37,11 @@ assert.notEqual(climateDownstreamRegenerationSalt(41, "states"), climateDownstre
 
 const first = runSuccessfulTransaction(sampleMap(), ["diplomacy"], 73);
 const second = runSuccessfulTransaction(sampleMap(), ["diplomacy"], 73);
+const asyncEquivalent = await runSuccessfulAsyncTransaction(sampleMap(), ["diplomacy"], 73);
 assert.equal(first.result.checksum, second.result.checksum);
 assert.deepEqual(structuredResult(first.result), structuredResult(second.result));
+assert.deepEqual(structuredResult(asyncEquivalent.result), structuredResult(first.result), "分阶段事务改变了同步事务结果");
+assert.deepEqual(asyncEquivalent.map.trace, first.map.trace, "分阶段事务改变了系统执行轨迹");
 assert.equal(first.commandState.beforeChecksum, first.result.checksum, "登记外层命令前地图应已处于最终状态");
 assert.equal(first.commandState.afterChecksum, first.commandState.beforeChecksum, "外层命令首次 apply 不应重复恢复地图");
 assert.deepEqual(first.commandState.afterTrace, first.commandState.beforeTrace, "外层命令首次 apply 不应改写最终结果");
@@ -73,6 +78,27 @@ assert.throws(() => executeClimateDownstreamRebuild({
 }), /注入失败/);
 assert.deepEqual(failureMap, failureBefore, "失败回滚留下了部分重算状态");
 assert.equal(failureHistory.getStats().undo, 0, "失败回滚留下了内层历史");
+
+const asyncFailureMap = sampleMap();
+const asyncFailureBefore = structuredClone(asyncFailureMap);
+const asyncFailureHistory = new EditHistory();
+await assert.rejects(() => executeClimateDownstreamRebuildAsync({
+  map: asyncFailureMap,
+  editHistory: asyncFailureHistory,
+  systems: ["diplomacy"],
+  seed: 17,
+  executeCommand(command) {
+    asyncFailureHistory.execute(command, {map: asyncFailureMap});
+    return {executed: true, command};
+  },
+  executeSystem(systemId) {
+    if (systemId === "religions") throw new Error("异步注入失败");
+    applyInnerMutation(asyncFailureMap, asyncFailureHistory, systemId);
+    return {executed: true};
+  }
+}), /异步注入失败/);
+assert.deepEqual(asyncFailureMap, asyncFailureBefore, "分阶段失败回滚留下了部分重算状态");
+assert.equal(asyncFailureHistory.getStats().undo, 0, "分阶段失败回滚留下了内层历史");
 
 const roundtrip = JSON.parse(JSON.stringify(first.map));
 assert.deepEqual(roundtrip.metadata.derivedStale.systems, ["military", "zones"]);
@@ -115,6 +141,14 @@ assert.equal(parsedFullDocument.map.metadata.derivedStale.systems.includes("citi
 assert.equal(parsedFullDocument.map.metadata.derivedStale.systems.includes("markers"), true, "完整地图往返后未选系统没有保持 stale");
 assert.equal(Object.prototype.hasOwnProperty.call(parsedFullDocument.map, "climateDownstreamRebuild"), false, "旧图兼容不应依赖新顶层字段");
 
+const chunkedPerformance = await runChunkedPerformanceTransaction();
+assert.deepEqual(chunkedPerformance.result.executionOrder, ["markers"], "经济候选没有收敛为资源 marker / 经济组合步骤");
+assert.equal(chunkedPerformance.history.undo, 1, "分阶段气候重算没有收拢为一条历史");
+assert(chunkedPerformance.result.timings.chunks.some(chunk => chunk.id === "system:markers"), "分阶段计时缺少 markers / economy 块");
+assert(chunkedPerformance.result.timings.maxBlockingMs < 250, `固定 10k 样本仍有超阈值同步块：${JSON.stringify(chunkedPerformance.result.timings)}`);
+assert(chunkedPerformance.yields.length >= 4, `固定 10k 样本没有在快照、系统和提交之间让出主线程：${chunkedPerformance.yields}`);
+assert(chunkedPerformance.progress.includes("system:markers"), "分阶段重算没有报告 markers / economy 进度");
+
 const [appSource, panelModelSource, panelVueSource, consoleApiSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/panels/climate-panel.js", import.meta.url), "utf8"),
@@ -123,15 +157,20 @@ const [appSource, panelModelSource, panelVueSource, consoleApiSource] = await Pr
 ]);
 assert.match(appSource, /inspectDownstreamRebuild: \(options = \{\}\) => inspectClimateDownstreamRebuildViaApi/);
 assert.match(appSource, /applyDownstreamRebuild: \(options = \{\}\) => applyClimateDownstreamRebuildViaApi/);
-assert.match(appSource, /executeClimateDownstreamRebuild\(\{/);
+assert.match(appSource, /await executeClimateDownstreamRebuildAsync\(\{/);
+assert.match(appSource, /yieldToMain: \(\) => yieldToBrowser\(documentRef\)/);
+assert.match(appSource, /regenerateMarkerResources\(state, documentRef, \{deferRefresh: true\}\)/);
 assert.match(panelModelSource, /downstreamSystems: \[\]/, "气候面板不应默认全选");
 assert.match(panelModelSource, /confirm: true/);
+assert.match(panelModelSource, /onApplyDownstream: async/);
+assert.match(panelModelSource, /downstreamRunning: false/);
 assert.match(panelVueSource, /type="checkbox"/);
 assert.match(panelVueSource, /固定 seed/);
 assert.match(panelVueSource, />预检</);
-assert.match(panelVueSource, />应用选中重算</);
+assert.match(panelVueSource, /重算中…/);
 assert.match(consoleApiSource, /actions\.climate\?\.inspectDownstreamRebuild/);
 assert.match(consoleApiSource, /actions\.climate\?\.applyDownstreamRebuild/);
+assert.match(consoleApiSource, /applyDownstreamRebuild: \{stable: "draft", mutates: "map-derived-data", undoable: true, async: true/);
 assert(API_METHODS.climate.includes("inspectDownstreamRebuild"));
 assert(API_METHODS.climate.includes("applyDownstreamRebuild"));
 assert(CONFIRM_REQUIRED_METHODS.includes("climate.applyDownstreamRebuild"));
@@ -144,6 +183,7 @@ console.log(JSON.stringify({
   deterministicChecksum: first.result.checksum,
   staleAfter: first.result.staleSystems,
   fullMapRoundtripChecksum: parsedFullDocument.map.metadata.checksum,
+  chunkedPerformance: chunkedPerformance.result.timings,
   publicClimateMethods: API_METHODS.climate.length,
   history: first.history.getStats()
 }, null, 2));
@@ -176,6 +216,65 @@ function runSuccessfulTransaction(map, systems, seed) {
     }
   });
   return {map, history, result, before, commandState};
+}
+
+async function runSuccessfulAsyncTransaction(map, systems, seed) {
+  const history = new EditHistory();
+  const result = await executeClimateDownstreamRebuildAsync({
+    map,
+    editHistory: history,
+    systems,
+    seed,
+    executeCommand(command) {
+      history.execute(command, {map});
+      return {executed: true, command};
+    },
+    executeSystem(systemId) {
+      applyInnerMutation(map, history, systemId);
+      return {executed: true, system: systemId};
+    },
+    refreshSummary(targetMap) {
+      const trace = targetMap.trace.map(item => `${item.system}:${item.salt}`).join("|");
+      targetMap.metadata.checksum = checksum(trace);
+      targetMap.summary = {checksum: targetMap.metadata.checksum};
+    }
+  });
+  return {map, history, result};
+}
+
+async function runChunkedPerformanceTransaction() {
+  const map = generatePlaceholderMap({seed: "climate-downstream-10k", cellsTarget: 10000, heightmapTemplate: "continents"});
+  map.metadata.derivedStale = {systems: [...allSystems], updatedAt: "before"};
+  const history = new EditHistory();
+  const yields = [];
+  const progress = [];
+  const result = await executeClimateDownstreamRebuildAsync({
+    map,
+    editHistory: history,
+    systems: ["economy"],
+    seed: 41,
+    executeSystem(systemId, {regenerationSalt}) {
+      assert.equal(systemId, "markers", "经济候选执行了意外系统");
+      history.execute(createRegenerateResourceMarkersCommand({salt: regenerationSalt}), {map});
+      return {executed: true, status: "资源 marker 与经济已重算"};
+    },
+    executeCommand(command) {
+      history.execute(command, {map});
+      return {executed: true, command};
+    },
+    refreshSummary(targetMap) {
+      targetMap.metadata.checksum = checksum(`${targetMap.markers?.markers?.length || 0}:${targetMap.economy?.deals?.length || 0}`);
+      targetMap.summary.checksum = targetMap.metadata.checksum;
+    },
+    onProgress(item) {
+      progress.push(item.system ? `${item.phase}:${item.system}` : item.phase);
+    },
+    async yieldToMain(item) {
+      yields.push(item.id);
+      await new Promise(resolve => setImmediate(resolve));
+    }
+  });
+  return {result, history: history.getStats(), yields, progress};
 }
 
 function applyInnerMutation(map, history, systemId) {

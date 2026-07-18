@@ -34,6 +34,7 @@ export function createClimatePanel(documentRef, manager, callbacks = {}) {
     downstreamPreview: null,
     downstreamResult: null,
     downstreamError: "",
+    downstreamRunning: false,
     version: 0
   });
   const panelCallbacks = {
@@ -80,10 +81,13 @@ export function createClimatePanel(documentRef, manager, callbacks = {}) {
       refreshDownstreamPreview();
     },
     onInspectDownstream: () => refreshDownstreamPreview(),
-    onApplyDownstream: () => {
+    onApplyDownstream: async () => {
+      if (panelState.downstreamRunning) return null;
       panelState.downstreamError = "";
+      panelState.downstreamRunning = true;
+      panelState.version++;
       try {
-        const result = callbacks.onApplyDownstreamRebuild?.({
+        const result = await callbacks.onApplyDownstreamRebuild?.({
           systems: panelState.downstreamSystems,
           seed: panelState.downstreamSeed,
           confirm: true
@@ -95,6 +99,9 @@ export function createClimatePanel(documentRef, manager, callbacks = {}) {
         panelState.downstreamError = String(error?.message || error);
         panelState.version++;
         return null;
+      } finally {
+        panelState.downstreamRunning = false;
+        panelState.version++;
       }
     }
   };

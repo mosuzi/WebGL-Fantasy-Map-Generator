@@ -382,7 +382,7 @@ function buildMethodMetadata() {
       setPrecipitation: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
       setWind: {stable: "draft", mutates: "climate-state-and-derived-stale", undoable: false, async: false, requiresConfirm: false},
       inspectDownstreamRebuild: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
-      applyDownstreamRebuild: {stable: "draft", mutates: "map-derived-data", undoable: true, async: false, requiresConfirm: true}
+      applyDownstreamRebuild: {stable: "draft", mutates: "map-derived-data", undoable: true, async: true, requiresConfirm: true}
     },
     history: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
