@@ -360,8 +360,22 @@ select {
   margin-top: 10px;
 }
 
-.visual-theme-import-action {
-  min-height: 34px;
+.visual-theme-action-row > .visual-theme-action-button {
+  width: auto;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 8px 15px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.visual-theme-action-button.el-button > span,
+.visual-theme-action-button.file-import-action > span {
+  font: inherit;
+  line-height: inherit;
 }
 
 .visual-theme-editor-note {

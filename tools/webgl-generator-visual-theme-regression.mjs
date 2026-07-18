@@ -92,10 +92,18 @@ assert.equal(exportVisualThemeDocument(seedDocument.id).colors.land, "#123456", 
 const rendererSource = await readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
 const mapIoSource = await readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8");
 const controlPanelSource = await readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8");
+const stylesSource = await readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8");
 assert.match(rendererSource, /setThemeCssColor\(stage, "--theme-legend-text", legend\.text\)/, "图例 CSS token 链路缺失");
 assert.match(rendererSource, /setThemeCssColor\(stage, "--theme-scale-line", scaleBar\.foreground\)/, "比例尺 CSS token 链路缺失");
 assert.match(mapIoSource, /context\.filter = filter;[\s\S]*context\.drawImage\(scratch, 0, 0\)/, "PNG 没有复用主题画布滤镜");
 assert.match(controlPanelSource, /<UiColorActionPanel[\s\S]*@apply="applyVisualThemeColor"/, "主题编辑没有复用共享颜色二级面板");
+assert.equal([...controlPanelSource.matchAll(/class="[^"]*visual-theme-action-button[^"]*"/g)].length, 3, "主题动作组没有统一按钮类");
+assert.match(controlPanelSource, /<label class="[^"]*visual-theme-action-button[^"]*">\s*<span>导入主题<\/span>\s*<input id="import-visual-theme-file"/s, "主题导入没有保留文件输入行为");
+const actionStyle = stylesSource.match(/\.visual-theme-action-row > \.visual-theme-action-button\s*\{([^}]+)\}/)?.[1] || "";
+for (const contract of ["height: 36px", "min-height: 36px", "padding: 8px 15px", "font-size: 14px", "font-weight: 700", "line-height: 1"]) {
+  assert(actionStyle.includes(contract), `主题动作组缺少统一样式契约：${contract}`);
+}
+assert.match(stylesSource, /\.visual-theme-action-button\.el-button > span,[\s\S]*\.visual-theme-action-button\.file-import-action > span\s*\{[\s\S]*font:\s*inherit;[\s\S]*line-height:\s*inherit;/, "主题动作文字内盒没有继承统一规格");
 
 console.log(JSON.stringify({
   ok: true,
@@ -103,5 +111,6 @@ console.log(JSON.stringify({
   colors: exportVisualThemeDocument(seedDocument.id).colors,
   history: history.getStats(),
   roundTripThemes: roundTrip.map.visualTheme.userThemes.length,
-  invalidRegistryUnchanged: true
+  invalidRegistryUnchanged: true,
+  actionTypographyUnified: true
 }, null, 2));

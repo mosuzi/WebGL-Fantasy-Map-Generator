@@ -329,9 +329,9 @@
           <span>{{ activeUserThemeDocument ? "可编辑" : "内置只读" }}</span>
         </div>
         <div class="visual-theme-action-row">
-          <UiButton id="create-user-visual-theme" variant="secondary">复制为用户主题</UiButton>
-          <UiButton id="export-visual-theme" variant="secondary">导出主题</UiButton>
-          <label class="file-import-action secondary-action visual-theme-import-action">
+          <UiButton id="create-user-visual-theme" class="visual-theme-action-button" variant="secondary">复制为用户主题</UiButton>
+          <UiButton id="export-visual-theme" class="visual-theme-action-button" variant="secondary">导出主题</UiButton>
+          <label class="file-import-action secondary-action visual-theme-import-action visual-theme-action-button">
             <span>导入主题</span>
             <input id="import-visual-theme-file" type="file" accept=".json,.webgl-theme.json,application/json" />
           </label>
