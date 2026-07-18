@@ -64,7 +64,7 @@
 
 ## 当前状态
 
-正式应用已经跨过早期占位原型阶段。权威任务第 28～52、54～87 项已完成，第 53 项按用户决定移除；公开 API 当前覆盖 11 个命名空间、204 个方法和 106 个编辑方法。第 87 项已按“调查 → 开发 → 代码审查”完成悬停信息卡被国家、省份标签遮挡的层级修复，并只验证本项；第 64～86 项没有复测。当前权威任务清单为空，等待用户批准下一波。现有功能与界面信息架构审计及整改证据见 `docs/audits/ui-function-and-information-architecture-audit.md` 和 `docs/task-notes/ui-system-audit-gate.md`。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
+正式应用已经跨过早期占位原型阶段。权威任务第 28～52、54～87 项已完成，第 53 项按用户决定移除；公开 API 当前覆盖 11 个命名空间、204 个方法和 106 个编辑方法。当前活动任务为第 88～93 项，按“调查 → 开发 → 审查测试”逐项完成并分别提交，中途不做浏览器验证，六项全部完成后统一复用浏览器验收并推送；第 45～52、54～87 项不得复测。现有功能与界面信息架构审计及整改证据见 `docs/audits/ui-function-and-information-architecture-audit.md` 和 `docs/task-notes/ui-system-audit-gate.md`。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
 
 以下内容是仍有参考价值的早期里程碑记录，不代表当前待办：
 
@@ -174,4 +174,4 @@ node .\tools\serve-prototype.mjs --port 5400
 10. `docs/task-notes/README.md`
 11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
-然后只按 `docs/current-plan.md` 的活动权威任务继续。第 87 项已经完成调查、开发、代码审查、本地提交和本项浏览器验证；第 64～86 项没有复测，来源与边界见 `docs/task-notes/authoritative-task-87.md`。当前清单为空，先等待用户批准下一波，不得从历史里程碑、README 或专题文档的“下一步”自行创造任务。
+然后只按 `docs/current-plan.md` 的活动权威任务继续。当前顺序固定为第 88～93 项：每项依次完成调查、开发、审查测试并本地提交，中途不做浏览器验证；第 93 项完成后统一复用浏览器验证六项并推送。第 45～52、54～87 项不得复测，来源与转正映射见 `docs/task-notes/next-quasi-authoritative-tasks-2026-07-18.md`。不得从历史里程碑、README 或专题文档的“下一步”自行创造任务。

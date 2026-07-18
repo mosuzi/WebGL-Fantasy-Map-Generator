@@ -35,10 +35,10 @@
 - 权威任务第 80 项：标签显示优先级与位置锁定。
 - 权威任务第 81 项：补齐路线与河流 GeoJSON 稳定属性。
 
-## 2026-07-18 已纳入下一批准权威候选池（仍未转正）
+## 2026-07-18 已转入权威任务第 88～90 项
 
 - `Q-13`：`tools/webgl-generator-feature-topology-ui-api-regression.mjs` 仍硬编码第 75 项时期的公开 API 总数 `196 / 98`，而当前权威基线已是 `204 / 106`，导致该脚本在进入 Feature 动态断言前失败；候选要求由唯一 inventory / stability 契约负责全局精确总数。
 - `Q-12`：`bindHeightEditing` 的普通高度 stroke 结束路由已经代码确认反接，`pointerup` 调用回滚、`pointercancel` 调用提交；候选只修正普通高度笔刷及其回归。
 - `Q-14`：第 72 项气候受约束下游重算在当前 10k 浏览器样本执行 `economy -> markers` 时仍约耗时 `1216ms`，健康监控会记录 warning 级 `input-handler-stall / main-thread-long-task`；候选只治理剩余同步长任务，不改变业务结果。
 
-以上三项已整理进 `docs/task-notes/next-quasi-authoritative-tasks-2026-07-18.md`，但仍未进入 `docs/current-plan.md`，批准前不得实施。
+以上三项已随 `Q-12～Q-14` 转入 `docs/current-plan.md` 的权威任务第 88～90 项，不再作为阶段外事项；后续新发现继续另行追加。
