@@ -91,7 +91,7 @@ function markHeightDependentDerivedStale(map) {
 
 function getPackCellsForGrid(map, gridCell) {
   if (!map?.pack?.cells?.g || !map?.pack?.cells?.h) return [];
-  if (!map.__heightEditorPackCellsByGrid) {
+  if (!(map.__heightEditorPackCellsByGrid instanceof Map)) {
     const byGrid = new Map();
     for (let packCell = 0; packCell < map.pack.cells.g.length; packCell++) {
       const mappedGrid = map.pack.cells.g[packCell];
@@ -99,7 +99,12 @@ function getPackCellsForGrid(map, gridCell) {
       if (!byGrid.has(mappedGrid)) byGrid.set(mappedGrid, []);
       byGrid.get(mappedGrid).push(packCell);
     }
-    map.__heightEditorPackCellsByGrid = byGrid;
+    Object.defineProperty(map, "__heightEditorPackCellsByGrid", {
+      value: byGrid,
+      writable: true,
+      configurable: true,
+      enumerable: false
+    });
   }
   return map.__heightEditorPackCellsByGrid.get(gridCell) || [];
 }
