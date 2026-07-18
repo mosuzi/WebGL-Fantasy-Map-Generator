@@ -11,6 +11,7 @@ import {
   normalizePanelPositionState,
   panelDragHasMoved,
   panelsCanCoexist,
+  resolvePanelRegistrationPosition,
   restoreManagedPanelViewportOrigin
 } from "../app/webgl-generator/src/ui/panel-manager.js";
 
@@ -76,6 +77,11 @@ assert.equal(chooseLastOpenMainPanel([{id: "state", openedAt: 10}, {id: "city", 
 assert.equal(chooseLastOpenMainPanel([{id: "state", openedAt: 10}, {id: "city", openedAt: 20}], "state"), "state");
 assert.equal(chooseLastOpenMainPanel([], "state"), null);
 assert.equal(normalizePanelPositionState({left: 180, top: 96}, {left: 24, top: 24}).positionMode, "manual", "旧面板坐标必须迁移为手动偏好");
+assert.deepEqual(
+  resolvePanelRegistrationPosition({role: "main", persistOpen: true, savedState: null, defaults: {left: 500, top: 136}}),
+  {positionMode: "auto", left: 8, top: 64, defaultLeft: 8, defaultTop: 64, initialPlacement: "left"},
+  "新主面板必须从左侧安全区首次打开"
+);
 assert.deepEqual(
   constrainPanelRuntimePosition({left: 900, top: 600, hostWidth: 720, hostHeight: 576, panelWidth: 560, headerHeight: 44}),
   {left: 152, top: 524},

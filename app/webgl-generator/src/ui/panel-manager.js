@@ -3,10 +3,12 @@ import {getOverlayRegistry} from "./overlay-registry.js";
 
 const PANEL_POSITION_AUTO = "auto";
 const PANEL_POSITION_MANUAL = "manual";
+const PANEL_INITIAL_PLACEMENT_LEFT = "left";
 const PANEL_MARGIN = 8;
 const PANEL_PAIR_GAP = 24;
 const PANEL_HEADER_HEIGHT = 44;
 const PANEL_MIN_VISIBLE_HEADER_WIDTH = 64;
+const PANEL_FIRST_OPEN_TOP = 64;
 
 export class PanelManager {
   constructor(documentRef, host) {
@@ -25,10 +27,16 @@ export class PanelManager {
   }
 
   registerPanel(id, options) {
-    const defaultLeft = finiteCoordinate(options.left, 24);
-    const defaultTop = finiteCoordinate(options.top, 24);
-    const savedState = this.readPanelState(id, {left: defaultLeft, top: defaultTop});
-    const positionState = normalizePanelPositionState(savedState, {left: defaultLeft, top: defaultTop});
+    const role = options.role === "detail" ? "detail" : "main";
+    const optionDefaults = {left: finiteCoordinate(options.left, 24), top: finiteCoordinate(options.top, 24)};
+    const savedState = this.readPanelState(id, optionDefaults);
+    const registrationPosition = resolvePanelRegistrationPosition({
+      role,
+      persistOpen: options.persistOpen !== false,
+      savedState,
+      defaults: optionDefaults
+    });
+    const {defaultLeft, defaultTop, initialPlacement, ...positionState} = registrationPosition;
     const panel = this.documentRef.createElement("section");
     panel.className = "floating-panel hidden";
     panel.style.left = `${positionState.left}px`;
@@ -36,7 +44,8 @@ export class PanelManager {
     panel.style.width = `${savedState?.width ?? options.width ?? 320}px`;
     if (options.maxWidth) panel.style.maxWidth = `min(${options.maxWidth}px, calc(100% - 16px))`;
     panel.dataset.panelId = id;
-    panel.dataset.panelRole = options.role === "detail" ? "detail" : "main";
+    panel.dataset.panelRole = role;
+    if (initialPlacement) panel.dataset.initialPlacement = initialPlacement;
 
     const header = this.documentRef.createElement("header");
     header.className = "floating-panel-header";
@@ -77,6 +86,7 @@ export class PanelManager {
       positionMode: positionState.positionMode,
       preferredLeft: positionState.left,
       preferredTop: positionState.top,
+      initialPlacement,
       defaultLeft,
       defaultTop,
       openSequence: 0,
@@ -250,6 +260,7 @@ export class PanelManager {
       width: Math.round(record.panel.offsetWidth || Number.parseFloat(record.panel.style.width) || 320),
       openedAt: open ? Date.now() : previous?.openedAt || 0
     };
+    if (record.initialPlacement) state.initialPlacement = record.initialPlacement;
     if (record.persistOpen) state.open = open;
     this.writePanelState(id, state);
     if (record.role === "main" && record.persistOpen) {
@@ -374,6 +385,14 @@ export class PanelManager {
       this.applyPreferredPosition(record);
       return;
     }
+    if (record.initialPlacement === PANEL_INITIAL_PLACEMENT_LEFT) {
+      this.constrain(record.panel, {
+        left: record.preferredLeft,
+        top: record.preferredTop,
+        reachableOnly: true
+      });
+      return;
+    }
     const {panel} = record;
     this.constrain(panel);
     const toolbar = this.documentRef.querySelector(".map-toolbar");
@@ -454,6 +473,22 @@ export function normalizePanelPositionState(state, defaults = {}) {
     positionMode: manual ? PANEL_POSITION_MANUAL : PANEL_POSITION_AUTO,
     left: manual ? source.left : defaultLeft,
     top: manual ? source.top : defaultTop
+  };
+}
+
+export function resolvePanelRegistrationPosition({role = "main", persistOpen = true, savedState = null, defaults = {}} = {}) {
+  const hasSavedState = Boolean(savedState && typeof savedState === "object");
+  const initialPlacement = role === "main" && persistOpen && (!hasSavedState || savedState.initialPlacement === PANEL_INITIAL_PLACEMENT_LEFT)
+    ? PANEL_INITIAL_PLACEMENT_LEFT
+    : null;
+  const resolvedDefaults = initialPlacement === PANEL_INITIAL_PLACEMENT_LEFT
+    ? {left: PANEL_MARGIN, top: PANEL_FIRST_OPEN_TOP}
+    : {left: finiteCoordinate(defaults.left, 24), top: finiteCoordinate(defaults.top, 24)};
+  return {
+    ...normalizePanelPositionState(savedState, resolvedDefaults),
+    defaultLeft: resolvedDefaults.left,
+    defaultTop: resolvedDefaults.top,
+    initialPlacement
   };
 }
 

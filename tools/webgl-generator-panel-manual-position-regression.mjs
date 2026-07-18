@@ -9,6 +9,7 @@ import {
   constrainPanelRuntimePosition,
   normalizePanelPositionState,
   panelDragHasMoved,
+  resolvePanelRegistrationPosition,
   restoreManagedPanelViewportOrigin
 } from "../app/webgl-generator/src/ui/panel-manager.js";
 
@@ -33,6 +34,47 @@ for (const state of [
   assert.equal(normalized.positionMode, "auto", "非法模式或坐标必须回退 auto");
   assert.deepEqual([normalized.left, normalized.top], [24, 36], "auto 必须使用面板默认坐标");
 }
+
+assert.deepEqual(
+  resolvePanelRegistrationPosition({role: "main", persistOpen: true, savedState: null, defaults: {left: 500, top: 136}}),
+  {positionMode: "auto", left: 8, top: 64, defaultLeft: 8, defaultTop: 64, initialPlacement: "left"},
+  "无记录的主面板首次必须使用画布左侧安全落点"
+);
+assert.deepEqual(
+  resolvePanelRegistrationPosition({
+    role: "main",
+    persistOpen: true,
+    savedState: {positionMode: "auto", left: 8, top: 64, initialPlacement: "left"},
+    defaults: {left: 500, top: 136}
+  }),
+  {positionMode: "auto", left: 8, top: 64, initialPlacement: "left", defaultLeft: 8, defaultTop: 64},
+  "新版首次左侧标记必须在刷新后继续使用自动左侧落点"
+);
+assert.deepEqual(
+  resolvePanelRegistrationPosition({
+    role: "main",
+    persistOpen: true,
+    savedState: {positionMode: "auto", left: 500, top: 136},
+    defaults: {left: 500, top: 136}
+  }),
+  {positionMode: "auto", left: 500, top: 136, defaultLeft: 500, defaultTop: 136, initialPlacement: null},
+  "既有 auto 记录不得被新首次落点规则改写"
+);
+assert.deepEqual(
+  resolvePanelRegistrationPosition({role: "detail", persistOpen: false, savedState: null, defaults: {left: 24, top: 72}}),
+  {positionMode: "auto", left: 24, top: 72, defaultLeft: 24, defaultTop: 72, initialPlacement: null},
+  "详情和非持久化面板不得套用主面板首次左侧规则"
+);
+assert.deepEqual(
+  resolvePanelRegistrationPosition({
+    role: "main",
+    persistOpen: true,
+    savedState: {left: 180, top: 96},
+    defaults: {left: 500, top: 136}
+  }),
+  {left: 180, top: 96, positionMode: "manual", defaultLeft: 500, defaultTop: 136, initialPlacement: null},
+  "旧有限坐标仍须优先迁移为手动位置"
+);
 
 const preferred = {left: 650, top: 500};
 const constrained = constrainPanelRuntimePosition({
@@ -101,12 +143,14 @@ manager.panels.set("state-panel", {
   positionMode: "auto",
   preferredLeft: 24,
   preferredTop: 24,
+  initialPlacement: "left",
   defaultLeft: 24,
   defaultTop: 24
 });
 manager.savePanelState("state-panel");
 assert.equal(writes[0].state.positionMode, "auto");
 assert.deepEqual([writes[0].state.left, writes[0].state.top], [24, 24], "自动重排后的 DOM 坐标不得污染持久化偏好");
+assert.equal(writes[0].state.initialPlacement, "left", "首次左侧标记必须随 auto 状态持久化");
 
 writes.length = 0;
 manager.panels.set("object-details", {
@@ -138,6 +182,7 @@ assert.match(pointerCancelSource, /startLeft[\s\S]*startTop[\s\S]*reflowPanels/,
 assert.match(saveSource, /preferredLeft[\s\S]*preferredTop/, "持久化必须读取偏好坐标");
 assert.doesNotMatch(saveSource, /parseFloat\(record\.panel\.style\.(left|top)\)/, "持久化不得从运行时 DOM 反推偏好");
 assert.match(toolbarSource, /PANEL_POSITION_MANUAL[\s\S]*applyPreferredPosition[\s\S]*return/, "手动面板必须跳过工具栏强制避让");
+assert.match(toolbarSource, /PANEL_INITIAL_PLACEMENT_LEFT[\s\S]*preferredLeft[\s\S]*preferredTop[\s\S]*reachableOnly:\s*true/, "首次左侧面板必须保持左侧安全落点并只做可达钳制");
 assert.match(managerSource, /ResizeObserverCtor[\s\S]{0,500}?reflowPanels\(\)/, "ResizeObserver 只能触发运行时重排");
 assert.match(managerSource, /if \(panel\.style\.left !== left\)[\s\S]{0,100}?if \(panel\.style\.top !== top\)/, "运行时 style 写入必须保持幂等");
 assert.match(managerSource, /record\.openSequence = \+\+this\.openSequence/, "每次 open 必须更新仅运行时序号");
@@ -148,6 +193,7 @@ assert.match(managerSource, /reflowPanels\(\) \{[\s\S]{0,100}?restoreManagedPane
 console.log(JSON.stringify({
   ok: true,
   migration: "legacy-finite-to-manual",
+  firstOpen: "persistent-main-left",
   persistence: "preferred-position-only",
   drag: "actual-pointerup-only",
   coexistence: "manual-protected-auto-remainder",
